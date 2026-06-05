@@ -1,4 +1,4 @@
-import type { BusinessSettings, User, UserProfile, UserSettings, WhatsAppInstance } from "../generated/prisma/client.js";
+import type { BusinessSettings, IgnoredContact, User, UserProfile, UserSettings, WhatsAppInstance } from "../generated/prisma/client.js";
 
 type SettingsRecord = UserSettings & {
   identityMode?: string | null;
@@ -120,6 +120,22 @@ export function businessSettingsDto(settings: BusinessSettings) {
     configured: settings.businessName.trim().length >= 2,
     createdAt: toIso(settings.createdAt),
     updatedAt: toIso(settings.updatedAt)
+  };
+}
+
+export function ignoredContactDto(contact: IgnoredContact) {
+  return {
+    id: contact.id,
+    jid: contact.jid,
+    phoneNumber: contact.phoneNumber,
+    displayName: contact.displayName,
+    pushName: contact.pushName,
+    businessName: contact.businessName,
+    source: contact.source,
+    reason: contact.reason,
+    isActive: contact.isActive,
+    createdAt: toIso(contact.createdAt),
+    updatedAt: toIso(contact.updatedAt)
   };
 }
 

@@ -76,7 +76,10 @@ O frontend ja encaminha `/api/automation/business-settings`, `/api/automation/ai
 
 - `GET /ignored-contacts`
 - `POST /ignored-contacts`
+- `POST /ignored-contacts/bulk`
 - `DELETE /ignored-contacts/:id`
+
+O frontend ja encaminha `/api/automation/ignored-contacts`, `/api/automation/ignored-contacts/bulk` e `/api/automation/ignored-contacts/:id` para estes endpoints do BFF.
 
 ## Conversas
 

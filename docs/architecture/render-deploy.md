@@ -44,3 +44,15 @@ O frontend deve receber apenas URLs do BFF:
 4. Migrar chamadas do frontend para o BFF.
 5. Atualizar `HEALTH_TARGETS`.
 6. Endurecer CORS e tokens internos depois que os fluxos forem validados.
+
+## Autorizacao do GitHub App
+
+Antes de criar/sincronizar os servicos a partir do monorepo privado, o GitHub App do Render precisa ter acesso ao repositorio `FelipePbi/atendly-ia`.
+
+Se o Render retornar `repository URL is invalid or unfetchable`, abra:
+
+```text
+https://github.com/apps/render/installations/new
+```
+
+Na instalacao existente do Render, confirme que `FelipePbi/atendly-ia` esta incluido em `Repository access`. Depois disso, a CLI/API do Render consegue criar os servicos com o `render.yaml` validado.

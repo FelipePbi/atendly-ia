@@ -387,4 +387,4 @@ Audits de dependencias apos instalar as copias em `apps/*`:
 - `apps/bff`: `npm audit` reportou 3 vulnerabilidades moderadas.
 - `apps/health-worker`: sem vulnerabilidades reportadas.
 
-A estrutura `apps/*`, o BFF base e os documentos de arquitetura alvo ja foram criados no monorepo. O frontend ja usa o BFF para autenticacao JWT, guards server-side, logout/login/register, rotas WhatsApp principais e importacao de contatos. A proxima etapa e migrar as rotas restantes de chat manual, webhook legado, handoff e lista de ignorados para remover as chamadas server-side diretas para API/Evolution Go.
+A estrutura `apps/*`, o BFF base e os documentos de arquitetura alvo ja foram criados no monorepo. O frontend ja usa o BFF para autenticacao JWT, guards server-side, logout/login/register, rotas WhatsApp principais, importacao de contatos, configuracoes de negocio e configuracoes da Atendente Virtual. A proxima etapa e migrar as rotas restantes de chat manual, webhook legado, handoff, persona customizada, onboarding e lista de ignorados para remover as chamadas server-side diretas para API/Evolution Go.

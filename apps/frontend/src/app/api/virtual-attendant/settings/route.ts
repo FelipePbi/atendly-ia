@@ -1,30 +1,11 @@
-import { handleRouteError, ok, readJson, requireSessionUser } from "@/lib/api";
-import { virtualAttendantSettingsPatchSchema } from "@/lib/virtual-attendant";
-import {
-  getVirtualAttendantSettingsForUser,
-  updateVirtualAttendantSettingsForUser,
-  virtualAttendantSettingsDto,
-} from "@/services/virtual-attendant";
+import { proxyBffJson } from "@/lib/bff";
 
 export const runtime = "nodejs";
 
-export async function GET() {
-  try {
-    const user = await requireSessionUser();
-    const settings = await getVirtualAttendantSettingsForUser(user.id);
-    return ok({ ok: true, settings: virtualAttendantSettingsDto(settings) });
-  } catch (error) {
-    return handleRouteError(error);
-  }
+export async function GET(request: Request) {
+  return proxyBffJson(request, "/virtual-attendant/settings", { method: "GET" });
 }
 
 export async function PATCH(request: Request) {
-  try {
-    const user = await requireSessionUser();
-    const data = await readJson(request, virtualAttendantSettingsPatchSchema);
-    const settings = await updateVirtualAttendantSettingsForUser(user.id, data);
-    return ok({ ok: true, settings: virtualAttendantSettingsDto(settings) });
-  } catch (error) {
-    return handleRouteError(error);
-  }
+  return proxyBffJson(request, "/virtual-attendant/settings", { method: "PATCH" });
 }

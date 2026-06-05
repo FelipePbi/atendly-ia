@@ -57,11 +57,22 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
   app.patch("/business-settings", async (request) => {
     const user = currentUser(request);
     const data = parseBody(businessSettingsSchema, request.body);
-    const settings = await getPrisma().businessSettings.upsert({
+    const prisma = getPrisma();
+    const settings = await prisma.businessSettings.upsert({
       where: { userId: user.id },
       create: { userId: user.id, ...data },
       update: data
     });
+
+    if (typeof data.businessName === "string") {
+      await prisma.userProfile.updateMany({
+        where: { userId: user.id },
+        data: {
+          businessName: data.businessName
+        }
+      });
+    }
+
     return dataResponse(request, { businessSettings: businessSettingsDto(settings) });
   });
 
@@ -95,11 +106,21 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
     ]);
 
     return dataResponse(request, {
-      promptPreview: {
-        businessSettings,
-        settings
-      }
+      preview: buildPromptPreview({
+        businessSettings: businessSettings ? businessSettingsDto(businessSettings) : null,
+        settings: settingsDto(settings)
+      })
     });
+  });
+
+  app.get("/automation/ai", async (request) => {
+    const user = currentUser(request);
+    const settings = await getPrisma().userSettings.upsert({
+      where: { userId: user.id },
+      create: { userId: user.id, aiEnabled: false },
+      update: {}
+    });
+    return dataResponse(request, { aiEnabled: settings.aiEnabled, settings: settingsDto(settings) });
   });
 
   app.patch("/automation/ai", async (request) => {
@@ -112,4 +133,39 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
     });
     return dataResponse(request, { settings: settingsDto(settings) });
   });
+}
+
+function buildPromptPreview(input: {
+  businessSettings: ReturnType<typeof businessSettingsDto> | null;
+  settings: ReturnType<typeof settingsDto>;
+}) {
+  const persona = input.settings.personaType ?? "Nao definida";
+  const activation =
+    input.settings.activationMode === "AWAY_FROM_WHATSAPP"
+      ? `Somente ausente por ${input.settings.awayTimeoutMinutes ?? "?"} minuto(s).`
+      : "Sempre que a IA estiver ativa.";
+
+  return {
+    blocks: [
+      {
+        label: "Negocio",
+        value: input.businessSettings?.businessName || "Nao configurado"
+      },
+      {
+        label: "Identidade",
+        value:
+          input.settings.identityMode === "SEPARATE_ASSISTANT"
+            ? `Atendente ${input.settings.assistantName || "sem nome definido"}`
+            : "Responder como a profissional"
+      },
+      {
+        label: "Persona",
+        value: persona
+      },
+      {
+        label: "Ativacao",
+        value: activation
+      }
+    ]
+  };
 }

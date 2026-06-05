@@ -64,7 +64,7 @@ npm run dev:frontend
 
 ## Pendencias conhecidas
 
-- Migrar as rotas restantes do frontend para o BFF: webhook legado, handoff fora do chat e persona customizada.
+- Migrar as rotas restantes do frontend para o BFF: webhook legado e persona customizada.
 - Remover do frontend as variaveis server-side de API/Evolution Go.
 - Endurecer API/Evolution Go com token interno apos validar staging.
 - Revisar `npm audit`: API tem 1 vulnerabilidade critica; frontend tem 5 moderadas; BFF tem 3 moderadas.

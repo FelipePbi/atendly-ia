@@ -1,9 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { env } from "../config/env.js";
 import { currentUser, requireAuth } from "../lib/auth.js";
-import { businessSettingsDto, settingsDto } from "../lib/dto.js";
+import { businessSettingsDto, instanceDto, settingsDto } from "../lib/dto.js";
+import { AppError } from "../lib/errors.js";
 import { dataResponse, parseBody } from "../lib/http.js";
+import { whatsappPhoneCandidates } from "../lib/phone.js";
 import { getPrisma } from "../lib/prisma.js";
+import { getEvolutionStatus } from "../services/evolution-go.js";
+import { dispatchToApi } from "../services/internal-api.js";
 
 const businessSettingsSchema = z.object({
   businessName: z.string().trim().max(160).optional(),
@@ -126,13 +131,112 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
   app.patch("/automation/ai", async (request) => {
     const user = currentUser(request);
     const data = parseBody(z.object({ aiEnabled: z.boolean() }), request.body);
-    const settings = await getPrisma().userSettings.upsert({
+    const prisma = getPrisma();
+    let automationSync: { skipped: boolean; resumed: number } | null = null;
+
+    if (data.aiEnabled) {
+      automationSync = await validateAiCanBeEnabledAndResumeHandoffs(user.id, request.id);
+    }
+
+    const settings = await prisma.userSettings.upsert({
       where: { userId: user.id },
       create: { userId: user.id, aiEnabled: data.aiEnabled },
       update: { aiEnabled: data.aiEnabled }
     });
-    return dataResponse(request, { settings: settingsDto(settings) });
+    return dataResponse(request, { settings: settingsDto(settings), automationSync });
   });
+}
+
+async function validateAiCanBeEnabledAndResumeHandoffs(userId: string, requestId: string) {
+  const prisma = getPrisma();
+  const virtualSettings = settingsDto(
+    await prisma.userSettings.upsert({
+      where: { userId },
+      create: { userId, aiEnabled: false },
+      update: {}
+    })
+  );
+
+  if (!virtualSettings.canEnable) {
+    throw new AppError("CONFLICT", virtualSettings.readinessIssues[0] ?? "Complete virtual attendant setup first.", 409, {
+      settings: virtualSettings,
+      readinessIssues: virtualSettings.readinessIssues
+    });
+  }
+
+  const businessSettings = await prisma.businessSettings.upsert({
+    where: { userId },
+    create: { userId },
+    update: {}
+  });
+  const businessSettingsData = businessSettingsDto(businessSettings);
+  if (!businessSettingsData.configured) {
+    throw new AppError("CONFLICT", "Complete business settings before enabling AI.", 409, {
+      businessSettings: businessSettingsData
+    });
+  }
+
+  const instance = await prisma.whatsAppInstance.findUnique({
+    where: { userId }
+  });
+
+  if (!instance) {
+    throw new AppError("CONFLICT", "Connect WhatsApp before enabling AI.", 409);
+  }
+
+  const status = await getEvolutionStatus(instance.evolutionInstanceToken).catch(() => null);
+  const syncedInstance = await prisma.whatsAppInstance.update({
+    where: { id: instance.id },
+    data: {
+      status: status?.connected ? "CONNECTED" : "DISCONNECTED",
+      phoneNumber: status?.phoneNumber ?? instance.phoneNumber,
+      connectedAt: status?.connected && !instance.connectedAt ? new Date() : instance.connectedAt
+    }
+  });
+
+  if (syncedInstance.status !== "CONNECTED") {
+    throw new AppError("CONFLICT", "Connect WhatsApp before enabling AI.", 409, {
+      whatsappInstance: instanceDto(syncedInstance),
+      settings: virtualSettings
+    });
+  }
+
+  const conversations = await prisma.conversation.findMany({
+    where: { userId },
+    select: { contactJid: true }
+  });
+  const phones = [...new Set(conversations.flatMap((conversation) => whatsappPhoneCandidates(conversation.contactJid)))];
+  return resumeBotHandoffsInApi({ userId, requestId, phones });
+}
+
+async function resumeBotHandoffsInApi(input: {
+  userId: string;
+  requestId: string;
+  phones: string[];
+}): Promise<{ skipped: boolean; resumed: number }> {
+  const phones = [...new Set(input.phones)].filter(Boolean);
+  if (!env.INTERNAL_SERVICE_TOKEN || phones.length === 0) {
+    return { skipped: true, resumed: 0 };
+  }
+
+  const result = await dispatchToApi("/internal/bot/resume", {
+    userId: input.userId,
+    requestId: input.requestId,
+    body: { phones }
+  }).catch(() => null);
+
+  if (!result) {
+    return { skipped: true, resumed: 0 };
+  }
+
+  return {
+    skipped: false,
+    resumed: isResumeResult(result) ? (result.resumed ?? phones.length) : phones.length
+  };
+}
+
+function isResumeResult(value: unknown): value is { resumed?: number } {
+  return Boolean(value && typeof value === "object" && "resumed" in value);
 }
 
 function buildPromptPreview(input: {

@@ -8,9 +8,9 @@
 | `atendly-ia-bff` | web Node | `apps/bff` | `/health` |
 | `atendly-ia-api` | web Node | `apps/api` | `/health` |
 | `atendly-ia-evolution-go` | web Docker | `apps/evolution-go` | `/healthy` |
-| `atendly-ia-health-worker` | worker Node | `apps/health-worker` | sem URL publica |
+| `atendly-ia-health-worker` | web Node | `apps/health-worker` | `/health` |
 
-O Blueprint usa `plan: free`. Nesse plano, o Render nao aceita `preDeployCommand`; por isso as migrations Prisma de BFF/API rodam dentro do `buildCommand` antes do build.
+O Blueprint usa `plan: free`. Nesse plano, o Render nao aceita `preDeployCommand`; por isso as migrations Prisma de BFF/API rodam dentro do `buildCommand` antes do build. O Render tambem nao aceita `background_worker` no plano free; o health-worker roda como web service leve com `/health` e mantem o polling interno.
 
 ## Variaveis sensiveis
 

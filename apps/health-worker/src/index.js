@@ -1,5 +1,8 @@
+import http from "node:http";
+
 const POLL_INTERVAL_MS = 40_000;
 const REQUEST_TIMEOUT_MS = 10_000;
+const PORT = Number(process.env.PORT || 10000);
 
 const defaultTargets = [
   {
@@ -93,6 +96,27 @@ function hostnameFromUrl(value) {
 console.log(
   `[${nowIso()}] starting health worker interval_ms=${POLL_INTERVAL_MS} timeout_ms=${REQUEST_TIMEOUT_MS}`
 );
+
+const server = http.createServer((request, response) => {
+  if (request.url === "/health") {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ status: "ok", service: "health-worker", timestamp: nowIso() }));
+    return;
+  }
+
+  if (request.url === "/targets") {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ targets: targets.map((target) => target.name) }));
+    return;
+  }
+
+  response.writeHead(404, { "content-type": "application/json" });
+  response.end(JSON.stringify({ error: "not_found" }));
+});
+
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`[${nowIso()}] health worker http listening port=${PORT}`);
+});
 
 await pollOnce();
 setInterval(() => {

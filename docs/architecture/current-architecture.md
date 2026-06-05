@@ -12,7 +12,7 @@ O workspace `/home/felip/atendimeto-ia` agora e um monorepo Git com os servicos 
 | BFF | `apps/bff` | Fastify, TypeScript, Prisma, JWT | Auth, sessao, onboarding, WhatsApp, inbox, configuracoes e webhook Evolution |
 | API | `apps/api` | Fastify, TypeScript, Prisma | Motor de IA, handoff, agenda e rotas internas |
 | Evolution Go | `apps/evolution-go` | Go, Gin, GORM | Gateway WhatsApp |
-| Health worker | `apps/health-worker` | Node.js | Monitoramento dos health checks |
+| Health worker | `apps/health-worker` | Node.js | Web service leve que monitora health checks |
 
 ## Fluxo alvo
 
@@ -104,7 +104,7 @@ O `render.yaml` da raiz define:
 - `atendly-ia-bff`: web Node em `apps/bff`.
 - `atendly-ia-api`: web Node em `apps/api`.
 - `atendly-ia-evolution-go`: web Docker em `apps/evolution-go`.
-- `atendly-ia-health-worker`: worker Node em `apps/health-worker`.
+- `atendly-ia-health-worker`: web Node em `apps/health-worker`, com `/health` e polling interno.
 
 O frontend builda apenas com `npm ci && npm run build`; nao ha migrate ou generate de Prisma nesse servico. Migrations Prisma ficam no BFF e na API.
 

@@ -10,7 +10,7 @@ Monorepo privado da plataforma Atendly IA.
 | BFF | `apps/bff` | Fastify, TypeScript, Prisma, JWT | `npm run dev`, `npm run build`, `npm run start` |
 | API | `apps/api` | Fastify, TypeScript, Prisma | `npm run dev`, `npm run build`, `npm start` |
 | Evolution Go | `apps/evolution-go` | Go, Gin, GORM | `make dev`, `make build`, `go test ./...` |
-| Health worker | `apps/health-worker` | Node.js | `npm start`, `npm run check` |
+| Health worker | `apps/health-worker` | Node.js web worker | `npm start`, `npm run check` |
 
 ## Arquitetura alvo
 
@@ -75,7 +75,7 @@ Preencher apos configurar os servicos no Render:
 - BFF: `https://atendly-ia-bff.onrender.com`
 - API: `https://atendly-ia-api.onrender.com`
 - Evolution Go: `https://atendly-ia-evolution-go.onrender.com`
-- Health worker: worker sem URL publica.
+- Health worker: `https://atendly-ia-health-worker.onrender.com/health`.
 
 ## Origem dos projetos importados
 

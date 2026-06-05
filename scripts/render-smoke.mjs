@@ -137,10 +137,31 @@ async function whatsappFlow(label, baseUrl, prefix) {
 
 async function expectFetch(name, url, expectedStatus) {
   const startedAt = Date.now();
-  const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+  const response = await fetchWithRetry(url);
   const sample = await response.text().catch(() => "");
   const ok = response.status === expectedStatus;
   record(name, ok, `status=${response.status} expected=${expectedStatus} ms=${Date.now() - startedAt} sample=${sample.slice(0, 80)}`);
+}
+
+async function fetchWithRetry(url) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await fetch(url, { signal: AbortSignal.timeout(60_000) });
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) {
+        await sleep(attempt * 1_000);
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function jsonRequest(url, options = {}) {

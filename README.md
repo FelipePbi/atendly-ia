@@ -63,7 +63,7 @@ npm run dev:frontend
 
 ## Pendencias conhecidas
 
-- Validar smoke test manual completo em producao: login/logout, QR do WhatsApp, envio/recebimento e IA.
+- Validacao real de WhatsApp em producao dispensada por decisao explicita do usuario em 2026-06-05; ver `docs/qa/render-smoke-2026-06-05.md`.
 - Endurecer API/Evolution Go com token interno apos validar staging.
 - Revisar `npm audit`: API tem 1 vulnerabilidade critica; frontend tem 2 moderadas; BFF tem 3 moderadas.
 

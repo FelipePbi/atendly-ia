@@ -67,6 +67,7 @@
 - `npm run smoke:render` passou em modo seguro.
 - `RUN_MUTATING=1 npm run smoke:render` passou usando `BFF_DATABASE_URL` do BFF no Render, sem imprimir segredo.
 - Apos atualizar envs da API no Render, `npm run smoke:render` passou novamente em modo seguro: 8 checks, 0 falhas.
+- Apos dispensar validacao real de WhatsApp, `npm run smoke:render` passou novamente em modo seguro: 8 checks, 0 falhas. O script agora tolera cold starts do Render free com retry em checks `GET` seguros.
 
 ## Gaps restantes
 
@@ -76,7 +77,9 @@ Nao validado neste smoke por exigir WhatsApp real e/ou chamadas externas de nego
 - envio de resposta real pela IA ao cliente;
 - criacao/alteracao real de agendamento na Minha Agenda;
 
-Esses itens seguem como smoke manual final antes de considerar a meta totalmente provada em producao.
+Por decisao explicita do usuario em 2026-06-05, a etapa de validacao real do WhatsApp foi dispensada para conclusao desta meta.
+
+Sem essa validacao real, a evidencia de producao fica limitada ao smoke automatizado de auth, health, QR/status/instancia via BFF/frontend, protecao de endpoints internos, configuracao de envs da API e deploy Render.
 
 Estado observado em 2026-06-05 apos env/deploy da API:
 

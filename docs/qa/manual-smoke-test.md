@@ -79,7 +79,9 @@ O auditor final busca `API_DATABASE_URL` e `BFF_DATABASE_URL` pelo Render CLI lo
 10. Validar Evolution Go `/healthy`.
 11. Validar health-worker monitorando frontend, BFF, API e Evolution Go.
 
-### Smoke real final
+### Smoke real final opcional
+
+Esta etapa foi dispensada por decisao explicita do usuario em 2026-06-05 para conclusao da meta atual.
 
 1. Abrir o frontend Render e entrar com um usuario real.
 2. Confirmar que a instancia WhatsApp desse usuario esta `CONNECTED`.

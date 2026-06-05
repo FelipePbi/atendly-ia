@@ -1,14 +1,7 @@
-import { handleRouteError, ok, requireSessionUser } from "@/lib/api";
-import { ensureCustomPersonaGeneration } from "@/services/virtual-attendant";
+import { proxyBffJson } from "@/lib/bff";
 
 export const runtime = "nodejs";
 
-export async function POST() {
-  try {
-    const user = await requireSessionUser();
-    const settings = await ensureCustomPersonaGeneration(user.id);
-    return ok({ ok: true, settings });
-  } catch (error) {
-    return handleRouteError(error);
-  }
+export async function POST(request: Request) {
+  return proxyBffJson(request, "/virtual-attendant/persona/generate");
 }

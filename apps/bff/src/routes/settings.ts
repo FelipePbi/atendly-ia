@@ -9,6 +9,7 @@ import { whatsappPhoneCandidates } from "../lib/phone.js";
 import { getPrisma } from "../lib/prisma.js";
 import { getEvolutionStatus } from "../services/evolution-go.js";
 import { dispatchToApi } from "../services/internal-api.js";
+import { ensureCustomPersonaGeneration, importPersonaConversations, listPersonaImportsForUser } from "../services/persona.js";
 
 const businessSettingsSchema = z.object({
   businessName: z.string().trim().max(160).optional(),
@@ -36,6 +37,19 @@ const virtualAttendantSchema = z.object({
   awayTimeoutMinutes: z.number().int().min(1).max(1440).optional().nullable(),
   awayScope: z.enum(["GLOBAL", "CONVERSATION"]).optional().nullable(),
   virtualAttendantOnboardingCompleted: z.boolean().optional()
+});
+
+const personaImportSchema = z.object({
+  files: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1),
+        size: z.number().int().nonnegative(),
+        text: z.string()
+      })
+    )
+    .min(1),
+  participantName: z.string().trim().optional().nullable()
 });
 
 export async function registerSettingsRoutes(app: FastifyInstance): Promise<void> {
@@ -116,6 +130,35 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
         settings: settingsDto(settings)
       })
     });
+  });
+
+  app.post("/virtual-attendant/persona/import", async (request) => {
+    const user = currentUser(request);
+    const data = parseBody(personaImportSchema, request.body);
+    const profile = await getPrisma().userProfile.findUnique({
+      where: { userId: user.id },
+      select: { businessName: true, fullName: true }
+    });
+    const result = await importPersonaConversations({
+      userId: user.id,
+      files: data.files,
+      participantName: data.participantName,
+      businessName: profile?.businessName,
+      professionalName: profile?.fullName
+    });
+    return dataResponse(request, result);
+  });
+
+  app.get("/virtual-attendant/persona/imports", async (request) => {
+    const user = currentUser(request);
+    const imports = await listPersonaImportsForUser(user.id);
+    return dataResponse(request, { imports });
+  });
+
+  app.post("/virtual-attendant/persona/generate", async (request) => {
+    const user = currentUser(request);
+    const settings = await ensureCustomPersonaGeneration(user.id);
+    return dataResponse(request, { settings });
   });
 
   app.get("/automation/ai", async (request) => {

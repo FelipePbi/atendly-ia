@@ -1,14 +1,7 @@
-import { handleRouteError, ok, requireSessionUser } from "@/lib/api";
-import { listPersonaImportsForUser } from "@/services/virtual-attendant";
+import { proxyBffJson } from "@/lib/bff";
 
 export const runtime = "nodejs";
 
-export async function GET() {
-  try {
-    const user = await requireSessionUser();
-    const imports = await listPersonaImportsForUser(user.id);
-    return ok({ ok: true, imports });
-  } catch (error) {
-    return handleRouteError(error);
-  }
+export async function GET(request: Request) {
+  return proxyBffJson(request, "/virtual-attendant/persona/imports");
 }

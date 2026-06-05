@@ -67,10 +67,13 @@ O frontend ja encaminha as rotas `/api/whatsapp/*` e `/api/automation/evolution-
 - `GET /virtual-attendant/settings`
 - `PATCH /virtual-attendant/settings`
 - `GET /virtual-attendant/prompt-preview`
+- `POST /virtual-attendant/persona/import`
+- `GET /virtual-attendant/persona/imports`
+- `POST /virtual-attendant/persona/generate`
 - `GET /automation/ai`
 - `PATCH /automation/ai`
 
-O frontend ja encaminha `/api/automation/business-settings`, `/api/automation/ai`, `/api/virtual-attendant/settings` e `/api/virtual-attendant/prompt-preview` para estes endpoints do BFF.
+O frontend ja encaminha `/api/automation/business-settings`, `/api/automation/ai`, `/api/virtual-attendant/settings`, `/api/virtual-attendant/prompt-preview` e `/api/virtual-attendant/persona/*` para estes endpoints do BFF.
 
 ## Lista de ignorados
 

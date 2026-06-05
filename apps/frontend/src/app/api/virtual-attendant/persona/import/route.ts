@@ -1,36 +1,43 @@
-import { errorResponse, handleRouteError, ok, requireSessionUser } from "@/lib/api";
-import { prisma } from "@/lib/prisma";
-import { importPersonaConversations } from "@/services/virtual-attendant";
+import { bffFetch, copySetCookie } from "@/lib/bff";
 
 export const runtime = "nodejs";
 
+type PersonaImportData = Record<string, unknown>;
+
 export async function POST(request: Request) {
-  try {
-    const user = await requireSessionUser();
-    const formData = await request.formData();
-    const files = formData.getAll("files").filter((value): value is File => value instanceof File);
+  const formData = await request.formData();
+  const files = formData.getAll("files").filter((value): value is File => value instanceof File);
+  const payload = {
+    participantName: stringFormValue(formData.get("participantName")),
+    files: await Promise.all(
+      files.map(async (file) => ({
+        name: file.name,
+        size: file.size,
+        text: await file.text(),
+      }))
+    ),
+  };
 
-    if (files.length === 0) {
-      return errorResponse("Selecione pelo menos 3 arquivos .txt exportados do WhatsApp.", 400);
-    }
+  const { response, envelope } = await bffFetch<PersonaImportData>("/virtual-attendant/persona/import", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(payload),
+    cookieHeader: request.headers.get("cookie"),
+  });
 
-    const profile = await prisma.userProfile.findUnique({
-      where: { userId: user.id },
-      select: { businessName: true, fullName: true },
-    });
-    const participantName = stringFormValue(formData.get("participantName"));
-    const result = await importPersonaConversations({
-      userId: user.id,
-      files,
-      participantName,
-      businessName: profile?.businessName,
-      professionalName: profile?.fullName,
-    });
-
-    return ok({ ok: true, ...result });
-  } catch (error) {
-    return handleRouteError(error);
-  }
+  const body =
+    response.ok && envelope?.data
+      ? { ok: true, ...envelope.data }
+      : {
+          ok: false,
+          error: envelope?.error?.message ?? "Nao foi possivel importar a persona agora.",
+          details: envelope?.error?.details,
+        };
+  const nextResponse = Response.json(body, { status: response.status });
+  copySetCookie(response, nextResponse);
+  return nextResponse;
 }
 
 function stringFormValue(value: FormDataEntryValue | null): string | null {

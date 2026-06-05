@@ -38,6 +38,24 @@ Resultado parcial em Render: ver `docs/qa/render-smoke-2026-06-05.md`.
 
 ## Staging Render
 
+### Automatizado
+
+Smoke seguro, sem criar dados:
+
+```bash
+npm run smoke:render
+```
+
+Smoke mutavel, criando e removendo usuarios/instancias temporarios:
+
+```bash
+RUN_MUTATING=1 BFF_DATABASE_URL=<bff-database-url> npm run smoke:render
+```
+
+O smoke mutavel valida auth pelo BFF, auth pelo proxy do frontend, criacao/conexao/QR/status/delete de instancia WhatsApp pelo BFF e pelo proxy do frontend. Ele nao envia mensagem WhatsApp real e nao escreve na Minha Agenda.
+
+### Manual
+
 1. Publicar BFF.
 2. Validar `/health`.
 3. Criar usuario pelo BFF.

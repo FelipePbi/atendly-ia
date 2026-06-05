@@ -42,7 +42,11 @@
 - Logs do BFF:
   - webhook com `?token=<valor>` aparece no Render como `?token=%5BREDACTED%5D`
   - marker de smoke nao apareceu no log apos o deploy `ea9e799`
+- Script automatizado `npm run smoke:render`:
+  - modo seguro sem credenciais: 8 checks, 0 falhas.
+  - modo mutavel com `RUN_MUTATING=1` e `BFF_DATABASE_URL`: 32 checks, 0 falhas.
 - Usuarios e instancias temporarios criados no smoke foram removidos.
+- Verificacao no BFF DB confirmou `0` usuarios temporarios `codex-*-smoke-*`.
 
 ## Gates locais
 
@@ -50,6 +54,8 @@
 - `npm --prefix apps/api test` passou: 52 testes, 1 integracao readonly da Minha Agenda skipped.
 - `npx vitest run tests/integration/minha-agenda.readonly.test.ts` passou com writes forcados para `false`.
 - `npm --prefix apps/bff run check` passou.
+- `npm run smoke:render` passou em modo seguro.
+- `RUN_MUTATING=1 npm run smoke:render` passou usando `BFF_DATABASE_URL` do BFF no Render, sem imprimir segredo.
 
 ## Gaps restantes
 

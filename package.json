@@ -11,6 +11,7 @@
     "build:api": "cd apps/api && npm run build",
     "build:all": "bash scripts/build-all.sh",
     "check:health-worker": "cd apps/health-worker && npm run check",
+    "smoke:render": "node scripts/render-smoke.mjs",
     "test:evolution-go": "cd apps/evolution-go && go test ./..."
   },
   "engines": {

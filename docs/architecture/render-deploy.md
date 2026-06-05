@@ -10,6 +10,8 @@
 | `atendly-ia-evolution-go` | web Docker | `apps/evolution-go` | `/healthy` |
 | `atendly-ia-health-worker` | worker Node | `apps/health-worker` | sem URL publica |
 
+O Blueprint usa `plan: free`. Nesse plano, o Render nao aceita `preDeployCommand`; por isso as migrations Prisma de BFF/API rodam dentro do `buildCommand` antes do build.
+
 ## Variaveis sensiveis
 
 Configurar no Render, nunca no Git:

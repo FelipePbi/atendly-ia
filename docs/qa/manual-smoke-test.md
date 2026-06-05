@@ -1,5 +1,7 @@
 # Smoke Test Manual
 
+Resultado parcial em Render: ver `docs/qa/render-smoke-2026-06-05.md`.
+
 ## Local
 
 1. API

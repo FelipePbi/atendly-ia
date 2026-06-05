@@ -1,6 +1,4 @@
-import "server-only";
-
-import type { MessageType } from "@/generated/prisma/client";
+import type { MessageType } from "../generated/prisma/client.js";
 
 export type EvolutionWebhookEvent =
   | "MESSAGE"
@@ -154,7 +152,7 @@ export function parseEvolutionMessage(payload: unknown): ParsedEvolutionMessage 
       stringValue(recordValue(message?.DocumentMessage)?.URL) ||
       null,
     mediaBase64: stringValue(message?.base64) || stringValue(message?.mediaBase64) || null,
-    timestamp,
+    timestamp
   };
 }
 

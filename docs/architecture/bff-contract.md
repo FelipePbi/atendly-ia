@@ -104,4 +104,4 @@ O frontend ja encaminha `/api/conversations`, `/api/conversations/:id`, `/api/co
 
 - `POST /webhooks/evolution-go?token=...`
 
-Esta rota valida `EVOLUTION_WEBHOOK_SECRET` e encaminha para a API quando `API_EVOLUTION_WEBHOOK_TOKEN` estiver configurado.
+Esta rota valida `EVOLUTION_WEBHOOK_SECRET`, atualiza estado da instancia WhatsApp, persiste eventos visiveis no inbox, aplica pausas/lista de ignorados e faz dispatch interno para a API quando a IA estiver elegivel. A rota legada do frontend `/api/webhooks/evolution-go` apenas encaminha para este endpoint do BFF.

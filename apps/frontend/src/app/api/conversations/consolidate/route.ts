@@ -1,18 +1,7 @@
-import { handleRouteError, ok, requireSessionUser } from "@/lib/api";
-import { consolidateEquivalentConversationsForUser } from "@/services/conversation-consolidation";
+import { proxyBffJson } from "@/lib/bff";
 
 export const runtime = "nodejs";
 
-export async function POST() {
-  try {
-    const user = await requireSessionUser();
-    const result = await consolidateEquivalentConversationsForUser(user.id);
-
-    return ok({
-      ok: true,
-      ...result,
-    });
-  } catch (error) {
-    return handleRouteError(error);
-  }
+export async function POST(request: Request) {
+  return proxyBffJson(request, "/conversations/consolidate");
 }

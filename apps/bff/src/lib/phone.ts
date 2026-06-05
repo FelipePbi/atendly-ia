@@ -65,6 +65,19 @@ export function whatsappPhoneCandidates(value: string): string[] {
   return [...candidates];
 }
 
+export function phonesMatch(expected: string | null | undefined, connected: string | null | undefined): boolean {
+  const expectedCandidates = whatsappPhoneCandidates(expected ?? "");
+  const connectedCandidates = new Set(whatsappPhoneCandidates(connected ?? ""));
+
+  if (expectedCandidates.length === 0 || connectedCandidates.size === 0) return false;
+
+  for (const candidate of expectedCandidates) {
+    if (connectedCandidates.has(candidate)) return true;
+  }
+
+  return false;
+}
+
 function removeBrazilianNinthDigit(value: string): string | null {
   if (value.length !== 13 || !value.startsWith("55")) return null;
 

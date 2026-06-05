@@ -64,7 +64,7 @@ npm run dev:frontend
 
 ## Pendencias conhecidas
 
-- Migrar a rota restante do frontend para o BFF: webhook legado.
+- Publicar o monorepo privado no GitHub e configurar deploy/variaveis no Render.
 - Remover do frontend as variaveis server-side de API/Evolution Go.
 - Endurecer API/Evolution Go com token interno apos validar staging.
 - Revisar `npm audit`: API tem 1 vulnerabilidade critica; frontend tem 5 moderadas; BFF tem 3 moderadas.

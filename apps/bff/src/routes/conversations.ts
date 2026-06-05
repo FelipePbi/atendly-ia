@@ -21,6 +21,28 @@ type BotHandoffStatus = {
   handoffId: string | null;
 };
 
+type ConsolidationConversation = {
+  id: string;
+  instanceId: string;
+  contactJid: string;
+  contactName: string | null;
+  profilePictureUrl: string | null;
+  lastMessagePreview: string | null;
+  lastMessageAt: Date | null;
+  unreadCount: number;
+  archivedAt: Date | null;
+  aiPaused: boolean;
+  aiPausedReason: string | null;
+  aiPausedUpdatedAt: Date | null;
+  updatedAt: Date;
+  messages: Array<{
+    timestamp: Date;
+    fromMe: boolean;
+    mediaType: string | null;
+    contentText: string | null;
+  }>;
+};
+
 const idParamSchema = z.object({
   id: z.string().min(1)
 });
@@ -89,6 +111,12 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         );
       })
     });
+  });
+
+  app.post("/conversations/consolidate", async (request) => {
+    const user = currentUser(request);
+    const result = await consolidateEquivalentConversationsForUser(user.id);
+    return dataResponse(request, result);
   });
 
   app.get("/conversations/:id/messages", async (request) => {
@@ -346,6 +374,162 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
       })
     });
   });
+}
+
+async function consolidateEquivalentConversationsForUser(userId: string) {
+  const prisma = getPrisma();
+  const conversations = await prisma.conversation.findMany({
+    where: { userId },
+    include: latestMessageInclude()
+  });
+  const groups = new Map<string, typeof conversations>();
+
+  for (const conversation of conversations) {
+    const key = conversationDedupeKey(conversation.contactJid);
+    if (!key) continue;
+    groups.set(key, [...(groups.get(key) ?? []), conversation]);
+  }
+
+  const result = {
+    mergedGroups: 0,
+    movedMessages: 0,
+    removedConversations: 0
+  };
+
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const canonical = [...group].sort((left, right) => conversationTime(right) - conversationTime(left))[0];
+    const duplicates = group.filter((conversation) => conversation.id !== canonical.id);
+    const existingExternalMessageIds = new Set(
+      (
+        await prisma.message.findMany({
+          where: {
+            conversationId: canonical.id,
+            externalMessageId: { not: null }
+          },
+          select: { externalMessageId: true }
+        })
+      )
+        .map((message) => message.externalMessageId)
+        .filter((externalMessageId): externalMessageId is string => Boolean(externalMessageId))
+    );
+
+    for (const duplicate of duplicates) {
+      const duplicateMessages = await prisma.message.findMany({
+        where: { conversationId: duplicate.id },
+        select: {
+          id: true,
+          externalMessageId: true
+        }
+      });
+      const duplicateMessageIds = duplicateMessages
+        .filter((message) => message.externalMessageId && existingExternalMessageIds.has(message.externalMessageId))
+        .map((message) => message.id);
+      const messageIdsToMove = duplicateMessages
+        .filter((message) => !duplicateMessageIds.includes(message.id))
+        .map((message) => message.id);
+
+      if (duplicateMessageIds.length > 0) {
+        await prisma.message.deleteMany({ where: { id: { in: duplicateMessageIds } } });
+      }
+
+      if (messageIdsToMove.length > 0) {
+        await prisma.message.updateMany({
+          where: { id: { in: messageIdsToMove } },
+          data: { conversationId: canonical.id }
+        });
+        result.movedMessages += messageIdsToMove.length;
+
+        for (const message of duplicateMessages) {
+          if (message.externalMessageId && messageIdsToMove.includes(message.id)) {
+            existingExternalMessageIds.add(message.externalMessageId);
+          }
+        }
+      }
+
+      await prisma.aiSuppressionLog.updateMany({
+        where: { conversationId: duplicate.id },
+        data: { conversationId: canonical.id }
+      });
+      await prisma.conversation.delete({ where: { id: duplicate.id } });
+      result.removedConversations += 1;
+    }
+
+    await recomputeConversationSummary(canonical.id, group);
+    result.mergedGroups += 1;
+  }
+
+  return result;
+}
+
+async function recomputeConversationSummary(
+  canonicalId: string,
+  mergedConversations: ConsolidationConversation[]
+) {
+  const prisma = getPrisma();
+  const latestMessage = await prisma.message.findFirst({
+    where: { conversationId: canonicalId },
+    orderBy: { timestamp: "desc" }
+  });
+  const newestConversation = [...mergedConversations].sort((left, right) => conversationTime(right) - conversationTime(left))[0];
+  const pausedConversation = [...mergedConversations]
+    .filter((conversation) => conversation.aiPaused)
+    .sort((left, right) => {
+      const leftTime = (left.aiPausedUpdatedAt ?? left.updatedAt).getTime();
+      const rightTime = (right.aiPausedUpdatedAt ?? right.updatedAt).getTime();
+      return rightTime - leftTime;
+    })[0];
+
+  await prisma.conversation.update({
+    where: { id: canonicalId },
+    data: {
+      instanceId: newestConversation.instanceId,
+      contactName: newestConversation.contactName,
+      profilePictureUrl: newestConversation.profilePictureUrl,
+      lastMessagePreview: latestMessage
+        ? previewText(latestMessage.contentText, buildMediaPreview(latestMessage.fromMe, latestMessage.mediaType))
+        : newestConversation.lastMessagePreview,
+      lastMessageAt: latestMessage?.timestamp ?? newestConversation.lastMessageAt,
+      unreadCount: mergedConversations.reduce((total, conversation) => total + conversation.unreadCount, 0),
+      archivedAt: mergedConversations.some((conversation) => conversation.archivedAt === null)
+        ? null
+        : newestConversation.archivedAt,
+      aiPaused: Boolean(pausedConversation),
+      aiPausedReason: pausedConversation?.aiPausedReason ?? null,
+      aiPausedUpdatedAt: pausedConversation?.aiPausedUpdatedAt ?? null
+    }
+  });
+}
+
+function conversationDedupeKey(value: string): string {
+  const normalizedJid = normalizeWhatsappJid(value);
+  if (!normalizedJid) return fallbackJidKey(value);
+  if (normalizedJid.endsWith("@g.us")) return `group:${normalizedJid}`;
+  if (normalizedJid.endsWith("@lid")) return `lid:${normalizedJid}`;
+  const phoneCandidates = whatsappPhoneCandidates(normalizedJid).sort();
+  return phoneCandidates.length > 0 ? `phone:${phoneCandidates.join("|")}` : fallbackJidKey(normalizedJid);
+}
+
+function fallbackJidKey(value: string): string {
+  const input = value.trim().toLowerCase();
+  return input ? `raw:${input}` : "";
+}
+
+function conversationTime(conversation: { messages?: Array<{ timestamp: Date }>; lastMessageAt: Date | null; updatedAt: Date }): number {
+  return (conversation.messages?.[0]?.timestamp ?? conversation.lastMessageAt ?? conversation.updatedAt).getTime();
+}
+
+function previewText(text: string | null | undefined, fallback = "Mensagem"): string {
+  const cleaned = text?.replace(/\s+/g, " ").trim();
+  return cleaned ? cleaned.slice(0, 180) : fallback;
+}
+
+function buildMediaPreview(fromMe: boolean, mediaType: string | null | undefined): string {
+  if (mediaType) {
+    return `Midia ${fromMe ? "enviada" : "recebida"}: ${mediaType}`;
+  }
+
+  return `Midia ${fromMe ? "enviada" : "recebida"}`;
 }
 
 function latestMessageInclude() {

@@ -3,6 +3,8 @@
 ## Escopo validado
 
 - Render repo privado `FelipePbi/atendly-ia` acessivel.
+- Repositorio GitHub confirmado como `PRIVATE`.
+- Render conseguiu clonar/deployar o repo privado no commit `64fb050` via health-worker.
 - Servicos Render em `live`:
   - `atendly-ia-frontend`
   - `atendly-ia-bff`

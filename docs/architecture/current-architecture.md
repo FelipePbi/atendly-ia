@@ -383,8 +383,8 @@ Comandos basicos foram validados com sucesso em 2026-06-05:
 Audits de dependencias apos instalar as copias em `apps/*`:
 
 - `apps/api`: `npm audit` reportou 1 vulnerabilidade critica.
-- `apps/frontend`: `npm audit` reportou 7 vulnerabilidades moderadas.
+- `apps/frontend`: `npm audit` reportou 5 vulnerabilidades moderadas apos remover NextAuth.
 - `apps/bff`: `npm audit` reportou 3 vulnerabilidades moderadas.
 - `apps/health-worker`: sem vulnerabilidades reportadas.
 
-A estrutura `apps/*`, o BFF base e os documentos de arquitetura alvo ja foram criados no monorepo. A proxima etapa e migrar o frontend de NextAuth/rotas locais para o BFF JWT e remover as chamadas server-side diretas para API/Evolution Go.
+A estrutura `apps/*`, o BFF base e os documentos de arquitetura alvo ja foram criados no monorepo. O frontend ja usa o BFF para autenticacao JWT, guards server-side, logout/login/register, rotas WhatsApp principais e importacao de contatos. A proxima etapa e migrar as rotas restantes de chat manual, webhook legado, handoff e lista de ignorados para remover as chamadas server-side diretas para API/Evolution Go.

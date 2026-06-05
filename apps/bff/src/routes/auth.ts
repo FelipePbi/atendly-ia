@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { clearSessionCookie, currentUser, requireAuth, setSessionCookie, signSession } from "../lib/auth.js";
+import { instanceDto, onboardingDto, profileDto, settingsDto, userDto } from "../lib/dto.js";
 import { AppError } from "../lib/errors.js";
 import { dataResponse, parseBody } from "../lib/http.js";
 import { hashPassword, verifyPassword } from "../lib/password.js";
@@ -64,14 +65,15 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       },
       select: {
         id: true,
-        email: true
+        email: true,
+        createdAt: true
       }
     });
 
     const token = await signSession(user);
     setSessionCookie(reply, token);
     reply.code(201);
-    return dataResponse(request, { user });
+    return dataResponse(request, { user: userDto(user) });
   });
 
   app.post(
@@ -98,10 +100,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       const token = await signSession({ id: user.id, email: user.email });
       setSessionCookie(reply, token);
       return dataResponse(request, {
-        user: {
-          id: user.id,
-          email: user.email
-        }
+        user: userDto(user)
       });
     }
   );
@@ -132,7 +131,14 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       throw new AppError("NOT_FOUND", "User not found.", 404);
     }
 
-    return dataResponse(request, { user: record });
+    return dataResponse(request, {
+      user: userDto(record),
+      profile: profileDto(record.profile),
+      onboarding: onboardingDto(record.profile, record.whatsappInstance, record.settings),
+      settings: settingsDto(record.settings),
+      whatsappInstance: instanceDto(record.whatsappInstance),
+      businessSettings: record.businessSettings
+    });
   });
 
   app.post("/auth/change-password", { preHandler: requireAuth }, async (request) => {

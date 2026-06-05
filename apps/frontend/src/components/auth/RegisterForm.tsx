@@ -3,7 +3,6 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
 import { UserPlus } from "lucide-react";
 import { AuthCard } from "@/components/auth/AuthCard";
 
@@ -40,17 +39,6 @@ export function RegisterForm() {
     if (!response.ok) {
       setError(data.error ?? "Nao foi possivel criar sua conta.");
       setLoading(false);
-      return;
-    }
-
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
-
-    if (result?.error) {
-      router.replace("/login");
       return;
     }
 

@@ -50,6 +50,8 @@ Sessao:
 - `GET /whatsapp/contacts`
 - `POST /whatsapp/logout`
 
+O frontend ja encaminha as rotas `/api/whatsapp/*` e `/api/automation/evolution-contacts` para estes endpoints do BFF.
+
 ## Configuracoes
 
 - `GET /business-settings`

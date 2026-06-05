@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { currentUser, requireAuth } from "../lib/auth.js";
+import { instanceDto, settingsDto } from "../lib/dto.js";
 import { AppError } from "../lib/errors.js";
 import { dataResponse } from "../lib/http.js";
 import { getPrisma } from "../lib/prisma.js";
@@ -43,7 +44,7 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
       }
     });
 
-    return dataResponse(request, { status, whatsappInstance: updated });
+    return dataResponse(request, { status, whatsappInstance: instanceDto(updated) });
   });
 
   app.post("/whatsapp/instance", async (request, reply) => {
@@ -62,7 +63,7 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
     }
 
     if (record.whatsappInstance) {
-      return dataResponse(request, { whatsappInstance: record.whatsappInstance });
+      return dataResponse(request, { whatsappInstance: instanceDto(record.whatsappInstance) });
     }
 
     const instanceName = buildInstanceName(record.profile?.fullName ?? record.email, record.profile?.businessName ?? "atendly");
@@ -84,7 +85,7 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
     });
 
     reply.code(201);
-    return dataResponse(request, { whatsappInstance: created });
+    return dataResponse(request, { whatsappInstance: instanceDto(created) });
   });
 
   app.delete("/whatsapp/instance", async (request) => {
@@ -125,7 +126,7 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
       }
     });
 
-    return dataResponse(request, { whatsappInstance: updated });
+    return dataResponse(request, { whatsappInstance: instanceDto(updated) });
   });
 
   app.get("/whatsapp/qr", async (request) => {
@@ -152,7 +153,7 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
       qrcode: qr.qrcode,
       code: qr.code,
       pending: !qr.qrcode,
-      whatsappInstance: updated
+      whatsappInstance: instanceDto(updated)
     });
   });
 
@@ -177,7 +178,8 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
       }
     });
 
-    return dataResponse(request, { whatsappInstance: updated });
+    const settings = await prisma.userSettings.findUnique({ where: { userId: user.id } });
+    return dataResponse(request, { whatsappInstance: instanceDto(updated), settings: settingsDto(settings) });
   });
 
   app.get("/whatsapp/contacts", async (request) => {
@@ -191,8 +193,31 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
       throw new AppError("NOT_FOUND", "WhatsApp instance not found.", 404);
     }
 
-    const contacts = await getEvolutionContacts(instance.evolutionInstanceToken);
-    return dataResponse(request, { contacts });
+    if (instance.status !== "CONNECTED") {
+      throw new AppError("CONFLICT", "Connect WhatsApp before loading contacts.", 409);
+    }
+
+    const [contacts, ignoredContacts] = await Promise.all([
+      getEvolutionContacts(instance.evolutionInstanceToken),
+      prisma.ignoredContact.findMany({
+        where: {
+          userId: user.id,
+          instanceId: instance.id,
+          isActive: true
+        },
+        select: { jid: true }
+      })
+    ]);
+    const ignoredJids = new Set(ignoredContacts.map((contact) => contact.jid));
+
+    return dataResponse(request, {
+      contacts: contacts.map((contact) => ({
+        ...contact,
+        displayName:
+          contact.fullName || contact.pushName || contact.firstName || contact.businessName || contact.phoneNumber || contact.jid,
+        alreadyIgnored: ignoredJids.has(contact.jid)
+      }))
+    });
   });
 }
 

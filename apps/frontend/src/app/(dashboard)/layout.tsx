@@ -1,39 +1,22 @@
 import { redirect } from "next/navigation";
-import { getServerSession } from "next-auth";
 import { AppShell } from "@/components/layout/AppShell";
-import { authOptions } from "@/lib/auth";
-import { instanceDto, settingsDto, userDto } from "@/lib/dto";
-import { onboardingComplete } from "@/lib/onboarding";
-import { prisma } from "@/lib/prisma";
+import { getCurrentSession } from "@/lib/session";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
+  const session = await getCurrentSession();
+  if (!session) {
     redirect("/login");
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    include: {
-      profile: true,
-      settings: true,
-      whatsappInstance: true,
-    },
-  });
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  if (!onboardingComplete(user.profile, user.settings)) {
+  if (!session.onboarding.completed) {
     redirect("/onboarding");
   }
 
   return (
     <AppShell
-      initialUser={userDto(user)}
-      initialSettings={settingsDto(user.settings)}
-      initialWhatsappInstance={instanceDto(user.whatsappInstance)}
+      initialUser={session.user}
+      initialSettings={session.settings}
+      initialWhatsappInstance={session.whatsappInstance}
     >
       {children}
     </AppShell>

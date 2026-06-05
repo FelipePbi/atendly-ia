@@ -3,7 +3,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { signOut } from "next-auth/react";
 import { Bot, Building2, LogOut, MessageSquare, Smartphone, UserRound, UserX } from "lucide-react";
 import { clsx } from "clsx";
 import { useDashboard } from "@/components/layout/DashboardContext";
@@ -40,7 +39,6 @@ export function AppSidebar({
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
-    await signOut({ redirect: false });
     onNavigate?.();
     router.replace("/login");
   }

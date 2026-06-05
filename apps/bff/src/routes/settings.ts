@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { currentUser, requireAuth } from "../lib/auth.js";
+import { businessSettingsDto, settingsDto } from "../lib/dto.js";
 import { dataResponse, parseBody } from "../lib/http.js";
 import { getPrisma } from "../lib/prisma.js";
 
@@ -50,7 +51,7 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
       create: { userId: user.id },
       update: {}
     });
-    return dataResponse(request, { businessSettings: settings });
+    return dataResponse(request, { businessSettings: businessSettingsDto(settings) });
   });
 
   app.patch("/business-settings", async (request) => {
@@ -61,7 +62,7 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
       create: { userId: user.id, ...data },
       update: data
     });
-    return dataResponse(request, { businessSettings: settings });
+    return dataResponse(request, { businessSettings: businessSettingsDto(settings) });
   });
 
   app.get("/virtual-attendant/settings", async (request) => {
@@ -71,7 +72,7 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
       create: { userId: user.id, aiEnabled: false },
       update: {}
     });
-    return dataResponse(request, { settings });
+    return dataResponse(request, { settings: settingsDto(settings) });
   });
 
   app.patch("/virtual-attendant/settings", async (request) => {
@@ -82,7 +83,7 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
       create: { userId: user.id, aiEnabled: data.aiEnabled ?? false, ...data },
       update: data
     });
-    return dataResponse(request, { settings });
+    return dataResponse(request, { settings: settingsDto(settings) });
   });
 
   app.get("/virtual-attendant/prompt-preview", async (request) => {
@@ -109,6 +110,6 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
       create: { userId: user.id, aiEnabled: data.aiEnabled },
       update: { aiEnabled: data.aiEnabled }
     });
-    return dataResponse(request, { settings });
+    return dataResponse(request, { settings: settingsDto(settings) });
   });
 }

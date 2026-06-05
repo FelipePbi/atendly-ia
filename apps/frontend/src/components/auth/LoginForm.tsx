@@ -3,7 +3,6 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
 import { LogIn } from "lucide-react";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { postAuthPath } from "@/lib/post-auth";
@@ -20,14 +19,15 @@ export function LoginForm() {
     setError("");
     setLoading(true);
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password }),
     });
+    const data = await response.json().catch(() => null);
 
-    if (result?.error) {
-      setError("Credenciais invalidas. Verifique email e senha.");
+    if (!response.ok) {
+      setError(data?.error ?? "Credenciais invalidas. Verifique email e senha.");
       setLoading(false);
       return;
     }

@@ -1,8 +1,8 @@
 import "server-only";
 
-import { getServerSession } from "next-auth";
 import { z } from "zod";
-import { authOptions } from "@/lib/auth";
+import { bffFetch } from "@/lib/bff";
+import type { ApiUser } from "@/types/domain";
 
 export function ok<T>(data: T, init?: ResponseInit): Response {
   return Response.json(data, init);
@@ -24,12 +24,12 @@ export async function readJson<T>(request: Request, schema: z.ZodSchema<T>): Pro
 }
 
 export async function requireSessionUser() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
+  const { response, envelope } = await bffFetch<{ user: ApiUser }>("/auth/me");
+  if (!response.ok || !envelope?.data?.user?.id) {
     throw new ApiError("Sessao invalida.", 401);
   }
 
-  return session.user;
+  return envelope.data.user;
 }
 
 export function getClientIp(request: Request): string {

@@ -4,7 +4,6 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from
 import type { InputHTMLAttributes, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Bot, Check, Circle, Clock, FileText, Loader2, ShieldCheck, Sparkles, Upload, UserRound } from "lucide-react";
-import type { UserSex } from "@/generated/prisma/client";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { PersonaChoiceCard } from "@/components/ia/PersonaChoiceCard";
 import { QrCodePanel } from "@/components/whatsapp/QrCodePanel";
@@ -21,7 +20,7 @@ import {
   type VirtualAttendantIdentityMode,
   type VirtualAttendantPersonaType,
 } from "@/lib/virtual-attendant";
-import type { ApiOnboarding, ApiOnboardingStep, ApiSettings, ApiUserProfile, ApiWhatsAppInstance } from "@/types/domain";
+import type { ApiOnboarding, ApiOnboardingStep, ApiSettings, ApiUserProfile, ApiWhatsAppInstance, UserSex } from "@/types/domain";
 
 type OnboardingResponse = {
   ok: boolean;

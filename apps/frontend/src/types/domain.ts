@@ -1,6 +1,17 @@
-import type { MessageType, UserSex, WhatsAppInstanceStatus } from "@/generated/prisma/client";
 import type { ApiBusinessSettings } from "@/lib/business-settings";
 import type { ApiVirtualAttendantSettings } from "@/lib/virtual-attendant";
+
+export type MessageType = "TEXT" | "AUDIO" | "IMAGE" | "DOCUMENT" | "UNKNOWN";
+export type UserSex = "MALE" | "FEMALE" | "OTHER" | "PREFER_NOT_TO_SAY";
+export type WhatsAppInstanceStatus =
+  | "CREATED"
+  | "CONNECTING"
+  | "WAITING_QR"
+  | "CONNECTED"
+  | "DISCONNECTED"
+  | "LOGGED_OUT"
+  | "QR_EXPIRED"
+  | "ERROR";
 
 export type ApiUser = {
   id: string;

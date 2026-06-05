@@ -1,4 +1,4 @@
-import type { WhatsAppInstanceStatus } from "@/generated/prisma/client";
+import type { WhatsAppInstanceStatus } from "@/types/domain";
 
 type Tone = "success" | "warning" | "danger" | "neutral";
 

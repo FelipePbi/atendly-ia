@@ -3,8 +3,7 @@ services:
     name: atendly-ia-frontend
     runtime: node
     rootDir: apps/frontend
-    buildCommand: npm ci && npm run db:generate && npm run build
-    preDeployCommand: npm run db:migrate
+    buildCommand: npm ci && npm run build
     startCommand: npm run start
     healthCheckPath: /login
     buildFilter:
@@ -17,17 +16,7 @@ services:
         value: 24.13.0
       - key: NEXT_PUBLIC_BFF_URL
         sync: false
-      - key: DATABASE_URL
-        sync: false
-      - key: AUTH_SECRET
-        generateValue: true
-      - key: JWT_SECRET
-        generateValue: true
-      - key: NEXT_PUBLIC_APP_URL
-        sync: false
-      - key: APP_PUBLIC_URL
-        sync: false
-      - key: NEXTAUTH_URL
+      - key: BFF_BASE_URL
         sync: false
 
   - type: web

@@ -29,6 +29,11 @@ Configurar no Render, nunca no Git:
 - `POSTGRES_USERS_DB`
 - `GLOBAL_API_KEY`
 
+O frontend deve receber apenas URLs do BFF:
+
+- `NEXT_PUBLIC_BFF_URL`
+- `BFF_BASE_URL`
+
 ## Sequencia segura
 
 1. Criar BFF no Render.

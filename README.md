@@ -6,7 +6,7 @@ Monorepo privado da plataforma Atendly IA.
 
 | App | Path | Stack | Comandos principais |
 | --- | --- | --- | --- |
-| Frontend | `apps/frontend` | Next.js, React, TypeScript, Prisma | `npm run dev`, `npm run build`, `npm run start` |
+| Frontend | `apps/frontend` | Next.js, React, TypeScript | `npm run dev`, `npm run build`, `npm run start` |
 | BFF | `apps/bff` | Fastify, TypeScript, Prisma, JWT | `npm run dev`, `npm run build`, `npm run start` |
 | API | `apps/api` | Fastify, TypeScript, Prisma | `npm run dev`, `npm run build`, `npm start` |
 | Evolution Go | `apps/evolution-go` | Go, Gin, GORM | `make dev`, `make build`, `go test ./...` |
@@ -42,7 +42,6 @@ cd ../bff && npm ci
 
 ```bash
 cd apps/api && npm run prisma:generate
-cd ../frontend && npm run db:generate
 cd ../bff && npm run prisma:generate
 ```
 
@@ -65,9 +64,8 @@ npm run dev:frontend
 ## Pendencias conhecidas
 
 - Publicar o monorepo privado no GitHub e configurar deploy/variaveis no Render.
-- Remover do frontend as variaveis server-side de API/Evolution Go.
 - Endurecer API/Evolution Go com token interno apos validar staging.
-- Revisar `npm audit`: API tem 1 vulnerabilidade critica; frontend tem 5 moderadas; BFF tem 3 moderadas.
+- Revisar `npm audit`: API tem 1 vulnerabilidade critica; frontend tem 2 moderadas; BFF tem 3 moderadas.
 
 ## URLs publicas esperadas
 

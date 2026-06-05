@@ -1,10 +1,12 @@
 # atendimeto-ia-health-worker
 
-Background Worker Node para o Render que consulta as rotas publicas de saude da API e do Evolution Go a cada 40 segundos.
+Web service Node para o Render que expoe `/health` e consulta as rotas publicas de saude dos servicos a cada 40 segundos.
 
 ## Endpoints monitorados
 
-- `https://atendimeto-ia.onrender.com/healthy`
+- `https://atendly-ia-frontend.onrender.com/login`
+- `https://atendly-ia-bff.onrender.com/health`
+- `https://atendimeto-ia.onrender.com/health`
 - `https://evolution-go-4pmo.onrender.com/healthy`
 
 ## Rodar localmente
@@ -15,9 +17,10 @@ npm start
 
 ## Render
 
-Este projeto usa `render.yaml` para criar um servico Render do tipo Background Worker:
+Este projeto usa `render.yaml` para criar um web service leve no plano free do Render:
 
-- name: `atendimeto-ia-health-worker`
+- name: `atendly-ia-health-worker`
 - runtime: `node`
-- build command: `npm install`
+- build command: `npm ci`
 - start command: `npm start`
+- health check: `/health`

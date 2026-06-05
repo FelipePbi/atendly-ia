@@ -63,18 +63,16 @@ npm run dev:frontend
 
 ## Pendencias conhecidas
 
-- Publicar o monorepo privado no GitHub e configurar deploy/variaveis no Render.
+- Validar smoke test manual completo em producao: login/logout, QR do WhatsApp, envio/recebimento e IA.
 - Endurecer API/Evolution Go com token interno apos validar staging.
 - Revisar `npm audit`: API tem 1 vulnerabilidade critica; frontend tem 2 moderadas; BFF tem 3 moderadas.
 
-## URLs publicas esperadas
-
-Preencher apos configurar os servicos no Render:
+## URLs publicas no Render
 
 - Frontend: `https://atendly-ia-frontend.onrender.com`
 - BFF: `https://atendly-ia-bff.onrender.com`
-- API: `https://atendly-ia-api.onrender.com`
-- Evolution Go: `https://atendly-ia-evolution-go.onrender.com`
+- API: `https://atendimeto-ia.onrender.com`
+- Evolution Go: `https://evolution-go-4pmo.onrender.com`
 - Health worker: `https://atendly-ia-health-worker.onrender.com/health`.
 
 ## Origem dos projetos importados

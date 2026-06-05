@@ -108,6 +108,14 @@ O `render.yaml` da raiz define:
 
 O frontend builda apenas com `npm ci && npm run build`; nao ha migrate ou generate de Prisma nesse servico. Migrations Prisma ficam no BFF e na API.
 
+URLs publicas atuais:
+
+- Frontend: `https://atendly-ia-frontend.onrender.com`
+- BFF: `https://atendly-ia-bff.onrender.com`
+- API: `https://atendimeto-ia.onrender.com`
+- Evolution Go: `https://evolution-go-4pmo.onrender.com`
+- Health worker: `https://atendly-ia-health-worker.onrender.com/health`
+
 ## Validacoes
 
 Comandos ja validados durante a migracao:
@@ -121,8 +129,7 @@ Comandos ja validados durante a migracao:
 
 ## Pendencias conhecidas
 
-- Criar/publicar o repositorio privado `FelipePbi/atendly-ia`.
-- Configurar Blueprint/variaveis no Render e validar staging.
+- Validar smoke test manual completo em producao: login/logout, QR do WhatsApp, envio/recebimento e IA.
 - Endurecer CORS e tokens internos depois que os fluxos forem validados.
 - Revisar `npm audit`: API tem 1 vulnerabilidade critica; frontend tem 2 moderadas; BFF tem 3 moderadas.
 

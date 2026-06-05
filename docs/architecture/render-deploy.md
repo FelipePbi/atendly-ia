@@ -12,6 +12,14 @@
 
 O Blueprint usa `plan: free`. Nesse plano, o Render nao aceita `preDeployCommand`; por isso as migrations Prisma de BFF/API rodam dentro do `buildCommand` antes do build. O Render tambem nao aceita `background_worker` no plano free; o health-worker roda como web service leve com `/health` e mantem o polling interno.
 
+URLs publicas atuais:
+
+- Frontend: `https://atendly-ia-frontend.onrender.com`
+- BFF: `https://atendly-ia-bff.onrender.com`
+- API: `https://atendimeto-ia.onrender.com`
+- Evolution Go: `https://evolution-go-4pmo.onrender.com`
+- Health worker: `https://atendly-ia-health-worker.onrender.com/health`
+
 ## Variaveis sensiveis
 
 Configurar no Render, nunca no Git:

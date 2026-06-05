@@ -15,11 +15,11 @@ const defaultTargets = [
   },
   {
     name: "api",
-    url: "https://atendly-ia-api.onrender.com/health"
+    url: "https://atendimeto-ia.onrender.com/health"
   },
   {
     name: "evolution-go",
-    url: "https://atendly-ia-evolution-go.onrender.com/healthy"
+    url: "https://evolution-go-4pmo.onrender.com/healthy"
   }
 ];
 

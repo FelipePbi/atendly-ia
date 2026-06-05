@@ -57,15 +57,13 @@ O smoke mutavel valida auth pelo BFF, auth pelo proxy do frontend, criacao/conex
 Auditoria final apos smoke real de WhatsApp e Minha Agenda:
 
 ```bash
-API_DATABASE_URL=<api-database-url> \
-BFF_DATABASE_URL=<bff-database-url> \
 CUSTOMER_PHONE=<telefone-cliente-com-ddi> \
 SINCE_ISO=<inicio-do-teste-em-iso-utc> \
 INBOUND_TEXT_MARKER=<texto-unico-enviado-pelo-cliente> \
 npm run smoke:final-audit
 ```
 
-O auditor final valida no banco da API que a mensagem real do cliente foi recebida, que a IA salvou uma resposta enviada pelo Evolution Go e que houve escrita real de agendamento/remarcacao na Minha Agenda. Quando `BFF_DATABASE_URL` e informado, tambem valida que o inbox do BFF registrou a mensagem inbound.
+O auditor final busca `API_DATABASE_URL` e `BFF_DATABASE_URL` pelo Render CLI local quando essas variaveis nao sao informadas. Ele valida no banco da API que a mensagem real do cliente foi recebida, que a IA salvou uma resposta enviada pelo Evolution Go e que houve escrita real de agendamento/remarcacao na Minha Agenda. Quando `BFF_DATABASE_URL` existe, tambem valida que o inbox do BFF registrou a mensagem inbound.
 
 ### Manual
 

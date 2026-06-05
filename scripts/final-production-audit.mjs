@@ -1,21 +1,28 @@
 #!/usr/bin/env node
 import { createRequire } from "node:module";
+import { existsSync, readFileSync } from "node:fs";
 
 const requireFromBff = createRequire(new URL("../apps/bff/package.json", import.meta.url));
 const { Client } = requireFromBff("pg");
 
 const usage = `Usage:
-  API_DATABASE_URL=... CUSTOMER_PHONE=... SINCE_ISO=... npm run smoke:final-audit
+  CUSTOMER_PHONE=... SINCE_ISO=... npm run smoke:final-audit
 
 Optional:
+  API_DATABASE_URL=...
   BFF_DATABASE_URL=...
   INBOUND_TEXT_MARKER=...
+  RENDER_API_SERVICE_ID=...
+  RENDER_BFF_SERVICE_ID=...
 
 This audit verifies production evidence after a real WhatsApp smoke:
 - API recorded inbound customer message.
 - API recorded outbound AI message sent through Evolution Go.
 - API recorded a real Minha Agenda schedule/reschedule write.
 - BFF inbox recorded the inbound customer message, when BFF_DATABASE_URL is set.
+
+When database URLs are not provided, the script tries to read them from Render
+using the local Render CLI session in ~/.render/cli.yaml.
 `;
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
@@ -26,6 +33,8 @@ if (process.argv.includes("--help") || process.argv.includes("-h")) {
 const config = {
   apiDatabaseUrl: process.env.API_DATABASE_URL,
   bffDatabaseUrl: process.env.BFF_DATABASE_URL,
+  renderApiServiceId: process.env.RENDER_API_SERVICE_ID || "srv-d83v971kh4rs73co18vg",
+  renderBffServiceId: process.env.RENDER_BFF_SERVICE_ID || "srv-d8h7e7t8nd3s73bvtp70",
   customerPhone: normalizePhone(process.env.CUSTOMER_PHONE || ""),
   sinceIso: process.env.SINCE_ISO,
   inboundTextMarker: process.env.INBOUND_TEXT_MARKER?.trim() || ""
@@ -34,6 +43,7 @@ const config = {
 const results = [];
 
 async function main() {
+  await hydrateDatabaseUrls();
   validateConfig();
 
   const api = await connect(config.apiDatabaseUrl);
@@ -55,6 +65,16 @@ async function main() {
   }
 }
 
+async function hydrateDatabaseUrls() {
+  if (!config.apiDatabaseUrl) {
+    config.apiDatabaseUrl = await fetchRenderEnvVar(config.renderApiServiceId, "DATABASE_URL").catch(() => "");
+  }
+
+  if (!config.bffDatabaseUrl) {
+    config.bffDatabaseUrl = await fetchRenderEnvVar(config.renderBffServiceId, "DATABASE_URL").catch(() => "");
+  }
+}
+
 function validateConfig() {
   const missing = [];
   if (!config.apiDatabaseUrl) missing.push("API_DATABASE_URL");
@@ -73,6 +93,53 @@ async function connect(connectionString) {
   const client = new Client({ connectionString });
   await client.connect();
   return client;
+}
+
+async function fetchRenderEnvVar(serviceId, key) {
+  const token = readRenderToken();
+  if (!token) throw new Error("Render CLI token not available.");
+
+  const response = await fetch(`https://api.render.com/v1/services/${serviceId}/env-vars?limit=100`, {
+    headers: {
+      accept: "application/json",
+      authorization: `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Render env fetch failed for ${serviceId}: HTTP ${response.status}`);
+  }
+
+  const envVars = await response.json();
+  const value = envVars.find((item) => item.envVar?.key === key)?.envVar?.value;
+  if (!value) throw new Error(`Render env ${key} not found for ${serviceId}.`);
+  return value;
+}
+
+function readRenderToken() {
+  const configPath = process.env.RENDER_CLI_CONFIG || `${process.env.HOME || ""}/.render/cli.yaml`;
+  if (!configPath || !existsSync(configPath)) return "";
+
+  const text = readFileSync(configPath, "utf8");
+  const lines = text.split(/\r?\n/);
+  let inApi = false;
+
+  for (const line of lines) {
+    if (/^api:\s*$/.test(line)) {
+      inApi = true;
+      continue;
+    }
+
+    if (inApi && /^\S/.test(line)) {
+      inApi = false;
+    }
+
+    if (!inApi) continue;
+    const match = line.match(/^\s+key:\s*(\S+)\s*$/);
+    if (match) return match[1];
+  }
+
+  return "";
 }
 
 async function auditApi(client) {

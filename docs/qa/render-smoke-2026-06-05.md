@@ -56,6 +56,7 @@
   - `MINHA_AGENDA_ENABLE_WRITES=true`.
   - deploy manual da API `dep-d8h8iek8aovs73evag40` passou.
 - Auditor final `npm run smoke:final-audit` criado para validar evidencia pos-smoke real sem imprimir segredos, telefone bruto, corpo de mensagem ou payload bruto.
+- Auditor final usa a sessao local do Render CLI para buscar `DATABASE_URL` da API/BFF quando essas variaveis nao sao passadas manualmente.
 
 ## Gates locais
 
@@ -76,3 +77,9 @@ Nao validado neste smoke por exigir WhatsApp real e/ou chamadas externas de nego
 - criacao/alteracao real de agendamento na Minha Agenda;
 
 Esses itens seguem como smoke manual final antes de considerar a meta totalmente provada em producao.
+
+Estado observado em 2026-06-05 apos env/deploy da API:
+
+- API DB: `0` mensagens inbound reais registradas.
+- API DB: `0` respostas de IA com envio Evolution Go registrado.
+- BFF DB: `0` instancias WhatsApp `CONNECTED`; `1` instancia `QR_EXPIRED`.

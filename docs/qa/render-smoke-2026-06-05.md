@@ -37,12 +37,16 @@
   - `GET /internal/handoffs` na API -> `401`
   - `POST /internal/evolution/dispatch` na API -> `401`
   - `GET /instance/status` no Evolution Go sem `apikey` -> `401`
+- Logs do BFF:
+  - webhook com `?token=<valor>` aparece no Render como `?token=%5BREDACTED%5D`
+  - marker de smoke nao apareceu no log apos o deploy `ea9e799`
 - Usuarios e instancias temporarios criados no smoke foram removidos.
 
 ## Gates locais
 
 - `npm run build:all` passou.
 - `npm --prefix apps/api test` passou: 52 testes, 1 integracao readonly da Minha Agenda skipped.
+- `npx vitest run tests/integration/minha-agenda.readonly.test.ts` passou com writes forcados para `false`.
 - `npm --prefix apps/bff run check` passou.
 
 ## Gaps restantes
@@ -51,7 +55,7 @@ Nao validado neste smoke por exigir WhatsApp real e/ou chamadas externas de nego
 
 - recebimento de mensagem real no WhatsApp;
 - envio de resposta real pela IA ao cliente;
-- agendamento real na Minha Agenda;
+- criacao/alteracao real de agendamento na Minha Agenda;
 - sessao expirada em tempo real.
 
 Esses itens seguem como smoke manual final antes de considerar a meta totalmente provada em producao.

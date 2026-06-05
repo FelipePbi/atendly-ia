@@ -40,6 +40,14 @@ Sessao:
 - `Secure` em producao
 - `SameSite=Lax` por padrao
 
+## Onboarding
+
+- `GET /onboarding`
+- `PATCH /onboarding/profile`
+- `POST /onboarding/complete`
+
+O frontend ja encaminha `/api/onboarding`, `/api/onboarding/profile` e `/api/onboarding/complete` para estes endpoints do BFF.
+
 ## WhatsApp
 
 - `GET /whatsapp/status`

@@ -10,6 +10,7 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerConversationRoutes } from "./routes/conversations.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerIgnoredContactsRoutes } from "./routes/ignored-contacts.js";
+import { registerOnboardingRoutes } from "./routes/onboarding.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
 import { registerWhatsAppRoutes } from "./routes/whatsapp.js";
@@ -42,6 +43,7 @@ export async function buildApp() {
   await registerHealthRoutes(app);
   await registerWebhookRoutes(app);
   await registerAuthRoutes(app);
+  await registerOnboardingRoutes(app);
   await registerWhatsAppRoutes(app);
   await registerSettingsRoutes(app);
   await registerIgnoredContactsRoutes(app);

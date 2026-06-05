@@ -47,6 +47,15 @@
   - modo mutavel com `RUN_MUTATING=1` e `BFF_DATABASE_URL`: 32 checks, 0 falhas.
 - Usuarios e instancias temporarios criados no smoke foram removidos.
 - Verificacao no BFF DB confirmou `0` usuarios temporarios `codex-*-smoke-*`.
+- API Render configurada para smoke real:
+  - `OPENAI_API_KEY` presente.
+  - `MINHA_AGENDA_BASE_URL` presente.
+  - `MINHA_AGENDA_BASIC_AUTH` presente.
+  - `MINHA_AGENDA_USERNAME` presente.
+  - `MINHA_AGENDA_PASSWORD` presente.
+  - `MINHA_AGENDA_ENABLE_WRITES=true`.
+  - deploy manual da API `dep-d8h8iek8aovs73evag40` passou.
+- Auditor final `npm run smoke:final-audit` criado para validar evidencia pos-smoke real sem imprimir segredos, telefone bruto, corpo de mensagem ou payload bruto.
 
 ## Gates locais
 
@@ -56,6 +65,7 @@
 - `npm --prefix apps/bff run check` passou.
 - `npm run smoke:render` passou em modo seguro.
 - `RUN_MUTATING=1 npm run smoke:render` passou usando `BFF_DATABASE_URL` do BFF no Render, sem imprimir segredo.
+- Apos atualizar envs da API no Render, `npm run smoke:render` passou novamente em modo seguro: 8 checks, 0 falhas.
 
 ## Gaps restantes
 

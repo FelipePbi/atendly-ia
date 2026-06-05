@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+.next/
+build/
+coverage/
+coverage.out
+coverage.html
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs and local runtime files
+logs/
+*.log
+*.tmp
+
+# OS/editor metadata
+.DS_Store
+Thumbs.db
+*.Zone.Identifier
+
+# Legacy source repositories kept in the workspace during migration.
+# The monorepo source lives under apps/*.
+/api/
+/evolution-go/
+/health-worker/
+/whatsapp-ai-inbox-frontend/
+
+# Generated during BFF build.
+/apps/bff/src/generated/
+
+# Large prompt kit copied from earlier planning material; keep outside the initial monorepo commit.
+/docs/codex_persona_ui_kit/
+
+# Evolution Go Dockerfile expects this bundled manager asset.
+!/apps/evolution-go/manager/
+!/apps/evolution-go/manager/dist/
+!/apps/evolution-go/manager/dist/**

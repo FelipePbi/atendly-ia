@@ -1,0 +1,142 @@
+services:
+  - type: web
+    name: atendly-ia-frontend
+    runtime: node
+    rootDir: apps/frontend
+    buildCommand: npm ci && npm run db:generate && npm run build
+    preDeployCommand: npm run db:migrate
+    startCommand: npm run start
+    healthCheckPath: /login
+    buildFilter:
+      paths:
+        - apps/frontend/**
+        - packages/**
+        - render.yaml
+    envVars:
+      - key: NODE_VERSION
+        value: 24.13.0
+      - key: NEXT_PUBLIC_BFF_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: APP_PUBLIC_URL
+        sync: false
+      - key: NEXTAUTH_URL
+        sync: false
+
+  - type: web
+    name: atendly-ia-bff
+    runtime: node
+    rootDir: apps/bff
+    buildCommand: npm ci && npm run build
+    preDeployCommand: npm run prisma:deploy
+    startCommand: npm run start
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - apps/bff/**
+        - packages/**
+        - render.yaml
+    envVars:
+      - key: NODE_VERSION
+        value: 24.13.0
+      - key: PORT
+        value: 3002
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: BFF_PUBLIC_URL
+        sync: false
+      - key: API_BASE_URL
+        sync: false
+      - key: API_EVOLUTION_WEBHOOK_TOKEN
+        sync: false
+      - key: EVOLUTION_GO_BASE_URL
+        sync: false
+      - key: EVOLUTION_GO_API_KEY
+        sync: false
+      - key: EVOLUTION_WEBHOOK_SECRET
+        generateValue: true
+      - key: INTERNAL_SERVICE_TOKEN
+        sync: false
+
+  - type: web
+    name: atendly-ia-api
+    runtime: node
+    rootDir: apps/api
+    buildCommand: npm ci && npm run build
+    preDeployCommand: npm run prisma:deploy
+    startCommand: npm run start
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - apps/api/**
+        - packages/**
+        - render.yaml
+    envVars:
+      - key: NODE_VERSION
+        value: 24.13.0
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: INTERNAL_SERVICE_TOKEN
+        sync: false
+      - key: ADMIN_API_TOKEN
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: MINHA_AGENDA_BASIC_AUTH
+        sync: false
+      - key: MINHA_AGENDA_USERNAME
+        sync: false
+      - key: MINHA_AGENDA_PASSWORD
+        sync: false
+
+  - type: web
+    name: atendly-ia-evolution-go
+    runtime: docker
+    rootDir: apps/evolution-go
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthy
+    buildFilter:
+      paths:
+        - apps/evolution-go/**
+        - render.yaml
+    envVars:
+      - key: SERVER_PORT
+        value: 8080
+      - key: POSTGRES_AUTH_DB
+        sync: false
+      - key: POSTGRES_USERS_DB
+        sync: false
+      - key: GLOBAL_API_KEY
+        sync: false
+      - key: INTERNAL_SERVICE_TOKEN
+        sync: false
+
+  - type: worker
+    name: atendly-ia-health-worker
+    runtime: node
+    rootDir: apps/health-worker
+    buildCommand: npm ci
+    startCommand: npm start
+    buildFilter:
+      paths:
+        - apps/health-worker/**
+        - render.yaml
+    envVars:
+      - key: NODE_VERSION
+        value: 24.13.0
+      - key: HEALTH_TARGETS
+        sync: false

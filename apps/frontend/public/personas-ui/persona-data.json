@@ -1,0 +1,134 @@
+{
+  "defaultGender": "feminino",
+  "defaultSelected": "leve-proxima",
+  "personas": [
+    {
+      "id": "corporativa",
+      "order": 1,
+      "title": "Corporativa",
+      "description": "Responde de forma profissional, clara e objetiva. Ideal para negócios que preferem um atendimento mais formal e direto.",
+      "example": "Olá, tudo bem? Posso te ajudar com informações sobre serviços, horários e agendamentos.",
+      "icon": "/personas-ui/icons/briefcase.svg",
+      "accent": "#07945F",
+      "theme": "mint",
+      "assets": {
+        "feminino": "/personas-ui/personas/tight/feminino/corporativa.png",
+        "masculino": "/personas-ui/personas/tight/masculino/corporativa.png"
+      }
+    },
+    {
+      "id": "leve-proxima",
+      "order": 2,
+      "title": "Leve e Próxima",
+      "description": "Responde de forma simpática, natural e acolhedora. Ideal para criar proximidade com a cliente sem perder o profissionalismo.",
+      "example": "Oii, tudo bem? Me conta o que você quer fazer que eu te ajudo a encontrar o melhor horário 😊",
+      "icon": "/personas-ui/icons/heart.svg",
+      "accent": "#07945F",
+      "theme": "activeMint",
+      "assets": {
+        "feminino": "/personas-ui/personas/tight/feminino/leve-proxima.png",
+        "masculino": "/personas-ui/personas/tight/masculino/leve-proxima.png"
+      }
+    },
+    {
+      "id": "personalizada",
+      "order": 3,
+      "title": "Personalizada",
+      "description": "A IA aprende o estilo de atendimento do seu negócio a partir de conversas reais importadas do WhatsApp.",
+      "example": "A IA adapta o tom, as frases e a forma de atendimento com base no seu histórico de conversas.",
+      "icon": "/personas-ui/icons/magic.svg",
+      "accent": "#7A4CC2",
+      "theme": "lavender",
+      "assets": {
+        "feminino": "/personas-ui/personas/tight/feminino/personalizada.png",
+        "masculino": "/personas-ui/personas/tight/masculino/personalizada.png"
+      }
+    }
+  ],
+  "assets": [
+    {
+      "persona": "corporativa",
+      "gender": "feminino",
+      "square": "/personas-ui/personas/feminino/corporativa.png",
+      "tight": "/personas-ui/personas/tight/feminino/corporativa.png",
+      "square_size": [
+        1024,
+        1024
+      ],
+      "tight_size": [
+        458,
+        940
+      ]
+    },
+    {
+      "persona": "corporativa",
+      "gender": "masculino",
+      "square": "/personas-ui/personas/masculino/corporativa.png",
+      "tight": "/personas-ui/personas/tight/masculino/corporativa.png",
+      "square_size": [
+        1024,
+        1024
+      ],
+      "tight_size": [
+        364,
+        939
+      ]
+    },
+    {
+      "persona": "leve-proxima",
+      "gender": "feminino",
+      "square": "/personas-ui/personas/feminino/leve-proxima.png",
+      "tight": "/personas-ui/personas/tight/feminino/leve-proxima.png",
+      "square_size": [
+        1024,
+        1024
+      ],
+      "tight_size": [
+        476,
+        924
+      ]
+    },
+    {
+      "persona": "leve-proxima",
+      "gender": "masculino",
+      "square": "/personas-ui/personas/masculino/leve-proxima.png",
+      "tight": "/personas-ui/personas/tight/masculino/leve-proxima.png",
+      "square_size": [
+        1024,
+        1024
+      ],
+      "tight_size": [
+        407,
+        933
+      ]
+    },
+    {
+      "persona": "personalizada",
+      "gender": "feminino",
+      "square": "/personas-ui/personas/feminino/personalizada.png",
+      "tight": "/personas-ui/personas/tight/feminino/personalizada.png",
+      "square_size": [
+        1024,
+        1024
+      ],
+      "tight_size": [
+        469,
+        939
+      ]
+    },
+    {
+      "persona": "personalizada",
+      "gender": "masculino",
+      "square": "/personas-ui/personas/masculino/personalizada.png",
+      "tight": "/personas-ui/personas/tight/masculino/personalizada.png",
+      "square_size": [
+        1024,
+        1024
+      ],
+      "tight_size": [
+        485,
+        927
+      ]
+    }
+  ]
+}

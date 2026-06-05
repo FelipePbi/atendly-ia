@@ -1,0 +1,19 @@
+{
+  "name": "atendly-ia",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:frontend": "cd apps/frontend && npm run dev",
+    "dev:bff": "cd apps/bff && npm run dev",
+    "dev:api": "cd apps/api && npm run dev",
+    "build:frontend": "cd apps/frontend && npm run build",
+    "build:bff": "cd apps/bff && npm run build",
+    "build:api": "cd apps/api && npm run build",
+    "build:all": "bash scripts/build-all.sh",
+    "check:health-worker": "cd apps/health-worker && npm run check",
+    "test:evolution-go": "cd apps/evolution-go && go test ./..."
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

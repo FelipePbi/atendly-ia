@@ -1,0 +1,24 @@
+{
+  "colors": {
+    "screenBg": "#F7FAF8",
+    "cardBg": "#FFFFFF",
+    "cardBorder": "#DDE4E0",
+    "selectedBorder": "#07945F",
+    "textPrimary": "#0F1F1D",
+    "textSecondary": "#647370",
+    "mintSurface": "#EFF7F3",
+    "mintBlob": "#DCEDE5",
+    "greenBlob": "#D7F0E6",
+    "lavenderSurface": "#F6F2FB",
+    "lavenderBlob": "#EDE7F7",
+    "shadow": "0 12px 26px rgba(14, 35, 30, 0.10)"
+  },
+  "radius": {
+    "screen": 28,
+    "card": 20,
+    "quote": 20,
+    "button": 16,
+    "circleIcon": 999
+  },
+  "maxWidth": 430
+}

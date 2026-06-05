@@ -27,6 +27,8 @@
   - `GET /api/auth/me` autenticado -> `200`
   - `POST /api/auth/logout` -> `200`
   - `POST /api/auth/login` -> `200`
+- Sessao expirada:
+  - `GET /auth/me` com JWT expirado assinado pelo BFF -> `401 UNAUTHORIZED`
 - WhatsApp via BFF e via frontend proxy, sem enviar mensagem real:
   - criar instancia -> `201`
   - conectar -> `200`
@@ -56,6 +58,5 @@ Nao validado neste smoke por exigir WhatsApp real e/ou chamadas externas de nego
 - recebimento de mensagem real no WhatsApp;
 - envio de resposta real pela IA ao cliente;
 - criacao/alteracao real de agendamento na Minha Agenda;
-- sessao expirada em tempo real.
 
 Esses itens seguem como smoke manual final antes de considerar a meta totalmente provada em producao.

@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import { env } from "./config/env.js";
 import { AppError, toErrorMessage } from "./lib/errors.js";
+import { redactRequestUrl } from "./lib/logging.js";
 import { disconnectPrisma } from "./lib/prisma.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerConversationRoutes } from "./routes/conversations.js";
@@ -18,7 +19,18 @@ import { registerWhatsAppRoutes } from "./routes/whatsapp.js";
 export async function buildApp() {
   const app = Fastify({
     logger: {
-      redact: ["req.headers.authorization", "req.headers.cookie", "body.password", "body.currentPassword", "body.newPassword"]
+      redact: ["req.headers.authorization", "req.headers.cookie", "body.password", "body.currentPassword", "body.newPassword"],
+      serializers: {
+        req(request) {
+          return {
+            method: request.method,
+            url: redactRequestUrl(request.url),
+            host: request.headers.host,
+            remoteAddress: request.socket?.remoteAddress,
+            remotePort: request.socket?.remotePort
+          };
+        }
+      }
     },
     genReqId: (request) => {
       const header = request.headers["x-request-id"];

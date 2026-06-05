@@ -25,6 +25,7 @@ WhatsApp -> Evolution Go -> API -> Evolution Go -> WhatsApp
 - O Evolution Go permanece dono da instancia WhatsApp, QR, status, contatos e envio.
 - Configuracoes de IA/negocio ainda devem migrar com cuidado, pois hoje estao no banco do frontend.
 - O BFF inicial reutiliza o schema Prisma do frontend para preservar usuarios e configuracoes existentes.
+- A API aceita `INTERNAL_SERVICE_TOKEN` nas rotas `/internal/*` em paralelo ao `ADMIN_API_TOKEN` legado.
 
 ## Fases
 

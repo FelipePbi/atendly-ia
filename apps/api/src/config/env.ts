@@ -59,7 +59,8 @@ const envSchema = z.object({
   MINHA_AGENDA_TIMEOUT_MS: intEnv(10_000),
   MINHA_AGENDA_TOKEN_REFRESH_SKEW_SECONDS: intEnv(300),
   MINHA_AGENDA_ENABLE_WRITES: boolEnv(false),
-  ADMIN_API_TOKEN: stringEnv()
+  ADMIN_API_TOKEN: stringEnv(),
+  INTERNAL_SERVICE_TOKEN: stringEnv()
 });
 
 export const env = envSchema.parse(process.env);

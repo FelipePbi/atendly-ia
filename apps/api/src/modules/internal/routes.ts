@@ -204,11 +204,16 @@ export async function registerInternalRoutes(app: FastifyInstance, prisma: Prism
 }
 
 function isAuthorized(request: FastifyRequest): boolean {
-  if (!env.ADMIN_API_TOKEN) return false;
+  const validTokens = [env.ADMIN_API_TOKEN, env.INTERNAL_SERVICE_TOKEN].filter(Boolean);
+  if (validTokens.length === 0) return false;
+
   const authorization = request.headers.authorization;
   const adminToken = request.headers["x-admin-token"];
 
-  if (authorization === `Bearer ${env.ADMIN_API_TOKEN}`) return true;
-  if (adminToken === env.ADMIN_API_TOKEN) return true;
+  for (const token of validTokens) {
+    if (authorization === `Bearer ${token}`) return true;
+    if (adminToken === token) return true;
+  }
+
   return false;
 }

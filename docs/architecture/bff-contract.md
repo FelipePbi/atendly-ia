@@ -90,6 +90,8 @@ O frontend ja encaminha `/api/automation/ignored-contacts`, `/api/automation/ign
 - `POST /conversations/:id/ai/pause`
 - `POST /conversations/:id/ai/resume`
 
+O frontend ja encaminha `/api/conversations`, `/api/conversations/:id`, `/api/conversations/:id/messages`, `/api/conversations/:id/ai/pause` e `/api/conversations/:id/ai/resume` para estes endpoints do BFF.
+
 ## Health
 
 - `GET /health`

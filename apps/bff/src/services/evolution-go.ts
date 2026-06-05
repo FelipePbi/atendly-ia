@@ -39,6 +39,18 @@ type StatusData = {
   Status?: string;
 };
 
+type SendTextData = {
+  messageId?: string;
+  key?: {
+    id?: string;
+  };
+  data?: {
+    Info?: {
+      ID?: string;
+    };
+  };
+};
+
 type EvolutionContactData = {
   Jid?: string;
   jid?: string;
@@ -144,7 +156,7 @@ export async function deleteEvolutionInstance(instanceId: string) {
 }
 
 export async function sendEvolutionText(input: { instanceToken: string; to: string; text: string; correlationId: string }) {
-  return evolutionFetch(env.EVOLUTION_GO_SEND_TEXT_PATH || "/send/text", {
+  const response = await evolutionFetch<SendTextData>(env.EVOLUTION_GO_SEND_TEXT_PATH || "/send/text", {
     method: "POST",
     apiKey: input.instanceToken,
     body: {
@@ -153,6 +165,12 @@ export async function sendEvolutionText(input: { instanceToken: string; to: stri
       id: input.correlationId
     }
   });
+  const data = response.data ?? {};
+
+  return {
+    raw: response,
+    messageId: stringValue(response.messageId) ?? data.messageId ?? data.data?.Info?.ID ?? data.key?.id
+  };
 }
 
 export async function getEvolutionContacts(instanceToken: string): Promise<EvolutionContact[]> {

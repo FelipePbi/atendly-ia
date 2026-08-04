@@ -1,6 +1,7 @@
 package instance_service
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/EvolutionAPI/evolution-go/pkg/config"
@@ -10,6 +11,40 @@ import (
 	whatsmeow_service "github.com/EvolutionAPI/evolution-go/pkg/whatsmeow/service"
 	"go.mau.fi/whatsmeow"
 )
+
+func TestStatusStructSerializesConnectedPhoneJID(t *testing.T) {
+	status := StatusStruct{
+		Connected: true,
+		LoggedIn:  true,
+		MyJid:     "5511999999999@s.whatsapp.net",
+		Name:      "Atendly",
+	}
+
+	payload, err := json.Marshal(status)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+
+	var decoded struct {
+		Connected bool   `json:"connected"`
+		LoggedIn  bool   `json:"loggedIn"`
+		MyJid     string `json:"myJid"`
+		Name      string `json:"name"`
+	}
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+
+	if !decoded.Connected || !decoded.LoggedIn {
+		t.Fatalf("connection status = connected:%v loggedIn:%v", decoded.Connected, decoded.LoggedIn)
+	}
+	if decoded.MyJid != status.MyJid {
+		t.Fatalf("myJid = %q, want %q", decoded.MyJid, status.MyJid)
+	}
+	if decoded.Name != status.Name {
+		t.Fatalf("name = %q, want %q", decoded.Name, status.Name)
+	}
+}
 
 func TestConnectPreservesExistingConfigurationOnEmptyPayload(t *testing.T) {
 	repo := &fakeInstanceRepository{}

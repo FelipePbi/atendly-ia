@@ -21,7 +21,6 @@ import (
 	"github.com/EvolutionAPI/evolution-go/pkg/utils"
 	whatsmeow_service "github.com/EvolutionAPI/evolution-go/pkg/whatsmeow/service"
 	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/types"
 )
 
 type InstanceService interface {
@@ -83,10 +82,10 @@ type ConnectStruct struct {
 }
 
 type StatusStruct struct {
-	Connected bool
-	LoggedIn  bool
-	myJid     *types.JID
-	Name      string
+	Connected bool   `json:"connected"`
+	LoggedIn  bool   `json:"loggedIn"`
+	MyJid     string `json:"myJid,omitempty"`
+	Name      string `json:"name,omitempty"`
 }
 
 type QrcodeStruct struct {
@@ -380,17 +379,19 @@ func (i instances) Status(instance *instance_model.Instance) (*StatusStruct, err
 	isConnected := client.IsConnected()
 	isLoggedIn := client.IsLoggedIn()
 
-	var myJid *types.JID
+	var myJid string
 	var name string
 	if isLoggedIn {
-		myJid = client.Store.ID
+		if client.Store.ID != nil {
+			myJid = client.Store.ID.String()
+		}
 		name = client.Store.PushName
 	}
 
 	status := &StatusStruct{
 		Connected: isConnected,
 		LoggedIn:  isLoggedIn,
-		myJid:     myJid,
+		MyJid:     myJid,
 		Name:      name,
 	}
 

@@ -4,6 +4,7 @@ import { currentUser, requireAuth } from "../lib/auth.js";
 import { instanceDto, onboardingDto, profileDto, settingsDto, userDto } from "../lib/dto.js";
 import { AppError } from "../lib/errors.js";
 import { dataResponse, parseBody } from "../lib/http.js";
+import { normalizeWhatsappPhone } from "../lib/phone.js";
 import { getPrisma } from "../lib/prisma.js";
 import { getEvolutionStatus } from "../services/evolution-go.js";
 
@@ -121,7 +122,7 @@ export async function registerOnboardingRoutes(app: FastifyInstance): Promise<vo
       });
     }
 
-    const connectedPhone = normalizeConnectedPhone(status.phoneNumber);
+    const connectedPhone = normalizeWhatsappPhone(status.phoneNumber ?? "") || null;
     if (!connectedPhone) {
       throw new AppError("CONFLICT", "Could not identify connected WhatsApp phone.", 409, {
         whatsappInstance: instanceDto(record.whatsappInstance)
@@ -172,11 +173,4 @@ function profileComplete(profile: {
 
 function dateOnlyToUtc(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
-}
-
-function normalizeConnectedPhone(value: string | null): string | null {
-  if (!value) return null;
-  const local = value.includes("@") ? value.split("@")[0] : value;
-  const digits = local.replace(/\D/g, "");
-  return digits.length >= 10 ? digits : null;
 }

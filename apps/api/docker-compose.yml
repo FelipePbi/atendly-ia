@@ -90,6 +90,8 @@ services:
 
   evolution-go:
     image: evoapicloud/evolution-go:latest
+    build:
+      context: ../evolution-go
     environment:
       SERVER_PORT: 8080
       CLIENT_NAME: evolution
@@ -101,6 +103,8 @@ services:
       LOGTYPE: ${EVOGO_LOGTYPE:-console}
     ports:
       - "8080:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       evogo-postgres:
         condition: service_healthy

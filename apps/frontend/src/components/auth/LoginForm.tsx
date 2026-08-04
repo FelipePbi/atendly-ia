@@ -3,14 +3,17 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogIn } from "lucide-react";
+import { ArrowRight, LockKeyhole, Mail } from "lucide-react";
 import { AuthCard } from "@/components/auth/AuthCard";
+import { Button } from "@/components/ui/Button";
+import { FormField } from "@/components/ui/FormField";
 import { postAuthPath } from "@/lib/post-auth";
 
 export function LoginForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -27,7 +30,7 @@ export function LoginForm() {
     const data = await response.json().catch(() => null);
 
     if (!response.ok) {
-      setError(data?.error ?? "Credenciais invalidas. Verifique email e senha.");
+      setError(data?.error ?? "Credenciais inválidas. Verifique email e senha.");
       setLoading(false);
       return;
     }
@@ -38,51 +41,67 @@ export function LoginForm() {
 
   return (
     <AuthCard
-      title="Entrar"
-      subtitle="Acesse seu painel para acompanhar conversas e controlar quando a IA responde."
+      mode="login"
+      kicker="Bem-vindo de volta"
+      title="Entre na sua conta"
+      subtitle="Acompanhe conversas e mantenha seu atendimento sempre em movimento."
+      mobileTitle="Entrar"
+      mobileSubtitle="Acesse suas conversas e configurações."
+      storyTitle="Atenda melhor. Converta mais."
       footer={
         <>
-          Ainda nao tem conta?{" "}
-          <Link className="font-semibold text-brand-strong" href="/register">
+          Ainda não tem conta?{" "}
+          <Link className="auth-card__link" href="/register">
             Criar conta
           </Link>
         </>
       }
     >
-      <form className="space-y-4" onSubmit={handleSubmit}>
-        <label className="block">
-          <span className="text-sm font-medium text-foreground">Email</span>
-          <input
-            className="mt-2 h-12 w-full rounded-md border border-border bg-white px-3 text-base outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-foreground">Senha</span>
-          <input
-            className="mt-2 h-12 w-full rounded-md border border-border bg-white px-3 text-base outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
-        </label>
+      <form className="auth-form" onSubmit={handleSubmit}>
+        <FormField
+          id="login-email"
+          label="Email"
+          type="email"
+          autoComplete="email"
+          placeholder="voce@empresa.com"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          icon={<Mail aria-hidden="true" />}
+          required
+        />
+        <FormField
+          id="login-password"
+          label="Senha"
+          type="password"
+          autoComplete="current-password"
+          placeholder="••••••••"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          icon={<LockKeyhole aria-hidden="true" />}
+          required
+        />
+        <div className="auth-form__meta">
+          <label className="auth-form__remember">
+            <input
+              className="ui-checkbox"
+              type="checkbox"
+              checked={remember}
+              onChange={(event) => setRemember(event.target.checked)}
+            />
+            Lembrar de mim
+          </label>
+          <Link className="auth-card__link type-caption" href="/login">
+            Esqueci minha senha
+          </Link>
+        </div>
         {error ? (
-          <p className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>
+          <p className="auth-form__error" role="alert">
+            {error}
+          </p>
         ) : null}
-        <button
-          className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-md bg-brand px-4 text-base font-bold text-white transition hover:bg-brand-strong disabled:opacity-60"
-          type="submit"
-          disabled={loading}
-        >
-          <LogIn className="h-5 w-5" aria-hidden="true" />
+        <Button fullWidth type="submit" disabled={loading} icon={<ArrowRight size={20} aria-hidden="true" />}>
           {loading ? "Entrando..." : "Entrar"}
-        </button>
+        </Button>
       </form>
     </AuthCard>
   );

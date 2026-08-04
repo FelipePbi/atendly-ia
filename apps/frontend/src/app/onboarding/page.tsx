@@ -1,18 +1,29 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import type { InputHTMLAttributes, ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Bot, Check, Circle, Clock, FileText, Loader2, ShieldCheck, Sparkles, Upload, UserRound } from "lucide-react";
-import { LoadingState } from "@/components/ui/LoadingState";
+import {
+  ArrowRight,
+  Clock3,
+  FileText,
+  Loader2,
+  Moon,
+  ShieldCheck,
+  Smartphone,
+  Sparkles,
+  Upload,
+} from "lucide-react";
 import { PersonaChoiceCard } from "@/components/ia/PersonaChoiceCard";
+import { OnboardingShell } from "@/components/onboarding/OnboardingShell";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { FormField } from "@/components/ui/FormField";
+import { LoadingState } from "@/components/ui/LoadingState";
+import { SegmentedControl, type SegmentedOption } from "@/components/ui/SegmentedControl";
+import { ChoiceCard, ChoiceGroup, RadioCard } from "@/components/ui/SelectionCard";
 import { QrCodePanel } from "@/components/whatsapp/QrCodePanel";
 import { postAuthPath } from "@/lib/post-auth";
 import {
-  ACTIVATION_MODE_LABELS,
-  ASSISTANT_SEX_LABELS,
-  AWAY_SCOPE_LABELS,
-  IDENTITY_MODE_LABELS,
   PERSONA_DEFINITIONS,
   type VirtualAttendantAssistantSex,
   type VirtualAttendantActivationMode,
@@ -64,19 +75,18 @@ const stepOrder: OnboardingScreenStep[] = [
   "WHATSAPP",
 ];
 
-const stepLabels: Record<OnboardingScreenStep, string> = {
-  PROFILE: "Dados",
-  ATTENDANT_IDENTITY: "Identificação",
-  ATTENDANT_PERSONA: "Persona",
-  ATTENDANT_SETTINGS: "Configurações",
-  WHATSAPP: "Conexão",
-};
-
-const sexOptions: Array<{ value: UserSex; label: string }> = [
-  { value: "MALE", label: "Masculino" },
+const sexOptions: Array<SegmentedOption<UserSex | "">> = [
   { value: "FEMALE", label: "Feminino" },
-  { value: "OTHER", label: "Outro" },
-  { value: "PREFER_NOT_TO_SAY", label: "Prefiro nao informar" },
+  { value: "MALE", label: "Masculino" },
+  { value: "PREFER_NOT_TO_SAY", label: "Não informar" },
+];
+
+type VisualSexOption = VirtualAttendantAssistantSex | "NEUTRAL" | "";
+
+const visualSexOptions: Array<SegmentedOption<VisualSexOption>> = [
+  { value: "FEMALE", label: "Feminino", icon: <span className="onboarding-visual-dot" data-tone="brand" /> },
+  { value: "MALE", label: "Masculino", icon: <span className="onboarding-visual-dot" /> },
+  { value: "NEUTRAL", label: "Neutro", icon: <span className="onboarding-visual-dot" />, disabled: true },
 ];
 
 function resolveScreenStep(step: ApiOnboardingStep): OnboardingScreenStep {
@@ -463,336 +473,367 @@ export default function OnboardingPage() {
     return <LoadingState label="Abrindo onboarding..." />;
   }
 
-  const assistantExampleName = assistantName.trim() || "Bea";
-  const assistantExampleBusiness = businessName.trim() || "nome da empresa";
-  const assistantArticle = assistantSex === "MALE" ? "o" : "a";
-  const assistantGreeting = personaType === "CORPORATE" ? "Olá" : "Oii";
-  const assistantIntroExample = `${assistantGreeting}, sou ${assistantArticle} ${assistantExampleName}, atendente pessoal da ${assistantExampleBusiness}.`;
   const personaVisualSex: VirtualAttendantAssistantSex =
     identityMode === "SEPARATE_ASSISTANT" ? assistantSex || "FEMALE" : professionalSex;
+  const currentStep = stepOrder.indexOf(step);
+  const screenMeta: Record<
+    OnboardingScreenStep,
+    { title: string; subtitle: string; mobileTitle?: string; mobileSubtitle?: string; tone?: "mint" | "violet" }
+  > = {
+    PROFILE: {
+      title: "Dados básicos",
+      subtitle: "Informe seus dados para personalizar o atendimento inicial.",
+    },
+    ATTENDANT_IDENTITY: {
+      title: "Como a Atendly deve se apresentar?",
+      mobileTitle: "Como a Atendly se apresenta?",
+      subtitle: "Escolha como a Atendly se apresenta ao cliente.",
+    },
+    ATTENDANT_PERSONA: {
+      title: "Como a Atendly deve conversar?",
+      subtitle: "Escolha um estilo. Você poderá ajustar o tom depois.",
+      tone: "violet",
+    },
+    ATTENDANT_SETTINGS: {
+      title: "Configurações iniciais",
+      subtitle: "Defina quando a Atendly pode assumir o atendimento.",
+      mobileSubtitle: "Defina quando a Atendly pode responder.",
+      tone: "violet",
+    },
+    WHATSAPP: {
+      title: "Conecte seu WhatsApp.",
+      subtitle: "Abra o WhatsApp e escaneie o código abaixo.",
+    },
+  };
+  const meta = screenMeta[step];
 
   return (
-    <main className="min-h-dvh bg-background px-3 py-3 sm:px-4 sm:py-4">
-      <div className="mx-auto flex min-h-[calc(100dvh-1.5rem)] w-full max-w-5xl flex-col rounded-lg border border-border bg-surface p-3 shadow-sm sm:min-h-[calc(100dvh-2rem)] sm:p-4 lg:min-h-0 lg:p-5">
-        <header className="flex flex-col gap-3 border-b border-border pb-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <div>
-              <h1 className="text-xl font-black text-foreground sm:text-2xl">Configuracao inicial</h1>
-              <p className="mt-1 hidden max-w-xl text-sm leading-6 text-muted sm:block">
-                Complete os dados do negocio, configure a atendente virtual e conecte o WhatsApp pelo QR Code.
-              </p>
-            </div>
+    <OnboardingShell
+      currentStep={currentStep}
+      title={meta.title}
+      subtitle={meta.subtitle}
+      mobileTitle={meta.mobileTitle}
+      mobileSubtitle={meta.mobileSubtitle}
+      tone={meta.tone}
+      headerAddon={
+        step === "ATTENDANT_PERSONA" ? (
+          <div className="onboarding-persona-toolbar">
+            <span className="onboarding-persona-toolbar__label">Visual do avatar</span>
+            <SegmentedControl<VisualSexOption>
+              label="Visual do avatar"
+              value={personaVisualSex}
+              options={visualSexOptions}
+              onChange={(value) => {
+                if (value === "NEUTRAL" || value === "") return;
+                if (identityMode === "SEPARATE_ASSISTANT") setAssistantSex(value);
+                else setProfessionalSex(value);
+              }}
+            />
           </div>
-          <ol className="flex items-center gap-2 overflow-x-auto">
-            {stepOrder.map((item, index) => {
-              const active = step === item;
-              const done = stepOrder.indexOf(step) > index || (item === "WHATSAPP" && instance?.status === "CONNECTED");
-              return (
-                <li
-                  className={`flex shrink-0 items-center gap-2 rounded-md border px-2.5 py-2 text-sm ${
-                    active
-                      ? "border-brand/20 bg-brand/10 font-bold text-brand-strong"
-                      : done
-                        ? "border-border bg-white font-medium text-foreground"
-                        : "border-border bg-white text-muted"
-                  }`}
-                  key={item}
-                >
-                  <span className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-white">
-                    {done ? <Check className="h-4 w-4 text-brand" /> : <Circle className="h-3 w-3" />}
+        ) : undefined
+      }
+    >
+      {step === "PROFILE" ? (
+        <form className="onboarding-step-form" onSubmit={handleProfileSubmit}>
+          <div className="onboarding-step-content">
+            <div className="onboarding-fields-grid">
+              <FormField
+                id="full-name"
+                label="Nome"
+                value={fullName}
+                onChange={(event) => setFullName(event.target.value)}
+                placeholder="Digite seu nome"
+                autoComplete="name"
+                required
+              />
+              <FormField
+                id="birth-date"
+                label="Data de nascimento"
+                value={birthDate}
+                onChange={(event) => setBirthDate(event.target.value)}
+                type="date"
+                required
+              />
+              <div className="onboarding-field-group">
+                <span className="onboarding-field-label">Gênero</span>
+                <SegmentedControl<UserSex | "">
+                  label="Gênero"
+                  value={sex}
+                  options={sexOptions}
+                  onChange={setSex}
+                />
+              </div>
+              <FormField
+                id="business-name"
+                label="Nome do negócio"
+                value={businessName}
+                onChange={(event) => setBusinessName(event.target.value)}
+                placeholder="Ex.: Studio Aurora"
+                autoComplete="organization"
+                required
+              />
+            </div>
+            <p className="onboarding-inline-note onboarding-mobile-only">
+              Você poderá atualizar esses dados depois.
+            </p>
+            <SubmitError error={error} />
+          </div>
+          <StepFooter loading={savingProfile} loadingLabel="Salvando..." />
+        </form>
+      ) : null}
+
+      {step === "ATTENDANT_IDENTITY" ? (
+        <form className="onboarding-step-form" onSubmit={handleIdentitySubmit}>
+          <div className="onboarding-step-content">
+            <div className="onboarding-selection-grid">
+              <RadioCard
+                title="Como a profissional"
+                description="Fala em nome do negócio."
+                selected={identityMode === "PROFESSIONAL"}
+                onClick={() => setIdentityMode("PROFESSIONAL")}
+              />
+              <RadioCard
+                title="Atendente à parte"
+                description="Usa nome e identidade próprios."
+                selected={identityMode === "SEPARATE_ASSISTANT"}
+                onClick={() => setIdentityMode("SEPARATE_ASSISTANT")}
+              />
+            </div>
+
+            <div className="onboarding-content-card">
+              <h3 className="onboarding-content-card__title">
+                {identityMode === "PROFESSIONAL" ? "Avatar da profissional" : "Identidade da atendente"}
+              </h3>
+              <p className="onboarding-content-card__description">
+                {identityMode === "PROFESSIONAL"
+                  ? "Escolha apenas a apresentação visual. O tom da conversa será definido na próxima etapa."
+                  : "Escolha o nome e a apresentação visual usada nas conversas."}
+              </p>
+
+              {identityMode === "SEPARATE_ASSISTANT" ? (
+                <FormField
+                  id="assistant-name"
+                  className="onboarding-content-card__field"
+                  label="Nome da atendente"
+                  value={assistantName}
+                  onChange={(event) => setAssistantName(event.target.value)}
+                  placeholder="Ex.: Bea"
+                  required
+                />
+              ) : null}
+
+              <span className="onboarding-content-card__label">Gênero visual</span>
+              <SegmentedControl<VisualSexOption>
+                label="Gênero visual"
+                value={identityMode === "SEPARATE_ASSISTANT" ? assistantSex : professionalSex}
+                options={visualSexOptions}
+                onChange={(value) => {
+                  if (value === "NEUTRAL" || value === "") return;
+                  if (identityMode === "SEPARATE_ASSISTANT") setAssistantSex(value);
+                  else setProfessionalSex(value);
+                }}
+              />
+              {identityMode === "PROFESSIONAL" ? (
+                <p className="onboarding-identity-note">
+                  <span className="responsive-copy--desktop">
+                    Ao selecionar “Atendente à parte”, serão exibidos também Nome, Gênero Visual e Avatar.
                   </span>
-                  {stepLabels[item]}
-                </li>
-              );
-            })}
-          </ol>
-        </header>
-
-        <section className="min-h-0 flex-1 pt-3 sm:pt-4">
-          {step === "PROFILE" ? (
-            <form className="space-y-3 sm:space-y-4" onSubmit={handleProfileSubmit}>
-              <SectionTitle icon={<UserRound className="h-5 w-5" />} title="Dados basicos" />
-              <div className="grid gap-3 md:grid-cols-2 md:gap-4">
-                <TextField label="Nome" value={fullName} onChange={setFullName} autoComplete="name" />
-                <TextField label="Data de nascimento" value={birthDate} onChange={setBirthDate} type="date" />
-                <label className="block">
-                  <span className="text-sm font-medium text-foreground">Sexo</span>
-                  <select
-                    className="mt-1.5 h-11 w-full rounded-md border border-border bg-white px-3 text-base outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10 sm:mt-2 sm:h-12"
-                    value={sex}
-                    onChange={(event) => setSex(event.target.value as UserSex)}
-                    required
-                  >
-                    <option value="">Selecione</option>
-                    {sexOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <TextField label="Nome do negocio" value={businessName} onChange={setBusinessName} />
-              </div>
-              <SubmitError error={error} />
-              <SubmitButton loading={savingProfile} label="Continuar" loadingLabel="Salvando..." />
-            </form>
-          ) : null}
-
-          {step === "ATTENDANT_IDENTITY" ? (
-            <form className="space-y-3 sm:space-y-4" onSubmit={handleIdentitySubmit}>
-              <SectionTitle icon={<Bot className="h-5 w-5" />} title="Como a IA se identifica" />
-              <div className="rounded-md border border-border bg-white p-3 sm:p-4">
-                <div className="flex items-center gap-2 text-brand">
-                  <UserRound className="h-5 w-5" />
-                  <h2 className="text-base font-black text-foreground">Identidade da atendente</h2>
-                </div>
-                <div className="mt-3 grid gap-2">
-                  <button
-                    className={`rounded-md border px-3 py-2 text-left text-sm transition ${
-                      identityMode === "PROFESSIONAL"
-                        ? "border-brand bg-brand/10 text-foreground"
-                        : "border-border bg-white text-muted hover:bg-surface-muted"
-                    }`}
-                    type="button"
-                    onClick={() => setIdentityMode("PROFESSIONAL")}
-                    aria-pressed={identityMode === "PROFESSIONAL"}
-                  >
-                    <span className="flex items-start justify-between gap-3">
-                      <span className="font-black text-foreground">{IDENTITY_MODE_LABELS.PROFESSIONAL}</span>
-                      {identityMode === "PROFESSIONAL" ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden="true" /> : null}
-                    </span>
-                    <span className="mt-1 block leading-5">
-                      A IA fala em nome da profissional ou do negócio. Não precisa de nome próprio e não se apresenta como uma atendente separada.
-                    </span>
-                  </button>
-                  <button
-                    className={`rounded-md border px-3 py-2 text-left text-sm transition ${
-                      identityMode === "SEPARATE_ASSISTANT"
-                        ? "border-brand bg-brand/10 text-foreground"
-                        : "border-border bg-white text-muted hover:bg-surface-muted"
-                    }`}
-                    type="button"
-                    onClick={() => setIdentityMode("SEPARATE_ASSISTANT")}
-                    aria-pressed={identityMode === "SEPARATE_ASSISTANT"}
-                  >
-                    <span className="flex items-start justify-between gap-3">
-                      <span className="font-black text-foreground">{IDENTITY_MODE_LABELS.SEPARATE_ASSISTANT}</span>
-                      {identityMode === "SEPARATE_ASSISTANT" ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden="true" /> : null}
-                    </span>
-                    <span className="mt-1 block leading-5">
-                      A IA usa uma identidade própria, com nome e sexo definidos por você, e se apresenta ao iniciar ou retomar o atendimento.
-                    </span>
-                  </button>
-                </div>
-
-                {identityMode === "SEPARATE_ASSISTANT" ? (
-                  <div className="mt-3 border-t border-border pt-3">
-                    <label className="block">
-                      <span className="text-sm font-medium text-foreground">Nome da atendente</span>
-                      <input
-                        className="mt-1.5 h-11 w-full rounded-md border border-border bg-white px-3 text-base outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10 sm:mt-2 sm:h-12"
-                        value={assistantName}
-                        onChange={(event) => setAssistantName(event.target.value)}
-                        placeholder="Ex: Bea, Sofia, Clara"
-                        required
-                      />
-                    </label>
-                    <label className="mt-3 block">
-                      <span className="text-sm font-medium text-foreground">Sexo da atendente</span>
-                      <select
-                        className="mt-1.5 h-11 w-full rounded-md border border-border bg-white px-3 text-base outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10 sm:mt-2 sm:h-12"
-                        value={assistantSex}
-                        onChange={(event) => setAssistantSex(event.target.value as VirtualAttendantAssistantSex | "")}
-                        required
-                      >
-                        <option value="">Selecione</option>
-                        <option value="FEMALE">{ASSISTANT_SEX_LABELS.FEMALE}</option>
-                        <option value="MALE">{ASSISTANT_SEX_LABELS.MALE}</option>
-                      </select>
-                    </label>
-                    <p className="mt-3 rounded-md bg-surface-muted px-3 py-2 text-sm leading-6 text-foreground">
-                      Exemplo: {assistantIntroExample}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="mt-3 border-t border-border pt-3">
-                    <p className="rounded-md bg-surface-muted px-3 py-2 text-sm leading-6 text-muted">
-                      Neste modo, a IA responde como extensão da profissional. O cliente não verá uma apresentação com nome de atendente.
-                    </p>
-                    <label className="mt-3 block">
-                      <span className="text-sm font-medium text-foreground">Imagem da profissional</span>
-                      <select
-                        className="mt-1.5 h-11 w-full rounded-md border border-border bg-white px-3 text-base outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10 sm:mt-2 sm:h-12"
-                        value={professionalSex}
-                        onChange={(event) => setProfessionalSex(event.target.value as VirtualAttendantAssistantSex)}
-                      >
-                        <option value="FEMALE">{ASSISTANT_SEX_LABELS.FEMALE}</option>
-                        <option value="MALE">{ASSISTANT_SEX_LABELS.MALE}</option>
-                      </select>
-                    </label>
-                    <p className="mt-2 text-sm leading-6 text-muted">
-                      Essa escolha define as imagens usadas nos cards de persona quando a IA responde como a profissional.
-                    </p>
-                  </div>
-                )}
-              </div>
-              <SubmitError error={error} />
-              <SubmitButton loading={false} label="Continuar" loadingLabel="Continuando..." />
-            </form>
-          ) : null}
-
-          {step === "ATTENDANT_PERSONA" ? (
-            <form className="space-y-3 sm:space-y-4" onSubmit={handlePersonaSubmit}>
-              <SectionTitle icon={<Sparkles className="h-5 w-5" />} title="Persona" />
-              <div className="grid gap-3">
-                {(Object.keys(PERSONA_DEFINITIONS) as VirtualAttendantPersonaType[]).map((persona) => (
-                  <PersonaChoiceCard
-                    key={persona}
-                    persona={persona}
-                    selected={personaType === persona}
-                    visualSex={personaVisualSex}
-                    onSelect={() => setPersonaType(persona)}
-                  >
-                    {persona === "CUSTOM" && personaType === "CUSTOM" ? (
-                      <>
-                        <p className="rounded-md bg-surface-muted px-3 py-2 text-sm font-bold leading-5 text-foreground">
-                          Envie pelo menos 3 conversas reais com clientes, exportadas do WhatsApp em .txt, para a IA aprender o jeito de atendimento do seu negócio.
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-muted">
-                          Use conversas de atendimento reais, não arquivos de teste. O conteúdo bruto é processado e descartado; salvamos apenas o perfil de estilo gerado.
-                        </p>
-                        <p className="mt-2 rounded-md bg-white px-3 py-2 text-sm font-bold text-foreground">
-                          Status: {customPersonaStatus}
-                        </p>
-                        <input
-                          className="mt-3 block w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-muted file:mr-3 file:rounded-md file:border-0 file:bg-brand file:px-3 file:py-2 file:text-sm file:font-black file:text-white"
-                          type="file"
-                          accept=".txt,text/plain"
-                          multiple
-                          onChange={updatePersonaFiles}
-                        />
-                        {participants.length > 0 ? (
-                          <label className="mt-3 block">
-                            <span className="text-sm font-medium text-foreground">Participante profissional</span>
-                            <select
-                              className="mt-1.5 h-11 w-full rounded-md border border-border bg-white px-3 text-base outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10 sm:mt-2 sm:h-12"
-                              value={participantName}
-                              onChange={(event) => setParticipantName(event.target.value)}
-                            >
-                              <option value="">Selecione</option>
-                              {participants.map((participant) => (
-                                <option key={participant} value={participant}>
-                                  {participant}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        ) : null}
-                        <button
-                          className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-black text-foreground transition hover:bg-surface-muted disabled:opacity-60"
-                          type="button"
-                          onClick={uploadCustomPersonaFiles}
-                          disabled={uploadingPersona}
-                        >
-                          {uploadingPersona ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                          {uploadingPersona ? "Processando..." : "Importar conversas"}
-                        </button>
-                        {personaImports?.slice(0, 3).map((item) => (
-                          <p className="mt-2 flex items-center gap-2 text-xs text-muted" key={item.id}>
-                            <FileText className="h-4 w-4" />
-                            {item.fileName} · {item.status}
-                          </p>
-                        ))}
-                      </>
-                    ) : null}
-                  </PersonaChoiceCard>
-                ))}
-              </div>
-              <SubmitError error={error} />
-              <SubmitButton loading={false} label="Continuar" loadingLabel="Continuando..." />
-            </form>
-          ) : null}
-
-          {step === "ATTENDANT_SETTINGS" ? (
-            <form className="space-y-3 sm:space-y-4" onSubmit={handleAssistantSubmit}>
-              <SectionTitle icon={<Clock className="h-5 w-5" />} title="Configurações iniciais" />
-              <div className="rounded-md border border-border bg-white p-3 sm:p-4">
-                <p className="text-sm leading-6 text-muted">
-                  Defina em quais situações a atendente virtual pode responder. Essa escolha evita respostas automáticas quando você preferir assumir o atendimento pelo WhatsApp.
+                  <span className="responsive-copy--mobile">
+                    Na opção “Atendente à parte”, também pediremos o nome da atendente.
+                  </span>
                 </p>
-                <div className="mt-3 grid gap-3">
-                  <label className="block">
-                    <span className="text-sm font-medium text-foreground">Quando a IA entra em ação</span>
+              ) : null}
+            </div>
+            <SubmitError error={error} />
+          </div>
+          <StepFooter />
+        </form>
+      ) : null}
+
+      {step === "ATTENDANT_PERSONA" ? (
+        <form className="onboarding-step-form onboarding-step-form--persona" onSubmit={handlePersonaSubmit}>
+          <div className="onboarding-step-content">
+            <div className="onboarding-personas">
+              {(Object.keys(PERSONA_DEFINITIONS) as VirtualAttendantPersonaType[]).map((persona) => (
+                <PersonaChoiceCard
+                  key={persona}
+                  persona={persona}
+                  selected={personaType === persona}
+                  visualSex={personaVisualSex}
+                  onSelect={() => setPersonaType(persona)}
+                >
+                  {persona === "CUSTOM" && personaType === "CUSTOM" ? (
+                    <div className="onboarding-upload">
+                      <p className="onboarding-inline-note">
+                        Envie pelo menos 3 conversas reais do WhatsApp em formato .txt. O conteúdo bruto é
+                        descartado após gerar o perfil de estilo.
+                      </p>
+                      <span className="onboarding-persona-toolbar__label">Status: {customPersonaStatus}</span>
+                      <input type="file" accept=".txt,text/plain" multiple onChange={updatePersonaFiles} />
+                      {participants.length > 0 ? (
+                        <label className="ui-field-label">
+                          <span>Participante profissional</span>
+                          <select
+                            className="ui-field"
+                            value={participantName}
+                            onChange={(event) => setParticipantName(event.target.value)}
+                          >
+                            <option value="">Selecione</option>
+                            {participants.map((participant) => (
+                              <option key={participant} value={participant}>
+                                {participant}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        fullWidth
+                        onClick={uploadCustomPersonaFiles}
+                        disabled={uploadingPersona}
+                        icon={
+                          uploadingPersona ? (
+                            <Loader2 className="ui-spin" aria-hidden="true" />
+                          ) : (
+                            <Upload aria-hidden="true" />
+                          )
+                        }
+                      >
+                        {uploadingPersona ? "Processando..." : "Importar conversas"}
+                      </Button>
+                      {personaImports?.slice(0, 3).map((item) => (
+                        <p className="onboarding-import-status" key={item.id}>
+                          <FileText aria-hidden="true" />
+                          {item.fileName} · {item.status}
+                        </p>
+                      ))}
+                    </div>
+                  ) : null}
+                </PersonaChoiceCard>
+              ))}
+            </div>
+            <SubmitError error={error} />
+          </div>
+          <StepFooter />
+        </form>
+      ) : null}
+
+      {step === "ATTENDANT_SETTINGS" ? (
+        <form className="onboarding-step-form" onSubmit={handleAssistantSubmit}>
+          <div className="onboarding-step-content">
+            <div className="onboarding-choice-card">
+              <p className="onboarding-choice-card__intro">
+                <span className="responsive-copy--desktop">
+                  Escolha quando a Atendly responde. Você poderá alterar essa configuração depois.
+                </span>
+                <span className="responsive-copy--mobile">
+                  Escolha quando a Atendly responde. Você pode mudar isso depois.
+                </span>
+              </p>
+              <span className="onboarding-choice-card__label">Quando a IA entra em ação</span>
+              <ChoiceGroup label="Momento de ativação da atendente">
+                <ChoiceCard
+                  title="A qualquer momento"
+                  description="Atende automaticamente, 24h por dia."
+                  selected={activationMode === "ALWAYS"}
+                  onClick={() => setActivationMode("ALWAYS")}
+                  icon={<Sparkles aria-hidden="true" />}
+                />
+                <ChoiceCard
+                  title="Fora do horário"
+                  description="Assume quando sua equipe estiver ausente."
+                  selected={activationMode === "AWAY_FROM_WHATSAPP"}
+                  onClick={() => setActivationMode("AWAY_FROM_WHATSAPP")}
+                  icon={<Moon aria-hidden="true" />}
+                />
+                <ChoiceCard
+                  title="Após espera"
+                  description="Entra se ninguém responder a conversa."
+                  selected={false}
+                  disabled
+                  icon={<Clock3 aria-hidden="true" />}
+                />
+              </ChoiceGroup>
+
+              {activationMode === "AWAY_FROM_WHATSAPP" ? (
+                <div className="onboarding-away-fields">
+                  <FormField
+                    id="away-timeout"
+                    label="Minutos sem atividade"
+                    value={awayTimeoutMinutes}
+                    onChange={(event) => setAwayTimeoutMinutes(event.target.value)}
+                    type="number"
+                    min={1}
+                    required
+                  />
+                  <label className="ui-field-label">
+                    <span>Escopo da ausência</span>
                     <select
-                      className="mt-1.5 h-11 w-full rounded-md border border-border bg-white px-3 text-base outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10 sm:mt-2 sm:h-12"
-                      value={activationMode}
-                      onChange={(event) => setActivationMode(event.target.value as VirtualAttendantActivationMode)}
+                      className="ui-field"
+                      value={awayScope}
+                      onChange={(event) => setAwayScope(event.target.value as VirtualAttendantAwayScope)}
+                      required
                     >
-                      <option value="ALWAYS">{ACTIVATION_MODE_LABELS.ALWAYS}</option>
-                      <option value="AWAY_FROM_WHATSAPP">{ACTIVATION_MODE_LABELS.AWAY_FROM_WHATSAPP}</option>
+                      <option value="">Selecione</option>
+                      <option value="GLOBAL">Todo o WhatsApp</option>
+                      <option value="CONVERSATION">Somente a conversa</option>
                     </select>
                   </label>
-                  <p className="rounded-md bg-surface-muted px-3 py-2 text-sm leading-6 text-muted">
-                    {activationMode === "ALWAYS"
-                      ? "A IA pode responder a qualquer momento, mas ainda respeita WhatsApp conectado, lista de ignorados, conversas pausadas, debounce e as regras de segurança."
-                      : "A IA só responde quando você ficar sem atividade manual no WhatsApp pelo tempo definido abaixo. Esse modo exige tempo mínimo de inatividade e escopo de ausência."}
-                  </p>
-
-                  {activationMode === "AWAY_FROM_WHATSAPP" ? (
-                    <>
-                      <TextField
-                        label="Minutos sem atividade"
-                        value={awayTimeoutMinutes}
-                        onChange={setAwayTimeoutMinutes}
-                        type="number"
-                        min={1}
-                      />
-                      <label className="block">
-                        <span className="text-sm font-medium text-foreground">Escopo da ausência</span>
-                        <select
-                          className="mt-1.5 h-11 w-full rounded-md border border-border bg-white px-3 text-base outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10 sm:mt-2 sm:h-12"
-                          value={awayScope}
-                          onChange={(event) => setAwayScope(event.target.value as VirtualAttendantAwayScope)}
-                          required
-                        >
-                          <option value="">Selecione</option>
-                          <option value="GLOBAL">{AWAY_SCOPE_LABELS.GLOBAL}</option>
-                          <option value="CONVERSATION">{AWAY_SCOPE_LABELS.CONVERSATION}</option>
-                        </select>
-                      </label>
-                    </>
-                  ) : null}
                 </div>
-              </div>
-              <SubmitError error={error} />
-              <SubmitButton loading={savingAssistant} label="Continuar" loadingLabel="Salvando..." />
-            </form>
-          ) : null}
+              ) : null}
 
-          {step === "WHATSAPP" ? (
-            <div className="grid min-h-0 gap-3 lg:grid-cols-[minmax(220px,0.75fr)_minmax(320px,1fr)] lg:items-start">
-              <div className="rounded-md bg-surface-muted px-3 py-3 sm:px-4">
-                <div className="flex items-start gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-brand/10 text-brand">
-                    <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+              <p className="onboarding-choice-card__safety">
+                <span className="responsive-copy--desktop">
+                  Proteção ativa: conversas pausadas, contatos ignorados e regras de segurança continuam sendo
+                  respeitados.
+                </span>
+                <span className="responsive-copy--mobile">
+                  Proteção ativa: pausas, contatos ignorados e regras de segurança continuam sendo respeitados.
+                </span>
+              </p>
+            </div>
+            <SubmitError error={error} />
+          </div>
+          <StepFooter loading={savingAssistant} loadingLabel="Salvando..." />
+        </form>
+      ) : null}
+
+      {step === "WHATSAPP" ? (
+        <div className="onboarding-step-static">
+          <div className="onboarding-step-content">
+            <details className="onboarding-mobile-pairing">
+              <summary>Como conectar</summary>
+              <ol>
+                <li>Abra o WhatsApp no celular.</li>
+                <li>Acesse Aparelhos conectados.</li>
+                <li>Escaneie o QR Code ao lado.</li>
+              </ol>
+            </details>
+            <div className="onboarding-qr-grid">
+              <div className="onboarding-pairing">
+                <h3 className="onboarding-pairing__title">
+                  <span className="onboarding-pairing__icon">
+                    <ShieldCheck aria-hidden="true" />
                   </span>
-                  <div className="min-w-0 text-sm leading-6 text-muted">
-                    <h2 className="text-base font-black text-foreground">Pareamento seguro</h2>
-                    <p className="mt-1">
-                      Escaneie com o WhatsApp do celular para autorizar este painel a receber e responder conversas.
-                    </p>
-                    <p className="mt-1 text-xs leading-5 sm:text-sm">
-                      O numero conectado sera identificado automaticamente apos a leitura.
-                    </p>
-                  </div>
-                </div>
-                <SubmitError error={error} />
-                {whatsAppLoading ? (
-                  <div className="mt-3 flex items-center gap-2 rounded-md border border-border bg-white px-3 py-2 text-sm font-bold text-muted">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Preparando QR Code...
-                  </div>
-                ) : null}
+                  Pareamento seguro
+                </h3>
+                <p className="onboarding-pairing__description">Siga os três passos no celular.</p>
+                <ol className="onboarding-pairing__steps">
+                  <li>
+                    <span>1</span> Abra o WhatsApp no celular.
+                  </li>
+                  <li>
+                    <span>2</span> Acesse Aparelhos conectados.
+                  </li>
+                  <li>
+                    <span>3</span> Aponte a câmera para o QR Code.
+                  </li>
+                </ol>
+                <Badge className="onboarding-qr-status onboarding-qr-status--desktop" tone="status" dot>
+                  Aguardando leitura segura
+                </Badge>
               </div>
               <QrCodePanel
                 qrcode={qrcode ?? instance?.qrcode ?? null}
@@ -802,65 +843,57 @@ export default function OnboardingPage() {
                 compact
               />
             </div>
-          ) : null}
-        </section>
-      </div>
-    </main>
+            <Badge className="onboarding-qr-status onboarding-qr-status--mobile" tone="status" dot>
+              Aguardando leitura segura
+            </Badge>
+            {whatsAppLoading ? (
+              <p className="onboarding-connection-status">
+                <Loader2 className="ui-spin" aria-hidden="true" /> Preparando QR Code...
+              </p>
+            ) : null}
+            <SubmitError error={error} />
+          </div>
+          <footer className="onboarding-step-footer onboarding-step-footer--connect">
+            <Button
+              type="button"
+              onClick={() => {
+                if (instance?.status === "CONNECTED") void completeOnboarding();
+                else void loadQrAndStatus();
+              }}
+              disabled={whatsAppLoading || refreshingQr}
+              icon={<Smartphone aria-hidden="true" />}
+            >
+              <span className="onboarding-finish-copy onboarding-finish-copy--desktop">
+                Finalizar configuração
+              </span>
+              <span className="onboarding-finish-copy onboarding-finish-copy--mobile">Finalizar</span>
+            </Button>
+          </footer>
+        </div>
+      ) : null}
+    </OnboardingShell>
   );
 }
 
-function SectionTitle({ icon, title }: { icon: ReactNode; title: string }) {
+function StepFooter({ loading = false, loadingLabel = "Continuando..." }: { loading?: boolean; loadingLabel?: string }) {
   return (
-    <div className="flex items-center gap-2 text-brand">
-      {icon}
-      <h2 className="text-base font-black text-foreground sm:text-lg">{title}</h2>
-    </div>
-  );
-}
-
-function TextField({
-  label,
-  value,
-  onChange,
-  type = "text",
-  ...inputProps
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  type?: string;
-} & Omit<InputHTMLAttributes<HTMLInputElement>, "className" | "onChange" | "type" | "value">) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium text-foreground">{label}</span>
-      <input
-        className="mt-1.5 h-11 w-full rounded-md border border-border bg-white px-3 text-base outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/10 sm:mt-2 sm:h-12"
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        required
-        {...inputProps}
-      />
-    </label>
-  );
-}
-
-function SubmitButton({ loading, label, loadingLabel }: { loading: boolean; label: string; loadingLabel: string }) {
-  return (
-    <button
-      className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-brand px-4 text-base font-bold text-white transition hover:bg-brand-strong disabled:opacity-60 sm:h-12"
-      type="submit"
-      disabled={loading}
-    >
-      {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
-      {loading ? loadingLabel : label}
-    </button>
+    <footer className="onboarding-step-footer">
+      <Button
+        type="submit"
+        disabled={loading}
+        icon={loading ? <Loader2 className="ui-spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
+      >
+        {loading ? loadingLabel : "Continuar"}
+      </Button>
+    </footer>
   );
 }
 
 function SubmitError({ error }: { error: string }) {
   return error ? (
-    <p className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>
+    <p className="onboarding-error" role="alert">
+      {error}
+    </p>
   ) : null;
 }
 

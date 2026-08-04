@@ -34,7 +34,7 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
       throw new AppError("NOT_FOUND", "WhatsApp instance not found.", 404);
     }
 
-    const status = await getEvolutionStatus(instance.evolutionInstanceToken);
+    const status = await withExistingEvolutionInstance(() => getEvolutionStatus(instance.evolutionInstanceToken));
     const updated = await prisma.whatsAppInstance.update({
       where: { id: instance.id },
       data: {
@@ -63,7 +63,16 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
     }
 
     if (record.whatsappInstance) {
-      return dataResponse(request, { whatsappInstance: instanceDto(record.whatsappInstance) });
+      let upstreamMissing = false;
+      try {
+        await getEvolutionStatus(record.whatsappInstance.evolutionInstanceToken);
+      } catch (error) {
+        upstreamMissing = isMissingEvolutionInstanceError(error);
+      }
+
+      if (!upstreamMissing) {
+        return dataResponse(request, { whatsappInstance: instanceDto(record.whatsappInstance) });
+      }
     }
 
     const instanceName = buildInstanceName(record.profile?.fullName ?? record.email, record.profile?.businessName ?? "atendly");
@@ -74,15 +83,25 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
       webhookUrl: buildWebhookUrl()
     });
 
-    const created = await prisma.whatsAppInstance.create({
-      data: {
-        userId: user.id,
-        evolutionInstanceId: evolution.data?.id ?? evolution.data?.name ?? instanceName,
-        evolutionInstanceName: evolution.data?.name ?? instanceName,
-        evolutionInstanceToken: evolution.data?.token ?? instanceToken,
-        status: "CREATED"
-      }
-    });
+    const instanceData = {
+      evolutionInstanceId: evolution.data?.id ?? evolution.data?.name ?? instanceName,
+      evolutionInstanceName: evolution.data?.name ?? instanceName,
+      evolutionInstanceToken: evolution.data?.token ?? instanceToken,
+      status: "CREATED" as const,
+      qrcode: null,
+      connectedAt: null
+    };
+    const created = record.whatsappInstance
+      ? await prisma.whatsAppInstance.update({
+          where: { id: record.whatsappInstance.id },
+          data: instanceData
+        })
+      : await prisma.whatsAppInstance.create({
+          data: {
+            userId: user.id,
+            ...instanceData
+          }
+        });
 
     reply.code(201);
     return dataResponse(request, { whatsappInstance: instanceDto(created) });
@@ -118,7 +137,7 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
       throw new AppError("NOT_FOUND", "Create a WhatsApp instance before connecting.", 404);
     }
 
-    await connectEvolutionInstance(instance.evolutionInstanceToken, buildWebhookUrl());
+    await withExistingEvolutionInstance(() => connectEvolutionInstance(instance.evolutionInstanceToken, buildWebhookUrl()));
     const updated = await prisma.whatsAppInstance.update({
       where: { id: instance.id },
       data: {
@@ -140,7 +159,7 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
       throw new AppError("NOT_FOUND", "WhatsApp instance not found.", 404);
     }
 
-    const qr = await getEvolutionQr(instance.evolutionInstanceToken);
+    const qr = await withExistingEvolutionInstance(() => getEvolutionQr(instance.evolutionInstanceToken));
     const updated = await prisma.whatsAppInstance.update({
       where: { id: instance.id },
       data: {
@@ -238,4 +257,19 @@ function slugify(value: string): string {
     .replace(/^_|_$/g, "")
     .slice(0, 48)
     .replace(/^_|_$/g, "");
+}
+
+async function withExistingEvolutionInstance<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isMissingEvolutionInstanceError(error)) {
+      throw new AppError("NOT_FOUND", "A instancia da Evolution nao foi encontrada.", 404);
+    }
+    throw error;
+  }
+}
+
+function isMissingEvolutionInstanceError(error: unknown): boolean {
+  return error instanceof AppError && error.code === "UPSTREAM_ERROR" && error.statusCode === 401;
 }

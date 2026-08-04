@@ -383,6 +383,8 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 
 	// 🔒 FIX: Sempre criar logger, mesmo que WaDebug esteja vazio
 	// Usar "INFO" como nível mínimo para garantir que logs importantes apareçam
+	applyWhatsAppVersion(version)
+
 	minLevel := w.config.WaDebug
 	if minLevel == "" {
 		minLevel = "INFO" // Nível mínimo para garantir que logs INFO apareçam
@@ -2473,6 +2475,17 @@ var (
 	cachedWebVersionMu sync.Mutex
 	webVersionCacheTTL = 1 * time.Hour
 )
+
+func applyWhatsAppVersion(version clientVersion) {
+	if version.Major <= 0 || version.Minor <= 0 || version.Patch <= 0 {
+		return
+	}
+	store.SetWAVersion(store.WAVersionContainer{
+		uint32(version.Major),
+		uint32(version.Minor),
+		uint32(version.Patch),
+	})
+}
 
 func fetchWhatsAppWebVersion() (*clientVersion, error) {
 	cachedWebVersionMu.Lock()

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Conversas vazias — Atendly</title>
+  <link rel="stylesheet" href="atendly.css">
+  <link rel="stylesheet" href="atendly-conversations.css">
+</head>
+<body>
+  <div class="conversations-shell" data-od-id="conversations-empty">
+    <aside class="sidebar" data-od-id="desktop-sidebar">
+      <div class="sidebar-brand">
+        <a class="brand" href="index.html" data-od-id="atendly-brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>Atendly</span>
+        </a>
+      </div>
+
+      <div class="business-context">
+        <span class="avatar" aria-hidden="true">SA</span>
+        <span class="business-name">
+          <strong>Studio Aurora</strong>
+          <span>Ambiente de demonstração</span>
+        </span>
+      </div>
+
+      <div class="wa-status status-line" data-od-id="whatsapp-status">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span>WhatsApp conectado</span>
+      </div>
+
+      <nav class="nav" aria-label="Navegação principal" data-od-id="desktop-navigation">
+        <a class="nav-item" href="dashboard-atendly.html">
+          <svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-home"></use></svg>
+          <span>Início</span>
+        </a>
+        <a class="nav-item is-active" href="conversations.html" aria-current="page">
+          <svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-chat"></use></svg>
+          <span>Conversas</span>
+        </a>
+        <a class="nav-item" href="agenda-atendly.html">
+          <svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-calendar"></use></svg>
+          <span>Agenda</span>
+        </a>
+        <a class="nav-item" href="customers.html">
+          <svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-users"></use></svg>
+          <span>Clientes</span>
+        </a>
+        <a class="nav-item" href="services.html">
+          <svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-briefcase"></use></svg>
+          <span>Serviços</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <nav class="nav" aria-label="Configurações">
+          <a class="nav-item" href="#">
+            <svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-settings"></use></svg>
+            <span>Configurações</span>
+          </a>
+        </nav>
+        <div class="dropdown">
+          <button class="account-button" type="button" data-toggle="empty-account-menu" aria-controls="empty-account-menu" aria-expanded="false" data-od-id="account-menu-trigger">
+            <span class="avatar" aria-hidden="true">FM</span>
+            <span class="business-name">
+              <strong>Felipe Martins</strong>
+              <span>Conta principal</span>
+            </span>
+            <svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-more"></use></svg>
+          </button>
+          <div id="empty-account-menu" class="menu hidden" data-panel aria-hidden="true">
+            <button class="menu-item" type="button" data-close>Minha conta</button>
+            <button class="menu-item" type="button" data-close>Ajuda</button>
+            <div class="menu-divider"></div>
+            <button class="menu-item danger" type="button" data-close>Sair</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="conversations-main" id="main-content" data-od-id="conversations-main">
+      <header class="conversations-mobile-header" data-od-id="mobile-header">
+        <a class="brand" href="index.html">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>Atendly</span>
+        </a>
+        <span class="badge">Studio Aurora</span>
+      </header>
+
+      <div class="conversation-list-page">
+        <header class="conversation-page-header" data-od-id="conversations-header">
+          <div>
+            <h1 data-od-id="conversations-title">Conversas</h1>
+            <p>Acompanhe as mensagens recebidas e priorize quem precisa do seu atendimento.</p>
+          </div>
+        </header>
+
+        <section class="conversation-toolbar conversation-empty-toolbar" aria-labelledby="empty-search-title" data-od-id="conversation-search-region">
+          <h2 class="sr-only" id="empty-search-title">Buscar conversas</h2>
+          <div class="conversation-empty-search-group">
+            <div class="conversation-search">
+              <label class="sr-only" for="empty-search">Buscar por nome ou telefone</label>
+              <svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-search"></use></svg>
+              <input class="input" id="empty-search" type="search" placeholder="Buscar por nome ou telefone" aria-describedby="empty-search-help" disabled data-od-id="conversation-search">
+            </div>
+            <p class="conversation-empty-search-help" id="empty-search-help">A busca ficará disponível quando a primeira conversa chegar.</p>
+          </div>
+        </section>
+
+        <section class="conversation-list-surface conversation-list-state conversation-empty-surface" aria-labelledby="empty-state-title" data-od-id="conversations-empty-state">
+          <div class="empty-state conversation-empty-state">
+            <div class="state-icon" aria-hidden="true">
+              <svg class="icon"><use href="atendly-icons.svg#i-chat"></use></svg>
+            </div>
+            <div class="conversation-empty-status" role="status">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span>WhatsApp conectado e aguardando mensagens</span>
+            </div>
+            <h2 id="empty-state-title" data-od-id="empty-state-title">Nenhuma conversa por enquanto</h2>
+            <p>As mensagens recebidas pelo WhatsApp aparecerão aqui. Compartilhe seu número com os clientes ou aguarde o próximo contato.</p>
+            <button class="btn btn-primary" type="button" data-refresh-empty data-od-id="refresh-conversations">Atualizar lista</button>
+            <p class="conversation-empty-update" role="status" aria-live="polite" data-empty-update>A lista está atualizada.</p>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <nav class="conversations-bottom-nav" aria-label="Navegação principal" data-od-id="mobile-bottom-navigation">
+      <a class="bottom-nav-item" href="dashboard-atendly.html">
+        <svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-home"></use></svg>
+        <span>Início</span>
+      </a>
+      <a class="bottom-nav-item is-active" href="conversations.html" aria-current="page">
+        <svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-chat"></use></svg>
+        <span>Conversas</span>
+      </a>
+      <a class="bottom-nav-item" href="agenda-atendly.html">
+        <svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-calendar"></use></svg>
+        <span>Agenda</span>
+      </a>
+      <button class="bottom-nav-item" type="button" data-open="conversations-more-sheet" aria-controls="conversations-more-sheet" aria-haspopup="dialog" aria-expanded="false" data-od-id="more-menu-trigger">
+        <svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-more"></use></svg>
+        <span>Mais</span>
+      </button>
+    </nav>
+  </div>
+
+  <script src="atendly.js"></script>
+  <script src="atendly-conversations.js"></script>
+</body>
+</html>

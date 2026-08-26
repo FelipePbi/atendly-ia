@@ -4,6 +4,7 @@ export type ErrorCode =
   | "VALIDATION_ERROR"
   | "NOT_FOUND"
   | "CONFLICT"
+  | "RATE_LIMITED"
   | "UPSTREAM_ERROR"
   | "CONFIGURATION_ERROR"
   | "INTERNAL_ERROR";

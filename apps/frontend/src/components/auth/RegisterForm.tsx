@@ -1,38 +1,51 @@
 "use client";
 
-import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, LockKeyhole, Mail } from "lucide-react";
+import { type FormEvent, useRef, useState } from "react";
 import { AuthCard } from "@/components/auth/AuthCard";
+import { useRegistrationDraft } from "@/components/auth/RegistrationDraftProvider";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
+import { CURRENT_LEGAL_VERSIONS } from "@/config/legal-versions";
+
+export const TERMS_ERROR_MESSAGE = "Você precisa aceitar os Termos de Uso para criar sua conta.";
 
 export function RegisterForm() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [acceptedTerms, setAcceptedTerms] = useState(true);
+  const { draft, updateDraft, clearDraft, markLegalNavigationFromRegistration } = useRegistrationDraft();
   const [error, setError] = useState("");
+  const [termsError, setTermsError] = useState("");
   const [loading, setLoading] = useState(false);
+  const termsRef = useRef<HTMLInputElement>(null);
+
+  function focusTermsError() {
+    requestAnimationFrame(() => termsRef.current?.focus());
+  }
+
+  function handleLegalLinkClick() {
+    markLegalNavigationFromRegistration();
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setTermsError("");
 
-    if (password.length < 8) {
+    if (!draft.termsAccepted) {
+      setTermsError(TERMS_ERROR_MESSAGE);
+      focusTermsError();
+      return;
+    }
+
+    if (draft.password.length < 8) {
       setError("A senha precisa ter pelo menos 8 caracteres.");
       return;
     }
 
-    if (password !== confirmPassword) {
+    if (draft.password !== draft.confirmPassword) {
       setError("As senhas não conferem.");
-      return;
-    }
-
-    if (!acceptedTerms) {
-      setError("Aceite os Termos de Uso e a Política de Privacidade para continuar.");
       return;
     }
 
@@ -40,7 +53,13 @@ export function RegisterForm() {
     const response = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email, password, confirmPassword }),
+      body: JSON.stringify({
+        email: draft.email,
+        password: draft.password,
+        confirmPassword: draft.confirmPassword,
+        termsAccepted: draft.termsAccepted,
+        ...CURRENT_LEGAL_VERSIONS,
+      }),
     });
     const data = await response.json();
 
@@ -50,6 +69,7 @@ export function RegisterForm() {
       return;
     }
 
+    clearDraft();
     router.replace("/onboarding");
   }
 
@@ -71,15 +91,15 @@ export function RegisterForm() {
         </>
       }
     >
-      <form className="auth-form" onSubmit={handleSubmit}>
+      <form className="auth-form" onSubmit={handleSubmit} noValidate>
         <FormField
           id="register-email"
           label="Email"
           type="email"
           autoComplete="email"
           placeholder="voce@empresa.com"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
+          value={draft.email}
+          onChange={(event) => updateDraft({ email: event.target.value })}
           icon={<Mail aria-hidden="true" />}
           required
         />
@@ -89,8 +109,8 @@ export function RegisterForm() {
           type="password"
           autoComplete="new-password"
           placeholder="••••••••"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
+          value={draft.password}
+          onChange={(event) => updateDraft({ password: event.target.value })}
           icon={<LockKeyhole aria-hidden="true" />}
           required
         />
@@ -100,22 +120,50 @@ export function RegisterForm() {
           type="password"
           autoComplete="new-password"
           placeholder="Repita sua senha"
-          value={confirmPassword}
-          onChange={(event) => setConfirmPassword(event.target.value)}
+          value={draft.confirmPassword}
+          onChange={(event) => updateDraft({ confirmPassword: event.target.value })}
           icon={<LockKeyhole aria-hidden="true" />}
           required
         />
-        <label className="auth-form__terms">
-          <input
-            className="ui-checkbox"
-            type="checkbox"
-            checked={acceptedTerms}
-            onChange={(event) => setAcceptedTerms(event.target.checked)}
-          />
-          <span>Concordo com os Termos de Uso e a Política de Privacidade.</span>
-        </label>
+
+        <div className="auth-form__terms-field" data-invalid={Boolean(termsError)}>
+          <span className="auth-form__terms-target">
+            <input
+              ref={termsRef}
+              id="register-terms"
+              className="ui-checkbox"
+              type="checkbox"
+              checked={draft.termsAccepted}
+              onChange={(event) => {
+                updateDraft({ termsAccepted: event.target.checked });
+                if (event.target.checked) setTermsError("");
+              }}
+              aria-invalid={Boolean(termsError)}
+              aria-describedby={termsError ? "register-terms-error" : undefined}
+              aria-label="Li e concordo com os Termos de Uso e declaro que li a Política de Privacidade."
+              required
+            />
+          </span>
+          <p id="register-terms-label" className="auth-form__terms-copy">
+            <label htmlFor="register-terms">Li e concordo com os </label>
+            <Link href="/termos-de-uso" onClick={handleLegalLinkClick}>
+              Termos de Uso
+            </Link>
+            <label htmlFor="register-terms"> e declaro que li a </label>
+            <Link href="/politica-de-privacidade" onClick={handleLegalLinkClick}>
+              Política de Privacidade
+            </Link>
+            .
+          </p>
+          {termsError ? (
+            <p className="auth-form__terms-error" id="register-terms-error" role="alert" aria-live="assertive">
+              {termsError}
+            </p>
+          ) : null}
+        </div>
+
         {error ? (
-          <p className="auth-form__error" role="alert">
+          <p className="auth-form__error" role="alert" aria-live="assertive">
             {error}
           </p>
         ) : null}

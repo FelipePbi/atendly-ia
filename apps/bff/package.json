@@ -8,6 +8,7 @@
     "build": "prisma generate && tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "check": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy"
@@ -16,6 +17,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@atendly-ia/legal-contract": "file:../../packages/legal-contract",
     "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.1.0",
     "@fastify/rate-limit": "^10.3.0",
@@ -33,6 +35,7 @@
     "@types/pg": "^8.20.0",
     "prisma": "^7.8.0",
     "tsx": "^4.20.6",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.8"
   }
 }

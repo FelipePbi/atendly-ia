@@ -73,6 +73,16 @@ export async function buildApp() {
       });
     }
 
+    if (error instanceof Error && "statusCode" in error && error.statusCode === 429) {
+      return reply.code(429).send({
+        error: {
+          code: "RATE_LIMITED",
+          message: "Muitas tentativas. Aguarde alguns minutos e tente novamente."
+        },
+        requestId: request.id
+      });
+    }
+
     app.log.error({ err: toErrorMessage(error) }, "Unhandled request error");
     return reply.code(500).send({
       error: {

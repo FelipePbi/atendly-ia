@@ -41,7 +41,9 @@ Em desenvolvimento local, o BFF usa `http://localhost:3002` e o frontend usa `ht
 
 ## Rotas principais
 
-- `/register`: cadastro com email e senha.
+- `/cadastro`: cadastro com email, senha e aceite versionado dos Termos de Uso; `/register` redireciona para esta rota.
+- `/termos-de-uso`: template versionado dos Termos de Uso.
+- `/politica-de-privacidade`: template versionado da Política de Privacidade.
 - `/login`: login.
 - `/onboarding`: dados iniciais, telefone esperado e conexao por QR Code.
 - `/chat`: area principal de atendimento, com menu contextual de conversas.
@@ -69,6 +71,7 @@ Configurar no Render:
 
 - `NEXT_PUBLIC_BFF_URL`: URL publica do BFF.
 - `BFF_BASE_URL`: URL publica ou privada do BFF usada nas chamadas server-side.
+- Variáveis `ATENDLY_LEGAL_*`: identificação, contatos, fornecedores, retenção, foro, aprovação jurídica e estratégia de indexação. Consulte `docs/legal-review-checklist.md`.
 
 O webhook publico do Evolution Go deve apontar para o BFF:
 

@@ -51,7 +51,7 @@ export function LoginForm() {
       footer={
         <>
           Ainda não tem conta?{" "}
-          <Link className="auth-card__link" href="/register">
+          <Link className="auth-card__link" href="/cadastro">
             Criar conta
           </Link>
         </>

@@ -19,6 +19,30 @@ export function normalizeWhatsappPhone(value: string): string {
   return /^\d{10,15}$/.test(digits) ? digits : "";
 }
 
+const BRAZILIAN_DDDS = new Set([
+  11, 12, 13, 14, 15, 16, 17, 18, 19,
+  21, 22, 24, 27, 28,
+  31, 32, 33, 34, 35, 37, 38,
+  41, 42, 43, 44, 45, 46, 47, 48, 49,
+  51, 53, 54, 55,
+  61, 62, 63, 64, 65, 66, 67, 68, 69,
+  71, 73, 74, 75, 77, 79,
+  81, 82, 83, 84, 85, 86, 87, 88, 89,
+  91, 92, 93, 94, 95, 96, 97, 98, 99
+]);
+
+export function normalizeBrazilianWhatsappPhone(value: string): string {
+  const normalized = normalizeWhatsappPhone(value);
+  if (!normalized.startsWith("55") || (normalized.length !== 12 && normalized.length !== 13)) return "";
+
+  const ddd = Number(normalized.slice(2, 4));
+  const subscriber = normalized.slice(4);
+  if (!BRAZILIAN_DDDS.has(ddd)) return "";
+  if (subscriber.length === 9 && subscriber[0] !== "9") return "";
+
+  return normalized;
+}
+
 export function normalizeWhatsappJid(value: string): string {
   const input = value.trim().toLowerCase();
   if (!input) return "";

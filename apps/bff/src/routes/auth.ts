@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { CURRENT_LEGAL_VERSIONS } from "../config/legal-versions.js";
 import { clearSessionCookie, currentUser, requireAuth, setSessionCookie, signSession } from "../lib/auth.js";
 import { instanceDto, onboardingDto, profileDto, settingsDto, userDto } from "../lib/dto.js";
 import { AppError } from "../lib/errors.js";
@@ -13,7 +14,14 @@ const registerSchema = z
   .object({
     email: emailSchema,
     password: z.string().min(8),
-    confirmPassword: z.string().min(8)
+    confirmPassword: z.string().min(8),
+    termsAccepted: z.literal(true, { error: "Terms of Use must be accepted." }),
+    termsVersion: z.literal(CURRENT_LEGAL_VERSIONS.termsVersion, {
+      error: "Terms of Use version is not current."
+    }),
+    privacyPolicyVersion: z.literal(CURRENT_LEGAL_VERSIONS.privacyPolicyVersion, {
+      error: "Privacy Policy version is not current."
+    })
   })
   .refine((data) => data.password === data.confirmPassword, {
     path: ["confirmPassword"],
@@ -60,6 +68,12 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         settings: {
           create: {
             aiEnabled: false
+          }
+        },
+        legalAcceptances: {
+          create: {
+            termsVersion: data.termsVersion,
+            privacyPolicyVersion: data.privacyPolicyVersion
           }
         }
       },

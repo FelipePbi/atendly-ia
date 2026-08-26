@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { businessSettingsSchema } from "@/lib/business-settings";
+import { CURRENT_LEGAL_VERSIONS } from "@/config/legal-versions";
 
 export const emailSchema = z.string().email("Informe um email valido.").trim().toLowerCase();
 
@@ -8,6 +9,9 @@ export const registerSchema = z
     email: emailSchema,
     password: z.string().min(8, "A senha precisa ter pelo menos 8 caracteres."),
     confirmPassword: z.string().min(8, "Confirme a senha."),
+    termsAccepted: z.literal(true, { error: "Você precisa aceitar os Termos de Uso para criar sua conta." }),
+    termsVersion: z.literal(CURRENT_LEGAL_VERSIONS.termsVersion),
+    privacyPolicyVersion: z.literal(CURRENT_LEGAL_VERSIONS.privacyPolicyVersion),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "As senhas nao conferem.",

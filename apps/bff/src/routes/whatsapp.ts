@@ -1,9 +1,11 @@
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 import { currentUser, requireAuth } from "../lib/auth.js";
 import { instanceDto, settingsDto } from "../lib/dto.js";
 import { AppError } from "../lib/errors.js";
-import { dataResponse } from "../lib/http.js";
+import { dataResponse, parseBody } from "../lib/http.js";
+import { normalizeBrazilianWhatsappPhone } from "../lib/phone.js";
 import { getPrisma } from "../lib/prisma.js";
 import {
   buildWebhookUrl,
@@ -13,8 +15,15 @@ import {
   getEvolutionContacts,
   getEvolutionQr,
   getEvolutionStatus,
-  logoutEvolutionInstance
+  logoutEvolutionInstance,
+  pairEvolutionInstance
 } from "../services/evolution-go.js";
+
+const pairingSchema = z.object({
+  phone: z.string().trim().min(10).max(32)
+});
+
+const PAIRING_CODE_TTL_MS = 160_000;
 
 export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void> {
   app.addHook("preHandler", async (request) => {
@@ -175,6 +184,88 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
       whatsappInstance: instanceDto(updated)
     });
   });
+
+  app.post(
+    "/whatsapp/pair",
+    {
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: "5 minutes"
+        }
+      }
+    },
+    async (request) => {
+      const user = currentUser(request);
+      const body = parseBody(pairingSchema, request.body);
+      const phone = normalizeBrazilianWhatsappPhone(body.phone);
+      if (!phone) {
+        throw new AppError("VALIDATION_ERROR", "Informe um telefone brasileiro valido com DDD.", 400);
+      }
+
+      const prisma = getPrisma();
+      const instance = await prisma.whatsAppInstance.findUnique({
+        where: { userId: user.id }
+      });
+      if (!instance) {
+        throw new AppError("NOT_FOUND", "Create a WhatsApp instance before pairing.", 404);
+      }
+
+      await prisma.userProfile.updateMany({
+        where: { userId: user.id },
+        data: {
+          whatsappPhoneRaw: body.phone,
+          whatsappPhoneNormalized: phone
+        }
+      });
+
+      await withExistingEvolutionInstance(() =>
+        connectEvolutionInstance(instance.evolutionInstanceToken, buildWebhookUrl())
+      );
+      const status = await withExistingEvolutionInstance(() =>
+        getEvolutionStatus(instance.evolutionInstanceToken)
+      );
+
+      if (status.connected) {
+        const connected = await prisma.whatsAppInstance.update({
+          where: { id: instance.id },
+          data: {
+            status: "CONNECTED",
+            phoneNumber: status.phoneNumber ?? instance.phoneNumber,
+            qrcode: null,
+            connectedAt: instance.connectedAt ?? new Date()
+          }
+        });
+        return dataResponse(request, {
+          pairingCode: null,
+          expiresAt: null,
+          connected: true,
+          whatsappInstance: instanceDto(connected)
+        });
+      }
+
+      let pair: Awaited<ReturnType<typeof pairEvolutionInstance>>;
+      try {
+        pair = await withExistingEvolutionInstance(() =>
+          pairEvolutionInstance(instance.evolutionInstanceToken, phone)
+        );
+      } catch (error) {
+        if (error instanceof AppError && error.code === "NOT_FOUND") throw error;
+        throw new AppError("UPSTREAM_ERROR", "Não foi possível gerar o código de conexão.", 502);
+      }
+      const updated = await prisma.whatsAppInstance.update({
+        where: { id: instance.id },
+        data: { status: "CONNECTING" }
+      });
+
+      return dataResponse(request, {
+        pairingCode: pair.pairingCode,
+        expiresAt: new Date(Date.now() + PAIRING_CODE_TTL_MS).toISOString(),
+        connected: false,
+        whatsappInstance: instanceDto(updated)
+      });
+    }
+  );
 
   app.post("/whatsapp/logout", async (request) => {
     const user = currentUser(request);

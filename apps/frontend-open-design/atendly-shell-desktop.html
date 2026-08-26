@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atendly — Shell responsivo</title>
+  <script>
+    (function () {
+      var state = new URLSearchParams(window.location.search).get('state');
+      document.documentElement.dataset.shellState = ['loading', 'empty', 'error'].includes(state) ? state : 'ready';
+    })();
+  </script>
+  <link rel="stylesheet" href="atendly.css">
+  <style>
+    .shell-page-header > div { min-width: 0; }
+    .sidebar-brand .brand, .shell-mobile-header .brand { min-height: 44px; }
+    .shell-page-header > .badge { color: var(--fg-soft); background: var(--surface-interactive); }
+    .shell-operational .operational-icon:not(.danger), .shell-context-icon { color: var(--fg-soft); background: var(--surface-interactive); }
+    .shell-start-panel { min-height: 330px; }
+    .shell-start-panel h2 { margin-top: 30px; }
+    .shell-start-copy { max-width: 48ch; }
+    .shell-state-view { min-height: 430px; border: 1px solid var(--border); border-radius: var(--r-lg); display: grid; place-items: center; background: var(--surface); }
+    [data-shell-state][hidden] { display: none !important; }
+    html:not([data-shell-state="ready"]) [data-shell-state="ready"] { display: none !important; }
+    .shell-state-view .empty-state, .shell-state-view .error-state { padding-block: 56px; }
+    .shell-state-view .empty-state h2, .shell-state-view .error-state h2 { margin-bottom: 8px; font-size: 22px; }
+    .shell-state-action { display: flex; justify-content: center; }
+    .shell-retry-status { min-height: 20px; margin-top: 12px; color: var(--danger); font-size: 13px; letter-spacing: .01em; }
+    .shell-loading-view { width: 100%; min-height: 430px; padding: 28px; align-content: start; place-items: stretch; gap: 22px; }
+    .shell-loading-header { display: grid; gap: 10px; }
+    .shell-loading-label { color: var(--muted); font-size: 13px; letter-spacing: .01em; }
+    .shell-loading-header .skeleton-title { width: min(280px, 55%); }
+    .shell-loading-header .skeleton-line { width: min(460px, 82%); }
+    .shell-loading-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(280px, .75fr); gap: 20px; }
+    .shell-loading-block { min-height: 230px; padding: 24px; border: 1px solid var(--border); border-radius: var(--r-card); display: grid; align-content: start; gap: 16px; }
+    .shell-loading-block.is-compact { min-height: 150px; }
+    .shell-loading-block .skeleton-line:nth-child(2) { width: 78%; }
+    .shell-loading-block .skeleton-line:nth-child(3) { width: 58%; }
+    .shell-loading-view .skeleton { animation-iteration-count: 3; }
+    @media (max-width: 1099px) {
+      .shell-loading-grid { grid-template-columns: 1fr; }
+      .shell-loading-block { min-height: 150px; }
+    }
+    @media (max-width: 767px) {
+      .shell-start-panel { min-height: 320px; }
+      .shell-start-panel h2 { margin-top: 24px; }
+      .shell-state-view { min-height: 390px; margin-inline: -16px; border-inline: 0; border-radius: 0; }
+      .shell-loading-view { padding: 24px 16px; }
+      .shell-loading-grid { gap: 16px; }
+      .shell-loading-block { padding: 20px 16px; }
+    }
+    @media (max-width: 520px) {
+      .shell-page-header { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+      .shell-page-header > .badge { justify-self: start; }
+    }
+  </style>
+</head>
+<body>
+  <a class="shell-skip-link" href="#main-content">Ir para o conteúdo</a>
+  <div class="app-frame desktop-shell shell-reference" data-od-id="desktop-app-shell">
+    <aside class="sidebar" aria-label="Navegação da aplicação" data-od-id="desktop-sidebar">
+      <div class="sidebar-brand">
+        <a class="brand" href="index.html" aria-label="Atendly — visão geral"><span class="brand-mark" aria-hidden="true"></span><span>Atendly</span></a>
+      </div>
+
+      <div class="business-context" data-od-id="business-context" aria-label="Negócio atual: Studio Aurora; Agenda Atendly é a fonte oficial">
+        <span class="avatar" aria-hidden="true">SA</span>
+        <span class="business-name"><strong>Studio Aurora</strong><span>Agenda Atendly oficial</span></span>
+      </div>
+
+      <div class="wa-status status-line" data-od-id="whatsapp-status" aria-label="WhatsApp conectado"><span class="status-dot" aria-hidden="true"></span><span>WhatsApp conectado</span></div>
+
+      <nav class="nav" aria-label="Navegação principal" data-od-id="desktop-primary-navigation">
+        <a class="nav-item is-active" href="dashboard-atendly.html" aria-current="page" aria-label="Início" data-od-id="nav-home"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-home"></use></svg><span>Início</span></a>
+        <a class="nav-item" href="conversations.html" aria-label="Conversas" data-od-id="nav-conversations"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-chat"></use></svg><span>Conversas</span></a>
+        <a class="nav-item" href="agenda-atendly.html" aria-label="Agenda" data-od-id="nav-calendar"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-calendar"></use></svg><span>Agenda</span></a>
+        <a class="nav-item" href="customers.html" aria-label="Clientes" data-od-id="nav-customers"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-users"></use></svg><span>Clientes</span></a>
+        <a class="nav-item" href="services.html" aria-label="Serviços" data-od-id="nav-services"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-briefcase"></use></svg><span>Serviços</span></a>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <nav class="nav" aria-label="Configurações"><a class="nav-item" href="settings.html" data-od-id="nav-settings"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-settings"></use></svg><span>Configurações</span></a></nav>
+        <div class="dropdown shell-account-dropdown">
+          <button class="account-button" type="button" data-toggle="account-menu" aria-label="Abrir menu da conta de Felipe Martins" aria-controls="account-menu" aria-expanded="false" data-od-id="account-menu-button">
+            <span class="avatar" aria-hidden="true">FM</span><span class="business-name"><strong>Felipe Martins</strong><span>Conta principal</span></span><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-more"></use></svg>
+          </button>
+          <div id="account-menu" class="menu hidden" data-panel aria-hidden="true" data-od-id="account-menu-panel">
+            <span class="menu-item" aria-disabled="true" data-od-id="account-help-disabled"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-help"></use></svg>Ajuda</span>
+            <div class="menu-divider"></div>
+            <a class="menu-item danger" href="auth-login.html" data-od-id="account-sign-out"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-logout"></use></svg>Sair</a>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="desktop-main" id="main-content" tabindex="-1" data-od-id="desktop-content-area">
+      <header class="shell-mobile-header" data-od-id="shell-mobile-header">
+        <a class="brand" href="index.html" aria-label="Atendly — visão geral"><span class="brand-mark" aria-hidden="true"></span><span>Atendly</span></a>
+        <span class="badge">Studio Aurora</span>
+      </header>
+
+      <div class="page shell-page">
+        <header class="page-header shell-page-header" data-od-id="desktop-page-header">
+          <div><p class="eyebrow">Operação do negócio</p><h1 data-od-id="desktop-page-title">Seu espaço de trabalho</h1><p>Acesse agenda, conversas e cadastros sem perder o contexto operacional.</p></div>
+          <span class="badge" data-od-id="shell-demo-badge">Dados demonstrativos</span>
+        </header>
+
+        <section class="operational-strip shell-operational" aria-labelledby="shell-status-title" data-shell-operational data-od-id="shell-operational-status">
+          <span class="operational-icon" aria-hidden="true" data-shell-operational-icon><svg class="icon"><use href="atendly-icons.svg#i-shield"></use></svg></span>
+          <div class="operational-copy"><strong id="shell-status-title" data-shell-operational-title>Operação disponível</strong><span data-shell-operational-copy>WhatsApp conectado e Agenda Atendly definida como fonte oficial neste exemplo.</span></div>
+          <div class="operational-points" aria-label="Estados operacionais" data-shell-operational-points><span class="status-line"><span class="status-dot" aria-hidden="true"></span>WhatsApp</span><span class="status-line"><span class="status-dot" aria-hidden="true"></span>Agenda</span></div>
+        </section>
+
+        <section class="neutral-canvas shell-reference-canvas" data-shell-state="ready" data-od-id="neutral-desktop-screen">
+          <article class="neutral-panel shell-start-panel" data-od-id="shell-start-panel">
+            <span class="badge"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-home"></use></svg>Próxima ação</span>
+            <h2 data-od-id="shell-next-action-title">Organize o que precisa de atenção hoje</h2>
+            <p class="muted shell-start-copy">Consulte horários na agenda ou abra conversas para atender clientes que precisam de uma pessoa.</p>
+            <div class="shell-start-actions">
+              <a class="btn btn-primary" href="agenda-atendly.html" data-od-id="open-agenda-from-shell"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-calendar"></use></svg>Abrir agenda</a>
+              <a class="btn btn-secondary" href="conversations.html" data-od-id="open-conversations-from-shell">Ver conversas</a>
+            </div>
+          </article>
+
+          <aside class="neutral-aside shell-context" aria-label="Contexto operacional" data-od-id="shell-context">
+            <section class="card shell-context-card" data-od-id="calendar-source-card">
+              <span class="shell-context-icon" aria-hidden="true"><svg class="icon"><use href="atendly-icons.svg#i-calendar"></use></svg></span>
+              <div><p class="caption muted">Fonte oficial</p><h3 data-od-id="shell-calendar-source-title">Agenda Atendly</h3><p class="small muted">Agendamentos e disponibilidade são controlados aqui.</p></div>
+            </section>
+            <nav class="list shell-shortcuts" aria-label="Atalhos do negócio" data-od-id="shell-shortcuts">
+              <a class="list-item" href="customers.html" data-od-id="shell-customers-link"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-users"></use></svg><span class="list-item-main"><span class="list-item-title">Clientes</span><span class="list-item-copy">Cadastros, observações e histórico</span></span><svg class="icon shell-chevron" aria-hidden="true"><use href="atendly-icons.svg#i-chevron-right"></use></svg></a>
+              <a class="list-item" href="services.html" data-od-id="shell-services-link"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-briefcase"></use></svg><span class="list-item-main"><span class="list-item-title">Serviços</span><span class="list-item-copy">Duração, preço e estado</span></span><svg class="icon shell-chevron" aria-hidden="true"><use href="atendly-icons.svg#i-chevron-right"></use></svg></a>
+            </nav>
+          </aside>
+        </section>
+
+        <section class="shell-state-view shell-loading-view" data-shell-state="loading" role="status" aria-labelledby="shell-loading-title" aria-busy="true" hidden data-od-id="shell-loading-state">
+          <div class="shell-loading-header">
+            <span class="shell-loading-label" id="shell-loading-title" data-od-id="shell-loading-title">Carregando espaço de trabalho…</span>
+            <span class="skeleton skeleton-title"></span><span class="skeleton skeleton-line"></span>
+          </div>
+          <div class="shell-loading-grid" aria-hidden="true">
+            <div class="shell-loading-block"><span class="skeleton skeleton-title"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line"></span></div>
+            <div class="shell-loading-block is-compact"><span class="skeleton skeleton-title"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line"></span></div>
+          </div>
+        </section>
+
+        <section class="shell-state-view" data-shell-state="empty" aria-labelledby="shell-empty-title" hidden data-od-id="shell-empty-state">
+          <div class="empty-state">
+            <span class="state-icon" aria-hidden="true"><svg class="icon"><use href="atendly-icons.svg#i-check"></use></svg></span>
+            <h2 id="shell-empty-title" data-od-id="shell-empty-title">Nenhuma tarefa urgente agora</h2>
+            <p>Conversas que aguardam uma pessoa e próximos horários aparecerão aqui quando existirem.</p>
+            <div class="shell-state-action"><a class="btn btn-secondary" href="agenda-atendly.html" data-od-id="empty-open-agenda">Consultar agenda</a></div>
+          </div>
+        </section>
+
+        <section class="shell-state-view" data-shell-state="error" role="alert" aria-labelledby="shell-error-title" hidden data-od-id="shell-error-state">
+          <div class="error-state">
+            <span class="state-icon" aria-hidden="true"><svg class="icon"><use href="atendly-icons.svg#i-alert"></use></svg></span>
+            <h2 id="shell-error-title" data-od-id="shell-error-title">Não foi possível carregar esta visão</h2>
+            <p>O estado da operação não foi atualizado. Nenhum agendamento, conversa ou cadastro foi alterado.</p>
+            <div class="shell-state-action"><button class="btn btn-primary" type="button" aria-describedby="shell-retry-status" data-shell-retry data-od-id="retry-shell">Carregar novamente</button></div>
+            <div class="shell-retry-status" id="shell-retry-status" role="status" aria-live="polite" data-shell-retry-status></div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <nav class="shell-bottom-nav" aria-label="Navegação principal" data-od-id="shell-mobile-navigation">
+      <a class="bottom-nav-item is-active" href="dashboard-atendly.html" aria-current="page" data-od-id="mobile-nav-home"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-home"></use></svg><span>Início</span></a>
+      <a class="bottom-nav-item" href="conversations.html" data-od-id="mobile-nav-conversations"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-chat"></use></svg><span>Conversas</span></a>
+      <a class="bottom-nav-item" href="agenda-atendly.html" data-od-id="mobile-nav-agenda"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-calendar"></use></svg><span>Agenda</span></a>
+      <button class="bottom-nav-item" type="button" data-open="shell-more-sheet" aria-controls="shell-more-sheet" aria-haspopup="dialog" aria-expanded="false" data-od-id="mobile-nav-more"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-more"></use></svg><span>Mais</span></button>
+    </nav>
+  </div>
+
+  <div id="shell-more-sheet" class="overlay bottom-sheet-wrap hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="shell-more-title" data-od-id="mobile-more-sheet">
+    <section class="bottom-sheet"><div class="sheet-handle" aria-hidden="true"></div><div class="modal-header"><div><p class="eyebrow">Navegação</p><h2 id="shell-more-title" data-od-id="mobile-more-title">Mais</h2></div><button class="icon-btn" type="button" data-close aria-label="Fechar" data-od-id="mobile-more-close"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-x"></use></svg></button></div><div class="list"><a class="menu-item" href="customers.html" data-od-id="mobile-more-customers"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-users"></use></svg>Clientes</a><a class="menu-item" href="services.html" data-od-id="mobile-more-services"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-briefcase"></use></svg>Serviços</a><a class="menu-item" href="settings.html" data-od-id="mobile-more-settings"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-settings"></use></svg>Configurações</a><span class="menu-item" aria-disabled="true" data-od-id="mobile-more-help-disabled"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-help"></use></svg>Ajuda</span><div class="menu-divider"></div><a class="menu-item danger" href="auth-login.html" data-od-id="mobile-more-sign-out"><svg class="icon" aria-hidden="true"><use href="atendly-icons.svg#i-logout"></use></svg>Sair</a></div></section>
+  </div>
+  <script>
+    (function () {
+      var requested = document.documentElement.dataset.shellState || 'ready';
+      document.querySelectorAll('[data-shell-state]').forEach(function (view) {
+        view.hidden = view.getAttribute('data-shell-state') !== requested;
+      });
+
+      var operational = document.querySelector('[data-shell-operational]');
+      var operationalIcon = document.querySelector('[data-shell-operational-icon]');
+      var operationalTitle = document.querySelector('[data-shell-operational-title]');
+      var operationalCopy = document.querySelector('[data-shell-operational-copy]');
+      var operationalPoints = document.querySelector('[data-shell-operational-points]');
+      if (requested === 'loading') {
+        operational.setAttribute('aria-busy', 'true');
+        operationalTitle.textContent = 'Verificando operação';
+        operationalCopy.textContent = 'Confirmando conexão do WhatsApp e disponibilidade da agenda.';
+        operationalPoints.classList.add('hidden');
+      } else if (requested === 'error') {
+        operationalIcon.classList.add('danger');
+        operationalIcon.querySelector('use').setAttribute('href', 'atendly-icons.svg#i-alert');
+        operationalTitle.textContent = 'Estado operacional indisponível';
+        operationalCopy.textContent = 'Não use esta visão para confirmar atendimento ou disponibilidade agora.';
+        operationalPoints.classList.add('hidden');
+      }
+
+      var retry = document.querySelector('[data-shell-retry]');
+      if (!retry) return;
+      retry.addEventListener('click', function () {
+        var status = document.querySelector('[data-shell-retry-status]');
+        var original = retry.textContent;
+        retry.disabled = true;
+        retry.setAttribute('aria-busy', 'true');
+        retry.innerHTML = '<span class="spinner" aria-hidden="true"></span>Carregando';
+        if (status) status.textContent = '';
+        window.setTimeout(function () {
+          retry.disabled = false;
+          retry.removeAttribute('aria-busy');
+          retry.textContent = original;
+          if (status) status.textContent = 'A visão continua indisponível. Tente novamente mais tarde.';
+        }, 1000);
+      });
+    })();
+  </script>
+  <script src="atendly.js"></script>
+</body>
+</html>

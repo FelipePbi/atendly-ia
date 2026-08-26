@@ -14,15 +14,25 @@ export function SegmentedControl<T extends string>({
   onChange,
   label,
   className,
+  invalid = false,
+  describedBy,
 }: {
   value: T;
   options: Array<SegmentedOption<T>>;
   onChange: (value: T) => void;
   label: string;
   className?: string;
+  invalid?: boolean;
+  describedBy?: string;
 }) {
   return (
-    <div className={clsx("ui-segmented", className)} role="group" aria-label={label}>
+    <div
+      className={clsx("ui-segmented", className)}
+      role="group"
+      aria-label={label}
+      aria-describedby={describedBy}
+      data-invalid={invalid || undefined}
+    >
       {options.map((option) => (
         <button
           className="ui-segmented__item"

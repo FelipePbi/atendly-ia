@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createRequire } from "node:module";
+import { CURRENT_LEGAL_VERSIONS } from "../packages/legal-contract/index.js";
 
 const requireFromBff = createRequire(new URL("../apps/bff/package.json", import.meta.url));
 
@@ -57,7 +58,7 @@ async function authFlow(label, baseUrl, prefix) {
   try {
     let response = await jsonRequest(`${baseUrl}${prefix}/auth/register`, {
       method: "POST",
-      body: { email, password, confirmPassword: password },
+      body: { email, password, confirmPassword: password, termsAccepted: true, ...CURRENT_LEGAL_VERSIONS },
       cookie
     });
     cookie = response.cookie || cookie;
@@ -97,7 +98,7 @@ async function whatsappFlow(label, baseUrl, prefix) {
   try {
     let response = await jsonRequest(`${baseUrl}${prefix}/auth/register`, {
       method: "POST",
-      body: { email, password, confirmPassword: password },
+      body: { email, password, confirmPassword: password, termsAccepted: true, ...CURRENT_LEGAL_VERSIONS },
       cookie
     });
     cookie = response.cookie || cookie;

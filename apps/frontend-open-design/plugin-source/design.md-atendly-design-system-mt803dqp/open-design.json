@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design.md-atendly-design-system-mt803dqp",
+  "title": "DESIGN.md — Atendly Design System",
+  "version": "0.1.0",
+  "description": "Atendly should look like a **modern premium SaaS for small businesses**: elegant, practical, calm and trustworthy.",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

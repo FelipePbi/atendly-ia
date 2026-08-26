@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DM_Sans, Geist_Mono, Sora } from "next/font/google";
+import { RegistrationDraftProvider } from "@/components/auth/RegistrationDraftProvider";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -39,7 +40,9 @@ export default function RootLayout({
       lang="pt-BR"
       className={`${dmSans.variable} ${sora.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        <RegistrationDraftProvider>{children}</RegistrationDraftProvider>
+      </body>
     </html>
   );
 }

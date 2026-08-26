@@ -24,6 +24,11 @@ type QrData = {
   Qr?: string;
 };
 
+type PairData = {
+  pairingCode?: string;
+  PairingCode?: string;
+};
+
 type StatusData = {
   connected?: boolean;
   Connected?: boolean;
@@ -118,6 +123,22 @@ export async function getEvolutionQr(instanceToken: string) {
     qrcode: normalizeQrDataUrl(imageQr || rawQr),
     code: rawQr
   };
+}
+
+export async function pairEvolutionInstance(instanceToken: string, phone: string) {
+  const response = await evolutionFetch<PairData>("/instance/pair", {
+    method: "POST",
+    apiKey: instanceToken,
+    body: { phone }
+  });
+  const data = response.data ?? {};
+  const pairingCode = stringValue(data.pairingCode) ?? stringValue(data.PairingCode);
+
+  if (!pairingCode) {
+    throw new AppError("UPSTREAM_ERROR", "Evolution Go did not return a pairing code.", 502);
+  }
+
+  return { pairingCode };
 }
 
 export async function getEvolutionStatus(instanceToken: string) {

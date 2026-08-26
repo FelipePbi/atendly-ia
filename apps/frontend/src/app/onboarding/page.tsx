@@ -4,7 +4,6 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
-  Clock3,
   FileText,
   Loader2,
   Moon,
@@ -22,6 +21,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { SegmentedControl, type SegmentedOption } from "@/components/ui/SegmentedControl";
 import { ChoiceCard, ChoiceGroup, RadioCard } from "@/components/ui/SelectionCard";
 import { QrCodePanel } from "@/components/whatsapp/QrCodePanel";
+import { WhatsAppPairingMobile } from "@/components/whatsapp/WhatsAppPairingMobile";
 import { postAuthPath } from "@/lib/post-auth";
 import {
   PERSONA_DEFINITIONS,
@@ -81,12 +81,11 @@ const sexOptions: Array<SegmentedOption<UserSex | "">> = [
   { value: "PREFER_NOT_TO_SAY", label: "Não informar" },
 ];
 
-type VisualSexOption = VirtualAttendantAssistantSex | "NEUTRAL" | "";
+type VisualSexOption = VirtualAttendantAssistantSex | "";
 
 const visualSexOptions: Array<SegmentedOption<VisualSexOption>> = [
   { value: "FEMALE", label: "Feminino", icon: <span className="onboarding-visual-dot" data-tone="brand" /> },
   { value: "MALE", label: "Masculino", icon: <span className="onboarding-visual-dot" /> },
-  { value: "NEUTRAL", label: "Neutro", icon: <span className="onboarding-visual-dot" />, disabled: true },
 ];
 
 function resolveScreenStep(step: ApiOnboardingStep): OnboardingScreenStep {
@@ -110,11 +109,15 @@ export default function OnboardingPage() {
   const [whatsAppLoading, setWhatsAppLoading] = useState(false);
   const [refreshingQr, setRefreshingQr] = useState(false);
   const [qrPending, setQrPending] = useState(false);
+  const [sexError, setSexError] = useState("");
+  const [assistantSexError, setAssistantSexError] = useState("");
+  const [connectionLayout, setConnectionLayout] = useState<"pending" | "mobile" | "desktop">("pending");
 
   const [fullName, setFullName] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [sex, setSex] = useState<UserSex | "">("");
   const [businessName, setBusinessName] = useState("");
+  const [whatsappPhone, setWhatsappPhone] = useState("");
   const [identityMode, setIdentityMode] = useState<VirtualAttendantIdentityMode>("PROFESSIONAL");
   const [assistantName, setAssistantName] = useState("");
   const [assistantSex, setAssistantSex] = useState<VirtualAttendantAssistantSex | "">("");
@@ -138,6 +141,7 @@ export default function OnboardingPage() {
       setBirthDate(data.profile.birthDate ?? "");
       setSex(data.profile.sex);
       setBusinessName(data.profile.businessName);
+      setWhatsappPhone(data.profile.whatsappPhoneNormalized ?? data.profile.whatsappPhoneRaw ?? "");
     }
 
     if (data.settings) {
@@ -162,7 +166,7 @@ export default function OnboardingPage() {
 
     const data = (await response.json()) as OnboardingResponse;
     if (!response.ok) {
-      setError(data.error ?? "Nao foi possivel carregar o onboarding.");
+      setError(data.error ?? "Não foi possível carregar o onboarding.");
       setLoading(false);
       return;
     }
@@ -187,14 +191,22 @@ export default function OnboardingPage() {
     });
   }, [loadOnboarding]);
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
+    const updateLayout = () => setConnectionLayout(mediaQuery.matches ? "mobile" : "desktop");
+    updateLayout();
+    mediaQuery.addEventListener("change", updateLayout);
+    return () => mediaQuery.removeEventListener("change", updateLayout);
+  }, []);
+
   const recoverWhatsAppInstance = useCallback(async () => {
-    setError("Criando uma nova instancia na Evolution...");
+    setError("Criando uma nova instância na Evolution...");
 
     const createResponse = await fetch("/api/whatsapp/instance", { method: "POST" });
     const createData = await createResponse.json();
     if (!createResponse.ok) {
       setQrPending(false);
-      setError(createData.error ?? "Nao foi possivel criar a instancia.");
+      setError(createData.error ?? "Não foi possível criar a instância.");
       return false;
     }
 
@@ -215,7 +227,7 @@ export default function OnboardingPage() {
     if (!response.ok) {
       completeStarted.current = false;
       setInstance(data.whatsappInstance ?? data.details?.whatsappInstance ?? instance);
-      setError(data.error ?? "Nao foi possivel finalizar o onboarding.");
+      setError(data.error ?? "Não foi possível finalizar o onboarding.");
       return;
     }
 
@@ -234,7 +246,7 @@ export default function OnboardingPage() {
           await recoverWhatsAppInstance();
           return;
         }
-        setError(statusData.error ?? "Nao foi possivel verificar a conexao.");
+        setError(statusData.error ?? "Não foi possível verificar a conexão.");
         return;
       }
 
@@ -257,11 +269,11 @@ export default function OnboardingPage() {
           await recoverWhatsAppInstance();
           return;
         }
-        setError(qrData.error ?? "Nao foi possivel gerar o QR Code.");
+        setError(qrData.error ?? "Não foi possível gerar o QR Code.");
       }
     } catch {
       setQrPending(false);
-      setError("Nao foi possivel verificar o QR Code agora.");
+      setError("Não foi possível verificar o QR Code agora.");
     }
   }, [completeOnboarding, recoverWhatsAppInstance]);
 
@@ -272,7 +284,7 @@ export default function OnboardingPage() {
     const createResponse = await fetch("/api/whatsapp/instance", { method: "POST" });
     const createData = await createResponse.json();
     if (!createResponse.ok) {
-      setError(createData.error ?? "Nao foi possivel criar a instancia.");
+      setError(createData.error ?? "Não foi possível criar a instância.");
       setWhatsAppLoading(false);
       return;
     }
@@ -286,28 +298,32 @@ export default function OnboardingPage() {
   }, [loadQrAndStatus]);
 
   useEffect(() => {
-    if (step !== "WHATSAPP" || whatsAppStarted.current) return;
+    if (step !== "WHATSAPP" || connectionLayout !== "desktop" || whatsAppStarted.current) return;
     whatsAppStarted.current = true;
     queueMicrotask(() => {
       void prepareWhatsApp();
     });
-  }, [prepareWhatsApp, step]);
+  }, [connectionLayout, prepareWhatsApp, step]);
 
   useEffect(() => {
-    if (step !== "WHATSAPP" || !instance || instance.status === "CONNECTED") return;
+    if (step !== "WHATSAPP" || connectionLayout !== "desktop" || !instance || instance.status === "CONNECTED") return;
 
     const interval = window.setInterval(() => {
       void loadQrAndStatus();
     }, 5000);
 
     return () => window.clearInterval(interval);
-  }, [instance, loadQrAndStatus, step]);
+  }, [connectionLayout, instance, loadQrAndStatus, step]);
 
   async function handleProfileSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!sex) return;
+    if (!sex) {
+      setSexError("Selecione uma opção.");
+      return;
+    }
 
     setError("");
+    setSexError("");
     setSavingProfile(true);
     const response = await fetch("/api/onboarding/profile", {
       method: "PATCH",
@@ -323,7 +339,7 @@ export default function OnboardingPage() {
     setSavingProfile(false);
 
     if (!response.ok) {
-      setError(data.error ?? "Nao foi possivel salvar os dados.");
+      setError(data.error ?? "Não foi possível salvar os dados.");
       return;
     }
 
@@ -344,11 +360,12 @@ export default function OnboardingPage() {
       }
 
       if (!assistantSex) {
-        setError("Defina o sexo da atendente virtual.");
+        setAssistantSexError("Selecione uma opção.");
         return;
       }
     }
 
+    setAssistantSexError("");
     setStep("ATTENDANT_PERSONA");
   }
 
@@ -389,7 +406,7 @@ export default function OnboardingPage() {
     setSavingAssistant(false);
 
     if (!response.ok) {
-      setError(data?.error ?? "Nao foi possivel salvar a Atendente Virtual.");
+      setError(data?.error ?? "Não foi possível salvar a Atendente Virtual.");
       return;
     }
 
@@ -421,7 +438,7 @@ export default function OnboardingPage() {
     setUploadingPersona(false);
 
     if (!response.ok || !data) {
-      setError(data?.error ?? "Nao foi possivel processar os arquivos.");
+      setError(data?.error ?? "Não foi possível processar os arquivos.");
       return;
     }
 
@@ -434,7 +451,7 @@ export default function OnboardingPage() {
     }
 
     if (data.participantSelectionRequired) {
-      setError("Selecione qual participante representa voce e envie os mesmos arquivos novamente.");
+      setError("Selecione qual participante representa você e envie os mesmos arquivos novamente.");
       return;
     }
 
@@ -460,7 +477,7 @@ export default function OnboardingPage() {
     if (createResponse.ok) {
       setInstance(createData.whatsappInstance);
     } else {
-      setError(createData.error ?? "Nao foi possivel criar a instancia.");
+      setError(createData.error ?? "Não foi possível criar a instância.");
       setRefreshingQr(false);
       return;
     }
@@ -503,6 +520,8 @@ export default function OnboardingPage() {
     WHATSAPP: {
       title: "Conecte seu WhatsApp.",
       subtitle: "Abra o WhatsApp e escaneie o código abaixo.",
+      mobileTitle: "Conecte seu WhatsApp",
+      mobileSubtitle: "Vincule o número do seu negócio usando um código seguro.",
     },
   };
   const meta = screenMeta[step];
@@ -515,6 +534,7 @@ export default function OnboardingPage() {
       mobileTitle={meta.mobileTitle}
       mobileSubtitle={meta.mobileSubtitle}
       tone={meta.tone}
+      copyBreakpoint={step === "WHATSAPP" ? "tablet" : "wide"}
       headerAddon={
         step === "ATTENDANT_PERSONA" ? (
           <div className="onboarding-persona-toolbar">
@@ -524,7 +544,7 @@ export default function OnboardingPage() {
               value={personaVisualSex}
               options={visualSexOptions}
               onChange={(value) => {
-                if (value === "NEUTRAL" || value === "") return;
+                if (value === "") return;
                 if (identityMode === "SEPARATE_ASSISTANT") setAssistantSex(value);
                 else setProfessionalSex(value);
               }}
@@ -555,13 +575,23 @@ export default function OnboardingPage() {
                 required
               />
               <div className="onboarding-field-group">
-                <span className="onboarding-field-label">Gênero</span>
+                <span className="onboarding-field-label">Sexo</span>
                 <SegmentedControl<UserSex | "">
-                  label="Gênero"
+                  label="Sexo"
                   value={sex}
                   options={sexOptions}
-                  onChange={setSex}
+                  invalid={Boolean(sexError)}
+                  describedBy={sexError ? "sex-error" : undefined}
+                  onChange={(value) => {
+                    setSex(value);
+                    setSexError("");
+                  }}
                 />
+                {sexError ? (
+                  <span className="ui-helper-error" id="sex-error" role="alert" aria-live="assertive">
+                    {sexError}
+                  </span>
+                ) : null}
               </div>
               <FormField
                 id="business-name"
@@ -590,13 +620,19 @@ export default function OnboardingPage() {
                 title="Como a profissional"
                 description="Fala em nome do negócio."
                 selected={identityMode === "PROFESSIONAL"}
-                onClick={() => setIdentityMode("PROFESSIONAL")}
+                onClick={() => {
+                  setIdentityMode("PROFESSIONAL");
+                  setAssistantSexError("");
+                }}
               />
               <RadioCard
                 title="Atendente à parte"
                 description="Usa nome e identidade próprios."
                 selected={identityMode === "SEPARATE_ASSISTANT"}
-                onClick={() => setIdentityMode("SEPARATE_ASSISTANT")}
+                onClick={() => {
+                  setIdentityMode("SEPARATE_ASSISTANT");
+                  setAssistantSexError("");
+                }}
               />
             </div>
 
@@ -623,13 +659,23 @@ export default function OnboardingPage() {
               ) : null}
 
               <span className="onboarding-content-card__label">Gênero visual</span>
+              {identityMode === "SEPARATE_ASSISTANT" && assistantSexError ? (
+                <span className="ui-helper-error" id="assistant-sex-error" role="alert" aria-live="assertive">
+                  {assistantSexError}
+                </span>
+              ) : null}
               <SegmentedControl<VisualSexOption>
                 label="Gênero visual"
                 value={identityMode === "SEPARATE_ASSISTANT" ? assistantSex : professionalSex}
                 options={visualSexOptions}
+                invalid={identityMode === "SEPARATE_ASSISTANT" && Boolean(assistantSexError)}
+                describedBy={assistantSexError ? "assistant-sex-error" : undefined}
                 onChange={(value) => {
-                  if (value === "NEUTRAL" || value === "") return;
-                  if (identityMode === "SEPARATE_ASSISTANT") setAssistantSex(value);
+                  if (value === "") return;
+                  if (identityMode === "SEPARATE_ASSISTANT") {
+                    setAssistantSex(value);
+                    setAssistantSexError("");
+                  }
                   else setProfessionalSex(value);
                 }}
               />
@@ -668,8 +714,19 @@ export default function OnboardingPage() {
                         Envie pelo menos 3 conversas reais do WhatsApp em formato .txt. O conteúdo bruto é
                         descartado após gerar o perfil de estilo.
                       </p>
-                      <span className="onboarding-persona-toolbar__label">Status: {customPersonaStatus}</span>
-                      <input type="file" accept=".txt,text/plain" multiple onChange={updatePersonaFiles} />
+                      <span className="onboarding-persona-toolbar__label">
+                        Status: {formatPersonaStatus(customPersonaStatus)}
+                      </span>
+                      <label className="onboarding-choice-card__label" htmlFor="persona-files">
+                        Conversas exportadas (.txt)
+                      </label>
+                      <input
+                        id="persona-files"
+                        type="file"
+                        accept=".txt,text/plain"
+                        multiple
+                        onChange={updatePersonaFiles}
+                      />
                       {participants.length > 0 ? (
                         <label className="ui-field-label">
                           <span>Participante profissional</span>
@@ -706,7 +763,7 @@ export default function OnboardingPage() {
                       {personaImports?.slice(0, 3).map((item) => (
                         <p className="onboarding-import-status" key={item.id}>
                           <FileText aria-hidden="true" />
-                          {item.fileName} · {item.status}
+                          {item.fileName} · {formatPersonaStatus(item.status)}
                         </p>
                       ))}
                     </div>
@@ -747,13 +804,6 @@ export default function OnboardingPage() {
                   selected={activationMode === "AWAY_FROM_WHATSAPP"}
                   onClick={() => setActivationMode("AWAY_FROM_WHATSAPP")}
                   icon={<Moon aria-hidden="true" />}
-                />
-                <ChoiceCard
-                  title="Após espera"
-                  description="Entra se ninguém responder a conversa."
-                  selected={false}
-                  disabled
-                  icon={<Clock3 aria-hidden="true" />}
                 />
               </ChoiceGroup>
 
@@ -801,75 +851,90 @@ export default function OnboardingPage() {
       ) : null}
 
       {step === "WHATSAPP" ? (
-        <div className="onboarding-step-static">
-          <div className="onboarding-step-content">
-            <details className="onboarding-mobile-pairing">
-              <summary>Como conectar</summary>
-              <ol>
-                <li>Abra o WhatsApp no celular.</li>
-                <li>Acesse Aparelhos conectados.</li>
-                <li>Escaneie o QR Code ao lado.</li>
-              </ol>
-            </details>
-            <div className="onboarding-qr-grid">
-              <div className="onboarding-pairing">
-                <h3 className="onboarding-pairing__title">
-                  <span className="onboarding-pairing__icon">
-                    <ShieldCheck aria-hidden="true" />
-                  </span>
-                  Pareamento seguro
-                </h3>
-                <p className="onboarding-pairing__description">Siga os três passos no celular.</p>
-                <ol className="onboarding-pairing__steps">
-                  <li>
-                    <span>1</span> Abra o WhatsApp no celular.
-                  </li>
-                  <li>
-                    <span>2</span> Acesse Aparelhos conectados.
-                  </li>
-                  <li>
-                    <span>3</span> Aponte a câmera para o QR Code.
-                  </li>
+        <>
+          <div className="onboarding-step-static onboarding-whatsapp-desktop">
+            <div className="onboarding-step-content">
+              <details className="onboarding-mobile-pairing">
+                <summary>Como conectar</summary>
+                <ol>
+                  <li>Abra o WhatsApp no celular.</li>
+                  <li>Acesse Aparelhos conectados.</li>
+                  <li>Escaneie o QR Code ao lado.</li>
                 </ol>
-                <Badge className="onboarding-qr-status onboarding-qr-status--desktop" tone="status" dot>
-                  Aguardando leitura segura
-                </Badge>
+              </details>
+              <div className="onboarding-qr-grid">
+                <div className="onboarding-pairing">
+                  <h3 className="onboarding-pairing__title">
+                    <span className="onboarding-pairing__icon">
+                      <ShieldCheck aria-hidden="true" />
+                    </span>
+                    Pareamento seguro
+                  </h3>
+                  <p className="onboarding-pairing__description">Siga os três passos no celular.</p>
+                  <ol className="onboarding-pairing__steps">
+                    <li>
+                      <span>1</span> Abra o WhatsApp no celular.
+                    </li>
+                    <li>
+                      <span>2</span> Acesse Aparelhos conectados.
+                    </li>
+                    <li>
+                      <span>3</span> Aponte a câmera para o QR Code.
+                    </li>
+                  </ol>
+                  <Badge className="onboarding-qr-status onboarding-qr-status--desktop" tone="status" dot>
+                    Aguardando leitura segura
+                  </Badge>
+                </div>
+                <QrCodePanel
+                  qrcode={qrcode ?? instance?.qrcode ?? null}
+                  expired={instance?.status === "QR_EXPIRED"}
+                  loading={refreshingQr || whatsAppLoading || qrPending}
+                  onRefresh={refreshQr}
+                  compact
+                />
               </div>
-              <QrCodePanel
-                qrcode={qrcode ?? instance?.qrcode ?? null}
-                expired={instance?.status === "QR_EXPIRED"}
-                loading={refreshingQr || whatsAppLoading || qrPending}
-                onRefresh={refreshQr}
-                compact
-              />
+              <Badge className="onboarding-qr-status onboarding-qr-status--mobile" tone="status" dot>
+                Aguardando leitura segura
+              </Badge>
+              {whatsAppLoading ? (
+                <p className="onboarding-connection-status" role="status" aria-live="polite">
+                  <Loader2 className="ui-spin" aria-hidden="true" /> Preparando QR Code...
+                </p>
+              ) : null}
+              <SubmitError error={error} />
             </div>
-            <Badge className="onboarding-qr-status onboarding-qr-status--mobile" tone="status" dot>
-              Aguardando leitura segura
-            </Badge>
-            {whatsAppLoading ? (
-              <p className="onboarding-connection-status">
-                <Loader2 className="ui-spin" aria-hidden="true" /> Preparando QR Code...
-              </p>
-            ) : null}
-            <SubmitError error={error} />
+            <footer className="onboarding-step-footer onboarding-step-footer--connect">
+              <Button
+                type="button"
+                onClick={() => {
+                  if (instance?.status === "CONNECTED") void completeOnboarding();
+                  else void loadQrAndStatus();
+                }}
+                disabled={whatsAppLoading || refreshingQr}
+                icon={<Smartphone aria-hidden="true" />}
+              >
+                <span className="onboarding-finish-copy onboarding-finish-copy--desktop">
+                  Finalizar configuração
+                </span>
+                <span className="onboarding-finish-copy onboarding-finish-copy--mobile">Finalizar</span>
+              </Button>
+            </footer>
           </div>
-          <footer className="onboarding-step-footer onboarding-step-footer--connect">
-            <Button
-              type="button"
-              onClick={() => {
-                if (instance?.status === "CONNECTED") void completeOnboarding();
-                else void loadQrAndStatus();
-              }}
-              disabled={whatsAppLoading || refreshingQr}
-              icon={<Smartphone aria-hidden="true" />}
-            >
-              <span className="onboarding-finish-copy onboarding-finish-copy--desktop">
-                Finalizar configuração
-              </span>
-              <span className="onboarding-finish-copy onboarding-finish-copy--mobile">Finalizar</span>
-            </Button>
-          </footer>
-        </div>
+          <WhatsAppPairingMobile
+            active={connectionLayout === "mobile"}
+            initialPhone={whatsappPhone || instance?.phoneNumber || ""}
+            instance={instance}
+            qrcode={qrcode}
+            qrExpired={instance?.status === "QR_EXPIRED"}
+            qrLoading={refreshingQr || whatsAppLoading || qrPending}
+            qrError={error}
+            onInstanceChange={setInstance}
+            onConnected={completeOnboarding}
+            onShowQr={prepareWhatsApp}
+            onRefreshQr={refreshQr}
+          />
+        </>
       ) : null}
     </OnboardingShell>
   );
@@ -891,10 +956,23 @@ function StepFooter({ loading = false, loadingLabel = "Continuando..." }: { load
 
 function SubmitError({ error }: { error: string }) {
   return error ? (
-    <p className="onboarding-error" role="alert">
+    <p className="onboarding-error" role="alert" aria-live="assertive">
       {error}
     </p>
   ) : null;
+}
+
+function formatPersonaStatus(status: string): string {
+  const labels: Record<string, string> = {
+    NOT_STARTED: "Não iniciada",
+    PROCESSING: "Processando",
+    READY: "Pronta",
+    FAILED: "Falhou",
+    PENDING: "Pendente",
+    COMPLETED: "Concluída",
+  };
+
+  return labels[status] ?? status;
 }
 
 function isMissingEvolutionInstance(error: string | undefined): boolean {

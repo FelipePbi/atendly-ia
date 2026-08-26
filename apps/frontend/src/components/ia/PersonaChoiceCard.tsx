@@ -97,7 +97,7 @@ export function PersonaChoiceCard({
             fill
             sizes="(max-width: 767px) 88px, 220px"
             className="persona-card__image"
-            priority={selected}
+            loading={selected ? "eager" : "lazy"}
           />
         </span>
 

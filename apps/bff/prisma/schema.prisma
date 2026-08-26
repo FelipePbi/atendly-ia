@@ -104,6 +104,20 @@ model User {
   profile            UserProfile?
   settings           UserSettings?
   businessSettings   BusinessSettings?
+  legalAcceptances   LegalAcceptance[]
+}
+
+model LegalAcceptance {
+  id                   String   @id @default(cuid())
+  userId               String
+  termsVersion         String
+  privacyPolicyVersion String
+  acceptedAt           DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, termsVersion, privacyPolicyVersion])
+  @@index([acceptedAt])
 }
 
 model UserProfile {

@@ -468,9 +468,18 @@ func (i instances) GetQr(instance *instance_model.Instance) (*QrcodeStruct, erro
 }
 
 func (i instances) Pair(data *PairStruct, instance *instance_model.Instance) (*PairReturnStruct, error) {
-	code, err := i.clientPointer[instance.Id].PairPhone(context.Background(), data.Phone, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
+	client, err := i.ensureClientConnected(instance.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	code, err := client.PairPhone(context.Background(), data.Phone, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
 	if err != nil {
 		i.loggerWrapper.GetLogger(instance.Id).LogError("[%s] something went wrong calling pair phone", instance.Id)
+		return nil, err
+	}
+	if code == "" {
+		return nil, errors.New("empty pairing code returned by WhatsApp")
 	}
 
 	return &PairReturnStruct{PairingCode: code}, nil

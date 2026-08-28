@@ -20,16 +20,7 @@ services:
       EVOLUTION_BOT_ENABLED: ${EVOLUTION_BOT_ENABLED:-true}
       EVOLUTION_ALLOW_SELF_CHAT: ${EVOLUTION_ALLOW_SELF_CHAT:-false}
       HUMAN_HANDOFF_PAUSE_MINUTES: ${HUMAN_HANDOFF_PAUSE_MINUTES:-120}
-      MINHA_AGENDA_BASE_URL: ${MINHA_AGENDA_BASE_URL:-https://api.minhaagendaapp.com.br}
-      MINHA_AGENDA_BASIC_AUTH: ${MINHA_AGENDA_BASIC_AUTH:-}
-      MINHA_AGENDA_USERNAME: ${MINHA_AGENDA_USERNAME:-}
-      MINHA_AGENDA_PASSWORD: ${MINHA_AGENDA_PASSWORD:-}
-      MINHA_AGENDA_DEFAULT_EMPLOYEE_ID: ${MINHA_AGENDA_DEFAULT_EMPLOYEE_ID:-873242}
-      MINHA_AGENDA_DEFAULT_PAYMENT_METHOD: ${MINHA_AGENDA_DEFAULT_PAYMENT_METHOD:-CASH}
-      MINHA_AGENDA_MODEL_VERSION: ${MINHA_AGENDA_MODEL_VERSION:-2}
-      MINHA_AGENDA_TIMEOUT_MS: ${MINHA_AGENDA_TIMEOUT_MS:-10000}
-      MINHA_AGENDA_TOKEN_REFRESH_SKEW_SECONDS: ${MINHA_AGENDA_TOKEN_REFRESH_SKEW_SECONDS:-300}
-      MINHA_AGENDA_ENABLE_WRITES: ${MINHA_AGENDA_ENABLE_WRITES:-false}
+      SCHEDULING_SERVICE_BASE_URL: ${SCHEDULING_SERVICE_BASE_URL:-http://host.docker.internal:3003}
       BUSINESS_TIMEZONE: ${BUSINESS_TIMEZONE:-America/Sao_Paulo}
       BUSINESS_MAX_SLOTS_TO_OFFER: ${BUSINESS_MAX_SLOTS_TO_OFFER:-3}
       BUSINESS_AVAILABILITY_DAYS: ${BUSINESS_AVAILABILITY_DAYS:-14}
@@ -42,6 +33,9 @@ services:
       BUSINESS_CANCELLATION_POLICY: ${BUSINESS_CANCELLATION_POLICY:-}
       BUSINESS_DEPOSIT_POLICY: ${BUSINESS_DEPOSIT_POLICY:-}
       ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${API_PORT:-3000}:3000"
     depends_on:
@@ -62,7 +56,11 @@ services:
     volumes:
       - api_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${API_POSTGRES_USER:-app} -d ${API_POSTGRES_DB:-salao}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${API_POSTGRES_USER:-app} -d ${API_POSTGRES_DB:-salao}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -82,7 +80,11 @@ services:
       - evogo_postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/evolution-init.sql:/docker-entrypoint-initdb.d/01-evolution-init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${EVOGO_POSTGRES_USER:-postgres} -d postgres"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${EVOGO_POSTGRES_USER:-postgres} -d postgres",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10

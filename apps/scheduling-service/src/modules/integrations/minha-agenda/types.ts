@@ -2,42 +2,22 @@ export interface MinhaAgendaAuthResponse {
   access_token: string;
   token_type: string;
   expires_in: number;
-  scope?: string;
-  principal?: {
-    id: number;
-    email: string;
-    name: string;
-    companyId: number;
-    companySettings?: {
-      showServiceValue?: boolean;
-      greetingText?: string;
-      goodbyeText?: string;
-    };
-  };
 }
 
 export interface MinhaAgendaService {
   id: number;
-  companyId?: number;
   name: string;
   duration: number;
   price: number;
   colorId: number | null;
   deleted: boolean;
-  description?: string | null;
-  onlineSchedulingEnabled?: boolean;
 }
 
 export interface MinhaAgendaCustomer {
   id: number;
-  companyId?: number;
   name: string;
   phone1?: string | null;
   phone2?: string | null;
-  email?: string | null;
-  comments?: string | null;
-  remarks?: string | null;
-  deleted?: boolean;
 }
 
 export interface CreateCustomerInput {
@@ -56,17 +36,14 @@ export interface CreateCustomerInput {
 }
 
 export interface MinhaAgendaAppointmentServiceItem {
-  id?: number;
   serviceId: number;
   price: number;
-  orderIndex?: number;
   service?: MinhaAgendaService;
 }
 
 export interface MinhaAgendaAppointment {
   id: number;
   userId: number;
-  companyId?: number;
   date: string;
   startTime: string;
   endTime: string;
@@ -88,11 +65,9 @@ export interface MinhaAgendaAppointment {
   modelVersion?: number | null;
   accountsReceivableId?: number | null;
   loyaltyCardCustomerId?: number | null;
-  totalBeforeDiscount?: number | null;
   serviceIds?: number[] | null;
   services?: MinhaAgendaService[] | null;
   appHasServices?: MinhaAgendaAppointmentServiceItem[] | null;
-  slotBlocker?: boolean;
   deleted?: boolean;
   customerName?: string | null;
   serviceName?: string | null;
@@ -119,7 +94,7 @@ export interface CreateAppointmentInput {
 export interface UpdateAppointmentInput extends CreateAppointmentInput {
   id: number;
   accountsReceivableId: number | null;
-  appointmentRepeatInfoForm: unknown | null;
+  appointmentRepeatInfoForm: unknown;
   discount: number | null;
   discountInPercentage: boolean;
   tag: string | null;

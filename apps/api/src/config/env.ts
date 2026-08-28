@@ -1,4 +1,5 @@
 import "dotenv/config";
+
 import { z } from "zod";
 
 const stringEnv = (defaultValue = "") =>
@@ -49,18 +50,9 @@ const envSchema = z.object({
   AI_DEBOUNCE_MAX_WAIT_SECONDS: intEnv(60),
   AI_BUFFER_BETWEEN_SERVICES_MINUTES: intEnv(0),
   AI_PROMPT_VERSION: stringEnv("scheduling_v1.0.0"),
-  MINHA_AGENDA_BASE_URL: stringEnv("https://api.minhaagendaapp.com.br"),
-  MINHA_AGENDA_BASIC_AUTH: stringEnv(),
-  MINHA_AGENDA_USERNAME: stringEnv(),
-  MINHA_AGENDA_PASSWORD: stringEnv(),
-  MINHA_AGENDA_DEFAULT_EMPLOYEE_ID: intEnv(873242),
-  MINHA_AGENDA_DEFAULT_PAYMENT_METHOD: stringEnv("CASH"),
-  MINHA_AGENDA_MODEL_VERSION: intEnv(2),
-  MINHA_AGENDA_TIMEOUT_MS: intEnv(10_000),
-  MINHA_AGENDA_TOKEN_REFRESH_SKEW_SECONDS: intEnv(300),
-  MINHA_AGENDA_ENABLE_WRITES: boolEnv(false),
+  SCHEDULING_SERVICE_BASE_URL: stringEnv("http://localhost:3003"),
   ADMIN_API_TOKEN: stringEnv(),
-  INTERNAL_SERVICE_TOKEN: stringEnv()
+  INTERNAL_SERVICE_TOKEN: stringEnv(),
 });
 
 export const env = envSchema.parse(process.env);
@@ -73,18 +65,9 @@ export function requireEnv(keys: Array<keyof Env>): void {
   });
 
   if (missing.length > 0) {
-    throw new Error(`Missing required environment variables: ${missing.join(", ")}`);
-  }
-}
-
-export function requireMinhaAgendaReadEnv(): void {
-  requireEnv(["MINHA_AGENDA_BASE_URL", "MINHA_AGENDA_BASIC_AUTH", "MINHA_AGENDA_USERNAME", "MINHA_AGENDA_PASSWORD"]);
-}
-
-export function requireMinhaAgendaWriteEnv(): void {
-  requireMinhaAgendaReadEnv();
-  if (!env.MINHA_AGENDA_ENABLE_WRITES) {
-    throw new Error("Minha Agenda writes are disabled. Set MINHA_AGENDA_ENABLE_WRITES=true to allow real writes.");
+    throw new Error(
+      `Missing required environment variables: ${missing.join(", ")}`,
+    );
   }
 }
 
@@ -95,6 +78,8 @@ export function requireOpenAiEnv(): void {
 export function requireEvolutionEnv(): void {
   requireEnv(["EVOLUTION_BASE_URL"]);
   if (!env.EVOLUTION_INSTANCE_TOKEN && !env.EVOLUTION_API_KEY) {
-    throw new Error("Missing required environment variables: EVOLUTION_INSTANCE_TOKEN or EVOLUTION_API_KEY");
+    throw new Error(
+      "Missing required environment variables: EVOLUTION_INSTANCE_TOKEN or EVOLUTION_API_KEY",
+    );
   }
 }

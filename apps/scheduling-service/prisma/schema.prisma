@@ -213,3 +213,20 @@ model MigrationConflict {
 
   @@index([tenantId, migrationJobId, status])
 }
+
+model CalendarMutationIdempotency {
+  id            String   @id @default(cuid())
+  tenantId      String
+  key           String
+  operation     String
+  requestHash   String
+  status        String
+  response      Json?
+  lastErrorCode String?
+  lockedAt      DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([tenantId, key])
+  @@index([tenantId, status, updatedAt])
+}

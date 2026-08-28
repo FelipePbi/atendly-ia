@@ -7,7 +7,7 @@
 - recepção/dispatch de eventos Evolution Go;
 - orchestration de mensagens e chamadas ao modelo OpenAI;
 - tools determinísticas de agendamento;
-- client/facade e regras de disponibilidade do Minha Agenda;
+- client interno do Scheduling Service;
 - conversas, mensagens, idempotência, tool calls e handoffs no próprio PostgreSQL;
 - envio de mensagens pelo provider WhatsApp;
 - endpoints legais legados.
@@ -16,7 +16,7 @@ Esta composição é `CURRENT`, não arquitetura final. Não faça big-bang rewr
 
 ## Target role
 
-Responsabilidades de IA serão transformadas e migradas incrementalmente para AI Orchestrator no GOAL 07. Integração Minha Agenda sai para CalendarProvider/Scheduling Service no GOAL 05.
+Responsabilidades de IA serão transformadas e migradas incrementalmente para AI Orchestrator no GOAL 07. Integração Minha Agenda foi extraída para CalendarProvider/Scheduling Service no GOAL 05.
 
 Tecnologias planejadas, ainda ausentes:
 
@@ -36,7 +36,7 @@ Não introduza essas etapas em conjunto.
 - `HandoffService`;
 - `IdempotencyStore`;
 - prompt rules;
-- Minha Agenda client/facade até extração autorizada.
+- client tipado do Scheduling Service.
 
 Preservar significa reutilizar comportamento validado durante migração, não manter duplicação depois de todos os consumidores migrarem.
 
@@ -50,7 +50,7 @@ Preservar significa reutilizar comportamento validado durante migração, não m
 - Vitest existente;
 - integração OpenAI via HTTP;
 - Evolution Go;
-- Minha Agenda.
+- Scheduling Service via HTTP interno.
 
 LangChain, LangGraph e pgvector não estão instalados.
 
@@ -62,7 +62,7 @@ BFF ou webhook legado
       apps/api
        ├─ MessageOrchestrator / AssistantService
        ├─ OpenAI tools
-       ├─ Minha Agenda
+       ├─ Scheduling Service
        ├─ PostgreSQL próprio
        └─ EvolutionProvider → Evolution Go
 ```
@@ -99,10 +99,10 @@ Copie `.env.example` para `.env`. Principais grupos:
 - runtime/persistence: `NODE_ENV`, `API_PORT`, `DATABASE_URL`;
 - OpenAI: `OPENAI_API_KEY`, `OPENAI_MODEL`, limites e versão de prompt;
 - Evolution Go: `EVOLUTION_*`, provider e políticas de webhook/handoff;
-- Minha Agenda: `MINHA_AGENDA_*`;
+- agenda: `SCHEDULING_SERVICE_BASE_URL` e `INTERNAL_SERVICE_TOKEN`;
 - chamadas internas/admin: `INTERNAL_SERVICE_TOKEN`, `ADMIN_API_TOKEN`.
 
-Escritas reais no Minha Agenda ficam desabilitadas enquanto `MINHA_AGENDA_ENABLE_WRITES=false`. Nunca use dados reais em validação local sem autorização explícita.
+Escritas reais são controladas por tenant na conexão mantida pelo Scheduling Service. Nunca use dados reais em validação local sem autorização explícita.
 
 ## Commands
 
@@ -132,7 +132,7 @@ Porta padrão: `3000`.
 
 ## Migration guardrails
 
-- Minha Agenda permanece aqui até GOAL 05.
+- Minha Agenda pertence ao Scheduling Service desde GOAL 05.
 - Nome/diretório permanece `apps/api` até GOAL 07.
 - Não compartilhe Prisma com BFF ou serviços futuros.
 - LLM não acessa SQL nem Minha Agenda diretamente; ações usam tools tipadas.

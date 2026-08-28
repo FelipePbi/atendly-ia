@@ -1,48 +1,49 @@
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "../../src/generated/prisma/client.js";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_BUSINESS_SETTINGS } from "../../src/modules/business-settings/business-settings.js";
 import { AssistantToolRegistry } from "../../src/modules/openai/tools.js";
-import type { ScheduleAppointmentInput } from "../../src/modules/minha-agenda/service.js";
 import type {
-  MinhaAgendaAppointment,
-  MinhaAgendaService
-} from "../../src/modules/minha-agenda/types.js";
+  ScheduleAppointmentInput,
+  SchedulingAppointment,
+  SchedulingServiceDefinition,
+} from "../../src/modules/scheduling-service/types.js";
 
 const conversationId = "conversation-1";
 const phone = "555591359589";
-const service: MinhaAgendaService = {
+const service: SchedulingServiceDefinition = {
   id: 5114873,
   name: "Aplicacao 5D",
   duration: 100,
   price: 190,
   colorId: 3,
-  deleted: false
 };
-const browService: MinhaAgendaService = {
+const browService: SchedulingServiceDefinition = {
   id: 5114888,
   name: "Design de sobrancelha",
   duration: 30,
   price: 40,
   colorId: 4,
-  deleted: false
 };
 const slot = {
   date: "2026-06-08",
   startTime: "13:30",
-  endTime: "15:10"
+  endTime: "15:10",
 };
 const combinedSlot = {
   date: "2026-06-08",
   startTime: "13:30",
-  endTime: "15:40"
+  endTime: "15:40",
 };
 
 describe("AssistantToolRegistry scheduling service resolution", () => {
   it("recovers serviceId 0 from the stored availability context when preparing a schedule", async () => {
     const { prisma, store } = createPrismaMock({
-      availabilityLookups: [availabilityLookup()]
+      availabilityLookups: [availabilityLookup()],
     });
-    const registry = new AssistantToolRegistry(prisma, createAgendaMock().agenda);
+    const registry = new AssistantToolRegistry(
+      prisma,
+      createAgendaMock().agenda,
+    );
 
     const result = (await registry.execute(
       "preparar_agendamento",
@@ -50,9 +51,9 @@ describe("AssistantToolRegistry scheduling service resolution", () => {
         serviceId: 0,
         date: slot.date,
         startTime: slot.startTime,
-        customerName: "Thais"
+        customerName: "Thais",
       },
-      context()
+      context(),
     )) as { ok: boolean; pendingAction?: { serviceId: number } };
 
     expect(result.ok).toBe(true);
@@ -61,13 +62,16 @@ describe("AssistantToolRegistry scheduling service resolution", () => {
       type: "schedule",
       serviceId: service.id,
       date: slot.date,
-      startTime: slot.startTime
+      startTime: slot.startTime,
     });
   });
 
   it("does not save a pending schedule when serviceId is invalid and no availability context exists", async () => {
     const { prisma, store } = createPrismaMock({});
-    const registry = new AssistantToolRegistry(prisma, createAgendaMock().agenda);
+    const registry = new AssistantToolRegistry(
+      prisma,
+      createAgendaMock().agenda,
+    );
 
     const result = (await registry.execute(
       "preparar_agendamento",
@@ -75,14 +79,14 @@ describe("AssistantToolRegistry scheduling service resolution", () => {
         serviceId: 0,
         date: slot.date,
         startTime: slot.startTime,
-        customerName: "Thais"
+        customerName: "Thais",
       },
-      context()
+      context(),
     )) as { ok: boolean; code?: string; error?: string };
 
     expect(result).toMatchObject({
       ok: false,
-      code: "SERVICE_ID_UNRESOLVED"
+      code: "SERVICE_ID_UNRESOLVED",
     });
     expect(store.state.pendingAction).toBeUndefined();
   });
@@ -96,13 +100,17 @@ describe("AssistantToolRegistry scheduling service resolution", () => {
         date: slot.date,
         startTime: slot.startTime,
         customerName: "Thais",
-        customerPhone: phone
-      }
+        customerPhone: phone,
+      },
     });
     const { agenda, calls } = createAgendaMock();
     const registry = new AssistantToolRegistry(prisma, agenda);
 
-    const result = (await registry.execute("confirmar_agendamento", {}, context())) as {
+    const result = (await registry.execute(
+      "confirmar_agendamento",
+      {},
+      context(),
+    )) as {
       ok: boolean;
       appointment?: { id: number };
     };
@@ -113,23 +121,26 @@ describe("AssistantToolRegistry scheduling service resolution", () => {
     expect(calls.createAppointment[0]).toMatchObject({
       serviceId: service.id,
       date: slot.date,
-      startTime: slot.startTime
+      startTime: slot.startTime,
     });
     expect(store.state.pendingAction).toBeUndefined();
   });
 
   it("stores availability context when searching available slots", async () => {
     const { prisma, store } = createPrismaMock({});
-    const registry = new AssistantToolRegistry(prisma, createAgendaMock().agenda);
+    const registry = new AssistantToolRegistry(
+      prisma,
+      createAgendaMock().agenda,
+    );
 
     const result = (await registry.execute(
       "buscar_horarios_disponiveis",
       {
         serviceId: service.id,
-        startDate: slot.date
+        startDate: slot.date,
       },
-      context()
-    )) as { ok: boolean; slots?: typeof slot[] };
+      context(),
+    )) as { ok: boolean; slots?: (typeof slot)[] };
 
     expect(result.ok).toBe(true);
     expect(result.slots).toEqual([slot]);
@@ -138,10 +149,10 @@ describe("AssistantToolRegistry scheduling service resolution", () => {
         service: expect.objectContaining({
           id: service.id,
           name: service.name,
-          duration: service.duration
+          duration: service.duration,
         }),
-        slots: [slot]
-      })
+        slots: [slot],
+      }),
     ]);
   });
 
@@ -154,15 +165,15 @@ describe("AssistantToolRegistry scheduling service resolution", () => {
       "buscar_horarios_disponiveis",
       {
         serviceIds: [service.id, browService.id],
-        startDate: slot.date
+        startDate: slot.date,
       },
-      context()
+      context(),
     )) as {
       ok: boolean;
       services?: Array<{ id: number }>;
       totalDurationMinutes?: number;
       totalPrice?: number;
-      slots?: typeof combinedSlot[];
+      slots?: (typeof combinedSlot)[];
     };
 
     expect(result).toMatchObject({
@@ -170,19 +181,24 @@ describe("AssistantToolRegistry scheduling service resolution", () => {
       services: [{ id: service.id }, { id: browService.id }],
       totalDurationMinutes: 130,
       totalPrice: 230,
-      slots: [combinedSlot]
+      slots: [combinedSlot],
     });
-    expect(calls.getAvailableSlotsForServices).toEqual([[service.id, browService.id]]);
+    expect(calls.getAvailableSlotsForServices).toEqual([
+      [service.id, browService.id],
+    ]);
     expect(store.state.availabilityLookups).toEqual([
       expect.objectContaining({
         services: [
           expect.objectContaining({ id: service.id, price: service.price }),
-          expect.objectContaining({ id: browService.id, price: browService.price })
+          expect.objectContaining({
+            id: browService.id,
+            price: browService.price,
+          }),
         ],
         totalDurationMinutes: 130,
         totalPrice: 230,
-        slots: [combinedSlot]
-      })
+        slots: [combinedSlot],
+      }),
     ]);
   });
 
@@ -197,27 +213,42 @@ describe("AssistantToolRegistry scheduling service resolution", () => {
         serviceIds: [service.id, browService.id],
         date: slot.date,
         startTime: slot.startTime,
-        customerName: "Thais"
+        customerName: "Thais",
       },
-      context()
-    )) as { ok: boolean; pendingAction?: { serviceIds?: number[]; totalDurationMinutes?: number; totalPrice?: number; endTime?: string } };
+      context(),
+    )) as {
+      ok: boolean;
+      pendingAction?: {
+        serviceIds?: number[];
+        totalDurationMinutes?: number;
+        totalPrice?: number;
+        endTime?: string;
+      };
+    };
 
     expect(prepared.ok).toBe(true);
     expect(prepared.pendingAction).toMatchObject({
       serviceIds: [service.id, browService.id],
       totalDurationMinutes: 130,
       totalPrice: 230,
-      endTime: "15:40"
+      endTime: "15:40",
     });
 
-    const confirmed = (await registry.execute("confirmar_agendamento", {}, context())) as { ok: boolean; appointment?: { id: number } };
+    const confirmed = (await registry.execute(
+      "confirmar_agendamento",
+      {},
+      context(),
+    )) as {
+      ok: boolean;
+      appointment?: { id: number };
+    };
 
     expect(confirmed.ok).toBe(true);
     expect(calls.createAppointment[0]).toMatchObject({
       serviceId: service.id,
       serviceIds: [service.id, browService.id],
       date: slot.date,
-      startTime: slot.startTime
+      startTime: slot.startTime,
     });
     expect(store.state.pendingAction).toBeUndefined();
   });
@@ -226,13 +257,16 @@ describe("AssistantToolRegistry scheduling service resolution", () => {
 function context() {
   return {
     conversationId,
+    tenantId: "tenant-1",
+    userId: "user-1",
+    requestId: "request-1",
     phone,
     customerName: "Thais",
     businessSettings: {
       ...DEFAULT_BUSINESS_SETTINGS,
       businessName: "Camili Krauser Beauty",
-      configured: true
-    }
+      configured: true,
+    },
   };
 }
 
@@ -241,18 +275,21 @@ function availabilityLookup() {
     service: {
       id: service.id,
       name: service.name,
-      duration: service.duration
+      duration: service.duration,
     },
     slots: [slot],
-    checkedAt: "2026-06-04T03:52:47.348Z"
+    checkedAt: "2026-06-04T03:52:47.348Z",
   };
 }
 
-function createAppointment(input: ScheduleAppointmentInput): MinhaAgendaAppointment {
-  const services = [service, browService].filter((item) => (input.serviceIds ?? [input.serviceId]).includes(item.id));
+function createAppointment(
+  input: ScheduleAppointmentInput,
+): SchedulingAppointment {
+  const services = [service, browService].filter((item) =>
+    (input.serviceIds ?? [input.serviceId]).includes(item.id),
+  );
   return {
     id: 98765,
-    userId: 873242,
     date: input.date,
     startTime: input.startTime,
     endTime: services.length > 1 ? combinedSlot.endTime : slot.endTime,
@@ -261,20 +298,31 @@ function createAppointment(input: ScheduleAppointmentInput): MinhaAgendaAppointm
     serviceId: input.serviceId,
     serviceIds: services.map((item) => item.id),
     price: services.reduce((total, item) => total + item.price, 0),
-    service: services[0],
-    services,
+    customer: { id: 12345, name: "Thais", phone },
+    services: services.map((item) => ({
+      serviceId: item.id,
+      name: item.name,
+      duration: item.duration,
+      price: item.price,
+    })),
+    comments: null,
+    status: "SCHEDULED",
     customerName: "Thais",
-    serviceName: services.map((item) => item.name).join(", ")
+    serviceName: services.map((item) => item.name).join(", "),
   };
 }
 
 function createAgendaMock() {
-  const calls: { createAppointment: ScheduleAppointmentInput[]; getAvailableSlotsForServices: number[][] } = {
+  const calls: {
+    createAppointment: ScheduleAppointmentInput[];
+    getAvailableSlotsForServices: number[][];
+  } = {
     createAppointment: [],
-    getAvailableSlotsForServices: []
+    getAvailableSlotsForServices: [],
   };
   const services = [service, browService];
   const agenda = {
+    listActiveServices: async () => services,
     findService: async (serviceId: number) => {
       const found = services.find((item) => item.id === serviceId);
       if (!found) throw new Error("Servico nao encontrado no Minha Agenda.");
@@ -290,14 +338,18 @@ function createAgendaMock() {
       return createAppointment(input);
     },
     findFutureAppointmentsForPhone: async () => [],
-    cancelAppointment: async (appointmentId: number) => ({ appointmentId, cancelled: true as const }),
-    rescheduleAppointment: async () => createAppointment({
-      date: slot.date,
-      startTime: slot.startTime,
-      serviceId: service.id,
-      customerName: "Thais",
-      customerPhone: phone
-    })
+    cancelAppointment: async (appointmentId: number) => ({
+      appointmentId,
+      cancelled: true as const,
+    }),
+    rescheduleAppointment: async () =>
+      createAppointment({
+        date: slot.date,
+        startTime: slot.startTime,
+        serviceId: service.id,
+        customerName: "Thais",
+        customerPhone: phone,
+      }),
   };
 
   return { agenda: agenda as never, calls };
@@ -307,35 +359,35 @@ function createPrismaMock(initialState: Record<string, unknown>) {
   const store = {
     state: { ...initialState },
     externalAppointments: [] as unknown[],
-    customerLinks: [] as unknown[]
+    customerLinks: [] as unknown[],
   };
   const prisma = {
     conversation: {
       findUnique: async () => ({
         id: conversationId,
-        state: store.state
+        state: store.state,
       }),
       update: async (args: { data: { state?: Record<string, unknown> } }) => {
         if (args.data.state) store.state = args.data.state;
         return { id: conversationId, state: store.state };
-      }
+      },
     },
     customerLink: {
       upsert: async (args: unknown) => {
         store.customerLinks.push(args);
         return args;
-      }
+      },
     },
     externalAppointment: {
       upsert: async (args: unknown) => {
         store.externalAppointments.push(args);
         return args;
       },
-      updateMany: async () => ({ count: 1 })
+      updateMany: async () => ({ count: 1 }),
     },
     handoff: {
-      create: async () => ({ id: "handoff-1" })
-    }
+      create: async () => ({ id: "handoff-1" }),
+    },
   } as unknown as PrismaClient;
 
   return { prisma, store };

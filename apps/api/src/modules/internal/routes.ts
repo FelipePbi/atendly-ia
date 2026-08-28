@@ -1,41 +1,61 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import type { PrismaClient } from "@prisma/client";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
+
 import { env } from "../../config/env.js";
+import type { PrismaClient } from "../../generated/prisma/client.js";
 import { toErrorMessage } from "../../lib/errors.js";
 import { AssistantService } from "../assistant/assistant.service.js";
-import { businessSettingsSchema, normalizeBusinessSettings } from "../business-settings/business-settings.js";
-import { normalizeVirtualAttendantSettings, virtualAttendantSettingsSchema } from "../virtual-attendant/virtual-attendant.js";
 import { MessageOrchestrator } from "../automation/MessageOrchestrator.js";
+import {
+  businessSettingsSchema,
+  normalizeBusinessSettings,
+} from "../business-settings/business-settings.js";
+import {
+  inspectEvolutionInboundPayload,
+  mapEvolutionInbound,
+} from "../channel/adapters/evolution/EvolutionInboundMapper.js";
 import { EvolutionProvider } from "../channel/adapters/evolution/EvolutionProvider.js";
-import { inspectEvolutionInboundPayload, mapEvolutionInbound } from "../channel/adapters/evolution/EvolutionInboundMapper.js";
 import { HandoffService } from "../handoff/HandoffService.js";
 import { BOT_OFF_PAUSE_UNTIL } from "../handoff/HandoffService.js";
 import { IdempotencyStore } from "../idempotency/IdempotencyStore.js";
+import {
+  normalizeVirtualAttendantSettings,
+  virtualAttendantSettingsSchema,
+} from "../virtual-attendant/virtual-attendant.js";
 
 const createHandoffSchema = z.object({
   phone: z.string().min(6),
   reason: z.string().min(3),
-  summary: z.string().optional()
+  summary: z.string().optional(),
 });
 
 const evolutionDispatchSchema = z.object({
   payload: z.unknown(),
   instanceToken: z.string().min(16),
+  tenantId: z.string().min(1).optional(),
   userId: z.string().optional(),
   businessSettings: businessSettingsSchema.optional(),
-  virtualAttendantSettings: virtualAttendantSettingsSchema.optional()
+  virtualAttendantSettings: virtualAttendantSettingsSchema.optional(),
 });
 
 const resumeBotSchema = z.object({
-  phones: z.array(z.string().regex(/^\d{10,15}$/)).min(1).max(500)
+  phones: z
+    .array(z.string().regex(/^\d{10,15}$/))
+    .min(1)
+    .max(500),
 });
 
 const botStatusSchema = z.object({
-  phones: z.array(z.string().regex(/^\d{10,15}$/)).min(1).max(500)
+  phones: z
+    .array(z.string().regex(/^\d{10,15}$/))
+    .min(1)
+    .max(500),
 });
 
-export async function registerInternalRoutes(app: FastifyInstance, prisma: PrismaClient): Promise<void> {
+export async function registerInternalRoutes(
+  app: FastifyInstance,
+  prisma: PrismaClient,
+): Promise<void> {
   app.addHook("preHandler", async (request, reply) => {
     if (!request.url.startsWith("/internal/")) return;
     if (!isAuthorized(request)) {
@@ -47,7 +67,7 @@ export async function registerInternalRoutes(app: FastifyInstance, prisma: Prism
     const handoffs = await prisma.handoff.findMany({
       where: { status: "OPEN" },
       orderBy: { createdAt: "desc" },
-      take: 100
+      take: 100,
     });
     return { ok: true, handoffs };
   });
@@ -63,15 +83,15 @@ export async function registerInternalRoutes(app: FastifyInstance, prisma: Prism
       update: {
         humanHandoff: true,
         status: "HUMAN_HANDOFF",
-        handoffPausedUntil: BOT_OFF_PAUSE_UNTIL
+        handoffPausedUntil: BOT_OFF_PAUSE_UNTIL,
       },
       create: {
         whatsappPhone: parsed.data.phone,
         humanHandoff: true,
         status: "HUMAN_HANDOFF",
         handoffPausedUntil: BOT_OFF_PAUSE_UNTIL,
-        state: {}
-      }
+        state: {},
+      },
     });
 
     const handoff = await prisma.handoff.create({
@@ -80,8 +100,8 @@ export async function registerInternalRoutes(app: FastifyInstance, prisma: Prism
         phone: parsed.data.phone,
         reason: parsed.data.reason,
         summary: parsed.data.summary ?? null,
-        status: "OPEN"
-      }
+        status: "OPEN",
+      },
     });
 
     return reply.code(201).send({ ok: true, handoff });
@@ -93,8 +113,8 @@ export async function registerInternalRoutes(app: FastifyInstance, prisma: Prism
       where: { id: params.id },
       data: {
         status: "RESOLVED",
-        resolvedAt: new Date()
-      }
+        resolvedAt: new Date(),
+      },
     });
 
     if (handoff.conversationId) {
@@ -103,8 +123,8 @@ export async function registerInternalRoutes(app: FastifyInstance, prisma: Prism
         data: {
           humanHandoff: false,
           status: "ACTIVE",
-          handoffPausedUntil: null
-        }
+          handoffPausedUntil: null,
+        },
       });
     }
 
@@ -155,7 +175,7 @@ export async function registerInternalRoutes(app: FastifyInstance, prisma: Prism
         reason: pauseContext?.reason ?? null,
         summary: pauseContext?.summary ?? null,
         pauseUntil: pauseContext?.pauseUntil?.toISOString() ?? null,
-        handoffId: pauseContext?.handoffId ?? null
+        handoffId: pauseContext?.handoffId ?? null,
       });
     }
 
@@ -171,40 +191,65 @@ export async function registerInternalRoutes(app: FastifyInstance, prisma: Prism
     const inspection = inspectEvolutionInboundPayload(parsed.data.payload);
     const message = mapEvolutionInbound(parsed.data.payload);
     if (!message) {
-      app.log.warn(inspection, "Internal Evolution dispatch ignored: payload did not map to inbound message");
-      return reply.code(400).send({ ok: false, error: "Payload did not map to inbound message", inspection });
+      app.log.warn(
+        inspection,
+        "Internal Evolution dispatch ignored: payload did not map to inbound message",
+      );
+      return reply.code(400).send({
+        ok: false,
+        error: "Payload did not map to inbound message",
+        inspection,
+      });
     }
-    const businessSettings = normalizeBusinessSettings(parsed.data.businessSettings);
-    const virtualAttendantSettings = normalizeVirtualAttendantSettings(parsed.data.virtualAttendantSettings);
+    const businessSettings = normalizeBusinessSettings(
+      parsed.data.businessSettings,
+    );
+    const virtualAttendantSettings = normalizeVirtualAttendantSettings(
+      parsed.data.virtualAttendantSettings,
+    );
     const messageWithContext = {
       ...message,
+      tenantId: parsed.data.tenantId,
       userId: parsed.data.userId,
+      requestId: request.id,
       businessSettings,
-      virtualAttendantSettings
+      virtualAttendantSettings,
     };
 
     const assistant = new AssistantService(prisma, app.log);
     const provider = new EvolutionProvider(app.log, parsed.data.instanceToken);
     const idempotency = new IdempotencyStore(prisma);
     const handoff = new HandoffService(prisma);
-    const orchestrator = new MessageOrchestrator(assistant, provider, idempotency, handoff, app.log);
+    const orchestrator = new MessageOrchestrator(
+      assistant,
+      provider,
+      idempotency,
+      handoff,
+      app.log,
+    );
 
     try {
-      const result = await orchestrator.handleInboundMessage(messageWithContext);
+      const result =
+        await orchestrator.handleInboundMessage(messageWithContext);
       return reply.send({
         ok: true,
         action: result.action,
-        outboundMessage: result.outboundMessage ?? null
+        outboundMessage: result.outboundMessage ?? null,
       });
     } catch (error) {
-      app.log.error({ err: toErrorMessage(error) }, "Internal Evolution dispatch failed");
+      app.log.error(
+        { err: toErrorMessage(error) },
+        "Internal Evolution dispatch failed",
+      );
       return reply.code(500).send({ ok: false, error: "Dispatch failed" });
     }
   });
 }
 
 function isAuthorized(request: FastifyRequest): boolean {
-  const validTokens = [env.ADMIN_API_TOKEN, env.INTERNAL_SERVICE_TOKEN].filter(Boolean);
+  const validTokens = [env.ADMIN_API_TOKEN, env.INTERNAL_SERVICE_TOKEN].filter(
+    Boolean,
+  );
   if (validTokens.length === 0) return false;
 
   const authorization = request.headers.authorization;

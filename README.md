@@ -15,18 +15,19 @@ O monorepo está em transição arquitetural.
 - Frontend novo já foi reconstruído a partir do Open Design e é base visual aprovada.
 - Frontend ainda usa services e dados mockados; não está integrado ao BFF.
 - BFF e API mantêm responsabilidades legadas que serão separadas por goals sequenciais.
-- Multi-tenancy alvo, Scheduling Service, AI Orchestrator separado, LangChain, LangGraph e RAG ainda não estão implementados como arquitetura final.
+- Fundação multi-tenant do BFF e Scheduling Service estão implementados. Minha Agenda opera atrás de `CalendarProvider`; dados operacionais restantes ainda migram por goals. AI Orchestrator separado, LangChain, LangGraph e RAG ainda não existem.
 
 ## Apps
 
-| App | Path | Estado atual |
-| --- | --- | --- |
-| Frontend | `apps/frontend` | Next.js 16, React 19, TypeScript e CSS próprio; UI nova com mocks |
-| Open Design | `apps/frontend-open-design` | Contrato visual estático; referência, não serviço de produção |
-| BFF | `apps/bff` | Fastify, TypeScript, Prisma/PostgreSQL, cookie/JWT; backend web transitório |
-| API | `apps/api` | Fastify, TypeScript, Prisma/PostgreSQL; AI orchestration e Minha Agenda legadas |
-| Evolution Go | `apps/evolution-go` | Provedor/transporte WhatsApp em Go |
-| Health worker | `apps/health-worker` | Serviço Node de monitoramento de saúde |
+| App                | Path                        | Estado atual                                                                                        |
+| ------------------ | --------------------------- | --------------------------------------------------------------------------------------------------- |
+| Frontend           | `apps/frontend`             | Next.js 16, React 19, TypeScript e CSS próprio; UI nova com mocks                                   |
+| Open Design        | `apps/frontend-open-design` | Contrato visual estático; referência, não serviço de produção                                       |
+| BFF                | `apps/bff`                  | Fastify, TypeScript, Prisma/PostgreSQL, cookie/JWT; backend web transitório                         |
+| API                | `apps/api`                  | Fastify, TypeScript, Prisma/PostgreSQL; AI orchestration transitória e client do Scheduling Service |
+| Scheduling Service | `apps/scheduling-service`   | Fastify, TypeScript, Prisma/PostgreSQL; domínio canônico e provider Minha Agenda                    |
+| Evolution Go       | `apps/evolution-go`         | Provedor/transporte WhatsApp em Go                                                                  |
+| Health worker      | `apps/health-worker`        | Serviço Node de monitoramento de saúde                                                              |
 
 `packages/legal-contract` é o único package compartilhado atual.
 
@@ -42,7 +43,7 @@ Backend legado continua operacional em paralelo:
 
 ```text
 Evolution Go → BFF → apps/api → Evolution Go
-                    ↘ Minha Agenda
+                    ↘ Scheduling Service → Minha Agenda
 ```
 
 BFF também expõe auth/session, onboarding, settings, WhatsApp e inbox atuais. Esta descrição é `CURRENT`, não ownership final.
@@ -71,7 +72,7 @@ WhatsApp → Evolution Go → AI Orchestrator
 WhatsApp ← Evolution Go ←─────┘
 ```
 
-Frontend falará exclusivamente com BFF. Apps alvo `ai-orchestrator` e `scheduling-service` ainda não existem.
+Frontend falará exclusivamente com BFF. `scheduling-service` já existe; `ai-orchestrator` separado entra em goal posterior.
 
 ## Plano de migração
 

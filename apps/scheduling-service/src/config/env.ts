@@ -19,6 +19,7 @@ const envSchema = z.object({
   PORT: intEnv(3003),
   DATABASE_URL: stringEnv(),
   INTERNAL_SERVICE_TOKEN: stringEnv(),
+  INTEGRATION_CREDENTIALS_KEY: stringEnv(),
 });
 
 export const env = envSchema.parse(process.env);
@@ -31,6 +32,12 @@ if (env.NODE_ENV === "production") {
   if (env.INTERNAL_SERVICE_TOKEN.length < 32) {
     throw new Error(
       "INTERNAL_SERVICE_TOKEN must contain at least 32 characters in production.",
+    );
+  }
+
+  if (!env.INTEGRATION_CREDENTIALS_KEY) {
+    throw new Error(
+      "INTEGRATION_CREDENTIALS_KEY must be configured in production.",
     );
   }
 }

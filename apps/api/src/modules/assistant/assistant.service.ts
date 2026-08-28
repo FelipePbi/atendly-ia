@@ -1,26 +1,30 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
 import { env } from "../../config/env.js";
+import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import {
   channelMessageLogContext,
   type DiagnosticLogger,
   maskPhone,
-  noopDiagnosticLogger
+  noopDiagnosticLogger,
 } from "../../lib/diagnostic-log.js";
 import { toErrorMessage } from "../../lib/errors.js";
-import { businessSettingsConfigured, normalizeBusinessSettings, type BusinessSettingsDTO } from "../business-settings/business-settings.js";
 import {
-  normalizeVirtualAttendantSettings,
-  type VirtualAttendantSettingsDTO
-} from "../virtual-attendant/virtual-attendant.js";
-import { buildSystemPrompt } from "../openai/prompts.js";
+  businessSettingsConfigured,
+  type BusinessSettingsDTO,
+  normalizeBusinessSettings,
+} from "../business-settings/business-settings.js";
+import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
 import {
   extractFunctionCalls,
   extractOutputText,
   OpenAiResponsesClient,
-  type ResponsesApiResponse
+  type ResponsesApiResponse,
 } from "../openai/openai-client.js";
+import { buildSystemPrompt } from "../openai/prompts.js";
 import { AssistantToolRegistry } from "../openai/tools.js";
-import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
+import {
+  normalizeVirtualAttendantSettings,
+  type VirtualAttendantSettingsDTO,
+} from "../virtual-attendant/virtual-attendant.js";
 
 export interface IncomingAssistantMessage {
   phone: string;
@@ -152,29 +156,35 @@ interface StoredConversationState extends Record<string, unknown> {
   }>;
 }
 
-const defaultHandoffMessage = "Vou chamar uma pessoa da equipe pra te responder com atencao por aqui, ta?";
+const defaultHandoffMessage =
+  "Vou chamar uma pessoa da equipe pra te responder com atencao por aqui, ta?";
 
 export class AssistantService {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly logger: DiagnosticLogger = noopDiagnosticLogger,
     private readonly openAi = new OpenAiResponsesClient(),
-    private readonly tools = new AssistantToolRegistry(prisma)
+    private readonly tools = new AssistantToolRegistry(prisma),
   ) {}
 
-  async handleIncomingText(input: IncomingAssistantMessage): Promise<AssistantReply> {
+  async handleIncomingText(
+    input: IncomingAssistantMessage,
+  ): Promise<AssistantReply> {
     const recorded = await this.recordInboundText(input);
     return this.handleBufferedText({
       ...input,
-      messageRecordIds: [recorded.messageRecordId]
+      messageRecordIds: [recorded.messageRecordId],
     });
   }
 
-  async recordInboundText(input: IncomingAssistantMessage): Promise<Pick<AssistantReply, "conversationId" | "messageRecordId">> {
+  async recordInboundText(
+    input: IncomingAssistantMessage,
+  ): Promise<Pick<AssistantReply, "conversationId" | "messageRecordId">> {
     const channelMessage = input.channelMessage;
     const phone = channelMessage?.customerPhone ?? input.phone;
     const customerName = channelMessage?.customerName ?? input.customerName;
-    const whatsappMessageId = channelMessage?.messageId ?? input.whatsappMessageId;
+    const whatsappMessageId =
+      channelMessage?.messageId ?? input.whatsappMessageId;
     const rawPayload = channelMessage?.raw ?? input.rawPayload;
     const baseContext = channelMessage
       ? channelMessageLogContext(channelMessage)
@@ -182,22 +192,25 @@ export class AssistantService {
 
     this.logger.info(baseContext, "Assistant recording inbound text");
 
-    const conversation = await this.upsertActiveConversation(phone, customerName);
+    const conversation = await this.upsertActiveConversation(
+      phone,
+      customerName,
+    );
     this.logger.info(
       {
         ...baseContext,
-        conversationId: conversation.id
+        conversationId: conversation.id,
       },
-      "Assistant upserted conversation"
+      "Assistant upserted conversation",
     );
 
     this.logger.info(
       {
         ...baseContext,
         conversationId: conversation.id,
-        whatsappMessageId
+        whatsappMessageId,
       },
-      "Assistant saving inbound message"
+      "Assistant saving inbound message",
     );
     const message = await this.prisma.message.create({
       data: {
@@ -207,24 +220,26 @@ export class AssistantService {
         role: "user",
         body: input.text,
         whatsappMessageId,
-        rawPayload: rawPayload as object
-      }
+        rawPayload: rawPayload as object,
+      },
     });
     this.logger.info(
       {
         ...baseContext,
-        conversationId: conversation.id
+        conversationId: conversation.id,
       },
-      "Assistant saved inbound message"
+      "Assistant saved inbound message",
     );
 
     return {
       conversationId: conversation.id,
-      messageRecordId: message.id
+      messageRecordId: message.id,
     };
   }
 
-  async handleBufferedText(input: IncomingAssistantMessage & { messageRecordIds: string[] }): Promise<AssistantReply> {
+  async handleBufferedText(
+    input: IncomingAssistantMessage & { messageRecordIds: string[] },
+  ): Promise<AssistantReply> {
     const channelMessage = input.channelMessage;
     const phone = channelMessage?.customerPhone ?? input.phone;
     const customerName = channelMessage?.customerName ?? input.customerName;
@@ -235,46 +250,57 @@ export class AssistantService {
     this.logger.info(
       {
         ...baseContext,
-        groupedMessageCount: input.messageRecordIds.length
+        groupedMessageCount: input.messageRecordIds.length,
       },
-      "Assistant started buffered text handling"
+      "Assistant started buffered text handling",
     );
 
-    const conversation = await this.upsertActiveConversation(phone, customerName);
+    const conversation = await this.upsertActiveConversation(
+      phone,
+      customerName,
+    );
     const recentMessages = await this.prisma.message.findMany({
       where: { conversationId: conversation.id },
       orderBy: { createdAt: "desc" },
-      take: 30
+      take: 30,
     });
 
     const chronologicalMessageRecords = recentMessages.reverse();
-    const chronologicalMessages = chronologicalMessageRecords.map((message) => ({
-      role: message.role === "assistant" ? "assistant" : "user",
-      content: message.body
-    }));
+    const chronologicalMessages = chronologicalMessageRecords.map(
+      (message) => ({
+        role: message.role === "assistant" ? "assistant" : "user",
+        content: message.body,
+      }),
+    );
     this.logger.info(
       {
         ...baseContext,
         conversationId: conversation.id,
-        recentMessageCount: chronologicalMessages.length
+        recentMessageCount: chronologicalMessages.length,
       },
-      "Assistant loaded conversation context"
+      "Assistant loaded conversation context",
     );
 
     const state = normalizeStoredState(conversation.state);
-    const businessSettings = normalizeBusinessSettings(input.businessSettings ?? channelMessage?.businessSettings);
+    const businessSettings = normalizeBusinessSettings(
+      input.businessSettings ?? channelMessage?.businessSettings,
+    );
     const virtualAttendantSettings = normalizeVirtualAttendantSettings(
-      input.virtualAttendantSettings ?? channelMessage?.virtualAttendantSettings
+      input.virtualAttendantSettings ??
+        channelMessage?.virtualAttendantSettings,
     );
     if (!businessSettingsConfigured(businessSettings)) {
       const decision: AiDecision = {
         action: "handoff_human",
-        messages: ["Vou deixar essa conversa para a profissional responder, ta?"],
+        messages: [
+          "Vou deixar essa conversa para a profissional responder, ta?",
+        ],
         pauseReason: "manual_handoff",
         conversationStage: "HUMAN_HANDOFF",
         classification: "potential_customer",
         confidence: 1,
-        internalNotes: "IA bloqueada porque as configuracoes do negocio estao incompletas."
+        internalNotes:
+          "IA bloqueada porque as configuracoes do negocio estao incompletas.",
       };
 
       await this.applyDecision({
@@ -282,7 +308,7 @@ export class AssistantService {
         phone,
         customerName,
         inputMessageIds: input.messageRecordIds,
-        decision
+        decision,
       });
 
       const reply = composeReplyText(decision);
@@ -292,30 +318,43 @@ export class AssistantService {
           direction: "OUTBOUND",
           source: "AI",
           role: "assistant",
-          body: reply
-        }
+          body: reply,
+        },
       });
 
       return {
         text: reply,
         conversationId: conversation.id,
-        messageRecordId: assistantMessage.id
+        messageRecordId: assistantMessage.id,
       };
     }
 
-    const previousMessageCount = Math.max(0, chronologicalMessages.length - input.messageRecordIds.length);
+    const previousMessageCount = Math.max(
+      0,
+      chronologicalMessages.length - input.messageRecordIds.length,
+    );
     const shouldIntroduce = shouldIntroduceSeparateAssistant({
       settings: virtualAttendantSettings,
       state,
       previousMessageCount,
-      previousMessages: chronologicalMessageRecords.slice(0, previousMessageCount)
+      previousMessages: chronologicalMessageRecords.slice(
+        0,
+        previousMessageCount,
+      ),
     });
-    const immediateDecision = buildImmediateDecision(input.text, previousMessageCount, virtualAttendantSettings);
+    const immediateDecision = buildImmediateDecision(
+      input.text,
+      previousMessageCount,
+      virtualAttendantSettings,
+    );
     const rawDecision =
       immediateDecision ??
       parseAiDecision(
         await this.runToolLoop({
           conversationId: conversation.id,
+          tenantId: channelMessage?.tenantId,
+          userId: channelMessage?.userId,
+          requestId: channelMessage?.requestId,
           phone,
           customerName,
           instructions: buildSystemPrompt({
@@ -324,17 +363,17 @@ export class AssistantService {
             groupedMessages: input.text,
             currentDateTime: new Date().toISOString(),
             businessSettings,
-            virtualAttendantSettings
+            virtualAttendantSettings,
           }),
           businessSettings,
-          input: chronologicalMessages
-        })
+          input: chronologicalMessages,
+        }),
       );
     const decision = maybeAddAssistantIntroduction({
       decision: rawDecision,
       settings: virtualAttendantSettings,
       businessSettings,
-      shouldIntroduce
+      shouldIntroduce,
     });
 
     await this.applyDecision({
@@ -342,7 +381,7 @@ export class AssistantService {
       phone,
       customerName,
       inputMessageIds: input.messageRecordIds,
-      decision
+      decision,
     });
 
     const reply = composeReplyText(decision);
@@ -350,9 +389,9 @@ export class AssistantService {
       {
         ...baseContext,
         conversationId: conversation.id,
-        replyLength: reply.length
+        replyLength: reply.length,
       },
-      "Assistant generated reply"
+      "Assistant generated reply",
     );
 
     const assistantMessage = await this.prisma.message.create({
@@ -361,30 +400,33 @@ export class AssistantService {
         direction: "OUTBOUND",
         source: "AI",
         role: "assistant",
-        body: reply
-      }
+        body: reply,
+      },
     });
     this.logger.info(
       {
         ...baseContext,
         conversationId: conversation.id,
-        messageRecordId: assistantMessage.id
+        messageRecordId: assistantMessage.id,
       },
-      "Assistant saved outbound message"
+      "Assistant saved outbound message",
     );
 
     return {
       text: reply,
       conversationId: conversation.id,
-      messageRecordId: assistantMessage.id
+      messageRecordId: assistantMessage.id,
     };
   }
 
-  async recordManualOutboundText(input: IncomingAssistantMessage): Promise<Pick<AssistantReply, "conversationId" | "messageRecordId">> {
+  async recordManualOutboundText(
+    input: IncomingAssistantMessage,
+  ): Promise<Pick<AssistantReply, "conversationId" | "messageRecordId">> {
     const channelMessage = input.channelMessage;
     const phone = channelMessage?.customerPhone ?? input.phone;
     const customerName = channelMessage?.customerName ?? input.customerName;
-    const whatsappMessageId = channelMessage?.messageId ?? input.whatsappMessageId;
+    const whatsappMessageId =
+      channelMessage?.messageId ?? input.whatsappMessageId;
     const rawPayload = channelMessage?.raw ?? input.rawPayload;
     const baseContext = channelMessage
       ? channelMessageLogContext(channelMessage)
@@ -394,13 +436,13 @@ export class AssistantService {
     const conversation = await this.prisma.conversation.upsert({
       where: { whatsappPhone: phone },
       update: {
-        customerName: customerName ?? undefined
+        customerName: customerName ?? undefined,
       },
       create: {
         whatsappPhone: phone,
         customerName: customerName ?? null,
-        state: {}
-      }
+        state: {},
+      },
     });
 
     const message = await this.prisma.message.create({
@@ -411,22 +453,22 @@ export class AssistantService {
         role: "assistant",
         body: input.text,
         whatsappMessageId,
-        rawPayload: rawPayload as object
-      }
+        rawPayload: rawPayload as object,
+      },
     });
 
     this.logger.info(
       {
         ...baseContext,
         conversationId: conversation.id,
-        messageRecordId: message.id
+        messageRecordId: message.id,
       },
-      "Assistant recorded manual outbound text"
+      "Assistant recorded manual outbound text",
     );
 
     return {
       conversationId: conversation.id,
-      messageRecordId: message.id
+      messageRecordId: message.id,
     };
   }
 
@@ -439,41 +481,44 @@ export class AssistantService {
       {
         messageRecordId: input.messageRecordId,
         providerMessageId: input.providerMessageId,
-        hasRawPayload: input.rawPayload !== undefined
+        hasRawPayload: input.rawPayload !== undefined,
       },
-      "Assistant marking outbound message"
+      "Assistant marking outbound message",
     );
     await this.prisma.message.update({
       where: { id: input.messageRecordId },
       data: {
         whatsappMessageId: input.providerMessageId,
-        rawPayload: input.rawPayload as object
-      }
+        rawPayload: input.rawPayload as object,
+      },
     });
     this.logger.info(
       {
         messageRecordId: input.messageRecordId,
         providerMessageId: input.providerMessageId,
-        hasRawPayload: input.rawPayload !== undefined
+        hasRawPayload: input.rawPayload !== undefined,
       },
-      "Assistant marked outbound message"
+      "Assistant marked outbound message",
     );
   }
 
-  private async upsertActiveConversation(phone: string, customerName?: string | null) {
+  private async upsertActiveConversation(
+    phone: string,
+    customerName?: string | null,
+  ) {
     return this.prisma.conversation.upsert({
       where: { whatsappPhone: phone },
       update: {
         customerName: customerName ?? undefined,
         status: "ACTIVE",
         humanHandoff: false,
-        handoffPausedUntil: null
+        handoffPausedUntil: null,
       },
       create: {
         whatsappPhone: phone,
         customerName: customerName ?? null,
-        state: {}
-      }
+        state: {},
+      },
     });
   }
 
@@ -485,17 +530,21 @@ export class AssistantService {
     decision: AiDecision;
   }): Promise<void> {
     const conversation = await this.prisma.conversation.findUnique({
-      where: { id: input.conversationId }
+      where: { id: input.conversationId },
     });
     const state = normalizeStoredState(conversation?.state);
     const now = new Date().toISOString();
-    const stage = input.decision.conversationStage ?? inferStageFromDecision(input.decision, state);
-    const classification = input.decision.classification ?? inferClassificationFromDecision(input.decision, state);
+    const stage =
+      input.decision.conversationStage ??
+      inferStageFromDecision(input.decision, state);
+    const classification =
+      input.decision.classification ??
+      inferClassificationFromDecision(input.decision, state);
     const appointmentDraft = mergeAppointmentDraft({
       existing: state.appointmentDraft,
       patch: input.decision.appointmentDraftPatch,
       phone: input.phone,
-      customerName: input.customerName ?? undefined
+      customerName: input.customerName ?? undefined,
     });
     const memory = updateConversationMemory({
       existing: state.conversationMemory,
@@ -504,19 +553,21 @@ export class AssistantService {
       classification,
       appointmentDraft,
       customerName: input.customerName ?? undefined,
-      updatedAt: now
+      updatedAt: now,
     });
 
     const nextState: StoredConversationState = {
       ...state,
       aiConversation: {
-        aiEnabledForChat: input.decision.action !== "pause_ai" && input.decision.action !== "handoff_human",
+        aiEnabledForChat:
+          input.decision.action !== "pause_ai" &&
+          input.decision.action !== "handoff_human",
         stage,
         classification,
         pauseReason: input.decision.pauseReason,
         lastProcessedMessageIds: input.inputMessageIds,
         lastAiResponseAt: now,
-        promptVersion: env.AI_PROMPT_VERSION
+        promptVersion: env.AI_PROMPT_VERSION,
       },
       conversationMemory: memory,
       appointmentDraft,
@@ -529,28 +580,31 @@ export class AssistantService {
           toolName: input.decision.toolName,
           pauseReason: input.decision.pauseReason,
           internalNotes: input.decision.internalNotes,
-          createdAt: now
+          createdAt: now,
         },
-        ...(state.aiDecisionLogs ?? [])
-      ].slice(0, 20)
+        ...(state.aiDecisionLogs ?? []),
+      ].slice(0, 20),
     };
 
     await this.prisma.conversation.update({
       where: { id: input.conversationId },
       data: {
         currentIntent: input.decision.action,
-        state: nextState as Prisma.InputJsonValue
-      }
+        state: nextState as Prisma.InputJsonValue,
+      },
     });
 
-    if (input.decision.action === "pause_ai" || input.decision.action === "handoff_human") {
+    if (
+      input.decision.action === "pause_ai" ||
+      input.decision.action === "handoff_human"
+    ) {
       await this.prisma.conversation.update({
         where: { id: input.conversationId },
         data: {
           humanHandoff: true,
           status: "HUMAN_HANDOFF",
-          handoffPausedUntil: null
-        }
+          handoffPausedUntil: null,
+        },
       });
       await this.prisma.handoff.create({
         data: {
@@ -558,14 +612,17 @@ export class AssistantService {
           phone: input.phone,
           reason: input.decision.pauseReason ?? "manual_handoff",
           summary: input.decision.internalNotes ?? null,
-          status: "OPEN"
-        }
+          status: "OPEN",
+        },
       });
     }
   }
 
   private async runToolLoop(args: {
     conversationId: string;
+    tenantId?: string;
+    userId?: string;
+    requestId?: string;
     phone: string;
     customerName?: string | null;
     businessSettings: BusinessSettingsDTO;
@@ -582,14 +639,14 @@ export class AssistantService {
           phone: maskPhone(args.phone),
           iteration,
           inputItems: input.length,
-          toolCount: this.tools.definitions.length
+          toolCount: this.tools.definitions.length,
         },
-        "Assistant OpenAI request starting"
+        "Assistant OpenAI request starting",
       );
       const response = await this.openAi.createResponse({
         instructions: args.instructions,
         input,
-        tools: this.tools.definitions
+        tools: this.tools.definitions,
       });
 
       lastResponse = response;
@@ -601,9 +658,9 @@ export class AssistantService {
           iteration,
           responseId: response.id,
           functionCallCount: functionCalls.length,
-          outputTextLength: extractOutputText(response).length
+          outputTextLength: extractOutputText(response).length,
         },
-        "Assistant OpenAI response received"
+        "Assistant OpenAI response received",
       );
       if (functionCalls.length === 0) {
         return extractOutputText(response) || "Certo, vou te ajudar por aqui.";
@@ -619,25 +676,28 @@ export class AssistantService {
             phone: maskPhone(args.phone),
             iteration,
             toolName: call.name,
-            callId: call.call_id
+            callId: call.call_id,
           },
-          "Assistant tool call started"
+          "Assistant tool call started",
         );
         const toolCall = await this.prisma.toolCall.create({
           data: {
             conversationId: args.conversationId,
             name: call.name,
             arguments: parsedArgs as object,
-            status: "STARTED"
-          }
+            status: "STARTED",
+          },
         });
 
         try {
           const result = await this.tools.execute(call.name, parsedArgs, {
             conversationId: args.conversationId,
+            tenantId: args.tenantId,
+            userId: args.userId,
+            requestId: args.requestId,
             phone: args.phone,
             customerName: args.customerName,
-            businessSettings: args.businessSettings
+            businessSettings: args.businessSettings,
           });
 
           await this.prisma.toolCall.update({
@@ -645,14 +705,14 @@ export class AssistantService {
             data: {
               result: result as object,
               status: "SUCCEEDED",
-              completedAt: new Date()
-            }
+              completedAt: new Date(),
+            },
           });
 
           input.push({
             type: "function_call_output",
             call_id: call.call_id,
-            output: JSON.stringify(result)
+            output: JSON.stringify(result),
           });
           this.logger.info(
             {
@@ -660,9 +720,9 @@ export class AssistantService {
               phone: maskPhone(args.phone),
               iteration,
               toolName: call.name,
-              callId: call.call_id
+              callId: call.call_id,
             },
-            "Assistant tool call succeeded"
+            "Assistant tool call succeeded",
           );
         } catch (error) {
           const result = { ok: false, error: toErrorMessage(error) };
@@ -672,14 +732,14 @@ export class AssistantService {
               result,
               status: "FAILED",
               error: result.error,
-              completedAt: new Date()
-            }
+              completedAt: new Date(),
+            },
           });
 
           input.push({
             type: "function_call_output",
             call_id: call.call_id,
-            output: JSON.stringify(result)
+            output: JSON.stringify(result),
           });
           this.logger.error(
             {
@@ -688,9 +748,9 @@ export class AssistantService {
               iteration,
               toolName: call.name,
               callId: call.call_id,
-              err: result.error
+              err: result.error,
             },
-            "Assistant tool call failed"
+            "Assistant tool call failed",
           );
         }
       }
@@ -699,11 +759,14 @@ export class AssistantService {
     this.logger.warn(
       {
         conversationId: args.conversationId,
-        phone: maskPhone(args.phone)
+        phone: maskPhone(args.phone),
       },
-      "Assistant tool loop reached iteration limit"
+      "Assistant tool loop reached iteration limit",
     );
-    return extractOutputText(lastResponse ?? { id: "none" }) || "Vou chamar a profissional para continuar seu atendimento.";
+    return (
+      extractOutputText(lastResponse ?? { id: "none" }) ||
+      "Vou chamar a profissional para continuar seu atendimento."
+    );
   }
 }
 
@@ -722,7 +785,8 @@ function shouldIntroduceSeparateAssistant(input: {
   previousMessages: Array<{ source?: string | null }>;
 }): boolean {
   if (input.settings.identityMode !== "SEPARATE_ASSISTANT") return false;
-  if (!input.settings.assistantName.trim() || !input.settings.assistantSex) return false;
+  if (!input.settings.assistantName.trim() || !input.settings.assistantSex)
+    return false;
   if (input.previousMessageCount === 0) return true;
 
   const stage = input.state.aiConversation?.stage;
@@ -739,27 +803,50 @@ function maybeAddAssistantIntroduction(input: {
   shouldIntroduce: boolean;
 }): AiDecision {
   if (!input.shouldIntroduce) return input.decision;
-  if (input.decision.action === "pause_ai" || input.decision.action === "handoff_human" || input.decision.action === "do_nothing") {
+  if (
+    input.decision.action === "pause_ai" ||
+    input.decision.action === "handoff_human" ||
+    input.decision.action === "do_nothing"
+  ) {
     return input.decision;
   }
 
-  const messages = (input.decision.messages ?? []).map((message) => message.trim()).filter(Boolean);
-  const introduction = assistantIntroduction(input.settings, input.businessSettings);
+  const messages = (input.decision.messages ?? [])
+    .map((message) => message.trim())
+    .filter(Boolean);
+  const introduction = assistantIntroduction(
+    input.settings,
+    input.businessSettings,
+  );
   if (!introduction) return input.decision;
 
-  if (messages[0] && messageAlreadyIntroducesAssistant(messages[0], input.settings.assistantName)) {
+  if (
+    messages[0] &&
+    messageAlreadyIntroducesAssistant(messages[0], input.settings.assistantName)
+  ) {
     return input.decision;
   }
 
   return {
     ...input.decision,
-    messages: messages.length > 0 ? [`${introduction}\n\n${messages[0]}`, ...messages.slice(1)] : [introduction]
+    messages:
+      messages.length > 0
+        ? [`${introduction}\n\n${messages[0]}`, ...messages.slice(1)]
+        : [introduction],
   };
 }
 
-function assistantIntroduction(settings: VirtualAttendantSettingsDTO, businessSettings: BusinessSettingsDTO): string {
+function assistantIntroduction(
+  settings: VirtualAttendantSettingsDTO,
+  businessSettings: BusinessSettingsDTO,
+): string {
   const name = settings.assistantName.trim();
-  if (settings.identityMode !== "SEPARATE_ASSISTANT" || !name || !settings.assistantSex) return "";
+  if (
+    settings.identityMode !== "SEPARATE_ASSISTANT" ||
+    !name ||
+    !settings.assistantSex
+  )
+    return "";
 
   const greeting = settings.personaType === "CORPORATE" ? "Olá" : "Oii";
   const article = settings.assistantSex === "MALE" ? "o" : "a";
@@ -767,41 +854,52 @@ function assistantIntroduction(settings: VirtualAttendantSettingsDTO, businessSe
   return `${greeting}, sou ${article} ${name}, atendente pessoal da ${businessName}.`;
 }
 
-function messageAlreadyIntroducesAssistant(message: string, assistantName: string): boolean {
+function messageAlreadyIntroducesAssistant(
+  message: string,
+  assistantName: string,
+): boolean {
   const normalizedMessage = normalizeText(message);
   const normalizedName = normalizeText(assistantName);
   if (!normalizedName) return false;
-  return normalizedMessage.includes(`sou a ${normalizedName}`) || normalizedMessage.includes(`sou o ${normalizedName}`);
+  return (
+    normalizedMessage.includes(`sou a ${normalizedName}`) ||
+    normalizedMessage.includes(`sou o ${normalizedName}`)
+  );
 }
 
 function buildImmediateDecision(
   text: string,
   previousMessageCount: number,
-  virtualAttendantSettings: VirtualAttendantSettingsDTO
+  virtualAttendantSettings: VirtualAttendantSettingsDTO,
 ): AiDecision | null {
   const normalized = normalizeText(text);
 
   if (isHumanRequested(normalized) || isSensitiveComplaint(normalized)) {
     return {
       action: "handoff_human",
-      messages: ["Sinto muito por isso. Vou chamar uma pessoa da equipe pra te atender com atencao por aqui, ta?"],
+      messages: [
+        "Sinto muito por isso. Vou chamar uma pessoa da equipe pra te atender com atencao por aqui, ta?",
+      ],
       pauseReason: "complaint_or_sensitive",
       conversationStage: "HUMAN_HANDOFF",
       classification: "potential_customer",
       confidence: 0.96,
-      internalNotes: "Pedido de humano ou reclamacao sensivel detectado antes de chamar o modelo."
+      internalNotes:
+        "Pedido de humano ou reclamacao sensivel detectado antes de chamar o modelo.",
     };
   }
 
   if (isSupplierOrPartner(normalized)) {
     return {
       action: "pause_ai",
-      messages: ["Oi! Vou deixar essa mensagem para a equipe verificar e te responder direitinho, ta bom?"],
+      messages: [
+        "Oi! Vou deixar essa mensagem para a equipe verificar e te responder direitinho, ta bom?",
+      ],
       pauseReason: "supplier_or_partner",
       conversationStage: "AI_PAUSED",
       classification: "supplier_or_partner",
       confidence: 0.93,
-      internalNotes: "Contato aparenta ser fornecedor ou parceiro."
+      internalNotes: "Contato aparenta ser fornecedor ou parceiro.",
     };
   }
 
@@ -813,7 +911,7 @@ function buildImmediateDecision(
       conversationStage: "AI_PAUSED",
       classification: "personal_contact",
       confidence: 0.9,
-      internalNotes: "Contato aparenta ser pessoal e fora do escopo comercial."
+      internalNotes: "Contato aparenta ser pessoal e fora do escopo comercial.",
     };
   }
 
@@ -824,7 +922,8 @@ function buildImmediateDecision(
       conversationStage: "QUALIFYING_CONTACT",
       classification: "unknown",
       confidence: 0.92,
-      internalNotes: "Primeira mensagem generica; nao oferecer servicos antes de entender o motivo do contato."
+      internalNotes:
+        "Primeira mensagem generica; nao oferecer servicos antes de entender o motivo do contato.",
     };
   }
 
@@ -836,7 +935,10 @@ function genericGreetingReply(settings: VirtualAttendantSettingsDTO): string {
     return "Olá, tudo bem? Como posso te ajudar hoje?";
   }
 
-  if (settings.personaType === "CUSTOM" && settings.customPersonaProfile?.greetingStyle) {
+  if (
+    settings.personaType === "CUSTOM" &&
+    settings.customPersonaProfile?.greetingStyle
+  ) {
     return settings.customPersonaProfile.emojiUsage === "none"
       ? "Oi, tudo bem? Me conta como posso te ajudar hoje."
       : "Oii, tudo bem? Me conta como posso te ajudar hoje 😊";
@@ -851,16 +953,28 @@ function parseAiDecision(raw: string): AiDecision {
     return {
       action: parsed.action,
       messages: parseStringArray(parsed.messages).slice(0, 3),
-      toolName: typeof parsed.toolName === "string" ? parsed.toolName : undefined,
+      toolName:
+        typeof parsed.toolName === "string" ? parsed.toolName : undefined,
       toolInput: isRecord(parsed.toolInput) ? parsed.toolInput : undefined,
       appointmentDraftPatch: isRecord(parsed.appointmentDraftPatch)
-        ? (parsed.appointmentDraftPatch as Partial<AppointmentDraft>)
+        ? parsed.appointmentDraftPatch
         : undefined,
-      pauseReason: typeof parsed.pauseReason === "string" ? parsed.pauseReason : undefined,
-      conversationStage: isConversationStage(parsed.conversationStage) ? parsed.conversationStage : undefined,
-      classification: isContactClassification(parsed.classification) ? parsed.classification : undefined,
-      confidence: typeof parsed.confidence === "number" ? clamp(parsed.confidence, 0, 1) : 0.7,
-      internalNotes: typeof parsed.internalNotes === "string" ? parsed.internalNotes : undefined
+      pauseReason:
+        typeof parsed.pauseReason === "string" ? parsed.pauseReason : undefined,
+      conversationStage: isConversationStage(parsed.conversationStage)
+        ? parsed.conversationStage
+        : undefined,
+      classification: isContactClassification(parsed.classification)
+        ? parsed.classification
+        : undefined,
+      confidence:
+        typeof parsed.confidence === "number"
+          ? clamp(parsed.confidence, 0, 1)
+          : 0.7,
+      internalNotes:
+        typeof parsed.internalNotes === "string"
+          ? parsed.internalNotes
+          : undefined,
     };
   }
 
@@ -870,12 +984,16 @@ function parseAiDecision(raw: string): AiDecision {
     conversationStage: "GENERAL_CONVERSATION",
     classification: "potential_customer",
     confidence: 0.6,
-    internalNotes: "Resposta do modelo nao veio em JSON estruturado; convertida para send_message."
+    internalNotes:
+      "Resposta do modelo nao veio em JSON estruturado; convertida para send_message.",
   };
 }
 
 function composeReplyText(decision: AiDecision): string {
-  const messages = (decision.messages ?? []).map((message) => message.trim()).filter(Boolean).slice(0, 3);
+  const messages = (decision.messages ?? [])
+    .map((message) => message.trim())
+    .filter(Boolean)
+    .slice(0, 3);
   if (messages.length > 0) return messages.join("\n\n");
 
   if (decision.action === "pause_ai" || decision.action === "handoff_human") {
@@ -887,20 +1005,32 @@ function composeReplyText(decision: AiDecision): string {
 
 function normalizeStoredState(value: unknown): StoredConversationState {
   if (!isRecord(value)) return {};
-  return { ...value } as StoredConversationState;
+  return { ...value };
 }
 
-function inferStageFromDecision(decision: AiDecision, state: StoredConversationState): ConversationStage {
+function inferStageFromDecision(
+  decision: AiDecision,
+  state: StoredConversationState,
+): ConversationStage {
   if (decision.action === "handoff_human") return "HUMAN_HANDOFF";
   if (decision.action === "pause_ai") return "AI_PAUSED";
   if (decision.action === "create_appointment") return "APPOINTMENT_CREATED";
-  if (decision.action === "update_appointment_draft") return "COLLECTING_SCHEDULING_INFO";
-  if (decision.toolName?.includes("horarios") || decision.toolName === "check_availability") return "CHECKING_AVAILABILITY";
+  if (decision.action === "update_appointment_draft")
+    return "COLLECTING_SCHEDULING_INFO";
+  if (
+    decision.toolName?.includes("horarios") ||
+    decision.toolName === "check_availability"
+  )
+    return "CHECKING_AVAILABILITY";
   return state.aiConversation?.stage ?? "GENERAL_CONVERSATION";
 }
 
-function inferClassificationFromDecision(decision: AiDecision, state: StoredConversationState): ContactClassification {
-  if (decision.pauseReason === "supplier_or_partner") return "supplier_or_partner";
+function inferClassificationFromDecision(
+  decision: AiDecision,
+  state: StoredConversationState,
+): ContactClassification {
+  if (decision.pauseReason === "supplier_or_partner")
+    return "supplier_or_partner";
   if (decision.pauseReason === "personal_contact") return "personal_contact";
   if (decision.pauseReason === "spam") return "spam";
   return state.aiConversation?.classification ?? "potential_customer";
@@ -919,27 +1049,45 @@ function mergeAppointmentDraft(input: {
     services: [],
     status: "draft",
     ...input.existing,
-    ...input.patch
+    ...input.patch,
   };
 
-  draft.customerName = input.patch?.customerName ?? draft.customerName ?? input.customerName;
-  draft.customerPhone = input.patch?.customerPhone ?? draft.customerPhone ?? input.phone;
+  draft.customerName =
+    input.patch?.customerName ?? draft.customerName ?? input.customerName;
+  draft.customerPhone =
+    input.patch?.customerPhone ?? draft.customerPhone ?? input.phone;
   draft.services = input.patch?.services ?? draft.services ?? [];
 
   if (draft.services.length > 0) {
-    const bufferMinutes = Math.max(0, env.AI_BUFFER_BETWEEN_SERVICES_MINUTES) * Math.max(0, draft.services.length - 1);
+    const bufferMinutes =
+      Math.max(0, env.AI_BUFFER_BETWEEN_SERVICES_MINUTES) *
+      Math.max(0, draft.services.length - 1);
     draft.totalDurationMinutes =
       input.patch?.totalDurationMinutes ??
       draft.totalDurationMinutes ??
-      draft.services.reduce((total, service) => total + Number(service.durationMinutes || 0), 0) + bufferMinutes;
+      draft.services.reduce(
+        (total, service) => total + Number(service.durationMinutes || 0),
+        0,
+      ) + bufferMinutes;
     draft.totalPrice =
-      input.patch?.totalPrice ?? draft.totalPrice ?? draft.services.reduce((total, service) => total + Number(service.price || 0), 0);
+      input.patch?.totalPrice ??
+      draft.totalPrice ??
+      draft.services.reduce(
+        (total, service) => total + Number(service.price || 0),
+        0,
+      );
   }
 
-  if (draft.selectedStartDateTime && draft.totalDurationMinutes && !draft.selectedEndDateTime) {
+  if (
+    draft.selectedStartDateTime &&
+    draft.totalDurationMinutes &&
+    !draft.selectedEndDateTime
+  ) {
     const start = new Date(draft.selectedStartDateTime);
     if (!Number.isNaN(start.getTime())) {
-      draft.selectedEndDateTime = new Date(start.getTime() + draft.totalDurationMinutes * 60_000).toISOString();
+      draft.selectedEndDateTime = new Date(
+        start.getTime() + draft.totalDurationMinutes * 60_000,
+      ).toISOString();
     }
   }
 
@@ -956,31 +1104,41 @@ function updateConversationMemory(input: {
   updatedAt: string;
 }): ConversationMemory {
   const interestedServices =
-    input.appointmentDraft?.services.map((service) => service.name).filter(Boolean) ??
+    input.appointmentDraft?.services
+      .map((service) => service.name)
+      .filter(Boolean) ??
     input.existing?.knownCustomerInfo.interestedServices ??
     [];
   const pendingTopics = new Set(input.existing?.pendingTopics ?? []);
 
-  if (input.stage === "COLLECTING_SCHEDULING_INFO" || input.stage === "CONFIRMING_APPOINTMENT") {
+  if (
+    input.stage === "COLLECTING_SCHEDULING_INFO" ||
+    input.stage === "CONFIRMING_APPOINTMENT"
+  ) {
     pendingTopics.add("agendamento_em_andamento");
   }
-  if (input.stage === "APPOINTMENT_CREATED" || input.stage === "POST_APPOINTMENT") {
+  if (
+    input.stage === "APPOINTMENT_CREATED" ||
+    input.stage === "POST_APPOINTMENT"
+  ) {
     pendingTopics.delete("agendamento_em_andamento");
   }
 
   return {
     summary:
       input.existing?.summary ??
-      (input.customerName ? `Atendimento iniciado com ${input.customerName}.` : "Atendimento iniciado via WhatsApp."),
+      (input.customerName
+        ? `Atendimento iniciado com ${input.customerName}.`
+        : "Atendimento iniciado via WhatsApp."),
     pendingTopics: [...pendingTopics],
     knownCustomerInfo: {
       ...input.existing?.knownCustomerInfo,
       name: input.customerName ?? input.existing?.knownCustomerInfo.name,
-      interestedServices
+      interestedServices,
     },
     lastIntent: input.decision.action,
     lastStage: input.stage,
-    updatedAt: input.updatedAt
+    updatedAt: input.updatedAt,
   };
 }
 
@@ -1042,7 +1200,9 @@ function isConversationStage(value: unknown): value is ConversationStage {
   );
 }
 
-function isContactClassification(value: unknown): value is ContactClassification {
+function isContactClassification(
+  value: unknown,
+): value is ContactClassification {
   return (
     value === "potential_customer" ||
     value === "existing_customer" ||
@@ -1081,7 +1241,7 @@ function isOnlyGenericGreeting(normalized: string): boolean {
     "td bem",
     "ta ai",
     "to por aqui",
-    "alo"
+    "alo",
   ].includes(compact);
 }
 

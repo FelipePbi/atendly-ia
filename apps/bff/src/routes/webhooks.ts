@@ -1,19 +1,31 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
+
 import { env } from "../config/env.js";
-import { Prisma, type AiSuppressionReason, type IgnoredContact, type IgnoredContactSource, type MessageType } from "../generated/prisma/client.js";
+import {
+  type AiSuppressionReason,
+  type IgnoredContact,
+  type IgnoredContactSource,
+  type MessageType,
+  type Prisma,
+} from "../generated/prisma/client.js";
 import { businessSettingsDto, settingsDto } from "../lib/dto.js";
 import { AppError } from "../lib/errors.js";
 import { dataResponse } from "../lib/http.js";
-import { normalizeWhatsappJid, normalizeWhatsappPhone, phoneFromWhatsappJid, phonesMatch } from "../lib/phone.js";
+import {
+  normalizeWhatsappJid,
+  normalizeWhatsappPhone,
+  phoneFromWhatsappJid,
+  phonesMatch,
+} from "../lib/phone.js";
 import { getPrisma } from "../lib/prisma.js";
-import { dispatchToApi } from "../services/internal-api.js";
 import {
   extractConnectedPhone,
   extractQrCode,
   getEvolutionEvent,
   getEvolutionInstanceKey,
-  parseEvolutionMessage
+  parseEvolutionMessage,
 } from "../services/evolution-webhook-parser.js";
+import { dispatchToApi } from "../services/internal-api.js";
 
 type BackendDispatchOutboundMessage = {
   text: string;
@@ -24,15 +36,22 @@ type BackendDispatchOutboundMessage = {
 };
 
 type SavedVisibleMessage = {
-  conversation: Awaited<ReturnType<typeof fetchConversationWithLatestMessage>>;
+  conversation: Prisma.ConversationGetPayload<{
+    include: ReturnType<typeof latestMessageInclude>;
+  }>;
   message: Awaited<ReturnType<typeof createMessageRecord>>;
   duplicate: boolean;
 };
 
-export async function registerWebhookRoutes(app: FastifyInstance): Promise<void> {
+export async function registerWebhookRoutes(
+  app: FastifyInstance,
+): Promise<void> {
   app.post("/webhooks/evolution-go", async (request) => {
     const query = request.query as { token?: string };
-    if (!env.EVOLUTION_WEBHOOK_SECRET || query.token !== env.EVOLUTION_WEBHOOK_SECRET) {
+    if (
+      !env.EVOLUTION_WEBHOOK_SECRET ||
+      query.token !== env.EVOLUTION_WEBHOOK_SECRET
+    ) {
       throw new AppError("UNAUTHORIZED", "Invalid webhook token.", 401);
     }
 
@@ -49,17 +68,20 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
     const prisma = getPrisma();
     const instance = await prisma.whatsAppInstance.findFirst({
       where: {
-        OR: [{ evolutionInstanceId: instanceKey }, { evolutionInstanceName: instanceKey }]
+        OR: [
+          { evolutionInstanceId: instanceKey },
+          { evolutionInstanceName: instanceKey },
+        ],
       },
       include: {
         user: {
           include: {
             profile: true,
             settings: true,
-            businessSettings: true
-          }
-        }
-      }
+            businessSettings: true,
+          },
+        },
+      },
     });
 
     if (!instance) {
@@ -73,8 +95,8 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
         where: { id: instance.id },
         data: {
           qrcode: extractQrCode(payload) ?? instance.qrcode,
-          status: "WAITING_QR"
-        }
+          status: "WAITING_QR",
+        },
       });
       return dataResponse(request, { ok: true });
     }
@@ -82,14 +104,20 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
     if (event === "QR_TIMEOUT") {
       await prisma.whatsAppInstance.update({
         where: { id: instance.id },
-        data: { status: "QR_EXPIRED" }
+        data: { status: "QR_EXPIRED" },
       });
       return dataResponse(request, { ok: true });
     }
 
-    if (event === "QR_SUCCESS" || event === "PAIR_SUCCESS" || event === "CONNECTED") {
+    if (
+      event === "QR_SUCCESS" ||
+      event === "PAIR_SUCCESS" ||
+      event === "CONNECTED"
+    ) {
       const connectedPhone = extractConnectedPhone(payload);
-      const normalizedPhone = connectedPhone ? normalizeWhatsappPhone(connectedPhone) : "";
+      const normalizedPhone = connectedPhone
+        ? normalizeWhatsappPhone(connectedPhone)
+        : "";
 
       if (connectedPhone && !normalizedPhone) {
         await prisma.whatsAppInstance.update({
@@ -97,13 +125,20 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
           data: {
             status: "ERROR",
             phoneNumber: connectedPhone,
-            qrcode: null
-          }
+            qrcode: null,
+          },
         });
         return dataResponse(request, { ok: true });
       }
 
-      if (connectedPhone && normalizedPhone && shouldClearWhatsAppDataForPhoneChange(instance.phoneNumber, connectedPhone)) {
+      if (
+        connectedPhone &&
+        normalizedPhone &&
+        shouldClearWhatsAppDataForPhoneChange(
+          instance.phoneNumber,
+          connectedPhone,
+        )
+      ) {
         await clearWhatsAppInstanceConversationData(instance.id);
       }
 
@@ -111,7 +146,7 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
         status: "CONNECTED" as const,
         phoneNumber: connectedPhone ?? instance.phoneNumber,
         qrcode: null,
-        connectedAt: instance.connectedAt ?? new Date()
+        connectedAt: instance.connectedAt ?? new Date(),
       };
 
       if (connectedPhone && normalizedPhone && instance.user.profile) {
@@ -120,18 +155,18 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
             where: { userId: instance.userId },
             data: {
               whatsappPhoneRaw: connectedPhone,
-              whatsappPhoneNormalized: normalizedPhone
-            }
+              whatsappPhoneNormalized: normalizedPhone,
+            },
           }),
           prisma.whatsAppInstance.update({
             where: { id: instance.id },
-            data: instanceUpdate
-          })
+            data: instanceUpdate,
+          }),
         ]);
       } else {
         await prisma.whatsAppInstance.update({
           where: { id: instance.id },
-          data: instanceUpdate
+          data: instanceUpdate,
         });
       }
 
@@ -143,8 +178,8 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
         where: { id: instance.id },
         data: {
           status: event === "LOGGED_OUT" ? "LOGGED_OUT" : "DISCONNECTED",
-          qrcode: null
-        }
+          qrcode: null,
+        },
       });
       await deactivateAiForUserIfEnabled(instance.userId);
       return dataResponse(request, { ok: true });
@@ -175,18 +210,20 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
       mediaUrl: message.mediaUrl,
       mediaBase64: message.mediaBase64,
       timestamp: message.timestamp,
-      rawPayload: payload
+      rawPayload: payload,
     });
 
     if (saved.duplicate) {
       if (instance.user.settings?.aiEnabled && message.fromMe) {
-        const businessSettings = await getBusinessSettingsForUser(instance.userId);
+        const businessSettings = await getBusinessSettingsForUser(
+          instance.userId,
+        );
         await dispatchMessageToBackend(request, {
           payload,
           instanceToken: instance.evolutionInstanceToken,
           userId: instance.userId,
           businessSettings: businessSettingsDto(businessSettings),
-          virtualAttendantSettings: settingsDto(instance.user.settings)
+          virtualAttendantSettings: settingsDto(instance.user.settings),
         });
       }
 
@@ -194,11 +231,15 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
     }
 
     const command = detectAiCommand(message.contentText);
-    if (command?.type === "PAUSE_AI_FOR_CONTACT" && message.fromMe && !message.isGroup) {
+    if (
+      command?.type === "PAUSE_AI_FOR_CONTACT" &&
+      message.fromMe &&
+      !message.isGroup
+    ) {
       await recordOwnerManualActivity({
         instanceId: instance.id,
         conversationId: saved.conversation.id,
-        happenedAt: message.timestamp
+        happenedAt: message.timestamp,
       });
 
       await pauseConversationAi({
@@ -210,7 +251,7 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
         source: "WHATSAPP_COMMAND",
         reason: "IA pausada por comando enviado no WhatsApp.",
         createdByUserId: instance.userId,
-        createdByMessageId: saved.message.id
+        createdByMessageId: saved.message.id,
       });
 
       const phone = phoneFromWhatsappJid(message.contactJid);
@@ -218,7 +259,7 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
         await pauseBotHandoffInBackend(request, instance.userId, {
           phone,
           reason: "IA pausada por comando /ia_pause",
-          summary: "Comando enviado pelo WhatsApp conectado."
+          summary: "Comando enviado pelo WhatsApp conectado.",
         });
       }
 
@@ -229,7 +270,7 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
         messageId: saved.message.id,
         contactJid: message.contactJid,
         reason: "COMMAND_RECEIVED",
-        metadata: { command: "/ia_pause" }
+        metadata: { command: "/ia_pause" },
       });
 
       return dataResponse(request, { action: "ai_paused_by_command" });
@@ -241,8 +282,10 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
             payload,
             instanceToken: instance.evolutionInstanceToken,
             userId: instance.userId,
-            businessSettings: businessSettingsDto(await getBusinessSettingsForUser(instance.userId)),
-            virtualAttendantSettings: settingsDto(instance.user.settings)
+            businessSettings: businessSettingsDto(
+              await getBusinessSettingsForUser(instance.userId),
+            ),
+            virtualAttendantSettings: settingsDto(instance.user.settings),
           })
         : { skipped: true, action: null, outboundMessage: null };
 
@@ -250,12 +293,15 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
         await recordOwnerManualActivity({
           instanceId: instance.id,
           conversationId: saved.conversation.id,
-          happenedAt: message.timestamp
+          happenedAt: message.timestamp,
         });
       }
 
       return dataResponse(request, {
-        action: dispatchResult.action === "ignored_bot_outbound" ? "bot_outbound_recorded" : "owner_activity_recorded"
+        action:
+          dispatchResult.action === "ignored_bot_outbound"
+            ? "bot_outbound_recorded"
+            : "owner_activity_recorded",
       });
     }
 
@@ -267,7 +313,7 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
         displayName: message.contactName,
         source: "AUTO_SAFETY",
         reason: "IA desativada para grupos.",
-        createdByMessageId: saved.message.id
+        createdByMessageId: saved.message.id,
       });
       await logAiSuppression({
         userId: instance.userId,
@@ -275,7 +321,7 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
         conversationId: saved.conversation.id,
         messageId: saved.message.id,
         contactJid: message.contactJid,
-        reason: "GROUP_CHAT"
+        reason: "GROUP_CHAT",
       });
 
       return dataResponse(request, { ignored: "group_chat" });
@@ -284,16 +330,17 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
     const ignoredContact = await findActiveIgnoredContact({
       userId: instance.userId,
       instanceId: instance.id,
-      jid: message.contactJid
+      jid: message.contactJid,
     });
     if (ignoredContact) {
       await prisma.conversation.update({
         where: { id: saved.conversation.id },
         data: {
           aiPaused: true,
-          aiPausedReason: ignoredContact.reason ?? "Contato na lista de ignorados.",
-          aiPausedUpdatedAt: new Date()
-        }
+          aiPausedReason:
+            ignoredContact.reason ?? "Contato na lista de ignorados.",
+          aiPausedUpdatedAt: new Date(),
+        },
       });
       await logAiSuppression({
         userId: instance.userId,
@@ -302,23 +349,30 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
         messageId: saved.message.id,
         contactJid: message.contactJid,
         reason: "IGNORED_CONTACT",
-        metadata: { ignoredContactId: ignoredContact.id, source: ignoredContact.source }
+        metadata: {
+          ignoredContactId: ignoredContact.id,
+          source: ignoredContact.source,
+        },
       });
 
       return dataResponse(request, { ignored: "ignored_contact" });
     }
 
     if (instance.user.settings?.aiEnabled) {
-      const businessSettings = instance.user.businessSettings ?? (await getBusinessSettingsForUser(instance.userId));
+      const businessSettings =
+        instance.user.businessSettings ??
+        (await getBusinessSettingsForUser(instance.userId));
       const businessSettingsSnapshot = businessSettingsDto(businessSettings);
       if (!businessSettingsSnapshot.configured) {
-        return dataResponse(request, { ignored: "business_settings_incomplete" });
+        return dataResponse(request, {
+          ignored: "business_settings_incomplete",
+        });
       }
 
       const eligibility = checkVirtualAttendantEligibility({
         settings: instance.user.settings,
         instance,
-        conversation: saved.conversation
+        conversation: saved.conversation,
       });
 
       if (!eligibility.allowed) {
@@ -334,10 +388,13 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
               : eligibility.reason === "ai_disabled"
                 ? "GLOBAL_AI_DISABLED"
                 : "VIRTUAL_ATTENDANT_INCOMPLETE",
-          metadata: eligibility.metadata as Prisma.InputJsonValue | undefined
+          metadata: eligibility.metadata as Prisma.InputJsonValue | undefined,
         });
 
-        return dataResponse(request, { ignored: eligibility.reason, metadata: eligibility.metadata });
+        return dataResponse(request, {
+          ignored: eligibility.reason,
+          metadata: eligibility.metadata,
+        });
       }
 
       const dispatchResult = await dispatchMessageToBackend(request, {
@@ -345,7 +402,7 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
         instanceToken: instance.evolutionInstanceToken,
         userId: instance.userId,
         businessSettings: businessSettingsSnapshot,
-        virtualAttendantSettings: settingsDto(instance.user.settings)
+        virtualAttendantSettings: settingsDto(instance.user.settings),
       });
 
       const outbound = dispatchResult.outboundMessage;
@@ -356,14 +413,20 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
           contactJid: message.contactJid,
           contactName: message.contactName,
           profilePictureUrl: message.profilePictureUrl,
-          externalMessageId: outbound.providerMessageId ?? outbound.messageRecordId ?? `backend-${message.externalMessageId}`,
+          externalMessageId:
+            outbound.providerMessageId ??
+            outbound.messageRecordId ??
+            `backend-${message.externalMessageId}`,
           fromMe: true,
           senderJid: instance.phoneNumber,
-          senderName: businessSettingsSnapshot.businessName || instance.user.profile?.businessName || null,
+          senderName:
+            businessSettingsSnapshot.businessName ||
+            instance.user.profile?.businessName ||
+            null,
           type: "TEXT",
           contentText: outbound.text,
           timestamp: new Date(),
-          rawPayload: outbound.rawPayload ?? null
+          rawPayload: outbound.rawPayload ?? null,
         });
       }
     }
@@ -372,7 +435,9 @@ export async function registerWebhookRoutes(app: FastifyInstance): Promise<void>
   });
 }
 
-function detectAiCommand(messageText: string | null | undefined): { type: "PAUSE_AI_FOR_CONTACT" } | null {
+function detectAiCommand(
+  messageText: string | null | undefined,
+): { type: "PAUSE_AI_FOR_CONTACT" } | null {
   const normalized = messageText?.trim().toLowerCase();
   return normalized === "/ia_pause" ? { type: "PAUSE_AI_FOR_CONTACT" } : null;
 }
@@ -399,41 +464,48 @@ async function saveVisibleMessage(input: {
     const existingMessage = await tx.message.findFirst({
       where: {
         instanceId: input.instanceId,
-        externalMessageId: input.externalMessageId
+        externalMessageId: input.externalMessageId,
       },
       include: {
         conversation: {
-          include: latestMessageInclude()
-        }
-      }
+          include: latestMessageInclude(),
+        },
+      },
     });
 
     if (existingMessage) {
       return {
         conversation: existingMessage.conversation,
         message: existingMessage,
-        duplicate: true
+        duplicate: true,
       };
     }
 
-    const contactJid = normalizeWhatsappJid(input.contactJid) || input.contactJid.trim().toLowerCase();
+    const contactJid =
+      normalizeWhatsappJid(input.contactJid) ||
+      input.contactJid.trim().toLowerCase();
     const timestamp = input.timestamp ?? new Date();
-    const lastMessagePreview = previewText(input.contentText, buildMediaPreview(input.fromMe, input.mediaType));
+    const lastMessagePreview = previewText(
+      input.contentText,
+      buildMediaPreview(input.fromMe, input.mediaType),
+    );
     const conversation = await tx.conversation.upsert({
       where: {
         userId_contactJid: {
           userId: input.userId,
-          contactJid
-        }
+          contactJid,
+        },
       },
       update: {
         instanceId: input.instanceId,
         ...(input.contactName ? { contactName: input.contactName } : {}),
-        ...(input.profilePictureUrl ? { profilePictureUrl: input.profilePictureUrl } : {}),
+        ...(input.profilePictureUrl
+          ? { profilePictureUrl: input.profilePictureUrl }
+          : {}),
         lastMessagePreview,
         lastMessageAt: timestamp,
         unreadCount: input.fromMe ? 0 : { increment: 1 },
-        ...(input.fromMe ? {} : { archivedAt: null })
+        ...(input.fromMe ? {} : { archivedAt: null }),
       },
       create: {
         userId: input.userId,
@@ -443,23 +515,23 @@ async function saveVisibleMessage(input: {
         profilePictureUrl: input.profilePictureUrl ?? null,
         lastMessagePreview,
         lastMessageAt: timestamp,
-        unreadCount: input.fromMe ? 0 : 1
+        unreadCount: input.fromMe ? 0 : 1,
       },
-      include: latestMessageInclude()
+      include: latestMessageInclude(),
     });
     const message = await createMessageRecord(tx, {
       ...input,
       conversationId: conversation.id,
-      timestamp
+      timestamp,
     });
 
     return {
       conversation: {
         ...conversation,
-        messages: [message]
+        messages: [message],
       },
       message,
-      duplicate: false
+      duplicate: false,
     };
   });
 }
@@ -481,7 +553,7 @@ async function createMessageRecord(
     mediaBase64?: string | null;
     timestamp: Date;
     rawPayload?: unknown;
-  }
+  },
 ) {
   return tx.message.create({
     data: {
@@ -498,15 +570,8 @@ async function createMessageRecord(
       mediaUrl: input.mediaUrl ?? null,
       mediaBase64: input.mediaBase64 ?? null,
       timestamp: input.timestamp,
-      rawPayload: toJson(input.rawPayload)
-    }
-  });
-}
-
-async function fetchConversationWithLatestMessage(conversationId: string) {
-  return getPrisma().conversation.findUniqueOrThrow({
-    where: { id: conversationId },
-    include: latestMessageInclude()
+      rawPayload: toJson(input.rawPayload),
+    },
   });
 }
 
@@ -514,17 +579,23 @@ function latestMessageInclude() {
   return {
     messages: {
       orderBy: { timestamp: "desc" as const },
-      take: 1
-    }
+      take: 1,
+    },
   };
 }
 
-function previewText(text: string | null | undefined, fallback = "Mensagem"): string {
+function previewText(
+  text: string | null | undefined,
+  fallback = "Mensagem",
+): string {
   const cleaned = text?.replace(/\s+/g, " ").trim();
   return cleaned ? cleaned.slice(0, 180) : fallback;
 }
 
-function buildMediaPreview(fromMe: boolean, mediaType: string | null | undefined): string {
+function buildMediaPreview(
+  fromMe: boolean,
+  mediaType: string | null | undefined,
+): string {
   if (mediaType) {
     return `Midia ${fromMe ? "enviada" : "recebida"}: ${mediaType}`;
   }
@@ -532,17 +603,22 @@ function buildMediaPreview(fromMe: boolean, mediaType: string | null | undefined
   return `Midia ${fromMe ? "enviada" : "recebida"}`;
 }
 
-function shouldClearWhatsAppDataForPhoneChange(previousPhone: string | null | undefined, nextPhone: string | null | undefined): boolean {
+function shouldClearWhatsAppDataForPhoneChange(
+  previousPhone: string | null | undefined,
+  nextPhone: string | null | undefined,
+): boolean {
   const previous = previousPhone?.trim();
   const next = nextPhone?.trim();
   if (!previous || !next) return false;
   return !phonesMatch(previous, next);
 }
 
-async function clearWhatsAppInstanceConversationData(instanceId: string): Promise<void> {
+async function clearWhatsAppInstanceConversationData(
+  instanceId: string,
+): Promise<void> {
   await getPrisma().$transaction([
     getPrisma().message.deleteMany({ where: { instanceId } }),
-    getPrisma().conversation.deleteMany({ where: { instanceId } })
+    getPrisma().conversation.deleteMany({ where: { instanceId } }),
   ]);
 }
 
@@ -550,11 +626,11 @@ async function deactivateAiForUserIfEnabled(userId: string) {
   await getPrisma().userSettings.updateMany({
     where: {
       userId,
-      aiEnabled: true
+      aiEnabled: true,
     },
     data: {
-      aiEnabled: false
-    }
+      aiEnabled: false,
+    },
   });
 
   return getPrisma().userSettings.findUnique({ where: { userId } });
@@ -564,7 +640,7 @@ async function getBusinessSettingsForUser(userId: string) {
   return getPrisma().businessSettings.upsert({
     where: { userId },
     update: {},
-    create: { userId }
+    create: { userId },
   });
 }
 
@@ -576,9 +652,26 @@ async function dispatchMessageToBackend(
     userId: string;
     businessSettings?: ReturnType<typeof businessSettingsDto>;
     virtualAttendantSettings?: ReturnType<typeof settingsDto>;
-  }
-): Promise<{ skipped: boolean; action: string | null; outboundMessage: BackendDispatchOutboundMessage | null }> {
+  },
+): Promise<{
+  skipped: boolean;
+  action: string | null;
+  outboundMessage: BackendDispatchOutboundMessage | null;
+}> {
   if (!env.INTERNAL_SERVICE_TOKEN) {
+    return { skipped: true, action: null, outboundMessage: null };
+  }
+
+  const membership = await getPrisma().tenantMember.findFirst({
+    where: { userId: input.userId },
+    select: { tenantId: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (!membership) {
+    request.log.warn(
+      { userId: input.userId },
+      "Backend dispatch skipped: tenant membership not found",
+    );
     return { skipped: true, action: null, outboundMessage: null };
   }
 
@@ -586,13 +679,15 @@ async function dispatchMessageToBackend(
     const result = await dispatchToApi("/internal/evolution/dispatch", {
       userId: input.userId,
       requestId: request.id,
-      body: input
+      body: { ...input, tenantId: membership.tenantId },
     });
     const record = recordValue(result);
     return {
       skipped: false,
       action: typeof record?.action === "string" ? record.action : null,
-      outboundMessage: isOutboundMessage(record?.outboundMessage) ? record.outboundMessage : null
+      outboundMessage: isOutboundMessage(record?.outboundMessage)
+        ? record.outboundMessage
+        : null,
     };
   } catch (error) {
     request.log.warn({ err: errorMessage(error) }, "Backend dispatch failed");
@@ -603,7 +698,7 @@ async function dispatchMessageToBackend(
 async function pauseBotHandoffInBackend(
   request: FastifyRequest,
   userId: string,
-  input: { phone: string; reason: string; summary?: string }
+  input: { phone: string; reason: string; summary?: string },
 ): Promise<{ skipped: boolean }> {
   if (!env.INTERNAL_SERVICE_TOKEN) return { skipped: true };
 
@@ -611,7 +706,7 @@ async function pauseBotHandoffInBackend(
     await dispatchToApi("/internal/handoffs", {
       userId,
       requestId: request.id,
-      body: input
+      body: input,
     });
     return { skipped: false };
   } catch (error) {
@@ -633,8 +728,8 @@ async function findActiveIgnoredContact(input: {
       userId: input.userId,
       instanceId: input.instanceId,
       jid,
-      isActive: true
-    }
+      isActive: true,
+    },
   });
 }
 
@@ -656,13 +751,13 @@ async function pauseConversationAi(input: {
     where: {
       userId: input.userId,
       instanceId: input.instanceId,
-      contactJid: contact.jid
+      contactJid: contact.jid,
     },
     data: {
       aiPaused: true,
       aiPausedReason: input.reason,
-      aiPausedUpdatedAt: new Date()
-    }
+      aiPausedUpdatedAt: new Date(),
+    },
   });
 
   return contact;
@@ -691,8 +786,8 @@ async function upsertIgnoredContact(input: {
       userId_instanceId_jid: {
         userId: input.userId,
         instanceId: input.instanceId,
-        jid
-      }
+        jid,
+      },
     },
     update: {
       phoneNumber,
@@ -700,11 +795,21 @@ async function upsertIgnoredContact(input: {
       reason: cleanOptionalText(input.reason),
       isActive: true,
       deletedAt: null,
-      ...(cleanOptionalText(input.displayName) !== undefined ? { displayName: cleanOptionalText(input.displayName) } : {}),
-      ...(cleanOptionalText(input.pushName) !== undefined ? { pushName: cleanOptionalText(input.pushName) } : {}),
-      ...(cleanOptionalText(input.businessName) !== undefined ? { businessName: cleanOptionalText(input.businessName) } : {}),
-      ...(input.createdByUserId !== undefined ? { createdByUserId: input.createdByUserId } : {}),
-      ...(input.createdByMessageId !== undefined ? { createdByMessageId: input.createdByMessageId } : {})
+      ...(cleanOptionalText(input.displayName) !== undefined
+        ? { displayName: cleanOptionalText(input.displayName) }
+        : {}),
+      ...(cleanOptionalText(input.pushName) !== undefined
+        ? { pushName: cleanOptionalText(input.pushName) }
+        : {}),
+      ...(cleanOptionalText(input.businessName) !== undefined
+        ? { businessName: cleanOptionalText(input.businessName) }
+        : {}),
+      ...(input.createdByUserId !== undefined
+        ? { createdByUserId: input.createdByUserId }
+        : {}),
+      ...(input.createdByMessageId !== undefined
+        ? { createdByMessageId: input.createdByMessageId }
+        : {}),
     },
     create: {
       userId: input.userId,
@@ -717,8 +822,8 @@ async function upsertIgnoredContact(input: {
       source: input.source,
       reason: cleanOptionalText(input.reason) ?? null,
       createdByUserId: input.createdByUserId ?? null,
-      createdByMessageId: input.createdByMessageId ?? null
-    }
+      createdByMessageId: input.createdByMessageId ?? null,
+    },
   });
 }
 
@@ -740,8 +845,8 @@ async function logAiSuppression(input: {
         messageId: input.messageId ?? null,
         contactJid: input.contactJid,
         reason: input.reason,
-        metadata: input.metadata ?? undefined
-      }
+        metadata: input.metadata ?? undefined,
+      },
     });
   } catch {
     // Suppression logs are diagnostic; webhook processing should continue if this insert fails.
@@ -763,8 +868,11 @@ function checkVirtualAttendantEligibility(input: {
   if (settings.readinessIssues.length > 0) {
     return {
       allowed: false,
-      reason: settings.personaType === "CUSTOM" ? "custom_persona_not_ready" : "settings_incomplete",
-      metadata: { readinessIssues: settings.readinessIssues }
+      reason:
+        settings.personaType === "CUSTOM"
+          ? "custom_persona_not_ready"
+          : "settings_incomplete",
+      metadata: { readinessIssues: settings.readinessIssues },
     };
   }
 
@@ -778,7 +886,9 @@ function checkVirtualAttendantEligibility(input: {
   }
 
   const reference =
-    settings.awayScope === "GLOBAL" ? input.instance.lastOwnerActivityAt : input.conversation.lastOwnerActivityAt;
+    settings.awayScope === "GLOBAL"
+      ? input.instance.lastOwnerActivityAt
+      : input.conversation.lastOwnerActivityAt;
   if (!reference) {
     return { allowed: true, reason: "allowed" };
   }
@@ -794,8 +904,8 @@ function checkVirtualAttendantEligibility(input: {
         awayScope: settings.awayScope,
         awayTimeoutMinutes: timeoutMinutes,
         lastOwnerActivityAt: reference.toISOString(),
-        remainingSeconds: Math.ceil((timeoutMs - elapsedMs) / 1000)
-      }
+        remainingSeconds: Math.ceil((timeoutMs - elapsedMs) / 1000),
+      },
     };
   }
 
@@ -811,28 +921,38 @@ async function recordOwnerManualActivity(input: {
   await getPrisma().$transaction([
     getPrisma().whatsAppInstance.update({
       where: { id: input.instanceId },
-      data: { lastOwnerActivityAt: happenedAt }
+      data: { lastOwnerActivityAt: happenedAt },
     }),
     getPrisma().conversation.update({
       where: { id: input.conversationId },
-      data: { lastOwnerActivityAt: happenedAt }
-    })
+      data: { lastOwnerActivityAt: happenedAt },
+    }),
   ]);
 }
 
-function isOutboundMessage(value: unknown): value is BackendDispatchOutboundMessage {
-  return Boolean(value && typeof value === "object" && typeof (value as { text?: unknown }).text === "string");
+function isOutboundMessage(
+  value: unknown,
+): value is BackendDispatchOutboundMessage {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    typeof (value as { text?: unknown }).text === "string",
+  );
 }
 
 function recordValue(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
-function cleanOptionalText(value: string | null | undefined): string | null | undefined {
+function cleanOptionalText(
+  value: string | null | undefined,
+): string | null | undefined {
   if (value === undefined) return undefined;
   const text = value?.trim() ?? "";
   return text ? text : null;

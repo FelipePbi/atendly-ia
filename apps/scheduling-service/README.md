@@ -4,9 +4,7 @@ Fonte canônica do domínio de agenda da Atendly.
 
 ## Estado atual
 
-Fundação do serviço: schema tenant-aware, migration inicial, autenticação interna preparada e `GET /health` com verificação do PostgreSQL.
-
-Ainda não existem CalendarProviders, CRUD de agenda ou integração com frontend. Minha Agenda entra somente no GOAL 05; Agenda Atendly, no GOAL 06.
+Fonte canônica tenant-aware com `CalendarService`, port `CalendarProvider`, provider Minha Agenda e API interna de calendário. Agenda Atendly entra somente no GOAL 06. Frontend continua sem acesso direto.
 
 ## Stack
 
@@ -29,9 +27,36 @@ Serviço acessa somente banco próprio. BFF, AI Orchestrator e outros serviços 
 
 ## Environment
 
-Copie `.env.example` para `.env`. `DATABASE_URL` aponta para banco exclusivo. `INTERNAL_SERVICE_TOKEN` autentica futuras rotas internas.
+Copie `.env.example` para `.env`. `DATABASE_URL` aponta para banco exclusivo. `INTERNAL_SERVICE_TOKEN` autentica rotas internas. `INTEGRATION_CREDENTIALS_KEY` é chave base64 de 32 bytes usada por AES-256-GCM.
 
-Rotas internas futuras também exigirão `x-tenant-id`, `x-user-id` e `x-request-id`. `GET /health` permanece público para health checks.
+Rotas internas exigem `x-tenant-id`, `x-user-id` e `x-request-id`. Mutations também exigem `Idempotency-Key`. `GET /health` permanece público para health checks.
+
+Credenciais Minha Agenda pertencem a `IntegrationConnection.credentialsEncrypted`; configurações por tenant ficam em `IntegrationConnection.config`:
+
+```json
+{
+  "baseUrl": "https://api.minhaagendaapp.com.br",
+  "employeeId": 123,
+  "paymentMethod": "CASH",
+  "modelVersion": 2,
+  "timeoutMs": 10000,
+  "refreshSkewSeconds": 300,
+  "enableWrites": false,
+  "bufferBetweenServicesMinutes": 0
+}
+```
+
+Payload cifrado contém `basicAuth`, `username` e `password`. `encryptIntegrationCredentials(tenantId, payload)` produz envelope autenticado e vinculado ao tenant. Nenhuma credencial de tenant é lida de env global.
+
+## API interna
+
+- `GET /internal/services`
+- `GET /internal/appointments`
+- `GET /internal/appointments/:id`
+- `GET /internal/availability`
+- `POST /internal/appointments`
+- `POST /internal/appointments/:id/reschedule`
+- `POST /internal/appointments/:id/cancel`
 
 ## Commands
 

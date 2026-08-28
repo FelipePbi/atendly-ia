@@ -3,7 +3,7 @@
 ## Estado
 
 ```text
-NEXT: GOAL 01
+NEXT: GOAL 02
 ```
 
 Este roadmap governa refatoração incremental. Todos os goals começam em `NOT_STARTED`. Esta tarefa de documentação ocorre antes do GOAL 01.
@@ -64,7 +64,7 @@ AI Orchestrator e Scheduling Service são `TARGET`; ainda não existem como apps
 
 | Goal | Descrição | Depende de | Status |
 | --- | --- | --- | --- |
-| GOAL 01 | Baseline arquitetural e inventário | — | NOT_STARTED |
+| GOAL 01 | Baseline arquitetural e inventário | — | COMPLETED |
 | GOAL 02 | Tooling + shared contracts | GOAL 01 | NOT_STARTED |
 | GOAL 03 | Multi-tenancy BFF | GOAL 02 | NOT_STARTED |
 | GOAL 04 | Scheduling Service foundation | GOAL 03 | NOT_STARTED |

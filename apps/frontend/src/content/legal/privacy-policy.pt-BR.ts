@@ -6,7 +6,9 @@ import {
 } from "@/config/legal-versions";
 import type { LegalDocumentContent } from "./types";
 
-export function createPrivacyPolicy(details: LegalDetails): LegalDocumentContent {
+export function createPrivacyPolicy(
+  details: LegalDetails,
+): LegalDocumentContent {
   return {
     title: "Política de Privacidade",
     intro:

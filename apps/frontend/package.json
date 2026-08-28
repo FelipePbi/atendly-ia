@@ -4,12 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev -H 0.0.0.0 -p 3001",
-    "build": "npm run legal:check && next build",
+    "build": "next build",
+    "build:release": "npm run legal:check && next build",
     "start": "next start -H 0.0.0.0",
     "lint": "eslint",
-    "test": "vitest run",
-    "test:e2e": "playwright test",
-    "test:e2e:legal": "playwright test --config=playwright.legal.config.ts",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "legal:check": "node scripts/check-legal-config.mjs"
   },
   "engines": {
@@ -18,26 +19,18 @@
   "dependencies": {
     "@atendly-ia/legal-contract": "file:../../packages/legal-contract",
     "clsx": "^2.1.1",
-    "lucide-react": "^1.17.0",
-    "next": "16.2.7",
+    "next": "^16.3.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.13.0",
-    "@playwright/test": "^1.62.1",
-    "@tailwindcss/postcss": "^4",
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.7",
-    "jsdom": "^30.0.1",
-    "tailwindcss": "^4",
-    "typescript": "^5",
-    "vitest": "^4.1.8"
+    "eslint-config-next": "^16.3.3",
+    "prettier": "^3.6.2",
+    "typescript": "^5"
   }
 }

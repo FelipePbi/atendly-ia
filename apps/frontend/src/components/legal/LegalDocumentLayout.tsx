@@ -1,8 +1,6 @@
+import Link from "next/link";
 import type { LegalDocumentContent } from "@/content/legal/types";
-import { LegalDocumentHeader } from "./LegalDocumentHeader";
-import { LegalDocumentMetadata } from "./LegalDocumentMetadata";
-import { LegalSection } from "./LegalSection";
-import { LegalTableOfContents } from "./LegalTableOfContents";
+import { Brand } from "@/shared/ui/Brand";
 
 export function LegalDocumentLayout({
   document,
@@ -12,44 +10,86 @@ export function LegalDocumentLayout({
   contactEmail: string;
 }) {
   const canLinkContact = contactEmail.includes("@");
-
   return (
-    <div className="legal-page">
-      <a className="legal-skip-link" href="#conteudo-legal">
-        Ir para o conteúdo
-      </a>
-      <LegalDocumentHeader />
-      <main className="legal-main" id="conteudo-legal">
-        <div className="legal-hero">
-          <span className="legal-eyebrow">Documento legal</span>
-          <h1>{document.title}</h1>
-          <p>{document.intro}</p>
-          <p className="legal-review-notice" role="note">
-            Template técnico inicial. Conteúdo sujeito à revisão jurídica e de proteção de dados antes da publicação.
-          </p>
-          <LegalDocumentMetadata
-            version={document.version}
-            effectiveDate={document.effectiveDate}
-            lastUpdatedDate={document.lastUpdatedDate}
-          />
-        </div>
-
-        <div className="legal-grid">
-          <LegalTableOfContents sections={document.sections} />
-          <article className="legal-article">
-            {document.sections.map((section) => <LegalSection section={section} key={section.id} />)}
-          </article>
-        </div>
-      </main>
-      <footer className="legal-footer">
-        <div className="legal-footer__inner">
-          <span>Atendly</span>
+    <main className="auth-layout legal-layout">
+      <aside className="auth-brand-panel legal-brand-panel">
+        <Brand href="/login" />
+        <div className="auth-story">
+          <p className="eyebrow">Informação clara</p>
+          <h2>
+            {document.title === "Termos de Uso"
+              ? "Condições de uso em linguagem direta."
+              : "Transparência sem jargão."}
+          </h2>
           <p>
-            Canal de contato:{" "}
-            {canLinkContact ? <a href={`mailto:${contactEmail}`}>{contactEmail}</a> : <strong>{contactEmail}</strong>}
+            Documento organizado para leitura clara em qualquer tamanho de tela.
           </p>
         </div>
-      </footer>
-    </div>
+        <div className="auth-flow" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+      </aside>
+      <section className="auth-main legal-main">
+        <article className="legal-document">
+          <Link className="auth-back" href="/cadastro">
+            ← Voltar ao cadastro
+          </Link>
+          <header>
+            <h1>{document.title}</h1>
+            <p>
+              Versão {document.version} · vigência em {document.effectiveDate}
+            </p>
+          </header>
+          <div className="legal-note" role="note">
+            <strong>Revisão jurídica:</strong> conteúdo técnico sujeito à
+            aprovação formal antes da publicação.
+          </div>
+          <p>{document.intro}</p>
+          {document.sections.map((section) => (
+            <section className="legal-section" id={section.id} key={section.id}>
+              <h2>{section.title}</h2>
+              {section.paragraphs?.map((paragraph) => (
+                <p key={paragraph}>{paragraph}</p>
+              ))}
+              {section.bullets && (
+                <ul>
+                  {section.bullets.map((bullet) => (
+                    <li key={bullet}>{bullet}</li>
+                  ))}
+                </ul>
+              )}
+              {section.subsections?.map((subsection) => (
+                <div key={subsection.title}>
+                  <h3>{subsection.title}</h3>
+                  {subsection.paragraphs?.map((paragraph) => (
+                    <p key={paragraph}>{paragraph}</p>
+                  ))}
+                  {subsection.bullets && (
+                    <ul>
+                      {subsection.bullets.map((bullet) => (
+                        <li key={bullet}>{bullet}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </section>
+          ))}
+          <footer className="legal-section">
+            <h2>Contato</h2>
+            <p>
+              {canLinkContact ? (
+                <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
+              ) : (
+                <strong>{contactEmail}</strong>
+              )}
+            </p>
+            <p>Última atualização: {document.lastUpdatedDate}</p>
+          </footer>
+        </article>
+      </section>
+    </main>
   );
 }

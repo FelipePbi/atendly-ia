@@ -15,12 +15,19 @@ const required = [
 
 const missing = required.filter((key) => !process.env[key]?.trim());
 
-if (missing.length > 0 || process.env.ATENDLY_LEGAL_REVIEW_APPROVED !== "true") {
+if (
+  missing.length > 0 ||
+  process.env.ATENDLY_LEGAL_REVIEW_APPROVED !== "true"
+) {
   const details = [
     missing.length > 0 ? `campos ausentes: ${missing.join(", ")}` : "",
-    process.env.ATENDLY_LEGAL_REVIEW_APPROVED !== "true" ? "revisão jurídica não aprovada" : "",
+    process.env.ATENDLY_LEGAL_REVIEW_APPROVED !== "true"
+      ? "revisão jurídica não aprovada"
+      : "",
   ].filter(Boolean);
-  throw new Error(`Publicação dos documentos legais bloqueada — ${details.join("; ")}.`);
+  throw new Error(
+    `Publicação dos documentos legais bloqueada — ${details.join("; ")}.`,
+  );
 }
 
 process.stdout.write("Configuração jurídica obrigatória validada.\n");

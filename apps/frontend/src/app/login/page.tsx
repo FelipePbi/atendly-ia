@@ -1,5 +1,6 @@
-import { LoginForm } from "@/components/auth/LoginForm";
-
+import type { Metadata } from "next";
+import { AuthScreen } from "@/features/auth/AuthScreen";
+export const metadata: Metadata = { title: "Entrar" };
 export default function LoginPage() {
-  return <LoginForm />;
+  return <AuthScreen scenario="login" />;
 }

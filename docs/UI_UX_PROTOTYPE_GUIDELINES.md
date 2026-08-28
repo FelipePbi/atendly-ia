@@ -1,4 +1,4 @@
-# AGENTS.md — Atendly UI/UX Prototype
+# UI/UX Prototype Guidelines — Atendly
 
 ## 1. Mission
 
@@ -21,13 +21,13 @@ Use these project documents as the source of truth when available:
 1. `CONTEXTO_PRODUTO_ATENDLY.md` or the provided `CONTEXTO_PRODUTO_ATENDLY(1).md`
 2. `ESPECIFICACAO_TELAS_UX_ATENDLY.md` or the provided `ESPECIFICACAO_TELAS_UX_ATENDLY(1).md`
 3. `DESIGN.md`
-4. This `AGENTS.md`
+4. This historical prototype guideline
 
 Priority in case of conflict:
 
 1. explicit product/business rule in the product context;
 2. explicit screen/UX requirement;
-3. `AGENTS.md`;
+3. this prototype guideline;
 4. `DESIGN.md`;
 5. visual/design judgment.
 

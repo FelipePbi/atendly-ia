@@ -1,85 +1,163 @@
-# atendly-ia
+# Atendly
 
-Monorepo privado da plataforma Atendly IA.
+## O produto
+
+Atendly é um SaaS multi-tenant de atendimento via WhatsApp e agendamento assistido por IA para profissionais autônomos e pequenos negócios.
+
+Objetivo: transformar conversas do WhatsApp em agendamentos reais e válidos, reduzindo trabalho manual. O produto não é apenas um chatbot.
+
+Este repositório é público. Não publique secrets, credenciais, dados pessoais ou payloads reais.
+
+## Estado atual do repositório
+
+O monorepo está em transição arquitetural.
+
+- Frontend novo já foi reconstruído a partir do Open Design e é base visual aprovada.
+- Frontend ainda usa services e dados mockados; não está integrado ao BFF.
+- BFF e API mantêm responsabilidades legadas que serão separadas por goals sequenciais.
+- Multi-tenancy alvo, Scheduling Service, AI Orchestrator separado, LangChain, LangGraph e RAG ainda não estão implementados como arquitetura final.
 
 ## Apps
 
-| App | Path | Stack | Comandos principais |
-| --- | --- | --- | --- |
-| Frontend | `apps/frontend` | Next.js, React, TypeScript | `npm run dev`, `npm run build`, `npm run start` |
-| BFF | `apps/bff` | Fastify, TypeScript, Prisma, JWT | `npm run dev`, `npm run build`, `npm run start` |
-| API | `apps/api` | Fastify, TypeScript, Prisma | `npm run dev`, `npm run build`, `npm start` |
-| Evolution Go | `apps/evolution-go` | Go, Gin, GORM | `make dev`, `make build`, `go test ./...` |
-| Health worker | `apps/health-worker` | Node.js web worker | `npm start`, `npm run check` |
+| App | Path | Estado atual |
+| --- | --- | --- |
+| Frontend | `apps/frontend` | Next.js 16, React 19, TypeScript e CSS próprio; UI nova com mocks |
+| Open Design | `apps/frontend-open-design` | Contrato visual estático; referência, não serviço de produção |
+| BFF | `apps/bff` | Fastify, TypeScript, Prisma/PostgreSQL, cookie/JWT; backend web transitório |
+| API | `apps/api` | Fastify, TypeScript, Prisma/PostgreSQL; AI orchestration e Minha Agenda legadas |
+| Evolution Go | `apps/evolution-go` | Provedor/transporte WhatsApp em Go |
+| Health worker | `apps/health-worker` | Serviço Node de monitoramento de saúde |
+
+`packages/legal-contract` é o único package compartilhado atual.
+
+## Arquitetura atual
+
+Frontend atual é uma superfície funcional baseada em mocks:
+
+```text
+Browser → apps/frontend → Mock*Service
+```
+
+Backend legado continua operacional em paralelo:
+
+```text
+Evolution Go → BFF → apps/api → Evolution Go
+                    ↘ Minha Agenda
+```
+
+BFF também expõe auth/session, onboarding, settings, WhatsApp e inbox atuais. Esta descrição é `CURRENT`, não ownership final.
 
 ## Arquitetura alvo
 
-```text
-Browser / Frontend
-  -> BFF
-     -> API
-     -> Evolution Go
-```
-
-O fluxo critico do WhatsApp permanece fora do BFF nesta fase:
+`TARGET` após migração incremental:
 
 ```text
-WhatsApp -> Evolution Go -> API -> Evolution Go -> WhatsApp
+Frontend
+   │
+   ▼
+BFF
+   ├──────────────► AI Orchestrator
+   ├──────────────► Scheduling Service
+   └──────────────► Evolution Go
 ```
+
+Fluxo inbound alvo:
+
+```text
+WhatsApp → Evolution Go → AI Orchestrator
+                              │
+                              └─→ Scheduling Service, quando necessário
+                              │
+WhatsApp ← Evolution Go ←─────┘
+```
+
+Frontend falará exclusivamente com BFF. Apps alvo `ai-orchestrator` e `scheduling-service` ainda não existem.
+
+## Plano de migração
+
+Migração possui 18 goals estritamente sequenciais. Estado inicial: todos `NOT_STARTED`; próximo trabalho é GOAL 01.
+
+Consulte [docs/ROADMAP_INTEGRACAO_V1.md](docs/ROADMAP_INTEGRACAO_V1.md). Não avance goal futuro sem solicitação explícita.
+
+## Fontes de verdade
+
+Produto:
+
+1. [docs/CONTEXTO_PRODUTO_ATENDLY.md](docs/CONTEXTO_PRODUTO_ATENDLY.md)
+2. [docs/ESPECIFICACAO_TELAS_UX_ATENDLY.md](docs/ESPECIFICACAO_TELAS_UX_ATENDLY.md)
+
+Frontend/design:
+
+1. [apps/frontend-open-design/DESIGN-HANDOFF.md](apps/frontend-open-design/DESIGN-HANDOFF.md)
+2. [apps/frontend-open-design/DESIGN-MANIFEST.json](apps/frontend-open-design/DESIGN-MANIFEST.json)
+3. HTML/CSS/JS da tela em `apps/frontend-open-design`
+4. [docs/DESIGN.md](docs/DESIGN.md)
+5. Implementação em `apps/frontend`
+
+Regras de trabalho: [AGENTS.md](AGENTS.md).
 
 ## Setup local
 
-1. Copie `.env.example` para os `.env` de cada app conforme necessario.
-2. Instale dependencias por app:
+Requisito comum: Node.js 20 ou superior. Evolution Go possui toolchain próprio descrito no README do app.
+
+Instale dependências dos apps Node usando lockfiles existentes, a partir da raiz:
 
 ```bash
-cd apps/api && npm ci
-cd ../frontend && npm ci
-cd ../bff && npm ci
+npm --prefix apps/frontend ci
+npm --prefix apps/bff ci
+npm --prefix apps/api ci
+npm --prefix apps/health-worker ci
 ```
 
-3. Gere clients Prisma quando aplicavel:
+Copie o `.env.example` de cada app necessário para `.env` e preencha somente valores locais. Para apps com Prisma:
 
 ```bash
-cd apps/api && npm run prisma:generate
-cd ../bff && npm run prisma:generate
+npm --prefix apps/bff run prisma:generate
+npm --prefix apps/api run prisma:generate
 ```
 
-4. Rode os servicos:
+Da raiz, após instalar dependências, rode em terminais separados:
 
 ```bash
-npm run dev:api
-npm run dev:bff
 npm run dev:frontend
+npm run dev:bff
+npm run dev:api
 ```
 
-## Validacoes ja executadas
+Portas padrão: frontend `3001`, BFF `3002`, API `3000`, Evolution Go `8080`.
 
-- `apps/api`: `npm run build`.
-- `apps/frontend`: `npm run build`.
-- `apps/health-worker`: `npm run check`.
-- `apps/evolution-go`: `go test ./...`.
-- `apps/bff`: `npm run build`.
+## Validações
 
-## Pendencias conhecidas
+Scripts disponíveis na raiz:
 
-- Validacao real de WhatsApp em producao dispensada por decisao explicita do usuario em 2026-06-05; ver `docs/qa/render-smoke-2026-06-05.md`.
-- Endurecer API/Evolution Go com token interno apos validar staging.
-- Revisar `npm audit`: API tem 1 vulnerabilidade critica; frontend tem 2 moderadas; BFF tem 3 moderadas.
+```bash
+npm run build:frontend
+npm run build:bff
+npm run build:api
+npm run build:all
+npm run check:health-worker
+npm run test:evolution-go
+```
 
-## URLs publicas no Render
+Checks adicionais por app estão nos respectivos `package.json` e READMEs. Nem todos os apps possuem hoje `lint`, `typecheck` e `format:check`; padronização pertence ao GOAL 02.
 
-- Frontend: `https://atendly-ia-frontend.onrender.com`
-- BFF: `https://atendly-ia-bff.onrender.com`
-- API: `https://atendimeto-ia.onrender.com`
-- Evolution Go: `https://evolution-go-4pmo.onrender.com`
-- Health worker: `https://atendly-ia-health-worker.onrender.com/health`.
+## Deploy
 
-## Origem dos projetos importados
+`render.yaml` define deploy `CURRENT` de cinco web services:
 
-A migracao inicial foi feita por copia simples, preservando os repositorios antigos no workspace local e documentando a origem:
+- `atendly-ia-frontend` — Node, `apps/frontend`;
+- `atendly-ia-bff` — Node, `apps/bff`;
+- `atendly-ia-api` — Node, `apps/api`;
+- `atendly-ia-evolution-go` — Docker, `apps/evolution-go`;
+- `atendly-ia-health-worker` — Node, `apps/health-worker`.
 
-- `apps/api`: `https://github.com/FelipePbi/atendimeto-ia.git`, commit `cc14edb010d46b73565539d4a1a1bf030a7315f0`.
-- `apps/evolution-go`: `git@github.com:FelipePbi/evolution-go.git`, commit `465b1747e91b470844343ca931c648909fea74ad`.
-- `apps/health-worker`: `git@github.com:FelipePbi/atendimeto-ia-health-worker.git`, commit `7ac068ec55424dfee6b9cde398a91d494fe398ff`.
-- `apps/frontend`: `git@github.com:FelipePbi/whatsapp-ai-inbox-frontend.git`, commit `1c77945bc9fe6409fa1ee8bdc9b5773fd1eb5c8b`.
+Não há serviços Render separados para AI Orchestrator ou Scheduling Service. Mudanças de deploy pertencem aos goals posteriores.
+
+## Documentação
+
+- [docs/README.md](docs/README.md) — índice documental.
+- [apps/frontend/README.md](apps/frontend/README.md) — frontend atual.
+- [apps/bff/README.md](apps/bff/README.md) — BFF atual e alvo.
+- [apps/api/README.md](apps/api/README.md) — aplicação transitória.
+- [apps/evolution-go/README.md](apps/evolution-go/README.md) — provedor WhatsApp.
+- [apps/health-worker/README.md](apps/health-worker/README.md) — monitor de saúde.

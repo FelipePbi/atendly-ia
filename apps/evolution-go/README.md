@@ -211,8 +211,6 @@ evolution-go/
 | Community | [evolutionfoundation.com.br/community](https://evolutionfoundation.com.br/community) |
 | Docker Hub | [evoapicloud/evolution-go](https://hub.docker.com/r/evoapicloud/evolution-go) |
 | Changelog | [CHANGELOG.md](./CHANGELOG.md) |
-| Contributing | [CONTRIBUTING.md](./CONTRIBUTING.md) |
-| Security | [SECURITY.md](./SECURITY.md) |
 
 ---
 
@@ -232,7 +230,7 @@ Evolution Go collects anonymous telemetry data (routes used, API version) to hel
 
 ## Contributing
 
-Contributions are welcome! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines on how to submit issues, propose features, and open pull requests.
+Contributions are welcome. Consult the upstream project channels for current contribution guidance.
 
 Join our [community](https://evolutionfoundation.com.br/community) to discuss ideas and collaborate.
 
@@ -240,7 +238,7 @@ Join our [community](https://evolutionfoundation.com.br/community) to discuss id
 
 ## Security
 
-For security issues, **do not open a public issue**. Email **suporte@evofoundation.com.br** or use GitHub's private vulnerability reporting. See [SECURITY.md](./SECURITY.md) for details.
+For security issues, **do not open a public issue**. Email **suporte@evofoundation.com.br** or use GitHub's private vulnerability reporting.
 
 ---
 

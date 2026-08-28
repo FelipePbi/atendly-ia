@@ -1,158 +1,139 @@
-# Atendente IA + Minha Agenda + Evolution Go
+# Atendly API — Transitional Application
 
-API MVP para atendimento via WhatsApp com Evolution Go, OpenAI function calling e integracao real com Minha Agenda.
+## Current transitional role
 
-## Setup Local
+`apps/api` é aplicação transitória do backend legado. Hoje concentra:
 
-1. Instale dependencias:
+- recepção/dispatch de eventos Evolution Go;
+- orchestration de mensagens e chamadas ao modelo OpenAI;
+- tools determinísticas de agendamento;
+- client/facade e regras de disponibilidade do Minha Agenda;
+- conversas, mensagens, idempotência, tool calls e handoffs no próprio PostgreSQL;
+- envio de mensagens pelo provider WhatsApp;
+- endpoints legais legados.
 
-```bash
-npm install
-```
+Esta composição é `CURRENT`, não arquitetura final. Não faça big-bang rewrite e não renomeie app antecipadamente.
 
-2. Crie `.env` a partir de `.env.example` e preencha as chaves reais:
+## Target role
 
-```bash
-cp .env.example .env
-```
+Responsabilidades de IA serão transformadas e migradas incrementalmente para AI Orchestrator no GOAL 07. Integração Minha Agenda sai para CalendarProvider/Scheduling Service no GOAL 05.
 
-Configure pelo menos:
+Tecnologias planejadas, ainda ausentes:
 
-```env
-EVOLUTION_API_KEY=uma-chave-forte
-EVOLUTION_WEBHOOK_TOKEN=outro-token-forte
-FRONTEND_WEBHOOK_BASE_URL=http://127.0.0.1:3001
-EVOLUTION_INSTANCE_TOKEN=token-da-instancia
-EVOLUTION_ALLOW_SELF_CHAT=false
-OPENAI_API_KEY=
-MINHA_AGENDA_BASIC_AUTH=
-MINHA_AGENDA_USERNAME=
-MINHA_AGENDA_PASSWORD=
-```
+- LangChain: GOAL 08;
+- LangGraph: GOAL 09;
+- RAG + pgvector: GOAL 10.
 
-3. Gere o Prisma Client:
+Não introduza essas etapas em conjunto.
 
-```bash
-npm run prisma:generate
-```
+## Valuable code to preserve
 
-4. Rode as migracoes no Postgres:
+- `MessageOrchestrator`;
+- `AssistantService`;
+- `EvolutionInboundMapper`;
+- `EvolutionProvider`;
+- `WhatsAppProvider`;
+- `HandoffService`;
+- `IdempotencyStore`;
+- prompt rules;
+- Minha Agenda client/facade até extração autorizada.
 
-```bash
-npm run prisma:migrate
-```
+Preservar significa reutilizar comportamento validado durante migração, não manter duplicação depois de todos os consumidores migrarem.
 
-5. Inicie em desenvolvimento:
+## Stack
 
-```bash
-npm run dev
-```
+- Node.js 20+;
+- Fastify 5;
+- TypeScript strict;
+- Zod;
+- Prisma 6 + PostgreSQL;
+- Vitest existente;
+- integração OpenAI via HTTP;
+- Evolution Go;
+- Minha Agenda.
 
-## Stack Docker
+LangChain, LangGraph e pgvector não estão instalados.
 
-Suba API, banco da API, banco do Evolution Go e Evolution Go:
-
-```bash
-docker compose up --build
-```
-
-Servicos locais:
-
-- API Node: `http://localhost:3000`
-- Evolution Go: `http://localhost:8080`
-- Swagger Evolution Go: `http://localhost:8080/swagger/index.html`
-- Manager Evolution Go: `http://localhost:8080/manager/login`
-
-Se uma instancia antiga do Evolution Go ainda estiver chamando
-`http://localhost:3000/api/webhooks/evolution-go?...`, a API encaminha essa rota
-legada para o frontend configurado em `FRONTEND_WEBHOOK_BASE_URL`.
-
-Quando configurar a instancia no Evolution Go, use o hostname interno Docker no webhook:
+## Current architecture
 
 ```text
-http://api:3000/webhooks/evolution?token=<EVOLUTION_WEBHOOK_TOKEN>
+BFF ou webhook legado
+          ↓
+      apps/api
+       ├─ MessageOrchestrator / AssistantService
+       ├─ OpenAI tools
+       ├─ Minha Agenda
+       ├─ PostgreSQL próprio
+       └─ EvolutionProvider → Evolution Go
 ```
 
-Assinaturas recomendadas para o MVP:
+Schema atual é legado e não tenant-aware. Não altere schema fora do goal explícito.
 
-```json
-["MESSAGE", "SEND_MESSAGE", "CONNECTION", "QRCODE"]
-```
+## Current routes
 
-## Evolution Go
-
-Crie a instancia:
-
-```bash
-curl -X POST http://localhost:8080/instance/create \
-  -H "Content-Type: application/json" \
-  -H "apikey: $EVOLUTION_API_KEY" \
-  -d '{
-    "instanceName": "salao-principal",
-    "integration": "WHATSAPP-BAILEYS"
-  }'
-```
-
-Guarde o `id` retornado em `EVOLUTION_INSTANCE_ID` e o `token` retornado em `EVOLUTION_INSTANCE_TOKEN`. As rotas de envio do Evolution Go usam o token da instância no header `apikey`.
-
-Conecte com webhook:
-
-```bash
-curl -X POST http://localhost:8080/instance/connect \
-  -H "Content-Type: application/json" \
-  -H "apikey: $EVOLUTION_API_KEY" \
-  -H "instanceId: $EVOLUTION_INSTANCE_ID" \
-  -d '{
-    "webhookUrl": "http://api:3000/webhooks/evolution?token=troque-este-token",
-    "subscribe": ["MESSAGE", "SEND_MESSAGE", "CONNECTION", "QRCODE"],
-    "immediate": true
-  }'
-```
-
-O Evolution Go pode exigir ativacao de licenca no primeiro uso; nesse caso, acesse o Manager antes de criar/conectar a instancia.
-
-## Escrita Real No Minha Agenda
-
-Por seguranca, chamadas reais de escrita ficam bloqueadas ate configurar:
-
-```env
-MINHA_AGENDA_ENABLE_WRITES=true
-```
-
-Com a flag desligada, leituras como servicos, clientes, agenda e disponibilidade continuam funcionando, mas criar, cancelar, remarcar e criar cliente retornam erro operacional.
-
-## Endpoints
+Públicas/legadas:
 
 - `GET /health`
+- `GET /healthy`
 - `GET /privacy`
 - `GET /terms`
 - `GET /data-deletion`
+- `POST /api/webhooks/evolution-go` — bridge legado
 - `POST /webhooks/evolution`
+
+Internas:
+
 - `GET /internal/handoffs`
 - `POST /internal/handoffs`
 - `PATCH /internal/handoffs/:id/resolve`
+- `POST /internal/bot/resume`
+- `POST /internal/bot/status`
+- `POST /internal/evolution/dispatch`
 
-Rotas `/internal/*` exigem `Authorization: Bearer <ADMIN_API_TOKEN>` ou header `x-admin-token`.
+Rotas internas exigem token configurado. Não crie ou remova rota nesta tarefa nem gere CRUD sem consumidor real.
 
-## Handoff Humano
+## Environment
 
-- Resposta manual pelo celular (`fromMe=true`) pausa o bot no chat por `HUMAN_HANDOFF_PAUSE_MINUTES`.
-- Para testar conversando no chat consigo mesmo, use `EVOLUTION_ALLOW_SELF_CHAT=true`; o bot continua pausando mensagens manuais para outros chats.
-- `/bot off` pausa o bot indefinidamente naquele chat.
-- `/bot on` reativa o bot naquele chat.
-- Grupos sao ignorados quando `EVOLUTION_IGNORE_GROUPS=true`.
+Copie `.env.example` para `.env`. Principais grupos:
 
-## Validacao
+- runtime/persistence: `NODE_ENV`, `API_PORT`, `DATABASE_URL`;
+- OpenAI: `OPENAI_API_KEY`, `OPENAI_MODEL`, limites e versão de prompt;
+- Evolution Go: `EVOLUTION_*`, provider e políticas de webhook/handoff;
+- Minha Agenda: `MINHA_AGENDA_*`;
+- chamadas internas/admin: `INTERNAL_SERVICE_TOKEN`, `ADMIN_API_TOKEN`.
+
+Escritas reais no Minha Agenda ficam desabilitadas enquanto `MINHA_AGENDA_ENABLE_WRITES=false`. Nunca use dados reais em validação local sem autorização explícita.
+
+## Commands
 
 ```bash
+npm ci
+npm run dev
 npm run build
 npm test
+npm run test:watch
+npm run prisma:generate
+npm run prisma:migrate
+npm run prisma:deploy
+npm run start
 ```
 
-Teste manual de webhook:
+Teste manual de webhook disponível:
 
 ```bash
-EVOLUTION_WEBHOOK_TOKEN=troque-este-token npm run test:webhook
+npm run test:webhook
 ```
 
-Testes de escrita real devem ser feitos manualmente com dados dedicados e `MINHA_AGENDA_ENABLE_WRITES=true`.
+Porta padrão: `3000`.
+
+## Docker
+
+`docker-compose.yml` deste app sobe API, PostgreSQL da API e dependências locais do Evolution Go. Use `.env.example` como catálogo; não versione secrets.
+
+## Migration guardrails
+
+- Minha Agenda permanece aqui até GOAL 05.
+- Nome/diretório permanece `apps/api` até GOAL 07.
+- Não compartilhe Prisma com BFF ou serviços futuros.
+- LLM não acessa SQL nem Minha Agenda diretamente; ações usam tools tipadas.
+- Ao concluir migração responsável e remover consumidores, remova legado; não crie diretórios de backup.

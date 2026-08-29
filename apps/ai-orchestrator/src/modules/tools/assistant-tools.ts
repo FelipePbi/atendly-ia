@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
-
+import type { StructuredToolInterface } from "@langchain/core/tools";
+import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
 import { env } from "../../config/env.js";
@@ -14,8 +14,6 @@ import type {
   SchedulingAppointment,
   SchedulingRequestContext,
 } from "../scheduling-service/types.js";
-import type { OpenAiToolDefinition } from "./openai-client.js";
-
 export interface ToolExecutionContext {
   conversationId: string;
   tenantId: string;
@@ -25,7 +23,36 @@ export interface ToolExecutionContext {
   phone: string;
   customerName?: string | null;
   businessSettings: BusinessSettingsDTO;
+  aiRunId: string;
+  toolCallId: string;
+  idempotencyKey: string;
 }
+
+export type ToolBindingContext = Omit<
+  ToolExecutionContext,
+  "idempotencyKey" | "toolCallId"
+>;
+
+export interface AssistantToolCall {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+
+interface ToolResultContext {
+  requestId: string;
+  tenantId: string;
+  aiRunId: string;
+  toolCallId: string;
+  idempotencyKey: string;
+}
+
+export type StructuredToolResult<T> =
+  | (ToolResultContext & { ok: true; data: T })
+  | (ToolResultContext & {
+      ok: false;
+      error: { code: string; message: string; details?: unknown };
+    });
 
 type PendingAction =
   | {
@@ -101,320 +128,295 @@ const availableSlotsSchema = z
   .refine((args) => Boolean(args.serviceId || args.serviceIds?.length), {
     message: "Informe serviceId ou serviceIds.",
   });
-const prepareScheduleSchema = z
+const createAppointmentSchema = z
   .object({
+    action: z.enum(["prepare", "confirm"]),
     serviceId: z.string().min(1).nullable().optional(),
     serviceIds: z.array(z.string().min(1)).min(1).max(10).optional(),
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    startTime: z.string().regex(/^\d{2}:\d{2}$/),
-    customerName: z.string().min(1),
+    date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+    startTime: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/)
+      .optional(),
+    customerName: z.string().min(1).optional(),
   })
-  .strict();
-const appointmentIdSchema = z
-  .object({ appointmentId: z.string().min(1) })
-  .strict();
-const prepareRescheduleSchema = appointmentIdSchema
-  .extend({
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    startTime: z.string().regex(/^\d{2}:\d{2}$/),
+  .strict()
+  .superRefine((args, context) => {
+    if (args.action !== "prepare") return;
+    if (!args.date) {
+      context.addIssue({ code: "custom", message: "date is required" });
+    }
+    if (!args.startTime) {
+      context.addIssue({ code: "custom", message: "startTime is required" });
+    }
+    if (!args.customerName) {
+      context.addIssue({ code: "custom", message: "customerName is required" });
+    }
+  });
+const cancelAppointmentSchema = z
+  .object({
+    action: z.enum(["prepare", "confirm"]),
+    appointmentId: z.string().min(1).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((args, context) => {
+    if (args.action === "prepare" && !args.appointmentId) {
+      context.addIssue({
+        code: "custom",
+        message: "appointmentId is required",
+      });
+    }
+  });
+const rescheduleAppointmentSchema = z
+  .object({
+    action: z.enum(["prepare", "confirm"]),
+    appointmentId: z.string().min(1).optional(),
+    date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+    startTime: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/)
+      .optional(),
+  })
+  .strict()
+  .superRefine((args, context) => {
+    if (args.action !== "prepare") return;
+    for (const [path, value] of [
+      ["appointmentId", args.appointmentId],
+      ["date", args.date],
+      ["startTime", args.startTime],
+    ] as const) {
+      if (!value) {
+        context.addIssue({
+          code: "custom",
+          message: `${path} is required`,
+          path: [path],
+        });
+      }
+    }
+  });
 const handoffSchema = z
   .object({
     reason: z.string().min(3),
     summary: z.string().optional(),
   })
   .strict();
-const pauseAiSchema = z
-  .object({
-    reason: z.enum([
-      "not_potential_customer",
-      "supplier_or_partner",
-      "personal_contact",
-      "human_requested",
-      "complaint_or_sensitive",
-      "spam",
-      "low_confidence",
-      "manual_handoff",
-    ]),
-    note: z.string().optional(),
-  })
-  .strict();
-const updateMemorySchema = z
-  .object({
-    summary: z.string().min(1),
-    pendingTopics: z.array(z.string()).default([]),
-    knownCustomerInfo: z.record(z.string(), z.unknown()).optional(),
-    stage: z.string().min(1),
-  })
-  .strict();
-
 export class AssistantToolRegistry {
-  readonly definitions: OpenAiToolDefinition[] = [
-    {
-      type: "function",
-      name: "listar_servicos",
-      description:
-        "Lista servicos reais da fonte oficial do tenant via Scheduling Service. Inclua precos apenas se a cliente perguntou por valores.",
-      parameters: {
-        type: "object",
-        properties: {
-          includePrices: {
-            type: "boolean",
-            description: "True somente quando a cliente pediu preco/valor.",
-          },
-        },
-        required: ["includePrices"],
-        additionalProperties: false,
-      },
-    },
-    {
-      type: "function",
-      name: "buscar_horarios_disponiveis",
-      description:
-        "Busca horarios reais disponiveis para um ou mais servicos usando IDs reais retornados por listar_servicos. Para combinacao de servicos, envie serviceIds e a API considerara um bloco continuo com a duracao total.",
-      parameters: {
-        type: "object",
-        properties: {
-          serviceId: {
-            type: "string",
-            description:
-              "ID positivo e real retornado por listar_servicos. Use para um unico servico.",
-          },
-          serviceIds: {
-            type: "array",
-            items: { type: "string" },
-            description:
-              "Lista de IDs positivos e reais quando a cliente quer multiplos servicos no mesmo horario.",
-          },
-          startDate: {
-            type: "string",
-            description: "Data inicial YYYY-MM-DD. Opcional.",
-          },
-        },
-        required: [],
-        additionalProperties: false,
-      },
-    },
-    {
-      type: "function",
-      name: "preparar_agendamento",
-      description:
-        "Prepara um agendamento e registra uma acao pendente. Nao cria nada; depois peca confirmacao da cliente. Reutilize o serviceId real retornado pelas tools anteriores; nunca invente serviceId nem use 0.",
-      parameters: {
-        type: "object",
-        properties: {
-          serviceId: {
-            type: "string",
-            description:
-              "ID positivo e real retornado por listar_servicos/buscar_horarios_disponiveis. Use para um unico servico.",
-          },
-          serviceIds: {
-            type: "array",
-            items: { type: "string" },
-            description:
-              "Lista de IDs positivos e reais quando a cliente quer multiplos servicos no mesmo horario.",
-          },
-          date: { type: "string" },
-          startTime: { type: "string" },
-          customerName: { type: "string" },
-        },
-        required: ["date", "startTime", "customerName"],
-        additionalProperties: false,
-      },
-    },
-    {
-      type: "function",
-      name: "confirmar_agendamento",
-      description:
-        "Cria o agendamento real na fonte oficial via Scheduling Service apenas se houver acao pendente preparada.",
-      parameters: {
-        type: "object",
-        properties: {},
-        required: [],
-        additionalProperties: false,
-      },
-    },
-    {
-      type: "function",
-      name: "buscar_agendamentos_cliente",
-      description:
-        "Busca agendamentos futuros da cliente pelo telefone do WhatsApp.",
-      parameters: {
-        type: "object",
-        properties: {},
-        required: [],
-        additionalProperties: false,
-      },
-    },
-    {
-      type: "function",
-      name: "preparar_cancelamento",
-      description:
-        "Prepara o cancelamento de um agendamento futuro da cliente. Nao cancela; depois peca confirmacao.",
-      parameters: {
-        type: "object",
-        properties: {
-          appointmentId: { type: "string" },
-        },
-        required: ["appointmentId"],
-        additionalProperties: false,
-      },
-    },
-    {
-      type: "function",
-      name: "confirmar_cancelamento",
-      description:
-        "Cancela o agendamento real na fonte oficial via Scheduling Service apenas se houver cancelamento pendente preparado.",
-      parameters: {
-        type: "object",
-        properties: {},
-        required: [],
-        additionalProperties: false,
-      },
-    },
-    {
-      type: "function",
-      name: "preparar_remarcacao",
-      description:
-        "Prepara a remarcacao de um agendamento futuro. Nao altera a agenda; depois peca confirmacao.",
-      parameters: {
-        type: "object",
-        properties: {
-          appointmentId: { type: "string" },
-          date: { type: "string" },
-          startTime: { type: "string" },
-        },
-        required: ["appointmentId", "date", "startTime"],
-        additionalProperties: false,
-      },
-    },
-    {
-      type: "function",
-      name: "confirmar_remarcacao",
-      description:
-        "Remarca o agendamento real na fonte oficial via Scheduling Service apenas se houver remarcacao pendente preparada.",
-      parameters: {
-        type: "object",
-        properties: {},
-        required: [],
-        additionalProperties: false,
-      },
-    },
-    {
-      type: "function",
-      name: "acionar_humano",
-      description: "Abre handoff para a profissional assumir a conversa.",
-      parameters: {
-        type: "object",
-        properties: {
-          reason: { type: "string" },
-          summary: { type: "string" },
-        },
-        required: ["reason"],
-        additionalProperties: false,
-      },
-    },
-    {
-      type: "function",
-      name: "pausar_ia_chat",
-      description:
-        "Pausa a IA no chat atual quando a conversa nao deve continuar automatica.",
-      parameters: {
-        type: "object",
-        properties: {
-          reason: {
-            type: "string",
-            enum: [
-              "not_potential_customer",
-              "supplier_or_partner",
-              "personal_contact",
-              "human_requested",
-              "complaint_or_sensitive",
-              "spam",
-              "low_confidence",
-              "manual_handoff",
-            ],
-          },
-          note: { type: "string" },
-        },
-        required: ["reason"],
-        additionalProperties: false,
-      },
-    },
-    {
-      type: "function",
-      name: "atualizar_memoria_conversa",
-      description:
-        "Atualiza resumo persistente, pendencias e dados conhecidos da cliente.",
-      parameters: {
-        type: "object",
-        properties: {
-          summary: { type: "string" },
-          pendingTopics: { type: "array", items: { type: "string" } },
-          knownCustomerInfo: { type: "object" },
-          stage: { type: "string" },
-        },
-        required: ["summary", "pendingTopics", "stage"],
-        additionalProperties: false,
-      },
-    },
-  ];
-
   constructor(
     private readonly prisma: PrismaClient,
     private readonly scheduling: SchedulingGateway = new SchedulingClient(),
   ) {}
 
+  createDefinitions(context: ToolBindingContext): StructuredToolInterface[] {
+    return this.createTools({
+      ...context,
+      toolCallId: "model-binding",
+      idempotencyKey: `${context.aiRunId}:model-binding`,
+    });
+  }
+
   async execute(
-    name: string,
-    rawArgs: unknown,
-    context: ToolExecutionContext,
-  ): Promise<unknown> {
-    switch (name) {
-      case "listar_servicos":
-        return this.listServices(listServicesSchema.parse(rawArgs), context);
-      case "buscar_horarios_disponiveis":
-        return this.findAvailableSlots(
-          availableSlotsSchema.parse(rawArgs),
-          context,
-        );
-      case "preparar_agendamento":
-        return this.prepareSchedule(
-          prepareScheduleSchema.parse(rawArgs),
-          context,
-        );
-      case "confirmar_agendamento":
-        noArgsSchema.parse(rawArgs);
-        return this.confirmSchedule(context);
-      case "buscar_agendamentos_cliente":
-        noArgsSchema.parse(rawArgs);
-        return this.findCustomerAppointments(context);
-      case "preparar_cancelamento":
-        return this.prepareCancel(appointmentIdSchema.parse(rawArgs), context);
-      case "confirmar_cancelamento":
-        noArgsSchema.parse(rawArgs);
-        return this.confirmCancel(context);
-      case "preparar_remarcacao":
-        return this.prepareReschedule(
-          prepareRescheduleSchema.parse(rawArgs),
-          context,
-        );
-      case "confirmar_remarcacao":
-        noArgsSchema.parse(rawArgs);
-        return this.confirmReschedule(context);
-      case "acionar_humano":
-        return this.createHandoff(handoffSchema.parse(rawArgs), context);
-      case "pausar_ia_chat":
-        return this.pauseAiForChat(pauseAiSchema.parse(rawArgs), context);
-      case "atualizar_memoria_conversa":
-        return this.updateConversationMemory(
-          updateMemorySchema.parse(rawArgs),
-          context,
-        );
-      default:
-        return { ok: false, error: `Unknown tool: ${name}` };
+    call: AssistantToolCall,
+    context: ToolBindingContext,
+  ): Promise<StructuredToolResult<unknown>> {
+    const executionContext: ToolExecutionContext = {
+      ...context,
+      toolCallId: call.id,
+      idempotencyKey: `${context.aiRunId}:${call.id}:${call.name}`,
+    };
+    const selected = this.createTools(executionContext).find(
+      (candidate) => candidate.name === call.name,
+    );
+    if (!selected) {
+      return this.failure(
+        executionContext,
+        "UNKNOWN_TOOL",
+        `Unknown tool: ${call.name}`,
+      );
     }
+
+    try {
+      const result: unknown = await selected.invoke(call.args);
+      return isStructuredToolResult(result)
+        ? result
+        : this.failure(
+            executionContext,
+            "INVALID_TOOL_RESULT",
+            `Tool ${call.name} returned an invalid result.`,
+          );
+    } catch (error) {
+      return this.failure(
+        executionContext,
+        "INVALID_TOOL_INPUT",
+        error instanceof Error ? error.message : "Invalid tool input.",
+      );
+    }
+  }
+
+  private createTools(
+    context: ToolExecutionContext,
+  ): StructuredToolInterface[] {
+    return [
+      tool(
+        (args) => this.run(context, () => this.listServices(args, context)),
+        {
+          name: "list_services",
+          description:
+            "Lista servicos reais da fonte oficial do tenant via Scheduling Service. Inclua precos somente quando a cliente perguntou por valores.",
+          schema: listServicesSchema,
+        },
+      ),
+      tool(
+        (args) =>
+          this.run(context, () => this.findAvailableSlots(args, context)),
+        {
+          name: "get_availability",
+          description:
+            "Busca disponibilidade real para um ou mais serviceIds retornados por list_services. Multiplos servicos usam bloco continuo.",
+          schema: availableSlotsSchema,
+        },
+      ),
+      tool(
+        async (args) => {
+          if (args.action === "confirm") {
+            return this.run(context, () => this.confirmSchedule(context));
+          }
+          return this.run(context, () =>
+            this.prepareSchedule(
+              {
+                serviceId: args.serviceId,
+                serviceIds: args.serviceIds,
+                date: requireString(args.date, "date"),
+                startTime: requireString(args.startTime, "startTime"),
+                customerName: requireString(args.customerName, "customerName"),
+              },
+              context,
+            ),
+          );
+        },
+        {
+          name: "create_appointment",
+          description:
+            "Prepara ou confirma agendamento. Use action=prepare antes de pedir confirmacao; action=confirm somente apos confirmacao clara da cliente.",
+          schema: createAppointmentSchema,
+        },
+      ),
+      tool(
+        (args) => {
+          noArgsSchema.parse(args);
+          return this.run(context, () =>
+            this.findCustomerAppointments(context),
+          );
+        },
+        {
+          name: "list_customer_appointments",
+          description:
+            "Lista agendamentos futuros reais da cliente identificada pelo telefone do WhatsApp.",
+          schema: noArgsSchema,
+        },
+      ),
+      tool(
+        async (args) => {
+          if (args.action === "confirm") {
+            return this.run(context, () => this.rescheduleAppointment(context));
+          }
+          return this.run(context, () =>
+            this.prepareReschedule(
+              {
+                appointmentId: requireString(
+                  args.appointmentId,
+                  "appointmentId",
+                ),
+                date: requireString(args.date, "date"),
+                startTime: requireString(args.startTime, "startTime"),
+              },
+              context,
+            ),
+          );
+        },
+        {
+          name: "reschedule_appointment",
+          description:
+            "Prepara ou confirma remarcacao. Use action=prepare antes de pedir confirmacao; action=confirm somente apos confirmacao clara.",
+          schema: rescheduleAppointmentSchema,
+        },
+      ),
+      tool(
+        async (args) => {
+          if (args.action === "confirm") {
+            return this.run(context, () => this.cancelAppointment(context));
+          }
+          return this.run(context, () =>
+            this.prepareCancel(
+              {
+                appointmentId: requireString(
+                  args.appointmentId,
+                  "appointmentId",
+                ),
+              },
+              context,
+            ),
+          );
+        },
+        {
+          name: "cancel_appointment",
+          description:
+            "Prepara ou confirma cancelamento. Use action=prepare antes de pedir confirmacao; action=confirm somente apos confirmacao clara.",
+          schema: cancelAppointmentSchema,
+        },
+      ),
+      tool(
+        (args) => this.run(context, () => this.createHandoff(args, context)),
+        {
+          name: "request_human_handoff",
+          description:
+            "Abre handoff e pausa automacao para uma pessoa assumir a conversa.",
+          schema: handoffSchema,
+        },
+      ),
+    ];
+  }
+
+  private async run<T>(
+    context: ToolExecutionContext,
+    operation: () => Promise<T>,
+  ): Promise<StructuredToolResult<T>> {
+    try {
+      const data = await operation();
+      if (isDomainFailure(data)) {
+        return this.failure(
+          context,
+          data.code ?? "TOOL_OPERATION_FAILED",
+          data.error,
+        );
+      }
+      return { ...resultContext(context), ok: true, data };
+    } catch (error) {
+      return this.failure(
+        context,
+        error instanceof AppError ? error.code : "TOOL_EXECUTION_FAILED",
+        error instanceof Error ? error.message : "Unknown tool error",
+        error instanceof AppError ? error.details : undefined,
+      );
+    }
+  }
+
+  private failure(
+    context: ToolExecutionContext,
+    code: string,
+    message: string,
+    details?: unknown,
+  ): StructuredToolResult<never> {
+    return {
+      ...resultContext(context),
+      ok: false,
+      error: { code, message, ...(details === undefined ? {} : { details }) },
+    };
   }
 
   private async listServices(
@@ -425,7 +427,6 @@ export class AssistantToolRegistry {
       schedulingContext(context),
     );
     return {
-      ok: true,
       services: services.map((service) => ({
         id: service.id,
         name: service.name,
@@ -464,7 +465,6 @@ export class AssistantToolRegistry {
     });
 
     return {
-      ok: true,
       services: serviceResult.services,
       totalDurationMinutes: serviceResult.totalDurationMinutes,
       totalPrice: serviceResult.totalPrice,
@@ -473,7 +473,13 @@ export class AssistantToolRegistry {
   }
 
   private async prepareSchedule(
-    args: z.infer<typeof prepareScheduleSchema>,
+    args: {
+      serviceId?: string | null;
+      serviceIds?: string[];
+      date: string;
+      startTime: string;
+      customerName: string;
+    },
     context: ToolExecutionContext,
   ) {
     const serviceResult = await this.resolveScheduleServices({
@@ -501,10 +507,10 @@ export class AssistantToolRegistry {
       totalPrice: serviceResult.totalPrice,
       customerName: args.customerName,
       customerPhone: context.phone,
-      idempotencyKey: randomUUID(),
+      idempotencyKey: context.idempotencyKey,
     };
     await this.setPendingAction(context.conversationId, pending);
-    return { ok: true, requiresConfirmation: true, pendingAction: pending };
+    return { requiresConfirmation: true, pendingAction: pending };
   }
 
   private async confirmSchedule(context: ToolExecutionContext) {
@@ -541,11 +547,11 @@ export class AssistantToolRegistry {
       },
       context.businessSettings,
       schedulingContext(context),
-      pending.idempotencyKey,
+      pending.idempotencyKey || context.idempotencyKey,
     );
 
     await this.clearPendingAction(context.conversationId);
-    return { ok: true, appointment: this.presentAppointment(appointment) };
+    return { appointment: this.presentAppointment(appointment) };
   }
 
   private async findCustomerAppointments(context: ToolExecutionContext) {
@@ -555,7 +561,6 @@ export class AssistantToolRegistry {
       schedulingContext(context),
     );
     return {
-      ok: true,
       appointments: appointments.map((appointment) =>
         this.presentAppointment(appointment),
       ),
@@ -563,7 +568,7 @@ export class AssistantToolRegistry {
   }
 
   private async prepareCancel(
-    args: z.infer<typeof appointmentIdSchema>,
+    args: { appointmentId: string },
     context: ToolExecutionContext,
   ) {
     const appointments = await this.scheduling.findFutureAppointmentsForPhone(
@@ -584,17 +589,16 @@ export class AssistantToolRegistry {
     const pending: PendingAction = {
       type: "cancel",
       appointmentId: args.appointmentId,
-      idempotencyKey: randomUUID(),
+      idempotencyKey: context.idempotencyKey,
     };
     await this.setPendingAction(context.conversationId, pending);
     return {
-      ok: true,
       requiresConfirmation: true,
       appointment: this.presentAppointment(appointment),
     };
   }
 
-  private async confirmCancel(context: ToolExecutionContext) {
+  private async cancelAppointment(context: ToolExecutionContext) {
     const pending = await this.getPendingAction(context.conversationId);
     if (!pending || pending.type !== "cancel") {
       return {
@@ -606,14 +610,14 @@ export class AssistantToolRegistry {
     const result = await this.scheduling.cancelAppointment(
       pending.appointmentId,
       schedulingContext(context),
-      pending.idempotencyKey,
+      pending.idempotencyKey || context.idempotencyKey,
     );
     await this.clearPendingAction(context.conversationId);
-    return { ok: true, ...result };
+    return result;
   }
 
   private async prepareReschedule(
-    args: z.infer<typeof prepareRescheduleSchema>,
+    args: { appointmentId: string; date: string; startTime: string },
     context: ToolExecutionContext,
   ) {
     const appointments = await this.scheduling.findFutureAppointmentsForPhone(
@@ -636,11 +640,10 @@ export class AssistantToolRegistry {
       appointmentId: args.appointmentId,
       date: args.date,
       startTime: args.startTime,
-      idempotencyKey: randomUUID(),
+      idempotencyKey: context.idempotencyKey,
     };
     await this.setPendingAction(context.conversationId, pending);
     return {
-      ok: true,
       requiresConfirmation: true,
       currentAppointment: this.presentAppointment(appointment),
       newDate: args.date,
@@ -648,7 +651,7 @@ export class AssistantToolRegistry {
     };
   }
 
-  private async confirmReschedule(context: ToolExecutionContext) {
+  private async rescheduleAppointment(context: ToolExecutionContext) {
     const pending = await this.getPendingAction(context.conversationId);
     if (!pending || pending.type !== "reschedule") {
       return { ok: false, error: "Nao ha remarcacao pendente para confirmar." };
@@ -662,52 +665,39 @@ export class AssistantToolRegistry {
       },
       context.businessSettings,
       schedulingContext(context),
-      pending.idempotencyKey,
+      pending.idempotencyKey || context.idempotencyKey,
     );
 
     await this.clearPendingAction(context.conversationId);
-    return { ok: true, appointment: this.presentAppointment(appointment) };
+    return { appointment: this.presentAppointment(appointment) };
   }
 
   private async createHandoff(
     args: z.infer<typeof handoffSchema>,
     context: ToolExecutionContext,
   ) {
-    const handoff = await this.prisma.handoff.create({
-      data: {
+    const existing = await this.prisma.handoff.findFirst({
+      where: {
         tenantId: context.tenantId,
         channelId: context.channelId,
         conversationId: context.conversationId,
-        externalContactId: context.phone,
-        reason: args.reason,
-        summary: args.summary ?? null,
         status: "OPEN",
       },
+      orderBy: { createdAt: "desc" },
     });
-
-    await this.prisma.conversation.update({
-      where: { id: context.conversationId },
-      data: { humanHandoff: true, status: "HUMAN_HANDOFF" },
-    });
-
-    return { ok: true, handoffId: handoff.id };
-  }
-
-  private async pauseAiForChat(
-    args: z.infer<typeof pauseAiSchema>,
-    context: ToolExecutionContext,
-  ) {
-    const handoff = await this.prisma.handoff.create({
-      data: {
-        tenantId: context.tenantId,
-        channelId: context.channelId,
-        conversationId: context.conversationId,
-        externalContactId: context.phone,
-        reason: args.reason,
-        summary: args.note ?? null,
-        status: "OPEN",
-      },
-    });
+    const handoff =
+      existing ??
+      (await this.prisma.handoff.create({
+        data: {
+          tenantId: context.tenantId,
+          channelId: context.channelId,
+          conversationId: context.conversationId,
+          externalContactId: context.phone,
+          reason: args.reason,
+          summary: args.summary ?? null,
+          status: "OPEN",
+        },
+      }));
 
     const state = await this.getConversationState(context.conversationId);
     await this.prisma.conversation.update({
@@ -721,45 +711,14 @@ export class AssistantToolRegistry {
           aiConversation: {
             ...(isRecord(state.aiConversation) ? state.aiConversation : {}),
             aiEnabledForChat: false,
-            stage: "AI_PAUSED",
+            stage: "HUMAN_HANDOFF",
             pauseReason: args.reason,
           },
         } as Prisma.InputJsonValue,
       },
     });
 
-    return {
-      ok: true,
-      handoffId: handoff.id,
-      paused: true,
-      reason: args.reason,
-    };
-  }
-
-  private async updateConversationMemory(
-    args: z.infer<typeof updateMemorySchema>,
-    context: ToolExecutionContext,
-  ) {
-    const state = await this.getConversationState(context.conversationId);
-    const memory = {
-      summary: args.summary,
-      pendingTopics: args.pendingTopics,
-      knownCustomerInfo: args.knownCustomerInfo ?? {},
-      lastStage: args.stage,
-      updatedAt: new Date().toISOString(),
-    };
-
-    await this.prisma.conversation.update({
-      where: { id: context.conversationId },
-      data: {
-        state: {
-          ...state,
-          conversationMemory: memory,
-        } as Prisma.InputJsonValue,
-      },
-    });
-
-    return { ok: true, memory };
+    return { handoffId: handoff.id, reused: existing !== null };
   }
 
   private async getPendingAction(
@@ -991,6 +950,52 @@ export class AssistantToolRegistry {
         appointment.customerName ?? appointment.customer?.name ?? null,
     };
   }
+}
+
+function resultContext(context: ToolExecutionContext): ToolResultContext {
+  return {
+    requestId: context.requestId,
+    tenantId: context.tenantId,
+    aiRunId: context.aiRunId,
+    toolCallId: context.toolCallId,
+    idempotencyKey: context.idempotencyKey,
+  };
+}
+
+function requireString(value: string | undefined, field: string): string {
+  if (value) return value;
+  throw new AppError(`${field} is required.`, {
+    statusCode: 400,
+    code: "INVALID_TOOL_INPUT",
+  });
+}
+
+function isDomainFailure(
+  value: unknown,
+): value is { ok: false; code?: string; error: string } {
+  return (
+    isRecord(value) &&
+    value.ok === false &&
+    typeof value.error === "string" &&
+    (value.code === undefined || typeof value.code === "string")
+  );
+}
+
+function isStructuredToolResult(
+  value: unknown,
+): value is StructuredToolResult<unknown> {
+  if (!isRecord(value) || typeof value.ok !== "boolean") return false;
+  return (
+    typeof value.requestId === "string" &&
+    typeof value.tenantId === "string" &&
+    typeof value.aiRunId === "string" &&
+    typeof value.toolCallId === "string" &&
+    typeof value.idempotencyKey === "string" &&
+    (value.ok ||
+      (isRecord(value.error) &&
+        typeof value.error.code === "string" &&
+        typeof value.error.message === "string"))
+  );
 }
 
 function normalizeServiceIds(serviceIds: string[]): string[] {

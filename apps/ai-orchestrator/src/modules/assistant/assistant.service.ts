@@ -14,13 +14,15 @@ import {
 } from "../business-settings/business-settings.js";
 import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
 import {
-  extractFunctionCalls,
-  extractOutputText,
-  OpenAiResponsesClient,
-  type ResponsesApiResponse,
-} from "../openai/openai-client.js";
-import { buildSystemPrompt } from "../openai/prompts.js";
-import { AssistantToolRegistry } from "../openai/tools.js";
+  LangChainModelProvider,
+  type ModelInputMessage,
+  type ModelProvider,
+  type ModelResponse,
+  type ModelToolResult,
+  type ModelTurn,
+} from "../model/model-provider.js";
+import { buildSystemPrompt } from "../prompts/system.js";
+import { AssistantToolRegistry } from "../tools/assistant-tools.js";
 import {
   normalizeVirtualAttendantSettings,
   type VirtualAttendantSettingsDTO,
@@ -163,7 +165,7 @@ export class AssistantService {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly logger: DiagnosticLogger = noopDiagnosticLogger,
-    private readonly openAi = new OpenAiResponsesClient(),
+    private readonly modelProvider: ModelProvider = new LangChainModelProvider(),
     private readonly tools = new AssistantToolRegistry(prisma),
   ) {}
 
@@ -263,12 +265,11 @@ export class AssistantService {
     });
 
     const chronologicalMessageRecords = recentMessages.reverse();
-    const chronologicalMessages = chronologicalMessageRecords.map(
-      (message) => ({
+    const chronologicalMessages: ModelInputMessage[] =
+      chronologicalMessageRecords.map((message) => ({
         role: message.role === "assistant" ? "assistant" : "user",
         content: message.body,
-      }),
-    );
+      }));
     this.logger.info(
       {
         ...baseContext,
@@ -566,6 +567,7 @@ export class AssistantService {
       ...state,
       aiConversation: {
         aiEnabledForChat:
+          !conversation.humanHandoff &&
           input.decision.action !== "pause_ai" &&
           input.decision.action !== "handoff_human",
         stage,
@@ -612,17 +614,27 @@ export class AssistantService {
           handoffPausedUntil: null,
         },
       });
-      await this.prisma.handoff.create({
-        data: {
+      const existingHandoff = await this.prisma.handoff.findFirst({
+        where: {
           tenantId: conversation.tenantId,
           channelId: conversation.channelId,
           conversationId: input.conversationId,
-          externalContactId: input.phone,
-          reason: input.decision.pauseReason ?? "manual_handoff",
-          summary: input.decision.internalNotes ?? null,
           status: "OPEN",
         },
       });
+      if (!existingHandoff) {
+        await this.prisma.handoff.create({
+          data: {
+            tenantId: conversation.tenantId,
+            channelId: conversation.channelId,
+            conversationId: input.conversationId,
+            externalContactId: input.phone,
+            reason: input.decision.pauseReason ?? "manual_handoff",
+            summary: input.decision.internalNotes ?? null,
+            status: "OPEN",
+          },
+        });
+      }
     }
   }
 
@@ -637,10 +649,10 @@ export class AssistantService {
     customerName?: string | null;
     businessSettings: BusinessSettingsDTO;
     instructions: string;
-    input: unknown[];
+    input: ModelInputMessage[];
   }): Promise<string> {
-    let input = [...args.input];
-    let lastResponse: ResponsesApiResponse | null = null;
+    const turns: ModelTurn[] = [];
+    let lastResponse: ModelResponse | null = null;
     const aiRun = await this.prisma.aiRun.create({
       data: {
         tenantId: args.tenantId,
@@ -652,6 +664,18 @@ export class AssistantService {
         inputMessageIds: args.inputMessageIds,
       },
     });
+    const toolContext = {
+      conversationId: args.conversationId,
+      tenantId: args.tenantId,
+      channelId: args.channelId,
+      userId: args.userId,
+      requestId: args.requestId,
+      phone: args.phone,
+      customerName: args.customerName,
+      businessSettings: args.businessSettings,
+      aiRunId: aiRun.id,
+    };
+    const definitions = this.tools.createDefinitions(toolContext);
 
     try {
       for (let iteration = 0; iteration < 5; iteration += 1) {
@@ -660,19 +684,20 @@ export class AssistantService {
             conversationId: args.conversationId,
             phone: maskPhone(args.phone),
             iteration,
-            inputItems: input.length,
-            toolCount: this.tools.definitions.length,
+            inputItems: args.input.length,
+            toolCount: definitions.length,
           },
-          "Assistant OpenAI request starting",
+          "Assistant LangChain model request starting",
         );
-        const response = await this.openAi.createResponse({
+        const response = await this.modelProvider.invoke({
           instructions: args.instructions,
-          input,
-          tools: this.tools.definitions,
+          messages: args.input,
+          turns,
+          tools: definitions,
         });
 
         lastResponse = response;
-        const functionCalls = extractFunctionCalls(response);
+        const functionCalls = response.toolCalls;
         this.logger.info(
           {
             conversationId: args.conversationId,
@@ -680,13 +705,12 @@ export class AssistantService {
             iteration,
             responseId: response.id,
             functionCallCount: functionCalls.length,
-            outputTextLength: extractOutputText(response).length,
+            outputTextLength: response.text.length,
           },
-          "Assistant OpenAI response received",
+          "Assistant LangChain model response received",
         );
         if (functionCalls.length === 0) {
-          const output =
-            extractOutputText(response) || "Certo, vou te ajudar por aqui.";
+          const output = response.text || "Certo, vou te ajudar por aqui.";
           await this.prisma.aiRun.update({
             where: { id: aiRun.id },
             data: {
@@ -698,17 +722,16 @@ export class AssistantService {
           return output;
         }
 
-        input = [...input, ...(response.output ?? [])];
+        const toolResults: ModelToolResult[] = [];
 
         for (const call of functionCalls) {
-          const parsedArgs = safeParseJson(call.arguments);
           this.logger.info(
             {
               conversationId: args.conversationId,
               phone: maskPhone(args.phone),
               iteration,
               toolName: call.name,
-              callId: call.call_id,
+              callId: call.id,
             },
             "Assistant tool call started",
           );
@@ -716,65 +739,87 @@ export class AssistantService {
             data: {
               tenantId: args.tenantId,
               aiRunId: aiRun.id,
-              externalCallId: call.call_id,
+              externalCallId: call.id,
               name: call.name,
-              arguments: parsedArgs as object,
+              arguments: toInputJsonObject(call.args),
               status: "STARTED",
             },
           });
 
           try {
-            const result = await this.tools.execute(call.name, parsedArgs, {
+            const result = await this.tools.execute(call, toolContext);
+            const resultContent = JSON.stringify(result);
+
+            await this.prisma.aiToolCall.update({
+              where: { id: toolCall.id },
+              data: {
+                result: toInputJsonObject(result),
+                status: result.ok ? "SUCCEEDED" : "FAILED",
+                error: result.ok ? null : result.error.message,
+                completedAt: new Date(),
+              },
+            });
+
+            toolResults.push({
+              toolCallId: call.id,
+              toolName: call.name,
+              content: resultContent,
+            });
+            const toolLogContext = {
               conversationId: args.conversationId,
-              tenantId: args.tenantId,
-              channelId: args.channelId,
-              userId: args.userId,
-              requestId: args.requestId,
-              phone: args.phone,
-              customerName: args.customerName,
-              businessSettings: args.businessSettings,
-            });
-
-            await this.prisma.aiToolCall.update({
-              where: { id: toolCall.id },
-              data: {
-                result: result as object,
-                status: "SUCCEEDED",
-                completedAt: new Date(),
-              },
-            });
-
-            input.push({
-              type: "function_call_output",
-              call_id: call.call_id,
-              output: JSON.stringify(result),
-            });
-            this.logger.info(
-              {
-                conversationId: args.conversationId,
-                phone: maskPhone(args.phone),
-                iteration,
-                toolName: call.name,
-                callId: call.call_id,
-              },
-              "Assistant tool call succeeded",
-            );
+              phone: maskPhone(args.phone),
+              iteration,
+              toolName: call.name,
+              callId: call.id,
+              ...(result.ok ? {} : { errorCode: result.error.code }),
+            };
+            if (result.ok) {
+              this.logger.info(toolLogContext, "Assistant tool call succeeded");
+            } else {
+              this.logger.warn(
+                toolLogContext,
+                "Assistant tool call returned structured error",
+              );
+            }
           } catch (error) {
-            const result = { ok: false, error: toErrorMessage(error) };
+            const errorMessage = toErrorMessage(error);
+            const idempotencyKey = `${aiRun.id}:${call.id}:${call.name}`;
             await this.prisma.aiToolCall.update({
               where: { id: toolCall.id },
               data: {
-                result,
+                result: {
+                  ok: false,
+                  requestId: args.requestId,
+                  tenantId: args.tenantId,
+                  aiRunId: aiRun.id,
+                  toolCallId: call.id,
+                  idempotencyKey,
+                  error: {
+                    code: "TOOL_EXECUTION_FAILED",
+                    message: errorMessage,
+                  },
+                },
                 status: "FAILED",
-                error: result.error,
+                error: errorMessage,
                 completedAt: new Date(),
               },
             });
 
-            input.push({
-              type: "function_call_output",
-              call_id: call.call_id,
-              output: JSON.stringify(result),
+            toolResults.push({
+              toolCallId: call.id,
+              toolName: call.name,
+              content: JSON.stringify({
+                ok: false,
+                requestId: args.requestId,
+                tenantId: args.tenantId,
+                aiRunId: aiRun.id,
+                toolCallId: call.id,
+                idempotencyKey,
+                error: {
+                  code: "TOOL_EXECUTION_FAILED",
+                  message: errorMessage,
+                },
+              }),
             });
             this.logger.error(
               {
@@ -782,13 +827,15 @@ export class AssistantService {
                 phone: maskPhone(args.phone),
                 iteration,
                 toolName: call.name,
-                callId: call.call_id,
-                err: result.error,
+                callId: call.id,
+                err: errorMessage,
               },
               "Assistant tool call failed",
             );
           }
         }
+
+        turns.push({ response, toolResults });
       }
 
       this.logger.warn(
@@ -799,7 +846,7 @@ export class AssistantService {
         "Assistant tool loop reached iteration limit",
       );
       const output =
-        extractOutputText(lastResponse ?? { id: "none" }) ||
+        lastResponse?.text ||
         "Vou chamar a profissional para continuar seu atendimento.";
       await this.prisma.aiRun.update({
         where: { id: aiRun.id },
@@ -824,12 +871,31 @@ export class AssistantService {
   }
 }
 
-function safeParseJson(value: string): unknown {
-  try {
-    return JSON.parse(value || "{}");
-  } catch {
-    return {};
+function toInputJsonObject(value: object): Prisma.InputJsonObject {
+  const result: Record<string, Prisma.InputJsonValue | null> = {};
+  for (const [key, item] of Object.entries(value)) {
+    const normalized = toInputJsonValue(item);
+    if (normalized !== undefined) result[key] = normalized;
   }
+  return result;
+}
+
+function toInputJsonValue(
+  value: unknown,
+): Prisma.InputJsonValue | null | undefined {
+  if (value === null) return null;
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => toInputJsonValue(item) ?? null);
+  }
+  if (typeof value === "object") return toInputJsonObject(value);
+  return undefined;
 }
 
 function requireChannelMessage(

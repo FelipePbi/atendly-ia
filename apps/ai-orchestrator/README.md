@@ -9,6 +9,7 @@ Evolution Go
   → webhook autenticado
   → ChannelConnection resolve tenant e canal
   → MessageOrchestrator / AssistantService
+  → LangChain ModelProvider + tools tipadas
   → SchedulingClient, quando necessário
   → EvolutionProvider
   → Evolution Go
@@ -61,4 +62,20 @@ npm run start
 
 Porta padrão: `3000`.
 
-LangChain, LangGraph e RAG ainda não fazem parte deste goal.
+## IA e tools
+
+`AssistantService` usa `LangChainModelProvider`; somente esse provider conhece `ChatOpenAI`. Prompts ficam separados por contexto do tenant, agenda, handoff e resposta.
+
+Tools LangChain disponíveis:
+
+- `list_services`;
+- `get_availability`;
+- `create_appointment`;
+- `list_customer_appointments`;
+- `reschedule_appointment`;
+- `cancel_appointment`;
+- `request_human_handoff`.
+
+Tools operacionais recebem contexto confiável de tenant/request. Mutações usam chave estável derivada de `aiRunId` e `toolCallId`; agenda continua acessível somente via `SchedulingClient`.
+
+LangGraph e RAG ainda não fazem parte do serviço.

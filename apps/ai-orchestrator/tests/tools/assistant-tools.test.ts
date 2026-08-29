@@ -1,7 +1,7 @@
 import type { PrismaClient } from "../../src/generated/prisma/client.js";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_BUSINESS_SETTINGS } from "../../src/modules/business-settings/business-settings.js";
-import { AssistantToolRegistry } from "../../src/modules/openai/tools.js";
+import { AssistantToolRegistry } from "../../src/modules/tools/assistant-tools.js";
 import type {
   ScheduleAppointmentInput,
   SchedulingAppointment,
@@ -47,19 +47,26 @@ describe("AssistantToolRegistry scheduling service resolution", () => {
       createAgendaMock().agenda,
     );
 
-    const result = (await registry.execute(
-      "preparar_agendamento",
+    const result = await registry.execute(
       {
-        serviceId: null,
-        date: slot.date,
-        startTime: slot.startTime,
-        customerName: "Thais",
+        id: "call-prepare-1",
+        name: "create_appointment",
+        args: {
+          action: "prepare",
+          serviceId: null,
+          date: slot.date,
+          startTime: slot.startTime,
+          customerName: "Thais",
+        },
       },
       context(),
-    )) as { ok: boolean; pendingAction?: { serviceId: string } };
+    );
 
     expect(result.ok).toBe(true);
-    expect(result.pendingAction?.serviceId).toBe(service.id);
+    expect(result).toMatchObject({
+      ok: true,
+      data: { pendingAction: { serviceId: service.id } },
+    });
     expect(store.state.pendingAction).toMatchObject({
       type: "schedule",
       serviceId: service.id,
@@ -75,20 +82,24 @@ describe("AssistantToolRegistry scheduling service resolution", () => {
       createAgendaMock().agenda,
     );
 
-    const result = (await registry.execute(
-      "preparar_agendamento",
+    const result = await registry.execute(
       {
-        serviceId: null,
-        date: slot.date,
-        startTime: slot.startTime,
-        customerName: "Thais",
+        id: "call-prepare-invalid",
+        name: "create_appointment",
+        args: {
+          action: "prepare",
+          serviceId: null,
+          date: slot.date,
+          startTime: slot.startTime,
+          customerName: "Thais",
+        },
       },
       context(),
-    )) as { ok: boolean; code?: string; error?: string };
+    );
 
     expect(result).toMatchObject({
       ok: false,
-      code: "SERVICE_ID_UNRESOLVED",
+      error: { code: "SERVICE_ID_UNRESOLVED" },
     });
     expect(store.state.pendingAction).toBeUndefined();
   });
@@ -108,17 +119,20 @@ describe("AssistantToolRegistry scheduling service resolution", () => {
     const { agenda, calls } = createAgendaMock();
     const registry = new AssistantToolRegistry(prisma, agenda);
 
-    const result = (await registry.execute(
-      "confirmar_agendamento",
-      {},
+    const result = await registry.execute(
+      {
+        id: "call-confirm-legacy",
+        name: "create_appointment",
+        args: { action: "confirm" },
+      },
       context(),
-    )) as {
-      ok: boolean;
-      appointment?: { id: string };
-    };
+    );
 
     expect(result.ok).toBe(true);
-    expect(result.appointment?.id).toBe("98765");
+    expect(result).toMatchObject({
+      ok: true,
+      data: { appointment: { id: "98765" } },
+    });
     expect(calls.createAppointment).toHaveLength(1);
     expect(calls.createAppointment[0]).toMatchObject({
       serviceId: service.id,
@@ -135,17 +149,20 @@ describe("AssistantToolRegistry scheduling service resolution", () => {
       createAgendaMock().agenda,
     );
 
-    const result = (await registry.execute(
-      "buscar_horarios_disponiveis",
+    const result = await registry.execute(
       {
-        serviceId: service.id,
-        startDate: slot.date,
+        id: "call-availability-1",
+        name: "get_availability",
+        args: {
+          serviceId: service.id,
+          startDate: slot.date,
+        },
       },
       context(),
-    )) as { ok: boolean; slots?: (typeof slot)[] };
+    );
 
     expect(result.ok).toBe(true);
-    expect(result.slots).toEqual([slot]);
+    expect(result).toMatchObject({ ok: true, data: { slots: [slot] } });
     expect(store.state.availabilityLookups).toEqual([
       expect.objectContaining({
         service: expect.objectContaining({
@@ -163,27 +180,26 @@ describe("AssistantToolRegistry scheduling service resolution", () => {
     const { agenda, calls } = createAgendaMock();
     const registry = new AssistantToolRegistry(prisma, agenda);
 
-    const result = (await registry.execute(
-      "buscar_horarios_disponiveis",
+    const result = await registry.execute(
       {
-        serviceIds: [service.id, browService.id],
-        startDate: slot.date,
+        id: "call-availability-multi",
+        name: "get_availability",
+        args: {
+          serviceIds: [service.id, browService.id],
+          startDate: slot.date,
+        },
       },
       context(),
-    )) as {
-      ok: boolean;
-      services?: Array<{ id: string }>;
-      totalDurationMinutes?: number;
-      totalPrice?: number;
-      slots?: (typeof combinedSlot)[];
-    };
+    );
 
     expect(result).toMatchObject({
       ok: true,
-      services: [{ id: service.id }, { id: browService.id }],
-      totalDurationMinutes: 130,
-      totalPrice: 230,
-      slots: [combinedSlot],
+      data: {
+        services: [{ id: service.id }, { id: browService.id }],
+        totalDurationMinutes: 130,
+        totalPrice: 230,
+        slots: [combinedSlot],
+      },
     });
     expect(calls.getAvailableSlotsForServices).toEqual([
       [service.id, browService.id],
@@ -209,41 +225,41 @@ describe("AssistantToolRegistry scheduling service resolution", () => {
     const { agenda, calls } = createAgendaMock();
     const registry = new AssistantToolRegistry(prisma, agenda);
 
-    const prepared = (await registry.execute(
-      "preparar_agendamento",
+    const prepared = await registry.execute(
       {
-        serviceIds: [service.id, browService.id],
-        date: slot.date,
-        startTime: slot.startTime,
-        customerName: "Thais",
+        id: "call-prepare-multi",
+        name: "create_appointment",
+        args: {
+          action: "prepare",
+          serviceIds: [service.id, browService.id],
+          date: slot.date,
+          startTime: slot.startTime,
+          customerName: "Thais",
+        },
       },
       context(),
-    )) as {
-      ok: boolean;
-      pendingAction?: {
-        serviceIds?: string[];
-        totalDurationMinutes?: number;
-        totalPrice?: number;
-        endTime?: string;
-      };
-    };
+    );
 
     expect(prepared.ok).toBe(true);
-    expect(prepared.pendingAction).toMatchObject({
-      serviceIds: [service.id, browService.id],
-      totalDurationMinutes: 130,
-      totalPrice: 230,
-      endTime: "15:40",
+    expect(prepared).toMatchObject({
+      data: {
+        pendingAction: {
+          serviceIds: [service.id, browService.id],
+          totalDurationMinutes: 130,
+          totalPrice: 230,
+          endTime: "15:40",
+        },
+      },
     });
 
-    const confirmed = (await registry.execute(
-      "confirmar_agendamento",
-      {},
+    const confirmed = await registry.execute(
+      {
+        id: "call-confirm-multi",
+        name: "create_appointment",
+        args: { action: "confirm" },
+      },
       context(),
-    )) as {
-      ok: boolean;
-      appointment?: { id: string };
-    };
+    );
 
     expect(confirmed.ok).toBe(true);
     expect(calls.createAppointment[0]).toMatchObject({
@@ -270,6 +286,7 @@ function context() {
       businessName: "Camili Krauser Beauty",
       configured: true,
     },
+    aiRunId: "ai-run-1",
   };
 }
 

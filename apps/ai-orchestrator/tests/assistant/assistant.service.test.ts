@@ -8,8 +8,12 @@ const phone = "5511999999999";
 describe("AssistantService conversational decisions", () => {
   it("answers a first generic greeting without calling the model or offering services", async () => {
     const { prisma, store } = createPrismaMock();
-    const openAi = { createResponse: vi.fn() };
-    const assistant = new AssistantService(prisma, undefined, openAi as never);
+    const modelProvider = { invoke: vi.fn() };
+    const assistant = new AssistantService(
+      prisma,
+      undefined,
+      modelProvider as never,
+    );
 
     const reply = await assistant.handleIncomingText({
       phone,
@@ -19,7 +23,7 @@ describe("AssistantService conversational decisions", () => {
     });
 
     expect(reply.text).toBe("Oii, tudo bem? Como posso te ajudar hoje?");
-    expect(openAi.createResponse).not.toHaveBeenCalled();
+    expect(modelProvider.invoke).not.toHaveBeenCalled();
     expect(store.state.aiConversation).toMatchObject({
       stage: "QUALIFYING_CONTACT",
       classification: "unknown",
@@ -32,8 +36,12 @@ describe("AssistantService conversational decisions", () => {
 
   it("uses the light and close tone without inventing an assistant identity", async () => {
     const { prisma } = createPrismaMock();
-    const openAi = { createResponse: vi.fn() };
-    const assistant = new AssistantService(prisma, undefined, openAi as never);
+    const modelProvider = { invoke: vi.fn() };
+    const assistant = new AssistantService(
+      prisma,
+      undefined,
+      modelProvider as never,
+    );
 
     const reply = await assistant.handleIncomingText({
       phone,
@@ -47,13 +55,17 @@ describe("AssistantService conversational decisions", () => {
     });
 
     expect(reply.text).toBe("Oii, tudo bem? Como posso te ajudar hoje?");
-    expect(openAi.createResponse).not.toHaveBeenCalled();
+    expect(modelProvider.invoke).not.toHaveBeenCalled();
   });
 
   it("uses the professional and objective tone", async () => {
     const { prisma } = createPrismaMock();
-    const openAi = { createResponse: vi.fn() };
-    const assistant = new AssistantService(prisma, undefined, openAi as never);
+    const modelProvider = { invoke: vi.fn() };
+    const assistant = new AssistantService(
+      prisma,
+      undefined,
+      modelProvider as never,
+    );
 
     const reply = await assistant.handleIncomingText({
       phone,
@@ -67,7 +79,7 @@ describe("AssistantService conversational decisions", () => {
     });
 
     expect(reply.text).toBe("Olá, tudo bem? Como posso te ajudar hoje?");
-    expect(openAi.createResponse).not.toHaveBeenCalled();
+    expect(modelProvider.invoke).not.toHaveBeenCalled();
   });
 
   it("does not invent an assistant identity after an owner message", async () => {
@@ -81,19 +93,25 @@ describe("AssistantService conversational decisions", () => {
       body: "Oi Maria, pode me mandar o horário que você prefere?",
       createdAt: new Date(Date.UTC(2026, 5, 4, 12, 0)),
     });
-    const openAi = {
-      createResponse: vi.fn().mockResolvedValue({
+    const modelProvider = {
+      invoke: vi.fn().mockResolvedValue({
         id: "response-1",
-        output_text: JSON.stringify({
+        text: JSON.stringify({
           action: "send_message",
           messages: ["Claro, consigo te ajudar com isso."],
           conversationStage: "GENERAL_CONVERSATION",
           classification: "potential_customer",
           confidence: 0.9,
         }),
+        toolCalls: [],
+        continuation: {},
       }),
     };
-    const assistant = new AssistantService(prisma, undefined, openAi as never);
+    const assistant = new AssistantService(
+      prisma,
+      undefined,
+      modelProvider as never,
+    );
 
     const reply = await assistant.handleIncomingText({
       phone,
@@ -111,8 +129,12 @@ describe("AssistantService conversational decisions", () => {
 
   it("pauses the chat for supplier-like messages without calling the model", async () => {
     const { prisma, store } = createPrismaMock();
-    const openAi = { createResponse: vi.fn() };
-    const assistant = new AssistantService(prisma, undefined, openAi as never);
+    const modelProvider = { invoke: vi.fn() };
+    const assistant = new AssistantService(
+      prisma,
+      undefined,
+      modelProvider as never,
+    );
 
     const reply = await assistant.handleIncomingText({
       phone,
@@ -124,7 +146,7 @@ describe("AssistantService conversational decisions", () => {
     expect(reply.text).toBe(
       "Oi! Vou deixar essa mensagem para a equipe verificar e te responder direitinho, ta bom?",
     );
-    expect(openAi.createResponse).not.toHaveBeenCalled();
+    expect(modelProvider.invoke).not.toHaveBeenCalled();
     expect(store.conversation).toMatchObject({
       humanHandoff: true,
       status: "HUMAN_HANDOFF",
@@ -144,10 +166,10 @@ describe("AssistantService conversational decisions", () => {
 
   it("persists multi-service appointment draft totals from a structured AI decision", async () => {
     const { prisma, store } = createPrismaMock();
-    const openAi = {
-      createResponse: vi.fn().mockResolvedValue({
+    const modelProvider = {
+      invoke: vi.fn().mockResolvedValue({
         id: "response-1",
-        output_text: JSON.stringify({
+        text: JSON.stringify({
           action: "update_appointment_draft",
           messages: [
             "Perfeito, cilios + sobrancelha fica R$ 220,00 no total.",
@@ -175,9 +197,15 @@ describe("AssistantService conversational decisions", () => {
           classification: "potential_customer",
           confidence: 0.94,
         }),
+        toolCalls: [],
+        continuation: {},
       }),
     };
-    const assistant = new AssistantService(prisma, undefined, openAi as never);
+    const assistant = new AssistantService(
+      prisma,
+      undefined,
+      modelProvider as never,
+    );
 
     const reply = await assistant.handleIncomingText({
       phone,
@@ -289,6 +317,7 @@ function createPrismaMock() {
       update: vi.fn(),
     },
     handoff: {
+      findFirst: async () => store.handoffs[0] ?? null,
       create: async (args: any) => {
         store.handoffs.push(args.data);
         return { id: `handoff-${store.handoffs.length}`, ...args.data };

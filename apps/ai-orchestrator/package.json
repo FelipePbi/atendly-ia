@@ -19,8 +19,10 @@
     "prisma:deploy": "prisma migrate deploy"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "7.10.0",
     "@fastify/cors": "^11.1.0",
+    "@langchain/core": "1.2.9",
+    "@langchain/openai": "1.5.8",
+    "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
     "dotenv": "^17.2.3",
     "fastify": "^5.6.2",

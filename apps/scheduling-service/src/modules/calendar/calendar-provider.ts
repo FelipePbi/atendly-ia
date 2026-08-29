@@ -2,7 +2,8 @@ export interface CalendarServiceDefinition {
   id: string;
   name: string;
   durationMinutes: number;
-  price: number;
+  priceType: "FIXED" | "ON_REQUEST";
+  price: number | null;
   active: boolean;
   colorId?: number | null;
 }
@@ -17,7 +18,8 @@ export interface CalendarAppointmentServiceItem {
   serviceId: string;
   name: string;
   durationMinutes: number;
-  price: number;
+  priceType: "FIXED" | "ON_REQUEST";
+  price: number | null;
 }
 
 export interface CalendarAppointment {
@@ -29,7 +31,7 @@ export interface CalendarAppointment {
   customerId: string | null;
   customer: CalendarCustomerSummary | null;
   services: CalendarAppointmentServiceItem[];
-  totalPrice: number;
+  totalPrice: number | null;
   comments: string | null;
   status: string;
 }

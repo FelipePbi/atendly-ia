@@ -1,4 +1,5 @@
 import { AppError } from "../../../shared/errors/app-error.js";
+import { normalizePhone, phoneMatches } from "../../../shared/phone/phone.js";
 import type {
   AvailableSlot,
   CalendarAppointment,
@@ -15,7 +16,6 @@ import { computeAvailableSlots } from "./availability.js";
 import { createMinhaAgendaClient, type MinhaAgendaClient } from "./client.js";
 import type { MinhaAgendaConnectionConfig } from "./config.js";
 import { addDays } from "./date-time.js";
-import { normalizePhone, phoneMatches } from "./phone.js";
 import type {
   CreateAppointmentInput,
   MinhaAgendaAppointment,
@@ -427,6 +427,7 @@ function toCalendarService(
     id: String(service.id),
     name: service.name,
     durationMinutes: service.duration,
+    priceType: "FIXED",
     price: Number(service.price),
     active: !service.deleted,
     colorId: service.colorId,
@@ -473,6 +474,7 @@ function appointmentServices(
       serviceId: String(service.id),
       name: service.name,
       durationMinutes: service.duration,
+      priceType: "FIXED",
       price: Number(service.price),
     }));
   }
@@ -481,6 +483,7 @@ function appointmentServices(
       serviceId: String(item.serviceId),
       name: item.service?.name ?? `Servico ${item.serviceId}`,
       durationMinutes: item.service?.duration ?? appointment.duration,
+      priceType: "FIXED",
       price: Number(item.price ?? item.service?.price ?? 0),
     }));
   }
@@ -493,6 +496,7 @@ function appointmentServices(
           appointment.service?.name ??
           `Servico ${appointment.serviceId}`,
         durationMinutes: appointment.service?.duration ?? appointment.duration,
+        priceType: "FIXED",
         price: Number(appointment.service?.price ?? appointment.price ?? 0),
       },
     ];

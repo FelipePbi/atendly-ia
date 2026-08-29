@@ -4,7 +4,7 @@ Fonte canônica do domínio de agenda da Atendly.
 
 ## Estado atual
 
-Fonte canônica tenant-aware com `CalendarService`, port `CalendarProvider`, provider Minha Agenda e API interna de calendário. Agenda Atendly entra somente no GOAL 06. Frontend continua sem acesso direto.
+Fonte canônica tenant-aware com `CalendarService`, port `CalendarProvider`, providers Agenda Atendly e Minha Agenda, e API interna de calendário. `CalendarSettings.source` seleciona exatamente uma fonte oficial por tenant. Frontend continua sem acesso direto.
 
 ## Stack
 
@@ -47,6 +47,8 @@ Credenciais Minha Agenda pertencem a `IntegrationConnection.credentialsEncrypted
 ```
 
 Payload cifrado contém `basicAuth`, `username` e `password`. `encryptIntegrationCredentials(tenantId, payload)` produz envelope autenticado e vinculado ao tenant. Nenhuma credencial de tenant é lida de env global.
+
+Agenda Atendly persiste serviços, clientes, disponibilidade e appointments no banco próprio. Clientes usam telefone normalizado com unicidade por tenant. Appointments guardam snapshots de nome, duração, tipo de preço e preço; cancelamento preserva registro e reagendamento troca slot somente após persistência transacional.
 
 ## API interna
 

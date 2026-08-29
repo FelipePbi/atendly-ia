@@ -59,17 +59,18 @@ model IntegrationConnection {
 }
 
 model Customer {
-  id        String   @id @default(cuid())
-  tenantId  String
-  name      String?
-  phone     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(cuid())
+  tenantId        String
+  name            String?
+  phone           String
+  normalizedPhone String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   appointments Appointment[]
 
   @@unique([tenantId, id])
-  @@unique([tenantId, phone])
+  @@unique([tenantId, normalizedPhone])
   @@index([tenantId, name])
 }
 
@@ -138,6 +139,7 @@ model Appointment {
   endAt      DateTime
   status     String
   createdBy  String
+  comments   String?
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
 

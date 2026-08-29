@@ -3,7 +3,7 @@
 ## Estado
 
 ```text
-NEXT: GOAL 06
+NEXT: GOAL 07
 ```
 
 Este roadmap governa refatoração incremental. Todos os goals começam em `NOT_STARTED`. Esta tarefa de documentação ocorre antes do GOAL 01.
@@ -69,7 +69,7 @@ AI Orchestrator e Scheduling Service são `TARGET`; ainda não existem como apps
 | GOAL 03 | Multi-tenancy BFF | GOAL 02 | COMPLETED |
 | GOAL 04 | Scheduling Service foundation | GOAL 03 | COMPLETED |
 | GOAL 05 | Minha Agenda CalendarProvider | GOAL 04 | COMPLETED |
-| GOAL 06 | Agenda Atendly CalendarProvider | GOAL 05 | NOT_STARTED |
+| GOAL 06 | Agenda Atendly CalendarProvider | GOAL 05 | COMPLETED |
 | GOAL 07 | AI Orchestrator multi-tenant | GOAL 06 | NOT_STARTED |
 | GOAL 08 | LangChain | GOAL 07 | NOT_STARTED |
 | GOAL 09 | LangGraph | GOAL 08 | NOT_STARTED |

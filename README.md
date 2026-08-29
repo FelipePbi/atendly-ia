@@ -15,7 +15,7 @@ O monorepo está em transição arquitetural.
 - Frontend novo já foi reconstruído a partir do Open Design e é base visual aprovada.
 - Frontend ainda usa services e dados mockados; não está integrado ao BFF.
 - BFF e API mantêm responsabilidades legadas que serão separadas por goals sequenciais.
-- Fundação multi-tenant do BFF e Scheduling Service estão implementados. Minha Agenda opera atrás de `CalendarProvider`; dados operacionais restantes ainda migram por goals. AI Orchestrator separado, LangChain, LangGraph e RAG ainda não existem.
+- Fundação multi-tenant do BFF e Scheduling Service estão implementados. Agenda Atendly e Minha Agenda operam atrás do mesmo `CalendarProvider`; dados operacionais restantes ainda migram por goals. AI Orchestrator separado, LangChain, LangGraph e RAG ainda não existem.
 
 ## Apps
 
@@ -25,7 +25,7 @@ O monorepo está em transição arquitetural.
 | Open Design        | `apps/frontend-open-design` | Contrato visual estático; referência, não serviço de produção                                       |
 | BFF                | `apps/bff`                  | Fastify, TypeScript, Prisma/PostgreSQL, cookie/JWT; backend web transitório                         |
 | API                | `apps/api`                  | Fastify, TypeScript, Prisma/PostgreSQL; AI orchestration transitória e client do Scheduling Service |
-| Scheduling Service | `apps/scheduling-service`   | Fastify, TypeScript, Prisma/PostgreSQL; domínio canônico e provider Minha Agenda                    |
+| Scheduling Service | `apps/scheduling-service`   | Fastify, TypeScript, Prisma/PostgreSQL; domínio canônico e providers Atendly/Minha Agenda           |
 | Evolution Go       | `apps/evolution-go`         | Provedor/transporte WhatsApp em Go                                                                  |
 | Health worker      | `apps/health-worker`        | Serviço Node de monitoramento de saúde                                                              |
 

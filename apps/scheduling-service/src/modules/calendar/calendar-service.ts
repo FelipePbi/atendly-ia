@@ -32,10 +32,11 @@ const calendarAppointmentSchema: z.ZodType<CalendarAppointment> = z.object({
       serviceId: z.string(),
       name: z.string(),
       durationMinutes: z.number(),
-      price: z.number(),
+      priceType: z.enum(["FIXED", "ON_REQUEST"]).default("FIXED"),
+      price: z.number().nullable(),
     }),
   ),
-  totalPrice: z.number(),
+  totalPrice: z.number().nullable(),
   comments: z.string().nullable(),
   status: z.string(),
 });
@@ -135,6 +136,8 @@ export class CalendarService {
     }
     return this.providerFactory.create({
       tenantId: context.tenantId,
+      userId: context.userId,
+      timeZone: settings.timezone,
       source: settings.source,
     });
   }

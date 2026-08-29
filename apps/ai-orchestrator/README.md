@@ -34,7 +34,9 @@ Rotas `/internal/*` exigem `INTERNAL_SERVICE_TOKEN`. Provisionamento exige `x-te
 
 ## Persistência
 
-PostgreSQL próprio via Prisma. Models operacionais: `ChannelConnection`, `Conversation`, `Message`, `ProcessedEvent`, `AiRun`, `AiToolCall`, `Handoff` e `AiTenantConfig`. Chaves de conversa, mensagem e evento são compostas por tenant/canal/provider conforme o domínio.
+PostgreSQL próprio via Prisma. Models operacionais: `ChannelConnection`, `Conversation`, `Message`, `ProcessedEvent`, `AiRun`, `AiToolCall`, `Handoff`, `AiTenantConfig`, `KnowledgeDocument` e `KnowledgeChunk`. Chaves operacionais e relações de knowledge são tenant-scoped.
+
+Extensão `vector` armazena embeddings `vector(1536)`. Prisma mantém o tipo como `Unsupported`; escrita e busca vetorial usam SQL parametrizado dentro de `PGVectorKnowledgeStore`.
 
 ## Environment
 
@@ -42,7 +44,8 @@ Copie `.env.example` para `.env`. Principais grupos:
 
 - runtime: `NODE_ENV`, `AI_ORCHESTRATOR_PORT`, `DATABASE_URL`;
 - autenticação interna: `INTERNAL_SERVICE_TOKEN`, `ADMIN_API_TOKEN`;
-- OpenAI: `OPENAI_API_KEY`, `OPENAI_MODEL` e limites;
+- OpenAI: `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_EMBEDDING_MODEL` e limites;
+- RAG: `KNOWLEDGE_SEARCH_LIMIT` e `KNOWLEDGE_SEARCH_MIN_SCORE`;
 - Evolution Go: `EVOLUTION_*`;
 - agenda: `SCHEDULING_SERVICE_BASE_URL`.
 
@@ -75,13 +78,14 @@ Tools LangChain disponíveis:
 - `list_customer_appointments`;
 - `reschedule_appointment`;
 - `cancel_appointment`;
-- `request_human_handoff`.
+- `request_human_handoff`;
+- `search_business_knowledge`.
 
 Tools operacionais recebem contexto confiável de tenant/request. Mutações usam chave estável derivada de `aiRunId` e `toolCallId`; agenda continua acessível somente via `SchedulingClient`.
 
 ## LangGraph
 
-Workflow inbound usa nodes explícitos para contexto, conversa, guards operacionais, entendimento, retrieval placeholder, agent, execução/validação de tools, composição, persistência, envio e handoff.
+Workflow inbound usa nodes explícitos para contexto, conversa, guards operacionais, entendimento, retrieval tenant-scoped, agent, execução/validação de tools, composição, persistência, envio e handoff.
 
 - `thread_id` é sempre `Conversation.id`;
 - checkpoints usam o mesmo PostgreSQL do serviço no schema dedicado `langgraph`;
@@ -90,4 +94,20 @@ Workflow inbound usa nodes explícitos para contexto, conversa, guards operacion
 - Appointment nunca é armazenado como source of truth do graph;
 - scheduling continua `Graph → LangChain Tool → SchedulingClient → Scheduling Service`.
 
-`MessageOrchestrator` permanece somente como adapter para webhook e debounce durante migração. RAG/retrieval real pertence ao GOAL 10 e não foi iniciado.
+`MessageOrchestrator` permanece somente como adapter para webhook e debounce durante migração.
+
+## RAG
+
+`EmbeddingProvider` isola geração de embeddings. `KnowledgeVectorStore` exige `tenantId` tanto para indexação quanto para busca; implementação ativa é `PGVectorKnowledgeStore`.
+
+Graph só chama `retrieveKnowledge` para perguntas classificadas como conhecimento. Preço, serviço ativo, agenda, disponibilidade, appointments, status WhatsApp e status de integração continuam fora do RAG e usam serviços determinísticos.
+
+Não existe rota ou CRUD público de knowledge. Carga controlada usa arquivo JSON local e contexto explícito de tenant:
+
+```bash
+KNOWLEDGE_SEED_TENANT_ID=tenant-id \
+KNOWLEDGE_SEED_FILE=./knowledge.json \
+npm run knowledge:seed
+```
+
+Tipos permitidos: `FAQ`, `GUIDANCE`, `CARE`, `PROCEDURE`, `BUSINESS_INFO` e `TEXT_POLICY`. Cada arquivo contém `type`, `title`, `source`, `version`, `status` opcional e `chunks` com `content` e `metadata` opcional.

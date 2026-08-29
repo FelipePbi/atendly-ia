@@ -56,6 +56,20 @@ enum AiTone {
   LIGHT_CLOSE
 }
 
+enum KnowledgeDocumentType {
+  FAQ
+  GUIDANCE
+  CARE
+  PROCEDURE
+  BUSINESS_INFO
+  TEXT_POLICY
+}
+
+enum KnowledgeDocumentStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model ChannelConnection {
   id                 String                  @id @default(cuid())
   tenantId           String
@@ -208,4 +222,38 @@ model AiTenantConfig {
   settings      Json?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model KnowledgeDocument {
+  id        String                  @id @default(cuid())
+  tenantId  String
+  type      KnowledgeDocumentType
+  title     String
+  source    String
+  version   String
+  checksum  String
+  status    KnowledgeDocumentStatus @default(ACTIVE)
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+
+  chunks KnowledgeChunk[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, type, source, version])
+  @@index([tenantId, status, updatedAt])
+}
+
+model KnowledgeChunk {
+  id         String    @id @default(cuid())
+  tenantId   String
+  documentId String
+  content    String
+  metadata   Json?
+  embedding  Unsupported("vector(1536)")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  document KnowledgeDocument @relation(fields: [tenantId, documentId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, documentId])
 }

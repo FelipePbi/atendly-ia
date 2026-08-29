@@ -2,6 +2,7 @@ import { Annotation } from "@langchain/langgraph";
 
 import type { AssistantGraphSession } from "../assistant/assistant.service.js";
 import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
+import type { KnowledgeSearchResult } from "../knowledge/knowledge-vector-store.js";
 import type {
   ModelResponse,
   ModelToolResult,
@@ -94,7 +95,7 @@ export const MessageGraphState = Annotation.Root({
   conversation: Annotation<GraphConversationContext>(),
   guardDecision: Annotation<GraphGuardDecision>(),
   intent: Annotation<GraphIntent>(),
-  retrievedKnowledge: Annotation<string[]>(),
+  retrievedKnowledge: Annotation<KnowledgeSearchResult[]>(),
   toolResults: Annotation<GraphToolResult[]>(),
   assistantSession: Annotation<AssistantGraphSession | undefined>(),
   modelResponse: Annotation<ModelResponse | undefined>(),

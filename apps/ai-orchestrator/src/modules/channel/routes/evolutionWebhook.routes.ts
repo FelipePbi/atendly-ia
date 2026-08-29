@@ -10,6 +10,10 @@ import { MessageOrchestrator } from "../../automation/MessageOrchestrator.js";
 import { PrismaGraphRuntime } from "../../graph/graph-runtime.js";
 import { HandoffService } from "../../handoff/HandoffService.js";
 import { IdempotencyStore } from "../../idempotency/IdempotencyStore.js";
+import { OpenAIEmbeddingProvider } from "../../knowledge/embedding-provider.js";
+import { PGVectorKnowledgeStore } from "../../knowledge/pgvector-knowledge-store.js";
+import { SchedulingClient } from "../../scheduling-service/client.js";
+import { AssistantToolRegistry } from "../../tools/assistant-tools.js";
 import {
   inspectEvolutionInboundPayload,
   mapEvolutionInbound,
@@ -107,7 +111,22 @@ export function buildOrchestrator(input: {
   instanceToken?: string;
   checkpointer?: BaseCheckpointSaver;
 }) {
-  const assistant = new AssistantService(input.prisma, input.app.log);
+  const knowledge = new PGVectorKnowledgeStore(
+    input.prisma,
+    new OpenAIEmbeddingProvider(),
+    env.KNOWLEDGE_SEARCH_MIN_SCORE,
+  );
+  const tools = new AssistantToolRegistry(
+    input.prisma,
+    new SchedulingClient(),
+    knowledge,
+  );
+  const assistant = new AssistantService(
+    input.prisma,
+    input.app.log,
+    undefined,
+    tools,
+  );
   const provider = new EvolutionProvider(
     input.app.log,
     input.instanceToken,
@@ -127,6 +146,7 @@ export function buildOrchestrator(input: {
     input.app.log,
     {
       runtime,
+      knowledge,
       checkpointer: input.checkpointer,
     },
   );

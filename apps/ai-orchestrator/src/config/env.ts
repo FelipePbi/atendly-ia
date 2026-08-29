@@ -14,6 +14,12 @@ const intEnv = (defaultValue: number) =>
     return Number(value);
   }, z.number().int().default(defaultValue));
 
+const numberEnv = (defaultValue: number) =>
+  z.preprocess((value) => {
+    if (value === undefined || value === null || value === "") return undefined;
+    return Number(value);
+  }, z.number().default(defaultValue));
+
 const boolEnv = (defaultValue: boolean) =>
   z.preprocess((value) => {
     if (value === undefined || value === null || value === "") return undefined;
@@ -31,7 +37,10 @@ const envSchema = z.object({
   DATABASE_URL: stringEnv(),
   OPENAI_API_KEY: stringEnv(),
   OPENAI_MODEL: stringEnv("gpt-5.4-mini"),
+  OPENAI_EMBEDDING_MODEL: stringEnv("text-embedding-3-small"),
   OPENAI_MAX_OUTPUT_TOKENS: intEnv(600),
+  KNOWLEDGE_SEARCH_LIMIT: intEnv(4),
+  KNOWLEDGE_SEARCH_MIN_SCORE: numberEnv(0.65),
   CHANNEL_PROVIDER: z.literal("evolution-go").default("evolution-go"),
   EVOLUTION_WEBHOOK_TOKEN: stringEnv(),
   EVOLUTION_BASE_URL: stringEnv("http://evolution-go:8080"),

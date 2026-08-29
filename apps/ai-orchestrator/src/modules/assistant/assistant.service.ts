@@ -12,6 +12,7 @@ import {
   normalizeBusinessSettings,
 } from "../business-settings/business-settings.js";
 import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
+import type { KnowledgeSearchResult } from "../knowledge/knowledge-vector-store.js";
 import {
   LangChainModelProvider,
   type ModelInputMessage,
@@ -37,6 +38,8 @@ export interface IncomingAssistantMessage {
   whatsappMessageId?: string;
   customerName?: string | null;
   rawPayload?: unknown;
+  knowledgeRequested?: boolean;
+  retrievedKnowledge?: KnowledgeSearchResult[];
 }
 
 export interface AssistantReply {
@@ -324,6 +327,8 @@ export class AssistantService {
         currentDateTime: new Date().toISOString(),
         businessSettings,
         virtualAttendantSettings,
+        knowledgeRequested: input.knowledgeRequested,
+        retrievedKnowledge: input.retrievedKnowledge,
       }),
       input: chronologicalMessages,
       turns: [],

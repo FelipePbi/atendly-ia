@@ -7,6 +7,10 @@ import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import { AppError } from "../../lib/errors.js";
 import type { BusinessSettingsDTO } from "../business-settings/business-settings.js";
 import {
+  isOperationalKnowledgeQuery,
+  type KnowledgeVectorStore,
+} from "../knowledge/knowledge-vector-store.js";
+import {
   SchedulingClient,
   type SchedulingGateway,
 } from "../scheduling-service/client.js";
@@ -206,10 +210,17 @@ const handoffSchema = z
     summary: z.string().optional(),
   })
   .strict();
+const searchKnowledgeSchema = z
+  .object({
+    query: z.string().trim().min(2).max(500),
+    limit: z.number().int().min(1).max(8).optional(),
+  })
+  .strict();
 export class AssistantToolRegistry {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly scheduling: SchedulingGateway = new SchedulingClient(),
+    private readonly knowledge?: KnowledgeVectorStore,
   ) {}
 
   createDefinitions(context: ToolBindingContext): StructuredToolInterface[] {
@@ -261,7 +272,7 @@ export class AssistantToolRegistry {
   private createTools(
     context: ToolExecutionContext,
   ): StructuredToolInterface[] {
-    return [
+    const tools: StructuredToolInterface[] = [
       tool(
         (args) => this.run(context, () => this.listServices(args, context)),
         {
@@ -380,6 +391,51 @@ export class AssistantToolRegistry {
         },
       ),
     ];
+    if (this.knowledge) {
+      tools.push(
+        tool(
+          (args) =>
+            this.run(context, () =>
+              this.searchBusinessKnowledge(args, context),
+            ),
+          {
+            name: "search_business_knowledge",
+            description:
+              "Busca conhecimento textual configurado do tenant para FAQ, orientacoes, cuidados, procedimentos e politicas. Nunca use para preco atual, servico ativo, agenda, disponibilidade, appointment ou status de integracao.",
+            schema: searchKnowledgeSchema,
+          },
+        ),
+      );
+    }
+    return tools;
+  }
+
+  private async searchBusinessKnowledge(
+    args: z.infer<typeof searchKnowledgeSchema>,
+    context: ToolExecutionContext,
+  ) {
+    if (!this.knowledge) throw new Error("Knowledge store is unavailable.");
+    if (isOperationalKnowledgeQuery(args.query)) {
+      throw new AppError("Use Scheduling tools for operational data.", {
+        statusCode: 400,
+        code: "KNOWLEDGE_QUERY_NOT_ALLOWED",
+      });
+    }
+    const matches = await this.knowledge.search({
+      tenantId: context.tenantId,
+      query: args.query,
+      limit: args.limit ?? env.KNOWLEDGE_SEARCH_LIMIT,
+    });
+    return {
+      matches: matches.map((match) => ({
+        type: match.type,
+        title: match.title,
+        source: match.source,
+        version: match.version,
+        content: match.content,
+        metadata: match.metadata,
+      })),
+    };
   }
 
   private async run<T>(

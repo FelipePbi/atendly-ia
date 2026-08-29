@@ -24,6 +24,7 @@ import type {
   HandoffService,
 } from "../handoff/HandoffService.js";
 import type { IdempotencyStore } from "../idempotency/IdempotencyStore.js";
+import type { KnowledgeVectorStore } from "../knowledge/knowledge-vector-store.js";
 
 export interface OrchestratorOutboundMessage {
   text: string;
@@ -129,6 +130,7 @@ export interface MessageOrchestratorOptions {
   debounce?: Partial<Omit<MessageDebounceConfig, "enabled">> | false;
   runtime?: GraphRuntimePort;
   checkpointer?: BaseCheckpointSaver;
+  knowledge?: KnowledgeVectorStore;
 }
 
 interface BufferedMessage {
@@ -171,6 +173,7 @@ export class MessageOrchestrator {
       idempotency,
       handoff,
       runtime: this.runtime,
+      knowledge: options.knowledge,
       checkpointer: options.checkpointer,
       logger,
     });

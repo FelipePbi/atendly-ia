@@ -15,7 +15,7 @@ O monorepo está em transição arquitetural.
 - Frontend novo já foi reconstruído a partir do Open Design e é base visual aprovada.
 - Frontend ainda usa services e dados mockados; não está integrado ao BFF.
 - BFF ainda mantém cópias e rotas legadas que serão substituídas por goals sequenciais.
-- BFF, Scheduling Service e AI Orchestrator possuem fundações multi-tenant. Agenda Atendly e Minha Agenda operam atrás do mesmo `CalendarProvider`; AI Orchestrator usa LangChain para modelo/tools e LangGraph persistente para orchestration. RAG ainda não existe.
+- BFF, Scheduling Service e AI Orchestrator possuem fundações multi-tenant. Agenda Atendly e Minha Agenda operam atrás do mesmo `CalendarProvider`; AI Orchestrator usa LangChain, LangGraph persistente e RAG tenant-scoped com pgvector.
 
 ## Apps
 
@@ -24,7 +24,7 @@ O monorepo está em transição arquitetural.
 | Frontend           | `apps/frontend`             | Next.js 16, React 19, TypeScript e CSS próprio; UI nova com mocks                                   |
 | Open Design        | `apps/frontend-open-design` | Contrato visual estático; referência, não serviço de produção                                       |
 | BFF                | `apps/bff`                  | Fastify, TypeScript, Prisma/PostgreSQL, cookie/JWT; backend web transitório                         |
-| AI Orchestrator    | `apps/ai-orchestrator`      | Fastify, TypeScript, Prisma/PostgreSQL, LangChain e LangGraph; conversas, handoff, IA e client do Scheduling Service |
+| AI Orchestrator    | `apps/ai-orchestrator`      | Fastify, TypeScript, Prisma/PostgreSQL + pgvector, LangChain e LangGraph; conversas, handoff, IA, RAG e client do Scheduling Service |
 | Scheduling Service | `apps/scheduling-service`   | Fastify, TypeScript, Prisma/PostgreSQL; domínio canônico e providers Atendly/Minha Agenda           |
 | Evolution Go       | `apps/evolution-go`         | Provedor/transporte WhatsApp em Go                                                                  |
 | Health worker      | `apps/health-worker`        | Serviço Node de monitoramento de saúde                                                              |

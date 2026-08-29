@@ -23,6 +23,7 @@ import type {
 } from "../automation/MessageOrchestrator.js";
 import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
 import type { WhatsAppProvider } from "../channel/ports/WhatsAppProvider.js";
+import type { KnowledgeVectorStore } from "../knowledge/knowledge-vector-store.js";
 import type { GraphRuntimePort } from "./graph-runtime.js";
 import {
   type GraphIntent,
@@ -56,6 +57,7 @@ export interface MessageGraphDependencies {
   idempotency: IdempotencyPort;
   handoff: HandoffPort;
   runtime: GraphRuntimePort;
+  knowledge?: KnowledgeVectorStore;
   checkpointer?: BaseCheckpointSaver;
   logger?: DiagnosticLogger;
 }
@@ -265,7 +267,7 @@ export class MessageGraphWorkflow {
       return this.handleOwnerActivity(state);
     }
     if (!isTextMessage(message)) return { intent: "unsupported" };
-    return { intent: classifyIntent(state.inboundText) };
+    return { intent: classifyMessageIntent(state.inboundText) };
   }
 
   private async handleOwnerActivity(
@@ -326,11 +328,28 @@ export class MessageGraphWorkflow {
     };
   }
 
-  private retrieveKnowledge(
-    _state: MessageGraphStateValue,
-  ): MessageGraphStateUpdate {
-    // GOAL 10 owns retrieval. Node exists now so routing remains explicit.
-    return { retrievedKnowledge: [] };
+  private async retrieveKnowledge(
+    state: MessageGraphStateValue,
+  ): Promise<MessageGraphStateUpdate> {
+    if (!this.dependencies.knowledge) return { retrievedKnowledge: [] };
+    try {
+      return {
+        retrievedKnowledge: await this.dependencies.knowledge.search({
+          tenantId: state.tenantId,
+          query: state.inboundText,
+          limit: env.KNOWLEDGE_SEARCH_LIMIT,
+        }),
+      };
+    } catch (error) {
+      this.logger.warn(
+        {
+          ...channelMessageLogContext(state.inboundMessage),
+          err: toErrorMessage(error),
+        },
+        "Knowledge retrieval failed",
+      );
+      return { retrievedKnowledge: [] };
+    }
   }
 
   private async bufferInbound(
@@ -401,6 +420,8 @@ export class MessageGraphWorkflow {
             virtualAttendantSettings: message.virtualAttendantSettings,
             channelMessage: message,
             messageRecordIds: state.inputMessageIds,
+            knowledgeRequested: state.intent === "knowledge",
+            retrievedKnowledge: state.retrievedKnowledge,
           }));
         const step =
           await this.dependencies.automation.invokeGraphAgent(session);
@@ -660,19 +681,24 @@ function routeAfterAgent(
   return state.modelResponse?.toolCalls.length ? "tools" : "compose";
 }
 
-function classifyIntent(text: string): GraphIntent {
+export function classifyMessageIntent(text: string): GraphIntent {
   const normalized = normalizeText(text);
   if (/(humano|pessoa|atendente|profissional)/u.test(normalized)) {
     return "handoff";
   }
   if (
-    /(agend|horario|disponib|servico|preco|valor|cancel|remarc|reagend)/u.test(
+    /(agend|horario|disponib|servico|preco|valor|quanto custa|custo|cancel|remarc|reagend)/u.test(
       normalized,
     )
   ) {
     return "operational";
   }
-  if (/(politica|cuidado|orientacao|duvida|como funciona)/u.test(normalized)) {
+  if (
+    /(politica|cuidado|orientacao|duvida|como funciona|procedimento|contraindic|manutencao|durabilidade)/u.test(
+      normalized,
+    ) ||
+    /(posso|pode)\b.*\b(antes|depois|lavar|molhar|usar|fazer)/u.test(normalized)
+  ) {
     return "knowledge";
   }
   return "simple_response";

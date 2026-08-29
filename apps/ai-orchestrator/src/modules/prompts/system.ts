@@ -3,12 +3,14 @@ import {
   type BusinessSettingsDTO,
   normalizeBusinessSettings,
 } from "../business-settings/business-settings.js";
+import type { KnowledgeSearchResult } from "../knowledge/knowledge-vector-store.js";
 import {
   buildVirtualAttendantPromptSection,
   normalizeVirtualAttendantSettings,
   type VirtualAttendantSettingsDTO,
 } from "../virtual-attendant/virtual-attendant.js";
 import { buildHandoffPrompt } from "./handoff.js";
+import { buildKnowledgePrompt } from "./knowledge.js";
 import { buildResponsePrompt } from "./response.js";
 import { buildSchedulingPrompt } from "./scheduling.js";
 import { buildTenantContextPrompt } from "./tenant-context.js";
@@ -20,6 +22,8 @@ export interface BuildSystemPromptInput {
   currentDateTime?: string;
   businessSettings?: BusinessSettingsDTO;
   virtualAttendantSettings?: VirtualAttendantSettingsDTO;
+  knowledgeRequested?: boolean;
+  retrievedKnowledge?: KnowledgeSearchResult[];
 }
 
 export function buildSystemPrompt(input: unknown): string {
@@ -58,6 +62,11 @@ export function buildSystemPrompt(input: unknown): string {
     "",
     ...buildSchedulingPrompt(businessSettings),
     "",
+    ...buildKnowledgePrompt({
+      requested: args.knowledgeRequested ?? false,
+      results: args.retrievedKnowledge ?? [],
+    }),
+    "",
     buildVirtualAttendantPromptSection(virtualAttendantSettings),
     "",
     ...buildHandoffPrompt(),
@@ -80,6 +89,8 @@ function isPromptInput(value: unknown): value is BuildSystemPromptInput {
       "promptVersion" in value ||
       "groupedMessages" in value ||
       "businessSettings" in value ||
-      "virtualAttendantSettings" in value)
+      "virtualAttendantSettings" in value ||
+      "knowledgeRequested" in value ||
+      "retrievedKnowledge" in value)
   );
 }

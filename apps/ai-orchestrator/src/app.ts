@@ -22,6 +22,7 @@ export async function buildApp() {
         "req.headers.cookie",
         "body.password",
         "body.token",
+        "body.instanceToken",
       ],
     },
   });

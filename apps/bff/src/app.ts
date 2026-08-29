@@ -9,14 +9,18 @@ import { env } from "./config/env.js";
 import { AppError, toErrorMessage } from "./lib/errors.js";
 import { redactRequestUrl } from "./lib/logging.js";
 import { disconnectPrisma } from "./lib/prisma.js";
-import { registerAuthRoutes } from "./routes/auth.js";
-import { registerConversationRoutes } from "./routes/conversations.js";
+import { registerV1AuthRoutes } from "./modules/auth/routes.js";
+import { registerV1CalendarRoutes } from "./modules/calendar/routes.js";
+import { registerV1ConversationRoutes } from "./modules/conversations/routes.js";
+import { registerV1CustomerRoutes } from "./modules/customers/routes.js";
+import { registerV1DashboardRoutes } from "./modules/dashboard/routes.js";
+import { registerV1MigrationRoutes } from "./modules/migrations/routes.js";
+import { registerV1OnboardingRoutes } from "./modules/onboarding/routes.js";
+import { registerV1ServiceRoutes } from "./modules/services/routes.js";
+import { registerV1SettingsRoutes } from "./modules/settings/routes.js";
+import { registerV1WhatsAppRoutes } from "./modules/whatsapp/routes.js";
 import { registerHealthRoutes } from "./routes/health.js";
-import { registerIgnoredContactsRoutes } from "./routes/ignored-contacts.js";
-import { registerOnboardingRoutes } from "./routes/onboarding.js";
-import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerWebhookRoutes } from "./routes/webhooks.js";
-import { registerWhatsAppRoutes } from "./routes/whatsapp.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -27,6 +31,7 @@ export async function buildApp() {
         "body.password",
         "body.currentPassword",
         "body.newPassword",
+        "body.token",
       ],
       serializers: {
         req(request) {
@@ -62,12 +67,16 @@ export async function buildApp() {
 
   await registerHealthRoutes(app);
   await registerWebhookRoutes(app);
-  await registerAuthRoutes(app);
-  await registerOnboardingRoutes(app);
-  await registerWhatsAppRoutes(app);
-  await registerSettingsRoutes(app);
-  await registerIgnoredContactsRoutes(app);
-  await registerConversationRoutes(app);
+  await registerV1AuthRoutes(app);
+  await registerV1OnboardingRoutes(app);
+  await registerV1DashboardRoutes(app);
+  await registerV1ConversationRoutes(app);
+  await registerV1CalendarRoutes(app);
+  await registerV1MigrationRoutes(app);
+  await registerV1CustomerRoutes(app);
+  await registerV1ServiceRoutes(app);
+  await registerV1SettingsRoutes(app);
+  await registerV1WhatsAppRoutes(app);
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof AppError) {

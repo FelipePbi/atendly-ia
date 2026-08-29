@@ -40,6 +40,7 @@ function parseServiceIds(value: unknown): string[] {
   );
 }
 const createAppointmentBodySchema = z.object({
+  source: z.enum(["AI", "USER"]).optional(),
   serviceIds: z.array(z.string().trim().min(1).max(128)).min(1).max(10),
   date: dateSchema,
   startTime: timeSchema,

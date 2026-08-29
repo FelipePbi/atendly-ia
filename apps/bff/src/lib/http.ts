@@ -37,3 +37,16 @@ export function parseParams<T>(schema: z.ZodSchema<T>, params: unknown): T {
 
   return parsed.data;
 }
+
+export function parseQuery<T>(schema: z.ZodSchema<T>, query: unknown): T {
+  const parsed = schema.safeParse(query);
+  if (!parsed.success) {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      "Invalid query parameters.",
+      400,
+      parsed.error.flatten(),
+    );
+  }
+  return parsed.data;
+}

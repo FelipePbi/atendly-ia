@@ -99,17 +99,31 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  whatsappInstance  WhatsAppInstance?
-  conversations      Conversation[]
-  messages           Message[]
-  ignoredContacts    IgnoredContact[]
-  aiSuppressionLogs  AiSuppressionLog[]
+  whatsappInstance           WhatsAppInstance?
+  conversations              Conversation[]
+  messages                   Message[]
+  ignoredContacts            IgnoredContact[]
+  aiSuppressionLogs          AiSuppressionLog[]
   personaConversationImports PersonaConversationImport[]
-  profile            UserProfile?
-  settings           UserSettings?
-  businessSettings   BusinessSettings?
-  legalAcceptances   LegalAcceptance[]
-  tenantMemberships  TenantMember[]
+  profile                    UserProfile?
+  settings                   UserSettings?
+  businessSettings           BusinessSettings?
+  legalAcceptances           LegalAcceptance[]
+  passwordResetTokens        PasswordResetToken[]
+  tenantMemberships          TenantMember[]
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
 }
 
 model Tenant {
@@ -137,15 +151,16 @@ model TenantMember {
 }
 
 model BusinessProfile {
-  id           String   @id @default(cuid())
-  tenantId     String   @unique
-  businessName String   @default("")
-  category     String?
-  timezone     String   @default("America/Sao_Paulo")
-  language     String   @default("pt-BR")
-  currency     String   @default("BRL")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                    String    @id @default(cuid())
+  tenantId              String    @unique
+  businessName          String    @default("")
+  category              String?
+  timezone              String    @default("America/Sao_Paulo")
+  language              String    @default("pt-BR")
+  currency              String    @default("BRL")
+  onboardingCompletedAt DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
@@ -164,8 +179,8 @@ model LegalAcceptance {
 }
 
 model UserProfile {
-  id                      String   @id @default(cuid())
-  userId                  String   @unique
+  id                      String    @id @default(cuid())
+  userId                  String    @unique
   fullName                String
   birthDate               DateTime? @db.Date
   sex                     UserSex
@@ -173,8 +188,8 @@ model UserProfile {
   whatsappPhoneRaw        String?
   whatsappPhoneNormalized String?
   onboardingCompletedAt   DateTime?
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -195,9 +210,9 @@ model WhatsAppInstance {
   createdAt              DateTime               @default(now())
   updatedAt              DateTime               @updatedAt
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  conversations Conversation[]
-  messages      Message[]
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversations     Conversation[]
+  messages          Message[]
   ignoredContacts   IgnoredContact[]
   aiSuppressionLogs AiSuppressionLog[]
 
@@ -206,26 +221,26 @@ model WhatsAppInstance {
 }
 
 model Conversation {
-  id                 String   @id @default(cuid())
-  userId             String
-  instanceId         String
-  contactJid         String
-  contactName        String?
-  profilePictureUrl  String?
-  lastMessagePreview String?
-  lastMessageAt      DateTime?
-  unreadCount        Int      @default(0)
-  archivedAt         DateTime?
-  aiPaused           Boolean  @default(false)
-  aiPausedReason     String?
-  aiPausedUpdatedAt  DateTime?
+  id                  String    @id @default(cuid())
+  userId              String
+  instanceId          String
+  contactJid          String
+  contactName         String?
+  profilePictureUrl   String?
+  lastMessagePreview  String?
+  lastMessageAt       DateTime?
+  unreadCount         Int       @default(0)
+  archivedAt          DateTime?
+  aiPaused            Boolean   @default(false)
+  aiPausedReason      String?
+  aiPausedUpdatedAt   DateTime?
   lastOwnerActivityAt DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  instance WhatsAppInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-  messages Message[]
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instance          WhatsAppInstance   @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  messages          Message[]
   aiSuppressionLogs AiSuppressionLog[]
 
   @@unique([userId, contactJid])
@@ -358,9 +373,9 @@ model AiSuppressionLog {
   metadata       Json?
   createdAt      DateTime            @default(now())
 
-  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  instance     WhatsAppInstance  @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-  conversation Conversation?     @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instance     WhatsAppInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  conversation Conversation?    @relation(fields: [conversationId], references: [id], onDelete: SetNull)
 
   @@index([userId, instanceId, contactJid])
   @@index([createdAt])

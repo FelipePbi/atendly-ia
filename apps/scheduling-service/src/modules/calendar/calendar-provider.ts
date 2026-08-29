@@ -24,6 +24,7 @@ export interface CalendarAppointmentServiceItem {
 
 export interface CalendarAppointment {
   id: string;
+  source: "AI" | "USER" | "INTEGRATION";
   date: string;
   startTime: string;
   endTime: string;
@@ -57,6 +58,7 @@ export interface GetAvailabilityInput {
 }
 
 export interface CreateCalendarAppointmentInput {
+  source?: "AI" | "USER";
   serviceIds: string[];
   date: string;
   startTime: string;

@@ -15,6 +15,7 @@ import { CalendarProviderFactory } from "./provider-factory.js";
 
 const calendarAppointmentSchema: z.ZodType<CalendarAppointment> = z.object({
   id: z.string(),
+  source: z.enum(["AI", "USER", "INTEGRATION"]),
   date: z.string(),
   startTime: z.string(),
   endTime: z.string(),

@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto";
+
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
 import { env } from "../../config/env.js";
-import type { PrismaClient } from "../../generated/prisma/client.js";
+import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import { AppError, toErrorMessage } from "../../lib/errors.js";
 import {
   businessSettingsSchema,
@@ -12,6 +14,7 @@ import {
   inspectEvolutionInboundPayload,
   mapEvolutionInbound,
 } from "../channel/adapters/evolution/EvolutionInboundMapper.js";
+import { EvolutionProvider } from "../channel/adapters/evolution/EvolutionProvider.js";
 import { ChannelConnectionService } from "../channel/ChannelConnectionService.js";
 import { buildOrchestrator } from "../channel/routes/evolutionWebhook.routes.js";
 import {
@@ -52,6 +55,21 @@ const phonesSchema = z.object({
     .array(z.string().regex(/^\d{10,15}$/))
     .min(1)
     .max(500),
+});
+
+const conversationParamsSchema = z.object({
+  id: z.string().trim().min(1).max(128),
+});
+
+const conversationQuerySchema = z.object({
+  status: z.enum(["ACTIVE", "HUMAN_HANDOFF", "CLOSED"]).optional(),
+  search: z.string().trim().max(160).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+const sendOwnerMessageSchema = z.object({
+  text: z.string().trim().min(1).max(4_000),
+  instanceToken: z.string().min(16).max(512),
 });
 
 export async function registerInternalRoutes(
@@ -112,6 +130,196 @@ export async function registerInternalRoutes(
         tone: config.tone,
         promptVersion: config.promptVersion,
       },
+    });
+  });
+
+  app.get("/internal/conversations", async (request) => {
+    const { tenantId } = await trustedTenantContext(prisma, request, true);
+    const query = parseOrThrow(conversationQuerySchema, request.query);
+    const conversations = await prisma.conversation.findMany({
+      where: {
+        tenantId,
+        ...(query.status ? { status: query.status } : {}),
+        ...(query.search
+          ? {
+              OR: [
+                {
+                  customerName: { contains: query.search, mode: "insensitive" },
+                },
+                { externalContactId: { contains: query.search } },
+              ],
+            }
+          : {}),
+      },
+      include: { messages: { orderBy: { createdAt: "desc" }, take: 1 } },
+      orderBy: { updatedAt: "desc" },
+      take: query.limit,
+    });
+
+    return internalData(
+      request,
+      conversations.map((conversation) => conversationDto(conversation)),
+    );
+  });
+
+  app.get("/internal/conversations/:id", async (request) => {
+    const { tenantId } = await trustedTenantContext(prisma, request, true);
+    const { id } = parseOrThrow(conversationParamsSchema, request.params);
+    return internalData(
+      request,
+      conversationDto(await requireConversation(prisma, tenantId, id)),
+    );
+  });
+
+  app.get("/internal/conversations/:id/messages", async (request) => {
+    const { tenantId } = await trustedTenantContext(prisma, request, true);
+    const { id } = parseOrThrow(conversationParamsSchema, request.params);
+    await requireConversation(prisma, tenantId, id);
+    const messages = await prisma.message.findMany({
+      where: { tenantId, conversationId: id },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: 500,
+    });
+    return internalData(request, messages.map(messageDto));
+  });
+
+  app.post("/internal/conversations/:id/messages", async (request, reply) => {
+    const { tenantId } = await trustedTenantContext(prisma, request, true);
+    const { id } = parseOrThrow(conversationParamsSchema, request.params);
+    const body = parseOrThrow(sendOwnerMessageSchema, request.body);
+    const conversation = await requireConversation(prisma, tenantId, id);
+    if (!conversation.humanHandoff) {
+      throw new AppError("Take over conversation before sending a message.", {
+        statusCode: 409,
+        code: "HUMAN_HANDOFF_REQUIRED",
+      });
+    }
+
+    const correlationId = `owner-${randomUUID()}`;
+    const sent = await new EvolutionProvider(
+      app.log,
+      body.instanceToken,
+      conversation.channel.externalInstanceId,
+    ).sendText({
+      to: contactNumber(conversation.externalContactId),
+      text: body.text,
+      correlationId,
+    });
+    const message = await prisma.message.create({
+      data: {
+        tenantId,
+        channelId: conversation.channelId,
+        conversationId: conversation.id,
+        externalMessageId: sent.messageId ?? correlationId,
+        direction: "OUTBOUND",
+        source: "OWNER",
+        role: "assistant",
+        body: body.text,
+        rawPayload: jsonValue(sent.raw),
+      },
+    });
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { status: "HUMAN_HANDOFF", humanHandoff: true },
+    });
+    return reply.code(201).send(internalData(request, messageDto(message)));
+  });
+
+  app.post("/internal/conversations/:id/takeover", async (request) => {
+    const { tenantId } = await trustedTenantContext(prisma, request, true);
+    const { id } = parseOrThrow(conversationParamsSchema, request.params);
+    const conversation = await requireConversation(prisma, tenantId, id);
+    const existing = await prisma.handoff.findFirst({
+      where: { tenantId, conversationId: id, status: "OPEN" },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!existing) {
+      await prisma.handoff.create({
+        data: {
+          tenantId,
+          channelId: conversation.channelId,
+          conversationId: id,
+          externalContactId: conversation.externalContactId,
+          reason: "OWNER_TAKEOVER",
+          summary: "Atendimento humano iniciado pelo painel.",
+        },
+      });
+    }
+    await prisma.conversation.update({
+      where: { id },
+      data: {
+        humanHandoff: true,
+        status: "HUMAN_HANDOFF",
+        handoffPausedUntil: BOT_OFF_PAUSE_UNTIL,
+      },
+    });
+    return internalData(
+      request,
+      conversationDto(await requireConversation(prisma, tenantId, id)),
+    );
+  });
+
+  app.post("/internal/conversations/:id/release", async (request) => {
+    const { tenantId } = await trustedTenantContext(prisma, request, true);
+    const { id } = parseOrThrow(conversationParamsSchema, request.params);
+    await requireConversation(prisma, tenantId, id);
+    await resolveConversationHandoffs(prisma, tenantId, id);
+    await prisma.conversation.update({
+      where: { id },
+      data: { humanHandoff: false, status: "ACTIVE", handoffPausedUntil: null },
+    });
+    return internalData(
+      request,
+      conversationDto(await requireConversation(prisma, tenantId, id)),
+    );
+  });
+
+  app.post("/internal/conversations/:id/resolve", async (request) => {
+    const { tenantId } = await trustedTenantContext(prisma, request, true);
+    const { id } = parseOrThrow(conversationParamsSchema, request.params);
+    await requireConversation(prisma, tenantId, id);
+    await resolveConversationHandoffs(prisma, tenantId, id);
+    await prisma.conversation.update({
+      where: { id },
+      data: { humanHandoff: false, status: "CLOSED", handoffPausedUntil: null },
+    });
+    return internalData(
+      request,
+      conversationDto(await requireConversation(prisma, tenantId, id)),
+    );
+  });
+
+  app.get("/internal/dashboard", async (request) => {
+    const { tenantId } = await trustedTenantContext(prisma, request, true);
+    const startOfDay = new Date();
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const [attention, successfulAppointmentTools, aiRuns] = await Promise.all([
+      prisma.conversation.count({
+        where: { tenantId, status: "HUMAN_HANDOFF", humanHandoff: true },
+      }),
+      prisma.aiToolCall.count({
+        where: {
+          tenantId,
+          name: "create_appointment",
+          status: "SUCCEEDED",
+          completedAt: { gte: startOfDay },
+        },
+      }),
+      prisma.aiRun.findMany({
+        where: {
+          tenantId,
+          status: "SUCCEEDED",
+          completedAt: { gte: startOfDay },
+        },
+        select: { conversationId: true },
+      }),
+    ]);
+    return internalData(request, {
+      conversationsNeedingAttention: attention,
+      aiAppointmentsToday: successfulAppointmentTools,
+      automatedConversationsToday: new Set(
+        aiRuns.map((run) => run.conversationId),
+      ).size,
     });
   });
 
@@ -305,6 +513,117 @@ export async function registerInternalRoutes(
       return reply.code(500).send({ ok: false, error: "Dispatch failed" });
     }
   });
+}
+
+function parseOrThrow<TSchema extends z.ZodType>(
+  schema: TSchema,
+  value: unknown,
+): z.output<TSchema> {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) {
+    throw new AppError("Request validation failed.", {
+      statusCode: 400,
+      code: "VALIDATION_ERROR",
+      details: z.flattenError(parsed.error).fieldErrors,
+    });
+  }
+  return parsed.data;
+}
+
+async function requireConversation(
+  prisma: PrismaClient,
+  tenantId: string,
+  id: string,
+) {
+  const conversation = await prisma.conversation.findFirst({
+    where: { id, tenantId },
+    include: {
+      messages: { orderBy: { createdAt: "desc" }, take: 1 },
+      channel: true,
+    },
+  });
+  if (!conversation) {
+    throw new AppError("Conversation not found.", {
+      statusCode: 404,
+      code: "CONVERSATION_NOT_FOUND",
+    });
+  }
+  return conversation;
+}
+
+function conversationDto(conversation: {
+  id: string;
+  externalContactId: string;
+  customerName: string | null;
+  status: "ACTIVE" | "HUMAN_HANDOFF" | "CLOSED";
+  humanHandoff: boolean;
+  updatedAt: Date;
+  messages: Array<{
+    id: string;
+    direction: "INBOUND" | "OUTBOUND";
+    source: "CUSTOMER" | "AI" | "OWNER" | null;
+    body: string;
+    createdAt: Date;
+  }>;
+}) {
+  return {
+    id: conversation.id,
+    externalContactId: conversation.externalContactId,
+    customerName: conversation.customerName,
+    status: conversation.status,
+    humanHandoff: conversation.humanHandoff,
+    lastMessage: conversation.messages[0]
+      ? messageDto(conversation.messages[0])
+      : null,
+    unreadCount: 0,
+    updatedAt: conversation.updatedAt.toISOString(),
+  };
+}
+
+function messageDto(message: {
+  id: string;
+  direction: "INBOUND" | "OUTBOUND";
+  source: "CUSTOMER" | "AI" | "OWNER" | null;
+  body: string;
+  createdAt: Date;
+}) {
+  return {
+    id: message.id,
+    direction: message.direction,
+    source: message.source,
+    body: message.body,
+    createdAt: message.createdAt.toISOString(),
+  };
+}
+
+function internalData<T>(request: FastifyRequest, data: T) {
+  return { data, requestId: request.id };
+}
+
+async function resolveConversationHandoffs(
+  prisma: PrismaClient,
+  tenantId: string,
+  conversationId: string,
+): Promise<void> {
+  await prisma.handoff.updateMany({
+    where: { tenantId, conversationId, status: "OPEN" },
+    data: { status: "RESOLVED", resolvedAt: new Date() },
+  });
+}
+
+function contactNumber(value: string): string {
+  const number = value.split("@")[0]?.replace(/\D/g, "") ?? "";
+  if (number.length < 6) {
+    throw new AppError("Conversation contact is invalid.", {
+      statusCode: 409,
+      code: "INVALID_CONVERSATION_CONTACT",
+    });
+  }
+  return number;
+}
+
+function jsonValue(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
 }
 
 async function tenantHandoffService(

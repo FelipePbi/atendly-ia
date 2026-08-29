@@ -24,6 +24,10 @@ O serviço não acessa Minha Agenda nem tabelas de outro serviço. Calendário, 
 - `POST /webhooks/evolution` — inbound autenticado do Evolution Go.
 - `PUT /internal/channel-connections/evolution` — provisiona a relação confiável entre instância, tenant e usuário.
 - `PUT /internal/ai-tenant-config` — sincroniza ativação, tom aprovado e snapshot de negócio usado no inbound direto.
+- `GET /internal/conversations` e `GET /internal/conversations/:id` — inbox e detalhe tenant-scoped.
+- `GET|POST /internal/conversations/:id/messages` — histórico e mensagem manual do owner durante takeover.
+- `POST /internal/conversations/:id/takeover|release|resolve` — lifecycle de handoff.
+- `GET /internal/dashboard` — métricas de conversas e automação para agregação pelo BFF.
 - `POST /internal/evolution/dispatch` — dispatch interno compatível com o BFF durante a transição.
 - `/internal/handoffs` e `/internal/bot/*` — controle de handoff e automação.
 - rotas legais legadas permanecem até o goal de cleanup.

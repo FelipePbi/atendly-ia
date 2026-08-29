@@ -59,6 +59,16 @@ Agenda Atendly persiste serviços, clientes, disponibilidade e appointments no b
 - `POST /internal/appointments`
 - `POST /internal/appointments/:id/reschedule`
 - `POST /internal/appointments/:id/cancel`
+- `GET|PATCH /internal/calendar`
+- `GET|POST /internal/service-catalog` e `PATCH /internal/service-catalog/:id`
+- `GET|POST /internal/customers` e `GET /internal/customers/:id`
+- `GET|PATCH /internal/availability-settings`
+- `POST /internal/time-blocks` e `DELETE /internal/time-blocks/:id`
+- `POST /internal/calendar-integration/connect|reconnect`, `DELETE /internal/calendar-integration` e `GET /internal/calendar-integration`
+- `POST /internal/calendar-migrations/diagnose`, `POST /internal/calendar-migrations` e `GET /internal/calendar-migrations/:id`
+- `GET /internal/dashboard`
+
+Operações não confirmadas no provider externo retornam capacidade indisponível em vez de inventar sucesso. Troca de origem acontece somente por migração assistida concluída, nunca por `PATCH /internal/calendar`.
 
 ## Commands
 

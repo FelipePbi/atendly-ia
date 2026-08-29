@@ -139,7 +139,7 @@ export class AtendlyCalendarProvider implements CalendarProvider {
         });
         return transaction.appointment.create({
           data: {
-            source: "AI",
+            source: input.source ?? "AI",
             startAt: slot.startAt,
             endAt: slot.endAt,
             status: "SCHEDULED",
@@ -284,6 +284,7 @@ export class AtendlyCalendarProvider implements CalendarProvider {
     );
     return {
       id: appointment.id,
+      source: appointment.source,
       date: start.date,
       startTime: start.time,
       endTime: end.time,

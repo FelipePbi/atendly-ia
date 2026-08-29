@@ -4,6 +4,7 @@ import Fastify from "fastify";
 
 import { disconnectPrisma } from "../infrastructure/database/prisma.js";
 import { registerCalendarRoutes } from "../modules/calendar/routes.js";
+import { registerManagementRoutes } from "../modules/internal-api/routes.js";
 import { AppError, toErrorMessage } from "../shared/errors/app-error.js";
 import { registerHealthRoute } from "./health.js";
 
@@ -26,6 +27,7 @@ export async function buildApp() {
 
   await registerHealthRoute(app);
   await registerCalendarRoutes(app);
+  await registerManagementRoutes(app);
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof AppError) {

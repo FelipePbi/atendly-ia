@@ -440,6 +440,7 @@ function toCalendarAppointment(
   const services = appointmentServices(appointment);
   return {
     id: String(appointment.id),
+    source: "INTEGRATION",
     date: appointment.date,
     startTime: appointment.startTime,
     endTime: appointment.endTime,

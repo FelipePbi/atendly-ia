@@ -2,27 +2,27 @@
 
 ## Purpose
 
-Backend público da aplicação web Atendly. Estado atual é transitório: atende contratos legados enquanto arquitetura multi-tenant e serviços de domínio ainda não foram extraídos.
+Backend público da aplicação web Atendly. A Public API V1 é o único contrato web registrado; o BFF resolve tenant pela sessão e orquestra serviços internos sem expor suas APIs ao browser.
 
 ## Current responsibilities
 
 `CURRENT`:
 
-- cadastro, login, logout, sessão por cookie e troca de senha;
+- cadastro, login, logout, sessão por cookie, troca e recuperação de senha;
 - aceite versionado de Termos de Uso e Política de Privacidade;
 - onboarding e perfil;
 - business settings, configurações da atendente e automação;
 - lifecycle da instância WhatsApp, QR/pairing e contatos;
 - webhook Evolution Go legado, preservado durante a transição;
-- inbox, mensagens, pausa/retomada da IA e contatos ignorados;
-- persistência dessas responsabilidades no PostgreSQL próprio;
-- chamadas internas para o AI Orchestrator e chamadas ao Evolution Go.
+- agregação de dashboard e adaptação dos contratos web de conversas, agenda, clientes, serviços e migração;
+- persistência somente de auth, perfil, settings e conexão WhatsApp no PostgreSQL próprio;
+- clients explícitos para AI Orchestrator, Scheduling Service e Evolution Go.
 
-Frontend novo ainda não consome estes endpoints.
+Frontend novo passa a consumir estes endpoints no GOAL 12; até lá seus mocks permanecem inalterados.
 
 ## Transitional responsibilities
 
-Conversation, Message, handoff, persona e partes de execução da IA ainda aparecem no BFF atual. Elas não representam ownership alvo.
+Arquivos legados de Conversation, Message, handoff e persona ainda existem no repositório, mas suas rotas públicas não são registradas. O webhook legado do provider permanece registrado até o cleanup responsável.
 
 Não remova responsabilidades transitórias até goal explícito substituir contratos e consumidores. Schemas atuais também contêm conceitos legados que não devem ser propagados para V1.
 
@@ -76,13 +76,13 @@ Frontend → BFF → explicit service clients
                    └─ Evolution Go
 ```
 
-Clients internos são introduzidos conforme consumidores reais; o client do AI Orchestrator já participa da transição inbound.
+Clients validam respostas com Zod, propagam request ID e contexto tenant confiável, têm timeout e fazem retry limitado somente em leituras. Mutações não são repetidas automaticamente.
 
 ## Database
 
 Prisma schema: `prisma/schema.prisma`. Fundação multi-tenant contém `Tenant`, `TenantMember` e `BusinessProfile`. Cadastro cria `User`, tenant, membership `OWNER`, perfil inicial e aceite legal na mesma transação. Migration do GOAL 03 cria um tenant determinístico para cada usuário legado ainda sem membership.
 
-Conversation, Message, WhatsApp e demais responsabilidades transitórias continuam user-scoped enquanto seus consumidores legados existem. Não representam ownership final nem devem orientar novos recursos de negócio.
+Models legados ainda presentes aguardam o GOAL 17. Não representam ownership atual nem devem orientar novos recursos de negócio.
 
 No alvo, BFF acessa somente tabelas do próprio domínio. Nunca compartilhe Prisma nem consulte DB de Scheduling Service ou AI Orchestrator.
 
@@ -99,58 +99,25 @@ Fluxo tenant atual no BFF:
 session → TenantMember → TenantContext
 ```
 
-JWT continua contendo `userId`. Rotas autenticadas resolvem `TenantContext` server-side; `GET /auth/me` retorna tenant e `BusinessProfile`. Nunca autorize por `tenantId` arbitrário recebido do browser.
+JWT continua contendo `userId`. Rotas autenticadas resolvem `TenantContext` server-side; `GET /v1/auth/session` retorna tenant e `BusinessProfile`. Nunca autorize por `tenantId` arbitrário recebido do browser.
 
-## Current routes
+## Public API V1
 
 Saúde:
 
 - `GET /health`
 - `GET /health/dependencies`
 
-Auth:
+- `/v1/auth/*`: registro, login, logout, sessão, senha e recuperação;
+- `/v1/onboarding*` e `/v1/settings*`: configuração guiada e settings;
+- `/v1/dashboard`: visão agregada;
+- `/v1/conversations*`: inbox, mensagens e handoff;
+- `/v1/calendar*`, `/v1/appointments*`, `/v1/time-blocks*`: agenda;
+- `/v1/customers*` e `/v1/services*`: diretório e catálogo;
+- `/v1/calendar/integration*` e `/v1/calendar/migrations*`: integração e migração assistida;
+- `/v1/whatsapp*`: lifecycle da conexão.
 
-- `POST /auth/register`
-- `POST /auth/login`
-- `POST /auth/logout`
-- `GET /auth/me`
-- `POST /auth/change-password`
-
-Onboarding/settings:
-
-- `GET /onboarding`
-- `PATCH /onboarding/profile`
-- `POST /onboarding/complete`
-- `GET|PATCH /business-settings`
-- `GET|PATCH /virtual-attendant/settings`
-- `GET /virtual-attendant/prompt-preview`
-- `POST /virtual-attendant/persona/import`
-- `GET /virtual-attendant/persona/imports`
-- `POST /virtual-attendant/persona/generate`
-- `GET|PATCH /automation/ai`
-
-WhatsApp/inbox:
-
-- `POST /webhooks/evolution-go`
-- `GET /whatsapp/status`
-- `POST|DELETE /whatsapp/instance`
-- `POST /whatsapp/connect`
-- `GET /whatsapp/qr`
-- `POST /whatsapp/pair`
-- `POST /whatsapp/logout`
-- `GET /whatsapp/contacts`
-- `GET|POST /ignored-contacts`
-- `POST /ignored-contacts/bulk`
-- `DELETE /ignored-contacts/:id`
-- `GET /conversations`
-- `POST /conversations/consolidate`
-- `GET /conversations/:id/messages`
-- `PATCH /conversations/:id`
-- `POST /conversations/:id/messages`
-- `POST /conversations/:id/ai/pause`
-- `POST /conversations/:id/ai/resume`
-
-Lista descreve implementação atual, não contrato Public API V1. Não crie CRUD especulativo; Public API V1 pertence ao GOAL 11.
+O mapa completo entre endpoints e consumidores planejados está em `PUBLIC_API_V1.md`. Fora de `/v1`, apenas health checks e `POST /webhooks/evolution-go` permanecem registrados.
 
 ## Environment
 
@@ -161,8 +128,9 @@ Grupos:
 - runtime/session: `NODE_ENV`, `PORT`, `JWT_*`, `SESSION_COOKIE_NAME`, `COOKIE_*`;
 - persistence: `DATABASE_URL`;
 - browser boundary: `FRONTEND_ORIGIN`, `BFF_PUBLIC_URL`;
-- API interna: `AI_ORCHESTRATOR_BASE_URL`, `INTERNAL_SERVICE_TOKEN`;
+- APIs internas: `AI_ORCHESTRATOR_BASE_URL`, `SCHEDULING_SERVICE_BASE_URL`, `INTERNAL_SERVICE_TOKEN`, `INTERNAL_HTTP_TIMEOUT_MS`, `INTERNAL_HTTP_GET_RETRIES`;
 - Evolution Go: `EVOLUTION_GO_*`, `EVOLUTION_WEBHOOK_SECRET`.
+- recuperação de senha: `PASSWORD_RESET_*`.
 
 Não registre valores dessas variáveis em logs.
 
@@ -186,6 +154,6 @@ Porta padrão: `3002`.
 
 - GOAL 03: multi-tenancy BFF.
 - GOAL 11: Public API V1 orientada por consumidores reais.
-- GOAL 13+: integração progressiva do frontend.
-- Responsabilidades de Conversation/Message/Handoff migram para AI Orchestrator no goal correto.
-- Scheduling permanece fora do domínio do BFF.
+- GOAL 12+: integração progressiva do frontend.
+- Conversation, Message e Handoff pertencem ao AI Orchestrator.
+- Agenda, clientes, serviços e appointments pertencem ao Scheduling Service.

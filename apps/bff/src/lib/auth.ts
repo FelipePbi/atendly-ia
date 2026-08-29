@@ -1,5 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { SignJWT, jwtVerify } from "jose";
+import { jwtVerify, SignJWT } from "jose";
+
 import { env } from "../config/env.js";
 import { AppError } from "./errors.js";
 
@@ -19,7 +20,9 @@ export async function signSession(user: AuthenticatedUser): Promise<string> {
     .sign(secretKey());
 }
 
-export async function verifySessionToken(token: string): Promise<AuthenticatedUser> {
+export async function verifySessionToken(
+  token: string,
+): Promise<AuthenticatedUser> {
   try {
     const { payload } = await jwtVerify(token, secretKey());
     if (!payload.sub || typeof payload.email !== "string") {
@@ -28,7 +31,7 @@ export async function verifySessionToken(token: string): Promise<AuthenticatedUs
 
     return {
       id: payload.sub,
-      email: payload.email
+      email: payload.email,
     };
   } catch (error) {
     if (error instanceof AppError) throw error;
@@ -42,7 +45,7 @@ export function setSessionCookie(reply: FastifyReply, token: string): void {
     secure: env.COOKIE_SECURE || env.COOKIE_SAME_SITE === "none",
     sameSite: env.COOKIE_SAME_SITE,
     path: "/",
-    maxAge: 60 * 60 * 24 * 7
+    maxAge: 60 * 60 * 24 * 7,
   });
 }
 
@@ -52,7 +55,9 @@ export function clearSessionCookie(reply: FastifyReply): void {
 
 export async function requireAuth(request: FastifyRequest): Promise<void> {
   const header = request.headers.authorization;
-  const bearerToken = header?.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : "";
+  const bearerToken = header?.startsWith("Bearer ")
+    ? header.slice("Bearer ".length).trim()
+    : "";
   const cookieToken = request.cookies[env.SESSION_COOKIE_NAME];
   const token = bearerToken || cookieToken;
 

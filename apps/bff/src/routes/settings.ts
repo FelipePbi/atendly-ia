@@ -1,15 +1,27 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+
 import { env } from "../config/env.js";
-import { currentUser, requireAuth } from "../lib/auth.js";
+import { currentUser } from "../lib/auth.js";
 import { businessSettingsDto, instanceDto, settingsDto } from "../lib/dto.js";
 import { AppError } from "../lib/errors.js";
 import { dataResponse, parseBody } from "../lib/http.js";
 import { whatsappPhoneCandidates } from "../lib/phone.js";
 import { getPrisma } from "../lib/prisma.js";
+import {
+  currentTenantContext,
+  requireTenantContext,
+} from "../lib/tenant-context.js";
+import {
+  dispatchToAiOrchestrator,
+  syncAiTenantConfig,
+} from "../services/ai-orchestrator.js";
 import { getEvolutionStatus } from "../services/evolution-go.js";
-import { dispatchToApi } from "../services/internal-api.js";
-import { ensureCustomPersonaGeneration, importPersonaConversations, listPersonaImportsForUser } from "../services/persona.js";
+import {
+  ensureCustomPersonaGeneration,
+  importPersonaConversations,
+  listPersonaImportsForUser,
+} from "../services/persona.js";
 
 const businessSettingsSchema = z.object({
   businessName: z.string().trim().max(160).optional(),
@@ -22,7 +34,7 @@ const businessSettingsSchema = z.object({
   appointmentLookupDays: z.number().int().min(1).max(365).optional(),
   delayPolicy: z.string().trim().max(2000).optional().nullable(),
   cancellationPolicy: z.string().trim().max(2000).optional().nullable(),
-  depositPolicy: z.string().trim().max(2000).optional().nullable()
+  depositPolicy: z.string().trim().max(2000).optional().nullable(),
 });
 
 const virtualAttendantSchema = z.object({
@@ -36,7 +48,7 @@ const virtualAttendantSchema = z.object({
   activationMode: z.enum(["ALWAYS", "AWAY_FROM_WHATSAPP"]).optional(),
   awayTimeoutMinutes: z.number().int().min(1).max(1440).optional().nullable(),
   awayScope: z.enum(["GLOBAL", "CONVERSATION"]).optional().nullable(),
-  virtualAttendantOnboardingCompleted: z.boolean().optional()
+  virtualAttendantOnboardingCompleted: z.boolean().optional(),
 });
 
 const personaImportSchema = z.object({
@@ -45,21 +57,23 @@ const personaImportSchema = z.object({
       z.object({
         name: z.string().trim().min(1),
         size: z.number().int().nonnegative(),
-        text: z.string()
-      })
+        text: z.string(),
+      }),
     )
     .min(1),
-  participantName: z.string().trim().optional().nullable()
+  participantName: z.string().trim().optional().nullable(),
 });
 
-export async function registerSettingsRoutes(app: FastifyInstance): Promise<void> {
+export async function registerSettingsRoutes(
+  app: FastifyInstance,
+): Promise<void> {
   app.addHook("preHandler", async (request) => {
     if (
       request.url.startsWith("/business-settings") ||
       request.url.startsWith("/virtual-attendant") ||
       request.url.startsWith("/automation/ai")
     ) {
-      await requireAuth(request);
+      await requireTenantContext(request);
     }
   });
 
@@ -68,31 +82,66 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
     const settings = await getPrisma().businessSettings.upsert({
       where: { userId: user.id },
       create: { userId: user.id },
-      update: {}
+      update: {},
     });
-    return dataResponse(request, { businessSettings: businessSettingsDto(settings) });
+    return dataResponse(request, {
+      businessSettings: businessSettingsDto(settings),
+    });
   });
 
   app.patch("/business-settings", async (request) => {
     const user = currentUser(request);
+    const tenantContext = currentTenantContext(request);
     const data = parseBody(businessSettingsSchema, request.body);
     const prisma = getPrisma();
-    const settings = await prisma.businessSettings.upsert({
-      where: { userId: user.id },
-      create: { userId: user.id, ...data },
-      update: data
+    const settings = await prisma.$transaction(async (transaction) => {
+      const updatedSettings = await transaction.businessSettings.upsert({
+        where: { userId: user.id },
+        create: { userId: user.id, ...data },
+        update: data,
+      });
+
+      if (typeof data.businessName === "string") {
+        await transaction.userProfile.updateMany({
+          where: { userId: user.id },
+          data: { businessName: data.businessName },
+        });
+        await transaction.tenant.update({
+          where: { id: tenantContext.tenantId },
+          data: { name: data.businessName || "Novo negócio" },
+        });
+      }
+
+      if (
+        typeof data.businessName === "string" ||
+        typeof data.timezone === "string"
+      ) {
+        await transaction.businessProfile.upsert({
+          where: { tenantId: tenantContext.tenantId },
+          create: {
+            tenantId: tenantContext.tenantId,
+            businessName: data.businessName ?? "",
+            timezone: data.timezone ?? "America/Sao_Paulo",
+          },
+          update: {
+            ...(typeof data.businessName === "string"
+              ? { businessName: data.businessName }
+              : {}),
+            ...(typeof data.timezone === "string"
+              ? { timezone: data.timezone }
+              : {}),
+          },
+        });
+      }
+
+      return updatedSettings;
     });
 
-    if (typeof data.businessName === "string") {
-      await prisma.userProfile.updateMany({
-        where: { userId: user.id },
-        data: {
-          businessName: data.businessName
-        }
-      });
-    }
+    await syncCurrentAiTenantConfig(request);
 
-    return dataResponse(request, { businessSettings: businessSettingsDto(settings) });
+    return dataResponse(request, {
+      businessSettings: businessSettingsDto(settings),
+    });
   });
 
   app.get("/virtual-attendant/settings", async (request) => {
@@ -100,7 +149,7 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
     const settings = await getPrisma().userSettings.upsert({
       where: { userId: user.id },
       create: { userId: user.id, aiEnabled: false },
-      update: {}
+      update: {},
     });
     return dataResponse(request, { settings: settingsDto(settings) });
   });
@@ -111,8 +160,9 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
     const settings = await getPrisma().userSettings.upsert({
       where: { userId: user.id },
       create: { userId: user.id, aiEnabled: data.aiEnabled ?? false, ...data },
-      update: data
+      update: data,
     });
+    await syncCurrentAiTenantConfig(request);
     return dataResponse(request, { settings: settingsDto(settings) });
   });
 
@@ -121,14 +171,16 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
     const prisma = getPrisma();
     const [businessSettings, settings] = await Promise.all([
       prisma.businessSettings.findUnique({ where: { userId: user.id } }),
-      prisma.userSettings.findUnique({ where: { userId: user.id } })
+      prisma.userSettings.findUnique({ where: { userId: user.id } }),
     ]);
 
     return dataResponse(request, {
       preview: buildPromptPreview({
-        businessSettings: businessSettings ? businessSettingsDto(businessSettings) : null,
-        settings: settingsDto(settings)
-      })
+        businessSettings: businessSettings
+          ? businessSettingsDto(businessSettings)
+          : null,
+        settings: settingsDto(settings),
+      }),
     });
   });
 
@@ -137,14 +189,14 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
     const data = parseBody(personaImportSchema, request.body);
     const profile = await getPrisma().userProfile.findUnique({
       where: { userId: user.id },
-      select: { businessName: true, fullName: true }
+      select: { businessName: true, fullName: true },
     });
     const result = await importPersonaConversations({
       userId: user.id,
       files: data.files,
       participantName: data.participantName,
       businessName: profile?.businessName,
-      professionalName: profile?.fullName
+      professionalName: profile?.fullName,
     });
     return dataResponse(request, result);
   });
@@ -166,9 +218,12 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
     const settings = await getPrisma().userSettings.upsert({
       where: { userId: user.id },
       create: { userId: user.id, aiEnabled: false },
-      update: {}
+      update: {},
     });
-    return dataResponse(request, { aiEnabled: settings.aiEnabled, settings: settingsDto(settings) });
+    return dataResponse(request, {
+      aiEnabled: settings.aiEnabled,
+      settings: settingsDto(settings),
+    });
   });
 
   app.patch("/automation/ai", async (request) => {
@@ -178,77 +233,147 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
     let automationSync: { skipped: boolean; resumed: number } | null = null;
 
     if (data.aiEnabled) {
-      automationSync = await validateAiCanBeEnabledAndResumeHandoffs(user.id, request.id);
+      automationSync = await validateAiCanBeEnabledAndResumeHandoffs(
+        user.id,
+        request.id,
+      );
     }
 
     const settings = await prisma.userSettings.upsert({
       where: { userId: user.id },
       create: { userId: user.id, aiEnabled: data.aiEnabled },
-      update: { aiEnabled: data.aiEnabled }
+      update: { aiEnabled: data.aiEnabled },
     });
-    return dataResponse(request, { settings: settingsDto(settings), automationSync });
+    await syncCurrentAiTenantConfig(request);
+    return dataResponse(request, {
+      settings: settingsDto(settings),
+      automationSync,
+    });
   });
 }
 
-async function validateAiCanBeEnabledAndResumeHandoffs(userId: string, requestId: string) {
+async function syncCurrentAiTenantConfig(
+  request: Parameters<typeof currentTenantContext>[0],
+): Promise<void> {
+  if (!env.INTERNAL_SERVICE_TOKEN) return;
+
+  const tenant = currentTenantContext(request);
+  const prisma = getPrisma();
+  const [businessSettings, virtualSettings] = await Promise.all([
+    prisma.businessSettings.upsert({
+      where: { userId: tenant.userId },
+      create: { userId: tenant.userId },
+      update: {},
+    }),
+    prisma.userSettings.upsert({
+      where: { userId: tenant.userId },
+      create: { userId: tenant.userId, aiEnabled: false },
+      update: {},
+    }),
+  ]);
+  const virtualSettingsDto = settingsDto(virtualSettings);
+  await syncAiTenantConfig({
+    tenantId: tenant.tenantId,
+    userId: tenant.userId,
+    requestId: request.id,
+    enabled: virtualSettingsDto.aiEnabled,
+    tone:
+      virtualSettingsDto.personaType === "CORPORATE"
+        ? "PROFESSIONAL_OBJECTIVE"
+        : "LIGHT_CLOSE",
+    businessSettings: businessSettingsDto(businessSettings),
+  });
+}
+
+async function validateAiCanBeEnabledAndResumeHandoffs(
+  userId: string,
+  requestId: string,
+) {
   const prisma = getPrisma();
   const virtualSettings = settingsDto(
     await prisma.userSettings.upsert({
       where: { userId },
       create: { userId, aiEnabled: false },
-      update: {}
-    })
+      update: {},
+    }),
   );
 
   if (!virtualSettings.canEnable) {
-    throw new AppError("CONFLICT", virtualSettings.readinessIssues[0] ?? "Complete virtual attendant setup first.", 409, {
-      settings: virtualSettings,
-      readinessIssues: virtualSettings.readinessIssues
-    });
+    throw new AppError(
+      "CONFLICT",
+      virtualSettings.readinessIssues[0] ??
+        "Complete virtual attendant setup first.",
+      409,
+      {
+        settings: virtualSettings,
+        readinessIssues: virtualSettings.readinessIssues,
+      },
+    );
   }
 
   const businessSettings = await prisma.businessSettings.upsert({
     where: { userId },
     create: { userId },
-    update: {}
+    update: {},
   });
   const businessSettingsData = businessSettingsDto(businessSettings);
   if (!businessSettingsData.configured) {
-    throw new AppError("CONFLICT", "Complete business settings before enabling AI.", 409, {
-      businessSettings: businessSettingsData
-    });
+    throw new AppError(
+      "CONFLICT",
+      "Complete business settings before enabling AI.",
+      409,
+      {
+        businessSettings: businessSettingsData,
+      },
+    );
   }
 
   const instance = await prisma.whatsAppInstance.findUnique({
-    where: { userId }
+    where: { userId },
   });
 
   if (!instance) {
     throw new AppError("CONFLICT", "Connect WhatsApp before enabling AI.", 409);
   }
 
-  const status = await getEvolutionStatus(instance.evolutionInstanceToken).catch(() => null);
+  const status = await getEvolutionStatus(
+    instance.evolutionInstanceToken,
+  ).catch(() => null);
   const syncedInstance = await prisma.whatsAppInstance.update({
     where: { id: instance.id },
     data: {
       status: status?.connected ? "CONNECTED" : "DISCONNECTED",
       phoneNumber: status?.phoneNumber ?? instance.phoneNumber,
-      connectedAt: status?.connected && !instance.connectedAt ? new Date() : instance.connectedAt
-    }
+      connectedAt:
+        status?.connected && !instance.connectedAt
+          ? new Date()
+          : instance.connectedAt,
+    },
   });
 
   if (syncedInstance.status !== "CONNECTED") {
-    throw new AppError("CONFLICT", "Connect WhatsApp before enabling AI.", 409, {
-      whatsappInstance: instanceDto(syncedInstance),
-      settings: virtualSettings
-    });
+    throw new AppError(
+      "CONFLICT",
+      "Connect WhatsApp before enabling AI.",
+      409,
+      {
+        whatsappInstance: instanceDto(syncedInstance),
+        settings: virtualSettings,
+      },
+    );
   }
 
   const conversations = await prisma.conversation.findMany({
     where: { userId },
-    select: { contactJid: true }
+    select: { contactJid: true },
   });
-  const phones = [...new Set(conversations.flatMap((conversation) => whatsappPhoneCandidates(conversation.contactJid)))];
+  const phones = [
+    ...new Set(
+      conversations.flatMap((conversation) =>
+        whatsappPhoneCandidates(conversation.contactJid),
+      ),
+    ),
+  ];
   return resumeBotHandoffsInApi({ userId, requestId, phones });
 }
 
@@ -262,10 +387,10 @@ async function resumeBotHandoffsInApi(input: {
     return { skipped: true, resumed: 0 };
   }
 
-  const result = await dispatchToApi("/internal/bot/resume", {
+  const result = await dispatchToAiOrchestrator("/internal/bot/resume", {
     userId: input.userId,
     requestId: input.requestId,
-    body: { phones }
+    body: { phones },
   }).catch(() => null);
 
   if (!result) {
@@ -274,7 +399,9 @@ async function resumeBotHandoffsInApi(input: {
 
   return {
     skipped: false,
-    resumed: isResumeResult(result) ? (result.resumed ?? phones.length) : phones.length
+    resumed: isResumeResult(result)
+      ? (result.resumed ?? phones.length)
+      : phones.length,
   };
 }
 
@@ -296,23 +423,23 @@ function buildPromptPreview(input: {
     blocks: [
       {
         label: "Negocio",
-        value: input.businessSettings?.businessName || "Nao configurado"
+        value: input.businessSettings?.businessName || "Nao configurado",
       },
       {
         label: "Identidade",
         value:
           input.settings.identityMode === "SEPARATE_ASSISTANT"
             ? `Atendente ${input.settings.assistantName || "sem nome definido"}`
-            : "Responder como a profissional"
+            : "Responder como a profissional",
       },
       {
         label: "Persona",
-        value: persona
+        value: persona,
       },
       {
         label: "Ativacao",
-        value: activation
-      }
-    ]
+        value: activation,
+      },
+    ],
   };
 }

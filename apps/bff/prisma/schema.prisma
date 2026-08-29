@@ -88,6 +88,10 @@ enum CustomPersonaStatus {
   NEEDS_PARTICIPANT
 }
 
+enum TenantRole {
+  OWNER
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -105,6 +109,45 @@ model User {
   settings           UserSettings?
   businessSettings   BusinessSettings?
   legalAcceptances   LegalAcceptance[]
+  tenantMemberships  TenantMember[]
+}
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members         TenantMember[]
+  businessProfile BusinessProfile?
+}
+
+model TenantMember {
+  id        String     @id @default(cuid())
+  tenantId  String
+  userId    String
+  role      TenantRole @default(OWNER)
+  createdAt DateTime   @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([userId])
+}
+
+model BusinessProfile {
+  id           String   @id @default(cuid())
+  tenantId     String   @unique
+  businessName String   @default("")
+  category     String?
+  timezone     String   @default("America/Sao_Paulo")
+  language     String   @default("pt-BR")
+  currency     String   @default("BRL")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
 
 model LegalAcceptance {

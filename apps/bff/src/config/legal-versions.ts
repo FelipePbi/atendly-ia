@@ -5,5 +5,5 @@ export {
   PRIVACY_POLICY_VERSION,
   TERMS_EFFECTIVE_DATE,
   TERMS_LAST_UPDATED_DATE,
-  TERMS_VERSION
+  TERMS_VERSION,
 } from "@atendly-ia/legal-contract";

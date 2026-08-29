@@ -3,7 +3,7 @@
 ## Estado
 
 ```text
-NEXT: GOAL 07
+NEXT: GOAL 08
 ```
 
 Este roadmap governa refatoração incremental. Todos os goals começam em `NOT_STARTED`. Esta tarefa de documentação ocorre antes do GOAL 01.
@@ -40,15 +40,15 @@ Evolution Go
 WhatsApp
 ```
 
-AI Orchestrator e Scheduling Service são `TARGET`; ainda não existem como apps separados.
+AI Orchestrator e Scheduling Service já existem como apps separados; goals seguintes evoluem suas capacidades e integram consumidores.
 
 ## Princípios globais
 
 1. Frontend conhece somente BFF.
 2. BFF é backend público web.
 3. Fluxo inbound crítico pode contornar BFF.
-4. AI Orchestrator será owner de Conversation, Message, Handoff e execução da IA.
-5. Scheduling Service será owner de serviços, clientes, calendários, disponibilidade e appointments.
+4. AI Orchestrator é owner de Conversation, Message, Handoff e execução da IA.
+5. Scheduling Service é owner de serviços, clientes, calendários, disponibilidade e appointments.
 6. Evolution Go é transporte WhatsApp.
 7. Cada serviço acessa apenas seu domínio e banco.
 8. Dados operacionais serão tenant-aware; autorização não confia em `tenantId` do browser.
@@ -70,7 +70,7 @@ AI Orchestrator e Scheduling Service são `TARGET`; ainda não existem como apps
 | GOAL 04 | Scheduling Service foundation | GOAL 03 | COMPLETED |
 | GOAL 05 | Minha Agenda CalendarProvider | GOAL 04 | COMPLETED |
 | GOAL 06 | Agenda Atendly CalendarProvider | GOAL 05 | COMPLETED |
-| GOAL 07 | AI Orchestrator multi-tenant | GOAL 06 | NOT_STARTED |
+| GOAL 07 | AI Orchestrator multi-tenant | GOAL 06 | COMPLETED |
 | GOAL 08 | LangChain | GOAL 07 | NOT_STARTED |
 | GOAL 09 | LangGraph | GOAL 08 | NOT_STARTED |
 | GOAL 10 | RAG + pgvector | GOAL 09 | NOT_STARTED |

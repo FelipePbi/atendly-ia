@@ -18,12 +18,13 @@ Resultado central: transformar conversas do WhatsApp em agendamentos reais e vá
 - `apps/frontend`: frontend novo, reconstruído a partir do Open Design; base visual aprovada; ainda usa mocks.
 - `apps/frontend-open-design`: REFERENCE / DESIGN CONTRACT; não é aplicação de produção.
 - `apps/bff`: backend público web atual, com responsabilidades legadas em transição.
-- `apps/api`: aplicação transitória com orchestration de IA e integração Minha Agenda legadas.
+- `apps/ai-orchestrator`: owner multi-tenant de conversas, mensagens, handoff e execução da IA.
+- `apps/scheduling-service`: owner de calendário, serviços, clientes, disponibilidade e appointments.
 - `apps/evolution-go`: transporte/provedor WhatsApp.
 - `apps/health-worker`: monitoramento de saúde.
 - `packages`: hoje contém `legal-contract`; contratos compartilhados adicionais são planejados.
 
-AI Orchestrator e Scheduling Service ainda não existem como apps separados. Backend será refatorado incrementalmente.
+AI Orchestrator e Scheduling Service já existem como apps separados. Backend continua sendo refatorado incrementalmente.
 
 ## Target — arquitetura alvo
 
@@ -177,7 +178,8 @@ Execute checks já existentes e aplicáveis ao app alterado. Intenção final: `
 
 - `apps/frontend/AGENTS.md`: Next.js, Open Design, mocks, data access e UI freeze.
 - `apps/bff/AGENTS.md`: backend público web, tenant resolution e responsabilidades transitórias.
-- `apps/api/AGENTS.md`: aplicação transitória; calendário de extrações e tecnologias futuras.
+- `apps/ai-orchestrator/AGENTS.md`: IA, inbound tenant-aware, tools e tecnologias futuras.
+- `apps/scheduling-service/AGENTS.md`: domínio de agenda e CalendarProviders.
 - `apps/evolution-go/AGENTS.md`: transporte WhatsApp.
 - `apps/health-worker/AGENTS.md`: health monitoring only.
 - `apps/frontend-open-design/AGENTS.md`: contrato histórico de prototipação; preserve diretório.

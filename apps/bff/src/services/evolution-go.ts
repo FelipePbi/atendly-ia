@@ -78,9 +78,18 @@ export type EvolutionContact = {
   businessName: string;
 };
 
-const DEFAULT_SUBSCRIPTIONS = ["MESSAGE", "SEND_MESSAGE", "CONNECTION", "QRCODE"];
+const DEFAULT_SUBSCRIPTIONS = [
+  "MESSAGE",
+  "SEND_MESSAGE",
+  "CONNECTION",
+  "QRCODE",
+];
 
-export async function createEvolutionInstance(input: { name: string; token: string; webhookUrl: string }) {
+export async function createEvolutionInstance(input: {
+  name: string;
+  token: string;
+  webhookUrl: string;
+}) {
   return evolutionFetch<InstanceCreateData>("/instance/create", {
     method: "POST",
     apiKey: requireEnv("EVOLUTION_GO_API_KEY"),
@@ -90,13 +99,16 @@ export async function createEvolutionInstance(input: { name: string; token: stri
       webhook: input.webhookUrl,
       webhookEvents: DEFAULT_SUBSCRIPTIONS,
       advancedSettings: {
-        ignoreGroups: true
-      }
-    }
+        ignoreGroups: true,
+      },
+    },
   });
 }
 
-export async function connectEvolutionInstance(instanceToken: string, webhookUrl: string) {
+export async function connectEvolutionInstance(
+  instanceToken: string,
+  webhookUrl: string,
+) {
   return evolutionFetch("/instance/connect", {
     method: "POST",
     apiKey: instanceToken,
@@ -104,38 +116,51 @@ export async function connectEvolutionInstance(instanceToken: string, webhookUrl
       webhookUrl,
       webhookUrlLocal: webhookUrl,
       subscribe: DEFAULT_SUBSCRIPTIONS,
-      immediate: true
-    }
+      immediate: true,
+    },
   });
 }
 
 export async function getEvolutionQr(instanceToken: string) {
   const response = await evolutionFetch<QrData>("/instance/qr", {
     method: "GET",
-    apiKey: instanceToken
+    apiKey: instanceToken,
   });
   const data = response.data ?? {};
-  const imageQr = stringValue(data.qrcode) ?? stringValue(data.Qrcode) ?? stringValue(data.qr) ?? stringValue(data.Qr) ?? "";
+  const imageQr =
+    stringValue(data.qrcode) ??
+    stringValue(data.Qrcode) ??
+    stringValue(data.qr) ??
+    stringValue(data.Qr) ??
+    "";
   const rawQr = stringValue(data.code) ?? stringValue(data.Code) ?? imageQr;
 
   return {
     raw: response,
     qrcode: normalizeQrDataUrl(imageQr || rawQr),
-    code: rawQr
+    code: rawQr,
   };
 }
 
-export async function pairEvolutionInstance(instanceToken: string, phone: string) {
+export async function pairEvolutionInstance(
+  instanceToken: string,
+  phone: string,
+) {
   const response = await evolutionFetch<PairData>("/instance/pair", {
     method: "POST",
     apiKey: instanceToken,
-    body: { phone }
+    body: { phone },
   });
   const data = response.data ?? {};
-  const pairingCode = stringValue(data.pairingCode) ?? stringValue(data.PairingCode);
+  const pairingCode =
+    stringValue(data.pairingCode) ?? stringValue(data.PairingCode);
 
   if (!pairingCode) {
-    throw new AppError("UPSTREAM_ERROR", "Evolution Go did not return a pairing code.", 502);
+    throw new AppError(
+      "UPSTREAM_ERROR",
+      "Evolution Go did not return a pairing code.",
+      502,
+    );
   }
 
   return { pairingCode };
@@ -144,20 +169,26 @@ export async function pairEvolutionInstance(instanceToken: string, phone: string
 export async function getEvolutionStatus(instanceToken: string) {
   const response = await evolutionFetch<StatusData>("/instance/status", {
     method: "GET",
-    apiKey: instanceToken
+    apiKey: instanceToken,
   });
   const data = response.data ?? {};
-  const transportConnected = booleanValue(data.connected) ?? booleanValue(data.Connected) ?? false;
-  const loggedIn = booleanValue(data.loggedIn) ?? booleanValue(data.LoggedIn) ?? false;
+  const transportConnected =
+    booleanValue(data.connected) ?? booleanValue(data.Connected) ?? false;
+  const loggedIn =
+    booleanValue(data.loggedIn) ?? booleanValue(data.LoggedIn) ?? false;
 
   return {
     raw: response,
     connected: Boolean(transportConnected && loggedIn),
     loggedIn,
     phoneNumber:
-      stringValue(data.myJid) ?? stringValue(data.MyJid) ?? stringValue(data.jid) ?? stringValue(data.Jid) ?? null,
+      stringValue(data.myJid) ??
+      stringValue(data.MyJid) ??
+      stringValue(data.jid) ??
+      stringValue(data.Jid) ??
+      null,
     displayName: stringValue(data.name) ?? stringValue(data.Name) ?? null,
-    statusText: stringValue(data.status) ?? stringValue(data.Status) ?? null
+    statusText: stringValue(data.status) ?? stringValue(data.Status) ?? null,
   };
 }
 
@@ -165,39 +196,55 @@ export async function logoutEvolutionInstance(instanceToken: string) {
   return evolutionFetch("/instance/logout", {
     method: "DELETE",
     apiKey: instanceToken,
-    body: {}
+    body: {},
   });
 }
 
 export async function deleteEvolutionInstance(instanceId: string) {
   return evolutionFetch(`/instance/delete/${encodeURIComponent(instanceId)}`, {
     method: "DELETE",
-    apiKey: requireEnv("EVOLUTION_GO_API_KEY")
+    apiKey: requireEnv("EVOLUTION_GO_API_KEY"),
   });
 }
 
-export async function sendEvolutionText(input: { instanceToken: string; to: string; text: string; correlationId: string }) {
-  const response = await evolutionFetch<SendTextData>(env.EVOLUTION_GO_SEND_TEXT_PATH || "/send/text", {
-    method: "POST",
-    apiKey: input.instanceToken,
-    body: {
-      number: input.to,
-      text: input.text,
-      id: input.correlationId
-    }
-  });
+export async function sendEvolutionText(input: {
+  instanceToken: string;
+  to: string;
+  text: string;
+  correlationId: string;
+}) {
+  const response = await evolutionFetch<SendTextData>(
+    env.EVOLUTION_GO_SEND_TEXT_PATH || "/send/text",
+    {
+      method: "POST",
+      apiKey: input.instanceToken,
+      body: {
+        number: input.to,
+        text: input.text,
+        id: input.correlationId,
+      },
+    },
+  );
   const data = response.data ?? {};
 
   return {
     raw: response,
-    messageId: stringValue(response.messageId) ?? data.messageId ?? data.data?.Info?.ID ?? data.key?.id
+    messageId:
+      stringValue(response.messageId) ??
+      data.messageId ??
+      data.data?.Info?.ID ??
+      data.key?.id,
   };
 }
 
-export async function getEvolutionContacts(instanceToken: string): Promise<EvolutionContact[]> {
-  const response = await evolutionFetch<EvolutionContactData[] | { contacts?: EvolutionContactData[] }>("/user/contacts", {
+export async function getEvolutionContacts(
+  instanceToken: string,
+): Promise<EvolutionContact[]> {
+  const response = await evolutionFetch<
+    EvolutionContactData[] | { contacts?: EvolutionContactData[] }
+  >("/user/contacts", {
     method: "GET",
-    apiKey: instanceToken
+    apiKey: instanceToken,
   });
   const rawContacts = Array.isArray(response.data)
     ? response.data
@@ -205,13 +252,15 @@ export async function getEvolutionContacts(instanceToken: string): Promise<Evolu
       ? response.data.contacts
       : [];
 
-  return rawContacts.map(normalizeEvolutionContact).filter((contact): contact is EvolutionContact => Boolean(contact));
+  return rawContacts
+    .map(normalizeEvolutionContact)
+    .filter((contact): contact is EvolutionContact => Boolean(contact));
 }
 
 export function buildWebhookUrl(): string {
-  const baseUrl = env.BFF_PUBLIC_URL.replace(/\/$/, "");
+  const baseUrl = env.AI_ORCHESTRATOR_BASE_URL.replace(/\/$/, "");
   const token = encodeURIComponent(requireEnv("EVOLUTION_WEBHOOK_SECRET"));
-  return `${baseUrl}/webhooks/evolution-go?token=${token}`;
+  return `${baseUrl}/webhooks/evolution?token=${token}`;
 }
 
 async function evolutionFetch<T>(
@@ -220,28 +269,38 @@ async function evolutionFetch<T>(
     method: "GET" | "POST" | "DELETE";
     apiKey: string;
     body?: unknown;
-  }
+  },
 ): Promise<EvolutionResponse<T>> {
   const url = `${env.EVOLUTION_GO_BASE_URL.replace(/\/$/, "")}${path}`;
   const response = await fetch(url, {
     method: input.method,
     headers: {
       "content-type": "application/json",
-      apikey: input.apiKey
+      apikey: input.apiKey,
     },
-    body: input.body === undefined ? undefined : JSON.stringify(input.body)
+    body: input.body === undefined ? undefined : JSON.stringify(input.body),
   });
 
   const parsed = await parseEvolutionResponse<T>(response);
   if (!response.ok) {
-    const message = parsed.error ?? parsed.message ?? `Evolution Go returned HTTP ${response.status}`;
-    throw new AppError("UPSTREAM_ERROR", message, response.status >= 500 ? 502 : response.status, parsed);
+    const message =
+      parsed.error ??
+      parsed.message ??
+      `Evolution Go returned HTTP ${response.status}`;
+    throw new AppError(
+      "UPSTREAM_ERROR",
+      message,
+      response.status >= 500 ? 502 : response.status,
+      parsed,
+    );
   }
 
   return parsed;
 }
 
-async function parseEvolutionResponse<T>(response: Response): Promise<EvolutionResponse<T>> {
+async function parseEvolutionResponse<T>(
+  response: Response,
+): Promise<EvolutionResponse<T>> {
   const text = await response.text();
   if (!text) return {};
 
@@ -252,24 +311,35 @@ async function parseEvolutionResponse<T>(response: Response): Promise<EvolutionR
   }
 }
 
-function normalizeEvolutionContact(contact: EvolutionContactData): EvolutionContact | null {
+function normalizeEvolutionContact(
+  contact: EvolutionContactData,
+): EvolutionContact | null {
   const jid = stringValue(contact.Jid) ?? stringValue(contact.jid);
   if (!jid) return null;
 
   return {
     jid,
-    phoneNumber: jid.endsWith("@s.whatsapp.net") ? (jid.split("@")[0] ?? null) : null,
-    firstName: stringValue(contact.FirstName) ?? stringValue(contact.firstName) ?? "",
-    fullName: stringValue(contact.FullName) ?? stringValue(contact.fullName) ?? "",
-    pushName: stringValue(contact.PushName) ?? stringValue(contact.pushName) ?? "",
-    businessName: stringValue(contact.BusinessName) ?? stringValue(contact.businessName) ?? ""
+    phoneNumber: jid.endsWith("@s.whatsapp.net")
+      ? (jid.split("@")[0] ?? null)
+      : null,
+    firstName:
+      stringValue(contact.FirstName) ?? stringValue(contact.firstName) ?? "",
+    fullName:
+      stringValue(contact.FullName) ?? stringValue(contact.fullName) ?? "",
+    pushName:
+      stringValue(contact.PushName) ?? stringValue(contact.pushName) ?? "",
+    businessName:
+      stringValue(contact.BusinessName) ??
+      stringValue(contact.businessName) ??
+      "",
   };
 }
 
 function normalizeQrDataUrl(value: string): string {
   if (!value) return "";
   if (value.startsWith("data:image")) return value;
-  if (value.startsWith("iVBOR") || value.length > 500) return `data:image/png;base64,${value}`;
+  if (value.startsWith("iVBOR") || value.length > 500)
+    return `data:image/png;base64,${value}`;
   return value;
 }
 

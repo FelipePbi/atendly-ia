@@ -19,13 +19,16 @@ import {
 } from "../lib/phone.js";
 import { getPrisma } from "../lib/prisma.js";
 import {
+  dispatchToAiOrchestrator,
+  syncEvolutionChannelToAiOrchestrator,
+} from "../services/ai-orchestrator.js";
+import {
   extractConnectedPhone,
   extractQrCode,
   getEvolutionEvent,
   getEvolutionInstanceKey,
   parseEvolutionMessage,
 } from "../services/evolution-webhook-parser.js";
-import { dispatchToApi } from "../services/internal-api.js";
 
 type BackendDispatchOutboundMessage = {
   text: string;
@@ -675,12 +678,37 @@ async function dispatchMessageToBackend(
     return { skipped: true, action: null, outboundMessage: null };
   }
 
+  const payload = recordValue(input.payload);
+  const externalInstanceId =
+    typeof payload?.instanceId === "string"
+      ? payload.instanceId
+      : typeof payload?.instance === "string"
+        ? payload.instance
+        : null;
+  if (!externalInstanceId) {
+    request.log.warn(
+      { userId: input.userId },
+      "Backend dispatch skipped: Evolution instance id missing",
+    );
+    return { skipped: true, action: null, outboundMessage: null };
+  }
+
   try {
-    const result = await dispatchToApi("/internal/evolution/dispatch", {
+    await syncEvolutionChannelToAiOrchestrator({
+      tenantId: membership.tenantId,
       userId: input.userId,
       requestId: request.id,
-      body: { ...input, tenantId: membership.tenantId },
+      externalInstanceId,
     });
+    const result = await dispatchToAiOrchestrator(
+      "/internal/evolution/dispatch",
+      {
+        tenantId: membership.tenantId,
+        userId: input.userId,
+        requestId: request.id,
+        body: input,
+      },
+    );
     const record = recordValue(result);
     return {
       skipped: false,
@@ -703,7 +731,7 @@ async function pauseBotHandoffInBackend(
   if (!env.INTERNAL_SERVICE_TOKEN) return { skipped: true };
 
   try {
-    await dispatchToApi("/internal/handoffs", {
+    await dispatchToAiOrchestrator("/internal/handoffs", {
       userId,
       requestId: request.id,
       body: input,

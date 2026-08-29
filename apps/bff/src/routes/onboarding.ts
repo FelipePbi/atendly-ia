@@ -1,24 +1,40 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { currentUser, requireAuth } from "../lib/auth.js";
-import { instanceDto, onboardingDto, profileDto, settingsDto, userDto } from "../lib/dto.js";
+
+import { currentUser } from "../lib/auth.js";
+import {
+  instanceDto,
+  onboardingDto,
+  profileDto,
+  settingsDto,
+  userDto,
+} from "../lib/dto.js";
 import { AppError } from "../lib/errors.js";
 import { dataResponse, parseBody } from "../lib/http.js";
 import { normalizeWhatsappPhone } from "../lib/phone.js";
 import { getPrisma } from "../lib/prisma.js";
+import {
+  currentTenantContext,
+  requireTenantContext,
+} from "../lib/tenant-context.js";
 import { getEvolutionStatus } from "../services/evolution-go.js";
 
 const profileSchema = z.object({
   fullName: z.string().trim().min(2).max(160),
-  birthDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
+  birthDate: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/),
   sex: z.enum(["MALE", "FEMALE", "OTHER", "PREFER_NOT_TO_SAY"]),
-  businessName: z.string().trim().min(2).max(160)
+  businessName: z.string().trim().min(2).max(160),
 });
 
-export async function registerOnboardingRoutes(app: FastifyInstance): Promise<void> {
+export async function registerOnboardingRoutes(
+  app: FastifyInstance,
+): Promise<void> {
   app.addHook("preHandler", async (request) => {
     if (request.url.startsWith("/onboarding")) {
-      await requireAuth(request);
+      await requireTenantContext(request);
     }
   });
 
@@ -29,8 +45,8 @@ export async function registerOnboardingRoutes(app: FastifyInstance): Promise<vo
       include: {
         profile: true,
         whatsappInstance: true,
-        settings: true
-      }
+        settings: true,
+      },
     });
 
     if (!record) {
@@ -40,44 +56,66 @@ export async function registerOnboardingRoutes(app: FastifyInstance): Promise<vo
     return dataResponse(request, {
       user: userDto(record),
       profile: profileDto(record.profile),
-      onboarding: onboardingDto(record.profile, record.whatsappInstance, record.settings),
+      onboarding: onboardingDto(
+        record.profile,
+        record.whatsappInstance,
+        record.settings,
+      ),
       settings: settingsDto(record.settings),
-      whatsappInstance: instanceDto(record.whatsappInstance)
+      whatsappInstance: instanceDto(record.whatsappInstance),
     });
   });
 
   app.patch("/onboarding/profile", async (request) => {
     const user = currentUser(request);
+    const tenantContext = currentTenantContext(request);
     const data = parseBody(profileSchema, request.body);
     const prisma = getPrisma();
-    const profile = await prisma.userProfile.upsert({
-      where: { userId: user.id },
-      update: {
-        fullName: data.fullName,
-        birthDate: dateOnlyToUtc(data.birthDate),
-        sex: data.sex,
-        businessName: data.businessName
-      },
-      create: {
-        userId: user.id,
-        fullName: data.fullName,
-        birthDate: dateOnlyToUtc(data.birthDate),
-        sex: data.sex,
-        businessName: data.businessName
-      }
+    const profile = await prisma.$transaction(async (transaction) => {
+      const updatedProfile = await transaction.userProfile.upsert({
+        where: { userId: user.id },
+        update: {
+          fullName: data.fullName,
+          birthDate: dateOnlyToUtc(data.birthDate),
+          sex: data.sex,
+          businessName: data.businessName,
+        },
+        create: {
+          userId: user.id,
+          fullName: data.fullName,
+          birthDate: dateOnlyToUtc(data.birthDate),
+          sex: data.sex,
+          businessName: data.businessName,
+        },
+      });
+
+      await transaction.tenant.update({
+        where: { id: tenantContext.tenantId },
+        data: { name: data.businessName },
+      });
+      await transaction.businessProfile.upsert({
+        where: { tenantId: tenantContext.tenantId },
+        create: {
+          tenantId: tenantContext.tenantId,
+          businessName: data.businessName,
+        },
+        update: { businessName: data.businessName },
+      });
+
+      return updatedProfile;
     });
     const [instance, settings] = await Promise.all([
       prisma.whatsAppInstance.findUnique({ where: { userId: user.id } }),
       prisma.userSettings.upsert({
         where: { userId: user.id },
         create: { userId: user.id, aiEnabled: false },
-        update: {}
-      })
+        update: {},
+      }),
     ]);
 
     return dataResponse(request, {
       profile: profileDto(profile),
-      onboarding: onboardingDto(profile, instance, settings)
+      onboarding: onboardingDto(profile, instance, settings),
     });
   });
 
@@ -89,15 +127,19 @@ export async function registerOnboardingRoutes(app: FastifyInstance): Promise<vo
       include: {
         profile: true,
         whatsappInstance: true,
-        settings: true
-      }
+        settings: true,
+      },
     });
 
     if (!record) {
       throw new AppError("NOT_FOUND", "User not found.", 404);
     }
     if (!profileComplete(record.profile)) {
-      throw new AppError("CONFLICT", "Complete profile before finishing onboarding.", 409);
+      throw new AppError(
+        "CONFLICT",
+        "Complete profile before finishing onboarding.",
+        409,
+      );
     }
     const currentProfile = record.profile;
 
@@ -106,27 +148,48 @@ export async function registerOnboardingRoutes(app: FastifyInstance): Promise<vo
       (await prisma.userSettings.upsert({
         where: { userId: user.id },
         create: { userId: user.id, aiEnabled: false },
-        update: {}
+        update: {},
       }));
     if (!settings.virtualAttendantOnboardingCompleted) {
-      throw new AppError("CONFLICT", "Configure virtual attendant before finishing onboarding.", 409);
+      throw new AppError(
+        "CONFLICT",
+        "Configure virtual attendant before finishing onboarding.",
+        409,
+      );
     }
     if (!record.whatsappInstance) {
-      throw new AppError("CONFLICT", "Create and connect WhatsApp before finishing onboarding.", 409);
+      throw new AppError(
+        "CONFLICT",
+        "Create and connect WhatsApp before finishing onboarding.",
+        409,
+      );
     }
 
-    const status = await getEvolutionStatus(record.whatsappInstance.evolutionInstanceToken);
+    const status = await getEvolutionStatus(
+      record.whatsappInstance.evolutionInstanceToken,
+    );
     if (!status.connected) {
-      throw new AppError("CONFLICT", "Scan QR Code and wait for WhatsApp to connect.", 409, {
-        whatsappInstance: instanceDto(record.whatsappInstance)
-      });
+      throw new AppError(
+        "CONFLICT",
+        "Scan QR Code and wait for WhatsApp to connect.",
+        409,
+        {
+          whatsappInstance: instanceDto(record.whatsappInstance),
+        },
+      );
     }
 
-    const connectedPhone = normalizeWhatsappPhone(status.phoneNumber ?? "") || null;
+    const connectedPhone =
+      normalizeWhatsappPhone(status.phoneNumber ?? "") || null;
     if (!connectedPhone) {
-      throw new AppError("CONFLICT", "Could not identify connected WhatsApp phone.", 409, {
-        whatsappInstance: instanceDto(record.whatsappInstance)
-      });
+      throw new AppError(
+        "CONFLICT",
+        "Could not identify connected WhatsApp phone.",
+        409,
+        {
+          whatsappInstance: instanceDto(record.whatsappInstance),
+        },
+      );
     }
 
     const [profile, instance] = await Promise.all([
@@ -135,40 +198,48 @@ export async function registerOnboardingRoutes(app: FastifyInstance): Promise<vo
         data: {
           whatsappPhoneRaw: status.phoneNumber,
           whatsappPhoneNormalized: connectedPhone,
-          onboardingCompletedAt: currentProfile.onboardingCompletedAt ?? new Date()
-        }
+          onboardingCompletedAt:
+            currentProfile.onboardingCompletedAt ?? new Date(),
+        },
       }),
       prisma.whatsAppInstance.update({
         where: { id: record.whatsappInstance.id },
         data: {
           phoneNumber: connectedPhone,
           status: "CONNECTED",
-          connectedAt: record.whatsappInstance.connectedAt ?? new Date()
-        }
-      })
+          connectedAt: record.whatsappInstance.connectedAt ?? new Date(),
+        },
+      }),
     ]);
 
     return dataResponse(request, {
       profile: profileDto(profile),
       onboarding: onboardingDto(profile, instance, settings),
-      whatsappInstance: instanceDto(instance)
+      whatsappInstance: instanceDto(instance),
     });
   });
 }
 
-function profileComplete(profile: {
-  fullName: string;
-  birthDate: Date | null;
-  sex: string;
-  businessName: string;
-} | null): profile is {
+function profileComplete(
+  profile: {
+    fullName: string;
+    birthDate: Date | null;
+    sex: string;
+    businessName: string;
+  } | null,
+): profile is {
   fullName: string;
   birthDate: Date;
   sex: string;
   businessName: string;
   onboardingCompletedAt: Date | null;
 } {
-  return Boolean(profile?.fullName.trim() && profile.birthDate && profile.sex && profile.businessName.trim());
+  return Boolean(
+    profile?.fullName.trim() &&
+    profile.birthDate &&
+    profile.sex &&
+    profile.businessName.trim(),
+  );
 }
 
 function dateOnlyToUtc(value: string): Date {

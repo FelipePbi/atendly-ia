@@ -6,7 +6,7 @@ Web service Node para o Render que expoe `/health` e consulta as rotas publicas 
 
 - `https://atendly-ia-frontend.onrender.com/login`
 - `https://atendly-ia-bff.onrender.com/health`
-- `https://atendimeto-ia.onrender.com/health`
+- `https://atendly-ia-ai-orchestrator.onrender.com/health`
 - `https://evolution-go-4pmo.onrender.com/healthy`
 
 ## Rodar localmente

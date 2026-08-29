@@ -1,0 +1,7 @@
+dist/
+docs/
+node_modules/
+package-lock.json
+src/generated/
+AGENTS.md
+README.md

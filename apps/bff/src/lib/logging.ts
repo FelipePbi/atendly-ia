@@ -1,6 +1,15 @@
-const SENSITIVE_QUERY_KEYS = new Set(["token", "apikey", "apiKey", "key", "secret", "password"]);
+const SENSITIVE_QUERY_KEYS = new Set([
+  "token",
+  "apikey",
+  "apiKey",
+  "key",
+  "secret",
+  "password",
+]);
 
-export function redactRequestUrl(value: string | undefined): string | undefined {
+export function redactRequestUrl(
+  value: string | undefined,
+): string | undefined {
   if (!value) return value;
 
   try {
@@ -16,6 +25,9 @@ export function redactRequestUrl(value: string | undefined): string | undefined 
 
     return changed ? `${url.pathname}${url.search}${url.hash}` : value;
   } catch {
-    return value.replace(/([?&](?:token|apikey|apiKey|key|secret|password)=)[^&]*/g, "$1[REDACTED]");
+    return value.replace(
+      /([?&](?:token|apikey|apiKey|key|secret|password)=)[^&]*/g,
+      "$1[REDACTED]",
+    );
   }
 }

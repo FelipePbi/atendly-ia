@@ -14,8 +14,8 @@ O monorepo está em transição arquitetural.
 
 - Frontend novo já foi reconstruído a partir do Open Design e é base visual aprovada.
 - Frontend ainda usa services e dados mockados; não está integrado ao BFF.
-- BFF e API mantêm responsabilidades legadas que serão separadas por goals sequenciais.
-- Fundação multi-tenant do BFF e Scheduling Service estão implementados. Agenda Atendly e Minha Agenda operam atrás do mesmo `CalendarProvider`; dados operacionais restantes ainda migram por goals. AI Orchestrator separado, LangChain, LangGraph e RAG ainda não existem.
+- BFF ainda mantém cópias e rotas legadas que serão substituídas por goals sequenciais.
+- BFF, Scheduling Service e AI Orchestrator possuem fundações multi-tenant. Agenda Atendly e Minha Agenda operam atrás do mesmo `CalendarProvider`; LangChain, LangGraph e RAG ainda não existem.
 
 ## Apps
 
@@ -24,7 +24,7 @@ O monorepo está em transição arquitetural.
 | Frontend           | `apps/frontend`             | Next.js 16, React 19, TypeScript e CSS próprio; UI nova com mocks                                   |
 | Open Design        | `apps/frontend-open-design` | Contrato visual estático; referência, não serviço de produção                                       |
 | BFF                | `apps/bff`                  | Fastify, TypeScript, Prisma/PostgreSQL, cookie/JWT; backend web transitório                         |
-| API                | `apps/api`                  | Fastify, TypeScript, Prisma/PostgreSQL; AI orchestration transitória e client do Scheduling Service |
+| AI Orchestrator    | `apps/ai-orchestrator`      | Fastify, TypeScript, Prisma/PostgreSQL; conversas, handoff, IA e client do Scheduling Service        |
 | Scheduling Service | `apps/scheduling-service`   | Fastify, TypeScript, Prisma/PostgreSQL; domínio canônico e providers Atendly/Minha Agenda           |
 | Evolution Go       | `apps/evolution-go`         | Provedor/transporte WhatsApp em Go                                                                  |
 | Health worker      | `apps/health-worker`        | Serviço Node de monitoramento de saúde                                                              |
@@ -42,8 +42,8 @@ Browser → apps/frontend → Mock*Service
 Backend legado continua operacional em paralelo:
 
 ```text
-Evolution Go → BFF → apps/api → Evolution Go
-                    ↘ Scheduling Service → Minha Agenda
+Evolution Go → AI Orchestrator → Evolution Go
+                     ↘ Scheduling Service → CalendarProvider
 ```
 
 BFF também expõe auth/session, onboarding, settings, WhatsApp e inbox atuais. Esta descrição é `CURRENT`, não ownership final.
@@ -72,11 +72,11 @@ WhatsApp → Evolution Go → AI Orchestrator
 WhatsApp ← Evolution Go ←─────┘
 ```
 
-Frontend falará exclusivamente com BFF. `scheduling-service` já existe; `ai-orchestrator` separado entra em goal posterior.
+Frontend falará exclusivamente com BFF. `scheduling-service` e `ai-orchestrator` já existem como serviços internos separados.
 
 ## Plano de migração
 
-Migração possui 18 goals estritamente sequenciais. Estado inicial: todos `NOT_STARTED`; próximo trabalho é GOAL 01.
+Migração possui 18 goals estritamente sequenciais. O status e o próximo goal autorizado ficam no roadmap.
 
 Consulte [docs/ROADMAP_INTEGRACAO_V1.md](docs/ROADMAP_INTEGRACAO_V1.md). Não avance goal futuro sem solicitação explícita.
 
@@ -106,7 +106,8 @@ Instale dependências dos apps Node usando lockfiles existentes, a partir da rai
 ```bash
 npm --prefix apps/frontend ci
 npm --prefix apps/bff ci
-npm --prefix apps/api ci
+npm --prefix apps/ai-orchestrator ci
+npm --prefix apps/scheduling-service ci
 npm --prefix apps/health-worker ci
 ```
 
@@ -114,7 +115,8 @@ Copie o `.env.example` de cada app necessário para `.env` e preencha somente va
 
 ```bash
 npm --prefix apps/bff run prisma:generate
-npm --prefix apps/api run prisma:generate
+npm --prefix apps/ai-orchestrator run prisma:generate
+npm --prefix apps/scheduling-service run prisma:generate
 ```
 
 Da raiz, após instalar dependências, rode em terminais separados:
@@ -122,10 +124,10 @@ Da raiz, após instalar dependências, rode em terminais separados:
 ```bash
 npm run dev:frontend
 npm run dev:bff
-npm run dev:api
+npm run dev:ai-orchestrator
 ```
 
-Portas padrão: frontend `3001`, BFF `3002`, API `3000`, Evolution Go `8080`.
+Portas padrão: frontend `3001`, BFF `3002`, AI Orchestrator `3000`, Scheduling Service `3003`, Evolution Go `8080`.
 
 ## Validações
 
@@ -134,7 +136,7 @@ Scripts disponíveis na raiz:
 ```bash
 npm run build:frontend
 npm run build:bff
-npm run build:api
+npm run build:ai-orchestrator
 npm run build:all
 npm run check:health-worker
 npm run test:evolution-go
@@ -148,17 +150,18 @@ Checks adicionais por app estão nos respectivos `package.json` e READMEs. Nem t
 
 - `atendly-ia-frontend` — Node, `apps/frontend`;
 - `atendly-ia-bff` — Node, `apps/bff`;
-- `atendly-ia-api` — Node, `apps/api`;
+- `atendly-ia-ai-orchestrator` — Node, `apps/ai-orchestrator`;
 - `atendly-ia-evolution-go` — Docker, `apps/evolution-go`;
 - `atendly-ia-health-worker` — Node, `apps/health-worker`.
 
-Não há serviços Render separados para AI Orchestrator ou Scheduling Service. Mudanças de deploy pertencem aos goals posteriores.
+O Scheduling Service ainda não possui definição própria neste blueprint; sua publicação será concluída no goal de deploy.
 
 ## Documentação
 
 - [docs/README.md](docs/README.md) — índice documental.
 - [apps/frontend/README.md](apps/frontend/README.md) — frontend atual.
 - [apps/bff/README.md](apps/bff/README.md) — BFF atual e alvo.
-- [apps/api/README.md](apps/api/README.md) — aplicação transitória.
+- [apps/ai-orchestrator/README.md](apps/ai-orchestrator/README.md) — conversas e execução da IA.
+- [apps/scheduling-service/README.md](apps/scheduling-service/README.md) — domínio de agenda.
 - [apps/evolution-go/README.md](apps/evolution-go/README.md) — provedor WhatsApp.
 - [apps/health-worker/README.md](apps/health-worker/README.md) — monitor de saúde.

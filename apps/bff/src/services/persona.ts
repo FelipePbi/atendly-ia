@@ -1,4 +1,7 @@
-import type { CustomPersonaStatus, PersonaConversationImport } from "../generated/prisma/client.js";
+import type {
+  CustomPersonaStatus,
+  PersonaConversationImport,
+} from "../generated/prisma/client.js";
 import { settingsDto } from "../lib/dto.js";
 import { AppError } from "../lib/errors.js";
 import { getPrisma } from "../lib/prisma.js";
@@ -43,11 +46,13 @@ export type PersonaImportDto = {
   createdAt: string;
 };
 
-export async function listPersonaImportsForUser(userId: string): Promise<PersonaImportDto[]> {
+export async function listPersonaImportsForUser(
+  userId: string,
+): Promise<PersonaImportDto[]> {
   const imports = await getPrisma().personaConversationImport.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
-    take: 20
+    take: 20,
   });
   return imports.map(personaImportDto);
 }
@@ -67,8 +72,8 @@ export async function importPersonaConversations(input: {
       userId: input.userId,
       aiEnabled: false,
       activationMode: "ALWAYS",
-      customPersonaStatus: "PROCESSING"
-    }
+      customPersonaStatus: "PROCESSING",
+    },
   });
 
   const parsedFiles: ParsedConversationFile[] = [];
@@ -90,7 +95,7 @@ export async function importPersonaConversations(input: {
         fileSize,
         status: "FAILED",
         extractedCount: 0,
-        errorMessage: "Send only WhatsApp .txt export files."
+        errorMessage: "Send only WhatsApp .txt export files.",
       });
       continue;
     }
@@ -101,7 +106,7 @@ export async function importPersonaConversations(input: {
         fileSize,
         status: "FAILED",
         extractedCount: 0,
-        errorMessage: "TXT file exceeds the technical size limit."
+        errorMessage: "TXT file exceeds the technical size limit.",
       });
       continue;
     }
@@ -113,7 +118,7 @@ export async function importPersonaConversations(input: {
         fileSize,
         status: "FAILED",
         extractedCount: 0,
-        errorMessage: "No readable text messages were found in this file."
+        errorMessage: "No readable text messages were found in this file.",
       });
       continue;
     }
@@ -124,19 +129,22 @@ export async function importPersonaConversations(input: {
       fileSize,
       status: "PROCESSING",
       extractedCount: parsed.messages.length,
-      errorMessage: null
+      errorMessage: null,
     });
   }
 
   if (parsedFiles.length < MIN_CUSTOM_PERSONA_FILES) {
-    const imports = await persistPersonaImportRows(input.userId, markValidRows(importRows, "WAITING_UPLOADS"));
+    const imports = await persistPersonaImportRows(
+      input.userId,
+      markValidRows(importRows, "WAITING_UPLOADS"),
+    );
     const settings = await prisma.userSettings.update({
       where: { userId: input.userId },
       data: {
         customPersonaStatus: "WAITING_UPLOADS",
         customPersonaProfileJson: undefined,
-        customPersonaGeneratedAt: null
-      }
+        customPersonaGeneratedAt: null,
+      },
     });
 
     return {
@@ -146,7 +154,7 @@ export async function importPersonaConversations(input: {
       requiredCount: MIN_CUSTOM_PERSONA_FILES,
       participantSelectionRequired: false,
       participants: collectParticipants(parsedFiles),
-      error: "Import at least 3 valid WhatsApp TXT conversations."
+      error: "Import at least 3 valid WhatsApp TXT conversations.",
     };
   }
 
@@ -154,18 +162,21 @@ export async function importPersonaConversations(input: {
     parsedFiles,
     participantName: input.participantName,
     businessName: input.businessName,
-    professionalName: input.professionalName
+    professionalName: input.professionalName,
   });
 
   if (!ownerParticipant) {
-    const imports = await persistPersonaImportRows(input.userId, markValidRows(importRows, "NEEDS_PARTICIPANT"));
+    const imports = await persistPersonaImportRows(
+      input.userId,
+      markValidRows(importRows, "NEEDS_PARTICIPANT"),
+    );
     const settings = await prisma.userSettings.update({
       where: { userId: input.userId },
       data: {
         customPersonaStatus: "NEEDS_PARTICIPANT",
         customPersonaProfileJson: undefined,
-        customPersonaGeneratedAt: null
-      }
+        customPersonaGeneratedAt: null,
+      },
     });
 
     return {
@@ -174,23 +185,28 @@ export async function importPersonaConversations(input: {
       importedCount: parsedFiles.length,
       requiredCount: MIN_CUSTOM_PERSONA_FILES,
       participantSelectionRequired: true,
-      participants: collectParticipants(parsedFiles)
+      participants: collectParticipants(parsedFiles),
     };
   }
 
   const ownerMessages = parsedFiles.flatMap((file) =>
-    file.messages.filter((message) => sameParticipant(message.author, ownerParticipant)).map((message) => message.text)
+    file.messages
+      .filter((message) => sameParticipant(message.author, ownerParticipant))
+      .map((message) => message.text),
   );
   const profile = buildCustomPersonaProfile(ownerMessages);
-  const imports = await persistPersonaImportRows(input.userId, markValidRows(importRows, "READY"));
+  const imports = await persistPersonaImportRows(
+    input.userId,
+    markValidRows(importRows, "READY"),
+  );
   const settings = await prisma.userSettings.update({
     where: { userId: input.userId },
     data: {
       personaType: "CUSTOM",
       customPersonaStatus: "READY",
       customPersonaProfileJson: profile,
-      customPersonaGeneratedAt: new Date()
-    }
+      customPersonaGeneratedAt: new Date(),
+    },
   });
 
   return {
@@ -199,7 +215,7 @@ export async function importPersonaConversations(input: {
     importedCount: parsedFiles.length,
     requiredCount: MIN_CUSTOM_PERSONA_FILES,
     participantSelectionRequired: false,
-    participants: collectParticipants(parsedFiles)
+    participants: collectParticipants(parsedFiles),
   };
 }
 
@@ -211,17 +227,22 @@ export async function ensureCustomPersonaGeneration(userId: string) {
       userId,
       aiEnabled: false,
       activationMode: "ALWAYS",
-      customPersonaStatus: "NOT_STARTED"
-    }
+      customPersonaStatus: "NOT_STARTED",
+    },
   });
   const dto = settingsDto(settings);
   if (dto.customPersonaStatus === "READY" && dto.customPersonaProfile) {
     return dto;
   }
 
-  throw new AppError("CONFLICT", "Import at least 3 valid TXT files before generating a custom persona.", 409, {
-    customPersonaStatus: dto.customPersonaStatus
-  });
+  throw new AppError(
+    "CONFLICT",
+    "Import at least 3 valid TXT files before generating a custom persona.",
+    409,
+    {
+      customPersonaStatus: dto.customPersonaStatus,
+    },
+  );
 }
 
 function personaImportDto(row: PersonaConversationImport): PersonaImportDto {
@@ -232,7 +253,7 @@ function personaImportDto(row: PersonaConversationImport): PersonaImportDto {
     status: isCustomPersonaStatus(row.status) ? row.status : "FAILED",
     extractedCount: row.extractedCount,
     errorMessage: row.errorMessage,
-    createdAt: row.createdAt.toISOString()
+    createdAt: row.createdAt.toISOString(),
   };
 }
 
@@ -244,13 +265,13 @@ async function persistPersonaImportRows(
     status: CustomPersonaStatus;
     extractedCount: number | null;
     errorMessage: string | null;
-  }>
+  }>,
 ): Promise<PersonaImportDto[]> {
   await getPrisma().personaConversationImport.createMany({
     data: rows.map((row) => ({
       userId,
-      ...row
-    }))
+      ...row,
+    })),
   });
   return listPersonaImportsForUser(userId);
 }
@@ -263,12 +284,18 @@ function markValidRows(
     extractedCount: number | null;
     errorMessage: string | null;
   }>,
-  status: CustomPersonaStatus
+  status: CustomPersonaStatus,
 ) {
-  return rows.map((row) => (row.status === "PROCESSING" ? { ...row, status } : row));
+  return rows.map((row) =>
+    row.status === "PROCESSING" ? { ...row, status } : row,
+  );
 }
 
-function parseWhatsAppTxtExport(fileName: string, fileSize: number, content: string): ParsedConversationFile {
+function parseWhatsAppTxtExport(
+  fileName: string,
+  fileSize: number,
+  content: string,
+): ParsedConversationFile {
   const messages: ParsedWhatsAppMessage[] = [];
   const lines = content.replace(/^\uFEFF/, "").split(/\r?\n/);
   let current: ParsedWhatsAppMessage | null = null;
@@ -297,7 +324,7 @@ function parseWhatsAppTxtExport(fileName: string, fileSize: number, content: str
     fileName,
     fileSize,
     messages,
-    participants: [...new Set(messages.map((message) => message.author))]
+    participants: [...new Set(messages.map((message) => message.author))],
   };
 }
 
@@ -305,7 +332,7 @@ function parseWhatsAppMessageLine(line: string): ParsedWhatsAppMessage | null {
   const patterns = [
     /^\[(?:\d{1,2}\/\d{1,2}\/\d{2,4}),?\s+\d{1,2}:\d{2}(?::\d{2})?\]\s*([^:]+):\s*(.+)$/u,
     /^(?:\d{1,2}\/\d{1,2}\/\d{2,4}),?\s+\d{1,2}:\d{2}(?::\d{2})?\s*[-–]\s*([^:]+):\s*(.+)$/u,
-    /^(?:\d{4}-\d{2}-\d{2}),?\s+\d{1,2}:\d{2}(?::\d{2})?\s*[-–]\s*([^:]+):\s*(.+)$/u
+    /^(?:\d{4}-\d{2}-\d{2}),?\s+\d{1,2}:\d{2}(?::\d{2})?\s*[-–]\s*([^:]+):\s*(.+)$/u,
   ];
 
   for (const pattern of patterns) {
@@ -313,7 +340,7 @@ function parseWhatsAppMessageLine(line: string): ParsedWhatsAppMessage | null {
     if (match?.[1] && match[2]) {
       return {
         author: match[1].trim(),
-        text: match[2].trim()
+        text: match[2].trim(),
       };
     }
   }
@@ -352,7 +379,9 @@ function isIgnoredMessageText(text: string): boolean {
 }
 
 function collectParticipants(files: ParsedConversationFile[]): string[] {
-  return [...new Set(files.flatMap((file) => file.participants))].sort((a, b) => a.localeCompare(b));
+  return [...new Set(files.flatMap((file) => file.participants))].sort((a, b) =>
+    a.localeCompare(b),
+  );
 }
 
 function resolveOwnerParticipant(input: {
@@ -366,13 +395,23 @@ function resolveOwnerParticipant(input: {
 
   const explicit = input.participantName?.trim();
   if (explicit) {
-    return participants.find((participant) => sameParticipant(participant, explicit)) ?? null;
+    return (
+      participants.find((participant) =>
+        sameParticipant(participant, explicit),
+      ) ?? null
+    );
   }
 
-  const hints = [input.professionalName, input.businessName].map((value) => normalizeParticipant(value ?? "")).filter(Boolean);
+  const hints = [input.professionalName, input.businessName]
+    .map((value) => normalizeParticipant(value ?? ""))
+    .filter(Boolean);
   for (const participant of participants) {
     const normalized = normalizeParticipant(participant);
-    if (hints.some((hint) => normalized.includes(hint) || hint.includes(normalized))) {
+    if (
+      hints.some(
+        (hint) => normalized.includes(hint) || hint.includes(normalized),
+      )
+    ) {
       return participant;
     }
   }
@@ -383,21 +422,46 @@ function resolveOwnerParticipant(input: {
 function buildCustomPersonaProfile(messages: string[]): CustomPersonaProfile {
   const cleanMessages = messages.map(cleanVirtualAttendantText).filter(Boolean);
   const totalMessages = cleanMessages.length || 1;
-  const averageLength = cleanMessages.reduce((sum, message) => sum + message.length, 0) / totalMessages;
-  const emojiCount = cleanMessages.reduce((sum, message) => sum + countEmojis(message), 0);
+  const averageLength =
+    cleanMessages.reduce((sum, message) => sum + message.length, 0) /
+    totalMessages;
+  const emojiCount = cleanMessages.reduce(
+    (sum, message) => sum + countEmojis(message),
+    0,
+  );
   const emojiRatio = emojiCount / totalMessages;
-  const formalCount = countMatches(cleanMessages, /\b(senhor|senhora|por gentileza|agradeco|agradeço|estou a disposicao|estou à disposição)\b/gi);
-  const informalCount = countMatches(cleanMessages, /\b(oii+|ta|tá|beleza|combinado|querida|amor|flor)\b/gi);
+  const formalCount = countMatches(
+    cleanMessages,
+    /\b(senhor|senhora|por gentileza|agradeco|agradeço|estou a disposicao|estou à disposição)\b/gi,
+  );
+  const informalCount = countMatches(
+    cleanMessages,
+    /\b(oii+|ta|tá|beleza|combinado|querida|amor|flor)\b/gi,
+  );
   const greetingExpressions = topExpressions(
-    cleanMessages.filter((message) => /^(oi|ola|olá|bom dia|boa tarde|boa noite|oie|oii)/i.test(message)),
-    4
+    cleanMessages.filter((message) =>
+      /^(oi|ola|olá|bom dia|boa tarde|boa noite|oie|oii)/i.test(message),
+    ),
+    4,
   );
   const commonExpressions = topExpressions(cleanMessages, 8);
 
   const formalityLevel =
-    formalCount > informalCount * 1.4 ? "formal" : informalCount > formalCount * 1.4 ? "informal" : "balanced";
-  const emojiUsage = emojiRatio === 0 ? "none" : emojiRatio < 0.25 ? "low" : emojiRatio < 0.8 ? "moderate" : "high";
-  const messageLengthPreference = averageLength < 80 ? "short" : averageLength > 180 ? "long" : "medium";
+    formalCount > informalCount * 1.4
+      ? "formal"
+      : informalCount > formalCount * 1.4
+        ? "informal"
+        : "balanced";
+  const emojiUsage =
+    emojiRatio === 0
+      ? "none"
+      : emojiRatio < 0.25
+        ? "low"
+        : emojiRatio < 0.8
+          ? "moderate"
+          : "high";
+  const messageLengthPreference =
+    averageLength < 80 ? "short" : averageLength > 180 ? "long" : "medium";
 
   return {
     greetingStyle: greetingExpressions.length
@@ -406,22 +470,26 @@ function buildCustomPersonaProfile(messages: string[]): CustomPersonaProfile {
     formalityLevel,
     emojiUsage,
     commonExpressions,
-    schedulingStyle: "Conduz para o agendamento aos poucos, confirmando servico, dia, horario e valor antes de fechar.",
-    objectionHandlingStyle: "Responde duvidas com calma, acolhe insegurancas e evita pressionar a cliente.",
-    closingStyle: "Finaliza confirmando proximos passos e mantendo abertura para a cliente chamar de novo.",
-    persuasionStyle: "Usa persuasao leve, baseada em ajuda e clareza, sem prometer disponibilidade nao confirmada.",
+    schedulingStyle:
+      "Conduz para o agendamento aos poucos, confirmando servico, dia, horario e valor antes de fechar.",
+    objectionHandlingStyle:
+      "Responde duvidas com calma, acolhe insegurancas e evita pressionar a cliente.",
+    closingStyle:
+      "Finaliza confirmando proximos passos e mantendo abertura para a cliente chamar de novo.",
+    persuasionStyle:
+      "Usa persuasao leve, baseada em ajuda e clareza, sem prometer disponibilidade nao confirmada.",
     messageLengthPreference,
     doList: [
       "Manter portugues brasileiro natural.",
       "Usar uma pergunta principal por vez.",
       "Adaptar vocabulario as expressoes frequentes do negocio.",
-      "Confirmar informacoes antes de agendar."
+      "Confirmar informacoes antes de agendar.",
     ],
     avoidList: [
       "Copiar mensagens sensiveis das conversas importadas.",
       "Exagerar em emojis ou exclamacoes.",
       "Inventar precos, servicos, politicas ou disponibilidade.",
-      "Repetir o nome da IA em todas as mensagens."
+      "Repetir o nome da IA em todas as mensagens.",
     ],
     generatedPersonaInstructions: [
       `Use um tom ${formalityLevel === "formal" ? "profissional e claro" : formalityLevel === "informal" ? "leve, proximo e natural" : "equilibrado, simpatico e profissional"}.`,
@@ -433,10 +501,12 @@ function buildCustomPersonaProfile(messages: string[]): CustomPersonaProfile {
           : emojiUsage === "moderate"
             ? "Use emojis com moderacao."
             : "Use emojis com cuidado para nao parecer exagerado.",
-      commonExpressions.length ? `Expressoes recorrentes que podem inspirar o estilo: ${commonExpressions.join(", ")}.` : ""
+      commonExpressions.length
+        ? `Expressoes recorrentes que podem inspirar o estilo: ${commonExpressions.join(", ")}.`
+        : "",
     ]
       .filter(Boolean)
-      .join(" ")
+      .join(" "),
   };
 }
 
@@ -458,7 +528,10 @@ function topExpressions(messages: string[], limit: number): string[] {
 }
 
 function countMatches(messages: string[], regex: RegExp): number {
-  return messages.reduce((sum, message) => sum + (message.match(regex)?.length ?? 0), 0);
+  return messages.reduce(
+    (sum, message) => sum + (message.match(regex)?.length ?? 0),
+    0,
+  );
 }
 
 function countEmojis(value: string): number {
@@ -482,10 +555,13 @@ function normalizeParticipant(value: string): string {
 }
 
 function cleanVirtualAttendantText(value: string | null | undefined): string {
-  return (value ?? "")
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
-    .replace(/\s+\n/g, "\n")
-    .trim();
+  return (
+    (value ?? "")
+      // eslint-disable-next-line no-control-regex -- Remove unsafe control bytes from imported text.
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+      .replace(/\s+\n/g, "\n")
+      .trim()
+  );
 }
 
 function isCustomPersonaStatus(value: unknown): value is CustomPersonaStatus {

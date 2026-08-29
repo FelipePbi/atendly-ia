@@ -32,10 +32,22 @@ export type ParsedEvolutionMessage = {
 type RecordValue = Record<string, unknown>;
 
 export function getEvolutionEvent(payload: unknown): EvolutionWebhookEvent {
-  const raw = (stringValue(recordValue(payload)?.event) ?? "").replace(/[\s.-]/g, "_").toUpperCase();
+  const raw = (stringValue(recordValue(payload)?.event) ?? "")
+    .replace(/[\s.-]/g, "_")
+    .toUpperCase();
 
-  if (raw === "MESSAGE" || raw === "MESSAGES_UPSERT" || raw === "MESSAGE_UPSERT") return "MESSAGE";
-  if (raw === "SENDMESSAGE" || raw === "SEND_MESSAGE" || raw === "SENDSTATUS" || raw === "SEND_STATUS") {
+  if (
+    raw === "MESSAGE" ||
+    raw === "MESSAGES_UPSERT" ||
+    raw === "MESSAGE_UPSERT"
+  )
+    return "MESSAGE";
+  if (
+    raw === "SENDMESSAGE" ||
+    raw === "SEND_MESSAGE" ||
+    raw === "SENDSTATUS" ||
+    raw === "SEND_STATUS"
+  ) {
     return "SEND_MESSAGE";
   }
   if (raw === "QRCODE" || raw === "QR_CODE") return "QRCODE";
@@ -80,7 +92,8 @@ export function extractQrCode(payload: unknown): string | null {
 
   if (!value) return null;
   if (value.startsWith("data:image")) return value;
-  if (value.startsWith("iVBOR") || value.length > 500) return `data:image/png;base64,${value}`;
+  if (value.startsWith("iVBOR") || value.length > 500)
+    return `data:image/png;base64,${value}`;
   return value;
 }
 
@@ -99,7 +112,9 @@ export function extractConnectedPhone(payload: unknown): string | null {
   );
 }
 
-export function parseEvolutionMessage(payload: unknown): ParsedEvolutionMessage | null {
+export function parseEvolutionMessage(
+  payload: unknown,
+): ParsedEvolutionMessage | null {
   const root = recordValue(payload);
   const data = recordValue(root?.data);
   const info = recordValue(data?.Info) ?? recordValue(data?.info);
@@ -107,20 +122,32 @@ export function parseEvolutionMessage(payload: unknown): ParsedEvolutionMessage 
   const key = recordValue(data?.key);
   const event = getEvolutionEvent(payload);
 
-  const externalMessageId = stringValue(info?.ID) || stringValue(info?.id) || stringValue(key?.id);
-  const chat = stringValue(info?.Chat) || stringValue(info?.chat) || stringValue(key?.remoteJid);
+  const externalMessageId =
+    stringValue(info?.ID) || stringValue(info?.id) || stringValue(key?.id);
+  const chat =
+    stringValue(info?.Chat) ||
+    stringValue(info?.chat) ||
+    stringValue(key?.remoteJid);
   const fromMe =
     booleanValue(info?.IsFromMe) ??
     booleanValue(info?.fromMe) ??
     booleanValue(key?.fromMe) ??
     event === "SEND_MESSAGE";
-  const sender = stringValue(info?.Sender) || stringValue(info?.sender) || stringValue(key?.participant);
+  const sender =
+    stringValue(info?.Sender) ||
+    stringValue(info?.sender) ||
+    stringValue(key?.participant);
   const contactJid = chat || sender;
-  const isGroup = Boolean(booleanValue(info?.IsGroup) ?? booleanValue(info?.isGroup) ?? chat?.endsWith("@g.us"));
+  const isGroup = Boolean(
+    booleanValue(info?.IsGroup) ??
+    booleanValue(info?.isGroup) ??
+    chat?.endsWith("@g.us"),
+  );
 
   if (!externalMessageId || !contactJid) return null;
 
-  const mediaType = stringValue(info?.MediaType) || stringValue(info?.mediaType);
+  const mediaType =
+    stringValue(info?.MediaType) || stringValue(info?.mediaType);
   const infoType = stringValue(info?.Type) || stringValue(info?.type);
   const contentText = extractText(message);
   const type = resolveMessageType(infoType, mediaType, message, contentText);
@@ -128,18 +155,20 @@ export function parseEvolutionMessage(payload: unknown): ParsedEvolutionMessage 
     stringValue(info?.Timestamp) ||
       stringValue(info?.timestamp) ||
       stringValue(data?.messageTimestamp) ||
-      stringValue(data?.timestamp)
+      stringValue(data?.timestamp),
   );
 
   return {
     externalMessageId,
     contactJid,
-    contactName: stringValue(info?.PushName) || stringValue(data?.pushName) || null,
+    contactName:
+      stringValue(info?.PushName) || stringValue(data?.pushName) || null,
     profilePictureUrl: extractProfilePictureUrl(payload),
     fromMe,
     isGroup,
     senderJid: sender || chat || null,
-    senderName: stringValue(info?.PushName) || stringValue(data?.pushName) || null,
+    senderName:
+      stringValue(info?.PushName) || stringValue(data?.pushName) || null,
     type,
     contentText,
     mediaType: mediaType || null,
@@ -151,8 +180,9 @@ export function parseEvolutionMessage(payload: unknown): ParsedEvolutionMessage 
       stringValue(recordValue(message?.documentMessage)?.url) ||
       stringValue(recordValue(message?.DocumentMessage)?.URL) ||
       null,
-    mediaBase64: stringValue(message?.base64) || stringValue(message?.mediaBase64) || null,
-    timestamp
+    mediaBase64:
+      stringValue(message?.base64) || stringValue(message?.mediaBase64) || null,
+    timestamp,
   };
 }
 
@@ -208,13 +238,28 @@ function resolveMessageType(
   infoType: string | null,
   mediaType: string | null,
   message: RecordValue | null,
-  contentText: string | null
+  contentText: string | null,
 ): MessageType {
   const source = `${infoType ?? ""} ${mediaType ?? ""}`.toLowerCase();
 
-  if (source.includes("audio") || message?.audioMessage || message?.AudioMessage) return "AUDIO";
-  if (source.includes("image") || message?.imageMessage || message?.ImageMessage) return "IMAGE";
-  if (source.includes("document") || message?.documentMessage || message?.DocumentMessage) return "DOCUMENT";
+  if (
+    source.includes("audio") ||
+    message?.audioMessage ||
+    message?.AudioMessage
+  )
+    return "AUDIO";
+  if (
+    source.includes("image") ||
+    message?.imageMessage ||
+    message?.ImageMessage
+  )
+    return "IMAGE";
+  if (
+    source.includes("document") ||
+    message?.documentMessage ||
+    message?.DocumentMessage
+  )
+    return "DOCUMENT";
   if (contentText) return "TEXT";
 
   return "UNKNOWN";
@@ -233,7 +278,9 @@ function parseTimestamp(value: string | null): Date {
 }
 
 function recordValue(value: unknown): RecordValue | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as RecordValue) : null;
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as RecordValue)
+    : null;
 }
 
 function stringValue(value: unknown): string | null {

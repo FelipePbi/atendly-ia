@@ -13,10 +13,10 @@ Backend público da aplicação web Atendly. Estado atual é transitório: atend
 - onboarding e perfil;
 - business settings, configurações da atendente e automação;
 - lifecycle da instância WhatsApp, QR/pairing e contatos;
-- webhook Evolution Go;
+- webhook Evolution Go legado, preservado durante a transição;
 - inbox, mensagens, pausa/retomada da IA e contatos ignorados;
 - persistência dessas responsabilidades no PostgreSQL próprio;
-- chamadas internas para `apps/api` e chamadas ao Evolution Go.
+- chamadas internas para o AI Orchestrator e chamadas ao Evolution Go.
 
 Frontend novo ainda não consome estes endpoints.
 
@@ -39,6 +39,8 @@ Não remova responsabilidades transitórias até goal explícito substituir cont
 - clients de serviços internos;
 - lifecycle/configuração WhatsApp.
 
+Ao criar ou reconectar uma instância, o BFF provisiona `ChannelConnection`, sincroniza a configuração tenant-aware da IA e aponta o webhook de mensagens para o AI Orchestrator.
+
 BFF não será owner de Conversation, Message, Handoff, Appointment, Availability, scheduling, RAG ou LLM orchestration.
 
 ## Stack
@@ -58,11 +60,11 @@ BFF não será owner de Conversation, Message, Handoff, Appointment, Availabilit
 `CURRENT`:
 
 ```text
-web client (legado)
-       ↓
-      BFF ──→ PostgreSQL do BFF
-       ├────→ apps/api
-       └────→ Evolution Go
+web client (legado) → BFF → PostgreSQL do BFF
+                       ├─→ AI Orchestrator
+                       └─→ Evolution Go
+
+Evolution Go → AI Orchestrator
 ```
 
 `TARGET`:
@@ -74,13 +76,13 @@ Frontend → BFF → explicit service clients
                    └─ Evolution Go
 ```
 
-Clients alvo serão `AiOrchestratorClient`, `SchedulingClient` e `EvolutionClient`, introduzidos apenas nos goals correspondentes.
+Clients internos são introduzidos conforme consumidores reais; o client do AI Orchestrator já participa da transição inbound.
 
 ## Database
 
-Prisma schema: `prisma/schema.prisma`. Banco atual contém User, legal acceptance, perfil/settings, WhatsAppInstance, Conversation, Message, ignored contacts e suppression logs.
+Prisma schema: `prisma/schema.prisma`. Fundação multi-tenant contém `Tenant`, `TenantMember` e `BusinessProfile`. Cadastro cria `User`, tenant, membership `OWNER`, perfil inicial e aceite legal na mesma transação. Migration do GOAL 03 cria um tenant determinístico para cada usuário legado ainda sem membership.
 
-Modelo ainda é majoritariamente user-scoped, não tenant-aware. Fundação multi-tenant pertence ao GOAL 03.
+Conversation, Message, WhatsApp e demais responsabilidades transitórias continuam user-scoped enquanto seus consumidores legados existem. Não representam ownership final nem devem orientar novos recursos de negócio.
 
 No alvo, BFF acessa somente tabelas do próprio domínio. Nunca compartilhe Prisma nem consulte DB de Scheduling Service ou AI Orchestrator.
 
@@ -91,13 +93,13 @@ No alvo, BFF acessa somente tabelas do próprio domínio. Nunca compartilhe Pris
 - produção rejeita secret default/fraco;
 - rotas de domínio usam usuário autenticado atual.
 
-Fluxo tenant futuro:
+Fluxo tenant atual no BFF:
 
 ```text
 session → TenantMember → TenantContext
 ```
 
-Nunca autorize por `tenantId` arbitrário recebido do browser.
+JWT continua contendo `userId`. Rotas autenticadas resolvem `TenantContext` server-side; `GET /auth/me` retorna tenant e `BusinessProfile`. Nunca autorize por `tenantId` arbitrário recebido do browser.
 
 ## Current routes
 
@@ -159,7 +161,7 @@ Grupos:
 - runtime/session: `NODE_ENV`, `PORT`, `JWT_*`, `SESSION_COOKIE_NAME`, `COOKIE_*`;
 - persistence: `DATABASE_URL`;
 - browser boundary: `FRONTEND_ORIGIN`, `BFF_PUBLIC_URL`;
-- API interna: `API_BASE_URL`, `API_EVOLUTION_WEBHOOK_TOKEN`, `INTERNAL_SERVICE_TOKEN`;
+- API interna: `AI_ORCHESTRATOR_BASE_URL`, `INTERNAL_SERVICE_TOKEN`;
 - Evolution Go: `EVOLUTION_GO_*`, `EVOLUTION_WEBHOOK_SECRET`.
 
 Não registre valores dessas variáveis em logs.

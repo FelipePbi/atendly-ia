@@ -8,7 +8,10 @@ export function normalizeWhatsappPhone(value: string): string {
     digits = digits.slice(2);
   }
 
-  if (digits.startsWith("0") && (digits.length === 11 || digits.length === 12)) {
+  if (
+    digits.startsWith("0") &&
+    (digits.length === 11 || digits.length === 12)
+  ) {
     digits = digits.slice(1);
   }
 
@@ -20,20 +23,19 @@ export function normalizeWhatsappPhone(value: string): string {
 }
 
 const BRAZILIAN_DDDS = new Set([
-  11, 12, 13, 14, 15, 16, 17, 18, 19,
-  21, 22, 24, 27, 28,
-  31, 32, 33, 34, 35, 37, 38,
-  41, 42, 43, 44, 45, 46, 47, 48, 49,
-  51, 53, 54, 55,
-  61, 62, 63, 64, 65, 66, 67, 68, 69,
-  71, 73, 74, 75, 77, 79,
-  81, 82, 83, 84, 85, 86, 87, 88, 89,
-  91, 92, 93, 94, 95, 96, 97, 98, 99
+  11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 24, 27, 28, 31, 32, 33, 34, 35,
+  37, 38, 41, 42, 43, 44, 45, 46, 47, 48, 49, 51, 53, 54, 55, 61, 62, 63, 64,
+  65, 66, 67, 68, 69, 71, 73, 74, 75, 77, 79, 81, 82, 83, 84, 85, 86, 87, 88,
+  89, 91, 92, 93, 94, 95, 96, 97, 98, 99,
 ]);
 
 export function normalizeBrazilianWhatsappPhone(value: string): string {
   const normalized = normalizeWhatsappPhone(value);
-  if (!normalized.startsWith("55") || (normalized.length !== 12 && normalized.length !== 13)) return "";
+  if (
+    !normalized.startsWith("55") ||
+    (normalized.length !== 12 && normalized.length !== 13)
+  )
+    return "";
 
   const ddd = Number(normalized.slice(2, 4));
   const subscriber = normalized.slice(4);
@@ -89,11 +91,15 @@ export function whatsappPhoneCandidates(value: string): string[] {
   return [...candidates];
 }
 
-export function phonesMatch(expected: string | null | undefined, connected: string | null | undefined): boolean {
+export function phonesMatch(
+  expected: string | null | undefined,
+  connected: string | null | undefined,
+): boolean {
   const expectedCandidates = whatsappPhoneCandidates(expected ?? "");
   const connectedCandidates = new Set(whatsappPhoneCandidates(connected ?? ""));
 
-  if (expectedCandidates.length === 0 || connectedCandidates.size === 0) return false;
+  if (expectedCandidates.length === 0 || connectedCandidates.size === 0)
+    return false;
 
   for (const candidate of expectedCandidates) {
     if (connectedCandidates.has(candidate)) return true;
@@ -108,7 +114,12 @@ function removeBrazilianNinthDigit(value: string): string | null {
   const ddd = Number(value.slice(2, 4));
   const firstSubscriberDigit = value[4];
 
-  if (!Number.isInteger(ddd) || ddd < 11 || ddd > 99 || firstSubscriberDigit !== "9") {
+  if (
+    !Number.isInteger(ddd) ||
+    ddd < 11 ||
+    ddd > 99 ||
+    firstSubscriberDigit !== "9"
+  ) {
     return null;
   }
 

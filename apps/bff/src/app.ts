@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto";
+
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
-import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
+
 import { env } from "./config/env.js";
 import { AppError, toErrorMessage } from "./lib/errors.js";
 import { redactRequestUrl } from "./lib/logging.js";
@@ -19,7 +21,13 @@ import { registerWhatsAppRoutes } from "./routes/whatsapp.js";
 export async function buildApp() {
   const app = Fastify({
     logger: {
-      redact: ["req.headers.authorization", "req.headers.cookie", "body.password", "body.currentPassword", "body.newPassword"],
+      redact: [
+        "req.headers.authorization",
+        "req.headers.cookie",
+        "body.password",
+        "body.currentPassword",
+        "body.newPassword",
+      ],
       serializers: {
         req(request) {
           return {
@@ -27,25 +35,25 @@ export async function buildApp() {
             url: redactRequestUrl(request.url),
             host: request.headers.host,
             remoteAddress: request.socket?.remoteAddress,
-            remotePort: request.socket?.remotePort
+            remotePort: request.socket?.remotePort,
           };
-        }
-      }
+        },
+      },
     },
     genReqId: (request) => {
       const header = request.headers["x-request-id"];
       return Array.isArray(header) ? header[0] : header || randomUUID();
-    }
+    },
   });
 
   await app.register(cookie);
   await app.register(cors, {
     origin: env.FRONTEND_ORIGIN ? [env.FRONTEND_ORIGIN] : false,
-    credentials: true
+    credentials: true,
   });
   await app.register(rateLimit, {
     max: 300,
-    timeWindow: "1 minute"
+    timeWindow: "1 minute",
   });
 
   app.addHook("onRequest", async (request, reply) => {
@@ -67,19 +75,24 @@ export async function buildApp() {
         error: {
           code: error.code,
           message: error.message,
-          details: error.details
+          details: error.details,
         },
-        requestId: request.id
+        requestId: request.id,
       });
     }
 
-    if (error instanceof Error && "statusCode" in error && error.statusCode === 429) {
+    if (
+      error instanceof Error &&
+      "statusCode" in error &&
+      error.statusCode === 429
+    ) {
       return reply.code(429).send({
         error: {
           code: "RATE_LIMITED",
-          message: "Muitas tentativas. Aguarde alguns minutos e tente novamente."
+          message:
+            "Muitas tentativas. Aguarde alguns minutos e tente novamente.",
         },
-        requestId: request.id
+        requestId: request.id,
       });
     }
 
@@ -87,9 +100,9 @@ export async function buildApp() {
     return reply.code(500).send({
       error: {
         code: "INTERNAL_ERROR",
-        message: "Internal server error."
+        message: "Internal server error.",
       },
-      requestId: request.id
+      requestId: request.id,
     });
   });
 

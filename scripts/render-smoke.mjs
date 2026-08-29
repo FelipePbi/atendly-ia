@@ -7,7 +7,10 @@ const requireFromBff = createRequire(new URL("../apps/bff/package.json", import.
 const config = {
   frontendUrl: envUrl("FRONTEND_URL", "https://atendly-ia-frontend.onrender.com"),
   bffUrl: envUrl("BFF_URL", "https://atendly-ia-bff.onrender.com"),
-  apiUrl: envUrl("API_URL", "https://atendimeto-ia.onrender.com"),
+  aiOrchestratorUrl: envUrl(
+    "AI_ORCHESTRATOR_URL",
+    "https://atendly-ia-ai-orchestrator.onrender.com"
+  ),
   evolutionUrl: envUrl("EVOLUTION_URL", "https://evolution-go-4pmo.onrender.com"),
   healthWorkerUrl: envUrl("HEALTH_WORKER_URL", "https://atendly-ia-health-worker.onrender.com"),
   runMutating: process.env.RUN_MUTATING === "1",
@@ -38,14 +41,18 @@ async function main() {
 async function healthChecks() {
   await expectFetch("frontend_login", `${config.frontendUrl}/login`, 200);
   await expectFetch("bff_health", `${config.bffUrl}/health`, 200);
-  await expectFetch("api_health", `${config.apiUrl}/health`, 200);
+  await expectFetch("ai_orchestrator_health", `${config.aiOrchestratorUrl}/health`, 200);
   await expectFetch("evolution_health", `${config.evolutionUrl}/healthy`, 200);
   await expectFetch("health_worker_health", `${config.healthWorkerUrl}/health`, 200);
 }
 
 async function negativeAuthChecks() {
   await expectFetch("bff_me_without_session", `${config.bffUrl}/auth/me`, 401);
-  await expectFetch("api_internal_without_token", `${config.apiUrl}/internal/handoffs`, 401);
+  await expectFetch(
+    "ai_orchestrator_internal_without_token",
+    `${config.aiOrchestratorUrl}/internal/handoffs`,
+    401
+  );
   await expectFetch("evolution_without_apikey", `${config.evolutionUrl}/instance/status`, 401);
 }
 

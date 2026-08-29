@@ -22,12 +22,13 @@
 
 - [Frontend](../apps/frontend/README.md)
 - [BFF](../apps/bff/README.md)
-- [API transitória](../apps/api/README.md)
+- [AI Orchestrator](../apps/ai-orchestrator/README.md)
+- [Scheduling Service](../apps/scheduling-service/README.md)
 - [Evolution Go](../apps/evolution-go/README.md)
 - [Health worker](../apps/health-worker/README.md)
 
 ## Instruções para agentes
 
 - [AGENTS raiz](../AGENTS.md) — mapa, invariantes, fontes e guardrails globais.
-- Scoped `AGENTS.md`: `apps/frontend`, `apps/bff`, `apps/api`, `apps/evolution-go` e `apps/health-worker`.
+- Scoped `AGENTS.md`: `apps/frontend`, `apps/bff`, `apps/ai-orchestrator`, `apps/scheduling-service`, `apps/evolution-go` e `apps/health-worker`.
 - `apps/frontend-open-design/AGENTS.md` rege somente contrato histórico de prototipação dentro daquele diretório.

@@ -1,12 +1,14 @@
 import type {
+  BusinessProfile,
   BusinessSettings,
   Conversation,
   IgnoredContact,
   Message,
+  Tenant,
   User,
   UserProfile,
   UserSettings,
-  WhatsAppInstance
+  WhatsAppInstance,
 } from "../generated/prisma/client.js";
 
 type SettingsRecord = UserSettings & {
@@ -26,14 +28,48 @@ type SettingsRecord = UserSettings & {
   updatedAt?: Date | string | null;
 };
 
-type ProfileRecord = (UserProfile & { birthDate?: Date | string | null; onboardingCompletedAt?: Date | string | null }) | null;
-type InstanceRecord = (WhatsAppInstance & { connectedAt?: Date | string | null }) | null;
+type ProfileRecord =
+  | (UserProfile & {
+      birthDate?: Date | string | null;
+      onboardingCompletedAt?: Date | string | null;
+    })
+  | null;
+type InstanceRecord =
+  (WhatsAppInstance & { connectedAt?: Date | string | null }) | null;
 
 export function userDto(user: Pick<User, "id" | "email" | "createdAt">) {
   return {
     id: user.id,
     email: user.email,
-    createdAt: toIso(user.createdAt)
+    createdAt: toIso(user.createdAt),
+  };
+}
+
+export function tenantDto(
+  tenant: Pick<Tenant, "id" | "name" | "createdAt" | "updatedAt">,
+  role: "OWNER",
+) {
+  return {
+    id: tenant.id,
+    name: tenant.name,
+    role,
+    createdAt: toIso(tenant.createdAt),
+    updatedAt: toIso(tenant.updatedAt),
+  };
+}
+
+export function businessProfileDto(profile: BusinessProfile | null) {
+  if (!profile) return null;
+
+  return {
+    id: profile.id,
+    businessName: profile.businessName,
+    category: profile.category,
+    timezone: profile.timezone,
+    language: profile.language,
+    currency: profile.currency,
+    createdAt: toIso(profile.createdAt),
+    updatedAt: toIso(profile.updatedAt),
   };
 }
 
@@ -47,51 +83,88 @@ export function profileDto(profile: ProfileRecord) {
     businessName: profile.businessName,
     whatsappPhoneRaw: profile.whatsappPhoneRaw,
     whatsappPhoneNormalized: profile.whatsappPhoneNormalized,
-    onboardingCompletedAt: profile.onboardingCompletedAt ? toIso(profile.onboardingCompletedAt) : null
+    onboardingCompletedAt: profile.onboardingCompletedAt
+      ? toIso(profile.onboardingCompletedAt)
+      : null,
   };
 }
 
-export function onboardingDto(profile: ProfileRecord, instance: InstanceRecord, settings?: SettingsRecord | null) {
+export function onboardingDto(
+  profile: ProfileRecord,
+  instance: InstanceRecord,
+  settings?: SettingsRecord | null,
+) {
   const hasProfile = profileComplete(profile);
-  const hasVirtualAttendant = Boolean(settings?.virtualAttendantOnboardingCompleted);
+  const hasVirtualAttendant = Boolean(
+    settings?.virtualAttendantOnboardingCompleted,
+  );
   const hasPhone = hasProfile && Boolean(profile?.whatsappPhoneNormalized);
-  const completed = hasPhone && hasVirtualAttendant && Boolean(profile?.onboardingCompletedAt);
+  const completed =
+    hasPhone && hasVirtualAttendant && Boolean(profile?.onboardingCompletedAt);
 
   return {
     completed,
-    currentStep: completed ? "COMPLETE" : !hasProfile ? "PROFILE" : !hasVirtualAttendant ? "VIRTUAL_ATTENDANT" : "WHATSAPP",
+    currentStep: completed
+      ? "COMPLETE"
+      : !hasProfile
+        ? "PROFILE"
+        : !hasVirtualAttendant
+          ? "VIRTUAL_ATTENDANT"
+          : "WHATSAPP",
     profileComplete: hasProfile,
     virtualAttendantComplete: hasVirtualAttendant,
     phoneComplete: hasPhone,
     whatsappConnected: instance?.status === "CONNECTED",
     phoneVerified: Boolean(hasPhone && instance?.status === "CONNECTED"),
-    completedAt: profile?.onboardingCompletedAt ? toIso(profile.onboardingCompletedAt) : null
+    completedAt: profile?.onboardingCompletedAt
+      ? toIso(profile.onboardingCompletedAt)
+      : null,
   };
 }
 
 export function settingsDto(settings: SettingsRecord | null | undefined) {
   const dto = {
     aiEnabled: Boolean(settings?.aiEnabled),
-    identityMode: settings?.identityMode === "SEPARATE_ASSISTANT" ? "SEPARATE_ASSISTANT" : "PROFESSIONAL",
+    identityMode:
+      settings?.identityMode === "SEPARATE_ASSISTANT"
+        ? "SEPARATE_ASSISTANT"
+        : "PROFESSIONAL",
     assistantName: settings?.assistantName?.trim() ?? "",
-    assistantSex: settings?.assistantSex === "FEMALE" || settings?.assistantSex === "MALE" ? settings.assistantSex : null,
+    assistantSex:
+      settings?.assistantSex === "FEMALE" || settings?.assistantSex === "MALE"
+        ? settings.assistantSex
+        : null,
     professionalSex: settings?.professionalSex === "MALE" ? "MALE" : "FEMALE",
     personaType:
-      settings?.personaType === "CORPORATE" || settings?.personaType === "WARM" || settings?.personaType === "CUSTOM"
+      settings?.personaType === "CORPORATE" ||
+      settings?.personaType === "WARM" ||
+      settings?.personaType === "CUSTOM"
         ? settings.personaType
         : null,
     customInstructions: settings?.customInstructions?.trim() ?? "",
-    activationMode: settings?.activationMode === "AWAY_FROM_WHATSAPP" ? "AWAY_FROM_WHATSAPP" : "ALWAYS",
+    activationMode:
+      settings?.activationMode === "AWAY_FROM_WHATSAPP"
+        ? "AWAY_FROM_WHATSAPP"
+        : "ALWAYS",
     awayTimeoutMinutes: settings?.awayTimeoutMinutes ?? null,
-    awayScope: settings?.awayScope === "GLOBAL" || settings?.awayScope === "CONVERSATION" ? settings.awayScope : null,
-    customPersonaStatus: isCustomPersonaStatus(settings?.customPersonaStatus) ? settings.customPersonaStatus : "NOT_STARTED",
+    awayScope:
+      settings?.awayScope === "GLOBAL" || settings?.awayScope === "CONVERSATION"
+        ? settings.awayScope
+        : null,
+    customPersonaStatus: isCustomPersonaStatus(settings?.customPersonaStatus)
+      ? settings.customPersonaStatus
+      : "NOT_STARTED",
     customPersonaProfile: parseJsonObject(settings?.customPersonaProfileJson),
-    customPersonaGeneratedAt: settings?.customPersonaGeneratedAt ? toIso(settings.customPersonaGeneratedAt) : null,
-    virtualAttendantOnboardingCompleted: Boolean(settings?.virtualAttendantOnboardingCompleted),
+    customPersonaGeneratedAt: settings?.customPersonaGeneratedAt
+      ? toIso(settings.customPersonaGeneratedAt)
+      : null,
+    virtualAttendantOnboardingCompleted: Boolean(
+      settings?.virtualAttendantOnboardingCompleted,
+    ),
     configured: false,
     canEnable: false,
     readinessIssues: [] as string[],
-    updatedAt: settings?.updatedAt ? toIso(settings.updatedAt) : null
+    updatedAt: settings?.updatedAt ? toIso(settings.updatedAt) : null,
   };
 
   dto.readinessIssues = readinessIssues(dto);
@@ -108,7 +181,7 @@ export function instanceDto(instance: InstanceRecord) {
     phoneNumber: instance.phoneNumber,
     status: instance.status,
     qrcode: instance.qrcode,
-    connectedAt: instance.connectedAt ? toIso(instance.connectedAt) : null
+    connectedAt: instance.connectedAt ? toIso(instance.connectedAt) : null,
   };
 }
 
@@ -128,7 +201,7 @@ export function businessSettingsDto(settings: BusinessSettings) {
     depositPolicy: settings.depositPolicy ?? "",
     configured: settings.businessName.trim().length >= 2,
     createdAt: toIso(settings.createdAt),
-    updatedAt: toIso(settings.updatedAt)
+    updatedAt: toIso(settings.updatedAt),
   };
 }
 
@@ -144,7 +217,7 @@ export function ignoredContactDto(contact: IgnoredContact) {
     reason: contact.reason,
     isActive: contact.isActive,
     createdAt: toIso(contact.createdAt),
-    updatedAt: toIso(contact.updatedAt)
+    updatedAt: toIso(contact.updatedAt),
   };
 }
 
@@ -154,7 +227,7 @@ export function conversationDto(
     aiHandoff: boolean;
     aiHandoffReason: string | null;
     aiHandoffPauseUntil: string | null;
-  }
+  },
 ) {
   return {
     id: conversation.id,
@@ -162,16 +235,21 @@ export function conversationDto(
     contactName: conversation.contactName,
     profilePictureUrl: conversation.profilePictureUrl,
     lastMessagePreview: conversation.lastMessagePreview,
-    lastMessageAt: conversation.lastMessageAt ? toIso(conversation.lastMessageAt) : null,
+    lastMessageAt: conversation.lastMessageAt
+      ? toIso(conversation.lastMessageAt)
+      : null,
     unreadCount: conversation.unreadCount,
     archivedAt: conversation.archivedAt ? toIso(conversation.archivedAt) : null,
     lastMessageFromMe: conversation.messages?.[0]?.fromMe ?? false,
     aiPaused: conversation.aiPaused || aiHandoff?.aiHandoff || false,
-    aiPausedReason: conversation.aiPausedReason ?? aiHandoff?.aiHandoffReason ?? null,
-    aiPausedUpdatedAt: conversation.aiPausedUpdatedAt ? toIso(conversation.aiPausedUpdatedAt) : null,
+    aiPausedReason:
+      conversation.aiPausedReason ?? aiHandoff?.aiHandoffReason ?? null,
+    aiPausedUpdatedAt: conversation.aiPausedUpdatedAt
+      ? toIso(conversation.aiPausedUpdatedAt)
+      : null,
     aiHandoff: aiHandoff?.aiHandoff ?? false,
     aiHandoffReason: aiHandoff?.aiHandoffReason ?? null,
-    aiHandoffPauseUntil: aiHandoff?.aiHandoffPauseUntil ?? null
+    aiHandoffPauseUntil: aiHandoff?.aiHandoffPauseUntil ?? null,
   };
 }
 
@@ -183,12 +261,17 @@ export function messageDto(message: Message) {
     type: message.type,
     contentText: message.contentText,
     mediaType: message.mediaType,
-    timestamp: toIso(message.timestamp)
+    timestamp: toIso(message.timestamp),
   };
 }
 
 function profileComplete(profile: ProfileRecord): boolean {
-  return Boolean(profile?.fullName.trim() && profile.birthDate && profile.sex && profile.businessName.trim());
+  return Boolean(
+    profile?.fullName.trim() &&
+    profile.birthDate &&
+    profile.sex &&
+    profile.businessName.trim(),
+  );
 }
 
 function readinessIssues(settings: {
@@ -203,10 +286,16 @@ function readinessIssues(settings: {
 }): string[] {
   const issues: string[] = [];
 
-  if (settings.identityMode === "SEPARATE_ASSISTANT" && !settings.assistantName.trim()) {
+  if (
+    settings.identityMode === "SEPARATE_ASSISTANT" &&
+    !settings.assistantName.trim()
+  ) {
     issues.push("Defina o nome da atendente virtual.");
   }
-  if (settings.identityMode === "SEPARATE_ASSISTANT" && !settings.assistantSex) {
+  if (
+    settings.identityMode === "SEPARATE_ASSISTANT" &&
+    !settings.assistantSex
+  ) {
     issues.push("Defina o sexo da atendente virtual.");
   }
   if (!settings.personaType) {
@@ -220,8 +309,13 @@ function readinessIssues(settings: {
       issues.push("Escolha o escopo da ausência.");
     }
   }
-  if (settings.personaType === "CUSTOM" && settings.customPersonaStatus !== "READY") {
-    issues.push("Gere a persona personalizada com pelo menos 3 conversas TXT válidas.");
+  if (
+    settings.personaType === "CUSTOM" &&
+    settings.customPersonaStatus !== "READY"
+  ) {
+    issues.push(
+      "Gere a persona personalizada com pelo menos 3 conversas TXT válidas.",
+    );
   }
 
   return issues;

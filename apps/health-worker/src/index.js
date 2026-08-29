@@ -14,8 +14,8 @@ const defaultTargets = [
     url: "https://atendly-ia-bff.onrender.com/health"
   },
   {
-    name: "api",
-    url: "https://atendimeto-ia.onrender.com/health"
+    name: "ai-orchestrator",
+    url: "https://atendly-ia-ai-orchestrator.onrender.com/health"
   },
   {
     name: "evolution-go",

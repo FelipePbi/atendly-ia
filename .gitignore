@@ -34,6 +34,9 @@ Thumbs.db
 # Generated during BFF build.
 /apps/bff/src/generated/
 
+# Generated during AI Orchestrator build.
+/apps/ai-orchestrator/src/generated/
+
 # Large prompt kit copied from earlier planning material; keep outside the initial monorepo commit.
 /docs/codex_persona_ui_kit/
 

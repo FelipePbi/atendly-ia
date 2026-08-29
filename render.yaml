@@ -46,30 +46,28 @@ services:
         sync: false
       - key: BFF_PUBLIC_URL
         sync: false
-      - key: API_BASE_URL
-        sync: false
-      - key: API_EVOLUTION_WEBHOOK_TOKEN
+      - key: AI_ORCHESTRATOR_BASE_URL
         sync: false
       - key: EVOLUTION_GO_BASE_URL
         sync: false
       - key: EVOLUTION_GO_API_KEY
         sync: false
       - key: EVOLUTION_WEBHOOK_SECRET
-        generateValue: true
+        sync: false
       - key: INTERNAL_SERVICE_TOKEN
         sync: false
 
   - type: web
-    name: atendly-ia-api
+    name: atendly-ia-ai-orchestrator
     runtime: node
     plan: free
-    rootDir: apps/api
+    rootDir: apps/ai-orchestrator
     buildCommand: npm ci && npm run prisma:deploy && npm run build
     startCommand: npm run start
     healthCheckPath: /health
     buildFilter:
       paths:
-        - apps/api/**
+        - apps/ai-orchestrator/**
         - packages/**
         - render.yaml
     envVars:
@@ -84,6 +82,12 @@ services:
       - key: ADMIN_API_TOKEN
         sync: false
       - key: OPENAI_API_KEY
+        sync: false
+      - key: EVOLUTION_WEBHOOK_TOKEN
+        sync: false
+      - key: EVOLUTION_BASE_URL
+        sync: false
+      - key: EVOLUTION_API_KEY
         sync: false
       - key: SCHEDULING_SERVICE_BASE_URL
         sync: false

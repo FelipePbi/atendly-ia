@@ -1,0 +1,211 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ChannelProvider {
+  EVOLUTION_GO
+}
+
+enum ChannelConnectionStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageSource {
+  CUSTOMER
+  AI
+  OWNER
+}
+
+enum ConversationStatus {
+  ACTIVE
+  HUMAN_HANDOFF
+  CLOSED
+}
+
+enum AiRunStatus {
+  STARTED
+  SUCCEEDED
+  FAILED
+}
+
+enum ToolCallStatus {
+  STARTED
+  SUCCEEDED
+  FAILED
+}
+
+enum HandoffStatus {
+  OPEN
+  RESOLVED
+}
+
+enum AiTone {
+  PROFESSIONAL_OBJECTIVE
+  LIGHT_CLOSE
+}
+
+model ChannelConnection {
+  id                 String                  @id @default(cuid())
+  tenantId           String
+  userId             String
+  provider           ChannelProvider
+  externalInstanceId String
+  displayName        String?
+  status             ChannelConnectionStatus @default(ACTIVE)
+  metadata           Json?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  conversations   Conversation[]
+  messages        Message[]
+  processedEvents ProcessedEvent[]
+  aiRuns          AiRun[]
+  handoffs        Handoff[]
+
+  @@unique([provider, externalInstanceId])
+  @@unique([tenantId, provider])
+  @@unique([tenantId, id])
+  @@index([tenantId, status])
+}
+
+model Conversation {
+  id                 String             @id @default(cuid())
+  tenantId           String
+  channelId          String
+  externalContactId  String
+  customerName       String?
+  currentIntent      String?
+  state              Json?
+  status             ConversationStatus @default(ACTIVE)
+  humanHandoff       Boolean            @default(false)
+  handoffPausedUntil DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  channel  ChannelConnection @relation(fields: [tenantId, channelId], references: [tenantId, id], onDelete: Cascade)
+  messages Message[]
+  aiRuns   AiRun[]
+  handoffs Handoff[]
+
+  @@unique([tenantId, channelId, externalContactId])
+  @@unique([tenantId, channelId, id])
+  @@index([tenantId, status, updatedAt])
+}
+
+model Message {
+  id                String           @id @default(cuid())
+  tenantId          String
+  channelId         String
+  conversationId    String
+  externalMessageId String?
+  direction         MessageDirection
+  source            MessageSource?
+  role              String
+  body              String
+  rawPayload        Json?
+  createdAt         DateTime         @default(now())
+
+  channel      ChannelConnection @relation(fields: [tenantId, channelId], references: [tenantId, id], onDelete: Cascade)
+  conversation Conversation      @relation(fields: [tenantId, channelId, conversationId], references: [tenantId, channelId, id], onDelete: Cascade)
+
+  @@unique([tenantId, channelId, externalMessageId])
+  @@index([tenantId, conversationId, createdAt])
+}
+
+model ProcessedEvent {
+  id         String          @id @default(cuid())
+  tenantId   String
+  channelId  String
+  provider   ChannelProvider
+  eventKey   String
+  messageId  String
+  rawPayload Json?
+  receivedAt DateTime        @default(now())
+
+  channel ChannelConnection @relation(fields: [tenantId, channelId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, provider, eventKey])
+  @@index([tenantId, channelId, receivedAt])
+}
+
+model AiRun {
+  id              String      @id @default(cuid())
+  tenantId        String
+  channelId       String
+  conversationId  String
+  provider        String
+  model           String
+  promptVersion   String
+  inputMessageIds String[]
+  status          AiRunStatus @default(STARTED)
+  outputText      String?
+  error           String?
+  startedAt       DateTime    @default(now())
+  completedAt     DateTime?
+
+  channel      ChannelConnection @relation(fields: [tenantId, channelId], references: [tenantId, id], onDelete: Cascade)
+  conversation Conversation      @relation(fields: [tenantId, channelId, conversationId], references: [tenantId, channelId, id], onDelete: Cascade)
+  toolCalls    AiToolCall[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, conversationId, startedAt])
+}
+
+model AiToolCall {
+  id             String         @id @default(cuid())
+  tenantId       String
+  aiRunId        String
+  externalCallId String?
+  name           String
+  arguments      Json
+  result         Json?
+  status         ToolCallStatus @default(STARTED)
+  error          String?
+  createdAt      DateTime       @default(now())
+  completedAt    DateTime?
+
+  aiRun AiRun @relation(fields: [tenantId, aiRunId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, aiRunId, createdAt])
+}
+
+model Handoff {
+  id                String        @id @default(cuid())
+  tenantId          String
+  channelId         String
+  conversationId    String?
+  externalContactId String
+  reason            String
+  summary           String?
+  status            HandoffStatus @default(OPEN)
+  createdAt         DateTime      @default(now())
+  resolvedAt        DateTime?
+
+  channel      ChannelConnection @relation(fields: [tenantId, channelId], references: [tenantId, id], onDelete: Cascade)
+  conversation Conversation?     @relation(fields: [tenantId, channelId, conversationId], references: [tenantId, channelId, id], onDelete: NoAction)
+
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, channelId, externalContactId])
+}
+
+model AiTenantConfig {
+  tenantId      String   @id
+  enabled       Boolean  @default(false)
+  tone          AiTone   @default(LIGHT_CLOSE)
+  promptVersion String   @default("scheduling_v1.0.0")
+  settings      Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

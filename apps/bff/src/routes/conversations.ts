@@ -1,15 +1,29 @@
 import crypto from "node:crypto";
+
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
+
 import { env } from "../config/env.js";
-import { Prisma, type IgnoredContact, type IgnoredContactSource } from "../generated/prisma/client.js";
-import { currentUser, requireAuth } from "../lib/auth.js";
+import {
+  type IgnoredContact,
+  type IgnoredContactSource,
+  type Prisma,
+} from "../generated/prisma/client.js";
+import { currentUser } from "../lib/auth.js";
 import { conversationDto, messageDto } from "../lib/dto.js";
 import { AppError } from "../lib/errors.js";
 import { dataResponse, parseBody, parseParams } from "../lib/http.js";
-import { normalizeWhatsappJid, phoneFromWhatsappJid, whatsappPhoneCandidates } from "../lib/phone.js";
+import {
+  normalizeWhatsappJid,
+  phoneFromWhatsappJid,
+  whatsappPhoneCandidates,
+} from "../lib/phone.js";
 import { getPrisma } from "../lib/prisma.js";
-import { dispatchToApi } from "../services/internal-api.js";
+import { requireTenantContext } from "../lib/tenant-context.js";
+import {
+  dispatchToAiOrchestrator,
+  syncEvolutionChannelToAiOrchestrator,
+} from "../services/ai-orchestrator.js";
 import { sendEvolutionText } from "../services/evolution-go.js";
 
 type BotHandoffStatus = {
@@ -44,31 +58,33 @@ type ConsolidationConversation = {
 };
 
 const idParamSchema = z.object({
-  id: z.string().min(1)
+  id: z.string().min(1),
 });
 
 const conversationQuerySchema = z.object({
-  archived: z.string().optional()
+  archived: z.string().optional(),
 });
 
 const conversationPatchSchema = z.object({
   archived: z.boolean().optional(),
   aiPaused: z.boolean().optional(),
-  aiPausedReason: z.string().trim().max(300).optional().nullable()
+  aiPausedReason: z.string().trim().max(300).optional().nullable(),
 });
 
 const sendMessageSchema = z.object({
-  text: z.string().trim().min(1).max(4000)
+  text: z.string().trim().min(1).max(4000),
 });
 
 const pauseConversationAiSchema = z.object({
-  reason: z.string().trim().max(300).optional().nullable()
+  reason: z.string().trim().max(300).optional().nullable(),
 });
 
-export async function registerConversationRoutes(app: FastifyInstance): Promise<void> {
+export async function registerConversationRoutes(
+  app: FastifyInstance,
+): Promise<void> {
   app.addHook("preHandler", async (request) => {
     if (request.url.startsWith("/conversations")) {
-      await requireAuth(request);
+      await requireTenantContext(request);
     }
   });
 
@@ -78,26 +94,38 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
     const conversations = await getPrisma().conversation.findMany({
       where: {
         userId: user.id,
-        archivedAt: showArchived ? { not: null } : null
+        archivedAt: showArchived ? { not: null } : null,
       },
       orderBy: [{ lastMessageAt: "desc" }, { updatedAt: "desc" }],
       take: 100,
-      include: latestMessageInclude()
+      include: latestMessageInclude(),
     });
     const phonesByConversationId = new Map(
       conversations
-        .map((conversation) => [conversation.id, whatsappPhoneCandidates(conversation.contactJid)] as const)
-        .filter(([, phones]) => phones.length > 0)
+        .map(
+          (conversation) =>
+            [
+              conversation.id,
+              whatsappPhoneCandidates(conversation.contactJid),
+            ] as const,
+        )
+        .filter(([, phones]) => phones.length > 0),
     );
-    const handoffStatuses = await fetchBotHandoffStatusesFromApi(request, user.id, [
-      ...new Set([...phonesByConversationId.values()].flat())
-    ]);
-    const handoffByPhone = new Map(handoffStatuses.map((status) => [status.phone, status]));
+    const handoffStatuses = await fetchBotHandoffStatusesFromApi(
+      request,
+      user.id,
+      [...new Set([...phonesByConversationId.values()].flat())],
+    );
+    const handoffByPhone = new Map(
+      handoffStatuses.map((status) => [status.phone, status]),
+    );
 
     return dataResponse(request, {
       conversations: conversations.map((conversation) => {
         const phones = phonesByConversationId.get(conversation.id) ?? [];
-        const handoff = phones.map((phone) => handoffByPhone.get(phone)).find(Boolean);
+        const handoff = phones
+          .map((phone) => handoffByPhone.get(phone))
+          .find(Boolean);
 
         return conversationDto(
           conversation,
@@ -105,11 +133,11 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
             ? {
                 aiHandoff: true,
                 aiHandoffReason: handoff.reason,
-                aiHandoffPauseUntil: handoff.pauseUntil
+                aiHandoffPauseUntil: handoff.pauseUntil,
               }
-            : undefined
+            : undefined,
         );
-      })
+      }),
     });
   });
 
@@ -126,9 +154,9 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
     const conversation = await prisma.conversation.findFirst({
       where: {
         id: params.id,
-        userId: user.id
+        userId: user.id,
       },
-      select: { id: true }
+      select: { id: true },
     });
 
     if (!conversation) {
@@ -138,15 +166,15 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
     const messages = await prisma.message.findMany({
       where: {
         userId: user.id,
-        conversationId: conversation.id
+        conversationId: conversation.id,
       },
       orderBy: { timestamp: "asc" },
-      take: 300
+      take: 300,
     });
 
     await prisma.conversation.update({
       where: { id: conversation.id },
-      data: { unreadCount: 0 }
+      data: { unreadCount: 0 },
     });
 
     return dataResponse(request, { messages: messages.map(messageDto) });
@@ -160,9 +188,9 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
     const conversation = await prisma.conversation.findFirst({
       where: {
         id: params.id,
-        userId: user.id
+        userId: user.id,
       },
-      select: { id: true }
+      select: { id: true },
     });
 
     if (!conversation) {
@@ -172,16 +200,20 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
     const updated = await prisma.conversation.update({
       where: { id: conversation.id },
       data: {
-        ...(data.archived === undefined ? {} : { archivedAt: data.archived ? new Date() : null }),
+        ...(data.archived === undefined
+          ? {}
+          : { archivedAt: data.archived ? new Date() : null }),
         ...(data.aiPaused === undefined
           ? {}
           : {
               aiPaused: data.aiPaused,
-              aiPausedReason: data.aiPaused ? (data.aiPausedReason ?? null) : null,
-              aiPausedUpdatedAt: new Date()
-            })
+              aiPausedReason: data.aiPaused
+                ? (data.aiPausedReason ?? null)
+                : null,
+              aiPausedUpdatedAt: new Date(),
+            }),
       },
-      include: latestMessageInclude()
+      include: latestMessageInclude(),
     });
 
     return dataResponse(request, { conversation: conversationDto(updated) });
@@ -195,16 +227,16 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
     const conversation = await prisma.conversation.findFirst({
       where: {
         id: params.id,
-        userId: user.id
+        userId: user.id,
       },
       include: {
         instance: true,
         user: {
           include: {
-            settings: true
-          }
-        }
-      }
+            settings: true,
+          },
+        },
+      },
     });
 
     if (!conversation) {
@@ -217,7 +249,11 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
 
     const phone = whatsappPhoneCandidates(conversation.contactJid)[0];
     if (!phone) {
-      throw new AppError("VALIDATION_ERROR", "Invalid conversation phone.", 400);
+      throw new AppError(
+        "VALIDATION_ERROR",
+        "Invalid conversation phone.",
+        400,
+      );
     }
 
     const correlationId = `manual-${crypto.randomUUID()}`;
@@ -225,7 +261,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
       instanceToken: conversation.instance.evolutionInstanceToken,
       to: phone,
       text: data.text,
-      correlationId
+      correlationId,
     });
     const externalMessageId = sent.messageId ?? correlationId;
     const timestamp = new Date();
@@ -241,42 +277,49 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
         type: "TEXT",
         contentText: data.text,
         timestamp,
-        rawPayload: toJson(sent.raw)
-      }
+        rawPayload: toJson(sent.raw),
+      },
     });
     const updatedConversation = await prisma.conversation.update({
       where: { id: conversation.id },
       data: {
         lastMessagePreview: data.text,
         lastMessageAt: timestamp,
-        unreadCount: 0
+        unreadCount: 0,
       },
-      include: latestMessageInclude()
+      include: latestMessageInclude(),
     });
 
     let warning: string | undefined;
     if (conversation.user.settings?.aiEnabled) {
-      const dispatchResult = await dispatchManualMessageToApi(request, user.id, {
-        payload: buildManualOutboundPayload({
-          instanceKey: conversation.instance.evolutionInstanceId ?? conversation.instance.evolutionInstanceName,
-          contactJid: conversation.contactJid,
-          senderJid: conversation.instance.phoneNumber,
-          externalMessageId,
-          senderName: user.email ?? null,
-          text: data.text,
-          timestamp
-        }),
-        instanceToken: conversation.instance.evolutionInstanceToken
-      });
+      const dispatchResult = await dispatchManualMessageToApi(
+        request,
+        user.id,
+        {
+          payload: buildManualOutboundPayload({
+            instanceKey:
+              conversation.instance.evolutionInstanceId ??
+              conversation.instance.evolutionInstanceName,
+            contactJid: conversation.contactJid,
+            senderJid: conversation.instance.phoneNumber,
+            externalMessageId,
+            senderName: user.email ?? null,
+            text: data.text,
+            timestamp,
+          }),
+          instanceToken: conversation.instance.evolutionInstanceToken,
+        },
+      );
 
       if (dispatchResult.skipped) {
         const paused = await pauseBotHandoffInApi(request, user.id, phone, {
           reason: "Atendimento humano iniciado pelo painel",
-          summary: "Mensagem manual enviada pelo chat do frontend."
+          summary: "Mensagem manual enviada pelo chat do frontend.",
         });
 
         if (!paused) {
-          warning = "Mensagem enviada, mas nao foi possivel pausar a IA automaticamente.";
+          warning =
+            "Mensagem enviada, mas nao foi possivel pausar a IA automaticamente.";
         }
       }
     }
@@ -285,7 +328,7 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
     return dataResponse(request, {
       message: messageDto(message),
       conversation: conversationDto(updatedConversation),
-      warning
+      warning,
     });
   });
 
@@ -297,9 +340,9 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
     const conversation = await prisma.conversation.findFirst({
       where: {
         id: params.id,
-        userId: user.id
+        userId: user.id,
       },
-      include: latestMessageInclude()
+      include: latestMessageInclude(),
     });
 
     if (!conversation) {
@@ -314,20 +357,20 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
       displayName: conversation.contactName,
       source: "CHAT_ACTION",
       reason,
-      createdByUserId: user.id
+      createdByUserId: user.id,
     });
 
     const phone = phoneFromWhatsappJid(conversation.contactJid);
     if (phone) {
       await pauseBotHandoffInApi(request, user.id, phone, {
         reason: "IA pausada pela lista de ignorados",
-        summary: reason
+        summary: reason,
       });
     }
 
     const updated = await prisma.conversation.findUniqueOrThrow({
       where: { id: conversation.id },
-      include: latestMessageInclude()
+      include: latestMessageInclude(),
     });
 
     return dataResponse(request, { conversation: conversationDto(updated) });
@@ -340,9 +383,9 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
     const conversation = await prisma.conversation.findFirst({
       where: {
         id: params.id,
-        userId: user.id
+        userId: user.id,
       },
-      include: latestMessageInclude()
+      include: latestMessageInclude(),
     });
 
     if (!conversation) {
@@ -351,27 +394,31 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
 
     const phones = whatsappPhoneCandidates(conversation.contactJid);
     if (phones.length === 0) {
-      throw new AppError("VALIDATION_ERROR", "Invalid conversation phone.", 400);
+      throw new AppError(
+        "VALIDATION_ERROR",
+        "Invalid conversation phone.",
+        400,
+      );
     }
 
     await resumeBotHandoffsInApi(request, user.id, phones);
     await resumeConversationAiByJid({
       userId: user.id,
       instanceId: conversation.instanceId,
-      jid: conversation.contactJid
+      jid: conversation.contactJid,
     });
 
     const updated = await prisma.conversation.findUniqueOrThrow({
       where: { id: conversation.id },
-      include: latestMessageInclude()
+      include: latestMessageInclude(),
     });
 
     return dataResponse(request, {
       conversation: conversationDto(updated, {
         aiHandoff: false,
         aiHandoffReason: null,
-        aiHandoffPauseUntil: null
-      })
+        aiHandoffPauseUntil: null,
+      }),
     });
   });
 }
@@ -380,7 +427,7 @@ async function consolidateEquivalentConversationsForUser(userId: string) {
   const prisma = getPrisma();
   const conversations = await prisma.conversation.findMany({
     where: { userId },
-    include: latestMessageInclude()
+    include: latestMessageInclude(),
   });
   const groups = new Map<string, typeof conversations>();
 
@@ -393,25 +440,31 @@ async function consolidateEquivalentConversationsForUser(userId: string) {
   const result = {
     mergedGroups: 0,
     movedMessages: 0,
-    removedConversations: 0
+    removedConversations: 0,
   };
 
   for (const group of groups.values()) {
     if (group.length < 2) continue;
-    const canonical = [...group].sort((left, right) => conversationTime(right) - conversationTime(left))[0];
-    const duplicates = group.filter((conversation) => conversation.id !== canonical.id);
+    const canonical = [...group].sort(
+      (left, right) => conversationTime(right) - conversationTime(left),
+    )[0];
+    const duplicates = group.filter(
+      (conversation) => conversation.id !== canonical.id,
+    );
     const existingExternalMessageIds = new Set(
       (
         await prisma.message.findMany({
           where: {
             conversationId: canonical.id,
-            externalMessageId: { not: null }
+            externalMessageId: { not: null },
           },
-          select: { externalMessageId: true }
+          select: { externalMessageId: true },
         })
       )
         .map((message) => message.externalMessageId)
-        .filter((externalMessageId): externalMessageId is string => Boolean(externalMessageId))
+        .filter((externalMessageId): externalMessageId is string =>
+          Boolean(externalMessageId),
+        ),
     );
 
     for (const duplicate of duplicates) {
@@ -419,29 +472,38 @@ async function consolidateEquivalentConversationsForUser(userId: string) {
         where: { conversationId: duplicate.id },
         select: {
           id: true,
-          externalMessageId: true
-        }
+          externalMessageId: true,
+        },
       });
       const duplicateMessageIds = duplicateMessages
-        .filter((message) => message.externalMessageId && existingExternalMessageIds.has(message.externalMessageId))
+        .filter(
+          (message) =>
+            message.externalMessageId &&
+            existingExternalMessageIds.has(message.externalMessageId),
+        )
         .map((message) => message.id);
       const messageIdsToMove = duplicateMessages
         .filter((message) => !duplicateMessageIds.includes(message.id))
         .map((message) => message.id);
 
       if (duplicateMessageIds.length > 0) {
-        await prisma.message.deleteMany({ where: { id: { in: duplicateMessageIds } } });
+        await prisma.message.deleteMany({
+          where: { id: { in: duplicateMessageIds } },
+        });
       }
 
       if (messageIdsToMove.length > 0) {
         await prisma.message.updateMany({
           where: { id: { in: messageIdsToMove } },
-          data: { conversationId: canonical.id }
+          data: { conversationId: canonical.id },
         });
         result.movedMessages += messageIdsToMove.length;
 
         for (const message of duplicateMessages) {
-          if (message.externalMessageId && messageIdsToMove.includes(message.id)) {
+          if (
+            message.externalMessageId &&
+            messageIdsToMove.includes(message.id)
+          ) {
             existingExternalMessageIds.add(message.externalMessageId);
           }
         }
@@ -449,7 +511,7 @@ async function consolidateEquivalentConversationsForUser(userId: string) {
 
       await prisma.aiSuppressionLog.updateMany({
         where: { conversationId: duplicate.id },
-        data: { conversationId: canonical.id }
+        data: { conversationId: canonical.id },
       });
       await prisma.conversation.delete({ where: { id: duplicate.id } });
       result.removedConversations += 1;
@@ -464,14 +526,16 @@ async function consolidateEquivalentConversationsForUser(userId: string) {
 
 async function recomputeConversationSummary(
   canonicalId: string,
-  mergedConversations: ConsolidationConversation[]
+  mergedConversations: ConsolidationConversation[],
 ) {
   const prisma = getPrisma();
   const latestMessage = await prisma.message.findFirst({
     where: { conversationId: canonicalId },
-    orderBy: { timestamp: "desc" }
+    orderBy: { timestamp: "desc" },
   });
-  const newestConversation = [...mergedConversations].sort((left, right) => conversationTime(right) - conversationTime(left))[0];
+  const newestConversation = [...mergedConversations].sort(
+    (left, right) => conversationTime(right) - conversationTime(left),
+  )[0];
   const pausedConversation = [...mergedConversations]
     .filter((conversation) => conversation.aiPaused)
     .sort((left, right) => {
@@ -487,17 +551,26 @@ async function recomputeConversationSummary(
       contactName: newestConversation.contactName,
       profilePictureUrl: newestConversation.profilePictureUrl,
       lastMessagePreview: latestMessage
-        ? previewText(latestMessage.contentText, buildMediaPreview(latestMessage.fromMe, latestMessage.mediaType))
+        ? previewText(
+            latestMessage.contentText,
+            buildMediaPreview(latestMessage.fromMe, latestMessage.mediaType),
+          )
         : newestConversation.lastMessagePreview,
-      lastMessageAt: latestMessage?.timestamp ?? newestConversation.lastMessageAt,
-      unreadCount: mergedConversations.reduce((total, conversation) => total + conversation.unreadCount, 0),
-      archivedAt: mergedConversations.some((conversation) => conversation.archivedAt === null)
+      lastMessageAt:
+        latestMessage?.timestamp ?? newestConversation.lastMessageAt,
+      unreadCount: mergedConversations.reduce(
+        (total, conversation) => total + conversation.unreadCount,
+        0,
+      ),
+      archivedAt: mergedConversations.some(
+        (conversation) => conversation.archivedAt === null,
+      )
         ? null
         : newestConversation.archivedAt,
       aiPaused: Boolean(pausedConversation),
       aiPausedReason: pausedConversation?.aiPausedReason ?? null,
-      aiPausedUpdatedAt: pausedConversation?.aiPausedUpdatedAt ?? null
-    }
+      aiPausedUpdatedAt: pausedConversation?.aiPausedUpdatedAt ?? null,
+    },
   });
 }
 
@@ -507,7 +580,9 @@ function conversationDedupeKey(value: string): string {
   if (normalizedJid.endsWith("@g.us")) return `group:${normalizedJid}`;
   if (normalizedJid.endsWith("@lid")) return `lid:${normalizedJid}`;
   const phoneCandidates = whatsappPhoneCandidates(normalizedJid).sort();
-  return phoneCandidates.length > 0 ? `phone:${phoneCandidates.join("|")}` : fallbackJidKey(normalizedJid);
+  return phoneCandidates.length > 0
+    ? `phone:${phoneCandidates.join("|")}`
+    : fallbackJidKey(normalizedJid);
 }
 
 function fallbackJidKey(value: string): string {
@@ -515,16 +590,30 @@ function fallbackJidKey(value: string): string {
   return input ? `raw:${input}` : "";
 }
 
-function conversationTime(conversation: { messages?: Array<{ timestamp: Date }>; lastMessageAt: Date | null; updatedAt: Date }): number {
-  return (conversation.messages?.[0]?.timestamp ?? conversation.lastMessageAt ?? conversation.updatedAt).getTime();
+function conversationTime(conversation: {
+  messages?: Array<{ timestamp: Date }>;
+  lastMessageAt: Date | null;
+  updatedAt: Date;
+}): number {
+  return (
+    conversation.messages?.[0]?.timestamp ??
+    conversation.lastMessageAt ??
+    conversation.updatedAt
+  ).getTime();
 }
 
-function previewText(text: string | null | undefined, fallback = "Mensagem"): string {
+function previewText(
+  text: string | null | undefined,
+  fallback = "Mensagem",
+): string {
   const cleaned = text?.replace(/\s+/g, " ").trim();
   return cleaned ? cleaned.slice(0, 180) : fallback;
 }
 
-function buildMediaPreview(fromMe: boolean, mediaType: string | null | undefined): string {
+function buildMediaPreview(
+  fromMe: boolean,
+  mediaType: string | null | undefined,
+): string {
   if (mediaType) {
     return `Midia ${fromMe ? "enviada" : "recebida"}: ${mediaType}`;
   }
@@ -536,8 +625,8 @@ function latestMessageInclude() {
   return {
     messages: {
       orderBy: { timestamp: "desc" as const },
-      take: 1
-    }
+      take: 1,
+    },
   };
 }
 
@@ -549,16 +638,16 @@ function parseShowArchived(query: unknown): boolean {
 async function fetchBotHandoffStatusesFromApi(
   request: FastifyRequest,
   userId: string,
-  phones: string[]
+  phones: string[],
 ): Promise<BotHandoffStatus[]> {
   const uniquePhones = [...new Set(phones)].filter(Boolean);
   if (!env.INTERNAL_SERVICE_TOKEN || uniquePhones.length === 0) return [];
 
   try {
-    const result = await dispatchToApi("/internal/bot/status", {
+    const result = await dispatchToAiOrchestrator("/internal/bot/status", {
       userId,
       requestId: request.id,
-      body: { phones: uniquePhones }
+      body: { phones: uniquePhones },
     });
     return isBotStatusResponse(result) ? result.statuses : [];
   } catch (error) {
@@ -573,15 +662,41 @@ async function dispatchManualMessageToApi(
   body: {
     payload: unknown;
     instanceToken: string;
-  }
+  },
 ): Promise<{ skipped: boolean }> {
   if (!env.INTERNAL_SERVICE_TOKEN) return { skipped: true };
 
   try {
-    await dispatchToApi("/internal/evolution/dispatch", {
+    const membership = await getPrisma().tenantMember.findFirst({
+      where: { userId },
+      select: { tenantId: true },
+      orderBy: { createdAt: "asc" },
+    });
+    const payload =
+      body.payload &&
+      typeof body.payload === "object" &&
+      !Array.isArray(body.payload)
+        ? (body.payload as Record<string, unknown>)
+        : null;
+    const externalInstanceId =
+      typeof payload?.instanceId === "string"
+        ? payload.instanceId
+        : typeof payload?.instance === "string"
+          ? payload.instance
+          : null;
+    if (!membership || !externalInstanceId) return { skipped: true };
+
+    await syncEvolutionChannelToAiOrchestrator({
+      tenantId: membership.tenantId,
       userId,
       requestId: request.id,
-      body
+      externalInstanceId,
+    });
+    await dispatchToAiOrchestrator("/internal/evolution/dispatch", {
+      tenantId: membership.tenantId,
+      userId,
+      requestId: request.id,
+      body,
     });
     return { skipped: false };
   } catch (error) {
@@ -594,19 +709,19 @@ async function pauseBotHandoffInApi(
   request: FastifyRequest,
   userId: string,
   phone: string,
-  body: { reason: string; summary?: string }
+  body: { reason: string; summary?: string },
 ): Promise<boolean> {
   if (!env.INTERNAL_SERVICE_TOKEN || !phone) return false;
 
   try {
-    await dispatchToApi("/internal/handoffs", {
+    await dispatchToAiOrchestrator("/internal/handoffs", {
       userId,
       requestId: request.id,
       body: {
         phone,
         reason: body.reason,
-        summary: body.summary
-      }
+        summary: body.summary,
+      },
     });
     return true;
   } catch (error) {
@@ -615,15 +730,19 @@ async function pauseBotHandoffInApi(
   }
 }
 
-async function resumeBotHandoffsInApi(request: FastifyRequest, userId: string, phones: string[]): Promise<boolean> {
+async function resumeBotHandoffsInApi(
+  request: FastifyRequest,
+  userId: string,
+  phones: string[],
+): Promise<boolean> {
   const uniquePhones = [...new Set(phones)].filter(Boolean);
   if (!env.INTERNAL_SERVICE_TOKEN || uniquePhones.length === 0) return false;
 
   try {
-    await dispatchToApi("/internal/bot/resume", {
+    await dispatchToAiOrchestrator("/internal/bot/resume", {
       userId,
       requestId: request.id,
-      body: { phones: uniquePhones }
+      body: { phones: uniquePhones },
     });
     return true;
   } catch (error) {
@@ -650,19 +769,23 @@ async function pauseConversationAi(input: {
     where: {
       userId: input.userId,
       instanceId: input.instanceId,
-      contactJid: contact.jid
+      contactJid: contact.jid,
     },
     data: {
       aiPaused: true,
       aiPausedReason: input.reason,
-      aiPausedUpdatedAt: new Date()
-    }
+      aiPausedUpdatedAt: new Date(),
+    },
   });
 
   return contact;
 }
 
-async function resumeConversationAiByJid(input: { userId: string; instanceId: string; jid: string }): Promise<void> {
+async function resumeConversationAiByJid(input: {
+  userId: string;
+  instanceId: string;
+  jid: string;
+}): Promise<void> {
   const jid = normalizeWhatsappJid(input.jid);
   if (!jid) return;
 
@@ -672,25 +795,25 @@ async function resumeConversationAiByJid(input: { userId: string; instanceId: st
       userId: input.userId,
       instanceId: input.instanceId,
       jid,
-      isActive: true
+      isActive: true,
     },
     data: {
       isActive: false,
-      deletedAt: now
-    }
+      deletedAt: now,
+    },
   });
 
   await getPrisma().conversation.updateMany({
     where: {
       userId: input.userId,
       instanceId: input.instanceId,
-      contactJid: jid
+      contactJid: jid,
     },
     data: {
       aiPaused: false,
       aiPausedReason: null,
-      aiPausedUpdatedAt: now
-    }
+      aiPausedUpdatedAt: now,
+    },
   });
 }
 
@@ -718,11 +841,21 @@ async function upsertIgnoredContact(input: {
     reason: cleanOptionalText(input.reason),
     isActive: true,
     deletedAt: null,
-    ...(cleanOptionalText(input.displayName) !== undefined ? { displayName: cleanOptionalText(input.displayName) } : {}),
-    ...(cleanOptionalText(input.pushName) !== undefined ? { pushName: cleanOptionalText(input.pushName) } : {}),
-    ...(cleanOptionalText(input.businessName) !== undefined ? { businessName: cleanOptionalText(input.businessName) } : {}),
-    ...(input.createdByUserId !== undefined ? { createdByUserId: input.createdByUserId } : {}),
-    ...(input.createdByMessageId !== undefined ? { createdByMessageId: input.createdByMessageId } : {})
+    ...(cleanOptionalText(input.displayName) !== undefined
+      ? { displayName: cleanOptionalText(input.displayName) }
+      : {}),
+    ...(cleanOptionalText(input.pushName) !== undefined
+      ? { pushName: cleanOptionalText(input.pushName) }
+      : {}),
+    ...(cleanOptionalText(input.businessName) !== undefined
+      ? { businessName: cleanOptionalText(input.businessName) }
+      : {}),
+    ...(input.createdByUserId !== undefined
+      ? { createdByUserId: input.createdByUserId }
+      : {}),
+    ...(input.createdByMessageId !== undefined
+      ? { createdByMessageId: input.createdByMessageId }
+      : {}),
   };
 
   return getPrisma().ignoredContact.upsert({
@@ -730,8 +863,8 @@ async function upsertIgnoredContact(input: {
       userId_instanceId_jid: {
         userId: input.userId,
         instanceId: input.instanceId,
-        jid
-      }
+        jid,
+      },
     },
     update: updateData,
     create: {
@@ -745,8 +878,8 @@ async function upsertIgnoredContact(input: {
       source: input.source,
       reason: cleanOptionalText(input.reason) ?? null,
       createdByUserId: input.createdByUserId ?? null,
-      createdByMessageId: input.createdByMessageId ?? null
-    }
+      createdByMessageId: input.createdByMessageId ?? null,
+    },
   });
 }
 
@@ -771,17 +904,20 @@ function buildManualOutboundPayload(input: {
         ID: input.externalMessageId,
         Type: "text",
         Timestamp: input.timestamp.toISOString(),
-        PushName: input.senderName
+        PushName: input.senderName,
       },
       Message: {
-        conversation: input.text
-      }
-    }
+        conversation: input.text,
+      },
+    },
   };
 }
 
-function isBotStatusResponse(value: unknown): value is { statuses: BotHandoffStatus[] } {
-  if (!value || typeof value !== "object" || !("statuses" in value)) return false;
+function isBotStatusResponse(
+  value: unknown,
+): value is { statuses: BotHandoffStatus[] } {
+  if (!value || typeof value !== "object" || !("statuses" in value))
+    return false;
   const statuses = (value as { statuses?: unknown }).statuses;
   return Array.isArray(statuses);
 }
@@ -790,7 +926,9 @@ function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
-function cleanOptionalText(value: string | null | undefined): string | null | undefined {
+function cleanOptionalText(
+  value: string | null | undefined,
+): string | null | undefined {
   if (value === undefined) return undefined;
   const text = value?.trim() ?? "";
   return text ? text : null;

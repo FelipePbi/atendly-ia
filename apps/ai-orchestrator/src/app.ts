@@ -1,15 +1,20 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
 
-import { env } from "./config/env.js";
+import { env, requireEnv } from "./config/env.js";
 import { prisma } from "./db/prisma.js";
 import { AppError, toErrorMessage } from "./lib/errors.js";
 import { redactSensitive } from "./lib/redact.js";
 import { registerEvolutionWebhookRoutes } from "./modules/channel/routes/evolutionWebhook.routes.js";
+import { createPostgresGraphCheckpointer } from "./modules/graph/checkpointer.js";
 import { registerInternalRoutes } from "./modules/internal/routes.js";
 import { registerLegalRoutes } from "./modules/legal/routes.js";
 
 export async function buildApp() {
+  requireEnv(["DATABASE_URL"]);
+  const graphCheckpointer = await createPostgresGraphCheckpointer(
+    env.DATABASE_URL,
+  );
   const app = Fastify({
     logger: {
       redact: [
@@ -36,7 +41,7 @@ export async function buildApp() {
   }));
 
   await registerLegalRoutes(app);
-  await registerEvolutionWebhookRoutes(app, prisma);
+  await registerEvolutionWebhookRoutes(app, prisma, graphCheckpointer);
   await registerInternalRoutes(app, prisma);
 
   app.setErrorHandler((error, _request, reply) => {
@@ -57,6 +62,7 @@ export async function buildApp() {
   });
 
   app.addHook("onClose", async () => {
+    await graphCheckpointer.end();
     await prisma.$disconnect();
   });
 

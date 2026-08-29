@@ -3,7 +3,6 @@ import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import {
   channelMessageLogContext,
   type DiagnosticLogger,
-  maskPhone,
   noopDiagnosticLogger,
 } from "../../lib/diagnostic-log.js";
 import { toErrorMessage } from "../../lib/errors.js";
@@ -18,6 +17,7 @@ import {
   type ModelInputMessage,
   type ModelProvider,
   type ModelResponse,
+  type ModelToolCall,
   type ModelToolResult,
   type ModelTurn,
 } from "../model/model-provider.js";
@@ -43,6 +43,35 @@ export interface AssistantReply {
   text: string;
   conversationId: string;
   messageRecordId: string;
+}
+
+export interface AssistantGraphSession {
+  conversationId: string;
+  tenantId: string;
+  channelId: string;
+  userId: string;
+  requestId: string;
+  inputMessageIds: string[];
+  phone: string;
+  customerName?: string | null;
+  businessSettings: BusinessSettingsDTO;
+  instructions: string;
+  input: ModelInputMessage[];
+  turns: ModelTurn[];
+  iteration: number;
+  aiRunId?: string;
+  immediateDecision?: AiDecision;
+  lastResponseText?: string;
+}
+
+export interface AssistantGraphAgentStep {
+  session: AssistantGraphSession;
+  response?: ModelResponse;
+}
+
+export interface AssistantGraphToolStep {
+  session: AssistantGraphSession;
+  toolResults: ModelToolResult[];
 }
 
 export type ConversationStage =
@@ -238,22 +267,12 @@ export class AssistantService {
     };
   }
 
-  async handleBufferedText(
+  async prepareGraphTurn(
     input: IncomingAssistantMessage & { messageRecordIds: string[] },
-  ): Promise<AssistantReply> {
+  ): Promise<AssistantGraphSession> {
     const channelMessage = requireChannelMessage(input.channelMessage);
     const phone = channelMessage.customerPhone;
     const customerName = channelMessage.customerName ?? input.customerName;
-    const baseContext = channelMessageLogContext(channelMessage);
-
-    this.logger.info(
-      {
-        ...baseContext,
-        groupedMessageCount: input.messageRecordIds.length,
-      },
-      "Assistant started buffered text handling",
-    );
-
     const conversation = await this.upsertActiveConversation(
       channelMessage,
       customerName,
@@ -263,148 +282,285 @@ export class AssistantService {
       orderBy: { createdAt: "desc" },
       take: 30,
     });
-
-    const chronologicalMessageRecords = recentMessages.reverse();
-    const chronologicalMessages: ModelInputMessage[] =
-      chronologicalMessageRecords.map((message) => ({
+    const chronologicalMessages: ModelInputMessage[] = recentMessages
+      .reverse()
+      .map((message) => ({
         role: message.role === "assistant" ? "assistant" : "user",
         content: message.body,
       }));
-    this.logger.info(
-      {
-        ...baseContext,
-        conversationId: conversation.id,
-        recentMessageCount: chronologicalMessages.length,
-      },
-      "Assistant loaded conversation context",
-    );
-
     const state = normalizeStoredState(conversation.state);
     const businessSettings = normalizeBusinessSettings(
-      input.businessSettings ?? channelMessage?.businessSettings,
+      input.businessSettings ?? channelMessage.businessSettings,
     );
     const virtualAttendantSettings = normalizeVirtualAttendantSettings(
-      input.virtualAttendantSettings ??
-        channelMessage?.virtualAttendantSettings,
+      input.virtualAttendantSettings ?? channelMessage.virtualAttendantSettings,
     );
-    if (!businessSettingsConfigured(businessSettings)) {
-      const decision: AiDecision = {
-        action: "handoff_human",
-        messages: [
-          "Vou deixar essa conversa para a profissional responder, ta?",
-        ],
-        pauseReason: "manual_handoff",
-        conversationStage: "HUMAN_HANDOFF",
-        classification: "potential_customer",
-        confidence: 1,
-        internalNotes:
-          "IA bloqueada porque as configuracoes do negocio estao incompletas.",
-      };
-
-      await this.applyDecision({
-        conversationId: conversation.id,
-        phone,
-        customerName,
-        inputMessageIds: input.messageRecordIds,
-        decision,
-      });
-
-      const reply = composeReplyText(decision);
-      const assistantMessage = await this.prisma.message.create({
-        data: {
-          tenantId: channelMessage.tenantId,
-          channelId: channelMessage.channelId,
-          conversationId: conversation.id,
-          direction: "OUTBOUND",
-          source: "AI",
-          role: "assistant",
-          body: reply,
-        },
-      });
-
-      return {
-        text: reply,
-        conversationId: conversation.id,
-        messageRecordId: assistantMessage.id,
-      };
-    }
-
     const previousMessageCount = Math.max(
       0,
       chronologicalMessages.length - input.messageRecordIds.length,
     );
-    const immediateDecision = buildImmediateDecision(
-      input.text,
-      previousMessageCount,
-      virtualAttendantSettings,
-    );
-    const decision =
-      immediateDecision ??
-      parseAiDecision(
-        await this.runToolLoop({
-          conversationId: conversation.id,
-          tenantId: channelMessage.tenantId,
-          channelId: channelMessage.channelId,
-          userId: channelMessage.userId,
-          requestId: channelMessage.requestId,
-          inputMessageIds: input.messageRecordIds,
-          phone,
-          customerName,
-          instructions: buildSystemPrompt({
-            state,
-            promptVersion: env.AI_PROMPT_VERSION,
-            groupedMessages: input.text,
-            currentDateTime: new Date().toISOString(),
-            businessSettings,
-            virtualAttendantSettings,
-          }),
-          businessSettings,
-          input: chronologicalMessages,
-        }),
-      );
-    await this.applyDecision({
+    const immediateDecision = !businessSettingsConfigured(businessSettings)
+      ? incompleteBusinessSettingsDecision()
+      : buildImmediateDecision(
+          input.text,
+          previousMessageCount,
+          virtualAttendantSettings,
+        );
+
+    return {
       conversationId: conversation.id,
+      tenantId: channelMessage.tenantId,
+      channelId: channelMessage.channelId,
+      userId: channelMessage.userId,
+      requestId: channelMessage.requestId,
+      inputMessageIds: input.messageRecordIds,
       phone,
       customerName,
-      inputMessageIds: input.messageRecordIds,
+      businessSettings,
+      instructions: buildSystemPrompt({
+        state,
+        promptVersion: env.AI_PROMPT_VERSION,
+        groupedMessages: input.text,
+        currentDateTime: new Date().toISOString(),
+        businessSettings,
+        virtualAttendantSettings,
+      }),
+      input: chronologicalMessages,
+      turns: [],
+      iteration: 0,
+      immediateDecision: immediateDecision ?? undefined,
+    };
+  }
+
+  async invokeGraphAgent(
+    session: AssistantGraphSession,
+  ): Promise<AssistantGraphAgentStep> {
+    if (session.immediateDecision) return { session };
+    if (session.iteration >= 5) {
+      return {
+        session,
+        response: {
+          id: `iteration-limit:${session.aiRunId ?? session.conversationId}`,
+          text:
+            session.lastResponseText ||
+            "Vou chamar a profissional para continuar seu atendimento.",
+          toolCalls: [],
+          continuation: null,
+        },
+      };
+    }
+
+    const aiRunId =
+      session.aiRunId ?? (await this.createGraphAiRun(session)).id;
+    const toolContext = graphToolContext(session, aiRunId);
+    const response = await this.modelProvider.invoke({
+      instructions: session.instructions,
+      messages: session.input,
+      turns: session.turns,
+      tools: this.tools.createDefinitions(toolContext),
+    });
+    return {
+      session: {
+        ...session,
+        aiRunId,
+        lastResponseText: response.text || session.lastResponseText,
+      },
+      response,
+    };
+  }
+
+  async executeGraphTools(
+    session: AssistantGraphSession,
+    calls: ModelToolCall[],
+  ): Promise<AssistantGraphToolStep> {
+    if (!session.aiRunId) {
+      throw new Error("Graph tool execution requires an AiRun.");
+    }
+    const toolContext = graphToolContext(session, session.aiRunId);
+    const toolResults: ModelToolResult[] = [];
+
+    for (const call of calls) {
+      const existing = await this.prisma.aiToolCall.findFirst({
+        where: {
+          tenantId: session.tenantId,
+          aiRunId: session.aiRunId,
+          externalCallId: call.id,
+          name: call.name,
+        },
+      });
+      if (existing?.completedAt && existing.result) {
+        toolResults.push({
+          toolCallId: call.id,
+          toolName: call.name,
+          content: JSON.stringify(existing.result),
+        });
+        continue;
+      }
+
+      const toolCall =
+        existing ??
+        (await this.prisma.aiToolCall.create({
+          data: {
+            tenantId: session.tenantId,
+            aiRunId: session.aiRunId,
+            externalCallId: call.id,
+            name: call.name,
+            arguments: toInputJsonObject(call.args),
+            status: "STARTED",
+          },
+        }));
+
+      try {
+        const result = await this.tools.execute(call, toolContext);
+        await this.prisma.aiToolCall.update({
+          where: { id: toolCall.id },
+          data: {
+            result: toInputJsonObject(result),
+            status: result.ok ? "SUCCEEDED" : "FAILED",
+            error: result.ok ? null : result.error.message,
+            completedAt: new Date(),
+          },
+        });
+        toolResults.push({
+          toolCallId: call.id,
+          toolName: call.name,
+          content: JSON.stringify(result),
+        });
+      } catch (error) {
+        const result = graphToolFailure(session, call, error);
+        await this.prisma.aiToolCall.update({
+          where: { id: toolCall.id },
+          data: {
+            result: toInputJsonObject(result),
+            status: "FAILED",
+            error: result.error.message,
+            completedAt: new Date(),
+          },
+        });
+        toolResults.push({
+          toolCallId: call.id,
+          toolName: call.name,
+          content: JSON.stringify(result),
+        });
+      }
+    }
+
+    return { session, toolResults };
+  }
+
+  advanceGraphTurn(
+    session: AssistantGraphSession,
+    response: ModelResponse,
+    toolResults: ModelToolResult[],
+  ): AssistantGraphSession {
+    return {
+      ...session,
+      turns: [...session.turns, { response, toolResults }],
+      iteration: session.iteration + 1,
+    };
+  }
+
+  async completeGraphTurn(
+    session: AssistantGraphSession,
+    response?: ModelResponse,
+  ): Promise<AssistantReply> {
+    const decision =
+      session.immediateDecision ??
+      parseAiDecision(
+        response?.text ||
+          session.lastResponseText ||
+          "Vou chamar a profissional para continuar seu atendimento.",
+      );
+    await this.applyDecision({
+      conversationId: session.conversationId,
+      phone: session.phone,
+      customerName: session.customerName,
+      inputMessageIds: session.inputMessageIds,
       decision,
     });
-
-    const reply = composeReplyText(decision);
-    this.logger.info(
-      {
-        ...baseContext,
-        conversationId: conversation.id,
-        replyLength: reply.length,
-      },
-      "Assistant generated reply",
-    );
-
+    const text = composeReplyText(decision);
     const assistantMessage = await this.prisma.message.create({
       data: {
-        tenantId: channelMessage.tenantId,
-        channelId: channelMessage.channelId,
-        conversationId: conversation.id,
+        tenantId: session.tenantId,
+        channelId: session.channelId,
+        conversationId: session.conversationId,
         direction: "OUTBOUND",
         source: "AI",
         role: "assistant",
-        body: reply,
+        body: text,
       },
     });
-    this.logger.info(
-      {
-        ...baseContext,
-        conversationId: conversation.id,
-        messageRecordId: assistantMessage.id,
-      },
-      "Assistant saved outbound message",
-    );
-
+    if (session.aiRunId) {
+      await this.prisma.aiRun.update({
+        where: { id: session.aiRunId },
+        data: {
+          status: "SUCCEEDED",
+          outputText: response?.text ?? session.lastResponseText ?? text,
+          completedAt: new Date(),
+        },
+      });
+    }
     return {
-      text: reply,
-      conversationId: conversation.id,
+      text,
+      conversationId: session.conversationId,
       messageRecordId: assistantMessage.id,
     };
+  }
+
+  async failGraphTurn(
+    session: AssistantGraphSession | undefined,
+    error: unknown,
+  ): Promise<void> {
+    if (!session?.aiRunId) return;
+    await this.prisma.aiRun.update({
+      where: { id: session.aiRunId },
+      data: {
+        status: "FAILED",
+        error: toErrorMessage(error),
+        completedAt: new Date(),
+      },
+    });
+  }
+
+  private createGraphAiRun(session: AssistantGraphSession) {
+    return this.prisma.aiRun.create({
+      data: {
+        tenantId: session.tenantId,
+        channelId: session.channelId,
+        conversationId: session.conversationId,
+        provider: "openai",
+        model: env.OPENAI_MODEL,
+        promptVersion: env.AI_PROMPT_VERSION,
+        inputMessageIds: session.inputMessageIds,
+      },
+    });
+  }
+
+  async handleBufferedText(
+    input: IncomingAssistantMessage & { messageRecordIds: string[] },
+  ): Promise<AssistantReply> {
+    let session = await this.prepareGraphTurn(input);
+    try {
+      while (true) {
+        const step = await this.invokeGraphAgent(session);
+        session = step.session;
+        if (!step.response || step.response.toolCalls.length === 0) {
+          return this.completeGraphTurn(session, step.response);
+        }
+        const toolStep = await this.executeGraphTools(
+          session,
+          step.response.toolCalls,
+        );
+        session = this.advanceGraphTurn(
+          toolStep.session,
+          step.response,
+          toolStep.toolResults,
+        );
+      }
+    } catch (error) {
+      await this.failGraphTurn(session, error);
+      throw error;
+    }
   }
 
   async recordManualOutboundText(
@@ -637,238 +793,53 @@ export class AssistantService {
       }
     }
   }
+}
 
-  private async runToolLoop(args: {
-    conversationId: string;
-    tenantId: string;
-    channelId: string;
-    userId: string;
-    requestId: string;
-    inputMessageIds: string[];
-    phone: string;
-    customerName?: string | null;
-    businessSettings: BusinessSettingsDTO;
-    instructions: string;
-    input: ModelInputMessage[];
-  }): Promise<string> {
-    const turns: ModelTurn[] = [];
-    let lastResponse: ModelResponse | null = null;
-    const aiRun = await this.prisma.aiRun.create({
-      data: {
-        tenantId: args.tenantId,
-        channelId: args.channelId,
-        conversationId: args.conversationId,
-        provider: "openai",
-        model: env.OPENAI_MODEL,
-        promptVersion: env.AI_PROMPT_VERSION,
-        inputMessageIds: args.inputMessageIds,
-      },
-    });
-    const toolContext = {
-      conversationId: args.conversationId,
-      tenantId: args.tenantId,
-      channelId: args.channelId,
-      userId: args.userId,
-      requestId: args.requestId,
-      phone: args.phone,
-      customerName: args.customerName,
-      businessSettings: args.businessSettings,
-      aiRunId: aiRun.id,
-    };
-    const definitions = this.tools.createDefinitions(toolContext);
+function incompleteBusinessSettingsDecision(): AiDecision {
+  return {
+    action: "handoff_human",
+    messages: ["Vou deixar essa conversa para a profissional responder, ta?"],
+    pauseReason: "manual_handoff",
+    conversationStage: "HUMAN_HANDOFF",
+    classification: "potential_customer",
+    confidence: 1,
+    internalNotes:
+      "IA bloqueada porque as configuracoes do negocio estao incompletas.",
+  };
+}
 
-    try {
-      for (let iteration = 0; iteration < 5; iteration += 1) {
-        this.logger.info(
-          {
-            conversationId: args.conversationId,
-            phone: maskPhone(args.phone),
-            iteration,
-            inputItems: args.input.length,
-            toolCount: definitions.length,
-          },
-          "Assistant LangChain model request starting",
-        );
-        const response = await this.modelProvider.invoke({
-          instructions: args.instructions,
-          messages: args.input,
-          turns,
-          tools: definitions,
-        });
+function graphToolContext(session: AssistantGraphSession, aiRunId: string) {
+  return {
+    conversationId: session.conversationId,
+    tenantId: session.tenantId,
+    channelId: session.channelId,
+    userId: session.userId,
+    requestId: session.requestId,
+    phone: session.phone,
+    customerName: session.customerName,
+    businessSettings: session.businessSettings,
+    aiRunId,
+  };
+}
 
-        lastResponse = response;
-        const functionCalls = response.toolCalls;
-        this.logger.info(
-          {
-            conversationId: args.conversationId,
-            phone: maskPhone(args.phone),
-            iteration,
-            responseId: response.id,
-            functionCallCount: functionCalls.length,
-            outputTextLength: response.text.length,
-          },
-          "Assistant LangChain model response received",
-        );
-        if (functionCalls.length === 0) {
-          const output = response.text || "Certo, vou te ajudar por aqui.";
-          await this.prisma.aiRun.update({
-            where: { id: aiRun.id },
-            data: {
-              status: "SUCCEEDED",
-              outputText: output,
-              completedAt: new Date(),
-            },
-          });
-          return output;
-        }
-
-        const toolResults: ModelToolResult[] = [];
-
-        for (const call of functionCalls) {
-          this.logger.info(
-            {
-              conversationId: args.conversationId,
-              phone: maskPhone(args.phone),
-              iteration,
-              toolName: call.name,
-              callId: call.id,
-            },
-            "Assistant tool call started",
-          );
-          const toolCall = await this.prisma.aiToolCall.create({
-            data: {
-              tenantId: args.tenantId,
-              aiRunId: aiRun.id,
-              externalCallId: call.id,
-              name: call.name,
-              arguments: toInputJsonObject(call.args),
-              status: "STARTED",
-            },
-          });
-
-          try {
-            const result = await this.tools.execute(call, toolContext);
-            const resultContent = JSON.stringify(result);
-
-            await this.prisma.aiToolCall.update({
-              where: { id: toolCall.id },
-              data: {
-                result: toInputJsonObject(result),
-                status: result.ok ? "SUCCEEDED" : "FAILED",
-                error: result.ok ? null : result.error.message,
-                completedAt: new Date(),
-              },
-            });
-
-            toolResults.push({
-              toolCallId: call.id,
-              toolName: call.name,
-              content: resultContent,
-            });
-            const toolLogContext = {
-              conversationId: args.conversationId,
-              phone: maskPhone(args.phone),
-              iteration,
-              toolName: call.name,
-              callId: call.id,
-              ...(result.ok ? {} : { errorCode: result.error.code }),
-            };
-            if (result.ok) {
-              this.logger.info(toolLogContext, "Assistant tool call succeeded");
-            } else {
-              this.logger.warn(
-                toolLogContext,
-                "Assistant tool call returned structured error",
-              );
-            }
-          } catch (error) {
-            const errorMessage = toErrorMessage(error);
-            const idempotencyKey = `${aiRun.id}:${call.id}:${call.name}`;
-            await this.prisma.aiToolCall.update({
-              where: { id: toolCall.id },
-              data: {
-                result: {
-                  ok: false,
-                  requestId: args.requestId,
-                  tenantId: args.tenantId,
-                  aiRunId: aiRun.id,
-                  toolCallId: call.id,
-                  idempotencyKey,
-                  error: {
-                    code: "TOOL_EXECUTION_FAILED",
-                    message: errorMessage,
-                  },
-                },
-                status: "FAILED",
-                error: errorMessage,
-                completedAt: new Date(),
-              },
-            });
-
-            toolResults.push({
-              toolCallId: call.id,
-              toolName: call.name,
-              content: JSON.stringify({
-                ok: false,
-                requestId: args.requestId,
-                tenantId: args.tenantId,
-                aiRunId: aiRun.id,
-                toolCallId: call.id,
-                idempotencyKey,
-                error: {
-                  code: "TOOL_EXECUTION_FAILED",
-                  message: errorMessage,
-                },
-              }),
-            });
-            this.logger.error(
-              {
-                conversationId: args.conversationId,
-                phone: maskPhone(args.phone),
-                iteration,
-                toolName: call.name,
-                callId: call.id,
-                err: errorMessage,
-              },
-              "Assistant tool call failed",
-            );
-          }
-        }
-
-        turns.push({ response, toolResults });
-      }
-
-      this.logger.warn(
-        {
-          conversationId: args.conversationId,
-          phone: maskPhone(args.phone),
-        },
-        "Assistant tool loop reached iteration limit",
-      );
-      const output =
-        lastResponse?.text ||
-        "Vou chamar a profissional para continuar seu atendimento.";
-      await this.prisma.aiRun.update({
-        where: { id: aiRun.id },
-        data: {
-          status: "SUCCEEDED",
-          outputText: output,
-          completedAt: new Date(),
-        },
-      });
-      return output;
-    } catch (error) {
-      await this.prisma.aiRun.update({
-        where: { id: aiRun.id },
-        data: {
-          status: "FAILED",
-          error: toErrorMessage(error),
-          completedAt: new Date(),
-        },
-      });
-      throw error;
-    }
-  }
+function graphToolFailure(
+  session: AssistantGraphSession,
+  call: ModelToolCall,
+  error: unknown,
+) {
+  const aiRunId = session.aiRunId ?? "missing-ai-run";
+  return {
+    ok: false as const,
+    requestId: session.requestId,
+    tenantId: session.tenantId,
+    aiRunId,
+    toolCallId: call.id,
+    idempotencyKey: `${aiRunId}:${call.id}:${call.name}`,
+    error: {
+      code: "TOOL_EXECUTION_FAILED",
+      message: toErrorMessage(error),
+    },
+  };
 }
 
 function toInputJsonObject(value: object): Prisma.InputJsonObject {

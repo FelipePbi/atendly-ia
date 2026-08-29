@@ -21,6 +21,8 @@
   "dependencies": {
     "@fastify/cors": "^11.1.0",
     "@langchain/core": "1.2.9",
+    "@langchain/langgraph": "1.4.13",
+    "@langchain/langgraph-checkpoint-postgres": "1.0.5",
     "@langchain/openai": "1.5.8",
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",

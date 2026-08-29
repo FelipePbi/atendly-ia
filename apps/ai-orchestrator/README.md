@@ -8,7 +8,8 @@ Serviço interno multi-tenant responsável por conversas, mensagens, handoff e e
 Evolution Go
   → webhook autenticado
   → ChannelConnection resolve tenant e canal
-  → MessageOrchestrator / AssistantService
+  → MessageOrchestrator (adapter de compatibilidade/debounce)
+  → LangGraph persistente + AssistantService
   → LangChain ModelProvider + tools tipadas
   → SchedulingClient, quando necessário
   → EvolutionProvider
@@ -78,4 +79,15 @@ Tools LangChain disponíveis:
 
 Tools operacionais recebem contexto confiável de tenant/request. Mutações usam chave estável derivada de `aiRunId` e `toolCallId`; agenda continua acessível somente via `SchedulingClient`.
 
-LangGraph e RAG ainda não fazem parte do serviço.
+## LangGraph
+
+Workflow inbound usa nodes explícitos para contexto, conversa, guards operacionais, entendimento, retrieval placeholder, agent, execução/validação de tools, composição, persistência, envio e handoff.
+
+- `thread_id` é sempre `Conversation.id`;
+- checkpoints usam o mesmo PostgreSQL do serviço no schema dedicado `langgraph`;
+- startup executa `PostgresSaver.setup()` e shutdown encerra o pool;
+- retry retoma node pendente; tool call checkpointada mantém `aiRunId`, `toolCallId` e chave idempotente;
+- Appointment nunca é armazenado como source of truth do graph;
+- scheduling continua `Graph → LangChain Tool → SchedulingClient → Scheduling Service`.
+
+`MessageOrchestrator` permanece somente como adapter para webhook e debounce durante migração. RAG/retrieval real pertence ao GOAL 10 e não foi iniciado.

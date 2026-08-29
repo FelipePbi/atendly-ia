@@ -1,3 +1,4 @@
+import type { BaseCheckpointSaver } from "@langchain/langgraph";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import { env } from "../../../config/env.js";
@@ -6,6 +7,7 @@ import { channelMessageLogContext } from "../../../lib/diagnostic-log.js";
 import { toErrorMessage } from "../../../lib/errors.js";
 import { AssistantService } from "../../assistant/assistant.service.js";
 import { MessageOrchestrator } from "../../automation/MessageOrchestrator.js";
+import { PrismaGraphRuntime } from "../../graph/graph-runtime.js";
 import { HandoffService } from "../../handoff/HandoffService.js";
 import { IdempotencyStore } from "../../idempotency/IdempotencyStore.js";
 import {
@@ -18,6 +20,7 @@ import { ChannelConnectionService } from "../ChannelConnectionService.js";
 export async function registerEvolutionWebhookRoutes(
   app: FastifyInstance,
   prisma: PrismaClient,
+  checkpointer?: BaseCheckpointSaver,
 ): Promise<void> {
   const channelConnections = new ChannelConnectionService(prisma);
 
@@ -57,6 +60,7 @@ export async function registerEvolutionWebhookRoutes(
         channelId: message.channelId,
         instanceId: message.instanceId,
         instanceToken: readInstanceToken(request.body),
+        checkpointer,
       });
 
       app.log.info(
@@ -101,6 +105,7 @@ export function buildOrchestrator(input: {
   channelId: string;
   instanceId: string;
   instanceToken?: string;
+  checkpointer?: BaseCheckpointSaver;
 }) {
   const assistant = new AssistantService(input.prisma, input.app.log);
   const provider = new EvolutionProvider(
@@ -113,12 +118,17 @@ export function buildOrchestrator(input: {
     tenantId: input.tenantId,
     channelId: input.channelId,
   });
+  const runtime = new PrismaGraphRuntime(input.prisma);
   return new MessageOrchestrator(
     assistant,
     provider,
     idempotency,
     handoff,
     input.app.log,
+    {
+      runtime,
+      checkpointer: input.checkpointer,
+    },
   );
 }
 

@@ -4,7 +4,7 @@
 
 Aplicação web responsiva da Atendly. Implementa autenticação, onboarding, dashboard, conversas, agenda, clientes, serviços, configurações, migração e estados sistêmicos conforme Open Design.
 
-Frontend novo é base visual aprovada. Estado atual usa mocks e não está conectado ao BFF.
+Frontend novo é base visual aprovada. Data layer do BFF existe; integração de cada domínio ocorre nos goals seguintes.
 
 ## Stack
 
@@ -21,20 +21,11 @@ Tailwind CSS, shadcn e rotas proxy `/api` não fazem parte da implementação at
 ## Architecture
 
 ```text
-route/page
-    ↓
-feature screen
-    ↓
-Mock*Service (CURRENT)
+produto:  UI → Bff*Service → BffHttpClient → BFF /v1
+preview:  UI → Mock*Service
 ```
 
-Contrato planejado após GOAL 12:
-
-```text
-UI → service adapter → BFF
-```
-
-Componentes não devem fazer fetch ad hoc.
+`fetch` fica restrito a `src/data/http/BffHttpClient.ts`. Componentes não fazem acesso HTTP ad hoc.
 
 ## Directory structure
 
@@ -63,9 +54,11 @@ Prioridade:
 
 ## Current data state
 
-Todos os fluxos de produto usam `src/mocks/services/Mock*Service.ts` e dados em `src/mocks/data`. Não existe `Bff*Service` nem data layer real nesta etapa.
-
-Não conecte BFF prematuramente. GOAL 12 cria data layer; goals seguintes integram domínios.
+- `src/data/http/BffHttpClient.ts` centraliza URL, cookies, JSON, request ID, cancelamento, CSRF opcional e erros;
+- `src/data/services` contém os adapters da Public API V1 e o registry BFF;
+- `src/data/mappers` valida respostas do BFF com Zod;
+- `src/mocks` permanece como registry isolado para `/_preview` e para telas ainda não migradas;
+- goals 13–16 ativam os adapters por domínio, removendo dados demonstrativos do fluxo real sem alterar o preview.
 
 ## Routes
 
@@ -104,7 +97,8 @@ npm run start
 Copie `.env.example` para `.env` quando precisar configurar documentos legais.
 
 - `ATENDLY_LEGAL_*`: identidade jurídica, contatos, fornecedores, retenção, foro e flags de revisão/indexação.
-- `NEXT_PUBLIC_BFF_URL` e `BFF_BASE_URL`: reservadas no template para integração futura; código frontend atual não as consome.
+- `NEXT_PUBLIC_BFF_URL`: URL pública do BFF usada pelo registry no navegador.
+- `BFF_BASE_URL`: reservada para acesso server-side futuro; não é exposta ao navegador.
 
 Nunca exponha secret em variável `NEXT_PUBLIC_*`.
 
@@ -121,7 +115,7 @@ Frontend falará exclusivamente com BFF. Nunca chame AI Orchestrator, Scheduling
 ## Migration status
 
 - Open Design → React/Next: concluído como base visual.
-- Data layer BFF: `NOT_STARTED`, GOAL 12.
+- Data layer BFF: implementada no GOAL 12.
 - Auth/onboarding/settings/WhatsApp: `NOT_STARTED`, GOAL 13.
 - Services/customers/calendar: `NOT_STARTED`, GOAL 14.
 - Conversations/handoff: `NOT_STARTED`, GOAL 15.

@@ -8,7 +8,7 @@ import { MockOnboardingService } from "./services/MockOnboardingService";
 import { MockServiceCatalogService } from "./services/MockServiceCatalogService";
 import { MockSettingsService } from "./services/MockSettingsService";
 
-export const mockServices = {
+export const previewServices = {
   auth: new MockAuthService(),
   calendar: new MockCalendarService(),
   conversations: new MockConversationService(),
@@ -19,3 +19,5 @@ export const mockServices = {
   services: new MockServiceCatalogService(),
   settings: new MockSettingsService(),
 };
+
+export const mockServices = previewServices;

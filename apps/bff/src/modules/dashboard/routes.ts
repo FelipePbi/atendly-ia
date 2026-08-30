@@ -28,7 +28,9 @@ export async function registerV1DashboardRoutes(
         await Promise.all([
           platformSummary(tenant.tenantId),
           settled(ai.dashboard(context)),
-          settled(scheduling.dashboard(context)),
+          settled(
+            scheduling.dashboard(context).then(publicSchedulingDashboard),
+          ),
           settled(whatsappSummary(tenant.userId, request.id, evolution)),
         ]);
       return dataResponse(request, {
@@ -43,6 +45,25 @@ export async function registerV1DashboardRoutes(
       });
     },
   );
+}
+
+function publicSchedulingDashboard<
+  T extends {
+    calendar: { source: "ATENDLY" | "MINHA_AGENDA" | null };
+  },
+>(dashboard: T) {
+  return {
+    ...dashboard,
+    calendar: {
+      ...dashboard.calendar,
+      source:
+        dashboard.calendar.source === null
+          ? null
+          : dashboard.calendar.source === "ATENDLY"
+            ? ("ATENDLY" as const)
+            : ("EXTERNAL" as const),
+    },
+  };
 }
 
 async function platformSummary(tenantId: string) {

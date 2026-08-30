@@ -2,10 +2,17 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent, type ReactNode } from "react";
-import { Brand } from "@/shared/ui/Brand";
-import { Icon } from "@/shared/icons/Icon";
+import { type FormEvent, type ReactNode, useState } from "react";
+
+import { CURRENT_LEGAL_VERSIONS } from "@/config/legal-versions";
+import { BffHttpError } from "@/data";
 import { mockServices } from "@/mocks";
+import { Icon } from "@/shared/icons/Icon";
+import {
+  getProductServices,
+  useProductRuntime,
+} from "@/shared/runtime/ProductRuntime";
+import { Brand } from "@/shared/ui/Brand";
 
 export type AuthScenario =
   | "login"
@@ -111,6 +118,7 @@ function PasswordField({
       <span className="input-wrap">
         <input
           id={id}
+          name={id}
           className="input input-with-action"
           type={visible ? "text" : "password"}
           autoComplete={
@@ -140,21 +148,75 @@ function PasswordField({
   );
 }
 
-export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
+export function AuthScreen({
+  scenario,
+  preview = false,
+}: {
+  scenario: AuthScenario;
+  preview?: boolean;
+}) {
   const router = useRouter();
+  const { refreshSession } = useProductRuntime();
   const [loading, setLoading] = useState(false);
-  async function submit(
-    event: FormEvent<HTMLFormElement>,
-    destination: string,
-  ) {
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!event.currentTarget.checkValidity()) {
       event.currentTarget.reportValidity();
       return;
     }
+    const data = new FormData(event.currentTarget);
     setLoading(true);
-    await mockServices.auth.submit(scenario);
-    router.push(destination);
+    setSubmitError(null);
+    try {
+      if (preview) {
+        await mockServices.auth.submit(scenario);
+        router.push(destination);
+        return;
+      }
+
+      const auth = getProductServices().auth;
+      if (scenario === "signup") {
+        const password = formString(data, "signup-password");
+        const confirmPassword = formString(data, "confirm-password");
+        await auth.register({
+          email: formString(data, "email"),
+          password,
+          confirmPassword,
+          termsAccepted: true,
+          ...CURRENT_LEGAL_VERSIONS,
+        });
+        await refreshSession();
+        router.push("/onboarding");
+      } else if (scenario === "login") {
+        await auth.login({
+          email: formString(data, "email"),
+          password: formString(data, "login-password"),
+        });
+        const session = await refreshSession();
+        router.push(session?.onboardingCompleted ? "/inicio" : "/onboarding");
+      } else if (scenario === "forgot-password") {
+        await auth.forgotPassword(formString(data, "email"));
+        router.push("/solicitacao-enviada");
+      } else if (scenario === "new-password") {
+        const token = new URLSearchParams(window.location.search).get("token");
+        if (!token) {
+          router.push("/link-expirado");
+          return;
+        }
+        await auth.resetPassword({
+          token,
+          newPassword: formString(data, "new-password"),
+          confirmPassword: formString(data, "confirm-password"),
+        });
+        router.push("/login");
+      }
+    } catch (error: unknown) {
+      setSubmitError(authErrorMessage(error, scenario));
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (scenario === "request-sent" || scenario === "link-expired") {
@@ -257,10 +319,19 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
             </div>
           </div>
         )}
+        {submitError && (
+          <div className="auth-inline-alert" role="alert">
+            <Icon name="alert" />
+            <div>
+              <strong>Não foi possível continuar</strong>
+              {submitError}
+            </div>
+          </div>
+        )}
         <form
           className="auth-form"
           style={errors ? { marginTop: 18 } : undefined}
-          onSubmit={(event) => submit(event, destination)}
+          onSubmit={(event) => void submit(event)}
           noValidate
         >
           {!newPassword && (
@@ -308,8 +379,22 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
               }
             />
           )}
-          {newPassword && (
+          {(newPassword || (signup && !preview)) && (
             <PasswordField id="confirm-password" label="Repita a nova senha" />
+          )}
+          {signup && !preview && (
+            <label className="check">
+              <input name="terms" type="checkbox" required />
+              <span className="check-box" aria-hidden="true" />
+              <span className="small">
+                Li e aceito os <Link href="/termos-de-uso">Termos de Uso</Link>{" "}
+                e a{" "}
+                <Link href="/politica-de-privacidade">
+                  Política de Privacidade
+                </Link>
+                .
+              </span>
+            </label>
           )}
           {scenario === "login" && (
             <div className="auth-row">
@@ -363,4 +448,25 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
       </div>
     </AuthLayout>
   );
+}
+
+function authErrorMessage(error: unknown, scenario: AuthScenario): string {
+  if (error instanceof BffHttpError) {
+    if (scenario === "login" && error.status === 401) {
+      return "E-mail ou senha incorretos.";
+    }
+    if (error.code === "RESET_TOKEN_INVALID") {
+      return "Este link expirou ou já foi utilizado.";
+    }
+    if (error.code === "EMAIL_ALREADY_EXISTS") {
+      return "Já existe uma conta com este e-mail.";
+    }
+    if (error.status === 400) return "Revise os dados informados.";
+  }
+  return "Não foi possível falar com a Atendly. Tente novamente.";
+}
+
+function formString(data: FormData, name: string): string {
+  const value = data.get(name);
+  return typeof value === "string" ? value : "";
 }

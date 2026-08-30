@@ -1,6 +1,9 @@
-import type { Metadata, Viewport } from "next";
-import { RouteAnnouncer } from "@/shared/ui/RouteAnnouncer";
 import "./globals.css";
+
+import type { Metadata, Viewport } from "next";
+
+import { ProductRuntimeProvider } from "@/shared/runtime/ProductRuntime";
+import { RouteAnnouncer } from "@/shared/ui/RouteAnnouncer";
 
 export const metadata: Metadata = {
   title: { default: "Atendly", template: "%s — Atendly" },
@@ -21,8 +24,10 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body>
-        <RouteAnnouncer />
-        {children}
+        <ProductRuntimeProvider>
+          <RouteAnnouncer />
+          {children}
+        </ProductRuntimeProvider>
       </body>
     </html>
   );

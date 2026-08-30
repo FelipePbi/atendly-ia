@@ -1,30 +1,31 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+
+import { type AuthScenario, AuthScreen } from "@/features/auth/AuthScreen";
 import { AgendaScreen } from "@/features/calendar/AgendaScreen";
 import type { AgendaScenario } from "@/features/calendar/types";
-import { AuthScreen, type AuthScenario } from "@/features/auth/AuthScreen";
 import { ConversationsScreen } from "@/features/conversations/ConversationsScreen";
 import type { ConversationsScenario } from "@/features/conversations/types";
+import type { CustomerScenario } from "@/features/customers/types";
 import { DashboardScreen } from "@/features/dashboard/DashboardScreen";
 import type { DashboardScenario } from "@/features/dashboard/types";
 import { DirectoryScreen } from "@/features/directory/DirectoryScreen";
-import type { CustomerScenario } from "@/features/customers/types";
-import type { ServiceScenario } from "@/features/services/types";
 import { MigrationScreen } from "@/features/migration/MigrationScreen";
 import type { MigrationScenario } from "@/features/migration/types";
 import { OnboardingScreen } from "@/features/onboarding/OnboardingScreen";
 import {
   isOnboardingScenario,
-  onboardingOrder,
+  type onboardingOrder,
 } from "@/features/onboarding/scenarios";
+import type { ServiceScenario } from "@/features/services/types";
 import { SettingsScreen } from "@/features/settings/SettingsScreen";
 import type { SettingsScenario } from "@/features/settings/types";
 import {
-  SystemScreen,
   type SystemScenario,
+  SystemScreen,
 } from "@/features/system/SystemScreen";
-import { Brand } from "@/shared/ui/Brand";
 import { Icon } from "@/shared/icons/Icon";
+import { Brand } from "@/shared/ui/Brand";
 
 const authPreview: Record<string, AuthScenario> = {
   "auth-login": "login",
@@ -1162,7 +1163,8 @@ function PrototypeLegalScreen({ privacy = false }: { privacy?: boolean }) {
 }
 
 export function PreviewScreen({ slug }: { slug: string }) {
-  if (slug in authPreview) return <AuthScreen scenario={authPreview[slug]} />;
+  if (slug in authPreview)
+    return <AuthScreen preview scenario={authPreview[slug]} />;
   if (slug === "auth-terms") return <PrototypeLegalScreen />;
   if (slug === "auth-privacy") return <PrototypeLegalScreen privacy />;
   if (slug in dashboardPreview)
@@ -1178,14 +1180,14 @@ export function PreviewScreen({ slug }: { slug: string }) {
   if (slug in servicesPreview)
     return <DirectoryScreen area="services" scenario={servicesPreview[slug]} />;
   if (slug in settingsPreview)
-    return <SettingsScreen scenario={settingsPreview[slug]} />;
+    return <SettingsScreen preview scenario={settingsPreview[slug]} />;
   if (slug in migrationPreview)
     return <MigrationScreen scenario={migrationPreview[slug]} />;
   if (slug in systemPreview)
     return <SystemScreen scenario={systemPreview[slug]} />;
   const onboarding = onboardingPreviewMap[slug];
   if (onboarding && isOnboardingScenario(onboarding))
-    return <OnboardingScreen scenario={onboarding} />;
+    return <OnboardingScreen preview scenario={onboarding} />;
   if (slug === "atendly-design-system") return <DesignSystemPreview />;
   if (slug === "atendly-shell-desktop") return <DesktopShellPreview />;
   if (slug === "atendly-shell-mobile") return <MobileShellPreview />;

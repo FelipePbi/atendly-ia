@@ -3,14 +3,17 @@
 import clsx from "clsx";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { type FormEvent, type ReactNode, useMemo, useState } from "react";
+
+import { Icon } from "@/shared/icons/Icon";
 import { Brand } from "@/shared/ui/Brand";
 import { CurrencyInput } from "@/shared/ui/CurrencyInput";
-import { Icon } from "@/shared/icons/Icon";
+
+import { ProductOnboardingScreen } from "./ProductOnboardingScreen";
 import {
   onboardingOrder,
-  onboardingScenarios,
   type OnboardingScenario,
+  onboardingScenarios,
 } from "./scenarios";
 
 function Summary({
@@ -909,7 +912,18 @@ const nextByKind: Record<string, string> = {
   error: "fonte-da-agenda",
 };
 
-export function OnboardingScreen({
+export function OnboardingScreen(props: {
+  scenario: OnboardingScenario;
+  preview?: boolean;
+}) {
+  return props.preview ? (
+    <PrototypeOnboardingScreen scenario={props.scenario} />
+  ) : (
+    <ProductOnboardingScreen scenario={props.scenario} />
+  );
+}
+
+function PrototypeOnboardingScreen({
   scenario,
 }: {
   scenario: OnboardingScenario;

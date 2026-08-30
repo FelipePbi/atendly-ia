@@ -1,4 +1,5 @@
-import { redirect } from "next/navigation";
+import { OnboardingResume } from "@/features/onboarding/OnboardingRuntime";
+
 export default function OnboardingIndexPage() {
-  redirect("/onboarding/dados-do-negocio");
+  return <OnboardingResume />;
 }

@@ -247,6 +247,12 @@ async function onboardingState(
     }),
     scheduling.calendar(context),
   ]);
+  const [services, availability] = await Promise.all([
+    calendar.source ? scheduling.listServices(context) : Promise.resolve([]),
+    calendar.source === "ATENDLY"
+      ? scheduling.availabilitySettings(context)
+      : Promise.resolve(null),
+  ]);
   return {
     business: profile
       ? {
@@ -268,6 +274,8 @@ async function onboardingState(
             ? "LIGHT_CLOSE"
             : null,
     },
+    service: services.find((service) => service.active) ?? null,
+    availability,
     whatsapp: instance
       ? { status: instance.status, phoneNumber: instance.phoneNumber }
       : null,

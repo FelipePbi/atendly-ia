@@ -16,7 +16,9 @@ Frontend novo é base visual aprovada. Data layer do BFF existe; integração de
 - `clsx`;
 - package local `@atendly-ia/legal-contract`.
 
-Tailwind CSS, shadcn e rotas proxy `/api` não fazem parte da implementação atual.
+Tailwind CSS e shadcn não fazem parte da implementação atual. O rewrite
+same-origin `/api/bff/*` encaminha exclusivamente ao BFF configurado em
+`BFF_BASE_URL`.
 
 ## Architecture
 
@@ -97,8 +99,8 @@ npm run start
 Copie `.env.example` para `.env` quando precisar configurar documentos legais.
 
 - `ATENDLY_LEGAL_*`: identidade jurídica, contatos, fornecedores, retenção, foro e flags de revisão/indexação.
-- `NEXT_PUBLIC_BFF_URL`: URL pública do BFF usada pelo registry no navegador.
-- `BFF_BASE_URL`: reservada para acesso server-side futuro; não é exposta ao navegador.
+- `NEXT_PUBLIC_BFF_URL`: base usada pelo registry no navegador; pode apontar para o rewrite same-origin `/api/bff`.
+- `BFF_BASE_URL`: destino server-side do rewrite; não é exposto ao navegador.
 
 Nunca exponha secret em variável `NEXT_PUBLIC_*`.
 
@@ -116,7 +118,7 @@ Frontend falará exclusivamente com BFF. Nunca chame AI Orchestrator, Scheduling
 
 - Open Design → React/Next: concluído como base visual.
 - Data layer BFF: implementada no GOAL 12.
-- Auth/onboarding/settings/WhatsApp: `NOT_STARTED`, GOAL 13.
+- Auth/onboarding/settings/WhatsApp: concluído no GOAL 13, incluindo smoke integrado real.
 - Services/customers/calendar: `NOT_STARTED`, GOAL 14.
 - Conversations/handoff: `NOT_STARTED`, GOAL 15.
 - Dashboard/calendar migration: `NOT_STARTED`, GOAL 16.

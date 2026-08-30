@@ -2,8 +2,14 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { type ReactNode, useState } from "react";
+
 import { Icon, type IconName } from "@/shared/icons/Icon";
+import {
+  getProductServices,
+  useProductRuntime,
+} from "@/shared/runtime/ProductRuntime";
 import { Brand } from "@/shared/ui/Brand";
 import { Dialog } from "@/shared/ui/Dialog";
 
@@ -66,6 +72,9 @@ export function AppShell({
   showMobileHeader = true,
   attention = false,
 }: AppShellProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const { session, setUnauthenticated } = useProductRuntime();
   const [accountOpen, setAccountOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const styleModule =
@@ -82,13 +91,33 @@ export function AppShell({
   const mainClass = mainClassName ?? `${styleModule}-main`;
   const officialSource =
     source === "external" ? "Minha Agenda" : "Agenda Atendly";
-  const sourceContext =
-    module === "dashboard" || module === "conversations"
-      ? "Ambiente de demonstração"
-      : `${officialSource} oficial`;
   const systemAttention = module === "system";
   const mobileAttention = systemAttention || attention;
   const compactAccount = ["settings", "migration", "system"].includes(module);
+  const preview = pathname.startsWith("/_preview");
+  const sourceContext = preview
+    ? "Ambiente de demonstração"
+    : `${officialSource} oficial`;
+  const businessName = preview
+    ? "Studio Aurora"
+    : (session?.businessProfile?.businessName ??
+      session?.tenant.name ??
+      "Seu negócio");
+  const userLabel = preview
+    ? "Felipe Martins"
+    : (session?.user.email ?? "Conta principal");
+
+  async function logout() {
+    if (preview) {
+      router.push("/_preview/auth-login");
+      return;
+    }
+    await getProductServices()
+      .auth.logout()
+      .catch(() => undefined);
+    setUnauthenticated();
+    router.replace("/login");
+  }
 
   return (
     <>
@@ -109,10 +138,10 @@ export function AppShell({
           </div>
           <div className="business-context">
             <span className="avatar" aria-hidden="true">
-              SA
+              {initials(businessName)}
             </span>
             <span className="business-name">
-              <strong>Studio Aurora</strong>
+              <strong>{businessName}</strong>
               <span>{sourceContext}</span>
             </span>
           </div>
@@ -182,11 +211,11 @@ export function AppShell({
                   aria-controls="account-menu"
                 >
                   <span className="avatar" aria-hidden="true">
-                    FM
+                    {initials(userLabel)}
                   </span>
                   <span className="business-name">
-                    <strong>Felipe Martins</strong>
-                    <span>Conta principal</span>
+                    <strong>{userLabel}</strong>
+                    <span>Conta proprietária</span>
                   </span>
                   <Icon name={compactAccount ? "chevron-right" : "more"} />
                 </button>
@@ -199,9 +228,13 @@ export function AppShell({
                       Ajuda
                     </span>
                     <div className="menu-divider" />
-                    <Link className="menu-item danger" href="/login">
+                    <button
+                      className="menu-item danger"
+                      type="button"
+                      onClick={() => void logout()}
+                    >
                       Sair
-                    </Link>
+                    </button>
                   </div>
                 )}
               </div>
@@ -225,7 +258,7 @@ export function AppShell({
                     ? officialSource
                     : mobileAttention
                       ? "Atenção"
-                      : "Studio Aurora"}
+                      : businessName}
               </span>
             </header>
           )}
@@ -289,10 +322,14 @@ export function AppShell({
             Ajuda
           </span>
           <div className="menu-divider" />
-          <Link className="menu-item danger" href="/login">
+          <button
+            className="menu-item danger"
+            type="button"
+            onClick={() => void logout()}
+          >
             <Icon name="logout" />
             Sair
-          </Link>
+          </button>
         </div>
         <p className="sr-only">
           Fonte oficial:{" "}
@@ -301,4 +338,13 @@ export function AppShell({
       </Dialog>
     </>
   );
+}
+
+function initials(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
 }

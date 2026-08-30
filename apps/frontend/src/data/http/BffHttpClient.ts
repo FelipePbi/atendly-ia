@@ -67,7 +67,8 @@ export class BffHttpClient {
   constructor(options: BffHttpClientOptions) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
     this.csrfHeaderName = options.csrfHeaderName ?? "x-csrf-token";
-    this.fetchImplementation = options.fetchImplementation ?? globalThis.fetch;
+    this.fetchImplementation =
+      options.fetchImplementation ?? globalThis.fetch.bind(globalThis);
     this.getCsrfToken = options.getCsrfToken;
   }
 

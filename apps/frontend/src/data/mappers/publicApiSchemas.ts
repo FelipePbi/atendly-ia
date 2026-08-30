@@ -98,6 +98,17 @@ export const onboardingStateSchema = z.object({
     integration: calendarIntegrationSchema.nullable(),
   }),
   ai: z.object({ tone: aiToneSchema.nullable() }),
+  service: z
+    .object({
+      id: z.string().min(1),
+      name: z.string(),
+      durationMinutes: z.number().int().positive(),
+      priceType: z.enum(["FIXED", "ON_REQUEST"]),
+      price: z.number().nonnegative().nullable(),
+      active: z.boolean(),
+    })
+    .nullable(),
+  availability: availabilitySettingsSchema.nullable(),
   whatsapp: z
     .object({
       status: z.string(),

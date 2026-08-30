@@ -3,7 +3,7 @@
 ## Estado
 
 ```text
-NEXT: GOAL 13
+COMPLETED: GOAL 13
 ```
 
 Este roadmap governa refatoração incremental. Todos os goals começam em `NOT_STARTED`. Esta tarefa de documentação ocorre antes do GOAL 01.
@@ -76,7 +76,7 @@ AI Orchestrator e Scheduling Service já existem como apps separados; goals segu
 | GOAL 10 | RAG + pgvector | GOAL 09 | COMPLETED |
 | GOAL 11 | BFF Public API V1 | GOAL 10 | COMPLETED |
 | GOAL 12 | Frontend data layer | GOAL 11 | COMPLETED |
-| GOAL 13 | Auth + Onboarding + Settings + WhatsApp | GOAL 12 | NOT_STARTED |
+| GOAL 13 | Auth + Onboarding + Settings + WhatsApp | GOAL 12 | COMPLETED |
 | GOAL 14 | Services + Customers + Calendar | GOAL 13 | NOT_STARTED |
 | GOAL 15 | Conversations + Handoff | GOAL 14 | NOT_STARTED |
 | GOAL 16 | Dashboard + Calendar Migration | GOAL 15 | NOT_STARTED |

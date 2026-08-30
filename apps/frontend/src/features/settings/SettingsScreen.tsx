@@ -2,10 +2,13 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
+
+import { Icon, type IconName } from "@/shared/icons/Icon";
 import { AppShell } from "@/shared/layout/AppShell";
 import { Dialog } from "@/shared/ui/Dialog";
-import { Icon, type IconName } from "@/shared/icons/Icon";
+
+import { ProductSettingsScreen } from "./ProductSettingsScreen";
 import type { SettingsScenario } from "./types";
 
 function Page({
@@ -1199,7 +1202,18 @@ function AccountSettings() {
   );
 }
 
-export function SettingsScreen({
+export function SettingsScreen(props: {
+  preview?: boolean;
+  scenario?: SettingsScenario;
+}) {
+  return props.preview ? (
+    <PrototypeSettingsScreen scenario={props.scenario} />
+  ) : (
+    <ProductSettingsScreen scenario={props.scenario ?? "hub"} />
+  );
+}
+
+function PrototypeSettingsScreen({
   scenario = "hub",
 }: {
   scenario?: SettingsScenario;

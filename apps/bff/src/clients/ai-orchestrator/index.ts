@@ -20,6 +20,7 @@ const conversationSchema = z.object({
   customerName: z.string().nullable(),
   status: z.enum(["ACTIVE", "HUMAN_HANDOFF", "CLOSED"]),
   humanHandoff: z.boolean(),
+  handoffReason: z.string().nullable(),
   lastMessage: messageSchema.nullable(),
   unreadCount: z.number().int().nonnegative(),
   updatedAt: z.string(),

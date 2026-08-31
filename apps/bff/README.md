@@ -13,16 +13,15 @@ Backend público da aplicação web Atendly. A Public API V1 é o único contrat
 - onboarding e perfil;
 - business settings, configurações da atendente e automação;
 - lifecycle da instância WhatsApp, QR/pairing e contatos;
-- webhook Evolution Go legado, preservado durante a transição;
 - agregação de dashboard e adaptação dos contratos web de conversas, agenda, clientes, serviços e migração;
 - persistência somente de auth, perfil, settings e conexão WhatsApp no PostgreSQL próprio;
 - clients explícitos para AI Orchestrator, Scheduling Service e Evolution Go.
 
-Frontend novo passa a consumir estes endpoints no GOAL 12; até lá seus mocks permanecem inalterados.
+Frontend de produto consome estes endpoints. Preview visual continua isolado em mocks.
 
 ## Transitional responsibilities
 
-Arquivos legados de Conversation, Message, handoff e persona ainda existem no repositório, mas suas rotas públicas não são registradas. O webhook legado do provider permanece registrado até o cleanup responsável.
+Arquivos legados de persona e configurações anteriores à V1 ainda existem no repositório, mas suas rotas públicas não são registradas. Conversation, Message e Handoff pertencem exclusivamente ao AI Orchestrator.
 
 Não remova responsabilidades transitórias até goal explícito substituir contratos e consumidores. Schemas atuais também contêm conceitos legados que não devem ser propagados para V1.
 
@@ -60,9 +59,10 @@ BFF não será owner de Conversation, Message, Handoff, Appointment, Availabilit
 `CURRENT`:
 
 ```text
-web client (legado) → BFF → PostgreSQL do BFF
-                       ├─→ AI Orchestrator
-                       └─→ Evolution Go
+Frontend → BFF → PostgreSQL do BFF
+             ├─→ AI Orchestrator
+             ├─→ Scheduling Service
+             └─→ Evolution Go
 
 Evolution Go → AI Orchestrator
 ```
@@ -82,7 +82,7 @@ Clients validam respostas com Zod, propagam request ID e contexto tenant confiá
 
 Prisma schema: `prisma/schema.prisma`. Fundação multi-tenant contém `Tenant`, `TenantMember` e `BusinessProfile`. Cadastro cria `User`, tenant, membership `OWNER`, perfil inicial e aceite legal na mesma transação. Migration do GOAL 03 cria um tenant determinístico para cada usuário legado ainda sem membership.
 
-Models legados ainda presentes aguardam o GOAL 17. Não representam ownership atual nem devem orientar novos recursos de negócio.
+Models legados de configuração ainda presentes aguardam o GOAL 17. Conversation, Message e AiSuppressionLog foram removidos no GOAL 15.
 
 No alvo, BFF acessa somente tabelas do próprio domínio. Nunca compartilhe Prisma nem consulte DB de Scheduling Service ou AI Orchestrator.
 
@@ -117,7 +117,7 @@ Saúde:
 - `/v1/calendar/integration*` e `/v1/calendar/migrations*`: integração e migração assistida;
 - `/v1/whatsapp*`: lifecycle da conexão.
 
-O mapa completo entre endpoints e consumidores planejados está em `PUBLIC_API_V1.md`. Fora de `/v1`, apenas health checks e `POST /webhooks/evolution-go` permanecem registrados.
+O mapa completo entre endpoints e consumidores planejados está em `PUBLIC_API_V1.md`. Fora de `/v1`, apenas health checks permanecem registrados.
 
 ## Environment
 

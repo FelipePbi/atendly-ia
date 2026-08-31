@@ -151,7 +151,14 @@ export async function registerInternalRoutes(
             }
           : {}),
       },
-      include: { messages: { orderBy: { createdAt: "desc" }, take: 1 } },
+      include: {
+        messages: { orderBy: { createdAt: "desc" }, take: 1 },
+        handoffs: {
+          where: { status: "OPEN" },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
       orderBy: { updatedAt: "desc" },
       take: query.limit,
     });
@@ -196,25 +203,39 @@ export async function registerInternalRoutes(
     }
 
     const correlationId = `owner-${randomUUID()}`;
-    const sent = await new EvolutionProvider(
-      app.log,
-      body.instanceToken,
-      conversation.channel.externalInstanceId,
-    ).sendText({
-      to: contactNumber(conversation.externalContactId),
-      text: body.text,
-      correlationId,
-    });
-    const message = await prisma.message.create({
+    const pendingMessage = await prisma.message.create({
       data: {
         tenantId,
         channelId: conversation.channelId,
         conversationId: conversation.id,
-        externalMessageId: sent.messageId ?? correlationId,
+        externalMessageId: correlationId,
         direction: "OUTBOUND",
         source: "OWNER",
         role: "assistant",
         body: body.text,
+      },
+    });
+
+    let sent;
+    try {
+      sent = await new EvolutionProvider(
+        app.log,
+        body.instanceToken,
+        conversation.channel.externalInstanceId,
+      ).sendText({
+        to: contactNumber(conversation.externalContactId),
+        text: body.text,
+        correlationId,
+      });
+    } catch (error) {
+      await prisma.message.delete({ where: { id: pendingMessage.id } });
+      throw error;
+    }
+
+    const message = await prisma.message.update({
+      where: { id: pendingMessage.id },
+      data: {
+        externalMessageId: sent.messageId ?? correlationId,
         rawPayload: jsonValue(sent.raw),
       },
     });
@@ -229,11 +250,11 @@ export async function registerInternalRoutes(
     const { tenantId } = await trustedTenantContext(prisma, request, true);
     const { id } = parseOrThrow(conversationParamsSchema, request.params);
     const conversation = await requireConversation(prisma, tenantId, id);
-    const existing = await prisma.handoff.findFirst({
+    const existingOwnerTakeover = await prisma.handoff.findFirst({
       where: { tenantId, conversationId: id, status: "OPEN" },
       orderBy: { createdAt: "desc" },
     });
-    if (!existing) {
+    if (existingOwnerTakeover?.reason !== "OWNER_TAKEOVER") {
       await prisma.handoff.create({
         data: {
           tenantId,
@@ -539,6 +560,11 @@ async function requireConversation(
     where: { id, tenantId },
     include: {
       messages: { orderBy: { createdAt: "desc" }, take: 1 },
+      handoffs: {
+        where: { status: "OPEN" },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
       channel: true,
     },
   });
@@ -558,6 +584,7 @@ function conversationDto(conversation: {
   status: "ACTIVE" | "HUMAN_HANDOFF" | "CLOSED";
   humanHandoff: boolean;
   updatedAt: Date;
+  handoffs: Array<{ reason: string }>;
   messages: Array<{
     id: string;
     direction: "INBOUND" | "OUTBOUND";
@@ -572,6 +599,7 @@ function conversationDto(conversation: {
     customerName: conversation.customerName,
     status: conversation.status,
     humanHandoff: conversation.humanHandoff,
+    handoffReason: conversation.handoffs[0]?.reason ?? null,
     lastMessage: conversation.messages[0]
       ? messageDto(conversation.messages[0])
       : null,

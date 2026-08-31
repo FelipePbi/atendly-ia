@@ -1,9 +1,7 @@
 import type {
   BusinessProfile,
   BusinessSettings,
-  Conversation,
   IgnoredContact,
-  Message,
   Tenant,
   User,
   UserProfile,
@@ -218,50 +216,6 @@ export function ignoredContactDto(contact: IgnoredContact) {
     isActive: contact.isActive,
     createdAt: toIso(contact.createdAt),
     updatedAt: toIso(contact.updatedAt),
-  };
-}
-
-export function conversationDto(
-  conversation: Conversation & { messages?: Message[] },
-  aiHandoff?: {
-    aiHandoff: boolean;
-    aiHandoffReason: string | null;
-    aiHandoffPauseUntil: string | null;
-  },
-) {
-  return {
-    id: conversation.id,
-    contactJid: conversation.contactJid,
-    contactName: conversation.contactName,
-    profilePictureUrl: conversation.profilePictureUrl,
-    lastMessagePreview: conversation.lastMessagePreview,
-    lastMessageAt: conversation.lastMessageAt
-      ? toIso(conversation.lastMessageAt)
-      : null,
-    unreadCount: conversation.unreadCount,
-    archivedAt: conversation.archivedAt ? toIso(conversation.archivedAt) : null,
-    lastMessageFromMe: conversation.messages?.[0]?.fromMe ?? false,
-    aiPaused: conversation.aiPaused || aiHandoff?.aiHandoff || false,
-    aiPausedReason:
-      conversation.aiPausedReason ?? aiHandoff?.aiHandoffReason ?? null,
-    aiPausedUpdatedAt: conversation.aiPausedUpdatedAt
-      ? toIso(conversation.aiPausedUpdatedAt)
-      : null,
-    aiHandoff: aiHandoff?.aiHandoff ?? false,
-    aiHandoffReason: aiHandoff?.aiHandoffReason ?? null,
-    aiHandoffPauseUntil: aiHandoff?.aiHandoffPauseUntil ?? null,
-  };
-}
-
-export function messageDto(message: Message) {
-  return {
-    id: message.id,
-    fromMe: message.fromMe,
-    senderName: message.senderName,
-    type: message.type,
-    contentText: message.contentText,
-    mediaType: message.mediaType,
-    timestamp: toIso(message.timestamp),
   };
 }
 

@@ -20,7 +20,6 @@ import { registerV1ServiceRoutes } from "./modules/services/routes.js";
 import { registerV1SettingsRoutes } from "./modules/settings/routes.js";
 import { registerV1WhatsAppRoutes } from "./modules/whatsapp/routes.js";
 import { registerHealthRoutes } from "./routes/health.js";
-import { registerWebhookRoutes } from "./routes/webhooks.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -66,7 +65,6 @@ export async function buildApp() {
   });
 
   await registerHealthRoutes(app);
-  await registerWebhookRoutes(app);
   await registerV1AuthRoutes(app);
   await registerV1OnboardingRoutes(app);
   await registerV1DashboardRoutes(app);

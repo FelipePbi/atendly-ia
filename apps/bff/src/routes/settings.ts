@@ -6,16 +6,12 @@ import { currentUser } from "../lib/auth.js";
 import { businessSettingsDto, instanceDto, settingsDto } from "../lib/dto.js";
 import { AppError } from "../lib/errors.js";
 import { dataResponse, parseBody } from "../lib/http.js";
-import { whatsappPhoneCandidates } from "../lib/phone.js";
 import { getPrisma } from "../lib/prisma.js";
 import {
   currentTenantContext,
   requireTenantContext,
 } from "../lib/tenant-context.js";
-import {
-  dispatchToAiOrchestrator,
-  syncAiTenantConfig,
-} from "../services/ai-orchestrator.js";
+import { syncAiTenantConfig } from "../services/ai-orchestrator.js";
 import { getEvolutionStatus } from "../services/evolution-go.js";
 import {
   ensureCustomPersonaGeneration,
@@ -233,10 +229,7 @@ export async function registerSettingsRoutes(
     let automationSync: { skipped: boolean; resumed: number } | null = null;
 
     if (data.aiEnabled) {
-      automationSync = await validateAiCanBeEnabledAndResumeHandoffs(
-        user.id,
-        request.id,
-      );
+      automationSync = await validateAiCanBeEnabled(user.id);
     }
 
     const settings = await prisma.userSettings.upsert({
@@ -285,10 +278,7 @@ async function syncCurrentAiTenantConfig(
   });
 }
 
-async function validateAiCanBeEnabledAndResumeHandoffs(
-  userId: string,
-  requestId: string,
-) {
+async function validateAiCanBeEnabled(userId: string) {
   const prisma = getPrisma();
   const virtualSettings = settingsDto(
     await prisma.userSettings.upsert({
@@ -363,50 +353,7 @@ async function validateAiCanBeEnabledAndResumeHandoffs(
     );
   }
 
-  const conversations = await prisma.conversation.findMany({
-    where: { userId },
-    select: { contactJid: true },
-  });
-  const phones = [
-    ...new Set(
-      conversations.flatMap((conversation) =>
-        whatsappPhoneCandidates(conversation.contactJid),
-      ),
-    ),
-  ];
-  return resumeBotHandoffsInApi({ userId, requestId, phones });
-}
-
-async function resumeBotHandoffsInApi(input: {
-  userId: string;
-  requestId: string;
-  phones: string[];
-}): Promise<{ skipped: boolean; resumed: number }> {
-  const phones = [...new Set(input.phones)].filter(Boolean);
-  if (!env.INTERNAL_SERVICE_TOKEN || phones.length === 0) {
-    return { skipped: true, resumed: 0 };
-  }
-
-  const result = await dispatchToAiOrchestrator("/internal/bot/resume", {
-    userId: input.userId,
-    requestId: input.requestId,
-    body: { phones },
-  }).catch(() => null);
-
-  if (!result) {
-    return { skipped: true, resumed: 0 };
-  }
-
-  return {
-    skipped: false,
-    resumed: isResumeResult(result)
-      ? (result.resumed ?? phones.length)
-      : phones.length,
-  };
-}
-
-function isResumeResult(value: unknown): value is { resumed?: number } {
-  return Boolean(value && typeof value === "object" && "resumed" in value);
+  return { skipped: true, resumed: 0 };
 }
 
 function buildPromptPreview(input: {

@@ -18,14 +18,6 @@ enum WhatsAppInstanceStatus {
   ERROR
 }
 
-enum MessageType {
-  TEXT
-  AUDIO
-  IMAGE
-  DOCUMENT
-  UNKNOWN
-}
-
 enum UserSex {
   MALE
   FEMALE
@@ -40,17 +32,6 @@ enum IgnoredContactSource {
   CHAT_ACTION
   AUTO_SAFETY
   SYSTEM
-}
-
-enum AiSuppressionReason {
-  GLOBAL_AI_DISABLED
-  VIRTUAL_ATTENDANT_INCOMPLETE
-  AWAY_TIMEOUT_NOT_REACHED
-  IGNORED_CONTACT
-  GROUP_CHAT
-  HUMAN_HANDOFF
-  COMMAND_RECEIVED
-  INSTANCE_DISCONNECTED
 }
 
 enum VirtualAttendantPersona {
@@ -100,10 +81,7 @@ model User {
   updatedAt    DateTime @updatedAt
 
   whatsappInstance           WhatsAppInstance?
-  conversations              Conversation[]
-  messages                   Message[]
   ignoredContacts            IgnoredContact[]
-  aiSuppressionLogs          AiSuppressionLog[]
   personaConversationImports PersonaConversationImport[]
   profile                    UserProfile?
   settings                   UserSettings?
@@ -210,72 +188,11 @@ model WhatsAppInstance {
   createdAt              DateTime               @default(now())
   updatedAt              DateTime               @updatedAt
 
-  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  conversations     Conversation[]
-  messages          Message[]
-  ignoredContacts   IgnoredContact[]
-  aiSuppressionLogs AiSuppressionLog[]
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ignoredContacts IgnoredContact[]
 
   @@index([evolutionInstanceId])
   @@index([status])
-}
-
-model Conversation {
-  id                  String    @id @default(cuid())
-  userId              String
-  instanceId          String
-  contactJid          String
-  contactName         String?
-  profilePictureUrl   String?
-  lastMessagePreview  String?
-  lastMessageAt       DateTime?
-  unreadCount         Int       @default(0)
-  archivedAt          DateTime?
-  aiPaused            Boolean   @default(false)
-  aiPausedReason      String?
-  aiPausedUpdatedAt   DateTime?
-  lastOwnerActivityAt DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-
-  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  instance          WhatsAppInstance   @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-  messages          Message[]
-  aiSuppressionLogs AiSuppressionLog[]
-
-  @@unique([userId, contactJid])
-  @@index([userId, lastMessageAt])
-  @@index([userId, archivedAt, lastMessageAt])
-  @@index([userId, aiPaused])
-  @@index([instanceId])
-}
-
-model Message {
-  id                String      @id @default(cuid())
-  conversationId    String
-  userId            String
-  instanceId        String
-  externalMessageId String?
-  fromMe            Boolean     @default(false)
-  senderJid         String?
-  senderName        String?
-  type              MessageType @default(UNKNOWN)
-  contentText       String?
-  mediaType         String?
-  mediaUrl          String?
-  mediaBase64       String?
-  timestamp         DateTime
-  rawPayload        Json?
-  createdAt         DateTime    @default(now())
-
-  conversation Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  instance     WhatsAppInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-
-  @@unique([conversationId, externalMessageId])
-  @@index([conversationId, timestamp])
-  @@index([userId, timestamp])
-  @@index([instanceId])
 }
 
 model UserSettings {
@@ -337,22 +254,21 @@ model BusinessSettings {
 }
 
 model IgnoredContact {
-  id                 String               @id @default(cuid())
-  userId             String
-  instanceId         String
-  jid                String
-  phoneNumber        String?
-  displayName        String?
-  pushName           String?
-  businessName       String?
-  source             IgnoredContactSource @default(MANUAL)
-  reason             String?
-  isActive           Boolean              @default(true)
-  createdByUserId    String?
-  createdByMessageId String?
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  deletedAt          DateTime?
+  id              String               @id @default(cuid())
+  userId          String
+  instanceId      String
+  jid             String
+  phoneNumber     String?
+  displayName     String?
+  pushName        String?
+  businessName    String?
+  source          IgnoredContactSource @default(MANUAL)
+  reason          String?
+  isActive        Boolean              @default(true)
+  createdByUserId String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  deletedAt       DateTime?
 
   user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   instance WhatsAppInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
@@ -360,23 +276,4 @@ model IgnoredContact {
   @@unique([userId, instanceId, jid])
   @@index([userId, instanceId, isActive])
   @@index([instanceId, jid])
-}
-
-model AiSuppressionLog {
-  id             String              @id @default(cuid())
-  userId         String
-  instanceId     String
-  conversationId String?
-  messageId      String?
-  contactJid     String
-  reason         AiSuppressionReason
-  metadata       Json?
-  createdAt      DateTime            @default(now())
-
-  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  instance     WhatsAppInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-  conversation Conversation?    @relation(fields: [conversationId], references: [id], onDelete: SetNull)
-
-  @@index([userId, instanceId, contactJid])
-  @@index([createdAt])
 }

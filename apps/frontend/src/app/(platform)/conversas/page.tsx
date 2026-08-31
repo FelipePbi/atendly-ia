@@ -1,4 +1,5 @@
-import { ConversationsScreen } from "@/features/conversations/ConversationsScreen";
+import { ProductConversationsScreen } from "@/features/conversations/ProductConversationsScreen";
+
 export default function ConversationsPage() {
-  return <ConversationsScreen />;
+  return <ProductConversationsScreen />;
 }

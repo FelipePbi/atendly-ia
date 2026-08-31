@@ -70,7 +70,7 @@ Rotas implementadas:
 - `/` → redireciona para `/login`;
 - auth/legal: `/login`, `/cadastro`, `/recuperar-senha`, `/solicitacao-enviada`, `/nova-senha`, `/link-expirado`, `/termos-de-uso`, `/politica-de-privacidade`;
 - onboarding: `/onboarding` e `/onboarding/[step]`;
-- produto: `/inicio`, `/conversas`, `/conversas/[state]`, `/agenda`, `/clientes`, `/servicos`, `/configuracoes`;
+- produto: `/inicio`, `/conversas`, `/conversas/[id]`, `/agenda`, `/clientes`, `/servicos`, `/configuracoes`;
 - agenda: `/agenda/novo`, `/agenda/agendamento`, `/agenda/reagendar`, `/agenda/cancelar`, `/agenda/bloquear`;
 - clientes: `/clientes/novo`, `/clientes/detalhes`, `/clientes/detalhes/externo`;
 - serviços: `/servicos/novo`, `/servicos/editar`;
@@ -121,5 +121,5 @@ Frontend falará exclusivamente com BFF. Nunca chame AI Orchestrator, Scheduling
 - Data layer BFF: implementada no GOAL 12.
 - Auth/onboarding/settings/WhatsApp: concluído no GOAL 13, incluindo smoke integrado real.
 - Services/customers/calendar: concluído no GOAL 14, com Agenda Atendly gravável e Minha Agenda orientada por capabilities reais.
-- Conversations/handoff: `NOT_STARTED`, GOAL 15.
+- Conversations/handoff: integrado ao BFF no GOAL 15; preview continua mockado.
 - Dashboard/calendar migration: `NOT_STARTED`, GOAL 16.

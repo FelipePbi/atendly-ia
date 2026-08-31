@@ -69,7 +69,9 @@ export class InternalHttpClient {
         method: input.method,
         headers: {
           accept: "application/json",
-          "content-type": "application/json",
+          ...(input.body === undefined
+            ? {}
+            : { "content-type": "application/json" }),
           "x-service-audience": this.audience,
           ...(this.authMode === "internal"
             ? {

@@ -1,4 +1,4 @@
-import { AgendaScreen } from "@/features/calendar/AgendaScreen";
+import { ProductAgendaScreen } from "@/features/calendar/ProductAgendaScreen";
 export default function NewAppointmentPage() {
-  return <AgendaScreen scenario="new" />;
+  return <ProductAgendaScreen scenario="new" />;
 }

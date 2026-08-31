@@ -1,4 +1,11 @@
-import { DirectoryScreen } from "@/features/directory/DirectoryScreen";
-export default function EditServicePage() {
-  return <DirectoryScreen area="services" scenario="edit" />;
+import { ProductDirectoryScreen } from "@/features/directory/ProductDirectoryScreen";
+export default async function EditServicePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ id?: string }>;
+}) {
+  const { id } = await searchParams;
+  return (
+    <ProductDirectoryScreen area="services" scenario="edit" serviceId={id} />
+  );
 }

@@ -1,4 +1,4 @@
-import { AgendaScreen } from "@/features/calendar/AgendaScreen";
+import { ProductAgendaScreen } from "@/features/calendar/ProductAgendaScreen";
 export default function BlockTimePage() {
-  return <AgendaScreen scenario="block-time" />;
+  return <ProductAgendaScreen scenario="block-time" />;
 }

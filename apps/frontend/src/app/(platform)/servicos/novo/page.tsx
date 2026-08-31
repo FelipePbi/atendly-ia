@@ -1,4 +1,4 @@
-import { DirectoryScreen } from "@/features/directory/DirectoryScreen";
+import { ProductDirectoryScreen } from "@/features/directory/ProductDirectoryScreen";
 export default function NewServicePage() {
-  return <DirectoryScreen area="services" scenario="new" />;
+  return <ProductDirectoryScreen area="services" scenario="new" />;
 }

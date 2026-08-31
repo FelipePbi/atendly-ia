@@ -507,6 +507,10 @@ async function calendarOverview(prisma: PrismaClient, tenantId: string) {
     }),
   ]);
   const source = settings?.source ?? null;
+  const externalWritesEnabled = integration
+    ? minhaAgendaWritesSchema.safeParse(integration.config).data
+        ?.enableWrites === true
+    : false;
   return {
     source,
     timezone: settings?.timezone ?? null,
@@ -525,11 +529,17 @@ async function calendarOverview(prisma: PrismaClient, tenantId: string) {
       manageCustomers: source === "ATENDLY",
       createAppointments:
         source === "ATENDLY" ||
-        (source === "MINHA_AGENDA" && integration?.status === "CONNECTED"),
+        (source === "MINHA_AGENDA" &&
+          integration?.status === "CONNECTED" &&
+          externalWritesEnabled),
       migrate: source !== null,
     },
   };
 }
+
+const minhaAgendaWritesSchema = z.object({
+  enableWrites: z.boolean().default(false),
+});
 
 async function requireCalendar(prisma: PrismaClient, tenantId: string) {
   const calendar = await prisma.calendarSettings.findUnique({

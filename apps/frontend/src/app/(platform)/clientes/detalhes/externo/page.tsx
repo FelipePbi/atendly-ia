@@ -1,5 +1,16 @@
-import { DirectoryScreen } from "@/features/directory/DirectoryScreen";
+import { ProductDirectoryScreen } from "@/features/directory/ProductDirectoryScreen";
 
-export default function ExternalCustomerDetailPage() {
-  return <DirectoryScreen area="customers" scenario="detail-external" />;
+export default async function ExternalCustomerDetailPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ id?: string }>;
+}) {
+  const { id } = await searchParams;
+  return (
+    <ProductDirectoryScreen
+      area="customers"
+      customerId={id}
+      scenario="detail"
+    />
+  );
 }

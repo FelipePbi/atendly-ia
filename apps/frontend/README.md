@@ -4,7 +4,8 @@
 
 Aplicação web responsiva da Atendly. Implementa autenticação, onboarding, dashboard, conversas, agenda, clientes, serviços, configurações, migração e estados sistêmicos conforme Open Design.
 
-Frontend novo é base visual aprovada. Data layer do BFF existe; integração de cada domínio ocorre nos goals seguintes.
+Frontend novo é base visual aprovada. Data layer do BFF existe; autenticação,
+configurações, serviços, clientes e agenda já usam dados reais no produto.
 
 ## Stack
 
@@ -60,7 +61,7 @@ Prioridade:
 - `src/data/services` contém os adapters da Public API V1 e o registry BFF;
 - `src/data/mappers` valida respostas do BFF com Zod;
 - `src/mocks` permanece como registry isolado para `/_preview` e para telas ainda não migradas;
-- goals 13–16 ativam os adapters por domínio, removendo dados demonstrativos do fluxo real sem alterar o preview.
+- goals 13–14 ativaram os adapters de conta, configurações, serviços, clientes e agenda sem alterar o preview.
 
 ## Routes
 
@@ -70,7 +71,7 @@ Rotas implementadas:
 - auth/legal: `/login`, `/cadastro`, `/recuperar-senha`, `/solicitacao-enviada`, `/nova-senha`, `/link-expirado`, `/termos-de-uso`, `/politica-de-privacidade`;
 - onboarding: `/onboarding` e `/onboarding/[step]`;
 - produto: `/inicio`, `/conversas`, `/conversas/[state]`, `/agenda`, `/clientes`, `/servicos`, `/configuracoes`;
-- agenda: `/agenda/novo`, `/agenda/agendamento`, `/agenda/reagendar`, `/agenda/bloquear`;
+- agenda: `/agenda/novo`, `/agenda/agendamento`, `/agenda/reagendar`, `/agenda/cancelar`, `/agenda/bloquear`;
 - clientes: `/clientes/novo`, `/clientes/detalhes`, `/clientes/detalhes/externo`;
 - serviços: `/servicos/novo`, `/servicos/editar`;
 - configurações: `/configuracoes/negocio`, `/configuracoes/ia`, `/configuracoes/agenda`, `/configuracoes/disponibilidade`, `/configuracoes/whatsapp`, `/configuracoes/conta`;
@@ -119,6 +120,6 @@ Frontend falará exclusivamente com BFF. Nunca chame AI Orchestrator, Scheduling
 - Open Design → React/Next: concluído como base visual.
 - Data layer BFF: implementada no GOAL 12.
 - Auth/onboarding/settings/WhatsApp: concluído no GOAL 13, incluindo smoke integrado real.
-- Services/customers/calendar: `NOT_STARTED`, GOAL 14.
+- Services/customers/calendar: concluído no GOAL 14, com Agenda Atendly gravável e Minha Agenda orientada por capabilities reais.
 - Conversations/handoff: `NOT_STARTED`, GOAL 15.
 - Dashboard/calendar migration: `NOT_STARTED`, GOAL 16.

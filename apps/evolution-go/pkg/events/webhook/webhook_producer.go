@@ -2,6 +2,8 @@ package webhook_producer
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -46,9 +48,9 @@ func (p *webhookProducer) Produce(
 
 func (p *webhookProducer) sendWebhookWithRetry(url string, body []byte, maxRetries int, retryInterval time.Duration, userID string) {
 	for i := 0; i < maxRetries; i++ {
-		err, responseBody, statusCode := p.sendWebhook(url, body, userID)
+		err, _, statusCode := p.sendWebhook(url, body, userID)
 		if err == nil {
-			p.loggerWrapper.GetLogger(userID).LogInfo("[%s] webhook sent successfully - url: %s, status: %d, response: %s", userID, url, statusCode, string(responseBody))
+			p.loggerWrapper.GetLogger(userID).LogInfo("[%s] webhook sent successfully - url: %s, status: %d", userID, url, statusCode)
 			return
 		}
 		p.loggerWrapper.GetLogger(userID).LogWarn("[%s] webhook failed - url: %s, attempt: %d, error: %v", userID, url, i+1, err)
@@ -65,6 +67,7 @@ func (p *webhookProducer) sendWebhook(url string, body []byte, userID string) (e
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Request-Id", newRequestID())
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -83,6 +86,14 @@ func (p *webhookProducer) sendWebhook(url string, body []byte, userID string) (e
 	}
 
 	return nil, responseBody, resp.StatusCode
+}
+
+func newRequestID() string {
+	value := make([]byte, 16)
+	if _, err := rand.Read(value); err == nil {
+		return hex.EncodeToString(value)
+	}
+	return "request-id-unavailable"
 }
 
 // CreateGlobalQueues não faz nada para webhook producer

@@ -11,7 +11,16 @@ import { registerHealthRoute } from "./health.js";
 export async function buildApp() {
   const app = Fastify({
     logger: {
-      redact: ["req.headers.authorization"],
+      redact: [
+        "req.headers.authorization",
+        "req.headers.cookie",
+        "req.headers.apikey",
+        "body.password",
+        "body.token",
+        "body.apiKey",
+        "body.credentials",
+        "body.integrationCredentials",
+      ],
     },
     genReqId: (request) => {
       const requestId = request.headers["x-request-id"];

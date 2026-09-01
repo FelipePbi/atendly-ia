@@ -131,7 +131,11 @@ export class InternalHttpClient {
 }
 
 function normalizedBaseUrl(baseUrl: string): string {
-  return `${baseUrl.replace(/\/$/, "")}/`;
+  const trimmed = baseUrl.trim().replace(/\/$/, "");
+  const normalized = /^https?:\/\//u.test(trimmed)
+    ? trimmed
+    : `http://${trimmed}`;
+  return `${normalized}/`;
 }
 
 async function parseJson(response: Response): Promise<unknown> {

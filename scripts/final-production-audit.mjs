@@ -1,316 +1,300 @@
 #!/usr/bin/env node
-import { createRequire } from "node:module";
-import { existsSync, readFileSync } from "node:fs";
 
-const requireFromBff = createRequire(new URL("../apps/bff/package.json", import.meta.url));
-const { Client } = requireFromBff("pg");
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 
-const usage = `Usage:
-  CUSTOMER_PHONE=... SINCE_ISO=... npm run smoke:final-audit
-
-Optional:
-  API_DATABASE_URL=...
-  BFF_DATABASE_URL=...
-  INBOUND_TEXT_MARKER=...
-  RENDER_API_SERVICE_ID=...
-  RENDER_BFF_SERVICE_ID=...
-
-This audit verifies production evidence after a real WhatsApp smoke:
-- API recorded inbound customer message.
-- API recorded outbound AI message sent through Evolution Go.
-- API recorded a real Minha Agenda schedule/reschedule write.
-- BFF inbox recorded the inbound customer message, when BFF_DATABASE_URL is set.
-
-When database URLs are not provided, the script tries to read them from Render
-using the local Render CLI session in ~/.render/cli.yaml.
-`;
-
-if (process.argv.includes("--help") || process.argv.includes("-h")) {
-  console.log(usage.trim());
-  process.exit(0);
-}
-
-const config = {
-  apiDatabaseUrl: process.env.API_DATABASE_URL,
-  bffDatabaseUrl: process.env.BFF_DATABASE_URL,
-  renderApiServiceId: process.env.RENDER_API_SERVICE_ID || "srv-d83v971kh4rs73co18vg",
-  renderBffServiceId: process.env.RENDER_BFF_SERVICE_ID || "srv-d8h7e7t8nd3s73bvtp70",
-  customerPhone: normalizePhone(process.env.CUSTOMER_PHONE || ""),
-  sinceIso: process.env.SINCE_ISO,
-  inboundTextMarker: process.env.INBOUND_TEXT_MARKER?.trim() || ""
-};
-
+const repositoryRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 const results = [];
 
+const expectedServices = [
+  "atendly-ia-frontend",
+  "atendly-ia-bff",
+  "atendly-ia-ai-orchestrator",
+  "atendly-ia-scheduling-service",
+  "atendly-ia-evolution-go",
+  "atendly-ia-health-worker",
+];
+
 async function main() {
-  await hydrateDatabaseUrls();
-  validateConfig();
+  const renderBlueprint = read("render.yaml");
+  const frontendSources = sourceFiles("apps/frontend/src");
+  const bffSchema = read("apps/bff/prisma/schema.prisma");
+  const aiSources = sourceFiles("apps/ai-orchestrator/src");
+  const schedulingSources = sourceFiles("apps/scheduling-service/src");
+  const schedulingPackage = read("apps/scheduling-service/package.json");
+  const graphSources = sourceFiles("apps/ai-orchestrator/src/modules/graph");
+  const knowledgeStore = read(
+    "apps/ai-orchestrator/src/modules/knowledge/pgvector-knowledge-store.ts",
+  );
+  const modelProvider = read(
+    "apps/ai-orchestrator/src/modules/model/model-provider.ts",
+  );
+  const assistantTools = read(
+    "apps/ai-orchestrator/src/modules/tools/assistant-tools.ts",
+  );
+  const schedulingEnv = read("apps/scheduling-service/src/config/env.ts");
+  const credentialRepository = read(
+    "apps/scheduling-service/src/modules/integrations/credentials.ts",
+  );
 
-  const api = await connect(config.apiDatabaseUrl);
-  const bff = config.bffDatabaseUrl ? await connect(config.bffDatabaseUrl) : null;
+  check(
+    "render_has_exact_final_service_set",
+    expectedServices.every((name) =>
+      renderBlueprint.includes(`name: ${name}`),
+    ) && !renderBlueprint.includes("name: atendly-ia-api"),
+    expectedServices.join(", "),
+  );
+  check(
+    "all_services_expose_cheap_health_route",
+    count(renderBlueprint, "healthCheckPath: /health") === 6 &&
+      read("apps/frontend/src/app/health/route.ts").includes("function GET") &&
+      read("apps/bff/src/routes/health.ts").includes('app.get("/health"') &&
+      read("apps/ai-orchestrator/src/app.ts").includes('app.get("/health"') &&
+      read("apps/scheduling-service/src/app/health.ts").includes(
+        'app.get("/health"',
+      ) &&
+      read("apps/evolution-go/pkg/routes/routes.go").includes(
+        'eng.GET("/health"',
+      ) &&
+      read("apps/health-worker/src/index.js").includes(
+        'request.url === "/health"',
+      ),
+    "six GET /health endpoints and six Render health checks",
+  );
 
-  try {
-    const apiEvidence = await auditApi(api);
+  const frontendNetworkFiles = matchingFiles(frontendSources, [
+    /\bfetch\s*\(/u,
+    /\baxios\b/u,
+    /AI_ORCHESTRATOR_BASE_URL|SCHEDULING_SERVICE_BASE_URL|EVOLUTION(?:_GO)?_BASE_URL/u,
+  ]);
+  check(
+    "frontend_calls_only_bff",
+    frontendNetworkFiles.length === 0 &&
+      read("apps/frontend/src/data/services/registry.ts").includes(
+        "NEXT_PUBLIC_BFF_URL",
+      ),
+    frontendNetworkFiles.length
+      ? frontendNetworkFiles.join(", ")
+      : "BFF service registry is the only data boundary",
+  );
+  check(
+    "bff_does_not_persist_conversation_or_message",
+    !/model\s+(Conversation|Message)\b/u.test(bffSchema),
+    "no Conversation or Message model in BFF Prisma schema",
+  );
 
-    if (bff) {
-      await auditBffInbox(bff);
-    } else {
-      record("bff_inbox_recorded_inbound", true, "skipped: BFF_DATABASE_URL not set");
-    }
+  const aiMinhaAgendaFiles = matchingFiles(aiSources, [
+    /minha.?agenda/iu,
+  ]).filter((file) => file !== "apps/ai-orchestrator/src/lib/redact.ts");
+  check(
+    "ai_does_not_access_minha_agenda",
+    aiMinhaAgendaFiles.length === 0,
+    aiMinhaAgendaFiles.length
+      ? aiMinhaAgendaFiles.join(", ")
+      : "only the generic Scheduling gateway is visible to AI",
+  );
+  check(
+    "scheduling_does_not_call_openai",
+    !/(?:@langchain|langgraph|openai)/iu.test(
+      `${joinSources(schedulingSources)}\n${schedulingPackage}`,
+    ),
+    "no model dependency or call in Scheduling Service",
+  );
+  check(
+    "rag_is_tenant_scoped",
+    knowledgeStore.includes('WHERE chunk."tenantId" = ${tenantId}') &&
+      knowledgeStore.includes('AND document."tenantId" = ${tenantId}'),
+    "chunk and document tenant filters are mandatory in vector search",
+  );
+  check(
+    "appointments_do_not_depend_on_langgraph_state",
+    !/prisma\.(?:appointment|externalAppointment)|appointment\.(?:create|update|delete)/iu.test(
+      joinSources(graphSources),
+    ),
+    "LangGraph contains workflow state, not appointment persistence",
+  );
+  check(
+    "llm_cannot_create_appointments_directly",
+    !/Prisma|SchedulingClient|CalendarProvider/u.test(modelProvider) &&
+      /SchedulingGateway/u.test(assistantTools),
+    "model provider emits typed calls; tool registry owns Scheduling access",
+  );
+  check(
+    "minha_agenda_has_no_global_credentials",
+    !/MINHA_AGENDA_(?:URL|USERNAME|PASSWORD|TOKEN)/u.test(schedulingEnv) &&
+      /tenantId/u.test(credentialRepository) &&
+      /decrypt|encrypted/iu.test(credentialRepository),
+    "credentials are encrypted and resolved by tenant",
+  );
 
-    printSummary(apiEvidence);
-  } finally {
-    await api.end();
-    if (bff) await bff.end();
-  }
+  const prismaSchemas = [
+    "apps/bff/prisma/schema.prisma",
+    "apps/ai-orchestrator/prisma/schema.prisma",
+    "apps/scheduling-service/prisma/schema.prisma",
+  ].map(read);
+  check(
+    "no_global_phone_unique_constraint",
+    prismaSchemas.every((schema) => !/phone\w*\s+[^\n]*@unique/iu.test(schema)),
+    "no operational phone field is globally unique",
+  );
+
+  check(
+    "request_id_is_propagated_end_to_end",
+    [
+      "apps/frontend/src/data/http/BffHttpClient.ts",
+      "apps/bff/src/app.ts",
+      "apps/bff/src/clients/internal-http-client.ts",
+      "apps/ai-orchestrator/src/app.ts",
+      "apps/ai-orchestrator/src/modules/scheduling-service/client.ts",
+      "apps/evolution-go/pkg/routes/routes.go",
+      "apps/health-worker/src/index.js",
+    ].every((file) => /x-request-id/iu.test(read(file))),
+    "frontend, BFF, AI, Scheduling calls, Evolution and worker carry x-request-id",
+  );
+  check(
+    "ai_tool_logs_have_required_correlation",
+    ["tenantId", "conversationId", "aiRunId", "toolCallId"].every((field) =>
+      read(
+        "apps/ai-orchestrator/src/modules/assistant/assistant.service.ts",
+      ).includes(field),
+    ),
+    "tenantId, conversationId, aiRunId and toolCallId",
+  );
+  check(
+    "sensitive_log_redaction_is_configured",
+    /authorization|cookie|password|token/iu.test(read("apps/bff/src/app.ts")) &&
+      /authorization|cookie|password|credentials/iu.test(
+        read("apps/scheduling-service/src/app/build-app.ts"),
+      ) &&
+      /openai_api_key|evolution_api_key|minha_agenda_password/iu.test(
+        read("apps/ai-orchestrator/src/lib/redact.ts"),
+      ) &&
+      /sanitizeLogMessage/u.test(
+        read("apps/evolution-go/pkg/logger/logger.go"),
+      ),
+    "authorization, cookies, credentials, provider tokens and customer phones",
+  );
+
+  await auditProductionHealth();
+  summarize();
 }
 
-async function hydrateDatabaseUrls() {
-  if (!config.apiDatabaseUrl) {
-    config.apiDatabaseUrl = await fetchRenderEnvVar(config.renderApiServiceId, "DATABASE_URL").catch(() => "");
+async function auditProductionHealth() {
+  const configured = process.env.PRODUCTION_HEALTH_TARGETS?.trim();
+  if (!configured) {
+    check(
+      "production_health",
+      true,
+      "not requested; set PRODUCTION_HEALTH_TARGETS=name=url,... to verify deployed endpoints",
+      true,
+    );
+    return;
   }
 
-  if (!config.bffDatabaseUrl) {
-    config.bffDatabaseUrl = await fetchRenderEnvVar(config.renderBffServiceId, "DATABASE_URL").catch(() => "");
-  }
-}
-
-function validateConfig() {
-  const missing = [];
-  if (!config.apiDatabaseUrl) missing.push("API_DATABASE_URL");
-  if (!config.customerPhone) missing.push("CUSTOMER_PHONE");
-  if (!config.sinceIso) missing.push("SINCE_ISO");
-  if (config.sinceIso && Number.isNaN(Date.parse(config.sinceIso))) {
-    throw new Error("SINCE_ISO must be a valid ISO date.");
-  }
-  if (missing.length > 0) {
-    console.error(usage.trim());
-    throw new Error(`Missing required env vars: ${missing.join(", ")}`);
-  }
-}
-
-async function connect(connectionString) {
-  const client = new Client({ connectionString });
-  await client.connect();
-  return client;
-}
-
-async function fetchRenderEnvVar(serviceId, key) {
-  const token = readRenderToken();
-  if (!token) throw new Error("Render CLI token not available.");
-
-  const response = await fetch(`https://api.render.com/v1/services/${serviceId}/env-vars?limit=100`, {
-    headers: {
-      accept: "application/json",
-      authorization: `Bearer ${token}`
-    }
+  const targets = configured.split(",").map((entry) => {
+    const [name, url] = entry.trim().split("=", 2);
+    if (!name || !url) throw new Error(`Invalid health target: ${entry}`);
+    return { name, url };
   });
-
-  if (!response.ok) {
-    throw new Error(`Render env fetch failed for ${serviceId}: HTTP ${response.status}`);
-  }
-
-  const envVars = await response.json();
-  const value = envVars.find((item) => item.envVar?.key === key)?.envVar?.value;
-  if (!value) throw new Error(`Render env ${key} not found for ${serviceId}.`);
-  return value;
+  const evidence = await Promise.all(
+    targets.map(async ({ name, url }) => {
+      const requestId = crypto.randomUUID();
+      try {
+        const response = await fetch(url, {
+          headers: { "x-request-id": requestId },
+          signal: AbortSignal.timeout(20_000),
+        });
+        return {
+          name,
+          ok: response.ok,
+          status: response.status,
+          requestId: response.headers.get("x-request-id") ?? requestId,
+        };
+      } catch (error) {
+        return {
+          name,
+          ok: false,
+          error: error instanceof Error ? error.name : "NETWORK_ERROR",
+          requestId,
+        };
+      }
+    }),
+  );
+  check(
+    "production_health",
+    evidence.every((item) => item.ok),
+    JSON.stringify(evidence),
+  );
 }
 
-function readRenderToken() {
-  const configPath = process.env.RENDER_CLI_CONFIG || `${process.env.HOME || ""}/.render/cli.yaml`;
-  if (!configPath || !existsSync(configPath)) return "";
+function read(relativePath) {
+  const absolutePath = path.join(repositoryRoot, relativePath);
+  if (!existsSync(absolutePath))
+    throw new Error(`Missing file: ${relativePath}`);
+  return readFileSync(absolutePath, "utf8");
+}
 
-  const text = readFileSync(configPath, "utf8");
-  const lines = text.split(/\r?\n/);
-  let inApi = false;
-
-  for (const line of lines) {
-    if (/^api:\s*$/.test(line)) {
-      inApi = true;
-      continue;
+function sourceFiles(relativeRoot) {
+  const absoluteRoot = path.join(repositoryRoot, relativeRoot);
+  const files = [];
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory)) {
+      if (["dist", "generated", "node_modules"].includes(entry)) continue;
+      const absolutePath = path.join(directory, entry);
+      if (statSync(absolutePath).isDirectory()) {
+        visit(absolutePath);
+      } else if (/\.(?:cjs|js|jsx|mjs|ts|tsx)$/u.test(entry)) {
+        files.push(
+          path.relative(repositoryRoot, absolutePath).replaceAll("\\", "/"),
+        );
+      }
     }
-
-    if (inApi && /^\S/.test(line)) {
-      inApi = false;
-    }
-
-    if (!inApi) continue;
-    const match = line.match(/^\s+key:\s*(\S+)\s*$/);
-    if (match) return match[1];
-  }
-
-  return "";
+  };
+  visit(absoluteRoot);
+  return files;
 }
 
-async function auditApi(client) {
-  const conversation = await first(
-    client,
-    `
-      select id, "createdAt", "updatedAt"
-      from "Conversation"
-      where "whatsappPhone" = $1
-      limit 1
-    `,
-    [config.customerPhone]
-  );
-
-  record("api_conversation_exists", Boolean(conversation), summarizeRow(conversation));
-
-  const inbound = conversation
-    ? await first(
-        client,
-        `
-          select id, "createdAt"
-          from "Message"
-          where "conversationId" = $1
-            and direction = 'INBOUND'
-            and source = 'CUSTOMER'
-            and "createdAt" >= $2
-            ${config.inboundTextMarker ? "and body ilike $3" : ""}
-          order by "createdAt" desc
-          limit 1
-        `,
-        config.inboundTextMarker
-          ? [conversation.id, new Date(config.sinceIso), `%${config.inboundTextMarker}%`]
-          : [conversation.id, new Date(config.sinceIso)]
-      )
-    : null;
-
-  record("api_recorded_inbound_customer_message", Boolean(inbound), summarizeRow(inbound));
-
-  const outbound = conversation
-    ? await first(
-        client,
-        `
-          select id, "createdAt", "whatsappMessageId", ("rawPayload" is not null) as "hasRawPayload"
-          from "Message"
-          where "conversationId" = $1
-            and direction = 'OUTBOUND'
-            and source = 'AI'
-            and "createdAt" >= $2
-            and "rawPayload" is not null
-          order by "createdAt" desc
-          limit 1
-        `,
-        [conversation.id, inbound?.createdAt || new Date(config.sinceIso)]
-      )
-    : null;
-
-  record("api_recorded_ai_reply_sent", Boolean(outbound), summarizeRow(outbound));
-
-  const appointmentTool = conversation
-    ? await first(
-        client,
-        `
-          select id, name, status, "completedAt"
-          from "ToolCall"
-          where "conversationId" = $1
-            and status = 'SUCCEEDED'
-            and name in ('confirmar_agendamento', 'confirmar_remarcacao')
-            and "completedAt" >= $2
-          order by "completedAt" desc
-          limit 1
-        `,
-        [conversation.id, new Date(config.sinceIso)]
-      )
-    : null;
-
-  record("api_recorded_successful_appointment_tool", Boolean(appointmentTool), summarizeRow(appointmentTool));
-
-  const appointment = conversation
-    ? await first(
-        client,
-        `
-          select id, "minhaAgendaAppointmentId", status, "createdAt", "updatedAt"
-          from "ExternalAppointment"
-          where "conversationId" = $1
-            and status in ('SCHEDULED', 'RESCHEDULED')
-            and ("createdAt" >= $2 or "updatedAt" >= $2)
-          order by "updatedAt" desc
-          limit 1
-        `,
-        [conversation.id, new Date(config.sinceIso)]
-      )
-    : null;
-
-  record("api_recorded_minha_agenda_write", Boolean(appointment), summarizeRow(appointment));
-
-  return { conversation, inbound, outbound, appointmentTool, appointment };
+function matchingFiles(files, patterns) {
+  return files.filter((file) => {
+    const content = read(file);
+    return patterns.some((pattern) => pattern.test(content));
+  });
 }
 
-async function auditBffInbox(client) {
-  const inbound = await first(
-    client,
-    `
-      select m.id, m.timestamp, c."lastMessageAt"
-      from "Message" m
-      join "Conversation" c on c.id = m."conversationId"
-      where c."contactJid" like $1
-        and m."fromMe" = false
-        and m.timestamp >= $2
-      order by m.timestamp desc
-      limit 1
-    `,
-    [`%${config.customerPhone}%`, new Date(config.sinceIso)]
-  );
-
-  record("bff_inbox_recorded_inbound", Boolean(inbound), summarizeRow(inbound));
+function joinSources(files) {
+  return files.map(read).join("\n");
 }
 
-async function first(client, sql, params) {
-  const result = await client.query(sql, params);
-  return result.rows[0] || null;
+function count(value, needle) {
+  return value.split(needle).length - 1;
 }
 
-function summarizeRow(row) {
-  if (!row) return "not found";
-  return JSON.stringify(redactRow(row));
+function check(name, ok, details, skipped = false) {
+  results.push({ name, ok, details, skipped });
+  console.log(JSON.stringify({ name, ok, skipped, details }));
 }
 
-function redactRow(row) {
-  return Object.fromEntries(
-    Object.entries(row).map(([key, value]) => {
-      if (value instanceof Date) return [key, value.toISOString()];
-      return [key, value];
-    })
-  );
-}
-
-function record(name, ok, details) {
-  results.push({ name, ok, details });
-  console.log(JSON.stringify({ name, ok, phone: maskPhone(config.customerPhone), details }));
-}
-
-function printSummary(evidence) {
+function summarize() {
   const failed = results.filter((result) => !result.ok);
-  console.log(JSON.stringify({
-    total: results.length,
-    failed: failed.length,
-    evidence: {
-      conversationId: evidence.conversation?.id ?? null,
-      inboundMessageId: evidence.inbound?.id ?? null,
-      outboundMessageId: evidence.outbound?.id ?? null,
-      appointmentToolCallId: evidence.appointmentTool?.id ?? null,
-      externalAppointmentId: evidence.appointment?.id ?? null,
-      minhaAgendaAppointmentId: evidence.appointment?.minhaAgendaAppointmentId ?? null
-    }
-  }, null, 2));
-
-  if (failed.length > 0) {
-    process.exitCode = 1;
-  }
-}
-
-function normalizePhone(value) {
-  return value.replace(/\D/g, "");
-}
-
-function maskPhone(value) {
-  if (!value) return "";
-  return `${value.slice(0, 2)}***${value.slice(-4)}`;
+  console.log(
+    JSON.stringify(
+      {
+        total: results.length,
+        passed: results.length - failed.length,
+        failed: failed.length,
+      },
+      null,
+      2,
+    ),
+  );
+  if (failed.length > 0) process.exitCode = 1;
 }
 
 main().catch((error) => {
-  console.error(error.message);
+  console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 });

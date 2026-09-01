@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import cors from "@fastify/cors";
 import Fastify from "fastify";
 
@@ -19,14 +21,28 @@ export async function buildApp() {
       redact: [
         "req.headers.authorization",
         "req.headers.cookie",
+        "req.headers.apikey",
+        "req.headers.instanceToken",
         "body.password",
         "body.token",
+        "body.apiKey",
         "body.instanceToken",
+        "body.credentials",
       ],
+    },
+    genReqId: (request) => {
+      const requestId = request.headers["x-request-id"];
+      return Array.isArray(requestId)
+        ? requestId[0]
+        : requestId || randomUUID();
     },
   });
 
   await app.register(cors, { origin: false });
+
+  app.addHook("onRequest", async (request, reply) => {
+    reply.header("x-request-id", request.id);
+  });
 
   app.get("/health", async () => ({
     ok: true,
@@ -43,13 +59,14 @@ export async function buildApp() {
   await registerEvolutionWebhookRoutes(app, prisma, graphCheckpointer);
   await registerInternalRoutes(app, prisma);
 
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
     if (error instanceof AppError) {
       return reply.code(error.statusCode).send({
         ok: false,
         error: error.message,
         code: error.code,
         details: redactSensitive(error.details),
+        requestId: request.id,
       });
     }
 
@@ -57,6 +74,7 @@ export async function buildApp() {
     return reply.code(500).send({
       ok: false,
       error: "Internal server error",
+      requestId: request.id,
     });
   });
 

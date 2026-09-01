@@ -4,6 +4,7 @@ import { env } from "../../config/env.js";
 import {
   channelMessageLogContext,
   type DiagnosticLogger,
+  maskPhone,
   noopDiagnosticLogger,
 } from "../../lib/diagnostic-log.js";
 import { toErrorMessage } from "../../lib/errors.js";
@@ -257,7 +258,7 @@ export class InboundMessageProcessor {
       () => {
         void this.flushBufferedMessages(buffer.key).catch((error) => {
           this.logger.error(
-            { phone: buffer.phone, err: toErrorMessage(error) },
+            { phone: maskPhone(buffer.phone), err: toErrorMessage(error) },
             "Inbound message processor failed to flush graph buffer",
           );
         });

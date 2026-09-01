@@ -390,6 +390,20 @@ export class AssistantService {
         },
       });
       if (existing?.completedAt && existing.result) {
+        this.logger.info(
+          {
+            requestId: session.requestId,
+            tenantId: session.tenantId,
+            conversationId: session.conversationId,
+            aiRunId: session.aiRunId,
+            toolCallId: existing.id,
+            externalToolCallId: call.id,
+            toolName: call.name,
+            status: existing.status,
+            replayed: true,
+          },
+          "AI tool call replayed from persisted result",
+        );
         toolResults.push({
           toolCallId: call.id,
           toolName: call.name,
@@ -411,6 +425,20 @@ export class AssistantService {
           },
         }));
 
+      this.logger.info(
+        {
+          requestId: session.requestId,
+          tenantId: session.tenantId,
+          conversationId: session.conversationId,
+          aiRunId: session.aiRunId,
+          toolCallId: toolCall.id,
+          externalToolCallId: call.id,
+          toolName: call.name,
+          status: "STARTED",
+        },
+        "AI tool call started",
+      );
+
       try {
         const result = await this.tools.execute(call, toolContext);
         await this.prisma.aiToolCall.update({
@@ -422,6 +450,19 @@ export class AssistantService {
             completedAt: new Date(),
           },
         });
+        this.logger.info(
+          {
+            requestId: session.requestId,
+            tenantId: session.tenantId,
+            conversationId: session.conversationId,
+            aiRunId: session.aiRunId,
+            toolCallId: toolCall.id,
+            externalToolCallId: call.id,
+            toolName: call.name,
+            status: result.ok ? "SUCCEEDED" : "FAILED",
+          },
+          "AI tool call completed",
+        );
         toolResults.push({
           toolCallId: call.id,
           toolName: call.name,
@@ -438,6 +479,20 @@ export class AssistantService {
             completedAt: new Date(),
           },
         });
+        this.logger.error(
+          {
+            requestId: session.requestId,
+            tenantId: session.tenantId,
+            conversationId: session.conversationId,
+            aiRunId: session.aiRunId,
+            toolCallId: toolCall.id,
+            externalToolCallId: call.id,
+            toolName: call.name,
+            status: "FAILED",
+            error: result.error.message,
+          },
+          "AI tool call failed",
+        );
         toolResults.push({
           toolCallId: call.id,
           toolName: call.name,

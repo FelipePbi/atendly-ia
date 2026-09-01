@@ -1,9 +1,14 @@
 import type { NextConfig } from "next";
 import { fileURLToPath } from "node:url";
 
-const bffBaseUrl = (
-  process.env.BFF_BASE_URL ?? "http://localhost:3002"
-).replace(/\/$/, "");
+const bffBaseUrl = normalizeBackendUrl(
+  process.env.BFF_BASE_URL ?? "http://localhost:3002",
+);
+
+function normalizeBackendUrl(value: string): string {
+  const trimmed = value.trim().replace(/\/$/, "");
+  return /^https?:\/\//u.test(trimmed) ? trimmed : `http://${trimmed}`;
+}
 
 const nextConfig: NextConfig = {
   async rewrites() {

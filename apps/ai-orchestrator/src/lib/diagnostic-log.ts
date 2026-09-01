@@ -13,6 +13,9 @@ export const noopDiagnosticLogger: DiagnosticLogger = {
 };
 
 interface ChannelMessageLogInput {
+  requestId?: string;
+  tenantId?: string;
+  channelId?: string;
   provider?: string;
   instanceId?: string;
   messageId?: string;
@@ -29,6 +32,9 @@ export function channelMessageLogContext(
   message: ChannelMessageLogInput,
 ): Record<string, unknown> {
   return {
+    requestId: message.requestId,
+    tenantId: message.tenantId,
+    channelId: message.channelId,
     provider: message.provider,
     instanceId: message.instanceId,
     messageId: message.messageId,

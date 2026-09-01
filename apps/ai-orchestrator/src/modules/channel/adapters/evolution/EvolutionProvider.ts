@@ -6,6 +6,7 @@ import {
   truncateDiagnostic,
 } from "../../../../lib/diagnostic-log.js";
 import { AppError } from "../../../../lib/errors.js";
+import { redactSensitive } from "../../../../lib/redact.js";
 import type {
   SendTextInput,
   SendTextResult,
@@ -39,6 +40,7 @@ export class EvolutionProvider implements WhatsAppProvider {
         textLength: input.text.length,
         quotedMessageId: input.quotedMessageId,
         correlationId: input.correlationId,
+        requestId: input.requestId,
         hasInstanceIdHeader: true,
         hasApiKeyHeader: true,
       },
@@ -47,7 +49,7 @@ export class EvolutionProvider implements WhatsAppProvider {
 
     const response = await fetch(url, {
       method: "POST",
-      headers: buildHeaders(apiKey, instanceId),
+      headers: buildHeaders(apiKey, instanceId, input.requestId),
       body: JSON.stringify(buildSendTextBody(input)),
     });
 
@@ -58,7 +60,8 @@ export class EvolutionProvider implements WhatsAppProvider {
           url,
           to: maskPhone(input.to),
           status: response.status,
-          response: truncateDiagnostic(raw),
+          requestId: input.requestId,
+          response: truncateDiagnostic(redactSensitive(raw)),
         },
         "EvolutionProvider send failed",
       );
@@ -79,6 +82,7 @@ export class EvolutionProvider implements WhatsAppProvider {
         to: maskPhone(input.to),
         status: response.status,
         messageId,
+        requestId: input.requestId,
       },
       "EvolutionProvider send succeeded",
     );
@@ -94,11 +98,13 @@ export class EvolutionProvider implements WhatsAppProvider {
 function buildHeaders(
   apiKey: string,
   instanceId: string,
+  requestId?: string,
 ): Record<string, string> {
   return {
     "content-type": "application/json",
     apikey: apiKey,
     instanceId,
+    ...(requestId ? { "x-request-id": requestId } : {}),
   };
 }
 
@@ -122,7 +128,12 @@ function buildSendTextBody(input: SendTextInput): Record<string, unknown> {
 }
 
 function joinUrl(baseUrl: string, path: string): string {
-  const normalizedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+  const withProtocol = /^https?:\/\//u.test(baseUrl)
+    ? baseUrl
+    : `http://${baseUrl}`;
+  const normalizedBase = withProtocol.endsWith("/")
+    ? withProtocol.slice(0, -1)
+    : withProtocol;
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return `${normalizedBase}${normalizedPath}`;
 }

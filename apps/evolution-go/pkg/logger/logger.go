@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"time"
 
@@ -33,6 +34,13 @@ type LogEntry struct {
 	Message    string          `json:"message"`
 	Metadata   json.RawMessage `json:"metadata,omitempty"`
 }
+
+var (
+	sensitiveAssignmentPattern = regexp.MustCompile(`(?i)(authorization|token|password|senha|api[_-]?key|apikey|secret)(\s*[:=]\s*)([^,\s}\"]+)`)
+	sensitiveQueryPattern      = regexp.MustCompile(`(?i)([?&](?:token|key|apikey|password|secret|signature|sig)=)[^&\s]+`)
+	urlQueryPattern            = regexp.MustCompile(`(?i)(https?://[^\s?]+)\?[^\s]+`)
+	phonePattern               = regexp.MustCompile(`\b\d{6,11}(\d{4})\b`)
+)
 
 func NewLoggerManager(config *config.Config) *LoggerManager {
 	// Garante que o diretório base de logs existe
@@ -92,26 +100,30 @@ func newLogger(instanceId string, config *config.Config) *Logger {
 }
 
 func (l *Logger) LogInfo(format string, args ...interface{}) {
-	l.log("INFO", format, args...)
-	logger.LogInfo(format, args...)
+	message := sanitizeLogMessage(fmt.Sprintf(format, args...))
+	l.log("INFO", message)
+	logger.LogInfo("%s", message)
 }
 
 func (l *Logger) LogError(format string, args ...interface{}) {
-	l.log("ERROR", format, args...)
-	logger.LogError(format, args...)
+	message := sanitizeLogMessage(fmt.Sprintf(format, args...))
+	l.log("ERROR", message)
+	logger.LogError("%s", message)
 }
 
 func (l *Logger) LogWarn(format string, args ...interface{}) {
-	l.log("WARN", format, args...)
-	logger.LogWarn(format, args...)
+	message := sanitizeLogMessage(fmt.Sprintf(format, args...))
+	l.log("WARN", message)
+	logger.LogWarn("%s", message)
 }
 
 func (l *Logger) LogDebug(format string, args ...interface{}) {
-	l.log("DEBUG", format, args...)
-	logger.LogDebug(format, args...)
+	message := sanitizeLogMessage(fmt.Sprintf(format, args...))
+	l.log("DEBUG", message)
+	logger.LogDebug("%s", message)
 }
 
-func (l *Logger) log(level string, format string, args ...interface{}) {
+func (l *Logger) log(level string, message string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -119,7 +131,7 @@ func (l *Logger) log(level string, format string, args ...interface{}) {
 		Timestamp:  time.Now(),
 		Level:      level,
 		InstanceId: l.instanceId,
-		Message:    fmt.Sprintf(format, args...),
+		Message:    message,
 	}
 
 	jsonEntry, err := json.Marshal(entry)
@@ -131,6 +143,13 @@ func (l *Logger) log(level string, format string, args ...interface{}) {
 	if _, err := l.writer.Write(append(jsonEntry, '\n')); err != nil {
 		logger.LogError("Failed to write log: %v", err)
 	}
+}
+
+func sanitizeLogMessage(message string) string {
+	redacted := sensitiveAssignmentPattern.ReplaceAllString(message, "$1$2[REDACTED]")
+	redacted = sensitiveQueryPattern.ReplaceAllString(redacted, "$1[REDACTED]")
+	redacted = urlQueryPattern.ReplaceAllString(redacted, "$1?[REDACTED]")
+	return phonePattern.ReplaceAllString(redacted, "********$1")
 }
 
 func (l *Logger) Close() error {

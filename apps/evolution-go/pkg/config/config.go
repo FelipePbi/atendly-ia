@@ -142,7 +142,7 @@ func extractDBNameAndAdminDSN(dsn string) (string, string, error) {
 }
 
 func (c *Config) CreateUsersDB() (*gorm.DB, error) {
-	logger.LogDebug("Connecting to database on: %s", c.postgresUsersDB)
+	logger.LogDebug("Connecting to users database")
 
 	dbDSN := c.postgresUsersDB
 

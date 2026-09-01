@@ -6,6 +6,7 @@ export interface SendTextInput {
   quotedMessageId?: string;
   quotedParticipant?: string;
   correlationId?: string;
+  requestId?: string;
 }
 
 export interface SendTextResult {

@@ -27,10 +27,15 @@ export async function buildApp() {
       redact: [
         "req.headers.authorization",
         "req.headers.cookie",
+        "req.headers.apikey",
+        "req.headers.instanceToken",
         "body.password",
         "body.currentPassword",
         "body.newPassword",
         "body.token",
+        "body.apiKey",
+        "body.instanceToken",
+        "body.credentials",
       ],
       serializers: {
         req(request) {

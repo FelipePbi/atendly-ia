@@ -15,13 +15,16 @@ export async function registerHealthRoutes(
   );
 
   app.get("/health/dependencies", async (request) => {
-    const [aiOrchestrator, evolutionGo] = await Promise.allSettled([
-      checkHealth(env.AI_ORCHESTRATOR_BASE_URL, "/health"),
-      checkHealth(env.EVOLUTION_GO_BASE_URL, "/healthy"),
-    ]);
+    const [aiOrchestrator, schedulingService, evolutionGo] =
+      await Promise.allSettled([
+        checkHealth(env.AI_ORCHESTRATOR_BASE_URL, "/health", request.id),
+        checkHealth(env.SCHEDULING_SERVICE_BASE_URL, "/health", request.id),
+        checkHealth(env.EVOLUTION_GO_BASE_URL, "/health", request.id),
+      ]);
 
     return dataResponse(request, {
       aiOrchestrator: resultValue(aiOrchestrator),
+      schedulingService: resultValue(schedulingService),
       evolutionGo: resultValue(evolutionGo),
     });
   });
@@ -30,15 +33,23 @@ export async function registerHealthRoutes(
 async function checkHealth(
   baseUrl: string,
   path: string,
+  requestId: string,
 ): Promise<{
   ok: boolean;
   status?: number;
   latencyMs: number;
 }> {
   const startedAt = Date.now();
-  const response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
-    signal: AbortSignal.timeout(env.INTERNAL_HTTP_TIMEOUT_MS),
-  });
+  const normalizedBaseUrl = /^https?:\/\//u.test(baseUrl)
+    ? baseUrl
+    : `http://${baseUrl}`;
+  const response = await fetch(
+    `${normalizedBaseUrl.replace(/\/$/, "")}${path}`,
+    {
+      headers: { "x-request-id": requestId },
+      signal: AbortSignal.timeout(env.INTERNAL_HTTP_TIMEOUT_MS),
+    },
+  );
   return {
     ok: response.ok,
     status: response.status,

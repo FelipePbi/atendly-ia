@@ -615,6 +615,7 @@ export class MessageGraphWorkflow {
       quotedMessageId: message.messageId,
       quotedParticipant: message.chatId,
       correlationId: state.response.messageRecordId,
+      requestId: message.requestId,
     });
     const response = {
       ...state.response,

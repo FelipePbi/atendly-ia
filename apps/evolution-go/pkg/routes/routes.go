@@ -1,7 +1,10 @@
 package routes
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -41,13 +44,26 @@ type Routes struct {
 }
 
 func (r *Routes) AssignRoutes(eng *gin.Engine) {
+	eng.Use(func(c *gin.Context) {
+		requestID := strings.TrimSpace(c.GetHeader("X-Request-Id"))
+		if requestID == "" {
+			requestID = newRequestID()
+		}
+		if len(requestID) > 128 {
+			requestID = requestID[:128]
+		}
+		c.Set("requestId", requestID)
+		c.Header("X-Request-Id", requestID)
+		c.Next()
+	})
+
 	// Configuração do CORS
 	eng.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, Accept, Cache-Control, X-Requested-With, apikey, ApiKey")
-		c.Writer.Header().Set("Access-Control-Expose-Headers", "Content-Length")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, X-Request-Id, Authorization, Accept, Cache-Control, X-Requested-With, apikey, ApiKey")
+		c.Writer.Header().Set("Access-Control-Expose-Headers", "Content-Length, X-Request-Id")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(200)
@@ -63,11 +79,15 @@ func (r *Routes) AssignRoutes(eng *gin.Engine) {
 		c.Status(http.StatusNoContent)
 	})
 
-	eng.GET("/healthy", func(c *gin.Context) {
+	healthHandler := func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"status": "ok",
+			"status":    "ok",
+			"service":   "atendly-ia-evolution-go",
+			"requestId": c.GetString("requestId"),
 		})
-	})
+	}
+	eng.GET("/health", healthHandler)
+	eng.GET("/healthy", healthHandler)
 
 	// Rotas para o gerenciador React (sem autenticação)
 	eng.Static("/assets", "./manager/dist/assets")
@@ -249,6 +269,14 @@ func (r *Routes) AssignRoutes(eng *gin.Engine) {
 		}
 	}
 
+}
+
+func newRequestID() string {
+	value := make([]byte, 16)
+	if _, err := rand.Read(value); err == nil {
+		return hex.EncodeToString(value)
+	}
+	return "request-id-unavailable"
 }
 
 func NewRouter(

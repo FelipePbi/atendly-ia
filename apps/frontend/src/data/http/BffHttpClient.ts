@@ -178,7 +178,10 @@ function normalizeBaseUrl(value: string): URL {
   const trimmed = value.trim();
   if (!trimmed) throw new Error("BFF base URL is required.");
 
-  const url = new URL(trimmed.endsWith("/") ? trimmed : `${trimmed}/`);
+  const normalized = trimmed.endsWith("/") ? trimmed : `${trimmed}/`;
+  const url = trimmed.startsWith("/")
+    ? new URL(normalized, globalThis.location?.origin ?? "http://localhost")
+    : new URL(normalized);
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("BFF base URL must use HTTP or HTTPS.");
   }

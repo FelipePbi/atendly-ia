@@ -229,28 +229,26 @@ export class SchedulingClient implements SchedulingGateway {
     },
   ): Promise<z.output<TSchema>> {
     const context = requireContext(options.context);
-    const response = await fetch(
-      `${env.SCHEDULING_SERVICE_BASE_URL.replace(/\/$/, "")}${path}`,
-      {
-        method: options.method ?? "GET",
-        headers: {
-          accept: "application/json",
-          authorization: `Bearer ${env.INTERNAL_SERVICE_TOKEN}`,
-          "x-tenant-id": context.tenantId,
-          "x-user-id": context.userId,
-          "x-request-id": context.requestId,
-          ...(options.idempotencyKey
-            ? { "idempotency-key": options.idempotencyKey }
-            : {}),
-          ...(options.body === undefined
-            ? {}
-            : { "content-type": "application/json" }),
-        },
-        body:
-          options.body === undefined ? undefined : JSON.stringify(options.body),
-        signal: AbortSignal.timeout(10_000),
+    const baseUrl = normalizeBaseUrl(env.SCHEDULING_SERVICE_BASE_URL);
+    const response = await fetch(`${baseUrl}${path}`, {
+      method: options.method ?? "GET",
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${env.INTERNAL_SERVICE_TOKEN}`,
+        "x-tenant-id": context.tenantId,
+        "x-user-id": context.userId,
+        "x-request-id": context.requestId,
+        ...(options.idempotencyKey
+          ? { "idempotency-key": options.idempotencyKey }
+          : {}),
+        ...(options.body === undefined
+          ? {}
+          : { "content-type": "application/json" }),
       },
-    );
+      body:
+        options.body === undefined ? undefined : JSON.stringify(options.body),
+      signal: AbortSignal.timeout(10_000),
+    });
     const text = await response.text();
     const payload = text ? parseJson(text) : null;
     if (!response.ok) {
@@ -269,6 +267,11 @@ export class SchedulingClient implements SchedulingGateway {
     }
     return schema.parse(parsed.data.data);
   }
+}
+
+function normalizeBaseUrl(value: string): string {
+  const trimmed = value.trim().replace(/\/$/, "");
+  return /^https?:\/\//u.test(trimmed) ? trimmed : `http://${trimmed}`;
 }
 
 function requireContext(

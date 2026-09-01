@@ -6,7 +6,7 @@ services:
     rootDir: apps/frontend
     buildCommand: npm ci && npm run build
     startCommand: npm run start
-    healthCheckPath: /login
+    healthCheckPath: /health
     buildFilter:
       paths:
         - apps/frontend/**
@@ -16,9 +16,12 @@ services:
       - key: NODE_VERSION
         value: 24.13.0
       - key: NEXT_PUBLIC_BFF_URL
-        sync: false
+        value: /api/bff
       - key: BFF_BASE_URL
-        sync: false
+        fromService:
+          type: web
+          name: atendly-ia-bff
+          property: hostport
 
   - type: web
     name: atendly-ia-bff
@@ -43,19 +46,34 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: FRONTEND_ORIGIN
-        sync: false
-      - key: BFF_PUBLIC_URL
-        sync: false
+        value: https://atendly-ia-frontend.onrender.com
       - key: AI_ORCHESTRATOR_BASE_URL
-        sync: false
+        fromService:
+          type: web
+          name: atendly-ia-ai-orchestrator
+          property: hostport
+      - key: SCHEDULING_SERVICE_BASE_URL
+        fromService:
+          type: web
+          name: atendly-ia-scheduling-service
+          property: hostport
       - key: EVOLUTION_GO_BASE_URL
-        sync: false
+        fromService:
+          type: web
+          name: atendly-ia-evolution-go
+          property: hostport
       - key: EVOLUTION_GO_API_KEY
-        sync: false
+        fromService:
+          type: web
+          name: atendly-ia-evolution-go
+          envVarKey: GLOBAL_API_KEY
       - key: EVOLUTION_WEBHOOK_SECRET
-        sync: false
+        generateValue: true
       - key: INTERNAL_SERVICE_TOKEN
-        sync: false
+        fromService:
+          type: web
+          name: atendly-ia-ai-orchestrator
+          envVarKey: INTERNAL_SERVICE_TOKEN
 
   - type: web
     name: atendly-ia-ai-orchestrator
@@ -79,18 +97,60 @@ services:
         sync: false
       - key: INTERNAL_SERVICE_TOKEN
         sync: false
-      - key: ADMIN_API_TOKEN
-        sync: false
       - key: OPENAI_API_KEY
         sync: false
       - key: EVOLUTION_WEBHOOK_TOKEN
-        sync: false
+        fromService:
+          type: web
+          name: atendly-ia-bff
+          envVarKey: EVOLUTION_WEBHOOK_SECRET
       - key: EVOLUTION_BASE_URL
-        sync: false
+        fromService:
+          type: web
+          name: atendly-ia-evolution-go
+          property: hostport
       - key: EVOLUTION_API_KEY
-        sync: false
+        fromService:
+          type: web
+          name: atendly-ia-evolution-go
+          envVarKey: GLOBAL_API_KEY
       - key: SCHEDULING_SERVICE_BASE_URL
-        sync: false
+        fromService:
+          type: web
+          name: atendly-ia-scheduling-service
+          property: hostport
+
+  - type: web
+    name: atendly-ia-scheduling-service
+    runtime: node
+    plan: free
+    rootDir: apps/scheduling-service
+    buildCommand: npm ci && npm run prisma:deploy && npm run build
+    startCommand: npm run start
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - apps/scheduling-service/**
+        - packages/**
+        - render.yaml
+    envVars:
+      - key: NODE_VERSION
+        value: 24.13.0
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3003
+      - key: DATABASE_URL
+        fromDatabase:
+          name: atendly-ia-scheduling-db
+          property: connectionString
+      - key: INTERNAL_SERVICE_TOKEN
+        fromService:
+          type: web
+          name: atendly-ia-ai-orchestrator
+          envVarKey: INTERNAL_SERVICE_TOKEN
+      - key: INTEGRATION_CREDENTIALS_KEY
+        generateValue: true
 
   - type: web
     name: atendly-ia-evolution-go
@@ -99,7 +159,7 @@ services:
     rootDir: apps/evolution-go
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    healthCheckPath: /healthy
+    healthCheckPath: /health
     buildFilter:
       paths:
         - apps/evolution-go/**
@@ -131,5 +191,35 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 24.13.0
-      - key: HEALTH_TARGETS
-        sync: false
+      - key: FRONTEND_BASE_URL
+        fromService:
+          type: web
+          name: atendly-ia-frontend
+          property: hostport
+      - key: BFF_BASE_URL
+        fromService:
+          type: web
+          name: atendly-ia-bff
+          property: hostport
+      - key: AI_ORCHESTRATOR_BASE_URL
+        fromService:
+          type: web
+          name: atendly-ia-ai-orchestrator
+          property: hostport
+      - key: SCHEDULING_SERVICE_BASE_URL
+        fromService:
+          type: web
+          name: atendly-ia-scheduling-service
+          property: hostport
+      - key: EVOLUTION_GO_BASE_URL
+        fromService:
+          type: web
+          name: atendly-ia-evolution-go
+          property: hostport
+
+databases:
+  - name: atendly-ia-scheduling-db
+    plan: free
+    region: oregon
+    databaseName: atendly_scheduling
+    user: atendly_scheduling

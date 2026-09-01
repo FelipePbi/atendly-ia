@@ -7,6 +7,11 @@ const sensitiveKeys = new Set([
   "api_key",
   "apikey",
   "secret",
+  "credentials",
+  "integration_credentials",
+  "client_secret",
+  "cookie",
+  "set-cookie",
   "evolution_api_key",
   "evolution_webhook_token",
   "minha_agenda_password",
@@ -26,7 +31,9 @@ export function redactSensitive(value: unknown): unknown {
         if (
           sensitiveKeys.has(normalized) ||
           normalized.includes("token") ||
-          normalized.includes("password")
+          normalized.includes("password") ||
+          normalized.includes("secret") ||
+          normalized.includes("credential")
         ) {
           return [key, "[REDACTED]"];
         }

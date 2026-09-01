@@ -59,6 +59,16 @@ export async function buildApp() {
   await app.register(cors, {
     origin: env.FRONTEND_ORIGIN ? [env.FRONTEND_ORIGIN] : false,
     credentials: true,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "accept",
+      "authorization",
+      "content-type",
+      "idempotency-key",
+      "x-csrf-token",
+      "x-request-id",
+    ],
+    exposedHeaders: ["x-request-id"],
   });
   await app.register(rateLimit, {
     max: 300,

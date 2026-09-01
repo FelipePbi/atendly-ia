@@ -16,12 +16,9 @@ services:
       - key: NODE_VERSION
         value: 24.13.0
       - key: NEXT_PUBLIC_BFF_URL
-        value: /api/bff
+        value: https://atendly-ia-bff.onrender.com
       - key: BFF_BASE_URL
-        fromService:
-          type: web
-          name: atendly-ia-bff
-          property: hostport
+        value: https://atendly-ia-bff.onrender.com
 
   - type: web
     name: atendly-ia-bff
@@ -47,21 +44,16 @@ services:
         generateValue: true
       - key: FRONTEND_ORIGIN
         value: https://atendly-ia-frontend.onrender.com
+      - key: COOKIE_SECURE
+        value: true
+      - key: COOKIE_SAME_SITE
+        value: none
       - key: AI_ORCHESTRATOR_BASE_URL
-        fromService:
-          type: web
-          name: atendly-ia-ai-orchestrator
-          property: hostport
+        value: https://atendimeto-ia.onrender.com
       - key: SCHEDULING_SERVICE_BASE_URL
-        fromService:
-          type: web
-          name: atendly-ia-scheduling-service
-          property: hostport
+        value: https://atendly-ia-scheduling-service.onrender.com
       - key: EVOLUTION_GO_BASE_URL
-        fromService:
-          type: web
-          name: atendly-ia-evolution-go
-          property: hostport
+        value: https://evolution-go-4pmo.onrender.com
       - key: EVOLUTION_GO_API_KEY
         fromService:
           type: web
@@ -105,20 +97,14 @@ services:
           name: atendly-ia-bff
           envVarKey: EVOLUTION_WEBHOOK_SECRET
       - key: EVOLUTION_BASE_URL
-        fromService:
-          type: web
-          name: atendly-ia-evolution-go
-          property: hostport
+        value: https://evolution-go-4pmo.onrender.com
       - key: EVOLUTION_API_KEY
         fromService:
           type: web
           name: atendly-ia-evolution-go
           envVarKey: GLOBAL_API_KEY
       - key: SCHEDULING_SERVICE_BASE_URL
-        fromService:
-          type: web
-          name: atendly-ia-scheduling-service
-          property: hostport
+        value: https://atendly-ia-scheduling-service.onrender.com
 
   - type: web
     name: atendly-ia-scheduling-service
@@ -192,30 +178,15 @@ services:
       - key: NODE_VERSION
         value: 24.13.0
       - key: FRONTEND_BASE_URL
-        fromService:
-          type: web
-          name: atendly-ia-frontend
-          property: hostport
+        value: https://atendly-ia-frontend.onrender.com
       - key: BFF_BASE_URL
-        fromService:
-          type: web
-          name: atendly-ia-bff
-          property: hostport
+        value: https://atendly-ia-bff.onrender.com
       - key: AI_ORCHESTRATOR_BASE_URL
-        fromService:
-          type: web
-          name: atendly-ia-ai-orchestrator
-          property: hostport
+        value: https://atendimeto-ia.onrender.com
       - key: SCHEDULING_SERVICE_BASE_URL
-        fromService:
-          type: web
-          name: atendly-ia-scheduling-service
-          property: hostport
+        value: https://atendly-ia-scheduling-service.onrender.com
       - key: EVOLUTION_GO_BASE_URL
-        fromService:
-          type: web
-          name: atendly-ia-evolution-go
-          property: hostport
+        value: https://evolution-go-4pmo.onrender.com
 
 databases:
   - name: atendly-ia-scheduling-db

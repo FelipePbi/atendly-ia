@@ -50,7 +50,11 @@ export function setSessionCookie(reply: FastifyReply, token: string): void {
 }
 
 export function clearSessionCookie(reply: FastifyReply): void {
-  reply.clearCookie(env.SESSION_COOKIE_NAME, { path: "/" });
+  reply.clearCookie(env.SESSION_COOKIE_NAME, {
+    secure: env.COOKIE_SECURE || env.COOKIE_SAME_SITE === "none",
+    sameSite: env.COOKIE_SAME_SITE,
+    path: "/",
+  });
 }
 
 export async function requireAuth(request: FastifyRequest): Promise<void> {

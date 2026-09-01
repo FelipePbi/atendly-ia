@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { env } from "../../src/config/env.js";
-import { MessageOrchestrator } from "../../src/modules/automation/MessageOrchestrator.js";
 import type { ChannelInboundMessage } from "../../src/modules/channel/domain/ChannelMessage.js";
+import { InboundMessageProcessor } from "../../src/modules/channel/InboundMessageProcessor.js";
+import type { GraphRuntimePort } from "../../src/modules/graph/graph-runtime.js";
 
 function baseMessage(
   overrides: Partial<ChannelInboundMessage> = {},
@@ -76,13 +77,29 @@ function buildSubject(
     pauseIndefinitely: vi.fn().mockResolvedValue(undefined),
     resumeBot: vi.fn().mockResolvedValue(undefined),
   };
+  const runtime: GraphRuntimePort = {
+    resolveConversationId: vi.fn().mockResolvedValue("conversation-1"),
+    loadTenantConfig: vi.fn().mockResolvedValue({
+      channelConnected: true,
+      tenantConfig: {
+        aiEnabled: true,
+        tone: "LIGHT_CLOSE",
+        promptVersion: "scheduling_v1.0.0",
+      },
+    }),
+    loadConversation: vi.fn().mockResolvedValue({
+      status: "ACTIVE",
+      humanHandoff: false,
+    }),
+    loadToolResults: vi.fn().mockResolvedValue([]),
+  };
 
   return {
     automation,
     provider,
     idempotency,
     handoff,
-    orchestrator: new MessageOrchestrator(
+    processor: new InboundMessageProcessor(
       automation,
       provider,
       idempotency,
@@ -90,17 +107,18 @@ function buildSubject(
       undefined,
       {
         debounce: options.debounce ?? false,
+        runtime,
       },
     ),
   };
 }
 
-describe("MessageOrchestrator", () => {
+describe("InboundMessageProcessor", () => {
   it("ignores group messages before touching idempotency or automation", async () => {
     const subject = buildSubject();
 
     await expect(
-      subject.orchestrator.handleInboundMessage(baseMessage({ isGroup: true })),
+      subject.processor.handleInboundMessage(baseMessage({ isGroup: true })),
     ).resolves.toMatchObject({
       action: "ignored_group",
     });
@@ -115,7 +133,7 @@ describe("MessageOrchestrator", () => {
     subject.idempotency.remember.mockResolvedValue(false);
 
     await expect(
-      subject.orchestrator.handleInboundMessage(baseMessage()),
+      subject.processor.handleInboundMessage(baseMessage()),
     ).resolves.toMatchObject({
       action: "duplicate",
     });
@@ -128,7 +146,7 @@ describe("MessageOrchestrator", () => {
     const subject = buildSubject();
 
     await expect(
-      subject.orchestrator.handleInboundMessage(
+      subject.processor.handleInboundMessage(
         baseMessage({ fromMe: true, text: "respondi pelo celular" }),
       ),
     ).resolves.toMatchObject({
@@ -155,7 +173,7 @@ describe("MessageOrchestrator", () => {
     });
 
     await expect(
-      subject.orchestrator.handleInboundMessage(
+      subject.processor.handleInboundMessage(
         baseMessage({ messageId: "message-1", text: "Oi" }),
       ),
     ).resolves.toMatchObject({
@@ -163,7 +181,7 @@ describe("MessageOrchestrator", () => {
     });
 
     await expect(
-      subject.orchestrator.handleInboundMessage(
+      subject.processor.handleInboundMessage(
         baseMessage({
           messageId: "command-1",
           fromMe: true,
@@ -181,7 +199,7 @@ describe("MessageOrchestrator", () => {
     );
     expect(subject.automation.recordManualOutboundText).not.toHaveBeenCalled();
     await expect(
-      subject.orchestrator.flushBufferedMessagesForTesting("5511999999999"),
+      subject.processor.flushBufferedMessagesForTesting("5511999999999"),
     ).resolves.toBeNull();
   });
 
@@ -189,7 +207,7 @@ describe("MessageOrchestrator", () => {
     const subject = buildSubject();
 
     await expect(
-      subject.orchestrator.handleInboundMessage(
+      subject.processor.handleInboundMessage(
         baseMessage({ text: "/ia_pause" }),
       ),
     ).resolves.toMatchObject({
@@ -209,7 +227,7 @@ describe("MessageOrchestrator", () => {
     subject.handoff.isBotOutboundMessage.mockResolvedValue(true);
 
     await expect(
-      subject.orchestrator.handleInboundMessage(
+      subject.processor.handleInboundMessage(
         baseMessage({ fromMe: true, text: "resposta do bot" }),
       ),
     ).resolves.toMatchObject({
@@ -228,7 +246,7 @@ describe("MessageOrchestrator", () => {
       const subject = buildSubject();
 
       await expect(
-        subject.orchestrator.handleInboundMessage(
+        subject.processor.handleInboundMessage(
           baseMessage({
             fromMe: true,
             chatId: "5511999999999@lid",
@@ -268,7 +286,7 @@ describe("MessageOrchestrator", () => {
       const subject = buildSubject();
 
       await expect(
-        subject.orchestrator.handleInboundMessage(
+        subject.processor.handleInboundMessage(
           baseMessage({
             fromMe: true,
             chatId: "5511888888888@s.whatsapp.net",
@@ -300,7 +318,7 @@ describe("MessageOrchestrator", () => {
     const subject = buildSubject();
 
     await expect(
-      subject.orchestrator.handleInboundMessage(
+      subject.processor.handleInboundMessage(
         baseMessage({ fromMe: true, text: "/bot on" }),
       ),
     ).resolves.toMatchObject({
@@ -315,7 +333,7 @@ describe("MessageOrchestrator", () => {
     subject.handoff.isBotPaused.mockResolvedValue(true);
 
     await expect(
-      subject.orchestrator.handleInboundMessage(baseMessage()),
+      subject.processor.handleInboundMessage(baseMessage()),
     ).resolves.toMatchObject({
       action: "paused_conversation",
     });
@@ -338,7 +356,7 @@ describe("MessageOrchestrator", () => {
     });
 
     await expect(
-      subject.orchestrator.handleInboundMessage(
+      subject.processor.handleInboundMessage(
         baseMessage({ text: "Quero agendar" }),
       ),
     ).resolves.toMatchObject({
@@ -364,7 +382,7 @@ describe("MessageOrchestrator", () => {
     const subject = buildSubject();
 
     await expect(
-      subject.orchestrator.handleInboundMessage(
+      subject.processor.handleInboundMessage(
         baseMessage({ kind: "unknown", text: undefined }),
       ),
     ).resolves.toMatchObject({
@@ -383,8 +401,7 @@ describe("MessageOrchestrator", () => {
   it("sends assistant replies through the Evolution provider", async () => {
     const subject = buildSubject();
 
-    const result =
-      await subject.orchestrator.handleInboundMessage(baseMessage());
+    const result = await subject.processor.handleInboundMessage(baseMessage());
 
     expect(result).toMatchObject({
       action: "replied",
@@ -435,7 +452,7 @@ describe("MessageOrchestrator", () => {
       .mockResolvedValueOnce(true);
 
     await expect(
-      subject.orchestrator.handleInboundMessage(baseMessage()),
+      subject.processor.handleInboundMessage(baseMessage()),
     ).resolves.toMatchObject({
       action: "paused_conversation",
     });
@@ -455,14 +472,14 @@ describe("MessageOrchestrator", () => {
     });
 
     await expect(
-      subject.orchestrator.handleInboundMessage(
+      subject.processor.handleInboundMessage(
         baseMessage({ messageId: "message-1", text: "Oi" }),
       ),
     ).resolves.toMatchObject({
       action: "buffered",
     });
     await expect(
-      subject.orchestrator.handleInboundMessage(
+      subject.processor.handleInboundMessage(
         baseMessage({
           messageId: "message-2",
           text: "queria horario pra sobrancelha amanha",
@@ -478,7 +495,7 @@ describe("MessageOrchestrator", () => {
     expect(subject.provider.sendText).not.toHaveBeenCalled();
 
     await expect(
-      subject.orchestrator.flushBufferedMessagesForTesting("5511999999999"),
+      subject.processor.flushBufferedMessagesForTesting("5511999999999"),
     ).resolves.toMatchObject({
       action: "replied",
     });

@@ -15,13 +15,13 @@ import {
 } from "../../lib/diagnostic-log.js";
 import { toErrorMessage } from "../../lib/errors.js";
 import type { AssistantService } from "../assistant/assistant.service.js";
+import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
 import type {
   AutomationPort,
   HandoffPort,
   IdempotencyPort,
-  OrchestratorResult,
-} from "../automation/MessageOrchestrator.js";
-import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
+  InboundProcessingResult,
+} from "../channel/InboundMessageProcessor.js";
 import type { WhatsAppProvider } from "../channel/ports/WhatsAppProvider.js";
 import type { KnowledgeVectorStore } from "../knowledge/knowledge-vector-store.js";
 import type { GraphRuntimePort } from "./graph-runtime.js";
@@ -47,7 +47,7 @@ export interface MessageGraphInput {
 }
 
 export interface MessageGraphExecution {
-  result: OrchestratorResult;
+  result: InboundProcessingResult;
   bufferedRecord?: { conversationId: string; messageRecordId: string };
 }
 
@@ -318,7 +318,7 @@ export class MessageGraphWorkflow {
       await this.dependencies.automation.recordManualOutboundText({
         phone: message.customerPhone,
         text: message.text,
-        virtualAttendantSettings: message.virtualAttendantSettings,
+        aiSettings: message.aiSettings,
         channelMessage: message,
       });
     }
@@ -364,8 +364,8 @@ export class MessageGraphWorkflow {
     const recorded = await this.dependencies.automation.recordInboundText({
       phone: state.inboundMessage.customerPhone,
       text: state.inboundText,
-      businessSettings: state.inboundMessage.businessSettings,
-      virtualAttendantSettings: state.inboundMessage.virtualAttendantSettings,
+      businessContext: state.inboundMessage.businessContext,
+      aiSettings: state.inboundMessage.aiSettings,
       channelMessage: state.inboundMessage,
     });
     return {
@@ -387,8 +387,8 @@ export class MessageGraphWorkflow {
     const recorded = await this.dependencies.automation.recordInboundText({
       phone: state.inboundMessage.customerPhone,
       text: state.inboundText,
-      businessSettings: state.inboundMessage.businessSettings,
-      virtualAttendantSettings: state.inboundMessage.virtualAttendantSettings,
+      businessContext: state.inboundMessage.businessContext,
+      aiSettings: state.inboundMessage.aiSettings,
       channelMessage: state.inboundMessage,
     });
     return { inputMessageIds: [recorded.messageRecordId] };
@@ -416,8 +416,8 @@ export class MessageGraphWorkflow {
           (await this.dependencies.automation.prepareGraphTurn({
             phone: message.customerPhone,
             text: state.inboundText,
-            businessSettings: message.businessSettings,
-            virtualAttendantSettings: message.virtualAttendantSettings,
+            businessContext: message.businessContext,
+            aiSettings: message.aiSettings,
             channelMessage: message,
             messageRecordIds: state.inputMessageIds,
             knowledgeRequested: state.intent === "knowledge",
@@ -437,16 +437,16 @@ export class MessageGraphWorkflow {
           ? await this.dependencies.automation.handleBufferedText({
               phone: message.customerPhone,
               text: state.inboundText,
-              businessSettings: message.businessSettings,
-              virtualAttendantSettings: message.virtualAttendantSettings,
+              businessContext: message.businessContext,
+              aiSettings: message.aiSettings,
               channelMessage: message,
               messageRecordIds: state.inputMessageIds,
             })
           : await this.dependencies.automation.handleIncomingText({
               phone: message.customerPhone,
               text: state.inboundText,
-              businessSettings: message.businessSettings,
-              virtualAttendantSettings: message.virtualAttendantSettings,
+              businessContext: message.businessContext,
+              aiSettings: message.aiSettings,
               channelMessage: message,
             });
       const conversation = await this.dependencies.runtime.loadConversation({

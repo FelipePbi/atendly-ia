@@ -41,13 +41,9 @@ const envSchema = z.object({
   OPENAI_MAX_OUTPUT_TOKENS: intEnv(600),
   KNOWLEDGE_SEARCH_LIMIT: intEnv(4),
   KNOWLEDGE_SEARCH_MIN_SCORE: numberEnv(0.65),
-  CHANNEL_PROVIDER: z.literal("evolution-go").default("evolution-go"),
   EVOLUTION_WEBHOOK_TOKEN: stringEnv(),
   EVOLUTION_BASE_URL: stringEnv("http://evolution-go:8080"),
   EVOLUTION_API_KEY: stringEnv(),
-  EVOLUTION_INSTANCE_ID: stringEnv(),
-  EVOLUTION_INSTANCE_TOKEN: stringEnv(),
-  EVOLUTION_INSTANCE_NAME: stringEnv("salao-principal"),
   EVOLUTION_SEND_TEXT_PATH: stringEnv("/send/text"),
   EVOLUTION_IGNORE_GROUPS: boolEnv(true),
   EVOLUTION_BOT_ENABLED: boolEnv(true),
@@ -59,7 +55,6 @@ const envSchema = z.object({
   AI_BUFFER_BETWEEN_SERVICES_MINUTES: intEnv(0),
   AI_PROMPT_VERSION: stringEnv("scheduling_v1.0.0"),
   SCHEDULING_SERVICE_BASE_URL: stringEnv("http://localhost:3003"),
-  ADMIN_API_TOKEN: stringEnv(),
   INTERNAL_SERVICE_TOKEN: stringEnv(),
 });
 
@@ -81,13 +76,4 @@ export function requireEnv(keys: Array<keyof Env>): void {
 
 export function requireOpenAiEnv(): void {
   requireEnv(["OPENAI_API_KEY", "OPENAI_MODEL"]);
-}
-
-export function requireEvolutionEnv(): void {
-  requireEnv(["EVOLUTION_BASE_URL"]);
-  if (!env.EVOLUTION_INSTANCE_TOKEN && !env.EVOLUTION_API_KEY) {
-    throw new Error(
-      "Missing required environment variables: EVOLUTION_INSTANCE_TOKEN or EVOLUTION_API_KEY",
-    );
-  }
 }

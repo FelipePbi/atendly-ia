@@ -1,7 +1,7 @@
 import type { PrismaClient } from "../../src/generated/prisma/client.js";
 import { describe, expect, it, vi } from "vitest";
 import { AssistantService } from "../../src/modules/assistant/assistant.service.js";
-import { DEFAULT_BUSINESS_SETTINGS } from "../../src/modules/business-settings/business-settings.js";
+import { DEFAULT_BUSINESS_CONTEXT } from "../../src/modules/tenant-config/business-context.js";
 
 const phone = "5511999999999";
 
@@ -19,7 +19,7 @@ describe("AssistantService conversational decisions", () => {
       phone,
       text: "Oi",
       channelMessage: channelMessage(),
-      businessSettings: configuredBusinessSettings(),
+      businessContext: configuredBusinessContext(),
     });
 
     expect(reply.text).toBe("Oii, tudo bem? Como posso te ajudar hoje?");
@@ -47,8 +47,8 @@ describe("AssistantService conversational decisions", () => {
       phone,
       text: "Oi",
       channelMessage: channelMessage(),
-      businessSettings: configuredBusinessSettings(),
-      virtualAttendantSettings: {
+      businessContext: configuredBusinessContext(),
+      aiSettings: {
         aiEnabled: true,
         tone: "LIGHT_CLOSE",
       },
@@ -71,8 +71,8 @@ describe("AssistantService conversational decisions", () => {
       phone,
       text: "Olá",
       channelMessage: channelMessage(),
-      businessSettings: configuredBusinessSettings(),
-      virtualAttendantSettings: {
+      businessContext: configuredBusinessContext(),
+      aiSettings: {
         aiEnabled: true,
         tone: "PROFESSIONAL_OBJECTIVE",
       },
@@ -117,8 +117,8 @@ describe("AssistantService conversational decisions", () => {
       phone,
       text: "Pode ser amanhã?",
       channelMessage: channelMessage(),
-      businessSettings: configuredBusinessSettings(),
-      virtualAttendantSettings: {
+      businessContext: configuredBusinessContext(),
+      aiSettings: {
         aiEnabled: true,
         tone: "LIGHT_CLOSE",
       },
@@ -140,7 +140,7 @@ describe("AssistantService conversational decisions", () => {
       phone,
       text: "Oi, aqui e da distribuidora. Chegou o pedido dos produtos?",
       channelMessage: channelMessage(),
-      businessSettings: configuredBusinessSettings(),
+      businessContext: configuredBusinessContext(),
     });
 
     expect(reply.text).toBe(
@@ -211,7 +211,7 @@ describe("AssistantService conversational decisions", () => {
       phone,
       text: "Quero fazer cilios e sobrancelha amanha as 14h",
       channelMessage: channelMessage(),
-      businessSettings: configuredBusinessSettings(),
+      businessContext: configuredBusinessContext(),
     });
 
     expect(reply.text).toContain("cilios + sobrancelha");
@@ -348,9 +348,9 @@ function channelMessage() {
   };
 }
 
-function configuredBusinessSettings() {
+function configuredBusinessContext() {
   return {
-    ...DEFAULT_BUSINESS_SETTINGS,
+    ...DEFAULT_BUSINESS_CONTEXT,
     businessName: "Camili Krauser Beauty",
     configured: true,
   };

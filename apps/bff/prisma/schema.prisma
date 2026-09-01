@@ -18,55 +18,9 @@ enum WhatsAppInstanceStatus {
   ERROR
 }
 
-enum UserSex {
-  MALE
-  FEMALE
-  OTHER
-  PREFER_NOT_TO_SAY
-}
-
-enum IgnoredContactSource {
-  MANUAL
-  EVOLUTION_CONTACT_IMPORT
-  WHATSAPP_COMMAND
-  CHAT_ACTION
-  AUTO_SAFETY
-  SYSTEM
-}
-
-enum VirtualAttendantPersona {
-  CORPORATE
-  WARM
-  CUSTOM
-}
-
-enum VirtualAttendantActivationMode {
-  ALWAYS
-  AWAY_FROM_WHATSAPP
-}
-
-enum VirtualAttendantAwayScope {
-  GLOBAL
-  CONVERSATION
-}
-
-enum VirtualAttendantIdentityMode {
-  PROFESSIONAL
-  SEPARATE_ASSISTANT
-}
-
-enum VirtualAttendantAssistantSex {
-  FEMALE
-  MALE
-}
-
-enum CustomPersonaStatus {
-  NOT_STARTED
-  WAITING_UPLOADS
-  PROCESSING
-  READY
-  FAILED
-  NEEDS_PARTICIPANT
+enum AiTone {
+  PROFESSIONAL_OBJECTIVE
+  LIGHT_CLOSE
 }
 
 enum TenantRole {
@@ -80,15 +34,10 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  whatsappInstance           WhatsAppInstance?
-  ignoredContacts            IgnoredContact[]
-  personaConversationImports PersonaConversationImport[]
-  profile                    UserProfile?
-  settings                   UserSettings?
-  businessSettings           BusinessSettings?
-  legalAcceptances           LegalAcceptance[]
-  passwordResetTokens        PasswordResetToken[]
-  tenantMemberships          TenantMember[]
+  whatsappInstance    WhatsAppInstance?
+  legalAcceptances    LegalAcceptance[]
+  passwordResetTokens PasswordResetToken[]
+  tenantMemberships   TenantMember[]
 }
 
 model PasswordResetToken {
@@ -112,6 +61,7 @@ model Tenant {
 
   members         TenantMember[]
   businessProfile BusinessProfile?
+  aiSettings      AiSettings?
 }
 
 model TenantMember {
@@ -156,24 +106,6 @@ model LegalAcceptance {
   @@index([acceptedAt])
 }
 
-model UserProfile {
-  id                      String    @id @default(cuid())
-  userId                  String    @unique
-  fullName                String
-  birthDate               DateTime? @db.Date
-  sex                     UserSex
-  businessName            String
-  whatsappPhoneRaw        String?
-  whatsappPhoneNormalized String?
-  onboardingCompletedAt   DateTime?
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([onboardingCompletedAt])
-}
-
 model WhatsAppInstance {
   id                     String                 @id @default(cuid())
   userId                 String                 @unique
@@ -188,92 +120,19 @@ model WhatsAppInstance {
   createdAt              DateTime               @default(now())
   updatedAt              DateTime               @updatedAt
 
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  ignoredContacts IgnoredContact[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([evolutionInstanceId])
   @@index([status])
 }
 
-model UserSettings {
-  id                                  String                         @id @default(cuid())
-  userId                              String                         @unique
-  aiEnabled                           Boolean                        @default(false)
-  identityMode                        VirtualAttendantIdentityMode   @default(PROFESSIONAL)
-  assistantName                       String?
-  assistantSex                        VirtualAttendantAssistantSex?
-  professionalSex                     VirtualAttendantAssistantSex   @default(FEMALE)
-  personaType                         VirtualAttendantPersona?
-  customInstructions                  String?
-  activationMode                      VirtualAttendantActivationMode @default(ALWAYS)
-  awayTimeoutMinutes                  Int?
-  awayScope                           VirtualAttendantAwayScope?
-  customPersonaStatus                 CustomPersonaStatus            @default(NOT_STARTED)
-  customPersonaProfileJson            Json?
-  customPersonaGeneratedAt            DateTime?
-  virtualAttendantOnboardingCompleted Boolean                        @default(false)
-  createdAt                           DateTime                       @default(now())
-  updatedAt                           DateTime                       @updatedAt
+model AiSettings {
+  id        String   @id @default(cuid())
+  tenantId  String   @unique
+  enabled   Boolean  @default(false)
+  tone      AiTone?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model PersonaConversationImport {
-  id             String              @id @default(cuid())
-  userId         String
-  fileName       String
-  fileSize       Int?
-  status         CustomPersonaStatus @default(PROCESSING)
-  extractedCount Int?
-  errorMessage   String?
-  createdAt      DateTime            @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-}
-
-model BusinessSettings {
-  id                    String   @id @default(cuid())
-  userId                String   @unique
-  businessName          String   @default("")
-  professionalName      String?  @default("")
-  businessAddress       String?  @default("")
-  timezone              String   @default("America/Sao_Paulo")
-  maxSlotsToOffer       Int      @default(3)
-  availabilityDays      Int      @default(14)
-  slotStepMinutes       Int      @default(30)
-  appointmentLookupDays Int      @default(90)
-  delayPolicy           String?  @default("")
-  cancellationPolicy    String?  @default("")
-  depositPolicy         String?  @default("")
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model IgnoredContact {
-  id              String               @id @default(cuid())
-  userId          String
-  instanceId      String
-  jid             String
-  phoneNumber     String?
-  displayName     String?
-  pushName        String?
-  businessName    String?
-  source          IgnoredContactSource @default(MANUAL)
-  reason          String?
-  isActive        Boolean              @default(true)
-  createdByUserId String?
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-  deletedAt       DateTime?
-
-  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  instance WhatsAppInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, instanceId, jid])
-  @@index([userId, instanceId, isActive])
-  @@index([instanceId, jid])
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }

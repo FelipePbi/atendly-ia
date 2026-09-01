@@ -1,13 +1,13 @@
 import type { PrismaClient } from "../../generated/prisma/client.js";
 import { AppError } from "../../lib/errors.js";
 import {
-  type BusinessSettingsDTO,
-  normalizeBusinessSettings,
-} from "../business-settings/business-settings.js";
+  type AiTenantSettings,
+  normalizeAiSettings,
+} from "../tenant-config/ai-settings.js";
 import {
-  normalizeVirtualAttendantSettings,
-  type VirtualAttendantSettingsDTO,
-} from "../virtual-attendant/virtual-attendant.js";
+  type BusinessContext,
+  normalizeBusinessContext,
+} from "../tenant-config/business-context.js";
 import type {
   ChannelInboundMessage,
   MappedChannelInboundMessage,
@@ -27,7 +27,7 @@ export interface UpdateAiTenantConfigInput {
   enabled: boolean;
   tone: "PROFESSIONAL_OBJECTIVE" | "LIGHT_CLOSE";
   promptVersion: string;
-  businessSettings: BusinessSettingsDTO;
+  businessContext: BusinessContext;
 }
 
 export class ChannelConnectionService {
@@ -91,14 +91,14 @@ export class ChannelConnectionService {
         enabled: input.enabled,
         tone: input.tone,
         promptVersion: input.promptVersion,
-        settings: input.businessSettings,
+        settings: input.businessContext,
       },
       create: {
         tenantId: input.tenantId,
         enabled: input.enabled,
         tone: input.tone,
         promptVersion: input.promptVersion,
-        settings: input.businessSettings,
+        settings: input.businessContext,
       },
     });
   }
@@ -106,8 +106,8 @@ export class ChannelConnectionService {
   async resolveEvolutionInbound(input: {
     message: MappedChannelInboundMessage;
     requestId: string;
-    businessSettings?: BusinessSettingsDTO;
-    virtualAttendantSettings?: VirtualAttendantSettingsDTO;
+    businessContext?: BusinessContext;
+    aiSettings?: AiTenantSettings;
   }): Promise<ChannelInboundMessage> {
     const connection = await this.prisma.channelConnection.findUnique({
       where: {
@@ -131,7 +131,7 @@ export class ChannelConnectionService {
     const config = await this.prisma.aiTenantConfig.findUnique({
       where: { tenantId: connection.tenantId },
     });
-    const virtualAttendantSettings = normalizeVirtualAttendantSettings({
+    const aiSettings = normalizeAiSettings({
       aiEnabled: config?.enabled ?? false,
       tone: config?.tone ?? "LIGHT_CLOSE",
     });
@@ -142,10 +142,9 @@ export class ChannelConnectionService {
       channelId: connection.id,
       userId: connection.userId,
       requestId: input.requestId,
-      businessSettings:
-        input.businessSettings ?? normalizeBusinessSettings(config?.settings),
-      virtualAttendantSettings:
-        input.virtualAttendantSettings ?? virtualAttendantSettings,
+      businessContext:
+        input.businessContext ?? normalizeBusinessContext(config?.settings),
+      aiSettings: input.aiSettings ?? aiSettings,
     };
   }
 

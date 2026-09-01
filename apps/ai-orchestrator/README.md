@@ -8,7 +8,7 @@ Serviço interno multi-tenant responsável por conversas, mensagens, handoff e e
 Evolution Go
   → webhook autenticado
   → ChannelConnection resolve tenant e canal
-  → MessageOrchestrator (adapter de compatibilidade/debounce)
+  → InboundMessageProcessor + debounce
   → LangGraph persistente + AssistantService
   → LangChain ModelProvider + tools tipadas
   → SchedulingClient, quando necessário
@@ -20,38 +20,32 @@ O serviço não acessa Minha Agenda nem tabelas de outro serviço. Calendário, 
 
 ## Rotas
 
-- `GET /health` e `GET /healthy` — saúde.
-- `POST /webhooks/evolution` — inbound autenticado do Evolution Go.
-- `PUT /internal/channel-connections/evolution` — provisiona a relação confiável entre instância, tenant e usuário.
-- `PUT /internal/ai-tenant-config` — sincroniza ativação, tom aprovado e snapshot de negócio usado no inbound direto.
-- `GET /internal/conversations` e `GET /internal/conversations/:id` — inbox e detalhe tenant-scoped.
-- `GET|POST /internal/conversations/:id/messages` — histórico e mensagem manual do owner durante takeover.
-- `POST /internal/conversations/:id/takeover|release|resolve` — lifecycle de handoff.
-- `GET /internal/dashboard` — conversas que exigem atenção e métricas diárias de automação, calculadas no timezone do tenant, para agregação pelo BFF.
-- `POST /internal/evolution/dispatch` — dispatch interno compatível com o BFF durante a transição.
-- `/internal/handoffs` e `/internal/bot/*` — controle de handoff e automação.
-- rotas legais legadas permanecem até o goal de cleanup.
+- `GET /health` e `GET /healthy` — saúde;
+- `POST /webhooks/evolution` — inbound autenticado do Evolution Go;
+- `PUT /internal/channel-connections/evolution` — provisiona a relação confiável entre instância, tenant e usuário;
+- `PUT /internal/ai-tenant-config` — sincroniza ativação, um dos dois tons aprovados e contexto mínimo do negócio;
+- `GET /internal/conversations` e `GET /internal/conversations/:id` — inbox e detalhe tenant-scoped;
+- `GET|POST /internal/conversations/:id/messages` — histórico e mensagem manual durante takeover;
+- `POST /internal/conversations/:id/takeover|release|resolve` — lifecycle de handoff;
+- `GET /internal/dashboard` — métricas diárias e conversas que exigem atenção.
 
-Rotas `/internal/*` exigem `INTERNAL_SERVICE_TOKEN`. Provisionamento exige `x-tenant-id` e `x-user-id` provenientes de serviço confiável. O body inbound nunca autoriza tenant.
-
-`EVOLUTION_WEBHOOK_TOKEN` deve ter o mesmo valor usado pelo BFF ao configurar o webhook da instância.
+Rotas `/internal/*` exigem `INTERNAL_SERVICE_TOKEN`. Provisionamento exige headers de tenant e usuário provenientes de serviço confiável. O body inbound nunca autoriza tenant.
 
 ## Persistência
 
-PostgreSQL próprio via Prisma. Models operacionais: `ChannelConnection`, `Conversation`, `Message`, `ProcessedEvent`, `AiRun`, `AiToolCall`, `Handoff`, `AiTenantConfig`, `KnowledgeDocument` e `KnowledgeChunk`. Chaves operacionais e relações de knowledge são tenant-scoped.
+PostgreSQL próprio via Prisma. Models operacionais: `ChannelConnection`, `Conversation`, `Message`, `ProcessedEvent`, `AiRun`, `AiToolCall`, `Handoff`, `AiTenantConfig`, `KnowledgeDocument` e `KnowledgeChunk`. Relações operacionais e de knowledge são tenant-scoped.
 
-Extensão `vector` armazena embeddings `vector(1536)`. Prisma mantém o tipo como `Unsupported`; escrita e busca vetorial usam SQL parametrizado dentro de `PGVectorKnowledgeStore`.
+Checkpoints LangGraph usam o mesmo PostgreSQL no schema dedicado `langgraph`. Appointment nunca é source of truth do graph.
 
 ## Environment
 
-Copie `.env.example` para `.env`. Principais grupos:
+Copie `.env.example` para `.env`. Os grupos principais são runtime/database, OpenAI, RAG, Evolution Go, Scheduling Service e `INTERNAL_SERVICE_TOKEN`. Credenciais de instância do WhatsApp vêm da conexão tenant-scoped; não há configuração global de instância.
 
-- runtime: `NODE_ENV`, `AI_ORCHESTRATOR_PORT`, `DATABASE_URL`;
-- autenticação interna: `INTERNAL_SERVICE_TOKEN`, `ADMIN_API_TOKEN`;
-- OpenAI: `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_EMBEDDING_MODEL` e limites;
-- RAG: `KNOWLEDGE_SEARCH_LIMIT` e `KNOWLEDGE_SEARCH_MIN_SCORE`;
-- Evolution Go: `EVOLUTION_*`;
-- agenda: `SCHEDULING_SERVICE_BASE_URL`.
+## IA, tools e RAG
+
+`AssistantService` usa `LangChainModelProvider`; somente esse provider conhece `ChatOpenAI`. A configuração aceita exclusivamente os tons `PROFESSIONAL_OBJECTIVE` e `LIGHT_CLOSE`.
+
+Tools operacionais usam contexto confiável de tenant/request e chamam o Scheduling Service. O RAG é limitado a conhecimento textual tenant-scoped; preço atual, serviço ativo, disponibilidade, appointments e status de integrações usam serviços determinísticos.
 
 ## Comandos
 
@@ -69,49 +63,3 @@ npm run start
 ```
 
 Porta padrão: `3000`.
-
-## IA e tools
-
-`AssistantService` usa `LangChainModelProvider`; somente esse provider conhece `ChatOpenAI`. Prompts ficam separados por contexto do tenant, agenda, handoff e resposta.
-
-Tools LangChain disponíveis:
-
-- `list_services`;
-- `get_availability`;
-- `create_appointment`;
-- `list_customer_appointments`;
-- `reschedule_appointment`;
-- `cancel_appointment`;
-- `request_human_handoff`;
-- `search_business_knowledge`.
-
-Tools operacionais recebem contexto confiável de tenant/request. Mutações usam chave estável derivada de `aiRunId` e `toolCallId`; agenda continua acessível somente via `SchedulingClient`.
-
-## LangGraph
-
-Workflow inbound usa nodes explícitos para contexto, conversa, guards operacionais, entendimento, retrieval tenant-scoped, agent, execução/validação de tools, composição, persistência, envio e handoff.
-
-- `thread_id` é sempre `Conversation.id`;
-- checkpoints usam o mesmo PostgreSQL do serviço no schema dedicado `langgraph`;
-- startup executa `PostgresSaver.setup()` e shutdown encerra o pool;
-- retry retoma node pendente; tool call checkpointada mantém `aiRunId`, `toolCallId` e chave idempotente;
-- Appointment nunca é armazenado como source of truth do graph;
-- scheduling continua `Graph → LangChain Tool → SchedulingClient → Scheduling Service`.
-
-`MessageOrchestrator` permanece somente como adapter para webhook e debounce durante migração.
-
-## RAG
-
-`EmbeddingProvider` isola geração de embeddings. `KnowledgeVectorStore` exige `tenantId` tanto para indexação quanto para busca; implementação ativa é `PGVectorKnowledgeStore`.
-
-Graph só chama `retrieveKnowledge` para perguntas classificadas como conhecimento. Preço, serviço ativo, agenda, disponibilidade, appointments, status WhatsApp e status de integração continuam fora do RAG e usam serviços determinísticos.
-
-Não existe rota ou CRUD público de knowledge. Carga controlada usa arquivo JSON local e contexto explícito de tenant:
-
-```bash
-KNOWLEDGE_SEED_TENANT_ID=tenant-id \
-KNOWLEDGE_SEED_FILE=./knowledge.json \
-npm run knowledge:seed
-```
-
-Tipos permitidos: `FAQ`, `GUIDANCE`, `CARE`, `PROCEDURE`, `BUSINESS_INFO` e `TEXT_POLICY`. Cada arquivo contém `type`, `title`, `source`, `version`, `status` opcional e `chunks` com `content` e `metadata` opcional.

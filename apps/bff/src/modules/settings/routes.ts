@@ -3,7 +3,6 @@ import { z } from "zod";
 
 import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
 import { SchedulingClient } from "../../clients/scheduling/index.js";
-import { businessSettingsDto } from "../../lib/dto.js";
 import { AppError } from "../../lib/errors.js";
 import { dataResponse, parseBody } from "../../lib/http.js";
 import { getPrisma } from "../../lib/prisma.js";
@@ -74,15 +73,6 @@ export async function registerV1SettingsRoutes(
             timezone: body.timezone,
           },
         }),
-        prisma.businessSettings.upsert({
-          where: { userId: tenant.userId },
-          create: {
-            userId: tenant.userId,
-            businessName: body.name,
-            timezone: body.timezone,
-          },
-          update: { businessName: body.name, timezone: body.timezone },
-        }),
       ]);
       await syncAi(request, ai);
       return dataResponse(request, await settingsState(request, scheduling));
@@ -95,20 +85,16 @@ export async function registerV1SettingsRoutes(
     async (request) => {
       const body = parseBody(aiSchema, request.body);
       const tenant = currentTenantContext(request);
-      await getPrisma().userSettings.upsert({
-        where: { userId: tenant.userId },
+      await getPrisma().aiSettings.upsert({
+        where: { tenantId: tenant.tenantId },
         create: {
-          userId: tenant.userId,
-          aiEnabled: body.enabled,
-          personaType:
-            body.tone === "PROFESSIONAL_OBJECTIVE" ? "CORPORATE" : "WARM",
-          virtualAttendantOnboardingCompleted: true,
+          tenantId: tenant.tenantId,
+          enabled: body.enabled,
+          tone: body.tone,
         },
         update: {
-          aiEnabled: body.enabled,
-          personaType:
-            body.tone === "PROFESSIONAL_OBJECTIVE" ? "CORPORATE" : "WARM",
-          virtualAttendantOnboardingCompleted: true,
+          enabled: body.enabled,
+          tone: body.tone,
         },
       });
       await syncAi(request, ai);
@@ -136,11 +122,13 @@ async function settingsState(
 ) {
   const tenant = currentTenantContext(request);
   const context = internalContext(request);
-  const [profile, userSettings, calendar] = await Promise.all([
+  const [profile, aiSettings, calendar] = await Promise.all([
     getPrisma().businessProfile.findUnique({
       where: { tenantId: tenant.tenantId },
     }),
-    getPrisma().userSettings.findUnique({ where: { userId: tenant.userId } }),
+    getPrisma().aiSettings.findUnique({
+      where: { tenantId: tenant.tenantId },
+    }),
     scheduling.calendar(context),
   ]);
   const availability =
@@ -158,13 +146,8 @@ async function settingsState(
         }
       : null,
     ai: {
-      enabled: Boolean(userSettings?.aiEnabled),
-      tone:
-        userSettings?.personaType === "CORPORATE"
-          ? "PROFESSIONAL_OBJECTIVE"
-          : userSettings?.personaType === "WARM"
-            ? "LIGHT_CLOSE"
-            : null,
+      enabled: Boolean(aiSettings?.enabled),
+      tone: aiSettings?.tone ?? null,
     },
     calendar: {
       ...calendar,
@@ -184,25 +167,25 @@ async function syncAi(
   ai: AiOrchestratorClient,
 ): Promise<void> {
   const tenant = currentTenantContext(request);
-  const [settings, businessSettings] = await Promise.all([
-    getPrisma().userSettings.upsert({
-      where: { userId: tenant.userId },
-      create: { userId: tenant.userId, aiEnabled: false },
+  const [settings, businessProfile] = await Promise.all([
+    getPrisma().aiSettings.upsert({
+      where: { tenantId: tenant.tenantId },
+      create: { tenantId: tenant.tenantId, enabled: false },
       update: {},
     }),
-    getPrisma().businessSettings.upsert({
-      where: { userId: tenant.userId },
-      create: { userId: tenant.userId },
+    getPrisma().businessProfile.upsert({
+      where: { tenantId: tenant.tenantId },
+      create: { tenantId: tenant.tenantId },
       update: {},
     }),
   ]);
   await ai.updateTenantConfig(internalContext(request), {
-    enabled: settings.aiEnabled,
-    tone:
-      settings.personaType === "CORPORATE"
-        ? "PROFESSIONAL_OBJECTIVE"
-        : "LIGHT_CLOSE",
-    businessSettings: businessSettingsDto(businessSettings),
+    enabled: settings.enabled,
+    tone: settings.tone ?? "LIGHT_CLOSE",
+    businessContext: {
+      businessName: businessProfile.businessName,
+      timezone: businessProfile.timezone,
+    },
   });
 }
 

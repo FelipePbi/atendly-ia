@@ -5,7 +5,6 @@ import { z } from "zod";
 import { env } from "../../config/env.js";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import { AppError } from "../../lib/errors.js";
-import type { BusinessSettingsDTO } from "../business-settings/business-settings.js";
 import {
   isOperationalKnowledgeQuery,
   type KnowledgeVectorStore,
@@ -18,6 +17,7 @@ import type {
   SchedulingAppointment,
   SchedulingRequestContext,
 } from "../scheduling-service/types.js";
+import type { BusinessContext } from "../tenant-config/business-context.js";
 export interface ToolExecutionContext {
   conversationId: string;
   tenantId: string;
@@ -26,7 +26,7 @@ export interface ToolExecutionContext {
   requestId: string;
   phone: string;
   customerName?: string | null;
-  businessSettings: BusinessSettingsDTO;
+  businessContext: BusinessContext;
   aiRunId: string;
   toolCallId: string;
   idempotencyKey: string;
@@ -508,7 +508,7 @@ export class AssistantToolRegistry {
     const slots = await this.scheduling.getAvailableSlotsForServices(
       serviceResult.serviceIds,
       args.startDate,
-      context.businessSettings,
+      context.businessContext,
       schedulingContext(context),
     );
     await this.rememberAvailabilityLookup(context.conversationId, {
@@ -601,7 +601,6 @@ export class AssistantToolRegistry {
           serviceResult.totalPrice,
         ),
       },
-      context.businessSettings,
       schedulingContext(context),
       pending.idempotencyKey || context.idempotencyKey,
     );
@@ -613,7 +612,7 @@ export class AssistantToolRegistry {
   private async findCustomerAppointments(context: ToolExecutionContext) {
     const appointments = await this.scheduling.findFutureAppointmentsForPhone(
       context.phone,
-      context.businessSettings,
+      context.businessContext,
       schedulingContext(context),
     );
     return {
@@ -629,7 +628,7 @@ export class AssistantToolRegistry {
   ) {
     const appointments = await this.scheduling.findFutureAppointmentsForPhone(
       context.phone,
-      context.businessSettings,
+      context.businessContext,
       schedulingContext(context),
     );
     const appointment = appointments.find(
@@ -678,7 +677,7 @@ export class AssistantToolRegistry {
   ) {
     const appointments = await this.scheduling.findFutureAppointmentsForPhone(
       context.phone,
-      context.businessSettings,
+      context.businessContext,
       schedulingContext(context),
     );
     const appointment = appointments.find(
@@ -719,7 +718,6 @@ export class AssistantToolRegistry {
         date: pending.date,
         startTime: pending.startTime,
       },
-      context.businessSettings,
       schedulingContext(context),
       pending.idempotencyKey || context.idempotencyKey,
     );

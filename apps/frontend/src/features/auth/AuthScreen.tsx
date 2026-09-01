@@ -6,7 +6,7 @@ import { type FormEvent, type ReactNode, useState } from "react";
 
 import { CURRENT_LEGAL_VERSIONS } from "@/config/legal-versions";
 import { BffHttpError } from "@/data";
-import { mockServices } from "@/mocks";
+import { previewServices } from "@/mocks";
 import { Icon } from "@/shared/icons/Icon";
 import {
   getProductServices,
@@ -171,7 +171,7 @@ export function AuthScreen({
     setSubmitError(null);
     try {
       if (preview) {
-        await mockServices.auth.submit(scenario);
+        await previewServices.auth.submit(scenario);
         router.push(destination);
         return;
       }

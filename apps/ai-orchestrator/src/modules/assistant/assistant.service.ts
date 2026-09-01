@@ -6,11 +6,6 @@ import {
   noopDiagnosticLogger,
 } from "../../lib/diagnostic-log.js";
 import { toErrorMessage } from "../../lib/errors.js";
-import {
-  businessSettingsConfigured,
-  type BusinessSettingsDTO,
-  normalizeBusinessSettings,
-} from "../business-settings/business-settings.js";
 import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
 import type { KnowledgeSearchResult } from "../knowledge/knowledge-vector-store.js";
 import {
@@ -23,18 +18,23 @@ import {
   type ModelTurn,
 } from "../model/model-provider.js";
 import { buildSystemPrompt } from "../prompts/system.js";
-import { AssistantToolRegistry } from "../tools/assistant-tools.js";
 import {
-  normalizeVirtualAttendantSettings,
-  type VirtualAttendantSettingsDTO,
-} from "../virtual-attendant/virtual-attendant.js";
+  type AiTenantSettings,
+  normalizeAiSettings,
+} from "../tenant-config/ai-settings.js";
+import {
+  type BusinessContext,
+  businessContextConfigured,
+  normalizeBusinessContext,
+} from "../tenant-config/business-context.js";
+import { AssistantToolRegistry } from "../tools/assistant-tools.js";
 
 export interface IncomingAssistantMessage {
   phone: string;
   text: string;
   channelMessage?: ChannelInboundMessage;
-  businessSettings?: BusinessSettingsDTO;
-  virtualAttendantSettings?: VirtualAttendantSettingsDTO;
+  businessContext?: BusinessContext;
+  aiSettings?: AiTenantSettings;
   whatsappMessageId?: string;
   customerName?: string | null;
   rawPayload?: unknown;
@@ -57,7 +57,7 @@ export interface AssistantGraphSession {
   inputMessageIds: string[];
   phone: string;
   customerName?: string | null;
-  businessSettings: BusinessSettingsDTO;
+  businessContext: BusinessContext;
   instructions: string;
   input: ModelInputMessage[];
   turns: ModelTurn[];
@@ -292,23 +292,19 @@ export class AssistantService {
         content: message.body,
       }));
     const state = normalizeStoredState(conversation.state);
-    const businessSettings = normalizeBusinessSettings(
-      input.businessSettings ?? channelMessage.businessSettings,
+    const businessContext = normalizeBusinessContext(
+      input.businessContext ?? channelMessage.businessContext,
     );
-    const virtualAttendantSettings = normalizeVirtualAttendantSettings(
-      input.virtualAttendantSettings ?? channelMessage.virtualAttendantSettings,
+    const aiSettings = normalizeAiSettings(
+      input.aiSettings ?? channelMessage.aiSettings,
     );
     const previousMessageCount = Math.max(
       0,
       chronologicalMessages.length - input.messageRecordIds.length,
     );
-    const immediateDecision = !businessSettingsConfigured(businessSettings)
-      ? incompleteBusinessSettingsDecision()
-      : buildImmediateDecision(
-          input.text,
-          previousMessageCount,
-          virtualAttendantSettings,
-        );
+    const immediateDecision = !businessContextConfigured(businessContext)
+      ? incompleteBusinessContextDecision()
+      : buildImmediateDecision(input.text, previousMessageCount, aiSettings);
 
     return {
       conversationId: conversation.id,
@@ -319,14 +315,14 @@ export class AssistantService {
       inputMessageIds: input.messageRecordIds,
       phone,
       customerName,
-      businessSettings,
+      businessContext,
       instructions: buildSystemPrompt({
         state,
         promptVersion: env.AI_PROMPT_VERSION,
         groupedMessages: input.text,
         currentDateTime: new Date().toISOString(),
-        businessSettings,
-        virtualAttendantSettings,
+        businessContext,
+        aiSettings,
         knowledgeRequested: input.knowledgeRequested,
         retrievedKnowledge: input.retrievedKnowledge,
       }),
@@ -800,7 +796,7 @@ export class AssistantService {
   }
 }
 
-function incompleteBusinessSettingsDecision(): AiDecision {
+function incompleteBusinessContextDecision(): AiDecision {
   return {
     action: "handoff_human",
     messages: ["Vou deixar essa conversa para a profissional responder, ta?"],
@@ -822,7 +818,7 @@ function graphToolContext(session: AssistantGraphSession, aiRunId: string) {
     requestId: session.requestId,
     phone: session.phone,
     customerName: session.customerName,
-    businessSettings: session.businessSettings,
+    businessContext: session.businessContext,
     aiRunId,
   };
 }
@@ -886,7 +882,7 @@ function requireChannelMessage(
 function buildImmediateDecision(
   text: string,
   previousMessageCount: number,
-  virtualAttendantSettings: VirtualAttendantSettingsDTO,
+  aiSettings: AiTenantSettings,
 ): AiDecision | null {
   const normalized = normalizeText(text);
 
@@ -934,7 +930,7 @@ function buildImmediateDecision(
   if (previousMessageCount === 0 && isOnlyGenericGreeting(normalized)) {
     return {
       action: "send_message",
-      messages: [genericGreetingReply(virtualAttendantSettings)],
+      messages: [genericGreetingReply(aiSettings)],
       conversationStage: "QUALIFYING_CONTACT",
       classification: "unknown",
       confidence: 0.92,
@@ -946,7 +942,7 @@ function buildImmediateDecision(
   return null;
 }
 
-function genericGreetingReply(settings: VirtualAttendantSettingsDTO): string {
+function genericGreetingReply(settings: AiTenantSettings): string {
   if (settings.tone === "PROFESSIONAL_OBJECTIVE") {
     return "Olá, tudo bem? Como posso te ajudar hoje?";
   }

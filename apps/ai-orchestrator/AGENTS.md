@@ -31,4 +31,4 @@ Não é owner de calendário, serviços, clientes, disponibilidade ou appointmen
 - RAG e pgvector entram somente no GOAL 10.
 - Legado legal e outros consumidores remanescentes saem no goal responsável.
 
-Preserve/refatore incrementalmente `MessageOrchestrator`, `AssistantService`, mappers/providers Evolution, `WhatsAppProvider`, `HandoffService`, `IdempotencyStore`, prompts e utilitários.
+Preserve/refatore incrementalmente `InboundMessageProcessor`, `AssistantService`, mappers/providers Evolution, `WhatsAppProvider`, `HandoffService`, `IdempotencyStore`, prompts e utilitários.

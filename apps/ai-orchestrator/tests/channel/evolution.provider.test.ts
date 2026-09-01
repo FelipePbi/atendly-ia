@@ -10,8 +10,6 @@ describe("EvolutionProvider", () => {
   it("sends text messages to the configured Evolution Go endpoint", async () => {
     vi.stubEnv("EVOLUTION_BASE_URL", "http://evolution-go:8080/");
     vi.stubEnv("EVOLUTION_API_KEY", "global-key");
-    vi.stubEnv("EVOLUTION_INSTANCE_ID", "instance-1");
-    vi.stubEnv("EVOLUTION_INSTANCE_TOKEN", "instance-token");
     vi.stubEnv("EVOLUTION_SEND_TEXT_PATH", "/send/text");
     vi.resetModules();
 
@@ -29,7 +27,11 @@ describe("EvolutionProvider", () => {
     const { EvolutionProvider } =
       await import("../../src/modules/channel/adapters/evolution/EvolutionProvider.js");
 
-    const result = await new EvolutionProvider().sendText({
+    const result = await new EvolutionProvider(
+      undefined,
+      "instance-token",
+      "instance-1",
+    ).sendText({
       to: "5511999999999",
       text: "resposta",
       quotedMessageId: "inbound-1",
@@ -84,7 +86,10 @@ describe("EvolutionProvider", () => {
       await import("../../src/modules/channel/adapters/evolution/EvolutionProvider.js");
 
     await expect(
-      new EvolutionProvider().sendText({ to: "5511999999999", text: "ok" }),
+      new EvolutionProvider(undefined, undefined, "instance-1").sendText({
+        to: "5511999999999",
+        text: "ok",
+      }),
     ).resolves.toMatchObject({
       messageId: "nested-id",
     });
@@ -109,7 +114,10 @@ describe("EvolutionProvider", () => {
       await import("../../src/modules/channel/adapters/evolution/EvolutionProvider.js");
 
     await expect(
-      new EvolutionProvider().sendText({ to: "5511999999999", text: "ok" }),
+      new EvolutionProvider(undefined, undefined, "instance-1").sendText({
+        to: "5511999999999",
+        text: "ok",
+      }),
     ).rejects.toThrow("Evolution Go send failed with HTTP 500");
   });
 });

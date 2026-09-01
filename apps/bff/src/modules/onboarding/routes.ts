@@ -4,7 +4,6 @@ import { z } from "zod";
 import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
 import { EvolutionClient } from "../../clients/evolution/index.js";
 import { SchedulingClient } from "../../clients/scheduling/index.js";
-import { businessSettingsDto } from "../../lib/dto.js";
 import { AppError } from "../../lib/errors.js";
 import { dataResponse, parseBody } from "../../lib/http.js";
 import { getPrisma } from "../../lib/prisma.js";
@@ -104,18 +103,6 @@ export async function registerV1OnboardingRoutes(
               timezone: body.business.timezone,
             },
           }),
-          prisma.businessSettings.upsert({
-            where: { userId: tenant.userId },
-            create: {
-              userId: tenant.userId,
-              businessName: body.business.name,
-              timezone: body.business.timezone,
-            },
-            update: {
-              businessName: body.business.name,
-              timezone: body.business.timezone,
-            },
-          }),
         ]);
       }
 
@@ -137,22 +124,18 @@ export async function registerV1OnboardingRoutes(
       }
 
       if (body.ai) {
-        const userSettings = await prisma.userSettings.upsert({
-          where: { userId: tenant.userId },
+        const aiSettings = await prisma.aiSettings.upsert({
+          where: { tenantId: tenant.tenantId },
           create: {
-            userId: tenant.userId,
-            aiEnabled: false,
-            personaType:
-              body.ai.tone === "PROFESSIONAL_OBJECTIVE" ? "CORPORATE" : "WARM",
-            virtualAttendantOnboardingCompleted: true,
+            tenantId: tenant.tenantId,
+            enabled: false,
+            tone: body.ai.tone,
           },
           update: {
-            personaType:
-              body.ai.tone === "PROFESSIONAL_OBJECTIVE" ? "CORPORATE" : "WARM",
-            virtualAttendantOnboardingCompleted: true,
+            tone: body.ai.tone,
           },
         });
-        await syncAiConfig(request, ai, userSettings.aiEnabled, body.ai.tone);
+        await syncAiConfig(request, ai, aiSettings.enabled, body.ai.tone);
       }
 
       return dataResponse(request, await onboardingState(request, scheduling));
@@ -170,7 +153,7 @@ export async function registerV1OnboardingRoutes(
         prisma.businessProfile.findUnique({
           where: { tenantId: tenant.tenantId },
         }),
-        prisma.userSettings.findUnique({ where: { userId: tenant.userId } }),
+        prisma.aiSettings.findUnique({ where: { tenantId: tenant.tenantId } }),
         prisma.whatsAppInstance.findUnique({
           where: { userId: tenant.userId },
         }),
@@ -182,8 +165,8 @@ export async function registerV1OnboardingRoutes(
       }
       if (!calendar.source) issues.push("CALENDAR_NOT_SELECTED");
       if (
-        settings?.personaType !== "CORPORATE" &&
-        settings?.personaType !== "WARM"
+        settings?.tone !== "PROFESSIONAL_OBJECTIVE" &&
+        settings?.tone !== "LIGHT_CLOSE"
       ) {
         issues.push("AI_TONE_NOT_SELECTED");
       }
@@ -241,7 +224,9 @@ async function onboardingState(
     getPrisma().businessProfile.findUnique({
       where: { tenantId: tenant.tenantId },
     }),
-    getPrisma().userSettings.findUnique({ where: { userId: tenant.userId } }),
+    getPrisma().aiSettings.findUnique({
+      where: { tenantId: tenant.tenantId },
+    }),
     getPrisma().whatsAppInstance.findUnique({
       where: { userId: tenant.userId },
     }),
@@ -267,12 +252,7 @@ async function onboardingState(
       integration: calendar.integration,
     },
     ai: {
-      tone:
-        settings?.personaType === "CORPORATE"
-          ? "PROFESSIONAL_OBJECTIVE"
-          : settings?.personaType === "WARM"
-            ? "LIGHT_CLOSE"
-            : null,
+      tone: settings?.tone ?? null,
     },
     service: services.find((service) => service.active) ?? null,
     availability,
@@ -291,15 +271,18 @@ async function syncAiConfig(
   tone: "PROFESSIONAL_OBJECTIVE" | "LIGHT_CLOSE",
 ): Promise<void> {
   const tenant = currentTenantContext(request);
-  const businessSettings = await getPrisma().businessSettings.upsert({
-    where: { userId: tenant.userId },
-    create: { userId: tenant.userId },
+  const businessProfile = await getPrisma().businessProfile.upsert({
+    where: { tenantId: tenant.tenantId },
+    create: { tenantId: tenant.tenantId },
     update: {},
   });
   await ai.updateTenantConfig(internalContext(request), {
     enabled,
     tone,
-    businessSettings: businessSettingsDto(businessSettings),
+    businessContext: {
+      businessName: businessProfile.businessName,
+      timezone: businessProfile.timezone,
+    },
   });
 }
 

@@ -2,7 +2,6 @@ import type { FastifyInstance } from "fastify";
 
 import { env } from "../config/env.js";
 import { dataResponse } from "../lib/http.js";
-import { checkAiOrchestratorHealth } from "../services/ai-orchestrator.js";
 
 export async function registerHealthRoutes(
   app: FastifyInstance,
@@ -17,8 +16,8 @@ export async function registerHealthRoutes(
 
   app.get("/health/dependencies", async (request) => {
     const [aiOrchestrator, evolutionGo] = await Promise.allSettled([
-      checkAiOrchestratorHealth(),
-      checkEvolutionHealth(),
+      checkHealth(env.AI_ORCHESTRATOR_BASE_URL, "/health"),
+      checkHealth(env.EVOLUTION_GO_BASE_URL, "/healthy"),
     ]);
 
     return dataResponse(request, {
@@ -28,15 +27,18 @@ export async function registerHealthRoutes(
   });
 }
 
-async function checkEvolutionHealth(): Promise<{
+async function checkHealth(
+  baseUrl: string,
+  path: string,
+): Promise<{
   ok: boolean;
   status?: number;
   latencyMs: number;
 }> {
   const startedAt = Date.now();
-  const response = await fetch(
-    `${env.EVOLUTION_GO_BASE_URL.replace(/\/$/, "")}/healthy`,
-  );
+  const response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
+    signal: AbortSignal.timeout(env.INTERNAL_HTTP_TIMEOUT_MS),
+  });
   return {
     ok: response.ok,
     status: response.status,

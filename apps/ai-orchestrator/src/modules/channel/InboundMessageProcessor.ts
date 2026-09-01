@@ -11,13 +11,7 @@ import type {
   AssistantReply,
   AssistantService,
 } from "../assistant/assistant.service.js";
-import type { BusinessSettingsDTO } from "../business-settings/business-settings.js";
-import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
-import type { WhatsAppProvider } from "../channel/ports/WhatsAppProvider.js";
-import {
-  createCompatibilityGraphRuntime,
-  type GraphRuntimePort,
-} from "../graph/graph-runtime.js";
+import type { GraphRuntimePort } from "../graph/graph-runtime.js";
 import { MessageGraphWorkflow } from "../graph/message-graph.js";
 import type {
   BotPauseContext,
@@ -25,8 +19,11 @@ import type {
 } from "../handoff/HandoffService.js";
 import type { IdempotencyStore } from "../idempotency/IdempotencyStore.js";
 import type { KnowledgeVectorStore } from "../knowledge/knowledge-vector-store.js";
+import type { BusinessContext } from "../tenant-config/business-context.js";
+import type { ChannelInboundMessage } from "./domain/ChannelMessage.js";
+import type { WhatsAppProvider } from "./ports/WhatsAppProvider.js";
 
-export interface OrchestratorOutboundMessage {
+export interface InboundOutboundMessage {
   text: string;
   conversationId?: string;
   messageRecordId?: string;
@@ -34,7 +31,7 @@ export interface OrchestratorOutboundMessage {
   rawPayload?: unknown;
 }
 
-export interface OrchestratorResult {
+export interface InboundProcessingResult {
   ok: true;
   action:
     | "ignored_group"
@@ -52,7 +49,7 @@ export interface OrchestratorResult {
     | "buffered"
     | "replied"
     | "error_handoff";
-  outboundMessage?: OrchestratorOutboundMessage;
+  outboundMessage?: InboundOutboundMessage;
 }
 
 export interface RecordedInboundText {
@@ -64,8 +61,8 @@ export interface AutomationPort {
   handleIncomingText(input: {
     phone: string;
     text: string;
-    businessSettings?: BusinessSettingsDTO;
-    virtualAttendantSettings?: ChannelInboundMessage["virtualAttendantSettings"];
+    businessContext?: BusinessContext;
+    aiSettings?: ChannelInboundMessage["aiSettings"];
     channelMessage: ChannelInboundMessage;
   }): Promise<AssistantReply>;
   markOutboundMessageSent(input: {
@@ -76,22 +73,22 @@ export interface AutomationPort {
   recordManualOutboundText(input: {
     phone: string;
     text: string;
-    businessSettings?: BusinessSettingsDTO;
-    virtualAttendantSettings?: ChannelInboundMessage["virtualAttendantSettings"];
+    businessContext?: BusinessContext;
+    aiSettings?: ChannelInboundMessage["aiSettings"];
     channelMessage: ChannelInboundMessage;
   }): Promise<Pick<AssistantReply, "conversationId" | "messageRecordId">>;
   recordInboundText?(input: {
     phone: string;
     text: string;
-    businessSettings?: BusinessSettingsDTO;
-    virtualAttendantSettings?: ChannelInboundMessage["virtualAttendantSettings"];
+    businessContext?: BusinessContext;
+    aiSettings?: ChannelInboundMessage["aiSettings"];
     channelMessage: ChannelInboundMessage;
   }): Promise<RecordedInboundText>;
   handleBufferedText?(input: {
     phone: string;
     text: string;
-    businessSettings?: BusinessSettingsDTO;
-    virtualAttendantSettings?: ChannelInboundMessage["virtualAttendantSettings"];
+    businessContext?: BusinessContext;
+    aiSettings?: ChannelInboundMessage["aiSettings"];
     channelMessage: ChannelInboundMessage;
     messageRecordIds: string[];
   }): Promise<AssistantReply>;
@@ -126,9 +123,9 @@ export interface MessageDebounceConfig {
   maxWaitSeconds: number;
 }
 
-export interface MessageOrchestratorOptions {
+export interface InboundMessageProcessorOptions {
   debounce?: Partial<Omit<MessageDebounceConfig, "enabled">> | false;
-  runtime?: GraphRuntimePort;
+  runtime: GraphRuntimePort;
   checkpointer?: BaseCheckpointSaver;
   knowledge?: KnowledgeVectorStore;
 }
@@ -150,8 +147,8 @@ interface ConversationMessageBuffer {
   timer?: NodeJS.Timeout;
 }
 
-/** Compatibility adapter. Inbound orchestration belongs to MessageGraphWorkflow. */
-export class MessageOrchestrator {
+/** Owns the inbound channel pipeline and delegates state transitions to LangGraph. */
+export class InboundMessageProcessor {
   private readonly debounce: MessageDebounceConfig;
   private readonly buffers = new Map<string, ConversationMessageBuffer>();
   private readonly runtime: GraphRuntimePort;
@@ -163,10 +160,10 @@ export class MessageOrchestrator {
     idempotency: IdempotencyPort | IdempotencyStore,
     handoff: HandoffPort | HandoffService,
     private readonly logger: DiagnosticLogger = noopDiagnosticLogger,
-    options: MessageOrchestratorOptions = {},
+    options: InboundMessageProcessorOptions,
   ) {
     this.debounce = buildDebounceConfig(options.debounce);
-    this.runtime = options.runtime ?? createCompatibilityGraphRuntime();
+    this.runtime = options.runtime;
     this.workflow = new MessageGraphWorkflow({
       automation,
       provider,
@@ -181,10 +178,10 @@ export class MessageOrchestrator {
 
   async handleInboundMessage(
     message: ChannelInboundMessage,
-  ): Promise<OrchestratorResult> {
+  ): Promise<InboundProcessingResult> {
     this.logger.info(
       channelMessageLogContext(message),
-      "MessageOrchestrator adapter received inbound message",
+      "Inbound message processor received channel message",
     );
     if (message.isGroup && env.EVOLUTION_IGNORE_GROUPS) {
       return { ok: true, action: "ignored_group" };
@@ -209,7 +206,7 @@ export class MessageOrchestrator {
 
   async flushBufferedMessagesForTesting(
     phone: string,
-  ): Promise<OrchestratorResult | null> {
+  ): Promise<InboundProcessingResult | null> {
     const entry = [...this.buffers.entries()].find(
       ([, buffer]) => buffer.phone === phone,
     );
@@ -219,7 +216,7 @@ export class MessageOrchestrator {
   private async bufferTextMessage(
     message: ChannelInboundMessage & { kind: "text"; text: string },
     conversationId: string,
-  ): Promise<OrchestratorResult> {
+  ): Promise<InboundProcessingResult> {
     const execution = await this.workflow.invoke({
       message,
       conversationId,
@@ -261,7 +258,7 @@ export class MessageOrchestrator {
         void this.flushBufferedMessages(buffer.key).catch((error) => {
           this.logger.error(
             { phone: buffer.phone, err: toErrorMessage(error) },
-            "MessageOrchestrator failed to flush graph buffer",
+            "Inbound message processor failed to flush graph buffer",
           );
         });
       },
@@ -279,7 +276,7 @@ export class MessageOrchestrator {
 
   private async flushBufferedMessages(
     key: string,
-  ): Promise<OrchestratorResult | null> {
+  ): Promise<InboundProcessingResult | null> {
     const buffer = this.buffers.get(key);
     if (!buffer) return null;
     if (buffer.timer) clearTimeout(buffer.timer);
@@ -318,7 +315,9 @@ function hasBufferedAutomation(
   );
 }
 
-function shouldCancelBufferedMessages(result: OrchestratorResult): boolean {
+function shouldCancelBufferedMessages(
+  result: InboundProcessingResult,
+): boolean {
   return [
     "manual_activity_recorded",
     "ai_pause_command",
@@ -331,7 +330,7 @@ function messageBufferKey(message: ChannelInboundMessage): string {
 }
 
 function buildDebounceConfig(
-  overrides: MessageOrchestratorOptions["debounce"],
+  overrides: InboundMessageProcessorOptions["debounce"],
 ): MessageDebounceConfig {
   if (overrides === false) {
     return {

@@ -1,6 +1,6 @@
 import type { PrismaClient } from "../../src/generated/prisma/client.js";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_BUSINESS_SETTINGS } from "../../src/modules/business-settings/business-settings.js";
+import { DEFAULT_BUSINESS_CONTEXT } from "../../src/modules/tenant-config/business-context.js";
 import { AssistantToolRegistry } from "../../src/modules/tools/assistant-tools.js";
 import type {
   ScheduleAppointmentInput,
@@ -281,8 +281,8 @@ function context() {
     requestId: "request-1",
     phone,
     customerName: "Thais",
-    businessSettings: {
-      ...DEFAULT_BUSINESS_SETTINGS,
+    businessContext: {
+      ...DEFAULT_BUSINESS_CONTEXT,
       businessName: "Camili Krauser Beauty",
       configured: true,
     },

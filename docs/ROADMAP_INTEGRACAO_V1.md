@@ -3,7 +3,7 @@
 ## Estado
 
 ```text
-COMPLETED: GOAL 16
+COMPLETED: GOAL 17
 ```
 
 Este roadmap governa refatoração incremental. Todos os goals começam em `NOT_STARTED`. Esta tarefa de documentação ocorre antes do GOAL 01.
@@ -80,7 +80,7 @@ AI Orchestrator e Scheduling Service já existem como apps separados; goals segu
 | GOAL 14 | Services + Customers + Calendar | GOAL 13 | COMPLETED |
 | GOAL 15 | Conversations + Handoff | GOAL 14 | COMPLETED |
 | GOAL 16 | Dashboard + Calendar Migration | GOAL 15 | COMPLETED |
-| GOAL 17 | Legacy cleanup | GOAL 16 | NOT_STARTED |
+| GOAL 17 | Legacy cleanup | GOAL 16 | COMPLETED |
 | GOAL 18 | Deploy + final architecture audit | GOAL 17 | NOT_STARTED |
 
 ## Goal documents

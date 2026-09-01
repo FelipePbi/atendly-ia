@@ -11,7 +11,7 @@ const url = `http://localhost:${port}/webhooks/evolution?token=${encodeURICompon
 
 const payload = {
   event: "Message",
-  instanceId: process.env.EVOLUTION_INSTANCE_ID || "sample-instance",
+  instanceId: process.env.SAMPLE_EVOLUTION_INSTANCE_ID || "sample-instance",
   instanceToken: "sample-token",
   data: {
     Info: {

@@ -1,5 +1,5 @@
-import type { BusinessSettingsDTO } from "../../business-settings/business-settings.js";
-import type { VirtualAttendantSettingsDTO } from "../../virtual-attendant/virtual-attendant.js";
+import type { AiTenantSettings } from "../../tenant-config/ai-settings.js";
+import type { BusinessContext } from "../../tenant-config/business-context.js";
 
 export type ChannelProviderName = "evolution-go";
 export type ChannelMessageKind =
@@ -25,8 +25,8 @@ export interface ChannelExecutionContext {
   channelId: string;
   userId: string;
   requestId: string;
-  businessSettings?: BusinessSettingsDTO;
-  virtualAttendantSettings?: VirtualAttendantSettingsDTO;
+  businessContext?: BusinessContext;
+  aiSettings?: AiTenantSettings;
 }
 
 export type ChannelInboundMessage = MappedChannelInboundMessage &

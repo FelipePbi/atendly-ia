@@ -37,7 +37,6 @@ const envSchema = z.object({
   SCHEDULING_SERVICE_BASE_URL: stringEnv("http://localhost:3003"),
   EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),
   EVOLUTION_GO_API_KEY: stringEnv(),
-  EVOLUTION_GO_SEND_TEXT_PATH: stringEnv("/send/text"),
   INTERNAL_SERVICE_TOKEN: stringEnv(),
   INTERNAL_HTTP_TIMEOUT_MS: intEnv(10_000),
   INTERNAL_HTTP_GET_RETRIES: intEnv(2),
@@ -45,7 +44,6 @@ const envSchema = z.object({
   PASSWORD_RESET_PUBLIC_URL: stringEnv("http://localhost:3001/nova-senha"),
   PASSWORD_RESET_DELIVERY_URL: stringEnv(),
   PASSWORD_RESET_DELIVERY_TOKEN: stringEnv(),
-  BFF_PUBLIC_URL: stringEnv("http://localhost:3002"),
   EVOLUTION_WEBHOOK_SECRET: stringEnv(),
 });
 

@@ -12,7 +12,6 @@
     "build:all": "bash scripts/build-all.sh",
     "check:health-worker": "cd apps/health-worker && npm run check",
     "smoke:final-audit": "node scripts/final-production-audit.mjs",
-    "smoke:render": "node scripts/render-smoke.mjs",
     "test:evolution-go": "cd apps/evolution-go && go test ./..."
   },
   "engines": {

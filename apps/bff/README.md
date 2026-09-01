@@ -19,12 +19,6 @@ Backend público da aplicação web Atendly. A Public API V1 é o único contrat
 
 Frontend de produto consome estes endpoints. Preview visual continua isolado em mocks.
 
-## Transitional responsibilities
-
-Arquivos legados de persona e configurações anteriores à V1 ainda existem no repositório, mas suas rotas públicas não são registradas. Conversation, Message e Handoff pertencem exclusivamente ao AI Orchestrator.
-
-Não remova responsabilidades transitórias até goal explícito substituir contratos e consumidores. Schemas atuais também contêm conceitos legados que não devem ser propagados para V1.
-
 ## Target responsibilities
 
 `TARGET`:
@@ -82,7 +76,7 @@ Clients validam respostas com Zod, propagam request ID e contexto tenant confiá
 
 Prisma schema: `prisma/schema.prisma`. Fundação multi-tenant contém `Tenant`, `TenantMember` e `BusinessProfile`. Cadastro cria `User`, tenant, membership `OWNER`, perfil inicial e aceite legal na mesma transação. Migration do GOAL 03 cria um tenant determinístico para cada usuário legado ainda sem membership.
 
-Models legados de configuração ainda presentes aguardam o GOAL 17. Conversation, Message e AiSuppressionLog foram removidos no GOAL 15.
+`BusinessProfile` e `AiSettings` são tenant-scoped. `AiSettings` aceita somente os dois tons aprovados na V1. Conversation, Message e AiSuppressionLog foram removidos no GOAL 15; configurações paralelas de persona e negócio foram removidas no GOAL 17.
 
 No alvo, BFF acessa somente tabelas do próprio domínio. Nunca compartilhe Prisma nem consulte DB de Scheduling Service ou AI Orchestrator.
 
@@ -127,7 +121,7 @@ Grupos:
 
 - runtime/session: `NODE_ENV`, `PORT`, `JWT_*`, `SESSION_COOKIE_NAME`, `COOKIE_*`;
 - persistence: `DATABASE_URL`;
-- browser boundary: `FRONTEND_ORIGIN`, `BFF_PUBLIC_URL`;
+- browser boundary: `FRONTEND_ORIGIN`;
 - APIs internas: `AI_ORCHESTRATOR_BASE_URL`, `SCHEDULING_SERVICE_BASE_URL`, `INTERNAL_SERVICE_TOKEN`, `INTERNAL_HTTP_TIMEOUT_MS`, `INTERNAL_HTTP_GET_RETRIES`;
 - Evolution Go: `EVOLUTION_GO_*`, `EVOLUTION_WEBHOOK_SECRET`.
 - recuperação de senha: `PASSWORD_RESET_*`.
@@ -158,3 +152,4 @@ Porta padrão: `3002`.
 - Conversation, Message e Handoff pertencem ao AI Orchestrator.
 - Agenda, clientes, serviços e appointments pertencem ao Scheduling Service.
 - GOAL 16: dashboard real e migração assistida com diagnóstico, criação por `migrationId` e consulta de progresso persistido.
+- GOAL 17: implementações legadas, modelos duplicados e rotas internas sem consumidor removidos.

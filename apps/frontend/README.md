@@ -25,7 +25,7 @@ same-origin `/api/bff/*` encaminha exclusivamente ao BFF configurado em
 
 ```text
 produto:  UI → Bff*Service → BffHttpClient → BFF /v1
-preview:  UI → Mock*Service
+preview:  UI → fixtures visuais + MockAuthService
 ```
 
 `fetch` fica restrito a `src/data/http/BffHttpClient.ts`. Componentes não fazem acesso HTTP ad hoc.
@@ -37,7 +37,7 @@ src/
 ├── app/       rotas, layouts, CSS global
 ├── features/  telas e tipos por domínio
 ├── shared/    layout, UI, ícones e estilos
-├── mocks/     dados e service adapters temporários
+├── mocks/     fixtures visuais e auth isolados do preview
 ├── components/legal/
 ├── config/    configuração legal
 └── content/   documentos legais
@@ -60,7 +60,7 @@ Prioridade:
 - `src/data/http/BffHttpClient.ts` centraliza URL, cookies, JSON, request ID, cancelamento, CSRF opcional e erros;
 - `src/data/services` contém os adapters da Public API V1 e o registry BFF;
 - `src/data/mappers` valida respostas do BFF com Zod;
-- `src/mocks` permanece como registry isolado para `/_preview` e para telas ainda não migradas;
+- `src/mocks` permanece somente como registry/fixtures isolados para `/_preview`;
 - goals 13–14 ativaram os adapters de conta, configurações, serviços, clientes e agenda sem alterar o preview.
 
 ## Routes

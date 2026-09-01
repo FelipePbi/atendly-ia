@@ -3,7 +3,7 @@ import { z } from "zod";
 import { env } from "../../config/env.js";
 import { addDays, todayInTimeZone } from "../../lib/dates.js";
 import { AppError } from "../../lib/errors.js";
-import type { BusinessSettingsDTO } from "../business-settings/business-settings.js";
+import type { BusinessContext } from "../tenant-config/business-context.js";
 import type {
   RescheduleAppointmentInput,
   ScheduleAppointmentInput,
@@ -53,6 +53,10 @@ const slotSchema = z.object({
   startTime: z.string(),
   endTime: z.string(),
 });
+const DEFAULT_AVAILABILITY_DAYS = 14;
+const DEFAULT_APPOINTMENT_LOOKUP_DAYS = 90;
+const DEFAULT_MAX_SLOTS = 3;
+const DEFAULT_SLOT_STEP_MINUTES = 30;
 
 export interface SchedulingGateway {
   listActiveServices(
@@ -65,18 +69,17 @@ export interface SchedulingGateway {
   getAvailableSlotsForServices(
     serviceIds: string[],
     startDate: string | undefined,
-    businessSettings: BusinessSettingsDTO,
+    businessContext: BusinessContext,
     context?: SchedulingRequestContext,
   ): Promise<Array<{ date: string; startTime: string; endTime: string }>>;
   createAppointment(
     input: ScheduleAppointmentInput,
-    businessSettings: BusinessSettingsDTO,
     context?: SchedulingRequestContext,
     idempotencyKey?: string,
   ): Promise<SchedulingAppointment>;
   findFutureAppointmentsForPhone(
     phone: string,
-    businessSettings: BusinessSettingsDTO,
+    businessContext: BusinessContext,
     context?: SchedulingRequestContext,
   ): Promise<SchedulingAppointment[]>;
   cancelAppointment(
@@ -86,7 +89,6 @@ export interface SchedulingGateway {
   ): Promise<{ appointmentId: string; cancelled: true }>;
   rescheduleAppointment(
     input: RescheduleAppointmentInput,
-    businessSettings: BusinessSettingsDTO,
     context?: SchedulingRequestContext,
     idempotencyKey?: string,
   ): Promise<SchedulingAppointment>;
@@ -119,15 +121,15 @@ export class SchedulingClient implements SchedulingGateway {
   async getAvailableSlotsForServices(
     serviceIds: string[],
     startDate: string | undefined,
-    businessSettings: BusinessSettingsDTO,
+    businessContext: BusinessContext,
     context?: SchedulingRequestContext,
   ) {
     const query = new URLSearchParams({
       serviceIds: serviceIds.join(","),
-      startDate: startDate ?? todayInTimeZone(businessSettings.timezone),
-      days: String(businessSettings.availabilityDays),
-      stepMinutes: String(businessSettings.slotStepMinutes),
-      maxSlots: String(businessSettings.maxSlotsToOffer),
+      startDate: startDate ?? todayInTimeZone(businessContext.timezone),
+      days: String(DEFAULT_AVAILABILITY_DAYS),
+      stepMinutes: String(DEFAULT_SLOT_STEP_MINUTES),
+      maxSlots: String(DEFAULT_MAX_SLOTS),
     });
     return this.request(
       `/internal/availability?${query.toString()}`,
@@ -138,7 +140,6 @@ export class SchedulingClient implements SchedulingGateway {
 
   async createAppointment(
     input: ScheduleAppointmentInput,
-    businessSettings: BusinessSettingsDTO,
     context?: SchedulingRequestContext,
     idempotencyKey?: string,
   ) {
@@ -155,7 +156,7 @@ export class SchedulingClient implements SchedulingGateway {
           customerName: input.customerName,
           customerPhone: input.customerPhone,
           comments: input.comments,
-          stepMinutes: businessSettings.slotStepMinutes,
+          stepMinutes: DEFAULT_SLOT_STEP_MINUTES,
         },
       }),
     );
@@ -163,14 +164,14 @@ export class SchedulingClient implements SchedulingGateway {
 
   async findFutureAppointmentsForPhone(
     phone: string,
-    businessSettings: BusinessSettingsDTO,
+    businessContext: BusinessContext,
     context?: SchedulingRequestContext,
   ) {
-    const startDate = todayInTimeZone(businessSettings.timezone);
+    const startDate = todayInTimeZone(businessContext.timezone);
     const query = new URLSearchParams({
       customerPhone: phone,
       startDate,
-      endDate: addDays(startDate, businessSettings.appointmentLookupDays),
+      endDate: addDays(startDate, DEFAULT_APPOINTMENT_LOOKUP_DAYS),
     });
     return (
       await this.request(
@@ -196,7 +197,6 @@ export class SchedulingClient implements SchedulingGateway {
 
   async rescheduleAppointment(
     input: RescheduleAppointmentInput,
-    businessSettings: BusinessSettingsDTO,
     context?: SchedulingRequestContext,
     idempotencyKey?: string,
   ) {
@@ -211,7 +211,7 @@ export class SchedulingClient implements SchedulingGateway {
           body: {
             date: input.date,
             startTime: input.startTime,
-            stepMinutes: businessSettings.slotStepMinutes,
+            stepMinutes: DEFAULT_SLOT_STEP_MINUTES,
           },
         },
       ),

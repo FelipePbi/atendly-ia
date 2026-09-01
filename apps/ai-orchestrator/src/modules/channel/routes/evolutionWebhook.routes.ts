@@ -6,7 +6,6 @@ import type { PrismaClient } from "../../../generated/prisma/client.js";
 import { channelMessageLogContext } from "../../../lib/diagnostic-log.js";
 import { toErrorMessage } from "../../../lib/errors.js";
 import { AssistantService } from "../../assistant/assistant.service.js";
-import { MessageOrchestrator } from "../../automation/MessageOrchestrator.js";
 import { PrismaGraphRuntime } from "../../graph/graph-runtime.js";
 import { HandoffService } from "../../handoff/HandoffService.js";
 import { IdempotencyStore } from "../../idempotency/IdempotencyStore.js";
@@ -20,6 +19,7 @@ import {
 } from "../adapters/evolution/EvolutionInboundMapper.js";
 import { EvolutionProvider } from "../adapters/evolution/EvolutionProvider.js";
 import { ChannelConnectionService } from "../ChannelConnectionService.js";
+import { InboundMessageProcessor } from "../InboundMessageProcessor.js";
 
 export async function registerEvolutionWebhookRoutes(
   app: FastifyInstance,
@@ -57,7 +57,7 @@ export async function registerEvolutionWebhookRoutes(
         message: mappedMessage,
         requestId: request.id,
       });
-      const orchestrator = buildOrchestrator({
+      const processor = buildInboundMessageProcessor({
         app,
         prisma,
         tenantId: message.tenantId,
@@ -76,7 +76,7 @@ export async function registerEvolutionWebhookRoutes(
       );
       reply.code(202).send({ ok: true, received: true });
 
-      void orchestrator
+      void processor
         .handleInboundMessage(message)
         .then((result) => {
           app.log.info(
@@ -102,7 +102,7 @@ export async function registerEvolutionWebhookRoutes(
   );
 }
 
-export function buildOrchestrator(input: {
+export function buildInboundMessageProcessor(input: {
   app: FastifyInstance;
   prisma: PrismaClient;
   tenantId: string;
@@ -138,7 +138,7 @@ export function buildOrchestrator(input: {
     channelId: input.channelId,
   });
   const runtime = new PrismaGraphRuntime(input.prisma);
-  return new MessageOrchestrator(
+  return new InboundMessageProcessor(
     assistant,
     provider,
     idempotency,

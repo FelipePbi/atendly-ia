@@ -71,14 +71,8 @@ export class PrismaGraphRuntime implements GraphRuntimePort {
     return {
       channelConnected: trustedChannel && channel.status === "ACTIVE",
       tenantConfig: {
-        aiEnabled:
-          config?.enabled ??
-          message.virtualAttendantSettings?.aiEnabled ??
-          false,
-        tone:
-          config?.tone ??
-          message.virtualAttendantSettings?.tone ??
-          "LIGHT_CLOSE",
+        aiEnabled: config?.enabled ?? message.aiSettings?.aiEnabled ?? false,
+        tone: config?.tone ?? message.aiSettings?.tone ?? "LIGHT_CLOSE",
         promptVersion: config?.promptVersion ?? "scheduling_v1.0.0",
       },
     };
@@ -131,28 +125,4 @@ export class PrismaGraphRuntime implements GraphRuntimePort {
       error: call.error ?? undefined,
     }));
   }
-}
-
-export function createCompatibilityGraphRuntime(): GraphRuntimePort {
-  return {
-    async resolveConversationId(message) {
-      return `${message.tenantId}:${message.channelId}:${message.customerPhone}`;
-    },
-    async loadTenantConfig(message) {
-      return {
-        channelConnected: true,
-        tenantConfig: {
-          aiEnabled: message.virtualAttendantSettings?.aiEnabled ?? true,
-          tone: message.virtualAttendantSettings?.tone ?? "LIGHT_CLOSE",
-          promptVersion: "scheduling_v1.0.0",
-        },
-      };
-    },
-    async loadConversation() {
-      return { status: "ACTIVE", humanHandoff: false };
-    },
-    async loadToolResults() {
-      return [];
-    },
-  };
 }

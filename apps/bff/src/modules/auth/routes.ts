@@ -90,12 +90,14 @@ export async function registerV1AuthRoutes(
         data: {
           email: body.email,
           passwordHash,
-          settings: { create: { aiEnabled: false } },
         },
         select: { id: true, email: true, createdAt: true },
       });
       const tenant = await transaction.tenant.create({
-        data: { name: "Novo negócio" },
+        data: {
+          name: "Novo negócio",
+          aiSettings: { create: { enabled: false } },
+        },
       });
       await transaction.tenantMember.create({
         data: { tenantId: tenant.id, userId: user.id, role: "OWNER" },

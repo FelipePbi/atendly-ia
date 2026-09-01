@@ -1,4 +1,4 @@
-import { env, requireEvolutionEnv } from "../../../../config/env.js";
+import { env, requireEnv } from "../../../../config/env.js";
 import {
   type DiagnosticLogger,
   maskPhone,
@@ -21,7 +21,15 @@ export class EvolutionProvider implements WhatsAppProvider {
   ) {}
 
   async sendText(input: SendTextInput): Promise<SendTextResult> {
-    requireEvolutionEnv();
+    requireEnv(["EVOLUTION_BASE_URL"]);
+    const instanceId = this.instanceIdOverride;
+    const apiKey = this.instanceTokenOverride || env.EVOLUTION_API_KEY;
+    if (!instanceId || !apiKey) {
+      throw new AppError("Evolution channel credentials are not configured.", {
+        statusCode: 500,
+        code: "EVOLUTION_CHANNEL_NOT_CONFIGURED",
+      });
+    }
 
     const url = joinUrl(env.EVOLUTION_BASE_URL, env.EVOLUTION_SEND_TEXT_PATH);
     this.logger.info(
@@ -31,22 +39,15 @@ export class EvolutionProvider implements WhatsAppProvider {
         textLength: input.text.length,
         quotedMessageId: input.quotedMessageId,
         correlationId: input.correlationId,
-        hasInstanceIdHeader: Boolean(
-          this.instanceIdOverride || env.EVOLUTION_INSTANCE_ID,
-        ),
-        hasApiKeyHeader: Boolean(
-          env.EVOLUTION_INSTANCE_TOKEN || env.EVOLUTION_API_KEY,
-        ),
+        hasInstanceIdHeader: true,
+        hasApiKeyHeader: true,
       },
       "EvolutionProvider sending text",
     );
 
     const response = await fetch(url, {
       method: "POST",
-      headers: buildHeaders(
-        this.instanceTokenOverride,
-        this.instanceIdOverride,
-      ),
+      headers: buildHeaders(apiKey, instanceId),
       body: JSON.stringify(buildSendTextBody(input)),
     });
 
@@ -91,21 +92,14 @@ export class EvolutionProvider implements WhatsAppProvider {
 }
 
 function buildHeaders(
-  instanceTokenOverride?: string,
-  instanceIdOverride?: string,
+  apiKey: string,
+  instanceId: string,
 ): Record<string, string> {
-  const headers: Record<string, string> = {
+  return {
     "content-type": "application/json",
+    apikey: apiKey,
+    instanceId,
   };
-
-  const sendApiKey =
-    instanceTokenOverride ||
-    env.EVOLUTION_INSTANCE_TOKEN ||
-    env.EVOLUTION_API_KEY;
-  if (sendApiKey) headers.apikey = sendApiKey;
-  const instanceId = instanceIdOverride || env.EVOLUTION_INSTANCE_ID;
-  if (instanceId) headers.instanceId = instanceId;
-  return headers;
 }
 
 function buildSendTextBody(input: SendTextInput): Record<string, unknown> {

@@ -1,15 +1,10 @@
 import { env } from "../../config/env.js";
-import type { BusinessSettingsDTO } from "../business-settings/business-settings.js";
 
-export function buildSchedulingPrompt(
-  businessSettings: BusinessSettingsDTO,
-): string[] {
+export function buildSchedulingPrompt(): string[] {
   return [
     "Regras de agenda:",
-    `- Oferecer no maximo ${businessSettings.maxSlotsToOffer} horario(s) por resposta.`,
-    `- Buscar disponibilidade nos proximos ${businessSettings.availabilityDays} dia(s).`,
-    `- Gerar opcoes em intervalos de ${businessSettings.slotStepMinutes} minuto(s).`,
-    `- Ao procurar agenda futura da cliente, considerar os proximos ${businessSettings.appointmentLookupDays} dia(s).`,
+    "- Use somente os horarios retornados pela tool de disponibilidade.",
+    "- Nao altere limites, intervalos ou janela de consulta por conta propria.",
     "",
     "AGENDAMENTO COM MULTIPLOS SERVICOS:",
     "- Some a duracao dos servicos e some o valor dos servicos.",

@@ -8,7 +8,6 @@ import { redactSensitive } from "./lib/redact.js";
 import { registerEvolutionWebhookRoutes } from "./modules/channel/routes/evolutionWebhook.routes.js";
 import { createPostgresGraphCheckpointer } from "./modules/graph/checkpointer.js";
 import { registerInternalRoutes } from "./modules/internal/routes.js";
-import { registerLegalRoutes } from "./modules/legal/routes.js";
 
 export async function buildApp() {
   requireEnv(["DATABASE_URL"]);
@@ -32,16 +31,15 @@ export async function buildApp() {
   app.get("/health", async () => ({
     ok: true,
     service: "ai-orchestrator",
-    provider: env.CHANNEL_PROVIDER,
+    provider: "evolution-go",
   }));
 
   app.get("/healthy", async () => ({
     ok: true,
     service: "ai-orchestrator",
-    provider: env.CHANNEL_PROVIDER,
+    provider: "evolution-go",
   }));
 
-  await registerLegalRoutes(app);
   await registerEvolutionWebhookRoutes(app, prisma, graphCheckpointer);
   await registerInternalRoutes(app, prisma);
 

@@ -5,7 +5,6 @@ import { z } from "zod";
 
 import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
 import { EvolutionClient } from "../../clients/evolution/index.js";
-import { businessSettingsDto } from "../../lib/dto.js";
 import { AppError } from "../../lib/errors.js";
 import { dataResponse, parseBody } from "../../lib/http.js";
 import { normalizeBrazilianWhatsappPhone } from "../../lib/phone.js";
@@ -233,25 +232,25 @@ async function provisionChannel(
       instance.evolutionInstanceId ?? instance.evolutionInstanceName,
     displayName: instance.evolutionInstanceName,
   });
-  const [settings, businessSettings] = await Promise.all([
-    getPrisma().userSettings.upsert({
-      where: { userId: tenant.userId },
-      create: { userId: tenant.userId, aiEnabled: false },
+  const [settings, businessProfile] = await Promise.all([
+    getPrisma().aiSettings.upsert({
+      where: { tenantId: tenant.tenantId },
+      create: { tenantId: tenant.tenantId, enabled: false },
       update: {},
     }),
-    getPrisma().businessSettings.upsert({
-      where: { userId: tenant.userId },
-      create: { userId: tenant.userId },
+    getPrisma().businessProfile.upsert({
+      where: { tenantId: tenant.tenantId },
+      create: { tenantId: tenant.tenantId },
       update: {},
     }),
   ]);
   await ai.updateTenantConfig(internalContext(request), {
-    enabled: settings.aiEnabled,
-    tone:
-      settings.personaType === "CORPORATE"
-        ? "PROFESSIONAL_OBJECTIVE"
-        : "LIGHT_CLOSE",
-    businessSettings: businessSettingsDto(businessSettings),
+    enabled: settings.enabled,
+    tone: settings.tone ?? "LIGHT_CLOSE",
+    businessContext: {
+      businessName: businessProfile.businessName,
+      timezone: businessProfile.timezone,
+    },
   });
 }
 

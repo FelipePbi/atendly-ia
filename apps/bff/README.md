@@ -110,7 +110,7 @@ Saúde:
 
 - `/v1/auth/*`: registro, login, logout, sessão, senha e recuperação;
 - `/v1/onboarding*` e `/v1/settings*`: configuração guiada e settings;
-- `/v1/dashboard`: visão agregada;
+- `/v1/dashboard`: visão agregada em paralelo de IA, agenda, calendário e WhatsApp;
 - `/v1/conversations*`: inbox, mensagens e handoff;
 - `/v1/calendar*`, `/v1/appointments*`, `/v1/time-blocks*`: agenda;
 - `/v1/customers*` e `/v1/services*`: diretório e catálogo;
@@ -157,3 +157,4 @@ Porta padrão: `3002`.
 - GOAL 12+: integração progressiva do frontend.
 - Conversation, Message e Handoff pertencem ao AI Orchestrator.
 - Agenda, clientes, serviços e appointments pertencem ao Scheduling Service.
+- GOAL 16: dashboard real e migração assistida com diagnóstico, criação por `migrationId` e consulta de progresso persistido.

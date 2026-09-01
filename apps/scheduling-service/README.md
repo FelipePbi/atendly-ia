@@ -4,7 +4,7 @@ Fonte canônica do domínio de agenda da Atendly.
 
 ## Estado atual
 
-Fonte canônica tenant-aware com `CalendarService`, port `CalendarProvider`, providers Agenda Atendly e Minha Agenda, e API interna de calendário. `CalendarSettings.source` seleciona exatamente uma fonte oficial por tenant. Frontend continua sem acesso direto.
+Fonte canônica tenant-aware com `CalendarService`, port `CalendarProvider`, providers Agenda Atendly e Minha Agenda, API interna de calendário e migração assistida persistida. `CalendarSettings.source` seleciona exatamente uma fonte oficial por tenant. Frontend continua sem acesso direto.
 
 ## Stack
 
@@ -69,6 +69,8 @@ Agenda Atendly persiste serviços, clientes, disponibilidade e appointments no b
 - `GET /internal/dashboard`
 
 Operações não confirmadas no provider externo retornam capacidade indisponível em vez de inventar sucesso. Troca de origem acontece somente por migração assistida concluída, nunca por `PATCH /internal/calendar`.
+
+Migrações percorrem `PENDING`, `ANALYZING` e `RUNNING`, terminando em `PARTIAL`, `COMPLETED` ou `FAILED`. O diagnóstico informa entidades importáveis, conflitos, avisos e limitações. Na direção Minha Agenda → Agenda Atendly, serviços, clientes, agendamentos futuros e disponibilidade são importados antes do corte transacional; a origem oficial só muda após persistência bem-sucedida. A direção Agenda Atendly → Minha Agenda permanece indisponível enquanto o provider externo não confirmar as capacidades necessárias.
 
 ## Commands
 

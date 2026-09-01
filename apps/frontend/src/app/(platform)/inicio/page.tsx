@@ -1,5 +1,5 @@
-import { DashboardScreen } from "@/features/dashboard/DashboardScreen";
+import { ProductDashboardScreen } from "@/features/dashboard/DashboardScreen";
 
 export default function DashboardPage() {
-  return <DashboardScreen />;
+  return <ProductDashboardScreen />;
 }

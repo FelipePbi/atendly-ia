@@ -75,11 +75,49 @@ const availabilitySettingsSchema = z.object({
     }),
   ),
 });
-const migrationSchema = z.object({
-  id: z.string(),
+const migrationEntityCountSchema = z.object({
+  total: z.number().int().nonnegative(),
+  importable: z.number().int().nonnegative(),
+});
+const migrationDiagnosisSchema = z.object({
   source: sourceSchema,
   target: sourceSchema,
-  status: z.string(),
+  supported: z.boolean(),
+  conflicts: z.array(
+    z.object({
+      entityType: z.string(),
+      externalId: z.string().nullable(),
+      code: z.string(),
+      message: z.string(),
+    }),
+  ),
+  entities: z.object({
+    services: migrationEntityCountSchema,
+    customers: migrationEntityCountSchema,
+    appointments: migrationEntityCountSchema,
+    availability: migrationEntityCountSchema,
+  }),
+  warnings: z.array(z.string()),
+  limitations: z.array(z.string()),
+});
+const migrationSchema = z.object({
+  migrationId: z.string(),
+  source: sourceSchema,
+  target: sourceSchema,
+  status: z.enum([
+    "PENDING",
+    "ANALYZING",
+    "RUNNING",
+    "PARTIAL",
+    "COMPLETED",
+    "FAILED",
+  ]),
+  progress: z.number().int().min(0).max(100),
+  currentStep: z.string().nullable(),
+  summary: z.unknown().nullable(),
+  warnings: z.array(z.string()),
+  limitations: z.array(z.string()),
+  error: z.object({ code: z.string(), message: z.string() }).nullable(),
   startedAt: z.string().nullable(),
   finishedAt: z.string().nullable(),
   createdAt: z.string(),
@@ -348,15 +386,7 @@ export class SchedulingClient {
       "POST",
       "/internal/calendar/migrations/diagnose",
       input,
-      z.object({
-        source: sourceSchema,
-        target: sourceSchema,
-        services: z.number().int().nonnegative(),
-        customers: z.number().int().nonnegative(),
-        futureAppointments: z.number().int().nonnegative(),
-        supported: z.boolean(),
-        issues: z.array(z.string()),
-      }),
+      migrationDiagnosisSchema,
     );
   }
 
@@ -384,6 +414,7 @@ export class SchedulingClient {
       "/internal/dashboard",
       z.object({
         appointmentsToday: z.number().int().nonnegative(),
+        todayAppointments: z.array(appointmentSchema),
         nextAppointment: appointmentSchema.nullable(),
         estimatedRevenueToday: z.number().nonnegative().nullable(),
         calendar: calendarSchema,

@@ -1,37 +1,42 @@
 import { notFound } from "next/navigation";
-import { MigrationScreen } from "@/features/migration/MigrationScreen";
-import type {
-  MigrationScenario,
-  MigrationTarget,
-} from "@/features/migration/types";
-const scenarios: Record<string, MigrationScenario> = {
-  "para-atendly": "to-atendly-intro",
-  "para-minha-agenda": "to-external-intro",
+
+import type { ProductMigrationStep } from "@/features/migration/ProductMigrationScreen";
+import { ProductMigrationScreen } from "@/features/migration/ProductMigrationScreen";
+
+const steps: Record<string, ProductMigrationStep> = {
+  "para-atendly": "intro",
+  "para-minha-agenda": "intro",
   diagnostico: "diagnosis",
   conflitos: "conflicts",
   revisao: "review",
   progresso: "progress",
-  sucesso: "success",
-  parcial: "partial",
-  erro: "error",
+  sucesso: "result",
+  parcial: "result",
+  erro: "result",
 };
 export function generateStaticParams() {
-  return Object.keys(scenarios).map((step) => ({ step }));
+  return Object.keys(steps).map((step) => ({ step }));
 }
 export default async function MigrationPage({
   params,
   searchParams,
 }: {
   params: Promise<{ step: string }>;
-  searchParams: Promise<{ target?: string }>;
+  searchParams: Promise<{ migrationId?: string; target?: string }>;
 }) {
   const { step } = await params;
   const query = await searchParams;
-  const scenario = scenarios[step];
-  if (!scenario) notFound();
-  const target: MigrationTarget =
+  const productStep = steps[step];
+  if (!productStep) notFound();
+  const target =
     query.target === "external" || step === "para-minha-agenda"
-      ? "external"
-      : "atendly";
-  return <MigrationScreen scenario={scenario} target={target} />;
+      ? ("EXTERNAL" as const)
+      : ("ATENDLY" as const);
+  return (
+    <ProductMigrationScreen
+      migrationId={query.migrationId}
+      step={productStep}
+      target={target}
+    />
+  );
 }

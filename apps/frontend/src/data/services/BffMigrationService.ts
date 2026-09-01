@@ -3,6 +3,7 @@ import {
   type CalendarSource,
   migrationDiagnosisSchema,
   migrationSchema,
+  migrationStartSchema,
 } from "../mappers/publicApiSchemas";
 
 export class BffMigrationService {
@@ -23,7 +24,7 @@ export class BffMigrationService {
       body: { target },
       method: "POST",
       path: "/v1/calendar/migrations",
-      schema: migrationSchema,
+      schema: migrationStartSchema,
       signal,
     });
   }

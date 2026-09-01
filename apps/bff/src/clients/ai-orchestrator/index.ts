@@ -108,7 +108,8 @@ export class AiOrchestratorClient {
         context,
         schema: envelope(
           z.object({
-            conversationsNeedingAttention: z.number().int().nonnegative(),
+            conversationsNeedingAttention: z.array(conversationSchema),
+            conversationsNeedingAttentionCount: z.number().int().nonnegative(),
             aiAppointmentsToday: z.number().int().nonnegative(),
             automatedConversationsToday: z.number().int().nonnegative(),
           }),

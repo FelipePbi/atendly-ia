@@ -10,6 +10,7 @@ import {
 import {
   addDays,
   databaseTimeToMinutes,
+  localDateTimeToInstant,
   timeFromMinutes,
 } from "../../shared/date-time/calendar-date-time.js";
 import { AppError } from "../../shared/errors/app-error.js";
@@ -18,6 +19,7 @@ import { AtendlyCustomerService } from "../customers/atendly-customer-service.js
 import { encryptIntegrationCredentials } from "../integrations/credentials.js";
 import { parseMinhaAgendaConnection } from "../integrations/minha-agenda/config.js";
 import { MinhaAgendaCalendarProvider } from "../integrations/minha-agenda/provider.js";
+import { CalendarMigrationService } from "../migrations/calendar-migration-service.js";
 import { AtendlyServiceService } from "../services/atendly-service-service.js";
 
 const sourceSchema = z.enum(["ATENDLY", "MINHA_AGENDA"]);
@@ -91,6 +93,8 @@ export async function registerManagementRoutes(
 ): Promise<void> {
   const prisma = getPrisma();
   const internalOnly = { preHandler: requireInternalAuth };
+  const migrations = new CalendarMigrationService(prisma);
+  await migrations.resumeIncomplete();
 
   app.get("/internal/calendar", internalOnly, async (request) =>
     data(request, await calendarOverview(prisma, tenantId(request))),
@@ -417,10 +421,7 @@ export async function registerManagementRoutes(
     async (request) => {
       const context = currentInternalContext(request);
       const body = parse(migrationBodySchema, request.body);
-      return data(
-        request,
-        await diagnoseMigration(prisma, context, body.target),
-      );
+      return data(request, await migrations.diagnose(context, body.target));
     },
   );
 
@@ -430,25 +431,9 @@ export async function registerManagementRoutes(
     async (request, reply) => {
       const context = currentInternalContext(request);
       const body = parse(migrationBodySchema, request.body);
-      const diagnosis = await diagnoseMigration(prisma, context, body.target);
-      if (!diagnosis.supported) {
-        throw new AppError(
-          "MIGRATION_NOT_SUPPORTED",
-          "Automatic migration is not supported for this target.",
-          409,
-          { issues: diagnosis.issues },
-        );
-      }
-      const job = await prisma.migrationJob.create({
-        data: {
-          tenantId: context.tenantId,
-          source: diagnosis.source,
-          target: diagnosis.target,
-          status: diagnosis.issues.length > 0 ? "REQUIRES_REVIEW" : "READY",
-        },
-        include: { conflicts: true },
-      });
-      return reply.code(201).send(data(request, migrationDto(job)));
+      return reply
+        .code(201)
+        .send(data(request, await migrations.start(context, body.target)));
     },
   );
 
@@ -458,18 +443,7 @@ export async function registerManagementRoutes(
     async (request) => {
       const context = currentInternalContext(request);
       const { id } = parse(idParamsSchema, request.params);
-      const job = await prisma.migrationJob.findUnique({
-        where: { tenantId_id: { tenantId: context.tenantId, id } },
-        include: { conflicts: true },
-      });
-      if (!job) {
-        throw new AppError(
-          "MIGRATION_NOT_FOUND",
-          "Calendar migration was not found.",
-          404,
-        );
-      }
-      return data(request, migrationDto(job));
+      return data(request, await migrations.get(context.tenantId, id));
     },
   );
 
@@ -487,9 +461,16 @@ export async function registerManagementRoutes(
     );
     return data(request, {
       appointmentsToday: todayAppointments.length,
+      todayAppointments,
       nextAppointment:
         appointments.find(
-          (appointment) => appointment.status !== "CANCELLED",
+          (appointment) =>
+            appointment.status !== "CANCELLED" &&
+            localDateTimeToInstant(
+              appointment.date,
+              appointment.startTime,
+              calendar.timezone,
+            ) >= new Date(),
         ) ?? null,
       estimatedRevenueToday: revenue(todayAppointments),
       calendar: await calendarOverview(prisma, context.tenantId),
@@ -583,70 +564,6 @@ async function requireIntegration(prisma: PrismaClient, tenantId: string) {
   return connection;
 }
 
-async function diagnoseMigration(
-  prisma: PrismaClient,
-  context: { tenantId: string; userId: string; requestId: string },
-  target: "ATENDLY" | "MINHA_AGENDA",
-) {
-  const calendar = await requireCalendar(prisma, context.tenantId);
-  if (calendar.source === target) {
-    throw new AppError(
-      "MIGRATION_SOURCE_EQUALS_TARGET",
-      "Migration target must differ from the current source.",
-      409,
-    );
-  }
-
-  if (calendar.source === "ATENDLY") {
-    const now = new Date();
-    const [services, customers, futureAppointments] = await Promise.all([
-      prisma.service.count({ where: { tenantId: context.tenantId } }),
-      prisma.customer.count({ where: { tenantId: context.tenantId } }),
-      prisma.appointment.count({
-        where: {
-          tenantId: context.tenantId,
-          startAt: { gte: now },
-          status: { not: "CANCELLED" },
-        },
-      }),
-    ]);
-    return {
-      source: calendar.source,
-      target,
-      services,
-      customers,
-      futureAppointments,
-      supported: false,
-      issues: [
-        "Automatic transfer to the external calendar is not confirmed by the integration.",
-      ],
-    };
-  }
-
-  const provider = new CalendarService(prisma);
-  const startDate = localDate(new Date(), calendar.timezone);
-  const [services, appointments] = await Promise.all([
-    provider.listServices(context),
-    provider.listAppointments(context, {
-      startDate,
-      endDate: addDays(startDate, 365),
-    }),
-  ]);
-  return {
-    source: calendar.source,
-    target,
-    services: services.length,
-    customers: new Set(
-      appointments.map((appointment) => appointment.customerId).filter(Boolean),
-    ).size,
-    futureAppointments: appointments.filter(
-      (appointment) => appointment.status !== "CANCELLED",
-    ).length,
-    supported: true,
-    issues: [] as string[],
-  };
-}
-
 function serviceDto(service: {
   id: string;
   name: string;
@@ -708,40 +625,6 @@ function timeBlockDto(block: {
     startAt: block.startAt.toISOString(),
     endAt: block.endAt.toISOString(),
     reason: block.reason,
-  };
-}
-
-function migrationDto(job: {
-  id: string;
-  source: "ATENDLY" | "MINHA_AGENDA";
-  target: "ATENDLY" | "MINHA_AGENDA";
-  status: string;
-  startedAt: Date | null;
-  finishedAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-  conflicts: Array<{
-    id: string;
-    entityType: string;
-    status: string;
-    details: unknown;
-  }>;
-}) {
-  return {
-    id: job.id,
-    source: job.source,
-    target: job.target,
-    status: job.status,
-    startedAt: job.startedAt?.toISOString() ?? null,
-    finishedAt: job.finishedAt?.toISOString() ?? null,
-    createdAt: job.createdAt.toISOString(),
-    updatedAt: job.updatedAt.toISOString(),
-    conflicts: job.conflicts.map((conflict) => ({
-      id: conflict.id,
-      entityType: conflict.entityType,
-      status: conflict.status,
-      details: conflict.details,
-    })),
   };
 }
 

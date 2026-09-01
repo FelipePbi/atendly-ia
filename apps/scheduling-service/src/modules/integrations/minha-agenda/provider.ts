@@ -12,7 +12,11 @@ import type {
   ListAppointmentsInput,
   RescheduleCalendarAppointmentInput,
 } from "../../calendar/calendar-provider.js";
-import { computeAvailableSlots } from "./availability.js";
+import {
+  computeAvailableSlots,
+  type MigrationAvailabilityRule,
+  migrationAvailabilityRules,
+} from "./availability.js";
 import { createMinhaAgendaClient, type MinhaAgendaClient } from "./client.js";
 import type { MinhaAgendaConnectionConfig } from "./config.js";
 import { addDays } from "./date-time.js";
@@ -63,6 +67,31 @@ export class MinhaAgendaCalendarProvider implements CalendarProvider {
         ),
       )
       .map(toCalendarAppointment);
+  }
+
+  async getMigrationSnapshot(input: {
+    startDate: string;
+    endDate: string;
+  }): Promise<{
+    services: CalendarServiceDefinition[];
+    appointments: CalendarAppointment[];
+    availability: MigrationAvailabilityRule[];
+  }> {
+    const [services, appointments, companySchedule, employeeSchedule] =
+      await Promise.all([
+        this.listServices(),
+        this.listAppointments(input),
+        this.client.getCompanyWorkSchedule(),
+        this.client.getEmployeeWorkScheduleByEmployeeId(this.config.employeeId),
+      ]);
+    return {
+      services,
+      appointments,
+      availability: migrationAvailabilityRules(
+        companySchedule,
+        employeeSchedule,
+      ),
+    };
   }
 
   async getAppointment(appointmentId: string): Promise<CalendarAppointment> {

@@ -26,6 +26,7 @@ enum ExternalEntityType {
   SERVICE
   CUSTOMER
   APPOINTMENT
+  AVAILABILITY
 }
 
 enum PriceType {
@@ -185,15 +186,23 @@ model ExternalEntityMap {
 }
 
 model MigrationJob {
-  id         String         @id @default(cuid())
-  tenantId   String
-  source     CalendarSource
-  target     CalendarSource
-  status     String
-  startedAt  DateTime?
-  finishedAt DateTime?
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
+  id                String         @id @default(cuid())
+  tenantId          String
+  requestedBy       String
+  source            CalendarSource
+  target            CalendarSource
+  status            String
+  progress           Int            @default(0)
+  currentStep        String?
+  summary            Json?
+  warnings           Json           @default("[]")
+  limitations        Json           @default("[]")
+  errorCode          String?
+  errorMessage       String?
+  startedAt          DateTime?
+  finishedAt         DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 
   conflicts MigrationConflict[]
 

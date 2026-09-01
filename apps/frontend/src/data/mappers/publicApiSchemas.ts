@@ -238,6 +238,7 @@ const dependencyResultSchema = <TSchema extends z.ZodType>(schema: TSchema) =>
 
 const schedulingDashboardSchema = z.object({
   appointmentsToday: z.number().int().nonnegative(),
+  todayAppointments: z.array(appointmentSchema),
   nextAppointment: appointmentSchema.nullable(),
   estimatedRevenueToday: z.number().nonnegative().nullable(),
   calendar: calendarStateSchema,
@@ -251,7 +252,8 @@ export const dashboardSchema = z.object({
   }),
   ai: dependencyResultSchema(
     z.object({
-      conversationsNeedingAttention: z.number().int().nonnegative(),
+      conversationsNeedingAttention: z.array(conversationSchema),
+      conversationsNeedingAttentionCount: z.number().int().nonnegative(),
       aiAppointmentsToday: z.number().int().nonnegative(),
       automatedConversationsToday: z.number().int().nonnegative(),
     }),
@@ -268,21 +270,55 @@ export const dashboardSchema = z.object({
   degraded: z.boolean(),
 });
 
+const migrationEntityCountSchema = z.object({
+  total: z.number().int().nonnegative(),
+  importable: z.number().int().nonnegative(),
+});
+
 export const migrationDiagnosisSchema = z.object({
   source: calendarSourceSchema,
   target: calendarSourceSchema,
-  services: z.number().int().nonnegative(),
-  customers: z.number().int().nonnegative(),
-  futureAppointments: z.number().int().nonnegative(),
   supported: z.boolean(),
-  issues: z.array(z.string()),
+  conflicts: z.array(
+    z.object({
+      entityType: z.string(),
+      externalId: z.string().nullable(),
+      code: z.string(),
+      message: z.string(),
+    }),
+  ),
+  entities: z.object({
+    services: migrationEntityCountSchema,
+    customers: migrationEntityCountSchema,
+    appointments: migrationEntityCountSchema,
+    availability: migrationEntityCountSchema,
+  }),
+  warnings: z.array(z.string()),
+  limitations: z.array(z.string()),
+});
+
+export const migrationStartSchema = z.object({
+  migrationId: z.string().min(1),
 });
 
 export const migrationSchema = z.object({
-  id: z.string().min(1),
+  migrationId: z.string().min(1),
   source: calendarSourceSchema,
   target: calendarSourceSchema,
-  status: z.string(),
+  status: z.enum([
+    "PENDING",
+    "ANALYZING",
+    "RUNNING",
+    "PARTIAL",
+    "COMPLETED",
+    "FAILED",
+  ]),
+  progress: z.number().int().min(0).max(100),
+  currentStep: z.string().nullable(),
+  summary: z.unknown().nullable(),
+  warnings: z.array(z.string()),
+  limitations: z.array(z.string()),
+  error: z.object({ code: z.string(), message: z.string() }).nullable(),
   startedAt: isoDateTimeSchema.nullable(),
   finishedAt: isoDateTimeSchema.nullable(),
   createdAt: isoDateTimeSchema,
@@ -329,6 +365,7 @@ export type Dashboard = z.infer<typeof dashboardSchema>;
 export type Message = z.infer<typeof messageSchema>;
 export type Migration = z.infer<typeof migrationSchema>;
 export type MigrationDiagnosis = z.infer<typeof migrationDiagnosisSchema>;
+export type MigrationStart = z.infer<typeof migrationStartSchema>;
 export type OnboardingState = z.infer<typeof onboardingStateSchema>;
 export type Service = z.infer<typeof serviceSchema>;
 export type ServiceList = z.infer<typeof serviceListSchema>;

@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { env } from "../../config/env.js";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
+import { startOfTodayInTimeZone } from "../../lib/dates.js";
 import { AppError, toErrorMessage } from "../../lib/errors.js";
 import {
   businessSettingsSchema,
@@ -312,31 +313,51 @@ export async function registerInternalRoutes(
 
   app.get("/internal/dashboard", async (request) => {
     const { tenantId } = await trustedTenantContext(prisma, request, true);
-    const startOfDay = new Date();
-    startOfDay.setUTCHours(0, 0, 0, 0);
-    const [attention, successfulAppointmentTools, aiRuns] = await Promise.all([
-      prisma.conversation.count({
-        where: { tenantId, status: "HUMAN_HANDOFF", humanHandoff: true },
-      }),
-      prisma.aiToolCall.count({
-        where: {
-          tenantId,
-          name: "create_appointment",
-          status: "SUCCEEDED",
-          completedAt: { gte: startOfDay },
-        },
-      }),
-      prisma.aiRun.findMany({
-        where: {
-          tenantId,
-          status: "SUCCEEDED",
-          completedAt: { gte: startOfDay },
-        },
-        select: { conversationId: true },
-      }),
-    ]);
+    const tenantConfig = await prisma.aiTenantConfig.findUnique({
+      where: { tenantId },
+      select: { settings: true },
+    });
+    const startOfDay = startOfTodayInTimeZone(
+      normalizeBusinessSettings(tenantConfig?.settings).timezone,
+    );
+    const [attention, attentionCount, successfulAppointmentTools, aiRuns] =
+      await Promise.all([
+        prisma.conversation.findMany({
+          where: { tenantId, status: "HUMAN_HANDOFF", humanHandoff: true },
+          include: {
+            messages: { orderBy: { createdAt: "desc" }, take: 1 },
+            handoffs: {
+              where: { status: "OPEN" },
+              orderBy: { createdAt: "desc" },
+              take: 1,
+            },
+          },
+          orderBy: { updatedAt: "desc" },
+          take: 5,
+        }),
+        prisma.conversation.count({
+          where: { tenantId, status: "HUMAN_HANDOFF", humanHandoff: true },
+        }),
+        prisma.aiToolCall.count({
+          where: {
+            tenantId,
+            name: "create_appointment",
+            status: "SUCCEEDED",
+            completedAt: { gte: startOfDay },
+          },
+        }),
+        prisma.aiRun.findMany({
+          where: {
+            tenantId,
+            status: "SUCCEEDED",
+            completedAt: { gte: startOfDay },
+          },
+          select: { conversationId: true },
+        }),
+      ]);
     return internalData(request, {
-      conversationsNeedingAttention: attention,
+      conversationsNeedingAttention: attention.map(conversationDto),
+      conversationsNeedingAttentionCount: attentionCount,
       aiAppointmentsToday: successfulAppointmentTools,
       automatedConversationsToday: new Set(
         aiRuns.map((run) => run.conversationId),

@@ -2,12 +2,14 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
-import { AppShell } from "@/shared/layout/AppShell";
+import { type ReactNode, useState } from "react";
+
 import { Icon, type IconName } from "@/shared/icons/Icon";
+import { AppShell } from "@/shared/layout/AppShell";
+
 import type { MigrationScenario, MigrationTarget } from "./types";
 
-function Stepper({ step }: { step: number }) {
+export function Stepper({ step }: { step: number }) {
   return (
     <ol className="migration-stepper" aria-label="Progresso da migração">
       {[
@@ -37,7 +39,7 @@ function Stepper({ step }: { step: number }) {
   );
 }
 
-function Route({
+export function Route({
   source,
   target,
   complete,
@@ -61,7 +63,7 @@ function Route({
   );
 }
 
-function SideNotes({ children }: { children?: ReactNode }) {
+export function SideNotes({ children }: { children?: ReactNode }) {
   return (
     <aside className="migration-side" aria-label="Proteções da migração">
       <section className="migration-side-card">
@@ -86,7 +88,7 @@ function SideNotes({ children }: { children?: ReactNode }) {
   );
 }
 
-function Status({
+export function Status({
   icon,
   tone,
   children,
@@ -103,7 +105,7 @@ function Status({
   );
 }
 
-function Frame({
+export function Frame({
   title,
   description,
   step,

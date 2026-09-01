@@ -122,4 +122,4 @@ Frontend falará exclusivamente com BFF. Nunca chame AI Orchestrator, Scheduling
 - Auth/onboarding/settings/WhatsApp: concluído no GOAL 13, incluindo smoke integrado real.
 - Services/customers/calendar: concluído no GOAL 14, com Agenda Atendly gravável e Minha Agenda orientada por capabilities reais.
 - Conversations/handoff: integrado ao BFF no GOAL 15; preview continua mockado.
-- Dashboard/calendar migration: `NOT_STARTED`, GOAL 16.
+- Dashboard e migração de agenda: integrados ao BFF no GOAL 16; estados operacionais são derivados de dados reais e o preview continua mockado.

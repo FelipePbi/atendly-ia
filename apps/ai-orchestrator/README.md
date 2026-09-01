@@ -27,7 +27,7 @@ O serviço não acessa Minha Agenda nem tabelas de outro serviço. Calendário, 
 - `GET /internal/conversations` e `GET /internal/conversations/:id` — inbox e detalhe tenant-scoped.
 - `GET|POST /internal/conversations/:id/messages` — histórico e mensagem manual do owner durante takeover.
 - `POST /internal/conversations/:id/takeover|release|resolve` — lifecycle de handoff.
-- `GET /internal/dashboard` — métricas de conversas e automação para agregação pelo BFF.
+- `GET /internal/dashboard` — conversas que exigem atenção e métricas diárias de automação, calculadas no timezone do tenant, para agregação pelo BFF.
 - `POST /internal/evolution/dispatch` — dispatch interno compatível com o BFF durante a transição.
 - `/internal/handoffs` e `/internal/bot/*` — controle de handoff e automação.
 - rotas legais legadas permanecem até o goal de cleanup.

@@ -28,6 +28,42 @@ export function todayInTimeZone(timeZone: string): string {
   return formatter.format(new Date());
 }
 
+export function startOfTodayInTimeZone(timeZone: string): Date {
+  const [year, month, day] = todayInTimeZone(timeZone).split("-").map(Number);
+  const desiredWallTime = Date.UTC(year, month - 1, day);
+  let candidate = desiredWallTime;
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const parts = Object.fromEntries(
+      formatter
+        .formatToParts(new Date(candidate))
+        .filter((part) => part.type !== "literal")
+        .map((part) => [part.type, Number(part.value)]),
+    );
+    const actualWallTime = Date.UTC(
+      parts.year,
+      parts.month - 1,
+      parts.day,
+      parts.hour,
+      parts.minute,
+    );
+    const difference = desiredWallTime - actualWallTime;
+    if (difference === 0) break;
+    candidate += difference;
+  }
+
+  return new Date(candidate);
+}
+
 export function weekdayIndex(date: string): number {
   return new Date(`${date}T12:00:00.000Z`).getUTCDay();
 }

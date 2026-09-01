@@ -15,6 +15,12 @@ interface Interval {
   end: number;
 }
 
+export interface MigrationAvailabilityRule {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+}
+
 export interface AvailabilityInput {
   companySchedule: WorkSchedule;
   employeeSchedule: WorkSchedule | null;
@@ -70,6 +76,29 @@ export function computeAvailableSlots(
   }
 
   return slots;
+}
+
+export function migrationAvailabilityRules(
+  companySchedule: WorkSchedule,
+  employeeSchedule: WorkSchedule | null,
+): MigrationAvailabilityRule[] {
+  return dayPrefixes.flatMap((prefix, dayOfWeek) => {
+    if (readBoolean(companySchedule, `${prefix}Enabled`) === false) return [];
+    if (readBoolean(employeeSchedule ?? {}, `${prefix}Enabled`) === false)
+      return [];
+    const employeeIntervals = employeeSchedule
+      ? readIntervals(employeeSchedule, prefix)
+      : [];
+    const intervals =
+      employeeIntervals.length > 0
+        ? employeeIntervals
+        : readIntervals(companySchedule, prefix);
+    return intervals.map((interval) => ({
+      dayOfWeek,
+      startTime: timeFromMinutes(interval.start),
+      endTime: timeFromMinutes(interval.end),
+    }));
+  });
 }
 
 function resolveWorkIntervals(

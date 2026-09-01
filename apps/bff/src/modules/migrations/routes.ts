@@ -41,7 +41,7 @@ export async function registerV1MigrationRoutes(
       );
       return reply
         .code(201)
-        .send(dataResponse(request, publicMigration(migration)));
+        .send(dataResponse(request, { migrationId: migration.migrationId }));
     },
   );
 

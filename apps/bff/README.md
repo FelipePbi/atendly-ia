@@ -120,13 +120,16 @@ Copie `.env.example` para `.env`.
 Grupos:
 
 - runtime/session: `NODE_ENV`, `PORT`, `JWT_*`, `SESSION_COOKIE_NAME`, `COOKIE_*`;
-- persistence: `DATABASE_URL`;
+- persistence: `DATABASE_URL` para runtime e `DIRECT_DATABASE_URL` para migrations;
 - browser boundary: `FRONTEND_ORIGIN`;
 - APIs internas: `AI_ORCHESTRATOR_BASE_URL`, `SCHEDULING_SERVICE_BASE_URL`, `INTERNAL_SERVICE_TOKEN`, `INTERNAL_HTTP_TIMEOUT_MS`, `INTERNAL_HTTP_GET_RETRIES`;
 - Evolution Go: `EVOLUTION_GO_*`, `EVOLUTION_WEBHOOK_SECRET`.
 - recuperação de senha: `PASSWORD_RESET_*`.
 
 Não registre valores dessas variáveis em logs.
+
+Em Neon, mantenha `DATABASE_URL` pooled no runtime e configure
+`DIRECT_DATABASE_URL` sem o sufixo `-pooler` para `prisma migrate deploy`.
 
 ## Commands
 

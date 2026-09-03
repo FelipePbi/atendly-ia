@@ -23,6 +23,15 @@ const stringEnv = (defaultValue = "") =>
     z.string().default(defaultValue),
   );
 
+const serviceTokenEnv = () =>
+  z.preprocess(
+    (value) =>
+      typeof value === "string"
+        ? value.trim().replace(/^Bearer\s+/iu, "")
+        : value,
+    z.string().default(""),
+  );
+
 const envSchema = z.object({
   NODE_ENV: stringEnv("development"),
   PORT: intEnv(3002),
@@ -37,7 +46,7 @@ const envSchema = z.object({
   SCHEDULING_SERVICE_BASE_URL: stringEnv("http://localhost:3003"),
   EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),
   EVOLUTION_GO_API_KEY: stringEnv(),
-  INTERNAL_SERVICE_TOKEN: stringEnv(),
+  INTERNAL_SERVICE_TOKEN: serviceTokenEnv(),
   INTERNAL_HTTP_TIMEOUT_MS: intEnv(10_000),
   INTERNAL_HTTP_GET_RETRIES: intEnv(2),
   PASSWORD_RESET_TOKEN_TTL_MINUTES: intEnv(30),

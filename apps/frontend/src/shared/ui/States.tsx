@@ -1,5 +1,7 @@
 import type { ComponentPropsWithoutRef } from "react";
+
 import { Icon, type IconName } from "@/shared/icons/Icon";
+
 import { Button } from "./Button";
 
 type StateProps = {

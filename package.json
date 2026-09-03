@@ -9,6 +9,7 @@
     "build:frontend": "cd apps/frontend && npm run build",
     "build:bff": "cd apps/bff && npm run build",
     "build:ai-orchestrator": "cd apps/ai-orchestrator && npm run build",
+    "build:contracts": "cd packages/contracts && npm run build",
     "build:all": "bash scripts/build-all.sh",
     "check:health-worker": "cd apps/health-worker && npm run check",
     "smoke:final-audit": "node scripts/final-production-audit.mjs",

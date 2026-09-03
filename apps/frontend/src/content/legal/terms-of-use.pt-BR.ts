@@ -4,6 +4,7 @@ import {
   TERMS_LAST_UPDATED_DATE,
   TERMS_VERSION,
 } from "@/config/legal-versions";
+
 import type { LegalDocumentContent } from "./types";
 
 export function createTermsOfUse(details: LegalDetails): LegalDocumentContent {

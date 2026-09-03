@@ -40,6 +40,12 @@ Thumbs.db
 # Large prompt kit copied from earlier planning material; keep outside the initial monorepo commit.
 /docs/codex_persona_ui_kit/
 
+# Graphify keeps graph/map files in Git. Cache and machine-local state stay local.
+/graphify-out/cache/
+/graphify-out/cost.json
+/graphify-out/.graphify_analysis.json
+/graphify-out/.graphify_root
+
 # Evolution Go Dockerfile expects this bundled manager asset.
 !/apps/evolution-go/manager/
 !/apps/evolution-go/manager/dist/

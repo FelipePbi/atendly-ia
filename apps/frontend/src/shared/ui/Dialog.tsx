@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { type ReactNode, useEffect, useId, useRef } from "react";
+
 import { Icon } from "@/shared/icons/Icon";
 
 type DialogProps = {

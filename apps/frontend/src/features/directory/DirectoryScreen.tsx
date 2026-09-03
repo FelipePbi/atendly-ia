@@ -2,14 +2,15 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
-import { AppShell } from "@/shared/layout/AppShell";
-import { Dialog } from "@/shared/ui/Dialog";
-import { CurrencyInput } from "@/shared/ui/CurrencyInput";
-import { Icon } from "@/shared/icons/Icon";
-import { mockCustomers, mockServices } from "@/mocks/data/directory";
+import { type FormEvent, useState } from "react";
+
 import type { CustomerScenario } from "@/features/customers/types";
 import type { ServiceScenario } from "@/features/services/types";
+import { mockCustomers, mockServices } from "@/mocks/data/directory";
+import { Icon } from "@/shared/icons/Icon";
+import { AppShell } from "@/shared/layout/AppShell";
+import { CurrencyInput } from "@/shared/ui/CurrencyInput";
+import { Dialog } from "@/shared/ui/Dialog";
 
 type DirectoryProps =
   | { area: "customers"; scenario?: CustomerScenario }

@@ -1,4 +1,5 @@
 import Link from "next/link";
+
 import type { LegalDocumentContent } from "@/content/legal/types";
 import { Brand } from "@/shared/ui/Brand";
 

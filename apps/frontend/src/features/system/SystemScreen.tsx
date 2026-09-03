@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useState } from "react";
+
+import { Icon } from "@/shared/icons/Icon";
 import { AppShell } from "@/shared/layout/AppShell";
 import { Brand } from "@/shared/ui/Brand";
-import { Icon } from "@/shared/icons/Icon";
 
 export type SystemScenario =
   "offline" | "external-unavailable" | "error" | "session-expired";

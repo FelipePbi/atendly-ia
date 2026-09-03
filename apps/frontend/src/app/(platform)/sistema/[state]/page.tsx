@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
+
 import {
-  SystemScreen,
   type SystemScenario,
+  SystemScreen,
 } from "@/features/system/SystemScreen";
 const states: Record<string, SystemScenario> = {
   offline: "offline",

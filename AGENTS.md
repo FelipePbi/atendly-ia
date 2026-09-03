@@ -183,3 +183,17 @@ Execute checks já existentes e aplicáveis ao app alterado. Intenção final: `
 - `apps/evolution-go/AGENTS.md`: transporte WhatsApp.
 - `apps/health-worker/AGENTS.md`: health monitoring only.
 - `apps/frontend-open-design/AGENTS.md`: contrato histórico de prototipação; preserve diretório.
+
+## graphify
+
+Knowledge graph: `graphify-out/graph.json`. `$graphify` invokes its project skill.
+
+- Start codebase discovery with `graphify query "<specific question>" --budget 800`; refine at 1500, use ~2500 only for complex architecture. Use `explain` for entity and `path` for relationship.
+- Read only files/ranges Graphify identifies. No global `rg`/`find`, recursive reads, `graph.json`, or `GRAPH_REPORT.md` unless Graphify is stale, misses literal text, or broad review is necessary.
+- Code changes: `graphify update .` AST incremental. Product/architecture docs changed: `$graphify . --update` only then. Full rebuild only missing/corrupt graph, required upgrade, major invalidation, or explicit user request.
+
+## Token-efficient codebase workflow
+
+1. Discovery: Graphify → relevant symbols/files → targeted reads → implementation.
+2. Shell: prefer `rtk` for verbose git/diff/log, tests, lint/typecheck/build, npm/pnpm, Docker, logs, and grep/find fallback. Keep raw minimal commands; use raw/proxy when debugging needs unfiltered output.
+3. Never duplicate global search after Graphify found target. Post-commit Graphify hook remains owner of graph updates.

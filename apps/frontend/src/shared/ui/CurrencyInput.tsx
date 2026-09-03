@@ -1,10 +1,10 @@
 "use client";
 
 import {
-  useState,
   type ChangeEvent,
   type InputHTMLAttributes,
   type KeyboardEvent,
+  useState,
 } from "react";
 
 const brlFormatter = new Intl.NumberFormat("pt-BR", {

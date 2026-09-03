@@ -1,0 +1,16 @@
+# Graphify accepts .gitignore syntax and also respects .gitignore.
+# Keep generated, runtime, cache, and Graphify-output files out of AST extraction.
+**/node_modules/
+**/dist/
+**/build/
+**/coverage/
+**/.next/
+**/.turbo/
+**/.cache/
+artifacts/
+logs/
+graphify-out/
+**/src/generated/
+apps/evolution-go/whatsmeow-lib/proto/
+apps/frontend-open-design/plugin-source/
+**/*.pb.go

@@ -4,6 +4,7 @@ import {
   PRIVACY_POLICY_LAST_UPDATED_DATE,
   PRIVACY_POLICY_VERSION,
 } from "@/config/legal-versions";
+
 import type { LegalDocumentContent } from "./types";
 
 export function createPrivacyPolicy(

@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+
 import { OnboardingScreen } from "@/features/onboarding/OnboardingScreen";
 import {
   isOnboardingScenario,

@@ -3,11 +3,13 @@
 import clsx from "clsx";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+
+import { mockConversations } from "@/mocks/data/conversations";
+import { Icon } from "@/shared/icons/Icon";
 import { AppShell } from "@/shared/layout/AppShell";
 import { Dialog } from "@/shared/ui/Dialog";
-import { Icon } from "@/shared/icons/Icon";
-import { mockConversations } from "@/mocks/data/conversations";
-import type { ConversationState, ConversationsScenario } from "./types";
+
+import type { ConversationsScenario, ConversationState } from "./types";
 
 const stateLabel: Record<ConversationState, string> = {
   ai: "IA atendendo",

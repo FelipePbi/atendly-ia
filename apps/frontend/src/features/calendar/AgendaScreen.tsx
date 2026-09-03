@@ -2,11 +2,13 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { useState, useSyncExternalStore, type FormEvent } from "react";
+import { type FormEvent, useState, useSyncExternalStore } from "react";
+
+import { mockAppointments } from "@/mocks/data/appointments";
+import { Icon } from "@/shared/icons/Icon";
 import { AppShell } from "@/shared/layout/AppShell";
 import { Dialog } from "@/shared/ui/Dialog";
-import { Icon } from "@/shared/icons/Icon";
-import { mockAppointments } from "@/mocks/data/appointments";
+
 import type { AgendaScenario, Appointment } from "./types";
 
 function subscribeCompact(callback: () => void) {

@@ -8,6 +8,15 @@ const stringEnv = (defaultValue = "") =>
     return value.trim();
   }, z.string().default(defaultValue));
 
+const serviceTokenEnv = () =>
+  z.preprocess(
+    (value) =>
+      typeof value === "string"
+        ? value.trim().replace(/^Bearer\s+/iu, "")
+        : value,
+    z.string().default(""),
+  );
+
 const intEnv = (defaultValue: number) =>
   z.preprocess((value) => {
     if (value === undefined || value === null || value === "") return undefined;
@@ -55,7 +64,7 @@ const envSchema = z.object({
   AI_BUFFER_BETWEEN_SERVICES_MINUTES: intEnv(0),
   AI_PROMPT_VERSION: stringEnv("scheduling_v1.0.0"),
   SCHEDULING_SERVICE_BASE_URL: stringEnv("http://localhost:3003"),
-  INTERNAL_SERVICE_TOKEN: stringEnv(),
+  INTERNAL_SERVICE_TOKEN: serviceTokenEnv(),
 });
 
 export const env = envSchema.parse(process.env);

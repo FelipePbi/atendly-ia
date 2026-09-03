@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+
 import { LegalDocumentLayout } from "@/components/legal/LegalDocumentLayout";
 import {
   getLegalDetails,

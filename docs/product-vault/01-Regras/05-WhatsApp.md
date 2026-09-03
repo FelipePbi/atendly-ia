@@ -114,3 +114,9 @@ Para o cliente, a troca deve ser natural, sem mensagens como “agora você est�
 Trocar o número não apaga clientes, agenda nem conversas armazenadas.
 
 Visualmente, a experiência histórica continua unificada; o usuário não precisa distinguir conversas por “número antigo”.
+
+## Relacionado
+
+- [[01-Regras/03-IA-e-Conversas]]
+- [[02-Fluxos/02-Ativacao-e-Teste-do-WhatsApp]]
+- [[02-Fluxos/04-Handoff-e-Atendimento-Humano]]

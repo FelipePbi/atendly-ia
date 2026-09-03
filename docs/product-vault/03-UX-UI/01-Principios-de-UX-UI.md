@@ -130,3 +130,9 @@ Evitar modal em ações facilmente reversíveis, como marcar falta quando pode s
 MVP apenas tema claro.
 
 Dark mode fica para evolução futura.
+
+## Relacionado
+
+- [[03-UX-UI/02-Responsividade-Mobile-First]]
+- [[03-UX-UI/05-Design-System-Conceitual]]
+- [[03-UX-UI/06-Copy-e-Linguagem]]

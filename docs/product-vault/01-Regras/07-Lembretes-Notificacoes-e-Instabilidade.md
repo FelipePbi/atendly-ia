@@ -145,3 +145,8 @@ Em erro ao criar agendamento:
 1. tentar novamente uma vez quando apropriado;
 2. se continuar falhando, realizar handoff;
 3. informar ao profissional de forma simples que o cliente ainda não recebeu confirmação.
+
+## Relacionado
+
+- [[01-Regras/02-Agenda-e-Agendamentos]]
+- [[01-Regras/03-IA-e-Conversas]]

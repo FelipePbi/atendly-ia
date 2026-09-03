@@ -57,3 +57,8 @@ Período indisponível da agenda, pontual ou recorrente.
 
 ## Importação única
 Migração do Minha Agenda permitida uma única vez por negócio.
+
+## Relacionado
+
+- [[01-Regras/01-Regras-de-Negocio]]
+- [[00-HOME]]

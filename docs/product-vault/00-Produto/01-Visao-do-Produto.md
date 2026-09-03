@@ -65,3 +65,9 @@ No MVP e como direção de produto definida:
 No MVP a experiência é para um único profissional. O produto não deve expor conceitos de equipe, múltiplos usuários ou vários números de WhatsApp.
 
 A prioridade é uma experiência extremamente simples para autônomos.
+
+## Relacionado
+
+- [[00-Produto/02-Escopo-do-MVP]]
+- [[00-Produto/03-Publico-e-Proposta-de-Valor]]
+- [[01-Regras/01-Regras-de-Negocio]]

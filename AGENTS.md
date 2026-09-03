@@ -10,6 +10,8 @@ A IA é parte da plataforma Atendly; não é uma persona chamada “Atendly”.
 
 Antes de alterar comportamento, copy, fluxo ou interface, leia `docs/product-vault/00-HOME.md` e os documentos relevantes em `docs/product-vault/`.
 
+Leitura é **seletiva**: localize o tema, abra apenas os documentos necessários e pare. Fluxo de consulta e política de atualização de documentação: `docs/AI_WORKFLOW.md`; roteamento resumido: `CLAUDE.md`.
+
 Ordem de autoridade:
 
 1. `docs/product-vault/` — regras vigentes de produto e UX/UI;
@@ -149,3 +151,5 @@ Antes de considerar uma mudança pronta, verifique:
 ## Graphify / RTK
 
 Ferramentas existentes de descoberta e economia de tokens continuam válidas para navegar no código. Elas não são fontes de verdade de produto.
+
+Graphify localiza implementação; RTK executa shell/testes/build/git e busca textual com pouco output. A documentação define intenção. Ver `docs/AI_WORKFLOW.md`.

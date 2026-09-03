@@ -12,6 +12,12 @@ Este vault consolida as decisões de **produto** e **UX/UI** do MVP da Atendly.
 > [!important]
 > Este pacote **não é uma especificação técnica de implementação**. Decisões de infraestrutura, banco, APIs, arquitetura de serviços, modelos de persistência, bibliotecas e detalhes internos devem ser documentadas separadamente.
 
+## Como abrir
+
+Esta pasta é um **Obsidian Vault**: abra `docs/product-vault` diretamente no Obsidian (`Open folder as vault`). A configuração mínima e portátil fica em `.obsidian/`; estado de janela e cache não são versionados. Notas são ligadas por `[[wikilinks]]`, então Graph View e backlinks funcionam sem plugin externo.
+
+O grafo de **código** é outro artefato e vive em `graphify-out/` — ele nunca é exportado por cima deste vault. Ver `docs/AI_WORKFLOW.md`.
+
 ## Comece por aqui
 
 - [[00-HOME]] — mapa geral da documentação

@@ -275,3 +275,9 @@ Central com:
 - estado lida/não lida;
 - histórico recente;
 - problemas resolvidos identificados como resolvidos.
+
+## Relacionado
+
+- [[00-Produto/04-Navegacao-e-Modulos]]
+- [[03-UX-UI/05-Design-System-Conceitual]]
+- [[03-UX-UI/02-Responsividade-Mobile-First]]

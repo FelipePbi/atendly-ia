@@ -72,3 +72,8 @@ Uma nova sessão futura, após aproximadamente 24h, pode voltar à IA automatica
 Não enviar mensagens automáticas anunciando troca entre IA e humano.
 
 Se cliente perguntar se está falando com o profissional, responder honestamente quando for a IA.
+
+## Relacionado
+
+- [[01-Regras/03-IA-e-Conversas]]
+- [[01-Regras/05-WhatsApp]]

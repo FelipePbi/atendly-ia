@@ -217,3 +217,9 @@ Enquanto IA não estiver ativa, Home mostra:
 Itens concluídos aparecem marcados até ativação.
 
 Depois da ativação, checklist desaparece.
+
+## Relacionado
+
+- [[03-UX-UI/03-Onboarding-UX]]
+- [[02-Fluxos/05-Importacao-Unica]]
+- [[02-Fluxos/02-Ativacao-e-Teste-do-WhatsApp]]

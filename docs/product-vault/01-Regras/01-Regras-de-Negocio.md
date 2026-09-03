@@ -116,3 +116,10 @@ Cada negócio pode concluir apenas uma importação do Minha Agenda.
 - após `Concluir importação`, não existe nova importação;
 - credenciais deixam de ser usadas;
 - alterações futuras no Minha Agenda não chegam à Atendly.
+
+## Relacionado
+
+- [[01-Regras/02-Agenda-e-Agendamentos]]
+- [[01-Regras/03-IA-e-Conversas]]
+- [[01-Regras/05-WhatsApp]]
+- [[00-Produto/02-Escopo-do-MVP]]

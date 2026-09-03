@@ -130,3 +130,8 @@ Configurações → Importação continua mostrando:
 - status final.
 
 Não existe CTA de nova importação.
+
+## Relacionado
+
+- [[01-Regras/02-Agenda-e-Agendamentos]]
+- [[02-Fluxos/05-Importacao-Unica]]

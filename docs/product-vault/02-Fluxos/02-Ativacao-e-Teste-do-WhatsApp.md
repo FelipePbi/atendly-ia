@@ -131,3 +131,8 @@ CTA:
 Novo teste é necessário ao vincular novamente/trocar o WhatsApp.
 
 Não é uma ferramenta recorrente de “testar IA” dentro das configurações.
+
+## Relacionado
+
+- [[01-Regras/05-WhatsApp]]
+- [[02-Fluxos/01-Onboarding]]

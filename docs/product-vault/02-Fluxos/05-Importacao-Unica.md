@@ -47,3 +47,8 @@ Se houver itens não importados:
 ## Depois
 
 Configurações → Importação mostra somente o histórico da migração concluída.
+
+## Relacionado
+
+- [[01-Regras/06-Importacao-Minha-Agenda]]
+- [[02-Fluxos/01-Onboarding]]

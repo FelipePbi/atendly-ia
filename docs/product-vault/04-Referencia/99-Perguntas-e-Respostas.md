@@ -1350,3 +1350,8 @@ As perguntas abaixo também fizeram parte da entrevista. Elas são listadas indi
 - **R30-original-946.** Emojis na interface? — **Pontuais.**
 - **R30-original-947.** Termos técnicos na UI? — **Não.**
 - **R30-original-948.** Mensagem de erro deve explicar ação? — **Sim.**
+
+## Relacionado
+
+- [[04-Referencia/02-Decisoes-Substituidas]]
+- [[00-HOME]]

@@ -107,3 +107,8 @@ Recorrência é uma frequência configurada no serviço e usada para criar múlt
 **Rejeitada.**
 
 A IA deve responder quando tiver o resultado, sem mensagens de espera rotineiras.
+
+## Relacionado
+
+- [[04-Referencia/99-Perguntas-e-Respostas]]
+- [[01-Regras/01-Regras-de-Negocio]]

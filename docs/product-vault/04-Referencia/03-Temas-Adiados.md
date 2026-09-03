@@ -59,3 +59,8 @@ Este vault descreve comportamento de produto. Antes de lançamento comercial amp
 ## Engenharia
 
 Decisões sobre arquitetura, banco de dados, provedores, filas, APIs, armazenamento, segurança interna, observabilidade, modelos e infraestrutura não fazem parte deste vault e devem ser documentadas em um pacote técnico separado.
+
+## Relacionado
+
+- [[00-Produto/02-Escopo-do-MVP]]
+- [[04-Referencia/02-Decisoes-Substituidas]]

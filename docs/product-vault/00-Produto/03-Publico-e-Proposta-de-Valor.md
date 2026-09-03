@@ -46,3 +46,8 @@ O produto deve funcionar para pessoas que:
 > **Continue usando seu WhatsApp normalmente. A IA identifica atendimentos, responde seus clientes e sai de cena quando você assume.**
 
 Essa promessa deve orientar produto, UX e copy.
+
+## Relacionado
+
+- [[00-Produto/01-Visao-do-Produto]]
+- [[03-UX-UI/06-Copy-e-Linguagem]]

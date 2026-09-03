@@ -88,3 +88,8 @@ Não deve parecer vídeo longo ou tutorial passivo.
 A tela de teste deve usar animações/progresso para mostrar que o sistema está validando o fluxo completo.
 
 Deve ser possível alternar para o WhatsApp no celular e voltar sem perder estado.
+
+## Relacionado
+
+- [[02-Fluxos/01-Onboarding]]
+- [[03-UX-UI/01-Principios-de-UX-UI]]

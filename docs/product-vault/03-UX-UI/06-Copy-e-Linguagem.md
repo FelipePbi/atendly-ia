@@ -107,3 +107,8 @@ Mensagem após conclusão:
 - Agenda = Agenda Atendly
 - Cliente = pessoa atendida
 - Profissional = conceito praticamente oculto no MVP; usar “minha agenda”, “meus horários” etc. na interface
+
+## Relacionado
+
+- [[01-Regras/03-IA-e-Conversas]]
+- [[03-UX-UI/01-Principios-de-UX-UI]]

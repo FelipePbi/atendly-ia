@@ -79,3 +79,8 @@ Seções conceituais:
 - Conta
 
 Configurações devem estar divididas por objetivo, evitando uma única tela longa.
+
+## Relacionado
+
+- [[03-UX-UI/02-Responsividade-Mobile-First]]
+- [[03-UX-UI/04-Especificacao-das-Telas]]

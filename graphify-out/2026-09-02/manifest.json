@@ -1,10 +1,4 @@
 {
-  ".codex/hooks.json": {
-    "mtime": 1788198752.757884,
-    "seen": 1788198803.177371,
-    "ast_hash": "5ebef3dd159986e465ab65e4014107ec",
-    "semantic_hash": "5ebef3dd159986e465ab65e4014107ec"
-  },
   ".prettierrc.json": {
     "mtime": 1787921630.1645432,
     "seen": 1788198803.1773753,
@@ -892,546 +886,6 @@
     "seen": 1788289159.4512448,
     "ast_hash": "265669d49edb9b361915449b4d5a75aa",
     "semantic_hash": "265669d49edb9b361915449b4d5a75aa"
-  },
-  "apps/evolution-go/whatsmeow-lib/appstate.go": {
-    "mtime": 1785763922.8889701,
-    "seen": 1788198803.1774528,
-    "ast_hash": "3b48cad3056393aa8c51354498996375",
-    "semantic_hash": "3b48cad3056393aa8c51354498996375"
-  },
-  "apps/evolution-go/whatsmeow-lib/appstate/decode.go": {
-    "mtime": 1785763922.8889701,
-    "seen": 1788198803.1774533,
-    "ast_hash": "4b31943b3ae4a3a4042e5ab96511640f",
-    "semantic_hash": "4b31943b3ae4a3a4042e5ab96511640f"
-  },
-  "apps/evolution-go/whatsmeow-lib/appstate/encode.go": {
-    "mtime": 1785763922.8889701,
-    "seen": 1788198803.1774535,
-    "ast_hash": "71f0eeba967edf112447f9c84ddca2d1",
-    "semantic_hash": "71f0eeba967edf112447f9c84ddca2d1"
-  },
-  "apps/evolution-go/whatsmeow-lib/appstate/errors.go": {
-    "mtime": 1785763922.8899696,
-    "seen": 1788198803.177454,
-    "ast_hash": "192cca6187ef369486c064010e34ac7f",
-    "semantic_hash": "192cca6187ef369486c064010e34ac7f"
-  },
-  "apps/evolution-go/whatsmeow-lib/appstate/hash.go": {
-    "mtime": 1785763922.8899696,
-    "seen": 1788198803.1774547,
-    "ast_hash": "1ecda78e91ddf86df5cd7b52def785a8",
-    "semantic_hash": "1ecda78e91ddf86df5cd7b52def785a8"
-  },
-  "apps/evolution-go/whatsmeow-lib/appstate/keys.go": {
-    "mtime": 1785763922.8899696,
-    "seen": 1788198803.1774557,
-    "ast_hash": "f55f7ddb57634508e0f181f76ff3b427",
-    "semantic_hash": "f55f7ddb57634508e0f181f76ff3b427"
-  },
-  "apps/evolution-go/whatsmeow-lib/appstate/lthash/lthash.go": {
-    "mtime": 1785763922.8909695,
-    "seen": 1788198803.1774561,
-    "ast_hash": "8abc187542c59dc45d6b90f208962710",
-    "semantic_hash": "8abc187542c59dc45d6b90f208962710"
-  },
-  "apps/evolution-go/whatsmeow-lib/appstate/recovery.go": {
-    "mtime": 1785763922.8909695,
-    "seen": 1788198803.1774566,
-    "ast_hash": "eed9137223ae5804c5a01f42184a5465",
-    "semantic_hash": "eed9137223ae5804c5a01f42184a5465"
-  },
-  "apps/evolution-go/whatsmeow-lib/argo/argo.go": {
-    "mtime": 1785763922.8919704,
-    "seen": 1788198803.177457,
-    "ast_hash": "33a25596cd9d82c26f7ec01c4e179463",
-    "semantic_hash": "33a25596cd9d82c26f7ec01c4e179463"
-  },
-  "apps/evolution-go/whatsmeow-lib/argo/name-to-queryids.json": {
-    "mtime": 1785763922.8919704,
-    "seen": 1788198803.1774576,
-    "ast_hash": "01cc69a434534202c434151731fefa38",
-    "semantic_hash": "01cc69a434534202c434151731fefa38"
-  },
-  "apps/evolution-go/whatsmeow-lib/armadillomessage.go": {
-    "mtime": 1785763922.8919704,
-    "seen": 1788198803.1774578,
-    "ast_hash": "da8cfd12361fc208cc9a8cb609103dad",
-    "semantic_hash": "da8cfd12361fc208cc9a8cb609103dad"
-  },
-  "apps/evolution-go/whatsmeow-lib/binary/attrs.go": {
-    "mtime": 1785763922.8929696,
-    "seen": 1788198803.1774585,
-    "ast_hash": "5d77290028c0a081923ef0fa769a6da9",
-    "semantic_hash": "5d77290028c0a081923ef0fa769a6da9"
-  },
-  "apps/evolution-go/whatsmeow-lib/binary/decoder.go": {
-    "mtime": 1785763922.8929696,
-    "seen": 1788198803.177459,
-    "ast_hash": "472c86a1728ea15f41912c0d7bfb059c",
-    "semantic_hash": "472c86a1728ea15f41912c0d7bfb059c"
-  },
-  "apps/evolution-go/whatsmeow-lib/binary/encoder.go": {
-    "mtime": 1785763922.8929696,
-    "seen": 1788198803.1774592,
-    "ast_hash": "1baa0171e4e47aafd2ab68d005589dfa",
-    "semantic_hash": "1baa0171e4e47aafd2ab68d005589dfa"
-  },
-  "apps/evolution-go/whatsmeow-lib/binary/errors.go": {
-    "mtime": 1785763922.8929696,
-    "seen": 1788198803.1774597,
-    "ast_hash": "a3d6dd618c565eff95496af5b68c70c6",
-    "semantic_hash": "a3d6dd618c565eff95496af5b68c70c6"
-  },
-  "apps/evolution-go/whatsmeow-lib/binary/node.go": {
-    "mtime": 1785763922.89397,
-    "seen": 1788198803.1774602,
-    "ast_hash": "e1af7eae12f497d3f8a9ba554431365a",
-    "semantic_hash": "e1af7eae12f497d3f8a9ba554431365a"
-  },
-  "apps/evolution-go/whatsmeow-lib/binary/proto/doc.go": {
-    "mtime": 1785763922.89397,
-    "seen": 1788198803.1774607,
-    "ast_hash": "3666b8f0d44619e42637c1c351274f02",
-    "semantic_hash": "3666b8f0d44619e42637c1c351274f02"
-  },
-  "apps/evolution-go/whatsmeow-lib/binary/proto/legacy.go": {
-    "mtime": 1785763922.8949697,
-    "seen": 1788198803.1774611,
-    "ast_hash": "9e4e7e75774dbf469dc095132196551f",
-    "semantic_hash": "9e4e7e75774dbf469dc095132196551f"
-  },
-  "apps/evolution-go/whatsmeow-lib/binary/token/token.go": {
-    "mtime": 1785763922.8949697,
-    "seen": 1788198803.1774614,
-    "ast_hash": "3054639a97e31317e991d5980e913f78",
-    "semantic_hash": "3054639a97e31317e991d5980e913f78"
-  },
-  "apps/evolution-go/whatsmeow-lib/binary/unpack.go": {
-    "mtime": 1785763922.8959708,
-    "seen": 1788198803.177462,
-    "ast_hash": "04a7a1109ef0ced6ef13ed8bdb743266",
-    "semantic_hash": "04a7a1109ef0ced6ef13ed8bdb743266"
-  },
-  "apps/evolution-go/whatsmeow-lib/binary/xml.go": {
-    "mtime": 1785763922.8959708,
-    "seen": 1788198803.1774623,
-    "ast_hash": "026297515a1d037e538e7e9a7eef160a",
-    "semantic_hash": "026297515a1d037e538e7e9a7eef160a"
-  },
-  "apps/evolution-go/whatsmeow-lib/broadcast.go": {
-    "mtime": 1785763922.8959708,
-    "seen": 1788198803.1774628,
-    "ast_hash": "68cf50e30f0521e3b0a780f748a1cc12",
-    "semantic_hash": "68cf50e30f0521e3b0a780f748a1cc12"
-  },
-  "apps/evolution-go/whatsmeow-lib/call.go": {
-    "mtime": 1785763922.8959708,
-    "seen": 1788198803.1774633,
-    "ast_hash": "aa1d0819ccc1e096241167b1c7fa66cb",
-    "semantic_hash": "aa1d0819ccc1e096241167b1c7fa66cb"
-  },
-  "apps/evolution-go/whatsmeow-lib/client.go": {
-    "mtime": 1785763922.8969707,
-    "seen": 1788198803.1774635,
-    "ast_hash": "43dfefd6accdc3d53ecc6c8f0c8e748a",
-    "semantic_hash": "43dfefd6accdc3d53ecc6c8f0c8e748a"
-  },
-  "apps/evolution-go/whatsmeow-lib/client_test.go": {
-    "mtime": 1785763922.8969707,
-    "seen": 1788198803.177464,
-    "ast_hash": "baf2ab23163aaf3d380fcf226ed45195",
-    "semantic_hash": "baf2ab23163aaf3d380fcf226ed45195"
-  },
-  "apps/evolution-go/whatsmeow-lib/connectionevents.go": {
-    "mtime": 1785763922.8969707,
-    "seen": 1788198803.1774645,
-    "ast_hash": "5348c692ec5921e4873762fd4e410df2",
-    "semantic_hash": "5348c692ec5921e4873762fd4e410df2"
-  },
-  "apps/evolution-go/whatsmeow-lib/download-to-file.go": {
-    "mtime": 1785763922.8979692,
-    "seen": 1788198803.1774647,
-    "ast_hash": "70a056f722a9c98ee2e14fcc3b13a35c",
-    "semantic_hash": "70a056f722a9c98ee2e14fcc3b13a35c"
-  },
-  "apps/evolution-go/whatsmeow-lib/download.go": {
-    "mtime": 1785763922.8979692,
-    "seen": 1788198803.1774654,
-    "ast_hash": "5d8b56fc0b5fe02a467bf14bb885fa00",
-    "semantic_hash": "5d8b56fc0b5fe02a467bf14bb885fa00"
-  },
-  "apps/evolution-go/whatsmeow-lib/errors.go": {
-    "mtime": 1785763922.8979692,
-    "seen": 1788198803.1774657,
-    "ast_hash": "3e4892a25704494ab67cccbc05b8594d",
-    "semantic_hash": "3e4892a25704494ab67cccbc05b8594d"
-  },
-  "apps/evolution-go/whatsmeow-lib/go.mod": {
-    "mtime": 1785763922.8979692,
-    "seen": 1788198803.1774662,
-    "ast_hash": "8f8e2fd4314f832f870b8a88e0fe0e29",
-    "semantic_hash": "8f8e2fd4314f832f870b8a88e0fe0e29"
-  },
-  "apps/evolution-go/whatsmeow-lib/group.go": {
-    "mtime": 1785763922.89897,
-    "seen": 1788198803.1774666,
-    "ast_hash": "10e84793841593696439145ce389ab64",
-    "semantic_hash": "10e84793841593696439145ce389ab64"
-  },
-  "apps/evolution-go/whatsmeow-lib/handshake.go": {
-    "mtime": 1785763922.89897,
-    "seen": 1788198803.1774669,
-    "ast_hash": "67f6d48019cc0208484440f726976546",
-    "semantic_hash": "67f6d48019cc0208484440f726976546"
-  },
-  "apps/evolution-go/whatsmeow-lib/internals.go": {
-    "mtime": 1785763922.89897,
-    "seen": 1788198803.1774673,
-    "ast_hash": "e70f3e39c548bfa901e6524e77714ef0",
-    "semantic_hash": "e70f3e39c548bfa901e6524e77714ef0"
-  },
-  "apps/evolution-go/whatsmeow-lib/internals_generate.go": {
-    "mtime": 1785763922.89997,
-    "seen": 1788198803.1774678,
-    "ast_hash": "5137d93c41881879386197bbd1774e7e",
-    "semantic_hash": "5137d93c41881879386197bbd1774e7e"
-  },
-  "apps/evolution-go/whatsmeow-lib/keepalive.go": {
-    "mtime": 1785763922.89997,
-    "seen": 1788198803.177468,
-    "ast_hash": "4c754f8aea6a6a84ddea126a92cf554c",
-    "semantic_hash": "4c754f8aea6a6a84ddea126a92cf554c"
-  },
-  "apps/evolution-go/whatsmeow-lib/mediaconn.go": {
-    "mtime": 1785763922.89997,
-    "seen": 1788198803.1774688,
-    "ast_hash": "f45bd08d27e5aceba51542c7bad48678",
-    "semantic_hash": "f45bd08d27e5aceba51542c7bad48678"
-  },
-  "apps/evolution-go/whatsmeow-lib/mediaretry.go": {
-    "mtime": 1785763922.89997,
-    "seen": 1788198803.1774693,
-    "ast_hash": "6e9986fcde1d55e15a45f3e2a580cc32",
-    "semantic_hash": "6e9986fcde1d55e15a45f3e2a580cc32"
-  },
-  "apps/evolution-go/whatsmeow-lib/message.go": {
-    "mtime": 1785763922.90097,
-    "seen": 1788198803.1774695,
-    "ast_hash": "43a4b330f3993f970631d0266458d40b",
-    "semantic_hash": "43a4b330f3993f970631d0266458d40b"
-  },
-  "apps/evolution-go/whatsmeow-lib/msgsecret.go": {
-    "mtime": 1785763922.90097,
-    "seen": 1788198803.17747,
-    "ast_hash": "91d4c38b0626c08c80b31e951b480a5e",
-    "semantic_hash": "91d4c38b0626c08c80b31e951b480a5e"
-  },
-  "apps/evolution-go/whatsmeow-lib/newsletter.go": {
-    "mtime": 1785763922.90097,
-    "seen": 1788198803.1774702,
-    "ast_hash": "32c4ef23f4420bdf6377322506d919bb",
-    "semantic_hash": "32c4ef23f4420bdf6377322506d919bb"
-  },
-  "apps/evolution-go/whatsmeow-lib/notification.go": {
-    "mtime": 1785763922.9019692,
-    "seen": 1788198803.177471,
-    "ast_hash": "eb2f137ca8cb59203725c81e18ff59ef",
-    "semantic_hash": "eb2f137ca8cb59203725c81e18ff59ef"
-  },
-  "apps/evolution-go/whatsmeow-lib/pair-code.go": {
-    "mtime": 1785763922.9019692,
-    "seen": 1788198803.1774712,
-    "ast_hash": "f7c45b3a3a7283f46d3f5d517b797f21",
-    "semantic_hash": "f7c45b3a3a7283f46d3f5d517b797f21"
-  },
-  "apps/evolution-go/whatsmeow-lib/pair.go": {
-    "mtime": 1785763922.9019692,
-    "seen": 1788198803.1774716,
-    "ast_hash": "b87740b12518534a2549a9ff010246c6",
-    "semantic_hash": "b87740b12518534a2549a9ff010246c6"
-  },
-  "apps/evolution-go/whatsmeow-lib/prekeys.go": {
-    "mtime": 1785763922.9029684,
-    "seen": 1788198803.177472,
-    "ast_hash": "0fff2b05b55f8d89b3d6aca40136cd71",
-    "semantic_hash": "0fff2b05b55f8d89b3d6aca40136cd71"
-  },
-  "apps/evolution-go/whatsmeow-lib/presence.go": {
-    "mtime": 1785763922.9029684,
-    "seen": 1788198803.1774726,
-    "ast_hash": "bf419319ea563dbe057c314904b5d8d7",
-    "semantic_hash": "bf419319ea563dbe057c314904b5d8d7"
-  },
-  "apps/evolution-go/whatsmeow-lib/privacysettings.go": {
-    "mtime": 1785763922.9029684,
-    "seen": 1788198803.177473,
-    "ast_hash": "2bf9d98eecb238d56e97d48330b9a659",
-    "semantic_hash": "2bf9d98eecb238d56e97d48330b9a659"
-  },
-  "apps/evolution-go/whatsmeow-lib/push.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.1775012,
-    "ast_hash": "e5bba317453fb008c19204ec7fa05a05",
-    "semantic_hash": "e5bba317453fb008c19204ec7fa05a05"
-  },
-  "apps/evolution-go/whatsmeow-lib/qrchan.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.1775014,
-    "ast_hash": "846356f11107c8669ef9d5bc6213b1b8",
-    "semantic_hash": "846356f11107c8669ef9d5bc6213b1b8"
-  },
-  "apps/evolution-go/whatsmeow-lib/receipt.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.1775017,
-    "ast_hash": "6245e4c05c43987f6ef34236ba494cdc",
-    "semantic_hash": "6245e4c05c43987f6ef34236ba494cdc"
-  },
-  "apps/evolution-go/whatsmeow-lib/reportingfields.json": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.1775022,
-    "ast_hash": "f6087082718408322fabe29e15787e2e",
-    "semantic_hash": "f6087082718408322fabe29e15787e2e"
-  },
-  "apps/evolution-go/whatsmeow-lib/reportingtoken.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.1775026,
-    "ast_hash": "3040eb76bb4cb4b089b1cc3d1cd7959e",
-    "semantic_hash": "3040eb76bb4cb4b089b1cc3d1cd7959e"
-  },
-  "apps/evolution-go/whatsmeow-lib/request.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.1775029,
-    "ast_hash": "d2b9cb984fb1f7ff72ae042429f69ddd",
-    "semantic_hash": "d2b9cb984fb1f7ff72ae042429f69ddd"
-  },
-  "apps/evolution-go/whatsmeow-lib/retry.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.1775036,
-    "ast_hash": "b13012c992ba830ccd723ee67976adef",
-    "semantic_hash": "b13012c992ba830ccd723ee67976adef"
-  },
-  "apps/evolution-go/whatsmeow-lib/send.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.177504,
-    "ast_hash": "b706c7c09d09f00ed79c4f15b48e39b2",
-    "semantic_hash": "b706c7c09d09f00ed79c4f15b48e39b2"
-  },
-  "apps/evolution-go/whatsmeow-lib/sendfb.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.1775045,
-    "ast_hash": "7e9343cb2e1445357167c524498cfe07",
-    "semantic_hash": "7e9343cb2e1445357167c524498cfe07"
-  },
-  "apps/evolution-go/whatsmeow-lib/socket/constants.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.1775048,
-    "ast_hash": "f3b11fcb32df39c25ff51e5569ee16fa",
-    "semantic_hash": "f3b11fcb32df39c25ff51e5569ee16fa"
-  },
-  "apps/evolution-go/whatsmeow-lib/socket/dialopts.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.1775053,
-    "ast_hash": "1b0993254ac3905b7dff7c4430f2e699",
-    "semantic_hash": "1b0993254ac3905b7dff7c4430f2e699"
-  },
-  "apps/evolution-go/whatsmeow-lib/socket/dialopts_js.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.1775057,
-    "ast_hash": "50166a08bf5b22bc2be284a814d3ebcb",
-    "semantic_hash": "50166a08bf5b22bc2be284a814d3ebcb"
-  },
-  "apps/evolution-go/whatsmeow-lib/socket/framesocket.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.177506,
-    "ast_hash": "4dae8e42544e16185f7180f851c6ab22",
-    "semantic_hash": "4dae8e42544e16185f7180f851c6ab22"
-  },
-  "apps/evolution-go/whatsmeow-lib/socket/noisehandshake.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.1775064,
-    "ast_hash": "052869f9dc382e0218708c68a21669c9",
-    "semantic_hash": "052869f9dc382e0218708c68a21669c9"
-  },
-  "apps/evolution-go/whatsmeow-lib/socket/noisesocket.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.177507,
-    "ast_hash": "2be91c00aa7c24364efe70f7f7f65612",
-    "semantic_hash": "2be91c00aa7c24364efe70f7f7f65612"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/clientpayload.go": {
-    "mtime": 1785769771.9982524,
-    "seen": 1788198803.1775074,
-    "ast_hash": "5dc62e1d4e8e511a2f8241346bcd1c86",
-    "semantic_hash": "5dc62e1d4e8e511a2f8241346bcd1c86"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/noop.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.1775079,
-    "ast_hash": "a0de25b693d1be2b6a070c44a721265c",
-    "semantic_hash": "a0de25b693d1be2b6a070c44a721265c"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/sessioncache.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.1775084,
-    "ast_hash": "de71016850b348cd2f3b1e891695cf54",
-    "semantic_hash": "de71016850b348cd2f3b1e891695cf54"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/signal.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.1775088,
-    "ast_hash": "dcf33d4071926962bf1124a92e345164",
-    "semantic_hash": "dcf33d4071926962bf1124a92e345164"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/sqlstore/container.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.177509,
-    "ast_hash": "5c7c482bf6ce25a6f04eecc60188dc71",
-    "semantic_hash": "5c7c482bf6ce25a6f04eecc60188dc71"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/sqlstore/lidmap.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.1775095,
-    "ast_hash": "2f47edc9a7c61a856b769d511582b759",
-    "semantic_hash": "2f47edc9a7c61a856b769d511582b759"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/sqlstore/store.go": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198803.1775098,
-    "ast_hash": "c8fc79275bd239312061e22541b9e4ad",
-    "semantic_hash": "c8fc79275bd239312061e22541b9e4ad"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/sqlstore/upgrades/upgrades.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.1775105,
-    "ast_hash": "b6d65117793ce732fb991d6a8fb29af7",
-    "semantic_hash": "b6d65117793ce732fb991d6a8fb29af7"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/store.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.177511,
-    "ast_hash": "b843397de847410d030c3f03c7973324",
-    "semantic_hash": "b843397de847410d030c3f03c7973324"
-  },
-  "apps/evolution-go/whatsmeow-lib/types/botmap.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.1775115,
-    "ast_hash": "80d3bf29cc9945c450697acbabfc345a",
-    "semantic_hash": "80d3bf29cc9945c450697acbabfc345a"
-  },
-  "apps/evolution-go/whatsmeow-lib/types/call.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.1775117,
-    "ast_hash": "df4359d6a02a5b8fe4664a9381128684",
-    "semantic_hash": "df4359d6a02a5b8fe4664a9381128684"
-  },
-  "apps/evolution-go/whatsmeow-lib/types/events/appstate.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.1775122,
-    "ast_hash": "a900887f19a281d082f34bf4903f9ae1",
-    "semantic_hash": "a900887f19a281d082f34bf4903f9ae1"
-  },
-  "apps/evolution-go/whatsmeow-lib/types/events/call.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.1775126,
-    "ast_hash": "56bbf5f9e7f111e9e4a857fce9f08044",
-    "semantic_hash": "56bbf5f9e7f111e9e4a857fce9f08044"
-  },
-  "apps/evolution-go/whatsmeow-lib/types/events/events.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.1775131,
-    "ast_hash": "60573217208a95bd734583cf7828e79f",
-    "semantic_hash": "60573217208a95bd734583cf7828e79f"
-  },
-  "apps/evolution-go/whatsmeow-lib/types/group.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.1775134,
-    "ast_hash": "2253f0db509aff730bcdd9d0fb3dfa87",
-    "semantic_hash": "2253f0db509aff730bcdd9d0fb3dfa87"
-  },
-  "apps/evolution-go/whatsmeow-lib/types/jid.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.177514,
-    "ast_hash": "2bf45d388440fcd296eaa84ae987cbd1",
-    "semantic_hash": "2bf45d388440fcd296eaa84ae987cbd1"
-  },
-  "apps/evolution-go/whatsmeow-lib/types/message.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.1775146,
-    "ast_hash": "4f1b90b3b06c86cb329529d3f65ceeb0",
-    "semantic_hash": "4f1b90b3b06c86cb329529d3f65ceeb0"
-  },
-  "apps/evolution-go/whatsmeow-lib/types/newsletter.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.1775148,
-    "ast_hash": "69ddf49e646398c71649b11930544685",
-    "semantic_hash": "69ddf49e646398c71649b11930544685"
-  },
-  "apps/evolution-go/whatsmeow-lib/types/presence.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.1775153,
-    "ast_hash": "bf0bcd5d3653093f187949325b23f785",
-    "semantic_hash": "bf0bcd5d3653093f187949325b23f785"
-  },
-  "apps/evolution-go/whatsmeow-lib/types/user.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.1775155,
-    "ast_hash": "cc9f3d4b0a5d538043587f52dd569891",
-    "semantic_hash": "cc9f3d4b0a5d538043587f52dd569891"
-  },
-  "apps/evolution-go/whatsmeow-lib/update.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.177516,
-    "ast_hash": "108c255e5d0fade8ead0ab942ff54a50",
-    "semantic_hash": "108c255e5d0fade8ead0ab942ff54a50"
-  },
-  "apps/evolution-go/whatsmeow-lib/upload.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.1775162,
-    "ast_hash": "6629aa56e6935ca23675cd70a18ab975",
-    "semantic_hash": "6629aa56e6935ca23675cd70a18ab975"
-  },
-  "apps/evolution-go/whatsmeow-lib/user.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.1775167,
-    "ast_hash": "6446ad3f89e8fb6c5c93d0909063c547",
-    "semantic_hash": "6446ad3f89e8fb6c5c93d0909063c547"
-  },
-  "apps/evolution-go/whatsmeow-lib/util/cbcutil/cbc.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.1775177,
-    "ast_hash": "05d8717eb6442dfae67bc25ba9814549",
-    "semantic_hash": "05d8717eb6442dfae67bc25ba9814549"
-  },
-  "apps/evolution-go/whatsmeow-lib/util/gcmutil/gcm.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.177518,
-    "ast_hash": "d4e5f177692ba6dbbb724684c6874207",
-    "semantic_hash": "d4e5f177692ba6dbbb724684c6874207"
-  },
-  "apps/evolution-go/whatsmeow-lib/util/hkdfutil/hkdf.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.1775184,
-    "ast_hash": "654d940707ea58394d09f75aa57d4225",
-    "semantic_hash": "654d940707ea58394d09f75aa57d4225"
-  },
-  "apps/evolution-go/whatsmeow-lib/util/keys/keypair.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.1775186,
-    "ast_hash": "f42432e677fdffc3fd12472e811d84c0",
-    "semantic_hash": "f42432e677fdffc3fd12472e811d84c0"
-  },
-  "apps/evolution-go/whatsmeow-lib/util/log/log.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.177519,
-    "ast_hash": "e1b3b1758b75153fa2b0f4fa35676347",
-    "semantic_hash": "e1b3b1758b75153fa2b0f4fa35676347"
-  },
-  "apps/evolution-go/whatsmeow-lib/util/log/zerolog.go": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198803.1775196,
-    "ast_hash": "eaf9dfb5a088803f320a73b2b2324791",
-    "semantic_hash": "eaf9dfb5a088803f320a73b2b2324791"
   },
   "apps/frontend-open-design/DESIGN-MANIFEST.json": {
     "mtime": 1787784769.793648,
@@ -2741,78 +2195,6 @@
     "ast_hash": "f57f8313dd963c66d78b73d458d2cd41",
     "semantic_hash": "f57f8313dd963c66d78b73d458d2cd41"
   },
-  "apps/evolution-go/whatsmeow-lib/store/sqlstore/upgrades/00-latest-schema.sql": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198830.3728974,
-    "ast_hash": "7bdd127e9e0c2c3a2c0571502e94597a",
-    "semantic_hash": "7bdd127e9e0c2c3a2c0571502e94597a"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/sqlstore/upgrades/03-message-secrets.sql": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198830.3728983,
-    "ast_hash": "3313869a29f6ffb5c4e1f1a978542188",
-    "semantic_hash": "3313869a29f6ffb5c4e1f1a978542188"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/sqlstore/upgrades/04-privacy-tokens.sql": {
-    "mtime": 1785763922.9477792,
-    "seen": 1788198830.3728993,
-    "ast_hash": "93b30c843e846187c7696b8a546e75b8",
-    "semantic_hash": "93b30c843e846187c7696b8a546e75b8"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/sqlstore/upgrades/05-account-jid-format.sql": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198830.3729,
-    "ast_hash": "de1c10f7005502101a4508085332e90f",
-    "semantic_hash": "de1c10f7005502101a4508085332e90f"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/sqlstore/upgrades/06-facebook-uuid.sql": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198830.3729007,
-    "ast_hash": "26be7ac2157f92f39dbe9dd23a124365",
-    "semantic_hash": "26be7ac2157f92f39dbe9dd23a124365"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/sqlstore/upgrades/07-account-lid.sql": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198830.3729012,
-    "ast_hash": "4c3813f31eda245911876f92d83b6112",
-    "semantic_hash": "4c3813f31eda245911876f92d83b6112"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/sqlstore/upgrades/08-lid-mapping.sql": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198830.372902,
-    "ast_hash": "ef98fcbc530b94bd77db0785a704da77",
-    "semantic_hash": "ef98fcbc530b94bd77db0785a704da77"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/sqlstore/upgrades/09-decryption-buffer.sql": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198830.3729026,
-    "ast_hash": "99c4d9fff8aaac278f08b59c6c7f1a2e",
-    "semantic_hash": "99c4d9fff8aaac278f08b59c6c7f1a2e"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/sqlstore/upgrades/10-chat-db-lid-migration-ts.sql": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198830.3729033,
-    "ast_hash": "c1b2f2ccdfe910b53ac13f9fdd8677d3",
-    "semantic_hash": "c1b2f2ccdfe910b53ac13f9fdd8677d3"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/sqlstore/upgrades/11-redacted-phone-contacts.sql": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198830.3729038,
-    "ast_hash": "9603f1c6a6c2a17de59128167e1b438b",
-    "semantic_hash": "9603f1c6a6c2a17de59128167e1b438b"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/sqlstore/upgrades/12-privacy-token-sender-timestamp.sql": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198830.3729048,
-    "ast_hash": "03cccd7b51ee47b8802f531cd8e047dd",
-    "semantic_hash": "03cccd7b51ee47b8802f531cd8e047dd"
-  },
-  "apps/evolution-go/whatsmeow-lib/store/sqlstore/upgrades/13-retry-buffer.sql": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788198830.3729055,
-    "ast_hash": "2d0fe37f0ea9f8a8ebdfcdc69bdf79ab",
-    "semantic_hash": "2d0fe37f0ea9f8a8ebdfcdc69bdf79ab"
-  },
   "apps/scheduling-service/prisma/migrations/20260828175825_init/migration.sql": {
     "mtime": 1787939944.530553,
     "seen": 1788198830.3854039,
@@ -2831,60 +2213,6 @@
     "ast_hash": "0fe5d9ade9c875e05a1af2d5bb9c3bf2",
     "semantic_hash": "0fe5d9ade9c875e05a1af2d5bb9c3bf2"
   },
-  ".codex/skills/graphify/SKILL.md": {
-    "mtime": 1788198752.7555656,
-    "seen": 1788199059.2337904,
-    "ast_hash": "212b55d95333d84e14262f8ec83faa2b",
-    "semantic_hash": ""
-  },
-  ".codex/skills/graphify/references/add-watch.md": {
-    "mtime": 1788198734.2827294,
-    "seen": 1788199059.233792,
-    "ast_hash": "d59d027fe449f06aa03905a01184e779",
-    "semantic_hash": ""
-  },
-  ".codex/skills/graphify/references/exports.md": {
-    "mtime": 1788198734.2827294,
-    "seen": 1788199059.2337928,
-    "ast_hash": "9da2a2152e60a22f07f05fed5158f287",
-    "semantic_hash": ""
-  },
-  ".codex/skills/graphify/references/extraction-spec.md": {
-    "mtime": 1788198734.520399,
-    "seen": 1788199059.2337933,
-    "ast_hash": "bf895ec4d4e40f5f66f7d31c2a9bd4a7",
-    "semantic_hash": ""
-  },
-  ".codex/skills/graphify/references/github-and-merge.md": {
-    "mtime": 1788198734.520399,
-    "seen": 1788199059.233794,
-    "ast_hash": "cde13df085e4c492aeb7ba298a996d0d",
-    "semantic_hash": ""
-  },
-  ".codex/skills/graphify/references/hooks.md": {
-    "mtime": 1788198734.5214605,
-    "seen": 1788199059.2337942,
-    "ast_hash": "3f545db6ce646650bb9de588f5512a27",
-    "semantic_hash": ""
-  },
-  ".codex/skills/graphify/references/query.md": {
-    "mtime": 1788198734.5214605,
-    "seen": 1788199059.233795,
-    "ast_hash": "3c46f8ad006874260614ed8657d02307",
-    "semantic_hash": ""
-  },
-  ".codex/skills/graphify/references/transcribe.md": {
-    "mtime": 1788198734.5225036,
-    "seen": 1788199059.2337954,
-    "ast_hash": "67b6a5fa6c0974e18f60db9f8932fbd8",
-    "semantic_hash": ""
-  },
-  ".codex/skills/graphify/references/update.md": {
-    "mtime": 1788198734.5225036,
-    "seen": 1788199059.2337956,
-    "ast_hash": "9378bd03d56baaf78bd738ab3848f142",
-    "semantic_hash": ""
-  },
   "AGENTS.md": {
     "mtime": 1788400687.9853308,
     "seen": 1788400797.3391352,
@@ -2892,15 +2220,15 @@
     "semantic_hash": ""
   },
   "GRAPHIFY_WORKSPACE_MAP.md": {
-    "mtime": 1788400687.9853308,
-    "seen": 1788400797.3391366,
-    "ast_hash": "94e633cb8e50dc3c3b1349a7c124ccf6",
+    "mtime": 1788401786.7329485,
+    "seen": 1788402517.8167615,
+    "ast_hash": "9872c25715c3d1a53435c25533cfca95",
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1788400688.0049183,
-    "seen": 1788400797.3391373,
-    "ast_hash": "b8b503e89011dc69229de3430f61d59c",
+    "mtime": 1788401786.7329485,
+    "seen": 1788402517.816763,
+    "ast_hash": "134f7f0c08f342ab6bd8c875752a62da",
     "semantic_hash": ""
   },
   "apps/ai-orchestrator/AGENTS.md": {
@@ -2910,9 +2238,9 @@
     "semantic_hash": ""
   },
   "apps/ai-orchestrator/README.md": {
-    "mtime": 1788400713.5112114,
-    "seen": 1788400797.33914,
-    "ast_hash": "7ab98118531bb2c9ba547cf225c32508",
+    "mtime": 1788401786.7329485,
+    "seen": 1788402517.8167644,
+    "ast_hash": "19b3f50017e7e8b9c970919f5687182f",
     "semantic_hash": ""
   },
   "apps/ai-orchestrator/docker-compose.yml": {
@@ -2928,15 +2256,15 @@
     "semantic_hash": ""
   },
   "apps/bff/PUBLIC_API_V1.md": {
-    "mtime": 1788045726.886607,
-    "seen": 1788199059.2337995,
-    "ast_hash": "f547f8bfb1485d58debbfff4de3820a6",
+    "mtime": 1788401786.7329485,
+    "seen": 1788402517.8167667,
+    "ast_hash": "fce3fedda33246635df6d3430404925c",
     "semantic_hash": ""
   },
   "apps/bff/README.md": {
-    "mtime": 1788400713.493412,
-    "seen": 1788400797.339142,
-    "ast_hash": "880a1c5b0d9d74bd1073aba3a607ba2f",
+    "mtime": 1788401786.7329485,
+    "seen": 1788402517.8167677,
+    "ast_hash": "156d93aec6ddd3e76bbc562acf5657e1",
     "semantic_hash": ""
   },
   "apps/evolution-go/.github/ISSUE_TEMPLATE/-en--bug-report.yaml": {
@@ -3030,9 +2358,9 @@
     "semantic_hash": ""
   },
   "apps/evolution-go/docs/wiki/README.md": {
-    "mtime": 1785763922.8072793,
-    "seen": 1788199059.233807,
-    "ast_hash": "64319d91707262b47c04e8406731ecb2",
+    "mtime": 1788401942.2287936,
+    "seen": 1788402517.816778,
+    "ast_hash": "5cc668e853a7fe0a86875a3e629d112f",
     "semantic_hash": ""
   },
   "apps/evolution-go/docs/wiki/conceitos-core/architecture.md": {
@@ -3108,9 +2436,9 @@
     "semantic_hash": ""
   },
   "apps/evolution-go/docs/wiki/fundamentos/quickstart.md": {
-    "mtime": 1785763922.8072793,
-    "seen": 1788199059.233813,
-    "ast_hash": "0b3f785e3485d074f78aa2ce840f18c3",
+    "mtime": 1788401942.2287936,
+    "seen": 1788402517.8167865,
+    "ast_hash": "ba617cafbd34d115b959a89e5a8790aa",
     "semantic_hash": ""
   },
   "apps/evolution-go/docs/wiki/guias-api/api-call.md": {
@@ -3180,9 +2508,9 @@
     "semantic_hash": ""
   },
   "apps/evolution-go/docs/wiki/recursos-avancados/events-system.md": {
-    "mtime": 1785763922.8229306,
-    "seen": 1788199059.2338185,
-    "ast_hash": "7f332af6ad070d7cf168386c8358acf1",
+    "mtime": 1788401942.2287936,
+    "seen": 1788402517.816794,
+    "ast_hash": "def320ca69409adb8febbb68de54c871",
     "semantic_hash": ""
   },
   "apps/evolution-go/docs/wiki/recursos-avancados/media-storage.md": {
@@ -3227,46 +2555,10 @@
     "ast_hash": "0966166e55a9c7dd4cdbc6f4100b50cf",
     "semantic_hash": ""
   },
-  "apps/evolution-go/whatsmeow-lib/.github/ISSUE_TEMPLATE/config.yml": {
-    "mtime": 1785763922.8859117,
-    "seen": 1788199059.233822,
-    "ast_hash": "f056c2e0fcc4b86daec73b9b9452068c",
-    "semantic_hash": ""
-  },
-  "apps/evolution-go/whatsmeow-lib/.github/ISSUE_TEMPLATE/issue.md": {
-    "mtime": 1785763922.8869736,
-    "seen": 1788199059.2338223,
-    "ast_hash": "d802c2d8d07cf08d8bed415444ec266a",
-    "semantic_hash": ""
-  },
-  "apps/evolution-go/whatsmeow-lib/.github/workflows/go.yml": {
-    "mtime": 1785763922.8869736,
-    "seen": 1788199059.233823,
-    "ast_hash": "73649f5135788e32b8d58428731be3d4",
-    "semantic_hash": ""
-  },
-  "apps/evolution-go/whatsmeow-lib/.github/workflows/stale.yml": {
-    "mtime": 1785763922.8869736,
-    "seen": 1788199059.2338235,
-    "ast_hash": "80402be786109b71e0e9f00c5ddd4a74",
-    "semantic_hash": ""
-  },
-  "apps/evolution-go/whatsmeow-lib/.pre-commit-config.yaml": {
-    "mtime": 1785763922.8879707,
-    "seen": 1788199059.233824,
-    "ast_hash": "121366abe7f933486246cbe9ca852606",
-    "semantic_hash": ""
-  },
-  "apps/evolution-go/whatsmeow-lib/README.md": {
-    "mtime": 1785763922.8879707,
-    "seen": 1788199059.2338245,
-    "ast_hash": "b43cbad6940905ca551355bd787d79d9",
-    "semantic_hash": ""
-  },
   "apps/frontend-open-design/AGENTS.md": {
-    "mtime": 1788400713.524836,
-    "seen": 1788400797.3391767,
-    "ast_hash": "83e0bd6ff90d1c3dd441ca91dcac706d",
+    "mtime": 1788401786.7426257,
+    "seen": 1788402517.8167987,
+    "ast_hash": "1903050f1d7b615e7a4758dcadef6edf",
     "semantic_hash": ""
   },
   "apps/frontend-open-design/DESIGN-HANDOFF.md": {
@@ -3978,9 +3270,9 @@
     "semantic_hash": ""
   },
   "apps/frontend/AGENTS.md": {
-    "mtime": 1788400713.5425086,
-    "seen": 1788400797.339247,
-    "ast_hash": "c27176364c21dad43d07994c50a91719",
+    "mtime": 1788401786.7426257,
+    "seen": 1788402517.8168721,
+    "ast_hash": "57a5466c5528d62e0a8aba1850b9e630",
     "semantic_hash": ""
   },
   "apps/frontend/CLAUDE.md": {
@@ -3990,9 +3282,9 @@
     "semantic_hash": ""
   },
   "apps/frontend/README.md": {
-    "mtime": 1788400713.5425086,
-    "seen": 1788400797.3392482,
-    "ast_hash": "0842c943bd490010c9503a32d7bc0f46",
+    "mtime": 1788401786.7426257,
+    "seen": 1788402517.8168733,
+    "ast_hash": "4a255d0942b5d031dcb713ed727c4bd4",
     "semantic_hash": ""
   },
   "apps/health-worker/AGENTS.md": {
@@ -4002,9 +3294,9 @@
     "semantic_hash": ""
   },
   "apps/health-worker/README.md": {
-    "mtime": 1787978188.839184,
-    "seen": 1788199059.2338936,
-    "ast_hash": "91b8fa1905a3eadd1636909f5103687c",
+    "mtime": 1788401786.7406209,
+    "seen": 1788402517.8168745,
+    "ast_hash": "32e3707ed512e1983686dffbb5f8fb9c",
     "semantic_hash": ""
   },
   "apps/scheduling-service/AGENTS.md": {
@@ -4014,69 +3306,27 @@
     "semantic_hash": ""
   },
   "apps/scheduling-service/README.md": {
-    "mtime": 1788400713.5331712,
-    "seen": 1788400797.33925,
-    "ast_hash": "696549b3b9744785f64a32850a82c962",
+    "mtime": 1788401786.7329485,
+    "seen": 1788402517.8168755,
+    "ast_hash": "e2b90ae58ba2dca6b3edb53e51a77e19",
     "semantic_hash": ""
   },
   "docs/PLANO_REFATORACAO.md": {
-    "mtime": 1788400668.094175,
-    "seen": 1788400797.3392508,
-    "ast_hash": "fd8af32621536f5b4a0788a1a8e71fbb",
+    "mtime": 1788401873.9303925,
+    "seen": 1788402517.816876,
+    "ast_hash": "30d930ece53b8b6bafc36ff971fa931a",
     "semantic_hash": ""
   },
   "docs/README.md": {
-    "mtime": 1788400668.101555,
-    "seen": 1788400797.3392515,
-    "ast_hash": "175a8483672aa809894371a8e7c6ab84",
-    "semantic_hash": ""
-  },
-  "docs/ROADMAP_INTEGRACAO_V1.md": {
-    "mtime": 1788400668.10981,
-    "seen": 1788400797.339252,
-    "ast_hash": "f651b91c66c2399815dbe7d8d34d1269",
+    "mtime": 1788401786.7329485,
+    "seen": 1788402517.8168766,
+    "ast_hash": "6327d2b2ceae6987a12559f78bf35223",
     "semantic_hash": ""
   },
   "docs/UI_UX_PROTOTYPE_GUIDELINES.md": {
     "mtime": 1788400668.10981,
     "seen": 1788400797.3392525,
     "ast_hash": "5f7bb5c3cbb1e49ca1d0343faa522ed6",
-    "semantic_hash": ""
-  },
-  "docs/architecture/001-target-architecture.md": {
-    "mtime": 1787920764.6513686,
-    "seen": 1788199059.2339013,
-    "ast_hash": "5eac70d8f5b22e08f526abe41006c45d",
-    "semantic_hash": ""
-  },
-  "docs/architecture/002-service-ownership.md": {
-    "mtime": 1787920704.092857,
-    "seen": 1788199059.2339017,
-    "ast_hash": "3a2427f6b96c80ef25e3feb47d269913",
-    "semantic_hash": ""
-  },
-  "docs/architecture/003-data-ownership.md": {
-    "mtime": 1787920630.2747054,
-    "seen": 1788199059.2339025,
-    "ast_hash": "5bc9084de669e78f5097a4e49cd45d1c",
-    "semantic_hash": ""
-  },
-  "docs/architecture/004-public-api-boundary.md": {
-    "mtime": 1787920630.2757068,
-    "seen": 1788199059.233903,
-    "ast_hash": "1e23a6bcba077c79091d63b628003442",
-    "semantic_hash": ""
-  },
-  "docs/architecture/005-migration-order.md": {
-    "mtime": 1787920630.2765458,
-    "seen": 1788199059.2339034,
-    "ast_hash": "42b30493a6a44c719d7150d38792e7b8",
-    "semantic_hash": ""
-  },
-  "docs/architecture/006-current-code-inventory.md": {
-    "mtime": 1787920764.6513686,
-    "seen": 1788199059.2339036,
-    "ast_hash": "f18eba267eda3abd4799d0f5f6254ecc",
     "semantic_hash": ""
   },
   "render.yaml": {
@@ -4451,220 +3701,10 @@
     "ast_hash": "d3d1fb83841f2a295b074d4f01b131b7",
     "semantic_hash": "d3d1fb83841f2a295b074d4f01b131b7"
   },
-  "docs/architecture/007-goal-17-legacy-cleanup.md": {
-    "mtime": 1788264451.538594,
-    "seen": 1788264507.297759,
-    "ast_hash": "efc5ea6ca93dbbb819d22be054b4b478",
-    "semantic_hash": ""
-  },
   "apps/frontend/src/app/health/route.ts": {
     "mtime": 1788267425.2307546,
     "seen": 1788289159.462503,
     "ast_hash": "4b0a0dbbe0b55b191bd91e1cc81aee1a",
     "semantic_hash": "4b0a0dbbe0b55b191bd91e1cc81aee1a"
-  },
-  ".playwright-mcp/page-2026-09-01T12-57-59-991Z.yml": {
-    "mtime": 1788267479.9926233,
-    "seen": 1788287514.0297873,
-    "ast_hash": "55f592bffed3ca863f4b11b9c5f4582e",
-    "semantic_hash": ""
-  },
-  "docs/architecture/008-goal-18-production-audit.md": {
-    "mtime": 1788289111.509081,
-    "seen": 1788289234.8092816,
-    "ast_hash": "523e0cd7c76d5a1db47920d9cf9b5d48",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/00-HOME.md": {
-    "mtime": 1788398990.3609765,
-    "seen": 1788399017.9805179,
-    "ast_hash": "8b37a24ea7eeefcfdb10d06730ecb1f5",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/00-Produto/01-Visao-do-Produto.md": {
-    "mtime": 1788398990.4243045,
-    "seen": 1788399017.980519,
-    "ast_hash": "637f968a2440f053435de2899f038f16",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/00-Produto/02-Escopo-do-MVP.md": {
-    "mtime": 1788398990.4403381,
-    "seen": 1788399017.98052,
-    "ast_hash": "d030b7729bb78c9360a977c820bc529d",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/00-Produto/03-Publico-e-Proposta-de-Valor.md": {
-    "mtime": 1788398990.4403381,
-    "seen": 1788399017.9805205,
-    "ast_hash": "5e8020dac64f7fdfde9f326da7312480",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/00-Produto/04-Navegacao-e-Modulos.md": {
-    "mtime": 1788398990.4243045,
-    "seen": 1788399017.980521,
-    "ast_hash": "3c2074afd6991966b8e6c9c2218647bd",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/00-Produto/05-Internacionalizacao-Futura.md": {
-    "mtime": 1788398990.4403381,
-    "seen": 1788399017.9805212,
-    "ast_hash": "54a94531e9c2afefdd9745723fc783ce",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/01-Regras/01-Regras-de-Negocio.md": {
-    "mtime": 1788398990.3842702,
-    "seen": 1788399017.9805217,
-    "ast_hash": "a0c3884cdbe781749969390ce420817b",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/01-Regras/02-Agenda-e-Agendamentos.md": {
-    "mtime": 1788398990.376851,
-    "seen": 1788399017.9805222,
-    "ast_hash": "17c36184335931afb9ced1d0e43e8b44",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/01-Regras/03-IA-e-Conversas.md": {
-    "mtime": 1788398990.3927608,
-    "seen": 1788399017.9805224,
-    "ast_hash": "979692660a77f96eff95ff391f035283",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/01-Regras/04-Clientes-e-Memoria.md": {
-    "mtime": 1788398990.3927608,
-    "seen": 1788399017.980523,
-    "ast_hash": "6d9f0b8d77361a409c19ed6a1306d534",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/01-Regras/05-WhatsApp.md": {
-    "mtime": 1788398990.3927608,
-    "seen": 1788399017.9805236,
-    "ast_hash": "b31b80a7747cc05395963e1088491634",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/01-Regras/06-Importacao-Minha-Agenda.md": {
-    "mtime": 1788398990.3842702,
-    "seen": 1788399017.980524,
-    "ast_hash": "a23fb31c264df1c9b0e9d0435533a47e",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/01-Regras/07-Lembretes-Notificacoes-e-Instabilidade.md": {
-    "mtime": 1788398990.3927608,
-    "seen": 1788399017.9805245,
-    "ast_hash": "6b06a3c8c76ddec21ffefa0d0d48e0a7",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/01-Regras/08-Privacidade-e-Retencao.md": {
-    "mtime": 1788398990.3927608,
-    "seen": 1788399017.980525,
-    "ast_hash": "4e9d0f128276dad482b53661d2ac49fd",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/02-Fluxos/01-Onboarding.md": {
-    "mtime": 1788398990.4403381,
-    "seen": 1788399017.9805257,
-    "ast_hash": "30ef4f00d02cc7aa8fb15d38c494a13b",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/02-Fluxos/02-Ativacao-e-Teste-do-WhatsApp.md": {
-    "mtime": 1788398990.456261,
-    "seen": 1788399017.980526,
-    "ast_hash": "4f9376282803d361732c336cbd7d6cb1",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/02-Fluxos/03-Fluxos-de-Agendamento.md": {
-    "mtime": 1788398990.456261,
-    "seen": 1788399017.9805267,
-    "ast_hash": "326fc98660d6d6b54bb16c0065cb8e74",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/02-Fluxos/04-Handoff-e-Atendimento-Humano.md": {
-    "mtime": 1788398990.456261,
-    "seen": 1788399017.9805272,
-    "ast_hash": "bfd803519a81aab4591049675bda133a",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/02-Fluxos/05-Importacao-Unica.md": {
-    "mtime": 1788398990.456261,
-    "seen": 1788399017.9805276,
-    "ast_hash": "2f72fa63ab4cf8ece6655bd04a355de0",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/03-UX-UI/01-Principios-de-UX-UI.md": {
-    "mtime": 1788398990.4084527,
-    "seen": 1788399017.980528,
-    "ast_hash": "32ffe56bb6842d2f38c84d7f25a4f0d7",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/03-UX-UI/02-Responsividade-Mobile-First.md": {
-    "mtime": 1788398990.4084527,
-    "seen": 1788399017.9805284,
-    "ast_hash": "795d526827bf935c610bf752b1308dab",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/03-UX-UI/03-Onboarding-UX.md": {
-    "mtime": 1788398990.4243045,
-    "seen": 1788399017.9805288,
-    "ast_hash": "9714086f1b74573b46c60d4dc372d35a",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/03-UX-UI/04-Especificacao-das-Telas.md": {
-    "mtime": 1788398990.4243045,
-    "seen": 1788399017.9805293,
-    "ast_hash": "233e989003f674279f69118ef81193e6",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/03-UX-UI/05-Design-System-Conceitual.md": {
-    "mtime": 1788398990.4084527,
-    "seen": 1788399017.98053,
-    "ast_hash": "8585086d6489297ef7ca62daff9c3d6f",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/03-UX-UI/06-Copy-e-Linguagem.md": {
-    "mtime": 1788398990.4084527,
-    "seen": 1788399017.9805305,
-    "ast_hash": "aaed78070b9cc4b1340a589954e38b73",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/04-Referencia/01-Glossario.md": {
-    "mtime": 1788398990.4722106,
-    "seen": 1788399017.980531,
-    "ast_hash": "a233079e89a844cd17aed03c7c0f8f70",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/04-Referencia/02-Decisoes-Substituidas.md": {
-    "mtime": 1788398990.4722106,
-    "seen": 1788399017.9805315,
-    "ast_hash": "e857ef7f58bb2c04624140b9ee9d4939",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/04-Referencia/03-Temas-Adiados.md": {
-    "mtime": 1788398990.4722106,
-    "seen": 1788399017.980532,
-    "ast_hash": "dddb6a454b8269ae26c0c76ac283fcee",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/04-Referencia/99-Perguntas-e-Respostas.md": {
-    "mtime": 1788398990.4722106,
-    "seen": 1788399017.9805324,
-    "ast_hash": "3dc846e6e0511d6398b91580734b103f",
-    "semantic_hash": ""
-  },
-  "docs/product-vault/README.md": {
-    "mtime": 1788398990.376851,
-    "seen": 1788399017.980533,
-    "ast_hash": "214df04015a102571beb5a3942416d22",
-    "semantic_hash": ""
-  },
-  "REFRESH_MANIFEST.md": {
-    "mtime": 1788400686.495091,
-    "seen": 1788400797.339138,
-    "ast_hash": "992b08935eebf8f19b172c53ceb27f8b",
-    "semantic_hash": ""
-  },
-  "docs/architecture/README.md": {
-    "mtime": 1788400669.7465515,
-    "seen": 1788400797.3392582,
-    "ast_hash": "52564e25cde8284e60e6d72bde8a4c7c",
-    "semantic_hash": ""
   }
 }

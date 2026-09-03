@@ -24,4 +24,4 @@ Para setup e limites técnicos, consulte o README e o `AGENTS.md` do app corresp
 
 ## Para agentes
 
-Leia [`AGENTS.md`](AGENTS.md) antes de alterar o projeto.
+Leia [`AGENTS.md`](AGENTS.md) antes de alterar o projeto. O roteamento entre product vault, Graphify e RTK está em [`CLAUDE.md`](CLAUDE.md); o fluxo detalhado, em [`docs/AI_WORKFLOW.md`](docs/AI_WORKFLOW.md).

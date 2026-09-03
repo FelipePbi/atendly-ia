@@ -179,3 +179,10 @@ Documentos podem aparecer na conversa, mas não são interpretados pela IA no MV
 ## Stickers e GIFs
 
 Não devem determinar fluxo operacional quando não houver intenção textual/contextual clara.
+
+## Relacionado
+
+- [[01-Regras/05-WhatsApp]]
+- [[01-Regras/04-Clientes-e-Memoria]]
+- [[02-Fluxos/04-Handoff-e-Atendimento-Humano]]
+- [[03-UX-UI/06-Copy-e-Linguagem]]

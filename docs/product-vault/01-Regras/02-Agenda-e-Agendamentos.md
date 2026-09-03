@@ -188,3 +188,10 @@ Depois de criados, os agendamentos funcionam como atendimentos independentes.
 Se uma remarcação feita pela IA alterar muito a distância para os próximos atendimentos, ela deve perguntar se o cliente deseja ajustar os seguintes também.
 
 Esse aviso de preservação de cadência não é obrigatório quando o profissional edita manualmente pela Agenda.
+
+## Relacionado
+
+- [[02-Fluxos/03-Fluxos-de-Agendamento]]
+- [[01-Regras/06-Importacao-Minha-Agenda]]
+- [[01-Regras/07-Lembretes-Notificacoes-e-Instabilidade]]
+- [[04-Referencia/01-Glossario]]

@@ -106,3 +106,9 @@ Quando retorna depois do hold:
 - consultar novamente;
 - se horário ainda estiver livre, confirmar;
 - se não estiver, oferecer alternativas.
+
+## Relacionado
+
+- [[01-Regras/02-Agenda-e-Agendamentos]]
+- [[01-Regras/03-IA-e-Conversas]]
+- [[02-Fluxos/04-Handoff-e-Atendimento-Humano]]

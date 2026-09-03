@@ -99,3 +99,8 @@ Ao iniciar exclusão:
 - usuário pode cancelar a exclusão dentro do prazo.
 
 Se restaurar a conta, precisa reconectar o WhatsApp e realizar novo teste de ativação.
+
+## Relacionado
+
+- [[01-Regras/04-Clientes-e-Memoria]]
+- [[01-Regras/05-WhatsApp]]

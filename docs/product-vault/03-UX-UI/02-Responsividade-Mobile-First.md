@@ -106,3 +106,8 @@ Pode mostrar mais contexto e métricas sem transformar a tela em dashboard anal�
 Responsive design deve seguir:
 
 > **Adicionar contexto conforme o espaço aumenta**, e não “esconder problemas do desktop” quando o espaço diminui.
+
+## Relacionado
+
+- [[03-UX-UI/01-Principios-de-UX-UI]]
+- [[00-Produto/04-Navegacao-e-Modulos]]

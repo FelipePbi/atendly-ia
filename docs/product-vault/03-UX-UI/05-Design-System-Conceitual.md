@@ -116,3 +116,8 @@ Motion deve ser rápido, útil e respeitar redução de movimento quando aplicá
 O mesmo conceito deve usar o mesmo componente/padrão visual em todas as telas.
 
 Exemplo: `IA ativa` não pode parecer um switch em uma tela, um badge sem ação em outra e um card totalmente diferente numa terceira sem motivo claro.
+
+## Relacionado
+
+- [[03-UX-UI/01-Principios-de-UX-UI]]
+- [[03-UX-UI/04-Especificacao-das-Telas]]

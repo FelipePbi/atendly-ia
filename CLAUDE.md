@@ -1,38 +1,61 @@
 # CLAUDE.md — Atendly
 
-Arquivo de **roteamento**. As regras completas vivem na documentação; não copie o conteúdo delas para cá.
+Arquivo de **roteamento**, não base de conhecimento: diz onde procurar, não qual é a resposta.
+Guardrails de produto estão em `AGENTS.md`. Detalhe operacional em `docs/AI_WORKFLOW.md`.
 
-## Política de leitura de documentação
+## Roteamento
 
+| Pergunta | Fonte | Como |
+| --- | --- | --- |
+| Regra de negócio, decisão de produto, fluxo, UX/copy, domínio, feature | `docs/product-vault/` | busca dirigida, depois 1–3 notas |
+| Arquitetura conceitual, contratos, decisões técnicas, ADRs | `docs/PLANO_REFATORACAO.md`, `docs/architecture/`, `apps/bff/PUBLIC_API_V1.md`, `AGENTS.md`/README do app | abrir só o documento do tema |
+| Onde/como algo está implementado, call paths, dependências, impacto | Graphify | `graphify query "..." --budget 800` |
+| Output verboso de shell (git, testes, lint, build, logs) | RTK | automático — o hook `PreToolUse` reescreve o comando |
+
+Tarefa mista: **Product Vault → Graphify → 2–5 arquivos → implementar → RTK (lint/typecheck/testes/diff) → atualizar docs afetados**.
+
+## Leitura de documentação
+
+- `docs/product-vault/` é a base **canônica** de produto/negócio e um **Obsidian Vault** (abra a pasta no Obsidian). `graphify-out/` é o grafo de **código**. São dois grafos separados, de propósito — não tente unificá-los.
 - **Nunca** carregue `docs/**` ou `docs/product-vault/**` por inteiro. Nada de `cat docs/**/*.md`, varredura preventiva de `.md` ou "ler todo o vault" como etapa inicial.
-- Documentação é consultada **sob demanda**: identifique o conceito → localize 1–3 documentos prováveis → leia somente eles → siga links `[[...]]` apenas se a dúvida persistir. Se os primeiros documentos bastarem, pare a busca.
+- Consulta sob demanda: identifique o conceito → localize 1–3 documentos prováveis → leia só eles → siga `[[wikilinks]]` apenas se os primeiros forem insuficientes. Se bastarem, pare.
 - Antes de abrir mais um arquivo, pergunte: *isto pode mudar minha decisão ou implementação?* Se não, não leia.
-- Fluxo detalhado, tabela de roteamento por tema e política de sincronização: [`docs/AI_WORKFLOW.md`](docs/AI_WORKFLOW.md) — leia quando precisar, não por padrão.
+- O vault **não** é mapa de código — ele nunca diz qual arquivo editar. Graphify diz.
+- Fluxo detalhado, roteamento por tema e política de sincronização: `docs/AI_WORKFLOW.md` (leia quando precisar, não por padrão). Índice do vault: `docs/product-vault/00-HOME.md`.
 
-## Quando consultar
+## graphify
 
-Consulte antes de decidir quando a tarefa envolver produto, regra de negócio, fluxo, domínio, UX/copy, integração, multi-tenancy, autenticação, agendamento, WhatsApp, IA, importação, persistência, decisão técnica anterior ou comportamento cujo motivo não esteja evidente no código.
+Este projeto tem um grafo de conhecimento em `graphify-out/` com god nodes, comunidades e relações entre arquivos.
 
-| Necessidade | Fonte |
-| --- | --- |
-| Produto, regras, fluxos, UX/UI | `docs/product-vault/` (índice: `docs/product-vault/00-HOME.md`) |
-| Arquitetura, contratos, decisões técnicas | `docs/` (`PLANO_REFATORACAO.md`, ADRs em `docs/architecture/`), `apps/bff/PUBLIC_API_V1.md`, `AGENTS.md`/README do app |
-| Guardrails globais de trabalho | `AGENTS.md` na raiz — leia antes de alterar comportamento, copy ou interface |
-| Onde algo está implementado, símbolos, dependências | Graphify (`GRAPHIFY_WORKSPACE_MAP.md`) |
-| Busca textual pontual | RTK `grep`/`find` |
-| Shell, testes, build, git | RTK |
+- Para perguntas sobre o código, rode primeiro `graphify query "<pergunta>" --budget 800` quando `graphify-out/graph.json` existir. Suba para `--budget 1500` só se insuficiente e `--budget 2500` só em perguntas realmente complexas. Use `graphify path "<A>" "<B>"` para relações, `graphify explain "<conceito>"` para conceitos focados e `graphify affected "<X>"` para análise de impacto. Isso devolve um subgrafo escopado, normalmente muito menor que `GRAPH_REPORT.md` ou grep cru.
+- Leia `graphify-out/GRAPH_REPORT.md` apenas em revisão ampla de arquitetura ou quando query/path/explain não trouxerem contexto suficiente.
+- O grafo cobre **código apenas**. `docs/product-vault/` e código vendorizado (`apps/evolution-go/whatsmeow-lib/`) são excluídos de propósito — ver `.graphifyignore`.
+- O grafo é atualizado pelos hooks git post-commit/post-checkout. Rode `graphify update .` (AST-only, sem custo de API) só quando precisar dele atualizado antes de commitar. Nunca rode rebuild completo `graphify extract --mode deep` sem pedido explícito.
+- Não use Graphify profundo para entender regra que já está documentada.
 
-Graphify e RTK continuam válidos e **não** são fonte de verdade de produto. Documentação responde *como deve funcionar e por quê*; Graphify responde *como está implementado e onde*. Para dúvidas estritamente de localização de código, comece pelo Graphify.
+## RTK
+
+RTK compacta output verboso. O hook global `PreToolUse` reescreve comandos Bash automaticamente (`git status` → `rtk git status`), então basta rodar o comando normal.
+
+- Use `rtk grep` / `rtk find` / `rtk read` explicitamente quando a busca puder retornar muito output.
+- Use as ferramentas nativas `Read` / `Grep` / `Glob` quando o alvo for pequeno e específico — o objetivo é o menor custo **líquido** de tokens, não uso máximo de RTK.
+- `rtk gain` reporta a economia acumulada.
 
 ## Divergência entre documentação e código
 
-Não escolha um dos dois em silêncio. Determine se o código está defasado, se a documentação está defasada ou se existe decisão mais recente (`docs/product-vault/04-Referencia/02-Decisoes-Substituidas.md`). Resolva dentro do escopo da tarefa quando for possível; caso contrário, informe a divergência.
+Não escolha um dos dois em silêncio. Determine se o código está defasado, se a documentação está defasada, se houve mudança incompleta ou se existe decisão mais recente (`docs/product-vault/04-Referencia/02-Decisoes-Substituidas.md`). Resolva dentro do escopo da tarefa quando for possível; caso contrário, informe a divergência.
 
 ## Manutenção da documentação
 
 Ao concluir uma alteração, verifique: *ela faz algum documento vigente mentir, ficar incompleto ou induzir agente/desenvolvedor ao erro?*
 
-- **Sim** → atualize apenas os documentos afetados, sem esperar pedido explícito.
+- **Sim** → atualize apenas os documentos afetados, sem esperar pedido explícito (arquitetura, regra, contrato, integração, fluxo, domínio, API, persistência, decisão técnica, feature documentada).
 - **Não** → não toque na documentação. Refactor interno, rename local, formatação, lint, typo em código e teste sem mudança de comportamento não geram atualização de docs.
 
 Prefira atualizar documento existente a criar novo. Documente conceitos, decisões, contratos, regras e fluxos — nunca implementação linha a linha.
+
+## Regras de trabalho
+
+- Leia apenas os arquivos de que realmente precisa; prefira `graphify query` a grep exploratório.
+- Não commite nem faça push sem pedido explícito.
+- `AGENTS.md` guarda os guardrails inegociáveis do produto — vence documentação e código defasados; `docs/product-vault/` vence `AGENTS.md` no detalhe de produto.

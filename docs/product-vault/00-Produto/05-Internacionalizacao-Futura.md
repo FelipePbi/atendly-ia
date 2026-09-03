@@ -51,3 +51,8 @@ Não adicionar agora:
 - seção “Regional”.
 
 Esses controles aparecem somente quando existirem opções reais para o usuário escolher.
+
+## Relacionado
+
+- [[04-Referencia/03-Temas-Adiados]]
+- [[03-UX-UI/06-Copy-e-Linguagem]]

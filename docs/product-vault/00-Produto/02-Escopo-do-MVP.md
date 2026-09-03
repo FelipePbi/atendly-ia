@@ -149,3 +149,9 @@ Não criar infraestrutura especial de beta apenas para esse momento.
 Não implementar camada comercial antes da validação prática.
 
 Hipóteses futuras como “Agenda básica” e “Agenda + IA + automações” ficam deliberadamente em aberto até observar uso real.
+
+## Relacionado
+
+- [[00-Produto/01-Visao-do-Produto]]
+- [[01-Regras/01-Regras-de-Negocio]]
+- [[04-Referencia/03-Temas-Adiados]]

@@ -50,3 +50,13 @@ Thumbs.db
 !/apps/evolution-go/manager/
 !/apps/evolution-go/manager/dist/
 !/apps/evolution-go/manager/dist/**
+
+# Obsidian vault (docs/product-vault): version the portable settings, ignore machine state.
+docs/product-vault/.obsidian/workspace.json
+docs/product-vault/.obsidian/workspace-mobile.json
+docs/product-vault/.obsidian/cache
+docs/product-vault/.obsidian/graph.json
+docs/product-vault/.obsidian/hotkeys.json
+docs/product-vault/.obsidian/plugins/
+docs/product-vault/.obsidian/themes/
+docs/product-vault/.trash/

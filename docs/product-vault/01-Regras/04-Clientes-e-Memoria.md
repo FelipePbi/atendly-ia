@@ -123,3 +123,8 @@ O resumo só pode considerar informações que a IA está autorizada a utilizar.
 Tags manuais fazem parte do MVP.
 
 A IA só pode considerar uma tag na conversa quando essa tag estiver autorizada para uso pela IA.
+
+## Relacionado
+
+- [[01-Regras/03-IA-e-Conversas]]
+- [[01-Regras/08-Privacidade-e-Retencao]]

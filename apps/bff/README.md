@@ -1,158 +1,59 @@
 # Atendly BFF
 
-## Purpose
+Backend público consumido pela aplicação web Atendly.
 
-Backend público da aplicação web Atendly. A Public API V1 é o único contrato web registrado; o BFF resolve tenant pela sessão e orquestra serviços internos sem expor suas APIs ao browser.
+## Contexto de produto vigente
 
-## Current responsibilities
+A API pública deve suportar a experiência definida em `../../docs/product-vault/`.
 
-`CURRENT`:
+Regras centrais que substituem premissas antigas:
 
-- cadastro, login, logout, sessão por cookie, troca e recuperação de senha;
-- aceite versionado de Termos de Uso e Política de Privacidade;
-- onboarding e perfil;
-- business settings, configurações da atendente e automação;
-- lifecycle da instância WhatsApp, QR/pairing e contatos;
-- agregação de dashboard e adaptação dos contratos web de conversas, agenda, clientes, serviços e migração;
-- persistência somente de auth, perfil, settings e conexão WhatsApp no PostgreSQL próprio;
-- clients explícitos para AI Orchestrator, Scheduling Service e Evolution Go.
+- Agenda Atendly é a única agenda operacional;
+- Minha Agenda é somente origem de uma única importação;
+- não existe sincronização/reimportação/troca de fonte como comportamento de produto;
+- IA usa estilos Profissional / Equilibrada / Descontraída;
+- um negócio usa um único número de WhatsApp;
+- inbox: Comercial / Não classificadas / Pessoal;
+- estados de atendimento: IA atendendo / Aguardando você / Você atendendo.
 
-Frontend de produto consome estes endpoints. Preview visual continua isolado em mocks.
+## Superfícies de produto
 
-## Target responsibilities
+O frontend precisa de capacidades para:
 
-`TARGET`:
+- autenticação e conta;
+- onboarding;
+- negócio/configurações;
+- WhatsApp e ativação;
+- Home;
+- conversas;
+- agenda/agendamentos;
+- clientes;
+- serviços;
+- importação única;
+- notificações;
+- retenção e preferências relevantes.
 
-- auth e session;
-- tenant resolution;
-- legal acceptance;
-- business/account profile;
-- API exclusiva do frontend;
-- response aggregation;
-- clients de serviços internos;
-- lifecycle/configuração WhatsApp.
+Este README não define contratos HTTP ou ownership técnico. Consulte documentação técnica/código atual para esses detalhes.
 
-Ao criar ou reconectar uma instância, o BFF provisiona `ChannelConnection`, sincroniza a configuração tenant-aware da IA e aponta o webhook de mensagens para o AI Orchestrator.
+## Importação
 
-BFF não será owner de Conversation, Message, Handoff, Appointment, Availability, scheduling, RAG ou LLM orchestration.
+Qualquer endpoint/contrato de integração antigo deve ser interpretado à luz da regra atual:
 
-## Stack
+`analisar → preview → importar → revisar pendências → concluir definitivamente`
 
-- Node.js 20+;
-- Fastify 5;
-- TypeScript strict;
-- Zod;
-- Prisma 7 + PostgreSQL;
-- cookie de sessão com JWT via `jose`;
-- bcrypt;
-- CORS e rate limiting;
-- Vitest existente.
+Depois da conclusão, o produto não oferece nova importação.
 
-## Architecture
+## Segurança de UX
 
-`CURRENT`:
+O BFF não deve induzir o frontend a:
 
-```text
-Frontend → BFF → PostgreSQL do BFF
-             ├─→ AI Orchestrator
-             ├─→ Scheduling Service
-             └─→ Evolution Go
+- confirmar agendamento antes de sucesso real;
+- mostrar sincronização inexistente;
+- tratar erro de agenda/IA como sucesso;
+- expor detalhes técnicos ao usuário final.
 
-Evolution Go → AI Orchestrator
-```
+## Fonte de verdade
 
-`TARGET`:
-
-```text
-Frontend → BFF → explicit service clients
-                   ├─ AI Orchestrator
-                   ├─ Scheduling Service
-                   └─ Evolution Go
-```
-
-Clients validam respostas com Zod, propagam request ID e contexto tenant confiável, têm timeout e fazem retry limitado somente em leituras. Mutações não são repetidas automaticamente.
-
-## Database
-
-Prisma schema: `prisma/schema.prisma`. Fundação multi-tenant contém `Tenant`, `TenantMember` e `BusinessProfile`. Cadastro cria `User`, tenant, membership `OWNER`, perfil inicial e aceite legal na mesma transação. Migration do GOAL 03 cria um tenant determinístico para cada usuário legado ainda sem membership.
-
-`BusinessProfile` e `AiSettings` são tenant-scoped. `AiSettings` aceita somente os dois tons aprovados na V1. Conversation, Message e AiSuppressionLog foram removidos no GOAL 15; configurações paralelas de persona e negócio foram removidas no GOAL 17.
-
-No alvo, BFF acessa somente tabelas do próprio domínio. Nunca compartilhe Prisma nem consulte DB de Scheduling Service ou AI Orchestrator.
-
-## Auth/session
-
-- Cookie padrão: `atendly_session`;
-- JWT configurado por `JWT_SECRET` e `JWT_EXPIRES_IN`;
-- produção rejeita secret default/fraco;
-- rotas de domínio usam usuário autenticado atual.
-
-Fluxo tenant atual no BFF:
-
-```text
-session → TenantMember → TenantContext
-```
-
-JWT continua contendo `userId`. Rotas autenticadas resolvem `TenantContext` server-side; `GET /v1/auth/session` retorna tenant e `BusinessProfile`. Nunca autorize por `tenantId` arbitrário recebido do browser.
-
-## Public API V1
-
-Saúde:
-
-- `GET /health`
-- `GET /health/dependencies`
-
-- `/v1/auth/*`: registro, login, logout, sessão, senha e recuperação;
-- `/v1/onboarding*` e `/v1/settings*`: configuração guiada e settings;
-- `/v1/dashboard`: visão agregada em paralelo de IA, agenda, calendário e WhatsApp;
-- `/v1/conversations*`: inbox, mensagens e handoff;
-- `/v1/calendar*`, `/v1/appointments*`, `/v1/time-blocks*`: agenda;
-- `/v1/customers*` e `/v1/services*`: diretório e catálogo;
-- `/v1/calendar/integration*` e `/v1/calendar/migrations*`: integração e migração assistida;
-- `/v1/whatsapp*`: lifecycle da conexão.
-
-O mapa completo entre endpoints e consumidores planejados está em `PUBLIC_API_V1.md`. Fora de `/v1`, apenas health checks permanecem registrados.
-
-## Environment
-
-Copie `.env.example` para `.env`.
-
-Grupos:
-
-- runtime/session: `NODE_ENV`, `PORT`, `JWT_*`, `SESSION_COOKIE_NAME`, `COOKIE_*`;
-- persistence: `DATABASE_URL` para runtime e `DIRECT_DATABASE_URL` para migrations;
-- browser boundary: `FRONTEND_ORIGIN`;
-- APIs internas: `AI_ORCHESTRATOR_BASE_URL`, `SCHEDULING_SERVICE_BASE_URL`, `INTERNAL_SERVICE_TOKEN`, `INTERNAL_HTTP_TIMEOUT_MS`, `INTERNAL_HTTP_GET_RETRIES`;
-- Evolution Go: `EVOLUTION_GO_*`, `EVOLUTION_WEBHOOK_SECRET`.
-- recuperação de senha: `PASSWORD_RESET_*`.
-
-Não registre valores dessas variáveis em logs.
-
-Em Neon, mantenha `DATABASE_URL` pooled no runtime e configure
-`DIRECT_DATABASE_URL` sem o sufixo `-pooler` para `prisma migrate deploy`.
-
-## Commands
-
-```bash
-npm ci
-npm run dev
-npm run check
-npm run build
-npm test
-npm run prisma:generate
-npm run prisma:migrate
-npm run prisma:deploy
-npm run start
-```
-
-Porta padrão: `3002`.
-
-## Migration notes
-
-- GOAL 03: multi-tenancy BFF.
-- GOAL 11: Public API V1 orientada por consumidores reais.
-- GOAL 12+: integração progressiva do frontend.
-- Conversation, Message e Handoff pertencem ao AI Orchestrator.
-- Agenda, clientes, serviços e appointments pertencem ao Scheduling Service.
-- GOAL 16: dashboard real e migração assistida com diagnóstico, criação por `migrationId` e consulta de progresso persistido.
-- GOAL 17: implementações legadas, modelos duplicados e rotas internas sem consumidor removidos.
+- `../../docs/product-vault/00-HOME.md`
+- `AGENTS.md` local
+- `../../AGENTS.md`

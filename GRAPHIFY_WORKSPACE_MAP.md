@@ -2,39 +2,33 @@
 
 ## Projetos
 
-| Projeto | Responsabilidade | Tecnologia / entrypoint |
-| --- | --- | --- |
-| `apps/frontend` | Interface web aprovada; ainda com mocks | Next.js / `src/app` |
-| `apps/bff` | API pública web e responsabilidades transitórias | Fastify / `src/server.ts` |
-| `apps/ai-orchestrator` | Conversas, mensagens, handoff e execução de IA | Fastify / `src/server.ts` |
-| `apps/scheduling-service` | Agenda, serviços, clientes, disponibilidade e appointments | Fastify / `src/server.ts` |
-| `apps/evolution-go` | Transporte WhatsApp | Go / módulos Go |
-| `apps/health-worker` | Monitoramento de saúde | Node / `src/index.js` |
-| `apps/frontend-open-design` | Contrato visual de referência, não runtime | HTML/CSS/JS |
+| Projeto | Responsabilidade de alto nível |
+| --- | --- |
+| `apps/frontend` | Interface web do produto |
+| `apps/bff` | Backend público consumido pelo frontend |
+| `apps/ai-orchestrator` | Conversas, handoff e execução da IA |
+| `apps/scheduling-service` | Agenda, serviços, clientes, disponibilidade e agendamentos |
+| `apps/evolution-go` | Transporte WhatsApp |
+| `apps/health-worker` | Monitoramento de saúde |
+| `apps/frontend-open-design` | Referência/prototipação visual |
 
-## Dependências e fluxos
+## Regra de produto que impacta a descoberta
 
-- Web alvo: Frontend → BFF → AI Orchestrator, Scheduling Service e Evolution Go.
-- WhatsApp inbound: Evolution Go → AI Orchestrator → Scheduling Service quando necessário → Evolution Go.
-- Frontend atual usa `Mock*Service`; não chama serviços internos diretamente.
-- `packages/legal-contract` e `packages/contracts` são contratos compartilhados.
+- Agenda Atendly é a única agenda operacional.
+- Minha Agenda deve ser procurada apenas em contexto de **importação/migração única** ou legado técnico a remover/reavaliar.
+- Referências a `calendar source`, `sync`, `external calendar`, `Minha Agenda provider` ou `Agenda Atendly vs Minha Agenda` podem representar premissas antigas e devem ser verificadas contra `docs/product-vault/`.
 
-## Banco e integrações
+## Onde procurar regras
 
-- BFF, AI Orchestrator e Scheduling Service: Prisma/PostgreSQL; AI Orchestrator também usa pgvector.
-- Integrações: WhatsApp via Evolution Go; calendário via Agenda Atendly ou Minha Agenda, uma fonte oficial por tenant.
-- Infraestrutura: `render.yaml`, Docker em Evolution Go e AI Orchestrator.
+- Produto/UX: `docs/product-vault/00-HOME.md`.
+- Regras de agenda: `docs/product-vault/01-Regras/02-Agenda-e-Agendamentos.md`.
+- IA/conversas: `docs/product-vault/01-Regras/03-IA-e-Conversas.md`.
+- WhatsApp: `docs/product-vault/01-Regras/05-WhatsApp.md`.
+- Importação: `docs/product-vault/01-Regras/06-Importacao-Minha-Agenda.md`.
+- UX/UI: `docs/product-vault/03-UX-UI/`.
 
-## Onde procurar
+## Graphify
 
-- Regras de produto: `docs/CONTEXTO_PRODUTO_ATENDLY.md`.
-- UX: `docs/ESPECIFICACAO_TELAS_UX_ATENDLY.md` e `apps/frontend-open-design`.
-- Migração: `docs/ROADMAP_INTEGRACAO_V1.md` e `docs/goals`.
-- Configuração e comandos: `package.json`, manifests de cada app e `render.yaml`.
+Graphify descreve o código atual. Ele não substitui a documentação de produto.
 
-## Grafos Graphify
-
-- Grafo compartilhado: `graphify-out/graph.json`.
-- Visual: `graphify-out/graph.html`.
-- Manifest incremental: `graphify-out/manifest.json`.
-- Atualização: `graphify update .`; hooks Git fazem atualização AST após commit/checkout.
+Quando o grafo revelar implementação conflitante com o product vault, trate-a como dívida/alinhamento necessário, não como evidência de que a regra antiga continua válida.

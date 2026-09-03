@@ -1,46 +1,39 @@
 # AGENTS.md — BFF
 
-## Estado
+## Contexto de produto
 
-BFF está em transição. Leia `/AGENTS.md` e goal atual antes de alterar.
+O BFF deve expor ao frontend comportamentos compatíveis com `../../docs/product-vault/`.
 
-## Target responsibilities
+Este arquivo não redefine arquitetura técnica; apenas fixa as premissas de produto que não podem ser contrariadas por contratos públicos ou mocks.
 
-- Auth e session.
-- Tenant resolution.
-- Legal acceptance.
-- Business/account profile.
-- Frontend API e response aggregation.
-- Backend clients.
-- WhatsApp lifecycle/configuration.
+## Premissas obrigatórias
 
-## Non-ownership alvo
+- Agenda Atendly é a única agenda operacional.
+- Minha Agenda só participa de uma única importação.
+- Não criar/continuar contrato público de “calendar source ativo”, sincronização, reimportação ou troca de provider por decisão de produto antiga.
+- Um negócio utiliza um número de WhatsApp.
+- IA pode estar ativa, pausada ou com instabilidade.
+- Conversas precisam suportar Comercial / Não classificadas / Pessoal e estados de atendimento humano/IA.
+- Cliente pode existir sem telefone em casos manuais específicos.
+- Serviços suportam preço fixo, a partir de, sob consulta e sem preço informado.
 
-BFF não será owner de Conversation, Message, Handoff, Appointment, Availability, service scheduling, RAG ou LLM orchestration.
-Algumas dessas responsabilidades ainda existem no código atual.
+## Contratos de produto
 
-Do not delete transitional legacy responsibilities until the explicit migration goal that replaces them.
+Não desenhar API/DTO novo neste arquivo. Ao criar ou alterar contrato real, derive os campos do comportamento vigente e documente a decisão técnica separadamente.
 
-## Segurança e tenant
+## Erros
 
-Resolução futura obrigatória:
+O frontend nunca deve receber um resultado que force interpretação de falha como sucesso.
 
-```text
-session → TenantMember → TenantContext
-```
+Operações de agenda precisam permitir UX segura para:
 
-Nunca confie em `tenantId` arbitrário do browser. Autorização deriva de sessão e membership validada.
+- confirmação apenas após conclusão real;
+- remarcação sem liberar horário antigo antes da nova confirmação;
+- cancelamento preservando histórico;
+- estados de indisponibilidade/erro compreensíveis.
 
-## Database
+## Fonte
 
-BFF acessa somente seu domínio. Não acesse DB futuro de Scheduling Service ou AI Orchestrator diretamente. Não compartilhe Prisma entre serviços.
-
-## Internal clients
-
-Integrações futuras usam clients explícitos, introduzidos somente no goal correto:
-
-- `AiOrchestratorClient`
-- `SchedulingClient`
-- `EvolutionClient`
-
-Crie rota pública somente para consumidor real no frontend. Preserve contratos legados ainda consumidos até sua migração explícita.
+- `../../docs/product-vault/00-HOME.md`
+- `../../docs/product-vault/01-Regras/`
+- `../../docs/product-vault/02-Fluxos/`

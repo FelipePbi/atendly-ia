@@ -4019,18 +4019,6 @@
     "ast_hash": "04f6367990e8ebc027616de2aa1be59c",
     "semantic_hash": ""
   },
-  "docs/CONTEXTO_PRODUTO_ATENDLY.md": {
-    "mtime": 1787607097.2219963,
-    "seen": 1788199059.233895,
-    "ast_hash": "55eb13d8f97bfe69fcd697a9c0dec34f",
-    "semantic_hash": ""
-  },
-  "docs/GOAL ATUAL.md": {
-    "mtime": 1787919371.8211112,
-    "seen": 1788199059.2338984,
-    "ast_hash": "0b41ba7e934da20dbf30d65692737a9b",
-    "semantic_hash": ""
-  },
   "docs/PLANO_REFATORACAO.md": {
     "mtime": 1787878219.5316014,
     "seen": 1788199059.233899,
@@ -4485,6 +4473,186 @@
     "mtime": 1788289111.509081,
     "seen": 1788289234.8092816,
     "ast_hash": "523e0cd7c76d5a1db47920d9cf9b5d48",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/00-HOME.md": {
+    "mtime": 1788398990.3609765,
+    "seen": 1788399017.9805179,
+    "ast_hash": "8b37a24ea7eeefcfdb10d06730ecb1f5",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/00-Produto/01-Visao-do-Produto.md": {
+    "mtime": 1788398990.4243045,
+    "seen": 1788399017.980519,
+    "ast_hash": "637f968a2440f053435de2899f038f16",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/00-Produto/02-Escopo-do-MVP.md": {
+    "mtime": 1788398990.4403381,
+    "seen": 1788399017.98052,
+    "ast_hash": "d030b7729bb78c9360a977c820bc529d",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/00-Produto/03-Publico-e-Proposta-de-Valor.md": {
+    "mtime": 1788398990.4403381,
+    "seen": 1788399017.9805205,
+    "ast_hash": "5e8020dac64f7fdfde9f326da7312480",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/00-Produto/04-Navegacao-e-Modulos.md": {
+    "mtime": 1788398990.4243045,
+    "seen": 1788399017.980521,
+    "ast_hash": "3c2074afd6991966b8e6c9c2218647bd",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/00-Produto/05-Internacionalizacao-Futura.md": {
+    "mtime": 1788398990.4403381,
+    "seen": 1788399017.9805212,
+    "ast_hash": "54a94531e9c2afefdd9745723fc783ce",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/01-Regras/01-Regras-de-Negocio.md": {
+    "mtime": 1788398990.3842702,
+    "seen": 1788399017.9805217,
+    "ast_hash": "a0c3884cdbe781749969390ce420817b",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/01-Regras/02-Agenda-e-Agendamentos.md": {
+    "mtime": 1788398990.376851,
+    "seen": 1788399017.9805222,
+    "ast_hash": "17c36184335931afb9ced1d0e43e8b44",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/01-Regras/03-IA-e-Conversas.md": {
+    "mtime": 1788398990.3927608,
+    "seen": 1788399017.9805224,
+    "ast_hash": "979692660a77f96eff95ff391f035283",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/01-Regras/04-Clientes-e-Memoria.md": {
+    "mtime": 1788398990.3927608,
+    "seen": 1788399017.980523,
+    "ast_hash": "6d9f0b8d77361a409c19ed6a1306d534",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/01-Regras/05-WhatsApp.md": {
+    "mtime": 1788398990.3927608,
+    "seen": 1788399017.9805236,
+    "ast_hash": "b31b80a7747cc05395963e1088491634",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/01-Regras/06-Importacao-Minha-Agenda.md": {
+    "mtime": 1788398990.3842702,
+    "seen": 1788399017.980524,
+    "ast_hash": "a23fb31c264df1c9b0e9d0435533a47e",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/01-Regras/07-Lembretes-Notificacoes-e-Instabilidade.md": {
+    "mtime": 1788398990.3927608,
+    "seen": 1788399017.9805245,
+    "ast_hash": "6b06a3c8c76ddec21ffefa0d0d48e0a7",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/01-Regras/08-Privacidade-e-Retencao.md": {
+    "mtime": 1788398990.3927608,
+    "seen": 1788399017.980525,
+    "ast_hash": "4e9d0f128276dad482b53661d2ac49fd",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/02-Fluxos/01-Onboarding.md": {
+    "mtime": 1788398990.4403381,
+    "seen": 1788399017.9805257,
+    "ast_hash": "30ef4f00d02cc7aa8fb15d38c494a13b",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/02-Fluxos/02-Ativacao-e-Teste-do-WhatsApp.md": {
+    "mtime": 1788398990.456261,
+    "seen": 1788399017.980526,
+    "ast_hash": "4f9376282803d361732c336cbd7d6cb1",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/02-Fluxos/03-Fluxos-de-Agendamento.md": {
+    "mtime": 1788398990.456261,
+    "seen": 1788399017.9805267,
+    "ast_hash": "326fc98660d6d6b54bb16c0065cb8e74",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/02-Fluxos/04-Handoff-e-Atendimento-Humano.md": {
+    "mtime": 1788398990.456261,
+    "seen": 1788399017.9805272,
+    "ast_hash": "bfd803519a81aab4591049675bda133a",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/02-Fluxos/05-Importacao-Unica.md": {
+    "mtime": 1788398990.456261,
+    "seen": 1788399017.9805276,
+    "ast_hash": "2f72fa63ab4cf8ece6655bd04a355de0",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/03-UX-UI/01-Principios-de-UX-UI.md": {
+    "mtime": 1788398990.4084527,
+    "seen": 1788399017.980528,
+    "ast_hash": "32ffe56bb6842d2f38c84d7f25a4f0d7",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/03-UX-UI/02-Responsividade-Mobile-First.md": {
+    "mtime": 1788398990.4084527,
+    "seen": 1788399017.9805284,
+    "ast_hash": "795d526827bf935c610bf752b1308dab",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/03-UX-UI/03-Onboarding-UX.md": {
+    "mtime": 1788398990.4243045,
+    "seen": 1788399017.9805288,
+    "ast_hash": "9714086f1b74573b46c60d4dc372d35a",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/03-UX-UI/04-Especificacao-das-Telas.md": {
+    "mtime": 1788398990.4243045,
+    "seen": 1788399017.9805293,
+    "ast_hash": "233e989003f674279f69118ef81193e6",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/03-UX-UI/05-Design-System-Conceitual.md": {
+    "mtime": 1788398990.4084527,
+    "seen": 1788399017.98053,
+    "ast_hash": "8585086d6489297ef7ca62daff9c3d6f",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/03-UX-UI/06-Copy-e-Linguagem.md": {
+    "mtime": 1788398990.4084527,
+    "seen": 1788399017.9805305,
+    "ast_hash": "aaed78070b9cc4b1340a589954e38b73",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/04-Referencia/01-Glossario.md": {
+    "mtime": 1788398990.4722106,
+    "seen": 1788399017.980531,
+    "ast_hash": "a233079e89a844cd17aed03c7c0f8f70",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/04-Referencia/02-Decisoes-Substituidas.md": {
+    "mtime": 1788398990.4722106,
+    "seen": 1788399017.9805315,
+    "ast_hash": "e857ef7f58bb2c04624140b9ee9d4939",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/04-Referencia/03-Temas-Adiados.md": {
+    "mtime": 1788398990.4722106,
+    "seen": 1788399017.980532,
+    "ast_hash": "dddb6a454b8269ae26c0c76ac283fcee",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/04-Referencia/99-Perguntas-e-Respostas.md": {
+    "mtime": 1788398990.4722106,
+    "seen": 1788399017.9805324,
+    "ast_hash": "3dc846e6e0511d6398b91580734b103f",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/README.md": {
+    "mtime": 1788398990.376851,
+    "seen": 1788399017.980533,
+    "ast_hash": "214df04015a102571beb5a3942416d22",
     "semantic_hash": ""
   }
 }

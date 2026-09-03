@@ -1,34 +1,43 @@
 # Documentação Atendly
 
-## Produto
+## Fonte de verdade de produto
 
-- [CONTEXTO_PRODUTO_ATENDLY.md](CONTEXTO_PRODUTO_ATENDLY.md) — visão, escopo e regras de negócio.
-- [ESPECIFICACAO_TELAS_UX_ATENDLY.md](ESPECIFICACAO_TELAS_UX_ATENDLY.md) — telas, fluxos e estados UX/UI.
+Toda decisão vigente de produto e UX/UI está em:
 
-## Design
+- [`product-vault/00-HOME.md`](product-vault/00-HOME.md)
 
-- [DESIGN.md](DESIGN.md) — design system.
-- [UI_UX_PROTOTYPE_GUIDELINES.md](UI_UX_PROTOTYPE_GUIDELINES.md) — guia histórico da prototipação.
-- [Open Design handoff](../apps/frontend-open-design/DESIGN-HANDOFF.md) — contrato visual principal.
-- [Open Design manifest](../apps/frontend-open-design/DESIGN-MANIFEST.json) — mapa machine-readable das telas.
+O `product-vault` substitui documentos históricos de contexto de produto, especificação de telas e decisões antigas de integração.
 
-## Engenharia e migração
+## Como navegar
 
-- [ROADMAP_INTEGRACAO_V1.md](ROADMAP_INTEGRACAO_V1.md) — sequência, dependências e status dos 18 goals.
-- [goals/](goals/) — escopo detalhado de cada goal.
-- [PLANO_REFATORACAO.md](PLANO_REFATORACAO.md) — plano técnico de referência.
+### Produto
 
-## Apps
+- `product-vault/00-Produto/`
+- `product-vault/01-Regras/`
+- `product-vault/02-Fluxos/`
 
-- [Frontend](../apps/frontend/README.md)
-- [BFF](../apps/bff/README.md)
-- [AI Orchestrator](../apps/ai-orchestrator/README.md)
-- [Scheduling Service](../apps/scheduling-service/README.md)
-- [Evolution Go](../apps/evolution-go/README.md)
-- [Health worker](../apps/health-worker/README.md)
+### UX/UI
 
-## Instruções para agentes
+- `product-vault/03-UX-UI/`
 
-- [AGENTS raiz](../AGENTS.md) — mapa, invariantes, fontes e guardrails globais.
-- Scoped `AGENTS.md`: `apps/frontend`, `apps/bff`, `apps/ai-orchestrator`, `apps/scheduling-service`, `apps/evolution-go` e `apps/health-worker`.
-- `apps/frontend-open-design/AGENTS.md` rege somente contrato histórico de prototipação dentro daquele diretório.
+### Rastreabilidade
+
+- `product-vault/04-Referencia/02-Decisoes-Substituidas.md`
+- `product-vault/04-Referencia/99-Perguntas-e-Respostas.md`
+
+## Documentos auxiliares deste repositório
+
+- [`PLANO_REFATORACAO.md`](PLANO_REFATORACAO.md) — plano para alinhar produto/protótipo/código à especificação atual, sem decidir arquitetura nova.
+- [`ROADMAP_INTEGRACAO_V1.md`](ROADMAP_INTEGRACAO_V1.md) — documento histórico; não deve mais governar produto.
+- [`UI_UX_PROTOTYPE_GUIDELINES.md`](UI_UX_PROTOTYPE_GUIDELINES.md) — instruções atualizadas para prototipação.
+- [`architecture/`](architecture/) — decisões técnicas existentes; devem ser reavaliadas separadamente quando contradisserem novas regras de produto.
+
+## Regra de precedência
+
+1. `docs/product-vault/`
+2. `AGENTS.md` raiz
+3. instruções locais do app
+4. documentação técnica vigente
+5. protótipos/READMEs históricos
+
+Não use documentação antiga para reintroduzir sincronização com Minha Agenda, múltiplas fontes de calendário ou regras substituídas.

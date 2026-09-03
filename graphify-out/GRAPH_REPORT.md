@@ -1,7 +1,7 @@
 # Graph Report - atendly-ia  (2026-09-03)
 
 ## Corpus Check
-- 443 files · ~654,165 words
+- 443 files · ~654,217 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `f1ef611c`
+- Built from commit: `d53b54ab`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -1265,20 +1265,20 @@ Cohesion: 0.67
 Nodes (3): Desktop, Mobile, Navegação vigente
 
 ## Knowledge Gaps
-- **1877 isolated node(s):** `Missão`, `Fonte soberana de produto`, `Agenda`, `WhatsApp`, `IA` (+1872 more)
+- **1877 isolated node(s):** `Documentação`, `Aplicações`, `Para agentes`, `Divisão de responsabilidades`, `Fluxo padrão` (+1872 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 2243 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **44 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `API de Instâncias` connect `API de Instâncias` to `Boas Práticas`, `Deletar Instância`, `api-overview.md`, `Criar Instância`, `Obter QR Code`, `Listar Todas as Instâncias`, `Informações da Instância`, `Remover Proxy`, `Configurações Avançadas`, `Conectar via Código de Pareamento`, `Fluxo Completo de Uso`, `Conectar Instância`, `Desconectar Instância`, `Reconectar Instância`, `Logout`, `Configurar Proxy`, `Forçar Reconexão`, `Status da Conexão`, `Obter Logs`, `Erros Comuns`?**
-  _High betweenness centrality (0.017) - this node is a cross-community bridge._
-- **Why does `DiagnosticLogger` connect `EvolutionProvider.ts` to `message-graph.ts`, `InboundMessageProcessor.ts`, `assistant.service.ts`?**
-  _High betweenness centrality (0.012) - this node is a cross-community bridge._
-- **Why does `Banco de Dados` connect `Banco de Dados` to `wiki/README.md`?**
-  _High betweenness centrality (0.011) - this node is a cross-community bridge._
-- **What connects `Missão`, `Fonte soberana de produto`, `Agenda` to the rest of the system?**
+- **Why does `Evolution GO - Changelog` connect `Evolution GO - Changelog` to `v0.5.2`, `v0.2.0`, `v0.6.1`, `📋 Migration Notes`, `v0.7.1`, `v0.4.7`, `v0.4.6`, `v0.6.0`, `v0.7.0`?**
+  _High betweenness centrality (0.016) - this node is a cross-community bridge._
+- **Why does `Visão Geral da API` connect `Visão Geral da API` to `api-overview.md`?**
+  _High betweenness centrality (0.015) - this node is a cross-community bridge._
+- **Why does `Sistema de Eventos` connect `Sistema de Eventos` to `RabbitMQ`, `Tipos de Eventos`, `WebSocket`, `api-overview.md`, `NATS`, `Exemplos Práticos`, `Formato de Payload`, `Webhook`, `Boas Práticas`?**
+  _High betweenness centrality (0.015) - this node is a cross-community bridge._
+- **What connects `Documentação`, `Aplicações`, `Para agentes` to the rest of the system?**
   _1877 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `evolutionWebhook.routes.ts` be split into smaller, more focused modules?**
   _Cohesion score 0.10037878787878787 - nodes in this community are weakly interconnected._

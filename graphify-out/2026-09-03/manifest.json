@@ -2214,21 +2214,21 @@
     "semantic_hash": "0fe5d9ade9c875e05a1af2d5bb9c3bf2"
   },
   "AGENTS.md": {
-    "mtime": 1788400687.9853308,
-    "seen": 1788400797.3391352,
-    "ast_hash": "72bffd89be6d24c872013ec9c78bee40",
+    "mtime": 1788402717.3264706,
+    "seen": 1788404499.1314158,
+    "ast_hash": "bb6e7553d5858e5101bf5d4aefc0949e",
     "semantic_hash": ""
   },
   "GRAPHIFY_WORKSPACE_MAP.md": {
-    "mtime": 1788401786.7329485,
-    "seen": 1788402517.8167615,
-    "ast_hash": "9872c25715c3d1a53435c25533cfca95",
+    "mtime": 1788403250.6863897,
+    "seen": 1788404499.1314173,
+    "ast_hash": "092548a859dffe4c1e4aef30d8bb266a",
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1788401786.7329485,
-    "seen": 1788402517.816763,
-    "ast_hash": "134f7f0c08f342ab6bd8c875752a62da",
+    "mtime": 1788403250.6863897,
+    "seen": 1788404499.1314182,
+    "ast_hash": "b4609fa55ccbcf1c09e73832ab01a387",
     "semantic_hash": ""
   },
   "apps/ai-orchestrator/AGENTS.md": {
@@ -3318,9 +3318,9 @@
     "semantic_hash": ""
   },
   "docs/README.md": {
-    "mtime": 1788401786.7329485,
-    "seen": 1788402517.8168766,
-    "ast_hash": "6327d2b2ceae6987a12559f78bf35223",
+    "mtime": 1788403250.6863897,
+    "seen": 1788404499.1315348,
+    "ast_hash": "415667982331856d14a16310102ee106",
     "semantic_hash": ""
   },
   "docs/UI_UX_PROTOTYPE_GUIDELINES.md": {
@@ -3708,15 +3708,27 @@
     "semantic_hash": "4b0a0dbbe0b55b191bd91e1cc81aee1a"
   },
   ".claude/settings.json": {
-    "mtime": 1788402622.5055366,
-    "seen": 1788402672.3576093,
-    "ast_hash": "c553d377c06e56b1079e2916954f07fc",
+    "mtime": 1788402677.2563462,
+    "seen": 1788404499.1311388,
+    "ast_hash": "6b5648b097c9cb03c49f2a5a7c0c1c83",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1788402656.9931407,
-    "seen": 1788402672.358091,
-    "ast_hash": "50dad9a5ad6093372cb1c17528287984",
+    "mtime": 1788403271.34217,
+    "seen": 1788404499.1314166,
+    "ast_hash": "58bed71a3a530cb00fda1ce0d7832c79",
+    "semantic_hash": ""
+  },
+  "docs/AI_WORKFLOW.md": {
+    "mtime": 1788402988.9841058,
+    "seen": 1788404499.1315334,
+    "ast_hash": "166961b5f8295636807ba94575fbb6cc",
+    "semantic_hash": ""
+  },
+  "docs/architecture/README.md": {
+    "mtime": 1788402732.3821287,
+    "seen": 1788404499.1315365,
+    "ast_hash": "20ee86a4bfe2bee53a1c73491eec7d61",
     "semantic_hash": ""
   }
 }

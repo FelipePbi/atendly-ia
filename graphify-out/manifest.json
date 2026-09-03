@@ -2226,9 +2226,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1788403250.6863897,
-    "seen": 1788404499.1314182,
-    "ast_hash": "b4609fa55ccbcf1c09e73832ab01a387",
+    "mtime": 1788404739.221585,
+    "seen": 1788404898.3293326,
+    "ast_hash": "56a19a9edc3fc16034b5ca9e366aaf31",
     "semantic_hash": ""
   },
   "apps/ai-orchestrator/AGENTS.md": {
@@ -3318,9 +3318,9 @@
     "semantic_hash": ""
   },
   "docs/README.md": {
-    "mtime": 1788403250.6863897,
-    "seen": 1788404499.1315348,
-    "ast_hash": "415667982331856d14a16310102ee106",
+    "mtime": 1788404763.0702608,
+    "seen": 1788404898.3295562,
+    "ast_hash": "be620f63f303c3ee404e91baeaf2a539",
     "semantic_hash": ""
   },
   "docs/UI_UX_PROTOTYPE_GUIDELINES.md": {
@@ -3720,9 +3720,9 @@
     "semantic_hash": ""
   },
   "docs/AI_WORKFLOW.md": {
-    "mtime": 1788402988.9841058,
-    "seen": 1788404499.1315334,
-    "ast_hash": "166961b5f8295636807ba94575fbb6cc",
+    "mtime": 1788404754.0905812,
+    "seen": 1788404898.3295538,
+    "ast_hash": "48948dbcac791d046401377b00829d4f",
     "semantic_hash": ""
   },
   "docs/architecture/README.md": {

@@ -2886,33 +2886,33 @@
     "semantic_hash": ""
   },
   "AGENTS.md": {
-    "mtime": 1788294248.8607018,
-    "seen": 1788398633.2183506,
-    "ast_hash": "327d525d8a26df932b634f856711aab4",
+    "mtime": 1788400687.9853308,
+    "seen": 1788400797.3391352,
+    "ast_hash": "72bffd89be6d24c872013ec9c78bee40",
     "semantic_hash": ""
   },
   "GRAPHIFY_WORKSPACE_MAP.md": {
-    "mtime": 1788198955.4093995,
-    "seen": 1788199059.2337966,
-    "ast_hash": "aa26112d5d16e1e6f610d1f23eb36706",
+    "mtime": 1788400687.9853308,
+    "seen": 1788400797.3391366,
+    "ast_hash": "94e633cb8e50dc3c3b1349a7c124ccf6",
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1788034129.8980255,
-    "seen": 1788199059.233797,
-    "ast_hash": "0ad7ab8fa7eddf839d0046688088ecd7",
+    "mtime": 1788400688.0049183,
+    "seen": 1788400797.3391373,
+    "ast_hash": "b8b503e89011dc69229de3430f61d59c",
     "semantic_hash": ""
   },
   "apps/ai-orchestrator/AGENTS.md": {
-    "mtime": 1788226142.0101745,
-    "seen": 1788264507.2976317,
-    "ast_hash": "51c7717162e73a7882f56cb6172889cd",
+    "mtime": 1788400713.516225,
+    "seen": 1788400797.339139,
+    "ast_hash": "a7befa75cb540cee18bb90c7c3f9b128",
     "semantic_hash": ""
   },
   "apps/ai-orchestrator/README.md": {
-    "mtime": 1788226030.2254834,
-    "seen": 1788264507.2976325,
-    "ast_hash": "903ea0ac7a04b28c9cc61452515430b9",
+    "mtime": 1788400713.5112114,
+    "seen": 1788400797.33914,
+    "ast_hash": "7ab98118531bb2c9ba547cf225c32508",
     "semantic_hash": ""
   },
   "apps/ai-orchestrator/docker-compose.yml": {
@@ -2922,9 +2922,9 @@
     "semantic_hash": ""
   },
   "apps/bff/AGENTS.md": {
-    "mtime": 1787919461.9059336,
-    "seen": 1788199059.233799,
-    "ast_hash": "d4434c5dd06411978d3dc894175d336e",
+    "mtime": 1788400713.493412,
+    "seen": 1788400797.3391411,
+    "ast_hash": "188aee423040d1429e04f090d416d2c6",
     "semantic_hash": ""
   },
   "apps/bff/PUBLIC_API_V1.md": {
@@ -2934,9 +2934,9 @@
     "semantic_hash": ""
   },
   "apps/bff/README.md": {
-    "mtime": 1788289047.0395539,
-    "seen": 1788289234.8091583,
-    "ast_hash": "c94177d23c716a3edf040f70473459eb",
+    "mtime": 1788400713.493412,
+    "seen": 1788400797.339142,
+    "ast_hash": "880a1c5b0d9d74bd1073aba3a607ba2f",
     "semantic_hash": ""
   },
   "apps/evolution-go/.github/ISSUE_TEMPLATE/-en--bug-report.yaml": {
@@ -3264,21 +3264,21 @@
     "semantic_hash": ""
   },
   "apps/frontend-open-design/AGENTS.md": {
-    "mtime": 1787784769.1715584,
-    "seen": 1788199059.233825,
-    "ast_hash": "1d253cbafd9c76f9bbb72a4e2dbfb1cd",
+    "mtime": 1788400713.524836,
+    "seen": 1788400797.3391767,
+    "ast_hash": "83e0bd6ff90d1c3dd441ca91dcac706d",
     "semantic_hash": ""
   },
   "apps/frontend-open-design/DESIGN-HANDOFF.md": {
-    "mtime": 1787784769.7895377,
-    "seen": 1788199059.2338252,
-    "ast_hash": "28b37b544a8e682398c810375555a66f",
+    "mtime": 1788400713.516225,
+    "seen": 1788400797.3391774,
+    "ast_hash": "5805a8fc1cc3764c90a6107368981680",
     "semantic_hash": ""
   },
   "apps/frontend-open-design/DESIGN.md": {
-    "mtime": 1787784769.4571505,
-    "seen": 1788199059.2338257,
-    "ast_hash": "46e2d227145ceeb4149bf13e704b797d",
+    "mtime": 1788400713.5304546,
+    "seen": 1788400797.339178,
+    "ast_hash": "e598b495335c99d6680db806f8e1d6f0",
     "semantic_hash": ""
   },
   "apps/frontend-open-design/agenda-atendly.html": {
@@ -3978,21 +3978,21 @@
     "semantic_hash": ""
   },
   "apps/frontend/AGENTS.md": {
-    "mtime": 1787960274.0851824,
-    "seen": 1788199059.2338922,
-    "ast_hash": "cf402419c535cc21e15e5bab02b4fe46",
+    "mtime": 1788400713.5425086,
+    "seen": 1788400797.339247,
+    "ast_hash": "c27176364c21dad43d07994c50a91719",
     "semantic_hash": ""
   },
   "apps/frontend/CLAUDE.md": {
-    "mtime": 1785763922.9635715,
-    "seen": 1788199059.2338927,
-    "ast_hash": "771faa62feb60b7de901a397aebb29b0",
+    "mtime": 1788400713.5524967,
+    "seen": 1788400797.3392477,
+    "ast_hash": "9f2c8d37d0f89e176f7f2d9897979dfa",
     "semantic_hash": ""
   },
   "apps/frontend/README.md": {
-    "mtime": 1788226040.6367965,
-    "seen": 1788264507.2977438,
-    "ast_hash": "a2467a5a0b75e9f7da4ba486cdff25bf",
+    "mtime": 1788400713.5425086,
+    "seen": 1788400797.3392482,
+    "ast_hash": "0842c943bd490010c9503a32d7bc0f46",
     "semantic_hash": ""
   },
   "apps/health-worker/AGENTS.md": {
@@ -4008,51 +4008,39 @@
     "semantic_hash": ""
   },
   "apps/scheduling-service/AGENTS.md": {
-    "mtime": 1787939833.1128254,
-    "seen": 1788199059.233894,
-    "ast_hash": "4a2e4cb2bc722b03f0a9f0373ac06245",
+    "mtime": 1788400713.5405037,
+    "seen": 1788400797.3392498,
+    "ast_hash": "2d46002469a8bdcc73ca3f7b9fb302ff",
     "semantic_hash": ""
   },
   "apps/scheduling-service/README.md": {
-    "mtime": 1788203017.119391,
-    "seen": 1788223996.301875,
-    "ast_hash": "04f6367990e8ebc027616de2aa1be59c",
-    "semantic_hash": ""
-  },
-  "docs/CONTEXTO_PRODUTO_ATENDLY.md": {
-    "mtime": 1787607097.2219963,
-    "seen": 1788199059.233895,
-    "ast_hash": "55eb13d8f97bfe69fcd697a9c0dec34f",
-    "semantic_hash": ""
-  },
-  "docs/GOAL ATUAL.md": {
-    "mtime": 1787919371.8211112,
-    "seen": 1788199059.2338984,
-    "ast_hash": "0b41ba7e934da20dbf30d65692737a9b",
+    "mtime": 1788400713.5331712,
+    "seen": 1788400797.33925,
+    "ast_hash": "696549b3b9744785f64a32850a82c962",
     "semantic_hash": ""
   },
   "docs/PLANO_REFATORACAO.md": {
-    "mtime": 1787878219.5316014,
-    "seen": 1788199059.233899,
-    "ast_hash": "16753b553a73331b93f548fb63f55896",
+    "mtime": 1788400668.094175,
+    "seen": 1788400797.3392508,
+    "ast_hash": "fd8af32621536f5b4a0788a1a8e71fbb",
     "semantic_hash": ""
   },
   "docs/README.md": {
-    "mtime": 1787978188.839184,
-    "seen": 1788199059.2338996,
-    "ast_hash": "2ceb6936ee953d8cd81aa7e69d8e6051",
+    "mtime": 1788400668.101555,
+    "seen": 1788400797.3392515,
+    "ast_hash": "175a8483672aa809894371a8e7c6ab84",
     "semantic_hash": ""
   },
   "docs/ROADMAP_INTEGRACAO_V1.md": {
-    "mtime": 1788289213.5872228,
-    "seen": 1788289234.8092752,
-    "ast_hash": "1faf77037df604379b6c7b2fdfd1e33f",
+    "mtime": 1788400668.10981,
+    "seen": 1788400797.339252,
+    "ast_hash": "f651b91c66c2399815dbe7d8d34d1269",
     "semantic_hash": ""
   },
   "docs/UI_UX_PROTOTYPE_GUIDELINES.md": {
-    "mtime": 1787919690.766403,
-    "seen": 1788199059.2339008,
-    "ast_hash": "44614638c4b6adbba9e3d4b0f1b5d124",
+    "mtime": 1788400668.10981,
+    "seen": 1788400797.3392525,
+    "ast_hash": "5f7bb5c3cbb1e49ca1d0343faa522ed6",
     "semantic_hash": ""
   },
   "docs/architecture/001-target-architecture.md": {
@@ -4485,6 +4473,198 @@
     "mtime": 1788289111.509081,
     "seen": 1788289234.8092816,
     "ast_hash": "523e0cd7c76d5a1db47920d9cf9b5d48",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/00-HOME.md": {
+    "mtime": 1788398990.3609765,
+    "seen": 1788399017.9805179,
+    "ast_hash": "8b37a24ea7eeefcfdb10d06730ecb1f5",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/00-Produto/01-Visao-do-Produto.md": {
+    "mtime": 1788398990.4243045,
+    "seen": 1788399017.980519,
+    "ast_hash": "637f968a2440f053435de2899f038f16",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/00-Produto/02-Escopo-do-MVP.md": {
+    "mtime": 1788398990.4403381,
+    "seen": 1788399017.98052,
+    "ast_hash": "d030b7729bb78c9360a977c820bc529d",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/00-Produto/03-Publico-e-Proposta-de-Valor.md": {
+    "mtime": 1788398990.4403381,
+    "seen": 1788399017.9805205,
+    "ast_hash": "5e8020dac64f7fdfde9f326da7312480",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/00-Produto/04-Navegacao-e-Modulos.md": {
+    "mtime": 1788398990.4243045,
+    "seen": 1788399017.980521,
+    "ast_hash": "3c2074afd6991966b8e6c9c2218647bd",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/00-Produto/05-Internacionalizacao-Futura.md": {
+    "mtime": 1788398990.4403381,
+    "seen": 1788399017.9805212,
+    "ast_hash": "54a94531e9c2afefdd9745723fc783ce",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/01-Regras/01-Regras-de-Negocio.md": {
+    "mtime": 1788398990.3842702,
+    "seen": 1788399017.9805217,
+    "ast_hash": "a0c3884cdbe781749969390ce420817b",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/01-Regras/02-Agenda-e-Agendamentos.md": {
+    "mtime": 1788398990.376851,
+    "seen": 1788399017.9805222,
+    "ast_hash": "17c36184335931afb9ced1d0e43e8b44",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/01-Regras/03-IA-e-Conversas.md": {
+    "mtime": 1788398990.3927608,
+    "seen": 1788399017.9805224,
+    "ast_hash": "979692660a77f96eff95ff391f035283",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/01-Regras/04-Clientes-e-Memoria.md": {
+    "mtime": 1788398990.3927608,
+    "seen": 1788399017.980523,
+    "ast_hash": "6d9f0b8d77361a409c19ed6a1306d534",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/01-Regras/05-WhatsApp.md": {
+    "mtime": 1788398990.3927608,
+    "seen": 1788399017.9805236,
+    "ast_hash": "b31b80a7747cc05395963e1088491634",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/01-Regras/06-Importacao-Minha-Agenda.md": {
+    "mtime": 1788398990.3842702,
+    "seen": 1788399017.980524,
+    "ast_hash": "a23fb31c264df1c9b0e9d0435533a47e",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/01-Regras/07-Lembretes-Notificacoes-e-Instabilidade.md": {
+    "mtime": 1788398990.3927608,
+    "seen": 1788399017.9805245,
+    "ast_hash": "6b06a3c8c76ddec21ffefa0d0d48e0a7",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/01-Regras/08-Privacidade-e-Retencao.md": {
+    "mtime": 1788398990.3927608,
+    "seen": 1788399017.980525,
+    "ast_hash": "4e9d0f128276dad482b53661d2ac49fd",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/02-Fluxos/01-Onboarding.md": {
+    "mtime": 1788398990.4403381,
+    "seen": 1788399017.9805257,
+    "ast_hash": "30ef4f00d02cc7aa8fb15d38c494a13b",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/02-Fluxos/02-Ativacao-e-Teste-do-WhatsApp.md": {
+    "mtime": 1788398990.456261,
+    "seen": 1788399017.980526,
+    "ast_hash": "4f9376282803d361732c336cbd7d6cb1",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/02-Fluxos/03-Fluxos-de-Agendamento.md": {
+    "mtime": 1788398990.456261,
+    "seen": 1788399017.9805267,
+    "ast_hash": "326fc98660d6d6b54bb16c0065cb8e74",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/02-Fluxos/04-Handoff-e-Atendimento-Humano.md": {
+    "mtime": 1788398990.456261,
+    "seen": 1788399017.9805272,
+    "ast_hash": "bfd803519a81aab4591049675bda133a",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/02-Fluxos/05-Importacao-Unica.md": {
+    "mtime": 1788398990.456261,
+    "seen": 1788399017.9805276,
+    "ast_hash": "2f72fa63ab4cf8ece6655bd04a355de0",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/03-UX-UI/01-Principios-de-UX-UI.md": {
+    "mtime": 1788398990.4084527,
+    "seen": 1788399017.980528,
+    "ast_hash": "32ffe56bb6842d2f38c84d7f25a4f0d7",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/03-UX-UI/02-Responsividade-Mobile-First.md": {
+    "mtime": 1788398990.4084527,
+    "seen": 1788399017.9805284,
+    "ast_hash": "795d526827bf935c610bf752b1308dab",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/03-UX-UI/03-Onboarding-UX.md": {
+    "mtime": 1788398990.4243045,
+    "seen": 1788399017.9805288,
+    "ast_hash": "9714086f1b74573b46c60d4dc372d35a",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/03-UX-UI/04-Especificacao-das-Telas.md": {
+    "mtime": 1788398990.4243045,
+    "seen": 1788399017.9805293,
+    "ast_hash": "233e989003f674279f69118ef81193e6",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/03-UX-UI/05-Design-System-Conceitual.md": {
+    "mtime": 1788398990.4084527,
+    "seen": 1788399017.98053,
+    "ast_hash": "8585086d6489297ef7ca62daff9c3d6f",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/03-UX-UI/06-Copy-e-Linguagem.md": {
+    "mtime": 1788398990.4084527,
+    "seen": 1788399017.9805305,
+    "ast_hash": "aaed78070b9cc4b1340a589954e38b73",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/04-Referencia/01-Glossario.md": {
+    "mtime": 1788398990.4722106,
+    "seen": 1788399017.980531,
+    "ast_hash": "a233079e89a844cd17aed03c7c0f8f70",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/04-Referencia/02-Decisoes-Substituidas.md": {
+    "mtime": 1788398990.4722106,
+    "seen": 1788399017.9805315,
+    "ast_hash": "e857ef7f58bb2c04624140b9ee9d4939",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/04-Referencia/03-Temas-Adiados.md": {
+    "mtime": 1788398990.4722106,
+    "seen": 1788399017.980532,
+    "ast_hash": "dddb6a454b8269ae26c0c76ac283fcee",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/04-Referencia/99-Perguntas-e-Respostas.md": {
+    "mtime": 1788398990.4722106,
+    "seen": 1788399017.9805324,
+    "ast_hash": "3dc846e6e0511d6398b91580734b103f",
+    "semantic_hash": ""
+  },
+  "docs/product-vault/README.md": {
+    "mtime": 1788398990.376851,
+    "seen": 1788399017.980533,
+    "ast_hash": "214df04015a102571beb5a3942416d22",
+    "semantic_hash": ""
+  },
+  "REFRESH_MANIFEST.md": {
+    "mtime": 1788400686.495091,
+    "seen": 1788400797.339138,
+    "ast_hash": "992b08935eebf8f19b172c53ceb27f8b",
+    "semantic_hash": ""
+  },
+  "docs/architecture/README.md": {
+    "mtime": 1788400669.7465515,
+    "seen": 1788400797.3392582,
+    "ast_hash": "52564e25cde8284e60e6d72bde8a4c7c",
     "semantic_hash": ""
   }
 }

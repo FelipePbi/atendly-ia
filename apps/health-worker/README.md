@@ -1,13 +1,21 @@
-# atendimeto-ia-health-worker
+# Atendly health worker
 
-Web service Node para o Render que expoe `/health` e consulta as rotas publicas de saude dos servicos a cada 40 segundos.
+Web service Node que consulta os health checks dos serviços a cada 40 segundos.
 
-## Endpoints monitorados
+## Superfície HTTP
 
-- `https://atendly-ia-frontend.onrender.com/login`
-- `https://atendly-ia-bff.onrender.com/health`
-- `https://atendly-ia-ai-orchestrator.onrender.com/health`
-- `https://evolution-go-4pmo.onrender.com/healthy`
+- `GET /health` — saúde do próprio worker;
+- `GET /targets` — nomes dos alvos configurados.
+
+## Alvos padrão
+
+- frontend;
+- BFF;
+- AI Orchestrator;
+- Scheduling Service;
+- Evolution Go.
+
+As URLs vêm de `FRONTEND_BASE_URL`, `BFF_BASE_URL`, `AI_ORCHESTRATOR_BASE_URL`, `SCHEDULING_SERVICE_BASE_URL` e `EVOLUTION_GO_BASE_URL`. `HEALTH_TARGETS` pode substituir a lista inteira.
 
 ## Rodar localmente
 
@@ -17,10 +25,10 @@ npm start
 
 ## Render
 
-Este projeto usa `render.yaml` para criar um web service leve no plano free do Render:
+O deployment é definido em `render.yaml` na raiz do repositório:
 
 - name: `atendly-ia-health-worker`
 - runtime: `node`
 - build command: `npm ci`
 - start command: `npm start`
-- health check: `/health`
+- health check: `/health`.

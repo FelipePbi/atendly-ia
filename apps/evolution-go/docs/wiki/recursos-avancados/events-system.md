@@ -1026,7 +1026,7 @@ location /ws {
 - [Armazenamento de Mídia](./media-storage.md) - MinIO/S3 para arquivos
 - [Conexão QR Code](./qrcode-connection.md) - Processo de autenticação
 - [Multi-Dispositivo](./multi-device.md) - Suporte Multi-Device
-- [API de Webhooks](../guias-api/api-webhooks.md) - Configurar webhooks via API
+- [API de Instâncias](../guias-api/api-instances.md) - Configurar webhooks ao criar ou conectar instâncias
 
 ---
 

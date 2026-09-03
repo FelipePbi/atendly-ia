@@ -1,19 +1,6 @@
 # Atendly Frontend
 
-Frontend da experiência web da Atendly.
-
-## Produto representado
-
-A interface atual deve evoluir para refletir o product vault em `../../docs/product-vault/`.
-
-Regras centrais:
-
-- Agenda Atendly é a única agenda operacional;
-- Minha Agenda é apenas origem de importação única;
-- WhatsApp pode ser pessoal ou comercial;
-- Conversas: Comercial / Não classificadas / Pessoal;
-- IA: Profissional / Equilibrada / Descontraída;
-- mobile-first: Mobile → Tablet → Notebook → Desktop.
+Frontend web do produto Atendly.
 
 ## Principais áreas
 
@@ -24,30 +11,11 @@ Regras centrais:
 - Serviços
 - Mais/Configurações
 
-## Navegação mobile
+## Referências
 
-`Início | Conversas | Agenda | Clientes | Mais`
+- Produto e fluxos: [`../../docs/product-vault/00-HOME.md`](../../docs/product-vault/00-HOME.md)
+- UX/UI: [`../../docs/product-vault/03-UX-UI/`](../../docs/product-vault/03-UX-UI/)
+- Direção visual: [`../frontend-open-design/DESIGN.md`](../frontend-open-design/DESIGN.md)
+- Guardrails locais: [`AGENTS.md`](AGENTS.md)
 
-## Onboarding
-
-Quatro blocos:
-
-1. Seu negócio
-2. Sua agenda
-3. Sua IA
-4. WhatsApp
-
-Consulte `../../docs/product-vault/02-Fluxos/01-Onboarding.md`.
-
-## Design
-
-Direção visual:
-
-- `../frontend-open-design/DESIGN.md`
-- `../../docs/product-vault/03-UX-UI/`
-
-Protótipos antigos não devem ser tratados como regra quando contradisserem o product vault.
-
-## Documentação para agentes
-
-Leia `AGENTS.md` neste diretório e o `AGENTS.md` raiz antes de alterações.
+A interface existente ainda contém fluxos de agenda externa e dois tons antigos. Eles são dívida de implementação e não devem orientar telas novas.

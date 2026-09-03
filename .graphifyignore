@@ -14,3 +14,15 @@ graphify-out/
 apps/evolution-go/whatsmeow-lib/proto/
 apps/frontend-open-design/plugin-source/
 **/*.pb.go
+
+# Vendored third-party Go library (go.mod: replace go.mau.fi/whatsmeow => ./whatsmeow-lib).
+# Indexing it floods code queries with library internals instead of Atendly code.
+apps/evolution-go/whatsmeow-lib/
+
+# Legacy agent config from the previous Codex setup + MCP scratch output.
+.codex/
+.playwright-mcp/
+
+# Product knowledge lives in the Obsidian vault, not in the code graph.
+# See docs/AI_WORKFLOW.md for the Product Vault / Graphify split.
+docs/product-vault/

@@ -2,58 +2,10 @@
 
 Backend público consumido pela aplicação web Atendly.
 
-## Contexto de produto vigente
+## Referências
 
-A API pública deve suportar a experiência definida em `../../docs/product-vault/`.
+- Produto e UX/UI: [`../../docs/product-vault/00-HOME.md`](../../docs/product-vault/00-HOME.md)
+- Guardrails locais: [`AGENTS.md`](AGENTS.md)
+- Rotas registradas e divergências atuais: [`PUBLIC_API_V1.md`](PUBLIC_API_V1.md)
 
-Regras centrais que substituem premissas antigas:
-
-- Agenda Atendly é a única agenda operacional;
-- Minha Agenda é somente origem de uma única importação;
-- não existe sincronização/reimportação/troca de fonte como comportamento de produto;
-- IA usa estilos Profissional / Equilibrada / Descontraída;
-- um negócio usa um único número de WhatsApp;
-- inbox: Comercial / Não classificadas / Pessoal;
-- estados de atendimento: IA atendendo / Aguardando você / Você atendendo.
-
-## Superfícies de produto
-
-O frontend precisa de capacidades para:
-
-- autenticação e conta;
-- onboarding;
-- negócio/configurações;
-- WhatsApp e ativação;
-- Home;
-- conversas;
-- agenda/agendamentos;
-- clientes;
-- serviços;
-- importação única;
-- notificações;
-- retenção e preferências relevantes.
-
-Este README não define contratos HTTP ou ownership técnico. Consulte documentação técnica/código atual para esses detalhes.
-
-## Importação
-
-Qualquer endpoint/contrato de integração antigo deve ser interpretado à luz da regra atual:
-
-`analisar → preview → importar → revisar pendências → concluir definitivamente`
-
-Depois da conclusão, o produto não oferece nova importação.
-
-## Segurança de UX
-
-O BFF não deve induzir o frontend a:
-
-- confirmar agendamento antes de sucesso real;
-- mostrar sincronização inexistente;
-- tratar erro de agenda/IA como sucesso;
-- expor detalhes técnicos ao usuário final.
-
-## Fonte de verdade
-
-- `../../docs/product-vault/00-HOME.md`
-- `AGENTS.md` local
-- `../../AGENTS.md`
+O inventário da API descreve o runtime atual. Novos contratos devem derivar do product vault, não dos campos legados ainda consumidos.

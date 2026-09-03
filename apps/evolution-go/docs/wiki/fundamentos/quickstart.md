@@ -315,15 +315,15 @@ Confirme a chave configurada no `docker-compose.yml` ou `.env`.
 
 - **[API de Mensagens](../guias-api/api-messages.md)** - Todos os tipos de mensagens
 - **[API de Grupos](../guias-api/api-groups.md)** - Gerenciamento de grupos
-- **[API de Usuários](../guias-api/api-users.md)** - Perfis e contatos
+- **[API de Usuários](../guias-api/api-user.md)** - Perfis e contatos
 - **[Referência Completa](../guias-api/api-overview.md)** - Todos os endpoints
 
 ### Recursos Avançados
 
 - **[Sistema de Eventos](../recursos-avancados/events-system.md)** - Webhooks e filas
-- **[Webhooks](../recursos-avancados/webhooks.md)** - Receber notificações
-- **[RabbitMQ](../recursos-avancados/rabbitmq.md)** - Processamento assíncrono
-- **[MinIO/S3](../recursos-avancados/minio.md)** - Armazenamento de mídia
+- **[Webhooks](../recursos-avancados/events-system.md#webhook)** - Receber notificações
+- **[RabbitMQ](../recursos-avancados/events-system.md#rabbitmq)** - Processamento assíncrono
+- **[MinIO/S3](../recursos-avancados/media-storage.md)** - Armazenamento de mídia
 
 ### Deploy e Segurança
 

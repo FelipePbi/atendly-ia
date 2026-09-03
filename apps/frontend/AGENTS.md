@@ -49,7 +49,7 @@ Adicionar contexto progressivamente, sem alterar o modelo mental principal.
 
 ## Design contract
 
-`apps/frontend-open-design` é referência visual histórica/evolutiva, não fonte soberana de produto.
+`apps/frontend-open-design` é referência visual subordinada ao product vault, não fonte soberana de produto.
 
 Preserve tokens e identidade visual quando úteis, mas **não preserve telas antigas que contradizem o product vault**.
 

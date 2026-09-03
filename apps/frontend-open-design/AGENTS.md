@@ -13,7 +13,7 @@ Antes de alterar qualquer protótipo, leia:
 3. `DESIGN.md`;
 4. este arquivo.
 
-Protótipos HTML antigos, `DESIGN-MANIFEST.json` e handoffs anteriores são **referência histórica**, não fonte de regra de produto.
+Protótipos HTML existentes, `DESIGN-MANIFEST.json` e handoffs visuais são insumos de implementação, não fonte de regra de produto.
 
 Se uma tela existente contradizer o product vault, a tela deve ser redesenhada.
 

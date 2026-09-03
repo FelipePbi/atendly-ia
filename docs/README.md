@@ -6,8 +6,6 @@ Toda decisão vigente de produto e UX/UI está em:
 
 - [`product-vault/00-HOME.md`](product-vault/00-HOME.md)
 
-O `product-vault` substitui documentos históricos de contexto de produto, especificação de telas e decisões antigas de integração.
-
 ## Como navegar
 
 ### Produto
@@ -25,12 +23,13 @@ O `product-vault` substitui documentos históricos de contexto de produto, espec
 - `product-vault/04-Referencia/02-Decisoes-Substituidas.md`
 - `product-vault/04-Referencia/99-Perguntas-e-Respostas.md`
 
-## Documentos auxiliares deste repositório
+## Documentos atuais fora do vault
 
-- [`PLANO_REFATORACAO.md`](PLANO_REFATORACAO.md) — plano para alinhar produto/protótipo/código à especificação atual, sem decidir arquitetura nova.
-- [`ROADMAP_INTEGRACAO_V1.md`](ROADMAP_INTEGRACAO_V1.md) — documento histórico; não deve mais governar produto.
-- [`UI_UX_PROTOTYPE_GUIDELINES.md`](UI_UX_PROTOTYPE_GUIDELINES.md) — instruções atualizadas para prototipação.
-- [`architecture/`](architecture/) — decisões técnicas existentes; devem ser reavaliadas separadamente quando contradisserem novas regras de produto.
+- [`UI_UX_PROTOTYPE_GUIDELINES.md`](UI_UX_PROTOTYPE_GUIDELINES.md) — guardrails para prototipação.
+- [`PLANO_REFATORACAO.md`](PLANO_REFATORACAO.md) — escopo da futura análise técnica de alinhamento, sem decisões arquiteturais antecipadas.
+- [`../apps/bff/PUBLIC_API_V1.md`](../apps/bff/PUBLIC_API_V1.md) — inventário do contrato HTTP que o runtime registra hoje, incluindo dívida explicitamente marcada.
+
+Setup e limites de cada aplicação ficam no README e no `AGENTS.md` locais.
 
 ## Regra de precedência
 
@@ -38,6 +37,6 @@ O `product-vault` substitui documentos históricos de contexto de produto, espec
 2. `AGENTS.md` raiz
 3. instruções locais do app
 4. documentação técnica vigente
-5. protótipos/READMEs históricos
+5. implementação existente
 
-Não use documentação antiga para reintroduzir sincronização com Minha Agenda, múltiplas fontes de calendário ou regras substituídas.
+Quando o runtime contradisser o product vault, registre a divergência como dívida técnica. Não derive uma nova regra de produto do comportamento legado.

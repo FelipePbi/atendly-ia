@@ -1,12 +1,6 @@
-# Scheduling Service — contexto de produto
+# Scheduling Service
 
-Este app representa o domínio operacional de agenda da Atendly.
-
-A regra de produto vigente é:
-
-> **Agenda Atendly é a única agenda oficial do negócio.**
-
-Minha Agenda participa somente como fonte de uma única importação/migração.
+Representa o domínio operacional de agenda, clientes, serviços, disponibilidade, agendamentos e importação.
 
 Consulte:
 
@@ -15,4 +9,4 @@ Consulte:
 - `../../docs/product-vault/02-Fluxos/03-Fluxos-de-Agendamento.md`
 - `../../docs/product-vault/02-Fluxos/05-Importacao-Unica.md`
 
-Qualquer documentação técnica antiga que trate Minha Agenda como provider operacional deve ser reavaliada separadamente e não deve ser considerada regra vigente de produto.
+Leia também [`AGENTS.md`](AGENTS.md) para os guardrails locais. As abstrações atuais de provider e migração bidirecional são fatos do runtime e dívida técnica; não definem comportamento de produto.

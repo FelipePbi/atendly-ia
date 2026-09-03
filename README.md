@@ -20,6 +20,8 @@ O código ainda contém contratos e fluxos anteriores à definição vigente. El
 | `apps/health-worker` | Monitoramento de saúde |
 | `apps/frontend-open-design` | Protótipos e referência visual |
 
+Pacotes compartilhados entre apps: `packages/contracts` (contratos TypeScript/Zod) e `packages/legal-contract` (textos legais versionados).
+
 Para setup e limites técnicos, consulte o README e o `AGENTS.md` do app correspondente.
 
 ## Para agentes

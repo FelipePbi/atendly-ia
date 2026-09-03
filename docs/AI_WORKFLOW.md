@@ -147,12 +147,12 @@ rtk gain
 
 | Sintoma | Causa provável | Ação |
 | --- | --- | --- |
-| `rtk gain` não existe | binário errado (Rust Type Kit) | reinstalar de `rtk-ai/rtk` |
+| `rtk gain` não existe | binário errado — colisão de nome com o Rust Type Kit (`reachingforthejack/rtk`) | conferir `rtk --version` e `which rtk`; reinstalar o RTK correto |
 | Comandos não são reescritos | hook ausente | `rtk init --show`; hook fica em `~/.claude/settings.json` |
 | `graphify query` sem resultado | grafo defasado ou caminho ignorado | `graphify update .`; conferir `.graphifyignore` |
 | Grafo não atualiza após commit | hook git ausente ou Python errado | `graphify hook status`; reinstalar com `graphify hook install` |
 | Vault não abre no Obsidian | pasta errada | abrir `docs/product-vault` como vault (config em `.obsidian/`) |
 
-> Nota sobre os hooks do Claude Code: `.claude/settings.json` mantém apenas o guard de busca do Graphify (`Bash|Grep`). O guard de `Read|Glob` foi removido de propósito — ele injeta "use Graphify antes de ler" em *toda* leitura, inclusive de notas do vault, o que contraria o roteamento acima e cobra tokens em leituras pequenas e dirigidas. Se você rodar `graphify claude install` de novo, ele volta: remova-o outra vez.
+> Nota sobre os hooks do Claude Code: `.claude/settings.json` mantém apenas o guard de busca do Graphify (`Bash|Grep`), que não se aplica ao vault — ele está fora do grafo por `.graphifyignore`, então para pergunta de produto vá direto à nota. O guard de `Read|Glob` foi removido de propósito — ele injeta "use Graphify antes de ler" em *toda* leitura, inclusive de notas do vault, o que contraria o roteamento acima e cobra tokens em leituras pequenas e dirigidas. Se você rodar `graphify claude install` de novo, ele volta: remova-o outra vez.
 
 Graphify indexa **código**; o vault é o grafo de **produto**. Nunca exporte Graphify por cima de `docs/product-vault/` — a visualização técnica é `graphify-out/graph.html`.

@@ -28,7 +28,7 @@ A documentação é consultada **sob demanda**: localize o tema, abra 1–3 arqu
 ## Documentos atuais fora do vault
 
 - [`AI_WORKFLOW.md`](AI_WORKFLOW.md) — política de consulta seletiva desta documentação e divisão entre docs, Graphify e RTK.
-- [`architecture/`](architecture/README.md) — decisões arquiteturais e ADRs vigentes.
+- [`architecture/`](architecture/README.md) — decisões arquiteturais e ADRs; hoje sem ADR vigente.
 - [`UI_UX_PROTOTYPE_GUIDELINES.md`](UI_UX_PROTOTYPE_GUIDELINES.md) — guardrails para prototipação.
 - [`PLANO_REFATORACAO.md`](PLANO_REFATORACAO.md) — escopo da futura análise técnica de alinhamento, sem decisões arquiteturais antecipadas.
 - [`../apps/bff/PUBLIC_API_V1.md`](../apps/bff/PUBLIC_API_V1.md) — inventário do contrato HTTP que o runtime registra hoje, incluindo dívida explicitamente marcada.

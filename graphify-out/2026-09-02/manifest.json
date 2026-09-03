@@ -42,10 +42,10 @@
     "semantic_hash": "b8b694cf7dcea29a860604775dd2222b"
   },
   "apps/ai-orchestrator/src/config/env.ts": {
-    "mtime": 1788314373.9290173,
-    "seen": 1788398633.2180147,
-    "ast_hash": "3245c6db355b7fc21c9944c84683b147",
-    "semantic_hash": ""
+    "mtime": 1788225699.287544,
+    "seen": 1788264302.4284096,
+    "ast_hash": "1558eb3a40f4884394c64b82a5345038",
+    "semantic_hash": "1558eb3a40f4884394c64b82a5345038"
   },
   "apps/ai-orchestrator/src/db/prisma.ts": {
     "mtime": 1787921635.4031067,
@@ -372,10 +372,10 @@
     "semantic_hash": "1d37083f5db34912e0bf77207466766c"
   },
   "apps/bff/src/config/env.ts": {
-    "mtime": 1788314373.920107,
-    "seen": 1788398633.2180803,
-    "ast_hash": "12afd3a51449249727d54b0206c809c6",
-    "semantic_hash": ""
+    "mtime": 1788225143.1786015,
+    "seen": 1788264302.4326322,
+    "ast_hash": "cad4fd69d4dabda462ba9100d71ca459",
+    "semantic_hash": "cad4fd69d4dabda462ba9100d71ca459"
   },
   "apps/bff/src/config/legal-versions.ts": {
     "mtime": 1787921635.3750803,
@@ -2232,10 +2232,10 @@
     "semantic_hash": "156b8aa9f8bfacce70e3fac1ec727420"
   },
   "apps/scheduling-service/src/config/env.ts": {
-    "mtime": 1788314373.9284647,
-    "seen": 1788398633.2183003,
-    "ast_hash": "3cc042e596581b05bd3aad7ab3323e3c",
-    "semantic_hash": ""
+    "mtime": 1787940550.9085646,
+    "seen": 1788198803.177582,
+    "ast_hash": "4804ffe07480b2dde41f7165935313f8",
+    "semantic_hash": "4804ffe07480b2dde41f7165935313f8"
   },
   "apps/scheduling-service/src/infrastructure/database/prisma.ts": {
     "mtime": 1787939833.1245694,
@@ -2886,9 +2886,9 @@
     "semantic_hash": ""
   },
   "AGENTS.md": {
-    "mtime": 1788294248.8607018,
-    "seen": 1788398633.2183506,
-    "ast_hash": "327d525d8a26df932b634f856711aab4",
+    "mtime": 1788199774.596104,
+    "seen": 1788223996.3017602,
+    "ast_hash": "5b313433dbca5d12a4c553eb3660fa65",
     "semantic_hash": ""
   },
   "GRAPHIFY_WORKSPACE_MAP.md": {
@@ -4025,6 +4025,24 @@
     "ast_hash": "55eb13d8f97bfe69fcd697a9c0dec34f",
     "semantic_hash": ""
   },
+  "docs/DESIGN.md": {
+    "mtime": 1787618715.4114776,
+    "seen": 1788199059.2338958,
+    "ast_hash": "46e2d227145ceeb4149bf13e704b797d",
+    "semantic_hash": ""
+  },
+  "docs/ESPECIFICACAO_TELAS_UX_ATENDLY.md": {
+    "mtime": 1787615429.6109836,
+    "seen": 1788199059.233896,
+    "ast_hash": "28d3a6623e27d4f33ab09172e964731e",
+    "semantic_hash": ""
+  },
+  "docs/EXECU\u00c7\u00c3O DE GOAL \u2014 ROADMAP ATENDLY V1.md": {
+    "mtime": 1788265180.842237,
+    "seen": 1788266870.6289268,
+    "ast_hash": "a4b692a089c3fd35a1bb757ede2d854d",
+    "semantic_hash": ""
+  },
   "docs/GOAL ATUAL.md": {
     "mtime": 1787919371.8211112,
     "seen": 1788199059.2338984,
@@ -4041,6 +4059,12 @@
     "mtime": 1787978188.839184,
     "seen": 1788199059.2338996,
     "ast_hash": "2ceb6936ee953d8cd81aa7e69d8e6051",
+    "semantic_hash": ""
+  },
+  "docs/README_GOALS.md": {
+    "mtime": 1787879394.133235,
+    "seen": 1788199059.2339,
+    "ast_hash": "eb96cb6dc8170733f8ba06ad62bfca38",
     "semantic_hash": ""
   },
   "docs/ROADMAP_INTEGRACAO_V1.md": {
@@ -4089,6 +4113,120 @@
     "mtime": 1787920764.6513686,
     "seen": 1788199059.2339036,
     "ast_hash": "f18eba267eda3abd4799d0f5f6254ecc",
+    "semantic_hash": ""
+  },
+  "docs/goals/GOAL_01_BASELINE_ARQUITETURAL.md": {
+    "mtime": 1787879394.0696714,
+    "seen": 1788199059.2339041,
+    "ast_hash": "af3f201d6ddb17c830aeb2a8abd41baf",
+    "semantic_hash": ""
+  },
+  "docs/goals/GOAL_02_TOOLING_CONTRACTS.md": {
+    "mtime": 1787879394.0696714,
+    "seen": 1788199059.2339046,
+    "ast_hash": "702a27fcbb7ca3112686ac576ae9a21c",
+    "semantic_hash": ""
+  },
+  "docs/goals/GOAL_03_MULTI_TENANCY_BFF.md": {
+    "mtime": 1787879394.0696714,
+    "seen": 1788199059.233905,
+    "ast_hash": "9425322f52c2aa29b6288e54ea100416",
+    "semantic_hash": ""
+  },
+  "docs/goals/GOAL_04_SCHEDULING_FOUNDATION.md": {
+    "mtime": 1787879394.0696714,
+    "seen": 1788199059.2339053,
+    "ast_hash": "47afa21e95a5d8f9e6fe31d34bf23e55",
+    "semantic_hash": ""
+  },
+  "docs/goals/GOAL_05_MINHA_AGENDA_PROVIDER.md": {
+    "mtime": 1787879394.0874188,
+    "seen": 1788199059.233906,
+    "ast_hash": "94069d8c7e86c72392c4bd886643f18f",
+    "semantic_hash": ""
+  },
+  "docs/goals/GOAL_06_ATENDLY_CALENDAR_PROVIDER.md": {
+    "mtime": 1787879394.0874188,
+    "seen": 1788199059.2339063,
+    "ast_hash": "37db3f0d4849cc71a7cc08f9912a3608",
+    "semantic_hash": ""
+  },
+  "docs/goals/GOAL_07_AI_ORCHESTRATOR_MULTI_TENANT.md": {
+    "mtime": 1787879394.0874188,
+    "seen": 1788199059.2339067,
+    "ast_hash": "b96fc5173acb173fa4911919f4546a5f",
+    "semantic_hash": ""
+  },
+  "docs/goals/GOAL_08_LANGCHAIN.md": {
+    "mtime": 1787879394.0874188,
+    "seen": 1788199059.2339072,
+    "ast_hash": "a4f58ad9bd7353ee39090631e24a0bc4",
+    "semantic_hash": ""
+  },
+  "docs/goals/GOAL_09_LANGGRAPH.md": {
+    "mtime": 1787879394.1014805,
+    "seen": 1788199059.2339077,
+    "ast_hash": "807569922476b16481cbfbe9c2860fa6",
+    "semantic_hash": ""
+  },
+  "docs/goals/GOAL_10_RAG_PGVECTOR.md": {
+    "mtime": 1787879394.1014805,
+    "seen": 1788199059.2339082,
+    "ast_hash": "6acf6c458114a992ed98af03344039f4",
+    "semantic_hash": ""
+  },
+  "docs/goals/GOAL_11_BFF_PUBLIC_API_V1.md": {
+    "mtime": 1787879394.1014805,
+    "seen": 1788199059.2339084,
+    "ast_hash": "d580d4441d36c2d7d667f578603fabaa",
+    "semantic_hash": ""
+  },
+  "docs/goals/GOAL_12_FRONTEND_DATA_LAYER.md": {
+    "mtime": 1787879394.1014805,
+    "seen": 1788199059.233909,
+    "ast_hash": "bce3ddb1251a8248d1fd622fd5dd5c6c",
+    "semantic_hash": ""
+  },
+  "docs/goals/GOAL_13_AUTH_ONBOARDING_SETTINGS_WHATSAPP.md": {
+    "mtime": 1787879394.1014805,
+    "seen": 1788199059.2339091,
+    "ast_hash": "fa2cc3193f4d3b8c45eb4bbba4e0977f",
+    "semantic_hash": ""
+  },
+  "docs/goals/GOAL_14_SERVICES_CUSTOMERS_CALENDAR.md": {
+    "mtime": 1787879394.1172662,
+    "seen": 1788199059.2339098,
+    "ast_hash": "c4477004678e310d8fb00cc6ee1726f9",
+    "semantic_hash": ""
+  },
+  "docs/goals/GOAL_15_CONVERSATIONS_HANDOFF.md": {
+    "mtime": 1787879394.1172662,
+    "seen": 1788199059.2339103,
+    "ast_hash": "240387a5c049c742845e6e389e6e2ce2",
+    "semantic_hash": ""
+  },
+  "docs/goals/GOAL_16_DASHBOARD_MIGRATION.md": {
+    "mtime": 1787879394.1172662,
+    "seen": 1788199059.2339108,
+    "ast_hash": "b8cfc0947a3bba950c11cc15e1d36b15",
+    "semantic_hash": ""
+  },
+  "docs/goals/GOAL_17_LEGACY_CLEANUP.md": {
+    "mtime": 1787879394.1172662,
+    "seen": 1788199059.2339113,
+    "ast_hash": "3438ce9805e8a882daceee32a9982cbb",
+    "semantic_hash": ""
+  },
+  "docs/goals/GOAL_18_DEPLOY_FINAL_AUDIT.md": {
+    "mtime": 1787879394.1172662,
+    "seen": 1788199059.2339115,
+    "ast_hash": "9aebaa0a2bc56410cc39891492bc6559",
+    "semantic_hash": ""
+  },
+  "docs/goals/GOAL_CODEX_FRONTEND_ATENDLY.md": {
+    "mtime": 1787788135.1417887,
+    "seen": 1788199059.233912,
+    "ast_hash": "3e8fa89991fb0f78ea2bb0b31c4b998b",
     "semantic_hash": ""
   },
   "render.yaml": {
@@ -4432,6 +4570,12 @@
     "seen": 1788264302.457332,
     "ast_hash": "077faa1cca77a5b4925b32645596b42a",
     "semantic_hash": "077faa1cca77a5b4925b32645596b42a"
+  },
+  "RTK.md": {
+    "mtime": 1788199756.1238556,
+    "seen": 1788223996.301762,
+    "ast_hash": "5215800c9abc77330d271ad256c71f7f",
+    "semantic_hash": ""
   },
   "apps/ai-orchestrator/src/modules/channel/InboundMessageProcessor.ts": {
     "mtime": 1788266251.757303,

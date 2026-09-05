@@ -13,8 +13,7 @@ Leia nesta ordem:
 1. `docs/product-vault/00-HOME.md`;
 2. documento de produto/regra/fluxo relevante;
 3. `docs/product-vault/03-UX-UI/`;
-4. `apps/frontend-open-design/DESIGN.md` para identidade visual;
-5. este guia.
+4. este guia.
 
 Se houver conflito, o product vault prevalece.
 

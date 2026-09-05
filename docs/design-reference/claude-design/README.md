@@ -65,12 +65,12 @@ claude-design/
 
 - `handoff/Atendly-Stage-1-delivery-handoff.zip`: bundle nativo de **Handoff para Claude Code**, com o README gerado pelo Claude Design e uma cópia do projeto.
 - `handoff/claude-code-prompt.md`: prompt copiado da opção **Local agent** do handoff.
-- `prototype/Atendly-Stage-1-delivery.zip`: arquivo completo do projeto, exportado antes da geração do standalone. É a cópia canônica e limpa das 40 páginas originais.
-- `prototype/project/`: conteúdo do projeto extraído para inspeção local, sem as cópias redundantes de documentação usadas como input.
+- `prototype/Atendly-Stage-1-delivery.zip`: exportação original, canônica e imutável do Claude Design, preservada como arquivo histórico das 40 páginas originais.
+- `prototype/project/`: working copy extraída e sanitizada para inspeção pelos agentes. Pode ter documentação redundante removida, preserva as telas, assets e a estrutura necessários para inspeção e não substitui o ZIP como arquivo histórico original.
 - `prototype/Atendly-standalone.html`: standalone offline da página principal `Atendly.dc.html`, que reúne índice e design system.
 - `assets/`: cópia de fácil acesso dos assets visuais e artefatos de QA; inputs documentais históricos permanecem apenas nos ZIPs originais.
 
-O bundle de handoff foi gerado depois do standalone e, por isso, também contém a página exportada `Atendly - Índice e Design System.html`. A cópia canônica em `prototype/project/` preserva o estado anterior, com as 40 páginas originais.
+O bundle de handoff foi gerado depois do standalone e, por isso, também contém a página exportada `Atendly - Índice e Design System.html`. A working copy em `prototype/project/` preserva o estado anterior, com as 40 páginas originais.
 
 Depois das exportações, a página temporária usada para gerar o standalone foi removida do projeto online, restaurando o Claude Design às 40 páginas originais. Seu conteúdo permanece recuperável no standalone e no bundle de handoff arquivados aqui.
 

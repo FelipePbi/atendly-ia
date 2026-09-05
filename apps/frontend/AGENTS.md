@@ -39,13 +39,18 @@ Sempre validar primeiro a experiência mobile.
 - uma coluna;
 - ação principal clara;
 - formulário complexo em página própria;
-- Agenda focada em Dia/lista;
+- na Agenda, `Dia` é a visualização principal e padrão;
+- `Semana` e `Mês` também permanecem disponíveis na Agenda;
+- cada visualização da Agenda deve ter adaptação própria para o viewport, sem comprimir uma grade desktop para caber no celular;
 - Chat full-screen;
 - contexto de cliente via cabeçalho/tela secundária.
 
 ### Tablet/desktop
 
 Adicionar contexto progressivamente, sem alterar o modelo mental principal.
+
+- na Agenda, `Semana` pode ser a visualização padrão;
+- `Dia`, `Semana` e `Mês` permanecem disponíveis.
 
 ## Design contract
 

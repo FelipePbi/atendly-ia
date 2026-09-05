@@ -24,5 +24,6 @@ apps/evolution-go/whatsmeow-lib/
 
 # Product knowledge lives in the Obsidian vault, not in the code graph.
 # See docs/AI_WORKFLOW.md for the Product Vault / Graphify split.
+**/*.md
 docs/product-vault/
 docs/design-reference/

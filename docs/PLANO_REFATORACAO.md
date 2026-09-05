@@ -36,10 +36,10 @@ Este arquivo delimita trabalho futuro real. Ele não é uma especificação téc
 
 ### 5. Alinhar frontend e protótipos
 
-- redesenhar onboarding e navegação a partir do mobile;
-- substituir telas que representam agenda externa ativa;
-- cobrir loading, vazio, erro e sucesso sem prometer operações não concluídas;
-- atualizar ou remover os artefatos do Open Design identificados na auditoria documental.
+- alinhar o frontend existente ao Product Vault;
+- utilizar `docs/design-reference/claude-design/` como referência visual e comportamental aprovada;
+- preservar a separação entre especificação visual e decisões técnicas;
+- não copiar automaticamente HTML, CSS ou JavaScript do protótipo para produção.
 
 ### 6. Validar a transição
 

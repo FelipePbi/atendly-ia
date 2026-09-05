@@ -51,11 +51,10 @@ Evite: busca → 15 arquivos → contexto enorme.
 | Lembretes, notificações, instabilidade | `product-vault/01-Regras/07-Lembretes-Notificacoes-e-Instabilidade.md` |
 | Privacidade, retenção, dados do cliente | `product-vault/01-Regras/08-Privacidade-e-Retencao.md` |
 | Onboarding | `product-vault/02-Fluxos/01-Onboarding.md` + `product-vault/03-UX-UI/03-Onboarding-UX.md` |
-| UX, responsividade, telas, design system, copy | `product-vault/03-UX-UI/` |
-| Referência visual aprovada, layout, assets e microinterações | `design-reference/claude-design/` |
+| Comportamento, UX, navegação, regras, fluxos, requisitos de tela e responsividade como requisito de produto | `product-vault/03-UX-UI/` |
+| Aparência, layout, componentes, design system, assets, animações, microinterações e acabamento visual | `design-reference/claude-design/` |
 | Termo desconhecido | `product-vault/04-Referencia/01-Glossario.md` |
 | "Isso não foi decidido diferente antes?" | `product-vault/04-Referencia/02-Decisoes-Substituidas.md` e `product-vault/04-Referencia/99-Perguntas-e-Respostas.md` |
-| Prototipação visual | `UI_UX_PROTOTYPE_GUIDELINES.md` |
 | Trabalho técnico de alinhamento | `PLANO_REFATORACAO.md` |
 | Contrato HTTP registrado hoje | `../apps/bff/PUBLIC_API_V1.md` |
 | ADRs / decisões arquiteturais | `architecture/` |

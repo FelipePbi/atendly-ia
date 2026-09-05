@@ -1,0 +1,80 @@
+# Gaps — produto, experiência e implementação
+
+Baseline `5fb5d51`, 2026-09-05. Evidências completas: [CURRENT_STATE](CURRENT_STATE.md), [DATA_MIGRATION](DATA_MIGRATION.md), [REUSE_ANALYSIS](REUSE_ANALYSIS.md). Produto soberano: [Product Vault](../product-vault/00-HOME.md). Referências de arquivos abaixo são evidências do runtime, não autorização para executá-lo em produção.
+
+**P0:** falha de autorização confirmada no caminho estático, corrigir primeiro; não significa incidente comprovado. **P1:** risco de perda/ação incorreta/privacidade ou regra central incompatível, resolver antes de corte/validação. **P2:** capacidade MVP/UX/qualidade faltante, igualmente obrigatória para o MVP completo. Não há rollout de produto reduzido implícito nesta priorização.
+
+## Rastreabilidade das regras
+
+Estas são as fontes dos requisitos confrontados abaixo. Os fatos de implementação e suas referências de código estão em CURRENT_STATE/DATA_MIGRATION; uma proposta técnica não se torna regra de produto por aparecer nesta matriz.
+
+| Domínio / gaps | Fonte vigente |
+| --- | --- |
+| Negócio, identidade e escopo — G-02/G-26/G-34 | [Regras de negócio](../product-vault/01-Regras/01-Regras-de-Negocio.md), [Escopo do MVP](../product-vault/00-Produto/02-Escopo-do-MVP.md) |
+| Agenda e catálogo — G-10–G-13/G-16–G-18 | [Agenda e agendamentos](../product-vault/01-Regras/02-Agenda-e-Agendamentos.md), [Fluxos de agendamento](../product-vault/02-Fluxos/03-Fluxos-de-Agendamento.md) |
+| Clientes e memória — G-14/G-15 | [Clientes e memória](../product-vault/01-Regras/04-Clientes-e-Memoria.md) |
+| WhatsApp/controle humano — G-01/G-05–G-09 | [WhatsApp](../product-vault/01-Regras/05-WhatsApp.md), [Handoff e atendimento humano](../product-vault/02-Fluxos/04-Handoff-e-Atendimento-Humano.md) |
+| IA, categorias, mídia e conhecimento — G-21–G-24 | [IA e conversas](../product-vault/01-Regras/03-IA-e-Conversas.md) |
+| Importação — G-19/G-20 | [Importação Minha Agenda](../product-vault/01-Regras/06-Importacao-Minha-Agenda.md), [Fluxo único](../product-vault/02-Fluxos/05-Importacao-Unica.md) |
+| Onboarding/ativação — G-25/G-30 | [Onboarding](../product-vault/02-Fluxos/01-Onboarding.md), [Ativação e teste](../product-vault/02-Fluxos/02-Ativacao-e-Teste-do-WhatsApp.md) |
+| Lembretes/central/instabilidade — G-27/G-28 | [Lembretes e notificações](../product-vault/01-Regras/07-Lembretes-Notificacoes-e-Instabilidade.md) |
+| Privacidade/conta — G-03/G-04/G-22/G-29 | [Privacidade e retenção](../product-vault/01-Regras/08-Privacidade-e-Retencao.md); mecanismos de segurança são propostas técnicas para sustentar essas regras |
+| Navegação/visual — G-31 | [Navegação e módulos](../product-vault/00-Produto/04-Navegacao-e-Modulos.md), [Responsividade](../product-vault/03-UX-UI/02-Responsividade-Mobile-First.md), [Telas](../product-vault/03-UX-UI/04-Especificacao-das-Telas.md), [Claude Design](../design-reference/claude-design/README.md) |
+| Contratos e validação — G-32/G-33 | Requisitos de engenharia do Goal0, sustentados pelos consumers/checks auditados; o protótipo não define APIs ou deploy |
+
+## Matriz por domínio
+
+| ID / prioridade | Requisito vigente | Estado observado | Impacto/risco | Dependências e estratégia |
+| --- | --- | --- | --- | --- |
+| G-01 P0 — alvo WhatsApp | Isolamento entre negócios | Evolution GET/PUT advanced-settings usam ID da URL sem vínculo ao token (`routes.go:132`, handlers `:589/619`) | Token válido de A pode alcançar configuração de B se ID conhecido; não explorado | Goal 001: autorização de objeto e testes negativos/positivos; manter contrato de transporte |
+| G-02 P1 — confiança tenant | Um usuário/profissional/número por negócio; dados isolados | BFF deriva tenant corretamente, FKs compostas úteis; WhatsAppInstance por user; APIs internas confiam no bearer global | Associação/configuração divergente ou credencial com poder amplo | Consolidar tenant canônico, vínculo da instância e credenciais; validar dois tenants e inventário cross-database |
+| G-03 P1 — sessão | Conta protegida e exclusão suspende automações | Cookie cross-site configurado, CSRF só header permitido, JWT sem revogação por sessão | Mutações por contexto não validado/reutilização de sessão; exploração não testada | Proteção CSRF/origem, sessão revogável, gates de conta ativa; preservar auth existente |
+| G-04 P1 — segredos | Logs sem credenciais; dados mínimos | URL de webhook com segredo logada no Go; instanceToken no payload/raw; token BFF em texto | Multiplicação de acesso ao segredo e exposição nos logs/backups | Sanitizar envelope antes de persistir, resolver token por vínculo confiável, cifra/rotação/redaction com migração compatível |
+| G-05 P1 — recebimento | Mensagens não podem desaparecer após aceite | ACK202 antes de inbox; ProcessedEvent dedupe sem resultado | Queda pós-ACK ou falha pós-dedupe pode perder processamento | Inbox durável antes de ACK; estados/lease/retry e dedupe por evento/tenant/canal |
+| G-06 P1 — fragmentos | Janela 2–3s e reavaliar nova informação | Maps por processor criado a cada webhook | Respostas concorrentes/desatualizadas, duplo trabalho | Serialização por conversa, versão de entrada, debounce durável; revalidar antes de efeitos |
+| G-07 P1 — controle humano | Envio manual pausa; leitura não pausa; retorno explícito na sessão | `fromMe` comum só registra OWNER; envio interno exige takeover anterior | IA disputa atendimento, ou humano não consegue enviar na interação esperada | Controle da sessão fora do LLM; assumir atomicamente ao enviar; guard antes de tool e send |
+| G-08 P1 — inbox independente | IA off/pausada continua inbox | Guard encerra antes de Message | Conversas humanas incompletas no produto | Persistência de mensagem separada do processamento IA; ignorados nunca entram em classificação/embedding/contexto |
+| G-09 P1 — entrega | Mostrar resultado real de envio | Sem delivery status; marca ID antes de send; humano apaga tentativa ao falhar | Timeout confundido com não enviado; duplicação ou sucesso aparente | Outbox, receipt e estado unknown; retry somente quando seguro; UI pending/erro e correlação persistida |
+| G-10 P1 — agenda oficial | Somente Agenda Atendly operacional | Factory e consumers escolhem Minha Agenda; EXTERNAL público | Operação depende da fonte substituída | Núcleo local único; inventário, corte de writers/leitores por tenant e remoção após consumers; jamais dual-write remoto |
+| G-11 P1 — atomicidade/replay | Confirmar somente após operação, erro recuperável | Customer upsert antes do slot; resposta idempotente gravada após transação | Cadastro alterado sem agendamento; sucesso perdido/repetição | Customer e efeito local coerentes, resultado recuperável na transação, chaves estáveis, retry de serialização limitado |
+| G-12 P1 — sobreposição/remarcação | Horário antigo preservado até confirmar novo; holds 5min | Lock protege create/reschedule cooperantes; bloqueio/regras fora; hold ausente | Corrida com bloqueio/edição, proposta expirada | Política comum por recurso/intervalo, hold expira por relógio do banco; transação confirma novo e libera antigo |
+| G-13 P2 — agenda completa | Dia/Semana/Mês, exceções, pessoal, bloqueios recorrentes, multi-serviço | Regras/exceções parcialmente estruturadas; rotas/views incompletas | MVP operacional incompleto | Expandir entidades/contratos e UI mobile; recorrência finita com exceções e tratamento de conflito |
+| G-14 P1 — identidade cliente | Pessoa por ID; sem telefone manual; número compartilhado | Unique tenant/phone e upsert renomeiam pessoa | Histórico e agendamentos ligados à pessoa errada | Migrar consumers de telefone antes de remover índice; candidatos+seleção explícita, sem merge por número |
+| G-15 P2 — clientes/memória | Notas/tags autorizadas, preferências/relações/resumo/métricas básicas | Customer só nome/telefone; Conversation.state não é cadastro estruturado | IA sem autorização/proveniência e módulo incompleto | Scheduling dono de cliente e notas; IA memória derivada permitida e expiração; fatos de agenda abastecem histórico |
+| G-16 P1 — acordo comercial | Quatro preços, preço opcional, snapshots estáveis | Dois preços; catálogo lido antes da transação; import mapper pode fabricar zero | Valor/duração alterados ou ausente tratado como grátis | Quatro semânticas em todos leitores/constraints; proposta versionada e snapshots; zero somente quando explicitamente conhecido |
+| G-17 P2 — catálogo completo | Cor/descrição, buffers, recorrência, modalidades, regras privadas; importado sem duração em revisão | Duração sempre obrigatória, colorId null e atributos ausentes | Serviços importados inviáveis ou oferta incorreta | Estado de revisão separado de ativo/operacional; progressive disclosure, IA só serviço operacional |
+| G-18 P1 — histórico | Confirmado/concluído/cancelado/falta; presença separada; final cobrado opcional | Status string com SCHEDULED/CANCELLED, sem event log/presença/valor final | Histórico insuficiente; receita prevista confundida com recebida | Eventos e snapshots com proveniência, raw status desconhecido preservado; não backfill de concluído pela data |
+| G-19 P1 — importação única | Preview/categorias/destino com dados/parcial/concluir explícito | Job legado exige vazio, conflito global, auto-complete/source switch | Consome fluxo errado e impede importação posterior válida | Sessão+itens+decisões+único completedAt; preservar jobs legados para reconciliação; direito não deriva de lote técnico |
+| G-20 P1 — fidelidade importada | Clientes/histórico/cancelados/faltas/bloqueios suportados e incerteza visível | Snapshot futuro, filtro deleted, valores/durações com fallback | Perda silenciosa/transformação errada | Provar capacidade da API por categoria, preview fiel, preservação unknown e mapas; sem prometer dados que origem não fornece |
+| G-21 P1 — políticas IA | Três estilos, sem persona, sem inventar/confirmar cedo | Dois tons; graph/tools úteis mas regras dependem de prompt/JSON | Comportamento inconsistente e efeitos não autorizados | Prompts versionados + guards determinísticos, evals com falha/ambiguidade/humano; manter gateway Scheduling |
+| G-22 P1 — privacidade conversa | Comercial/Não classificadas/Pessoal; override; Ignorar IA absoluto | Classificação técnica JSON, sem Contact ignorado nem sessão explícita | Conteúdo privado pode ser processado | Política persistida antes de classificar/transcrever/RAG; memória anterior removida do contexto; armazenar inbox permitido |
+| G-23 P2 — mídia | Áudio entendido; imagem humano; documento visível sem interpretação | Não textual vira unsupported genérico | Conversa não segue fluxo do MVP | Pipeline áudio controlado por consentimento/ignore; attachments e handoff; não criar visão/PDF RAG |
+| G-24 P2 — conhecimento/sugestões | FAQ e conhecimento editáveis, sugestões no atendimento humano | pgvector/seed disponíveis; sem CRUD público completo | Infra existe mas feature incompleta | CRUD versionado e reindexação por owner; sugestões sem autoenvio e sem dados pessoais não autorizados |
+| G-25 P1 — onboarding/ativação | Pode concluir sem WA; teste real ativa; mínimos operacionais | WhatsApp obrigatório e enabled sem prova do teste | Bloqueia entrada ou mostra IA ativa sem aptidão | Onboarding completion separado de activation eligibility/test, demo simulada claramente distinta do teste real |
+| G-26 P2 — negócio | Dados/modalidades/horários/instruções consistentes | BFF perfil mínimo e timezone replicado | IA não tem informações suficientes, settings incompleto | BFF dono do negócio; projeções versionadas para IA/Scheduling, falha visível e reconciliação |
+| G-27 P1 — notificações/jobs | Até2 lembretes, default1/24h, presença separada, notificar cliente por padrão em mudanças relevantes | Sem mecanismo durável de domínio; health só sonda | Eventos/lembretes perdidos ou duplicados | Jobs no dono, outbox, dedupe por appointment/version; revalidar cancelamento/remarcação antes de envio |
+| G-28 P2 — central/alertas | Níveis informativo/atenção/crítico, handoff, falha lembrete, email crítico | Dashboard health/logs não são central de produto | Profissional não percebe falha/cliente esperando | Central persistida no BFF, eventos por dono, email crítico configurável; não novo app nativo/push |
+| G-29 P1 — retenção/conta | 30/90/180/365, comercial90/pessoal30; reduzir confirma; exclusão recuperável7dias | Sem ciclo cross-store ou conta pendente | Retenção indefinida/cópias esquecidas; automações após exclusão | Jobs de purge de conteúdo/copias; suspender conta/WA, restore exige novo teste. Metadados mínimos e histórico operacional separados |
+| G-30 P1 — status honesto | IA/WA mostram estado real | AppShell default connected; settings desejado pode divergir de IA | Usuário acredita que automação funciona | Read model com desired/effective e conexão verificada; unknown/loading distintos |
+| G-31 P2 — navegação/visual | Mobile→tablet→notebook→desktop; Clientes principal; Recepção | Shell antigo e CSS anterior | UX aprovada não implementada | Reusar Next/adapters/primitivas; substituir shell/tokens/composição e validar estados/acessibilidade |
+| G-32 P2 — contratos | Frontend/backend alinhados | Pacote domínios vazio, schemas locais duplicados e enums antigos | Mudança parcial quebra parser silenciosamente | Contratos por operação e testes producer/consumer; preservar replay e janela explícita |
+| G-33 P1 — validação/deploy | Cada Goal repositório validável | Build-all omite Scheduling; BFF integration obsoleto; IA1fail; migrations no build; sem CI localizado | Migração prossegue sem rede de segurança | Gate completo, bancos efêmeros, builds limpos, migrate etapa controlada e ensaio de restore; suites por risco |
+| G-34 P2 — escopo senha | Recuperação somente visual no MVP | Fluxo real FE/BFF com delivery opcional | Feature além do escopo e feedback de envio indevido | Isolar UX conforme vault; manter backend temporariamente até verificar uso, sem ampliar serviço |
+
+## Produto × protótipo
+
+1. **Funcional:** Movimento restringe Semana/Mês no mobile, em conflito com vault e Agenda do próprio protótipo. A implementação deve manter as três vistas mobile.
+2. **Editorial:** títulos de estilos variam em gênero entre notas, sem divergência no número/default. Usar três estilos e labels dos guardrails; não criar opção personalizada.
+3. **Cobertura:** frames de retenção, importação, notificações, IA e clientes são especificação, não prova de API/entidade existente. Adaptadores do protótipo e prompts de handoff não entram automaticamente no runtime.
+
+## Incertezas isoladas e decisões necessárias
+
+| Questão | Evidência faltante | Como resolver sem bloquear o plano inteiro |
+| --- | --- | --- |
+| Há tenants/dados legados em operação? | Bancos/migrations implantados e backup | Inventário autorizado e dry-run antes do corte; planejar preservação por padrão |
+| Capacidade completa Minha Agenda | Documentação/payloads sanitizados de categorias/paginação/histórico/status | Gate do Goal de importação; limitação do mapper não prova limitação da origem |
+| Conclusão de importação legada conta como única? | Decisão de transição do usuário, se houver negócios nessa condição | Proposta conservadora em DECISIONS; nunca conceder reimportação nem consumir direito silenciosamente |
+| Capacidade contínua do deploy e email crítico | Ambiente/custo/contas efetivos | Antes de ativar jobs em operação, provar processo sempre executando ou aprovar gasto/provider; não assumir free suficiente |
+| SLA, RPO/RTO e volume | Uso real ainda não inspecionado | Medir no ensaio; não prometer zero downtime, prazo ou custo fictício |
+
+As demais escolhas técnicas reversíveis ficam documentadas como propostas de arquitetura. Nenhuma lacuna autoriza apagar dados desconhecidos ou reduzir o MVP.

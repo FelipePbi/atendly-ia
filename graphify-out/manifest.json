@@ -2200,5 +2200,383 @@
     "seen": 1788578458.9896588,
     "ast_hash": "2aa3d7e7cdb05afd3c628eb4d7fe3ec8",
     "semantic_hash": "2aa3d7e7cdb05afd3c628eb4d7fe3ec8"
+  },
+  "apps/ai-orchestrator/docker-compose.yml": {
+    "mtime": 1788225736.2561817,
+    "seen": 1788578879.6942303,
+    "ast_hash": "b1dfcbf5d40e568e7217c0bb1443287a",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/.github/ISSUE_TEMPLATE/-en--bug-report.yaml": {
+    "mtime": 1785763922.8052783,
+    "seen": 1788578879.6942317,
+    "ast_hash": "93f3526cf3038194aa8bff03f2992328",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/.github/ISSUE_TEMPLATE/-en--feature-request.yaml": {
+    "mtime": 1785763922.8052783,
+    "seen": 1788578879.6942325,
+    "ast_hash": "ca9bcaeb5161a1b7b6e2cdd19ff9dcd9",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/.github/ISSUE_TEMPLATE/-pt--reportar-bug.yaml": {
+    "mtime": 1785763922.806277,
+    "seen": 1788578879.6942332,
+    "ast_hash": "9c80d2e3c5c2ca4880e2f5beab3ae52d",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/.github/ISSUE_TEMPLATE/-pt--solicitar-recurso.yaml": {
+    "mtime": 1785763922.806277,
+    "seen": 1788578879.6942337,
+    "ast_hash": "3ad801c9c345e9b7a5e2ea092319ac87",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/.github/workflows/publish_docker_image.yml": {
+    "mtime": 1785763922.8072793,
+    "seen": 1788578879.6942341,
+    "ast_hash": "da0064a1d9d3ac01a2bbea41f94609cd",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/docker/examples/docker-compose.full.yml": {
+    "mtime": 1785763922.8072793,
+    "seen": 1788578879.6942346,
+    "ast_hash": "5ce01ea5437a3d9c9d71ee820ba7ecf7",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/docker/examples/docker-compose.swarm.yml": {
+    "mtime": 1785763922.8072793,
+    "seen": 1788578879.6942348,
+    "ast_hash": "ec21ae42cc734a904b8de597772c1fe6",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/docker/examples/docker-compose.yml": {
+    "mtime": 1785763922.8072793,
+    "seen": 1788578879.6942353,
+    "ast_hash": "05494b1b64ec6217ceb50675c5c06699",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/docs/swagger.yaml": {
+    "mtime": 1785763922.8072793,
+    "seen": 1788578879.6942363,
+    "ast_hash": "1a252c9a14b70183ef5ef25ccf7fb647",
+    "semantic_hash": ""
+  },
+  "render.yaml": {
+    "mtime": 1788288406.0254202,
+    "seen": 1788578879.6942368,
+    "ast_hash": "c8bd0176aa18c5a127a106857ecacf73",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/public/hover-evolution.png": {
+    "mtime": 1785763922.879913,
+    "seen": 1788578879.6942372,
+    "ast_hash": "c249f2c9117209e70788b671f3e9b4fd",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/public/images/atendai-logo.png": {
+    "mtime": 1785763922.8809118,
+    "seen": 1788578879.6942377,
+    "ast_hash": "0b0e47db41c254121a34db25104705dc",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/public/images/bmc_qr.png": {
+    "mtime": 1785763922.8809118,
+    "seen": 1788578879.694238,
+    "ast_hash": "89cd117e4f423386bd4614f4eb36aa9c",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/public/images/code.png": {
+    "mtime": 1785763922.8809118,
+    "seen": 1788578879.6942384,
+    "ast_hash": "3fc3eb78cfdef3ffea0b8bc66b751cce",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/public/images/cover.png": {
+    "mtime": 1785763922.8819118,
+    "seen": 1788578879.694239,
+    "ast_hash": "af7cc5c2a3a4cfb6beafce6df54da475",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/public/images/evolution-logo.png": {
+    "mtime": 1785763922.8819118,
+    "seen": 1788578879.6942394,
+    "ast_hash": "84ab5ec0f5c9f0c61fb38d1654d4333c",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/public/images/evolution-pro.png": {
+    "mtime": 1785763922.8829122,
+    "seen": 1788578879.69424,
+    "ast_hash": "a0e0c1214ca0ea0dfe9d7ac2f2cc0c73",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/public/images/picpay-image.png": {
+    "mtime": 1785763922.8839111,
+    "seen": 1788578879.6942406,
+    "ast_hash": "f68f1109abcb211d7b6d035c8c76a040",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/public/images/picpay-qr.jpeg": {
+    "mtime": 1785763922.8849115,
+    "seen": 1788578879.694241,
+    "ast_hash": "cd5c0072412a7bf720a041b857b07f54",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/public/images/qrcode-pix.png": {
+    "mtime": 1785763922.8849115,
+    "seen": 1788578879.6942415,
+    "ast_hash": "381e15413d4971396b4ba1f2367123ac",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/public/images/video-cover.png": {
+    "mtime": 1785763922.8849115,
+    "seen": 1788578879.694242,
+    "ast_hash": "e6ee132ec77f4b0aee86067044e7a396",
+    "semantic_hash": ""
+  },
+  "apps/frontend/assets/corporativa_feminino.png": {
+    "mtime": 1785763922.9756231,
+    "seen": 1788578879.6942425,
+    "ast_hash": "616f31e15c4b87a33e7f8d61323f2657",
+    "semantic_hash": ""
+  },
+  "apps/frontend/assets/corporativa_masculino.png": {
+    "mtime": 1785763922.9756231,
+    "seen": 1788578879.694243,
+    "ast_hash": "f2cb016c129b3e04eabce58a457b9f47",
+    "semantic_hash": ""
+  },
+  "apps/frontend/assets/leve_proxima_feminino.png": {
+    "mtime": 1785763922.9793823,
+    "seen": 1788578879.6942437,
+    "ast_hash": "ca0a6d4992a92038e67fbcd0b1c0e9a5",
+    "semantic_hash": ""
+  },
+  "apps/frontend/assets/leve_proxima_masculino.png": {
+    "mtime": 1785763922.982095,
+    "seen": 1788578879.6942441,
+    "ast_hash": "72f9946e7746f76d5a3815a57e08ae05",
+    "semantic_hash": ""
+  },
+  "apps/frontend/assets/personalizada_feminino.png": {
+    "mtime": 1785763922.9840982,
+    "seen": 1788578879.6942446,
+    "ast_hash": "0a7f3dbc77735113454ff38319500947",
+    "semantic_hash": ""
+  },
+  "apps/frontend/assets/personalizada_masculino.png": {
+    "mtime": 1785763922.9864428,
+    "seen": 1788578879.694245,
+    "ast_hash": "37c840429ae4bea906cab95b556a4baf",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/brand/atendly-favicon-32x32.png": {
+    "mtime": 1785763922.9864428,
+    "seen": 1788578879.6942456,
+    "ast_hash": "15d62456edec00989ad1eb45b7f3be49",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/brand/atendly-favicon-512x512.png": {
+    "mtime": 1785763922.9864428,
+    "seen": 1788578879.694246,
+    "ast_hash": "485292f8efbf754c2da44ef30c4123ee",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/brand/atendly-logo-horizontal.png": {
+    "mtime": 1785763922.9864428,
+    "seen": 1788578879.6942463,
+    "ast_hash": "bb00f18f96110ab2140deb61e42d9d2e",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/brand/atendly-logo-icon.png": {
+    "mtime": 1785763922.9864428,
+    "seen": 1788578879.694247,
+    "ast_hash": "2f5961d80ba9e35d92b50a1225358f8f",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/file.svg": {
+    "mtime": 1785763922.9864428,
+    "seen": 1788578879.6942475,
+    "ast_hash": "d09f95206c3fa0bb9bd9fefabfd0ea71",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/globe.svg": {
+    "mtime": 1785763922.991689,
+    "seen": 1788578879.694248,
+    "ast_hash": "2aaafa6a49b6563925fe440891e32717",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/icons/atendly-icons.svg": {
+    "mtime": 1787784769.2465744,
+    "seen": 1788578879.6942484,
+    "ast_hash": "8fa02ea4155026ba2381ea9185c9c5fc",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/next.svg": {
+    "mtime": 1785763922.991689,
+    "seen": 1788578879.694249,
+    "ast_hash": "8e061864f388b47f33a1c3780831193e",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/backgrounds/swoosh-active-green.svg": {
+    "mtime": 1785763922.991689,
+    "seen": 1788578879.6942494,
+    "ast_hash": "cd9eef484851bb1de45d67d959cfc51b",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/backgrounds/swoosh-lavender.svg": {
+    "mtime": 1785763922.991689,
+    "seen": 1788578879.6942499,
+    "ast_hash": "6c6812ea5fca84d64fe0329eb00a78a3",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/backgrounds/swoosh-mint.svg": {
+    "mtime": 1785763922.991689,
+    "seen": 1788578879.6942506,
+    "ast_hash": "00cbd86cb46b1c1a95c5337561454b57",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/icons/arrow-left.svg": {
+    "mtime": 1785763922.991689,
+    "seen": 1788578879.694251,
+    "ast_hash": "90fe850229744517bee798a0c82d6c37",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/icons/brand-sparkle.svg": {
+    "mtime": 1785763922.991689,
+    "seen": 1788578879.6942515,
+    "ast_hash": "2bfb2969b5523b490f0de50f61e4c25a",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/icons/briefcase.svg": {
+    "mtime": 1785763922.991689,
+    "seen": 1788578879.6942518,
+    "ast_hash": "31278e51b83d90dcd9c03dc95fabd342",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/icons/chat-bubble.svg": {
+    "mtime": 1785763922.991689,
+    "seen": 1788578879.6942523,
+    "ast_hash": "ac012f4ba882172a44f3cfa84d345dea",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/icons/check.svg": {
+    "mtime": 1785763922.9952278,
+    "seen": 1788578879.694253,
+    "ast_hash": "5db61645892a5504468df2f6a127bcba",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/icons/heart.svg": {
+    "mtime": 1785763922.9952278,
+    "seen": 1788578879.6942537,
+    "ast_hash": "41d6a7af5915343c89e1d19c2c932c9e",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/icons/magic.svg": {
+    "mtime": 1785763922.9952278,
+    "seen": 1788578879.6942542,
+    "ast_hash": "94f25f3f03afa440a73787e0dd5827d1",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/icons/quote.svg": {
+    "mtime": 1785763922.9952278,
+    "seen": 1788578879.6942546,
+    "ast_hash": "153d63f60e7198c2e3a0360ea93bb309",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/personas/feminino/corporativa.png": {
+    "mtime": 1785763922.998242,
+    "seen": 1788578879.694255,
+    "ast_hash": "fe101321d61b725925d22ae6e41598e0",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/personas/feminino/leve-proxima.png": {
+    "mtime": 1785763923.0002222,
+    "seen": 1788578879.6942556,
+    "ast_hash": "37f2cb442cc4a3854d90a705668eb61a",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/personas/feminino/personalizada.png": {
+    "mtime": 1785763923.0022252,
+    "seen": 1788578879.694256,
+    "ast_hash": "5c0ce2909bcd84fca14d9ffd6539d95e",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/personas/masculino/corporativa.png": {
+    "mtime": 1785763923.0022252,
+    "seen": 1788578879.6942563,
+    "ast_hash": "be84552b66f7b77cc79a1155001b1e85",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/personas/masculino/leve-proxima.png": {
+    "mtime": 1785763923.0062876,
+    "seen": 1788578879.6942568,
+    "ast_hash": "00e2cf17db88ea2f042a85d8fb5f0c03",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/personas/masculino/personalizada.png": {
+    "mtime": 1785763923.0082903,
+    "seen": 1788578879.6942575,
+    "ast_hash": "aa6e5109529c0233ef9513c8f756a627",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/personas/preview-assets.png": {
+    "mtime": 1785763923.0082903,
+    "seen": 1788578879.694258,
+    "ast_hash": "7eb8c994b01c1e4a10b7f45d9ffe5039",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/personas/tight/feminino/corporativa.png": {
+    "mtime": 1785763923.0108936,
+    "seen": 1788578879.6942585,
+    "ast_hash": "d5b257acceed303d5ccb4bd2e1881a0b",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/personas/tight/feminino/leve-proxima.png": {
+    "mtime": 1785763923.0130005,
+    "seen": 1788578879.6942587,
+    "ast_hash": "1c000198315a1a5719952185c1bd4491",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/personas/tight/feminino/personalizada.png": {
+    "mtime": 1785763923.0146322,
+    "seen": 1788578879.6942592,
+    "ast_hash": "2241fa4b82921a77563e90c2cff8668c",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/personas/tight/masculino/corporativa.png": {
+    "mtime": 1785763923.0156367,
+    "seen": 1788578879.6942596,
+    "ast_hash": "9d2b35f1baf862158278f39928f59fc9",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/personas/tight/masculino/leve-proxima.png": {
+    "mtime": 1785763923.0166357,
+    "seen": 1788578879.6942601,
+    "ast_hash": "c2ced8bb9ce16c8a05c574dda1648581",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/personas/tight/masculino/personalizada.png": {
+    "mtime": 1785763923.018592,
+    "seen": 1788578879.694261,
+    "ast_hash": "fdca1cb969a8d1210574caf826de9fb8",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/personas-ui/reference/segunda-imagem-referencia.png": {
+    "mtime": 1785763923.0225945,
+    "seen": 1788578879.6942616,
+    "ast_hash": "4e6273597671c8e35191ec10f3cc75b8",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/vercel.svg": {
+    "mtime": 1785763923.0229762,
+    "seen": 1788578879.694262,
+    "ast_hash": "c0af2f507b369b085b35ef4bbe3bcf1e",
+    "semantic_hash": ""
+  },
+  "apps/frontend/public/window.svg": {
+    "mtime": 1785763923.0229762,
+    "seen": 1788578879.6942623,
+    "ast_hash": "a2760511c65806022ad20adf74370ff3",
+    "semantic_hash": ""
   }
 }

@@ -1,0 +1,99 @@
+# Plano mestre de migração
+
+Roadmap de planejamento v1, derivado da auditoria de `5fb5d51`, em 2026-09-05. Há **25 Goals estimados**, mais Goal0. O número resulta de limites distintos de revisão: autorização, validação, ownership, transporte, domínios operacionais, IA, superfícies UI, automações e corte. Não são versões menores do MVP nem estimativa de prazo.
+
+Objetivo final: implementar o único MVP do Product Vault, com experiência Claude Design aprovada e Agenda Atendly única. Direção: [TARGET_ARCHITECTURE](TARGET_ARCHITECTURE.md); decisões: [DECISIONS](DECISIONS.md); gates de dados: [DATA_MIGRATION](DATA_MIGRATION.md).
+
+## Regras de execução
+
+- Só Goal001 está detalhado. Depois de cada implementação, Astra inspeciona commit/diff, testes e dados relevantes e reavalia o próximo Goal antes de escrevê-lo.
+- Cada Goal mantém repositório compilável e contratos interoperáveis. Um consumer novo entra antes do produtor ativar um contrato incompatível. Não há período planejado de frontend quebrado aguardando backend.
+- Estado novo pode existir em schema sem ser exposto até consumer pronto; adapters temporários têm dono/critério de remoção. Não lançar para validação de produto enquanto faltarem partes do MVP.
+- Não apagar legado antes de inventário/corte; não preservar possibilidade de duas agendas no produto novo. Janela técnica congelada para transição é indisponibilidade explicitada, não modo híbrido.
+- Fixtures/bancos de teste isolados, sem mensagens a clientes reais. Relatórios do executor não substituem review real.
+- IDs estáveis; inserir/dividir/reordenar com histórico, sem detalhar Goals futuros antecipadamente.
+
+## Sequência e dependências
+
+| ID / nome | Objetivo e motivo da posição | Dependências | Áreas principais | Risco | Resultado verificável |
+| --- | --- | --- | --- | --- | --- |
+| 001 — Autorizar alvo de instância | Fechar falha P0 pequena e independente antes de ampliar integração | Baseline auditada | Evolution handlers/auth/tests | Alto, escopo pequeno | Token A não lê/altera B; uso legítimo preservado e tests Go |
+| 002 — Base de validação e contratos de transporte | Tornar checks confiáveis antes de mudanças de domínio; corrigir gaps de harness já identificados | 001 | Scripts, suites, contracts/common, build/CI | Médio | Build inclui Scheduling; IA teste requestId alinhado; BFF usa rota real; fixtures/DBs isolados e checks reproduzíveis |
+| 003 — Tenant, sessão e vínculo WhatsApp | Consolidar identidade/confiança/credenciais antes de novos fluxos persistidos | 002 | BFF, IA, Scheduling, Evolution transporte | Alto | Cardinalidade/ownership reconciliados, CSRF/revogação, scoping e tokens/vínculos testados com dois tenants |
+| 004 — Transporte e mensagens duráveis | Remover perda por ACK/dedupe antecipado e efeito remoto incerto | 003 | IA inbox/outbox, Go webhook/receipts, contracts | Alto | Evento persistido antes de ACK; retomada/lease/dedupe; status delivery e segredos sanitizados; queda exercitada |
+| 005 — Contatos, sessão e controle humano | Impedir processamento indevido antes de evoluir assistente/consumers | 004 | IA/Conversas/Contact, BFF endpoints | Alto | Três categorias/override/ignore, sessão24h, inbox IA off, envio humano assume e modelo não disputa |
+| 006 — Clientes como pessoas | Retirar identidade por telefone antes de novas escritas/importação | 003,005 | Scheduling clientes, IA mapeamento, BFF/contracts | Alto | Cliente sem telefone/número compartilhado, ID estável, relações/notas/tags/permissão e backfill conservador |
+| 007 — Catálogo e acordo comercial | Estabelecer semânticas consumidas pela agenda e IA | 003 | Scheduling serviços, BFF/contracts | Médio/alto | Quatro preços, atributos MVP, pendências importadas, ativo/operacional e contratos compatíveis |
+| 008 — Transações, holds e histórico da agenda | Corrigir atomicidade/replay e preservar acordo antes de ampliar ocupação | 006,007 | Scheduling agenda/idempotência/DB, tools/adapters | Alto | Mesma política writers, hold5min, snapshot/proposta, cancelar/remarcar seguros, status/presença/valor final/eventos |
+| 009 — Disponibilidade, pessoal e recorrência | Completar entidades e conflitos usados pelas telas e importação | 008 | Scheduling regras/exceções/blocos/séries, BFF/contracts | Alto | Exceções gerenciáveis, pessoal/bloqueios recorrentes, ocorrências/conflitos e override humano autorizado |
+| 010 — Importação única e corte do writer remoto | Implantar import-only depois de identidade/catálogo/agenda sólidos | 004,006,007,009; gates M0–M4/U-02 se aplicável | Scheduling importação/adapter, BFF, ajustes mínimos de consumers atuais | Alto | Preview/itens/parcial/concluir único/base preenchida; capacidade origem comprovada; novos fluxos sem provider remoto; corte dos legados reconciliado |
+| 011 — Assistente e ferramentas vigentes | Integrar raciocínio às invariantes prontas e aos três estilos | 005,006,007,008,009 | IA graph/prompts/tools, contracts | Alto | Confirmação explícita, ambiguidades, buffers, guard antes de efeito, erros sem mensagem de infraestrutura e evals |
+| 012 — Conhecimento, memória e sugestões | Completar conteúdo permitido após políticas/identidade | 005,006,011 | IA RAG/memória, BFF conhecimento | Médio/alto | FAQ CRUD/versionamento, memória com proveniência/autorização, sugestões humanas sem autoenvio |
+| 013 — Áudio e mídia | Fechar modos de atendimento respeitando política antes da inbox final | 004,005,011 | IA attachments/transcrição, Evolution adapter, BFF | Alto | Áudio válido nas tools; imagem humano; documento visível sem interpretação; ignored não transcreve |
+| 014 — Fundação visual, shell e auth | Migrar UI pela base compartilhada já com estados/contratos confiáveis | 002,003,005 | Frontend tokens/primitivas/layout/runtime/auth | Médio | Recepção, cinco destinos mobile, status real, acessibilidade/motion; login/cadastro e recovery no escopo |
+| 015 — Clientes e Serviços na UI | Conectar primeiro cadastros necessários à operação | 006,007,014 | Frontend diretórios/forms, BFF adapters | Médio | Telas completas com dados/pendências reais, busca/detalhe/editar, notas/autorização/relações, serviços progressivos |
+| 016 — Agenda na UI | Entregar núcleo operacional completo após cadastros | 008,009,014,015 | Frontend Agenda, adapters | Alto | Dia/Semana/Mês mobile, criação/multi-serviço/pessoal/holds/recorrência/status/histórico e conflitos seguros |
+| 017 — Conversas e chat na UI | Expor política/sessão/mídia pronta | 005,012,013,014 | Frontend inbox/chat, BFF read model | Médio/alto | Três abas, prioridade humano, busca, assunção no envio, suggestions, mídia/entrega e estados reais |
+| 018 — Negócio, onboarding e ativação real | Integrar jornada de entrada depois dos mínimos e IA completos | 010,011,013,014,015,016 | BFF perfil/ativação, IA config, frontend onboarding/WhatsApp | Alto | Quatro blocos, começar/importar, demo, estilo, WA opcional, consentimento/ignorados/teste real, autoativação válida e reconciliação desired/effective |
+| 019 — Importação na UI e histórico | Finalizar experiência da sessão única com operação/backend prontos | 010,014,015,016,018 | Frontend importação/Settings, BFF | Médio/alto | Preview categorias/conflitos/parcial/concluir forte/histórico e sem nova importação; não UI de source switching |
+| 020 — Lembretes e lifecycle da agenda | Automatizar sobre eventos/versões estáveis e entrega recuperável | 004,005,008,009,011 | Scheduling jobs, IA entrega, contratos BFF | Alto | Até2/default1-24h, confirmação presença separada, cancelamento/remarcação invalidam jobs, conclusão+30min/falta e falha auditável |
+| 021 — Notificações e alertas críticos | Tornar falhas/automações visíveis após producers estarem definidos | 004,005,018,020; capacidade/email U-03 | BFF central/preferences/email, IA/Scheduling eventos, frontend | Médio/alto | Central lida/prioridade, banners/status, alertas críticos e falha lembrete; eventos idempotentes ativados com consumer pronto |
+| 022 — Retenção e exclusão recuperável | Fechar lifecycle de todas as cópias depois dos stores finais | 003,004,005,012,013,018,021; U-01 | BFF lifecycle, IA/checkpoints/mídia, Scheduling/Go comandos, frontend | Alto | Retenção configurável/confirmada, purge multistore, conta7dias, suspensão imediata e restore com novo teste |
+| 023 — Home e Configurações completas | Consolidar operação e preferências com capacidades reais já disponíveis | 015–022 | Frontend Home/Settings, BFF agregação | Médio | Checklist/estados/central, negócio/modalidades/IA/FAQ/agenda/WA/retention/lembretes/conta; sem métricas não aprovadas |
+| 024 — Retirada do legado e ensaio de release | Remover compatibilidade somente depois da adoção completa | 010,019,022,023; gates M5–M6 | Todos consumers, contratos/dados legados, infra/docs técnicas | Alto | Zero consumers antigos, writer remoto inexistente, migrations/restore ensaiados, build e deploy gate completos/capacidade validada |
+| 025 — Auditoria final do MVP | Verificar produto inteiro, arquitetura e UX antes de uso real | 024 e todos critérios MVP | Todos apps, dados, fluxos E2E, referência visual | Alto | Conformidade global aceita por Astra; relatório de evidência/limites e pendências zero de MVP |
+
+Goal010 inclui compatibilidade mínima dos consumers atuais para que o corte operacional não deixe o frontend oferecendo operação impossível; Goal019 entrega a composição visual final. Não há duas implementações operacionais concorrentes. Da mesma forma, cada contrato de evento entra com receptor compatível antes de ativar seu produtor.
+
+## Fases, marcos e caminho crítico
+
+- **Segurança e base (001–005):** autorizar alvo, checks confiáveis, tenant e recebimento/controle humano. Marco A = eventos não aceitos sem persistência e guard de conteúdo efetivo; ainda não é validação de produto.
+- **Núcleo operacional e importação (006–010):** identidade, catálogo, agenda, ocupação e import-only. Marco B = unidade operacional local e dados reconciliáveis.
+- **IA e experiência (011–019):** regras/knowledge/mídia e módulos UI/onboarding. Marco C = jornadas integradas representadas com estados reais; ainda faltam operações/lifecycle.
+- **Operação e conformidade (020–025):** lembretes, central, retenção, Home/settings, limpeza e auditoria. Marco D = MVP completo apto à validação real definida no vault.
+
+Caminho crítico de dependências, sem estimativa de duração: `001 → 002 → 003 → 004 → 005 → 006 → 008 → 009 → 010 → 018 → 021/022 → 023 → 024 → 025`. Catálogo007 é requisito de008; IA011–013 e UI014–019 se juntam antes do fechamento. Pode haver execução paralela de planejamento/testes em ramos independentes, mas cada Goal implementado continua sujeito a review e replanejamento; não gerar todos os prompts agora.
+
+## Riscos e gates globais
+
+| Risco | Gate / controle |
+| --- | --- |
+| Isolamento/credenciais | 001/003 com testes negativos; revisão de scopes/objetos e tokens fora de logs/raw |
+| Perda/duplicação de mensagem ou efeito | 004/008/020: restart, timeout, receipt unknown, replay pós-commit, race DB |
+| Corrupção de pessoa/acordo/histórico | 006–010: IDs, snapshots, ausência explícita e reconciliação; não merge por número |
+| Origem externa não fornecer categoria necessária | Prova dirigida em010; registrar limitação e replanejar, sem fingir importação completa ou reduzir MVP silenciosamente |
+| Dados/instâncias implantados desconhecidos | M0 obrigatório antes de backfill/corte, backup restaurável; nunca assumir banco vazio |
+| Processo free não sustentar jobs | Ensaio e capacidade real, U-03 antes de operação; não depender de health pings como garantia |
+| Semântica de retenção não classificada e conclusão legada | U-01/U-02 resolvidas antes de ação irreversível correspondente, sem bloquear001 |
+| Testes estáticos passarem com produto errado | Contratos/integração/E2E+review manual dos fluxos; script regex é auxiliar |
+
+## Definition of Done por Goal
+
+1. Claude implementou somente escopo vigente e entregou commit/diff/report com arquivos, contratos/dados afetados e comandos/resultados.
+2. Testes obrigatórios e build/checks do escopo passaram; skipped, baseline failures e limitações estão separados, nunca mascarados como sucesso.
+3. Astra inspecionou diff real, migrations/consumers/testes e reproduziu a verificação relevante.
+4. Astra confirmou aderência ao Goal, arquitetura e Product Vault.
+5. Documentação necessária atualizada para refletir a implementação verificada.
+6. Decisões, riscos e pendências registrados; dados/rollback tratados quando aplicáveis.
+7. MIGRATION_STATUS atualizado após review: IMPLEMENTED não significa ACCEPTED. Correções exigidas antes de seguir consumer dependente.
+8. Próximo Goal e roadmap reavaliados com novas descobertas. Só então o próximo prompt executável é escrito.
+
+## Definition of Done global do MVP
+
+- Todo escopo MVP do Product Vault implementado; não há corte funcional provisório nem “beta” como solução de dívida.
+- Frontend fiel ao Claude Design subordinado ao vault, mobile principal, tablet/notebook/desktop tratados, Clientes principal, Dia/Semana/Mês, acessibilidade e reduced-motion.
+- Agenda Atendly única operacional; Minha Agenda somente importação única com conclusão explícita, destino com dados, parcial/conflitos/histórico e dados importados operáveis.
+- Serviços com preços/atributos/pendências corretos; clientes por pessoa, sem telefone quando permitido, número compartilhado, memória/observações autorizadas e histórico confiável.
+- Holds/disponibilidade/recorrência/pessoal/bloqueios/multi-serviço; confirmação/cancelamento/remarcação/estados/valor final/presença e snapshots consistentes, com concorrência e replay testados.
+- Três estilos, IA sem persona, regras determinísticas, conhecimento/FAQ/sugestões/memória permitida, áudio, imagem→humano, documentos sem interpretação.
+- WhatsApp ponta a ponta e recuperação/entrega observável; grupos fora; Ignorar IA absoluto; controle humano e sessões funcionam sem perder inbox.
+- Onboarding opcional de WhatsApp, demo distinta, teste real/ativação e estados desired/effective honestos; Home e Settings completas.
+- Lembretes/central/notificar cliente/alertas críticos, retenção de cópias e conta com recuperação7dias funcionando.
+- Auth/tenant isolation e credenciais validados; migrations/backfill/restore/corte ensaiados; contratos legados sem consumer retirados e nenhuma escrita remota operacional.
+- Loading/erro/vazio/sucesso reais em todas as superfícies relevantes; nenhuma confirmação antes de efeito concluído.
+- Checks, integrações PostgreSQL e E2E críticos passam; observabilidade/capacidade mínima comprovadas e documentação técnica representa implementação final.
+- Astra concluiu auditoria final de conformidade com evidências reais, não só relatório do executor.
+
+## Histórico de planejamento
+
+v1 — 2026-09-05: plano inicial após consolidação factual. Goal001 escolhido pelo defeito confirmado de autorização; base de testes em002. Novas descobertas podem inserir/dividir/juntar/cancelar Goals com rastreabilidade. Nenhuma execução funcional iniciada por este documento.

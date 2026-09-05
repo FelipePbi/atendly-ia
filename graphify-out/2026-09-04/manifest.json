@@ -2484,9 +2484,9 @@
     "semantic_hash": ""
   },
   "apps/frontend/AGENTS.md": {
-    "mtime": 1788568117.090923,
-    "seen": 1788568171.713994,
-    "ast_hash": "f0871c4482176085f038569498e95440",
+    "mtime": 1788401786.7426257,
+    "seen": 1788402517.8168721,
+    "ast_hash": "57a5466c5528d62e0a8aba1850b9e630",
     "semantic_hash": ""
   },
   "apps/frontend/CLAUDE.md": {
@@ -2538,9 +2538,9 @@
     "semantic_hash": ""
   },
   "docs/UI_UX_PROTOTYPE_GUIDELINES.md": {
-    "mtime": 1788568152.2079997,
-    "seen": 1788568171.7140005,
-    "ast_hash": "425666630bdaa0b5f5eb1ad2e928f7c7",
+    "mtime": 1788400668.10981,
+    "seen": 1788400797.3392525,
+    "ast_hash": "5f7bb5c3cbb1e49ca1d0343faa522ed6",
     "semantic_hash": ""
   },
   "render.yaml": {
@@ -2937,6 +2937,48 @@
     "mtime": 1788402732.3821287,
     "seen": 1788404499.1315365,
     "ast_hash": "20ee86a4bfe2bee53a1c73491eec7d61",
+    "semantic_hash": ""
+  },
+  "docs/backend-refactor/00-CURRENT-STATE.md": {
+    "mtime": 1788406453.7316306,
+    "seen": 1788441200.720019,
+    "ast_hash": "0f36ce03f33d35cd269187f6d2132cb2",
+    "semantic_hash": ""
+  },
+  "docs/backend-refactor/01-PRODUCT-BACKEND-MATRIX.md": {
+    "mtime": 1788406588.659479,
+    "seen": 1788441200.720021,
+    "ast_hash": "79ee36999064c4de08c363cf0a74b971",
+    "semantic_hash": ""
+  },
+  "docs/backend-refactor/02-REUSE-MATRIX.md": {
+    "mtime": 1788406723.3731885,
+    "seen": 1788441200.7200222,
+    "ast_hash": "c57880a43b3ee222910c52ad49bbfdc8",
+    "semantic_hash": ""
+  },
+  "docs/backend-refactor/03-TARGET-BACKEND.md": {
+    "mtime": 1788406851.4641705,
+    "seen": 1788441200.7200232,
+    "ast_hash": "78ed97563f246590620834544fd8c1bf",
+    "semantic_hash": ""
+  },
+  "docs/backend-refactor/04-DATA-MIGRATION.md": {
+    "mtime": 1788406943.7755315,
+    "seen": 1788441200.7200243,
+    "ast_hash": "dded4cf239a447509e3b99b79f85030f",
+    "semantic_hash": ""
+  },
+  "docs/backend-refactor/05-EXECUTION-PLAN.md": {
+    "mtime": 1788407158.6096866,
+    "seen": 1788441200.720025,
+    "ast_hash": "1375c64670f16c8e9f154934ef80ee6b",
+    "semantic_hash": ""
+  },
+  "docs/backend-refactor/DECISIONS.md": {
+    "mtime": 1788407265.722007,
+    "seen": 1788441200.720026,
+    "ast_hash": "cf79301730bd0785757f82fed11392b4",
     "semantic_hash": ""
   }
 }

@@ -1,22 +1,22 @@
-# Graph Report - atendly-ia  (2026-09-03)
+# Graph Report - atendly-ia  (2026-09-04)
 
 ## Corpus Check
-- 434 files · ~646,244 words
+- 435 files · ~647,693 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 4844 nodes · 8477 edges · 321 communities (241 shown, 38 thin omitted)
+- 4863 nodes · 8495 edges · 325 communities (239 shown, 44 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 152 edges (avg confidence: 0.82)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `6a75f9b3`
+- Built from commit: `bc06c70b`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- HandoffService
-- Instance
+- evolutionWebhook.routes.ts
+- InstanceRepository
 - docs/README.md
 - AssistantToolRegistry
 - WhatsmeowService
@@ -29,13 +29,14 @@
 - ProductAgendaScreen.tsx
 - PreviewScreen.tsx
 - ProductMigrationScreen.tsx
+- ProductOnboardingScreen.tsx
 - assistant.service.ts
 - 03 — Arquitetura backend alvo
 - message-graph.ts
-- CommunityService
+- registry.ts
 - Criar Instância
 - AppError
-- evolutionWebhook.routes.ts
+- internal/routes.ts
 - EvolutionProvider.ts
 - dependencies
 - Segurança e Hardening
@@ -50,27 +51,27 @@
 - scheduling-service/client.ts
 - assistant-tools.test.ts
 - ai-orchestrator/src/config/env.ts
-- LabelRepository
+- SendHandler
 - InboundMessageProcessor.ts
 - Guia de Instalação
 - Armazenamento de Mídia
-- ConversationsScreen.tsx
+- UserHandler
 - ParseJID
 - AppError
 - bff/src/modules/calendar/routes.ts
 - UserService
-- HandoffPort
+- GroupHandler
 - Configurações Avançadas
 - WhatsApp Multi-Device
 - Banco de Dados
 - devDependencies
 - system.ts
-- KnowledgeVectorStore
-- getProductServices
+- 04 — Migração de dados
+- ProductDirectoryScreen.tsx
 - Enviar Mensagens
 - github.com/gin-gonic/gin.Context
-- instances
-- 04 — Migração de dados
+- Instance
+- LabelHandler
 - EvolutionInboundMapper.ts
 - Autenticação
 - Debugging e Troubleshooting
@@ -84,7 +85,7 @@
 - minha-agenda/provider.ts
 - dependencies
 - .request
-- utils.go
+- MessageService
 - evolution-go/README.md
 - API de Labels
 - API de Newsletters
@@ -95,11 +96,11 @@
 - InternalRequestContext
 - Evolution GO - Changelog
 - scheduling-service/package.json
-- registry.ts
+- GOAL — Preparar o repositório Atendly para a análise técnica completa do Astra
 - common/index.ts
 - Início Rápido
 - Evento ButtonClick
-- ProductConversationsScreen.tsx
+- getProductServices
 - Introdução ao Evolution GO
 - Códigos de Erro
 - v0.7.0
@@ -131,7 +132,7 @@
 - NATS
 - Atendly health worker
 - webhookProducer
-- main
+- DECISIONS
 - CLAUDE.md — Atendly
 - AI Workflow — documentação, Graphify e RTK
 - scripts
@@ -139,7 +140,7 @@
 - 📚 Documentação Completa
 - NewRouter
 - c0.go
-- DECISIONS
+- utils.go
 - MinhaAgendaCalendarProvider
 - frontend/package.json
 - UI/UX Prototype Guidelines — Atendly
@@ -147,19 +148,18 @@
 - Logger
 - ai-orchestrator/package.json
 - ProductRuntime.tsx
-- PollService
+- 02 — Matriz de reaproveitamento
 - Boas Práticas
 - API de Chamadas
-- MessageService
+- 5. AI Orchestrator (`apps/ai-orchestrator`)
 - testing.T
 - scripts
 - AtendlyServiceService
 - Deletar Instância
-- 02 — Matriz de reaproveitamento
 - Frentes de refatoração
 - scripts
 - contracts/package.json
-- 5. AI Orchestrator (`apps/ai-orchestrator`)
+- .StartClient
 - @eslint/js
 - Obter QR Code
 - Listar Todas as Instâncias
@@ -169,7 +169,7 @@
 - Variáveis de Ambiente
 - onboarding/routes.ts
 - Informações da Instância
-- fakeWhatsmeowService
+- BffCalendarService.ts
 - scripts
 - BffHttpClient.ts
 - Remover Proxy
@@ -180,10 +180,10 @@
 - 📋 Migration Notes
 - compilerOptions
 - Configurações Avançadas
-- NormalizeSubscriptions
+- main
 - dependencies
 - bff/src/lib/phone.ts
-- BffAuthService.ts
+- CreateJID
 - v0.4.7
 - v0.6.0
 - Estados da Instância
@@ -201,28 +201,27 @@
 - @types/node
 - 📋 Comandos Essenciais
 - typescript
-- 01 — Matriz de regras de produto × backend
+- NormalizeSubscriptions
 - BffConversationService
-- CreateJID
-- 00 — Estado atual do backend
+- BffMigrationService.ts
+- BffAuthService.ts
 - compilerOptions
 - final-production-audit.mjs
-- business-context.ts
+- 01 — Matriz de regras de produto × backend
 - rabbitMQProducer
 - compilerOptions
 - Tipos de Eventos
-- 2. BFF (`apps/bff`)
-- Endpoints Disponíveis
+- NewsletterHandler
+- 00 — Estado atual do backend
 - Atendly
 - compilerOptions
+- 2. BFF (`apps/bff`)
 - 4. Scheduling service (`apps/scheduling-service`)
-- 6. WhatsApp / Evolution
 - 🎯 Workflows Comuns
 - Instâncias WhatsApp
-- natsProducer
+- 6. WhatsApp / Evolution
 - Evolution Go — Trademark and Brand Assets Policy
 - 8. Configuração, testes e observabilidade
-- BffServiceCatalogService.ts
 - ChatHandler
 - MessageHandler
 - Documentação Atendly
@@ -241,6 +240,7 @@
 - Logs e Debug
 - MinIO/S3
 - pull_request_template.md
+- fakeWhatsmeowService
 - legal-contract/index.js
 - legal-contract/package.json
 - Guia de Desenvolvimento
@@ -253,13 +253,17 @@
 - Makefile e Comandos
 - Convenções de Código
 - Boas Práticas
+- HandoffPort
+- KnowledgeVectorStore
 - onboarding/types.ts
+- CommunityHandler
 - AGENTS.md — AI Orchestrator
 - Sistema de Eventos
 - Executando Localmente
 - Proxy
 - Exemplos Práticos
 - Formato de Payload
+- telemetry.go
 - Requisitos
 - RabbitMQ (AMQP)
 - Servidor
@@ -304,57 +308,61 @@
 6. `InternalRequestContext` - 42 edges
 7. `SchedulingClient` - 42 edges
 8. `LoggerManager` - 41 edges
-9. `registerManagementRoutes()` - 39 edges
-10. `ParseJID()` - 39 edges
+9. `ParseJID()` - 39 edges
+10. `registerManagementRoutes()` - 39 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `ToolExecutionContext` --references--> `BusinessContext`  [EXTRACTED]
   apps/ai-orchestrator/src/modules/tools/assistant-tools.ts → apps/ai-orchestrator/src/modules/tenant-config/business-context.ts
-- `registerV1OnboardingRoutes()` --indirect_call--> `requireTenantContext()`  [INFERRED]
-  apps/bff/src/modules/onboarding/routes.ts → apps/bff/src/lib/tenant-context.ts
-- `registerV1SettingsRoutes()` --indirect_call--> `requireTenantContext()`  [INFERRED]
-  apps/bff/src/modules/settings/routes.ts → apps/bff/src/lib/tenant-context.ts
+- `registerV1AuthRoutes()` --indirect_call--> `requireTenantContext()`  [INFERRED]
+  apps/bff/src/modules/auth/routes.ts → apps/bff/src/lib/tenant-context.ts
 - `registerV1ConversationRoutes()` --indirect_call--> `requireTenantContext()`  [INFERRED]
   apps/bff/src/modules/conversations/routes.ts → apps/bff/src/lib/tenant-context.ts
 - `registerV1DashboardRoutes()` --indirect_call--> `requireTenantContext()`  [INFERRED]
   apps/bff/src/modules/dashboard/routes.ts → apps/bff/src/lib/tenant-context.ts
+- `registerV1OnboardingRoutes()` --indirect_call--> `requireTenantContext()`  [INFERRED]
+  apps/bff/src/modules/onboarding/routes.ts → apps/bff/src/lib/tenant-context.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (321 total, 38 thin omitted)
+## Communities (325 total, 44 thin omitted)
 
-### Community 1 - "Instance"
-Cohesion: 0.08
-Nodes (5): NewInstanceRepository(), AdvancedSettings, Instance, InstanceRepository, fakeInstanceRepository
+### Community 0 - "evolutionWebhook.routes.ts"
+Cohesion: 0.10
+Nodes (17): buildApp(), channelMessageLogContext(), toErrorMessage(), fetchJson(), HttpErrorDetails, HttpMethod, JsonRequestOptions, redactSensitive() (+9 more)
+
+### Community 1 - "InstanceRepository"
+Cohesion: 0.07
+Nodes (9): NewInstanceRepository(), NewLabelRepository(), NewMessageRepository(), gorm.io/gorm.DB, Label, Message, InstanceRepository, LabelRepository (+1 more)
 
 ### Community 2 - "docs/README.md"
 Cohesion: 0.26
 Nodes (4): BFF Public API V1 — inventário do runtime, Contratos legados ainda ativos, Rotas registradas, Arquitetura
 
 ### Community 3 - "AssistantToolRegistry"
-Cohesion: 0.22
+Cohesion: 0.21
 Nodes (4): AssistantToolRegistry, getLookupKey(), getLookupServices(), schedulingContext()
 
 ### Community 4 - "WhatsmeowService"
-Cohesion: 0.14
-Nodes (28): setupRouter(), NewCallService(), NewChatService(), NewCommunityService(), Config, NewNatsProducer(), NewRabbitMQProducer(), NewWebhookProducer() (+20 more)
+Cohesion: 0.07
+Nodes (42): setupRouter(), NewCallService(), NewChatService(), AddParticipantStruct, NewCommunityService(), Config, NewNatsProducer(), NewRabbitMQProducer() (+34 more)
 
 ### Community 5 - "whatsmeow.go"
-Cohesion: 0.13
-Nodes (15): GetMessageType(), GetStringValue(), UpdateUserInfo(), TestApplyWhatsAppVersionUpdatesLoginPayload(), applyWhatsAppVersion(), cleanSenderID(), fetchWhatsAppWebVersion(), getExtensionFromMimeType() (+7 more)
+Cohesion: 0.15
+Nodes (12): GetStringValue(), UpdateUserInfo(), cleanSenderID(), getExtensionFromMimeType(), ProxyConfig, UserCollection, isTransientStartupDisconnectReason(), processPresenceUpdates() (+4 more)
 
 ### Community 6 - "websocketProducer"
-Cohesion: 0.30
-Nodes (5): NewWebsocketProducer(), ServeWs(), github.com/gorilla/websocket.Conn, net/http.ResponseWriter, websocketProducer
+Cohesion: 0.27
+Nodes (6): NewWebsocketProducer(), ServeWs(), github.com/gorilla/websocket.Conn, net/http.ResponseWriter, sync.RWMutex, websocketProducer
 
 ### Community 7 - "send_service.go"
 Cohesion: 0.10
 Nodes (32): convertAudioToOpusWithDuration(), convertAudioWithApi(), convertToWebP(), fetchLinkMetadata(), findURL(), MessageSendStruct, mapKeyType(), sectionsToString() (+24 more)
 
 ### Community 8 - "ChatService"
-Cohesion: 0.24
-Nodes (7): BuildPollVoteFromEvent(), go.mau.fi/whatsmeow/proto/waE2E.PollVoteMessage, go.mau.fi/whatsmeow.SendResponse, go.mau.fi/whatsmeow/types.MessageInfo, BodyStruct, ChatService, HistorySyncRequestStruct
+Cohesion: 0.33
+Nodes (4): go.mau.fi/whatsmeow.SendResponse, BodyStruct, ChatService, HistorySyncRequestStruct
 
 ### Community 9 - "assistant-tools.ts"
 Cohesion: 0.09
@@ -366,19 +374,23 @@ Nodes (17): devDependencies, eslint, @eslint/js, eslint-plugin-simple-import-sor
 
 ### Community 11 - "ProductAgendaScreen.tsx"
 Cohesion: 0.07
-Nodes (39): Appointment, AvailabilitySlot, CalendarState, CustomerList, ServiceList, TimeBlock, addDays(), AgendaScenario (+31 more)
+Nodes (38): addDays(), AgendaScenario, AppointmentDetail(), AppointmentList(), AppointmentRow(), BlockTime(), create(), remove() (+30 more)
 
 ### Community 12 - "PreviewScreen.tsx"
 Cohesion: 0.04
-Nodes (39): OnboardingPage(), states, DashboardScreen(), DashboardScenario, DashboardService, nextByKind, OnboardingScreen(), PrototypeOnboardingScreen() (+31 more)
+Nodes (32): states, ConversationDetail(), ConversationsScreen(), stateClass, stateEvent, stateLabel, threadState, ConversationService (+24 more)
 
 ### Community 13 - "ProductMigrationScreen.tsx"
-Cohesion: 0.08
-Nodes (26): steps, Frame(), MigrationScreen(), Route(), SideNotes(), Status(), ConflictPanel(), entityLabel() (+18 more)
+Cohesion: 0.07
+Nodes (28): steps, Migration, MigrationDiagnosis, Frame(), MigrationScreen(), Route(), SideNotes(), Status() (+20 more)
+
+### Community 14 - "ProductOnboardingScreen.tsx"
+Cohesion: 0.09
+Nodes (18): OnboardingPage(), nextByKind, OnboardingScreen(), PrototypeOnboardingScreen(), flow, onboardingError(), ProductOnboardingScreen(), go() (+10 more)
 
 ### Community 15 - "assistant.service.ts"
 Cohesion: 0.05
-Nodes (54): requireOpenAiEnv(), AiDecision, AiDecisionAction, AppointmentDraft, AssistantGraphAgentStep, AssistantGraphSession, AssistantGraphToolStep, AssistantService (+46 more)
+Nodes (53): requireOpenAiEnv(), AiDecision, AiDecisionAction, AppointmentDraft, AssistantGraphAgentStep, AssistantGraphSession, AssistantGraphToolStep, AssistantService (+45 more)
 
 ### Community 16 - "03 — Arquitetura backend alvo"
 Cohesion: 0.06
@@ -388,9 +400,9 @@ Nodes (30): 03 — Arquitetura backend alvo, 10. Teste real de ativação, 11. C
 Cohesion: 0.12
 Nodes (25): AiCommand, detectAiCommand(), InboundProcessingResult, MessageGraphStateUpdate, MessageGraphStateValue, classifyMessageIntent(), GraphAutomationPort, hasBufferedAutomation() (+17 more)
 
-### Community 18 - "CommunityService"
-Cohesion: 0.42
-Nodes (4): AddParticipantStruct, github.com/gin-gonic/gin.H, CommunityService, CreateCommunityStruct
+### Community 18 - "registry.ts"
+Cohesion: 0.11
+Nodes (10): BffHttpClient, dashboardSchema, BffCustomerService, BffDashboardService, BffOnboardingService, BffServiceCatalogService, BffServiceRegistry, BffServiceRegistryOptions (+2 more)
 
 ### Community 19 - "Criar Instância"
 Cohesion: 0.25
@@ -400,13 +412,13 @@ Nodes (8): Body, Criar Instância, Endpoint, Exemplo cURL, Headers, Parâmetros,
 Cohesion: 0.05
 Nodes (66): buildApp(), registerHealthRoute(), env, envSchema, checkDatabaseConnection(), disconnectPrisma(), getPrisma(), availabilityQuerySchema (+58 more)
 
-### Community 21 - "evolutionWebhook.routes.ts"
-Cohesion: 0.08
-Nodes (37): buildApp(), startOfTodayInTimeZone(), channelMessageLogContext(), AppError, toErrorMessage(), EvolutionProvider, ChannelConnectionService, EVOLUTION_PROVIDER (+29 more)
+### Community 21 - "internal/routes.ts"
+Cohesion: 0.12
+Nodes (23): startOfTodayInTimeZone(), AppError, ChannelConnectionService, BOT_OFF_PAUSE_UNTIL, HandoffPauseInput, HandoffTenantScope, aiTenantConfigSchema, contactNumber() (+15 more)
 
 ### Community 22 - "EvolutionProvider.ts"
-Cohesion: 0.10
-Nodes (22): ChannelMessageLogInput, DiagnosticLogger, maskPhone(), noopDiagnosticLogger, truncateDiagnostic(), fetchJson(), HttpErrorDetails, HttpMethod (+14 more)
+Cohesion: 0.12
+Nodes (18): ChannelMessageLogInput, DiagnosticLogger, maskPhone(), noopDiagnosticLogger, truncateDiagnostic(), buildHeaders(), buildSendTextBody(), EvolutionProvider (+10 more)
 
 ### Community 23 - "dependencies"
 Cohesion: 0.15
@@ -434,7 +446,7 @@ Nodes (48): 1. Conectar Instância, 1. Exibir QR em Tempo Real, 2. Feedback Visu
 
 ### Community 29 - "publicApiSchemas.ts"
 Cohesion: 0.06
-Nodes (40): aiToneSchema, appointmentSchema, availabilityRuleSchema, AvailabilitySettings, availabilitySlotSchema, businessProfileSchema, calendarCapabilitiesSchema, calendarIntegrationSchema (+32 more)
+Nodes (37): aiToneSchema, availabilityRuleSchema, AvailabilitySettings, AvailabilitySlot, businessProfileSchema, calendarCapabilitiesSchema, calendarIntegrationSchema, calendarSourceSchema (+29 more)
 
 ### Community 30 - "Visão Geral da API"
 Cohesion: 0.04
@@ -457,16 +469,12 @@ Cohesion: 0.12
 Nodes (13): SchedulingGateway, RescheduleAppointmentInput, ScheduleAppointmentInput, SchedulingAppointment, SchedulingAppointmentServiceItem, SchedulingCustomerSummary, SchedulingServiceDefinition, browService (+5 more)
 
 ### Community 35 - "ai-orchestrator/src/config/env.ts"
-Cohesion: 0.08
-Nodes (26): envSchema, requireEnv(), prisma, EmbeddingProvider, KNOWLEDGE_EMBEDDING_DIMENSIONS, OpenAIEmbeddingProvider, requireEmbeddingEnv(), KNOWLEDGE_DOCUMENT_TYPES (+18 more)
-
-### Community 36 - "LabelRepository"
-Cohesion: 0.12
-Nodes (8): SetDB(), NewLabelRepository(), NewMessageRepository(), gorm.io/gorm.DB, Label, Message, LabelRepository, MessageRepository
+Cohesion: 0.07
+Nodes (30): envSchema, requireEnv(), prisma, EmbeddingProvider, KNOWLEDGE_EMBEDDING_DIMENSIONS, OpenAIEmbeddingProvider, requireEmbeddingEnv(), isOperationalKnowledgeQuery() (+22 more)
 
 ### Community 37 - "InboundMessageProcessor.ts"
 Cohesion: 0.06
-Nodes (39): AssistantReply, UpdateAiTenantConfigInput, ChannelExecutionContext, ChannelInboundMessage, ChannelMessageKind, AutomationPort, BufferedMessage, buildDebounceConfig() (+31 more)
+Nodes (35): AssistantReply, ChannelInboundMessage, AutomationPort, BufferedMessage, buildDebounceConfig(), ConversationMessageBuffer, getDebounceDelayMs(), hasBufferedAutomation() (+27 more)
 
 ### Community 38 - "Guia de Instalação"
 Cohesion: 0.05
@@ -476,13 +484,9 @@ Nodes (43): 1. Inicializar Swarm, 1. Instalar PostgreSQL, 1. Obter Arquivos, 2. 
 Cohesion: 0.05
 Nodes (42): 1. Upload de Mídia, 1. Use Nomes de Arquivo Únicos, 2. Acesso a Mídia Armazenada, 2. Configure Content-Type Correto, 3. Implemente Lifecycle Policies, 3. Limpeza de Arquivos Antigos, 4. Use CDN para Distribuição, 5. Monitore Uso e Custos (+34 more)
 
-### Community 40 - "ConversationsScreen.tsx"
-Cohesion: 0.14
-Nodes (11): ConversationDetail(), ConversationsScreen(), stateClass, stateEvent, stateLabel, threadState, ConversationService, ConversationsScenario (+3 more)
-
 ### Community 41 - "ParseJID"
-Cohesion: 0.10
-Nodes (26): AddParticipantStruct, validateMessageFields(), UserCollection, ParseJID(), UserCollection, go.mau.fi/whatsmeow.ParticipantChange, go.mau.fi/whatsmeow/types.GroupInfo, go.mau.fi/whatsmeow/types.GroupParticipant (+18 more)
+Cohesion: 0.11
+Nodes (24): AddParticipantStruct, validateMessageFields(), UserCollection, ParseJID(), go.mau.fi/whatsmeow.ParticipantChange, go.mau.fi/whatsmeow/types.GroupInfo, go.mau.fi/whatsmeow/types.GroupParticipant, go.mau.fi/whatsmeow/types.JID (+16 more)
 
 ### Community 42 - "AppError"
 Cohesion: 0.12
@@ -513,32 +517,28 @@ Cohesion: 0.09
 Nodes (23): devDependencies, eslint, @eslint/js, eslint-plugin-simple-import-sort, eslint-plugin-unused-imports, prettier, prisma, tsx (+15 more)
 
 ### Community 50 - "system.ts"
-Cohesion: 0.16
-Nodes (17): Env, IncomingAssistantMessage, KnowledgeSearchResult, RawKnowledgeSearchRow, buildHandoffPrompt(), buildKnowledgePrompt(), buildResponsePrompt(), buildSchedulingPrompt() (+9 more)
+Cohesion: 0.10
+Nodes (26): Env, IncomingAssistantMessage, EVOLUTION_PROVIDER, ProvisionEvolutionChannelInput, UpdateAiTenantConfigInput, ChannelExecutionContext, ChannelMessageKind, MappedChannelInboundMessage (+18 more)
 
-### Community 51 - "KnowledgeVectorStore"
-Cohesion: 0.25
-Nodes (4): InboundMessageProcessorOptions, isOperationalKnowledgeQuery(), KnowledgeVectorStore, normalizeText()
+### Community 51 - "04 — Migração de dados"
+Cohesion: 0.08
+Nodes (23): 04 — Migração de dados, 0. Premissa a confirmar antes da Fase 1, 1. Legado já quarentenado, 2. Modelos incompatíveis com o produto alvo, 3. Dados que precisam ser preservados, 4. Transformações de campo e enum, 5. Estratégia de rollout, 6. Riscos específicos de dados (+15 more)
 
-### Community 52 - "getProductServices"
+### Community 52 - "ProductDirectoryScreen.tsx"
 Cohesion: 0.07
-Nodes (33): Customer, Service, addDays(), CustomerDetail(), CustomerForm(), submit(), CustomerListPage(), formatDateTime() (+25 more)
+Nodes (25): Appointment, CalendarState, Customer, CustomerList, Service, ServiceList, addDays(), CustomerDetail() (+17 more)
 
 ### Community 53 - "Enviar Mensagens"
 Cohesion: 0.05
 Nodes (38): 1. Usar Delay em Múltiplas Mensagens, 2. Verificar Status de Conexão, 3. Tratamento de Erros, 4. Usar Webhooks, 5. Gerenciar Mídias, API de Mensagens, Boas Práticas, Citação de Mensagens (Quoted) (+30 more)
 
 ### Community 54 - "github.com/gin-gonic/gin.Context"
-Cohesion: 0.05
-Nodes (10): NewGroupHandler(), NewLabelHandler(), NewSendHandler(), NewUserHandler(), github.com/gin-gonic/gin.Context, GroupHandler, InstanceHandler, LabelHandler (+2 more)
+Cohesion: 0.17
+Nodes (3): github.com/gin-gonic/gin.Context, GetLogsQuery, InstanceHandler
 
-### Community 55 - "instances"
-Cohesion: 0.13
-Nodes (10): ProxyConfig, ConnectStruct, CreateStruct, ForceReconnectStruct, instances, PairReturnStruct, PairStruct, QrcodeStruct (+2 more)
-
-### Community 56 - "04 — Migração de dados"
-Cohesion: 0.08
-Nodes (23): 04 — Migração de dados, 0. Premissa a confirmar antes da Fase 1, 1. Legado já quarentenado, 2. Modelos incompatíveis com o produto alvo, 3. Dados que precisam ser preservados, 4. Transformações de campo e enum, 5. Estratégia de rollout, 6. Riscos específicos de dados (+15 more)
+### Community 55 - "Instance"
+Cohesion: 0.07
+Nodes (13): ProxyConfig, AdvancedSettings, Instance, ConnectStruct, CreateStruct, fakeInstanceRepository, ForceReconnectStruct, instances (+5 more)
 
 ### Community 57 - "EvolutionInboundMapper.ts"
 Cohesion: 0.29
@@ -589,12 +589,12 @@ Cohesion: 0.09
 Nodes (23): dependencies, dotenv, fastify, @fastify/cors, @langchain/core, @langchain/langgraph, @langchain/langgraph-checkpoint-postgres, @langchain/openai (+15 more)
 
 ### Community 69 - ".request"
-Cohesion: 0.12
-Nodes (3): BffAuthService, BffCalendarService, BffWhatsAppService
+Cohesion: 0.10
+Nodes (4): BffAuthService, BffCalendarService, BffSettingsService, BffWhatsAppService
 
-### Community 70 - "utils.go"
-Cohesion: 0.14
-Nodes (14): BuildProxyAddress(), CreateSocks5Proxy(), Find(), GenerateRandomString(), GenerateVC(), VCardStruct, NormalizeProxyProtocol(), PrepareNumberForWhatsAppCheck() (+6 more)
+### Community 70 - "MessageService"
+Cohesion: 0.16
+Nodes (13): MessageSendStruct, GetMessageType(), github.com/vincent-petithory/dataurl.DataURL, go.mau.fi/whatsmeow/proto/waE2E.ContextInfo, go.mau.fi/whatsmeow/proto/waE2E.Message, ChatPresenceStruct, DownloadMediaStruct, EditMessageStruct (+5 more)
 
 ### Community 71 - "evolution-go/README.md"
 Cohesion: 0.10
@@ -636,9 +636,9 @@ Nodes (27): 🤝 Contributing, Evolution GO - Changelog, 🔧 Improvements, 🔧
 Cohesion: 0.29
 Nodes (6): engines, node, name, private, type, version
 
-### Community 82 - "registry.ts"
+### Community 82 - "GOAL — Preparar o repositório Atendly para a análise técnica completa do Astra"
 Cohesion: 0.11
-Nodes (10): BffHttpClient, dashboardSchema, BffCustomerService, BffDashboardService, BffOnboardingService, BffSettingsService, BffServiceRegistry, BffServiceRegistryOptions (+2 more)
+Nodes (18): 10. Não limpar o legado funcional agora, 11. Não criar ainda a pasta/plano do Astra, 12. Auditoria final, 1. Limpar cópias antigas do Product Vault dentro da exportação do Claude Design, 2. Remover prompts antigos usados para criar o protótipo das áreas ativas, 3. Corrigir `.graphifyignore`, 4. Remover referências residuais a `apps/frontend-open-design`, 5. Atualizar `docs/README.md` (+10 more)
 
 ### Community 83 - "common/index.ts"
 Cohesion: 0.07
@@ -652,13 +652,13 @@ Nodes (29): 1. Verificar API, 2. Criar Instância, 3. Autenticar via QR Code, 4.
 Cohesion: 0.07
 Nodes (28): API de Mensagens Interativas, Campos do Evento, Canais de Disparo, Compatibilidade Testada, Enviar Botões, Enviar Carrossel, Enviar Lista, Estrutura de Cada Tipo (+20 more)
 
-### Community 86 - "ProductConversationsScreen.tsx"
-Cohesion: 0.17
-Nodes (17): ConversationContext(), ConversationDetail(), mutate(), send(), ConversationFilter, conversationLabel(), ConversationList(), ConversationRow() (+9 more)
+### Community 86 - "getProductServices"
+Cohesion: 0.10
+Nodes (34): ConversationContext(), ConversationDetail(), mutate(), send(), ConversationFilter, conversationLabel(), ConversationList(), ConversationRow() (+26 more)
 
 ### Community 87 - "Introdução ao Evolution GO"
-Cohesion: 0.10
-Nodes (21): Armazenamento Empresarial, Arquitetura, Biblioteca Whatsmeow, Casos de Uso, Componentes Principais, Comunicação via API REST, Diferencial, Documentação (+13 more)
+Cohesion: 0.07
+Nodes (28): Armazenamento Empresarial, Arquitetura, Biblioteca Whatsmeow, Casos de Uso, Chats, Componentes Principais, Comunicação via API REST, Diferencial (+20 more)
 
 ### Community 88 - "Códigos de Erro"
 Cohesion: 0.07
@@ -729,8 +729,8 @@ Cohesion: 0.33
 Nodes (6): Body, Endpoint, Exemplo cURL, Headers, Logout, Resposta Sucesso (200)
 
 ### Community 105 - "ProductSettingsScreen.tsx"
-Cohesion: 0.06
-Nodes (36): SettingsState, formatCurrency(), formatDateTime(), ProductDashboardScreen(), RealDashboard(), scenarioContent, AccountSettings(), changePassword() (+28 more)
+Cohesion: 0.08
+Nodes (25): formatCurrency(), formatDateTime(), ProductDashboardScreen(), RealDashboard(), scenarioContent, CalendarSettings(), SettingsHub(), sourceLabel() (+17 more)
 
 ### Community 106 - "Configurar Proxy"
 Cohesion: 0.33
@@ -780,9 +780,9 @@ Nodes (5): Alvos padrão, Atendly health worker, Render, Rodar localmente, Super
 Cohesion: 0.36
 Nodes (3): newRequestID(), time.Duration, webhookProducer
 
-### Community 118 - "main"
-Cohesion: 0.18
-Nodes (12): initAuthDB(), initPostgresAuthDB(), main(), migrate(), serverPort(), ensureDBExists(), extractDBNameAndAdminDSN(), Load() (+4 more)
+### Community 118 - "DECISIONS"
+Cohesion: 0.11
+Nodes (17): D-01 — Execução temporal durável (jobs), D-02 — Não introduzir broker, Redis ou fila externa, D-03 — `Contact` e `Customer` não são o mesmo conceito, D-04 — Remover a abstração `CalendarProvider` em vez de mantê-la, D-05 — Banco real nos testes do scheduling, D-06 — Provider de e-mail, D-07 — Configuração de tenant: projeção com reconciliação, D-08 — `thread_id` do checkpointer passa a ser a sessão (+9 more)
 
 ### Community 119 - "CLAUDE.md — Atendly"
 Cohesion: 0.25
@@ -805,16 +805,16 @@ Cohesion: 0.10
 Nodes (20): 📡 API Reference, Automatizar Workflows, 🚀 Começo Rápido, 🏗️ Conceitos Core, 🐳 Deploy e Produção, Deploy em Produção, 💻 Desenvolvimento, 📚 Documentação Completa (+12 more)
 
 ### Community 124 - "NewRouter"
-Cohesion: 0.10
-Nodes (15): NewCallHandler(), NewCommunityHandler(), NewInstanceHandler(), NewMiddleware(), newRequestID(), NewRouter(), NewServerHandler(), github.com/gin-gonic/gin.Engine (+7 more)
+Cohesion: 0.15
+Nodes (11): NewCallHandler(), NewMiddleware(), newRequestID(), NewRouter(), NewServerHandler(), github.com/gin-gonic/gin.Engine, CallHandler, ServerHandler (+3 more)
 
 ### Community 125 - "c0.go"
-Cohesion: 0.06
-Nodes (54): _2vm0(), _3qky(), _3tss(), _6yl(), ActivateIntegrity(), _bgrz(), ComputeSessionSeed(), _czg() (+46 more)
+Cohesion: 0.07
+Nodes (47): _2vm0(), _3qky(), _3tss(), _6yl(), ActivateIntegrity(), _bgrz(), ComputeSessionSeed(), _czg() (+39 more)
 
-### Community 126 - "DECISIONS"
-Cohesion: 0.11
-Nodes (17): D-01 — Execução temporal durável (jobs), D-02 — Não introduzir broker, Redis ou fila externa, D-03 — `Contact` e `Customer` não são o mesmo conceito, D-04 — Remover a abstração `CalendarProvider` em vez de mantê-la, D-05 — Banco real nos testes do scheduling, D-06 — Provider de e-mail, D-07 — Configuração de tenant: projeção com reconciliação, D-08 — `thread_id` do checkpointer passa a ser a sessão (+9 more)
+### Community 126 - "utils.go"
+Cohesion: 0.14
+Nodes (13): CreateHTTPProxy(), CreateSocks5Proxy(), GenerateRandomString(), GenerateVC(), VCardStruct, PrepareNumberForWhatsAppCheck(), PrepareNumbersForWhatsAppCheck(), WhatsAppGetUserAgent() (+5 more)
 
 ### Community 127 - "MinhaAgendaCalendarProvider"
 Cohesion: 0.25
@@ -833,8 +833,8 @@ Cohesion: 0.12
 Nodes (17): devDependencies, eslint, eslint-plugin-simple-import-sort, eslint-plugin-unused-imports, prettier, @types/node, @types/react, typescript (+9 more)
 
 ### Community 131 - "Logger"
-Cohesion: 0.28
-Nodes (5): newLogger(), sanitizeLogMessage(), sync.Mutex, Logger, lumberjack.Logger
+Cohesion: 0.11
+Nodes (16): newLogger(), sanitizeLogMessage(), PollResults, PollVote, BuildPollVoteFromEvent(), RuntimeConfig, encoding/json.RawMessage, go.mau.fi/whatsmeow/proto/waE2E.PollVoteMessage (+8 more)
 
 ### Community 132 - "ai-orchestrator/package.json"
 Cohesion: 0.40
@@ -844,9 +844,9 @@ Nodes (4): name, private, type, version
 Cohesion: 0.12
 Nodes (15): metadata, viewport, BffHttpError, parseJson(), Session, isAuthPath(), isOnboardingPath(), isPreviewPath() (+7 more)
 
-### Community 134 - "PollService"
-Cohesion: 0.13
-Nodes (13): NewPollHandler(), NewPollService(), postgresArrayToStringSlice(), stringArrayToPostgresArray(), generateFilePath(), NewMinioMediaStorage(), setBucketPolicy(), context.Context (+5 more)
+### Community 134 - "02 — Matriz de reaproveitamento"
+Cohesion: 0.12
+Nodes (15): 02 — Matriz de reaproveitamento, Adaptar, Adaptar, AI Orchestrator, BFF, evolution-go, Infraestrutura e topologia, Manter (+7 more)
 
 ### Community 135 - "Boas Práticas"
 Cohesion: 0.40
@@ -856,9 +856,9 @@ Nodes (5): 1. Gestão de Tokens, 2. Nome de Instância, 3. Webhooks, 4. Gerencia
 Cohesion: 0.11
 Nodes (18): 1. Receber Evento de Chamada via Webhook, 1. Rejeitar Todas as Chamadas, 2. Horário Comercial, 2. Rejeitar Automaticamente, 3. Rejeitar Chamadas de Vídeo, 3. Rejeição Seletiva, API de Chamadas, Boas Práticas (+10 more)
 
-### Community 137 - "MessageService"
-Cohesion: 0.14
-Nodes (15): MessageSendStruct, CreateHTTPProxy(), github.com/vincent-petithory/dataurl.DataURL, go.mau.fi/whatsmeow/proto/waE2E.ContextInfo, go.mau.fi/whatsmeow/proto/waE2E.Message, net/http.Request, net/url.URL, ChatPresenceStruct (+7 more)
+### Community 137 - "5. AI Orchestrator (`apps/ai-orchestrator`)"
+Cohesion: 0.13
+Nodes (15): 5. AI Orchestrator (`apps/ai-orchestrator`), Achado crítico: mensagem manual do profissional NÃO pausa a IA, Achado crítico: o debounce não funciona em produção, Estado de handoff triplicado, Estrutura real, Grafo LangGraph, Guardrails de IA — o que existe e o que falta, Lógica órfã identificada (+7 more)
 
 ### Community 138 - "testing.T"
 Cohesion: 0.17
@@ -876,10 +876,6 @@ Nodes (7): AtendlyServiceService, CreateAtendlyServiceInput, DatabaseClient, Pri
 Cohesion: 0.40
 Nodes (5): Deletar Instância, Endpoint, Exemplo cURL, Headers, Resposta Sucesso (200)
 
-### Community 142 - "02 — Matriz de reaproveitamento"
-Cohesion: 0.12
-Nodes (15): 02 — Matriz de reaproveitamento, Adaptar, Adaptar, AI Orchestrator, BFF, evolution-go, Infraestrutura e topologia, Manter (+7 more)
-
 ### Community 143 - "Frentes de refatoração"
 Cohesion: 0.18
 Nodes (11): 1. Fotografar o runtime atual, 2. Definir o plano técnico, 3. Alinhar agenda e importação, 4. Alinhar IA e conversas, 5. Alinhar frontend e protótipos, 6. Validar a transição, Critério de conclusão do alinhamento, Fora deste documento (+3 more)
@@ -892,9 +888,9 @@ Nodes (17): engines, node, name, private, scripts, build:ai-orchestrator, build:
 Cohesion: 0.10
 Nodes (20): import, types, dependencies, zod, devDependencies, typescript, exports, ./common (+12 more)
 
-### Community 146 - "5. AI Orchestrator (`apps/ai-orchestrator`)"
-Cohesion: 0.13
-Nodes (15): 5. AI Orchestrator (`apps/ai-orchestrator`), Achado crítico: mensagem manual do profissional NÃO pausa a IA, Achado crítico: o debounce não funciona em produção, Estado de handoff triplicado, Estrutura real, Grafo LangGraph, Guardrails de IA — o que existe e o que falta, Lógica órfã identificada (+7 more)
+### Community 146 - ".StartClient"
+Cohesion: 0.21
+Nodes (8): BuildProxyAddress(), Find(), NormalizeProxyProtocol(), WhatsAppGetUserOS(), TestApplyWhatsAppVersionUpdatesLoginPayload(), applyWhatsAppVersion(), fetchWhatsAppWebVersion(), clientVersion
 
 ### Community 148 - "Obter QR Code"
 Cohesion: 0.40
@@ -917,7 +913,7 @@ Cohesion: 0.12
 Nodes (16): Autenticação, Base URL, Chamadas (1 endpoint), Chats (7 endpoints), Comunidades (3 endpoints), Documentação Interativa, Endpoints por Categoria, Grupos (11 endpoints) (+8 more)
 
 ### Community 153 - "Variáveis de Ambiente"
-Cohesion: 0.12
+Cohesion: 0.13
 Nodes (15): Banco de Dados, Conexão e Comportamento, Eventos, Exemplo Completo, Logs, MinIO/S3, NATS, Obrigatórias (+7 more)
 
 ### Community 154 - "onboarding/routes.ts"
@@ -928,13 +924,17 @@ Nodes (23): getPrisma(), currentTenantContext(), assertTimezone(), internalSourc
 Cohesion: 0.40
 Nodes (5): Endpoint, Exemplo cURL, Headers, Informações da Instância, Resposta Sucesso (200)
 
+### Community 156 - "BffCalendarService.ts"
+Cohesion: 0.17
+Nodes (11): appointmentSchema, availabilitySlotSchema, calendarStateSchema, deletedSchema, timeBlockSchema, AvailabilityQuery, CalendarIntegrationInput, CreateAppointmentInput (+3 more)
+
 ### Community 157 - "scripts"
 Cohesion: 0.20
 Nodes (10): scripts, build, build:release, dev, format, format:check, legal:check, lint (+2 more)
 
 ### Community 158 - "BffHttpClient.ts"
-Cohesion: 0.11
-Nodes (15): BffHttpClientOptions, BffRequestOptions, buildUrl(), createRequestId(), errorEnvelopeSchema, HttpMethod, isAbortError(), isSafeMethod() (+7 more)
+Cohesion: 0.14
+Nodes (12): BffHttpClientOptions, BffRequestOptions, buildUrl(), createRequestId(), errorEnvelopeSchema, HttpMethod, isAbortError(), isSafeMethod() (+4 more)
 
 ### Community 159 - "Remover Proxy"
 Cohesion: 0.40
@@ -968,9 +968,9 @@ Nodes (28): compilerOptions, allowJs, esModuleInterop, incremental, isolatedModu
 Cohesion: 0.50
 Nodes (4): Como Configurar, Configurações Avançadas, O que São, Opções Disponíveis
 
-### Community 167 - "NormalizeSubscriptions"
-Cohesion: 0.24
-Nodes (5): IsEventType(), NormalizeSubscriptions(), TestNormalizeSubscriptions(), contains(), resolveInstanceWebhookUrl()
+### Community 167 - "main"
+Cohesion: 0.16
+Nodes (13): initAuthDB(), initPostgresAuthDB(), main(), migrate(), serverPort(), ensureDBExists(), extractDBNameAndAdminDSN(), Load() (+5 more)
 
 ### Community 168 - "dependencies"
 Cohesion: 0.15
@@ -980,9 +980,9 @@ Nodes (13): dependencies, @atendly-ia/legal-contract, clsx, next, react, react-d
 Cohesion: 0.31
 Nodes (13): addBrazilianNinthDigit(), BRAZILIAN_DDDS, extractPhoneDigits(), isWhatsappGroup(), isWhatsappLid(), jidLocalPart(), normalizeBrazilianWhatsappPhone(), normalizeWhatsappJid() (+5 more)
 
-### Community 170 - "BffAuthService.ts"
-Cohesion: 0.20
-Nodes (9): loginResultSchema, messageResultSchema, okSchema, registerResultSchema, sessionSchema, ChangePasswordInput, LoginInput, RegisterInput (+1 more)
+### Community 170 - "CreateJID"
+Cohesion: 0.40
+Nodes (4): NewJIDValidationMiddleware(), CreateJID(), github.com/gin-gonic/gin.HandlerFunc, JIDValidationMiddleware
 
 ### Community 171 - "v0.4.7"
 Cohesion: 0.67
@@ -997,16 +997,16 @@ Cohesion: 0.67
 Nodes (3): Diagrama de Estados, Estados da Instância, Verificando o Estado
 
 ### Community 174 - "BffSettingsService.ts"
-Cohesion: 0.16
-Nodes (10): AiTone, availabilitySettingsSchema, CalendarSource, onboardingStateSchema, settingsStateSchema, BffMigrationService, OnboardingPatch, AiSettingsInput (+2 more)
+Cohesion: 0.24
+Nodes (8): AiTone, availabilitySettingsSchema, onboardingStateSchema, settingsStateSchema, OnboardingPatch, AiSettingsInput, AvailabilitySettingsInput, BusinessSettingsInput
 
 ### Community 175 - "AiOrchestratorClient"
 Cohesion: 0.19
 Nodes (10): AiOrchestratorClient, conversationSchema, envelope(), messageSchema, registerV1ConversationRoutes(), platformSummary(), publicSchedulingDashboard(), registerV1DashboardRoutes() (+2 more)
 
 ### Community 178 - "NewsletterService"
-Cohesion: 0.14
-Nodes (9): NewNewsletterHandler(), go.mau.fi/whatsmeow/types.NewsletterMessage, go.mau.fi/whatsmeow/types.NewsletterMetadata, NewsletterHandler, CreateNewsletterStruct, GetNewsletterInviteStruct, GetNewsletterMessagesStruct, GetNewsletterStruct (+1 more)
+Cohesion: 0.27
+Nodes (7): go.mau.fi/whatsmeow/types.NewsletterMessage, go.mau.fi/whatsmeow/types.NewsletterMetadata, CreateNewsletterStruct, GetNewsletterInviteStruct, GetNewsletterMessagesStruct, GetNewsletterStruct, NewsletterService
 
 ### Community 180 - "bff/src/app.ts"
 Cohesion: 0.15
@@ -1020,21 +1020,17 @@ Nodes (12): "Appointment", "AppointmentItem", "AvailabilityException", "Availabi
 Cohesion: 0.20
 Nodes (10): Banco de Dados, Build e Instalação, 📋 Comandos Essenciais, Dependências, Desenvolvimento, Docker, Documentação, Limpeza (+2 more)
 
-### Community 188 - "01 — Matriz de regras de produto × backend"
+### Community 188 - "NormalizeSubscriptions"
+Cohesion: 0.24
+Nodes (5): IsEventType(), NormalizeSubscriptions(), TestNormalizeSubscriptions(), contains(), resolveInstanceWebhookUrl()
+
+### Community 190 - "BffMigrationService.ts"
+Cohesion: 0.24
+Nodes (5): CalendarSource, migrationDiagnosisSchema, migrationSchema, migrationStartSchema, BffMigrationService
+
+### Community 191 - "BffAuthService.ts"
 Cohesion: 0.20
-Nodes (9): 01 — Matriz de regras de produto × backend, Agenda e agendamentos, Clientes e memória, Conversas e inbox, IA, Importação única do Minha Agenda, Leitura da matriz, Operações assíncronas (+1 more)
-
-### Community 189 - "BffConversationService"
-Cohesion: 0.19
-Nodes (4): conversationSchema, messageSchema, BffConversationService, ConversationQuery
-
-### Community 190 - "CreateJID"
-Cohesion: 0.40
-Nodes (4): NewJIDValidationMiddleware(), CreateJID(), github.com/gin-gonic/gin.HandlerFunc, JIDValidationMiddleware
-
-### Community 191 - "00 — Estado atual do backend"
-Cohesion: 0.22
-Nodes (8): 00 — Estado atual do backend, 1. Topologia real, 3. `packages/contracts`, 7. Processamento assíncrono — inventário, 9. Síntese: o que o backend hoje realmente faz, Autenticação entre serviços, Escala do código autoral, Serviços (`render.yaml`)
+Nodes (9): loginResultSchema, messageResultSchema, okSchema, registerResultSchema, sessionSchema, ChangePasswordInput, LoginInput, RegisterInput (+1 more)
 
 ### Community 192 - "compilerOptions"
 Cohesion: 0.11
@@ -1044,9 +1040,9 @@ Nodes (18): compilerOptions, declaration, declarationMap, esModuleInterop, force
 Cohesion: 0.29
 Nodes (12): auditProductionHealth(), check(), count(), expectedServices, joinSources(), main(), matchingFiles(), read() (+4 more)
 
-### Community 194 - "business-context.ts"
-Cohesion: 0.29
-Nodes (3): businessContextConfigured(), businessContextSchema, DEFAULT_BUSINESS_CONTEXT
+### Community 194 - "01 — Matriz de regras de produto × backend"
+Cohesion: 0.20
+Nodes (9): 01 — Matriz de regras de produto × backend, Agenda e agendamentos, Clientes e memória, Conversas e inbox, IA, Importação única do Minha Agenda, Leitura da matriz, Operações assíncronas (+1 more)
 
 ### Community 196 - "compilerOptions"
 Cohesion: 0.11
@@ -1056,13 +1052,9 @@ Nodes (18): compilerOptions, esModuleInterop, forceConsistentCasingInFileNames, 
 Cohesion: 0.17
 Nodes (12): Categorias vs Eventos Individuais, Eventos de Chamadas, Eventos de Conexão, Eventos de Contatos, Eventos de Grupos, Eventos de Labels, Eventos de Mensagens, Eventos de Newsletter (+4 more)
 
-### Community 198 - "2. BFF (`apps/bff`)"
-Cohesion: 0.25
-Nodes (8): 2. BFF (`apps/bff`), Autenticação e tenant, Divergências código × product vault (BFF), Duplicações, Forma, Persistência própria, Superfície pública vs `PUBLIC_API_V1.md`, Testes
-
-### Community 199 - "Endpoints Disponíveis"
-Cohesion: 0.29
-Nodes (7): Chats, Endpoints Disponíveis, Grupos, Instâncias, Mensagens, Outros, Usuários
+### Community 199 - "00 — Estado atual do backend"
+Cohesion: 0.22
+Nodes (8): 00 — Estado atual do backend, 1. Topologia real, 3. `packages/contracts`, 7. Processamento assíncrono — inventário, 9. Síntese: o que o backend hoje realmente faz, Autenticação entre serviços, Escala do código autoral, Serviços (`render.yaml`)
 
 ### Community 200 - "Atendly"
 Cohesion: 0.50
@@ -1072,13 +1064,13 @@ Nodes (4): Aplicações, Atendly, Documentação, Para agentes
 Cohesion: 0.11
 Nodes (18): compilerOptions, esModuleInterop, forceConsistentCasingInFileNames, module, moduleResolution, outDir, rootDir, skipLibCheck (+10 more)
 
-### Community 202 - "4. Scheduling service (`apps/scheduling-service`)"
+### Community 202 - "2. BFF (`apps/bff`)"
+Cohesion: 0.25
+Nodes (8): 2. BFF (`apps/bff`), Autenticação e tenant, Divergências código × product vault (BFF), Duplicações, Forma, Persistência própria, Superfície pública vs `PUBLIC_API_V1.md`, Testes
+
+### Community 203 - "4. Scheduling service (`apps/scheduling-service`)"
 Cohesion: 0.29
 Nodes (7): 4. Scheduling service (`apps/scheduling-service`), Abstração multi-provider, Migração, Modelo de dados, O que existe e é bom, O que não existe, Riscos de correção
-
-### Community 203 - "6. WhatsApp / Evolution"
-Cohesion: 0.29
-Nodes (7): 6. WhatsApp / Evolution, Caminho inbound, Natureza, Riscos do caminho WhatsApp, Superfície consumida, Teste real de ativação, Troca de número
 
 ### Community 204 - "🎯 Workflows Comuns"
 Cohesion: 0.33
@@ -1088,6 +1080,10 @@ Nodes (6): Antes de Fazer Commit, Debug e Profiling, Desenvolvimento Diário, Pr
 Cohesion: 0.25
 Nodes (8): Analogia do Celular, Características, Do Zero até Enviar Mensagem, Exemplo Completo, Instâncias WhatsApp, O que é uma Instância, Resumo Rápido, 📋 Índice
 
+### Community 206 - "6. WhatsApp / Evolution"
+Cohesion: 0.29
+Nodes (7): 6. WhatsApp / Evolution, Caminho inbound, Natureza, Riscos do caminho WhatsApp, Superfície consumida, Teste real de ativação, Troca de número
+
 ### Community 207 - "Evolution Go — Trademark and Brand Assets Policy"
 Cohesion: 0.22
 Nodes (8): 1. Scope and purpose, 2. Permitted trademark and brand asset use, 3. Protected Visual Identity Elements (Brand Assets), 4. Restrictions for forks, modified versions, and redistributions, 5. Permission requests, 6. Enforcement and termination, 7. Disclaimer, Evolution Go — Trademark and Brand Assets Policy
@@ -1096,13 +1092,9 @@ Nodes (8): 1. Scope and purpose, 2. Permitted trademark and brand asset use, 3. 
 Cohesion: 0.40
 Nodes (5): 8. Configuração, testes e observabilidade, Configuração e deploy — achados, Observabilidade, Retenção de dados, Testes — panorama consolidado
 
-### Community 215 - "BffServiceCatalogService.ts"
-Cohesion: 0.20
-Nodes (5): serviceListSchema, serviceSchema, BffServiceCatalogService, ServiceInput, UpdateServiceInput
-
 ### Community 222 - "Documentação Atendly"
 Cohesion: 0.25
-Nodes (8): Como navegar, Documentação Atendly, Documentos atuais fora do vault, Fonte de verdade de produto, Produto, Rastreabilidade, Regra de precedência, UX/UI
+Nodes (8): Como navegar, Documentação Atendly, Documentos atuais fora do vault, Fontes por responsabilidade, Produto, Rastreabilidade, Regra de precedência, UX/UI
 
 ### Community 228 - "DirectoryScreen.tsx"
 Cohesion: 0.09
@@ -1240,6 +1232,10 @@ Nodes (5): 1. Setup Básico com Webhook, 2. Arquitetura Distribuída com RabbitM
 Cohesion: 0.40
 Nodes (5): Estrutura Padrão, Exemplo: Chamada Recebida, Exemplo: Grupo Criado, Exemplo: Mensagem Recebida, Formato de Payload
 
+### Community 313 - "telemetry.go"
+Cohesion: 0.47
+Nodes (4): NewTelemetryService(), SendTelemetry(), TelemetryData, telemetryService
+
 ### Community 327 - "Requisitos"
 Cohesion: 0.50
 Nodes (4): Ferramentas Recomendadas, Obrigatórios, Opcionais, Requisitos
@@ -1289,24 +1285,24 @@ Cohesion: 0.67
 Nodes (3): Desktop, Mobile, Navegação vigente
 
 ## Knowledge Gaps
-- **1964 isolated node(s):** `Serviços (`render.yaml`)`, `Escala do código autoral`, `Autenticação entre serviços`, `Forma`, `Persistência própria` (+1959 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 2314 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **38 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **1980 isolated node(s):** `endOfLine`, `name`, `version`, `private`, `type` (+1975 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 2331 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **44 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `API de Instâncias` connect `API de Instâncias` to `Boas Práticas`, `Deletar Instância`, `api-overview.md`, `Criar Instância`, `Obter QR Code`, `Listar Todas as Instâncias`, `Informações da Instância`, `Remover Proxy`, `Configurações Avançadas`, `Conectar via Código de Pareamento`, `Fluxo Completo de Uso`, `Conectar Instância`, `Desconectar Instância`, `Reconectar Instância`, `Logout`, `Configurar Proxy`, `Forçar Reconexão`, `Status da Conexão`, `Obter Logs`, `Erros Comuns`?**
-  _High betweenness centrality (0.027) - this node is a cross-community bridge._
-- **Why does `Armazenamento de Mídia` connect `Armazenamento de Mídia` to `wiki/README.md`?**
-  _High betweenness centrality (0.011) - this node is a cross-community bridge._
-- **Why does `Sistema de Eventos` connect `Sistema de Eventos` to `RabbitMQ`, `Tipos de Eventos`, `wiki/README.md`, `WebSocket`, `NATS`, `Exemplos Práticos`, `Formato de Payload`, `Webhook`, `Boas Práticas`?**
-  _High betweenness centrality (0.011) - this node is a cross-community bridge._
-- **What connects `Serviços (`render.yaml`)`, `Escala do código autoral`, `Autenticação entre serviços` to the rest of the system?**
-  _1964 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `Instance` be split into smaller, more focused modules?**
-  _Cohesion score 0.08048780487804878 - nodes in this community are weakly interconnected._
+- **Why does `Deploy com Docker` connect `Deploy com Docker` to `wiki/README.md`?**
+  _High betweenness centrality (0.010) - this node is a cross-community bridge._
+- **Why does `DiagnosticLogger` connect `EvolutionProvider.ts` to `message-graph.ts`, `InboundMessageProcessor.ts`, `assistant.service.ts`?**
+  _High betweenness centrality (0.008) - this node is a cross-community bridge._
+- **Why does `Evolution GO - Changelog` connect `Evolution GO - Changelog` to `v0.5.2`, `v0.2.0`, `v0.6.1`, `📋 Migration Notes`, `v0.7.1`, `v0.4.7`, `v0.6.0`, `v0.7.0`?**
+  _High betweenness centrality (0.008) - this node is a cross-community bridge._
+- **What connects `endOfLine`, `name`, `version` to the rest of the system?**
+  _1980 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `evolutionWebhook.routes.ts` be split into smaller, more focused modules?**
+  _Cohesion score 0.10037878787878787 - nodes in this community are weakly interconnected._
+- **Should `InstanceRepository` be split into smaller, more focused modules?**
+  _Cohesion score 0.07195121951219512 - nodes in this community are weakly interconnected._
 - **Should `WhatsmeowService` be split into smaller, more focused modules?**
-  _Cohesion score 0.14082503556187767 - nodes in this community are weakly interconnected._
-- **Should `whatsmeow.go` be split into smaller, more focused modules?**
-  _Cohesion score 0.12857142857142856 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07412587412587412 - nodes in this community are weakly interconnected._

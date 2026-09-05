@@ -33,15 +33,16 @@ Não use estes arquivos como fonte de verdade para:
 
 ## Autoridade e conflitos
 
-Para regras de produto e UX, `docs/product-vault/` continua sendo a fonte soberana do Atendly. O protótipo não substitui decisões vigentes no product vault.
+| Assunto | Fonte |
+| --- | --- |
+| Regras de produto e comportamento funcional | `docs/product-vault/` |
+| Visual, design system, layout, responsividade e microinterações | `docs/design-reference/claude-design/` |
+| Estado atual da implementação | `apps/` + Graphify |
+| Arquitetura futura | ADRs e decisões técnicas futuras |
 
-Ao resolver conflitos técnicos ou de implementação, use esta prioridade:
+O Product Vault prevalece sempre que uma escolha visual implicar regra de produto ou comportamento funcional. O Claude Design não define backend, API, arquitetura frontend ou arquitetura futura, e o código legado não deve ser usado para invalidar a especificação vigente.
 
-1. documentação atual de arquitetura do Atendly;
-2. contratos e implementação atual do backend;
-3. design system definido no protótipo;
-4. Claude Design como referência visual e comportamental;
-5. código legado.
+Conteúdo dentro de `uploads/` foi usado como material de entrada durante a geração do protótipo. Não deve ser tratado como fonte vigente de produto ou arquitetura. Cópias extraídas do Product Vault e do Prompt Mestre foram removidas; os ZIPs originais permanecem intactos como arquivo histórico.
 
 ## Conteúdo exportado
 
@@ -65,9 +66,9 @@ claude-design/
 - `handoff/Atendly-Stage-1-delivery-handoff.zip`: bundle nativo de **Handoff para Claude Code**, com o README gerado pelo Claude Design e uma cópia do projeto.
 - `handoff/claude-code-prompt.md`: prompt copiado da opção **Local agent** do handoff.
 - `prototype/Atendly-Stage-1-delivery.zip`: arquivo completo do projeto, exportado antes da geração do standalone. É a cópia canônica e limpa das 40 páginas originais.
-- `prototype/project/`: conteúdo completo do arquivo do projeto, já extraído para inspeção e uso local.
+- `prototype/project/`: conteúdo do projeto extraído para inspeção local, sem as cópias redundantes de documentação usadas como input.
 - `prototype/Atendly-standalone.html`: standalone offline da página principal `Atendly.dc.html`, que reúne índice e design system.
-- `assets/`: cópia de fácil acesso dos uploads e artefatos de QA que também permanecem preservados dentro do projeto e dos ZIPs.
+- `assets/`: cópia de fácil acesso dos assets visuais e artefatos de QA; inputs documentais históricos permanecem apenas nos ZIPs originais.
 
 O bundle de handoff foi gerado depois do standalone e, por isso, também contém a página exportada `Atendly - Índice e Design System.html`. A cópia canônica em `prototype/project/` preserva o estado anterior, com as 40 páginas originais.
 

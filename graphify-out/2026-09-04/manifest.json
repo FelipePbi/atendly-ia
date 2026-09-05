@@ -2142,21 +2142,21 @@
     "semantic_hash": "0fe5d9ade9c875e05a1af2d5bb9c3bf2"
   },
   "AGENTS.md": {
-    "mtime": 1788402717.3264706,
-    "seen": 1788404499.1314158,
-    "ast_hash": "bb6e7553d5858e5101bf5d4aefc0949e",
+    "mtime": 1788577050.6410694,
+    "seen": 1788577140.1426637,
+    "ast_hash": "1d1b78b0e83335f015f8afba51f2ae81",
     "semantic_hash": ""
   },
   "GRAPHIFY_WORKSPACE_MAP.md": {
-    "mtime": 1788403250.6863897,
-    "seen": 1788404499.1314173,
-    "ast_hash": "092548a859dffe4c1e4aef30d8bb266a",
+    "mtime": 1788577050.6390693,
+    "seen": 1788577140.1426656,
+    "ast_hash": "6ccad783fd2b9a86f1fdeaf39067e972",
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1788404739.221585,
-    "seen": 1788404898.3293326,
-    "ast_hash": "56a19a9edc3fc16034b5ca9e366aaf31",
+    "mtime": 1788577050.6380718,
+    "seen": 1788577140.1426666,
+    "ast_hash": "8872197be2cd1d399c0adbd9dadc5d8e",
     "semantic_hash": ""
   },
   "apps/ai-orchestrator/AGENTS.md": {
@@ -2484,9 +2484,9 @@
     "semantic_hash": ""
   },
   "apps/frontend/AGENTS.md": {
-    "mtime": 1788401786.7426257,
-    "seen": 1788402517.8168721,
-    "ast_hash": "57a5466c5528d62e0a8aba1850b9e630",
+    "mtime": 1788577050.6434124,
+    "seen": 1788577140.1427014,
+    "ast_hash": "188c0b16db439140b113f7c6152f1579",
     "semantic_hash": ""
   },
   "apps/frontend/CLAUDE.md": {
@@ -2496,9 +2496,9 @@
     "semantic_hash": ""
   },
   "apps/frontend/README.md": {
-    "mtime": 1788401786.7426257,
-    "seen": 1788402517.8168733,
-    "ast_hash": "4a255d0942b5d031dcb713ed727c4bd4",
+    "mtime": 1788577050.6434124,
+    "seen": 1788577140.1427026,
+    "ast_hash": "d6ac38588525b3caed1596ff609a62a8",
     "semantic_hash": ""
   },
   "apps/health-worker/AGENTS.md": {
@@ -2532,15 +2532,15 @@
     "semantic_hash": ""
   },
   "docs/README.md": {
-    "mtime": 1788404763.0702608,
-    "seen": 1788404898.3295562,
-    "ast_hash": "be620f63f303c3ee404e91baeaf2a539",
+    "mtime": 1788577050.6390693,
+    "seen": 1788577140.1427069,
+    "ast_hash": "7a9e11155a797f4e31904c734adb0f6b",
     "semantic_hash": ""
   },
   "docs/UI_UX_PROTOTYPE_GUIDELINES.md": {
-    "mtime": 1788400668.10981,
-    "seen": 1788400797.3392525,
-    "ast_hash": "5f7bb5c3cbb1e49ca1d0343faa522ed6",
+    "mtime": 1788568152.2079997,
+    "seen": 1788568171.7140005,
+    "ast_hash": "425666630bdaa0b5f5eb1ad2e928f7c7",
     "semantic_hash": ""
   },
   "render.yaml": {
@@ -2922,9 +2922,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1788403271.34217,
-    "seen": 1788404499.1314166,
-    "ast_hash": "58bed71a3a530cb00fda1ce0d7832c79",
+    "mtime": 1788577050.6400692,
+    "seen": 1788577140.142665,
+    "ast_hash": "f781f891d0e58ad88a9c8acd0840776c",
     "semantic_hash": ""
   },
   "docs/AI_WORKFLOW.md": {
@@ -2941,44 +2941,50 @@
   },
   "docs/backend-refactor/00-CURRENT-STATE.md": {
     "mtime": 1788406453.7316306,
-    "seen": 1788441200.720019,
+    "seen": 1788577140.1427095,
     "ast_hash": "0f36ce03f33d35cd269187f6d2132cb2",
     "semantic_hash": ""
   },
   "docs/backend-refactor/01-PRODUCT-BACKEND-MATRIX.md": {
     "mtime": 1788406588.659479,
-    "seen": 1788441200.720021,
+    "seen": 1788577140.1427104,
     "ast_hash": "79ee36999064c4de08c363cf0a74b971",
     "semantic_hash": ""
   },
   "docs/backend-refactor/02-REUSE-MATRIX.md": {
     "mtime": 1788406723.3731885,
-    "seen": 1788441200.7200222,
+    "seen": 1788577140.142711,
     "ast_hash": "c57880a43b3ee222910c52ad49bbfdc8",
     "semantic_hash": ""
   },
   "docs/backend-refactor/03-TARGET-BACKEND.md": {
     "mtime": 1788406851.4641705,
-    "seen": 1788441200.7200232,
+    "seen": 1788577140.1427119,
     "ast_hash": "78ed97563f246590620834544fd8c1bf",
     "semantic_hash": ""
   },
   "docs/backend-refactor/04-DATA-MIGRATION.md": {
     "mtime": 1788406943.7755315,
-    "seen": 1788441200.7200243,
+    "seen": 1788577140.142712,
     "ast_hash": "dded4cf239a447509e3b99b79f85030f",
     "semantic_hash": ""
   },
   "docs/backend-refactor/05-EXECUTION-PLAN.md": {
     "mtime": 1788407158.6096866,
-    "seen": 1788441200.720025,
+    "seen": 1788577140.1427126,
     "ast_hash": "1375c64670f16c8e9f154934ef80ee6b",
     "semantic_hash": ""
   },
   "docs/backend-refactor/DECISIONS.md": {
     "mtime": 1788407265.722007,
-    "seen": 1788441200.720026,
+    "seen": 1788577140.1427133,
     "ast_hash": "cf79301730bd0785757f82fed11392b4",
+    "semantic_hash": ""
+  },
+  "docs/goal_preparar_repositorio_atendly_para_astra.md": {
+    "mtime": 1788576707.140366,
+    "seen": 1788577140.1427138,
+    "ast_hash": "82149e7413fc556bd4526100dc962859",
     "semantic_hash": ""
   }
 }

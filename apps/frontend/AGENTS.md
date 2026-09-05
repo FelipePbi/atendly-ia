@@ -15,9 +15,9 @@ Antes de alterar UI, fluxo, copy, estados ou navegação, leia:
 1. `../../docs/product-vault/00-HOME.md`;
 2. documentos de regra/fluxo relevantes;
 3. `../../docs/product-vault/03-UX-UI/`;
-4. `../frontend-open-design/DESIGN.md` quando a tarefa envolver visual.
+4. `../../docs/design-reference/claude-design/` quando a tarefa envolver visual.
 
-O product vault prevalece sobre protótipos antigos e mocks existentes.
+O product vault prevalece sobre protótipos históricos/legados e mocks existentes. O Claude Design atual é a referência visual e comportamental aprovada, sem definir arquitetura ou regras de produto.
 
 ## Regras obrigatórias
 
@@ -49,7 +49,7 @@ Adicionar contexto progressivamente, sem alterar o modelo mental principal.
 
 ## Design contract
 
-`docs/prototype/claude-design/` é referência visual subordinada ao product vault, não fonte soberana de produto.
+`../../docs/design-reference/claude-design/` é referência visual subordinada ao product vault, não fonte soberana de produto.
 
 Preserve tokens e identidade visual quando úteis, mas **não preserve telas antigas que contradizem o product vault**.
 

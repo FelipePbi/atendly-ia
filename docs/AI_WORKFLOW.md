@@ -7,6 +7,7 @@ Este documento detalha a política resumida em [`../CLAUDE.md`](../CLAUDE.md). E
 | Fonte | Responde | Não responde |
 | --- | --- | --- |
 | `docs/product-vault/` | o que o produto deve fazer, para quem, com qual copy e qual regra | como o código está estruturado |
+| `docs/design-reference/claude-design/` | como o frontend novo deve parecer e se comportar visualmente | regras de produto, backend, API ou arquitetura futura |
 | `docs/` fora do vault + `AGENTS.md`/README dos apps | arquitetura conceitual, contratos, decisões técnicas, limites de cada app | detalhe de implementação atual |
 | Graphify | onde está implementado, quais símbolos e dependências existem | qual é a regra de produto correta |
 | RTK | execução de shell, testes, build, git, busca textual com pouco output | qualquer decisão de produto ou arquitetura |
@@ -51,6 +52,7 @@ Evite: busca → 15 arquivos → contexto enorme.
 | Privacidade, retenção, dados do cliente | `product-vault/01-Regras/08-Privacidade-e-Retencao.md` |
 | Onboarding | `product-vault/02-Fluxos/01-Onboarding.md` + `product-vault/03-UX-UI/03-Onboarding-UX.md` |
 | UX, responsividade, telas, design system, copy | `product-vault/03-UX-UI/` |
+| Referência visual aprovada, layout, assets e microinterações | `design-reference/claude-design/` |
 | Termo desconhecido | `product-vault/04-Referencia/01-Glossario.md` |
 | "Isso não foi decidido diferente antes?" | `product-vault/04-Referencia/02-Decisoes-Substituidas.md` e `product-vault/04-Referencia/99-Perguntas-e-Respostas.md` |
 | Prototipação visual | `UI_UX_PROTOTYPE_GUIDELINES.md` |
@@ -155,4 +157,4 @@ rtk gain
 
 > Nota sobre os hooks do Claude Code: `.claude/settings.json` mantém apenas o guard de busca do Graphify (`Bash|Grep`), que não se aplica ao vault — ele está fora do grafo por `.graphifyignore`, então para pergunta de produto vá direto à nota. O guard de `Read|Glob` foi removido de propósito — ele injeta "use Graphify antes de ler" em *toda* leitura, inclusive de notas do vault, o que contraria o roteamento acima e cobra tokens em leituras pequenas e dirigidas. Se você rodar `graphify claude install` de novo, ele volta: remova-o outra vez.
 
-Graphify indexa **código**; o vault é o grafo de **produto**. Nunca exporte Graphify por cima de `docs/product-vault/` — a visualização técnica é `graphify-out/graph.html`.
+Graphify indexa **código**; o vault é o grafo de **produto** e `docs/design-reference/` preserva referências visuais/comportamentais. Ambos ficam fora do Graphify. Nunca exporte Graphify por cima dessas áreas — a visualização técnica é `graphify-out/graph.html`.

@@ -4,11 +4,9 @@ Esta pasta facilita o acesso aos recursos que também permanecem no arquivo comp
 
 ## `uploads/`
 
-Contém 39 arquivos exportados pelo projeto:
+Contém sete assets visuais extraídos do projeto: seis PNGs e um JPEG, incluindo logo e capturas de telas/documentos.
 
-- seis PNGs, incluindo logo e capturas de telas/documentos;
-- um JPEG;
-- 32 documentos Markdown usados como referências durante a criação do protótipo.
+As cópias do Product Vault e do Prompt Mestre usadas como material de entrada foram removidas desta área ativa. Elas não são fontes vigentes; os ZIPs originais preservam o registro histórico da exportação.
 
 Arquivos de imagem identificados:
 

@@ -12,7 +12,6 @@ logs/
 graphify-out/
 **/src/generated/
 apps/evolution-go/whatsmeow-lib/proto/
-apps/frontend-open-design/plugin-source/
 **/*.pb.go
 
 # Vendored third-party Go library (go.mod: replace go.mau.fi/whatsmeow => ./whatsmeow-lib).
@@ -26,3 +25,4 @@ apps/evolution-go/whatsmeow-lib/
 # Product knowledge lives in the Obsidian vault, not in the code graph.
 # See docs/AI_WORKFLOW.md for the Product Vault / Graphify split.
 docs/product-vault/
+docs/design-reference/

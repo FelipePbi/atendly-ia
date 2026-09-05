@@ -84,20 +84,46 @@ Pode adicionar mais contexto e métricas simples.
 
 ## Agenda
 
-### Mobile
+### Agenda — visualização Dia
 
 - seletor de data;
 - lista cronológica;
-- filtros simples;
-- botão `+`;
-- hold visual;
-- estados dos atendimentos.
+- prioridade e default no mobile;
+- solução adequada a espaços estreitos, sem comprimir a grade das telas maiores.
 
-### Desktop
+### Agenda — visualização Semana
 
-- grade semanal;
-- filtros por status/serviço;
-- eventos diferenciados entre atendimento, compromisso e bloqueio.
+- compromissos distribuídos entre os dias;
+- possibilidade de ser a visualização padrão em telas maiores;
+- filtros por status/serviço em telas maiores;
+- adaptação própria para mobile, tablet, notebook e desktop.
+
+### Agenda — visualização Mês
+
+- visão macro da distribuição dos agendamentos no mês;
+- leitura eficiente também quando houver pouco espaço por evento;
+- adaptação própria para mobile, tablet, notebook e desktop.
+
+### Troca de visualização
+
+- seletor entre `Dia`, `Semana` e `Mês`;
+- os três modos representam a mesma Agenda, sem criar fluxos separados;
+- filtros simples, botão `+`, hold visual e estados dos atendimentos permanecem coerentes entre os modos.
+
+### Personalização dos dias visíveis
+
+- configuração opcional dos dias da semana exibidos;
+- aplicação principalmente em `Semana` e `Mês`;
+- redistribuição do espaço entre os dias visíveis;
+- possibilidade de voltar a exibir qualquer dia;
+- indicação clara de que ocultar não altera disponibilidade nem fecha o dia para atendimento.
+
+### Identidade visual do serviço nos eventos
+
+- exemplo de serviço com identidade visual/cor configurada, como `Manutenção de cílios` com rosa;
+- exemplo de serviço sem identidade configurada, usando o padrão da Agenda;
+- representação que preserve a distinção entre atendimento, compromisso, bloqueio, hold `Em confirmação` e estados do agendamento;
+- apoio visual adicional à cor para que tipo e estado do evento continuem reconhecíveis.
 
 ### Novo evento
 
@@ -201,6 +227,8 @@ Mobile: tela/drawer acionada pelo cabeçalho.
 - duração;
 - preço/tipo;
 - descrição;
+- identidade visual/cor opcional;
+- preview simples da identidade visual quando apropriado;
 - ativo/inativo;
 - recorrência;
 - buffers;

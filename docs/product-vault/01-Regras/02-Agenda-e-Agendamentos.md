@@ -11,6 +11,43 @@ status: vigente
 
 A agenda utilizada pela IA e pelo profissional é sempre a Agenda Atendly.
 
+## Visualizações da Agenda
+
+A Agenda oferece três modos de visualização da mesma operação:
+
+- Dia;
+- Semana;
+- Mês.
+
+No mobile, `Dia` é a visualização principal e padrão, mas o usuário também pode alternar para `Semana` e `Mês`.
+
+Em tablets, notebooks e desktops, as três visualizações permanecem disponíveis. Em telas maiores, `Semana` pode ser a visualização padrão por facilitar a leitura dos compromissos distribuídos entre os dias.
+
+`Mês` oferece uma visão macro para entender rapidamente a distribuição dos agendamentos ao longo do mês.
+
+## Identidade visual do serviço
+
+Um serviço pode ter uma identidade visual opcional para facilitar o reconhecimento dos seus eventos na Agenda. No MVP, essa configuração pode ser representada por uma cor escolhida pelo usuário.
+
+A forma de aplicar essa identidade não é fixa. O design pode usar acento, borda, faixa, marcador, ponto, superfície tonal ou outro padrão visual consistente, desde que preserve legibilidade e evite poluição visual.
+
+Quando o serviço não tiver uma identidade visual configurada, o evento usa o padrão visual da Agenda.
+
+A identidade do serviço não substitui o tipo nem o estado do evento. Atendimento, compromisso pessoal, bloqueio, hold `Em confirmação` e os demais estados do agendamento devem continuar claramente distinguíveis, sem depender apenas da cor do serviço.
+
+## Dias ocultos na visualização
+
+O usuário pode escolher quais dias da semana deseja ocultar da Agenda, principalmente nas visualizações `Semana` e `Mês`.
+
+Essa configuração:
+
+- afeta apenas a visualização;
+- não altera a disponibilidade real do negócio;
+- não indica que o dia está fechado ou indisponível para atendimento;
+- pode ser revertida a qualquer momento.
+
+Ocultar dias sem utilidade frequente permite aproveitar melhor o espaço disponível sem mudar as regras operacionais da Agenda.
+
 ## Disponibilidade semanal
 
 O profissional configura:

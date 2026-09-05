@@ -374,9 +374,9 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 318. **Tempo economizado?** — **B — Não sem cálculo confiável.** **Vigente.**
 319. **Taxa de automação?** — **A — Sim.** **Vigente como métrica simples.**
 320. **Conversão conversa → agendamento?** — **C — Só com volume mínimo.** **Vigente.**
-321. **Agenda desktop inicial?** — **B — Semana.** **Vigente.**
-322. **Agenda mobile inicial?** — **A — Dia.** **Vigente.**
-323. **Visualização mensal?** — **C — Mini calendário para navegação, sem necessidade de mês completo.** **Vigente.**
+321. **Agenda desktop inicial?** — **B — Semana.** **Vigente como visualização inicial**, com `Dia` e `Mês` também disponíveis.
+322. **Agenda mobile inicial?** — **A — Dia.** **Vigente como visualização inicial**, com `Semana` e `Mês` também disponíveis.
+323. **Visualização mensal?** — **C — Mini calendário para navegação, sem necessidade de mês completo.** **Substituída após a prototipação:** `Mês` passa a ser uma visualização completa da Agenda.
 324. **Clique em espaço vazio desktop?** — **C — Menu Agendamento / Compromisso / Bloqueio.** **Vigente.**
 325. **Botão global + na Agenda?** — **A — Sim.** **Vigente.**
 326. **Abrir agendamento?** — **A — Detalhes rápidos em modal/drawer.** **Vigente**, com mobile em tela própria quando necessário.
@@ -1035,7 +1035,7 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 903. **Home mobile prioriza o quê?** — **A — Status da IA + pendências + próximos atendimentos.** **Vigente.**
 904. **Métricas no mobile?** — **A — Poucas, compactas e secundárias.** **Vigente.**
 905. **Home desktop pode ganhar mais contexto?** — **A — Sim.** **Vigente.**
-906. **Agenda mobile principal?** — **A — Dia + seletor horizontal de datas.** **Vigente.**
+906. **Agenda mobile principal?** — **A — Dia + seletor horizontal de datas.** **Vigente como default**, com `Semana` e `Mês` também disponíveis.
 907. **Topo da Agenda mobile?** — **A — Data atual + navegação + calendário.** **Vigente.**
 908. **Eventos do dia no mobile?** — **B — Cards/linhas em lista cronológica.** **Vigente.**
 909. **Mostrar slots vazios no mobile?** — **B — Não; mostrar eventos e botão Novo.** **Vigente.**
@@ -1058,10 +1058,10 @@ Este arquivo registra a entrevista de produto realizada para redefinir a Atendly
 926. **Evitar mais de um formulário importante na mesma tela?** — **A — Sim.** **Vigente.**
 927. **Tablet se parece mais com quê?** — **A — Mobile ampliado com contexto extra.** **Vigente.**
 928. **Conversas em tablet landscape?** — **A — Lista + chat.** **Vigente.**
-929. **Agenda tablet landscape?** — **C — Usuário pode escolher Dia/Semana.** **Vigente.**
+929. **Agenda tablet landscape?** — **C — Usuário pode escolher Dia/Semana.** **Substituída após a prototipação:** `Dia`, `Semana` e `Mês` ficam disponíveis.
 930. **Conversas desktop amplo?** — **A — Lista + chat + cliente.** **Vigente.**
 931. **Notebook menor?** — **A — Lista + chat; cliente sob demanda.** **Vigente.**
-932. **Agenda desktop?** — **A — Semana em grade.** **Vigente.**
+932. **Agenda desktop?** — **A — Semana em grade.** **Vigente como possível default**, com `Dia` e `Mês` também disponíveis.
 933. **Clientes desktop?** — **A — Lista/tabela compacta com mais colunas.** **Vigente.**
 934. **Ações secundárias?** — **A — Menu `•••` quando pouco frequentes.** **Vigente.**
 935. **Quantas ações primárias por tela?** — **A — Uma evidente.** **Vigente.**
@@ -1324,7 +1324,7 @@ As perguntas abaixo também fizeram parte da entrevista. Elas são listadas indi
 - **R30-original-920.** Conversas desktop master-detail? — **Sim, lista/chat/cliente quando houver espaço.**
 - **R30-original-921.** Painel cliente em notebook menor? — **Sob demanda.**
 - **R30-original-922.** Agenda semanal grade/lista/kanban? — **Grade em desktop.**
-- **R30-original-923.** Cores dos eventos por serviço/tipo/status? — **Priorizar tipos de evento, evitando arco-íris.**
+- **R30-original-923.** Cores dos eventos por serviço/tipo/status? — **Evoluída após a prototipação:** serviços podem ter identidade visual opcional, sem substituir a distinção de tipo e estado nem gerar poluição visual.
 - **R30-original-924.** Cancelado permanece na grade? — **Não na visão normal.**
 - **R30-original-925.** Hold aparece na agenda? — **Sim, discreto.**
 - **R30-original-926.** Mensagens IA/humano visualmente diferentes? — **Autoria discreta, sem personagem/robô.**
@@ -1350,6 +1350,40 @@ As perguntas abaixo também fizeram parte da entrevista. Elas são listadas indi
 - **R30-original-946.** Emojis na interface? — **Pontuais.**
 - **R30-original-947.** Termos técnicos na UI? — **Não.**
 - **R30-original-948.** Mensagem de erro deve explicar ação? — **Sim.**
+
+# Decisões pós-prototipação — Refinamento da Agenda
+
+### P1. Quais visualizações a Agenda deve suportar?
+
+**Vigente.**
+
+- Dia;
+- Semana;
+- Mês.
+
+`Dia` permanece como visualização principal no mobile. `Semana` tende a ser mais adequada em telas grandes, e `Mês` oferece uma visão macro da distribuição dos agendamentos.
+
+### P2. Serviço pode ter identidade visual própria na Agenda?
+
+**Vigente.** Sim, opcionalmente.
+
+No MVP, essa identidade pode ser uma cor configurável. O design decide como representá-la, sem obrigação de preencher todo o evento com a cor.
+
+### P3. O que acontece se não houver cor configurada?
+
+**Vigente.** O evento usa o padrão visual da Agenda.
+
+### P4. Cor do serviço substitui estado ou tipo do evento?
+
+**Vigente.** Não.
+
+Atendimento, compromisso pessoal, bloqueio, hold `Em confirmação` e os estados do agendamento continuam visualmente distinguíveis.
+
+### P5. Usuário pode ocultar dias da semana?
+
+**Vigente.** Sim.
+
+Essa configuração afeta somente a visualização, não muda a disponibilidade e serve para aproveitar melhor o espaço e facilitar a leitura. Os dias ocultos podem voltar a ser exibidos a qualquer momento.
 
 ## Relacionado
 

@@ -108,6 +108,24 @@ Recorrência é uma frequência configurada no serviço e usada para criar múlt
 
 A IA deve responder quando tiver o resultado, sem mensagens de espera rotineiras.
 
+## Visualizações e leitura visual da Agenda
+
+**Evoluída após a primeira rodada de prototipação.**
+
+A decisão anterior priorizava `Dia` no mobile e `Semana` no desktop, não previa uma visualização mensal completa e concentrava a diferenciação visual nos tipos de evento.
+
+Direção atual:
+
+- `Dia`, `Semana` e `Mês` são modos de visualização da mesma Agenda;
+- `Dia` continua como padrão no mobile;
+- `Semana` pode ser o padrão em telas maiores;
+- `Mês` oferece a visão macro da distribuição dos agendamentos;
+- serviços podem ter identidade visual opcional, representada por uma cor no MVP;
+- identidade do serviço não substitui tipo nem estado do evento;
+- o usuário pode ocultar dias da semana apenas da visualização, sem alterar a disponibilidade.
+
+Essa mudança é um refinamento da experiência após a prototipação, não uma correção de erro.
+
 ## Relacionado
 
 - [[04-Referencia/99-Perguntas-e-Respostas]]

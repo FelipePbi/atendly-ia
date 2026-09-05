@@ -33,9 +33,10 @@ Fluxos complexos usam telas full-screen em vez de modais pequenos.
 
 ### Agenda
 
-- dia como visualização principal;
-- seletor horizontal de datas;
-- lista cronológica de eventos;
+- `Dia` como visualização principal e padrão;
+- `Semana` e `Mês` também disponíveis;
+- seletor horizontal de datas e lista cronológica de eventos na visualização `Dia`;
+- solução própria para cada visualização, sem comprimir uma grade desktop para caber no celular;
 - não mostrar todos os espaços vazios como slots;
 - `+` abre escolha Agendamento / Compromisso / Bloqueio.
 
@@ -69,7 +70,7 @@ Comportamento base semelhante ao mobile.
 Em landscape:
 
 - Conversas: lista + chat;
-- Agenda: permitir Dia/Semana;
+- Agenda: oferecer `Dia`, `Semana` e `Mês`, aproveitando a largura para aumentar a densidade sem prejudicar a leitura;
 - detalhes adicionais podem aparecer sem obrigar layout desktop completo.
 
 ## Notebook
@@ -91,7 +92,9 @@ Quando largura permitir:
 
 ### Agenda
 
-Grade semanal.
+- `Semana` pode ser a visualização padrão;
+- `Dia` e `Mês` permanecem disponíveis;
+- mostrar mais contexto conforme o espaço permitir, sem excesso de informação.
 
 ### Clientes
 
@@ -100,6 +103,12 @@ Lista/tabela compacta com mais colunas.
 ### Home
 
 Pode mostrar mais contexto e métricas sem transformar a tela em dashboard analítico.
+
+## Dias visíveis na Agenda
+
+O usuário pode ocultar dias da semana apenas da visualização, principalmente em `Semana` e `Mês`. O espaço liberado deve ser redistribuído entre os dias visíveis de forma adequada ao dispositivo.
+
+Ocultar um dia não altera disponibilidade nem significa que o negócio está fechado nesse dia. O usuário pode voltar a exibi-lo a qualquer momento.
 
 ## Regra de progressão
 

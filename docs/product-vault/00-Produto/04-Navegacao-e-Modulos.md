@@ -34,7 +34,7 @@ Base semelhante ao mobile, ganhando painéis adicionais quando a largura permiti
 Exemplos:
 
 - Conversas: lista + chat em landscape;
-- Agenda: opção Dia/Semana em landscape.
+- Agenda: opções `Dia`, `Semana` e `Mês`, com maior densidade em landscape.
 
 ## Notebook/Desktop
 

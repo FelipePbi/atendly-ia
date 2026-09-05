@@ -25,6 +25,18 @@ Base neutra com cor de marca como destaque.
 
 Não usar muitas cores para decorar dados. Cores funcionais devem comunicar estado.
 
+## Identidade visual de serviço na Agenda
+
+O Design System deve definir um padrão consistente para aplicar a identidade visual opcional do serviço nos eventos da Agenda, nas visualizações `Dia`, `Semana` e `Mês`, inclusive em estados compactos e locais com pouco espaço.
+
+No MVP, essa identidade pode partir de uma cor escolhida pelo usuário. Sua representação pode usar faixa, borda, marcador, ponto, superfície tonal ou outra solução validada pelo design; não é obrigatório preencher toda a superfície do evento.
+
+Quando não houver identidade configurada para o serviço, o evento usa o padrão visual da Agenda.
+
+A cor do serviço não pode conflitar com cores semânticas de erro, alerta, sucesso ou estados operacionais. Estado e tipo do evento nunca devem depender somente da cor escolhida para o serviço.
+
+Atendimento, compromisso pessoal, bloqueio, hold `Em confirmação` e os estados do agendamento devem continuar distinguíveis quando a identidade do serviço estiver presente.
+
 ## Gradientes
 
 Uso pontual em:

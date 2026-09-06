@@ -1,12 +1,12 @@
 # Plano mestre de migração
 
-Roadmap de planejamento v1, derivado da auditoria de `5fb5d51`, em 2026-09-05. Há **25 Goals estimados**, mais Goal0. O número resulta de limites distintos de revisão: autorização, validação, ownership, transporte, domínios operacionais, IA, superfícies UI, automações e corte. Não são versões menores do MVP nem estimativa de prazo.
+Roadmap de planejamento v2, após review001 em 2026-09-05, derivado da auditoria de `5fb5d51`. Há **25 Goals estimados**, mais Goal0. O número resulta de limites distintos de revisão: autorização, validação, ownership, transporte, domínios operacionais, IA, superfícies UI, automações e corte. Não são versões menores do MVP nem estimativa de prazo.
 
 Objetivo final: implementar o único MVP do Product Vault, com experiência Claude Design aprovada e Agenda Atendly única. Direção: [TARGET_ARCHITECTURE](TARGET_ARCHITECTURE.md); decisões: [DECISIONS](DECISIONS.md); gates de dados: [DATA_MIGRATION](DATA_MIGRATION.md).
 
 ## Regras de execução
 
-- Só Goal001 está detalhado. Depois de cada implementação, Astra inspeciona commit/diff, testes e dados relevantes e reavalia o próximo Goal antes de escrevê-lo.
+- Goal001 está aceito e preservado como histórico; somente o próximo Goal002 está detalhado e READY. Depois de cada implementação, Astra inspeciona commit/diff, testes e dados relevantes e reavalia o próximo Goal antes de escrevê-lo.
 - Cada Goal mantém repositório compilável e contratos interoperáveis. Um consumer novo entra antes do produtor ativar um contrato incompatível. Não há período planejado de frontend quebrado aguardando backend.
 - Estado novo pode existir em schema sem ser exposto até consumer pronto; adapters temporários têm dono/critério de remoção. Não lançar para validação de produto enquanto faltarem partes do MVP.
 - Não apagar legado antes de inventário/corte; não preservar possibilidade de duas agendas no produto novo. Janela técnica congelada para transição é indisponibilidade explicitada, não modo híbrido.
@@ -17,9 +17,9 @@ Objetivo final: implementar o único MVP do Product Vault, com experiência Clau
 
 | ID / nome | Objetivo e motivo da posição | Dependências | Áreas principais | Risco | Resultado verificável |
 | --- | --- | --- | --- | --- | --- |
-| 001 — Autorizar alvo de instância | Fechar falha P0 pequena e independente antes de ampliar integração | Baseline auditada | Evolution handlers/auth/tests | Alto, escopo pequeno | Token A não lê/altera B; uso legítimo preservado e tests Go |
-| 002 — Base de validação e contratos de transporte | Tornar checks confiáveis antes de mudanças de domínio; corrigir gaps de harness já identificados | 001 | Scripts, suites, contracts/common, build/CI | Médio | Build inclui Scheduling; IA teste requestId alinhado; BFF usa rota real; fixtures/DBs isolados e checks reproduzíveis |
-| 003 — Tenant, sessão e vínculo WhatsApp | Consolidar identidade/confiança/credenciais antes de novos fluxos persistidos | 002 | BFF, IA, Scheduling, Evolution transporte | Alto | Cardinalidade/ownership reconciliados, CSRF/revogação, scoping e tokens/vínculos testados com dois tenants |
+| 001 — Autorizar alvo de instância | Fechar falha P0 pequena e independente antes de ampliar integração — ACCEPTED no review001 | Baseline auditada | Evolution handlers/auth/tests | Alto, escopo pequeno | Token A não lê/altera B; uso legítimo preservado e testes Go verificados |
+| 002 — Base de validação reproduzível | Estabilizar checks antes do security/ownership003; fechar falhas de teste comprovadas | 001 | Scripts, suites/fixtures, builds, CI | Médio | Cleanup Go Windows corrigido, Scheduling no build, IA requestId, BFF integração real/isolada, gates propagam falhas e separam skipped; contratos atuais preservados |
+| 003 — Tenant, sessão e vínculo WhatsApp | Consolidar identidade/confiança/credenciais e fechar G-35 antes de novos fluxos persistidos | 002 | BFF, IA, Scheduling, Evolution transporte/docs | Alto | Ownership/scopes/CSRF/revogação; /message/status isolado por instância, linhas sem dono tratadas, testes A/B e documentação de segurança alinhada |
 | 004 — Transporte e mensagens duráveis | Remover perda por ACK/dedupe antecipado e efeito remoto incerto | 003 | IA inbox/outbox, Go webhook/receipts, contracts | Alto | Evento persistido antes de ACK; retomada/lease/dedupe; status delivery e segredos sanitizados; queda exercitada |
 | 005 — Contatos, sessão e controle humano | Impedir processamento indevido antes de evoluir assistente/consumers | 004 | IA/Conversas/Contact, BFF endpoints | Alto | Três categorias/override/ignore, sessão24h, inbox IA off, envio humano assume e modelo não disputa |
 | 006 — Clientes como pessoas | Retirar identidade por telefone antes de novas escritas/importação | 003,005 | Scheduling clientes, IA mapeamento, BFF/contracts | Alto | Cliente sem telefone/número compartilhado, ID estável, relações/notas/tags/permissão e backfill conservador |
@@ -45,6 +45,8 @@ Objetivo final: implementar o único MVP do Product Vault, com experiência Clau
 
 Goal010 inclui compatibilidade mínima dos consumers atuais para que o corte operacional não deixe o frontend oferecendo operação impossível; Goal019 entrega a composição visual final. Não há duas implementações operacionais concorrentes. Da mesma forma, cada contrato de evento entra com receptor compatível antes de ativar seu produtor.
 
+Após review001, G-35 é gate explícito de003→004: registro de metadados sem ownership não pode ser ampliado pela entrega durável. Não há evidência de exposição ativa para exigir interrupção emergencial; SAVE_MESSAGES=false no exemplo não comprova banco vazio. Se essa evidência mudar, antecipar security Goal separado. O escopo de segurança já pertence a003 e não será implementado silenciosamente em001/002. A quantidade e os IDs dos Goals permanecem estáveis.
+
 ## Fases, marcos e caminho crítico
 
 - **Segurança e base (001–005):** autorizar alvo, checks confiáveis, tenant e recebimento/controle humano. Marco A = eventos não aceitos sem persistência e guard de conteúdo efetivo; ainda não é validação de produto.
@@ -58,7 +60,7 @@ Caminho crítico de dependências, sem estimativa de duração: `001 → 002 →
 
 | Risco | Gate / controle |
 | --- | --- |
-| Isolamento/credenciais | 001/003 com testes negativos; revisão de scopes/objetos e tokens fora de logs/raw |
+| Isolamento/credenciais | 001 aceito; 003 com testes negativos de objetos, incluindo G-35; revisão de scopes e tokens fora de logs/raw |
 | Perda/duplicação de mensagem ou efeito | 004/008/020: restart, timeout, receipt unknown, replay pós-commit, race DB |
 | Corrupção de pessoa/acordo/histórico | 006–010: IDs, snapshots, ausência explícita e reconciliação; não merge por número |
 | Origem externa não fornecer categoria necessária | Prova dirigida em010; registrar limitação e replanejar, sem fingir importação completa ou reduzir MVP silenciosamente |
@@ -97,3 +99,5 @@ Caminho crítico de dependências, sem estimativa de duração: `001 → 002 →
 ## Histórico de planejamento
 
 v1 — 2026-09-05: plano inicial após consolidação factual. Goal001 escolhido pelo defeito confirmado de autorização; base de testes em002. Novas descobertas podem inserir/dividir/juntar/cancelar Goals com rastreabilidade. Nenhuma execução funcional iniciada por este documento.
+
+v2 — 2026-09-05: review001 ACCEPTED sobre working tree4ca1301, sem commit. Goal002 detalhado just-in-time e refinado para validação reproduzível; DTOs continuam por domínio. G-35 acrescentado como requisito obrigatório de003 antes de004; dívidas documentais de segurança agrupadas no mesmo escopo. Falhas preexistentes de cleanup Go ficam em002, sem bloquear artificialmente001. Ver D-016 e review001 para evidência e condição de antecipar security Goal.

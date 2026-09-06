@@ -239,6 +239,8 @@ Inventário factual completo desses schemas em [CURRENT_STATE](CURRENT_STATE.md)
 
 IDs de negócio são os do BFF; demais bancos preservam referência e só aceitam contexto autorizado. IDs externos sempre incluem provider/instância ou conta de origem e tenant no mapa. Não alterar telefone e usar esse novo valor como se fosse ID antigo do cliente.
 
+**Atualização do review001 — G-35:** a tabela Message do Go examinada armazena metadados com message_id global e source de chat/telefone, sem instanceId; `/message/status` não restringe a consulta à instância. O Goal003 deve estabelecer ownership antes de ampliar a persistência em004. Inventariar linhas existentes mesmo se SAVE_MESSAGES estiver desligado; não preencher o dono pelo telefone/source nem por adivinhação. Registros sem associação comprovável não podem continuar expostos por consulta global. A representação e o backfill serão detalhados no Goal003; não há migration executada por este review. [Evidência e condições](reviews/001-review.md).
+
 ## 10. Privacidade, histórico e descarte
 
 - Retenção de conversa: opções 30/90/180/365 dias, default comercial90/pessoal30; confirmar redução conforme vault. Categoria Não classificadas não tem default explícito localizado: decisão de produto pendente em DECISIONS, sem purge automático inventado para esse grupo.

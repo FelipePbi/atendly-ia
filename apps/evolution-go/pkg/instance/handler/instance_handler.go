@@ -580,17 +580,16 @@ func (h *instanceHandler) GetLogs(c *gin.Context) {
 // @Description Get advanced settings for a specific instance
 // @Tags Instance
 // @Produce json
-// @Param instanceId path string true "Instance ID"
+// @Param instanceId path string true "Instance ID (must be the authenticated instance)"
 // @Success 200 {object} instance_model.AdvancedSettings "Advanced settings retrieved successfully"
-// @Failure 400 {object} gin.H "Invalid instance ID"
+// @Failure 401 {object} gin.H "Not authorized"
+// @Failure 403 {object} gin.H "Target instance is not the authenticated instance"
 // @Failure 404 {object} gin.H "Instance not found"
 // @Failure 500 {object} gin.H "Internal server error"
 // @Router /instance/{instanceId}/advanced-settings [get]
 func (h *instanceHandler) GetAdvancedSettings(c *gin.Context) {
-	instanceId := c.Param("instanceId")
-
-	if instanceId == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "instanceId is required"})
+	instanceId, ok := authorizeInstanceTarget(c)
+	if !ok {
 		return
 	}
 
@@ -609,18 +608,18 @@ func (h *instanceHandler) GetAdvancedSettings(c *gin.Context) {
 // @Tags Instance
 // @Accept json
 // @Produce json
-// @Param instanceId path string true "Instance ID"
+// @Param instanceId path string true "Instance ID (must be the authenticated instance)"
 // @Param settings body instance_model.AdvancedSettings true "Advanced settings data"
 // @Success 200 {object} gin.H "Advanced settings updated successfully"
 // @Failure 400 {object} gin.H "Invalid request data"
+// @Failure 401 {object} gin.H "Not authorized"
+// @Failure 403 {object} gin.H "Target instance is not the authenticated instance"
 // @Failure 404 {object} gin.H "Instance not found"
 // @Failure 500 {object} gin.H "Internal server error"
 // @Router /instance/{instanceId}/advanced-settings [put]
 func (h *instanceHandler) UpdateAdvancedSettings(c *gin.Context) {
-	instanceId := c.Param("instanceId")
-
-	if instanceId == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "instanceId is required"})
+	instanceId, ok := authorizeInstanceTarget(c)
+	if !ok {
 		return
 	}
 

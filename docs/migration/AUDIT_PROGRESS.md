@@ -1,6 +1,6 @@
 # Progresso da auditoria — Astra Goal 0
 
-Checkpoint de fechamento em 2026-09-05. A auditoria factual e a síntese de planejamento estão entregues; o aceite do usuário ainda não foi registrado. Este arquivo preserva a retomada, as correções e os limites de evidência. Decisões ficam em `DECISIONS.md` e a sequência em `MASTER_PLAN.md`.
+Checkpoint de fechamento da auditoria em 2026-09-05, preservado abaixo como histórico. Atualização posterior: Goal0 tem aceite externo registrado; Goal001 foi revisado/aceito pelo Astra e Goal002 está READY, conforme seção final e MIGRATION_STATUS. Este arquivo preserva retomada, correções e limites de evidência. Decisões ficam em `DECISIONS.md` e a sequência em `MASTER_PLAN.md`.
 
 ## Baseline e preservação
 
@@ -107,3 +107,13 @@ Esses achados começaram como resultados parciais. Foram consolidados com suas r
 Fechamento documental validado: 12 arquivos Markdown UTF-8, links locais e referências explícitas de arquivos existentes, IDs 001–025 consistentes entre plano/status, dependências apontando para Goals anteriores e estrutura obrigatória do Goal001. Não há marcadores de conflito ou whitespace residual nos documentos. HEAD e hashes preexistentes foram reconferidos; alterações permanentes de autoria do Goal0 restritas a `docs/migration/`. Sem commit, push, merge ou PR.
 
 Limites permanecem: IA 39 passou/1 falhou (execução recuperada); auditoria estática 14 passou/1 health remoto pulado. Sem aprovação de build completo, Go, DB real, concorrência, E2E, deploy ou todos os frames. Conclusão documental não equivale a certificação do runtime ou aceite do usuário.
+
+## Checkpoint posterior — review formal001
+
+- Estado recebido: HEAD4ca1301 adicionou os documentos e manifesto anteriores; código continua igual a5fb5d51 até o diff001 do working tree. Aceite externo de Goal0 preservado.
+- [Review001](reviews/001-review.md) registra diff/hashes, critérios, consumers, testes e oito achados do executor. Resultado ACCEPTED: guard anterior ao bind/service, tipos/nil/ID vazio protegidos, recusa genérica e limite administrativo preservado.
+- Astra reproduziu31 nós de autorização PASS e RED do teste real no handler da baseline. Build/vet Go PASS; suite inteira95 nós PASS/2 testes FAIL por cleanup preexistente de logger. Baseline isolada confirmou mesmas falhas e independência do handler; worktree temporário removido.
+- Nova descoberta G-35: /message/status consulta metadados por ID global sem instância; risco condicionado a registros existentes/ID conhecido/client conectado. source é chat/telefone, não owner. Sem inspeção de produção/incidente comprovado.
+- Roadmap v2 mantém25 Goals; G-35 é obrigatório no003 antes de004. Goal002 foi detalhado para corrigir a base de validação, sem DTOs novos nem correção funcional de003. Nenhum prompt posterior a002 foi criado.
+- CURRENT_STATE preserva fotografia histórica com delta001; G-01 fechado em GAP, G-35 aberto, D-003/D-016 aceitos com escopo, README/status/plano atualizados. Implementação do executor preservada byte a byte; Astra alterou somente documentação em docs/migration.
+- Próxima retomada: Claude executa002; Astra revisa diff/testes reais e então detalha003 com prioridade ao isolamento de metadados. Não reiniciar discovery do Goal0. Estado de produção/DB/E2E continua não verificado.

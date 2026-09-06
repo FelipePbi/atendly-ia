@@ -676,6 +676,12 @@ curl "http://localhost:4000/instance/logs/vendas?start_date=2025-01-01&limit=50"
 
 ## Configurações Avançadas
 
+> **Autorização por alvo.** Estas duas rotas usam o token **da instância**, não a global API key.
+> O `:instanceId` da URL deve ser o ID (UUID) da própria instância dona do token: um token válido só
+> alcança o próprio alvo. Sem token válido a resposta é `401 {"error":"not authorized"}`; para o ID de
+> outra instância é `403 {"error":"forbidden"}`, emitido antes de qualquer leitura ou escrita e idêntico
+> para alvo existente e inexistente.
+
 ### Obter Configurações
 
 ```
@@ -684,7 +690,7 @@ GET /instance/:instanceId/advanced-settings
 
 ### Headers
 ```
-apikey: SUA-GLOBAL-API-KEY
+apikey: TOKEN-DA-INSTANCIA
 ```
 
 ### Resposta (200)
@@ -709,7 +715,7 @@ PUT /instance/:instanceId/advanced-settings
 ### Headers
 ```
 Content-Type: application/json
-apikey: SUA-GLOBAL-API-KEY
+apikey: TOKEN-DA-INSTANCIA
 ```
 
 ### Body
@@ -727,9 +733,9 @@ apikey: SUA-GLOBAL-API-KEY
 
 ### Exemplo cURL
 ```bash
-curl -X PUT "http://localhost:4000/instance/vendas/advanced-settings" \
+curl -X PUT "http://localhost:4000/instance/SEU-INSTANCE-ID/advanced-settings" \
   -H "Content-Type: application/json" \
-  -H "apikey: SUA-GLOBAL-API-KEY" \
+  -H "apikey: TOKEN-DA-INSTANCIA" \
   -d '{
     "rejectCall": true,
     "alwaysOnline": true

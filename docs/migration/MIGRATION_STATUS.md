@@ -6,10 +6,10 @@ Status: PLANNED, READY, IN_PROGRESS, IMPLEMENTED, REVIEW_REQUIRED, ACCEPTED, BLO
 
 | Goal | Status | Commit de implementação | Review | Observações |
 | --- | --- | --- | --- | --- |
-| 0 — Auditoria/arquitetura/roadmap | REVIEW_REQUIRED | —; baseline 5fb5d51 | Consolidação/revisão documental interna concluída; aceite do usuário não registrado | 12 documentos, arquitetura proposta, plano25 e somente001 detalhado; testes/limites no CURRENT_STATE |
-| 001 — Autorizar alvo de instância | READY | — | Pendente após implementação | [Prompt executável](goals/001-autorizar-alvo-instancia-evolution.md); Claude Code/Opus |
-| 002 — Base de validação/contratos transporte | PLANNED | — | — | Reavaliar após001 |
-| 003 — Tenant/sessão/vínculo WhatsApp | PLANNED | — | — | Ownership e scopes |
+| 0 — Auditoria/arquitetura/roadmap | ACCEPTED | —; baseline 5fb5d51 | Revisão aceita pelo usuário em 2026-09-05 | Arquitetura e roadmap aprovados como baseline de trabalho; decisões continuam sujeitas a replanning conforme novas evidências |
+| 001 — Autorizar alvo de instância | ACCEPTED | Working tree sobre 4ca1301; sem commit de implementação | Astra, 2026-09-05: [review e hashes](reviews/001-review.md) | 31 nós de autorização passaram; RED reproduzido no handler da baseline. Build/vet verdes. Duas falhas Go preexistentes de cleanup confirmadas em baseline isolada, independentes do diff; resolução no002. Aceite restrito ao diff identificado, sem deploy |
+| 002 — Base de validação reproduzível | READY | — | A revisar após implementação | [Goal executável](goals/002-base-de-validacao-reproduzivel.md); fixtures Go/IA/BFF, build Scheduling e gates local/CI; sem centralização de DTOs nesta etapa |
+| 003 — Tenant/sessão/vínculo WhatsApp | PLANNED | — | — | Ownership/scopes; fechar G-35 de /message/status e alinhar documentação de autorização antes do004 |
 | 004 — Transporte/mensagens duráveis | PLANNED | — | — | Inbox/outbox/ACK/recovery |
 | 005 — Contatos/sessão/humano | PLANNED | — | — | Ignore/categoria/controle |
 | 006 — Clientes como pessoas | PLANNED | — | — | Identidade sem unicidade de telefone |
@@ -38,3 +38,5 @@ Status: PLANNED, READY, IN_PROGRESS, IMPLEMENTED, REVIEW_REQUIRED, ACCEPTED, BLO
 Por Goal implementado registrar commit inicial/final, testes com resultado e data, review Astra e correções. IMPLEMENTED/REVIEW_REQUIRED não permite assumir aceite nem iniciar consumer dependente sem revisão. Ao aceitar, atualizar documentos afetados e reavaliar próximo Goal. Descoberta arquitetural exige DECISIONS/MASTER_PLAN revisados antes do próximo prompt.
 
 Validação recuperada do Goal0: IA39 passou/1 falhou; auditoria estática14 passou/health remoto1 pulado. Nenhum teste DB real, E2E, deploy ou comparação de todos os frames realizado. Esses limites não são aprovação de qualidade de runtime.
+
+Review001: suite Go atual executada por Astra com `-count=1 -json`: 95 nós passaram, 2 testes falharam em cleanup preexistente; 31 nós do handler passaram. Build/vet passaram. Formatação equivalente a gofmt após normalização LF; checkout CRLF explicado no review. Sem teste remoto/DB de produto. G-35 é achado independente, condicionado a registros existentes, não regressão001 nem exposição ativa comprovada. Nenhum novo código de implementação foi escrito por Astra.

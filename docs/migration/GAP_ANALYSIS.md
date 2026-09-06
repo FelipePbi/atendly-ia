@@ -2,6 +2,8 @@
 
 Baseline `5fb5d51`, 2026-09-05. Evidências completas: [CURRENT_STATE](CURRENT_STATE.md), [DATA_MIGRATION](DATA_MIGRATION.md), [REUSE_ANALYSIS](REUSE_ANALYSIS.md). Produto soberano: [Product Vault](../product-vault/00-HOME.md). Referências de arquivos abaixo são evidências do runtime, não autorização para executá-lo em produção.
 
+Atualização após review001: G-01 fechado no diff aceito sobre HEAD4ca1301; G-35 acrescentado como descoberta independente. Demais gaps mantêm a evidência da baseline, sem presumir implementação.
+
 **P0:** falha de autorização confirmada no caminho estático, corrigir primeiro; não significa incidente comprovado. **P1:** risco de perda/ação incorreta/privacidade ou regra central incompatível, resolver antes de corte/validação. **P2:** capacidade MVP/UX/qualidade faltante, igualmente obrigatória para o MVP completo. Não há rollout de produto reduzido implícito nesta priorização.
 
 ## Rastreabilidade das regras
@@ -26,7 +28,7 @@ Estas são as fontes dos requisitos confrontados abaixo. Os fatos de implementa�
 
 | ID / prioridade | Requisito vigente | Estado observado | Impacto/risco | Dependências e estratégia |
 | --- | --- | --- | --- | --- |
-| G-01 P0 — alvo WhatsApp | Isolamento entre negócios | Evolution GET/PUT advanced-settings usam ID da URL sem vínculo ao token (`routes.go:132`, handlers `:589/619`) | Token válido de A pode alcançar configuração de B se ID conhecido; não explorado | Goal 001: autorização de objeto e testes negativos/positivos; manter contrato de transporte |
+| G-01 P0 — alvo WhatsApp — FECHADO no diff001 | Isolamento entre negócios | Baseline usava ID da URL sem vínculo ao token. Guard atual autoriza antes de bind/service; A→B=403, contexto inválido=401 | Defeito anterior reproduzido localmente com doubles; correção aceita, sem exploração/deploy remoto | [Review001](reviews/001-review.md): hashes, RED/GREEN e limites. Reabrir se houver regressão ou alteração posterior do diff |
 | G-02 P1 — confiança tenant | Um usuário/profissional/número por negócio; dados isolados | BFF deriva tenant corretamente, FKs compostas úteis; WhatsAppInstance por user; APIs internas confiam no bearer global | Associação/configuração divergente ou credencial com poder amplo | Consolidar tenant canônico, vínculo da instância e credenciais; validar dois tenants e inventário cross-database |
 | G-03 P1 — sessão | Conta protegida e exclusão suspende automações | Cookie cross-site configurado, CSRF só header permitido, JWT sem revogação por sessão | Mutações por contexto não validado/reutilização de sessão; exploração não testada | Proteção CSRF/origem, sessão revogável, gates de conta ativa; preservar auth existente |
 | G-04 P1 — segredos | Logs sem credenciais; dados mínimos | URL de webhook com segredo logada no Go; instanceToken no payload/raw; token BFF em texto | Multiplicação de acesso ao segredo e exposição nos logs/backups | Sanitizar envelope antes de persistir, resolver token por vínculo confiável, cifra/rotação/redaction com migração compatível |
@@ -60,6 +62,7 @@ Estas são as fontes dos requisitos confrontados abaixo. Os fatos de implementa�
 | G-32 P2 — contratos | Frontend/backend alinhados | Pacote domínios vazio, schemas locais duplicados e enums antigos | Mudança parcial quebra parser silenciosamente | Contratos por operação e testes producer/consumer; preservar replay e janela explícita |
 | G-33 P1 — validação/deploy | Cada Goal repositório validável | Build-all omite Scheduling; BFF integration obsoleto; IA1fail; migrations no build; sem CI localizado | Migração prossegue sem rede de segurança | Gate completo, bancos efêmeros, builds limpos, migrate etapa controlada e ensaio de restore; suites por risco |
 | G-34 P2 — escopo senha | Recuperação somente visual no MVP | Fluxo real FE/BFF com delivery opcional | Feature além do escopo e feedback de envio indevido | Isolar UX conforme vault; manter backend temporariamente até verificar uso, sem ampliar serviço |
+| G-35 P1 — ownership de status de mensagem | Isolamento de metadados entre instâncias | POST /message/status consulta message_id global após verificar apenas conexão de A; modelo sem instanceId, source é chat/telefone | Com ID conhecido e registro existente de B, token/client A pode obter metadados de B. Gravação condicional, sem exposição ativa comprovada | Goal003: autoria no transporte, queries/writes scoped, tratamento conservador de linhas sem dono e teste A/B; requisito antes de004. Não usar telefone como ownership. [Review001](reviews/001-review.md) |
 
 ## Produto × protótipo
 

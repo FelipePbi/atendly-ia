@@ -1,6 +1,6 @@
 # Registro de decisões
 
-Baseline factual `5fb5d51`; data 2026-09-05. `ACCEPTED` abaixo identifica restrição já autorizada pelo objetivo/Product Vault. Novas direções técnicas permanecem `PROPOSED` para review desta auditoria; não são decisões do usuário presumidas. Proposta técnica reversível pode ser aceita na revisão do Goal pertinente. Somente questões de produto/custo sem fonte vigente exigem resposta específica do usuário.
+Baseline factual `5fb5d51`; data 2026-09-05. `ACCEPTED` identifica restrição autorizada ou decisão técnica aceita em review identificado. Novas direções sem review permanecem `PROPOSED`; não são decisões do usuário presumidas. Somente questões de produto/custo sem fonte vigente exigem resposta específica do usuário.
 
 ## D-001 — Autoridade e escopo
 
@@ -16,7 +16,7 @@ Baseline factual `5fb5d51`; data 2026-09-05. `ACCEPTED` abaixo identifica restri
 
 ## D-003 — Autorização de instância vem antes da migração
 
-**Status:** PROPOSED; Goal001 preparado.
+**Status:** ACCEPTED em 2026-09-05 pelo Astra no [review001](reviews/001-review.md), para o diff identificado sobre HEAD4ca1301, sem commit/deploy. Testes reais de autorização passaram e o comportamento anterior foi reproduzido com os mesmos testes na baseline. Não aceita por extensão toda a superfície de autenticação do Go.
 
 **Contexto:** advanced-settings autentica A e usa ID arbitrário. **Decisão:** token de instância acessa apenas seu alvo; 401 sem contexto válido, 403 para alvo diferente, antes de service/DB; sem mudar rotas administrativas. **Alternativas:** ocultar UI, confiar em UUID, migrar tudo para chave admin — rejeitadas. **Motivo:** falha de autorização confirmada, correção pequena e independente. **Consequências:** consumidores incorretos passam a falhar; contratos legítimos mantidos. **Revisar se:** aparecer contrato administrativo real que precise de outra rota explícita, sem ampliar acesso destas duas.
 
@@ -91,6 +91,12 @@ Baseline factual `5fb5d51`; data 2026-09-05. `ACCEPTED` abaixo identifica restri
 **Status:** PROPOSED.
 
 **Contexto:** dados com dois tons e recovery real fora do escopo. **Decisão:** proposta de backfill PROFESSIONAL_OBJECTIVE→Profissional, LIGHT_CLOSE→Equilibrada, preservando original; sem inferir Descontraída. Recuperação fica visual no MVP e não anuncia envio real; backend fica isolado até checar consumo implantado. **Alternativas:** escolher estilo casual para todos, remover recuperação/dados sem inventário, manter UX fora do escopo. **Motivo:** menor alteração de intenção e respeito ao MVP. **Consequências:** leitores compatíveis, reescolha normal do estilo, retirada posterior condicionada de rotas. **Revisar se:** inventário/decisão do usuário indicar semântica histórica diferente.
+
+## D-016 — Aceite001, base de validação e segurança de metadados
+
+**Status:** ACCEPTED como decisão de review/replanejamento em 2026-09-05; não aprova implementação futura ou custo.
+
+**Contexto:** Goal001 satisfaz sua autorização delimitada. Duas fixtures Go falham no Windows também na baseline; foi encontrada consulta independente de status por ID global sem dono da instância. **Decisão:** aceitar001 com evidências; detalhar002 como base de validação reproduzível (fixtures, requestId, BFF real, build Scheduling, gates local/CI); exigir fechamento de G-35 no Goal003 antes de ampliar persistência em004. Centralização de DTOs não entra em002; D-011 continua por operação. **Alternativas:** bloquear001 por dívida independente; corrigir todo o Go dentro de001; ignorar G-35 porque SAVE_MESSAGES está false no exemplo. Rejeitadas por falta de relação com o diff ou ausência de prova sobre dados implantados. **Motivo:** manter revisões pequenas, checks confiáveis e scoping pronto antes dos novos dados. **Consequências:** ordem/IDs mantidos; segurança003 inclui ownership de metadados, tratamento de linhas legadas sem dono, teste A/B e alinhamento dirigido de docs. Não criar um segundo Goal redundante enquanto003 cobre esse escopo separado. **Revisar se:** evidência de exposição ativa/exploração exigir antecipar um security Goal, ou solução de ownership demandar divisão adicional. `source`/telefone não é chave de instância; desenho exato será decidido no prompt003.
 
 ## Questões específicas do usuário, isoladas
 

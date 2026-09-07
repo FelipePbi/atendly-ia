@@ -987,10 +987,111 @@ deadline real, se um dia existir, será decisão separada e explícita.
 
 ---
 
+## V7 — Autonomous Goal-to-Goal Execution
+
+Até a V6 o loop parava em toda fronteira: `ACCEPTED` levava a `AWAITING_HUMAN`,
+e o próximo Goal só começava por comando. A V7 remove **essa** parada, e apenas
+ela. Tudo o que era motivo legítimo de parar continua parando.
+
+### O que passou a continuar sozinho
+
+```
+ACCEPTED → CLOSURE_PREPARING → … → BASELINE_ACCEPTED
+        → NEXT_GOAL_PLANNING → NEXT_GOAL_READY → NEXT_GOAL_STARTING
+        → PREPARING_WORKTREE  (Goal seguinte)
+```
+
+`AWAITING_HUMAN` segue alcançável para uma execução supervisionada, mas deixou
+de ser onde o caminho feliz termina. Um teste percorre o ciclo completo e falha
+se ele encostar em `AWAITING_HUMAN`.
+
+### O que continua parando
+
+| Situação | Efeito | Por quê |
+| --- | --- | --- |
+| `RATE_LIMIT`, `USAGE_LIMIT` | **espera**, não parada | Limite de uso é hora do dia, não problema. Parar aqui pararia o loop toda noite. |
+| `AUTH_ERROR`, `BILLING_ERROR`, `MODEL_UNAVAILABLE` | `PAUSED_FOR_HUMAN` | Nada que o loop faça resolve. |
+| `HARNESS_ERROR`, `AGENT_CONTRACT_ERROR`, `POLICY_VIOLATION` | `PAUSED_FOR_HUMAN` | O harness ou o contrato está errado; insistir amplifica o erro. |
+| `MAX_CORRECTION_ROUNDS_REACHED` | `PAUSED_FOR_HUMAN` | O Developer não está convergindo. |
+| `CHERRY_PICK_CONFLICT`, `ACCEPTED_WORKTREE_CHANGED` | `PAUSED_FOR_HUMAN` | Integração ambígua; resolver sozinho é reescrever história. |
+| `ORPHANED_EXECUTION_UNCERTAIN` | `PAUSED_FOR_HUMAN` | Herdado da V6: lease expirada nunca é prova de morte. |
+| Fronteira de Goal ambígua | `PAUSED_FOR_HUMAN` | Ver abaixo. |
+| Decisão de produto ou arquitetura | `PAUSED_FOR_HUMAN` | Não cabe a nenhum agente. |
+
+`PAUSED` e `PAUSED_FOR_HUMAN` são estados diferentes de propósito: o primeiro é
+uma **decisão** reversível com `clearPause()`; o segundo é um **problema**, e
+não há caminho que o transforme no primeiro.
+
+### A fronteira entre dois Goals
+
+É o único ponto onde um loop autônomo pode fazer a coisa errada em silêncio:
+começar sobre a baseline errada, reaproveitar uma worktree de outra execução, ou
+recomeçar trabalho que já foi commitado. `lib/goal-boundary.mjs` julga a
+fronteira sobre fatos já coletados — função pura, testável sem repositório — e
+**não conserta nada**:
+
+- Goal precisa estar `READY`;
+- a baseline declarada pelo Goal precisa bater com a aceita (divergência = um
+  fechamento que não terminou de registrar, ou commit fora do loop);
+- `main` limpa;
+- branch e worktree do Goal precisam existir **juntos** — um sem o outro é um
+  estado meio-feito que ninguém interpreta com segurança. Os dois presentes é o
+  caso de retomada; nenhum dos dois é começo limpo.
+
+### Fim de migração é afirmação, nunca inferência
+
+O planning tem exatamente três respostas — `NEXT_GOAL`, `MIGRATION_COMPLETE`,
+`HUMAN_REQUIRED`. "Não achei próximo Goal" não é uma delas. `MIGRATION_COMPLETE`
+exige `reason` e `remainingCriticalGaps` vazio, e depois é **verificada contra o
+repositório**: se qualquer Goal continuar `READY`, `IN_PROGRESS`,
+`REVIEW_REQUIRED` ou `CHANGES_REQUIRED`, a declaração é rejeitada com
+`MIGRATION_NOT_COMPLETE`, independentemente do que o modelo afirmou. As três
+opções vão no `enum` do schema entregue ao CLI, não só na validação local.
+
+### Uma execução autônoma por vez
+
+O orquestrador tem lease própria (`migration-loop`), separada das leases de job
+e worktree da V6: ela governa **decisões globais**, não execuções em voo. Um
+segundo `ia-loop:auto` é recusado com `AUTONOMOUS_RUN_ALREADY_ACTIVE`. Um
+processo que morre e volta faz `attach()` — retoma o mesmo `autonomousRunId`,
+com `completedGoals` preservado, e nunca abre uma segunda run.
+
+`recordGoalCompleted()` é idempotente: uma run retomada não conta o mesmo Goal
+duas vezes.
+
+**Bug corrigido aqui:** o teste de corrida com dois processos Node reais expôs
+que o perdedor quebrava com `LEASE_CORRUPT`. Criar o arquivo com `wx` e escrever
+o conteúdo são dois passos, e quem chega no meio vê um arquivo vazio — que é a
+assinatura de *claim em andamento*, não de corrupção. A leitura agora aguarda a
+claim assentar por uma janela curta; um arquivo que continua vazio depois disso
+segue sendo `LEASE_CORRUPT`.
+
+### Pausa
+
+`ia-loop:pause` levanta uma flag; não mata nada. A flag é consultada apenas em
+fronteiras seguras, nunca no meio de uma inferência ou de uma escrita.
+`--after-goal` espera o Goal inteiro terminar, que é o que deixa a árvore
+inspecionável quando o loop para.
+
+### Testes da V7
+
+Nenhum chama modelo. O principal (`THE MULTI-GOAL RUN`) leva dois Goals
+completos — um com rodada de correção, outro aceito de primeira — até uma
+declaração de fim verificada, e afirma o que define autonomia:
+`humanInterventionCount === 0`, `completedGoals == ['004','005']`, baseline
+avançando a cada Goal, uma chamada de Developer por rodada.
+
+Os demais cobrem: parada por `HUMAN_REQUIRED` sem avançar de Goal; espera de
+capacidade atravessando Goals sem encerrar a run; crash entre Goals retomando
+exatamente uma vez; fronteira ambígua; **dois processos Node reais** disputando
+a lease do orquestrador; pausa; e fim de migração.
+
+---
+
 ## Como executar
 
 ```bash
-npm run test:ia-loop       # 206 testes locais, sem chamadas reais a modelo
+npm run test:ia-loop       # 298 testes locais, sem chamadas reais a modelo
 ```
 
 ```bash
@@ -1027,6 +1128,20 @@ npm run ia-loop:status     # lê o estado persistido; não chama modelo
 npm run ia-loop:resume     # retoma uma etapa parada por limite de capacidade
 ```
 
+V7 — execução autônoma de Goal em Goal:
+
+```bash
+npm run ia-loop:auto -- --from 004   # roda Goals em sequência até uma parada real
+```
+
+```bash
+npm run ia-loop:pause                # pede parada na próxima fronteira segura
+```
+
+```bash
+npm run ia-loop:pause -- --after-goal   # espera o Goal inteiro terminar
+```
+
 | Variável | Efeito |
 | --- | --- |
 | `IA_LOOP_CLAUDE_BIN` | Caminho explícito do executável |
@@ -1056,6 +1171,13 @@ session ids nem dados pessoais.
 | `lib/contracts-v2.mjs` | Contratos protocolVersion 2 |
 | `lib/context-builders.mjs` | Pacotes explícitos de contexto por papel |
 | `lib/loop-state.mjs` | Máquina de estados V2 com human gate |
+| `lib/state-registry.mjs` | Fonte canônica dos estados; grafo e resumíveis derivados |
+| `lib/leases.mjs` | Leases de job e worktree; claim atômico, nunca declara morte |
+| `lib/autonomous-state.mjs` | Run autônoma durável, lease do orquestrador, pausa |
+| `lib/planning-decision.mjs` | Três decisões de planning; fim de migração verificado |
+| `lib/goal-boundary.mjs` | Julgamento puro da fronteira entre dois Goals |
+| `run-auto.mjs` | Orchestrator autônomo Goal a Goal |
+| `run-pause.mjs` | Pedido de pausa; não interrompe inferência em voo |
 | `lib/worker-loop.mjs` | Plumbing comum dos workers |
 | `run-status.mjs` | Status a partir do disco; nunca chama modelo |
 | `run-resume.mjs` | Retomada de etapa parada por capacidade |
@@ -1072,7 +1194,7 @@ session ids nem dados pessoais.
 | `lib/persistent-session.mjs` | Sessão por agente: cria no 1º turno, resume nos seguintes |
 | `lib/session-registry.mjs` | Registro durável de sessões, com escrita atômica |
 | `fixtures/synthetic-goal.md` | Tarefa sintética, fora do runtime |
-| `tests/*.test.mjs` | 206 testes com processo/agente fake; nenhuma chamada real |
+| `tests/*.test.mjs` | 298 testes com processo/agente fake; nenhuma chamada real |
 
 ## Limitações conhecidas
 

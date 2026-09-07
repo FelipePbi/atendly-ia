@@ -39,10 +39,9 @@ import { renderReviewPrompt } from '../lib/review-packet.mjs';
 import {
   CLOSURE_WRITE_PREFIX,
   closureDocSchemaFor,
-  planningSchemaFor,
   validateClosureDocResult,
-  validatePlanningResult,
 } from '../lib/closure-contracts.mjs';
+import { planningDecisionSchemaFor, validatePlanningDecision } from '../lib/planning-decision.mjs';
 import { readJson } from '../lib/job-store.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -144,7 +143,18 @@ function buildPlanningPrompt(job) {
     '',
     'Não detalhe Goals posteriores. Apenas um próximo Goal, e só ele READY.',
     '',
-    'Retorne exclusivamente o JSON do contrato PlanningResult.',
+    'Retorne exclusivamente o JSON do contrato PlanningDecision, com um destes:',
+    '',
+    '- decision "NEXT_GOAL": há um próximo Goal executável. Informe nextGoalId,',
+    '  nextGoalTitle e nextGoalPath. Escreva SOMENTE esse Goal e marque só ele READY.',
+    '',
+    '- decision "MIGRATION_COMPLETE": a migração terminou. Isto é uma AFIRMAÇÃO que você',
+    '  precisa justificar em reason, com remainingCriticalGaps vazio. Não declare',
+    '  completa apenas porque não encontrou um próximo Goal óbvio: se restar qualquer',
+    '  Goal READY, IN_PROGRESS ou gap crítico conhecido, ela não está completa.',
+    '',
+    '- decision "HUMAN_REQUIRED": há decisão de produto ou arquitetura que cabe a uma',
+    '  pessoa. Explique em reason.',
   ].join('\n');
 }
 
@@ -165,10 +175,10 @@ async function handleClosureJob(job) {
   const isPlanning = kind === 'NEXT_GOAL_PLANNING';
   const prompt = isPlanning ? buildPlanningPrompt(job) : buildClosureDocPrompt(job);
   const schema = isPlanning
-    ? planningSchemaFor({ jobId: job.jobId, goal: job.goal })
+    ? planningDecisionSchemaFor({ jobId: job.jobId, goal: job.goal })
     : closureDocSchemaFor({ jobId: job.jobId, goal: job.goal });
   const validate = isPlanning
-    ? (p) => validatePlanningResult(p, { jobId: job.jobId, goal: job.goal })
+    ? (p) => validatePlanningDecision(p, { jobId: job.jobId, goal: job.goal })
     : (p) => validateClosureDocResult(p, { jobId: job.jobId, goal: job.goal });
 
   log('FABLE STARTED', `session ${session.sessionId.slice(0, 8)} · ${kind}`);
@@ -210,9 +220,12 @@ async function handleClosureJob(job) {
     type: `${kind}_PUBLISHED`, jobId: job.jobId, goal: job.goal,
     documents: run.result?.documentsUpdated?.length ?? 0,
     nextGoalId: run.result?.nextGoalId ?? null,
+    planningDecision: run.result?.decision ?? null,
     reused: run.outcome === RUN_OUTCOMES.ALREADY_COMPLETED,
   });
-  log(`${kind} DONE`, isPlanning ? `next goal ${run.result?.nextGoalId}` : `${run.result?.documentsUpdated?.length ?? 0} docs`);
+  log(`${kind} DONE`, isPlanning
+    ? `${run.result?.decision}${run.result?.nextGoalId ? ` ${run.result.nextGoalId}` : ''}`
+    : `${run.result?.documentsUpdated?.length ?? 0} docs`);
   currentJob = null; capacityWait = null; workerState = 'IDLE';
 }
 

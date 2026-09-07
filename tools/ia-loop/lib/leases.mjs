@@ -65,6 +65,12 @@ export function worktreeKey(path) {
   return createHash('sha256').update(String(path).replace(/\\/g, '/')).digest('hex').slice(0, 16);
 }
 
+/** How long a reader waits for an in-flight claim to finish writing itself. */
+const CLAIM_SETTLE_ATTEMPTS = 20;
+const CLAIM_SETTLE_DELAY_MS = 25;
+
+const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
 export function createLeaseStore(stateDir, { config = LEASE_CONFIG } = {}) {
   const jobsDir = join(stateDir, 'leases', 'jobs');
   const worktreesDir = join(stateDir, 'leases', 'worktrees');
@@ -114,12 +120,31 @@ export function createLeaseStore(stateDir, { config = LEASE_CONFIG } = {}) {
     return { acquired: true, lease };
   }
 
-  async function read(kind, key) {
+  /**
+   * Reads a lease.
+   *
+   * A zero-length file is not corruption: exclusive creation and the write of
+   * the content are two steps, so a reader that arrives between them sees an
+   * empty file. That window is exactly what the loser of a claim race hits, and
+   * calling it LEASE_CORRUPT would turn a correct refusal into a fatal error.
+   * It is read as "a claim is in flight" and retried briefly; a file that stays
+   * empty past the window is genuinely corrupt.
+   */
+  async function read(kind, key, { attempt = 0 } = {}) {
     try {
       const raw = await readFile(pathFor(kind, key), 'utf8');
+      if (raw.trim() === '') {
+        if (attempt < CLAIM_SETTLE_ATTEMPTS) {
+          await sleep(CLAIM_SETTLE_DELAY_MS);
+          return read(kind, key, { attempt: attempt + 1 });
+        }
+        throw new SpikeError('LEASE_CORRUPT',
+          `Lease ${kind}/${key} is empty after ${CLAIM_SETTLE_ATTEMPTS} reads; a claim was left half-written`);
+      }
       return JSON.parse(raw);
     } catch (error) {
       if (error.code === 'ENOENT') return null;
+      if (error instanceof SpikeError) throw error;
       if (error instanceof SyntaxError) {
         throw new SpikeError('LEASE_CORRUPT', `Lease ${kind}/${key} is not valid JSON`);
       }

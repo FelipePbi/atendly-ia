@@ -53,7 +53,8 @@ export const STATE_REGISTRY = Object.freeze({
     resumable: true, execution: true, agent: 'tech_lead',
   },
 
-  // ACCEPTED may now proceed to closure. The human gate stays available.
+  // ACCEPTED proceeds to closure on its own. AWAITING_HUMAN stays reachable for
+  // a supervised run, but is no longer where the happy path ends.
   ACCEPTED: { to: ['AWAITING_HUMAN', 'CLOSURE_PREPARING'] },
   CHANGES_REQUIRED: { to: ['AWAITING_HUMAN', 'CORRECTION_QUEUED'] },
   HUMAN_REQUIRED: { to: ['AWAITING_HUMAN'] },
@@ -68,16 +69,26 @@ export const STATE_REGISTRY = Object.freeze({
   GOAL_COMMITTING: { to: ['GOAL_COMMITTED', 'HUMAN_REQUIRED', 'STOPPED'] },
   GOAL_COMMITTED: { to: ['INTEGRATING_ACCEPTED', 'HUMAN_REQUIRED', 'STOPPED'] },
   INTEGRATING_ACCEPTED: { to: ['BASELINE_ACCEPTED', 'HUMAN_REQUIRED', 'STOPPED'] },
-  BASELINE_ACCEPTED: { to: ['NEXT_GOAL_PLANNING', 'AWAITING_HUMAN', 'STOPPED'] },
+  BASELINE_ACCEPTED: { to: ['NEXT_GOAL_PLANNING', 'AWAITING_HUMAN', 'PAUSED', 'STOPPED'] },
   NEXT_GOAL_PLANNING: {
-    to: ['NEXT_GOAL_READY', 'WAITING_FOR_CAPACITY', 'HUMAN_REQUIRED', 'STOPPED'],
+    to: ['NEXT_GOAL_READY', 'MIGRATION_COMPLETE', 'WAITING_FOR_CAPACITY', 'HUMAN_REQUIRED', 'STOPPED'],
     resumable: true, execution: true, agent: 'tech_lead',
   },
-  NEXT_GOAL_READY: { to: ['AWAITING_HUMAN', 'STOPPED'] },
+  // The autonomous path continues here instead of stopping.
+  NEXT_GOAL_READY: { to: ['NEXT_GOAL_STARTING', 'AWAITING_HUMAN', 'PAUSED', 'STOPPED'] },
+  NEXT_GOAL_STARTING: { to: ['PREPARING_WORKTREE', 'HUMAN_REQUIRED', 'PAUSED', 'STOPPED'] },
 
   // A capacity wait returns to whichever resumable state it came from; the
   // targets are DERIVED below, never hand-listed.
   WAITING_FOR_CAPACITY: { to: null },
+
+  // A voluntary, resumable stop. Never the same as HUMAN_REQUIRED, which is a
+  // problem to solve rather than a decision to reverse.
+  PAUSED: { to: ['NEXT_GOAL_STARTING', 'PREPARING_WORKTREE', 'DEVELOPER_QUEUED', 'CORRECTION_QUEUED', 'REVIEWER_QUEUED', 'CLOSURE_PREPARING', 'NEXT_GOAL_PLANNING', 'STOPPED'] },
+
+  // The migration is finished, declared explicitly and verified against the
+  // repository — never inferred from the absence of a next Goal.
+  MIGRATION_COMPLETE: { to: ['STOPPED'], terminal: true },
 
   AWAITING_HUMAN: { to: ['STOPPED'] },
   STOPPED: { to: [], terminal: true },

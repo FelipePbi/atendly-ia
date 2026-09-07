@@ -24,6 +24,8 @@ import { readWorkerHealth, WORKER_HEALTH } from './lib/worker-registry.mjs';
 import { LOOP_STATES, createLoopStateMachine } from './lib/loop-state.mjs';
 import { PROTOCOL_VERSION_V2 } from './lib/contracts-v2.mjs';
 import { assertClosureScope, CLOSURE_WRITE_PREFIX } from './lib/closure-contracts.mjs';
+import { assertMigrationComplete } from './lib/planning-decision.mjs';
+import { parseMigrationStatus } from './lib/goal-discovery.mjs';
 import { classifyLease, createLeaseStore } from './lib/leases.mjs';
 import {
   createGitProbe,
@@ -303,8 +305,11 @@ async function main() {
   emit('');
 
   // ---------- Next Goal planning -----------------------------------------
-  const planPath = '.ai-worktrees/plan-next-goal';
-  const planBranch = 'ai-loop/plan-next-goal';
+  // A deterministic, unique name per Goal. Reusing one generic path across
+  // cycles would collide the moment the loop runs unattended, and would lose the
+  // audit trail of which planning produced which Goal.
+  const planPath = `.ai-worktrees/plan-after-goal-${goalId}`;
+  const planBranch = `ai-loop/plan-after-goal-${goalId}`;
   const absPlan = join(REPO_ROOT, planPath);
 
   if (!closure.planningWorktreeCreated) {
@@ -345,14 +350,37 @@ async function main() {
     const planChanges = await collectWorktreeChanges(absPlan, newBaseline);
     assertClosureScope(planChanges.changedFiles);
 
-    emit(`  next goal: ${envelope.result.nextGoalId} — ${envelope.result.nextGoalTitle}`);
-    emit(`  documents updated: ${planChanges.changedFiles.length}`);
-    await persistClosure({
-      nextGoalId: envelope.result.nextGoalId,
-      nextGoalTitle: envelope.result.nextGoalTitle,
-      nextGoalPath: envelope.result.nextGoalPath,
-      planningDocs: planChanges.changedFiles,
-    }, machine.state);
+    const planning = envelope.result;
+
+    if (planning.decision === 'HUMAN_REQUIRED') {
+      throw new SpikeError('PRODUCT_DECISION',
+        `The Tech Lead asked for a human before the next Goal: ${planning.reason}`);
+    }
+
+    if (planning.decision === 'MIGRATION_COMPLETE') {
+      // The declaration is checked against the repository: a Goal still READY
+      // means the migration demonstrably is not finished, whatever was claimed.
+      const statusText = await fs.readFile(join(REPO_ROOT, 'docs/migration/MIGRATION_STATUS.md'), 'utf8');
+      const { goalStatuses } = parseMigrationStatus(statusText);
+      goalStatuses.delete(goalId);
+      assertMigrationComplete({ decision: planning, goalStatuses });
+
+      emit(`  MIGRATION_COMPLETE: ${planning.reason}`);
+      await persistClosure({
+        migrationComplete: true,
+        migrationCompleteReason: planning.reason,
+        planningDocs: planChanges.changedFiles,
+      }, machine.state);
+    } else {
+      emit(`  next goal: ${planning.nextGoalId} — ${planning.nextGoalTitle}`);
+      emit(`  documents updated: ${planChanges.changedFiles.length}`);
+      await persistClosure({
+        nextGoalId: planning.nextGoalId,
+        nextGoalTitle: planning.nextGoalTitle,
+        nextGoalPath: planning.nextGoalPath,
+        planningDocs: planChanges.changedFiles,
+      }, machine.state);
+    }
   } else {
     machine.transitionTo(LOOP_STATES.NEXT_GOAL_PLANNING);
 
@@ -443,7 +471,9 @@ async function main() {
   emit(`integratedClosureCommit:   ${closure.integratedClosureCommit}`);
   emit(`newMigrationBaseline:      ${newBaseline}`);
   emit(`previousBaseline:          ${previousBaseline}`);
-  emit(`next Goal:                 ${closure.nextGoalId} — ${closure.nextGoalTitle} (READY)`);
+  emit(closure.migrationComplete
+    ? `migration:                 COMPLETE — ${closure.migrationCompleteReason}`
+    : `next Goal:                 ${closure.nextGoalId} — ${closure.nextGoalTitle} (READY)`);
   emit(`sourcePlanningCommit:      ${closure.sourcePlanningCommit}`);
   emit(`planningIntegrationCommit: ${closure.planningIntegrationCommit}`);
   emit(`main HEAD:                 ${mainHead}`);

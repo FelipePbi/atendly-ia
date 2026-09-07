@@ -180,7 +180,10 @@ async function main() {
       // --- Implementation, review and corrections --------------------------
       const goalPhase = await runPhase('run-goal.mjs', [goalId]);
       const runtimeAfterGoal = await store.readRuntime();
-      const decision = runtimeAfterGoal?.decision ?? null;
+      // A decision counts only if it belongs to the Goal that just ran. Reading
+      // one left by an earlier Goal is how a loop congratulates itself for work
+      // it did not do.
+      const decision = runtimeAfterGoal?.goal === goalId ? (runtimeAfterGoal.decision ?? null) : null;
 
       if (goalPhase.code !== 0 || decision !== 'ACCEPTED') {
         const reason = runtimeAfterGoal?.escalationReason ?? decision ?? 'UNKNOWN_FATAL';
@@ -219,7 +222,10 @@ async function main() {
       // --- Closure, integration and planning -------------------------------
       const closePhase = await runPhase('run-close.mjs', [goalId]);
       const runtimeAfterClose = await store.readRuntime();
-      const closure = runtimeAfterClose?.closure ?? {};
+      // Same rule for the closure: a closure record for another Goal proves
+      // nothing about this one, and its baseline would be the wrong one.
+      const recorded = runtimeAfterClose?.closure ?? {};
+      const closure = recorded.goal === goalId ? recorded : {};
 
       if (closePhase.code !== 0) {
         const reason = runtimeAfterClose?.humanRequired?.reason ?? 'UNKNOWN_FATAL';

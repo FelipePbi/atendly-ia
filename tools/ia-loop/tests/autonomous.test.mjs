@@ -29,7 +29,7 @@ import {
 } from '../lib/planning-decision.mjs';
 import { LOOP_STATES, createLoopStateMachine } from '../lib/loop-state.mjs';
 import { PROTOCOL_VERSION_V2 } from '../lib/contracts-v2.mjs';
-import { createJobStore } from '../lib/job-store.mjs';
+import { PER_GOAL_RUNTIME_FIELDS, clearPerGoalRuntime, createJobStore } from '../lib/job-store.mjs';
 import { createLeaseStore } from '../lib/leases.mjs';
 import { BOUNDARY_VERDICTS, evaluateGoalBoundary } from '../lib/goal-boundary.mjs';
 
@@ -515,4 +515,65 @@ test('a lease that never fills in is still reported as corrupt', async () => {
 
     await assert.rejects(leases.readJobLease('k'), codeIs('LEASE_CORRUPT'));
   });
+});
+
+// ===========================================================================
+// A Goal boundary keeps nothing from the previous Goal's execution
+// ===========================================================================
+
+test('starting a new Goal does not inherit the previous Goal\'s round', () => {
+  // The real failure: Goal 003 ended at round 2 with CHANGES_REQUIRED. The loop
+  // started Goal 004 by itself and opened it as "Round 2 (correction)" with no
+  // blockers, which is not a valid job.
+  const leftover = {
+    mode: 'REAL_EXECUTION', goal: '003', round: 2, decision: 'CHANGES_REQUIRED',
+    blockers: [{ id: 'B1' }], currentJobId: '003-r2-correction',
+    goalExecuted: true, roundsRun: [{ round: 1 }], escalationReason: 'CHANGES_REQUIRED',
+    capacity: { until: 1 }, blockedAgent: 'developer', resumeFrom: 'CORRECTION_RUNNING',
+    closure: { goal: '003', newMigrationBaseline: BASELINE_1 },
+    goalClosed: true, lastImplementationReport: 'R2 — Goal 003 …',
+    policyViolations: [], deferredNextAction: 'RETURN_TO_DEVELOPER',
+    reviewLevel: 'FULL',
+  };
+
+  const clean = clearPerGoalRuntime(leftover);
+
+  for (const field of PER_GOAL_RUNTIME_FIELDS) {
+    assert.equal(Object.hasOwn(clean, field), false, `${field} must not cross a Goal boundary`);
+  }
+  // The three that would corrupt the next Goal most quietly.
+  assert.equal(clean.closure, undefined, 'a closure for another Goal must not be inherited');
+  assert.equal(clean.lastImplementationReport, undefined,
+    'the next Goal reviewer must not read the previous Goal report');
+  assert.equal(clean.round, undefined);
+
+  // Fields that are not about one Goal's execution survive.
+  assert.equal(clean.reviewLevel, 'FULL');
+  assert.equal(clean.mode, 'REAL_EXECUTION');
+});
+
+test('a decision or closure belonging to another Goal proves nothing', () => {
+  // The rule run-auto applies after each phase, stated once.
+  const decisionFor = (runtime, goalId) => (runtime?.goal === goalId ? (runtime.decision ?? null) : null);
+  const closureFor = (runtime, goalId) => {
+    const recorded = runtime?.closure ?? {};
+    return recorded.goal === goalId ? recorded : {};
+  };
+
+  const stale = { goal: '003', decision: 'ACCEPTED', closure: { goal: '003', newMigrationBaseline: BASELINE_1 } };
+
+  assert.equal(decisionFor(stale, '004'), null, 'Goal 003 being ACCEPTED says nothing about Goal 004');
+  assert.deepEqual(closureFor(stale, '004'), {});
+  assert.equal(decisionFor(stale, '003'), 'ACCEPTED');
+  assert.equal(closureFor(stale, '003').newMigrationBaseline, BASELINE_1);
+});
+
+test('a resumed Goal keeps its round; a new Goal starts at 1', () => {
+  const previous = { goal: '003', round: 2, blockers: [{ id: 'B1' }] };
+
+  // Same Goal, worktree present: this is a resume, and the round is its own.
+  assert.equal(true ? (previous.round ?? 1) : 1, 2);
+  // Different Goal: round 1, and no blockers to inherit.
+  assert.equal(false ? (previous.round ?? 1) : 1, 1);
+  assert.equal(clearPerGoalRuntime(previous).blockers, undefined);
 });

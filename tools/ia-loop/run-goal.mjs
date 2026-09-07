@@ -19,7 +19,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { SpikeError } from './lib/claude-process.mjs';
-import { createJobStore } from './lib/job-store.mjs';
+import { clearPerGoalRuntime, createJobStore } from './lib/job-store.mjs';
 import { discoverGoal } from './lib/goal-discovery.mjs';
 import { planWorktree, createWorktreeForGoal, branchNameFor } from './lib/worktree-manager.mjs';
 import { readWorkerHealth, WORKER_HEALTH, SESSION_STRATEGY } from './lib/worker-registry.mjs';
@@ -251,12 +251,16 @@ async function main() {
     worktreePath: worktree.path, worktreeInitialHead: worktree.worktreeInitialHead,
     reviewLevel: REVIEW_LEVEL, goalExecuted: false,
   };
-  await store.writeRuntime({ ...previousRuntime, ...baseRuntime });
+  // Starting a different Goal keeps nothing from the previous one's execution.
+  await store.writeRuntime({
+    ...(resuming ? previousRuntime : clearPerGoalRuntime(previousRuntime)),
+    ...baseRuntime,
+  });
 
   // --- Round loop ----------------------------------------------------------
   // Where to start: a previous run that ended in CHANGES_REQUIRED resumes at the
   // NEXT round as a correction; anything else starts (or continues) round 1.
-  let round = previousRuntime?.round ?? 1;
+  let round = resuming ? (previousRuntime?.round ?? 1) : 1;
   let pendingBlockers = [];
   let startAsCorrection = false;
 

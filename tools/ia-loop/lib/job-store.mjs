@@ -85,6 +85,38 @@ export async function readJson(path, { required = false } = {}) {
   }
 }
 
+/**
+ * Runtime fields that describe ONE Goal's execution.
+ *
+ * They must never cross a Goal boundary. Before V7 nothing crossed one
+ * automatically, so inheriting them was harmless; the moment the loop started
+ * the next Goal by itself, a leftover `round: 2` from the previous Goal turned
+ * the first implementation round of the new Goal into a correction round with
+ * no blockers, which is not even a valid job.
+ *
+ * The list is explicit rather than a filter, so adding a per-Goal field is a
+ * decision someone makes here instead of a bug found in production.
+ */
+export const PER_GOAL_RUNTIME_FIELDS = Object.freeze([
+  'round', 'blockers', 'decision', 'currentJobId', 'escalationReason', 'roundsRun',
+  'goalExecuted', 'goalCommitted', 'migrationBaselineUpdated', 'nextGoalCreated',
+  'closure', 'goalClosed', 'nextGoalExecuted', 'humanRequired',
+  'policyViolations', 'deferredNextAction',
+  // The previous Goal's implementation report must never reach the next Goal's
+  // reviewer: it would describe work that is not in the tree under review.
+  'lastImplementationReport',
+  // A capacity block belongs to the execution that was blocked.
+  'capacity', 'blockedAgent', 'blockedJobId', 'resumeFrom', 'capacityClearedAt',
+]);
+
+/** Returns the runtime with every per-Goal field dropped. */
+export function clearPerGoalRuntime(runtime) {
+  if (!runtime) return {};
+  const next = { ...runtime };
+  for (const field of PER_GOAL_RUNTIME_FIELDS) delete next[field];
+  return next;
+}
+
 export function createJobStore(stateDir) {
   const paths = {
     root: stateDir,
@@ -261,7 +293,11 @@ export function createJobStore(stateDir) {
     },
 
     async writeRuntime(snapshot) {
-      await writeJsonAtomic(paths.runtime, { storeVersion: STORE_VERSION, updatedAt: new Date().toISOString(), ...snapshot });
+      // updatedAt goes AFTER the spread: every caller merges the previous
+      // runtime, which carries its own updatedAt, so a leading field would be
+      // overwritten by the old timestamp and the status of an unattended loop
+      // would always look stale.
+      await writeJsonAtomic(paths.runtime, { storeVersion: STORE_VERSION, ...snapshot, updatedAt: new Date().toISOString() });
     },
 
     readRuntime() {

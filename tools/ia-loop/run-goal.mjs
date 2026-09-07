@@ -20,6 +20,10 @@ import { fileURLToPath } from 'node:url';
 
 import { SpikeError } from './lib/claude-process.mjs';
 import { clearPerGoalRuntime, createJobStore } from './lib/job-store.mjs';
+import {
+  DISPATCH_KINDS, assertNoDuplicateStageDispatch, reconcileExecutionState,
+} from './lib/reconcile.mjs';
+import { STAGES } from './lib/stage-identity.mjs';
 import { discoverGoal } from './lib/goal-discovery.mjs';
 import { planWorktree, createWorktreeForGoal, branchNameFor } from './lib/worktree-manager.mjs';
 import { readWorkerHealth, WORKER_HEALTH, SESSION_STRATEGY } from './lib/worker-registry.mjs';
@@ -269,32 +273,74 @@ async function main() {
     ...baseRuntime,
   });
 
-  // --- Round loop ----------------------------------------------------------
-  // Where to start: a previous run that ended in CHANGES_REQUIRED resumes at the
-  // NEXT round as a correction; anything else starts (or continues) round 1.
-  let round = resuming ? (previousRuntime?.round ?? 1) : 1;
-  let pendingBlockers = [];
-  let startAsCorrection = false;
+  // --- Reconcile before dispatch -------------------------------------------
+  //
+  // Where the round comes from. It used to be read off ids recorded in the
+  // runtime, which are a hint and were treated as the authority: when the
+  // recorded id was missing, the loop concluded nothing had been done, minted a
+  // fresh attempt id, found no result under a name that had never existed, and
+  // sent Opus to re-implement a round whose work AND review were both already
+  // on disk.
+  //
+  // Completion is now derived from the results, the only durable proof that an
+  // inference happened.
+  const reconciled = await reconcileExecutionState({
+    store, goal: goal.goalId, maxRounds: LOOP_CONFIG.maxCorrectionRounds,
+  });
 
-  if (resuming && previousRuntime.decision === 'CHANGES_REQUIRED' && Array.isArray(previousRuntime.blockers)) {
-    const plan = planAfterReview({ decision: 'CHANGES_REQUIRED', round });
-    if (plan.action === 'CORRECT') {
-      emit(`Previous round ${round} ended in CHANGES_REQUIRED with ${previousRuntime.blockers.length} blocker(s).`);
-      emit(`Starting correction round ${plan.nextRound}.`);
-      emit('');
-      round = plan.nextRound;
-      pendingBlockers = previousRuntime.blockers;
-      startAsCorrection = true;
-    }
-  } else if (resuming && round > 1 && Array.isArray(previousRuntime.blockers) && previousRuntime.blockers.length > 0) {
-    // A correction round that was interrupted — by a harness failure or a
-    // crash — resumes as the SAME round with the SAME blockers. It is not a new
-    // round: the round budget must not be spent on an interruption.
-    emit(`Resuming correction round ${round} with its ${previousRuntime.blockers.length} recorded blocker(s).`);
-    emit('');
-    pendingBlockers = previousRuntime.blockers;
-    startAsCorrection = true;
+  for (const duplicate of reconciled.duplicates) {
+    // An attempt that should never have existed is recorded as superseded, not
+    // deleted: what the harness did wrong stays readable.
+    emit(`Superseding duplicate attempt ${duplicate.jobId} — ${duplicate.stageKey} completed as ${duplicate.completedBy}.`);
+    const role = duplicate.stageKey.endsWith(STAGES.REVIEW) ? 'tech_lead' : 'developer';
+    await store.setJobStatus(role, duplicate.jobId, 'SUPERSEDED').catch(() => {});
+    await store.appendEvent({
+      type: 'DUPLICATE_STAGE_ATTEMPT_SUPERSEDED', goal: goal.goalId,
+      jobId: duplicate.jobId, stageKey: duplicate.stageKey, completedBy: duplicate.completedBy,
+    });
   }
+
+  emit(`Reconciled: next is ${reconciled.next.kind}${reconciled.next.round ? ` at round ${reconciled.next.round}` : ''}.`);
+  emit('');
+
+  if (reconciled.next.kind === DISPATCH_KINDS.HUMAN_REQUIRED) {
+    machine.transitionTo(LOOP_STATES.HUMAN_REQUIRED);
+    machine.transitionTo(LOOP_STATES.AWAITING_HUMAN);
+    emit(`Goal ${goal.goalId} needs a human: ${reconciled.next.reason}`);
+    if (reconciled.next.detail) emit(`  ${reconciled.next.detail}`);
+    await store.writeRuntime({
+      ...(await store.readRuntime()),
+      state: machine.state,
+      humanRequired: {
+        reason: reconciled.next.reason,
+        note: reconciled.next.detail ?? null,
+        at: new Date().toISOString(),
+      },
+    });
+    return 0;
+  }
+
+  if (reconciled.next.kind === DISPATCH_KINDS.CLOSE_GOAL) {
+    emit(`Round ${reconciled.next.round} was ACCEPTED; the Goal is ready for closure.`);
+    machine.transitionTo(LOOP_STATES.ACCEPTED);
+    await store.writeRuntime({
+      ...(await store.readRuntime()),
+      state: machine.state, round: reconciled.next.round, decision: 'ACCEPTED',
+    });
+    return 0;
+  }
+
+  let round = reconciled.next.round;
+  // Blockers travel with the review that produced them; they are never
+  // rediscovered by asking the Tech Lead again.
+  const pendingBlockers = reconciled.next.blockers ?? [];
+  const startAsCorrection = reconciled.next.kind === DISPATCH_KINDS.CORRECTION;
+
+  if (startAsCorrection && pendingBlockers.length > 0) {
+    emit(`Correction round ${round} carries ${pendingBlockers.length} blocker(s) from review ${reconciled.next.fromReviewJobId ?? 'on disk'}.`);
+    emit('');
+  }
+
 
   const roundsRun = [];
   let finalDecision = null;
@@ -317,10 +363,15 @@ async function main() {
     // on resume the Developer step adopted it, found no Developer result under
     // it, and would have re-run Opus under a job id that belonged to the Tech
     // Lead. Two inferences, one of them already paid for.
-    const recorded = jobIdsFor(previousRuntime, round);
-    const devJobId = (resuming && recorded.developer && !startAsCorrection)
-      ? recorded.developer
-      : store.newJobId(goal.goalId, round, isCorrection ? 'correction' : 'developer');
+    // The attempt to use: the one the ledger says already completed this stage,
+    // then whichever was left in flight, then a new one. The recorded id is a
+    // hint now; the ledger is the authority.
+    const devStage = isCorrection ? STAGES.CORRECTION : STAGES.IMPLEMENTATION;
+    const devLedger = reconciled.ledger.get(`${goal.goalId}:r${round}:${devStage}`);
+    const devJobId = devLedger?.completedBy
+      ?? reconciled.next.resumeAttempt
+      ?? jobIdsFor(previousRuntime, round).developer
+      ?? store.newJobId(goal.goalId, round, isCorrection ? 'correction' : 'developer');
 
     const alreadyDone = await store.hasCompletedResult('developer', devJobId);
 
@@ -354,6 +405,10 @@ async function main() {
       machine.transitionTo(phaseRunning);
       devEnvelope = await store.readResult('developer', devJobId);
     } else {
+      // Fails closed rather than paying for an inference already on disk.
+      assertNoDuplicateStageDispatch({
+        ledger: reconciled.ledger, goal: goal.goalId, round, stage: devStage, jobId: devJobId,
+      });
       await store.publishJob('developer', devJob);
       emit(`${isCorrection ? 'Correction' : 'Developer'} job published: ${devJobId}`);
       machine.transitionTo(phaseRunning);
@@ -419,9 +474,10 @@ async function main() {
     // resume re-published the review and called Fable again — even when its
     // answer was already on disk. It is now recorded and reused like the
     // Developer's.
-    const revJobId = (resuming && jobIdsFor(previousRuntime, round).tech_lead)
-      ? jobIdsFor(previousRuntime, round).tech_lead
-      : store.newJobId(goal.goalId, round, 'tech_lead');
+    const revLedger = reconciled.ledger.get(`${goal.goalId}:r${round}:${STAGES.REVIEW}`);
+    const revJobId = revLedger?.completedBy
+      ?? jobIdsFor(previousRuntime, round).tech_lead
+      ?? store.newJobId(goal.goalId, round, 'tech_lead');
     const reviewAlreadyDone = await store.hasCompletedResult('tech_lead', revJobId);
     const revJob = validateReviewJob({
       protocolVersion: PROTOCOL_VERSION_V2,
@@ -452,6 +508,9 @@ async function main() {
       revEnvelope = await store.readResult('tech_lead', revJobId);
       await store.appendEvent({ type: 'JOB_RESULT_REUSED', role: 'tech_lead', jobId: revJobId, goal: goal.goalId, round });
     } else {
+      assertNoDuplicateStageDispatch({
+        ledger: reconciled.ledger, goal: goal.goalId, round, stage: STAGES.REVIEW, jobId: revJobId,
+      });
       await store.publishJob('tech_lead', revJob);
       emit(`Review job published: ${revJobId}`);
       machine.transitionTo(LOOP_STATES.REVIEWER_RUNNING);

@@ -1,0 +1,270 @@
+/**
+ * IA Loop — reconcile before dispatch.
+ *
+ * The rule this file exists to enforce: nothing is dispatched to an agent
+ * until the orchestrator has read what is already on disk and worked out what
+ * is genuinely left to do.
+ *
+ * The bug that made it necessary: round selection was derived from job ids
+ * recorded in the runtime. Those ids were a hint, and the code treated them as
+ * the authority. When the recorded id was missing — a state file written before
+ * the field existed — the loop concluded that nothing had been done, minted a
+ * fresh random attempt id, found no result under a name that had never existed,
+ * and sent Opus to re-implement round 1. Its result was on disk. So was the
+ * review of it, with four blockers.
+ *
+ * The fix is to stop asking "what id did I write down?" and start asking "what
+ * is finished?". Completion is derived from the RESULTS, which are the only
+ * durable proof that an inference happened. Ids are attempts; results are facts.
+ *
+ * Two independent layers, on purpose:
+ *
+ *   the recovery handoff  says where a recovered run should continue
+ *   the result store      proves what has already finished
+ *
+ * The handoff can be missing, stale or corrupt; the results still block a
+ * duplicate. That is why the guard does not depend on the handoff at all.
+ */
+
+import { SpikeError } from './claude-process.mjs';
+import { STAGES, roleForStage, stageKey, stageKeyOfJob } from './stage-identity.mjs';
+
+export const STAGE_STATUS = Object.freeze({
+  COMPLETED: 'COMPLETED',
+  IN_FLIGHT: 'IN_FLIGHT',
+  NOT_STARTED: 'NOT_STARTED',
+});
+
+export const DISPATCH_KINDS = Object.freeze({
+  IMPLEMENTATION: 'IMPLEMENTATION',
+  CORRECTION: 'CORRECTION',
+  REVIEW: 'REVIEW',
+  CONSUME_REVIEW: 'CONSUME_REVIEW',
+  CLOSE_GOAL: 'CLOSE_GOAL',
+  HUMAN_REQUIRED: 'HUMAN_REQUIRED',
+});
+
+/**
+ * Builds the picture of what has actually happened for one Goal.
+ *
+ * @param jobs     [{ role, job, status, result }] every stored job for the Goal
+ * @returns Map<stageKey, {status, attempts, completedBy, result, duplicates}>
+ */
+export function buildStageLedger(jobs) {
+  const ledger = new Map();
+
+  for (const entry of jobs) {
+    const key = stageKeyOfJob(entry.job);
+    if (!key) continue;
+
+    if (!ledger.has(key)) {
+      ledger.set(key, {
+        stageKey: key,
+        goal: entry.job.goal,
+        round: Number(entry.job.round),
+        role: entry.role,
+        status: STAGE_STATUS.NOT_STARTED,
+        attempts: [],
+        completedBy: null,
+        result: null,
+        duplicates: [],
+      });
+    }
+
+    const stage = ledger.get(key);
+    stage.attempts.push({ jobId: entry.job.jobId, status: entry.status, hasResult: Boolean(entry.result) });
+
+    if (entry.result) {
+      if (stage.completedBy && stage.completedBy !== entry.job.jobId) {
+        // Two successful results for one stage should be impossible. Record it
+        // rather than silently picking one.
+        stage.duplicates.push(entry.job.jobId);
+      } else {
+        stage.completedBy = entry.job.jobId;
+        stage.result = entry.result;
+        stage.status = STAGE_STATUS.COMPLETED;
+      }
+    }
+  }
+
+  // An attempt that is RUNNING or QUEUED at a stage already completed by
+  // another attempt is a duplicate, whatever the runtime points at.
+  for (const stage of ledger.values()) {
+    if (stage.status !== STAGE_STATUS.COMPLETED) {
+      const live = stage.attempts.find((a) => a.status === 'RUNNING' || a.status === 'QUEUED');
+      if (live) stage.status = STAGE_STATUS.IN_FLIGHT;
+      continue;
+    }
+    for (const attempt of stage.attempts) {
+      if (attempt.jobId !== stage.completedBy && !attempt.hasResult
+        && (attempt.status === 'RUNNING' || attempt.status === 'QUEUED')) {
+        stage.duplicates.push(attempt.jobId);
+      }
+    }
+  }
+
+  return ledger;
+}
+
+const get = (ledger, goal, round, stage) => ledger.get(stageKey({ goal, round, stage })) ?? null;
+
+/**
+ * Works out the one thing that should happen next.
+ *
+ * Reads only from the ledger — never from currentJobId, which is a pointer that
+ * a crash can leave aimed at a job that should not exist.
+ */
+export function decideNextDispatch({ ledger, goal, maxRounds = 3 }) {
+  const rounds = [...ledger.values()].map((s) => s.round);
+  const highest = rounds.length > 0 ? Math.max(...rounds) : 1;
+
+  for (let round = 1; round <= highest; round += 1) {
+    const implementation = get(ledger, goal, round, round === 1 ? STAGES.IMPLEMENTATION : STAGES.CORRECTION);
+    const review = get(ledger, goal, round, STAGES.REVIEW);
+
+    // The work of the round has not finished: that is what to do.
+    if (!implementation || implementation.status !== STAGE_STATUS.COMPLETED) {
+      const stage = round === 1 ? STAGES.IMPLEMENTATION : STAGES.CORRECTION;
+      return {
+        kind: round === 1 ? DISPATCH_KINDS.IMPLEMENTATION : DISPATCH_KINDS.CORRECTION,
+        goal, round, stage, role: roleForStage(stage),
+        stageKey: stageKey({ goal, round, stage }),
+        resumeAttempt: implementation?.attempts.find((a) => a.status === 'RUNNING' || a.status === 'QUEUED')?.jobId ?? null,
+      };
+    }
+
+    // Implemented but not reviewed.
+    if (!review || review.status !== STAGE_STATUS.COMPLETED) {
+      return {
+        kind: DISPATCH_KINDS.REVIEW,
+        goal, round, stage: STAGES.REVIEW, role: 'tech_lead',
+        stageKey: stageKey({ goal, round, stage: STAGES.REVIEW }),
+        implementationJobId: implementation.completedBy,
+        resumeAttempt: review?.attempts.find((a) => a.status === 'RUNNING' || a.status === 'QUEUED')?.jobId ?? null,
+      };
+    }
+
+    // Reviewed. The decision decides where the Goal goes, and it is READ, never
+    // asked for again.
+    const decision = review.result?.decision;
+
+    if (decision === 'ACCEPTED') {
+      return {
+        kind: DISPATCH_KINDS.CLOSE_GOAL, goal, round,
+        reviewJobId: review.completedBy, decision,
+      };
+    }
+
+    if (decision === 'CHANGES_REQUIRED') {
+      const blockers = review.result?.blockers ?? [];
+      const nextRound = round + 1;
+
+      // Is the correction of the next round already done? The loop continues
+      // there; otherwise this is where it goes.
+      const nextCorrection = get(ledger, goal, nextRound, STAGES.CORRECTION);
+      if (!nextCorrection || nextCorrection.status !== STAGE_STATUS.COMPLETED) {
+        if (nextRound > maxRounds) {
+          return {
+            kind: DISPATCH_KINDS.HUMAN_REQUIRED, goal, round,
+            reason: 'MAX_CORRECTION_ROUNDS_REACHED',
+            detail: `Round ${round} asked for changes and the round budget is ${maxRounds}.`,
+          };
+        }
+        return {
+          kind: DISPATCH_KINDS.CORRECTION,
+          goal, round: nextRound, stage: STAGES.CORRECTION, role: 'developer',
+          stageKey: stageKey({ goal, round: nextRound, stage: STAGES.CORRECTION }),
+          // Carried from the review that produced them. Never rediscovered.
+          blockers,
+          fromReviewJobId: review.completedBy,
+          resumeAttempt: nextCorrection?.attempts.find((a) => a.status === 'RUNNING' || a.status === 'QUEUED')?.jobId ?? null,
+        };
+      }
+      continue;
+    }
+
+    if (decision === 'HUMAN_REQUIRED') {
+      return {
+        kind: DISPATCH_KINDS.HUMAN_REQUIRED, goal, round,
+        reason: 'REVIEWER_ASKED_FOR_HUMAN', reviewJobId: review.completedBy,
+      };
+    }
+
+    return {
+      kind: DISPATCH_KINDS.HUMAN_REQUIRED, goal, round,
+      reason: 'AGENT_CONTRACT_ERROR',
+      detail: `The review of round ${round} carries no usable decision (${JSON.stringify(decision)}).`,
+    };
+  }
+
+  // Nothing recorded at all: the Goal starts at the beginning.
+  return {
+    kind: DISPATCH_KINDS.IMPLEMENTATION,
+    goal, round: 1, stage: STAGES.IMPLEMENTATION, role: 'developer',
+    stageKey: stageKey({ goal, round: 1, stage: STAGES.IMPLEMENTATION }),
+    resumeAttempt: null,
+  };
+}
+
+/**
+ * The guard. Fails closed immediately before a job would be published.
+ *
+ * This is the invariant that the duplicate R1 violated: a stage with a
+ * successful result is finished, and no restart, recovery, attach, capacity
+ * resume, missing pointer or freshly minted id makes another attempt at it
+ * legitimate.
+ */
+export function assertNoDuplicateStageDispatch({ ledger, goal, round, stage, jobId }) {
+  const key = stageKey({ goal, round, stage });
+  const recorded = ledger.get(key);
+  if (!recorded || recorded.status !== STAGE_STATUS.COMPLETED) return true;
+
+  // Re-publishing the SAME attempt that produced the result is not a duplicate;
+  // it is idempotence, and the runner reuses the result rather than the model.
+  if (jobId && jobId === recorded.completedBy) return true;
+
+  throw new SpikeError(
+    'DUPLICATE_COMPLETED_STAGE_DISPATCH',
+    `Refusing to dispatch ${key}: it already completed as ${recorded.completedBy}. `
+    + `Publishing ${jobId ?? 'a new attempt'} would pay for an inference that is already on disk.`,
+    { stageKey: key, completedBy: recorded.completedBy, attempted: jobId ?? null },
+  );
+}
+
+/**
+ * Reads every job and result for a Goal and reconciles them.
+ *
+ * Called after attach, after recovery, after a restart, and before any
+ * dispatch — never "publish first and deduplicate later".
+ */
+export async function reconcileExecutionState({ store, goal, maxRounds = 3 }) {
+  if (!goal) throw new SpikeError('INVALID_ARGS', 'reconcileExecutionState needs a goal');
+
+  const entries = [];
+  for (const role of ['developer', 'tech_lead']) {
+    // listJobs returns file names; the id is the name without its extension.
+    const jobIds = (await store.listJobs(role)).map((name) => name.replace(/\.json$/, ''));
+    for (const jobId of jobIds) {
+      const job = await store.readJob(role, jobId).catch(() => null);
+      if (!job || job.goal !== goal) continue;
+
+      const status = await store.readJobStatus(role, jobId).catch(() => null);
+      const envelope = (await store.hasCompletedResult(role, jobId))
+        ? await store.readResult(role, jobId)
+        : null;
+
+      entries.push({ role, job, status, result: envelope?.result ?? envelope ?? null });
+    }
+  }
+
+  const ledger = buildStageLedger(entries);
+  const next = decideNextDispatch({ ledger, goal, maxRounds });
+
+  // Attempts that should never have been created, so a caller can record them
+  // as superseded instead of leaving them looking live.
+  const duplicates = [...ledger.values()].flatMap((s) => s.duplicates.map((jobId) => ({
+    jobId, stageKey: s.stageKey, completedBy: s.completedBy,
+  })));
+
+  return { ledger, next, duplicates };
+}

@@ -232,6 +232,6 @@ test('a dry run publishes no job and creates no worktree', async () => {
     const events = await store.readEvents();
     assert.deepEqual(events.map((e) => e.type), ['DRY_RUN_COMPLETED']);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   }
 });

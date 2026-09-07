@@ -24,7 +24,7 @@ const NOW = Date.parse('2026-09-07T10:00:00.000Z');
 
 async function withStore(run) {
   const dir = await mkdtemp(join(tmpdir(), 'ia-loop-v4-'));
-  try { return await run(createJobStore(dir), dir); } finally { await rm(dir, { recursive: true, force: true }); }
+  try { return await run(createJobStore(dir), dir); } finally { await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); }
 }
 
 // --- Round budget ----------------------------------------------------------

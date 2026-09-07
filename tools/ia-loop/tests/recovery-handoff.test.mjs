@@ -39,7 +39,7 @@ const REVIEW_JOB = '004-r1-tech_lead-4ded365b';
 
 async function withDir(run) {
   const dir = await mkdtemp(join(tmpdir(), 'ia-loop-handoff-'));
-  try { return await run(dir); } finally { await rm(dir, { recursive: true, force: true }); }
+  try { return await run(dir); } finally { await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); }
 }
 
 /** The real Goal004 situation, as fixture. */

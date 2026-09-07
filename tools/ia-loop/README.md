@@ -1107,6 +1107,74 @@ preservando o motivo da parada, quem resolveu e a nota. Sem nota, nada é
 arquivado — silêncio não limpa problema — e o loop não pode executar esse
 caminho sozinho.
 
+### Reconcile before dispatch
+
+Depois do attach, o loop publicou `004-r1-developer-69a88746` e mandou o Opus
+**reimplementar a rodada 1** — cuja implementação e cujo review já estavam no
+disco, com quatro blockers.
+
+A causa não foi o handoff. Foi a seleção de rodada: ela derivava dos **ids
+gravados no runtime**, que são uma pista, e o código os tratava como
+autoridade. O `jobIdsByRound` só passou a existir num commit posterior à
+execução da R1, então o runtime no disco não tinha o campo. Sem id gravado, o
+loop concluiu que nada havia sido feito, sorteou um id novo, não achou resultado
+sob um nome que nunca existira, e despachou.
+
+A pergunta mudou de *"que id eu anotei?"* para *"o que está terminado?"*.
+Completude passa a ser derivada dos **resultados**, a única prova durável de que
+uma inferência aconteceu. Ids são tentativas; resultados são fatos.
+
+### Identidade lógica de estágio
+
+`004-r1-developer-d8f21303` e `004-r1-developer-69a88746` são duas tentativas da
+mesma coisa. Nada no sistema dizia isso.
+
+```
+stageKey   004:r1:implementation      o que precisa acontecer uma vez
+jobId      004-r1-developer-69a88746  uma tentativa disso
+```
+
+Tentativas continuam únicas — é o que faz lease e result fencing funcionarem.
+Completude é propriedade do **estágio**, e o estágio é derivado dos próprios
+campos do job (papel, rodada, tipo), então vale para todo job já no disco,
+inclusive os escritos antes de estágios terem nome.
+
+### Duplicate stage guard
+
+`assertNoDuplicateStageDispatch` roda **imediatamente antes** de publicar
+qualquer job e falha fechado com `DUPLICATE_COMPLETED_STAGE_DISPATCH`.
+
+A invariante, verificada contra toda rota que já produziu um id — restart,
+recovery, attach, capacity resume, ponteiro velho, id aleatório novo:
+
+> para um mesmo goal + rodada + estágio, se existe resultado terminal válido, o
+> despacho daquele estágio é proibido.
+
+A única exceção é a tentativa que **produziu** o resultado: reentrar com ela é
+idempotência, e o runner reaproveita o resultado em vez do modelo.
+
+**Duas camadas independentes, de propósito:** o handoff diz *onde continuar*; o
+result store prova *o que terminou*. O handoff pode estar ausente, velho ou
+corrompido — os resultados barram o duplicado assim mesmo, porque o guard não
+consulta o handoff.
+
+Tentativas que nunca deveriam ter existido viram `SUPERSEDED`, não são apagadas:
+o que o harness fez de errado continua legível.
+
+### Blockers viajam com o review
+
+`CHANGES_REQUIRED` na R1 leva à correção da R2 carregando **os blockers daquele
+review**, lidos do resultado no disco. Nunca são redescobertos chamando o Fable
+de novo.
+
+### Ctrl+C devolve a lease do loop
+
+O `run-auto` não tratava sinal, então o `finally` nunca rodava e a lease do
+orquestrador ficava para trás envelhecendo — foi assim que a `migration-loop-a3`
+virou órfã. Agora SIGINT/SIGTERM devolvem **apenas essa** lease, sem `force`.
+Leases de job e worktree não são tocadas: um sinal ao orquestrador não diz nada
+sobre um processo de modelo ainda escrevendo.
+
 ### Handoff: a run é uma coisa, o orchestrator é outra
 
 O primeiro recovery real terminou dizendo `RECOVERY COMPLETE / Continue with:
@@ -1322,7 +1390,7 @@ agora tem — `migration-loop-a1`, `-a2` a cada recuperação, na mesma run.
 ## Como executar
 
 ```bash
-npm run test:ia-loop       # 365 testes locais, sem chamadas reais a modelo
+npm run test:ia-loop       # 392 testes locais, sem chamadas reais a modelo
 ```
 
 ```bash
@@ -1419,6 +1487,8 @@ session ids nem dados pessoais.
 | `lib/orphan-evidence.mjs` | De suspeita a prova: quando uma lease pode ser tomada |
 | `lib/recovery-plan.mjs` | O passo seguro após um crash, por estado |
 | `lib/recovery-handoff.mjs` | Token de uso único que passa uma run recuperada ao próximo orchestrator |
+| `lib/stage-identity.mjs` | Identidade lógica do trabalho: estágio vs tentativa |
+| `lib/reconcile.mjs` | Reconcilia disco antes de despachar; barra estágio já concluído |
 | `run-recover.mjs` | Recovery de execução interrompida; não chama modelo nem retém lease |
 | `run-auto.mjs` | Orchestrator autônomo Goal a Goal |
 | `run-pause.mjs` | Pedido de pausa; não interrompe inferência em voo |
@@ -1438,7 +1508,7 @@ session ids nem dados pessoais.
 | `lib/persistent-session.mjs` | Sessão por agente: cria no 1º turno, resume nos seguintes |
 | `lib/session-registry.mjs` | Registro durável de sessões, com escrita atômica |
 | `fixtures/synthetic-goal.md` | Tarefa sintética, fora do runtime |
-| `tests/*.test.mjs` | 365 testes com processo/agente fake; nenhuma chamada real |
+| `tests/*.test.mjs` | 392 testes com processo/agente fake; nenhuma chamada real |
 
 ## Limitações conhecidas
 

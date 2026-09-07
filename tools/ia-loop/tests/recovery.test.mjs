@@ -47,7 +47,7 @@ const iso = (ms) => new Date(ms).toISOString();
 
 async function withDir(run) {
   const dir = await mkdtemp(join(tmpdir(), 'ia-loop-recover-'));
-  try { return await run(dir); } finally { await rm(dir, { recursive: true, force: true }); }
+  try { return await run(dir); } finally { await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); }
 }
 
 /** A machine that answers only what the test tells it to. */

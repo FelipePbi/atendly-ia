@@ -37,7 +37,7 @@ const NOW = Date.parse('2026-09-07T20:00:00.000Z');
 
 async function withDir(run) {
   const dir = await mkdtemp(join(tmpdir(), 'ia-loop-lease-'));
-  try { return await run(dir); } finally { await rm(dir, { recursive: true, force: true }); }
+  try { return await run(dir); } finally { await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); }
 }
 
 // ===========================================================================

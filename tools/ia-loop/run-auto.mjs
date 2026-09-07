@@ -279,6 +279,31 @@ async function main() {
   const stopLeaseHeartbeat = startLeaseHeartbeat(auto.leases, { jobId: 'migration-loop' });
   const finish = async () => { await stopLeaseHeartbeat(); await auto.releaseLoopLease().catch(() => {}); };
 
+  // Ctrl+C used to leave the loop lease behind: the finally block never runs
+  // when the process is signalled, so the lease aged into a suspected orphan
+  // and the next run had to prove a death that had not happened.
+  //
+  // Only THIS lease is given back, and only without force. The loop lease
+  // governs decisions, not writes in flight — an agent mid-inference keeps its
+  // own job and worktree leases, which is what stops a second writer. Those
+  // are deliberately not touched here: a signal to the orchestrator says
+  // nothing about whether a child model process has stopped writing.
+  let shuttingDown = false;
+  const onSignal = (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    emit(`\nStopping on ${signal}. Giving the loop lease back; work in flight keeps its own leases.`);
+    void finish()
+      .then(() => store.appendEvent({
+        type: 'ORCHESTRATOR_SHUTDOWN', signal,
+        runId: run?.autonomousRunId ?? null, goal: run?.currentGoal ?? null,
+      }))
+      .catch(() => {})
+      .finally(() => { process.exit(130); });
+  };
+  process.on('SIGINT', () => onSignal('SIGINT'));
+  process.on('SIGTERM', () => onSignal('SIGTERM'));
+
   emit(`Baseline: ${run.migrationAcceptedBaseline}`);
   emit('');
 

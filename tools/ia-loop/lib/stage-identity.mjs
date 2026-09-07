@@ -1,0 +1,83 @@
+/**
+ * IA Loop — logical identity of a unit of work.
+ *
+ * A job id is an ATTEMPT. `004-r1-developer-d8f21303` and
+ * `004-r1-developer-69a88746` are two attempts at one and the same thing:
+ * implement Goal 004, round 1. Nothing in the system said so, so when the
+ * recorded id went missing the loop minted a fresh random one, found no result
+ * under it, and dispatched Opus to redo work that was already finished and
+ * already reviewed.
+ *
+ * The stage is the thing that can be complete. The attempt is one try at it.
+ *
+ *   stageKey   004:r1:implementation      what must happen once
+ *   jobId      004-r1-developer-69a88746  one attempt at it
+ *
+ * Attempts stay unique — that is what makes leases and result fencing work.
+ * Completion is a property of the STAGE, and no new attempt at a completed
+ * stage is ever legitimate.
+ */
+
+import { SpikeError } from './claude-process.mjs';
+
+export const STAGES = Object.freeze({
+  IMPLEMENTATION: 'implementation',
+  CORRECTION: 'correction',
+  REVIEW: 'review',
+});
+
+const STAGE_ROLES = Object.freeze({
+  [STAGES.IMPLEMENTATION]: 'developer',
+  [STAGES.CORRECTION]: 'developer',
+  [STAGES.REVIEW]: 'tech_lead',
+});
+
+export function roleForStage(stage) {
+  const role = STAGE_ROLES[stage];
+  if (!role) throw new SpikeError('INVALID_ARGS', `Unknown stage ${JSON.stringify(stage)}`);
+  return role;
+}
+
+/** The stable name of a unit of work, independent of how many attempts it takes. */
+export function stageKey({ goal, round, stage }) {
+  if (!goal) throw new SpikeError('INVALID_ARGS', 'stageKey needs a goal');
+  if (!Number.isInteger(round) || round < 1) {
+    throw new SpikeError('INVALID_ARGS', `stageKey needs a round >= 1, got ${JSON.stringify(round)}`);
+  }
+  if (!Object.values(STAGES).includes(stage)) {
+    throw new SpikeError('INVALID_ARGS', `Unknown stage ${JSON.stringify(stage)}`);
+  }
+  return `${goal}:r${round}:${stage}`;
+}
+
+/**
+ * Which stage a stored job belongs to.
+ *
+ * Derived from the job's own contract fields — role, round and type — so it
+ * works on every job already on disk, including those written before stages
+ * had a name. A random attempt id can never disguise which stage it belongs to.
+ */
+export function stageOfJob(job) {
+  if (!job) return null;
+  const round = Number(job.round);
+  if (!Number.isInteger(round) || round < 1) return null;
+
+  if (job.role === 'tech_lead') {
+    // The Tech Lead also does closure and planning, which are not review
+    // stages of a round and are guarded by their own recorded artefacts.
+    if (job.kind === 'CLOSURE_DOCS' || job.kind === 'PLANNING') return null;
+    return { goal: job.goal, round, stage: STAGES.REVIEW };
+  }
+
+  if (job.role === 'developer') {
+    const stage = job.type === 'CORRECTION' ? STAGES.CORRECTION : STAGES.IMPLEMENTATION;
+    return { goal: job.goal, round, stage };
+  }
+
+  return null;
+}
+
+export function stageKeyOfJob(job) {
+  const stage = stageOfJob(job);
+  return stage ? stageKey(stage) : null;
+}

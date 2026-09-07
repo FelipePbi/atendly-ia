@@ -40,7 +40,7 @@ const BASELINE_2 = 'a'.repeat(40);
 
 async function withDir(run) {
   const dir = await mkdtemp(join(tmpdir(), 'ia-loop-auto-'));
-  try { return await run(dir); } finally { await rm(dir, { recursive: true, force: true }); }
+  try { return await run(dir); } finally { await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); }
 }
 
 // ===========================================================================

@@ -32,6 +32,9 @@ import { createAutonomousStore, LOOP_LEASE_KEY } from './lib/autonomous-state.mj
 import { createProcessInspector } from './lib/process-inspector.mjs';
 import { OWNER_STATUS, collectOwnerEvidence, isRecoveryEligible, judgeOwner } from './lib/orphan-evidence.mjs';
 import { RECOVERY_ACTIONS, planRecovery } from './lib/recovery-plan.mjs';
+import { reconcileExecutionState } from './lib/reconcile.mjs';
+import { STAGES } from './lib/stage-identity.mjs';
+import { LOOP_CONFIG } from './lib/loop-config.mjs';
 import { createHandoffStore, handoffCovers } from './lib/recovery-handoff.mjs';
 import { readRuntimeStrict } from './lib/capacity-state.mjs';
 import { createGitProbe } from './lib/git-ops.mjs';
@@ -115,12 +118,43 @@ async function main() {
     emit('');
   }
 
-  // --- What is the safe next step? ------------------------------------------
-  const jobId = runtime?.currentJobId ?? null;
-  const roleForState = runtime?.state?.startsWith('REVIEWER') || runtime?.state === 'CLOSURE_DOCUMENTING'
-    || runtime?.state === 'NEXT_GOAL_PLANNING' ? 'tech_lead' : 'developer';
+  // --- What is actually finished, and what is genuinely left? ---------------
+  //
+  // Read from the results, never from currentJobId. That pointer is exactly
+  // what a crash leaves aimed at the wrong thing — here it points at a
+  // duplicate attempt that should never have been published, and trusting it
+  // would make the duplicate more authoritative than the original result.
+  const reconciled = await reconcileExecutionState({
+    store, goal: runtime?.goal, maxRounds: LOOP_CONFIG.maxCorrectionRounds,
+  }).catch(() => null);
 
-  const resultExists = jobId ? await store.hasCompletedResult(roleForState, jobId) : false;
+  if (reconciled) {
+    emit('Stages on disk:');
+    for (const stage of [...reconciled.ledger.values()].sort((a, b) => a.stageKey.localeCompare(b.stageKey))) {
+      const decision = stage.result?.decision ? ` — ${stage.result.decision}` : '';
+      const blockers = Array.isArray(stage.result?.blockers) && stage.result.blockers.length > 0
+        ? ` (${stage.result.blockers.length} blocker(s))` : '';
+      emit(`  ${stage.stageKey}: ${stage.status}${stage.completedBy ? ` — ${stage.completedBy}` : ''}${decision}${blockers}`);
+    }
+    for (const duplicate of reconciled.duplicates) {
+      emit(`  DUPLICATE ATTEMPT: ${duplicate.jobId} — ${duplicate.stageKey} already completed as ${duplicate.completedBy}`);
+    }
+    emit('');
+  }
+
+  // The stage the stored state claims to have been in, judged by the ledger.
+  const stateStage = runtime?.state?.startsWith('REVIEWER') ? STAGES.REVIEW
+    : runtime?.state?.startsWith('CORRECTION') ? STAGES.CORRECTION
+      : STAGES.IMPLEMENTATION;
+  const stageRecord = reconciled && runtime?.goal && Number.isInteger(Number(runtime?.round))
+    ? reconciled.ledger.get(`${runtime.goal}:r${runtime.round}:${stateStage}`)
+    : null;
+
+  const resultExists = stageRecord?.status === 'COMPLETED';
+  // The ORIGINAL attempt that produced the result — not whatever the runtime
+  // happens to point at.
+  const jobId = stageRecord?.completedBy ?? runtime?.currentJobId ?? null;
+  const roleForState = stateStage === STAGES.REVIEW ? 'tech_lead' : 'developer';
   const jobStatus = jobId ? await store.readJobStatus(roleForState, jobId).catch(() => null) : null;
 
   const plan = planRecovery({
@@ -169,6 +203,14 @@ async function main() {
   emit('');
   emit('Next safe action:');
   emit(`  ${plan.action}${plan.jobId ? ` — ${plan.jobId}` : ''}`);
+  if (reconciled) {
+    // What the run will actually do next, derived the same way the runner
+    // will derive it — so the plan printed here and the plan executed later
+    // cannot disagree.
+    const next = reconciled.next;
+    emit(`  then: ${next.kind}${next.round ? ` at round ${next.round}` : ''}`
+      + `${next.blockers?.length ? ` with ${next.blockers.length} blocker(s) carried from ${next.fromReviewJobId}` : ''}`);
+  }
   emit('');
 
   if (dryRun) {

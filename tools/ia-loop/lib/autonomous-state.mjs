@@ -19,7 +19,7 @@ import { rm } from 'node:fs/promises';
 
 import { SpikeError } from './claude-process.mjs';
 import { readJson, writeJsonAtomic } from './job-store.mjs';
-import { createLeaseStore, classifyLease, LEASE_STATUS } from './leases.mjs';
+import { attemptIdFor, createLeaseStore, classifyLease, LEASE_STATUS } from './leases.mjs';
 
 export const RUN_MODES = Object.freeze({ SUPERVISED: 'SUPERVISED', AUTONOMOUS: 'AUTONOMOUS' });
 
@@ -31,7 +31,25 @@ export const RUN_STATUS = Object.freeze({
 });
 
 /** The orchestrator lease is a single, well-known key. */
-const LOOP_LEASE_KEY = 'migration-loop';
+export const LOOP_LEASE_KEY = 'migration-loop';
+
+/**
+ * Identity stamped on the orchestrator lease.
+ *
+ * The loop lease used to carry no attempt at all, so status printed
+ * "Attempt: undefined" and nothing in the record distinguished the orchestrator
+ * that started a run from the one that recovered it. Every attempt is now
+ * numbered and named, which is what makes recovery auditable.
+ */
+function loopLeasePayload({ autonomousRunId, attempt }) {
+  return {
+    autonomousRunId,
+    attemptId: attemptIdFor(LOOP_LEASE_KEY, attempt),
+    attempt,
+    agent: 'orchestrator',
+    ownerKind: 'orchestrator',
+  };
+}
 
 /**
  * Conditions that genuinely need a person. Everything else keeps going.
@@ -105,7 +123,7 @@ export function createAutonomousStore(stateDir) {
         throw new SpikeError(
           'ORPHANED_EXECUTION_UNCERTAIN',
           `A loop lease from run ${lease.autonomousRunId} is stale but not confirmably dead. `
-          + 'Resolve it before starting a new autonomous run.',
+          + 'Run ia-loop:recover, which checks whether that process can still write before taking the loop over.',
         );
       }
 
@@ -117,7 +135,7 @@ export function createAutonomousStore(stateDir) {
       }
 
       const autonomousRunId = `auto-${randomUUID().slice(0, 8)}`;
-      const claim = await leases.claimJob(LOOP_LEASE_KEY, { autonomousRunId, kind: 'orchestrator' });
+      const claim = await leases.claimJob(LOOP_LEASE_KEY, loopLeasePayload({ autonomousRunId, attempt: 1 }));
       if (!claim.acquired) {
         throw new SpikeError('AUTONOMOUS_RUN_ALREADY_ACTIVE',
           `Another orchestrator claimed the loop first (${claim.heldBy?.autonomousRunId ?? 'unknown'}).`);
@@ -133,6 +151,8 @@ export function createAutonomousStore(stateDir) {
         migrationAcceptedBaseline,
         pauseRequested: false,
         pauseAfterGoal: false,
+        attempt: 1,
+        ownerInstanceId: claim.lease.workerInstanceId,
       };
       await this.write(run);
       return run;
@@ -149,19 +169,53 @@ export function createAutonomousStore(stateDir) {
         if (status === LEASE_STATUS.ACTIVE) {
           return { run, attached: false, reason: 'AUTONOMOUS_RUN_ALREADY_ACTIVE', lease };
         }
-        // The previous orchestrator is gone; taking over the LOOP lease is safe
-        // because it only governs decisions, not in-flight executions — those
-        // keep their own V6 leases.
-        await leases.releaseJob(LOOP_LEASE_KEY, { force: true });
+        // An aged lease used to be force-released right here, which is exactly
+        // the "delete it and try again" that a stale heartbeat does not justify:
+        // a long inference, a paused machine and a crash all look the same from
+        // the outside. Proving abandonment is ia-loop:recover's job, and it is
+        // the only thing allowed to take this lease over.
+        return { run, attached: false, reason: 'RECOVERY_REQUIRED', lease };
       }
 
-      const claim = await leases.claimJob(LOOP_LEASE_KEY, {
-        autonomousRunId: run.autonomousRunId, kind: 'orchestrator',
-      });
+      const claim = await leases.claimJob(
+        LOOP_LEASE_KEY,
+        loopLeasePayload({ autonomousRunId: run.autonomousRunId, attempt: (run.attempt ?? 1) }),
+      );
       if (!claim.acquired) {
         return { run, attached: false, reason: 'AUTONOMOUS_RUN_ALREADY_ACTIVE', lease: claim.heldBy };
       }
       return { run, attached: true };
+    },
+
+    /**
+     * Takes the loop over from an orchestrator proven to be gone.
+     *
+     * The proof is made elsewhere; this only performs the swap, and only
+     * against the exact lease that was judged. A new attempt number is recorded
+     * so the history reads as "attempt 2 recovered attempt 1", never as a
+     * second run of the same one.
+     */
+    async takeoverLoopLease({ expected, proof }) {
+      const run = await this.read();
+      if (!run) throw new SpikeError('NO_AUTONOMOUS_RUN', 'There is no autonomous run to take over');
+
+      const attempt = (run.attempt ?? 1) + 1;
+      const result = await leases.takeoverJob(LOOP_LEASE_KEY, {
+        expected,
+        proof,
+        payload: loopLeasePayload({ autonomousRunId: run.autonomousRunId, attempt }),
+      });
+      if (!result.acquired) return result;
+
+      const updated = await this.write({
+        ...run,
+        attempt,
+        ownerInstanceId: result.lease.workerInstanceId,
+        recoveredAt: new Date().toISOString(),
+        recoveryCount: (run.recoveryCount ?? 0) + 1,
+        lastRecovery: { proof: proof ?? null, from: expected?.workerInstanceId ?? null, at: new Date().toISOString() },
+      });
+      return { ...result, run: updated };
     },
 
     renewLoopLease() { return leases.renewJob(LOOP_LEASE_KEY).catch(() => null); },

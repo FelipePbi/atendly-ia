@@ -24,6 +24,7 @@ import { mkdir, open, readFile, readdir, rename, rm, writeFile } from 'node:fs/p
 import { dirname, join } from 'node:path';
 
 import { SpikeError } from './claude-process.mjs';
+import { selfIdentity } from './process-inspector.mjs';
 
 export const LEASE_CONFIG = Object.freeze({
   /** How often a holder renews while the model is running. */
@@ -89,12 +90,16 @@ export function createLeaseStore(stateDir, { config = LEASE_CONFIG } = {}) {
     await mkdir(dirname(path), { recursive: true });
 
     const now = new Date();
+    // Identity is stamped here, on every lease, so recovery can later ask
+    // whether the holder can still write. A pid alone would not answer it:
+    // both Windows and POSIX recycle process ids.
+    const identity = selfIdentity({ now: now.getTime() });
     const lease = {
       ...payload,
       kind,
       key,
       workerInstanceId: WORKER_INSTANCE_ID,
-      pid: process.pid,
+      ...identity,
       status: LEASE_STATUS.ACTIVE,
       acquiredAt: now.toISOString(),
       heartbeatAt: now.toISOString(),
@@ -186,6 +191,63 @@ export function createLeaseStore(stateDir, { config = LEASE_CONFIG } = {}) {
     return true;
   }
 
+  /**
+   * Takes a lease over from a holder proven to be gone.
+   *
+   * Recovery is never "delete the lease and try again". Exactly one process may
+   * win, so the winner is decided by the same primitive that decides a claim:
+   * exclusive creation of a file. Only the process that creates the takeover
+   * marker touches the lease at all.
+   *
+   * The compare-and-swap is against the exact lease the caller judged. If it
+   * changed between that judgement and this call, someone else acted on it and
+   * the takeover aborts rather than overwriting their work.
+   */
+  async function takeover(kind, key, { expected, payload, proof }) {
+    const path = pathFor(kind, key);
+    const markerPath = `${path}.takeover`;
+    await mkdir(dirname(path), { recursive: true });
+
+    let marker;
+    try {
+      marker = await open(markerPath, 'wx');
+    } catch (error) {
+      if (error.code === 'EEXIST') {
+        return { acquired: false, reason: 'RECOVERY_IN_PROGRESS' };
+      }
+      throw new SpikeError('LEASE_IO_FAILED', `Cannot start takeover of ${kind} lease ${key}: ${error.message}`);
+    }
+
+    try {
+      const current = await read(kind, key);
+      if (!current) return { acquired: false, reason: 'LEASE_ALREADY_GONE' };
+
+      // Compare-and-swap: owner AND heartbeat must be what was judged.
+      if (current.workerInstanceId !== expected?.workerInstanceId
+        || current.heartbeatAt !== expected?.heartbeatAt) {
+        return { acquired: false, reason: 'LEASE_CHANGED_SINCE_JUDGEMENT', heldBy: current };
+      }
+
+      // History is archived, never overwritten: the superseded lease is the
+      // record of who held the run before recovery.
+      const supersededAt = new Date().toISOString();
+      await writeFile(
+        `${path}.superseded`,
+        `${JSON.stringify({ ...current, status: 'SUPERSEDED', supersededAt, supersededProof: proof ?? null }, null, 2)}
+`,
+        'utf8',
+      );
+      await rm(path, { force: true });
+
+      const claimed = await acquire(kind, key, payload);
+      if (!claimed.acquired) return { acquired: false, reason: 'RECLAIM_FAILED', heldBy: claimed.heldBy };
+      return { acquired: true, lease: claimed.lease, superseded: current };
+    } finally {
+      await marker.close();
+      await rm(markerPath, { force: true });
+    }
+  }
+
   return {
     paths: { jobsDir, worktreesDir, pathFor },
 
@@ -199,6 +261,9 @@ export function createLeaseStore(stateDir, { config = LEASE_CONFIG } = {}) {
 
     renewJob(jobId) { return renew('job', jobId); },
     renewWorktree(path) { return renew('worktree', worktreeKey(path)); },
+
+    takeoverJob(jobId, options) { return takeover('job', jobId, options); },
+    takeoverWorktree(path, options) { return takeover('worktree', worktreeKey(path), options); },
 
     releaseJob(jobId, options) { return release('job', jobId, options); },
     releaseWorktree(path, options) { return release('worktree', worktreeKey(path), options); },

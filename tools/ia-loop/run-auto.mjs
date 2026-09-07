@@ -44,9 +44,17 @@ const STATE_DIR = join(HERE, '.state');
 
 const probe = createGitProbe(REPO_ROOT);
 
-/** Releases the loop lease only when this process is the one holding it. */
-async function releaseHeldIfMine(auto, attached) {
-  if (attached?.attached) await auto.releaseLoopLease({ force: true }).catch(() => {});
+/**
+ * Every failure between taking the loop lease and entering the main try block
+ * goes through here.
+ *
+ * A run that threw before its own try once left attach()'s lease behind and
+ * locked the loop out of itself. One exit means one place to get right, instead
+ * of a rule each new throw has to remember.
+ */
+async function failAfterAttach(auto, code, message) {
+  await auto.releaseLoopLease({ force: true }).catch(() => {});
+  throw new SpikeError(code, message);
 }
 const emit = (line = '') => console.log(line);
 
@@ -125,16 +133,14 @@ async function main() {
   let run;
   const attached = await auto.attach();
 
-  // From here on the loop lease may be held — by attach() above or by start()
-  // below — so every exit has to go through releaseHeld(). A run that throws
-  // before its own try block once left the lease behind and locked the loop out
-  // of itself: the next start was refused by a lease nobody was holding.
-  const releaseHeld = async () => { await auto.releaseLoopLease({ force: true }).catch(() => {}); };
-
   if (attached && !attached.attached) {
-    // Nothing was claimed in this case, but be explicit rather than lucky.
-    await releaseHeldIfMine(auto, attached);
-    throw new SpikeError('AUTONOMOUS_RUN_ALREADY_ACTIVE',
+    if (attached.reason === 'RECOVERY_REQUIRED') {
+      await failAfterAttach(auto, 'RECOVERY_REQUIRED',
+        `Run ${attached.run.autonomousRunId} left a lease whose holder is not heartbeating. `
+        + 'Starting here would assume the old orchestrator is dead. Run ia-loop:recover, which proves it first.');
+    }
+
+    await failAfterAttach(auto, 'AUTONOMOUS_RUN_ALREADY_ACTIVE',
       `Run ${attached.lease?.autonomousRunId ?? attached.run.autonomousRunId} owns the loop. `
       + 'A second orchestrator would race it for Goals.');
   }
@@ -151,8 +157,7 @@ async function main() {
       // Resume must not walk past an unresolved problem — only an explicit
       // human statement that it was resolved retires the stopped run.
       if (!resolvedNote) {
-        await releaseHeld();
-        throw new SpikeError('HUMAN_REQUIRED',
+        await failAfterAttach(auto, 'HUMAN_REQUIRED',
           `Run ${run.autonomousRunId} is stopped for a human: ${run.humanRequired?.reason}. `
           + 'Resolve it, then start a new run with --from <goal> --resolved "<what was resolved>".');
       }
@@ -175,8 +180,7 @@ async function main() {
     const { acceptedBaseline } = parseMigrationStatus(migrationText);
     const startGoal = fromGoal ?? null;
     if (!startGoal) {
-      await releaseHeld();
-      throw new SpikeError('INVALID_ARGS', 'Pass --from <goalId> to start a new autonomous run');
+      await failAfterAttach(auto, 'INVALID_ARGS', 'Pass --from <goalId> to start a new autonomous run');
     }
 
     run = await auto.start({ fromGoal: startGoal, migrationAcceptedBaseline: acceptedBaseline });

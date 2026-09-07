@@ -28,6 +28,7 @@
     "ia-loop:pause": "node tools/ia-loop/run-pause.mjs",
     "ia-loop:status": "node tools/ia-loop/run-status.mjs",
     "ia-loop:resume": "node tools/ia-loop/run-resume.mjs",
+    "ia-loop:recover": "node tools/ia-loop/run-recover.mjs",
     "test:ia-loop": "node --test tools/ia-loop/tests/**/*.test.mjs",
     "validate:core": "node scripts/validate-core.mjs",
     "validate:integration": "node scripts/validate-integration.mjs"

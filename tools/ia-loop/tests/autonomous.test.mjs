@@ -635,12 +635,14 @@ test('every early exit after attach releases the loop lease', async () => {
   const tryLine = lines.findIndex((l, i) => i > attachLine && l.trim() === 'try {');
   assert.ok(attachLine > 0 && tryLine > attachLine);
 
+  // Every failure in that window must go through failAfterAttach, which
+  // releases first. A bare throw there is the original bug.
   for (let i = attachLine; i < tryLine; i += 1) {
-    if (!lines[i].includes('throw new SpikeError')) continue;
-    const before = lines.slice(Math.max(attachLine, i - 4), i).join('\n');
-    assert.match(
-      before, /releaseHeld\(\)|releaseHeldIfMine\(/,
-      `run-auto.mjs:${i + 1} throws while the loop lease may be held, without releasing it`,
+    assert.ok(
+      !lines[i].includes('throw new SpikeError'),
+      `run-auto.mjs:${i + 1} throws while the loop lease may be held; use failAfterAttach`,
     );
   }
+  assert.match(source, /async function failAfterAttach\([\s\S]*?releaseLoopLease/,
+    'failAfterAttach must release the loop lease before throwing');
 });

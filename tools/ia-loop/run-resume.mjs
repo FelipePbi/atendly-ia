@@ -19,6 +19,7 @@ import { createJobStore } from './lib/job-store.mjs';
 import { readRuntimeStrict, remainingWaitMs, validateWaitingRuntime } from './lib/capacity-state.mjs';
 import { formatRemaining } from './lib/capacity-policy.mjs';
 import { LOOP_STATES } from './lib/loop-state.mjs';
+import { AGENT_EXECUTION_STATES } from './lib/recovery-plan.mjs';
 import { readWorkerHealth, WORKER_HEALTH } from './lib/worker-registry.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -42,9 +43,17 @@ export function planResume(runtime, { now, workerHealth = {} }) {
   }
 
   if (runtime.state !== LOOP_STATES.WAITING_FOR_CAPACITY) {
+    // Resume answers one question: has the capacity wait elapsed? A run stuck
+    // in an execution state was not parked, it was interrupted — a different
+    // problem with a different answer. Saying so beats reporting "nothing to
+    // do" to someone whose machine just rebooted mid-run.
+    const interrupted = AGENT_EXECUTION_STATES.includes(runtime.state);
     return {
       action: 'NOTHING_TO_RESUME',
-      message: `Run is ${runtime.state}; nothing is parked waiting for capacity.`,
+      message: interrupted
+        ? `Run is ${runtime.state}; nothing is parked waiting for capacity. An execution in that state that is `
+          + 'no longer progressing was interrupted rather than rate-limited: npm run ia-loop:recover'
+        : `Run is ${runtime.state}; nothing is parked waiting for capacity.`,
     };
   }
 

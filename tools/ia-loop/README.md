@@ -1122,10 +1122,129 @@ a lease do orquestrador; pausa; e fim de migração.
 
 ---
 
+## Recovery — quando o processo morre
+
+A V6 estabeleceu que uma lease vencida é `SUSPECTED_ORPHAN` e nunca "morta":
+heartbeat velho não prova morte, e agir sobre ele é como dois processos acabam
+escrevendo na mesma worktree. Isso estava certo — e deixava uma lacuna: **não
+havia caminho para chegar à prova**. Uma máquina que reiniciasse no meio de uma
+execução ficava presa, e a única saída era apagar arquivo interno na mão.
+
+Isto fecha a lacuna sem afrouxar a regra.
+
+### Como o abandono é provado
+
+Uma lease vira `ORPHAN_CONFIRMED` só quando algo torna **impossível** o dono
+antigo escrever de novo:
+
+| Prova | Evidência |
+| --- | --- |
+| `DIFFERENT_BOOT` | a máquina bootou depois de a lease ser tomada — nenhum processo que a segurava sobreviveu |
+| `PROCESS_GONE` | o pid não existe |
+| `PID_REUSED` | o pid existe mas começou em outro instante: é outro processo com número reciclado |
+
+Qualquer outra coisa continua `SUSPECTED_ORPHAN`. Ausência de evidência nunca
+vira evidência de ausência. E um dono **vivo** com heartbeat velho é
+`OWNER_ALIVE` — uma inferência longa não é um crash.
+
+`DIFFERENT_BOOT` compara o boot atual com o `acquiredAt` da própria lease, então
+funciona inclusive em lease escrita **antes** desta feature existir — que é
+exatamente a lease que o primeiro reboot deixa para trás.
+
+pid sozinho nunca basta: Windows e POSIX reciclam ids. Toda lease passou a
+carregar `hostname`, `bootAt`, `pid`, `processStartedAt` e `workerInstanceId`.
+No Windows o start time vem do CIM, no POSIX do `ps`; falha na consulta devolve
+`UNKNOWN`, e `UNKNOWN` nunca confirma nada.
+
+### Takeover é troca, não remoção
+
+Recovery nunca é "apagar a lease e tentar de novo". O vencedor é decidido pelo
+mesmo primitivo que decide um claim — criação exclusiva de arquivo — e a troca é
+um compare-and-swap contra a lease exata que foi julgada: se ela mudou entre o
+julgamento e a troca, alguém agiu e o takeover **aborta**. A lease substituída é
+arquivada em `<lease>.superseded`, com a prova que a aposentou. História não se
+sobrescreve.
+
+`attach()` deixou de tomar lease envelhecida à força — era precisamente o
+palpite que recovery existe para evitar.
+
+### `resume` e `recover` são coisas diferentes
+
+```bash
+npm run ia-loop:resume    # a espera por capacidade terminou?
+```
+
+```bash
+npm run ia-loop:recover   # o dono da execução desapareceu
+```
+
+Juntar os dois faria "o modelo está com limite de uso" e "o processo morreu"
+serem o mesmo evento, e eles pedem respostas opostas. `resume` inalterado;
+quando o estado é de execução, ele passa a apontar para `recover` em vez de
+dizer "nada a fazer".
+
+```bash
+npm run ia-loop:recover -- --dry-run   # inspeciona e não escreve nada, nem evento
+```
+
+### O que recovery decide, por estado
+
+| Estado | Resultado já no disco | Ação |
+| --- | --- | --- |
+| `DEVELOPER_RUNNING`, `CORRECTION_RUNNING`, `REVIEWER_RUNNING`, `CLOSURE_DOCUMENTING`, `NEXT_GOAL_PLANNING` | sim | `CONSUME_RESULT` — **o modelo não é chamado de novo** |
+| idem | não | tentativa vira `INTERRUPTED`, o **mesmo** job é re-enfileirado |
+| `*_QUEUED` | — | re-enfileira |
+| `ACCEPTED`, `CLOSURE_*`, `GOAL_COMMIT*`, `INTEGRATING_ACCEPTED`, `BASELINE_ACCEPTED` | — | `RESUME_PHASE` — o `run-close` pula o que já registrou (SHA de commit, cherry-pick, jobs) |
+| `WAITING_FOR_CAPACITY` | — | `RECOVERY_BLOCKED` — isso é `resume` |
+| `HUMAN_REQUIRED`, `AWAITING_HUMAN`, run `PAUSED_FOR_HUMAN` | — | `RECOVERY_BLOCKED` — recovery não resolve porta humana |
+
+Os estados de execução são **derivados** do registry (`execution: true`), não
+listados à mão — a lista paralela que esqueceu `CORRECTION_RUNNING` na V4 não se
+repete.
+
+`INTERRUPTED` é deliberadamente diferente de `FAILED`: `FAILED` é trabalho
+tentado que não deu certo, e um humano olha; `INTERRUPTED` é trabalho sobre o
+qual nada se aprendeu. Um worker nunca pega um `INTERRUPTED` sozinho — quem
+decide re-enfileirar, substituir ou consumir um resultado é o orchestrator.
+
+### O defeito que a inspeção encontrou
+
+Dois, na verdade, e o segundo teria custado uma inferência:
+
+1. **O job id do reviewer era sorteado a cada passagem.** Qualquer retomada
+   republicava o review e chamava o Fable de novo, mesmo com a resposta dele já
+   no disco. Agora é registrado e reaproveitado como o do Developer.
+
+2. **`currentJobId` era um só para os dois papéis.** Com o loop parado em
+   `REVIEWER_RUNNING`, o id gravado era o do Tech Lead — e o passo do Developer
+   o adotaria na retomada, não acharia resultado de Developer sob ele, e
+   chamaria o Opus outra vez, sob um job id que pertencia ao Tech Lead. Duas
+   inferências, uma delas já paga. Os ids passaram a ser gravados por **papel e
+   por rodada**.
+
+No caso real que motivou tudo isto, o resultado do review tinha sido gravado
+**4 segundos depois** do último heartbeat: o crash matou o leitor, não o
+trabalho.
+
+### Auditoria
+
+`ORCHESTRATOR_ORPHAN_SUSPECTED`, `ORCHESTRATOR_ORPHAN_CONFIRMED`,
+`RECOVERY_STARTED`, `LEASE_TAKEOVER_SUCCEEDED`, `LEASE_TAKEOVER_FAILED`,
+`JOB_INTERRUPTED`, `JOB_RESULT_REUSED`, `JOB_REQUEUED_AFTER_RECOVERY`,
+`RECOVERY_COMPLETED`, `RECOVERY_BLOCKED` — cada um com goal, round, state,
+runId, attemptId, dono antigo e novo, sanitizados.
+
+`ia-loop:status` ganhou um bloco `ORCHESTRATOR:` com dono, tentativa, idade do
+heartbeat e **`Recovery eligible: YES/NO`** com o motivo. E `Attempt:` deixou de
+imprimir `undefined`: a lease do orchestrator não tinha tentativa nenhuma, e
+agora tem — `migration-loop-a1`, `-a2` a cada recuperação, na mesma run.
+
+---
+
 ## Como executar
 
 ```bash
-npm run test:ia-loop       # 304 testes locais, sem chamadas reais a modelo
+npm run test:ia-loop       # 341 testes locais, sem chamadas reais a modelo
 ```
 
 ```bash
@@ -1160,6 +1279,10 @@ npm run ia-loop:status     # lê o estado persistido; não chama modelo
 
 ```bash
 npm run ia-loop:resume     # retoma uma etapa parada por limite de capacidade
+```
+
+```bash
+npm run ia-loop:recover    # retoma uma execução interrompida por crash ou reboot
 ```
 
 V7 — execução autônoma de Goal em Goal:
@@ -1214,6 +1337,10 @@ session ids nem dados pessoais.
 | `lib/autonomous-state.mjs` | Run autônoma durável, lease do orquestrador, pausa |
 | `lib/planning-decision.mjs` | Três decisões de planning; fim de migração verificado |
 | `lib/goal-boundary.mjs` | Julgamento puro da fronteira entre dois Goals |
+| `lib/process-inspector.mjs` | Identidade e liveness de processo; Windows-aware, fake nos testes |
+| `lib/orphan-evidence.mjs` | De suspeita a prova: quando uma lease pode ser tomada |
+| `lib/recovery-plan.mjs` | O passo seguro após um crash, por estado |
+| `run-recover.mjs` | Recovery de execução interrompida; não chama modelo |
 | `run-auto.mjs` | Orchestrator autônomo Goal a Goal |
 | `run-pause.mjs` | Pedido de pausa; não interrompe inferência em voo |
 | `lib/worker-loop.mjs` | Plumbing comum dos workers |
@@ -1232,7 +1359,7 @@ session ids nem dados pessoais.
 | `lib/persistent-session.mjs` | Sessão por agente: cria no 1º turno, resume nos seguintes |
 | `lib/session-registry.mjs` | Registro durável de sessões, com escrita atômica |
 | `fixtures/synthetic-goal.md` | Tarefa sintética, fora do runtime |
-| `tests/*.test.mjs` | 304 testes com processo/agente fake; nenhuma chamada real |
+| `tests/*.test.mjs` | 341 testes com processo/agente fake; nenhuma chamada real |
 
 ## Limitações conhecidas
 

@@ -18,6 +18,9 @@ import { readRuntimeStrict, remainingWaitMs } from './lib/capacity-state.mjs';
 import { formatRemaining } from './lib/capacity-policy.mjs';
 import { LOOP_STATES } from './lib/loop-state.mjs';
 import { LEASE_STATUS, classifyLease, createLeaseStore } from './lib/leases.mjs';
+import { LOOP_LEASE_KEY, createAutonomousStore } from './lib/autonomous-state.mjs';
+import { createProcessInspector } from './lib/process-inspector.mjs';
+import { OWNER_STATUS, collectOwnerEvidence, isRecoveryEligible, judgeOwner } from './lib/orphan-evidence.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, '.state');
@@ -66,8 +69,12 @@ async function main() {
   const store = createJobStore(STATE_DIR);
   const leaseStore = createLeaseStore(STATE_DIR);
 
+  const auto = createAutonomousStore(STATE_DIR);
+  const inspector = createProcessInspector();
+
   const runtime = await readRuntimeStrict(store);
   const goal = await store.readCurrentGoal();
+  const autonomousRun = await auto.read();
   const [techLeadHealth, developerHealth] = await Promise.all([
     readWorkerHealth(store, 'tech_lead'),
     readWorkerHealth(store, 'developer'),
@@ -99,13 +106,47 @@ async function main() {
     for (const lease of leases) {
       const { status, ageMs } = classifyLease(lease, { now });
       out.push(`  Job: ${lease.jobId}`);
-      out.push(`  Attempt: ${lease.attemptId}`);
+      // A lease written before attempts were recorded says so, instead of
+      // printing "undefined" and leaving the reader to guess.
+      out.push(`  Attempt: ${lease.attemptId ?? 'not recorded (lease predates attempt ids)'}`);
       out.push(`  Worker: ${lease.agent ?? '?'} ${String(lease.workerInstanceId ?? '').slice(0, 12)}`);
       if (lease.worktree) out.push(`  Worktree: ${lease.worktree}`);
       out.push(`  Lease: ${status}`);
       out.push(`  Heartbeat age: ${Math.round((ageMs ?? 0) / 1000)}s`);
       out.push(`  Started: ${lease.acquiredAt}`);
       out.push(`  Duration: ${duration(lease.acquiredAt, now)}`);
+    }
+    out.push('');
+  }
+
+  // --- Orchestrator ------------------------------------------------------
+  // The single most useful line after a crash: is anyone still driving this
+  // run, and if not, can it be recovered without guessing?
+  const loopLease = await leaseStore.readJobLease(LOOP_LEASE_KEY);
+  if (loopLease || autonomousRun) {
+    out.push('ORCHESTRATOR:');
+    if (!loopLease) {
+      out.push(`  State: ${autonomousRun ? 'NOT HOLDING THE LOOP' : 'none'}`);
+      if (autonomousRun) out.push(`  Run: ${autonomousRun.autonomousRunId} (${autonomousRun.status})`);
+    } else {
+      const evidence = await collectOwnerEvidence(loopLease, inspector, { now });
+      const verdict = judgeOwner({ lease: loopLease, evidence, now });
+      const eligible = isRecoveryEligible(verdict);
+
+      out.push(`  State: ${verdict.status === OWNER_STATUS.ACTIVE ? 'RUNNING' : verdict.status}`);
+      out.push(`  Run: ${loopLease.autonomousRunId ?? 'unknown'}${autonomousRun ? ` (${autonomousRun.status})` : ''}`);
+      out.push(`  Owner: ${loopLease.workerInstanceId ?? 'unknown'}`);
+      out.push(`  Attempt: ${loopLease.attemptId ?? 'not recorded (lease predates attempt ids)'}`);
+      out.push(`  Last heartbeat: ${loopLease.heartbeatAt} (${Math.round((verdict.ageMs ?? 0) / 1000)}s ago)`);
+      if (verdict.status !== OWNER_STATUS.ACTIVE) {
+        out.push(`  Reason: ${verdict.detail}`);
+        out.push(`  Recovery eligible: ${eligible ? 'YES' : 'NO'}`);
+        if (eligible) out.push(`  Proof: ${verdict.proof}`);
+        out.push(`  ${eligible ? 'Recover with: npm run ia-loop:recover' : 'Not recoverable yet: abandonment is not proven.'}`);
+      }
+    }
+    if (runtime?.recovery) {
+      out.push(`  Recovered: yes — ${runtime.recovery.action} from ${runtime.recovery.fromState} at ${runtime.recovery.at}`);
     }
     out.push('');
   }
@@ -147,6 +188,8 @@ async function main() {
     out.push('WORKER: not confirmably alive');
     out.push('');
     out.push('State is AMBIGUOUS: an attempt may still be writing. Do not start a new one.');
+    out.push('');
+    out.push('Check whether the holder can still write: npm run ia-loop:recover -- --dry-run');
   } else if (activeLease) {
     out.push(`ORCHESTRATOR/OBSERVER: ${observerRunning ? 'attached' : 'OFFLINE'}`);
     out.push(`JOB: RUNNING (${activeLease.jobId}, attempt ${activeLease.attemptId})`);

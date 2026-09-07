@@ -29,7 +29,7 @@ export const STORE_VERSION = 1;
 
 /** Lifecycle of a single job, persisted alongside it. */
 export const JOB_STATUSES = Object.freeze([
-  'QUEUED', 'RUNNING', 'WAITING_FOR_CAPACITY', 'COMPLETED', 'FAILED', 'SUPERSEDED',
+  'QUEUED', 'RUNNING', 'WAITING_FOR_CAPACITY', 'INTERRUPTED', 'COMPLETED', 'FAILED', 'SUPERSEDED',
 ]);
 
 /**
@@ -42,6 +42,25 @@ export const TERMINAL_JOB_STATUSES = Object.freeze(['COMPLETED', 'FAILED', 'SUPE
 
 export function isTerminalJobStatus(status) {
   return TERMINAL_JOB_STATUSES.includes(status);
+}
+
+/**
+ * INTERRUPTED: the attempt was cut short by something outside the job — a
+ * crash, a closed terminal, a reboot — and produced no result.
+ *
+ * It is deliberately NOT FAILED. FAILED means the work was attempted and did
+ * not succeed, and a human looks at those; INTERRUPTED means nothing was
+ * learned, and the same job may legitimately run again. Collapsing the two
+ * would either hide real failures or silently re-run them.
+ *
+ * A worker never picks one up on its own: whether an interrupted job is
+ * re-queued, superseded, or consumed from a result that did land is the
+ * orchestrator's decision, made once and in the open.
+ */
+export const NON_CLAIMABLE_JOB_STATUSES = Object.freeze([...TERMINAL_JOB_STATUSES, 'INTERRUPTED']);
+
+export function isClaimableJobStatus(status) {
+  return status === null || status === undefined || !NON_CLAIMABLE_JOB_STATUSES.includes(status);
 }
 
 function fail(code, message, details = {}) {
@@ -100,7 +119,7 @@ export async function readJson(path, { required = false } = {}) {
 export const PER_GOAL_RUNTIME_FIELDS = Object.freeze([
   'round', 'blockers', 'decision', 'currentJobId', 'escalationReason', 'roundsRun',
   'goalExecuted', 'goalCommitted', 'migrationBaselineUpdated', 'nextGoalCreated',
-  'closure', 'goalClosed', 'nextGoalExecuted', 'humanRequired',
+  'closure', 'goalClosed', 'nextGoalExecuted', 'humanRequired', 'jobIdsByRound',
   'policyViolations', 'deferredNextAction',
   // The previous Goal's implementation report must never reach the next Goal's
   // reviewer: it would describe work that is not in the tree under review.
@@ -160,9 +179,7 @@ export function createJobStore(stateDir) {
      * simply no longer eligible for execution.
      */
     async isJobClaimable(role, jobId) {
-      const status = await this.readJobStatus(role, jobId);
-      if (status === null) return true;
-      return !isTerminalJobStatus(status);
+      return isClaimableJobStatus(await this.readJobStatus(role, jobId));
     },
 
     /**

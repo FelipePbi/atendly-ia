@@ -110,6 +110,18 @@ async function waitForResult(store, role, jobId, { emit, leaseStore }) {
   }
 }
 
+/** Job ids recorded for one round, by role. */
+function jobIdsFor(runtime, round) {
+  return runtime?.jobIdsByRound?.[String(round)] ?? {};
+}
+
+/** Records a role's job id for a round without disturbing the others. */
+function withJobId(runtime, round, role, jobId) {
+  const byRound = { ...(runtime?.jobIdsByRound ?? {}) };
+  byRound[String(round)] = { ...(byRound[String(round)] ?? {}), [role]: jobId };
+  return { jobIdsByRound: byRound };
+}
+
 async function main() {
   const emit = (line = '') => console.log(line);
   const { goalId, dryRun } = parseArgs(process.argv);
@@ -299,9 +311,15 @@ async function main() {
 
     const beforeDev = await captureSnapshot({ probe });
 
-    // A distinct job id per round is what makes idempotency meaningful.
-    const devJobId = (resuming && round === (previousRuntime?.round ?? 1) && previousRuntime?.currentJobId && !startAsCorrection)
-      ? previousRuntime.currentJobId
+    // A distinct job id per round is what makes idempotency meaningful — and it
+    // is recorded per ROLE, not just per round. A single currentJobId could not
+    // survive a crash during review: the id left on disk was the reviewer's, so
+    // on resume the Developer step adopted it, found no Developer result under
+    // it, and would have re-run Opus under a job id that belonged to the Tech
+    // Lead. Two inferences, one of them already paid for.
+    const recorded = jobIdsFor(previousRuntime, round);
+    const devJobId = (resuming && recorded.developer && !startAsCorrection)
+      ? recorded.developer
       : store.newJobId(goal.goalId, round, isCorrection ? 'correction' : 'developer');
 
     const alreadyDone = await store.hasCompletedResult('developer', devJobId);
@@ -325,7 +343,10 @@ async function main() {
     });
 
     machine.transitionTo(phaseQueued);
-    await store.writeRuntime({ ...(await store.readRuntime()), state: machine.state, round, currentJobId: devJobId });
+    await store.writeRuntime({
+      ...(await store.readRuntime()), state: machine.state, round,
+      currentJobId: devJobId, ...withJobId(await store.readRuntime(), round, 'developer', devJobId),
+    });
 
     let devEnvelope;
     if (alreadyDone) {
@@ -394,7 +415,14 @@ async function main() {
     const packetPath = join(artefactDir, 'review-packet.json');
     await fs.writeFile(packetPath, JSON.stringify(packet, null, 2), 'utf8');
 
-    const revJobId = store.newJobId(goal.goalId, round, 'tech_lead');
+    // The reviewer's job id was previously minted fresh on every pass, so any
+    // resume re-published the review and called Fable again — even when its
+    // answer was already on disk. It is now recorded and reused like the
+    // Developer's.
+    const revJobId = (resuming && jobIdsFor(previousRuntime, round).tech_lead)
+      ? jobIdsFor(previousRuntime, round).tech_lead
+      : store.newJobId(goal.goalId, round, 'tech_lead');
+    const reviewAlreadyDone = await store.hasCompletedResult('tech_lead', revJobId);
     const revJob = validateReviewJob({
       protocolVersion: PROTOCOL_VERSION_V2,
       jobId: revJobId, role: 'tech_lead', goal: goal.goalId, round,
@@ -412,18 +440,30 @@ async function main() {
     const beforeReview = await captureSnapshot({ probe, worktreePath: absWorktree, fingerprint: worktreeFingerprint });
 
     machine.transitionTo(LOOP_STATES.REVIEWER_QUEUED);
-    await store.publishJob('tech_lead', revJob);
-    await store.writeRuntime({ ...(await store.readRuntime()), state: machine.state, round, currentJobId: revJobId });
-    emit(`Review job published: ${revJobId}`);
-    machine.transitionTo(LOOP_STATES.REVIEWER_RUNNING);
-    emit('Waiting for the Tech Lead…');
+    await store.writeRuntime({
+      ...(await store.readRuntime()), state: machine.state, round,
+      currentJobId: revJobId, ...withJobId(await store.readRuntime(), round, 'tech_lead', revJobId),
+    });
 
-    const observedReview = await waitForResult(store, 'tech_lead', revJobId, { emit, leaseStore });
-    if (observedReview.observerTimeout || observedReview.workerOffline) {
-      await reportObserverStop({ store, emit, role: 'tech_lead', jobId: revJobId, observed: observedReview, goal: goal.goalId, round });
-      return 0;
+    let revEnvelope;
+    if (reviewAlreadyDone) {
+      emit(`Tech Lead already completed ${revJobId} — reusing the persisted review. The model is NOT called again.`);
+      machine.transitionTo(LOOP_STATES.REVIEWER_RUNNING);
+      revEnvelope = await store.readResult('tech_lead', revJobId);
+      await store.appendEvent({ type: 'JOB_RESULT_REUSED', role: 'tech_lead', jobId: revJobId, goal: goal.goalId, round });
+    } else {
+      await store.publishJob('tech_lead', revJob);
+      emit(`Review job published: ${revJobId}`);
+      machine.transitionTo(LOOP_STATES.REVIEWER_RUNNING);
+      emit('Waiting for the Tech Lead…');
+
+      const observedReview = await waitForResult(store, 'tech_lead', revJobId, { emit, leaseStore });
+      if (observedReview.observerTimeout || observedReview.workerOffline) {
+        await reportObserverStop({ store, emit, role: 'tech_lead', jobId: revJobId, observed: observedReview, goal: goal.goalId, round });
+        return 0;
+      }
+      revEnvelope = observedReview.envelope;
     }
-    const revEnvelope = observedReview.envelope;
     const afterReview = await captureSnapshot({ probe, worktreePath: absWorktree, fingerprint: worktreeFingerprint });
     const revViolations = checkReviewerPolicy({ before: beforeReview, after: afterReview });
 

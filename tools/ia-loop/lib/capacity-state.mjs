@@ -11,20 +11,13 @@
 
 import { SpikeError } from './claude-process.mjs';
 import { readJson, writeJsonAtomic, STORE_VERSION } from './job-store.mjs';
-import { LOOP_STATES } from './loop-state.mjs';
+import { LOOP_STATES, RESUMABLE_STATES } from './loop-state.mjs';
 import { CAPACITY_REASONS } from './capacity-classifier.mjs';
 import { ROLES } from './contracts-v2.mjs';
 
-/** States a blocked run may resume into. */
-const RESUMABLE_STATES = Object.freeze([
-  LOOP_STATES.DEVELOPER_QUEUED,
-  LOOP_STATES.DEVELOPER_RUNNING,
-  // A correction round waits for capacity exactly like an implementation one.
-  LOOP_STATES.CORRECTION_QUEUED,
-  LOOP_STATES.CORRECTION_RUNNING,
-  LOOP_STATES.REVIEWER_QUEUED,
-  LOOP_STATES.REVIEWER_RUNNING,
-]);
+// The resumable set is DERIVED from the canonical state registry. It used to be
+// a hand-maintained list here, which is how CORRECTION_RUNNING ended up in the
+// state machine but unknown to capacity resume.
 
 function fail(code, message, details = {}) {
   throw new SpikeError(code, message, details);

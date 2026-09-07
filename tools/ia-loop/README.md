@@ -14,6 +14,7 @@ Duas etapas concluídas:
 | Capacity / Usage Limits | `PASS` (espera controlada, retomada exata) |
 | V3 — Real Worktree + Supervised Execution | worktree real, execução supervisionada, parada em `AWAITING_HUMAN` |
 | V4 — Automatic Correction Rounds | correção automática até 3 rodadas, depois escala |
+| V5 — Accepted Goal Closure + Next Goal Planning | fechamento e planejamento automatizados, parada em AWAITING_HUMAN |
 
 ---
 
@@ -845,6 +846,74 @@ capacidade. Ela não gera `CAPACITY_LIMIT_REACHED`, não entra em
 `WAITING_FOR_CAPACITY` e vai direto a `HUMAN_REQUIRED`: esperar não conserta
 tooling quebrado. Registrar isso como limite de modelo poluiria o histórico de
 capacidade e induziria a erro qualquer análise posterior.
+
+---
+
+## V5 — Accepted Goal Closure + Next Goal Planning
+
+O IA Loop **não** decide que um Goal foi aceito. Ele mecaniza o fechamento só
+depois de encontrar uma ReviewDecision persistida com `ACCEPTED`. Nenhum review
+novo acontece e o Developer nunca é chamado.
+
+```bash
+npm run ia-loop:close -- 003
+```
+
+### Fonte canônica de estados
+
+`lib/state-registry.mjs` define cada estado **uma vez**: suas transições e suas
+propriedades (`resumable`, `execution`, `agent`). O grafo, o conjunto resumível e as
+categorias de observabilidade são **derivados** dali.
+
+Isso existe por causa de um bug real: `CORRECTION_RUNNING` foi adicionado à máquina
+de estados mas esquecido numa lista paralela de estados resumíveis, e um retry de
+capacidade durante uma correção não podia sequer ser persistido. Duas listas que
+precisam concordar, sem nada que force isso, é o defeito. Derivar é a correção.
+
+### Taxonomia de falhas
+
+| Família | Exemplos | Gera evento de capacidade? |
+| --- | --- | --- |
+| `MODEL_CAPACITY` | RATE_LIMIT, USAGE_LIMIT | **sim** |
+| `HARNESS` | ENAMETOOLONG, spawn, transição inválida | não |
+| `AGENT_CONTRACT` | protocolVersion, jobId, schema | não |
+
+Conflatar as três fazia o log mentir: deslizes de contrato e uma falha de spawn
+apareciam como `CAPACITY_LIMIT_REACHED`, o que induziria a erro qualquer análise de
+quantas vezes limites reais foram atingidos. O histórico anterior é preservado como
+fato; a classificação muda daqui para frente.
+
+### Accepted snapshot
+
+Prova que o que será commitado é exatamente o que foi aceito. O fingerprint é
+**de conteúdo, nunca de mtime**: cobre o commit base, a branch, a lista exata de
+arquivos e o hash do diff completo. Qualquer edição posterior ao aceite — em
+arquivo rastreado ou não — muda o fingerprint e bloqueia o fechamento com
+`ACCEPTED_WORKTREE_CHANGED`.
+
+Para um Goal aceito antes desta feature, o snapshot é reconstruído do review
+packet persistido, e **só** quando a lista de arquivos e o diff salvo ainda batem
+byte a byte com a worktree. Sem essa evidência, o backfill é recusado.
+
+### Duas baselines no fechamento
+
+O cherry-pick produz um SHA diferente do commit da topic branch. A baseline aceita
+operacional é o `integratedClosureCommit` — o commit que existe em `main` — nunca o
+da branch. E o commit documental do planejamento, que vem depois, **não** substitui
+a baseline.
+
+### Escopo de escrita do Tech Lead
+
+Durante review, o Fable é read-only. Durante fechamento e planejamento ele pode
+escrever **somente** em `docs/migration/`. A verificação é dupla: o contrato recusa
+um caminho fora do escopo, e o orchestrator confere no git o que realmente mudou.
+Qualquer coisa fora disso é `TECH_LEAD_CLOSURE_SCOPE_VIOLATION`.
+
+### Idempotência
+
+Cada etapa grava seu SHA (`sourceClosureCommit`, `integratedClosureCommit`,
+`sourcePlanningCommit`, `planningIntegrationCommit`). Um restart retoma em vez de
+repetir: sem commit duplicado, sem segundo cherry-pick, sem dois Goals novos.
 
 ---
 

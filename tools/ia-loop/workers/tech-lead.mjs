@@ -36,6 +36,13 @@ import { LOOP_STATES } from '../lib/loop-state.mjs';
 import { reviewDecisionSchemaFor, validateReviewJob, validateReviewDecision } from '../lib/contracts-v2.mjs';
 import { buildTechLeadContext } from '../lib/context-builders.mjs';
 import { renderReviewPrompt } from '../lib/review-packet.mjs';
+import {
+  CLOSURE_WRITE_PREFIX,
+  closureDocSchemaFor,
+  planningSchemaFor,
+  validateClosureDocResult,
+  validatePlanningResult,
+} from '../lib/closure-contracts.mjs';
 import { readJson } from '../lib/job-store.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -56,6 +63,159 @@ const TIMEOUT_MS = Number(process.env.IA_LOOP_TECH_LEAD_TIMEOUT_MS ?? 2 * 60 * 6
  * invalidates the review rather than being tolerated.
  */
 const REVIEWER_TOOLS = ['Read', 'Glob', 'Grep', 'Bash'];
+
+/**
+ * Closure and planning need to WRITE, unlike a review.
+ *
+ * The write surface is narrowed by policy rather than by tools alone: the
+ * orchestrator collects the changed files from git afterwards and fails the job
+ * if anything outside docs/migration was touched.
+ */
+const CLOSURE_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'];
+
+/** Job kinds this worker handles besides a review. */
+const CLOSURE_KINDS = ['CLOSURE_DOCUMENTATION', 'NEXT_GOAL_PLANNING'];
+
+function buildClosureDocPrompt(job) {
+  return [
+    'Você está atuando como Tech Lead no FECHAMENTO de um Goal já aceito.',
+    '',
+    'Isto NÃO é um review. A decisão ACCEPTED já foi tomada por você na rodada anterior',
+    'e não deve ser reaberta, reavaliada nem revertida.',
+    '',
+    'Contexto do fechamento:',
+    JSON.stringify(job.closureContext, null, 2),
+    '',
+    `Trabalhe dentro de: ${job.worktree}`,
+    '',
+    'Tarefa: registrar de forma factual e seletiva o que este Goal mudou.',
+    '',
+    `Você pode escrever SOMENTE em ${CLOSURE_WRITE_PREFIX}. Qualquer alteração fora disso`,
+    'encerra o fechamento e exige intervenção humana.',
+    '',
+    'Atualize apenas os documentos realmente afetados. Candidatos, quando pertinente:',
+    '  docs/migration/reviews/003-review.md (o review desta execução)',
+    '  CURRENT_STATE.md, GAP_ANALYSIS.md, REUSE_ANALYSIS.md, DATA_MIGRATION.md,',
+    '  DECISIONS.md, TARGET_ARCHITECTURE.md, MASTER_PLAN.md',
+    '',
+    'NÃO faça agora, em hipótese alguma:',
+    '- criar o próximo Goal;',
+    '- marcar qualquer Goal como READY;',
+    '- registrar o novo SHA de baseline (ele ainda não existe);',
+    '- atualizar MIGRATION_STATUS para o fechamento (é etapa posterior);',
+    '- tocar em código, testes, tooling ou configuração.',
+    '',
+    'Não atualize um documento só para mexer em data ou formatação: registre substância.',
+    '',
+    'Retorne exclusivamente o JSON do contrato ClosureDocResult, listando em',
+    'documentsUpdated os caminhos que você realmente alterou.',
+  ].join('\n');
+}
+
+function buildPlanningPrompt(job) {
+  return [
+    'Você está atuando como Tech Lead no PLANEJAMENTO do próximo Goal.',
+    '',
+    'O Goal anterior já foi aceito, fechado e integrado. A nova baseline aceita já existe',
+    'e está no contexto abaixo. Use exatamente esse SHA.',
+    '',
+    'Contexto do planejamento:',
+    JSON.stringify(job.planningContext, null, 2),
+    '',
+    `Trabalhe dentro de: ${job.worktree}`,
+    `Você pode escrever SOMENTE em ${CLOSURE_WRITE_PREFIX}.`,
+    '',
+    'Reavalie o roadmap de forma INCREMENTAL, à luz do que o Goal fechado revelou.',
+    'Não repita o Goal0, não releia o Product Vault inteiro, não refaça discovery',
+    'de arquitetura sem evidência concreta.',
+    '',
+    'Faça, nesta ordem:',
+    '1. atualizar MIGRATION_STATUS: o Goal fechado como ACCEPTED, com o commit/baseline correto;',
+    '2. registrar o que o fechamento exigir de administrativo;',
+    '3. atualizar MASTER_PLAN somente se a evidência exigir;',
+    '4. registrar nova decisão apenas se houver evidência concreta nova;',
+    '5. escrever SOMENTE o próximo Goal executável;',
+    '6. marcar READY apenas esse próximo Goal;',
+    '7. declarar nele a baseline aceita, com o SHA exato do contexto.',
+    '',
+    'O roadmap vigente aponta para o próximo Goal esperado, mas você NÃO é obrigado a',
+    'mantê-lo: se a evidência do Goal fechado justificar inserir, reordenar ou superseder,',
+    'faça — e registre o motivo. Preserve IDs e histórico.',
+    '',
+    'Não detalhe Goals posteriores. Apenas um próximo Goal, e só ele READY.',
+    '',
+    'Retorne exclusivamente o JSON do contrato PlanningResult.',
+  ].join('\n');
+}
+
+async function handleClosureJob(job) {
+  const kind = job.type;
+  currentJob = { goal: job.goal, round: job.round ?? 0 };
+  workerState = 'WORKING';
+
+  log(`${kind} ${job.goal} RECEIVED`);
+  await store.appendEvent({ type: `${kind}_RECEIVED`, jobId: job.jobId, goal: job.goal });
+
+  await store.writeRuntime({
+    ...(await store.readRuntime()),
+    state: kind === 'CLOSURE_DOCUMENTATION' ? 'CLOSURE_DOCUMENTING' : 'NEXT_GOAL_PLANNING',
+    currentJobId: job.jobId,
+  });
+
+  const isPlanning = kind === 'NEXT_GOAL_PLANNING';
+  const prompt = isPlanning ? buildPlanningPrompt(job) : buildClosureDocPrompt(job);
+  const schema = isPlanning
+    ? planningSchemaFor({ jobId: job.jobId, goal: job.goal })
+    : closureDocSchemaFor({ jobId: job.jobId, goal: job.goal });
+  const validate = isPlanning
+    ? (p) => validatePlanningResult(p, { jobId: job.jobId, goal: job.goal })
+    : (p) => validateClosureDocResult(p, { jobId: job.jobId, goal: job.goal });
+
+  log('FABLE STARTED', `session ${session.sessionId.slice(0, 8)} · ${kind}`);
+
+  const run = await runWithCapacity({
+    store,
+    role: ROLE,
+    jobId: job.jobId,
+    goal: job.goal,
+    round: job.round ?? 0,
+    resumeFrom: isPlanning ? LOOP_STATES.NEXT_GOAL_PLANNING : LOOP_STATES.CLOSURE_DOCUMENTING,
+    onEvent: onCapacityEvent,
+    invoke: async () => {
+      const outcome = await session.send({
+        prompt,
+        jsonSchema: schema,
+        validatePayload: validate,
+        tools: CLOSURE_TOOLS,
+        permissionMode: 'auto',
+        addDirs: job.worktree ? [job.worktree] : [],
+        safeMode: false,
+      });
+      await persistSession();
+      return outcome;
+    },
+  });
+
+  log('FABLE COMPLETED', run.outcome);
+
+  if (run.outcome === RUN_OUTCOMES.HUMAN_REQUIRED) {
+    workerState = 'ERROR';
+    await store.appendEvent({ type: `${kind}_FAILED`, jobId: job.jobId, code: run.reason });
+    currentJob = null; capacityWait = null; workerState = 'IDLE';
+    return;
+  }
+
+  workerState = 'PUBLISHING';
+  await store.appendEvent({
+    type: `${kind}_PUBLISHED`, jobId: job.jobId, goal: job.goal,
+    documents: run.result?.documentsUpdated?.length ?? 0,
+    nextGoalId: run.result?.nextGoalId ?? null,
+    reused: run.outcome === RUN_OUTCOMES.ALREADY_COMPLETED,
+  });
+  log(`${kind} DONE`, isPlanning ? `next goal ${run.result?.nextGoalId}` : `${run.result?.documentsUpdated?.length ?? 0} docs`);
+  currentJob = null; capacityWait = null; workerState = 'IDLE';
+}
+
 
 const store = createJobStore(STATE_DIR);
 
@@ -141,6 +301,12 @@ function buildPrompt(context) {
 }
 
 async function handleJob(rawJob) {
+  // Closure and planning are not reviews and use their own contracts.
+  if (CLOSURE_KINDS.includes(rawJob?.type)) {
+    await handleClosureJob(rawJob);
+    return;
+  }
+
   const job = validateReviewJob(rawJob);
   currentJob = { goal: job.goal, round: job.round };
   workerState = 'WORKING';

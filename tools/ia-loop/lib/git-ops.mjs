@@ -211,3 +211,87 @@ export async function createWorktree({ repoRoot, path, branch, base }) {
 
   return { path: created, branch: createdBranch, head, output };
 }
+
+/**
+ * Stages selected paths and creates a commit inside a worktree.
+ *
+ * The staging is explicit: `git add .` is never used, so tooling, regenerated
+ * artefacts and unrelated changes cannot ride along.
+ */
+export async function stageAndCommit({ cwd, paths, message, excludePaths = [] }) {
+  if (!cwd || !message) throw new SpikeError('INVALID_ARGS', 'cwd and message are required');
+  if (!Array.isArray(paths) || paths.length === 0) {
+    throw new SpikeError('INVALID_ARGS', 'at least one path must be staged');
+  }
+
+  // Chunked: a Goal can touch dozens of files and argv has a limit.
+  const CHUNK = 40;
+  for (let i = 0; i < paths.length; i += CHUNK) {
+    await git(['add', '--', ...paths.slice(i, i + CHUNK)], { cwd });
+  }
+
+  for (const excluded of excludePaths) {
+    await git(['reset', '-q', 'HEAD', '--', excluded], { cwd }).catch(() => {});
+  }
+
+  const staged = await git(['diff', '--cached', '--name-only'], { cwd });
+  if (staged === '') {
+    throw new SpikeError('NOTHING_TO_COMMIT', 'No staged changes; refusing to create an empty commit');
+  }
+
+  await git(['commit', '-m', message], { cwd, timeoutMs: 300_000 });
+  const sha = await git(['rev-parse', 'HEAD'], { cwd });
+
+  return { sha, stagedFiles: staged.split('\n').filter(Boolean) };
+}
+
+/** True when a cherry-pick is half-finished and must be resolved first. */
+export async function cherryPickInProgress(repoRoot) {
+  const dir = await git(['rev-parse', '--git-dir'], { cwd: repoRoot });
+  const path = join(repoRoot, dir, 'CHERRY_PICK_HEAD');
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Applies an accepted commit onto the main checkout.
+ *
+ * A conflict is aborted, never resolved automatically: the orchestrator has no
+ * authority to decide how two changes should be merged.
+ */
+export async function cherryPick({ repoRoot, sha }) {
+  if (await cherryPickInProgress(repoRoot)) {
+    throw new SpikeError('CHERRY_PICK_IN_PROGRESS', 'A cherry-pick is already in progress; resolve it first');
+  }
+
+  const before = await git(['rev-parse', 'HEAD'], { cwd: repoRoot });
+  try {
+    await git(['cherry-pick', '-x', sha], { cwd: repoRoot, timeoutMs: 300_000 });
+  } catch (error) {
+    await git(['cherry-pick', '--abort'], { cwd: repoRoot }).catch(() => {});
+    throw new SpikeError(
+      'CHERRY_PICK_CONFLICT',
+      `Cherry-pick of ${sha} did not apply cleanly and was aborted. A human must integrate it.`,
+      { sha, before },
+    );
+  }
+
+  const after = await git(['rev-parse', 'HEAD'], { cwd: repoRoot });
+  if (after === before) {
+    throw new SpikeError('CHERRY_PICK_NOOP', `Cherry-pick of ${sha} produced no commit`);
+  }
+  return { before, after };
+}
+
+/** Whether a commit is already reachable from HEAD (by content or by note). */
+export async function isAlreadyIntegrated({ repoRoot, sha }) {
+  // `-x` records the source sha in the message, so a repeated closure is
+  // detectable even though the cherry-pick created a different commit id.
+  const log = await git(['log', '--grep', `cherry picked from commit ${sha}`, '--format=%H', '-n', '1'], { cwd: repoRoot })
+    .catch(() => '');
+  return log !== '';
+}

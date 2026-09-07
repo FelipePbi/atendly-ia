@@ -23,6 +23,7 @@
     "ia-loop:tech-lead": "node tools/ia-loop/workers/tech-lead.mjs",
     "ia-loop:developer": "node tools/ia-loop/workers/developer.mjs",
     "ia-loop:goal": "node tools/ia-loop/run-goal.mjs",
+    "ia-loop:close": "node tools/ia-loop/run-close.mjs",
     "ia-loop:status": "node tools/ia-loop/run-status.mjs",
     "ia-loop:resume": "node tools/ia-loop/run-resume.mjs",
     "test:ia-loop": "node --test tools/ia-loop/tests/**/*.test.mjs",

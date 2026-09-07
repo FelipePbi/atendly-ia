@@ -638,5 +638,8 @@ test('recovery retires an orphan lease only with proof, never because a job was 
   const source = await readFile(new URL('../run-recover.mjs', import.meta.url), 'utf8');
   assert.match(source, /isRecoveryEligible\(heldVerdict\)/, 'the same standard of proof as the loop lease');
   assert.match(source, /ORPHANED_LEASE_RETIRED/, 'and it is recorded');
-  assert.match(source, /its lease is kept/, 'an unproven holder keeps its lease');
+  assert.match(source, /if \(!isRecoveryEligible\(heldVerdict\)\) \{[\s\S]{0,200}continue;/,
+    'an unproven holder keeps its lease');
+  assert.match(source, /if \(isClaimableJobStatus\(status\)\) continue;/,
+    'and so does a job that could still legitimately run');
 });

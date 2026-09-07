@@ -26,7 +26,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { SpikeError } from './lib/claude-process.mjs';
-import { createJobStore } from './lib/job-store.mjs';
+import { createJobStore, isClaimableJobStatus } from './lib/job-store.mjs';
 import { createLeaseStore } from './lib/leases.mjs';
 import { createAutonomousStore, LOOP_LEASE_KEY } from './lib/autonomous-state.mjs';
 import { createProcessInspector } from './lib/process-inspector.mjs';
@@ -208,33 +208,52 @@ async function main() {
       });
       emit(`Superseded duplicate attempt ${duplicate.jobId} — ${duplicate.stageKey} completed as ${duplicate.completedBy}.`);
 
-      // Its leases go too, but only against the same standard of proof: a lease
-      // is retired when its holder is confirmably gone, never because the job
-      // was superseded. Left behind, the worktree lease blocks the round that is
-      // legitimately next with WORKTREE_BUSY, held by a process that no longer
-      // exists.
-      const held = await leaseStore.readJobLease(duplicate.jobId).catch(() => null);
-      if (held) {
-        const heldEvidence = await collectOwnerEvidence(held, inspector, { now });
-        const heldVerdict = judgeOwner({ lease: held, evidence: heldEvidence, now });
-        if (isRecoveryEligible(heldVerdict)) {
-          const retired = await leaseStore.retireJob(duplicate.jobId, { expected: held, proof: heldVerdict.proof });
-          if (retired.retired && held.worktree) {
-            await leaseStore.retireWorktree(held.worktree, {
-              expected: await leaseStore.readWorktreeLease(held.worktree), proof: heldVerdict.proof,
-            }).catch(() => null);
-          }
-          await store.appendEvent({
-            type: 'ORPHANED_LEASE_RETIRED', jobId: duplicate.jobId,
-            goal: runtime.goal, round: runtime.round,
-            owner: held.workerInstanceId ?? null, proof: heldVerdict.proof,
-            worktree: held.worktree ?? null,
-          });
-          emit(`  its lease is retired too (${heldVerdict.proof}); the worktree is free for the next round.`);
-        } else {
-          emit(`  its lease is kept: ${heldVerdict.detail}`);
+    }
+
+    // --- Leases held by attempts that will never run again ------------------
+    //
+    // Driven by the leases themselves, not by the list of duplicates. Once a
+    // duplicate is marked SUPERSEDED it stops being reported as one, so a
+    // cleanup keyed on that list can only ever fire on the first run — and the
+    // lease it failed to release then stays on disk for good. A worktree lease
+    // held by a dead attempt blocks the round that is legitimately next with
+    // WORKTREE_BUSY, by a process that no longer exists.
+    //
+    // The bar stays high: the job must be one that can no longer be claimed AND
+    // its holder must be a confirmed orphan. An attempt that could still
+    // legitimately run keeps its lease, whatever state it is in.
+    for (const held of (await leaseStore.listJobLeases()).filter(Boolean)) {
+      if (held.jobId === LOOP_LEASE_KEY) continue;
+
+      const role = held.agent === 'tech_lead' ? 'tech_lead' : 'developer';
+      const status = await store.readJobStatus(role, held.jobId).catch(() => null);
+      if (isClaimableJobStatus(status)) continue;
+
+      const heldEvidence = await collectOwnerEvidence(held, inspector, { now });
+      const heldVerdict = judgeOwner({ lease: held, evidence: heldEvidence, now });
+      if (!isRecoveryEligible(heldVerdict)) {
+        emit(`Lease for ${held.jobId} (${status}) is kept: ${heldVerdict.detail}`);
+        continue;
+      }
+
+      const retired = await leaseStore.retireJob(held.jobId, { expected: held, proof: heldVerdict.proof });
+      if (!retired.retired) continue;
+
+      if (held.worktree) {
+        const wt = await leaseStore.readWorktreeLease(held.worktree).catch(() => null);
+        if (wt && wt.attemptId === held.attemptId) {
+          await leaseStore.retireWorktree(held.worktree, { expected: wt, proof: heldVerdict.proof }).catch(() => null);
         }
       }
+
+      await store.appendEvent({
+        type: 'ORPHANED_LEASE_RETIRED', jobId: held.jobId, jobStatus: status,
+        goal: runtime.goal, round: runtime.round,
+        runId: autonomousRun?.autonomousRunId ?? null,
+        owner: held.workerInstanceId ?? null, proof: heldVerdict.proof,
+        worktree: held.worktree ?? null,
+      });
+      emit(`Retired the lease of ${held.jobId} (${status}, ${heldVerdict.proof}); the worktree is free for the next round.`);
     }
 
   }

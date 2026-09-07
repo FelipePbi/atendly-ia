@@ -560,6 +560,19 @@ test('recovery itself supersedes a duplicate attempt, and never deletes it', asy
   assert.doesNotMatch(source, /rm\(|unlink\(/, 'history is never deleted to tidy up');
 });
 
+test('the lease sweep is driven by the leases, not by the duplicate list', async () => {
+  // Keyed on duplicates it could only fire once: after the first run the job is
+  // SUPERSEDED, stops being reported as a duplicate, and the lease it failed to
+  // release stays on disk for good.
+  const source = await readFile(new URL('../run-recover.mjs', import.meta.url), 'utf8');
+  assert.match(source, /for \(const held of \(await leaseStore\.listJobLeases\(\)\)/);
+  assert.match(source, /if \(isClaimableJobStatus\(status\)\) continue;/,
+    'a job that could still legitimately run keeps its lease');
+  assert.match(source, /if \(!isRecoveryEligible\(heldVerdict\)\)/,
+    'and so does one whose holder is not proven gone');
+  assert.match(source, /retireWorktree/, 'the worktree lease goes with it');
+});
+
 test('recovery repairs consistency on every run, not only the first', async () => {
   // Superseding a duplicate and retiring a dead attempt's leases sat behind the
   // "already recovered" early return, so the re-run someone makes when

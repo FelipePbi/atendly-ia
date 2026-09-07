@@ -43,6 +43,11 @@ const REPO_ROOT = resolve(HERE, '..', '..');
 const STATE_DIR = join(HERE, '.state');
 
 const probe = createGitProbe(REPO_ROOT);
+
+/** Releases the loop lease only when this process is the one holding it. */
+async function releaseHeldIfMine(auto, attached) {
+  if (attached?.attached) await auto.releaseLoopLease({ force: true }).catch(() => {});
+}
 const emit = (line = '') => console.log(line);
 
 function parseArgs(argv) {
@@ -120,7 +125,15 @@ async function main() {
   let run;
   const attached = await auto.attach();
 
+  // From here on the loop lease may be held — by attach() above or by start()
+  // below — so every exit has to go through releaseHeld(). A run that throws
+  // before its own try block once left the lease behind and locked the loop out
+  // of itself: the next start was refused by a lease nobody was holding.
+  const releaseHeld = async () => { await auto.releaseLoopLease({ force: true }).catch(() => {}); };
+
   if (attached && !attached.attached) {
+    // Nothing was claimed in this case, but be explicit rather than lucky.
+    await releaseHeldIfMine(auto, attached);
     throw new SpikeError('AUTONOMOUS_RUN_ALREADY_ACTIVE',
       `Run ${attached.lease?.autonomousRunId ?? attached.run.autonomousRunId} owns the loop. `
       + 'A second orchestrator would race it for Goals.');
@@ -138,6 +151,7 @@ async function main() {
       // Resume must not walk past an unresolved problem — only an explicit
       // human statement that it was resolved retires the stopped run.
       if (!resolvedNote) {
+        await releaseHeld();
         throw new SpikeError('HUMAN_REQUIRED',
           `Run ${run.autonomousRunId} is stopped for a human: ${run.humanRequired?.reason}. `
           + 'Resolve it, then start a new run with --from <goal> --resolved "<what was resolved>".');
@@ -160,7 +174,10 @@ async function main() {
     const migrationText = await readFile(join(REPO_ROOT, 'docs/migration/MIGRATION_STATUS.md'), 'utf8');
     const { acceptedBaseline } = parseMigrationStatus(migrationText);
     const startGoal = fromGoal ?? null;
-    if (!startGoal) throw new SpikeError('INVALID_ARGS', 'Pass --from <goalId> to start a new autonomous run');
+    if (!startGoal) {
+      await releaseHeld();
+      throw new SpikeError('INVALID_ARGS', 'Pass --from <goalId> to start a new autonomous run');
+    }
 
     run = await auto.start({ fromGoal: startGoal, migrationAcceptedBaseline: acceptedBaseline });
     await store.appendEvent({

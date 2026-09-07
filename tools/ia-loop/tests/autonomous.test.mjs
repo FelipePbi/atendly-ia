@@ -619,3 +619,28 @@ test('a RUNNING run is never archived out from under itself', async () => {
     );
   });
 });
+
+// ===========================================================================
+// No exit path may leave the orchestrator lease behind
+// ===========================================================================
+
+test('every early exit after attach releases the loop lease', async () => {
+  // The real failure: a run that stopped for a human threw before its own try
+  // block, so attach()'s lease was never released. The next start was then
+  // refused by a lease nobody was holding — the loop locked out of itself.
+  // Source is inspected because the bug is in control flow, not in a value.
+  const source = await readFile(new URL('../run-auto.mjs', import.meta.url), 'utf8');
+  const lines = source.split('\n');
+  const attachLine = lines.findIndex((l) => l.includes('await auto.attach()'));
+  const tryLine = lines.findIndex((l, i) => i > attachLine && l.trim() === 'try {');
+  assert.ok(attachLine > 0 && tryLine > attachLine);
+
+  for (let i = attachLine; i < tryLine; i += 1) {
+    if (!lines[i].includes('throw new SpikeError')) continue;
+    const before = lines.slice(Math.max(attachLine, i - 4), i).join('\n');
+    assert.match(
+      before, /releaseHeld\(\)|releaseHeldIfMine\(/,
+      `run-auto.mjs:${i + 1} throws while the loop lease may be held, without releasing it`,
+    );
+  }
+});

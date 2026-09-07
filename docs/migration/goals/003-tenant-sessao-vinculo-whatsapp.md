@@ -1,6 +1,6 @@
 # Goal 003 — Tenant, sessão e vínculo WhatsApp
 
-**Status: READY.** Executor: Developer Agent (Claude Opus 5). Reviewer: Tech Lead Agent (Claude Fable 5.1), conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Rascunho de 2026-09-06 reconciliado em 2026-09-07, após [Goal002 ACCEPTED](../reviews/002-review.md#rodada-3) e seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
+**Status: ACCEPTED.** Aceito em 2026-09-07 na [rodada 2 do review003](../reviews/003-review.md); fechamento integrado como `588b70f575670eeda015750b400a09752ceb5490`. Texto original preservado abaixo. Executor: Developer Agent (Claude Opus 5). Reviewer: Tech Lead Agent (Claude Fable 5.1), conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Rascunho de 2026-09-06 reconciliado em 2026-09-07, após [Goal002 ACCEPTED](../reviews/002-review.md#rodada-3) e seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
 
 ## Baseline aceita
 

@@ -158,6 +158,8 @@ Astra obtém o SHA do novo HEAD, adota-o como baseline, reavalia o MASTER_PLAN d
 
 ## Histórico de planejamento
 
+v4 — 2026-09-07: reconciliação administrativa após Goal002 ACCEPTED na rodada 3. Política de workflow preservada em commit separado; fechamento002 em `1e874e2785d2bc78860db0eb571ea901a4395c17`, baseline aceita vigente. Roadmap reavaliado incrementalmente: sem evidência nova para alterar ordem, IDs ou escopo. Somente o rascunho Goal003 foi reconciliado e liberado READY após esse SHA, mantendo tenant/sessão/vínculo e G-35 antes do004. Nenhum Goal posterior gerado; sem nova revisão técnica ou implementação.
+
 v1 — 2026-09-05: plano inicial após consolidação factual. Goal001 escolhido pelo defeito confirmado de autorização; base de testes em002. Novas descobertas podem inserir/dividir/juntar/cancelar Goals com rastreabilidade. Nenhuma execução funcional iniciada por este documento.
 
 v3 — 2026-09-06: adotado o fechamento de Goal por commit do Astra, com baseline aceita vigente e proibição de criar o próximo Goal antes desse commit; DoD estendida e política de review incremental completada. Regra operacional a partir desta data, sem reescrever Goals já concluídos. Ver D-017.

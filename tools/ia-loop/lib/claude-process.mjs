@@ -99,12 +99,25 @@ export const AGENT_SCHEMA = {
  * session persistence. We deliberately do NOT use any permission-bypass flag —
  * the goal is an agent that cannot act, not one allowed to act unchecked.
  */
-export function buildArgs({ prompt, model, jsonSchema, sessionId }) {
+export function buildArgs({
+  prompt,
+  model,
+  jsonSchema,
+  sessionId,
+  // One-shot by default: the conversation is discarded when the process exits.
+  // Persistent sessions opt in, because `--no-session-persistence` is exactly
+  // what makes a conversation impossible to resume later.
+  persistSession = false,
+  resume = false,
+}) {
   if (!prompt) throw new SpikeError('INVALID_ARGS', 'prompt is required');
   if (!model) throw new SpikeError('INVALID_ARGS', 'model is required');
   if (!sessionId) throw new SpikeError('INVALID_ARGS', 'sessionId is required');
+  if (resume && !persistSession) {
+    throw new SpikeError('INVALID_ARGS', 'resume requires persistSession: a non-persisted session cannot be resumed');
+  }
 
-  return [
+  const args = [
     '--print', prompt,
     '--model', model,
     '--output-format', 'json',
@@ -116,10 +129,19 @@ export function buildArgs({ prompt, model, jsonSchema, sessionId }) {
     '--strict-mcp-config',
     '--disable-slash-commands',
     '--safe-mode',
-    '--no-session-persistence',
-    // A fresh session id per agent guarantees two independent conversations.
-    '--session-id', sessionId,
   ];
+
+  if (resume) {
+    // Resuming keeps the same session id, so the registry stays valid.
+    args.push('--resume', sessionId);
+  } else {
+    // A caller-chosen session id keeps agents in separate conversations.
+    args.push('--session-id', sessionId);
+  }
+
+  if (!persistSession) args.push('--no-session-persistence');
+
+  return args;
 }
 
 /**
@@ -374,6 +396,12 @@ export async function invokeAgent({
   env = process.env,
   spawnFn = spawn,
   sessionId = randomUUID(),
+  jsonSchema = AGENT_SCHEMA,
+  // Optional contract validator. Defaults to the Spike's role/ok assertion so
+  // existing callers keep their behaviour unchanged.
+  validatePayload = null,
+  persistSession = false,
+  resume = false,
 }) {
   const outcome = {
     requestedModel: model,
@@ -384,6 +412,7 @@ export async function invokeAgent({
     sessionId,
     available: false,
     structuredOutput: false,
+    payload: null,
     error: null,
   };
 
@@ -391,7 +420,7 @@ export async function invokeAgent({
   try {
     processResult = await runClaudeProcess({
       executable,
-      args: buildArgs({ prompt, model, jsonSchema: AGENT_SCHEMA, sessionId }),
+      args: buildArgs({ prompt, model, jsonSchema, sessionId, persistSession, resume }),
       cwd,
       timeoutMs,
       env,
@@ -453,7 +482,12 @@ export async function invokeAgent({
     outcome.available = true;
 
     const payload = extractAgentPayload(envelope);
-    assertAgentPayload(payload, { expectedRole });
+    if (validatePayload) {
+      validatePayload(payload);
+    } else {
+      assertAgentPayload(payload, { expectedRole });
+    }
+    outcome.payload = payload;
     outcome.structuredOutput = true;
   } catch (error) {
     outcome.error = toReportableError(error);

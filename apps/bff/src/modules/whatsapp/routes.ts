@@ -14,6 +14,14 @@ import {
   requireTenantContext,
 } from "../../lib/tenant-context.js";
 import { internalContext } from "../tenant/context.js";
+import {
+  findLinkedInstance,
+  type LinkedInstance,
+  requireLinkedInstance,
+  resolveInstanceCredential,
+  resolveLinkState,
+  sealedInstanceCredentialData,
+} from "./instance-link.js";
 
 const connectSchema = z
   .object({
@@ -36,14 +44,17 @@ export async function registerV1WhatsAppRoutes(
     { preHandler: requireTenantContext },
     async (request) => {
       const tenant = currentTenantContext(request);
-      const instance = await getPrisma().whatsAppInstance.findUnique({
-        where: { userId: tenant.userId },
-      });
+      const instance = await findLinkedInstance(tenant);
       if (!instance) return dataResponse(request, null);
-      const status = await evolution.getStatus(
-        instance.evolutionInstanceToken,
-        request.id,
-      );
+      const credential = await resolveInstanceCredential(instance);
+      // Caminho de transição: a migration da IA deixou todo vínculo já
+      // existente sem projeção da credencial, e antes disso só `connect` e
+      // `reconnect` reprovisionavam — ou seja, a recuperação dependia de cada
+      // dono reconectar o número na mão. A leitura de status reprojeta o
+      // segredo, que é idempotente do lado da IA, e assim o vínculo se
+      // restabelece sozinho na primeira vez que o negócio abre a tela.
+      await projectChannelCredential(request, instance, credential, ai);
+      const status = await evolution.getStatus(credential, request.id);
       const updated = await getPrisma().whatsAppInstance.update({
         where: { id: instance.id },
         data: {
@@ -75,17 +86,9 @@ export async function registerV1WhatsAppRoutes(
     { preHandler: requireTenantContext },
     async (request) => {
       const body = parseBody(connectSchema, request.body ?? {});
-      const tenant = currentTenantContext(request);
-      const instance = await getPrisma().whatsAppInstance.findUnique({
-        where: { userId: tenant.userId },
-      });
-      if (!instance) {
-        throw new AppError(
-          "NOT_FOUND",
-          "WhatsApp connection was not found.",
-          404,
-        );
-      }
+      const instance = await requireLinkedInstance(
+        currentTenantContext(request),
+      );
       return dataResponse(
         request,
         await connect(request, instance, body, evolution, ai),
@@ -93,18 +96,33 @@ export async function registerV1WhatsAppRoutes(
     },
   );
 
+  // Desconectar é também o caminho de resolução do vínculo pendente: a linha
+  // legada é do próprio usuário autenticado e nenhum outro negócio a reivindica,
+  // então o dono pode descartá-la aqui e conectar o número de novo. A
+  // divergência entre negócios continua fora do autoatendimento.
   app.delete(
     "/v1/whatsapp",
     { preHandler: requireTenantContext },
     async (request) => {
       const tenant = currentTenantContext(request);
-      const instance = await getPrisma().whatsAppInstance.findUnique({
-        where: { userId: tenant.userId },
-      });
-      if (!instance) return dataResponse(request, { disconnected: true });
-      await evolution
-        .logoutInstance(instance.evolutionInstanceToken, request.id)
-        .catch(() => null);
+      const state = await resolveLinkState(tenant);
+      if (state.kind === "divergent" || state.kind === "absent") {
+        // Recusa igual à das demais rotas: na divergência já haveria outro
+        // negócio no meio, e apagar seria decidir por ele.
+        if (state.kind === "divergent") await findLinkedInstance(tenant);
+        return dataResponse(request, { disconnected: true });
+      }
+
+      const instance = state.instance;
+      // Sem dono de negócio a credencial não é abrível — a cifra está ligada ao
+      // vínculo. O logout autenticado é pulado; a instância remota ainda é
+      // removida pela credencial administrativa.
+      if (state.kind === "linked") {
+        const credential = await resolveInstanceCredential(instance);
+        await evolution
+          .logoutInstance(credential, request.id)
+          .catch(() => null);
+      }
       await evolution
         .deleteInstance(
           instance.evolutionInstanceId ?? instance.evolutionInstanceName,
@@ -112,6 +130,12 @@ export async function registerV1WhatsAppRoutes(
         )
         .catch(() => null);
       await getPrisma().whatsAppInstance.delete({ where: { id: instance.id } });
+      if (state.kind === "pending") {
+        request.log.info(
+          { instanceId: instance.id },
+          "Pending WhatsApp link discarded by its own owner",
+        );
+      }
       return dataResponse(request, { disconnected: true });
     },
   );
@@ -121,11 +145,9 @@ async function ensureInstance(
   request: FastifyRequest,
   evolution: EvolutionClient,
   ai: AiOrchestratorClient,
-) {
+): Promise<LinkedInstance> {
   const tenant = currentTenantContext(request);
-  const existing = await getPrisma().whatsAppInstance.findUnique({
-    where: { userId: tenant.userId },
-  });
+  const existing = await findLinkedInstance(tenant);
   if (existing) {
     await provisionChannel(request, existing, ai);
     return existing;
@@ -144,13 +166,20 @@ async function ensureInstance(
     },
     request.id,
   );
+  const evolutionInstanceName = created.data?.name ?? name;
+  // O vínculo nasce com dono explícito e credencial já cifrada: nenhuma
+  // gravação nova depende do backfill nem guarda o token em texto puro.
   const instance = await getPrisma().whatsAppInstance.create({
     data: {
       userId: tenant.userId,
+      tenantId: tenant.tenantId,
       evolutionInstanceId: created.data?.id ?? created.data?.name ?? name,
-      evolutionInstanceName: created.data?.name ?? name,
-      evolutionInstanceToken: created.data?.token ?? token,
+      evolutionInstanceName,
       status: "CREATED",
+      ...sealedInstanceCredentialData(created.data?.token ?? token, {
+        tenantId: tenant.tenantId,
+        evolutionInstanceName,
+      }),
     },
   });
   await provisionChannel(request, instance, ai);
@@ -159,20 +188,15 @@ async function ensureInstance(
 
 async function connect(
   request: FastifyRequest,
-  instance: {
-    id: string;
-    evolutionInstanceId: string | null;
-    evolutionInstanceName: string;
-    evolutionInstanceToken: string;
-    phoneNumber: string | null;
-  },
+  instance: LinkedInstance,
   body: z.output<typeof connectSchema>,
   evolution: EvolutionClient,
   ai: AiOrchestratorClient,
 ) {
   await provisionChannel(request, instance, ai);
+  const credential = await resolveInstanceCredential(instance);
   await evolution.connectInstance(
-    instance.evolutionInstanceToken,
+    credential,
     evolution.webhookUrl(),
     request.id,
   );
@@ -185,11 +209,7 @@ async function connect(
         400,
       );
     }
-    const pairing = await evolution.pairInstance(
-      instance.evolutionInstanceToken,
-      phone,
-      request.id,
-    );
+    const pairing = await evolution.pairInstance(credential, phone, request.id);
     const updated = await getPrisma().whatsAppInstance.update({
       where: { id: instance.id },
       data: { status: "CONNECTING", phoneNumber: phone },
@@ -202,7 +222,7 @@ async function connect(
     };
   }
 
-  const qr = await evolution.getQr(instance.evolutionInstanceToken, request.id);
+  const qr = await evolution.getQr(credential, request.id);
   const updated = await getPrisma().whatsAppInstance.update({
     where: { id: instance.id },
     data: {
@@ -218,19 +238,50 @@ async function connect(
   };
 }
 
+/**
+ * Reprojeta a credencial da instância na IA, sem tocar na configuração do
+ * negócio.
+ *
+ * Falhar aqui não pode derrubar a leitura de status: a IA estar fora do ar não
+ * torna o número menos conectado. O erro é registrado e a próxima leitura tenta
+ * de novo.
+ */
+async function projectChannelCredential(
+  request: FastifyRequest,
+  instance: LinkedInstance,
+  credential: string,
+  ai: AiOrchestratorClient,
+): Promise<void> {
+  try {
+    await ai.provisionEvolutionChannel(internalContext(request), {
+      externalInstanceId:
+        instance.evolutionInstanceId ?? instance.evolutionInstanceName,
+      displayName: instance.evolutionInstanceName,
+      instanceCredential: credential,
+    });
+  } catch (error) {
+    request.log.warn(
+      { err: error instanceof Error ? error.name : "PROVISION_ERROR" },
+      "WhatsApp channel credential projection is pending for this business",
+    );
+  }
+}
+
 async function provisionChannel(
   request: FastifyRequest,
-  instance: {
-    evolutionInstanceId: string | null;
-    evolutionInstanceName: string;
-  },
+  instance: LinkedInstance,
   ai: AiOrchestratorClient,
 ): Promise<void> {
   const tenant = currentTenantContext(request);
+  // Projeção controlada da credencial: o BFF entrega o segredo à IA pelo canal
+  // interno autenticado com a credencial de provisionamento, e a IA a guarda
+  // cifrada no próprio vínculo. Depois disso a IA nunca precisa do token vindo
+  // do corpo de um webhook.
   await ai.provisionEvolutionChannel(internalContext(request), {
     externalInstanceId:
       instance.evolutionInstanceId ?? instance.evolutionInstanceName,
     displayName: instance.evolutionInstanceName,
+    instanceCredential: await resolveInstanceCredential(instance),
   });
   const [settings, businessProfile] = await Promise.all([
     getPrisma().aiSettings.upsert({

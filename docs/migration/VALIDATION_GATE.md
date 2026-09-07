@@ -16,7 +16,7 @@ git diff --check
 
 | Comando | Cobre | Não cobre |
 | --- | --- | --- |
-| `validate:core` | Builds de contracts, Scheduling, IA, BFF e frontend; `npm run check` do health-worker; suíte da IA; `go build`/`go vet`/`go test` do Evolution Go; testes dos próprios scripts de gate; auditoria estática | Qualquer escrita em banco. Nenhum passo abre conexão de banco |
+| `validate:core` | Builds de contracts, Scheduling, IA, BFF e frontend; `npm run check` do health-worker; suíte da IA; suíte do adapter HTTP do frontend; `go build`/`go vet`/`go test` do Evolution Go; testes dos próprios scripts de gate; auditoria estática | Qualquer escrita em banco. Nenhum passo abre conexão de banco |
 | `validate:integration` | Geração do client Prisma, migrations e o teste real de cadastro do BFF contra um PostgreSQL descartável | Todo o resto do produto; um único fluxo (`POST /v1/auth/register`) é exercitado |
 | `git diff --check` | Espaço em branco/conflito no diff | Correção do diff |
 
@@ -117,11 +117,28 @@ npm ci --prefix apps/bff
 BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_bff_test" npm run validate:integration
 ```
 
-São três passos, nesta ordem: `generate:bff-prisma-client` produz
-`apps/bff/src/generated/prisma`; `migrate:bff-test-database` aplica as
-migrations existentes (`prisma migrate deploy`) **somente** nesse banco; e
-`test:bff-integration` roda a suíte. Nada de `migrate reset` sobre URL
-herdada, e nenhuma migration é reescrita.
+São cinco passos, nesta ordem:
+
+1. `generate:bff-prisma-client` produz `apps/bff/src/generated/prisma`;
+2. `migrate:bff-test-database` aplica as migrations existentes
+   (`prisma migrate deploy`) **somente** nesse banco;
+3. `test:bff-integration` roda a suíte do BFF — cadastro/aceite legal, sessão
+   revogável com CSRF/origem e vínculo tenant/instância com credencial cifrada;
+4. `rehearse:goal003-link-migration` ensaia a migration de vínculo contra um
+   estoque legado sintético, em banco `<alvo>_rehearsal` recriado a cada
+   execução, e reconcilia as contagens;
+5. `provision:evolution-test-database` + `test:evolution-go-ownership` rodam o
+   ensaio de propriedade de metadados do Evolution Go em `<alvo>_evolution`.
+
+Nada de `migrate reset` sobre URL herdada, e nenhuma migration é reescrita.
+
+Os bancos dos passos 4 e 5 são derivados do alvo já validado — mesmo servidor
+descartável, nome próprio que preserva o marcador `test`. Não existe variável
+nova para configurar, e nenhum passo depende de banco pessoal.
+
+O runner também injeta chaves de cifra **sintéticas**
+(`WHATSAPP_CREDENTIAL_KEYS`, `CHANNEL_CREDENTIAL_KEYS`) para que selagem,
+abertura e rotação sejam exercitadas sem qualquer credencial real.
 
 ### Limpeza
 
@@ -154,7 +171,62 @@ alvo de banco recusado. `skipped` e `not_run` jamais viram `passed`.
 
 Packages sem suíte automatizada aparecem explicitamente como `skipped` em
 `validate:core`: `apps/bff` (só integração), `apps/scheduling-service`,
-`packages/contracts`, `apps/frontend` e `apps/health-worker`.
+`packages/contracts` e `apps/health-worker`.
+
+`apps/frontend` deixou de ser skip: o Goal003 acrescentou `test:frontend`
+(`vitest run`), que exercita o adapter HTTP contra o BFF — sessão e CSRF sem
+cookie jar compartilhado, com `fetch` injetado. Não abre banco nem rede, por
+isso pertence ao core.
+
+## Ordem de corte do Goal003
+
+Duas transições deste Goal têm consumidor e produtor em serviços diferentes.
+Nenhuma delas pode perder evento no meio do caminho, então a ordem abaixo é
+parte da entrega, não sugestão de operação.
+
+### Projeção cifrada da credencial de canal (BFF → IA)
+
+`20260907120000_goal003_channel_credential_projection` é aditiva e deixa todo
+`ChannelConnection` já existente com `credentialVersion` 0 e sem cipher. A
+ordem de corte é:
+
+1. **Consumer compatível primeiro.** O webhook da IA resolve a credencial de
+   forma **preguiçosa**, no momento do envio. Receber, mapear e persistir o
+   inbound não dependem da projeção: um vínculo em `credentialVersion` 0 grava
+   a mensagem do cliente normalmente e só falha ao responder, com
+   `CHANNEL_CREDENTIAL_NOT_PROVISIONED` registrado no log do webhook. Em
+   nenhuma hipótese o envio cai em `EVOLUTION_API_KEY`.
+2. **Migration aditiva.** Aplicada sem backfill; ninguém precisa dela para
+   receber mensagem.
+3. **Reprovisionamento sem reconexão manual.** Além de `POST /v1/whatsapp/connect`
+   e `POST /v1/whatsapp/reconnect`, agora `GET /v1/whatsapp` reprojeta a
+   credencial na IA. É idempotente e não altera o estado do número, então o
+   vínculo se restabelece na primeira vez que o negócio abre a tela de
+   WhatsApp — sem depender de cada dono reconectar o número. Falha de projeção
+   é registrada e não derruba a leitura de status.
+4. **Retirada de campos do produtor.** Não acontece neste Goal. Enquanto
+   existir vínculo em `credentialVersion` 0, o estado é observável pelo índice
+   `ChannelConnection_credentialVersion_idx`.
+
+Cobertura: `apps/ai-orchestrator/tests/security/webhook-credential-transition.test.ts`
+— inbound de vínculo em `credentialVersion` 0 é processado e persistido, o
+envio é recusado e nenhuma chamada sai ao transporte; depois de reprovisionado,
+o envio usa a credencial da instância e não a chave global.
+
+### Estados ambíguos do vínculo tenant/instância (BFF)
+
+O backfill deixa em pendência segura as linhas sem proveniência inequívoca.
+Dois estados, com caminhos de resolução diferentes:
+
+| Estado | Resolução | Quem executa |
+| --- | --- | --- |
+| Pendente (linha do próprio usuário, sem negócio dono) | `DELETE /v1/whatsapp` descarta o vínculo; em seguida `POST /v1/whatsapp/connect` cria um novo | o próprio dono, autenticado |
+| Divergente (duas linhas, ou dono de negócio ≠ dono de usuário) | nenhuma rota resolve: envolveria decidir por outro negócio | operação, caso a caso |
+
+A mensagem de erro do estado pendente cita a rota que resolve. Cobertura em
+`apps/bff/tests/tenant-instance-link.integration.test.ts`: descarte pelo dono
+seguido de novo vínculo, e recusa do descarte no estado divergente sem apagar
+nada.
 
 ## CI
 

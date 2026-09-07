@@ -79,6 +79,12 @@ model ChannelConnection {
   displayName        String?
   status             ChannelConnectionStatus @default(ACTIVE)
   metadata           Json?
+  /// Projecao cifrada da credencial da instancia, entregue pelo BFF no
+  /// provisionamento. Nula enquanto o vinculo nao foi reprovisionado.
+  credentialCipher   String?
+  credentialKeyId    String?
+  credentialVersion  Int                     @default(0)
+  credentialRotatedAt DateTime?
   createdAt          DateTime                @default(now())
   updatedAt          DateTime                @updatedAt
 

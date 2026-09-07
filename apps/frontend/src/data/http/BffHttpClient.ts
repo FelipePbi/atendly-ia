@@ -20,6 +20,7 @@ type QueryValue = QueryScalar | readonly QueryScalar[] | null | undefined;
 
 export interface BffHttpClientOptions {
   baseUrl: string;
+  csrfCookieName?: string;
   csrfHeaderName?: string;
   getCsrfToken?: () => string | undefined;
   fetchImplementation?: typeof fetch;
@@ -58,18 +59,44 @@ export class BffHttpError extends Error {
   }
 }
 
+/**
+ * Adapter HTTP do frontend contra o BFF.
+ *
+ * Sobre o token de CSRF: a Atendly publica frontend e BFF em hosts distintos,
+ * sob um sufixo público, e o cookie legível `atendly_csrf` é gravado no host do
+ * BFF. `document.cookie` do frontend nunca enxerga esse cookie, então lê-lo não
+ * funciona no ambiente publicado — só em desenvolvimento, onde os dois estão em
+ * `localhost`. Por isso o canal primário aqui é o header `x-csrf-token` da
+ * resposta, exposto pelo CORS apenas para a origem permitida: o adapter guarda
+ * o valor **em memória** e o reenvia na mutação seguinte. O cookie continua
+ * sendo lido como segunda opção, para o caso mesma origem.
+ *
+ * O token não autoriza nada sozinho: o par esperado fica no servidor, ligado à
+ * sessão, e é lá que a comparação acontece.
+ */
 export class BffHttpClient {
   private readonly baseUrl: URL;
   private readonly csrfHeaderName: string;
   private readonly fetchImplementation: typeof fetch;
-  private readonly getCsrfToken?: () => string | undefined;
+  private readonly getCsrfToken: () => string | undefined;
+  private csrfToken: string | undefined;
 
   constructor(options: BffHttpClientOptions) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
     this.csrfHeaderName = options.csrfHeaderName ?? "x-csrf-token";
     this.fetchImplementation =
       options.fetchImplementation ?? globalThis.fetch.bind(globalThis);
-    this.getCsrfToken = options.getCsrfToken;
+    const cookieName = options.csrfCookieName ?? "atendly_csrf";
+    this.getCsrfToken =
+      options.getCsrfToken ?? (() => this.csrfToken ?? readCookie(cookieName));
+  }
+
+  /**
+   * Descarta o token guardado. Usado no logout: a sessão foi revogada no
+   * servidor e o token dela não vale mais para nada.
+   */
+  resetCsrfToken(): void {
+    this.csrfToken = undefined;
   }
 
   async request<TSchema extends z.ZodType>(
@@ -86,7 +113,7 @@ export class BffHttpClient {
     }
 
     if (!isSafeMethod(method)) {
-      const csrfToken = this.getCsrfToken?.();
+      const csrfToken = this.getCsrfToken();
       if (csrfToken) headers.set(this.csrfHeaderName, csrfToken);
     }
 
@@ -123,6 +150,12 @@ export class BffHttpClient {
         status: 0,
       });
     }
+
+    // Antes de qualquer decisão sobre o status: toda resposta autenticada por
+    // cookie carrega o token vigente, inclusive as de erro. É assim que o
+    // adapter se recupera de um reload — e de um 403 por token defasado.
+    const issuedCsrfToken = response.headers.get(this.csrfHeaderName);
+    if (issuedCsrfToken) this.csrfToken = issuedCsrfToken;
 
     const responseRequestId = response.headers.get("x-request-id") ?? requestId;
     const payload = await parseJson(response, responseRequestId);
@@ -241,4 +274,17 @@ function isAbortError(error: unknown): boolean {
 
 function isSafeMethod(method: HttpMethod): boolean {
   return method === "GET";
+}
+
+function readCookie(name: string): string | undefined {
+  if (typeof document === "undefined") return undefined;
+
+  const prefix = `${name}=`;
+  for (const part of document.cookie.split(";")) {
+    const entry = part.trim();
+    if (!entry.startsWith(prefix)) continue;
+    const value = decodeURIComponent(entry.slice(prefix.length));
+    return value || undefined;
+  }
+  return undefined;
 }

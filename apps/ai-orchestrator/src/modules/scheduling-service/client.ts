@@ -3,6 +3,10 @@ import { z } from "zod";
 import { env } from "../../config/env.js";
 import { addDays, todayInTimeZone } from "../../lib/dates.js";
 import { AppError } from "../../lib/errors.js";
+import {
+  CALLER_ID,
+  deriveInternalToken,
+} from "../../lib/internal-credentials.js";
 import type { BusinessContext } from "../tenant-config/business-context.js";
 import type {
   RescheduleAppointmentInput,
@@ -234,7 +238,10 @@ export class SchedulingClient implements SchedulingGateway {
       method: options.method ?? "GET",
       headers: {
         accept: "application/json",
-        authorization: `Bearer ${env.INTERNAL_SERVICE_TOKEN}`,
+        // Credencial própria deste chamador/uso, distinta da que o BFF
+        // apresenta e da que a IA aceita nas rotas internas.
+        authorization: `Bearer ${schedulingCommandToken()}`,
+        "x-service-audience": "scheduling-service",
         "x-tenant-id": context.tenantId,
         "x-user-id": context.userId,
         "x-request-id": context.requestId,
@@ -283,13 +290,26 @@ function requireContext(
       code: "SCHEDULING_CONTEXT_REQUIRED",
     });
   }
-  if (!env.INTERNAL_SERVICE_TOKEN) {
+  if (!schedulingCommandToken()) {
     throw new AppError("Scheduling Service authentication is not configured.", {
       statusCode: 500,
       code: "SCHEDULING_AUTH_NOT_CONFIGURED",
     });
   }
   return context;
+}
+
+function schedulingCommandToken(): string {
+  if (env.SCHEDULING_SERVICE_COMMAND_TOKEN) {
+    return env.SCHEDULING_SERVICE_COMMAND_TOKEN;
+  }
+  if (!env.INTERNAL_SERVICE_TOKEN) return "";
+  return deriveInternalToken(
+    env.INTERNAL_SERVICE_TOKEN,
+    CALLER_ID,
+    "scheduling-service",
+    "command",
+  );
 }
 
 function toService(

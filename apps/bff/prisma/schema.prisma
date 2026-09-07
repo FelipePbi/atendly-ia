@@ -38,6 +38,26 @@ model User {
   legalAcceptances    LegalAcceptance[]
   passwordResetTokens PasswordResetToken[]
   tenantMemberships   TenantMember[]
+  sessions            UserSession[]
+}
+
+/// Identidade de sessão revogável consultada a cada autenticação. O JWT carrega
+/// apenas o `sid`; expiração, revogação e o segredo de CSRF vivem aqui, de modo
+/// que logout e troca de senha invalidam cookie e Bearer no servidor.
+model UserSession {
+  id            String    @id @default(cuid())
+  userId        String
+  csrfTokenHash String
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime
+  lastUsedAt    DateTime?
+  revokedAt     DateTime?
+  revokedReason String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
 }
 
 model PasswordResetToken {
@@ -59,9 +79,10 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  members         TenantMember[]
-  businessProfile BusinessProfile?
-  aiSettings      AiSettings?
+  members          TenantMember[]
+  businessProfile  BusinessProfile?
+  aiSettings       AiSettings?
+  whatsappInstance WhatsAppInstance?
 }
 
 model TenantMember {
@@ -107,11 +128,19 @@ model LegalAcceptance {
 }
 
 model WhatsAppInstance {
-  id                     String                 @id @default(cuid())
-  userId                 String                 @unique
+  id     String @id @default(cuid())
+  userId String @unique
+  /// Dono de negócio do vínculo. Nulo apenas para estoque legado cuja
+  /// proveniência ficou ambígua na migração: essas linhas não autorizam uso.
+  tenantId String? @unique
   evolutionInstanceId    String?
   evolutionInstanceName  String                 @unique
+  /// Envelope cifrado `v1.<keyId>.<iv>.<ct>` a partir de credentialVersion >= 1.
+  /// credentialVersion 0 identifica o estoque legado ainda em texto puro.
   evolutionInstanceToken String
+  credentialKeyId        String?
+  credentialVersion      Int                    @default(0)
+  credentialRotatedAt    DateTime?
   phoneNumber            String?
   status                 WhatsAppInstanceStatus @default(CREATED)
   qrcode                 String?
@@ -120,10 +149,12 @@ model WhatsAppInstance {
   createdAt              DateTime               @default(now())
   updatedAt              DateTime               @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([evolutionInstanceId])
   @@index([status])
+  @@index([credentialVersion])
 }
 
 model AiSettings {

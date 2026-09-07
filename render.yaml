@@ -68,6 +68,13 @@ services:
           type: web
           name: atendly-ia-ai-orchestrator
           envVarKey: INTERNAL_SERVICE_TOKEN
+      # Cifra da credencial da instancia WhatsApp. Formato exigido:
+      # "<keyId>:<chave base64 de exatamente 32 bytes>", separadas por virgula.
+      # Nao usar generateValue: o valor precisa decodificar em 32 bytes.
+      - key: WHATSAPP_CREDENTIAL_KEYS
+        sync: false
+      - key: WHATSAPP_CREDENTIAL_ACTIVE_KEY_ID
+        sync: false
 
   - type: web
     name: atendly-ia-ai-orchestrator
@@ -105,6 +112,12 @@ services:
           type: web
           name: atendly-ia-evolution-go
           envVarKey: GLOBAL_API_KEY
+      # Cifra da projecao da credencial de instancia recebida do BFF. Material
+      # proprio da IA, mesmo formato de "<keyId>:<base64 de 32 bytes>".
+      - key: CHANNEL_CREDENTIAL_KEYS
+        sync: false
+      - key: CHANNEL_CREDENTIAL_ACTIVE_KEY_ID
+        sync: false
       - key: SCHEDULING_SERVICE_BASE_URL
         value: https://atendly-ia-scheduling-service.onrender.com
 

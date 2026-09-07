@@ -6,7 +6,7 @@ Documentação completa dos endpoints para gerenciar instâncias WhatsApp.
 
 Uma **instância** representa uma conexão individual com o WhatsApp. Cada instância mantém sua própria sessão, autenticação e configurações independentes.
 
-**Importante**: A maioria das rotas identifica a instância automaticamente através do header `apikey` (token da instância). Apenas rotas administrativas usam `:instanceId` na URL e exigem a `GLOBAL_API_KEY` configurada no ambiente.
+**Importante**: A maioria das rotas identifica a instância automaticamente através do header `apikey` (token da instância). Ter `:instanceId` na URL **não** significa que a rota seja administrativa: as rotas administrativas exigem a `GLOBAL_API_KEY`, enquanto `/instance/:instanceId/advanced-settings` usa o token da própria instância e só autoriza o próprio alvo. Consulte a lista abaixo para saber qual credencial cada rota espera.
 
 ## Endpoints Disponíveis
 
@@ -30,6 +30,8 @@ Uma **instância** representa uma conexão individual com o WhatsApp. Cada inst�
 - `DELETE /instance/proxy/:instanceId` - Remover proxy
 - `POST /instance/forcereconnect/:instanceId` - Forçar reconexão
 - `GET /instance/logs/:instanceId` - Obter logs
+
+### Configurações Avançadas (usa token da instância, só o próprio alvo)
 - `GET /instance/:instanceId/advanced-settings` - Configurações avançadas
 - `PUT /instance/:instanceId/advanced-settings` - Atualizar configurações
 
@@ -696,13 +698,12 @@ apikey: TOKEN-DA-INSTANCIA
 ### Resposta (200)
 ```json
 {
-  "rejectCall": false,
-  "msgCall": "Não estou disponível para chamadas",
-  "groupsIgnore": true,
   "alwaysOnline": false,
+  "rejectCall": false,
+  "msgRejectCall": "Não estou disponível para chamadas",
   "readMessages": false,
-  "readStatus": false,
-  "syncFullHistory": false
+  "ignoreGroups": true,
+  "ignoreStatus": false
 }
 ```
 
@@ -721,13 +722,12 @@ apikey: TOKEN-DA-INSTANCIA
 ### Body
 ```json
 {
-  "rejectCall": true,
-  "msgCall": "Por favor, envie mensagem",
-  "groupsIgnore": false,
   "alwaysOnline": true,
+  "rejectCall": true,
+  "msgRejectCall": "Por favor, envie mensagem",
   "readMessages": true,
-  "readStatus": true,
-  "syncFullHistory": false
+  "ignoreGroups": false,
+  "ignoreStatus": true
 }
 ```
 

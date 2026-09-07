@@ -158,8 +158,10 @@ func (i *instanceRepository) Delete(instanceId string) error {
 			return fmt.Errorf("erro ao deletar labels: %v", err)
 		}
 
-		// Deleta todas as mensagens associadas à instância
-		if err := tx.Where("source = ?", instanceId).Delete(&message_model.Message{}).Error; err != nil {
+		// Deleta todas as mensagens associadas à instância. O filtro é o dono
+		// (instance_id); `source` guarda o telefone do chat e nunca identificou
+		// a instância, então a limpeza anterior não removia nada.
+		if err := tx.Where("instance_id = ?", instanceId).Delete(&message_model.Message{}).Error; err != nil {
 			return fmt.Errorf("erro ao deletar mensagens: %v", err)
 		}
 

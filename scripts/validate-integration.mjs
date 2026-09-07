@@ -167,6 +167,23 @@ function loadDriverParser() {
   }
 }
 
+// Banco próprio do ensaio do Evolution Go, no mesmo servidor descartável já
+// validado. O sufixo mantém "test" no nome, então o alvo continua reconhecível
+// como descartável por quem o consome.
+export function evolutionTargetUrl(target) {
+  const url = new URL(target.url);
+  url.pathname = `/${encodeURIComponent(`${target.database}_evolution`)}`;
+  return url.toString();
+}
+
+// Chave de cifra sintética, fixa e pública por definição: existe apenas para
+// que a suíte exercite selagem, abertura e rotação. Nenhuma credencial real
+// entra aqui, e o valor jamais é usado fora do gate.
+const SYNTHETIC_CREDENTIAL_KEY =
+  "aW50ZWdyYXRpb24tb25seS1rZXktMDAwMS0zMmJ5dGU=";
+const SYNTHETIC_CREDENTIAL_KEY_NEXT =
+  "aW50ZWdyYXRpb24tb25seS1rZXktMDAwMi0zMmJ5dGU=";
+
 // Segredos sintéticos: a suíte não deve herdar credenciais reais do shell nem
 // alcançar serviços externos.
 function childEnvironment(target) {
@@ -175,11 +192,16 @@ function childEnvironment(target) {
     DATABASE_URL: target.url,
     DIRECT_DATABASE_URL: target.url,
     BFF_TEST_DATABASE_URL: target.url,
+    EVOLUTION_TEST_DATABASE_URL: evolutionTargetUrl(target),
     BFF_RUN_INTEGRATION_TESTS: "true",
     JWT_SECRET: "integration-only-secret-with-at-least-32-characters",
     INTERNAL_SERVICE_TOKEN: "integration-only-internal-token",
     EVOLUTION_GO_API_KEY: "integration-only-evolution-key",
     EVOLUTION_WEBHOOK_SECRET: "integration-only-webhook-secret",
+    WHATSAPP_CREDENTIAL_KEYS: `v1:${SYNTHETIC_CREDENTIAL_KEY},v2:${SYNTHETIC_CREDENTIAL_KEY_NEXT}`,
+    WHATSAPP_CREDENTIAL_ACTIVE_KEY_ID: "v1",
+    CHANNEL_CREDENTIAL_KEYS: `v1:${SYNTHETIC_CREDENTIAL_KEY},v2:${SYNTHETIC_CREDENTIAL_KEY_NEXT}`,
+    CHANNEL_CREDENTIAL_ACTIVE_KEY_ID: "v1",
     PASSWORD_RESET_DELIVERY_URL: "",
     PASSWORD_RESET_DELIVERY_TOKEN: "",
   };
@@ -209,6 +231,33 @@ export function integrationSteps(target) {
       cwd: "apps/bff",
       command: "npx",
       args: ["vitest", "run"],
+      env,
+    },
+    // Gate M0: ensaio da migration de vínculo contra estoque legado, em banco
+    // próprio e descartável. Contagens sanitizadas, sem credencial na saída.
+    {
+      name: "rehearse:goal003-link-migration",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal003-migration-rehearsal.mjs"],
+      env,
+    },
+    // Ensaio de propriedade de metadados do Evolution Go. Usa o mesmo servidor
+    // descartável, em banco próprio derivado do alvo já validado: nenhuma
+    // variável nova precisa ser configurada, e o gate não fica dependente de
+    // banco pessoal.
+    {
+      name: "provision:evolution-test-database",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/provision-evolution-test-database.mjs"],
+      env,
+    },
+    {
+      name: "test:evolution-go-ownership",
+      cwd: "apps/evolution-go",
+      command: "go",
+      args: ["test", "-count=1", "./pkg/message/..."],
       env,
     },
   ];

@@ -29,6 +29,9 @@ export const coreSteps = [
   npm("apps/health-worker", "check:health-worker", "run", "check"),
 
   npm("apps/ai-orchestrator", "test:ai-orchestrator", "test"),
+  // Adapter HTTP do frontend: sessão/CSRF sem cookie jar compartilhado. Não
+  // abre banco nem rede, então pertence ao core.
+  npm("apps/frontend", "test:frontend", "test"),
 
   {
     name: "build:evolution-go",
@@ -77,11 +80,6 @@ export const coreSteps = [
   {
     name: "test:contracts",
     cwd: "packages/contracts",
-    skip: "package has no automated test suite",
-  },
-  {
-    name: "test:frontend",
-    cwd: "apps/frontend",
     skip: "package has no automated test suite",
   },
   {

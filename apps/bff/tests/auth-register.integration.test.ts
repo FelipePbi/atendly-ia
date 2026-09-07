@@ -93,6 +93,8 @@ describe.skipIf(!runIntegration)("auth registration persistence", () => {
     const response = await app.inject({
       method: "POST",
       url: "/v1/auth/register",
+      // Cadastro é mutação: a origem passou a ser exigida.
+      headers: { origin: env.FRONTEND_ORIGIN },
       payload: {
         email,
         password: "Integration-only-123",

@@ -27,7 +27,11 @@ const envSchema = z.object({
   NODE_ENV: stringEnv("development"),
   PORT: intEnv(3003),
   DATABASE_URL: stringEnv(),
+  // Raiz da derivação das credenciais internas quando não há valor explícito
+  // por chamador. O valor bruto não é aceito como credencial.
   INTERNAL_SERVICE_TOKEN: serviceTokenEnv(),
+  BFF_COMMAND_TOKEN: serviceTokenEnv(),
+  AI_ORCHESTRATOR_COMMAND_TOKEN: serviceTokenEnv(),
   INTEGRATION_CREDENTIALS_KEY: stringEnv(),
 });
 
@@ -38,9 +42,11 @@ if (env.NODE_ENV === "production") {
     throw new Error("DATABASE_URL must be configured in production.");
   }
 
-  if (env.INTERNAL_SERVICE_TOKEN.length < 32) {
+  const hasExplicitClientTokens =
+    Boolean(env.BFF_COMMAND_TOKEN) && Boolean(env.AI_ORCHESTRATOR_COMMAND_TOKEN);
+  if (!hasExplicitClientTokens && env.INTERNAL_SERVICE_TOKEN.length < 32) {
     throw new Error(
-      "INTERNAL_SERVICE_TOKEN must contain at least 32 characters in production.",
+      "INTERNAL_SERVICE_TOKEN must contain at least 32 characters in production when per-caller tokens are not configured.",
     );
   }
 

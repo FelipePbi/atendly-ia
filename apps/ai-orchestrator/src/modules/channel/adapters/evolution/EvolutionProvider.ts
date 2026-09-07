@@ -14,17 +14,33 @@ import type {
 } from "../../ports/WhatsAppProvider.js";
 import type { EvolutionSendTextResponse } from "./EvolutionTypes.js";
 
+/**
+ * Credencial da instância, já resolvida ou resolvível sob demanda.
+ *
+ * A forma de função existe para o inbound: resolver a credencial só no momento
+ * do envio mantém a recepção independente do estado da projeção. Um vínculo
+ * ainda não reprovisionado faz falhar a resposta, não a persistência da
+ * mensagem que o cliente mandou.
+ */
+export type EvolutionInstanceCredential = string | (() => string);
+
 export class EvolutionProvider implements WhatsAppProvider {
   constructor(
     private readonly logger: DiagnosticLogger = noopDiagnosticLogger,
-    private readonly instanceTokenOverride?: string,
+    private readonly instanceToken?: EvolutionInstanceCredential,
     private readonly instanceIdOverride?: string,
   ) {}
 
   async sendText(input: SendTextInput): Promise<SendTextResult> {
     requireEnv(["EVOLUTION_BASE_URL"]);
     const instanceId = this.instanceIdOverride;
-    const apiKey = this.instanceTokenOverride || env.EVOLUTION_API_KEY;
+    // Sem queda para EVOLUTION_API_KEY: a chave global não substitui a
+    // credencial da instância. Sem credencial resolvida pelo vínculo, o envio
+    // falha em vez de sair assinado por outra identidade.
+    const apiKey =
+      typeof this.instanceToken === "function"
+        ? this.instanceToken()
+        : this.instanceToken;
     if (!instanceId || !apiKey) {
       throw new AppError("Evolution channel credentials are not configured.", {
         statusCode: 500,
@@ -70,7 +86,7 @@ export class EvolutionProvider implements WhatsAppProvider {
         {
           statusCode: response.status,
           code: "EVOLUTION_SEND_FAILED",
-          details: raw,
+          details: redactSensitive(raw),
         },
       );
     }
@@ -90,7 +106,8 @@ export class EvolutionProvider implements WhatsAppProvider {
     return {
       provider: "evolution-go",
       messageId,
-      raw,
+      // `raw` é persistido em Message.rawPayload; sai daqui já sem segredo.
+      raw: redactSensitive(raw),
     };
   }
 }

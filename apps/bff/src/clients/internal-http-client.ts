@@ -1,7 +1,12 @@
 import type { z } from "zod";
 
-import { env, requireEnv } from "../config/env.js";
+import { env } from "../config/env.js";
 import { AppError } from "../lib/errors.js";
+import {
+  type InternalAudience,
+  internalToken,
+  type InternalUse,
+} from "../lib/internal-credentials.js";
 
 export interface InternalRequestContext {
   tenantId: string;
@@ -18,6 +23,13 @@ export class InternalHttpClient {
     private readonly authMode: "internal" | "custom" = "internal",
   ) {}
 
+  // `x-service-audience` continua sendo informação de roteamento/observação; a
+  // autorização vem da credencial escolhida por (audiência, uso), distinta para
+  // provisionamento e para comando comum.
+  private credential(use: InternalUse): string {
+    return internalToken(this.audience as InternalAudience, use);
+  }
+
   async request<T>(input: {
     method: HttpMethod;
     path: string;
@@ -28,6 +40,7 @@ export class InternalHttpClient {
     idempotencyKey?: string;
     headers?: Record<string, string>;
     requestId?: string;
+    use?: InternalUse;
   }): Promise<T> {
     const attempts =
       input.method === "GET" ? env.INTERNAL_HTTP_GET_RETRIES + 1 : 1;
@@ -56,6 +69,7 @@ export class InternalHttpClient {
     idempotencyKey?: string;
     headers?: Record<string, string>;
     requestId?: string;
+    use?: InternalUse;
   }): Promise<T> {
     const url = new URL(input.path, normalizedBaseUrl(this.baseUrl));
     for (const [key, value] of Object.entries(input.query ?? {})) {
@@ -75,7 +89,7 @@ export class InternalHttpClient {
           "x-service-audience": this.audience,
           ...(this.authMode === "internal"
             ? {
-                authorization: `Bearer ${requireEnv("INTERNAL_SERVICE_TOKEN")}`,
+                authorization: `Bearer ${this.credential(input.use ?? "command")}`,
               }
             : {}),
           ...(input.context

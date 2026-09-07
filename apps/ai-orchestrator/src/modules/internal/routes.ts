@@ -7,6 +7,10 @@ import { env } from "../../config/env.js";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import { startOfTodayInTimeZone } from "../../lib/dates.js";
 import { AppError } from "../../lib/errors.js";
+import {
+  authorizeInternalRequest,
+  type InternalScope,
+} from "../../lib/internal-credentials.js";
 import { EvolutionProvider } from "../channel/adapters/evolution/EvolutionProvider.js";
 import { ChannelConnectionService } from "../channel/ChannelConnectionService.js";
 import { BOT_OFF_PAUSE_UNTIL } from "../handoff/HandoffService.js";
@@ -18,6 +22,9 @@ import {
 const provisionChannelSchema = z.object({
   externalInstanceId: z.string().min(1),
   displayName: z.string().min(1).optional(),
+  // Projeção da credencial entregue pelo BFF na mesma chamada de
+  // provisionamento, sob a credencial interna de provisionamento.
+  instanceCredential: z.string().min(16).max(512),
 });
 
 const aiTenantConfigSchema = z.object({
@@ -38,7 +45,10 @@ const conversationQuerySchema = z.object({
 
 const sendOwnerMessageSchema = z.object({
   text: z.string().trim().min(1).max(4_000),
-  instanceToken: z.string().min(16).max(512),
+  // Aceito e ignorado durante a troca de produtor: o consumer compatível entra
+  // primeiro, o BFF para de enviar em seguida. O valor nunca é usado como
+  // credencial — quem resolve o envio é o vínculo.
+  instanceToken: z.string().min(16).max(512).optional(),
 });
 
 export async function registerInternalRoutes(
@@ -47,15 +57,16 @@ export async function registerInternalRoutes(
 ): Promise<void> {
   const channelConnections = new ChannelConnectionService(prisma);
 
-  app.addHook("preHandler", async (request, reply) => {
+  // Autorização por escopo, com negação por omissão: um caminho `/internal/`
+  // sem escopo declarado no mapa abaixo é recusado, então rota nova não nasce
+  // aberta por esquecimento. A recusa acontece antes de qualquer efeito.
+  app.addHook("preHandler", async (request) => {
     if (!request.url.startsWith("/internal/")) return;
-    if (!isAuthorized(request)) {
-      return reply.code(401).send({ ok: false, error: "Unauthorized" });
-    }
+    authorizeInternalRequest(request, requiredScope(request));
   });
 
   app.put("/internal/channel-connections/evolution", async (request, reply) => {
-    const context = await trustedTenantContext(prisma, request, true);
+    const context = trustedTenantContext(request);
     const parsed = provisionChannelSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ ok: false, error: parsed.error.flatten() });
@@ -78,7 +89,7 @@ export async function registerInternalRoutes(
   });
 
   app.put("/internal/ai-tenant-config", async (request, reply) => {
-    const context = await trustedTenantContext(prisma, request, true);
+    const context = trustedTenantContext(request);
     const parsed = aiTenantConfigSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ ok: false, error: parsed.error.flatten() });
@@ -103,7 +114,7 @@ export async function registerInternalRoutes(
   });
 
   app.get("/internal/conversations", async (request) => {
-    const { tenantId } = await trustedTenantContext(prisma, request, true);
+    const { tenantId } = trustedTenantContext(request);
     const query = parseOrThrow(conversationQuerySchema, request.query);
     const conversations = await prisma.conversation.findMany({
       where: {
@@ -139,7 +150,7 @@ export async function registerInternalRoutes(
   });
 
   app.get("/internal/conversations/:id", async (request) => {
-    const { tenantId } = await trustedTenantContext(prisma, request, true);
+    const { tenantId } = trustedTenantContext(request);
     const { id } = parseOrThrow(conversationParamsSchema, request.params);
     return internalData(
       request,
@@ -148,7 +159,7 @@ export async function registerInternalRoutes(
   });
 
   app.get("/internal/conversations/:id/messages", async (request) => {
-    const { tenantId } = await trustedTenantContext(prisma, request, true);
+    const { tenantId } = trustedTenantContext(request);
     const { id } = parseOrThrow(conversationParamsSchema, request.params);
     await requireConversation(prisma, tenantId, id);
     const messages = await prisma.message.findMany({
@@ -160,7 +171,7 @@ export async function registerInternalRoutes(
   });
 
   app.post("/internal/conversations/:id/messages", async (request, reply) => {
-    const { tenantId } = await trustedTenantContext(prisma, request, true);
+    const { tenantId } = trustedTenantContext(request);
     const { id } = parseOrThrow(conversationParamsSchema, request.params);
     const body = parseOrThrow(sendOwnerMessageSchema, request.body);
     const conversation = await requireConversation(prisma, tenantId, id);
@@ -185,11 +196,15 @@ export async function registerInternalRoutes(
       },
     });
 
+    const credential = channelConnections.resolveChannelCredential(
+      conversation.channel,
+    );
+
     let sent;
     try {
       sent = await new EvolutionProvider(
         app.log,
-        body.instanceToken,
+        credential,
         conversation.channel.externalInstanceId,
       ).sendText({
         to: contactNumber(conversation.externalContactId),
@@ -216,7 +231,7 @@ export async function registerInternalRoutes(
   });
 
   app.post("/internal/conversations/:id/takeover", async (request) => {
-    const { tenantId } = await trustedTenantContext(prisma, request, true);
+    const { tenantId } = trustedTenantContext(request);
     const { id } = parseOrThrow(conversationParamsSchema, request.params);
     const conversation = await requireConversation(prisma, tenantId, id);
     const existingOwnerTakeover = await prisma.handoff.findFirst({
@@ -250,7 +265,7 @@ export async function registerInternalRoutes(
   });
 
   app.post("/internal/conversations/:id/release", async (request) => {
-    const { tenantId } = await trustedTenantContext(prisma, request, true);
+    const { tenantId } = trustedTenantContext(request);
     const { id } = parseOrThrow(conversationParamsSchema, request.params);
     await requireConversation(prisma, tenantId, id);
     await resolveConversationHandoffs(prisma, tenantId, id);
@@ -265,7 +280,7 @@ export async function registerInternalRoutes(
   });
 
   app.post("/internal/conversations/:id/resolve", async (request) => {
-    const { tenantId } = await trustedTenantContext(prisma, request, true);
+    const { tenantId } = trustedTenantContext(request);
     const { id } = parseOrThrow(conversationParamsSchema, request.params);
     await requireConversation(prisma, tenantId, id);
     await resolveConversationHandoffs(prisma, tenantId, id);
@@ -280,7 +295,7 @@ export async function registerInternalRoutes(
   });
 
   app.get("/internal/dashboard", async (request) => {
-    const { tenantId } = await trustedTenantContext(prisma, request, true);
+    const { tenantId } = trustedTenantContext(request);
     const tenantConfig = await prisma.aiTenantConfig.findUnique({
       where: { tenantId },
       select: { settings: true },
@@ -452,32 +467,21 @@ function jsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
 }
 
-async function trustedTenantContext(
-  prisma: PrismaClient,
-  request: FastifyRequest,
-  requireExplicitTenant = false,
-): Promise<{
+/**
+ * Contexto de negócio recebido de chamador interno já autenticado.
+ *
+ * Os headers não autenticam: eles só são lidos depois de a credencial ter sido
+ * verificada e o escopo concedido. O tenant precisa vir explícito — não existe
+ * mais a inferência pela primeira associação ativa do usuário, que escolhia um
+ * dono quando a associação era ambígua.
+ */
+function trustedTenantContext(request: FastifyRequest): {
   tenantId: string;
   userId: string;
-}> {
-  let tenantId = stringHeader(request.headers["x-tenant-id"]);
+} {
+  const tenantId = stringHeader(request.headers["x-tenant-id"]);
   const userId = stringHeader(request.headers["x-user-id"]);
-  if (!userId) {
-    throw new AppError("Trusted tenant context is required.", {
-      statusCode: 400,
-      code: "TENANT_CONTEXT_REQUIRED",
-    });
-  }
-  if (!tenantId && !requireExplicitTenant) {
-    tenantId = (
-      await prisma.channelConnection.findFirst({
-        where: { userId, status: "ACTIVE" },
-        select: { tenantId: true },
-        orderBy: { createdAt: "asc" },
-      })
-    )?.tenantId;
-  }
-  if (!tenantId) {
+  if (!tenantId || !userId) {
     throw new AppError("Trusted tenant context is required.", {
       statusCode: 400,
       code: "TENANT_CONTEXT_REQUIRED",
@@ -492,9 +496,34 @@ function stringHeader(
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function isAuthorized(request: FastifyRequest): boolean {
-  const token = env.INTERNAL_SERVICE_TOKEN;
-  if (!token) return false;
-  const authorization = request.headers.authorization;
-  return authorization === `Bearer ${token}`;
+/**
+ * Escopo exigido por operação interna.
+ *
+ * Provisionamento e comando comum são credenciais distintas: a credencial de
+ * provisionamento não lista os escopos de conversa, e a de comando não lista
+ * `channel:provision` nem `tenant-config:write`. Caminho sem escopo declarado
+ * cai em `internal:unmapped`, que nenhuma credencial possui.
+ */
+export function requiredScope(request: FastifyRequest): InternalScope {
+  const path = request.url.split("?")[0] ?? "";
+  const method = request.method.toUpperCase();
+
+  if (path === "/internal/channel-connections/evolution" && method === "PUT") {
+    return "channel:provision";
+  }
+  if (path === "/internal/ai-tenant-config" && method === "PUT") {
+    return "tenant-config:write";
+  }
+  if (path === "/internal/dashboard" && method === "GET") {
+    return "dashboard:read";
+  }
+  if (path.startsWith("/internal/conversations")) {
+    if (method === "GET") return "conversations:read";
+    if (path.endsWith("/messages") && method === "POST") {
+      return "messages:send";
+    }
+    if (method === "POST") return "conversations:write";
+  }
+
+  return "internal:unmapped";
 }

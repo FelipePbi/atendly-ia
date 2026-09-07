@@ -72,10 +72,12 @@ export class AiOrchestratorClient {
     ).data;
   }
 
+  // A credencial da instância não viaja mais aqui: a IA a resolve pelo vínculo
+  // interno projetado no provisionamento.
   async sendMessage(
     context: InternalRequestContext,
     id: string,
-    input: { text: string; instanceToken: string },
+    input: { text: string },
   ) {
     return (
       await this.http.request({
@@ -127,19 +129,25 @@ export class AiOrchestratorClient {
       path: "/internal/ai-tenant-config",
       context,
       body: input,
+      use: "provisioning",
       schema: z.object({ ok: z.literal(true), config: z.unknown() }),
     });
   }
 
   async provisionEvolutionChannel(
     context: InternalRequestContext,
-    input: { externalInstanceId: string; displayName?: string },
+    input: {
+      externalInstanceId: string;
+      displayName?: string;
+      instanceCredential: string;
+    },
   ): Promise<void> {
     await this.http.request({
       method: "PUT",
       path: "/internal/channel-connections/evolution",
       context,
       body: input,
+      use: "provisioning",
       schema: z.object({ ok: z.literal(true), connection: z.unknown() }),
     });
   }

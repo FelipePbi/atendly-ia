@@ -1,10 +1,13 @@
-import { timingSafeEqual } from "node:crypto";
-
 import type { FastifyRequest } from "fastify";
 import { z } from "zod";
 
-import { env } from "../../config/env.js";
 import { AppError } from "../errors/app-error.js";
+import {
+  identifyInternalClient,
+  internalAuthConfigured,
+  type InternalClient,
+  SERVICE_AUDIENCE,
+} from "./internal-credentials.js";
 
 const internalHeadersSchema = z.object({
   "x-tenant-id": z.string().trim().min(1).max(128),
@@ -16,22 +19,13 @@ export interface InternalRequestContext {
   tenantId: string;
   userId: string;
   requestId: string;
-}
-
-function tokenMatches(provided: string, expected: string): boolean {
-  const providedBuffer = Buffer.from(provided);
-  const expectedBuffer = Buffer.from(expected);
-
-  return (
-    providedBuffer.length === expectedBuffer.length &&
-    timingSafeEqual(providedBuffer, expectedBuffer)
-  );
+  caller: InternalClient["callerId"];
 }
 
 export async function requireInternalAuth(
   request: FastifyRequest,
 ): Promise<void> {
-  if (!env.INTERNAL_SERVICE_TOKEN) {
+  if (!internalAuthConfigured()) {
     throw new AppError(
       "CONFIGURATION_ERROR",
       "Internal authentication is not configured.",
@@ -41,14 +35,20 @@ export async function requireInternalAuth(
 
   const authorization = request.headers.authorization;
   const providedToken = authorization?.startsWith("Bearer ")
-    ? authorization.slice("Bearer ".length)
+    ? authorization.slice("Bearer ".length).trim()
     : "";
 
-  if (
-    !providedToken ||
-    !tokenMatches(providedToken, env.INTERNAL_SERVICE_TOKEN)
-  ) {
+  // Identidade vem da credencial; a audiência declarada é apenas conferida
+  // contra este serviço e nunca substitui a verificação.
+  const client = identifyInternalClient(providedToken);
+  if (!client) {
     throw new AppError("UNAUTHORIZED", "Invalid internal credentials.", 401);
+  }
+
+  const audience = request.headers["x-service-audience"];
+  const declaredAudience = Array.isArray(audience) ? audience[0] : audience;
+  if (declaredAudience && declaredAudience.trim() !== SERVICE_AUDIENCE) {
+    throw new AppError("FORBIDDEN", "Invalid internal audience.", 403);
   }
 
   const parsedHeaders = internalHeadersSchema.safeParse(request.headers);
@@ -65,6 +65,7 @@ export async function requireInternalAuth(
     tenantId: parsedHeaders.data["x-tenant-id"],
     userId: parsedHeaders.data["x-user-id"],
     requestId: parsedHeaders.data["x-request-id"],
+    caller: client.callerId,
   };
 }
 

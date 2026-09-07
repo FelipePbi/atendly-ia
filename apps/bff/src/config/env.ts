@@ -39,6 +39,9 @@ const envSchema = z.object({
   JWT_SECRET: stringEnv("dev-only-change-me-with-at-least-32-characters"),
   JWT_EXPIRES_IN: stringEnv("7d"),
   SESSION_COOKIE_NAME: stringEnv("atendly_session"),
+  CSRF_COOKIE_NAME: stringEnv("atendly_csrf"),
+  CSRF_HEADER_NAME: stringEnv("x-csrf-token"),
+  SESSION_TTL_HOURS: intEnv(24 * 7),
   COOKIE_SECURE: boolEnv(false),
   COOKIE_SAME_SITE: z.enum(["lax", "strict", "none"]).default("lax"),
   FRONTEND_ORIGIN: stringEnv("http://localhost:3001"),
@@ -47,6 +50,16 @@ const envSchema = z.object({
   EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),
   EVOLUTION_GO_API_KEY: stringEnv(),
   INTERNAL_SERVICE_TOKEN: serviceTokenEnv(),
+  // Credenciais por chamador/uso. Vazias, são derivadas de
+  // INTERNAL_SERVICE_TOKEN por HMAC — nunca o próprio valor bruto, para que o
+  // token de provisionamento não sirva de fallback de comando comum.
+  AI_ORCHESTRATOR_PROVISIONING_TOKEN: serviceTokenEnv(),
+  AI_ORCHESTRATOR_COMMAND_TOKEN: serviceTokenEnv(),
+  SCHEDULING_SERVICE_COMMAND_TOKEN: serviceTokenEnv(),
+  // Cifra da credencial de instância: "<keyId>:<chave base64 de 32 bytes>",
+  // separadas por vírgula. A chave ativa é a usada em novas gravações.
+  WHATSAPP_CREDENTIAL_KEYS: stringEnv(),
+  WHATSAPP_CREDENTIAL_ACTIVE_KEY_ID: stringEnv(),
   INTERNAL_HTTP_TIMEOUT_MS: intEnv(10_000),
   INTERNAL_HTTP_GET_RETRIES: intEnv(2),
   PASSWORD_RESET_TOKEN_TTL_MINUTES: intEnv(30),
@@ -64,6 +77,11 @@ if (env.NODE_ENV === "production") {
     env.JWT_SECRET.startsWith("dev-only") || env.JWT_SECRET.length < 32;
   if (insecureJwtSecret) {
     throw new Error("JWT_SECRET must be set to a strong value in production.");
+  }
+  if (!env.WHATSAPP_CREDENTIAL_KEYS) {
+    throw new Error(
+      "WHATSAPP_CREDENTIAL_KEYS must be configured in production: the WhatsApp instance credential is never stored in plain text.",
+    );
   }
 }
 

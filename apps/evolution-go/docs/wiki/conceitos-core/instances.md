@@ -389,7 +389,9 @@ false = Normal (recebe tudo)
 
 ### Como Configurar
 
-**Endpoint**: `POST /instance/:id/advanced-settings`
+**Endpoint**: `PUT /instance/:instanceId/advanced-settings`
+
+A credencial é o `apikey` da própria instância, e o `:instanceId` precisa ser o ID dela: token de outra instância recebe `403`.
 
 **Exemplo**:
 ```json

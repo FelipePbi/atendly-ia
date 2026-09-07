@@ -346,7 +346,16 @@ func (m *messageService) DownloadMedia(data *DownloadMediaStruct, instance *inst
 	return dataURL, ts.String(), nil
 }
 
+// GetMessageStatus lê metadados sempre no escopo da instância autenticada.
+//
+// A instância vem do contexto autenticado; `data.Id` é apenas o identificador
+// procurado dentro desse escopo. Um ID de outra instância e um ID inexistente
+// produzem exatamente a mesma resposta vazia, sem oracle de existência.
 func (m *messageService) GetMessageStatus(data *MessageStatusStruct, instance *instance_model.Instance) (*message_model.Message, string, error) {
+	if instance == nil || instance.Id == "" {
+		return nil, "", errors.New("authenticated instance is required")
+	}
+
 	_, err := m.ensureClientConnected(instance.Id)
 	if err != nil {
 		return nil, "", err
@@ -354,7 +363,7 @@ func (m *messageService) GetMessageStatus(data *MessageStatusStruct, instance *i
 
 	var ts time.Time
 
-	result, err := m.messageRepository.GetMessageByID(data.Id)
+	result, err := m.messageRepository.GetMessageByID(instance.Id, data.Id)
 	if err != nil {
 		return nil, "", err
 	}

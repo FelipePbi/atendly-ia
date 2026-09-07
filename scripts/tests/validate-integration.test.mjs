@@ -7,6 +7,7 @@ import { repositoryRoot } from "../lib/gate.mjs";
 import {
   assertDriverResolvesSameDestination,
   driverDestination,
+  evolutionTargetUrl,
   IntegrationTargetError,
   integrationSteps,
   resolveIntegrationTarget,
@@ -73,16 +74,48 @@ test("points the subprocess at the declared test database with synthetic secrets
       "generate:bff-prisma-client",
       "migrate:bff-test-database",
       "test:bff-integration",
+      "rehearse:goal003-link-migration",
+      "provision:evolution-test-database",
+      "test:evolution-go-ownership",
     ],
   );
   for (const step of steps) {
-    assert.equal(step.cwd, "apps/bff");
     // Nunca depender do fallback embutido em apps/bff/prisma.config.ts.
     assert.equal(step.env.DATABASE_URL, validUrl);
     assert.equal(step.env.DIRECT_DATABASE_URL, validUrl);
     assert.equal(step.env.BFF_RUN_INTEGRATION_TESTS, "true");
     assert.ok(step.env.JWT_SECRET.startsWith("integration-only-"));
+    // Chaves de cifra sintéticas: o gate exercita selagem e rotação sem
+    // qualquer credencial real.
+    assert.ok(step.env.WHATSAPP_CREDENTIAL_KEYS.includes("v1:"));
+    assert.ok(step.env.CHANNEL_CREDENTIAL_KEYS.includes("v1:"));
   }
+});
+
+// O ensaio de propriedade do Evolution Go roda no mesmo servidor descartável,
+// em banco próprio derivado do alvo já validado — sem variável nova e sem
+// depender de banco pessoal.
+test("derives the Evolution rehearsal database from the validated target", () => {
+  const target = resolveIntegrationTarget({ BFF_TEST_DATABASE_URL: validUrl });
+  const derived = new URL(evolutionTargetUrl(target));
+
+  assert.equal(derived.hostname, "127.0.0.1");
+  assert.equal(derived.port, "55432");
+  assert.equal(derived.pathname, "/atendly_bff_test_evolution");
+  assert.ok(/(?:^|[_-])test(?:[_-]|$)/iu.test("atendly_bff_test_evolution"));
+
+  const steps = integrationSteps(target);
+  const evolutionSteps = steps.filter((step) =>
+    step.name.includes("evolution"),
+  );
+  assert.equal(evolutionSteps.length, 2);
+  for (const step of evolutionSteps) {
+    assert.equal(step.env.EVOLUTION_TEST_DATABASE_URL, derived.toString());
+  }
+  assert.equal(
+    steps.find((step) => step.name === "test:evolution-go-ownership").cwd,
+    "apps/evolution-go",
+  );
 });
 
 // R2-02: um checkout limpo não tem `apps/bff/src/generated/prisma`; sem gerar o

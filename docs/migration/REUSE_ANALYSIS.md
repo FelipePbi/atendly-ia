@@ -74,7 +74,7 @@ Design exportado não define modelo de estado, APIs ou arquitetura de componente
 | Área/unidade | Estado atual / alinhamento | Decisão | Justificativa / dependências |
 | --- | --- | --- | --- |
 | BFF público | Auth, ownership de conta e agregação úteis | REFACTOR | Preservar serviço; separar comandos de aplicação, projeções e sincronização durável; nunca guardar segunda agenda |
-| JWT/cookie/membership/registro | Base sólida, revogação/CSRF/cardinalidade incompletos | REFACTOR | Endurecer e testar; não trocar auth provider sem necessidade |
+| JWT/cookie/membership/registro | Base sólida; revogação por sessão, CSRF/origem e vínculo tenant/instância entregues no Goal003 | REFACTOR | Endurecido e testado sem trocar o auth provider; restam gates de conta ativa/exclusão (Goal022) |
 | HTTP clients/error/request-id | Centralização local válida; schemas duplicados | REFACTOR | Contratos efetivamente importados, timeout/backoff de leitura, mutação com status recuperável |
 | Scheduling core | Transações, cálculo de disponibilidade, multi-serviço e snapshots | REFACTOR | Preservar unidade transacional, completar produto e todos os writers |
 | CalendarProvider como escolha operacional | Duas agendas | REMOVE | Manter gateway da agenda local; adapter externo exclusivo de importação |
@@ -86,7 +86,7 @@ Design exportado não define modelo de estado, APIs ou arquitetura de componente
 | IA inbound/buffer/entrega | ACK/dedupe prematuros e memória por request | REPLACE | Inbox/outbox duráveis e coordenação por conversa; manter mapper e abstração de provider |
 | Conversas/Contact/sessão | Histórico existe; política está em JSON/flags | REFACTOR / CREATE | Contact ignorado, categoria e sessão persistidas fora de checkpoint do modelo |
 | RAG/pgvector/checkpointer | Filtros e persistência úteis | REFACTOR | CRUD conhecimento versionado, consentimento e expiração de cópias; não trocar vector DB |
-| Evolution Go | Transporte separado, integração estabelecida | REFACTOR | Corrigir autorização de alvo, segredos, timeout/durabilidade; sem lógica de agenda/classificação |
+| Evolution Go | Transporte separado; autorização de alvo (Goal001) e ownership de metadados (Goal003) corrigidos | REFACTOR | Restam segredos no payload/log do produtor e timeout/durabilidade (Goal004); sem lógica de agenda/classificação |
 | Health Worker | Sonda simples e independente | REUSE | Manter monitor; reconsiderar somente se monitor substituto estiver implantado, sem virar worker de produto |
 | Jobs de domínio | Não há mecanismo comum confiável | CREATE | Jobs duráveis no banco do dono; alternativas comparadas em TARGET_ARCHITECTURE |
 | contracts/common | Zod utilitário existente | REUSE | Validar semântica monetária/temporal; não generalizar regra de produto cedo |

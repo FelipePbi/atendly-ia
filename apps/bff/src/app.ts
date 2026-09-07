@@ -6,6 +6,7 @@ import rateLimit from "@fastify/rate-limit";
 import Fastify from "fastify";
 
 import { env } from "./config/env.js";
+import { sendCsrfToken, sessionCsrfToken } from "./lib/auth.js";
 import { AppError, toErrorMessage } from "./lib/errors.js";
 import { redactRequestUrl } from "./lib/logging.js";
 import { disconnectPrisma } from "./lib/prisma.js";
@@ -68,7 +69,10 @@ export async function buildApp() {
       "x-csrf-token",
       "x-request-id",
     ],
-    exposedHeaders: ["x-request-id"],
+    // Sem expor o token de CSRF a resposta é ilegível para o adapter quando
+    // BFF e frontend estão em hosts distintos, que é o caso do ambiente
+    // publicado. A exposição vale só para a origem permitida.
+    exposedHeaders: ["x-request-id", env.CSRF_HEADER_NAME],
   });
   await app.register(rateLimit, {
     max: 300,
@@ -77,6 +81,24 @@ export async function buildApp() {
 
   app.addHook("onRequest", async (request, reply) => {
     reply.header("x-request-id", request.id);
+  });
+
+  // Toda resposta autenticada por cookie devolve o token de CSRF vigente da
+  // sessão. É o que permite ao frontend recuperar o token depois de um reload
+  // sem depender de `document.cookie` — impossível de ler quando o cookie foi
+  // gravado no host do BFF.
+  app.addHook("onSend", async (request, reply, payload) => {
+    // Um handler que já estabeleceu sessão nova — troca de senha, por exemplo —
+    // devolveu o token dela. Sobrescrever aqui entregaria o token da sessão
+    // antiga, que acabou de ser revogada.
+    if (
+      request.session &&
+      request.authCredentialKind === "cookie" &&
+      !reply.getHeader(env.CSRF_HEADER_NAME)
+    ) {
+      sendCsrfToken(reply, sessionCsrfToken(request.session));
+    }
+    return payload;
   });
 
   await registerHealthRoutes(app);

@@ -9,12 +9,12 @@ import {
   parseParams,
   parseQuery,
 } from "../../lib/http.js";
-import { getPrisma } from "../../lib/prisma.js";
 import {
   currentTenantContext,
   requireTenantContext,
 } from "../../lib/tenant-context.js";
 import { internalContext } from "../tenant/context.js";
+import { findLinkedInstance } from "../whatsapp/instance-link.js";
 
 const idSchema = z.object({ id: z.string().trim().min(1).max(128) });
 const querySchema = z.object({
@@ -72,15 +72,14 @@ export async function registerV1ConversationRoutes(
       const { id } = parseParams(idSchema, request.params);
       const body = parseBody(messageSchema, request.body);
       const tenant = currentTenantContext(request);
-      const instance = await getPrisma().whatsAppInstance.findUnique({
-        where: { userId: tenant.userId },
-      });
+      // O vínculo é resolvido pelo tenant autenticado, e a credencial não sai
+      // daqui: quem envia é a IA, com a projeção que ela já guarda cifrada.
+      const instance = await findLinkedInstance(tenant);
       if (!instance || instance.status !== "CONNECTED") {
         throw new AppError("CONFLICT", "WhatsApp is not connected.", 409);
       }
       const message = await ai.sendMessage(internalContext(request), id, {
         text: body.text,
-        instanceToken: instance.evolutionInstanceToken,
       });
       return reply.code(201).send(dataResponse(request, message));
     },

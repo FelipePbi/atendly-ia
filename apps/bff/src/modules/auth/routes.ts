@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
 import { PasswordResetDeliveryClient } from "../../clients/password-reset-delivery.js";
@@ -9,14 +9,22 @@ import { CURRENT_LEGAL_VERSIONS } from "../../config/legal-versions.js";
 import {
   clearSessionCookie,
   currentUser,
-  setSessionCookie,
-  signSession,
+  establishSession,
+  presentedCredential,
+  verifySessionToken,
 } from "../../lib/auth.js";
+import { assertAllowedOrigin, assertCsrfToken } from "../../lib/csrf.js";
 import { businessProfileDto, tenantDto, userDto } from "../../lib/dto.js";
 import { AppError } from "../../lib/errors.js";
 import { dataResponse, parseBody } from "../../lib/http.js";
 import { hashPassword, verifyPassword } from "../../lib/password.js";
 import { getPrisma } from "../../lib/prisma.js";
+import {
+  createUserSession,
+  loadActiveSession,
+  revokeAllUserSessions,
+  revokeSession,
+} from "../../lib/session.js";
 import {
   currentTenantContext,
   requireTenantContext,
@@ -72,7 +80,19 @@ export async function registerV1AuthRoutes(
   app: FastifyInstance,
 ): Promise<void> {
   const passwordResetDelivery = new PasswordResetDeliveryClient();
-  app.post("/v1/auth/register", async (request, reply) => {
+
+  // Os fluxos de autenticação não têm sessão estabelecida para carregar um
+  // token de CSRF, então a barreira aqui é a origem: um formulário hospedado em
+  // outro site não consegue cadastrar, logar nem derrubar sessão.
+  // Hook async de propósito: o Fastify só encadeia hooks de aridade 3 por
+  // callback, e um guard síncrono de um argumento travaria a requisição.
+  const originGuard = {
+    preHandler: async (request: FastifyRequest) => {
+      assertAllowedOrigin(request);
+    },
+  };
+
+  app.post("/v1/auth/register", originGuard, async (request, reply) => {
     const body = parseBody(registerSchema, request.body);
     const prisma = getPrisma();
     if (
@@ -121,7 +141,11 @@ export async function registerV1AuthRoutes(
       return { user, tenant };
     });
 
-    setSessionCookie(reply, await signSession(result.user));
+    await establishSession(
+      reply,
+      result.user,
+      await createUserSession(result.user.id),
+    );
     return reply.code(201).send(
       dataResponse(request, {
         user: userDto(result.user),
@@ -132,7 +156,10 @@ export async function registerV1AuthRoutes(
 
   app.post(
     "/v1/auth/login",
-    { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } },
+    {
+      ...originGuard,
+      config: { rateLimit: { max: 10, timeWindow: "15 minutes" } },
+    },
     async (request, reply) => {
       const body = parseBody(loginSchema, request.body);
       const user = await getPrisma().user.findUnique({
@@ -141,15 +168,32 @@ export async function registerV1AuthRoutes(
       if (!user || !(await verifyPassword(body.password, user.passwordHash))) {
         throw new AppError("UNAUTHORIZED", "Invalid credentials.", 401);
       }
-      setSessionCookie(
+      await establishSession(
         reply,
-        await signSession({ id: user.id, email: user.email }),
+        { id: user.id, email: user.email },
+        await createUserSession(user.id),
       );
       return dataResponse(request, { user: userDto(user) });
     },
   );
 
-  app.post("/v1/auth/logout", async (request, reply) => {
+  // Logout revoga a sessão no servidor antes de limpar o cookie. Um token já
+  // emitido — cookie ou Bearer — deixa de autorizar a partir daqui, e repetir a
+  // chamada não reativa nada.
+  app.post("/v1/auth/logout", originGuard, async (request, reply) => {
+    const credential = presentedCredential(request);
+    if (credential) {
+      const claims = await verifySessionToken(credential.token).catch(
+        () => null,
+      );
+      const session = claims
+        ? await loadActiveSession(claims.sessionId)
+        : null;
+      if (session && claims && session.userId === claims.userId) {
+        if (credential.kind === "cookie") assertCsrfToken(request, session);
+        await revokeSession(session.id, "LOGOUT");
+      }
+    }
     clearSessionCookie(reply);
     return dataResponse(request, { ok: true });
   });
@@ -184,7 +228,7 @@ export async function registerV1AuthRoutes(
   app.patch(
     "/v1/auth/password",
     { preHandler: requireTenantContext },
-    async (request) => {
+    async (request, reply) => {
       const sessionUser = currentUser(request);
       const body = parseBody(passwordSchema, request.body);
       const user = await getPrisma().user.findUnique({
@@ -202,13 +246,25 @@ export async function registerV1AuthRoutes(
         where: { id: user.id },
         data: { passwordHash: await hashPassword(body.newPassword) },
       });
+      // Troca efetiva de senha invalida todas as sessões do usuário, inclusive
+      // a que fez a chamada e qualquer Bearer emitido antes. O dispositivo
+      // corrente recebe uma sessão nova, com CSRF novo, no mesmo response.
+      await revokeAllUserSessions(user.id, "PASSWORD_CHANGED");
+      await establishSession(
+        reply,
+        { id: user.id, email: user.email },
+        await createUserSession(user.id),
+      );
       return dataResponse(request, { ok: true });
     },
   );
 
   app.post(
     "/v1/auth/forgot-password",
-    { config: { rateLimit: { max: 5, timeWindow: "15 minutes" } } },
+    {
+      ...originGuard,
+      config: { rateLimit: { max: 5, timeWindow: "15 minutes" } },
+    },
     async (request) => {
       if (!env.PASSWORD_RESET_DELIVERY_URL) {
         throw new AppError(
@@ -262,7 +318,7 @@ export async function registerV1AuthRoutes(
     },
   );
 
-  app.post("/v1/auth/reset-password", async (request) => {
+  app.post("/v1/auth/reset-password", originGuard, async (request) => {
     const body = parseBody(resetPasswordSchema, request.body);
     const prisma = getPrisma();
     const reset = await prisma.passwordResetToken.findUnique({
@@ -298,6 +354,10 @@ export async function registerV1AuthRoutes(
       });
       await transaction.passwordResetToken.deleteMany({
         where: { userId: reset.userId, id: { not: reset.id } },
+      });
+      await transaction.userSession.updateMany({
+        where: { userId: reset.userId, revokedAt: null },
+        data: { revokedAt: new Date(), revokedReason: "PASSWORD_RESET" },
       });
     });
     return dataResponse(request, { ok: true });

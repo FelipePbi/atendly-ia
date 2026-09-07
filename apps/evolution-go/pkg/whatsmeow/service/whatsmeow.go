@@ -1639,6 +1639,9 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 
 					var message message_model.Message
 
+					// Dono vem da instancia que produziu o evento, nunca de Source
+					// (telefone do chat) nem de dado enviado pelo cliente.
+					message.InstanceID = mycli.Instance.Id
 					message.MessageID = v
 					message.Timestamp = evt.Timestamp.Format("2006-01-02 15:04:05")
 					message.Status = "Read"
@@ -1656,6 +1659,9 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 
 			var message message_model.Message
 
+			// Dono vem da instancia que produziu o evento, nunca de Source
+			// (telefone do chat) nem de dado enviado pelo cliente.
+			message.InstanceID = mycli.Instance.Id
 			message.MessageID = evt.MessageIDs[0]
 			message.Timestamp = evt.Timestamp.Format("2006-01-02 15:04:05")
 			message.Status = "Delivered"

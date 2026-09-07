@@ -86,7 +86,7 @@ describe("EvolutionProvider", () => {
       await import("../../src/modules/channel/adapters/evolution/EvolutionProvider.js");
 
     await expect(
-      new EvolutionProvider(undefined, undefined, "instance-1").sendText({
+      new EvolutionProvider(undefined, "instance-token", "instance-1").sendText({
         to: "5511999999999",
         text: "ok",
       }),
@@ -114,10 +114,64 @@ describe("EvolutionProvider", () => {
       await import("../../src/modules/channel/adapters/evolution/EvolutionProvider.js");
 
     await expect(
-      new EvolutionProvider(undefined, undefined, "instance-1").sendText({
+      new EvolutionProvider(undefined, "instance-token", "instance-1").sendText({
         to: "5511999999999",
         text: "ok",
       }),
     ).rejects.toThrow("Evolution Go send failed with HTTP 500");
+  });
+
+  it("refuses to send with the global key when the instance credential is missing", async () => {
+    vi.stubEnv("EVOLUTION_BASE_URL", "http://evolution-go:8080");
+    vi.stubEnv("EVOLUTION_API_KEY", "global-key");
+    vi.resetModules();
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { EvolutionProvider } = await import(
+      "../../src/modules/channel/adapters/evolution/EvolutionProvider.js"
+    );
+
+    await expect(
+      new EvolutionProvider(undefined, undefined, "instance-1").sendText({
+        to: "5511999999999",
+        text: "ok",
+      }),
+    ).rejects.toThrow("Evolution channel credentials are not configured.");
+    // Falha de resolução impede o envio: nada sai assinado pela chave global.
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps secrets out of the raw payload it returns for persistence", async () => {
+    vi.stubEnv("EVOLUTION_BASE_URL", "http://evolution-go:8080");
+    vi.resetModules();
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            messageId: "message-1",
+            instanceToken: "wa_secret_token_value",
+            apikey: "wa_secret_token_value",
+            data: { credentials: { token: "wa_secret_token_value" } },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      ),
+    );
+
+    const { EvolutionProvider } = await import(
+      "../../src/modules/channel/adapters/evolution/EvolutionProvider.js"
+    );
+
+    const result = await new EvolutionProvider(
+      undefined,
+      "instance-token",
+      "instance-1",
+    ).sendText({ to: "5511999999999", text: "ok" });
+
+    expect(JSON.stringify(result.raw)).not.toContain("wa_secret_token_value");
   });
 });

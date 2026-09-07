@@ -65,6 +65,17 @@ const envSchema = z.object({
   AI_PROMPT_VERSION: stringEnv("scheduling_v1.0.0"),
   SCHEDULING_SERVICE_BASE_URL: stringEnv("http://localhost:3003"),
   INTERNAL_SERVICE_TOKEN: serviceTokenEnv(),
+  // Credenciais que a IA aceita, por uso. Vazias, são derivadas de
+  // INTERNAL_SERVICE_TOKEN por HMAC; o valor bruto do segredo compartilhado
+  // deixa de ser aceito, então provisionamento e comando não se substituem.
+  INTERNAL_PROVISIONING_TOKEN: serviceTokenEnv(),
+  INTERNAL_COMMAND_TOKEN: serviceTokenEnv(),
+  // Credencial que a IA apresenta ao scheduling-service.
+  SCHEDULING_SERVICE_COMMAND_TOKEN: serviceTokenEnv(),
+  // Cifra da projeção da credencial de instância: "<keyId>:<chave base64 de 32
+  // bytes>", separadas por vírgula.
+  CHANNEL_CREDENTIAL_KEYS: stringEnv(),
+  CHANNEL_CREDENTIAL_ACTIVE_KEY_ID: stringEnv(),
 });
 
 export const env = envSchema.parse(process.env);

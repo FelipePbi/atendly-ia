@@ -22,6 +22,38 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 
 As rotas autenticadas resolvem o negócio a partir da sessão; `tenantId` enviado isoladamente pelo browser não concede autorização.
 
+## Sessão, CSRF e origem
+
+O portador continua sendo o JWT, no cookie de sessão ou em `Authorization: Bearer`. O que mudou é que ele carrega uma identidade de sessão (`sid`) verificada no servidor a cada requisição:
+
+- sessão inexistente, expirada ou revogada devolve `401 UNAUTHORIZED`, mesmo com o JWT ainda dentro da validade;
+- um JWT emitido antes desta identidade não tem `sid` e devolve `401 SESSION_REAUTH_REQUIRED`: é preciso autenticar de novo, e nenhuma sessão é criada a partir dele;
+- `POST /v1/auth/logout` revoga a sessão no servidor; `PATCH /v1/auth/password` e `POST /v1/auth/reset-password` revogam **todas** as sessões do usuário, cookie e Bearer.
+
+Mutações autenticadas por cookie exigem duas provas, ambas verificadas antes de qualquer efeito:
+
+| Prova | Como é enviada | Recusa |
+| --- | --- | --- |
+| Origem | `Origin` (ou origem de `Referer`) na allowlist de `FRONTEND_ORIGIN` | `403 CSRF_ORIGIN_REJECTED` |
+| Token de CSRF | header `x-csrf-token` da requisição | `403 CSRF_TOKEN_REJECTED` |
+
+O token de CSRF é emitido junto com a sessão e conferido contra o valor guardado **naquela** sessão: o token de outra sessão não passa. Requisições autenticadas por Bearer não usam credencial ambiente e não exigem CSRF; a distinção vem da credencial efetivamente verificada, não de um header declarado.
+
+### Como o cliente obtém o token
+
+O BFF devolve o token vigente em **duas** formas, com o mesmo valor:
+
+| Canal | Quando | Para quem serve |
+| --- | --- | --- |
+| Cookie legível `atendly_csrf` | ao estabelecer sessão (register, login, troca de senha) | cliente na mesma origem do BFF |
+| Header de resposta `x-csrf-token` | ao estabelecer sessão **e** em toda resposta autenticada por cookie, inclusive de erro | cliente em outra origem, que é o caso do ambiente publicado |
+
+O header existe porque o cookie legível é gravado no host do BFF. Quando frontend e BFF estão em hosts distintos sob um sufixo público, `document.cookie` do frontend nunca enxerga esse cookie e ler dali devolveria sempre vazio — toda mutação por cookie cairia em `403 CSRF_TOKEN_REJECTED`, inclusive `POST /v1/auth/logout`. O header é exposto no CORS apenas para `FRONTEND_ORIGIN`; uma página de outra origem não consegue lê-lo, exatamente como não consegue ler o corpo da resposta.
+
+O token é estável enquanto a sessão viver, então uma segunda aba ou um reload recuperam o mesmo valor na primeira leitura autenticada. Requisições anônimas e autenticadas por Bearer não recebem o header.
+
+`POST /v1/auth/register`, `POST /v1/auth/login`, `POST /v1/auth/logout`, `POST /v1/auth/forgot-password` e `POST /v1/auth/reset-password` exigem origem permitida mesmo sem sessão estabelecida.
+
 ## Contratos legados ainda ativos
 
 As rotas abaixo também estão registradas e possuem consumidores no frontend atual:
@@ -42,3 +74,16 @@ Pela regra de produto vigente:
 - os estilos da IA são Profissional, Equilibrada e Descontraída.
 
 A futura revisão técnica deve migrar consumidores antes de remover ou alterar essas rotas e enums. Este documento não determina o desenho do contrato substituto.
+
+## Vínculo WhatsApp: estados ambíguos
+
+`GET /v1/whatsapp` também reprojeta a credencial da instância na IA. É idempotente e não altera o estado do número; existe para que um vínculo criado antes da projeção cifrada se restabeleça sozinho, sem o negócio precisar reconectar o número na mão. Falha nessa projeção é registrada e não impede a leitura de status.
+
+Quando o vínculo não é inequívoco, todas as rotas de WhatsApp recusam com `409 CONFLICT` antes de qualquer efeito. Há dois estados distintos:
+
+| Estado | O que é | Resolução |
+| --- | --- | --- |
+| Pendente | linha do próprio usuário autenticado, sem negócio dono, deixada assim pelo backfill; nenhum outro negócio a reivindica | o dono descarta com `DELETE /v1/whatsapp` e conecta o número de novo |
+| Divergente | duas linhas concorrentes, ou uma linha cujo dono de negócio e dono de usuário são contas diferentes | fora do autoatendimento: resolver envolveria decidir pelo outro negócio; depende de operação |
+
+`DELETE /v1/whatsapp` é a única rota que trata o estado pendente como resolvível, e apenas para o dono autenticado da linha. No estado pendente a credencial não é abrível — a cifra está ligada ao negócio —, então o logout autenticado no transporte é pulado; a instância remota ainda é removida pela credencial administrativa. No estado divergente a rota recusa como as demais, sem apagar nada.

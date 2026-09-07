@@ -1091,6 +1091,12 @@ Consulta o status de entrega/leitura de uma mensagem no banco de dados.
 |-------|------|-------------|-----------|
 | `id` | string | ✅ Sim | ID da mensagem |
 
+**Escopo**: a consulta é feita pelo par (instância autenticada, `id`). O `apikey` identifica a
+instância dona; o `id` é procurado **apenas** dentro dela. Um `id` que pertence a outra instância e
+um `id` inexistente devolvem exatamente a mesma resposta, com `data.result` nulo — a resposta nunca
+revela a existência de mensagem alheia. Mensagens gravadas antes da migração de propriedade não têm
+dona conhecida e nunca são devolvidas.
+
 **Nota**: Requer `DATABASE_SAVE_MESSAGES=true` para funcionar. O sistema precisa estar salvando mensagens no banco.
 
 **Resposta de Sucesso (200)**:
@@ -1109,6 +1115,22 @@ Consulta o status de entrega/leitura de uma mensagem no banco de dados.
     "timestamp": "2025-11-11T10:31:00Z"
   }
 }
+```
+
+**Resposta quando não há mensagem dessa instância com esse id (200)**:
+```json
+{
+  "message": "success",
+  "data": {
+    "result": null,
+    "timestamp": "0001-01-01 00:00:00 +0000 UTC"
+  }
+}
+```
+
+**Sem credencial válida (401)**:
+```json
+{ "error": "not authorized" }
 ```
 
 **Status Possíveis**:

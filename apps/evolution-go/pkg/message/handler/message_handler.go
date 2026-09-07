@@ -211,21 +211,22 @@ func (m *messageHandler) DownloadMedia(ctx *gin.Context) {
 
 // GetMessageStatus get message status
 // @Summary Get message status
-// @Description Get message status
+// @Description Returns delivery metadata for a message owned by the authenticated instance. The lookup is scoped to that instance: an id that belongs to another instance and an id that does not exist both return a null result, so the response never reveals the existence of another instance's message.
 // @Tags Message
 // @Accept json
 // @Produce json
 // @Param message body message_service.MessageStatusStruct true "Get message status"
-// @Success 200 {object} gin.H "success"
+// @Success 200 {object} gin.H "success (result is null when the authenticated instance owns no message with this id)"
 // @Failure 400 {object} gin.H "Error on validation"
+// @Failure 401 {object} gin.H "Missing or invalid instance credentials"
 // @Failure 500 {object} gin.H "Internal server error"
 // @Router /message/status [post]
 func (m *messageHandler) GetMessageStatus(ctx *gin.Context) {
-	getInstance := ctx.MustGet("instance")
-
-	instance, ok := getInstance.(*instance_model.Instance)
+	// Contexto autenticado ausente ou inválido é 401, antes de ler o body: a
+	// recusa não pode depender do alvo consultado.
+	instance, ok := authenticatedInstance(ctx)
 	if !ok {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "instance not found"})
+		ctx.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "not authorized"})
 		return
 	}
 

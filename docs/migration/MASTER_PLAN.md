@@ -19,7 +19,7 @@ Objetivo final: implementar o único MVP do Product Vault, com experiência Clau
 | --- | --- | --- | --- | --- | --- |
 | 001 — Autorizar alvo de instância | Fechar falha P0 pequena e independente antes de ampliar integração — ACCEPTED no review001 | Baseline auditada | Evolution handlers/auth/tests | Alto, escopo pequeno | Token A não lê/altera B; uso legítimo preservado e testes Go verificados |
 | 002 — Base de validação reproduzível | Estabilizar checks antes do security/ownership003; fechar falhas de teste comprovadas | 001 | Scripts, suites/fixtures, builds, CI | Médio | Cleanup Go Windows corrigido, Scheduling no build, IA requestId, BFF integração real/isolada, gates propagam falhas e separam skipped; contratos atuais preservados |
-| 003 — Tenant, sessão e vínculo WhatsApp | Consolidar identidade/confiança/credenciais e fechar G-35 antes de novos fluxos persistidos | 002 | BFF, IA, Scheduling, Evolution transporte/docs | Alto | Ownership/scopes/CSRF/revogação; /message/status isolado por instância, linhas sem dono tratadas, testes A/B e documentação de segurança alinhada |
+| 003 — Tenant, sessão e vínculo WhatsApp | Consolidar identidade/confiança/credenciais e fechar G-35 antes de novos fluxos persistidos — ACCEPTED no [review003](reviews/003-review.md), rodada 2 | 002 | BFF, IA, Scheduling, Evolution transporte/docs | Alto | Ownership/scopes/CSRF/revogação; /message/status isolado por instância, linhas sem dono tratadas, testes A/B e documentação de segurança alinhada |
 | 004 — Transporte e mensagens duráveis | Remover perda por ACK/dedupe antecipado e efeito remoto incerto | 003 | IA inbox/outbox, Go webhook/receipts, contracts | Alto | Evento persistido antes de ACK; retomada/lease/dedupe; status delivery e segredos sanitizados; queda exercitada |
 | 005 — Contatos, sessão e controle humano | Impedir processamento indevido antes de evoluir assistente/consumers | 004 | IA/Conversas/Contact, BFF endpoints | Alto | Três categorias/override/ignore, sessão24h, inbox IA off, envio humano assume e modelo não disputa |
 | 006 — Clientes como pessoas | Retirar identidade por telefone antes de novas escritas/importação | 003,005 | Scheduling clientes, IA mapeamento, BFF/contracts | Alto | Cliente sem telefone/número compartilhado, ID estável, relações/notas/tags/permissão e backfill conservador |
@@ -60,7 +60,7 @@ Caminho crítico de dependências, sem estimativa de duração: `001 → 002 →
 
 | Risco | Gate / controle |
 | --- | --- |
-| Isolamento/credenciais | 001 aceito; 003 com testes negativos de objetos, incluindo G-35; revisão de scopes e tokens fora de logs/raw |
+| Isolamento/credenciais | 001 e 003 aceitos com testes negativos de objetos, incluindo G-35, escopos por credencial e segredos fora de raw/eventos; resta ao 004 retirar `instanceToken` do payload e o token da URL nos logs do produtor Go |
 | Perda/duplicação de mensagem ou efeito | 004/008/020: restart, timeout, receipt unknown, replay pós-commit, race DB |
 | Corrupção de pessoa/acordo/histórico | 006–010: IDs, snapshots, ausência explícita e reconciliação; não merge por número |
 | Origem externa não fornecer categoria necessária | Prova dirigida em010; registrar limitação e replanejar, sem fingir importação completa ou reduzir MVP silenciosamente |
@@ -157,6 +157,8 @@ O Tech Lead obtém o SHA do novo HEAD, adota-o como baseline, reavalia o MASTER_
 - O Tech Lead concluiu auditoria final de conformidade com evidências reais, não só relatório do executor.
 
 ## Histórico de planejamento
+
+v5 — 2026-09-07: Goal003 ACCEPTED na rodada 2 pelo Tech Lead Agent, primeiro ciclo conduzido de ponta a ponta pelo IA Loop (D-018). G-02, G-03 (sessão/CSRF) e G-35 fechados; G-04 parcialmente fechado; D-004 aceita e D-019 registrada com os contratos adotados. Resíduos direcionados sem mudar ordem ou IDs: ao 004, segredos no payload/log do produtor Go e reenvio de resposta gerada na janela de transição; ao 022, gates de conta ativa/exclusão. O roadmap não foi reavaliado nesta etapa — a reavaliação incremental e o Goal004 aguardam o commit de fechamento e seu SHA.
 
 v4 — 2026-09-07: reconciliação administrativa após Goal002 ACCEPTED na rodada 3. Política de workflow preservada em commit separado; fechamento002 em `1e874e2785d2bc78860db0eb571ea901a4395c17`, baseline aceita vigente. Roadmap reavaliado incrementalmente: sem evidência nova para alterar ordem, IDs ou escopo. Somente o rascunho Goal003 foi reconciliado e liberado READY após esse SHA, mantendo tenant/sessão/vínculo e G-35 antes do004. Nenhum Goal posterior gerado; sem nova revisão técnica ou implementação.
 

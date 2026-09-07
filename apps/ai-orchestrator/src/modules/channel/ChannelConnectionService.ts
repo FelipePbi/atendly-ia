@@ -1,4 +1,9 @@
 import type { PrismaClient } from "../../generated/prisma/client.js";
+import {
+  CHANNEL_CREDENTIAL_VERSION,
+  openChannelCredential,
+  sealChannelCredential,
+} from "../../lib/channel-credentials.js";
 import { AppError } from "../../lib/errors.js";
 import {
   type AiTenantSettings,
@@ -20,6 +25,11 @@ export interface ProvisionEvolutionChannelInput {
   userId: string;
   externalInstanceId: string;
   displayName?: string;
+  /**
+   * Projeção da credencial da instância, entregue pelo BFF no provisionamento.
+   * Guardada cifrada e ligada ao vínculo; é a única origem aceita para o envio.
+   */
+  instanceCredential: string;
 }
 
 export interface UpdateAiTenantConfigInput {
@@ -53,6 +63,17 @@ export class ChannelConnectionService {
       );
     }
 
+    const sealed = sealChannelCredential(input.instanceCredential, {
+      tenantId: input.tenantId,
+      externalInstanceId: input.externalInstanceId,
+    });
+    const credential = {
+      credentialCipher: sealed.envelope,
+      credentialKeyId: sealed.keyId,
+      credentialVersion: sealed.version,
+      credentialRotatedAt: new Date(),
+    };
+
     const connection = await this.prisma.channelConnection.upsert({
       where: {
         tenantId_provider: {
@@ -65,6 +86,7 @@ export class ChannelConnectionService {
         externalInstanceId: input.externalInstanceId,
         displayName: input.displayName,
         status: "ACTIVE",
+        ...credential,
       },
       create: {
         tenantId: input.tenantId,
@@ -72,6 +94,7 @@ export class ChannelConnectionService {
         provider: EVOLUTION_PROVIDER,
         externalInstanceId: input.externalInstanceId,
         displayName: input.displayName,
+        ...credential,
       },
     });
 
@@ -109,6 +132,28 @@ export class ChannelConnectionService {
     businessContext?: BusinessContext;
     aiSettings?: AiTenantSettings;
   }): Promise<ChannelInboundMessage> {
+    return (await this.resolveEvolutionInboundContext(input)).message;
+  }
+
+  /**
+   * Mesma resolução do inbound, devolvendo também o vínculo persistido: a
+   * credencial de resposta sai daqui, não do corpo do evento.
+   */
+  async resolveEvolutionInboundContext(input: {
+    message: MappedChannelInboundMessage;
+    requestId: string;
+    businessContext?: BusinessContext;
+    aiSettings?: AiTenantSettings;
+  }): Promise<{
+    message: ChannelInboundMessage;
+    connection: {
+      id: string;
+      tenantId: string;
+      externalInstanceId: string;
+      credentialCipher: string | null;
+      credentialVersion: number;
+    };
+  }> {
     const connection = await this.prisma.channelConnection.findUnique({
       where: {
         provider_externalInstanceId: {
@@ -137,15 +182,50 @@ export class ChannelConnectionService {
     });
 
     return {
-      ...input.message,
-      tenantId: connection.tenantId,
-      channelId: connection.id,
-      userId: connection.userId,
-      requestId: input.requestId,
-      businessContext:
-        input.businessContext ?? normalizeBusinessContext(config?.settings),
-      aiSettings: input.aiSettings ?? aiSettings,
+      message: {
+        ...input.message,
+        tenantId: connection.tenantId,
+        channelId: connection.id,
+        userId: connection.userId,
+        requestId: input.requestId,
+        businessContext:
+          input.businessContext ?? normalizeBusinessContext(config?.settings),
+        aiSettings: input.aiSettings ?? aiSettings,
+      },
+      connection,
     };
+  }
+
+  /**
+   * Resolve a credencial de envio pelo vínculo, nunca por dado de requisição.
+   *
+   * Vínculo sem projeção — porque ainda não foi reprovisionado — falha aqui e
+   * interrompe o envio. Não existe caminho que caia na chave global nem que
+   * aceite um token vindo do corpo do webhook.
+   */
+  resolveChannelCredential(connection: {
+    tenantId: string;
+    externalInstanceId: string;
+    credentialCipher: string | null;
+    credentialVersion: number;
+  }): string {
+    if (
+      !connection.credentialCipher ||
+      connection.credentialVersion < CHANNEL_CREDENTIAL_VERSION
+    ) {
+      throw new AppError(
+        "Channel credential is not provisioned for this connection.",
+        {
+          statusCode: 409,
+          code: "CHANNEL_CREDENTIAL_NOT_PROVISIONED",
+        },
+      );
+    }
+
+    return openChannelCredential(connection.credentialCipher, {
+      tenantId: connection.tenantId,
+      externalInstanceId: connection.externalInstanceId,
+    });
   }
 
   async resolveTenantEvolutionChannel(tenantId: string) {

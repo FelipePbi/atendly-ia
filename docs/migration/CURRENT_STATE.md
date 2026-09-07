@@ -184,7 +184,7 @@ HEAD documental `4ca130128cafd620ea316c3ed9c51a46b34f8541`; implementação aind
 
 Com registro de B existente, seu ID conhecido e token/client A válidos, o caminho não impede leitura desses metadados de B. Não há texto da mensagem nesse modelo. Gravação examinada depende de `DATABASE_SAVE_MESSAGES=true`; exemplo versionado usa false. Configuração/linhas de produção não foram verificadas, e desligar escrita não prova ausência de histórico. Isso refina o inventário da persistência opcional de transporte: a tabela examinada contém metadados, sem pressupor conteúdo integral.
 
-Foram contados72 MustGet em dez arquivos de handlers; o uso em si indica fragilidade para contexto ausente/nil, não comprova IDOR. Auth repository retorna ponteiro válido quando encontra token. O achado de objeto acima é distinto e permanece como requisito de segurança do Goal003 antes de004.
+Foram contados72 MustGet em dez arquivos de handlers; o uso em si indica fragilidade para contexto ausente/nil, não comprova IDOR. Auth repository retorna ponteiro válido quando encontra token. O achado de objeto acima é distinto e permanece como requisito de segurança do Goal003 antes de004. **Corrigido no Goal003** — ver o delta ao final deste documento.
 
 ## Delta implementado — Goal002, 2026-09-05 (ACCEPTED na rodada 3)
 
@@ -218,3 +218,83 @@ com o Goal002 é infraestrutura de validação, não comportamento de produto.
 - Continuam **NÃO VERIFICADOS** todos os limites listados no fechamento
   factual: deploy, restore, E2E, concorrência, entrega WhatsApp real e
   persistência dos demais domínios.
+
+## Delta implementado — Goal003, 2026-09-07 (ACCEPTED na rodada 2)
+
+A fotografia histórica acima permanece como registro da baseline. Os FATOs de
+"BFF e autenticação", "WhatsApp / Evolution Go" e "Descoberta adicional" que
+descrevem JWT sem revogação, CSRF ausente, segredo interno único,
+`instanceToken` do corpo como autoridade e `/message/status` sem dono estão
+superados pelos fatos abaixo, verificados no [review003](reviews/003-review.md)
+sobre a base `99a7210`.
+
+- **FATO atual:** `apps/bff/src/lib/auth.ts` assina o JWT com `sid`;
+  `requireAuth` carrega `UserSession` a cada requisição e recusa sessão
+  inexistente, expirada, revogada ou de outro usuário com 401; JWT sem `sid`
+  recebe 401 `SESSION_REAUTH_REQUIRED` sem criar sessão. `POST /v1/auth/logout`
+  revoga a sessão corrente; `PATCH /v1/auth/password` e
+  `POST /v1/auth/reset-password` revogam todas, cookie e Bearer.
+- **FATO atual:** mutações autenticadas por cookie exigem `Origin`/`Referer` na
+  allowlist de `FRONTEND_ORIGIN` e header `x-csrf-token` conferido contra o
+  hash guardado na sessão; Bearer não exige CSRF e header declaratório não
+  autentica. O token é derivado por sessão e entregue no cookie legível
+  `atendly_csrf` e no header de resposta `x-csrf-token`, exposto pelo CORS só
+  à origem permitida, porque em produção frontend e BFF estão em hosts distintos
+  sob `onrender.com`. `BffHttpClient` guarda o token em memória e o reenvia;
+  `test:frontend` cobre esse adapter sem cookie jar.
+- **FATO atual:** `WhatsAppInstance.tenantId` é único com FK para `Tenant`;
+  `userId` único foi conservado. `apps/bff/src/modules/whatsapp/instance-link.ts`
+  resolve o vínculo pelo tenant autenticado e recusa com 409 os estados pendente
+  (linha do usuário sem tenant) e divergente (duas linhas, ou dono de negócio
+  diferente do usuário); só `DELETE /v1/whatsapp` descarta a linha pendente, e
+  apenas para o dono. **Nota:** a classificação de pendente não exige `tenantId`
+  nulo na linha do usuário; inalcançável com a associação única vigente,
+  endurecimento registrado no review.
+- **FATO atual:** credenciais internas são derivadas por
+  `HMAC(INTERNAL_SERVICE_TOKEN, chamador:audiência:uso)` ou definidas
+  explicitamente por variável; o valor bruto do segredo raiz não é aceito por
+  BFF→IA, BFF→Scheduling nem IA→Scheduling. A IA autoriza por escopo mapeado por
+  método e caminho (`internal:unmapped` negado) e exige `x-tenant-id`/`x-user-id`
+  explícitos depois da credencial; o fallback de primeira `ChannelConnection`
+  ativa foi removido. Scheduling identifica o chamador pela credencial e recusa
+  `x-service-audience` divergente com 403.
+- **FATO atual:** o token da instância é guardado no BFF como envelope
+  AES-256-GCM `v1.<keyId>.<iv>.<ct>` com AAD `tenantId|evolutionInstanceName`,
+  versionado por `credentialVersion`/`credentialKeyId`; envelope de chave antiga
+  é regravado na leitura e estoque legado em texto puro é selado na primeira
+  leitura autorizada. Falha de chave, envelope ou vínculo levanta
+  `CREDENTIAL_UNAVAILABLE` e impede a operação. `WHATSAPP_CREDENTIAL_KEYS` é
+  obrigatório em produção.
+- **FATO atual:** a IA recebe a credencial como projeção em
+  `PUT /internal/channel-connections/evolution`, guarda-a cifrada com chaves
+  próprias (`CHANNEL_CREDENTIAL_KEYS`) e resolve-a pelo vínculo de forma
+  preguiçosa no envio; `readInstanceToken(request.body)` não existe mais, o
+  payload do webhook é saneado por `redactSensitive` antes do mapeamento e
+  `EvolutionProvider` não cai em `EVOLUTION_API_KEY`. Vínculo em
+  `credentialVersion` 0 recebe e persiste o inbound e só falha ao responder;
+  `GET /v1/whatsapp` reprojeta a credencial de forma idempotente.
+- **FATO atual:** `apps/evolution-go/pkg/message/model/message_model.go` tem
+  `instance_id` e índice único `(instance_id, message_id)`; `InsertMessage`
+  recusa dono vazio e faz upsert nesse par; `GetMessageByID`,
+  `GetLatestMessageID`, `DeleteMessagesByInstance` e a limpeza de
+  `instance_repository.Delete` são escopadas por instância (a limpeza anterior
+  filtrava por `source`, telefone, e não removia nada). `POST /message/status`
+  devolve 401 antes de ler o body sem sujeito autenticado e `result` nulo
+  idêntico para ID alheio e desconhecido. Writers de recibo em `whatsmeow.go`
+  gravam `InstanceID = mycli.Instance.Id`. Expand roda no boot com inventário
+  logado; `EVOLUTION_MESSAGE_OWNERSHIP_CUTOVER=true` remove a unicidade global de
+  `message_id` só com o índice composto presente. Linhas legadas sem dono ficam
+  preservadas e inalcançáveis.
+- **FATO atual, não alterado:** o produtor Go ainda inclui `instanceToken` no
+  payload dos eventos (`whatsmeow.go`, cinco pontos) e `webhook_producer.go`
+  ainda loga a URL completa com o token de query. O consumer descarta e sanea; a
+  retirada no produtor é do Goal004.
+- **FATO atual:** `validate:core` executa `test:frontend` (deixou de ser skip) e
+  `validate:integration` tem seis passos, incluindo o ensaio da migration de
+  vínculo e a suíte de ownership do Go em bancos derivados do alvo descartável
+  ([VALIDATION_GATE](VALIDATION_GATE.md)). Swagger e wiki do Evolution foram
+  alinhados cirurgicamente para `/message/status` e `advanced-settings`.
+- Continuam **NÃO VERIFICADOS:** prova em navegador real do CSRF cross-host,
+  execução hospedada da CI, corte do Go em banco implantado, drift da migration
+  da IA contra o schema (o cluster local não tem pgvector), deploy, WhatsApp
+  real e os demais limites do fechamento factual.

@@ -1562,13 +1562,19 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Invalid instance ID",
+                        "description": "Invalid instance ID for the authenticated instance",
                         "schema": {
                             "$ref": "#/definitions/gin.H"
                         }
                     },
-                    "404": {
-                        "description": "Instance not found",
+                    "401": {
+                        "description": "Missing or invalid instance credentials",
+                        "schema": {
+                            "$ref": "#/definitions/gin.H"
+                        }
+                    },
+                    "403": {
+                        "description": "instanceId belongs to another instance",
                         "schema": {
                             "$ref": "#/definitions/gin.H"
                         }
@@ -1624,8 +1630,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/gin.H"
                         }
                     },
-                    "404": {
-                        "description": "Instance not found",
+                    "401": {
+                        "description": "Missing or invalid instance credentials",
+                        "schema": {
+                            "$ref": "#/definitions/gin.H"
+                        }
+                    },
+                    "403": {
+                        "description": "instanceId belongs to another instance",
                         "schema": {
                             "$ref": "#/definitions/gin.H"
                         }
@@ -2084,7 +2096,7 @@ const docTemplate = `{
         },
         "/message/status": {
             "post": {
-                "description": "Get message status",
+                "description": "Returns delivery metadata for a message owned by the authenticated instance. The lookup is scoped to that instance by (instance_id, message_id): an id that belongs to another instance and an id that does not exist both return data.result = null, so the response never reveals the existence of another instance's message. Legacy rows stored before ownership existed have no owner and are never returned.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2108,13 +2120,19 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "success",
+                        "description": "success; data.result is null when the authenticated instance owns no message with this id",
                         "schema": {
                             "$ref": "#/definitions/gin.H"
                         }
                     },
                     "400": {
                         "description": "Error on validation",
+                        "schema": {
+                            "$ref": "#/definitions/gin.H"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid instance credentials",
                         "schema": {
                             "$ref": "#/definitions/gin.H"
                         }

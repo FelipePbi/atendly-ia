@@ -272,6 +272,30 @@ func migrate(db *gorm.DB) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Fase EXPAND já está aplicada pelo AutoMigrate acima: coluna instance_id e
+	// índice único composto passam a existir, e a unicidade global de
+	// message_id continua no lugar.
+	report, err := message_repository.InspectMessageOwnership(db)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf(
+		"message ownership: composite_index=%t legacy_unique=%t messages=%d without_owner=%d",
+		report.CompositeIndexPresent,
+		report.LegacyUniquePresent,
+		report.TotalMessages,
+		report.MessagesWithoutOwner,
+	)
+
+	// Fase CUTOVER, explícita: remove a unicidade global só quando pedida, e
+	// somente depois de o índice composto existir.
+	if os.Getenv("EVOLUTION_MESSAGE_OWNERSHIP_CUTOVER") == "true" {
+		if err := message_repository.ApplyMessageOwnershipCutover(db); err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("message ownership: legacy global unique on message_id removed")
+	}
 }
 
 func initAuthDB(config *config.Config) (*sql.DB, string, error) {

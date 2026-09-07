@@ -5,6 +5,7 @@ import { env } from "../../../config/env.js";
 import type { PrismaClient } from "../../../generated/prisma/client.js";
 import { channelMessageLogContext } from "../../../lib/diagnostic-log.js";
 import { toErrorMessage } from "../../../lib/errors.js";
+import { redactSensitive } from "../../../lib/redact.js";
 import { AssistantService } from "../../assistant/assistant.service.js";
 import { PrismaGraphRuntime } from "../../graph/graph-runtime.js";
 import { HandoffService } from "../../handoff/HandoffService.js";
@@ -17,7 +18,10 @@ import {
   inspectEvolutionInboundPayload,
   mapEvolutionInbound,
 } from "../adapters/evolution/EvolutionInboundMapper.js";
-import { EvolutionProvider } from "../adapters/evolution/EvolutionProvider.js";
+import {
+  type EvolutionInstanceCredential,
+  EvolutionProvider,
+} from "../adapters/evolution/EvolutionProvider.js";
 import { ChannelConnectionService } from "../ChannelConnectionService.js";
 import { InboundMessageProcessor } from "../InboundMessageProcessor.js";
 
@@ -39,8 +43,13 @@ export async function registerEvolutionWebhookRoutes(
         return reply.code(401).send({ ok: false, error: "Unauthorized" });
       }
 
-      const inspection = inspectEvolutionInboundPayload(request.body);
-      const mappedMessage = mapEvolutionInbound(request.body);
+      // Saneamento antes de qualquer mapeamento: o payload que segue adiante —
+      // e que termina em `rawPayload` de Message/ProcessedEvent — já não
+      // carrega token, apikey nem authorization. Nada aqui é tratado como
+      // autoridade: `instanceToken` no corpo é descartado junto.
+      const payload = redactSensitive(request.body);
+      const inspection = inspectEvolutionInboundPayload(payload);
+      const mappedMessage = mapEvolutionInbound(payload);
       if (!mappedMessage) {
         app.log.warn(
           { requestId: request.id, ...inspection },
@@ -53,17 +62,25 @@ export async function registerEvolutionWebhookRoutes(
         });
       }
 
-      const message = await channelConnections.resolveEvolutionInbound({
-        message: mappedMessage,
-        requestId: request.id,
-      });
+      const { message, connection } =
+        await channelConnections.resolveEvolutionInboundContext({
+          message: mappedMessage,
+          requestId: request.id,
+        });
       const processor = buildInboundMessageProcessor({
         app,
         prisma,
         tenantId: message.tenantId,
         channelId: message.channelId,
         instanceId: message.instanceId,
-        instanceToken: readInstanceToken(request.body),
+        // Resolução preguiçosa, no momento do envio. Recepção e persistência
+        // não dependem do estado da projeção da credencial: um vínculo ainda
+        // não reprovisionado — `credentialVersion` 0 logo após a migration —
+        // grava a mensagem do cliente normalmente e só falha ao responder, com
+        // erro explícito e logado. Um token adulterado no corpo do evento
+        // continua sem influência sobre o que é usado para responder.
+        instanceToken: () =>
+          channelConnections.resolveChannelCredential(connection),
         checkpointer,
       });
 
@@ -108,7 +125,7 @@ export function buildInboundMessageProcessor(input: {
   tenantId: string;
   channelId: string;
   instanceId: string;
-  instanceToken?: string;
+  instanceToken: EvolutionInstanceCredential;
   checkpointer?: BaseCheckpointSaver;
 }) {
   const knowledge = new PGVectorKnowledgeStore(
@@ -157,12 +174,4 @@ function isValidWebhookToken(request: FastifyRequest): boolean {
 
   const query = request.query as Record<string, string | undefined>;
   return query.token === env.EVOLUTION_WEBHOOK_TOKEN;
-}
-
-function readInstanceToken(payload: unknown): string | undefined {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    return undefined;
-  }
-  const value = (payload as Record<string, unknown>).instanceToken;
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }

@@ -56,13 +56,19 @@ export class BffAuthService {
     });
   }
 
-  logout(signal?: AbortSignal) {
-    return this.http.request({
-      method: "POST",
-      path: "/v1/auth/logout",
-      schema: okSchema,
-      signal,
-    });
+  async logout(signal?: AbortSignal) {
+    try {
+      return await this.http.request({
+        method: "POST",
+        path: "/v1/auth/logout",
+        schema: okSchema,
+        signal,
+      });
+    } finally {
+      // A sessão foi revogada no servidor; guardar o token dela só levaria a
+      // enviar uma prova morta na próxima mutação.
+      this.http.resetCsrfToken();
+    }
   }
 
   session(signal?: AbortSignal) {

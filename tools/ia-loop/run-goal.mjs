@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { SpikeError } from './lib/claude-process.mjs';
 import { createJobStore } from './lib/job-store.mjs';
 import { discoverGoal } from './lib/goal-discovery.mjs';
-import { planWorktree, createWorktreeForGoal } from './lib/worktree-manager.mjs';
+import { planWorktree, createWorktreeForGoal, branchNameFor, worktreePathFor } from './lib/worktree-manager.mjs';
 import { readWorkerHealth, WORKER_HEALTH, SESSION_STRATEGY } from './lib/worker-registry.mjs';
 import { LOOP_STATES, createLoopStateMachine, planAfterDecision, stateForDecision } from './lib/loop-state.mjs';
 import { PROTOCOL_VERSION_V2, validateDeveloperJob, validateReviewJob } from './lib/contracts-v2.mjs';
@@ -230,16 +230,42 @@ async function main() {
 
   // --- Worktree ------------------------------------------------------------
   machine.transitionTo(LOOP_STATES.PREPARING_WORKTREE);
-  emit('Creating worktree…');
 
-  const worktree = await createWorktreeForGoal({
-    goalId,
-    executionBase,
-    git: probe,
-    repoRoot: REPO_ROOT,
-    createFn: gitCreateWorktree,
-  });
+  // Resuming an execution that was interrupted must not redo finished work.
+  // The worktree is reused and the ORIGINAL execution base is kept, otherwise
+  // the functional diff would be measured against the wrong commit.
+  const previousRuntime = await store.readRuntime();
+  const resuming = previousRuntime?.mode === 'REAL_EXECUTION'
+    && previousRuntime.goal === goal.goalId
+    && Boolean(previousRuntime.worktreeInitialHead)
+    && Boolean(previousRuntime.worktreePath)
+    && await probe.pathExists(previousRuntime.worktreePath);
+
+  let worktree;
+  if (resuming) {
+    emit('Resuming an execution already in progress — the worktree is reused, not recreated.');
+    worktree = {
+      path: previousRuntime.worktreePath,
+      branch: branchNameFor(goalId),
+      worktreeInitialHead: previousRuntime.worktreeInitialHead,
+      absolutePath: join(REPO_ROOT, previousRuntime.worktreePath),
+    };
+  } else {
+    emit('Creating worktree…');
+    worktree = await createWorktreeForGoal({
+      goalId,
+      executionBase,
+      git: probe,
+      repoRoot: REPO_ROOT,
+      createFn: gitCreateWorktree,
+    });
+  }
   machine.transitionTo(LOOP_STATES.WORKTREE_READY);
+
+  // The base of record is the one this execution actually started from.
+  const effectiveExecutionBase = resuming
+    ? (previousRuntime.executionBase ?? worktree.worktreeInitialHead)
+    : executionBase;
 
   emit('Worktree:');
   emit(`  path: ${worktree.path}`);
@@ -249,12 +275,12 @@ async function main() {
 
   await store.writeCurrentGoal({
     goalId: goal.goalId, title: goal.title, status: goal.status, goalPath: goal.goalPath,
-    migrationAcceptedBaseline: goal.migrationAcceptedBaseline, executionBase,
+    migrationAcceptedBaseline: goal.migrationAcceptedBaseline, executionBase: effectiveExecutionBase,
     worktreePath: worktree.path, worktreeInitialHead: worktree.worktreeInitialHead,
   });
   await store.writeRuntime({
     mode: 'REAL_EXECUTION', goal: goal.goalId, round: ROUND, state: machine.state,
-    migrationAcceptedBaseline: goal.migrationAcceptedBaseline, executionBase,
+    migrationAcceptedBaseline: goal.migrationAcceptedBaseline, executionBase: effectiveExecutionBase,
     worktreePath: worktree.path, worktreeInitialHead: worktree.worktreeInitialHead,
     reviewLevel: REVIEW_LEVEL, goalExecuted: false,
   });
@@ -268,7 +294,13 @@ async function main() {
   // --- Developer -----------------------------------------------------------
   const beforeDev = await captureSnapshot({ probe });
 
-  const devJobId = store.newJobId(goal.goalId, ROUND, 'developer');
+  // Reusing the recorded job id is what makes the idempotency check meaningful.
+  const devJobId = resuming && previousRuntime.currentJobId
+    ? previousRuntime.currentJobId
+    : store.newJobId(goal.goalId, ROUND, 'developer');
+
+  const developerAlreadyDone = await store.hasCompletedResult('developer', devJobId);
+
   const devJob = validateDeveloperJob({
     protocolVersion: PROTOCOL_VERSION_V2,
     jobId: devJobId,
@@ -277,7 +309,7 @@ async function main() {
     round: ROUND,
     type: 'IMPLEMENTATION',
     migrationAcceptedBaseline: goal.migrationAcceptedBaseline,
-    executionBase,
+    executionBase: effectiveExecutionBase,
     worktreeInitialHead: worktree.worktreeInitialHead,
     worktree: absWorktree,
     goalPath: goal.goalPath,
@@ -285,22 +317,32 @@ async function main() {
   });
 
   machine.transitionTo(LOOP_STATES.DEVELOPER_QUEUED);
-  await store.publishJob('developer', devJob);
-  await store.writeRuntime({
-    ...(await store.readRuntime()), state: machine.state, currentJobId: devJobId,
-  });
-  emit(`Developer job published: ${devJobId}`);
-  machine.transitionTo(LOOP_STATES.DEVELOPER_RUNNING);
-  emit('Waiting for the Developer…');
 
-  const devEnvelope = await waitForResult(store, 'developer', devJobId, { emit });
+  let devEnvelope;
+  if (developerAlreadyDone) {
+    // The Developer finished before the interruption. Calling it again would
+    // redo hours of work and could produce a different implementation than the
+    // one already on disk.
+    emit(`Developer already completed ${devJobId} — reusing the persisted result. The model is NOT called again.`);
+    machine.transitionTo(LOOP_STATES.DEVELOPER_RUNNING);
+    devEnvelope = await store.readResult('developer', devJobId);
+  } else {
+    await store.publishJob('developer', devJob);
+    await store.writeRuntime({
+      ...(await store.readRuntime()), state: machine.state, currentJobId: devJobId,
+    });
+    emit(`Developer job published: ${devJobId}`);
+    machine.transitionTo(LOOP_STATES.DEVELOPER_RUNNING);
+    emit('Waiting for the Developer…');
+    devEnvelope = await waitForResult(store, 'developer', devJobId, { emit });
+  }
 
   if (!devEnvelope.ok) {
     machine.transitionTo(LOOP_STATES.HUMAN_REQUIRED);
     machine.transitionTo(LOOP_STATES.AWAITING_HUMAN);
     emit('');
     emit(`Developer failed: [${devEnvelope.code}] ${devEnvelope.message}`);
-    await finish({ store, machine, emit, goal, worktree, executionBase, decision: 'HUMAN_REQUIRED', blockers: [], violations: [] });
+    await finish({ store, machine, emit, goal, worktree, executionBase: effectiveExecutionBase, decision: 'HUMAN_REQUIRED', blockers: [], violations: [] });
     return 1;
   }
 
@@ -338,7 +380,7 @@ async function main() {
     machine.transitionTo(LOOP_STATES.AWAITING_HUMAN);
     await store.appendEvent({ type: 'POLICY_VIOLATION', goal: goal.goalId, agent: 'developer', violations: devViolations });
     emit('POLICY_VIOLATION — stopping before the review.');
-    await finish({ store, machine, emit, goal, worktree, executionBase, decision: 'HUMAN_REQUIRED', blockers: [], violations: devViolations });
+    await finish({ store, machine, emit, goal, worktree, executionBase: effectiveExecutionBase, decision: 'HUMAN_REQUIRED', blockers: [], violations: devViolations });
     return 1;
   }
 
@@ -351,7 +393,7 @@ async function main() {
     round: ROUND,
     reviewLevel: REVIEW_LEVEL,
     migrationAcceptedBaseline: goal.migrationAcceptedBaseline,
-    executionBase,
+    executionBase: effectiveExecutionBase,
     worktreeInitialHead: worktree.worktreeInitialHead,
     worktreePath: absWorktree,
     changes,
@@ -371,7 +413,7 @@ async function main() {
     round: ROUND,
     reviewLevel: REVIEW_LEVEL,
     migrationAcceptedBaseline: goal.migrationAcceptedBaseline,
-    executionBase,
+    executionBase: effectiveExecutionBase,
     worktreeInitialHead: worktree.worktreeInitialHead,
     worktree: absWorktree,
     goalPath: goal.goalPath,
@@ -400,7 +442,7 @@ async function main() {
     emit('REVIEWER_MUTATED_WORKTREE — the review is not accepted.');
     machine.transitionTo(LOOP_STATES.HUMAN_REQUIRED);
     machine.transitionTo(LOOP_STATES.AWAITING_HUMAN);
-    await finish({ store, machine, emit, goal, worktree, executionBase, decision: 'HUMAN_REQUIRED', blockers: [], violations: revViolations });
+    await finish({ store, machine, emit, goal, worktree, executionBase: effectiveExecutionBase, decision: 'HUMAN_REQUIRED', blockers: [], violations: revViolations });
     return 1;
   }
 
@@ -408,7 +450,7 @@ async function main() {
     machine.transitionTo(LOOP_STATES.HUMAN_REQUIRED);
     machine.transitionTo(LOOP_STATES.AWAITING_HUMAN);
     emit(`Review failed: [${revEnvelope.code}] ${revEnvelope.message}`);
-    await finish({ store, machine, emit, goal, worktree, executionBase, decision: 'HUMAN_REQUIRED', blockers: [], violations: [] });
+    await finish({ store, machine, emit, goal, worktree, executionBase: effectiveExecutionBase, decision: 'HUMAN_REQUIRED', blockers: [], violations: [] });
     return 1;
   }
 
@@ -422,7 +464,7 @@ async function main() {
   machine.transitionTo(LOOP_STATES.AWAITING_HUMAN);
 
   await finish({
-    store, machine, emit, goal, worktree, executionBase,
+    store, machine, emit, goal, worktree, executionBase: effectiveExecutionBase,
     decision: decision.decision, blockers: decision.blockers ?? [], violations: [], plan,
     developerResult: devResult, changes,
   });

@@ -125,7 +125,10 @@ export function buildArgs({
   }
 
   const args = [
-    '--print', prompt,
+    // The prompt goes over stdin, never in argv: a real review packet exceeds
+    // the ~32KB Windows command-line limit and the spawn fails with
+    // ENAMETOOLONG. Measured on the first real Goal003 run.
+    '--print',
     '--model', model,
     '--output-format', 'json',
     '--json-schema', JSON.stringify(jsonSchema ?? AGENT_SCHEMA),
@@ -168,6 +171,7 @@ export function runClaudeProcess({
   timeoutMs = 120_000,
   env = process.env,
   spawnFn = spawn,
+  stdinData = null,
 }) {
   return new Promise((resolve, reject) => {
     let child;
@@ -182,6 +186,13 @@ export function runClaudeProcess({
     let stderr = '';
     let timedOut = false;
     let settled = false;
+
+    if (stdinData !== null && child.stdin) {
+      // A broken pipe here must not crash the orchestrator; the process error
+      // handler already reports a failed spawn.
+      child.stdin.on('error', () => {});
+      child.stdin.end(stdinData);
+    }
 
     const timer = setTimeout(() => {
       timedOut = true;
@@ -441,6 +452,7 @@ export async function invokeAgent({
         prompt, model, jsonSchema, sessionId, persistSession, resume,
         tools, permissionMode, addDirs, safeMode,
       }),
+      stdinData: prompt,
       cwd,
       timeoutMs,
       env,

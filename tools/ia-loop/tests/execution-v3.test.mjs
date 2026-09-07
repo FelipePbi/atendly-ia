@@ -300,3 +300,19 @@ test('the reviewer profile has no write tools', () => {
   assert.ok(!toolList.includes('Edit'));
   assert.ok(toolList.includes('Read'));
 });
+
+// --- Prompt transport ------------------------------------------------------
+
+test('the prompt never travels in argv', () => {
+  // Regression: a real review packet (65 changed files, a ~30KB implementation
+  // report) exceeded the ~32KB Windows command-line limit and the spawn failed
+  // with ENAMETOOLONG. The prompt now goes over stdin.
+  const bigPrompt = 'x'.repeat(40_000);
+  const args = buildArgs({ prompt: bigPrompt, model: 'm', sessionId: 's' });
+
+  assert.ok(!args.includes(bigPrompt), 'the prompt must not appear in argv');
+  assert.ok(args.every((a) => a.length < 32_000), 'no argument may approach the command-line limit');
+
+  // --print stays, but as a bare flag followed by the next option.
+  assert.equal(args[args.indexOf('--print') + 1], '--model');
+});

@@ -2,7 +2,7 @@
 
 Esta pasta contém a auditoria independente, a arquitetura alvo e o plano incremental para o único MVP do Atendly. Goal0 analisa e planeja; não implementa produto. Baseline histórica do Goal0: `5fb5d51abc1de58cb24718e7349d7a68ccaa7356`, auditada em 2026-09-05 — fotografia daquele momento, não a baseline operacional dos Goals seguintes. A **baseline aceita vigente** é o SHA do commit de fechamento do último Goal ACCEPTED e fica em [MIGRATION_STATUS](MIGRATION_STATUS.md).
 
-**Astra:** Tech Lead / Architect / Reviewer; confronta evidências, decide direção técnica dentro do escopo, mantém plano e inspeciona implementações. **Claude Code / Opus:** Developer / Executor; implementa o Goal vigente, migrations/contratos/testes e entrega diff/resultados para review. Relatório do executor não substitui inspeção real.
+**Tech Lead Agent:** Tech Lead / Architect / Reviewer; confronta evidências, decide direção técnica dentro do escopo, mantém plano e inspeciona implementações. **Developer Agent:** Developer / Executor; implementa o Goal vigente, migrations/contratos/testes e entrega diff/resultados para review. **IA Loop:** orchestrator; transporta, persiste estado e executa mecanicamente as transições já autorizadas, sem decidir aceite. Relatório do executor não substitui inspeção real. Os modelos que exercem cada papel estão em [AGENT_ROLES](AGENT_ROLES.md).
 
 ## Fontes e leitura
 
@@ -31,17 +31,17 @@ Fatos, inferências, divergências e propostas aparecem separados. “Factual co
 
 ## Ciclo de execução e manutenção
 
-`Astra gera Goal N → Claude implementa/testa → diff/testes/report → Astra revisa → correção, se necessário → ACCEPTED → Astra atualiza docs → Astra commita o fechamento do Goal N → o SHA vira baseline aceita → Astra reavalia o roadmap → Astra cria o Goal N+1 como READY → Claude executa`.
+`Tech Lead gera Goal N → Developer implementa/testa → diff/testes/report → Tech Lead revisa → correção, se necessário → ACCEPTED → Tech Lead define as atualizações documentais → IA Loop valida invariantes e commita o fechamento do Goal N → o SHA vira baseline aceita → Tech Lead reavalia o roadmap → Tech Lead cria o Goal N+1 como READY → Developer executa`.
 
-O commit de fechamento é do Astra e só existe depois do ACCEPTED; Claude entrega diff, testes e relatório, sem commitar. Enquanto o Goal N estiver IMPLEMENTED, REVIEW_REQUIRED, CHANGES_REQUIRED, CORRECTION_REQUIRED, BLOCKED ou ACCEPTED sem commit, o Goal N+1 não é criado como READY. As regras obrigatórias — o que entra no commit, a checagem antes de commitar, a declaração de baseline nos Goals novos e a geração do próximo Goal — estão em [MASTER_PLAN](MASTER_PLAN.md#fechamento-por-commit-e-baseline-aceita); a decisão que adotou essa política é [D-017](DECISIONS.md).
+O commit de fechamento só existe depois do ACCEPTED declarado pelo Tech Lead; a execução mecânica do commit cabe ao IA Loop. O Developer entrega diff, testes e relatório, sem commitar. Enquanto o Goal N estiver IMPLEMENTED, REVIEW_REQUIRED, CHANGES_REQUIRED, CORRECTION_REQUIRED, BLOCKED ou ACCEPTED sem commit, o Goal N+1 não é criado como READY. As regras obrigatórias — o que entra no commit, a checagem antes de commitar, a declaração de baseline nos Goals novos e a geração do próximo Goal — estão em [MASTER_PLAN](MASTER_PLAN.md#fechamento-por-commit-e-baseline-aceita); a decisão que adotou essa política é [D-017](DECISIONS.md).
 
 Atualizar CURRENT_STATE quando um Goal aceito mudar a fotografia de runtime, preservando a baseline anterior na trilha. Atualizar gaps/reuso/dados/arquitetura somente onde mudança alterar conclusões. DECISIONS registra evidência e substituição; MASTER_PLAN é o roteiro vigente, não promessa imutável. MIGRATION_STATUS muda com provas de implementação/review, nunca só com intenção.
 
-Não escrever prompts de todos os Goals agora. Se houver descoberta relevante, Astra confirma no código, registra impacto e insere/divide/reordena/supersede sem perder IDs/histórico. Correções ficam vinculadas ao Goal original. Os critérios do ciclo de review/DoD estão operacionalizados no MASTER_PLAN.
+Não escrever prompts de todos os Goals agora. Se houver descoberta relevante, o Tech Lead confirma no código, registra impacto e insere/divide/reordena/supersede sem perder IDs/histórico. Correções ficam vinculadas ao Goal original. Os critérios do ciclo de review/DoD estão operacionalizados no MASTER_PLAN.
 
 No Goal0, somente esta pasta foi produzida: nenhuma feature, contrato, schema, migration, teste de runtime, Product Vault ou design foi alterado, alterações anteriores fora desta pasta foram preservadas e não houve commit, push, merge ou PR. Depois do Goal0, o único commit previsto é o de fechamento de Goal descrito acima; push, merge e PR continuam exigindo autorização explícita do usuário.
 
-## Começar um chat novo do Astra
+## Começar uma sessão nova do Tech Lead
 
 O estado necessário está no repositório; não é preciso recuperar o histórico de outro chat. Leia de forma seletiva:
 

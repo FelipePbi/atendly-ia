@@ -6,7 +6,7 @@ Objetivo final: implementar o único MVP do Product Vault, com experiência Clau
 
 ## Regras de execução
 
-- Somente um Goal executável fica detalhado por vez; os anteriores são preservados como histórico. Depois de cada implementação, Astra inspeciona diff real, testes e dados relevantes, aceita ou devolve correção, e só reavalia e escreve o próximo Goal depois do commit de fechamento — ver [Fechamento por commit e baseline aceita](#fechamento-por-commit-e-baseline-aceita).
+- Somente um Goal executável fica detalhado por vez; os anteriores são preservados como histórico. Depois de cada implementação, o Tech Lead Agent inspeciona diff real, testes e dados relevantes, aceita ou devolve correção, e só reavalia e escreve o próximo Goal depois do commit de fechamento — ver [Fechamento por commit e baseline aceita](#fechamento-por-commit-e-baseline-aceita).
 - Cada Goal mantém repositório compilável e contratos interoperáveis. Um consumer novo entra antes do produtor ativar um contrato incompatível. Não há período planejado de frontend quebrado aguardando backend.
 - Estado novo pode existir em schema sem ser exposto até consumer pronto; adapters temporários têm dono/critério de remoção. Não lançar para validação de produto enquanto faltarem partes do MVP.
 - Não apagar legado antes de inventário/corte; não preservar possibilidade de duas agendas no produto novo. Janela técnica congelada para transição é indisponibilidade explicitada, não modo híbrido.
@@ -41,7 +41,7 @@ Objetivo final: implementar o único MVP do Product Vault, com experiência Clau
 | 022 — Retenção e exclusão recuperável | Fechar lifecycle de todas as cópias depois dos stores finais | 003,004,005,012,013,018,021; U-01 | BFF lifecycle, IA/checkpoints/mídia, Scheduling/Go comandos, frontend | Alto | Retenção configurável/confirmada, purge multistore, conta7dias, suspensão imediata e restore com novo teste |
 | 023 — Home e Configurações completas | Consolidar operação e preferências com capacidades reais já disponíveis | 015–022 | Frontend Home/Settings, BFF agregação | Médio | Checklist/estados/central, negócio/modalidades/IA/FAQ/agenda/WA/retention/lembretes/conta; sem métricas não aprovadas |
 | 024 — Retirada do legado e ensaio de release | Remover compatibilidade somente depois da adoção completa | 010,019,022,023; gates M5–M6 | Todos consumers, contratos/dados legados, infra/docs técnicas | Alto | Zero consumers antigos, writer remoto inexistente, migrations/restore ensaiados, build e deploy gate completos/capacidade validada |
-| 025 — Auditoria final do MVP | Verificar produto inteiro, arquitetura e UX antes de uso real | 024 e todos critérios MVP | Todos apps, dados, fluxos E2E, referência visual | Alto | Conformidade global aceita por Astra; relatório de evidência/limites e pendências zero de MVP |
+| 025 — Auditoria final do MVP | Verificar produto inteiro, arquitetura e UX antes de uso real | 024 e todos critérios MVP | Todos apps, dados, fluxos E2E, referência visual | Alto | Conformidade global aceita pelo Tech Lead Agent; relatório de evidência/limites e pendências zero de MVP |
 
 Goal010 inclui compatibilidade mínima dos consumers atuais para que o corte operacional não deixe o frontend oferecendo operação impossível; Goal019 entrega a composição visual final. Não há duas implementações operacionais concorrentes. Da mesma forma, cada contrato de evento entra com receptor compatível antes de ativar seu produtor.
 
@@ -76,30 +76,30 @@ Política vigente a partir de 2026-09-06, aplicável aos Goals aceitos daqui em 
 ### Ciclo obrigatório
 
 ```text
-Claude implementa Goal N
-→ Astra revisa a implementação real
-→ CHANGES_REQUIRED, se necessário → Claude corrige → Astra revisa de novo
+Developer implementa Goal N
+→ Tech Lead revisa a implementação real
+→ CHANGES_REQUIRED, se necessário → Developer corrige → Tech Lead revisa de novo
 → Goal N = ACCEPTED
-→ Astra atualiza review/status/documentos afetados
-→ Astra cria o commit de fechamento do Goal N
+→ Tech Lead define as atualizações de review/status/documentos afetados
+→ IA Loop valida as invariantes e executa o commit de fechamento do Goal N
 → o SHA desse commit vira a baseline aceita vigente
-→ Astra reavalia o roadmap incrementalmente
-→ somente então Astra cria o Goal N+1
+→ Tech Lead reavalia o roadmap incrementalmente
+→ somente então o Tech Lead cria o Goal N+1
 → Goal N+1 = READY
-→ Claude executa
+→ IA Loop entrega o Goal ao Developer
 ```
 
 O Goal N+1 **não** pode ser criado como READY enquanto o Goal N estiver IMPLEMENTED, REVIEW_REQUIRED, CHANGES_REQUIRED, CORRECTION_REQUIRED, BLOCKED — ou ACCEPTED sem commit de fechamento.
 
 ### Quem commita, e quando
 
-O commit de fechamento é do **Astra** e só existe depois do ACCEPTED formal. Claude entrega diff, testes e relatório; não cria commit de fechamento. Havendo CHANGES_REQUIRED, CORRECTION_REQUIRED ou BLOCKED não há commit: Claude corrige e Astra revisa de novo.
+A **decisão** de fechar é do **Tech Lead Agent** e só existe depois do ACCEPTED formal; a **execução mecânica** do commit é do **IA Loop**, que aplica a política sem interpretá-la. O IA Loop não pode inferir ACCEPTED: a transição vem de decisão estruturada do Tech Lead. O Developer entrega diff, testes e relatório; não cria commit de fechamento. Havendo CHANGES_REQUIRED, CORRECTION_REQUIRED ou BLOCKED não há commit: o Developer corrige e o Tech Lead revisa de novo.
 
-O commit representa o estado completo e aceito do Goal: implementação do Claude, testes, migrations/contratos/configs pertencentes ao escopo, correções das rodadas do mesmo Goal, review final do Astra e as atualizações documentais causadas diretamente pelo aceite.
+O commit representa o estado completo e aceito do Goal: implementação do Developer, testes, migrations/contratos/configs pertencentes ao escopo, correções das rodadas do mesmo Goal, review final do Tech Lead e as atualizações documentais causadas diretamente pelo aceite.
 
 Não entram automaticamente: arquivos temporários, caches, logs, bancos locais, artefatos de teste, alterações externas, alterações preexistentes não relacionadas e cleanup oportunista.
 
-Antes de commitar, Astra: (1) roda `git status`; (2) inspeciona o diff; (3) separa o que pertence ao Goal do que é externo ou preexistente; (4) faz stage seletivo; (5) evita `git add .` quando houver mudança não relacionada; (6) preserva as alterações externas sem descartá-las; (7) roda `git diff --check`; (8) confere que nenhum segredo ou credencial foi introduzido. Push, merge e PR exigem autorização explícita do usuário.
+Antes de commitar, o IA Loop: (1) roda `git status`; (2) inspeciona o diff; (3) separa o que pertence ao Goal do que é externo ou preexistente; (4) faz stage seletivo; (5) evita `git add .` quando houver mudança não relacionada; (6) preserva as alterações externas sem descartá-las; (7) roda `git diff --check`; (8) confere que nenhum segredo ou credencial foi introduzido. Push, merge e PR exigem autorização explícita do usuário.
 
 ### Baseline histórica e baseline aceita vigente
 
@@ -123,19 +123,19 @@ Alterações já aceitas não são revertidas nem reinterpretadas sem evidência
 
 ### Depois do commit: gerar o próximo Goal
 
-Astra obtém o SHA do novo HEAD, adota-o como baseline, reavalia o MASTER_PLAN de forma incremental, verifica novos gaps/decisões/achados, insere/divide/reordena/supersede Goals quando necessário, escreve **somente** o próximo Goal executável com a baseline declarada e marca apenas ele como READY. Nenhum prompt de Goals posteriores é gerado antecipadamente.
+O Tech Lead obtém o SHA do novo HEAD, adota-o como baseline, reavalia o MASTER_PLAN de forma incremental, verifica novos gaps/decisões/achados, insere/divide/reordena/supersede Goals quando necessário, escreve **somente** o próximo Goal executável com a baseline declarada e marca apenas ele como READY. Nenhum prompt de Goals posteriores é gerado antecipadamente.
 
 ## Definition of Done por Goal
 
 1. Claude implementou somente escopo vigente e entregou diff/testes/report com arquivos, contratos/dados afetados e comandos/resultados; o commit de fechamento não é dele.
 2. Testes obrigatórios e build/checks do escopo passaram; skipped, baseline failures e limitações estão separados, nunca mascarados como sucesso.
-3. Astra inspecionou diff real, migrations/consumers/testes e reproduziu a verificação relevante.
-4. Astra confirmou aderência ao Goal, arquitetura e Product Vault.
+3. O Tech Lead inspecionou diff real, migrations/consumers/testes e reproduziu a verificação relevante.
+4. O Tech Lead confirmou aderência ao Goal, arquitetura e Product Vault.
 5. Documentação necessária atualizada para refletir a implementação verificada.
 6. Decisões, riscos e pendências registrados; dados/rollback tratados quando aplicáveis.
 7. MIGRATION_STATUS atualizado após review: IMPLEMENTED não significa ACCEPTED. Correções exigidas antes de seguir consumer dependente.
-8. Astra declarou ACCEPTED e atualizou a documentação afetada pelo aceite.
-9. Astra criou o commit de fechamento do Goal e registrou o SHA como baseline aceita vigente.
+8. O Tech Lead declarou ACCEPTED e definiu a documentação afetada pelo aceite.
+9. O IA Loop criou o commit de fechamento do Goal e registrou o SHA como baseline aceita vigente.
 10. Roadmap reavaliado com as novas descobertas. Só então o próximo prompt executável é escrito e marcado READY.
 
 `ACCEPTED` sem commit de fechamento é encerramento administrativo incompleto: não habilita a criação do próximo Goal. Detalhe operacional em [Fechamento por commit e baseline aceita](#fechamento-por-commit-e-baseline-aceita).
@@ -154,11 +154,13 @@ Astra obtém o SHA do novo HEAD, adota-o como baseline, reavalia o MASTER_PLAN d
 - Auth/tenant isolation e credenciais validados; migrations/backfill/restore/corte ensaiados; contratos legados sem consumer retirados e nenhuma escrita remota operacional.
 - Loading/erro/vazio/sucesso reais em todas as superfícies relevantes; nenhuma confirmação antes de efeito concluído.
 - Checks, integrações PostgreSQL e E2E críticos passam; observabilidade/capacidade mínima comprovadas e documentação técnica representa implementação final.
-- Astra concluiu auditoria final de conformidade com evidências reais, não só relatório do executor.
+- O Tech Lead concluiu auditoria final de conformidade com evidências reais, não só relatório do executor.
 
 ## Histórico de planejamento
 
 v4 — 2026-09-07: reconciliação administrativa após Goal002 ACCEPTED na rodada 3. Política de workflow preservada em commit separado; fechamento002 em `1e874e2785d2bc78860db0eb571ea901a4395c17`, baseline aceita vigente. Roadmap reavaliado incrementalmente: sem evidência nova para alterar ordem, IDs ou escopo. Somente o rascunho Goal003 foi reconciliado e liberado READY após esse SHA, mantendo tenant/sessão/vínculo e G-35 antes do004. Nenhum Goal posterior gerado; sem nova revisão técnica ou implementação.
+
+v4 — 2026-09-07: handoff operacional do papel de Tech Lead / Reviewer, de Astra para o Tech Lead Agent, com os modelos vigentes registrados em [AGENT_ROLES](AGENT_ROLES.md). A decisão de aceite continua no papel de review; a execução mecânica do commit de fechamento passa ao IA Loop. Vale a partir do Goal003; reviews e Goals já concluídos não são reatribuídos nem reescritos. Ver D-018.
 
 v1 — 2026-09-05: plano inicial após consolidação factual. Goal001 escolhido pelo defeito confirmado de autorização; base de testes em002. Novas descobertas podem inserir/dividir/juntar/cancelar Goals com rastreabilidade. Nenhuma execução funcional iniciada por este documento.
 
@@ -166,7 +168,7 @@ v3 — 2026-09-06: adotado o fechamento de Goal por commit do Astra, com baselin
 
 v2 — 2026-09-05: review001 ACCEPTED sobre working tree4ca1301, sem commit. Goal002 detalhado just-in-time e refinado para validação reproduzível; DTOs continuam por domínio. G-35 acrescentado como requisito obrigatório de003 antes de004; dívidas documentais de segurança agrupadas no mesmo escopo. Falhas preexistentes de cleanup Go ficam em002, sem bloquear artificialmente001. Ver D-016 e review001 para evidência e condição de antecipar security Goal.
 
-## Política de review do Astra
+## Política de review do Tech Lead
 
 Por padrão, reviews são incrementais.
 

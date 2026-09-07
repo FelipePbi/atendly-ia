@@ -1,6 +1,6 @@
 # Goal 003 — Tenant, sessão e vínculo WhatsApp
 
-**Status: READY.** Executor: Claude Code / Opus. Reviewer: Astra. Rascunho de 2026-09-06 reconciliado em 2026-09-07, após [Goal002 ACCEPTED](../reviews/002-review.md#rodada-3) e seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
+**Status: READY.** Executor: Developer Agent (Claude Opus 5). Reviewer: Tech Lead Agent (Claude Fable 5.1), conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Rascunho de 2026-09-06 reconciliado em 2026-09-07, após [Goal002 ACCEPTED](../reviews/002-review.md#rodada-3) e seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
 
 ## Baseline aceita
 
@@ -77,7 +77,7 @@ Alinhar somente a documentação de segurança impactada: contrato `/message/sta
 - Criar migrations novas; não reescrever migrations aplicadas, rodar reset em URL herdada ou executar migration durante build. Preservar IDs e credenciais necessárias à operação até consumidores migrarem; dados ambíguos ficam em pendência segura.
 - Descrever expansão, backfill retomável, constraints, ordem de troca de readers/writers/credenciais e reversão segura. Não reintroduzir exposição de metadados ou sessões revogadas como estratégia de rollback.
 - Mudança de API/contexto/CSRF entra com seus consumers no mesmo Goal ou com compatibilidade explicitamente limitada e testada. D-011 continua por operação; sem centralização geral de DTOs.
-- Sem WhatsApp real, deploy, credenciais reais em fixtures, rotação de produção, commits pelo executor, push/merge/PR ou alteração de provider/framework. O commit de fechamento cabe ao Astra após ACCEPTED, conforme D-017. Se surgir evidência de exposição ativa ou necessidade de mudar fronteiras arquiteturais, registrar evidência e devolver a decisão ao Astra; não ampliar o Goal silenciosamente.
+- Sem WhatsApp real, deploy, credenciais reais em fixtures, rotação de produção, commits pelo executor, push/merge/PR ou alteração de provider/framework. O commit de fechamento é executado pelo IA Loop após o ACCEPTED declarado pelo Tech Lead, conforme D-017 e D-018. Se surgir evidência de exposição ativa ou necessidade de mudar fronteiras arquiteturais, registrar evidência e devolver a decisão ao Tech Lead; não ampliar o Goal silenciosamente.
 
 ## Testes e critérios de aceite
 
@@ -91,6 +91,6 @@ Alinhar somente a documentação de segurança impactada: contrato `/message/sta
 
 ## Entrega
 
-Relatório com diff inicial/final, arquivos e consumers, decisões do escopo, migrations/compatibilidade, RED/GREEN dos casos negativos, comandos/resultados e limitações. Atualizar somente contratos/docs afetados e registrar G-02/G-03/G-04/G-35 conforme evidência, sem alegar fechamento de outros domínios. Goal003 termina IMPLEMENTED/REVIEW_REQUIRED até review do Astra.
+Relatório com diff inicial/final, arquivos e consumers, decisões do escopo, migrations/compatibilidade, RED/GREEN dos casos negativos, comandos/resultados e limitações. Atualizar somente contratos/docs afetados e registrar G-02/G-03/G-04/G-35 conforme evidência, sem alegar fechamento de outros domínios. Goal003 termina IMPLEMENTED/REVIEW_REQUIRED até review do Tech Lead.
 
 O review de003 deve usar profundidade adequada à evidência concreta de auth/credenciais e migração de ownership (**DEEP dirigido**), sem reabrir a baseline arquitetural nem os aceites anteriores. Não usar subagentes por padrão. Goal004 permanece condicionado ao aceite003, ao fechamento de G-35 e ao commit de fechamento003 cujo SHA será sua baseline aceita. Não gerar prompts de004 ou posteriores.

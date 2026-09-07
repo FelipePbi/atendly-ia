@@ -519,9 +519,11 @@ Sem daemon, sem socket, sem polling agressivo — o loop de jobs usa polling de 
 
 ### Nota sobre a documentação da migração
 
-`docs/migration/` **não** foi alterado nesta etapa. Os artefatos históricos
-continuam registrando o reviewer como Astra. A troca formal do Tech Lead para
-Fable será tratada separadamente, antes da primeira execução real do Goal003.
+O handoff operacional do papel de Tech Lead já foi formalizado: a fonte canônica
+de quem exerce cada papel é [AGENT_ROLES](../../docs/migration/AGENT_ROLES.md),
+e a decisão está em D-018. Os artefatos históricos que registram Astra como
+reviewer dos Goals 001 e 002 permanecem inalterados — reviews concluídos não são
+reatribuídos.
 
 ---
 

@@ -248,6 +248,51 @@ export function createLeaseStore(stateDir, { config = LEASE_CONFIG } = {}) {
     }
   }
 
+  /**
+   * Retires a lease whose holder is proven gone, leaving no lease behind.
+   *
+   * Takeover hands ownership to a new attempt; this ends ownership instead —
+   * what a superseded attempt needs. The attempt it belonged to will never
+   * run again, so claiming its lease for someone would be a lie, and leaving
+   * it there blocks the worktree for work that is legitimately next.
+   *
+   * Same atomicity and the same compare-and-swap as takeover, and the lease is
+   * archived rather than deleted.
+   */
+  async function retire(kind, key, { expected, proof }) {
+    const path = pathFor(kind, key);
+    const markerPath = `${path}.takeover`;
+    await mkdir(dirname(path), { recursive: true });
+
+    let marker;
+    try {
+      marker = await open(markerPath, 'wx');
+    } catch (error) {
+      if (error.code === 'EEXIST') return { retired: false, reason: 'RECOVERY_IN_PROGRESS' };
+      throw new SpikeError('LEASE_IO_FAILED', `Cannot retire ${kind} lease ${key}: ${error.message}`);
+    }
+
+    try {
+      const current = await read(kind, key);
+      if (!current) return { retired: false, reason: 'LEASE_ALREADY_GONE' };
+      if (current.workerInstanceId !== expected?.workerInstanceId
+        || current.heartbeatAt !== expected?.heartbeatAt) {
+        return { retired: false, reason: 'LEASE_CHANGED_SINCE_JUDGEMENT', heldBy: current };
+      }
+
+      await writeFile(
+        `${path}.superseded`,
+        `${JSON.stringify({ ...current, status: 'SUPERSEDED', supersededAt: new Date().toISOString(), supersededProof: proof ?? null }, null, 2)}\n`,
+        'utf8',
+      );
+      await rm(path, { force: true });
+      return { retired: true, lease: current };
+    } finally {
+      await marker.close();
+      await rm(markerPath, { force: true });
+    }
+  }
+
   return {
     paths: { jobsDir, worktreesDir, pathFor },
 
@@ -263,6 +308,8 @@ export function createLeaseStore(stateDir, { config = LEASE_CONFIG } = {}) {
     renewWorktree(path) { return renew('worktree', worktreeKey(path)); },
 
     takeoverJob(jobId, options) { return takeover('job', jobId, options); },
+    retireJob(jobId, options) { return retire('job', jobId, options); },
+    retireWorktree(path, options) { return retire('worktree', worktreeKey(path), options); },
     takeoverWorktree(path, options) { return takeover('worktree', worktreeKey(path), options); },
 
     releaseJob(jobId, options) { return release('job', jobId, options); },

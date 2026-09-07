@@ -576,3 +576,67 @@ test('27. recovery calls no model and cannot fall back to one', async () => {
       `${file} must not be able to invoke a model`);
   }
 });
+
+// ===========================================================================
+// Retiring the leases of an attempt that will never run again
+// ===========================================================================
+
+test('a lease whose holder is proven gone is retired, archived, and leaves nothing behind', async () => {
+  await withDir(async (dir) => {
+    const leases = createLeaseStore(dir);
+    const { lease } = await leases.claimJob('004-r1-developer-dupe', { agent: 'developer' });
+
+    const retired = await leases.retireJob('004-r1-developer-dupe', {
+      expected: lease, proof: 'PROCESS_GONE',
+    });
+
+    assert.equal(retired.retired, true);
+    assert.equal(await leases.readJobLease('004-r1-developer-dupe'), null, 'ownership ends');
+
+    const archived = JSON.parse(
+      await readFile(join(dir, 'leases', 'jobs', '004-r1-developer-dupe.lock.superseded'), 'utf8'),
+    );
+    assert.equal(archived.status, 'SUPERSEDED');
+    assert.equal(archived.supersededProof, 'PROCESS_GONE', 'the proof that retired it is kept');
+  });
+});
+
+test('retiring is refused when the lease moved since it was judged', async () => {
+  await withDir(async (dir) => {
+    const leases = createLeaseStore(dir);
+    const { lease } = await leases.claimJob('k', {});
+    const judged = { ...lease };
+    await leases.renewJob('k');
+
+    const retired = await leases.retireJob('k', { expected: judged, proof: 'PROCESS_GONE' });
+    assert.equal(retired.retired, false);
+    assert.equal(retired.reason, 'LEASE_CHANGED_SINCE_JUDGEMENT');
+    assert.ok(await leases.readJobLease('k'), 'and the lease stays');
+  });
+});
+
+test('a worktree lease held by a dead attempt does not block the next round', async () => {
+  // The real leftover: the duplicate attempt died holding the Goal004 worktree,
+  // so the correction round would have been refused with WORKTREE_BUSY by a
+  // process that no longer existed.
+  await withDir(async (dir) => {
+    const leases = createLeaseStore(dir);
+    const path = '.ai-worktrees/goal-004';
+    const { lease } = await leases.claimWorktree(path, { attemptId: 'dupe-a1', agent: 'developer' });
+
+    const blocked = await leases.claimWorktree(path, { attemptId: 'r2-a1', agent: 'developer' });
+    assert.equal(blocked.acquired, false, 'busy while the lease stands');
+
+    await leases.retireWorktree(path, { expected: lease, proof: 'PROCESS_GONE' });
+
+    const free = await leases.claimWorktree(path, { attemptId: 'r2-a1', agent: 'developer' });
+    assert.equal(free.acquired, true, 'and free once its holder is proven gone');
+  });
+});
+
+test('recovery retires an orphan lease only with proof, never because a job was superseded', async () => {
+  const source = await readFile(new URL('../run-recover.mjs', import.meta.url), 'utf8');
+  assert.match(source, /isRecoveryEligible\(heldVerdict\)/, 'the same standard of proof as the loop lease');
+  assert.match(source, /ORPHANED_LEASE_RETIRED/, 'and it is recorded');
+  assert.match(source, /its lease is kept/, 'an unproven holder keeps its lease');
+});

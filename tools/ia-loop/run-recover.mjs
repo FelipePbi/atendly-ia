@@ -265,6 +265,34 @@ async function main() {
       jobId: duplicate.jobId, stageKey: duplicate.stageKey, completedBy: duplicate.completedBy,
     });
     emit(`Superseded duplicate attempt ${duplicate.jobId} — ${duplicate.stageKey} completed as ${duplicate.completedBy}.`);
+
+    // Its leases go too, but only against the same standard of proof: a lease
+    // is retired when its holder is confirmably gone, never because the job
+    // was superseded. Left behind, the worktree lease blocks the round that is
+    // legitimately next with WORKTREE_BUSY, held by a process that no longer
+    // exists.
+    const held = await leaseStore.readJobLease(duplicate.jobId).catch(() => null);
+    if (held) {
+      const heldEvidence = await collectOwnerEvidence(held, inspector, { now });
+      const heldVerdict = judgeOwner({ lease: held, evidence: heldEvidence, now });
+      if (isRecoveryEligible(heldVerdict)) {
+        const retired = await leaseStore.retireJob(duplicate.jobId, { expected: held, proof: heldVerdict.proof });
+        if (retired.retired && held.worktree) {
+          await leaseStore.retireWorktree(held.worktree, {
+            expected: await leaseStore.readWorktreeLease(held.worktree), proof: heldVerdict.proof,
+          }).catch(() => null);
+        }
+        await store.appendEvent({
+          type: 'ORPHANED_LEASE_RETIRED', jobId: duplicate.jobId,
+          goal: runtime.goal, round: runtime.round,
+          owner: held.workerInstanceId ?? null, proof: heldVerdict.proof,
+          worktree: held.worktree ?? null,
+        });
+        emit(`  its lease is retired too (${heldVerdict.proof}); the worktree is free for the next round.`);
+      } else {
+        emit(`  its lease is kept: ${heldVerdict.detail}`);
+      }
+    }
   }
 
   await store.appendEvent({

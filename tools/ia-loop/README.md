@@ -1073,6 +1073,40 @@ fronteiras seguras, nunca no meio de uma inferência ou de uma escrita.
 `--after-goal` espera o Goal inteiro terminar, que é o que deixa a árvore
 inspecionável quando o loop para.
 
+### O que a primeira execução real expôs
+
+Três defeitos que só existiam porque, até a V6, **nada atravessava uma fronteira
+de Goal sozinho**. Eram inofensivos enquanto um humano começava cada Goal; a V7
+os transformou em falha na primeira tentativa.
+
+1. **Herança do runtime entre Goals.** O Goal003 terminara na rodada 2 com
+   `CHANGES_REQUIRED`. O loop abriu o Goal004 como *"Round 2 (correction)"* sem
+   blockers — job que nem é válido. `PER_GOAL_RUNTIME_FIELDS` passou a declarar
+   explicitamente o que descreve **uma** execução (rodada, blockers, decisão,
+   jobs, closure, relatório de implementação, bloqueio de capacidade), e
+   `clearPerGoalRuntime()` os remove ao começar um Goal diferente. Retomada do
+   mesmo Goal continua preservando tudo. A lista é explícita, e não um filtro,
+   para que acrescentar um campo por Goal seja decisão de alguém aqui.
+
+2. **Decisão lida fora de escopo.** O `run-auto` leu `decision: ACCEPTED` do
+   runtime e produziu o diagnóstico `"Goal 004 ended as ACCEPTED"` junto de uma
+   falha — a decisão era do Goal003. Decisão e closure agora só contam se
+   pertencerem ao Goal que acabou de rodar. Ler decisão de outro Goal é como um
+   loop se parabeniza por trabalho que não fez.
+
+3. **Lease do orquestrador vazando.** Uma run que parava por `HUMAN_REQUIRED`
+   lançava **antes** do próprio bloco `try`, então o lease tomado por `attach()`
+   ficava para trás; a tentativa seguinte era recusada por um lease que ninguém
+   segurava — o loop trancado fora de si mesmo. Todo caminho de saída entre
+   `attach()` e o `try` passa a soltar o lease, e o teste lê o código-fonte,
+   porque o defeito está no fluxo de controle e não em um valor.
+
+Junto veio a saída de `PAUSED_FOR_HUMAN`, que não existia: `--resolved "<o que
+foi resolvido>"` arquiva a run parada em `.state/autonomous-runs/<id>.json`,
+preservando o motivo da parada, quem resolveu e a nota. Sem nota, nada é
+arquivado — silêncio não limpa problema — e o loop não pode executar esse
+caminho sozinho.
+
 ### Testes da V7
 
 Nenhum chama modelo. O principal (`THE MULTI-GOAL RUN`) leva dois Goals
@@ -1091,7 +1125,7 @@ a lease do orquestrador; pausa; e fim de migração.
 ## Como executar
 
 ```bash
-npm run test:ia-loop       # 298 testes locais, sem chamadas reais a modelo
+npm run test:ia-loop       # 304 testes locais, sem chamadas reais a modelo
 ```
 
 ```bash
@@ -1132,6 +1166,10 @@ V7 — execução autônoma de Goal em Goal:
 
 ```bash
 npm run ia-loop:auto -- --from 004   # roda Goals em sequência até uma parada real
+```
+
+```bash
+npm run ia-loop:auto -- --from 004 --resolved "o que foi resolvido"   # retoma depois de PAUSED_FOR_HUMAN
 ```
 
 ```bash
@@ -1194,7 +1232,7 @@ session ids nem dados pessoais.
 | `lib/persistent-session.mjs` | Sessão por agente: cria no 1º turno, resume nos seguintes |
 | `lib/session-registry.mjs` | Registro durável de sessões, com escrita atômica |
 | `fixtures/synthetic-goal.md` | Tarefa sintética, fora do runtime |
-| `tests/*.test.mjs` | 298 testes com processo/agente fake; nenhuma chamada real |
+| `tests/*.test.mjs` | 304 testes com processo/agente fake; nenhuma chamada real |
 
 ## Limitações conhecidas
 

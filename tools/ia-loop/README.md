@@ -1107,6 +1107,84 @@ preservando o motivo da parada, quem resolveu e a nota. Sem nota, nada é
 arquivado — silêncio não limpa problema — e o loop não pode executar esse
 caminho sozinho.
 
+### Handoff: a run é uma coisa, o orchestrator é outra
+
+O primeiro recovery real terminou dizendo `RECOVERY COMPLETE / Continue with:
+npm run ia-loop:auto` — e o `auto` respondeu `AUTONOMOUS_RUN_ALREADY_ACTIVE:
+Run auto-7b32c56a owns the loop`, enquanto o `status` dizia `NOT HOLDING THE
+LOOP`. As duas frases eram verdadeiras sobre coisas diferentes.
+
+```
+Autonomous Run   auto-7b32c56a   RUNNING   a campanha não terminou
+Orchestrator     NONE                      nenhum processo está conduzindo
+```
+
+Esse par é um estado **válido** depois de um crash. `RUNNING` fala do ciclo de
+vida da migração; não afirma que existe processo vivo. Confundir os dois é o que
+deixou a run encalhada.
+
+**Dois defeitos, e o segundo é o mais perigoso:**
+
+1. **Posse fantasma.** O `run-recover` adquiria a lease do orquestrador e
+   terminava. Por toda a janela de expiração a lease lia como dono saudável — e
+   bloqueava exatamente o comando que o próprio recovery mandava rodar.
+
+2. **`run-auto` apagava lease alheia.** O `failAfterAttach` liberava com
+   `force: true`, que ignora a checagem de dono. Recusar-se a começar porque
+   *outro* orquestrador detinha o loop **também apagava a lease dele** — "outro
+   é dono" virava "ninguém é dono" na mesma respiração. Se houvesse um segundo
+   orquestrador de verdade, essa era a porta para dois processos na mesma run.
+   A liberação passou a ser sem `force`: `LEASE_NOT_OWNED` é o no-op correto.
+
+**Recovery não vira o orquestrador.** Ele prova que o dono anterior morreu,
+registra qual é o próximo passo seguro, escreve um handoff e sai **sem segurar
+nada**. O handoff é um token de uso único (`nonce`) com `autonomousRunId`,
+`recoveryAttempt`, `recoveredFromState`, `nextSafeAction`, `jobId` e o dono
+substituído.
+
+**`ia-loop:auto` anexa.** Ao reatacar, valida o handoff — mesma run, não
+consumido, bem formado — consome o token e segue como orquestrador **da mesma
+run**: mesmo `autonomousRunId`, mesma história, tentativa posterior. Handoff de
+outra run é recusado, nunca esticado para servir. Dois `auto` simultâneos: a
+lease decide por criação exclusiva, e o token confirma; o perdedor recebe
+`ORCHESTRATOR_ALREADY_ATTACHED`.
+
+Nenhuma run nova é criada. `start()` deixou de responder
+`AUTONOMOUS_RUN_ALREADY_ACTIVE` para uma run `RUNNING` sem lease — agora é
+`AUTONOMOUS_RUN_NEEDS_ATTACH`, que é o que realmente se quer dizer.
+
+### Main guard checkpoint ≠ execution base
+
+Commits de tooling entram na main enquanto um Goal está parado. Para que a
+execução seguinte não leia isso como o Developer tendo escrito fora da worktree,
+recovery e attach gravam `mainGuardCheckpoint` — head da main, instante e
+motivo, rotulado como *operational checkpoint, not the execution base*.
+
+`executionBase`, `worktreeInitialHead` e `migrationAcceptedBaseline` **não são
+tocados**: o diff de mérito continua medido contra a árvore original. São coisas
+distintas e ficam guardadas como coisas distintas.
+
+### Status
+
+```
+Run:
+  auto-7b32c56a
+  State: RUNNING
+
+Orchestrator:
+  State: RECOVERED_READY
+  Holding loop: NO
+  Recovery: VALID
+  Next action: CONSUME_RESULT — 004-r1-tech_lead-4ded365b
+```
+
+Run e orchestrator são blocos separados, então não há como imprimir "ninguém
+segura o loop" e recusar o attach dizendo "a run segura o loop".
+
+Eventos: `RECOVERY_READY_FOR_ATTACH`, `ORCHESTRATOR_ATTACH_STARTED`,
+`ORCHESTRATOR_ATTACH_SUCCEEDED`, `ORCHESTRATOR_ATTACH_FAILED`,
+`RECOVERED_RUN_RESUMED`.
+
 ### Testes da V7
 
 Nenhum chama modelo. O principal (`THE MULTI-GOAL RUN`) leva dois Goals
@@ -1244,7 +1322,7 @@ agora tem — `migration-loop-a1`, `-a2` a cada recuperação, na mesma run.
 ## Como executar
 
 ```bash
-npm run test:ia-loop       # 341 testes locais, sem chamadas reais a modelo
+npm run test:ia-loop       # 365 testes locais, sem chamadas reais a modelo
 ```
 
 ```bash
@@ -1340,7 +1418,8 @@ session ids nem dados pessoais.
 | `lib/process-inspector.mjs` | Identidade e liveness de processo; Windows-aware, fake nos testes |
 | `lib/orphan-evidence.mjs` | De suspeita a prova: quando uma lease pode ser tomada |
 | `lib/recovery-plan.mjs` | O passo seguro após um crash, por estado |
-| `run-recover.mjs` | Recovery de execução interrompida; não chama modelo |
+| `lib/recovery-handoff.mjs` | Token de uso único que passa uma run recuperada ao próximo orchestrator |
+| `run-recover.mjs` | Recovery de execução interrompida; não chama modelo nem retém lease |
 | `run-auto.mjs` | Orchestrator autônomo Goal a Goal |
 | `run-pause.mjs` | Pedido de pausa; não interrompe inferência em voo |
 | `lib/worker-loop.mjs` | Plumbing comum dos workers |
@@ -1359,7 +1438,7 @@ session ids nem dados pessoais.
 | `lib/persistent-session.mjs` | Sessão por agente: cria no 1º turno, resume nos seguintes |
 | `lib/session-registry.mjs` | Registro durável de sessões, com escrita atômica |
 | `fixtures/synthetic-goal.md` | Tarefa sintética, fora do runtime |
-| `tests/*.test.mjs` | 341 testes com processo/agente fake; nenhuma chamada real |
+| `tests/*.test.mjs` | 365 testes com processo/agente fake; nenhuma chamada real |
 
 ## Limitações conhecidas
 

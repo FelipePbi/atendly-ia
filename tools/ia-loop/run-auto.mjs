@@ -36,6 +36,7 @@ import {
   shouldPauseAt,
 } from './lib/autonomous-state.mjs';
 import { startLeaseHeartbeat } from './lib/leases.mjs';
+import { createHandoffStore } from './lib/recovery-handoff.mjs';
 import { readFile } from 'node:fs/promises';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -51,9 +52,16 @@ const probe = createGitProbe(REPO_ROOT);
  * A run that threw before its own try once left attach()'s lease behind and
  * locked the loop out of itself. One exit means one place to get right, instead
  * of a rule each new throw has to remember.
+ *
+ * It releases WITHOUT force, on purpose. The forced version released whatever
+ * lease was on disk, including one belonging to another process — so refusing
+ * to start because someone else owned the loop also deleted their lease. That
+ * turned "another orchestrator owns this" into "nobody owns this" in the same
+ * breath, which is exactly the contradiction that stranded a recovered run.
+ * A non-owner release throws LEASE_NOT_OWNED, which is the correct no-op here.
  */
 async function failAfterAttach(auto, code, message) {
-  await auto.releaseLoopLease({ force: true }).catch(() => {});
+  await auto.releaseLoopLease().catch(() => {});
   throw new SpikeError(code, message);
 }
 const emit = (line = '') => console.log(line);
@@ -115,6 +123,7 @@ async function main() {
   const { fromGoal, resolvedNote } = parseArgs(process.argv);
   const store = createJobStore(STATE_DIR);
   const auto = createAutonomousStore(STATE_DIR);
+  const handoffs = createHandoffStore(STATE_DIR);
 
   emit('');
   emit('ATENDLY IA LOOP — AUTONOMOUS');
@@ -148,6 +157,81 @@ async function main() {
   if (attached?.attached) {
     run = attached.run;
     emit(`Re-attached to run ${run.autonomousRunId} (started ${run.startedAt}).`);
+
+    // --- A run that was recovered is picked up, never replaced -------------
+    //
+    // status RUNNING means the campaign is unfinished, not that a process is
+    // driving it. When recovery has proven the previous orchestrator gone and
+    // left a handoff, this process becomes the new orchestrator OF THE SAME
+    // RUN: same id, same history, a later attempt.
+    const check = await handoffs.validateFor(run.autonomousRunId);
+    if (check.handoff && !check.valid && check.reason !== 'HANDOFF_ALREADY_CONSUMED') {
+      // A handoff that does not belong here is never "close enough".
+      await store.appendEvent({
+        type: 'ORCHESTRATOR_ATTACH_FAILED', runId: run.autonomousRunId,
+        reason: check.reason, handoffRunId: check.handoff.autonomousRunId ?? null,
+      });
+      await failAfterAttach(auto, 'RECOVERY_HANDOFF_INVALID',
+        `A recovery handoff is on disk but does not apply here (${check.reason}). `
+        + 'Run ia-loop:recover to produce one for this run, rather than guessing.');
+    }
+
+    if (check.valid) {
+      const lease = await auto.readLoopLease();
+      await store.appendEvent({
+        type: 'ORCHESTRATOR_ATTACH_STARTED', runId: run.autonomousRunId,
+        goal: check.handoff.goal, round: check.handoff.round,
+        recoveryAttempt: check.handoff.recoveryAttempt,
+        orchestratorAttempt: lease?.attemptId ?? null,
+        previousOwner: check.handoff.supersededOwner, newOwner: lease?.workerInstanceId ?? null,
+        nextSafeAction: check.handoff.nextSafeAction,
+      });
+
+      const consumed = await handoffs.consume({
+        nonce: check.handoff.nonce, consumedBy: lease?.workerInstanceId ?? null,
+      });
+      if (!consumed.consumed) {
+        await store.appendEvent({
+          type: 'ORCHESTRATOR_ATTACH_FAILED', runId: run.autonomousRunId, reason: consumed.reason,
+        });
+        await failAfterAttach(auto, 'ORCHESTRATOR_ALREADY_ATTACHED',
+          `Another orchestrator consumed this recovery handoff first (${consumed.reason}).`);
+      }
+
+      emit('');
+      emit(`ATTACH EXISTING RUN: ${run.autonomousRunId}`);
+      emit('  Owner: NONE / RECOVERED');
+      emit(`  Recovery: VALID (from ${check.handoff.recoveredFromState}${check.handoff.proof ? `, ${check.handoff.proof}` : ''})`);
+      emit(`  Attaching orchestrator: ${lease?.attemptId ?? 'unknown attempt'}`);
+      emit(`  Next safe action: ${check.handoff.nextSafeAction}${check.handoff.jobId ? ` — ${check.handoff.jobId}` : ''}`);
+      emit('');
+
+      await store.appendEvent({
+        type: 'ORCHESTRATOR_ATTACH_SUCCEEDED', runId: run.autonomousRunId,
+        goal: check.handoff.goal, round: check.handoff.round,
+        orchestratorAttempt: lease?.attemptId ?? null, newOwner: lease?.workerInstanceId ?? null,
+        nextSafeAction: check.handoff.nextSafeAction,
+      });
+      await store.appendEvent({
+        type: 'RECOVERED_RUN_RESUMED', runId: run.autonomousRunId,
+        goal: check.handoff.goal, round: check.handoff.round,
+        recoveryAttempt: check.handoff.recoveryAttempt, nextSafeAction: check.handoff.nextSafeAction,
+      });
+
+      // The operational checkpoint of main moves with the attach; the Goal's
+      // execution base does not.
+      const runtimeNow = await store.readRuntime();
+      const mainHead = await probe.head().catch(() => null);
+      if (mainHead) {
+        await store.writeRuntime({
+          ...runtimeNow,
+          mainGuardCheckpoint: {
+            head: mainHead, at: new Date().toISOString(), reason: 'ORCHESTRATOR_ATTACH',
+            note: 'operational checkpoint, not the execution base',
+          },
+        });
+      }
+    }
     if (run.status === RUN_STATUS.PAUSED) {
       run = await auto.clearPause();
       await store.appendEvent({ type: 'AUTONOMOUS_RUN_RESUMED', autonomousRunId: run.autonomousRunId });
@@ -164,7 +248,7 @@ async function main() {
       const archived = await auto.archiveRun({ resolvedBy: 'operator', note: resolvedNote });
       // attach() took the loop lease for the retired run; the new run claims
       // its own, so this one has to go first.
-      await auto.releaseLoopLease({ force: true });
+      await auto.releaseLoopLease();
       await store.appendEvent({
         type: 'AUTONOMOUS_RUN_ARCHIVED', autonomousRunId: archived.autonomousRunId,
         reason: archived.humanRequired?.reason ?? null, note: resolvedNote,

@@ -32,10 +32,13 @@ import { createAutonomousStore, LOOP_LEASE_KEY } from './lib/autonomous-state.mj
 import { createProcessInspector } from './lib/process-inspector.mjs';
 import { OWNER_STATUS, collectOwnerEvidence, isRecoveryEligible, judgeOwner } from './lib/orphan-evidence.mjs';
 import { RECOVERY_ACTIONS, planRecovery } from './lib/recovery-plan.mjs';
+import { createHandoffStore, handoffCovers } from './lib/recovery-handoff.mjs';
 import { readRuntimeStrict } from './lib/capacity-state.mjs';
+import { createGitProbe } from './lib/git-ops.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, '.state');
+const REPO_ROOT = join(HERE, '..', '..');
 
 const emit = (line = '') => console.log(line);
 
@@ -45,9 +48,9 @@ function parseArgs(argv) {
 }
 
 /** The next command to run, once the state is consistent again. */
-function continuationFor(plan) {
-  if (plan.phase === 'close') return 'npm run ia-loop:auto';
-  if (plan.phase === 'auto') return 'npm run ia-loop:auto';
+function continuationFor() {
+  // Every phase continues the same way: the orchestrator attaches to the
+  // recovered run and takes it from there.
   return 'npm run ia-loop:auto';
 }
 
@@ -56,6 +59,7 @@ async function main() {
   const store = createJobStore(STATE_DIR);
   const leaseStore = createLeaseStore(STATE_DIR);
   const auto = createAutonomousStore(STATE_DIR);
+  const handoffs = createHandoffStore(STATE_DIR);
   const inspector = createProcessInspector();
 
   const runtime = await readRuntimeStrict(store);
@@ -144,6 +148,22 @@ async function main() {
     return 1;
   }
 
+  // Running recovery again on an unchanged run must not take a lease again or
+  // mint a second token. Saying "already recovered" is the whole job.
+  const existingHandoff = await handoffs.read();
+  if (handoffCovers(existingHandoff, {
+    autonomousRunId: autonomousRun?.autonomousRunId,
+    state: runtime.state,
+    nextSafeAction: plan.action,
+  })) {
+    emit('Already recovered and waiting for an orchestrator.');
+    emit(`  Run: ${existingHandoff.autonomousRunId}`);
+    emit(`  Next safe action: ${existingHandoff.nextSafeAction}${existingHandoff.jobId ? ` — ${existingHandoff.jobId}` : ''}`);
+    emit('');
+    emit(`Continue with: ${continuationFor()}`);
+    return 0;
+  }
+
   emit(`${plan.agent === 'tech_lead' ? 'ReviewResult' : plan.agent === 'developer' ? 'DeveloperResult' : 'Phase'}:`);
   emit(`  ${plan.message}`);
   emit('');
@@ -221,6 +241,14 @@ async function main() {
   // The stored state is left exactly as it was: the runner re-enters it and
   // decides from the artefacts. Recovery restores ownership and consistency; it
   // does not move the state machine on the runner's behalf.
+  //
+  // The main guard checkpoint is recorded here and is NOT the execution base.
+  // Tooling commits land on main while a Goal sits interrupted, and the next
+  // execution must not read them as the Developer having written outside its
+  // worktree. executionBase, worktreeInitialHead and migrationAcceptedBaseline
+  // are deliberately untouched: the diff of record is still measured against
+  // the original tree.
+  const mainHead = await createGitProbe(REPO_ROOT).head().catch(() => null);
   await store.writeRuntime({
     ...(await store.readRuntime()),
     recovery: {
@@ -230,6 +258,9 @@ async function main() {
       proof: verdict?.proof ?? null,
       attempt: (autonomousRun?.recoveryCount ?? 0) + (lease ? 1 : 0),
     },
+    mainGuardCheckpoint: mainHead
+      ? { head: mainHead, at: new Date().toISOString(), reason: 'RECOVERY', note: 'operational checkpoint, not the execution base' }
+      : (await store.readRuntime())?.mainGuardCheckpoint ?? null,
   });
 
   await store.appendEvent({
@@ -238,10 +269,40 @@ async function main() {
     runId: autonomousRun?.autonomousRunId ?? null, action: plan.action, jobId: plan.jobId ?? null,
   });
 
+  // --- Hand the run over, and hold nothing ----------------------------------
+  //
+  // Recovery is not the orchestrator. Keeping the lease it just took would be
+  // phantom ownership: the process ends here, but the lease reads as a healthy
+  // owner for the whole expiry window, and blocks the very command this prints.
+  const handoff = await handoffs.write({
+    autonomousRunId: autonomousRun?.autonomousRunId ?? null,
+    recoveryAttempt: autonomousRun?.recoveryCount ?? 1,
+    recoveredFromState: runtime.state,
+    nextSafeAction: plan.action,
+    jobId: plan.jobId ?? null,
+    agent: plan.agent ?? null,
+    goal: runtime.goal,
+    round: runtime.round,
+    supersededOwner: lease?.workerInstanceId ?? null,
+    proof: verdict?.proof ?? null,
+  });
+
+  await auto.releaseLoopLease().catch(() => {});
+
+  await store.appendEvent({
+    type: 'RECOVERY_READY_FOR_ATTACH',
+    goal: runtime.goal, round: runtime.round, state: runtime.state,
+    runId: handoff.autonomousRunId, recoveryAttempt: handoff.recoveryAttempt,
+    nextSafeAction: handoff.nextSafeAction, jobId: handoff.jobId,
+    previousOwner: handoff.supersededOwner,
+  });
+
   emit('');
-  emit('RECOVERY COMPLETE');
+  emit('RECOVERY COMPLETE — the run is ready for an orchestrator to attach.');
+  emit(`  Run: ${handoff.autonomousRunId} (no orchestrator holds the loop)`);
+  emit(`  Next safe action: ${handoff.nextSafeAction}${handoff.jobId ? ` — ${handoff.jobId}` : ''}`);
   emit('');
-  emit(`Continue with: ${continuationFor(plan)}`);
+  emit(`Continue with: ${continuationFor()}`);
   return 0;
 }
 

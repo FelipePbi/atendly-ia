@@ -21,6 +21,7 @@ import { LEASE_STATUS, classifyLease, createLeaseStore } from './lib/leases.mjs'
 import { LOOP_LEASE_KEY, createAutonomousStore } from './lib/autonomous-state.mjs';
 import { createProcessInspector } from './lib/process-inspector.mjs';
 import { OWNER_STATUS, collectOwnerEvidence, isRecoveryEligible, judgeOwner } from './lib/orphan-evidence.mjs';
+import { createHandoffStore, HANDOFF_STATUS } from './lib/recovery-handoff.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, '.state');
@@ -70,6 +71,7 @@ async function main() {
   const leaseStore = createLeaseStore(STATE_DIR);
 
   const auto = createAutonomousStore(STATE_DIR);
+  const handoffs = createHandoffStore(STATE_DIR);
   const inspector = createProcessInspector();
 
   const runtime = await readRuntimeStrict(store);
@@ -119,22 +121,48 @@ async function main() {
     out.push('');
   }
 
-  // --- Orchestrator ------------------------------------------------------
-  // The single most useful line after a crash: is anyone still driving this
-  // run, and if not, can it be recovered without guessing?
+  // --- Run and orchestrator, kept apart ----------------------------------
+  //
+  // These used to be one block, and it could print "NOT HOLDING THE LOOP" while
+  // ia-loop:auto refused to start because "the run owns the loop". They are two
+  // different things: the run is a campaign that has not finished, the
+  // orchestrator is a process that may or may not exist right now.
   const loopLease = await leaseStore.readJobLease(LOOP_LEASE_KEY);
+  const handoff = await handoffs.read();
+
+  if (autonomousRun) {
+    out.push('Run:');
+    out.push(`  ${autonomousRun.autonomousRunId}`);
+    out.push(`  State: ${autonomousRun.status}`);
+    out.push(`  Goal: ${autonomousRun.currentGoal ?? 'n/a'}`);
+    if (autonomousRun.recoveryCount) out.push(`  Recoveries: ${autonomousRun.recoveryCount}`);
+    out.push('');
+  }
+
   if (loopLease || autonomousRun) {
-    out.push('ORCHESTRATOR:');
+    out.push('Orchestrator:');
     if (!loopLease) {
-      out.push(`  State: ${autonomousRun ? 'NOT HOLDING THE LOOP' : 'none'}`);
-      if (autonomousRun) out.push(`  Run: ${autonomousRun.autonomousRunId} (${autonomousRun.status})`);
+      const ready = handoff?.status === HANDOFF_STATUS.READY_FOR_ATTACH
+        && handoff.autonomousRunId === autonomousRun?.autonomousRunId;
+      out.push(`  State: ${ready ? 'RECOVERED_READY' : (autonomousRun ? 'NONE' : 'none')}`);
+      out.push('  Holding loop: NO');
+      if (ready) {
+        out.push('  Recovery: VALID');
+        out.push(`  Recovered from: ${handoff.recoveredFromState}`);
+        out.push(`  Next action: ${handoff.nextSafeAction}${handoff.jobId ? ` — ${handoff.jobId}` : ''}`);
+        out.push('  Attach with: npm run ia-loop:auto');
+      } else if (autonomousRun) {
+        out.push('  Recovery: none recorded');
+        out.push('  Check with: npm run ia-loop:recover -- --dry-run');
+      }
     } else {
       const evidence = await collectOwnerEvidence(loopLease, inspector, { now });
       const verdict = judgeOwner({ lease: loopLease, evidence, now });
       const eligible = isRecoveryEligible(verdict);
 
       out.push(`  State: ${verdict.status === OWNER_STATUS.ACTIVE ? 'RUNNING' : verdict.status}`);
-      out.push(`  Run: ${loopLease.autonomousRunId ?? 'unknown'}${autonomousRun ? ` (${autonomousRun.status})` : ''}`);
+      out.push(`  Holding loop: ${verdict.status === OWNER_STATUS.ACTIVE ? 'YES' : 'NOT CONFIRMABLY'}`);
+      out.push(`  Run: ${loopLease.autonomousRunId ?? 'unknown'}`);
       out.push(`  Owner: ${loopLease.workerInstanceId ?? 'unknown'}`);
       out.push(`  Attempt: ${loopLease.attemptId ?? 'not recorded (lease predates attempt ids)'}`);
       out.push(`  Last heartbeat: ${loopLease.heartbeatAt} (${Math.round((verdict.ageMs ?? 0) / 1000)}s ago)`);
@@ -147,6 +175,10 @@ async function main() {
     }
     if (runtime?.recovery) {
       out.push(`  Recovered: yes — ${runtime.recovery.action} from ${runtime.recovery.fromState} at ${runtime.recovery.at}`);
+    }
+    if (runtime?.mainGuardCheckpoint) {
+      // Not the execution base, and labelled so nobody reads it as one.
+      out.push(`  Main guard checkpoint: ${shortSha(runtime.mainGuardCheckpoint.head)} (${runtime.mainGuardCheckpoint.reason})`);
     }
     out.push('');
   }

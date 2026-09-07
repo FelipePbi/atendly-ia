@@ -128,9 +128,16 @@ export function createAutonomousStore(stateDir) {
       }
 
       if (existing?.status === RUN_STATUS.RUNNING) {
+        // RUNNING is about the campaign, not about ownership: it means the
+        // migration has not finished, and says nothing about whether a process
+        // is driving it. A run with no lease has no orchestrator — which is a
+        // perfectly ordinary state after a crash — and the answer is to attach
+        // to it, never to open a second run beside it.
         throw new SpikeError(
-          'AUTONOMOUS_RUN_ALREADY_ACTIVE',
-          `Run ${existing.autonomousRunId} is recorded as RUNNING without a lease; resolve it first.`,
+          'AUTONOMOUS_RUN_NEEDS_ATTACH',
+          `Run ${existing.autonomousRunId} is unfinished (${existing.currentGoal ? `Goal ${existing.currentGoal}` : 'no Goal recorded'}) `
+          + 'and no orchestrator holds the loop. Attach to it instead of starting a second run: '
+          + 'ia-loop:recover if it was interrupted, then ia-loop:auto.',
         );
       }
 

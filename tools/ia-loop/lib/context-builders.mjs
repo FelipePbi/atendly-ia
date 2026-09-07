@@ -118,3 +118,67 @@ export function buildTechLeadContext({
     note: 'O repositório é a autoridade. A sessão persistente serve para continuidade recente, não como registro oficial.',
   });
 }
+
+/**
+ * Builds the package for a correction round.
+ *
+ * The scope is the reviewer's blockers, NOT the Goal as a whole. The
+ * implementation from the previous round stays in the worktree and must be
+ * preserved: a correction is a targeted fix, not a reimplementation.
+ *
+ * The original baselines travel unchanged, so the functional diff keeps being
+ * measured against the commit the work actually started from.
+ */
+export function buildCorrectionContext({
+  goal,
+  goalPath,
+  round,
+  previousRound,
+  migrationAcceptedBaseline,
+  executionBase,
+  worktreeInitialHead,
+  worktree,
+  blockers,
+  previousImplementationReport,
+  previousDecision,
+  changedFiles = [],
+}) {
+  if (!goal) fail('INVALID_ARGS', 'goal is required');
+  if (!Number.isInteger(round) || round < 2) {
+    fail('INVALID_ARGS', 'a correction round is always >= 2');
+  }
+  if (!Array.isArray(blockers) || blockers.length === 0) {
+    fail('INVALID_ARGS', 'a correction round requires the blockers it must address');
+  }
+
+  return Object.freeze({
+    role: 'developer',
+    type: 'CORRECTION',
+    goal,
+    goalPath,
+    round,
+    previousRound,
+
+    // Unchanged across rounds, on purpose.
+    migrationAcceptedBaseline,
+    executionBase,
+    worktreeInitialHead,
+    worktree,
+
+    // The authority for this round.
+    blockers: [...blockers],
+    previousDecision,
+    previousImplementationReport,
+    // Collected from git by the orchestrator, not claimed by the model.
+    changedFiles: [...changedFiles],
+
+    mustRead: ['CLAUDE.md', 'AGENTS.md', goalPath],
+    consultSelectively: [
+      'graphify query "<pergunta>" --budget 800 para confirmar impacto das correções',
+      'os arquivos realmente alterados, listados em changedFiles',
+    ],
+    scope:
+      'Corrigir SOMENTE os blockers listados. Preservar o que já foi aceito. '
+      + 'Não reverter nem reimplementar partes sem relação com os blockers.',
+  });
+}

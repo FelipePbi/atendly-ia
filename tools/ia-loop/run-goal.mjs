@@ -8,9 +8,10 @@
  * The orchestrator is the ONLY component that decides who works next. The
  * models never call each other: every hand-off is validated and recorded here.
  *
- * A real run stops at AWAITING_HUMAN whatever the verdict. It never commits the
- * Goal, never updates the migration baseline, never creates the next Goal and
- * never removes the worktree.
+ * V4 automates the correction rounds. A run keeps going while the reviewer asks
+ * for changes and the round budget lasts, then stops at AWAITING_HUMAN whatever
+ * the verdict. It never commits the Goal, never updates the migration baseline,
+ * never creates the next Goal and never removes the worktree.
  */
 
 import { promises as fs } from 'node:fs';
@@ -20,16 +21,16 @@ import { fileURLToPath } from 'node:url';
 import { SpikeError } from './lib/claude-process.mjs';
 import { createJobStore } from './lib/job-store.mjs';
 import { discoverGoal } from './lib/goal-discovery.mjs';
-import { planWorktree, createWorktreeForGoal, branchNameFor, worktreePathFor } from './lib/worktree-manager.mjs';
+import { planWorktree, createWorktreeForGoal, branchNameFor } from './lib/worktree-manager.mjs';
 import { readWorkerHealth, WORKER_HEALTH, SESSION_STRATEGY } from './lib/worker-registry.mjs';
-import { LOOP_STATES, createLoopStateMachine, planAfterDecision, stateForDecision } from './lib/loop-state.mjs';
+import { LOOP_STATES, createLoopStateMachine, stateForDecision } from './lib/loop-state.mjs';
+import { LOOP_CONFIG, planAfterReview } from './lib/loop-config.mjs';
 import { PROTOCOL_VERSION_V2, validateDeveloperJob, validateReviewJob } from './lib/contracts-v2.mjs';
 import {
   createGitProbe,
   createWorktree as gitCreateWorktree,
   collectWorktreeChanges,
   worktreeFingerprint,
-  git,
 } from './lib/git-ops.mjs';
 import { captureSnapshot, checkDeveloperPolicy, checkReviewerPolicy, formatViolations } from './lib/policy-guards.mjs';
 import { buildReviewPacket } from './lib/review-packet.mjs';
@@ -40,35 +41,27 @@ const STATE_DIR = join(HERE, '.state');
 
 const TECH_LEAD_MODEL = process.env.IA_LOOP_TECH_LEAD_MODEL ?? 'claude-fable-5-1';
 const DEVELOPER_MODEL = process.env.IA_LOOP_DEVELOPER_MODEL ?? 'claude-opus-5';
-const REVIEW_LEVEL = 'DEEP';
-const ROUND = 1;
+const REVIEW_LEVEL = LOOP_CONFIG.reviewLevel;
 
-/** A real Goal can take hours; a capacity wait can add more on top. */
 const RESULT_TIMEOUT_MS = Number(process.env.IA_LOOP_RESULT_TIMEOUT_MS ?? 6 * 60 * 60 * 1000);
 const POLL_MS = 5_000;
 
 const probe = createGitProbe(REPO_ROOT);
+const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
 
 function parseArgs(argv) {
   const args = argv.slice(2);
   const goalId = args.find((a) => /^\d{3}$/.test(a));
-  const dryRun = args.includes('--dry-run');
-
-  if (!goalId) {
-    throw new SpikeError('INVALID_ARGS', 'Usage: npm run ia-loop:goal -- <goalId> [--dry-run]');
-  }
-  return { goalId, dryRun };
+  if (!goalId) throw new SpikeError('INVALID_ARGS', 'Usage: npm run ia-loop:goal -- <goalId> [--dry-run]');
+  return { goalId, dryRun: args.includes('--dry-run') };
 }
 
-function formatHealth(health) {
-  if (health.health === WORKER_HEALTH.OFFLINE) return 'OFFLINE (worker not running)';
-  const age = health.ageMs === null ? '?' : `${Math.round(health.ageMs / 1000)}s ago`;
-  return `${health.health} (state ${health.state}, heartbeat ${age})`;
+function formatHealth(h) {
+  if (h.health === WORKER_HEALTH.OFFLINE) return 'OFFLINE (worker not running)';
+  const age = h.ageMs === null ? '?' : `${Math.round(h.ageMs / 1000)}s ago`;
+  return `${h.health} (state ${h.state}, heartbeat ${age})`;
 }
 
-const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
-
-/** Waits for a worker to publish a result for one job. */
 async function waitForResult(store, role, jobId, { emit }) {
   const startedAt = Date.now();
   let lastState = null;
@@ -81,7 +74,6 @@ async function waitForResult(store, role, jobId, { emit }) {
       throw new SpikeError('RESULT_TIMEOUT', `No result from "${role}" for job ${jobId} within the timeout`);
     }
 
-    // Surface capacity waits and worker state changes while waiting.
     const health = await readWorkerHealth(store, role);
     if (health.state !== lastState) {
       lastState = health.state;
@@ -91,15 +83,12 @@ async function waitForResult(store, role, jobId, { emit }) {
     if (health.health === WORKER_HEALTH.OFFLINE) {
       throw new SpikeError('WORKER_OFFLINE', `The "${role}" worker went offline while the job was pending`);
     }
-
     await sleep(POLL_MS);
   }
 }
 
 async function main() {
-  const out = [];
-  const emit = (line = '') => { out.push(line); if (line !== undefined) console.log(line); };
-
+  const emit = (line = '') => console.log(line);
   const { goalId, dryRun } = parseArgs(process.argv);
   const store = createJobStore(STATE_DIR);
   const machine = createLoopStateMachine();
@@ -110,11 +99,8 @@ async function main() {
   emit(`Mode:\n${dryRun ? 'DRY_RUN' : 'REAL_EXECUTION'}`);
   emit('');
 
-  // --- Goal discovery ------------------------------------------------------
   const goal = await discoverGoal({
-    repoRoot: REPO_ROOT,
-    goalId,
-    resolveSha: (sha) => probe.commitExists(sha),
+    repoRoot: REPO_ROOT, goalId, resolveSha: (sha) => probe.commitExists(sha),
   });
   machine.transitionTo(LOOP_STATES.GOAL_READY, { goal: goal.goalId });
 
@@ -125,115 +111,68 @@ async function main() {
   emit(`  previous goal: ${goal.previousGoalId ?? 'n/a'} (${goal.previousGoalStatus ?? 'n/a'})`);
   emit('');
 
-  // --- The two baselines ---------------------------------------------------
-  const executionBase = await probe.head();
-
+  const headNow = await probe.head();
   emit('Migration baseline (accepted):');
   emit(`  ${goal.migrationAcceptedBaseline}`);
   emit('Execution base (current HEAD):');
-  emit(`  ${executionBase}`);
-  emit(`  distinct from accepted baseline: ${executionBase !== goal.migrationAcceptedBaseline ? 'YES (expected)' : 'NO'}`);
+  emit(`  ${headNow}`);
   emit('');
-
-  emit('Tech Lead:');
-  emit(`  ${TECH_LEAD_MODEL}`);
-  emit(`  ${SESSION_STRATEGY.PERSISTENT}`);
-  emit('Developer:');
-  emit(`  ${DEVELOPER_MODEL}`);
-  emit(`  ${SESSION_STRATEGY.STATELESS}`);
+  emit(`Tech Lead:\n  ${TECH_LEAD_MODEL}\n  ${SESSION_STRATEGY.PERSISTENT}`);
+  emit(`Developer:\n  ${DEVELOPER_MODEL}\n  ${SESSION_STRATEGY.STATELESS}`);
   emit('');
 
   // ======================= DRY RUN ========================================
   if (dryRun) {
     machine.transitionTo(LOOP_STATES.PREPARING_WORKTREE);
-    const plan = await planWorktree({ goalId, executionBase, git: probe });
+    const plan = await planWorktree({ goalId, executionBase: headNow, git: probe });
 
     emit('Worktree plan:');
     emit(`  path: ${plan.path}`);
     emit(`  branch: ${plan.branch}`);
     emit(`  base: ${plan.executionBase}`);
     emit(`  current branch (untouched): ${plan.currentBranch}`);
-    emit(`  planned command: ${plan.plannedCommand}`);
     emit('  created: NO (dry run)');
     if (plan.blockers.length > 0) {
       emit('  blockers:');
       for (const b of plan.blockers) emit(`    - [${b.code}] ${b.message}`);
-    } else {
-      emit('  blockers: none');
-    }
+    } else emit('  blockers: none');
     emit('');
 
     if (plan.safe) machine.transitionTo(LOOP_STATES.WORKTREE_READY);
 
     const [tl, dev] = await Promise.all([
-      readWorkerHealth(store, 'tech_lead'),
-      readWorkerHealth(store, 'developer'),
+      readWorkerHealth(store, 'tech_lead'), readWorkerHealth(store, 'developer'),
     ]);
-    emit('Workers:');
-    emit(`  tech-lead: ${formatHealth(tl)}`);
-    emit(`  developer: ${formatHealth(dev)}`);
+    emit(`Workers:\n  tech-lead: ${formatHealth(tl)}\n  developer: ${formatHealth(dev)}`);
     emit('');
-    emit('Review:');
-    emit(`  ${REVIEW_LEVEL}`);
+    emit(`Review:\n  ${REVIEW_LEVEL}`);
     emit('');
 
-    await store.writeCurrentGoal({
-      goalId: goal.goalId, title: goal.title, status: goal.status, goalPath: goal.goalPath,
-      migrationAcceptedBaseline: goal.migrationAcceptedBaseline, executionBase,
-    });
-    await store.writeRuntime({
-      mode: 'DRY_RUN', goal: goal.goalId, state: machine.state,
-      migrationAcceptedBaseline: goal.migrationAcceptedBaseline, executionBase,
-      worktreePlan: { path: plan.path, branch: plan.branch, safe: plan.safe },
-      reviewLevel: REVIEW_LEVEL, goalExecuted: false,
-    });
     await store.appendEvent({ type: 'DRY_RUN_COMPLETED', goal: goal.goalId, state: machine.state, worktreeSafe: plan.safe });
-
-    emit('State:');
-    for (const t of machine.history) emit(`  ${t.from} -> ${t.to}`);
-    emit(`  current: ${machine.state}`);
-    emit('');
 
     const devJobs = await store.listJobs('developer');
     const revJobs = await store.listJobs('tech_lead');
-    emit('Dry-run guarantees:');
-    emit(`  developer jobs published: ${devJobs.length}`);
-    emit(`  review jobs published: ${revJobs.length}`);
-    emit('  model calls: 0');
-    emit('  worktree created: NO');
+    emit('Goal executed:\nNO');
     emit('');
-    emit('Goal executed:');
-    emit('NO');
-    emit('');
-
-    const passed = goal.status === 'READY' && devJobs.length === 0 && revJobs.length === 0;
     emit('Overall:');
+    const passed = goal.status === 'READY';
     emit(passed ? 'PASS' : 'FAIL');
     return passed ? 0 : 1;
   }
 
   // ===================== REAL EXECUTION ===================================
-  // Both workers must be up: they are the execution interface.
   const [tlHealth, devHealth] = await Promise.all([
-    readWorkerHealth(store, 'tech_lead'),
-    readWorkerHealth(store, 'developer'),
+    readWorkerHealth(store, 'tech_lead'), readWorkerHealth(store, 'developer'),
   ]);
-  emit('Workers:');
-  emit(`  tech-lead: ${formatHealth(tlHealth)}`);
-  emit(`  developer: ${formatHealth(devHealth)}`);
+  emit(`Workers:\n  tech-lead: ${formatHealth(tlHealth)}\n  developer: ${formatHealth(devHealth)}`);
   emit('');
-
   if (tlHealth.health === WORKER_HEALTH.OFFLINE || devHealth.health === WORKER_HEALTH.OFFLINE) {
     throw new SpikeError('WORKERS_NOT_RUNNING',
-      'Both workers must be running. Open two terminals: npm run ia-loop:tech-lead and npm run ia-loop:developer');
+      'Both workers must be running: npm run ia-loop:tech-lead and npm run ia-loop:developer');
   }
 
-  // --- Worktree ------------------------------------------------------------
+  // --- Worktree: reuse when an execution is already in progress ------------
   machine.transitionTo(LOOP_STATES.PREPARING_WORKTREE);
-
-  // Resuming an execution that was interrupted must not redo finished work.
-  // The worktree is reused and the ORIGINAL execution base is kept, otherwise
-  // the functional diff would be measured against the wrong commit.
   const previousRuntime = await store.readRuntime();
   const resuming = previousRuntime?.mode === 'REAL_EXECUTION'
     && previousRuntime.goal === goal.goalId
@@ -253,260 +192,299 @@ async function main() {
   } else {
     emit('Creating worktree…');
     worktree = await createWorktreeForGoal({
-      goalId,
-      executionBase,
-      git: probe,
-      repoRoot: REPO_ROOT,
-      createFn: gitCreateWorktree,
+      goalId, executionBase: headNow, git: probe, repoRoot: REPO_ROOT, createFn: gitCreateWorktree,
     });
   }
   machine.transitionTo(LOOP_STATES.WORKTREE_READY);
 
-  // The base of record is the one this execution actually started from.
-  const effectiveExecutionBase = resuming
+  // The base of record never moves, even though the tooling checkout advanced.
+  const executionBase = resuming
     ? (previousRuntime.executionBase ?? worktree.worktreeInitialHead)
-    : executionBase;
+    : headNow;
+  const absWorktree = worktree.absolutePath;
 
   emit('Worktree:');
   emit(`  path: ${worktree.path}`);
   emit(`  branch: ${worktree.branch}`);
   emit(`  initialHead: ${worktree.worktreeInitialHead}`);
+  emit(`  executionBase (original): ${executionBase}`);
   emit('');
 
   await store.writeCurrentGoal({
     goalId: goal.goalId, title: goal.title, status: goal.status, goalPath: goal.goalPath,
-    migrationAcceptedBaseline: goal.migrationAcceptedBaseline, executionBase: effectiveExecutionBase,
+    migrationAcceptedBaseline: goal.migrationAcceptedBaseline, executionBase,
     worktreePath: worktree.path, worktreeInitialHead: worktree.worktreeInitialHead,
-  });
-  await store.writeRuntime({
-    mode: 'REAL_EXECUTION', goal: goal.goalId, round: ROUND, state: machine.state,
-    migrationAcceptedBaseline: goal.migrationAcceptedBaseline, executionBase: effectiveExecutionBase,
-    worktreePath: worktree.path, worktreeInitialHead: worktree.worktreeInitialHead,
-    reviewLevel: REVIEW_LEVEL, goalExecuted: false,
   });
   await store.appendEvent({
-    type: 'WORKTREE_CREATED', goal: goal.goalId, path: worktree.path,
-    branch: worktree.branch, initialHead: worktree.worktreeInitialHead,
+    type: resuming ? 'WORKTREE_REUSED' : 'WORKTREE_CREATED',
+    goal: goal.goalId, path: worktree.path, branch: worktree.branch,
+    initialHead: worktree.worktreeInitialHead,
   });
 
-  const absWorktree = worktree.absolutePath;
+  const baseRuntime = {
+    mode: 'REAL_EXECUTION', goal: goal.goalId, state: machine.state,
+    migrationAcceptedBaseline: goal.migrationAcceptedBaseline, executionBase,
+    worktreePath: worktree.path, worktreeInitialHead: worktree.worktreeInitialHead,
+    reviewLevel: REVIEW_LEVEL, goalExecuted: false,
+  };
+  await store.writeRuntime({ ...previousRuntime, ...baseRuntime });
 
-  // --- Developer -----------------------------------------------------------
-  const beforeDev = await captureSnapshot({ probe });
+  // --- Round loop ----------------------------------------------------------
+  // Where to start: a previous run that ended in CHANGES_REQUIRED resumes at the
+  // NEXT round as a correction; anything else starts (or continues) round 1.
+  let round = previousRuntime?.round ?? 1;
+  let pendingBlockers = [];
+  let startAsCorrection = false;
 
-  // Reusing the recorded job id is what makes the idempotency check meaningful.
-  const devJobId = resuming && previousRuntime.currentJobId
-    ? previousRuntime.currentJobId
-    : store.newJobId(goal.goalId, ROUND, 'developer');
-
-  const developerAlreadyDone = await store.hasCompletedResult('developer', devJobId);
-
-  const devJob = validateDeveloperJob({
-    protocolVersion: PROTOCOL_VERSION_V2,
-    jobId: devJobId,
-    role: 'developer',
-    goal: goal.goalId,
-    round: ROUND,
-    type: 'IMPLEMENTATION',
-    migrationAcceptedBaseline: goal.migrationAcceptedBaseline,
-    executionBase: effectiveExecutionBase,
-    worktreeInitialHead: worktree.worktreeInitialHead,
-    worktree: absWorktree,
-    goalPath: goal.goalPath,
-    blockers: [],
-  });
-
-  machine.transitionTo(LOOP_STATES.DEVELOPER_QUEUED);
-
-  let devEnvelope;
-  if (developerAlreadyDone) {
-    // The Developer finished before the interruption. Calling it again would
-    // redo hours of work and could produce a different implementation than the
-    // one already on disk.
-    emit(`Developer already completed ${devJobId} — reusing the persisted result. The model is NOT called again.`);
-    machine.transitionTo(LOOP_STATES.DEVELOPER_RUNNING);
-    devEnvelope = await store.readResult('developer', devJobId);
-  } else {
-    await store.publishJob('developer', devJob);
-    await store.writeRuntime({
-      ...(await store.readRuntime()), state: machine.state, currentJobId: devJobId,
-    });
-    emit(`Developer job published: ${devJobId}`);
-    machine.transitionTo(LOOP_STATES.DEVELOPER_RUNNING);
-    emit('Waiting for the Developer…');
-    devEnvelope = await waitForResult(store, 'developer', devJobId, { emit });
-  }
-
-  if (!devEnvelope.ok) {
-    machine.transitionTo(LOOP_STATES.HUMAN_REQUIRED);
-    machine.transitionTo(LOOP_STATES.AWAITING_HUMAN);
+  if (resuming && previousRuntime.decision === 'CHANGES_REQUIRED' && Array.isArray(previousRuntime.blockers)) {
+    const plan = planAfterReview({ decision: 'CHANGES_REQUIRED', round });
+    if (plan.action === 'CORRECT') {
+      emit(`Previous round ${round} ended in CHANGES_REQUIRED with ${previousRuntime.blockers.length} blocker(s).`);
+      emit(`Starting correction round ${plan.nextRound}.`);
+      emit('');
+      round = plan.nextRound;
+      pendingBlockers = previousRuntime.blockers;
+      startAsCorrection = true;
+    }
+  } else if (resuming && round > 1 && Array.isArray(previousRuntime.blockers) && previousRuntime.blockers.length > 0) {
+    // A correction round that was interrupted — by a harness failure or a
+    // crash — resumes as the SAME round with the SAME blockers. It is not a new
+    // round: the round budget must not be spent on an interruption.
+    emit(`Resuming correction round ${round} with its ${previousRuntime.blockers.length} recorded blocker(s).`);
     emit('');
-    emit(`Developer failed: [${devEnvelope.code}] ${devEnvelope.message}`);
-    await finish({ store, machine, emit, goal, worktree, executionBase: effectiveExecutionBase, decision: 'HUMAN_REQUIRED', blockers: [], violations: [] });
-    return 1;
+    pendingBlockers = previousRuntime.blockers;
+    startAsCorrection = true;
   }
 
-  const devResult = devEnvelope.result;
-  emit(`Developer result: ${devResult.status}`);
-  emit('');
+  const roundsRun = [];
+  let finalDecision = null;
+  let finalReason = null;
+  let lastChanges = null;
+  let lastDevResult = null;
 
-  // --- Collect the REAL state ---------------------------------------------
-  emit('Collecting real repository state…');
-  const changes = await collectWorktreeChanges(absWorktree, worktree.worktreeInitialHead);
-  const afterDev = await captureSnapshot({ probe });
+  for (;;) {
+    const isCorrection = startAsCorrection || round > 1;
+    const phaseQueued = isCorrection ? LOOP_STATES.CORRECTION_QUEUED : LOOP_STATES.DEVELOPER_QUEUED;
+    const phaseRunning = isCorrection ? LOOP_STATES.CORRECTION_RUNNING : LOOP_STATES.DEVELOPER_RUNNING;
 
-  const devViolations = checkDeveloperPolicy({
-    before: beforeDev,
-    after: afterDev,
-    worktreeInitialHead: worktree.worktreeInitialHead,
-    changes,
-  });
+    emit(`── Round ${round} ${isCorrection ? '(correction)' : '(implementation)'} ──`);
 
-  emit(`  changed files: ${changes.changedFiles.length}`);
-  emit(`  commits in worktree: ${changes.commits.length} (must be 0)`);
-  emit(`  policy violations: ${devViolations.length}`);
-  for (const v of formatViolations(devViolations)) emit(`    - ${v}`);
-  emit('');
+    const beforeDev = await captureSnapshot({ probe });
 
-  // Persist the evidence so the review reads real artefacts.
-  const artefactDir = join(STATE_DIR, 'artefacts', `${goal.goalId}-r${ROUND}`);
-  await fs.mkdir(artefactDir, { recursive: true });
-  const diffPath = join(artefactDir, 'implementation.patch');
-  await fs.writeFile(diffPath, changes.diff, 'utf8');
-  await fs.writeFile(join(artefactDir, 'changed-files.txt'), changes.changedFiles.join('\n'), 'utf8');
+    // A distinct job id per round is what makes idempotency meaningful.
+    const devJobId = (resuming && round === (previousRuntime?.round ?? 1) && previousRuntime?.currentJobId && !startAsCorrection)
+      ? previousRuntime.currentJobId
+      : store.newJobId(goal.goalId, round, isCorrection ? 'correction' : 'developer');
 
-  if (devViolations.length > 0) {
-    machine.transitionTo(LOOP_STATES.HUMAN_REQUIRED);
-    machine.transitionTo(LOOP_STATES.AWAITING_HUMAN);
-    await store.appendEvent({ type: 'POLICY_VIOLATION', goal: goal.goalId, agent: 'developer', violations: devViolations });
-    emit('POLICY_VIOLATION — stopping before the review.');
-    await finish({ store, machine, emit, goal, worktree, executionBase: effectiveExecutionBase, decision: 'HUMAN_REQUIRED', blockers: [], violations: devViolations });
-    return 1;
+    const alreadyDone = await store.hasCompletedResult('developer', devJobId);
+
+    const devJob = validateDeveloperJob({
+      protocolVersion: PROTOCOL_VERSION_V2,
+      jobId: devJobId,
+      role: 'developer',
+      goal: goal.goalId,
+      round,
+      type: isCorrection ? 'CORRECTION' : 'IMPLEMENTATION',
+      migrationAcceptedBaseline: goal.migrationAcceptedBaseline,
+      executionBase,
+      worktreeInitialHead: worktree.worktreeInitialHead,
+      worktree: absWorktree,
+      goalPath: goal.goalPath,
+      blockers: isCorrection ? pendingBlockers.map(blockerText) : [],
+      previousImplementationReport: lastDevResult?.implementationReport ?? previousRuntime?.lastImplementationReport ?? null,
+      previousDecision: isCorrection ? 'CHANGES_REQUIRED' : undefined,
+      changedFiles: lastChanges?.changedFiles ?? [],
+    });
+
+    machine.transitionTo(phaseQueued);
+    await store.writeRuntime({ ...(await store.readRuntime()), state: machine.state, round, currentJobId: devJobId });
+
+    let devEnvelope;
+    if (alreadyDone) {
+      emit(`Developer already completed ${devJobId} — reusing the persisted result. The model is NOT called again.`);
+      machine.transitionTo(phaseRunning);
+      devEnvelope = await store.readResult('developer', devJobId);
+    } else {
+      await store.publishJob('developer', devJob);
+      emit(`${isCorrection ? 'Correction' : 'Developer'} job published: ${devJobId}`);
+      machine.transitionTo(phaseRunning);
+      emit('Waiting for the Developer…');
+      devEnvelope = await waitForResult(store, 'developer', devJobId, { emit });
+    }
+
+    if (!devEnvelope.ok) {
+      emit(`Developer failed: [${devEnvelope.code}] ${devEnvelope.message}`);
+      machine.transitionTo(LOOP_STATES.HUMAN_REQUIRED);
+      finalDecision = 'HUMAN_REQUIRED';
+      finalReason = devEnvelope.code;
+      break;
+    }
+
+    lastDevResult = devEnvelope.result;
+    emit(`Developer result: ${lastDevResult.status}`);
+
+    // --- Real state, collected from git -----------------------------------
+    const changes = await collectWorktreeChanges(absWorktree, worktree.worktreeInitialHead);
+    lastChanges = changes;
+    const afterDev = await captureSnapshot({ probe });
+    const devViolations = checkDeveloperPolicy({
+      before: beforeDev, after: afterDev,
+      worktreeInitialHead: worktree.worktreeInitialHead, changes,
+    });
+
+    emit(`  changed files: ${changes.changedFiles.length} · commits: ${changes.commits.length} · violations: ${devViolations.length}`);
+    for (const v of formatViolations(devViolations)) emit(`    - ${v}`);
+
+    const artefactDir = join(STATE_DIR, 'artefacts', `${goal.goalId}-r${round}`);
+    await fs.mkdir(artefactDir, { recursive: true });
+    const diffPath = join(artefactDir, 'implementation.patch');
+    await fs.writeFile(diffPath, changes.diff, 'utf8');
+
+    if (devViolations.length > 0) {
+      await store.appendEvent({ type: 'POLICY_VIOLATION', goal: goal.goalId, round, agent: 'developer', violations: devViolations });
+      machine.transitionTo(LOOP_STATES.HUMAN_REQUIRED);
+      finalDecision = 'HUMAN_REQUIRED';
+      finalReason = 'POLICY_VIOLATION';
+      break;
+    }
+
+    machine.transitionTo(LOOP_STATES.REVIEW_REQUIRED);
+
+    // --- Review ------------------------------------------------------------
+    const packet = buildReviewPacket({
+      goal: goal.goalId, goalPath: goal.goalPath, round, reviewLevel: REVIEW_LEVEL,
+      migrationAcceptedBaseline: goal.migrationAcceptedBaseline,
+      executionBase, worktreeInitialHead: worktree.worktreeInitialHead,
+      worktreePath: absWorktree, changes, developerResult: lastDevResult,
+      previousBlockers: pendingBlockers.map(blockerText), diffPath,
+    });
+    const packetPath = join(artefactDir, 'review-packet.json');
+    await fs.writeFile(packetPath, JSON.stringify(packet, null, 2), 'utf8');
+
+    const revJobId = store.newJobId(goal.goalId, round, 'tech_lead');
+    const revJob = validateReviewJob({
+      protocolVersion: PROTOCOL_VERSION_V2,
+      jobId: revJobId, role: 'tech_lead', goal: goal.goalId, round,
+      reviewLevel: REVIEW_LEVEL,
+      migrationAcceptedBaseline: goal.migrationAcceptedBaseline,
+      executionBase, worktreeInitialHead: worktree.worktreeInitialHead,
+      worktree: absWorktree, goalPath: goal.goalPath,
+      changedFiles: changes.changedFiles, diffStat: changes.diffStat,
+      implementationReport: lastDevResult.implementationReport,
+      validations: lastDevResult.validations,
+      previousBlockers: pendingBlockers.map(blockerText),
+      packetPath,
+    });
+
+    const beforeReview = await captureSnapshot({ probe, worktreePath: absWorktree, fingerprint: worktreeFingerprint });
+
+    machine.transitionTo(LOOP_STATES.REVIEWER_QUEUED);
+    await store.publishJob('tech_lead', revJob);
+    await store.writeRuntime({ ...(await store.readRuntime()), state: machine.state, round, currentJobId: revJobId });
+    emit(`Review job published: ${revJobId}`);
+    machine.transitionTo(LOOP_STATES.REVIEWER_RUNNING);
+    emit('Waiting for the Tech Lead…');
+
+    const revEnvelope = await waitForResult(store, 'tech_lead', revJobId, { emit });
+    const afterReview = await captureSnapshot({ probe, worktreePath: absWorktree, fingerprint: worktreeFingerprint });
+    const revViolations = checkReviewerPolicy({ before: beforeReview, after: afterReview });
+
+    if (revViolations.length > 0) {
+      await store.appendEvent({ type: 'POLICY_VIOLATION', goal: goal.goalId, round, agent: 'tech_lead', violations: revViolations });
+      emit('REVIEWER_MUTATED_WORKTREE — the review is not accepted.');
+      machine.transitionTo(LOOP_STATES.HUMAN_REQUIRED);
+      finalDecision = 'HUMAN_REQUIRED';
+      finalReason = 'REVIEWER_MUTATED_WORKTREE';
+      break;
+    }
+
+    if (!revEnvelope.ok) {
+      emit(`Review failed: [${revEnvelope.code}] ${revEnvelope.message}`);
+      machine.transitionTo(LOOP_STATES.HUMAN_REQUIRED);
+      finalDecision = 'HUMAN_REQUIRED';
+      finalReason = revEnvelope.code;
+      break;
+    }
+
+    const decision = revEnvelope.result;
+    emit(`Decision R${round}: ${decision.decision}`);
+    emit('');
+    roundsRun.push({ round, decision: decision.decision, blockers: decision.blockers.length, changedFiles: changes.changedFiles.length });
+
+    await store.writeRuntime({
+      ...(await store.readRuntime()),
+      round, decision: decision.decision, blockers: decision.blockers,
+      lastImplementationReport: lastDevResult.implementationReport,
+    });
+
+    // --- What follows -----------------------------------------------------
+    const plan = planAfterReview({ decision: decision.decision, round });
+
+    if (plan.action === 'CORRECT') {
+      machine.transitionTo(LOOP_STATES.CHANGES_REQUIRED);
+      machine.transitionTo(LOOP_STATES.CORRECTION_QUEUED);
+      await store.appendEvent({
+        type: 'CORRECTION_ROUND_STARTED', goal: goal.goalId,
+        fromRound: round, toRound: plan.nextRound, blockers: decision.blockers.length,
+      });
+      pendingBlockers = decision.blockers;
+      round = plan.nextRound;
+      startAsCorrection = true;
+      // The machine is already in CORRECTION_QUEUED; the next iteration
+      // transitions from there.
+      continue;
+    }
+
+    finalDecision = plan.decision;
+    finalReason = plan.reason;
+    if (plan.reason === 'MAX_CORRECTION_ROUNDS_REACHED') {
+      emit(plan.note);
+      machine.transitionTo(LOOP_STATES.HUMAN_REQUIRED);
+    } else {
+      machine.transitionTo(stateForDecision(plan.decision));
+    }
+    break;
   }
 
-  machine.transitionTo(LOOP_STATES.REVIEW_REQUIRED);
-
-  // --- Review packet -------------------------------------------------------
-  const packet = buildReviewPacket({
-    goal: goal.goalId,
-    goalPath: goal.goalPath,
-    round: ROUND,
-    reviewLevel: REVIEW_LEVEL,
-    migrationAcceptedBaseline: goal.migrationAcceptedBaseline,
-    executionBase: effectiveExecutionBase,
-    worktreeInitialHead: worktree.worktreeInitialHead,
-    worktreePath: absWorktree,
-    changes,
-    developerResult: devResult,
-    previousBlockers: [],
-    diffPath,
-  });
-  const packetPath = join(artefactDir, 'review-packet.json');
-  await fs.writeFile(packetPath, JSON.stringify(packet, null, 2), 'utf8');
-
-  const revJobId = store.newJobId(goal.goalId, ROUND, 'tech_lead');
-  const revJob = validateReviewJob({
-    protocolVersion: PROTOCOL_VERSION_V2,
-    jobId: revJobId,
-    role: 'tech_lead',
-    goal: goal.goalId,
-    round: ROUND,
-    reviewLevel: REVIEW_LEVEL,
-    migrationAcceptedBaseline: goal.migrationAcceptedBaseline,
-    executionBase: effectiveExecutionBase,
-    worktreeInitialHead: worktree.worktreeInitialHead,
-    worktree: absWorktree,
-    goalPath: goal.goalPath,
-    changedFiles: changes.changedFiles,
-    diffStat: changes.diffStat,
-    implementationReport: devResult.implementationReport,
-    validations: devResult.validations,
-    previousBlockers: [],
-    packetPath,
-  });
-
-  const beforeReview = await captureSnapshot({ probe, worktreePath: absWorktree, fingerprint: worktreeFingerprint });
-
-  machine.transitionTo(LOOP_STATES.REVIEWER_QUEUED);
-  await store.publishJob('tech_lead', revJob);
-  emit(`Review job published: ${revJobId}`);
-  machine.transitionTo(LOOP_STATES.REVIEWER_RUNNING);
-  emit('Waiting for the Tech Lead…');
-
-  const revEnvelope = await waitForResult(store, 'tech_lead', revJobId, { emit });
-  const afterReview = await captureSnapshot({ probe, worktreePath: absWorktree, fingerprint: worktreeFingerprint });
-  const revViolations = checkReviewerPolicy({ before: beforeReview, after: afterReview });
-
-  if (revViolations.length > 0) {
-    await store.appendEvent({ type: 'POLICY_VIOLATION', goal: goal.goalId, agent: 'tech_lead', violations: revViolations });
-    emit('REVIEWER_MUTATED_WORKTREE — the review is not accepted.');
-    machine.transitionTo(LOOP_STATES.HUMAN_REQUIRED);
-    machine.transitionTo(LOOP_STATES.AWAITING_HUMAN);
-    await finish({ store, machine, emit, goal, worktree, executionBase: effectiveExecutionBase, decision: 'HUMAN_REQUIRED', blockers: [], violations: revViolations });
-    return 1;
-  }
-
-  if (!revEnvelope.ok) {
-    machine.transitionTo(LOOP_STATES.HUMAN_REQUIRED);
-    machine.transitionTo(LOOP_STATES.AWAITING_HUMAN);
-    emit(`Review failed: [${revEnvelope.code}] ${revEnvelope.message}`);
-    await finish({ store, machine, emit, goal, worktree, executionBase: effectiveExecutionBase, decision: 'HUMAN_REQUIRED', blockers: [], violations: [] });
-    return 1;
-  }
-
-  const decision = revEnvelope.result;
-  emit(`Decision: ${decision.decision}`);
-  emit('');
-
-  // --- Supervised stop -----------------------------------------------------
-  machine.transitionTo(stateForDecision(decision.decision));
-  const plan = planAfterDecision(decision.decision);
   machine.transitionTo(LOOP_STATES.AWAITING_HUMAN);
 
-  await finish({
-    store, machine, emit, goal, worktree, executionBase: effectiveExecutionBase,
-    decision: decision.decision, blockers: decision.blockers ?? [], violations: [], plan,
-    developerResult: devResult, changes,
-  });
-  return 0;
-}
-
-/** Writes the final snapshot and prints the supervised-stop summary. */
-async function finish({ store, machine, emit, goal, worktree, executionBase, decision, blockers, violations, plan, developerResult, changes }) {
   const previous = (await store.readRuntime()) ?? {};
   await store.writeRuntime({
     ...previous,
     state: machine.state,
-    decision,
-    blockers,
-    policyViolations: violations,
-    // Explicit and deliberate: none of these happen in V3.
+    round,
+    decision: finalDecision,
+    escalationReason: finalReason,
+    roundsRun,
     goalExecuted: true,
     goalCommitted: false,
     migrationBaselineUpdated: false,
     nextGoalCreated: false,
-    deferredNextAction: plan?.deferredNextAction ?? null,
   });
   await store.appendEvent({
-    type: 'SUPERVISED_STOP', goal: goal.goalId, state: machine.state, decision,
-    blockers: blockers.length, violations: violations.length,
+    type: 'SUPERVISED_STOP', goal: goal.goalId, state: machine.state,
+    decision: finalDecision, reason: finalReason, rounds: roundsRun.length,
   });
 
   emit('State:');
   for (const t of machine.history) emit(`  ${t.from} -> ${t.to}`);
   emit('');
   emit(`Goal: ${goal.goalId}`);
-  emit(`Round: ${ROUND}`);
-  emit(`Worktree: ${worktree?.path ?? 'n/a'} (branch ${worktree?.branch ?? 'n/a'})`);
+  emit(`Final round: ${round}`);
+  for (const r of roundsRun) emit(`  R${r.round}: ${r.decision} (${r.blockers} blockers, ${r.changedFiles} files)`);
+  emit(`Worktree: ${worktree.path} (branch ${worktree.branch})`);
   emit(`Migration baseline: ${goal.migrationAcceptedBaseline}`);
-  emit(`Execution base: ${executionBase}`);
-  if (changes) emit(`Changed files: ${changes.changedFiles.length}`);
-  if (developerResult) emit(`Developer status: ${developerResult.status}`);
-  emit(`Decision: ${decision}`);
-  if (blockers?.length) {
+  emit(`Execution base (original): ${executionBase}`);
+  emit(`Decision: ${finalDecision}`);
+  if (finalReason) emit(`Reason: ${finalReason}`);
+
+  const lastRound = roundsRun[roundsRun.length - 1];
+  if (lastRound && lastRound.blockers > 0) {
+    const runtime = await store.readRuntime();
     emit('Blockers:');
-    for (const b of blockers) emit(`  - ${typeof b === 'string' ? b : JSON.stringify(b)}`);
+    for (const b of runtime.blockers ?? []) emit(`  - ${blockerText(b)}`);
   }
+
   emit('');
   emit(`State: ${machine.state}`);
   emit('');
@@ -514,6 +492,17 @@ async function finish({ store, machine, emit, goal, worktree, executionBase, dec
   emit('Migration baseline updated: NO');
   emit('Next Goal created: NO');
   emit('Worktree kept for human inspection.');
+
+  return 0;
+}
+
+/** Blockers may be plain strings or structured records; both must render. */
+function blockerText(blocker) {
+  if (typeof blocker === 'string') return blocker;
+  const id = blocker.id ? `${blocker.id}: ` : '';
+  const severity = blocker.severity ? `[${blocker.severity}] ` : '';
+  const scope = blocker.correctionScope ? ` — escopo: ${blocker.correctionScope}` : '';
+  return `${severity}${id}${blocker.description ?? JSON.stringify(blocker)}${scope}`;
 }
 
 main()

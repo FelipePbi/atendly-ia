@@ -18,6 +18,10 @@ export const LOOP_STATES = Object.freeze({
   WORKTREE_READY: 'WORKTREE_READY',
   DEVELOPER_QUEUED: 'DEVELOPER_QUEUED',
   DEVELOPER_RUNNING: 'DEVELOPER_RUNNING',
+  // Correction rounds reuse the same worktree and the same Developer role, but
+  // are a distinct phase: the scope is the reviewer's blockers, not the Goal.
+  CORRECTION_QUEUED: 'CORRECTION_QUEUED',
+  CORRECTION_RUNNING: 'CORRECTION_RUNNING',
   REVIEW_REQUIRED: 'REVIEW_REQUIRED',
   REVIEWER_QUEUED: 'REVIEWER_QUEUED',
   REVIEWER_RUNNING: 'REVIEWER_RUNNING',
@@ -42,7 +46,10 @@ const ALLOWED_TRANSITIONS = Object.freeze({
   IDLE: ['GOAL_READY', 'STOPPED'],
   GOAL_READY: ['PREPARING_WORKTREE', 'STOPPED'],
   PREPARING_WORKTREE: ['WORKTREE_READY', 'HUMAN_REQUIRED', 'STOPPED'],
-  WORKTREE_READY: ['DEVELOPER_QUEUED', 'STOPPED'],
+  // CORRECTION_QUEUED is reachable here because a resumed execution re-enters
+  // after preparing the worktree: the previous round already ran, so the next
+  // phase is a correction, not a fresh implementation.
+  WORKTREE_READY: ['DEVELOPER_QUEUED', 'CORRECTION_QUEUED', 'STOPPED'],
   DEVELOPER_QUEUED: ['DEVELOPER_RUNNING', 'WAITING_FOR_CAPACITY', 'HUMAN_REQUIRED', 'STOPPED'],
   DEVELOPER_RUNNING: ['REVIEW_REQUIRED', 'WAITING_FOR_CAPACITY', 'HUMAN_REQUIRED', 'STOPPED'],
   REVIEW_REQUIRED: ['REVIEWER_QUEUED', 'STOPPED'],
@@ -52,11 +59,16 @@ const ALLOWED_TRANSITIONS = Object.freeze({
   // one, so completed work is not redone.
   WAITING_FOR_CAPACITY: [
     'DEVELOPER_QUEUED', 'DEVELOPER_RUNNING',
+    'CORRECTION_QUEUED', 'CORRECTION_RUNNING',
     'REVIEWER_QUEUED', 'REVIEWER_RUNNING',
     'HUMAN_REQUIRED', 'STOPPED',
   ],
+  CORRECTION_QUEUED: ['CORRECTION_RUNNING', 'WAITING_FOR_CAPACITY', 'HUMAN_REQUIRED', 'STOPPED'],
+  CORRECTION_RUNNING: ['REVIEW_REQUIRED', 'WAITING_FOR_CAPACITY', 'HUMAN_REQUIRED', 'STOPPED'],
   ACCEPTED: ['AWAITING_HUMAN'],
-  CHANGES_REQUIRED: ['AWAITING_HUMAN'],
+  // A correction round is now reachable, but only while the round budget lasts;
+  // the orchestrator consults planAfterReview before taking it.
+  CHANGES_REQUIRED: ['AWAITING_HUMAN', 'CORRECTION_QUEUED'],
   HUMAN_REQUIRED: ['AWAITING_HUMAN'],
   AWAITING_HUMAN: ['STOPPED'],
   STOPPED: [],

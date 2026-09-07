@@ -29,8 +29,20 @@ export const STORE_VERSION = 1;
 
 /** Lifecycle of a single job, persisted alongside it. */
 export const JOB_STATUSES = Object.freeze([
-  'QUEUED', 'RUNNING', 'WAITING_FOR_CAPACITY', 'COMPLETED', 'FAILED',
+  'QUEUED', 'RUNNING', 'WAITING_FOR_CAPACITY', 'COMPLETED', 'FAILED', 'SUPERSEDED',
 ]);
+
+/**
+ * Terminal statuses. A job that reached one of these is never picked up again
+ * by a restarting worker: retrying it would repeat work or, worse, re-run a
+ * failed inference that a human has not looked at yet. Only an explicit
+ * transition may create a NEW jobId for a retry or a correction round.
+ */
+export const TERMINAL_JOB_STATUSES = Object.freeze(['COMPLETED', 'FAILED', 'SUPERSEDED']);
+
+export function isTerminalJobStatus(status) {
+  return TERMINAL_JOB_STATUSES.includes(status);
+}
 
 function fail(code, message, details = {}) {
   throw new SpikeError(code, message, details);
@@ -107,6 +119,18 @@ export function createJobStore(stateDir) {
     async readJobStatus(role, jobId) {
       const envelope = await readJson(paths.job(role, jobId));
       return envelope?.status ?? null;
+    },
+
+    /**
+     * Whether a worker may pick this job up.
+     *
+     * History is preserved: a terminal job keeps its file and its result, it is
+     * simply no longer eligible for execution.
+     */
+    async isJobClaimable(role, jobId) {
+      const status = await this.readJobStatus(role, jobId);
+      if (status === null) return true;
+      return !isTerminalJobStatus(status);
     },
 
     /**

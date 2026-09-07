@@ -23,8 +23,8 @@ import { SESSION_STRATEGY } from '../lib/worker-registry.mjs';
 import { banner, log, runWorkerLoop } from '../lib/worker-loop.mjs';
 import { runWithCapacity, RUN_OUTCOMES } from '../lib/capacity-runner.mjs';
 import { LOOP_STATES } from '../lib/loop-state.mjs';
-import { DEVELOPER_RESULT_SCHEMA, validateDeveloperJob, validateDeveloperResult } from '../lib/contracts-v2.mjs';
-import { buildDeveloperContext } from '../lib/context-builders.mjs';
+import { developerResultSchemaFor, validateDeveloperJob, validateDeveloperResult } from '../lib/contracts-v2.mjs';
+import { buildDeveloperContext, buildCorrectionContext } from '../lib/context-builders.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, '..', '.state');
@@ -87,6 +87,48 @@ function onCapacityEvent(event) {
   }
 }
 
+/**
+ * Prompt for a correction round.
+ *
+ * The blockers are the authority, not the Goal as a whole. The engine stays
+ * generic: everything Goal-specific arrives inside the structured context.
+ */
+function buildCorrectionPrompt(context, job) {
+  return [
+    'Você está atuando como Developer em um pipeline automatizado do Atendly.',
+    `Esta é a correction round ${context.round} do Goal ${context.goal}.`,
+    '',
+    `A implementação da rodada ${context.previousRound} PERMANECE na worktree. Ela não foi revertida.`,
+    '',
+    'Contexto explícito desta rodada (não há conversa anterior):',
+    JSON.stringify(context, null, 2),
+    '',
+    `Trabalhe exclusivamente dentro de: ${job.worktree}`,
+    '',
+    'Corrija SOMENTE os blockers listados em blockers. Cada um foi registrado pelo Tech Lead',
+    'na revisão da rodada anterior e é a autoridade desta rodada.',
+    '',
+    'NÃO reverta nem reimplemente partes sem relação com os blockers.',
+    'Preserve os critérios do Goal que já foram atendidos.',
+    '',
+    'Antes de corrigir, inspecione o código real na worktree — não confie apenas na descrição.',
+    'Leia o Goal em ' + context.goalPath + ' para confirmar o critério de cada ponto tocado.',
+    '',
+    'Depois de corrigir, execute os testes dirigidos das correções e em seguida as validações',
+    'do Goal necessárias para provar ausência de regressão.',
+    '',
+    'Você NÃO PODE: criar commit, push, merge ou PR; mudar de branch; alterar o checkout',
+    'principal; escrever fora da worktree; editar documentos de controle da migração',
+    '(goals/, reviews/, MIGRATION_STATUS.md); declarar o Goal ACCEPTED; criar o próximo Goal.',
+    'O orchestrator verifica isso no Git depois; violação encerra a execução.',
+    '',
+    `Retorne exclusivamente o JSON do contrato DeveloperResult, com protocolVersion 2,`,
+    `jobId exatamente "${job.jobId}", goal "${job.goal}", round ${job.round}, e com o implementationReport`,
+    `desta rodada (R${context.round}): o que mudou por blocker, comandos executados com`,
+    'resultado, e limitações. Não invente resultado de validação que você não executou.',
+  ].join('\n');
+}
+
 function buildPrompt(context, job) {
   return [
     'Você está atuando como Developer em um pipeline automatizado do Atendly.',
@@ -118,6 +160,8 @@ function buildPrompt(context, job) {
     'O orchestrator verifica isso no Git depois; violação encerra a execução.',
     '',
     'Ao terminar, retorne exclusivamente o JSON do contrato DeveloperResult, com:',
+    '- protocolVersion: 2 (obrigatório, exatamente esse valor);',
+    `- jobId: exatamente "${job.jobId}"; goal: "${job.goal}"; round: ${job.round};`,
     '- status: "REVIEW_REQUIRED" se implementou, "BLOCKED" se não pôde prosseguir;',
     '- summary: uma frase;',
     '- implementationReport: relatório conforme o Goal pede (diff inicial/final, arquivos e',
@@ -135,18 +179,46 @@ async function handleJob(rawJob) {
   workerState = 'WORKING';
 
   log(`JOB ${job.goal}/R${job.round} RECEIVED`, `type ${job.type}`);
+  if (job.type === 'CORRECTION') log('CORRECTION SCOPE', `${job.blockers.length} blocker(s)`);
   await store.appendEvent({ type: 'DEVELOPER_JOB_RECEIVED', jobId: job.jobId, goal: job.goal, round: job.round });
 
-  const context = buildDeveloperContext({
-    goal: job.goal,
-    goalPath: job.goalPath,
+  const isCorrection = job.type === 'CORRECTION';
+
+  const context = isCorrection
+    ? buildCorrectionContext({
+      goal: job.goal,
+      goalPath: job.goalPath,
+      round: job.round,
+      previousRound: job.round - 1,
+      migrationAcceptedBaseline: job.migrationAcceptedBaseline,
+      // Original baselines, unchanged across rounds.
+      executionBase: job.executionBase,
+      worktreeInitialHead: job.worktreeInitialHead,
+      worktree: job.worktree,
+      blockers: [...job.blockers],
+      previousImplementationReport: job.previousImplementationReport ?? null,
+      previousDecision: job.previousDecision ?? 'CHANGES_REQUIRED',
+      changedFiles: job.changedFiles ?? [],
+    })
+    : buildDeveloperContext({
+      goal: job.goal,
+      goalPath: job.goalPath,
+      round: job.round,
+      type: job.type,
+      migrationAcceptedBaseline: job.migrationAcceptedBaseline,
+      executionBase: job.executionBase,
+      worktree: job.worktree,
+      blockers: [...job.blockers],
+      previousImplementationReport: job.previousImplementationReport ?? null,
+    });
+
+  // Persist the running state BEFORE calling the model, so a crash mid-call
+  // leaves the runtime saying what was actually happening.
+  await store.writeRuntime({
+    ...(await store.readRuntime()),
+    state: isCorrection ? 'CORRECTION_RUNNING' : 'DEVELOPER_RUNNING',
     round: job.round,
-    type: job.type,
-    migrationAcceptedBaseline: job.migrationAcceptedBaseline,
-    executionBase: job.executionBase,
-    worktree: job.worktree,
-    blockers: [...job.blockers],
-    previousImplementationReport: job.previousImplementationReport ?? null,
+    currentJobId: job.jobId,
   });
 
   // A fresh session id per job. This is the stateless invariant.
@@ -165,7 +237,7 @@ async function handleJob(rawJob) {
     jobId: job.jobId,
     goal: job.goal,
     round: job.round,
-    resumeFrom: LOOP_STATES.DEVELOPER_RUNNING,
+    resumeFrom: isCorrection ? LOOP_STATES.CORRECTION_RUNNING : LOOP_STATES.DEVELOPER_RUNNING,
     onEvent: onCapacityEvent,
     invoke: async () => {
       const attemptSessionId = randomUUID();
@@ -175,8 +247,8 @@ async function handleJob(rawJob) {
         model: MODEL,
         expectedFamily: 'opus',
         expectedRole: ROLE,
-        prompt: buildPrompt(context, job),
-        jsonSchema: DEVELOPER_RESULT_SCHEMA,
+        prompt: isCorrection ? buildCorrectionPrompt(context, job) : buildPrompt(context, job),
+        jsonSchema: developerResultSchemaFor({ jobId: job.jobId, goal: job.goal, round: job.round }),
         validatePayload: (payload) => validateDeveloperResult(payload, {
           jobId: job.jobId,
           goal: job.goal,

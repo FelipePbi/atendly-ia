@@ -119,9 +119,10 @@ test('26. a detected model fallback is fatal, never retried around', () => {
 });
 
 test('classification prefers our structured code over text', () => {
-  // Text says "rate limit", but our own code says the executable is missing.
+  // Text says "rate limit", but our own code says the executable is missing:
+  // a local tooling failure, not a model limit.
   const outcome = failure({ code: 'EXECUTABLE_NOT_FOUND', message: 'rate limit 429' });
-  assert.equal(classifyFailure(outcome).reason, CAPACITY_REASONS.UNKNOWN_FATAL);
+  assert.equal(classifyFailure(outcome).reason, CAPACITY_REASONS.HARNESS_ERROR);
 });
 
 test('2. Retry-After is extracted when present', () => {

@@ -33,7 +33,7 @@ import { SESSION_STRATEGY } from '../lib/worker-registry.mjs';
 import { banner, log, runWorkerLoop } from '../lib/worker-loop.mjs';
 import { runWithCapacity, RUN_OUTCOMES } from '../lib/capacity-runner.mjs';
 import { LOOP_STATES } from '../lib/loop-state.mjs';
-import { REVIEW_DECISION_SCHEMA, validateReviewJob, validateReviewDecision } from '../lib/contracts-v2.mjs';
+import { reviewDecisionSchemaFor, validateReviewJob, validateReviewDecision } from '../lib/contracts-v2.mjs';
 import { buildTechLeadContext } from '../lib/context-builders.mjs';
 import { renderReviewPrompt } from '../lib/review-packet.mjs';
 import { readJson } from '../lib/job-store.mjs';
@@ -165,6 +165,14 @@ async function handleJob(rawJob) {
 
   // A real review reads the packet the orchestrator persisted, which carries
   // the change surface collected from git rather than claimed by the Developer.
+  // Persist the running state BEFORE the model call, for the same reason.
+  await store.writeRuntime({
+    ...(await store.readRuntime()),
+    state: 'REVIEWER_RUNNING',
+    round: job.round,
+    currentJobId: job.jobId,
+  });
+
   const packet = job.packetPath ? await readJson(job.packetPath, { required: true }) : null;
   const prompt = packet ? renderReviewPrompt(packet) : buildPrompt(context);
 
@@ -184,7 +192,7 @@ async function handleJob(rawJob) {
     invoke: async () => {
       const outcome = await session.send({
         prompt,
-        jsonSchema: REVIEW_DECISION_SCHEMA,
+        jsonSchema: reviewDecisionSchemaFor({ jobId: job.jobId, goal: job.goal, round: job.round }),
         tools: REVIEWER_TOOLS,
         permissionMode: 'auto',
         addDirs: job.worktree ? [job.worktree] : [],

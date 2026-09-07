@@ -80,6 +80,15 @@ export async function runWorkerLoop({
       seen.add(file);
       const jobId = file.replace(/\.json$/, '');
       try {
+        // A job that already reached a terminal status is never re-run. Before
+        // this check, a restart re-executed a FAILED job and spent a second
+        // inference on work a human had not yet looked at. Only an explicit
+        // transition may create a NEW jobId for a retry or correction round.
+        if (!(await store.isJobClaimable(role, jobId))) {
+          const status = await store.readJobStatus(role, jobId);
+          log('SKIP', `${jobId} is ${status}`);
+          continue;
+        }
         const job = await store.readJob(role, jobId);
         await handleJob(job);
       } catch (error) {

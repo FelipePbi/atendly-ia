@@ -12,7 +12,7 @@
 
 import { SpikeError } from './claude-process.mjs';
 import { CAPACITY_CONFIG } from './capacity-config.mjs';
-import { classifyFailure } from './capacity-classifier.mjs';
+import { classifyFailure, isHarnessError } from './capacity-classifier.mjs';
 import { CAPACITY_ACTIONS, decideCapacityAction, formatRemaining } from './capacity-policy.mjs';
 import {
   clearCapacityWait,
@@ -110,8 +110,11 @@ export async function runWithCapacity({
       config,
     });
 
+    // A local tooling failure is not a capacity event and must not be logged as
+    // one: it would pollute the capacity history and mislead any later analysis
+    // of how often real model limits were hit.
     await store.appendEvent({
-      type: 'CAPACITY_LIMIT_REACHED',
+      type: isHarnessError(decision.reason) ? 'HARNESS_ERROR' : 'CAPACITY_LIMIT_REACHED',
       goal,
       round,
       agent: role,

@@ -19,6 +19,9 @@ import { ROLES } from './contracts-v2.mjs';
 const RESUMABLE_STATES = Object.freeze([
   LOOP_STATES.DEVELOPER_QUEUED,
   LOOP_STATES.DEVELOPER_RUNNING,
+  // A correction round waits for capacity exactly like an implementation one.
+  LOOP_STATES.CORRECTION_QUEUED,
+  LOOP_STATES.CORRECTION_RUNNING,
   LOOP_STATES.REVIEWER_QUEUED,
   LOOP_STATES.REVIEWER_RUNNING,
 ]);

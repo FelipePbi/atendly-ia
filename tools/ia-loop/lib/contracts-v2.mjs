@@ -237,7 +237,9 @@ export function validateReviewDecision(payload, { jobId, goal, round }) {
 export const DEVELOPER_RESULT_SCHEMA = Object.freeze({
   type: 'object',
   properties: {
-    protocolVersion: { type: 'integer' },
+    // Pinned, not just typed: an open integer let a model answer with version 1
+    // and the mismatch only surfaced after the inference had been paid for.
+    protocolVersion: { type: 'integer', enum: [PROTOCOL_VERSION_V2] },
     jobId: { type: 'string' },
     goal: { type: 'string' },
     round: { type: 'integer' },
@@ -265,7 +267,7 @@ export const DEVELOPER_RESULT_SCHEMA = Object.freeze({
 export const REVIEW_DECISION_SCHEMA = Object.freeze({
   type: 'object',
   properties: {
-    protocolVersion: { type: 'integer' },
+    protocolVersion: { type: 'integer', enum: [PROTOCOL_VERSION_V2] },
     jobId: { type: 'string' },
     goal: { type: 'string' },
     round: { type: 'integer' },
@@ -277,3 +279,37 @@ export const REVIEW_DECISION_SCHEMA = Object.freeze({
   required: ['protocolVersion', 'jobId', 'goal', 'round', 'decision', 'blockers', 'nextAction'],
   additionalProperties: false,
 });
+
+/**
+ * Builds a DeveloperResult schema with the identity fields pinned.
+ *
+ * A model answered with jobId "003" (the goal) instead of the job id, and with
+ * protocolVersion 1. Both slipped past an open schema and only failed local
+ * validation after the inference had been paid for. Pinning them lets the CLI
+ * reject the shape at the source.
+ */
+export function developerResultSchemaFor({ jobId, goal, round }) {
+  return {
+    ...DEVELOPER_RESULT_SCHEMA,
+    properties: {
+      ...DEVELOPER_RESULT_SCHEMA.properties,
+      protocolVersion: { type: 'integer', enum: [PROTOCOL_VERSION_V2] },
+      jobId: { type: 'string', enum: [jobId] },
+      goal: { type: 'string', enum: [goal] },
+      round: { type: 'integer', enum: [round] },
+    },
+  };
+}
+
+export function reviewDecisionSchemaFor({ jobId, goal, round }) {
+  return {
+    ...REVIEW_DECISION_SCHEMA,
+    properties: {
+      ...REVIEW_DECISION_SCHEMA.properties,
+      protocolVersion: { type: 'integer', enum: [PROTOCOL_VERSION_V2] },
+      jobId: { type: 'string', enum: [jobId] },
+      goal: { type: 'string', enum: [goal] },
+      round: { type: 'integer', enum: [round] },
+    },
+  };
+}

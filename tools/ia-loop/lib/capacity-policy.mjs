@@ -21,6 +21,8 @@ const ESCALATE_IMMEDIATELY = Object.freeze([
   CAPACITY_REASONS.BILLING_ERROR,
   CAPACITY_REASONS.MODEL_UNAVAILABLE,
   CAPACITY_REASONS.UNKNOWN_FATAL,
+  // Waiting cannot fix a local tooling failure.
+  CAPACITY_REASONS.HARNESS_ERROR,
 ]);
 
 /**
@@ -107,6 +109,8 @@ function humanNoteFor(reason) {
       return 'Billing needs human intervention. Switching provider or model is not an option.';
     case CAPACITY_REASONS.MODEL_UNAVAILABLE:
       return 'The requested model is unavailable. No fallback model will be used.';
+    case CAPACITY_REASONS.HARNESS_ERROR:
+      return 'Local harness failure, not a model limit. Fix the tooling; retrying as-is will not help.';
     default:
       return 'Unrecoverable failure; a human must look at it.';
   }

@@ -13,6 +13,7 @@ Duas etapas concluídas:
 | V2 — Hybrid Real Goal Harness | `PASS` (dry-run; Goal003 **não** executado) |
 | Capacity / Usage Limits | `PASS` (espera controlada, retomada exata) |
 | V3 — Real Worktree + Supervised Execution | worktree real, execução supervisionada, parada em `AWAITING_HUMAN` |
+| V4 — Automatic Correction Rounds | correção automática até 3 rodadas, depois escala |
 
 ---
 
@@ -765,18 +766,92 @@ linha, não um sandbox.
 
 ### Parada supervisionada
 
-`ACCEPTED`, `CHANGES_REQUIRED` e `HUMAN_REQUIRED` levam todos a
-`AWAITING_HUMAN`. A execução **não** commita o Goal, não atualiza a baseline da
-migração, não cria o Goal seguinte, não chama o Developer de novo e não remove a
-worktree. A implementação fica na branch `ai-loop/goal-003`, sem commit, para
-inspeção humana.
+A execução **não** commita o Goal, não atualiza a baseline da migração, não cria o
+Goal seguinte e não remove a worktree. A implementação fica na branch
+`ai-loop/goal-003`, sem commit, para inspeção humana.
+
+A partir da V4, `CHANGES_REQUIRED` não para imediatamente: dispara uma rodada de
+correção enquanto houver orçamento de rodadas. Ver abaixo.
+
+
+---
+
+## V4 — Automatic Correction Rounds
+
+O reviewer pedir mudanças deixa de ser fim de execução: vira a próxima rodada.
+
+### Orçamento de rodadas
+
+`maxCorrectionRounds = 3`, em `lib/loop-config.mjs`.
+
+| Rodada | Conteúdo |
+| --- | --- |
+| R1 | Implementação inicial + review |
+| R2 | Primeira correção + review |
+| R3 | Segunda correção + review |
+
+Um `CHANGES_REQUIRED` depois do review da R3 escala com
+`MAX_CORRECTION_ROUNDS_REACHED`. A R4 nunca começa sozinha. O número de rodadas
+é orçamento, não evidência de problema — por isso é a única coisa que converte um
+pedido de mudança repetido em escalação.
+
+### Ciclo
+
+```
+CHANGES_REQUIRED → CORRECTION_QUEUED → CORRECTION_RUNNING
+                → REVIEW_REQUIRED → REVIEWER_QUEUED → REVIEWER_RUNNING
+                → ACCEPTED | CHANGES_REQUIRED | HUMAN_REQUIRED
+```
+
+`ACCEPTED` e `HUMAN_REQUIRED` sempre param em `AWAITING_HUMAN`.
+
+### Escopo de uma correção
+
+O `CorrectionContext` carrega os blockers do reviewer, e eles são a autoridade da
+rodada — não o Goal inteiro. A implementação da rodada anterior **permanece** na
+worktree; a instrução é corrigir só os blockers e preservar o que já foi aceito.
+As baselines não se movem entre rodadas, então o diff funcional continua medido
+contra o `worktreeInitialHead` original.
+
+O engine é genérico: nada específico do Goal está no código, tudo chega em
+blockers estruturados. O contexto também nunca carrega transcript ou histórico de
+conversa — há teste que falha se carregar.
+
+### Mesma worktree, sempre
+
+Todas as rodadas usam `.ai-worktrees/goal-NNN` e a branch `ai-loop/goal-NNN`.
+Não se cria `goal-NNN-r2`. A correção acontece sobre a implementação existente.
+
+### Jobs terminais
+
+Um job que chegou a `COMPLETED`, `FAILED` ou `SUPERSEDED` nunca mais é
+executado. Antes disso, reiniciar um worker reexecutava um job `FAILED` e gastava
+uma segunda inferência em trabalho que um humano ainda não tinha visto. O
+histórico é preservado — o job continua em disco com seu resultado, apenas deixa
+de ser elegível. Só uma transição explícita cria um `jobId` novo.
+
+### Estado RUNNING persistido
+
+`DEVELOPER_RUNNING`, `CORRECTION_RUNNING` e `REVIEWER_RUNNING` são gravados
+**antes** da chamada ao modelo. Se o processo cair no meio, o runtime diz o que
+estava de fato acontecendo, e `ia-loop:status` reflete a realidade em vez de
+ficar preso em `QUEUED` por horas.
+
+### HARNESS_ERROR
+
+Falha local do harness — spawn ruim, lista de argumentos longa demais, executável
+ausente — é classificada como `HARNESS_ERROR`, **não** como limite de
+capacidade. Ela não gera `CAPACITY_LIMIT_REACHED`, não entra em
+`WAITING_FOR_CAPACITY` e vai direto a `HUMAN_REQUIRED`: esperar não conserta
+tooling quebrado. Registrar isso como limite de modelo poluiria o histórico de
+capacidade e induziria a erro qualquer análise posterior.
 
 ---
 
 ## Como executar
 
 ```bash
-npm run test:ia-loop       # 162 testes locais, sem chamadas reais a modelo
+npm run test:ia-loop       # 206 testes locais, sem chamadas reais a modelo
 ```
 
 ```bash
@@ -858,7 +933,7 @@ session ids nem dados pessoais.
 | `lib/persistent-session.mjs` | Sessão por agente: cria no 1º turno, resume nos seguintes |
 | `lib/session-registry.mjs` | Registro durável de sessões, com escrita atômica |
 | `fixtures/synthetic-goal.md` | Tarefa sintética, fora do runtime |
-| `tests/*.test.mjs` | 162 testes com processo/agente fake; nenhuma chamada real |
+| `tests/*.test.mjs` | 206 testes com processo/agente fake; nenhuma chamada real |
 
 ## Limitações conhecidas
 

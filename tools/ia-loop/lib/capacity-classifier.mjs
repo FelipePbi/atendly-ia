@@ -19,7 +19,18 @@ export const CAPACITY_REASONS = Object.freeze({
   MODEL_UNAVAILABLE: 'MODEL_UNAVAILABLE',
   UNKNOWN_TRANSIENT: 'UNKNOWN_TRANSIENT',
   UNKNOWN_FATAL: 'UNKNOWN_FATAL',
+  /**
+   * A local failure of the harness itself — a bad spawn, an argument list too
+   * long, a missing executable. It is NOT a model or capacity limit and must
+   * never be reported as one or waited out: no amount of waiting fixes it.
+   */
+  HARNESS_ERROR: 'HARNESS_ERROR',
 });
+
+/** True when the cause is local tooling rather than the model or its limits. */
+export function isHarnessError(reason) {
+  return reason === CAPACITY_REASONS.HARNESS_ERROR;
+}
 
 /**
  * Our own error codes map directly, without touching text.
@@ -34,8 +45,24 @@ const CODE_MAP = Object.freeze({
   INVALID_AGENT_SHAPE: CAPACITY_REASONS.UNKNOWN_TRANSIENT,
   MISSING_RESULT: CAPACITY_REASONS.UNKNOWN_TRANSIENT,
 
-  EXECUTABLE_NOT_FOUND: CAPACITY_REASONS.UNKNOWN_FATAL,
-  SPAWN_FAILED: CAPACITY_REASONS.UNKNOWN_FATAL,
+  // Contract slips by the model. Retryable within the transient budget: the
+  // schema is pinned, so a second attempt normally lands. Fatal would burn the
+  // whole round over a wrong version number.
+  UNSUPPORTED_PROTOCOL_VERSION: CAPACITY_REASONS.UNKNOWN_TRANSIENT,
+  UNSUPPORTED_STATUS: CAPACITY_REASONS.UNKNOWN_TRANSIENT,
+  UNSUPPORTED_DECISION: CAPACITY_REASONS.UNKNOWN_TRANSIENT,
+  CONTRACT_FIELD_INVALID: CAPACITY_REASONS.UNKNOWN_TRANSIENT,
+  ROLE_MISMATCH: CAPACITY_REASONS.UNKNOWN_TRANSIENT,
+  JOB_ID_MISMATCH: CAPACITY_REASONS.UNKNOWN_TRANSIENT,
+  GOAL_MISMATCH: CAPACITY_REASONS.UNKNOWN_TRANSIENT,
+  ROUND_MISMATCH: CAPACITY_REASONS.UNKNOWN_TRANSIENT,
+  DECISION_BLOCKERS_INCOHERENT: CAPACITY_REASONS.UNKNOWN_TRANSIENT,
+  DECISION_NEXT_ACTION_INCOHERENT: CAPACITY_REASONS.UNKNOWN_TRANSIENT,
+
+  // Local execution problems, not capacity. ENAMETOOLONG (argv over the OS
+  // limit) was originally misreported as a capacity limit; it is a harness bug.
+  EXECUTABLE_NOT_FOUND: CAPACITY_REASONS.HARNESS_ERROR,
+  SPAWN_FAILED: CAPACITY_REASONS.HARNESS_ERROR,
   MODEL_FALLBACK_DETECTED: CAPACITY_REASONS.UNKNOWN_FATAL,
   RESOLVED_MODEL_AMBIGUOUS: CAPACITY_REASONS.UNKNOWN_FATAL,
   RESOLVED_MODEL_UNKNOWN: CAPACITY_REASONS.UNKNOWN_FATAL,
@@ -43,6 +70,8 @@ const CODE_MAP = Object.freeze({
 
 /** Ordered: the first match wins, so the more specific patterns come first. */
 const TEXT_PATTERNS = Object.freeze([
+  // Checked first: an OS-level spawn failure must never be read as a rate limit.
+  [CAPACITY_REASONS.HARNESS_ERROR, /ENAMETOOLONG|E2BIG|argument list too long|ENOENT|EACCES|EMFILE|spawn \w+ E[A-Z]+/],
   [CAPACITY_REASONS.AUTH_ERROR, /not logged in|please run \/login|unauthorized|authentication_error|invalid[_ ]api[_ ]key|oauth|401\b/i],
   [CAPACITY_REASONS.BILLING_ERROR, /billing|payment|credit balance|insufficient (credit|funds|balance)|402\b/i],
   [CAPACITY_REASONS.USAGE_LIMIT, /usage limit|quota|out of (usage|credits)|limit will reset|weekly limit|\d+-hour limit|upgrade to (a )?(higher|paid)/i],

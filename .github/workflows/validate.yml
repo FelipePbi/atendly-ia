@@ -1,0 +1,125 @@
+# Gate de validação da migração.
+#
+# Executa exatamente os mesmos comandos documentados em
+# docs/migration/VALIDATION_GATE.md. Não faz deploy, não usa banco
+# compartilhado e não depende de segredo real: as credenciais abaixo são
+# sintéticas e válidas apenas dentro do job.
+name: validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # Versões já estabelecidas no projeto (render.yaml e apps/evolution-go/go.mod).
+  NODE_VERSION: "24.13.0"
+  GO_VERSION: "1.25.0"
+
+jobs:
+  core:
+    name: validate:core (linux)
+    runs-on: ubuntu-latest
+    env:
+      # Sintéticos: os builds só geram clients/artefatos, nenhum passo do core
+      # abre conexão com banco.
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci_build_only
+      DIRECT_DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci_build_only
+      BFF_BASE_URL: http://localhost:3002
+      NEXT_PUBLIC_BFF_URL: http://localhost:3002
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: apps/evolution-go/go.sum
+      - name: Install package dependencies
+        # Checkout limpo: nada de node_modules, dist ou código gerado vem do
+        # Git. O client Prisma de cada app é produzido pelo próprio
+        # `npm run build`, que roda antes das suítes dentro de validate:core.
+        run: |
+          for dir in packages/contracts apps/scheduling-service apps/ai-orchestrator apps/bff apps/frontend apps/health-worker; do
+            npm ci --prefix "$dir"
+          done
+      - name: npm run validate:core
+        run: npm run validate:core
+
+  go-windows:
+    name: evolution-go (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: apps/evolution-go/go.sum
+      - name: go build
+        working-directory: apps/evolution-go
+        run: go build ./...
+      - name: go vet
+        working-directory: apps/evolution-go
+        run: go vet ./...
+      - name: go test
+        working-directory: apps/evolution-go
+        run: go test -count=1 ./...
+      - name: repeated cleanup fixtures
+        # Reproduz no Windows a classe de falha corrigida pelo Goal002:
+        # arquivo de log aberto impedindo a remoção do t.TempDir().
+        working-directory: apps/evolution-go
+        run: go test -count=5 ./pkg/instance/service ./pkg/events/webhook
+
+  integration:
+    name: validate:integration (linux)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Banco descartável do job; morre junto com o runner.
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: bff_test
+          POSTGRES_PASSWORD: bff_test_synthetic_password
+          POSTGRES_DB: atendly_bff_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bff_test -d atendly_bff_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      BFF_TEST_DATABASE_URL: postgresql://bff_test:bff_test_synthetic_password@127.0.0.1:5432/atendly_bff_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install BFF dependencies
+        # Única preparação fora do gate. A geração do client Prisma é o
+        # primeiro passo de validate:integration, e não depende de nenhum
+        # artefato produzido por outro job ou por execução local anterior.
+        run: npm ci --prefix apps/bff
+      - name: Assert no generated Prisma client is committed
+        run: |
+          if [ -e apps/bff/src/generated/prisma ]; then
+            echo "apps/bff/src/generated/prisma must not come from the checkout"
+            exit 1
+          fi
+      - name: npm run validate:integration
+        run: npm run validate:integration
+      - name: Refuses to run without an explicit test database
+        # O gate precisa recusar, não pular, quando a URL de teste some.
+        run: |
+          set +e
+          npm run validate:integration
+          status=$?
+          set -e
+          if [ "$status" -ne 2 ]; then
+            echo "expected refusal exit code 2, got $status"
+            exit 1
+          fi
+        env:
+          BFF_TEST_DATABASE_URL: ""

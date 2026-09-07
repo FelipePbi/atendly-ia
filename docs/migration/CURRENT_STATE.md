@@ -185,3 +185,36 @@ HEAD documental `4ca130128cafd620ea316c3ed9c51a46b34f8541`; implementação aind
 Com registro de B existente, seu ID conhecido e token/client A válidos, o caminho não impede leitura desses metadados de B. Não há texto da mensagem nesse modelo. Gravação examinada depende de `DATABASE_SAVE_MESSAGES=true`; exemplo versionado usa false. Configuração/linhas de produção não foram verificadas, e desligar escrita não prova ausência de histórico. Isso refina o inventário da persistência opcional de transporte: a tabela examinada contém metadados, sem pressupor conteúdo integral.
 
 Foram contados72 MustGet em dez arquivos de handlers; o uso em si indica fragilidade para contexto ausente/nil, não comprova IDOR. Auth repository retorna ponteiro válido quando encontra token. O achado de objeto acima é distinto e permanece como requisito de segurança do Goal003 antes de004.
+
+## Delta implementado — Goal002, 2026-09-05 (ACCEPTED na rodada 3)
+
+A fotografia histórica acima permanece como registro da baseline. O que mudou
+com o Goal002 é infraestrutura de validação, não comportamento de produto.
+
+- **FATO atual:** `scripts/build-all.sh` também compila o Scheduling Service, e
+  os comandos canônicos passaram a ser `npm run validate:core` e
+  `npm run validate:integration` ([VALIDATION_GATE](VALIDATION_GATE.md)).
+- **FATO atual:** o teste de integração do BFF usa `POST /v1/auth/register` e
+  exige `BFF_TEST_DATABASE_URL` apontando para PostgreSQL descartável em
+  loopback; sem essa URL o runner recusa com exit2, sem tocar o banco default.
+- **FATO atual:** `final-production-audit.mjs` reporta `skipped` em contagem
+  própria (14 passed /0 failed /1 skipped); o resumo antigo de "15 passed" não
+  existe mais. O script continua sendo auditoria estática por regex.
+- **FATO atual:** as duas fixtures Go de cleanup fecham o logger da instância
+  antes da remoção do `t.TempDir()`. A suíte Go completa passa no Windows
+  (7 pacotes `ok`), incluindo os 31 nós de autorização do Goal001. A asserção de
+  `requestId` da IA foi corrigida e passa.
+- **FATO atual:** `tests/channel/evolution.routes.test.ts` prepara o ambiente e
+  importa o módulo de rotas uma única vez, na avaliação do arquivo. O custo de
+  carregar a cadeia LangGraph/Prisma/embeddings deixou de ser pago dentro de
+  cada caso e o `testTimeout` padrão de5000ms deixou de estourar. Fastify,
+  guard de token, mapper e as respostas401/400/404 continuam reais. A suíte da
+  IA passa40/40 e `validate:core` retorna exit0.
+- **FATO atual:** `BFF_TEST_DATABASE_URL` só é aceita com uma allowlist de
+  query parameters e com o destino efetivo conferido pelo parser do driver do
+  BFF; `validate:integration` gera o client Prisma antes de migrar e testar.
+- **FATO atual:** existe `.github/workflows/validate.yml` — a baseline não tinha
+  `.github`. **NÃO VERIFICADO:** execução hospedada desse workflow.
+- Continuam **NÃO VERIFICADOS** todos os limites listados no fechamento
+  factual: deploy, restore, E2E, concorrência, entrega WhatsApp real e
+  persistência dos demais domínios.

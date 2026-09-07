@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 
+// Auditoria estatica auxiliar: le arquivos e aplica expressoes regulares.
+// Nao executa os servicos, nao prova isolamento em runtime e nao substitui
+// teste de integracao ou E2E. Chamadas remotas so acontecem quando
+// PRODUCTION_HEALTH_TARGETS e fornecido explicitamente.
+
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -279,13 +284,20 @@ function check(name, ok, details, skipped = false) {
 }
 
 function summarize() {
-  const failed = results.filter((result) => !result.ok);
+  // Um check pulado nao e um check aprovado: skipped tem contagem propria e
+  // nao entra em "passed".
+  const skipped = results.filter((result) => result.skipped);
+  const failed = results.filter((result) => !result.skipped && !result.ok);
+  const passed = results.filter((result) => !result.skipped && result.ok);
   console.log(
     JSON.stringify(
       {
         total: results.length,
-        passed: results.length - failed.length,
+        passed: passed.length,
         failed: failed.length,
+        skipped: skipped.length,
+        skippedChecks: skipped.map((result) => result.name),
+        kind: "static-regex-audit",
       },
       null,
       2,

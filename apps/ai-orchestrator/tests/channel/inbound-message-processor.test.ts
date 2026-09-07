@@ -426,6 +426,7 @@ describe("InboundMessageProcessor", () => {
       quotedMessageId: "message-1",
       quotedParticipant: "5511999999999@s.whatsapp.net",
       correlationId: "outbound-1",
+      requestId: "request-1",
     });
     expect(subject.automation.markOutboundMessageSent).toHaveBeenNthCalledWith(
       1,

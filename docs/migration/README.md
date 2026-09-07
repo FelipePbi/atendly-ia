@@ -23,7 +23,7 @@ Esta pasta contém a auditoria independente, a arquitetura alvo e o plano increm
 | [MASTER_PLAN](MASTER_PLAN.md) | Qual sequência de 25 Goals, dependências, marcos, riscos e DoD? |
 | [MIGRATION_STATUS](MIGRATION_STATUS.md) | O que está planejado/pronto/implementado/revisado/aceito, com commit e evidência? |
 | [Goal001](goals/001-autorizar-alvo-instancia-evolution.md) e [review001](reviews/001-review.md) | Qual escopo foi implementado/aceito e qual diff/evidência sustenta o aceite? |
-| [Goal002](goals/002-base-de-validacao-reproduzivel.md) | Qual o único próximo escopo executável detalhado para Claude? |
+| [Goal002](goals/002-base-de-validacao-reproduzivel.md) | Qual o escopo aceito do Goal002? |
 | [AUDIT_PROGRESS](AUDIT_PROGRESS.md) | Onde a auditoria parou/foi retomada, checkpoints, correções e limites? |
 
 Fatos, inferências, divergências e propostas aparecem separados. “Factual concluído” significa evidência suficiente para planejamento, não certificação de produção nem execução de todos os testes. O histórico das interrupções está preservado no progresso.
@@ -57,6 +57,6 @@ Isso basta para descobrir baseline, Goal fechado, Goal atual, decisões, blocker
 
 Goal 0 revisado e aceito pelo usuário em 2026-09-05.
 
-O **Goal001 está ACCEPTED** após inspeção do diff e reprodução dos testes pelo Astra em 2026-09-05. A implementação permanece no working tree, sem commit; [review001](reviews/001-review.md) identifica os arquivos/hashes e limites do aceite.
+O **Goal001 está ACCEPTED** após inspeção do diff e reprodução dos testes pelo Astra em 2026-09-05; [review001](reviews/001-review.md) identifica os arquivos/hashes e limites do aceite. Sua implementação está em `9a0bb5d`, conforme correção factual registrada no [review002](reviews/002-review.md) — commit anterior à política de fechamento descrita acima, que passa a valer para os Goals aceitos a partir de agora.
 
-O **[Goal002](goals/002-base-de-validacao-reproduzivel.md) está READY** para **Claude Code / Opus**, focado na base de validação reproduzível. Somente001 histórico e002 vigente estão detalhados; nenhum prompt posterior foi criado. G-35, achado independente de isolamento na consulta de status de mensagem, é obrigatório no Goal003 antes da ampliação de persistência no004. As falhas Go preexistentes não bloquearam001 e serão tratadas em002. Sem push, merge ou PR nesta revisão.
+O **[Goal002](goals/002-base-de-validacao-reproduzivel.md) está ACCEPTED**, conforme [rodada 3](reviews/002-review.md#rodada-3). Fechamento documental concluído; o SHA será registrado após o commit. O rascunho Goal003 aguarda essa baseline para liberação. A ordem do roadmap permanece: tenant/sessão/vínculo e G-35 no003 antes da ampliação de persistência no004. Sem push, merge ou PR.

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	producer_interfaces "github.com/EvolutionAPI/evolution-go/pkg/events/interfaces"
@@ -17,6 +18,12 @@ import (
 
 type webhookProducer struct {
 	loggerWrapper *logger_wrapper.LoggerManager
+	// inflight contabiliza as entregas assincronas ja disparadas por Produce.
+	// Nao altera politica de retry nem de entrega: existe apenas para que o
+	// teste possa esperar de forma deterministica o fim da goroutine antes de
+	// fechar o logger da instancia. Sem isso o log de sucesso e escrito depois
+	// da resposta HTTP e mantem instance.log aberto no cleanup.
+	inflight sync.WaitGroup
 }
 
 func NewWebhookProducer(
@@ -40,7 +47,11 @@ func (p *webhookProducer) Produce(
 	}
 
 	if webhookUrl != "" {
-		go p.sendWebhookWithRetry(webhookUrl, payload, 5, 30*time.Second, userID)
+		p.inflight.Add(1)
+		go func() {
+			defer p.inflight.Done()
+			p.sendWebhookWithRetry(webhookUrl, payload, 5, 30*time.Second, userID)
+		}()
 	}
 
 	return nil

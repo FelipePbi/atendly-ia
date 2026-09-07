@@ -4,7 +4,7 @@
 
 Tornar verificáveis os próximos Goals com comandos locais e CI que compilam os apps, executam os testes existentes e distinguem sucesso, falha e verificação não executada. Corrigir os defeitos de teste já comprovados: fixtures Go que deixam arquivos abertos, asserção IA sem requestId e integração BFF que usa rota antiga. Incluir Scheduling no build agregado.
 
-Executor: **Claude Code / Opus**. Reviewer: **Astra**. Goal001 foi aceito por diff; este Goal está READY e não foi implementado pelo Astra.
+Executor: **Claude Code / Opus**. Reviewer: **Astra**. **Status vigente: ACCEPTED**, conforme [review da rodada 3](../reviews/002-review.md#rodada-3). Este prompt é preservado como escopo histórico; implementação entregue pelo executor e aceite formalizado administrativamente em 2026-09-07.
 
 ## Por que agora
 

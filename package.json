@@ -10,10 +10,15 @@
     "build:bff": "cd apps/bff && npm run build",
     "build:ai-orchestrator": "cd apps/ai-orchestrator && npm run build",
     "build:contracts": "cd packages/contracts && npm run build",
+    "build:scheduling-service": "cd apps/scheduling-service && npm run build",
     "build:all": "bash scripts/build-all.sh",
     "check:health-worker": "cd apps/health-worker && npm run check",
     "smoke:final-audit": "node scripts/final-production-audit.mjs",
-    "test:evolution-go": "cd apps/evolution-go && go test ./..."
+    "test:evolution-go": "cd apps/evolution-go && go test ./...",
+    "test:ai-orchestrator": "cd apps/ai-orchestrator && npm test",
+    "test:gate": "node --test scripts/tests/**/*.test.mjs",
+    "validate:core": "node scripts/validate-core.mjs",
+    "validate:integration": "node scripts/validate-integration.mjs"
   },
   "engines": {
     "node": ">=20"

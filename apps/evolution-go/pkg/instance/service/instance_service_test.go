@@ -47,19 +47,33 @@ func TestStatusStructSerializesConnectedPhoneJID(t *testing.T) {
 }
 
 func TestConnectPreservesExistingConfigurationOnEmptyPayload(t *testing.T) {
+	const instanceId = "11111111-1111-4111-8111-111111111111"
+
 	repo := &fakeInstanceRepository{}
 	whatsmeowSvc := &fakeWhatsmeowService{}
+	testConfig := &config.Config{LogDirectory: t.TempDir(), LogMaxSize: 1, LogMaxBackups: 1, LogMaxAge: 1}
+	loggerWrapper := logger_wrapper.NewLoggerManager(testConfig)
+
+	// Registrado depois de t.TempDir(), portanto executa antes da remocao do
+	// diretorio (cleanups rodam em LIFO). Connect escreve logs sincronos da
+	// instancia e o arquivo aberto impede o RemoveAll do TempDir no Windows.
+	t.Cleanup(func() {
+		if err := loggerWrapper.GetLogger(instanceId).Close(); err != nil {
+			t.Errorf("logger Close() error = %v", err)
+		}
+	})
+
 	svc := instances{
 		instanceRepository: repo,
-		config:             &config.Config{LogDirectory: t.TempDir(), LogMaxSize: 1, LogMaxBackups: 1, LogMaxAge: 1},
+		config:             testConfig,
 		killChannel:        map[string]chan bool{},
 		clientPointer:      map[string]*whatsmeow.Client{},
 		whatsmeowService:   whatsmeowSvc,
-		loggerWrapper:      logger_wrapper.NewLoggerManager(&config.Config{LogDirectory: t.TempDir(), LogMaxSize: 1, LogMaxBackups: 1, LogMaxAge: 1}),
+		loggerWrapper:      loggerWrapper,
 	}
 
 	instance := &instance_model.Instance{
-		Id:              "11111111-1111-4111-8111-111111111111",
+		Id:              instanceId,
 		Name:            "test",
 		Token:           "token",
 		Events:          "MESSAGE,CONNECTION",

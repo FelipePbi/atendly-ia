@@ -1,22 +1,36 @@
-import Fastify from "fastify";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import Fastify, { type FastifyInstance } from "fastify";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// `config/env.js` lê process.env uma única vez, quando o módulo é avaliado.
+// Por isso o token é definido antes do import dinâmico abaixo — e esse import
+// acontece na avaliação deste arquivo, uma única vez, fora do tempo de execução
+// dos casos. Antes, cada caso repetia stubEnv + vi.resetModules() + import
+// dinâmico e pagava de novo o carregamento da cadeia de LangGraph/Prisma/
+// embeddings/tools dentro do próprio teste, estourando o testTimeout padrão.
+vi.stubEnv("EVOLUTION_WEBHOOK_TOKEN", "secret");
+
+const { registerEvolutionWebhookRoutes } = await import(
+  "../../src/modules/channel/routes/evolutionWebhook.routes.js"
+);
 
 describe("Evolution webhook route", () => {
-  afterEach(() => {
+  let app: FastifyInstance;
+
+  // App próprio por caso, com a rota, o guard de token e o mapper reais.
+  beforeEach(async () => {
+    app = Fastify();
+    await registerEvolutionWebhookRoutes(app, {} as never);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  afterAll(() => {
     vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
-    vi.resetModules();
   });
 
   it("rejects invalid webhook tokens", async () => {
-    vi.stubEnv("EVOLUTION_WEBHOOK_TOKEN", "secret");
-    vi.resetModules();
-
-    const { registerEvolutionWebhookRoutes } =
-      await import("../../src/modules/channel/routes/evolutionWebhook.routes.js");
-    const app = Fastify();
-    await registerEvolutionWebhookRoutes(app, {} as never);
-
     const response = await app.inject({
       method: "POST",
       url: "/webhooks/evolution?token=wrong",
@@ -24,18 +38,9 @@ describe("Evolution webhook route", () => {
     });
 
     expect(response.statusCode).toBe(401);
-    await app.close();
   });
 
   it("rejects malformed payloads even with a valid webhook token", async () => {
-    vi.stubEnv("EVOLUTION_WEBHOOK_TOKEN", "secret");
-    vi.resetModules();
-
-    const { registerEvolutionWebhookRoutes } =
-      await import("../../src/modules/channel/routes/evolutionWebhook.routes.js");
-    const app = Fastify();
-    await registerEvolutionWebhookRoutes(app, {} as never);
-
     const response = await app.inject({
       method: "POST",
       url: "/webhooks/evolution?token=secret",
@@ -47,17 +52,9 @@ describe("Evolution webhook route", () => {
       ok: false,
       error: "Payload did not map to inbound message",
     });
-    await app.close();
   });
 
   it("does not expose the removed legacy frontend webhook bridge", async () => {
-    vi.resetModules();
-
-    const { registerEvolutionWebhookRoutes } =
-      await import("../../src/modules/channel/routes/evolutionWebhook.routes.js");
-    const app = Fastify();
-    await registerEvolutionWebhookRoutes(app, {} as never);
-
     const response = await app.inject({
       method: "POST",
       url: "/api/webhooks/evolution-go?token=secret&source=evolution",
@@ -65,7 +62,5 @@ describe("Evolution webhook route", () => {
     });
 
     expect(response.statusCode).toBe(404);
-
-    await app.close();
   });
 });

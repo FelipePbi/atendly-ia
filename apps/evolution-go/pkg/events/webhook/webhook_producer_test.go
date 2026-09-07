@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/EvolutionAPI/evolution-go/pkg/config"
+	producer_interfaces "github.com/EvolutionAPI/evolution-go/pkg/events/interfaces"
 	logger_wrapper "github.com/EvolutionAPI/evolution-go/pkg/logger"
 )
 
@@ -30,6 +31,7 @@ func TestProduceSendsOnlyToInstanceWebhookURL(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
+	const instanceId = "test-instance"
 	loggerWrapper := logger_wrapper.NewLoggerManager(&config.Config{
 		LogDirectory:  t.TempDir(),
 		LogMaxSize:    1,
@@ -38,8 +40,19 @@ func TestProduceSendsOnlyToInstanceWebhookURL(t *testing.T) {
 	})
 	producer := NewWebhookProducer(loggerWrapper)
 
+	// Registrado depois de t.TempDir(), portanto executa antes da remocao do
+	// diretorio (cleanups rodam em LIFO). A entrega e assincrona e so escreve o
+	// log de sucesso depois da resposta HTTP, entao a espera pelo fim da
+	// goroutine precede o Close do logger.
+	t.Cleanup(func() {
+		waitForDeliveries(t, producer, 10*time.Second)
+		if err := loggerWrapper.GetLogger(instanceId).Close(); err != nil {
+			t.Errorf("logger Close() error = %v", err)
+		}
+	})
+
 	payload := []byte(`{"event":"MESSAGE"}`)
-	if err := producer.Produce("messages.upsert", payload, server.URL, "test-instance"); err != nil {
+	if err := producer.Produce("messages.upsert", payload, server.URL, instanceId); err != nil {
 		t.Fatalf("Produce() error = %v", err)
 	}
 
@@ -56,5 +69,28 @@ func TestProduceSendsOnlyToInstanceWebhookURL(t *testing.T) {
 	case extra := <-requests:
 		t.Fatalf("unexpected extra webhook request: %s", extra)
 	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+// waitForDeliveries espera as goroutines de entrega disparadas por Produce
+// terminarem, com limite de tempo e sem sleep fixo.
+func waitForDeliveries(t *testing.T, producer producer_interfaces.Producer, timeout time.Duration) {
+	t.Helper()
+
+	impl, ok := producer.(*webhookProducer)
+	if !ok {
+		t.Fatalf("producer type = %T, want *webhookProducer", producer)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		impl.inflight.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		t.Fatalf("timed out waiting for webhook delivery goroutines")
 	}
 }

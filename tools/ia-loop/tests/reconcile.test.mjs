@@ -551,3 +551,11 @@ test('7b. the recovery plan names the attempt that owns the stage, not the point
   assert.equal(reconciledPlan.jobId, DEV_R1, 'the attempt that actually produced the result');
   assert.match(reconciledPlan.message, new RegExp(DEV_R1));
 });
+
+test('recovery itself supersedes a duplicate attempt, and never deletes it', async () => {
+  const source = await readFile(new URL('../run-recover.mjs', import.meta.url), 'utf8');
+  assert.match(source, /reconciled\?\.duplicates/, 'recovery acts on the duplicates it found');
+  assert.match(source, /setJobStatus\(role, duplicate\.jobId, 'SUPERSEDED'\)/);
+  assert.match(source, /DUPLICATE_STAGE_ATTEMPT_SUPERSEDED/, 'and records it in the audit log');
+  assert.doesNotMatch(source, /rm\(|unlink\(/, 'history is never deleted to tidy up');
+});

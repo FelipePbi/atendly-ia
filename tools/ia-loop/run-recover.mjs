@@ -249,6 +249,24 @@ async function main() {
     emit(`Lease acquired by: ${taken.lease.workerInstanceId} (${taken.lease.attemptId})`);
   }
 
+  // --- Attempts that should never have existed ------------------------------
+  //
+  // Recorded as SUPERSEDED, never deleted: what the harness did wrong stays
+  // readable, and the attempt stops looking live to anything that reads the
+  // store. A worker will not pick it up again, and reconciliation already
+  // refuses to treat it as authoritative over the result it duplicates.
+  for (const duplicate of reconciled?.duplicates ?? []) {
+    const role = duplicate.stageKey.endsWith('review') ? 'tech_lead' : 'developer';
+    await store.setJobStatus(role, duplicate.jobId, 'SUPERSEDED').catch(() => {});
+    await store.appendEvent({
+      type: 'DUPLICATE_STAGE_ATTEMPT_SUPERSEDED',
+      goal: runtime.goal, round: runtime.round,
+      runId: autonomousRun?.autonomousRunId ?? null,
+      jobId: duplicate.jobId, stageKey: duplicate.stageKey, completedBy: duplicate.completedBy,
+    });
+    emit(`Superseded duplicate attempt ${duplicate.jobId} — ${duplicate.stageKey} completed as ${duplicate.completedBy}.`);
+  }
+
   await store.appendEvent({
     type: 'RECOVERY_STARTED',
     goal: runtime.goal, round: runtime.round, state: runtime.state,

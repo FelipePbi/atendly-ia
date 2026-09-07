@@ -24,6 +24,7 @@ import { readWorkerHealth, WORKER_HEALTH } from './lib/worker-registry.mjs';
 import { LOOP_STATES, createLoopStateMachine } from './lib/loop-state.mjs';
 import { PROTOCOL_VERSION_V2 } from './lib/contracts-v2.mjs';
 import { assertClosureScope, CLOSURE_WRITE_PREFIX } from './lib/closure-contracts.mjs';
+import { classifyLease, createLeaseStore } from './lib/leases.mjs';
 import {
   createGitProbe,
   createWorktree as gitCreateWorktree,
@@ -55,15 +56,28 @@ function parseArgs(argv) {
   return { goalId };
 }
 
-async function waitForResult(store, role, jobId) {
+/**
+ * Waits for a result. An observer timeout never fails the job — same reasoning
+ * as in run-goal. Closure and planning write to docs, so a duplicate execution
+ * here is as harmful as a duplicate implementation.
+ */
+async function waitForResult(store, role, jobId, { leaseStore } = {}) {
   const startedAt = Date.now();
   let lastState = null;
   for (;;) {
     const envelope = await store.readResult(role, jobId);
     if (envelope) return envelope;
+
     if (Date.now() - startedAt > RESULT_TIMEOUT_MS) {
-      throw new SpikeError('RESULT_TIMEOUT', `No result from "${role}" for ${jobId}`);
+      const lease = await leaseStore?.readJobLease(jobId);
+      const { status } = lease ? classifyLease(lease) : { status: null };
+      throw new SpikeError(
+        'OBSERVER_TIMEOUT',
+        `Stopped observing ${jobId}. The job was NOT failed and keeps its lease (${status ?? 'no lease'}). `
+        + 'Re-run the closure once it finishes; it resumes instead of repeating.',
+      );
     }
+
     const health = await readWorkerHealth(store, role);
     if (health.state !== lastState) {
       lastState = health.state;
@@ -71,7 +85,8 @@ async function waitForResult(store, role, jobId) {
       emit(`  … ${role}: ${health.state ?? 'unknown'}${suffix}`);
     }
     if (health.health === WORKER_HEALTH.OFFLINE) {
-      throw new SpikeError('WORKER_OFFLINE', `The "${role}" worker went offline`);
+      throw new SpikeError('WORKER_OFFLINE',
+        `The "${role}" worker stopped heartbeating. The attempt keeps its lease; no new attempt is started.`);
     }
     await sleep(POLL_MS);
   }
@@ -111,6 +126,7 @@ async function findAcceptedDecision(store, runtime, goalId) {
 async function main() {
   const { goalId } = parseArgs(process.argv);
   const store = createJobStore(STATE_DIR);
+  const leaseStore = createLeaseStore(STATE_DIR);
   const machine = createLoopStateMachine({ initialState: LOOP_STATES.ACCEPTED });
 
   emit('');
@@ -204,7 +220,7 @@ async function main() {
     emit(`Closure documentation job published: ${jobId}`);
     await persistClosure({ closureDocsJobId: jobId }, machine.state);
 
-    const envelope = await waitForResult(store, 'tech_lead', jobId);
+    const envelope = await waitForResult(store, 'tech_lead', jobId, { leaseStore });
     if (!envelope.ok) {
       throw new SpikeError('CLOSURE_DOCS_FAILED', `[${envelope.code}] ${envelope.message}`);
     }
@@ -323,7 +339,7 @@ async function main() {
     emit(`Planning job published: ${jobId}`);
     await persistClosure({ planningJobId: jobId }, machine.state);
 
-    const envelope = await waitForResult(store, 'tech_lead', jobId);
+    const envelope = await waitForResult(store, 'tech_lead', jobId, { leaseStore });
     if (!envelope.ok) throw new SpikeError('PLANNING_FAILED', `[${envelope.code}] ${envelope.message}`);
 
     const planChanges = await collectWorktreeChanges(absPlan, newBaseline);

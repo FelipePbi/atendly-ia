@@ -15,6 +15,7 @@ Duas etapas concluídas:
 | V3 — Real Worktree + Supervised Execution | worktree real, execução supervisionada, parada em `AWAITING_HUMAN` |
 | V4 — Automatic Correction Rounds | correção automática até 3 rodadas, depois escala |
 | V5 — Accepted Goal Closure + Next Goal Planning | fechamento e planejamento automatizados, parada em AWAITING_HUMAN |
+| V6 — Job Ownership and Leases | uma execução por operação lógica; timeout de observador não duplica trabalho |
 
 ---
 
@@ -914,6 +915,75 @@ Qualquer coisa fora disso é `TECH_LEAD_CLOSURE_SCOPE_VIOLATION`.
 Cada etapa grava seu SHA (`sourceClosureCommit`, `integratedClosureCommit`,
 `sourcePlanningCommit`, `planningIntegrationCommit`). Um restart retoma em vez de
 repetir: sem commit duplicado, sem segundo cherry-pick, sem dois Goals novos.
+
+---
+
+## V6 — Job Ownership, Leases and Duplicate Execution Prevention
+
+Uma invariante: **para uma operação lógica, nunca existem duas execuções de agente
+concorrentes.**
+
+Isto existe por causa de um incidente real. Um runner desistiu de esperar um job
+enquanto o worker ainda o executava; uma segunda correção foi enfileirada para a
+mesma rodada e duas inferências Opus trabalharam na mesma worktree. Nada quebrou
+daquela vez — que é exatamente por que precisava ser corrigido.
+
+### Vocabulário
+
+| Conceito | O que é |
+| --- | --- |
+| logical job | a operação: `goal004 / correction / round 2` |
+| attempt | uma execução concreta dela: `<jobId>-a1`, `-a2` |
+| worker instance | um processo worker vivo, nunca reusado após restart |
+| lease | prova durável de que uma attempt possui o job ou a worktree |
+
+### Claim atômico de verdade
+
+O claim usa `open(path, 'wx')` — criação exclusiva, uma única syscall. Não é um
+read-check-write, porque dois processos podem ambos passar pela verificação. Há um
+teste que sobe **dois processos Node reais** disputando o mesmo claim e exige que
+exatamente um vença; duas promises no mesmo processo não provariam atomicidade.
+
+### Timeout do observador não é falha do job
+
+Era o bug central. O runner é espectador: o trabalho pertence à attempt que detém a
+lease. Um timeout de espera agora **não** marca FAILED, não libera lease, não cria
+attempt nova e não chama modelo de novo — apenas para de observar.
+
+```
+runner desiste  ->  job continua RUNNING, lease intacta
+                ->  ia-loop:status mostra a attempt viva
+                ->  ia-loop:resume re-anexa a execucao existente
+```
+
+### Falha fechada em ambiguidade
+
+Uma lease expirada é `SUSPECTED_ORPHAN`, **nunca** "morta". Expiração sozinha não é
+evidência de que o worker parou, e agir sobre ela é como dois writers acabam na
+mesma árvore. Sem prova de que a execução anterior terminou:
+`ORPHANED_EXECUTION_UNCERTAIN` → `HUMAN_REQUIRED`.
+
+PID não conta como prova: PIDs são reusados, então um pid vivo nada diz sobre *esta*
+execução. É evidência adicional, jamais suficiente.
+
+### Result fencing
+
+Todo resultado carrega `attemptId`. Um resultado atrasado de uma attempt superada é
+gravado para auditoria em `<job>.stale-<attempt>.json`, recusado com
+`STALE_ATTEMPT_RESULT`, e **não** avança a máquina de estados nem sobrescreve o
+resultado autorizado.
+
+### Cobertura
+
+Vale para todos os agentes, não só o Developer: review, closure e planning também
+adquirem lease. Duplicar um review custa inferência e pode gerar duas decisões
+conflitantes; duplicar planning poderia criar dois Goals por corrida.
+
+### O que NÃO é retry
+
+Inferência longa com heartbeat saudável é execução válida. Nada aqui mata ou
+reinicia por demora: `warningAfterMs` seria observabilidade, não política. Um
+deadline real, se um dia existir, será decisão separada e explícita.
 
 ---
 

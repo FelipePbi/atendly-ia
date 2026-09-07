@@ -229,8 +229,25 @@ export function createJobStore(stateDir) {
       return envelope.job;
     },
 
-    async publishResult(role, jobId, result) {
+    /**
+     * Publishes a result, fenced by attempt.
+     *
+     * A late result from a superseded attempt is kept for audit under a
+     * distinct name and never overwrites the authorised one.
+     */
+    async publishResult(role, jobId, result, { attemptId = null, expectedAttemptId = null } = {}) {
       assertRole(role);
+
+      if (expectedAttemptId && attemptId && attemptId !== expectedAttemptId) {
+        const stalePath = join(stateDir, 'results', role, `${jobId}.stale-${attemptId}.json`);
+        await writeJsonAtomic(stalePath, {
+          storeVersion: STORE_VERSION, publishedAt: new Date().toISOString(),
+          staleAttemptId: attemptId, expectedAttemptId, result,
+        });
+        fail('STALE_ATTEMPT_RESULT',
+          `Result from attempt ${attemptId} rejected; ${expectedAttemptId} is the authorised attempt`);
+      }
+      if (attemptId) result = { ...result, attemptId };
       await writeJsonAtomic(paths.result(role, jobId), {
         storeVersion: STORE_VERSION,
         publishedAt: new Date().toISOString(),

@@ -33,6 +33,7 @@ import {
   worktreeFingerprint,
 } from './lib/git-ops.mjs';
 import { captureSnapshot, checkDeveloperPolicy, checkReviewerPolicy, formatViolations } from './lib/policy-guards.mjs';
+import { classifyLease, createLeaseStore } from './lib/leases.mjs';
 import { buildReviewPacket } from './lib/review-packet.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -62,27 +63,49 @@ function formatHealth(h) {
   return `${h.health} (state ${h.state}, heartbeat ${age})`;
 }
 
-async function waitForResult(store, role, jobId, { emit }) {
+/**
+ * Waits for a worker to publish a result.
+ *
+ * A timeout here is an OBSERVER timeout, never a job failure. The runner is a
+ * spectator: the work belongs to the attempt that holds the lease. Treating the
+ * wait as a failure is what once queued a second correction while the first was
+ * still running, putting two agents on one worktree.
+ *
+ * So on timeout this returns instead of throwing, and the caller stops watching
+ * without failing the job, without releasing the lease and without creating a
+ * new attempt.
+ */
+async function waitForResult(store, role, jobId, { emit, leaseStore }) {
   const startedAt = Date.now();
   let lastState = null;
 
   for (;;) {
     const envelope = await store.readResult(role, jobId);
-    if (envelope) return envelope;
+    if (envelope) return { envelope };
 
     if (Date.now() - startedAt > RESULT_TIMEOUT_MS) {
-      throw new SpikeError('RESULT_TIMEOUT', `No result from "${role}" for job ${jobId} within the timeout`);
+      const lease = await leaseStore?.readJobLease(jobId);
+      const { status, ageMs } = lease ? classifyLease(lease) : { status: null, ageMs: null };
+      return {
+        observerTimeout: true,
+        lease,
+        leaseStatus: status,
+        leaseAgeMs: ageMs,
+      };
     }
 
     const health = await readWorkerHealth(store, role);
     if (health.state !== lastState) {
       lastState = health.state;
-      const suffix = health.capacityReason ? ` (${health.capacityReason}, retry ${health.nextRetryAt})` : '';
+      const suffix = health.capacityReason ? ` (${health.capacityReason})` : '';
       emit(`  … ${role}: ${health.state ?? 'unknown'}${suffix}`);
     }
     if (health.health === WORKER_HEALTH.OFFLINE) {
-      throw new SpikeError('WORKER_OFFLINE', `The "${role}" worker went offline while the job was pending`);
+      // The worker is gone. Whether its child died with it is NOT knowable here,
+      // so this is reported, not resolved: no new attempt is started.
+      return { workerOffline: true };
     }
+
     await sleep(POLL_MS);
   }
 }
@@ -91,6 +114,7 @@ async function main() {
   const emit = (line = '') => console.log(line);
   const { goalId, dryRun } = parseArgs(process.argv);
   const store = createJobStore(STATE_DIR);
+  const leaseStore = createLeaseStore(STATE_DIR);
   const machine = createLoopStateMachine();
 
   emit('');
@@ -309,7 +333,12 @@ async function main() {
       emit(`${isCorrection ? 'Correction' : 'Developer'} job published: ${devJobId}`);
       machine.transitionTo(phaseRunning);
       emit('Waiting for the Developer…');
-      devEnvelope = await waitForResult(store, 'developer', devJobId, { emit });
+      const observed = await waitForResult(store, 'developer', devJobId, { emit, leaseStore });
+      if (observed.observerTimeout || observed.workerOffline) {
+        await reportObserverStop({ store, emit, role: 'developer', jobId: devJobId, observed, goal: goal.goalId, round });
+        return 0;
+      }
+      devEnvelope = observed.envelope;
     }
 
     if (!devEnvelope.ok) {
@@ -385,7 +414,12 @@ async function main() {
     machine.transitionTo(LOOP_STATES.REVIEWER_RUNNING);
     emit('Waiting for the Tech Lead…');
 
-    const revEnvelope = await waitForResult(store, 'tech_lead', revJobId, { emit });
+    const observedReview = await waitForResult(store, 'tech_lead', revJobId, { emit, leaseStore });
+    if (observedReview.observerTimeout || observedReview.workerOffline) {
+      await reportObserverStop({ store, emit, role: 'tech_lead', jobId: revJobId, observed: observedReview, goal: goal.goalId, round });
+      return 0;
+    }
+    const revEnvelope = observedReview.envelope;
     const afterReview = await captureSnapshot({ probe, worktreePath: absWorktree, fingerprint: worktreeFingerprint });
     const revViolations = checkReviewerPolicy({ before: beforeReview, after: afterReview });
 
@@ -494,6 +528,34 @@ async function main() {
   emit('Worktree kept for human inspection.');
 
   return 0;
+}
+
+/**
+ * Reports that the OBSERVER stopped watching, leaving the job untouched.
+ *
+ * Nothing is failed, nothing is released, nothing is re-queued: the attempt
+ * keeps ownership and `ia-loop:resume` re-attaches to it.
+ */
+async function reportObserverStop({ store, emit, role, jobId, observed, goal, round }) {
+  await store.appendEvent({
+    type: 'OBSERVER_STOPPED', goal, round, role, jobId,
+    reason: observed.workerOffline ? 'WORKER_OFFLINE' : 'OBSERVER_TIMEOUT',
+    leaseStatus: observed.leaseStatus ?? null,
+  });
+
+  emit('');
+  emit(observed.workerOffline
+    ? `The ${role} worker is no longer heartbeating.`
+    : `Stopped observing ${jobId} after the observer window.`);
+  emit('');
+  emit('The job was NOT failed and NOT re-queued. The attempt keeps its lease.');
+  if (observed.lease) {
+    emit(`  attempt: ${observed.lease.attemptId} · lease: ${observed.leaseStatus} `
+      + `(heartbeat ${Math.round((observed.leaseAgeMs ?? 0) / 1000)}s ago)`);
+  }
+  emit('');
+  emit('Check with:  npm run ia-loop:status');
+  emit('Re-attach with:  npm run ia-loop:resume');
 }
 
 /** Blockers may be plain strings or structured records; both must render. */

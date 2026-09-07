@@ -10,6 +10,7 @@ Duas etapas concluídas:
 | Spike 0 — Agent Invocation Bootstrap | `PASS` |
 | Vertical Slice Supervisionada V1 | `PASS` |
 | Spike 1 — Persistent Dual Session | `BLOCKED` (Fable OK, Opus 5 não sustenta multi-turno) |
+| V2 — Hybrid Real Goal Harness | `PASS` (dry-run; Goal003 **não** executado) |
 
 ---
 
@@ -325,10 +326,208 @@ recurso.
 
 ---
 
+## V2 — Hybrid Real Goal Harness
+
+Prepara a infraestrutura para executar um Goal real. **Nenhum Goal foi
+executado**: a V2 termina em `--dry-run`.
+
+### Arquitetura oficial
+
+| Papel | Modelo | Processo | Sessão Claude |
+| --- | --- | --- | --- |
+| Tech Lead / Architect / Reviewer | `claude-fable-5-1` | persistente | **persistente** (`--session-id` + `--resume`) |
+| Developer / Executor | `claude-opus-5` | persistente | **stateless** (sessão nova por tarefa) |
+
+A assimetria é deliberada e vem direto do Spike 1: Fable sustenta multi-turno,
+Opus 5 não. Para o Developer, o **processo** fica vivo e visível, mas cada
+tarefa usa uma sessão Claude nova e recebe contexto reinjetado explicitamente
+pelo orchestrator.
+
+Isso não é contorno de bug nem limitação temporária a ser "consertada". Não
+transforme o Developer em multi-turno; o worker do Developer nunca usa
+`--resume` nem grava sessão no registro, e há teste garantindo isso.
+
+Os dois lifecycles vivem em arquivos separados (`workers/tech-lead.mjs` e
+`workers/developer.mjs`) justamente para não serem abstraídos como se fossem
+iguais. O que compartilham — transporte, contratos, heartbeat, polling — está em
+`lib/`.
+
+### Dois terminais
+
+```bash
+npm run ia-loop:tech-lead
+```
+
+```bash
+npm run ia-loop:developer
+```
+
+Cada um imprime seu banner, fica `IDLE` e aguarda jobs. São workers Node, não
+shells interativos do `claude`. Abertura automática de janelas não faz parte
+desta versão: o usuário abre os dois terminais manualmente.
+
+Eventos mostrados (Developer):
+
+```
+[JOB 003/R1 RECEIVED] · [OPUS STARTED] · [OPUS COMPLETED] · [RESULT REVIEW_REQUIRED] · [IDLE]
+```
+
+Eventos mostrados (Tech Lead):
+
+```
+[REVIEW 003/R1 RECEIVED] · [FABLE STARTED] · [FABLE COMPLETED] · [DECISION ACCEPTED] · [IDLE]
+```
+
+Nunca são impressos prompts completos, tokens, secrets ou session ids inteiros —
+apenas os 8 primeiros caracteres, para correlação de log.
+
+### Comunicação: nunca direta
+
+Fable jamais escreve no stdin de Opus, nem o contrário. Todo hand-off passa pelo
+orchestrator, que valida contrato e transição antes de publicar o próximo job.
+É o que torna o loop auditável.
+
+```
+Developer result → orchestrator → valida contrato → transição → ReviewJob → Tech Lead
+```
+
+O protocolo é local, em arquivos, sob `tools/ia-loop/.state/` (fora do git):
+
+```
+runtime.json          snapshot da execução
+current-goal.json     Goal descoberto
+events.jsonl          log append-only
+sessions.json         registro durável de sessões
+workers/<role>.json   heartbeat
+jobs/<role>/*.json    fila de jobs
+results/<role>/*.json resultados publicados
+```
+
+Toda escrita é atômica (arquivo temporário + `rename`), então uma queda no meio
+da escrita nunca deixa um job parcialmente legível. Arquivo corrompido é
+**recusado**, nunca zerado em silêncio: apagar o estado esconderia justamente a
+falha que o operador precisa ver. Job duplicado, papel errado e versão de store
+divergente também falham fechado.
+
+### Orchestrator
+
+`run-goal.mjs` é o único componente que decide quem trabalha. Os modelos não
+escolhem quem chamar. Ele constrói input, chama, valida contrato, valida
+transição e registra — sem interpretar prosa.
+
+```bash
+npm run ia-loop:goal -- 003 --dry-run
+```
+
+Executar sem `--dry-run` é recusado com `DRY_RUN_REQUIRED`: execução real é uma
+etapa separada e ainda não autorizada.
+
+### Estados implementados
+
+```
+IDLE → GOAL_READY → PREPARING_WORKTREE → WORKTREE_READY
+     → DEVELOPER_QUEUED → DEVELOPER_RUNNING → REVIEW_REQUIRED
+     → REVIEWER_QUEUED → REVIEWER_RUNNING
+     → ACCEPTED | CHANGES_REQUIRED | HUMAN_REQUIRED
+     → AWAITING_HUMAN → STOPPED
+```
+
+**Human gate.** Todos os três veredictos convergem para `AWAITING_HUMAN`,
+inclusive `ACCEPTED`. `CHANGES_REQUIRED` **não** volta ao Developer: a transição
+não existe no grafo e há teste provando que é recusada. O harness registra qual
+*seria* a próxima ação (`RETURN_TO_DEVELOPER`, `CLOSE_GOAL`) sem executá-la.
+
+Ainda **não** implementados, de propósito: `CLOSING_GOAL`, `CREATE_NEXT_GOAL`,
+`AUTONOMOUS_NEXT_GOAL` e o loop de correção automático.
+
+### Descoberta do Goal
+
+`lib/goal-discovery.mjs` lê os artefatos de migração como autoridade e não
+adivinha. Verifica, falhando fechado em cada ponto:
+
+| Verificação | Código de falha |
+| --- | --- |
+| Exatamente um arquivo `003-*.md` | `GOAL_NOT_FOUND` / `GOAL_AMBIGUOUS` |
+| Status declarado é `READY` | `GOAL_NOT_READY` |
+| Baseline do Goal == baseline do MIGRATION_STATUS | `BASELINE_DIVERGENCE` |
+| Status do Goal == status na tabela | `GOAL_STATUS_DIVERGENCE` |
+| Goal anterior `ACCEPTED` | `PREVIOUS_GOAL_NOT_ACCEPTED` |
+| SHA resolve neste repositório | `BASELINE_NOT_IN_REPO` |
+
+Este módulo **apenas lê**. Nunca escreve em `docs/migration`.
+
+### Duas baselines, nunca colapsadas
+
+| Conceito | Valor | Papel |
+| --- | --- | --- |
+| `migrationAcceptedBaseline` | `1e874e27…` | Último Goal formalmente ACCEPTED; é contra ela que o diff funcional continua rastreável |
+| `executionBase` | HEAD atual | Árvore sobre a qual se trabalha, que também carrega a documentação do Goal003 e este tooling |
+
+São diferentes por definição, e isso é esperado, não erro. A baseline aceita
+**nunca** é inferida do HEAD: vem declarada nos documentos. As duas viajam em
+todo job e ficam registradas no runtime.
+
+### Worktree
+
+Plano apenas. Convenção: `.ai-worktrees/goal-003`, branch `ai-loop/goal-003`.
+
+Em `--dry-run` a worktree **não é criada** — só o plano é exibido, incluindo o
+comando que seria executado. `createWorktree()` existe apenas para lançar
+`WORKTREE_CREATION_NOT_IMPLEMENTED`, de modo que a fronteira seja explícita no
+código e coberta por teste, em vez de ser uma ausência que alguém preencha por
+acidente.
+
+Condições que bloqueiam o plano, todas acumuladas em vez de curto-circuito:
+árvore principal suja, branch já existente, worktree já registrada, diretório
+desconhecido ocupando o caminho. Nada é forçado, resetado ou apagado; o checkout
+principal e a branch do usuário não são tocados.
+
+### Contextos explícitos
+
+Os dois construtores são assimétricos, espelhando as estratégias de sessão.
+
+**DeveloperContext** carrega papel, Goal e caminho, as duas baselines, worktree,
+round, blockers (quando correção) e ponteiros para ler `CLAUDE.md`, `AGENTS.md` e
+o Goal, além de consultar Graphify/Product Vault seletivamente. **Nunca** carrega
+conversa anterior do Opus — há teste que falha se aparecer `transcript`,
+`conversation`, `messages`, `history` ou `sessionId` no pacote.
+
+**TechLeadContext** repete os fatos mesmo tendo sessão persistente: Goal, as duas
+baselines, round, arquivos alterados reais, relatório de implementação,
+validações, blockers anteriores e nível de review. O repositório é a autoridade;
+a sessão serve para continuidade recente, não como registro oficial.
+
+### Restart dos workers
+
+| Worker | Ao reiniciar |
+| --- | --- |
+| Developer | Continua stateless; nada a recuperar |
+| Tech Lead | Recupera o session id do registro e retoma a sessão |
+
+Se o resume do Fable falhar, a política **depende do estado**, e a diferença
+importa: com um review em andamento, criar uma sessão nova silenciosamente
+mudaria a continuidade sobre a qual o review foi iniciado, então o job vira
+`HUMAN_REQUIRED`. Com o worker `IDLE`, abrir sessão nova é aceitável e fica
+registrado como evento.
+
+### Heartbeat
+
+Cada worker escreve um heartbeat a cada 5s. O orchestrator deriva saúde só pela
+idade: `RUNNING` (< 15s), `STALE` (15–60s), `OFFLINE` (> 60s ou arquivo ausente).
+Sem daemon, sem socket, sem polling agressivo — o loop de jobs usa polling de 1s.
+
+### Nota sobre a documentação da migração
+
+`docs/migration/` **não** foi alterado nesta etapa. Os artefatos históricos
+continuam registrando o reviewer como Astra. A troca formal do Tech Lead para
+Fable será tratada separadamente, antes da primeira execução real do Goal003.
+
+---
+
 ## Como executar
 
 ```bash
-npm run test:ia-loop       # 55 testes locais, sem chamadas reais a modelo
+npm run test:ia-loop       # 127 testes locais, sem chamadas reais a modelo
 ```
 
 ```bash
@@ -341,6 +540,20 @@ npm run ia-loop:supervised # Vertical Slice V1: Developer → Reviewer (2 chamad
 
 ```bash
 npm run ia-loop:sessions   # Spike 1: duas sessões persistentes (até 6 chamadas)
+```
+
+V2 — dois terminais e o dry-run:
+
+```bash
+npm run ia-loop:tech-lead  # Terminal A: worker Fable, sessão persistente
+```
+
+```bash
+npm run ia-loop:developer  # Terminal B: worker Opus, inferências stateless
+```
+
+```bash
+npm run ia-loop:goal -- 003 --dry-run   # não publica job, não cria worktree, não chama modelo
 ```
 
 | Variável | Efeito |
@@ -362,6 +575,17 @@ session ids nem dados pessoais.
 | `spike-agent-invocation.mjs` | Runner do Spike 0 |
 | `run-supervised.mjs` | Orchestrator da Vertical Slice V1 |
 | `persistent-session-spike.mjs` | Runner do Spike 1 |
+| `run-goal.mjs` | Orchestrator da V2: descoberta, baselines, plano e dry-run |
+| `workers/tech-lead.mjs` | Worker Fable — processo e sessão persistentes |
+| `workers/developer.mjs` | Worker Opus — processo persistente, inferência stateless |
+| `lib/goal-discovery.mjs` | Descoberta determinística do Goal e coerência da migração |
+| `lib/worktree-manager.mjs` | Plano de worktree; criação não implementada |
+| `lib/job-store.mjs` | Protocolo local em arquivos, escrita atômica, log append-only |
+| `lib/worker-registry.mjs` | Heartbeat e saúde RUNNING/STALE/OFFLINE |
+| `lib/contracts-v2.mjs` | Contratos protocolVersion 2 |
+| `lib/context-builders.mjs` | Pacotes explícitos de contexto por papel |
+| `lib/loop-state.mjs` | Máquina de estados V2 com human gate |
+| `lib/worker-loop.mjs` | Plumbing comum dos workers |
 | `lib/claude-process.mjs` | Executável, spawn, timeout, parsing, resolução de modelo |
 | `lib/contracts.mjs` | Contratos Developer/Reviewer e handoff |
 | `lib/state-machine.mjs` | Máquina de estados mínima |
@@ -369,7 +593,7 @@ session ids nem dados pessoais.
 | `lib/persistent-session.mjs` | Sessão por agente: cria no 1º turno, resume nos seguintes |
 | `lib/session-registry.mjs` | Registro durável de sessões, com escrita atômica |
 | `fixtures/synthetic-goal.md` | Tarefa sintética, fora do runtime |
-| `tests/*.test.mjs` | 68 testes com processo fake; nenhuma chamada real |
+| `tests/*.test.mjs` | 127 testes com processo fake; nenhuma chamada real |
 
 ## Limitações conhecidas
 

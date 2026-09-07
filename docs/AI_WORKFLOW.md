@@ -56,6 +56,7 @@ Evite: busca → 15 arquivos → contexto enorme.
 | Termo desconhecido | `product-vault/04-Referencia/01-Glossario.md` |
 | "Isso não foi decidido diferente antes?" | `product-vault/04-Referencia/02-Decisoes-Substituidas.md` e `product-vault/04-Referencia/99-Perguntas-e-Respostas.md` |
 | Trabalho técnico de alinhamento | `PLANO_REFATORACAO.md` |
+| Ciclo de migração Astra ↔ Claude: Goal vigente, baseline aceita, fechamento por commit | `migration/README.md` e `migration/MASTER_PLAN.md` |
 | Contrato HTTP registrado hoje | `../apps/bff/PUBLIC_API_V1.md` |
 | ADRs / decisões arquiteturais | `architecture/` |
 

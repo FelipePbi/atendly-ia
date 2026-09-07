@@ -1,8 +1,12 @@
 # Status da migração
 
-Baseline auditada: `5fb5d51abc1de58cb24718e7349d7a68ccaa7356`. Atualização: 2026-09-05. Nenhuma implementação ou commit de migração foi feito pelo Goal0.
+Baseline histórica do Goal0: `5fb5d51abc1de58cb24718e7349d7a68ccaa7356`. Atualização: 2026-09-06. Nenhuma implementação ou commit de migração foi feito pelo Goal0.
 
-Status: PLANNED, READY, IN_PROGRESS, IMPLEMENTED, REVIEW_REQUIRED, ACCEPTED, BLOCKED, SUPERSEDED. No objetivo original, `Goal0 = COMPLETE após auditoria aceita`; nesta tabela isso corresponde a **ACCEPTED** após aceite registrado. Entrega documental não presume esse aceite. READY significa prompt executável preparado, não execução iniciada.
+**Baseline aceita vigente:** ainda nenhuma. A política de [fechamento por commit](MASTER_PLAN.md#fechamento-por-commit-e-baseline-aceita) foi adotada em 2026-09-06 ([D-017](DECISIONS.md)) e vale para os Goals aceitos a partir dela; nenhum Goal foi fechado ainda por commit sob essa regra. Enquanto isso, a referência de trabalho continua sendo o HEAD indicado na coluna de commit de cada Goal.
+
+Status: PLANNED, READY, IN_PROGRESS, IMPLEMENTED, REVIEW_REQUIRED, ACCEPTED, BLOCKED, SUPERSEDED. No objetivo original, `Goal0 = COMPLETE após auditoria aceita`; nesta tabela isso corresponde a **ACCEPTED** após aceite registrado. Entrega documental não presume esse aceite. READY significa prompt executável preparado, não execução iniciada. `ACCEPTED` sem commit de fechamento é encerramento administrativo incompleto e não libera a criação do próximo Goal.
+
+A coluna **Commit de implementação** passa a registrar, para os Goals fechados sob a nova política, o **SHA do commit de fechamento aceito** — o mesmo que se torna a baseline aceita vigente. As linhas anteriores a 2026-09-06 preservam o que foi registrado na época.
 
 | Goal | Status | Commit de implementação | Review | Observações |
 | --- | --- | --- | --- | --- |
@@ -35,7 +39,7 @@ Status: PLANNED, READY, IN_PROGRESS, IMPLEMENTED, REVIEW_REQUIRED, ACCEPTED, BLO
 
 ## Evidências e atualização
 
-Por Goal implementado registrar commit inicial/final, testes com resultado e data, review Astra e correções. IMPLEMENTED/REVIEW_REQUIRED não permite assumir aceite nem iniciar consumer dependente sem revisão. Ao aceitar, atualizar documentos afetados e reavaliar próximo Goal. Descoberta arquitetural exige DECISIONS/MASTER_PLAN revisados antes do próximo prompt.
+Por Goal implementado registrar diff/testes com resultado e data, review Astra e correções; ao aceitar, registrar também o SHA do commit de fechamento criado pelo Astra, que passa a ser a baseline aceita vigente. IMPLEMENTED/REVIEW_REQUIRED não permite assumir aceite nem iniciar consumer dependente sem revisão. Ao aceitar, atualizar os documentos afetados e seguir o [fechamento por commit](MASTER_PLAN.md#fechamento-por-commit-e-baseline-aceita) antes de reavaliar o roadmap e escrever o próximo Goal. Descoberta arquitetural exige DECISIONS/MASTER_PLAN revisados antes do próximo prompt.
 
 Validação recuperada do Goal0: IA39 passou/1 falhou; auditoria estática14 passou/health remoto1 pulado. Nenhum teste DB real, E2E, deploy ou comparação de todos os frames realizado. Esses limites não são aprovação de qualidade de runtime.
 

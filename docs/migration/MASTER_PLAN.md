@@ -1,12 +1,12 @@
 # Plano mestre de migração
 
-Roadmap de planejamento v2, após review001 em 2026-09-05, derivado da auditoria de `5fb5d51`. Há **25 Goals estimados**, mais Goal0. O número resulta de limites distintos de revisão: autorização, validação, ownership, transporte, domínios operacionais, IA, superfícies UI, automações e corte. Não são versões menores do MVP nem estimativa de prazo.
+Roadmap de planejamento v3, atualizado em 2026-09-06, derivado da auditoria de `5fb5d51` — baseline histórica do Goal0, não a baseline operacional vigente. Há **25 Goals estimados**, mais Goal0. O número resulta de limites distintos de revisão: autorização, validação, ownership, transporte, domínios operacionais, IA, superfícies UI, automações e corte. Não são versões menores do MVP nem estimativa de prazo.
 
 Objetivo final: implementar o único MVP do Product Vault, com experiência Claude Design aprovada e Agenda Atendly única. Direção: [TARGET_ARCHITECTURE](TARGET_ARCHITECTURE.md); decisões: [DECISIONS](DECISIONS.md); gates de dados: [DATA_MIGRATION](DATA_MIGRATION.md).
 
 ## Regras de execução
 
-- Goal001 está aceito e preservado como histórico; somente o próximo Goal002 está detalhado e READY. Depois de cada implementação, Astra inspeciona commit/diff, testes e dados relevantes e reavalia o próximo Goal antes de escrevê-lo.
+- Somente um Goal executável fica detalhado por vez; os anteriores são preservados como histórico. Depois de cada implementação, Astra inspeciona diff real, testes e dados relevantes, aceita ou devolve correção, e só reavalia e escreve o próximo Goal depois do commit de fechamento — ver [Fechamento por commit e baseline aceita](#fechamento-por-commit-e-baseline-aceita).
 - Cada Goal mantém repositório compilável e contratos interoperáveis. Um consumer novo entra antes do produtor ativar um contrato incompatível. Não há período planejado de frontend quebrado aguardando backend.
 - Estado novo pode existir em schema sem ser exposto até consumer pronto; adapters temporários têm dono/critério de remoção. Não lançar para validação de produto enquanto faltarem partes do MVP.
 - Não apagar legado antes de inventário/corte; não preservar possibilidade de duas agendas no produto novo. Janela técnica congelada para transição é indisponibilidade explicitada, não modo híbrido.
@@ -69,16 +69,76 @@ Caminho crítico de dependências, sem estimativa de duração: `001 → 002 →
 | Semântica de retenção não classificada e conclusão legada | U-01/U-02 resolvidas antes de ação irreversível correspondente, sem bloquear001 |
 | Testes estáticos passarem com produto errado | Contratos/integração/E2E+review manual dos fluxos; script regex é auxiliar |
 
+## Fechamento por commit e baseline aceita
+
+Política vigente a partir de 2026-09-06, aplicável aos Goals aceitos daqui em diante. Goals já concluídos não são reescritos por causa dela.
+
+### Ciclo obrigatório
+
+```text
+Claude implementa Goal N
+→ Astra revisa a implementação real
+→ CHANGES_REQUIRED, se necessário → Claude corrige → Astra revisa de novo
+→ Goal N = ACCEPTED
+→ Astra atualiza review/status/documentos afetados
+→ Astra cria o commit de fechamento do Goal N
+→ o SHA desse commit vira a baseline aceita vigente
+→ Astra reavalia o roadmap incrementalmente
+→ somente então Astra cria o Goal N+1
+→ Goal N+1 = READY
+→ Claude executa
+```
+
+O Goal N+1 **não** pode ser criado como READY enquanto o Goal N estiver IMPLEMENTED, REVIEW_REQUIRED, CHANGES_REQUIRED, CORRECTION_REQUIRED, BLOCKED — ou ACCEPTED sem commit de fechamento.
+
+### Quem commita, e quando
+
+O commit de fechamento é do **Astra** e só existe depois do ACCEPTED formal. Claude entrega diff, testes e relatório; não cria commit de fechamento. Havendo CHANGES_REQUIRED, CORRECTION_REQUIRED ou BLOCKED não há commit: Claude corrige e Astra revisa de novo.
+
+O commit representa o estado completo e aceito do Goal: implementação do Claude, testes, migrations/contratos/configs pertencentes ao escopo, correções das rodadas do mesmo Goal, review final do Astra e as atualizações documentais causadas diretamente pelo aceite.
+
+Não entram automaticamente: arquivos temporários, caches, logs, bancos locais, artefatos de teste, alterações externas, alterações preexistentes não relacionadas e cleanup oportunista.
+
+Antes de commitar, Astra: (1) roda `git status`; (2) inspeciona o diff; (3) separa o que pertence ao Goal do que é externo ou preexistente; (4) faz stage seletivo; (5) evita `git add .` quando houver mudança não relacionada; (6) preserva as alterações externas sem descartá-las; (7) roda `git diff --check`; (8) confere que nenhum segredo ou credencial foi introduzido. Push, merge e PR exigem autorização explícita do usuário.
+
+### Baseline histórica e baseline aceita vigente
+
+- **Baseline histórica do Goal0** (`5fb5d51`): fotografia auditada do sistema naquele momento. Continua válida como referência histórica e **deixa de ser** a baseline operacional assim que Goals passam a ser aceitos e commitados.
+- **Baseline aceita vigente**: SHA do commit de fechamento do último Goal ACCEPTED. É contra ela que o próximo Goal é escrito e revisado. Fica registrada em [MIGRATION_STATUS](MIGRATION_STATUS.md).
+
+Todo Goal novo declara a própria baseline logo no início, no padrão:
+
+```markdown
+## Baseline
+
+Este Goal parte do último estado formalmente aceito:
+
+**Baseline aceita:** `<SHA>`
+
+Goal anterior: `NNN — <nome>`
+Status: `ACCEPTED`
+```
+
+Alterações já aceitas não são revertidas nem reinterpretadas sem evidência concreta nova e decisão registrada em [DECISIONS](DECISIONS.md).
+
+### Depois do commit: gerar o próximo Goal
+
+Astra obtém o SHA do novo HEAD, adota-o como baseline, reavalia o MASTER_PLAN de forma incremental, verifica novos gaps/decisões/achados, insere/divide/reordena/supersede Goals quando necessário, escreve **somente** o próximo Goal executável com a baseline declarada e marca apenas ele como READY. Nenhum prompt de Goals posteriores é gerado antecipadamente.
+
 ## Definition of Done por Goal
 
-1. Claude implementou somente escopo vigente e entregou commit/diff/report com arquivos, contratos/dados afetados e comandos/resultados.
+1. Claude implementou somente escopo vigente e entregou diff/testes/report com arquivos, contratos/dados afetados e comandos/resultados; o commit de fechamento não é dele.
 2. Testes obrigatórios e build/checks do escopo passaram; skipped, baseline failures e limitações estão separados, nunca mascarados como sucesso.
 3. Astra inspecionou diff real, migrations/consumers/testes e reproduziu a verificação relevante.
 4. Astra confirmou aderência ao Goal, arquitetura e Product Vault.
 5. Documentação necessária atualizada para refletir a implementação verificada.
 6. Decisões, riscos e pendências registrados; dados/rollback tratados quando aplicáveis.
 7. MIGRATION_STATUS atualizado após review: IMPLEMENTED não significa ACCEPTED. Correções exigidas antes de seguir consumer dependente.
-8. Próximo Goal e roadmap reavaliados com novas descobertas. Só então o próximo prompt executável é escrito.
+8. Astra declarou ACCEPTED e atualizou a documentação afetada pelo aceite.
+9. Astra criou o commit de fechamento do Goal e registrou o SHA como baseline aceita vigente.
+10. Roadmap reavaliado com as novas descobertas. Só então o próximo prompt executável é escrito e marcado READY.
+
+`ACCEPTED` sem commit de fechamento é encerramento administrativo incompleto: não habilita a criação do próximo Goal. Detalhe operacional em [Fechamento por commit e baseline aceita](#fechamento-por-commit-e-baseline-aceita).
 
 ## Definition of Done global do MVP
 
@@ -100,4 +160,49 @@ Caminho crítico de dependências, sem estimativa de duração: `001 → 002 →
 
 v1 — 2026-09-05: plano inicial após consolidação factual. Goal001 escolhido pelo defeito confirmado de autorização; base de testes em002. Novas descobertas podem inserir/dividir/juntar/cancelar Goals com rastreabilidade. Nenhuma execução funcional iniciada por este documento.
 
+v3 — 2026-09-06: adotado o fechamento de Goal por commit do Astra, com baseline aceita vigente e proibição de criar o próximo Goal antes desse commit; DoD estendida e política de review incremental completada. Regra operacional a partir desta data, sem reescrever Goals já concluídos. Ver D-017.
+
 v2 — 2026-09-05: review001 ACCEPTED sobre working tree4ca1301, sem commit. Goal002 detalhado just-in-time e refinado para validação reproduzível; DTOs continuam por domínio. G-35 acrescentado como requisito obrigatório de003 antes de004; dívidas documentais de segurança agrupadas no mesmo escopo. Falhas preexistentes de cleanup Go ficam em002, sem bloquear artificialmente001. Ver D-016 e review001 para evidência e condição de antecipar security Goal.
+
+## Política de review do Astra
+
+Por padrão, reviews são incrementais.
+
+O reviewer NÃO deve repetir a auditoria global do Goal 0.
+
+### FAST
+Usar quando a alteração é local e não modifica arquitetura, dados ou contratos.
+
+Ler:
+- Goal
+- diff
+- testes
+- implementation report
+
+### STANDARD
+Além do FAST:
+- consultar consumers diretamente afetados;
+- consultar TARGET_ARCHITECTURE/DECISIONS apenas nas seções pertinentes;
+- usar Graphify de forma dirigida.
+
+### DEEP
+Usar apenas para segurança, persistência, concorrência, migração,
+auth/tenant ou efeitos externos críticos.
+
+### ARCHITECTURE
+Usar somente quando uma descoberta pode modificar arquitetura,
+data ownership, boundaries ou vários Goals futuros.
+
+Subagentes não devem ser usados em FAST/STANDARD salvo lacuna concreta.
+
+Product Vault e protótipo não devem ser reabertos em todo review;
+consultar somente quando a mudança toca comportamento de produto/UX.
+
+Um relatório do Claude não substitui inspeção real, mas também não é necessário
+reexecutar toda investigação já comprovada pelo executor.
+
+Graphify é consultado de forma dirigida, para claims específicos; o grafo não é
+reconstruído para revisar.
+
+Correction review verifica somente os blockers apontados e regressões plausíveis
+do que foi corrigido — não repete o review completo já realizado.

@@ -1,6 +1,6 @@
 # Registro de decisões
 
-Baseline factual `5fb5d51`; data 2026-09-05. `ACCEPTED` identifica restrição autorizada ou decisão técnica aceita em review identificado. Novas direções sem review permanecem `PROPOSED`; não são decisões do usuário presumidas. Somente questões de produto/custo sem fonte vigente exigem resposta específica do usuário.
+Baseline factual do Goal0 `5fb5d51`; primeira versão em 2026-09-05, última atualização em 2026-09-06. `ACCEPTED` identifica restrição autorizada ou decisão técnica aceita em review identificado. Novas direções sem review permanecem `PROPOSED`; não são decisões do usuário presumidas. Somente questões de produto/custo sem fonte vigente exigem resposta específica do usuário.
 
 ## D-001 — Autoridade e escopo
 
@@ -97,6 +97,12 @@ Baseline factual `5fb5d51`; data 2026-09-05. `ACCEPTED` identifica restrição a
 **Status:** ACCEPTED como decisão de review/replanejamento em 2026-09-05; não aprova implementação futura ou custo.
 
 **Contexto:** Goal001 satisfaz sua autorização delimitada. Duas fixtures Go falham no Windows também na baseline; foi encontrada consulta independente de status por ID global sem dono da instância. **Decisão:** aceitar001 com evidências; detalhar002 como base de validação reproduzível (fixtures, requestId, BFF real, build Scheduling, gates local/CI); exigir fechamento de G-35 no Goal003 antes de ampliar persistência em004. Centralização de DTOs não entra em002; D-011 continua por operação. **Alternativas:** bloquear001 por dívida independente; corrigir todo o Go dentro de001; ignorar G-35 porque SAVE_MESSAGES está false no exemplo. Rejeitadas por falta de relação com o diff ou ausência de prova sobre dados implantados. **Motivo:** manter revisões pequenas, checks confiáveis e scoping pronto antes dos novos dados. **Consequências:** ordem/IDs mantidos; segurança003 inclui ownership de metadados, tratamento de linhas legadas sem dono, teste A/B e alinhamento dirigido de docs. Não criar um segundo Goal redundante enquanto003 cobre esse escopo separado. **Revisar se:** evidência de exposição ativa/exploração exigir antecipar um security Goal, ou solução de ownership demandar divisão adicional. `source`/telefone não é chave de instância; desenho exato será decidido no prompt003.
+
+## D-017 — Fechamento de Goal por commit e baseline aceita vigente
+
+**Status:** ACCEPTED em 2026-09-06, por instrução do usuário, como decisão operacional do fluxo Astra ↔ Claude. Não altera arquitetura, produto nem status de nenhum Goal.
+
+**Contexto:** Goals aceitos vinham ficando no working tree, com a baseline do Goal0 sendo reusada como referência operacional e sem um ponto formal de fechamento entre um Goal e o próximo. **Decisão:** depois do ACCEPTED, Astra atualiza a documentação afetada e cria o commit de fechamento do Goal; o SHA desse commit vira a baseline aceita vigente; só então o roadmap é reavaliado e o próximo Goal é escrito e marcado READY, declarando essa baseline. Claude entrega diff/testes/relatório e não cria o commit de fechamento. Sem ACCEPTED não há commit. **Alternativas:** manter tudo em working tree até o fim da migração; deixar Claude commitar ao terminar; commitar por rodada de correção — rejeitadas por não produzirem estado aceito rastreável, por confundir execução com aceite e por criar fechamentos sem review. **Motivo:** dar a cada Goal um estado aceito identificável por SHA, tornar o replanejamento incremental verificável e permitir que um chat novo do Astra recupere o fluxo lendo apenas o repositório. **Consequências:** a baseline do Goal0 fica como fotografia histórica; MASTER_PLAN carrega o procedimento e a DoD estendida; MIGRATION_STATUS registra o SHA aceito; Goals já concluídos não são reescritos. Push, merge e PR continuam exigindo autorização explícita. **Revisar se:** o usuário mudar o modelo de branch/PR ou passar a exigir commit em outra etapa do ciclo.
 
 ## Questões específicas do usuário, isoladas
 

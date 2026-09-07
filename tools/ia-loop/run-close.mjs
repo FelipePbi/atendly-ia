@@ -140,13 +140,21 @@ async function main() {
   };
 
   // ---------- Accepted snapshot ------------------------------------------
+  // The gate protects the moment BEFORE the closure commit. Once that commit
+  // exists the snapshot has already been verified and consumed, and the tree has
+  // legitimately moved on — closure docs were added and the work was committed.
+  // Re-checking here would block every resume.
   machine.transitionTo(LOOP_STATES.CLOSURE_PREPARING);
-  emit('Verifying the accepted snapshot…');
 
   const currentChanges = await collectWorktreeChanges(absWorktree, initialHead);
   let snapshot = closure.acceptedSnapshot ?? null;
 
-  if (!snapshot) {
+  if (closure.sourceClosureCommit) {
+    emit(`Accepted snapshot already verified and committed as ${closure.sourceClosureCommit}.`);
+    emit(`  files: ${snapshot?.fileCount ?? 'n/a'} · diffHash: ${(snapshot?.diffHash ?? '').slice(0, 16)}`);
+    emit('');
+  } else if (!snapshot) {
+    emit('Verifying the accepted snapshot…');
     // Backfill for a Goal accepted before snapshots existed. Only valid when the
     // persisted review packet still matches the worktree byte for byte.
     const artefactDir = join(STATE_DIR, 'artefacts', `${goalId}-r${accepted.decision.round}`);
@@ -158,14 +166,17 @@ async function main() {
     });
     emit('  snapshot backfilled from the persisted review packet (file list + diff match byte for byte)');
     await persistClosure({ acceptedSnapshot: snapshot }, machine.state);
+    emit(`  files: ${snapshot.fileCount} · diffHash: ${snapshot.diffHash.slice(0, 16)}`);
+    emit('');
   } else {
+    emit('Verifying the accepted snapshot…');
     assertSnapshotUnchanged(snapshot, buildAcceptedSnapshot({
       changes: currentChanges, round: accepted.decision.round,
     }));
     emit('  snapshot unchanged since the acceptance');
+    emit(`  files: ${snapshot.fileCount} · diffHash: ${snapshot.diffHash.slice(0, 16)}`);
+    emit('');
   }
-  emit(`  files: ${snapshot.fileCount} · diffHash: ${snapshot.diffHash.slice(0, 16)}`);
-  emit('');
 
   // ---------- Closure documentation --------------------------------------
   if (!closure.closureDocsJobId) {

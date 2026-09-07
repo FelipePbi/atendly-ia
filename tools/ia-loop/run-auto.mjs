@@ -47,8 +47,16 @@ const emit = (line = '') => console.log(line);
 
 function parseArgs(argv) {
   const args = argv.slice(2);
-  const fromIndex = args.indexOf('--from');
-  return { fromGoal: fromIndex >= 0 ? args[fromIndex + 1] : null };
+  const valueOf = (flag) => {
+    const i = args.indexOf(flag);
+    return i >= 0 ? args[i + 1] ?? null : null;
+  };
+  return {
+    fromGoal: valueOf('--from'),
+    // Declaring a HUMAN_REQUIRED stop resolved is a person's decision, stated
+    // explicitly and recorded. The loop can never do it for itself.
+    resolvedNote: valueOf('--resolved'),
+  };
 }
 
 /** Runs one phase as a child process, inheriting stdio so progress is visible. */
@@ -91,7 +99,7 @@ async function goalBoundaryPreflight({ goalId, expectedBaseline }) {
 }
 
 async function main() {
-  const { fromGoal } = parseArgs(process.argv);
+  const { fromGoal, resolvedNote } = parseArgs(process.argv);
   const store = createJobStore(STATE_DIR);
   const auto = createAutonomousStore(STATE_DIR);
 
@@ -127,12 +135,28 @@ async function main() {
       emit('Resuming from PAUSED.');
     }
     if (run.status === RUN_STATUS.PAUSED_FOR_HUMAN) {
-      // Resume must not walk past an unresolved problem.
-      throw new SpikeError('HUMAN_REQUIRED',
-        `Run ${run.autonomousRunId} is stopped for a human: ${run.humanRequired?.reason}. `
-        + 'Resolve it, then start a new run explicitly.');
+      // Resume must not walk past an unresolved problem — only an explicit
+      // human statement that it was resolved retires the stopped run.
+      if (!resolvedNote) {
+        throw new SpikeError('HUMAN_REQUIRED',
+          `Run ${run.autonomousRunId} is stopped for a human: ${run.humanRequired?.reason}. `
+          + 'Resolve it, then start a new run with --from <goal> --resolved "<what was resolved>".');
+      }
+      const archived = await auto.archiveRun({ resolvedBy: 'operator', note: resolvedNote });
+      // attach() took the loop lease for the retired run; the new run claims
+      // its own, so this one has to go first.
+      await auto.releaseLoopLease({ force: true });
+      await store.appendEvent({
+        type: 'AUTONOMOUS_RUN_ARCHIVED', autonomousRunId: archived.autonomousRunId,
+        reason: archived.humanRequired?.reason ?? null, note: resolvedNote,
+      });
+      emit(`Run ${archived.autonomousRunId} retired: ${resolvedNote}`);
+      run = null;
     }
-  } else {
+  }
+
+  // A fresh run: no run existed, or the stopped one was just retired.
+  if (!run) {
     const migrationText = await readFile(join(REPO_ROOT, 'docs/migration/MIGRATION_STATUS.md'), 'utf8');
     const { acceptedBaseline } = parseMigrationStatus(migrationText);
     const startGoal = fromGoal ?? null;

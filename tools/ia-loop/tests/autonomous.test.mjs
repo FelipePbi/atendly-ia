@@ -577,3 +577,45 @@ test('a resumed Goal keeps its round; a new Goal starts at 1', () => {
   assert.equal(false ? (previous.round ?? 1) : 1, 1);
   assert.equal(clearPerGoalRuntime(previous).blockers, undefined);
 });
+
+// ===========================================================================
+// Getting past PAUSED_FOR_HUMAN is a person's decision, and it is recorded
+// ===========================================================================
+
+test('a stopped run is retired only with an explicit note, and archived', async () => {
+  await withDir(async (dir) => {
+    const auto = createAutonomousStore(dir);
+    const run = await auto.start({ fromGoal: '004', migrationAcceptedBaseline: BASELINE_1 });
+    await auto.markHumanRequired('UNKNOWN_FATAL', 'harness bug');
+
+    // No note: nothing is retired. Silence must not clear a problem.
+    await assert.rejects(auto.archiveRun({ resolvedBy: 'operator', note: '' }), codeIs('INVALID_ARGS'));
+    assert.equal((await auto.read()).status, RUN_STATUS.PAUSED_FOR_HUMAN);
+
+    const archived = await auto.archiveRun({ resolvedBy: 'operator', note: 'runtime inheritance fixed' });
+    assert.equal(archived.resolutionNote, 'runtime inheritance fixed');
+    assert.equal(archived.humanRequired.reason, 'UNKNOWN_FATAL', 'the archive keeps why it stopped');
+
+    // The run is gone from the active slot but preserved on disk.
+    assert.equal(await auto.read(), null);
+    const onDisk = JSON.parse(await readFile(join(dir, 'autonomous-runs', `${run.autonomousRunId}.json`), 'utf8'));
+    assert.equal(onDisk.autonomousRunId, run.autonomousRunId);
+
+    // And a new run can now start.
+    await auto.releaseLoopLease({ force: true });
+    const fresh = await auto.start({ fromGoal: '004', migrationAcceptedBaseline: BASELINE_1 });
+    assert.equal(fresh.status, RUN_STATUS.RUNNING);
+    assert.notEqual(fresh.autonomousRunId, run.autonomousRunId);
+  });
+});
+
+test('a RUNNING run is never archived out from under itself', async () => {
+  await withDir(async (dir) => {
+    const auto = createAutonomousStore(dir);
+    await auto.start({ fromGoal: '004', migrationAcceptedBaseline: BASELINE_1 });
+    await assert.rejects(
+      auto.archiveRun({ resolvedBy: 'operator', note: 'nope' }),
+      codeIs('AUTONOMOUS_RUN_ALREADY_ACTIVE'),
+    );
+  });
+});

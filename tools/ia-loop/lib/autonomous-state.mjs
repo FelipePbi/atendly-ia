@@ -15,6 +15,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { rm } from 'node:fs/promises';
 
 import { SpikeError } from './claude-process.mjs';
 import { readJson, writeJsonAtomic } from './job-store.mjs';
@@ -208,6 +209,36 @@ export function createAutonomousStore(stateDir) {
     async setCurrentGoal(goalId) {
       const run = await this.read();
       return this.write({ ...run, currentGoal: goalId });
+    },
+
+    /**
+     * Retires a run stopped for a human, recording who said the problem was
+     * resolved and why.
+     *
+     * This is the ONLY way past PAUSED_FOR_HUMAN, and it is deliberately not
+     * something the loop can do to itself: the archived file is the audit trail
+     * of a person's decision. The run is never merely deleted.
+     */
+    async archiveRun({ resolvedBy, note }) {
+      const run = await this.read();
+      if (!run) throw new SpikeError('NO_AUTONOMOUS_RUN', 'There is no autonomous run to archive');
+      if (run.status === RUN_STATUS.RUNNING) {
+        throw new SpikeError('AUTONOMOUS_RUN_ALREADY_ACTIVE',
+          `Run ${run.autonomousRunId} is still RUNNING; pause or resolve it before archiving.`);
+      }
+      if (!note || String(note).trim() === '') {
+        throw new SpikeError('INVALID_ARGS', 'Archiving a stopped run requires a note saying what was resolved');
+      }
+
+      const archived = {
+        ...run,
+        archivedAt: new Date().toISOString(),
+        resolvedBy: resolvedBy ?? 'unknown',
+        resolutionNote: note,
+      };
+      await writeJsonAtomic(`${stateDir}/autonomous-runs/${run.autonomousRunId}.json`, archived);
+      await rm(path, { force: true });
+      return archived;
     },
 
     async clearPause() {

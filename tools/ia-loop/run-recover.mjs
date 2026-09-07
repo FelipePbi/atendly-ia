@@ -183,6 +183,62 @@ async function main() {
     return 1;
   }
 
+  // Consistency first, and on every run — not only the first one.
+  //
+  // Superseding a duplicate and retiring the leases of a dead attempt are
+  // repairs, not part of the handoff. Behind the "already recovered" return
+  // they would be skipped by exactly the re-run someone makes when something
+  // is still stuck — and a worktree lease held by a process that no longer
+  // exists blocks the round that is legitimately next.
+  if (!dryRun) {
+    // --- Attempts that should never have existed ------------------------------
+    //
+    // Recorded as SUPERSEDED, never deleted: what the harness did wrong stays
+    // readable, and the attempt stops looking live to anything that reads the
+    // store. A worker will not pick it up again, and reconciliation already
+    // refuses to treat it as authoritative over the result it duplicates.
+    for (const duplicate of reconciled?.duplicates ?? []) {
+      const role = duplicate.stageKey.endsWith('review') ? 'tech_lead' : 'developer';
+      await store.setJobStatus(role, duplicate.jobId, 'SUPERSEDED').catch(() => {});
+      await store.appendEvent({
+        type: 'DUPLICATE_STAGE_ATTEMPT_SUPERSEDED',
+        goal: runtime.goal, round: runtime.round,
+        runId: autonomousRun?.autonomousRunId ?? null,
+        jobId: duplicate.jobId, stageKey: duplicate.stageKey, completedBy: duplicate.completedBy,
+      });
+      emit(`Superseded duplicate attempt ${duplicate.jobId} — ${duplicate.stageKey} completed as ${duplicate.completedBy}.`);
+
+      // Its leases go too, but only against the same standard of proof: a lease
+      // is retired when its holder is confirmably gone, never because the job
+      // was superseded. Left behind, the worktree lease blocks the round that is
+      // legitimately next with WORKTREE_BUSY, held by a process that no longer
+      // exists.
+      const held = await leaseStore.readJobLease(duplicate.jobId).catch(() => null);
+      if (held) {
+        const heldEvidence = await collectOwnerEvidence(held, inspector, { now });
+        const heldVerdict = judgeOwner({ lease: held, evidence: heldEvidence, now });
+        if (isRecoveryEligible(heldVerdict)) {
+          const retired = await leaseStore.retireJob(duplicate.jobId, { expected: held, proof: heldVerdict.proof });
+          if (retired.retired && held.worktree) {
+            await leaseStore.retireWorktree(held.worktree, {
+              expected: await leaseStore.readWorktreeLease(held.worktree), proof: heldVerdict.proof,
+            }).catch(() => null);
+          }
+          await store.appendEvent({
+            type: 'ORPHANED_LEASE_RETIRED', jobId: duplicate.jobId,
+            goal: runtime.goal, round: runtime.round,
+            owner: held.workerInstanceId ?? null, proof: heldVerdict.proof,
+            worktree: held.worktree ?? null,
+          });
+          emit(`  its lease is retired too (${heldVerdict.proof}); the worktree is free for the next round.`);
+        } else {
+          emit(`  its lease is kept: ${heldVerdict.detail}`);
+        }
+      }
+    }
+
+  }
+
   // Running recovery again on an unchanged run must not take a lease again or
   // mint a second token. Saying "already recovered" is the whole job.
   const existingHandoff = await handoffs.read();
@@ -247,52 +303,6 @@ async function main() {
       proof: verdict.proof,
     });
     emit(`Lease acquired by: ${taken.lease.workerInstanceId} (${taken.lease.attemptId})`);
-  }
-
-  // --- Attempts that should never have existed ------------------------------
-  //
-  // Recorded as SUPERSEDED, never deleted: what the harness did wrong stays
-  // readable, and the attempt stops looking live to anything that reads the
-  // store. A worker will not pick it up again, and reconciliation already
-  // refuses to treat it as authoritative over the result it duplicates.
-  for (const duplicate of reconciled?.duplicates ?? []) {
-    const role = duplicate.stageKey.endsWith('review') ? 'tech_lead' : 'developer';
-    await store.setJobStatus(role, duplicate.jobId, 'SUPERSEDED').catch(() => {});
-    await store.appendEvent({
-      type: 'DUPLICATE_STAGE_ATTEMPT_SUPERSEDED',
-      goal: runtime.goal, round: runtime.round,
-      runId: autonomousRun?.autonomousRunId ?? null,
-      jobId: duplicate.jobId, stageKey: duplicate.stageKey, completedBy: duplicate.completedBy,
-    });
-    emit(`Superseded duplicate attempt ${duplicate.jobId} — ${duplicate.stageKey} completed as ${duplicate.completedBy}.`);
-
-    // Its leases go too, but only against the same standard of proof: a lease
-    // is retired when its holder is confirmably gone, never because the job
-    // was superseded. Left behind, the worktree lease blocks the round that is
-    // legitimately next with WORKTREE_BUSY, held by a process that no longer
-    // exists.
-    const held = await leaseStore.readJobLease(duplicate.jobId).catch(() => null);
-    if (held) {
-      const heldEvidence = await collectOwnerEvidence(held, inspector, { now });
-      const heldVerdict = judgeOwner({ lease: held, evidence: heldEvidence, now });
-      if (isRecoveryEligible(heldVerdict)) {
-        const retired = await leaseStore.retireJob(duplicate.jobId, { expected: held, proof: heldVerdict.proof });
-        if (retired.retired && held.worktree) {
-          await leaseStore.retireWorktree(held.worktree, {
-            expected: await leaseStore.readWorktreeLease(held.worktree), proof: heldVerdict.proof,
-          }).catch(() => null);
-        }
-        await store.appendEvent({
-          type: 'ORPHANED_LEASE_RETIRED', jobId: duplicate.jobId,
-          goal: runtime.goal, round: runtime.round,
-          owner: held.workerInstanceId ?? null, proof: heldVerdict.proof,
-          worktree: held.worktree ?? null,
-        });
-        emit(`  its lease is retired too (${heldVerdict.proof}); the worktree is free for the next round.`);
-      } else {
-        emit(`  its lease is kept: ${heldVerdict.detail}`);
-      }
-    }
   }
 
   await store.appendEvent({

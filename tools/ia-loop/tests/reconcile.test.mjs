@@ -559,3 +559,15 @@ test('recovery itself supersedes a duplicate attempt, and never deletes it', asy
   assert.match(source, /DUPLICATE_STAGE_ATTEMPT_SUPERSEDED/, 'and records it in the audit log');
   assert.doesNotMatch(source, /rm\(|unlink\(/, 'history is never deleted to tidy up');
 });
+
+test('recovery repairs consistency on every run, not only the first', async () => {
+  // Superseding a duplicate and retiring a dead attempt's leases sat behind the
+  // "already recovered" early return, so the re-run someone makes when
+  // something is still stuck skipped exactly the repair it needed.
+  const source = await readFile(new URL('../run-recover.mjs', import.meta.url), 'utf8');
+  const repairs = source.indexOf('Attempts that should never have existed');
+  const alreadyRecovered = source.indexOf('Already recovered and waiting');
+  assert.ok(repairs > 0 && alreadyRecovered > 0);
+  assert.ok(repairs < alreadyRecovered, 'repairs must run before the idempotent return');
+  assert.match(source.slice(0, repairs), /if \(dryRun\)|if \(!dryRun\)/, 'and still write nothing on a dry run');
+});

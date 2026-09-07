@@ -1107,6 +1107,45 @@ preservando o motivo da parada, quem resolveu e a nota. Sem nota, nada é
 arquivado — silêncio não limpa problema — e o loop não pode executar esse
 caminho sozinho.
 
+### Fingerprint completo da worktree
+
+A perícia do incidente do duplicate R1 conseguiu provar só metade da árvore.
+
+O conteúdo **tracked** era demonstrável: o diff da R1 estava salvo em
+`artefacts/004-r1/implementation.patch` e o packet trazia o mesmo diff inline —
+os dois com o mesmo sha256, o que valida a evidência contra si mesma. Recalculado
+pelo mesmo code path, o diff de hoje bate byte a byte.
+
+Os **20 arquivos untracked**, não. `git diff` não os inclui, e o
+`worktreeFingerprint` antigo hashava só conteúdo tracked (`git stash create`).
+O veredito honesto para eles foi `UNPROVEN` — e continua sendo. Nada aqui declara
+retroativamente que a R1 estava provada nos untracked; o que existe é ausência de
+evidência de alteração (mesmos 20 caminhos, nenhum novo ou removido, nenhum
+tracked alterado, mtimes anteriores à tentativa duplicada), e ausência de
+evidência não é prova.
+
+`fullWorktreeFingerprint()` fecha a lacuna daqui para frente:
+
+| campo | o que cobre |
+| --- | --- |
+| `trackedDiffHash` | sha256 do diff contra a base |
+| `untracked[]` | cada caminho untracked com o **sha256 do conteúdo** e o tamanho |
+| `untrackedHash` | um valor que muda se qualquer untracked mudar, entrar ou sair |
+| `head`, `branch`, `worktreeInitialHead`, `base` | identidade da árvore |
+| `contentHash` | a árvore inteira em um valor, para uma comparação só |
+
+Conteúdo, nunca timestamp: mtime diz quando alguém escreveu; hash diz o que está
+lá. O conteúdo é hasheado como **bytes** — normalizar fim de linha faria dois
+arquivos genuinamente diferentes hashearem igual, que é a única coisa que um
+fingerprint não pode fazer.
+
+É capturado e persistido **antes** de cada inferência
+(`worktree-fingerprint-before.json`) e junto do review packet
+(`worktree-fingerprint-reviewed.json`, também embutido no packet).
+`compareFingerprints()` devolve os deltas — caminhos adicionados, removidos e
+modificados — porque "algo mudou" não é acionável; depois do incidente o que
+faltou foi a lista de caminhos.
+
 ### Reconcile before dispatch
 
 Depois do attach, o loop publicou `004-r1-developer-69a88746` e mandou o Opus
@@ -1390,7 +1429,7 @@ agora tem — `migration-loop-a1`, `-a2` a cada recuperação, na mesma run.
 ## Como executar
 
 ```bash
-npm run test:ia-loop       # 392 testes locais, sem chamadas reais a modelo
+npm run test:ia-loop       # 403 testes locais, sem chamadas reais a modelo
 ```
 
 ```bash
@@ -1488,6 +1527,7 @@ session ids nem dados pessoais.
 | `lib/recovery-plan.mjs` | O passo seguro após um crash, por estado |
 | `lib/recovery-handoff.mjs` | Token de uso único que passa uma run recuperada ao próximo orchestrator |
 | `lib/stage-identity.mjs` | Identidade lógica do trabalho: estágio vs tentativa |
+| `lib/worktree-fingerprint.mjs` | Identidade de conteúdo da árvore inteira, untracked incluído |
 | `lib/reconcile.mjs` | Reconcilia disco antes de despachar; barra estágio já concluído |
 | `run-recover.mjs` | Recovery de execução interrompida; não chama modelo nem retém lease |
 | `run-auto.mjs` | Orchestrator autônomo Goal a Goal |
@@ -1508,7 +1548,7 @@ session ids nem dados pessoais.
 | `lib/persistent-session.mjs` | Sessão por agente: cria no 1º turno, resume nos seguintes |
 | `lib/session-registry.mjs` | Registro durável de sessões, com escrita atômica |
 | `fixtures/synthetic-goal.md` | Tarefa sintética, fora do runtime |
-| `tests/*.test.mjs` | 392 testes com processo/agente fake; nenhuma chamada real |
+| `tests/*.test.mjs` | 403 testes com processo/agente fake; nenhuma chamada real |
 
 ## Limitações conhecidas
 

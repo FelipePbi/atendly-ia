@@ -24,6 +24,7 @@ import {
   DISPATCH_KINDS, assertNoDuplicateStageDispatch, reconcileExecutionState,
 } from './lib/reconcile.mjs';
 import { STAGES } from './lib/stage-identity.mjs';
+import { fullWorktreeFingerprint } from './lib/worktree-fingerprint.mjs';
 import { discoverGoal } from './lib/goal-discovery.mjs';
 import { planWorktree, createWorktreeForGoal, branchNameFor } from './lib/worktree-manager.mjs';
 import { readWorkerHealth, WORKER_HEALTH, SESSION_STRATEGY } from './lib/worker-registry.mjs';
@@ -357,6 +358,27 @@ async function main() {
 
     const beforeDev = await captureSnapshot({ probe });
 
+    // The complete content identity of the tree the agent is about to be
+    // given, persisted before it runs. The older evidence covered tracked
+    // files only, so after a duplicate attempt the untracked half of the tree
+    // could not be proven either way. This makes the next comparison total.
+    const artefactDirForRound = join(STATE_DIR, 'artefacts', `${goal.goalId}-r${round}`);
+    await fs.mkdir(artefactDirForRound, { recursive: true });
+    const fingerprintBefore = await fullWorktreeFingerprint(absWorktree, executionBase, {
+      worktreeInitialHead: worktree.worktreeInitialHead,
+    });
+    await fs.writeFile(
+      join(artefactDirForRound, 'worktree-fingerprint-before.json'),
+      JSON.stringify(fingerprintBefore, null, 2), 'utf8',
+    );
+    await store.appendEvent({
+      type: 'WORKTREE_FINGERPRINT_CAPTURED', goal: goal.goalId, round, phase: 'BEFORE_DEVELOPER',
+      contentHash: fingerprintBefore.contentHash,
+      trackedDiffHash: fingerprintBefore.trackedDiffHash,
+      untrackedHash: fingerprintBefore.untrackedHash,
+      untrackedFileCount: fingerprintBefore.untrackedFileCount,
+    });
+
     // A distinct job id per round is what makes idempotency meaningful — and it
     // is recorded per ROLE, not just per round. A single currentJobId could not
     // survive a crash during review: the id left on disk was the reviewer's, so
@@ -467,8 +489,29 @@ async function main() {
       worktreePath: absWorktree, changes, developerResult: lastDevResult,
       previousBlockers: pendingBlockers.map(blockerText), diffPath,
     });
+    // The exact tree being reviewed, hashed in full. The review packet already
+    // carried the tracked diff; what was missing was the content of untracked
+    // files, which is why a later forensic comparison could only reach a verdict
+    // for part of the tree.
+    const reviewedFingerprint = await fullWorktreeFingerprint(absWorktree, executionBase, {
+      worktreeInitialHead: worktree.worktreeInitialHead,
+    });
+    const fingerprintPath = join(artefactDir, 'worktree-fingerprint-reviewed.json');
+    await fs.writeFile(fingerprintPath, JSON.stringify(reviewedFingerprint, null, 2), 'utf8');
+
     const packetPath = join(artefactDir, 'review-packet.json');
-    await fs.writeFile(packetPath, JSON.stringify(packet, null, 2), 'utf8');
+    await fs.writeFile(
+      packetPath,
+      JSON.stringify({ ...packet, worktreeFingerprint: reviewedFingerprint, fingerprintPath }, null, 2),
+      'utf8',
+    );
+    await store.appendEvent({
+      type: 'WORKTREE_FINGERPRINT_CAPTURED', goal: goal.goalId, round, phase: 'REVIEWED',
+      contentHash: reviewedFingerprint.contentHash,
+      trackedDiffHash: reviewedFingerprint.trackedDiffHash,
+      untrackedHash: reviewedFingerprint.untrackedHash,
+      untrackedFileCount: reviewedFingerprint.untrackedFileCount,
+    });
 
     // The reviewer's job id was previously minted fresh on every pass, so any
     // resume re-published the review and called Fable again — even when its

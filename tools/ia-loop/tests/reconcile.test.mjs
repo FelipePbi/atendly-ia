@@ -533,3 +533,21 @@ test('INVARIANT: a completed stage is never dispatched again, by any route', () 
     ledger, goal: GOAL, round: 1, stage: STAGES.IMPLEMENTATION, jobId: DEV_R1,
   }), true);
 });
+
+test('7b. the recovery plan names the attempt that owns the stage, not the pointer', () => {
+  // planRecovery used to read runtime.currentJobId itself, so it reported the
+  // duplicate as the thing whose result was on disk — the same "trust the
+  // pointer" mistake one level down.
+  const runtime = {
+    mode: 'REAL_EXECUTION', goal: GOAL, round: 1, state: LOOP_STATES.DEVELOPER_RUNNING,
+    currentJobId: DUPE_R1, executionBase: EXECUTION_BASE, worktreeInitialHead: EXECUTION_BASE,
+  };
+
+  const withPointer = planRecovery({ runtime, resultExists: true, leaseExists: false });
+  assert.equal(withPointer.jobId, DUPE_R1, 'the fallback is still the pointer');
+
+  const reconciledPlan = planRecovery({ runtime, resultExists: true, leaseExists: false, jobId: DEV_R1 });
+  assert.equal(reconciledPlan.action, RECOVERY_ACTIONS.CONSUME_RESULT);
+  assert.equal(reconciledPlan.jobId, DEV_R1, 'the attempt that actually produced the result');
+  assert.match(reconciledPlan.message, new RegExp(DEV_R1));
+});

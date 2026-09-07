@@ -164,6 +164,7 @@ async function main() {
     leaseExists: Boolean(lease),
     resultExists,
     jobStatus,
+    jobId,
   });
 
   if (plan.action === RECOVERY_ACTIONS.NOTHING_TO_RECOVER) {

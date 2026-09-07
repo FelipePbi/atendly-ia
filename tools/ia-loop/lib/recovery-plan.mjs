@@ -75,8 +75,15 @@ export function agentForState(state) {
  * @param facts.autonomousRun    persisted autonomous run, if any
  * @param facts.ownerVerdict     judgement of the orchestrator lease holder
  * @param facts.leaseExists      whether a loop lease is on disk at all
- * @param facts.resultExists     true when the current job already has a result
- * @param facts.jobStatus        stored status of the current job
+ * @param facts.resultExists     true when the stage already has a result
+ * @param facts.jobStatus        stored status of that attempt
+ * @param facts.jobId            the attempt that OWNS the stage, when the caller
+ *                               has reconciled it. Without one this falls back to
+ *                               runtime.currentJobId, which is a pointer a crash
+ *                               can leave aimed at an attempt that should never
+ *                               have existed — naming it here would make a
+ *                               duplicate look more authoritative than the
+ *                               original result.
  */
 export function planRecovery({
   runtime,
@@ -85,6 +92,7 @@ export function planRecovery({
   leaseExists = false,
   resultExists = false,
   jobStatus = null,
+  jobId: reconciledJobId = null,
 }) {
   const blocked = (reason, message) => ({ action: RECOVERY_ACTIONS.BLOCKED, reason, message });
 
@@ -133,7 +141,7 @@ export function planRecovery({
 
   // --- What was interrupted? ------------------------------------------------
 
-  const jobId = runtime.currentJobId ?? null;
+  const jobId = reconciledJobId ?? runtime.currentJobId ?? null;
   const agent = agentForState(runtime.state);
 
   if (AGENT_EXECUTION_STATES.includes(runtime.state) || QUEUED_STATES.includes(runtime.state)) {

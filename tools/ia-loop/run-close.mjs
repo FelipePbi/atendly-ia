@@ -327,8 +327,40 @@ async function main() {
       planningDocs: planChanges.changedFiles,
     }, machine.state);
   } else {
-    emit(`Planning already done (job ${closure.planningJobId}).`);
     machine.transitionTo(LOOP_STATES.NEXT_GOAL_PLANNING);
+
+    if (closure.nextGoalId) {
+      emit(`Planning already done (job ${closure.planningJobId}), next Goal ${closure.nextGoalId}.`);
+    } else {
+      // The planning job ran and the Tech Lead's work is on disk, but the
+      // result was not recorded — a harness failure after the inference. The
+      // work is recovered from the worktree instead of paying for it twice.
+      emit(`Planning job ${closure.planningJobId} already ran; recovering its result from the worktree.`);
+
+      const planChanges = await collectWorktreeChanges(absPlan, newBaseline);
+      assertClosureScope(planChanges.changedFiles);
+
+      const goalFiles = planChanges.changedFiles.filter((p) => /^docs\/migration\/goals\/\d{3}-.+\.md$/.test(p));
+      const newGoals = goalFiles.filter((p) => !p.includes(`/${goalId}-`));
+      if (newGoals.length !== 1) {
+        throw new SpikeError(
+          'PLANNING_RESULT_AMBIGUOUS',
+          `Expected exactly one new Goal in the planning worktree, found ${newGoals.length}: ${newGoals.join(', ')}`,
+        );
+      }
+
+      const nextGoalPath = newGoals[0];
+      const nextGoalId = nextGoalPath.match(/goals\/(\d{3})-/)[1];
+      const heading = (await fs.readFile(join(absPlan, nextGoalPath), 'utf8')).split('\n')[0];
+      const nextGoalTitle = heading.replace(/^#\s*Goal\s+\d{3}\s*[—-]\s*/, '').trim();
+
+      emit(`  recovered: Goal ${nextGoalId} — ${nextGoalTitle}`);
+      await persistClosure({
+        nextGoalId, nextGoalTitle, nextGoalPath,
+        planningDocs: planChanges.changedFiles,
+        planningRecovered: true,
+      }, machine.state);
+    }
   }
   emit('');
 

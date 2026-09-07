@@ -55,6 +55,9 @@ const AGENT_CONTRACT_CODES = Object.freeze([
   'EMPTY_OUTPUT',
   'ACK_FAILED',
   'OK_NOT_TRUE',
+  // A path reported in the wrong format is a contract slip. The real scope
+  // breach is TECH_LEAD_CLOSURE_SCOPE_VIOLATION, raised from git evidence.
+  'CLOSURE_SCOPE_VIOLATION',
 ]);
 
 /** Local codes that are the harness's own fault. */

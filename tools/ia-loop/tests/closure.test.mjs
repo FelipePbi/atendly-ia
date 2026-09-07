@@ -362,3 +362,38 @@ test('excluded paths never enter the closure commit', async () => {
     assert.deepEqual(stagedFiles, ['impl.txt']);
   });
 });
+
+test('a path reported by the model is normalised, not treated as a breach', async () => {
+  // Regression: the reviewer answered with an absolute worktree path and the
+  // validator called it a scope violation, failing a correct planning run.
+  const { normalizeReportedPath } = await import('../lib/closure-contracts.mjs');
+
+  for (const reported of [
+    'docs/migration/goals/004-x.md',
+    './docs/migration/goals/004-x.md',
+    'E:/repo/.ai-worktrees/plan-next-goal/docs/migration/goals/004-x.md',
+    ['E:', 'repo', '.ai-worktrees', 'plan-next-goal', 'docs', 'migration', 'goals', '004-x.md'].join(String.fromCharCode(92)),
+  ]) {
+    assert.equal(normalizeReportedPath(reported), 'docs/migration/goals/004-x.md', reported);
+  }
+
+  const ok = validatePlanningResult({
+    protocolVersion: PROTOCOL_VERSION_V2, jobId: 'j', goal: '003', nextGoalId: '004',
+    nextGoalTitle: 'T', nextGoalPath: 'E:/repo/.ai-worktrees/plan/docs/migration/goals/004-x.md',
+    summary: 's', documentsUpdated: ['./docs/migration/MIGRATION_STATUS.md'],
+  }, { jobId: 'j', goal: '003' });
+
+  assert.equal(ok.nextGoalPath, 'docs/migration/goals/004-x.md');
+  assert.deepEqual([...ok.documentsUpdated], ['docs/migration/MIGRATION_STATUS.md']);
+});
+
+test('a genuine out-of-scope path is still refused after normalisation', () => {
+  assert.throws(() => validatePlanningResult({
+    protocolVersion: PROTOCOL_VERSION_V2, jobId: 'j', goal: '003', nextGoalId: '004',
+    nextGoalTitle: 'T', nextGoalPath: 'apps/bff/src/goal.md',
+    summary: 's', documentsUpdated: [],
+  }, { jobId: 'j', goal: '003' }), codeIs('CLOSURE_SCOPE_VIOLATION'));
+
+  // And the git-evidence guard stays strict regardless of formatting.
+  assert.throws(() => assertClosureScope(['apps/bff/src/index.ts']), codeIs('TECH_LEAD_CLOSURE_SCOPE_VIOLATION'));
+});

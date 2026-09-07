@@ -21,6 +21,26 @@ function fail(code, message, details = {}) {
   throw new SpikeError(code, message, details);
 }
 
+/**
+ * Normalises a path reported BY A MODEL.
+ *
+ * The model writes prose, not git output: it may answer with a backslash
+ * separator, a leading "./", or the absolute path inside the worktree. Rejecting
+ * those as scope violations confuses a formatting difference with an actual
+ * breach — which is exactly what happened on the first real planning run.
+ *
+ * Paths collected FROM GIT are never passed through here; those stay strict,
+ * because git is the authority on what really changed.
+ */
+export function normalizeReportedPath(path) {
+  if (typeof path !== 'string') return path;
+  const slashed = path.replace(/\\/g, '/');
+  const index = slashed.indexOf(CLOSURE_WRITE_PREFIX);
+  // Anchor on the allowed prefix wherever it appears, so an absolute worktree
+  // path collapses to the repository-relative one.
+  return index >= 0 ? slashed.slice(index) : slashed.replace(/^\.\//, '');
+}
+
 function assertNonEmptyString(value, field) {
   if (typeof value !== 'string' || value.trim() === '') {
     fail('CONTRACT_FIELD_INVALID', `Field "${field}" must be a non-empty string`);
@@ -56,16 +76,15 @@ export function validateClosureDocResult(payload, { jobId, goal }) {
   assertNonEmptyString(payload.summary, 'summary');
   assertStringArray(payload.documentsUpdated, 'documentsUpdated');
 
-  // Every path must be inside the allowed tree; the guard checks git afterwards,
-  // but a claim outside it is already a contract violation.
-  for (const path of payload.documentsUpdated) {
+  const documentsUpdated = payload.documentsUpdated.map(normalizeReportedPath);
+  for (const path of documentsUpdated) {
     if (!path.startsWith(CLOSURE_WRITE_PREFIX)) {
       fail('CLOSURE_SCOPE_VIOLATION',
         `ClosureDocResult claims a document outside ${CLOSURE_WRITE_PREFIX}: ${path}`);
     }
   }
 
-  return Object.freeze({ ...payload, documentsUpdated: Object.freeze([...payload.documentsUpdated]) });
+  return Object.freeze({ ...payload, documentsUpdated: Object.freeze(documentsUpdated) });
 }
 
 export function closureDocSchemaFor({ jobId, goal }) {
@@ -104,18 +123,22 @@ export function validatePlanningResult(payload, { jobId, goal }) {
 
   assertNonEmptyString(payload.nextGoalTitle, 'nextGoalTitle');
   assertNonEmptyString(payload.nextGoalPath, 'nextGoalPath');
-  if (!payload.nextGoalPath.startsWith(CLOSURE_WRITE_PREFIX)) {
-    fail('CLOSURE_SCOPE_VIOLATION', `nextGoalPath must live under ${CLOSURE_WRITE_PREFIX}`);
+  const nextGoalPath = normalizeReportedPath(payload.nextGoalPath);
+  if (!nextGoalPath.startsWith(CLOSURE_WRITE_PREFIX)) {
+    fail('CLOSURE_SCOPE_VIOLATION',
+      `nextGoalPath must live under ${CLOSURE_WRITE_PREFIX}, got ${JSON.stringify(payload.nextGoalPath)}`);
   }
   assertNonEmptyString(payload.summary, 'summary');
   assertStringArray(payload.documentsUpdated, 'documentsUpdated');
-  for (const path of payload.documentsUpdated) {
+
+  const documentsUpdated = payload.documentsUpdated.map(normalizeReportedPath);
+  for (const path of documentsUpdated) {
     if (!path.startsWith(CLOSURE_WRITE_PREFIX)) {
       fail('CLOSURE_SCOPE_VIOLATION', `PlanningResult claims a document outside ${CLOSURE_WRITE_PREFIX}: ${path}`);
     }
   }
 
-  return Object.freeze({ ...payload, documentsUpdated: Object.freeze([...payload.documentsUpdated]) });
+  return Object.freeze({ ...payload, nextGoalPath, documentsUpdated: Object.freeze(documentsUpdated) });
 }
 
 export function planningSchemaFor({ jobId, goal }) {

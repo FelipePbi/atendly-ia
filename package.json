@@ -17,6 +17,8 @@
     "test:evolution-go": "cd apps/evolution-go && go test ./...",
     "test:ai-orchestrator": "cd apps/ai-orchestrator && npm test",
     "test:gate": "node --test scripts/tests/**/*.test.mjs",
+    "ia-loop:spike": "node tools/ia-loop/spike-agent-invocation.mjs",
+    "test:ia-loop": "node --test tools/ia-loop/tests/**/*.test.mjs",
     "validate:core": "node scripts/validate-core.mjs",
     "validate:integration": "node scripts/validate-integration.mjs"
   },

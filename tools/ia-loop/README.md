@@ -12,6 +12,7 @@ Duas etapas concluídas:
 | Spike 1 — Persistent Dual Session | `BLOCKED` (Fable OK, Opus 5 não sustenta multi-turno) |
 | V2 — Hybrid Real Goal Harness | `PASS` (dry-run; Goal003 **não** executado) |
 | Capacity / Usage Limits | `PASS` (espera controlada, retomada exata) |
+| V3 — Real Worktree + Supervised Execution | worktree real, execução supervisionada, parada em `AWAITING_HUMAN` |
 
 ---
 
@@ -473,10 +474,9 @@ todo job e ficam registradas no runtime.
 Plano apenas. Convenção: `.ai-worktrees/goal-003`, branch `ai-loop/goal-003`.
 
 Em `--dry-run` a worktree **não é criada** — só o plano é exibido, incluindo o
-comando que seria executado. `createWorktree()` existe apenas para lançar
-`WORKTREE_CREATION_NOT_IMPLEMENTED`, de modo que a fronteira seja explícita no
-código e coberta por teste, em vez de ser uma ausência que alguém preencha por
-acidente.
+comando que seria executado. Sem `--dry-run` (V3), `createWorktreeForGoal()` cria a
+worktree de verdade, mas **somente a partir de um plano sem blockers**: a segurança
+é garantida recusando o plano, nunca contornando-o.
 
 Condições que bloqueiam o plano, todas acumuladas em vez de curto-circuito:
 árvore principal suja, branch já existente, worktree já registrada, diretório
@@ -704,6 +704,72 @@ registrados.
 Toda a política é testada com fixtures sanitizadas, agente falso e **relógio
 virtual**: a espera de 20 minutos do `USAGE_LIMIT` é exercitada ponta a ponta sem
 gastar tempo real nem quota. Nenhum teste provoca limite de verdade.
+
+
+---
+
+## V3 — Real Worktree + Supervised Execution
+
+Primeira execução real de um Goal pelo IA Loop. Termina obrigatoriamente em
+`AWAITING_HUMAN`.
+
+```bash
+npm run ia-loop:goal -- 003        # execução real (exige os dois workers rodando)
+```
+
+### Três baselines, não duas
+
+| Conceito | Papel |
+| --- | --- |
+| `migrationAcceptedBaseline` | Último Goal funcional aceito |
+| `executionBase` | HEAD do tooling no momento da execução |
+| `worktreeInitialHead` | HEAD da worktree ao ser criada (== executionBase) |
+
+O diff **funcional** do Goal é medido de `worktreeInitialHead` até o estado atual
+da worktree — não da baseline aceita, porque entre as duas existem commits
+legítimos de tooling, documentação do Goal e handoff que não pertencem a esta
+implementação. O reviewer recebe os três valores e sabe distingui-los.
+
+### Perfis de execução
+
+| Papel | Tools | Permission mode | safe-mode |
+| --- | --- | --- | --- |
+| Spikes / V1 | nenhuma | — | on |
+| Developer (real) | Read, Write, Edit, Glob, Grep, Bash, TodoWrite | `auto` | off |
+| Tech Lead (real) | Read, Glob, Grep, Bash | `auto` | off |
+
+`auto` foi escolhido por medição: `acceptEdits` nega Bash e `dontAsk` nega Write.
+Nenhum perfil usa flag de bypass de permissão, e `--permission-prompts none`
+continua garantindo que nada trave. O reviewer não tem tool de escrita.
+
+### Guardas de política
+
+O orchestrator fotografa o repositório antes e depois de cada agente e coleta a
+superfície de mudança **do git**, nunca do que o modelo diz ter alterado.
+
+| Violação | Quando |
+| --- | --- |
+| `DEVELOPER_COMMITTED` | Surgiu commit na worktree |
+| `DEVELOPER_MOVED_HEAD` | HEAD da worktree saiu do initialHead |
+| `MAIN_CHECKOUT_MUTATED` | HEAD, branch ou sujeira nova no checkout principal |
+| `DEVELOPER_CHANGED_BRANCH` | Branch principal mudou |
+| `GOAL_DOC_MUTATED` | Developer editou goals/, reviews/ ou MIGRATION_STATUS |
+| `REVIEWER_MUTATED_WORKTREE` | Worktree mudou durante o review |
+
+Qualquer violação leva a `HUMAN_REQUIRED` e encerra a execução.
+
+**Limitação honesta:** estas guardas **detectam**, não isolam. Um agente com Bash
+pode alcançar fora do diretório de trabalho. A mitigação é em camadas — worktree
+separada, `--add-dir` restrito e estas checagens — mas a checagem é a última
+linha, não um sandbox.
+
+### Parada supervisionada
+
+`ACCEPTED`, `CHANGES_REQUIRED` e `HUMAN_REQUIRED` levam todos a
+`AWAITING_HUMAN`. A execução **não** commita o Goal, não atualiza a baseline da
+migração, não cria o Goal seguinte, não chama o Developer de novo e não remove a
+worktree. A implementação fica na branch `ai-loop/goal-003`, sem commit, para
+inspeção humana.
 
 ---
 

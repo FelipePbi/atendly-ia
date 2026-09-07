@@ -97,14 +97,54 @@ export async function planWorktree({ goalId, executionBase, git }) {
 }
 
 /**
- * V2 guard: creating a worktree is not implemented.
+ * Creates the worktree for real, but only from a plan with no blockers.
  *
- * Exists so the boundary is explicit in code and covered by a test, rather than
- * being an absence someone could fill in by accident.
+ * The safety rules are enforced by refusing an unsafe plan, never by working
+ * around it: nothing is forced, reset or deleted, the main checkout and the
+ * user's branch are untouched, and any ambiguity stops the run.
+ *
+ * `createFn` performs the actual `git worktree add`; it is injected so tests
+ * exercise every refusal path without touching a repository.
  */
-export function createWorktree() {
-  fail(
-    'WORKTREE_CREATION_NOT_IMPLEMENTED',
-    'V2 only plans worktrees. Real creation is a separate, explicit step that has not been authorised yet.',
-  );
+export async function createWorktreeForGoal({
+  goalId,
+  executionBase,
+  git,
+  repoRoot,
+  createFn,
+}) {
+  const plan = await planWorktree({ goalId, executionBase, git });
+
+  if (!plan.safe) {
+    fail(
+      'WORKTREE_PLAN_UNSAFE',
+      `Refusing to create the worktree: ${plan.blockers.map((b) => b.code).join(', ')}`,
+      { blockers: [...plan.blockers] },
+    );
+  }
+
+  const created = await createFn({
+    repoRoot,
+    path: plan.path,
+    branch: plan.branch,
+    base: executionBase,
+  });
+
+  // The worktree must start exactly at the execution base. Anything else means
+  // the tree being implemented is not the tree that was planned.
+  if (created.head !== executionBase) {
+    fail(
+      'WORKTREE_HEAD_MISMATCH',
+      `Worktree started at ${created.head} instead of the execution base ${executionBase}`,
+    );
+  }
+
+  return Object.freeze({
+    ...plan,
+    created: true,
+    absolutePath: created.path,
+    // At creation time these are equal by definition; they diverge only if
+    // someone moves HEAD inside the worktree, which is a policy violation.
+    worktreeInitialHead: created.head,
+  });
 }

@@ -109,6 +109,13 @@ export function buildArgs({
   // what makes a conversation impossible to resume later.
   persistSession = false,
   resume = false,
+  // Execution profile. The default is the fully isolated one used by the spikes
+  // and the synthetic slice: no tools at all, nothing that can act. Real Goal
+  // execution opts in explicitly.
+  tools = '',
+  permissionMode = null,
+  addDirs = [],
+  safeMode = true,
 }) {
   if (!prompt) throw new SpikeError('INVALID_ARGS', 'prompt is required');
   if (!model) throw new SpikeError('INVALID_ARGS', 'model is required');
@@ -122,14 +129,20 @@ export function buildArgs({
     '--model', model,
     '--output-format', 'json',
     '--json-schema', JSON.stringify(jsonSchema ?? AGENT_SCHEMA),
-    // Isolation: remove every tool from the built-in set.
-    '--tools', '',
-    // Anything that would otherwise prompt is denied automatically, never hangs.
+    // Tool surface. An empty string removes every built-in tool.
+    '--tools', Array.isArray(tools) ? tools.join(',') : tools,
+    // Nothing may block on a prompt. Combined with an explicit permission mode
+    // this authorises the profile's tools while still never hanging.
     '--permission-prompts', 'none',
     '--strict-mcp-config',
     '--disable-slash-commands',
-    '--safe-mode',
   ];
+
+  if (safeMode) args.push('--safe-mode');
+  // Measured: only "auto" authorises both file writes and Bash without a
+  // prompt; acceptEdits denies Bash and dontAsk denies Write.
+  if (permissionMode) args.push('--permission-mode', permissionMode);
+  for (const dir of addDirs) args.push('--add-dir', dir);
 
   if (resume) {
     // Resuming keeps the same session id, so the registry stays valid.
@@ -402,6 +415,10 @@ export async function invokeAgent({
   validatePayload = null,
   persistSession = false,
   resume = false,
+  tools = '',
+  permissionMode = null,
+  addDirs = [],
+  safeMode = true,
 }) {
   const outcome = {
     requestedModel: model,
@@ -420,7 +437,10 @@ export async function invokeAgent({
   try {
     processResult = await runClaudeProcess({
       executable,
-      args: buildArgs({ prompt, model, jsonSchema, sessionId, persistSession, resume }),
+      args: buildArgs({
+        prompt, model, jsonSchema, sessionId, persistSession, resume,
+        tools, permissionMode, addDirs, safeMode,
+      }),
       cwd,
       timeoutMs,
       env,

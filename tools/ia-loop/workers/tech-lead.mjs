@@ -35,6 +35,8 @@ import { runWithCapacity, RUN_OUTCOMES } from '../lib/capacity-runner.mjs';
 import { LOOP_STATES } from '../lib/loop-state.mjs';
 import { REVIEW_DECISION_SCHEMA, validateReviewJob, validateReviewDecision } from '../lib/contracts-v2.mjs';
 import { buildTechLeadContext } from '../lib/context-builders.mjs';
+import { renderReviewPrompt } from '../lib/review-packet.mjs';
+import { readJson } from '../lib/job-store.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, '..', '.state');
@@ -43,7 +45,17 @@ const SESSION_CWD = join(STATE_DIR, 'workdirs', 'tech-lead');
 
 const ROLE = 'tech_lead';
 const MODEL = process.env.IA_LOOP_TECH_LEAD_MODEL ?? 'claude-fable-5-1';
-const TIMEOUT_MS = Number(process.env.IA_LOOP_TIMEOUT_MS ?? 900_000);
+const TIMEOUT_MS = Number(process.env.IA_LOOP_TECH_LEAD_TIMEOUT_MS ?? 2 * 60 * 60 * 1000);
+
+/**
+ * Review profile: read-only by tool surface.
+ *
+ * Bash is included because a DEEP review needs directed verification (git diff,
+ * targeted test runs, graphify). There is no Write or Edit tool, and the
+ * orchestrator fingerprints the worktree before and after: any mutation
+ * invalidates the review rather than being tolerated.
+ */
+const REVIEWER_TOOLS = ['Read', 'Glob', 'Grep', 'Bash'];
 
 const store = createJobStore(STATE_DIR);
 
@@ -151,7 +163,13 @@ async function handleJob(rawJob) {
     previousBlockers: [...job.previousBlockers],
   });
 
+  // A real review reads the packet the orchestrator persisted, which carries
+  // the change surface collected from git rather than claimed by the Developer.
+  const packet = job.packetPath ? await readJson(job.packetPath, { required: true }) : null;
+  const prompt = packet ? renderReviewPrompt(packet) : buildPrompt(context);
+
   log('FABLE STARTED', `session ${session.sessionId.slice(0, 8)}`);
+  if (packet) log('DEEP REVIEW', `${packet.changedFiles.length} arquivos alterados`);
 
   // The SAME Fable session is resumed on every retry: a capacity limit must not
   // cost the reviewer its continuity, and never switches model.
@@ -165,8 +183,12 @@ async function handleJob(rawJob) {
     onEvent: onCapacityEvent,
     invoke: async () => {
       const outcome = await session.send({
-        prompt: buildPrompt(context),
+        prompt,
         jsonSchema: REVIEW_DECISION_SCHEMA,
+        tools: REVIEWER_TOOLS,
+        permissionMode: 'auto',
+        addDirs: job.worktree ? [job.worktree] : [],
+        safeMode: false,
         validatePayload: (payload) => validateReviewDecision(payload, {
           jobId: job.jobId,
           goal: job.goal,

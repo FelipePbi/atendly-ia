@@ -61,3 +61,6 @@ docs/product-vault/.obsidian/hotkeys.json
 docs/product-vault/.obsidian/plugins/
 docs/product-vault/.obsidian/themes/
 docs/product-vault/.trash/
+
+# IA Loop worktrees (criadas por tools/ia-loop; nunca versionadas)
+.ai-worktrees/

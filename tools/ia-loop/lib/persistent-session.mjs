@@ -70,7 +70,10 @@ export function createPersistentSession({
      * Sends one message. The first send creates the conversation; every later
      * send resumes it, so context accumulates across separate processes.
      */
-    async send({ prompt, jsonSchema, validatePayload, timeoutMs: perCallTimeout }) {
+    async send({
+      prompt, jsonSchema, validatePayload, timeoutMs: perCallTimeout,
+      tools = '', permissionMode = null, addDirs = [], safeMode = true,
+    }) {
       const outcome = await invokeAgent({
         executable,
         model,
@@ -83,6 +86,10 @@ export function createPersistentSession({
         sessionId,
         persistSession: true,
         resume: hasConversation,
+        tools,
+        permissionMode,
+        addDirs,
+        safeMode,
         timeoutMs: perCallTimeout ?? timeoutMs,
       });
 

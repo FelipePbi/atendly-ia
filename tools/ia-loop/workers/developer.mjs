@@ -31,7 +31,22 @@ const STATE_DIR = join(HERE, '..', '.state');
 
 const ROLE = 'developer';
 const MODEL = process.env.IA_LOOP_DEVELOPER_MODEL ?? 'claude-opus-5';
-const TIMEOUT_MS = Number(process.env.IA_LOOP_TIMEOUT_MS ?? 900_000);
+// A real Goal is hours of work, not minutes.
+const TIMEOUT_MS = Number(process.env.IA_LOOP_DEVELOPER_TIMEOUT_MS ?? 4 * 60 * 60 * 1000);
+
+/**
+ * Execution profile for real work.
+ *
+ * The Developer needs to read, write and run commands inside its worktree.
+ * Measured: only permission mode "auto" authorises both file writes and Bash
+ * without a prompt. safeMode is off so the project's own CLAUDE.md and AGENTS.md
+ * rules load, which the Goal explicitly requires the executor to follow.
+ *
+ * These guards detect, they do not sandbox: Bash can reach outside the
+ * worktree. The orchestrator snapshots the repository before and after and
+ * fails the run on any violation.
+ */
+const DEVELOPER_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'TodoWrite'];
 
 const store = createJobStore(STATE_DIR);
 
@@ -72,17 +87,45 @@ function onCapacityEvent(event) {
   }
 }
 
-function buildPrompt(context) {
+function buildPrompt(context, job) {
   return [
     'Você está atuando como Developer em um pipeline automatizado do Atendly.',
+    'Esta é uma execução REAL: você deve implementar o Goal de verdade nesta worktree.',
     '',
-    'Contexto explícito desta tarefa (não há conversa anterior):',
+    'Contexto explícito desta tarefa (não há conversa anterior; nada foi dito antes):',
     JSON.stringify(context, null, 2),
     '',
-    'Leia os arquivos indicados em mustRead e consulte seletivamente o que estiver em consultSelectively.',
-    'Siga as regras do CLAUDE.md e do AGENTS.md do projeto.',
+    `Trabalhe exclusivamente dentro de: ${job.worktree}`,
     '',
-    'Retorne exclusivamente o JSON do contrato DeveloperResult.',
+    'Autorização e critério: o próprio Goal, em ' + context.goalPath + '.',
+    'Leia-o por inteiro antes de começar. Ele define escopo, pontos de implementação,',
+    'o que é obrigatório e o que está fora de escopo. Não amplie o Goal.',
+    '',
+    'Leia também CLAUDE.md e AGENTS.md e siga as regras do projeto, inclusive',
+    'consulta seletiva (Graphify para call paths, Product Vault sob demanda).',
+    'Não carregue documentação inteira.',
+    '',
+    'Você PODE: ler código, usar Graphify, editar a worktree, criar migrations,',
+    'criar/alterar testes e executar comandos, incluindo as validações que o Goal exigir.',
+    '',
+    'Você NÃO PODE, em nenhuma hipótese:',
+    '- criar commit, push, merge ou PR;',
+    '- mudar de branch ou alterar o checkout principal do repositório;',
+    '- escrever fora da worktree indicada;',
+    '- editar documentos de controle da migração (goals/, reviews/, MIGRATION_STATUS.md);',
+    '- declarar o Goal ACCEPTED ou alterar a baseline aceita;',
+    '- criar o próximo Goal.',
+    'O orchestrator verifica isso no Git depois; violação encerra a execução.',
+    '',
+    'Ao terminar, retorne exclusivamente o JSON do contrato DeveloperResult, com:',
+    '- status: "REVIEW_REQUIRED" se implementou, "BLOCKED" se não pôde prosseguir;',
+    '- summary: uma frase;',
+    '- implementationReport: relatório conforme o Goal pede (diff inicial/final, arquivos e',
+    '  consumers, decisões de escopo, migrations/compatibilidade, RED/GREEN dos casos negativos,',
+    '  comandos executados com resultado, e limitações);',
+    '- validations: lista de {name, passed, detail} com as validações que você realmente rodou.',
+    '',
+    'Não invente resultado de validação que você não executou.',
   ].join('\n');
 }
 
@@ -111,7 +154,8 @@ async function handleJob(rawJob) {
   currentJob.sessionId = sessionId;
 
   const executable = resolveClaudeExecutable();
-  log('OPUS STARTED', `session ${sessionId.slice(0, 8)}`);
+  log('OPUS STARTED', `session ${sessionId.slice(0, 8)} · worktree ${job.worktree}`);
+  log('IMPLEMENTING', `${job.goal} round ${job.round} — pode levar horas`);
 
   // Each retry gets a brand-new session id: the Developer is stateless, so a
   // capacity retry re-sends the same explicit context, never a resumed chat.
@@ -131,7 +175,7 @@ async function handleJob(rawJob) {
         model: MODEL,
         expectedFamily: 'opus',
         expectedRole: ROLE,
-        prompt: buildPrompt(context),
+        prompt: buildPrompt(context, job),
         jsonSchema: DEVELOPER_RESULT_SCHEMA,
         validatePayload: (payload) => validateDeveloperResult(payload, {
           jobId: job.jobId,
@@ -143,6 +187,11 @@ async function handleJob(rawJob) {
         // Explicitly NOT persisted and NOT resumed. No fallback model, ever.
         persistSession: false,
         resume: false,
+        // Real execution profile, scoped to the worktree.
+        tools: DEVELOPER_TOOLS,
+        permissionMode: 'auto',
+        addDirs: [job.worktree],
+        safeMode: false,
         timeoutMs: TIMEOUT_MS,
       });
     },

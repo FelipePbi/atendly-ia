@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 
 import {
   branchNameFor,
-  createWorktree,
+  createWorktreeForGoal,
   planWorktree,
   worktreePathFor,
 } from '../lib/worktree-manager.mjs';
@@ -111,8 +111,85 @@ test('a malformed goal id is refused', async () => {
   );
 });
 
-test('creating a worktree is not implemented in V2', () => {
-  assert.throws(() => createWorktree(), codeIs('WORKTREE_CREATION_NOT_IMPLEMENTED'));
+test('creating a worktree requires a plan with no blockers', async () => {
+  let called = false;
+  const createFn = async () => { called = true; return { path: 'p', branch: 'b', head: BASE }; };
+
+  await assert.rejects(
+    createWorktreeForGoal({
+      goalId: '003',
+      executionBase: BASE,
+      git: gitProbe({ branchExists: async () => true }),
+      repoRoot: '/repo',
+      createFn,
+    }),
+    codeIs('WORKTREE_PLAN_UNSAFE'),
+  );
+  assert.equal(called, false, 'nothing may be created while the plan is unsafe');
+});
+
+test('a safe plan creates the worktree at the execution base', async () => {
+  const calls = [];
+  const created = await createWorktreeForGoal({
+    goalId: '003',
+    executionBase: BASE,
+    git: gitProbe(),
+    repoRoot: '/repo',
+    createFn: async (args) => {
+      calls.push(args);
+      return { path: '/repo/.ai-worktrees/goal-003', branch: 'ai-loop/goal-003', head: BASE };
+    },
+  });
+
+  assert.equal(created.created, true);
+  // worktreeInitialHead equals executionBase by definition at creation time.
+  assert.equal(created.worktreeInitialHead, BASE);
+  assert.equal(created.branch, 'ai-loop/goal-003');
+  assert.deepEqual(calls, [{
+    repoRoot: '/repo',
+    path: '.ai-worktrees/goal-003',
+    branch: 'ai-loop/goal-003',
+    base: BASE,
+  }]);
+});
+
+test('a worktree that did not start at the execution base is refused', async () => {
+  await assert.rejects(
+    createWorktreeForGoal({
+      goalId: '003',
+      executionBase: BASE,
+      git: gitProbe(),
+      repoRoot: '/repo',
+      createFn: async () => ({ path: 'p', branch: 'ai-loop/goal-003', head: 'deadbeef'.repeat(5) }),
+    }),
+    codeIs('WORKTREE_HEAD_MISMATCH'),
+  );
+});
+
+test('a dirty main checkout blocks creation', async () => {
+  await assert.rejects(
+    createWorktreeForGoal({
+      goalId: '003',
+      executionBase: BASE,
+      git: gitProbe({ isDirty: async () => true }),
+      repoRoot: '/repo',
+      createFn: async () => { throw new Error('must not be called'); },
+    }),
+    codeIs('WORKTREE_PLAN_UNSAFE'),
+  );
+});
+
+test('an existing path blocks creation', async () => {
+  await assert.rejects(
+    createWorktreeForGoal({
+      goalId: '003',
+      executionBase: BASE,
+      git: gitProbe({ pathExists: async () => true }),
+      repoRoot: '/repo',
+      createFn: async () => { throw new Error('must not be called'); },
+    }),
+    codeIs('WORKTREE_PLAN_UNSAFE'),
+  );
 });
 
 test('naming conventions are stable', () => {

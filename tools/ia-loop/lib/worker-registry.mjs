@@ -21,6 +21,9 @@ export const OFFLINE_AFTER_MS = 60_000;
 
 export const WORKER_STATES = Object.freeze([
   'STARTING', 'IDLE', 'WORKING', 'PUBLISHING', 'ERROR', 'STOPPING',
+  // A worker waiting out a model limit is healthy, not stuck: it keeps
+  // heartbeating so health never degrades to STALE/OFFLINE while it waits.
+  'WAITING_FOR_CAPACITY',
 ]);
 
 /** Session strategy per role. The asymmetry is deliberate — see the README. */
@@ -29,7 +32,10 @@ export const SESSION_STRATEGY = Object.freeze({
   STATELESS: 'STATELESS',
 });
 
-export async function writeHeartbeat(store, role, { state, model, sessionStrategy, sessionId = null, detail = null }) {
+export async function writeHeartbeat(store, role, {
+  state, model, sessionStrategy, sessionId = null, detail = null,
+  capacityReason = null, nextRetryAt = null,
+}) {
   if (!WORKER_STATES.includes(state)) {
     throw new SpikeError('INVALID_ARGS', `Unknown worker state ${JSON.stringify(state)}`);
   }
@@ -44,6 +50,8 @@ export async function writeHeartbeat(store, role, { state, model, sessionStrateg
     // Truncated on purpose: enough to correlate logs, not the full identifier.
     sessionIdShort: sessionId ? String(sessionId).slice(0, 8) : null,
     detail,
+    capacityReason,
+    nextRetryAt,
     lastHeartbeat: new Date().toISOString(),
   });
 }
@@ -78,6 +86,8 @@ export async function readWorkerHealth(store, role, options = {}) {
     model: heartbeat?.model ?? null,
     sessionStrategy: heartbeat?.sessionStrategy ?? null,
     sessionIdShort: heartbeat?.sessionIdShort ?? null,
+    capacityReason: heartbeat?.capacityReason ?? null,
+    nextRetryAt: heartbeat?.nextRetryAt ?? null,
     pid: heartbeat?.pid ?? null,
   };
 }

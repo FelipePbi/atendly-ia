@@ -11,6 +11,7 @@ Duas etapas concluídas:
 | Vertical Slice Supervisionada V1 | `PASS` |
 | Spike 1 — Persistent Dual Session | `BLOCKED` (Fable OK, Opus 5 não sustenta multi-turno) |
 | V2 — Hybrid Real Goal Harness | `PASS` (dry-run; Goal003 **não** executado) |
+| Capacity / Usage Limits | `PASS` (espera controlada, retomada exata) |
 
 ---
 
@@ -524,10 +525,190 @@ Fable será tratada separadamente, antes da primeira execução real do Goal003.
 
 ---
 
+## Capacity / Usage Limits
+
+Um limite de uso do modelo é uma pausa esperada, **não** uma falha do Goal.
+
+O IA Loop persiste o estado, entra em espera controlada e retoma exatamente a
+etapa bloqueada quando a capacidade volta. Nada do que já foi concluído é
+refeito, e o modelo **nunca** é trocado.
+
+### Garantias
+
+| Garantia | Como é obtida |
+| --- | --- |
+| O Goal não é encerrado | Um limite leva a `WAITING_FOR_CAPACITY`, nunca a falha |
+| O contexto não é perdido | Estado em disco com escrita atômica; sessão do Fable preservada |
+| Trabalho concluído não é repetido | Resultado persistido por `jobId` + status do job |
+| O modelo não é trocado | Sem fallback: o mesmo modelo retoma. `--fallback-model` nunca é usado |
+| Sem retry apertado | Espera baseada em `nextRetryAt` persistido, não em polling |
+| Limite temporário não vira HUMAN_REQUIRED | Só auth/billing/model/fatal escalam |
+
+### Classificação de erros
+
+Centralizada em `lib/capacity-classifier.mjs`. Sinais estruturados (nossos
+próprios códigos de erro, `terminal_reason`, status HTTP) têm precedência sobre
+casamento de texto, que é o último recurso.
+
+| Causa | Política |
+| --- | --- |
+| `RATE_LIMIT` | Espera. Usa `Retry-After` quando existe; senão backoff progressivo |
+| `USAGE_LIMIT` | Espera longa e retenta indefinidamente enquanto a causa for essa |
+| `AUTH_ERROR` | `HUMAN_REQUIRED` — retry não resolve autenticação |
+| `BILLING_ERROR` | `HUMAN_REQUIRED` — e não se troca de provider/modelo |
+| `MODEL_UNAVAILABLE` | `HUMAN_REQUIRED` — sem fallback |
+| `UNKNOWN_TRANSIENT` | Retry limitado (3), depois `HUMAN_REQUIRED` |
+| `UNKNOWN_FATAL` | `HUMAN_REQUIRED` imediato |
+
+Um fallback de modelo detectado (`MODEL_FALLBACK_DETECTED`) é classificado como
+`UNKNOWN_FATAL` de propósito: é invariante violada, não algo a contornar com
+retry.
+
+Diagnósticos são sanitizados e truncados antes de qualquer persistência —
+tokens, cookies, chaves, senhas e UUIDs de sessão são redigidos.
+
+### Backoff
+
+```
+RATE_LIMIT:   30s → 60s → 120s → 300s   (teto de 5 min, inclusive sobre Retry-After)
+USAGE_LIMIT:  20 min, sem teto de tentativas
+UNKNOWN_TRANSIENT: 15s → 30s → 60s, máx. 3 tentativas
+```
+
+Configuração em `lib/capacity-config.mjs`; nada de número mágico espalhado.
+Sobrescrevível por ambiente (`IA_LOOP_USAGE_LIMIT_RETRY_MS`, etc.).
+
+### Estado persistido
+
+```json
+{
+  "goal": "003",
+  "round": 2,
+  "state": "WAITING_FOR_CAPACITY",
+  "blockedAgent": "tech_lead",
+  "resumeFrom": "REVIEWER_RUNNING",
+  "blockedJobId": "003-r2-tech_lead-…",
+  "capacity": {
+    "reason": "USAGE_LIMIT",
+    "attempt": 4,
+    "firstSeenAt": "…",
+    "lastAttemptAt": "…",
+    "nextRetryAt": "…",
+    "retryIntervalMs": 1200000
+  }
+}
+```
+
+Escrita atômica, timestamps ISO. Registro corrompido **falha fechado**
+(`CAPACITY_STATE_CORRUPT`) e nunca é zerado: agir sobre um estado meio escrito
+poderia duplicar uma inferência ou pular trabalho concluído. A baseline aceita e
+o Goal nunca são alterados por um evento de capacidade.
+
+### Retomada exata
+
+O campo `resumeFrom` é o que impede repetir trabalho. Exemplo real:
+
+```
+Opus termina Goal003/R2  → DeveloperResult persistido
+Fable começa o review    → bate USAGE_LIMIT
+                         → WAITING_FOR_CAPACITY, resumeFrom = REVIEWER_RUNNING
+Quando volta             → retoma SÓ o review, com o mesmo ReviewJob
+                         → Opus NÃO é chamado de novo
+```
+
+E no sentido inverso: se o Developer for limitado na R3, ao voltar retoma
+somente a R3 — a R2 não é refeita e o Fable não é chamado antes do Developer
+terminar.
+
+A idempotência fecha a janela perigosa: se o retry disparou, a resposta chegou e
+o processo caiu antes de avançar o estado, o restart encontra o resultado no
+disco e **não chama o modelo de novo**.
+
+### Limites são por agente
+
+Fable e Opus têm limites independentes. Se o Tech Lead está em
+`WAITING_FOR_CAPACITY`, o Developer continua `IDLE` — não é marcado como
+limitado. O orchestrator sabe qual agente está bloqueado (`blockedAgent`).
+
+### Heartbeat durante a espera
+
+Um worker esperando continua batendo heartbeat com estado
+`WAITING_FOR_CAPACITY`, `reason` e `nextRetryAt`. Ele está saudável, não travado,
+então o health check nunca o classifica como `STALE`/`OFFLINE`.
+
+### Sobrevive a restart
+
+O cenário coberto: o limite chega, o estado é salvo, você fecha os terminais ou
+reinicia o Windows, reabre os dois workers e roda `resume`. O sistema conhece
+Goal, round, job, agente bloqueado, motivo, `nextRetryAt` e `resumeFrom` — e não
+reexecuta nada.
+
+Ao retomar, só o tempo **restante** é aguardado: se a máquina ficou desligada 15
+dos 20 minutos, espera-se apenas os 5 que faltam.
+
+### Comandos
+
+```bash
+npm run ia-loop:status
+```
+
+```
+ATENDLY IA LOOP
+
+Goal: 003
+Round: 2
+State: WAITING_FOR_CAPACITY
+
+Developer:
+  Model: claude-opus-5
+  State: IDLE
+  Reason: waiting for Tech Lead
+
+Tech Lead:
+  Model: claude-fable-5-1
+  State: WAITING_FOR_CAPACITY
+  Reason: USAGE_LIMIT
+  Retry in: 12m 43s
+  Attempt: 4
+
+Resume from: REVIEWER_RUNNING
+Blocked job: 003-r2-tech_lead-…
+
+Last accepted baseline:
+1e874e27…
+
+No work lost.
+```
+
+```bash
+npm run ia-loop:resume
+```
+
+Carrega o estado, valida integridade, respeita `nextRetryAt`, não duplica job e
+não recria resultado que já exista. Sem nada parado, informa e sai com sucesso.
+
+**`resume` não é override de human gate.** Com o estado em `HUMAN_REQUIRED` ele
+recusa continuar e diz por quê.
+
+### Eventos registrados
+
+`CAPACITY_LIMIT_REACHED`, `CAPACITY_WAIT_STARTED`, `CAPACITY_RETRY`,
+`CAPACITY_AVAILABLE`, `CAPACITY_WAIT_ENDED`, `HUMAN_REQUIRED` — com goal, round,
+agente, motivo, tentativa e `nextRetryAt`. Prompt e resposta completos nunca são
+registrados.
+
+### Testes
+
+Toda a política é testada com fixtures sanitizadas, agente falso e **relógio
+virtual**: a espera de 20 minutos do `USAGE_LIMIT` é exercitada ponta a ponta sem
+gastar tempo real nem quota. Nenhum teste provoca limite de verdade.
+
+---
+
 ## Como executar
 
 ```bash
-npm run test:ia-loop       # 127 testes locais, sem chamadas reais a modelo
+npm run test:ia-loop       # 162 testes locais, sem chamadas reais a modelo
 ```
 
 ```bash
@@ -554,6 +735,14 @@ npm run ia-loop:developer  # Terminal B: worker Opus, inferências stateless
 
 ```bash
 npm run ia-loop:goal -- 003 --dry-run   # não publica job, não cria worktree, não chama modelo
+```
+
+```bash
+npm run ia-loop:status     # lê o estado persistido; não chama modelo
+```
+
+```bash
+npm run ia-loop:resume     # retoma uma etapa parada por limite de capacidade
 ```
 
 | Variável | Efeito |
@@ -586,6 +775,14 @@ session ids nem dados pessoais.
 | `lib/context-builders.mjs` | Pacotes explícitos de contexto por papel |
 | `lib/loop-state.mjs` | Máquina de estados V2 com human gate |
 | `lib/worker-loop.mjs` | Plumbing comum dos workers |
+| `run-status.mjs` | Status a partir do disco; nunca chama modelo |
+| `run-resume.mjs` | Retomada de etapa parada por capacidade |
+| `lib/capacity-config.mjs` | Intervalos e limites centralizados |
+| `lib/capacity-classifier.mjs` | Classificação de erro e sanitização de diagnóstico |
+| `lib/capacity-policy.mjs` | Política por causa: esperar ou escalar |
+| `lib/capacity-state.mjs` | Estado durável de espera, com resumeFrom |
+| `lib/capacity-runner.mjs` | Executa uma inferência sob controle de capacidade |
+| `lib/clock.mjs` | Relógio injetável, para testar esperas sem esperar |
 | `lib/claude-process.mjs` | Executável, spawn, timeout, parsing, resolução de modelo |
 | `lib/contracts.mjs` | Contratos Developer/Reviewer e handoff |
 | `lib/state-machine.mjs` | Máquina de estados mínima |
@@ -593,7 +790,7 @@ session ids nem dados pessoais.
 | `lib/persistent-session.mjs` | Sessão por agente: cria no 1º turno, resume nos seguintes |
 | `lib/session-registry.mjs` | Registro durável de sessões, com escrita atômica |
 | `fixtures/synthetic-goal.md` | Tarefa sintética, fora do runtime |
-| `tests/*.test.mjs` | 127 testes com processo fake; nenhuma chamada real |
+| `tests/*.test.mjs` | 162 testes com processo/agente fake; nenhuma chamada real |
 
 ## Limitações conhecidas
 

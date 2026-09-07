@@ -21,6 +21,8 @@ import { invokeAgent, resolveClaudeExecutable } from '../lib/claude-process.mjs'
 import { createJobStore } from '../lib/job-store.mjs';
 import { SESSION_STRATEGY } from '../lib/worker-registry.mjs';
 import { banner, log, runWorkerLoop } from '../lib/worker-loop.mjs';
+import { runWithCapacity, RUN_OUTCOMES } from '../lib/capacity-runner.mjs';
+import { LOOP_STATES } from '../lib/loop-state.mjs';
 import { DEVELOPER_RESULT_SCHEMA, validateDeveloperJob, validateDeveloperResult } from '../lib/contracts-v2.mjs';
 import { buildDeveloperContext } from '../lib/context-builders.mjs';
 
@@ -35,6 +37,9 @@ const store = createJobStore(STATE_DIR);
 
 let workerState = 'STARTING';
 let currentJob = null;
+// Kept so the heartbeat keeps reporting a live, waiting worker rather than
+// looking stalled while a model limit is being waited out.
+let capacityWait = null;
 
 const getStatus = () => ({
   state: workerState,
@@ -44,7 +49,28 @@ const getStatus = () => ({
   // reported, and truncated.
   sessionId: currentJob?.sessionId ?? null,
   detail: currentJob ? `${currentJob.goal}/R${currentJob.round}` : null,
+  capacityReason: capacityWait?.reason ?? null,
+  nextRetryAt: capacityWait?.nextRetryAt ?? null,
 });
+
+function onCapacityEvent(event) {
+  if (event.type === 'CAPACITY_WAIT' || event.type === 'CAPACITY_WAIT_RESUMED_FROM_DISK') {
+    capacityWait = { reason: event.reason, nextRetryAt: event.nextRetryAt ?? capacityWait?.nextRetryAt ?? null };
+    workerState = 'WAITING_FOR_CAPACITY';
+    log('CAPACITY LIMIT', `${event.reason} · retry in ${event.remaining}`);
+    log('STATE', 'WAITING_FOR_CAPACITY · Goal state preserved');
+    if (event.resumeFrom) log('RESUME', event.resumeFrom);
+  } else if (event.type === 'CAPACITY_AVAILABLE') {
+    log('CAPACITY AVAILABLE', 'resuming');
+    capacityWait = null;
+    workerState = 'WORKING';
+  } else if (event.type === 'ALREADY_COMPLETED') {
+    log('ALREADY COMPLETED', 'result on disk; model not called again');
+  } else if (event.type === 'HUMAN_REQUIRED') {
+    log('HUMAN REQUIRED', event.reason);
+    capacityWait = null;
+  }
+}
 
 function buildPrompt(context) {
   return [
@@ -87,51 +113,64 @@ async function handleJob(rawJob) {
   const executable = resolveClaudeExecutable();
   log('OPUS STARTED', `session ${sessionId.slice(0, 8)}`);
 
-  const outcome = await invokeAgent({
-    executable: executable.path,
-    model: MODEL,
-    expectedFamily: 'opus',
-    expectedRole: ROLE,
-    prompt: buildPrompt(context),
-    jsonSchema: DEVELOPER_RESULT_SCHEMA,
-    validatePayload: (payload) => validateDeveloperResult(payload, {
-      jobId: job.jobId,
-      goal: job.goal,
-      round: job.round,
-    }),
-    cwd: job.worktree,
-    sessionId,
-    // Explicitly NOT persisted and NOT resumed.
-    persistSession: false,
-    resume: false,
-    timeoutMs: TIMEOUT_MS,
+  // Each retry gets a brand-new session id: the Developer is stateless, so a
+  // capacity retry re-sends the same explicit context, never a resumed chat.
+  const run = await runWithCapacity({
+    store,
+    role: ROLE,
+    jobId: job.jobId,
+    goal: job.goal,
+    round: job.round,
+    resumeFrom: LOOP_STATES.DEVELOPER_RUNNING,
+    onEvent: onCapacityEvent,
+    invoke: async () => {
+      const attemptSessionId = randomUUID();
+      currentJob.sessionId = attemptSessionId;
+      return invokeAgent({
+        executable: executable.path,
+        model: MODEL,
+        expectedFamily: 'opus',
+        expectedRole: ROLE,
+        prompt: buildPrompt(context),
+        jsonSchema: DEVELOPER_RESULT_SCHEMA,
+        validatePayload: (payload) => validateDeveloperResult(payload, {
+          jobId: job.jobId,
+          goal: job.goal,
+          round: job.round,
+        }),
+        cwd: job.worktree,
+        sessionId: attemptSessionId,
+        // Explicitly NOT persisted and NOT resumed. No fallback model, ever.
+        persistSession: false,
+        resume: false,
+        timeoutMs: TIMEOUT_MS,
+      });
+    },
   });
 
-  log('OPUS COMPLETED', outcome.error ? `error ${outcome.error.code}` : `primary ${outcome.resolvedPrimaryModel}`);
+  log('OPUS COMPLETED', run.outcome);
 
-  if (outcome.error || !outcome.structuredOutput) {
-    workerState = 'ERROR';
-    const code = outcome.error?.code ?? 'STEP_FAILED';
-    log('RESULT FAILED', code);
-    await store.publishResult(ROLE, job.jobId, { ok: false, code, message: outcome.error?.message ?? 'no structured output' });
-    await store.appendEvent({ type: 'DEVELOPER_JOB_FAILED', jobId: job.jobId, code });
+  if (run.outcome === RUN_OUTCOMES.HUMAN_REQUIRED) {
+    await store.appendEvent({ type: 'DEVELOPER_JOB_FAILED', jobId: job.jobId, code: run.reason });
     currentJob = null;
+    capacityWait = null;
     workerState = 'IDLE';
     return;
   }
 
   workerState = 'PUBLISHING';
-  await store.publishResult(ROLE, job.jobId, { ok: true, result: outcome.payload });
   await store.appendEvent({
     type: 'DEVELOPER_RESULT_PUBLISHED',
     jobId: job.jobId,
     goal: job.goal,
     round: job.round,
-    status: outcome.payload.status,
+    status: run.result?.status ?? 'UNKNOWN',
+    reused: run.outcome === RUN_OUTCOMES.ALREADY_COMPLETED,
   });
 
-  log(`RESULT ${outcome.payload.status}`);
+  log(`RESULT ${run.result?.status ?? 'UNKNOWN'}`);
   currentJob = null;
+  capacityWait = null;
   workerState = 'IDLE';
 }
 

@@ -27,6 +27,11 @@ import { ROLES } from './contracts-v2.mjs';
 
 export const STORE_VERSION = 1;
 
+/** Lifecycle of a single job, persisted alongside it. */
+export const JOB_STATUSES = Object.freeze([
+  'QUEUED', 'RUNNING', 'WAITING_FOR_CAPACITY', 'COMPLETED', 'FAILED',
+]);
+
 function fail(code, message, details = {}) {
   throw new SpikeError(code, message, details);
 }
@@ -84,6 +89,38 @@ export function createJobStore(stateDir) {
   return {
     paths,
 
+    /**
+     * Marks where a job is in its lifecycle. Combined with a result persisted
+     * per jobId, this is what makes a retry safe: a job that already COMPLETED
+     * is never re-sent to a model.
+     */
+    async setJobStatus(role, jobId, status) {
+      if (!JOB_STATUSES.includes(status)) {
+        fail('INVALID_JOB_STATUS', `Unknown job status ${JSON.stringify(status)}`);
+      }
+      const path = paths.job(role, jobId);
+      const envelope = await readJson(path, { required: true });
+      await writeJsonAtomic(path, { ...envelope, status, statusAt: new Date().toISOString() });
+      return status;
+    },
+
+    async readJobStatus(role, jobId) {
+      const envelope = await readJson(paths.job(role, jobId));
+      return envelope?.status ?? null;
+    },
+
+    /**
+     * True when a successful result is already on disk for this job.
+     *
+     * Guards the dangerous window: retry fires, the model answers, the process
+     * dies before the state is advanced, and the restart would otherwise call
+     * the model again for work that is already done.
+     */
+    async hasCompletedResult(role, jobId) {
+      const envelope = await readJson(paths.result(role, jobId));
+      return envelope?.result?.ok === true;
+    },
+
     newJobId(goal, round, role) {
       return `${goal}-r${round}-${role}-${randomUUID().slice(0, 8)}`;
     },
@@ -138,7 +175,12 @@ export function createJobStore(stateDir) {
         fail('DUPLICATE_JOB', `Job ${job.jobId} already exists for role "${role}"`);
       }
 
-      await writeJsonAtomic(path, { storeVersion: STORE_VERSION, publishedAt: new Date().toISOString(), job });
+      await writeJsonAtomic(path, {
+        storeVersion: STORE_VERSION,
+        publishedAt: new Date().toISOString(),
+        status: 'QUEUED',
+        job,
+      });
       return path;
     },
 

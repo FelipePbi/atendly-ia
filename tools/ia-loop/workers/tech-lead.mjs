@@ -31,6 +31,8 @@ import {
 } from '../lib/session-registry.mjs';
 import { SESSION_STRATEGY } from '../lib/worker-registry.mjs';
 import { banner, log, runWorkerLoop } from '../lib/worker-loop.mjs';
+import { runWithCapacity, RUN_OUTCOMES } from '../lib/capacity-runner.mjs';
+import { LOOP_STATES } from '../lib/loop-state.mjs';
 import { REVIEW_DECISION_SCHEMA, validateReviewJob, validateReviewDecision } from '../lib/contracts-v2.mjs';
 import { buildTechLeadContext } from '../lib/context-builders.mjs';
 
@@ -48,6 +50,7 @@ const store = createJobStore(STATE_DIR);
 let workerState = 'STARTING';
 let session = null;
 let currentJob = null;
+let capacityWait = null;
 
 const getStatus = () => ({
   state: workerState,
@@ -55,7 +58,28 @@ const getStatus = () => ({
   sessionStrategy: SESSION_STRATEGY.PERSISTENT,
   sessionId: session?.sessionId ?? null,
   detail: currentJob ? `${currentJob.goal}/R${currentJob.round}` : null,
+  capacityReason: capacityWait?.reason ?? null,
+  nextRetryAt: capacityWait?.nextRetryAt ?? null,
 });
+
+function onCapacityEvent(event) {
+  if (event.type === 'CAPACITY_WAIT' || event.type === 'CAPACITY_WAIT_RESUMED_FROM_DISK') {
+    capacityWait = { reason: event.reason, nextRetryAt: event.nextRetryAt ?? capacityWait?.nextRetryAt ?? null };
+    workerState = 'WAITING_FOR_CAPACITY';
+    log('CAPACITY LIMIT', `${event.reason} · retry in ${event.remaining}`);
+    log('STATE', 'WAITING_FOR_CAPACITY · Goal state preserved');
+    if (event.resumeFrom) log('RESUME', event.resumeFrom);
+  } else if (event.type === 'CAPACITY_AVAILABLE') {
+    log('CAPACITY AVAILABLE', 'resuming');
+    capacityWait = null;
+    workerState = 'WORKING';
+  } else if (event.type === 'ALREADY_COMPLETED') {
+    log('ALREADY COMPLETED', 'decision on disk; model not called again');
+  } else if (event.type === 'HUMAN_REQUIRED') {
+    log('HUMAN REQUIRED', event.reason);
+    capacityWait = null;
+  }
+}
 
 /**
  * Restores the session from the durable registry, or creates one.
@@ -129,49 +153,56 @@ async function handleJob(rawJob) {
 
   log('FABLE STARTED', `session ${session.sessionId.slice(0, 8)}`);
 
-  const outcome = await session.send({
-    prompt: buildPrompt(context),
-    jsonSchema: REVIEW_DECISION_SCHEMA,
-    validatePayload: (payload) => validateReviewDecision(payload, {
-      jobId: job.jobId,
-      goal: job.goal,
-      round: job.round,
-    }),
+  // The SAME Fable session is resumed on every retry: a capacity limit must not
+  // cost the reviewer its continuity, and never switches model.
+  const run = await runWithCapacity({
+    store,
+    role: ROLE,
+    jobId: job.jobId,
+    goal: job.goal,
+    round: job.round,
+    resumeFrom: LOOP_STATES.REVIEWER_RUNNING,
+    onEvent: onCapacityEvent,
+    invoke: async () => {
+      const outcome = await session.send({
+        prompt: buildPrompt(context),
+        jsonSchema: REVIEW_DECISION_SCHEMA,
+        validatePayload: (payload) => validateReviewDecision(payload, {
+          jobId: job.jobId,
+          goal: job.goal,
+          round: job.round,
+        }),
+      });
+      await persistSession();
+      return outcome;
+    },
   });
 
-  await persistSession();
-  log('FABLE COMPLETED', outcome.error ? `error ${outcome.error.code}` : `primary ${outcome.resolvedPrimaryModel}`);
+  log('FABLE COMPLETED', run.outcome);
 
-  if (outcome.error || !outcome.structuredOutput) {
-    // A failed resume mid-review must not silently become a new session: the
-    // review would then be based on different continuity than it started with.
+  if (run.outcome === RUN_OUTCOMES.HUMAN_REQUIRED) {
     workerState = 'ERROR';
-    const code = outcome.error?.code ?? 'STEP_FAILED';
-    log('DECISION HUMAN_REQUIRED', code);
-    await store.publishResult(ROLE, job.jobId, {
-      ok: false,
-      code,
-      message: outcome.error?.message ?? 'no structured output',
-      escalation: 'HUMAN_REQUIRED',
-    });
-    await store.appendEvent({ type: 'REVIEW_JOB_FAILED', jobId: job.jobId, code, escalation: 'HUMAN_REQUIRED' });
+    log('DECISION HUMAN_REQUIRED', run.reason);
+    await store.appendEvent({ type: 'REVIEW_JOB_FAILED', jobId: job.jobId, code: run.reason, escalation: 'HUMAN_REQUIRED' });
     currentJob = null;
+    capacityWait = null;
     workerState = 'IDLE';
     return;
   }
 
   workerState = 'PUBLISHING';
-  await store.publishResult(ROLE, job.jobId, { ok: true, result: outcome.payload });
   await store.appendEvent({
     type: 'REVIEW_DECISION_PUBLISHED',
     jobId: job.jobId,
     goal: job.goal,
     round: job.round,
-    decision: outcome.payload.decision,
+    decision: run.result?.decision ?? 'UNKNOWN',
+    reused: run.outcome === RUN_OUTCOMES.ALREADY_COMPLETED,
   });
 
-  log(`DECISION ${outcome.payload.decision}`);
+  log(`DECISION ${run.result?.decision ?? 'UNKNOWN'}`);
   currentJob = null;
+  capacityWait = null;
   workerState = 'IDLE';
 }
 

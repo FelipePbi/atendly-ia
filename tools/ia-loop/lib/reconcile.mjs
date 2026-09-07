@@ -109,6 +109,22 @@ export function buildStageLedger(jobs) {
 const get = (ledger, goal, round, stage) => ledger.get(stageKey({ goal, round, stage })) ?? null;
 
 /**
+ * The attempt a dispatch should reuse for a stage, if there is one.
+ *
+ * A live attempt first, then an interrupted one. Interrupted used to be
+ * invisible here, so a stage whose only attempt had been cut short got a
+ * brand new random id — the same work under two names, which is exactly the
+ * confusion the stage ledger exists to remove. The jobId IS the stage's job;
+ * what changes between tries is the attempt number.
+ */
+function reusableAttempt(stage) {
+  const attempts = stage?.attempts ?? [];
+  const live = attempts.find((a) => a.status === 'RUNNING' || a.status === 'QUEUED');
+  if (live) return live;
+  return attempts.find((a) => a.status === 'INTERRUPTED') ?? null;
+}
+
+/**
  * Works out the one thing that should happen next.
  *
  * Reads only from the ledger — never from currentJobId, which is a pointer that
@@ -129,7 +145,8 @@ export function decideNextDispatch({ ledger, goal, maxRounds = 3 }) {
         kind: round === 1 ? DISPATCH_KINDS.IMPLEMENTATION : DISPATCH_KINDS.CORRECTION,
         goal, round, stage, role: roleForStage(stage),
         stageKey: stageKey({ goal, round, stage }),
-        resumeAttempt: implementation?.attempts.find((a) => a.status === 'RUNNING' || a.status === 'QUEUED')?.jobId ?? null,
+        resumeAttempt: reusableAttempt(implementation)?.jobId ?? null,
+        resumeAttemptStatus: reusableAttempt(implementation)?.status ?? null,
       };
     }
 
@@ -140,7 +157,8 @@ export function decideNextDispatch({ ledger, goal, maxRounds = 3 }) {
         goal, round, stage: STAGES.REVIEW, role: 'tech_lead',
         stageKey: stageKey({ goal, round, stage: STAGES.REVIEW }),
         implementationJobId: implementation.completedBy,
-        resumeAttempt: review?.attempts.find((a) => a.status === 'RUNNING' || a.status === 'QUEUED')?.jobId ?? null,
+        resumeAttempt: reusableAttempt(review)?.jobId ?? null,
+        resumeAttemptStatus: reusableAttempt(review)?.status ?? null,
       };
     }
 
@@ -177,7 +195,8 @@ export function decideNextDispatch({ ledger, goal, maxRounds = 3 }) {
           // Carried from the review that produced them. Never rediscovered.
           blockers,
           fromReviewJobId: review.completedBy,
-          resumeAttempt: nextCorrection?.attempts.find((a) => a.status === 'RUNNING' || a.status === 'QUEUED')?.jobId ?? null,
+          resumeAttempt: reusableAttempt(nextCorrection)?.jobId ?? null,
+          resumeAttemptStatus: reusableAttempt(nextCorrection)?.status ?? null,
         };
       }
       continue;

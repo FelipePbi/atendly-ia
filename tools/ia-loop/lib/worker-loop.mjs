@@ -117,7 +117,10 @@ export async function runWorkerLoop({
           continue;
         }
 
-        const attemptId = attemptIdFor(jobId, 1);
+        // The attempt number lives on the job. Hardcoding 1 meant a second
+        // attempt at an interrupted stage would have carried the first
+        // attempt's id, and result fencing could not have told them apart.
+        const attemptId = attemptIdFor(jobId, await store.readJobAttempt(role, jobId));
         claimed = await leaseStore.claimJob(jobId, {
           attemptId, agent: role, goal: job.goal, round: job.round, worktree: job.worktree,
         });

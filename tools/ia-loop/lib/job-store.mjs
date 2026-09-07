@@ -18,7 +18,7 @@
  * leave a partially readable job. Corrupt files are refused, never zeroed.
  */
 
-import { mkdir, readFile, readdir, rename, writeFile, appendFile } from 'node:fs/promises';
+import { mkdir, open, readFile, readdir, rename, rm, writeFile, appendFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -59,6 +59,32 @@ export function isTerminalJobStatus(status) {
  */
 export const NON_CLAIMABLE_JOB_STATUSES = Object.freeze([...TERMINAL_JOB_STATUSES, 'INTERRUPTED']);
 
+
+/**
+ * How a dispatch resolved against what was already on disk.
+ *
+ * publishJob refuses to overwrite an existing job, which is right — it is what
+ * stops an accidental second write to a job someone else owns. But the runner
+ * called it even when it had DELIBERATELY chosen to reuse an existing job id,
+ * so every resume of a stage whose job existed died with DUPLICATE_JOB. The
+ * two halves disagreed about who owns the job's existence.
+ */
+export const JOB_DISPATCH = Object.freeze({
+  PUBLISHED: 'PUBLISHED',
+  ALREADY_QUEUED: 'ALREADY_QUEUED',
+  ALREADY_RUNNING: 'ALREADY_RUNNING',
+  NEW_ATTEMPT: 'NEW_ATTEMPT',
+  ALREADY_COMPLETED: 'ALREADY_COMPLETED',
+});
+
+/**
+ * Statuses a job may legitimately be attempted again from.
+ *
+ * INTERRUPTED only. FAILED is deliberately absent: the work was attempted and
+ * did not succeed, and whether to try again is a policy decision a person
+ * makes — not something a restart assumes.
+ */
+export const RETRYABLE_JOB_STATUSES = Object.freeze(['INTERRUPTED']);
 export function isClaimableJobStatus(status) {
   return status === null || status === undefined || !NON_CLAIMABLE_JOB_STATUSES.includes(status);
 }
@@ -167,6 +193,19 @@ export function createJobStore(stateDir) {
       return status;
     },
 
+    /**
+     * Which attempt of this job is current.
+     *
+     * The worker used to hardcode 1, so a second attempt at an interrupted
+     * stage would have worn the first attempt's id and result fencing could not
+     * have told the two apart.
+     */
+    async readJobAttempt(role, jobId) {
+      const envelope = await readJson(paths.job(role, jobId));
+      const attempt = envelope?.attempt;
+      return Number.isInteger(attempt) && attempt >= 1 ? attempt : 1;
+    },
+
     async readJobStatus(role, jobId) {
       const envelope = await readJson(paths.job(role, jobId));
       return envelope?.status ?? null;
@@ -255,6 +294,98 @@ export function createJobStore(stateDir) {
         job,
       });
       return path;
+    },
+
+
+    /**
+     * Dispatches a job, whether or not it already exists.
+     *
+     * One logical stage, many attempts. The jobId stays the same — it IS the
+     * stage's job — and an interrupted attempt is superseded by a numbered
+     * successor rather than by a second job with a different random name.
+     * Creating a new id would mean the same work under two names, which is the
+     * confusion the stage ledger exists to remove.
+     *
+     * Refuses everything the guards refuse: a completed stage, a job that
+     * failed and has not been looked at, an attempt that is genuinely running.
+     */
+    async dispatchJob(role, job, { reason = null } = {}) {
+      assertRole(role);
+      if (!job?.jobId) fail('INVALID_JOB', 'Job must carry a jobId');
+
+      const path = paths.job(role, job.jobId);
+      const existing = await readJson(path);
+
+      if (!existing) {
+        await this.publishJob(role, job);
+        return { outcome: JOB_DISPATCH.PUBLISHED, attempt: 1, jobId: job.jobId };
+      }
+
+      if (await this.hasCompletedResult(role, job.jobId)) {
+        return { outcome: JOB_DISPATCH.ALREADY_COMPLETED, attempt: existing.attempt ?? 1, jobId: job.jobId };
+      }
+
+      const status = existing.status ?? null;
+      if (status === 'RUNNING') {
+        // Whether that attempt is really alive is the lease's question, not
+        // this one's. Dispatch simply does not create a second attempt beside
+        // one that still looks live.
+        return { outcome: JOB_DISPATCH.ALREADY_RUNNING, attempt: existing.attempt ?? 1, jobId: job.jobId };
+      }
+      if (status === 'QUEUED') {
+        return { outcome: JOB_DISPATCH.ALREADY_QUEUED, attempt: existing.attempt ?? 1, jobId: job.jobId };
+      }
+
+      if (!RETRYABLE_JOB_STATUSES.includes(status)) {
+        fail('STAGE_NOT_RETRYABLE',
+          `Job ${job.jobId} is ${status}; a new attempt is not something a restart may assume.`,
+          { jobId: job.jobId, status });
+      }
+
+      // Exactly one new attempt, even if two recoveries race: the winner is
+      // decided by exclusive creation, the same primitive the leases use.
+      const marker = `${path}.attempt`;
+      let handle;
+      try {
+        handle = await open(marker, 'wx');
+      } catch (error) {
+        if (error.code === 'EEXIST') {
+          return { outcome: JOB_DISPATCH.ALREADY_QUEUED, attempt: existing.attempt ?? 1, jobId: job.jobId, raced: true };
+        }
+        fail('FILE_UNREADABLE', `Cannot start a new attempt for ${job.jobId}: ${error.message}`);
+      }
+
+      try {
+        const current = await readJson(path);
+        if (!RETRYABLE_JOB_STATUSES.includes(current?.status ?? null)) {
+          return { outcome: JOB_DISPATCH.ALREADY_QUEUED, attempt: current?.attempt ?? 1, jobId: job.jobId, raced: true };
+        }
+
+        const previousAttempt = current.attempt ?? 1;
+        const attempt = previousAttempt + 1;
+        await writeJsonAtomic(path, {
+          ...current,
+          status: 'QUEUED',
+          attempt,
+          // History is appended, never rewritten: the interrupted attempt stays
+          // in the record as what it was.
+          attemptHistory: [
+            ...(current.attemptHistory ?? []),
+            {
+              attempt: previousAttempt,
+              status: 'INTERRUPTED',
+              reason: reason ?? null,
+              endedAt: new Date().toISOString(),
+            },
+          ],
+          requeuedAt: new Date().toISOString(),
+          job: current.job,
+        });
+        return { outcome: JOB_DISPATCH.NEW_ATTEMPT, attempt, jobId: job.jobId };
+      } finally {
+        await handle.close();
+        await rm(marker, { force: true });
+      }
     },
 
     /** Lists pending job ids for a role, oldest first by name. */

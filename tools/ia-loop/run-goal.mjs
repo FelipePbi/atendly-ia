@@ -19,7 +19,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { SpikeError } from './lib/claude-process.mjs';
-import { clearPerGoalRuntime, createJobStore } from './lib/job-store.mjs';
+import { JOB_DISPATCH, clearPerGoalRuntime, createJobStore } from './lib/job-store.mjs';
 import {
   DISPATCH_KINDS, assertNoDuplicateStageDispatch, reconcileExecutionState,
 } from './lib/reconcile.mjs';
@@ -112,6 +112,22 @@ async function waitForResult(store, role, jobId, { emit, leaseStore }) {
     }
 
     await sleep(POLL_MS);
+  }
+}
+
+/** Says what a dispatch actually did, so the log never claims more than it did. */
+function dispatchMessage(dispatched, label) {
+  switch (dispatched.outcome) {
+    case JOB_DISPATCH.PUBLISHED:
+      return `${label} job published: ${dispatched.jobId}`;
+    case JOB_DISPATCH.NEW_ATTEMPT:
+      return `${label} job ${dispatched.jobId} — attempt ${dispatched.attempt} after an interrupted one.`;
+    case JOB_DISPATCH.ALREADY_QUEUED:
+      return `${label} job ${dispatched.jobId} is already queued; waiting rather than publishing it twice.`;
+    case JOB_DISPATCH.ALREADY_RUNNING:
+      return `${label} job ${dispatched.jobId} is already running; waiting for that attempt.`;
+    default:
+      return `${label} job ${dispatched.jobId}: ${dispatched.outcome}`;
   }
 }
 
@@ -431,8 +447,19 @@ async function main() {
       assertNoDuplicateStageDispatch({
         ledger: reconciled.ledger, goal: goal.goalId, round, stage: devStage, jobId: devJobId,
       });
-      await store.publishJob('developer', devJob);
-      emit(`${isCorrection ? 'Correction' : 'Developer'} job published: ${devJobId}`);
+      // Dispatch, not publish: the job for this stage may already exist —
+      // queued, or interrupted and owed another attempt. Publishing blindly
+      // is what turned every resume into DUPLICATE_JOB.
+      const dispatched = await store.dispatchJob('developer', devJob, {
+        reason: 'RECOVERED_INTERRUPTED_ATTEMPT',
+      });
+      emit(dispatchMessage(dispatched, isCorrection ? 'Correction' : 'Developer'));
+      if (dispatched.outcome === JOB_DISPATCH.NEW_ATTEMPT) {
+        await store.appendEvent({
+          type: 'JOB_ATTEMPT_STARTED', role: 'developer', jobId: devJobId,
+          goal: goal.goalId, round, stage: devStage, attempt: dispatched.attempt,
+        });
+      }
       machine.transitionTo(phaseRunning);
       emit('Waiting for the Developer…');
       const observed = await waitForResult(store, 'developer', devJobId, { emit, leaseStore });
@@ -554,8 +581,16 @@ async function main() {
       assertNoDuplicateStageDispatch({
         ledger: reconciled.ledger, goal: goal.goalId, round, stage: STAGES.REVIEW, jobId: revJobId,
       });
-      await store.publishJob('tech_lead', revJob);
-      emit(`Review job published: ${revJobId}`);
+      const dispatchedReview = await store.dispatchJob('tech_lead', revJob, {
+        reason: 'RECOVERED_INTERRUPTED_ATTEMPT',
+      });
+      emit(dispatchMessage(dispatchedReview, 'Review'));
+      if (dispatchedReview.outcome === JOB_DISPATCH.NEW_ATTEMPT) {
+        await store.appendEvent({
+          type: 'JOB_ATTEMPT_STARTED', role: 'tech_lead', jobId: revJobId,
+          goal: goal.goalId, round, stage: STAGES.REVIEW, attempt: dispatchedReview.attempt,
+        });
+      }
       machine.transitionTo(LOOP_STATES.REVIEWER_RUNNING);
       emit('Waiting for the Tech Lead…');
 

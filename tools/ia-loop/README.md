@@ -1107,6 +1107,56 @@ preservando o motivo da parada, quem resolveu e a nota. Sem nota, nada é
 arquivado — silêncio não limpa problema — e o loop não pode executar esse
 caminho sozinho.
 
+### Estágio, tentativa, e o direito de tentar de novo
+
+O recovery decidiu `REQUEUE_JOB` para uma correção interrompida, a reconciliação
+concordou — *"next is CORRECTION at round 2"* — e o despacho morreu com
+`DUPLICATE_JOB`. As duas metades discordavam sobre **quem é dono da existência
+do job**: o recovery re-enfileirava o mesmo job, e o runner sempre chamava
+`publishJob`, que recusa sobrescrever.
+
+Não era específico do caso interrompido: **qualquer retomada de um estágio cujo
+job já existisse** morria igual.
+
+```
+stageKey   004:r2:correction          o que precisa acontecer uma vez
+jobId      004-r2-correction-dde6dca4 o job DESSE estágio
+attempt    a1 INTERRUPTED, a2 QUEUED  cada tentativa dele
+```
+
+O `jobId` **é** o job do estágio. O que muda entre tentativas é o número. Criar
+um id novo significaria o mesmo trabalho sob dois nomes — exatamente a confusão
+que o ledger de estágios existe para remover.
+
+`store.dispatchJob()` substitui o `publishJob` cego no runner:
+
+| situação no disco | resultado |
+| --- | --- |
+| job ausente | `PUBLISHED`, tentativa 1 |
+| resultado bem-sucedido | `ALREADY_COMPLETED` — reaproveita, não chama modelo |
+| `QUEUED` | `ALREADY_QUEUED` — espera, não publica de novo |
+| `RUNNING` | `ALREADY_RUNNING` — quem julga se está vivo é a lease |
+| `INTERRUPTED` | `NEW_ATTEMPT` — mesmo job, tentativa seguinte |
+| `COMPLETED`/`FAILED`/`SUPERSEDED` | `STAGE_NOT_RETRYABLE` |
+
+`FAILED` está deliberadamente fora dos retentáveis: o trabalho foi tentado e não
+deu certo, e repetir é decisão de política que uma pessoa toma — não algo que um
+restart assume.
+
+A tentativa anterior fica no `attemptHistory` como `INTERRUPTED`, com o motivo.
+Duas recoveries concorrentes criam **uma** tentativa: o vencedor sai de criação
+exclusiva de arquivo, o mesmo primitivo das leases.
+
+O worker parou de fixar `attemptIdFor(jobId, 1)` e passa a ler o número do job —
+sem isso a segunda tentativa usaria o id da primeira, e o result fencing não
+distinguiria as duas.
+
+**Leases ganharam versão.** O compare-and-swap comparava `heartbeatAt`, que tem
+resolução de milissegundo: um claim e um renew no mesmo milissegundo eram
+indistinguíveis, e o CAS sobrescrevia uma lease que havia se movido. Era a causa
+de uma falha de teste que aparecia de vez em quando e não reproduzia. `version` é
+monotônica; `heartbeatAt` fica como fallback para leases escritas antes disso.
+
 ### Fingerprint completo da worktree
 
 A perícia do incidente do duplicate R1 conseguiu provar só metade da árvore.
@@ -1429,7 +1479,7 @@ agora tem — `migration-loop-a1`, `-a2` a cada recuperação, na mesma run.
 ## Como executar
 
 ```bash
-npm run test:ia-loop       # 403 testes locais, sem chamadas reais a modelo
+npm run test:ia-loop       # 426 testes locais, sem chamadas reais a modelo
 ```
 
 ```bash
@@ -1548,7 +1598,7 @@ session ids nem dados pessoais.
 | `lib/persistent-session.mjs` | Sessão por agente: cria no 1º turno, resume nos seguintes |
 | `lib/session-registry.mjs` | Registro durável de sessões, com escrita atômica |
 | `fixtures/synthetic-goal.md` | Tarefa sintética, fora do runtime |
-| `tests/*.test.mjs` | 403 testes com processo/agente fake; nenhuma chamada real |
+| `tests/*.test.mjs` | 426 testes com processo/agente fake; nenhuma chamada real |
 
 ## Limitações conhecidas
 

@@ -72,6 +72,24 @@ const CLAIM_SETTLE_DELAY_MS = 25;
 
 const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
+/**
+ * Has the lease moved since it was judged?
+ *
+ * The version answers it exactly. heartbeatAt is kept as the fallback for a
+ * lease written before versions existed, where it is the best available
+ * signal — and being the FALLBACK is the point: on its own it once let a
+ * renew inside the same millisecond pass unnoticed.
+ */
+export function leaseMoved(current, expected) {
+  if (!expected) return true;
+  if (current.workerInstanceId !== expected.workerInstanceId) return true;
+
+  if (Number.isInteger(current.version) && Number.isInteger(expected.version)) {
+    return current.version !== expected.version;
+  }
+  return current.heartbeatAt !== expected.heartbeatAt;
+}
+
 export function createLeaseStore(stateDir, { config = LEASE_CONFIG } = {}) {
   const jobsDir = join(stateDir, 'leases', 'jobs');
   const worktreesDir = join(stateDir, 'leases', 'worktrees');
@@ -101,6 +119,11 @@ export function createLeaseStore(stateDir, { config = LEASE_CONFIG } = {}) {
       workerInstanceId: WORKER_INSTANCE_ID,
       ...identity,
       status: LEASE_STATUS.ACTIVE,
+      // A monotonic version, because a timestamp is not one. heartbeatAt has
+      // millisecond resolution, so a claim and a renew inside the same
+      // millisecond are indistinguishable — and a compare-and-swap that
+      // cannot tell them apart will overwrite a lease that moved.
+      version: 1,
       acquiredAt: now.toISOString(),
       heartbeatAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + config.expiryMs).toISOString(),
@@ -168,6 +191,7 @@ export function createLeaseStore(stateDir, { config = LEASE_CONFIG } = {}) {
     const now = new Date();
     const updated = {
       ...lease,
+      version: (lease.version ?? 1) + 1,
       heartbeatAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + config.expiryMs).toISOString(),
     };
@@ -222,9 +246,7 @@ export function createLeaseStore(stateDir, { config = LEASE_CONFIG } = {}) {
       const current = await read(kind, key);
       if (!current) return { acquired: false, reason: 'LEASE_ALREADY_GONE' };
 
-      // Compare-and-swap: owner AND heartbeat must be what was judged.
-      if (current.workerInstanceId !== expected?.workerInstanceId
-        || current.heartbeatAt !== expected?.heartbeatAt) {
+      if (leaseMoved(current, expected)) {
         return { acquired: false, reason: 'LEASE_CHANGED_SINCE_JUDGEMENT', heldBy: current };
       }
 
@@ -275,8 +297,7 @@ export function createLeaseStore(stateDir, { config = LEASE_CONFIG } = {}) {
     try {
       const current = await read(kind, key);
       if (!current) return { retired: false, reason: 'LEASE_ALREADY_GONE' };
-      if (current.workerInstanceId !== expected?.workerInstanceId
-        || current.heartbeatAt !== expected?.heartbeatAt) {
+      if (leaseMoved(current, expected)) {
         return { retired: false, reason: 'LEASE_CHANGED_SINCE_JUDGEMENT', heldBy: current };
       }
 

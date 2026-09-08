@@ -16,6 +16,7 @@ Duas etapas concluídas:
 | V4 — Automatic Correction Rounds | correção automática até 3 rodadas, depois escala |
 | V5 — Accepted Goal Closure + Next Goal Planning | fechamento e planejamento automatizados, parada em AWAITING_HUMAN |
 | V6 — Job Ownership and Leases | uma execução por operação lógica; timeout de observador não duplica trabalho |
+| V13 — Identidade do modelo por evidência explícita | `modelUsage`/`usage` viram observabilidade; identidade vem de `message.model` do stream |
 
 ---
 
@@ -2548,6 +2549,126 @@ explícito tira dali, de propósito — mas o rótulo do motivo foi corrigido de
 `reclassifiedFrom` e um evento `AUTONOMOUS_RUN_HUMAN_REQUIRED_RECLASSIFIED`
 auditável. Nenhum modelo foi chamado.
 
+## V13 — Identidade do modelo por evidência explícita, não por accounting
+
+Escrito a partir de uma falha real. O review do Goal006 R1 (Tech Lead, Fable
+5.1, sessão persistente, turno 3 de um `--resume`) terminou assim:
+
+```
+AGENT_FAILURE code=RESOLVED_MODEL_UNKNOWN
+"No modelUsage entry accounts for the top-level usage, so the primary
+model cannot be determined"
+→ UNKNOWN_FATAL → HUMAN_REQUIRED
+```
+
+O CLI tinha rodado por completo: sessão retomada com sucesso, dezenas de
+ferramentas executadas, `StructuredOutput` emitido sem erro no stream. A
+attempt morreu inteira por causa de uma etapa **posterior** à resposta do
+modelo — a mesma classe de bug que a V9 já tinha documentado para argv, agora
+no mecanismo de identidade do modelo. Isso já era o item 3 da lista de
+limitações conhecidas ("a correspondência de usage é exata... exigirá revisão
+do critério") — o item previu exatamente esta falha antes de ela acontecer.
+
+### Por que accounting nunca foi prova de identidade
+
+O critério antigo (`resolvePrimaryModel`, ainda existente, ver abaixo) exigia
+igualdade byte a byte entre o `usage` de topo do envelope e **uma única**
+entrada de `modelUsage`. Isso sempre foi um proxy, nunca uma fonte primária: o
+próprio binário do CLI instalado documenta, no schema dos seus eventos, que
+`modelUsage` e o `usage`/`total_cost_usd` que o acompanham "share a lifecycle"
+que é "cumulative across turns in streaming … each result carries the running
+total so far" e que "resumed sessions start fresh" — semântica de contador
+acumulado, não de assinatura determinística por chamada. Uma sessão persistente
+multi-turno (exatamente o desenho do Tech Lead) pode legitimamente cair fora
+dessa igualdade sem que nada tenha saído errado.
+
+### A fonte explícita: `message.model` do próprio stream
+
+Inspecionando o schema de eventos do CLI instalado (2.1.263): cada evento
+`assistant` de `--output-format stream-json` é, textualmente,
+"Shaped like an Anthropic Messages API Message object (role \"assistant\"):
+**id, model**, content blocks…". Esse `model` é a identidade que a própria API
+atribui à resposta — não uma inferência nossa, não uma contagem de tokens.
+
+`resolveServedPrimaryModel` (`lib/claude-process.mjs`) lê exatamente isso:
+
+1. `stream-telemetry.mjs` acumula, por invocação, os valores distintos de
+   `message.model` vistos em eventos `assistant` (`parser.servedModels()`).
+2. Zero valores → `PRIMARY_MODEL_EVIDENCE_MISSING`.
+3. Mais de um valor distinto → `PRIMARY_MODEL_EVIDENCE_CONFLICT` (nunca deveria
+   acontecer numa única invocação; falha fechado em vez de escolher um).
+4. Exatamente um valor → é o `resolvedPrimaryModel`, confrontado com a família
+   esperada por `assertNoSilentFallback` como antes (inalterado):
+   divergência de família continua `MODEL_FALLBACK_DETECTED`.
+
+Como `--output-format stream-json` agora é **sempre** solicitado (ver abaixo),
+essa evidência existe em toda invocação real, streaming sendo renderizado para
+um humano ou não.
+
+`resolvePrimaryModel` (o mecanismo antigo, por accounting) não foi removido:
+vira puramente **advisório**, calculado sempre e nunca lançado adiante. Seu
+resultado fica em `outcome.usageAccounting = { matched, resolvedByAccounting,
+error }`, só para observabilidade — um evento `MODEL_USAGE_ACCOUNTING_OBSERVED`
+pode ser derivado dali por quem quiser correlacionar divergências de contagem,
+mas nada no caminho de decisão volta a lê-lo.
+
+### Streaming deixou de ser opcional
+
+Antes, `invokeAgent` só pedia `stream-json` quando um `onTelemetryEvent` era
+passado — `IA_LOOP_STREAM_EVENTS=0` voltava a `--output-format json`. Como a
+evidência de identidade só existe no stream, isso teria transformado a flag de
+debug num apagador silencioso de verificação de modelo. Em vez disso,
+`invokeAgent` sempre roda em `stream-json` internamente; `onTelemetryEvent`
+continua controlando apenas se esses mesmos eventos são **também** renderizados
+para um humano. `IA_LOOP_STREAM_EVENTS=0` agora desliga só a renderização,
+nunca a verificação de identidade — prompt, contexto, schema, modelo, effort e
+sessão continuam idênticos, como já valia para o nível de log (V8).
+
+### Ordem do pós-processamento: conteúdo antes de identidade
+
+O bug real do Goal006 R1 não foi "não sabemos qual modelo respondeu" — foi que
+essa dúvida **descartou uma resposta que já tinha sido extraída e validada**,
+porque as duas verificações aconteciam no mesmo `try`, na ordem errada.
+`invokeAgent` agora roda em passos independentes:
+
+```
+parseEnvelope
+  → extrai e valida o candidate payload (papel, ok, schema do chamador)
+  → SEPARADAMENTE: resolve identidade explícita do modelo + advisory accounting
+  → só as duas coisas juntas publicam outcome.payload como confiável
+```
+
+`outcome.candidatePayload` guarda o payload estruturalmente válido **mesmo
+quando a verificação de identidade falha** — é isso que faz `outcome.payload`
+continuar `null` (nunca publicado como resultado confiável) enquanto o
+conteúdo real da resposta não se perde.
+
+### Candidate result: a resposta nunca se perde, mesmo sem confiança ainda
+
+Quando `runWithCapacity` escala para `HUMAN_REQUIRED` e `agentOutcome
+.candidatePayload` existe, `capacity-runner.mjs` chama
+`store.publishCandidateResult`, que grava
+`results/<role>/<jobId>.candidate-<attemptId>.json` **ao lado** do resultado
+FAILED de sempre — nunca no lugar dele. Só campos já seguros: o payload
+validado, o modelo pedido, os modelos observados e o erro de verificação;
+nunca chain-of-thought, texto livre do assistant, saída bruta de tool ou
+segredos. Isso é o que permite corrigir um bug de harness como este e
+recuperar a resposta original sem gastar uma segunda inferência — sem nunca
+publicá-la como verdade antes de alguém decidir que ela merece confiança.
+
+### Taxonomia
+
+`RESOLVED_MODEL_UNKNOWN` e `RESOLVED_MODEL_AMBIGUOUS` (mecanismo antigo, ainda
+usado por quem chamar `resolvePrimaryModel`/`assertNoSilentFallback`
+diretamente, como `developer-profiles.mjs`) e os dois códigos novos,
+`PRIMARY_MODEL_EVIDENCE_MISSING`/`PRIMARY_MODEL_EVIDENCE_CONFLICT`, classificam
+todos como `HARNESS_ERROR` — antes, os dois primeiros caíam em `UNKNOWN_FATAL`.
+Continuam terminando em `HUMAN_REQUIRED` (nenhuma espera resolve uma falha de
+harness), mas agora nomeados pelo que realmente são: uma falha local de
+verificação, não um limite de modelo desconhecido. `MODEL_FALLBACK_DETECTED`
+não muda — evidência de que o modelo ERRADO respondeu continua fatal, e
+continua uma família à parte de "não sabemos".
+
 ## Limitações conhecidas
 
 1. **Auth não é herdável por subprocesso a partir do app desktop.** O que
@@ -2556,9 +2677,11 @@ auditável. Nenhum modelo foi chamado.
 2. **Kill em timeout usa `child.kill('SIGKILL')`**, que no Windows não mata a
    árvore inteira de processos. Suficiente para as etapas atuais; revisar se o
    orquestrador rodar agentes de longa duração.
-3. **A correspondência de usage é exata.** Se o CLI passar a arredondar ou
-   agregar os contadores de topo, a resolução cai em `RESOLVED_MODEL_UNKNOWN` —
-   falha fechado, mas exigirá revisão do critério.
+3. **A identidade do modelo depende do stream carregar `message.model`.** Se
+   uma versão futura do CLI parar de incluir esse campo nos eventos
+   `assistant`, a verificação cai em `PRIMARY_MODEL_EVIDENCE_MISSING` — falha
+   fechado, nunca finge saber. `usage`/`modelUsage` continuam disponíveis só
+   como observabilidade (V13); não voltam a decidir identidade.
 4. **Sem verificação de versão do CLI em runtime.** A versão encontrada é
    registrada, não exigida.
 5. **Uma única tentativa por agente.** Não há retry: qualquer falha de contrato

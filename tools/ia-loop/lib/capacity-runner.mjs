@@ -185,6 +185,21 @@ export async function runWithCapacity({
         jobId,
         now: clock.now(),
       });
+
+      // The CLI may have already answered correctly: model-identity
+      // verification failing is not evidence the payload itself was bad. When
+      // invokeAgent kept a structurally-valid candidate, preserve it
+      // alongside the FAILED result — an audit trail a harness fix can read
+      // back later, never something published as trusted on its own.
+      if (agentOutcome?.candidatePayload) {
+        await store.publishCandidateResult(role, jobId, {
+          requestedModel: agentOutcome.requestedModel ?? null,
+          modelVerificationError: agentOutcome.error ?? null,
+          observedModels: agentOutcome.observedModels ?? [],
+          payload: agentOutcome.candidatePayload,
+        }, { attemptId: currentAttemptId });
+      }
+
       await store.publishResult(role, jobId, {
         ok: false,
         code: decision.reason,

@@ -103,6 +103,14 @@ export function createStreamParser({ onEvent = () => {}, root = null, now = () =
   // tool_use id → { category, detail, startedAt }, so a result can report the
   // duration of the call it belongs to.
   const pending = new Map();
+  // Distinct `message.model` values seen on `assistant` events, in the order
+  // first observed. This is the ONLY explicit, CLI-reported identity of which
+  // model produced the visible conversation turn: every `assistant` stream
+  // event is "shaped like an Anthropic Messages API Message object … id,
+  // model, content blocks …" (confirmed from the installed CLI's own event
+  // schema). Unlike `usage`/`modelUsage`, it is never inferred from token
+  // accounting.
+  const servedModelsSeen = [];
 
   const safeEmit = (event) => {
     try {
@@ -113,6 +121,9 @@ export function createStreamParser({ onEvent = () => {}, root = null, now = () =
   };
 
   function handleAssistant(message) {
+    const servedModel = typeof message?.model === 'string' && message.model !== '' ? message.model : null;
+    if (servedModel && !servedModelsSeen.includes(servedModel)) servedModelsSeen.push(servedModel);
+
     const content = Array.isArray(message?.content) ? message.content : [];
     for (const block of content) {
       // text and thinking blocks are skipped on purpose.
@@ -205,6 +216,15 @@ export function createStreamParser({ onEvent = () => {}, root = null, now = () =
     /** The final `result` event, or null if the stream never produced one. */
     envelope() {
       return envelope;
+    },
+
+    /**
+     * Distinct `message.model` ids observed on `assistant` events, in first-seen
+     * order. This is the explicit evidence `resolveServedPrimaryModel` uses; it
+     * is never derived from `usage`/`modelUsage`.
+     */
+    servedModels() {
+      return [...servedModelsSeen];
     },
   };
 }

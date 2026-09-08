@@ -41,15 +41,26 @@ function modelUsage(n = 10) {
   return { inputTokens: n, outputTokens: 2, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
 }
 
+/**
+ * A stream-json transcript naming `model` as the served model — via the
+ * explicit `assistant`/`message.model` evidence invokeAgent now reads, not
+ * via `usage`/`modelUsage`, which stays purely advisory (see
+ * claude-process.mjs's resolvePrimaryModel).
+ */
 function envelopeFor(model, result = '{"role":"developer","ok":true}') {
-  return JSON.stringify({
-    type: 'result',
-    subtype: 'success',
-    is_error: false,
-    result,
-    usage: usage(),
-    modelUsage: { [model]: modelUsage() },
-  });
+  const lines = [
+    JSON.stringify({ type: 'system', subtype: 'init', session_id: '11111111-1111-4111-8111-111111111111' }),
+    JSON.stringify({ type: 'assistant', message: { model, content: [{ type: 'text', text: 'ok' }] } }),
+    JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      result,
+      usage: usage(),
+      modelUsage: { [model]: modelUsage() },
+    }),
+  ];
+  return lines.join('\n');
 }
 
 function fakeSpawn({ stdout, onSpawn } = {}) {

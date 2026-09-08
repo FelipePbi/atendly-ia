@@ -216,6 +216,9 @@ export function createJobStore(stateDir) {
     job: (role, jobId) => join(stateDir, 'jobs', assertRole(role), `${jobId}.json`),
     resultsDir: (role) => join(stateDir, 'results', assertRole(role)),
     result: (role, jobId) => join(stateDir, 'results', assertRole(role), `${jobId}.json`),
+    candidateResult: (role, jobId, attemptId) => join(
+      stateDir, 'results', assertRole(role), `${jobId}.candidate-${attemptId}.json`,
+    ),
   };
 
   return {
@@ -642,6 +645,48 @@ export function createJobStore(stateDir) {
         attemptId,
         result: { ...result, attemptId },
       });
+    },
+
+    /**
+     * Preserves a structurally-valid agent payload that could not be published
+     * as a trusted result, because model-identity verification failed after
+     * the CLI had already answered — never because the payload itself was
+     * bad. Written alongside `publishResult`'s FAILED/HUMAN_REQUIRED record,
+     * never instead of it: the failure stays the truth on the primary path,
+     * and this is only the audit trail that lets a harness fix recover the
+     * answer later without a second inference.
+     *
+     * Only what is already safe to keep: the validated payload (structured
+     * JSON the agent itself produced under contract, e.g. a ReviewDecision or
+     * a DeveloperResult), never assistant free text, chain-of-thought, raw
+     * tool output or secrets.
+     */
+    async publishCandidateResult(role, jobId, candidate, { attemptId = null } = {}) {
+      assertRole(role);
+      if (!attemptId) {
+        fail('RESULT_ATTEMPT_REQUIRED',
+          `Refusing to publish a candidate result for ${jobId} without an attemptId`);
+      }
+
+      await writeJsonAtomic(paths.candidateResult(role, jobId, attemptId), {
+        storeVersion: STORE_VERSION,
+        publishedAt: new Date().toISOString(),
+        role,
+        jobId,
+        attemptId,
+        requestedModel: candidate.requestedModel ?? null,
+        // Why the candidate could not be trusted as-is; kept for the human
+        // deciding whether to recover it.
+        modelVerificationError: candidate.modelVerificationError ?? null,
+        observedModels: candidate.observedModels ?? [],
+        payload: candidate.payload,
+      });
+    },
+
+    /** Reads back a preserved candidate result, or null if none exists. */
+    async readCandidateResult(role, jobId, attemptId) {
+      assertRole(role);
+      return readJson(paths.candidateResult(role, jobId, attemptId));
     },
 
     /**

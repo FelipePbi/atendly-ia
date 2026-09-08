@@ -80,6 +80,14 @@ const HARNESS_CODES = Object.freeze([
   // Reached only when a leak got as far as the store: a superseded attempt
   // cannot be retried, and being asked to is a bug in whoever chose the id.
   'STAGE_NOT_RETRYABLE',
+  // The harness failing to establish which model served a call — never the
+  // model or a limit doing anything. RESOLVED_MODEL_UNKNOWN/AMBIGUOUS are the
+  // old token-accounting mechanism (now advisory only); PRIMARY_MODEL_EVIDENCE_*
+  // are the current evidence-based one. See claude-process.mjs.
+  'RESOLVED_MODEL_UNKNOWN',
+  'RESOLVED_MODEL_AMBIGUOUS',
+  'PRIMARY_MODEL_EVIDENCE_MISSING',
+  'PRIMARY_MODEL_EVIDENCE_CONFLICT',
 ]);
 
 /**

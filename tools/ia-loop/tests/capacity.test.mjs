@@ -125,6 +125,42 @@ test('classification prefers our structured code over text', () => {
   assert.equal(classifyFailure(outcome).reason, CAPACITY_REASONS.HARNESS_ERROR);
 });
 
+// ---------------------------------------------------------------------------
+// Model-identity resolution failures are local tooling, not an unknowable
+// model failure. Goal006 R1's review stopped as UNKNOWN_FATAL on
+// RESOLVED_MODEL_UNKNOWN even though the CLI had already answered correctly;
+// see claude-process.mjs's resolveServedPrimaryModel and resolvePrimaryModel.
+// ---------------------------------------------------------------------------
+
+test('11. RESOLVED_MODEL_UNKNOWN classifies as HARNESS_ERROR, not UNKNOWN_FATAL', () => {
+  const outcome = failure({ code: 'RESOLVED_MODEL_UNKNOWN', message: 'no modelUsage entry accounts for the top-level usage' });
+  const classification = classifyFailure(outcome);
+  assert.equal(classification.reason, CAPACITY_REASONS.HARNESS_ERROR);
+
+  const decision = decideCapacityAction({ reason: classification.reason, attempt: 1, now: NOW });
+  assert.equal(decision.action, CAPACITY_ACTIONS.HUMAN_REQUIRED);
+  assert.match(decision.note, /local harness failure/i);
+});
+
+test('12. RESOLVED_MODEL_AMBIGUOUS classifies as HARNESS_ERROR, not UNKNOWN_FATAL', () => {
+  const outcome = failure({ code: 'RESOLVED_MODEL_AMBIGUOUS', message: 'several models match the top-level usage indistinguishably' });
+  assert.equal(classifyFailure(outcome).reason, CAPACITY_REASONS.HARNESS_ERROR);
+});
+
+test('9/10. missing or conflicting explicit model evidence classifies as HARNESS_ERROR', () => {
+  const missing = failure({ code: 'PRIMARY_MODEL_EVIDENCE_MISSING', message: 'no assistant event carried message.model' });
+  assert.equal(classifyFailure(missing).reason, CAPACITY_REASONS.HARNESS_ERROR);
+
+  const conflict = failure({ code: 'PRIMARY_MODEL_EVIDENCE_CONFLICT', message: 'more than one served model reported' });
+  assert.equal(classifyFailure(conflict).reason, CAPACITY_REASONS.HARNESS_ERROR);
+});
+
+test('a genuinely detected fallback stays UNKNOWN_FATAL, distinct from a harness verification bug', () => {
+  // Unchanged by the fix: MODEL_FALLBACK_DETECTED means the evidence is clear
+  // and damning (a different model answered), never "we could not tell".
+  assert.equal(classifyFailure(failure(FIXTURES.fallbackDetected)).reason, CAPACITY_REASONS.UNKNOWN_FATAL);
+});
+
 test('2. Retry-After is extracted when present', () => {
   assert.equal(extractRetryAfterMs('retry-after: 45'), 45_000);
   assert.equal(extractRetryAfterMs('try again in 3 minutes'), 180_000);
@@ -339,6 +375,69 @@ test('7. AUTH_ERROR escalates and stops retrying', async () => {
     const runtime = await store.readRuntime();
     assert.equal(runtime.state, LOOP_STATES.HUMAN_REQUIRED);
     assert.equal(await store.readJobStatus('developer', 'job-dev-1'), 'FAILED');
+  });
+});
+
+test('14/15/16. a harness-side model-identity failure preserves the CLI\'s valid answer as a candidate result', async () => {
+  await withStore(async (store) => {
+    await store.publishJob('tech_lead', developerJob({ jobId: 'job-tl-1', role: 'tech_lead' }));
+    const attemptId = (await store.readAttemptState('tech_lead', 'job-tl-1'))?.attemptId;
+
+    const decisionPayload = { role: 'tech_lead', ok: true, decision: 'CHANGES_REQUIRED' };
+    const run = await runWithCapacity({
+      store,
+      role: 'tech_lead',
+      jobId: 'job-tl-1',
+      goal: '003',
+      round: 2,
+      resumeFrom: LOOP_STATES.REVIEWER_RUNNING,
+      clock: createFakeClock(NOW),
+      invoke: async () => ({
+        error: { code: 'PRIMARY_MODEL_EVIDENCE_MISSING', message: 'no assistant event carried message.model' },
+        structuredOutput: true,
+        available: false,
+        payload: null,
+        // The point of the fix: a structurally-valid candidate survives a
+        // model-identity failure instead of being discarded with it.
+        candidatePayload: decisionPayload,
+        requestedModel: 'claude-fable-5-1',
+        observedModels: ['claude-fable-5-1'],
+      }),
+    });
+
+    assert.equal(run.outcome, RUN_OUTCOMES.HUMAN_REQUIRED);
+    assert.equal(run.reason, CAPACITY_REASONS.HARNESS_ERROR);
+
+    // Not published as trusted: the FAILED result stands on the primary path.
+    const primary = await store.readResult('tech_lead', 'job-tl-1');
+    assert.equal(primary.ok, false);
+
+    // But recoverable: the candidate sits alongside it, unpublished as truth.
+    const candidate = await store.readCandidateResult('tech_lead', 'job-tl-1', attemptId);
+    assert.ok(candidate, 'the candidate result must have been preserved');
+    assert.deepEqual(candidate.payload, decisionPayload);
+    assert.equal(candidate.modelVerificationError.code, 'PRIMARY_MODEL_EVIDENCE_MISSING');
+  });
+});
+
+test('a harness failure with no candidate payload writes no candidate result', async () => {
+  await withStore(async (store) => {
+    await store.publishJob('developer', developerJob());
+    const attemptId = (await store.readAttemptState('developer', 'job-dev-1'))?.attemptId;
+
+    await runWithCapacity({
+      store,
+      role: 'developer',
+      jobId: 'job-dev-1',
+      goal: '003',
+      round: 2,
+      resumeFrom: LOOP_STATES.DEVELOPER_RUNNING,
+      clock: createFakeClock(NOW),
+      invoke: async () => failure({ code: 'PRIMARY_MODEL_EVIDENCE_MISSING', message: 'no evidence' }),
+    });
+
+    const candidate = await store.readCandidateResult('developer', 'job-dev-1', attemptId);
+    assert.equal(candidate, null);
   });
 });
 

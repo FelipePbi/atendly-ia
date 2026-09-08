@@ -62,6 +62,12 @@ function fakeCli({ servedBy = FABLE, result = '{"role":"tech_lead","ok":true}', 
         child.emit('close', 1);
         return;
       }
+      // The explicit evidence invokeAgent now reads: an `assistant` event
+      // naming the served model, before the closing `result`.
+      child.stdout.emit('data', `${JSON.stringify({
+        type: 'assistant',
+        message: { model: servedBy, content: [{ type: 'text', text: 'ok' }] },
+      })}\n`);
       child.stdout.emit('data', JSON.stringify({
         type: 'result',
         subtype: 'success',

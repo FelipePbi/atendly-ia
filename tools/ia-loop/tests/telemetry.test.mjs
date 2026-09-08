@@ -289,7 +289,7 @@ test('9b. a failing tool result is visible at normal level, a passing one only a
 test('10. a telemetry failure never fails the agent execution', async () => {
   const spawnFn = fakeSpawn({
     stdout: streamOf([
-      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'x', name: 'Read', input: { file_path: 'a.ts' } }] } },
+      { type: 'assistant', message: { model: OPUS, content: [{ type: 'tool_use', id: 'x', name: 'Read', input: { file_path: 'a.ts' } }] } },
       resultEvent(),
     ]),
   });

@@ -472,15 +472,26 @@ function usageMatches(a, b) {
 }
 
 /**
- * Determines which model produced the main inference.
+ * Reconciles token accounting against a single `modelUsage` entry.
  *
- * `modelUsage` legitimately contains auxiliary models that Claude Code uses
- * internally (Haiku for its own bookkeeping, for example). Their presence is
- * NOT a fallback, so we cannot simply read the first or the most expensive key.
+ * ADVISORY ONLY. This is NOT how the served model is verified — see
+ * `resolveServedPrimaryModel`, which uses the CLI's explicit `message.model`
+ * evidence instead. Token counts are not proof of identity: the installed
+ * CLI's own field documentation states `modelUsage` and the top-level `usage`
+ * it is checked against "share a lifecycle" that is "cumulative across turns
+ * in streaming … each result carries the running total so far" and "resumed
+ * sessions start fresh" — behaviour a persistent multi-turn session (the Tech
+ * Lead's) can legitimately hit, with no fallback involved. Goal006 R1's
+ * review was lost this way: the CLI produced a valid StructuredOutput on turn
+ * 3 of a resumed session, but no single `modelUsage` entry reproduced the
+ * top-level counters, and the mismatch was (wrongly) treated as fatal.
  *
- * Instead we anchor on the envelope's top-level `usage`, which reflects the
- * main inference, and look for the single `modelUsage` entry that accounts for
- * it. Anything else observed is recorded as auxiliary, for observability.
+ * Kept for observability: a caller may compare its result against
+ * `resolveServedPrimaryModel`'s explicit answer and emit
+ * `MODEL_USAGE_ACCOUNTING_OBSERVED` when they disagree, without ever letting
+ * the disagreement block a result. `modelUsage` legitimately contains
+ * auxiliary models the CLI uses internally (Haiku for its own bookkeeping,
+ * for example); their presence alone is not a fallback.
  *
  * Fails closed: never guesses when the evidence is missing or ambiguous.
  */
@@ -534,6 +545,44 @@ export function resolvePrimaryModel(envelope) {
     auxiliary: observedModels.filter((id) => id !== primary),
     observedModels,
   };
+}
+
+/**
+ * Determines which model produced the visible conversation turn, from
+ * EXPLICIT evidence only — never from token accounting.
+ *
+ * `evidenceModels` is the set of distinct `message.model` values observed on
+ * `assistant` stream events for this invocation (see `stream-telemetry.mjs`).
+ * Every `assistant` event is "shaped like an Anthropic Messages API Message
+ * object … id, model, content blocks …" per the installed CLI's own event
+ * schema, so `message.model` is the model that actually served that turn —
+ * not an inference from `usage`/`modelUsage`, which legitimately contains
+ * auxiliary models (Haiku for the CLI's own bookkeeping, for example) and can
+ * carry cumulative or running-total semantics across turns/resumes. Token
+ * accounting is kept for observability only (see `resolvePrimaryModel`); it
+ * is deliberately never consulted here.
+ *
+ * Fails closed: never guesses when the evidence is missing or conflicting.
+ */
+export function resolveServedPrimaryModel({ evidenceModels = [] } = {}) {
+  const distinct = [...new Set((Array.isArray(evidenceModels) ? evidenceModels : []).filter(Boolean))];
+
+  if (distinct.length === 0) {
+    throw new SpikeError(
+      'PRIMARY_MODEL_EVIDENCE_MISSING',
+      'No explicit model identity was observed on the response stream (no assistant event carried message.model), so the served model cannot be verified',
+    );
+  }
+
+  if (distinct.length > 1) {
+    throw new SpikeError(
+      'PRIMARY_MODEL_EVIDENCE_CONFLICT',
+      `The response stream reported more than one served model, indistinguishably: ${distinct.join(', ')}`,
+      { observed: distinct },
+    );
+  }
+
+  return distinct[0];
 }
 
 /** Lists every model id the CLI reported, without interpreting them. */
@@ -631,10 +680,12 @@ export async function invokeAgent({
   // Developer profile effort. null keeps the CLI's default and passes no flag.
   effort = null,
   /**
-   * Observational telemetry. When a sink is given, the CLI is asked for its
-   * event stream instead of a single JSON blob and the events it was already
-   * producing are reported as they arrive. No prompt, context, schema or model
-   * changes; the envelope parsed at the end is the same one either way.
+   * Observational telemetry sink. Purely a forwarding target: when given, the
+   * events the CLI stream was already producing are reported as they arrive.
+   * No prompt, context, schema or model changes, and it does NOT decide
+   * whether the CLI is asked for its event stream — that happens
+   * unconditionally now (see below), because the stream is also where the
+   * served-model evidence comes from.
    */
   onTelemetryEvent = null,
   telemetryRoot = null,
@@ -652,13 +703,26 @@ export async function invokeAgent({
     available: false,
     structuredOutput: false,
     payload: null,
+    // The structurally-valid candidate, kept EVEN WHEN model verification
+    // fails or the caller decides not to trust it yet. This is what lets a
+    // harness-side accounting/verification bug be fixed later without paying
+    // for a second inference: the model's own answer is never thrown away
+    // just because a later step about model identity, not content, failed.
+    candidatePayload: null,
+    // Advisory only, from the OLD token-accounting mechanism. Never gates
+    // anything; see resolvePrimaryModel's docstring.
+    usageAccounting: { matched: null, resolvedByAccounting: null, error: null },
     error: null,
   };
 
-  const streaming = typeof onTelemetryEvent === 'function';
-  const parser = streaming
-    ? createStreamParser({ onEvent: onTelemetryEvent, root: telemetryRoot ?? cwd })
-    : null;
+  // Always requested: this is the only channel that carries the CLI's
+  // explicit `message.model` evidence (see resolveServedPrimaryModel). Whether
+  // a telemetry sink is attached only decides whether those same events are
+  // ALSO rendered/persisted for a human; it never decided the wire format.
+  const parser = createStreamParser({
+    onEvent: typeof onTelemetryEvent === 'function' ? onTelemetryEvent : () => {},
+    root: telemetryRoot ?? cwd,
+  });
 
   let processResult;
   try {
@@ -667,16 +731,16 @@ export async function invokeAgent({
       args: buildArgs({
         prompt, model, jsonSchema, sessionId, persistSession, resume,
         tools, permissionMode, addDirs, safeMode, effort,
-        outputFormat: streaming ? 'stream-json' : 'json',
+        outputFormat: 'stream-json',
       }),
       stdinData: prompt,
       cwd,
       timeoutMs,
       env,
       spawnFn,
-      onStdoutChunk: parser ? (chunk) => parser.push(chunk) : null,
+      onStdoutChunk: (chunk) => parser.push(chunk),
     });
-    parser?.end();
+    parser.end();
   } catch (error) {
     outcome.error = toReportableError(error);
     return outcome;
@@ -716,32 +780,66 @@ export async function invokeAgent({
     return outcome;
   }
 
-  // Recorded even when resolution fails, so a blocked run still shows what the
-  // CLI reported.
-  outcome.observedModels = listObservedModels(envelope);
-
+  // Step 1 — structural candidate: extract and validate the payload on its
+  // own merits, independent of model identity. This is what Goal006 R1 got
+  // wrong: a valid StructuredOutput existed but was discarded because a LATER
+  // step (model-identity verification) failed first in the same try block.
+  let payloadError = null;
   try {
-    const resolution = resolvePrimaryModel(envelope);
-    outcome.resolvedPrimaryModel = resolution.primary;
-    outcome.auxiliaryModels = resolution.auxiliary;
-
-    assertNoSilentFallback({
-      requestedModel: model,
-      resolvedPrimaryModel: outcome.resolvedPrimaryModel,
-      expectedFamily,
-    });
-    outcome.available = true;
-
     const payload = extractAgentPayload(envelope);
     if (validatePayload) {
       validatePayload(payload);
     } else {
       assertAgentPayload(payload, { expectedRole });
     }
-    outcome.payload = payload;
+    outcome.candidatePayload = payload;
     outcome.structuredOutput = true;
   } catch (error) {
-    outcome.error = toReportableError(error);
+    payloadError = toReportableError(error);
+  }
+
+  // Step 2 — model identity, from explicit evidence only. Recorded even when
+  // it fails, so a blocked run still shows what the CLI reported.
+  outcome.observedModels = listObservedModels(envelope);
+
+  // Advisory accounting cross-check. Never thrown, never gates anything — see
+  // resolvePrimaryModel's docstring for why token counts cannot be trusted.
+  try {
+    const accounting = resolvePrimaryModel(envelope);
+    outcome.usageAccounting.resolvedByAccounting = accounting.primary;
+  } catch (error) {
+    outcome.usageAccounting.error = error instanceof SpikeError ? error.code : 'UNEXPECTED_ERROR';
+  }
+
+  let modelError = null;
+  try {
+    const servedPrimaryModel = resolveServedPrimaryModel({ evidenceModels: parser.servedModels() });
+    // Recorded even when the family check below then rejects it as a
+    // fallback: a diagnosis needs to show WHICH model answered, not just that
+    // it was the wrong one.
+    outcome.resolvedPrimaryModel = servedPrimaryModel;
+    outcome.auxiliaryModels = outcome.observedModels.filter((id) => id !== servedPrimaryModel);
+    outcome.usageAccounting.matched = outcome.usageAccounting.resolvedByAccounting === servedPrimaryModel;
+
+    assertNoSilentFallback({
+      requestedModel: model,
+      resolvedPrimaryModel: servedPrimaryModel,
+      expectedFamily,
+    });
+    outcome.available = true;
+  } catch (error) {
+    modelError = toReportableError(error);
+  }
+
+  // Step 3 — only a verified model AND a valid candidate together produce a
+  // trusted result. Model identity wins when both fail: a response we cannot
+  // attribute is not trustworthy regardless of its shape.
+  if (modelError) {
+    outcome.error = modelError;
+  } else if (payloadError) {
+    outcome.error = payloadError;
+  } else {
+    outcome.payload = outcome.candidatePayload;
   }
 
   return outcome;

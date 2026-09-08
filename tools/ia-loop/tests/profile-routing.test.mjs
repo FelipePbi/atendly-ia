@@ -199,6 +199,12 @@ test('integration: Sonnet R1 → CHANGES_REQUIRED → Opus High R2 → ACCEPTED'
       child.stderr = new EventEmitter();
       child.kill = () => true;
       setImmediate(() => {
+        // The explicit evidence invokeAgent now reads: an `assistant` event
+        // naming the served model, before the closing `result`.
+        child.stdout.emit('data', `${JSON.stringify({
+          type: 'assistant',
+          message: { model, content: [{ type: 'text', text: 'ok' }] },
+        })}\n`);
         child.stdout.emit('data', JSON.stringify({
           type: 'result',
           subtype: 'success',

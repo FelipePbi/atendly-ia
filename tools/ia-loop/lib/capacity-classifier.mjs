@@ -68,9 +68,28 @@ const CODE_MAP = Object.freeze({
   // deterministic and ours to fix.
   INVALID_CLAUDE_CLI_ARGS: CAPACITY_REASONS.HARNESS_ERROR,
   UNSUPPORTED_EFFORT: CAPACITY_REASONS.HARNESS_ERROR,
+  // A detected fallback is a violated invariant about WHICH model answered,
+  // proven from explicit evidence (resolveServedPrimaryModel). Genuinely
+  // fatal, never local tooling.
   MODEL_FALLBACK_DETECTED: CAPACITY_REASONS.UNKNOWN_FATAL,
-  RESOLVED_MODEL_AMBIGUOUS: CAPACITY_REASONS.UNKNOWN_FATAL,
-  RESOLVED_MODEL_UNKNOWN: CAPACITY_REASONS.UNKNOWN_FATAL,
+
+  // Everything below is the harness failing to establish model identity, not
+  // the model or a limit doing anything. Goal006 R1 stopped as UNKNOWN_FATAL
+  // on exactly RESOLVED_MODEL_UNKNOWN — a byte-exact match between the
+  // envelope's top-level `usage` and one `modelUsage` entry failing on turn 3
+  // of a resumed session, while the CLI had already produced a valid
+  // StructuredOutput. That token-accounting mechanism is now advisory only
+  // (see claude-process.mjs's resolvePrimaryModel); these two codes are kept
+  // for whatever still calls it directly, reclassified as local tooling
+  // rather than an unknowable model failure.
+  RESOLVED_MODEL_AMBIGUOUS: CAPACITY_REASONS.HARNESS_ERROR,
+  RESOLVED_MODEL_UNKNOWN: CAPACITY_REASONS.HARNESS_ERROR,
+
+  // The current mechanism: no explicit `message.model` evidence on the
+  // response stream, or more than one distinct value. Never a capacity or
+  // model problem — waiting cannot produce evidence that was never emitted.
+  PRIMARY_MODEL_EVIDENCE_MISSING: CAPACITY_REASONS.HARNESS_ERROR,
+  PRIMARY_MODEL_EVIDENCE_CONFLICT: CAPACITY_REASONS.HARNESS_ERROR,
 });
 
 /**

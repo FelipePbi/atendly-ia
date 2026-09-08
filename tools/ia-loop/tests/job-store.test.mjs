@@ -319,3 +319,71 @@ test('runtime and current-goal snapshots round-trip', async () => {
     assert.equal(runtime.goalExecuted, false);
   });
 });
+
+// --- Candidate results ------------------------------------------------------
+//
+// Goal006 R1's review: the CLI produced a valid ReviewDecision, but a harness
+// bug in model-identity verification (see claude-process.mjs) discarded it
+// before it ever reached publishResult. These prove the audit trail that lets
+// that answer be recovered later without a second inference — never as a
+// trusted result on its own, always alongside the FAILED envelope.
+
+test('16. a candidate result round-trips and is recoverable by attempt', async () => {
+  await withStore(async (store) => {
+    await store.publishCandidateResult('tech_lead', '006-r1-tech_lead-eabcb3e9', {
+      requestedModel: 'claude-fable-5-1',
+      modelVerificationError: { code: 'PRIMARY_MODEL_EVIDENCE_MISSING', message: 'no evidence' },
+      observedModels: ['claude-fable-5-1'],
+      payload: { role: 'tech_lead', ok: true, decision: 'CHANGES_REQUIRED' },
+    }, { attemptId: '006-r1-tech_lead-eabcb3e9-a1' });
+
+    const candidate = await store.readCandidateResult(
+      'tech_lead', '006-r1-tech_lead-eabcb3e9', '006-r1-tech_lead-eabcb3e9-a1',
+    );
+    assert.equal(candidate.attemptId, '006-r1-tech_lead-eabcb3e9-a1');
+    assert.equal(candidate.payload.decision, 'CHANGES_REQUIRED');
+    assert.equal(candidate.modelVerificationError.code, 'PRIMARY_MODEL_EVIDENCE_MISSING');
+  });
+});
+
+test('a candidate result requires an attemptId, same as a real result', async () => {
+  await withStore(async (store) => {
+    await assert.rejects(
+      () => store.publishCandidateResult('developer', 'job-1', { payload: {} }),
+      codeIs('RESULT_ATTEMPT_REQUIRED'),
+    );
+  });
+});
+
+test('reading a candidate result that was never published returns null', async () => {
+  await withStore(async (store) => {
+    const candidate = await store.readCandidateResult('developer', 'job-1', 'job-1-a1');
+    assert.equal(candidate, null);
+  });
+});
+
+test('17. a candidate result persists only the whitelisted fields, never arbitrary extras', async () => {
+  await withStore(async (store, dir) => {
+    await store.publishCandidateResult('developer', 'job-1', {
+      requestedModel: 'claude-opus-5',
+      modelVerificationError: null,
+      observedModels: ['claude-opus-5'],
+      payload: { role: 'developer', ok: true },
+      // None of these belong in a candidate result and must not survive.
+      reasoning: 'chain-of-thought the model produced while deciding',
+      rawStdout: 'full raw CLI stdout, potentially containing anything',
+      secret: 'sk-should-never-be-here',
+    }, { attemptId: 'job-1-a1' });
+
+    const raw = await readFile(join(dir, 'results', 'developer', 'job-1.candidate-job-1-a1.json'), 'utf8');
+    assert.ok(!raw.includes('chain-of-thought'));
+    assert.ok(!raw.includes('rawStdout') && !raw.includes('full raw CLI stdout'));
+    assert.ok(!raw.includes('sk-should-never-be-here'));
+
+    const candidate = JSON.parse(raw);
+    assert.deepEqual(Object.keys(candidate).sort(), [
+      'attemptId', 'jobId', 'modelVerificationError', 'observedModels',
+      'payload', 'publishedAt', 'requestedModel', 'role', 'storeVersion',
+    ]);
+  });
+});

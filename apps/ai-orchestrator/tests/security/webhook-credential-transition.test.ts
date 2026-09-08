@@ -93,6 +93,7 @@ function ports() {
       messageRecordId: "outbound-1",
     }),
     markOutboundMessageSent: vi.fn().mockResolvedValue(undefined),
+    markOutboundDelivery: vi.fn().mockResolvedValue(undefined),
     recordManualOutboundText: vi.fn().mockResolvedValue({
       conversationId: "conversation-1",
       messageRecordId: "manual-1",
@@ -170,9 +171,17 @@ describe("inbound during the channel credential transition", () => {
       { debounce: false, runtime },
     );
 
+    // Goal004: a resposta gerada nesta janela nao se perde nem estoura para
+    // fora. A tentativa fica registrada como falha, com motivo explicito, e o
+    // processamento termina dizendo que nao houve envio.
     await expect(
       processor.handleInboundMessage(resolved.message),
-    ).rejects.toMatchObject({ code: "CHANNEL_CREDENTIAL_NOT_PROVISIONED" });
+    ).resolves.toMatchObject({ ok: true, action: "send_failed" });
+    expect(automation.markOutboundDelivery).toHaveBeenCalledWith({
+      messageRecordId: "outbound-1",
+      state: "FAILED",
+      detail: "channel_credential_not_projected",
+    });
 
     // A mensagem do cliente foi processada e gravada antes da falha de envio.
     expect(automation.handleIncomingText).toHaveBeenCalledTimes(1);

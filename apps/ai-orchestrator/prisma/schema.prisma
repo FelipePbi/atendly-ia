@@ -46,6 +46,28 @@ enum ToolCallStatus {
   FAILED
 }
 
+/// Estado de execucao do evento recebido na inbox duravel.
+///
+/// LEGACY marca as linhas gravadas antes do Goal004, quando ProcessedEvent
+/// provava recebimento e nao conclusao: elas nao sao reprocessadas.
+enum InboundEventStatus {
+  RECEIVED
+  PROCESSING
+  DONE
+  FAILED
+  IGNORED
+  LEGACY
+}
+
+/// Estado de entrega de uma saida (outbox). UNKNOWN e o unico estado que a
+/// plataforma nao pode afirmar: so muda por reconciliacao.
+enum MessageDeliveryState {
+  PENDING
+  SENT
+  FAILED
+  UNKNOWN
+}
+
 enum HandoffStatus {
   OPEN
   RESOLVED
@@ -71,22 +93,22 @@ enum KnowledgeDocumentStatus {
 }
 
 model ChannelConnection {
-  id                 String                  @id @default(cuid())
-  tenantId           String
-  userId             String
-  provider           ChannelProvider
-  externalInstanceId String
-  displayName        String?
-  status             ChannelConnectionStatus @default(ACTIVE)
-  metadata           Json?
+  id                  String                  @id @default(cuid())
+  tenantId            String
+  userId              String
+  provider            ChannelProvider
+  externalInstanceId  String
+  displayName         String?
+  status              ChannelConnectionStatus @default(ACTIVE)
+  metadata            Json?
   /// Projecao cifrada da credencial da instancia, entregue pelo BFF no
   /// provisionamento. Nula enquanto o vinculo nao foi reprovisionado.
-  credentialCipher   String?
-  credentialKeyId    String?
-  credentialVersion  Int                     @default(0)
+  credentialCipher    String?
+  credentialKeyId     String?
+  credentialVersion   Int                     @default(0)
   credentialRotatedAt DateTime?
-  createdAt          DateTime                @default(now())
-  updatedAt          DateTime                @updatedAt
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
 
   conversations   Conversation[]
   messages        Message[]
@@ -98,6 +120,7 @@ model ChannelConnection {
   @@unique([tenantId, provider])
   @@unique([tenantId, id])
   @@index([tenantId, status])
+  @@index([credentialVersion])
 }
 
 model Conversation {
@@ -137,13 +160,28 @@ model Message {
   rawPayload        Json?
   createdAt         DateTime         @default(now())
 
+  /// Operation-id estavel da tentativa de saida, gerado antes de chamar o
+  /// transporte. Sobrevive a retry e e o que o recibo do Go reconcilia.
+  correlationId     String?
+  /// Nulo em INBOUND e no estoque anterior ao Goal004. O backfill marca
+  /// OUTBOUND legado como UNKNOWN: nunca SENT presumido.
+  deliveryState     MessageDeliveryState?
+  deliveryDetail    String?
+  deliveryAttempts  Int                   @default(0)
+  deliveryUpdatedAt DateTime?
+
   channel      ChannelConnection @relation(fields: [tenantId, channelId], references: [tenantId, id], onDelete: Cascade)
   conversation Conversation      @relation(fields: [tenantId, channelId, conversationId], references: [tenantId, channelId, id], onDelete: Cascade)
 
   @@unique([tenantId, channelId, externalMessageId])
+  @@unique([tenantId, channelId, correlationId])
   @@index([tenantId, conversationId, createdAt])
+  @@index([tenantId, deliveryState, deliveryUpdatedAt])
 }
 
+/// Inbox duravel do transporte. A linha e gravada antes do ACK; o dedupe
+/// (tenantId, provider, eventKey) continua valendo, agora acompanhado do
+/// estado de execucao, do lease e do resultado.
 model ProcessedEvent {
   id         String          @id @default(cuid())
   tenantId   String
@@ -154,10 +192,33 @@ model ProcessedEvent {
   rawPayload Json?
   receivedAt DateTime        @default(now())
 
+  /// Tipo tecnico do evento (Message, Receipt, Presence, ...). Determina se o
+  /// evento vira trabalho de conversa, reconciliacao de entrega ou registro.
+  eventType            String?
+  /// Chave de serializacao: os eventos de uma mesma conversa executam um de
+  /// cada vez; conversas distintas correm em paralelo.
+  conversationKey      String?
+  status               InboundEventStatus @default(RECEIVED)
+  attempts             Int                @default(0)
+  nextAttemptAt        DateTime?
+  leaseOwner           String?
+  /// Fencing: a conclusao so vale se o token continuar sendo o do claim.
+  leaseToken           String?
+  leaseExpiresAt       DateTime?
+  /// Mensagem nova chegou enquanto a conversa executava: a resposta ainda nao
+  /// enviada e reavaliada ou cancelada.
+  supersedeRequestedAt DateTime?
+  result               Json?
+  error                String?
+  completedAt          DateTime?
+
   channel ChannelConnection @relation(fields: [tenantId, channelId], references: [tenantId, id], onDelete: Cascade)
 
   @@unique([tenantId, provider, eventKey])
   @@index([tenantId, channelId, receivedAt])
+  @@index([status, nextAttemptAt])
+  @@index([status, leaseExpiresAt])
+  @@index([conversationKey, status, receivedAt])
 }
 
 model AiRun {
@@ -250,14 +311,14 @@ model KnowledgeDocument {
 }
 
 model KnowledgeChunk {
-  id         String    @id @default(cuid())
+  id         String                      @id @default(cuid())
   tenantId   String
   documentId String
   content    String
   metadata   Json?
   embedding  Unsupported("vector(1536)")
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  createdAt  DateTime                    @default(now())
+  updatedAt  DateTime                    @updatedAt
 
   document KnowledgeDocument @relation(fields: [tenantId, documentId], references: [tenantId, id], onDelete: Cascade)
 

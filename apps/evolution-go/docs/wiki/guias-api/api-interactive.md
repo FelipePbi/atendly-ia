@@ -541,11 +541,12 @@ A instância deve ter o evento `BUTTON_CLICK` ou `MESSAGE` habilitado na configu
     "timestamp": 1711990500,
     "extraData": {}
   },
-  "instanceToken": "token_da_instancia",
   "instanceId": "uuid-da-instancia",
   "instanceName": "nome_da_instancia"
 }
 ```
+
+> O payload **não** carrega o token da instância. `instanceId` e `instanceName` identificam a origem do evento; a credencial da instância nunca viaja em evento, webhook ou fila. Consumidores autenticam o webhook pelo próprio canal (token de webhook, assinatura ou rede), não pelo corpo.
 
 ### Campos do Evento
 
@@ -588,7 +589,6 @@ A instância deve ter o evento `BUTTON_CLICK` ou `MESSAGE` habilitado na configu
     "fromMe": false,
     "timestamp": 1711991000
   },
-  "instanceToken": "teste123",
   "instanceId": "4ee8ab07-8a67-42a8-a029-f382315912b1",
   "instanceName": "minha_instancia"
 }
@@ -611,7 +611,6 @@ A instância deve ter o evento `BUTTON_CLICK` ou `MESSAGE` habilitado na configu
     "fromMe": false,
     "timestamp": 1711991500
   },
-  "instanceToken": "teste123",
   "instanceId": "4ee8ab07-8a67-42a8-a029-f382315912b1",
   "instanceName": "minha_instancia"
 }
@@ -634,7 +633,6 @@ A instância deve ter o evento `BUTTON_CLICK` ou `MESSAGE` habilitado na configu
     "fromMe": false,
     "timestamp": 1711992000
   },
-  "instanceToken": "teste123",
   "instanceId": "4ee8ab07-8a67-42a8-a029-f382315912b1",
   "instanceName": "minha_instancia"
 }

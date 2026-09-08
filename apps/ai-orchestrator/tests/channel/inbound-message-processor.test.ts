@@ -428,15 +428,12 @@ describe("InboundMessageProcessor", () => {
       correlationId: "outbound-1",
       requestId: "request-1",
     });
+    // Uma unica marcacao, e so depois do transporte responder. Ate o Goal004 o
+    // no de persistencia ja marcava a saida como enviada antes de qualquer
+    // chamada, e o envio que falhasse depois ficava indistinguivel de sucesso.
+    expect(subject.automation.markOutboundMessageSent).toHaveBeenCalledTimes(1);
     expect(subject.automation.markOutboundMessageSent).toHaveBeenNthCalledWith(
       1,
-      {
-        messageRecordId: "outbound-1",
-        providerMessageId: "outbound-1",
-      },
-    );
-    expect(subject.automation.markOutboundMessageSent).toHaveBeenNthCalledWith(
-      2,
       {
         messageRecordId: "outbound-1",
         providerMessageId: "sent-1",

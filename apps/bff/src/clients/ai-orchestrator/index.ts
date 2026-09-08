@@ -12,6 +12,14 @@ const messageSchema = z.object({
   source: z.enum(["CUSTOMER", "AI", "OWNER"]).nullable(),
   body: z.string(),
   createdAt: z.string(),
+  // Estado de entrega da saida, por operacao. Opcional de proposito: mensagem
+  // recebida nao tem entrega, e o estoque anterior ao Goal004 nao tem estado.
+  // `UNKNOWN` significa que a plataforma nao pode afirmar que chegou.
+  deliveryState: z
+    .enum(["PENDING", "SENT", "FAILED", "UNKNOWN"])
+    .nullish()
+    .optional(),
+  deliveryDetail: z.string().nullish().optional(),
 });
 
 const conversationSchema = z.object({

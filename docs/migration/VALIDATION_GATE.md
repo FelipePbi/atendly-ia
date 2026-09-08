@@ -117,7 +117,7 @@ npm ci --prefix apps/bff
 BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_bff_test" npm run validate:integration
 ```
 
-São cinco passos, nesta ordem:
+São dez passos, nesta ordem — o item 5 agrupa o par do Evolution Go:
 
 1. `generate:bff-prisma-client` produz `apps/bff/src/generated/prisma`;
 2. `migrate:bff-test-database` aplica as migrations existentes
@@ -128,13 +128,29 @@ São cinco passos, nesta ordem:
    estoque legado sintético, em banco `<alvo>_rehearsal` recriado a cada
    execução, e reconcilia as contagens;
 5. `provision:evolution-test-database` + `test:evolution-go-ownership` rodam o
-   ensaio de propriedade de metadados do Evolution Go em `<alvo>_evolution`.
+   ensaio de propriedade de metadados do Evolution Go em `<alvo>_evolution`;
+6. `rehearse:goal004-transport-migration` ensaia a migration de transporte
+   durável em `<alvo>_goal004`, recriado a cada execução, e deixa o banco no
+   estado pós-migration;
+7. `generate:ai-orchestrator-prisma-client` produz
+   `apps/ai-orchestrator/src/generated/prisma`;
+8. `test:ai-orchestrator-transport-durability` roda a suíte de persistência e
+   concorrência da IA sobre o resultado do ensaio;
+9. `test:evolution-go-webhook-outbox` roda o outbox técnico do Evolution Go no
+   mesmo servidor descartável.
 
 Nada de `migrate reset` sobre URL herdada, e nenhuma migration é reescrita.
 
-Os bancos dos passos 4 e 5 são derivados do alvo já validado — mesmo servidor
-descartável, nome próprio que preserva o marcador `test`. Não existe variável
-nova para configurar, e nenhum passo depende de banco pessoal.
+Os bancos derivados (`_rehearsal`, `_evolution`, `_goal004`) saem do alvo já
+validado — mesmo servidor descartável, nome próprio que preserva o marcador
+`test`. Não existe variável nova para configurar, e nenhum passo depende de
+banco pessoal.
+
+O banco do passo 6 não roda `prisma migrate deploy` da IA: o schema é
+reconstruído em SQL porque o cluster descartável não tem pgvector. Depois das
+asserções do ensaio, o script cria as tabelas de apoio que o caminho durável
+toca (`AiTenantConfig`, `AiRun`, `Handoff`) sem semear linha alguma, para que o
+passo 8 exercite o fluxo inteiro com um alvo só.
 
 O runner também injeta chaves de cifra **sintéticas**
 (`WHATSAPP_CREDENTIAL_KEYS`, `CHANNEL_CREDENTIAL_KEYS`) para que selagem,
@@ -227,6 +243,38 @@ A mensagem de erro do estado pendente cita a rota que resolve. Cobertura em
 `apps/bff/tests/tenant-instance-link.integration.test.ts`: descarte pelo dono
 seguido de novo vínculo, e recusa do descarte no estado divergente sem apagar
 nada.
+
+## Transporte durável do Goal004
+
+O que os dois passos novos trancam, além do que a lista acima descreve:
+
+- **Recebimento antes do ACK.** O evento é gravado com chave única
+  `(tenantId, provider, eventKey)` antes do 202; duplicata devolve 202 sem novo
+  efeito e queda entre ACK e processamento retoma exatamente uma vez.
+- **Dedupe no lugar certo.** O guard do grafo não repete a prova de recebimento
+  do trabalho já reivindicado: um evento único claimado é processado e
+  respondido, não marcado `duplicate`. Coberto por
+  `apps/ai-orchestrator/tests/integration/inbox-dispatch.test.ts`, que roda o
+  `InboundEventDispatcher` com `InboxStore` e `IdempotencyStore` reais.
+- **Fila sem bloqueio de cabeça.** O claim exclui conversas com `PROCESSING` de
+  lease vivo e segue para a próxima candidata no mesmo ciclo: uma conversa
+  ocupada não segura as outras, e ela própria continua serializada.
+- **Janela de conversa sobre o inbox persistido.** A janela adaptativa de
+  fragmentos (mínimo `AI_DEBOUNCE_MIN_SECONDS`, até
+  `AI_DEBOUNCE_MAX_SECONDS`, limitada por `AI_DEBOUNCE_MAX_WAIT_SECONDS` desde
+  o primeiro fragmento) e a espera da primeira mensagem ambígua de contato sem
+  histórico (`AI_AMBIGUOUS_WAIT_SECONDS`, teto
+  `AI_AMBIGUOUS_MAX_WAIT_SECONDS`) são recalculadas em `nextAttemptAt`, não em
+  buffer de memória. Cobertas em
+  `apps/ai-orchestrator/tests/integration/transport-durability.test.ts` e, na
+  parte de política pura, em `apps/ai-orchestrator/tests/inbox/inbox-policy.test.ts`.
+  A espera é heurística de transporte; classificação de intenção é do Goal005.
+- **Entrega sem promessa falsa.** Timeout vira `unknown` e a tentativa
+  permanece; recibo `Delivered`/`Read` reconcilia; estoque legado fica
+  `UNKNOWN`, nunca `SENT` presumido.
+
+Capacidade de execução contínua do worker (quantas instâncias, com que
+disponibilidade) continua sendo decisão de operação, fora do gate.
 
 ## CI
 

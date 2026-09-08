@@ -138,7 +138,35 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 		)
 	}
 
-	webhookProducer := webhook_producer.NewWebhookProducer(loggerWrapper)
+	// Outbox tecnico do webhook: a tentativa e persistida antes da goroutine de
+	// HTTP, no banco ja configurado do Evolution, e o que ficou pendente e
+	// retomado no boot. Sem broker novo e sem servico novo.
+	var webhookOptions []webhook_producer.Option
+	webhookStore, err := webhook_producer.NewGormDeliveryStore(db)
+	if err != nil {
+		logger.LogError("Failed to prepare the webhook outbox: %v", err)
+	} else {
+		webhookOptions = append(
+			webhookOptions,
+			webhook_producer.WithDeliveryStore(webhookStore),
+			webhook_producer.WithURLResolver(func(instanceID string) (string, error) {
+				instance, err := instance_repository.NewInstanceRepository(db).GetInstanceByID(instanceID)
+				if err != nil {
+					return "", err
+				}
+				return whatsmeow_service.ResolveInstanceWebhookUrl(config.EvolutionEnv, instance), nil
+			}),
+		)
+	}
+	webhookProducer := webhook_producer.NewWebhookProducer(loggerWrapper, webhookOptions...)
+	if resumable, ok := webhookProducer.(interface{ ResumePending(int) (int, error) }); ok {
+		resumed, err := resumable.ResumePending(0)
+		if err != nil {
+			logger.LogError("Failed to resume pending webhooks: %v", err)
+		} else if resumed > 0 {
+			logger.LogInfo("Resumed %d pending webhook deliveries", resumed)
+		}
+	}
 	websocketProducer := websocket_producer.NewWebsocketProducer(loggerWrapper)
 
 	// Cria filas globais se o RabbitMQ global estiver habilitado
@@ -152,7 +180,6 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 	}
 
 	var mediaStorage storage_interfaces.MediaStorage
-	var err error
 	if config.MinioEnabled {
 		mediaStorage, err = minio_storage.NewMinioMediaStorage(
 			config.MinioEndpoint,

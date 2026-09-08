@@ -61,7 +61,24 @@ const envSchema = z.object({
   AI_DEBOUNCE_MIN_SECONDS: intEnv(8),
   AI_DEBOUNCE_MAX_SECONDS: intEnv(35),
   AI_DEBOUNCE_MAX_WAIT_SECONDS: intEnv(60),
+  // Espera da mensagem ambigua: primeira mensagem de um numero sem historico,
+  // curta e sem pedido. A resposta e adiada para a pessoa dizer o que quer,
+  // com teto desde a primeira mensagem.
+  AI_AMBIGUOUS_WAIT_SECONDS: intEnv(120),
+  AI_AMBIGUOUS_MAX_WAIT_SECONDS: intEnv(300),
   AI_BUFFER_BETWEEN_SERVICES_MINUTES: intEnv(0),
+  // Inbox duravel: o loop roda no proprio processo da IA. Sem broker novo.
+  INBOX_WORKER_ENABLED: boolEnv(true),
+  INBOX_POLL_INTERVAL_MS: intEnv(1000),
+  INBOX_LEASE_SECONDS: intEnv(120),
+  INBOX_MAX_ATTEMPTS: intEnv(5),
+  INBOX_RETRY_BASE_SECONDS: intEnv(15),
+  INBOX_RETRY_MAX_SECONDS: intEnv(900),
+  INBOX_MAX_CONCURRENT_CONVERSATIONS: intEnv(4),
+  INBOX_GROUP_BATCH_LIMIT: intEnv(20),
+  // Timeout do envio: sem ele o transporte fica pendurado e o estado da saida
+  // nunca sai de PENDING.
+  EVOLUTION_SEND_TIMEOUT_MS: intEnv(15000),
   AI_PROMPT_VERSION: stringEnv("scheduling_v1.0.0"),
   SCHEDULING_SERVICE_BASE_URL: stringEnv("http://localhost:3003"),
   INTERNAL_SERVICE_TOKEN: serviceTokenEnv(),

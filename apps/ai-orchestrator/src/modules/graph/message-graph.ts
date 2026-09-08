@@ -24,6 +24,7 @@ import type {
 } from "../channel/InboundMessageProcessor.js";
 import type { WhatsAppProvider } from "../channel/ports/WhatsAppProvider.js";
 import type { KnowledgeVectorStore } from "../knowledge/knowledge-vector-store.js";
+import { classifySendFailure } from "../outbox/outbox-policy.js";
 import type { GraphRuntimePort } from "./graph-runtime.js";
 import {
   type GraphIntent,
@@ -51,6 +52,17 @@ export interface MessageGraphExecution {
   bufferedRecord?: { conversationId: string; messageRecordId: string };
 }
 
+/**
+ * Porta de cancelamento da resposta ainda nao enviada.
+ *
+ * Mensagem nova na mesma conversa durante uma execucao pede reavaliacao: a
+ * saida ja persistida e cancelada antes de chamar o transporte, em vez de sair
+ * respondendo a um contexto que o cliente acabou de mudar.
+ */
+export interface OutboundGate {
+  shouldCancel(): Promise<string | null>;
+}
+
 export interface MessageGraphDependencies {
   automation: AutomationPort;
   provider: WhatsAppProvider;
@@ -60,6 +72,7 @@ export interface MessageGraphDependencies {
   knowledge?: KnowledgeVectorStore;
   checkpointer?: BaseCheckpointSaver;
   logger?: DiagnosticLogger;
+  outboundGate?: OutboundGate;
 }
 
 export class MessageGraphWorkflow {
@@ -588,18 +601,45 @@ export class MessageGraphWorkflow {
       state.customerContext.phone,
     );
     if (paused && !state.handoffRequired) {
+      // A saida ja existe persistida; ela nao sera enviada porque o humano
+      // assumiu. Fica falha com motivo, nao apagada nem presumida enviada.
+      await this.recordDelivery(state.response.messageRecordId, {
+        state: "FAILED",
+        detail: "paused_before_send",
+      });
       return {
         result: { ok: true, action: "paused_conversation" },
       };
     }
 
-    if (state.response.messageRecordId) {
-      await this.dependencies.automation.markOutboundMessageSent({
-        messageRecordId: state.response.messageRecordId,
-        providerMessageId: state.response.messageRecordId,
+    // Nada e marcado como enviado aqui: ate o Goal004 este no confirmava a
+    // saida antes de qualquer chamada ao transporte, e o envio que falhasse
+    // depois ficava indistinguivel de um envio bem-sucedido.
+    return {};
+  }
+
+  private async recordDelivery(
+    messageRecordId: string | undefined,
+    delivery: {
+      state: "SENT" | "FAILED" | "UNKNOWN";
+      providerMessageId?: string;
+      rawPayload?: unknown;
+      detail?: string;
+    },
+  ): Promise<void> {
+    if (!messageRecordId) return;
+    const automation = this.dependencies.automation;
+    if (automation.markOutboundDelivery) {
+      await automation.markOutboundDelivery({ messageRecordId, ...delivery });
+      return;
+    }
+    if (delivery.state === "SENT") {
+      await automation.markOutboundMessageSent({
+        messageRecordId,
+        providerMessageId: delivery.providerMessageId,
+        rawPayload: delivery.rawPayload,
       });
     }
-    return {};
   }
 
   private async sendResponse(
@@ -609,26 +649,69 @@ export class MessageGraphWorkflow {
       throw new Error("LangGraph sendResponse received an empty response.");
     }
     const message = state.inboundMessage;
-    const sent = await this.dependencies.provider.sendText({
-      to: message.customerPhone,
-      text: state.response.text,
-      quotedMessageId: message.messageId,
-      quotedParticipant: message.chatId,
-      correlationId: state.response.messageRecordId,
-      requestId: message.requestId,
-    });
+
+    const cancelReason = await this.dependencies.outboundGate?.shouldCancel();
+    if (cancelReason) {
+      await this.recordDelivery(state.response.messageRecordId, {
+        state: "FAILED",
+        detail: cancelReason,
+      });
+      this.logger.info(
+        {
+          ...channelMessageLogContext(message),
+          messageRecordId: state.response.messageRecordId,
+          reason: cancelReason,
+        },
+        "LangGraph cancelled a response that had not been sent yet",
+      );
+      return { result: { ok: true, action: "superseded" } };
+    }
+
+    const correlationId =
+      state.response.correlationId ?? state.response.messageRecordId;
+    let sent: Awaited<ReturnType<WhatsAppProvider["sendText"]>>;
+    try {
+      sent = await this.dependencies.provider.sendText({
+        to: message.customerPhone,
+        text: state.response.text,
+        quotedMessageId: message.messageId,
+        quotedParticipant: message.chatId,
+        correlationId,
+        requestId: message.requestId,
+      });
+    } catch (error) {
+      const classification = classifySendFailure(error);
+      await this.recordDelivery(state.response.messageRecordId, {
+        state: classification.state,
+        detail: classification.detail,
+      });
+      this.logger.error(
+        {
+          ...channelMessageLogContext(message),
+          messageRecordId: state.response.messageRecordId,
+          deliveryState: classification.state,
+          deliveryDetail: classification.detail,
+          err: toErrorMessage(error),
+        },
+        "LangGraph could not confirm the outbound message",
+      );
+      // Retry so quando a falha comprovadamente aconteceu antes do envio: o
+      // inbox retenta o evento. `unknown` nunca e reenviado — muda de estado
+      // por reconciliacao, nao por nova tentativa.
+      if (classification.retryable) throw error;
+      return { result: { ok: true, action: "send_failed" } };
+    }
+
     const response = {
       ...state.response,
-      providerMessageId: sent.messageId ?? state.response.messageRecordId,
+      providerMessageId: sent.messageId ?? correlationId,
       rawPayload: sent.raw,
     };
-    if (state.response.messageRecordId) {
-      await this.dependencies.automation.markOutboundMessageSent({
-        messageRecordId: state.response.messageRecordId,
-        providerMessageId: sent.messageId ?? state.response.messageRecordId,
-        rawPayload: sent.raw,
-      });
-    }
+    await this.recordDelivery(state.response.messageRecordId, {
+      state: "SENT",
+      providerMessageId: sent.messageId ?? correlationId,
+      rawPayload: sent.raw,
+    });
     return {
       response,
       result: {

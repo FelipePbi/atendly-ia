@@ -14,6 +14,7 @@ import type { TenantContext } from "../src/lib/tenant-context.js";
 import {
   findLinkedInstance,
   resolveInstanceCredential,
+  resolveLinkState,
   sealedInstanceCredentialData,
 } from "../src/modules/whatsapp/instance-link.js";
 import {
@@ -239,6 +240,38 @@ describe.skipIf(!RUN_INTEGRATION)("tenant to WhatsApp instance link", () => {
     // por proveniência. Nenhum dos dois recebe a instância do outro.
     await expect(findLinkedInstance(context(a))).rejects.toThrowError(AppError);
     await expect(findLinkedInstance(context(b))).rejects.toThrowError(AppError);
+  });
+
+  // Resíduo do Goal003: uma linha do usuário que já aponta para outro negócio
+  // não é pendência dele — é divergência. Tratá-la como pendente deixaria o
+  // usuário descartar, por `DELETE /v1/whatsapp`, o vínculo de outro negócio.
+  it("classifies a user row owned by another business as divergent, not pending", async () => {
+    const a = await business("link-user-row-other-tenant-a");
+    const b = await business("link-user-row-other-tenant-b");
+    const suffix = randomBytes(3).toString("hex");
+    const instance = await linkInstance(
+      a,
+      SYNTHETIC_CREDENTIAL_A,
+      `link_other_tenant_${suffix}`,
+    );
+    // A linha continua sendo do usuário de A, mas o dono de negócio é B.
+    await getPrisma().whatsAppInstance.update({
+      where: { id: instance.id },
+      data: { tenantId: b.tenantId },
+    });
+
+    expect(await resolveLinkState(context(a))).toEqual({ kind: "divergent" });
+    await expect(findLinkedInstance(context(a))).rejects.toThrowError(AppError);
+
+    const discard = await app.inject({
+      method: "DELETE",
+      url: "/v1/whatsapp",
+      headers: browserMutation(a),
+    });
+    expect(discard.statusCode).toBe(409);
+    expect(
+      await getPrisma().whatsAppInstance.count({ where: { id: instance.id } }),
+    ).toBe(1);
   });
 
   it("keeps one number per business at the database level", async () => {

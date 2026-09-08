@@ -5,6 +5,7 @@ import test from "node:test";
 
 import { repositoryRoot } from "../lib/gate.mjs";
 import {
+  aiTransportTargetUrl,
   assertDriverResolvesSameDestination,
   driverDestination,
   evolutionTargetUrl,
@@ -77,6 +78,10 @@ test("points the subprocess at the declared test database with synthetic secrets
       "rehearse:goal003-link-migration",
       "provision:evolution-test-database",
       "test:evolution-go-ownership",
+      "rehearse:goal004-transport-migration",
+      "generate:ai-orchestrator-prisma-client",
+      "test:ai-orchestrator-transport-durability",
+      "test:evolution-go-webhook-outbox",
     ],
   );
   for (const step of steps) {
@@ -108,7 +113,7 @@ test("derives the Evolution rehearsal database from the validated target", () =>
   const evolutionSteps = steps.filter((step) =>
     step.name.includes("evolution"),
   );
-  assert.equal(evolutionSteps.length, 2);
+  assert.equal(evolutionSteps.length, 3);
   for (const step of evolutionSteps) {
     assert.equal(step.env.EVOLUTION_TEST_DATABASE_URL, derived.toString());
   }
@@ -225,4 +230,31 @@ test("the CLI exits non-zero and runs no step when the URL is missing", () => {
     /migrate:bff-test-database|test:bff-integration/u,
     "no step may run before the target is accepted",
   );
+});
+
+// O ensaio de transporte do Goal004 usa o mesmo servidor descartável, em banco
+// próprio derivado do alvo validado: a suíte de persistência roda sobre o banco
+// que o ensaio da migration deixou pronto.
+test("derives the Goal004 transport rehearsal database from the validated target", () => {
+  const target = resolveIntegrationTarget({ BFF_TEST_DATABASE_URL: validUrl });
+  const derived = new URL(aiTransportTargetUrl(target));
+
+  assert.equal(derived.hostname, "127.0.0.1");
+  assert.equal(derived.port, "55432");
+  assert.equal(derived.pathname, "/atendly_bff_test_goal004");
+  assert.ok(/(?:^|[_-])test(?:[_-]|$)/iu.test("atendly_bff_test_goal004"));
+
+  const steps = integrationSteps(target);
+  for (const step of steps) {
+    assert.equal(step.env.AI_TEST_DATABASE_URL, derived.toString());
+  }
+
+  // A suíte de persistência precisa do banco já migrado pelo ensaio.
+  const rehearsal = steps.findIndex(
+    (step) => step.name === "rehearse:goal004-transport-migration",
+  );
+  const durability = steps.findIndex(
+    (step) => step.name === "test:ai-orchestrator-transport-durability",
+  );
+  assert.ok(rehearsal >= 0 && durability > rehearsal);
 });

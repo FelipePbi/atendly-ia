@@ -613,7 +613,6 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 							"maxCount":    w.config.QrcodeMaxCount,
 							"forceLogout": true,
 						}
-						postMap["instanceToken"] = mycli.token
 						postMap["instanceId"] = mycli.userID
 						postMap["instanceName"] = cd.Instance.Name
 
@@ -659,7 +658,6 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 
 					postMap["data"] = dataMap
 
-					postMap["instanceToken"] = mycli.token
 					postMap["instanceId"] = mycli.userID
 					postMap["instanceName"] = cd.Instance.Name
 
@@ -701,7 +699,6 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 
 					postMap["data"] = dataMap
 
-					postMap["instanceToken"] = mycli.token
 					postMap["instanceId"] = mycli.userID
 					postMap["instanceName"] = cd.Instance.Name
 
@@ -763,7 +760,6 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
 
 			postMap["data"] = dataMap
 
-			postMap["instanceToken"] = mycli.token
 			postMap["instanceId"] = mycli.userID
 			postMap["instanceName"] = cd.Instance.Name
 
@@ -1591,7 +1587,6 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 					"timestamp":  evt.Info.Timestamp.Unix(),
 					"extraData":  buttonClickData,
 				},
-				"instanceToken": mycli.token,
 				"instanceId":    mycli.userID,
 				"instanceName":  mycli.Instance.Name,
 			}
@@ -1757,7 +1752,6 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		dataMap["reason"] = evt.Reason.String()
 
 		// Enviar evento LoggedOut para webhook/RabbitMQ ANTES de matar o canal
-		postMap["instanceToken"] = mycli.Instance.Token
 		postMap["instanceId"] = mycli.userID
 		postMap["instanceName"] = mycli.Instance.Name
 
@@ -1950,7 +1944,6 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 	}
 
 	if doWebhook {
-		postMap["instanceToken"] = mycli.token
 		postMap["instanceId"] = mycli.userID
 		postMap["instanceName"] = mycli.Instance.Name
 
@@ -2173,6 +2166,14 @@ func (w *whatsmeowService) sendToQueueOrWebhook(instance *instance_model.Instanc
 		}
 		w.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Message sent to webhook successfully", instance.Id)
 	}
+}
+
+// ResolveInstanceWebhookUrl expoe a resolucao do destino de webhook da
+// instancia. A retomada do outbox precisa dela: o outbox guarda o destino
+// redigido, e o destino real (com o token na query) continua vindo so da
+// instancia.
+func ResolveInstanceWebhookUrl(evolutionEnv string, instance *instance_model.Instance) string {
+	return resolveInstanceWebhookUrl(evolutionEnv, instance)
 }
 
 func resolveInstanceWebhookUrl(evolutionEnv string, instance *instance_model.Instance) string {

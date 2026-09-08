@@ -176,6 +176,16 @@ export function evolutionTargetUrl(target) {
   return url.toString();
 }
 
+// Banco do ensaio de transporte da IA (Goal004). É o mesmo banco que
+// `goal004-migration-rehearsal.mjs` cria e deixa no estado pós-migration, então
+// a suíte de persistência/concorrência roda sobre o resultado do ensaio, não
+// sobre um schema montado à parte.
+export function aiTransportTargetUrl(target) {
+  const url = new URL(target.url);
+  url.pathname = `/${encodeURIComponent(`${target.database}_goal004`)}`;
+  return url.toString();
+}
+
 // Chave de cifra sintética, fixa e pública por definição: existe apenas para
 // que a suíte exercite selagem, abertura e rotação. Nenhuma credencial real
 // entra aqui, e o valor jamais é usado fora do gate.
@@ -193,6 +203,7 @@ function childEnvironment(target) {
     DIRECT_DATABASE_URL: target.url,
     BFF_TEST_DATABASE_URL: target.url,
     EVOLUTION_TEST_DATABASE_URL: evolutionTargetUrl(target),
+    AI_TEST_DATABASE_URL: aiTransportTargetUrl(target),
     BFF_RUN_INTEGRATION_TESTS: "true",
     JWT_SECRET: "integration-only-secret-with-at-least-32-characters",
     INTERNAL_SERVICE_TOKEN: "integration-only-internal-token",
@@ -258,6 +269,43 @@ export function integrationSteps(target) {
       cwd: "apps/evolution-go",
       command: "go",
       args: ["test", "-count=1", "./pkg/message/..."],
+      env,
+    },
+    // Gate M0/M1 do Goal004: ensaio da migration de transporte contra estoque
+    // legado, em banco próprio e descartável. Deixa o banco no estado
+    // pós-migration para a suíte de persistência logo abaixo.
+    {
+      name: "rehearse:goal004-transport-migration",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal004-migration-rehearsal.mjs"],
+      env,
+    },
+    {
+      // Checkout limpo não tem `src/generated/prisma`; sem isto a suíte falha
+      // na importação do client.
+      name: "generate:ai-orchestrator-prisma-client",
+      cwd: "apps/ai-orchestrator",
+      command: "npx",
+      args: ["prisma", "generate"],
+      env,
+    },
+    // Persistência e concorrência da inbox/outbox contra PostgreSQL real:
+    // claim com SKIP LOCKED, serialização por conversa, lease e reconciliação.
+    // Não pertence ao core porque exige banco.
+    {
+      name: "test:ai-orchestrator-transport-durability",
+      cwd: "apps/ai-orchestrator",
+      command: "npx",
+      args: ["vitest", "run", "tests/integration"],
+      env,
+    },
+    // Outbox técnico do Evolution Go contra o mesmo servidor descartável.
+    {
+      name: "test:evolution-go-webhook-outbox",
+      cwd: "apps/evolution-go",
+      command: "go",
+      args: ["test", "-count=1", "./pkg/events/..."],
       env,
     },
   ];

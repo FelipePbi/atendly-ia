@@ -210,6 +210,14 @@ export const messageSchema = z.object({
   source: z.enum(["CUSTOMER", "AI", "OWNER"]).nullable(),
   body: z.string(),
   createdAt: isoDateTimeSchema,
+  // Campo opcional: respostas anteriores ao Goal004 nao trazem estado de
+  // entrega, e mensagem recebida nunca traz. A composicao do chat que consome
+  // isso e do Goal017; aqui o schema so passa a aceitar o campo.
+  deliveryState: z
+    .enum(["PENDING", "SENT", "FAILED", "UNKNOWN"])
+    .nullish()
+    .optional(),
+  deliveryDetail: z.string().nullish().optional(),
 });
 
 export const conversationSchema = z.object({

@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { env } from "../../config/env.js";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import {
@@ -46,6 +48,8 @@ export interface AssistantReply {
   text: string;
   conversationId: string;
   messageRecordId: string;
+  /** Operation-id da tentativa de saida, ja persistido com estado PENDING. */
+  correlationId?: string;
 }
 
 export interface AssistantGraphSession {
@@ -535,6 +539,9 @@ export class AssistantService {
       decision,
     });
     const text = composeReplyText(decision);
+    // A saida existe antes de qualquer chamada ao transporte, com
+    // `correlationId` estavel: e ele que viaja como id da mensagem no envio e
+    // que o recibo do Go reconcilia depois.
     const assistantMessage = await this.prisma.message.create({
       data: {
         tenantId: session.tenantId,
@@ -544,6 +551,9 @@ export class AssistantService {
         source: "AI",
         role: "assistant",
         body: text,
+        correlationId: `ai-${randomUUID()}`,
+        deliveryState: "PENDING",
+        deliveryUpdatedAt: new Date(),
       },
     });
     if (session.aiRunId) {
@@ -560,6 +570,7 @@ export class AssistantService {
       text,
       conversationId: session.conversationId,
       messageRecordId: assistantMessage.id,
+      correlationId: assistantMessage.correlationId ?? undefined,
     };
   }
 
@@ -662,6 +673,10 @@ export class AssistantService {
         body: input.text,
         externalMessageId,
         rawPayload: rawPayload as object,
+        // Eco de mensagem que o dono ja enviou pelo proprio WhatsApp: o
+        // transporte e quem contou, entao a entrega e fato observado.
+        deliveryState: "SENT",
+        deliveryUpdatedAt: new Date(),
       },
     });
 
@@ -680,6 +695,45 @@ export class AssistantService {
     };
   }
 
+  /**
+   * Transicao de entrega da saida persistida.
+   *
+   * `SENT` so e escrito com evidencia do transporte; `UNKNOWN` guarda a
+   * tentativa cujo desfecho nao da para afirmar e espera reconciliacao;
+   * `FAILED` registra o motivo visivel de nao ter saido.
+   */
+  async markOutboundDelivery(input: {
+    messageRecordId: string;
+    state: "SENT" | "FAILED" | "UNKNOWN";
+    providerMessageId?: string;
+    rawPayload?: unknown;
+    detail?: string;
+  }): Promise<void> {
+    this.logger.info(
+      {
+        messageRecordId: input.messageRecordId,
+        deliveryState: input.state,
+        deliveryDetail: input.detail,
+      },
+      "Assistant recording outbound delivery state",
+    );
+    await this.prisma.message.update({
+      where: { id: input.messageRecordId },
+      data: {
+        ...(input.state === "SENT"
+          ? {
+              externalMessageId: input.providerMessageId,
+              rawPayload: input.rawPayload as object,
+            }
+          : {}),
+        deliveryState: input.state,
+        deliveryDetail: input.detail ?? null,
+        deliveryUpdatedAt: new Date(),
+        ...(input.state === "SENT" ? {} : { deliveryAttempts: { increment: 1 } }),
+      },
+    });
+  }
+
   async markOutboundMessageSent(input: {
     messageRecordId: string;
     providerMessageId?: string;
@@ -693,13 +747,7 @@ export class AssistantService {
       },
       "Assistant marking outbound message",
     );
-    await this.prisma.message.update({
-      where: { id: input.messageRecordId },
-      data: {
-        externalMessageId: input.providerMessageId,
-        rawPayload: input.rawPayload as object,
-      },
-    });
+    await this.markOutboundDelivery({ ...input, state: "SENT" });
     this.logger.info(
       {
         messageRecordId: input.messageRecordId,

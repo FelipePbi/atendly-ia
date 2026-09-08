@@ -261,7 +261,15 @@ async function projectChannelCredential(
     });
   } catch (error) {
     request.log.warn(
-      { err: error instanceof Error ? error.name : "PROVISION_ERROR" },
+      {
+        err: error instanceof Error ? error.name : "PROVISION_ERROR",
+        // Codigo e status dizem se a IA esta fora do ar, se recusou a
+        // credencial ou se o vinculo nao existe la. Sem isso o warn nao
+        // distinguia indisponibilidade de recusa.
+        code:
+          error instanceof AppError ? error.code : "PROVISION_ERROR",
+        statusCode: error instanceof AppError ? error.statusCode : undefined,
+      },
       "WhatsApp channel credential projection is pending for this business",
     );
   }

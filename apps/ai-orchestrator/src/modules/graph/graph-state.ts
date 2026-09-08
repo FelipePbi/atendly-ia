@@ -51,6 +51,8 @@ export interface GraphResponse {
   text: string;
   conversationId?: string;
   messageRecordId?: string;
+  /** Operation-id estavel da saida, emitido antes de chamar o transporte. */
+  correlationId?: string;
   providerMessageId?: string;
   rawPayload?: unknown;
 }
@@ -75,6 +77,8 @@ export interface GraphResult {
     | "unsupported_message"
     | "buffered"
     | "replied"
+    | "superseded"
+    | "send_failed"
     | "error_handoff";
   outboundMessage?: GraphResponse;
 }

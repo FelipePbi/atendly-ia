@@ -99,9 +99,9 @@ Tools de agenda retornam fatos, IDs, versão/resultados e erros de domínio; LLM
 
 ### Semântica de confiabilidade
 
-Evolution persiste evento técnico sanitizado/outbox antes de depender de goroutine de HTTP. IA autentica, resolve canal e persiste inbox+chave única antes de ACK. Processamento posterior possui status, attempts, nextAttemptAt, lease/owner e resultado. Eventos duplicados retornam ACK sem novo efeito, mas eventos recebidos e falhos permanecem retomáveis.
+Evolution persiste evento técnico sanitizado/outbox antes de depender de goroutine de HTTP. IA autentica, resolve canal e persiste inbox+chave única antes de ACK. Processamento posterior possui status, attempts, nextAttemptAt, lease/owner e resultado. Eventos duplicados retornam ACK sem novo efeito, mas eventos recebidos e falhos permanecem retomáveis. Goal004 implementa essa semântica na IA (`ProcessedEvent` como inbox, worker com lease) e no Go (`webhook_deliveries`), conforme D-020.
 
-Outbound recebe operation-id estável, mensagem/tentativa persistida e estados `pending`, `sent`, `failed` e `unknown` quando envio pode ter ocorrido. Recibo/ID externo reconcilia unknown. Não prometer exactly-once do WhatsApp sem garantia do provider; efeito de agenda é idempotente local, entrega é at-least-once com dedupe/reconciliação quando suportados. Timeout não apaga tentativa nem comprova não entrega.
+Outbound recebe operation-id estável, mensagem/tentativa persistida e estados `pending`, `sent`, `failed` e `unknown` quando envio pode ter ocorrido. Recibo/ID externo reconcilia unknown. Não prometer exactly-once do WhatsApp sem garantia do provider; efeito de agenda é idempotente local, entrega é at-least-once com dedupe/reconciliação quando suportados. Timeout não apaga tentativa nem comprova não entrega. Goal004 implementa os estados em `Message`, com `correlationId` como id de envio e reconciliação por recibo (D-020).
 
 ### Alternativas consideradas
 

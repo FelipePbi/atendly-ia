@@ -126,11 +126,11 @@ Inventário de entidades, constraints SQL adicionais ao Prisma, caminhos com loc
 
 **Fluxo confirmado:** Evolution webhook → autenticação por token → mapper → resolução de ChannelConnection por instance ID → processor → LangGraph (contexto/guard/classificação/RAG/buffer/ferramentas/resposta) → Scheduling quando necessário → Evolution sendText. `MessageGraphWorkflow` é importado e construído por InboundMessageProcessor (Graphify explain confirmou; código em `modules/graph/message-graph.ts:65` e `channel/InboundMessageProcessor.ts:168`).
 
-- `channel/routes/evolutionWebhook.routes.ts:60–99`: processor novo por request; HTTP 202 precede `handleInboundMessage`. O buffer é Map por processor (`InboundMessageProcessor.ts:154`). Consequência inferida: debounce/cancelamento não coordena requests distintos e queda após ACK pode perder trabalho.
+- `channel/routes/evolutionWebhook.routes.ts:60–99`: processor novo por request; HTTP 202 precede `handleInboundMessage`. O buffer é Map por processor (`InboundMessageProcessor.ts:154`). Consequência inferida: debounce/cancelamento não coordena requests distintos e queda após ACK pode perder trabalho. **Superado no Goal004** — ver o delta ao final deste documento.
 - `graph/message-graph.ts:206`: ProcessedEvent é criado antes do processamento. A tabela tem dedupe único, mas não estados de execução/retry. Guard de IA desligada/handoff pode encerrar antes de Message. Deduplicação não equivale a processamento concluído.
 - `message-graph.ts:273` e `assistant.service.ts:622`: `fromMe` comum grava OWNER, sem acionar a pausa; comandos especiais de pausa existem. Mensagem humana no chat interno exige takeover prévio (`internal/routes.ts:167`), enquanto o produto pede que o envio assuma. Abrir conversa não deve assumir.
 - `message-graph.ts:269/401`: conteúdo não textual vai para resposta genérica unsupported. Não foi localizado pipeline de transcrição; áudio, imagem e documento ainda não têm tratamentos distintos do MVP.
-- `message-graph.ts:581–631`: registro de outbound é marcado com ID local antes de send e depois atualizado; não há estado separado de entrega. Envio humano remove mensagem pendente se send falha (`internal/routes.ts:174–208`), inclusive quando timeout não prova ausência de entrega.
+- `message-graph.ts:581–631`: registro de outbound é marcado com ID local antes de send e depois atualizado; não há estado separado de entrega. Envio humano remove mensagem pendente se send falha (`internal/routes.ts:174–208`), inclusive quando timeout não prova ausência de entrega. **Superado no Goal004** — ver o delta ao final deste documento.
 - Classificação existente em `assistant.service.ts` usa `potential_customer`, `supplier_or_partner`, `personal_contact`, `unknown` dentro de JSON do agente. Não equivale às três abas, override manual, Contact ignorado e sessão de aproximadamente 24h do produto. Não há esses modelos explícitos no schema.
 
 ### Dados e memória da IA
@@ -298,3 +298,78 @@ sobre a base `99a7210`.
   execução hospedada da CI, corte do Go em banco implantado, drift da migration
   da IA contra o schema (o cluster local não tem pgvector), deploy, WhatsApp
   real e os demais limites do fechamento factual.
+
+## Delta implementado — Goal004, 2026-09-07 (ACCEPTED na rodada 2)
+
+A fotografia histórica acima permanece como registro da baseline. Os FATOs de
+"AI Orchestrator e conversas" e "WhatsApp / Evolution Go" que descrevem ACK
+antes do processamento, buffer em `Map`, outbound marcado antes do envio,
+`delete` da tentativa do dono, `instanceToken` no payload e produtor sem
+persistência estão superados pelos fatos abaixo, verificados no
+[review004](reviews/004-review.md) sobre a base `b3a019c`.
+
+- **FATO atual:** `channel/routes/evolutionWebhook.routes.ts` saneia,
+  classifica e persiste o evento em `ProcessedEvent` antes de responder 202;
+  falha ao persistir devolve 5xx; duplicata devolve 202 sem novo efeito;
+  eventos técnicos recebem 2xx (presença descartada, ciclo de vida da conexão
+  registrado como IGNORED); `Receipt` vira trabalho de reconciliação; vínculo
+  não resolvido devolve 503. Não há mais processamento em promise solta depois
+  do ACK.
+- **FATO atual:** `ProcessedEvent` carrega `eventType`, `conversationKey`
+  (`tenant:canal:contato`), `status` RECEIVED/PROCESSING/DONE/FAILED/IGNORED/
+  LEGACY, tentativas, `nextAttemptAt`, lease (`leaseOwner`, `leaseToken`,
+  `leaseExpiresAt`), `supersedeRequestedAt`, resultado e erro sanitizado.
+  `InboxStore.claimNext` varre candidatos excluindo conversas com PROCESSING
+  de lease vivo, fixa a linha com `FOR UPDATE SKIP LOCKED`, usa
+  `pg_try_advisory_xact_lock` por conversa e agrupa os fragmentos pendentes
+  dentro da janela; só lease expirado é recuperado; `complete`/`fail` exigem
+  o `leaseToken` do claim; dead-letter após `INBOX_MAX_ATTEMPTS` fica visível
+  em `inboxDeadLetters` no painel interno, sem reenvio em massa.
+- **FATO atual:** `InboxWorker` roda no processo da IA (`INBOX_WORKER_ENABLED`,
+  `INBOX_POLL_INTERVAL_MS`, `INBOX_LEASE_SECONDS` 120,
+  `INBOX_MAX_CONCURRENT_CONVERSATIONS`), acordado pelo webhook sem bloquear o
+  ACK; `InboundEventDispatcher` executa o lote com `eventAlreadyGuarded`, então
+  o guard do grafo não repete `remember` sobre a própria linha da inbox. O
+  lease não é renovado durante a execução.
+- **FATO atual:** a janela de fragmentos e a espera da primeira mensagem
+  ambígua de contato sem histórico são recalculadas por
+  `InboxStore.applyConversationWindow` em `nextAttemptAt` sobre os pendentes
+  da conversa (`inbox-policy.ts`: mínimo `AI_DEBOUNCE_MIN_SECONDS`, degraus
+  por texto longo ou vários fragmentos, seguimento urgente, teto
+  `AI_DEBOUNCE_MAX_SECONDS`, limite `AI_DEBOUNCE_MAX_WAIT_SECONDS` desde o
+  primeiro evento; `AI_AMBIGUOUS_WAIT_SECONDS` 120 e
+  `AI_AMBIGUOUS_MAX_WAIT_SECONDS` 300). O `Map` do processador ficou só como
+  gatilho local e está desligado no caminho do worker. Mensagem nova durante a
+  execução marca supersede e `sendResponse` cancela a resposta ainda não
+  enviada (`superseded`).
+- **FATO atual:** toda saída existe em `Message` antes do transporte, com
+  `correlationId` estável (que viaja como id da mensagem no envio) e
+  `deliveryState` PENDING/SENT/FAILED/UNKNOWN mais `deliveryDetail`,
+  `deliveryAttempts` e `deliveryUpdatedAt`. `EvolutionProvider` tem timeout
+  (`EVOLUTION_SEND_TIMEOUT_MS` 15000) mapeado para `EVOLUTION_SEND_TIMEOUT`;
+  `outbox-policy.classifySendFailure` faz 4xx = FAILED definitivo, timeout/5xx/
+  erro pós-envio = UNKNOWN sem retry, conexão nunca estabelecida = FAILED
+  retentável, credencial não projetada = FAILED com motivo; `markOutboundDelivery`
+  substitui a marcação antecipada de envio. `POST /internal/conversations/:id/messages`
+  não apaga mais a tentativa: devolve 201 quando SENT e 202 com o estado real
+  quando FAILED/UNKNOWN. `OutboxStore.reconcileFromReceipt` leva PENDING/UNKNOWN
+  a SENT por `correlationId` ou `externalMessageId`, escopado a tenant e canal.
+- **FATO atual:** `messageDto` da IA, o client do BFF e `publicApiSchemas.ts`
+  do frontend expõem `deliveryState`/`deliveryDetail` como opcionais e
+  anuláveis ([PUBLIC_API_V1](../../apps/bff/PUBLIC_API_V1.md)); não há UI nova.
+- **FATO atual:** no Evolution Go, `webhook_producer.go` persiste a tentativa em
+  `webhook_deliveries` (`AutoMigrate` aditivo) antes da goroutine, com destino
+  redigido; 2xx conclui, 4xx é recusa definitiva sem retry, 5xx/timeout/rede
+  ficam pendentes com retry limitado; `ResumePending` no boot resolve o destino
+  real pela instância. O payload de evento não carrega mais `instanceToken`
+  (sete pontos em `whatsmeow.go` e dois em `send_service.go`); os logs não
+  imprimem a URL com token. 429 e 408 são tratados como 4xx definitivo.
+- **FATO atual:** `validate:integration` tem dez passos, incluindo o ensaio da
+  migration 004 (que também cria tabelas de apoio sem linhas, porque o cluster
+  descartável não tem pgvector), a geração do client Prisma da IA, a suíte de
+  durabilidade/dispatch contra PostgreSQL e o outbox do Go
+  ([VALIDATION_GATE](VALIDATION_GATE.md#transporte-durável-do-goal004)).
+- Continuam **NÃO VERIFICADOS:** WhatsApp real (inclusive se o transporte honra
+  `correlationId` como ID da mensagem), execução hospedada da CI, deploy,
+  `migrate deploy`/`diff` da IA em banco com pgvector, capacidade de execução
+  contínua do worker e os demais limites do fechamento factual.

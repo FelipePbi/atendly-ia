@@ -87,7 +87,10 @@ Envia eventos via HTTP POST para uma URL que você configurar. É o método mais
 
 ### Características
 
-- **Retry automático**: 5 tentativas com intervalo de 30 segundos entre cada tentativa
+- **Entrega durável**: a tentativa é persistida no banco do Evolution **antes** do disparo HTTP; o que ficou pendente é retomado no boot
+- **Retry automático**: 5 tentativas com intervalo de 30 segundos entre cada tentativa, apenas para falhas transitórias
+- **4xx não é retentado**: resposta 4xx é recusa definitiva do destino e conclui a tentativa como falha
+- **Sem segredo no registro**: o destino gravado e logado é redigido (esquema, host e caminho); o token de query nunca é persistido nem impresso
 - **Timeout**: Configurável
 - **Content-Type**: `application/json`
 - **Método**: HTTP POST
@@ -116,8 +119,13 @@ Quando um evento ocorre no WhatsApp:
 
 1. **Webhook por Instância**: Se configurado no `POST /instance/connect`, eventos daquela instância vão para a URL específica
 2. **Webhook local**: Com `EVOLUTION_ENV=local`, `webhookUrlLocal` é usado quando preenchido; caso contrário, usa `webhookUrl`
-3. **Retry Automático**: Se a requisição falhar, o Evolution GO tenta novamente até 5 vezes
-4. **Intervalo**: 30 segundos entre cada tentativa
+3. **Persistência antes do disparo**: a tentativa é gravada em `webhook_deliveries` (estado, tentativas, próxima tentativa, destino redigido) antes de a goroutine de HTTP existir
+4. **Retry Automático**: falha transitória (5xx, timeout, erro de rede) é retentada até 5 vezes
+5. **Intervalo**: 30 segundos entre cada tentativa
+6. **Recusa definitiva**: 4xx encerra a tentativa como falha, sem repetir
+7. **Retomada**: no boot, as tentativas ainda pendentes são reenviadas; o destino real é resolvido de novo a partir da instância
+
+> O payload de evento **não** carrega `instanceToken`. A origem é identificada por `instanceId`/`instanceName`; a credencial da instância não circula em evento, fila ou log.
 
 ### Requisição HTTP
 

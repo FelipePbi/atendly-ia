@@ -6,7 +6,7 @@ import { z } from "zod";
 import { env } from "../../config/env.js";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import { startOfTodayInTimeZone } from "../../lib/dates.js";
-import { AppError } from "../../lib/errors.js";
+import { AppError, toErrorMessage } from "../../lib/errors.js";
 import {
   authorizeInternalRequest,
   type InternalScope,
@@ -14,6 +14,13 @@ import {
 import { EvolutionProvider } from "../channel/adapters/evolution/EvolutionProvider.js";
 import { ChannelConnectionService } from "../channel/ChannelConnectionService.js";
 import { BOT_OFF_PAUSE_UNTIL } from "../handoff/HandoffService.js";
+import {
+  type InboxPort,
+  inboxRetryPolicyFromEnv,
+  InboxStore,
+} from "../inbox/InboxStore.js";
+import { classifySendFailure } from "../outbox/outbox-policy.js";
+import { OutboxStore } from "../outbox/OutboxStore.js";
 import {
   businessContextSchema,
   normalizeBusinessContext,
@@ -51,11 +58,19 @@ const sendOwnerMessageSchema = z.object({
   instanceToken: z.string().min(16).max(512).optional(),
 });
 
+export interface InternalRoutesOptions {
+  /** Inbox duravel: o dead-letter aparece como atencao no painel. */
+  inbox?: Pick<InboxPort, "countDeadLetters">;
+}
+
 export async function registerInternalRoutes(
   app: FastifyInstance,
   prisma: PrismaClient,
+  options: InternalRoutesOptions = {},
 ): Promise<void> {
   const channelConnections = new ChannelConnectionService(prisma);
+  const inbox =
+    options.inbox ?? new InboxStore(prisma, inboxRetryPolicyFromEnv());
 
   // Autorização por escopo, com negação por omissão: um caminho `/internal/`
   // sem escopo declarado no mapa abaixo é recusado, então rota nova não nasce
@@ -182,6 +197,10 @@ export async function registerInternalRoutes(
       });
     }
 
+    // A tentativa existe antes do transporte, com operation-id estavel. Ela
+    // nunca e apagada: timeout ou erro de rede depois do envio nao provam que a
+    // mensagem nao chegou, e apagar a linha era exatamente a forma de a
+    // profissional achar que nao mandou nada e mandar de novo.
     const correlationId = `owner-${randomUUID()}`;
     const pendingMessage = await prisma.message.create({
       data: {
@@ -189,19 +208,22 @@ export async function registerInternalRoutes(
         channelId: conversation.channelId,
         conversationId: conversation.id,
         externalMessageId: correlationId,
+        correlationId,
         direction: "OUTBOUND",
         source: "OWNER",
         role: "assistant",
         body: body.text,
+        deliveryState: "PENDING",
+        deliveryUpdatedAt: new Date(),
       },
     });
 
-    const credential = channelConnections.resolveChannelCredential(
-      conversation.channel,
-    );
-
+    const outbox = new OutboxStore(prisma);
     let sent;
     try {
+      const credential = channelConnections.resolveChannelCredential(
+        conversation.channel,
+      );
       sent = await new EvolutionProvider(
         app.log,
         credential,
@@ -212,16 +234,37 @@ export async function registerInternalRoutes(
         correlationId,
       });
     } catch (error) {
-      await prisma.message.delete({ where: { id: pendingMessage.id } });
-      throw error;
+      const classification = classifySendFailure(error);
+      await outbox.markUndelivered({
+        messageRecordId: pendingMessage.id,
+        state: classification.state,
+        detail: classification.detail,
+      });
+      app.log.warn(
+        {
+          conversationId: conversation.id,
+          messageRecordId: pendingMessage.id,
+          deliveryState: classification.state,
+          deliveryDetail: classification.detail,
+          err: toErrorMessage(error),
+        },
+        "Owner outbound message was persisted without delivery confirmation",
+      );
+      const undelivered = await prisma.message.findUniqueOrThrow({
+        where: { id: pendingMessage.id },
+      });
+      // 202: a tentativa foi aceita e esta registrada, a entrega nao foi
+      // confirmada. O estado real vai no DTO, nao num sucesso presumido.
+      return reply.code(202).send(internalData(request, messageDto(undelivered)));
     }
 
-    const message = await prisma.message.update({
+    await outbox.markSent({
+      messageRecordId: pendingMessage.id,
+      providerMessageId: sent.messageId ?? correlationId,
+      rawPayload: jsonValue(sent.raw),
+    });
+    const message = await prisma.message.findUniqueOrThrow({
       where: { id: pendingMessage.id },
-      data: {
-        externalMessageId: sent.messageId ?? correlationId,
-        rawPayload: jsonValue(sent.raw),
-      },
     });
     await prisma.conversation.update({
       where: { id: conversation.id },
@@ -338,9 +381,13 @@ export async function registerInternalRoutes(
           select: { conversationId: true },
         }),
       ]);
+    // Dead-letter visivel como atencao. Nao existe endpoint de reenvio em
+    // massa: retomar um evento parado e decisao explicita, evento a evento.
+    const inboxDeadLetters = await inbox.countDeadLetters(tenantId);
     return internalData(request, {
       conversationsNeedingAttention: attention.map(conversationDto),
       conversationsNeedingAttentionCount: attentionCount,
+      inboxDeadLetters,
       aiAppointmentsToday: successfulAppointmentTools,
       automatedConversationsToday: new Set(
         aiRuns.map((run) => run.conversationId),
@@ -427,6 +474,8 @@ function messageDto(message: {
   source: "CUSTOMER" | "AI" | "OWNER" | null;
   body: string;
   createdAt: Date;
+  deliveryState?: "PENDING" | "SENT" | "FAILED" | "UNKNOWN" | null;
+  deliveryDetail?: string | null;
 }) {
   return {
     id: message.id,
@@ -434,6 +483,10 @@ function messageDto(message: {
     source: message.source,
     body: message.body,
     createdAt: message.createdAt.toISOString(),
+    // Nulo em INBOUND e no estoque anterior ao Goal004; o consumidor trata o
+    // campo como opcional.
+    deliveryState: message.deliveryState ?? null,
+    deliveryDetail: message.deliveryDetail ?? null,
   };
 }
 

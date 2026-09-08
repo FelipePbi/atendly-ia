@@ -86,7 +86,13 @@ export async function resolveLinkState(
     return { kind: "divergent" };
   }
   if (!byTenant && byUser) {
-    return { kind: "pending", instance: byUser };
+    // `pending` e o vinculo que ainda nao foi atribuido a negocio nenhum: so ai
+    // o descarte pelo dono e seguro. Linha do usuario ja apontando para outro
+    // tenant e divergencia, e resolver como pendente deixaria um negocio
+    // descartar o vinculo de outro.
+    return byUser.tenantId === null
+      ? { kind: "pending", instance: byUser }
+      : { kind: "divergent" };
   }
   return byTenant ? { kind: "linked", instance: byTenant } : { kind: "absent" };
 }

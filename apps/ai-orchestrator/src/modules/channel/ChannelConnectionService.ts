@@ -197,6 +197,40 @@ export class ChannelConnectionService {
   }
 
   /**
+   * Vínculo ativo da instância, sem montar contexto de mensagem.
+   *
+   * Existe para os eventos que não são mensagem: recibo e evento técnico
+   * precisam de dono (tenant e canal) para serem persistidos na inbox, mas não
+   * têm contato, conversa nem texto para resolver.
+   */
+  async findActiveEvolutionConnection(externalInstanceId: string): Promise<{
+    id: string;
+    tenantId: string;
+    externalInstanceId: string;
+  }> {
+    const connection = await this.prisma.channelConnection.findUnique({
+      where: {
+        provider_externalInstanceId: {
+          provider: EVOLUTION_PROVIDER,
+          externalInstanceId,
+        },
+      },
+      select: { id: true, tenantId: true, externalInstanceId: true, status: true },
+    });
+    if (!connection || connection.status !== "ACTIVE") {
+      throw new AppError(
+        "Active channel connection was not found for Evolution instance.",
+        { statusCode: 404, code: "CHANNEL_CONNECTION_NOT_FOUND" },
+      );
+    }
+    return {
+      id: connection.id,
+      tenantId: connection.tenantId,
+      externalInstanceId: connection.externalInstanceId,
+    };
+  }
+
+  /**
    * Resolve a credencial de envio pelo vínculo, nunca por dado de requisição.
    *
    * Vínculo sem projeção — porque ainda não foi reprovisionado — falha aqui e

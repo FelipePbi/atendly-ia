@@ -83,10 +83,10 @@ Design exportado não define modelo de estado, APIs ou arquitetura de componente
 | Migração antiga/jobs/maps/conflitos | Dados rastreáveis parciais, execução errada para alvo | REPLACE / REFACTOR | Substituir orquestração; evoluir registro/mapas preservando história |
 | Cliente e serviço Scheduling | Donos adequados, schema insuficiente | REFACTOR | Pessoa independente do contato; contratos comerciais completos antes de consumers |
 | IA graph/tools/LLM gateway | Separação entre modelo e efeito de agenda útil | REFACTOR | Workflow audita decisão; domínio decide efeitos; testes de falha/confirmar/handoff |
-| IA inbound/buffer/entrega | ACK/dedupe prematuros e memória por request | REPLACE | Inbox/outbox duráveis e coordenação por conversa; manter mapper e abstração de provider |
+| IA inbound/buffer/entrega | Substituído no Goal004: inbox durável sobre `ProcessedEvent`, worker com lease e serialização por conversa, outbox sobre `Message` com estados e reconciliação por recibo | REPLACE (feito) | Mapper e abstração de provider preservados; o `Map` em memória ficou só como gatilho local; restam heartbeat de lease e política de takeover (Goal005) |
 | Conversas/Contact/sessão | Histórico existe; política está em JSON/flags | REFACTOR / CREATE | Contact ignorado, categoria e sessão persistidas fora de checkpoint do modelo |
 | RAG/pgvector/checkpointer | Filtros e persistência úteis | REFACTOR | CRUD conhecimento versionado, consentimento e expiração de cópias; não trocar vector DB |
-| Evolution Go | Transporte separado; autorização de alvo (Goal001) e ownership de metadados (Goal003) corrigidos | REFACTOR | Restam segredos no payload/log do produtor e timeout/durabilidade (Goal004); sem lógica de agenda/classificação |
+| Evolution Go | Transporte separado; autorização de alvo (Goal001), ownership de metadados (Goal003), segredos fora do payload/log e entrega de webhook durável (Goal004) corrigidos | REFACTOR | Restam timeout configurável do cliente HTTP e retenção de `webhook_deliveries` (Goal022); sem lógica de agenda/classificação |
 | Health Worker | Sonda simples e independente | REUSE | Manter monitor; reconsiderar somente se monitor substituto estiver implantado, sem virar worker de produto |
 | Jobs de domínio | Não há mecanismo comum confiável | CREATE | Jobs duráveis no banco do dono; alternativas comparadas em TARGET_ARCHITECTURE |
 | contracts/common | Zod utilitário existente | REUSE | Validar semântica monetária/temporal; não generalizar regra de produto cedo |

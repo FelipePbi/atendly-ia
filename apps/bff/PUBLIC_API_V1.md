@@ -87,3 +87,20 @@ Quando o vínculo não é inequívoco, todas as rotas de WhatsApp recusam com `4
 | Divergente | duas linhas concorrentes, ou uma linha cujo dono de negócio e dono de usuário são contas diferentes | fora do autoatendimento: resolver envolveria decidir pelo outro negócio; depende de operação |
 
 `DELETE /v1/whatsapp` é a única rota que trata o estado pendente como resolvível, e apenas para o dono autenticado da linha. No estado pendente a credencial não é abrível — a cifra está ligada ao negócio —, então o logout autenticado no transporte é pulado; a instância remota ainda é removida pela credencial administrativa. No estado divergente a rota recusa como as demais, sem apagar nada.
+
+## Mensagem: estado de entrega
+
+O DTO de mensagem de `GET /v1/conversations/:id/messages`, `POST /v1/conversations/:id/messages` e do `lastMessage` de conversa passou a expor o estado de entrega **por operação**, em dois campos opcionais:
+
+| Campo | Valores | Significado |
+| --- | --- | --- |
+| `deliveryState` | `PENDING`, `SENT`, `FAILED`, `UNKNOWN`, `null` | estado da tentativa de saída |
+| `deliveryDetail` | texto curto ou `null` | motivo, quando o estado não é `SENT` |
+
+Os campos são opcionais e podem vir `null`: mensagem recebida (`INBOUND`) não tem entrega, e mensagens gravadas antes desta versão ficaram sem estado ou como `UNKNOWN` pelo backfill. Consumidores devem tratar ausência como "sem informação", nunca como sucesso.
+
+`UNKNOWN` é o estado que a plataforma **não pode afirmar**: o envio saiu e o transporte não respondeu a tempo, ou respondeu erro de servidor. A tentativa não é apagada nem reenviada automaticamente — ela muda de estado apenas por reconciliação, quando o transporte devolve o ID externo ou quando chega o recibo `Delivered`/`Read`. Até lá, apresente a mensagem como incerta, não como enviada.
+
+`FAILED` significa que a saída comprovadamente não foi entregue: recusa definitiva do transporte, credencial do canal ainda não projetada, ou resposta cancelada porque o cliente mandou mensagem nova antes do envio. A entrega é *at-least-once* com dedupe e reconciliação; a API não promete exactly-once.
+
+`POST /v1/conversations/:id/messages` continua respondendo `201` com a mensagem criada. O sucesso do HTTP significa que a tentativa foi registrada de forma durável, não que o WhatsApp já entregou: quem diz isso é `deliveryState`.

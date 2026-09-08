@@ -13,7 +13,10 @@ import type {
   AssistantService,
 } from "../assistant/assistant.service.js";
 import type { GraphRuntimePort } from "../graph/graph-runtime.js";
-import { MessageGraphWorkflow } from "../graph/message-graph.js";
+import {
+  MessageGraphWorkflow,
+  type OutboundGate,
+} from "../graph/message-graph.js";
 import type {
   BotPauseContext,
   HandoffService,
@@ -49,8 +52,22 @@ export interface InboundProcessingResult {
     | "unsupported_message"
     | "buffered"
     | "replied"
+    | "superseded"
+    | "send_failed"
     | "error_handoff";
   outboundMessage?: InboundOutboundMessage;
+}
+
+/**
+ * Origem da execucao, do ponto de vista do dedupe.
+ *
+ * `eventAlreadyGuarded` significa "o recebimento ja foi provado antes de mim":
+ * e o caso do trabalho vindo da inbox duravel, onde a linha unica foi gravada
+ * pelo webhook antes do 202. O caminho legado, que chama o processador direto
+ * do request, continua sem a flag e segue usando `IdempotencyStore.remember`.
+ */
+export interface InboundExecutionOptions {
+  eventAlreadyGuarded?: boolean;
 }
 
 export interface RecordedInboundText {
@@ -70,6 +87,18 @@ export interface AutomationPort {
     messageRecordId: string;
     providerMessageId?: string;
     rawPayload?: unknown;
+  }): Promise<void>;
+  /**
+   * Transição de entrega da saída persistida. Opcional no port para não
+   * quebrar automações que só sabem confirmar envio; quando ausente, apenas o
+   * caminho `SENT` é registrado.
+   */
+  markOutboundDelivery?(input: {
+    messageRecordId: string;
+    state: "SENT" | "FAILED" | "UNKNOWN";
+    providerMessageId?: string;
+    rawPayload?: unknown;
+    detail?: string;
   }): Promise<void>;
   recordManualOutboundText(input: {
     phone: string;
@@ -129,6 +158,8 @@ export interface InboundMessageProcessorOptions {
   runtime: GraphRuntimePort;
   checkpointer?: BaseCheckpointSaver;
   knowledge?: KnowledgeVectorStore;
+  /** Cancelamento da resposta ainda nao enviada, avaliado antes do transporte. */
+  outboundGate?: OutboundGate;
 }
 
 interface BufferedMessage {
@@ -173,12 +204,14 @@ export class InboundMessageProcessor {
       runtime: this.runtime,
       knowledge: options.knowledge,
       checkpointer: options.checkpointer,
+      outboundGate: options.outboundGate,
       logger,
     });
   }
 
   async handleInboundMessage(
     message: ChannelInboundMessage,
+    options: InboundExecutionOptions = {},
   ): Promise<InboundProcessingResult> {
     this.logger.info(
       channelMessageLogContext(message),
@@ -198,10 +231,87 @@ export class InboundMessageProcessor {
       return this.bufferTextMessage(message, conversationId);
     }
 
-    const execution = await this.workflow.invoke({ message, conversationId });
+    const execution = await this.workflow.invoke({
+      message,
+      conversationId,
+      eventAlreadyGuarded: options.eventAlreadyGuarded ?? false,
+    });
     if (shouldCancelBufferedMessages(execution.result)) {
       this.cancelBufferedMessages(message);
     }
+    return execution.result;
+  }
+
+  /**
+   * Execucao de um lote ja persistido na inbox, na ordem de recebimento.
+   *
+   * O agrupamento de fragmentos aqui vem do claim — o `Map` em memoria nao e
+   * fonte de verdade nesse caminho, so gatilho local. Um lote com varias
+   * mensagens de texto do cliente e registrado inteiro e respondido uma vez,
+   * como a janela de debounce fazia, mas sobre trabalho duravel.
+   *
+   * Todo evento deste lote ja foi gravado na inbox e reivindicado: a linha em
+   * `ProcessedEvent` e a prova de recebimento. Reexecutar `remember` aqui
+   * colidiria com a propria linha do webhook e faria toda mensagem unica ser
+   * descartada como duplicata — por isso o guard do grafo recebe
+   * `eventAlreadyGuarded` em todos os caminhos deste lote, inclusive no de uma
+   * mensagem so. O dedupe continua existindo, apenas mudou de lugar: e a chave
+   * unica `(tenantId, provider, eventKey)` gravada antes do 202.
+   */
+  async handleInboundBatch(
+    messages: ChannelInboundMessage[],
+  ): Promise<InboundProcessingResult> {
+    if (messages.length === 0) {
+      throw new Error("Inbound batch cannot be empty.");
+    }
+    if (messages.length === 1) {
+      return this.handleInboundMessage(messages[0], {
+        eventAlreadyGuarded: true,
+      });
+    }
+
+    const groupable = messages.every(
+      (message) => isTextMessage(message) && !message.fromMe,
+    );
+    if (!groupable || !hasBufferedAutomation(this.automation)) {
+      let last: InboundProcessingResult | undefined;
+      for (const message of messages) {
+        last = await this.handleInboundMessage(message, {
+          eventAlreadyGuarded: true,
+        });
+      }
+      return last as InboundProcessingResult;
+    }
+
+    const latest = messages[messages.length - 1];
+    const conversationId = await this.runtime.resolveConversationId(latest);
+    const messageRecordIds: string[] = [];
+    for (const message of messages) {
+      const execution = await this.workflow.invoke({
+        message,
+        conversationId,
+        text: message.text,
+        deferResponse: true,
+        eventAlreadyGuarded: true,
+      });
+      if (execution.result.action !== "buffered") return execution.result;
+      if (!execution.bufferedRecord) {
+        throw new Error("LangGraph buffered input without a message record.");
+      }
+      messageRecordIds.push(execution.bufferedRecord.messageRecordId);
+    }
+
+    const text = messages
+      .map((message) => (message.text ?? "").trim())
+      .filter(Boolean)
+      .join("\n");
+    const execution = await this.workflow.invoke({
+      message: latest,
+      conversationId,
+      text,
+      messageRecordIds,
+      eventAlreadyGuarded: true,
+    });
     return execution.result;
   }
 

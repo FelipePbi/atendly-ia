@@ -63,11 +63,35 @@ export class EvolutionProvider implements WhatsAppProvider {
       "EvolutionProvider sending text",
     );
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: buildHeaders(apiKey, instanceId, input.requestId),
-      body: JSON.stringify(buildSendTextBody(input)),
-    });
+    // Sem timeout o envio pode ficar pendurado indefinidamente e a saida
+    // persistida nunca sai de PENDING. Expirar aqui e o que permite ao outbox
+    // classificar a tentativa como `unknown` — nao entregue, nao descartada.
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: buildHeaders(apiKey, instanceId, input.requestId),
+        body: JSON.stringify(buildSendTextBody(input)),
+        signal: AbortSignal.timeout(env.EVOLUTION_SEND_TIMEOUT_MS),
+      });
+    } catch (error) {
+      if (isAbortError(error)) {
+        this.logger.error(
+          {
+            url,
+            to: maskPhone(input.to),
+            requestId: input.requestId,
+            timeoutMs: env.EVOLUTION_SEND_TIMEOUT_MS,
+          },
+          "EvolutionProvider send timed out without a transport answer",
+        );
+        throw new AppError("Evolution Go send timed out.", {
+          statusCode: 504,
+          code: "EVOLUTION_SEND_TIMEOUT",
+        });
+      }
+      throw error;
+    }
 
     const raw = await parseResponse(response);
     if (!response.ok) {
@@ -110,6 +134,11 @@ export class EvolutionProvider implements WhatsAppProvider {
       raw: redactSensitive(raw),
     };
   }
+}
+
+function isAbortError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return error.name === "TimeoutError" || error.name === "AbortError";
 }
 
 function buildHeaders(

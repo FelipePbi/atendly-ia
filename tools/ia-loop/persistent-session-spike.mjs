@@ -31,6 +31,7 @@ import { promisify } from 'node:util';
 
 import { resolveClaudeExecutable, SpikeError } from './lib/claude-process.mjs';
 import { createPersistentSession } from './lib/persistent-session.mjs';
+import { isDirectExecution } from './lib/direct-execution.mjs';
 import {
   assertSessionsAreIndependent,
   getSession,
@@ -325,9 +326,13 @@ async function main() {
   return passed ? 0 : 1;
 }
 
-main()
-  .then((code) => { process.exitCode = code; })
-  .catch((error) => {
-    console.error(`IA Loop — Persistent Dual Session Spike\n\nUnexpected failure: ${error?.message ?? error}\n\nOverall:\nFAIL`);
-    process.exitCode = 1;
-  });
+// Only when this file IS the program. Importing it — from a test, a doc
+// generator, or an agent reading the tooling — must never start anything.
+if (isDirectExecution(import.meta.url)) {
+  main()
+    .then((code) => { process.exitCode = code; })
+    .catch((error) => {
+      console.error(`IA Loop — Persistent Dual Session Spike\n\nUnexpected failure: ${error?.message ?? error}\n\nOverall:\nFAIL`);
+      process.exitCode = 1;
+    });
+}

@@ -23,6 +23,7 @@ import { createAutonomousStore } from './lib/autonomous-state.mjs';
 import { findFailureEvidence, reclassifyEvidence, reclassifyFailure } from './lib/failure-reclassification.mjs';
 import { LOOP_STATES } from './lib/loop-state.mjs';
 import { ROLES } from './lib/contracts-v2.mjs';
+import { isDirectExecution } from './lib/direct-execution.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, '.state');
@@ -110,10 +111,14 @@ async function main() {
   return 0;
 }
 
-main()
-  .then((code) => { process.exitCode = code; })
-  .catch((error) => {
-    const code = error instanceof SpikeError ? error.code : 'UNEXPECTED_ERROR';
-    console.error(`\nATENDLY IA LOOP\n\nCannot reclassify: [${code}] ${error.message}`);
-    process.exitCode = 1;
-  });
+// Only when this file IS the program. Importing it — from a test, a doc
+// generator, or an agent reading the tooling — must never start anything.
+if (isDirectExecution(import.meta.url)) {
+  main()
+    .then((code) => { process.exitCode = code; })
+    .catch((error) => {
+      const code = error instanceof SpikeError ? error.code : 'UNEXPECTED_ERROR';
+      console.error(`\nATENDLY IA LOOP\n\nCannot reclassify: [${code}] ${error.message}`);
+      process.exitCode = 1;
+    });
+}

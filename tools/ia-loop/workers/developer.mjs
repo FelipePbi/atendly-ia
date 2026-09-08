@@ -38,6 +38,7 @@ import { runWithCapacity, RUN_OUTCOMES } from '../lib/capacity-runner.mjs';
 import { LOOP_STATES } from '../lib/loop-state.mjs';
 import { developerResultSchemaFor, validateDeveloperJob, validateDeveloperResult } from '../lib/contracts-v2.mjs';
 import { buildDeveloperContext, buildCorrectionContext } from '../lib/context-builders.mjs';
+import { isDirectExecution } from '../lib/direct-execution.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, '..', '.state');
@@ -388,7 +389,11 @@ async function main() {
   await runWorkerLoop({ store, role: ROLE, getStatus, handleJob });
 }
 
-main().catch((error) => {
-  console.error(`Developer worker failed: ${error?.message ?? error}`);
-  process.exitCode = 1;
-});
+// Only when this file IS the program. Importing it — from a test, a doc
+// generator, or an agent reading the tooling — must never start anything.
+if (isDirectExecution(import.meta.url)) {
+  main().catch((error) => {
+    console.error(`Developer worker failed: ${error?.message ?? error}`);
+    process.exitCode = 1;
+  });
+}

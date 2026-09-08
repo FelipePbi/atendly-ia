@@ -46,6 +46,7 @@ import { classifyLease, createLeaseStore } from './lib/leases.mjs';
 import { buildReviewPacket } from './lib/review-packet.mjs';
 import { createDeveloperProfileStore } from './lib/developer-profiles.mjs';
 import { PROFILE_SOURCES, resolveProfileForRound, toExecutionRecord } from './lib/profile-routing.mjs';
+import { isDirectExecution } from './lib/direct-execution.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..');
@@ -893,10 +894,14 @@ function blockerText(blocker) {
   return `${severity}${id}${blocker.description ?? JSON.stringify(blocker)}${scope}`;
 }
 
-main()
-  .then((code) => { process.exitCode = code; })
-  .catch((error) => {
-    const code = error instanceof SpikeError ? error.code : 'UNEXPECTED_ERROR';
-    console.error(`\nIA Loop — Goal Runner\n\nBlocker: [${code}] ${error.message}\n\nOverall:\nFAIL`);
-    process.exitCode = 1;
-  });
+// Only when this file IS the program. Importing it — from a test, a doc
+// generator, or an agent reading the tooling — must never start anything.
+if (isDirectExecution(import.meta.url)) {
+  main()
+    .then((code) => { process.exitCode = code; })
+    .catch((error) => {
+      const code = error instanceof SpikeError ? error.code : 'UNEXPECTED_ERROR';
+      console.error(`\nIA Loop — Goal Runner\n\nBlocker: [${code}] ${error.message}\n\nOverall:\nFAIL`);
+      process.exitCode = 1;
+    });
+}

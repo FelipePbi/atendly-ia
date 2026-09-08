@@ -23,6 +23,7 @@ import { promisify } from 'node:util';
 
 import { resolveClaudeExecutable, SpikeError } from './lib/claude-process.mjs';
 import { buildReviewRequest } from './lib/contracts.mjs';
+import { isDirectExecution } from './lib/direct-execution.mjs';
 import {
   DEVELOPER_MODEL,
   TECH_LEAD_MODEL,
@@ -224,11 +225,15 @@ async function main() {
   }
 }
 
-main()
-  .then((code) => { process.exitCode = code; })
-  .catch((error) => {
-    console.error('IA Loop — Supervised V1\n');
-    console.error(`Unexpected failure: ${error?.message ?? error}`);
-    console.error('\nOverall:\nFAIL');
-    process.exitCode = 1;
-  });
+// Only when this file IS the program. Importing it — from a test, a doc
+// generator, or an agent reading the tooling — must never start anything.
+if (isDirectExecution(import.meta.url)) {
+  main()
+    .then((code) => { process.exitCode = code; })
+    .catch((error) => {
+      console.error('IA Loop — Supervised V1\n');
+      console.error(`Unexpected failure: ${error?.message ?? error}`);
+      console.error('\nOverall:\nFAIL');
+      process.exitCode = 1;
+    });
+}

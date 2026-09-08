@@ -21,6 +21,7 @@ import { formatRemaining } from './lib/capacity-policy.mjs';
 import { LOOP_STATES } from './lib/loop-state.mjs';
 import { AGENT_EXECUTION_STATES } from './lib/recovery-plan.mjs';
 import { readWorkerHealth, WORKER_HEALTH } from './lib/worker-registry.mjs';
+import { isDirectExecution } from './lib/direct-execution.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, '.state');
@@ -172,8 +173,9 @@ async function main() {
   return 0;
 }
 
-// Only run when invoked directly, so planResume can be imported by tests.
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1].replace(/\\/g, '/')}`).href) {
+// Only when this file IS the program. Importing it — from a test, a doc
+// generator, or an agent reading the tooling — must never start anything.
+if (isDirectExecution(import.meta.url)) {
   main()
     .then((code) => { process.exitCode = code; })
     .catch((error) => {

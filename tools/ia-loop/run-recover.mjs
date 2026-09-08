@@ -38,6 +38,7 @@ import { LOOP_CONFIG } from './lib/loop-config.mjs';
 import { createHandoffStore, handoffCovers } from './lib/recovery-handoff.mjs';
 import { readRuntimeStrict } from './lib/capacity-state.mjs';
 import { createGitProbe } from './lib/git-ops.mjs';
+import { isDirectExecution } from './lib/direct-execution.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, '.state');
@@ -480,10 +481,14 @@ async function main() {
   return 0;
 }
 
-main()
-  .then((code) => { process.exitCode = code; })
-  .catch((error) => {
-    const code = error instanceof SpikeError ? error.code : 'UNEXPECTED_ERROR';
-    console.error(`\nATENDLY IA LOOP — RECOVERY\n\nBlocker: [${code}] ${error.message}`);
-    process.exitCode = 1;
-  });
+// Only when this file IS the program. Importing it — from a test, a doc
+// generator, or an agent reading the tooling — must never start anything.
+if (isDirectExecution(import.meta.url)) {
+  main()
+    .then((code) => { process.exitCode = code; })
+    .catch((error) => {
+      const code = error instanceof SpikeError ? error.code : 'UNEXPECTED_ERROR';
+      console.error(`\nATENDLY IA LOOP — RECOVERY\n\nBlocker: [${code}] ${error.message}`);
+      process.exitCode = 1;
+    });
+}

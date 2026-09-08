@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { SpikeError } from './lib/claude-process.mjs';
 import { createAutonomousStore } from './lib/autonomous-state.mjs';
 import { createJobStore } from './lib/job-store.mjs';
+import { isDirectExecution } from './lib/direct-execution.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, '.state');
@@ -54,10 +55,14 @@ async function main() {
   return 0;
 }
 
-main()
-  .then((code) => { process.exitCode = code; })
-  .catch((error) => {
-    const code = error instanceof SpikeError ? error.code : 'UNEXPECTED_ERROR';
-    console.error(`\nATENDLY IA LOOP — PAUSE\n\nBlocker: [${code}] ${error.message}`);
-    process.exitCode = 1;
-  });
+// Only when this file IS the program. Importing it — from a test, a doc
+// generator, or an agent reading the tooling — must never start anything.
+if (isDirectExecution(import.meta.url)) {
+  main()
+    .then((code) => { process.exitCode = code; })
+    .catch((error) => {
+      const code = error instanceof SpikeError ? error.code : 'UNEXPECTED_ERROR';
+      console.error(`\nATENDLY IA LOOP — PAUSE\n\nBlocker: [${code}] ${error.message}`);
+      process.exitCode = 1;
+    });
+}

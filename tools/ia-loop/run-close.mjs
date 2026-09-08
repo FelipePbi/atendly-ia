@@ -28,6 +28,7 @@ import { assertMigrationComplete } from './lib/planning-decision.mjs';
 import { createDeveloperProfileStore, resolveDeveloperProfile } from './lib/developer-profiles.mjs';
 import { parseMigrationStatus } from './lib/goal-discovery.mjs';
 import { classifyLease, createLeaseStore } from './lib/leases.mjs';
+import { isDirectExecution } from './lib/direct-execution.mjs';
 import {
   createGitProbe,
   createWorktree as gitCreateWorktree,
@@ -511,10 +512,14 @@ async function main() {
   return 0;
 }
 
-main()
-  .then((code) => { process.exitCode = code; })
-  .catch((error) => {
-    const code = error instanceof SpikeError ? error.code : 'UNEXPECTED_ERROR';
-    console.error(`\nIA Loop — Goal Closure\n\nBlocker: [${code}] ${error.message}\n\nState: HUMAN_REQUIRED`);
-    process.exitCode = 1;
-  });
+// Only when this file IS the program. Importing it — from a test, a doc
+// generator, or an agent reading the tooling — must never start anything.
+if (isDirectExecution(import.meta.url)) {
+  main()
+    .then((code) => { process.exitCode = code; })
+    .catch((error) => {
+      const code = error instanceof SpikeError ? error.code : 'UNEXPECTED_ERROR';
+      console.error(`\nIA Loop — Goal Closure\n\nBlocker: [${code}] ${error.message}\n\nState: HUMAN_REQUIRED`);
+      process.exitCode = 1;
+    });
+}

@@ -23,6 +23,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 import { invokeAgent, resolveClaudeExecutable, SpikeError } from './lib/claude-process.mjs';
+import { isDirectExecution } from './lib/direct-execution.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -140,11 +141,15 @@ async function main() {
   }
 }
 
-main()
-  .then((code) => { process.exitCode = code; })
-  .catch((error) => {
-    console.error('IA Loop — Agent Invocation Spike\n');
-    console.error(`Unexpected failure: ${error?.message ?? error}`);
-    console.error('\nOverall:\nFAIL');
-    process.exitCode = 1;
-  });
+// Only when this file IS the program. Importing it — from a test, a doc
+// generator, or an agent reading the tooling — must never start anything.
+if (isDirectExecution(import.meta.url)) {
+  main()
+    .then((code) => { process.exitCode = code; })
+    .catch((error) => {
+      console.error('IA Loop — Agent Invocation Spike\n');
+      console.error(`Unexpected failure: ${error?.message ?? error}`);
+      console.error('\nOverall:\nFAIL');
+      process.exitCode = 1;
+    });
+}

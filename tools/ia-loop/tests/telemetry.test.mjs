@@ -108,11 +108,21 @@ test('4. the model, schema and prompt are identical across levels', () => {
 
   const streamed = buildArgs({ prompt: 'p', model: OPUS, sessionId: 'abc', outputFormat: 'stream-json' });
   const plain = buildArgs({ prompt: 'p', model: OPUS, sessionId: 'abc', outputFormat: 'json' });
-  // The ONLY difference streaming makes is the output format.
+
+  // Streaming differs ONLY in how this process is told to print: the output
+  // format, and the `--verbose` the CLI demands alongside it. Everything that
+  // reaches the model is untouched.
+  const LOCAL_OUTPUT_FLAGS = new Set(['--verbose', 'stream-json', 'json']);
   assert.equal(
-    streamed.filter((a) => a !== 'stream-json').join('|'),
-    plain.filter((a) => a !== 'json').join('|'),
+    streamed.filter((a) => !LOCAL_OUTPUT_FLAGS.has(a)).join('|'),
+    plain.filter((a) => !LOCAL_OUTPUT_FLAGS.has(a)).join('|'),
   );
+
+  // Named explicitly, so a future flag cannot be smuggled in under this test.
+  const inferenceArgs = (args) => ['--model', '--json-schema', '--tools', '--effort', '--permission-mode',
+    '--session-id', '--resume', '--append-system-prompt', '--system-prompt']
+    .flatMap((flag) => (args.includes(flag) ? [flag, args[args.indexOf(flag) + 1]] : []));
+  assert.deepEqual(inferenceArgs(streamed), inferenceArgs(plain));
 });
 
 test('4b. no telemetry text is ever appended to the prompt', async () => {

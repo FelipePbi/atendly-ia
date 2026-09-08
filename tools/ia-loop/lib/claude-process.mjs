@@ -104,15 +104,112 @@ export const AGENT_SCHEMA = {
 /**
  * Effort levels the installed CLI accepts (`claude --help`, 2.1.263).
  *
- * Duplicated from the profile registry on purpose: this layer must be able to
- * refuse an unknown level even when it is called without a profile. The CLI
- * only WARNS about an unknown value and then runs at default effort, which is a
- * silent downgrade — so the check happens before spawn, not after.
+ * The single source of truth: the profile registry imports it from here. The
+ * CLI only WARNS about an unknown value and then runs at default effort, which
+ * is a silent downgrade — so the check happens before spawn, not after.
  */
 export const CLI_EFFORT_LEVELS = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
 
 /** Output formats this wrapper knows how to parse back into an envelope. */
 export const OUTPUT_FORMATS = Object.freeze(['json', 'stream-json']);
+
+/**
+ * Validates a Claude CLI invocation BEFORE anything is spawned.
+ *
+ * This exists because of a real, expensive failure. Goal 005's review died with
+ *
+ *   Error: When using --print, --output-format=stream-json requires --verbose
+ *
+ * after the harness switched to the event stream without adding `--verbose`.
+ * Every test passed, because every test used a fake spawn: they proved what
+ * argv we BUILD, never what the CLI ACCEPTS. A pre-flight probe missed it too,
+ * because an invalid `--session-id` short-circuits the CLI's validation before
+ * this constraint is ever reached.
+ *
+ * So the rule is not "let the CLI tell us". A combination we already know is
+ * invalid must fail here, deterministically, as our own bug — with a stable
+ * code the classifier can read — rather than as a mysterious non-zero exit
+ * after an attempt has already been consumed.
+ *
+ * Only combinations that are DOCUMENTED constraints of the CLI belong here.
+ * This is not a place to guess.
+ */
+export function validateClaudeCliArgs({
+  print = true,
+  outputFormat = 'json',
+  verbose = false,
+  effort = null,
+  resume = false,
+  persistSession = false,
+} = {}) {
+  const problems = [];
+
+  if (!OUTPUT_FORMATS.includes(outputFormat)) {
+    problems.push(`--output-format ${JSON.stringify(outputFormat)} is not one of: ${OUTPUT_FORMATS.join(', ')}`);
+  }
+
+  // The constraint that broke Goal 005 R1 a2. Stated by the CLI itself:
+  // "When using --print, --output-format=stream-json requires --verbose".
+  if (print && outputFormat === 'stream-json' && !verbose) {
+    problems.push('--print with --output-format stream-json requires --verbose');
+  }
+
+  if (effort !== null && effort !== undefined && !CLI_EFFORT_LEVELS.includes(effort)) {
+    problems.push(`--effort ${JSON.stringify(effort)} is not one of: ${CLI_EFFORT_LEVELS.join(', ')}`);
+  }
+
+  if (resume && !persistSession) {
+    problems.push('--resume requires a persisted session; a non-persisted session cannot be resumed');
+  }
+
+  if (problems.length > 0) {
+    throw new SpikeError(
+      'INVALID_CLAUDE_CLI_ARGS',
+      `Refusing to spawn the Claude CLI with arguments it rejects: ${problems.join('; ')}`,
+      { problems, outputFormat, verbose, effort, print },
+    );
+  }
+
+  return true;
+}
+
+/**
+ * Re-checks an argv that was already built.
+ *
+ * Defence in depth against drift between what `validateClaudeCliArgs` was told
+ * and what actually ended up in the array — the exact gap that let a missing
+ * `--verbose` reach a real run.
+ */
+export function assertArgvCompatible(args) {
+  const argv = Array.isArray(args) ? args : [];
+  const has = (flag) => argv.includes(flag);
+  const valueOf = (flag) => (has(flag) ? argv[argv.indexOf(flag) + 1] : null);
+
+  validateClaudeCliArgs({
+    print: has('--print'),
+    outputFormat: valueOf('--output-format') ?? 'json',
+    verbose: has('--verbose'),
+    effort: valueOf('--effort'),
+    resume: has('--resume'),
+    // `--resume` in the argv already implies the session is persisted: the
+    // builder never emits both `--resume` and `--no-session-persistence`.
+    persistSession: !has('--no-session-persistence'),
+  });
+
+  // A duplicated flag is a builder bug, and a silent one: the CLI would take
+  // the last occurrence and the argv would no longer say what we think it says.
+  const duplicated = ['--verbose', '--output-format', '--model', '--effort', '--print', '--json-schema']
+    .filter((flag) => argv.filter((a) => a === flag).length > 1);
+  if (duplicated.length > 0) {
+    throw new SpikeError(
+      'INVALID_CLAUDE_CLI_ARGS',
+      `Refusing to spawn the Claude CLI with duplicated arguments: ${duplicated.join(', ')}`,
+      { duplicated },
+    );
+  }
+
+  return argv;
+}
 
 export function buildArgs({
   prompt,
@@ -151,9 +248,6 @@ export function buildArgs({
   if (resume && !persistSession) {
     throw new SpikeError('INVALID_ARGS', 'resume requires persistSession: a non-persisted session cannot be resumed');
   }
-  if (!OUTPUT_FORMATS.includes(outputFormat)) {
-    throw new SpikeError('INVALID_ARGS', `Unsupported output format ${JSON.stringify(outputFormat)}`);
-  }
   if (effort !== null && effort !== undefined && !CLI_EFFORT_LEVELS.includes(effort)) {
     throw new SpikeError(
       'UNSUPPORTED_EFFORT',
@@ -162,6 +256,16 @@ export function buildArgs({
     );
   }
 
+  // `--print --output-format stream-json` is only accepted alongside
+  // `--verbose`. This is a LOCAL output-shape requirement of the CLI: it
+  // changes how the process prints what it was already going to produce, and
+  // nothing about the prompt, the context, the model or the effort.
+  const verbose = outputFormat === 'stream-json';
+
+  // Checked before the array is built, so an invalid combination never reaches
+  // a spawn and never consumes an attempt.
+  validateClaudeCliArgs({ print: true, outputFormat, verbose, effort, resume, persistSession });
+
   const args = [
     // The prompt goes over stdin, never in argv: a real review packet exceeds
     // the ~32KB Windows command-line limit and the spawn fails with
@@ -169,6 +273,9 @@ export function buildArgs({
     '--print',
     '--model', model,
     '--output-format', outputFormat,
+    // Emitted only for stream-json, and only because the CLI demands it there.
+    // It affects the shape of this process's stdout, never the inference.
+    ...(verbose ? ['--verbose'] : []),
     '--json-schema', JSON.stringify(jsonSchema ?? AGENT_SCHEMA),
     // Tool surface. An empty string removes every built-in tool.
     '--tools', Array.isArray(tools) ? tools.join(',') : tools,
@@ -199,7 +306,9 @@ export function buildArgs({
 
   if (!persistSession) args.push('--no-session-persistence');
 
-  return args;
+  // Last gate. Nothing leaves this function that we already know the CLI would
+  // reject, and nothing leaves it with a flag emitted twice.
+  return assertArgvCompatible(args);
 }
 
 /**

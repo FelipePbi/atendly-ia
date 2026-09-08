@@ -25,6 +25,7 @@ import { createProcessInspector } from './lib/process-inspector.mjs';
 import { OWNER_STATUS, collectOwnerEvidence, isRecoveryEligible, judgeOwner } from './lib/orphan-evidence.mjs';
 import { createHandoffStore, HANDOFF_STATUS } from './lib/recovery-handoff.mjs';
 import { SELECTABLE_DEVELOPER_PROFILES } from './lib/developer-profiles.mjs';
+import { isDirectExecution } from './lib/direct-execution.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, '.state');
@@ -313,10 +314,14 @@ async function main() {
   return 0;
 }
 
-main()
-  .then((code) => { process.exitCode = code; })
-  .catch((error) => {
-    const code = error instanceof SpikeError ? error.code : 'UNEXPECTED_ERROR';
-    console.error(`ATENDLY IA LOOP\n\nCannot read state: [${code}] ${error.message}`);
-    process.exitCode = 1;
-  });
+// Only when this file IS the program. Importing it — from a test, a doc
+// generator, or an agent reading the tooling — must never start anything.
+if (isDirectExecution(import.meta.url)) {
+  main()
+    .then((code) => { process.exitCode = code; })
+    .catch((error) => {
+      const code = error instanceof SpikeError ? error.code : 'UNEXPECTED_ERROR';
+      console.error(`ATENDLY IA LOOP\n\nCannot read state: [${code}] ${error.message}`);
+      process.exitCode = 1;
+    });
+}

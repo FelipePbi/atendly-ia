@@ -1875,8 +1875,11 @@ session ids nem dados pessoais.
 | `lib/stream-telemetry.mjs` | Parsing incremental do stream do CLI em eventos seguros |
 | `lib/developer-profiles.mjs` | Registry de perfis do Developer, effort do CLI e prova anti-fallback |
 | `lib/profile-routing.mjs` | Precedência do perfil por rodada: persistido > escalation > planejado > padrão |
+| `lib/direct-execution.mjs` | Guard de execução direta: importar um entry point não o executa |
+| `lib/harness-retry.mjs` | Autorização auditável de UMA retry depois de corrigir bug do harness |
+| `run-authorize-retry.mjs` | CLI do repair de harness, dry-run por padrão |
 | `fixtures/synthetic-goal.md` | Tarefa sintética, fora do runtime |
-| `tests/*.test.mjs` | 560 testes com processo/agente fake; nenhuma chamada real |
+| `tests/*.test.mjs` | 595 testes com processo/agente fake; nenhuma chamada real |
 
 ## V8 — Telemetria zero-token + roteamento adaptativo do Developer
 
@@ -2025,6 +2028,125 @@ State: IDLE
 
 `npm run ia-loop:status` reporta o perfil roteado, o modelo, o effort e — quando
 existe — o perfil que o Tech Lead escolheu para a próxima rodada.
+
+## V9 — Argumentos do Claude CLI e recuperação de falha do harness
+
+Escrito a partir de uma falha real. O review do Goal005 R1 morreu em:
+
+```
+Error: When using --print, --output-format=stream-json requires --verbose
+exit 1 · stdout vazio · 0 eventos de stream · 0 inferência
+```
+
+O commit da V8 passou a usar `--output-format stream-json` sem adicionar
+`--verbose`. Todos os 560 testes passaram, porque **todos usavam spawn fake**:
+eles provavam o argv que nós *construímos*, nunca o argv que o CLI *aceita*.
+A sondagem prévia também não pegou — um `--session-id` inválido curto-circuita a
+validação do CLI antes de essa restrição ser alcançada.
+
+A parada foi correta (ninguém gastou token, nada foi perdido), mas o
+diagnóstico foi `UNKNOWN_FATAL`: um defeito determinístico e local aparecendo
+como algo incognoscível.
+
+### `--verbose` é requisito de forma de saída, não de inferência
+
+`buildArgs` acrescenta `--verbose` sempre que `outputFormat === 'stream-json'`
+sob `--print`, e nunca fora disso.
+
+```
+--print --model <m> --output-format stream-json --verbose --json-schema … --resume <id>
+```
+
+Isso muda **como este processo imprime** o que o CLI já ia produzir. Não muda
+prompt, contexto, schema, modelo, effort nem sessão. A telemetria continua
+zero-token, e o teste correspondente afirma isso de forma nomeada: entre
+`minimal`, `normal` e `verbose` os argumentos de inferência (`--model`,
+`--json-schema`, `--tools`, `--effort`, `--permission-mode`, `--session-id`,
+`--resume`, `--system-prompt`, `--append-system-prompt`) são idênticos, e a
+única diferença entre `json` e `stream-json` é o formato mais o `--verbose` que
+o CLI exige junto.
+
+### Validação de argumentos antes do spawn
+
+`validateClaudeCliArgs()` é a função canônica e roda **antes** de qualquer
+processo existir. Recusa, com `INVALID_CLAUDE_CLI_ARGS`:
+
+- `--print` + `stream-json` sem `--verbose`;
+- `--output-format` desconhecido;
+- `--effort` fora de `low|medium|high|xhigh|max` (o CLI apenas *avisa* e roda no
+  padrão — um downgrade silencioso);
+- `--resume` sem sessão persistida.
+
+`assertArgvCompatible()` revalida o array já construído e recusa flag duplicada.
+`buildArgs` chama as duas: uma antes de montar, outra sobre o resultado. Não
+dependemos de o CLI reclamar depois — uma combinação que já sabemos inválida
+falha aqui, como bug nosso, com código estável, sem consumir attempt.
+
+### Rejeição de argv é `HARNESS_ERROR`
+
+O classificador reconhece as mensagens de validação **local** do CLI —
+`requires --<flag>`, `unknown/invalid option`, `invalid value for --<flag>`,
+`cannot be used with`, `mutually exclusive`, `unsupported output format`,
+`--json-schema is not valid JSON`, `invalid session id` — e as classifica como
+`HARNESS_ERROR`. Os códigos `INVALID_CLAUDE_CLI_ARGS` e `UNSUPPORTED_EFFORT`
+entram no mapa estrutural.
+
+Deliberadamente estreito: **nada casa por exit code**. Um `NON_ZERO_EXIT`
+genérico continua `UNKNOWN_FATAL`, e limite de sessão, rate limit, auth, billing
+e modelo indisponível continuam em suas próprias categorias — há teste para cada
+um.
+
+`HARNESS_ERROR` continua levando a `HUMAN_REQUIRED`, e isso está certo: esperar
+não conserta um argv inválido. O ganho é o diagnóstico deixar de mentir.
+
+### Repair auditável ≠ capacity retry
+
+Duas causas diferentes de uma attempt merecer sucessora, com instrumentos
+diferentes:
+
+| | `ia-loop:reclassify` | `ia-loop:authorize-retry` |
+| --- | --- | --- |
+| Causa | o modelo disse "agora não" | defeito **nosso**, já corrigido |
+| A attempt | não falhou — foi estacionada | **falhou**, e continua FAILED |
+| Vira | `WAITING_FOR_CAPACITY` | permanece `FAILED` no histórico |
+| Sucessora | pelo caminho normal de capacidade | uma, explicitamente autorizada |
+| Exige | classificação virar um WAIT | classificação ser `HARNESS_ERROR` |
+
+```bash
+npm run ia-loop:authorize-retry -- --role tech_lead --job <id> --reason "<o que foi corrigido>" --fix-commit <sha> --apply
+```
+
+Dry-run por padrão. A nova classificação é **derivada** do diagnóstico
+persistido pelo classificador atual, nunca afirmada pelo operador. Precondições,
+todas fail-closed: attempt `FAILED`; falha lê como `HARNESS_ERROR`; run em
+`HUMAN_REQUIRED`/`AWAITING_HUMAN`; operador deu um motivo; nenhuma sucessora já
+existe; stage incompleto e sem result válido. Rodar duas vezes responde
+`ALREADY_REPAIRED` e **não** cria uma quarta attempt.
+
+Nada é apagado. O envelope de falha é arquivado sob o nome da attempt, ela entra
+no `attemptHistory` **como FAILED** com `originalClassification`,
+`correctedClassification` e `originalError`, e a autorização vira registro
+próprio (`retryAuthorizations`) com `sourceAttemptId`, `successorAttemptId`,
+`reason`, `fixCommit` e `authorizedAt`. Eventos: `FAILURE_RECLASSIFIED` e
+`RETRY_AUTHORIZED_AFTER_HARNESS_FIX`.
+
+### Importar um entry point não executa nada
+
+Durante a introspecção desta própria tooling, um `import()` feito só para checar
+dependências circulares **iniciou os dois workers** — heartbeat e polling de
+jobs incluídos. Nada foi reivindicado, mas por sorte.
+
+Todo executável agora se protege:
+
+```js
+if (isDirectExecution(import.meta.url)) { main().catch(...) }
+```
+
+`lib/direct-execution.mjs` compara `import.meta.url` com `process.argv[1]`,
+ambos passados por `realpath`, então bin symlinkado, argv relativo e caixa de
+caminho no Windows continuam comparando iguais; o que não resolve responde
+`false`, porque não iniciar é a direção segura. Há regressão que importa todos os
+entry points e afirma que nenhum imprime coisa alguma.
 
 ## Limitações conhecidas
 

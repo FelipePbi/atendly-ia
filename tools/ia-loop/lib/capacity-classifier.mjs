@@ -64,14 +64,56 @@ const CODE_MAP = Object.freeze({
   // limit) was originally misreported as a capacity limit; it is a harness bug.
   EXECUTABLE_NOT_FOUND: CAPACITY_REASONS.HARNESS_ERROR,
   SPAWN_FAILED: CAPACITY_REASONS.HARNESS_ERROR,
+  // An argv we refused to spawn, or one the CLI refused to accept. Local,
+  // deterministic and ours to fix.
+  INVALID_CLAUDE_CLI_ARGS: CAPACITY_REASONS.HARNESS_ERROR,
+  UNSUPPORTED_EFFORT: CAPACITY_REASONS.HARNESS_ERROR,
   MODEL_FALLBACK_DETECTED: CAPACITY_REASONS.UNKNOWN_FATAL,
   RESOLVED_MODEL_AMBIGUOUS: CAPACITY_REASONS.UNKNOWN_FATAL,
   RESOLVED_MODEL_UNKNOWN: CAPACITY_REASONS.UNKNOWN_FATAL,
 });
 
+/**
+ * The Claude CLI rejecting our own argv or configuration.
+ *
+ * These are the CLI's LOCAL validation messages, produced before any request
+ * leaves the machine: a flag that needs a companion flag, an unknown flag, an
+ * invalid value, two flags that cannot be combined. They are deterministic
+ * defects in the harness, and waiting cannot fix one.
+ *
+ * Goal 005 R1 stopped as UNKNOWN_FATAL on exactly this — "When using --print,
+ * --output-format=stream-json requires --verbose" — which read as though
+ * something unknowable had happened, when in fact our argv was simply wrong.
+ * The stop was right; the diagnosis was not.
+ *
+ * Deliberately narrow. A non-zero exit is NOT evidence of an argument problem,
+ * and nothing here matches on exit status: only on wording the CLI uses for its
+ * own argument parsing.
+ */
+const CLI_ARGUMENT_REJECTION = new RegExp([
+  // "When using --print, --output-format=stream-json requires --verbose"
+  'when using --[a-z-]+,',
+  '--?[a-z-]+ requires --',
+  'requires (the )?--[a-z-]+',
+  'only works with --',
+  '(unknown|unrecognized|invalid|unexpected) (option|argument|flag|command)',
+  'invalid value for --',
+  'invalid value .* for --',
+  '(unsupported|invalid) output format',
+  'cannot be (used|combined) (with|together)',
+  'mutually exclusive',
+  'missing required (option|argument|flag)',
+  'is not valid json', // --json-schema rejected locally by the CLI parser
+  'must be a valid uuid',
+  'invalid session id',
+].join('|'), 'i');
+
 /** Ordered: the first match wins, so the more specific patterns come first. */
 const TEXT_PATTERNS = Object.freeze([
-  // Checked first: an OS-level spawn failure must never be read as a rate limit.
+  // Checked before everything else: an argv the CLI refused is our bug, and it
+  // must never be read as a model problem, a limit, or an unknown.
+  [CAPACITY_REASONS.HARNESS_ERROR, CLI_ARGUMENT_REJECTION],
+  // Then an OS-level spawn failure, which must never be read as a rate limit.
   [CAPACITY_REASONS.HARNESS_ERROR, /ENAMETOOLONG|E2BIG|argument list too long|ENOENT|EACCES|EMFILE|spawn \w+ E[A-Z]+/],
   [CAPACITY_REASONS.AUTH_ERROR, /not logged in|please run \/login|unauthorized|authentication_error|invalid[_ ]api[_ ]key|oauth|401\b/i],
   [CAPACITY_REASONS.BILLING_ERROR, /billing|payment|credit balance|insufficient (credit|funds|balance)|402\b/i],

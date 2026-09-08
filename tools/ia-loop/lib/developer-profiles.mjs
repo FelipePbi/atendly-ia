@@ -22,16 +22,16 @@ import { readFile, mkdir, writeFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-import { SpikeError } from './claude-process.mjs';
+import { CLI_EFFORT_LEVELS, SpikeError } from './claude-process.mjs';
 
 /**
  * Effort levels the installed Claude CLI accepts.
  *
- * Verified against `claude --help` (2.1.263): `--effort <level>` takes
- * low, medium, high, xhigh, max. An unknown value only produces a warning and
- * is IGNORED, which would silently run at default effort — hence the closed set.
+ * Re-exported, not redeclared: the argument layer owns what the CLI accepts,
+ * and two copies of that list is exactly how a profile ends up declaring an
+ * effort the CLI silently ignores.
  */
-export const CLI_EFFORT_LEVELS = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
+export { CLI_EFFORT_LEVELS };
 
 /**
  * The profiles the Tech Lead may choose from.

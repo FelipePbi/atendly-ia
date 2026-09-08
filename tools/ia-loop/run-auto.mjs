@@ -40,6 +40,7 @@ import { LOOP_STATES } from './lib/loop-state.mjs';
 import { startLeaseHeartbeat } from './lib/leases.mjs';
 import { createHandoffStore } from './lib/recovery-handoff.mjs';
 import { readFile } from 'node:fs/promises';
+import { isDirectExecution } from './lib/direct-execution.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..');
@@ -520,10 +521,14 @@ async function main() {
   }
 }
 
-main()
-  .then((code) => { process.exitCode = code; })
-  .catch((error) => {
-    const code = error instanceof SpikeError ? error.code : 'UNEXPECTED_ERROR';
-    console.error(`\nATENDLY IA LOOP — AUTONOMOUS\n\nBlocker: [${code}] ${error.message}`);
-    process.exitCode = 1;
-  });
+// Only when this file IS the program. Importing it — from a test, a doc
+// generator, or an agent reading the tooling — must never start anything.
+if (isDirectExecution(import.meta.url)) {
+  main()
+    .then((code) => { process.exitCode = code; })
+    .catch((error) => {
+      const code = error instanceof SpikeError ? error.code : 'UNEXPECTED_ERROR';
+      console.error(`\nATENDLY IA LOOP — AUTONOMOUS\n\nBlocker: [${code}] ${error.message}`);
+      process.exitCode = 1;
+    });
+}

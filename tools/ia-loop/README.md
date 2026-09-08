@@ -1038,6 +1038,89 @@ fronteira sobre fatos já coletados — função pura, testável sem repositóri
   estado meio-feito que ninguém interpreta com segurança. Os dois presentes é o
   caso de retomada; nenhum dos dois é começo limpo.
 
+### Run state e goal execution state
+
+Dentro de um único `runtime.json` existem **duas coisas diferentes**, e tratá-las
+como uma só foi o defeito que a primeira transição automática de Goal expôs:
+
+| | o que é | atravessa a fronteira? |
+| --- | --- | --- |
+| **run state** | a campanha: `autonomousRunId`, `migrationAcceptedBaseline`, `reviewLevel`, `mode`, `mainGuardCheckpoint` | **sim** |
+| **goal execution state** | uma tentativa de um Goal: `round`, `currentJobId`, `currentAttemptId`, `jobIdsByRound`, `blockers`, `decision`, `correction`, `closure`, `recovery`, `capacity`/`resumeFrom`, `acceptedSnapshot`, worktree da execução | **nunca** |
+
+A fronteira vive em `lib/goal-execution.mjs`:
+
+- `goalExecutionOf(runtime, goalId)` — **o portão de leitura**. Devolve `null`
+  quando o estado em disco é de outro Goal. Todo lugar que antes espiava o
+  runtime atrás de uma dica (um job id, um round, um relatório, um ponto de
+  retomada) passa por aqui, e recebe `null` — que é a verdade: nada se sabe
+  ainda sobre este Goal.
+- `initializeGoalExecutionState({ previousRuntime, goal, execution })` —
+  constrói o estado do próximo Goal **explicitamente**, carregando apenas a
+  allowlist run-scoped. Nunca `{ ...oldRuntime, goal: '005' }`: um spread
+  preserva todo campo em que ninguém pensou, e foi exatamente assim que os job
+  ids do Goal 004 chegaram ao dispatch do Goal 005.
+- `staleGoalPointers(runtime, goalId)` — relata (não conserta) os ponteiros de
+  outro Goal encontrados em disco, com o campo e o que ele nomeava. Job ids são
+  julgados pelo **próprio id**, não pelo `runtime.goal`: um runtime pode dizer o
+  Goal certo e carregar ids errados — foi exatamente o que a transição falha
+  deixou em disco (`goal: "005"` ao lado de `currentJobId:
+  "004-r1-developer-69a88746"`).
+- `assertBelongsToGoal` / `jobIdForGoal` / `readJobForGoal` — falham fechado com
+  `CROSS_GOAL_STATE_LEAK`.
+
+Um campo que ninguém classificou é **descartado** na fronteira em vez de
+herdado: perder um campo é visível e recuperável; herdar um é o defeito.
+
+### Toda entidade "current" é escopada por Goal
+
+No contexto de execução do Goal G, toda entidade que é *current* satisfaz
+`entity.goal === G` — job, attempt, stage, result, review, origem de blocker,
+continuação de recovery, operação de capacidade, metadados de worktree. Uma
+entidade histórica de outro Goal **continua existindo no store** — isso é o que
+história é — mas nunca pode ser selecionada:
+
+- o job id carrega o Goal (`005-r1-developer-…`), então um ponteiro cross-goal é
+  detectável sem consultar o store (`goalOfJobId`);
+- `reconcileExecutionState({ goal })` filtra na leitura **e** o ledger recusa
+  segurar stage de outro Goal — toda `stageKey` começa pelo Goal;
+- `dispatchJob` recusa reaproveitar um job em disco cujo `goal` não bate com o
+  despachado;
+- `planRecovery` descarta um `runtime.currentJobId` que nomeia outro Goal em vez
+  de segui-lo.
+
+`CROSS_GOAL_STATE_LEAK` é **HARNESS_ERROR** na taxonomia e `HUMAN_REQUIRED` na
+run — nunca um veredito sobre o Goal que estava começando.
+
+### O boundary Goal→Goal
+
+```
+FINALIZE_GOAL_EXECUTION
+  → ARCHIVE_GOAL_EXECUTION_STATE     .state/goal-executions/<goal>.json
+  → INITIALIZE_NEXT_GOAL_EXECUTION   round 1, sem nada herdado
+  → DISPATCH_NEXT_GOAL
+```
+
+Atravessado em `run-auto` no início de cada iteração — não no instante em que o
+ponteiro da run mudou — porque esse é o ponto que **todo** caminho alcança:
+continuação automática, retomada de pausa, e restart após crash entre o
+fechamento de um Goal e o começo do próximo. É idempotente: chegar duas vezes
+não custa nada e não rebobina um Goal que já começou a trabalhar. O arquivo do
+Goal anterior é escrito uma vez e nunca reescrito; nada é apagado.
+
+Eventos: `GOAL_EXECUTION_ARCHIVED`, `NEXT_GOAL_EXECUTION_INITIALIZED`,
+`CROSS_GOAL_STATE_LEAK_DETECTED` (com campos sanitizados).
+
+O defeito que gerou tudo isso: Goal 004 `ACCEPTED` → closure → nova baseline →
+Goal 005 `READY` → o loop seguiu sozinho. `run-auto` moveu o ponteiro da run
+para 005; o execution state em disco continuou sendo o de 004. O ledger do Goal
+005 estava vazio, então a cadeia de fallback de job id em `run-goal` chegou a
+`jobIdsByRound["1"].developer` do Goal **anterior** e despachou
+`004-r1-developer-69a88746` — uma tentativa já `SUPERSEDED`. O store recusou
+(`STAGE_NOT_RETRYABLE`) e a run parou como `UNKNOWN_FATAL`, parecendo, de fora,
+que o Goal 005 havia falhado. O Goal 005 nunca rodou; nenhuma inferência
+aconteceu para ele.
+
 ### Fim de migração é afirmação, nunca inferência
 
 O planning tem exatamente três respostas — `NEXT_GOAL`, `MIGRATION_COMPLETE`,
@@ -1370,6 +1453,14 @@ distintas e ficam guardadas como coisas distintas.
 ### Status
 
 ```
+Current Goal: 005
+Goal execution:
+  Round: 1
+  State: GOAL_READY
+Previous Goal: 004 (ACCEPTED)
+
+Active job: none for Goal 005.
+
 Run:
   auto-7b32c56a
   State: RUNNING
@@ -1383,6 +1474,12 @@ Orchestrator:
 
 Run e orchestrator são blocos separados, então não há como imprimir "ninguém
 segura o loop" e recusar o attach dizendo "a run segura o loop".
+
+Do mesmo modo, *current Goal* e *goal execution* são blocos separados: o bloco de
+execução só é preenchido quando o estado em disco é daquele Goal, e job ativo é
+filtrado pelo Goal corrente. Nunca aparece um job `004-*` como ativo enquanto o
+Goal corrente é 005 — leases de outros Goals são listadas à parte, rotuladas
+como históricas.
 
 Eventos: `RECOVERY_READY_FOR_ATTACH`, `ORCHESTRATOR_ATTACH_STARTED`,
 `ORCHESTRATOR_ATTACH_SUCCEEDED`, `ORCHESTRATOR_ATTACH_FAILED`,
@@ -1525,7 +1622,7 @@ agora tem — `migration-loop-a1`, `-a2` a cada recuperação, na mesma run.
 ## Como executar
 
 ```bash
-npm run test:ia-loop       # 442 testes locais, sem chamadas reais a modelo
+npm run test:ia-loop       # 478 testes locais, sem chamadas reais a modelo
 ```
 
 ```bash
@@ -1618,6 +1715,7 @@ session ids nem dados pessoais.
 | `lib/autonomous-state.mjs` | Run autônoma durável, lease do orquestrador, pausa |
 | `lib/planning-decision.mjs` | Três decisões de planning; fim de migração verificado |
 | `lib/goal-boundary.mjs` | Julgamento puro da fronteira entre dois Goals |
+| `lib/goal-execution.mjs` | Run state vs goal execution state; escopo por Goal e guarda `CROSS_GOAL_STATE_LEAK` |
 | `lib/process-inspector.mjs` | Identidade e liveness de processo; Windows-aware, fake nos testes |
 | `lib/orphan-evidence.mjs` | De suspeita a prova: quando uma lease pode ser tomada |
 | `lib/recovery-plan.mjs` | O passo seguro após um crash, por estado |
@@ -1644,7 +1742,7 @@ session ids nem dados pessoais.
 | `lib/persistent-session.mjs` | Sessão por agente: cria no 1º turno, resume nos seguintes |
 | `lib/session-registry.mjs` | Registro durável de sessões, com escrita atômica |
 | `fixtures/synthetic-goal.md` | Tarefa sintética, fora do runtime |
-| `tests/*.test.mjs` | 442 testes com processo/agente fake; nenhuma chamada real |
+| `tests/*.test.mjs` | 478 testes com processo/agente fake; nenhuma chamada real |
 
 ## Limitações conhecidas
 

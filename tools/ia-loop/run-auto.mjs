@@ -35,6 +35,8 @@ import {
   requiresHuman,
   shouldPauseAt,
 } from './lib/autonomous-state.mjs';
+import { goalExecutionOf, initializeGoalExecutionState, staleGoalPointers } from './lib/goal-execution.mjs';
+import { LOOP_STATES } from './lib/loop-state.mjs';
 import { startLeaseHeartbeat } from './lib/leases.mjs';
 import { createHandoffStore } from './lib/recovery-handoff.mjs';
 import { readFile } from 'node:fs/promises';
@@ -44,6 +46,65 @@ const REPO_ROOT = resolve(HERE, '..', '..');
 const STATE_DIR = join(HERE, '.state');
 
 const probe = createGitProbe(REPO_ROOT);
+
+/**
+ * The boundary between two Goals, made explicit.
+ *
+ *   FINALIZE → ARCHIVE → INITIALIZE → DISPATCH
+ *
+ * Until V7 this was a single line — move the run's pointer to the next Goal —
+ * and the execution state stayed exactly as the closed Goal left it. `run-goal`
+ * then read it as a hint for Goal 005 and dispatched `004-r1-developer-…`, an
+ * attempt already SUPERSEDED, so the store refused it and the run stopped as if
+ * Goal 005 had failed. Nothing of Goal 005 had run.
+ *
+ * Crossing is idempotent: it is safe to call again after a crash between the
+ * closure of one Goal and the start of the next, and does nothing at all once
+ * the next Goal's execution state is already on disk.
+ */
+async function crossGoalBoundary({ store, fromGoal, toGoal, baseline, runId, emit }) {
+  const runtime = await store.readRuntime();
+
+  if (goalExecutionOf(runtime, toGoal)) {
+    // Already crossed — a restart landing here must not rewind the Goal that
+    // has since started working.
+    return { crossed: false, reason: 'ALREADY_INITIALIZED' };
+  }
+
+  const leaked = staleGoalPointers(runtime, toGoal);
+  const archived = await store.archiveGoalExecution(runtime);
+  await store.appendEvent({
+    type: 'GOAL_EXECUTION_ARCHIVED',
+    autonomousRunId: runId, previousGoal: fromGoal, nextGoal: toGoal,
+    baseline, archived: archived.archived, reason: archived.reason ?? null,
+  });
+
+  await store.writeRuntime(initializeGoalExecutionState({
+    previousRuntime: runtime,
+    goal: toGoal,
+    execution: {
+      // The next Goal is READY and nothing has been attempted for it. run-goal
+      // takes it from here and owns every later transition.
+      state: LOOP_STATES.GOAL_READY,
+      migrationAcceptedBaseline: baseline,
+      // The worktree of the next Goal is not this boundary's business: it is
+      // planned, verified and created by run-goal, which is the only place
+      // allowed to decide between reuse and creation.
+      executionBase: null, worktreePath: null, worktreeInitialHead: null,
+    },
+  }));
+
+  await store.appendEvent({
+    type: 'NEXT_GOAL_EXECUTION_INITIALIZED',
+    autonomousRunId: runId, previousGoal: fromGoal, nextGoal: toGoal,
+    baseline, round: 1,
+  });
+
+  if (leaked.length > 0) {
+    emit(`Goal ${fromGoal} execution archived; ${leaked.length} pointer(s) retired with it.`);
+  }
+  return { crossed: true, leaked };
+}
 
 /**
  * Every failure between taking the loop lease and entering the main try block
@@ -327,6 +388,22 @@ async function main() {
         emit('Goal boundary is ambiguous; stopping instead of guessing:');
         for (const p of preflight.problems) emit(`  - ${p}`);
         return 1;
+      }
+
+      // --- The Goal boundary ------------------------------------------------
+      //
+      // Crossed here rather than at the moment the pointer moved, because this
+      // is the point every path reaches: continuing automatically, resuming
+      // from a pause, and restarting after a crash between one Goal's closure
+      // and the next Goal's start. It is idempotent, so arriving twice costs
+      // nothing and rewinds nothing.
+      const runtimeBefore = await store.readRuntime();
+      if (runtimeBefore?.goal && runtimeBefore.goal !== goalId) {
+        await crossGoalBoundary({
+          store, fromGoal: runtimeBefore.goal, toGoal: goalId,
+          baseline: run.migrationAcceptedBaseline, runId: run.autonomousRunId, emit,
+        });
+        emit(`Goal ${runtimeBefore.goal} execution closed. Goal ${goalId} starts at round 1 with no inherited state.`);
       }
 
       await store.appendEvent({ type: 'GOAL_STARTED', autonomousRunId: run.autonomousRunId, goal: goalId });

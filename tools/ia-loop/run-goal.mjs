@@ -19,10 +19,14 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { SpikeError } from './lib/claude-process.mjs';
-import { JOB_DISPATCH, clearPerGoalRuntime, createJobStore } from './lib/job-store.mjs';
+import { JOB_DISPATCH, createJobStore } from './lib/job-store.mjs';
 import {
   DISPATCH_KINDS, assertNoDuplicateStageDispatch, reconcileExecutionState,
 } from './lib/reconcile.mjs';
+import {
+  assertBelongsToGoal, goalExecutionOf, initializeGoalExecutionState,
+  jobIdForGoal, readJobForGoal, staleGoalPointers,
+} from './lib/goal-execution.mjs';
 import { STAGES } from './lib/stage-identity.mjs';
 import { fullWorktreeFingerprint } from './lib/worktree-fingerprint.mjs';
 import { discoverGoal } from './lib/goal-discovery.mjs';
@@ -230,21 +234,45 @@ async function main() {
 
   // --- Worktree: reuse when an execution is already in progress ------------
   machine.transitionTo(LOOP_STATES.PREPARING_WORKTREE);
-  const previousRuntime = await store.readRuntime();
-  const resuming = previousRuntime?.mode === 'REAL_EXECUTION'
-    && previousRuntime.goal === goal.goalId
-    && Boolean(previousRuntime.worktreeInitialHead)
-    && Boolean(previousRuntime.worktreePath)
-    && await probe.pathExists(previousRuntime.worktreePath);
+  const persistedRuntime = await store.readRuntime();
+
+  // THE read gate. Everything below that wants to know what already happened
+  // asks this, never the persisted runtime: it is null unless the state on disk
+  // is this Goal's own. A closed Goal's execution is history — readable in the
+  // store and in the archive, never an input to what happens next.
+  const priorGoalExecution = goalExecutionOf(persistedRuntime, goal.goalId);
+
+  const leaked = staleGoalPointers(persistedRuntime, goal.goalId);
+  if (leaked.length > 0) {
+    // Not a repair and not a failure: the pointers are simply not used, and the
+    // fact that they were there is recorded with what they named.
+    emit(persistedRuntime.goal === goal.goalId
+      ? `Execution state carries ${leaked.length} pointer(s) from another Goal; they are history and are not used.`
+      : `Execution state on disk belongs to Goal ${persistedRuntime.goal}; it is history, not this Goal's state.`);
+    for (const pointer of leaked.slice(0, 8)) {
+      emit(`  stale: ${pointer.field} = ${pointer.value}${pointer.goal ? ` (Goal ${pointer.goal})` : ''}`);
+    }
+    await store.appendEvent({
+      type: 'CROSS_GOAL_STATE_LEAK_DETECTED',
+      goal: goal.goalId, previousGoal: persistedRuntime.goal,
+      pointers: leaked.map(({ field, value, goal: owner }) => ({ field, value, goal: owner })),
+    });
+    emit('');
+  }
+
+  const resuming = priorGoalExecution?.mode === 'REAL_EXECUTION'
+    && Boolean(priorGoalExecution.worktreeInitialHead)
+    && Boolean(priorGoalExecution.worktreePath)
+    && await probe.pathExists(priorGoalExecution.worktreePath);
 
   let worktree;
   if (resuming) {
     emit('Resuming an execution already in progress — the worktree is reused, not recreated.');
     worktree = {
-      path: previousRuntime.worktreePath,
+      path: priorGoalExecution.worktreePath,
       branch: branchNameFor(goalId),
-      worktreeInitialHead: previousRuntime.worktreeInitialHead,
-      absolutePath: join(REPO_ROOT, previousRuntime.worktreePath),
+      worktreeInitialHead: priorGoalExecution.worktreeInitialHead,
+      absolutePath: join(REPO_ROOT, priorGoalExecution.worktreePath),
     };
   } else {
     emit('Creating worktree…');
@@ -256,7 +284,7 @@ async function main() {
 
   // The base of record never moves, even though the tooling checkout advanced.
   const executionBase = resuming
-    ? (previousRuntime.executionBase ?? worktree.worktreeInitialHead)
+    ? (priorGoalExecution.executionBase ?? worktree.worktreeInitialHead)
     : headNow;
   const absWorktree = worktree.absolutePath;
 
@@ -284,11 +312,30 @@ async function main() {
     worktreePath: worktree.path, worktreeInitialHead: worktree.worktreeInitialHead,
     reviewLevel: REVIEW_LEVEL, goalExecuted: false,
   };
-  // Starting a different Goal keeps nothing from the previous one's execution.
-  await store.writeRuntime({
-    ...(resuming ? previousRuntime : clearPerGoalRuntime(previousRuntime)),
-    ...baseRuntime,
-  });
+  // Continuing THIS Goal keeps its own execution state; starting a Goal builds
+  // a new one explicitly. The difference matters more than it looks: a spread
+  // of the previous runtime keeps every field nobody thought about, and that is
+  // exactly how Goal 004's job ids arrived in Goal 005's dispatch.
+  if (priorGoalExecution) {
+    await store.writeRuntime({ ...priorGoalExecution, ...baseRuntime });
+  } else {
+    if (persistedRuntime?.goal) {
+      const archived = await store.archiveGoalExecution(persistedRuntime);
+      await store.appendEvent({
+        type: 'GOAL_EXECUTION_ARCHIVED',
+        previousGoal: persistedRuntime.goal, nextGoal: goal.goalId,
+        baseline: goal.migrationAcceptedBaseline, archived: archived.archived,
+      });
+    }
+    await store.writeRuntime(initializeGoalExecutionState({
+      previousRuntime: persistedRuntime, goal: goal.goalId, execution: baseRuntime,
+    }));
+    await store.appendEvent({
+      type: 'NEXT_GOAL_EXECUTION_INITIALIZED',
+      previousGoal: persistedRuntime?.goal ?? null, nextGoal: goal.goalId,
+      baseline: goal.migrationAcceptedBaseline, round: 1,
+    });
+  }
 
   // --- Reconcile before dispatch -------------------------------------------
   //
@@ -384,12 +431,21 @@ async function main() {
     // The attempt to use: the one the ledger says already completed this stage,
     // then whichever was left in flight, then a new one. The recorded id is a
     // hint now; the ledger is the authority.
+    //
+    // Every candidate is scoped to this Goal before it is considered. The
+    // ledger and the reconciled resume point already are; the recorded hint is
+    // read through `priorGoalExecution`, which is null for any other Goal, and
+    // `jobIdForGoal` drops an id whose own name says it belongs elsewhere. A
+    // freshly minted id is the answer whenever nothing legitimate survives —
+    // never an inherited one.
     const devStage = isCorrection ? STAGES.CORRECTION : STAGES.IMPLEMENTATION;
     const devLedger = reconciled.ledger.get(`${goal.goalId}:r${round}:${devStage}`);
     const devJobId = devLedger?.completedBy
       ?? reconciled.next.resumeAttempt
-      ?? jobIdsFor(previousRuntime, round).developer
+      ?? jobIdForGoal(jobIdsFor(priorGoalExecution, round).developer, goal.goalId)
       ?? store.newJobId(goal.goalId, round, isCorrection ? 'correction' : 'developer');
+    assertBelongsToGoal(devJobId, goal.goalId, `developer job ${devJobId}`);
+    await readJobForGoal(store, 'developer', devJobId, goal.goalId);
 
     const alreadyDone = await store.hasCompletedResult('developer', devJobId);
 
@@ -406,7 +462,7 @@ async function main() {
       worktree: absWorktree,
       goalPath: goal.goalPath,
       blockers: isCorrection ? pendingBlockers.map(blockerText) : [],
-      previousImplementationReport: lastDevResult?.implementationReport ?? previousRuntime?.lastImplementationReport ?? null,
+      previousImplementationReport: lastDevResult?.implementationReport ?? priorGoalExecution?.lastImplementationReport ?? null,
       previousDecision: isCorrection ? 'CHANGES_REQUIRED' : undefined,
       changedFiles: lastChanges?.changedFiles ?? [],
     });
@@ -550,8 +606,10 @@ async function main() {
     // Developer's.
     const revLedger = reconciled.ledger.get(`${goal.goalId}:r${round}:${STAGES.REVIEW}`);
     const revJobId = revLedger?.completedBy
-      ?? jobIdsFor(previousRuntime, round).tech_lead
+      ?? jobIdForGoal(jobIdsFor(priorGoalExecution, round).tech_lead, goal.goalId)
       ?? store.newJobId(goal.goalId, round, 'tech_lead');
+    assertBelongsToGoal(revJobId, goal.goalId, `review job ${revJobId}`);
+    await readJobForGoal(store, 'tech_lead', revJobId, goal.goalId);
     const reviewAlreadyDone = await store.hasCompletedResult('tech_lead', revJobId);
     const revJob = validateReviewJob({
       protocolVersion: PROTOCOL_VERSION_V2,

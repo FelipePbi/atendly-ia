@@ -19,6 +19,8 @@ import { formatRemaining } from './lib/capacity-policy.mjs';
 import { LOOP_STATES } from './lib/loop-state.mjs';
 import { LEASE_STATUS, classifyLease, createLeaseStore } from './lib/leases.mjs';
 import { LOOP_LEASE_KEY, createAutonomousStore } from './lib/autonomous-state.mjs';
+import { goalExecutionOf } from './lib/goal-execution.mjs';
+import { goalOfJobId } from './lib/stage-identity.mjs';
 import { createProcessInspector } from './lib/process-inspector.mjs';
 import { OWNER_STATUS, collectOwnerEvidence, isRecoveryEligible, judgeOwner } from './lib/orphan-evidence.mjs';
 import { createHandoffStore, HANDOFF_STATUS } from './lib/recovery-handoff.mjs';
@@ -94,15 +96,40 @@ async function main() {
     return 0;
   }
 
-  out.push(`Goal: ${goal?.goalId ?? runtime?.goal ?? 'n/a'}`);
-  out.push(`Round: ${runtime?.round ?? 'n/a'}`);
-  out.push(`State: ${runtime?.state ?? 'n/a'}`);
-  if (runtime?.mode) out.push(`Mode: ${runtime.mode}`);
+  // The run and the Goal execution are two different things, and printing them
+  // as one is what let a screen show Goal 005 next to Goal 004's job as though
+  // the two belonged together. The current Goal comes from the run; the
+  // execution block is only filled in when the state on disk is that Goal's.
+  const currentGoal = autonomousRun?.currentGoal ?? goal?.goalId ?? runtime?.goal ?? null;
+  const goalExecution = goalExecutionOf(runtime, currentGoal);
+  const previousGoal = (autonomousRun?.completedGoals ?? []).at(-1) ?? null;
+
+  out.push(`Current Goal: ${currentGoal ?? 'n/a'}`);
+  out.push('Goal execution:');
+  out.push(`  Round: ${goalExecution?.round ?? (currentGoal ? 1 : 'n/a')}`);
+  out.push(`  State: ${goalExecution?.state ?? 'NOT_STARTED'}`);
+  if (goalExecution?.mode) out.push(`  Mode: ${goalExecution.mode}`);
+  if (!goalExecution && runtime?.goal) {
+    // Said plainly rather than shown as this Goal's: it is the previous Goal's
+    // record, and nothing here may act on it.
+    out.push(`  Execution state on disk belongs to Goal ${runtime.goal} — historical, not current.`);
+  }
+  if (previousGoal) out.push(`Previous Goal: ${previousGoal} (ACCEPTED)`);
   out.push('');
 
   // An execution in flight is the most important thing on this screen: it is
   // what tells the operator whether work is still owned by a live attempt.
-  const leases = (await leaseStore.listJobLeases()).filter(Boolean);
+  //
+  // Scoped to the current Goal. A lease from a closed Goal is history, and
+  // showing it as the active job is how "Goal 005" and "004-r1-developer-…"
+  // ended up on the same screen looking like one fact.
+  const allLeases = (await leaseStore.listJobLeases()).filter(Boolean)
+    .filter((l) => l.jobId !== LOOP_LEASE_KEY);
+  const leases = currentGoal
+    ? allLeases.filter((l) => goalOfJobId(l.jobId) === currentGoal)
+    : allLeases;
+  const otherGoalLeases = allLeases.filter((l) => !leases.includes(l));
+
   if (leases.length > 0) {
     out.push('Active job:');
     for (const lease of leases) {
@@ -117,6 +144,17 @@ async function main() {
       out.push(`  Heartbeat age: ${Math.round((ageMs ?? 0) / 1000)}s`);
       out.push(`  Started: ${lease.acquiredAt}`);
       out.push(`  Duration: ${duration(lease.acquiredAt, now)}`);
+    }
+    out.push('');
+  } else if (currentGoal) {
+    out.push(`Active job: none for Goal ${currentGoal}.`);
+    out.push('');
+  }
+
+  if (otherGoalLeases.length > 0) {
+    out.push('Leases from other Goals (historical, never current):');
+    for (const lease of otherGoalLeases) {
+      out.push(`  ${lease.jobId} — Goal ${goalOfJobId(lease.jobId) ?? 'unknown'}, ${classifyLease(lease, { now }).status}`);
     }
     out.push('');
   }
@@ -173,8 +211,8 @@ async function main() {
         out.push(`  ${eligible ? 'Recover with: npm run ia-loop:recover' : 'Not recoverable yet: abandonment is not proven.'}`);
       }
     }
-    if (runtime?.recovery) {
-      out.push(`  Recovered: yes — ${runtime.recovery.action} from ${runtime.recovery.fromState} at ${runtime.recovery.at}`);
+    if (goalExecution?.recovery) {
+      out.push(`  Recovered: yes — ${goalExecution.recovery.action} from ${goalExecution.recovery.fromState} at ${goalExecution.recovery.at}`);
     }
     if (runtime?.mainGuardCheckpoint) {
       // Not the execution base, and labelled so nobody reads it as one.
@@ -183,20 +221,22 @@ async function main() {
     out.push('');
   }
 
-  out.push(agentBlock({ label: 'Developer', model: DEVELOPER_MODEL, health: developerHealth, runtime, now }));
+  out.push(agentBlock({ label: 'Developer', model: DEVELOPER_MODEL, health: developerHealth, runtime: goalExecution, now }));
   out.push('');
-  out.push(agentBlock({ label: 'Tech Lead', model: TECH_LEAD_MODEL, health: techLeadHealth, runtime, now }));
+  out.push(agentBlock({ label: 'Tech Lead', model: TECH_LEAD_MODEL, health: techLeadHealth, runtime: goalExecution, now }));
   out.push('');
 
-  if (runtime?.state === LOOP_STATES.WAITING_FOR_CAPACITY) {
-    out.push(`Resume from: ${runtime.resumeFrom}`);
-    out.push(`Blocked job: ${runtime.blockedJobId ?? 'n/a'}`);
+  // Read from the Goal execution, not the raw runtime: a capacity wait or a
+  // human-required record belongs to the Goal that hit it.
+  if (goalExecution?.state === LOOP_STATES.WAITING_FOR_CAPACITY) {
+    out.push(`Resume from: ${goalExecution.resumeFrom}`);
+    out.push(`Blocked job: ${goalExecution.blockedJobId ?? 'n/a'}`);
     out.push('');
   }
 
-  if (runtime?.state === LOOP_STATES.HUMAN_REQUIRED && runtime.humanRequired) {
-    out.push(`Human required: ${runtime.humanRequired.reason}`);
-    if (runtime.humanRequired.note) out.push(`  ${runtime.humanRequired.note}`);
+  if (goalExecution?.state === LOOP_STATES.HUMAN_REQUIRED && goalExecution.humanRequired) {
+    out.push(`Human required: ${goalExecution.humanRequired.reason}`);
+    if (goalExecution.humanRequired.note) out.push(`  ${goalExecution.humanRequired.note}`);
     out.push('');
   }
 
@@ -212,7 +252,7 @@ async function main() {
   const suspectLease = leases.find((l) => classifyLease(l, { now }).status === LEASE_STATUS.SUSPECTED_ORPHAN);
   const observerRunning = [techLeadHealth, developerHealth].some((h) => h.health === 'RUNNING');
 
-  if (runtime?.state === LOOP_STATES.HUMAN_REQUIRED) {
+  if (goalExecution?.state === LOOP_STATES.HUMAN_REQUIRED) {
     out.push('Awaiting human.');
   } else if (suspectLease) {
     out.push('ORCHESTRATOR/OBSERVER: unknown');

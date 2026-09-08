@@ -13,6 +13,7 @@
  */
 
 import { LOOP_STATES, STATE_REGISTRY } from './state-registry.mjs';
+import { jobIdForGoal } from './goal-execution.mjs';
 
 export const RECOVERY_ACTIONS = Object.freeze({
   NOTHING_TO_RECOVER: 'NOTHING_TO_RECOVER',
@@ -141,7 +142,12 @@ export function planRecovery({
 
   // --- What was interrupted? ------------------------------------------------
 
-  const jobId = reconciledJobId ?? runtime.currentJobId ?? null;
+  // The fallback pointer is only usable if it names an attempt at THIS Goal.
+  // After a Goal boundary it can name the previous one's — that is how a
+  // superseded attempt at Goal 004 was offered as Goal 005's next safe action —
+  // and an id that belongs elsewhere is dropped rather than followed.
+  const inheritedJobId = jobIdForGoal(runtime.currentJobId, runtime.goal);
+  const jobId = reconciledJobId ?? inheritedJobId ?? null;
   const agent = agentForState(runtime.state);
 
   if (AGENT_EXECUTION_STATES.includes(runtime.state) || QUEUED_STATES.includes(runtime.state)) {

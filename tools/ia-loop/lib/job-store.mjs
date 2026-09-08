@@ -179,6 +179,11 @@ export const PER_GOAL_RUNTIME_FIELDS = Object.freeze([
   'lastImplementationReport',
   // A capacity block belongs to the execution that was blocked.
   'capacity', 'blockedAgent', 'blockedJobId', 'resumeFrom', 'capacityClearedAt',
+  // The attempt, the review and the correction are one Goal's, and so is a
+  // recovery continuation: "resume what was interrupted" is meaningless once
+  // the Goal that was interrupted has been closed.
+  'currentAttemptId', 'currentDeveloperJobId', 'currentReviewJobId',
+  'reviewDecision', 'correction', 'acceptedSnapshot', 'recovery',
 ]);
 
 /** Returns the runtime with every per-Goal field dropped. */
@@ -194,6 +199,7 @@ export function createJobStore(stateDir) {
     root: stateDir,
     runtime: join(stateDir, 'runtime.json'),
     currentGoal: join(stateDir, 'current-goal.json'),
+    goalExecution: (goalId) => join(stateDir, 'goal-executions', `${goalId}.json`),
     events: join(stateDir, 'events.jsonl'),
     worker: (role) => join(stateDir, 'workers', `${assertRole(role)}.json`),
     jobsDir: (role) => join(stateDir, 'jobs', assertRole(role)),
@@ -366,6 +372,19 @@ export function createJobStore(stateDir) {
       if (!existing) {
         await this.publishJob(role, job);
         return { outcome: JOB_DISPATCH.PUBLISHED, attempt: 1, jobId: job.jobId };
+      }
+
+      // The id names a job that already exists — but of WHICH Goal? A pointer
+      // inherited across a Goal boundary looks exactly like a resume from here,
+      // and reusing the record would have started a "next attempt" at Goal
+      // 004's superseded round 1 while executing Goal 005. The stored job is
+      // the authority on what it is; a disagreement is a harness bug, not a
+      // retry.
+      if (existing.job && existing.job.goal !== job.goal) {
+        fail('CROSS_GOAL_STATE_LEAK',
+          `Job ${job.jobId} on disk belongs to Goal ${existing.job.goal}, but it was dispatched for Goal ${job.goal}. `
+          + 'An attempt from a closed Goal is history; it is never the next attempt of another one.',
+          { jobId: job.jobId, storedGoal: existing.job.goal, dispatchedGoal: job.goal, role });
       }
 
       if (await this.hasCompletedResult(role, job.jobId)) {
@@ -575,6 +594,33 @@ export function createJobStore(stateDir) {
 
     readRuntime() {
       return readJson(paths.runtime);
+    },
+
+    /**
+     * Files a finished Goal's execution state away, once.
+     *
+     * Archiving is what makes the boundary safe to cross: after this, nothing
+     * of that Goal is "current" any more, and the record of what it did is
+     * still readable. It never overwrites — a second crossing of the same
+     * boundary after a restart must not rewrite history with whatever the
+     * runtime happens to hold now.
+     */
+    async archiveGoalExecution(runtime) {
+      const goalId = runtime?.goal;
+      if (!goalId) return { archived: false, reason: 'NO_GOAL_EXECUTION' };
+
+      const path = paths.goalExecution(goalId);
+      if (await readJson(path)) return { archived: false, reason: 'ALREADY_ARCHIVED', path };
+
+      await writeJsonAtomic(path, {
+        storeVersion: STORE_VERSION, archivedAt: new Date().toISOString(), goal: goalId, execution: runtime,
+      });
+      return { archived: true, path };
+    },
+
+    async readArchivedGoalExecution(goalId) {
+      const envelope = await readJson(paths.goalExecution(goalId));
+      return envelope?.execution ?? null;
     },
 
     async writeCurrentGoal(goal) {

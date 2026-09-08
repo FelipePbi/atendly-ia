@@ -73,6 +73,13 @@ const HARNESS_CODES = Object.freeze([
   'EVENT_LOG_CORRUPT',
   'INVALID_JOB_STATUS',
   'DUPLICATE_JOB',
+  // Execution state from a closed Goal reaching the next one. Ours, always:
+  // no model produced it and no Goal is at fault for it. Recorded under its own
+  // name so a run that stopped for it can never be read as "Goal 005 failed".
+  'CROSS_GOAL_STATE_LEAK',
+  // Reached only when a leak got as far as the store: a superseded attempt
+  // cannot be retried, and being asked to is a bug in whoever chose the id.
+  'STAGE_NOT_RETRYABLE',
 ]);
 
 /**

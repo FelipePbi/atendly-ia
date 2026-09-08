@@ -48,12 +48,18 @@ export const DISPATCH_KINDS = Object.freeze({
  * Builds the picture of what has actually happened for one Goal.
  *
  * @param jobs     [{ role, job, status, result }] every stored job for the Goal
+ * @param goal     when given, jobs of any other Goal are not merely irrelevant
+ *                 here — they are excluded, so no lookup can reach them. The
+ *                 ledger is the authority on what to dispatch, and an authority
+ *                 that can see a closed Goal's stages is how one of them became
+ *                 the next Goal's first dispatch.
  * @returns Map<stageKey, {status, attempts, completedBy, result, duplicates}>
  */
-export function buildStageLedger(jobs) {
+export function buildStageLedger(jobs, { goal = null } = {}) {
   const ledger = new Map();
 
   for (const entry of jobs) {
+    if (goal && entry.job?.goal !== goal) continue;
     const key = stageKeyOfJob(entry.job);
     if (!key) continue;
 
@@ -311,7 +317,10 @@ export async function reconcileExecutionState({ store, goal, maxRounds = 3 }) {
     }
   }
 
-  const ledger = buildStageLedger(entries);
+  // Scoped twice, on purpose: the read above skips other Goals' jobs, and the
+  // ledger refuses to hold one even if a future caller hands it some. Every
+  // stage key here begins with this Goal.
+  const ledger = buildStageLedger(entries, { goal });
   const next = decideNextDispatch({ ledger, goal, maxRounds });
 
   // Attempts that should never have been created, so a caller can record them

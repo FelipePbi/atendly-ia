@@ -38,6 +38,23 @@ export function roleForStage(stage) {
   return role;
 }
 
+/**
+ * The Goal a job id belongs to, read from the id itself.
+ *
+ * Ids are minted as `${goal}-r${round}-${role}-${uuid}` and attempt ids append
+ * `-a${n}`, so the Goal travels with the name. That makes a cross-Goal pointer
+ * detectable without the store — which matters, because the pointer that leaked
+ * (`004-r1-developer-69a88746` while executing Goal 005) had to be rejected
+ * before anything went looking for a job file under it.
+ *
+ * Returns null for an id in any other shape: unknown is not the same as wrong.
+ */
+export function goalOfJobId(jobId) {
+  if (typeof jobId !== 'string') return null;
+  const match = /^(\d{3})-r\d+-/.exec(jobId);
+  return match ? match[1] : null;
+}
+
 /** The stable name of a unit of work, independent of how many attempts it takes. */
 export function stageKey({ goal, round, stage }) {
   if (!goal) throw new SpikeError('INVALID_ARGS', 'stageKey needs a goal');

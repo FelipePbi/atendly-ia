@@ -65,6 +65,9 @@ export const HUMAN_REQUIRED_REASONS = Object.freeze([
   'MODEL_UNAVAILABLE',
   'UNKNOWN_FATAL',
   'HARNESS_ERROR',
+  // Our own state crossing a Goal boundary. A harness error, and one nobody
+  // should be able to mistake for a verdict about the Goal that was starting.
+  'CROSS_GOAL_STATE_LEAK',
   'AGENT_CONTRACT_ERROR',
   'POLICY_VIOLATION',
   'CHERRY_PICK_CONFLICT',

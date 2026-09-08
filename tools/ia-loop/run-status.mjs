@@ -53,7 +53,9 @@ function agentBlock({ label, model, health, runtime, now, profile = null, suppor
   // reported first and the model is shown as its consequence. An idle worker
   // with nothing routed to it lists what it CAN run instead of claiming a model.
   if (profile) {
-    lines.push(`  Profile: ${profile.name}`);
+    // The persisted execution record names the profile in `profile`; a registry
+    // entry names it in `name`. Reading only one of them printed "undefined".
+    lines.push(`  Profile: ${profile.profile ?? profile.name}`);
     lines.push(`  Model: ${profile.model}`);
     lines.push(`  Effort: ${profile.effort ?? 'CLI default'}`);
     if (profile.source) lines.push(`  Selected by: ${profile.selectedBy ?? 'tech_lead'} (${profile.source})`);

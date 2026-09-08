@@ -304,3 +304,16 @@ test('integration: Sonnet R1 → CHANGES_REQUIRED → Opus High R2 → ACCEPTED'
   // And a restart of R2 still finds OPUS_HIGH.
   assert.equal(resolveProfileForRound({ goalExecution: execution, round: 2 }).profile.name, 'OPUS_HIGH');
 });
+
+test('the status screen reads the profile name from the persisted record', () => {
+  // The persisted record names the profile in `profile`; the registry entry
+  // names it in `name`. Reading only `name` printed "Profile: undefined" on a
+  // real, correctly repaired run.
+  const record = toExecutionRecord(
+    resolveProfileForRound({ round: 1, planningRecord: { profile: 'OPUS_HIGH' } }),
+    { goal: '006', round: 1 },
+  );
+  assert.equal(record.profile, 'OPUS_HIGH');
+  assert.equal(record.name, undefined, 'the record has no `name` field to fall back on');
+  assert.equal(record.profile ?? record.name, 'OPUS_HIGH');
+});

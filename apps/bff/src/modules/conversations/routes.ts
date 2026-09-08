@@ -19,10 +19,19 @@ import { findLinkedInstance } from "../whatsapp/instance-link.js";
 const idSchema = z.object({ id: z.string().trim().min(1).max(128) });
 const querySchema = z.object({
   status: z.enum(["ACTIVE", "HUMAN_HANDOFF", "CLOSED"]).optional(),
+  // Organizacao da inbox e estado de atendimento. A inbox em tres abas e do
+  // Goal017; aqui o contrato so passa a aceitar o filtro.
+  category: z.enum(["COMMERCIAL", "UNCLASSIFIED", "PERSONAL"]).optional(),
+  handling: z.enum(["AI", "HUMAN"]).optional(),
+  ignored: z.enum(["true", "false"]).optional(),
   search: z.string().trim().max(160).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 const messageSchema = z.object({ text: z.string().trim().min(1).max(4_000) });
+const categorySchema = z.object({
+  category: z.enum(["COMMERCIAL", "UNCLASSIFIED", "PERSONAL"]).nullable(),
+});
+const ignoreSchema = z.object({ ignored: z.boolean() });
 
 export async function registerV1ConversationRoutes(
   app: FastifyInstance,
@@ -82,6 +91,35 @@ export async function registerV1ConversationRoutes(
         text: body.text,
       });
       return reply.code(201).send(dataResponse(request, message));
+    },
+  );
+
+  // O tenant sai da sessao autenticada e o CSRF ja e exigido por
+  // `requireTenantContext` nas mutacoes por cookie: nenhuma das rotas abaixo
+  // aceita tenant por header, body ou query.
+  app.put(
+    "/v1/conversations/:id/category",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      const body = parseBody(categorySchema, request.body);
+      return dataResponse(
+        request,
+        await ai.setCategory(internalContext(request), id, body),
+      );
+    },
+  );
+
+  app.put(
+    "/v1/conversations/:id/ignore",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      const body = parseBody(ignoreSchema, request.body);
+      return dataResponse(
+        request,
+        await ai.setIgnored(internalContext(request), id, body),
+      );
     },
   );
 

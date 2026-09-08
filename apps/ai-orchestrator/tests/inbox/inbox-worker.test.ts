@@ -29,21 +29,27 @@ function claim(overrides: Partial<InboxClaim> = {}): InboxClaim {
   };
 }
 
-function fakeInbox(claims: Array<InboxClaim | null>) {
+function fakeInbox(
+  claims: Array<InboxClaim | null>,
+  options: { renewals?: number[] } = {},
+) {
   const queue = [...claims];
   const complete = vi.fn(async () => 1);
   const fail = vi.fn(async () => ({ retrying: true, deadLettered: false }));
+  const pending = [...(options.renewals ?? [])];
+  const renewLease = vi.fn(async () => pending.shift() ?? 1);
   const inbox: InboxPort = {
     record: async () => ({ stored: true, duplicate: false, id: "event-1" }),
     applyConversationWindow: async () => null,
     claimNext: async () => queue.shift() ?? null,
     complete,
     fail,
+    renewLease,
     requestSupersede: async () => 0,
     isSupersedeRequested: async () => false,
     countDeadLetters: async () => 0,
   };
-  return { inbox, complete, fail };
+  return { inbox, complete, fail, renewLease };
 }
 
 const options = {
@@ -160,5 +166,86 @@ describe("inbox worker", () => {
     expect(processed).toBe(3);
     expect(peak).toBeGreaterThan(1);
     expect(peak).toBeLessThanOrEqual(3);
+  });
+});
+
+describe("heartbeat do lease", () => {
+  it("renova o lease enquanto o lote longo executa", async () => {
+    vi.useFakeTimers();
+    try {
+      const { inbox, renewLease, complete } = fakeInbox([claim(), null]);
+      let release = () => undefined as void;
+      const handler = {
+        dispatch: vi.fn(
+          () =>
+            new Promise<{ status: "DONE"; result: Record<string, unknown> }>(
+              (resolve) => {
+                release = () => resolve({ status: "DONE", result: {} });
+              },
+            ),
+        ),
+      };
+      const worker = new InboxWorker(inbox, handler, {
+        ...options,
+        leaseHeartbeatMs: 1_000,
+      });
+
+      const cycle = worker.runOnce();
+      // Lote longo: tres batidas de heartbeat antes de terminar.
+      await vi.advanceTimersByTimeAsync(3_500);
+      expect(renewLease.mock.calls.length).toBeGreaterThanOrEqual(3);
+      expect(renewLease).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ids: ["event-1"],
+          leaseToken: "lease-1",
+          leaseMs: 60_000,
+        }),
+      );
+
+      release();
+      await cycle;
+      expect(complete).toHaveBeenCalledTimes(1);
+
+      // Terminou: nenhuma renovacao a mais depois da conclusao.
+      const afterFinish = renewLease.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(renewLease.mock.calls.length).toBe(afterFinish);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("para de renovar quando o lease ja nao e mais nosso", async () => {
+    vi.useFakeTimers();
+    try {
+      const { inbox, renewLease } = fakeInbox([claim(), null], {
+        renewals: [0],
+      });
+      let release = () => undefined as void;
+      const handler = {
+        dispatch: vi.fn(
+          () =>
+            new Promise<{ status: "DONE"; result: Record<string, unknown> }>(
+              (resolve) => {
+                release = () => resolve({ status: "DONE", result: {} });
+              },
+            ),
+        ),
+      };
+      const worker = new InboxWorker(inbox, handler, {
+        ...options,
+        leaseHeartbeatMs: 1_000,
+      });
+
+      const cycle = worker.runOnce();
+      await vi.advanceTimersByTimeAsync(5_000);
+      // Fencing preservado: quem perdeu o lease nao o traz de volta.
+      expect(renewLease).toHaveBeenCalledTimes(1);
+
+      release();
+      await cycle;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -23,6 +23,7 @@ import type {
 } from "../handoff/HandoffService.js";
 import type { IdempotencyStore } from "../idempotency/IdempotencyStore.js";
 import type { KnowledgeVectorStore } from "../knowledge/knowledge-vector-store.js";
+import type { GraphSessionPort } from "../session/SessionService.js";
 import type { BusinessContext } from "../tenant-config/business-context.js";
 import type { ChannelInboundMessage } from "./domain/ChannelMessage.js";
 import type { WhatsAppProvider } from "./ports/WhatsAppProvider.js";
@@ -50,6 +51,10 @@ export interface InboundProcessingResult {
     | "channel_disconnected"
     | "unsupported_handoff"
     | "unsupported_message"
+    // Contato ignorado e sessao pessoal: a mensagem foi persistida, o
+    // processamento nao aconteceu. Nao e erro nem pausa.
+    | "ignored_contact"
+    | "personal_session"
     | "buffered"
     | "replied"
     | "superseded"
@@ -160,6 +165,8 @@ export interface InboundMessageProcessorOptions {
   knowledge?: KnowledgeVectorStore;
   /** Cancelamento da resposta ainda nao enviada, avaliado antes do transporte. */
   outboundGate?: OutboundGate;
+  /** Contato, sessao, categoria e controle humano persistidos (Goal005). */
+  sessions?: GraphSessionPort;
 }
 
 interface BufferedMessage {
@@ -205,6 +212,7 @@ export class InboundMessageProcessor {
       knowledge: options.knowledge,
       checkpointer: options.checkpointer,
       outboundGate: options.outboundGate,
+      sessions: options.sessions,
       logger,
     });
   }

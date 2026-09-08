@@ -156,6 +156,11 @@ export async function registerEvolutionWebhookRoutes(
             externalContactId: message.customerPhone,
             conversationKey,
             text: message.text ?? "",
+            // Os fragmentos ja gravados sao relidos pelo mesmo mapeador do
+            // provedor: e assim que a espera da mensagem ambigua enxerga que o
+            // fragmento seguinte continua sendo saudacao.
+            fragmentText: (rawPayload) =>
+              mapEvolutionInbound(rawPayload)?.text ?? undefined,
             policy: conversationWindowPolicyFromEnv(),
           });
         } catch (error) {

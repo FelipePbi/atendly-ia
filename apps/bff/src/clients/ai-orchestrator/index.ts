@@ -22,6 +22,12 @@ const messageSchema = z.object({
   deliveryDetail: z.string().nullish().optional(),
 });
 
+const sessionCategorySchema = z.enum([
+  "COMMERCIAL",
+  "UNCLASSIFIED",
+  "PERSONAL",
+]);
+
 const conversationSchema = z.object({
   id: z.string(),
   externalContactId: z.string(),
@@ -32,6 +38,26 @@ const conversationSchema = z.object({
   lastMessage: messageSchema.nullable(),
   unreadCount: z.number().int().nonnegative(),
   updatedAt: z.string(),
+  // Goal005: organizacao da inbox, estado de atendimento, sessao vigente e
+  // ignore do contato. Opcionais de proposito — a resposta anterior ao Goal005
+  // continua valida, e o consumidor trata a ausencia como padrao seguro.
+  category: sessionCategorySchema.optional(),
+  categorySource: z.enum(["AUTOMATIC", "MANUAL"]).optional(),
+  suggestedCategory: sessionCategorySchema.nullish().optional(),
+  handling: z.enum(["AI", "HUMAN"]).optional(),
+  ignored: z.boolean().optional(),
+  ignoredAt: z.string().nullish().optional(),
+  aiPaused: z.boolean().optional(),
+  session: z
+    .object({
+      id: z.string(),
+      startedAt: z.string(),
+      expiresAt: z.string(),
+      lastContactMessageAt: z.string().nullish().optional(),
+      humanHandlingSince: z.string().nullish().optional(),
+    })
+    .nullish()
+    .optional(),
 });
 
 const envelope = <T extends z.ZodType>(schema: T) =>
@@ -45,7 +71,14 @@ export class AiOrchestratorClient {
 
   async listConversations(
     context: InternalRequestContext,
-    query: { status?: string; search?: string; limit?: number },
+    query: {
+      status?: string;
+      category?: string;
+      handling?: string;
+      ignored?: string;
+      search?: string;
+      limit?: number;
+    },
   ) {
     return (
       await this.http.request({
@@ -94,6 +127,43 @@ export class AiOrchestratorClient {
         context,
         body: input,
         schema: envelope(messageSchema),
+      })
+    ).data;
+  }
+
+  /**
+   * Contrato por operacao (D-011): definir ou limpar o override de categoria e
+   * marcar ou desmarcar contato ignorado sao decisoes distintas, cada uma com
+   * sua rota, em vez de um PATCH generico de conversa.
+   */
+  async setCategory(
+    context: InternalRequestContext,
+    id: string,
+    input: { category: "COMMERCIAL" | "UNCLASSIFIED" | "PERSONAL" | null },
+  ) {
+    return (
+      await this.http.request({
+        method: "PUT",
+        path: `/internal/conversations/${encodeURIComponent(id)}/category`,
+        context,
+        body: input,
+        schema: envelope(conversationSchema),
+      })
+    ).data;
+  }
+
+  async setIgnored(
+    context: InternalRequestContext,
+    id: string,
+    input: { ignored: boolean },
+  ) {
+    return (
+      await this.http.request({
+        method: "PUT",
+        path: `/internal/conversations/${encodeURIComponent(id)}/ignore`,
+        context,
+        body: input,
+        schema: envelope(conversationSchema),
       })
     ).data;
   }

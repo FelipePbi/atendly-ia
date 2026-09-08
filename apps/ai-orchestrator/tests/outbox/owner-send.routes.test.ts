@@ -66,10 +66,14 @@ function fakePrisma() {
         tenantId: "tenant-a",
         channelId: "channel-a",
         externalContactId: "5511999999999",
-        humanHandoff: true,
-        status: "HUMAN_HANDOFF",
+        customerName: null,
+        // Sem takeover previo de proposito: enviar assume.
+        humanHandoff: false,
+        status: "ACTIVE",
         messages: [],
         handoffs: [],
+        contact: null,
+        sessions: [],
         channel,
       }),
       update: async () => ({}),
@@ -133,10 +137,47 @@ function fakePrisma() {
   return { prisma, messages, deleted };
 }
 
-async function buildApp(prisma: never) {
+/**
+ * Porta de sessao em dobro.
+ *
+ * O envio pela Atendly assume a sessao antes do transporte; aqui o dobro so
+ * registra a chamada para que a suite prove a ordem sem precisar de banco.
+ */
+function fakeSessions() {
+  const assumed: Array<{ sessionId: string; source: string }> = [];
+  return {
+    assumed,
+    port: {
+      resolveContext: async () => ({
+        contactId: "contact-a",
+        sessionId: "session-a",
+        externalContactId: "5511999999999",
+        ignored: false,
+        aiPaused: false,
+        category: "UNCLASSIFIED" as const,
+        categorySource: "AUTOMATIC" as const,
+        humanHandling: false,
+        inboundVersion: 3,
+        startedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+        contextResetAt: null,
+      }),
+      assumeHumanControl: async (input: {
+        sessionId: string;
+        source: string;
+      }) => {
+        assumed.push({ sessionId: input.sessionId, source: input.source });
+        return undefined as never;
+      },
+    } as never,
+  };
+}
+
+async function buildApp(prisma: never, sessions: never) {
   const app = Fastify();
   await registerInternalRoutes(app, prisma, {
     inbox: { countDeadLetters: async () => 0 },
+    sessions,
   });
   return app;
 }
@@ -182,7 +223,8 @@ describe("owner outbound message", () => {
         }),
       ),
     );
-    app = await buildApp(store.prisma);
+    const sessions = fakeSessions();
+    app = await buildApp(store.prisma, sessions.port);
 
     const response = await sendOwnerMessage(app);
 
@@ -192,6 +234,11 @@ describe("owner outbound message", () => {
       deliveryDetail: null,
     });
     expect(store.deleted).toHaveLength(0);
+    // Enviar assume: a conversa nao estava em handoff e o envio nao foi
+    // recusado com HUMAN_HANDOFF_REQUIRED.
+    expect(sessions.assumed).toEqual([
+      { sessionId: "session-a", source: "ATENDLY" },
+    ]);
   });
 
   it("keeps a timed-out attempt as UNKNOWN instead of deleting it", async () => {
@@ -204,7 +251,8 @@ describe("owner outbound message", () => {
         }),
       ),
     );
-    app = await buildApp(store.prisma);
+    const sessions = fakeSessions();
+    app = await buildApp(store.prisma, sessions.port);
 
     const response = await sendOwnerMessage(app);
 
@@ -232,7 +280,8 @@ describe("owner outbound message", () => {
         }),
       ),
     );
-    app = await buildApp(store.prisma);
+    const sessions = fakeSessions();
+    app = await buildApp(store.prisma, sessions.port);
 
     const response = await sendOwnerMessage(app);
 
@@ -256,10 +305,13 @@ describe("owner outbound message", () => {
             tenantId: "tenant-a",
             channelId: "channel-a",
             externalContactId: "5511999999999",
-            humanHandoff: true,
-            status: "HUMAN_HANDOFF",
+            customerName: null,
+            humanHandoff: false,
+            status: "ACTIVE",
             messages: [],
             handoffs: [],
+            contact: null,
+            sessions: [],
             channel: {
               ...channel,
               credentialCipher: null,
@@ -272,7 +324,8 @@ describe("owner outbound message", () => {
     };
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
-    app = await buildApp(unprovisioned.prisma);
+    const sessions = fakeSessions();
+    app = await buildApp(unprovisioned.prisma, sessions.port);
 
     const response = await sendOwnerMessage(app);
 

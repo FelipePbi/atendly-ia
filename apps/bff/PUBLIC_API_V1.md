@@ -12,7 +12,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Autenticação | `POST /v1/auth/register`; `POST /v1/auth/login`; `POST /v1/auth/logout`; `GET /v1/auth/session`; `PATCH /v1/auth/password`; `POST /v1/auth/forgot-password`; `POST /v1/auth/reset-password` |
 | Onboarding | `GET /v1/onboarding`; `PATCH /v1/onboarding`; `POST /v1/onboarding/complete` |
 | Home | `GET /v1/dashboard` |
-| Conversas | `GET /v1/conversations`; `GET /v1/conversations/:id`; `GET /v1/conversations/:id/messages`; `POST /v1/conversations/:id/messages`; `POST /v1/conversations/:id/takeover`; `POST /v1/conversations/:id/release`; `POST /v1/conversations/:id/resolve` |
+| Conversas | `GET /v1/conversations`; `GET /v1/conversations/:id`; `GET /v1/conversations/:id/messages`; `POST /v1/conversations/:id/messages`; `POST /v1/conversations/:id/takeover`; `POST /v1/conversations/:id/release`; `POST /v1/conversations/:id/resolve`; `PUT /v1/conversations/:id/category`; `PUT /v1/conversations/:id/ignore` |
 | Agendamentos | `GET /v1/appointments`; `GET /v1/appointments/:id`; `POST /v1/appointments`; `POST /v1/appointments/:id/reschedule`; `POST /v1/appointments/:id/cancel` |
 | Disponibilidade e bloqueios | `GET /v1/availability`; `POST /v1/time-blocks`; `DELETE /v1/time-blocks/:id` |
 | Clientes | `GET /v1/customers`; `GET /v1/customers/:id`; `POST /v1/customers` |
@@ -104,3 +104,39 @@ Os campos são opcionais e podem vir `null`: mensagem recebida (`INBOUND`) não 
 `FAILED` significa que a saída comprovadamente não foi entregue: recusa definitiva do transporte, credencial do canal ainda não projetada, ou resposta cancelada porque o cliente mandou mensagem nova antes do envio. A entrega é *at-least-once* com dedupe e reconciliação; a API não promete exactly-once.
 
 `POST /v1/conversations/:id/messages` continua respondendo `201` com a mensagem criada. O sucesso do HTTP significa que a tentativa foi registrada de forma durável, não que o WhatsApp já entregou: quem diz isso é `deliveryState`.
+
+## Conversa: categoria, sessão e atendimento humano
+
+`GET /v1/conversations` aceita, além de `status`, `search` e `limit`:
+
+| Filtro | Valores | Significado |
+| --- | --- | --- |
+| `category` | `COMMERCIAL`, `UNCLASSIFIED`, `PERSONAL` | organização da inbox, atributo da sessão vigente |
+| `handling` | `AI`, `HUMAN` | estado de atendimento: `HUMAN` é "Você atendendo" |
+| `ignored` | `true`, `false` | contato em `Ignorar IA` |
+
+O DTO de conversa ganhou campos **opcionais**; respostas anteriores a esta versão continuam válidas e o consumidor trata ausência como o padrão seguro (`UNCLASSIFIED`, `AUTOMATIC`, `AI`, não ignorado):
+
+| Campo | Valores | Significado |
+| --- | --- | --- |
+| `category` | `COMMERCIAL`, `UNCLASSIFIED`, `PERSONAL` | categoria vigente da sessão |
+| `categorySource` | `AUTOMATIC`, `MANUAL` | origem da categoria vigente |
+| `suggestedCategory` | mesma lista ou `null` | sugestão do agente, gravada com proveniência |
+| `handling` | `AI`, `HUMAN` | quem está atendendo agora |
+| `ignored`, `ignoredAt` | booleano, data ou `null` | contato ignorado, regra do contato |
+| `aiPaused` | booleano | pausa explícita da IA para o contato (`/bot off`, `/ia_pause`) |
+| `session` | objeto ou `null` | `id`, `startedAt`, `expiresAt`, `lastContactMessageAt`, `humanHandlingSince` |
+
+Precedência: `ignored` do contato prevalece sobre a sessão; o override manual (`categorySource: MANUAL`) prevalece sobre `suggestedCategory` e atravessa a troca de sessão. A classificação automática nunca escreve override.
+
+`PUT /v1/conversations/:id/category` recebe `{ "category": "COMMERCIAL" | "UNCLASSIFIED" | "PERSONAL" | null }`; `null` limpa o override e devolve a conversa à classificação automática. `PUT /v1/conversations/:id/ignore` recebe `{ "ignored": true | false }`. As duas respondem com o DTO de conversa completo.
+
+Como as demais mutações, ambas resolvem o negócio pela sessão autenticada e exigem CSRF quando a credencial é o cookie. Nenhuma delas aceita `tenantId` por header, body ou query.
+
+## Envio manual assume a conversa
+
+`POST /v1/conversations/:id/messages` **deixou de exigir takeover prévio**: enviar assume. Antes desta versão a rota respondia `409 HUMAN_HANDOFF_REQUIRED` quando a conversa não estava em handoff, e a profissional precisava clicar em assumir antes de escrever — enquanto isso, a resposta automática em curso continuava valendo.
+
+Agora o controle humano é gravado antes do transporte e a saída automática ainda não enviada é cancelada. O mesmo vale para a mensagem manual enviada pelo próprio WhatsApp conectado. Abrir ou ler a conversa (`GET`) não muda estado nenhum.
+
+`POST /v1/conversations/:id/release` é o `Retomar IA`: devolve a conversa à IA e faz o próximo turno reavaliar o contexto atual em vez de continuar do ponto anterior. Dentro de uma sessão viva não existe retomada automática por relógio — a IA só volta por essa rota ou em uma sessão nova, aberta após a expiração por inatividade do contato (~24 h), e nunca para contato ignorado. Nenhuma mensagem automática anuncia a troca entre IA e humano.

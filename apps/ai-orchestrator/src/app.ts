@@ -83,6 +83,7 @@ export async function buildApp() {
       groupWindowMs: env.AI_DEBOUNCE_MIN_SECONDS * 1000,
       batchLimit: env.INBOX_GROUP_BATCH_LIMIT,
       maxConcurrentConversations: env.INBOX_MAX_CONCURRENT_CONVERSATIONS,
+      leaseHeartbeatMs: env.INBOX_LEASE_HEARTBEAT_SECONDS * 1000,
     },
     app.log,
   );

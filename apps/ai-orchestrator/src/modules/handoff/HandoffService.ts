@@ -22,10 +22,26 @@ export interface HandoffTenantScope {
   channelId: string;
 }
 
+/**
+ * Leitura de sessao usada pela pausa.
+ *
+ * Existe para que o relogio de `handoffPausedUntil` deixe de significar
+ * "retorno silencioso": dentro de uma sessao viva com humano atendendo, o
+ * vencimento do relogio nao devolve a conversa a IA.
+ */
+export interface HandoffSessionReader {
+  isHumanControlActive(input: {
+    tenantId: string;
+    conversationId: string;
+    now?: Date;
+  }): Promise<boolean>;
+}
+
 export class HandoffService {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly scope: HandoffTenantScope,
+    private readonly sessions?: HandoffSessionReader,
   ) {}
 
   async isBotPaused(phone: string, now = new Date()): Promise<boolean> {
@@ -41,6 +57,16 @@ export class HandoffService {
     if (!conversation?.humanHandoff) return false;
     if (!conversation.handoffPausedUntil) return true;
     if (conversation.handoffPausedUntil > now) return true;
+
+    // O relogio venceu. Ele so vale como expiracao da sessao: se o humano
+    // ainda esta atendendo dentro de uma sessao viva, a IA nao volta sozinha —
+    // volta por `Retomar IA` explicito.
+    const humanStillHandling = await this.sessions?.isHumanControlActive({
+      tenantId: this.scope.tenantId,
+      conversationId: conversation.id,
+      now,
+    });
+    if (humanStillHandling) return true;
 
     await this.prisma.conversation.update({
       where: { id: conversation.id },

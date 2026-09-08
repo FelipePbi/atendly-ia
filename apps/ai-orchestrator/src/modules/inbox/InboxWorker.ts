@@ -19,6 +19,15 @@ export interface InboxWorkerOptions {
   groupWindowMs: number;
   batchLimit: number;
   maxConcurrentConversations: number;
+  /**
+   * Intervalo do heartbeat do lease.
+   *
+   * O orcamento de um lote (modelo + tools + envio) nao cabe num lease fixo, e
+   * dimensiona-lo para o pior caso deixaria um worker morto segurando trabalho
+   * por muito tempo. O lease continua curto e e renovado enquanto o lote
+   * executa; quando o processo morre, ele expira sozinho.
+   */
+  leaseHeartbeatMs?: number;
   owner?: string;
 }
 
@@ -100,6 +109,7 @@ export class InboxWorker {
 
   private async execute(claim: InboxClaim): Promise<void> {
     const ids = claim.events.map((event) => event.id);
+    const heartbeat = this.startLeaseHeartbeat(claim, ids);
     try {
       const outcome = await this.handler.dispatch(claim);
       const applied = await this.inbox.complete({
@@ -134,7 +144,60 @@ export class InboxWorker {
           ? "Inbox event moved to dead-letter and will not be retried automatically"
           : "Inbox event failed and was scheduled for retry",
       );
+    } finally {
+      heartbeat();
     }
+  }
+
+  /**
+   * Renova o lease enquanto o lote executa e devolve como parar.
+   *
+   * A renovacao carrega o token do claim: um worker cujo lease ja expirou e
+   * foi recuperado por outro nao consegue trazer o trabalho de volta — nesse
+   * caso o heartbeat apenas registra e para.
+   */
+  private startLeaseHeartbeat(claim: InboxClaim, ids: string[]): () => void {
+    const intervalMs =
+      this.options.leaseHeartbeatMs ??
+      Math.max(1000, Math.floor(this.options.leaseMs / 3));
+    const renewLease = this.inbox.renewLease?.bind(this.inbox);
+    if (!renewLease || intervalMs <= 0) return () => undefined;
+
+    let stopped = false;
+    const timer = setInterval(() => {
+      void (async () => {
+        if (stopped) return;
+        try {
+          const renewed = await renewLease({
+            ids,
+            leaseToken: claim.leaseToken,
+            leaseMs: this.options.leaseMs,
+          });
+          if (renewed === 0) {
+            stopped = true;
+            clearInterval(timer);
+            this.logger.warn(
+              { conversationKey: claim.conversationKey, events: ids.length },
+              "Inbox worker could not renew an expired lease and stopped the heartbeat",
+            );
+          }
+        } catch (error) {
+          this.logger.warn(
+            {
+              conversationKey: claim.conversationKey,
+              err: sanitizeInboxError(error),
+            },
+            "Inbox worker failed to renew the lease",
+          );
+        }
+      })();
+    }, intervalMs);
+    timer.unref?.();
+
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
   }
 
   private schedule(delayMs: number): void {

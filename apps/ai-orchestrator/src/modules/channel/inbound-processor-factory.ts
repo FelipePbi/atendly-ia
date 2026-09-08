@@ -11,6 +11,7 @@ import { IdempotencyStore } from "../idempotency/IdempotencyStore.js";
 import { OpenAIEmbeddingProvider } from "../knowledge/embedding-provider.js";
 import { PGVectorKnowledgeStore } from "../knowledge/pgvector-knowledge-store.js";
 import { SchedulingClient } from "../scheduling-service/client.js";
+import { SessionService } from "../session/SessionService.js";
 import { AssistantToolRegistry } from "../tools/assistant-tools.js";
 import {
   type EvolutionInstanceCredential,
@@ -46,11 +47,13 @@ export function buildInboundMessageProcessor(input: InboundProcessorInput) {
     new SchedulingClient(),
     knowledge,
   );
+  const sessions = new SessionService(input.prisma);
   const assistant = new AssistantService(
     input.prisma,
     input.logger,
     undefined,
     tools,
+    sessions,
   );
   const provider = new EvolutionProvider(
     input.logger,
@@ -58,10 +61,11 @@ export function buildInboundMessageProcessor(input: InboundProcessorInput) {
     input.instanceId,
   );
   const idempotency = new IdempotencyStore(input.prisma);
-  const handoff = new HandoffService(input.prisma, {
-    tenantId: input.tenantId,
-    channelId: input.channelId,
-  });
+  const handoff = new HandoffService(
+    input.prisma,
+    { tenantId: input.tenantId, channelId: input.channelId },
+    sessions,
+  );
   const runtime = new PrismaGraphRuntime(input.prisma);
   return new InboundMessageProcessor(
     assistant,
@@ -75,6 +79,7 @@ export function buildInboundMessageProcessor(input: InboundProcessorInput) {
       checkpointer: input.checkpointer,
       debounce: input.debounce,
       outboundGate: input.outboundGate,
+      sessions,
     },
   );
 }

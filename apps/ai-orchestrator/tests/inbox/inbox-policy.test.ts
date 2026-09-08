@@ -304,6 +304,53 @@ describe("conversation window policy", () => {
     ).toBe(12_000);
   });
 
+  it("extends the ambiguous wait while the next fragments stay ambiguous", () => {
+    // "oi" ... "bom dia": a pessoa ainda nao disse o que quer, entao a espera
+    // recomeca a partir do fragmento novo em vez de responder saudacao com
+    // saudacao.
+    const input = {
+      ...base,
+      text: "bom dia",
+      pendingTexts: ["oi", "bom dia"],
+      pendingFragments: 2,
+      firstContact: true,
+      firstEventAt: new Date(now.getTime() - 110_000),
+    };
+    expect(isAmbiguousFirstContact(input)).toBe(true);
+    expect(conversationWindowMs(input)).toBe(120_000);
+  });
+
+  it("stops extending at the configured ceiling since the first message", () => {
+    const input = {
+      ...base,
+      text: "opa",
+      pendingTexts: ["oi", "ola", "opa"],
+      pendingFragments: 3,
+      firstContact: true,
+      // Teto de 300 s: faltam 40 s, e nao os 120 s da espera reiniciada.
+      firstEventAt: new Date(now.getTime() - 260_000),
+    };
+    expect(conversationWindowMs(input)).toBe(40_000);
+    expect(
+      conversationWindowMs({
+        ...input,
+        firstEventAt: new Date(now.getTime() - 320_000),
+      }),
+    ).toBe(0);
+  });
+
+  it("goes back to the fragment window as soon as one fragment says something", () => {
+    const input = {
+      ...base,
+      text: "queria marcar amanha",
+      pendingTexts: ["oi", "queria marcar amanha"],
+      pendingFragments: 2,
+      firstContact: true,
+    };
+    expect(isAmbiguousFirstContact(input)).toBe(false);
+    expect(conversationWindowMs(input)).toBe(12_000);
+  });
+
   it("recognises composed greetings as ambiguous, not as a request", () => {
     expect(
       isAmbiguousFirstContact({

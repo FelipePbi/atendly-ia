@@ -20,6 +20,7 @@ import {
   type ModelTurn,
 } from "../model/model-provider.js";
 import { buildSystemPrompt } from "../prompts/system.js";
+import type { CategorySuggestionPort } from "../session/SessionService.js";
 import {
   type AiTenantSettings,
   normalizeAiSettings,
@@ -42,6 +43,14 @@ export interface IncomingAssistantMessage {
   rawPayload?: unknown;
   knowledgeRequested?: boolean;
   retrievedKnowledge?: KnowledgeSearchResult[];
+  /**
+   * Instante a partir do qual o contexto vale.
+   *
+   * `Retomar IA` grava a marca na sessao e ela chega aqui: o turno seguinte
+   * reavalia a conversa a partir desse ponto em vez de continuar de onde a IA
+   * parou antes de o humano assumir.
+   */
+  contextSince?: string;
 }
 
 export interface AssistantReply {
@@ -203,6 +212,12 @@ export class AssistantService {
     private readonly logger: DiagnosticLogger = noopDiagnosticLogger,
     private readonly modelProvider: ModelProvider = new LangChainModelProvider(),
     private readonly tools = new AssistantToolRegistry(prisma),
+    /**
+     * Sugestao de categoria. A classificacao do agente sai daqui como
+     * **sugestao com proveniencia**; ela nunca escreve override manual nem
+     * decide sozinha se a IA responde.
+     */
+    private readonly sessions?: CategorySuggestionPort,
   ) {}
 
   async handleIncomingText(
@@ -284,8 +299,16 @@ export class AssistantService {
       channelMessage,
       customerName,
     );
+    const contextSince = input.contextSince
+      ? new Date(input.contextSince)
+      : undefined;
     const recentMessages = await this.prisma.message.findMany({
-      where: { conversationId: conversation.id },
+      where: {
+        conversationId: conversation.id,
+        ...(contextSince && !Number.isNaN(contextSince.getTime())
+          ? { createdAt: { gte: contextSince } }
+          : {}),
+      },
       orderBy: { createdAt: "desc" },
       take: 30,
     });
@@ -860,6 +883,15 @@ export class AssistantService {
         currentIntent: input.decision.action,
         state: nextState as Prisma.InputJsonValue,
       },
+    });
+
+    // Sugestao, nunca override: se a profissional ja decidiu a categoria, a
+    // decisao dela continua valendo e a sugestao fica registrada ao lado.
+    await this.sessions?.recordCategorySuggestion({
+      tenantId: conversation.tenantId,
+      conversationId: input.conversationId,
+      classification,
+      provenance: `agent:${env.AI_PROMPT_VERSION}`,
     });
 
     if (

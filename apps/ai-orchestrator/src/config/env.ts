@@ -67,6 +67,10 @@ const envSchema = z.object({
   AI_AMBIGUOUS_WAIT_SECONDS: intEnv(120),
   AI_AMBIGUOUS_MAX_WAIT_SECONDS: intEnv(300),
   AI_BUFFER_BETWEEN_SERVICES_MINUTES: intEnv(0),
+  // Sessao de conversa: inatividade **do contato** que expira a sessao
+  // (~24 h). E fronteira configuravel e testada; mudar este valor muda o
+  // relogio da sessao, nunca em silencio (D-009).
+  AI_SESSION_INACTIVITY_SECONDS: intEnv(86_400),
   // Inbox duravel: o loop roda no proprio processo da IA. Sem broker novo.
   INBOX_WORKER_ENABLED: boolEnv(true),
   INBOX_POLL_INTERVAL_MS: intEnv(1000),
@@ -75,6 +79,9 @@ const envSchema = z.object({
   INBOX_RETRY_BASE_SECONDS: intEnv(15),
   INBOX_RETRY_MAX_SECONDS: intEnv(900),
   INBOX_MAX_CONCURRENT_CONVERSATIONS: intEnv(4),
+  // Heartbeat do lease: o lote longo (LLM + tools + envio) renova o lease
+  // enquanto executa, em vez de perde-lo para outro ciclo no meio do trabalho.
+  INBOX_LEASE_HEARTBEAT_SECONDS: intEnv(30),
   INBOX_GROUP_BATCH_LIMIT: intEnv(20),
   // Timeout do envio: sem ele o transporte fica pendurado e o estado da saida
   // nunca sai de PENDING.

@@ -128,10 +128,10 @@ Inventário de entidades, constraints SQL adicionais ao Prisma, caminhos com loc
 
 - `channel/routes/evolutionWebhook.routes.ts:60–99`: processor novo por request; HTTP 202 precede `handleInboundMessage`. O buffer é Map por processor (`InboundMessageProcessor.ts:154`). Consequência inferida: debounce/cancelamento não coordena requests distintos e queda após ACK pode perder trabalho. **Superado no Goal004** — ver o delta ao final deste documento.
 - `graph/message-graph.ts:206`: ProcessedEvent é criado antes do processamento. A tabela tem dedupe único, mas não estados de execução/retry. Guard de IA desligada/handoff pode encerrar antes de Message. Deduplicação não equivale a processamento concluído.
-- `message-graph.ts:273` e `assistant.service.ts:622`: `fromMe` comum grava OWNER, sem acionar a pausa; comandos especiais de pausa existem. Mensagem humana no chat interno exige takeover prévio (`internal/routes.ts:167`), enquanto o produto pede que o envio assuma. Abrir conversa não deve assumir.
+- `message-graph.ts:273` e `assistant.service.ts:622`: `fromMe` comum grava OWNER, sem acionar a pausa; comandos especiais de pausa existem. Mensagem humana no chat interno exige takeover prévio (`internal/routes.ts:167`), enquanto o produto pede que o envio assuma. Abrir conversa não deve assumir. **Superado no Goal005** — ver o delta ao final deste documento.
 - `message-graph.ts:269/401`: conteúdo não textual vai para resposta genérica unsupported. Não foi localizado pipeline de transcrição; áudio, imagem e documento ainda não têm tratamentos distintos do MVP.
 - `message-graph.ts:581–631`: registro de outbound é marcado com ID local antes de send e depois atualizado; não há estado separado de entrega. Envio humano remove mensagem pendente se send falha (`internal/routes.ts:174–208`), inclusive quando timeout não prova ausência de entrega. **Superado no Goal004** — ver o delta ao final deste documento.
-- Classificação existente em `assistant.service.ts` usa `potential_customer`, `supplier_or_partner`, `personal_contact`, `unknown` dentro de JSON do agente. Não equivale às três abas, override manual, Contact ignorado e sessão de aproximadamente 24h do produto. Não há esses modelos explícitos no schema.
+- Classificação existente em `assistant.service.ts` usa `potential_customer`, `supplier_or_partner`, `personal_contact`, `unknown` dentro de JSON do agente. Não equivale às três abas, override manual, Contact ignorado e sessão de aproximadamente 24h do produto. Não há esses modelos explícitos no schema. **Superado no Goal005** — ver o delta ao final deste documento.
 
 ### Dados e memória da IA
 
@@ -373,3 +373,67 @@ persistência estão superados pelos fatos abaixo, verificados no
   `correlationId` como ID da mensagem), execução hospedada da CI, deploy,
   `migrate deploy`/`diff` da IA em banco com pgvector, capacidade de execução
   contínua do worker e os demais limites do fechamento factual.
+
+## Delta implementado — Goal005, 2026-09-08 (ACCEPTED na rodada 2)
+
+A fotografia histórica acima permanece como registro da baseline. Os FATOs de
+"AI Orchestrator e conversas" que descrevem `fromMe` sem pausa, takeover
+prévio obrigatório, classificação só no JSON do agente e ausência de Contact,
+sessão e categoria persistidas estão superados pelos fatos abaixo, verificados
+no [review005](reviews/005-review.md) sobre a base `8551717`.
+
+- **FATO atual:** `apps/ai-orchestrator/prisma/schema.prisma` tem `Contact`
+  (identidade externa única por tenant e canal, `ignored` com autor/origem/data,
+  `aiPaused` com motivo, `categoryOverride` com autor/data) e
+  `ConversationSession` (`startedAt`, `lastContactMessageAt`, `expiresAt`,
+  `endedAt`, categoria vigente com `categorySource`, `suggestedCategory` com
+  proveniência, `humanHandling` com origem e autor, `contextResetAt`,
+  `inboundVersion`, `backfillNote`); `Conversation.contactId` é opcional.
+- **FATO atual:** `src/modules/session/session-policy.ts` decide sem Prisma:
+  expiração por inatividade do contato (`AI_SESSION_INACTIVITY_SECONDS`,
+  86400), precedência override manual > sugestão > Não classificadas, tradução
+  da classificação técnica sem inventar Comercial, elegibilidade na ordem
+  ignorado → pessoal → canal → IA desligada → pausa do contato → atendimento
+  humano, e guard de execução comparando a versão de entrada.
+  `SessionService` resolve contato e sessão, rotaciona por expiração
+  sincronizando o espelho legado da conversa (salvo contato pausado ou
+  ignorado), assume o controle humano em transação, grava override, ignore e
+  pausa do contato, e `releaseToAi` marca `contextResetAt` e reseta o rascunho.
+- **FATO atual:** `message-graph.ts` executa `loadSession` antes de
+  `operationalGuard`; o guard só anota a decisão e `sessionGate` encerra
+  **depois** de `recordInbound`, então a mensagem do cliente é persistida com
+  IA desligada, canal desconectado, handoff, sessão pessoal e contato ignorado,
+  e o conteúdo bloqueado não chega a `understandMessage`, RAG, modelo nem
+  memória. `executeTool` e `sendResponse` consultam `executionBlockReason`
+  (versão de entrada, controle humano, elegibilidade, categoria, ignore).
+- **FATO atual:** mensagem manual do dono pelo WhatsApp (`fromMe` que não é
+  saída do bot) cai em `ownerActivity`, assume a sessão e pede supersede da
+  resposta pendente; `/ia_pause` e `/bot off` gravam `Contact.aiPaused`;
+  `/bot on` libera a sessão como Retomar IA. `POST /internal/conversations/:id/messages`
+  e `takeover` assumem a sessão (o `409 HUMAN_HANDOFF_REQUIRED` saiu; o takeover
+  não grava mais relógio 9999); `release` chama `releaseToAi`; `GET` não altera
+  estado. `HandoffService.isBotPaused` consulta a sessão antes de retomar por
+  relógio vencido.
+- **FATO atual:** `AssistantService` recebe uma porta de sugestão: a
+  classificação do agente é gravada como `suggestedCategory` com proveniência
+  `agent:<promptVersion>` e nunca como override; `contextSince` limita o
+  histórico do turno após Retomar IA.
+- **FATO atual:** rotas internas `PUT /internal/conversations/:id/category`
+  (`null` limpa) e `PUT .../ignore` sob `conversations:write`; filtros
+  `category`/`handling`/`ignored`; DTO de conversa com `category`,
+  `categorySource`, `suggestedCategory`, `handling`, `ignored`/`ignoredAt`,
+  `aiPaused` e `session`. BFF expõe `PUT /v1/conversations/:id/category` e
+  `/ignore` com tenant da sessão e CSRF ([PUBLIC_API_V1](../../apps/bff/PUBLIC_API_V1.md));
+  frontend aceita campos e operações novas sem tela.
+- **FATO atual (resíduos do 004):** `InboxStore.renewLease` com fencing pelo
+  token e heartbeat no `InboxWorker` (`INBOX_LEASE_HEARTBEAT_SECONDS`, 30); a
+  espera da mensagem ambígua se estende enquanto os fragmentos seguintes forem
+  saudação, até `AI_AMBIGUOUS_MAX_WAIT_SECONDS`.
+- **FATO atual:** `validate:integration` tem onze passos, com o ensaio da
+  migration 005 e as suítes de sessão e controle humano contra PostgreSQL;
+  `tests/session/**` e `tests/internal/**` rodam no core sobre um Prisma em
+  memória de teste.
+- Continuam **NÃO VERIFICADOS:** WhatsApp real, execução hospedada da CI, deploy,
+  `migrate deploy`/`diff` da IA em banco com pgvector e os demais limites do
+  fechamento factual. Handoffs `OPEN` legados não são resolvidos pela rotação
+  de sessão, e mensagens não textuais do contato não renovam a sessão.

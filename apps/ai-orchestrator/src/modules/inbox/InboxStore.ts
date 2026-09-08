@@ -108,6 +108,15 @@ export interface ConversationWindowInput {
   conversationKey: string;
   /** Texto do fragmento que acabou de chegar. */
   text: string;
+  /**
+   * Extrator de texto do payload persistido.
+   *
+   * Existe para que a politica enxergue os fragmentos anteriores da conversa
+   * sem que a inbox precise conhecer o formato do provedor: quem sabe ler o
+   * payload e o adaptador, e ele passa a funcao. Sem extrator, a politica cai
+   * no comportamento de fragmento unico.
+   */
+  fragmentText?: (rawPayload: unknown) => string | undefined;
   policy: ConversationWindowPolicy;
   now?: Date;
 }
@@ -124,6 +133,21 @@ export interface InboxPort {
     input: ConversationWindowInput,
   ): Promise<ConversationWindowResult | null>;
   claimNext(options: InboxClaimOptions): Promise<InboxClaim | null>;
+  /**
+   * Heartbeat do lease: estende a validade enquanto o lote executa.
+   *
+   * Devolve quantas linhas continuavam sob o mesmo token. Zero significa que o
+   * lease ja foi perdido — quem chamou nao e mais o dono e nao deve concluir.
+   *
+   * Opcional na porta para nao quebrar implementacao anterior ao Goal005;
+   * quando ausente, o lease so vale pelo tempo do claim.
+   */
+  renewLease?(input: {
+    ids: string[];
+    leaseToken: string;
+    leaseMs: number;
+    now?: Date;
+  }): Promise<number>;
   complete(input: {
     ids: string[];
     leaseToken: string;
@@ -233,15 +257,21 @@ export class InboxStore implements InboxPort {
         status: "RECEIVED",
         attempts: 0,
       },
-      select: { id: true, receivedAt: true },
+      select: { id: true, receivedAt: true, rawPayload: true },
       orderBy: { receivedAt: "asc" },
     });
     if (pending.length === 0) return null;
 
     const firstEventAt = pending[0].receivedAt;
     const firstContact = !(await this.hasConversationHistory(input));
+    const extract = input.fragmentText;
     const windowInput = {
       text: input.text,
+      pendingTexts: extract
+        ? pending
+            .map((row) => extract(row.rawPayload))
+            .filter((text): text is string => Boolean(text?.trim()))
+        : undefined,
       pendingFragments: pending.length,
       firstEventAt,
       firstContact,
@@ -430,6 +460,32 @@ export class InboxStore implements InboxPort {
       conversationKey: events[0].conversationKey,
       events,
     };
+  }
+
+  /**
+   * Renovacao do lease durante a execucao.
+   *
+   * O lote longo — modelo, tools e envio — passava do lease e era recuperado
+   * por outro ciclo no meio do trabalho. Renovar sob o proprio token mantem o
+   * fencing: quem ja perdeu o lease nao consegue estende-lo de volta.
+   */
+  async renewLease(input: {
+    ids: string[];
+    leaseToken: string;
+    leaseMs: number;
+    now?: Date;
+  }): Promise<number> {
+    if (input.ids.length === 0) return 0;
+    const now = input.now ?? new Date();
+    const updated = await this.prisma.processedEvent.updateMany({
+      where: {
+        id: { in: input.ids },
+        leaseToken: input.leaseToken,
+        status: "PROCESSING",
+      },
+      data: { leaseExpiresAt: new Date(now.getTime() + input.leaseMs) },
+    });
+    return updated.count;
   }
 
   async complete(input: {

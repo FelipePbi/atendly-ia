@@ -25,6 +25,7 @@ import type {
 import type { WhatsAppProvider } from "../channel/ports/WhatsAppProvider.js";
 import type { KnowledgeVectorStore } from "../knowledge/knowledge-vector-store.js";
 import { classifySendFailure } from "../outbox/outbox-policy.js";
+import type { GraphSessionPort } from "../session/SessionService.js";
 import type { GraphRuntimePort } from "./graph-runtime.js";
 import {
   type GraphIntent,
@@ -61,6 +62,13 @@ export interface MessageGraphExecution {
  */
 export interface OutboundGate {
   shouldCancel(): Promise<string | null>;
+  /**
+   * Pede a reavaliacao da saida pendente desta conversa.
+   *
+   * E o mesmo supersede do Goal004, agora acionado tambem quando o humano
+   * assume: a resposta automatica que ainda nao saiu deixa de sair.
+   */
+  requestCancel?(reason: string): Promise<void>;
 }
 
 export interface MessageGraphDependencies {
@@ -73,6 +81,14 @@ export interface MessageGraphDependencies {
   checkpointer?: BaseCheckpointSaver;
   logger?: DiagnosticLogger;
   outboundGate?: OutboundGate;
+  /**
+   * Contato, sessao, categoria e controle humano persistidos.
+   *
+   * Opcional para o caminho legado que ainda nao a injeta; quando ausente, o
+   * grafo cai na politica anterior (handoff + pausa por relogio) e nao inventa
+   * categoria nem ignore.
+   */
+  sessions?: GraphSessionPort;
 }
 
 export class MessageGraphWorkflow {
@@ -111,6 +127,8 @@ export class MessageGraphWorkflow {
         deferResponse: input.deferResponse ?? false,
         eventAlreadyGuarded: input.eventAlreadyGuarded ?? false,
         bufferedRecord: undefined,
+        session: undefined,
+        observedInboundVersion: 0,
         retrievedKnowledge: [],
         toolResults: [],
         assistantSession: undefined,
@@ -127,13 +145,27 @@ export class MessageGraphWorkflow {
     return requireGraphExecution(state);
   }
 
+  /**
+   * Ordem do grafo depois do Goal005.
+   *
+   * A inbox deixou de depender da decisao de IA: `operationalGuard` continua
+   * recusando duplicata e desviando a atividade do dono, mas nao encerra mais
+   * a execucao por IA desligada, pausa, sessao pessoal ou contato ignorado.
+   * Ele apenas **anota** a decisao; quem encerra e `sessionGate`, ja depois de
+   * `recordInbound`. Assim a mensagem do cliente existe em `Message` antes de
+   * qualquer decisao, e o conteudo bloqueado nunca chega a
+   * `understandMessage`, ao RAG, ao modelo nem a memoria.
+   */
   private buildGraph(checkpointer: BaseCheckpointSaver) {
     return new StateGraph(MessageGraphState)
       .addNode("loadRuntimeContext", (state) => this.loadRuntimeContext(state))
       .addNode("loadConversation", (state) => this.loadConversation(state))
+      .addNode("loadSession", (state) => this.loadSession(state))
       .addNode("operationalGuard", (state) => this.operationalGuard(state))
+      .addNode("ownerActivity", (state) => this.handleOwnerActivity(state))
       .addNode("understandMessage", (state) => this.understandMessage(state))
       .addNode("recordInbound", (state) => this.recordInbound(state))
+      .addNode("sessionGate", (state) => this.sessionGate(state))
       .addNode("bufferInbound", (state) => this.bufferInbound(state))
       .addNode("retrieveKnowledge", (state) => this.retrieveKnowledge(state))
       .addNode("agent", (state) => this.agent(state))
@@ -145,21 +177,24 @@ export class MessageGraphWorkflow {
       .addNode("handoff", (state) => this.handoff(state))
       .addEdge(START, "loadRuntimeContext")
       .addEdge("loadRuntimeContext", "loadConversation")
-      .addEdge("loadConversation", "operationalGuard")
+      .addEdge("loadConversation", "loadSession")
+      .addEdge("loadSession", "operationalGuard")
+      .addConditionalEdges("operationalGuard", routeAfterGuard, {
+        end: END,
+        owner: "ownerActivity",
+        buffer: "bufferInbound",
+        record: "recordInbound",
+      })
+      .addEdge("ownerActivity", END)
+      .addEdge("bufferInbound", END)
+      .addEdge("recordInbound", "sessionGate")
       .addConditionalEdges(
-        "operationalGuard",
-        (state) => (state.guardDecision === "enabled" ? "continue" : "end"),
-        { continue: "understandMessage", end: END },
+        "sessionGate",
+        (state) => (state.result ? "end" : "understand"),
+        { end: END, understand: "understandMessage" },
       )
       .addConditionalEdges("understandMessage", routeAfterUnderstanding, {
         end: END,
-        buffer: "bufferInbound",
-        record: "recordInbound",
-        retrieval: "retrieveKnowledge",
-        agent: "agent",
-      })
-      .addEdge("bufferInbound", END)
-      .addConditionalEdges("recordInbound", routeAfterRecording, {
         retrieval: "retrieveKnowledge",
         agent: "agent",
       })
@@ -216,6 +251,35 @@ export class MessageGraphWorkflow {
     };
   }
 
+  /**
+   * Contato e sessao vigentes, antes de qualquer decisao.
+   *
+   * A sessao rotaciona sozinha aqui quando expirou por inatividade do contato:
+   * a nova sessao volta a IA se o contato for elegivel — e nunca se ele estiver
+   * ignorado, porque `ignored` e regra do contato.
+   */
+  private async loadSession(
+    state: MessageGraphStateValue,
+  ): Promise<MessageGraphStateUpdate> {
+    const sessions = this.dependencies.sessions;
+    if (!sessions) return {};
+    const message = state.inboundMessage;
+    const session = await sessions.resolveContext({
+      tenantId: state.tenantId,
+      channelId: state.channelId,
+      conversationId: state.conversationId,
+      externalContactId:
+        state.conversation.externalContactId ?? message.customerPhone,
+      customerName: message.customerName,
+    });
+    return { session, observedInboundVersion: session.inboundVersion };
+  }
+
+  /**
+   * Recusa o que nao e trabalho de conversa e anota por que a IA nao deve
+   * responder. Nao encerra a execucao por politica: o encerramento acontece em
+   * `sessionGate`, depois de a mensagem estar persistida.
+   */
   private async operationalGuard(
     state: MessageGraphStateValue,
   ): Promise<MessageGraphStateUpdate> {
@@ -234,52 +298,83 @@ export class MessageGraphWorkflow {
       return { guardDecision: "enabled" };
     }
 
-    if (state.guardDecision === "channel_disconnected") {
-      return {
-        result: { ok: true, action: "channel_disconnected" },
-      };
+    // Regra do contato antes de tudo: conteudo de contato ignorado e de sessao
+    // pessoal nao pode ser lido por classificacao, modelo, RAG nem memoria.
+    if (state.session?.ignored) return { guardDecision: "ignored_contact" };
+    if (state.session?.category === "PERSONAL") {
+      return { guardDecision: "personal_session" };
     }
 
+    if (state.guardDecision === "channel_disconnected") return {};
+
     if (!env.EVOLUTION_BOT_ENABLED || !state.tenantConfig.aiEnabled) {
-      return {
-        guardDecision: "bot_disabled",
-        result: { ok: true, action: "bot_disabled" },
-      };
+      return { guardDecision: "bot_disabled" };
     }
 
     const paused = await this.dependencies.handoff.isBotPaused(
       message.customerPhone,
     );
-    if (!paused) return { guardDecision: "enabled" };
+    if (!paused && !state.session?.humanHandling) {
+      return { guardDecision: "enabled" };
+    }
 
     const pauseContext = await this.dependencies.handoff.getBotPauseContext?.(
       message.customerPhone,
     );
-    if (isTextMessage(message) && isUnsupportedMessagePause(pauseContext)) {
+    if (
+      paused &&
+      isTextMessage(message) &&
+      isUnsupportedMessagePause(pauseContext)
+    ) {
       await this.dependencies.handoff.resumeBot(message.customerPhone);
       return {
         guardDecision: "enabled",
-        conversation: { status: "ACTIVE", humanHandoff: false },
+        conversation: {
+          ...state.conversation,
+          status: "ACTIVE",
+          humanHandoff: false,
+        },
       };
     }
 
     const humanTakeover =
+      Boolean(state.session?.humanHandling) ||
       state.conversation.humanHandoff ||
       state.conversation.status === "HUMAN_HANDOFF";
-    return {
-      guardDecision: humanTakeover ? "human_takeover" : "paused",
-      result: { ok: true, action: "paused_conversation" },
-    };
+    return { guardDecision: humanTakeover ? "human_takeover" : "paused" };
   }
 
-  private async understandMessage(
+  /**
+   * Onde a decisao de nao processar vira fim de execucao.
+   *
+   * Roda depois de `recordInbound`: a mensagem do cliente ja existe em
+   * `Message` e continua aparecendo na lista de conversas do BFF, mesmo com a
+   * IA desligada, em handoff, em sessao pessoal ou com contato ignorado.
+   */
+  private sessionGate(
     state: MessageGraphStateValue,
-  ): Promise<MessageGraphStateUpdate> {
-    const message = state.inboundMessage;
-    if (message.fromMe && !isSelfChatMessage(message)) {
-      return this.handleOwnerActivity(state);
+  ): MessageGraphStateUpdate {
+    switch (state.guardDecision) {
+      case "ignored_contact":
+        return { result: { ok: true, action: "ignored_contact" } };
+      case "personal_session":
+        return { result: { ok: true, action: "personal_session" } };
+      case "channel_disconnected":
+        return { result: { ok: true, action: "channel_disconnected" } };
+      case "bot_disabled":
+        return { result: { ok: true, action: "bot_disabled" } };
+      case "paused":
+      case "human_takeover":
+        return { result: { ok: true, action: "paused_conversation" } };
+      default:
+        return {};
     }
-    if (!isTextMessage(message)) return { intent: "unsupported" };
+  }
+
+  private understandMessage(
+    state: MessageGraphStateValue,
+  ): MessageGraphStateUpdate {
+    if (!isTextMessage(state.inboundMessage)) return { intent: "unsupported" };
     return { intent: classifyMessageIntent(state.inboundText) };
   }
 
@@ -304,6 +399,7 @@ export class MessageGraphWorkflow {
         "IA pausada por comando /ia_pause",
         "Comando enviado pelo WhatsApp conectado.",
       );
+      await this.setContactAiPaused(state, true, "command:/ia_pause");
       return {
         intent: "owner_activity",
         result: { ok: true, action: "ai_pause_command" },
@@ -311,6 +407,7 @@ export class MessageGraphWorkflow {
     }
     if (command === "/bot on") {
       await this.dependencies.handoff.resumeBot(message.customerPhone);
+      await this.releaseSessionToAi(state);
       return {
         intent: "owner_activity",
         result: { ok: true, action: "bot_resumed" },
@@ -321,12 +418,17 @@ export class MessageGraphWorkflow {
         message.customerPhone,
         "Bot pausado por comando /bot off",
       );
+      await this.setContactAiPaused(state, true, "command:/bot off");
       return {
         intent: "owner_activity",
         result: { ok: true, action: "bot_paused" },
       };
     }
 
+    // Mensagem manual da profissional pelo WhatsApp: assume a sessao antes de
+    // registrar. A resposta automatica que ainda nao saiu e cancelada; nenhuma
+    // mensagem automatica anuncia a troca para o cliente.
+    await this.assumeHumanControl(state, "WHATSAPP");
     if (isTextMessage(message)) {
       await this.dependencies.automation.recordManualOutboundText({
         phone: message.customerPhone,
@@ -339,6 +441,30 @@ export class MessageGraphWorkflow {
       intent: "owner_activity",
       result: { ok: true, action: "manual_activity_recorded" },
     };
+  }
+
+  /**
+   * Assume a sessao para o humano e cancela a saida automatica pendente.
+   *
+   * A ordem importa: o controle humano e gravado antes de o cancelamento ser
+   * pedido, entao a execucao concorrente que chegar ao guard de envio ja
+   * encontra o estado novo.
+   */
+  private async assumeHumanControl(
+    state: MessageGraphStateValue,
+    source: "WHATSAPP" | "ATENDLY",
+  ): Promise<void> {
+    const sessions = this.dependencies.sessions;
+    if (sessions && state.session) {
+      await sessions.assumeHumanControl({
+        tenantId: state.tenantId,
+        sessionId: state.session.sessionId,
+        source,
+      });
+    }
+    await this.dependencies.outboundGate?.requestCancel?.(
+      "human_took_over_the_session",
+    );
   }
 
   private async retrieveKnowledge(
@@ -381,30 +507,124 @@ export class MessageGraphWorkflow {
       aiSettings: state.inboundMessage.aiSettings,
       channelMessage: state.inboundMessage,
     });
+    // Fragmento diferido tambem e interacao do contato: renova a sessao e
+    // avanca a versao de entrada.
+    const sessions = this.dependencies.sessions;
+    const session =
+      sessions && state.session
+        ? await sessions.recordContactMessage({
+            tenantId: state.tenantId,
+            sessionId: state.session.sessionId,
+          })
+        : undefined;
     return {
       bufferedRecord: recorded,
+      ...(session
+        ? { session, observedInboundVersion: session.inboundVersion }
+        : {}),
       result: { ok: true, action: "buffered" },
     };
   }
 
+  /**
+   * `/bot on` e `Retomar IA` na sessao vigente.
+   *
+   * Limpar so a pausa do contato nao bastava: se a profissional ja tinha
+   * respondido manualmente, `ConversationSession.humanHandling` continuava
+   * verdadeiro e o guard mantinha a conversa em atendimento humano. O comando
+   * passa pelo mesmo caminho do painel — libera a sessao, marca a reavaliacao
+   * de contexto e limpa a pausa do contato.
+   */
+  private async releaseSessionToAi(
+    state: MessageGraphStateValue,
+  ): Promise<void> {
+    const sessions = this.dependencies.sessions;
+    if (!sessions) return;
+    const released = await sessions.releaseToAi({
+      tenantId: state.tenantId,
+      conversationId: state.conversationId,
+    });
+    // Sem sessao vigente nao ha o que liberar, mas a pausa do contato existe
+    // mesmo assim e o comando precisa desfaze-la.
+    if (!released) await this.setContactAiPaused(state, false);
+  }
+
+  private async setContactAiPaused(
+    state: MessageGraphStateValue,
+    paused: boolean,
+    reason?: string,
+  ): Promise<void> {
+    const sessions = this.dependencies.sessions;
+    if (!sessions || !state.session) return;
+    await sessions.setContactAiPaused({
+      tenantId: state.tenantId,
+      contactId: state.session.contactId,
+      paused,
+      reason,
+    });
+  }
+
+  /**
+   * Persiste a mensagem do cliente antes de qualquer decisao de IA.
+   *
+   * O guard nao encerra mais antes deste no: com a IA desligada, em handoff,
+   * em sessao pessoal ou com contato ignorado, a mensagem existe do mesmo
+   * jeito. So o que ja foi gravado no lote (`inputMessageIds`) e pulado.
+   */
   private async recordInbound(
     state: MessageGraphStateValue,
   ): Promise<MessageGraphStateUpdate> {
+    const update: MessageGraphStateUpdate = {};
     if (
-      state.inputMessageIds.length > 0 ||
-      !isTextMessage(state.inboundMessage) ||
-      !hasGraphAutomation(this.dependencies.automation)
+      state.inputMessageIds.length === 0 &&
+      isTextMessage(state.inboundMessage) &&
+      hasRecordInboundAutomation(this.dependencies.automation) &&
+      hasGraphAutomation(this.dependencies.automation)
     ) {
-      return {};
+      const recorded = await this.dependencies.automation.recordInboundText({
+        phone: state.inboundMessage.customerPhone,
+        text: state.inboundText,
+        businessContext: state.inboundMessage.businessContext,
+        aiSettings: state.inboundMessage.aiSettings,
+        channelMessage: state.inboundMessage,
+      });
+      update.inputMessageIds = [recorded.messageRecordId];
     }
-    const recorded = await this.dependencies.automation.recordInboundText({
-      phone: state.inboundMessage.customerPhone,
-      text: state.inboundText,
-      businessContext: state.inboundMessage.businessContext,
-      aiSettings: state.inboundMessage.aiSettings,
-      channelMessage: state.inboundMessage,
+
+    // Interacao do contato renova a sessao e avanca a versao de entrada, que e
+    // o que os guards de tool e de envio comparam depois.
+    const sessions = this.dependencies.sessions;
+    if (sessions && state.session && isTextMessage(state.inboundMessage)) {
+      const session = await sessions.recordContactMessage({
+        tenantId: state.tenantId,
+        sessionId: state.session.sessionId,
+      });
+      update.session = session;
+      update.observedInboundVersion = session.inboundVersion;
+    }
+    return update;
+  }
+
+  /**
+   * Guard deterministico antes de agir com efeito.
+   *
+   * Rele o estado persistido e compara versao de entrada, controle humano,
+   * elegibilidade global, categoria e ignore. Sem porta de sessao ligada, cai
+   * na politica anterior de pausa.
+   */
+  private async executionBlockReason(
+    state: MessageGraphStateValue,
+  ): Promise<string | null> {
+    const sessions = this.dependencies.sessions;
+    if (!sessions || !state.session) return null;
+    const { reason } = await sessions.evaluate({
+      tenantId: state.tenantId,
+      sessionId: state.session.sessionId,
+      observedInboundVersion: state.observedInboundVersion,
+      aiEnabled: env.EVOLUTION_BOT_ENABLED && state.tenantConfig.aiEnabled,
+      channelConnected: state.guardDecision !== "channel_disconnected",
     });
-    return { inputMessageIds: [recorded.messageRecordId] };
+    return reason;
   }
 
   private async agent(
@@ -435,6 +655,9 @@ export class MessageGraphWorkflow {
             messageRecordIds: state.inputMessageIds,
             knowledgeRequested: state.intent === "knowledge",
             retrievedKnowledge: state.retrievedKnowledge,
+            // `Retomar IA` reavalia o contexto atual: o turno seguinte le a
+            // conversa a partir do instante da retomada, nao do ponto anterior.
+            contextSince: state.session?.contextResetAt ?? undefined,
           }));
         const step =
           await this.dependencies.automation.invokeGraphAgent(session);
@@ -496,6 +719,32 @@ export class MessageGraphWorkflow {
   private async executeTool(
     state: MessageGraphStateValue,
   ): Promise<MessageGraphStateUpdate> {
+    // Guard antes de tool com efeito: o humano pode ter assumido, o contato
+    // pode ter sido ignorado e o cliente pode ter falado de novo enquanto o
+    // modelo pensava. Nada com efeito roda sobre contexto vencido.
+    const blocked = await this.executionBlockReason(state);
+    if (blocked) {
+      this.logger.info(
+        {
+          ...channelMessageLogContext(state.inboundMessage),
+          reason: blocked,
+        },
+        "LangGraph skipped a tool with effect because the turn is no longer eligible",
+      );
+      return {
+        result: {
+          ok: true,
+          action:
+            blocked === "input_superseded"
+              ? "superseded"
+              : blocked === "contact_ignored"
+                ? "ignored_contact"
+                : blocked === "session_personal"
+                  ? "personal_session"
+                  : "paused_conversation",
+        },
+      };
+    }
     if (
       hasGraphAutomation(this.dependencies.automation) &&
       state.assistantSession &&
@@ -650,7 +899,9 @@ export class MessageGraphWorkflow {
     }
     const message = state.inboundMessage;
 
-    const cancelReason = await this.dependencies.outboundGate?.shouldCancel();
+    const cancelReason =
+      (await this.executionBlockReason(state)) ??
+      (await this.dependencies.outboundGate?.shouldCancel());
     if (cancelReason) {
       await this.recordDelivery(state.response.messageRecordId, {
         state: "FAILED",
@@ -743,18 +994,28 @@ function readPendingMessageId(value: unknown): string | undefined {
     : undefined;
 }
 
-function routeAfterUnderstanding(
+/**
+ * Saida do guard operacional.
+ *
+ * `owner` desvia a atividade manual da profissional, que nao e mensagem de
+ * cliente e nao entra na inbox como INBOUND. `buffer` e o lote diferido, que
+ * ja persiste o fragmento. Todo o resto vai para `record`: a decisao de nao
+ * processar acontece depois, em `sessionGate`.
+ */
+function routeAfterGuard(
   state: MessageGraphStateValue,
-): "end" | "buffer" | "record" | "retrieval" | "agent" {
+): "end" | "owner" | "buffer" | "record" {
   if (state.result) return "end";
-  if (state.deferResponse && state.intent !== "owner_activity") return "buffer";
-  if (state.intent === "unsupported") return "agent";
+  const message = state.inboundMessage;
+  if (message.fromMe && !isSelfChatMessage(message)) return "owner";
+  if (state.deferResponse && isTextMessage(message)) return "buffer";
   return "record";
 }
 
-function routeAfterRecording(
+function routeAfterUnderstanding(
   state: MessageGraphStateValue,
-): "retrieval" | "agent" {
+): "end" | "retrieval" | "agent" {
+  if (state.result) return "end";
   return state.intent === "knowledge" ? "retrieval" : "agent";
 }
 

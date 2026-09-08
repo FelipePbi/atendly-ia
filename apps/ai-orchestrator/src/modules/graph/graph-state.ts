@@ -7,6 +7,7 @@ import type {
   ModelResponse,
   ModelToolResult,
 } from "../model/model-provider.js";
+import type { SessionSnapshot } from "../session/SessionService.js";
 
 export type GraphIntent =
   | "simple_response"
@@ -22,7 +23,11 @@ export type GraphGuardDecision =
   | "bot_disabled"
   | "paused"
   | "human_takeover"
-  | "channel_disconnected";
+  | "channel_disconnected"
+  // Regra do contato e da sessao, avaliadas antes de qualquer leitura de
+  // conteudo: nem classificacao, nem modelo, nem RAG, nem memoria.
+  | "ignored_contact"
+  | "personal_session";
 
 export interface GraphTenantConfig {
   aiEnabled: boolean;
@@ -38,6 +43,12 @@ export interface GraphCustomerContext {
 export interface GraphConversationContext {
   status: "ACTIVE" | "HUMAN_HANDOFF" | "CLOSED";
   humanHandoff: boolean;
+  /**
+   * Contato da conversa lido do banco, nao do payload do transporte. Opcional
+   * porque o runtime anterior ao Goal005 nao o devolve.
+   */
+  externalContactId?: string;
+  contactId?: string | null;
 }
 
 export interface GraphToolResult {
@@ -75,6 +86,8 @@ export interface GraphResult {
     | "paused_conversation"
     | "channel_disconnected"
     | "unsupported_message"
+    | "ignored_contact"
+    | "personal_session"
     | "buffered"
     | "replied"
     | "superseded"
@@ -98,6 +111,10 @@ export const MessageGraphState = Annotation.Root({
   customerContext: Annotation<GraphCustomerContext>(),
   conversation: Annotation<GraphConversationContext>(),
   guardDecision: Annotation<GraphGuardDecision>(),
+  /** Contato e sessao vigentes; ausente quando a porta de sessao nao esta ligada. */
+  session: Annotation<SessionSnapshot | undefined>(),
+  /** Versao de entrada observada no inicio do turno, comparada antes de agir. */
+  observedInboundVersion: Annotation<number>(),
   intent: Annotation<GraphIntent>(),
   retrievedKnowledge: Annotation<KnowledgeSearchResult[]>(),
   toolResults: Annotation<GraphToolResult[]>(),

@@ -281,6 +281,16 @@ export function integrationSteps(target) {
       args: ["scripts/goal004-migration-rehearsal.mjs"],
       env,
     },
+    // Gate M0/M1 do Goal005: ensaio da migration de contato, sessão e controle
+    // humano contra estoque legado (handoff, pausa indefinida, `state` com
+    // classificação, mensagens antigas), em banco próprio e descartável.
+    {
+      name: "rehearse:goal005-contact-session-migration",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal005-migration-rehearsal.mjs"],
+      env,
+    },
     {
       // Checkout limpo não tem `src/generated/prisma`; sem isto a suíte falha
       // na importação do client.

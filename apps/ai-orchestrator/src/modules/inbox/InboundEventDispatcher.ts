@@ -122,6 +122,12 @@ export class InboundEventDispatcher {
           (await this.dependencies.inbox.isSupersedeRequested(eventIds))
             ? "superseded_by_new_inbound_message"
             : null,
+        // O humano assumindo a sessao usa o mesmo supersede: a saida
+        // automatica que ainda nao foi enviada deixa de ser enviada.
+        requestCancel: async () => {
+          if (!claim.conversationKey) return;
+          await this.dependencies.inbox.requestSupersede(claim.conversationKey);
+        },
       },
     });
 

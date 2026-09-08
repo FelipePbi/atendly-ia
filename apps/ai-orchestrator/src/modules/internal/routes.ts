@@ -13,7 +13,6 @@ import {
 } from "../../lib/internal-credentials.js";
 import { EvolutionProvider } from "../channel/adapters/evolution/EvolutionProvider.js";
 import { ChannelConnectionService } from "../channel/ChannelConnectionService.js";
-import { BOT_OFF_PAUSE_UNTIL } from "../handoff/HandoffService.js";
 import {
   type InboxPort,
   inboxRetryPolicyFromEnv,
@@ -21,6 +20,7 @@ import {
 } from "../inbox/InboxStore.js";
 import { classifySendFailure } from "../outbox/outbox-policy.js";
 import { OutboxStore } from "../outbox/OutboxStore.js";
+import { SessionService } from "../session/SessionService.js";
 import {
   businessContextSchema,
   normalizeBusinessContext,
@@ -46,9 +46,20 @@ const conversationParamsSchema = z.object({
 
 const conversationQuerySchema = z.object({
   status: z.enum(["ACTIVE", "HUMAN_HANDOFF", "CLOSED"]).optional(),
+  // Organizacao da inbox e estado de atendimento: filtros por operacao, sem
+  // sobrecarregar `status`, que continua sendo o ciclo de vida da conversa.
+  category: z.enum(["COMMERCIAL", "UNCLASSIFIED", "PERSONAL"]).optional(),
+  handling: z.enum(["AI", "HUMAN"]).optional(),
+  ignored: z.enum(["true", "false"]).optional(),
   search: z.string().trim().max(160).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
+
+const categoryOverrideSchema = z.object({
+  category: z.enum(["COMMERCIAL", "UNCLASSIFIED", "PERSONAL"]).nullable(),
+});
+
+const ignoreContactSchema = z.object({ ignored: z.boolean() });
 
 const sendOwnerMessageSchema = z.object({
   text: z.string().trim().min(1).max(4_000),
@@ -61,6 +72,16 @@ const sendOwnerMessageSchema = z.object({
 export interface InternalRoutesOptions {
   /** Inbox duravel: o dead-letter aparece como atencao no painel. */
   inbox?: Pick<InboxPort, "countDeadLetters">;
+  /** Contato, sessao, categoria e controle humano (Goal005). */
+  sessions?: Pick<
+    SessionService,
+    | "resolveContext"
+    | "currentSession"
+    | "setCategoryOverride"
+    | "setIgnored"
+    | "releaseToAi"
+    | "assumeHumanControl"
+  >;
 }
 
 export async function registerInternalRoutes(
@@ -69,6 +90,7 @@ export async function registerInternalRoutes(
   options: InternalRoutesOptions = {},
 ): Promise<void> {
   const channelConnections = new ChannelConnectionService(prisma);
+  const sessions = options.sessions ?? new SessionService(prisma);
   const inbox =
     options.inbox ?? new InboxStore(prisma, inboxRetryPolicyFromEnv());
 
@@ -135,6 +157,24 @@ export async function registerInternalRoutes(
       where: {
         tenantId,
         ...(query.status ? { status: query.status } : {}),
+        // Categoria e atendimento humano vivem na sessao vigente (a que ainda
+        // nao terminou); `ignored` e regra do contato.
+        ...(query.category || query.handling
+          ? {
+              sessions: {
+                some: {
+                  endedAt: null,
+                  ...(query.category ? { category: query.category } : {}),
+                  ...(query.handling
+                    ? { humanHandling: query.handling === "HUMAN" }
+                    : {}),
+                },
+              },
+            }
+          : {}),
+        ...(query.ignored
+          ? { contact: { ignored: query.ignored === "true" } }
+          : {}),
         ...(query.search
           ? {
               OR: [
@@ -146,14 +186,7 @@ export async function registerInternalRoutes(
             }
           : {}),
       },
-      include: {
-        messages: { orderBy: { createdAt: "desc" }, take: 1 },
-        handoffs: {
-          where: { status: "OPEN" },
-          orderBy: { createdAt: "desc" },
-          take: 1,
-        },
-      },
+      include: conversationInclude,
       orderBy: { updatedAt: "desc" },
       take: query.limit,
     });
@@ -189,13 +222,27 @@ export async function registerInternalRoutes(
     const { tenantId } = trustedTenantContext(request);
     const { id } = parseOrThrow(conversationParamsSchema, request.params);
     const body = parseOrThrow(sendOwnerMessageSchema, request.body);
+    const { userId } = trustedTenantContext(request);
     const conversation = await requireConversation(prisma, tenantId, id);
-    if (!conversation.humanHandoff) {
-      throw new AppError("Take over conversation before sending a message.", {
-        statusCode: 409,
-        code: "HUMAN_HANDOFF_REQUIRED",
-      });
-    }
+
+    // Enviar assume. O takeover previo deixou de ser pre-condicao: exigir o
+    // clique antes fazia a mensagem da profissional sair sem que a plataforma
+    // soubesse que ela ja estava atendendo — e a resposta automatica em curso
+    // continuava valendo. Agora o controle humano e gravado antes do
+    // transporte, e a saida automatica pendente e cancelada.
+    const session = await sessions.resolveContext({
+      tenantId,
+      channelId: conversation.channelId,
+      conversationId: conversation.id,
+      externalContactId: conversation.externalContactId,
+      customerName: conversation.customerName,
+    });
+    await sessions.assumeHumanControl({
+      tenantId,
+      sessionId: session.sessionId,
+      source: "ATENDLY",
+      actor: userId,
+    });
 
     // A tentativa existe antes do transporte, com operation-id estavel. Ela
     // nunca e apagada: timeout ou erro de rede depois do envio nao provam que a
@@ -266,15 +313,11 @@ export async function registerInternalRoutes(
     const message = await prisma.message.findUniqueOrThrow({
       where: { id: pendingMessage.id },
     });
-    await prisma.conversation.update({
-      where: { id: conversation.id },
-      data: { status: "HUMAN_HANDOFF", humanHandoff: true },
-    });
     return reply.code(201).send(internalData(request, messageDto(message)));
   });
 
   app.post("/internal/conversations/:id/takeover", async (request) => {
-    const { tenantId } = trustedTenantContext(request);
+    const { tenantId, userId } = trustedTenantContext(request);
     const { id } = parseOrThrow(conversationParamsSchema, request.params);
     const conversation = await requireConversation(prisma, tenantId, id);
     const existingOwnerTakeover = await prisma.handoff.findFirst({
@@ -293,13 +336,30 @@ export async function registerInternalRoutes(
         },
       });
     }
+    // Sem relogio: a sessao guarda o atendimento humano, entao o takeover nao
+    // precisa mais de `BOT_OFF_PAUSE_UNTIL` para nao ser desfeito sozinho. O
+    // relogio no ano 9999 era o que fazia a pausa sobreviver a troca de sessao
+    // e prender a conversa depois de a sessao expirar.
     await prisma.conversation.update({
       where: { id },
       data: {
         humanHandoff: true,
         status: "HUMAN_HANDOFF",
-        handoffPausedUntil: BOT_OFF_PAUSE_UNTIL,
+        handoffPausedUntil: null,
       },
+    });
+    const takenOver = await sessions.resolveContext({
+      tenantId,
+      channelId: conversation.channelId,
+      conversationId: conversation.id,
+      externalContactId: conversation.externalContactId,
+      customerName: conversation.customerName,
+    });
+    await sessions.assumeHumanControl({
+      tenantId,
+      sessionId: takenOver.sessionId,
+      source: "ATENDLY",
+      actor: userId,
     });
     return internalData(
       request,
@@ -307,14 +367,83 @@ export async function registerInternalRoutes(
     );
   });
 
+  /**
+   * `Retomar IA`.
+   *
+   * Unico caminho de volta dentro da sessao: o relogio nunca devolve sozinho.
+   * A retomada reavalia o contexto atual em vez de continuar do ponto anterior,
+   * e nenhuma mensagem automatica anuncia a troca para o cliente.
+   */
   app.post("/internal/conversations/:id/release", async (request) => {
-    const { tenantId } = trustedTenantContext(request);
+    const { tenantId, userId } = trustedTenantContext(request);
     const { id } = parseOrThrow(conversationParamsSchema, request.params);
-    await requireConversation(prisma, tenantId, id);
+    const conversation = await requireConversation(prisma, tenantId, id);
     await resolveConversationHandoffs(prisma, tenantId, id);
     await prisma.conversation.update({
       where: { id },
       data: { humanHandoff: false, status: "ACTIVE", handoffPausedUntil: null },
+    });
+    await sessions.resolveContext({
+      tenantId,
+      channelId: conversation.channelId,
+      conversationId: conversation.id,
+      externalContactId: conversation.externalContactId,
+      customerName: conversation.customerName,
+    });
+    await sessions.releaseToAi({ tenantId, conversationId: id, actor: userId });
+    return internalData(
+      request,
+      conversationDto(await requireConversation(prisma, tenantId, id)),
+    );
+  });
+
+  /**
+   * Override manual da categoria. `category: null` limpa o override e devolve a
+   * conversa a classificacao automatica; qualquer valor prevalece sobre ela.
+   */
+  app.put("/internal/conversations/:id/category", async (request) => {
+    const { tenantId, userId } = trustedTenantContext(request);
+    const { id } = parseOrThrow(conversationParamsSchema, request.params);
+    const body = parseOrThrow(categoryOverrideSchema, request.body);
+    const conversation = await requireConversation(prisma, tenantId, id);
+    await sessions.resolveContext({
+      tenantId,
+      channelId: conversation.channelId,
+      conversationId: conversation.id,
+      externalContactId: conversation.externalContactId,
+      customerName: conversation.customerName,
+    });
+    await sessions.setCategoryOverride({
+      tenantId,
+      conversationId: id,
+      category: body.category,
+      actor: userId,
+    });
+    return internalData(
+      request,
+      conversationDto(await requireConversation(prisma, tenantId, id)),
+    );
+  });
+
+  /** Contato ignorado: regra do contato, prevalece sobre a sessao. */
+  app.put("/internal/conversations/:id/ignore", async (request) => {
+    const { tenantId, userId } = trustedTenantContext(request);
+    const { id } = parseOrThrow(conversationParamsSchema, request.params);
+    const body = parseOrThrow(ignoreContactSchema, request.body);
+    const conversation = await requireConversation(prisma, tenantId, id);
+    await sessions.resolveContext({
+      tenantId,
+      channelId: conversation.channelId,
+      conversationId: conversation.id,
+      externalContactId: conversation.externalContactId,
+      customerName: conversation.customerName,
+    });
+    await sessions.setIgnored({
+      tenantId,
+      conversationId: id,
+      ignored: body.ignored,
+      actor: userId,
+      source: "panel",
     });
     return internalData(
       request,
@@ -350,14 +479,7 @@ export async function registerInternalRoutes(
       await Promise.all([
         prisma.conversation.findMany({
           where: { tenantId, status: "HUMAN_HANDOFF", humanHandoff: true },
-          include: {
-            messages: { orderBy: { createdAt: "desc" }, take: 1 },
-            handoffs: {
-              where: { status: "OPEN" },
-              orderBy: { createdAt: "desc" },
-              take: 1,
-            },
-          },
+          include: conversationInclude,
           orderBy: { updatedAt: "desc" },
           take: 5,
         }),
@@ -418,15 +540,7 @@ async function requireConversation(
 ) {
   const conversation = await prisma.conversation.findFirst({
     where: { id, tenantId },
-    include: {
-      messages: { orderBy: { createdAt: "desc" }, take: 1 },
-      handoffs: {
-        where: { status: "OPEN" },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-      },
-      channel: true,
-    },
+    include: { ...conversationInclude, channel: true },
   });
   if (!conversation) {
     throw new AppError("Conversation not found.", {
@@ -437,7 +551,29 @@ async function requireConversation(
   return conversation;
 }
 
-function conversationDto(conversation: {
+/**
+ * Include comum das leituras de conversa.
+ *
+ * A sessao vigente e a que ainda nao terminou; `take: 1` com ordem
+ * decrescente por inicio deixa a leitura deterministica mesmo se um resto de
+ * corrida tiver aberto duas.
+ */
+const conversationInclude = {
+  messages: { orderBy: { createdAt: "desc" }, take: 1 },
+  handoffs: {
+    where: { status: "OPEN" },
+    orderBy: { createdAt: "desc" },
+    take: 1,
+  },
+  contact: true,
+  sessions: {
+    where: { endedAt: null },
+    orderBy: { startedAt: "desc" },
+    take: 1,
+  },
+} as const satisfies Prisma.ConversationInclude;
+
+interface ConversationDtoInput {
   id: string;
   externalContactId: string;
   customerName: string | null;
@@ -452,7 +588,35 @@ function conversationDto(conversation: {
     body: string;
     createdAt: Date;
   }>;
-}) {
+  contact?: {
+    ignored: boolean;
+    ignoredAt: Date | null;
+    aiPaused: boolean;
+  } | null;
+  sessions?: Array<{
+    id: string;
+    startedAt: Date;
+    expiresAt: Date;
+    lastContactMessageAt: Date | null;
+    category: "COMMERCIAL" | "UNCLASSIFIED" | "PERSONAL";
+    categorySource: "AUTOMATIC" | "MANUAL";
+    suggestedCategory: "COMMERCIAL" | "UNCLASSIFIED" | "PERSONAL" | null;
+    humanHandling: boolean;
+    humanHandlingSince: Date | null;
+  }>;
+}
+
+/**
+ * DTO de conversa.
+ *
+ * Campos do Goal005 sao aditivos: `category`, `categorySource`, `handling`,
+ * `session` e `ignored`. Conversa sem sessao materializada ainda (estoque em
+ * migracao) responde com o padrao seguro — `Nao classificadas`, automatica,
+ * nao ignorada — em vez de omitir o campo e obrigar o consumidor a adivinhar.
+ */
+function conversationDto(conversation: ConversationDtoInput) {
+  const session = conversation.sessions?.[0];
+  const humanHandling = session?.humanHandling ?? conversation.humanHandoff;
   return {
     id: conversation.id,
     externalContactId: conversation.externalContactId,
@@ -465,6 +629,26 @@ function conversationDto(conversation: {
       : null,
     unreadCount: 0,
     updatedAt: conversation.updatedAt.toISOString(),
+    category: session?.category ?? "UNCLASSIFIED",
+    categorySource: session?.categorySource ?? "AUTOMATIC",
+    suggestedCategory: session?.suggestedCategory ?? null,
+    // "Voce atendendo" x "IA atendendo": estado de atendimento, nao ciclo de
+    // vida. Aberto ou lido nao muda nada disto.
+    handling: humanHandling ? "HUMAN" : "AI",
+    ignored: conversation.contact?.ignored ?? false,
+    ignoredAt: conversation.contact?.ignoredAt?.toISOString() ?? null,
+    aiPaused: conversation.contact?.aiPaused ?? false,
+    session: session
+      ? {
+          id: session.id,
+          startedAt: session.startedAt.toISOString(),
+          expiresAt: session.expiresAt.toISOString(),
+          lastContactMessageAt:
+            session.lastContactMessageAt?.toISOString() ?? null,
+          humanHandlingSince:
+            session.humanHandlingSince?.toISOString() ?? null,
+        }
+      : null,
   };
 }
 
@@ -576,6 +760,9 @@ export function requiredScope(request: FastifyRequest): InternalScope {
       return "messages:send";
     }
     if (method === "POST") return "conversations:write";
+    // Categoria e ignore sao decisao sobre a conversa, no mesmo escopo de
+    // takeover/release: `PUT` sem escopo declarado cairia em `internal:unmapped`.
+    if (method === "PUT") return "conversations:write";
   }
 
   return "internal:unmapped";

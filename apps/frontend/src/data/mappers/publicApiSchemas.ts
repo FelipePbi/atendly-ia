@@ -220,6 +220,12 @@ export const messageSchema = z.object({
   deliveryDetail: z.string().nullish().optional(),
 });
 
+export const sessionCategorySchema = z.enum([
+  "COMMERCIAL",
+  "UNCLASSIFIED",
+  "PERSONAL",
+]);
+
 export const conversationSchema = z.object({
   id: z.string().min(1),
   externalContactId: z.string(),
@@ -230,6 +236,26 @@ export const conversationSchema = z.object({
   lastMessage: messageSchema.nullable(),
   unreadCount: z.number().int().nonnegative(),
   updatedAt: isoDateTimeSchema,
+  // Campos do Goal005, todos opcionais: resposta anterior continua valida e a
+  // inbox em tres abas, que consome isto de verdade, e do Goal017. Aqui o
+  // schema so passa a aceitar os campos e as operacoes novas.
+  category: sessionCategorySchema.optional(),
+  categorySource: z.enum(["AUTOMATIC", "MANUAL"]).optional(),
+  suggestedCategory: sessionCategorySchema.nullish().optional(),
+  handling: z.enum(["AI", "HUMAN"]).optional(),
+  ignored: z.boolean().optional(),
+  ignoredAt: isoDateTimeSchema.nullish().optional(),
+  aiPaused: z.boolean().optional(),
+  session: z
+    .object({
+      id: z.string().min(1),
+      startedAt: isoDateTimeSchema,
+      expiresAt: isoDateTimeSchema,
+      lastContactMessageAt: isoDateTimeSchema.nullish().optional(),
+      humanHandlingSince: isoDateTimeSchema.nullish().optional(),
+    })
+    .nullish()
+    .optional(),
 });
 
 const dependencyErrorSchema = z.object({
@@ -367,6 +393,7 @@ export type AvailabilitySettings = z.infer<typeof availabilitySettingsSchema>;
 export type CalendarSource = z.infer<typeof calendarSourceSchema>;
 export type CalendarState = z.infer<typeof calendarStateSchema>;
 export type Conversation = z.infer<typeof conversationSchema>;
+export type SessionCategory = z.infer<typeof sessionCategorySchema>;
 export type Customer = z.infer<typeof customerSchema>;
 export type CustomerList = z.infer<typeof customerListSchema>;
 export type Dashboard = z.infer<typeof dashboardSchema>;

@@ -91,7 +91,12 @@ export class PrismaGraphRuntime implements GraphRuntimePort {
           id: input.conversationId,
         },
       },
-      select: { status: true, humanHandoff: true },
+      select: {
+        status: true,
+        humanHandoff: true,
+        externalContactId: true,
+        contactId: true,
+      },
     });
     if (!conversation) {
       throw new Error("Conversation was not found for LangGraph execution.");

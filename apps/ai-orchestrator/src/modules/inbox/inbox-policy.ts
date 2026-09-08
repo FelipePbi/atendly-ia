@@ -106,6 +106,13 @@ export interface ConversationWindowPolicy {
 export interface ConversationWindowInput {
   /** Texto do fragmento mais recente da conversa. */
   text: string;
+  /**
+   * Textos dos fragmentos ainda pendentes, na ordem de recebimento.
+   *
+   * Opcional: quando o chamador nao consegue reconstruir os fragmentos
+   * anteriores, a politica cai no comportamento de fragmento unico.
+   */
+  pendingTexts?: string[];
   /** Fragmentos pendentes da conversa, incluindo o que acabou de chegar. */
   pendingFragments: number;
   /** Recebimento do fragmento mais antigo ainda pendente. */
@@ -133,10 +140,16 @@ export function conversationWindowMs(input: ConversationWindowInput): number {
   const remainingUntilMax = Math.max(0, maxWaitSeconds * 1000 - elapsedMs);
 
   const desiredMs = ambiguous
-    ? // Mensagem ambigua de numero sem historico: a espera nao e debounce de
-      // fragmento, e tempo para a pessoa dizer o que quer antes de a Atendly
-      // responder. Conta desde o primeiro evento, nao desde agora.
-      Math.max(0, input.policy.ambiguousSeconds * 1000 - elapsedMs)
+    ? input.pendingFragments <= 1
+      ? // Mensagem ambigua de numero sem historico: a espera nao e debounce de
+        // fragmento, e tempo para a pessoa dizer o que quer antes de a Atendly
+        // responder. Conta desde o primeiro evento, nao desde agora.
+        Math.max(0, input.policy.ambiguousSeconds * 1000 - elapsedMs)
+      : // O fragmento seguinte continua igualmente ambiguo ("oi", "bom dia"):
+        // a pessoa ainda nao disse o que quer, entao a espera recomeca a partir
+        // dele em vez de a Atendly responder uma saudacao com outra. O teto
+        // desde o primeiro evento continua valendo e fecha a janela.
+        input.policy.ambiguousSeconds * 1000
     : fragmentWindowMs(input);
 
   return Math.max(0, Math.min(desiredMs, remainingUntilMax));
@@ -172,14 +185,20 @@ function fragmentWindowMs(input: ConversationWindowInput): number {
 export function isAmbiguousFirstContact(
   input: Pick<
     ConversationWindowInput,
-    "text" | "pendingFragments" | "firstContact"
+    "text" | "pendingFragments" | "firstContact" | "pendingTexts"
   >,
 ): boolean {
   if (!input.firstContact) return false;
-  // Um segundo fragmento ja e a pessoa completando o pedido: a espera perde o
-  // motivo e a conversa volta a janela normal de fragmentos.
-  if (input.pendingFragments !== 1) return false;
-  return isAmbiguousGreeting(input.text);
+  if (!isAmbiguousGreeting(input.text)) return false;
+  if (input.pendingFragments <= 1) return true;
+
+  // Um segundo fragmento que ja diz o que a pessoa quer encerra a espera: a
+  // conversa volta a janela normal de fragmentos. Se os fragmentos seguintes
+  // continuam sendo saudacao, a mensagem segue ambigua e a espera se estende
+  // ate o teto.
+  const fragments = input.pendingTexts;
+  if (!fragments || fragments.length === 0) return false;
+  return fragments.every((fragment) => isAmbiguousGreeting(fragment));
 }
 
 const ambiguousGreeting =

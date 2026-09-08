@@ -73,6 +73,29 @@ enum HandoffStatus {
   RESOLVED
 }
 
+/// As tres organizacoes da inbox. E atributo da sessao, nao do contato: um
+/// contato pode abrir uma sessao comercial hoje e uma pessoal em outro mes.
+enum SessionCategory {
+  COMMERCIAL
+  UNCLASSIFIED
+  PERSONAL
+}
+
+/// De onde veio a categoria vigente da sessao. MANUAL e decisao da
+/// profissional e prevalece sobre qualquer sugestao automatica.
+enum CategorySource {
+  AUTOMATIC
+  MANUAL
+}
+
+/// Por onde o atendimento humano assumiu a sessao. Registrado para o painel
+/// explicar o estado, nunca para mudar a decisao.
+enum HumanControlSource {
+  WHATSAPP
+  ATENDLY
+  BACKFILL
+}
+
 enum AiTone {
   PROFESSIONAL_OBJECTIVE
   LIGHT_CLOSE
@@ -137,14 +160,128 @@ model Conversation {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  channel  ChannelConnection @relation(fields: [tenantId, channelId], references: [tenantId, id], onDelete: Cascade)
+  /// Vinculo com o Contato do canal. Opcional por compatibilidade: binario
+  /// anterior ignora a coluna e o backfill preenche sem apagar nada.
+  contactId          String?
+
+  channel  ChannelConnection     @relation(fields: [tenantId, channelId], references: [tenantId, id], onDelete: Cascade)
+  contact  Contact?              @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: SetNull)
   messages Message[]
   aiRuns   AiRun[]
   handoffs Handoff[]
+  sessions ConversationSession[]
 
   @@unique([tenantId, channelId, externalContactId])
   @@unique([tenantId, channelId, id])
   @@index([tenantId, status, updatedAt])
+  @@index([tenantId, contactId])
+}
+
+/// Contato do canal.
+///
+/// Guarda o que e do contato e nao da conversa: identidade externa, perfil
+/// predominante, `ignored` (regra absoluta, prevalece sobre a sessao) e a pausa
+/// explicita da IA — `/bot off` e `/ia_pause` nao podem ser desfeitos por
+/// expiracao de sessao nem por relogio.
+///
+/// Nao existe identidade de pessoa, nota, tag nem memoria estruturada aqui:
+/// isso e dos Goals 006 e 012.
+model Contact {
+  id                String   @id @default(cuid())
+  tenantId          String
+  channelId         String
+  externalContactId String
+  displayName       String?
+
+  /// Contato ignorado: a IA nunca atende, em nenhuma sessao. Guarda quando e
+  /// por quem foi marcado, porque rollback nao pode desfazer a decisao.
+  ignored           Boolean   @default(false)
+  ignoredAt         DateTime?
+  ignoredBy         String?
+  ignoredSource     String?
+
+  /// Pausa explicita da IA para este contato (`/bot off`, `/ia_pause`). Vive
+  /// no contato, e nao na sessao, para que a expiracao de ~24 h nao devolva a
+  /// conversa a IA sem alguem ter pedido.
+  aiPaused          Boolean   @default(false)
+  aiPausedAt        DateTime?
+  aiPausedReason    String?
+
+  /// Override manual de categoria. Prevalece sobre qualquer classificacao
+  /// automatica e atravessa a troca de sessao.
+  categoryOverride       SessionCategory?
+  categoryOverrideAt     DateTime?
+  categoryOverrideBy     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  conversations Conversation[]
+  sessions      ConversationSession[]
+
+  @@unique([tenantId, channelId, externalContactId])
+  @@unique([tenantId, id])
+  @@index([tenantId, ignored])
+}
+
+/// Sessao de conversa.
+///
+/// Janela de aproximadamente 24 h sem interacao do contato. A categoria
+/// vigente, a sugestao automatica com proveniencia e o estado de atendimento
+/// humano sao atributos dela; expirar abre uma sessao nova, que pode reavaliar
+/// a intencao — nunca para contato ignorado.
+model ConversationSession {
+  id             String @id @default(cuid())
+  tenantId       String
+  channelId      String
+  conversationId String
+  contactId      String
+
+  startedAt           DateTime  @default(now())
+  /// Ultima interacao do contato. E ela, e nao a resposta da IA, que renova a
+  /// sessao: cliente que sumiu deixa a sessao expirar.
+  lastContactMessageAt DateTime?
+  expiresAt           DateTime
+  endedAt             DateTime?
+  endedReason         String?
+
+  category        SessionCategory @default(UNCLASSIFIED)
+  categorySource  CategorySource  @default(AUTOMATIC)
+  categoryUpdatedAt DateTime?
+  categoryUpdatedBy String?
+
+  /// Sugestao do agente, com proveniencia. Nunca vira override manual.
+  suggestedCategory   SessionCategory?
+  suggestionProvenance String?
+  suggestedAt          DateTime?
+
+  humanHandling       Boolean             @default(false)
+  humanHandlingSince  DateTime?
+  humanHandlingSource HumanControlSource?
+  humanHandlingBy     String?
+
+  /// `Retomar IA` marca aqui: o proximo turno reavalia o contexto a partir
+  /// deste instante em vez de continuar do ponto anterior.
+  contextResetAt DateTime?
+
+  /// Versao de entrada da sessao. Incrementa a cada mensagem do contato e e
+  /// comparada antes de executar tool com efeito e antes de enviar.
+  inboundVersion Int @default(0)
+
+  /// Marca de pendencia do backfill. Preenchida so quando o estoque legado era
+  /// ambiguo; nao e usada para decidir nada em runtime.
+  backfillNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  conversation Conversation @relation(fields: [tenantId, channelId, conversationId], references: [tenantId, channelId, id], onDelete: Cascade)
+  contact      Contact      @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, conversationId, startedAt])
+  @@index([tenantId, conversationId, endedAt])
+  @@index([tenantId, category, humanHandling])
 }
 
 model Message {

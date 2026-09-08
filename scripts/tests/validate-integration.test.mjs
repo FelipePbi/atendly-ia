@@ -79,6 +79,7 @@ test("points the subprocess at the declared test database with synthetic secrets
       "provision:evolution-test-database",
       "test:evolution-go-ownership",
       "rehearse:goal004-transport-migration",
+      "rehearse:goal005-contact-session-migration",
       "generate:ai-orchestrator-prisma-client",
       "test:ai-orchestrator-transport-durability",
       "test:evolution-go-webhook-outbox",

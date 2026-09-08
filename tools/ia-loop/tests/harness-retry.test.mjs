@@ -23,6 +23,7 @@ import {
   HARNESS_RETRY_OUTCOMES,
   assessHarnessFailure,
   authorizeRetryAfterHarnessFix,
+  findExistingAuthorization,
   findHarnessFailure,
 } from '../lib/harness-retry.mjs';
 import { LOOP_STATES } from '../lib/loop-state.mjs';
@@ -183,6 +184,46 @@ test('authorising twice does not create a fourth attempt', async () => {
     const job = await readJson(store.paths.job('tech_lead', JOB_ID));
     assert.equal(job.attempt, 3, 'a second authorisation must not produce a4');
     assert.equal(job.retryAuthorizations.length, 1);
+
+    // The operator-facing path must reach the same conclusion, and reach it
+    // WITHOUT reading evidence: the successor attempt has no failure of its own.
+    const existing = await findExistingAuthorization(store, { role: 'tech_lead', jobId: JOB_ID });
+    assert.equal(existing.sourceAttemptId, `${JOB_ID}-a2`);
+    assert.equal(existing.successorAttemptId, `${JOB_ID}-a3`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('evidence is never borrowed from another attempt', async () => {
+  // The real shape of Goal 005: a1 ended on a quota message, a2 on an argv
+  // rejection. Reading a1's diagnostic as a2's would classify a harness bug as
+  // a capacity wait — and, after a repair, would describe the queued successor
+  // as a USAGE_LIMIT failure it never had.
+  const { dir, store } = await makeFailedState();
+  try {
+    await store.appendEvent({
+      type: 'AGENT_FAILURE', jobId: JOB_ID, attemptId: `${JOB_ID}-a1`,
+      reason: 'USAGE_LIMIT', diagnostic: QUOTA_ERROR,
+    });
+
+    // a2's own evidence still wins, even though a1's event is newer on disk.
+    const evidence = await findHarnessFailure(store, { role: 'tech_lead', jobId: JOB_ID });
+    assert.equal(evidence.attemptId, `${JOB_ID}-a2`);
+    assert.equal(evidence.originalError, ARGV_ERROR);
+    assert.equal(assessHarnessFailure(evidence).to, 'HARNESS_ERROR');
+
+    await authorize(store);
+
+    // And once the job is on a3, the repair reports itself done rather than
+    // reaching back for whichever diagnostic happens to be last.
+    const second = await authorize(store);
+    assert.equal(second.outcome, HARNESS_RETRY_OUTCOMES.ALREADY_REPAIRED);
+    await assert.rejects(
+      () => findHarnessFailure(store, { role: 'tech_lead', jobId: JOB_ID }),
+      (e) => e.code === 'NO_FAILURE_EVIDENCE',
+      'a queued successor has no failure evidence, and none may be borrowed',
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

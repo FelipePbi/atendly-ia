@@ -31,6 +31,7 @@ import {
   HARNESS_RETRY_OUTCOMES,
   assessHarnessFailure,
   authorizeRetryAfterHarnessFix,
+  findExistingAuthorization,
   findHarnessFailure,
 } from './lib/harness-retry.mjs';
 import { LOOP_STATES } from './lib/loop-state.mjs';
@@ -84,6 +85,22 @@ async function main() {
   emit('');
   emit(`Mode:\n${apply ? 'APPLY' : 'DRY_RUN (nothing is written)'}`);
   emit('');
+
+  // Asked BEFORE any evidence is read. Once a repair has run, the job is on
+  // the successor attempt — which has no failure of its own — so reading
+  // evidence first would report something misleading about an already-repaired
+  // job instead of simply saying it is already repaired.
+  const existing = await findExistingAuthorization(store, { role, jobId });
+  if (existing) {
+    emit('ALREADY_REPAIRED');
+    emit(`  ${existing.sourceAttemptId} was authorised at ${existing.authorizedAt}`);
+    emit(`  reason: ${existing.reason}${existing.detail ? ` — ${existing.detail}` : ''}`);
+    emit(`  fix commit: ${existing.fixCommit ?? '(none recorded)'}`);
+    emit(`  successor: ${existing.successorAttemptId}`);
+    emit('');
+    emit('No new attempt was created.');
+    return 0;
+  }
 
   const evidence = await findHarnessFailure(store, { role, jobId });
   emit('Failed attempt on disk:');

@@ -52,6 +52,19 @@ function fail(code, message, details = {}) {
 }
 
 /**
+ * The authorisation already recorded for the attempt the job is now on, if any.
+ *
+ * Separate from `findHarnessFailure` on purpose: after a repair the job points
+ * at the successor, which has no failure to read. Asking this first is what
+ * makes a second run a clean no-op rather than a confusing error.
+ */
+export async function findExistingAuthorization(store, { role, jobId }) {
+  const job = await readJson(store.paths.job(role, jobId), { required: true });
+  const currentAttemptId = job.currentAttemptId ?? attemptIdOf(jobId, job.attempt ?? 1);
+  return (job.retryAuthorizations ?? []).find((a) => a.successorAttemptId === currentAttemptId) ?? null;
+}
+
+/**
  * Collects what is on disk about the failed attempt.
  *
  * The result envelope holds the CONCLUSION the harness drew; the event log
@@ -72,12 +85,19 @@ export async function findHarnessFailure(store, { role, jobId }) {
   const attemptId = job.currentAttemptId ?? attemptIdOf(jobId, attempt);
 
   const events = await store.readEvents();
-  const evidence = [...events].reverse().find(
-    (event) => event.jobId === jobId && typeof event.diagnostic === 'string'
-      // Scoped to THIS attempt when the event says which one it belonged to,
-      // so a2's repair can never be justified by a1's evidence.
-      && (event.attemptId === undefined || event.attemptId === attemptId),
-  );
+  const diagnostics = [...events].reverse()
+    .filter((event) => event.jobId === jobId && typeof event.diagnostic === 'string');
+
+  // Scoped to THIS attempt, strictly. Accepting an event that names no attempt
+  // is only safe when NO event for this job names one — otherwise a1's quota
+  // message gets read as a2's evidence, which is exactly what happened the
+  // first time this was tried: the second run of the repair reported the job
+  // as a USAGE_LIMIT because it had picked up the wrong attempt's diagnostic.
+  const anyAttemptScoped = diagnostics.some((event) => typeof event.attemptId === 'string');
+  const evidence = diagnostics.find((event) => (anyAttemptScoped
+    ? event.attemptId === attemptId
+    : true));
+
   if (!evidence) {
     fail('NO_FAILURE_EVIDENCE',
       `No diagnostic is recorded for ${attemptId}; a retry will not be authorised on a failure nobody can read.`);

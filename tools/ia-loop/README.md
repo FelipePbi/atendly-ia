@@ -572,6 +572,130 @@ retry.
 Diagnósticos são sanitizados e truncados antes de qualquer persistência —
 tokens, cookies, chaves, senhas e UUIDs de sessão são redigidos.
 
+### Session limit é USAGE_LIMIT
+
+O Claude CLI anuncia o limite de sessão com estas palavras:
+
+```
+You've hit your session limit · resets 3:10am (America/Sao_Paulo)
+```
+
+Nenhum padrão antigo casava com isso — procurava-se `usage limit`, `quota`,
+`limit will reset`. A única condição que o loop existe para **esperar** foi
+classificada `UNKNOWN_FATAL`, escalou na hora e parou o Goal005 para um humano
+**onze minutos antes** da própria quota resetar. O event log ainda registrou o
+episódio como `CAPACITY_LIMIT_REACHED` com `reason: UNKNOWN_FATAL` — um evento
+de capacity cuja razão nega que houve limite.
+
+Reconhecidos agora, todos como `USAGE_LIMIT`:
+
+```
+session limit
+you've hit your session limit
+session usage limit
+usage limit / quota / weekly limit / N-hour limit
+limit will reset
+resets 3:10am | resets at 3:10am | resets 15:10
+```
+
+`limit` sozinho continua **não** bastando: orçamento de rodada, limite de
+contexto e teto de retries carregam a palavra e não são quota. `AUTH_ERROR` e
+`BILLING_ERROR` são testados antes, então uma mensagem com as duas coisas
+continua sendo o problema que uma pessoa precisa resolver.
+
+### Horário de reset
+
+`parseResetAt()` transforma `resets 3:10am (America/Sao_Paulo)` na espera real.
+É uma subtração de relógios de parede na timezone declarada, então a virada de
+dia cai fora da conta sozinha: às 23:50 um reset de 3:10am é amanhã.
+
+- a timezone entre parênteses vence; depois `IA_LOOP_TIMEZONE`; depois a da máquina;
+- sem `am`/`pm` a hora é lida literalmente em 24h — o horário declarado, não um palpite;
+- timezone irresolúvel, hora impossível ou espera acima de 24h → `null`, e a
+  política usa o intervalo configurado. Nada é inventado;
+- ao **reparar** uma falha antiga, o reset é calculado a partir do instante em
+  que a mensagem foi produzida, não do agora. `resets 3:10am` significava 3:10
+  daquele dia; ancorar no presente inventaria uma espera de quase um dia para um
+  horário que já passou.
+
+Um `Retry-After` explícito continua vencendo o horário de reset.
+
+### FAILED não é o mesmo que capacidade
+
+| Status | Significado | Retry |
+| --- | --- | --- |
+| `COMPLETED` | resultado em disco | nunca repetir |
+| `FAILED` | tentou e não deu certo | não automático; é decisão de pessoa |
+| `INTERRUPTED` | nada foi aprendido — crash, reboot | nova attempt |
+| `WAITING_FOR_CAPACITY` | o modelo disse "agora não" | nova attempt após `nextRetryAt` |
+| `SUPERSEDED` | histórico | nunca executar |
+
+Um limite de quota **nunca** termina como `FAILED`. `RETRYABLE_JOB_STATUSES` é
+`['INTERRUPTED', 'WAITING_FOR_CAPACITY']`, e `FAILED`/`SUPERSEDED`/`COMPLETED`
+seguem fora dela de propósito.
+
+### Cada chamada real é uma attempt
+
+Antes, um retry de capacidade reentrava na **mesma** attempt: um `attemptId`
+cobria a chamada que bateu no muro e a que fez o trabalho, o result fencing não
+distinguia as duas e a história mostrava uma tentativa onde houve duas.
+
+```
+005:r1:review                       stage lógico — o que precisa acontecer uma vez
+005-r1-tech_lead-ca1d7bf4           job do stage — id estável
+  a1  WAITING_FOR_CAPACITY / USAGE_LIMIT
+  a2  QUEUED → RUNNING → COMPLETED
+```
+
+O stage e o job não mudam; o que um retry cria é uma attempt sucessora, via a
+mesma `startNextAttempt()` usada por recovery — não uma segunda implementação.
+`attemptHistory` guarda, por attempt: `attemptId`, `startedAt`, `endedAt`,
+`status`, `classification`, `retryReason`, `nextRetryAt`, `capacityWait`, `role`.
+
+Idempotência: se `a2` já está `QUEUED`, um novo resume não cria `a3`; se está
+`RUNNING`, espera; se `COMPLETED`, consome o resultado. Se `a2` também bater na
+quota, ela vira `WAITING_FOR_CAPACITY` e `a3` virá depois. O modelo é sempre o
+mesmo — não existe ação de fallback na política.
+
+### Eventos de capacity só nomeiam capacity
+
+`capacity-runner` escolhia o evento com um ternário que só sabia "harness ou
+capacity", então toda outra família virava `CAPACITY_LIMIT_REACHED`. O tipo agora
+vem de `eventTypeFor()`/`producesCapacityEvent()`:
+
+| Reason | Evento |
+| --- | --- |
+| `RATE_LIMIT`, `USAGE_LIMIT` | `CAPACITY_LIMIT_REACHED`, `CAPACITY_WAIT_STARTED`, `CAPACITY_RETRY`, `CAPACITY_AVAILABLE`, `CAPACITY_WAIT_ENDED` |
+| `HARNESS_ERROR`, códigos locais | `HARNESS_ERROR` |
+| erros de contrato | `AGENT_CONTRACT_ERROR` |
+| `UNKNOWN_FATAL`, `UNKNOWN_TRANSIENT` | `AGENT_FAILURE`, e a espera vira `AGENT_RETRY` / `AGENT_RETRY_SCHEDULED` |
+
+Eventos históricos não são reescritos: a correção vale daqui para frente.
+
+### Reclassificar uma falha mal lida
+
+```bash
+npm run ia-loop:reclassify -- --role tech_lead --job 005-r1-tech_lead-ca1d7bf4
+npm run ia-loop:reclassify -- --role tech_lead --job <id> --apply
+```
+
+Dry por padrão. Isto **não** é `--resolved`: não aposenta a run nem declara um
+problema resolvido. Ele diz o que a falha realmente era, com base na evidência
+já em disco, e devolve o fluxo à trilha normal de capacidade.
+
+O que o impede de virar um jeito de fazer falhas sumirem:
+
+- a nova classificação é **derivada**, nunca afirmada — o diagnóstico persistido
+  é reprocessado pelo classificador atual; se continuar lendo igual, o reparo é
+  recusado (`NOTHING_TO_RECLASSIFY`);
+- só move uma falha para algo que a política **esperaria**. Fatal continuar fatal
+  não é reparo (`RECLASSIFICATION_NOT_A_WAIT`);
+- stage já concluído nunca é reaberto;
+- nada é apagado: status original, classificação original e o envelope de falha
+  sobrevivem (`results/<role>/<jobId>.failed-<attemptId>.json`), e o evento
+  `FAILURE_RECLASSIFIED` registra a correção com `from`, `to`, `attemptId`,
+  `reason` e ponteiro para a evidência.
+
 ### Backoff
 
 ```
@@ -1622,7 +1746,7 @@ agora tem — `migration-loop-a1`, `-a2` a cada recuperação, na mesma run.
 ## Como executar
 
 ```bash
-npm run test:ia-loop       # 478 testes locais, sem chamadas reais a modelo
+npm run test:ia-loop       # 513 testes locais, sem chamadas reais a modelo
 ```
 
 ```bash
@@ -1661,6 +1785,10 @@ npm run ia-loop:resume     # retoma uma etapa parada por limite de capacidade
 
 ```bash
 npm run ia-loop:recover    # retoma uma execução interrompida por crash ou reboot
+```
+
+```bash
+npm run ia-loop:reclassify -- --role tech_lead --job <jobId>   # dry-run; --apply escreve
 ```
 
 V7 — execução autônoma de Goal em Goal:
@@ -1716,6 +1844,8 @@ session ids nem dados pessoais.
 | `lib/planning-decision.mjs` | Três decisões de planning; fim de migração verificado |
 | `lib/goal-boundary.mjs` | Julgamento puro da fronteira entre dois Goals |
 | `lib/goal-execution.mjs` | Run state vs goal execution state; escopo por Goal e guarda `CROSS_GOAL_STATE_LEAK` |
+| `lib/failure-reclassification.mjs` | Reparo auditável de falha mal classificada, derivado da evidência persistida |
+| `run-reclassify.mjs` | CLI do reparo; dry por padrão, `--apply` escreve |
 | `lib/process-inspector.mjs` | Identidade e liveness de processo; Windows-aware, fake nos testes |
 | `lib/orphan-evidence.mjs` | De suspeita a prova: quando uma lease pode ser tomada |
 | `lib/recovery-plan.mjs` | O passo seguro após um crash, por estado |
@@ -1742,7 +1872,7 @@ session ids nem dados pessoais.
 | `lib/persistent-session.mjs` | Sessão por agente: cria no 1º turno, resume nos seguintes |
 | `lib/session-registry.mjs` | Registro durável de sessões, com escrita atômica |
 | `fixtures/synthetic-goal.md` | Tarefa sintética, fora do runtime |
-| `tests/*.test.mjs` | 478 testes com processo/agente fake; nenhuma chamada real |
+| `tests/*.test.mjs` | 513 testes com processo/agente fake; nenhuma chamada real |
 
 ## Limitações conhecidas
 

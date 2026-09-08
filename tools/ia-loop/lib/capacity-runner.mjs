@@ -12,8 +12,10 @@
 
 import { SpikeError } from './claude-process.mjs';
 import { CAPACITY_CONFIG } from './capacity-config.mjs';
-import { classifyFailure, isHarnessError } from './capacity-classifier.mjs';
+import { classifyFailure } from './capacity-classifier.mjs';
 import { CAPACITY_ACTIONS, decideCapacityAction, formatRemaining } from './capacity-policy.mjs';
+import { eventTypeFor, producesCapacityEvent } from './failure-taxonomy.mjs';
+import { RETRYABLE_JOB_STATUSES } from './job-store.mjs';
 import {
   clearCapacityWait,
   persistCapacityWait,
@@ -64,6 +66,9 @@ export async function runWithCapacity({
 
   let attempt = 0;
   let waits = 0;
+  let capacityWaits = 0;
+  // What ended the previous attempt, carried into the successor's history.
+  let pendingRetry = null;
 
   for (;;) {
     // Honour a deadline persisted by an earlier process: a restart must not
@@ -83,6 +88,33 @@ export async function runWithCapacity({
     }
 
     attempt += 1;
+
+    // Every real call to the model is its own attempt.
+    //
+    // Before this, a capacity retry re-entered the SAME attempt: one attemptId
+    // covered a call that hit a quota wall and a later call that did the work,
+    // so result fencing could not tell them apart and the history showed one
+    // try where there had been two. The stage and the job stay exactly as they
+    // were — what a retry creates is a successor attempt, nothing else.
+    const before = await store.readAttemptState(role, jobId);
+    if (before && RETRYABLE_JOB_STATUSES.includes(before.attemptStatus)) {
+      const started = await store.startNextAttempt(role, jobId, {
+        reason: pendingRetry?.reason ?? before.attemptStatus,
+        detail: pendingRetry?.detail ?? null,
+      });
+      if (started.created) {
+        await store.appendEvent({
+          type: 'JOB_ATTEMPT_STARTED',
+          goal, round, agent: role, jobId,
+          attempt: started.attempt,
+          attemptId: started.attemptId,
+          previousAttemptId: started.previousAttemptId,
+          reason: pendingRetry?.reason ?? before.attemptStatus,
+        });
+      }
+    }
+    pendingRetry = null;
+
     await store.setJobStatus(role, jobId, 'RUNNING');
 
     const agentOutcome = await invoke({ attempt });
@@ -92,16 +124,21 @@ export async function runWithCapacity({
       await store.publishResult(role, jobId, { ok: true, result: agentOutcome.payload });
       await store.setJobStatus(role, jobId, 'COMPLETED');
 
-      if (waits > 0) {
+      // Only a genuine capacity wait ends with a capacity event. A retry after
+      // an unexplained transient failure is not the quota coming back.
+      if (capacityWaits > 0) {
         await store.appendEvent({ type: 'CAPACITY_AVAILABLE', goal, round, agent: role, jobId, attempt });
         await store.appendEvent({ type: 'CAPACITY_WAIT_ENDED', goal, round, agent: role, jobId, attempt });
         onEvent({ type: 'CAPACITY_AVAILABLE', jobId, attempt });
+      } else if (waits > 0) {
+        await store.appendEvent({ type: 'AGENT_RETRY_SUCCEEDED', goal, round, agent: role, jobId, attempt });
+        onEvent({ type: 'AGENT_RETRY_SUCCEEDED', jobId, attempt });
       }
       await clearCapacityWait(store, { state: resumeFrom, now: clock.now() });
       return { outcome: RUN_OUTCOMES.COMPLETED, result: agentOutcome.payload, attempts: attempt };
     }
 
-    const classification = classifyFailure(agentOutcome);
+    const classification = classifyFailure(agentOutcome, { now: clock.now() });
     const decision = decideCapacityAction({
       reason: classification.reason,
       attempt,
@@ -110,16 +147,23 @@ export async function runWithCapacity({
       config,
     });
 
-    // A local tooling failure is not a capacity event and must not be logged as
-    // one: it would pollute the capacity history and mislead any later analysis
-    // of how often real model limits were hit.
+    // The event is named by the taxonomy, not by a local ternary.
+    //
+    // The ternary this replaces knew only "harness or capacity", so every other
+    // family — an unexplained fatal, a contract slip — was logged as
+    // CAPACITY_LIMIT_REACHED. The real history carries four of those, each one
+    // a claim that a model limit was hit when none was. failure-taxonomy exists
+    // precisely to stop that, and now it is the thing that decides.
+    const isCapacity = producesCapacityEvent({ code: classification.code, reason: decision.reason });
     await store.appendEvent({
-      type: isHarnessError(decision.reason) ? 'HARNESS_ERROR' : 'CAPACITY_LIMIT_REACHED',
+      type: eventTypeFor({ code: classification.code, reason: decision.reason }),
       goal,
       round,
       agent: role,
       jobId,
+      attemptId: (await store.readAttemptState(role, jobId))?.attemptId ?? null,
       reason: decision.reason,
+      code: classification.code,
       attempt,
       // Sanitized and truncated by the classifier; never the full response.
       diagnostic: classification.diagnostic,
@@ -159,10 +203,26 @@ export async function runWithCapacity({
       now: clock.now(),
     });
 
-    if (waits === 0) {
-      await store.appendEvent({ type: 'CAPACITY_WAIT_STARTED', goal, round, agent: role, jobId, reason: decision.reason });
+    if (isCapacity) {
+      if (capacityWaits === 0) {
+        await store.appendEvent({ type: 'CAPACITY_WAIT_STARTED', goal, round, agent: role, jobId, reason: decision.reason });
+      }
+      capacityWaits += 1;
     }
     waits += 1;
+
+    // Handed to the successor attempt so its history says why it exists.
+    pendingRetry = {
+      reason: decision.reason,
+      detail: {
+        classification: classification.reason,
+        code: classification.code,
+        retryReason: decision.reason,
+        nextRetryAt: decision.nextRetryAt,
+        capacityWait: isCapacity,
+        role,
+      },
+    };
 
     onEvent({
       type: 'CAPACITY_WAIT',
@@ -179,7 +239,10 @@ export async function runWithCapacity({
       throw new SpikeError('CAPACITY_WAIT_LIMIT', `Exceeded ${maxWaits} capacity waits for job ${jobId}`);
     }
 
-    await store.appendEvent({ type: 'CAPACITY_RETRY', goal, round, agent: role, jobId, attempt, nextRetryAt: decision.nextRetryAt });
+    await store.appendEvent({
+      type: isCapacity ? 'CAPACITY_RETRY' : 'AGENT_RETRY',
+      goal, round, agent: role, jobId, attempt, reason: decision.reason, nextRetryAt: decision.nextRetryAt,
+    });
     await clock.sleep(decision.retryIntervalMs);
   }
 }

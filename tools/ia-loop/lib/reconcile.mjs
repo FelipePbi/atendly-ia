@@ -27,6 +27,7 @@
  */
 
 import { SpikeError } from './claude-process.mjs';
+import { RETRYABLE_JOB_STATUSES } from './job-store.mjs';
 import { STAGES, roleForStage, stageKey, stageKeyOfJob } from './stage-identity.mjs';
 
 export const STAGE_STATUS = Object.freeze({
@@ -138,7 +139,13 @@ function reusableAttempt(stage) {
   const attempts = stage?.attempts ?? [];
   const live = attempts.find((a) => a.attemptStatus === 'RUNNING' || a.attemptStatus === 'QUEUED');
   if (live) return live;
-  return attempts.find((a) => a.attemptStatus === 'INTERRUPTED') ?? null;
+  // A parked attempt is reusable for the same reason an interrupted one is:
+  // the stage's job already exists, and what a retry needs is a successor
+  // attempt at it. Judged by the store's own retryable set rather than a list
+  // repeated here — WAITING_FOR_CAPACITY was missing from this one, so a
+  // review that had waited out a quota would have been dispatched under a
+  // brand new job id, losing its packet and its attempt history.
+  return attempts.find((a) => RETRYABLE_JOB_STATUSES.includes(a.attemptStatus)) ?? null;
 }
 
 /**

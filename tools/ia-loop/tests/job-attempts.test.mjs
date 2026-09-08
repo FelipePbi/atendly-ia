@@ -201,7 +201,13 @@ test('FAILED is not retried by a restart: that is a policy decision, not an assu
     await store.setJobStatus('developer', CORRECTION_JOB, 'FAILED');
 
     await assert.rejects(store.dispatchJob('developer', correctionJob()), codeIs('STAGE_NOT_RETRYABLE'));
-    assert.deepEqual([...RETRYABLE_JOB_STATUSES], ['INTERRUPTED']);
+    // What matters is which statuses are EXCLUDED. A capacity wait joined the
+    // retryable set — the model said "not now", which is not a failure of the
+    // work — but FAILED and SUPERSEDED never may.
+    assert.equal(RETRYABLE_JOB_STATUSES.includes('FAILED'), false);
+    assert.equal(RETRYABLE_JOB_STATUSES.includes('SUPERSEDED'), false);
+    assert.equal(RETRYABLE_JOB_STATUSES.includes('COMPLETED'), false);
+    assert.equal(RETRYABLE_JOB_STATUSES.includes('INTERRUPTED'), true);
 
     await store.setJobStatus('developer', CORRECTION_JOB, 'SUPERSEDED');
     await assert.rejects(store.dispatchJob('developer', correctionJob()), codeIs('STAGE_NOT_RETRYABLE'));

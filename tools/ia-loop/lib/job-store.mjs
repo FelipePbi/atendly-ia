@@ -80,11 +80,17 @@ export const JOB_DISPATCH = Object.freeze({
 /**
  * Statuses a job may legitimately be attempted again from.
  *
- * INTERRUPTED only. FAILED is deliberately absent: the work was attempted and
- * did not succeed, and whether to try again is a policy decision a person
- * makes — not something a restart assumes.
+ * INTERRUPTED: nothing was learned — a crash, a reboot, a closed terminal.
+ * WAITING_FOR_CAPACITY: the model said "not now". A quota window closing is
+ * not a failure of the work and never was; the attempt ends, the STAGE stays
+ * unfinished, and the next attempt at the same job runs when capacity returns.
+ *
+ * FAILED is deliberately absent: the work was attempted and did not succeed,
+ * and whether to try again is a policy decision a person makes — not something
+ * a restart assumes. That distinction is the whole point of keeping a capacity
+ * wait out of FAILED.
  */
-export const RETRYABLE_JOB_STATUSES = Object.freeze(['INTERRUPTED']);
+export const RETRYABLE_JOB_STATUSES = Object.freeze(['INTERRUPTED', 'WAITING_FOR_CAPACITY']);
 
 /**
  * The id of one attempt at a job.
@@ -463,7 +469,7 @@ export function createJobStore(stateDir) {
      * Requeuing a logical job and creating its next attempt are different acts.
      * Only this one produces something claimable.
      */
-    async startNextAttempt(role, jobId, { reason = null } = {}) {
+    async startNextAttempt(role, jobId, { reason = null, detail = null } = {}) {
       assertRole(role);
       const path = paths.job(role, jobId);
 
@@ -519,8 +525,21 @@ export function createJobStore(stateDir) {
           // record as what it was.
           attemptHistory: [
             ...(current.attemptHistory ?? []),
-            { attempt, attemptId, status: attemptStatus, reason: reason ?? null, endedAt: new Date().toISOString() },
+            {
+              attempt,
+              attemptId,
+              status: attemptStatus,
+              reason: reason ?? null,
+              startedAt: current.attemptStartedAt ?? current.publishedAt ?? null,
+              endedAt: new Date().toISOString(),
+              // Why the attempt ended and why a successor is legitimate —
+              // classification, retry reason, nextRetryAt, model, role. Kept
+              // with the attempt so an audit never has to correlate the event
+              // log by timestamp to explain a retry.
+              ...(detail ?? {}),
+            },
           ],
+          attemptStartedAt: new Date().toISOString(),
           requeuedAt: new Date().toISOString(),
           job: current.job,
         });

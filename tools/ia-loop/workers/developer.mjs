@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 /**
- * IA Loop — Developer worker (Claude Opus 5).
+ * IA Loop — Developer worker.
+ *
+ * ONE worker, many profiles. The model and the effort are NOT properties of
+ * this process: they arrive on the job, chosen by the Tech Lead for that Goal
+ * and that round. There is deliberately no `ia-loop:developer-sonnet` and no
+ * `ia-loop:developer-opus` — a second worker would be a second place for the
+ * routing decision to drift.
  *
  * The PROCESS is persistent; the INFERENCE is not.
  *
@@ -21,6 +27,13 @@ import { invokeAgent, resolveClaudeExecutable } from '../lib/claude-process.mjs'
 import { createJobStore } from '../lib/job-store.mjs';
 import { SESSION_STRATEGY } from '../lib/worker-registry.mjs';
 import { banner, log, runWorkerLoop } from '../lib/worker-loop.mjs';
+import {
+  SELECTABLE_DEVELOPER_PROFILES,
+  assertProfileWasHonoured,
+  describeProfile,
+  resolveDeveloperProfile,
+} from '../lib/developer-profiles.mjs';
+import { createTelemetry, createTelemetryFileSink, resolveLogLevel } from '../lib/telemetry.mjs';
 import { runWithCapacity, RUN_OUTCOMES } from '../lib/capacity-runner.mjs';
 import { LOOP_STATES } from '../lib/loop-state.mjs';
 import { developerResultSchemaFor, validateDeveloperJob, validateDeveloperResult } from '../lib/contracts-v2.mjs';
@@ -30,9 +43,17 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, '..', '.state');
 
 const ROLE = 'developer';
-const MODEL = process.env.IA_LOOP_DEVELOPER_MODEL ?? 'claude-opus-5';
 // A real Goal is hours of work, not minutes.
 const TIMEOUT_MS = Number(process.env.IA_LOOP_DEVELOPER_TIMEOUT_MS ?? 4 * 60 * 60 * 1000);
+
+const LOG_LEVEL = resolveLogLevel();
+const PERSIST_TELEMETRY = process.env.IA_LOOP_TELEMETRY_PERSIST !== '0';
+/**
+ * Real-time telemetry is derived from the CLI's own event stream. Turning it
+ * off falls back to the single-JSON output format; it never changes the prompt,
+ * the schema, the model or the effort either way.
+ */
+const STREAM_EVENTS = process.env.IA_LOOP_STREAM_EVENTS !== '0';
 
 /**
  * Execution profile for real work.
@@ -50,15 +71,28 @@ const DEVELOPER_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'TodoW
 
 const store = createJobStore(STATE_DIR);
 
+const telemetry = createTelemetry({
+  level: LOG_LEVEL,
+  role: ROLE,
+  sink: createTelemetryFileSink({ stateDir: STATE_DIR, role: ROLE, enabled: PERSIST_TELEMETRY }),
+});
+
 let workerState = 'STARTING';
 let currentJob = null;
+// The profile the job in flight is running on. Read from the job, never
+// decided here: this worker executes a routing choice, it does not make one.
+let currentProfile = null;
 // Kept so the heartbeat keeps reporting a live, waiting worker rather than
 // looking stalled while a model limit is being waited out.
 let capacityWait = null;
 
 const getStatus = () => ({
   state: workerState,
-  model: MODEL,
+  // What is actually running, not a constant. An IDLE worker has no model.
+  model: currentProfile?.model ?? null,
+  developerProfile: currentProfile?.name ?? null,
+  effort: currentProfile?.effort ?? null,
+  supportedProfiles: [...SELECTABLE_DEVELOPER_PROFILES],
   sessionStrategy: SESSION_STRATEGY.STATELESS,
   // No session id is ever retained between jobs; only the in-flight one is
   // reported, and truncated.
@@ -175,12 +209,27 @@ function buildPrompt(context, job) {
 
 async function handleJob(rawJob) {
   const job = validateDeveloperJob(rawJob);
+  // Fails closed on an unknown name: a typo must stop the run, never quietly
+  // land on some other model.
+  const profile = resolveDeveloperProfile(job.developerProfile);
   currentJob = { goal: job.goal, round: job.round, sessionId: null };
+  currentProfile = profile;
   workerState = 'WORKING';
 
+  telemetry.setContext({ goal: job.goal, round: job.round, jobId: job.jobId });
+  telemetry.event('JOB', `${job.goal}/R${job.round} ${job.type}`);
+  telemetry.event('PROFILE', profile.name);
+  telemetry.event('MODEL', `${profile.label} · effort ${profile.effortLabel}`);
+
   log(`JOB ${job.goal}/R${job.round} RECEIVED`, `type ${job.type}`);
+  log('PROFILE', profile.name);
+  log('MODEL', profile.label);
+  log('EFFORT', profile.effortLabel);
   if (job.type === 'CORRECTION') log('CORRECTION SCOPE', `${job.blockers.length} blocker(s)`);
-  await store.appendEvent({ type: 'DEVELOPER_JOB_RECEIVED', jobId: job.jobId, goal: job.goal, round: job.round });
+  await store.appendEvent({
+    type: 'DEVELOPER_JOB_RECEIVED', jobId: job.jobId, goal: job.goal, round: job.round,
+    developerProfile: profile.name, model: profile.model, effort: profile.effort,
+  });
 
   const isCorrection = job.type === 'CORRECTION';
 
@@ -226,7 +275,7 @@ async function handleJob(rawJob) {
   currentJob.sessionId = sessionId;
 
   const executable = resolveClaudeExecutable();
-  log('OPUS STARTED', `session ${sessionId.slice(0, 8)} · worktree ${job.worktree}`);
+  log(`${profile.name} STARTED`, `session ${sessionId.slice(0, 8)} · worktree ${job.worktree}`);
   log('IMPLEMENTING', `${job.goal} round ${job.round} — pode levar horas`);
 
   // Each retry gets a brand-new session id: the Developer is stateless, so a
@@ -244,9 +293,14 @@ async function handleJob(rawJob) {
       currentJob.sessionId = attemptSessionId;
       return invokeAgent({
         executable: executable.path,
-        model: MODEL,
-        expectedFamily: 'opus',
+        // From the profile on the job, not from a constant in this file.
+        model: profile.model,
+        effort: profile.effort,
+        expectedFamily: profile.family,
         expectedRole: ROLE,
+        // Purely observational: derived from events the CLI already emits.
+        onTelemetryEvent: STREAM_EVENTS ? (event) => telemetry.emit(event) : null,
+        telemetryRoot: job.worktree,
         prompt: isCorrection ? buildCorrectionPrompt(context, job) : buildPrompt(context, job),
         jsonSchema: developerResultSchemaFor({ jobId: job.jobId, goal: job.goal, round: job.round }),
         validatePayload: (payload) => validateDeveloperResult(payload, {
@@ -265,15 +319,32 @@ async function handleJob(rawJob) {
         addDirs: [job.worktree],
         safeMode: false,
         timeoutMs: TIMEOUT_MS,
+      }).then((agentOutcome) => {
+        // Second, profile-aware proof that no substitution happened. invokeAgent
+        // already refuses a wrong family; this makes the failure name the
+        // profile that was promised, and keeps the guarantee true even if the
+        // family check above is ever loosened.
+        if (agentOutcome.resolvedPrimaryModel) {
+          assertProfileWasHonoured({
+            profile: profile.name,
+            resolvedPrimaryModel: agentOutcome.resolvedPrimaryModel,
+          });
+        }
+        return agentOutcome;
       });
     },
   });
 
-  log('OPUS COMPLETED', run.outcome);
+  log(`${profile.name} COMPLETED`, run.outcome);
+  telemetry.event('JOB', `${job.goal}/R${job.round} ${run.outcome}`);
 
   if (run.outcome === RUN_OUTCOMES.HUMAN_REQUIRED) {
-    await store.appendEvent({ type: 'DEVELOPER_JOB_FAILED', jobId: job.jobId, code: run.reason });
+    await store.appendEvent({
+      type: 'DEVELOPER_JOB_FAILED', jobId: job.jobId, code: run.reason,
+      developerProfile: profile.name, model: profile.model, effort: profile.effort,
+    });
     currentJob = null;
+    currentProfile = null;
     capacityWait = null;
     workerState = 'IDLE';
     return;
@@ -286,21 +357,30 @@ async function handleJob(rawJob) {
     goal: job.goal,
     round: job.round,
     status: run.result?.status ?? 'UNKNOWN',
+    // The profile that actually served this result, recorded next to it.
+    developerProfile: profile.name,
+    model: profile.model,
+    effort: profile.effort,
     reused: run.outcome === RUN_OUTCOMES.ALREADY_COMPLETED,
   });
 
   log(`RESULT ${run.result?.status ?? 'UNKNOWN'}`);
+  telemetry.clearContext();
   currentJob = null;
+  currentProfile = null;
   capacityWait = null;
   workerState = 'IDLE';
 }
 
 async function main() {
+  // Deliberately NOT "Model: Claude Opus 5". An idle Developer has no model:
+  // it has a set of profiles it can execute, and the Tech Lead picks one per
+  // Goal. Printing a fixed model here is what made the routing invisible.
   console.log(banner({
     title: 'DEVELOPER',
-    model: `Claude Opus 5 (${MODEL})`,
+    supportedProfiles: SELECTABLE_DEVELOPER_PROFILES.map(describeProfile),
     sessionLine: 'Session strategy: STATELESS',
-    extra: [],
+    extra: [`Log level: ${LOG_LEVEL}`],
   }));
   console.log('Waiting for implementation task...\n');
 

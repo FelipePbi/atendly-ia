@@ -24,6 +24,7 @@ import { goalOfJobId } from './lib/stage-identity.mjs';
 import { createProcessInspector } from './lib/process-inspector.mjs';
 import { OWNER_STATUS, collectOwnerEvidence, isRecoveryEligible, judgeOwner } from './lib/orphan-evidence.mjs';
 import { createHandoffStore, HANDOFF_STATUS } from './lib/recovery-handoff.mjs';
+import { SELECTABLE_DEVELOPER_PROFILES } from './lib/developer-profiles.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, '.state');
@@ -44,8 +45,24 @@ function shortSha(sha) {
   return typeof sha === 'string' && sha.length >= 8 ? `${sha.slice(0, 8)}…` : (sha ?? 'n/a');
 }
 
-function agentBlock({ label, model, health, runtime, now }) {
-  const lines = [`${label}:`, `  Model: ${model}`];
+function agentBlock({ label, model, health, runtime, now, profile = null, supportedProfiles = null }) {
+  const lines = [`${label}:`];
+
+  // The Developer's model is a per-Goal routing decision, so the profile is
+  // reported first and the model is shown as its consequence. An idle worker
+  // with nothing routed to it lists what it CAN run instead of claiming a model.
+  if (profile) {
+    lines.push(`  Profile: ${profile.name}`);
+    lines.push(`  Model: ${profile.model}`);
+    lines.push(`  Effort: ${profile.effort ?? 'CLI default'}`);
+    if (profile.source) lines.push(`  Selected by: ${profile.selectedBy ?? 'tech_lead'} (${profile.source})`);
+  } else if (supportedProfiles) {
+    lines.push('  Profile: none routed yet');
+    lines.push(`  Supported profiles: ${supportedProfiles.join(', ')}`);
+  } else {
+    lines.push(`  Model: ${model}`);
+  }
+
   const isBlocked = runtime?.blockedAgent === health.role;
 
   // A stale heartbeat file must not make a dead worker look IDLE: liveness
@@ -109,6 +126,9 @@ async function main() {
   out.push(`  Round: ${goalExecution?.round ?? (currentGoal ? 1 : 'n/a')}`);
   out.push(`  State: ${goalExecution?.state ?? 'NOT_STARTED'}`);
   if (goalExecution?.mode) out.push(`  Mode: ${goalExecution.mode}`);
+  if (goalExecution?.developerProfile) {
+    out.push(`  Developer profile: ${goalExecution.developerProfile.profile}`);
+  }
   if (!goalExecution && runtime?.goal) {
     // Said plainly rather than shown as this Goal's: it is the previous Goal's
     // record, and nothing here may act on it.
@@ -221,7 +241,22 @@ async function main() {
     out.push('');
   }
 
-  out.push(agentBlock({ label: 'Developer', model: DEVELOPER_MODEL, health: developerHealth, runtime: goalExecution, now }));
+  // The live record wins over the worker heartbeat: the heartbeat says what a
+  // process believes, the runtime says what the Goal is routed to.
+  const routedProfile = goalExecution?.developerProfile ?? null;
+  out.push(agentBlock({
+    label: 'Developer',
+    model: DEVELOPER_MODEL,
+    health: developerHealth,
+    runtime: goalExecution,
+    now,
+    profile: routedProfile,
+    supportedProfiles: routedProfile ? null : [...SELECTABLE_DEVELOPER_PROFILES],
+  }));
+  if (goalExecution?.nextDeveloperProfile) {
+    out.push(`  Next round profile: ${goalExecution.nextDeveloperProfile.profile} `
+      + `(round ${goalExecution.nextDeveloperProfile.round}, selected by tech_lead)`);
+  }
   out.push('');
   out.push(agentBlock({ label: 'Tech Lead', model: TECH_LEAD_MODEL, health: techLeadHealth, runtime: goalExecution, now }));
   out.push('');

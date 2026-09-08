@@ -190,6 +190,10 @@ export const PER_GOAL_RUNTIME_FIELDS = Object.freeze([
   // the Goal that was interrupted has been closed.
   'currentAttemptId', 'currentDeveloperJobId', 'currentReviewJobId',
   'reviewDecision', 'correction', 'acceptedSnapshot', 'recovery',
+  // The Developer profile this Goal is executing on, and what the Tech Lead
+  // asked the NEXT correction round to run on. Both belong to one Goal: a
+  // promotion decided for Goal 006 must never be inherited by Goal 007.
+  'developerProfile', 'nextDeveloperProfile',
 ]);
 
 /** Returns the runtime with every per-Goal field dropped. */

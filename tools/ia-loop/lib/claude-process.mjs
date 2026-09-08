@@ -14,6 +14,8 @@ import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
+import { createStreamParser } from './stream-telemetry.mjs';
+
 /** Error carrying a stable machine-readable code, so callers never regex prose. */
 export class SpikeError extends Error {
   constructor(code, message, details = {}) {
@@ -99,11 +101,37 @@ export const AGENT_SCHEMA = {
  * session persistence. We deliberately do NOT use any permission-bypass flag —
  * the goal is an agent that cannot act, not one allowed to act unchecked.
  */
+/**
+ * Effort levels the installed CLI accepts (`claude --help`, 2.1.263).
+ *
+ * Duplicated from the profile registry on purpose: this layer must be able to
+ * refuse an unknown level even when it is called without a profile. The CLI
+ * only WARNS about an unknown value and then runs at default effort, which is a
+ * silent downgrade — so the check happens before spawn, not after.
+ */
+export const CLI_EFFORT_LEVELS = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
+
+/** Output formats this wrapper knows how to parse back into an envelope. */
+export const OUTPUT_FORMATS = Object.freeze(['json', 'stream-json']);
+
 export function buildArgs({
   prompt,
   model,
   jsonSchema,
   sessionId,
+  // Reasoning effort for this call. Part of the Developer profile; null means
+  // "do not pass the flag", which is what every pre-routing execution did.
+  effort = null,
+  /**
+   * `stream-json` makes the CLI emit its events as they happen, which is what
+   * real-time telemetry is derived from. The final `result` event carries the
+   * same envelope `json` would have produced, so the structured output the
+   * orchestrator validates is unchanged.
+   *
+   * This is NOT a function of the log level: the argument vector must be
+   * identical at every level.
+   */
+  outputFormat = 'json',
   // One-shot by default: the conversation is discarded when the process exits.
   // Persistent sessions opt in, because `--no-session-persistence` is exactly
   // what makes a conversation impossible to resume later.
@@ -123,6 +151,16 @@ export function buildArgs({
   if (resume && !persistSession) {
     throw new SpikeError('INVALID_ARGS', 'resume requires persistSession: a non-persisted session cannot be resumed');
   }
+  if (!OUTPUT_FORMATS.includes(outputFormat)) {
+    throw new SpikeError('INVALID_ARGS', `Unsupported output format ${JSON.stringify(outputFormat)}`);
+  }
+  if (effort !== null && effort !== undefined && !CLI_EFFORT_LEVELS.includes(effort)) {
+    throw new SpikeError(
+      'UNSUPPORTED_EFFORT',
+      `Effort ${JSON.stringify(effort)} is not accepted by this CLI (expected one of: ${CLI_EFFORT_LEVELS.join(', ')})`,
+      { effort, supported: CLI_EFFORT_LEVELS },
+    );
+  }
 
   const args = [
     // The prompt goes over stdin, never in argv: a real review packet exceeds
@@ -130,7 +168,7 @@ export function buildArgs({
     // ENAMETOOLONG. Measured on the first real Goal003 run.
     '--print',
     '--model', model,
-    '--output-format', 'json',
+    '--output-format', outputFormat,
     '--json-schema', JSON.stringify(jsonSchema ?? AGENT_SCHEMA),
     // Tool surface. An empty string removes every built-in tool.
     '--tools', Array.isArray(tools) ? tools.join(',') : tools,
@@ -140,6 +178,10 @@ export function buildArgs({
     '--strict-mcp-config',
     '--disable-slash-commands',
   ];
+
+  // Only when the profile asks for one. Omitting the flag is what every
+  // pre-routing execution did, and is how a legacy Goal keeps its behaviour.
+  if (effort !== null && effort !== undefined) args.push('--effort', effort);
 
   if (safeMode) args.push('--safe-mode');
   // Measured: only "auto" authorises both file writes and Bash without a
@@ -172,6 +214,12 @@ export function runClaudeProcess({
   env = process.env,
   spawnFn = spawn,
   stdinData = null,
+  /**
+   * Called with each stdout fragment as it arrives. Purely observational: the
+   * chunk is still accumulated and returned, so the caller's parsing is
+   * unaffected whether or not anybody is watching.
+   */
+  onStdoutChunk = null,
 }) {
   return new Promise((resolve, reject) => {
     let child;
@@ -199,7 +247,15 @@ export function runClaudeProcess({
       child.kill('SIGKILL');
     }, timeoutMs);
 
-    child.stdout?.on('data', (chunk) => { stdout += chunk; });
+    child.stdout?.on('data', (chunk) => {
+      stdout += chunk;
+      if (!onStdoutChunk) return;
+      try {
+        onStdoutChunk(String(chunk));
+      } catch {
+        // An observer must never be able to fail an inference.
+      }
+    });
     child.stderr?.on('data', (chunk) => { stderr += chunk; });
 
     child.on('error', (error) => {
@@ -219,21 +275,54 @@ export function runClaudeProcess({
   });
 }
 
-/** Parses the CLI's --output-format json envelope. */
+/**
+ * Parses the CLI's envelope, from either output format.
+ *
+ * `--output-format json` prints one object. `--output-format stream-json`
+ * prints one object per line and ends with a `{"type":"result",…}` that carries
+ * the SAME fields. Reading the last result event therefore yields exactly the
+ * envelope the non-streaming call would have produced, so switching format
+ * changes nothing downstream.
+ */
 export function parseEnvelope(stdout) {
   const trimmed = (stdout || '').trim();
   if (!trimmed) throw new SpikeError('EMPTY_OUTPUT', 'CLI produced no stdout');
 
   let envelope;
+  let wholeParseError = null;
   try {
     envelope = JSON.parse(trimmed);
   } catch (error) {
-    throw new SpikeError('INVALID_ENVELOPE_JSON', `CLI envelope is not valid JSON: ${error.message}`);
+    wholeParseError = error;
   }
-  if (envelope === null || typeof envelope !== 'object' || Array.isArray(envelope)) {
-    throw new SpikeError('INVALID_ENVELOPE_JSON', 'CLI envelope is not a JSON object');
+
+  if (wholeParseError === null) {
+    if (envelope === null || typeof envelope !== 'object' || Array.isArray(envelope)) {
+      throw new SpikeError('INVALID_ENVELOPE_JSON', 'CLI envelope is not a JSON object');
+    }
+    return envelope;
   }
-  return envelope;
+
+  // Not one object: try the event stream.
+  const events = [];
+  for (const line of trimmed.split('\n')) {
+    const candidate = line.trim();
+    if (candidate === '') continue;
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) events.push(parsed);
+    } catch {
+      // A stray non-JSON line (a warning, for example) is not the envelope.
+    }
+  }
+
+  const result = events.filter((event) => event.type === 'result').at(-1);
+  if (result) return result;
+
+  throw new SpikeError(
+    'INVALID_ENVELOPE_JSON',
+    `CLI envelope is not valid JSON: ${wholeParseError.message}`,
+  );
 }
 
 /**
@@ -430,9 +519,22 @@ export async function invokeAgent({
   permissionMode = null,
   addDirs = [],
   safeMode = true,
+  // Developer profile effort. null keeps the CLI's default and passes no flag.
+  effort = null,
+  /**
+   * Observational telemetry. When a sink is given, the CLI is asked for its
+   * event stream instead of a single JSON blob and the events it was already
+   * producing are reported as they arrive. No prompt, context, schema or model
+   * changes; the envelope parsed at the end is the same one either way.
+   */
+  onTelemetryEvent = null,
+  telemetryRoot = null,
 }) {
   const outcome = {
     requestedModel: model,
+    // Recorded so the runtime can report what was actually asked for, not just
+    // what a profile said in some earlier file.
+    requestedEffort: effort ?? null,
     expectedRole,
     resolvedPrimaryModel: null,
     auxiliaryModels: [],
@@ -444,20 +546,28 @@ export async function invokeAgent({
     error: null,
   };
 
+  const streaming = typeof onTelemetryEvent === 'function';
+  const parser = streaming
+    ? createStreamParser({ onEvent: onTelemetryEvent, root: telemetryRoot ?? cwd })
+    : null;
+
   let processResult;
   try {
     processResult = await runClaudeProcess({
       executable,
       args: buildArgs({
         prompt, model, jsonSchema, sessionId, persistSession, resume,
-        tools, permissionMode, addDirs, safeMode,
+        tools, permissionMode, addDirs, safeMode, effort,
+        outputFormat: streaming ? 'stream-json' : 'json',
       }),
       stdinData: prompt,
       cwd,
       timeoutMs,
       env,
       spawnFn,
+      onStdoutChunk: parser ? (chunk) => parser.push(chunk) : null,
     });
+    parser?.end();
   } catch (error) {
     outcome.error = toReportableError(error);
     return outcome;

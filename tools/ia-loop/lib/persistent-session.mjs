@@ -73,6 +73,10 @@ export function createPersistentSession({
     async send({
       prompt, jsonSchema, validatePayload, timeoutMs: perCallTimeout,
       tools = '', permissionMode = null, addDirs = [], safeMode = true,
+      // Observational only. Passing a sink switches the CLI to its event
+      // stream; the prompt, the schema, the model and the session are
+      // unchanged, and so is the envelope parsed at the end.
+      onTelemetryEvent = null, telemetryRoot = null,
     }) {
       const outcome = await invokeAgent({
         executable,
@@ -90,6 +94,8 @@ export function createPersistentSession({
         permissionMode,
         addDirs,
         safeMode,
+        onTelemetryEvent,
+        telemetryRoot,
         timeoutMs: perCallTimeout ?? timeoutMs,
       });
 

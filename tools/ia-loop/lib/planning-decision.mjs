@@ -13,6 +13,7 @@
 import { SpikeError } from './claude-process.mjs';
 import { PROTOCOL_VERSION_V2 } from './contracts-v2.mjs';
 import { CLOSURE_WRITE_PREFIX, normalizeReportedPath } from './closure-contracts.mjs';
+import { DEFAULT_DEVELOPER_PROFILE, SELECTABLE_DEVELOPER_PROFILES, assertSelectableProfile } from './developer-profiles.mjs';
 
 export const PLANNING_DECISIONS = Object.freeze(['NEXT_GOAL', 'MIGRATION_COMPLETE', 'HUMAN_REQUIRED']);
 
@@ -73,7 +74,20 @@ export function validatePlanningDecision(payload, { jobId, goal }) {
     if (!nextGoalPath.startsWith(CLOSURE_WRITE_PREFIX)) {
       fail('CLOSURE_SCOPE_VIOLATION', `nextGoalPath must live under ${CLOSURE_WRITE_PREFIX}`);
     }
-    return Object.freeze({ ...payload, nextGoalPath, documentsUpdated: Object.freeze(documentsUpdated) });
+
+    // Which Developer profile the Goal being written needs. Stated here, in
+    // the planning call that already runs — no separate selection inference.
+    // Absent means the default, so an older planning result stays valid.
+    const developerProfile = payload.developerProfile ?? DEFAULT_DEVELOPER_PROFILE;
+    assertSelectableProfile(developerProfile, 'developerProfile');
+
+    return Object.freeze({
+      ...payload,
+      nextGoalPath,
+      developerProfile,
+      developerProfileReason: payload.developerProfileReason ?? null,
+      documentsUpdated: Object.freeze(documentsUpdated),
+    });
   }
 
   if (payload.decision === 'MIGRATION_COMPLETE') {
@@ -132,6 +146,11 @@ export function planningDecisionSchemaFor({ jobId, goal }) {
       remainingCriticalGaps: { type: 'array', items: { type: 'string' } },
       summary: { type: 'string' },
       documentsUpdated: { type: 'array', items: { type: 'string' } },
+      // Developer routing for the Goal being written. Two extra fields on an
+      // output that already exists; the reason is capped so the output does
+      // not grow in any meaningful way.
+      developerProfile: { type: 'string', enum: [...SELECTABLE_DEVELOPER_PROFILES] },
+      developerProfileReason: { type: 'string', maxLength: 200 },
     },
     required: ['protocolVersion', 'jobId', 'goal', 'decision', 'summary'],
     additionalProperties: false,

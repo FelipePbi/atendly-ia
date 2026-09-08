@@ -25,6 +25,7 @@ import { LOOP_STATES, createLoopStateMachine } from './lib/loop-state.mjs';
 import { PROTOCOL_VERSION_V2 } from './lib/contracts-v2.mjs';
 import { assertClosureScope, CLOSURE_WRITE_PREFIX } from './lib/closure-contracts.mjs';
 import { assertMigrationComplete } from './lib/planning-decision.mjs';
+import { createDeveloperProfileStore, resolveDeveloperProfile } from './lib/developer-profiles.mjs';
 import { parseMigrationStatus } from './lib/goal-discovery.mjs';
 import { classifyLease, createLeaseStore } from './lib/leases.mjs';
 import {
@@ -129,6 +130,7 @@ async function main() {
   const { goalId } = parseArgs(process.argv);
   const store = createJobStore(STATE_DIR);
   const leaseStore = createLeaseStore(STATE_DIR);
+  const profileStore = createDeveloperProfileStore(STATE_DIR);
   const machine = createLoopStateMachine({ initialState: LOOP_STATES.ACCEPTED });
 
   emit('');
@@ -373,11 +375,35 @@ async function main() {
       }, machine.state);
     } else {
       emit(`  next goal: ${planning.nextGoalId} — ${planning.nextGoalTitle}`);
+      emit(`  developer profile: ${planning.developerProfile}`);
       emit(`  documents updated: ${planChanges.changedFiles.length}`);
+
+      // The routing decision outlives this process: the Goal it applies to is
+      // executed later, by `run-goal`. Recorded durably here so a restart in
+      // between cannot lose it and nothing has to re-derive it from prose.
+      await profileStore.write(planning.nextGoalId, {
+        profile: planning.developerProfile,
+        reason: planning.developerProfileReason,
+        selectedBy: 'tech_lead',
+        stage: 'NEXT_GOAL_PLANNING',
+      });
+      await store.appendEvent({
+        type: 'DEVELOPER_PROFILE_SELECTED',
+        goal: planning.nextGoalId,
+        round: 1,
+        stage: 'NEXT_GOAL_PLANNING',
+        profile: planning.developerProfile,
+        model: resolveDeveloperProfile(planning.developerProfile).model,
+        effort: resolveDeveloperProfile(planning.developerProfile).effort,
+        selectedBy: 'tech_lead',
+        reason: planning.developerProfileReason ?? null,
+      });
+
       await persistClosure({
         nextGoalId: planning.nextGoalId,
         nextGoalTitle: planning.nextGoalTitle,
         nextGoalPath: planning.nextGoalPath,
+        nextGoalDeveloperProfile: planning.developerProfile,
         planningDocs: planChanges.changedFiles,
       }, machine.state);
     }

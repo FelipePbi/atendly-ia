@@ -21,12 +21,23 @@ import { isClaimableJobStatus } from './job-store.mjs';
 /** Moderate polling. No file watcher needed at this cadence, no busy loop. */
 export const POLL_INTERVAL_MS = 1_000;
 
-export function banner({ title, model, sessionLine, extra = [] }) {
+/**
+ * The idle banner.
+ *
+ * A worker whose model is fixed prints it. A worker whose model is chosen per
+ * job prints the profiles it CAN execute instead — stating a single model
+ * there would be a claim the worker is not entitled to make.
+ */
+export function banner({ title, model = null, supportedProfiles = null, sessionLine, extra = [] }) {
+  const identity = supportedProfiles
+    ? ['Supported profiles:', ...supportedProfiles.map((profile) => `  ${profile}`)]
+    : [`Model: ${model}`];
+
   return [
     '',
     `ATENDLY IA LOOP — ${title}`,
     '',
-    `Model: ${model}`,
+    ...identity,
     ...extra,
     sessionLine,
     'State: IDLE',

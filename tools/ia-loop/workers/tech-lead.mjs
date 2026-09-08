@@ -31,6 +31,7 @@ import {
 } from '../lib/session-registry.mjs';
 import { SESSION_STRATEGY } from '../lib/worker-registry.mjs';
 import { banner, log, runWorkerLoop } from '../lib/worker-loop.mjs';
+import { createTelemetry, createTelemetryFileSink, resolveLogLevel } from '../lib/telemetry.mjs';
 import { runWithCapacity, RUN_OUTCOMES } from '../lib/capacity-runner.mjs';
 import { LOOP_STATES } from '../lib/loop-state.mjs';
 import { reviewDecisionSchemaFor, validateReviewJob, validateReviewDecision } from '../lib/contracts-v2.mjs';
@@ -52,6 +53,10 @@ const SESSION_CWD = join(STATE_DIR, 'workdirs', 'tech-lead');
 const ROLE = 'tech_lead';
 const MODEL = process.env.IA_LOOP_TECH_LEAD_MODEL ?? 'claude-fable-5-1';
 const TIMEOUT_MS = Number(process.env.IA_LOOP_TECH_LEAD_TIMEOUT_MS ?? 2 * 60 * 60 * 1000);
+
+const LOG_LEVEL = resolveLogLevel();
+const PERSIST_TELEMETRY = process.env.IA_LOOP_TELEMETRY_PERSIST !== '0';
+const STREAM_EVENTS = process.env.IA_LOOP_STREAM_EVENTS !== '0';
 
 /**
  * Review profile: read-only by tool surface.
@@ -143,6 +148,22 @@ function buildPlanningPrompt(job) {
     '',
     'Não detalhe Goals posteriores. Apenas um próximo Goal, e só ele READY.',
     '',
+    // Developer routing. It rides on THIS call — a call the cycle already
+    // makes — precisely so that choosing a model costs no extra inference.
+    'Escolha também o perfil de execução do Developer para o Goal que você está escrevendo.',
+    'O padrão é SONNET_MEDIUM: não use Opus quando Sonnet for suficiente.',
+    '- SONNET_MEDIUM: implementação localizada, CRUD, UI, adapters, testes, refactor simples,',
+    '  arquitetura já definida, risco baixo/médio, poucas fronteiras entre serviços;',
+    '- OPUS_MEDIUM: mudança multi-serviço, contrato importante, domínio complexo, migration,',
+    '  debugging difícil, concorrência, mudança com vários consumers;',
+    '- OPUS_HIGH: segurança, auth/sessão, isolamento de tenant, dado crítico, race condition,',
+    '  consistência/sistemas distribuídos, migration delicada, mudança arquitetural, alta',
+    '  superfície, alto custo de erro.',
+    'São critérios, não regra rígida: a decisão é sua.',
+    'Informe developerProfile e um developerProfileReason de UMA frase curta.',
+    'Registre a mesma escolha no documento do Goal, em uma linha exatamente assim:',
+    '  Developer execution profile: <PERFIL>',
+    '',
     'Retorne exclusivamente o JSON do contrato PlanningDecision, com um destes:',
     '',
     '- decision "NEXT_GOAL": há um próximo Goal executável. Informe nextGoalId,',
@@ -164,6 +185,8 @@ async function handleClosureJob(job) {
   workerState = 'WORKING';
 
   log(`${kind} ${job.goal} RECEIVED`);
+  telemetry.setContext({ goal: job.goal, round: job.round ?? 0, jobId: job.jobId });
+  telemetry.event('JOB', `${job.goal} ${kind}`);
   await store.appendEvent({ type: `${kind}_RECEIVED`, jobId: job.jobId, goal: job.goal });
 
   await store.writeRuntime({
@@ -200,6 +223,7 @@ async function handleClosureJob(job) {
         permissionMode: 'auto',
         addDirs: job.worktree ? [job.worktree] : [],
         safeMode: false,
+        ...telemetryOptions(job.worktree),
       });
       await persistSession();
       return outcome;
@@ -231,6 +255,23 @@ async function handleClosureJob(job) {
 
 
 const store = createJobStore(STATE_DIR);
+
+const telemetry = createTelemetry({
+  level: LOG_LEVEL,
+  role: ROLE,
+  sink: createTelemetryFileSink({ stateDir: STATE_DIR, role: ROLE, enabled: PERSIST_TELEMETRY }),
+});
+
+/**
+ * Observational telemetry for the reviewer's own tool use.
+ *
+ * The Tech Lead reads files, greps and runs directed commands during a DEEP
+ * review; all of that already streams out of the CLI. Nothing is asked of the
+ * model to produce it.
+ */
+const telemetryOptions = (worktree) => (STREAM_EVENTS
+  ? { onTelemetryEvent: (event) => telemetry.emit(event), telemetryRoot: worktree ?? null }
+  : {});
 
 let workerState = 'STARTING';
 let session = null;
@@ -325,6 +366,8 @@ async function handleJob(rawJob) {
   workerState = 'WORKING';
 
   log(`REVIEW ${job.goal}/R${job.round} RECEIVED`, `level ${job.reviewLevel}`);
+  telemetry.setContext({ goal: job.goal, round: job.round, jobId: job.jobId });
+  telemetry.event('JOB', `${job.goal}/R${job.round} REVIEW ${job.reviewLevel}`);
   await store.appendEvent({ type: 'REVIEW_JOB_RECEIVED', jobId: job.jobId, goal: job.goal, round: job.round });
 
   const context = buildTechLeadContext({
@@ -376,6 +419,7 @@ async function handleJob(rawJob) {
         permissionMode: 'auto',
         addDirs: job.worktree ? [job.worktree] : [],
         safeMode: false,
+        ...telemetryOptions(job.worktree),
         validatePayload: (payload) => validateReviewDecision(payload, {
           jobId: job.jobId,
           goal: job.goal,
@@ -406,10 +450,19 @@ async function handleJob(rawJob) {
     goal: job.goal,
     round: job.round,
     decision: run.result?.decision ?? 'UNKNOWN',
+    // Recorded next to the decision that produced it: the escalation is the
+    // Tech Lead's, and it is auditable as such.
+    nextDeveloperProfile: run.result?.nextDeveloperProfile ?? null,
     reused: run.outcome === RUN_OUTCOMES.ALREADY_COMPLETED,
   });
 
   log(`DECISION ${run.result?.decision ?? 'UNKNOWN'}`);
+  telemetry.event('DECISION', run.result?.decision ?? 'UNKNOWN');
+  if (run.result?.nextDeveloperProfile) {
+    log('NEXT DEVELOPER PROFILE', run.result.nextDeveloperProfile);
+    telemetry.event('PROFILE', `next round → ${run.result.nextDeveloperProfile}`);
+  }
+  telemetry.clearContext();
   currentJob = null;
   capacityWait = null;
   workerState = 'IDLE';
@@ -423,7 +476,7 @@ async function main() {
     title: 'TECH LEAD',
     model: `Claude Fable 5.1 (${MODEL})`,
     sessionLine: `Session: ${session.sessionId.slice(0, 8)} (${resumed ? 'resumed from registry' : 'new'})`,
-    extra: ['Session strategy: PERSISTENT'],
+    extra: ['Session strategy: PERSISTENT', `Log level: ${LOG_LEVEL}`],
   }));
   console.log('Waiting for review task...\n');
 

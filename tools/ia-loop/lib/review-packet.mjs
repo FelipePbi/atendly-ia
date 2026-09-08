@@ -30,6 +30,7 @@ export function buildReviewPacket({
   developerResult,
   previousBlockers = [],
   diffPath = null,
+  developerProfile = null,
 }) {
   if (!goal) throw new SpikeError('INVALID_ARGS', 'goal is required');
   if (!worktreeInitialHead) throw new SpikeError('INVALID_ARGS', 'worktreeInitialHead is required');
@@ -72,6 +73,10 @@ export function buildReviewPacket({
     developerResult,
 
     previousBlockers: Object.freeze([...previousBlockers]),
+
+    // The profile this round ran on, so the reviewer decides an escalation
+    // against what actually happened rather than against an assumption.
+    developerProfile: developerProfile ?? null,
   });
 }
 
@@ -126,5 +131,16 @@ export function renderReviewPrompt(packet) {
     '',
     'Retorne exclusivamente o JSON do contrato ReviewDecision.',
     'Em CHANGES_REQUIRED, cada blocker deve ser específico e acionável.',
+    '',
+    // Routing rides on THIS call. There is no separate selection inference and
+    // no automatic promotion by round number: either the Tech Lead says so
+    // here, or the Goal keeps the profile it is already running on.
+    `Perfil de execução do Developer nesta rodada: ${packet.developerProfile ?? 'SONNET_MEDIUM'}.`,
+    'Em CHANGES_REQUIRED, você PODE definir nextDeveloperProfile para a próxima rodada de correção:',
+    '- SONNET_MEDIUM: correção localizada, arquitetura já definida, risco baixo/médio;',
+    '- OPUS_MEDIUM: multi-serviço, contrato relevante, domínio complexo, migration, concorrência;',
+    '- OPUS_HIGH: segurança, auth/sessão, isolamento de tenant, dado crítico, race condition,',
+    '  consistência distribuída, mudança arquitetural, alto custo de erro.',
+    'Omita o campo para manter o perfil vigente. nextDeveloperProfileReason: no máximo uma frase curta.',
   ].join('\n');
 }

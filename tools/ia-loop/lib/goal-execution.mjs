@@ -194,6 +194,13 @@ export function initializeGoalExecutionState({ previousRuntime = null, goal, exe
     nextGoalExecuted: false,
     acceptedSnapshot: null,
 
+    // --- no Developer profile chosen for this Goal yet --------------------
+    // Left null rather than defaulted here: the runner resolves the precedence
+    // (persisted choice > Tech Lead escalation > Goal declaration > default)
+    // and records what it resolved, so the choice is never recomputed twice.
+    developerProfile: null,
+    nextDeveloperProfile: null,
+
     // --- no continuation of anything --------------------------------------
     recovery: null,
     capacity: null,

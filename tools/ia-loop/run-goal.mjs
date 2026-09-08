@@ -44,6 +44,8 @@ import {
 import { captureSnapshot, checkDeveloperPolicy, checkReviewerPolicy, formatViolations } from './lib/policy-guards.mjs';
 import { classifyLease, createLeaseStore } from './lib/leases.mjs';
 import { buildReviewPacket } from './lib/review-packet.mjs';
+import { createDeveloperProfileStore } from './lib/developer-profiles.mjs';
+import { PROFILE_SOURCES, resolveProfileForRound, toExecutionRecord } from './lib/profile-routing.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..');
@@ -152,6 +154,7 @@ async function main() {
   const { goalId, dryRun } = parseArgs(process.argv);
   const store = createJobStore(STATE_DIR);
   const leaseStore = createLeaseStore(STATE_DIR);
+  const profileStore = createDeveloperProfileStore(STATE_DIR);
   const machine = createLoopStateMachine();
 
   emit('');
@@ -397,8 +400,23 @@ async function main() {
   let round = reconciled.next.round;
   // Blockers travel with the review that produced them; they are never
   // rediscovered by asking the Tech Lead again.
-  const pendingBlockers = reconciled.next.blockers ?? [];
-  const startAsCorrection = reconciled.next.kind === DISPATCH_KINDS.CORRECTION;
+  // `let`, because the loop below reassigns both when a review asks for a
+  // correction round. They were `const`, which made the in-process continuation
+  // after CHANGES_REQUIRED throw before it could start the next round.
+  let pendingBlockers = reconciled.next.blockers ?? [];
+  let startAsCorrection = reconciled.next.kind === DISPATCH_KINDS.CORRECTION;
+
+  // The Developer profile the Tech Lead chose for this Goal when it planned it.
+  // Read once: `run-goal` never asks a model which profile to use.
+  const plannedProfile = await profileStore.read(goal.goalId);
+  // Carried across rounds inside this process. A review may replace it; silence
+  // preserves it. Nothing here promotes on round number.
+  //
+  // Seeded from disk: a run interrupted between "the Tech Lead escalated" and
+  // "the correction round started" must resume on the escalated profile, not on
+  // the one the previous round happened to use.
+  const persistedEscalation = priorGoalExecution?.nextDeveloperProfile ?? null;
+  let pendingProfileEscalation = persistedEscalation?.round === round ? persistedEscalation : null;
 
   if (startAsCorrection && pendingBlockers.length > 0) {
     emit(`Correction round ${round} carries ${pendingBlockers.length} blocker(s) from review ${reconciled.next.fromReviewJobId ?? 'on disk'}.`);
@@ -418,6 +436,45 @@ async function main() {
     const phaseRunning = isCorrection ? LOOP_STATES.CORRECTION_RUNNING : LOOP_STATES.DEVELOPER_RUNNING;
 
     emit(`── Round ${round} ${isCorrection ? '(correction)' : '(implementation)'} ──`);
+
+    // --- Developer routing -------------------------------------------------
+    // Resolved BEFORE the job is built, from state only. A recovered round
+    // re-reads the profile it already had; it is never recalculated, so a
+    // promotion to OPUS_HIGH cannot be downgraded by a restart.
+    const currentExecution = goalExecutionOf(await store.readRuntime(), goal.goalId);
+    const routing = resolveProfileForRound({
+      goalExecution: currentExecution,
+      round,
+      techLeadEscalation: pendingProfileEscalation,
+      planningRecord: plannedProfile,
+      declaredInGoal: goal.declaredDeveloperProfile,
+    });
+    const profileRecord = toExecutionRecord(routing, { goal: goal.goalId, round });
+
+    if (routing.source !== PROFILE_SOURCES.PERSISTED) {
+      await store.writeRuntime({
+        ...(await store.readRuntime()), developerProfile: profileRecord, nextDeveloperProfile: null,
+      });
+      await store.appendEvent({
+        type: routing.changed ? 'DEVELOPER_PROFILE_CHANGED' : 'DEVELOPER_PROFILE_SELECTED',
+        goal: goal.goalId,
+        round,
+        stage: isCorrection ? STAGES.CORRECTION : STAGES.IMPLEMENTATION,
+        profile: routing.profile.name,
+        previousProfile: routing.previousProfile,
+        model: routing.profile.model,
+        effort: routing.profile.effort,
+        selectedBy: routing.selectedBy,
+        source: routing.source,
+        // Short by contract: the audit trail records a choice, not an argument.
+        reason: routing.reason,
+      });
+    }
+    // Consumed: an escalation applies to exactly one round.
+    pendingProfileEscalation = null;
+
+    emit(`Developer profile: ${routing.profile.name} (${routing.profile.model}, effort ${routing.profile.effort ?? 'CLI default'}) — ${routing.source}`);
+    if (routing.reason) emit(`  reason: ${routing.reason}`);
 
     const beforeDev = await captureSnapshot({ probe });
 
@@ -465,6 +522,11 @@ async function main() {
       previousImplementationReport: lastDevResult?.implementationReport ?? priorGoalExecution?.lastImplementationReport ?? null,
       previousDecision: isCorrection ? 'CHANGES_REQUIRED' : undefined,
       changedFiles: lastChanges?.changedFiles ?? [],
+      // The job is what the worker reads. Putting the profile here — rather
+      // than letting the worker decide — is what makes a restart, a capacity
+      // retry and a recovery all run on the same model.
+      developerProfile: routing.profile.name,
+      developerProfileReason: routing.reason,
     });
 
     machine.transitionTo(phaseQueued);
@@ -575,6 +637,9 @@ async function main() {
       executionBase, worktreeInitialHead: worktree.worktreeInitialHead,
       worktreePath: absWorktree, changes, developerResult: lastDevResult,
       previousBlockers: pendingBlockers.map(blockerText), diffPath,
+      // So the reviewer decides an escalation against the profile that
+      // actually ran, not against an assumption.
+      developerProfile: routing.profile.name,
     });
     // The exact tree being reviewed, hashed in full. The review packet already
     // carried the tracked diff; what was missing was the content of untracked
@@ -700,9 +765,27 @@ async function main() {
     if (plan.action === 'CORRECT') {
       machine.transitionTo(LOOP_STATES.CHANGES_REQUIRED);
       machine.transitionTo(LOOP_STATES.CORRECTION_QUEUED);
+
+      // The Tech Lead's escalation for the NEXT round, if it made one. Absent
+      // means the correction keeps the profile it is on — the round number
+      // decides nothing.
+      pendingProfileEscalation = decision.nextDeveloperProfile
+        ? { profile: decision.nextDeveloperProfile, reason: decision.nextDeveloperProfileReason ?? null }
+        : null;
+      if (pendingProfileEscalation) {
+        emit(`Tech Lead selected ${pendingProfileEscalation.profile} for round ${plan.nextRound}.`);
+        // Persisted before the next round starts, so a crash in between does
+        // not lose the escalation and resume the correction on the old profile.
+        await store.writeRuntime({
+          ...(await store.readRuntime()),
+          nextDeveloperProfile: { ...pendingProfileEscalation, round: plan.nextRound, selectedBy: 'tech_lead' },
+        });
+      }
+
       await store.appendEvent({
         type: 'CORRECTION_ROUND_STARTED', goal: goal.goalId,
         fromRound: round, toRound: plan.nextRound, blockers: decision.blockers.length,
+        nextDeveloperProfile: decision.nextDeveloperProfile ?? null,
       });
       pendingBlockers = decision.blockers;
       round = plan.nextRound;

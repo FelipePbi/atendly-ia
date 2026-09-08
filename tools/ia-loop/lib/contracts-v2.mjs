@@ -10,6 +10,12 @@
  */
 
 import { SpikeError } from './claude-process.mjs';
+import {
+  DEFAULT_DEVELOPER_PROFILE,
+  SELECTABLE_DEVELOPER_PROFILES,
+  assertSelectableProfile,
+  resolveDeveloperProfile,
+} from './developer-profiles.mjs';
 
 export const PROTOCOL_VERSION_V2 = 2;
 
@@ -115,7 +121,22 @@ export function validateDeveloperJob(payload) {
     fail('CONTRACT_FIELD_INVALID', 'An IMPLEMENTATION job must not carry blockers');
   }
 
-  return Object.freeze({ ...payload, blockers: Object.freeze([...(payload.blockers ?? [])]) });
+  // Which Developer profile this job runs on. The job is the authority: the
+  // worker reads it here rather than deciding for itself, and a restart or a
+  // capacity retry re-reads the same file, so the choice cannot drift.
+  //
+  // Absent means the default, which is what a job written before routing
+  // existed will look like. An unknown name is refused: guessing would be a
+  // silent downgrade.
+  const developerProfile = payload.developerProfile ?? DEFAULT_DEVELOPER_PROFILE;
+  resolveDeveloperProfile(developerProfile);
+
+  return Object.freeze({
+    ...payload,
+    developerProfile,
+    developerProfileReason: payload.developerProfileReason ?? null,
+    blockers: Object.freeze([...(payload.blockers ?? [])]),
+  });
 }
 
 // --- DeveloperResult -------------------------------------------------------
@@ -229,7 +250,25 @@ export function validateReviewDecision(payload, { jobId, goal, round }) {
     );
   }
 
-  return Object.freeze({ ...payload, blockers: Object.freeze([...payload.blockers]) });
+  // Correction escalation. Optional on purpose: silence means "keep the profile
+  // this Goal is already running on", never an automatic promotion. Nothing
+  // here reads the round number — the Tech Lead decides, or nothing changes.
+  if (payload.nextDeveloperProfile !== undefined && payload.nextDeveloperProfile !== null) {
+    assertSelectableProfile(payload.nextDeveloperProfile, 'nextDeveloperProfile');
+    if (payload.decision !== 'CHANGES_REQUIRED') {
+      fail(
+        'CONTRACT_FIELD_INVALID',
+        `nextDeveloperProfile only applies to a CHANGES_REQUIRED decision, got "${payload.decision}"`,
+      );
+    }
+  }
+
+  return Object.freeze({
+    ...payload,
+    nextDeveloperProfile: payload.nextDeveloperProfile ?? null,
+    nextDeveloperProfileReason: payload.nextDeveloperProfileReason ?? null,
+    blockers: Object.freeze([...payload.blockers]),
+  });
 }
 
 // --- JSON Schemas handed to the CLI ---------------------------------------
@@ -275,6 +314,13 @@ export const REVIEW_DECISION_SCHEMA = Object.freeze({
     blockers: { type: 'array', items: { type: 'string' } },
     nextAction: { type: 'string', enum: ['STOP', 'RETURN_TO_DEVELOPER', 'HUMAN_REQUIRED'] },
     summary: { type: 'string' },
+    // Optional, and only meaningful with CHANGES_REQUIRED: the profile the
+    // NEXT correction round should run on. Rides on the review inference the
+    // cycle already performs; it costs no extra call.
+    nextDeveloperProfile: { type: 'string', enum: [...SELECTABLE_DEVELOPER_PROFILES] },
+    // Kept short deliberately: this must not grow the output in any
+    // meaningful way.
+    nextDeveloperProfileReason: { type: 'string', maxLength: 200 },
   },
   required: ['protocolVersion', 'jobId', 'goal', 'round', 'decision', 'blockers', 'nextAction'],
   additionalProperties: false,

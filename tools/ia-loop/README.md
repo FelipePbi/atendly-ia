@@ -1830,7 +1830,7 @@ session ids nem dados pessoais.
 | `persistent-session-spike.mjs` | Runner do Spike 1 |
 | `run-goal.mjs` | Orchestrator da V2: descoberta, baselines, plano e dry-run |
 | `workers/tech-lead.mjs` | Worker Fable — processo e sessão persistentes |
-| `workers/developer.mjs` | Worker Opus — processo persistente, inferência stateless |
+| `workers/developer.mjs` | Worker do Developer — um único processo, modelo/effort vindos do job |
 | `lib/goal-discovery.mjs` | Descoberta determinística do Goal e coerência da migração |
 | `lib/worktree-manager.mjs` | Plano de worktree; criação não implementada |
 | `lib/job-store.mjs` | Protocolo local em arquivos, escrita atômica, log append-only |
@@ -1871,8 +1871,160 @@ session ids nem dados pessoais.
 | `lib/agents.mjs` | Papéis fixos e construção de prompt |
 | `lib/persistent-session.mjs` | Sessão por agente: cria no 1º turno, resume nos seguintes |
 | `lib/session-registry.mjs` | Registro durável de sessões, com escrita atômica |
+| `lib/telemetry.mjs` | Níveis, sanitização e emissão da telemetria observacional |
+| `lib/stream-telemetry.mjs` | Parsing incremental do stream do CLI em eventos seguros |
+| `lib/developer-profiles.mjs` | Registry de perfis do Developer, effort do CLI e prova anti-fallback |
+| `lib/profile-routing.mjs` | Precedência do perfil por rodada: persistido > escalation > planejado > padrão |
 | `fixtures/synthetic-goal.md` | Tarefa sintética, fora do runtime |
-| `tests/*.test.mjs` | 513 testes com processo/agente fake; nenhuma chamada real |
+| `tests/*.test.mjs` | 560 testes com processo/agente fake; nenhuma chamada real |
+
+## V8 — Telemetria zero-token + roteamento adaptativo do Developer
+
+Dois incrementos independentes que compartilham uma regra: **nenhum dos dois
+adiciona uma chamada de modelo**.
+
+### Telemetria zero-token
+
+Os terminais mostram o que o agente está fazendo enquanto ele trabalha. Toda
+linha é **derivada** de um evento que o CLI já produzia; nada é pedido ao
+modelo.
+
+```
+[10:31:02] JOB 006/R1 IMPLEMENTATION
+[10:31:02] PROFILE SONNET_MEDIUM
+[10:31:02] MODEL Claude Sonnet 5 · effort Medium
+[10:31:04] READ apps/bff/src/session/SessionService.ts
+[10:31:08] SEARCH SessionService in apps/bff
+[10:31:15] TEST pnpm test apps/bff
+[10:31:42] EDIT apps/bff/src/ConversationService.ts
+[10:32:10] WRITE apps/bff/test/integration.test.ts
+[10:34:22] RESULT TEST pnpm test apps/bff — ok (3.4s)
+```
+
+**Fonte.** `--output-format stream-json`. O CLI emite um objeto JSON por linha
+enquanto executa — init de sessão, cada `tool_use` que ele decidiu usar, cada
+`tool_result`, e por fim um evento `result` que carrega **exatamente o mesmo
+envelope** que `--output-format json` imprimiria no final. `parseEnvelope`
+aceita os dois formatos, então o structured output que o orchestrator valida é
+o mesmo. A telemetria é um **side channel observacional**: a máquina de estados
+nunca lê texto de terminal, só o envelope e os arquivos em disco.
+
+**O que nunca é emitido:** blocos de texto ou de `thinking` do assistente,
+inputs de tool além de caminho/pattern/comando, e o conteúdo de qualquer
+`tool_result`. Nenhum prompt foi alterado para produzir telemetria; nada é
+reenviado ao modelo.
+
+**Sanitização.** Todo detalhe passa por `sanitize()` antes de chegar a um
+terminal ou a um arquivo: `Authorization`/`Bearer`, `password`, `token`,
+`api_key`, `secret`, `cookie`, credenciais em URL, chaves reconhecíveis
+(`sk-…`, `ghp_…`, `xox…`, JWT) e atribuições de env com valor longo viram
+`«redacted»`. Depois disso o texto é colapsado e truncado em 160 caracteres —
+nenhum payload cabe numa linha de telemetria.
+
+**Níveis.** `IA_LOOP_LOG_LEVEL` = `minimal` | `normal` | `verbose`
+(padrão `normal`).
+
+| Nível | Mostra |
+| --- | --- |
+| `minimal` | job start/end, profile/model, decisão, capacity, erro |
+| `normal` | acima + categoria de tool, caminhos, comandos resumidos, testes, transições de estado, e todo resultado que **falhou** |
+| `verbose` | acima + todos os eventos seguros, durações, tool start/end e resultados bem-sucedidos |
+
+**Invariante testada:** mudar o nível **não** muda o que o modelo recebe. Os
+testes comparam o argv, o prompt e o schema entre os três níveis e exigem
+igualdade byte a byte. `buildArgs` não tem sequer um parâmetro de nível — a
+propriedade é estrutural, não coincidência.
+
+**Persistência.** `tools/ia-loop/.state/telemetry/<role>-<data>.jsonl`, só com
+o que já foi renderizado (categoria, detalhe curto, duração, erro). Desligue com
+`IA_LOOP_TELEMETRY_PERSIST=0`. Uma falha de telemetria — writer, sink ou parser
+— é engolida: ela nunca derruba uma execução.
+
+**Desligar o streaming.** `IA_LOOP_STREAM_EVENTS=0` volta ao
+`--output-format json`. Isso muda apenas o formato de saída; prompt, modelo,
+effort, schema e sessão continuam idênticos.
+
+### Perfis de execução do Developer
+
+O Developer deixou de ser fixo em Opus. O **mesmo** worker
+(`npm run ia-loop:developer`) executa qualquer perfil; não existe
+`ia-loop:developer-sonnet` nem `ia-loop:developer-opus` — um segundo worker
+seria um segundo lugar para a decisão de roteamento divergir.
+
+| Perfil | Modelo | Effort | Quando |
+| --- | --- | --- | --- |
+| `SONNET_MEDIUM` | `claude-sonnet-5` | `medium` | implementação localizada, CRUD, UI, adapters, testes, refactor simples, arquitetura já definida, risco baixo/médio |
+| `OPUS_MEDIUM` | `claude-opus-5` | `medium` | mudança multi-serviço, contrato importante, domínio complexo, migration, debugging difícil, concorrência, vários consumers |
+| `OPUS_HIGH` | `claude-opus-5` | `high` | segurança, auth/sessão, isolamento de tenant, dado crítico, race condition, consistência distribuída, mudança arquitetural, alto custo de erro |
+
+`--effort` é uma flag real do CLI instalado (2.1.263), que aceita
+`low, medium, high, xhigh, max`. Um valor desconhecido produz apenas um
+*warning* e roda no effort padrão — um downgrade silencioso —, então o registry
+valida antes do spawn e falha fechado com `UNSUPPORTED_EFFORT`.
+
+**Padrão: `SONNET_MEDIUM`.** A ideia é não pagar Opus por trabalho que Sonnet
+resolve. O Tech Lead promove explicitamente quando o Goal justifica.
+
+**Quem escolhe, e sem inferência extra.** A escolha viaja em chamadas que o
+ciclo **já faz**:
+
+- `PlanningDecision` (a chamada que escreve o próximo Goal) ganhou
+  `developerProfile` e um `developerProfileReason` de uma frase;
+- `ReviewDecision` ganhou `nextDeveloperProfile` e `nextDeveloperProfileReason`,
+  válidos apenas com `CHANGES_REQUIRED`.
+
+Não existe `MODEL_SELECTION_JOB`, e nenhuma chamada de modelo é feita para
+escolher um modelo.
+
+**Precedência**, resolvida em `lib/profile-routing.mjs` (função pura, testável
+sem store, sem git e sem modelo):
+
+1. o que a rodada **já** está executando — restart, recovery e espera por
+   capacidade caem aqui; o perfil é relido, nunca recalculado;
+2. o `nextDeveloperProfile` que o Tech Lead anexou ao review anterior;
+3. o perfil vigente do Goal, quando a rodada avança e o Tech Lead não disse nada
+   — **silêncio preserva**, o número da rodada não promove nada;
+4. compatibilidade: um Goal que **já estava em execução** antes do roteamento
+   existir mantém o modelo com que começou (`LEGACY_OPUS`, sem flag `--effort`);
+5. o que o Tech Lead escolheu ao planejar o Goal (registro durável, ou a linha
+   `Developer execution profile: <PERFIL>` no documento do Goal);
+6. o padrão, `SONNET_MEDIUM`.
+
+**Persistência.** O perfil é gravado no próprio job (`developerProfile`), no
+estado de execução do Goal (`runtime.developerProfile`, campo por-Goal) e num
+handoff durável em `.state/developer-profiles.json`, escrito pelo planejamento.
+O worker lê do job — por isso restart, retry de capacidade e recovery rodam
+exatamente o mesmo modelo.
+
+**Sem fallback, nunca.** Nenhum caminho passa `--fallback-model`. O modelo que
+efetivamente serviu a chamada é resolvido do `modelUsage` e confrontado com a
+família do perfil; divergência é `MODEL_FALLBACK_DETECTED`, e um modelo
+indisponível é `MODEL_UNAVAILABLE` — ambos terminam em `HUMAN_REQUIRED`, jamais
+em outro modelo.
+
+**Tech Lead continua fixo** em Claude Fable 5.1 com sessão persistente. Só o
+Developer é dinâmico.
+
+**Auditoria.** Eventos `DEVELOPER_PROFILE_SELECTED` e
+`DEVELOPER_PROFILE_CHANGED`, com goal, round, stage, profile, model, effort,
+`selectedBy`, origem e uma razão curta. Nenhum reasoning longo é registrado.
+
+**Terminais.**
+
+```
+ATENDLY IA LOOP — DEVELOPER
+
+Supported profiles:
+  SONNET_MEDIUM · Claude Sonnet 5 · effort Medium
+  OPUS_MEDIUM · Claude Opus 5 · effort Medium
+  OPUS_HIGH · Claude Opus 5 · effort High
+Log level: normal
+Session strategy: STATELESS
+State: IDLE
+```
+
+`npm run ia-loop:status` reporta o perfil roteado, o modelo, o effort e — quando
+existe — o perfil que o Tech Lead escolheu para a próxima rodada.
 
 ## Limitações conhecidas
 

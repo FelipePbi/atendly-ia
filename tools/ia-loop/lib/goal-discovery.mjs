@@ -14,6 +14,7 @@ import { join } from 'node:path';
 
 import { SpikeError } from './claude-process.mjs';
 import { assertSha } from './contracts-v2.mjs';
+import { DEVELOPER_PROFILE_NAMES } from './developer-profiles.mjs';
 
 export const GOAL_STATUSES = Object.freeze([
   'PLANNED', 'READY', 'IN_PROGRESS', 'IMPLEMENTED', 'REVIEW_REQUIRED', 'ACCEPTED', 'BLOCKED', 'SUPERSEDED',
@@ -68,6 +69,18 @@ export function parseGoalDocument(text, goalId) {
   const previousGoal = text.match(/Goal anterior:\s*(\d{3})\b/);
   const previousStatus = text.match(/Status anterior:\s*([A-Z_]+)/);
 
+  // The Developer profile the Tech Lead chose for this Goal, written as a
+  // human-readable mirror of the choice recorded in the profile store.
+  // Optional: a Goal written before routing existed simply has no line, and an
+  // unknown name is refused rather than silently downgraded.
+  const profile = text.match(/Developer execution profile:\s*`?([A-Z_]+)`?/);
+  if (profile && !DEVELOPER_PROFILE_NAMES.includes(profile[1])) {
+    fail(
+      'UNKNOWN_DEVELOPER_PROFILE',
+      `Goal ${goalId} declares Developer execution profile "${profile[1]}", which is not in the registry`,
+    );
+  }
+
   return {
     goalId,
     title: title[1].trim(),
@@ -75,6 +88,7 @@ export function parseGoalDocument(text, goalId) {
     declaredBaseline: baseline[1],
     previousGoalId: previousGoal ? previousGoal[1] : null,
     previousGoalStatus: previousStatus ? previousStatus[1] : null,
+    declaredDeveloperProfile: profile ? profile[1] : null,
   };
 }
 
@@ -198,5 +212,8 @@ export async function discoverGoal({
     previousGoalId: goal.previousGoalId,
     previousGoalStatus: goal.previousGoalStatus ?? migration.goalStatuses.get(goal.previousGoalId) ?? null,
     migrationAcceptedBaseline: migration.acceptedBaseline,
+    // Null when the Goal predates routing, or when the Tech Lead recorded the
+    // choice only in the profile store. The runner resolves the precedence.
+    declaredDeveloperProfile: goal.declaredDeveloperProfile ?? null,
   });
 }

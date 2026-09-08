@@ -23,6 +23,21 @@
  * A runtime human-gate NEVER outranks a completed result. This module only ever
  * moves the runtime toward the facts; it cannot invent a decision, cannot
  * create an attempt, and cannot clear a gate the facts still support.
+ *
+ * A second, related lie the runtime can tell: Goal 005 R2's review completed —
+ * ACCEPTED, no blockers — while a live orchestrator process was still asleep in
+ * its wait loop, fenced on the attempt that review's capacity retry had already
+ * superseded (`result-waiter.mjs` is what stops that going forward). The
+ * runtime it had written stayed REVIEWER_RUNNING, at the PREVIOUS round's
+ * decision, with nothing to move it. That is not a human gate; it is an
+ * in-flight marker the facts have already outrun. `runtimeInFlightStale` below
+ * is what catches it: the runtime claims stage X of its own round is still
+ * running, and the ledger shows that exact stage COMPLETED. It only ever
+ * fires when a decisive result already landed — a genuinely active stage
+ * always shows IN_FLIGHT or NOT_STARTED there, never COMPLETED — so it can
+ * never mistake real, ongoing work for staleness. And it only ever moves the
+ * runtime TOWARD progress (a later stage, a later round, or CLOSE_GOAL) —
+ * never toward a human gate, which stays the first divergence's job alone.
  */
 
 import { SpikeError } from './claude-process.mjs';
@@ -43,6 +58,38 @@ const STATE_FOR_DISPATCH = Object.freeze({
   [DISPATCH_KINDS.CLOSE_GOAL]: LOOP_STATES.ACCEPTED,
   [DISPATCH_KINDS.HUMAN_REQUIRED]: LOOP_STATES.HUMAN_REQUIRED,
 });
+
+/**
+ * Which dispatch kind an IN-FLIGHT runtime state claims to still be doing.
+ *
+ * Both the QUEUED and the RUNNING member of each stage are listed: a live
+ * orchestrator writes QUEUED before dispatch and RUNNING once it starts
+ * waiting, and the runtime can go stale in either one.
+ */
+const IN_FLIGHT_KIND_FOR_STATE = Object.freeze({
+  [LOOP_STATES.DEVELOPER_QUEUED]: DISPATCH_KINDS.IMPLEMENTATION,
+  [LOOP_STATES.DEVELOPER_RUNNING]: DISPATCH_KINDS.IMPLEMENTATION,
+  [LOOP_STATES.CORRECTION_QUEUED]: DISPATCH_KINDS.CORRECTION,
+  [LOOP_STATES.CORRECTION_RUNNING]: DISPATCH_KINDS.CORRECTION,
+  [LOOP_STATES.REVIEWER_QUEUED]: DISPATCH_KINDS.REVIEW,
+  [LOOP_STATES.REVIEWER_RUNNING]: DISPATCH_KINDS.REVIEW,
+});
+
+/**
+ * Dispatch kinds that represent genuine progress past an in-flight stage.
+ *
+ * HUMAN_REQUIRED is deliberately absent: reconciling FROM an in-flight state
+ * TO a human gate would need to populate `humanRequired` with the reason and
+ * note the normal dispatch path attaches, which this function's blanket
+ * `humanRequired: null` does not do. Rather than grow that special case here,
+ * an in-flight runtime that the facts have moved to HUMAN_REQUIRED is left
+ * alone: the live orchestrator process reaches that gate correctly on its
+ * own once `result-waiter.mjs` lets it stop waiting on a superseded attempt.
+ */
+const PROGRESSION_KINDS = Object.freeze(new Set([
+  DISPATCH_KINDS.IMPLEMENTATION, DISPATCH_KINDS.CORRECTION,
+  DISPATCH_KINDS.REVIEW, DISPATCH_KINDS.CLOSE_GOAL,
+]));
 
 function fail(code, message, details = {}) {
   throw new SpikeError(code, message, details);
@@ -79,6 +126,16 @@ export async function assessRuntimeDivergence(store, { goal, maxRounds = 3 }) {
   const runtimeSaysHuman = HUMAN_GATE_STATES.includes(runtimeState) || runtimeDecision === 'HUMAN_REQUIRED';
   const factsSayHuman = next.kind === DISPATCH_KINDS.HUMAN_REQUIRED;
 
+  // The runtime claims a stage is still in flight; does the ledger show that
+  // EXACT stage already resolved? This can only be true when a decisive
+  // result already landed — an active stage's ledger entry is always
+  // IN_FLIGHT or NOT_STARTED, never COMPLETED — so it never flags genuinely
+  // ongoing work.
+  const expectedKind = IN_FLIGHT_KIND_FOR_STATE[runtimeState] ?? null;
+  const runtimeInFlightStale = expectedKind !== null
+    && PROGRESSION_KINDS.has(next.kind)
+    && next.kind !== expectedKind;
+
   return {
     goal,
     ledger,
@@ -99,9 +156,11 @@ export async function assessRuntimeDivergence(store, { goal, maxRounds = 3 }) {
     runtimeState,
     runtimeDecision,
     runtimeReason: execution?.escalationReason ?? null,
-    // The only divergence worth repairing: the runtime holds a person hostage
-    // to a conclusion the facts no longer support.
-    diverged: runtimeSaysHuman && !factsSayHuman,
+    runtimeInFlightStale,
+    // Two different lies, one repair: the runtime holds a person hostage to a
+    // conclusion the facts no longer support, OR the runtime still claims a
+    // stage is running that the facts show already finished.
+    diverged: (runtimeSaysHuman && !factsSayHuman) || runtimeInFlightStale,
     factsSayHuman,
   };
 }

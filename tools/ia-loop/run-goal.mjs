@@ -42,11 +42,12 @@ import {
   worktreeFingerprint,
 } from './lib/git-ops.mjs';
 import { captureSnapshot, checkDeveloperPolicy, checkReviewerPolicy, formatViolations } from './lib/policy-guards.mjs';
-import { classifyLease, createLeaseStore } from './lib/leases.mjs';
+import { createLeaseStore } from './lib/leases.mjs';
 import { buildReviewPacket } from './lib/review-packet.mjs';
 import { createDeveloperProfileStore } from './lib/developer-profiles.mjs';
 import { PROFILE_SOURCES, resolveProfileForRound, toExecutionRecord } from './lib/profile-routing.mjs';
 import { isDirectExecution } from './lib/direct-execution.mjs';
+import { waitForResult } from './lib/result-waiter.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..');
@@ -57,10 +58,8 @@ const DEVELOPER_MODEL = process.env.IA_LOOP_DEVELOPER_MODEL ?? 'claude-opus-5';
 const REVIEW_LEVEL = LOOP_CONFIG.reviewLevel;
 
 const RESULT_TIMEOUT_MS = Number(process.env.IA_LOOP_RESULT_TIMEOUT_MS ?? 6 * 60 * 60 * 1000);
-const POLL_MS = 5_000;
 
 const probe = createGitProbe(REPO_ROOT);
-const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
 
 function parseArgs(argv) {
   const args = argv.slice(2);
@@ -73,71 +72,6 @@ function formatHealth(h) {
   if (h.health === WORKER_HEALTH.OFFLINE) return 'OFFLINE (worker not running)';
   const age = h.ageMs === null ? '?' : `${Math.round(h.ageMs / 1000)}s ago`;
   return `${h.health} (state ${h.state}, heartbeat ${age})`;
-}
-
-/**
- * Waits for a worker to publish a result.
- *
- * A timeout here is an OBSERVER timeout, never a job failure. The runner is a
- * spectator: the work belongs to the attempt that holds the lease. Treating the
- * wait as a failure is what once queued a second correction while the first was
- * still running, putting two agents on one worktree.
- *
- * So on timeout this returns instead of throwing, and the caller stops watching
- * without failing the job, without releasing the lease and without creating a
- * new attempt.
- */
-async function waitForResult(store, role, jobId, { emit, leaseStore, expectedAttemptId = null }) {
-  const startedAt = Date.now();
-  let lastState = null;
-  // Reported once per distinct stale attempt, so a five-second poll does not
-  // fill the terminal and the event log with the same fact.
-  const reportedStale = new Set();
-
-  for (;;) {
-    // Fenced by attempt. "The first non-null envelope" was the bug: after a
-    // repair materialised a3, the primary path still held a2's failure, and
-    // this returned it as though a3 had answered — 4.5 minutes before a3
-    // actually did, with a completely different decision.
-    const envelope = await store.readResult(role, jobId, {
-      expectedAttemptId,
-      onStale: ({ foundAttemptId }) => {
-        if (reportedStale.has(foundAttemptId)) return;
-        reportedStale.add(foundAttemptId);
-        emit(`  … ignoring a result left by ${foundAttemptId ?? 'an unnamed attempt'}; waiting for ${expectedAttemptId}.`);
-        void store.appendEvent({
-          type: 'STALE_RESULT_IGNORED',
-          role, jobId, expectedAttemptId, foundAttemptId: foundAttemptId ?? null,
-        }).catch(() => {});
-      },
-    });
-    if (envelope) return { envelope };
-
-    if (Date.now() - startedAt > RESULT_TIMEOUT_MS) {
-      const lease = await leaseStore?.readJobLease(jobId);
-      const { status, ageMs } = lease ? classifyLease(lease) : { status: null, ageMs: null };
-      return {
-        observerTimeout: true,
-        lease,
-        leaseStatus: status,
-        leaseAgeMs: ageMs,
-      };
-    }
-
-    const health = await readWorkerHealth(store, role);
-    if (health.state !== lastState) {
-      lastState = health.state;
-      const suffix = health.capacityReason ? ` (${health.capacityReason})` : '';
-      emit(`  … ${role}: ${health.state ?? 'unknown'}${suffix}`);
-    }
-    if (health.health === WORKER_HEALTH.OFFLINE) {
-      // The worker is gone. Whether its child died with it is NOT knowable here,
-      // so this is reported, not resolved: no new attempt is started.
-      return { workerOffline: true };
-    }
-
-    await sleep(POLL_MS);
-  }
 }
 
 /** Says what a dispatch actually did, so the log never claims more than it did. */
@@ -609,6 +543,7 @@ async function main() {
       emit(`  attempt: ${devAttemptId ?? 'unknown'}`);
       const observed = await waitForResult(store, 'developer', devJobId, {
         emit, leaseStore, expectedAttemptId: devAttemptId,
+        goal: goal.goalId, round, resultTimeoutMs: RESULT_TIMEOUT_MS,
       });
       if (observed.observerTimeout || observed.workerOffline) {
         await reportObserverStop({ store, emit, role: 'developer', jobId: devJobId, observed, goal: goal.goalId, round });
@@ -750,6 +685,7 @@ async function main() {
       emit(`  attempt: ${revAttemptId ?? 'unknown'}`);
       const observedReview = await waitForResult(store, 'tech_lead', revJobId, {
         emit, leaseStore, expectedAttemptId: revAttemptId,
+        goal: goal.goalId, round, resultTimeoutMs: RESULT_TIMEOUT_MS,
       });
       if (observedReview.observerTimeout || observedReview.workerOffline) {
         await reportObserverStop({ store, emit, role: 'tech_lead', jobId: revJobId, observed: observedReview, goal: goal.goalId, round });

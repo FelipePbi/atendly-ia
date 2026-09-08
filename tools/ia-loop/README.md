@@ -1878,10 +1878,12 @@ session ids nem dados pessoais.
 | `lib/direct-execution.mjs` | Guard de execução direta: importar um entry point não o executa |
 | `lib/harness-retry.mjs` | Autorização auditável de UMA retry depois de corrigir bug do harness |
 | `run-authorize-retry.mjs` | CLI do repair de harness, dry-run por padrão |
-| `lib/runtime-reconciliation.mjs` | Precedência dos fatos sobre o runtime derivado |
+| `lib/runtime-reconciliation.mjs` | Precedência dos fatos sobre o runtime derivado; também converge um estado "em voo" já resolvido |
 | `run-reconcile-runtime.mjs` | CLI da reconciliação do runtime, dry-run por padrão |
+| `lib/attempt-handoff.mjs` | Prova pura de lineage: a attempt corrente descende de uma esperada por uma cadeia autorizada? |
+| `lib/result-waiter.mjs` | `waitForResult` — cerca por attempt, e segue uma sucessora autorizada sem nunca aceitar "a mais nova" por hábito |
 | `fixtures/synthetic-goal.md` | Tarefa sintética, fora do runtime |
-| `tests/*.test.mjs` | 620 testes com processo/agente fake; nenhuma chamada real |
+| `tests/*.test.mjs` | 646 testes com processo/agente fake; nenhuma chamada real |
 
 ## V8 — Telemetria zero-token + roteamento adaptativo do Developer
 
@@ -2283,6 +2285,150 @@ Next:
 
 E quando o runtime ainda carrega um human gate que os resultados já
 desmentiram, a tela diz isso e aponta o comando — em vez de repetir o cache.
+
+## V11 — Successor-attempt handoff
+
+A cerca por attempt (V10) resolveu "o waiter consome a resposta errada". Ficou
+uma segunda forma de a mesma classe de bug aparecer: o waiter fica correto e
+**preso**, para sempre, numa attempt que nunca mais vai responder.
+
+### O caso real: Goal 005 R2
+
+```
+Review a1   WAITING_FOR_CAPACITY / USAGE_LIMIT
+(a capacidade volta; o capacity runner materializa a a2)
+Review a2   COMPLETED, decision ACCEPTED
+```
+
+O orquestrador tinha despachado a review, lido o `attemptId` da a1 e ia dormir
+em `waitForResult`. Quando a capacidade voltou e a a2 foi materializada, o
+`expectedAttemptId` local **nunca foi atualizado** — ele foi capturado uma vez,
+antes do loop. O terminal mostrava, a cada poll:
+
+```
+… ignoring a result left by 005-r2-tech_lead-8eec8bd3-a2; waiting for 005-r2-tech_lead-8eec8bd3-a1.
+```
+
+Isso prova que a cerca funcionava exatamente como projetada — e ainda assim
+estava errado: a1 não ia responder de novo. `status` já calculava corretamente
+`Next: 005 R2 CLOSE_GOAL` a partir do disco (a leitura do ledger não é
+cercada), mas o **processo vivo**, preso no loop, nunca chegava lá.
+
+### Stale result vs. sucessora válida
+
+São perguntas diferentes, e confundi-las nos dois sentidos é o erro:
+
+| | pergunta | quem responde |
+| --- | --- | --- |
+| stale result | "isto que apareceu no caminho primário é resposta da attempt que eu espero?" | `readResult({ expectedAttemptId })`, V10 |
+| sucessora autorizada | "a attempt que eu espero **acabou**, e o job **avançou** para uma sucessora legítima?" | `findAuthorizedSuccessor`, V11 |
+
+Um resultado de outra attempt no caminho primário é sempre stale — nunca
+consumido diretamente. Mas a pergunta certa, antes de continuar esperando pela
+attempt original para sempre, é se o **job** já se moveu, e por quê.
+
+`findAuthorizedSuccessor(attemptState, expectedAttemptId)` (`lib/attempt-handoff.mjs`)
+responde só a partir do que o job já prova sobre si mesmo — `attemptHistory` e
+`currentAttemptId`, do próprio `readAttemptState`:
+
+1. a attempt corrente já é a esperada → nada a fazer, `null`.
+2. a esperada não aparece no histórico → `UNKNOWN_ATTEMPT`, sem handoff.
+3. entre a esperada e a corrente, cada elo (um por número de attempt) precisa
+   estar presente e ter terminado por um motivo que o próprio store autoriza:
+   `WAITING_FOR_CAPACITY` ou `INTERRUPTED` (os mesmos `RETRYABLE_JOB_STATUSES`
+   que guardam `startNextAttempt`), ou `FAILED` com `retryAuthorizedBy`
+   carimbado por `authorizeRetryAfterHarnessFix`. Faltando um elo →
+   `BROKEN_LINEAGE`. Um elo que terminou por qualquer outro motivo — um
+   `FAILED` sem autorização, um `SUPERSEDED` — → `NOT_AUTHORIZED`.
+4. dois elos reivindicando o mesmo número de attempt → `CONFLICTING_LINEAGE`,
+   recusado sem escolher um dos dois. Isso nunca acontece pelas APIs do store
+   (`startNextAttempt` serializa cada incremento atrás do próprio lock file),
+   mas a checagem continua: "pegar a mais nova" é exatamente o atalho que este
+   módulo existe para recusar.
+
+Uma cadeia de vários saltos — capacidade, depois uma falha de harness
+reparada, depois conclusão — é seguida **de uma vez**: `findAuthorizedSuccessor`
+caminha do número da attempt esperada até o corrente, exigindo que **todos**
+os elos intermediários sejam autorizados. Um `ATTEMPT_WAIT_HANDOFF` cobre o
+salto inteiro, não um por elo.
+
+### `waitForResult` segue a sucessora
+
+`lib/result-waiter.mjs` (antes uma função local em `run-goal.mjs`) mantém
+`currentAttemptId` como variável, não como constante do closure. A cada volta
+do loop, se ainda não veio resultado:
+
+```
+lida o resultado com { expectedAttemptId: currentAttemptId }
+  → achou? retorna.
+  → não achou: pergunta findAuthorizedSuccessor(job atual, currentAttemptId)
+      → autorizada? currentAttemptId = sucessora; evento ATTEMPT_WAIT_HANDOFF; continue (sem dormir)
+      → não autorizada: segue esperando currentAttemptId, como antes
+```
+
+O `continue` sem `sleep` importa: se a sucessora já tiver publicado (o caso
+real do Goal 005 R2), a próxima volta do loop encontra o resultado
+imediatamente, sem esperar mais um ciclo de poll.
+
+```json
+{ "type": "ATTEMPT_WAIT_HANDOFF", "goal": "005", "round": 2, "role": "tech_lead",
+  "jobId": "005-r2-tech_lead-8eec8bd3",
+  "fromAttemptId": "...-a1", "toAttemptId": "...-a2",
+  "reason": "USAGE_LIMIT", "hops": 1 }
+```
+
+`STALE_RESULT_IGNORED` (V10) continua existindo e continua sendo emitido para
+qualquer resultado de uma attempt que **não** seja uma sucessora autorizada —
+o handoff nunca enfraquece essa parte da cerca.
+
+### O que isso NUNCA faz
+
+- Não aceita "a attempt mais nova" sem uma cadeia provada.
+- Não cria uma nova attempt. Só segue uma que os dois portões existentes já
+  materializaram (`startNextAttempt`, `authorizeRetryAfterHarnessFix`).
+- Não reconcilia em direção a um human gate — ver a seção seguinte.
+- Não troca `expectedAttemptId` por nada que o próprio job não prove.
+
+### Restart: o caso que já funcionava
+
+Um restart nunca herda um `expectedAttemptId` desatualizado: `run-goal.mjs` lê
+`readAttemptState(role, jobId).attemptId` **de novo**, do disco, logo antes de
+cada dispatch. O bug só existe para um processo **vivo**, dormindo no loop,
+quando a sucessora é materializada enquanto ele dorme — exatamente a corrida
+worker-antes-do-orquestrador (V10) e orquestrador-antes-do-worker, agora
+também para o caso em que o worker é, na verdade, o próprio capacity runner
+retomando depois da espera.
+
+### Runtime "em voo" também converge
+
+`assessRuntimeDivergence` (V10) sabia detectar só um tipo de mentira: um
+human gate no runtime que os fatos já desmentiam. Ficou faltando o caso do
+Goal 005 R2: o runtime dizia `REVIEWER_RUNNING`, `decision: CHANGES_REQUIRED`
+(sobra da rodada 1), enquanto o ledger já mostrava a review da rodada 2
+`COMPLETED` / `ACCEPTED`. Não é um human gate — é um marcador "em voo" que os
+fatos já ultrapassaram.
+
+`runtimeInFlightStale` cobre exatamente isso: o runtime afirma que um estágio
+do seu próprio round está rodando (`DEVELOPER_QUEUED/RUNNING`,
+`CORRECTION_QUEUED/RUNNING`, `REVIEWER_QUEUED/RUNNING`), e o ledger mostra
+esse **mesmo** estágio `COMPLETED`. Isso só pode ser verdade quando um
+resultado decisivo já chegou — um estágio genuinamente ativo aparece como
+`IN_FLIGHT` ou `NOT_STARTED` no ledger, nunca `COMPLETED` — então nunca marca
+trabalho real em andamento como obsoleto.
+
+Deliberadamente restrito: só reconcilia **progresso** (`CLOSE_GOAL`, o
+próximo estágio, a próxima rodada) — nunca em direção a `HUMAN_REQUIRED`. Para
+esse caso, a mesma correção do `waitForResult` já é suficiente: um processo
+vivo, deixando de ficar preso numa attempt superada, chega ao human gate
+sozinho, pelo caminho normal.
+
+```bash
+npm run ia-loop:reconcile-runtime -- --goal 005          # dry-run
+npm run ia-loop:reconcile-runtime -- --goal 005 --apply
+```
+
+O mesmo comando de V10 agora também repara este caso — nada de novo na CLI,
+só um `diverged` mais completo por baixo.
 
 ## Limitações conhecidas
 

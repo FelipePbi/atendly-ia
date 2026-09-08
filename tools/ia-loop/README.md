@@ -1882,8 +1882,10 @@ session ids nem dados pessoais.
 | `run-reconcile-runtime.mjs` | CLI da reconciliação do runtime, dry-run por padrão |
 | `lib/attempt-handoff.mjs` | Prova pura de lineage: a attempt corrente descende de uma esperada por uma cadeia autorizada? |
 | `lib/result-waiter.mjs` | `waitForResult` — cerca por attempt, e segue uma sucessora autorizada sem nunca aceitar "a mais nova" por hábito |
+| `lib/closure-eligibility.mjs` | Reprova, cercada por attempt, que um Goal está elegível para closure; o retorno vira a evidência de `hydrateTo` |
+| `lib/orchestrator-fault.mjs` | Classifica um defeito da própria state machine (`INVALID_TRANSITION`...) como `HARNESS_ERROR`, nunca `UNKNOWN_FATAL` |
 | `fixtures/synthetic-goal.md` | Tarefa sintética, fora do runtime |
-| `tests/*.test.mjs` | 646 testes com processo/agente fake; nenhuma chamada real |
+| `tests/*.test.mjs` | 679 testes com processo/agente fake; nenhuma chamada real |
 
 ## V8 — Telemetria zero-token + roteamento adaptativo do Developer
 
@@ -2429,6 +2431,122 @@ npm run ia-loop:reconcile-runtime -- --goal 005 --apply
 
 O mesmo comando de V10 agora também repara este caso — nada de novo na CLI,
 só um `diverged` mais completo por baixo.
+
+## V12 — Resumir um Goal já ACCEPTED através de uma closure guardada
+
+`npm run ia-loop:auto` reinvoca `run-goal.mjs` como processo filho a **cada**
+iteração — inclusive para um Goal que já foi aceito e só está esperando
+closure, porque descobrir isso é exatamente o papel dessa chamada. Um
+processo novo sempre começa em `IDLE` e caminha `GOAL_READY` →
+`PREPARING_WORKTREE` → `WORKTREE_READY` **antes** de olhar o ledger — o estado
+local nunca é herdado de `runtime.json`.
+
+### O caso real: Goal 005, depois do commit anterior
+
+Depois da reconciliação de V11, `runtime.json` já dizia `decision: ACCEPTED`,
+`round: 2`. `npm run ia-loop:auto` reconheceu corretamente:
+
+```
+Reconciled: next is CLOSE_GOAL at round 2.
+Round 2 was ACCEPTED; the Goal is ready for closure.
+```
+
+E travou:
+
+```
+[INVALID_TRANSITION]
+Transition WORKTREE_READY -> ACCEPTED is not allowed
+```
+
+`run-auto.mjs`, um processo separado que só vê o código de saída e o disco,
+leu isso como `UNKNOWN_FATAL` — o mesmo rótulo de uma falha de modelo
+inexplicável.
+
+### Por que não simplesmente liberar `WORKTREE_READY -> ACCEPTED`
+
+Isso permitiria, em qualquer contexto futuro, que `transitionTo` aceitasse
+esse salto **sem prova nenhuma** — um Goal sem review válido chegando a
+`ACCEPTED` porque alguém chamou a função na ordem errada. O grafo de
+`state-registry.mjs` continua exatamente como estava; nenhuma aresta nova foi
+adicionada a ele.
+
+### `hydrateTo`: um segundo caminho, não um atalho no primeiro
+
+`lib/loop-state.mjs` ganha `machine.hydrateTo(next, { reason, evidence })`,
+ao lado — nunca no lugar — de `transitionTo`:
+
+- ignora o grafo de `ALLOWED_TRANSITIONS`, mas **exige** `reason` e
+  `evidence`; sem os dois, recusa com `HYDRATION_EVIDENCE_REQUIRED`;
+- marca a entrada do histórico com `hydrated: true`, então uma auditoria
+  sempre distingue um passo real de um salto reconciliado;
+- **não verifica** a evidência — quem chama é responsável por ela ser real.
+  `transitionTo` não muda em nada: toda outra chamada continua recusando
+  exatamente como antes.
+
+```js
+machine.hydrateTo(LOOP_STATES.ACCEPTED, {
+  reason: 'AUTHORITATIVE_REVIEW_ACCEPTED',
+  evidence, // de assertGoalEligibleForClosure — nunca inventada aqui
+});
+```
+
+O mesmo problema existia, de forma latente, para `HUMAN_REQUIRED`:
+`WORKTREE_READY -> HUMAN_REQUIRED` também não está no grafo, e a
+reconciliação early-exit podia chegar lá do mesmo jeito (rodada esgotada,
+review pedindo humano, decisão sem contrato). Corrigido do mesmo modo.
+
+### `assertGoalEligibleForClosure`: a prova que vira evidência
+
+`lib/closure-eligibility.mjs` **não confia** em `reconciled.next.kind ===
+CLOSE_GOAL` sozinho — relê os mesmos fatos direto do job store, cercado por
+attempt, escopado ao job/round exatos que o ledger apontou:
+
+1. o job de review existe e pertence ao Goal e à rodada certos;
+2. a attempt corrente está `COMPLETED`;
+3. o resultado confiado é o da attempt `COMPLETED` — nunca um envelope de
+   outra attempt (`RESULT_NOT_FENCED` se divergir);
+4. `decision === 'ACCEPTED'`;
+5. zero blockers pendentes.
+
+Qualquer falha recusa com `CLOSURE_INELIGIBLE` e uma `reason` específica —
+nunca um "provavelmente está tudo bem". O retorno **é** a `evidence` que
+`hydrateTo` exige; nada entre a prova e o salto é inventado.
+
+### Harness fault ≠ UNKNOWN_FATAL
+
+`lib/orchestrator-fault.mjs` classifica `INVALID_TRANSITION`,
+`UNKNOWN_STATE` e `HYDRATION_EVIDENCE_REQUIRED` — códigos que só podem
+significar um defeito no uso da própria state machine, nunca um fato sobre o
+Goal — como `HARNESS_ERROR`, reaproveitando o vocabulário que
+`harness-retry.mjs` já usa para o mesmo tipo de problema (um bug do harness,
+não uma falha de modelo). O catch de nível superior de `run-goal.mjs` grava
+essa classificação em `runtime.escalationReason` antes de propagar o erro —
+`store` foi elevado a escopo de módulo justamente para isso, já que o catch
+roda fora de `main()`. `run-auto.mjs` já sabia ler `escalationReason`; o que
+faltava era esse valor nunca ser preenchido para este tipo de erro.
+
+### Idempotência da closure
+
+`run-close.mjs` já cria sua própria state machine iniciada direto em
+`ACCEPTED` (`createLoopStateMachine({ initialState: LOOP_STATES.ACCEPTED })`)
+— nunca sofreu este bug, porque nunca caminha o grafo a partir de
+`WORKTREE_READY`. E já é idempotente por etapa (`closure.sourceClosureCommit`,
+`closure.acceptedSnapshot`, etc. — cada passo verifica antes de agir). Este
+fix não duplica nem substitui essa infraestrutura; ele só garante que
+`run-goal.mjs` PARE de travar antes de `run-close.mjs` sequer começar.
+
+### Reconciliação do Goal 005 real
+
+`runtime.json` (ignorado pelo git) tinha `state: WORKTREE_READY` — sobra do
+processo que travou — enquanto `decision: ACCEPTED` já estava correto desde
+V11. Corrigido para `state: ACCEPTED`, evento
+`RUNTIME_RECONCILED_FOR_CLOSURE` (`reason:
+INVALID_REENTRY_STATE_AFTER_ACCEPTED_REVIEW`). O run autônomo
+(`autonomous-run.json`) segue `PAUSED_FOR_HUMAN` — só um `--resolved`
+explícito tira dali, de propósito — mas o rótulo do motivo foi corrigido de
+`UNKNOWN_FATAL` para `HARNESS_ERROR`, com o valor anterior preservado em
+`reclassifiedFrom` e um evento `AUTONOMOUS_RUN_HUMAN_REQUIRED_RECLASSIFIED`
+auditável. Nenhum modelo foi chamado.
 
 ## Limitações conhecidas
 

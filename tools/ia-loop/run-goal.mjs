@@ -48,6 +48,8 @@ import { createDeveloperProfileStore } from './lib/developer-profiles.mjs';
 import { PROFILE_SOURCES, resolveProfileForRound, toExecutionRecord } from './lib/profile-routing.mjs';
 import { isDirectExecution } from './lib/direct-execution.mjs';
 import { waitForResult } from './lib/result-waiter.mjs';
+import { assertGoalEligibleForClosure } from './lib/closure-eligibility.mjs';
+import { recordOrchestratorFault } from './lib/orchestrator-fault.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..');
@@ -60,6 +62,17 @@ const REVIEW_LEVEL = LOOP_CONFIG.reviewLevel;
 const RESULT_TIMEOUT_MS = Number(process.env.IA_LOOP_RESULT_TIMEOUT_MS ?? 6 * 60 * 60 * 1000);
 
 const probe = createGitProbe(REPO_ROOT);
+
+// Created once, at module scope rather than inside main(): the top-level
+// catch below needs the SAME store to record a harness fault, and a fresh
+// createJobStore(STATE_DIR) here does no I/O of its own — it only builds path
+// helpers — so hoisting it costs nothing and does not change when main()
+// starts touching disk.
+const store = createJobStore(STATE_DIR);
+// Set once discoverGoal resolves inside main(). The top-level catch runs
+// OUTSIDE main()'s scope and has no other way to know which Goal a thrown
+// error belongs to.
+let currentGoalId = null;
 
 function parseArgs(argv) {
   const args = argv.slice(2);
@@ -105,7 +118,6 @@ function withJobId(runtime, round, role, jobId) {
 async function main() {
   const emit = (line = '') => console.log(line);
   const { goalId, dryRun } = parseArgs(process.argv);
-  const store = createJobStore(STATE_DIR);
   const leaseStore = createLeaseStore(STATE_DIR);
   const profileStore = createDeveloperProfileStore(STATE_DIR);
   const machine = createLoopStateMachine();
@@ -119,6 +131,7 @@ async function main() {
   const goal = await discoverGoal({
     repoRoot: REPO_ROOT, goalId, resolveSha: (sha) => probe.commitExists(sha),
   });
+  currentGoalId = goal.goalId;
   machine.transitionTo(LOOP_STATES.GOAL_READY, { goal: goal.goalId });
 
   emit('Goal discovery:');
@@ -324,7 +337,18 @@ async function main() {
   emit('');
 
   if (reconciled.next.kind === DISPATCH_KINDS.HUMAN_REQUIRED) {
-    machine.transitionTo(LOOP_STATES.HUMAN_REQUIRED);
+    // The machine is at WORKTREE_READY here — this branch fires the moment
+    // reconciliation reads the ledger, before any dispatch — and WORKTREE_READY
+    // legally leads only to DEVELOPER_QUEUED/CORRECTION_QUEUED/STOPPED. This is
+    // never this process discovering HUMAN_REQUIRED by doing the work; it is
+    // the ledger already proving it (a round budget exhausted, a review that
+    // asked for a human, an unusable decision) on a resumed or freshly
+    // attached run. `hydrateTo` records that distinction instead of forcing a
+    // transition the graph correctly refuses.
+    machine.hydrateTo(LOOP_STATES.HUMAN_REQUIRED, {
+      reason: reconciled.next.reason,
+      evidence: { kind: reconciled.next.kind, round: reconciled.next.round ?? null, detail: reconciled.next.detail ?? null },
+    });
     machine.transitionTo(LOOP_STATES.AWAITING_HUMAN);
     emit(`Goal ${goal.goalId} needs a human: ${reconciled.next.reason}`);
     if (reconciled.next.detail) emit(`  ${reconciled.next.detail}`);
@@ -342,7 +366,20 @@ async function main() {
 
   if (reconciled.next.kind === DISPATCH_KINDS.CLOSE_GOAL) {
     emit(`Round ${reconciled.next.round} was ACCEPTED; the Goal is ready for closure.`);
-    machine.transitionTo(LOOP_STATES.ACCEPTED);
+    // Independent, fenced re-proof — never trusted from `reconciled.next`
+    // alone — that this exact review job, round and attempt earned ACCEPTED.
+    // Its return value IS the evidence `hydrateTo` requires: this jump is
+    // legitimate only because a completed, unblocked, correctly-scoped review
+    // says so, not because the ledger's first pass said so.
+    const closureEvidence = await assertGoalEligibleForClosure(store, {
+      goal: goal.goalId, round: reconciled.next.round, reviewJobId: reconciled.next.reviewJobId,
+    });
+    // See the HUMAN_REQUIRED branch above: WORKTREE_READY cannot legally reach
+    // ACCEPTED through `transitionTo`, and should not be able to — a Goal
+    // without a proven review must never slip through as though it had one.
+    machine.hydrateTo(LOOP_STATES.ACCEPTED, {
+      reason: 'AUTHORITATIVE_REVIEW_ACCEPTED', evidence: closureEvidence,
+    });
     await store.writeRuntime({
       ...(await store.readRuntime()),
       state: machine.state, round: reconciled.next.round, decision: 'ACCEPTED',
@@ -863,8 +900,14 @@ function blockerText(blocker) {
 if (isDirectExecution(import.meta.url)) {
   main()
     .then((code) => { process.exitCode = code; })
-    .catch((error) => {
+    .catch(async (error) => {
       const code = error instanceof SpikeError ? error.code : 'UNEXPECTED_ERROR';
+      // A state-machine defect (INVALID_TRANSITION and friends) is never a
+      // fact about the Goal, so it must never read as UNKNOWN_FATAL to
+      // run-auto.mjs — a separate process that only sees this exit code and
+      // whatever is on disk. Best-effort: a failure to record this must never
+      // hide the ORIGINAL error.
+      await recordOrchestratorFault(store, { goal: currentGoalId, error }).catch(() => {});
       console.error(`\nIA Loop — Goal Runner\n\nBlocker: [${code}] ${error.message}\n\nOverall:\nFAIL`);
       process.exitCode = 1;
     });

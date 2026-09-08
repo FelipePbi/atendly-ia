@@ -75,6 +75,55 @@ export function createLoopStateMachine({ initialState = LOOP_STATES.IDLE } = {})
       current = next;
       return { ...transition };
     },
+
+    /**
+     * Jumps directly to `next`, bypassing the ordinary transition graph.
+     *
+     * `transitionTo` models a process actually DOING the intermediate work —
+     * WORKTREE_READY -> DEVELOPER_QUEUED -> ... -> ACCEPTED is a claim that
+     * this process ran the Developer and the reviewer. A process that RESUMES
+     * an execution whose review already completed, on an earlier attempt or a
+     * prior run, never did that work and must never claim to have: walking the
+     * graph one fake transition at a time is exactly the "fictitious lifecycle"
+     * this exists to avoid, and skipping straight to ACCEPTED through
+     * `transitionTo` is correctly refused as INVALID_TRANSITION — a resumed
+     * WORKTREE_READY process never dispatched a reviewer in THIS run.
+     *
+     * `hydrateTo` is the one place allowed past that graph, and only under two
+     * conditions that make it unable to become a generic bypass:
+     *
+     *   - it requires both `reason` and `evidence` — there is no "hydrate for
+     *     no stated reason", so a caller cannot reach for this out of
+     *     convenience the way an added graph edge would invite;
+     *   - the CALLER is responsible for `evidence` actually proving the jump.
+     *     This function does not and cannot verify it — see
+     *     `assertGoalEligibleForClosure` in closure-eligibility.mjs for the one
+     *     case that matters today (resuming an already-ACCEPTED Goal). Nothing
+     *     here weakens `transitionTo`: every other caller, and every state this
+     *     one is not explicitly used for, still fails exactly as before.
+     *
+     * The history entry is tagged `hydrated: true`, so an audit trail can always
+     * tell a real, sequential transition from a reconciled jump.
+     */
+    hydrateTo(next, { reason, evidence } = {}) {
+      if (!isKnownState(next)) {
+        throw new SpikeError('UNKNOWN_STATE', `Unknown target state "${next}"`, { from: current, to: next });
+      }
+      if (!reason || evidence === undefined || evidence === null) {
+        throw new SpikeError(
+          'HYDRATION_EVIDENCE_REQUIRED',
+          `Hydrating ${current} -> ${next} needs both a reason and evidence; a state jump is never asserted for free.`,
+          { from: current, to: next },
+        );
+      }
+
+      const transition = {
+        from: current, to: next, at: new Date().toISOString(), hydrated: true, reason, evidence,
+      };
+      history.push(transition);
+      current = next;
+      return { ...transition };
+    },
   };
 }
 

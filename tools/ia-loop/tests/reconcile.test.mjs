@@ -320,7 +320,7 @@ test('THE INTEGRATION: R1 done and reviewed, reboot, recover, attach — next is
         protocolVersion: PROTOCOL_VERSION_V2, jobId: DEV_R1, goal: GOAL, round: 1,
         status: 'REVIEW_REQUIRED', summary: 'transporte durável', implementationReport: 'R1',
       },
-    });
+    }, { attemptId: (await store.readAttemptState('developer', DEV_R1))?.attemptId });
     await store.setJobStatus('developer', DEV_R1, 'COMPLETED');
 
     await store.publishJob('tech_lead', {
@@ -332,7 +332,7 @@ test('THE INTEGRATION: R1 done and reviewed, reboot, recover, attach — next is
         protocolVersion: PROTOCOL_VERSION_V2, jobId: REV_R1, goal: GOAL, round: 1,
         decision: 'CHANGES_REQUIRED', blockers: BLOCKERS, summary: 'quatro blockers',
       },
-    });
+    }, { attemptId: (await store.readAttemptState('tech_lead', REV_R1))?.attemptId });
     await store.setJobStatus('tech_lead', REV_R1, 'COMPLETED');
 
     const run = await auto.start({ fromGoal: GOAL, migrationAcceptedBaseline: BASELINE });
@@ -417,7 +417,7 @@ test('the same integration with the duplicate already published classifies it', 
         protocolVersion: PROTOCOL_VERSION_V2, jobId: DEV_R1, goal: GOAL, round: 1,
         status: 'REVIEW_REQUIRED', summary: 's',
       },
-    });
+    }, { attemptId: (await store.readAttemptState('developer', DEV_R1))?.attemptId });
     await store.setJobStatus('developer', DEV_R1, 'COMPLETED');
     await store.publishResult('tech_lead', REV_R1, {
       ok: true,
@@ -425,7 +425,7 @@ test('the same integration with the duplicate already published classifies it', 
         protocolVersion: PROTOCOL_VERSION_V2, jobId: REV_R1, goal: GOAL, round: 1,
         decision: 'CHANGES_REQUIRED', blockers: BLOCKERS, summary: 's',
       },
-    });
+    }, { attemptId: (await store.readAttemptState('tech_lead', REV_R1))?.attemptId });
     await store.setJobStatus('tech_lead', REV_R1, 'COMPLETED');
     await store.setJobStatus('developer', DUPE_R1, 'RUNNING');
 

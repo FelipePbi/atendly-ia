@@ -25,6 +25,9 @@ import { createProcessInspector } from './lib/process-inspector.mjs';
 import { OWNER_STATUS, collectOwnerEvidence, isRecoveryEligible, judgeOwner } from './lib/orphan-evidence.mjs';
 import { createHandoffStore, HANDOFF_STATUS } from './lib/recovery-handoff.mjs';
 import { SELECTABLE_DEVELOPER_PROFILES } from './lib/developer-profiles.mjs';
+import { reconcileExecutionState } from './lib/reconcile.mjs';
+import { STAGES } from './lib/stage-identity.mjs';
+import { LOOP_CONFIG } from './lib/loop-config.mjs';
 import { isDirectExecution } from './lib/direct-execution.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -180,6 +183,64 @@ async function main() {
       out.push(`  ${lease.jobId} — Goal ${goalOfJobId(lease.jobId) ?? 'unknown'}, ${classifyLease(lease, { now }).status}`);
     }
     out.push('');
+  }
+
+  // --- What the jobs actually say ----------------------------------------
+  //
+  // Printed from the RESULTS, not from the runtime. The runtime is a cache of
+  // what the orchestrator concluded, and it once concluded HUMAN_REQUIRED from
+  // a dead attempt's envelope while the live attempt was still working. When
+  // the two disagree, this block says so rather than repeating the cache.
+  if (currentGoal) {
+    const { ledger, next } = await reconcileExecutionState({ store, goal: currentGoal, maxRounds: LOOP_CONFIG.maxCorrectionRounds })
+      .catch(() => ({ ledger: new Map(), next: null }));
+
+    const reviews = [...ledger.values()]
+      .filter((stage) => stage.stageKey.endsWith(`:${STAGES.REVIEW}`) && stage.result?.decision)
+      .sort((a, b) => a.round - b.round);
+    const latestReview = reviews.at(-1) ?? null;
+
+    if (latestReview) {
+      const attempt = latestReview.attempts.find((a) => a.jobId === latestReview.completedBy);
+      out.push('Review:');
+      out.push(`  Job: ${latestReview.completedBy}`);
+      out.push(`  Attempt: ${attempt?.attemptId ?? 'not recorded'}`);
+      out.push(`  Status: ${latestReview.status}`);
+      out.push(`  Decision: ${latestReview.result.decision}`);
+      if ((latestReview.result.blockers ?? []).length > 0) {
+        out.push(`  Blockers: ${latestReview.result.blockers.length}`);
+      }
+      if (latestReview.result.nextDeveloperProfile) {
+        out.push(`  Next developer profile: ${latestReview.result.nextDeveloperProfile}`);
+      }
+      out.push('');
+    }
+
+    if (next) {
+      out.push('Next:');
+      out.push(`  ${currentGoal} R${next.round ?? '?'} ${next.kind}`);
+      if (next.kind === 'CORRECTION') {
+        const profile = goalExecution?.nextDeveloperProfile?.profile
+          ?? latestReview?.result?.nextDeveloperProfile
+          ?? goalExecution?.developerProfile?.profile
+          ?? 'SONNET_MEDIUM';
+        out.push(`  Developer profile: ${profile}`);
+        out.push(`  Blockers: ${(next.blockers ?? []).length}`);
+      }
+      if (next.reason) out.push(`  Reason: ${next.reason}`);
+
+      // The one thing a status screen must never do is repeat a human gate the
+      // results have already outlived.
+      const runtimeSaysHuman = goalExecution?.state === LOOP_STATES.HUMAN_REQUIRED
+        || goalExecution?.state === LOOP_STATES.AWAITING_HUMAN
+        || goalExecution?.decision === 'HUMAN_REQUIRED';
+      if (runtimeSaysHuman && next.kind !== 'HUMAN_REQUIRED') {
+        out.push('');
+        out.push('  The runtime still records HUMAN_REQUIRED, but the jobs on disk do not support it.');
+        out.push('  Reconcile with: npm run ia-loop:reconcile-runtime -- --goal ' + currentGoal);
+      }
+      out.push('');
+    }
   }
 
   // --- Run and orchestrator, kept apart ----------------------------------

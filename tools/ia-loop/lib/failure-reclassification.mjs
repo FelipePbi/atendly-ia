@@ -205,6 +205,11 @@ export async function reclassifyFailure(store, {
       repair,
     });
   }
+  // And cleared from the primary path, so the successor attempt this repair
+  // enables cannot find the predecessor's envelope waiting there.
+  await store.archiveResultForAttempt(role, jobId, attemptId, {
+    reason: 'RECLASSIFIED_AS_CAPACITY_WAIT',
+  });
 
   // The attempt becomes what it always was: one that ended because the model
   // said "not now". The stage stays unfinished and the same job keeps its id;

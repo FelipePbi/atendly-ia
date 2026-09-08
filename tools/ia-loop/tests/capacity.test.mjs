@@ -296,7 +296,7 @@ test('16/17/18/19. the wait record preserves resumeFrom, round, goal and baselin
 test('23. an existing result prevents a duplicate model call', async () => {
   await withStore(async (store) => {
     await store.publishJob('developer', developerJob());
-    await store.publishResult('developer', 'job-dev-1', { ok: true, result: DEV_RESULT });
+    await store.publishResult('developer', 'job-dev-1', { ok: true, result: DEV_RESULT }, { attemptId: (await store.readAttemptState('developer', 'job-dev-1'))?.attemptId });
 
     let calls = 0;
     const run = await runWithCapacity({
@@ -371,7 +371,7 @@ test('14/15. limits are per agent: one blocked agent does not block the other', 
     });
 
     // The Developer finished round 2; only the review is blocked.
-    await store.publishResult('developer', 'job-dev-1', { ok: true, result: DEV_RESULT });
+    await store.publishResult('developer', 'job-dev-1', { ok: true, result: DEV_RESULT }, { attemptId: (await store.readAttemptState('developer', 'job-dev-1'))?.attemptId });
 
     const clock = createFakeClock(NOW);
     await runWithCapacity({

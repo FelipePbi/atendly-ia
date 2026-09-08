@@ -261,9 +261,14 @@ export async function authorizeRetryAfterHarnessFix(store, {
     authorizedAt: at,
   };
 
-  // The failure envelope is archived under the attempt's own name before the
-  // successor can publish over it. The conclusion the harness drew about a2
-  // must outlive a3.
+  // The failure envelope is preserved under the attempt's own name AND removed
+  // from the primary path.
+  //
+  // Copying alone was not enough, and the cost of learning that was a whole
+  // review: a2's failure stayed on the primary path while a3 ran, and the
+  // orchestrator — arriving six seconds after the worker — read it as a3's
+  // answer and stopped the Goal for a human 4.5 minutes before a3 actually
+  // finished with CHANGES_REQUIRED.
   const archivedResult = evidence.resultPath.replace(/\.json$/, `.failed-${evidence.attemptId}.json`);
   if (!await readJson(archivedResult)) {
     await writeJsonAtomic(archivedResult, {
@@ -274,6 +279,9 @@ export async function authorizeRetryAfterHarnessFix(store, {
       authorization,
     });
   }
+  await store.archiveResultForAttempt(role, jobId, evidence.attemptId, {
+    reason: 'RETRY_AUTHORIZED_AFTER_HARNESS_FIX',
+  });
 
   const current = await readJson(evidence.jobPath, { required: true });
   await writeJsonAtomic(evidence.jobPath, {

@@ -1878,8 +1878,10 @@ session ids nem dados pessoais.
 | `lib/direct-execution.mjs` | Guard de execução direta: importar um entry point não o executa |
 | `lib/harness-retry.mjs` | Autorização auditável de UMA retry depois de corrigir bug do harness |
 | `run-authorize-retry.mjs` | CLI do repair de harness, dry-run por padrão |
+| `lib/runtime-reconciliation.mjs` | Precedência dos fatos sobre o runtime derivado |
+| `run-reconcile-runtime.mjs` | CLI da reconciliação do runtime, dry-run por padrão |
 | `fixtures/synthetic-goal.md` | Tarefa sintética, fora do runtime |
-| `tests/*.test.mjs` | 595 testes com processo/agente fake; nenhuma chamada real |
+| `tests/*.test.mjs` | 620 testes com processo/agente fake; nenhuma chamada real |
 
 ## V8 — Telemetria zero-token + roteamento adaptativo do Developer
 
@@ -2147,6 +2149,140 @@ ambos passados por `realpath`, então bin symlinkado, argv relativo e caixa de
 caminho no Windows continuam comparando iguais; o que não resolve responde
 `false`, porque não iniciar é a direção segura. Há regressão que importa todos os
 entry points e afirma que nenhum imprime coisa alguma.
+
+## V10 — Resultados cercados por attempt e reconciliação do runtime
+
+Escrito a partir de uma falha real, e de uma que doeu mais que as anteriores
+porque **nada tinha falhado**.
+
+A review a3 do Goal005 R1 rodou 4 min 34 s, resumiu a sessão Fable, leu código,
+rodou `validate:core` e lint, subiu e derrubou um PostgreSQL efêmero, e concluiu
+`CHANGES_REQUIRED` com 2 blockers e escalation `OPUS_MEDIUM`. Isso ficou correto
+em disco o tempo todo.
+
+Mesmo assim o Goal parou como `HUMAN_REQUIRED / UNKNOWN_FATAL` — **4 min 29 s
+antes de a a3 terminar**.
+
+### O que aconteceu
+
+O repair que autorizou a a3 **copiou** o envelope de falha da a2 para um arquivo
+histórico, mas deixou o original no caminho primário. E `waitForResult` retornava
+"o primeiro envelope não-nulo", sem saber de qual attempt ele era. O worker
+reivindicou a a3 às 15:14:00; o orquestrador começou às 15:14:06, foi direto
+para a espera, encontrou a falha da a2 e a consumiu como se fosse a resposta da
+a3.
+
+| horário | fato |
+| --- | --- |
+| 15:04:57 | repair enfileira a3; **primário ainda com a falha da a2** |
+| 15:14:00 | worker reivindica a a3 |
+| 15:14:06 | orquestrador inicia |
+| 15:14:15 | `SUPERVISED_STOP` HUMAN_REQUIRED / UNKNOWN_FATAL |
+| **15:18:45** | **a a3 publica `CHANGES_REQUIRED`** |
+
+Dois defeitos compostos: leitura sem cerca, e ciclo de vida errado do arquivo
+primário.
+
+### Cerca por attempt
+
+Um resultado pertence a **uma** attempt, e diz isso de si mesmo:
+
+```json
+{ "attemptId": "005-r1-tech_lead-ca1d7bf4-a3",
+  "result": { "attemptId": "005-r1-tech_lead-ca1d7bf4-a3", "decision": "CHANGES_REQUIRED" } }
+```
+
+**Publicação.** `publishResult` **exige** `attemptId` (`RESULT_ATTEMPT_REQUIRED`
+sem ele). A attempt autorizada é lida do **job em disco**, não confiada em quem
+escreve: um escritor atrasado é justamente a parte que não pode saber que foi
+superada. Uma a2 tardia tentando publicar depois de a a3 existir é recusada com
+`STALE_ATTEMPT_RESULT` — e o que ela escreveu é preservado em
+`<jobId>.stale-<attemptId>.json`, nunca descartado. A mesma attempt publicando
+duas vezes é idempotente.
+
+**Leitura.** `readResult` responde a duas perguntas diferentes, e confundi-las
+era o bug:
+
+| chamada | pergunta | quem usa |
+| --- | --- | --- |
+| `readResult(role, jobId)` | "qual o último resultado válido deste job lógico?" | reconciliação, fechamento, reuso |
+| `readResult(role, jobId, { expectedAttemptId })` | "**esta** attempt já respondeu?" | toda execução ativa |
+
+Na forma cercada, um envelope de outra attempt devolve `null` e o leitor
+**continua esperando** — nunca consome. Um envelope sem `attemptId` é anterior à
+cerca e também conta como stale: não dá para provar a quem pertence, e consumir
+sem prova foi exatamente o erro. Cada stale distinto reporta uma vez, via
+`onStale`, e vira evento `STALE_RESULT_IGNORED` — observação, não erro fatal.
+
+`hasCompletedResult` aceita o mesmo `expectedAttemptId` opcional.
+
+### Ciclo de vida do arquivo primário
+
+`results/<role>/<jobId>.json` é o resultado da attempt **corrente**, e nada mais.
+
+Quando uma sucessora é materializada — recovery de `INTERRUPTED`, retry de
+capacidade, ou repair de harness —, `archiveResultForAttempt` preserva o
+envelope em `<jobId>.attempt-<attemptId>.json` e **remove o primário**, nessa
+ordem: preserva primeiro, apaga depois, então uma queda entre as duas não perde
+nada. Copiar e deixar o antigo disponível foi o que custou uma review inteira.
+
+Os três caminhos usam a mesma infraestrutura: `startNextAttempt`,
+`reclassifyFailure` e `authorizeRetryAfterHarnessFix`.
+
+### Precedência: os fatos vencem o cache
+
+`runtime.json` é estado **derivado** — o que o orquestrador concluiu enquanto
+andava. Os jobs e seus resultados são os fatos.
+
+1. resultado `COMPLETED` válido da attempt corrente/mais recente;
+2. `attemptHistory` do JobStore;
+3. o stage ledger persistido;
+4. o runtime derivado.
+
+**Um human gate no runtime nunca vence um resultado concluído.**
+
+```bash
+npm run ia-loop:reconcile-runtime -- --goal 005          # dry-run
+npm run ia-loop:reconcile-runtime -- --goal 005 --apply
+```
+
+Corrige **apenas o cache**: não cria attempt, não chama modelo, não repara
+falha. Recusa (`NOTHING_TO_RECONCILE`) quando o runtime já concorda com o disco
+**e** quando os fatos realmente pedem uma pessoa. Os blockers vêm exatamente do
+`ReviewDecision` persistido — nunca re-derivados, nunca reinventados —, o
+`nextDeveloperProfile` vem da mesma review, e `roundsRun` é reconstruído das
+reviews em disco. Evento auditável:
+`RUNTIME_RECONCILED_FROM_COMPLETED_RESULT`, com decisão e razão anteriores ao
+lado da autoritativa. Nada é apagado.
+
+### A corrida worker-antes-do-orquestrador
+
+Deixou de importar quem começa primeiro. O orquestrador lê o `attemptId`
+corrente do job depois do dispatch e passa esse valor para `waitForResult`; um
+envelope de qualquer outra attempt é ignorado, venha ele de antes ou de depois.
+O teste cobre as duas ordens de início explicitamente.
+
+### O que o status mostra agora
+
+Lido dos **resultados**, não do runtime:
+
+```
+Review:
+  Job: 005-r1-tech_lead-ca1d7bf4
+  Attempt: 005-r1-tech_lead-ca1d7bf4-a3
+  Status: COMPLETED
+  Decision: CHANGES_REQUIRED
+  Blockers: 2
+  Next developer profile: OPUS_MEDIUM
+
+Next:
+  005 R2 CORRECTION
+  Developer profile: OPUS_MEDIUM
+  Blockers: 2
+```
+
+E quando o runtime ainda carrega um human gate que os resultados já
+desmentiram, a tela diz isso e aponta o comando — em vez de repetir o cache.
 
 ## Limitações conhecidas
 

@@ -287,9 +287,12 @@ export function createJobStore(stateDir) {
      * dies before the state is advanced, and the restart would otherwise call
      * the model again for work that is already done.
      */
-    async hasCompletedResult(role, jobId) {
+    async hasCompletedResult(role, jobId, { expectedAttemptId = null } = {}) {
       const envelope = await readJson(paths.result(role, jobId));
-      return envelope?.result?.ok === true;
+      if (envelope?.result?.ok !== true) return false;
+      if (!expectedAttemptId) return true;
+      const foundAttemptId = envelope.attemptId ?? envelope.result?.attemptId ?? null;
+      return foundAttemptId === expectedAttemptId;
     },
 
     newJobId(goal, round, role) {
@@ -519,6 +522,15 @@ export function createJobStore(stateDir) {
 
         const next = attempt + 1;
         const nextAttemptId = attemptIdOf(jobId, next);
+
+        // The predecessor's result leaves the primary path BEFORE the successor
+        // exists. Otherwise there is a window in which the job says "attempt
+        // N+1" while the primary result still holds attempt N's answer, and a
+        // reader that arrives in that window consumes the wrong one.
+        await this.archiveResultForAttempt(role, jobId, attemptId, {
+          reason: `SUPERSEDED_BY_${nextAttemptId}`,
+        });
+
         await writeJsonAtomic(path, {
           ...current,
           status: 'QUEUED',
@@ -582,29 +594,126 @@ export function createJobStore(stateDir) {
      * A late result from a superseded attempt is kept for audit under a
      * distinct name and never overwrites the authorised one.
      */
+    /**
+     * Publishes the result of ONE attempt.
+     *
+     * The attempt is not optional. A result published without one cannot be
+     * fenced, and an unfenced result is exactly what let Goal 005 R1 read a
+     * dead attempt's failure as the live attempt's answer.
+     *
+     * The authorised attempt is read from the job on disk rather than trusted
+     * from the caller: a late writer does not know it has been superseded, so
+     * asking it would be asking the one party that cannot know.
+     */
     async publishResult(role, jobId, result, { attemptId = null, expectedAttemptId = null } = {}) {
       assertRole(role);
 
-      if (expectedAttemptId && attemptId && attemptId !== expectedAttemptId) {
+      if (!attemptId) {
+        fail('RESULT_ATTEMPT_REQUIRED',
+          `Refusing to publish a result for ${jobId} without an attemptId: an unfenced result can be consumed by the wrong attempt.`);
+      }
+
+      // The job file is the authority on which attempt is current. The caller
+      // may also state what it expected; both must agree.
+      const authorised = expectedAttemptId
+        ?? (await this.readAttemptState(role, jobId))?.attemptId
+        ?? attemptId;
+
+      if (attemptId !== authorised) {
+        // Never dropped: a late result is evidence about a real execution, and
+        // it is kept under its own name rather than discarded or written over
+        // the attempt that legitimately owns the primary path.
         const stalePath = join(stateDir, 'results', role, `${jobId}.stale-${attemptId}.json`);
         await writeJsonAtomic(stalePath, {
           storeVersion: STORE_VERSION, publishedAt: new Date().toISOString(),
-          staleAttemptId: attemptId, expectedAttemptId, result,
+          staleAttemptId: attemptId, expectedAttemptId: authorised, result,
         });
         fail('STALE_ATTEMPT_RESULT',
-          `Result from attempt ${attemptId} rejected; ${expectedAttemptId} is the authorised attempt`);
+          `Result from attempt ${attemptId} rejected; ${authorised} is the authorised attempt`,
+          { jobId, attemptId, expectedAttemptId: authorised, preservedAt: stalePath });
       }
-      if (attemptId) result = { ...result, attemptId };
+
       await writeJsonAtomic(paths.result(role, jobId), {
         storeVersion: STORE_VERSION,
         publishedAt: new Date().toISOString(),
-        result,
+        // Recorded at both levels: the envelope says which attempt wrote it,
+        // and the result carries it too, so a reader that only has the payload
+        // can still tell.
+        attemptId,
+        result: { ...result, attemptId },
       });
     },
 
-    async readResult(role, jobId) {
+    /**
+     * Moves the current primary result out of the way, preserving it.
+     *
+     * Called when a successor attempt is materialised. Copying was not enough:
+     * the copy is history, but the ORIGINAL stayed on the primary path, and a
+     * reader waiting for the successor found the predecessor's failure sitting
+     * there and consumed it.
+     *
+     * Returns what it did, so a caller can report it rather than assume it.
+     */
+    async archiveResultForAttempt(role, jobId, attemptId, { reason = null } = {}) {
+      assertRole(role);
+      const primary = paths.result(role, jobId);
+      const envelope = await readJson(primary);
+      if (!envelope) return { archived: false, reason: 'NO_PRIMARY_RESULT' };
+
+      const archivePath = primary.replace(/\.json$/, `.attempt-${attemptId}.json`);
+      if (!await readJson(archivePath)) {
+        await writeJsonAtomic(archivePath, {
+          storeVersion: STORE_VERSION,
+          archivedAt: new Date().toISOString(),
+          attemptId,
+          reason,
+          original: envelope,
+        });
+      }
+
+      // Only now is the primary cleared. Preserve first, remove second: a crash
+      // between the two loses nothing.
+      await rm(primary, { force: true });
+      return { archived: true, archivePath, attemptId };
+    },
+
+    /**
+     * Reads a job's result.
+     *
+     * Two different questions, and conflating them is the bug this signature
+     * exists to prevent:
+     *
+     *   without `expectedAttemptId`  "what is this logical job's latest valid
+     *                                 result?" — reconciliation and closure ask
+     *                                 this, and it is the right question there.
+     *
+     *   with `expectedAttemptId`     "did THIS attempt answer yet?" — every
+     *                                 active execution asks this, and anything
+     *                                 written by another attempt is not an
+     *                                 answer to it.
+     *
+     * A stored envelope that names no attempt predates fencing. Under a fenced
+     * read it is treated as stale: it cannot be proven to belong to the attempt
+     * being waited on, and consuming it unproven is precisely what went wrong.
+     */
+    async readResult(role, jobId, { expectedAttemptId = null, onStale = null } = {}) {
       const envelope = await readJson(paths.result(role, jobId));
-      return envelope?.result ?? null;
+      if (!envelope) return null;
+
+      const result = envelope.result ?? null;
+      if (!expectedAttemptId) return result;
+
+      const foundAttemptId = envelope.attemptId ?? result?.attemptId ?? null;
+      if (foundAttemptId === expectedAttemptId) return result;
+
+      if (onStale) {
+        try {
+          onStale({ jobId, role, expectedAttemptId, foundAttemptId });
+        } catch {
+          // Reporting a stale read must never break the read itself.
+        }
+      }
+      return null;
     },
 
     async writeRuntime(snapshot) {

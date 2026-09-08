@@ -292,7 +292,7 @@ test('17. the stage stays incomplete while an attempt is waiting', async () => {
   await withStore(async (store) => {
     await store.publishJob('tech_lead', reviewJob());
     await store.publishJob('developer', developerJob());
-    await store.publishResult('developer', DEV_JOB, { ok: true, result: { status: 'REVIEW_REQUIRED' } });
+    await store.publishResult('developer', DEV_JOB, { ok: true, result: { status: 'REVIEW_REQUIRED' } }, { attemptId: (await store.readAttemptState('developer', DEV_JOB))?.attemptId });
     await store.setJobStatus('developer', DEV_JOB, 'COMPLETED');
     await store.setJobStatus('tech_lead', REV_JOB, 'WAITING_FOR_CAPACITY');
 
@@ -336,7 +336,7 @@ test('23. an attempt that is RUNNING blocks a new one', async () => {
 test('24. a completed attempt is reused, never recomputed', async () => {
   await withStore(async (store) => {
     await store.publishJob('tech_lead', reviewJob());
-    await store.publishResult('tech_lead', REV_JOB, { ok: true, result: { decision: 'ACCEPTED' } });
+    await store.publishResult('tech_lead', REV_JOB, { ok: true, result: { decision: 'ACCEPTED' } }, { attemptId: (await store.readAttemptState('tech_lead', REV_JOB))?.attemptId });
 
     let calls = 0;
     const run = await runWithCapacity({
@@ -491,7 +491,7 @@ async function goal005AtTheStop(store) {
   await store.publishResult('developer', DEV_JOB, {
     ok: true,
     result: { jobId: DEV_JOB, goal: GOAL, round: 1, status: 'REVIEW_REQUIRED', implementationReport: 'Goal 005' },
-  });
+  }, { attemptId: (await store.readAttemptState('developer', DEV_JOB))?.attemptId });
   await store.setJobStatus('developer', DEV_JOB, 'COMPLETED');
 
   await store.publishJob('tech_lead', reviewJob());
@@ -504,7 +504,7 @@ async function goal005AtTheStop(store) {
   await store.publishResult('tech_lead', REV_JOB, {
     ok: false, code: 'UNKNOWN_FATAL',
     message: 'Unrecoverable failure; a human must look at it.', escalation: 'HUMAN_REQUIRED',
-  });
+  }, { attemptId: (await store.readAttemptState('tech_lead', REV_JOB))?.attemptId });
   await store.writeRuntime({
     mode: 'REAL_EXECUTION', goal: GOAL, round: 1, state: LOOP_STATES.AWAITING_HUMAN,
     migrationAcceptedBaseline: BASELINE, executionBase: EXECUTION_BASE,
@@ -675,7 +675,7 @@ test('a failure that still classifies the same way is not repairable', async () 
       type: 'AGENT_FAILURE', jobId: REV_JOB, reason: 'UNKNOWN_FATAL',
       diagnostic: 'CLI exited with code 1: something nobody has ever seen',
     });
-    await store.publishResult('tech_lead', REV_JOB, { ok: false, code: 'UNKNOWN_FATAL', message: 'x' });
+    await store.publishResult('tech_lead', REV_JOB, { ok: false, code: 'UNKNOWN_FATAL', message: 'x' }, { attemptId: (await store.readAttemptState('tech_lead', REV_JOB))?.attemptId });
 
     await assert.rejects(
       reclassifyFailure(store, { role: 'tech_lead', jobId: REV_JOB, resumeFrom: LOOP_STATES.REVIEWER_RUNNING }),
@@ -693,7 +693,7 @@ test('a repair that would still need a human is refused', async () => {
       type: 'AGENT_FAILURE', jobId: REV_JOB, reason: 'UNKNOWN_FATAL',
       diagnostic: 'CLI exited with code 1: Not logged in. Please run /login',
     });
-    await store.publishResult('tech_lead', REV_JOB, { ok: false, code: 'UNKNOWN_FATAL', message: 'x' });
+    await store.publishResult('tech_lead', REV_JOB, { ok: false, code: 'UNKNOWN_FATAL', message: 'x' }, { attemptId: (await store.readAttemptState('tech_lead', REV_JOB))?.attemptId });
 
     // AUTH_ERROR is a better reading, and still a person's problem: turning the
     // stop into a wait would hide it.
@@ -707,7 +707,7 @@ test('a repair that would still need a human is refused', async () => {
 test('a completed stage is never reopened by a repair', async () => {
   await withStore(async (store) => {
     await goal005AtTheStop(store);
-    await store.publishResult('tech_lead', REV_JOB, { ok: true, result: { decision: 'ACCEPTED' } });
+    await store.publishResult('tech_lead', REV_JOB, { ok: true, result: { decision: 'ACCEPTED' } }, { attemptId: (await store.readAttemptState('tech_lead', REV_JOB))?.attemptId });
 
     await assert.rejects(
       reclassifyFailure(store, { role: 'tech_lead', jobId: REV_JOB, resumeFrom: LOOP_STATES.REVIEWER_RUNNING }),

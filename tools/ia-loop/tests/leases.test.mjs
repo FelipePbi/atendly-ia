@@ -235,19 +235,26 @@ test('15/16. a stale attempt result is neither accepted nor allowed to overwrite
     });
     await store.publishJob('developer', job);
 
-    await store.publishResult('developer', 'j', { ok: true, result: { from: 'a2' } }, { attemptId: 'a2' });
+    // Real attempt ids, materialised the way the store materialises them: the
+    // authorised attempt is now whatever the JOB says it is, so a late writer
+    // cannot authorise itself by claiming to be expected.
+    await store.setJobStatus('developer', 'j', 'INTERRUPTED');
+    const a2 = await store.startNextAttempt('developer', 'j', { reason: 'INTERRUPTED' });
+    assert.equal(a2.attemptId, 'j-a2');
+
+    await store.publishResult('developer', 'j', { ok: true, result: { from: 'a2' } }, { attemptId: 'j-a2' });
 
     await assert.rejects(
       store.publishResult('developer', 'j', { ok: true, result: { from: 'a1' } },
-        { attemptId: 'a1', expectedAttemptId: 'a2' }),
+        { attemptId: 'j-a1' }),
       codeIs('STALE_ATTEMPT_RESULT'),
     );
 
     // The authorised result stands, and the late one is kept for audit.
     const current = await store.readResult('developer', 'j');
     assert.equal(current.result.from, 'a2');
-    const stale = JSON.parse(await readFile(join(dir, 'results', 'developer', 'j.stale-a1.json'), 'utf8'));
-    assert.equal(stale.staleAttemptId, 'a1');
+    const stale = JSON.parse(await readFile(join(dir, 'results', 'developer', 'j.stale-j-a1.json'), 'utf8'));
+    assert.equal(stale.staleAttemptId, 'j-a1');
   });
 });
 
@@ -256,6 +263,9 @@ test('a published result carries its attempt identity', async () => {
     const store = createJobStore(dir);
     await store.publishResult('developer', 'j', { ok: true, result: {} }, { attemptId: 'a1' });
     assert.equal((await store.readResult('developer', 'j')).attemptId, 'a1');
+    // And a fenced read only answers for the attempt it was asked about.
+    assert.equal(await store.readResult('developer', 'j', { expectedAttemptId: 'a1' }) !== null, true);
+    assert.equal(await store.readResult('developer', 'j', { expectedAttemptId: 'a2' }), null);
   });
 });
 

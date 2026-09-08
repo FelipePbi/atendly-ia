@@ -73,7 +73,7 @@ async function goal004(dir) {
   await store.publishResult('developer', DEV_R1, ok({
     protocolVersion: PROTOCOL_VERSION_V2, jobId: DEV_R1, goal: GOAL, round: 1,
     status: 'REVIEW_REQUIRED', summary: 's',
-  }));
+  }), { attemptId: (await store.readAttemptState('developer', DEV_R1))?.attemptId });
   await store.setJobStatus('developer', DEV_R1, 'COMPLETED');
 
   await store.publishJob('tech_lead', {
@@ -82,7 +82,7 @@ async function goal004(dir) {
   await store.publishResult('tech_lead', REV_R1, ok({
     protocolVersion: PROTOCOL_VERSION_V2, jobId: REV_R1, goal: GOAL, round: 1,
     decision: 'CHANGES_REQUIRED', blockers: BLOCKERS, summary: 's',
-  }));
+  }), { attemptId: (await store.readAttemptState('tech_lead', REV_R1))?.attemptId });
   await store.setJobStatus('tech_lead', REV_R1, 'COMPLETED');
 
   await store.publishJob('developer', correctionJob());
@@ -291,7 +291,7 @@ test('15. a completed a2 is reused, never re-attempted', async () => {
     await store.publishResult('developer', JOB, ok({
       protocolVersion: PROTOCOL_VERSION_V2, jobId: JOB, goal: GOAL, round: 2,
       status: 'REVIEW_REQUIRED', summary: 'corrigido',
-    }));
+    }), { attemptId: (await store.readAttemptState('developer', JOB))?.attemptId });
     await store.setJobStatus('developer', JOB, 'COMPLETED');
 
     const again = await store.startNextAttempt('developer', JOB, { reason: 'X' });
@@ -423,7 +423,7 @@ test('THE INTEGRATION: a1 running, process dies, recover, a2 claimed, result, re
     await store.publishResult('developer', JOB, ok({
       protocolVersion: PROTOCOL_VERSION_V2, jobId: JOB, goal: GOAL, round: 2,
       status: 'REVIEW_REQUIRED', summary: 'quatro blockers corrigidos',
-    }));
+    }), { attemptId: (await store.readAttemptState('developer', JOB))?.attemptId });
     await store.setJobStatus('developer', JOB, 'COMPLETED');
     await leases.releaseJob(JOB);
 

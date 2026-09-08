@@ -219,11 +219,16 @@ test('evidence is never borrowed from another attempt', async () => {
     // reaching back for whichever diagnostic happens to be last.
     const second = await authorize(store);
     assert.equal(second.outcome, HARNESS_RETRY_OUTCOMES.ALREADY_REPAIRED);
+    // The repair also CLEARS the primary result path, so there is no longer a
+    // failure envelope sitting there for the successor to be judged by — which
+    // is the whole point: a3 must not inherit a2's answer.
     await assert.rejects(
       () => findHarnessFailure(store, { role: 'tech_lead', jobId: JOB_ID }),
-      (e) => e.code === 'NO_FAILURE_EVIDENCE',
-      'a queued successor has no failure evidence, and none may be borrowed',
+      (e) => e.code === 'NO_FAILURE_TO_REPAIR' || e.code === 'NO_FAILURE_EVIDENCE',
+      'a queued successor has no failure of its own, and may borrow none',
     );
+    assert.equal(await store.readResult('tech_lead', JOB_ID), null,
+      'the primary result path is empty while the successor runs');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -87,12 +87,30 @@ function formatHealth(h) {
  * without failing the job, without releasing the lease and without creating a
  * new attempt.
  */
-async function waitForResult(store, role, jobId, { emit, leaseStore }) {
+async function waitForResult(store, role, jobId, { emit, leaseStore, expectedAttemptId = null }) {
   const startedAt = Date.now();
   let lastState = null;
+  // Reported once per distinct stale attempt, so a five-second poll does not
+  // fill the terminal and the event log with the same fact.
+  const reportedStale = new Set();
 
   for (;;) {
-    const envelope = await store.readResult(role, jobId);
+    // Fenced by attempt. "The first non-null envelope" was the bug: after a
+    // repair materialised a3, the primary path still held a2's failure, and
+    // this returned it as though a3 had answered — 4.5 minutes before a3
+    // actually did, with a completely different decision.
+    const envelope = await store.readResult(role, jobId, {
+      expectedAttemptId,
+      onStale: ({ foundAttemptId }) => {
+        if (reportedStale.has(foundAttemptId)) return;
+        reportedStale.add(foundAttemptId);
+        emit(`  … ignoring a result left by ${foundAttemptId ?? 'an unnamed attempt'}; waiting for ${expectedAttemptId}.`);
+        void store.appendEvent({
+          type: 'STALE_RESULT_IGNORED',
+          role, jobId, expectedAttemptId, foundAttemptId: foundAttemptId ?? null,
+        }).catch(() => {});
+      },
+    });
     if (envelope) return { envelope };
 
     if (Date.now() - startedAt > RESULT_TIMEOUT_MS) {
@@ -585,7 +603,13 @@ async function main() {
       }
       machine.transitionTo(phaseRunning);
       emit('Waiting for the Developer…');
-      const observed = await waitForResult(store, 'developer', devJobId, { emit, leaseStore });
+      // Which attempt this run is waiting on, read from the job the dispatch
+      // just settled. Without it the wait would accept any attempt's result.
+      const devAttemptId = (await store.readAttemptState('developer', devJobId))?.attemptId ?? null;
+      emit(`  attempt: ${devAttemptId ?? 'unknown'}`);
+      const observed = await waitForResult(store, 'developer', devJobId, {
+        emit, leaseStore, expectedAttemptId: devAttemptId,
+      });
       if (observed.observerTimeout || observed.workerOffline) {
         await reportObserverStop({ store, emit, role: 'developer', jobId: devJobId, observed, goal: goal.goalId, round });
         return 0;
@@ -722,7 +746,11 @@ async function main() {
       machine.transitionTo(LOOP_STATES.REVIEWER_RUNNING);
       emit('Waiting for the Tech Lead…');
 
-      const observedReview = await waitForResult(store, 'tech_lead', revJobId, { emit, leaseStore });
+      const revAttemptId = (await store.readAttemptState('tech_lead', revJobId))?.attemptId ?? null;
+      emit(`  attempt: ${revAttemptId ?? 'unknown'}`);
+      const observedReview = await waitForResult(store, 'tech_lead', revJobId, {
+        emit, leaseStore, expectedAttemptId: revAttemptId,
+      });
       if (observedReview.observerTimeout || observedReview.workerOffline) {
         await reportObserverStop({ store, emit, role: 'tech_lead', jobId: revJobId, observed: observedReview, goal: goal.goalId, round });
         return 0;

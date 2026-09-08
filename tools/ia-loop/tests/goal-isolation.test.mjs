@@ -314,7 +314,7 @@ test('21. reconciliation filters by the current Goal', async () => {
     const store = createJobStore(dir);
     for (const entry of goal004Entries()) {
       await store.publishJob(entry.role, entry.job);
-      if (entry.result) await store.publishResult(entry.role, entry.job.jobId, entry.result);
+      if (entry.result) await store.publishResult(entry.role, entry.job.jobId, entry.result, { attemptId: (await store.readAttemptState(entry.role, entry.job.jobId))?.attemptId });
     }
     await store.setJobStatus('developer', DEV_004_R1, 'SUPERSEDED');
 
@@ -366,7 +366,7 @@ test('23. Goal005 R1 is a new stage, not a retry', async () => {
     const store = createJobStore(dir);
     for (const entry of goal004Entries()) {
       await store.publishJob(entry.role, entry.job);
-      if (entry.result) await store.publishResult(entry.role, entry.job.jobId, entry.result);
+      if (entry.result) await store.publishResult(entry.role, entry.job.jobId, entry.result, { attemptId: (await store.readAttemptState(entry.role, entry.job.jobId))?.attemptId });
     }
     await store.setJobStatus('developer', DEV_004_R1, 'SUPERSEDED');
     await store.writeRuntime(goal005Runtime());
@@ -406,7 +406,7 @@ test('25. no attempt of Goal004 is read during Goal005 dispatch', async () => {
     const store = createJobStore(dir);
     for (const entry of goal004Entries()) {
       await store.publishJob(entry.role, entry.job);
-      if (entry.result) await store.publishResult(entry.role, entry.job.jobId, entry.result);
+      if (entry.result) await store.publishResult(entry.role, entry.job.jobId, entry.result, { attemptId: (await store.readAttemptState(entry.role, entry.job.jobId))?.attemptId });
     }
     await store.setJobStatus('developer', DEV_004_R1, 'SUPERSEDED');
 
@@ -629,7 +629,7 @@ test('the whole boundary: 004 R2 ACCEPTED → closure → 005 starts clean at R1
     // --- Goal 004, exactly as it ran ---------------------------------------
     for (const entry of goal004Entries()) {
       await store.publishJob(entry.role, entry.job);
-      if (entry.result) await store.publishResult(entry.role, entry.job.jobId, entry.result);
+      if (entry.result) await store.publishResult(entry.role, entry.job.jobId, entry.result, { attemptId: (await store.readAttemptState(entry.role, entry.job.jobId))?.attemptId });
     }
     await store.setJobStatus('developer', DEV_004_R1, 'SUPERSEDED');
     await store.writeRuntime(goal004Runtime());

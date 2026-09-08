@@ -117,11 +117,18 @@ export async function runWithCapacity({
 
     await store.setJobStatus(role, jobId, 'RUNNING');
 
+    // Read AFTER the attempt has been materialised and the job marked RUNNING,
+    // so it is the attempt this invocation actually belongs to. Every result
+    // published below is fenced by it.
+    const currentAttemptId = (await store.readAttemptState(role, jobId))?.attemptId ?? null;
+
     const agentOutcome = await invoke({ attempt });
 
     const failed = Boolean(agentOutcome?.error) || !agentOutcome?.structuredOutput;
     if (!failed) {
-      await store.publishResult(role, jobId, { ok: true, result: agentOutcome.payload });
+      await store.publishResult(role, jobId, { ok: true, result: agentOutcome.payload }, {
+        attemptId: currentAttemptId,
+      });
       await store.setJobStatus(role, jobId, 'COMPLETED');
 
       // Only a genuine capacity wait ends with a capacity event. A retry after
@@ -161,7 +168,7 @@ export async function runWithCapacity({
       round,
       agent: role,
       jobId,
-      attemptId: (await store.readAttemptState(role, jobId))?.attemptId ?? null,
+      attemptId: currentAttemptId,
       reason: decision.reason,
       code: classification.code,
       attempt,
@@ -183,7 +190,7 @@ export async function runWithCapacity({
         code: decision.reason,
         message: decision.note ?? 'Escalated to a human.',
         escalation: 'HUMAN_REQUIRED',
-      });
+      }, { attemptId: currentAttemptId });
       await store.appendEvent({ type: 'HUMAN_REQUIRED', goal, round, agent: role, jobId, reason: decision.reason });
       onEvent({ type: 'HUMAN_REQUIRED', jobId, reason: decision.reason, note: decision.note });
 

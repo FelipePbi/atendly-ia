@@ -85,6 +85,33 @@ export const JOB_DISPATCH = Object.freeze({
  * makes — not something a restart assumes.
  */
 export const RETRYABLE_JOB_STATUSES = Object.freeze(['INTERRUPTED']);
+
+/**
+ * The id of one attempt at a job.
+ *
+ * The job names the logical stage; the attempt names one try at it. Keeping
+ * them apart is what lets an interrupted try be superseded by a successor
+ * instead of by a second job under a different random name.
+ */
+export function attemptIdOf(jobId, attempt) {
+  return `${jobId}-a${attempt}`;
+}
+
+/**
+ * A state no job should ever be in.
+ *
+ * The job says QUEUED — so a worker considers it — while the attempt it points
+ * at is INTERRUPTED, so nothing is actually waiting to be picked up. Recovery
+ * produced exactly this by requeuing the logical job without materialising the
+ * next attempt, and the Developer sat IDLE against a job that looked ready.
+ */
+export function isInconsistentAttemptState(envelope) {
+  if (!envelope) return false;
+  const attemptStatus = envelope.attemptStatus ?? null;
+  if (!attemptStatus) return false;
+  return (envelope.status === 'QUEUED' || envelope.status === 'RUNNING')
+    && (attemptStatus === 'INTERRUPTED' || attemptStatus === 'SUPERSEDED');
+}
 export function isClaimableJobStatus(status) {
   return status === null || status === undefined || !NON_CLAIMABLE_JOB_STATUSES.includes(status);
 }
@@ -183,13 +210,29 @@ export function createJobStore(stateDir) {
      * per jobId, this is what makes a retry safe: a job that already COMPLETED
      * is never re-sent to a model.
      */
+    /**
+     * The job's status IS the current attempt's status. They are written
+     * together because letting them drift is what produced a job that said
+     * QUEUED while the attempt it pointed at was INTERRUPTED.
+     */
     async setJobStatus(role, jobId, status) {
       if (!JOB_STATUSES.includes(status)) {
         fail('INVALID_JOB_STATUS', `Unknown job status ${JSON.stringify(status)}`);
       }
       const path = paths.job(role, jobId);
       const envelope = await readJson(path, { required: true });
-      await writeJsonAtomic(path, { ...envelope, status, statusAt: new Date().toISOString() });
+      const attempt = Number.isInteger(envelope.attempt) && envelope.attempt >= 1 ? envelope.attempt : 1;
+      await writeJsonAtomic(path, {
+        ...envelope,
+        status,
+        // Written together, always. A job whose status said QUEUED while the
+        // attempt it pointed at was INTERRUPTED is what left a worker waiting
+        // forever on something that was never claimable.
+        attempt,
+        currentAttemptId: envelope.currentAttemptId ?? attemptIdOf(jobId, attempt),
+        attemptStatus: status,
+        statusAt: new Date().toISOString(),
+      });
       return status;
     },
 
@@ -291,6 +334,10 @@ export function createJobStore(stateDir) {
         storeVersion: STORE_VERSION,
         publishedAt: new Date().toISOString(),
         status: 'QUEUED',
+        attempt: 1,
+        currentAttemptId: attemptIdOf(job.jobId, 1),
+        attemptStatus: 'QUEUED',
+        attemptHistory: [],
         job,
       });
       return path;
@@ -325,63 +372,141 @@ export function createJobStore(stateDir) {
         return { outcome: JOB_DISPATCH.ALREADY_COMPLETED, attempt: existing.attempt ?? 1, jobId: job.jobId };
       }
 
-      const status = existing.status ?? null;
-      if (status === 'RUNNING') {
+      // The ATTEMPT decides, not the job-level status. A job that says QUEUED
+      // while the attempt it points at is INTERRUPTED is not queued at all —
+      // nothing is waiting to be claimed — and reading that as ALREADY_QUEUED
+      // is what left a worker IDLE forever against work it was meant to do.
+      const state = await this.readAttemptState(role, job.jobId);
+      const attemptStatus = state?.attemptStatus ?? existing.status ?? null;
+
+      if (attemptStatus === 'RUNNING') {
         // Whether that attempt is really alive is the lease's question, not
         // this one's. Dispatch simply does not create a second attempt beside
         // one that still looks live.
-        return { outcome: JOB_DISPATCH.ALREADY_RUNNING, attempt: existing.attempt ?? 1, jobId: job.jobId };
+        return {
+          outcome: JOB_DISPATCH.ALREADY_RUNNING,
+          attempt: state?.attempt ?? 1, attemptId: state?.attemptId ?? null, jobId: job.jobId,
+        };
       }
-      if (status === 'QUEUED') {
-        return { outcome: JOB_DISPATCH.ALREADY_QUEUED, attempt: existing.attempt ?? 1, jobId: job.jobId };
+      if (attemptStatus === 'QUEUED') {
+        return {
+          outcome: JOB_DISPATCH.ALREADY_QUEUED,
+          attempt: state?.attempt ?? 1, attemptId: state?.attemptId ?? null, jobId: job.jobId,
+        };
       }
 
-      if (!RETRYABLE_JOB_STATUSES.includes(status)) {
-        fail('STAGE_NOT_RETRYABLE',
-          `Job ${job.jobId} is ${status}; a new attempt is not something a restart may assume.`,
-          { jobId: job.jobId, status });
+      // One implementation of "make the next attempt", shared with recovery.
+      const started = await this.startNextAttempt(role, job.jobId, { reason });
+      if (started.created) {
+        return {
+          outcome: JOB_DISPATCH.NEW_ATTEMPT,
+          attempt: started.attempt, attemptId: started.attemptId,
+          previousAttemptId: started.previousAttemptId, jobId: job.jobId,
+        };
+      }
+      return {
+        outcome: started.reason === 'ATTEMPT_RUNNING'
+          ? JOB_DISPATCH.ALREADY_RUNNING : JOB_DISPATCH.ALREADY_QUEUED,
+        attempt: started.attempt ?? 1, attemptId: started.attemptId ?? null,
+        jobId: job.jobId, raced: true,
+      };
+    },
+
+
+    /**
+     * Reads the attempt the job currently points at.
+     *
+     * A job written before attempts were modelled reports attempt 1 with its
+     * own status, which is what it effectively was.
+     */
+    async readAttemptState(role, jobId) {
+      const envelope = await readJson(paths.job(role, jobId));
+      if (!envelope) return null;
+      const attempt = Number.isInteger(envelope.attempt) && envelope.attempt >= 1 ? envelope.attempt : 1;
+      return {
+        attempt,
+        attemptId: envelope.currentAttemptId ?? attemptIdOf(jobId, attempt),
+        attemptStatus: envelope.attemptStatus ?? envelope.status ?? null,
+        status: envelope.status ?? null,
+        history: envelope.attemptHistory ?? [],
+        inconsistent: isInconsistentAttemptState(envelope),
+      };
+    },
+
+    /**
+     * Materialises the next attempt at a job.
+     *
+     * This is what "requeue" actually means, and conflating the two is the bug
+     * it was written for: recovery set the job back to QUEUED while it still
+     * pointed at the interrupted attempt, so there was nothing new for a worker
+     * to claim and the Developer waited forever against a job that looked ready.
+     *
+     * Requeuing a logical job and creating its next attempt are different acts.
+     * Only this one produces something claimable.
+     */
+    async startNextAttempt(role, jobId, { reason = null } = {}) {
+      assertRole(role);
+      const path = paths.job(role, jobId);
+
+      if (await this.hasCompletedResult(role, jobId)) {
+        return { created: false, reason: 'STAGE_ALREADY_COMPLETED' };
       }
 
-      // Exactly one new attempt, even if two recoveries race: the winner is
-      // decided by exclusive creation, the same primitive the leases use.
+      // Exactly one new attempt, even if two recoveries race. The loser rereads
+      // and finds the attempt the winner made, rather than adding a third.
       const marker = `${path}.attempt`;
       let handle;
       try {
         handle = await open(marker, 'wx');
       } catch (error) {
         if (error.code === 'EEXIST') {
-          return { outcome: JOB_DISPATCH.ALREADY_QUEUED, attempt: existing.attempt ?? 1, jobId: job.jobId, raced: true };
+          const settled = await this.readAttemptState(role, jobId);
+          return { created: false, reason: 'ATTEMPT_IN_PROGRESS', ...settled };
         }
-        fail('FILE_UNREADABLE', `Cannot start a new attempt for ${job.jobId}: ${error.message}`);
+        fail('FILE_UNREADABLE', `Cannot start the next attempt for ${jobId}: ${error.message}`);
       }
 
       try {
         const current = await readJson(path);
-        if (!RETRYABLE_JOB_STATUSES.includes(current?.status ?? null)) {
-          return { outcome: JOB_DISPATCH.ALREADY_QUEUED, attempt: current?.attempt ?? 1, jobId: job.jobId, raced: true };
+        if (!current) fail('UNKNOWN_JOB', `Job ${jobId} does not exist for role "${role}"`);
+
+        const attempt = Number.isInteger(current.attempt) && current.attempt >= 1 ? current.attempt : 1;
+        const attemptStatus = current.attemptStatus ?? current.status ?? null;
+        const attemptId = current.currentAttemptId ?? attemptIdOf(jobId, attempt);
+
+        // Already claimable, and genuinely so: nothing to do.
+        if (attemptStatus === 'QUEUED' || attemptStatus === 'RUNNING') {
+          return {
+            created: false, reason: attemptStatus === 'RUNNING' ? 'ATTEMPT_RUNNING' : 'ATTEMPT_ALREADY_QUEUED',
+            attempt, attemptId, attemptStatus,
+          };
         }
 
-        const previousAttempt = current.attempt ?? 1;
-        const attempt = previousAttempt + 1;
+        if (!RETRYABLE_JOB_STATUSES.includes(attemptStatus)) {
+          fail('STAGE_NOT_RETRYABLE',
+            `Attempt ${attemptId} is ${attemptStatus}; a new attempt is not something a restart may assume.`,
+            { jobId, attemptId, attemptStatus });
+        }
+
+        const next = attempt + 1;
+        const nextAttemptId = attemptIdOf(jobId, next);
         await writeJsonAtomic(path, {
           ...current,
           status: 'QUEUED',
-          attempt,
-          // History is appended, never rewritten: the interrupted attempt stays
-          // in the record as what it was.
+          attempt: next,
+          currentAttemptId: nextAttemptId,
+          attemptStatus: 'QUEUED',
+          // Appended, never rewritten: the interrupted attempt stays in the
+          // record as what it was.
           attemptHistory: [
             ...(current.attemptHistory ?? []),
-            {
-              attempt: previousAttempt,
-              status: 'INTERRUPTED',
-              reason: reason ?? null,
-              endedAt: new Date().toISOString(),
-            },
+            { attempt, attemptId, status: attemptStatus, reason: reason ?? null, endedAt: new Date().toISOString() },
           ],
           requeuedAt: new Date().toISOString(),
           job: current.job,
         });
-        return { outcome: JOB_DISPATCH.NEW_ATTEMPT, attempt, jobId: job.jobId };
+
+        return { created: true, attempt: next, attemptId: nextAttemptId, previousAttemptId: attemptId };
       } finally {
         await handle.close();
         await rm(marker, { force: true });

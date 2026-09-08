@@ -16,6 +16,7 @@ import {
   startLeaseHeartbeat,
   workerInstanceId,
 } from './leases.mjs';
+import { isClaimableJobStatus } from './job-store.mjs';
 
 /** Moderate polling. No file watcher needed at this cadence, no busy loop. */
 export const POLL_INTERVAL_MS = 1_000;
@@ -84,10 +85,16 @@ export async function runWorkerLoop({
       log('ERROR', `cannot list jobs: ${error.message}`);
     }
 
-    const pending = files.filter((f) => !seen.has(f));
-    for (const file of pending) {
-      seen.add(file);
+    // Seen is keyed by ATTEMPT, not by job. Keyed by job, a skip was
+    // permanent: a job refused once because an orphaned lease made it
+    // unclaimable was never looked at again, so the attempt recovery later
+    // materialised for it was never picked up, and the worker stayed IDLE
+    // against work that was waiting for it.
+    for (const file of files) {
       const jobId = file.replace(/\.json$/, '');
+      const attemptNumber = await store.readJobAttempt(role, jobId);
+      const seenKey = `${jobId}#a${attemptNumber}`;
+      if (seen.has(seenKey)) continue;
       let claimed = null;
       let stopLeaseHeartbeat = null;
       try {
@@ -97,7 +104,18 @@ export async function runWorkerLoop({
         // transition may create a NEW jobId for a retry or correction round.
         if (!(await store.isJobClaimable(role, jobId))) {
           const status = await store.readJobStatus(role, jobId);
+          // Terminal for this attempt: remembering it is correct.
+          seen.add(seenKey);
           log('SKIP', `${jobId} is ${status}`);
+          continue;
+        }
+
+        // A job whose CURRENT ATTEMPT is not itself claimable is not ready,
+        // whatever the job-level status says. Not remembered: the next
+        // attempt is exactly what this worker is waiting for.
+        const attemptState = await store.readAttemptState(role, jobId);
+        if (attemptState && !isClaimableJobStatus(attemptState.attemptStatus)) {
+          log('SKIP', `${attemptState.attemptId} is ${attemptState.attemptStatus}`);
           continue;
         }
 
@@ -114,13 +132,17 @@ export async function runWorkerLoop({
           if (verdict.escalate) {
             await store.appendEvent({ type: 'ORPHANED_EXECUTION_UNCERTAIN', role, jobId, detail: verdict.detail });
           }
+          // Deliberately not remembered. This is a state recovery can change,
+          // and a worker that stopped looking would never notice it had.
           continue;
         }
+
+        seen.add(seenKey);
 
         // The attempt number lives on the job. Hardcoding 1 meant a second
         // attempt at an interrupted stage would have carried the first
         // attempt's id, and result fencing could not have told them apart.
-        const attemptId = attemptIdFor(jobId, await store.readJobAttempt(role, jobId));
+        const attemptId = attemptIdFor(jobId, attemptNumber);
         claimed = await leaseStore.claimJob(jobId, {
           attemptId, agent: role, goal: job.goal, round: job.round, worktree: job.worktree,
         });

@@ -342,16 +342,72 @@ async function main() {
   }
 
   if (plan.action === RECOVERY_ACTIONS.REQUEUE_JOB) {
-    // The old attempt is recorded as INTERRUPTED — not FAILED, because nothing
-    // was learned about the work — and the SAME job is queued again.
-    await store.setJobStatus(plan.agent, plan.jobId, 'INTERRUPTED');
-    await store.appendEvent({
-      type: 'JOB_INTERRUPTED', role: plan.agent, jobId: plan.jobId,
-      goal: runtime.goal, round: runtime.round, runId: autonomousRun?.autonomousRunId ?? null,
+    // Requeuing the logical job and creating its next attempt are different
+    // acts, and only the second produces something a worker can claim. This
+    // used to set the job back to QUEUED while it still pointed at the
+    // interrupted attempt: the job looked ready, nothing was, and the
+    // Developer sat IDLE against it forever.
+    const before = await store.readAttemptState(plan.agent, plan.jobId);
+
+    // The lease of the attempt being retired goes first, and only with proof.
+    // Left in place it is what makes the worker refuse the job — the new
+    // attempt would be as unclaimable as the old one.
+    const heldByOldAttempt = await leaseStore.readJobLease(plan.jobId).catch(() => null);
+    if (heldByOldAttempt) {
+      const heldEvidence = await collectOwnerEvidence(heldByOldAttempt, inspector, { now });
+      const heldVerdict = judgeOwner({ lease: heldByOldAttempt, evidence: heldEvidence, now });
+      if (isRecoveryEligible(heldVerdict)) {
+        await leaseStore.retireJob(plan.jobId, { expected: heldByOldAttempt, proof: heldVerdict.proof });
+        if (heldByOldAttempt.worktree) {
+          const wt = await leaseStore.readWorktreeLease(heldByOldAttempt.worktree).catch(() => null);
+          if (wt && wt.attemptId === heldByOldAttempt.attemptId) {
+            await leaseStore.retireWorktree(heldByOldAttempt.worktree, { expected: wt, proof: heldVerdict.proof })
+              .catch(() => null);
+          }
+        }
+        await store.appendEvent({
+          type: 'ORPHANED_LEASE_RETIRED', jobId: plan.jobId,
+          goal: runtime.goal, round: runtime.round,
+          runId: autonomousRun?.autonomousRunId ?? null,
+          owner: heldByOldAttempt.workerInstanceId ?? null, proof: heldVerdict.proof,
+          attemptId: heldByOldAttempt.attemptId ?? null,
+        });
+        emit(`Retired the lease of ${heldByOldAttempt.attemptId ?? plan.jobId} (${heldVerdict.proof}).`);
+      } else {
+        emit(`RECOVERY_BLOCKED`);
+        emit(`  The attempt still holds its lease and abandonment is not proven: ${heldVerdict.detail}`);
+        return 1;
+      }
+    }
+
+    if (before?.attemptStatus !== 'INTERRUPTED') {
+      await store.setJobStatus(plan.agent, plan.jobId, 'INTERRUPTED');
+      await store.appendEvent({
+        type: 'JOB_INTERRUPTED', role: plan.agent, jobId: plan.jobId,
+        attemptId: before?.attemptId ?? null,
+        goal: runtime.goal, round: runtime.round, runId: autonomousRun?.autonomousRunId ?? null,
+      });
+    }
+
+    const started = await store.startNextAttempt(plan.agent, plan.jobId, {
+      reason: verdict?.proof ?? 'ORCHESTRATOR_GONE',
     });
-    await store.setJobStatus(plan.agent, plan.jobId, 'QUEUED');
+
+    if (started.created) {
+      await store.appendEvent({
+        type: 'JOB_ATTEMPT_MATERIALISED', role: plan.agent, jobId: plan.jobId,
+        attemptId: started.attemptId, attempt: started.attempt,
+        previousAttemptId: started.previousAttemptId,
+        goal: runtime.goal, round: runtime.round, runId: autonomousRun?.autonomousRunId ?? null,
+      });
+      emit(`New attempt ${started.attemptId} is queued; ${started.previousAttemptId} stays in the record as INTERRUPTED.`);
+    } else {
+      emit(`Attempt ${started.attemptId ?? before?.attemptId} is already ${started.reason}; no second one was created.`);
+    }
+
     await store.appendEvent({
       type: 'JOB_REQUEUED_AFTER_RECOVERY', role: plan.agent, jobId: plan.jobId,
+      attemptId: started.attemptId ?? before?.attemptId ?? null,
       goal: runtime.goal, round: runtime.round, runId: autonomousRun?.autonomousRunId ?? null,
     });
   }

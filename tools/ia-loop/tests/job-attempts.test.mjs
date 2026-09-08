@@ -144,7 +144,8 @@ test('the worker takes the attempt number from the job, so a2 is not mistaken fo
   const source = await readFile(new URL('../lib/worker-loop.mjs', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /attemptIdFor\(jobId, 1\)/,
     'hardcoding 1 meant result fencing could not tell two attempts apart');
-  assert.match(source, /attemptIdFor\(jobId, await store\.readJobAttempt\(role, jobId\)\)/);
+  assert.match(source, /readJobAttempt\(role, jobId\)/, 'the number comes from the job');
+  assert.match(source, /attemptIdFor\(jobId, attemptNumber\)/, 'and the lease is claimed for that attempt');
 });
 
 // ===========================================================================

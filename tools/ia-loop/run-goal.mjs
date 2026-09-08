@@ -374,26 +374,6 @@ async function main() {
 
     const beforeDev = await captureSnapshot({ probe });
 
-    // The complete content identity of the tree the agent is about to be
-    // given, persisted before it runs. The older evidence covered tracked
-    // files only, so after a duplicate attempt the untracked half of the tree
-    // could not be proven either way. This makes the next comparison total.
-    const artefactDirForRound = join(STATE_DIR, 'artefacts', `${goal.goalId}-r${round}`);
-    await fs.mkdir(artefactDirForRound, { recursive: true });
-    const fingerprintBefore = await fullWorktreeFingerprint(absWorktree, executionBase, {
-      worktreeInitialHead: worktree.worktreeInitialHead,
-    });
-    await fs.writeFile(
-      join(artefactDirForRound, 'worktree-fingerprint-before.json'),
-      JSON.stringify(fingerprintBefore, null, 2), 'utf8',
-    );
-    await store.appendEvent({
-      type: 'WORKTREE_FINGERPRINT_CAPTURED', goal: goal.goalId, round, phase: 'BEFORE_DEVELOPER',
-      contentHash: fingerprintBefore.contentHash,
-      trackedDiffHash: fingerprintBefore.trackedDiffHash,
-      untrackedHash: fingerprintBefore.untrackedHash,
-      untrackedFileCount: fingerprintBefore.untrackedFileCount,
-    });
 
     // A distinct job id per round is what makes idempotency meaningful — and it
     // is recorded per ROLE, not just per round. A single currentJobId could not
@@ -454,6 +434,30 @@ async function main() {
         reason: 'RECOVERED_INTERRUPTED_ATTEMPT',
       });
       emit(dispatchMessage(dispatched, isCorrection ? 'Correction' : 'Developer'));
+
+      // The complete content identity of the tree this attempt is handed,
+      // captured before the model runs and named by ATTEMPT. A single
+      // worktree-fingerprint-before.json was overwritten on every pass, so the
+      // state a given attempt actually started from was lost the moment the
+      // next one ran — and reconstructing that is the whole reason to capture
+      // it. Earlier snapshots are never rewritten.
+      const attemptNumber = dispatched.attempt ?? 1;
+      const fingerprintBefore = await fullWorktreeFingerprint(absWorktree, executionBase, {
+        worktreeInitialHead: worktree.worktreeInitialHead,
+      });
+      await fs.mkdir(join(STATE_DIR, 'artefacts', `${goal.goalId}-r${round}`), { recursive: true });
+      await fs.writeFile(
+        join(STATE_DIR, 'artefacts', `${goal.goalId}-r${round}`, `worktree-fingerprint-before-a${attemptNumber}.json`),
+        JSON.stringify({ ...fingerprintBefore, attempt: attemptNumber, jobId: devJobId }, null, 2), 'utf8',
+      );
+      await store.appendEvent({
+        type: 'WORKTREE_FINGERPRINT_CAPTURED', goal: goal.goalId, round,
+        phase: 'BEFORE_DEVELOPER', attempt: attemptNumber, jobId: devJobId,
+        contentHash: fingerprintBefore.contentHash,
+        trackedDiffHash: fingerprintBefore.trackedDiffHash,
+        untrackedHash: fingerprintBefore.untrackedHash,
+        untrackedFileCount: fingerprintBefore.untrackedFileCount,
+      });
       if (dispatched.outcome === JOB_DISPATCH.NEW_ATTEMPT) {
         await store.appendEvent({
           type: 'JOB_ATTEMPT_STARTED', role: 'developer', jobId: devJobId,

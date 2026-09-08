@@ -1107,6 +1107,52 @@ preservando o motivo da parada, quem resolveu e a nota. Sem nota, nada é
 arquivado — silêncio não limpa problema — e o loop não pode executar esse
 caminho sozinho.
 
+### Job não é attempt
+
+Depois do fix anterior, o recovery decidiu `REQUEUE_JOB` para a correção
+interrompida da R2 e devolveu o job para `QUEUED` — **apontando ainda para a
+tentativa interrompida**. O job parecia pronto, nada estava, a lease órfã da `a1`
+continuava no disco, e o Developer ficou `IDLE` contra um trabalho que era dele.
+Indefinidamente.
+
+Re-enfileirar o job lógico e criar a próxima tentativa são atos diferentes. Só o
+segundo produz algo reivindicável.
+
+```
+job         004-r2-correction-dde6dca4     o estágio 004:r2:correction
+attempt a1  ...-a1  INTERRUPTED            uma tentativa dele
+attempt a2  ...-a2  QUEUED                 a seguinte
+```
+
+**Estado proibido, agora detectado:** job `QUEUED` + attempt `INTERRUPTED`.
+`isInconsistentAttemptState()` o reconhece e `needsNewAttempt()` o traduz em
+"precisa de nova tentativa" em vez de "já enfileirado" — que era a leitura que
+deixava o worker esperando. `setJobStatus` passou a escrever status do job e da
+tentativa **juntos**, para que não voltem a divergir.
+
+`startNextAttempt()` é a única implementação de "faça a próxima tentativa",
+compartilhada por recovery e dispatch. Ela: recusa se o estágio tem resultado;
+recusa se a tentativa atual está `QUEUED` ou `RUNNING`; exige `INTERRUPTED`;
+incrementa; grava `currentAttemptId`; e **anexa** a anterior ao `attemptHistory`.
+Duas recoveries concorrentes criam **uma** tentativa — vencedor por criação
+exclusiva de arquivo.
+
+**Leases.** A lease da `a1` é aposentada com prova de orphan e arquivada em
+`.superseded`; a `a2` reivindica a sua. Sem isso, a tentativa nova seria tão
+inreivindicável quanto a velha: era a lease órfã que fazia o worker recusar.
+
+**O worker parou de se cegar.** O conjunto `seen` era por *job*: uma recusa
+virava permanente, e a tentativa que o recovery materializasse depois nunca era
+notada. Agora a chave é `<jobId>#a<N>`, e uma recusa que o recovery pode desfazer
+não é memorizada.
+
+### Fingerprint por tentativa
+
+`worktree-fingerprint-before-a1.json`, `-a2.json`, … Um arquivo único era
+sobrescrito a cada passagem, então o estado de onde uma tentativa partiu se
+perdia assim que a seguinte rodava — e reconstruir isso é a razão de capturar.
+Snapshots anteriores nunca são reescritos.
+
 ### Estágio, tentativa, e o direito de tentar de novo
 
 O recovery decidiu `REQUEUE_JOB` para uma correção interrompida, a reconciliação
@@ -1479,7 +1525,7 @@ agora tem — `migration-loop-a1`, `-a2` a cada recuperação, na mesma run.
 ## Como executar
 
 ```bash
-npm run test:ia-loop       # 426 testes locais, sem chamadas reais a modelo
+npm run test:ia-loop       # 442 testes locais, sem chamadas reais a modelo
 ```
 
 ```bash
@@ -1598,7 +1644,7 @@ session ids nem dados pessoais.
 | `lib/persistent-session.mjs` | Sessão por agente: cria no 1º turno, resume nos seguintes |
 | `lib/session-registry.mjs` | Registro durável de sessões, com escrita atômica |
 | `fixtures/synthetic-goal.md` | Tarefa sintética, fora do runtime |
-| `tests/*.test.mjs` | 426 testes com processo/agente fake; nenhuma chamada real |
+| `tests/*.test.mjs` | 442 testes com processo/agente fake; nenhuma chamada real |
 
 ## Limitações conhecidas
 

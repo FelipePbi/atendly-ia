@@ -72,7 +72,15 @@ export function buildStageLedger(jobs) {
     }
 
     const stage = ledger.get(key);
-    stage.attempts.push({ jobId: entry.job.jobId, status: entry.status, hasResult: Boolean(entry.result) });
+    stage.attempts.push({
+      jobId: entry.job.jobId,
+      status: entry.status,
+      // The attempt is the thing that can be claimed. A job saying QUEUED
+      // while its attempt is INTERRUPTED is not queued at all.
+      attemptId: entry.attemptId ?? null,
+      attemptStatus: entry.attemptStatus ?? entry.status,
+      hasResult: Boolean(entry.result),
+    });
 
     if (entry.result) {
       if (stage.completedBy && stage.completedBy !== entry.job.jobId) {
@@ -91,7 +99,10 @@ export function buildStageLedger(jobs) {
   // another attempt is a duplicate, whatever the runtime points at.
   for (const stage of ledger.values()) {
     if (stage.status !== STAGE_STATUS.COMPLETED) {
-      const live = stage.attempts.find((a) => a.status === 'RUNNING' || a.status === 'QUEUED');
+      // In flight means an ATTEMPT is genuinely waiting or working. Judged
+      // on the job status alone, an interrupted attempt looked in flight and
+      // the loop waited for something nobody was going to do.
+      const live = stage.attempts.find((a) => a.attemptStatus === 'RUNNING' || a.attemptStatus === 'QUEUED');
       if (live) stage.status = STAGE_STATUS.IN_FLIGHT;
       continue;
     }
@@ -119,9 +130,24 @@ const get = (ledger, goal, round, stage) => ledger.get(stageKey({ goal, round, s
  */
 function reusableAttempt(stage) {
   const attempts = stage?.attempts ?? [];
-  const live = attempts.find((a) => a.status === 'RUNNING' || a.status === 'QUEUED');
+  const live = attempts.find((a) => a.attemptStatus === 'RUNNING' || a.attemptStatus === 'QUEUED');
   if (live) return live;
-  return attempts.find((a) => a.status === 'INTERRUPTED') ?? null;
+  return attempts.find((a) => a.attemptStatus === 'INTERRUPTED') ?? null;
+}
+
+/**
+ * Does this stage need a new attempt before anything can happen?
+ *
+ * True when the stage is unfinished and no attempt is actually claimable —
+ * including the state that caused the failure this was written for: the job
+ * reads QUEUED while the attempt it points at is INTERRUPTED, so a worker
+ * considers the job, finds nothing to claim, and waits forever.
+ */
+export function needsNewAttempt(stage) {
+  if (!stage || stage.status === STAGE_STATUS.COMPLETED) return false;
+  const attempts = stage.attempts ?? [];
+  if (attempts.length === 0) return false;
+  return !attempts.some((a) => a.attemptStatus === 'RUNNING' || a.attemptStatus === 'QUEUED');
 }
 
 /**
@@ -146,7 +172,8 @@ export function decideNextDispatch({ ledger, goal, maxRounds = 3 }) {
         goal, round, stage, role: roleForStage(stage),
         stageKey: stageKey({ goal, round, stage }),
         resumeAttempt: reusableAttempt(implementation)?.jobId ?? null,
-        resumeAttemptStatus: reusableAttempt(implementation)?.status ?? null,
+        resumeAttemptStatus: reusableAttempt(implementation)?.attemptStatus ?? null,
+        needsNewAttempt: needsNewAttempt(implementation),
       };
     }
 
@@ -158,7 +185,8 @@ export function decideNextDispatch({ ledger, goal, maxRounds = 3 }) {
         stageKey: stageKey({ goal, round, stage: STAGES.REVIEW }),
         implementationJobId: implementation.completedBy,
         resumeAttempt: reusableAttempt(review)?.jobId ?? null,
-        resumeAttemptStatus: reusableAttempt(review)?.status ?? null,
+        resumeAttemptStatus: reusableAttempt(review)?.attemptStatus ?? null,
+        needsNewAttempt: needsNewAttempt(review),
       };
     }
 
@@ -196,7 +224,8 @@ export function decideNextDispatch({ ledger, goal, maxRounds = 3 }) {
           blockers,
           fromReviewJobId: review.completedBy,
           resumeAttempt: reusableAttempt(nextCorrection)?.jobId ?? null,
-          resumeAttemptStatus: reusableAttempt(nextCorrection)?.status ?? null,
+          resumeAttemptStatus: reusableAttempt(nextCorrection)?.attemptStatus ?? null,
+          needsNewAttempt: needsNewAttempt(nextCorrection),
         };
       }
       continue;
@@ -272,7 +301,13 @@ export async function reconcileExecutionState({ store, goal, maxRounds = 3 }) {
         ? await store.readResult(role, jobId)
         : null;
 
-      entries.push({ role, job, status, result: envelope?.result ?? envelope ?? null });
+      const attemptState = await store.readAttemptState(role, jobId).catch(() => null);
+      entries.push({
+        role, job, status,
+        attemptId: attemptState?.attemptId ?? null,
+        attemptStatus: attemptState?.attemptStatus ?? status,
+        result: envelope?.result ?? envelope ?? null,
+      });
     }
   }
 

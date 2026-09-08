@@ -44,6 +44,9 @@ export interface AvailableSlot {
 }
 
 export interface ListAppointmentsInput {
+  /** Pessoa resolvida. Quando presente, o telefone não é consultado. */
+  customerId?: string;
+  /** Filtro por candidatos: todas as pessoas que compartilham o número. */
   customerPhone?: string;
   startDate: string;
   endDate: string;
@@ -62,8 +65,13 @@ export interface CreateCalendarAppointmentInput {
   serviceIds: string[];
   date: string;
   startTime: string;
-  customerName: string;
-  customerPhone: string;
+  /**
+   * Pessoa já resolvida. Quando ausente, o cliente é criado **dentro** da
+   * transação de confirmação, depois de o slot ser validado.
+   */
+  customerId?: string;
+  customerName?: string;
+  customerPhone?: string;
   comments?: string;
   stepMinutes: number;
   idempotencyKey: string;

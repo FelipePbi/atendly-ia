@@ -29,6 +29,10 @@ export const coreSteps = [
   npm("apps/health-worker", "check:health-worker", "run", "check"),
 
   npm("apps/ai-orchestrator", "test:ai-orchestrator", "test"),
+  // Regras de identidade de cliente que não dependem de banco: telefone não
+  // exclusivo, criação explícita e autorização de notas/tags. Persistência e
+  // transação de confirmação ficam em validate:integration.
+  npm("apps/scheduling-service", "test:scheduling-service", "test"),
   // Adapter HTTP do frontend: sessão/CSRF sem cookie jar compartilhado. Não
   // abre banco nem rede, então pertence ao core.
   npm("apps/frontend", "test:frontend", "test"),
@@ -71,11 +75,6 @@ export const coreSteps = [
     name: "test:bff",
     cwd: "apps/bff",
     skip: "only the integration suite exists; it runs in validate:integration",
-  },
-  {
-    name: "test:scheduling-service",
-    cwd: "apps/scheduling-service",
-    skip: "package has no automated test suite",
   },
   {
     name: "test:contracts",

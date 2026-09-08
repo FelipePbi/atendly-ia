@@ -116,7 +116,7 @@ Grafo existente de 3.039 nós. Consulta por vocabulário `auth tenant session bu
 
 **FATOS consolidados:** núcleo operacional independente da IA, com CalendarService, factory e dois providers. O provider Atendly já oferece soma de multi-serviço, snapshots em AppointmentItem, cancelamento sem apagar appointment e remarcação por atualização transacional. Create e reschedule usam Serializable e advisory lock por tenant/data. Não é uma base a descartar.
 
-O motor de disponibilidade considera intervalos semanais, exceções por data, blocos e agendamentos não cancelados. A gestão HTTP não completa todas essas estruturas: exceções não têm rota de gestão localizada; hold, compromisso pessoal distinto, séries recorrentes, presença, falta e valor final não aparecem como capacidades completas. Serviço tem somente FIXED/ON_REQUEST, duração obrigatória e ativo. Cliente é identificado por telefone normalizado único no tenant; upsert pode renomeá-lo antes da transação de agendamento.
+O motor de disponibilidade considera intervalos semanais, exceções por data, blocos e agendamentos não cancelados. A gestão HTTP não completa todas essas estruturas: exceções não têm rota de gestão localizada; hold, compromisso pessoal distinto, séries recorrentes, presença, falta e valor final não aparecem como capacidades completas. Serviço tem somente FIXED/ON_REQUEST, duração obrigatória e ativo. Cliente é identificado por telefone normalizado único no tenant; upsert pode renomeá-lo antes da transação de agendamento. **Superado no Goal006** — ver o delta ao final deste documento.
 
 Minha Agenda continua recebendo leitura e escrita operacional. O snapshot de migração atual consulta hoje até dez anos à frente, deriva clientes desses agendamentos, filtra deleted e reduz estados. Migração exige destino vazio, bloqueia todos os itens se houver conflito e conclui/troca fonte automaticamente. Há tabela de job e claim condicional, mas execução usa Set/queueMicrotask locais e recuperação global no boot sem lease. Isso não implementa importação única do produto.
 
@@ -436,4 +436,71 @@ no [review005](reviews/005-review.md) sobre a base `8551717`.
 - Continuam **NÃO VERIFICADOS:** WhatsApp real, execução hospedada da CI, deploy,
   `migrate deploy`/`diff` da IA em banco com pgvector e os demais limites do
   fechamento factual. Handoffs `OPEN` legados não são resolvidos pela rotação
-  de sessão, e mensagens não textuais do contato não renovam a sessão.
+  de sessão (resolvido no Goal006), e mensagens não textuais do contato não
+  renovam a sessão.
+
+## Delta implementado — Goal006, 2026-09-08 (ACCEPTED na rodada 1)
+
+A fotografia histórica acima permanece como registro da baseline. Os FATOs de
+"Scheduling, catálogo, clientes e importação" que descrevem cliente por
+telefone único e upsert que renomeia, e o resíduo do Goal005 sobre handoffs
+`OPEN`, estão superados pelos fatos abaixo, verificados no
+[review006](reviews/006-review.md) sobre a base `8acd4c6`.
+
+- **FATO atual:** `apps/scheduling-service/prisma/schema.prisma` tem `Customer`
+  com `phone`/`normalizedPhone` opcionais e índice não exclusivo
+  `(tenantId, normalizedPhone)`; `(tenantId, id)` continua a identidade
+  referenciada pelas FKs. `CustomerRelation` (um responsável principal por
+  cliente, `proposedBy`/`status`/`confirmedBy` com datas), `CustomerNote` e
+  `CustomerTag` (ambas com `aiAuthorized`, padrão falso), com FK composta por
+  tenant. Migrations `20260908160000_goal006_customer_identity_expand` e
+  `20260908161000_goal006_customer_phone_not_unique` (corte da unicidade
+  antiga, sem tocar em linha).
+- **FATO atual:** `AtendlyCustomerService.create` exige nome ou telefone e
+  nunca consulta por telefone; `update` é a única operação que altera nome e
+  telefone; `findCandidatesByPhone`/`list({ phone })` devolvem candidatos;
+  `primaryGuardian`/`setPrimaryGuardian`/`confirmPrimaryGuardian`/
+  `clearPrimaryGuardian` (a IA só propõe); notas e tags com autorização;
+  `aiAuthorizedContext` filtra na consulta e só inclui responsável
+  `CONFIRMED`. O upsert por telefone e `findByPhone` não existem mais.
+- **FATO atual:** no provider Atendly, `createAppointment` executa dentro da
+  transação `lockCalendarDay` → validação do slot → `resolveCustomerForAppointment`
+  (obter por `customerId` ou criar) → `appointment.create`; `listAppointments`
+  aceita `customerId` ou candidatos por telefone. O provider Minha Agenda
+  recusa agendamento por `customerId`. `CUSTOMER_PHONE_DUPLICATED` deixou de
+  ser conflito do serviço de migração de calendário.
+- **FATO atual:** rotas internas do Scheduling `GET/POST /internal/customers`,
+  `GET/PATCH /internal/customers/:id`, `GET .../ai-context`, responsável
+  principal, notas e tags (treze rotas). BFF expõe `/v1/customers` e
+  sub-recursos equivalentes sob tenant da sessão e CSRF por cookie; `POST
+  /v1/appointments` aceita `customerId` opcional
+  ([PUBLIC_API_V1](../../apps/bff/PUBLIC_API_V1.md)); frontend aceita telefone
+  nulo, `primaryGuardian`, `notes` e `tags` sem tela nova.
+- **FATO atual:** na IA, `SchedulingClient` busca candidatos, contexto
+  autorizado e compromissos por `customerId`; `assistant-tools.ts` tem
+  `list_customer_candidates` e `get_customer_context`, `resolveScheduleCustomer`
+  devolve `CUSTOMER_IDENTITY_AMBIGUOUS` com vários candidatos e
+  `proposedCustomerId` com um só, `confirmSchedule` agenda por
+  `pending.customerId ?? pending.proposedCustomerId` e
+  `linkContactToCustomer` grava `Contact.customerId`/`customerLinkedAt` por
+  tenant, canal e ID externo (migration `20260908170000_goal006_contact_customer_link`,
+  sem backfill nem FK entre bancos).
+- **FATO atual (resíduos do 005):** `syncLegacyPauseMirror` resolve o handoff
+  `OPEN` da conversa ao limpar o espelho legado;
+  `20260908171000_goal005_single_open_session` fecha sessões abertas excedentes
+  e cria o índice único parcial `ConversationSession_one_open_per_conversation`
+  (só em SQL); a criação da sessão absorve a violação (`isUniqueViolation`,
+  `P2002`/`23505`) e adota a sessão vencedora.
+- **FATO atual:** `scripts/final-production-audit.mjs` tem a regra
+  `no_tenant_scoped_phone_unique_constraint`; o Scheduling tem suíte própria —
+  `tests/unit` (13) no `validate:core`, que deixou de pular
+  `test:scheduling-service`, e `tests/integration` (10) no
+  `validate:integration`, agora com dezesseis passos, incluindo os ensaios
+  `goal006-migration-rehearsal.mjs` e `goal006-ai-migration-rehearsal.mjs` e
+  `provision-scheduling-test-database.mjs`.
+- Continuam **NÃO VERIFICADOS:** WhatsApp real, execução hospedada da CI, deploy,
+  `migrate deploy`/`diff` da IA em banco com pgvector e os demais limites do
+  fechamento factual. Mensagens não textuais do contato não renovam a sessão;
+  `findCustomerAppointments` na IA ainda lista por telefone sobre todos os
+  candidatos do número; o identificador `actor` de proveniência vem do cliente
+  do BFF.

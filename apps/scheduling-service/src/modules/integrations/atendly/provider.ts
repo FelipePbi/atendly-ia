@@ -47,13 +47,19 @@ export class AtendlyCalendarProvider implements CalendarProvider {
   async listAppointments(
     input: ListAppointmentsInput,
   ): Promise<CalendarAppointment[]> {
-    const customer = input.customerPhone
-      ? await new AtendlyCustomerService(
-          this.prisma,
-          this.tenantId,
-        ).findByPhone(input.customerPhone)
-      : null;
-    if (input.customerPhone && !customer) return [];
+    // `customerId` é a pessoa; `customerPhone` é filtro de **candidatos** —
+    // o mesmo número pode pertencer a mais de uma pessoa do negócio.
+    let customerIds: string[] | null = null;
+    if (input.customerId) {
+      customerIds = [input.customerId];
+    } else if (input.customerPhone) {
+      const candidates = await new AtendlyCustomerService(
+        this.prisma,
+        this.tenantId,
+      ).findCandidatesByPhone(input.customerPhone);
+      if (candidates.length === 0) return [];
+      customerIds = candidates.map((candidate) => candidate.id);
+    }
 
     const rangeStart = localDateTimeToInstant(
       input.startDate,
@@ -78,7 +84,7 @@ export class AtendlyCalendarProvider implements CalendarProvider {
         tenantId: this.tenantId,
         startAt: { lt: rangeEnd },
         endAt: { gt: rangeStart },
-        ...(customer ? { customerId: customer.id } : {}),
+        ...(customerIds ? { customerId: { in: customerIds } } : {}),
       },
       include: appointmentInclude,
       orderBy: { startAt: "asc" },
@@ -105,10 +111,6 @@ export class AtendlyCalendarProvider implements CalendarProvider {
       this.prisma,
       this.tenantId,
     ).requireActive(input.serviceIds);
-    const customer = await new AtendlyCustomerService(
-      this.prisma,
-      this.tenantId,
-    ).create({ name: input.customerName, phone: input.customerPhone });
     const durationMinutes = services.reduce(
       (total, service) => total + service.durationMinutes,
       0,
@@ -137,6 +139,13 @@ export class AtendlyCalendarProvider implements CalendarProvider {
           durationMinutes,
           stepMinutes: input.stepMinutes,
         });
+        // A pessoa só é criada aqui, **depois** de o slot ser validado dentro
+        // da transação: consulta de preço ou disponibilidade não cria
+        // ninguém, e uma confirmação que falha no slot também não.
+        const customerId = await this.resolveCustomerForAppointment(
+          transaction,
+          input,
+        );
         return transaction.appointment.create({
           data: {
             source: input.source ?? "AI",
@@ -149,7 +158,7 @@ export class AtendlyCalendarProvider implements CalendarProvider {
               connect: {
                 tenantId_id: {
                   tenantId: this.tenantId,
-                  id: customer.id,
+                  id: customerId,
                 },
               },
             },
@@ -254,6 +263,33 @@ export class AtendlyCalendarProvider implements CalendarProvider {
       include: appointmentInclude,
     });
     return this.toAppointment(appointment);
+  }
+
+  /**
+   * Pessoa do agendamento, resolvida dentro da transação de confirmação.
+   *
+   * Com `customerId`, a pessoa é a escolhida — nada é renomeado nem fundido.
+   * Sem ela, um cadastro novo nasce com o nome informado, mesmo que o número
+   * já pertença a outra pessoa: telefone não prova identidade (D-005).
+   */
+  private async resolveCustomerForAppointment(
+    transaction: Prisma.TransactionClient,
+    input: CreateCalendarAppointmentInput,
+  ): Promise<string> {
+    const customers = new AtendlyCustomerService(transaction, this.tenantId);
+    if (input.customerId) return (await customers.get(input.customerId)).id;
+    if (!input.customerName && !input.customerPhone) {
+      throw new AppError(
+        "CUSTOMER_IDENTIFICATION_REQUIRED",
+        "An appointment needs a resolved customerId or at least a customer name or phone.",
+        400,
+      );
+    }
+    const created = await customers.create({
+      name: input.customerName,
+      phone: input.customerPhone,
+    });
+    return created.id;
   }
 
   private async requireAppointment(

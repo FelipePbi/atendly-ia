@@ -18,17 +18,30 @@ const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const appointmentsQuerySchema = z.object({
   startDate: dateSchema,
   endDate: dateSchema,
+  // Pessoa por ID; telefone continua valendo como filtro de candidatos.
+  customerId: z.string().trim().min(1).max(128).optional(),
   customerPhone: z.string().trim().min(6).max(32).optional(),
 });
-const appointmentBodySchema = z.object({
-  serviceIds: z.array(z.string().trim().min(1).max(128)).min(1).max(10),
-  date: dateSchema,
-  startTime: timeSchema,
-  customerName: z.string().trim().min(1).max(200),
-  customerPhone: z.string().trim().min(6).max(32),
-  comments: z.string().trim().max(2_000).optional(),
-  stepMinutes: z.number().int().min(1).max(180).default(30),
-});
+const appointmentBodySchema = z
+  .object({
+    serviceIds: z.array(z.string().trim().min(1).max(128)).min(1).max(10),
+    date: dateSchema,
+    startTime: timeSchema,
+    customerId: z.string().trim().min(1).max(128).optional(),
+    customerName: z.string().trim().min(1).max(200).optional(),
+    customerPhone: z.string().trim().min(6).max(32).optional(),
+    comments: z.string().trim().max(2_000).optional(),
+    stepMinutes: z.number().int().min(1).max(180).default(30),
+  })
+  .refine(
+    (value) =>
+      Boolean(value.customerId ?? value.customerName ?? value.customerPhone),
+    {
+      path: ["customerId"],
+      message:
+        "Informe customerId de uma pessoa já cadastrada, ou nome/telefone para criá-la na confirmação.",
+    },
+  );
 const rescheduleSchema = z.object({
   date: dateSchema,
   startTime: timeSchema,

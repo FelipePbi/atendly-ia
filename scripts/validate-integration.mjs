@@ -186,6 +186,15 @@ export function aiTransportTargetUrl(target) {
   return url.toString();
 }
 
+// Banco próprio da suíte de identidade de cliente do Scheduling (Goal006), no
+// mesmo servidor descartável já validado. O sufixo mantém "test" no nome, então
+// o alvo continua reconhecível como descartável por quem o consome.
+export function schedulingTargetUrl(target) {
+  const url = new URL(target.url);
+  url.pathname = `/${encodeURIComponent(`${target.database}_scheduling`)}`;
+  return url.toString();
+}
+
 // Chave de cifra sintética, fixa e pública por definição: existe apenas para
 // que a suíte exercite selagem, abertura e rotação. Nenhuma credencial real
 // entra aqui, e o valor jamais é usado fora do gate.
@@ -204,6 +213,7 @@ function childEnvironment(target) {
     BFF_TEST_DATABASE_URL: target.url,
     EVOLUTION_TEST_DATABASE_URL: evolutionTargetUrl(target),
     AI_TEST_DATABASE_URL: aiTransportTargetUrl(target),
+    SCHEDULING_TEST_DATABASE_URL: schedulingTargetUrl(target),
     BFF_RUN_INTEGRATION_TESTS: "true",
     JWT_SECRET: "integration-only-secret-with-at-least-32-characters",
     INTERNAL_SERVICE_TOKEN: "integration-only-internal-token",
@@ -289,6 +299,50 @@ export function integrationSteps(target) {
       cwd: ".",
       command: "node",
       args: ["scripts/goal005-migration-rehearsal.mjs"],
+      env,
+    },
+    // Gate M0/M1 do Goal006: ensaio da migração de identidade de cliente contra
+    // estoque legado (telefone obrigatório e único), em banco próprio e
+    // descartável, com expansão e corte em passos separados.
+    {
+      name: "rehearse:goal006-customer-identity-migration",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal006-migration-rehearsal.mjs"],
+      env,
+    },
+    // Gate M0/M1 do Goal006 na IA: referência ao cliente no Contato e índice
+    // parcial de sessão aberta (resíduo do Goal005), em banco próprio.
+    {
+      name: "rehearse:goal006-ai-migration",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal006-ai-migration-rehearsal.mjs"],
+      env,
+    },
+    // Identidade de cliente contra PostgreSQL real: telefone compartilhado,
+    // cliente sem telefone, criação só na confirmação e isolamento por tenant.
+    // Não pertence ao core porque exige banco.
+    {
+      // Checkout limpo não tem `apps/scheduling-service/src/generated/prisma`.
+      name: "generate:scheduling-prisma-client",
+      cwd: "apps/scheduling-service",
+      command: "npx",
+      args: ["prisma", "generate"],
+      env,
+    },
+    {
+      name: "provision:scheduling-test-database",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/provision-scheduling-test-database.mjs"],
+      env,
+    },
+    {
+      name: "test:scheduling-integration",
+      cwd: "apps/scheduling-service",
+      command: "npx",
+      args: ["vitest", "run", "--dir", "tests/integration"],
       env,
     },
     {

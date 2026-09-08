@@ -13,7 +13,9 @@
     "format:check": "prettier --check .",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:deploy": "prisma migrate deploy"
+    "prisma:deploy": "prisma migrate deploy",
+    "test": "vitest run --dir tests/unit",
+    "test:integration": "vitest run --dir tests/integration"
   },
   "engines": {
     "node": ">=20"
@@ -37,6 +39,7 @@
     "prisma": "7.10.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.42.0"
+    "typescript-eslint": "^8.42.0",
+    "vitest": "^4.1.8"
   }
 }

@@ -147,6 +147,17 @@ export class MinhaAgendaCalendarProvider implements CalendarProvider {
       duration,
       input.stepMinutes,
     );
+    // A agenda externa continua identificando pessoa por telefone: a
+    // identidade por ID do Goal006 vale para a Agenda Atendly. Aqui o contrato
+    // externo é recusado explicitamente quando falta o que ele exige, em vez
+    // de inventar um cadastro.
+    if (!input.customerPhone || !input.customerName) {
+      throw new AppError(
+        "EXTERNAL_CUSTOMER_IDENTIFICATION_REQUIRED",
+        "The external calendar requires customer name and phone; scheduling by customerId is only supported by the Atendly calendar.",
+        400,
+      );
+    }
     const customer = await this.findOrCreateCustomer(
       input.customerPhone,
       input.customerName,

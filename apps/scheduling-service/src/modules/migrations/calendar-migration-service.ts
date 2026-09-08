@@ -468,6 +468,10 @@ export class CalendarMigrationService {
           transaction,
           context.tenantId,
         );
+        // Uma pessoa por cliente da fonte externa, mapeada pelo ID externo —
+        // nunca pelo telefone. Dois clientes externos que compartilham o mesmo
+        // número continuam sendo duas pessoas, e nenhum cadastro existente é
+        // renomeado ou fundido pela importação.
         for (const appointment of snapshot.appointments) {
           const customer = appointment.customer;
           if (!customer || !customer.phone || customerIds.has(customer.id))
@@ -663,7 +667,6 @@ function diagnoseSnapshot(
     }
   }
   const serviceIds = new Set(snapshot.services.map((service) => service.id));
-  const customersByPhone = new Map<string, string>();
   for (const appointment of snapshot.appointments) {
     if (!appointment.customer?.phone) {
       conflicts.push({
@@ -674,23 +677,12 @@ function diagnoseSnapshot(
           "Um cliente de agendamento futuro não possui telefone importável.",
       });
     } else {
+      // Telefone repetido entre clientes distintos deixou de ser conflito: a
+      // Agenda Atendly admite o mesmo número em mais de uma pessoa, e cada
+      // cliente externo continua virando uma pessoa própria. O que ainda
+      // impede a importação é telefone inválido.
       try {
-        const phone = normalizePhone(appointment.customer.phone);
-        const existingCustomerId = customersByPhone.get(phone);
-        if (
-          existingCustomerId &&
-          existingCustomerId !== appointment.customer.id
-        ) {
-          conflicts.push({
-            entityType: "CUSTOMER",
-            externalId: appointment.customer.id,
-            code: "CUSTOMER_PHONE_DUPLICATED",
-            message:
-              "Clientes diferentes compartilham o mesmo telefone na fonte atual.",
-          });
-        } else {
-          customersByPhone.set(phone, appointment.customer.id);
-        }
+        normalizePhone(appointment.customer.phone);
       } catch {
         conflicts.push({
           entityType: "CUSTOMER",

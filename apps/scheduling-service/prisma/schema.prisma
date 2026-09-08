@@ -59,20 +59,120 @@ model IntegrationConnection {
   @@index([tenantId, status])
 }
 
+/// Pessoa atendida pelo negocio.
+///
+/// A identidade e `(tenantId, id)`, nunca o telefone: o numero e opcional,
+/// pode ser compartilhado por mais de uma pessoa do mesmo negocio (mae que
+/// agenda para o filho) e serve apenas para **encontrar candidatos**. Nenhum
+/// caminho funde, renomeia ou deduplica pessoas por telefone ou nome parecido
+/// (D-005).
 model Customer {
   id              String   @id @default(cuid())
   tenantId        String
   name            String?
-  phone           String
-  normalizedPhone String
+  phone           String?
+  normalizedPhone String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  appointments Appointment[]
+  appointments   Appointment[]
+  notes          CustomerNote[]
+  tags           CustomerTag[]
+  /// Relacoes em que esta pessoa e a atendida (tem um responsavel).
+  relations      CustomerRelation[] @relation("CustomerRelationSubject")
+  /// Relacoes em que esta pessoa e a responsavel por outra.
+  responsibleFor CustomerRelation[] @relation("CustomerRelationRelated")
 
   @@unique([tenantId, id])
-  @@unique([tenantId, normalizedPhone])
+  @@index([tenantId, normalizedPhone])
   @@index([tenantId, name])
+}
+
+/// Relacao entre pessoas. No MVP existe apenas o responsavel principal, um por
+/// cliente.
+enum CustomerRelationType {
+  PRIMARY_GUARDIAN
+}
+
+/// A IA pode **propor** a relacao; ela so vira permanente depois de
+/// confirmacao explicita do cliente ou da profissional.
+enum CustomerRelationStatus {
+  PROPOSED
+  CONFIRMED
+}
+
+/// Quem originou ou confirmou a relacao. Proveniencia e atributo do registro.
+enum CustomerRelationActor {
+  AI
+  PROFESSIONAL
+  CUSTOMER
+}
+
+model CustomerRelation {
+  id                String                 @id @default(cuid())
+  tenantId          String
+  /// Pessoa atendida.
+  customerId        String
+  /// Pessoa responsavel.
+  relatedCustomerId String
+  type              CustomerRelationType   @default(PRIMARY_GUARDIAN)
+  status            CustomerRelationStatus @default(PROPOSED)
+  proposedBy        CustomerRelationActor
+  proposedByActor   String?
+  proposedAt        DateTime               @default(now())
+  confirmedBy       CustomerRelationActor?
+  confirmedByActor  String?
+  confirmedAt       DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  customer        Customer @relation("CustomerRelationSubject", fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade)
+  relatedCustomer Customer @relation("CustomerRelationRelated", fields: [tenantId, relatedCustomerId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, customerId, type])
+  @@index([tenantId, relatedCustomerId])
+}
+
+/// Observacao interna livre. `aiAuthorized` e atributo do registro, nao do
+/// prompt: sem autorizacao explicita a nota nunca chega ao modelo.
+model CustomerNote {
+  id             String    @id @default(cuid())
+  tenantId       String
+  customerId     String
+  body           String
+  aiAuthorized   Boolean   @default(false)
+  authorizedAt   DateTime?
+  authorizedBy   String?
+  createdBy      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  customer Customer @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, customerId, createdAt])
+  @@index([tenantId, customerId, aiAuthorized])
+}
+
+/// Tag manual. Mesma regra de autorizacao das observacoes.
+model CustomerTag {
+  id           String    @id @default(cuid())
+  tenantId     String
+  customerId   String
+  label        String
+  aiAuthorized Boolean   @default(false)
+  authorizedAt DateTime?
+  authorizedBy String?
+  createdBy    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  customer Customer @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, customerId, label])
+  @@index([tenantId, customerId, aiAuthorized])
 }
 
 model Service {

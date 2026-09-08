@@ -12,6 +12,8 @@ import type {
   RescheduleAppointmentInput,
   ScheduleAppointmentInput,
   SchedulingAppointment,
+  SchedulingAuthorizedCustomerContext,
+  SchedulingCustomerCandidate,
   SchedulingRequestContext,
   SchedulingServiceDefinition,
 } from "./types.js";
@@ -52,6 +54,28 @@ const appointmentSchema = z.object({
   comments: z.string().nullable(),
   status: z.string(),
 });
+const customerCandidateSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+  phone: z.string().nullable(),
+});
+const customerListSchema = z.object({
+  items: z.array(customerCandidateSchema),
+  source: z.string(),
+  managedExternally: z.boolean(),
+  filteredByPhone: z.boolean().optional(),
+});
+const authorizedCustomerSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+  phone: z.string().nullable(),
+  notes: z.array(z.string()).default([]),
+  tags: z.array(z.string()).default([]),
+  primaryGuardian: z
+    .object({ guardian: z.object({ id: z.string(), name: z.string().nullable() }) })
+    .nullable()
+    .default(null),
+});
 const slotSchema = z.object({
   date: z.string(),
   startTime: z.string(),
@@ -86,6 +110,19 @@ export interface SchedulingGateway {
     businessContext: BusinessContext,
     context?: SchedulingRequestContext,
   ): Promise<SchedulingAppointment[]>;
+  findFutureAppointmentsForCustomer(
+    customerId: string,
+    businessContext: BusinessContext,
+    context?: SchedulingRequestContext,
+  ): Promise<SchedulingAppointment[]>;
+  findCustomerCandidatesByPhone(
+    phone: string,
+    context?: SchedulingRequestContext,
+  ): Promise<SchedulingCustomerCandidate[]>;
+  getAuthorizedCustomerContext(
+    customerId: string,
+    context?: SchedulingRequestContext,
+  ): Promise<SchedulingAuthorizedCustomerContext>;
   cancelAppointment(
     appointmentId: string,
     context?: SchedulingRequestContext,
@@ -157,13 +194,80 @@ export class SchedulingClient implements SchedulingGateway {
           serviceIds: serviceIds.map(String),
           date: input.date,
           startTime: input.startTime,
-          customerName: input.customerName,
-          customerPhone: input.customerPhone,
+          // Pessoa resolvida vence: sem `customerId`, o Scheduling cria o
+          // cadastro dentro da transação de confirmação.
+          customerId: input.customerId ?? undefined,
+          customerName: input.customerName ?? undefined,
+          customerPhone: input.customerPhone ?? undefined,
           comments: input.comments,
           stepMinutes: DEFAULT_SLOT_STEP_MINUTES,
         },
       }),
     );
+  }
+
+  /**
+   * Candidatos para o número do contato.
+   *
+   * Zero, um ou vários — o número não prova de quem é o atendimento, então a
+   * escolha volta para a conversa em vez de ser adivinhada aqui.
+   */
+  async findCustomerCandidatesByPhone(
+    phone: string,
+    context?: SchedulingRequestContext,
+  ): Promise<SchedulingCustomerCandidate[]> {
+    const query = new URLSearchParams({ phone });
+    const result = await this.request(
+      `/internal/customers?${query.toString()}`,
+      customerListSchema,
+      { context },
+    );
+    return result.items;
+  }
+
+  /** Só o que a pessoa autorizou explicitamente chega ao modelo. */
+  async getAuthorizedCustomerContext(
+    customerId: string,
+    context?: SchedulingRequestContext,
+  ): Promise<SchedulingAuthorizedCustomerContext> {
+    const authorized = await this.request(
+      `/internal/customers/${encodeURIComponent(customerId)}/ai-context`,
+      authorizedCustomerSchema,
+      { context },
+    );
+    return {
+      id: authorized.id,
+      name: authorized.name,
+      phone: authorized.phone,
+      notes: authorized.notes,
+      tags: authorized.tags,
+      primaryGuardian: authorized.primaryGuardian
+        ? {
+            id: authorized.primaryGuardian.guardian.id,
+            name: authorized.primaryGuardian.guardian.name,
+          }
+        : null,
+    };
+  }
+
+  async findFutureAppointmentsForCustomer(
+    customerId: string,
+    businessContext: BusinessContext,
+    context?: SchedulingRequestContext,
+  ) {
+    const startDate = todayInTimeZone(businessContext.timezone);
+    const query = new URLSearchParams({
+      customerId,
+      startDate,
+      endDate: addDays(startDate, DEFAULT_APPOINTMENT_LOOKUP_DAYS),
+    });
+    return (
+      await this.request(
+        `/internal/appointments?${query.toString()}`,
+        appointmentSchema.array(),
+        { context },
+      )
+    ).map(toAppointment);
   }
 
   async findFutureAppointmentsForPhone(

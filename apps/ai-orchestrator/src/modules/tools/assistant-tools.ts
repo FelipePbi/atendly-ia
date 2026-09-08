@@ -71,6 +71,10 @@ type PendingAction =
       totalPrice?: number | null;
       customerName: string;
       customerPhone: string;
+      /** Pessoa resolvida. Ausente => o cadastro nasce na confirmacao. */
+      customerId?: string | null;
+      /** Candidato unico proposto: precisa de confirmacao da pessoa. */
+      proposedCustomerId?: string | null;
       idempotencyKey: string;
     }
   | {
@@ -146,6 +150,9 @@ const createAppointmentSchema = z
       .regex(/^\d{2}:\d{2}$/)
       .optional(),
     customerName: z.string().min(1).optional(),
+    // Pessoa escolhida entre os candidatos do numero. O telefone do contato
+    // nao prova de quem e o atendimento (D-005).
+    customerId: z.string().min(1).nullable().optional(),
   })
   .strict()
   .superRefine((args, context) => {
@@ -209,6 +216,9 @@ const handoffSchema = z
     reason: z.string().min(3),
     summary: z.string().optional(),
   })
+  .strict();
+const customerContextSchema = z
+  .object({ customerId: z.string().min(1) })
   .strict();
 const searchKnowledgeSchema = z
   .object({
@@ -305,6 +315,7 @@ export class AssistantToolRegistry {
                 date: requireString(args.date, "date"),
                 startTime: requireString(args.startTime, "startTime"),
                 customerName: requireString(args.customerName, "customerName"),
+                customerId: args.customerId ?? null,
               },
               context,
             ),
@@ -313,8 +324,32 @@ export class AssistantToolRegistry {
         {
           name: "create_appointment",
           description:
-            "Prepara ou confirma agendamento. Use action=prepare antes de pedir confirmacao; action=confirm somente apos confirmacao clara da cliente.",
+            "Prepara ou confirma agendamento. Use action=prepare antes de pedir confirmacao; action=confirm somente apos confirmacao clara da cliente. Quando o numero tiver mais de uma pessoa cadastrada, pergunte para quem e o atendimento e reenvie prepare com customerId.",
           schema: createAppointmentSchema,
+        },
+      ),
+      tool(
+        (args) => {
+          noArgsSchema.parse(args);
+          return this.run(context, () => this.listCustomerCandidates(context));
+        },
+        {
+          name: "list_customer_candidates",
+          description:
+            "Lista as pessoas ja cadastradas para o numero deste contato. Zero, uma ou varias: o numero nao prova de quem e o atendimento.",
+          schema: noArgsSchema,
+        },
+      ),
+      tool(
+        (args) =>
+          this.run(context, () =>
+            this.getAuthorizedCustomerContext(args, context),
+          ),
+        {
+          name: "get_customer_context",
+          description:
+            "Observacoes e tags de uma pessoa que estao autorizadas para uso pela IA. O que nao foi autorizado nao existe para esta ferramenta.",
+          schema: customerContextSchema,
         },
       ),
       tool(
@@ -449,6 +484,7 @@ export class AssistantToolRegistry {
           context,
           data.code ?? "TOOL_OPERATION_FAILED",
           data.error,
+          data.details,
         );
       }
       return { ...resultContext(context), ok: true, data };
@@ -528,6 +564,38 @@ export class AssistantToolRegistry {
     };
   }
 
+  /**
+   * Candidatos para o número deste contato.
+   *
+   * O número não prova identidade: pode não haver pessoa nenhuma, pode haver
+   * uma (que a IA propõe e pede confirmação) ou várias (a IA pergunta para
+   * quem é o atendimento).
+   */
+  private async listCustomerCandidates(context: ToolExecutionContext) {
+    const candidates = await this.scheduling.findCustomerCandidatesByPhone(
+      context.phone,
+      schedulingContext(context),
+    );
+    return {
+      candidates: candidates.map((candidate) => ({
+        customerId: candidate.id,
+        name: candidate.name,
+      })),
+      // Um só candidato é proposta, nunca certeza.
+      requiresConfirmation: candidates.length > 0,
+    };
+  }
+
+  private async getAuthorizedCustomerContext(
+    args: { customerId: string },
+    context: ToolExecutionContext,
+  ) {
+    return this.scheduling.getAuthorizedCustomerContext(
+      args.customerId,
+      schedulingContext(context),
+    );
+  }
+
   private async prepareSchedule(
     args: {
       serviceId?: string | null;
@@ -535,6 +603,7 @@ export class AssistantToolRegistry {
       date: string;
       startTime: string;
       customerName: string;
+      customerId?: string | null;
     },
     context: ToolExecutionContext,
   ) {
@@ -547,6 +616,9 @@ export class AssistantToolRegistry {
       context,
     });
     if (!serviceResult.ok) return serviceResult;
+
+    const identity = await this.resolveScheduleCustomer(args, context);
+    if ("ok" in identity) return identity;
 
     const pending: PendingAction = {
       type: "schedule",
@@ -563,10 +635,79 @@ export class AssistantToolRegistry {
       totalPrice: serviceResult.totalPrice,
       customerName: args.customerName,
       customerPhone: context.phone,
+      customerId: identity.customerId,
+      proposedCustomerId: identity.proposedCustomerId,
       idempotencyKey: context.idempotencyKey,
     };
     await this.setPendingAction(context.conversationId, pending);
-    return { requiresConfirmation: true, pendingAction: pending };
+    return {
+      requiresConfirmation: true,
+      pendingAction: pending,
+      customerIdentity: identity,
+    };
+  }
+
+  /**
+   * Para quem é o atendimento.
+   *
+   * `customerId` escolhido pela conversa vence. Sem escolha, os candidatos do
+   * número decidem o que perguntar: vários exigem seleção explícita antes de
+   * seguir; um vira proposta a confirmar; nenhum significa cadastro novo, que
+   * só nasce na confirmação do agendamento.
+   */
+  private async resolveScheduleCustomer(
+    args: { customerId?: string | null },
+    context: ToolExecutionContext,
+  ): Promise<
+    | {
+        customerId: string | null;
+        proposedCustomerId: string | null;
+        candidates: Array<{ customerId: string; name: string | null }>;
+      }
+    | {
+        ok: false;
+        code: string;
+        error: string;
+        details: {
+          candidates: Array<{ customerId: string; name: string | null }>;
+        };
+      }
+  > {
+    const candidates = (
+      await this.scheduling.findCustomerCandidatesByPhone(
+        context.phone,
+        schedulingContext(context),
+      )
+    ).map((candidate) => ({
+      customerId: candidate.id,
+      name: candidate.name,
+    }));
+
+    if (args.customerId) {
+      return {
+        customerId: args.customerId,
+        proposedCustomerId: null,
+        candidates,
+      };
+    }
+    if (candidates.length > 1) {
+      return {
+        ok: false,
+        code: "CUSTOMER_IDENTITY_AMBIGUOUS",
+        error:
+          "Esse numero tem mais de uma pessoa cadastrada. Pergunte para quem e o atendimento e reenvie prepare com customerId.",
+        details: { candidates },
+      };
+    }
+    if (candidates.length === 1) {
+      // Proposta, não certeza: a pessoa ainda precisa confirmar que é ela.
+      return {
+        customerId: null,
+        proposedCustomerId: candidates[0].customerId,
+        candidates,
+      };
+    }
+    return { customerId: null, proposedCustomerId: null, candidates };
   }
 
   private async confirmSchedule(context: ToolExecutionContext) {
@@ -588,14 +729,21 @@ export class AssistantToolRegistry {
     });
     if (!serviceResult.ok) return serviceResult;
 
+    // A confirmação do agendamento é também a confirmação de para quem ele é:
+    // o candidato único proposto no `prepare` só vira a pessoa do agendamento
+    // aqui, depois de a cliente confirmar. Sem pessoa resolvida, o cadastro
+    // nasce no Scheduling dentro da transação de confirmação.
+    const resolvedCustomerId =
+      pending.customerId ?? pending.proposedCustomerId ?? null;
     const appointment = await this.scheduling.createAppointment(
       {
         serviceId: serviceResult.serviceIds[0],
         serviceIds: serviceResult.serviceIds,
         date: pending.date,
         startTime: pending.startTime,
-        customerName: pending.customerName,
-        customerPhone: pending.customerPhone,
+        customerId: resolvedCustomerId,
+        customerName: resolvedCustomerId ? null : pending.customerName,
+        customerPhone: resolvedCustomerId ? null : pending.customerPhone,
         comments: buildAppointmentComment(
           serviceResult.services,
           serviceResult.totalPrice,
@@ -605,8 +753,32 @@ export class AssistantToolRegistry {
       pending.idempotencyKey || context.idempotencyKey,
     );
 
+    await this.linkContactToCustomer(context, appointment.customerId);
     await this.clearPendingAction(context.conversationId);
     return { appointment: this.presentAppointment(appointment) };
+  }
+
+  /**
+   * Contato do canal passa a referenciar a pessoa atendida.
+   *
+   * A referência é por ID e tenant, sem FK entre bancos, e pode mudar ao longo
+   * do tempo — a mãe que agenda para o filho e depois para si mesma continua
+   * sendo **um** contato, apontando ora para uma pessoa, ora para outra.
+   * Nenhum contato e nenhum cliente é fundido por causa disso.
+   */
+  private async linkContactToCustomer(
+    context: ToolExecutionContext,
+    customerId: string | null,
+  ): Promise<void> {
+    if (!customerId) return;
+    await this.prisma.contact.updateMany({
+      where: {
+        tenantId: context.tenantId,
+        channelId: context.channelId,
+        externalContactId: context.phone,
+      },
+      data: { customerId, customerLinkedAt: new Date() },
+    });
   }
 
   private async findCustomerAppointments(context: ToolExecutionContext) {
@@ -1026,7 +1198,7 @@ function requireString(value: string | undefined, field: string): string {
 
 function isDomainFailure(
   value: unknown,
-): value is { ok: false; code?: string; error: string } {
+): value is { ok: false; code?: string; error: string; details?: unknown } {
   return (
     isRecord(value) &&
     value.ok === false &&

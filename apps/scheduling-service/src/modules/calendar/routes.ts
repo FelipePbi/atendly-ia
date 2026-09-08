@@ -13,6 +13,9 @@ const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const timeSchema = z.string().regex(/^\d{2}:\d{2}$/);
 const idParamsSchema = z.object({ id: z.string().trim().min(1).max(128) });
 const listAppointmentsQuerySchema = z.object({
+  // Pessoa resolvida por ID; o telefone continua valendo como filtro de
+  // candidatos, nunca como prova de identidade.
+  customerId: z.string().trim().min(1).max(128).optional(),
   customerPhone: z.string().trim().min(6).max(32).optional(),
   startDate: dateSchema,
   endDate: dateSchema,
@@ -39,16 +42,29 @@ function parseServiceIds(value: unknown): string[] {
       : [],
   );
 }
-const createAppointmentBodySchema = z.object({
-  source: z.enum(["AI", "USER"]).optional(),
-  serviceIds: z.array(z.string().trim().min(1).max(128)).min(1).max(10),
-  date: dateSchema,
-  startTime: timeSchema,
-  customerName: z.string().trim().min(1).max(200),
-  customerPhone: z.string().trim().min(6).max(32),
-  comments: z.string().trim().max(2_000).optional(),
-  stepMinutes: z.number().int().min(1).max(180).default(30),
-});
+const createAppointmentBodySchema = z
+  .object({
+    source: z.enum(["AI", "USER"]).optional(),
+    serviceIds: z.array(z.string().trim().min(1).max(128)).min(1).max(10),
+    date: dateSchema,
+    startTime: timeSchema,
+    // Ou a pessoa já foi resolvida (`customerId`), ou o cadastro nasce na
+    // confirmação com o que foi informado. Telefone deixou de ser obrigatório.
+    customerId: z.string().trim().min(1).max(128).optional(),
+    customerName: z.string().trim().min(1).max(200).optional(),
+    customerPhone: z.string().trim().min(6).max(32).optional(),
+    comments: z.string().trim().max(2_000).optional(),
+    stepMinutes: z.number().int().min(1).max(180).default(30),
+  })
+  .refine(
+    (value) =>
+      Boolean(value.customerId ?? value.customerName ?? value.customerPhone),
+    {
+      path: ["customerId"],
+      message:
+        "Provide customerId for a resolved person, or a name/phone to create one on confirmation.",
+    },
+  );
 const rescheduleBodySchema = z.object({
   date: dateSchema,
   startTime: timeSchema,

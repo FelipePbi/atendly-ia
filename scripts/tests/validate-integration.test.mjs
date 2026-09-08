@@ -11,6 +11,7 @@ import {
   evolutionTargetUrl,
   IntegrationTargetError,
   integrationSteps,
+  schedulingTargetUrl,
   resolveIntegrationTarget,
 } from "../validate-integration.mjs";
 
@@ -80,6 +81,11 @@ test("points the subprocess at the declared test database with synthetic secrets
       "test:evolution-go-ownership",
       "rehearse:goal004-transport-migration",
       "rehearse:goal005-contact-session-migration",
+      "rehearse:goal006-customer-identity-migration",
+      "rehearse:goal006-ai-migration",
+      "generate:scheduling-prisma-client",
+      "provision:scheduling-test-database",
+      "test:scheduling-integration",
       "generate:ai-orchestrator-prisma-client",
       "test:ai-orchestrator-transport-durability",
       "test:evolution-go-webhook-outbox",
@@ -258,4 +264,30 @@ test("derives the Goal004 transport rehearsal database from the validated target
     (step) => step.name === "test:ai-orchestrator-transport-durability",
   );
   assert.ok(rehearsal >= 0 && durability > rehearsal);
+});
+
+// Goal006: a suíte de identidade do Scheduling roda em banco próprio derivado
+// do mesmo alvo já validado — sem variável nova e sem banco pessoal. O banco é
+// provisionado e migrado antes de a suíte rodar.
+test("derives the Scheduling identity database from the validated target", () => {
+  const target = resolveIntegrationTarget({ BFF_TEST_DATABASE_URL: validUrl });
+  const derived = new URL(schedulingTargetUrl(target));
+
+  assert.equal(derived.hostname, "127.0.0.1");
+  assert.equal(derived.port, "55432");
+  assert.equal(derived.pathname, "/atendly_bff_test_scheduling");
+  assert.ok(/(?:^|[_-])test(?:[_-]|$)/iu.test("atendly_bff_test_scheduling"));
+
+  const steps = integrationSteps(target);
+  for (const step of steps) {
+    assert.equal(step.env.SCHEDULING_TEST_DATABASE_URL, derived.toString());
+  }
+
+  const provision = steps.findIndex(
+    (step) => step.name === "provision:scheduling-test-database",
+  );
+  const suite = steps.findIndex(
+    (step) => step.name === "test:scheduling-integration",
+  );
+  assert.ok(provision >= 0 && suite > provision);
 });

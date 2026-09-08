@@ -154,6 +154,55 @@ export const customerSchema = z.object({
   updatedAt: isoDateTimeSchema.optional(),
 });
 
+// Relação, observações e tags são opcionais no schema de propósito: a
+// resposta antiga (sem esses campos) continua válida, e a nova é aceita sem
+// redesenho de tela — o cadastro completo é do Goal015.
+export const customerPrimaryGuardianSchema = z
+  .object({
+    id: z.string().min(1),
+    status: z.enum(["PROPOSED", "CONFIRMED"]),
+    guardian: z.object({
+      id: z.string().min(1),
+      name: z.string().nullable(),
+      phone: z.string().nullable(),
+    }),
+    proposedBy: z.enum(["AI", "PROFESSIONAL", "CUSTOMER"]),
+    proposedByActor: z.string().nullable(),
+    proposedAt: isoDateTimeSchema,
+    confirmedBy: z.enum(["AI", "PROFESSIONAL", "CUSTOMER"]).nullable(),
+    confirmedByActor: z.string().nullable(),
+    confirmedAt: isoDateTimeSchema.nullable(),
+  })
+  .nullable();
+
+export const customerNoteSchema = z.object({
+  id: z.string().min(1),
+  body: z.string(),
+  aiAuthorized: z.boolean(),
+  authorizedAt: isoDateTimeSchema.nullable(),
+  authorizedBy: z.string().nullable(),
+  createdBy: z.string().nullable(),
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+});
+
+export const customerTagSchema = z.object({
+  id: z.string().min(1),
+  label: z.string(),
+  aiAuthorized: z.boolean(),
+  authorizedAt: isoDateTimeSchema.nullable(),
+  authorizedBy: z.string().nullable(),
+  createdBy: z.string().nullable(),
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+});
+
+export const customerDetailSchema = customerSchema.extend({
+  primaryGuardian: customerPrimaryGuardianSchema.optional().default(null),
+  notes: z.array(customerNoteSchema).optional().default([]),
+  tags: z.array(customerTagSchema).optional().default([]),
+});
+
 export const appointmentSchema = z.object({
   id: z.string().min(1),
   source: z.enum(["AI", "USER", "INTEGRATION"]),
@@ -196,6 +245,7 @@ export const customerListSchema = z.object({
   items: z.array(customerSchema),
   source: calendarSourceSchema,
   managedExternally: z.boolean(),
+  filteredByPhone: z.boolean().optional(),
 });
 
 export const serviceListSchema = z.object({
@@ -395,6 +445,9 @@ export type CalendarState = z.infer<typeof calendarStateSchema>;
 export type Conversation = z.infer<typeof conversationSchema>;
 export type SessionCategory = z.infer<typeof sessionCategorySchema>;
 export type Customer = z.infer<typeof customerSchema>;
+export type CustomerDetail = z.infer<typeof customerDetailSchema>;
+export type CustomerNote = z.infer<typeof customerNoteSchema>;
+export type CustomerTag = z.infer<typeof customerTagSchema>;
 export type CustomerList = z.infer<typeof customerListSchema>;
 export type Dashboard = z.infer<typeof dashboardSchema>;
 export type Message = z.infer<typeof messageSchema>;

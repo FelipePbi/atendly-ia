@@ -147,6 +147,20 @@ async function main() {
     "no operational phone field is globally unique",
   );
 
+  // Goal006/D-005: o telefone também não pode ser exclusivo **por tenant**.
+  // Duas pessoas do mesmo negócio podem compartilhar o número, então um
+  // `@@unique([tenantId, normalizedPhone])` reintroduziria a identidade por
+  // telefone que este Goal removeu. A prova de que o comportamento vale em
+  // runtime está nas suítes do Scheduling; esta regra só impede a volta do
+  // constraint por engano.
+  check(
+    "no_tenant_scoped_phone_unique_constraint",
+    prismaSchemas.every(
+      (schema) => !/@@unique\(\[[^\]]*phone[^\]]*\]/iu.test(schema),
+    ),
+    "no composite unique constraint makes a phone identify a person within a tenant",
+  );
+
   check(
     "request_id_is_propagated_end_to_end",
     [

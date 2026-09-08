@@ -15,7 +15,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Conversas | `GET /v1/conversations`; `GET /v1/conversations/:id`; `GET /v1/conversations/:id/messages`; `POST /v1/conversations/:id/messages`; `POST /v1/conversations/:id/takeover`; `POST /v1/conversations/:id/release`; `POST /v1/conversations/:id/resolve`; `PUT /v1/conversations/:id/category`; `PUT /v1/conversations/:id/ignore` |
 | Agendamentos | `GET /v1/appointments`; `GET /v1/appointments/:id`; `POST /v1/appointments`; `POST /v1/appointments/:id/reschedule`; `POST /v1/appointments/:id/cancel` |
 | Disponibilidade e bloqueios | `GET /v1/availability`; `POST /v1/time-blocks`; `DELETE /v1/time-blocks/:id` |
-| Clientes | `GET /v1/customers`; `GET /v1/customers/:id`; `POST /v1/customers` |
+| Clientes | `GET /v1/customers`; `GET /v1/customers/:id`; `POST /v1/customers`; `PATCH /v1/customers/:id`; `PUT /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/primary-guardian/confirm`; `DELETE /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/notes`; `PATCH /v1/customers/:id/notes/:noteId`; `DELETE /v1/customers/:id/notes/:noteId`; `POST /v1/customers/:id/tags`; `PATCH /v1/customers/:id/tags/:tagId`; `DELETE /v1/customers/:id/tags/:tagId` |
 | Serviços | `GET /v1/services`; `POST /v1/services`; `PATCH /v1/services/:id` |
 | Configurações | `GET /v1/settings`; `PATCH /v1/settings/business`; `PATCH /v1/settings/ai`; `PATCH /v1/settings/availability` |
 | WhatsApp | `GET /v1/whatsapp`; `POST /v1/whatsapp/connect`; `POST /v1/whatsapp/reconnect`; `DELETE /v1/whatsapp` |
@@ -74,6 +74,25 @@ Pela regra de produto vigente:
 - os estilos da IA são Profissional, Equilibrada e Descontraída.
 
 A futura revisão técnica deve migrar consumidores antes de remover ou alterar essas rotas e enums. Este documento não determina o desenho do contrato substituto.
+
+## Clientes: identidade por ID
+
+O cliente é uma **pessoa**, identificada pelo ID dentro do negócio. O telefone é contato, não identidade:
+
+- `phone` é opcional na criação e na resposta. Um cliente pode existir só com nome — criança, pessoa agendada presencialmente. O que a criação recusa é um cadastro sem nome **e** sem telefone.
+- o mesmo número pode pertencer a mais de uma pessoa do mesmo negócio. `GET /v1/customers?phone=...` devolve **candidatos** (zero, um ou vários) e marca a resposta com `filteredByPhone: true`; nenhuma rota resolve identidade a partir do número.
+- nome e telefone só mudam por `PATCH /v1/customers/:id`. Nenhuma outra rota renomeia, funde ou deduplica pessoas.
+- `GET /v1/customers/:id` devolve, além dos dados básicos, `primaryGuardian`, `notes` e `tags`. Consumidores que só conhecem o contrato anterior continuam válidos: os campos novos são adicionais.
+
+`POST /v1/appointments` aceita `customerId` para uma pessoa já resolvida ou `customerName`/`customerPhone` para criar o cadastro **na confirmação** — a criação acontece dentro da transação do agendamento, depois de o horário ser validado. Consultar preço ou disponibilidade não cria ninguém, e uma confirmação que falha no horário também não. `GET /v1/appointments` aceita `customerId` (a pessoa) e `customerPhone` (todos os candidatos do número).
+
+### Responsável principal
+
+`PUT /v1/customers/:id/primary-guardian` grava a relação com proveniência (`proposedBy`) e estado (`status`). A relação nasce `PROPOSED` e só vira `CONFIRMED` com confirmação explícita — no corpo do `PUT` ou por `POST .../primary-guardian/confirm`. Uma relação apenas proposta não é afirmada para a IA. No MVP existe no máximo um responsável principal por cliente.
+
+### Observações e tags: autorização de uso pela IA
+
+`aiAuthorized` é atributo do **registro**, não do prompt, e nasce `false`. A IA lê o cliente por um recorte próprio no Scheduling que carrega apenas notas e tags autorizadas; retirar a autorização (`PATCH` com `aiAuthorized: false`) volta a escondê-las. A interface de cadastro completo é do Goal015.
 
 ## Vínculo WhatsApp: estados ambíguos
 

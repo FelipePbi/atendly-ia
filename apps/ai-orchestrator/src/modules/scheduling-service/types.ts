@@ -39,13 +39,37 @@ export interface SchedulingAppointment {
   customerName: string | null;
 }
 
+/**
+ * Candidato a pessoa atendida.
+ *
+ * O telefone do contato pode devolver zero, um ou varios candidatos: ele nao
+ * prova identidade. A escolha entre eles e sempre explicita.
+ */
+export interface SchedulingCustomerCandidate {
+  id: string;
+  name: string | null;
+  phone: string | null;
+}
+
+/** Recorte do cliente que a IA esta autorizada a usar. */
+export interface SchedulingAuthorizedCustomerContext {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  notes: string[];
+  tags: string[];
+  primaryGuardian: { id: string; name: string | null } | null;
+}
+
 export interface ScheduleAppointmentInput {
   serviceId: string;
   serviceIds?: string[];
   date: string;
   startTime: string;
-  customerName: string;
-  customerPhone: string;
+  /** Pessoa ja resolvida. Quando ausente, o cadastro nasce na confirmacao. */
+  customerId?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
   comments?: string;
 }
 

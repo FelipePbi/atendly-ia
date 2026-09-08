@@ -272,6 +272,273 @@ describe("AssistantToolRegistry scheduling service resolution", () => {
   });
 });
 
+describe("AssistantToolRegistry customer identity", () => {
+  const maria = { id: "cust-maria", name: "Maria", phone };
+  const pedro = { id: "cust-pedro", name: "Pedro", phone };
+
+  it("asks who the appointment is for when the number has more than one person", async () => {
+    const { prisma, store } = createPrismaMock({
+      availabilityLookups: [availabilityLookup()],
+    });
+    const { agenda, calls } = createAgendaMock([maria, pedro]);
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const result = await registry.execute(
+      {
+        id: "call-prepare-ambiguous",
+        name: "create_appointment",
+        args: {
+          action: "prepare",
+          serviceId: service.id,
+          date: slot.date,
+          startTime: slot.startTime,
+          customerName: "Maria",
+        },
+      },
+      context(),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "CUSTOMER_IDENTITY_AMBIGUOUS",
+        details: {
+          candidates: [{ customerId: maria.id }, { customerId: pedro.id }],
+        },
+      },
+    });
+    // Nada foi gravado: a pessoa ainda não foi escolhida.
+    expect(store.state.pendingAction).toBeUndefined();
+    expect(calls.createAppointment).toHaveLength(0);
+  });
+
+  it("proposes the single candidate instead of assuming it, and only resolves it on confirmation", async () => {
+    const { prisma, store } = createPrismaMock({
+      availabilityLookups: [availabilityLookup()],
+    });
+    const { agenda, calls } = createAgendaMock([pedro]);
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const prepared = await registry.execute(
+      {
+        id: "call-prepare-single",
+        name: "create_appointment",
+        args: {
+          action: "prepare",
+          serviceId: service.id,
+          date: slot.date,
+          startTime: slot.startTime,
+          customerName: "Pedro",
+        },
+      },
+      context(),
+    );
+
+    expect(prepared).toMatchObject({
+      ok: true,
+      data: {
+        pendingAction: { customerId: null, proposedCustomerId: pedro.id },
+      },
+    });
+    expect(calls.createAppointment).toHaveLength(0);
+
+    await registry.execute(
+      {
+        id: "call-confirm-single",
+        name: "create_appointment",
+        args: { action: "confirm" },
+      },
+      context(),
+    );
+
+    expect(calls.createAppointment[0]).toMatchObject({
+      customerId: pedro.id,
+      customerName: null,
+      customerPhone: null,
+    });
+    expect(store.contactLinks).toHaveLength(1);
+  });
+
+  it("schedules the chosen person when the conversation selects a customerId", async () => {
+    const { prisma } = createPrismaMock({
+      availabilityLookups: [availabilityLookup()],
+    });
+    const { agenda, calls } = createAgendaMock([maria, pedro]);
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const prepared = await registry.execute(
+      {
+        id: "call-prepare-chosen",
+        name: "create_appointment",
+        args: {
+          action: "prepare",
+          serviceId: service.id,
+          date: slot.date,
+          startTime: slot.startTime,
+          customerName: "Pedro",
+          customerId: pedro.id,
+        },
+      },
+      context(),
+    );
+
+    expect(prepared).toMatchObject({
+      ok: true,
+      data: { pendingAction: { customerId: pedro.id } },
+    });
+
+    await registry.execute(
+      {
+        id: "call-confirm-chosen",
+        name: "create_appointment",
+        args: { action: "confirm" },
+      },
+      context(),
+    );
+
+    expect(calls.createAppointment[0]).toMatchObject({ customerId: pedro.id });
+  });
+
+  it("creates nobody when the number has no candidate until the appointment is confirmed", async () => {
+    const { prisma } = createPrismaMock({
+      availabilityLookups: [availabilityLookup()],
+    });
+    const { agenda, calls } = createAgendaMock([]);
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    await registry.execute(
+      {
+        id: "call-prepare-new",
+        name: "create_appointment",
+        args: {
+          action: "prepare",
+          serviceId: service.id,
+          date: slot.date,
+          startTime: slot.startTime,
+          customerName: "Thais",
+        },
+      },
+      context(),
+    );
+    expect(calls.createAppointment).toHaveLength(0);
+
+    await registry.execute(
+      {
+        id: "call-confirm-new",
+        name: "create_appointment",
+        args: { action: "confirm" },
+      },
+      context(),
+    );
+
+    // Sem pessoa resolvida, o cadastro nasce no Scheduling, dentro da
+    // transação de confirmação — nunca antes.
+    expect(calls.createAppointment[0]).toMatchObject({
+      customerId: null,
+      customerName: "Thais",
+      customerPhone: phone,
+    });
+  });
+
+  it("lets one contact point to different people over time without merging anything", async () => {
+    const { prisma, store } = createPrismaMock({
+      availabilityLookups: [availabilityLookup()],
+    });
+    const { agenda, calls } = createAgendaMock([maria, pedro]);
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    // Mesmo contato (mesmo número, mesma conversa) agendando primeiro para uma
+    // pessoa e depois para outra — a mãe que agenda para o filho e depois para
+    // si mesma.
+    for (const chosen of [pedro, maria]) {
+      await registry.execute(
+        {
+          id: `call-prepare-${chosen.id}`,
+          name: "create_appointment",
+          args: {
+            action: "prepare",
+            serviceId: service.id,
+            date: slot.date,
+            startTime: slot.startTime,
+            customerName: chosen.name,
+            customerId: chosen.id,
+          },
+        },
+        context(),
+      );
+      await registry.execute(
+        {
+          id: `call-confirm-${chosen.id}`,
+          name: "create_appointment",
+          args: { action: "confirm" },
+        },
+        context(),
+      );
+    }
+
+    expect(calls.createAppointment.map((call) => call.customerId)).toEqual([
+      pedro.id,
+      maria.id,
+    ]);
+
+    // O contato foi reapontado, não duplicado nem fundido: as duas escritas
+    // endereçam o mesmo contato e só a pessoa referenciada muda.
+    const links = store.contactLinks as Array<{
+      where: Record<string, unknown>;
+      data: { customerId: string };
+    }>;
+    expect(links).toHaveLength(2);
+    expect(links.map((link) => link.data.customerId)).toEqual([
+      pedro.id,
+      maria.id,
+    ]);
+    expect(links[0].where).toEqual(links[1].where);
+    expect(links[1].where).toMatchObject({
+      tenantId: "tenant-1",
+      channelId: "channel-1",
+      externalContactId: phone,
+    });
+  });
+
+  it("checking availability never touches the customer registry", async () => {
+    const { prisma } = createPrismaMock({});
+    const { agenda, calls } = createAgendaMock([maria]);
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    await registry.execute(
+      {
+        id: "call-availability",
+        name: "get_availability",
+        args: { serviceId: service.id },
+      },
+      context(),
+    );
+
+    expect(calls.createAppointment).toHaveLength(0);
+    expect(calls.findCustomerCandidatesByPhone).toHaveLength(0);
+  });
+
+  it("only exposes what the record authorised for AI use", async () => {
+    const { prisma } = createPrismaMock({});
+    const { agenda } = createAgendaMock([maria]);
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const result = await registry.execute(
+      {
+        id: "call-customer-context",
+        name: "get_customer_context",
+        args: { customerId: maria.id },
+      },
+      context(),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { id: maria.id, notes: [], tags: [] },
+    });
+  });
+});
+
 function context() {
   return {
     conversationId,
@@ -316,11 +583,17 @@ function createAppointment(
     startTime: input.startTime,
     endTime: services.length > 1 ? combinedSlot.endTime : slot.endTime,
     duration: services.reduce((total, item) => total + item.duration, 0),
-    customerId: "12345",
+    // Quando a conversa resolveu a pessoa, o agendamento volta com ela: e o
+    // `customerId` da resposta que o Contato passa a referenciar.
+    customerId: input.customerId ?? "12345",
     serviceId: input.serviceId,
     serviceIds: services.map((item) => item.id),
     price: services.reduce((total, item) => total + (item.price ?? 0), 0),
-    customer: { id: "12345", name: "Thais", phone },
+    customer: {
+      id: input.customerId ?? "12345",
+      name: input.customerName ?? "Thais",
+      phone,
+    },
     services: services.map((item) => ({
       serviceId: item.id,
       name: item.name,
@@ -335,13 +608,17 @@ function createAppointment(
   };
 }
 
-function createAgendaMock() {
+function createAgendaMock(
+  candidates: Array<{ id: string; name: string | null; phone: string | null }> = [],
+) {
   const calls: {
     createAppointment: ScheduleAppointmentInput[];
     getAvailableSlotsForServices: string[][];
+    findCustomerCandidatesByPhone: string[];
   } = {
     createAppointment: [],
     getAvailableSlotsForServices: [],
+    findCustomerCandidatesByPhone: [],
   };
   const services = [service, browService];
   const agenda = {
@@ -361,6 +638,20 @@ function createAgendaMock() {
       return createAppointment(input);
     },
     findFutureAppointmentsForPhone: async () => [],
+    findFutureAppointmentsForCustomer: async () => [],
+    // Numero sem pessoa cadastrada: o cliente so nasce na confirmacao.
+    findCustomerCandidatesByPhone: async (value: string) => {
+      calls.findCustomerCandidatesByPhone.push(value);
+      return candidates;
+    },
+    getAuthorizedCustomerContext: async (customerId: string) => ({
+      id: customerId,
+      name: "Thais",
+      phone,
+      notes: [],
+      tags: [],
+      primaryGuardian: null,
+    }),
     cancelAppointment: async (appointmentId: string) => ({
       appointmentId,
       cancelled: true as const,
@@ -383,6 +674,7 @@ function createPrismaMock(initialState: Record<string, unknown>) {
     state: { ...initialState },
     externalAppointments: [] as unknown[],
     customerLinks: [] as unknown[],
+    contactLinks: [] as unknown[],
   };
   const prisma = {
     conversation: {
@@ -410,6 +702,12 @@ function createPrismaMock(initialState: Record<string, unknown>) {
     },
     handoff: {
       create: async () => ({ id: "handoff-1" }),
+    },
+    contact: {
+      updateMany: async (args: unknown) => {
+        store.contactLinks.push(args);
+        return { count: 1 };
+      },
     },
   } as unknown as PrismaClient;
 

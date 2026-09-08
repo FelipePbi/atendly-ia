@@ -55,9 +55,58 @@ const servicePatchSchema = serviceBodySchema
     (value) => Object.keys(value).length > 0,
     "At least one service field is required.",
   );
-const customerBodySchema = z.object({
-  name: z.string().trim().min(1).max(200).nullable().optional(),
-  phone: z.string().trim().min(6).max(32),
+// Criação explícita: nome e telefone são ambos opcionais, mas não os dois.
+// Telefone deixou de ser obrigatório e de ser exclusivo — ver D-005.
+const customerBodySchema = z
+  .object({
+    name: z.string().trim().min(1).max(200).nullable().optional(),
+    phone: z.string().trim().min(6).max(32).nullable().optional(),
+  })
+  .refine((value) => Boolean(value.name ?? value.phone), {
+    path: ["name"],
+    message: "A customer needs at least a name or a phone number.",
+  });
+const customerPatchSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200).nullable().optional(),
+    phone: z.string().trim().min(6).max(32).nullable().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "At least one customer field is required.",
+  });
+const customerQuerySchema = z.object({
+  phone: z.string().trim().min(6).max(32).optional(),
+});
+const relationActorSchema = z.enum(["AI", "PROFESSIONAL", "CUSTOMER"]);
+const primaryGuardianBodySchema = z.object({
+  guardianCustomerId: z.string().trim().min(1).max(128),
+  proposedBy: relationActorSchema,
+  proposedByActor: z.string().trim().max(200).nullable().optional(),
+  confirmedBy: z.enum(["PROFESSIONAL", "CUSTOMER"]).nullable().optional(),
+  confirmedByActor: z.string().trim().max(200).nullable().optional(),
+});
+const primaryGuardianConfirmSchema = z.object({
+  confirmedBy: z.enum(["PROFESSIONAL", "CUSTOMER"]),
+  actor: z.string().trim().max(200).nullable().optional(),
+});
+// Autorização de uso pela IA é atributo do registro e nasce negada.
+const customerNoteBodySchema = z.object({
+  body: z.string().trim().min(1).max(2_000),
+  aiAuthorized: z.boolean().default(false),
+  actor: z.string().trim().max(200).nullable().optional(),
+});
+const customerTagBodySchema = z.object({
+  label: z.string().trim().min(1).max(60),
+  aiAuthorized: z.boolean().default(false),
+  actor: z.string().trim().max(200).nullable().optional(),
+});
+const authorizationPatchSchema = z.object({
+  aiAuthorized: z.boolean(),
+  actor: z.string().trim().max(200).nullable().optional(),
+});
+const customerChildParamsSchema = z.object({
+  id: z.string().trim().min(1).max(128),
+  childId: z.string().trim().min(1).max(128),
 });
 const timeBlockBodySchema = z
   .object({
@@ -171,14 +220,18 @@ export async function registerManagementRoutes(
         managedExternally: true,
       });
     }
+    const query = parse(customerQuerySchema, request.query ?? {});
     const customers = await new AtendlyCustomerService(
       prisma,
       context.tenantId,
-    ).list();
+    ).list({ phone: query.phone });
     return data(request, {
       items: customers.map(customerDto),
       source: settings.source,
       managedExternally: false,
+      // Busca por telefone devolve **candidatos**: zero, um ou vários. A
+      // escolha entre eles é sempre explícita.
+      filteredByPhone: query.phone !== undefined,
     });
   });
 
@@ -186,13 +239,46 @@ export async function registerManagementRoutes(
     const context = currentInternalContext(request);
     await requireAtendlyCalendar(prisma, context.tenantId);
     const { id } = parse(idParamsSchema, request.params);
-    return data(
-      request,
-      customerDto(
-        await new AtendlyCustomerService(prisma, context.tenantId).get(id),
-      ),
-    );
+    const customers = new AtendlyCustomerService(prisma, context.tenantId);
+    const [customer, guardian, notes, tags] = await Promise.all([
+      customers.get(id),
+      customers.primaryGuardian(id),
+      customers.listNotes(id),
+      customers.listTags(id),
+    ]);
+    return data(request, {
+      ...customerDto(customer),
+      primaryGuardian: primaryGuardianDto(guardian),
+      notes: notes.map(customerNoteDto),
+      tags: tags.map(customerTagDto),
+    });
   });
+
+  /**
+   * Recorte que a IA pode ver.
+   *
+   * Só sai daqui o que tem autorização explícita: nota e tag não autorizadas
+   * não são carregadas, e relação apenas proposta não é afirmada.
+   */
+  app.get(
+    "/internal/customers/:id/ai-context",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      await requireAtendlyCalendar(prisma, context.tenantId);
+      const { id } = parse(idParamsSchema, request.params);
+      const authorized = await new AtendlyCustomerService(
+        prisma,
+        context.tenantId,
+      ).aiAuthorizedContext(id);
+      return data(request, {
+        ...customerDto(authorized.customer),
+        primaryGuardian: primaryGuardianDto(authorized.primaryGuardian),
+        notes: authorized.notes.map((note) => note.body),
+        tags: authorized.tags.map((tag) => tag.label),
+      });
+    },
+  );
 
   app.post("/internal/customers", internalOnly, async (request, reply) => {
     const context = currentInternalContext(request);
@@ -203,6 +289,191 @@ export async function registerManagementRoutes(
     ).create(parse(customerBodySchema, request.body));
     return reply.code(201).send(data(request, customerDto(customer)));
   });
+
+  /** Nome e telefone só mudam por esta operação explícita. */
+  app.patch("/internal/customers/:id", internalOnly, async (request) => {
+    const context = currentInternalContext(request);
+    await requireAtendlyCalendar(prisma, context.tenantId);
+    const { id } = parse(idParamsSchema, request.params);
+    const body = parse(customerPatchSchema, request.body);
+    const customer = await new AtendlyCustomerService(
+      prisma,
+      context.tenantId,
+    ).update(id, body);
+    return data(request, customerDto(customer));
+  });
+
+  app.put(
+    "/internal/customers/:id/primary-guardian",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      await requireAtendlyCalendar(prisma, context.tenantId);
+      const { id } = parse(idParamsSchema, request.params);
+      const body = parse(primaryGuardianBodySchema, request.body);
+      const relation = await new AtendlyCustomerService(
+        prisma,
+        context.tenantId,
+      ).setPrimaryGuardian(id, body);
+      return data(request, primaryGuardianDto(relation));
+    },
+  );
+
+  app.post(
+    "/internal/customers/:id/primary-guardian/confirm",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      await requireAtendlyCalendar(prisma, context.tenantId);
+      const { id } = parse(idParamsSchema, request.params);
+      const body = parse(primaryGuardianConfirmSchema, request.body);
+      const relation = await new AtendlyCustomerService(
+        prisma,
+        context.tenantId,
+      ).confirmPrimaryGuardian(id, {
+        confirmedBy: body.confirmedBy,
+        actor: body.actor,
+      });
+      return data(request, primaryGuardianDto(relation));
+    },
+  );
+
+  app.delete(
+    "/internal/customers/:id/primary-guardian",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      await requireAtendlyCalendar(prisma, context.tenantId);
+      const { id } = parse(idParamsSchema, request.params);
+      return data(
+        request,
+        await new AtendlyCustomerService(
+          prisma,
+          context.tenantId,
+        ).clearPrimaryGuardian(id),
+      );
+    },
+  );
+
+  app.get("/internal/customers/:id/notes", internalOnly, async (request) => {
+    const context = currentInternalContext(request);
+    await requireAtendlyCalendar(prisma, context.tenantId);
+    const { id } = parse(idParamsSchema, request.params);
+    const notes = await new AtendlyCustomerService(
+      prisma,
+      context.tenantId,
+    ).listNotes(id);
+    return data(request, notes.map(customerNoteDto));
+  });
+
+  app.post(
+    "/internal/customers/:id/notes",
+    internalOnly,
+    async (request, reply) => {
+      const context = currentInternalContext(request);
+      await requireAtendlyCalendar(prisma, context.tenantId);
+      const { id } = parse(idParamsSchema, request.params);
+      const body = parse(customerNoteBodySchema, request.body);
+      const note = await new AtendlyCustomerService(
+        prisma,
+        context.tenantId,
+      ).addNote(id, body);
+      return reply.code(201).send(data(request, customerNoteDto(note)));
+    },
+  );
+
+  app.patch(
+    "/internal/customers/:id/notes/:childId",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      await requireAtendlyCalendar(prisma, context.tenantId);
+      const params = parse(customerChildParamsSchema, request.params);
+      const body = parse(authorizationPatchSchema, request.body);
+      const note = await new AtendlyCustomerService(
+        prisma,
+        context.tenantId,
+      ).setNoteAuthorization(params.id, params.childId, body);
+      return data(request, customerNoteDto(note));
+    },
+  );
+
+  app.delete(
+    "/internal/customers/:id/notes/:childId",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      await requireAtendlyCalendar(prisma, context.tenantId);
+      const params = parse(customerChildParamsSchema, request.params);
+      return data(
+        request,
+        await new AtendlyCustomerService(prisma, context.tenantId).deleteNote(
+          params.id,
+          params.childId,
+        ),
+      );
+    },
+  );
+
+  app.get("/internal/customers/:id/tags", internalOnly, async (request) => {
+    const context = currentInternalContext(request);
+    await requireAtendlyCalendar(prisma, context.tenantId);
+    const { id } = parse(idParamsSchema, request.params);
+    const tags = await new AtendlyCustomerService(
+      prisma,
+      context.tenantId,
+    ).listTags(id);
+    return data(request, tags.map(customerTagDto));
+  });
+
+  app.post(
+    "/internal/customers/:id/tags",
+    internalOnly,
+    async (request, reply) => {
+      const context = currentInternalContext(request);
+      await requireAtendlyCalendar(prisma, context.tenantId);
+      const { id } = parse(idParamsSchema, request.params);
+      const body = parse(customerTagBodySchema, request.body);
+      const tag = await new AtendlyCustomerService(
+        prisma,
+        context.tenantId,
+      ).addTag(id, body);
+      return reply.code(201).send(data(request, customerTagDto(tag)));
+    },
+  );
+
+  app.patch(
+    "/internal/customers/:id/tags/:childId",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      await requireAtendlyCalendar(prisma, context.tenantId);
+      const params = parse(customerChildParamsSchema, request.params);
+      const body = parse(authorizationPatchSchema, request.body);
+      const tag = await new AtendlyCustomerService(
+        prisma,
+        context.tenantId,
+      ).setTagAuthorization(params.id, params.childId, body);
+      return data(request, customerTagDto(tag));
+    },
+  );
+
+  app.delete(
+    "/internal/customers/:id/tags/:childId",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      await requireAtendlyCalendar(prisma, context.tenantId);
+      const params = parse(customerChildParamsSchema, request.params);
+      return data(
+        request,
+        await new AtendlyCustomerService(prisma, context.tenantId).deleteTag(
+          params.id,
+          params.childId,
+        ),
+      );
+    },
+  );
 
   app.get("/internal/availability-settings", internalOnly, async (request) => {
     const context = currentInternalContext(request);
@@ -585,7 +856,7 @@ function serviceDto(service: {
 function customerDto(customer: {
   id: string;
   name: string | null;
-  phone: string;
+  phone: string | null;
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -595,6 +866,81 @@ function customerDto(customer: {
     phone: customer.phone,
     createdAt: customer.createdAt.toISOString(),
     updatedAt: customer.updatedAt.toISOString(),
+  };
+}
+
+function primaryGuardianDto(
+  relation: {
+    id: string;
+    status: "PROPOSED" | "CONFIRMED";
+    proposedBy: "AI" | "PROFESSIONAL" | "CUSTOMER";
+    proposedByActor: string | null;
+    proposedAt: Date;
+    confirmedBy: "AI" | "PROFESSIONAL" | "CUSTOMER" | null;
+    confirmedByActor: string | null;
+    confirmedAt: Date | null;
+    relatedCustomer: { id: string; name: string | null; phone: string | null };
+  } | null,
+) {
+  if (!relation) return null;
+  return {
+    id: relation.id,
+    status: relation.status,
+    guardian: {
+      id: relation.relatedCustomer.id,
+      name: relation.relatedCustomer.name,
+      phone: relation.relatedCustomer.phone,
+    },
+    proposedBy: relation.proposedBy,
+    proposedByActor: relation.proposedByActor,
+    proposedAt: relation.proposedAt.toISOString(),
+    confirmedBy: relation.confirmedBy,
+    confirmedByActor: relation.confirmedByActor,
+    confirmedAt: relation.confirmedAt?.toISOString() ?? null,
+  };
+}
+
+function customerNoteDto(note: {
+  id: string;
+  body: string;
+  aiAuthorized: boolean;
+  authorizedAt: Date | null;
+  authorizedBy: string | null;
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: note.id,
+    body: note.body,
+    aiAuthorized: note.aiAuthorized,
+    authorizedAt: note.authorizedAt?.toISOString() ?? null,
+    authorizedBy: note.authorizedBy,
+    createdBy: note.createdBy,
+    createdAt: note.createdAt.toISOString(),
+    updatedAt: note.updatedAt.toISOString(),
+  };
+}
+
+function customerTagDto(tag: {
+  id: string;
+  label: string;
+  aiAuthorized: boolean;
+  authorizedAt: Date | null;
+  authorizedBy: string | null;
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: tag.id,
+    label: tag.label,
+    aiAuthorized: tag.aiAuthorized,
+    authorizedAt: tag.authorizedAt?.toISOString() ?? null,
+    authorizedBy: tag.authorizedBy,
+    createdBy: tag.createdBy,
+    createdAt: tag.createdAt.toISOString(),
+    updatedAt: tag.updatedAt.toISOString(),
   };
 }
 

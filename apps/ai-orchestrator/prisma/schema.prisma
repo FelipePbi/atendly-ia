@@ -213,6 +213,14 @@ model Contact {
   categoryOverrideAt     DateTime?
   categoryOverrideBy     String?
 
+  /// Pessoa do Scheduling resolvida a partir deste contato, preenchida quando
+  /// um agendamento e confirmado. Referencia por ID e tenant: nenhuma FK
+  /// atravessa bancos. Um contato pode apontar para pessoas diferentes ao
+  /// longo do tempo (mae que agenda para o filho) sem fundir contato nem
+  /// cliente.
+  customerId             String?
+  customerLinkedAt       DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -222,6 +230,7 @@ model Contact {
   @@unique([tenantId, channelId, externalContactId])
   @@unique([tenantId, id])
   @@index([tenantId, ignored])
+  @@index([tenantId, customerId])
 }
 
 /// Sessao de conversa.
@@ -278,6 +287,12 @@ model ConversationSession {
   conversation Conversation @relation(fields: [tenantId, channelId, conversationId], references: [tenantId, channelId, id], onDelete: Cascade)
   contact      Contact      @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: Cascade)
 
+  /// DIVERGENCIA DE SCHEMA CONHECIDA: existe tambem um indice unico **parcial**
+  /// `ConversationSession_one_open_per_conversation` sobre
+  /// `("tenantId","conversationId") WHERE "endedAt" IS NULL`, criado em SQL na
+  /// migration `20260908171000_goal005_single_open_session`. O Prisma nao
+  /// modela indice parcial, entao ele nao aparece aqui; `prisma migrate diff`
+  /// vai relatar essa diferenca e ela e intencional.
   @@unique([tenantId, id])
   @@index([tenantId, conversationId, startedAt])
   @@index([tenantId, conversationId, endedAt])

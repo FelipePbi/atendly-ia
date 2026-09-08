@@ -173,20 +173,36 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
       override: contact.categoryOverride,
       suggestion: null,
     });
-    const created = await this.prisma.conversationSession.create({
-      data: {
-        tenantId: scope.tenantId,
-        channelId: scope.channelId,
-        conversationId: scope.conversationId,
-        contactId: contact.id,
-        startedAt: now,
-        expiresAt: sessionExpiresAt(now, this.policy),
-        category: effective.category,
-        categorySource: effective.source,
-        categoryUpdatedAt: contact.categoryOverrideAt,
-        categoryUpdatedBy: contact.categoryOverrideBy,
-      },
-    });
+    // Duas mensagens do mesmo contato podem chegar juntas e tentar abrir a
+    // sessão ao mesmo tempo. O índice único parcial em SQL (uma sessão aberta
+    // por conversa) faz a segunda falhar; aqui o conflito é **absorvido**
+    // relendo a sessão que venceu, em vez de duplicar.
+    let created: SessionRow;
+    try {
+      created = await this.prisma.conversationSession.create({
+        data: {
+          tenantId: scope.tenantId,
+          channelId: scope.channelId,
+          conversationId: scope.conversationId,
+          contactId: contact.id,
+          startedAt: now,
+          expiresAt: sessionExpiresAt(now, this.policy),
+          category: effective.category,
+          categorySource: effective.source,
+          categoryUpdatedAt: contact.categoryOverrideAt,
+          categoryUpdatedBy: contact.categoryOverrideBy,
+        },
+      });
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+      const winner = await this.currentSession(
+        scope.tenantId,
+        scope.conversationId,
+      );
+      if (!winner) throw error;
+      await this.syncLegacyPauseMirror(scope, contact);
+      return toSnapshot(winner, contact);
+    }
     await this.syncLegacyPauseMirror(scope, contact);
     return toSnapshot(created, contact);
   }
@@ -479,13 +495,17 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
    * O que atravessa a troca de sessao continua atravessando: `/bot off` e
    * `/ia_pause` sao pausa do contato (`aiPaused`) e contato ignorado e regra do
    * contato. Nesses casos o espelho fica como esta.
+   *
+   * Residuo do Goal005: o handoff `OPEN` que motivou aquele espelho tambem
+   * precisa ser resolvido. Sem isto a conversa voltava para a IA com a fila de
+   * atendimento humano ainda acusando pendencia para sempre.
    */
   private async syncLegacyPauseMirror(
     scope: SessionScope,
     contact: ContactRow,
   ): Promise<void> {
     if (contact.aiPaused || contact.ignored) return;
-    await this.prisma.conversation.updateMany({
+    const cleared = await this.prisma.conversation.updateMany({
       where: {
         tenantId: scope.tenantId,
         id: scope.conversationId,
@@ -496,6 +516,15 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
         status: "ACTIVE",
         handoffPausedUntil: null,
       },
+    });
+    if (cleared.count === 0) return;
+    await this.prisma.handoff.updateMany({
+      where: {
+        tenantId: scope.tenantId,
+        conversationId: scope.conversationId,
+        status: "OPEN",
+      },
+      data: { status: "RESOLVED", resolvedAt: new Date() },
     });
   }
 
@@ -603,4 +632,11 @@ export function toSnapshot(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Violação de unicidade do PostgreSQL, inclusive a do índice parcial em SQL. */
+function isUniqueViolation(error: unknown): boolean {
+  if (!isRecord(error)) return false;
+  if (error.code === "P2002" || error.code === "23505") return true;
+  return isRecord(error.meta) && error.meta.code === "23505";
 }

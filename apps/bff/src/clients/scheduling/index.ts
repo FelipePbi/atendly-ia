@@ -22,6 +22,48 @@ const customerSchema = z.object({
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });
+const primaryGuardianSchema = z
+  .object({
+    id: z.string(),
+    status: z.enum(["PROPOSED", "CONFIRMED"]),
+    guardian: z.object({
+      id: z.string(),
+      name: z.string().nullable(),
+      phone: z.string().nullable(),
+    }),
+    proposedBy: z.enum(["AI", "PROFESSIONAL", "CUSTOMER"]),
+    proposedByActor: z.string().nullable(),
+    proposedAt: z.string(),
+    confirmedBy: z.enum(["AI", "PROFESSIONAL", "CUSTOMER"]).nullable(),
+    confirmedByActor: z.string().nullable(),
+    confirmedAt: z.string().nullable(),
+  })
+  .nullable();
+const customerNoteSchema = z.object({
+  id: z.string(),
+  body: z.string(),
+  aiAuthorized: z.boolean(),
+  authorizedAt: z.string().nullable(),
+  authorizedBy: z.string().nullable(),
+  createdBy: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+const customerTagSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  aiAuthorized: z.boolean(),
+  authorizedAt: z.string().nullable(),
+  authorizedBy: z.string().nullable(),
+  createdBy: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+const customerDetailSchema = customerSchema.extend({
+  primaryGuardian: primaryGuardianSchema.default(null),
+  notes: z.array(customerNoteSchema).default([]),
+  tags: z.array(customerTagSchema).default([]),
+});
 const appointmentSchema = z.object({
   id: z.string(),
   source: z.enum(["AI", "USER", "INTEGRATION"]),
@@ -159,7 +201,12 @@ export class SchedulingClient {
 
   async listAppointments(
     context: InternalRequestContext,
-    query: { startDate: string; endDate: string; customerPhone?: string },
+    query: {
+      startDate: string;
+      endDate: string;
+      customerId?: string;
+      customerPhone?: string;
+    },
   ) {
     return this.get(
       context,
@@ -288,7 +335,10 @@ export class SchedulingClient {
     );
   }
 
-  async listCustomers(context: InternalRequestContext) {
+  async listCustomers(
+    context: InternalRequestContext,
+    query: { phone?: string } = {},
+  ) {
     return this.get(
       context,
       "/internal/customers",
@@ -296,7 +346,9 @@ export class SchedulingClient {
         items: z.array(customerSchema),
         source: sourceSchema,
         managedExternally: z.boolean(),
+        filteredByPhone: z.boolean().optional(),
       }),
+      query,
     );
   }
 
@@ -304,7 +356,7 @@ export class SchedulingClient {
     return this.get(
       context,
       `/internal/customers/${encodeURIComponent(id)}`,
-      customerSchema,
+      customerDetailSchema,
     );
   }
 
@@ -315,6 +367,147 @@ export class SchedulingClient {
       "/internal/customers",
       input,
       customerSchema,
+    );
+  }
+
+  async updateCustomer(
+    context: InternalRequestContext,
+    id: string,
+    input: unknown,
+  ) {
+    return this.mutate(
+      context,
+      "PATCH",
+      `/internal/customers/${encodeURIComponent(id)}`,
+      input,
+      customerSchema,
+    );
+  }
+
+  async setCustomerPrimaryGuardian(
+    context: InternalRequestContext,
+    id: string,
+    input: unknown,
+  ) {
+    return this.mutate(
+      context,
+      "PUT",
+      `/internal/customers/${encodeURIComponent(id)}/primary-guardian`,
+      input,
+      primaryGuardianSchema,
+    );
+  }
+
+  async confirmCustomerPrimaryGuardian(
+    context: InternalRequestContext,
+    id: string,
+    input: unknown,
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      `/internal/customers/${encodeURIComponent(id)}/primary-guardian/confirm`,
+      input,
+      primaryGuardianSchema,
+    );
+  }
+
+  async clearCustomerPrimaryGuardian(
+    context: InternalRequestContext,
+    id: string,
+  ) {
+    return this.mutate(
+      context,
+      "DELETE",
+      `/internal/customers/${encodeURIComponent(id)}/primary-guardian`,
+      undefined,
+      z.object({ deleted: z.boolean() }),
+    );
+  }
+
+  async createCustomerNote(
+    context: InternalRequestContext,
+    id: string,
+    input: unknown,
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      `/internal/customers/${encodeURIComponent(id)}/notes`,
+      input,
+      customerNoteSchema,
+    );
+  }
+
+  async updateCustomerNote(
+    context: InternalRequestContext,
+    id: string,
+    noteId: string,
+    input: unknown,
+  ) {
+    return this.mutate(
+      context,
+      "PATCH",
+      `/internal/customers/${encodeURIComponent(id)}/notes/${encodeURIComponent(noteId)}`,
+      input,
+      customerNoteSchema,
+    );
+  }
+
+  async deleteCustomerNote(
+    context: InternalRequestContext,
+    id: string,
+    noteId: string,
+  ) {
+    return this.mutate(
+      context,
+      "DELETE",
+      `/internal/customers/${encodeURIComponent(id)}/notes/${encodeURIComponent(noteId)}`,
+      undefined,
+      z.object({ deleted: z.literal(true) }),
+    );
+  }
+
+  async createCustomerTag(
+    context: InternalRequestContext,
+    id: string,
+    input: unknown,
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      `/internal/customers/${encodeURIComponent(id)}/tags`,
+      input,
+      customerTagSchema,
+    );
+  }
+
+  async updateCustomerTag(
+    context: InternalRequestContext,
+    id: string,
+    tagId: string,
+    input: unknown,
+  ) {
+    return this.mutate(
+      context,
+      "PATCH",
+      `/internal/customers/${encodeURIComponent(id)}/tags/${encodeURIComponent(tagId)}`,
+      input,
+      customerTagSchema,
+    );
+  }
+
+  async deleteCustomerTag(
+    context: InternalRequestContext,
+    id: string,
+    tagId: string,
+  ) {
+    return this.mutate(
+      context,
+      "DELETE",
+      `/internal/customers/${encodeURIComponent(id)}/tags/${encodeURIComponent(tagId)}`,
+      undefined,
+      z.object({ deleted: z.literal(true) }),
     );
   }
 
@@ -440,7 +633,7 @@ export class SchedulingClient {
 
   private async mutate<T extends z.ZodType>(
     context: InternalRequestContext,
-    method: "POST" | "PATCH" | "DELETE",
+    method: "POST" | "PATCH" | "PUT" | "DELETE",
     path: string,
     body: unknown,
     schema: T,

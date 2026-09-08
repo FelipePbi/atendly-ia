@@ -1,6 +1,6 @@
 # Goal 006 — Clientes como pessoas
 
-**Status: READY.** Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-08 pelo Tech Lead Agent após [Goal005 ACCEPTED](../reviews/005-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
+**Status: ACCEPTED.** Aceito em 2026-09-08 na [rodada 1 do review006](../reviews/006-review.md); fechamento integrado como `8d77ed992f12e1405ae7bfaaeb2d852af5711b5d`. Texto original preservado abaixo. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-08 pelo Tech Lead Agent após [Goal005 ACCEPTED](../reviews/005-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
 
 Developer execution profile: OPUS_MEDIUM
 

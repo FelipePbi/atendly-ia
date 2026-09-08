@@ -1,6 +1,6 @@
 # Goal 005 — Contatos, sessão e controle humano
 
-**Status: READY.** Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-08 pelo Tech Lead Agent após [Goal004 ACCEPTED](../reviews/004-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
+**Status: ACCEPTED.** Aceito em 2026-09-08 na [rodada 2 do review005](../reviews/005-review.md); fechamento integrado como `30fc42f62616ba826d0f2fc737386b038fbf9fb7`. Texto original preservado abaixo. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-08 pelo Tech Lead Agent após [Goal004 ACCEPTED](../reviews/004-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
 
 ## Baseline aceita
 

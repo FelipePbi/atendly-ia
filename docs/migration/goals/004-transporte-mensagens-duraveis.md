@@ -1,6 +1,6 @@
 # Goal 004 — Transporte e mensagens duráveis
 
-**Status: READY.** Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-07 pelo Tech Lead Agent após [Goal003 ACCEPTED](../reviews/003-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
+**Status: ACCEPTED.** Aceito em 2026-09-07 na [rodada 2 do review004](../reviews/004-review.md); fechamento integrado como `ecaf7058f2b81ffe4bd4d2966e233b4b58c16dd5`. Texto original preservado abaixo. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-07 pelo Tech Lead Agent após [Goal003 ACCEPTED](../reviews/003-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
 
 ## Baseline aceita
 

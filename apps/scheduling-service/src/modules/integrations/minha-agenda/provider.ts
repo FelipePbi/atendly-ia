@@ -4,11 +4,13 @@ import {
   type AvailableSlot,
   type CalendarAppointment,
   type CalendarAppointmentServiceItem,
+  type CalendarHold,
   type CalendarProvider,
   type CalendarServiceDefinition,
   type CancelCalendarAppointmentInput,
   computeAgreementTotal,
   type CreateCalendarAppointmentInput,
+  type CreateCalendarHoldInput,
   type GetAvailabilityInput,
   type ListAppointmentsInput,
   type RescheduleCalendarAppointmentInput,
@@ -140,6 +142,7 @@ export class MinhaAgendaCalendarProvider implements CalendarProvider {
     input: CreateCalendarAppointmentInput,
   ): Promise<CalendarAppointment> {
     this.requireWrites();
+    this.refuseAtendlyOnlyWrite(input);
     const services = await this.findServices(input.serviceIds);
     const duration = this.calculateServiceBlockMinutes(services);
     await this.assertSlotAvailable(
@@ -195,6 +198,7 @@ export class MinhaAgendaCalendarProvider implements CalendarProvider {
     input: RescheduleCalendarAppointmentInput,
   ): Promise<CalendarAppointment> {
     this.requireWrites();
+    this.refuseAtendlyOnlyWrite(input);
     const appointmentId = parseExternalId(input.appointmentId);
     const current = await this.client.getAppointment(appointmentId);
     const serviceId = this.extractSingleServiceId(current);
@@ -262,6 +266,66 @@ export class MinhaAgendaCalendarProvider implements CalendarProvider {
       input.idempotencyKey,
     );
     return { ...toCalendarAppointment(current), status: "CANCELLED" };
+  }
+
+  /**
+   * A fonte externa mantem a interface, mas recusa o que so a Agenda Atendly
+   * sabe garantir (Goal008): sobreposicao forcada e atendimento sem servico
+   * cadastrado dependem da politica unica de escrita — transacao, lock e
+   * historico no mesmo commit — que nao existe do outro lado de uma chamada
+   * HTTP. Recusar e explicito; aceitar seria fingir a mesma garantia.
+   */
+  private refuseAtendlyOnlyWrite(input: {
+    overlapOverride?: boolean;
+    serviceIds?: string[];
+    holdId?: string;
+  }): void {
+    if (input.holdId) this.refuseHolds();
+    if (input.overlapOverride) {
+      throw new AppError(
+        "EXTERNAL_CALENDAR_OVERLAP_OVERRIDE_UNSUPPORTED",
+        "The external calendar does not support forcing an overlapping appointment.",
+        409,
+      );
+    }
+    if (input.serviceIds && input.serviceIds.length === 0) {
+      throw new AppError(
+        "EXTERNAL_CALENDAR_MANUAL_APPOINTMENT_UNSUPPORTED",
+        "The external calendar does not support an appointment without a catalog service.",
+        409,
+      );
+    }
+  }
+
+  /**
+   * Holds nao existem na fonte externa (Goal008). Segurar um horario por
+   * minutos depende de reservar tempo sob a mesma transacao, o mesmo lock e o
+   * mesmo relogio que decidem a disponibilidade — nada disso atravessa uma
+   * chamada HTTP para outro sistema. Recusar e explicito; aceitar seria
+   * prometer uma reserva que ninguem esta guardando.
+   */
+  async createHold(_input: CreateCalendarHoldInput): Promise<CalendarHold> {
+    this.refuseHolds();
+  }
+
+  async listHolds(): Promise<CalendarHold[]> {
+    this.refuseHolds();
+  }
+
+  async getHold(_holdId: string): Promise<CalendarHold> {
+    this.refuseHolds();
+  }
+
+  async releaseHold(_holdId: string): Promise<CalendarHold> {
+    this.refuseHolds();
+  }
+
+  private refuseHolds(): never {
+    throw new AppError(
+      "EXTERNAL_CALENDAR_HOLD_UNSUPPORTED",
+      "The external calendar does not support holding a slot for confirmation.",
+      409,
+    );
   }
 
   private requireWrites(): void {
@@ -498,6 +562,9 @@ function toCalendarAppointment(
   return {
     id: String(appointment.id),
     source: "INTEGRATION",
+    // Atendimento sem servico cadastrado nao existe na fonte externa: la todo
+    // compromisso vem de um servico, entao nunca ha titulo proprio.
+    title: null,
     date: appointment.date,
     startTime: appointment.startTime,
     endTime: appointment.endTime,

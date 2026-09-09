@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
+import { env } from "../../config/env.js";
 import type { PrismaClient } from "../../generated/prisma/client.js";
 import { getPrisma } from "../../infrastructure/database/prisma.js";
 import {
@@ -14,10 +15,15 @@ import {
   timeFromMinutes,
 } from "../../shared/date-time/calendar-date-time.js";
 import { AppError } from "../../shared/errors/app-error.js";
+import { runAutoCompleteSweep } from "../appointments/auto-complete-loop.js";
 import {
   type CalendarRequestContext,
   CalendarService,
 } from "../calendar/calendar-service.js";
+import {
+  createTimeBlock,
+  removeTimeBlock,
+} from "../calendar/time-blocks.js";
 import { AtendlyCustomerService } from "../customers/atendly-customer-service.js";
 import { encryptIntegrationCredentials } from "../integrations/credentials.js";
 import { parseMinhaAgendaConnection } from "../integrations/minha-agenda/config.js";
@@ -548,54 +554,48 @@ export async function registerManagementRoutes(
     },
   );
 
+  // Bloqueio ocupa e libera tempo como qualquer atendimento: mesma transacao,
+  // mesmo lock e conflito checado dentro dela (Goal008).
   app.post("/internal/time-blocks", internalOnly, async (request, reply) => {
     const context = currentInternalContext(request);
-    await requireAtendlyCalendar(prisma, context.tenantId);
+    const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
     const body = parse(timeBlockBodySchema, request.body);
-    const startAt = new Date(body.startAt);
-    const endAt = new Date(body.endAt);
-    const conflict = await prisma.appointment.findFirst({
-      where: {
-        tenantId: context.tenantId,
-        status: { not: "CANCELLED" },
-        startAt: { lt: endAt },
-        endAt: { gt: startAt },
-      },
-      select: { id: true },
-    });
-    if (conflict) {
-      throw new AppError(
-        "TIME_BLOCK_APPOINTMENT_CONFLICT",
-        "Time block overlaps an existing appointment.",
-        409,
-      );
-    }
-    const block = await prisma.timeBlock.create({
-      data: {
-        tenantId: context.tenantId,
-        startAt,
-        endAt,
-        reason: body.reason ?? null,
-      },
+    const block = await createTimeBlock(prisma, {
+      tenantId: context.tenantId,
+      timeZone: calendar.timezone,
+      startAt: new Date(body.startAt),
+      endAt: new Date(body.endAt),
+      reason: body.reason ?? null,
     });
     return reply.code(201).send(data(request, timeBlockDto(block)));
   });
 
   app.delete("/internal/time-blocks/:id", internalOnly, async (request) => {
     const context = currentInternalContext(request);
-    await requireAtendlyCalendar(prisma, context.tenantId);
+    const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
     const { id } = parse(idParamsSchema, request.params);
-    const deleted = await prisma.timeBlock.deleteMany({
-      where: { id, tenantId: context.tenantId },
+    await removeTimeBlock(prisma, {
+      tenantId: context.tenantId,
+      timeZone: calendar.timezone,
+      id,
     });
-    if (deleted.count === 0) {
-      throw new AppError(
-        "TIME_BLOCK_NOT_FOUND",
-        "Time block was not found.",
-        404,
-      );
-    }
     return data(request, { deleted: true as const });
+  });
+
+  // Conclusao automatica invocavel (Goal008): a mesma varredura do loop,
+  // uma vez, sem esperar o timer. Existe para o teste de integracao provar o
+  // relogio do banco e o lease entre duas instancias sem depender de
+  // `sleep`; em operacao, o loop no proprio processo e quem a chama.
+  app.post("/internal/appointments/auto-complete", internalOnly, async (request) => {
+    const context = currentInternalContext(request);
+    // Escopo por tenant confirmado antes da varredura: a rota so responde a
+    // um tenant com agenda Atendly, mesmo que a varredura em si seja global
+    // (o loop no processo atende todos os tenants do banco do dono).
+    await requireAtendlyCalendar(prisma, context.tenantId);
+    const result = await runAutoCompleteSweep(prisma, {
+      graceMinutes: env.CALENDAR_AUTO_COMPLETE_GRACE_MINUTES,
+    });
+    return data(request, result);
   });
 
   app.post(

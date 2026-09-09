@@ -90,6 +90,9 @@ const customerDetailSchema = customerSchema.extend({
 const appointmentSchema = z.object({
   id: z.string(),
   source: z.enum(["AI", "USER", "INTEGRATION"]),
+  // Atendimento manual excepcional sem servico cadastrado (Goal008). Com
+  // default: toda resposta anterior a este Goal continua decodavel.
+  title: z.string().nullable().default(null),
   date: z.string(),
   startTime: z.string(),
   endTime: z.string(),
@@ -108,7 +111,66 @@ const appointmentSchema = z.object({
   totalPrice: z.number().nonnegative().nullable(),
   totalPriceType: z.enum(["FIXED", "STARTING_AT", "NONE"]).default("NONE"),
   comments: z.string().nullable(),
+  // `status` continua `string`, nao enum: um replay de idempotencia gravado
+  // antes do Goal008 traz `SCHEDULED`, e recusar a resposta seria quebrar
+  // uma chave ja respondida. A leitura de estado do produto e do frontend.
   status: z.string(),
+});
+
+/**
+ * Ciclo de vida do atendimento (Goal008): conclusao, falta, presenca e
+ * valor final. E um recorte proprio, e nao um pedaco do atendimento, porque
+ * as rotas de ciclo respondem exatamente isto — o estado que mudou, sem
+ * repetir servicos, cliente e acordo.
+ */
+const appointmentLifecycleSchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  completedAt: z.string().nullable(),
+  completedBy: z.string().nullable(),
+  completionOrigin: z.enum(["MANUAL", "AUTO"]).nullable(),
+  noShowAt: z.string().nullable(),
+  noShowNote: z.string().nullable(),
+  presenceConfirmedAt: z.string().nullable(),
+  finalValue: z.number().nullable(),
+  finalValueSetAt: z.string().nullable(),
+  finalValueSetBy: z.string().nullable(),
+});
+
+const appointmentEventSchema = z.object({
+  id: z.string(),
+  type: z.enum([
+    "CREATED",
+    "RESCHEDULED",
+    "CANCELLED",
+    "COMPLETED",
+    "NO_SHOW",
+    "FINAL_VALUE_SET",
+    "PRESENCE_CONFIRMED",
+    "HOLD_CONSUMED",
+    "OVERLAP_OVERRIDE",
+  ]),
+  source: z.enum(["AI", "USER", "SYSTEM", "INTEGRATION"]),
+  actor: z.string().nullable(),
+  reason: z.string().nullable(),
+  before: z.unknown().nullable(),
+  after: z.unknown().nullable(),
+  occurredAt: z.string(),
+  sequence: z.string(),
+});
+
+const holdSchema = z.object({
+  id: z.string(),
+  date: z.string(),
+  startTime: z.string(),
+  endTime: z.string(),
+  durationMinutes: z.number().int().positive(),
+  serviceIds: z.array(z.string()),
+  customerId: z.string().nullable(),
+  contactRef: z.string().nullable(),
+  source: z.enum(["AI", "USER"]),
+  expiresAt: z.string(),
+  status: z.enum(["ACTIVE", "CONSUMED", "RELEASED", "EXPIRED"]),
 });
 const calendarSchema = z.object({
   source: sourceSchema.nullable(),
@@ -293,6 +355,99 @@ export class SchedulingClient {
       input,
       appointmentSchema,
       idempotencyKey,
+    );
+  }
+
+  /**
+   * Hold (Goal008). Criar segura tempo, entao exige `Idempotency-Key`, como
+   * confirmar e remarcar; listar e liberar nao — liberar de novo nao tem
+   * segundo efeito.
+   */
+  async createHold(
+    context: InternalRequestContext,
+    input: unknown,
+    idempotencyKey: string,
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      "/internal/holds",
+      input,
+      holdSchema,
+      idempotencyKey,
+    );
+  }
+
+  async listHolds(context: InternalRequestContext) {
+    return this.get(context, "/internal/holds", z.array(holdSchema));
+  }
+
+  async releaseHold(context: InternalRequestContext, id: string) {
+    return this.mutate(
+      context,
+      "DELETE",
+      `/internal/holds/${encodeURIComponent(id)}`,
+      undefined,
+      holdSchema,
+    );
+  }
+
+  async completeAppointment(context: InternalRequestContext, id: string) {
+    return this.mutate(
+      context,
+      "POST",
+      `/internal/appointments/${encodeURIComponent(id)}/complete`,
+      {},
+      appointmentLifecycleSchema,
+    );
+  }
+
+  async markAppointmentNoShow(
+    context: InternalRequestContext,
+    id: string,
+    input: unknown,
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      `/internal/appointments/${encodeURIComponent(id)}/no-show`,
+      input,
+      appointmentLifecycleSchema,
+    );
+  }
+
+  async setAppointmentFinalValue(
+    context: InternalRequestContext,
+    id: string,
+    input: unknown,
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      `/internal/appointments/${encodeURIComponent(id)}/final-value`,
+      input,
+      appointmentLifecycleSchema,
+    );
+  }
+
+  async confirmAppointmentPresence(
+    context: InternalRequestContext,
+    id: string,
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      `/internal/appointments/${encodeURIComponent(id)}/presence`,
+      {},
+      appointmentLifecycleSchema,
+    );
+  }
+
+  async listAppointmentEvents(context: InternalRequestContext, id: string) {
+    return this.get(
+      context,
+      `/internal/appointments/${encodeURIComponent(id)}/events`,
+      z.array(appointmentEventSchema),
     );
   }
 

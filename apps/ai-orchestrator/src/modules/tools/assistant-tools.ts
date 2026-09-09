@@ -13,9 +13,11 @@ import {
   SchedulingClient,
   type SchedulingGateway,
 } from "../scheduling-service/client.js";
-import type {
-  SchedulingAppointment,
-  SchedulingRequestContext,
+import {
+  APPOINTMENT_HOLD_EXPIRED,
+  type SchedulingAppointment,
+  type SchedulingHold,
+  type SchedulingRequestContext,
 } from "../scheduling-service/types.js";
 import type { BusinessContext } from "../tenant-config/business-context.js";
 export interface ToolExecutionContext {
@@ -76,6 +78,15 @@ type PendingAction =
       customerId?: string | null;
       /** Candidato unico proposto: precisa de confirmacao da pessoa. */
       proposedCustomerId?: string | null;
+      /**
+       * Hold criado ao propor o horario (Goal008): o rascunho carrega a
+       * reserva, e a confirmacao a consome. Nulo quando a fonte da agenda
+       * nao suporta hold (agenda externa) ou em rascunho anterior a este
+       * Goal — nesses casos a confirmacao revalida a disponibilidade
+       * normalmente, como antes.
+       */
+      holdId?: string | null;
+      holdExpiresAt?: string | null;
       idempotencyKey: string;
     }
   | {
@@ -88,6 +99,9 @@ type PendingAction =
       appointmentId: string;
       date: string;
       startTime: string;
+      /** Hold do NOVO horario; o original segue ocupado ate a confirmacao. */
+      holdId?: string | null;
+      holdExpiresAt?: string | null;
       idempotencyKey: string;
     };
 
@@ -633,6 +647,19 @@ export class AssistantToolRegistry {
     const identity = await this.resolveScheduleCustomer(args, context);
     if ("ok" in identity) return identity;
 
+    // Propor ja segura o horario (Goal008): entre a proposta e o "pode
+    // confirmar" da cliente existe uma conversa inteira, e sem hold esse
+    // intervalo e exatamente onde o horario some.
+    const hold = await this.holdProposedSlot(
+      {
+        serviceIds: serviceResult.serviceIds,
+        date: args.date,
+        startTime: args.startTime,
+        customerId: identity.customerId ?? identity.proposedCustomerId,
+      },
+      context,
+    );
+
     const pending: PendingAction = {
       type: "schedule",
       serviceId: serviceResult.serviceIds[0],
@@ -651,6 +678,8 @@ export class AssistantToolRegistry {
       customerPhone: context.phone,
       customerId: identity.customerId,
       proposedCustomerId: identity.proposedCustomerId,
+      holdId: hold?.id ?? null,
+      holdExpiresAt: hold?.expiresAt ?? null,
       idempotencyKey: context.idempotencyKey,
     };
     await this.setPendingAction(context.conversationId, pending);
@@ -658,7 +687,47 @@ export class AssistantToolRegistry {
       requiresConfirmation: true,
       pendingAction: pending,
       customerIdentity: identity,
+      hold: hold ? { id: hold.id, expiresAt: hold.expiresAt } : null,
     };
+  }
+
+  /**
+   * Segura o horario proposto, sem transformar a proposta em confirmacao.
+   *
+   * Duas falhas sao tratadas de formas opostas de proposito. Uma fonte de
+   * agenda externa nao tem hold — recusar a proposta inteira por isso seria
+   * quebrar quem depende dessa fonte, entao a proposta segue **sem** reserva,
+   * como antes deste Goal. Ja "o horario nao esta livre" e informacao real
+   * sobre a agenda: propagar e o certo, porque propor um horario ocupado e
+   * pior do que nao propor.
+   */
+  private async holdProposedSlot(
+    input: {
+      serviceIds: string[];
+      date: string;
+      startTime: string;
+      customerId?: string | null;
+    },
+    context: ToolExecutionContext,
+  ): Promise<SchedulingHold | null> {
+    try {
+      return await this.scheduling.createHold(
+        {
+          serviceIds: input.serviceIds,
+          date: input.date,
+          startTime: input.startTime,
+          customerId: input.customerId ?? null,
+          // Contato ainda nao resolvido para uma pessoa: referencia livre,
+          // nunca fusao de identidade por telefone (D-005).
+          contactRef: input.customerId ? null : context.phone,
+        },
+        schedulingContext(context),
+        `${context.idempotencyKey}:hold`,
+      );
+    } catch (error) {
+      if (holdsUnsupported(error)) return null;
+      throw error;
+    }
   }
 
   /**
@@ -749,24 +818,70 @@ export class AssistantToolRegistry {
     // nasce no Scheduling dentro da transação de confirmação.
     const resolvedCustomerId =
       pending.customerId ?? pending.proposedCustomerId ?? null;
-    const appointment = await this.scheduling.createAppointment(
-      {
-        serviceId: serviceResult.serviceIds[0],
-        serviceIds: serviceResult.serviceIds,
-        date: pending.date,
-        startTime: pending.startTime,
-        customerId: resolvedCustomerId,
-        customerName: resolvedCustomerId ? null : pending.customerName,
-        customerPhone: resolvedCustomerId ? null : pending.customerPhone,
-        comments: buildAppointmentComment(serviceResult.services),
-      },
-      schedulingContext(context),
-      pending.idempotencyKey || context.idempotencyKey,
-    );
+    let appointment;
+    try {
+      appointment = await this.scheduling.createAppointment(
+        {
+          serviceId: serviceResult.serviceIds[0],
+          serviceIds: serviceResult.serviceIds,
+          date: pending.date,
+          startTime: pending.startTime,
+          customerId: resolvedCustomerId,
+          customerName: resolvedCustomerId ? null : pending.customerName,
+          customerPhone: resolvedCustomerId ? null : pending.customerPhone,
+          comments: buildAppointmentComment(serviceResult.services),
+          holdId: pending.holdId ?? null,
+        },
+        schedulingContext(context),
+        pending.idempotencyKey || context.idempotencyKey,
+      );
+    } catch (error) {
+      if (!isHoldExpired(error)) throw error;
+      // Hold vencido nao vira confirmacao silenciosa: a IA consulta de novo
+      // e volta com alternativas. O rascunho perde a reserva mas permanece,
+      // porque a conversa continua sendo sobre o mesmo agendamento.
+      return this.holdExpiredAlternatives(
+        serviceResult.serviceIds,
+        pending.date,
+        context,
+        { ...pending, holdId: null, holdExpiresAt: null },
+      );
+    }
 
     await this.linkContactToCustomer(context, appointment.customerId);
     await this.clearPendingAction(context.conversationId);
     return { appointment: this.presentAppointment(appointment) };
+  }
+
+  /**
+   * Resposta unica para "o horario reservado nao vale mais": disponibilidade
+   * consultada de novo e alternativas oferecidas, sem nada confirmado.
+   *
+   * O resultado e uma falha de dominio (`ok: false`) e nao um sucesso com
+   * aviso: quem le precisa saber que **nao existe** agendamento, e um objeto
+   * de sucesso com um campo `expired` escondido no meio seria lido como
+   * confirmacao mais cedo ou mais tarde.
+   */
+  private async holdExpiredAlternatives(
+    serviceIds: string[],
+    startDate: string,
+    context: ToolExecutionContext,
+    pending: PendingAction,
+  ) {
+    const slots = await this.scheduling.getAvailableSlotsForServices(
+      serviceIds,
+      startDate,
+      context.businessContext,
+      schedulingContext(context),
+    );
+    await this.setPendingAction(context.conversationId, pending);
+    return {
+      ok: false as const,
+      code: APPOINTMENT_HOLD_EXPIRED,
+      error:
+        "A reserva do horario expirou. Nada foi confirmado; ofereca os horarios disponiveis abaixo e peca uma nova escolha.",
+      details: { slots, confirmed: false },
+    };
   }
 
   /**
@@ -904,11 +1019,26 @@ export class AssistantToolRegistry {
       };
     }
 
+    // Hold apenas no horario NOVO. O original continua ocupado pelo proprio
+    // atendimento ate a remarcacao commitar: soltar antes deixaria a cliente
+    // sem nenhum dos dois se a confirmacao nao viesse.
+    const hold = await this.holdProposedSlot(
+      {
+        serviceIds: appointment.serviceIds,
+        date: args.date,
+        startTime: args.startTime,
+        customerId: appointment.customerId,
+      },
+      context,
+    );
+
     const pending: PendingAction = {
       type: "reschedule",
       appointmentId: args.appointmentId,
       date: args.date,
       startTime: args.startTime,
+      holdId: hold?.id ?? null,
+      holdExpiresAt: hold?.expiresAt ?? null,
       idempotencyKey: context.idempotencyKey,
     };
     await this.setPendingAction(context.conversationId, pending);
@@ -917,6 +1047,7 @@ export class AssistantToolRegistry {
       currentAppointment: this.presentAppointment(appointment),
       newDate: args.date,
       newStartTime: args.startTime,
+      hold: hold ? { id: hold.id, expiresAt: hold.expiresAt } : null,
     };
   }
 
@@ -926,15 +1057,37 @@ export class AssistantToolRegistry {
       return { ok: false, error: "Nao ha remarcacao pendente para confirmar." };
     }
 
-    const appointment = await this.scheduling.rescheduleAppointment(
-      {
-        appointmentId: pending.appointmentId,
-        date: pending.date,
-        startTime: pending.startTime,
-      },
-      schedulingContext(context),
-      pending.idempotencyKey || context.idempotencyKey,
-    );
+    let appointment;
+    try {
+      appointment = await this.scheduling.rescheduleAppointment(
+        {
+          appointmentId: pending.appointmentId,
+          date: pending.date,
+          startTime: pending.startTime,
+          holdId: pending.holdId ?? null,
+        },
+        schedulingContext(context),
+        pending.idempotencyKey || context.idempotencyKey,
+      );
+    } catch (error) {
+      if (!isHoldExpired(error)) throw error;
+      // Nada foi remarcado: o atendimento original continua exatamente onde
+      // estava, e e isso que a IA deve dizer antes de oferecer outro horario.
+      const current = await this.scheduling.findFutureAppointmentsForPhone(
+        context.phone,
+        context.businessContext,
+        schedulingContext(context),
+      );
+      const original = current.find(
+        (item) => item.id === pending.appointmentId,
+      );
+      return this.holdExpiredAlternatives(
+        original?.serviceIds ?? [],
+        pending.date,
+        context,
+        { ...pending, holdId: null, holdExpiresAt: null },
+      );
+    }
 
     await this.clearPendingAction(context.conversationId);
     return { appointment: this.presentAppointment(appointment) };
@@ -1240,6 +1393,32 @@ function requireString(value: string | undefined, field: string): string {
     statusCode: 400,
     code: "INVALID_TOOL_INPUT",
   });
+}
+
+/**
+ * Hold que nao serve mais para esta confirmacao (vencido, consumido,
+ * liberado ou de outro horario). O Scheduling usa um unico codigo para
+ * todos: a reacao da IA e sempre a mesma — consultar de novo.
+ */
+function isHoldExpired(error: unknown): boolean {
+  return errorCode(error) === APPOINTMENT_HOLD_EXPIRED;
+}
+
+/**
+ * Fonte de agenda que nao tem hold: a proposta segue sem reserva.
+ *
+ * Um codigo unico e generico, e nao a lista dos integradores que nao
+ * suportam hold: a IA enxerga apenas o gateway de agenda, e quem sabe qual
+ * fonte esta por tras — e por que ela recusa — e o Scheduling.
+ */
+function holdsUnsupported(error: unknown): boolean {
+  return errorCode(error) === "EXTERNAL_CALENDAR_HOLD_UNSUPPORTED";
+}
+
+function errorCode(error: unknown): string | null {
+  if (error instanceof AppError) return error.code ?? null;
+  if (isRecord(error) && typeof error.code === "string") return error.code;
+  return null;
 }
 
 function isDomainFailure(

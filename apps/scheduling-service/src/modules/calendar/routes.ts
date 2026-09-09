@@ -42,10 +42,28 @@ function parseServiceIds(value: unknown): string[] {
       : [],
   );
 }
+/**
+ * Sobreposição por decisão humana (Goal008). A rota apenas transporta a
+ * flag e o motivo: quem recusa `source: AI` é o provider, num único lugar,
+ * porque a mesma regra tem de valer para todo caminho de escrita — não só
+ * para o que passou por HTTP.
+ */
+const overlapOverrideShape = {
+  overlapOverride: z.boolean().optional(),
+  overlapOverrideReason: z.string().trim().min(1).max(500).optional(),
+};
+
 const createAppointmentBodySchema = z
   .object({
     source: z.enum(["AI", "USER"]).optional(),
-    serviceIds: z.array(z.string().trim().min(1).max(128)).min(1).max(10),
+    // Vazio é permitido **no schema** porque o atendimento manual
+    // excepcional sem serviço cadastrado existe (Goal008); quem restringe
+    // isso a `source: USER`, com título e duração, é o provider.
+    serviceIds: z.array(z.string().trim().min(1).max(128)).max(10).default([]),
+    /** Título do atendimento manual excepcional sem serviço cadastrado. */
+    title: z.string().trim().min(1).max(200).optional(),
+    /** Duração do atendimento manual excepcional. */
+    durationMinutes: z.number().int().min(1).max(1_440).optional(),
     date: dateSchema,
     startTime: timeSchema,
     // Ou a pessoa já foi resolvida (`customerId`), ou o cadastro nasce na
@@ -55,6 +73,9 @@ const createAppointmentBodySchema = z
     customerPhone: z.string().trim().min(6).max(32).optional(),
     comments: z.string().trim().max(2_000).optional(),
     stepMinutes: z.number().int().min(1).max(180).default(30),
+    /** Hold a consumir nesta confirmação (Goal008). */
+    holdId: z.string().trim().min(1).max(128).optional(),
+    ...overlapOverrideShape,
   })
   .refine(
     (value) =>
@@ -66,12 +87,37 @@ const createAppointmentBodySchema = z
     },
   );
 const rescheduleBodySchema = z.object({
+  source: z.enum(["AI", "USER"]).optional(),
   date: dateSchema,
   startTime: timeSchema,
   stepMinutes: z.number().int().min(1).max(180).default(30),
+  /** Hold do NOVO horário; o original continua ocupado até o commit. */
+  holdId: z.string().trim().min(1).max(128).optional(),
+  ...overlapOverrideShape,
 });
 const cancelBodySchema = z.object({
+  source: z.enum(["AI", "USER"]).optional(),
   comments: z.string().trim().max(2_000).optional(),
+});
+
+const createHoldBodySchema = z.object({
+  source: z.enum(["AI", "USER"]).optional(),
+  serviceIds: z.array(z.string().trim().min(1).max(128)).min(1).max(10),
+  date: dateSchema,
+  startTime: timeSchema,
+  stepMinutes: z.number().int().min(1).max(180).default(30),
+  customerId: z.string().trim().min(1).max(128).optional(),
+  /** Contato ainda não resolvido para uma pessoa; nunca funde identidade. */
+  contactRef: z.string().trim().min(1).max(200).optional(),
+});
+
+const noShowBodySchema = z.object({
+  note: z.string().trim().max(2_000).optional(),
+});
+const finalValueBodySchema = z.object({
+  // Decimal com duas casas: o valor final é dinheiro combinado, não uma
+  // média. Negativo é recusado aqui e pela constraint SQL.
+  amount: z.number().min(0).max(99_999_999.99),
 });
 
 export async function registerCalendarRoutes(
@@ -164,6 +210,131 @@ export async function registerCalendarRoutes(
             ...body,
             idempotencyKey: idempotencyKey(request),
           },
+        ),
+        requestId: request.id,
+      };
+    },
+  );
+
+  // --- Holds (Goal008) ---------------------------------------------------
+  // Criar hold ocupa tempo, então exige `Idempotency-Key` como qualquer
+  // outra mutação da agenda. Listar e liberar não exigem: liberar de novo
+  // não tem segundo efeito.
+
+  app.post("/internal/holds", internalOnly, async (request, reply) => {
+    const body = parse(createHoldBodySchema, request.body);
+    const data = await calendarService().createHold(
+      currentInternalContext(request),
+      { ...body, idempotencyKey: idempotencyKey(request) },
+    );
+    return reply.code(201).send({ data, requestId: request.id });
+  });
+
+  app.get("/internal/holds", internalOnly, async (request) => ({
+    data: await calendarService().listHolds(currentInternalContext(request)),
+    requestId: request.id,
+  }));
+
+  app.get("/internal/holds/:id", internalOnly, async (request) => {
+    const params = parse(idParamsSchema, request.params);
+    return {
+      data: await calendarService().getHold(
+        currentInternalContext(request),
+        params.id,
+      ),
+      requestId: request.id,
+    };
+  });
+
+  app.delete("/internal/holds/:id", internalOnly, async (request) => {
+    const params = parse(idParamsSchema, request.params);
+    return {
+      data: await calendarService().releaseHold(
+        currentInternalContext(request),
+        params.id,
+      ),
+      requestId: request.id,
+    };
+  });
+
+  // --- Ciclo de vida e histórico (Goal008) -------------------------------
+  // Estas operações não ocupam nem liberam horário: rodam em transação
+  // curta, sem lock de dia e sem `Idempotency-Key` — a idempotência é a
+  // própria transição (concluir de novo não é um segundo efeito).
+
+  app.post(
+    "/internal/appointments/:id/complete",
+    internalOnly,
+    async (request) => {
+      const params = parse(idParamsSchema, request.params);
+      return {
+        data: await calendarService().completeAppointment(
+          currentInternalContext(request),
+          params.id,
+        ),
+        requestId: request.id,
+      };
+    },
+  );
+
+  app.post(
+    "/internal/appointments/:id/no-show",
+    internalOnly,
+    async (request) => {
+      const params = parse(idParamsSchema, request.params);
+      const body = parse(noShowBodySchema, request.body ?? {});
+      return {
+        data: await calendarService().markNoShow(
+          currentInternalContext(request),
+          params.id,
+          body.note ?? null,
+        ),
+        requestId: request.id,
+      };
+    },
+  );
+
+  app.post(
+    "/internal/appointments/:id/final-value",
+    internalOnly,
+    async (request) => {
+      const params = parse(idParamsSchema, request.params);
+      const body = parse(finalValueBodySchema, request.body);
+      return {
+        data: await calendarService().setFinalValue(
+          currentInternalContext(request),
+          params.id,
+          body.amount,
+        ),
+        requestId: request.id,
+      };
+    },
+  );
+
+  app.post(
+    "/internal/appointments/:id/presence",
+    internalOnly,
+    async (request) => {
+      const params = parse(idParamsSchema, request.params);
+      return {
+        data: await calendarService().confirmPresence(
+          currentInternalContext(request),
+          params.id,
+        ),
+        requestId: request.id,
+      };
+    },
+  );
+
+  app.get(
+    "/internal/appointments/:id/events",
+    internalOnly,
+    async (request) => {
+      const params = parse(idParamsSchema, request.params);
+      return {
+        data: await calendarService().listAppointmentHistory(
+          currentInternalContext(request),
+          params.id,
         ),
         requestId: request.id,
       };

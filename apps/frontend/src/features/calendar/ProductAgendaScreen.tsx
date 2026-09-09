@@ -13,10 +13,12 @@ import {
 
 import {
   type Appointment,
+  appointmentStatusLabel,
   type AvailabilitySlot,
   BffHttpError,
   type CalendarState,
   type CustomerList,
+  isActiveAppointmentStatus,
   type ServiceList,
   type TimeBlock,
 } from "@/data";
@@ -98,7 +100,7 @@ function AppointmentList() {
       item.services.some((service) => service.serviceId === filter),
   );
   const next = [...appointments]
-    .filter((item) => item.status !== "CANCELLED")
+    .filter((item) => isActiveAppointmentStatus(item.status))
     .sort(compareAppointments)[0];
   const external = calendar?.source === "EXTERNAL";
 
@@ -599,7 +601,7 @@ function AppointmentDetail({ appointmentId }: { appointmentId?: string }) {
 
   const writable = Boolean(
     calendar?.capabilities.createAppointments &&
-    appointment?.status !== "CANCELLED",
+    appointment ? isActiveAppointmentStatus(appointment.status) : false,
   );
   return (
     <FlowShell
@@ -1401,7 +1403,7 @@ function AppointmentRow({ item }: { item: Appointment }) {
           <span
             className={clsx(
               "badge",
-              item.status !== "CANCELLED" && "badge-success",
+              isActiveAppointmentStatus(item.status) && "badge-success",
             )}
           >
             {statusLabel(item.status)}
@@ -1447,10 +1449,7 @@ function sourceLabel(source: Appointment["source"]): string {
 }
 
 function statusLabel(status: string): string {
-  const normalized = status.toUpperCase();
-  if (normalized === "CANCELLED") return "Cancelado";
-  if (normalized === "COMPLETED") return "Concluído";
-  return "Confirmado";
+  return appointmentStatusLabel(status);
 }
 
 function compareAppointments(left: Appointment, right: Appointment): number {

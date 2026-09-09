@@ -580,3 +580,122 @@ reescrevendo autorização), estão superados pelos fatos abaixo, verificados no
   hospedada da CI, deploy, `migrate deploy`/`diff` da IA em banco com pgvector
   e os demais limites do fechamento factual. Mensagens não textuais do contato
   não renovam a sessão; a resposta do Minha Agenda não é validada por schema.
+
+## Delta implementado — Goal008, 2026-09-09 (ACCEPTED na rodada 2)
+
+A fotografia histórica acima permanece como registro da baseline. O FATO de
+"Scheduling, catálogo, clientes e importação" que descreve cancelamento e
+bloqueio escrevendo fora de transação, `status` textual em
+`SCHEDULED`/`CANCELLED`, ausência de hold, de eventos e de conclusão, e
+resultado idempotente gravado depois do commit, está superado pelos fatos
+abaixo, verificados no [review008](reviews/008-review.md) sobre a base
+`26593db`.
+
+- **FATO atual:** `apps/scheduling-service/src/modules/calendar/write-policy.ts`
+  é a política única de escrita na agenda: transação Serializable,
+  `lockCalendarDay` para **todos** os dias afetados em ordem estável de datas
+  (a remarcação trava o dia original e o novo), revalidação de disponibilidade
+  dentro da transação e retry limitado de abortos serializáveis
+  (`40001`/`40P01`/`P2034`), com `CALENDAR_WRITE_RETRY_EXCEEDED` quando o
+  limite é excedido. Confirmar, remarcar, cancelar, criar/remover bloqueio
+  (`calendar/time-blocks.ts`) e criar/consumir/liberar hold passam por ela;
+  cancelamento deixou de ser `update` solto.
+- **FATO atual:** sobreposição só existe por decisão humana explícita —
+  `source: USER`, flag de override e motivo obrigatórios
+  (`OVERLAP_OVERRIDE_NOT_ALLOWED`, `OVERLAP_OVERRIDE_REASON_REQUIRED`),
+  registrada como evento `OVERLAP_OVERRIDE`; origem `AI` nunca a obtém.
+  Atendimento manual excepcional sem serviço cadastrado é aceito só para
+  `USER`, com `title` e duração informados, sem `AppointmentItem` e com total
+  `NONE`; a constraint trigger deferrable
+  `Appointment_title_required_without_items` garante o título quando não há
+  itens (checagem entre tabelas, fora do alcance do Prisma).
+- **FATO atual:** `calendar/idempotency.ts` grava o resultado no **mesmo
+  commit** do efeito, com `effectEntityType`/`effectEntityId` em
+  `CalendarMutationIdempotency`. Um `PENDING` vencido cuja referência de efeito
+  já existe é recuperado como sucesso em vez de reexecutado; falha antes do
+  commit deixa `FAILED` com código e o retry da mesma chave reexecuta sob a
+  política. O schema de replay deriva `totalPriceType` de `totalPrice` quando
+  o registro antigo não traz o campo (resíduo do Goal007).
+- **FATO atual:** `AppointmentHold` (módulo `modules/holds/`) tem intervalo,
+  dia, serviços e duração propostos em JSON, `customerId` ou `contactRef`,
+  origem `AI`/`USER`, `expiresAt` **TIMESTAMPTZ** calculado com `now()` do
+  banco mais `CALENDAR_HOLD_TTL_SECONDS` (300), `consumedAt` e `releasedAt`.
+  Hold vigente conta como ocupação em `atendly-availability.ts` para todos,
+  exceto para a confirmação que o consome; hold vencido é ignorado sem
+  depender de worker. Confirmação e remarcação aceitam `holdId`; hold vencido
+  devolve `APPOINTMENT_HOLD_EXPIRED` e a operação revalida a disponibilidade.
+  A remarcação mantém o horário original reservado até o commit. O provider
+  Minha Agenda recusa holds e ciclo de vida.
+- **FATO atual:** `Appointment.status` é validado nos quatro estados do produto
+  (`CONFIRMED`, `COMPLETED`, `CANCELLED`, `NO_SHOW`) por
+  `Appointment_status_check`, com o valor bruto anterior preservado em
+  `statusRaw`, gravado uma vez e nunca reescrito por transição. Colunas novas:
+  `title`, `completedAt`/`completedBy`/`completionOrigin`,
+  `noShowAt`/`noShowNote`, `presenceConfirmedAt` (alimentado a partir do
+  Goal021) e `finalValue`/`finalValueSetAt`/`finalValueSetBy` (Decimal
+  opcional, nunca inferido do preço previsto).
+  `appointment-lifecycle-service.ts` implementa concluir, falta, valor final e
+  presença de forma idempotente e recusa transição inválida
+  (`APPOINTMENT_COMPLETION_INVALID`, `APPOINTMENT_NO_SHOW_INVALID`,
+  `APPOINTMENT_RESCHEDULE_INVALID`).
+- **FATO atual:** `AppointmentEvent` grava tipo, origem
+  (`AI`/`USER`/`SYSTEM`/`INTEGRATION`), ator, motivo, antes/depois em JSON,
+  `occurredAt` e `sequence` (`BIGSERIAL`), sempre na mesma transação da
+  mutação, com FK `ON DELETE RESTRICT` para o atendimento. A leitura é por
+  atendimento, ordenada por `occurredAt` e desempatada por `sequence` —
+  necessário porque `CURRENT_TIMESTAMP` é o instante de início da transação e
+  eventos irmãos compartilham o valor. Nenhum evento é fabricado
+  retroativamente para atendimentos existentes.
+- **FATO atual:** `appointments/auto-complete-loop.ts` é o primeiro loop de
+  jobs dentro do próprio Scheduling (D-008): marca `COMPLETED` com origem
+  `AUTO` os atendimentos confirmados cujo término venceu há
+  `CALENDAR_AUTO_COMPLETE_GRACE_MINUTES` (30) pelo relógio do banco, com lease
+  por `pg_try_advisory_xact_lock`, intervalo
+  `CALENDAR_AUTO_COMPLETE_POLL_INTERVAL_MS` (60000) e desligável por
+  `CALENDAR_AUTO_COMPLETE_ENABLED`; registrado em `build-app.ts` e disparável
+  por `POST /internal/appointments/auto-complete` para teste. Nunca toca
+  cancelados nem faltas e permite correção posterior para falta.
+- **FATO atual:** o Scheduling expõe `POST/GET/GET :id/DELETE
+  /internal/holds`; `/internal/appointments` e `/internal/appointments/:id/
+  reschedule` aceitam `holdId`, `overlapOverride` com motivo, `title`,
+  `durationMinutes` e `source`; `/cancel` aceita motivo; existem
+  `/complete`, `/no-show`, `/final-value`, `/presence` e `/events` por
+  atendimento. O BFF espelha por operação em `/v1/holds`, `/v1/holds/:id` e
+  `/v1/appointments/:id/{complete,no-show,final-value,presence,events}`, com
+  tenant da sessão, CSRF nas mutações por cookie e `source: USER` sempre
+  forçado ([PUBLIC_API_V1](../../apps/bff/PUBLIC_API_V1.md), seção do
+  Goal008).
+- **FATO atual:** na IA, `assistant-tools.ts` cria hold ao apresentar opções
+  (`holdProposedSlot`), guarda `holdId` no rascunho pendente, envia na
+  confirmação e na remarcação, e ao receber `APPOINTMENT_HOLD_EXPIRED`
+  consulta a disponibilidade de novo e devolve alternativas em vez de
+  confirmar silenciosamente; quando a fonte não oferece hold, segue sem
+  reserva. Nenhuma tool aceita override de sobreposição nem cria atendimento
+  sem serviço. No frontend, `publicApiSchemas.ts` aceita os quatro estados,
+  `title`, valor final, presença e conclusão, continua decodificando respostas
+  antigas com `SCHEDULED`, e `appointmentStatusLabel`/
+  `isActiveAppointmentStatus` substituem o filtro fixo por `CANCELLED` na tela
+  de agenda existente (sem tela nova — Goal016).
+- **FATO atual:** três migrations aditivas —
+  `20260909180000_goal008_agenda_expand` (tabelas de hold e evento, colunas
+  novas, referência de efeito, constraints e a constraint trigger do título),
+  `20260909181000_goal008_appointment_status` (guarda contra status
+  desconhecido, normalização `SCHEDULED → CONFIRMED` com bruto preservado e
+  `Appointment_status_check`) e `20260909182000_goal008_agenda_fixups`
+  (corrige a checagem de `expiresAt` para comparar com `createdAt` em UTC e
+  acrescenta a de fim posterior ao início). Nenhum atendimento mudou de
+  horário, acordo, cliente ou estado por migração; nenhum foi marcado
+  concluído ou falta.
+- **FATO atual:** `validate:integration` tem dezoito passos, com o ensaio
+  `goal008-migration-rehearsal.mjs`; a suíte de integração do Scheduling tem
+  34 testes, incluindo `goal008-agenda.test.ts` com 15 cenários contra
+  PostgreSQL com dois `PrismaClient` em paralelo, e a limpeza compartilhada em
+  `tests/integration/support/reset-tenant.ts`; a unitária tem 97 e a IA 191 no
+  `validate:core`.
+- Continuam **NÃO VERIFICADOS:** WhatsApp real, Minha Agenda real, execução
+  hospedada da CI, deploy, `migrate deploy`/`diff` da IA em banco com pgvector
+  e os demais limites do fechamento factual. Nenhum tenant real foi migrado.
+  As rotas internas ainda aceitam `source` do corpo em vez de derivá-lo do
+  token do chamador; a IA não libera o hold de um rascunho substituído por
+  nova proposta; não há teste dedicado do BFF nem de schema do frontend para
+  as rotas e campos novos; `createdAt`/`occurredAt` continuam `TIMESTAMP`.

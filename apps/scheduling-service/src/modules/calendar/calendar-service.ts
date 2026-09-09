@@ -2,11 +2,25 @@ import { z } from "zod";
 
 import type { PrismaClient } from "../../generated/prisma/client.js";
 import { AppError } from "../../shared/errors/app-error.js";
+import {
+  type AppointmentEventRecord,
+  listAppointmentEvents,
+} from "../appointments/appointment-event-service.js";
+import {
+  type AppointmentLifecycleSnapshot,
+  AtendlyAppointmentLifecycleService,
+} from "../appointments/appointment-lifecycle-service.js";
 import { isOperationalService } from "../services/atendly-service-service.js";
 import type {
   CalendarAppointment,
+  CalendarEffectEntityType,
+  CalendarHold,
+  CalendarMutationCommit,
+  CalendarMutationEffect,
+  CalendarProvider,
   CancelCalendarAppointmentInput,
   CreateCalendarAppointmentInput,
+  CreateCalendarHoldInput,
   GetAvailabilityInput,
   ListAppointmentsInput,
   RescheduleCalendarAppointmentInput,
@@ -17,6 +31,7 @@ import { CalendarProviderFactory } from "./provider-factory.js";
 const calendarAppointmentSchema: z.ZodType<CalendarAppointment> = z.object({
   id: z.string(),
   source: z.enum(["AI", "USER", "INTEGRATION"]),
+  title: z.string().nullable().default(null),
   date: z.string(),
   startTime: z.string(),
   endTime: z.string(),
@@ -41,9 +56,48 @@ const calendarAppointmentSchema: z.ZodType<CalendarAppointment> = z.object({
     }),
   ),
   totalPrice: z.number().nullable(),
-  totalPriceType: z.enum(["FIXED", "STARTING_AT", "NONE"]).default("NONE"),
+  totalPriceType: z.enum(["FIXED", "STARTING_AT", "NONE"]),
   comments: z.string().nullable(),
   status: z.string(),
+});
+
+/**
+ * Decodifica o resultado guardado pela idempotencia.
+ *
+ * Replay gravado antes do Goal007 nao tem `totalPriceType`. Ele e **derivado**
+ * de `totalPrice` (numero -> `FIXED`, nulo -> `NONE`) em vez de assumir
+ * `NONE` incondicionalmente: o valor ja estava la, e devolver "sem total"
+ * para um acordo que tinha total fechado mudaria a resposta de uma chave ja
+ * respondida.
+ */
+function parseCalendarAppointment(value: unknown): CalendarAppointment {
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (value as Record<string, unknown>).totalPriceType === undefined
+  ) {
+    const replay = value as Record<string, unknown>;
+    return calendarAppointmentSchema.parse({
+      ...replay,
+      totalPriceType: typeof replay.totalPrice === "number" ? "FIXED" : "NONE",
+    });
+  }
+  return calendarAppointmentSchema.parse(value);
+}
+
+const calendarHoldSchema: z.ZodType<CalendarHold> = z.object({
+  id: z.string(),
+  date: z.string(),
+  startTime: z.string(),
+  endTime: z.string(),
+  durationMinutes: z.number(),
+  serviceIds: z.array(z.string()),
+  customerId: z.string().nullable(),
+  contactRef: z.string().nullable(),
+  source: z.enum(["AI", "USER"]),
+  expiresAt: z.string(),
+  status: z.enum(["ACTIVE", "CONSUMED", "RELEASED", "EXPIRED"]),
 });
 
 export interface CalendarRequestContext {
@@ -106,48 +160,214 @@ export class CalendarService {
     context: CalendarRequestContext,
     input: CreateCalendarAppointmentInput,
   ) {
-    return this.idempotency.execute({
-      tenantId: context.tenantId,
-      key: input.idempotencyKey,
-      operation: "CREATE_APPOINTMENT",
-      request: input,
-      execute: async () =>
-        (await this.provider(context)).createAppointment(input),
-      parseResponse: (value) => calendarAppointmentSchema.parse(value),
-    });
+    return this.mutateAppointment(
+      context,
+      "CREATE_APPOINTMENT",
+      input,
+      (provider, commit) => provider.createAppointment(input, commit),
+    );
+  }
+
+  /**
+   * Hold (Goal008). Criar hold ocupa tempo, entao passa pela mesma
+   * idempotencia das outras mutacoes: repetir a chave devolve o mesmo hold em
+   * vez de segurar o horario duas vezes. Liberar e listar nao precisam de
+   * chave — liberar de novo nao tem segundo efeito.
+   */
+  async createHold(
+    context: CalendarRequestContext,
+    input: CreateCalendarHoldInput,
+  ) {
+    return this.mutate(
+      context,
+      "CREATE_HOLD",
+      input,
+      (provider, commit) => provider.createHold(input, commit),
+      (value) => calendarHoldSchema.parse(value),
+      "APPOINTMENT_HOLD",
+      (provider, effect) => provider.getHold(effect.entityId),
+    );
+  }
+
+  async listHolds(context: CalendarRequestContext) {
+    return (await this.provider(context)).listHolds();
+  }
+
+  async getHold(context: CalendarRequestContext, holdId: string) {
+    return (await this.provider(context)).getHold(holdId);
+  }
+
+  async releaseHold(context: CalendarRequestContext, holdId: string) {
+    return (await this.provider(context)).releaseHold(holdId);
+  }
+
+  /**
+   * Ciclo de vida e histórico (Goal008) só existem na Agenda Atendly.
+   *
+   * Não é uma limitação temporária: concluir, marcar falta, registrar valor
+   * final e gravar evento no mesmo commit do efeito dependem de o
+   * atendimento ser uma linha **deste** banco. Do outro lado de uma fonte
+   * externa não há transação para compartilhar, então a operação é recusada
+   * com erro próprio em vez de simulada.
+   */
+  async completeAppointment(
+    context: CalendarRequestContext,
+    appointmentId: string,
+  ): Promise<AppointmentLifecycleSnapshot> {
+    return (await this.lifecycle(context)).complete(appointmentId);
+  }
+
+  async markNoShow(
+    context: CalendarRequestContext,
+    appointmentId: string,
+    note: string | null,
+  ): Promise<AppointmentLifecycleSnapshot> {
+    return (await this.lifecycle(context)).markNoShow(appointmentId, { note });
+  }
+
+  async setFinalValue(
+    context: CalendarRequestContext,
+    appointmentId: string,
+    amount: number,
+  ): Promise<AppointmentLifecycleSnapshot> {
+    return (await this.lifecycle(context)).setFinalValue(appointmentId, amount);
+  }
+
+  async confirmPresence(
+    context: CalendarRequestContext,
+    appointmentId: string,
+  ): Promise<AppointmentLifecycleSnapshot> {
+    return (await this.lifecycle(context)).confirmPresence(appointmentId);
+  }
+
+  /** Leitura cronológica do histórico operacional de um atendimento. */
+  async listAppointmentHistory(
+    context: CalendarRequestContext,
+    appointmentId: string,
+  ): Promise<AppointmentEventRecord[]> {
+    await this.requireAtendlySource(context);
+    // Confirma que o atendimento é do tenant antes de devolver histórico:
+    // um id de outro negócio não pode virar leitura autorizada.
+    await this.getAppointment(context, appointmentId);
+    return listAppointmentEvents(
+      this.prisma,
+      context.tenantId,
+      appointmentId,
+    );
+  }
+
+  private async lifecycle(context: CalendarRequestContext) {
+    await this.requireAtendlySource(context);
+    return new AtendlyAppointmentLifecycleService(
+      this.prisma,
+      context.tenantId,
+      context.userId,
+    );
+  }
+
+  private async requireAtendlySource(
+    context: CalendarRequestContext,
+  ): Promise<void> {
+    const settings = await this.requireSettings(context);
+    if (settings.source !== "ATENDLY") {
+      throw new AppError(
+        "EXTERNAL_CALENDAR_LIFECYCLE_UNSUPPORTED",
+        "Appointment lifecycle and history are only available for the Atendly calendar.",
+        409,
+      );
+    }
   }
 
   async rescheduleAppointment(
     context: CalendarRequestContext,
     input: RescheduleCalendarAppointmentInput,
   ) {
-    return this.idempotency.execute({
-      tenantId: context.tenantId,
-      key: input.idempotencyKey,
-      operation: "RESCHEDULE_APPOINTMENT",
-      request: input,
-      execute: async () =>
-        (await this.provider(context)).rescheduleAppointment(input),
-      parseResponse: (value) => calendarAppointmentSchema.parse(value),
-    });
+    return this.mutateAppointment(
+      context,
+      "RESCHEDULE_APPOINTMENT",
+      input,
+      (provider, commit) => provider.rescheduleAppointment(input, commit),
+    );
   }
 
   async cancelAppointment(
     context: CalendarRequestContext,
     input: CancelCalendarAppointmentInput,
   ) {
+    return this.mutateAppointment(
+      context,
+      "CANCEL_APPOINTMENT",
+      input,
+      (provider, commit) => provider.cancelAppointment(input, commit),
+    );
+  }
+
+  private async mutateAppointment(
+    context: CalendarRequestContext,
+    operation: string,
+    input: { idempotencyKey: string },
+    run: (
+      provider: CalendarProvider,
+      commit: CalendarMutationCommit<CalendarAppointment>,
+    ) => Promise<CalendarAppointment>,
+  ) {
+    return this.mutate(
+      context,
+      operation,
+      input,
+      run,
+      parseCalendarAppointment,
+      "APPOINTMENT",
+      (provider, effect) => provider.getAppointment(effect.entityId),
+    );
+  }
+
+  /**
+   * Caminho unico das mutacoes da agenda: a chave e reivindicada, a mutacao
+   * roda recebendo o `commit` que grava resultado e referencia de efeito na
+   * mesma transacao, e uma chave cujo efeito ja existe e recuperada lendo a
+   * propria entidade em vez de mutar de novo.
+   *
+   * O tipo de efeito e parametro porque a entidade muda por operacao —
+   * atendimento ou hold — e recuperar uma chave lendo a entidade errada seria
+   * responder outra coisa como se fosse a mesma.
+   */
+  private async mutate<TResult>(
+    context: CalendarRequestContext,
+    operation: string,
+    input: { idempotencyKey: string },
+    run: (
+      provider: CalendarProvider,
+      commit: CalendarMutationCommit<TResult>,
+    ) => Promise<TResult>,
+    parseResponse: (value: unknown) => TResult,
+    effectEntityType: CalendarEffectEntityType,
+    recover: (
+      provider: CalendarProvider,
+      effect: CalendarMutationEffect,
+    ) => Promise<TResult>,
+  ) {
     return this.idempotency.execute({
       tenantId: context.tenantId,
       key: input.idempotencyKey,
-      operation: "CANCEL_APPOINTMENT",
+      operation,
       request: input,
-      execute: async () =>
-        (await this.provider(context)).cancelAppointment(input),
-      parseResponse: (value) => calendarAppointmentSchema.parse(value),
+      execute: async (commit) => run(await this.provider(context), commit),
+      parseResponse,
+      recoverEffect: async (effect) => {
+        if (effect.entityType !== effectEntityType) {
+          throw new AppError(
+            "CALENDAR_EFFECT_NOT_RECOVERABLE",
+            "The recorded effect does not belong to this operation.",
+            409,
+          );
+        }
+        return recover(await this.provider(context), effect);
+      },
     });
   }
 
-  private async provider(context: CalendarRequestContext) {
+  private async requireSettings(context: CalendarRequestContext) {
     const settings = await this.prisma.calendarSettings.findUnique({
       where: { tenantId: context.tenantId },
     });
@@ -158,6 +378,11 @@ export class CalendarService {
         404,
       );
     }
+    return settings;
+  }
+
+  private async provider(context: CalendarRequestContext) {
+    const settings = await this.requireSettings(context);
     return this.providerFactory.create({
       tenantId: context.tenantId,
       userId: context.userId,

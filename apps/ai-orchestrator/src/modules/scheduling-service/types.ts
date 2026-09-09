@@ -32,8 +32,31 @@ export interface SchedulingAppointmentServiceItem {
 
 export type SchedulingAgreementTotalType = "FIXED" | "STARTING_AT" | "NONE";
 
+/**
+ * Estados do produto (Goal008). O client continua tipando `status` como
+ * `string` de propósito: uma resposta antiga com `SCHEDULED` — replay de
+ * idempotência gravado antes da normalização — precisa continuar decodável.
+ * Esta lista é o que a IA sabe **interpretar**, não o que ela aceita
+ * receber.
+ */
+export const SCHEDULING_APPOINTMENT_STATES = [
+  "CONFIRMED",
+  "COMPLETED",
+  "CANCELLED",
+  "NO_SHOW",
+] as const;
+
+export type SchedulingAppointmentState =
+  (typeof SCHEDULING_APPOINTMENT_STATES)[number];
+
 export interface SchedulingAppointment {
   id: string;
+  /**
+   * Título do atendimento manual excepcional sem serviço cadastrado
+   * (Goal008). A IA **lê** este campo — um atendimento assim pode existir na
+   * agenda — mas nunca cria um: não há caminho de tool que o produza.
+   */
+  title: string | null;
   date: string;
   startTime: string;
   endTime: string;
@@ -83,13 +106,62 @@ export interface ScheduleAppointmentInput {
   customerName?: string | null;
   customerPhone?: string | null;
   comments?: string;
+  /**
+   * Hold criado ao propor o horário (Goal008). Ausente só quando a proposta
+   * é anterior ao hold (rascunho legado) — nesse caso o Scheduling revalida
+   * a disponibilidade normalmente.
+   *
+   * Não existe `overlapOverride` aqui, e isso é a regra, não um esquecimento:
+   * a IA nunca força sobreposição. O campo não estar no contrato é o que
+   * torna impossível enviá-lo por acidente.
+   */
+  holdId?: string | null;
 }
 
 export interface RescheduleAppointmentInput {
   appointmentId: string;
   date: string;
   startTime: string;
+  /**
+   * Hold do NOVO horário. O horário original continua ocupado pelo próprio
+   * atendimento até a remarcação acontecer — nada o solta antes.
+   */
+  holdId?: string | null;
 }
+
+/**
+ * Ocupação temporária de um horário enquanto a cliente decide (Goal008).
+ *
+ * Vive um TTL curto decidido pelo relógio do banco. A IA cria um ao propor
+ * e o apresenta na confirmação; se ele venceu, a confirmação não acontece —
+ * a IA consulta de novo e oferece alternativa.
+ */
+export interface SchedulingHold {
+  id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  duration: number;
+  serviceIds: string[];
+  /** Instante de expiração em ISO, sempre vindo do relógio do banco. */
+  expiresAt: string;
+  status: "ACTIVE" | "CONSUMED" | "RELEASED" | "EXPIRED";
+}
+
+export interface CreateSchedulingHoldInput {
+  serviceIds: string[];
+  date: string;
+  startTime: string;
+  customerId?: string | null;
+  /** Contato ainda não resolvido para uma pessoa; nunca funde identidade. */
+  contactRef?: string | null;
+}
+
+/**
+ * Erro próprio do Scheduling para hold que não serve mais. A IA reage a ele
+ * consultando a disponibilidade de novo — nunca confirmando assim mesmo.
+ */
+export const APPOINTMENT_HOLD_EXPIRED = "APPOINTMENT_HOLD_EXPIRED";
 
 export interface SchedulingRequestContext {
   tenantId: string;

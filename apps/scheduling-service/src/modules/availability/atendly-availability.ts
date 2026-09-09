@@ -15,6 +15,7 @@ import type {
   AvailableSlot,
   GetAvailabilityInput,
 } from "../calendar/calendar-provider.js";
+import { databaseNow } from "../calendar/write-policy.js";
 import { AtendlyServiceService } from "../services/atendly-service-service.js";
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
@@ -58,6 +59,7 @@ export class AtendlyAvailability {
     durationMinutes: number;
     stepMinutes: number;
     excludeAppointmentId?: string;
+    excludeHoldId?: string;
   }): Promise<{ startAt: Date; endAt: Date }> {
     const slots = await this.findSlots({
       startDate: input.date,
@@ -67,6 +69,7 @@ export class AtendlyAvailability {
       serviceIds: [],
       durationMinutes: input.durationMinutes,
       excludeAppointmentId: input.excludeAppointmentId,
+      excludeHoldId: input.excludeHoldId,
     });
     const slot = slots.find(
       (candidate) =>
@@ -92,6 +95,12 @@ export class AtendlyAvailability {
     input: GetAvailabilityInput & {
       durationMinutes: number;
       excludeAppointmentId?: string;
+      /**
+       * O hold que **esta sendo consumido** por esta mutacao. Ele e o unico
+       * que nao ocupa: para qualquer outro pedido, inclusive outro hold, ele
+       * continua sendo tempo tomado.
+       */
+      excludeHoldId?: string;
     },
   ): Promise<AvailableSlot[]> {
     if (input.durationMinutes <= 0) {
@@ -116,35 +125,57 @@ export class AtendlyAvailability {
     const databaseStartDate = new Date(`${input.startDate}T00:00:00.000Z`);
     const databaseEndDate = new Date(`${endDateExclusive}T00:00:00.000Z`);
 
-    const [rules, exceptions, timeBlocks, appointments] = await Promise.all([
-      this.database.availabilityRule.findMany({
-        where: { tenantId: this.tenantId, active: true },
-      }),
-      this.database.availabilityException.findMany({
-        where: {
-          tenantId: this.tenantId,
-          date: { gte: databaseStartDate, lt: databaseEndDate },
-        },
-      }),
-      this.database.timeBlock.findMany({
-        where: {
-          tenantId: this.tenantId,
-          startAt: { lt: rangeEnd },
-          endAt: { gt: rangeStart },
-        },
-      }),
-      this.database.appointment.findMany({
-        where: {
-          tenantId: this.tenantId,
-          status: { not: "CANCELLED" },
-          startAt: { lt: rangeEnd },
-          endAt: { gt: rangeStart },
-          ...(input.excludeAppointmentId
-            ? { id: { not: input.excludeAppointmentId } }
-            : {}),
-        },
-      }),
-    ]);
+    // Vigencia do hold pelo relogio do **banco**: dentro de uma transacao,
+    // `now()` e constante, entao ler uma vez e filtrar por ela e o mesmo que
+    // comparar no `WHERE` — e nao depende do relogio do processo.
+    const now = await databaseNow(this.database);
+
+    const [rules, exceptions, timeBlocks, appointments, holds] =
+      await Promise.all([
+        this.database.availabilityRule.findMany({
+          where: { tenantId: this.tenantId, active: true },
+        }),
+        this.database.availabilityException.findMany({
+          where: {
+            tenantId: this.tenantId,
+            date: { gte: databaseStartDate, lt: databaseEndDate },
+          },
+        }),
+        this.database.timeBlock.findMany({
+          where: {
+            tenantId: this.tenantId,
+            startAt: { lt: rangeEnd },
+            endAt: { gt: rangeStart },
+          },
+        }),
+        this.database.appointment.findMany({
+          where: {
+            tenantId: this.tenantId,
+            status: { not: "CANCELLED" },
+            startAt: { lt: rangeEnd },
+            endAt: { gt: rangeStart },
+            ...(input.excludeAppointmentId
+              ? { id: { not: input.excludeAppointmentId } }
+              : {}),
+          },
+        }),
+        // Hold vigente ocupa como um atendimento. Vencido, consumido ou
+        // liberado nao aparece aqui — e por isso que nao ha worker: a propria
+        // consulta de disponibilidade e quem "expira" o hold.
+        this.database.appointmentHold.findMany({
+          where: {
+            tenantId: this.tenantId,
+            consumedAt: null,
+            releasedAt: null,
+            expiresAt: { gt: now },
+            startAt: { lt: rangeEnd },
+            endAt: { gt: rangeStart },
+            ...(input.excludeHoldId
+              ? { id: { not: input.excludeHoldId } }
+              : {}),
+          },
+        }),
+      ]);
 
     const busy: BusyInterval[] = [
       ...timeBlocks.map((block) => ({
@@ -155,9 +186,9 @@ export class AtendlyAvailability {
         start: appointment.startAt,
         end: appointment.endAt,
       })),
+      ...holds.map((hold) => ({ start: hold.startAt, end: hold.endAt })),
     ];
     const slots: AvailableSlot[] = [];
-    const now = new Date();
 
     for (let offset = 0; offset < input.days; offset += 1) {
       const date = addDays(input.startDate, offset);

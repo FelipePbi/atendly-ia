@@ -13,10 +13,12 @@ import {
 
 import {
   type Appointment,
+  appointmentStatusLabel,
   BffHttpError,
   type CalendarState,
   type Customer,
   type CustomerList,
+  isActiveAppointmentStatus,
   type Service,
   type ServiceList,
 } from "@/data";
@@ -615,7 +617,8 @@ function CustomerDetail({ customerId }: { customerId?: string }) {
                       <span
                         className={clsx(
                           "badge",
-                          appointment.status !== "CANCELLED" && "badge-success",
+                          isActiveAppointmentStatus(appointment.status) &&
+                            "badge-success",
                         )}
                       >
                         {statusLabel(appointment.status)}
@@ -1275,7 +1278,7 @@ function formatShortDate(value: string): string {
 }
 
 function statusLabel(status: string): string {
-  return status === "CANCELLED" ? "Cancelado" : "Confirmado";
+  return appointmentStatusLabel(status);
 }
 
 function todayIso(timeZone: string): string {

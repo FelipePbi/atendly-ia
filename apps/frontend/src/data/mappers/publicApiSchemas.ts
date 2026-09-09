@@ -223,6 +223,10 @@ export const customerDetailSchema = customerSchema.extend({
 export const appointmentSchema = z.object({
   id: z.string().min(1),
   source: z.enum(["AI", "USER", "INTEGRATION"]),
+  // Título do atendimento manual excepcional sem serviço cadastrado
+  // (Goal008). Opcional com default: resposta anterior a este Goal — e o
+  // replay de idempotência gravado antes dele — continua decodável.
+  title: z.string().nullable().optional().default(null),
   date: dateSchema,
   startTime: timeSchema,
   endTime: timeSchema,
@@ -241,7 +245,99 @@ export const appointmentSchema = z.object({
   totalPrice: z.number().nonnegative().nullable(),
   totalPriceType: z.enum(["FIXED", "STARTING_AT", "NONE"]).optional().default("NONE"),
   comments: z.string().nullable(),
+  // Texto livre, não enum, de propósito: os estados do produto são
+  // `CONFIRMED | COMPLETED | CANCELLED | NO_SHOW`, mas uma resposta antiga
+  // ainda traz `SCHEDULED`. Um enum recusaria essa resposta e quebraria a
+  // tela por causa de um replay legítimo — a leitura de estado é feita por
+  // `appointmentStatusLabel`, que trata `SCHEDULED` como confirmado.
   status: z.string(),
+  // Ciclo de vida (Goal008). Todos opcionais: o DTO de agendamento só os
+  // traz quando a rota de ciclo respondeu, e a listagem continua válida sem
+  // eles.
+  completedAt: z.string().nullable().optional().default(null),
+  completionOrigin: z.enum(["MANUAL", "AUTO"]).nullable().optional().default(null),
+  noShowAt: z.string().nullable().optional().default(null),
+  noShowNote: z.string().nullable().optional().default(null),
+  presenceConfirmedAt: z.string().nullable().optional().default(null),
+  finalValue: z.number().nonnegative().nullable().optional().default(null),
+});
+
+/**
+ * Estados do produto (Goal008) e o legado que ainda chega por replay.
+ * `SCHEDULED` foi normalizado para `CONFIRMED` na migração, mas uma resposta
+ * idempotente gravada antes disso continua trazendo o valor antigo.
+ */
+export const APPOINTMENT_STATUS_LABELS: Record<string, string> = {
+  CANCELLED: "Cancelado",
+  COMPLETED: "Concluído",
+  CONFIRMED: "Confirmado",
+  NO_SHOW: "Não compareceu",
+  SCHEDULED: "Confirmado",
+};
+
+export function appointmentStatusLabel(status: string): string {
+  return APPOINTMENT_STATUS_LABELS[status.toUpperCase()] ?? "Confirmado";
+}
+
+/** Um atendimento cancelado ou com falta não ocupa mais a agenda. */
+export function isActiveAppointmentStatus(status: string): boolean {
+  const normalized = status.toUpperCase();
+  return normalized !== "CANCELLED" && normalized !== "NO_SHOW";
+}
+
+/** Ciclo de vida devolvido pelas rotas de conclusão, falta, valor e presença. */
+export const appointmentLifecycleSchema = z.object({
+  id: z.string().min(1),
+  status: z.string(),
+  completedAt: z.string().nullable(),
+  completedBy: z.string().nullable(),
+  completionOrigin: z.enum(["MANUAL", "AUTO"]).nullable(),
+  noShowAt: z.string().nullable(),
+  noShowNote: z.string().nullable(),
+  presenceConfirmedAt: z.string().nullable(),
+  finalValue: z.number().nullable(),
+  finalValueSetAt: z.string().nullable(),
+  finalValueSetBy: z.string().nullable(),
+});
+
+/** Histórico operacional: um evento por mutação, em ordem cronológica. */
+export const appointmentEventSchema = z.object({
+  id: z.string().min(1),
+  type: z.enum([
+    "CREATED",
+    "RESCHEDULED",
+    "CANCELLED",
+    "COMPLETED",
+    "NO_SHOW",
+    "FINAL_VALUE_SET",
+    "PRESENCE_CONFIRMED",
+    "HOLD_CONSUMED",
+    "OVERLAP_OVERRIDE",
+  ]),
+  source: z.enum(["AI", "USER", "SYSTEM", "INTEGRATION"]),
+  actor: z.string().nullable(),
+  reason: z.string().nullable(),
+  before: z.unknown().nullable(),
+  after: z.unknown().nullable(),
+  occurredAt: z.string(),
+  // Desempate determinístico: `occurredAt` é o início da transação, então
+  // eventos gravados juntos compartilham o instante.
+  sequence: z.string(),
+});
+
+/** Reserva temporária de um horário em confirmação. */
+export const appointmentHoldSchema = z.object({
+  id: z.string().min(1),
+  date: dateSchema,
+  startTime: timeSchema,
+  endTime: timeSchema,
+  durationMinutes: z.number().int().positive(),
+  serviceIds: z.array(z.string().min(1)),
+  customerId: z.string().nullable(),
+  contactRef: z.string().nullable(),
+  source: z.enum(["AI", "USER"]),
+  expiresAt: z.string(),
+  status: z.enum(["ACTIVE", "CONSUMED", "RELEASED", "EXPIRED"]),
 });
 
 export const availabilitySlotSchema = z.object({
@@ -456,6 +552,9 @@ export const whatsappDisconnectResultSchema = z.object({
 
 export type AiTone = z.infer<typeof aiToneSchema>;
 export type Appointment = z.infer<typeof appointmentSchema>;
+export type AppointmentLifecycle = z.infer<typeof appointmentLifecycleSchema>;
+export type AppointmentEvent = z.infer<typeof appointmentEventSchema>;
+export type AppointmentHold = z.infer<typeof appointmentHoldSchema>;
 export type AvailabilitySlot = z.infer<typeof availabilitySlotSchema>;
 export type AvailabilitySettings = z.infer<typeof availabilitySettingsSchema>;
 export type CalendarSource = z.infer<typeof calendarSourceSchema>;

@@ -9,11 +9,13 @@ import {
 } from "../../lib/internal-credentials.js";
 import type { BusinessContext } from "../tenant-config/business-context.js";
 import type {
+  CreateSchedulingHoldInput,
   RescheduleAppointmentInput,
   ScheduleAppointmentInput,
   SchedulingAppointment,
   SchedulingAuthorizedCustomerContext,
   SchedulingCustomerCandidate,
+  SchedulingHold,
   SchedulingRequestContext,
   SchedulingServiceDefinition,
 } from "./types.js";
@@ -37,6 +39,10 @@ const serviceSchema = z.object({
 });
 const appointmentSchema = z.object({
   id: z.string(),
+  // Atendimento manual excepcional sem servico cadastrado (Goal008). O
+  // default mantem decodavel toda resposta anterior a este Goal, inclusive
+  // replay de idempotencia gravado antes dele.
+  title: z.string().nullable().default(null),
   date: z.string(),
   startTime: z.string(),
   endTime: z.string(),
@@ -90,6 +96,19 @@ const slotSchema = z.object({
   startTime: z.string(),
   endTime: z.string(),
 });
+const holdSchema = z.object({
+  id: z.string(),
+  date: z.string(),
+  startTime: z.string(),
+  endTime: z.string(),
+  durationMinutes: z.number(),
+  serviceIds: z.array(z.string()),
+  customerId: z.string().nullable(),
+  contactRef: z.string().nullable(),
+  source: z.enum(["AI", "USER"]),
+  expiresAt: z.string(),
+  status: z.enum(["ACTIVE", "CONSUMED", "RELEASED", "EXPIRED"]),
+});
 const DEFAULT_AVAILABILITY_DAYS = 14;
 const DEFAULT_APPOINTMENT_LOOKUP_DAYS = 90;
 const DEFAULT_MAX_SLOTS = 3;
@@ -142,6 +161,22 @@ export interface SchedulingGateway {
     context?: SchedulingRequestContext,
     idempotencyKey?: string,
   ): Promise<SchedulingAppointment>;
+  /**
+   * Hold (Goal008): segura o horário proposto enquanto a cliente decide.
+   *
+   * Não há `createManualAppointment` nem parâmetro de sobreposição em lugar
+   * nenhum desta interface, de propósito: o que a IA não consegue expressar
+   * ela não consegue fazer por engano.
+   */
+  createHold(
+    input: CreateSchedulingHoldInput,
+    context?: SchedulingRequestContext,
+    idempotencyKey?: string,
+  ): Promise<SchedulingHold>;
+  releaseHold(
+    holdId: string,
+    context?: SchedulingRequestContext,
+  ): Promise<SchedulingHold>;
 }
 
 export class SchedulingClient implements SchedulingGateway {
@@ -210,8 +245,48 @@ export class SchedulingClient implements SchedulingGateway {
           customerPhone: input.customerPhone ?? undefined,
           comments: input.comments,
           stepMinutes: DEFAULT_SLOT_STEP_MINUTES,
+          // O hold criado ao propor. Vencido, o Scheduling recusa com
+          // `APPOINTMENT_HOLD_EXPIRED` em vez de confirmar assim mesmo.
+          holdId: input.holdId ?? undefined,
         },
       }),
+    );
+  }
+
+  /** Segura o horário proposto; sempre `source: AI`, nunca override. */
+  async createHold(
+    input: CreateSchedulingHoldInput,
+    context?: SchedulingRequestContext,
+    idempotencyKey?: string,
+  ): Promise<SchedulingHold> {
+    return toHold(
+      await this.request("/internal/holds", holdSchema, {
+        method: "POST",
+        context,
+        idempotencyKey,
+        body: {
+          source: "AI",
+          serviceIds: input.serviceIds.map(String),
+          date: input.date,
+          startTime: input.startTime,
+          stepMinutes: DEFAULT_SLOT_STEP_MINUTES,
+          customerId: input.customerId ?? undefined,
+          contactRef: input.contactRef ?? undefined,
+        },
+      }),
+    );
+  }
+
+  async releaseHold(
+    holdId: string,
+    context?: SchedulingRequestContext,
+  ): Promise<SchedulingHold> {
+    return toHold(
+      await this.request(
+        `/internal/holds/${encodeURIComponent(holdId)}`,
+        holdSchema,
+        { method: "DELETE", context },
+      ),
     );
   }
 
@@ -329,6 +404,9 @@ export class SchedulingClient implements SchedulingGateway {
             date: input.date,
             startTime: input.startTime,
             stepMinutes: DEFAULT_SLOT_STEP_MINUTES,
+            // Hold do NOVO horário; o original segue ocupado pelo próprio
+            // atendimento até esta transação commitar.
+            holdId: input.holdId ?? undefined,
           },
         },
       ),
@@ -339,7 +417,7 @@ export class SchedulingClient implements SchedulingGateway {
     path: string,
     schema: TSchema,
     options: {
-      method?: "GET" | "POST";
+      method?: "GET" | "POST" | "DELETE";
       body?: unknown;
       context?: SchedulingRequestContext;
       idempotencyKey?: string;
@@ -450,6 +528,7 @@ function toAppointment(
   }));
   return {
     id: appointment.id,
+    title: appointment.title,
     date: appointment.date,
     startTime: appointment.startTime,
     endTime: appointment.endTime,
@@ -471,6 +550,19 @@ function toAppointment(
     serviceIds: services.map((service) => service.serviceId),
     serviceName: services.map((service) => service.name).join(", ") || null,
     customerName: appointment.customer?.name ?? null,
+  };
+}
+
+function toHold(hold: z.output<typeof holdSchema>): SchedulingHold {
+  return {
+    id: hold.id,
+    date: hold.date,
+    startTime: hold.startTime,
+    endTime: hold.endTime,
+    duration: hold.durationMinutes,
+    serviceIds: hold.serviceIds,
+    expiresAt: hold.expiresAt,
+    status: hold.status,
   };
 }
 

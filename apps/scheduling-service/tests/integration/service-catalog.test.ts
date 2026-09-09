@@ -6,6 +6,7 @@ import { AtendlyCalendarProvider } from "../../src/modules/integrations/atendly/
 import {
   AtendlyServiceService,
 } from "../../src/modules/services/atendly-service-service.js";
+import { resetTenant } from "./support/reset-tenant.js";
 
 const connectionString = process.env.SCHEDULING_TEST_DATABASE_URL?.trim();
 
@@ -69,12 +70,7 @@ describeWithDatabase("service catalog against PostgreSQL", () => {
 
   beforeEach(async () => {
     for (const tenantId of [tenantA, tenantB]) {
-      await prisma.appointmentItem.deleteMany({ where: { tenantId } });
-      await prisma.appointment.deleteMany({ where: { tenantId } });
-      await prisma.customer.deleteMany({ where: { tenantId } });
-      await prisma.service.deleteMany({ where: { tenantId } });
-      await prisma.availabilityRule.deleteMany({ where: { tenantId } });
-      await prisma.timeBlock.deleteMany({ where: { tenantId } });
+      await resetTenant(prisma, tenantId);
     }
     await ensureCalendar(tenantA);
     await ensureCalendar(tenantB);

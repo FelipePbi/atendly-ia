@@ -3,8 +3,11 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_BUSINESS_CONTEXT } from "../../src/modules/tenant-config/business-context.js";
 import { AssistantToolRegistry } from "../../src/modules/tools/assistant-tools.js";
 import type {
+  CreateSchedulingHoldInput,
+  RescheduleAppointmentInput,
   ScheduleAppointmentInput,
   SchedulingAppointment,
+  SchedulingHold,
   SchedulingServiceDefinition,
 } from "../../src/modules/scheduling-service/types.js";
 
@@ -735,6 +738,270 @@ describe("AssistantToolRegistry customer appointment lookup", () => {
   });
 });
 
+/**
+ * Hold na IA (Goal008, critério 7).
+ *
+ * Entre "que tal quinta às 13h30?" e "pode confirmar" existe uma conversa
+ * inteira, e é exatamente nesse intervalo que o horário some. O hold é a
+ * ocupação temporária que fecha essa janela — e a expiração dele nunca pode
+ * virar uma confirmação silenciosa.
+ */
+describe("AssistantToolRegistry hold", () => {
+  const pendingSchedule = {
+    type: "schedule",
+    serviceId: service.id,
+    serviceIds: [service.id],
+    date: slot.date,
+    startTime: slot.startTime,
+    customerName: "Thais",
+    customerPhone: phone,
+    holdId,
+    holdExpiresAt,
+    idempotencyKey: "idem-1",
+  };
+
+  it("holds the proposed slot and keeps the hold in the draft", async () => {
+    const { prisma, store } = createPrismaMock({});
+    const { agenda, calls } = createAgendaMock();
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const result = await registry.execute(
+      {
+        id: "call-hold-prepare",
+        name: "create_appointment",
+        args: {
+          action: "prepare",
+          serviceId: service.id,
+          date: slot.date,
+          startTime: slot.startTime,
+          customerName: "Thais",
+        },
+      },
+      context(),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        requiresConfirmation: true,
+        hold: { id: holdId, expiresAt: holdExpiresAt },
+      },
+    });
+    expect(calls.createHold).toEqual([
+      expect.objectContaining({
+        serviceIds: [service.id],
+        date: slot.date,
+        startTime: slot.startTime,
+      }),
+    ]);
+    // Nada foi confirmado ao propor: o horário está segurado, não agendado.
+    expect(calls.createAppointment).toHaveLength(0);
+    expect(store.state.pendingAction).toMatchObject({ holdId });
+  });
+
+  it("consumes the hold of the draft when confirming", async () => {
+    const { prisma, store } = createPrismaMock({
+      availabilityLookups: [availabilityLookup()],
+      pendingAction: pendingSchedule,
+    });
+    const { agenda, calls } = createAgendaMock();
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const result = await registry.execute(
+      {
+        id: "call-hold-confirm",
+        name: "create_appointment",
+        args: { action: "confirm" },
+      },
+      context(),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(calls.createAppointment[0]).toMatchObject({ holdId });
+    expect(store.state.pendingAction).toBeUndefined();
+  });
+
+  it("offers alternatives instead of confirming when the hold expired", async () => {
+    const { prisma, store } = createPrismaMock({
+      availabilityLookups: [availabilityLookup()],
+      pendingAction: pendingSchedule,
+    });
+    const { agenda, calls } = createAgendaMock([], [service, browService], {
+      holdExpired: true,
+    });
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const result = await registry.execute(
+      {
+        id: "call-hold-expired",
+        name: "create_appointment",
+        args: { action: "confirm" },
+      },
+      context(),
+    );
+
+    // Falha de domínio, não sucesso com aviso: quem lê precisa saber que
+    // **não existe** agendamento.
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "APPOINTMENT_HOLD_EXPIRED" },
+    });
+    expect(calls.getAvailableSlotsForServices).toEqual([[service.id]]);
+    // O rascunho sobrevive sem a reserva: a conversa continua sendo sobre o
+    // mesmo agendamento, só que sem horário segurado.
+    expect(store.state.pendingAction).toMatchObject({
+      type: "schedule",
+      holdId: null,
+    });
+  });
+
+  it("holds only the new slot when preparing a reschedule", async () => {
+    const existing = createAppointment({
+      date: slot.date,
+      startTime: slot.startTime,
+      serviceId: service.id,
+      serviceIds: [service.id],
+      customerName: "Thais",
+      customerPhone: phone,
+    });
+    const { prisma, store } = createPrismaMock({}, "cust-thais");
+    const { agenda, calls } = createAgendaMock([], [service, browService], {
+      futureAppointments: [existing],
+    });
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const result = await registry.execute(
+      {
+        id: "call-reschedule-prepare",
+        name: "reschedule_appointment",
+        args: {
+          action: "prepare",
+          appointmentId: existing.id,
+          date: "2026-06-09",
+          startTime: "10:00",
+        },
+      },
+      context(),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { requiresConfirmation: true, hold: { id: holdId } },
+    });
+    expect(calls.createHold).toEqual([
+      expect.objectContaining({ date: "2026-06-09", startTime: "10:00" }),
+    ]);
+    // O horário original continua ocupado pelo próprio atendimento: nada o
+    // solta antes de a remarcação acontecer de fato.
+    expect(calls.releaseHold).toHaveLength(0);
+    expect(calls.rescheduleAppointment).toHaveLength(0);
+    expect(store.state.pendingAction).toMatchObject({
+      type: "reschedule",
+      holdId,
+    });
+  });
+
+  it("keeps proposing without a reservation when the source has no hold", async () => {
+    const { prisma, store } = createPrismaMock({});
+    const { agenda, calls } = createAgendaMock([], [service, browService], {
+      holds: "unsupported",
+    });
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const result = await registry.execute(
+      {
+        id: "call-hold-unsupported",
+        name: "create_appointment",
+        args: {
+          action: "prepare",
+          serviceId: service.id,
+          date: slot.date,
+          startTime: slot.startTime,
+          customerName: "Thais",
+        },
+      },
+      context(),
+    );
+
+    // A Minha Agenda não tem hold; recusar a proposta inteira por isso
+    // quebraria quem usa a fonte externa.
+    expect(result).toMatchObject({
+      ok: true,
+      data: { requiresConfirmation: true, hold: null },
+    });
+    expect(calls.createHold).toHaveLength(1);
+    expect(store.state.pendingAction).toMatchObject({ holdId: null });
+  });
+
+  it("never forwards an overlap override or a service-less appointment", async () => {
+    const { prisma } = createPrismaMock({
+      availabilityLookups: [availabilityLookup()],
+    });
+    const { agenda, calls } = createAgendaMock();
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const forced = await registry.execute(
+      {
+        id: "call-override-attempt",
+        name: "create_appointment",
+        args: {
+          action: "prepare",
+          serviceId: service.id,
+          date: slot.date,
+          startTime: slot.startTime,
+          customerName: "Thais",
+          // Nada disto existe no contrato da tool. O modelo pode inventar os
+          // campos; o schema é `.strict()`, então a chamada inteira é
+          // recusada antes de qualquer efeito — não é o campo que é
+          // ignorado, é a tentativa que não acontece.
+          overlapOverride: true,
+          overlapOverrideReason: "encaixe",
+          title: "Atendimento sem servico",
+        },
+      },
+      context(),
+    );
+
+    expect(forced.ok).toBe(false);
+    expect(calls.createHold).toHaveLength(0);
+    expect(calls.createAppointment).toHaveLength(0);
+
+    // E o caminho legítimo continua passando: o sucesso abaixo é a outra
+    // metade da prova, porque o dublê lança se algum dia receber override ou
+    // um atendimento sem serviço vindo de dentro da própria IA.
+    const prepared = await registry.execute(
+      {
+        id: "call-override-clean-prepare",
+        name: "create_appointment",
+        args: {
+          action: "prepare",
+          serviceId: service.id,
+          date: slot.date,
+          startTime: slot.startTime,
+          customerName: "Thais",
+        },
+      },
+      context(),
+    );
+    expect(prepared.ok).toBe(true);
+
+    const confirmed = await registry.execute(
+      {
+        id: "call-override-confirm",
+        name: "create_appointment",
+        args: { action: "confirm" },
+      },
+      context(),
+    );
+
+    expect(confirmed.ok).toBe(true);
+    expect(calls.createAppointment).toHaveLength(1);
+    expect(calls.createAppointment[0]).not.toHaveProperty("overlapOverride");
+    expect(calls.createAppointment[0].serviceIds).toEqual([service.id]);
+    expect(calls.createHold[0]).not.toHaveProperty("overlapOverride");
+  });
+});
+
 function context() {
   return {
     conversationId,
@@ -775,6 +1042,9 @@ function createAppointment(
   );
   return {
     id: "98765",
+    // Atendimento com serviço cadastrado não tem título próprio (Goal008): o
+    // título só existe no atendimento manual excepcional, que a IA nunca cria.
+    title: null,
     date: input.date,
     startTime: input.startTime,
     endTime: services.length > 1 ? combinedSlot.endTime : slot.endTime,
@@ -807,18 +1077,46 @@ function createAppointment(
   };
 }
 
+/** Erro do Scheduling como a IA o enxerga: um código, não uma mensagem. */
+function schedulingError(code: string): Error {
+  return Object.assign(new Error(code), { code });
+}
+
+const holdId = "hold-1";
+const holdExpiresAt = "2026-06-08T13:35:00.000Z";
+
 function createAgendaMock(
   candidates: Array<{ id: string; name: string | null; phone: string | null }> = [],
   servicesOverride: SchedulingServiceDefinition[] = [service, browService],
+  options: {
+    /**
+     * `unsupported` é a Minha Agenda: a fonte externa recusa hold, e a
+     * proposta precisa continuar acontecendo sem reserva.
+     */
+    holds?: "supported" | "unsupported";
+    /**
+     * Hold vencido entre a proposta e a confirmação — o caso que o relógio
+     * do banco decide e que nenhum `sleep` deste teste conseguiria produzir.
+     */
+    holdExpired?: boolean;
+    /** Agenda já ocupada por este número, para os caminhos de remarcação. */
+    futureAppointments?: SchedulingAppointment[];
+  } = {},
 ) {
   const calls: {
     createAppointment: ScheduleAppointmentInput[];
+    rescheduleAppointment: RescheduleAppointmentInput[];
+    createHold: CreateSchedulingHoldInput[];
+    releaseHold: string[];
     getAvailableSlotsForServices: string[][];
     findCustomerCandidatesByPhone: string[];
     findFutureAppointmentsForCustomer: string[];
     findFutureAppointmentsForPhone: string[];
   } = {
     createAppointment: [],
+    rescheduleAppointment: [],
+    createHold: [],
+    releaseHold: [],
     getAvailableSlotsForServices: [],
     findCustomerCandidatesByPhone: [],
     findFutureAppointmentsForCustomer: [],
@@ -838,12 +1136,47 @@ function createAgendaMock(
       return serviceIds.length > 1 ? [combinedSlot] : [slot];
     },
     createAppointment: async (input: ScheduleAppointmentInput) => {
+      assertNeverForcesTheAgenda(input);
       calls.createAppointment.push(input);
+      // Só quem apresenta um hold pode vê-lo vencer; sem `holdId` a
+      // confirmação revalida a disponibilidade normalmente.
+      if (options.holdExpired && input.holdId) {
+        throw schedulingError("APPOINTMENT_HOLD_EXPIRED");
+      }
       return createAppointment(input);
+    },
+    createHold: async (input: CreateSchedulingHoldInput): Promise<SchedulingHold> => {
+      calls.createHold.push(input);
+      if (options.holds === "unsupported") {
+        throw schedulingError("EXTERNAL_CALENDAR_HOLD_UNSUPPORTED");
+      }
+      return {
+        id: holdId,
+        date: input.date,
+        startTime: input.startTime,
+        endTime: slot.endTime,
+        duration: service.duration,
+        serviceIds: input.serviceIds,
+        expiresAt: holdExpiresAt,
+        status: "ACTIVE",
+      };
+    },
+    releaseHold: async (id: string): Promise<SchedulingHold> => {
+      calls.releaseHold.push(id);
+      return {
+        id,
+        date: slot.date,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        duration: service.duration,
+        serviceIds: [service.id],
+        expiresAt: holdExpiresAt,
+        status: "RELEASED",
+      };
     },
     findFutureAppointmentsForPhone: async (value: string) => {
       calls.findFutureAppointmentsForPhone.push(value);
-      return [];
+      return options.futureAppointments ?? [];
     },
     findFutureAppointmentsForCustomer: async (value: string) => {
       calls.findFutureAppointmentsForCustomer.push(value);
@@ -866,17 +1199,46 @@ function createAgendaMock(
       appointmentId,
       cancelled: true as const,
     }),
-    rescheduleAppointment: async () =>
-      createAppointment({
-        date: slot.date,
-        startTime: slot.startTime,
+    rescheduleAppointment: async (input: RescheduleAppointmentInput) => {
+      calls.rescheduleAppointment.push(input);
+      if (options.holdExpired && input.holdId) {
+        throw schedulingError("APPOINTMENT_HOLD_EXPIRED");
+      }
+      return createAppointment({
+        date: input.date,
+        startTime: input.startTime,
         serviceId: service.id,
         customerName: "Thais",
         customerPhone: phone,
-      }),
+      });
+    },
   };
 
   return { agenda: agenda as never, calls };
+}
+
+/**
+ * A asserção que falha **dentro** do dublê, não depois dele (Goal008,
+ * critério 7).
+ *
+ * A IA nunca força sobreposição nem cria atendimento sem serviço cadastrado.
+ * Verificar isso só no `expect` do teste provaria apenas os caminhos que o
+ * teste lembrou de exercitar; verificar aqui faz qualquer chamada de qualquer
+ * cenário quebrar na hora em que a tentativa acontecer.
+ */
+function assertNeverForcesTheAgenda(input: ScheduleAppointmentInput): void {
+  const forced = input as unknown as Record<string, unknown>;
+  if (forced.overlapOverride !== undefined) {
+    throw new Error(
+      "A IA nunca envia overlapOverride: sobreposição é decisão humana explícita.",
+    );
+  }
+  const serviceIds = input.serviceIds ?? [input.serviceId];
+  if (serviceIds.filter(Boolean).length === 0) {
+    throw new Error(
+      "A IA nunca cria atendimento sem serviço cadastrado: isso é exceção manual.",
+    );
+  }
 }
 
 function createPrismaMock(

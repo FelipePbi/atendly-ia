@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
 
 import Fastify from "fastify";
 
-import { disconnectPrisma } from "../infrastructure/database/prisma.js";
+import { env } from "../config/env.js";
+import {
+  disconnectPrisma,
+  getPrisma,
+} from "../infrastructure/database/prisma.js";
+import { AutoCompleteLoop } from "../modules/appointments/auto-complete-loop.js";
 import { registerCalendarRoutes } from "../modules/calendar/routes.js";
 import { registerManagementRoutes } from "../modules/internal-api/routes.js";
 import { AppError, toErrorMessage } from "../shared/errors/app-error.js";
@@ -38,6 +43,19 @@ export async function buildApp() {
   await registerCalendarRoutes(app);
   await registerManagementRoutes(app);
 
+  // Conclusao automatica (Goal008, D-008): loop no proprio processo, sem
+  // fila nem servico novo. Desligavel por variavel para operacao e para a
+  // suite de integracao que precisa do relogio do banco parado no cenario.
+  const autoCompleteLoop = new AutoCompleteLoop(
+    getPrisma(),
+    {
+      pollIntervalMs: env.CALENDAR_AUTO_COMPLETE_POLL_INTERVAL_MS,
+      graceMinutes: env.CALENDAR_AUTO_COMPLETE_GRACE_MINUTES,
+    },
+    app.log,
+  );
+  if (env.CALENDAR_AUTO_COMPLETE_ENABLED) autoCompleteLoop.start();
+
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof AppError) {
       return reply.code(error.statusCode).send({
@@ -61,6 +79,7 @@ export async function buildApp() {
   });
 
   app.addHook("onClose", async () => {
+    await autoCompleteLoop.stop();
     await disconnectPrisma();
   });
 

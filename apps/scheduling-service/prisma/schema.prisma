@@ -58,6 +58,50 @@ enum ServiceColorToken {
   SLATE
 }
 
+/// Quem propos o hold (Goal008). So AI ou USER: a fonte externa (Minha
+/// Agenda) recusa hold, e o SYSTEM nao propoe horario.
+enum AppointmentHoldSource {
+  AI
+  USER
+}
+
+/// Origem da conclusao (Goal008): manual (profissional) ou automatica (loop
+/// de conclusao trinta minutos apos o termino).
+enum AppointmentCompletionOrigin {
+  MANUAL
+  AUTO
+}
+
+/// Tipo de evento do historico operacional do atendimento (Goal008). Cada
+/// mutacao grava exatamente um evento, na mesma transacao do efeito.
+enum AppointmentEventType {
+  CREATED
+  RESCHEDULED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+  FINAL_VALUE_SET
+  PRESENCE_CONFIRMED
+  HOLD_CONSUMED
+  OVERLAP_OVERRIDE
+}
+
+/// Origem do evento (Goal008): quem/o que disparou a mutacao.
+enum AppointmentEventSource {
+  AI
+  USER
+  SYSTEM
+  INTEGRATION
+}
+
+/// Tipo da entidade referenciada pelo efeito gravado na idempotencia
+/// (Goal008): id de atendimento, hold ou bloqueio.
+enum CalendarEffectEntityType {
+  APPOINTMENT
+  APPOINTMENT_HOLD
+  TIME_BLOCK
+}
+
 model CalendarSettings {
   tenantId  String         @id
   source    CalendarSource
@@ -106,6 +150,9 @@ model Customer {
   relations      CustomerRelation[] @relation("CustomerRelationSubject")
   /// Relacoes em que esta pessoa e a responsavel por outra.
   responsibleFor CustomerRelation[] @relation("CustomerRelationRelated")
+  /// Holds propostos para esta pessoa (Goal008); ausente enquanto a
+  /// identidade nao foi resolvida (ver `AppointmentHold.contactRef`).
+  holds          AppointmentHold[]
 
   @@unique([tenantId, id])
   @@index([tenantId, normalizedPhone])
@@ -276,14 +323,46 @@ model Appointment {
   source     AppointmentSource
   startAt    DateTime
   endAt      DateTime
+  /// Estado do produto (Goal008): `CONFIRMED`/`COMPLETED`/`CANCELLED`/
+  /// `NO_SHOW`, validado pela constraint SQL `Appointment_status_check`
+  /// (fora do alcance do Prisma, que so tipa `String`). Antes do Goal008 o
+  /// valor era `SCHEDULED`/`CANCELLED` gravado livremente pelo codigo; o
+  /// valor pre-normalizacao fica em `statusRaw`.
   status     String
+  /// Valor bruto do status anterior a normalizacao do Goal008
+  /// (`SCHEDULED`/`CANCELLED`), preservado para auditoria. Nulo apenas para
+  /// linhas criadas antes do passo de normalizacao rodar preencher o
+  /// historico; o codigo do Goal008 em diante sempre grava os dois.
+  statusRaw  String?
+  /// Titulo do atendimento manual excepcional sem servico cadastrado
+  /// (Goal008). Obrigatorio quando o atendimento nao tem nenhum
+  /// `AppointmentItem` — ver a constraint trigger
+  /// `Appointment_title_required_without_items` no cabecalho da migration,
+  /// pois o Prisma nao expressa uma checagem entre tabelas.
+  title      String?
   createdBy  String
   comments   String?
+  /// Conclusao (Goal008): instante, ator e origem (manual ou automatica).
+  completedAt      DateTime?
+  completedBy      String?
+  completionOrigin AppointmentCompletionOrigin?
+  /// Falta (Goal008): instante e observacao opcional.
+  noShowAt         DateTime?
+  noShowNote       String?
+  /// Presenca confirmada (Goal008); campo separado de `completedAt`,
+  /// alimentado a partir do Goal021 (lembretes).
+  presenceConfirmedAt DateTime?
+  /// Valor final (Goal008): nunca inferido do preco previsto no acordo;
+  /// registrado com data e ator quando informado explicitamente.
+  finalValue       Decimal?  @db.Decimal(12, 2)
+  finalValueSetAt  DateTime?
+  finalValueSetBy  String?
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
 
   customer Customer          @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
   items    AppointmentItem[]
+  events   AppointmentEvent[]
 
   @@unique([tenantId, id])
   @@index([tenantId, startAt, endAt])
@@ -309,6 +388,76 @@ model AppointmentItem {
 
   @@index([tenantId, appointmentId])
   @@index([tenantId, serviceId])
+}
+
+/// Ocupacao temporaria de um horario enquanto ele esta em confirmacao
+/// (Goal008), por cinco minutos (configuravel), validada pelo relogio do
+/// banco. Conta como ocupacao na disponibilidade para todos, exceto para a
+/// propria confirmacao que a consome; hold vencido e ignorado sem depender
+/// de worker.
+model AppointmentHold {
+  id       String                @id @default(cuid())
+  tenantId String
+  startAt  DateTime
+  endAt    DateTime
+  /// Servicos propostos (ids) e duracao total proposta, em JSON: o hold e
+  /// efemero (expira em minutos) e nao precisa da mesma modelagem
+  /// relacional/snapshot do `AppointmentItem`, que e permanente.
+  proposedServiceIds      Json
+  proposedDurationMinutes Int
+  /// Pessoa ja identificada (Customer), quando existir.
+  customerId String?
+  /// Referencia livre a um contato ainda nao resolvido para um Customer
+  /// (por exemplo telefone/canal da conversa) — a IA pode segurar um hold
+  /// antes de a identidade do cliente estar confirmada (D-005: nenhuma
+  /// fusao por telefone).
+  contactRef String?
+  source     AppointmentHoldSource
+  /// TIMESTAMPTZ, nao TIMESTAMP: comparado a `now()` do banco em toda
+  /// avaliacao de vigencia, e precisa continuar correto independente do
+  /// fuso da sessao que grava ou le a linha.
+  expiresAt   DateTime  @db.Timestamptz(3)
+  consumedAt  DateTime?
+  releasedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  customer Customer? @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: SetNull)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, startAt, endAt])
+  @@index([tenantId, expiresAt])
+}
+
+/// Historico operacional do atendimento (Goal008): um evento por mutacao,
+/// gravado na mesma transacao do efeito. Nunca apagado nem reescrito;
+/// `updatedAt` do Appointment nao substitui este historico.
+model AppointmentEvent {
+  id            String                 @id @default(cuid())
+  tenantId      String
+  appointmentId String
+  type          AppointmentEventType
+  source        AppointmentEventSource
+  actor         String?
+  reason        String?
+  /// Antes/depois (horario, status, valores) — forma livre por tipo de
+  /// evento; leitura e sempre por atendimento, em ordem cronologica.
+  before        Json?
+  after         Json?
+  occurredAt    DateTime               @default(now())
+  /// Ordem real de gravacao (Goal008). `occurredAt` tem DEFAULT
+  /// CURRENT_TIMESTAMP, que em Postgres e o instante de **inicio da
+  /// transacao**: os eventos gravados juntos por uma mesma mutacao
+  /// (`CREATED` + `OVERLAP_OVERRIDE` + `HOLD_CONSUMED`) recebem o mesmo
+  /// valor. A leitura cronologica ordena por `occurredAt` e desempata por
+  /// esta sequencia, entao "o que aconteceu antes" nunca depende da ordem
+  /// fisica das linhas.
+  sequence      BigInt                 @unique @default(autoincrement())
+
+  appointment Appointment @relation(fields: [tenantId, appointmentId], references: [tenantId, id], onDelete: Restrict)
+
+  @@index([tenantId, appointmentId, occurredAt])
+  @@index([tenantId, appointmentId, sequence])
 }
 
 model ExternalEntityMap {
@@ -374,6 +523,13 @@ model CalendarMutationIdempotency {
   status        String
   response      Json?
   lastErrorCode String?
+  /// Referencia ao efeito gravado no mesmo commit da mutacao (Goal008): id
+  /// do atendimento, hold ou bloqueio. Um `PENDING` vencido cuja referencia
+  /// de efeito ja existe e recuperado como sucesso, nao reexecutado. Nulo
+  /// para registros anteriores ao Goal008 e enquanto o passo ainda nao
+  /// chegou ao commit do efeito.
+  effectEntityType CalendarEffectEntityType?
+  effectEntityId   String?
   lockedAt      DateTime @default(now())
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

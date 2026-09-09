@@ -331,6 +331,19 @@ export function integrationSteps(target) {
       args: ["scripts/goal007-migration-rehearsal.mjs"],
       env,
     },
+    // Gate M0/M1 do Goal008: ensaio da migração de transações, holds e
+    // histórico da agenda contra estoque legado (atendimentos SCHEDULED e
+    // CANCELLED, idempotências COMPLETED e PENDING), em banco próprio e
+    // descartável, com expansão e normalização de status em passos
+    // separados — a normalização precedida de guarda contra status
+    // desconhecido.
+    {
+      name: "rehearse:goal008-agenda-migration",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal008-migration-rehearsal.mjs"],
+      env,
+    },
     // Identidade de cliente contra PostgreSQL real: telefone compartilhado,
     // cliente sem telefone, criação só na confirmação e isolamento por tenant.
     // Não pertence ao core porque exige banco.

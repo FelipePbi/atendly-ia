@@ -14,6 +14,8 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Home | `GET /v1/dashboard` |
 | Conversas | `GET /v1/conversations`; `GET /v1/conversations/:id`; `GET /v1/conversations/:id/messages`; `POST /v1/conversations/:id/messages`; `POST /v1/conversations/:id/takeover`; `POST /v1/conversations/:id/release`; `POST /v1/conversations/:id/resolve`; `PUT /v1/conversations/:id/category`; `PUT /v1/conversations/:id/ignore` |
 | Agendamentos | `GET /v1/appointments`; `GET /v1/appointments/:id`; `POST /v1/appointments`; `POST /v1/appointments/:id/reschedule`; `POST /v1/appointments/:id/cancel` |
+| Ciclo de vida do atendimento | `POST /v1/appointments/:id/complete`; `POST /v1/appointments/:id/no-show`; `POST /v1/appointments/:id/final-value`; `POST /v1/appointments/:id/presence`; `GET /v1/appointments/:id/events` |
+| Reserva temporária (hold) | `POST /v1/holds`; `GET /v1/holds`; `DELETE /v1/holds/:id` |
 | Disponibilidade e bloqueios | `GET /v1/availability`; `POST /v1/time-blocks`; `DELETE /v1/time-blocks/:id` |
 | Clientes | `GET /v1/customers`; `GET /v1/customers/:id`; `POST /v1/customers`; `PATCH /v1/customers/:id`; `PUT /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/primary-guardian/confirm`; `DELETE /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/notes`; `PATCH /v1/customers/:id/notes/:noteId`; `DELETE /v1/customers/:id/notes/:noteId`; `POST /v1/customers/:id/tags`; `PATCH /v1/customers/:id/tags/:tagId`; `DELETE /v1/customers/:id/tags/:tagId` |
 | Serviços | `GET /v1/services`; `POST /v1/services`; `PATCH /v1/services/:id` |
@@ -105,6 +107,79 @@ O cliente é uma **pessoa**, identificada pelo ID dentro do negócio. O telefone
 Atributos adicionais do MVP, sem efeito operacional neste Goal (aplicação dos buffers na ocupação é do Goal009; uso da recorrência pela IA é do Goal011): `description` (texto livre opcional), `colorToken` (token estável de identidade visual — `ROSE | AMBER | EMERALD | SKY | VIOLET | SLATE`, nunca cor livre), `bufferBeforeMinutes`/`bufferAfterMinutes` (minutos, default `0`) e `recurrenceIntervalDays` (intervalo em dias, opcional).
 
 `GET/POST /v1/appointments` (e o `services[]` de cada agendamento) carregam as mesmas quatro semânticas nos itens do acordo, junto de `totalPrice`/`totalPriceType`. A regra do total é única e usada pelo Scheduling e pela IA: soma quando todos os itens são `FIXED`; `STARTING_AT` quando há algum "a partir de" e nenhum `ON_REQUEST`/`NOT_INFORMED`; `NONE` (sem total) nos demais casos. Editar o catálogo depois da confirmação não altera snapshots existentes.
+
+## Agenda: hold, estados do atendimento e histórico (Goal008)
+
+### Estados do atendimento
+
+`status` do agendamento passou a ser um dos quatro estados do produto: `CONFIRMED`, `COMPLETED`, `CANCELLED` e `NO_SHOW`. O valor legado `SCHEDULED` foi normalizado para `CONFIRMED` na migração, com o texto original preservado no lado do Scheduling para auditoria.
+
+O campo continua tipado como texto livre no contrato, de propósito: um replay de idempotência gravado antes da normalização ainda devolve `SCHEDULED`, e recusar essa resposta mudaria o resultado de uma chave já respondida. **Consumidores devem tratar `SCHEDULED` como equivalente a `CONFIRMED`** e nunca assumir que a lista de estados é fechada.
+
+O DTO de agendamento ganhou `title`: título do atendimento manual excepcional sem serviço cadastrado, `null` quando o atendimento tem itens de catálogo — que já descrevem o que será feito. O campo é adicional; consumidores do contrato anterior continuam válidos.
+
+### Reserva temporária (hold)
+
+Um hold segura um horário enquanto a confirmação acontece — cinco minutos por padrão, contados pelo relógio do banco. Enquanto vigente, ele **ocupa** a agenda para todo mundo, exceto para a confirmação que o consome.
+
+| Rota | O que faz |
+| --- | --- |
+| `POST /v1/holds` | reserva o horário; exige `Idempotency-Key` (reservar ocupa tempo) |
+| `GET /v1/holds` | lista apenas os holds vigentes (não consumidos, não liberados, dentro do TTL) |
+| `DELETE /v1/holds/:id` | libera; liberar de novo devolve o mesmo hold, sem segundo efeito |
+
+`POST /v1/appointments` e `POST /v1/appointments/:id/reschedule` aceitam `holdId` opcional. Se o hold não serve mais — vencido, já consumido, liberado ou de outro horário — a mutação **não acontece** e a resposta é `409 APPOINTMENT_HOLD_EXPIRED`, com `details.slotStillAvailable` dizendo se o horário continua livre depois da revalidação. Não existe caminho em que um hold vencido vire confirmação silenciosa.
+
+Na remarcação, o hold é do horário **novo**; o original continua ocupado pelo próprio atendimento até a remarcação commitar.
+
+Holds só existem na Agenda Atendly. Com agenda externa, as rotas recusam com `409 EXTERNAL_CALENDAR_HOLD_UNSUPPORTED`.
+
+### Sobreposição e atendimento manual: só por decisão humana
+
+`POST /v1/appointments` e `.../reschedule` aceitam `overlapOverride: true` com `overlapOverrideReason` obrigatório. Estas rotas sempre enviam `source: USER` — o override é uma decisão de quem está autenticado, registrada no histórico com o motivo. A IA não tem esse campo em nenhum contrato dela, e um override vindo de origem `AI` é recusado com `403 OVERLAP_OVERRIDE_NOT_ALLOWED`.
+
+`serviceIds` pode vir vazio **apenas** para o atendimento manual excepcional sem serviço cadastrado, que exige `title` e `durationMinutes`. Ele nasce sem itens e, por consequência da regra única do acordo, sem total (`totalPriceType: NONE`) — nada de preço fabricado. Pela IA, é recusado com `403 MANUAL_APPOINTMENT_NOT_ALLOWED`.
+
+### Ciclo de vida: conclusão, falta, presença e valor final
+
+| Rota | Corpo | Efeito |
+| --- | --- | --- |
+| `POST /v1/appointments/:id/complete` | — | marca `COMPLETED` com origem `MANUAL`; repetir não é um segundo efeito |
+| `POST /v1/appointments/:id/no-show` | `{ "note"?: string }` | marca `NO_SHOW`; aceito a partir de `CONFIRMED` (falta direta) ou `COMPLETED` (correção) |
+| `POST /v1/appointments/:id/final-value` | `{ "amount": number }` | registra o valor final com data e ator |
+| `POST /v1/appointments/:id/presence` | — | confirma presença; campo separado da conclusão |
+
+Estas rotas **não** usam `Idempotency-Key`: elas não ocupam nem liberam horário, e a idempotência é a própria transição. Como toda mutação por cookie, exigem CSRF e resolvem o negócio pela sessão.
+
+Transições inválidas devolvem `409` com código próprio: `APPOINTMENT_COMPLETION_INVALID` (concluir cancelado), `APPOINTMENT_NO_SHOW_INVALID` (falta em cancelado), `APPOINTMENT_RESCHEDULE_INVALID` (remarcar concluído ou falta).
+
+Valor final é dado **separado** do acordo comercial: nunca é inferido do preço previsto, não altera `totalPrice`/`totalPriceType` e não toca os itens do agendamento.
+
+Conclusão automática: o Scheduling marca `COMPLETED` com origem `AUTO` os atendimentos confirmados cujo término venceu há trinta minutos (configurável), avaliado pelo relógio do banco. Nunca toca cancelados nem faltas, e a correção posterior para falta continua permitida.
+
+### Histórico operacional
+
+`GET /v1/appointments/:id/events` devolve, em ordem cronológica, um evento por mutação — cada um gravado na **mesma transação** do efeito que descreve:
+
+| Campo | Valores |
+| --- | --- |
+| `type` | `CREATED`, `RESCHEDULED`, `CANCELLED`, `COMPLETED`, `NO_SHOW`, `FINAL_VALUE_SET`, `PRESENCE_CONFIRMED`, `HOLD_CONSUMED`, `OVERLAP_OVERRIDE` |
+| `source` | `AI`, `USER`, `SYSTEM`, `INTEGRATION` |
+| `actor`, `reason` | quem fez e por quê (`null` para a conclusão automática) |
+| `before`, `after` | horário, status e valores antes/depois |
+| `occurredAt`, `sequence` | instante e desempate determinístico |
+
+`sequence` existe porque `occurredAt` é o instante de início da transação: eventos gravados juntos pela mesma mutação compartilham o instante, e a ordem entre eles vem da sequência. Ordene por `occurredAt` **e depois** por `sequence`.
+
+O histórico nunca é apagado nem reescrito. Eventos de criação **não** foram fabricados retroativamente para atendimentos anteriores a este Goal: a ausência de `CREATED` no início da lista é esperada para essas linhas.
+
+`POST /v1/appointments/:id/cancel` aceita `reason` (o nome anterior, `comments`, continua aceito): o motivo vai para o evento de cancelamento.
+
+Ciclo de vida e histórico só existem na Agenda Atendly; com agenda externa, recusam com `409 EXTERNAL_CALENDAR_LIFECYCLE_UNSUPPORTED`.
+
+### Agenda disputada
+
+Toda escrita da agenda roda em transação `Serializable` com lock por dia. Abortos de serialização são repetidos um número limitado de vezes; excedido o limite, a resposta é `409 CALENDAR_WRITE_RETRY_EXCEEDED` — "a agenda estava disputada demais agora", não "o pedido era inválido". Repetir a mesma requisição com a mesma `Idempotency-Key` é seguro.
 
 ## Vínculo WhatsApp: estados ambíguos
 

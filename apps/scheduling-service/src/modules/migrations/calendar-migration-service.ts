@@ -518,7 +518,13 @@ export class CalendarMigrationService {
               source: "INTEGRATION",
               startAt,
               endAt,
-              status: appointment.status,
+              // Estado do produto (Goal008), com o bruto da origem externa
+              // preservado — o mesmo mapeamento que a migration aplicou nas
+              // linhas ja existentes: `SCHEDULED` vira `CONFIRMED`,
+              // `CANCELLED` continua `CANCELLED`.
+              status:
+                appointment.status === "CANCELLED" ? "CANCELLED" : "CONFIRMED",
+              statusRaw: appointment.status,
               createdBy: context.userId,
               comments: appointment.comments,
               customer: {

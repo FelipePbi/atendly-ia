@@ -22,9 +22,25 @@ const appointmentsQuerySchema = z.object({
   customerId: z.string().trim().min(1).max(128).optional(),
   customerPhone: z.string().trim().min(6).max(32).optional(),
 });
+/**
+ * Sobreposição por decisão humana (Goal008). Estas rotas são as **únicas**
+ * que podem carregá-la: toda mutação daqui sai com `source: "USER"`, e é o
+ * Scheduling que recusa o override vindo de qualquer outra origem. O motivo
+ * é obrigatório e vai para o histórico do atendimento.
+ */
+const overlapOverrideShape = {
+  overlapOverride: z.boolean().optional(),
+  overlapOverrideReason: z.string().trim().min(1).max(500).optional(),
+};
+
 const appointmentBodySchema = z
   .object({
-    serviceIds: z.array(z.string().trim().min(1).max(128)).min(1).max(10),
+    // Vazio só no atendimento manual excepcional sem serviço cadastrado
+    // (Goal008), que exige `title` e `durationMinutes`. Quem valida a
+    // combinação é o Scheduling, em um lugar só.
+    serviceIds: z.array(z.string().trim().min(1).max(128)).max(10).default([]),
+    title: z.string().trim().min(1).max(200).optional(),
+    durationMinutes: z.number().int().min(1).max(1_440).optional(),
     date: dateSchema,
     startTime: timeSchema,
     customerId: z.string().trim().min(1).max(128).optional(),
@@ -32,6 +48,8 @@ const appointmentBodySchema = z
     customerPhone: z.string().trim().min(6).max(32).optional(),
     comments: z.string().trim().max(2_000).optional(),
     stepMinutes: z.number().int().min(1).max(180).default(30),
+    holdId: z.string().trim().min(1).max(128).optional(),
+    ...overlapOverrideShape,
   })
   .refine(
     (value) =>
@@ -46,9 +64,29 @@ const rescheduleSchema = z.object({
   date: dateSchema,
   startTime: timeSchema,
   stepMinutes: z.number().int().min(1).max(180).default(30),
+  holdId: z.string().trim().min(1).max(128).optional(),
+  ...overlapOverrideShape,
 });
 const cancelSchema = z.object({
+  // Motivo do cancelamento (Goal008): vai para o evento e para o comentário
+  // do atendimento. `comments` continua aceito como o nome anterior do mesmo
+  // campo, para não quebrar quem já chama a rota.
+  reason: z.string().trim().max(2_000).optional(),
   comments: z.string().trim().max(2_000).optional(),
+});
+const holdBodySchema = z.object({
+  serviceIds: z.array(z.string().trim().min(1).max(128)).min(1).max(10),
+  date: dateSchema,
+  startTime: timeSchema,
+  stepMinutes: z.number().int().min(1).max(180).default(30),
+  customerId: z.string().trim().min(1).max(128).optional(),
+  contactRef: z.string().trim().min(1).max(200).optional(),
+});
+const noShowSchema = z.object({
+  note: z.string().trim().max(2_000).optional(),
+});
+const finalValueSchema = z.object({
+  amount: z.number().min(0).max(99_999_999.99),
 });
 const availabilityQuerySchema = z.object({
   serviceIds: z.string().transform((value) =>
@@ -137,7 +175,7 @@ export async function registerV1CalendarRoutes(
         await scheduling.rescheduleAppointment(
           internalContext(request),
           id,
-          parseBody(rescheduleSchema, request.body),
+          { ...parseBody(rescheduleSchema, request.body), source: "USER" },
           idempotencyKey(request),
         ),
       );
@@ -149,14 +187,131 @@ export async function registerV1CalendarRoutes(
     { preHandler: requireTenantContext },
     async (request) => {
       const { id } = parseParams(idSchema, request.params);
+      const body = parseBody(cancelSchema, request.body ?? {});
       return dataResponse(
         request,
         await scheduling.cancelAppointment(
           internalContext(request),
           id,
-          parseBody(cancelSchema, request.body ?? {}),
+          {
+            source: "USER",
+            comments: body.reason ?? body.comments,
+          },
           idempotencyKey(request),
         ),
+      );
+    },
+  );
+
+  // --- Holds (Goal008) ---------------------------------------------------
+
+  app.post(
+    "/v1/holds",
+    { preHandler: requireTenantContext },
+    async (request, reply) => {
+      const hold = await scheduling.createHold(
+        internalContext(request),
+        { ...parseBody(holdBodySchema, request.body), source: "USER" },
+        idempotencyKey(request),
+      );
+      return reply.code(201).send(dataResponse(request, hold));
+    },
+  );
+
+  app.get(
+    "/v1/holds",
+    { preHandler: requireTenantContext },
+    async (request) =>
+      dataResponse(
+        request,
+        await scheduling.listHolds(internalContext(request)),
+      ),
+  );
+
+  app.delete(
+    "/v1/holds/:id",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      return dataResponse(
+        request,
+        await scheduling.releaseHold(internalContext(request), id),
+      );
+    },
+  );
+
+  // --- Ciclo de vida e histórico (Goal008) -------------------------------
+  // Sem `Idempotency-Key`: estas operações não ocupam nem liberam horário e
+  // a idempotência é a própria transição — concluir de novo não é um segundo
+  // efeito. CSRF continua exigido, como em toda mutação por cookie.
+
+  app.post(
+    "/v1/appointments/:id/complete",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      return dataResponse(
+        request,
+        await scheduling.completeAppointment(internalContext(request), id),
+      );
+    },
+  );
+
+  app.post(
+    "/v1/appointments/:id/no-show",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      return dataResponse(
+        request,
+        await scheduling.markAppointmentNoShow(
+          internalContext(request),
+          id,
+          parseBody(noShowSchema, request.body ?? {}),
+        ),
+      );
+    },
+  );
+
+  app.post(
+    "/v1/appointments/:id/final-value",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      return dataResponse(
+        request,
+        await scheduling.setAppointmentFinalValue(
+          internalContext(request),
+          id,
+          parseBody(finalValueSchema, request.body),
+        ),
+      );
+    },
+  );
+
+  app.post(
+    "/v1/appointments/:id/presence",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      return dataResponse(
+        request,
+        await scheduling.confirmAppointmentPresence(
+          internalContext(request),
+          id,
+        ),
+      );
+    },
+  );
+
+  app.get(
+    "/v1/appointments/:id/events",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      return dataResponse(
+        request,
+        await scheduling.listAppointmentEvents(internalContext(request), id),
       );
     },
   );

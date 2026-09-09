@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "../../src/generated/prisma/client.js";
 import { AtendlyCalendarProvider } from "../../src/modules/integrations/atendly/provider.js";
 import { AtendlyCustomerService } from "../../src/modules/customers/atendly-customer-service.js";
+import { resetTenant } from "./support/reset-tenant.js";
 
 const connectionString = process.env.SCHEDULING_TEST_DATABASE_URL?.trim();
 
@@ -73,15 +74,7 @@ describeWithDatabase("customer identity against PostgreSQL", () => {
 
   beforeEach(async () => {
     for (const tenantId of [tenantA, tenantB]) {
-      await prisma.appointmentItem.deleteMany({ where: { tenantId } });
-      await prisma.appointment.deleteMany({ where: { tenantId } });
-      await prisma.customerNote.deleteMany({ where: { tenantId } });
-      await prisma.customerTag.deleteMany({ where: { tenantId } });
-      await prisma.customerRelation.deleteMany({ where: { tenantId } });
-      await prisma.customer.deleteMany({ where: { tenantId } });
-      await prisma.service.deleteMany({ where: { tenantId } });
-      await prisma.availabilityRule.deleteMany({ where: { tenantId } });
-      await prisma.timeBlock.deleteMany({ where: { tenantId } });
+      await resetTenant(prisma, tenantId);
     }
   });
 

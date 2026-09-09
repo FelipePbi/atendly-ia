@@ -2,6 +2,9 @@ import { z } from "zod";
 
 import { type BffHttpClient } from "../http/BffHttpClient";
 import {
+  appointmentEventSchema,
+  appointmentHoldSchema,
+  appointmentLifecycleSchema,
   appointmentSchema,
   availabilitySlotSchema,
   calendarStateSchema,
@@ -20,13 +23,34 @@ export interface CreateAppointmentInput {
   customerName: string;
   customerPhone: string;
   date: string;
+  /** Duração do atendimento manual excepcional sem serviço cadastrado. */
+  durationMinutes?: number;
+  /** Reserva criada antes de confirmar (Goal008). */
+  holdId?: string;
+  /** Sobreposição por decisão humana; o motivo é obrigatório com ela. */
+  overlapOverride?: boolean;
+  overlapOverrideReason?: string;
+  /** Vazio só no atendimento manual excepcional, que exige `title`. */
   serviceIds: string[];
   startTime: string;
   stepMinutes?: number;
+  title?: string;
 }
 
 export interface RescheduleAppointmentInput {
   date: string;
+  holdId?: string;
+  overlapOverride?: boolean;
+  overlapOverrideReason?: string;
+  startTime: string;
+  stepMinutes?: number;
+}
+
+export interface CreateHoldInput {
+  contactRef?: string;
+  customerId?: string;
+  date: string;
+  serviceIds: string[];
   startTime: string;
   stepMinutes?: number;
 }
@@ -120,7 +144,7 @@ export class BffCalendarService {
 
   cancelAppointment(
     id: string,
-    input: { comments?: string },
+    input: { comments?: string; reason?: string },
     idempotencyKey: string,
     signal?: AbortSignal,
   ) {
@@ -130,6 +154,100 @@ export class BffCalendarService {
       method: "POST",
       path: `/v1/appointments/${encodeURIComponent(id)}/cancel`,
       schema: appointmentSchema,
+      signal,
+    });
+  }
+
+  /**
+   * Ciclo de vida e histórico (Goal008). Sem `Idempotency-Key`: estas
+   * operações não ocupam nem liberam horário, e a idempotência é a própria
+   * transição — concluir de novo não é um segundo efeito.
+   */
+  completeAppointment(id: string, signal?: AbortSignal) {
+    return this.http.request({
+      body: {},
+      method: "POST",
+      path: `/v1/appointments/${encodeURIComponent(id)}/complete`,
+      schema: appointmentLifecycleSchema,
+      signal,
+    });
+  }
+
+  markAppointmentNoShow(
+    id: string,
+    input: { note?: string },
+    signal?: AbortSignal,
+  ) {
+    return this.http.request({
+      body: input,
+      method: "POST",
+      path: `/v1/appointments/${encodeURIComponent(id)}/no-show`,
+      schema: appointmentLifecycleSchema,
+      signal,
+    });
+  }
+
+  setAppointmentFinalValue(
+    id: string,
+    input: { amount: number },
+    signal?: AbortSignal,
+  ) {
+    return this.http.request({
+      body: input,
+      method: "POST",
+      path: `/v1/appointments/${encodeURIComponent(id)}/final-value`,
+      schema: appointmentLifecycleSchema,
+      signal,
+    });
+  }
+
+  confirmAppointmentPresence(id: string, signal?: AbortSignal) {
+    return this.http.request({
+      body: {},
+      method: "POST",
+      path: `/v1/appointments/${encodeURIComponent(id)}/presence`,
+      schema: appointmentLifecycleSchema,
+      signal,
+    });
+  }
+
+  listAppointmentEvents(id: string, signal?: AbortSignal) {
+    return this.http.request({
+      path: `/v1/appointments/${encodeURIComponent(id)}/events`,
+      schema: z.array(appointmentEventSchema),
+      signal,
+    });
+  }
+
+  /** Reserva temporária: criar ocupa tempo, então exige `Idempotency-Key`. */
+  createHold(
+    input: CreateHoldInput,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ) {
+    return this.http.request({
+      body: input,
+      headers: { "idempotency-key": idempotencyKey },
+      method: "POST",
+      path: "/v1/holds",
+      schema: appointmentHoldSchema,
+      signal,
+    });
+  }
+
+  listHolds(signal?: AbortSignal) {
+    return this.http.request({
+      path: "/v1/holds",
+      schema: z.array(appointmentHoldSchema),
+      signal,
+    });
+  }
+
+  releaseHold(id: string, signal?: AbortSignal) {
+    return this.http.request({
+      method: "DELETE",
+      path: `/v1/holds/${encodeURIComponent(id)}`,
+      schema: appointmentHoldSchema,
       signal,
     });
   }

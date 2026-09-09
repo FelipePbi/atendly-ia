@@ -76,6 +76,13 @@ export function idempotencyKeyFor(context = {}, { sessionId = null } = {}) {
  * worker is started by a human in its own terminal and is not told which run it
  * belongs to, so the file is the only honest source. Cached briefly because a
  * run id changes far less often than model calls happen.
+ *
+ * Only a RUNNING run is reported. A run that stopped for a human, paused or
+ * completed is a record of where it stopped, and work done supervised
+ * afterwards does not belong to it. Reading it unconditionally is what stamped
+ * `auto-987b6c55` onto Goal 008's closure — a call that run never made, in a
+ * Goal it never reached. A supervised call legitimately has no run id, and the
+ * column is nullable for exactly that reason.
  */
 function createRunIdReader({ stateDir, ttlMs = 2000, now = () => Date.now() }) {
   let cachedAt = 0;
@@ -84,12 +91,11 @@ function createRunIdReader({ stateDir, ttlMs = 2000, now = () => Date.now() }) {
     if (now() - cachedAt < ttlMs) return cached;
     cachedAt = now();
     try {
-      const raw = readFileSync(join(stateDir, 'autonomous-run.json'), 'utf8');
-      const parsed = JSON.parse(raw);
-      cached = typeof parsed?.autonomousRunId === 'string' ? parsed.autonomousRunId : null;
+      const parsed = JSON.parse(readFileSync(join(stateDir, 'autonomous-run.json'), 'utf8'));
+      cached = parsed?.status === 'RUNNING' && typeof parsed.autonomousRunId === 'string'
+        ? parsed.autonomousRunId
+        : null;
     } catch {
-      // No autonomous run, or none readable. A supervised run legitimately has
-      // no run id, and the column is nullable for exactly that reason.
       cached = null;
     }
     return cached;

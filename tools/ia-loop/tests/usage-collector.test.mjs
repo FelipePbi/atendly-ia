@@ -11,7 +11,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -461,6 +461,32 @@ test('a telemetry write failure is also left on disk for an operator to find', (
   assert.ok(files.includes('usage-failures.jsonl'));
   const contents = readFileSync(join(dir.dir, 'telemetry', 'usage-failures.jsonl'), 'utf8');
   assert.match(contents, /TELEMETRY_WRITE_FAILED/);
+});
+
+test('only a RUNNING autonomous run stamps its id on a call', async (t) => {
+  const dir = scratch(t);
+  const runFile = join(dir.dir, 'autonomous-run.json');
+
+  // A run that stopped for a human is a record of where it stopped. Work done
+  // supervised afterwards is not its work — reading this file unconditionally
+  // stamped auto-987b6c55 onto a Goal 008 closure that run never made.
+  writeFileSync(runFile, JSON.stringify({ autonomousRunId: 'auto-stopped', status: 'PAUSED_FOR_HUMAN' }), 'utf8');
+  const paused = dir.collector({ path: join(dir.dir, 'paused.sqlite') });
+  await invoke({
+    collector: paused,
+    context: { goalId: '009', jobId: 'j1', attemptId: 'j1#a1', role: 'tech_lead' },
+    stdout: streamOf({ result: successResult({ payload: DEVELOPER_PAYLOAD }) }),
+  });
+  assert.equal(paused.query('SELECT run_id FROM model_usage')[0].run_id, null);
+
+  writeFileSync(runFile, JSON.stringify({ autonomousRunId: 'auto-live', status: 'RUNNING' }), 'utf8');
+  const running = dir.collector({ path: join(dir.dir, 'running.sqlite') });
+  await invoke({
+    collector: running,
+    context: { goalId: '009', jobId: 'j2', attemptId: 'j2#a1', role: 'tech_lead' },
+    stdout: streamOf({ result: successResult({ payload: DEVELOPER_PAYLOAD }) }),
+  });
+  assert.equal(running.query('SELECT run_id FROM model_usage')[0].run_id, 'auto-live');
 });
 
 test('the ledger is off inside node --test unless a test names its own database', () => {

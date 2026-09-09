@@ -4076,6 +4076,147 @@ takeover registrado; shutdown normal liberando o papel; lease carregando todos o
 campos de identidade; versão de código estável, mudando com edição de fonte e
 **não** com edição de teste; detecção de código trocado sob o processo; `touch`
 contando como mudança porque um checkout move mtime.
+
+## V22 — Reconsideração de job reparado, e identidade própria de cada chamada real
+
+O caso real: Goal 009, 2026-09-09. Um review falhou (`UNKNOWN_FATAL`, na
+verdade um 429 mal classificado — corrigido separadamente no classifier).
+`ia-loop:reclassify --apply` reclassificou para `USAGE_LIMIT`
+(`FAILED → WAITING_FOR_CAPACITY`); `ia-loop:resume` reenfileirou
+(`→ QUEUED`) — **na mesma attempt**, `-a1`. O Tech Lead que originalmente
+executou a1, ainda vivo, nunca voltou a pegar o job: ficou em `IDLE`,
+`heartbeat` normal, silêncio total em `events.jsonl` para aquele job por mais
+de 27 minutos.
+
+### Causa raiz: `seen` era memória histórica, não cache do estado persistido
+
+`lib/worker-loop.mjs` mantinha um `Set` em memória, `seen`, chaveado por
+`${jobId}#a${attemptNumber}`. Essa chave foi adicionada no instante em que o
+worker se comprometeu a reivindicar a attempt 1 — **antes** de saber o
+resultado. Como `reclassify`/`resume` não mudam o número da attempt por
+design (ver `startNextAttempt` abaixo), a chave recalculada após o reparo
+(`#a1`) colidia com a já registrada, e a linha 220 do loop descartava o job
+**silenciosamente**, antes de qualquer outra verificação — sem `[SKIP]`, sem
+evento, sem nada.
+
+Nem `status` sozinho resolveria: `QUEUED` é tanto "nunca tentado" quanto
+"acabou de ser reparado". A distinção real está em `statusAt` — todo
+`setJobStatus` (e a escrita direta do reparo) grava um novo timestamp, então
+um job que passou por `QUEUED → RUNNING → FAILED → WAITING_FOR_CAPACITY →
+QUEUED` nunca revisita um `statusAt` já usado, ainda que `status` se repita.
+
+### A correção: elegibilidade derivada do disco, extraída e testável
+
+`evaluateJobEligibility` (nova função, `lib/worker-loop.mjs`) lê
+`store.readAttemptState` uma vez, calcula
+`` `${jobId}#a${attempt}:${attemptStatus}@${statusAt}` `` e só então consulta
+`seen`. Qualquer mudança real em disco — nova attempt, ou a mesma attempt
+com status/statusAt diferentes — produz uma chave diferente e força
+reavaliação, sem depender de restart. Todo motivo de recusa é retornado
+estruturado (`TERMINAL`, `ATTEMPT_NOT_CLAIMABLE`, `LEASE_BLOCKED`,
+`JOB_FILE_UNREADABLE`) e logado pelo loop — nenhum `continue` silencioso
+além do cache-hit legítimo (algo já visto e já logado antes).
+
+A concorrência continua sendo garantida **só** pelo lease persistido
+(`leaseStore.claimJob`), nunca por `seen` — que é puramente uma otimização
+de custo de I/O para não reler o mesmo job terminal a cada segundo.
+
+### `a1` é reexecutada — não existe `a2` neste caminho, por design já existente
+
+Verificado empiricamente: `canStartNewAttempt` só aceita reivindicar um job
+sem lease ativo quando o status está em
+`{COMPLETED, FAILED, SUPERSEDED, QUEUED, null}` — não inclui
+`WAITING_FOR_CAPACITY`. É por isso que `ia-loop:resume` grava `QUEUED`, não
+`WAITING_FOR_CAPACITY`. E `startNextAttempt`, por si só, recusa mintar uma
+nova attempt quando `attemptStatus === 'QUEUED'` ("já reivindicável, nada a
+fazer"). As duas guardas, independentes, concordam: uma attempt reparada e
+reenfileirada roda de novo sob o **mesmo** `attemptId` — confirmado pelo
+arquivamento preventivo que `reclassifyFailure` já fazia do resultado falho
+(`*.failed-<attemptId>.json`) antes do retry, precisamente porque previa esse
+reuso. Não é uma lacuna desta correção; é semântica do harness anterior a
+ela, e permanece intocada.
+
+### O gap que isso expôs na telemetria: `attemptId` podia repetir entre duas chamadas reais
+
+O ledger de uso (V20) usava `role::job::attempt` como chave de idempotência.
+Com uma attempt reparada rodando duas vezes de verdade sob o mesmo
+`attemptId` — e, no caso do Fable, na **mesma sessão persistente** também —
+nada na tripla `role/job/attempt` (nem a sessão) distinguia a segunda chamada
+real da primeira. Auditoria determinística confirmou: a segunda chamada
+colidia no `UNIQUE`, voltava `ALREADY_RECORDED`, e **todo o seu resultado —
+tokens, custo, resposta — era descartado**, com apenas uma flag
+`DUPLICATE_EXECUTION_KEY` sem dado nenhum por trás.
+
+A correção separa duas identidades que antes eram uma só:
+
+```text
+job            → estágio lógico (attemptId correlaciona com o harness)
+attempt        → uma tentativa daquele estágio
+model call     → uma invocação real do CLI — a que precisa ser única
+```
+
+`generateInvocationId()` (novo, `lib/usage-collector.mjs`) gera um UUID
+**no coletor, antes do spawn** — nunca derivado de job/attempt/sessão, que
+podem legitimamente se repetir entre duas chamadas reais distintas, e nunca
+o `uuid` do provider, que só existe depois que a chamada termina (a linha
+`STARTED` precisa existir antes). Esse id passa a ser a própria
+`idempotency_key` da linha. `attempt_id`/`job_id`/`role` continuam gravados
+em toda linha, inalterados, para correlação e consultas de "quantas
+invocações reais aconteceram por attempt" — só deixaram de fazer o papel de
+chave de unicidade.
+
+O único jeito legítimo de duas chamadas caírem na mesma linha continua
+existindo: uma reconciliação de crash que recupera o `invocation_id` de uma
+linha `STARTED` órfã e o passa de volta explicitamente
+(`beginModelExecution`/`recordModelExecution` aceitam `invocationId`) —
+nunca recomputado a partir de contexto.
+
+Schema `v1 → v2`: `ALTER TABLE model_usage ADD COLUMN invocation_id`,
+idempotente (guardado por `PRAGMA table_info`), aplicado na abertura de um
+banco existente; um banco novo já nasce com a coluna. Linhas anteriores à
+migração ficam com `invocation_id = NULL` — legítimo, nunca inventado.
+
+### Limpeza do estado residual: `runtime.blockedJobId`/`capacity` após o resume
+
+Achado secundário: depois de `ia-loop:resume` reenfileirar (ou encontrar um
+resultado já completo), `runtime.capacity`/`blockedJobId`/`blockedAgent`/
+`resumeFrom` continuavam descrevendo um bloqueio já resolvido —
+`nextRetryAt` de uma espera que já tinha terminado. `clearResolvedCapacityBlock`
+(novo, `lib/capacity-state.mjs`) limpa exatamente esses quatro campos,
+guardado por `blockedJobId` bater com o job sendo resolvido (nunca limpa um
+bloqueio diferente por engano), e **não toca `state`** — resume não sabe (e
+não deve adivinhar) qual é o próximo estado real do job; isso continua sendo
+derivado do status em disco por `ia-loop:goal`/`ia-loop:status`, exatamente
+como já acontece quando os dois divergem. Histórico preservado: o evento
+`CAPACITY_RESUME_REQUESTED`, já gravado antes, é o registro de que isso
+aconteceu.
+
+### Testes
+
+`tests/worker-loop-reconsideration.test.mjs` (5): o cenário exato —
+`a1 FAILED → reclassify → WAITING_FOR_CAPACITY → resume → QUEUED` —
+reconsiderado pelo mesmo `seen` (mesmo processo simulado) e reexecutado
+**exatamente uma vez** sob `a1`, sem `JOB_ATTEMPT_STARTED`; lease ainda é a
+única proteção de concorrência (status `RUNNING` sozinho não bloqueia,
+propositalmente — só o lease); resume idempotente/repetido não avança
+attempt; job genuinamente terminal nunca volta sem transição explícita;
+restart (Set novo) continua funcionando como antes da correção.
+
+`tests/usage-collector.test.mjs` (+2): `generateInvocationId` nunca repete,
+mesmo sob role/job/attempt idênticos; duas chamadas reais sob o mesmo
+`attemptId` (sessão Fable persistente incluída) geram duas linhas
+independentes, sem flag de integridade, com a falha original intacta.
+Testes de replay de crash atualizados para passar o `invocationId`
+recuperado explicitamente, em vez de depender de role/job/attempt coincidir.
+
+`tests/usage-ledger.test.mjs` (+2): migração v1→v2 preserva a linha existente
+(`invocation_id = NULL`) e habilita a coluna para linhas novas; reabrir um
+banco já v2 não tenta re-adicionar a coluna.
+
+`tests/capacity-state-resolved.test.mjs` (6): limpa os quatro campos do
+bloqueio; preserva `state` e todo o resto do runtime; nunca limpa o bloqueio
+de um job diferente; no-op seguro sem bloqueio algum ou sem runtime algum.
+
 ## Limitações conhecidas
 
 1. **Auth não é herdável por subprocesso a partir do app desktop.** O que

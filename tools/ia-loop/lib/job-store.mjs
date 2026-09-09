@@ -503,6 +503,16 @@ export function createJobStore(stateDir) {
      *
      * A job written before attempts were modelled reports attempt 1 with its
      * own status, which is what it effectively was.
+     *
+     * `statusAt` is included because attempt+status alone can repeat: a job
+     * that failed, was repaired by ia-loop:reclassify to WAITING_FOR_CAPACITY
+     * and requeued to QUEUED by ia-loop:resume ends up back at the exact same
+     * (attempt, status) pair it started at — QUEUED is also what a job's very
+     * first dispatch looks like. `statusAt` is what tells the two apart: every
+     * `setJobStatus` call (and the repair's own direct write) stamps a fresh
+     * one, so a caller memoising "have I already looked at this" by more than
+     * attempt+status alone needs it to avoid mistaking a repaired job for one
+     * it already dealt with.
      */
     async readAttemptState(role, jobId) {
       const envelope = await readJson(paths.job(role, jobId));
@@ -513,6 +523,7 @@ export function createJobStore(stateDir) {
         attemptId: envelope.currentAttemptId ?? attemptIdOf(jobId, attempt),
         attemptStatus: envelope.attemptStatus ?? envelope.status ?? null,
         status: envelope.status ?? null,
+        statusAt: envelope.statusAt ?? null,
         history: envelope.attemptHistory ?? [],
         inconsistent: isInconsistentAttemptState(envelope),
       };

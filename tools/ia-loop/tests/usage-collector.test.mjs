@@ -17,7 +17,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { invokeAgent } from '../lib/claude-process.mjs';
-import { createUsageCollector, idempotencyKeyFor, usageLedgerEnabled } from '../lib/usage-collector.mjs';
+import { createUsageCollector, generateInvocationId, usageLedgerEnabled } from '../lib/usage-collector.mjs';
 import { LEDGER_STATUS } from '../lib/usage-ledger.mjs';
 import { withUsageContext, routingContext } from '../lib/usage-context.mjs';
 import { runWithCapacity } from '../lib/capacity-runner.mjs';
@@ -350,16 +350,64 @@ test('an interrupted process still leaves an attributable row', async (t) => {
 
 // --- idempotency and recovery ---------------------------------------------
 
-test('the idempotency key is the ia-loop identity of one attempt', () => {
-  assert.equal(
-    idempotencyKeyFor({ role: 'developer', jobId: 'j1', attemptId: 'j1#a1' }),
-    'developer::j1::j1#a1',
-  );
-  assert.equal(
-    idempotencyKeyFor({ role: 'tech_lead', jobId: 'j1' }, { sessionId: 's' }),
-    'tech_lead::j1::session:s',
-  );
-  assert.equal(idempotencyKeyFor({}, { sessionId: 's' }), 'unrouted::unrouted::session:s');
+test('every real call mints its own invocation id, even under identical role/job/attempt', () => {
+  const a = generateInvocationId();
+  const b = generateInvocationId();
+  assert.notEqual(a, b);
+  // A UUID, not a string built from role/job/attempt: role+job+attempt is
+  // exactly what TWO real calls can legitimately share (see the collision
+  // test below), so it must never be what makes them the same row.
+  assert.match(a, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+});
+
+test('two REAL calls under the identical role/job/attempt are both recorded, independently', async (t) => {
+  // The scenario that lost data before this fix existed: ia-loop:reclassify
+  // moves a FAILED job to WAITING_FOR_CAPACITY and ia-loop:resume requeues it
+  // to QUEUED, and by harness design (canStartNewAttempt / startNextAttempt,
+  // see README V21/V22) the retry runs under the SAME attemptId as the
+  // original failure — not a new one. A key built from role+job+attempt alone
+  // made the retry's real tokens collide with the failure's row and vanish as
+  // an "already recorded" duplicate.
+  const collector = scratch(t).collector();
+  const context = { goalId: '009', roundId: 1, jobId: 'r1', attemptId: 'r1-a1', attempt: 1, role: 'tech_lead' };
+
+  // Call #1: fails before any served-model evidence arrives (a 429 rejected
+  // ahead of streaming, as the real Goal 009 incident did).
+  const h1 = collector.beginModelExecution({ context, request: { model: 'claude-fable-5-1', sessionId: 'sess-fable' } });
+  collector.finalizeModelExecution(h1, {
+    requestedModel: 'claude-fable-5-1', sessionId: 'sess-fable',
+    envelope: errorResult({ extra: { api_error_status: 429 } }),
+    structuredOutput: false,
+    error: { code: 'NON_ZERO_EXIT', message: 'CLI exited with code 1: transient' },
+    counters: { assistantMessages: 0, toolCallCount: 0, toolCalls: [] },
+  });
+
+  // ia-loop:reclassify + ia-loop:resume happen here — no model call, job doc
+  // FAILED -> WAITING_FOR_CAPACITY -> QUEUED, SAME attemptId throughout.
+
+  // Call #2: the SAME persistent Fable session (sessionId unchanged too, so
+  // NOTHING in role/job/attempt/session distinguishes this from call #1) —
+  // genuinely different, and succeeds.
+  const h2 = collector.beginModelExecution({ context, request: { model: 'claude-fable-5-1', sessionId: 'sess-fable', resume: true } });
+  assert.notEqual(h2.id, h1.id, 'a distinct row is opened for the retry');
+  const outcome2 = collector.finalizeModelExecution(h2, {
+    requestedModel: 'claude-fable-5-1', sessionId: 'sess-fable', resumed: true,
+    envelope: successResult({ model: 'claude-fable-5-1', payload: { decision: 'ACCEPTED' } }),
+    structuredOutput: true,
+    resolvedPrimaryModel: 'claude-fable-5-1',
+    counters: { assistantMessages: 40, toolCallCount: 30, toolCalls: [] },
+  });
+  assert.equal(outcome2.status, LEDGER_STATUS.OK, 'not ALREADY_RECORDED — this is a real, different call');
+
+  const recorded = rows(collector);
+  assert.equal(recorded.length, 2, 'both real calls are on record');
+  assert.deepEqual(recorded.map((r) => [r.job_id, r.attempt_id]), [['r1', 'r1-a1'], ['r1', 'r1-a1']],
+    'harness correlation (job/attempt) is identical on both, exactly as the harness reports it');
+  assert.notEqual(recorded[0].invocation_id, recorded[1].invocation_id, 'their own identity is not');
+  assert.equal(recorded[0].status, 'FAILED', 'the original failure is preserved exactly as it was');
+  assert.equal(recorded[1].status, 'COMPLETED');
+  assert.equal(collector.query('SELECT COUNT(*) AS n FROM model_usage_integrity')[0].n, 0,
+    'two real calls colliding on job/attempt is not an anomaly to flag; it is the harness working as designed');
 });
 
 test('processing the same result twice leaves exactly one row and counts nothing twice', async (t) => {
@@ -377,13 +425,17 @@ test('processing the same result twice leaves exactly one row and counts nothing
     resolvedPrimaryModel: OPUS,
     counters: { assistantMessages: 2, toolCallCount: 0, toolCalls: [] },
   };
+  // "The same result" means the SAME execution replayed — expressed by
+  // reusing the invocation id explicitly, never by role/job/attempt alone
+  // (which two DIFFERENT real calls can also share; see the collision test).
+  const invocationId = generateInvocationId();
 
-  const first = collector.recordModelExecution({ context, capture });
+  const first = collector.recordModelExecution({ context, capture, invocationId });
   assert.equal(first.status, LEDGER_STATUS.OK);
   const before = rows(collector);
   assert.equal(before.length, 1);
 
-  const second = collector.recordModelExecution({ context, capture });
+  const second = collector.recordModelExecution({ context, capture, invocationId });
   assert.equal(second.status, LEDGER_STATUS.ALREADY_RECORDED);
 
   const after = rows(collector);
@@ -401,13 +453,18 @@ test('a crash mid-inference leaves a STARTED row that reconciliation finalises e
   crashed.close();
 
   // A new process starts, finds the orphan, and replays the recovered result.
+  // It recovers the SAME invocation id from the orphaned row on disk — that,
+  // not role/job/attempt, is what proves this is the execution being
+  // finished rather than a new one.
   const restarted = dir.collector();
-  const orphans = restarted.query("SELECT id, status, attempt_id FROM model_usage WHERE status = 'STARTED'");
+  const orphans = restarted.query("SELECT id, status, attempt_id, invocation_id FROM model_usage WHERE status = 'STARTED'");
   assert.equal(orphans.length, 1);
   assert.equal(orphans[0].attempt_id, 'd1#a1');
+  assert.ok(orphans[0].invocation_id, 'the orphan carries the identity a recovery reads back');
 
   const recovered = restarted.recordModelExecution({
     context,
+    invocationId: orphans[0].invocation_id,
     capture: {
       requestedModel: OPUS,
       sessionId: 'session-1',
@@ -423,8 +480,11 @@ test('a crash mid-inference leaves a STARTED row that reconciliation finalises e
   assert.equal(all.length, 1, 'one logical execution');
   assert.equal(all[0].status, 'COMPLETED', 'one finalised usage record');
 
-  // A second reconciliation pass must change nothing at all.
-  const again = restarted.recordModelExecution({ context, capture: { requestedModel: OPUS, sessionId: 'session-1' } });
+  // A second reconciliation pass — same recovered id — must change nothing.
+  const again = restarted.recordModelExecution({
+    context, invocationId: orphans[0].invocation_id,
+    capture: { requestedModel: OPUS, sessionId: 'session-1' },
+  });
   assert.equal(again.status, LEDGER_STATUS.ALREADY_RECORDED);
   assert.equal(rows(restarted).length, 1);
   assert.equal(rows(restarted)[0].status, 'COMPLETED');
@@ -548,7 +608,10 @@ test('an unattributed call is still recorded, as UNKNOWN rather than not at all'
   assert.equal(row.operation, 'UNKNOWN');
   assert.equal(row.goal_id, null);
   assert.equal(row.resolved_model, HAIKU);
-  assert.match(row.idempotency_key, /^unrouted::unrouted::session:/);
+  // The row still gets its own identity — a fresh invocation id — even with
+  // no ia-loop context to correlate it to; unattributed is not un-identified.
+  assert.ok(row.invocation_id, 'unattributed does not mean un-identified');
+  assert.equal(row.idempotency_key, row.invocation_id);
 });
 
 // --- through the capacity runner ------------------------------------------

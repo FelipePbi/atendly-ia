@@ -72,6 +72,94 @@ export function log(tag, message = '') {
 const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
 /**
+ * Decides whether a job is worth looking at again, and names why when it is
+ * not — persisted state, never an in-memory Set, decides eligibility.
+ *
+ * `seen` is a cache of "nothing has changed here since I last looked", keyed
+ * by the exact persisted facts that decide eligibility. It is deliberately NOT
+ * "this worker has permanently dealt with this job" — that reading is what let
+ * a job repaired from outside the process (ia-loop:reclassify moving FAILED to
+ * WAITING_FOR_CAPACITY, ia-loop:resume moving that to QUEUED, all on the SAME
+ * attempt number) go silently unnoticed by a worker that never restarted: the
+ * old key was jobId+attempt alone, so the SAME key it had already cached at
+ * claim time for attempt 1 matched again after the repair, and the job was
+ * skipped at the very first line, before any status was even re-read.
+ *
+ * The key is attempt + status + statusAt, not attempt + status alone — status
+ * by itself is not enough, because a repaired job legitimately returns to the
+ * EXACT SAME status string it started at: QUEUED is both "freshly dispatched,
+ * never attempted" and "just requeued by ia-loop:resume after a repair", and
+ * attempt does not change either — creating attempt 2 is what the resumed
+ * attempt is FOR, via startNextAttempt, not something that has already
+ * happened by the time this job is looked at again. `statusAt` is what tells
+ * the two apart: every write that changes status — setJobStatus, and the
+ * repair's own direct write — stamps a fresh one, so a job that went
+ * QUEUED -> RUNNING -> FAILED -> WAITING_FOR_CAPACITY -> QUEUED never revisits
+ * a `statusAt` it already used, however many times `status` itself repeats.
+ *
+ * Any of the three changing produces a different key, so the cache misses and
+ * the job is evaluated fresh from disk — no restart required, and the
+ * persisted job/attempt/lease state is what actually decides, exactly as it
+ * does for a request that arrives while the worker was never polling at all.
+ * Concurrency safety does not come from this cache at all: it comes from
+ * `canStartNewAttempt`'s lease check below, which is authoritative across
+ * processes and untouched by anything cached in memory.
+ */
+export async function evaluateJobEligibility({ store, leaseStore, role, jobId, seen }) {
+  const attemptState = await store.readAttemptState(role, jobId);
+  if (!attemptState) {
+    // The file does not exist yet, or is mid-write between listJobs() and this
+    // read. Not a state worth caching: it resolves itself on the next poll.
+    return { eligible: false, cache: false, reason: 'JOB_FILE_UNREADABLE' };
+  }
+
+  const seenKey = `${jobId}#a${attemptState.attempt}:${attemptState.attemptStatus}@${attemptState.statusAt}`;
+  if (seen.has(seenKey)) {
+    // Already evaluated and already logged, for this exact persisted state.
+    // Silence here is correct, not a gap: nothing has changed to report.
+    return { eligible: false, cache: 'HIT', seenKey, attemptState, reason: 'ALREADY_EVALUATED' };
+  }
+
+  // A job that reached a terminal status is never re-run: only an explicit
+  // transition (a new jobId, or a repair tool moving the SAME attempt back to
+  // a claimable status) may make it eligible again, and either one changes
+  // this attemptState and therefore this key.
+  if (!isClaimableJobStatus(attemptState.status)) {
+    return {
+      eligible: false, cache: 'ADD', seenKey, attemptState,
+      reason: 'TERMINAL', detail: `${jobId} is ${attemptState.status}`,
+    };
+  }
+
+  // The CURRENT ATTEMPT may be unclaimable even when the job-level status
+  // looks fine (a REROUTED job mid-transition, for instance). Not cached: the
+  // next attempt materialising is exactly what this worker should notice
+  // without needing the status to change first.
+  if (!isClaimableJobStatus(attemptState.attemptStatus)) {
+    return {
+      eligible: false, cache: false, seenKey, attemptState,
+      reason: 'ATTEMPT_NOT_CLAIMABLE',
+      detail: `${attemptState.attemptId} is ${attemptState.attemptStatus}`,
+    };
+  }
+
+  // Ownership, decided by the filesystem lease rather than by anything cached
+  // here. This is the actual concurrency guard — the one thing two workers (or
+  // two polls) racing for the same job cannot both win.
+  const lease = await leaseStore.readJobLease(jobId);
+  const verdict = canStartNewAttempt({ lease, jobStatus: attemptState.status });
+  if (!verdict.allowed) {
+    return {
+      eligible: false, cache: false, seenKey, attemptState, lease, verdict,
+      reason: 'LEASE_BLOCKED',
+      detail: `${jobId}: ${verdict.reason} — ${verdict.detail ?? ''}`,
+    };
+  }
+
+  return { eligible: true, cache: 'ADD', seenKey, attemptState, lease, verdict };
+}
+
+/**
  * Runs the worker until the process is asked to stop.
  *
  * `handleJob(job)` is called for each queued job; the worker returns to IDLE
@@ -208,16 +296,38 @@ export async function runWorkerLoop({
       log('ERROR', `cannot list jobs: ${error.message}`);
     }
 
-    // Seen is keyed by ATTEMPT, not by job. Keyed by job, a skip was
-    // permanent: a job refused once because an orphaned lease made it
-    // unclaimable was never looked at again, so the attempt recovery later
-    // materialised for it was never picked up, and the worker stayed IDLE
-    // against work that was waiting for it.
+    // Eligibility is decided fresh from persisted state every time — see
+    // evaluateJobEligibility. `seen` only remembers "nothing has changed since
+    // I looked", keyed by attempt AND status, so a repair applied from outside
+    // this process (ia-loop:reclassify, ia-loop:resume) is never invisible to
+    // a worker that never restarted: it changes the status, which changes the
+    // key, which is exactly what makes the cache miss and the job get looked
+    // at again.
     for (const file of files) {
       const jobId = file.replace(/\.json$/, '');
-      const attemptNumber = await store.readJobAttempt(role, jobId);
-      const seenKey = `${jobId}#a${attemptNumber}`;
-      if (seen.has(seenKey)) continue;
+      const eligibility = await evaluateJobEligibility({ store, leaseStore, role, jobId, seen });
+
+      if (eligibility.cache === 'HIT') continue;
+
+      if (!eligibility.eligible) {
+        if (eligibility.cache === 'ADD') seen.add(eligibility.seenKey);
+        if (eligibility.reason === 'LEASE_BLOCKED') {
+          log('SKIP', eligibility.detail);
+          if (eligibility.verdict?.escalate) {
+            await store.appendEvent({ type: 'ORPHANED_EXECUTION_UNCERTAIN', role, jobId, detail: eligibility.verdict.detail });
+          }
+        } else if (eligibility.detail) {
+          // TERMINAL and ATTEMPT_NOT_CLAIMABLE both carry a ready-made detail
+          // line; JOB_FILE_UNREADABLE carries none because it is transient —
+          // the file existing or not by the next poll is the only fact that
+          // matters, and logging a race on every listing would be noise, not
+          // observability.
+          log('SKIP', eligibility.detail);
+        }
+        continue;
+      }
+
+      const { attemptState } = eligibility;
       let claimed = null;
       let stopLeaseHeartbeat = null;
       // Declared here, not inside the try: the finally block below needs it
@@ -225,44 +335,7 @@ export async function runWorkerLoop({
       // try would not be visible there.
       let attemptId = null;
       try {
-        // A job that already reached a terminal status is never re-run. Before
-        // this check, a restart re-executed a FAILED job and spent a second
-        // inference on work a human had not yet looked at. Only an explicit
-        // transition may create a NEW jobId for a retry or correction round.
-        if (!(await store.isJobClaimable(role, jobId))) {
-          const status = await store.readJobStatus(role, jobId);
-          // Terminal for this attempt: remembering it is correct.
-          seen.add(seenKey);
-          log('SKIP', `${jobId} is ${status}`);
-          continue;
-        }
-
-        // A job whose CURRENT ATTEMPT is not itself claimable is not ready,
-        // whatever the job-level status says. Not remembered: the next
-        // attempt is exactly what this worker is waiting for.
-        const attemptState = await store.readAttemptState(role, jobId);
-        if (attemptState && !isClaimableJobStatus(attemptState.attemptStatus)) {
-          log('SKIP', `${attemptState.attemptId} is ${attemptState.attemptStatus}`);
-          continue;
-        }
-
         const job = await store.readJob(role, jobId);
-
-        // Ownership, decided by the filesystem rather than by a check.
-        const existing = await leaseStore.readJobLease(jobId);
-        const verdict = canStartNewAttempt({
-          lease: existing,
-          jobStatus: await store.readJobStatus(role, jobId),
-        });
-        if (!verdict.allowed) {
-          log('SKIP', `${jobId}: ${verdict.reason} — ${verdict.detail ?? ''}`);
-          if (verdict.escalate) {
-            await store.appendEvent({ type: 'ORPHANED_EXECUTION_UNCERTAIN', role, jobId, detail: verdict.detail });
-          }
-          // Deliberately not remembered. This is a state recovery can change,
-          // and a worker that stopped looking would never notice it had.
-          continue;
-        }
 
         // The last gate before this worker commits to executing something.
         //
@@ -294,12 +367,12 @@ export async function runWorkerLoop({
           }
         }
 
-        seen.add(seenKey);
+        seen.add(eligibility.seenKey);
 
         // The attempt number lives on the job. Hardcoding 1 meant a second
         // attempt at an interrupted stage would have carried the first
         // attempt's id, and result fencing could not have told them apart.
-        attemptId = attemptIdFor(jobId, attemptNumber);
+        attemptId = attemptIdFor(jobId, attemptState.attempt);
         claimed = await leaseStore.claimJob(jobId, {
           attemptId, agent: role, goal: job.goal, round: job.round, worktree: job.worktree,
         });

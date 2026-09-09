@@ -144,8 +144,12 @@ test('the worker takes the attempt number from the job, so a2 is not mistaken fo
   const source = await readFile(new URL('../lib/worker-loop.mjs', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /attemptIdFor\(jobId, 1\)/,
     'hardcoding 1 meant result fencing could not tell two attempts apart');
-  assert.match(source, /readJobAttempt\(role, jobId\)/, 'the number comes from the job');
-  assert.match(source, /attemptIdFor\(jobId, attemptNumber\)/, 'and the lease is claimed for that attempt');
+  // readJobAttempt was folded into readAttemptState when the eligibility check
+  // was extracted (see evaluateJobEligibility) so the same read serves both the
+  // seen-cache key and the claim; the number still comes from the persisted
+  // job, never a literal.
+  assert.match(source, /readAttemptState\(role, jobId\)/, 'the number comes from the job');
+  assert.match(source, /attemptIdFor\(jobId, attemptState\.attempt\)/, 'and the lease is claimed for that attempt');
 });
 
 // ===========================================================================

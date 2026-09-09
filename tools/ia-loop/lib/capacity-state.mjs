@@ -123,6 +123,36 @@ export async function clearCapacityWait(store, { state, now }) {
   return runtime;
 }
 
+/**
+ * Clears a capacity block ia-loop:resume has just resolved, without touching
+ * `state`.
+ *
+ * `clearCapacityWait` is the in-process path: it runs the instant the SAME
+ * call that was waiting gets through, and it knows the real next state to
+ * write (`resumeFrom`). `ia-loop:resume` knows no such thing — it requeues a
+ * job for a worker that has not run yet, so writing a `state` here would be a
+ * guess (QUEUED vs RUNNING is a real distinction the reconciliation logic in
+ * `ia-loop:goal`/`ia-loop:status` derives from the job's own status, which is
+ * exactly the authority this codebase already treats `runtime.state` as a
+ * cache of — see run-status.mjs). What resume DOES know is that the block it
+ * is describing is over: the job was requeued (or already had a result), so
+ * a `capacity` object still naming an old `nextRetryAt` is now describing a
+ * wait that already ended.
+ *
+ * Guarded by `blockedJobId` matching exactly the job being resumed, so this
+ * can never clear a DIFFERENT block than the one just resolved.
+ */
+export async function clearResolvedCapacityBlock(store, { jobId, now }) {
+  const previous = await store.readRuntime();
+  if (!previous || previous.blockedJobId !== jobId) return previous ?? null;
+  const runtime = {
+    ...previous, capacity: null, blockedAgent: null, resumeFrom: null, blockedJobId: null,
+  };
+  runtime.capacityClearedAt = new Date(now).toISOString();
+  await store.writeRuntime(runtime);
+  return runtime;
+}
+
 /** Records an escalation. The Goal is preserved; only the state changes. */
 export async function persistHumanRequired(store, { blockedAgent, reason, note, jobId, now }) {
   const previous = (await store.readRuntime()) ?? {};

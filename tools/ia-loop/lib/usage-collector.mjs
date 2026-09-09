@@ -29,6 +29,7 @@
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
 
 import { LEDGER_STATUS, openUsageLedger } from './usage-ledger.mjs';
 import {
@@ -52,21 +53,32 @@ export function defaultLedgerPath(stateDir = DEFAULT_STATE_DIR) {
 /**
  * The idempotency key, built from ids the state machine already owns.
  *
- * The ia-loop's own invariant is that every real call to a model is its own
- * attempt (V9), so `role + job + attempt` names exactly one model execution.
- * That is what makes reprocessing safe: a recovery or reconciliation replaying
- * the same attempt produces the same key and hits the UNIQUE constraint instead
- * of counting the tokens twice.
+ * `role + job + attempt` was tried first and is NOT enough: the ia-loop's own
+ * repair path (ia-loop:reclassify moving a failure to WAITING_FOR_CAPACITY,
+ * ia-loop:resume requeuing it) re-runs the SAME attemptId by design — see
+ * README V21/V22 and `lib/leases.mjs`'s `canStartNewAttempt` — so a job that
+ * failed and was legitimately retried produces TWO real model calls sharing
+ * one role+job+attempt. A key built from those three alone made the second,
+ * genuinely different call collide with the first in the UNIQUE constraint
+ * and vanish as a false "already recorded" — the exact way a repaired retry's
+ * real tokens and result were silently lost before this was found.
  *
- * A call made with no job — a spike, a supervised slice, anything not routed —
- * still gets a stable key from its session id, because every such call mints a
- * fresh session id of its own.
+ * The identity that is actually unique per real call is the call itself:
+ * `generateInvocationId()` mints one, in the collector, before the CLI is
+ * spawned — necessarily before the provider has produced anything of its own
+ * (a `session_id` a persistent Fable conversation keeps across calls, a
+ * `result.uuid` that does not exist until the call finishes) that could serve
+ * instead. Two real calls always get two different ids; the harness identity
+ * (role, jobId, attemptId) is preserved on the row for correlation, exactly
+ * as before, just no longer doing duty as the uniqueness key.
+ *
+ * The single legitimate way two `begin()` calls should EVER resolve to the
+ * same row is a future crash-recovery reconciliation explicitly reading an
+ * orphaned STARTED row's own invocation id back off disk and passing it in to
+ * finish that SAME row — never a fresh id computed from context.
  */
-export function idempotencyKeyFor(context = {}, { sessionId = null } = {}) {
-  const role = context.role ?? 'unrouted';
-  if (context.jobId && context.attemptId) return `${role}::${context.jobId}::${context.attemptId}`;
-  if (context.jobId) return `${role}::${context.jobId}::session:${sessionId ?? 'unknown'}`;
-  return `${role}::unrouted::session:${sessionId ?? 'unknown'}`;
+export function generateInvocationId() {
+  return randomUUID();
 }
 
 /**
@@ -204,18 +216,27 @@ export function createUsageCollector({
      * This is what makes a crash visible: a process killed mid-inference leaves
      * a STARTED row naming the Goal, the attempt and the model it was running,
      * instead of leaving nothing at all.
+     *
+     * `invocationId` defaults to a fresh id — the normal case, a real new call.
+     * The only reason to pass one in explicitly is a future crash-recovery path
+     * that read an orphaned STARTED row's own id back off disk and is
+     * finishing that SAME row, never a caller trying to compute a key from
+     * context: role+job+attempt can repeat across two genuinely different real
+     * calls (a repaired attempt is re-run under its original attemptId), and
+     * that repeat must never make the second call collide with the first.
      */
-    beginModelExecution({ context: overrides = {}, request = {} } = {}) {
+    beginModelExecution({ context: overrides = {}, request = {}, invocationId = generateInvocationId() } = {}) {
       const context = contextFor(overrides);
-      const idempotencyKey = idempotencyKeyFor(context, { sessionId: request.sessionId });
+      const idempotencyKey = invocationId;
       const handle = {
-        idempotencyKey, context, id: null, recorded: false, startedAt: now(),
+        idempotencyKey, invocationId, context, id: null, recorded: false, startedAt: now(),
       };
 
       try {
         const record = buildUsageRecord({
           context,
           capture: {
+            invocationId,
             requestedModel: request.model ?? null,
             requestedEffort: request.effort ?? null,
             sessionId: request.sessionId ?? null,
@@ -259,7 +280,10 @@ export function createUsageCollector({
       try {
         const record = buildUsageRecord({
           context: handle.context,
-          capture: { ...capture, startedAt: capture.startedAt ?? handle.startedAt },
+          // The handle's own invocationId wins over anything a caller passed:
+          // it is the row's actual identity, fixed at begin() time, and a
+          // caller of finalizeModelExecution never needs to know it exists.
+          capture: { ...capture, invocationId: handle.invocationId, startedAt: capture.startedAt ?? handle.startedAt },
         });
         const outcome = ledgerOf().finalize({
           id: handle.id,
@@ -309,10 +333,19 @@ export function createUsageCollector({
      *   the row is terminal        it was already accounted for. Nothing is
      *                              written, ALREADY_RECORDED is returned, and
      *                              the tokens are not counted a second time.
+     *
+     * `invocationId` MUST be passed explicitly here to express "this is the
+     * same execution being replayed" — reading it back from the STARTED row a
+     * crash left behind, never recomputed from context. Left to its default, a
+     * second call generates a fresh id and records a second, independent
+     * execution, which is correct for two calls that just happen to share
+     * context (see generateInvocationId's docstring) but wrong for a genuine
+     * replay of the one this handle already opened.
      */
-    recordModelExecution({ context: overrides = {}, capture = {} } = {}) {
+    recordModelExecution({ context: overrides = {}, capture = {}, invocationId } = {}) {
       const handle = this.beginModelExecution({
         context: overrides,
+        invocationId,
         request: {
           model: capture.requestedModel ?? null,
           effort: capture.requestedEffort ?? null,

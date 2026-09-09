@@ -61,6 +61,9 @@ export const LEDGER_STATUS = Object.freeze({
  */
 const COLUMNS = Object.freeze([
   // identity
+  // The row's own identity — one real model call, never reused across two
+  // genuinely different ones. See usage-collector.mjs's generateInvocationId.
+  ['invocation_id', 'invocationId', true],
   ['project_id', 'projectId', true],
   ['run_id', 'runId', true],
   ['goal_id', 'goalId', true],
@@ -515,18 +518,35 @@ function unavailable(reason) {
  * so running it on an existing database is a no-op, which is what makes it safe
  * to call on every open.
  */
+/** True when `column` already exists on `table` — makes an ALTER idempotent. */
+function hasColumn(db, table, column) {
+  return db.prepare(`PRAGMA table_info(${table})`).all().some((row) => row.name === column);
+}
+
 function migrate(db, now) {
   const upsert = db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
   const read = db.prepare('SELECT value FROM meta WHERE key = ?');
 
   const current = read.get('schema_version');
   if (!current) {
+    // A brand-new database: CREATE TABLE (above) already built every column
+    // this version defines, invocation_id included. Nothing to migrate.
     upsert.run('schema_version', String(SCHEMA_VERSION));
     upsert.run('created_at', now());
   } else if (Number(current.value) > SCHEMA_VERSION) {
     throw new Error(
       `usage ledger schema_version ${current.value} is newer than this collector understands (${SCHEMA_VERSION})`,
     );
+  } else if (Number(current.value) < 2) {
+    // v1 -> v2: an existing database predates invocation_id. CREATE TABLE IF
+    // NOT EXISTS is a no-op on a table that already exists, so the column is
+    // genuinely missing and needs adding — guarded, so re-running this on an
+    // already-migrated v2 database (opened before the version row is written
+    // below) is a no-op rather than a duplicate-column error.
+    if (!hasColumn(db, 'model_usage', 'invocation_id')) {
+      db.exec('ALTER TABLE model_usage ADD COLUMN invocation_id TEXT');
+    }
+    upsert.run('schema_version', String(SCHEMA_VERSION));
   }
   // Recorded on every open: which collector last wrote here is a fact about the
   // data, and it changes more often than the schema does.

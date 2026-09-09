@@ -44,13 +44,14 @@ function scratch(t) {
   };
 }
 
-function rowFor({ status = 'STARTED', envelope = null, ...context } = {}) {
+function rowFor({ status = 'STARTED', envelope = null, invocationId = null, ...context } = {}) {
   const record = buildUsageRecord({
     context: {
       goalId: '008', roundId: 1, jobId: 'job-1', attemptId: 'job-1#a1', attempt: 1,
       role: 'developer', stage: 'implementation', ...context,
     },
     capture: {
+      invocationId,
       requestedModel: OPUS, sessionId: 'session-1', startedAt: '2026-09-09T10:00:00.000Z',
       envelope, structuredOutput: envelope !== null,
       resolvedPrimaryModel: envelope ? OPUS : null,
@@ -104,6 +105,46 @@ test('migration is idempotent: reopening an existing database changes nothing', 
   assert.equal(second.status, LEDGER_STATUS.OK);
   assert.equal(second.schemaVersion(), SCHEMA_VERSION);
   assert.equal(second.query('SELECT COUNT(*) AS n FROM model_usage')[0].n, 1, 'the row survived');
+});
+
+test('a v1 database (no invocation_id) migrates to v2 in place, keeping its row', (t) => {
+  const dir = scratch(t);
+
+  const v1 = dir.open();
+  const { id } = v1.begin({ idempotencyKey: 'legacy-key-1', record: rowFor() });
+  // Roll the database back to what a real v1 database looked like: no
+  // invocation_id column, and the meta row saying so.
+  v1.query('ALTER TABLE model_usage DROP COLUMN invocation_id');
+  v1.query('UPDATE meta SET value = ? WHERE key = ?', ['1', 'schema_version']);
+  v1.close();
+
+  const migrated = dir.open();
+  assert.equal(migrated.status, LEDGER_STATUS.OK);
+  assert.equal(migrated.schemaVersion(), SCHEMA_VERSION);
+  const row = migrated.get(id);
+  assert.equal(row.idempotency_key, 'legacy-key-1', 'the pre-existing row survives the migration');
+  assert.equal(row.invocation_id, null, 'a row that predates the concept has no invocation id to report');
+
+  // The column is real and usable for new rows, not just present.
+  const after = migrated.begin({
+    idempotencyKey: 'new-invocation-id',
+    record: rowFor({ invocationId: 'new-invocation-id' }),
+  });
+  assert.equal(after.status, LEDGER_STATUS.OK);
+  assert.equal(migrated.get(after.id).invocation_id, 'new-invocation-id');
+});
+
+test('reopening an already-migrated v2 database does not re-run the migration', (t) => {
+  const dir = scratch(t);
+  const first = dir.open();
+  first.begin({ idempotencyKey: 'k1', record: rowFor() });
+  first.close();
+
+  // Opening it again must not attempt `ALTER TABLE ... ADD COLUMN` on a
+  // column that already exists — that would throw, not silently succeed.
+  const second = dir.open();
+  assert.equal(second.status, LEDGER_STATUS.OK);
+  assert.equal(second.schemaVersion(), SCHEMA_VERSION);
 });
 
 test('a database written by a newer collector is refused, not silently downgraded', (t) => {

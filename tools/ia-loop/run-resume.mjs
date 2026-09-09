@@ -29,7 +29,9 @@ import { fileURLToPath } from 'node:url';
 
 import { SpikeError } from './lib/claude-process.mjs';
 import { createJobStore } from './lib/job-store.mjs';
-import { readRuntimeStrict, remainingWaitMs, validateWaitingRuntime } from './lib/capacity-state.mjs';
+import {
+  clearResolvedCapacityBlock, readRuntimeStrict, remainingWaitMs, validateWaitingRuntime,
+} from './lib/capacity-state.mjs';
 import { formatRemaining } from './lib/capacity-policy.mjs';
 import { LOOP_STATES } from './lib/loop-state.mjs';
 import { AGENT_EXECUTION_STATES } from './lib/recovery-plan.mjs';
@@ -250,6 +252,16 @@ async function main() {
     resumeFrom: plan.resumeFrom,
     alreadyCompleted: alreadyDone,
   });
+
+  // The wait this resume answers is over — requeued for its worker, or
+  // already had a result. `runtime.capacity`/`blockedJobId` describing it as
+  // still pending is now stale; `state` is left alone, since resume does not
+  // know (and must not guess) what the job's real next state is — that is
+  // read-status.mjs, and eventually ia-loop:goal, deriving it fresh from the
+  // job's own status, exactly as they already do for a runtime.state that
+  // disagrees with disk. History is preserved: CAPACITY_RESUME_REQUESTED,
+  // just appended above, already recorded that this happened.
+  await clearResolvedCapacityBlock(store, { jobId, now: Date.now() });
 
   console.log(out.join('\n'));
   return 0;

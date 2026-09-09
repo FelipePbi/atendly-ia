@@ -148,9 +148,18 @@ test('the worker refuses that job while nothing is claimable, and does not remem
     assert.equal(verdict.reason, 'ORPHANED_EXECUTION_UNCERTAIN');
 
     const source = await readFile(new URL('../lib/worker-loop.mjs', import.meta.url), 'utf8');
-    assert.match(source, /seenKey = `\$\{jobId\}#a\$\{attemptNumber\}`/,
-      'seen is keyed by attempt, so a later one is still noticed');
-    assert.match(source, /Deliberately not remembered/,
+    // seenKey now also carries statusAt, not just attempt+status: a repaired
+    // job (ia-loop:reclassify, ia-loop:resume) legitimately returns to the
+    // EXACT SAME status string it started at — QUEUED is both "never
+    // attempted" and "just requeued after a repair" — so status alone cannot
+    // tell the two apart. statusAt changes on every write that changes status,
+    // so it is what makes the worker notice without needing a restart.
+    assert.match(
+      source,
+      /seenKey = `\$\{jobId\}#a\$\{attemptState\.attempt\}:\$\{attemptState\.attemptStatus\}@\$\{attemptState\.statusAt\}`/,
+      'seen is keyed by attempt, status AND statusAt, so a repair that returns to the same status is still noticed',
+    );
+    assert.match(source, /Not cached: the\s*\n\s*\/\/ next attempt materialising/,
       'a refusal recovery can undo must not be permanent');
   });
 });

@@ -683,7 +683,10 @@ async function main() {
   const resumed = await restoreSession(executable.path);
 
   const mode = resolveRoutingMode();
-  console.log(banner({
+  // Built now, printed only once the role lease is actually held: a process
+  // that is about to refuse to start must not first announce that it is
+  // waiting for work.
+  const readyBanner = banner({
     title: 'TECH LEAD',
     model: 'adaptive — routed per job',
     sessionLine: `Specialist session: ${session.sessionId.slice(0, 8)} (${resumed ? 'resumed from registry' : 'new'})`,
@@ -695,12 +698,20 @@ async function main() {
       `Routing mode: ${mode}`,
       `Log level: ${LOG_LEVEL}`,
     ],
-  }));
-  console.log('Waiting for review task...\n');
+  });
 
   await persistSession();
   workerState = 'IDLE';
-  await runWorkerLoop({ store, role: ROLE, getStatus, handleJob });
+  await runWorkerLoop({
+    store,
+    role: ROLE,
+    getStatus,
+    handleJob,
+    onStarted: () => {
+      console.log(readyBanner);
+      console.log('Waiting for review task...\n');
+    },
+  });
 }
 
 // Only when this file IS the program. Importing it — from a test, a doc

@@ -3907,6 +3907,134 @@ incluindo Work Unit.
 filtros, parâmetros ligados em vez de interpolados, somas, e os contadores
 determinísticos do parser com trilha limitada e sem conteúdo.
 
+## V21 — Um worker por papel, provado em vez de assumido
+
+A arquitetura sempre assumiu **um** Tech Lead e **um** Developer. Nada garantia
+isso.
+
+### O caso real: 2026-09-09
+
+Um restart do Tech Lead não encerrou o processo anterior. Dois processos ficaram
+polando a mesma fila por cinco horas:
+
+```text
+PID 16424  iniciado 14:28  código anterior à telemetria   ← executou o trabalho
+PID 22748  iniciado 19:22  código atual                   ← SKIP a cada 1s
+```
+
+Todas as guardas existentes se comportaram **corretamente**: o lease de job
+deixou exatamente um executar, e o outro recusou o job uma vez por segundo com
+`ATTEMPT_ALREADY_RUNNING` — que é a guarda anti-duplicação da V6 fazendo
+precisamente o seu trabalho. O `SKIP` é deliberadamente não memorizado, para que
+uma recuperação ainda seja notada; daí a repetição de 1 em 1 segundo.
+
+O problema não era nenhuma dessas guardas. Era a pergunta que **ninguém fazia**:
+
+```text
+lease de job       → "este job está sendo executado?"
+lease de worktree  → "alguém está escrevendo aqui?"
+(nada)             → "existe outro worker deste papel vivo?"
+```
+
+Sem a terceira, o duplicado nunca parava. E o trabalho caiu no processo **mais
+antigo**, que rodava código anterior ao collector — então a chamada de
+`NEXT_GOAL_PLANNING` do Goal 008 não deixou linha no ledger. Nenhum dado foi
+corrompido e nenhuma inferência foi duplicada; o que se perdeu foi rastro.
+
+### Identidade
+
+Um terceiro tipo de lease, `leases/workers/<role>.lock`, adquirido antes de
+qualquer outra coisa que o worker faça. A aquisição é o mesmo `open(path, 'wx')`
+dos outros leases — a criação exclusiva é o árbitro, então dois processos em
+corrida não podem ambos vencer.
+
+O lease registra o suficiente para identificar o dono depois:
+
+```text
+role                 workerInstanceId (pid + nonce)   pid
+processStartedAt     hostname                        bootAt
+repoRoot             bootCodeVersion                 startedAt
+heartbeatAt          expiresAt (TTL explícito)       version
+```
+
+Um segundo processo do mesmo papel **falha no startup**, nomeando o dono, em vez
+de coexistir em silêncio:
+
+```text
+[REFUSING TO START] WORKER_ALREADY_RUNNING — held by instance 28988-3ecb7c58,
+  pid 28988, on Borges, started 2026-09-09T19:58:18.032Z,
+  last heartbeat 2026-09-09T19:59:58.117Z, code f09eb98159550b6d
+```
+
+Sai com código 1. O banner de "waiting for task" passou a ser impresso **só
+depois** que o papel é de fato adquirido: um processo prestes a recusar não pode
+antes anunciar que está esperando trabalho.
+
+### Liveness nunca por PID sozinho
+
+Windows e POSIX reciclam ids de processo. Um dono só é declarado ausente com
+evidência **positiva**, nesta ordem:
+
+```text
+heartbeat dentro do TTL          → HELD_BY_LIVE_WORKER   recusa
+bootAt anterior ao boot atual    → STALE_AFTER_REBOOT    takeover seguro
+pid não existe                   → HOLDER_GONE           takeover seguro
+pid existe, mas começou em outro
+  instante que o lease registra  → PID_RECYCLED          takeover seguro
+vivo, mesmo processo, calado     → UNCERTAIN             recusa
+liveness indeterminável          → UNCERTAIN             recusa
+```
+
+`UNCERTAIN` falha fechado de propósito. Um worker pausado pelo SO, ou com disco
+travado, continua sendo um worker — e dois workers é o desfecho pior.
+
+O takeover é compare-and-swap contra exatamente o lease julgado, então um dono
+que volte entre o julgamento e a troca mantém o papel. Ele registra
+`WORKER_IDENTITY_TAKEOVER` com o veredito que o autorizou.
+
+### Shutdown, crash e reboot
+
+Um shutdown normal libera o lease, e o restart seguinte simplesmente funciona.
+Um crash (kill sem handler, terminal fechado, reboot) deixa o lease para trás —
+e isso é correto: dentro do TTL o restart é **recusado**, porque uma batida
+recente não é prova de morte. Passado o TTL, a ausência do pid é prova, e o novo
+processo assume registrando de quem assumiu.
+
+### Frescor do código
+
+A segunda metade do incidente: o processo que executou o Goal rodava código de
+antes da telemetria existir. Um worker que continua pegando jobs depois que suas
+próprias fontes mudaram está executando uma versão sobre a qual ninguém consegue
+raciocinar.
+
+O worker registra no boot um `bootCodeVersion` — hash de caminho, tamanho e
+mtime de `lib/**.mjs`, `workers/**.mjs` e dos entrypoints `run-*.mjs`. Testes são
+excluídos de propósito: editar um teste não muda o que um worker executa.
+
+Antes de **aceitar um novo job** — nunca no meio de um, o que desperdiçaria a
+inferência — ele recompara. Se mudou:
+
+```text
+[CODE CHANGED] booted with f09eb981…, on disk 3ac71f02… — refusing new jobs, restart required
+```
+
+Ele **mantém o lease** e para de aceitar trabalho. Manter o lease é intencional:
+liberá-lo abriria a vaga para um processo que então correria com ele. A
+verificação roda só quando existe um job realmente reivindicável, para não pagar
+uma varredura de diretório a cada segundo de polling.
+
+### Testes
+
+`tests/worker-identity.test.mjs` (16): dono vivo nunca deslocado; lease obsoleto
+com pid ausente; lease anterior ao boot atual (com o pid até "vivo", irrelevante
+após reboot); pid reciclado detectado pelo instante de início; vivo-porém-calado
+falhando fechado; liveness indeterminável tratada como incerta; primeiro worker
+adquire e segundo é recusado; oito aquisições concorrentes produzindo exatamente
+um dono; papéis diferentes sem contenção; recuperação de worker morto com
+takeover registrado; shutdown normal liberando o papel; lease carregando todos os
+campos de identidade; versão de código estável, mudando com edição de fonte e
+**não** com edição de teste; detecção de código trocado sob o processo; `touch`
+contando como mudança porque um checkout move mtime.
 ## Limitações conhecidas
 
 1. **Auth não é herdável por subprocesso a partir do app desktop.** O que

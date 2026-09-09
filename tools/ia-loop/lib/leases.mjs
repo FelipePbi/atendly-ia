@@ -66,6 +66,13 @@ export function worktreeKey(path) {
   return createHash('sha256').update(String(path).replace(/\\/g, '/')).digest('hex').slice(0, 16);
 }
 
+/** Why a lease of each kind could not be acquired. */
+const BUSY_REASON = Object.freeze({
+  job: 'JOB_ALREADY_CLAIMED',
+  worktree: 'WORKTREE_BUSY',
+  worker: 'WORKER_ALREADY_RUNNING',
+});
+
 /** How long a reader waits for an in-flight claim to finish writing itself. */
 const CLAIM_SETTLE_ATTEMPTS = 20;
 const CLAIM_SETTLE_DELAY_MS = 25;
@@ -93,8 +100,18 @@ export function leaseMoved(current, expected) {
 export function createLeaseStore(stateDir, { config = LEASE_CONFIG } = {}) {
   const jobsDir = join(stateDir, 'leases', 'jobs');
   const worktreesDir = join(stateDir, 'leases', 'worktrees');
+  /**
+   * A third kind, for the SINGLETON identity of a worker role.
+   *
+   * A job lease answers "is this job being executed?" and a worktree lease
+   * answers "is anyone writing here?". Neither answers "is another Tech Lead
+   * process alive?", which is why two of them could coexist indefinitely: each
+   * one refused the other's JOBS, correctly, while both kept polling forever.
+   */
+  const workersDir = join(stateDir, 'leases', 'workers');
 
-  const pathFor = (kind, key) => join(kind === 'job' ? jobsDir : worktreesDir, `${key}.lock`);
+  const DIRS = { job: jobsDir, worktree: worktreesDir, worker: workersDir };
+  const pathFor = (kind, key) => join(DIRS[kind] ?? worktreesDir, `${key}.lock`);
 
   /**
    * Acquires a lease by creating its file EXCLUSIVELY.
@@ -135,7 +152,7 @@ export function createLeaseStore(stateDir, { config = LEASE_CONFIG } = {}) {
     } catch (error) {
       if (error.code === 'EEXIST') {
         const held = await read(kind, key);
-        return { acquired: false, heldBy: held, reason: kind === 'job' ? 'JOB_ALREADY_CLAIMED' : 'WORKTREE_BUSY' };
+        return { acquired: false, heldBy: held, reason: BUSY_REASON[kind] ?? 'WORKTREE_BUSY' };
       }
       throw new SpikeError('LEASE_IO_FAILED', `Cannot acquire ${kind} lease ${key}: ${error.message}`);
     }
@@ -315,9 +332,16 @@ export function createLeaseStore(stateDir, { config = LEASE_CONFIG } = {}) {
   }
 
   return {
-    paths: { jobsDir, worktreesDir, pathFor },
+    paths: { jobsDir, worktreesDir, workersDir, pathFor },
 
     claimJob(jobId, payload) { return acquire('job', jobId, { jobId, ...payload }); },
+    /** The singleton lease for a worker ROLE. One holder, process-wide. */
+    claimWorker(role, payload) { return acquire('worker', role, { role, ...payload }); },
+    readWorkerLease(role) { return read('worker', role); },
+    renewWorker(role) { return renew('worker', role); },
+    releaseWorker(role, options) { return release('worker', role, options); },
+    takeoverWorker(role, options) { return takeover('worker', role, options); },
+    retireWorker(role, options) { return retire('worker', role, options); },
     claimWorktree(path, payload) {
       return acquire('worktree', worktreeKey(path), { worktreePath: path, ...payload });
     },

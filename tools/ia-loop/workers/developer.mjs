@@ -647,16 +647,27 @@ async function main() {
   // Deliberately NOT "Model: Claude Opus 5". An idle Developer has no model:
   // it has a set of profiles it can execute, and the Tech Lead picks one per
   // Goal. Printing a fixed model here is what made the routing invisible.
-  console.log(banner({
+  // Built now, printed only once the role lease is actually held: a process
+  // that is about to refuse to start must not first announce that it is
+  // waiting for work.
+  const readyBanner = banner({
     title: 'DEVELOPER',
     supportedProfiles: SELECTABLE_DEVELOPER_PROFILES.map(describeProfile),
     sessionLine: 'Session strategy: STATELESS',
     extra: [`Log level: ${LOG_LEVEL}`],
-  }));
-  console.log('Waiting for implementation task...\n');
+  });
 
   workerState = 'IDLE';
-  await runWorkerLoop({ store, role: ROLE, getStatus, handleJob });
+  await runWorkerLoop({
+    store,
+    role: ROLE,
+    getStatus,
+    handleJob,
+    onStarted: () => {
+      console.log(readyBanner);
+      console.log('Waiting for implementation task...\n');
+    },
+  });
 }
 
 // Only when this file IS the program. Importing it — from a test, a doc

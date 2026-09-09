@@ -7,8 +7,18 @@
  */
 
 import { mkdir } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+import { SpikeError } from './claude-process.mjs';
 import { startHeartbeat } from './worker-registry.mjs';
+import {
+  acquireWorkerIdentity,
+  codeChangedSince,
+  computeCodeVersion,
+  describeHolder,
+  startWorkerIdentityHeartbeat,
+} from './worker-identity.mjs';
 import {
   attemptIdFor,
   canStartNewAttempt,
@@ -23,6 +33,9 @@ import { logResourceEvent } from './shutdown-hooks.mjs';
 
 /** Moderate polling. No file watcher needed at this cadence, no busy loop. */
 export const POLL_INTERVAL_MS = 1_000;
+
+/** The ia-loop package root, used to fingerprint the code this worker runs. */
+const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
  * The idle banner.
@@ -72,9 +85,62 @@ export async function runWorkerLoop({
   pollIntervalMs = POLL_INTERVAL_MS,
   leaseStore = createLeaseStore(store.paths.root),
   resourceRegistry = createResourceRegistry(store.paths.root),
+  /**
+   * The role's singleton guard. On by default and only ever disabled by a test
+   * that drives the loop directly: two workers of one role is precisely the
+   * condition this exists to make impossible.
+   */
+  enforceIdentity = true,
+  packageRoot = PACKAGE_ROOT,
+  /**
+   * Announces the worker as ready. Called ONLY once the role lease is held,
+   * because a process that is about to refuse to start must not first print a
+   * banner saying it is waiting for work.
+   */
+  onStarted = () => {},
 }) {
   await mkdir(store.paths.jobsDir(role), { recursive: true });
   log('WORKER', `instance ${workerInstanceId()}`);
+
+  // Claimed BEFORE anything else this worker does. A second process of the
+  // same role must fail here, loudly, rather than coexist: on 2026-09-09 two
+  // Tech Leads polled the same queue for five hours, each correctly refusing
+  // the other's jobs, and the work silently landed in the older one.
+  let releaseIdentity = async () => {};
+  let bootCodeVersion = null;
+  if (enforceIdentity) {
+    const codeVersion = await computeCodeVersion({ root: packageRoot });
+    bootCodeVersion = codeVersion.version;
+
+    const identity = await acquireWorkerIdentity({
+      leaseStore, role, repoRoot: packageRoot, codeVersion,
+    });
+    if (!identity.acquired) {
+      log('REFUSING TO START', `${identity.reason} — held by ${describeHolder(identity.heldBy)}`);
+      throw new SpikeError(
+        identity.reason,
+        `Another ${role} worker holds this role (${describeHolder(identity.heldBy)}). `
+        + `Stop it before starting another, or run ia-loop:recover if it is gone. [${identity.verdict}: ${identity.detail}]`,
+      );
+    }
+    if (identity.tookOver) {
+      log('IDENTITY', `took over from ${describeHolder(identity.replaced)} — ${identity.verdict}`);
+      await store.appendEvent({
+        type: 'WORKER_IDENTITY_TAKEOVER', role,
+        from: identity.replaced?.workerInstanceId ?? null,
+        verdict: identity.verdict,
+      }).catch(() => {});
+    }
+    log('IDENTITY', `${role} held by ${workerInstanceId()} · code ${bootCodeVersion} (${codeVersion.fileCount} files)`);
+
+    const stopIdentityHeartbeat = startWorkerIdentityHeartbeat(leaseStore, role, {
+      onError: (error) => log('ERROR', `identity heartbeat: ${error.message}`),
+    });
+    releaseIdentity = async () => {
+      await stopIdentityHeartbeat();
+      await leaseStore.releaseWorker(role).catch(() => {});
+    };
+  }
 
   // Crash recovery: anything a PREVIOUS instance of this worker left ACTIVE
   // (a crash, a killed terminal, a reboot — none of which run a `finally`)
@@ -92,6 +158,9 @@ export async function runWorkerLoop({
   } catch (error) {
     log('ERROR', `startup resource scavenger failed: ${error.message}`);
   }
+
+  // Past this point the role is genuinely ours, so saying so is true.
+  onStarted();
 
   const stopHeartbeat = startHeartbeat(store, role, getStatus);
   let running = true;
@@ -114,6 +183,9 @@ export async function runWorkerLoop({
       }
     }
     await stopHeartbeat();
+    // Released last, so nothing can claim the role while this process is still
+    // cleaning up what its attempt owned.
+    await releaseIdentity();
     process.exit(0);
   };
 
@@ -121,6 +193,9 @@ export async function runWorkerLoop({
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
   const seen = new Set();
+  // Latched: once the code under this process has changed, it never becomes
+  // trustworthy again without a restart.
+  let codeStale = false;
 
   while (running) {
     let files = [];
@@ -184,6 +259,29 @@ export async function runWorkerLoop({
           // Deliberately not remembered. This is a state recovery can change,
           // and a worker that stopped looking would never notice it had.
           continue;
+        }
+
+        // The last gate before this worker commits to executing something.
+        //
+        // Checked here rather than every poll because it costs a directory
+        // walk, and here it costs one only when there is actually work to
+        // take. A worker whose sources changed underneath it keeps its lease
+        // and stops accepting jobs: it must not execute a version nobody can
+        // reason about, and it must not release the role to a process that
+        // would then race it.
+        if (bootCodeVersion) {
+          const { changed, current } = await codeChangedSince({ root: packageRoot, bootVersion: bootCodeVersion });
+          if (changed) {
+            if (!codeStale) {
+              codeStale = true;
+              log('CODE CHANGED', `booted with ${bootCodeVersion}, on disk ${current?.version} — refusing new jobs, restart required`);
+              await store.appendEvent({
+                type: 'WORKER_CODE_STALE', role,
+                bootCodeVersion, currentCodeVersion: current?.version ?? null,
+              }).catch(() => {});
+            }
+            continue;
+          }
         }
 
         seen.add(seenKey);

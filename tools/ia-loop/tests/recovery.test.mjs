@@ -12,9 +12,9 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -34,7 +34,7 @@ import {
   isClaimableJobStatus,
   isTerminalJobStatus,
 } from '../lib/job-store.mjs';
-import { planResume } from '../run-resume.mjs';
+import { planResume, reclaimBlockedJobLease } from '../run-resume.mjs';
 import { LOOP_STATES } from '../lib/loop-state.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -372,6 +372,107 @@ test('15b. resume still handles capacity, and points at recover for an interrupt
   const interrupted = planResume({ state: LOOP_STATES.REVIEWER_RUNNING }, { now: NOW });
   assert.equal(interrupted.action, 'NOTHING_TO_RESUME');
   assert.match(interrupted.message, /ia-loop:recover/);
+});
+
+// ===========================================================================
+// 15c. A capacity wait interrupted by a reboot — resume must clear its OWN
+// lease, since ia-loop:recover correctly refuses to (it is not a crash) and
+// nothing else ever does.
+//
+// The real incident: Goal007's review fell back Fable → Opus on a usage
+// limit, Opus hit the same account-wide limit and parked WAITING_FOR_CAPACITY,
+// and the machine was rebooted while it waited. The deadline passed, the
+// worker came back up, ia-loop:resume correctly saw the wait as elapsed and
+// requeued the job — but the pre-reboot worker's lease was still on disk, so
+// the freshly-started worker refused every poll with ORPHANED_EXECUTION_UNCERTAIN,
+// forever, once a second. Nothing had ever cleared it: ia-loop:recover's own
+// lease sweep explicitly excludes a job whose status is still claimable
+// (WAITING_FOR_CAPACITY is), by design — that exclusion assumes something
+// else handles this case, and nothing did.
+// ===========================================================================
+
+function jobLeaseAt({ jobId = 'goal-007-r1-tech_lead-x', worktree = null, pid = 31852, ageMs = 3_600_000, bootAt = BOOT_OLD } = {}) {
+  return {
+    jobId, attemptId: `${jobId}-a2`, agent: 'tech_lead', goal: '007', round: 1,
+    worktree, kind: 'job', key: jobId,
+    workerInstanceId: `${pid}-4b5705e7`, hostname: 'HOST-A', bootAt, pid,
+    processStartedAt: BOOT_OLD, status: 'ACTIVE', version: 1,
+    acquiredAt: BOOT_OLD, heartbeatAt: iso(NOW - ageMs),
+    expiresAt: iso(NOW - ageMs + 90_000),
+  };
+}
+
+async function withRawLease(dir, lease) {
+  const leaseStore = createLeaseStore(dir);
+  const path = leaseStore.paths.pathFor('job', lease.jobId);
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify(lease, null, 2)}\n`, 'utf8');
+  return leaseStore;
+}
+
+test('15c. a lease proven orphaned (different boot, process gone) is reclaimed', async () => {
+  await withDir(async (dir) => {
+    const lease = jobLeaseAt({ jobId: '007-r1-tech_lead-x' });
+    const leaseStore = await withRawLease(dir, lease);
+    const inspector = fakeInspector({ bootAt: BOOT_NEW, alive: { 31852: LIVENESS.GONE } });
+
+    const result = await reclaimBlockedJobLease({ leaseStore, inspector, jobId: lease.jobId, now: NOW });
+
+    assert.equal(result.outcome, 'RECLAIMED');
+    assert.equal(result.proof, 'DIFFERENT_BOOT');
+    assert.equal(await leaseStore.readJobLease(lease.jobId), null, 'the lease is gone, not just marked');
+  });
+});
+
+test('15c. the matching worktree lease is freed alongside it', async () => {
+  await withDir(async (dir) => {
+    const worktree = '.ai-worktrees/goal-007';
+    const lease = jobLeaseAt({ jobId: '007-r1-tech_lead-x', worktree });
+    const leaseStore = await withRawLease(dir, lease);
+    await leaseStore.claimWorktree(worktree, { attemptId: lease.attemptId, agent: 'tech_lead' });
+    const inspector = fakeInspector({ bootAt: BOOT_NEW, alive: { 31852: LIVENESS.GONE } });
+
+    await reclaimBlockedJobLease({ leaseStore, inspector, jobId: lease.jobId, now: NOW });
+
+    const freed = await leaseStore.claimWorktree(worktree, { attemptId: 'new-a1', agent: 'tech_lead' });
+    assert.equal(freed.acquired, true, 'a live worker can claim the worktree again');
+  });
+});
+
+test('15c. a lease that cannot be proven abandoned is left exactly where it is', async () => {
+  await withDir(async (dir) => {
+    const lease = jobLeaseAt({ jobId: '007-r1-tech_lead-x', ageMs: 5_000 });
+    const leaseStore = await withRawLease(dir, lease);
+    // Same boot, and a fresh heartbeat: nothing here proves the holder gone.
+    const inspector = fakeInspector({ bootAt: BOOT_OLD, alive: { 31852: LIVENESS.ALIVE } });
+
+    const result = await reclaimBlockedJobLease({ leaseStore, inspector, jobId: lease.jobId, now: NOW });
+
+    assert.equal(result.outcome, 'NOT_PROVEN');
+    assert.ok(await leaseStore.readJobLease(lease.jobId), 'the lease survives an unproven guess');
+  });
+});
+
+test('15c. no lease at all is the ordinary case: nothing to reclaim', async () => {
+  await withDir(async (dir) => {
+    const leaseStore = createLeaseStore(dir);
+    const result = await reclaimBlockedJobLease({
+      leaseStore, inspector: fakeInspector(), jobId: 'never-claimed', now: NOW,
+    });
+    assert.equal(result.outcome, 'NO_LEASE');
+  });
+});
+
+test('15c. resume wires the reclaim outcome before ever requeuing the job', async () => {
+  // Not a re-test of the judgement (test 15c above already covers that) —
+  // this pins the ORDER in run-resume.mjs's own source: a job must never be
+  // set to QUEUED before an unproven lease has had the chance to refuse it.
+  const source = await readFile(new URL('../run-resume.mjs', import.meta.url), 'utf8');
+  const reclaimAt = source.indexOf('reclaimBlockedJobLease({');
+  const notProvenReturnAt = source.indexOf("return 1;", source.indexOf("outcome === 'NOT_PROVEN'"));
+  const queuedAt = source.indexOf("setJobStatus(plan.agent, jobId, 'QUEUED')", source.indexOf('// RESUME:'));
+  assert.ok(reclaimAt > 0 && notProvenReturnAt > reclaimAt && queuedAt > notProvenReturnAt,
+    'reclaim, then the refusal path returns, then (only otherwise) the job is queued');
 });
 
 test('16/17. recovery never clears a human gate', () => {

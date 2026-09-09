@@ -9,6 +9,19 @@
  * result.
  *
  * It is not an override: a run in HUMAN_REQUIRED stays there.
+ *
+ * A capacity wait is not a crash, and ia-loop:recover correctly refuses to
+ * touch one — but the PROCESS that was sleeping out the wait can still die
+ * (the machine it ran on rebooted), and its lease then survives the wait it
+ * was serving. The job's status genuinely is resumable (WAITING_FOR_CAPACITY
+ * is in RETRYABLE_JOB_STATUSES), but the worker refuses it anyway: an
+ * unrenewed lease it cannot prove abandoned reads as "a child process may
+ * still be writing" forever, once a second per poll, and nothing here used to
+ * clear it. Requeuing alone was not enough.
+ *
+ * This resumes the SAME logical job, at whatever attempt is current — it never
+ * mints one itself. The worker's own retry loop is what advances the attempt
+ * number, exactly as every other capacity retry already does.
  */
 
 import { dirname, join } from 'node:path';
@@ -21,7 +34,48 @@ import { formatRemaining } from './lib/capacity-policy.mjs';
 import { LOOP_STATES } from './lib/loop-state.mjs';
 import { AGENT_EXECUTION_STATES } from './lib/recovery-plan.mjs';
 import { readWorkerHealth, WORKER_HEALTH } from './lib/worker-registry.mjs';
+import { createLeaseStore } from './lib/leases.mjs';
+import { createProcessInspector } from './lib/process-inspector.mjs';
+import { collectOwnerEvidence, isRecoveryEligible, judgeOwner } from './lib/orphan-evidence.mjs';
 import { isDirectExecution } from './lib/direct-execution.mjs';
+
+/**
+ * Retires the blocked job's lease, but only when its holder is a PROVEN
+ * orphan — the same standard of proof ia-loop:recover uses for its own lease
+ * sweep, deliberately not relaxed here.
+ *
+ * Three outcomes:
+ *   NO_LEASE     nothing to do — the common case, when nothing rebooted.
+ *   RECLAIMED    the holder is confirmed gone; the lease (and any worktree
+ *                lease it matches) is retired, auditably.
+ *   NOT_PROVEN   a lease exists and abandonment could not be proven. Resume
+ *                refuses to go further: forcing the job to QUEUED with a live
+ *                lease still on it would just move the ambiguity, not resolve
+ *                it, and a worker that finds the job unclaimable would be
+ *                right to say so.
+ */
+export async function reclaimBlockedJobLease({ leaseStore, inspector, jobId, now = Date.now() }) {
+  const lease = await leaseStore.readJobLease(jobId);
+  if (!lease) return { outcome: 'NO_LEASE' };
+
+  const evidence = await collectOwnerEvidence(lease, inspector, { now });
+  const verdict = judgeOwner({ lease, evidence, now });
+  if (!isRecoveryEligible(verdict)) {
+    return { outcome: 'NOT_PROVEN', lease, verdict };
+  }
+
+  const retired = await leaseStore.retireJob(jobId, { expected: lease, proof: verdict.proof });
+  if (!retired.retired) return { outcome: 'NOT_PROVEN', lease, verdict, reason: retired.reason };
+
+  if (lease.worktree) {
+    const wt = await leaseStore.readWorktreeLease(lease.worktree).catch(() => null);
+    if (wt && wt.attemptId === lease.attemptId) {
+      await leaseStore.retireWorktree(lease.worktree, { expected: wt, proof: verdict.proof }).catch(() => null);
+    }
+  }
+
+  return { outcome: 'RECLAIMED', lease, proof: verdict.proof };
+}
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, '.state');
@@ -154,6 +208,34 @@ async function main() {
     out.push('A result for the blocked job already exists on disk.');
     out.push('The model will NOT be called again; the state machine advances from it.');
   } else {
+    // The lease of whatever process was waiting out the capacity limit goes
+    // first, and only with proof — the process that claimed it may simply
+    // still be running (a long sleep, not a crash), and requeuing underneath
+    // a live lease would make two things think they own the same attempt.
+    const leaseStore = createLeaseStore(STATE_DIR);
+    const reclaim = await reclaimBlockedJobLease({
+      leaseStore, inspector: createProcessInspector(), jobId,
+    });
+
+    if (reclaim.outcome === 'NOT_PROVEN') {
+      out.push(`The ${plan.agent} attempt still holds its lease and abandonment is not proven: ${reclaim.verdict?.detail ?? reclaim.reason ?? 'unknown'}`);
+      out.push('');
+      out.push('If that process is genuinely still working, let it finish. Otherwise investigate');
+      out.push('before forcing anything — this is exactly the ambiguity ia-loop:recover refuses to guess through.');
+      console.error(out.join('\n'));
+      return 1;
+    }
+
+    if (reclaim.outcome === 'RECLAIMED') {
+      await store.appendEvent({
+        type: 'ORPHANED_LEASE_RETIRED',
+        goal: plan.runtime.goal, round: plan.runtime.round, jobId,
+        owner: reclaim.lease.workerInstanceId ?? null, proof: reclaim.proof,
+        attemptId: reclaim.lease.attemptId ?? null,
+      });
+      out.push(`Retired the lease of ${reclaim.lease.attemptId ?? jobId} (${reclaim.proof}); its holder did not survive a restart.`);
+    }
+
     await store.setJobStatus(plan.agent, jobId, 'QUEUED');
     out.push(plan.message);
     out.push('Job re-queued for its worker. No duplicate job was created.');

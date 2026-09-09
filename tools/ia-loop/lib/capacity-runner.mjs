@@ -11,6 +11,7 @@
  */
 
 import { SpikeError } from './claude-process.mjs';
+import { REROUTE_REASONS } from './model-routing.mjs';
 import { CAPACITY_CONFIG } from './capacity-config.mjs';
 import { classifyFailure } from './capacity-classifier.mjs';
 import { CAPACITY_ACTIONS, decideCapacityAction, formatRemaining } from './capacity-policy.mjs';
@@ -31,6 +32,55 @@ export const RUN_OUTCOMES = Object.freeze({
 });
 
 /**
+ * Ends the current attempt because the ROUTER moved the work, and records why.
+ *
+ * One implementation for both reasons a model changes mid-job, because both
+ * must leave the same trail: the predecessor keeps its status, its model and
+ * its result; the successor is a real, separate attempt; and the event log says
+ * which model went to which, on what grounds.
+ *
+ * Nothing here decides anything. The decision arrives already made and already
+ * authorised — a worker that wants a stronger model cannot reach this function.
+ */
+async function rerouteAttempt({
+  store, role, jobId, goal, round, attempt, attemptId,
+  kind, decision, from, reason, evidence, candidate, agentOutcome, onEvent,
+}) {
+  // The answer that asked for help is preserved BEFORE the attempt is closed,
+  // so a crash between the two leaves the payload readable rather than lost.
+  if (candidate) {
+    await store.publishCandidateResult(role, jobId, {
+      requestedModel: agentOutcome?.requestedModel ?? null,
+      modelVerificationError: null,
+      observedModels: agentOutcome?.observedModels ?? [],
+      payload: candidate,
+    }, { attemptId });
+  }
+
+  await store.setJobStatus(role, jobId, 'REROUTED');
+  await store.appendEvent({
+    type: kind === REROUTE_REASONS.MODEL_ESCALATION ? 'MODEL_ESCALATED' : 'MODEL_FALLBACK',
+    goal,
+    round,
+    agent: role,
+    jobId,
+    attemptId,
+    attempt,
+    from: from ?? null,
+    to: decision.modelKey,
+    model: decision.model,
+    effort: decision.effort,
+    reason,
+    // Short and concrete: what the request was believed on. Never prose.
+    evidence: (evidence ?? []).slice(0, 5).map((item) => String(item).slice(0, 200)),
+  });
+  onEvent({
+    type: kind === REROUTE_REASONS.MODEL_ESCALATION ? 'MODEL_ESCALATED' : 'MODEL_FALLBACK',
+    jobId, attempt, from: from ?? null, to: decision.modelKey, reason,
+  });
+}
+
+/**
  * Executes one agent call, waiting out capacity limits.
  *
  * `invoke()` performs the actual inference and returns an invokeAgent-shaped
@@ -38,6 +88,20 @@ export const RUN_OUTCOMES = Object.freeze({
  * spending quota.
  *
  * `onEvent` receives sanitized progress notifications for the terminal.
+ *
+ * `router` is optional and, when given, may move the work to a DIFFERENT MODEL
+ * rather than waiting or failing:
+ *
+ *   fallbackFor({ reason, code, attempt })   availability only — a quota, a
+ *                                            rate limit, a model that is not
+ *                                            there. Never a harness bug.
+ *   escalationFor({ result, attempt })       a structurally valid result that
+ *                                            asked for a stronger model, with
+ *                                            evidence the router believed.
+ *
+ * Both return a routing decision or null, and BOTH produce a successor attempt
+ * through the same machinery a retry uses: the predecessor keeps its identity,
+ * its model and its place in the history. Nothing is rewritten.
  */
 export async function runWithCapacity({
   store,
@@ -47,6 +111,7 @@ export async function runWithCapacity({
   round,
   resumeFrom,
   invoke,
+  router = null,
   clock = systemClock(),
   config = CAPACITY_CONFIG,
   onEvent = () => {},
@@ -122,9 +187,64 @@ export async function runWithCapacity({
     // published below is fenced by it.
     const currentAttemptId = (await store.readAttemptState(role, jobId))?.attemptId ?? null;
 
+    // Recorded here rather than in each worker: the audit answer to "why this
+    // model?" must exist for every routed call, and a second place to emit it
+    // is a second place to forget.
+    if (router?.current) {
+      const { routing } = await router.current();
+      if (routing) {
+        await store.appendEvent({
+          type: 'MODEL_ROUTED',
+          goal, round, agent: role, jobId, attempt, attemptId: currentAttemptId,
+          stage: routing.stage ?? null,
+          complexity: routing.complexity ?? null,
+          riskScore: routing.riskScore ?? null,
+          selectedModel: routing.modelKey,
+          effort: routing.effort ?? null,
+          reason: routing.reason ?? null,
+          signals: [...(routing.signals ?? [])],
+          mode: routing.mode ?? null,
+        });
+      }
+    }
+
     const agentOutcome = await invoke({ attempt });
 
     const failed = Boolean(agentOutcome?.error) || !agentOutcome?.structuredOutput;
+
+    // The model answered, under contract, and asked for a stronger one. That
+    // is not a failure and must not be published as the stage's answer: the
+    // request is judged by the router, and a granted one becomes a successor
+    // attempt on the escalated model.
+    if (!failed && router?.escalationFor) {
+      const escalation = await router.escalationFor({ result: agentOutcome.payload, attempt });
+      if (escalation) {
+        await rerouteAttempt({
+          store, role, jobId, goal, round, attempt, attemptId: currentAttemptId,
+          kind: REROUTE_REASONS.MODEL_ESCALATION,
+          decision: escalation.decision,
+          from: escalation.from ?? null,
+          reason: escalation.reason,
+          evidence: escalation.evidence ?? [],
+          // The answer that asked for help is kept in full, auditable and
+          // recoverable, next to the attempt that produced it.
+          candidate: agentOutcome.payload,
+          agentOutcome,
+          onEvent,
+        });
+        pendingRetry = {
+          reason: REROUTE_REASONS.MODEL_ESCALATION,
+          detail: {
+            role,
+            escalationReason: escalation.reason,
+            routedTo: escalation.routed,
+            fromModel: escalation.from ?? null,
+          },
+        };
+        continue;
+      }
+    }
+
     if (!failed) {
       await store.publishResult(role, jobId, { ok: true, result: agentOutcome.payload }, {
         attemptId: currentAttemptId,
@@ -175,6 +295,40 @@ export async function runWithCapacity({
       // Sanitized and truncated by the classifier; never the full response.
       diagnostic: classification.diagnostic,
     });
+
+    // Availability, not correctness: a quota window closing is a reason to run
+    // the SAME work on another model, and a harness bug never is. The router
+    // owns that distinction; the runner only asks. Checked before the wait, so
+    // a weekly Fable limit does not park a pipeline that Opus could finish.
+    if (router?.fallbackFor) {
+      const fallback = await router.fallbackFor({
+        reason: classification.reason, code: classification.code, attempt,
+      });
+      if (fallback) {
+        await rerouteAttempt({
+          store, role, jobId, goal, round, attempt, attemptId: currentAttemptId,
+          kind: REROUTE_REASONS.MODEL_FALLBACK,
+          decision: fallback.decision,
+          from: fallback.from ?? null,
+          reason: classification.reason,
+          evidence: [],
+          candidate: null,
+          agentOutcome,
+          onEvent,
+        });
+        pendingRetry = {
+          reason: REROUTE_REASONS.MODEL_FALLBACK,
+          detail: {
+            role,
+            classification: classification.reason,
+            code: classification.code,
+            routedTo: fallback.routed,
+            fromModel: fallback.from ?? null,
+          },
+        };
+        continue;
+      }
+    }
 
     if (decision.action === CAPACITY_ACTIONS.HUMAN_REQUIRED) {
       await store.setJobStatus(role, jobId, 'FAILED');

@@ -27,9 +27,18 @@ import { ROLES } from './contracts-v2.mjs';
 
 export const STORE_VERSION = 1;
 
-/** Lifecycle of a single job, persisted alongside it. */
+/**
+ * Lifecycle of a single job, persisted alongside it.
+ *
+ * REROUTED: the attempt ended because the ROUTER moved the work to a different
+ * model — a capacity fallback, or an authorised escalation. It is deliberately
+ * neither INTERRUPTED (nothing was learned) nor FAILED (the work was attempted
+ * and did not succeed): something WAS learned, and the successor exists because
+ * of it. Keeping it under its own name is what lets the history say "a1 ran on
+ * Sonnet and asked for help" instead of pretending a1 crashed.
+ */
 export const JOB_STATUSES = Object.freeze([
-  'QUEUED', 'RUNNING', 'WAITING_FOR_CAPACITY', 'INTERRUPTED', 'COMPLETED', 'FAILED', 'SUPERSEDED',
+  'QUEUED', 'RUNNING', 'WAITING_FOR_CAPACITY', 'INTERRUPTED', 'REROUTED', 'COMPLETED', 'FAILED', 'SUPERSEDED',
 ]);
 
 /**
@@ -85,12 +94,16 @@ export const JOB_DISPATCH = Object.freeze({
  * not a failure of the work and never was; the attempt ends, the STAGE stays
  * unfinished, and the next attempt at the same job runs when capacity returns.
  *
+ * REROUTED: the router moved the work to another model. The successor is the
+ * whole point of the status, and it is authorised by the router before the
+ * status is written — never by the worker that wanted a stronger model.
+ *
  * FAILED is deliberately absent: the work was attempted and did not succeed,
  * and whether to try again is a policy decision a person makes — not something
  * a restart assumes. That distinction is the whole point of keeping a capacity
  * wait out of FAILED.
  */
-export const RETRYABLE_JOB_STATUSES = Object.freeze(['INTERRUPTED', 'WAITING_FOR_CAPACITY']);
+export const RETRYABLE_JOB_STATUSES = Object.freeze(['INTERRUPTED', 'WAITING_FOR_CAPACITY', 'REROUTED']);
 
 /**
  * The id of one attempt at a job.

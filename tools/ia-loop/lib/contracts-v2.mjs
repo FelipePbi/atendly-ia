@@ -21,8 +21,34 @@ export const PROTOCOL_VERSION_V2 = 2;
 
 export const JOB_TYPES = Object.freeze(['IMPLEMENTATION', 'CORRECTION']);
 export const REVIEW_LEVELS = Object.freeze(['STANDARD', 'DEEP']);
-export const DEVELOPER_STATUSES_V2 = Object.freeze(['REVIEW_REQUIRED', 'BLOCKED']);
+
+/**
+ * ESCALATION_REQUIRED is a real outcome, not a failure.
+ *
+ * The Developer reached the limit of what it could decide on its own and says
+ * so in the contract, with evidence. Reading that intent out of free text — "I
+ * think I need Opus" — would put a state-machine transition behind a regex,
+ * which is exactly what this avoids.
+ */
+export const DEVELOPER_STATUSES_V2 = Object.freeze(['REVIEW_REQUIRED', 'BLOCKED', 'ESCALATION_REQUIRED']);
 export const REVIEW_DECISIONS_V2 = Object.freeze(['ACCEPTED', 'CHANGES_REQUIRED', 'HUMAN_REQUIRED']);
+
+/** Reasons a Developer may give for asking to be escalated. Closed on purpose. */
+export const DEVELOPER_ESCALATION_REASONS = Object.freeze([
+  'REPEATED_EXECUTION_FAILURE',
+  'PLAN_MISMATCH',
+  'ARCHITECTURAL_DECISION_REQUIRED',
+  'LOW_CONFIDENCE',
+]);
+
+/** Reasons a reviewer may give for asking the specialist to take the review. */
+export const REVIEW_ESCALATION_REASONS = Object.freeze([
+  'REVIEW_INCONCLUSIVE',
+  'ARCHITECTURAL_RISK_DISCOVERED',
+  'SECURITY_RISK_DISCOVERED',
+]);
+
+export const CONFIDENCE_LEVELS = Object.freeze(['LOW', 'MEDIUM', 'HIGH']);
 
 /** Roles that can own a job queue. */
 export const ROLES = Object.freeze(['developer', 'tech_lead']);
@@ -135,7 +161,31 @@ export function validateDeveloperJob(payload) {
     ...payload,
     developerProfile,
     developerProfileReason: payload.developerProfileReason ?? null,
+    routing: assertJobRouting(payload.routing, 'developer'),
     blockers: Object.freeze([...(payload.blockers ?? [])]),
+  });
+}
+
+/**
+ * The routing decision a job carries.
+ *
+ * The job is the authority on which model an attempt runs: a worker executes
+ * this, it does not decide it. Absent is allowed and means "whatever the role's
+ * standing default is" — that is what a job written before adaptive routing
+ * looks like, and re-deciding one of those on read would rewrite history.
+ */
+function assertJobRouting(routing, role) {
+  if (routing === undefined || routing === null) return null;
+  assertObject(routing, 'routing');
+  if (routing.role !== undefined && routing.role !== role) {
+    fail('ROLE_MISMATCH', `Routing targets role ${JSON.stringify(routing.role)} on a ${role} job`);
+  }
+  assertNonEmptyString(routing.model, 'routing.model');
+  assertNonEmptyString(routing.modelKey, 'routing.modelKey');
+  assertNonEmptyString(routing.family, 'routing.family');
+  return Object.freeze({
+    ...routing,
+    signals: Object.freeze([...(routing.signals ?? [])]),
   });
 }
 
@@ -171,7 +221,62 @@ export function validateDeveloperResult(payload, { jobId, goal, round }) {
     }
   }
 
-  return Object.freeze({ ...payload, validations: Object.freeze([...payload.validations]) });
+  const escalation = validateEscalationRequest(payload.escalation, {
+    field: 'escalation',
+    reasons: DEVELOPER_ESCALATION_REASONS,
+    // Asking is not the same as being granted: the router decides, and it
+    // refuses a request that carries no evidence. Requiring the evidence HERE
+    // means a request that could never be granted is rejected before it is
+    // mistaken for one that could.
+    required: payload.status === 'ESCALATION_REQUIRED',
+  });
+  if (escalation && payload.status !== 'ESCALATION_REQUIRED') {
+    fail('CONTRACT_FIELD_INVALID', 'Field "escalation" only applies to status ESCALATION_REQUIRED');
+  }
+
+  return Object.freeze({
+    ...payload,
+    escalation,
+    validations: Object.freeze([...payload.validations]),
+  });
+}
+
+/**
+ * Shared shape of an escalation request, for both roles.
+ *
+ * Evidence is mandatory and must be concrete. A `confidence` field alone is a
+ * feeling; the router is explicitly told not to trust it on its own.
+ */
+function validateEscalationRequest(value, { field, reasons, required }) {
+  if (value === undefined || value === null) {
+    if (required) fail('CONTRACT_FIELD_INVALID', `Field "${field}" is required for this status`);
+    return null;
+  }
+  assertObject(value, field);
+  if (!reasons.includes(value.reason)) {
+    fail(
+      'CONTRACT_FIELD_INVALID',
+      `Field "${field}.reason" must be one of: ${reasons.join(', ')} (got ${JSON.stringify(value.reason)})`,
+    );
+  }
+  assertStringArray(value.evidence ?? [], `${field}.evidence`);
+  if ((value.evidence ?? []).length === 0) {
+    fail('CONTRACT_FIELD_INVALID', `Field "${field}.evidence" must carry at least one concrete observation`);
+  }
+  if (value.confidence !== undefined && value.confidence !== null
+    && !CONFIDENCE_LEVELS.includes(value.confidence)) {
+    fail(
+      'CONTRACT_FIELD_INVALID',
+      `Field "${field}.confidence" must be one of: ${CONFIDENCE_LEVELS.join(', ')}`,
+    );
+  }
+
+  return Object.freeze({
+    reason: value.reason,
+    confidence: value.confidence ?? null,
+    detail: typeof value.detail === 'string' ? value.detail.slice(0, 500) : null,
+    evidence: Object.freeze([...value.evidence]),
+  });
 }
 
 // --- ReviewJob -------------------------------------------------------------
@@ -202,6 +307,7 @@ export function validateReviewJob(payload) {
 
   return Object.freeze({
     ...payload,
+    routing: assertJobRouting(payload.routing, 'tech_lead'),
     changedFiles: Object.freeze([...(payload.changedFiles ?? [])]),
     previousBlockers: Object.freeze([...(payload.previousBlockers ?? [])]),
   });
@@ -263,10 +369,28 @@ export function validateReviewDecision(payload, { jobId, goal, round }) {
     }
   }
 
+  // A reviewer that could not reach a confident verdict says so structurally,
+  // and only alongside HUMAN_REQUIRED: it is asking for a stronger reviewer
+  // BEFORE a person is asked to look. The router decides whether that is
+  // legitimate; an ACCEPTED or CHANGES_REQUIRED review has already concluded
+  // and has nothing to escalate.
+  const escalationRequest = validateEscalationRequest(payload.escalationRequest, {
+    field: 'escalationRequest',
+    reasons: REVIEW_ESCALATION_REASONS,
+    required: false,
+  });
+  if (escalationRequest && payload.decision !== 'HUMAN_REQUIRED') {
+    fail(
+      'CONTRACT_FIELD_INVALID',
+      `escalationRequest only applies to a HUMAN_REQUIRED decision, got "${payload.decision}"`,
+    );
+  }
+
   return Object.freeze({
     ...payload,
     nextDeveloperProfile: payload.nextDeveloperProfile ?? null,
     nextDeveloperProfileReason: payload.nextDeveloperProfileReason ?? null,
+    escalationRequest,
     blockers: Object.freeze([...payload.blockers]),
   });
 }
@@ -298,6 +422,19 @@ export const DEVELOPER_RESULT_SCHEMA = Object.freeze({
         additionalProperties: false,
       },
     },
+    // Only with status ESCALATION_REQUIRED. Evidence is what makes the request
+    // reviewable: the router refuses one that carries none.
+    escalation: {
+      type: 'object',
+      properties: {
+        reason: { type: 'string', enum: [...DEVELOPER_ESCALATION_REASONS] },
+        confidence: { type: 'string', enum: [...CONFIDENCE_LEVELS] },
+        detail: { type: 'string', maxLength: 500 },
+        evidence: { type: 'array', items: { type: 'string' }, minItems: 1 },
+      },
+      required: ['reason', 'evidence'],
+      additionalProperties: false,
+    },
   },
   required: ['protocolVersion', 'jobId', 'goal', 'round', 'status', 'summary', 'implementationReport', 'validations'],
   additionalProperties: false,
@@ -321,6 +458,19 @@ export const REVIEW_DECISION_SCHEMA = Object.freeze({
     // Kept short deliberately: this must not grow the output in any
     // meaningful way.
     nextDeveloperProfileReason: { type: 'string', maxLength: 200 },
+    // Only with HUMAN_REQUIRED: "I could not conclude this safely" is a request
+    // for a stronger reviewer, considered before a person is asked.
+    escalationRequest: {
+      type: 'object',
+      properties: {
+        reason: { type: 'string', enum: [...REVIEW_ESCALATION_REASONS] },
+        confidence: { type: 'string', enum: [...CONFIDENCE_LEVELS] },
+        detail: { type: 'string', maxLength: 500 },
+        evidence: { type: 'array', items: { type: 'string' }, minItems: 1 },
+      },
+      required: ['reason', 'evidence'],
+      additionalProperties: false,
+    },
   },
   required: ['protocolVersion', 'jobId', 'goal', 'round', 'decision', 'blockers', 'nextAction'],
   additionalProperties: false,

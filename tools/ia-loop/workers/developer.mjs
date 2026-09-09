@@ -31,8 +31,11 @@ import {
   SELECTABLE_DEVELOPER_PROFILES,
   assertProfileWasHonoured,
   describeProfile,
+  profileForModel,
   resolveDeveloperProfile,
 } from '../lib/developer-profiles.mjs';
+import { ROUTING_STAGES, routingFromProfile } from '../lib/model-routing.mjs';
+import { createAttemptRouter } from '../lib/routing-runtime.mjs';
 import { createTelemetry, createTelemetryFileSink, resolveLogLevel } from '../lib/telemetry.mjs';
 import { runWithCapacity, RUN_OUTCOMES } from '../lib/capacity-runner.mjs';
 import { LOOP_STATES } from '../lib/loop-state.mjs';
@@ -276,6 +279,17 @@ async function handleJob(rawJob) {
   currentJob.sessionId = sessionId;
 
   const executable = resolveClaudeExecutable();
+
+  // What this job was routed to. The job is the authority; a job written before
+  // adaptive routing carries only a profile, and that still describes a model.
+  const baseRouting = job.routing ?? routingFromProfile(profile, {
+    stage: isCorrection ? ROUTING_STAGES.CORRECTION : ROUTING_STAGES.IMPLEMENTATION,
+  });
+  const router = createAttemptRouter({
+    store, role: ROLE, jobId: job.jobId, base: baseRouting, kind: 'developer',
+    goal: job.goal, round: job.round,
+  });
+
   log(`${profile.name} STARTED`, `session ${sessionId.slice(0, 8)} · worktree ${job.worktree}`);
   log('IMPLEMENTING', `${job.goal} round ${job.round} — pode levar horas`);
 
@@ -289,15 +303,30 @@ async function handleJob(rawJob) {
     round: job.round,
     resumeFrom: isCorrection ? LOOP_STATES.CORRECTION_RUNNING : LOOP_STATES.DEVELOPER_RUNNING,
     onEvent: onCapacityEvent,
-    invoke: async () => {
+    // Capacity fallback and authorised escalation both land here, and both
+    // arrive as a NEW attempt rather than as a quiet change of model.
+    router,
+    invoke: async ({ attempt }) => {
       const attemptSessionId = randomUUID();
       currentJob.sessionId = attemptSessionId;
+
+      // Re-read per attempt: a successor created by a fallback or an
+      // escalation runs on the model the router chose, and a restart resolves
+      // the same answer from the same history.
+      const { routing } = await router.current();
+      const active = routing ?? baseRouting;
+      currentProfile = profileForModel({ model: active.model, effort: active.effort });
+      if (attempt > 1) {
+        log('MODEL', `attempt ${attempt} runs on ${currentProfile.name} (${active.reason})`);
+        telemetry.event('MODEL', `attempt ${attempt} · ${currentProfile.name} · ${active.reason}`);
+      }
+
       return invokeAgent({
         executable: executable.path,
-        // From the profile on the job, not from a constant in this file.
-        model: profile.model,
-        effort: profile.effort,
-        expectedFamily: profile.family,
+        // From the routing on the attempt, not from a constant in this file.
+        model: active.model,
+        effort: active.effort,
+        expectedFamily: active.family,
         expectedRole: ROLE,
         // Purely observational: derived from events the CLI already emits.
         onTelemetryEvent: STREAM_EVENTS ? (event) => telemetry.emit(event) : null,
@@ -311,7 +340,9 @@ async function handleJob(rawJob) {
         }),
         cwd: job.worktree,
         sessionId: attemptSessionId,
-        // Explicitly NOT persisted and NOT resumed. No fallback model, ever.
+        // Explicitly NOT persisted and NOT resumed. `--fallback-model` is still
+        // never passed: a model change here is a routed successor attempt, on
+        // record, not the CLI silently answering with something else.
         persistSession: false,
         resume: false,
         // Real execution profile, scoped to the worktree.
@@ -327,7 +358,7 @@ async function handleJob(rawJob) {
         // family check above is ever loosened.
         if (agentOutcome.resolvedPrimaryModel) {
           assertProfileWasHonoured({
-            profile: profile.name,
+            profile: currentProfile.name,
             resolvedPrimaryModel: agentOutcome.resolvedPrimaryModel,
           });
         }

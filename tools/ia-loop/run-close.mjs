@@ -18,7 +18,14 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { SpikeError } from './lib/claude-process.mjs';
-import { createJobStore } from './lib/job-store.mjs';
+import { createJobStore, readJson } from './lib/job-store.mjs';
+import {
+  ROUTING_STAGES,
+  classifyPlanningComplexity,
+  resolveRoutingMode,
+  routeTechLead,
+  toJobRouting,
+} from './lib/model-routing.mjs';
 import { discoverGoal } from './lib/goal-discovery.mjs';
 import { readWorkerHealth, WORKER_HEALTH } from './lib/worker-registry.mjs';
 import { LOOP_STATES, createLoopStateMachine } from './lib/loop-state.mjs';
@@ -47,6 +54,50 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..');
 const STATE_DIR = join(HERE, '.state');
+
+/** Cap on the text handed to the classifier. It reads signals, not documents. */
+const RISK_TEXT_LIMIT = 40_000;
+
+/**
+ * The text the planning risk is scored from.
+ *
+ * The roadmap the planner is about to re-evaluate, plus the Goal it just
+ * closed — the two documents that actually say what comes next and how hard it
+ * was to get here. Missing files are not an error: a signal that cannot be read
+ * simply does not fire, and the score falls back to what can.
+ */
+async function readPlanningRiskText({ goal, closure }) {
+  const candidates = [
+    join(REPO_ROOT, 'docs', 'migration', 'MASTER_PLAN.md'),
+    goal?.goalPath ?? null,
+    ...(closure?.closureDocs ?? [])
+      .filter((doc) => doc.includes('review'))
+      .map((doc) => join(REPO_ROOT, doc)),
+  ].filter(Boolean);
+
+  const parts = [];
+  for (const path of candidates) {
+    try {
+      parts.push(await fs.readFile(path, 'utf8'));
+    } catch {
+      // Unreadable or absent: no signal, not a failure.
+    }
+  }
+  return parts.join('\n').slice(0, RISK_TEXT_LIMIT);
+}
+
+/** Whether any Developer round of this Goal had to be escalated to a stronger model. */
+async function goalHadDeveloperEscalation(store, goalId) {
+  // listJobs returns file names; the job id is the name without its extension.
+  const fileNames = await store.listJobs('developer').catch(() => []);
+  for (const fileName of fileNames) {
+    const jobId = String(fileName).replace(/\.json$/, '');
+    if (!jobId.startsWith(`${goalId}-`)) continue;
+    const envelope = await readJson(store.paths.job('developer', jobId));
+    if ((envelope?.attemptHistory ?? []).some((entry) => entry?.reason === 'MODEL_ESCALATION')) return true;
+  }
+  return false;
+}
 const RESULT_TIMEOUT_MS = Number(process.env.IA_LOOP_RESULT_TIMEOUT_MS ?? 3 * 60 * 60 * 1000);
 const POLL_MS = 5_000;
 
@@ -325,11 +376,32 @@ async function main() {
     machine.transitionTo(LOOP_STATES.NEXT_GOAL_PLANNING);
     const jobId = store.newJobId(goalId, accepted.decision.round, 'tech_lead');
 
+    // --- Planning routing --------------------------------------------------
+    // Scored from the roadmap the planner is about to re-evaluate and from
+    // what already went wrong, since at planning time there is no diff to
+    // read. Deterministic and zero-token: no model is called to choose a model.
+    const planningAssessment = classifyPlanningComplexity({
+      text: await readPlanningRiskText({ goal, closure }),
+      history: {
+        previousRoundRejected: (accepted.decision.round ?? 1) > 1,
+        previousDeveloperEscalation: await goalHadDeveloperEscalation(store, goalId),
+      },
+    });
+    const planningRouting = routeTechLead({
+      stage: ROUTING_STAGES.PLANNING,
+      assessment: planningAssessment,
+      mode: resolveRoutingMode(),
+    });
+    emit(`Planning routing: ${planningAssessment.classification} (score ${planningAssessment.riskScore})`
+      + ` → ${planningRouting.label} effort ${planningRouting.effort}`);
+    if (planningAssessment.signals.length > 0) emit(`  signals: ${planningAssessment.signals.join(', ')}`);
+
     await store.publishJob('tech_lead', {
       protocolVersion: PROTOCOL_VERSION_V2,
       jobId, role: 'tech_lead', type: 'NEXT_GOAL_PLANNING',
       goal: goalId, round: accepted.decision.round,
       worktree: absPlan,
+      routing: toJobRouting(planningRouting),
       planningContext: {
         closedGoal: goalId,
         closedGoalPath: goal.goalPath,

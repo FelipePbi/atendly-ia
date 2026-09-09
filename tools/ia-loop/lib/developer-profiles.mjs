@@ -49,6 +49,20 @@ export const DEVELOPER_PROFILES = Object.freeze({
     effortLabel: 'Medium',
     selectable: true,
   }),
+  /**
+   * The default under adaptive routing: Sonnet is the standard executor, and
+   * `high` is what it gets, because the point is to give it a real chance to
+   * finish the work rather than to hand the first difficulty to Opus.
+   */
+  SONNET_HIGH: Object.freeze({
+    name: 'SONNET_HIGH',
+    model: 'claude-sonnet-5',
+    effort: 'high',
+    family: 'sonnet',
+    label: 'Claude Sonnet 5',
+    effortLabel: 'High',
+    selectable: true,
+  }),
   OPUS_MEDIUM: Object.freeze({
     name: 'OPUS_MEDIUM',
     model: 'claude-opus-5',
@@ -65,6 +79,20 @@ export const DEVELOPER_PROFILES = Object.freeze({
     family: 'opus',
     label: 'Claude Opus 5',
     effortLabel: 'High',
+    selectable: true,
+  }),
+  /**
+   * Deep escalation only: an Opus attempt that itself hit something
+   * exceptional. Never a first answer, and never `max` — that stays a human's
+   * decision, not the router's.
+   */
+  OPUS_XHIGH: Object.freeze({
+    name: 'OPUS_XHIGH',
+    model: 'claude-opus-5',
+    effort: 'xhigh',
+    family: 'opus',
+    label: 'Claude Opus 5',
+    effortLabel: 'XHigh',
     selectable: true,
   }),
 
@@ -98,9 +126,12 @@ export const DEVELOPER_PROFILE_NAMES = Object.freeze(Object.keys(DEVELOPER_PROFI
  * The profile a new Goal gets when nobody said otherwise.
  *
  * Sonnet, not Opus: the point of routing is to stop paying Opus for work that
- * does not need it. The Tech Lead promotes explicitly when it does.
+ * does not need it. Under adaptive routing this is also the ONLY way a
+ * Developer round starts — the Tech Lead's planning choice no longer promotes
+ * it, because a Goal that was architecturally hard to PLAN is often ordinary to
+ * EXECUTE once the plan exists. Opus arrives through escalation, on evidence.
  */
-export const DEFAULT_DEVELOPER_PROFILE = 'SONNET_MEDIUM';
+export const DEFAULT_DEVELOPER_PROFILE = 'SONNET_HIGH';
 
 export const LEGACY_DEVELOPER_PROFILE = 'LEGACY_OPUS';
 
@@ -125,6 +156,26 @@ export function resolveDeveloperProfile(name) {
     fail('UNSUPPORTED_EFFORT', `Profile ${profile.name} declares effort "${profile.effort}", which this CLI does not accept`);
   }
   return profile;
+}
+
+/**
+ * The profile that names a (model, effort) pair.
+ *
+ * The bridge between the router — which decides in models and efforts — and
+ * the job contract, which speaks profile names. One registry, two vocabularies,
+ * no second table to drift.
+ */
+export function profileForModel({ model, effort }) {
+  const match = Object.values(DEVELOPER_PROFILES)
+    .find((p) => p.selectable && p.model === model && p.effort === effort);
+  if (!match) {
+    fail(
+      'UNKNOWN_DEVELOPER_PROFILE',
+      `No Developer profile declares model ${JSON.stringify(model)} at effort ${JSON.stringify(effort)}`,
+      { model, effort },
+    );
+  }
+  return match;
 }
 
 /** Resolves a name that may be absent, falling back to the default. */

@@ -1,12 +1,23 @@
 #!/usr/bin/env node
 /**
- * IA Loop — Tech Lead worker (Claude Fable 5.1).
+ * IA Loop — Tech Lead worker.
  *
- * Both the process AND the Claude session are persistent. Fable sustains
- * multi-turn conversation reliably (proven in Spike 1), so its session id is
- * kept in the durable registry and resumed across reviews and across restarts.
+ * ONE worker, two models. Which one runs is NOT a property of this process: it
+ * arrives on the job, decided by the router from the risk of the work
+ * (`lib/model-routing.mjs`). Opus is the standard Tech Lead; Fable is the
+ * specialist, reserved for HIGH and CRITICAL work and for a review Opus could
+ * not conclude.
  *
- * Restart policy, which differs by state on purpose:
+ * The session strategy follows the model, because the models differ:
+ *
+ * - Fable sustains multi-turn conversation reliably (Spike 1), so its session
+ *   is persistent, kept in the durable registry and resumed across reviews.
+ * - Opus does NOT sustain it in this environment (Spike 1: `reasoning_extraction`
+ *   from the second or third turn), so an Opus job is one stateless call. That
+ *   costs nothing here: the review packet is already the authority, and the
+ *   prompt says so — the repository is, never the reviewer's memory.
+ *
+ * Restart policy for the persistent side, which differs by state on purpose:
  *
  * - IDLE: if a stored session cannot be resumed, starting a fresh one is fine
  *   and is recorded as an event.
@@ -18,8 +29,17 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdir } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 
-import { resolveClaudeExecutable } from '../lib/claude-process.mjs';
+import { invokeAgent, resolveClaudeExecutable } from '../lib/claude-process.mjs';
+import {
+  MODELS,
+  ROUTING_CONFIG,
+  ROUTING_STAGES,
+  resolveModel,
+  resolveRoutingMode,
+} from '../lib/model-routing.mjs';
+import { createAttemptRouter } from '../lib/routing-runtime.mjs';
 import { createJobStore } from '../lib/job-store.mjs';
 import { createPersistentSession } from '../lib/persistent-session.mjs';
 import {
@@ -52,7 +72,11 @@ const REGISTRY_PATH = join(STATE_DIR, 'sessions.json');
 const SESSION_CWD = join(STATE_DIR, 'workdirs', 'tech-lead');
 
 const ROLE = 'tech_lead';
-const MODEL = process.env.IA_LOOP_TECH_LEAD_MODEL ?? 'claude-fable-5-1';
+/**
+ * The specialist's model, and the only one this worker keeps a session for.
+ * The standard model arrives on the job like any other routing decision.
+ */
+const SPECIALIST_MODEL = process.env.IA_LOOP_TECH_LEAD_MODEL ?? MODELS.fable.model;
 const TIMEOUT_MS = Number(process.env.IA_LOOP_TECH_LEAD_TIMEOUT_MS ?? 2 * 60 * 60 * 1000);
 
 const LOG_LEVEL = resolveLogLevel();
@@ -80,6 +104,106 @@ const CLOSURE_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'];
 
 /** Job kinds this worker handles besides a review. */
 const CLOSURE_KINDS = ['CLOSURE_DOCUMENTATION', 'NEXT_GOAL_PLANNING'];
+
+/**
+ * The routing a job carries, or the specialist for a job written before
+ * adaptive routing existed.
+ *
+ * Compatibility deliberately points at Fable: that is what every Tech Lead job
+ * ran on before, and re-deciding an in-flight job on read would change what a
+ * restart is resuming.
+ */
+function routingOf(job, stage) {
+  if (job?.routing?.model) return job.routing;
+  const specialist = resolveModel('fable');
+  return {
+    role: ROLE,
+    stage,
+    modelKey: specialist.key,
+    model: SPECIALIST_MODEL,
+    family: specialist.family,
+    effort: ROUTING_CONFIG.tech_lead[stage]?.deep.effort ?? null,
+    complexity: null,
+    riskScore: null,
+    signals: [],
+    reason: 'LEGACY_UNROUTED_JOB',
+    fallbackAllowed: false,
+    mode: resolveRoutingMode(),
+  };
+}
+
+/**
+ * Runs one Tech Lead call on the model the router chose.
+ *
+ * Fable keeps its persistent conversation; Opus gets a fresh, stateless call,
+ * because it cannot hold one. Everything else — prompt, schema, tools,
+ * permission mode, telemetry — is identical, so the two paths differ in
+ * transport only, never in what is asked.
+ */
+async function sendRouted({ routing, prompt, jsonSchema, validatePayload, tools, worktree }) {
+  const shared = {
+    prompt,
+    jsonSchema,
+    validatePayload,
+    tools,
+    permissionMode: 'auto',
+    addDirs: worktree ? [worktree] : [],
+    safeMode: false,
+    ...telemetryOptions(worktree),
+  };
+
+  if (routing.family === MODELS.fable.family) {
+    const outcome = await session.send(shared);
+    await persistSession();
+    return outcome;
+  }
+
+  const executable = resolveClaudeExecutable();
+  return invokeAgent({
+    ...shared,
+    executable: executable.path,
+    model: routing.model,
+    effort: routing.effort,
+    expectedFamily: routing.family,
+    expectedRole: ROLE,
+    cwd: SESSION_CWD,
+    // Stateless by necessity, not by preference: see the header.
+    sessionId: randomUUID(),
+    persistSession: false,
+    resume: false,
+    timeoutMs: TIMEOUT_MS,
+  });
+}
+
+/**
+ * Guarantees the specialist's session exists before a Fable job uses it.
+ *
+ * Only the specialist has one. Creating it costs nothing — a session id is a
+ * uuid until a call actually resumes it — but a job routed to Opus must never
+ * depend on it existing.
+ */
+async function ensureSessionFor(routing) {
+  if (routing.family !== MODELS.fable.family) return;
+  if (session) return;
+  await restoreSession(resolveClaudeExecutable().path);
+  await persistSession();
+}
+
+/**
+ * Shows which model is about to run and why.
+ *
+ * The AUDIT record is written once by the capacity runner, for every routed
+ * call of either role. This is the human-facing half only.
+ */
+function announceRouting({ routing }) {
+  currentRouting = routing;
+  const label = resolveModel(routing.modelKey).label;
+  log('MODEL', `${label}${routing.effort ? ` · effort ${routing.effort}` : ''} — ${routing.reason}`);
+  if (routing.complexity) {
+    log('COMPLEXITY', `${routing.complexity} (score ${routing.riskScore ?? '?'})`);
+  }
+  telemetry.event('MODEL', `${label} · ${routing.complexity ?? 'n/a'} · ${routing.reason}`);
+}
 
 function buildClosureDocPrompt(job) {
   return [
@@ -205,7 +329,15 @@ async function handleClosureJob(job) {
     ? (p) => validatePlanningDecision(p, { jobId: job.jobId, goal: job.goal })
     : (p) => validateClosureDocResult(p, { jobId: job.jobId, goal: job.goal });
 
-  log('FABLE STARTED', `session ${session.sessionId.slice(0, 8)} · ${kind}`);
+  // Planning is routed by risk; closure documentation is bookkeeping over a
+  // decision already taken, so it runs on the standard model unless the job
+  // says otherwise.
+  const stage = isPlanning ? ROUTING_STAGES.PLANNING : ROUTING_STAGES.REVIEW;
+  const baseRouting = routingOf(job, stage);
+  const router = createAttemptRouter({
+    store, role: ROLE, jobId: job.jobId, base: baseRouting, kind: 'closure',
+    goal: job.goal, round: job.round ?? 0,
+  });
 
   const run = await runWithCapacity({
     store,
@@ -215,23 +347,24 @@ async function handleClosureJob(job) {
     round: job.round ?? 0,
     resumeFrom: isPlanning ? LOOP_STATES.NEXT_GOAL_PLANNING : LOOP_STATES.CLOSURE_DOCUMENTING,
     onEvent: onCapacityEvent,
-    invoke: async () => {
-      const outcome = await session.send({
+    router,
+    invoke: async ({ attempt }) => {
+      const { routing } = await router.current();
+      const active = routing ?? baseRouting;
+      announceRouting({ routing: active });
+      await ensureSessionFor(active);
+      return sendRouted({
+        routing: active,
         prompt,
         jsonSchema: schema,
         validatePayload: validate,
         tools: CLOSURE_TOOLS,
-        permissionMode: 'auto',
-        addDirs: job.worktree ? [job.worktree] : [],
-        safeMode: false,
-        ...telemetryOptions(job.worktree),
+        worktree: job.worktree,
       });
-      await persistSession();
-      return outcome;
     },
   });
 
-  log('FABLE COMPLETED', run.outcome);
+  log(`${kind} COMPLETED`, run.outcome);
 
   if (run.outcome === RUN_OUTCOMES.HUMAN_REQUIRED) {
     workerState = 'ERROR';
@@ -278,11 +411,18 @@ let workerState = 'STARTING';
 let session = null;
 let currentJob = null;
 let capacityWait = null;
+// The model the job in flight is actually running on. Read from the routing on
+// the job, never decided here: this worker executes a routing choice.
+let currentRouting = null;
 
 const getStatus = () => ({
   state: workerState,
-  model: MODEL,
-  sessionStrategy: SESSION_STRATEGY.PERSISTENT,
+  // What is running, not a constant. An IDLE Tech Lead is on no model at all.
+  model: currentRouting?.model ?? null,
+  // Follows the model: only the specialist holds a conversation.
+  sessionStrategy: currentRouting && currentRouting.family !== MODELS.fable.family
+    ? SESSION_STRATEGY.STATELESS
+    : SESSION_STRATEGY.PERSISTENT,
   sessionId: session?.sessionId ?? null,
   detail: currentJob ? `${currentJob.goal}/R${currentJob.round}` : null,
   capacityReason: capacityWait?.reason ?? null,
@@ -322,8 +462,10 @@ async function restoreSession(executable) {
   session = createPersistentSession({
     executable,
     role: ROLE,
-    model: MODEL,
-    expectedFamily: 'fable',
+    // The session belongs to the specialist. A conversation cannot change
+    // model halfway: an Opus job never resumes this one, it runs stateless.
+    model: SPECIALIST_MODEL,
+    expectedFamily: MODELS.fable.family,
     cwd: record?.cwd ?? SESSION_CWD,
     sessionId: record?.sessionId,
     started: resumed,
@@ -399,11 +541,18 @@ async function handleJob(rawJob) {
   const packet = job.packetPath ? await readJson(job.packetPath, { required: true }) : null;
   const prompt = packet ? renderReviewPrompt(packet) : buildPrompt(context);
 
-  log('FABLE STARTED', `session ${session.sessionId.slice(0, 8)}`);
   if (packet) log('DEEP REVIEW', `${packet.changedFiles.length} arquivos alterados`);
 
-  // The SAME Fable session is resumed on every retry: a capacity limit must not
-  // cost the reviewer its continuity, and never switches model.
+  const baseRouting = routingOf(job, ROUTING_STAGES.REVIEW);
+  const router = createAttemptRouter({
+    store, role: ROLE, jobId: job.jobId, base: baseRouting, kind: 'review',
+    goal: job.goal, round: job.round,
+  });
+
+  // A capacity limit never costs the reviewer its continuity: the SAME session
+  // is resumed on every retry of the same model. What CAN change the model is
+  // the router — a Fable quota falling back to Opus, or an Opus review that
+  // could not conclude escalating to Fable — and either one is a new attempt.
   const run = await runWithCapacity({
     store,
     role: ROLE,
@@ -412,27 +561,28 @@ async function handleJob(rawJob) {
     round: job.round,
     resumeFrom: LOOP_STATES.REVIEWER_RUNNING,
     onEvent: onCapacityEvent,
-    invoke: async () => {
-      const outcome = await session.send({
+    router,
+    invoke: async ({ attempt }) => {
+      const { routing } = await router.current();
+      const active = routing ?? baseRouting;
+      announceRouting({ routing: active });
+      await ensureSessionFor(active);
+      return sendRouted({
+        routing: active,
         prompt,
         jsonSchema: reviewDecisionSchemaFor({ jobId: job.jobId, goal: job.goal, round: job.round }),
-        tools: REVIEWER_TOOLS,
-        permissionMode: 'auto',
-        addDirs: job.worktree ? [job.worktree] : [],
-        safeMode: false,
-        ...telemetryOptions(job.worktree),
         validatePayload: (payload) => validateReviewDecision(payload, {
           jobId: job.jobId,
           goal: job.goal,
           round: job.round,
         }),
+        tools: REVIEWER_TOOLS,
+        worktree: job.worktree,
       });
-      await persistSession();
-      return outcome;
     },
   });
 
-  log('FABLE COMPLETED', run.outcome);
+  log('REVIEW COMPLETED', run.outcome);
 
   if (run.outcome === RUN_OUTCOMES.HUMAN_REQUIRED) {
     workerState = 'ERROR';
@@ -473,11 +623,19 @@ async function main() {
   const executable = resolveClaudeExecutable();
   const resumed = await restoreSession(executable.path);
 
+  const mode = resolveRoutingMode();
   console.log(banner({
     title: 'TECH LEAD',
-    model: `Claude Fable 5.1 (${MODEL})`,
-    sessionLine: `Session: ${session.sessionId.slice(0, 8)} (${resumed ? 'resumed from registry' : 'new'})`,
-    extra: ['Session strategy: PERSISTENT', `Log level: ${LOG_LEVEL}`],
+    model: 'adaptive — routed per job',
+    sessionLine: `Specialist session: ${session.sessionId.slice(0, 8)} (${resumed ? 'resumed from registry' : 'new'})`,
+    extra: [
+      `Standard: ${resolveModel(ROUTING_CONFIG.tech_lead.review.standard.model).label}`
+      + ` · effort ${ROUTING_CONFIG.tech_lead.review.standard.effort} (stateless)`,
+      `Specialist: ${resolveModel(ROUTING_CONFIG.tech_lead.review.deep.model).label}`
+      + ` · effort ${ROUTING_CONFIG.tech_lead.review.deep.effort} (persistent session)`,
+      `Routing mode: ${mode}`,
+      `Log level: ${LOG_LEVEL}`,
+    ],
   }));
   console.log('Waiting for review task...\n');
 

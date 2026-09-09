@@ -147,19 +147,35 @@ test('30. the routed profile is Goal-scoped state, so status can show it', () =>
 
 // --- Default and legacy ----------------------------------------------------
 
-test('a brand-new Goal with nobody saying anything runs on SONNET_MEDIUM', () => {
+test('a brand-new Goal with nobody saying anything runs on SONNET_HIGH', () => {
   const resolved = resolveProfileForRound({ goalExecution: null, round: 1 });
-  assert.equal(resolved.profile.name, 'SONNET_MEDIUM');
-  assert.equal(resolved.source, PROFILE_SOURCES.DEFAULT);
+  assert.equal(resolved.profile.name, 'SONNET_HIGH');
+  assert.equal(resolved.source, PROFILE_SOURCES.ADAPTIVE_DEFAULT);
 });
 
-test('the planning record beats the Goal document, and both beat the default', () => {
+test('adaptive routing starts on Sonnet even when planning asked for Opus', () => {
+  // The Tech Lead's planning choice is recorded and reported, but it no longer
+  // decides the FIRST attempt: a Goal that was hard to plan is often ordinary
+  // to execute. Opus arrives through escalation, which carries evidence.
+  const resolved = resolveProfileForRound({
+    round: 1, planningRecord: { profile: 'OPUS_MEDIUM' }, declaredInGoal: 'OPUS_HIGH',
+  });
+  assert.equal(resolved.profile.name, 'SONNET_HIGH');
+  assert.equal(resolved.source, PROFILE_SOURCES.ADAPTIVE_DEFAULT);
+  assert.equal(resolved.plannedProfile, 'OPUS_MEDIUM', 'the choice is preserved for audit');
+});
+
+test('with adaptive routing off, the planning record beats the Goal document', () => {
+  // The old precedence is intact and still tested: it is what an operator gets
+  // by pinning routing, and what a legacy execution replays.
   assert.equal(
-    resolveProfileForRound({ round: 1, planningRecord: { profile: 'OPUS_MEDIUM' }, declaredInGoal: 'SONNET_MEDIUM' }).profile.name,
+    resolveProfileForRound({
+      round: 1, adaptive: false, planningRecord: { profile: 'OPUS_MEDIUM' }, declaredInGoal: 'SONNET_MEDIUM',
+    }).profile.name,
     'OPUS_MEDIUM',
   );
   assert.equal(
-    resolveProfileForRound({ round: 1, declaredInGoal: 'OPUS_HIGH' }).source,
+    resolveProfileForRound({ round: 1, adaptive: false, declaredInGoal: 'OPUS_HIGH' }).source,
     PROFILE_SOURCES.GOAL_DOCUMENT,
   );
 });
@@ -178,7 +194,7 @@ test('a Goal already in flight before routing existed keeps the model it started
   // A Goal that merely EXISTS has not started, and gets the new default.
   const announced = { goal: '007', round: 1, jobIdsByRound: {} };
   assert.equal(isLegacyInFlight(announced), false);
-  assert.equal(resolveProfileForRound({ goalExecution: announced, round: 1 }).profile.name, 'SONNET_MEDIUM');
+  assert.equal(resolveProfileForRound({ goalExecution: announced, round: 1 }).profile.name, 'SONNET_HIGH');
 });
 
 // --- Integration: one Goal, two rounds, zero extra inferences -------------
@@ -247,14 +263,14 @@ test('integration: Sonnet R1 → CHANGES_REQUIRED → Opus High R2 → ACCEPTED'
     }).then((outcome) => ({ outcome, decision }));
   }
 
-  // --- Goal A: the Tech Lead planned it as SONNET_MEDIUM -------------------
+  // --- Goal A: R1 starts on the standard executor --------------------------
   let execution = { goal: '006', round: 1 };
   const r1 = resolveProfileForRound({
     goalExecution: execution,
     round: 1,
     planningRecord: { profile: 'SONNET_MEDIUM', reason: 'Localized implementation with established architecture.' },
   });
-  assert.equal(r1.profile.name, 'SONNET_MEDIUM');
+  assert.equal(r1.profile.name, 'SONNET_HIGH');
   execution = { ...execution, developerProfile: toExecutionRecord(r1, { goal: '006', round: 1 }) };
 
   const devR1 = await developerRound({ developerProfile: r1.profile.name });
@@ -301,7 +317,7 @@ test('integration: Sonnet R1 → CHANGES_REQUIRED → Opus High R2 → ACCEPTED'
   // two reviews. Selecting a model added none.
   assert.equal(calls.length, 4, `expected 4 inferences, got ${calls.length}`);
   assert.deepEqual(calls, [
-    { model: SONNET, effort: 'medium', usedFallbackFlag: false },
+    { model: SONNET, effort: 'high', usedFallbackFlag: false },
     { model: 'claude-fable-5-1', effort: null, usedFallbackFlag: false },
     { model: OPUS, effort: 'high', usedFallbackFlag: false },
     { model: 'claude-fable-5-1', effort: null, usedFallbackFlag: false },
@@ -316,7 +332,7 @@ test('the status screen reads the profile name from the persisted record', () =>
   // names it in `name`. Reading only `name` printed "Profile: undefined" on a
   // real, correctly repaired run.
   const record = toExecutionRecord(
-    resolveProfileForRound({ round: 1, planningRecord: { profile: 'OPUS_HIGH' } }),
+    resolveProfileForRound({ round: 1, adaptive: false, planningRecord: { profile: 'OPUS_HIGH' } }),
     { goal: '006', round: 1 },
   );
   assert.equal(record.profile, 'OPUS_HIGH');

@@ -17,6 +17,7 @@ Duas etapas concluídas:
 | V5 — Accepted Goal Closure + Next Goal Planning | fechamento e planejamento automatizados, parada em AWAITING_HUMAN |
 | V6 — Job Ownership and Leases | uma execução por operação lógica; timeout de observador não duplica trabalho |
 | V13 — Identidade do modelo por evidência explícita | `modelUsage`/`usage` viram observabilidade; identidade vem de `message.model` do stream |
+| V14 — Adaptive Model Routing | modelo escolhido por risco: Opus padrão no Tech Lead, Sonnet no Developer, Fable só para HIGH/CRITICAL |
 
 ---
 
@@ -2668,6 +2669,179 @@ harness), mas agora nomeados pelo que realmente são: uma falha local de
 verificação, não um limite de modelo desconhecido. `MODEL_FALLBACK_DETECTED`
 não muda — evidência de que o modelo ERRADO respondeu continua fatal, e
 continua uma família à parte de "não sabemos".
+
+## V14 — Adaptive Model Routing
+
+Antes desta etapa o modelo era uma constante por papel: Tech Lead sempre Fable
+(review, fechamento e planejamento), Developer sempre o perfil que o
+planejamento tinha nomeado. Isso gastava o modelo de cota mais apertada em todo
+Goal, inclusive nos triviais, e não havia como perguntar depois *por que* um
+modelo foi escolhido — não havia escolha, havia constante.
+
+Agora quem decide é `lib/model-routing.mjs`, uma política única para os dois
+papéis e as três etapas.
+
+```
+                    GOAL
+                     │
+              Complexity Router
+                     │
+         ┌───────────┴───────────┐
+         │                       │
+    LOW/MEDIUM               HIGH/CRITICAL
+         │                       │
+     Opus Plan                Fable Plan
+         │                       │
+         └───────────┬───────────┘
+                     │
+                  PLAN
+                     │
+                Sonnet Dev
+                     │
+             difficulty?
+               │         │
+              no        yes
+               │         │
+               │      Opus Dev
+               │         │
+               └────┬────┘
+                    │
+                  DIFF
+                    │
+              Review Router
+                    │
+         ┌──────────┴───────────┐
+         │                      │
+    LOW/MEDIUM              HIGH/CRITICAL
+         │                      │
+    Opus Review             Fable Review
+         │                      │
+         └──────────┬───────────┘
+                    │
+                 RESULT
+```
+
+### A tabela
+
+| Papel · etapa | LOW · MEDIUM | HIGH · CRITICAL |
+| --- | --- | --- |
+| Tech Lead · planning | Opus 5 `high` | Fable 5.1 `high` |
+| Tech Lead · review | Opus 5 `high` | Fable 5.1 `high` |
+| Developer | Sonnet 5 `high` (sempre o início) | escalation → Opus 5 `high`; deep → Opus 5 `xhigh` |
+
+`max` não aparece: fica como decisão humana, nunca do router. A tabela inteira
+vive em `ROUTING_CONFIG`, e os ids de modelo só existem em `MODELS` — nenhum
+arquivo repete `claude-...` por conta própria.
+
+### Classificação de complexidade — determinística, zero-token
+
+Nenhum modelo é chamado para decidir qual modelo chamar. A pontuação soma
+sinais, e os limiares (`RISK_THRESHOLDS`) são: `0–1 LOW`, `2–3 MEDIUM`,
+`4–6 HIGH`, `7+ CRITICAL`.
+
+| Fonte | Exemplos | Peso |
+| --- | --- | --- |
+| Evidência — arquivos | migration em `prisma/migrations`, caminho de auth/session/tenant, worker/lease/queue | +3 |
+| Evidência — arquivos | infra/CI, 3+ apps tocados no mesmo diff | +2 |
+| Evidência — escopo | ≥15 arquivos (+1), ≥40 (+2), ≥500 inserções (+1), ≥1500 (+2) | +1/+2 |
+| Evidência — histórico | rodada anterior rejeitada, escalation do Developer, recovery de harness | +2 |
+| Texto (PT e EN) | arquitetura, segurança, concorrência, migração de schema, breaking change, consistência, recovery, infra, contrato de API, cross-cutting | +2/+3, **somados até no máximo 3** |
+
+O teto do texto (`TEXT_SIGNAL_CAP`) não é estética: **medido** contra os
+documentos reais deste repositório, a pontuação por palavra-chave sem teto
+colocava o `MASTER_PLAN` em 30 e **todo** Goal em CRITICAL — um documento longo
+sobre um projeto de migração fala de migração, arquitetura e segurança porque é
+longo, não porque a próxima mudança é perigosa. Com o teto, texto argumenta até
+MEDIUM; HIGH e CRITICAL exigem evidência que não se resolve escrevendo melhor.
+
+O planejamento **não** é pontuado pelo diff do Goal que acabou de fechar: aquele
+diff é prova sobre o trabalho terminado, não sobre o próximo. Sobra o que de
+fato prediz dificuldade — a leitura limitada do roadmap e o que deu errado antes.
+
+### Developer: Sonnet começa, Opus só com prova
+
+A escolha do planejamento (`developerProfile`) continua registrada e visível,
+mas não decide mais a primeira attempt (`PROFILE_SOURCES.ADAPTIVE_DEFAULT`). Um
+Goal pode ser difícil de **planejar** e comum de **executar** depois que
+arquitetura, escopo e contratos estão resolvidos — `Fable Planning → Sonnet
+Developer` é combinação válida e esperada.
+
+Sonnet não escala por um teste vermelho, um lint ou um erro de tipo: isso é o
+trabalho. Escala quando há evidência, declarada no contrato (não em texto
+livre): `status: ESCALATION_REQUIRED` com `escalation.reason` ∈
+`REPEATED_EXECUTION_FAILURE`, `PLAN_MISMATCH`,
+`ARCHITECTURAL_DECISION_REQUIRED`, `LOW_CONFIDENCE`, e ao menos uma entrada de
+`evidence`. **Pedir não é receber**: quem autoriza é o router
+(`authorizeDeveloperEscalation`), e uma recusa também vira evento
+(`MODEL_ESCALATION_REFUSED`). Uma attempt em Opus que peça de novo ganha `xhigh`
+uma vez; além disso é decisão humana.
+
+### Review: escala para cima, cai para o lado
+
+Uma review classificada LOW/MEDIUM vai para Opus. Se o reviewer concluir que
+não consegue concluir — `decision: HUMAN_REQUIRED` com `escalationRequest`
+(`REVIEW_INCONCLUSIVE`, `ARCHITECTURAL_RISK_DISCOVERED`,
+`SECURITY_RISK_DISCOVERED`) e evidência — o router autoriza **uma** nova attempt
+em Fable antes de acordar um humano. A review anterior não é apagada: fica como
+candidate result, com o que ela mesma disse.
+
+### Fallback: disponibilidade, nunca disfarce de bug
+
+`USAGE_LIMIT`, `RATE_LIMIT` e `MODEL_UNAVAILABLE` autorizam Fable → Opus e
+Sonnet → Opus como **nova attempt**, imediatamente, em vez de estacionar o
+pipeline até o reset semanal do Fable.
+
+`HARNESS_ERROR`, `AUTH_ERROR`, `INVALID_CLAUDE_CLI_ARGS`, `BILLING_ERROR`,
+`UNKNOWN_FATAL` e qualquer falha de contrato **nunca** caem para outro modelo —
+seguem a política existente e param para um humano. Fallback existe para
+disponibilidade; usar outro modelo para contornar um defeito nosso esconderia o
+defeito e ainda pagaria por ele.
+
+Cada modelo cai uma vez: um segundo limite espera, não procura um terceiro
+modelo.
+
+### Nada muda de modelo em silêncio
+
+Fallback e escalation criam uma **attempt nova** do mesmo job, pelo mesmo
+mecanismo que qualquer retry usa. O que a antecessora foi continua sendo:
+
+- status próprio, `REROUTED` — nem `INTERRUPTED` (nada aprendido) nem `FAILED`
+  (trabalho tentado e malsucedido). Algo *foi* aprendido, e a sucessora existe
+  por causa disso;
+- a resposta que pediu ajuda é preservada como candidate result, recuperável;
+- `attemptHistory` guarda `reason` e `routedTo`, então o modelo de uma attempt é
+  **derivado do disco** (`resolveRoutingForAttempt`) e um restart resolve a mesma
+  resposta em vez de decidir de novo;
+- Goal, round, stage, job, worktree, baseline e review packet seguem os mesmos.
+
+Nenhuma attempt antiga é reescrita para parecer que rodou em outro modelo.
+
+### Auditoria e telemetria
+
+Quatro eventos, gravados no momento da decisão — `MODEL_ROUTED` (uma vez por
+chamada roteada, emitido pelo capacity runner para que nenhum worker possa
+esquecer), `MODEL_FALLBACK`, `MODEL_ESCALATED` e `MODEL_ESCALATION_REFUSED`.
+`lib/routing-summary.mjs` deriva deles o bloco impresso ao fim de cada Goal e em
+`npm run ia-loop:status`:
+
+```
+MODEL ROUTING
+  Developer R1: n/a → sonnet high
+    started on sonnet, ended on opus after 2 attempts
+  Review R1: MEDIUM (score 3) → opus high
+  Calls: sonnet 1 · opus 2 · fable 0
+  Fallbacks: 0
+  Escalations: 1
+    developer R1: sonnet → opus (REPEATED_EXECUTION_FAILURE)
+```
+
+### Override manual
+
+`IA_LOOP_ROUTING_MODE` = `AUTO` (padrão) | `FORCE_SONNET` | `FORCE_OPUS` |
+`FORCE_FABLE`. Lido em um lugar (`resolveRoutingMode`), aparece na auditoria
+como `MANUAL_OVERRIDE_*`, e preserva a classificação que o router *teria* usado.
+Com o modo fixado, nada cai nem escala pelas costas do operador — quem fixou um
+modelo quis dizer isso, inclusive quando a cota acaba.
 
 ## Limitações conhecidas
 

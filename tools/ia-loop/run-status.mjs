@@ -26,6 +26,7 @@ import { OWNER_STATUS, collectOwnerEvidence, isRecoveryEligible, judgeOwner } fr
 import { createHandoffStore, HANDOFF_STATUS } from './lib/recovery-handoff.mjs';
 import { SELECTABLE_DEVELOPER_PROFILES } from './lib/developer-profiles.mjs';
 import { reconcileExecutionState } from './lib/reconcile.mjs';
+import { renderRoutingSummary, summarizeRouting } from './lib/routing-summary.mjs';
 import { STAGES } from './lib/stage-identity.mjs';
 import { LOOP_CONFIG } from './lib/loop-config.mjs';
 import { isDirectExecution } from './lib/direct-execution.mjs';
@@ -239,6 +240,18 @@ async function main() {
         out.push('  The runtime still records HUMAN_REQUIRED, but the jobs on disk do not support it.');
         out.push('  Reconcile with: npm run ia-loop:reconcile-runtime -- --goal ' + currentGoal);
       }
+      out.push('');
+    }
+  }
+
+  // --- What the router actually did ---------------------------------------
+  //
+  // Read from the routing events, so it answers the question this feature has
+  // to keep answering: did the expensive models stay rare?
+  if (currentGoal) {
+    const summary = summarizeRouting(await store.readEvents(), { goal: currentGoal });
+    if (summary.totalCalls > 0) {
+      out.push(...renderRoutingSummary(summary));
       out.push('');
     }
   }

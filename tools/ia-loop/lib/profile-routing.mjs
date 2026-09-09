@@ -13,9 +13,14 @@
  *   2. What the Tech Lead asked the NEXT correction round to run on, stated in
  *      the review that produced the blockers. Silence keeps the current
  *      profile: nothing promotes on round number alone.
- *   3. What the Tech Lead chose when it planned this Goal — the durable record
- *      written by the planning call, or the line mirrored in the Goal document.
- *   4. The default, SONNET_MEDIUM.
+ *   3. Under adaptive routing (the default), the standard executor —
+ *      SONNET_HIGH. What the Tech Lead chose while PLANNING is recorded and
+ *      reported, but no longer decides the first attempt: a Goal that is hard
+ *      to plan is often ordinary to execute once the plan exists, and Opus is
+ *      reached through escalation, which carries evidence.
+ *   4. With adaptive routing off (`adaptive: false`), the older precedence
+ *      applies instead: the planning record, then the Goal document, then the
+ *      default. That is what an operator gets by pinning routing.
  *
  * And one compatibility rule that overrides 2–4 but not 1: a Goal that was
  * ALREADY IN FLIGHT before routing existed keeps the model it started on.
@@ -34,6 +39,7 @@ export const PROFILE_SOURCES = Object.freeze({
   PLANNING_RECORD: 'PLANNING_RECORD',
   GOAL_DOCUMENT: 'GOAL_DOCUMENT',
   LEGACY_IN_FLIGHT: 'LEGACY_IN_FLIGHT',
+  ADAPTIVE_DEFAULT: 'ADAPTIVE_DEFAULT',
   DEFAULT: 'DEFAULT',
 });
 
@@ -75,6 +81,19 @@ export function resolveProfileForRound({
   // The line mirrored in the Goal document, if any.
   declaredInGoal = null,
   defaultProfile = DEFAULT_DEVELOPER_PROFILE,
+  /**
+   * Adaptive routing: the FIRST attempt of a Goal starts on the standard
+   * executor whatever the planning call chose for it.
+   *
+   * Not a downgrade, and not ignoring the Tech Lead. A Goal can be hard to
+   * PLAN — architecture, contracts, a migration strategy — and ordinary to
+   * EXECUTE once that plan exists, and paying the strongest executor for every
+   * such Goal is exactly what this stopped doing. The Tech Lead still promotes,
+   * but through the path that carries evidence: the escalation attached to a
+   * review that saw the work fail (rule 2), or the Developer's own escalation
+   * request during a round.
+   */
+  adaptive = true,
 } = {}) {
   const persisted = goalExecution?.developerProfile ?? null;
   const previous = persisted?.profile ?? null;
@@ -132,7 +151,24 @@ export function resolveProfileForRound({
     };
   }
 
-  // 5. What the Tech Lead chose when it planned this Goal.
+  // 5. What the Tech Lead chose when it planned this Goal — honoured only when
+  //    adaptive routing is off. Under adaptive routing the choice is still
+  //    recorded and still visible in status; it simply does not decide the
+  //    first attempt any more.
+  if (adaptive) {
+    return {
+      profile: resolveDeveloperProfile(defaultProfile),
+      source: PROFILE_SOURCES.ADAPTIVE_DEFAULT,
+      reason: planningRecord?.profile
+        ? `Planning chose ${planningRecord.profile}; adaptive routing starts on ${defaultProfile} and escalates on evidence.`
+        : null,
+      selectedBy: 'router',
+      previousProfile: null,
+      changed: false,
+      plannedProfile: planningRecord?.profile ?? declaredInGoal ?? null,
+    };
+  }
+
   if (planningRecord?.profile) {
     return {
       profile: resolveDeveloperProfile(planningRecord.profile),

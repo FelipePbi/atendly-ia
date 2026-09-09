@@ -172,16 +172,18 @@ test('14b. an effort the CLI would silently ignore is refused before spawn', () 
 
 // --- 15-16. Default and persistence ---------------------------------------
 
-test('15. the default profile is SONNET_MEDIUM', () => {
-  assert.equal(DEFAULT_DEVELOPER_PROFILE, 'SONNET_MEDIUM');
-  // A job that says nothing gets the default, not Opus.
-  assert.equal(validateDeveloperJob(developerJob()).developerProfile, 'SONNET_MEDIUM');
+test('15. the default profile is SONNET_HIGH', () => {
+  // Adaptive routing raised the default effort: Sonnet is the standard
+  // executor and gets a real chance to finish the work before anything
+  // escalates. The MODEL is unchanged — the default was never Opus.
+  assert.equal(DEFAULT_DEVELOPER_PROFILE, 'SONNET_HIGH');
+  assert.equal(validateDeveloperJob(developerJob()).developerProfile, 'SONNET_HIGH');
   const planning = validatePlanningDecision({
     protocolVersion: PROTOCOL_VERSION_V2,
     jobId: 'j1', goal: '005', decision: 'NEXT_GOAL', summary: 's',
     nextGoalId: '006', nextGoalTitle: 't', nextGoalPath: 'docs/migration/goals/006-x.md',
   }, { jobId: 'j1', goal: '005' });
-  assert.equal(planning.developerProfile, 'SONNET_MEDIUM');
+  assert.equal(planning.developerProfile, 'SONNET_HIGH');
 });
 
 test('16. a Goal persists its profile through the store, across processes', async () => {

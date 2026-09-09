@@ -19,7 +19,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { SpikeError } from './lib/claude-process.mjs';
-import { JOB_DISPATCH, createJobStore } from './lib/job-store.mjs';
+import { JOB_DISPATCH, createJobStore, readJson } from './lib/job-store.mjs';
 import {
   DISPATCH_KINDS, assertNoDuplicateStageDispatch, reconcileExecutionState,
 } from './lib/reconcile.mjs';
@@ -46,6 +46,15 @@ import { createLeaseStore } from './lib/leases.mjs';
 import { buildReviewPacket } from './lib/review-packet.mjs';
 import { createDeveloperProfileStore } from './lib/developer-profiles.mjs';
 import { PROFILE_SOURCES, resolveProfileForRound, toExecutionRecord } from './lib/profile-routing.mjs';
+import { renderRoutingSummary, summarizeRouting } from './lib/routing-summary.mjs';
+import {
+  ROUTING_STAGES,
+  classifyReviewComplexity,
+  resolveRoutingMode,
+  routeTechLead,
+  routingFromProfile,
+  toJobRouting,
+} from './lib/model-routing.mjs';
 import { isDirectExecution } from './lib/direct-execution.mjs';
 import { waitForResult } from './lib/result-waiter.mjs';
 import { assertGoalEligibleForClosure } from './lib/closure-eligibility.mjs';
@@ -58,10 +67,24 @@ const STATE_DIR = join(HERE, '.state');
 const TECH_LEAD_MODEL = process.env.IA_LOOP_TECH_LEAD_MODEL ?? 'claude-fable-5-1';
 const DEVELOPER_MODEL = process.env.IA_LOOP_DEVELOPER_MODEL ?? 'claude-opus-5';
 const REVIEW_LEVEL = LOOP_CONFIG.reviewLevel;
+/** Read once, here: an override is a property of the run, not of a worker. */
+const routingMode = resolveRoutingMode();
 
 const RESULT_TIMEOUT_MS = Number(process.env.IA_LOOP_RESULT_TIMEOUT_MS ?? 6 * 60 * 60 * 1000);
 
 const probe = createGitProbe(REPO_ROOT);
+
+/**
+ * Whether the Developer had to be escalated during this round.
+ *
+ * Evidence about the CHANGE, not about the Developer: work that turned out to
+ * need a stronger executor than the plan expected is work a reviewer benefits
+ * from reading more carefully, so it raises the review's risk score.
+ */
+async function developerEscalatedThisRound(jobStore, devJobId) {
+  const envelope = await readJson(jobStore.paths.job('developer', devJobId));
+  return (envelope?.attemptHistory ?? []).some((entry) => entry?.reason === 'MODEL_ESCALATION');
+}
 
 // Created once, at module scope rather than inside main(): the top-level
 // catch below needs the SAME store to record a harness fault, and a fresh
@@ -517,6 +540,12 @@ async function main() {
       // retry and a recovery all run on the same model.
       developerProfile: routing.profile.name,
       developerProfileReason: routing.reason,
+      // The same choice in the router's own vocabulary, so a fallback or an
+      // escalation can be replayed from the job without re-deriving it.
+      routing: toJobRouting(routingFromProfile(routing.profile, {
+        stage: isCorrection ? ROUTING_STAGES.CORRECTION : ROUTING_STAGES.IMPLEMENTATION,
+        mode: routingMode,
+      })),
     });
 
     machine.transitionTo(phaseQueued);
@@ -673,10 +702,33 @@ async function main() {
     assertBelongsToGoal(revJobId, goal.goalId, `review job ${revJobId}`);
     await readJobForGoal(store, 'tech_lead', revJobId, goal.goalId);
     const reviewAlreadyDone = await store.hasCompletedResult('tech_lead', revJobId);
+
+    // --- Review routing ----------------------------------------------------
+    // Scored on the change that now EXISTS, not on what the Goal said it would
+    // be: files, migrations, how many apps were touched, and whether the
+    // Developer itself had to escalate. Deterministic and zero-token — no model
+    // is called to decide which model reviews.
+    const reviewAssessment = classifyReviewComplexity({
+      changedFiles: changes.changedFiles,
+      diffStat: changes.diffStat,
+      text: `${lastDevResult.summary ?? ''}\n${lastDevResult.implementationReport ?? ''}`,
+      developerEscalated: await developerEscalatedThisRound(store, devJobId),
+      previousBlockers: pendingBlockers.map(blockerText),
+    });
+    const reviewRouting = routeTechLead({
+      stage: ROUTING_STAGES.REVIEW,
+      assessment: reviewAssessment,
+      mode: routingMode,
+    });
+    emit(`Review routing: ${reviewAssessment.classification} (score ${reviewAssessment.riskScore})`
+      + ` → ${reviewRouting.label} effort ${reviewRouting.effort}`);
+    if (reviewAssessment.signals.length > 0) emit(`  signals: ${reviewAssessment.signals.join(', ')}`);
+
     const revJob = validateReviewJob({
       protocolVersion: PROTOCOL_VERSION_V2,
       jobId: revJobId, role: 'tech_lead', goal: goal.goalId, round,
       reviewLevel: REVIEW_LEVEL,
+      routing: toJobRouting(reviewRouting),
       migrationAcceptedBaseline: goal.migrationAcceptedBaseline,
       executionBase, worktreeInitialHead: worktree.worktreeInitialHead,
       worktree: absWorktree, goalPath: goal.goalPath,
@@ -845,6 +897,14 @@ async function main() {
     const runtime = await store.readRuntime();
     emit('Blockers:');
     for (const b of runtime.blockers ?? []) emit(`  - ${blockerText(b)}`);
+  }
+
+  // What the router chose, and what it cost. Derived from the events written
+  // when each decision was taken, so this reports the run rather than a
+  // running total someone kept.
+  emit('');
+  for (const line of renderRoutingSummary(summarizeRouting(await store.readEvents(), { goal: goal.goalId }))) {
+    emit(line);
   }
 
   emit('');

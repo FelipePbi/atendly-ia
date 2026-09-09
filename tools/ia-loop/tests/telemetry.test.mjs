@@ -360,6 +360,85 @@ test('thinking blocks are never rendered', () => {
   assert.equal(seen.length, 0);
 });
 
+/**
+ * The counters the usage ledger reads.
+ *
+ * Every one of these is a tally of an event the CLI emitted anyway, so counting
+ * them costs nothing and asks the model for nothing. They are asserted here
+ * rather than in the ledger tests because this is where they are produced.
+ */
+test('the stream parser counts what the stream carried, deterministically', () => {
+  const parser = createStreamParser({ now: () => 0 });
+  const lines = [
+    { type: 'system', subtype: 'init', session_id: 'sess-1', model: 'claude-opus-5' },
+    { type: 'assistant', message: { model: 'claude-opus-5', content: [{ type: 'text', text: 'thinking out loud' }] } },
+    {
+      type: 'assistant',
+      message: {
+        model: 'claude-opus-5',
+        content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: 'a.ts' } }],
+      },
+    },
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', is_error: false }] } },
+    {
+      type: 'assistant',
+      message: {
+        model: 'claude-opus-5',
+        content: [{ type: 'tool_use', id: 't2', name: 'Bash', input: { command: 'npm test' } }],
+      },
+    },
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't2', is_error: true }] } },
+    { type: 'result', subtype: 'success', is_error: false, num_turns: 4 },
+  ];
+  parser.push(`${lines.map((line) => JSON.stringify(line)).join('\n')}\n`);
+  parser.end();
+
+  const counters = parser.counters();
+  assert.equal(counters.streamEvents, 7);
+  assert.equal(counters.assistantMessages, 3);
+  assert.equal(counters.userMessages, 2);
+  assert.equal(counters.toolCallCount, 2);
+  assert.equal(counters.toolResultEvents, 2);
+  assert.equal(counters.toolErrorEvents, 1);
+  assert.equal(counters.initSessionId, 'sess-1');
+  assert.deepEqual(
+    counters.toolCalls.sort((a, b) => a.tool.localeCompare(b.tool)),
+    [{ tool: 'Bash', calls: 1, errors: 1 }, { tool: 'Read', calls: 1, errors: 0 }],
+  );
+  assert.deepEqual(counters.byType, { system: 1, assistant: 3, user: 2, result: 1 });
+});
+
+test('the event trail is metadata only, and is bounded', () => {
+  const parser = createStreamParser({ maxTrailEvents: 2, now: () => 0 });
+  for (let index = 0; index < 5; index += 1) {
+    parser.push(`${JSON.stringify({
+      type: 'assistant',
+      message: {
+        model: 'claude-opus-5',
+        content: [{ type: 'tool_use', id: `t${index}`, name: 'Write', input: { file_path: 'secret.env', content: 'API_KEY=abc' } }],
+      },
+    })}\n`);
+  }
+  parser.end();
+
+  const trail = parser.trail();
+  assert.equal(trail.events.length, 2, 'the trail cannot grow without limit');
+  assert.equal(trail.dropped, 3, 'and says how much it dropped');
+  const text = JSON.stringify(trail.events);
+  assert.equal(text.includes('API_KEY'), false);
+  assert.equal(text.includes('secret.env'), false);
+  assert.match(text, /"tool":"Write"/);
+});
+
+test('lines that are not stream events are counted rather than silently ignored', () => {
+  const parser = createStreamParser();
+  parser.push('a npm warning on stdout\n');
+  parser.push(`${JSON.stringify({ type: 'result', subtype: 'success', is_error: false })}\n`);
+  parser.end();
+  assert.equal(parser.counters().unparsableLines, 1);
+  assert.equal(parser.counters().streamEvents, 1);
+});
+
 test('renderEvent produces one timestamped line and nothing else', () => {
   const line = renderEvent({ category: 'READ', detail: 'a.ts', at: '2026-09-08T10:31:02.000Z' }, 'normal');
   assert.equal(line, '[10:31:02] READ a.ts');

@@ -97,9 +97,64 @@ export function describeToolUse({ name, input = {} }, { root = null } = {}) {
  * internally. `end()` flushes whatever is left. `envelope()` returns the final
  * `result` object — the structured output the orchestrator validates.
  */
-export function createStreamParser({ onEvent = () => {}, root = null, now = () => Date.now() } = {}) {
+export const MAX_TRAIL_EVENTS = 500;
+
+export function createStreamParser({
+  onEvent = () => {},
+  root = null,
+  now = () => Date.now(),
+  /**
+   * How many stream events keep a metadata entry in the trail. The trail is
+   * metadata ONLY - a type, an index, a tool name, a duration - and exists so
+   * the usage ledger can say what a call did without duplicating the logs the
+   * harness already keeps. Bounded so a very long agent turn cannot grow it
+   * without limit.
+   */
+  maxTrailEvents = MAX_TRAIL_EVENTS,
+  clock = () => new Date().toISOString(),
+} = {}) {
   let buffer = '';
   let envelope = null;
+  /**
+   * Deterministic counts of what the stream carried.
+   *
+   * Every one of these is a tally of an event the CLI emitted anyway. Nothing
+   * is asked of the model to produce them, and nothing here is inferred: an
+   * event either arrived or it did not.
+   */
+  const counts = {
+    streamEvents: 0,
+    unparsableLines: 0,
+    byType: Object.create(null),
+    assistantMessages: 0,
+    userMessages: 0,
+    toolUseEvents: 0,
+    toolResultEvents: 0,
+    toolErrorEvents: 0,
+  };
+  /** Tool name to { calls, errors }. The breakdown the ledger records. */
+  const toolCalls = new Map();
+  /** Bounded metadata trail, never content. */
+  const trail = [];
+  let trailDropped = 0;
+  let initSessionId = null;
+  let initModel = null;
+
+  function pushTrail(entry) {
+    if (trail.length >= maxTrailEvents) {
+      trailDropped += 1;
+      return;
+    }
+    trail.push({ index: counts.streamEvents, at: clock(), ...entry });
+  }
+
+  function countTool(name, { error = false } = {}) {
+    const key = typeof name === 'string' && name !== '' ? name : 'UNKNOWN';
+    const record = toolCalls.get(key) ?? { calls: 0, errors: 0 };
+    if (error) record.errors += 1;
+    else record.calls += 1;
+    toolCalls.set(key, record);
+  }
   // tool_use id → { category, detail, startedAt }, so a result can report the
   // duration of the call it belongs to.
   const pending = new Map();
@@ -124,23 +179,41 @@ export function createStreamParser({ onEvent = () => {}, root = null, now = () =
     const servedModel = typeof message?.model === 'string' && message.model !== '' ? message.model : null;
     if (servedModel && !servedModelsSeen.includes(servedModel)) servedModelsSeen.push(servedModel);
 
+    counts.assistantMessages += 1;
+
     const content = Array.isArray(message?.content) ? message.content : [];
     for (const block of content) {
       // text and thinking blocks are skipped on purpose.
       if (block?.type !== 'tool_use') continue;
       const described = describeToolUse({ name: block.name, input: block.input ?? {} }, { root });
-      pending.set(block.id, { ...described, startedAt: now() });
+      pending.set(block.id, { ...described, startedAt: now(), name: block.name ?? null });
+      counts.toolUseEvents += 1;
+      countTool(block.name);
+      pushTrail({ type: 'tool_use', tool: block.name ?? null, category: described.category });
       safeEmit({ ...described, tool: block.name ?? null });
     }
   }
 
   function handleUser(message) {
+    counts.userMessages += 1;
     const content = Array.isArray(message?.content) ? message.content : [];
     for (const block of content) {
       if (block?.type !== 'tool_result') continue;
       const started = pending.get(block.tool_use_id);
       pending.delete(block.tool_use_id);
       const isError = block.is_error === true;
+      counts.toolResultEvents += 1;
+      if (isError) {
+        counts.toolErrorEvents += 1;
+        countTool(started?.name, { error: true });
+      }
+      pushTrail({
+        type: 'tool_result',
+        tool: started?.name ?? null,
+        category: started?.category ?? null,
+        isError,
+        durationMs: started ? now() - started.startedAt : null,
+      });
       // The result CONTENT is never rendered — only whether it failed.
       safeEmit({
         category: 'RESULT',
@@ -155,9 +228,16 @@ export function createStreamParser({ onEvent = () => {}, root = null, now = () =
   function handle(event) {
     if (!event || typeof event !== 'object') return;
 
+    counts.streamEvents += 1;
+    const type = typeof event.type === 'string' ? event.type : 'unknown';
+    counts.byType[type] = (counts.byType[type] ?? 0) + 1;
+
     switch (event.type) {
       case 'system':
         if (event.subtype === 'init') {
+          initSessionId = typeof event.session_id === 'string' ? event.session_id : initSessionId;
+          initModel = typeof event.model === 'string' ? event.model : initModel;
+          pushTrail({ type: 'system.init' });
           safeEmit({ category: 'STATE', detail: `session ${String(event.session_id ?? '').slice(0, 8)} started` });
         }
         break;
@@ -171,6 +251,7 @@ export function createStreamParser({ onEvent = () => {}, root = null, now = () =
         // The authority. Kept verbatim; the orchestrator validates it exactly
         // as it validates a non-streamed envelope.
         envelope = event;
+        pushTrail({ type: 'result', subtype: event.subtype ?? null, isError: event.is_error === true });
         safeEmit({
           category: 'RESULT',
           detail: `agent finished — ${event.is_error === true ? 'error' : 'ok'}`,
@@ -191,7 +272,9 @@ export function createStreamParser({ onEvent = () => {}, root = null, now = () =
     try {
       parsed = JSON.parse(trimmed);
     } catch {
-      // Not a stream event (a warning on stdout, for example). Ignored.
+      // Not a stream event (a warning on stdout, for example). Ignored, but
+      // counted: a stream that produced only noise is a fact worth having.
+      counts.unparsableLines += 1;
       return;
     }
     handle(parsed);
@@ -225,6 +308,28 @@ export function createStreamParser({ onEvent = () => {}, root = null, now = () =
      */
     servedModels() {
       return [...servedModelsSeen];
+    },
+
+    /**
+     * Deterministic tallies of the stream, for the usage ledger.
+     *
+     * Counts of events that were emitted regardless; no inference, no model
+     * involvement, and no content. `toolCalls` is the per-tool breakdown.
+     */
+    counters() {
+      return {
+        ...counts,
+        byType: { ...counts.byType },
+        toolCallCount: counts.toolUseEvents,
+        toolCalls: [...toolCalls.entries()].map(([tool, record]) => ({ tool, ...record })),
+        initSessionId,
+        initModel,
+      };
+    },
+
+    /** Bounded metadata trail of the stream. Never prompts, never content. */
+    trail() {
+      return { events: [...trail], dropped: trailDropped };
     },
   };
 }

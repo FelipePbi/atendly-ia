@@ -24,6 +24,7 @@ import {
   remainingWaitMs,
 } from './capacity-state.mjs';
 import { systemClock } from './clock.mjs';
+import { routingContext, withUsageContext } from './usage-context.mjs';
 
 export const RUN_OUTCOMES = Object.freeze({
   COMPLETED: 'COMPLETED',
@@ -145,6 +146,13 @@ export async function runWithCapacity({
    * "the slice was too narrow".
    */
   continuationFor = null,
+  /**
+   * Extra ia-loop facts the ledger should attribute this call to, for whatever
+   * only the caller knows. One caller today: a Work Unit, which is the only
+   * thing here that has an id the runner cannot see. Never influences routing,
+   * prompts or execution.
+   */
+  usageContext = {},
 }) {
   if (!store) throw new SpikeError('INVALID_ARGS', 'store is required');
   if (!jobId) throw new SpikeError('INVALID_ARGS', 'jobId is required');
@@ -207,6 +215,11 @@ export async function runWithCapacity({
         });
       }
     }
+    // What ended the PREVIOUS attempt is what this one exists for, so it is
+    // read before the slot is cleared: a successor created by a capacity
+    // fallback or an authorised escalation must be recorded as such, not as a
+    // plain retry that happened to run on a different model.
+    const attemptOrigin = pendingRetry;
     pendingRetry = null;
 
     await store.setJobStatus(role, jobId, 'RUNNING');
@@ -219,8 +232,10 @@ export async function runWithCapacity({
     // Recorded here rather than in each worker: the audit answer to "why this
     // model?" must exist for every routed call, and a second place to emit it
     // is a second place to forget.
+    let activeRouting = null;
     if (router?.current) {
       const { routing } = await router.current();
+      activeRouting = routing ?? null;
       if (routing) {
         await store.appendEvent({
           type: 'MODEL_ROUTED',
@@ -237,7 +252,38 @@ export async function runWithCapacity({
       }
     }
 
-    const agentOutcome = await invoke({ attempt });
+    // The ledger's identity half, published around the call rather than passed
+    // into it. `invokeAgent` records the row; this is the only place that knows
+    // which Goal, round, job and attempt the call belongs to, and what the
+    // router decided. Purely observational: `invoke` is called exactly as it
+    // was, with the same argument, in the same order.
+    const agentOutcome = await withUsageContext({
+      goalId: goal ?? null,
+      roundId: Number.isFinite(round) ? round : null,
+      jobId,
+      attemptId: currentAttemptId,
+      attempt,
+      // The worker that actually ran it. For a Work Unit these differ: `role`
+      // is the store namespace, `blockedAgent` is the Developer it ran inside.
+      role: blockedAgent,
+      namespace: role,
+      ...routingContext(activeRouting),
+      isFallback: attemptOrigin?.reason === REROUTE_REASONS.MODEL_FALLBACK,
+      fallbackFromModel: attemptOrigin?.reason === REROUTE_REASONS.MODEL_FALLBACK
+        ? attemptOrigin.detail?.fromModel ?? null
+        : null,
+      fallbackReason: attemptOrigin?.reason === REROUTE_REASONS.MODEL_FALLBACK
+        ? attemptOrigin.detail?.classification ?? null
+        : null,
+      isEscalation: attemptOrigin?.reason === REROUTE_REASONS.MODEL_ESCALATION,
+      escalationFromModel: attemptOrigin?.reason === REROUTE_REASONS.MODEL_ESCALATION
+        ? attemptOrigin.detail?.fromModel ?? null
+        : null,
+      escalationReason: attemptOrigin?.reason === REROUTE_REASONS.MODEL_ESCALATION
+        ? attemptOrigin.detail?.escalationReason ?? null
+        : null,
+      ...usageContext,
+    }, () => invoke({ attempt }));
 
     const failed = Boolean(agentOutcome?.error) || !agentOutcome?.structuredOutput;
 

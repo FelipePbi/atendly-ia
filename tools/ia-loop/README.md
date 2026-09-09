@@ -3610,6 +3610,303 @@ stage REVIEW) continuando a cair no Fable, prova de que o caminho legítimo não
 foi tocado; uma review já roteada retornando o que já carregava; fechamento
 fora da política de escalation de review.
 
+## V20 — Usage telemetry e ledger bruto de consumo
+
+Até aqui o loop sabia *o que* aconteceu (eventos, jobs, attempts, decisões de
+roteamento) mas não sabia *quanto custou*. O consumo real de cada chamada de
+modelo — tokens, cache, thinking, turns, duração, custo reportado — chegava no
+envelope do CLI, era usado como cross-check advisory de identidade e depois
+descartado. Esta etapa passa a persistir tudo isso.
+
+O objetivo desta etapa é fundação, não análise: **capturar, normalizar,
+persistir, rastrear e validar**. Não há pricing engine, não há dashboard, não há
+comparação econômica, e nada aqui julga uma execução como produtiva ou
+desperdiçada.
+
+### Princípio: overhead de token igual a zero
+
+Nada nesta camada fala com um modelo. Todo número é:
+
+- copiado de um campo que o CLI já devolve no envelope `result`;
+- contado a partir de eventos que o stream `stream-json` já emitia;
+- lido do estado que o próprio ia-loop já mantém em disco.
+
+O prompt, o schema, o modelo, o effort e o argv são byte-idênticos com ou sem
+ledger. Nunca se pergunta ao modelo quantos tokens ele gastou, qual fase estava
+executando ou quanto do output foi thinking.
+
+### Arquitetura
+
+```text
+invokeAgent (lib/claude-process.mjs)
+        │  abre a linha ANTES do spawn
+        ▼
+UsageCollector (lib/usage-collector.mjs)
+        │  identidade ambiente (lib/usage-context.mjs)
+        ▼
+Normalizer (lib/usage-normalizer.mjs)
+        │  extrai usage bruto, normaliza, sanitiza
+        ▼
+SQLite ledger (lib/usage-ledger.mjs)
+        .state/telemetry/usage.sqlite
+```
+
+`invokeAgent` é o único ponto do pacote capaz de iniciar uma inferência —
+`runClaudeProcess` é chamado de um lugar só, e há teste que falha se surgir um
+segundo. Instrumentar ali é o que torna a cobertura uma propriedade da
+arquitetura, e não um hábito de quem escreve o próximo worker.
+
+A identidade (Goal, round, job, attempt, papel, roteamento) não é passada por
+parâmetro: o `capacity-runner` publica esses fatos em torno da chamada, via
+`AsyncLocalStorage`, e o ponto de gravação lê o que estiver em vigor. Uma
+chamada feita fora de qualquer contexto **ainda gera linha**, com `operation =
+UNKNOWN` e ids nulos — uma inferência não atribuída que é *registrada* é um bug
+visível; uma que é pulada é um bug invisível.
+
+### O que o runtime realmente fornece
+
+Auditado contra o schema de eventos embutido no próprio CLI instalado
+(Claude Code 2.1.263), não contra suposição.
+
+Envelope `result` (subtype `success`):
+
+```text
+duration_ms, duration_api_ms, ttft_ms?, is_error, api_error_status?,
+num_turns, result, stop_reason, total_cost_usd, usage, modelUsage,
+subagent_stats?, permission_denials[], queued_turn_count?,
+structured_output?, terminal_reason?, uuid, session_id
+```
+
+Subtypes de erro: `error_during_execution`, `error_max_turns`,
+`error_max_budget_usd`, `error_max_structured_output_retries` — sem campo
+`result`, com `errors[]`.
+
+`usage` (shape cru da Messages API):
+
+```text
+input_tokens, output_tokens,
+output_tokens_details.thinking_tokens,
+cache_read_input_tokens, cache_creation_input_tokens,
+cache_creation.{ephemeral_5m_input_tokens, ephemeral_1h_input_tokens},
+server_tool_use.{web_search_requests, web_fetch_requests},
+service_tier
+```
+
+`modelUsage[<model>]` (camelCase, por modelo):
+
+```text
+inputTokens, outputTokens, thinkingTokens?,
+cacheReadInputTokens, cacheCreationInputTokens, webSearchRequests,
+costUSD, contextWindow, maxOutputTokens,
+canonicalModel?, provider?, costBasis?
+```
+
+Duas semânticas documentadas pelo próprio CLI e que decidem se o ledger conta
+em dobro:
+
+1. **`thinkingTokens` já está dentro de `outputTokens`.** Os dois são gravados
+   como vieram, e `total_tokens` nunca soma thinking por cima.
+2. **`usage` é MAIN AGENT LOOP ONLY** — exclui subagents, sidechains e chamadas
+   auxiliares; `modelUsage` é o campo que o CLI indica para contabilidade de
+   token/custo. Por isso a preferência de leitura é
+   `modelUsage[modelo servido]` → `modelUsage` com entrada única → `usage`, e a
+   coluna `usage_source` diz qual das três respondeu.
+
+Modelos auxiliares (um Haiku interno dentro de uma review em Opus) ficam em
+`auxiliary_usage_json`, nunca somados ao modelo roteado: esconder isso tornaria
+a pergunta "quanto cada modelo consumiu" impossível de responder.
+
+Contadores derivados localmente do stream, sem inferência: `stream_events`,
+`assistant_messages`, `user_messages`, `tool_call_count`, `tool_result_events`,
+`tool_error_events`, e o breakdown por ferramenta em `model_usage_tool_call`.
+
+### Banco
+
+```text
+.state/telemetry/usage.sqlite     (schema_version 1, collector_version 1.0.0)
+
+model_usage              uma linha por execução real de modelo
+model_usage_tool_call    breakdown por ferramenta
+model_usage_event        trilha de metadados do stream (nunca conteúdo)
+model_usage_correction   correções append-only sobre linhas já fechadas
+model_usage_integrity    inconsistências registradas, nunca fatais
+meta                     schema_version, collector_version, last_opened_at
+```
+
+SQLite em WAL com `busy_timeout`, porque Developer e Tech Lead são processos
+distintos e podem escrever ao mesmo tempo. Sem lock global: observabilidade não
+serializa o harness.
+
+`model_usage` guarda identidade (project/run/goal/round/stage/job/attempt/work
+unit), papel e operação, modelo pedido e modelo servido, effort, roteamento
+completo (complexity, risk score, razão, sinais, modo, fallback e escalation com
+o modelo de origem), resultado (status, subtype, stop_reason, exit code,
+taxonomia de falha), tokens completos, turns, tools, tempos, sessão, custo
+reportado e o payload bruto sanitizado.
+
+### Fase
+
+A coluna `phase` existe e tem vocabulário definido
+(`development.implementation`, `review.validation`, …), mas **nada a preenche
+hoje**: nenhum worker consegue provar deterministicamente em qual subfase estava,
+e inventar uma seria exatamente o tipo de dado fabricado que este ledger existe
+para não conter. Tudo grava `UNKNOWN` até que algo no harness possa provar o
+contrário.
+
+### O que existe como coluna e ainda não é preenchido
+
+Duas colunas ficam nulas hoje, e por motivo, não por esquecimento:
+
+- **`outcome`** (`accepted`, `review_rejected`, `required_rework`,
+  `goal_completed`). O desfecho semântico só é conhecido *depois* que a linha é
+  finalizada — a decisão do Tech Lead, a aceitação do Goal, a rodada de correção
+  seguinte. Preenchê-la mais tarde seria reescrever história, que este ledger não
+  faz. Enquanto isso o desfecho é obtido por join: `.state/events.jsonl` já
+  carrega `jobId`/`attemptId` em `REVIEW_DECISION_PUBLISHED`,
+  `DEVELOPER_RESULT_PUBLISHED` e afins, que são exatamente as chaves gravadas
+  aqui.
+- **`queue_wait_ms`**. O tempo entre despachar um job e um worker reivindicá-lo
+  existe no job store, mas não é atribuível de forma confiável a *uma* chamada de
+  modelo: uma attempt sucessora nasce dentro do worker, sem passar pela fila. É
+  preferível nulo a um número que pareça uma espera e não seja.
+
+Nada além disso é deixado de fora por escolha: campos do envelope que ainda não
+foram normalizados continuam disponíveis em `raw_result_json`, `raw_usage_json`
+e `raw_model_usage_json`, que é precisamente o motivo de eles serem preservados.
+
+### Idempotência
+
+A chave é a identidade que a própria máquina de estados já possui:
+
+```text
+idempotency_key = <role>::<jobId>::<attemptId>
+```
+
+Isso funciona porque o invariante do loop desde a V9 é que **toda chamada real
+ao modelo é a sua própria attempt**. Reprocessar o mesmo resultado — numa
+reconciliação, numa recuperação — produz a mesma chave, bate na constraint
+`UNIQUE` e retorna `ALREADY_RECORDED`: nenhuma linha nova, nenhum token contado
+duas vezes. Uma chamada sem job (spike, slice supervisionada) recebe chave
+estável a partir do seu próprio session id.
+
+### Crash e recovery
+
+A linha é aberta com status `STARTED` **antes** do spawn e fechada depois. Um
+worker morto no meio da inferência deixa uma linha nomeando o Goal, a attempt e
+o modelo que estava rodando, em vez de não deixar nada. A reconciliação
+posterior finaliza essa mesma linha — uma execução lógica, um registro
+finalizado — e uma segunda passagem não muda nada.
+
+`npm run ia-loop:usage -- --started` lista exatamente as linhas abertas e nunca
+fechadas.
+
+### Imutabilidade
+
+Finalizar só move `STARTED → terminal`. Qualquer tentativa de reescrever uma
+linha já fechada vira um registro em `model_usage_correction`, ao lado da
+original: história não é sobrescrita em silêncio. Usage, breakdown de
+ferramentas e trilha de eventos são gravados numa única transação, então nunca
+existe linha com tokens sem modelo ou job.
+
+### Sanitização
+
+O payload bruto preservado passa por três camadas: as chaves pesadas são
+descartadas (`result` e `structured_output` são a resposta do modelo e já estão
+em `.state/results/` — copiá-las aqui faria do ledger um segundo transcript),
+valores sob chaves com cara de credencial são substituídos, e todo string
+restante passa pela **mesma tabela de redação** da telemetria de terminal.
+Contadores como `inputTokens` e `maxOutputTokens` são explicitamente poupados:
+um segredo nunca é um número.
+
+Nada de prompt, diff, stdout, conteúdo de arquivo ou saída de ferramenta é
+gravado. A trilha de eventos guarda tipo, índice, nome da ferramenta e duração —
+não o comando nem o caminho.
+
+### Política de falha da telemetria
+
+Um problema de ledger é reportado e engolido operacionalmente. A falha aparece
+no stderr com o marcador `TELEMETRY_WRITE_FAILED` e é anexada em
+`.state/telemetry/usage-failures.jsonl`, mas um Goal corretamente concluído
+nunca falha porque o SQLite estava ocupado. `openUsageLedger` degrada para
+`UNAVAILABLE` (inclusive se `node:sqlite` não existir no runtime) e continua
+respondendo a todas as chamadas.
+
+### Integridade
+
+Valores impossíveis são **registrados, não recusados**: contagem negativa,
+`finished_at` anterior a `started_at`, thinking maior que output, tokens sem
+chamada de modelo, chave de execução duplicada. Recusar a linha perderia os
+tokens que ela carregava; sinalizar preserva os números e torna a inconsistência
+visível.
+
+### Falha de harness com custo zero
+
+`model_call_started` só é verdadeiro com evidência positiva: um turn `assistant`
+no stream, ou tokens/custo no envelope. Um argv inválido, um executável ausente
+ou uma validação local que falha antes do spawn gravam `model_call_started =
+false` com tokens nulos — é o que separa "falha de tooling que não custou nada"
+de "attempt que queimou tokens e falhou".
+
+### Consulta
+
+```bash
+npm run ia-loop:usage
+npm run ia-loop:usage -- --goal 008
+npm run ia-loop:usage -- --goal 008 --json
+npm run ia-loop:usage -- --started
+npm run ia-loop:usage -- --integrity
+```
+
+Deliberadamente uma tabela e um dump JSON, não um dashboard: esta etapa constrói
+o ledger; a análise que o lê é trabalho separado, depois.
+
+### Cobertura
+
+Toda chamada de modelo do loop passa por `invokeAgent`: Tech Lead planning,
+review, closure documentation e next goal planning; Developer round-level e por
+Work Unit; todo fallback, escalation, retry e correction round; e as chamadas
+legadas/auxiliares (`LEGACY_UNROUTED_JOB`, slice supervisionada V1, spikes), que
+gravam com `operation = UNKNOWN` em vez de sumirem. Work Units DETERMINISTIC não
+geram linha porque não chamam modelo nenhum.
+
+### Testes
+
+Todos zero-token, com stream falso reproduzindo shapes reais do CLI.
+
+`tests/usage-normalizer.test.mjs` (29): breakdown completo de tokens; thinking
+dentro de output; cache com split ephemeral 5m/1h; usage sem thinking e sem
+cost; modelo auxiliar separado do roteado; as três fontes de usage; usage parcial
+preservada em USAGE_LIMIT, RATE_LIMIT, MODEL_UNAVAILABLE e AUTH_ERROR; falha de
+harness com zero token; timeout ainda atribuível; fase nunca inventada;
+sanitização de API key, Bearer, cookie, token de ambiente e credencial em
+comando; contadores de token não confundidos com credencial; resposta do modelo
+descartada do payload; payload gigante marcado em vez de truncado; flags de
+integridade.
+
+`tests/usage-ledger.test.mjs` (13): criação automática de banco, schema e
+versão; tabelas, índices e constraints; migration idempotente; recusa de schema
+mais novo; WAL e busy timeout; dois handles escrevendo no mesmo arquivo;
+`ALREADY_RECORDED` sem linha duplicada; finalização atômica; linha fechada
+virando correção em vez de overwrite; linha `STARTED` sobrevivendo a crash;
+falha de escrita como status, nunca exceção.
+
+`tests/usage-collector.test.mjs` (17): uma chamada, uma linha, com identidade,
+roteamento e usage completos; breakdown por ferramenta sem vazar comando nem
+caminho; planning/developer/escalation/review cada um com seu modelo e razão;
+fallback de capacidade com modelo de origem; usage parcial em falha; zero-token
+de harness; timeout; chave de idempotência; mesmo resultado processado duas
+vezes (linhas antes = 1, depois = 1); crash → `STARTED` → reconciliação →
+exatamente um registro finalizado; ledger quebrado que não derruba a inferência;
+falha registrada em disco; ledger desligado dentro de `node --test`;
+**asserção de cobertura** provando que `runClaudeProcess` é chamado de um único
+arquivo e que nenhuma saída de `invokeAgent` escapa sem gravar; chamada não
+atribuída registrada como UNKNOWN; identidade publicada pelo `capacity-runner`,
+incluindo Work Unit.
+
+`tests/usage-cli.test.mjs` (6) e as adições em `tests/telemetry.test.mjs` (3):
+filtros, parâmetros ligados em vez de interpolados, somas, e os contadores
+determinísticos do parser com trilha limitada e sem conteúdo.
+
 ## Limitações conhecidas
 
 1. **Auth não é herdável por subprocesso a partir do app desktop.** O que
@@ -3627,3 +3924,13 @@ fora da política de escalation de review.
    registrada, não exigida.
 5. **Uma única tentativa por agente.** Não há retry: qualquer falha de contrato
    encerra a execução.
+6. **O ledger de uso guarda `phase` mas não a preenche.** Nenhum worker consegue
+   provar deterministicamente a subfase de uma chamada, então tudo grava
+   `UNKNOWN`. A coluna existe para quando algo no harness puder prová-la.
+7. **`total_cost_usd` é uma estimativa do provider, não uma fatura.** É gravado
+   exatamente como recebido, em `provider_reported_cost_usd`, e não representa
+   cobrança da assinatura. Nenhum cálculo econômico é feito sobre ele nesta
+   etapa.
+8. **O ledger depende de `node:sqlite`.** Em runtime sem esse builtin a
+   telemetria degrada para `UNAVAILABLE` e o loop segue normalmente, sem trilha
+   de consumo.

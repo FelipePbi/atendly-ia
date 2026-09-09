@@ -137,6 +137,22 @@ const REDACTIONS = Object.freeze([
 ]);
 
 /**
+ * Applies the redaction table and nothing else.
+ *
+ * Split out of `sanitize` because the usage ledger needs the SAME credential
+ * patterns over a JSON payload it must not collapse or truncate: collapsing
+ * whitespace would corrupt the document and a 160-character cap would destroy
+ * it. One table, two consumers, so a pattern added for the terminal also
+ * protects what is written to the ledger.
+ */
+export function redactSecrets(value) {
+  if (value === null || value === undefined) return '';
+  let text = typeof value === 'string' ? value : String(value);
+  for (const [pattern, replacement] of REDACTIONS) text = text.replace(pattern, replacement);
+  return text;
+}
+
+/**
  * Makes an arbitrary string safe to print.
  *
  * Redacts, collapses whitespace (a multi-line heredoc must never become fifty
@@ -145,9 +161,7 @@ const REDACTIONS = Object.freeze([
  */
 export function sanitize(value, { maxLength = MAX_DETAIL_LENGTH } = {}) {
   if (value === null || value === undefined) return '';
-  let text = typeof value === 'string' ? value : String(value);
-  for (const [pattern, replacement] of REDACTIONS) text = text.replace(pattern, replacement);
-  text = text.replace(/\s+/g, ' ').trim();
+  let text = redactSecrets(value).replace(/\s+/g, ' ').trim();
   if (text.length > maxLength) text = `${text.slice(0, maxLength - 1)}…`;
   return text;
 }

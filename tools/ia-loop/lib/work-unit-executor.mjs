@@ -500,6 +500,9 @@ async function executeModelUnit({
     round,
     resumeFrom,
     router,
+    // The unit id is the one identifier the capacity runner cannot see, and it
+    // is what makes per-unit consumption answerable later.
+    usageContext: { workUnitId: unit.id },
     onEvent: (event) => {
       if (event.type === 'MODEL_ESCALATED') {
         emit(`    ${unit.id} escalated: ${event.from} → ${event.to} (${event.reason})`);

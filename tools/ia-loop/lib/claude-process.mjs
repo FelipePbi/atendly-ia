@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 import { createStreamParser } from './stream-telemetry.mjs';
+import { defaultUsageCollector } from './usage-collector.mjs';
 
 /** Error carrying a stable machine-readable code, so callers never regex prose. */
 export class SpikeError extends Error {
@@ -331,6 +332,11 @@ export function runClaudeProcess({
   onStdoutChunk = null,
 }) {
   return new Promise((resolve, reject) => {
+    // Recorded here because this is the only place that knows when the child
+    // actually started: the CLI's own `duration_ms` excludes process startup,
+    // so the two figures answer different questions and the ledger keeps both.
+    const startedAt = new Date().toISOString();
+    const startedMs = Date.now();
     let child;
     try {
       child = spawnFn(executable, args, { cwd, env, windowsHide: true });
@@ -379,7 +385,16 @@ export function runClaudeProcess({
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve({ exitCode, stdout, stderr, timedOut, timeoutMs });
+      resolve({
+        exitCode,
+        stdout,
+        stderr,
+        timedOut,
+        timeoutMs,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        durationMs: Date.now() - startedMs,
+      });
     });
   });
 }
@@ -689,6 +704,22 @@ export async function invokeAgent({
    */
   onTelemetryEvent = null,
   telemetryRoot = null,
+  /**
+   * The usage ledger this invocation records itself in.
+   *
+   * Defaulted rather than optional, and unconditional below: every real model
+   * call in this package goes through this function, so recording HERE is what
+   * makes "no inference happens without a trail" a property of the code rather
+   * than a habit. A test injects its own; production gets the shared one.
+   */
+  usageCollector = defaultUsageCollector(),
+  /**
+   * ia-loop facts this call could not know on its own. Normally empty: the
+   * capacity runner publishes the Goal/round/job/attempt/routing ambiently
+   * (see lib/usage-context.mjs), and this parameter only exists so a caller
+   * outside that machinery can still attribute its call.
+   */
+  usageContext = {},
 }) {
   const outcome = {
     requestedModel: model,
@@ -724,7 +755,58 @@ export async function invokeAgent({
     root: telemetryRoot ?? cwd,
   });
 
-  let processResult;
+  // The row is opened BEFORE the process is spawned, so a worker killed
+  // mid-inference leaves a STARTED record naming the Goal, the attempt and the
+  // model it was running on, rather than leaving no trace of a call that was
+  // still paid for. See usage-ledger.mjs for how those are recovered.
+  const invocationStartedAt = new Date().toISOString();
+  const invocationStartedMs = Date.now();
+  const execution = usageCollector.beginModelExecution({
+    context: usageContext,
+    request: { model, effort: effort ?? null, sessionId, resume },
+  });
+
+  let processResult = null;
+  let envelope = null;
+
+  /**
+   * Closes the ledger row and hands the outcome back unchanged.
+   *
+   * Every exit from this function goes through here. It cannot alter the
+   * outcome and it cannot throw: telemetry may not change, delay or fail an
+   * inference, so a ledger problem is reported by the collector and the agent's
+   * own answer is returned exactly as it was.
+   */
+  const finish = () => {
+    try {
+      usageCollector.finalizeModelExecution(execution, {
+        requestedModel: model,
+        requestedEffort: effort ?? null,
+        sessionId,
+        resumed: resume === true,
+        startedAt: processResult?.startedAt ?? invocationStartedAt,
+        finishedAt: processResult?.finishedAt ?? new Date().toISOString(),
+        durationMs: processResult?.durationMs ?? (Date.now() - invocationStartedMs),
+        exitCode: processResult?.exitCode ?? null,
+        timedOut: processResult?.timedOut === true,
+        envelope,
+        counters: parser.counters(),
+        trail: parser.trail(),
+        error: outcome.error,
+        structuredOutput: outcome.structuredOutput,
+        resolvedPrimaryModel: outcome.resolvedPrimaryModel,
+        observedModels: outcome.observedModels,
+        auxiliaryModels: outcome.auxiliaryModels,
+        hasCandidatePayload: outcome.candidatePayload !== null,
+      });
+    } catch {
+      // Unreachable by design - the collector already swallows its own
+      // failures - and caught anyway, because this must never be the thing
+      // that loses a model's answer.
+    }
+    return outcome;
+  };
+
   try {
     processResult = await runClaudeProcess({
       executable,
@@ -743,7 +825,7 @@ export async function invokeAgent({
     parser.end();
   } catch (error) {
     outcome.error = toReportableError(error);
-    return outcome;
+    return finish();
   }
 
   if (processResult.timedOut) {
@@ -751,12 +833,11 @@ export async function invokeAgent({
       code: 'TIMEOUT',
       message: `Process exceeded ${processResult.timeoutMs}ms and was killed`,
     };
-    return outcome;
+    return finish();
   }
 
   // The envelope is worth parsing even on a non-zero exit: it usually carries
   // the real reason (for example "Not logged in").
-  let envelope = null;
   let envelopeError = null;
   try {
     envelope = parseEnvelope(processResult.stdout);
@@ -772,12 +853,12 @@ export async function invokeAgent({
       code: 'NON_ZERO_EXIT',
       message: `CLI exited with code ${processResult.exitCode}${reason ? `: ${reason}` : ''}`,
     };
-    return outcome;
+    return finish();
   }
 
   if (envelopeError) {
     outcome.error = envelopeError;
-    return outcome;
+    return finish();
   }
 
   // Step 1 — structural candidate: extract and validate the payload on its
@@ -842,7 +923,7 @@ export async function invokeAgent({
     outcome.payload = outcome.candidatePayload;
   }
 
-  return outcome;
+  return finish();
 }
 
 function toReportableError(error) {

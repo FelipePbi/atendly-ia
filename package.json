@@ -34,6 +34,7 @@
     "ia-loop:reclassify": "node tools/ia-loop/run-reclassify.mjs",
     "ia-loop:authorize-retry": "node tools/ia-loop/run-authorize-retry.mjs",
     "ia-loop:reconcile-runtime": "node tools/ia-loop/run-reconcile-runtime.mjs",
+    "ia-loop:usage": "node tools/ia-loop/run-usage.mjs",
     "test:ia-loop": "node --test tools/ia-loop/tests/**/*.test.mjs",
     "validate:core": "node scripts/validate-core.mjs",
     "validate:integration": "node scripts/validate-integration.mjs"

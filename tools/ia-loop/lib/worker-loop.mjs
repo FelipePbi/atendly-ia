@@ -17,6 +17,9 @@ import {
   workerInstanceId,
 } from './leases.mjs';
 import { isClaimableJobStatus } from './job-store.mjs';
+import { createResourceRegistry } from './resource-registry.mjs';
+import { cleanupResourcesForAttempt, scavengeOrphans } from './resource-lifecycle.mjs';
+import { logResourceEvent } from './shutdown-hooks.mjs';
 
 /** Moderate polling. No file watcher needed at this cadence, no busy loop. */
 export const POLL_INTERVAL_MS = 1_000;
@@ -68,17 +71,48 @@ export async function runWorkerLoop({
   handleJob,
   pollIntervalMs = POLL_INTERVAL_MS,
   leaseStore = createLeaseStore(store.paths.root),
+  resourceRegistry = createResourceRegistry(store.paths.root),
 }) {
   await mkdir(store.paths.jobsDir(role), { recursive: true });
   log('WORKER', `instance ${workerInstanceId()}`);
 
+  // Crash recovery: anything a PREVIOUS instance of this worker left ACTIVE
+  // (a crash, a killed terminal, a reboot — none of which run a `finally`)
+  // is judged and, if provably orphaned, cleaned before this instance claims
+  // any work. Best-effort: a scavenger failure must never block startup.
+  try {
+    const { report } = await scavengeOrphans(resourceRegistry, { stateDir: store.paths.root });
+    for (const entry of report) {
+      if (entry.verdict === 'ORPHAN_CONFIRMED') {
+        logResourceEvent(log, 'TEMP_RESOURCE_ORPHAN_CONFIRMED', `${entry.resourceId} cleaned=${entry.cleaned}`);
+      } else if (entry.verdict === 'ORPHAN_SUSPECTED') {
+        logResourceEvent(log, 'TEMP_RESOURCE_ORPHAN_SUSPECTED', `${entry.resourceId} — ${entry.detail}`);
+      }
+    }
+  } catch (error) {
+    log('ERROR', `startup resource scavenger failed: ${error.message}`);
+  }
+
   const stopHeartbeat = startHeartbeat(store, role, getStatus);
   let running = true;
+
+  // Tracks the attempt currently in flight (if any) so a signal mid-attempt
+  // can clean up what THAT attempt owns instead of exiting and leaving it
+  // behind. Cleared the moment the normal per-attempt cleanup already ran.
+  let inFlightAttemptId = null;
 
   const shutdown = async (signal) => {
     if (!running) return;
     running = false;
     log('STOPPING', `signal ${signal}`);
+    if (inFlightAttemptId) {
+      try {
+        const { results } = await cleanupResourcesForAttempt(resourceRegistry, inFlightAttemptId, { stateDir: store.paths.root });
+        for (const result of results) logResourceEvent(log, 'TEMP_RESOURCE_CLEANUP_STARTED', `${result.resourceId} (shutdown)`);
+      } catch (error) {
+        log('ERROR', `resource cleanup on shutdown failed: ${error.message}`);
+      }
+    }
     await stopHeartbeat();
     process.exit(0);
   };
@@ -108,6 +142,10 @@ export async function runWorkerLoop({
       if (seen.has(seenKey)) continue;
       let claimed = null;
       let stopLeaseHeartbeat = null;
+      // Declared here, not inside the try: the finally block below needs it
+      // to clean up this attempt's resources, and a `const` scoped to the
+      // try would not be visible there.
+      let attemptId = null;
       try {
         // A job that already reached a terminal status is never re-run. Before
         // this check, a restart re-executed a FAILED job and spent a second
@@ -153,7 +191,7 @@ export async function runWorkerLoop({
         // The attempt number lives on the job. Hardcoding 1 meant a second
         // attempt at an interrupted stage would have carried the first
         // attempt's id, and result fencing could not have told them apart.
-        const attemptId = attemptIdFor(jobId, attemptNumber);
+        attemptId = attemptIdFor(jobId, attemptNumber);
         claimed = await leaseStore.claimJob(jobId, {
           attemptId, agent: role, goal: job.goal, round: job.round, worktree: job.worktree,
         });
@@ -177,11 +215,30 @@ export async function runWorkerLoop({
         // Renewed throughout the inference, however long it runs.
         stopLeaseHeartbeat = startLeaseHeartbeat(leaseStore, { jobId, worktreePath: job.worktree });
 
+        // Visible to shutdown() for the duration of the inference, so a
+        // signal arriving mid-attempt cleans up what THIS attempt owns
+        // instead of exiting and leaving it running.
+        inFlightAttemptId = attemptId;
+
         await handleJob({ ...job, attemptId, workerInstanceId: workerInstanceId() });
       } catch (error) {
         log('ERROR', `job ${jobId}: [${error.code ?? 'UNEXPECTED'}] ${error.message}`);
         await store.appendEvent({ type: 'JOB_FAILED', role, jobId, code: error.code ?? 'UNEXPECTED', message: error.message });
       } finally {
+        // Whatever this attempt created — however it ended: COMPLETED,
+        // FAILED, WAITING_FOR_CAPACITY, or the catch above — is cleaned up
+        // before the lease is released. A resource must never outlive the
+        // attempt that owns it, and this `finally` runs on every path out.
+        if (attemptId) {
+          try {
+            const { results } = await cleanupResourcesForAttempt(resourceRegistry, attemptId, { stateDir: store.paths.root });
+            for (const result of results) logResourceEvent(log, 'TEMP_RESOURCE_CLEANUP_STARTED', `${result.resourceId} (attempt ended)`);
+          } catch (error) {
+            log('ERROR', `resource cleanup for ${attemptId} failed: ${error.message}`);
+          }
+        }
+        inFlightAttemptId = null;
+
         // Released only once the execution really ended, so nothing else can
         // start while this attempt might still be writing.
         if (stopLeaseHeartbeat) await stopLeaseHeartbeat();

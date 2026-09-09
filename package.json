@@ -27,6 +27,8 @@
     "ia-loop:auto": "node tools/ia-loop/run-auto.mjs",
     "ia-loop:pause": "node tools/ia-loop/run-pause.mjs",
     "ia-loop:status": "node tools/ia-loop/run-status.mjs",
+    "ia-loop:resources": "node tools/ia-loop/run-resources.mjs",
+    "ia-loop:resources:cleanup": "node tools/ia-loop/run-resources-cleanup.mjs",
     "ia-loop:resume": "node tools/ia-loop/run-resume.mjs",
     "ia-loop:recover": "node tools/ia-loop/run-recover.mjs",
     "ia-loop:reclassify": "node tools/ia-loop/run-reclassify.mjs",

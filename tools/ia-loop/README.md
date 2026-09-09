@@ -2843,6 +2843,151 @@ como `MANUAL_OVERRIDE_*`, e preserva a classificação que o router *teria* usad
 Com o modo fixado, nada cai nem escala pelas costas do operador — quem fixou um
 modelo quis dizer isso, inclusive quando a cota acaba.
 
+## V15 — Temporary Resource Lifecycle
+
+Um incidente real: Developer, Tech Lead e o orchestrator ficaram rodando por
+horas, e três instâncias de PostgreSQL efêmero (`atendly-review-005-r2`,
+`atendly-goal006-pg`, `atendly-pgtest`) sobreviveram aos jobs que as criaram,
+consumindo CPU e emitindo erros de shared memory no Windows continuamente.
+
+A causa não estava em código: `docs/migration/VALIDATION_GATE.md` documentava
+um procedimento **manual** — `initdb`/`pg_ctl` cru, nome de diretório escolhido
+pela sessão, um passo de "descarte do cluster" só no fim da receita. Qualquer
+attempt (Developer ou Tech Lead) que precisasse rodar `validate:integration`
+seguia essa receita via Bash livre. Se a attempt terminasse antes do último
+passo — `USAGE_LIMIT`, crash, Ctrl+C, timeout — nada em disco sabia que aquele
+processo existia, e nada o encerrava.
+
+A partir de V15, todo recurso temporário (hoje: PostgreSQL efêmero) passa por
+um registro central antes de existir:
+
+```
+Attempt
+  ↓
+TemporaryResourceRegistry (reserve → CREATING)
+  ↓
+spawn real (initdb + pg_ctl start)
+  ↓
+ACTIVE (pid, porta, PGDATA, ownerProcessId gravados)
+  ↓
+┌─────────────┬─────────────┬──────────────┐
+│ COMPLETED   │ CAPACITY    │ CRASH        │
+│ FAILED      │ USAGE_LIMIT │ Ctrl+C       │
+│ etc.        │ RATE_LIMIT  │ reboot       │
+└──────┬──────┴──────┬──────┴──────┬───────┘
+       ↓             ↓             ↓
+  cleanupResourcesForAttempt   scavengeOrphans (próximo startup)
+       └─────────────┴─────────────┘
+                     ↓
+                  CLEANED
+```
+
+### Registro (`lib/resource-registry.mjs`)
+
+Um arquivo por recurso em `.state/resources/<resourceId>.json`, reservado com
+criação exclusiva (`open(path, 'wx')`, o mesmo primitivo de `leases.mjs`) e
+escrito atomicamente (temp file + rename, como `job-store.mjs`). Estados:
+`CREATING → ACTIVE → STOPPING → CLEANED`, mais `CLEANUP_FAILED`,
+`ORPHAN_SUSPECTED` e `ORPHAN_CONFIRMED`. Um crash entre `reserve()` e o spawn
+real deixa o registro em `CREATING` — auditável, nunca invisível.
+
+### Prova de propriedade (`lib/postgres-ownership.mjs`)
+
+Antes de tocar em um processo, TODAS as condições precisam se confirmar:
+
+1. o pid existe;
+2. seu horário de início bate com o gravado (Windows recicla pids —
+   `process-inspector.mjs` já resolvia isso para leases; o mesmo princípio
+   se aplica aqui);
+3. sua linha de comando referencia o executável esperado;
+4. sua linha de comando referencia o `PGDATA` esperado.
+
+Qualquer divergência resulta em `UNKNOWN`, `PID_REUSED`, `EXECUTABLE_MISMATCH`
+ou `DATA_DIR_MISMATCH` — nenhum desses autoriza matar ou apagar nada. Só
+`CONFIRMED` autoriza `pg_ctl stop`; `CONFIRMED`, `PROCESS_GONE` e `PID_REUSED`
+autorizam remover o diretório de dados (nos dois últimos, o processo já não
+existe — não há o que matar, só um diretório para reclamar).
+
+### Wrapper (`lib/temporary-postgres.mjs`)
+
+`startTemporaryPostgres`/`stopTemporaryPostgres`/`withTemporaryPostgres`
+centralizam `initdb` + seleção de porta + `pg_ctl start` + espera de prontidão
++ registro + `pg_ctl stop` + remoção do diretório. Idempotente (uma segunda
+chamada para a mesma attempt reaproveita o cluster ACTIVE) e limitado por
+concorrência (`IA_LOOP_MAX_TEMP_POSTGRES_PER_ATTEMPT=1`,
+`_PER_JOB=1`, `_GLOBAL=2`, configuráveis). O diretório de dados fica sob
+`tools/ia-loop/.tmp/postgres/`; toda remoção passa por
+`lib/resource-paths.mjs#assertSafeTempPath`, que resolve symlinks/junctions e
+recusa qualquer caminho fora dessa raiz — inclusive a raiz em si.
+
+Escalonamento de parada: `pg_ctl stop -m fast` → (falha) reprova a
+propriedade → `pg_ctl stop -m immediate` → (falha) mata o PID específico
+(`taskkill /PID <pid> /F` no Windows — nunca `/IM postgres.exe`). Cada
+degrau só é tentado se a propriedade continuar `CONFIRMED` no momento dele.
+
+### Integração com o lifecycle (`lib/resource-lifecycle.mjs`)
+
+`cleanupResourcesForAttempt(attemptId)` está no `finally` de
+`worker-loop.mjs`, ao redor de `handleJob(...)` — o mesmo `finally` que já
+libera leases. Como Developer e Tech Lead compartilham esse loop, isso cobre
+os dois papéis e todo desfecho (`COMPLETED`, `FAILED`,
+`WAITING_FOR_CAPACITY`, um erro não tratado) com um único ponto de chamada,
+sem precisar de um `case` por estado.
+
+`scavengeOrphans()` roda uma vez no startup de `runWorkerLoop`, antes de
+reivindicar qualquer job: para cada recurso `ACTIVE` cujo processo QUE O
+CRIOU (`ownerProcessId` + `ownerProcessStartTime`, não o PostgreSQL em si)
+está provadamente morto, prova a propriedade do PostgreSQL separadamente —
+duas provas independentes, porque o worker ter morrido não diz nada sobre se
+o servidor que ele iniciou ainda está rodando sob o mesmo pid. Só quando as
+duas provam que dá para agir o recurso vira `ORPHAN_CONFIRMED` e é limpo;
+caso contrário fica `ORPHAN_SUSPECTED`, visível mas intocado.
+
+`SIGINT`/`SIGTERM` em `worker-loop.mjs` agora limpam os recursos da attempt
+em voo antes de sair — idempotente, e nunca uma varredura global.
+
+### Inspeção e limpeza manual
+
+```bash
+npm run ia-loop:resources                          # lista recursos vivos, PID, porta, PGDATA, idade
+npm run ia-loop:resources:cleanup -- --dry-run      # plano, sem mutação (padrão)
+npm run ia-loop:resources:cleanup -- --apply        # age só sobre CONFIRMED; UNKNOWN nunca é tocado
+```
+
+`--apply` nunca mata ou apaga um recurso cuja propriedade não seja `CONFIRMED`
+(ou, para um processo já morto, `PROCESS_GONE`/`PID_REUSED` — só o diretório é
+reclamado). Essa é a mesma regra do scavenger e do wrapper: proteção do
+PostgreSQL principal por construção, porque ele nunca tem um registro que o
+descreva, e um recurso sem registro nunca é candidato a nada aqui.
+
+### Descoberta de recursos legados (`discoverLegacyCandidates`)
+
+Só leitura, nunca limpa nada: enumera processos `postgres.exe` (Windows) cuja
+linha de comando referencia um padrão de diretório conhecido do incidente
+(`atendly-review*`, `atendly-goal*-pg`, `atendly-pgtest`) e devolve evidência
+para inspeção humana. Um diretório de dados sem processo anexado (o cluster já
+foi encerrado, só sobrou disco) não aparece aqui — não há processo para
+descobrir — e a limpeza desse disco é decisão manual do operador, não deste
+harness.
+
+### Limites conhecidos desta etapa
+
+- `discoverLegacyCandidates` só está implementado para Windows (a plataforma
+  onde o incidente ocorreu); em outra plataforma ele retorna vazio com
+  `skipped`.
+- Não há teste com um binário real de PostgreSQL nesta suíte — só um driver
+  falso injetável (`createPostgresDriver()` é substituível por completo). Um
+  smoke test real e opcional é intencional e não roda automaticamente; ver
+  o relatório da entrega original para as pré-condições exigidas antes de
+  rodá-lo manualmente.
+- `docs/migration/VALIDATION_GATE.md` mantém a receita manual original para
+  quem provisiona `validate:integration` fora do IA Loop (CI, humano local);
+  ela não foi reescrita para usar este wrapper, e nada nele impede alguém de
+  continuar seguindo `initdb`/`pg_ctl` cru manualmente. O que esta etapa
+  fecha é o caminho pelo qual um Developer/Tech Lead cria um cluster efêmero
+  livremente durante uma attempt — `npm run ia-loop:resources` mostra o que
+  ficou vivo, mesmo que criado à mão.
+
 ## Limitações conhecidas
 
 1. **Auth não é herdável por subprocesso a partir do app desktop.** O que

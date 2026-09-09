@@ -171,6 +171,22 @@ Descarte do cluster inteiro:
 rm -rf "$PGDIR"
 ```
 
+Se este cluster foi provisionado por uma attempt do IA Loop (Developer ou
+Tech Lead rodando `validate:integration` durante um Goal) e a attempt foi
+interrompida antes deste passo — `USAGE_LIMIT`, crash, Ctrl+C — o cluster
+pode ter ficado para trás sem que ninguém tenha rodado o descarte acima.
+Confira com:
+
+```bash
+npm run ia-loop:resources                      # lista o que ainda está vivo
+npm run ia-loop:resources:cleanup -- --dry-run  # plano de limpeza, sem mutação
+```
+
+Ver `tools/ia-loop/README.md` (seção "Temporary Resource Lifecycle") para o
+porquê disso existir — um cluster efêmero criado por esta receita antes
+daquela etapa não tem registro e não aparece nesses comandos; um criado
+depois, sim.
+
 ## Leitura dos resultados
 
 Cada passo termina em um de quatro estados, e o resumo em JSON separa todos:

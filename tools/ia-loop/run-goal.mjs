@@ -429,7 +429,19 @@ async function main() {
   // "the correction round started" must resume on the escalated profile, not on
   // the one the previous round happened to use.
   const persistedEscalation = priorGoalExecution?.nextDeveloperProfile ?? null;
-  let pendingProfileEscalation = persistedEscalation?.round === round ? persistedEscalation : null;
+  // A wider crash than the one above: no process ever reached the write that
+  // seeds `persistedEscalation` at all — the review completed with nobody's
+  // orchestrator alive to read it (recovery consumed the result cold, straight
+  // into round `reconciled.next.round`). The escalation the reviewer actually
+  // made is not lost, though: it is sitting on the review's own persisted
+  // result, and `reconcileExecutionState` already carries it on `next` for
+  // exactly this reason — the same way it already carries `blockers`.
+  const reconciledEscalation = startAsCorrection && reconciled.next.nextDeveloperProfile
+    ? { profile: reconciled.next.nextDeveloperProfile, reason: reconciled.next.nextDeveloperProfileReason ?? null }
+    : null;
+  let pendingProfileEscalation = persistedEscalation?.round === round
+    ? persistedEscalation
+    : reconciledEscalation;
 
   if (startAsCorrection && pendingBlockers.length > 0) {
     emit(`Correction round ${round} carries ${pendingBlockers.length} blocker(s) from review ${reconciled.next.fromReviewJobId ?? 'on disk'}.`);

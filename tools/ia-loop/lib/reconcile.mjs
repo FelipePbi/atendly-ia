@@ -235,6 +235,15 @@ export function decideNextDispatch({ ledger, goal, maxRounds = 3 }) {
           stageKey: stageKey({ goal, round: nextRound, stage: STAGES.CORRECTION }),
           // Carried from the review that produced them. Never rediscovered.
           blockers,
+          // Same reasoning as blockers: the Tech Lead's escalation for this
+          // round lives on the review's own result, and a cold resume that
+          // jumps straight here (recovery, after a crash between the review
+          // completing and the SAME process persisting the escalation) has no
+          // other way to see it. Without this, a reviewer's explicit "the next
+          // round needs Opus" was silently dropped and the round ran on
+          // whatever profile the Goal happened to be on.
+          nextDeveloperProfile: review.result?.nextDeveloperProfile ?? null,
+          nextDeveloperProfileReason: review.result?.nextDeveloperProfileReason ?? null,
           fromReviewJobId: review.completedBy,
           resumeAttempt: reusableAttempt(nextCorrection)?.jobId ?? null,
           resumeAttemptStatus: reusableAttempt(nextCorrection)?.attemptStatus ?? null,

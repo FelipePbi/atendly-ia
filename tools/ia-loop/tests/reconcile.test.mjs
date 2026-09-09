@@ -132,6 +132,39 @@ test('1/2/9. implementation and review both complete: the next step is correctio
   assert.equal(next.fromReviewJobId, REV_R1);
 });
 
+// A real incident: Goal007 R1's review asked for changes AND escalated the
+// next round to OPUS_MEDIUM, with a reason. The machine rebooted while that
+// review was still parked on a capacity wait; by the time it finished, no
+// run-goal.mjs process had ever been alive to read the decision and persist
+// the escalation (the worker completed it on its own — see
+// run-resume.mjs's reclaimBlockedJobLease). Recovery consumed the result cold,
+// straight into round 2, and the escalation was silently dropped: the
+// correction ran on the Goal's existing profile instead of the one the
+// reviewer explicitly asked for, and the discrepancy was invisible until
+// someone compared the review's own JSON against what actually got dispatched.
+test('a review\'s escalation for the next round travels with the dispatch, exactly like its blockers', () => {
+  const ledger = buildStageLedger([
+    withResult(devJob(DEV_R1, 1), { status: 'REVIEW_REQUIRED' }),
+    withResult(revJob(REV_R1, 1), {
+      decision: 'CHANGES_REQUIRED', blockers: BLOCKERS,
+      nextDeveloperProfile: 'OPUS_MEDIUM',
+      nextDeveloperProfileReason: 'Correções atravessam três serviços com contrato em jogo.',
+    }),
+  ]);
+  const next = decideNextDispatch({ ledger, goal: GOAL });
+
+  assert.equal(next.kind, DISPATCH_KINDS.CORRECTION);
+  assert.equal(next.nextDeveloperProfile, 'OPUS_MEDIUM');
+  assert.equal(next.nextDeveloperProfileReason, 'Correções atravessam três serviços com contrato em jogo.');
+});
+
+test('a review that named no escalation carries none — silence is not promotion', () => {
+  const ledger = buildStageLedger(goal004Entries());
+  const next = decideNextDispatch({ ledger, goal: GOAL });
+  assert.equal(next.nextDeveloperProfile, null);
+  assert.equal(next.nextDeveloperProfileReason, null);
+});
+
 test('10/11. neither model is asked to redo round 1', () => {
   const ledger = buildStageLedger(goal004Entries());
 

@@ -410,6 +410,28 @@ async function main() {
     return 0;
   }
 
+  // Reconciliation just proved the run is NOT blocked (neither of the two
+  // branches above fired) — so whatever `escalationReason`/`decision`/
+  // `humanRequired` are still sitting in runtime.json describe a gate a human
+  // already resolved, not this attempt. Left alone, a stale reason survives a
+  // completely different NEW failure: Goal007 R2 crashed on
+  // CONTRACT_FIELD_INVALID (this file building an invalid job), but the
+  // terminal surfaced the PREVIOUS run's POLICY_VIOLATION because nothing
+  // had ever cleared it. A future failure earns its own reason; it does not
+  // inherit one a person already closed out.
+  const stalePriorRuntime = await store.readRuntime();
+  if (stalePriorRuntime?.escalationReason || stalePriorRuntime?.humanRequired || stalePriorRuntime?.decision === 'HUMAN_REQUIRED') {
+    await store.appendEvent({
+      type: 'STALE_HUMAN_REASON_CLEARED', goal: goal.goalId,
+      previousReason: stalePriorRuntime.escalationReason ?? null,
+      previousDecision: stalePriorRuntime.decision ?? null,
+    });
+    await store.writeRuntime({
+      ...stalePriorRuntime, escalationReason: null, humanRequired: null,
+      decision: stalePriorRuntime.decision === 'HUMAN_REQUIRED' ? null : stalePriorRuntime.decision,
+    });
+  }
+
   let round = reconciled.next.round;
   // Blockers travel with the review that produced them; they are never
   // rediscovered by asking the Tech Lead again.
@@ -531,7 +553,16 @@ async function main() {
 
     const alreadyDone = await store.hasCompletedResult('developer', devJobId);
 
-    const devJob = validateDeveloperJob({
+    // Built and validated ONLY when a job might actually be published below.
+    // `pendingBlockers` is meaningless here when reconciliation resumed
+    // straight into REVIEW — nothing repopulates it for a round whose
+    // Developer stage is already COMPLETED, and it is never asked to: no new
+    // job is being built. Validating a hypothetical CORRECTION shaped from an
+    // empty blocker list was the bug — `validateDeveloperJob` correctly
+    // refuses that shape (a CORRECTION must carry at least one blocker), but
+    // the refusal fired before `alreadyDone` below ever got to reuse the
+    // result that already existed, on a round that needed no new job at all.
+    const buildDevJob = () => validateDeveloperJob({
       protocolVersion: PROTOCOL_VERSION_V2,
       jobId: devJobId,
       role: 'developer',
@@ -576,6 +607,7 @@ async function main() {
       assertNoDuplicateStageDispatch({
         ledger: reconciled.ledger, goal: goal.goalId, round, stage: devStage, jobId: devJobId,
       });
+      const devJob = buildDevJob();
       // Dispatch, not publish: the job for this stage may already exist —
       // queued, or interrupted and owed another attempt. Publishing blindly
       // is what turned every resume into DUPLICATE_JOB.

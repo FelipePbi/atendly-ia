@@ -2988,6 +2988,114 @@ harness.
   livremente durante uma attempt — `npm run ia-loop:resources` mostra o que
   ficou vivo, mesmo que criado à mão.
 
+## V16 — Resumir uma correção já concluída direto para Review
+
+### O caso real: Goal 007, R2
+
+R1 foi `CHANGES_REQUIRED` com 5 blockers. R2 rodou a correção em `SONNET_HIGH`
+e completou com `REVIEW_REQUIRED` — o resultado do Developer já estava
+persistido, a review de R2 nunca tinha sido despachada. Uma execução autônoma
+nova reconciliou corretamente: `reconcileExecutionState` leu o ledger, viu a
+correção da R2 `COMPLETED` e a review da R2 inexistente, e devolveu
+`next.kind = REVIEW, round: 2` — a autoridade estava certa desde o início.
+
+O laço de `run-goal.mjs`, porém, decidia se a rodada era "correção" olhando só
+para o número da rodada: `isCorrection = startAsCorrection || round > 1`, que
+é `true` para qualquer rodada além da primeira, sem nunca consultar
+`reconciled.next.kind`. Isso levou o código a montar um job hipotético de
+`CORRECTION` a partir de `pendingBlockers` — vazio, porque uma reconciliação do
+tipo REVIEW não carrega blockers, não há nada a corrigir — e
+`validateDeveloperJob` recusou corretamente essa forma: *"A CORRECTION job must
+carry at least one blocker"*. A validação disparava **antes** do código chegar
+ao ponto que reutilizaria o resultado do Developer já concluído, numa rodada
+que não precisava de nenhum job novo.
+
+O segundo efeito: essa exceção `CONTRACT_FIELD_INVALID`, não capturada, subia
+até o catch de topo. `recordOrchestratorFault` ainda não classificava esse
+código, então `runtime.escalationReason` continuou com o valor de um gate
+**diferente**, já resolvido por humano (`POLICY_VIOLATION`, de um
+`MAIN_CHECKOUT_MUTATED` anterior). `run-auto.mjs`, um processo separado que só
+lê código de saída e disco, reportou a falha nova com a razão antiga.
+
+### A correção: `next.kind` decide, nunca o número da rodada sozinho
+
+`isCorrection` continua existindo — ele ainda nomeia corretamente o estágio
+(`correction` vs. `implementation`) para fins de stage key e ledger. O que
+mudou é onde a construção do job acontece: `validateDeveloperJob(...)` deixou
+de rodar incondicionalmente e passou a viver atrás de um closure
+(`buildDevJob()`), chamado **só** dentro do branch que efetivamente despacha um
+job novo — nunca quando `alreadyDone` (o resultado já está no disco) é
+verdadeiro. Uma rodada cujo Developer já terminou nunca constrói, nunca valida
+e nunca publica um job de Developer, seja qual for `round`.
+
+```
+alreadyDone = store.hasCompletedResult('developer', devJobId)
+buildDevJob = () => validateDeveloperJob(...)   // não é mais chamado aqui em cima
+
+if (alreadyDone) devEnvelope = store.readResult(...)   // reusa; modelo NÃO é chamado
+else            devJob = buildDevJob(); store.dispatchJob('developer', devJob, ...)
+```
+
+### Razão de human gate nunca herdada de uma falha anterior
+
+Um gate resolvido por humano (`npm run ia-loop:auto -- --resolved "..."`) some
+do caminho de decisão, mas até este fix continuava sentado em
+`runtime.escalationReason`/`humanRequired`/`decision` até algo escrevê-lo por
+cima. Uma falha nova e sem relação nenhuma herdava a razão antiga.
+
+Logo após os dois early-return de `reconcileExecutionState` (HUMAN_REQUIRED e
+CLOSE_GOAL) e antes de `let round = reconciled.next.round`, `run-goal.mjs`
+agora lê o runtime e, se qualquer um desses três campos ainda estiver setado,
+conclui que a reconciliação acabou de provar que a execução **não** está
+bloqueada — logo, o que sobrou descreve um gate já fechado por humano, não esta
+tentativa. Ele zera os três campos e registra `STALE_HUMAN_REASON_CLEARED` com
+a razão/decisão anteriores, para que a resolução continue rastreável no
+histórico de eventos em vez de simplesmente desaparecer.
+
+Uma falha nova sempre ganha sua própria classificação: `CONTRACT_FIELD_INVALID`
+entrou em `ORCHESTRATOR_FAULT_CODES` (`lib/orchestrator-fault.mjs`) — mas só
+pelo call site que importa. `validateDeveloperJob`/`validateReviewJob` são
+chamados direto em `run-goal.mjs` sobre um job que **este processo** está
+montando para enviar; se falharem, a exceção sobe sem ser capturada até este
+catch, e o defeito é deste harness, nunca do modelo ou do Goal.
+`validateDeveloperResult`/`validateReviewDecision` lançam o mesmíssimo código
+para um contrato que um **modelo** quebrou, mas só são chamados como
+`validatePayload` de `invokeAgent`, que captura tudo internamente — nunca
+chegam a este catch. O código sozinho não distingue os dois casos; o call site
+distingue.
+
+### Ciclo de vida dos blockers
+
+Os 5 blockers da review de R1 continuam na review de R1 para sempre —
+`buildStageLedger` não descarta resultado nenhum. Eles foram a entrada que
+produziu a correção de R2; uma vez que R2 terminou, eles não precisam — e não
+devem — ser reencontrados ou reenviados para despachar a review de R2, que não
+carrega `blockers` nenhum porque não é uma correção.
+
+### O que isso preserva
+
+- Worktree, `worktreeInitialHead` e o diff de R2 intocados — a rodada nunca
+  entra no branch que cria worktree ou roda o Developer de novo.
+- O perfil efetivo de R2 (`SONNET_HIGH`) não é recalculado: ele é lido do job
+  já persistido, nunca do roteamento adaptativo de uma escalada anterior que já
+  foi aceita pelo humano.
+- Zero commits, zero mudança de baseline, zero resultado apagado ou
+  sobrescrito, zero attempt novo do Developer.
+
+### Testes
+
+`tests/goal007-resume-into-review.test.mjs` reproduz o incidente exato:
+reconciliação chega em `REVIEW`/round 2 sem construir `CORRECTION`; a forma
+antiga do código realmente lança `CONTRACT_FIELD_INVALID` e classifica como
+`HARNESS_ERROR`; os blockers de R1 sobrevivem no ledger sem serem exigidos para
+despachar a review; o perfil `SONNET_HIGH` é lido do job, não recalculado; o
+bloco de limpeza de razão obsoleta zera `escalationReason`/`humanRequired`/
+`decision` e registra `STALE_HUMAN_REASON_CLEARED`; reconciliar duas vezes
+seguidas é idempotente (nenhum attempt novo, resultado bit-a-bit igual).
+`tests/orchestrator-fault.test.mjs` cobre a classificação de
+`CONTRACT_FIELD_INVALID` e que `recordOrchestratorFault` sobrescreve uma razão
+obsoleta com a nova.
+
 ## Limitações conhecidas
 
 1. **Auth não é herdável por subprocesso a partir do app desktop.** O que

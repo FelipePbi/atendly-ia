@@ -42,6 +42,35 @@ test('an unrelated SpikeError is never reclassified', () => {
   assert.equal(classifyOrchestratorFault(new SpikeError('DUPLICATE_COMPLETED_STAGE_DISPATCH', 'x')), null);
 });
 
+// The real incident: reconciliation resumed Goal007 straight into REVIEW
+// (Developer R2 already COMPLETED), but run-goal.mjs still built a
+// hypothetical CORRECTION job from an empty blocker list to decide whether to
+// reuse it, and validateDeveloperJob correctly refused that shape. The
+// refusal is about THIS TOOLING's own bookkeeping — never about the Goal, the
+// worker or the model — even though validateDeveloperResult/
+// validateReviewDecision throw the identical code for a contract a MODEL
+// broke. What tells the two apart is not the code, it is WHERE it is thrown:
+// this test is only meaningful for the run-goal.mjs job-construction call
+// sites, which throw uncaught, straight into this catch.
+test('CONTRACT_FIELD_INVALID from building an outgoing job classifies as HARNESS_ERROR', () => {
+  const error = new SpikeError('CONTRACT_FIELD_INVALID', 'A CORRECTION job must carry at least one blocker');
+  assert.equal(classifyOrchestratorFault(error), 'HARNESS_ERROR');
+});
+
+test('recordOrchestratorFault overwrites a stale reason from an already-resolved gate', async () => {
+  await withStore(async (store) => {
+    // A previous, unrelated, already human-resolved failure left this behind.
+    await store.writeRuntime({ goal: '007', round: 2, state: 'WORKTREE_READY', escalationReason: 'POLICY_VIOLATION' });
+
+    const error = new SpikeError('CONTRACT_FIELD_INVALID', 'A CORRECTION job must carry at least one blocker');
+    const outcome = await recordOrchestratorFault(store, { goal: '007', error });
+    assert.equal(outcome.classification, 'HARNESS_ERROR');
+
+    const runtime = await store.readRuntime();
+    assert.equal(runtime.escalationReason, 'HARNESS_ERROR', 'the NEW failure\'s reason, never the stale one');
+  });
+});
+
 test('a plain, non-SpikeError Error is never classified', () => {
   assert.equal(classifyOrchestratorFault(new Error('boom')), null);
 });

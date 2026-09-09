@@ -20,8 +20,26 @@
 /**
  * SpikeError codes that can only mean the orchestrator's own state machine
  * usage was wrong — never a fact about the Goal, the worker, or the model.
+ *
+ * `CONTRACT_FIELD_INVALID` looks like it should belong to the model instead —
+ * `validateDeveloperResult`/`validateReviewDecision` throw the very same code
+ * for a contract a MODEL broke. But those two are only ever called as
+ * `invokeAgent`'s `validatePayload`, which catches everything it throws and
+ * folds it into `agentOutcome.error` — it never reaches this catch. The only
+ * way `CONTRACT_FIELD_INVALID` (or a sibling like `UNSUPPORTED_JOB_TYPE` or
+ * `ROLE_MISMATCH`) gets here is from `validateDeveloperJob`/`validateReviewJob`,
+ * called directly in run-goal.mjs on a job THIS PROCESS is building to send
+ * OUT — never on anything a model produced. A real incident: reconciliation
+ * resumed Goal007 straight into REVIEW (Developer R2 already COMPLETED), but
+ * the loop still built a hypothetical CORRECTION job from an empty blocker
+ * list to decide whether to reuse it, and `validateDeveloperJob` correctly
+ * refused that shape. The refusal was about this tooling's own bookkeeping,
+ * not about Goal007, and reporting it as an unrelated stale POLICY_VIOLATION
+ * (see run-auto.mjs's fallback) was worse than reporting nothing.
  */
-export const ORCHESTRATOR_FAULT_CODES = Object.freeze(['INVALID_TRANSITION', 'UNKNOWN_STATE', 'HYDRATION_EVIDENCE_REQUIRED']);
+export const ORCHESTRATOR_FAULT_CODES = Object.freeze([
+  'INVALID_TRANSITION', 'UNKNOWN_STATE', 'HYDRATION_EVIDENCE_REQUIRED', 'CONTRACT_FIELD_INVALID',
+]);
 
 /** Pure: does this error describe an orchestrator-internal defect? */
 export function classifyOrchestratorFault(error) {

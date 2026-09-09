@@ -19,7 +19,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { resolveCurrentGoal } from '../run-status.mjs';
+import { closureStateOf, resolveCurrentGoal } from '../run-status.mjs';
 import { RUN_STATUS } from '../lib/autonomous-state.mjs';
 
 const GOAL_008 = { goalId: '008' };
@@ -87,4 +87,52 @@ test('a RUNNING run with no Goal recorded falls through instead of erasing the G
     }),
     '008',
   );
+});
+
+
+// --- a closed Goal is not the Goal to work on ------------------------------
+
+/**
+ * The second half of the same confusion. `current-goal.json` is written when a
+ * Goal STARTS and never rewritten at closure, and the round ledger ends at
+ * "review ACCEPTED -> CLOSE_GOAL" knowing nothing about the closure that ran.
+ * So a Goal that was closed, committed, baselined and succeeded by the next one
+ * was still advertised as needing its closure.
+ */
+const CLOSED_008 = Object.freeze({
+  closure: {
+    goal: '008',
+    integratedClosureCommit: '1dc170eb8b04d6ee8a706dca089cfe4538175125',
+    newMigrationBaseline: '1dc170eb8b04d6ee8a706dca089cfe4538175125',
+    nextGoalId: '009',
+    nextGoalTitle: 'Disponibilidade, compromissos pessoais e recorrência',
+    nextGoalDeveloperProfile: 'OPUS_MEDIUM',
+  },
+});
+
+test('a Goal whose closure ran is reported as closed, naming the next Goal', () => {
+  const closure = closureStateOf(CLOSED_008);
+  assert.equal(closure.closed, true);
+  assert.equal(closure.nextGoalId, '009');
+  assert.equal(closure.nextDeveloperProfile, 'OPUS_MEDIUM');
+  assert.equal(closure.baseline, '1dc170eb8b04d6ee8a706dca089cfe4538175125');
+});
+
+test('documentation without planning is not a closed Goal', () => {
+  // Closure documentation published, but the next Goal was never written: the
+  // Goal is mid-closure, and claiming otherwise would skip the planning step.
+  assert.equal(closureStateOf({
+    closure: { closureDocsJobId: 'j1', closureDocs: ['a.md'], integratedClosureCommit: 'abc' },
+  }).closed, false);
+});
+
+test('planning without an integrated commit is not a closed Goal either', () => {
+  assert.equal(closureStateOf({ closure: { nextGoalId: '009' } }).closed, false);
+});
+
+test('a Goal that never reached closure reports nothing', () => {
+  assert.equal(closureStateOf({ closure: null }).closed, false);
+  assert.equal(closureStateOf({}).closed, false);
+  assert.equal(closureStateOf(null).closed, false);
+  assert.equal(closureStateOf(undefined).nextGoalId, null);
 });

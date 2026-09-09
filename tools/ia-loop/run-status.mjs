@@ -155,6 +155,46 @@ export function resolveCurrentGoal({ autonomousRun = null, goal = null, runtime 
   return goal?.goalId ?? runtime?.goal ?? autonomousRun?.currentGoal ?? null;
 }
 
+/**
+ * Whether this Goal's closure already happened, from the closure record itself.
+ *
+ * Three different "current Goals" exist at once and the screen has to keep them
+ * apart, because conflating them is how an operator is told to redo finished
+ * work:
+ *
+ *   the autonomous run's Goal   where a run stopped. History once it is not
+ *                               RUNNING (see resolveCurrentGoal).
+ *   the RUNTIME Goal            the Goal whose execution state is on disk.
+ *                               `current-goal.json` is written when a Goal is
+ *                               STARTED and never rewritten at closure, so
+ *                               after a close it names the Goal that just
+ *                               FINISHED — not the one to work on.
+ *   the NEXT Goal               written and marked READY by the closure's own
+ *                               planning step, and not started.
+ *
+ * `reconcileExecutionState` derives the next step from the round ledger, which
+ * ends at "review ACCEPTED -> CLOSE_GOAL" and knows nothing about the closure
+ * that already ran. So a closed Goal was still advertised as needing its
+ * closure — with the commits, the new baseline and the next Goal id sitting
+ * right there in `closure`. This reads that record instead of re-deriving.
+ *
+ * Exported for the regression test; nothing else calls it.
+ */
+export function closureStateOf(goalExecution) {
+  const closure = goalExecution?.closure ?? null;
+  // Both halves must be present: documentation alone is not a closed Goal, and
+  // planning is what produces the next one.
+  const closed = Boolean(closure?.integratedClosureCommit && closure?.nextGoalId);
+  return {
+    closed,
+    nextGoalId: closed ? closure.nextGoalId : null,
+    nextGoalTitle: closed ? closure.nextGoalTitle ?? null : null,
+    nextDeveloperProfile: closed ? closure.nextGoalDeveloperProfile ?? null : null,
+    baseline: closed ? closure.newMigrationBaseline ?? null : null,
+    closureCommit: closed ? closure.integratedClosureCommit : null,
+  };
+}
+
 async function main() {
   const store = createJobStore(STATE_DIR);
   const leaseStore = createLeaseStore(STATE_DIR);
@@ -191,7 +231,12 @@ async function main() {
   const goalExecution = goalExecutionOf(runtime, currentGoal);
   const previousGoal = (autonomousRun?.completedGoals ?? []).at(-1) ?? null;
 
-  out.push(`Current Goal: ${currentGoal ?? 'n/a'}`);
+  const closure = closureStateOf(goalExecution);
+
+  // "Runtime Goal", not "Current Goal": after a closure this names the Goal
+  // that just finished, and calling that "current" is what sent an operator
+  // back to re-run a closure that had already happened.
+  out.push(`Runtime Goal: ${currentGoal ?? 'n/a'}${closure.closed ? ' — CLOSED' : ''}`);
   out.push('Goal execution:');
   out.push(`  Round: ${goalExecution?.round ?? (currentGoal ? 1 : 'n/a')}`);
   out.push(`  State: ${goalExecution?.state ?? 'NOT_STARTED'}`);
@@ -204,7 +249,15 @@ async function main() {
     // record, and nothing here may act on it.
     out.push(`  Execution state on disk belongs to Goal ${runtime.goal} — historical, not current.`);
   }
+  if (closure.closed) {
+    out.push(`  Closed: closure commit ${String(closure.closureCommit).slice(0, 8)}`
+      + ` · new baseline ${String(closure.baseline).slice(0, 8)}`);
+  }
   if (previousGoal) out.push(`Previous Goal: ${previousGoal} (ACCEPTED)`);
+  if (closure.closed) {
+    out.push(`Next Goal: ${closure.nextGoalId} — READY, not started`
+      + `${closure.nextGoalTitle ? ` (${closure.nextGoalTitle})` : ''}`);
+  }
   out.push('');
 
   // An execution in flight is the most important thing on this screen: it is
@@ -280,7 +333,16 @@ async function main() {
       out.push('');
     }
 
-    if (next) {
+    if (closure.closed) {
+      // The ledger still ends at "ACCEPTED -> CLOSE_GOAL", but the closure
+      // record proves that step already ran. Repeating it here is how an
+      // operator gets told to redo finished work.
+      out.push('Next:');
+      out.push(`  Goal ${closure.nextGoalId} — not started`);
+      if (closure.nextDeveloperProfile) out.push(`  Developer profile: ${closure.nextDeveloperProfile}`);
+      out.push(`  Start with: npm run ia-loop:goal -- ${closure.nextGoalId}`);
+      out.push('');
+    } else if (next) {
       out.push('Next:');
       out.push(`  ${currentGoal} R${next.round ?? '?'} ${next.kind}`);
       if (next.kind === 'CORRECTION') {
@@ -327,7 +389,10 @@ async function main() {
     out.push('Run:');
     out.push(`  ${autonomousRun.autonomousRunId}`);
     out.push(`  State: ${autonomousRun.status}`);
-    out.push(`  Goal: ${autonomousRun.currentGoal ?? 'n/a'}`);
+    // Labelled by what it means: a run that is not RUNNING stopped AT this
+    // Goal, and the loop may have moved well past it supervised since.
+    out.push(`  Goal: ${autonomousRun.currentGoal ?? 'n/a'}`
+      + `${autonomousRun.status === RUN_STATUS.RUNNING ? '' : ' (where this run stopped — history)'}`);
     if (autonomousRun.recoveryCount) out.push(`  Recoveries: ${autonomousRun.recoveryCount}`);
     out.push('');
   }

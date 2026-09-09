@@ -26,6 +26,7 @@ import {
   buildStageLedger, decideNextDispatch, reconcileExecutionState,
 } from '../lib/reconcile.mjs';
 import { STAGES, roleForStage, stageKey, stageKeyOfJob } from '../lib/stage-identity.mjs';
+import { CLOSURE_JOB_TYPES } from '../lib/closure-contracts.mjs';
 import { createJobStore } from '../lib/job-store.mjs';
 import { createAutonomousStore } from '../lib/autonomous-state.mjs';
 import { createHandoffStore } from '../lib/recovery-handoff.mjs';
@@ -99,8 +100,19 @@ test('a correction and an implementation of the same round are different stages'
 });
 
 test('closure and planning jobs are not round stages', () => {
-  assert.equal(stageKeyOfJob({ role: 'tech_lead', goal: GOAL, round: 1, kind: 'CLOSURE_DOCS' }), null);
-  assert.equal(stageKeyOfJob({ role: 'tech_lead', goal: GOAL, round: 1, kind: 'PLANNING' }), null);
+  // Asserted against the field and the values the PUBLISHERS actually write
+  // (run-close.mjs), read from the same shared constant. This test used to
+  // assert `kind: 'CLOSURE_DOCS' | 'PLANNING'` — a shape that exists nowhere on
+  // disk — so it passed while the real jobs were being misread as reviews.
+  for (const type of CLOSURE_JOB_TYPES) {
+    assert.equal(stageKeyOfJob({ role: 'tech_lead', goal: GOAL, round: 1, type }), null, type);
+  }
+  // A job carrying the old, never-written shape is NOT a closure job, and must
+  // not be silently excluded from the ledger either.
+  assert.equal(
+    stageKeyOfJob({ role: 'tech_lead', goal: GOAL, round: 1, kind: 'PLANNING' }),
+    stageKey({ goal: GOAL, round: 1, stage: STAGES.REVIEW }),
+  );
 });
 
 // ===========================================================================
@@ -207,6 +219,52 @@ test('nothing on disk: the Goal starts at implementation round 1', () => {
   const next = decideNextDispatch({ ledger: buildStageLedger([]), goal: GOAL });
   assert.equal(next.kind, DISPATCH_KINDS.IMPLEMENTATION);
   assert.equal(next.round, 1);
+});
+
+// --- Closure and planning are not the round's review ------------------------
+//
+// After Goal006 closed, `ia-loop:status` reported a permanent
+// AGENT_CONTRACT_ERROR for a Goal that had been ACCEPTED, closed and whose
+// next Goal was already written. stageOfJob read `job.kind === 'CLOSURE_DOCS' |
+// 'PLANNING'` — a field and two values no publisher ever wrote — so both
+// Tech Lead jobs claimed the round's REVIEW stage key, and the PLANNING job's
+// `decision: "NEXT_GOAL"` was read as the review's answer.
+
+const closureJob = (jobId, round) => ({
+  role: 'tech_lead',
+  job: { jobId, role: 'tech_lead', goal: GOAL, round, type: 'CLOSURE_DOCUMENTATION' },
+});
+const planningJob = (jobId, round) => ({
+  role: 'tech_lead',
+  job: { jobId, role: 'tech_lead', goal: GOAL, round, type: 'NEXT_GOAL_PLANNING' },
+});
+
+test('closure and planning jobs have no stage: they are not the round review', () => {
+  assert.equal(stageKeyOfJob(closureJob('004-r1-tech_lead-aaa', 1).job), null);
+  assert.equal(stageKeyOfJob(planningJob('004-r1-tech_lead-bbb', 1).job), null);
+  // The real review still resolves, and to the review stage.
+  assert.equal(stageKeyOfJob(revJob(REV_R1, 1).job), stageKey({ goal: GOAL, round: 1, stage: STAGES.REVIEW }));
+});
+
+test('a closed Goal whose planning already ran still reads as ACCEPTED, not as a contract error', () => {
+  // Ordered exactly as a directory listing hands them over: the planning job's
+  // id sorts first, which is precisely how it won the review slot.
+  const ledger = buildStageLedger([
+    withResult(planningJob('004-r1-tech_lead-3f7879f7', 1), { decision: 'NEXT_GOAL', nextGoalId: '005' }),
+    withResult(closureJob('004-r1-tech_lead-6389eed2', 1), { documentsUpdated: ['docs/migration/x.md'] }),
+    withResult(devJob(DEV_R1, 1), { status: 'REVIEW_REQUIRED' }),
+    withResult(revJob(REV_R1, 1), { decision: 'ACCEPTED', blockers: [] }),
+  ]);
+
+  // Only ONE review stage exists, and it is the real review.
+  const review = ledger.get(stageKey({ goal: GOAL, round: 1, stage: STAGES.REVIEW }));
+  assert.equal(review.completedBy, REV_R1);
+  assert.equal(review.result.decision, 'ACCEPTED');
+  assert.deepEqual(review.duplicates, []);
+
+  const next = decideNextDispatch({ ledger, goal: GOAL });
+  assert.equal(next.kind, DISPATCH_KINDS.CLOSE_GOAL);
+  assert.notEqual(next.reason, 'AGENT_CONTRACT_ERROR');
 });
 
 test('a review with no usable decision asks for a human instead of guessing', () => {

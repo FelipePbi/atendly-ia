@@ -19,6 +19,7 @@
  */
 
 import { SpikeError } from './claude-process.mjs';
+import { CLOSURE_JOB_TYPES } from './closure-contracts.mjs';
 
 export const STAGES = Object.freeze({
   IMPLEMENTATION: 'implementation',
@@ -82,7 +83,18 @@ export function stageOfJob(job) {
   if (job.role === 'tech_lead') {
     // The Tech Lead also does closure and planning, which are not review
     // stages of a round and are guarded by their own recorded artefacts.
-    if (job.kind === 'CLOSURE_DOCS' || job.kind === 'PLANNING') return null;
+    //
+    // Read from the SAME constant the publishers write, and from the field they
+    // actually write it to. This checked `job.kind === 'CLOSURE_DOCS' |
+    // 'PLANNING'` — a field and two values that never existed on disk, since
+    // run-close.mjs publishes `type: 'CLOSURE_DOCUMENTATION' |
+    // 'NEXT_GOAL_PLANNING'`. Both jobs therefore claimed the round's REVIEW
+    // stage key, collided with the real review in the ledger, and whichever
+    // was enumerated first won it. After Goal006 closed, `ia-loop:status`
+    // read the PLANNING job as the round-1 review, found `decision:
+    // "NEXT_GOAL"` where a ReviewDecision was expected, and reported a
+    // permanent AGENT_CONTRACT_ERROR for a Goal that was already accepted.
+    if (CLOSURE_JOB_TYPES.includes(job.type)) return null;
     return { goal: job.goal, round, stage: STAGES.REVIEW };
   }
 

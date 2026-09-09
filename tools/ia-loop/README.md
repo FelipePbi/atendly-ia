@@ -4008,8 +4008,11 @@ próprias fontes mudaram está executando uma versão sobre a qual ninguém cons
 raciocinar.
 
 O worker registra no boot um `bootCodeVersion` — hash de caminho, tamanho e
-mtime de `lib/**.mjs`, `workers/**.mjs` e dos entrypoints `run-*.mjs`. Testes são
-excluídos de propósito: editar um teste não muda o que um worker executa.
+mtime de `lib/**.mjs` e `workers/**.mjs`, que é exatamente o que um processo de
+worker carrega. Testes e os entrypoints `run-*.mjs` ficam de fora de propósito:
+editar um teste não muda o que um worker executa, e `run-status.mjs` roda em
+outro processo. Uma guarda que dispara pelo motivo errado é uma guarda que as
+pessoas aprendem a ignorar.
 
 Antes de **aceitar um novo job** — nunca no meio de um, o que desperdiçaria a
 inferência — ele recompara. Se mudou:

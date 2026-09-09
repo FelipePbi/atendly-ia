@@ -265,24 +265,36 @@ test('the lease records everything needed to identify the holder later', async (
 
 // --- code freshness --------------------------------------------------------
 
-test('the code version changes when a source file changes, and only then', async (t) => {
+test('the code version covers what a worker loads, and only that', async (t) => {
   const root = scratch(t);
   mkdirSync(join(root, 'lib'), { recursive: true });
+  mkdirSync(join(root, 'workers'), { recursive: true });
   writeFileSync(join(root, 'lib', 'a.mjs'), 'export const a = 1;\n');
-  writeFileSync(join(root, 'run-thing.mjs'), 'export const b = 1;\n');
-  // Tests are excluded: editing one must not force every worker to restart.
+  writeFileSync(join(root, 'workers', 'w.mjs'), 'export const w = 1;\n');
+  // An operator CLI: runs in its own process, so it cannot change what a
+  // running worker executes.
+  writeFileSync(join(root, 'run-status.mjs'), 'export const b = 1;\n');
+  // Tests: editing one must not force every worker to restart.
   mkdirSync(join(root, 'tests'), { recursive: true });
   writeFileSync(join(root, 'tests', 'x.test.mjs'), 'test\n');
 
   const first = await computeCodeVersion({ root });
-  assert.equal(first.fileCount, 2, 'lib + entrypoint, and nothing from tests');
+  assert.equal(first.fileCount, 2, 'lib + workers only');
   assert.equal((await computeCodeVersion({ root })).version, first.version, 'stable when nothing moves');
 
   writeFileSync(join(root, 'tests', 'x.test.mjs'), 'test changed a lot\n');
   assert.equal((await computeCodeVersion({ root })).version, first.version, 'a test edit is not a code change');
 
+  writeFileSync(join(root, 'run-status.mjs'), 'export const b = 2; // changed\n');
+  assert.equal((await computeCodeVersion({ root })).version, first.version,
+    'an operator CLI edit must not stop a worker that never loads it');
+
   writeFileSync(join(root, 'lib', 'a.mjs'), 'export const a = 2; // changed\n');
   assert.notEqual((await computeCodeVersion({ root })).version, first.version);
+
+  const afterLib = await computeCodeVersion({ root });
+  writeFileSync(join(root, 'workers', 'w.mjs'), 'export const w = 2; // changed\n');
+  assert.notEqual((await computeCodeVersion({ root })).version, afterLib.version);
 });
 
 test('a worker detects that its own code was replaced under it', async (t) => {

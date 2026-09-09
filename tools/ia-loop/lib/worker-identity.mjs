@@ -59,7 +59,17 @@ export const IDENTITY_VERDICTS = Object.freeze({
   UNCERTAIN: 'UNCERTAIN',
 });
 
-/** Sources whose change means "this worker is running code that no longer exists". */
+/**
+ * Sources whose change means "this worker is running code that no longer
+ * exists" — and only those.
+ *
+ * `lib/` and `workers/` are exactly what a worker process loads. The `run-*.mjs`
+ * entrypoints at the root are operator and orchestrator CLIs that run in their
+ * own processes; editing `run-status.mjs` cannot change what a running worker
+ * executes, and treating it as if it could would stop workers for a change that
+ * never reached them. A false restart is cheap but not free, and a guard that
+ * fires for the wrong reason is one people learn to ignore.
+ */
 const CODE_DIRS = Object.freeze(['lib', 'workers']);
 const CODE_FILE = /\.mjs$/;
 /** Tests never affect what a worker executes, so editing one must not force a restart. */
@@ -97,13 +107,6 @@ export async function computeCodeVersion({ root, now = null } = {}) {
   }
 
   for (const dir of CODE_DIRS) await walk(join(root, dir));
-  // The entrypoints live at the root, beside directories we do not want to walk.
-  const top = await readdir(root, { withFileTypes: true }).catch(() => []);
-  for (const entry of top) {
-    if (!entry.isFile() || !CODE_FILE.test(entry.name)) continue;
-    const info = await stat(join(root, entry.name)).catch(() => null);
-    if (info) parts.push(`${entry.name}:${info.size}:${Math.round(info.mtimeMs)}`);
-  }
 
   parts.sort();
   const digest = createHash('sha256').update(parts.join('\n')).digest('hex').slice(0, 16);

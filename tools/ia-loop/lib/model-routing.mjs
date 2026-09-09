@@ -91,6 +91,8 @@ export const ROUTING_STAGES = Object.freeze({
   CORRECTION: 'correction',
   /** One Work Unit inside an implementation or correction round. */
   WORK_UNIT: 'work_unit',
+  /** Closure documentation: bookkeeping over a decision already taken. */
+  CLOSURE: 'closure',
 });
 
 export const ROUTING_CONFIG = Object.freeze({
@@ -102,6 +104,21 @@ export const ROUTING_CONFIG = Object.freeze({
     review: Object.freeze({
       standard: Object.freeze({ model: 'opus', effort: 'high' }),
       deep: Object.freeze({ model: 'fable', effort: 'high' }),
+    }),
+    /**
+     * Closure documentation: recording what a Goal already ACCEPTED changed.
+     * Never risk-classified — there is no diff being judged, so there is
+     * nothing for a HIGH/CRITICAL score to promote it to. One tier, not two.
+     *
+     * The specialist stays reachable, but never as this stage's own default:
+     * only an explicit routing on the job (a human override, or a future
+     * escalation policy) puts a closure job on Fable. Absence of a routing
+     * field is not evidence the job predates adaptive routing — a closure job
+     * never carries one, by construction — so it must not fall into the
+     * "legacy unrouted job" compatibility path built for actual reviews.
+     */
+    closure: Object.freeze({
+      standard: Object.freeze({ model: 'opus', effort: 'high' }),
     }),
   }),
   developer: Object.freeze({
@@ -512,6 +529,39 @@ export function routeTechLead({
     // Fable is the only model with a weekly quota tight enough to strand the
     // pipeline, so only a Fable selection carries a fallback.
     fallbackAllowed: (forced ?? chosen.model) === 'fable',
+    mode,
+  });
+}
+
+/**
+ * The model closure documentation runs on.
+ *
+ * Not `routeTechLead`: that function's whole shape is "classify risk, then
+ * pick standard or deep from it", and closure documentation has no risk to
+ * classify — it is bookkeeping over a decision the review already made. This
+ * always resolves to the standard Tech Lead tier, unless routing is pinned by
+ * a manual override. It never returns Fable as a DEFAULT: the specialist is
+ * reachable only through an explicit routing already sitting on the job,
+ * which this function is not given and does not need to be — a caller that
+ * has one uses it directly instead of calling this at all.
+ */
+export function routeClosureDocumentation({
+  mode = ROUTING_MODES.AUTO,
+  config = ROUTING_CONFIG,
+} = {}) {
+  const table = config.tech_lead.closure.standard;
+  const forced = FORCED_MODEL[mode] ?? null;
+
+  return decision({
+    role: 'tech_lead',
+    stage: ROUTING_STAGES.CLOSURE,
+    complexity: null,
+    riskScore: null,
+    signals: [],
+    modelKey: forced ?? table.model,
+    effort: table.effort,
+    reason: forced ? `MANUAL_OVERRIDE_${mode}` : 'CLOSURE_DOCUMENTATION_STANDARD',
+    fallbackAllowed: (forced ?? table.model) === 'fable',
     mode,
   });
 }

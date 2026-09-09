@@ -19,6 +19,7 @@ Duas etapas concluídas:
 | V13 — Identidade do modelo por evidência explícita | `modelUsage`/`usage` viram observabilidade; identidade vem de `message.model` do stream |
 | V14 — Adaptive Model Routing | modelo escolhido por risco: Opus padrão no Tech Lead, Sonnet no Developer, Fable só para HIGH/CRITICAL |
 | V18 — Work Unit Execution | rodada decomposta em DAG de Work Units; determinístico sem modelo, mecânico em Haiku, normal em Sonnet, difícil em Opus; contexto por unidade. Atrás de `IA_LOOP_WORK_UNIT_EXECUTION` (padrão: desligado) |
+| V19 — Closure documentation roteada | fechamento deixa de cair em Fable por padrão; stage e política próprios, `routeClosureDocumentation` |
 
 ---
 
@@ -3564,6 +3565,50 @@ Goals, os dois fallbacks de unidade única, `executionPlan` no contrato de
 planning (presente, ausente, cíclico), ausência de campo de modelo no schema,
 `spawn` sem shell, falha de spawn reportada, DAG no review packet e sua
 ausência numa rodada legada.
+
+## V19 — Closure documentation deixa de cair em Fable por padrão
+
+Descoberto ao fechar o Goal007 de verdade: `ia-loop:close` publica o job de
+`CLOSURE_DOCUMENTATION` sem `routing` — sempre publicou, porque fechamento é
+bookkeeping sobre uma decisão já tomada, nunca classificada por risco, então
+nunca existiu decisão de roteamento para anexar. O worker do Tech Lead lia essa
+ausência como `stage: REVIEW`, o caminho de compatibilidade construído para uma
+review real escrita antes do roteamento adaptativo existir, e todo fechamento
+rodava no Fable com razão `LEGACY_UNROUTED_JOB` — contradizendo o próprio
+comentário do código, que dizia que fechamento "runs on the standard model
+unless the job says otherwise".
+
+O fechamento ganhou stage e política próprios em `model-routing.mjs`, o único
+lugar onde essa decisão pode viver:
+
+```text
+ROUTING_STAGES.CLOSURE
+ROUTING_CONFIG.tech_lead.closure.standard = { model: 'opus', effort: 'high' }
+routeClosureDocumentation({ mode })  → sempre Opus padrão; Fable só por
+                                         override explícito de `mode`, nunca
+                                         como default desta função
+```
+
+`routingOf`, no worker, passou a perguntar a essa função para `CLOSURE` e
+manteve o fallback antigo — inalterado — para `REVIEW`/`PLANNING`, que é o
+caso legítimo: uma review real do Goal003–006 escrita antes do V14 de fato
+rodou inteira no especialista, e uma review roteada (com `routing` no job)
+continua retornando exatamente o que já carregava, sem redecidir.
+
+Nenhum id de modelo novo foi escrito no worker: a única mudança ali é qual
+stage se pergunta e para qual função.
+
+### Testes
+
+`tests/closure-documentation-routing.test.mjs` (9): `routeClosureDocumentation`
+sozinha (padrão Opus, sem classificação de risco, override manual incluindo
+Fable, sem fallback do próprio Opus); `routingOf` reproduzindo o bug exato —
+o job de fechamento tal como `run-close.mjs` de fato publica, sem `routing` —
+e provando que resolve para Opus, não Fable; routing explícito de um job de
+fechamento honrado sem redecisão; a review legada real (sem `routing`,
+stage REVIEW) continuando a cair no Fable, prova de que o caminho legítimo não
+foi tocado; uma review já roteada retornando o que já carregava; fechamento
+fora da política de escalation de review.
 
 ## Limitações conhecidas
 

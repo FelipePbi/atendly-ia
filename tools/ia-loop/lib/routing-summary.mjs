@@ -27,6 +27,7 @@ const STAGE_LABEL = Object.freeze({
   implementation: 'Developer',
   correction: 'Developer (correction)',
   work_unit: 'Work Unit',
+  closure: 'Closure documentation',
 });
 
 /**

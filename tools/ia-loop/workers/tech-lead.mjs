@@ -38,6 +38,8 @@ import {
   ROUTING_STAGES,
   resolveModel,
   resolveRoutingMode,
+  routeClosureDocumentation,
+  toJobRouting,
 } from '../lib/model-routing.mjs';
 import { createAttemptRouter } from '../lib/routing-runtime.mjs';
 import { createJobStore } from '../lib/job-store.mjs';
@@ -106,15 +108,37 @@ const CLOSURE_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'];
 const CLOSURE_KINDS = ['CLOSURE_DOCUMENTATION', 'NEXT_GOAL_PLANNING'];
 
 /**
- * The routing a job carries, or the specialist for a job written before
- * adaptive routing existed.
+ * The routing a job carries, or the stage's default when it does not carry
+ * one.
  *
- * Compatibility deliberately points at Fable: that is what every Tech Lead job
- * ran on before, and re-deciding an in-flight job on read would change what a
- * restart is resuming.
+ * The job's own `routing` field is always authoritative when present — that is
+ * how an explicit escalation or an operator override survives a restart. When
+ * it is absent, the default is NOT the same answer for every stage:
+ *
+ *   REVIEW / PLANNING   an absent `routing` here really does mean "written
+ *                       before adaptive routing existed" — every real Tech
+ *                       Lead job of these kinds has carried one since V14, so
+ *                       one that does not is a genuine legacy job, and Fable
+ *                       is what it actually ran on. Re-deciding it on read
+ *                       would change what a restart is resuming.
+ *
+ *   CLOSURE             a closure documentation job never carries `routing`,
+ *                       by construction — it is bookkeeping over a decision
+ *                       already taken, never risk-classified, so there was
+ *                       never a decision to attach. Reading that absence as
+ *                       "legacy" ran every closure through the specialist for
+ *                       no reason. `routeClosureDocumentation` is the single
+ *                       place that answer lives; this function only asks it.
+ *
+ * Exported for the regression test; nothing else calls it.
  */
-function routingOf(job, stage) {
+export function routingOf(job, stage) {
   if (job?.routing?.model) return job.routing;
+
+  if (stage === ROUTING_STAGES.CLOSURE) {
+    return toJobRouting(routeClosureDocumentation({ mode: resolveRoutingMode() }));
+  }
+
   const specialist = resolveModel('fable');
   return {
     role: ROLE,
@@ -365,8 +389,9 @@ async function handleClosureJob(job) {
 
   // Planning is routed by risk; closure documentation is bookkeeping over a
   // decision already taken, so it runs on the standard model unless the job
-  // says otherwise.
-  const stage = isPlanning ? ROUTING_STAGES.PLANNING : ROUTING_STAGES.REVIEW;
+  // says otherwise. CLOSURE is its own stage, not REVIEW — the two answer
+  // different questions when the job carries no `routing`.
+  const stage = isPlanning ? ROUTING_STAGES.PLANNING : ROUTING_STAGES.CLOSURE;
   const baseRouting = routingOf(job, stage);
   const router = createAttemptRouter({
     store, role: ROLE, jobId: job.jobId, base: baseRouting, kind: 'closure',

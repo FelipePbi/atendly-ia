@@ -1,6 +1,6 @@
 # Goal 007 — Catálogo e acordo comercial
 
-**Status: READY.** Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-08 pelo Tech Lead Agent após [Goal006 ACCEPTED](../reviews/006-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
+**Status: ACCEPTED.** Aceito em 2026-09-09 na [rodada 3 do review007](../reviews/007-review.md); fechamento integrado como `d20a52745cf1aae7391faf5688fb8084271ec3d4`. Texto original preservado abaixo. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-08 pelo Tech Lead Agent após [Goal006 ACCEPTED](../reviews/006-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
 
 Developer execution profile: OPUS_MEDIUM
 

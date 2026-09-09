@@ -18,7 +18,7 @@ import { readRuntimeStrict, remainingWaitMs } from './lib/capacity-state.mjs';
 import { formatRemaining } from './lib/capacity-policy.mjs';
 import { LOOP_STATES } from './lib/loop-state.mjs';
 import { LEASE_STATUS, classifyLease, createLeaseStore } from './lib/leases.mjs';
-import { LOOP_LEASE_KEY, createAutonomousStore } from './lib/autonomous-state.mjs';
+import { LOOP_LEASE_KEY, RUN_STATUS, createAutonomousStore } from './lib/autonomous-state.mjs';
 import { goalExecutionOf } from './lib/goal-execution.mjs';
 import { goalOfJobId } from './lib/stage-identity.mjs';
 import { createProcessInspector } from './lib/process-inspector.mjs';
@@ -120,6 +120,41 @@ export function hasStaleHumanGate({ goalExecution, next }) {
     || Boolean(goalExecution?.escalationReason);
 }
 
+/**
+ * Which Goal the loop is actually on.
+ *
+ * An autonomous run names the current Goal only while it is RUNNING. That
+ * qualifier is the whole fix: the run's pointer legitimately runs AHEAD of
+ * `current-goal.json` for a moment — `setCurrentGoal(next)` fires when planning
+ * names the next Goal, before `run-goal` writes the live pointer for it — so a
+ * driving run must keep priority. A run that is paused, stopped for a human or
+ * completed is driving nothing, and its pointer is then a record of where it
+ * stopped, not a statement about where the loop is.
+ *
+ * Read unconditionally, as it was, that record silently overrode reality: run
+ * auto-987b6c55 stopped at Goal 007 on 2026-09-09T04:42 and was never resumed
+ * (there is no AUTONOMOUS_RUN_RESUMED after it in the event log). The operator
+ * went on supervised — Goal 007 was closed at 13:43 and Goal 008 executed to
+ * ACCEPTED at 18:11, both writing `current-goal.json` — and the status screen
+ * still announced "Current Goal: 007", offered 007's closure as the next step,
+ * and dismissed Goal 008's live execution state as "historical, not current".
+ * Exactly backwards, and acted upon.
+ *
+ * The paused run is NOT rewritten to say otherwise: no event says it advanced,
+ * and inventing one would be worse than misreading it. It stays visible under
+ * `Run:`, as the history it is.
+ *
+ * Exported for the regression test; nothing else calls it.
+ */
+export function resolveCurrentGoal({ autonomousRun = null, goal = null, runtime = null } = {}) {
+  if (autonomousRun?.status === RUN_STATUS.RUNNING && autonomousRun.currentGoal) {
+    return autonomousRun.currentGoal;
+  }
+  // The live pointer first: `run-goal` writes it for every execution, whoever
+  // started it, so it is never staler than a run that is not driving.
+  return goal?.goalId ?? runtime?.goal ?? autonomousRun?.currentGoal ?? null;
+}
+
 async function main() {
   const store = createJobStore(STATE_DIR);
   const leaseStore = createLeaseStore(STATE_DIR);
@@ -150,9 +185,9 @@ async function main() {
 
   // The run and the Goal execution are two different things, and printing them
   // as one is what let a screen show Goal 005 next to Goal 004's job as though
-  // the two belonged together. The current Goal comes from the run; the
-  // execution block is only filled in when the state on disk is that Goal's.
-  const currentGoal = autonomousRun?.currentGoal ?? goal?.goalId ?? runtime?.goal ?? null;
+  // the two belonged together. The execution block is only filled in when the
+  // state on disk is that Goal's.
+  const currentGoal = resolveCurrentGoal({ autonomousRun, goal, runtime });
   const goalExecution = goalExecutionOf(runtime, currentGoal);
   const previousGoal = (autonomousRun?.completedGoals ?? []).at(-1) ?? null;
 

@@ -92,6 +92,34 @@ function agentBlock({ label, model, health, runtime, now, profile = null, suppor
   return lines.join('\n');
 }
 
+/**
+ * Whether the runtime still names a human gate the results have outlived.
+ *
+ * The one thing a status screen must never do is repeat a gate that is over.
+ * It must also not INVENT one, and it used to: `AWAITING_HUMAN` was read as a
+ * gate, and `AWAITING_HUMAN` is the ordinary supervised stop `run-goal` writes
+ * at the end of EVERY run — including one whose review said ACCEPTED. So every
+ * successfully accepted Goal was reported as "the runtime still records
+ * HUMAN_REQUIRED", which it plainly did not, and the operator was told to
+ * reconcile a state that was exactly what the design intends: closure is a
+ * deliberate separate step, and a Goal waiting for it is not blocked.
+ *
+ * What makes a gate stale is the runtime naming a REASON the ledger has moved
+ * past — a HUMAN_REQUIRED state or decision, or a recorded `humanRequired` /
+ * `escalationReason`. Those are precisely the fields `run-goal` clears once it
+ * has proven the run is not blocked, so reading them distinguishes "a person
+ * still has to look at something" from "a person has to run the next step".
+ *
+ * Exported for the regression test; nothing else calls it.
+ */
+export function hasStaleHumanGate({ goalExecution, next }) {
+  if (!next || next.kind === 'HUMAN_REQUIRED') return false;
+  return goalExecution?.state === LOOP_STATES.HUMAN_REQUIRED
+    || goalExecution?.decision === 'HUMAN_REQUIRED'
+    || Boolean(goalExecution?.humanRequired)
+    || Boolean(goalExecution?.escalationReason);
+}
+
 async function main() {
   const store = createJobStore(STATE_DIR);
   const leaseStore = createLeaseStore(STATE_DIR);
@@ -230,14 +258,9 @@ async function main() {
       }
       if (next.reason) out.push(`  Reason: ${next.reason}`);
 
-      // The one thing a status screen must never do is repeat a human gate the
-      // results have already outlived.
-      const runtimeSaysHuman = goalExecution?.state === LOOP_STATES.HUMAN_REQUIRED
-        || goalExecution?.state === LOOP_STATES.AWAITING_HUMAN
-        || goalExecution?.decision === 'HUMAN_REQUIRED';
-      if (runtimeSaysHuman && next.kind !== 'HUMAN_REQUIRED') {
+      if (hasStaleHumanGate({ goalExecution, next })) {
         out.push('');
-        out.push('  The runtime still records HUMAN_REQUIRED, but the jobs on disk do not support it.');
+        out.push('  The runtime still records a human gate, but the jobs on disk do not support it.');
         out.push('  Reconcile with: npm run ia-loop:reconcile-runtime -- --goal ' + currentGoal);
       }
       out.push('');

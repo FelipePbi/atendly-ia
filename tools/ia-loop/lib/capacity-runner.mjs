@@ -116,6 +116,35 @@ export async function runWithCapacity({
   config = CAPACITY_CONFIG,
   onEvent = () => {},
   maxWaits = Infinity,
+  /**
+   * The AGENT the persisted runtime records as blocked.
+   *
+   * Normally the same as `role`, and defaulted to it. They come apart for a
+   * Work Unit: `role` is the store namespace the unit's job lives in, but the
+   * thing that is actually blocked — that holds the lease, that a human would
+   * go and look at, that `resumeFrom` describes — is the Developer worker the
+   * unit is running inside. Writing `work_unit` into `blockedAgent` would name
+   * a process nobody can find.
+   */
+  blockedAgent = role,
+  /**
+   * A structurally valid answer that is nevertheless NOT the stage's answer,
+   * and that owes a successor attempt on the SAME model.
+   *
+   * Exactly one caller today: a Work Unit reporting CONTEXT_EXPANSION_REQUIRED.
+   * The unit answered under contract; it simply says the context it was
+   * deliberately given was too narrow and names what is missing. Publishing
+   * that as the unit's result would record "the unit is done" for a unit that
+   * did nothing, and the next reader would believe it.
+   *
+   * Deliberately shaped like `router.escalationFor`: return null to publish
+   * normally, or `{ reason, detail, candidate }` to end this attempt and let a
+   * successor run. The difference between the two hooks is the whole point —
+   * one changes the model, this one changes the CONTEXT — and keeping them
+   * apart is what makes the telemetry able to tell "the tier was too low" from
+   * "the slice was too narrow".
+   */
+  continuationFor = null,
 }) {
   if (!store) throw new SpikeError('INVALID_ARGS', 'store is required');
   if (!jobId) throw new SpikeError('INVALID_ARGS', 'jobId is required');
@@ -245,6 +274,37 @@ export async function runWithCapacity({
       }
     }
 
+    // Checked AFTER the escalation hook, and that order is deliberate: a unit
+    // that both cannot proceed and needs a stronger model has really asked for
+    // the stronger model, and answering it with more files would spend an
+    // attempt learning nothing.
+    if (!failed && typeof continuationFor === 'function') {
+      const continuation = await continuationFor({ result: agentOutcome.payload, attempt });
+      if (continuation) {
+        // The answer is preserved BEFORE the attempt is closed, exactly as a
+        // reroute preserves the answer that asked for help: a crash between
+        // the two must leave the payload readable rather than lost.
+        await store.publishCandidateResult(role, jobId, {
+          requestedModel: agentOutcome?.requestedModel ?? null,
+          modelVerificationError: null,
+          observedModels: agentOutcome?.observedModels ?? [],
+          payload: agentOutcome.payload,
+        }, { attemptId: currentAttemptId });
+
+        await store.setJobStatus(role, jobId, 'CONTEXT_EXPANDED');
+        await store.appendEvent({
+          type: 'WORK_UNIT_CONTEXT_EXPANDED',
+          goal, round, agent: role, jobId, attempt, attemptId: currentAttemptId,
+          reason: continuation.reason ?? null,
+          ...(continuation.event ?? {}),
+        });
+        onEvent({ type: 'CONTEXT_EXPANDED', jobId, attempt, reason: continuation.reason ?? null });
+
+        pendingRetry = { reason: 'CONTEXT_EXPANDED', detail: continuation.detail ?? null };
+        continue;
+      }
+    }
+
     if (!failed) {
       await store.publishResult(role, jobId, { ok: true, result: agentOutcome.payload }, {
         attemptId: currentAttemptId,
@@ -333,7 +393,7 @@ export async function runWithCapacity({
     if (decision.action === CAPACITY_ACTIONS.HUMAN_REQUIRED) {
       await store.setJobStatus(role, jobId, 'FAILED');
       await persistHumanRequired(store, {
-        blockedAgent: role,
+        blockedAgent,
         reason: decision.reason,
         note: decision.note,
         jobId,
@@ -372,7 +432,7 @@ export async function runWithCapacity({
     await persistCapacityWait(store, {
       goal,
       round,
-      blockedAgent: role,
+      blockedAgent,
       resumeFrom,
       jobId,
       decision,

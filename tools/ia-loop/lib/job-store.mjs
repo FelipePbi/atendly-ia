@@ -36,9 +36,18 @@ export const STORE_VERSION = 1;
  * and did not succeed): something WAS learned, and the successor exists because
  * of it. Keeping it under its own name is what lets the history say "a1 ran on
  * Sonnet and asked for help" instead of pretending a1 crashed.
+ *
+ * CONTEXT_EXPANDED: the attempt answered under contract that the context it
+ * was deliberately given was not enough, and named what was missing. Like
+ * REROUTED it is neither INTERRUPTED nor FAILED — something WAS learned, and
+ * the successor exists because of it — but the successor runs on the SAME
+ * model with a wider packet, not on a different model. Collapsing the two
+ * would make "the slicing was too narrow" indistinguishable from "the tier was
+ * too low", and those have opposite fixes.
  */
 export const JOB_STATUSES = Object.freeze([
-  'QUEUED', 'RUNNING', 'WAITING_FOR_CAPACITY', 'INTERRUPTED', 'REROUTED', 'COMPLETED', 'FAILED', 'SUPERSEDED',
+  'QUEUED', 'RUNNING', 'WAITING_FOR_CAPACITY', 'INTERRUPTED', 'REROUTED', 'CONTEXT_EXPANDED',
+  'COMPLETED', 'FAILED', 'SUPERSEDED',
 ]);
 
 /**
@@ -98,12 +107,19 @@ export const JOB_DISPATCH = Object.freeze({
  * whole point of the status, and it is authorised by the router before the
  * status is written — never by the worker that wanted a stronger model.
  *
+ * CONTEXT_EXPANDED: the attempt said, under contract, that its context was
+ * insufficient and named what was missing. The successor runs on the same
+ * model with a wider packet. Bounded by the loop's own budget, so "ask for
+ * more files" can never become an unbounded retry.
+ *
  * FAILED is deliberately absent: the work was attempted and did not succeed,
  * and whether to try again is a policy decision a person makes — not something
  * a restart assumes. That distinction is the whole point of keeping a capacity
  * wait out of FAILED.
  */
-export const RETRYABLE_JOB_STATUSES = Object.freeze(['INTERRUPTED', 'WAITING_FOR_CAPACITY', 'REROUTED']);
+export const RETRYABLE_JOB_STATUSES = Object.freeze([
+  'INTERRUPTED', 'WAITING_FOR_CAPACITY', 'REROUTED', 'CONTEXT_EXPANDED',
+]);
 
 /**
  * The id of one attempt at a job.
@@ -139,9 +155,30 @@ function fail(code, message, details = {}) {
   throw new SpikeError(code, message, details);
 }
 
+/**
+ * The Work Unit namespace.
+ *
+ * `ROLES` names the two agents that OWN A QUEUE: a worker process polls
+ * `jobs/<role>/` and claims what it finds. A Work Unit has no such worker and
+ * must not get one — it is executed by the Developer worker, inside the round
+ * job that already holds the worktree lease, so a second claimant would be a
+ * second writer to the same tree.
+ *
+ * It is still a first-class store citizen, because everything the store gives
+ * a job is exactly what a unit needs: an idempotent result, numbered attempts
+ * with a preserved history, attempt fencing, and a status a restart can read.
+ * Re-implementing those beside the store — "state in parallel files" — is what
+ * the recovery work spent months undoing.
+ *
+ * So: a namespace, deliberately not a role. Nothing polls it.
+ */
+export const WORK_UNIT_NAMESPACE = 'work_unit';
+
+export const STORE_NAMESPACES = Object.freeze([...ROLES, WORK_UNIT_NAMESPACE]);
+
 function assertRole(role) {
-  if (!ROLES.includes(role)) {
-    fail('UNKNOWN_ROLE', `Unknown role ${JSON.stringify(role)} (expected one of: ${ROLES.join(', ')})`);
+  if (!STORE_NAMESPACES.includes(role)) {
+    fail('UNKNOWN_ROLE', `Unknown role ${JSON.stringify(role)} (expected one of: ${STORE_NAMESPACES.join(', ')})`);
   }
   return role;
 }

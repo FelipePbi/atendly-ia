@@ -33,6 +33,7 @@ import { PROTOCOL_VERSION_V2 } from './lib/contracts-v2.mjs';
 import { assertClosureScope, CLOSURE_WRITE_PREFIX } from './lib/closure-contracts.mjs';
 import { assertMigrationComplete } from './lib/planning-decision.mjs';
 import { createDeveloperProfileStore, resolveDeveloperProfile } from './lib/developer-profiles.mjs';
+import { createExecutionPlanStore } from './lib/execution-plan-store.mjs';
 import { parseMigrationStatus } from './lib/goal-discovery.mjs';
 import { classifyLease, createLeaseStore } from './lib/leases.mjs';
 import { isDirectExecution } from './lib/direct-execution.mjs';
@@ -183,6 +184,7 @@ async function main() {
   const store = createJobStore(STATE_DIR);
   const leaseStore = createLeaseStore(STATE_DIR);
   const profileStore = createDeveloperProfileStore(STATE_DIR);
+  const planStore = createExecutionPlanStore(STATE_DIR);
   const machine = createLoopStateMachine({ initialState: LOOP_STATES.ACCEPTED });
 
   emit('');
@@ -471,6 +473,40 @@ async function main() {
         selectedBy: 'tech_lead',
         reason: planning.developerProfileReason ?? null,
       });
+
+      // The Work Unit DAG, if the Tech Lead produced one. Same lifetime and
+      // same failure modes as the profile above — written later, executed by a
+      // different process — so it is carried by the same kind of durable
+      // hand-off rather than re-derived from the Goal document.
+      //
+      // Absent is legitimate and recorded as such: the Goal then runs as a
+      // single STANDARD unit, which is what every Goal did before this existed.
+      if (planning.executionPlan) {
+        const record = await planStore.write(planning.nextGoalId, {
+          plan: planning.executionPlan,
+          selectedBy: 'tech_lead',
+          stage: 'NEXT_GOAL_PLANNING',
+        });
+        emit(`  execution plan: ${record.workUnitCount} work unit(s) `
+          + `(${Object.entries(record.types).map(([type, count]) => `${count} ${type}`).join(', ')})`);
+        await store.appendEvent({
+          type: 'EXECUTION_PLAN_RECORDED',
+          goal: planning.nextGoalId,
+          stage: 'NEXT_GOAL_PLANNING',
+          units: record.workUnitCount,
+          types: record.types,
+          fragmentation: record.fragmentation,
+          selectedBy: 'tech_lead',
+        });
+      } else {
+        emit('  execution plan: none — the Goal will run as a single STANDARD work unit.');
+        await store.appendEvent({
+          type: 'EXECUTION_PLAN_ABSENT',
+          goal: planning.nextGoalId,
+          stage: 'NEXT_GOAL_PLANNING',
+          reason: 'PLANNING_PRODUCED_NO_PLAN',
+        });
+      }
 
       await persistClosure({
         nextGoalId: planning.nextGoalId,

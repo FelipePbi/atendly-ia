@@ -20,11 +20,20 @@
  */
 
 import { dirname, join } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
-import { invokeAgent, resolveClaudeExecutable } from '../lib/claude-process.mjs';
+import { SpikeError, invokeAgent, resolveClaudeExecutable } from '../lib/claude-process.mjs';
 import { createJobStore } from '../lib/job-store.mjs';
+import {
+  createExecutionPlanStore,
+  fallbackExecutionPlan,
+  unitTypeForProfile,
+} from '../lib/execution-plan-store.mjs';
+import { executeWorkUnitPlan } from '../lib/work-unit-executor.mjs';
+import { workUnitConfig } from '../lib/work-unit-config.mjs';
+import { GOAL_SUMMARY_CHARS } from '../lib/work-unit-context.mjs';
 import { SESSION_STRATEGY } from '../lib/worker-registry.mjs';
 import { banner, log, runWorkerLoop } from '../lib/worker-loop.mjs';
 import {
@@ -74,6 +83,17 @@ const STREAM_EVENTS = process.env.IA_LOOP_STREAM_EVENTS !== '0';
 const DEVELOPER_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'TodoWrite'];
 
 const store = createJobStore(STATE_DIR);
+const planStore = createExecutionPlanStore(STATE_DIR);
+
+/**
+ * Whether this process executes a round as a Work Unit DAG.
+ *
+ * Read once, at module scope, for the same reason the routing mode is: a
+ * switch that could change halfway through a round would make the round
+ * unauditable. Flipping it takes a worker restart, which is the honest cost of
+ * changing what the Developer stage IS.
+ */
+const WORK_UNIT_CONFIG = workUnitConfig();
 
 const telemetry = createTelemetry({
   level: LOG_LEVEL,
@@ -211,6 +231,214 @@ function buildPrompt(context, job) {
   ].join('\n');
 }
 
+/**
+ * A few lines of the Goal, for a unit's context packet.
+ *
+ * Deliberately the HEAD of the document rather than a model-written summary:
+ * it costs nothing, it cannot hallucinate, and the Goal documents open with
+ * what the Goal is. A unit that needs more is told where the file is.
+ */
+async function readGoalSummary(goalPath) {
+  try {
+    const raw = await readFile(goalPath, 'utf8');
+    return raw.slice(0, GOAL_SUMMARY_CHARS);
+  } catch {
+    // Not fatal: a missing summary makes a packet thinner, never wrong. The
+    // unit still receives goalPath and can read the document itself.
+    return null;
+  }
+}
+
+/**
+ * The plan this round executes, and where it came from.
+ *
+ * A recorded plan that no longer VALIDATES is deliberately not treated as an
+ * absent plan: a cycle or an unknown dependency is a defect in something the
+ * Tech Lead wrote, and quietly replacing it with a single unit would hide a
+ * bug while still charging for the round. It fails the job instead.
+ */
+async function resolveRoundPlan(job) {
+  const goalSummary = await readGoalSummary(job.goalPath);
+
+  // The judgement the round already carries, translated into the vocabulary a
+  // plan speaks. Without this, a reviewer's explicit "the next correction round
+  // needs Opus" would be silently dropped the moment the flag was turned on.
+  const { type: unitType, reason: unitTypeReason } = unitTypeForProfile(job.developerProfile);
+
+  if (job.type === 'CORRECTION') {
+    return {
+      plan: fallbackExecutionPlan({
+        goal: job.goal, round: job.round, blockers: [...job.blockers], goalSummary,
+        unitType, unitTypeReason,
+      }),
+      goalSummary,
+      planned: false,
+    };
+  }
+
+  const planned = await planStore.read(job.goal);
+  if (planned) return { plan: planned, goalSummary, planned: true };
+
+  if (!WORK_UNIT_CONFIG.allowCompatibilityFallback) {
+    throw new SpikeError(
+      'EXECUTION_PLAN_MISSING',
+      `Goal ${job.goal} carries no execution plan and the compatibility fallback is disabled.`,
+      { goal: job.goal },
+    );
+  }
+
+  return {
+    plan: fallbackExecutionPlan({
+      goal: job.goal, round: job.round, goalSummary, unitType, unitTypeReason,
+    }),
+    goalSummary,
+    planned: false,
+  };
+}
+
+/**
+ * Executes one round as a Work Unit DAG.
+ *
+ * The round's own job, lease and worktree are unchanged and untouched: this
+ * runs INSIDE the attempt the worker loop already claimed, which is what keeps
+ * one worktree per Goal, one lease per round, and one review at the end.
+ */
+async function handleWorkUnitJob(job, { profile, isCorrection }) {
+  // Round-level idempotency, checked here because the capacity runner — which
+  // normally does it — is now called once per unit rather than once per round.
+  if (await store.hasCompletedResult(ROLE, job.jobId)) {
+    log('ALREADY COMPLETED', 'round result on disk; the DAG is not executed again');
+    await store.appendEvent({ type: 'JOB_RESULT_REUSED', role: ROLE, jobId: job.jobId, goal: job.goal, round: job.round });
+    currentJob = null; currentProfile = null; capacityWait = null; workerState = 'IDLE';
+    return;
+  }
+
+  const { plan, goalSummary, planned } = await resolveRoundPlan(job);
+
+  if (!planned) {
+    // Never silent. "This Goal ran as one unit" is a fact a later comparison of
+    // monolithic against decomposed execution has to be able to see.
+    await store.appendEvent({
+      type: 'WORK_UNIT_PLAN_FALLBACK',
+      goal: job.goal, round: job.round, jobId: job.jobId,
+      source: plan.source,
+      reason: isCorrection ? 'CORRECTION_ROUND' : 'NO_EXECUTION_PLAN_RECORDED',
+    });
+    log('PLAN', `${plan.source} — ${plan.workUnits.length} unit(s)`);
+  } else {
+    log('PLAN', `Tech Lead execution plan — ${plan.workUnits.length} unit(s)`);
+  }
+
+  await store.writeRuntime({
+    ...(await store.readRuntime()),
+    state: isCorrection ? 'CORRECTION_RUNNING' : 'DEVELOPER_RUNNING',
+    round: job.round,
+    currentJobId: job.jobId,
+  });
+
+  const executable = resolveClaudeExecutable();
+
+  const outcome = await executeWorkUnitPlan({
+    store,
+    plan,
+    job,
+    goal: job.goal,
+    round: job.round,
+    worktree: job.worktree,
+    executionBase: job.worktreeInitialHead ?? job.executionBase,
+    goalPath: job.goalPath,
+    goalSummary,
+    config: WORK_UNIT_CONFIG,
+    resumeFrom: isCorrection ? LOOP_STATES.CORRECTION_RUNNING : LOOP_STATES.DEVELOPER_RUNNING,
+    emit: (line) => log('DAG', line),
+
+    /**
+     * One unit, one inference.
+     *
+     * Identical in every safety-relevant respect to the round-level call this
+     * replaces: a brand-new session per attempt (the Developer is stateless
+     * and stays stateless), the model and effort read from the routing the
+     * ROUTER produced rather than from anything this file knows, the family
+     * checked against what actually served the call, and no `--fallback-model`.
+     * What changed is the size of the prompt, not the guarantees around it.
+     */
+    invokeUnit: async ({ unit, prompt, routing, jsonSchema, validatePayload, timeoutMs, attempt }) => {
+      const attemptSessionId = randomUUID();
+      currentJob.sessionId = attemptSessionId;
+      currentProfile = { name: `WU_${routing.modelKey.toUpperCase()}`, model: routing.model, effort: routing.effort };
+
+      telemetry.event('MODEL', `${unit.id} · ${routing.label} · ${routing.reason}`);
+      if (attempt > 1) log('MODEL', `${unit.id} attempt ${attempt} runs on ${routing.label} (${routing.reason})`);
+
+      return invokeAgent({
+        executable: executable.path,
+        model: routing.model,
+        effort: routing.effort,
+        expectedFamily: routing.family,
+        expectedRole: ROLE,
+        onTelemetryEvent: STREAM_EVENTS ? (event) => telemetry.emit(event) : null,
+        telemetryRoot: job.worktree,
+        prompt,
+        jsonSchema,
+        validatePayload,
+        cwd: job.worktree,
+        sessionId: attemptSessionId,
+        persistSession: false,
+        resume: false,
+        tools: DEVELOPER_TOOLS,
+        permissionMode: 'auto',
+        addDirs: [job.worktree],
+        safeMode: false,
+        timeoutMs,
+      });
+    },
+  });
+
+  // Validated with the SAME contract a model-produced round result is validated
+  // with. The aggregate is synthesised by the harness, which is exactly why it
+  // must not be exempt: a synthesised result that could not have been produced
+  // by the contract is a result the reviewer cannot trust either.
+  const aggregate = validateDeveloperResult(outcome.aggregate, {
+    jobId: job.jobId, goal: job.goal, round: job.round,
+  });
+
+  const attemptId = job.attemptId
+    ?? (await store.readAttemptState(ROLE, job.jobId))?.attemptId
+    ?? null;
+
+  workerState = 'PUBLISHING';
+  await store.publishResult(ROLE, job.jobId, { ok: true, result: aggregate }, { attemptId });
+  await store.setJobStatus(ROLE, job.jobId, 'COMPLETED');
+
+  await store.appendEvent({
+    type: 'DEVELOPER_RESULT_PUBLISHED',
+    jobId: job.jobId,
+    goal: job.goal,
+    round: job.round,
+    status: aggregate.status,
+    // The round no longer ran on ONE profile, so naming one here would be a
+    // claim this worker is not entitled to make. The routing per unit is in
+    // the aggregate and in the events.
+    developerProfile: null,
+    executionMode: 'WORK_UNITS',
+    workUnits: outcome.telemetry.workUnitsTotal,
+    modelCalls: outcome.telemetry.modelCalls,
+    escalations: outcome.telemetry.escalations,
+    contextExpansions: outcome.telemetry.contextExpansions,
+    reused: false,
+  });
+
+  log(`RESULT ${aggregate.status}`, `${outcome.telemetry.workUnitsTotal} work unit(s)`);
+  log('ROUTING', `native ${outcome.telemetry.modelCalls.native} · haiku ${outcome.telemetry.modelCalls.haiku}`
+    + ` · sonnet ${outcome.telemetry.modelCalls.sonnet} · opus ${outcome.telemetry.modelCalls.opus}`);
+
+  telemetry.clearContext();
+  currentJob = null;
+  currentProfile = null;
+  capacityWait = null;
+  workerState = 'IDLE';
+}
+
 async function handleJob(rawJob) {
   const job = validateDeveloperJob(rawJob);
   // Fails closed on an unknown name: a typo must stop the run, never quietly
@@ -236,6 +464,17 @@ async function handleJob(rawJob) {
   });
 
   const isCorrection = job.type === 'CORRECTION';
+
+  // The one fork in this worker. With the flag off, everything below runs
+  // exactly as it did before Work Units existed — same prompt, same schema,
+  // same single call, same published result. With it on, the round is executed
+  // as a DAG and the SAME DeveloperResult shape is published at the end, so
+  // nothing downstream can tell which path produced it. That equivalence is
+  // what makes rolling back a variable rather than a revert.
+  if (WORK_UNIT_CONFIG.enabled) {
+    await handleWorkUnitJob(job, { profile, isCorrection });
+    return;
+  }
 
   const context = isCorrection
     ? buildCorrectionContext({

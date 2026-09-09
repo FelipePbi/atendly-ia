@@ -9,7 +9,11 @@ Vigência: a partir do **Goal003**. Ver [D-018](DECISIONS.md).
 
 ## Tech Lead / Architect / Reviewer
 
-**Modelo atual:** Claude Fable 5.1 (`claude-fable-5-1`)
+**Modelo atual:** escolhido por risco, não fixo. `LOW`/`MEDIUM` → Claude Opus 5
+(`claude-opus-5`); `HIGH`/`CRITICAL` → Claude Fable 5.1 (`claude-fable-5-1`),
+com fallback para Opus quando a cota do especialista fecha. A classificação é
+determinística e não custa inferência. Tabela canônica em
+`tools/ia-loop/lib/model-routing.mjs`.
 
 Responsabilidades:
 
@@ -26,7 +30,19 @@ Responsabilidades:
 
 ## Developer / Executor
 
-**Modelo atual:** Claude Opus 5 (`claude-opus-5`)
+**Modelo atual:** escolhido pelo router, não fixo, e não necessariamente um só
+por Goal.
+
+- Execução legada (uma rodada, uma chamada): Claude Sonnet 5 (`claude-sonnet-5`)
+  como padrão, Claude Opus 5 (`claude-opus-5`) por escalada com evidência.
+- Execução por **Work Units** (`IA_LOOP_WORK_UNIT_EXECUTION=1`): cada unidade do
+  plano é roteada pela sua natureza — trabalho determinístico é executado pelo
+  próprio orchestrator sem modelo nenhum, mecânico em Claude Haiku 4.5
+  (`claude-haiku-4-5-20251001`), normal em Sonnet, e genuinamente difícil em
+  Opus. O Tech Lead declara tipo, complexidade e risco; **nunca** o modelo.
+
+Tabela canônica em `tools/ia-loop/lib/model-routing.mjs`; a arquitetura está em
+[tools/ia-loop/README.md](../../tools/ia-loop/README.md), seção V18.
 
 Responsabilidades:
 

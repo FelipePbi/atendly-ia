@@ -18,6 +18,7 @@ Duas etapas concluídas:
 | V6 — Job Ownership and Leases | uma execução por operação lógica; timeout de observador não duplica trabalho |
 | V13 — Identidade do modelo por evidência explícita | `modelUsage`/`usage` viram observabilidade; identidade vem de `message.model` do stream |
 | V14 — Adaptive Model Routing | modelo escolhido por risco: Opus padrão no Tech Lead, Sonnet no Developer, Fable só para HIGH/CRITICAL |
+| V18 — Work Unit Execution | rodada decomposta em DAG de Work Units; determinístico sem modelo, mecânico em Haiku, normal em Sonnet, difícil em Opus; contexto por unidade. Atrás de `IA_LOOP_WORK_UNIT_EXECUTION` (padrão: desligado) |
 
 ---
 
@@ -3208,6 +3209,361 @@ escalada; `resolveProfileForRound` preserva o perfil persistido num restart;
 restart com R3 inexistente/QUEUED/RUNNING/COMPLETED dispara exatamente uma
 vez, reutiliza, aguarda ou consome, respectivamente; Developer R2 e Review R2
 não são rechamados; a reconciliação do human gate preserva o evento original.
+
+## V18 — Work Unit Execution: DAG, roteamento por natureza e Context Slicing
+
+Até aqui, um Goal era **uma tarefa monolítica para um único Developer Model**.
+Tudo que o Goal tocava — um DTO de boilerplate, um service com regra de
+negócio real e `npm run typecheck` — era pago no mesmo preço, no mesmo modelo,
+com o mesmo contexto do Goal inteiro relido para cada um.
+
+V18 decompõe a rodada do Developer em **Work Units** ligadas por um DAG, e
+roteia cada unidade para o executor mais barato que consegue fazê-la
+corretamente.
+
+```text
+GOAL
+  ↓
+TECH LEAD PLANNING ....................... Opus (LOW/MEDIUM) · Fable (HIGH/CRITICAL)
+  ↓
+EXECUTION PLAN (contrato PlanningDecision.executionPlan)
+  ↓
+WORK UNIT DAG ............................ validado antes de qualquer dispatch
+  ↓
+WORK UNIT ROUTER ......................... lib/model-routing.mjs
+  ↓
+┌──────────────────────────────────────────────────────────┐
+│ DETERMINISTIC → ia-loop executa o comando (nenhum modelo) │
+│ MECHANICAL    → Haiku 4.5      high                       │
+│ STANDARD      → Sonnet 5       high                       │
+│ COMPLEX       → Opus 5         high                       │
+└──────────────────────────────────────────────────────────┘
+  ↓
+VERIFICATION (unidades DETERMINISTIC do próprio plano)
+  ↓
+AGGREGATE DeveloperResult ................ um único resultado da rodada
+  ↓
+TECH LEAD REVIEW ......................... Opus / Fable — no Goal, não por unidade
+```
+
+O que **não** mudou, de propósito: uma worktree por Goal, um lease por rodada,
+um review por rodada, a state machine, o reconciler, o recovery, o fechamento.
+A rodada continua publicando **um** `DeveloperResult` sob o mesmo `jobId` — é
+por isso que a feature flag pode ser ligada e desligada a qualquer momento.
+
+### O que é uma Work Unit
+
+`lib/work-units.mjs`. Autocontida o bastante para ser executada, pequena o
+bastante para receber contexto restrito, grande o bastante para entregar algo
+coerente. Deliberadamente **não** é microtarefa: "adicionar import" não é uma
+unidade, e o normalizador funde cadeias assim antes de qualquer execução.
+
+| Campo | Papel |
+| --- | --- |
+| `id` | `WU-`, `VERIFY-`, `FIX-` ou `DIAG-` + até três dígitos |
+| `objective` | o que a unidade entrega |
+| `type` | `DETERMINISTIC` · `MECHANICAL` · `STANDARD` · `COMPLEX` |
+| `complexity` / `risk` | `LOW`/`MEDIUM`/`HIGH` — derivados do `type` quando ausentes |
+| `dependencies` | arestas do DAG |
+| `expectedFiles` / `relevantFiles` | dicas de contexto, não permissões |
+| `acceptanceCriteria` | obrigatório para tudo que um modelo executa |
+| `verification` | actions determinísticas associadas |
+| `action` / `scope` / `pattern` | só para `DETERMINISTIC` |
+
+Três propriedades que o arquivo inteiro existe para sustentar:
+
+- **DECLARATIVO.** O plano declara *natureza*, nunca modelo. Um plano que traz
+  `model`, `modelKey`, `profile`, `developerProfile`, `effort` ou `executor` é
+  **recusado** (`PLAN_DECLARES_MODEL`), não obedecido em silêncio. Ignorar um
+  campo em que o planner acreditou é pior do que dizer não.
+- **VALIDADO.** IDs únicos, dependências resolvíveis, sem ciclo, critérios de
+  aceite presentes, tipos conhecidos, action determinística permitida,
+  fragmentação sã. Um plano que falha em qualquer um é `PLAN_INVALID` e **nada
+  é despachado** — ciclo descoberto por um worker é um worker que nunca termina.
+- **ORDENADO.** Kahn deriva a ordem topológica e os níveis. Empate é resolvido
+  por ordem de declaração, então um restart agenda a mesma coisa a seguir.
+
+### Fragmentação e fusão
+
+Bandas reportadas (`SMALL` 1–3, `MEDIUM` 3–8, `LARGE` 5–15) e um teto real de
+20 unidades (`PLAN_FRAGMENTATION_EXCESSIVE`). "Este Goal tem mesmo dezoito
+unidades" continua possível; "este Goal tem oitenta" não.
+
+A fusão é conservadora de propósito: A e B só se fundem quando a única
+dependência de B é A, nada mais depende de A, e ambas são `MECHANICAL` triviais
+(objetivo do tipo "adicionar o export de X"). O resultado mantém o **id do
+pai**, então toda aresta que apontava para ele continua válida, e registra o
+que absorveu em `mergedFrom`. Cadeias fundem até quatro edições; além disso a
+"unidade" viraria uma lista de compras com um único critério de aceite.
+
+### DETERMINISTIC: comando, não inferência
+
+`lib/deterministic-actions.mjs` e `lib/deterministic-executor.mjs`.
+
+O registro de actions é **fechado**, e isso é a propriedade de segurança, não
+uma conveniência. O plano nomeia uma *action*, nunca uma linha de comando: uma
+string de shell escrita por modelo não é algo que este executor roda, por mais
+plausível que pareça. `scope` e `pattern` são as únicas entradas vindas do
+planner, ambas validadas contra padrões estreitos, e **nada passa por shell** —
+tudo é `spawn` de argv, então não existe metacaractere para significar coisa
+alguma.
+
+Actions: `typecheck`, `lint`, `targeted-tests`, `unit-tests`, `tooling-tests`,
+`gate-tests`, `git-diff-check`, `build`, `validate-core`, `validate-integration`.
+
+O resultado vai para o store como qualquer outro: idempotência não é sobre
+modelos, e um restart não deve reexecutar um build de quinze minutos cuja
+resposta já está em disco.
+
+### Router: uma tabela, um lugar
+
+`lib/model-routing.mjs` — o mesmo arquivo que já era o único lugar onde um id
+de modelo é escrito. Um router paralelo seria um segundo lugar para a política
+divergir.
+
+```text
+DETERMINISTIC → executor: native      (nenhum modelo)
+MECHANICAL    → haiku   effort high
+STANDARD      → sonnet  effort high
+COMPLEX       → opus    effort high
+```
+
+Um **piso de risco**: unidade `MECHANICAL` marcada com `risk: HIGH` ou
+`complexity: HIGH` é promovida a `STANDARD` com razão `MECHANICAL_RISK_FLOOR` —
+"Haiku decidindo arquitetura" é explicitamente algo que isto não pode produzir.
+Não existe regra simétrica promovendo `STANDARD` a Opus por risco declarado:
+Opus se alcança por evidência, não por adjetivo.
+
+### Escalation entre tiers
+
+Um degrau por vez: `MECHANICAL → STANDARD → COMPLEX`, e `COMPLEX` não escala
+(isso é decisão humana, não de router). As razões admissíveis são **diferentes
+por tier**, porque as duas perguntas são diferentes:
+
+| Tier | Razões admissíveis |
+| --- | --- |
+| `MECHANICAL` | `NOT_AS_MECHANICAL_AS_CLASSIFIED`, `PATTERN_INSUFFICIENT`, `BEHAVIOUR_DECISION_REQUIRED`, `CROSS_MODULE_IMPACT_DISCOVERED`, `REPEATED_EXECUTION_FAILURE`, `LOW_CONFIDENCE` |
+| `STANDARD` | `REPEATED_EXECUTION_FAILURE`, `UNEXPECTED_ARCHITECTURE`, `DEEP_DEBUGGING_REQUIRED`, `CONCURRENCY_ISSUE`, `STATE_INCONSISTENCY`, `PLAN_INCOMPATIBILITY`, `COMPLEXITY_DISCOVERED` |
+
+`LOW_CONFIDENCE` é admissível no tier barato, onde errar é barato, e **não é**
+razão para comprar Opus. `REPEATED_EXECUTION_FAILURE` exige pelo menos duas
+tentativas falhas *que existam no histórico persistido* — uma falha não é uma
+repetição, e chamar de repetição é como um teste vermelho vira uma chamada Opus.
+Evidência concreta é obrigatória: confiança declarada não é evidência.
+
+Toda mudança de modelo passa pela mesma maquinaria que já existia
+(`runWithCapacity` + `createWorkUnitAttemptRouter`), então produz os mesmos
+eventos auditáveis — `MODEL_ROUTED`, `MODEL_ESCALATED`, `MODEL_FALLBACK`,
+`MODEL_ESCALATION_REFUSED` — e o predecessor mantém id, modelo e resposta.
+
+Fallback de capacidade (disponibilidade, nunca disfarce de bug) ganhou um alvo
+novo: `haiku → sonnet`. Um degrau, como todos os outros.
+
+### Context Slicing
+
+`lib/work-unit-context.mjs`. Um packet carrega, e **só** carrega:
+
+```yaml
+goalSummary:              # algumas linhas, não o documento
+workUnit:                 # objetivo, tipo, critérios, hints
+dependenciesCompleted:    # resumo + changedFiles de cada dependência
+relevantFiles:            # dicas do plano + o que as dependências mudaram
+constraints:              # o que não pode ser feito
+previousRelevantFailures: # tentativas anteriores DESTA unidade
+expandedContext:          # arquivos concedidos por expansão anterior
+```
+
+Deliberadamente **fora**: o corpo do documento do Goal, relatórios de outras
+unidades, o histórico de tentativas da rodada, o review packet, o diff, o log
+de eventos, o relatório da rodada anterior.
+
+`goalPath` **está** dentro, e isso não é brecha: a unidade é dita onde o Goal
+mora para que exploração legítima continue possível. A regra é "contexto
+pequeno primeiro, expandir quando precisar", não "você não pode olhar". O que o
+packet elimina é o *default* de mandar tudo para todo mundo.
+
+### Context Expansion
+
+Quando o recorte foi estreito demais, a unidade responde
+`CONTEXT_EXPANSION_REQUIRED` com um `contextRequest` nomeando os arquivos que
+faltam — estruturalmente, nunca em prosa. O harness concede, registra
+`WORK_UNIT_CONTEXT_EXPANDED` (pedido, razão, arquivos adicionados, arquivos que
+já estavam lá) e roda **uma nova tentativa no mesmo modelo**.
+
+Isso ganhou um status de job próprio, `CONTEXT_EXPANDED`, e não reaproveita
+`REROUTED`: colapsar os dois tornaria "o recorte foi estreito demais"
+indistinguível de "o tier era baixo demais", e os dois têm correções opostas.
+
+Limitado (2 por unidade, por padrão). Uma unidade que pediu duas vezes e ainda
+não consegue não está sem contexto: está mal especificada ou sub-tierada, e
+ambos se resolvem em outro lugar. No limite, a resposta vira o resultado da
+unidade e a rodada fica `BLOCKED` — fingir o contrário esconderia exatamente a
+medição que isto existe para produzir. Pedir arquivos que o packet já tinha não
+é concedido.
+
+### Verificação, atribuição de falha e unidades corretivas
+
+Verificação determinística falhou → o harness extrai os caminhos de arquivo da
+saída e **atribui** a falha à unidade cujos `changedFiles` (coletados do git,
+não declarados pelo modelo) intersectam.
+
+- atribuição inequívoca → `FIX-00N`, tipo **STANDARD**, escopada nos arquivos
+  daquela unidade;
+- ambígua ou sem interseção → `DIAG-00N`, **STANDARD**, dito explicitamente que
+  a origem é desconhecida, com os candidatos — apontar com confiança para o
+  lugar errado manda a correção para o lugar errado e depois reporta como
+  corrigido;
+- em ambos os casos a verificação é reexecutada em seguida (geração `-g2` do
+  mesmo `id`, então a primeira falha continua legível ao lado do segundo passe).
+
+Nunca Opus por padrão: "um teste ficou vermelho" é trabalho ordinário. O loop é
+limitado (2 correções por verificação, 4 por rodada); esgotado o orçamento a
+rodada segue para review **como `BLOCKED`**, com a falha registrada.
+
+### Estado, idempotência e recovery
+
+Uma Work Unit é um **job de verdade** no store, no namespace `work_unit`
+(`lib/job-store.mjs`). Namespace, deliberadamente **não** um role: nada faz
+polling nele. Quem executa é o worker Developer, dentro da attempt que já
+segurou o lease e a worktree — um segundo reclamante seria um segundo escritor
+na mesma árvore.
+
+Com isso a unidade herda tudo que o store já dá a um job: resultado idempotente,
+attempts numeradas com histórico preservado, fencing por attempt, e um status
+que um restart consegue ler. O job id é **determinístico** —
+`008-r1-unit-wu-001` — porque a identidade de uma unidade é (goal, round,
+unitId): um restart procura exatamente o nome que o processo anterior escreveu
+e acha o resultado, em vez de cunhar um novo.
+
+O que isso preserva, verificado por teste:
+
+- `WU-001` concluída não é reexecutada depois de um crash em `WU-002`;
+- uma unidade determinística não reexecuta o comando;
+- reconciliar três vezes não fabrica uma quarta attempt;
+- uma unidade cuja dependência falhou fica `BLOCKED`, nunca é tentada;
+- a decisão de que uma attempt foi interrompida continua sendo da camada de
+  lease — de dentro do processo, uma attempt morta e uma viva em outro processo
+  são indistinguíveis.
+
+### Estados da Work Unit
+
+`PENDING` · `READY` · `RUNNING` · `COMPLETED` · `FAILED` · `ESCALATED` ·
+`BLOCKED` · `SKIPPED`.
+
+### Review continua no Goal
+
+Não há review do Tech Lead por unidade: isso destruiria a economia duas vezes.
+O review packet ganhou o DAG **resumido** (unidades, executor, modelo, tier,
+tentativas, escalations, expansões, arquivos por unidade, contagem de chamadas)
+— evidência sobre a mudança, sem devolver o histórico inteiro da rodada para a
+única chamada que a decomposição queria manter pequena.
+
+### Feature flag
+
+```bash
+IA_LOOP_WORK_UNIT_EXECUTION=1   # execução por Work Units
+IA_LOOP_WORK_UNIT_EXECUTION=0   # Developer legado (padrão)
+```
+
+Padrão **desligado**. Vira quando o caminho novo tiver executado um Goal real de
+ponta a ponta — até lá, "a flag existe e os testes estão verdes" não é a mesma
+afirmação que "é assim que Goals rodam agora", e ligar por padrão faria dela uma.
+
+Orçamento do loop (nenhum deles nomeia modelo; essa política vive em
+`model-routing.mjs`):
+
+| Variável | Padrão |
+| --- | --- |
+| `IA_LOOP_WU_MAX_CONTEXT_EXPANSIONS` | 2 |
+| `IA_LOOP_WU_MAX_FIX_UNITS` | 2 por verificação |
+| `IA_LOOP_WU_MAX_FIX_UNITS_ROUND` | 4 |
+| `IA_LOOP_WU_TIMEOUT_MS` | 90 min por unidade |
+| `IA_LOOP_WU_ALLOW_FALLBACK` | ligado |
+
+### Compatibilidade
+
+Dois casos caem no plano de unidade única, e nenhum é defeito:
+
+- **rodada de correção**: não existe DAG planejado, por construção — o que uma
+  correção deve fazer é decidido pelo review que produziu os blockers, horas
+  depois do plano. Vira uma unidade `STANDARD` escopada nos blockers, com um
+  critério de aceite por blocker (`CORRECTION_ROUND_SINGLE_UNIT`);
+- **Goal planejado antes de execution plans existirem**: uma unidade `STANDARD`
+  cobrindo o Goal inteiro (`FALLBACK_SINGLE_STANDARD_UNIT`) — comportamentalmente
+  o caminho antigo, expresso no vocabulário novo.
+
+Nenhum dos dois sintetiza verificação determinística: inventar um gate que o
+planner não pediu seria o harness decidindo qual é o critério do Goal.
+
+O perfil que a rodada já tinha resolvido é **traduzido**, não descartado. Sob o
+mecanismo anterior, o reviewer podia dizer "a próxima correção precisa de Opus"
+nomeando um perfil, e a rodada rodava nele. Um plano de unidade única que
+ignorasse isso rebaixaria em silêncio uma decisão tomada com a falha à vista.
+`unitTypeForProfile` mapeia perfis da família Opus para `COMPLEX` e o resto para
+`STANDARD`: o julgamento do Tech Lead é preservado pelo canal correto — a
+natureza declarada — e a autoridade sobre ids de modelo continua não voltando
+para ele.
+
+O fallback é sempre registrado (`WORK_UNIT_PLAN_FALLBACK`): "este Goal rodou
+como uma unidade só" é um fato que uma comparação futura entre execução
+monolítica e decomposta precisa enxergar.
+
+Um plano **gravado mas inválido** não é tratado como plano ausente: ciclo ou
+dependência desconhecida é defeito em algo que o Tech Lead escreveu, e
+substituí-lo em silêncio por uma unidade única esconderia um bug enquanto ainda
+se cobra pela rodada.
+
+### Telemetria
+
+Derivada do log de eventos, nunca de um contador que alguém lembrou de
+incrementar. `renderRoutingSummary` passou a reportar:
+
+```text
+Calls: haiku N · sonnet N · opus N · fable N
+Work Units:
+  declared: N MECHANICAL · N STANDARD · N DETERMINISTIC
+  executed: N · states: N COMPLETED · N BLOCKED
+  attempts: N · context expansions: N
+  deterministic runs: N (N failed) — model calls avoided: N
+```
+
+Eventos novos: `WORK_UNIT_PLAN_RESOLVED`, `WORK_UNIT_PLAN_FALLBACK`,
+`WORK_UNIT_STARTED`, `WORK_UNIT_COMPLETED`, `WORK_UNIT_BLOCKED`,
+`WORK_UNIT_DETERMINISTIC_EXECUTED` (com `modelCalls: 0` explícito),
+`WORK_UNIT_CONTEXT_EXPANDED`, `WORK_UNIT_VERIFICATION_FAILED`,
+`WORK_UNIT_FIX_CREATED`, `EXECUTION_PLAN_RECORDED`, `EXECUTION_PLAN_ABSENT`.
+
+### Testes
+
+`tests/work-units.test.mjs` (27): schema, tipos, ids, critérios de aceite,
+recusa de plano que nomeia modelo, action fora do registro, scope fora do
+workspace, pattern com metacaractere, ciclos (curto, próprio e longo),
+ordem topológica, níveis, estabilidade da ordem, bandas de fragmentação, teto,
+fusão de triviais, preservação de arestas.
+
+`tests/work-unit-routing.test.mjs` (23): a tabela inteira, ausência de `max`,
+piso de risco, ausência de regra simétrica para Opus, escada de escalation,
+razões admissíveis por tier, exigência de evidência, exigência de attempts reais
+para `REPEATED_EXECUTION_FAILURE`, override manual, replay do tier a partir do
+histórico.
+
+`tests/work-unit-execution.test.mjs` (26): unidade determinística sem nenhuma
+chamada de modelo, `MECHANICAL` só em Haiku, escalation Haiku→Sonnet com a
+attempt 1 intacta e o payload preservado, escalation recusada, Sonnet→Opus,
+context slicing (o que entra e o que comprovadamente não entra), expansão de
+contexto concedida/redundante/no limite, ordem do DAG, níveis independentes,
+dependência falha bloqueando, `FIX`/`DIAG` com atribuição, loop de correção
+limitado, restart sem reexecução, resume como attempt 2 depois do veredito de
+lease, idempotência tripla, `changedFiles` decididos pelo git, agregado válido
+sob o contrato da rodada, telemetria.
+
+`tests/work-unit-compatibility.test.mjs` (17): flag desligada por padrão,
+grafias aceitas, contrato legado intacto, orçamento sem nomear modelo,
+hand-off Goal→plano, recusa de plano cíclico na gravação, isolamento entre
+Goals, os dois fallbacks de unidade única, `executionPlan` no contrato de
+planning (presente, ausente, cíclico), ausência de campo de modelo no schema,
+`spawn` sem shell, falha de spawn reportada, DAG no review packet e sua
+ausência numa rodada legada.
 
 ## Limitações conhecidas
 

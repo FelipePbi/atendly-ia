@@ -14,6 +14,7 @@ import { SpikeError } from './claude-process.mjs';
 import { PROTOCOL_VERSION_V2 } from './contracts-v2.mjs';
 import { CLOSURE_WRITE_PREFIX, normalizeReportedPath } from './closure-contracts.mjs';
 import { DEFAULT_DEVELOPER_PROFILE, SELECTABLE_DEVELOPER_PROFILES, assertSelectableProfile } from './developer-profiles.mjs';
+import { EXECUTION_PLAN_SCHEMA, validateExecutionPlan } from './work-units.mjs';
 
 export const PLANNING_DECISIONS = Object.freeze(['NEXT_GOAL', 'MIGRATION_COMPLETE', 'HUMAN_REQUIRED']);
 
@@ -81,11 +82,35 @@ export function validatePlanningDecision(payload, { jobId, goal }) {
     const developerProfile = payload.developerProfile ?? DEFAULT_DEVELOPER_PROFILE;
     assertSelectableProfile(developerProfile, 'developerProfile');
 
+    // The Work Unit DAG for the Goal being written. Optional, and absent is
+    // NOT an error: a planning call made before execution plans existed, or
+    // one the Tech Lead chose not to decompose, still produces a valid Goal —
+    // it simply runs as a single unit, which is what the previous architecture
+    // did for every Goal.
+    //
+    // Present-but-invalid is a different matter and fails here, in the process
+    // that still has the planning context to say why. A cycle discovered later,
+    // by the worker about to execute it, is a cycle discovered too late.
+    const executionPlan = payload.executionPlan
+      ? validateExecutionPlan({ ...payload.executionPlan, goal: payload.nextGoalId }, { goal: payload.nextGoalId })
+      : null;
+
     return Object.freeze({
       ...payload,
       nextGoalPath,
       developerProfile,
       developerProfileReason: payload.developerProfileReason ?? null,
+      // The RAW plan travels on, not the normalised one: the store validates
+      // again on read, so freezing one version of the normaliser into the
+      // record would mean a later fix to it silently did not apply.
+      executionPlan: payload.executionPlan ?? null,
+      executionPlanSummary: executionPlan
+        ? Object.freeze({
+          units: executionPlan.workUnits.length,
+          order: Object.freeze([...executionPlan.order]),
+          fragmentation: executionPlan.fragmentation,
+        })
+        : null,
       documentsUpdated: Object.freeze(documentsUpdated),
     });
   }
@@ -151,6 +176,13 @@ export function planningDecisionSchemaFor({ jobId, goal }) {
       // not grow in any meaningful way.
       developerProfile: { type: 'string', enum: [...SELECTABLE_DEVELOPER_PROFILES] },
       developerProfileReason: { type: 'string', maxLength: 200 },
+      // The Work Unit DAG for the Goal being written. It rides on the planning
+      // call the cycle already makes, so decomposing a Goal costs no extra
+      // inference — the same reasoning that put developerProfile here.
+      //
+      // Note what the schema does NOT contain: any field naming a model. The
+      // plan states type, complexity and risk; the router decides the rest.
+      executionPlan: EXECUTION_PLAN_SCHEMA,
     },
     required: ['protocolVersion', 'jobId', 'goal', 'decision', 'summary'],
     additionalProperties: false,

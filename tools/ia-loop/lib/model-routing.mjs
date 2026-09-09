@@ -41,6 +41,18 @@ import { CAPACITY_REASONS } from './capacity-classifier.mjs';
  * served model against, so it is not decoration.
  */
 export const MODELS = Object.freeze({
+  /**
+   * The cheap executor, and only ever for MECHANICAL Work Units.
+   *
+   * It exists here so that "boilerplate, DTOs, exports, a route that follows a
+   * pattern already in the tree" stops being billed at Sonnet's price. It is
+   * deliberately NOT selectable by the Tech Lead and NOT a Developer profile:
+   * the only path to it is the Work Unit router, and the only way off it is an
+   * escalation that carries evidence.
+   */
+  haiku: Object.freeze({
+    key: 'haiku', model: 'claude-haiku-4-5-20251001', family: 'haiku', label: 'Claude Haiku 4.5',
+  }),
   sonnet: Object.freeze({
     key: 'sonnet', model: 'claude-sonnet-5', family: 'sonnet', label: 'Claude Sonnet 5',
   }),
@@ -77,6 +89,8 @@ export const ROUTING_STAGES = Object.freeze({
   REVIEW: 'review',
   IMPLEMENTATION: 'implementation',
   CORRECTION: 'correction',
+  /** One Work Unit inside an implementation or correction round. */
+  WORK_UNIT: 'work_unit',
 });
 
 export const ROUTING_CONFIG = Object.freeze({
@@ -99,6 +113,56 @@ export const ROUTING_CONFIG = Object.freeze({
     deepEscalation: Object.freeze({ model: 'opus', effort: 'xhigh' }),
   }),
 });
+
+/**
+ * The Work Unit table.
+ *
+ * The whole point of decomposing a Goal is that the four kinds of work in it
+ * cost four different things to get right, so they should not cost the same
+ * thing to run. `executor: 'native'` is not a cheap model — it is NO model:
+ * the orchestrator runs the command itself.
+ *
+ * Kept next to the role tables above rather than in a router of its own,
+ * because the property that matters is that there is exactly ONE file that can
+ * name a model, and adding a second table somewhere else would end that.
+ */
+export const WORK_UNIT_EXECUTORS = Object.freeze({ NATIVE: 'native', MODEL: 'model' });
+
+export const WORK_UNIT_ROUTING = Object.freeze({
+  DETERMINISTIC: Object.freeze({ executor: WORK_UNIT_EXECUTORS.NATIVE }),
+  MECHANICAL: Object.freeze({ executor: WORK_UNIT_EXECUTORS.MODEL, model: 'haiku', effort: 'high' }),
+  STANDARD: Object.freeze({ executor: WORK_UNIT_EXECUTORS.MODEL, model: 'sonnet', effort: 'high' }),
+  COMPLEX: Object.freeze({ executor: WORK_UNIT_EXECUTORS.MODEL, model: 'opus', effort: 'high' }),
+});
+
+/**
+ * Where a unit type escalates to. One step at a time, never two.
+ *
+ * COMPLEX has nowhere to go: an Opus unit that cannot finish is a human's
+ * problem, not a routing problem, and inventing a fifth tier to send it to
+ * would be pretending otherwise.
+ */
+export const WORK_UNIT_ESCALATION = Object.freeze({
+  DETERMINISTIC: null,
+  MECHANICAL: 'STANDARD',
+  STANDARD: 'COMPLEX',
+  COMPLEX: null,
+});
+
+/**
+ * The risk floor.
+ *
+ * A unit the planner called MECHANICAL but marked HIGH risk (or HIGH
+ * complexity) is not mechanical, whatever the label says: "Haiku deciding
+ * architecture" is explicitly not a thing this may produce. The floor promotes
+ * it to STANDARD and says so in the reason, so the promotion is visible rather
+ * than being a silent disagreement with the plan.
+ *
+ * There is deliberately no symmetric rule promoting STANDARD to COMPLEX on
+ * risk: Opus is not the answer to "this looks scary", it is the answer to
+ * evidence, which arrives through escalation.
+ */
+const MECHANICAL_FLOOR_TRIGGERS = Object.freeze({ risk: ['HIGH'], complexity: ['HIGH'] });
 
 export const COMPLEXITY = Object.freeze({
   LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', CRITICAL: 'CRITICAL',
@@ -486,6 +550,96 @@ export function routeDeveloper({
 }
 
 // ---------------------------------------------------------------------------
+// Work Unit routing
+// ---------------------------------------------------------------------------
+
+/**
+ * The executor for one Work Unit.
+ *
+ * Input is what the PLAN declared plus what already HAPPENED to this unit —
+ * never a model call, never a feeling. Output says either "no model at all" or
+ * exactly which model at which effort, with the reason that produced it.
+ *
+ * `tier` is the effective type after the risk floor and after any authorised
+ * escalations already recorded for this unit; it is what the next escalation
+ * step is measured from, so replaying the history gives the same answer twice.
+ */
+export function routeWorkUnit({
+  unit,
+  escalations = 0,
+  mode = ROUTING_MODES.AUTO,
+  config = WORK_UNIT_ROUTING,
+} = {}) {
+  if (!unit?.type || !Object.hasOwn(config, unit.type)) {
+    throw new SpikeError('INVALID_ARGS', `Unknown Work Unit type ${JSON.stringify(unit?.type)}`);
+  }
+
+  let tier = unit.type;
+  let reason = `${tier}_WORK_UNIT`;
+
+  if (tier === 'MECHANICAL'
+    && (MECHANICAL_FLOOR_TRIGGERS.risk.includes(unit.risk)
+      || MECHANICAL_FLOOR_TRIGGERS.complexity.includes(unit.complexity))) {
+    tier = 'STANDARD';
+    reason = 'MECHANICAL_RISK_FLOOR';
+  }
+
+  // Escalations already granted for this unit are part of its identity, so a
+  // restart re-derives the same tier instead of starting again from the plan.
+  for (let step = 0; step < escalations; step += 1) {
+    const next = WORK_UNIT_ESCALATION[tier];
+    if (!next) break;
+    tier = next;
+    reason = `ESCALATED_TO_${tier}`;
+  }
+
+  const chosen = config[tier];
+
+  if (chosen.executor === WORK_UNIT_EXECUTORS.NATIVE) {
+    return Object.freeze({
+      executor: WORK_UNIT_EXECUTORS.NATIVE,
+      unitId: unit.id,
+      unitType: unit.type,
+      tier,
+      action: unit.action ?? null,
+      reason: 'DETERMINISTIC_WORK_UNIT',
+      mode,
+      // A deterministic unit has no routing decision to persist: there is no
+      // model, so there is nothing a fallback or an escalation could move.
+      routing: null,
+    });
+  }
+
+  const forced = FORCED_MODEL[mode] ?? null;
+  const routed = decision({
+    role: 'developer',
+    stage: ROUTING_STAGES.WORK_UNIT,
+    complexity: unit.complexity ?? null,
+    riskScore: null,
+    signals: [unit.type, `RISK_${unit.risk ?? 'LOW'}`],
+    modelKey: forced ?? chosen.model,
+    effort: chosen.effort,
+    reason: forced ? `MANUAL_OVERRIDE_${mode}` : reason,
+    // Haiku and Sonnet both have somewhere to go when a quota — not a bug —
+    // stops them. Opus is the top of this table and has nothing below it that
+    // would be an improvement.
+    fallbackAllowed: (forced ?? chosen.model) !== 'opus',
+    mode,
+  });
+
+  return Object.freeze({
+    executor: WORK_UNIT_EXECUTORS.MODEL,
+    unitId: unit.id,
+    unitType: unit.type,
+    tier,
+    action: null,
+    reason: routed.reason,
+    mode,
+    routing: routed,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Capacity fallback — availability only, never a way to hide a bug
 // ---------------------------------------------------------------------------
 
@@ -507,6 +661,11 @@ export const FALLBACK_REASONS = Object.freeze([
 const FALLBACK_TARGET = Object.freeze({
   fable: Object.freeze({ model: 'opus', effort: 'high' }),
   sonnet: Object.freeze({ model: 'opus', effort: 'high' }),
+  // One step up, like every other fallback here: a Haiku unit blocked by a
+  // quota is ordinary work that still needs doing, and the standard executor
+  // is the cheapest thing that can do it. Sending it to Opus would answer an
+  // availability problem with the most expensive model in the table.
+  haiku: Object.freeze({ model: 'sonnet', effort: 'high' }),
 });
 
 export function isFallbackReason(reason) {
@@ -645,6 +804,143 @@ export function authorizeDeveloperEscalation({
       stage: current?.stage ?? ROUTING_STAGES.IMPLEMENTATION,
       level,
       reason: request.reason,
+      mode,
+    }),
+  };
+}
+
+/**
+ * Reasons a Work Unit may give for asking to be moved up a tier.
+ *
+ * Closed, and SPLIT BY TIER on purpose. The two escalations are not the same
+ * question:
+ *
+ *   MECHANICAL -> STANDARD  "this was not as mechanical as the plan thought".
+ *                           Cheap to be wrong about, so a low-confidence
+ *                           reading of the work is admissible evidence.
+ *   STANDARD  -> COMPLEX    "this needs the strongest executor". Expensive, so
+ *                           the admissible reasons are the ones that describe a
+ *                           PROPERTY OF THE PROBLEM — concurrency, state,
+ *                           architecture, a plan that does not fit the code —
+ *                           and not a feeling about it. A lint failure, a
+ *                           typecheck failure or one red test is a thing to
+ *                           fix, not a reason to buy a bigger model.
+ */
+export const WORK_UNIT_ESCALATION_REASONS = Object.freeze({
+  MECHANICAL: Object.freeze([
+    'NOT_AS_MECHANICAL_AS_CLASSIFIED',
+    'PATTERN_INSUFFICIENT',
+    'BEHAVIOUR_DECISION_REQUIRED',
+    'CROSS_MODULE_IMPACT_DISCOVERED',
+    'REPEATED_EXECUTION_FAILURE',
+    'LOW_CONFIDENCE',
+  ]),
+  STANDARD: Object.freeze([
+    'REPEATED_EXECUTION_FAILURE',
+    'UNEXPECTED_ARCHITECTURE',
+    'DEEP_DEBUGGING_REQUIRED',
+    'CONCURRENCY_ISSUE',
+    'STATE_INCONSISTENCY',
+    'PLAN_INCOMPATIBILITY',
+    'COMPLEXITY_DISCOVERED',
+  ]),
+});
+
+/** Every reason any tier may name, for the contract's enum. */
+export const ALL_WORK_UNIT_ESCALATION_REASONS = Object.freeze([
+  ...new Set([...WORK_UNIT_ESCALATION_REASONS.MECHANICAL, ...WORK_UNIT_ESCALATION_REASONS.STANDARD]),
+]);
+
+/**
+ * Failed attempts a REPEATED_EXECUTION_FAILURE must actually be able to point
+ * at. One failure is not a repetition, and calling it one is how a single red
+ * test becomes an Opus call.
+ */
+export const MIN_ATTEMPTS_FOR_REPEATED_FAILURE = 2;
+
+/**
+ * Decides whether a Work Unit's request for a stronger tier is legitimate.
+ *
+ * The unit may ASK; only this decides. Every refusal is returned with its
+ * reason so the caller can record it: "the unit asked and the router said no"
+ * is exactly the kind of thing that must not be invisible afterwards.
+ */
+export function authorizeWorkUnitEscalation({
+  request,
+  currentTier,
+  escalations = 0,
+  failedAttempts = 0,
+  mode = ROUTING_MODES.AUTO,
+} = {}) {
+  const nextTier = WORK_UNIT_ESCALATION[currentTier] ?? null;
+  if (!nextTier) {
+    return {
+      verdict: ESCALATION_VERDICTS.REFUSED,
+      decision: null,
+      reason: `A ${currentTier} Work Unit is already at the top of the table; anything beyond it is a human decision.`,
+    };
+  }
+  if (mode !== ROUTING_MODES.AUTO) {
+    return {
+      verdict: ESCALATION_VERDICTS.REFUSED,
+      decision: null,
+      reason: `Routing is pinned by ${mode}; escalation is a human's call while it is.`,
+    };
+  }
+  if (!request || typeof request !== 'object') {
+    return { verdict: ESCALATION_VERDICTS.REFUSED, decision: null, reason: 'No escalation request was made.' };
+  }
+
+  const admissible = WORK_UNIT_ESCALATION_REASONS[currentTier] ?? [];
+  if (!admissible.includes(request.reason)) {
+    return {
+      verdict: ESCALATION_VERDICTS.REFUSED,
+      decision: null,
+      reason: `Reason ${JSON.stringify(request.reason)} does not justify moving a ${currentTier} unit to ${nextTier} `
+        + `(admissible: ${admissible.join(', ')}).`,
+    };
+  }
+
+  const evidence = Array.isArray(request.evidence)
+    ? request.evidence.filter((item) => typeof item === 'string' && item.trim() !== '')
+    : [];
+  if (evidence.length < MIN_ESCALATION_EVIDENCE) {
+    return {
+      verdict: ESCALATION_VERDICTS.REFUSED,
+      decision: null,
+      reason: 'An escalation must carry evidence; a stated confidence alone is not one.',
+    };
+  }
+
+  // "It failed repeatedly" has to be checkable against the attempts that
+  // actually exist, or it is just a phrase that unlocks a bigger model.
+  if (request.reason === 'REPEATED_EXECUTION_FAILURE' && failedAttempts < MIN_ATTEMPTS_FOR_REPEATED_FAILURE) {
+    return {
+      verdict: ESCALATION_VERDICTS.REFUSED,
+      decision: null,
+      reason: `REPEATED_EXECUTION_FAILURE needs at least ${MIN_ATTEMPTS_FOR_REPEATED_FAILURE} failed attempts; `
+        + `this unit has ${failedAttempts}.`,
+    };
+  }
+
+  const chosen = WORK_UNIT_ROUTING[nextTier];
+  return {
+    verdict: ESCALATION_VERDICTS.AUTHORIZED,
+    reason: request.reason,
+    evidence,
+    fromTier: currentTier,
+    toTier: nextTier,
+    escalations: escalations + 1,
+    decision: decision({
+      role: 'developer',
+      stage: ROUTING_STAGES.WORK_UNIT,
+      complexity: null,
+      riskScore: null,
+      signals: [request.reason],
+      modelKey: chosen.model,
+      effort: chosen.effort,
+      reason: request.reason,
+      fallbackAllowed: chosen.model !== 'opus',
       mode,
     }),
   };

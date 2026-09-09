@@ -591,7 +591,30 @@ async function main() {
       })),
     });
 
-    machine.transitionTo(phaseQueued);
+    // Two different callers can legitimately need the machine sitting in
+    // `phaseQueued` here, and only one of them has actually not arrived yet.
+    // A cold process resuming a correction round starts this loop from
+    // WORKTREE_READY (line ~275) and has never touched the machine before —
+    // for that caller this transition is the ONLY queuing step, and it is
+    // required. But when THIS SAME process just decided CHANGES_REQUIRED
+    // (below, `machine.transitionTo(LOOP_STATES.CORRECTION_QUEUED)` at the
+    // CHANGES_REQUIRED -> CORRECTION_QUEUED edge — the one edge the registry
+    // defines for CHANGES_REQUIRED) and looped back via `continue`, the
+    // machine is already exactly here: queuing is already done, persisted
+    // with the round/blockers/profile that decision carried, and this call
+    // would ask for CORRECTION_QUEUED -> CORRECTION_QUEUED — a state the
+    // registry correctly has no edge for, because self-transitions are not a
+    // real step. Goal007 R2->R3 crashed on exactly that: CHANGES_REQUIRED was
+    // real, the queue was already prepared, and this line re-asked for it.
+    //
+    // This does not add a self-transition to the graph — every OTHER caller
+    // of `transitionTo` in this file (there are 18) still fails exactly as
+    // before if it targets a state the machine cannot legally reach. This
+    // guard only recognises that `machine` is a single object owned by this
+    // process, so if it is already sitting in `phaseQueued`, the only thing
+    // that could have put it there is the CHANGES_REQUIRED branch below,
+    // which already did every bit of preparation this round needs.
+    if (machine.state !== phaseQueued) machine.transitionTo(phaseQueued);
     await store.writeRuntime({
       ...(await store.readRuntime()), state: machine.state, round,
       currentJobId: devJobId, ...withJobId(await store.readRuntime(), round, 'developer', devJobId),

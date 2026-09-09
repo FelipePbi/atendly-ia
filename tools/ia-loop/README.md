@@ -3096,6 +3096,119 @@ seguidas é idempotente (nenhum attempt novo, resultado bit-a-bit igual).
 `CONTRACT_FIELD_INVALID` e que `recordOrchestratorFault` sobrescreve uma razão
 obsoleta com a nova.
 
+## V17 — Transição idempotente para a próxima correction
+
+### O caso real: Goal 007, R2 → R3
+
+A Review R2 devolveu `CHANGES_REQUIRED` com 1 blocker e uma escalada explícita
+do Tech Lead para `SONNET_MEDIUM` na rodada 3. O mesmo processo (sem restart)
+reagiu corretamente: `REVIEWER_RUNNING -> CHANGES_REQUIRED -> CORRECTION_QUEUED`
+— o único par de arestas que o registry define para `CHANGES_REQUIRED` — e
+persistiu round, blockers e perfil da R3 antes de voltar ao topo do laço
+(`continue`) para começar a rodada 3. O topo do laço então pediu de novo,
+incondicionalmente, `CORRECTION_QUEUED` — o estado exato em que a máquina já
+estava — e o registry corretamente não tem aresta `CORRECTION_QUEUED ->
+CORRECTION_QUEUED`: self-transition nunca foi um passo real. A mensagem foi
+literal: *"Transition CORRECTION_QUEUED -> CORRECTION_QUEUED is not allowed"*.
+
+### As duas escritas
+
+```
+run-goal.mjs:865  CHANGES_REQUIRED -> CORRECTION_QUEUED
+                  a única aresta que o registry define para CHANGES_REQUIRED;
+                  é aqui que round/blockers/perfil da próxima rodada são
+                  persistidos — o verdadeiro passo de "preparar a rodada".
+
+run-goal.mjs:594  WORKTREE_READY -> CORRECTION_QUEUED (ou DEVELOPER_QUEUED)
+                  a entrada do laço por rodada, necessária quando um PROCESSO
+                  FRIO retoma direto numa correction já enfileirada e nunca
+                  tocou a máquina antes.
+```
+
+A segunda só é redundante quando o MESMO processo, com o MESMO objeto
+`machine`, já executou a primeira nesta mesma passagem — o que é demonstrável
+enumerando todos os `transitionTo` do arquivo: só existe UM outro call site
+que escreve `CORRECTION_QUEUED`/`DEVELOPER_QUEUED` (a linha 865, a única
+aresta de `CHANGES_REQUIRED`). Não há um terceiro fluxo escondido preparando a
+mesma etapa duas vezes.
+
+### O fix: um guard local, não uma aresta nova no registry
+
+`lib/state-registry.mjs` não mudou — `CORRECTION_QUEUED -> CORRECTION_QUEUED`
+continua inexistente no grafo, e uma chamada direta e desguarnecida a
+`transitionTo` no mesmo estado continua lançando `INVALID_TRANSITION` (ver
+teste "a genuine, unguarded self-transition still throws"). Liberar
+self-transition genericamente esconderia um segundo dispatch de verdade caso
+um dia exista; o que existe aqui é só o segundo pedido do MESMO passo já
+concluído.
+
+O guard vive só na linha 594, e só é seguro porque `machine` é um objeto por
+processo: a única forma de `machine.state` já ser `phaseQueued` naquele ponto
+é a linha 865 ter acabado de colocá-lo lá, no mesmo processo, na mesma
+iteração.
+
+```js
+if (machine.state !== phaseQueued) machine.transitionTo(phaseQueued);
+```
+
+Nada além da transição em si é pulado: o `dispatchJob`/`buildDevJob` da
+correção ainda não tinha rodado quando o crash acontecia (o crash era só a
+transição de estado), então o guard não esconde nenhum dispatch duplicado —
+prova disso são os testes de restart em QUEUED/RUNNING/COMPLETED, que
+continuam idempotentes exatamente como antes.
+
+### Ciclo de vida: preparar ≠ despachar
+
+```
+Review CHANGES_REQUIRED
+  ↓ persiste round+1, blockers da PRÓPRIA review, developerProfile escalado
+  ↓ machine: CHANGES_REQUIRED -> CORRECTION_QUEUED   (uma vez, aqui)
+Runner entra na rodada seguinte
+  ↓ vê que já está CORRECTION_QUEUED — não repete a transição
+  ↓ publica/reutiliza o Developer job (identidade única: `{goal}:r{round}:correction`)
+  ↓ machine: CORRECTION_QUEUED -> CORRECTION_RUNNING
+```
+
+Um processo frio que resume direto numa correction nunca passou pela primeira
+seta nesta execução — para ele, a segunda é a única e é obrigatória. Os dois
+casos compartilham a mesma linha porque o estado da máquina, não o histórico
+do processo, é o que decide se a transição já aconteceu.
+
+### Blockers e perfil: vêm da review que os produziu, nunca recalculados
+
+Os blockers da R3 são exatamente os da Review R2 (`007-r2-tech_lead-be8887fc`)
+— `decideNextDispatch` já carregava isso desde V10/V11 (`review.result?.blockers`).
+Os da R1 nunca são reaproveitados; nenhum é inventado. O perfil `SONNET_MEDIUM`
+escolhido pelo Tech Lead é lido do mesmo resultado
+(`review.result?.nextDeveloperProfile`) e, uma vez persistido para a rodada 3,
+`resolveProfileForRound` (regra 1, `lib/profile-routing.mjs`) o relê em
+qualquer restart sem recalcular — a mesma garantia que já protegia escaladas
+de rodadas anteriores contra downgrade por reinício.
+
+### Taxonomia preservada
+
+`INVALID_TRANSITION` já classificava como `HARNESS_ERROR` desde V16
+(`ORCHESTRATOR_FAULT_CODES`); esta correção não mexeu na taxonomia, só na causa
+raiz. Depois do fix, uma reconciliação real removeu o `escalationReason:
+HARNESS_ERROR` que esse INVALID_TRANSITION específico deixou, registrando
+`RUNTIME_RECONCILED_AFTER_HARNESS_FIX` (reason
+`DUPLICATE_CORRECTION_QUEUED_TRANSITION`) sem apagar o evento
+`ORCHESTRATOR_FAULT` original — os dois convivem no histórico.
+
+### Testes
+
+`tests/goal007-r3-correction-queued.test.mjs`: a seção A reproduz a máquina de
+estados isolada (a aresta única de `CHANGES_REQUIRED`, a ausência de self-edge
+em `CORRECTION_QUEUED`/`DEVELOPER_QUEUED`, a sequência antiga quebrando com a
+mensagem exata, a sequência corrigida entrando em `CORRECTION_QUEUED` uma
+única vez, o caso legítimo de processo frio, e a prova de que o guard não
+mascara um alvo genuinamente inválido). A seção B reconcilia o Goal007 real via
+`decideNextDispatch`: R3 recebe só o blocker da R2 e o `SONNET_MEDIUM` da
+escalada; `resolveProfileForRound` preserva o perfil persistido num restart;
+restart com R3 inexistente/QUEUED/RUNNING/COMPLETED dispara exatamente uma
+vez, reutiliza, aguarda ou consome, respectivamente; Developer R2 e Review R2
+não são rechamados; a reconciliação do human gate preserva o evento original.
+
 ## Limitações conhecidas
 
 1. **Auth não é herdável por subprocesso a partir do app desktop.** O que

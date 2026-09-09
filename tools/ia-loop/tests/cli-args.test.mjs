@@ -199,6 +199,29 @@ test('17. a session limit is still USAGE_LIMIT', () => {
   assert.equal(classify('You have hit your usage limit'), CAPACITY_REASONS.USAGE_LIMIT);
 });
 
+test('17b. a per-model limit is USAGE_LIMIT too, not UNKNOWN_FATAL', () => {
+  // Real production message, Goal 009, 2026-09-09: no "session"/"usage" word
+  // next to "limit", no "reset" mentioned. Every earlier pattern missed it, so
+  // the job \u2014 which had fallbackAllowed: true \u2014 was escalated to a human
+  // instead of falling back to another model.
+  assert.equal(
+    classify(
+      "CLI exited with code 1: You've reached your Fable limit. Switch to another model, "
+      + 'or manage usage credits at claude.ai/settings/usage?from=cc_cli_limit_message, to continue.',
+    ),
+    CAPACITY_REASONS.USAGE_LIMIT,
+  );
+  // The model name is a wildcard, not a fixed list.
+  assert.equal(classify("You've reached your Opus limit. Switch to another model."), CAPACITY_REASONS.USAGE_LIMIT);
+});
+
+test('17c. an unrelated "limit" is still not mistaken for capacity', () => {
+  // The new per-model pattern requires "reached your \u2026 limit"; a turn count or
+  // a context-size limit must not collide with it.
+  assert.equal(classify('Reached maximum number of turns (50)'), CAPACITY_REASONS.UNKNOWN_FATAL);
+  assert.equal(classify('context limit exceeded, please shorten the prompt'), CAPACITY_REASONS.UNKNOWN_FATAL);
+});
+
 test('18. a rate limit is still RATE_LIMIT', () => {
   assert.equal(classify('429 Too Many Requests'), CAPACITY_REASONS.RATE_LIMIT);
   assert.equal(classify('Error: model is overloaded'), CAPACITY_REASONS.RATE_LIMIT);

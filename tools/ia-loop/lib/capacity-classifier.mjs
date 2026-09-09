@@ -148,6 +148,16 @@ const TEXT_PATTERNS = Object.freeze([
     'usage limit',
     'session usage limit',
     'hit your (session|usage) limit',
+    // The PER-MODEL phrasing: "You've reached your Fable limit. Switch to
+    // another model, or manage usage credits at claude.ai/settings/usage…".
+    // Real production message (Goal 009, 2026-09-09): no "session"/"usage"
+    // word next to "limit", no "reset" mentioned at all, so every pattern
+    // above missed it and the job — which HAD fallbackAllowed: true — was
+    // escalated to a human instead of falling back to another model. The
+    // model name varies (Fable today, could be any family), so it is a
+    // wildcard, not a fixed list.
+    'reached your .{1,40}? limit',
+    'manage usage credits',
     'quota',
     'out of (usage|credits)',
     'limit (will )?reset',

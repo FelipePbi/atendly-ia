@@ -102,8 +102,8 @@ export const onboardingStateSchema = z.object({
     .object({
       id: z.string().min(1),
       name: z.string(),
-      durationMinutes: z.number().int().positive(),
-      priceType: z.enum(["FIXED", "ON_REQUEST"]),
+      durationMinutes: z.number().int().positive().nullable(),
+      priceType: z.enum(["FIXED", "STARTING_AT", "ON_REQUEST", "NOT_INFORMED"]),
       price: z.number().nonnegative().nullable(),
       active: z.boolean(),
     })
@@ -137,13 +137,30 @@ export const settingsStateSchema = z.object({
   availability: availabilitySettingsSchema.nullable(),
 });
 
+const serviceColorTokenSchema = z.enum([
+  "ROSE",
+  "AMBER",
+  "EMERALD",
+  "SKY",
+  "VIOLET",
+  "SLATE",
+]);
+
 export const serviceSchema = z.object({
   id: z.string().min(1),
   name: z.string(),
-  durationMinutes: z.number().int().positive(),
-  priceType: z.enum(["FIXED", "ON_REQUEST"]),
+  // Ausente e pendencia de revisao (Goal007); resposta antiga continua valida.
+  durationMinutes: z.number().int().positive().nullable(),
+  priceType: z.enum(["FIXED", "STARTING_AT", "ON_REQUEST", "NOT_INFORMED"]),
   price: z.number().nonnegative().nullable(),
   active: z.boolean(),
+  needsReview: z.boolean().optional().default(false),
+  reviewOrigin: z.enum(["IMPORT", "MANUAL"]).nullish().optional(),
+  description: z.string().nullish().optional(),
+  colorToken: serviceColorTokenSchema.nullish().optional(),
+  bufferBeforeMinutes: z.number().int().nonnegative().optional().default(0),
+  bufferAfterMinutes: z.number().int().nonnegative().optional().default(0),
+  recurrenceIntervalDays: z.number().int().positive().nullish().optional(),
 });
 
 export const customerSchema = z.object({
@@ -216,12 +233,13 @@ export const appointmentSchema = z.object({
     z.object({
       serviceId: z.string().min(1),
       name: z.string(),
-      durationMinutes: z.number().int().positive(),
-      priceType: z.enum(["FIXED", "ON_REQUEST"]),
+      durationMinutes: z.number().int().positive().nullable(),
+      priceType: z.enum(["FIXED", "STARTING_AT", "ON_REQUEST", "NOT_INFORMED"]),
       price: z.number().nonnegative().nullable(),
     }),
   ),
   totalPrice: z.number().nonnegative().nullable(),
+  totalPriceType: z.enum(["FIXED", "STARTING_AT", "NONE"]).optional().default("NONE"),
   comments: z.string().nullable(),
   status: z.string(),
 });

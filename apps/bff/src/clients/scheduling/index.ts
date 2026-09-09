@@ -7,13 +7,36 @@ import {
 } from "../internal-http-client.js";
 
 const sourceSchema = z.enum(["ATENDLY", "MINHA_AGENDA"]);
+const priceTypeSchema = z.enum([
+  "FIXED",
+  "STARTING_AT",
+  "ON_REQUEST",
+  "NOT_INFORMED",
+]);
+const serviceColorTokenSchema = z.enum([
+  "ROSE",
+  "AMBER",
+  "EMERALD",
+  "SKY",
+  "VIOLET",
+  "SLATE",
+]);
 const serviceSchema = z.object({
   id: z.string(),
   name: z.string(),
-  durationMinutes: z.number().int().positive(),
-  priceType: z.enum(["FIXED", "ON_REQUEST"]),
+  // Ausente e pendencia de revisao (Goal007); resposta antiga (sempre
+  // presente) continua valida.
+  durationMinutes: z.number().int().positive().nullable(),
+  priceType: priceTypeSchema,
   price: z.number().nonnegative().nullable(),
   active: z.boolean(),
+  needsReview: z.boolean().default(false),
+  reviewOrigin: z.enum(["IMPORT", "MANUAL"]).nullable().default(null),
+  description: z.string().nullable().default(null),
+  colorToken: serviceColorTokenSchema.nullable().default(null),
+  bufferBeforeMinutes: z.number().int().nonnegative().default(0),
+  bufferAfterMinutes: z.number().int().nonnegative().default(0),
+  recurrenceIntervalDays: z.number().int().positive().nullable().default(null),
 });
 const customerSchema = z.object({
   id: z.string(),
@@ -77,12 +100,13 @@ const appointmentSchema = z.object({
     z.object({
       serviceId: z.string(),
       name: z.string(),
-      durationMinutes: z.number().int().positive(),
-      priceType: z.enum(["FIXED", "ON_REQUEST"]),
+      durationMinutes: z.number().int().positive().nullable(),
+      priceType: priceTypeSchema,
       price: z.number().nonnegative().nullable(),
     }),
   ),
   totalPrice: z.number().nonnegative().nullable(),
+  totalPriceType: z.enum(["FIXED", "STARTING_AT", "NONE"]).default("NONE"),
   comments: z.string().nullable(),
   status: z.string(),
 });
@@ -103,6 +127,7 @@ const calendarSchema = z.object({
     manageCustomers: z.boolean(),
     createAppointments: z.boolean(),
     migrate: z.boolean(),
+    aiActivationReady: z.boolean().default(false),
   }),
 });
 const availabilitySettingsSchema = z.object({

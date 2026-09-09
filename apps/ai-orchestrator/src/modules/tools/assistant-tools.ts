@@ -69,6 +69,7 @@ type PendingAction =
       endTime?: string;
       totalDurationMinutes?: number;
       totalPrice?: number | null;
+      totalPriceType?: AgreementTotalType;
       customerName: string;
       customerPhone: string;
       /** Pessoa resolvida. Ausente => o cadastro nasce na confirmacao. */
@@ -90,11 +91,13 @@ type PendingAction =
       idempotencyKey: string;
     };
 
+type ServicePriceType = "FIXED" | "STARTING_AT" | "ON_REQUEST" | "NOT_INFORMED";
+
 interface ServiceSummary {
   id: string;
   name: string;
   duration: number;
-  priceType: "FIXED" | "ON_REQUEST";
+  priceType: ServicePriceType;
   price: number | null;
 }
 
@@ -103,12 +106,13 @@ interface AvailabilityLookup {
     id: string;
     name: string;
     duration: number;
-    priceType: "FIXED" | "ON_REQUEST";
+    priceType: ServicePriceType;
     price?: number | null;
   };
   services?: ServiceSummary[];
   totalDurationMinutes?: number;
   totalPrice?: number | null;
+  totalPriceType?: AgreementTotalType;
   slots: Array<{
     date: string;
     startTime: string;
@@ -519,12 +523,19 @@ export class AssistantToolRegistry {
       schedulingContext(context),
     );
     return {
+      // `priceType` sempre presente: "sob consulta" e "nao informado" nao
+      // dependem de `includePrices` para serem comunicados. O flag so
+      // controla se o valor numerico (quando existe) e revelado.
       services: services.map((service) => ({
         id: service.id,
         name: service.name,
         duration: service.duration,
         durationMinutes: service.duration,
-        ...(args.includePrices ? { price: service.price } : {}),
+        priceType: service.priceType,
+        ...(args.includePrices &&
+        (service.priceType === "FIXED" || service.priceType === "STARTING_AT")
+          ? { price: service.price }
+          : {}),
         colorId: service.colorId,
       })),
     };
@@ -552,6 +563,7 @@ export class AssistantToolRegistry {
       services: serviceResult.services,
       totalDurationMinutes: serviceResult.totalDurationMinutes,
       totalPrice: serviceResult.totalPrice,
+      totalPriceType: serviceResult.totalPriceType,
       slots,
       checkedAt: new Date().toISOString(),
     });
@@ -560,6 +572,7 @@ export class AssistantToolRegistry {
       services: serviceResult.services,
       totalDurationMinutes: serviceResult.totalDurationMinutes,
       totalPrice: serviceResult.totalPrice,
+      totalPriceType: serviceResult.totalPriceType,
       slots,
     };
   }
@@ -633,6 +646,7 @@ export class AssistantToolRegistry {
       ),
       totalDurationMinutes: serviceResult.totalDurationMinutes,
       totalPrice: serviceResult.totalPrice,
+      totalPriceType: serviceResult.totalPriceType,
       customerName: args.customerName,
       customerPhone: context.phone,
       customerId: identity.customerId,
@@ -744,10 +758,7 @@ export class AssistantToolRegistry {
         customerId: resolvedCustomerId,
         customerName: resolvedCustomerId ? null : pending.customerName,
         customerPhone: resolvedCustomerId ? null : pending.customerPhone,
-        comments: buildAppointmentComment(
-          serviceResult.services,
-          serviceResult.totalPrice,
-        ),
+        comments: buildAppointmentComment(serviceResult.services),
       },
       schedulingContext(context),
       pending.idempotencyKey || context.idempotencyKey,
@@ -781,12 +792,43 @@ export class AssistantToolRegistry {
     });
   }
 
+  private async linkedCustomerId(
+    context: ToolExecutionContext,
+  ): Promise<string | null> {
+    const contact = await this.prisma.contact.findUnique({
+      where: {
+        tenantId_channelId_externalContactId: {
+          tenantId: context.tenantId,
+          channelId: context.channelId,
+          externalContactId: context.phone,
+        },
+      },
+      select: { customerId: true },
+    });
+    return contact?.customerId ?? null;
+  }
+
+  /**
+   * Compromissos futuros do contato.
+   *
+   * Quando o contato ja esta vinculado a uma pessoa (confirmacao de
+   * agendamento anterior), a consulta e por `customerId` — o historico e
+   * dessa pessoa, nao de "todo mundo que compartilha o numero". Sem vinculo,
+   * cai nos candidatos por telefone, que a IA deve tratar como candidatos.
+   */
   private async findCustomerAppointments(context: ToolExecutionContext) {
-    const appointments = await this.scheduling.findFutureAppointmentsForPhone(
-      context.phone,
-      context.businessContext,
-      schedulingContext(context),
-    );
+    const linkedCustomerId = await this.linkedCustomerId(context);
+    const appointments = linkedCustomerId
+      ? await this.scheduling.findFutureAppointmentsForCustomer(
+          linkedCustomerId,
+          context.businessContext,
+          schedulingContext(context),
+        )
+      : await this.scheduling.findFutureAppointmentsForPhone(
+          context.phone,
+          context.businessContext,
+          schedulingContext(context),
+        );
     return {
       appointments: appointments.map((appointment) =>
         this.presentAppointment(appointment),
@@ -988,6 +1030,7 @@ export class AssistantToolRegistry {
         services: ServiceSummary[];
         totalDurationMinutes: number;
         totalPrice: number | null;
+        totalPriceType: AgreementTotalType;
       }
     | { ok: false; code: string; error: string }
   > {
@@ -1041,6 +1084,7 @@ export class AssistantToolRegistry {
         services: ServiceSummary[];
         totalDurationMinutes: number;
         totalPrice: number | null;
+        totalPriceType: AgreementTotalType;
       }
     | { ok: false; code: string; error: string }
   > {
@@ -1070,12 +1114,14 @@ export class AssistantToolRegistry {
         ),
       );
       const summaries = services.map(toServiceSummary);
+      const total = calculateAgreementTotal(summaries);
       return {
         ok: true,
         serviceIds: summaries.map((service) => service.id),
         services: summaries,
         totalDurationMinutes: calculateServiceBlockMinutes(summaries),
-        totalPrice: calculateTotalPrice(summaries),
+        totalPrice: total.amount,
+        totalPriceType: total.type,
       };
     } catch (error) {
       return {
@@ -1232,7 +1278,7 @@ function toServiceSummary(service: {
   id: string;
   name: string;
   duration: number;
-  priceType: "FIXED" | "ON_REQUEST";
+  priceType: ServicePriceType;
   price: number | null;
 }): ServiceSummary {
   return {
@@ -1270,21 +1316,52 @@ function calculateServiceBlockMinutes(services: ServiceSummary[]): number {
   );
 }
 
-function calculateTotalPrice(services: ServiceSummary[]): number | null {
-  if (services.some((service) => service.price === null)) return null;
-  return services.reduce((total, service) => total + (service.price ?? 0), 0);
+type AgreementTotalType = "FIXED" | "STARTING_AT" | "NONE";
+
+interface AgreementTotal {
+  type: AgreementTotalType;
+  amount: number | null;
 }
 
-function buildAppointmentComment(
-  services: ServiceSummary[],
-  totalPrice: number | null,
-): string {
+/**
+ * Regra unica do total (Goal007), reimplementada aqui porque IA e Scheduling
+ * nao compartilham pacote de contrato para este calculo (D-011): soma quando
+ * todos os itens sao `FIXED`; "a partir de" quando ha algum `STARTING_AT` e
+ * nenhum `ON_REQUEST`/`NOT_INFORMED`; sem total nos demais casos.
+ */
+function calculateAgreementTotal(services: ServiceSummary[]): AgreementTotal {
+  if (services.length === 0) return { type: "NONE", amount: null };
+  const hasUnpriced = services.some(
+    (service) =>
+      service.priceType === "ON_REQUEST" || service.priceType === "NOT_INFORMED",
+  );
+  if (hasUnpriced) return { type: "NONE", amount: null };
+  const amount = services.reduce(
+    (total, service) => total + (service.price ?? 0),
+    0,
+  );
+  const allFixed = services.every((service) => service.priceType === "FIXED");
+  return { type: allFixed ? "FIXED" : "STARTING_AT", amount };
+}
+
+function buildAppointmentComment(services: ServiceSummary[]): string {
   const serviceNames = services.map((service) => service.name).join(" + ");
-  const price =
-    totalPrice === null
-      ? "Valor sob consulta."
-      : `Total: R$ ${totalPrice.toFixed(2)}.`;
+  const price = priceCommentText(services, calculateAgreementTotal(services));
   return `Criado via Atendente IA WhatsApp. Servicos: ${serviceNames}. ${price}`;
+}
+
+function priceCommentText(
+  services: ServiceSummary[],
+  total: AgreementTotal,
+): string {
+  if (total.type === "FIXED") return `Total: R$ ${(total.amount ?? 0).toFixed(2)}.`;
+  if (total.type === "STARTING_AT") {
+    return `A partir de R$ ${(total.amount ?? 0).toFixed(2)}.`;
+  }
+  const hasOnRequest = services.some(
+    (service) => service.priceType === "ON_REQUEST",
+  );
+  return hasOnRequest ? "Valor sob consulta." : "Valor nao informado.";
 }
 
 function addMinutesToTime(startTime: string, minutes: number): string {
@@ -1320,6 +1397,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isServicePriceType(value: unknown): value is ServicePriceType {
+  return (
+    value === "FIXED" ||
+    value === "STARTING_AT" ||
+    value === "ON_REQUEST" ||
+    value === "NOT_INFORMED"
+  );
+}
+
 function isAvailabilityLookup(value: unknown): value is AvailabilityLookup {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const lookup = value as Partial<AvailabilityLookup>;
@@ -1330,7 +1416,7 @@ function isAvailabilityLookup(value: unknown): value is AvailabilityLookup {
     typeof service.id === "string" &&
     typeof service.name === "string" &&
     typeof service.duration === "number" &&
-    (service.priceType === "FIXED" || service.priceType === "ON_REQUEST") &&
+    isServicePriceType(service.priceType) &&
     (lookup.services === undefined ||
       (Array.isArray(lookup.services) &&
         lookup.services.every(
@@ -1340,7 +1426,7 @@ function isAvailabilityLookup(value: unknown): value is AvailabilityLookup {
             typeof item.id === "string" &&
             typeof item.name === "string" &&
             typeof item.duration === "number" &&
-            (item.priceType === "FIXED" || item.priceType === "ON_REQUEST") &&
+            isServicePriceType(item.priceType) &&
             (typeof item.price === "number" || item.price === null),
         ))) &&
     Array.isArray(lookup.slots) &&

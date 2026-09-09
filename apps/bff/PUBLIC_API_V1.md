@@ -94,6 +94,18 @@ O cliente é uma **pessoa**, identificada pelo ID dentro do negócio. O telefone
 
 `aiAuthorized` é atributo do **registro**, não do prompt, e nasce `false`. A IA lê o cliente por um recorte próprio no Scheduling que carrega apenas notas e tags autorizadas; retirar a autorização (`PATCH` com `aiAuthorized: false`) volta a escondê-las. A interface de cadastro completo é do Goal015.
 
+`actor` nunca vem do corpo destas rotas: a proveniência (`createdBy`/`authorizedBy`/`proposedByActor`/`confirmedByActor`) é sempre derivada da sessão autenticada.
+
+## Catálogo: quatro semânticas de preço e acordo comercial (Goal007)
+
+`priceType` em `GET/POST /v1/services` e `PATCH /v1/services/:id` admite quatro valores: `FIXED` (preço fixo), `STARTING_AT` ("a partir de"), `ON_REQUEST` (sob consulta) e `NOT_INFORMED` (não informado). `FIXED` e `ON_REQUEST` preservam o significado anterior ao Goal007; nenhum serviço existente foi reclassificado. `price` é obrigatório apenas em `FIXED`/`STARTING_AT` e proibido nos outros dois — a aplicação e uma constraint SQL recusam a combinação inválida. Preço ausente nunca é serializado como zero.
+
+`durationMinutes` é opcional: ausente é a única forma de um serviço entrar em `needsReview: true` (`Precisa de revisão`), estado distinto de `active`. Serviço em revisão continua listável e editável no catálogo, mas não aparece em `/internal/services` (o que a IA pode oferecer), não entra em `POST /v1/appointments` e não conta para `calendar.capabilities.aiActivationReady` (usada por `PATCH /v1/settings/ai` para recusar `enabled: true` com `409 CONFLICT` sem nenhum serviço operacional). Corrigir a duração retira a pendência automaticamente.
+
+Atributos adicionais do MVP, sem efeito operacional neste Goal (aplicação dos buffers na ocupação é do Goal009; uso da recorrência pela IA é do Goal011): `description` (texto livre opcional), `colorToken` (token estável de identidade visual — `ROSE | AMBER | EMERALD | SKY | VIOLET | SLATE`, nunca cor livre), `bufferBeforeMinutes`/`bufferAfterMinutes` (minutos, default `0`) e `recurrenceIntervalDays` (intervalo em dias, opcional).
+
+`GET/POST /v1/appointments` (e o `services[]` de cada agendamento) carregam as mesmas quatro semânticas nos itens do acordo, junto de `totalPrice`/`totalPriceType`. A regra do total é única e usada pelo Scheduling e pela IA: soma quando todos os itens são `FIXED`; `STARTING_AT` quando há algum "a partir de" e nenhum `ON_REQUEST`/`NOT_INFORMED`; `NONE` (sem total) nos demais casos. Editar o catálogo depois da confirmação não altera snapshots existentes.
+
 ## Vínculo WhatsApp: estados ambíguos
 
 `GET /v1/whatsapp` também reprojeta a credencial da instância na IA. É idempotente e não altera o estado do número; existe para que um vínculo criado antes da projeção cifrada se restabeleça sozinho, sem o negócio precisar reconectar o número na mão. Falha nessa projeção é registrada e não impede a leitura de status.

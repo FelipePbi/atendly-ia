@@ -1,16 +1,17 @@
 import { AppError } from "../../../shared/errors/app-error.js";
 import { normalizePhone, phoneMatches } from "../../../shared/phone/phone.js";
-import type {
-  AvailableSlot,
-  CalendarAppointment,
-  CalendarAppointmentServiceItem,
-  CalendarProvider,
-  CalendarServiceDefinition,
-  CancelCalendarAppointmentInput,
-  CreateCalendarAppointmentInput,
-  GetAvailabilityInput,
-  ListAppointmentsInput,
-  RescheduleCalendarAppointmentInput,
+import {
+  type AvailableSlot,
+  type CalendarAppointment,
+  type CalendarAppointmentServiceItem,
+  type CalendarProvider,
+  type CalendarServiceDefinition,
+  type CancelCalendarAppointmentInput,
+  computeAgreementTotal,
+  type CreateCalendarAppointmentInput,
+  type GetAvailabilityInput,
+  type ListAppointmentsInput,
+  type RescheduleCalendarAppointmentInput,
 } from "../../calendar/calendar-provider.js";
 import {
   computeAvailableSlots,
@@ -460,15 +461,30 @@ function parseExternalId(value: string): number {
   return id;
 }
 
+// A resposta do Minha Agenda nao passa por validacao de schema (`client.ts`
+// so faz `request<T>` com type assertion); preco e duracao "sabidos" pelo
+// TypeScript podem estar ausentes de verdade em tempo de execucao. As funcoes
+// abaixo tratam isso como o produto exige: ausente vira "nao informado" ou
+// pendencia de revisao, nunca `FIXED`/zero/duracao copiada (DATA-09).
+function knownNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function knownPositiveDuration(value: unknown): number | null {
+  const known = knownNumber(value);
+  return known !== null && known > 0 ? known : null;
+}
+
 function toCalendarService(
   service: MinhaAgendaService,
 ): CalendarServiceDefinition {
+  const price = knownNumber(service.price);
   return {
     id: String(service.id),
     name: service.name,
-    durationMinutes: service.duration,
-    priceType: "FIXED",
-    price: Number(service.price),
+    durationMinutes: knownPositiveDuration(service.duration),
+    priceType: price === null ? "NOT_INFORMED" : "FIXED",
+    price,
     active: !service.deleted,
     colorId: service.colorId,
   };
@@ -478,6 +494,7 @@ function toCalendarAppointment(
   appointment: MinhaAgendaAppointment,
 ): CalendarAppointment {
   const services = appointmentServices(appointment);
+  const total = computeAgreementTotal(services);
   return {
     id: String(appointment.id),
     source: "INTEGRATION",
@@ -501,7 +518,8 @@ function toCalendarAppointment(
           }
         : null,
     services,
-    totalPrice: Number(appointment.price ?? 0),
+    totalPrice: total.amount,
+    totalPriceType: total.type,
     comments: appointment.comments ?? null,
     status: appointment.deleted ? "CANCELLED" : "SCHEDULED",
   };
@@ -511,24 +529,34 @@ function appointmentServices(
   appointment: MinhaAgendaAppointment,
 ): CalendarAppointmentServiceItem[] {
   if (appointment.services?.length) {
-    return appointment.services.map((service) => ({
-      serviceId: String(service.id),
-      name: service.name,
-      durationMinutes: service.duration,
-      priceType: "FIXED",
-      price: Number(service.price),
-    }));
+    return appointment.services.map((service) => {
+      const price = knownNumber(service.price);
+      return {
+        serviceId: String(service.id),
+        name: service.name,
+        durationMinutes: knownPositiveDuration(service.duration),
+        priceType: price === null ? "NOT_INFORMED" : "FIXED",
+        price,
+      };
+    });
   }
   if (appointment.appHasServices?.length) {
-    return appointment.appHasServices.map((item) => ({
-      serviceId: String(item.serviceId),
-      name: item.service?.name ?? `Servico ${item.serviceId}`,
-      durationMinutes: item.service?.duration ?? appointment.duration,
-      priceType: "FIXED",
-      price: Number(item.price ?? item.service?.price ?? 0),
-    }));
+    return appointment.appHasServices.map((item) => {
+      const price = knownNumber(item.price ?? item.service?.price);
+      return {
+        serviceId: String(item.serviceId),
+        name: item.service?.name ?? `Servico ${item.serviceId}`,
+        // Duracao propria do item, nunca a duracao total do atendimento
+        // (DATA-09): sem duracao propria conhecida, fica explicitamente
+        // ausente.
+        durationMinutes: knownPositiveDuration(item.service?.duration),
+        priceType: price === null ? "NOT_INFORMED" : "FIXED",
+        price,
+      };
+    });
   }
   if (appointment.serviceId) {
+    const price = knownNumber(appointment.service?.price ?? appointment.price);
     return [
       {
         serviceId: String(appointment.serviceId),
@@ -536,9 +564,9 @@ function appointmentServices(
           appointment.serviceName ??
           appointment.service?.name ??
           `Servico ${appointment.serviceId}`,
-        durationMinutes: appointment.service?.duration ?? appointment.duration,
-        priceType: "FIXED",
-        price: Number(appointment.service?.price ?? appointment.price ?? 0),
+        durationMinutes: knownPositiveDuration(appointment.service?.duration),
+        priceType: price === null ? "NOT_INFORMED" : "FIXED",
+        price,
       },
     ];
   }

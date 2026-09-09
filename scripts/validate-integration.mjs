@@ -320,6 +320,17 @@ export function integrationSteps(target) {
       args: ["scripts/goal006-ai-migration-rehearsal.mjs"],
       env,
     },
+    // Gate M0/M1 do Goal007: ensaio da migração de catálogo e acordo
+    // comercial contra estoque legado (duração obrigatória, dois tipos de
+    // preço), em banco próprio e descartável, com expansão e constraints em
+    // passos separados.
+    {
+      name: "rehearse:goal007-catalog-migration",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal007-migration-rehearsal.mjs"],
+      env,
+    },
     // Identidade de cliente contra PostgreSQL real: telefone compartilhado,
     // cliente sem telefone, criação só na confirmação e isolamento por tenant.
     // Não pertence ao core porque exige banco.

@@ -29,9 +29,33 @@ enum ExternalEntityType {
   AVAILABILITY
 }
 
+/// Quatro semanticas de preco. `FIXED` e `ON_REQUEST` preservam o significado
+/// original (Goal002); `STARTING_AT` ("a partir de") e `NOT_INFORMED`
+/// ("nao informado") sao novos no Goal007. Nenhum registro existente e
+/// reclassificado.
 enum PriceType {
   FIXED
+  STARTING_AT
   ON_REQUEST
+  NOT_INFORMED
+}
+
+/// Origem do estado de revisao de um servico sem duracao: importacao (Minha
+/// Agenda) ou cadastro manual incompleto.
+enum ServiceReviewOrigin {
+  IMPORT
+  MANUAL
+}
+
+/// Identidade visual do servico (Goal007): token estavel, nao cor livre, para
+/// nao acoplar dado persistido a uma paleta de UI que pode mudar.
+enum ServiceColorToken {
+  ROSE
+  AMBER
+  EMERALD
+  SKY
+  VIOLET
+  SLATE
 }
 
 model CalendarSettings {
@@ -179,10 +203,24 @@ model Service {
   id              String    @id @default(cuid())
   tenantId        String
   name            String
-  durationMinutes Int
+  /// Ausente apenas como pendencia de revisao (Goal007); nunca zero fabricado.
+  durationMinutes Int?
   priceType       PriceType
   price           Decimal?  @db.Decimal(12, 2)
   active          Boolean   @default(true)
+  /// Estado de revisao, separado de `active`. Em lockstep com
+  /// `durationMinutes IS NULL` (constraint SQL `Service_review_check`):
+  /// corrigir a duracao retira a pendencia.
+  needsReview     Boolean             @default(false)
+  reviewOrigin    ServiceReviewOrigin?
+  description     String?
+  colorToken      ServiceColorToken?
+  /// Configuracao de catalogo (Goal007); sem efeito operacional na ocupacao
+  /// ate o Goal009.
+  bufferBeforeMinutes Int @default(0)
+  bufferAfterMinutes  Int @default(0)
+  /// Recorrencia de referencia em dias; sem efeito operacional ate o Goal011.
+  recurrenceIntervalDays Int?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -259,7 +297,9 @@ model AppointmentItem {
   appointmentId           String
   serviceId               String
   serviceNameSnapshot     String
-  durationMinutesSnapshot Int
+  /// Ausente quando o item nao tem duracao propria conhecida (Goal007);
+  /// nunca preenchida com a duracao total do atendimento.
+  durationMinutesSnapshot Int?
   priceTypeSnapshot       PriceType
   priceSnapshot           Decimal?  @db.Decimal(12, 2)
   createdAt               DateTime  @default(now())

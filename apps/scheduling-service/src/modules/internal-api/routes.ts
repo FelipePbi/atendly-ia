@@ -14,7 +14,10 @@ import {
   timeFromMinutes,
 } from "../../shared/date-time/calendar-date-time.js";
 import { AppError } from "../../shared/errors/app-error.js";
-import { CalendarService } from "../calendar/calendar-service.js";
+import {
+  type CalendarRequestContext,
+  CalendarService,
+} from "../calendar/calendar-service.js";
 import { AtendlyCustomerService } from "../customers/atendly-customer-service.js";
 import { encryptIntegrationCredentials } from "../integrations/credentials.js";
 import { parseMinhaAgendaConnection } from "../integrations/minha-agenda/config.js";
@@ -42,12 +45,26 @@ const availabilityBodySchema = z.object({
     )
     .max(28),
 });
+const serviceColorTokenSchema = z.enum([
+  "ROSE",
+  "AMBER",
+  "EMERALD",
+  "SKY",
+  "VIOLET",
+  "SLATE",
+]);
 const serviceBodySchema = z.object({
   name: z.string().trim().min(1).max(200),
-  durationMinutes: z.number().int().positive().max(1_440),
-  priceType: z.enum(["FIXED", "ON_REQUEST"]),
+  // Ausente vira pendencia de revisao (Goal007); nunca zero/duracao inventada.
+  durationMinutes: z.number().int().positive().max(1_440).nullable().optional(),
+  priceType: z.enum(["FIXED", "STARTING_AT", "ON_REQUEST", "NOT_INFORMED"]),
   price: z.number().nonnegative().nullable().optional(),
   active: z.boolean().optional(),
+  description: z.string().trim().max(1_000).nullable().optional(),
+  colorToken: serviceColorTokenSchema.nullable().optional(),
+  bufferBeforeMinutes: z.number().int().nonnegative().max(240).nullable().optional(),
+  bufferAfterMinutes: z.number().int().nonnegative().max(240).nullable().optional(),
+  recurrenceIntervalDays: z.number().int().positive().max(365).nullable().optional(),
 });
 const servicePatchSchema = serviceBodySchema
   .partial()
@@ -146,7 +163,10 @@ export async function registerManagementRoutes(
   await migrations.resumeIncomplete();
 
   app.get("/internal/calendar", internalOnly, async (request) =>
-    data(request, await calendarOverview(prisma, tenantId(request))),
+    data(
+      request,
+      await calendarOverview(prisma, currentInternalContext(request)),
+    ),
   );
 
   app.patch("/internal/calendar", internalOnly, async (request) => {
@@ -168,7 +188,7 @@ export async function registerManagementRoutes(
       create: { tenantId: context.tenantId, ...body },
       update: { timezone: body.timezone },
     });
-    return data(request, await calendarOverview(prisma, context.tenantId));
+    return data(request, await calendarOverview(prisma, context));
   });
 
   app.get("/internal/service-catalog", internalOnly, async (request) => {
@@ -627,7 +647,7 @@ export async function registerManagementRoutes(
           lastErrorCode: null,
         },
       });
-      return data(request, await calendarOverview(prisma, context.tenantId));
+      return data(request, await calendarOverview(prisma, context));
     },
   );
 
@@ -662,7 +682,7 @@ export async function registerManagementRoutes(
         });
         throw error;
       }
-      return data(request, await calendarOverview(prisma, context.tenantId));
+      return data(request, await calendarOverview(prisma, context));
     },
   );
 
@@ -682,7 +702,7 @@ export async function registerManagementRoutes(
       await prisma.integrationConnection.deleteMany({
         where: { tenantId: context.tenantId, provider: "MINHA_AGENDA" },
       });
-      return data(request, await calendarOverview(prisma, context.tenantId));
+      return data(request, await calendarOverview(prisma, context));
     },
   );
 
@@ -744,12 +764,16 @@ export async function registerManagementRoutes(
             ) >= new Date(),
         ) ?? null,
       estimatedRevenueToday: revenue(todayAppointments),
-      calendar: await calendarOverview(prisma, context.tenantId),
+      calendar: await calendarOverview(prisma, context),
     });
   });
 }
 
-async function calendarOverview(prisma: PrismaClient, tenantId: string) {
+async function calendarOverview(
+  prisma: PrismaClient,
+  context: CalendarRequestContext,
+) {
+  const { tenantId } = context;
   const [settings, integration] = await Promise.all([
     prisma.calendarSettings.findUnique({ where: { tenantId } }),
     prisma.integrationConnection.findUnique({
@@ -763,6 +787,11 @@ async function calendarOverview(prisma: PrismaClient, tenantId: string) {
     ? minhaAgendaWritesSchema.safeParse(integration.config).data
         ?.enableWrites === true
     : false;
+  const operationalServices = await countOperationalServices(
+    prisma,
+    context,
+    source,
+  );
   return {
     source,
     timezone: settings?.timezone ?? null,
@@ -785,8 +814,32 @@ async function calendarOverview(prisma: PrismaClient, tenantId: string) {
           integration?.status === "CONNECTED" &&
           externalWritesEnabled),
       migrate: source !== null,
+      // "Pelo menos um serviço operacional" (Goal007): lido do que
+      // `/internal/services` devolveria para a fonte vigente — mesmo
+      // predicado usado pela IA e pela agenda, sem distinguir a origem.
+      aiActivationReady: operationalServices > 0,
     },
   };
+}
+
+// Mesma fonte que a IA consulta (`CalendarService.listServices`, ja filtrada
+// para "operacional"): evita reimplementar o predicado por fonte e cobre a
+// Agenda Atendly e o Minha Agenda igualmente. Origem sem calendario
+// configurado ou integracao indisponivel conta como zero, sem derrubar a
+// tela de configuracoes.
+async function countOperationalServices(
+  prisma: PrismaClient,
+  context: CalendarRequestContext,
+  source: "ATENDLY" | "MINHA_AGENDA" | null,
+): Promise<number> {
+  if (source !== "ATENDLY" && source !== "MINHA_AGENDA") return 0;
+  try {
+    return (
+      await new CalendarService(prisma).listOperationalServices(context)
+    ).length;
+  } catch {
+    return 0;
+  }
 }
 
 const minhaAgendaWritesSchema = z.object({
@@ -838,10 +891,17 @@ async function requireIntegration(prisma: PrismaClient, tenantId: string) {
 function serviceDto(service: {
   id: string;
   name: string;
-  durationMinutes: number;
-  priceType: "FIXED" | "ON_REQUEST";
+  durationMinutes: number | null;
+  priceType: "FIXED" | "STARTING_AT" | "ON_REQUEST" | "NOT_INFORMED";
   price: { toString(): string } | number | null;
   active: boolean;
+  needsReview: boolean;
+  reviewOrigin: "IMPORT" | "MANUAL" | null;
+  description: string | null;
+  colorToken: string | null;
+  bufferBeforeMinutes: number;
+  bufferAfterMinutes: number;
+  recurrenceIntervalDays: number | null;
 }) {
   return {
     id: service.id,
@@ -850,6 +910,13 @@ function serviceDto(service: {
     priceType: service.priceType,
     price: service.price === null ? null : Number(service.price),
     active: service.active,
+    needsReview: service.needsReview,
+    reviewOrigin: service.reviewOrigin,
+    description: service.description,
+    colorToken: service.colorToken,
+    bufferBeforeMinutes: service.bufferBeforeMinutes,
+    bufferAfterMinutes: service.bufferAfterMinutes,
+    recurrenceIntervalDays: service.recurrenceIntervalDays,
   };
 }
 
@@ -988,10 +1055,6 @@ function parse<TSchema extends z.ZodType>(
     );
   }
   return parsed.data;
-}
-
-function tenantId(request: FastifyRequest): string {
-  return currentInternalContext(request).tenantId;
 }
 
 function data<T>(request: FastifyRequest, value: T) {

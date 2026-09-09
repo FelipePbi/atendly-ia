@@ -84,6 +84,16 @@ export async function registerV1SettingsRoutes(
     { preHandler: requireTenantContext },
     async (request) => {
       const body = parseBody(aiSchema, request.body);
+      if (body.enabled) {
+        const calendar = await scheduling.calendar(internalContext(request));
+        if (!calendar.capabilities.aiActivationReady) {
+          throw new AppError(
+            "CONFLICT",
+            "At least one operational service is required to activate the AI.",
+            409,
+          );
+        }
+      }
       const tenant = currentTenantContext(request);
       await getPrisma().aiSettings.upsert({
         where: { tenantId: tenant.tenantId },

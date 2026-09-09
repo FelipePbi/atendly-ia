@@ -191,6 +191,20 @@ describe("notes and tags authorisation", () => {
     expect(authorized.tags.map((item) => item.label)).toEqual(["vip"]);
   });
 
+  it("repeating an existing tag does not reset its authorisation", async () => {
+    const { customers } = service();
+    const maria = await customers.create({ name: "Maria" });
+    await customers.addTag(maria.id, { label: "vip", aiAuthorized: true });
+
+    // Mesmo rotulo, sem pedir autorizacao explicitamente: nao pode apagar o
+    // que ja foi concedido.
+    await customers.addTag(maria.id, { label: "vip" });
+
+    const tags = await customers.listTags(maria.id);
+    expect(tags).toHaveLength(1);
+    expect(tags[0].aiAuthorized).toBe(true);
+  });
+
   it("revokes authorisation when it is withdrawn", async () => {
     const { customers } = service();
     const maria = await customers.create({ name: "Maria" });

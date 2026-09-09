@@ -116,7 +116,7 @@ Grafo existente de 3.039 nós. Consulta por vocabulário `auth tenant session bu
 
 **FATOS consolidados:** núcleo operacional independente da IA, com CalendarService, factory e dois providers. O provider Atendly já oferece soma de multi-serviço, snapshots em AppointmentItem, cancelamento sem apagar appointment e remarcação por atualização transacional. Create e reschedule usam Serializable e advisory lock por tenant/data. Não é uma base a descartar.
 
-O motor de disponibilidade considera intervalos semanais, exceções por data, blocos e agendamentos não cancelados. A gestão HTTP não completa todas essas estruturas: exceções não têm rota de gestão localizada; hold, compromisso pessoal distinto, séries recorrentes, presença, falta e valor final não aparecem como capacidades completas. Serviço tem somente FIXED/ON_REQUEST, duração obrigatória e ativo. Cliente é identificado por telefone normalizado único no tenant; upsert pode renomeá-lo antes da transação de agendamento. **Superado no Goal006** — ver o delta ao final deste documento.
+O motor de disponibilidade considera intervalos semanais, exceções por data, blocos e agendamentos não cancelados. A gestão HTTP não completa todas essas estruturas: exceções não têm rota de gestão localizada; hold, compromisso pessoal distinto, séries recorrentes, presença, falta e valor final não aparecem como capacidades completas. Serviço tem somente FIXED/ON_REQUEST, duração obrigatória e ativo. **Superado no Goal007** — ver o delta ao final deste documento. Cliente é identificado por telefone normalizado único no tenant; upsert pode renomeá-lo antes da transação de agendamento. **Superado no Goal006** — ver o delta ao final deste documento.
 
 Minha Agenda continua recebendo leitura e escrita operacional. O snapshot de migração atual consulta hoje até dez anos à frente, deriva clientes desses agendamentos, filtra deleted e reduz estados. Migração exige destino vazio, bloqueia todos os itens se houver conflito e conclui/troca fonte automaticamente. Há tabela de job e claim condicional, mas execução usa Set/queueMicrotask locais e recuperação global no boot sem lease. Isso não implementa importação única do produto.
 
@@ -503,4 +503,80 @@ telefone único e upsert que renomeia, e o resíduo do Goal005 sobre handoffs
   fechamento factual. Mensagens não textuais do contato não renovam a sessão;
   `findCustomerAppointments` na IA ainda lista por telefone sobre todos os
   candidatos do número; o identificador `actor` de proveniência vem do cliente
-  do BFF.
+  do BFF (os dois últimos resolvidos no Goal007).
+
+## Delta implementado — Goal007, 2026-09-09 (ACCEPTED na rodada 3)
+
+A fotografia histórica acima permanece como registro da baseline. O FATO de
+"Scheduling, catálogo, clientes e importação" que descreve serviço com dois
+tipos de preço, duração obrigatória e sem atributos, e as observações 2, 3 e 4
+do Goal006 (proveniência vinda do corpo, compromissos por telefone, `addTag`
+reescrevendo autorização), estão superados pelos fatos abaixo, verificados no
+[review007](reviews/007-review.md) sobre a base `9494eb6`.
+
+- **FATO atual:** `apps/scheduling-service/prisma/schema.prisma` tem
+  `PriceType` com `FIXED`, `STARTING_AT`, `ON_REQUEST` e `NOT_INFORMED`;
+  `Service.durationMinutes` opcional com `needsReview` (lockstep por
+  `Service_review_check`) e `reviewOrigin` (`IMPORT`/`MANUAL`, só com pendência);
+  `description`, `colorToken` (enum `ServiceColorToken`),
+  `bufferBeforeMinutes`/`bufferAfterMinutes` (default 0) e
+  `recurrenceIntervalDays`; `AppointmentItem.durationMinutesSnapshot` opcional.
+  Migrations `20260908170000_goal007_catalog_expand` e
+  `20260908171000_goal007_catalog_constraints` (substituem
+  `Service_price_check`, `Service_durationMinutes_check` e o par de
+  `AppointmentItem`; separadas porque o valor novo do enum não pode ser
+  referenciado na transação que o criou). Nenhum registro reclassificado.
+- **FATO atual:** `AtendlyServiceService` valida preço por tipo (obrigatório
+  em `FIXED`/`STARTING_AT`, proibido nos outros), aceita duração ausente como
+  revisão, preserva a origem da revisão em `PATCH` que não toca a duração,
+  valida descrição, cor, buffers e recorrência; `isOperationalService` é o
+  predicado único (ativo, com duração, fora de revisão) usado por
+  `listOperational`/`listForScheduling` e por `requireActive`, que recusa
+  serviço em revisão com `SERVICE_NEEDS_REVIEW` e inativo com
+  `SERVICE_INACTIVE`.
+- **FATO atual:** `calendar-provider.ts` define `computeAgreementTotal` (soma
+  quando todos fixos; `STARTING_AT` quando há algum a partir de e nenhum sem
+  preço; `NONE` nos demais) e `CalendarAppointment.totalPriceType`; o provider
+  Atendly grava snapshots com as quatro semânticas, aplica a regra ao listar e
+  deriva a duração da remarcação de `endAt − startAt`; o schema de replay da
+  idempotência aceita os quatro tipos e duração nula, com
+  `totalPriceType` default `NONE`.
+- **FATO atual:** `CalendarService.listServices` devolve o catálogo completo da
+  fonte vigente (serviço em revisão incluído) para `/internal/service-catalog`;
+  `listOperationalServices` filtra pelo predicado único para qualquer fonte e
+  alimenta `GET /internal/services` e `countOperationalServices`, que define
+  `capabilities.aiActivationReady` em `/internal/calendar` (falha da fonte
+  externa conta como zero). O BFF recusa `PATCH /v1/settings/ai` com
+  `enabled: true` sem serviço operacional (`409 CONFLICT`).
+- **FATO atual:** o mapper do Minha Agenda (`toCalendarService`,
+  `appointmentServices`, `toCalendarAppointment`) não fabrica `FIXED`/zero:
+  preço desconhecido vira `NOT_INFORMED`, duração desconhecida vira ausência
+  explícita, item multi-serviço não herda a duração total;
+  `calendar-migration-service.ts` grava `reviewOrigin: IMPORT` para serviço
+  sem duração e `diagnoseSnapshot` não bloqueia duração ausente.
+- **FATO atual:** rotas `GET/POST /internal/service-catalog` e
+  `PATCH /internal/service-catalog/:id` com os campos novos; BFF
+  `GET/POST /v1/services` e `PATCH /v1/services/:id` idem
+  ([PUBLIC_API_V1](../../apps/bff/PUBLIC_API_V1.md), seção do Goal007);
+  frontend `serviceSchema`/`appointmentSchema` aceitam quatro tipos, duração
+  nula, `needsReview` e atributos, o diretório exibe "A partir de", "Sob
+  consulta", "Não informado" e "Precisa de revisão", e o onboarding normaliza
+  tipos novos para o par binário sem gravar zero. Na IA, `list_services` expõe
+  `priceType` sempre e o valor só quando existe; `calculateAgreementTotal` e
+  `totalPriceType` viajam em `AvailabilityLookup`, no rascunho pendente e nos
+  resultados; o comentário do agendamento tem quatro textos; serviço em revisão
+  nunca chega à IA porque `/internal/services` só devolve operacional.
+- **FATO atual (resíduos do 006):** `addTag` é idempotente por rótulo
+  (`update: {}`); o BFF deriva `actor`/`proposedByActor`/`confirmedByActor` da
+  sessão e não aceita mais do corpo; `list_customer_appointments` consulta por
+  `customerId` quando `Contact.customerId` está preenchido e só cai em
+  candidatos por telefone sem vínculo.
+- **FATO atual:** `validate:integration` tem dezessete passos, com o ensaio
+  `goal007-migration-rehearsal.mjs` (fixture legada com preço zero explícito,
+  expansão e constraints em passos separados, sondas por tipo); a suíte de
+  integração do Scheduling tem 19 testes (catálogo e acordo incluídos) e a
+  unitária 40; frontend 15 (`service-schema.test.ts`).
+- Continuam **NÃO VERIFICADOS:** WhatsApp real, Minha Agenda real, execução
+  hospedada da CI, deploy, `migrate deploy`/`diff` da IA em banco com pgvector
+  e os demais limites do fechamento factual. Mensagens não textuais do contato
+  não renovam a sessão; a resposta do Minha Agenda não é validada por schema.

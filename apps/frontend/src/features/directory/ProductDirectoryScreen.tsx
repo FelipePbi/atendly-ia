@@ -397,7 +397,7 @@ function ServiceListPage() {
                     </span>
                     <span className="directory-cell">
                       <span className="directory-cell-label">Duração</span>
-                      {service.durationMinutes} min
+                      {formatServiceDuration(service)}
                     </span>
                     <span className="directory-cell">
                       <span className="directory-cell-label">Preço</span>
@@ -794,7 +794,7 @@ function ServiceForm({
   const router = useRouter();
   const [catalog, setCatalog] = useState<ServiceList | null>(null);
   const [service, setService] = useState<Service | null>(null);
-  const [priceType, setPriceType] = useState<"FIXED" | "ON_REQUEST">("FIXED");
+  const [priceType, setPriceType] = useState<Service["priceType"]>("FIXED");
   const [priceCents, setPriceCents] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1239,12 +1239,21 @@ function initials(name: string | null): string {
 }
 
 function formatPrice(service: Service): string {
-  if (service.priceType === "ON_REQUEST" || service.price === null)
+  if (service.priceType === "NOT_INFORMED") return "Não informado";
+  if (service.priceType === "ON_REQUEST" || service.price === null) {
     return "Sob consulta";
-  return service.price.toLocaleString("pt-BR", {
+  }
+  const amount = service.price.toLocaleString("pt-BR", {
     currency: "BRL",
     style: "currency",
   });
+  return service.priceType === "STARTING_AT" ? `A partir de ${amount}` : amount;
+}
+
+function formatServiceDuration(service: Service): string {
+  return service.durationMinutes === null
+    ? "Precisa de revisão"
+    : `${service.durationMinutes} min`;
 }
 
 function formatDateTime(value?: string): string {

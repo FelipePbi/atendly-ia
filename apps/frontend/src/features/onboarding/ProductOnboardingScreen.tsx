@@ -13,7 +13,7 @@ import {
 } from "@/shared/runtime/ProductRuntime";
 import { Brand } from "@/shared/ui/Brand";
 
-import { useOnboardingRuntime } from "./OnboardingRuntime";
+import { onboardingPriceType, useOnboardingRuntime } from "./OnboardingRuntime";
 import { type OnboardingScenario, onboardingScenarios } from "./scenarios";
 
 const flow: OnboardingScenario[] = [
@@ -126,14 +126,18 @@ export function ProductOnboardingScreen({
         return;
       case "servico-preco": {
         const fixedPrice = Number(draft.servicePrice.replace(",", "."));
+        // O onboarding só grava os dois tipos originais; um tipo novo
+        // herdado de um serviço existente (ex.: importado) é normalizado
+        // pelo par mais próximo — nunca preço zero (ver OnboardingRuntime).
+        const priceType = onboardingPriceType(draft.servicePriceType);
         await onboarding.update({
           service: {
             active: true,
             durationMinutes: draft.serviceDuration,
             id: draft.serviceId,
             name: draft.serviceName,
-            price: draft.servicePriceType === "ON_REQUEST" ? null : fixedPrice,
-            priceType: draft.servicePriceType,
+            price: priceType === "ON_REQUEST" ? null : fixedPrice,
+            priceType,
           },
         });
         await refresh();

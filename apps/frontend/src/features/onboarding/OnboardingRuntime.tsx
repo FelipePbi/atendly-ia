@@ -23,7 +23,7 @@ export type OnboardingDraft = {
   serviceId?: string;
   serviceName: string;
   servicePrice: string;
-  servicePriceType: "FIXED" | "ON_REQUEST";
+  servicePriceType: "FIXED" | "STARTING_AT" | "ON_REQUEST" | "NOT_INFORMED";
   startTime: string;
   timezone: string;
   tone: AiTone | null;
@@ -140,6 +140,14 @@ export function nextRequiredStep(state: OnboardingState): string {
   return "validacao";
 }
 
+export function onboardingPriceType(
+  priceType: "FIXED" | "STARTING_AT" | "ON_REQUEST" | "NOT_INFORMED",
+): "FIXED" | "ON_REQUEST" {
+  return priceType === "ON_REQUEST" || priceType === "NOT_INFORMED"
+    ? "ON_REQUEST"
+    : "FIXED";
+}
+
 function draftFromState(
   state: OnboardingState,
   current: OnboardingDraft,
@@ -162,7 +170,12 @@ function draftFromState(
       state.service?.price === null || state.service?.price === undefined
         ? current.servicePrice
         : String(state.service.price),
-    servicePriceType: state.service?.priceType ?? current.servicePriceType,
+    // O onboarding só oferece os dois tipos originais; um serviço já com um
+    // dos dois tipos novos (ex.: importado) é exibido pelo par mais próximo
+    // sem nunca gravar preço zero — o formulário completo é do Goal015.
+    servicePriceType: state.service
+      ? onboardingPriceType(state.service.priceType)
+      : current.servicePriceType,
     startTime: activeRules[0]?.startTime ?? current.startTime,
     timezone:
       state.business?.timezone ?? state.calendar.timezone ?? current.timezone,

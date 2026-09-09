@@ -6,16 +6,17 @@ import {
 } from "../../../shared/date-time/calendar-date-time.js";
 import { AppError } from "../../../shared/errors/app-error.js";
 import { AtendlyAvailability } from "../../availability/atendly-availability.js";
-import type {
-  AvailableSlot,
-  CalendarAppointment,
-  CalendarProvider,
-  CalendarServiceDefinition,
-  CancelCalendarAppointmentInput,
-  CreateCalendarAppointmentInput,
-  GetAvailabilityInput,
-  ListAppointmentsInput,
-  RescheduleCalendarAppointmentInput,
+import {
+  type AvailableSlot,
+  type CalendarAppointment,
+  type CalendarProvider,
+  type CalendarServiceDefinition,
+  type CancelCalendarAppointmentInput,
+  computeAgreementTotal,
+  type CreateCalendarAppointmentInput,
+  type GetAvailabilityInput,
+  type ListAppointmentsInput,
+  type RescheduleCalendarAppointmentInput,
 } from "../../calendar/calendar-provider.js";
 import { AtendlyCustomerService } from "../../customers/atendly-customer-service.js";
 import { AtendlyServiceService } from "../../services/atendly-service-service.js";
@@ -315,9 +316,7 @@ export class AtendlyCalendarProvider implements CalendarProvider {
       priceType: item.priceTypeSnapshot,
       price: item.priceSnapshot === null ? null : Number(item.priceSnapshot),
     }));
-    const hasOnRequestPrice = services.some(
-      (service) => service.priceType === "ON_REQUEST",
-    );
+    const total = computeAgreementTotal(services);
     return {
       id: appointment.id,
       source: appointment.source,
@@ -334,9 +333,8 @@ export class AtendlyCalendarProvider implements CalendarProvider {
         phone: appointment.customer.phone,
       },
       services,
-      totalPrice: hasOnRequestPrice
-        ? null
-        : services.reduce((total, service) => total + (service.price ?? 0), 0),
+      totalPrice: total.amount,
+      totalPriceType: total.type,
       comments: appointment.comments,
       status: appointment.status,
     };
@@ -353,19 +351,17 @@ async function lockCalendarDay(
   );
 }
 
+/**
+ * Duracao real do agendamento para fins de remarcacao.
+ *
+ * Deriva do intervalo persistido (`endAt - startAt`), nao da soma dos
+ * snapshots por item: um item pode nao ter duracao propria conhecida
+ * (Goal007), e o intervalo continua sendo a fonte confiavel.
+ */
 function appointmentDuration(appointment: AppointmentRecord): number {
-  const duration = appointment.items.reduce(
-    (total, item) => total + item.durationMinutesSnapshot,
-    0,
+  return Math.round(
+    (appointment.endAt.getTime() - appointment.startAt.getTime()) / 60_000,
   );
-  if (duration <= 0) {
-    throw new AppError(
-      "APPOINTMENT_DURATION_INVALID",
-      "Appointment has no valid service duration snapshot.",
-      409,
-    );
-  }
-  return duration;
 }
 
 function assertCanReschedule(appointment: AppointmentRecord): void {

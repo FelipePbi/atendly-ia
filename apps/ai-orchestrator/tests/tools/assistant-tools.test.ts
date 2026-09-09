@@ -26,6 +26,30 @@ const browService: SchedulingServiceDefinition = {
   price: 40,
   colorId: 4,
 };
+const startingAtService: SchedulingServiceDefinition = {
+  id: "5114900",
+  name: "Manutencao de unhas",
+  duration: 60,
+  priceType: "STARTING_AT",
+  price: 80,
+  colorId: null,
+};
+const onRequestService: SchedulingServiceDefinition = {
+  id: "5114911",
+  name: "Procedimento especial",
+  duration: 45,
+  priceType: "ON_REQUEST",
+  price: null,
+  colorId: null,
+};
+const notInformedService: SchedulingServiceDefinition = {
+  id: "5114922",
+  name: "Servico recem cadastrado",
+  duration: 20,
+  priceType: "NOT_INFORMED",
+  price: null,
+  colorId: null,
+};
 const slot = {
   date: "2026-06-08",
   startTime: "13:30",
@@ -539,6 +563,178 @@ describe("AssistantToolRegistry customer identity", () => {
   });
 });
 
+describe("AssistantToolRegistry price semantics", () => {
+  it("lists the four price types and only carries a price when one exists", async () => {
+    const { prisma } = createPrismaMock({});
+    const { agenda } = createAgendaMock(
+      [],
+      [service, startingAtService, onRequestService, notInformedService],
+    );
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const result = await registry.execute(
+      {
+        id: "call-list-services",
+        name: "list_services",
+        args: { includePrices: true },
+      },
+      context(),
+    );
+
+    expect(result.ok).toBe(true);
+    const listed = (
+      result as unknown as { data: { services: Array<Record<string, unknown>> } }
+    ).data.services;
+    expect(listed).toMatchObject([
+      { id: service.id, priceType: "FIXED", price: service.price },
+      {
+        id: startingAtService.id,
+        priceType: "STARTING_AT",
+        price: startingAtService.price,
+      },
+      { id: onRequestService.id, priceType: "ON_REQUEST" },
+      { id: notInformedService.id, priceType: "NOT_INFORMED" },
+    ]);
+    expect(listed[2]).not.toHaveProperty("price");
+    expect(listed[3]).not.toHaveProperty("price");
+  });
+
+  it.each([
+    {
+      label: "fixed total",
+      services: [service, browService],
+      expected: `Total: R$ ${((service.price ?? 0) + (browService.price ?? 0)).toFixed(2)}.`,
+    },
+    {
+      label: "starting-at total",
+      services: [service, startingAtService],
+      expected: `A partir de R$ ${((service.price ?? 0) + (startingAtService.price ?? 0)).toFixed(2)}.`,
+    },
+    {
+      label: "on-request total",
+      services: [service, onRequestService],
+      expected: "Valor sob consulta.",
+    },
+    {
+      label: "not-informed total",
+      services: [service, notInformedService],
+      expected: "Valor nao informado.",
+    },
+  ])(
+    "writes the comment for a $label",
+    async ({ services: pairedServices, expected }) => {
+      const { prisma } = createPrismaMock({});
+      const { agenda, calls } = createAgendaMock([], pairedServices);
+      const registry = new AssistantToolRegistry(prisma, agenda);
+
+      await registry.execute(
+        {
+          id: "call-prepare-price",
+          name: "create_appointment",
+          args: {
+            action: "prepare",
+            serviceIds: pairedServices.map((item) => item.id),
+            date: slot.date,
+            startTime: slot.startTime,
+            customerName: "Thais",
+          },
+        },
+        context(),
+      );
+      await registry.execute(
+        {
+          id: "call-confirm-price",
+          name: "create_appointment",
+          args: { action: "confirm" },
+        },
+        context(),
+      );
+
+      expect(calls.createAppointment[0].comments).toContain(expected);
+    },
+  );
+
+  it("never offers or schedules a service pending review", async () => {
+    const reviewServiceId = "in-review-1";
+    const { prisma } = createPrismaMock({});
+    const { agenda, calls } = createAgendaMock([], [service]);
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const listed = await registry.execute(
+      { id: "call-list-review", name: "list_services", args: {} },
+      context(),
+    );
+    expect(listed.ok).toBe(true);
+    const services = (
+      listed as unknown as { data: { services: Array<{ id: string }> } }
+    ).data.services;
+    expect(services.map((item) => item.id)).not.toContain(reviewServiceId);
+
+    const prepared = await registry.execute(
+      {
+        id: "call-prepare-review",
+        name: "create_appointment",
+        args: {
+          action: "prepare",
+          serviceId: reviewServiceId,
+          date: slot.date,
+          startTime: slot.startTime,
+          customerName: "Thais",
+        },
+      },
+      context(),
+    );
+
+    expect(prepared).toMatchObject({
+      ok: false,
+      error: { code: "SERVICE_NOT_FOUND" },
+    });
+    expect(calls.createAppointment).toHaveLength(0);
+  });
+});
+
+describe("AssistantToolRegistry customer appointment lookup", () => {
+  it("queries by customerId when the contact is already linked to a person", async () => {
+    const { prisma } = createPrismaMock({}, "linked-customer-1");
+    const { agenda, calls } = createAgendaMock();
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const result = await registry.execute(
+      {
+        id: "call-list-appointments-linked",
+        name: "list_customer_appointments",
+        args: {},
+      },
+      context(),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(calls.findFutureAppointmentsForCustomer).toEqual([
+      "linked-customer-1",
+    ]);
+    expect(calls.findFutureAppointmentsForPhone).toHaveLength(0);
+  });
+
+  it("falls back to phone candidates when the contact is not linked", async () => {
+    const { prisma } = createPrismaMock({}, null);
+    const { agenda, calls } = createAgendaMock();
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const result = await registry.execute(
+      {
+        id: "call-list-appointments-unlinked",
+        name: "list_customer_appointments",
+        args: {},
+      },
+      context(),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(calls.findFutureAppointmentsForPhone).toEqual([phone]);
+    expect(calls.findFutureAppointmentsForCustomer).toHaveLength(0);
+  });
+});
+
 function context() {
   return {
     conversationId,
@@ -589,6 +785,9 @@ function createAppointment(
     serviceId: input.serviceId,
     serviceIds: services.map((item) => item.id),
     price: services.reduce((total, item) => total + (item.price ?? 0), 0),
+    totalPriceType: services.every((item) => item.priceType === "FIXED")
+      ? "FIXED"
+      : "STARTING_AT",
     customer: {
       id: input.customerId ?? "12345",
       name: input.customerName ?? "Thais",
@@ -610,17 +809,22 @@ function createAppointment(
 
 function createAgendaMock(
   candidates: Array<{ id: string; name: string | null; phone: string | null }> = [],
+  servicesOverride: SchedulingServiceDefinition[] = [service, browService],
 ) {
   const calls: {
     createAppointment: ScheduleAppointmentInput[];
     getAvailableSlotsForServices: string[][];
     findCustomerCandidatesByPhone: string[];
+    findFutureAppointmentsForCustomer: string[];
+    findFutureAppointmentsForPhone: string[];
   } = {
     createAppointment: [],
     getAvailableSlotsForServices: [],
     findCustomerCandidatesByPhone: [],
+    findFutureAppointmentsForCustomer: [],
+    findFutureAppointmentsForPhone: [],
   };
-  const services = [service, browService];
+  const services = servicesOverride;
   const agenda = {
     listActiveServices: async () => services,
     findService: async (serviceId: string) => {
@@ -637,8 +841,14 @@ function createAgendaMock(
       calls.createAppointment.push(input);
       return createAppointment(input);
     },
-    findFutureAppointmentsForPhone: async () => [],
-    findFutureAppointmentsForCustomer: async () => [],
+    findFutureAppointmentsForPhone: async (value: string) => {
+      calls.findFutureAppointmentsForPhone.push(value);
+      return [];
+    },
+    findFutureAppointmentsForCustomer: async (value: string) => {
+      calls.findFutureAppointmentsForCustomer.push(value);
+      return [];
+    },
     // Numero sem pessoa cadastrada: o cliente so nasce na confirmacao.
     findCustomerCandidatesByPhone: async (value: string) => {
       calls.findCustomerCandidatesByPhone.push(value);
@@ -669,7 +879,10 @@ function createAgendaMock(
   return { agenda: agenda as never, calls };
 }
 
-function createPrismaMock(initialState: Record<string, unknown>) {
+function createPrismaMock(
+  initialState: Record<string, unknown>,
+  linkedCustomerId: string | null = null,
+) {
   const store = {
     state: { ...initialState },
     externalAppointments: [] as unknown[],
@@ -677,6 +890,14 @@ function createPrismaMock(initialState: Record<string, unknown>) {
     contactLinks: [] as unknown[],
   };
   const prisma = {
+    contact: {
+      findUnique: async () =>
+        linkedCustomerId ? { customerId: linkedCustomerId } : null,
+      updateMany: async (args: unknown) => {
+        store.contactLinks.push(args);
+        return { count: 1 };
+      },
+    },
     conversation: {
       findUnique: async () => ({
         id: conversationId,
@@ -702,12 +923,6 @@ function createPrismaMock(initialState: Record<string, unknown>) {
     },
     handoff: {
       create: async () => ({ id: "handoff-1" }),
-    },
-    contact: {
-      updateMany: async (args: unknown) => {
-        store.contactLinks.push(args);
-        return { count: 1 };
-      },
     },
   } as unknown as PrismaClient;
 

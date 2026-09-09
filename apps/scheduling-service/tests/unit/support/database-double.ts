@@ -160,6 +160,9 @@ export function createDatabaseDouble() {
     tenantId_id: ["tenantId", "id"],
     tenantId_customerId_label: ["tenantId", "customerId", "label"],
   });
+  const service = new Table("service", {
+    tenantId_id: ["tenantId", "id"],
+  });
 
   // `include: { relatedCustomer: true }` é resolvido aqui porque o serviço o
   // usa para devolver o responsável junto com a relação.
@@ -180,6 +183,7 @@ export function createDatabaseDouble() {
     customer,
     customerNote,
     customerTag,
+    service,
     customerRelation: {
       ...customerRelation,
       findUnique: async (args: Parameters<Table["findUnique"]>[0]) =>
@@ -193,5 +197,8 @@ export function createDatabaseDouble() {
     },
   };
 
-  return { client, tables: { customer, customerRelation, customerNote, customerTag } };
+  return {
+    client,
+    tables: { customer, customerRelation, customerNote, customerTag, service },
+  };
 }

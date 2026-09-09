@@ -352,6 +352,11 @@ export class AtendlyCustomerService {
     });
   }
 
+  /**
+   * Idempotente por rotulo: repetir uma tag existente nao reescreve
+   * `aiAuthorized`. Autorizacao so muda por `setTagAuthorization`, uma
+   * decisao explicita — nao um efeito colateral de recriar a mesma tag.
+   */
   async addTag(customerId: string, input: CustomerTagInput) {
     await this.get(customerId);
     const label = input.label.trim();
@@ -376,11 +381,7 @@ export class AtendlyCustomerService {
         authorizedBy: authorized ? (input.actor ?? null) : null,
         createdBy: input.actor ?? null,
       },
-      update: {
-        aiAuthorized: authorized,
-        authorizedAt: authorized ? new Date() : null,
-        authorizedBy: authorized ? (input.actor ?? null) : null,
-      },
+      update: {},
     });
   }
 

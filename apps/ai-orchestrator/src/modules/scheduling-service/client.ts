@@ -18,11 +18,19 @@ import type {
   SchedulingServiceDefinition,
 } from "./types.js";
 
+const priceTypeSchema = z.enum([
+  "FIXED",
+  "STARTING_AT",
+  "ON_REQUEST",
+  "NOT_INFORMED",
+]);
 const serviceSchema = z.object({
   id: z.string(),
   name: z.string(),
+  // `/internal/services` so devolve servico operacional (Goal007): duracao
+  // sempre presente aqui.
   durationMinutes: z.number(),
-  priceType: z.enum(["FIXED", "ON_REQUEST"]),
+  priceType: priceTypeSchema,
   price: z.number().nullable(),
   active: z.boolean(),
   colorId: z.number().nullable().optional(),
@@ -45,12 +53,13 @@ const appointmentSchema = z.object({
     z.object({
       serviceId: z.string(),
       name: z.string(),
-      durationMinutes: z.number(),
-      priceType: z.enum(["FIXED", "ON_REQUEST"]),
+      durationMinutes: z.number().nullable(),
+      priceType: priceTypeSchema,
       price: z.number().nullable(),
     }),
   ),
   totalPrice: z.number().nullable(),
+  totalPriceType: z.enum(["FIXED", "STARTING_AT", "NONE"]).default("NONE"),
   comments: z.string().nullable(),
   status: z.string(),
 });
@@ -455,6 +464,7 @@ function toAppointment(
       : null,
     services,
     price: appointment.totalPrice,
+    totalPriceType: appointment.totalPriceType,
     comments: appointment.comments,
     status: appointment.status,
     serviceId: services[0]?.serviceId ?? null,

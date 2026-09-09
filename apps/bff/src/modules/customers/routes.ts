@@ -40,33 +40,30 @@ const customerPatchSchema = z
   .refine((value) => Object.keys(value).length > 0, {
     message: "Informe ao menos um campo.",
   });
+// `actor` nunca vem do corpo: o identificador de proveniência é sempre
+// derivado da sessão autenticada (`internalContext(request).userId`), para
+// que o corpo da requisição não possa se passar por outra pessoa.
 const primaryGuardianSchema = z.object({
   guardianCustomerId: z.string().trim().min(1).max(128),
   // O painel é a profissional: a relação criada aqui pode nascer confirmada,
   // mas isso continua sendo uma decisão explícita de quem chamou.
   proposedBy: z.enum(["PROFESSIONAL", "CUSTOMER"]).default("PROFESSIONAL"),
-  proposedByActor: z.string().trim().max(200).nullable().optional(),
   confirmedBy: z.enum(["PROFESSIONAL", "CUSTOMER"]).nullable().optional(),
-  confirmedByActor: z.string().trim().max(200).nullable().optional(),
 });
 const primaryGuardianConfirmSchema = z.object({
   confirmedBy: z.enum(["PROFESSIONAL", "CUSTOMER"]).default("PROFESSIONAL"),
-  actor: z.string().trim().max(200).nullable().optional(),
 });
 const noteSchema = z.object({
   body: z.string().trim().min(1).max(2_000),
   // Autorização de uso pela IA nasce negada e é atributo do registro.
   aiAuthorized: z.boolean().default(false),
-  actor: z.string().trim().max(200).nullable().optional(),
 });
 const tagSchema = z.object({
   label: z.string().trim().min(1).max(60),
   aiAuthorized: z.boolean().default(false),
-  actor: z.string().trim().max(200).nullable().optional(),
 });
 const authorizationSchema = z.object({
   aiAuthorized: z.boolean(),
-  actor: z.string().trim().max(200).nullable().optional(),
 });
 
 export async function registerV1CustomerRoutes(
@@ -121,13 +118,15 @@ export async function registerV1CustomerRoutes(
     authenticated,
     async (request) => {
       const { id } = parseParams(idSchema, request.params);
+      const context = internalContext(request);
+      const body = parseBody(primaryGuardianSchema, request.body);
       return dataResponse(
         request,
-        await scheduling.setCustomerPrimaryGuardian(
-          internalContext(request),
-          id,
-          parseBody(primaryGuardianSchema, request.body),
-        ),
+        await scheduling.setCustomerPrimaryGuardian(context, id, {
+          ...body,
+          proposedByActor: context.userId,
+          confirmedByActor: body.confirmedBy ? context.userId : null,
+        }),
       );
     },
   );
@@ -137,13 +136,14 @@ export async function registerV1CustomerRoutes(
     authenticated,
     async (request) => {
       const { id } = parseParams(idSchema, request.params);
+      const context = internalContext(request);
+      const body = parseBody(primaryGuardianConfirmSchema, request.body ?? {});
       return dataResponse(
         request,
-        await scheduling.confirmCustomerPrimaryGuardian(
-          internalContext(request),
-          id,
-          parseBody(primaryGuardianConfirmSchema, request.body ?? {}),
-        ),
+        await scheduling.confirmCustomerPrimaryGuardian(context, id, {
+          ...body,
+          actor: context.userId,
+        }),
       );
     },
   );
@@ -165,11 +165,11 @@ export async function registerV1CustomerRoutes(
 
   app.post("/v1/customers/:id/notes", authenticated, async (request, reply) => {
     const { id } = parseParams(idSchema, request.params);
-    const note = await scheduling.createCustomerNote(
-      internalContext(request),
-      id,
-      parseBody(noteSchema, request.body),
-    );
+    const context = internalContext(request);
+    const note = await scheduling.createCustomerNote(context, id, {
+      ...parseBody(noteSchema, request.body),
+      actor: context.userId,
+    });
     return reply.code(201).send(dataResponse(request, note));
   });
 
@@ -178,14 +178,13 @@ export async function registerV1CustomerRoutes(
     authenticated,
     async (request) => {
       const params = parseParams(childSchema, request.params);
+      const context = internalContext(request);
       return dataResponse(
         request,
-        await scheduling.updateCustomerNote(
-          internalContext(request),
-          params.id,
-          params.childId,
-          parseBody(authorizationSchema, request.body),
-        ),
+        await scheduling.updateCustomerNote(context, params.id, params.childId, {
+          ...parseBody(authorizationSchema, request.body),
+          actor: context.userId,
+        }),
       );
     },
   );
@@ -208,11 +207,11 @@ export async function registerV1CustomerRoutes(
 
   app.post("/v1/customers/:id/tags", authenticated, async (request, reply) => {
     const { id } = parseParams(idSchema, request.params);
-    const tag = await scheduling.createCustomerTag(
-      internalContext(request),
-      id,
-      parseBody(tagSchema, request.body),
-    );
+    const context = internalContext(request);
+    const tag = await scheduling.createCustomerTag(context, id, {
+      ...parseBody(tagSchema, request.body),
+      actor: context.userId,
+    });
     return reply.code(201).send(dataResponse(request, tag));
   });
 
@@ -221,14 +220,13 @@ export async function registerV1CustomerRoutes(
     authenticated,
     async (request) => {
       const params = parseParams(childSchema, request.params);
+      const context = internalContext(request);
       return dataResponse(
         request,
-        await scheduling.updateCustomerTag(
-          internalContext(request),
-          params.id,
-          params.childId,
-          parseBody(authorizationSchema, request.body),
-        ),
+        await scheduling.updateCustomerTag(context, params.id, params.childId, {
+          ...parseBody(authorizationSchema, request.body),
+          actor: context.userId,
+        }),
       );
     },
   );

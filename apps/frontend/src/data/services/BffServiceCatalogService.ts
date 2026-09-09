@@ -1,12 +1,26 @@
 import { type BffHttpClient } from "../http/BffHttpClient";
 import { serviceListSchema, serviceSchema } from "../mappers/publicApiSchemas";
 
+export type ServiceColorToken =
+  | "ROSE"
+  | "AMBER"
+  | "EMERALD"
+  | "SKY"
+  | "VIOLET"
+  | "SLATE";
+
 export interface ServiceInput {
   active?: boolean;
-  durationMinutes: number;
+  // Ausente vira pendencia de revisao (Goal007); nunca zero/duracao inventada.
+  durationMinutes?: number | null;
   name: string;
   price?: number | null;
-  priceType: "FIXED" | "ON_REQUEST";
+  priceType: "FIXED" | "STARTING_AT" | "ON_REQUEST" | "NOT_INFORMED";
+  description?: string | null;
+  colorToken?: ServiceColorToken | null;
+  bufferBeforeMinutes?: number | null;
+  bufferAfterMinutes?: number | null;
+  recurrenceIntervalDays?: number | null;
 }
 
 export type UpdateServiceInput = Partial<ServiceInput>;

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import type { PrismaClient } from "../../generated/prisma/client.js";
 import { AppError } from "../../shared/errors/app-error.js";
+import { isOperationalService } from "../services/atendly-service-service.js";
 import type {
   CalendarAppointment,
   CancelCalendarAppointmentInput,
@@ -32,12 +33,15 @@ const calendarAppointmentSchema: z.ZodType<CalendarAppointment> = z.object({
     z.object({
       serviceId: z.string(),
       name: z.string(),
-      durationMinutes: z.number(),
-      priceType: z.enum(["FIXED", "ON_REQUEST"]).default("FIXED"),
+      durationMinutes: z.number().nullable(),
+      priceType: z
+        .enum(["FIXED", "STARTING_AT", "ON_REQUEST", "NOT_INFORMED"])
+        .default("FIXED"),
       price: z.number().nullable(),
     }),
   ),
   totalPrice: z.number().nullable(),
+  totalPriceType: z.enum(["FIXED", "STARTING_AT", "NONE"]).default("NONE"),
   comments: z.string().nullable(),
   status: z.string(),
 });
@@ -57,8 +61,27 @@ export class CalendarService {
     this.idempotency = new CalendarMutationIdempotency(prisma);
   }
 
+  /** Catálogo completo da fonte vigente: serviço em revisão continua listável (Goal007). */
   async listServices(context: CalendarRequestContext) {
     return (await this.provider(context)).listServices();
+  }
+
+  /**
+   * "Operacional" (Goal007): o mesmo predicado para todas as fontes, usado
+   * por `/internal/services` (o que a IA pode oferecer) e pela capacidade de
+   * ativação lida pelo BFF. A Agenda Atendly já filtra em `listForScheduling`;
+   * a origem externa não tem estado de revisão, então só ativo e duração
+   * conhecida se aplicam.
+   */
+  async listOperationalServices(context: CalendarRequestContext) {
+    const services = await this.listServices(context);
+    return services.filter((service) =>
+      isOperationalService({
+        active: service.active,
+        durationMinutes: service.durationMinutes,
+        needsReview: false,
+      }),
+    );
   }
 
   async listAppointments(

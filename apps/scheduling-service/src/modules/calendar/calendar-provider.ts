@@ -1,11 +1,21 @@
+export type ServicePriceType =
+  | "FIXED"
+  | "STARTING_AT"
+  | "ON_REQUEST"
+  | "NOT_INFORMED";
+
 export interface CalendarServiceDefinition {
   id: string;
   name: string;
-  durationMinutes: number;
-  priceType: "FIXED" | "ON_REQUEST";
+  /** Ausente e pendencia de revisao; nunca zero fabricado. */
+  durationMinutes: number | null;
+  priceType: ServicePriceType;
   price: number | null;
   active: boolean;
+  /** Numero legado do Minha Agenda; sempre nulo para a Agenda Atendly. */
   colorId?: number | null;
+  /** Token estavel da identidade visual do servico (Agenda Atendly). */
+  colorToken?: string | null;
 }
 
 export interface CalendarCustomerSummary {
@@ -17,9 +27,37 @@ export interface CalendarCustomerSummary {
 export interface CalendarAppointmentServiceItem {
   serviceId: string;
   name: string;
-  durationMinutes: number;
-  priceType: "FIXED" | "ON_REQUEST";
+  /** Ausente quando o item nao tem duracao propria conhecida. */
+  durationMinutes: number | null;
+  priceType: ServicePriceType;
   price: number | null;
+}
+
+/**
+ * Regra unica do total do acordo (Goal007): soma quando todos os itens sao
+ * `FIXED`; `STARTING_AT` quando ha algum "a partir de" e nenhum "sob
+ * consulta" ou "nao informado"; sem total (`NONE`) nos demais casos. Usada
+ * pelo Scheduling e reimplementada de forma equivalente na IA — os dois lados
+ * nao compartilham pacote de contrato para este calculo (D-011).
+ */
+export type AgreementTotalType = "FIXED" | "STARTING_AT" | "NONE";
+
+export interface AgreementTotal {
+  type: AgreementTotalType;
+  amount: number | null;
+}
+
+export function computeAgreementTotal(
+  items: Array<{ priceType: ServicePriceType; price: number | null }>,
+): AgreementTotal {
+  if (items.length === 0) return { type: "NONE", amount: null };
+  const hasUnpriced = items.some(
+    (item) => item.priceType === "ON_REQUEST" || item.priceType === "NOT_INFORMED",
+  );
+  if (hasUnpriced) return { type: "NONE", amount: null };
+  const amount = items.reduce((total, item) => total + (item.price ?? 0), 0);
+  const allFixed = items.every((item) => item.priceType === "FIXED");
+  return { type: allFixed ? "FIXED" : "STARTING_AT", amount };
 }
 
 export interface CalendarAppointment {
@@ -33,6 +71,7 @@ export interface CalendarAppointment {
   customer: CalendarCustomerSummary | null;
   services: CalendarAppointmentServiceItem[];
   totalPrice: number | null;
+  totalPriceType: AgreementTotalType;
   comments: string | null;
   status: string;
 }

@@ -450,6 +450,10 @@ export class CalendarMigrationService {
             priceType: service.priceType,
             price: service.price,
             active: service.active,
+            // Duracao ausente na origem vira pendencia de revisao com origem
+            // "importacao" — nunca duracao/preco fabricados (DATA-09/DATA-12).
+            reviewOrigin:
+              service.durationMinutes === null ? "IMPORT" : undefined,
           });
           serviceIds.set(service.id, created.id);
           await transaction.externalEntityMap.create({
@@ -653,10 +657,14 @@ function diagnoseSnapshot(
     }
   }
   for (const service of snapshot.services) {
+    // Duração ausente não é conflito: vira serviço em revisão (DATA-12), não
+    // bloqueia a importação. Só duração inválida (zero/negativa, quando
+    // presente) e preço obrigatório ausente continuam impedindo o registro.
     if (
       !service.name.trim() ||
-      service.durationMinutes <= 0 ||
-      (service.priceType === "FIXED" && service.price === null)
+      (service.durationMinutes !== null && service.durationMinutes <= 0) ||
+      ((service.priceType === "FIXED" || service.priceType === "STARTING_AT") &&
+        service.price === null)
     ) {
       conflicts.push({
         entityType: "SERVICE",

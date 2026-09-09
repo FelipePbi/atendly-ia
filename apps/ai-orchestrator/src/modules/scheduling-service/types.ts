@@ -1,8 +1,16 @@
+export type SchedulingPriceType =
+  | "FIXED"
+  | "STARTING_AT"
+  | "ON_REQUEST"
+  | "NOT_INFORMED";
+
 export interface SchedulingServiceDefinition {
   id: string;
   name: string;
+  /** Ausente e pendencia de revisao; `/internal/services` ja so devolve
+   * servico operacional, entao aqui e sempre um numero. */
   duration: number;
-  priceType: "FIXED" | "ON_REQUEST";
+  priceType: SchedulingPriceType;
   price: number | null;
   colorId: number | null;
 }
@@ -16,10 +24,13 @@ export interface SchedulingCustomerSummary {
 export interface SchedulingAppointmentServiceItem {
   serviceId: string;
   name: string;
-  duration: number;
-  priceType: "FIXED" | "ON_REQUEST";
+  /** Ausente quando o item nao tem duracao propria conhecida (Goal007). */
+  duration: number | null;
+  priceType: SchedulingPriceType;
   price: number | null;
 }
+
+export type SchedulingAgreementTotalType = "FIXED" | "STARTING_AT" | "NONE";
 
 export interface SchedulingAppointment {
   id: string;
@@ -31,6 +42,7 @@ export interface SchedulingAppointment {
   customer: SchedulingCustomerSummary | null;
   services: SchedulingAppointmentServiceItem[];
   price: number | null;
+  totalPriceType: SchedulingAgreementTotalType;
   comments: string | null;
   status: string;
   serviceId: string | null;

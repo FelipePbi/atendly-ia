@@ -82,7 +82,9 @@ export async function registerCalendarRoutes(
   const internalOnly = { preHandler: requireInternalAuth };
 
   app.get("/internal/services", internalOnly, async (request) => ({
-    data: await calendarService().listServices(currentInternalContext(request)),
+    data: await calendarService().listOperationalServices(
+      currentInternalContext(request),
+    ),
     requestId: request.id,
   }));
 

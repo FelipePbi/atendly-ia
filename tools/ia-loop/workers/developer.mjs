@@ -51,6 +51,7 @@ import { LOOP_STATES } from '../lib/loop-state.mjs';
 import { developerResultSchemaFor, validateDeveloperJob, validateDeveloperResult } from '../lib/contracts-v2.mjs';
 import { buildDeveloperContext, buildCorrectionContext } from '../lib/context-builders.mjs';
 import { isDirectExecution } from '../lib/direct-execution.mjs';
+import { exitCodeForError, nameForExitCode } from '../lib/worker-exit.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, '..', '.state');
@@ -674,7 +675,11 @@ async function main() {
 // generator, or an agent reading the tooling — must never start anything.
 if (isDirectExecution(import.meta.url)) {
   main().catch((error) => {
-    console.error(`Developer worker failed: ${error?.message ?? error}`);
-    process.exitCode = 1;
+    // The exit CODE is the message a supervisor reads: an identity conflict and
+    // a changed codebase are deliberate stops, not crashes, and restarting into
+    // either one just repeats it.
+    const code = exitCodeForError(error);
+    console.error(`Developer worker stopped [${nameForExitCode(code)}]: ${error?.message ?? error}`);
+    process.exitCode = code;
   });
 }

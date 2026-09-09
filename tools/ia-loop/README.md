@@ -4023,7 +4023,45 @@ liberá-lo abriria a vaga para um processo que então correria com ele. A
 verificação roda só quando existe um job realmente reivindicável, para não pagar
 uma varredura de diretório a cada segundo de polling.
 
+### Supervisão por exit code
+
+`until node worker.mjs; do sleep 10; done` não serve como supervisor: ele
+reinicia em qualquer saída diferente de zero, então as duas condições para as
+quais o worker foi **projetado** para parar — outro processo já detém o papel, e
+o código mudou embaixo dele — viram um laço que repete a mesma recusa a cada dez
+segundos e soterra a única linha que a explica.
+
+A razão sai do processo como número, e o supervisor decide só a partir dele:
+
+```text
+0   OK                 shutdown pedido            → permanece desligado
+1   CRASH              ninguém planejou isto      → reinicia
+20  IDENTITY_CONFLICT  outro worker detém o papel → permanece desligado
+21  CODE_CHANGED       fontes mudaram sob ele     → permanece desligado
+22  FATAL_CONFIG       ambiente não comporta      → permanece desligado
+```
+
+```bash
+npm run ia-loop:worker -- tech_lead
+npm run ia-loop:worker -- developer
+```
+
+Só CRASH reinicia, com 5s de espera e teto de 5 crashes em 5 minutos — um crash
+que se reproduz sempre é desistido, não repetido. Toda saída registra por que
+houve ou não restart. Rodar o worker direto (`npm run ia-loop:tech-lead`)
+continua funcionando e não mudou; o supervisor é opcional.
+
+`CODE_CHANGED` deixou de ser um latch que idlava para sempre: o worker agora
+**sai**, liberando o papel. Manter o lease enquanto recusa todo job seria um
+papel que ninguém mais pode assumir.
+
 ### Testes
+
+`tests/worker-supervisor.test.mjs` (10): mapeamento erro → exit code; só CRASH
+reinicia e toda recusa se explica; código desconhecido tratado como crash;
+shutdown pedido inicia exatamente uma vez; conflito de identidade não repetido;
+código mudado não reinicia; crash reiniciado até uma saída limpa; crash que se
+reproduz sempre é desistido; janela do orçamento de crash; validação de papel.
 
 `tests/worker-identity.test.mjs` (16): dono vivo nunca deslocado; lease obsoleto
 com pid ausente; lease anterior ao boot atual (com o pid até "vivo", irrelevante

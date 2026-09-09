@@ -193,9 +193,12 @@ export async function runWorkerLoop({
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
   const seen = new Set();
-  // Latched: once the code under this process has changed, it never becomes
-  // trustworthy again without a restart.
-  let codeStale = false;
+  /**
+   * A reason to stop that is NOT a crash, carried out of the loop so the
+   * process can exit with a code that says so. Thrown after the loop unwinds,
+   * never from inside it: the per-job catch there would log it as a failed job.
+   */
+  let fatal = null;
 
   while (running) {
     let files = [];
@@ -272,15 +275,22 @@ export async function runWorkerLoop({
         if (bootCodeVersion) {
           const { changed, current } = await codeChangedSince({ root: packageRoot, bootVersion: bootCodeVersion });
           if (changed) {
-            if (!codeStale) {
-              codeStale = true;
-              log('CODE CHANGED', `booted with ${bootCodeVersion}, on disk ${current?.version} — refusing new jobs, restart required`);
-              await store.appendEvent({
-                type: 'WORKER_CODE_STALE', role,
-                bootCodeVersion, currentCodeVersion: current?.version ?? null,
-              }).catch(() => {});
-            }
-            continue;
+            log('CODE CHANGED', `booted with ${bootCodeVersion}, on disk ${current?.version} — stopping before taking this job`);
+            await store.appendEvent({
+              type: 'WORKER_CODE_STALE', role,
+              bootCodeVersion, currentCodeVersion: current?.version ?? null,
+            }).catch(() => {});
+            // Stopping rather than idling forever: a worker that keeps its role
+            // while refusing every job is a role nobody else can take. Exiting
+            // releases it, and the dedicated exit code stops a supervisor from
+            // restarting into code the operator has not chosen to deploy.
+            fatal = new SpikeError(
+              'WORKER_CODE_CHANGED',
+              `ia-loop code changed since this ${role} booted `
+              + `(${bootCodeVersion} -> ${current?.version ?? 'unknown'}). Restart the worker to pick it up.`,
+            );
+            running = false;
+            break;
           }
         }
 
@@ -349,6 +359,11 @@ export async function runWorkerLoop({
       log('IDLE');
     }
 
-    await sleep(pollIntervalMs);
+    if (running) await sleep(pollIntervalMs);
   }
+
+  // Reached only by a deliberate stop; `shutdown` exits the process directly.
+  await stopHeartbeat();
+  await releaseIdentity();
+  if (fatal) throw fatal;
 }

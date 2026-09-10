@@ -69,9 +69,36 @@ test('integrated with no next Goal yet is RESUME_PLANNING, which requires ACCEPT
   assert.equal(requiredGoalStatusFor(CLOSURE_RESUME_POINTS.RESUME_PLANNING), 'ACCEPTED');
 });
 
-test('integrated AND a next Goal already exists is ALREADY_CLOSED, which also requires ACCEPTED', () => {
+test('a next Goal id, on its own, is still RESUME_PLANNING — the plan is not integrated yet', () => {
+  // applyPlanningResult writes nextGoalId in the PLANNING WORKTREE, before that
+  // worktree's own commit is even made, let alone cherry-picked into main.
+  // Treating nextGoalId as "closed" would skip the commit/integrate steps that
+  // are still genuinely pending — and MIGRATION_STATUS.md in main would not
+  // yet carry the row NEXT_GOAL_PLANNING's commit puts there.
   const closure = {
     integratedClosureCommit: 'a'.repeat(40), newMigrationBaseline: 'a'.repeat(40), nextGoalId: '010',
+  };
+  assert.equal(resolveClosureResumePoint(closure), CLOSURE_RESUME_POINTS.RESUME_PLANNING);
+});
+
+test('nextGoalId AND a source planning commit, but not yet integrated, is still RESUME_PLANNING', () => {
+  // The exact shape `ia-loop:close` leaves behind when it recovers a
+  // successful planning result and commits the planning worktree, but the
+  // main checkout is dirty and the cherry-pick has not run yet.
+  const closure = {
+    integratedClosureCommit: 'a'.repeat(40), newMigrationBaseline: 'a'.repeat(40),
+    nextGoalId: '010', nextGoalTitle: 'x', nextGoalPath: 'docs/migration/goals/010-x.md',
+    sourcePlanningCommit: 'c'.repeat(40),
+  };
+  const resumePoint = resolveClosureResumePoint(closure);
+  assert.equal(resumePoint, CLOSURE_RESUME_POINTS.RESUME_PLANNING);
+  assert.equal(expectedMigrationStatusRowFor(resumePoint), 'READY', 'main does not have the row yet either');
+});
+
+test('integrated AND the planning commit is integrated is ALREADY_CLOSED, which also requires ACCEPTED', () => {
+  const closure = {
+    integratedClosureCommit: 'a'.repeat(40), newMigrationBaseline: 'a'.repeat(40),
+    nextGoalId: '010', sourcePlanningCommit: 'c'.repeat(40), planningIntegrationCommit: 'd'.repeat(40),
   };
   assert.equal(resolveClosureResumePoint(closure), CLOSURE_RESUME_POINTS.ALREADY_CLOSED);
   assert.equal(requiredGoalStatusFor(CLOSURE_RESUME_POINTS.ALREADY_CLOSED), 'ACCEPTED');
@@ -110,7 +137,7 @@ test('a Goal with no closure record at all stays FRESH even if its document says
   assert.equal(requiredGoalStatusFor(resumePoint), 'READY');
 });
 
-test('a next Goal id alone, without integration evidence, does not count as closed', () => {
+test('a next Goal id alone, without any closure integration evidence, does not count as closed', () => {
   // Guards against a future bug where nextGoalId is set by something other
   // than a completed integration (e.g. a stray write) being read as proof.
   const closure = { nextGoalId: '010' };
@@ -120,6 +147,13 @@ test('a next Goal id alone, without integration evidence, does not count as clos
 
 test('a partially-written integration (commit without baseline) is not integrated', () => {
   const closure = { integratedClosureCommit: 'a'.repeat(40), nextGoalId: '010' };
+  assert.equal(resolveClosureResumePoint(closure), CLOSURE_RESUME_POINTS.FRESH);
+});
+
+test('a planning integration commit alone, without closure integration, does not count as closed', () => {
+  // planningIntegrationCommit is only trustworthy once isClosureIntegrated is
+  // also true — a lone value here would be a corrupt or hand-edited record.
+  const closure = { planningIntegrationCommit: 'd'.repeat(40) };
   assert.equal(resolveClosureResumePoint(closure), CLOSURE_RESUME_POINTS.FRESH);
 });
 
@@ -189,10 +223,22 @@ test('the 009 story: READY -> closure docs -> integrated -> ACCEPTED -> baseline
   // NEXT_GOAL_PLANNING is pending", asserted above.
 
   // 11 & 12. A valid plan is produced this time: Goal 010 is created READY,
-  // and the closure record gains nextGoalId.
+  // and the closure record gains nextGoalId — but the planning worktree's own
+  // commit, and its cherry-pick into main, are each their own later step.
+  // Until the LATTER exists, MIGRATION_STATUS.md in main still has no row for
+  // this, so this is still RESUME_PLANNING, not the end of the story.
   closure = { ...closure, nextGoalId: '010', nextGoalTitle: 'Novo goal', nextGoalPath: 'docs/migration/goals/010-x.md' };
   resumePoint = resolveClosureResumePoint(closure);
-  assert.equal(resumePoint, CLOSURE_RESUME_POINTS.ALREADY_CLOSED, 'step 12: nextGoalId now closes the story');
+  assert.equal(resumePoint, CLOSURE_RESUME_POINTS.RESUME_PLANNING, 'step 11-12: nextGoalId alone does not close it');
+  assert.equal(expectedMigrationStatusRowFor(resumePoint), 'READY', 'main has not received the row yet');
+
+  closure = { ...closure, sourcePlanningCommit: 'c'.repeat(40) };
+  assert.equal(resolveClosureResumePoint(closure), CLOSURE_RESUME_POINTS.RESUME_PLANNING,
+    'committing the planning worktree is not integrating it');
+
+  closure = { ...closure, planningIntegrationCommit: 'd'.repeat(40) };
+  resumePoint = resolveClosureResumePoint(closure);
+  assert.equal(resumePoint, CLOSURE_RESUME_POINTS.ALREADY_CLOSED, 'only the cherry-pick into main closes the story');
 
   // 13. A further `ia-loop:close` call is a no-op: same evidence, same
   // conclusion, every time — and by now the ledger row is expected to have

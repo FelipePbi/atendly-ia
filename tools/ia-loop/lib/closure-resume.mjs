@@ -19,9 +19,20 @@
 export const CLOSURE_RESUME_POINTS = Object.freeze({
   /** No integrated closure yet: run the closure flow from the top. */
   FRESH: 'FRESH',
-  /** Closure integrated; the next Goal has not been planned yet. */
+  /**
+   * Closure integrated; the planning commit is not yet integrated into main.
+   *
+   * Covers the whole span between those two facts — planning not started,
+   * planning failed, planning succeeded but not yet committed, or committed
+   * but not yet cherry-picked — because MIGRATION_STATUS.md's row (and the
+   * closure SHA in it) only lands in main with `planningIntegrationCommit`.
+   * `nextGoalId` alone is NOT the boundary: it is written by
+   * `applyPlanningResult`, in the planning WORKTREE, before that worktree's
+   * own commit is even made, let alone integrated — a Goal 009 shape this was
+   * built to handle correctly, not to guess past.
+   */
   RESUME_PLANNING: 'RESUME_PLANNING',
-  /** Closure integrated AND a next Goal exists: nothing left to do. */
+  /** The planning commit is integrated into main: nothing left to do. */
   ALREADY_CLOSED: 'ALREADY_CLOSED',
 });
 
@@ -47,7 +58,9 @@ export function isClosureIntegrated(closure = {}) {
  */
 export function resolveClosureResumePoint(closure = {}) {
   if (!isClosureIntegrated(closure)) return CLOSURE_RESUME_POINTS.FRESH;
-  return closure.nextGoalId ? CLOSURE_RESUME_POINTS.ALREADY_CLOSED : CLOSURE_RESUME_POINTS.RESUME_PLANNING;
+  return closure.planningIntegrationCommit
+    ? CLOSURE_RESUME_POINTS.ALREADY_CLOSED
+    : CLOSURE_RESUME_POINTS.RESUME_PLANNING;
 }
 
 /**

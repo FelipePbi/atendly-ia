@@ -4244,3 +4244,23 @@ de um job diferente; no-op seguro sem bloqueio algum ou sem runtime algum.
 8. **O ledger depende de `node:sqlite`.** Em runtime sem esse builtin a
    telemetria degrada para `UNAVAILABLE` e o loop segue normalmente, sem trilha
    de consumo.
+9. **`UNKNOWN_MODEL_WITH_USAGE` pode disparar em uma falha rápida de API.**
+   Quando o provider corta a chamada (ex.: 429) depois de emitir um único turn
+   de assistente mas antes de qualquer evidência de modelo servido
+   (`message.model`, `modelUsage`), a linha registra `model_call_started=true`
+   com `resolved_model=null` e a flag é gravada — corretamente: é uma
+   inconsistência real dos dados que o provider devolveu, não um bug do
+   normalizer. Nunca se infere ou fabrica um modelo para eliminar a flag;
+   ela existe exatamente para tornar essa lacuna visível.
+
+### Validação real — VALIDATED
+
+Telemetria base (schema v2 / collector 2.0.0) validada com evidência de
+produção real, cobrindo três chamadas de closure documentation/planning
+(V20) mais o incidente de reconsideração do Goal 009 (V22):
+closure documentation; implementation; review com falha 429; reexecução
+real sob o mesmo `attemptId`; fallback automático Fable → Opus (criando
+`a2` pelo mecanismo legítimo do próprio harness); todas as invocações
+independentes preservadas append-only; zero duplicatas; zero `STARTED`
+órfãs; tokens, custos, tool calls e status reconciliados contra
+`events.jsonl` e o sink observacional do worker, de forma independente.

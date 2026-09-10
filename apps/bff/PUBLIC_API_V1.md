@@ -16,7 +16,10 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Agendamentos | `GET /v1/appointments`; `GET /v1/appointments/:id`; `POST /v1/appointments`; `POST /v1/appointments/:id/reschedule`; `POST /v1/appointments/:id/cancel` |
 | Ciclo de vida do atendimento | `POST /v1/appointments/:id/complete`; `POST /v1/appointments/:id/no-show`; `POST /v1/appointments/:id/final-value`; `POST /v1/appointments/:id/presence`; `GET /v1/appointments/:id/events` |
 | Reserva temporária (hold) | `POST /v1/holds`; `GET /v1/holds`; `DELETE /v1/holds/:id` |
-| Disponibilidade e bloqueios | `GET /v1/availability`; `POST /v1/time-blocks`; `DELETE /v1/time-blocks/:id` |
+| Série de atendimento (Goal009) | `POST /v1/appointments/series/preview`; `POST /v1/appointments/series/confirm` |
+| Disponibilidade e bloqueios | `GET /v1/availability`; `POST /v1/time-blocks`; `DELETE /v1/time-blocks/:id`; `DELETE /v1/time-blocks/:id/occurrence`; `PATCH /v1/time-blocks/:id/occurrence` |
+| Exceções de disponibilidade (Goal009) | `GET /v1/availability-exceptions`; `POST /v1/availability-exceptions/extra`; `POST /v1/availability-exceptions/unavailable`; `DELETE /v1/availability-exceptions/:id` |
+| Séries de bloqueio/compromisso (Goal009) | `POST /v1/block-series`; `PATCH /v1/block-series/:id/from-date`; `DELETE /v1/block-series/:id` |
 | Clientes | `GET /v1/customers`; `GET /v1/customers/:id`; `POST /v1/customers`; `PATCH /v1/customers/:id`; `PUT /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/primary-guardian/confirm`; `DELETE /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/notes`; `PATCH /v1/customers/:id/notes/:noteId`; `DELETE /v1/customers/:id/notes/:noteId`; `POST /v1/customers/:id/tags`; `PATCH /v1/customers/:id/tags/:tagId`; `DELETE /v1/customers/:id/tags/:tagId` |
 | Serviços | `GET /v1/services`; `POST /v1/services`; `PATCH /v1/services/:id` |
 | Configurações | `GET /v1/settings`; `PATCH /v1/settings/business`; `PATCH /v1/settings/ai`; `PATCH /v1/settings/availability` |
@@ -104,7 +107,7 @@ O cliente é uma **pessoa**, identificada pelo ID dentro do negócio. O telefone
 
 `durationMinutes` é opcional: ausente é a única forma de um serviço entrar em `needsReview: true` (`Precisa de revisão`), estado distinto de `active`. Serviço em revisão continua listável e editável no catálogo, mas não aparece em `/internal/services` (o que a IA pode oferecer), não entra em `POST /v1/appointments` e não conta para `calendar.capabilities.aiActivationReady` (usada por `PATCH /v1/settings/ai` para recusar `enabled: true` com `409 CONFLICT` sem nenhum serviço operacional). Corrigir a duração retira a pendência automaticamente.
 
-Atributos adicionais do MVP, sem efeito operacional neste Goal (aplicação dos buffers na ocupação é do Goal009; uso da recorrência pela IA é do Goal011): `description` (texto livre opcional), `colorToken` (token estável de identidade visual — `ROSE | AMBER | EMERALD | SKY | VIOLET | SLATE`, nunca cor livre), `bufferBeforeMinutes`/`bufferAfterMinutes` (minutos, default `0`) e `recurrenceIntervalDays` (intervalo em dias, opcional).
+Atributos adicionais do catálogo: `description` (texto livre opcional), `colorToken` (token estável de identidade visual — `ROSE | AMBER | EMERALD | SKY | VIOLET | SLATE`, nunca cor livre), `bufferBeforeMinutes`/`bufferAfterMinutes` (minutos, default `0` — com efeito operacional na ocupação desde o Goal009, ver abaixo) e `recurrenceIntervalDays` (intervalo em dias; uso pela IA para propor recorrência proativamente é do Goal011, mas a série já pode ser criada via `POST /v1/appointments/series/preview`/`confirm` desde já).
 
 `GET/POST /v1/appointments` (e o `services[]` de cada agendamento) carregam as mesmas quatro semânticas nos itens do acordo, junto de `totalPrice`/`totalPriceType`. A regra do total é única e usada pelo Scheduling e pela IA: soma quando todos os itens são `FIXED`; `STARTING_AT` quando há algum "a partir de" e nenhum `ON_REQUEST`/`NOT_INFORMED`; `NONE` (sem total) nos demais casos. Editar o catálogo depois da confirmação não altera snapshots existentes.
 
@@ -180,6 +183,56 @@ Ciclo de vida e histórico só existem na Agenda Atendly; com agenda externa, re
 ### Agenda disputada
 
 Toda escrita da agenda roda em transação `Serializable` com lock por dia. Abortos de serialização são repetidos um número limitado de vezes; excedido o limite, a resposta é `409 CALENDAR_WRITE_RETRY_EXCEEDED` — "a agenda estava disputada demais agora", não "o pedido era inválido". Repetir a mesma requisição com a mesma `Idempotency-Key` é seguro.
+
+## Agenda: regras de oferta, buffers, exceções e séries (Goal009)
+
+### Regras de oferta e granularidade
+
+`PATCH /v1/settings/availability` ganhou, de forma aditiva ao corpo existente (`timezone` + `rules`), `minLeadMinutes` (antecedência mínima, minutos), `maxLeadDays` (antecedência máxima, dias) e `granularityMinutes` (passo da grade, múltiplo de 5 entre 5 e 120). Ausentes preservam o valor já gravado. `GET /v1/settings` devolve os três dentro de `availability`.
+
+O motor de disponibilidade aplica as três a **toda** oferta — nenhum slot antes da antecedência mínima nem depois da máxima, passo sempre igual à granularidade do negócio. `GET /v1/availability` não aceita mais `stepMinutes`: quem decide o passo é sempre o negócio, nunca quem chama. A confirmação (`POST /v1/appointments`, `.../reschedule`, `POST /v1/holds`) continua aceitando `stepMinutes` no corpo por compatibilidade, mas o valor é ignorado pela Agenda Atendly — o horário pedido é sempre validado contra a grade do negócio. Override humano de sobreposição (`overlapOverride`) continua ignorando a grade; a IA nunca tem esse campo.
+
+### Buffers como ocupação externa
+
+O atendimento ocupa `[startAt − bufferBeforeMinutes, endAt + bufferAfterMinutes]` na disponibilidade de terceiros, onde os buffers são o maior `bufferBeforeMinutes`/`bufferAfterMinutes` entre os serviços do atendimento — buffers intermediários de multi-serviço nunca são somados. O DTO de agendamento ganhou `bufferBeforeMinutes`/`bufferAfterMinutes` (default `0`): o horário exibido (`startTime`/`endTime`) não muda, a ocupação estendida é dado separado. Gravados como snapshot na confirmação — editar o catálogo depois não move a ocupação de um atendimento já confirmado.
+
+### Exceções de disponibilidade
+
+| Rota | O que faz |
+| --- | --- |
+| `GET /v1/availability-exceptions?startDate&endDate` | lista exceções do período |
+| `POST /v1/availability-exceptions/extra` | abre disponibilidade extra em data normalmente fechada (`date`, `startTime`, `endTime`) |
+| `POST /v1/availability-exceptions/unavailable` | cria indisponibilidade pontual (`date`, `startTime`/`endTime` opcionais para dia inteiro, `reason`) |
+| `DELETE /v1/availability-exceptions/:id` | remove |
+
+Indisponibilidade que cobre um atendimento confirmado é recusada com `409 EXCEPTION_APPOINTMENT_CONFLICT`, salvo decisão humana explícita: `decidedBy` + `decidedReason` no corpo, gravados na própria exceção. A exceção nunca altera atendimento existente.
+
+### Séries de bloqueio e compromisso pessoal
+
+`POST /v1/time-blocks` ganhou `kind` (`BLOCK` — bloqueio operacional, default — ou `PERSONAL` — compromisso pessoal) e `title` opcional. Resposta de bloco ganhou `kind`, `title` e `seriesId` (nulo fora de série).
+
+| Rota | O que faz |
+| --- | --- |
+| `POST /v1/block-series` | cria série (`rule`: `kind`, `title`, `daysOfWeek`, `startTime`, `endTime`, `seriesStartDate`, e **um** entre `seriesEndDate`/`occurrenceCount`); materializa as ocorrências na criação |
+| `PATCH /v1/block-series/:id/from-date` | edita a série a partir de `fromDate`: encerra a série atual (ocorrências passadas intocadas) e cria outra com o novo `rule` |
+| `DELETE /v1/block-series/:id` | remove as ocorrências futuras da série (a partir de hoje); passadas preservadas |
+| `DELETE /v1/time-blocks/:id/occurrence` | remove uma única ocorrência, sem tocar a série |
+| `PATCH /v1/time-blocks/:id/occurrence` | move uma única ocorrência (`startAt`/`endAt`), sem tocar a série |
+
+Série sem `seriesEndDate` nem `occurrenceCount` (ou com os dois) é recusada com `400 INVALID_BLOCK_SERIES_TERMINATION` — não existe série infinita. Conflito de qualquer ocorrência com atendimento confirmado é recusado com `409 BLOCK_SERIES_APPOINTMENT_CONFLICT` (lista de ocorrências em conflito), salvo decisão humana: `skipConflicts: true` (pula as ocorrências em conflito) ou `forceOverlapReason` (força a sobreposição, com motivo).
+
+Estas rotas exigem sessão de pessoa: a IA nunca cria exceção, bloqueio, compromisso pessoal ou série — não há contrato equivalente do lado dela.
+
+### Série de atendimento
+
+| Rota | O que faz |
+| --- | --- |
+| `POST /v1/appointments/series/preview` | pré-visualiza `occurrenceCount` ocorrências a partir de `firstDate`/`firstStartTime`, no intervalo (`intervalDays`, ou o padrão do serviço), ajustando cada uma ao horário disponível mais próximo; cria um hold por ocorrência encontrada |
+| `POST /v1/appointments/series/confirm` | confirma todas as ocorrências de uma vez, a partir dos `holdId` da pré-visualização (`occurrences: [{ holdId }]`); exige `Idempotency-Key` |
+
+A confirmação roda em uma única transação: se qualquer ocorrência não puder ser confirmada, **nada é criado**. O código depende do motivo: hold vencido, consumido ou liberado responde `409 APPOINTMENT_HOLD_EXPIRED`; horário tomado entre a pré-visualização e a confirmação responde `409 SLOT_UNAVAILABLE` — o hold ainda era válido, quem recusou foi a disponibilidade. Nos dois casos a resposta identifica **qual** ocorrência falhou e oferece alternativas, em `error.details.upstreamDetails`: `occurrenceIndex`, `holdId`, `occurrenceDate` e `alternatives`. Confirmada, cada ocorrência vira um atendimento independente com `seriesId` comum — cancelar, remarcar ou concluir uma não toca as demais.
+
+O número de ocorrências é limitado por um teto configurável (`APPOINTMENT_SERIES_MAX_OCCURRENCES`), validado tanto na pré-visualização quanto na confirmação: acima dele a resposta é `400 APPOINTMENT_SERIES_TOO_LONG`, com o teto vigente em `details.cap`. Repetir a confirmação com a mesma `Idempotency-Key` devolve a série já criada, sem criar nada novo.
 
 ## Vínculo WhatsApp: estados ambíguos
 

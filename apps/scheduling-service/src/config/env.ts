@@ -61,6 +61,15 @@ const envSchema = z.object({
   CALENDAR_AUTO_COMPLETE_ENABLED: boolEnv(true),
   CALENDAR_AUTO_COMPLETE_GRACE_MINUTES: intEnv(30),
   CALENDAR_AUTO_COMPLETE_POLL_INTERVAL_MS: intEnv(60_000),
+  // Tetos de série finita (Goal009): nenhuma série de bloqueio/compromisso
+  // nem de atendimento nasce sem limite. Configuráveis porque o teto é
+  // decisão operacional, não invariante de domínio.
+  BLOCK_SERIES_MAX_OCCURRENCES: intEnv(104),
+  APPOINTMENT_SERIES_MAX_OCCURRENCES: intEnv(52),
+  // Janela de ajuste da recorrência de atendimento (Goal009): quantos dias
+  // para trás/frente do intervalo alvo o preview busca o horário disponível
+  // mais próximo antes de reportar a ocorrência como não encontrável.
+  APPOINTMENT_SERIES_ADJUST_WINDOW_DAYS: intEnv(3),
 });
 
 export const env = envSchema.parse(process.env);

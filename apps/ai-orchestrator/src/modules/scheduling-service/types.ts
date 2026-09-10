@@ -168,3 +168,42 @@ export interface SchedulingRequestContext {
   userId: string;
   requestId: string;
 }
+
+/**
+ * Recorrência de atendimento (Goal009): série finita a partir de um
+ * serviço, com um hold por ocorrência. A IA nunca decide antecedência,
+ * granularidade nem override — a pré-visualização e a confirmação passam
+ * pela mesma grade e pelos mesmos buffers que uma proposta avulsa.
+ */
+export interface PreviewAppointmentSeriesInput {
+  serviceIds: string[];
+  occurrenceCount: number;
+  /** Ausente usa o intervalo padrão do serviço (`recurrenceIntervalDays`). */
+  intervalDays?: number;
+  firstDate: string;
+  firstStartTime: string;
+  customerId?: string | null;
+  contactRef?: string | null;
+}
+
+export interface SchedulingSeriesOccurrencePreview {
+  index: number;
+  requestedDate: string;
+  date: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  adjusted: boolean;
+  holdId: string | null;
+  unavailable: boolean;
+}
+
+export interface ConfirmAppointmentSeriesInput {
+  /** Holds da pré-visualização, na mesma ordem. */
+  holdIds: string[];
+  serviceIds: string[];
+  intervalDays: number;
+  customerId?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  comments?: string;
+}

@@ -5,7 +5,9 @@ import { env } from "../../config/env.js";
 import type { PrismaClient } from "../../generated/prisma/client.js";
 import { getPrisma } from "../../infrastructure/database/prisma.js";
 import {
+  callerSource,
   currentInternalContext,
+  requireHumanCaller,
   requireInternalAuth,
 } from "../../shared/auth/internal-auth.js";
 import {
@@ -16,6 +18,19 @@ import {
 } from "../../shared/date-time/calendar-date-time.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { runAutoCompleteSweep } from "../appointments/auto-complete-loop.js";
+import {
+  createExtraAvailability,
+  createUnavailability,
+  listAvailabilityExceptions,
+  removeAvailabilityException,
+} from "../calendar/availability-exceptions.js";
+import {
+  createBlockSeries,
+  editBlockSeriesFromDate,
+  moveBlockOccurrence,
+  removeBlockOccurrence,
+  removeBlockSeriesFuture,
+} from "../calendar/block-series.js";
 import {
   type CalendarRequestContext,
   CalendarService,
@@ -33,11 +48,21 @@ import { AtendlyServiceService } from "../services/atendly-service-service.js";
 
 const sourceSchema = z.enum(["ATENDLY", "MINHA_AGENDA"]);
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const idParamsSchema = z.object({ id: z.string().trim().min(1).max(128) });
 const calendarBodySchema = z.object({
   source: sourceSchema,
   timezone: z.string().trim().min(1).max(100),
 });
+// Regras de oferta do negocio (Goal009): antecedencia minima/maxima e
+// granularidade, aditivas ao corpo existente. Ausentes preservam o valor ja
+// gravado — a rota continua aceitando o corpo antigo (so `timezone` +
+// `rules`) sem quebrar quem ainda nao manda os campos novos.
+const offerRulesShape = {
+  minLeadMinutes: z.number().int().min(0).max(43_200).optional(),
+  maxLeadDays: z.number().int().min(1).max(365).optional(),
+  granularityMinutes: z.number().int().min(5).max(120).optional(),
+};
 const availabilityBodySchema = z.object({
   timezone: z.string().trim().min(1).max(100),
   rules: z
@@ -50,6 +75,7 @@ const availabilityBodySchema = z.object({
       }),
     )
     .max(28),
+  ...offerRulesShape,
 });
 const serviceColorTokenSchema = z.enum([
   "ROSE",
@@ -131,16 +157,109 @@ const customerChildParamsSchema = z.object({
   id: z.string().trim().min(1).max(128),
   childId: z.string().trim().min(1).max(128),
 });
+const timeBlockKindSchema = z.enum(["BLOCK", "PERSONAL"]);
 const timeBlockBodySchema = z
   .object({
     startAt: z.iso.datetime({ offset: true }),
     endAt: z.iso.datetime({ offset: true }),
     reason: z.string().trim().max(500).nullable().optional(),
+    kind: timeBlockKindSchema.default("BLOCK"),
+    title: z.string().trim().min(1).max(200).nullable().optional(),
   })
   .refine((value) => new Date(value.startAt) < new Date(value.endAt), {
     path: ["endAt"],
     message: "End must be after start.",
   });
+const moveOccurrenceBodySchema = z
+  .object({
+    startAt: z.iso.datetime({ offset: true }),
+    endAt: z.iso.datetime({ offset: true }),
+  })
+  .refine((value) => new Date(value.startAt) < new Date(value.endAt), {
+    path: ["endAt"],
+    message: "End must be after start.",
+  });
+
+// --- Excecoes de disponibilidade (Goal009) --------------------------------
+const exceptionListQuerySchema = z.object({
+  startDate: dateSchema,
+  endDate: dateSchema,
+});
+const extraAvailabilityBodySchema = z
+  .object({
+    date: dateSchema,
+    startTime: timeSchema,
+    endTime: timeSchema,
+  })
+  .refine((value) => value.startTime < value.endTime, {
+    path: ["endTime"],
+    message: "End must be after start.",
+  });
+const unavailabilityBodySchema = z
+  .object({
+    date: dateSchema,
+    // Ausentes = dia inteiro.
+    startTime: timeSchema.optional(),
+    endTime: timeSchema.optional(),
+    reason: z.string().trim().max(500).optional(),
+    // Decisao humana explicita para aceitar conflito com atendimento
+    // confirmado; os dois juntos ou nenhum.
+    decidedBy: z.string().trim().min(1).max(200).optional(),
+    decidedReason: z.string().trim().min(1).max(500).optional(),
+  })
+  .refine(
+    (value) =>
+      (value.startTime === undefined) === (value.endTime === undefined),
+    { path: ["endTime"], message: "Provide both startTime and endTime, or neither for a whole day." },
+  )
+  .refine(
+    (value) =>
+      value.startTime === undefined ||
+      value.endTime === undefined ||
+      value.startTime < value.endTime,
+    { path: ["endTime"], message: "End must be after start." },
+  )
+  .refine(
+    (value) => (value.decidedBy === undefined) === (value.decidedReason === undefined),
+    {
+      path: ["decidedReason"],
+      message: "A human decision requires both an actor and a reason.",
+    },
+  );
+
+// --- Series de bloqueio/compromisso (Goal009) -----------------------------
+const blockSeriesRuleShape = {
+  kind: timeBlockKindSchema.default("BLOCK"),
+  // Sem `.default()`: o passo de edicao distingue "nao informado" (preserva
+  // o titulo atual da serie) de "informado como nulo" (limpa o titulo), e
+  // um default aqui confundiria os dois atras de `.partial()`.
+  title: z.string().trim().min(1).max(200).nullable().optional(),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+  startTime: timeSchema,
+  endTime: timeSchema,
+  seriesStartDate: dateSchema,
+  seriesEndDate: dateSchema.optional(),
+  occurrenceCount: z.number().int().positive().max(1_000).optional(),
+};
+const blockSeriesRuleSchema = z
+  .object(blockSeriesRuleShape)
+  .refine((value) => value.startTime < value.endTime, {
+    path: ["endTime"],
+    message: "End must be after start.",
+  });
+const blockSeriesDecisionShape = {
+  skipConflicts: z.boolean().optional(),
+  forceOverlapReason: z.string().trim().min(1).max(500).optional(),
+};
+const blockSeriesBodySchema = z.object({
+  rule: blockSeriesRuleSchema,
+  ...blockSeriesDecisionShape,
+});
+const blockSeriesEditBodySchema = z.object({
+  fromDate: dateSchema,
+  rule: z.object(blockSeriesRuleShape).partial(),
+  ...blockSeriesDecisionShape,
+});
 const integrationBodySchema = z.object({
   credentials: z.object({
     basicAuth: z.string().min(1).max(2_000),
@@ -511,6 +630,7 @@ export async function registerManagementRoutes(
     return data(request, {
       timezone: calendar.timezone,
       rules: rules.map(availabilityRuleDto),
+      ...offerRulesDto(calendar),
     });
   });
 
@@ -519,14 +639,28 @@ export async function registerManagementRoutes(
     internalOnly,
     async (request) => {
       const context = currentInternalContext(request);
-      await requireAtendlyCalendar(prisma, context.tenantId);
+      // Regras de oferta e grade semanal so por decisao humana (Goal009): a
+      // IA nunca decide granularidade, antecedencia nem disponibilidade
+      // semanal do negocio.
+      requireHumanCaller(context);
+      const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
       const body = parse(availabilityBodySchema, request.body);
       assertTimezone(body.timezone);
       assertNonOverlappingRules(body.rules);
+      const minLeadMinutes = body.minLeadMinutes ?? calendar.minLeadMinutes;
+      const maxLeadDays = body.maxLeadDays ?? calendar.maxLeadDays;
+      const granularityMinutes =
+        body.granularityMinutes ?? calendar.granularityMinutes;
+      assertOfferRules({ minLeadMinutes, maxLeadDays, granularityMinutes });
       await prisma.$transaction(async (transaction) => {
         await transaction.calendarSettings.update({
           where: { tenantId: context.tenantId },
-          data: { timezone: body.timezone },
+          data: {
+            timezone: body.timezone,
+            minLeadMinutes,
+            maxLeadDays,
+            granularityMinutes,
+          },
         });
         await transaction.availabilityRule.deleteMany({
           where: { tenantId: context.tenantId },
@@ -550,7 +684,188 @@ export async function registerManagementRoutes(
       return data(request, {
         timezone: body.timezone,
         rules: rules.map(availabilityRuleDto),
+        minLeadMinutes,
+        maxLeadDays,
+        granularityMinutes,
       });
+    },
+  );
+
+  // --- Excecoes de disponibilidade (Goal009) ------------------------------
+  // Nunca alteram atendimento existente; so mudam o que o motor oferece dali
+  // em diante. So humano (BFF): a IA nunca cria excecao.
+
+  app.get(
+    "/internal/availability-exceptions",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      await requireAtendlyCalendar(prisma, context.tenantId);
+      const query = parse(exceptionListQuerySchema, request.query);
+      const exceptions = await listAvailabilityExceptions(prisma, {
+        tenantId: context.tenantId,
+        startDate: query.startDate,
+        endDate: query.endDate,
+      });
+      return data(request, exceptions.map(exceptionDto));
+    },
+  );
+
+  app.post(
+    "/internal/availability-exceptions/extra",
+    internalOnly,
+    async (request, reply) => {
+      const context = currentInternalContext(request);
+      requireHumanCaller(context);
+      const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+      const body = parse(extraAvailabilityBodySchema, request.body);
+      const exception = await createExtraAvailability(prisma, {
+        tenantId: context.tenantId,
+        timeZone: calendar.timezone,
+        ...body,
+      });
+      return reply.code(201).send(data(request, exceptionDto(exception)));
+    },
+  );
+
+  app.post(
+    "/internal/availability-exceptions/unavailable",
+    internalOnly,
+    async (request, reply) => {
+      const context = currentInternalContext(request);
+      requireHumanCaller(context);
+      const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+      const body = parse(unavailabilityBodySchema, request.body);
+      const exception = await createUnavailability(prisma, {
+        tenantId: context.tenantId,
+        timeZone: calendar.timezone,
+        date: body.date,
+        startTime: body.startTime ?? null,
+        endTime: body.endTime ?? null,
+        reason: body.reason ?? null,
+        decision:
+          body.decidedBy && body.decidedReason
+            ? { decidedBy: body.decidedBy, decidedReason: body.decidedReason }
+            : undefined,
+      });
+      return reply.code(201).send(data(request, exceptionDto(exception)));
+    },
+  );
+
+  app.delete(
+    "/internal/availability-exceptions/:id",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      requireHumanCaller(context);
+      const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+      const { id } = parse(idParamsSchema, request.params);
+      await removeAvailabilityException(prisma, {
+        tenantId: context.tenantId,
+        timeZone: calendar.timezone,
+        id,
+      });
+      return data(request, { deleted: true as const });
+    },
+  );
+
+  // --- Series de bloqueio/compromisso (Goal009) ---------------------------
+  // So humano (BFF): a IA nunca cria bloqueio, compromisso ou serie.
+
+  app.post(
+    "/internal/block-series",
+    internalOnly,
+    async (request, reply) => {
+      const context = currentInternalContext(request);
+      requireHumanCaller(context);
+      const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+      const body = parse(blockSeriesBodySchema, request.body);
+      const series = await createBlockSeries(prisma, {
+        tenantId: context.tenantId,
+        timeZone: calendar.timezone,
+        rule: { ...body.rule, title: body.rule.title ?? null },
+        createdBy: context.userId,
+        skipConflicts: body.skipConflicts,
+        forceOverlapReason: body.forceOverlapReason,
+      });
+      return reply.code(201).send(data(request, blockSeriesDto(series)));
+    },
+  );
+
+  app.patch(
+    "/internal/block-series/:id/from-date",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      requireHumanCaller(context);
+      const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+      const { id } = parse(idParamsSchema, request.params);
+      const body = parse(blockSeriesEditBodySchema, request.body);
+      const series = await editBlockSeriesFromDate(prisma, {
+        tenantId: context.tenantId,
+        timeZone: calendar.timezone,
+        seriesId: id,
+        fromDate: body.fromDate,
+        rule: body.rule,
+        createdBy: context.userId,
+        skipConflicts: body.skipConflicts,
+        forceOverlapReason: body.forceOverlapReason,
+      });
+      return data(request, blockSeriesDto(series));
+    },
+  );
+
+  app.delete(
+    "/internal/block-series/:id",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      requireHumanCaller(context);
+      const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+      const { id } = parse(idParamsSchema, request.params);
+      await removeBlockSeriesFuture(prisma, {
+        tenantId: context.tenantId,
+        timeZone: calendar.timezone,
+        seriesId: id,
+      });
+      return data(request, { deleted: true as const });
+    },
+  );
+
+  app.delete(
+    "/internal/time-blocks/:id/occurrence",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      requireHumanCaller(context);
+      const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+      const { id } = parse(idParamsSchema, request.params);
+      await removeBlockOccurrence(prisma, {
+        tenantId: context.tenantId,
+        timeZone: calendar.timezone,
+        id,
+      });
+      return data(request, { deleted: true as const });
+    },
+  );
+
+  app.patch(
+    "/internal/time-blocks/:id/occurrence",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      requireHumanCaller(context);
+      const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+      const { id } = parse(idParamsSchema, request.params);
+      const body = parse(moveOccurrenceBodySchema, request.body);
+      const block = await moveBlockOccurrence(prisma, {
+        tenantId: context.tenantId,
+        timeZone: calendar.timezone,
+        id,
+        startAt: new Date(body.startAt),
+        endAt: new Date(body.endAt),
+      });
+      return data(request, timeBlockDto(block));
     },
   );
 
@@ -558,6 +873,8 @@ export async function registerManagementRoutes(
   // mesmo lock e conflito checado dentro dela (Goal008).
   app.post("/internal/time-blocks", internalOnly, async (request, reply) => {
     const context = currentInternalContext(request);
+    // Bloqueio, compromisso pessoal e excecao nunca sao da IA (Goal009).
+    requireHumanCaller(context);
     const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
     const body = parse(timeBlockBodySchema, request.body);
     const block = await createTimeBlock(prisma, {
@@ -566,12 +883,15 @@ export async function registerManagementRoutes(
       startAt: new Date(body.startAt),
       endAt: new Date(body.endAt),
       reason: body.reason ?? null,
+      kind: body.kind,
+      title: body.title ?? null,
     });
     return reply.code(201).send(data(request, timeBlockDto(block)));
   });
 
   app.delete("/internal/time-blocks/:id", internalOnly, async (request) => {
     const context = currentInternalContext(request);
+    requireHumanCaller(context);
     const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
     const { id } = parse(idParamsSchema, request.params);
     await removeTimeBlock(prisma, {
@@ -1032,12 +1352,114 @@ function timeBlockDto(block: {
   startAt: Date;
   endAt: Date;
   reason: string | null;
+  kind: "BLOCK" | "PERSONAL";
+  title: string | null;
+  seriesId: string | null;
 }) {
   return {
     id: block.id,
     startAt: block.startAt.toISOString(),
     endAt: block.endAt.toISOString(),
     reason: block.reason,
+    kind: block.kind,
+    title: block.title,
+    seriesId: block.seriesId,
+  };
+}
+
+function offerRulesDto(calendar: {
+  minLeadMinutes: number;
+  maxLeadDays: number;
+  granularityMinutes: number;
+}) {
+  return {
+    minLeadMinutes: calendar.minLeadMinutes,
+    maxLeadDays: calendar.maxLeadDays,
+    granularityMinutes: calendar.granularityMinutes,
+  };
+}
+
+function assertOfferRules(rules: {
+  minLeadMinutes: number;
+  maxLeadDays: number;
+  granularityMinutes: number;
+}): void {
+  if (rules.granularityMinutes < 5 || rules.granularityMinutes > 120 || rules.granularityMinutes % 5 !== 0) {
+    throw new AppError(
+      "INVALID_OFFER_RULES",
+      "Granularity must be a multiple of 5 minutes between 5 and 120.",
+      400,
+    );
+  }
+  if (rules.minLeadMinutes < 0 || rules.maxLeadDays <= 0) {
+    throw new AppError(
+      "INVALID_OFFER_RULES",
+      "Minimum lead time must not be negative and maximum lead time must be positive.",
+      400,
+    );
+  }
+  if (rules.minLeadMinutes >= rules.maxLeadDays * 1_440) {
+    throw new AppError(
+      "INVALID_OFFER_RULES",
+      "Minimum lead time must be smaller than the maximum lead time.",
+      400,
+    );
+  }
+}
+
+function exceptionDto(exception: {
+  id: string;
+  date: Date;
+  startTime: Date | null;
+  endTime: Date | null;
+  available: boolean;
+  reason: string | null;
+  decidedBy: string | null;
+  decidedReason: string | null;
+}) {
+  return {
+    id: exception.id,
+    date: exception.date.toISOString().slice(0, 10),
+    startTime:
+      exception.startTime === null
+        ? null
+        : timeFromMinutes(databaseTimeToMinutes(exception.startTime)),
+    endTime:
+      exception.endTime === null
+        ? null
+        : timeFromMinutes(databaseTimeToMinutes(exception.endTime)),
+    available: exception.available,
+    reason: exception.reason,
+    decidedBy: exception.decidedBy,
+    decidedReason: exception.decidedReason,
+  };
+}
+
+function blockSeriesDto(series: {
+  id: string;
+  kind: "BLOCK" | "PERSONAL";
+  title: string | null;
+  daysOfWeek: number[];
+  startTime: Date;
+  endTime: Date;
+  seriesStartDate: Date;
+  seriesEndDate: Date | null;
+  occurrenceCount: number | null;
+  status: "ACTIVE" | "ENDED";
+  supersededById: string | null;
+}) {
+  return {
+    id: series.id,
+    kind: series.kind,
+    title: series.title,
+    daysOfWeek: series.daysOfWeek,
+    startTime: timeFromMinutes(databaseTimeToMinutes(series.startTime)),
+    endTime: timeFromMinutes(databaseTimeToMinutes(series.endTime)),
+    seriesStartDate: series.seriesStartDate.toISOString().slice(0, 10),
+    seriesEndDate: series.seriesEndDate?.toISOString().slice(0, 10) ?? null,
+    occurrenceCount: series.occurrenceCount,
+    status: series.status,
+    supersededById: series.supersededById,
   };
 }
 

@@ -1,12 +1,15 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
+import type { PrismaClient } from "../../generated/prisma/client.js";
 import { getPrisma } from "../../infrastructure/database/prisma.js";
 import {
+  callerSource,
   currentInternalContext,
   requireInternalAuth,
 } from "../../shared/auth/internal-auth.js";
 import { AppError } from "../../shared/errors/app-error.js";
+import { AtendlyAppointmentSeriesService } from "../appointments/appointment-series-service.js";
 import { CalendarService } from "./calendar-service.js";
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -27,7 +30,6 @@ const availabilityQuerySchema = z.object({
   ),
   startDate: dateSchema,
   days: z.coerce.number().int().min(1).max(60).default(14),
-  stepMinutes: z.coerce.number().int().min(1).max(180).default(30),
   maxSlots: z.coerce.number().int().min(1).max(100).default(20),
 });
 
@@ -111,6 +113,29 @@ const createHoldBodySchema = z.object({
   contactRef: z.string().trim().min(1).max(200).optional(),
 });
 
+// --- Serie de atendimento (Goal009) ---------------------------------------
+const seriesPreviewBodySchema = z.object({
+  serviceIds: z.array(z.string().trim().min(1).max(128)).min(1).max(10),
+  occurrenceCount: z.number().int().min(1).max(365),
+  intervalDays: z.number().int().positive().max(3_650).optional(),
+  firstDate: dateSchema,
+  firstStartTime: timeSchema,
+  customerId: z.string().trim().min(1).max(128).optional(),
+  contactRef: z.string().trim().min(1).max(200).optional(),
+});
+const seriesConfirmBodySchema = z.object({
+  occurrences: z
+    .array(z.object({ holdId: z.string().trim().min(1).max(128) }))
+    .min(1)
+    .max(365),
+  serviceIds: z.array(z.string().trim().min(1).max(128)).min(1).max(10),
+  intervalDays: z.number().int().positive().max(3_650),
+  customerId: z.string().trim().min(1).max(128).optional(),
+  customerName: z.string().trim().min(1).max(200).optional(),
+  customerPhone: z.string().trim().min(6).max(32).optional(),
+  comments: z.string().trim().max(2_000).optional(),
+});
+
 const noShowBodySchema = z.object({
   note: z.string().trim().max(2_000).optional(),
 });
@@ -168,11 +193,15 @@ export async function registerCalendarRoutes(
   });
 
   app.post("/internal/appointments", internalOnly, async (request, reply) => {
+    const context = currentInternalContext(request);
     const body = parse(createAppointmentBodySchema, request.body);
-    const data = await calendarService().createAppointment(
-      currentInternalContext(request),
-      { ...body, idempotencyKey: idempotencyKey(request) },
-    );
+    const data = await calendarService().createAppointment(context, {
+      ...body,
+      // `source` do corpo e ignorado: quem prova a origem e a credencial do
+      // chamador (Goal009, residuo do Goal008).
+      source: callerSource(context.caller),
+      idempotencyKey: idempotencyKey(request),
+    });
     return reply.code(201).send({ data, requestId: request.id });
   });
 
@@ -180,17 +209,16 @@ export async function registerCalendarRoutes(
     "/internal/appointments/:id/reschedule",
     internalOnly,
     async (request) => {
+      const context = currentInternalContext(request);
       const params = parse(idParamsSchema, request.params);
       const body = parse(rescheduleBodySchema, request.body);
       return {
-        data: await calendarService().rescheduleAppointment(
-          currentInternalContext(request),
-          {
-            appointmentId: params.id,
-            ...body,
-            idempotencyKey: idempotencyKey(request),
-          },
-        ),
+        data: await calendarService().rescheduleAppointment(context, {
+          appointmentId: params.id,
+          ...body,
+          source: callerSource(context.caller),
+          idempotencyKey: idempotencyKey(request),
+        }),
         requestId: request.id,
       };
     },
@@ -200,17 +228,16 @@ export async function registerCalendarRoutes(
     "/internal/appointments/:id/cancel",
     internalOnly,
     async (request) => {
+      const context = currentInternalContext(request);
       const params = parse(idParamsSchema, request.params);
       const body = parse(cancelBodySchema, request.body ?? {});
       return {
-        data: await calendarService().cancelAppointment(
-          currentInternalContext(request),
-          {
-            appointmentId: params.id,
-            ...body,
-            idempotencyKey: idempotencyKey(request),
-          },
-        ),
+        data: await calendarService().cancelAppointment(context, {
+          appointmentId: params.id,
+          ...body,
+          source: callerSource(context.caller),
+          idempotencyKey: idempotencyKey(request),
+        }),
         requestId: request.id,
       };
     },
@@ -222,11 +249,13 @@ export async function registerCalendarRoutes(
   // não tem segundo efeito.
 
   app.post("/internal/holds", internalOnly, async (request, reply) => {
+    const context = currentInternalContext(request);
     const body = parse(createHoldBodySchema, request.body);
-    const data = await calendarService().createHold(
-      currentInternalContext(request),
-      { ...body, idempotencyKey: idempotencyKey(request) },
-    );
+    const data = await calendarService().createHold(context, {
+      ...body,
+      source: callerSource(context.caller),
+      idempotencyKey: idempotencyKey(request),
+    });
     return reply.code(201).send({ data, requestId: request.id });
   });
 
@@ -340,6 +369,79 @@ export async function registerCalendarRoutes(
       };
     },
   );
+
+  // --- Serie de atendimento (Goal009) -------------------------------------
+  // So a Agenda Atendly: preview cria um hold por ocorrencia, e a
+  // confirmacao consome todos em uma unica transacao.
+  const prisma = getPrisma();
+
+  app.post(
+    "/internal/appointments/series/preview",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      const calendar = await requireAtendlyCalendarForSeries(prisma, context.tenantId);
+      const body = parse(seriesPreviewBodySchema, request.body);
+      const service = new AtendlyAppointmentSeriesService(
+        prisma,
+        context.tenantId,
+        calendar.timezone,
+      );
+      return {
+        data: await service.preview({
+          ...body,
+          source: callerSource(context.caller),
+        }),
+        requestId: request.id,
+      };
+    },
+  );
+
+  app.post(
+    "/internal/appointments/series/confirm",
+    internalOnly,
+    async (request, reply) => {
+      const context = currentInternalContext(request);
+      const calendar = await requireAtendlyCalendarForSeries(prisma, context.tenantId);
+      const body = parse(seriesConfirmBodySchema, request.body);
+      const service = new AtendlyAppointmentSeriesService(
+        prisma,
+        context.tenantId,
+        calendar.timezone,
+      );
+      const data = await service.confirm({
+        ...body,
+        source: callerSource(context.caller),
+        createdBy: context.userId,
+        idempotencyKey: idempotencyKey(request),
+      });
+      return reply.code(201).send({ data, requestId: request.id });
+    },
+  );
+}
+
+async function requireAtendlyCalendarForSeries(
+  prisma: PrismaClient,
+  tenantId: string,
+) {
+  const settings = await prisma.calendarSettings.findUnique({
+    where: { tenantId },
+  });
+  if (!settings) {
+    throw new AppError(
+      "CALENDAR_SETTINGS_NOT_FOUND",
+      "Calendar settings were not found for this tenant.",
+      404,
+    );
+  }
+  if (settings.source !== "ATENDLY") {
+    throw new AppError(
+      "EXTERNAL_CALENDAR_SERIES_UNSUPPORTED",
+      "Appointment series are only available for the Atendly calendar.",
+      409,
+    );
+  }
+  return settings;
 }
 
 function parse<TSchema extends z.ZodType>(

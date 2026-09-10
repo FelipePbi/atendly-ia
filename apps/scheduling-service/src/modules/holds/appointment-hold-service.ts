@@ -18,7 +18,10 @@ import {
   lockCalendarDays,
   runCalendarWrite,
 } from "../calendar/write-policy.js";
-import { AtendlyServiceService } from "../services/atendly-service-service.js";
+import {
+  AtendlyServiceService,
+  maxServiceBuffer,
+} from "../services/atendly-service-service.js";
 
 /**
  * Hold: ocupacao temporaria de um horario enquanto ele esta em confirmacao
@@ -45,6 +48,8 @@ interface AppointmentHoldRow {
   endAt: Date;
   proposedServiceIds: unknown;
   proposedDurationMinutes: number;
+  proposedBufferBeforeMinutes: number;
+  proposedBufferAfterMinutes: number;
   customerId: string | null;
   contactRef: string | null;
   source: "AI" | "USER";
@@ -191,6 +196,11 @@ export class AtendlyAppointmentHoldService {
         (total, service) => total + service.durationMinutes,
         0,
       );
+      // Buffer externo do conjunto proposto (Goal009): mesma semantica da
+      // confirmacao — maior antes/depois entre os servicos propostos, nunca
+      // somados.
+      const bufferBeforeMinutes = maxServiceBuffer(services, "bufferBeforeMinutes");
+      const bufferAfterMinutes = maxServiceBuffer(services, "bufferAfterMinutes");
       const slot = await new AtendlyAvailability(
         transaction,
         this.tenantId,
@@ -199,7 +209,8 @@ export class AtendlyAppointmentHoldService {
         date: input.date,
         startTime: input.startTime,
         durationMinutes,
-        stepMinutes: input.stepMinutes,
+        bufferBeforeMinutes,
+        bufferAfterMinutes,
       });
       const now = await databaseNow(transaction);
       const created = (await transaction.appointmentHold.create({
@@ -209,6 +220,8 @@ export class AtendlyAppointmentHoldService {
           endAt: slot.endAt,
           proposedServiceIds: services.map((service) => service.id),
           proposedDurationMinutes: durationMinutes,
+          proposedBufferBeforeMinutes: bufferBeforeMinutes,
+          proposedBufferAfterMinutes: bufferAfterMinutes,
           customerId: input.customerId ?? null,
           contactRef: input.contactRef ?? null,
           source,

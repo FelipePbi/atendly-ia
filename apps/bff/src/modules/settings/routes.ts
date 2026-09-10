@@ -31,6 +31,11 @@ const availabilitySchema = z.object({
       active: z.boolean().default(true),
     }),
   ),
+  // Regras de oferta do negocio (Goal009), aditivas ao corpo existente:
+  // ausentes preservam o valor ja gravado no Scheduling.
+  minLeadMinutes: z.number().int().min(0).max(43_200).optional(),
+  maxLeadDays: z.number().int().min(1).max(365).optional(),
+  granularityMinutes: z.number().int().min(5).max(120).optional(),
 });
 
 export async function registerV1SettingsRoutes(

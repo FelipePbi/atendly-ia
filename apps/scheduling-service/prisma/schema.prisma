@@ -100,12 +100,42 @@ enum CalendarEffectEntityType {
   APPOINTMENT
   APPOINTMENT_HOLD
   TIME_BLOCK
+  /// Goal009: a serie de atendimento e o efeito de uma unica mutacao, e e por
+  /// ela que a chave idempotente recupera os N atendimentos criados juntos.
+  APPOINTMENT_SERIES
+}
+
+/// Compromisso pessoal e bloqueio sao a mesma entidade (`TimeBlock`) com
+/// semantica de produto diferente (Goal009): os dois ocupam tempo do mesmo
+/// jeito, mas so `PERSONAL` e algo que a profissional marcou para si, nao
+/// uma indisponibilidade operacional.
+enum TimeBlockKind {
+  BLOCK
+  PERSONAL
+}
+
+/// Estado de uma serie de bloqueio/compromisso (Goal009). `ENDED` e o que
+/// "editar desta data em diante" produz na serie antiga: ela para de gerar
+/// ocorrencias novas, mas as ja materializadas no passado continuam intactas
+/// — nunca ha serie infinita silenciosa nem reescrita do que ja aconteceu.
+enum BlockSeriesStatus {
+  ACTIVE
+  ENDED
 }
 
 model CalendarSettings {
   tenantId  String         @id
   source    CalendarSource
   timezone  String
+  /// Regras de oferta do negocio (Goal009), aplicadas pelo proprio motor de
+  /// disponibilidade a toda oferta — a IA e o BFF nunca decidem granularidade
+  /// nem antecedencia. Defaults sao o comportamento que o motor ja praticava
+  /// antes deste Goal (sem antecedencia minima, noventa dias de horizonte,
+  /// passo de trinta minutos), garantidos pela constraint SQL
+  /// `CalendarSettings_offer_rules_check` no cabecalho da migration.
+  minLeadMinutes     Int @default(0)
+  maxLeadDays        Int @default(90)
+  granularityMinutes Int @default(30)
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
 }
@@ -298,22 +328,90 @@ model AvailabilityException {
   endTime   DateTime? @db.Time(0)
   available Boolean
   reason    String?
+  /// Decisao humana explicita (Goal009): so preenchida quando uma
+  /// indisponibilidade que cobre atendimento confirmado foi criada mesmo
+  /// assim, por decisao humana. Ausente para o caso comum (sem conflito).
+  decidedBy     String?
+  decidedReason String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
   @@index([tenantId, date])
 }
 
+/// Serie finita de bloqueio ou compromisso pessoal (Goal009): regra semanal
+/// materializada em `TimeBlock` no momento da criacao, nunca gerada sob
+/// demanda — nao ha serie infinita silenciosa. `seriesEndDate` e
+/// `occurrenceCount` sao mutuamente exclusivos (constraint SQL
+/// `BlockSeries_termination_check`): a serie termina por data OU por
+/// contagem, sempre uma das duas.
+model BlockSeries {
+  id       String        @id @default(cuid())
+  tenantId String
+  kind     TimeBlockKind @default(BLOCK)
+  title    String?
+  /// Dias da semana (0=domingo..6=sabado) em que a serie ocorre.
+  daysOfWeek      Int[]
+  startTime       DateTime  @db.Time(0)
+  endTime         DateTime  @db.Time(0)
+  seriesStartDate DateTime  @db.Date
+  seriesEndDate   DateTime? @db.Date
+  occurrenceCount Int?
+  status          BlockSeriesStatus @default(ACTIVE)
+  /// Serie que a sucedeu quando esta foi encerrada por "editar desta data em
+  /// diante" (Goal009): a serie antiga nunca e reescrita, so encerrada.
+  supersededById String?
+  createdBy      String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  occurrences TimeBlock[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, status])
+}
+
 model TimeBlock {
-  id        String   @id @default(cuid())
+  id        String        @id @default(cuid())
   tenantId  String
   startAt   DateTime
   endAt     DateTime
   reason    String?
+  /// Compromisso pessoal ou bloqueio operacional (Goal009); `BLOCK` e o
+  /// default porque todo `TimeBlock` anterior a este Goal era um bloqueio.
+  kind      TimeBlockKind @default(BLOCK)
+  title     String?
+  seriesId  String?
+  /// Data local da ocorrencia dentro da serie — a mesma unidade que
+  /// "remover/mover uma ocorrencia" e "editar desta data em diante" operam
+  /// sobre, sem recalcular a partir de `startAt` a cada leitura.
+  occurrenceDate DateTime? @db.Date
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  series BlockSeries? @relation(fields: [tenantId, seriesId], references: [tenantId, id], onDelete: SetNull)
+
   @@index([tenantId, startAt, endAt])
+  @@index([tenantId, seriesId, occurrenceDate])
+}
+
+/// Serie finita de atendimento a partir de um servico (Goal009): so
+/// referencia de leitura depois de confirmada — cancelar, remarcar ou
+/// concluir uma ocorrencia nunca toca as outras (`Appointment.seriesId` e
+/// opcional e sem cascata).
+model AppointmentSeries {
+  id            String   @id @default(cuid())
+  tenantId      String
+  serviceIds    Json
+  intervalDays  Int
+  occurrenceCount Int
+  customerId    String?
+  createdBy     String
+  createdAt     DateTime @default(now())
+
+  appointments Appointment[]
+
+  @@unique([tenantId, id])
 }
 
 model Appointment {
@@ -357,17 +455,31 @@ model Appointment {
   finalValue       Decimal?  @db.Decimal(12, 2)
   finalValueSetAt  DateTime?
   finalValueSetBy  String?
+  /// Ocupacao externa por buffer (Goal009), gravada como snapshot na
+  /// confirmacao: o maior `bufferBeforeMinutes`/`bufferAfterMinutes` entre os
+  /// servicos do atendimento naquele instante. Editar o catalogo depois nao
+  /// move a ocupacao — o snapshot e a fonte, nunca o catalogo recalculado.
+  /// Atendimento legado (anterior a este Goal) e manual sem servico recebem
+  /// zero, o que o motor ja praticava.
+  bufferBeforeMinutesSnapshot Int @default(0)
+  bufferAfterMinutesSnapshot  Int @default(0)
+  /// Serie de atendimento (Goal009), so referencia de leitura: nula fora de
+  /// uma serie. Cancelar, remarcar ou concluir uma ocorrencia nunca toca as
+  /// demais, entao nao ha cascata aqui.
+  seriesId   String?
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
 
   customer Customer          @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
   items    AppointmentItem[]
   events   AppointmentEvent[]
+  series   AppointmentSeries? @relation(fields: [tenantId, seriesId], references: [tenantId, id], onDelete: SetNull)
 
   @@unique([tenantId, id])
   @@index([tenantId, startAt, endAt])
   @@index([tenantId, customerId, startAt])
   @@index([tenantId, status, startAt])
+  @@index([tenantId, seriesId])
 }
 
 model AppointmentItem {
@@ -405,6 +517,13 @@ model AppointmentHold {
   /// relacional/snapshot do `AppointmentItem`, que e permanente.
   proposedServiceIds      Json
   proposedDurationMinutes Int
+  /// Buffers propostos (Goal009): o maior `bufferBeforeMinutes`/
+  /// `bufferAfterMinutes` entre os servicos propostos, na mesma semantica do
+  /// snapshot do atendimento. Viram o snapshot definitivo se o hold for
+  /// consumido; zero para hold sem servico (nao existe hoje, mas o default
+  /// mantem a coluna alinhada ao atendimento).
+  proposedBufferBeforeMinutes Int @default(0)
+  proposedBufferAfterMinutes  Int @default(0)
   /// Pessoa ja identificada (Customer), quando existir.
   customerId String?
   /// Referencia livre a um contato ainda nao resolvido para um Customer

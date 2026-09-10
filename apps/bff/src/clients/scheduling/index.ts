@@ -115,6 +115,11 @@ const appointmentSchema = z.object({
   // antes do Goal008 traz `SCHEDULED`, e recusar a resposta seria quebrar
   // uma chave ja respondida. A leitura de estado do produto e do frontend.
   status: z.string(),
+  // Ocupacao externa por buffer e serie (Goal009). Defaults mantem
+  // decodavel toda resposta anterior a este Goal.
+  bufferBeforeMinutes: z.number().int().nonnegative().default(0),
+  bufferAfterMinutes: z.number().int().nonnegative().default(0),
+  seriesId: z.string().nullable().default(null),
 });
 
 /**
@@ -203,6 +208,54 @@ const availabilitySettingsSchema = z.object({
       active: z.boolean(),
     }),
   ),
+  // Regras de oferta do negocio (Goal009). Defaults iguais ao motor:
+  // resposta antiga (sem estes campos) continua decodavel.
+  minLeadMinutes: z.number().int().nonnegative().default(0),
+  maxLeadDays: z.number().int().positive().default(90),
+  granularityMinutes: z.number().int().positive().default(30),
+});
+const timeBlockKindSchema = z.enum(["BLOCK", "PERSONAL"]);
+const timeBlockSchema = z.object({
+  id: z.string(),
+  startAt: z.string(),
+  endAt: z.string(),
+  reason: z.string().nullable(),
+  kind: timeBlockKindSchema.default("BLOCK"),
+  title: z.string().nullable().default(null),
+  seriesId: z.string().nullable().default(null),
+});
+const availabilityExceptionSchema = z.object({
+  id: z.string(),
+  date: z.string(),
+  startTime: z.string().nullable(),
+  endTime: z.string().nullable(),
+  available: z.boolean(),
+  reason: z.string().nullable(),
+  decidedBy: z.string().nullable(),
+  decidedReason: z.string().nullable(),
+});
+const blockSeriesSchema = z.object({
+  id: z.string(),
+  kind: timeBlockKindSchema,
+  title: z.string().nullable(),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)),
+  startTime: z.string(),
+  endTime: z.string(),
+  seriesStartDate: z.string(),
+  seriesEndDate: z.string().nullable(),
+  occurrenceCount: z.number().int().positive().nullable(),
+  status: z.enum(["ACTIVE", "ENDED"]),
+  supersededById: z.string().nullable(),
+});
+const seriesOccurrencePreviewSchema = z.object({
+  index: z.number(),
+  requestedDate: z.string(),
+  date: z.string().nullable(),
+  startTime: z.string().nullable(),
+  endTime: z.string().nullable(),
+  adjusted: z.boolean(),
+  holdId: z.string().nullable(),
+  unavailable: z.boolean(),
 });
 const migrationEntityCountSchema = z.object({
   total: z.number().int().nonnegative(),
@@ -496,12 +549,7 @@ export class SchedulingClient {
       "POST",
       "/internal/time-blocks",
       input,
-      z.object({
-        id: z.string(),
-        startAt: z.string(),
-        endAt: z.string(),
-        reason: z.string().nullable(),
-      }),
+      timeBlockSchema,
     );
   }
 
@@ -512,6 +560,146 @@ export class SchedulingClient {
       `/internal/time-blocks/${encodeURIComponent(id)}`,
       undefined,
       z.object({ deleted: z.literal(true) }),
+    );
+  }
+
+  async removeBlockOccurrence(context: InternalRequestContext, id: string) {
+    return this.mutate(
+      context,
+      "DELETE",
+      `/internal/time-blocks/${encodeURIComponent(id)}/occurrence`,
+      undefined,
+      z.object({ deleted: z.literal(true) }),
+    );
+  }
+
+  async moveBlockOccurrence(
+    context: InternalRequestContext,
+    id: string,
+    input: unknown,
+  ) {
+    return this.mutate(
+      context,
+      "PATCH",
+      `/internal/time-blocks/${encodeURIComponent(id)}/occurrence`,
+      input,
+      timeBlockSchema,
+    );
+  }
+
+  // --- Excecoes de disponibilidade (Goal009) ------------------------------
+
+  async listAvailabilityExceptions(
+    context: InternalRequestContext,
+    query: { startDate: string; endDate: string },
+  ) {
+    return this.get(
+      context,
+      "/internal/availability-exceptions",
+      z.array(availabilityExceptionSchema),
+      query,
+    );
+  }
+
+  async createExtraAvailability(
+    context: InternalRequestContext,
+    input: unknown,
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      "/internal/availability-exceptions/extra",
+      input,
+      availabilityExceptionSchema,
+    );
+  }
+
+  async createUnavailability(context: InternalRequestContext, input: unknown) {
+    return this.mutate(
+      context,
+      "POST",
+      "/internal/availability-exceptions/unavailable",
+      input,
+      availabilityExceptionSchema,
+    );
+  }
+
+  async removeAvailabilityException(
+    context: InternalRequestContext,
+    id: string,
+  ) {
+    return this.mutate(
+      context,
+      "DELETE",
+      `/internal/availability-exceptions/${encodeURIComponent(id)}`,
+      undefined,
+      z.object({ deleted: z.literal(true) }),
+    );
+  }
+
+  // --- Series de bloqueio/compromisso (Goal009) ---------------------------
+
+  async createBlockSeries(context: InternalRequestContext, input: unknown) {
+    return this.mutate(
+      context,
+      "POST",
+      "/internal/block-series",
+      input,
+      blockSeriesSchema,
+    );
+  }
+
+  async editBlockSeriesFromDate(
+    context: InternalRequestContext,
+    id: string,
+    input: unknown,
+  ) {
+    return this.mutate(
+      context,
+      "PATCH",
+      `/internal/block-series/${encodeURIComponent(id)}/from-date`,
+      input,
+      blockSeriesSchema,
+    );
+  }
+
+  async removeBlockSeries(context: InternalRequestContext, id: string) {
+    return this.mutate(
+      context,
+      "DELETE",
+      `/internal/block-series/${encodeURIComponent(id)}`,
+      undefined,
+      z.object({ deleted: z.literal(true) }),
+    );
+  }
+
+  // --- Serie de atendimento (Goal009) --------------------------------------
+
+  async previewAppointmentSeries(
+    context: InternalRequestContext,
+    input: unknown,
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      "/internal/appointments/series/preview",
+      input,
+      z.array(seriesOccurrencePreviewSchema),
+    );
+  }
+
+  async confirmAppointmentSeries(
+    context: InternalRequestContext,
+    input: unknown,
+    idempotencyKey: string,
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      "/internal/appointments/series/confirm",
+      input,
+      z.array(appointmentSchema),
+      idempotencyKey,
     );
   }
 

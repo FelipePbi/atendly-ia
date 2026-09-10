@@ -369,6 +369,18 @@ function normalizeRecurrence(value: number | null | undefined): number | null {
   return value;
 }
 
+/**
+ * Maior buffer entre os servicos de um conjunto (Goal009): a ocupacao
+ * externa do atendimento e do hold usa o maior antes/depois, nunca a soma —
+ * buffers intermediarios de multi-servico nao contam.
+ */
+export function maxServiceBuffer(
+  services: Array<{ bufferBeforeMinutes: number; bufferAfterMinutes: number }>,
+  key: "bufferBeforeMinutes" | "bufferAfterMinutes",
+): number {
+  return services.reduce((max, service) => Math.max(max, service[key]), 0);
+}
+
 export function toCalendarService(service: {
   id: string;
   name: string;

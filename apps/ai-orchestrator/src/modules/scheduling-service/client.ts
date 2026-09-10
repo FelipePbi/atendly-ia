@@ -9,7 +9,9 @@ import {
 } from "../../lib/internal-credentials.js";
 import type { BusinessContext } from "../tenant-config/business-context.js";
 import type {
+  ConfirmAppointmentSeriesInput,
   CreateSchedulingHoldInput,
+  PreviewAppointmentSeriesInput,
   RescheduleAppointmentInput,
   ScheduleAppointmentInput,
   SchedulingAppointment,
@@ -17,6 +19,7 @@ import type {
   SchedulingCustomerCandidate,
   SchedulingHold,
   SchedulingRequestContext,
+  SchedulingSeriesOccurrencePreview,
   SchedulingServiceDefinition,
 } from "./types.js";
 
@@ -109,6 +112,16 @@ const holdSchema = z.object({
   expiresAt: z.string(),
   status: z.enum(["ACTIVE", "CONSUMED", "RELEASED", "EXPIRED"]),
 });
+const seriesOccurrenceSchema = z.object({
+  index: z.number(),
+  requestedDate: z.string(),
+  date: z.string().nullable(),
+  startTime: z.string().nullable(),
+  endTime: z.string().nullable(),
+  adjusted: z.boolean(),
+  holdId: z.string().nullable(),
+  unavailable: z.boolean(),
+});
 const DEFAULT_AVAILABILITY_DAYS = 14;
 const DEFAULT_APPOINTMENT_LOOKUP_DAYS = 90;
 const DEFAULT_MAX_SLOTS = 3;
@@ -177,6 +190,26 @@ export interface SchedulingGateway {
     holdId: string,
     context?: SchedulingRequestContext,
   ): Promise<SchedulingHold>;
+  /**
+   * Recorrência de atendimento (Goal009): pré-visualização cria um hold por
+   * ocorrência ajustada à grade do negócio. Nunca decide granularidade nem
+   * antecedência — o motor decide, como em `get_availability`.
+   */
+  previewAppointmentSeries(
+    input: PreviewAppointmentSeriesInput,
+    context?: SchedulingRequestContext,
+    idempotencyKey?: string,
+  ): Promise<SchedulingSeriesOccurrencePreview[]>;
+  /**
+   * Confirmação atômica: consome todos os holds da série de uma vez. Hold
+   * vencido não confirma nada — a resposta identifica a ocorrência e a IA
+   * consulta de novo, nunca força.
+   */
+  confirmAppointmentSeries(
+    input: ConfirmAppointmentSeriesInput,
+    context?: SchedulingRequestContext,
+    idempotencyKey?: string,
+  ): Promise<SchedulingAppointment[]>;
 }
 
 export class SchedulingClient implements SchedulingGateway {
@@ -209,11 +242,13 @@ export class SchedulingClient implements SchedulingGateway {
     businessContext: BusinessContext,
     context?: SchedulingRequestContext,
   ) {
+    // Sem `stepMinutes` (Goal009): a granularidade da oferta é sempre a do
+    // negócio, decidida pelo motor de disponibilidade — a IA não propõe a
+    // própria grade.
     const query = new URLSearchParams({
       serviceIds: serviceIds.join(","),
       startDate: startDate ?? todayInTimeZone(businessContext.timezone),
       days: String(DEFAULT_AVAILABILITY_DAYS),
-      stepMinutes: String(DEFAULT_SLOT_STEP_MINUTES),
       maxSlots: String(DEFAULT_MAX_SLOTS),
     });
     return this.request(
@@ -288,6 +323,58 @@ export class SchedulingClient implements SchedulingGateway {
         { method: "DELETE", context },
       ),
     );
+  }
+
+  async previewAppointmentSeries(
+    input: PreviewAppointmentSeriesInput,
+    context?: SchedulingRequestContext,
+    idempotencyKey?: string,
+  ): Promise<SchedulingSeriesOccurrencePreview[]> {
+    return this.request(
+      "/internal/appointments/series/preview",
+      seriesOccurrenceSchema.array(),
+      {
+        method: "POST",
+        context,
+        idempotencyKey,
+        body: {
+          serviceIds: input.serviceIds.map(String),
+          occurrenceCount: input.occurrenceCount,
+          intervalDays: input.intervalDays,
+          firstDate: input.firstDate,
+          firstStartTime: input.firstStartTime,
+          customerId: input.customerId ?? undefined,
+          contactRef: input.contactRef ?? undefined,
+        },
+      },
+    );
+  }
+
+  async confirmAppointmentSeries(
+    input: ConfirmAppointmentSeriesInput,
+    context?: SchedulingRequestContext,
+    idempotencyKey?: string,
+  ): Promise<SchedulingAppointment[]> {
+    return (
+      await this.request(
+        "/internal/appointments/series/confirm",
+        appointmentSchema.array(),
+        {
+          method: "POST",
+          context,
+          idempotencyKey,
+          body: {
+            occurrences: input.holdIds.map((holdId) => ({ holdId })),
+            serviceIds: input.serviceIds.map(String),
+            intervalDays: input.intervalDays,
+            customerId: input.customerId ?? undefined,
+            customerName: input.customerName ?? undefined,
+            customerPhone: input.customerPhone ?? undefined,
+            comments: input.comments,
+          },
+        },
+      )
+    ).map(toAppointment);
   }
 
   /**

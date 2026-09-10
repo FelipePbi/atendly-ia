@@ -199,22 +199,63 @@ class Table {
     }
   }
 
+  /**
+   * Preenche colunas com `@default` no schema real que a linha nao tem
+   * (`undefined`, nao apenas `null`) — cobre tanto fixture montada por
+   * `.create()` quanto linha empurrada direto em `rows` por um teste antigo,
+   * do mesmo jeito que uma coluna nova com `DEFAULT` no Postgres preenche
+   * linha existente sem o teste precisar saber que ela foi adicionada.
+   */
+  private withDefaults(row: Row): Row {
+    let result = row;
+    for (const [field, value] of Object.entries(this.defaults)) {
+      if (result[field] === undefined) {
+        if (result === row) result = { ...row };
+        result[field] = value();
+      }
+    }
+    return result;
+  }
+
   async findMany(
     args: { where?: Record<string, unknown>; orderBy?: unknown } = {},
   ) {
-    const found = this.rows.filter((row) => matches(row, args.where ?? {}));
+    const found: Row[] = this.rows
+      .filter((row) => matches(row, args.where ?? {}))
+      .map((row) => this.withDefaults(row));
     return args.orderBy ? sortBy(found, args.orderBy) : found;
   }
 
+  /**
+   * Só `_max` sobre colunas numéricas — o que o motor de disponibilidade usa
+   * para alargar a janela de busca pelo maior buffer gravado (Goal009).
+   * Linha sem a coluna conta como o `@default` do schema, igual a `findMany`.
+   */
+  async aggregate(args: {
+    where?: Record<string, unknown>;
+    _max?: Record<string, boolean>;
+  }) {
+    const rows = (await this.findMany({ where: args.where }));
+    const max: Record<string, number | null> = {};
+    for (const field of Object.keys(args._max ?? {})) {
+      const values = rows
+        .map((row) => row[field])
+        .filter((value): value is number => typeof value === "number");
+      max[field] = values.length === 0 ? null : Math.max(...values);
+    }
+    return { _max: max };
+  }
+
   async findFirst(args: { where?: Record<string, unknown> } = {}) {
-    return this.rows.find((row) => matches(row, args.where ?? {})) ?? null;
+    const row = this.rows.find((row) => matches(row, args.where ?? {}));
+    return row ? this.withDefaults(row) : null;
   }
 
   async findUnique(args: { where: Record<string, unknown> }) {
-    return (
-      this.rows.find((row) => matches(row, this.whereFromUnique(args.where))) ??
-      null
+    const row = this.rows.find((row) =>
+      matches(row, this.whereFromUnique(args.where)),
     );
+    return row ? this.withDefaults(row) : null;
   }
 
   async findUniqueOrThrow(args: { where: Record<string, unknown> }) {
@@ -303,10 +344,31 @@ export function createDatabaseDouble() {
     tenantId_id: ["tenantId", "id"],
     tenantId_customerId_label: ["tenantId", "customerId", "label"],
   });
-  const service = new Table("service", {
-    tenantId_id: ["tenantId", "id"],
-  });
-  const calendarSettings = new Table("settings", {});
+  const service = new Table(
+    "service",
+    { tenantId_id: ["tenantId", "id"] },
+    {
+      defaults: {
+        bufferBeforeMinutes: () => 0,
+        bufferAfterMinutes: () => 0,
+        recurrenceIntervalDays: () => null,
+      },
+    },
+  );
+  const calendarSettings = new Table(
+    "settings",
+    {},
+    {
+      // Mesmos defaults do schema real (Goal009): sem antecedencia minima,
+      // noventa dias de horizonte, passo de trinta minutos — o
+      // comportamento que o motor ja praticava antes das regras de oferta.
+      defaults: {
+        minLeadMinutes: () => 0,
+        maxLeadDays: () => 90,
+        granularityMinutes: () => 30,
+      },
+    },
+  );
   const availabilityRule = new Table("rule", {});
   const availabilityException = new Table("exception", {});
   const appointment = new Table(
@@ -330,6 +392,11 @@ export function createDatabaseDouble() {
         finalValue: () => null,
         finalValueSetAt: () => null,
         finalValueSetBy: () => null,
+        // Ocupacao externa por buffer e serie (Goal009): zero/nula e o
+        // mesmo default do schema real.
+        bufferBeforeMinutesSnapshot: () => 0,
+        bufferAfterMinutesSnapshot: () => 0,
+        seriesId: () => null,
       },
     },
   );
@@ -338,13 +405,30 @@ export function createDatabaseDouble() {
     { tenantId_id: ["tenantId", "id"] },
     { journal },
   );
-  const timeBlock = new Table("timeBlock", {}, { journal });
+  const timeBlock = new Table(
+    "timeBlock",
+    {},
+    {
+      journal,
+      defaults: {
+        kind: () => "BLOCK",
+        title: () => null,
+        seriesId: () => null,
+        occurrenceDate: () => null,
+      },
+    },
+  );
   const appointmentHold = new Table(
     "appointmentHold",
     { tenantId_id: ["tenantId", "id"] },
     {
       journal,
-      defaults: { consumedAt: () => null, releasedAt: () => null },
+      defaults: {
+        consumedAt: () => null,
+        releasedAt: () => null,
+        proposedBufferBeforeMinutes: () => 0,
+        proposedBufferAfterMinutes: () => 0,
+      },
     },
   );
   // `occurredAt` e `sequence` imitam o banco de propósito: o instante é o
@@ -363,6 +447,19 @@ export function createDatabaseDouble() {
         sequence: () => (eventSequence += 1n),
       },
     },
+  );
+  const blockSeries = new Table(
+    "blockSeries",
+    { tenantId_id: ["tenantId", "id"] },
+    {
+      journal,
+      defaults: { status: () => "ACTIVE", supersededById: () => null },
+    },
+  );
+  const appointmentSeries = new Table(
+    "appointmentSeries",
+    { tenantId_id: ["tenantId", "id"] },
+    { journal },
   );
   const calendarMutationIdempotency = new Table(
     "idempotency",
@@ -415,16 +512,22 @@ export function createDatabaseDouble() {
       withAppointmentRelations(await appointment.findUnique(args)),
     updateMany: (args: Parameters<Table["updateMany"]>[0]) =>
       appointment.updateMany(args),
+    aggregate: (args: Parameters<Table["aggregate"]>[0]) =>
+      appointment.aggregate(args),
     // Escrita aninhada do Prisma: `customer: { connect }` preenche as colunas
-    // escalares da relação, e `items: { create }` grava os itens do acordo.
+    // escalares da relação, `series: { connect }` idem para a série de
+    // atendimento (Goal009), e `items: { create }` grava os itens do acordo.
     create: async (args: { data: Record<string, unknown> }) => {
-      const { customer: link, items, ...rest } = args.data;
+      const { customer: link, series: seriesLink, items, ...rest } = args.data;
       const connect = (link as Connect | undefined)?.connect?.tenantId_id;
+      const seriesConnect = (seriesLink as Connect | undefined)?.connect
+        ?.tenantId_id;
       const row = await appointment.create({
         data: {
           ...rest,
           tenantId: connect?.tenantId ?? rest.tenantId,
           customerId: connect?.id ?? rest.customerId,
+          ...(seriesConnect ? { seriesId: seriesConnect.id } : {}),
         },
       });
       const nested =
@@ -464,6 +567,8 @@ export function createDatabaseDouble() {
     appointmentHold,
     appointmentEvent,
     appointmentItem,
+    blockSeries,
+    appointmentSeries,
     calendarMutationIdempotency,
     appointment: appointmentClient,
     customerRelation: {
@@ -556,6 +661,8 @@ export function createDatabaseDouble() {
       appointmentHold,
       appointmentEvent,
       timeBlock,
+      blockSeries,
+      appointmentSeries,
       calendarMutationIdempotency,
     },
   };

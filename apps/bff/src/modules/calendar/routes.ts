@@ -97,13 +97,86 @@ const availabilityQuerySchema = z.object({
   ),
   startDate: dateSchema,
   days: z.coerce.number().int().min(1).max(60).default(14),
-  stepMinutes: z.coerce.number().int().min(1).max(180).default(30),
   maxSlots: z.coerce.number().int().min(1).max(100).default(20),
 });
+const timeBlockKindSchema = z.enum(["BLOCK", "PERSONAL"]);
 const timeBlockSchema = z.object({
   startAt: z.iso.datetime({ offset: true }),
   endAt: z.iso.datetime({ offset: true }),
   reason: z.string().trim().max(500).nullable().optional(),
+  kind: timeBlockKindSchema.default("BLOCK"),
+  title: z.string().trim().min(1).max(200).nullable().optional(),
+});
+const moveOccurrenceSchema = z.object({
+  startAt: z.iso.datetime({ offset: true }),
+  endAt: z.iso.datetime({ offset: true }),
+});
+
+// --- Excecoes de disponibilidade (Goal009) --------------------------------
+const exceptionsQuerySchema = z.object({
+  startDate: dateSchema,
+  endDate: dateSchema,
+});
+const extraAvailabilitySchema = z.object({
+  date: dateSchema,
+  startTime: timeSchema,
+  endTime: timeSchema,
+});
+const unavailabilitySchema = z.object({
+  date: dateSchema,
+  startTime: timeSchema.optional(),
+  endTime: timeSchema.optional(),
+  reason: z.string().trim().max(500).optional(),
+  decidedBy: z.string().trim().min(1).max(200).optional(),
+  decidedReason: z.string().trim().min(1).max(500).optional(),
+});
+
+// --- Series de bloqueio/compromisso (Goal009) -----------------------------
+const blockSeriesRuleShape = {
+  kind: timeBlockKindSchema.default("BLOCK"),
+  title: z.string().trim().min(1).max(200).nullable().optional(),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+  startTime: timeSchema,
+  endTime: timeSchema,
+  seriesStartDate: dateSchema,
+  seriesEndDate: dateSchema.optional(),
+  occurrenceCount: z.number().int().positive().max(1_000).optional(),
+};
+const blockSeriesDecisionShape = {
+  skipConflicts: z.boolean().optional(),
+  forceOverlapReason: z.string().trim().min(1).max(500).optional(),
+};
+const blockSeriesBodySchema = z.object({
+  rule: z.object(blockSeriesRuleShape),
+  ...blockSeriesDecisionShape,
+});
+const blockSeriesEditSchema = z.object({
+  fromDate: dateSchema,
+  rule: z.object(blockSeriesRuleShape).partial(),
+  ...blockSeriesDecisionShape,
+});
+
+// --- Serie de atendimento (Goal009) ---------------------------------------
+const seriesPreviewSchema = z.object({
+  serviceIds: z.array(z.string().trim().min(1).max(128)).min(1).max(10),
+  occurrenceCount: z.number().int().min(1).max(365),
+  intervalDays: z.number().int().positive().max(3_650).optional(),
+  firstDate: dateSchema,
+  firstStartTime: timeSchema,
+  customerId: z.string().trim().min(1).max(128).optional(),
+  contactRef: z.string().trim().min(1).max(200).optional(),
+});
+const seriesConfirmSchema = z.object({
+  occurrences: z
+    .array(z.object({ holdId: z.string().trim().min(1).max(128) }))
+    .min(1)
+    .max(365),
+  serviceIds: z.array(z.string().trim().min(1).max(128)).min(1).max(10),
+  intervalDays: z.number().int().positive().max(3_650),
+  customerId: z.string().trim().min(1).max(128).optional(),
+  customerName: z.string().trim().min(1).max(200).optional(),
+  customerPhone: z.string().trim().min(6).max(32).optional(),
+  comments: z.string().trim().max(2_000).optional(),
 });
 const integrationSchema = z.object({
   credentials: z.object({
@@ -359,6 +432,159 @@ export async function registerV1CalendarRoutes(
         request,
         await scheduling.deleteTimeBlock(internalContext(request), id),
       );
+    },
+  );
+
+  app.delete(
+    "/v1/time-blocks/:id/occurrence",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      return dataResponse(
+        request,
+        await scheduling.removeBlockOccurrence(internalContext(request), id),
+      );
+    },
+  );
+
+  app.patch(
+    "/v1/time-blocks/:id/occurrence",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      return dataResponse(
+        request,
+        await scheduling.moveBlockOccurrence(
+          internalContext(request),
+          id,
+          parseBody(moveOccurrenceSchema, request.body),
+        ),
+      );
+    },
+  );
+
+  // --- Excecoes de disponibilidade (Goal009) ------------------------------
+
+  app.get(
+    "/v1/availability-exceptions",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const query = parseQuery(exceptionsQuerySchema, request.query);
+      return dataResponse(
+        request,
+        await scheduling.listAvailabilityExceptions(
+          internalContext(request),
+          query,
+        ),
+      );
+    },
+  );
+
+  app.post(
+    "/v1/availability-exceptions/extra",
+    { preHandler: requireTenantContext },
+    async (request, reply) => {
+      const exception = await scheduling.createExtraAvailability(
+        internalContext(request),
+        parseBody(extraAvailabilitySchema, request.body),
+      );
+      return reply.code(201).send(dataResponse(request, exception));
+    },
+  );
+
+  app.post(
+    "/v1/availability-exceptions/unavailable",
+    { preHandler: requireTenantContext },
+    async (request, reply) => {
+      const exception = await scheduling.createUnavailability(
+        internalContext(request),
+        parseBody(unavailabilitySchema, request.body),
+      );
+      return reply.code(201).send(dataResponse(request, exception));
+    },
+  );
+
+  app.delete(
+    "/v1/availability-exceptions/:id",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      return dataResponse(
+        request,
+        await scheduling.removeAvailabilityException(
+          internalContext(request),
+          id,
+        ),
+      );
+    },
+  );
+
+  // --- Series de bloqueio/compromisso (Goal009) ---------------------------
+
+  app.post(
+    "/v1/block-series",
+    { preHandler: requireTenantContext },
+    async (request, reply) => {
+      const series = await scheduling.createBlockSeries(
+        internalContext(request),
+        parseBody(blockSeriesBodySchema, request.body),
+      );
+      return reply.code(201).send(dataResponse(request, series));
+    },
+  );
+
+  app.patch(
+    "/v1/block-series/:id/from-date",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      return dataResponse(
+        request,
+        await scheduling.editBlockSeriesFromDate(
+          internalContext(request),
+          id,
+          parseBody(blockSeriesEditSchema, request.body),
+        ),
+      );
+    },
+  );
+
+  app.delete(
+    "/v1/block-series/:id",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      return dataResponse(
+        request,
+        await scheduling.removeBlockSeries(internalContext(request), id),
+      );
+    },
+  );
+
+  // --- Serie de atendimento (Goal009) --------------------------------------
+
+  app.post(
+    "/v1/appointments/series/preview",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const preview = await scheduling.previewAppointmentSeries(
+        internalContext(request),
+        parseBody(seriesPreviewSchema, request.body),
+      );
+      return dataResponse(request, preview);
+    },
+  );
+
+  app.post(
+    "/v1/appointments/series/confirm",
+    { preHandler: requireTenantContext },
+    async (request, reply) => {
+      const appointments = await scheduling.confirmAppointmentSeries(
+        internalContext(request),
+        parseBody(seriesConfirmSchema, request.body),
+        idempotencyKey(request),
+      );
+      return reply.code(201).send(dataResponse(request, appointments));
     },
   );
 

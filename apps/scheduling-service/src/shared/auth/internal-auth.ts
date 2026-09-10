@@ -82,3 +82,33 @@ export function currentInternalContext(
 
   return request.internalContext;
 }
+
+/**
+ * Origem derivada do chamador autenticado (Goal009, residuo do Goal008): o
+ * BFF fala em nome de uma pessoa (`USER`), a IA fala em nome dela mesma
+ * (`AI`). Nunca lida do corpo — um `source` divergente no corpo e ignorado,
+ * porque a credencial ja prova quem esta chamando.
+ */
+export function callerSource(
+  caller: InternalRequestContext["caller"],
+): "AI" | "USER" {
+  return caller === "ai-orchestrator" ? "AI" : "USER";
+}
+
+/**
+ * So o BFF (pessoa humana) pode criar excecao, bloqueio, compromisso ou
+ * serie deles: a IA nunca decide indisponibilidade, override ou grade do
+ * negocio (Goal009). Chamado pelas rotas que a IA nao pode alcançar mesmo
+ * tendo credencial interna valida.
+ */
+export function requireHumanCaller(
+  context: InternalRequestContext,
+): void {
+  if (context.caller === "ai-orchestrator") {
+    throw new AppError(
+      "AI_CALLER_NOT_ALLOWED",
+      "The AI cannot create or manage exceptions, blocks, personal commitments or their series.",
+      403,
+    );
+  }
+}

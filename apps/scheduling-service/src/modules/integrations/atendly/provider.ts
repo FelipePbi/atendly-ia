@@ -38,16 +38,65 @@ import {
   intendedInterval,
   releaseHoldWithin,
 } from "../../holds/appointment-hold-service.js";
-import { AtendlyServiceService } from "../../services/atendly-service-service.js";
+import {
+  AtendlyServiceService,
+  maxServiceBuffer,
+} from "../../services/atendly-service-service.js";
 
-const appointmentInclude = {
+export const appointmentInclude = {
   customer: true,
   items: true,
 } satisfies Prisma.AppointmentInclude;
 
-type AppointmentRecord = Prisma.AppointmentGetPayload<{
+export type AppointmentRecord = Prisma.AppointmentGetPayload<{
   include: typeof appointmentInclude;
 }>;
+
+/**
+ * DTO do atendimento a partir da linha persistida — exportada para a serie
+ * de atendimento (Goal009), que cria varias linhas na mesma transacao sem
+ * passar pelas mutacoes de uma unidade so do provider.
+ */
+export function toAtendlyAppointment(
+  appointment: AppointmentRecord,
+  timeZone: string,
+): CalendarAppointment {
+  const start = instantToLocalDateTime(appointment.startAt, timeZone);
+  const end = instantToLocalDateTime(appointment.endAt, timeZone);
+  const services = appointment.items.map((item) => ({
+    serviceId: item.serviceId,
+    name: item.serviceNameSnapshot,
+    durationMinutes: item.durationMinutesSnapshot,
+    priceType: item.priceTypeSnapshot,
+    price: item.priceSnapshot === null ? null : Number(item.priceSnapshot),
+  }));
+  const total = computeAgreementTotal(services);
+  return {
+    id: appointment.id,
+    source: appointment.source,
+    title: appointment.title,
+    date: start.date,
+    startTime: start.time,
+    endTime: end.time,
+    durationMinutes: Math.round(
+      (appointment.endAt.getTime() - appointment.startAt.getTime()) / 60_000,
+    ),
+    customerId: appointment.customerId,
+    customer: {
+      id: appointment.customer.id,
+      name: appointment.customer.name,
+      phone: appointment.customer.phone,
+    },
+    services,
+    totalPrice: total.amount,
+    totalPriceType: total.type,
+    comments: appointment.comments,
+    status: appointment.status,
+    bufferBeforeMinutes: appointment.bufferBeforeMinutesSnapshot,
+    bufferAfterMinutes: appointment.bufferAfterMinutesSnapshot,
+    seriesId: appointment.seriesId,
+  };
+}
 
 export class AtendlyCalendarProvider implements CalendarProvider {
   constructor(
@@ -148,6 +197,11 @@ export class AtendlyCalendarProvider implements CalendarProvider {
       const durationMinutes =
         manual?.durationMinutes ??
         services.reduce((total, service) => total + service.durationMinutes, 0);
+      // Buffer externo do conjunto proposto (Goal009): o maior antes/depois
+      // entre os servicos — buffers intermediarios de multi-servico nunca
+      // sao somados. Manual sem servico ocupa sem buffer.
+      const bufferBeforeMinutes = maxServiceBuffer(services, "bufferBeforeMinutes");
+      const bufferAfterMinutes = maxServiceBuffer(services, "bufferAfterMinutes");
       // O hold e validado **antes** de a disponibilidade ser consultada: se
       // ele nao serve mais, a confirmacao nao acontece, e o que a chamada
       // recebe e a expiracao junto com o estado revalidado do horario.
@@ -157,7 +211,8 @@ export class AtendlyCalendarProvider implements CalendarProvider {
             date: input.date,
             startTime: input.startTime,
             durationMinutes,
-            stepMinutes: input.stepMinutes,
+            bufferBeforeMinutes,
+            bufferAfterMinutes,
           })
         : null;
       const slot = overrideReason
@@ -170,7 +225,8 @@ export class AtendlyCalendarProvider implements CalendarProvider {
             date: input.date,
             startTime: input.startTime,
             durationMinutes,
-            stepMinutes: input.stepMinutes,
+            bufferBeforeMinutes,
+            bufferAfterMinutes,
             // O hold que esta sendo consumido nao ocupa contra a confirmacao
             // que o consome; para todo o resto ele continua ocupando.
             excludeHoldId: hold?.holdId,
@@ -195,6 +251,8 @@ export class AtendlyCalendarProvider implements CalendarProvider {
           title: manual?.title ?? null,
           createdBy: this.userId,
           comments: input.comments ?? null,
+          bufferBeforeMinutesSnapshot: bufferBeforeMinutes,
+          bufferAfterMinutesSnapshot: bufferAfterMinutes,
           customer: {
             connect: {
               tenantId_id: {
@@ -295,6 +353,11 @@ export class AtendlyCalendarProvider implements CalendarProvider {
         await lockCalendarDays(transaction, this.tenantId, [persistedDate]);
       }
       const persistedDuration = appointmentDuration(persisted);
+      // O buffer nao muda na remarcacao: e o mesmo snapshot da confirmacao —
+      // editar o catalogo depois nao move a ocupacao, e remarcar tambem nao
+      // recalcula.
+      const bufferBeforeMinutes = persisted.bufferBeforeMinutesSnapshot;
+      const bufferAfterMinutes = persisted.bufferAfterMinutesSnapshot;
       // O horario original segue ocupado por este atendimento ate aqui: o
       // hold segura apenas o **novo** horario, e nada solta o antigo antes de
       // a remarcacao acontecer de fato.
@@ -304,7 +367,8 @@ export class AtendlyCalendarProvider implements CalendarProvider {
             date: input.date,
             startTime: input.startTime,
             durationMinutes: persistedDuration,
-            stepMinutes: input.stepMinutes,
+            bufferBeforeMinutes,
+            bufferAfterMinutes,
             excludeAppointmentId: persisted.id,
           })
         : null;
@@ -318,7 +382,8 @@ export class AtendlyCalendarProvider implements CalendarProvider {
             date: input.date,
             startTime: input.startTime,
             durationMinutes: persistedDuration,
-            stepMinutes: input.stepMinutes,
+            bufferBeforeMinutes,
+            bufferAfterMinutes,
             excludeAppointmentId: persisted.id,
             excludeHoldId: hold?.holdId,
           });
@@ -466,7 +531,8 @@ export class AtendlyCalendarProvider implements CalendarProvider {
       date: string;
       startTime: string;
       durationMinutes: number;
-      stepMinutes: number;
+      bufferBeforeMinutes: number;
+      bufferAfterMinutes: number;
       excludeAppointmentId?: string;
     },
   ): Promise<{ holdId: string; now: Date }> {
@@ -501,7 +567,8 @@ export class AtendlyCalendarProvider implements CalendarProvider {
       date: string;
       startTime: string;
       durationMinutes: number;
-      stepMinutes: number;
+      bufferBeforeMinutes: number;
+      bufferAfterMinutes: number;
       excludeAppointmentId?: string;
     },
   ): Promise<boolean> {
@@ -604,38 +671,7 @@ export class AtendlyCalendarProvider implements CalendarProvider {
   }
 
   private toAppointment(appointment: AppointmentRecord): CalendarAppointment {
-    const start = instantToLocalDateTime(appointment.startAt, this.timeZone);
-    const end = instantToLocalDateTime(appointment.endAt, this.timeZone);
-    const services = appointment.items.map((item) => ({
-      serviceId: item.serviceId,
-      name: item.serviceNameSnapshot,
-      durationMinutes: item.durationMinutesSnapshot,
-      priceType: item.priceTypeSnapshot,
-      price: item.priceSnapshot === null ? null : Number(item.priceSnapshot),
-    }));
-    const total = computeAgreementTotal(services);
-    return {
-      id: appointment.id,
-      source: appointment.source,
-      title: appointment.title,
-      date: start.date,
-      startTime: start.time,
-      endTime: end.time,
-      durationMinutes: Math.round(
-        (appointment.endAt.getTime() - appointment.startAt.getTime()) / 60_000,
-      ),
-      customerId: appointment.customerId,
-      customer: {
-        id: appointment.customer.id,
-        name: appointment.customer.name,
-        phone: appointment.customer.phone,
-      },
-      services,
-      totalPrice: total.amount,
-      totalPriceType: total.type,
-      comments: appointment.comments,
-      status: appointment.status,
-    };
+    return toAtendlyAppointment(appointment, this.timeZone);
   }
 }
 

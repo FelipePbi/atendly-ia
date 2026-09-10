@@ -127,6 +127,11 @@ export class InternalHttpClient {
           upstream: this.audience,
           upstreamCode: normalized.code,
           upstreamRequestId: normalized.requestId,
+          // Detalhe estruturado do serviço interno, quando existe (Goal009):
+          // a falha de uma ocorrência de série só é acionável se disser QUAL
+          // ocorrência caiu e quais alternativas existem. Vai aninhado, não
+          // espalhado, para não colidir com as chaves acima.
+          ...(normalized.details ? { upstreamDetails: normalized.details } : {}),
         },
       );
     }
@@ -166,6 +171,7 @@ function upstreamError(value: unknown): {
   code: string;
   message: string;
   requestId?: string;
+  details?: unknown;
 } {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     const record = value as Record<string, unknown>;
@@ -181,6 +187,7 @@ function upstreamError(value: unknown): {
             : "Internal service returned an error.",
         requestId:
           typeof record.requestId === "string" ? record.requestId : undefined,
+        details: details.details,
       };
     }
     if (typeof record.error === "string") {

@@ -82,6 +82,11 @@ export const availabilityRuleSchema = z.object({
 export const availabilitySettingsSchema = z.object({
   timezone: z.string().min(1),
   rules: z.array(availabilityRuleSchema),
+  // Regras de oferta do negócio (Goal009). Defaults iguais ao motor:
+  // resposta antiga (sem estes campos) continua decodável.
+  minLeadMinutes: z.number().int().nonnegative().optional().default(0),
+  maxLeadDays: z.number().int().positive().optional().default(90),
+  granularityMinutes: z.number().int().positive().optional().default(30),
 });
 
 export const onboardingStateSchema = z.object({
@@ -260,6 +265,11 @@ export const appointmentSchema = z.object({
   noShowNote: z.string().nullable().optional().default(null),
   presenceConfirmedAt: z.string().nullable().optional().default(null),
   finalValue: z.number().nonnegative().nullable().optional().default(null),
+  // Ocupação externa por buffer e série de atendimento (Goal009). Defaults
+  // mantêm decodável toda resposta anterior a este Goal.
+  bufferBeforeMinutes: z.number().int().nonnegative().optional().default(0),
+  bufferAfterMinutes: z.number().int().nonnegative().optional().default(0),
+  seriesId: z.string().nullable().optional().default(null),
 });
 
 /**
@@ -346,11 +356,57 @@ export const availabilitySlotSchema = z.object({
   endTime: timeSchema,
 });
 
+export const timeBlockKindSchema = z.enum(["BLOCK", "PERSONAL"]);
+
 export const timeBlockSchema = z.object({
   id: z.string().min(1),
   startAt: isoDateTimeSchema,
   endAt: isoDateTimeSchema,
   reason: z.string().nullable(),
+  // Compromisso pessoal, título e vínculo com série (Goal009). Defaults
+  // mantêm decodável toda resposta anterior a este Goal.
+  kind: timeBlockKindSchema.optional().default("BLOCK"),
+  title: z.string().nullable().optional().default(null),
+  seriesId: z.string().nullable().optional().default(null),
+});
+
+/** Excecoes de disponibilidade geridas (Goal009). */
+export const availabilityExceptionSchema = z.object({
+  id: z.string().min(1),
+  date: dateSchema,
+  startTime: timeSchema.nullable(),
+  endTime: timeSchema.nullable(),
+  available: z.boolean(),
+  reason: z.string().nullable(),
+  decidedBy: z.string().nullable(),
+  decidedReason: z.string().nullable(),
+});
+
+/** Serie finita de bloqueio/compromisso pessoal (Goal009). */
+export const blockSeriesSchema = z.object({
+  id: z.string().min(1),
+  kind: timeBlockKindSchema,
+  title: z.string().nullable(),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)),
+  startTime: timeSchema,
+  endTime: timeSchema,
+  seriesStartDate: dateSchema,
+  seriesEndDate: dateSchema.nullable(),
+  occurrenceCount: z.number().int().positive().nullable(),
+  status: z.enum(["ACTIVE", "ENDED"]),
+  supersededById: z.string().nullable(),
+});
+
+/** Ocorrencia pre-visualizada de uma serie de atendimento (Goal009). */
+export const seriesOccurrencePreviewSchema = z.object({
+  index: z.number(),
+  requestedDate: dateSchema,
+  date: dateSchema.nullable(),
+  startTime: timeSchema.nullable(),
+  endTime: timeSchema.nullable(),
+  adjusted: z.boolean(),
+  holdId: z.string().nullable(),
+  unavailable: z.boolean(),
 });
 
 export const deletedSchema = z.object({ deleted: z.literal(true) });
@@ -577,4 +633,10 @@ export type ServiceList = z.infer<typeof serviceListSchema>;
 export type Session = z.infer<typeof sessionSchema>;
 export type SettingsState = z.infer<typeof settingsStateSchema>;
 export type TimeBlock = z.infer<typeof timeBlockSchema>;
+export type TimeBlockKind = z.infer<typeof timeBlockKindSchema>;
+export type AvailabilityException = z.infer<typeof availabilityExceptionSchema>;
+export type BlockSeries = z.infer<typeof blockSeriesSchema>;
+export type SeriesOccurrencePreview = z.infer<
+  typeof seriesOccurrencePreviewSchema
+>;
 export type WhatsAppConnection = z.infer<typeof whatsappConnectionSchema>;

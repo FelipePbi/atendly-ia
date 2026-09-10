@@ -344,6 +344,17 @@ export function integrationSteps(target) {
       args: ["scripts/goal008-migration-rehearsal.mjs"],
       env,
     },
+    // Gate M0/M1 do Goal009: ensaio da migração de regras de oferta,
+    // buffers, exceções, séries de bloqueio/compromisso e série de
+    // atendimento contra estoque legado (fim do Goal008), em banco próprio
+    // e descartável, passo único aditivo.
+    {
+      name: "rehearse:goal009-occupancy-migration",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal009-migration-rehearsal.mjs"],
+      env,
+    },
     // Identidade de cliente contra PostgreSQL real: telefone compartilhado,
     // cliente sem telefone, criação só na confirmação e isolamento por tenant.
     // Não pertence ao core porque exige banco.

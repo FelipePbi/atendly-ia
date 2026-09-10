@@ -133,7 +133,9 @@ export class MinhaAgendaCalendarProvider implements CalendarProvider {
       serviceDuration,
       startDate: input.startDate,
       days: input.days,
-      stepMinutes: input.stepMinutes,
+      // A fonte externa nao ganhou regra de oferta neste Goal (D-024): sem
+      // passo informado, mantem o default que ela ja praticava.
+      stepMinutes: input.stepMinutes ?? 30,
       maxSlots: input.maxSlots,
     });
   }
@@ -589,6 +591,12 @@ function toCalendarAppointment(
     totalPriceType: total.type,
     comments: appointment.comments ?? null,
     status: appointment.deleted ? "CANCELLED" : "SCHEDULED",
+    // A fonte externa nao ganhou buffer nem serie neste Goal (D-024): ela
+    // tem o proprio conceito de intervalo entre servicos
+    // (`bufferBetweenServicesMinutes`), que nao e o mesmo dado.
+    bufferBeforeMinutes: 0,
+    bufferAfterMinutes: 0,
+    seriesId: null,
   };
 }
 

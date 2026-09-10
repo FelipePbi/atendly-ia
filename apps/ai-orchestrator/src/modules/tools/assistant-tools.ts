@@ -185,6 +185,40 @@ const createAppointmentSchema = z
       context.addIssue({ code: "custom", message: "customerName is required" });
     }
   });
+// Recorrencia de atendimento (Goal009): serie finita, hold por ocorrencia.
+// Sem `stepMinutes`/granularidade propria — a grade e sempre a do negocio.
+const prepareRecurringAppointmentsSchema = z
+  .object({
+    serviceId: z.string().min(1).optional(),
+    serviceIds: z.array(z.string().min(1)).min(1).max(10).optional(),
+    occurrenceCount: z.number().int().min(1).max(52),
+    // Ausente usa o intervalo padrao do servico.
+    intervalDays: z.number().int().positive().max(3_650).optional(),
+    firstDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/),
+    firstStartTime: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/),
+    customerId: z.string().min(1).nullable().optional(),
+  })
+  .strict()
+  .refine((args) => Boolean(args.serviceId || args.serviceIds?.length), {
+    message: "Informe serviceId ou serviceIds.",
+  });
+const confirmRecurringAppointmentsSchema = z
+  .object({
+    holdIds: z.array(z.string().min(1)).min(1).max(52),
+    serviceId: z.string().min(1).optional(),
+    serviceIds: z.array(z.string().min(1)).min(1).max(10).optional(),
+    intervalDays: z.number().int().positive().max(3_650),
+    customerName: z.string().min(1).optional(),
+    customerId: z.string().min(1).nullable().optional(),
+  })
+  .strict()
+  .refine((args) => Boolean(args.serviceId || args.serviceIds?.length), {
+    message: "Informe serviceId ou serviceIds.",
+  });
 const cancelAppointmentSchema = z
   .object({
     action: z.enum(["prepare", "confirm"]),
@@ -344,6 +378,30 @@ export class AssistantToolRegistry {
           description:
             "Prepara ou confirma agendamento. Use action=prepare antes de pedir confirmacao; action=confirm somente apos confirmacao clara da cliente. Quando o numero tiver mais de uma pessoa cadastrada, pergunte para quem e o atendimento e reenvie prepare com customerId.",
           schema: createAppointmentSchema,
+        },
+      ),
+      tool(
+        (args) =>
+          this.run(context, () =>
+            this.prepareRecurringAppointments(args, context),
+          ),
+        {
+          name: "prepare_recurring_appointments",
+          description:
+            "Prepara uma serie finita de atendimentos recorrentes a partir de um servico, segurando um horario (hold) por ocorrencia ja ajustado a grade do negocio e aos buffers. Nao confirma nada ainda; nunca cria excecao, bloqueio ou override.",
+          schema: prepareRecurringAppointmentsSchema,
+        },
+      ),
+      tool(
+        (args) =>
+          this.run(context, () =>
+            this.confirmRecurringAppointments(args, context),
+          ),
+        {
+          name: "confirm_recurring_appointments",
+          description:
+            "Confirma de uma vez todas as ocorrencias preparadas por prepare_recurring_appointments, usando os holdIds recebidos. So chame apos confirmacao explicita da cliente. Se algum hold venceu, nada e confirmado e e preciso preparar de novo.",
+          schema: confirmRecurringAppointmentsSchema,
         },
       ),
       tool(
@@ -589,6 +647,86 @@ export class AssistantToolRegistry {
       totalPriceType: serviceResult.totalPriceType,
       slots,
     };
+  }
+
+  /**
+   * Recorrência de atendimento (Goal009): pré-visualização cria um hold por
+   * ocorrência, já ajustada à grade do negócio e aos buffers do serviço —
+   * nunca decide granularidade nem antecedência por conta própria.
+   */
+  private async prepareRecurringAppointments(
+    args: z.infer<typeof prepareRecurringAppointmentsSchema>,
+    context: ToolExecutionContext,
+  ) {
+    const serviceResult = await this.resolveServicesFromExplicitIds({
+      serviceId: args.serviceId,
+      serviceIds: args.serviceIds,
+      context,
+    });
+    if (!serviceResult.ok) return serviceResult;
+
+    const occurrences = await this.scheduling.previewAppointmentSeries(
+      {
+        serviceIds: serviceResult.serviceIds,
+        occurrenceCount: args.occurrenceCount,
+        intervalDays: args.intervalDays,
+        firstDate: args.firstDate,
+        firstStartTime: args.firstStartTime,
+        customerId: args.customerId ?? undefined,
+        contactRef: context.phone,
+      },
+      schedulingContext(context),
+      context.idempotencyKey,
+    );
+    return {
+      services: serviceResult.services,
+      intervalDays: args.intervalDays,
+      occurrences,
+    };
+  }
+
+  /**
+   * Confirma todas as ocorrências preparadas de uma vez. Hold vencido não
+   * confirma nada — o erro do Scheduling propaga como falha da tool, e a
+   * cliente precisa preparar a série de novo.
+   */
+  private async confirmRecurringAppointments(
+    args: z.infer<typeof confirmRecurringAppointmentsSchema>,
+    context: ToolExecutionContext,
+  ) {
+    const serviceResult = await this.resolveServicesFromExplicitIds({
+      serviceId: args.serviceId,
+      serviceIds: args.serviceIds,
+      context,
+    });
+    if (!serviceResult.ok) return serviceResult;
+
+    try {
+      const appointments = await this.scheduling.confirmAppointmentSeries(
+        {
+          holdIds: args.holdIds,
+          serviceIds: serviceResult.serviceIds,
+          intervalDays: args.intervalDays,
+          customerId: args.customerId ?? undefined,
+          customerName: args.customerName,
+          customerPhone: context.phone,
+        },
+        schedulingContext(context),
+        context.idempotencyKey,
+      );
+      return { appointments };
+    } catch (error) {
+      if (!isHoldExpired(error)) throw error;
+      // Mesma resposta unica de "o horario reservado nao vale mais" do
+      // agendamento avulso: falha de dominio explicita, nada confirmado.
+      return {
+        ok: false as const,
+        code: APPOINTMENT_HOLD_EXPIRED,
+        error:
+          "A reserva de uma das ocorrencias expirou. Nada da serie foi confirmado; prepare a serie de novo.",
+        details: { confirmed: false },
+      };
+    }
   }
 
   /**

@@ -1,4 +1,4 @@
-import type { PrismaClient } from "../../generated/prisma/client.js";
+import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import {
   calendarDaysBetween,
@@ -28,6 +28,8 @@ export async function createTimeBlock(
     startAt: Date;
     endAt: Date;
     reason: string | null;
+    kind?: "BLOCK" | "PERSONAL";
+    title?: string | null;
   },
 ) {
   return runCalendarWrite(prisma, async (transaction) => {
@@ -36,30 +38,60 @@ export async function createTimeBlock(
       input.tenantId,
       calendarDaysBetween(input.startAt, input.endAt, input.timeZone),
     );
-    const conflict = await transaction.appointment.findFirst({
-      where: {
-        tenantId: input.tenantId,
-        status: { not: "CANCELLED" },
-        startAt: { lt: input.endAt },
-        endAt: { gt: input.startAt },
-      },
-      select: { id: true },
-    });
-    if (conflict) {
-      throw new AppError(
-        "TIME_BLOCK_APPOINTMENT_CONFLICT",
-        "Time block overlaps an existing appointment.",
-        409,
-      );
-    }
-    return transaction.timeBlock.create({
-      data: {
-        tenantId: input.tenantId,
-        startAt: input.startAt,
-        endAt: input.endAt,
-        reason: input.reason,
-      },
-    });
+    return createTimeBlockRow(transaction, input);
+  });
+}
+
+/**
+ * Grava a linha do bloco dentro de uma transacao ja aberta e com os dias
+ * afetados ja travados por quem chamou — usada pela criacao avulsa acima e
+ * pela materializacao de ocorrencias de uma serie (Goal009), que trava todos
+ * os dias da serie de uma vez, em ordem estavel, antes de criar qualquer
+ * ocorrencia.
+ */
+export async function createTimeBlockRow(
+  transaction: Prisma.TransactionClient,
+  input: {
+    tenantId: string;
+    startAt: Date;
+    endAt: Date;
+    reason: string | null;
+    kind?: "BLOCK" | "PERSONAL";
+    title?: string | null;
+    seriesId?: string;
+    occurrenceDate?: string;
+  },
+) {
+  const conflict = await transaction.appointment.findFirst({
+    where: {
+      tenantId: input.tenantId,
+      status: { not: "CANCELLED" },
+      startAt: { lt: input.endAt },
+      endAt: { gt: input.startAt },
+    },
+    select: { id: true },
+  });
+  if (conflict) {
+    throw new AppError(
+      "TIME_BLOCK_APPOINTMENT_CONFLICT",
+      "Time block overlaps an existing appointment.",
+      409,
+      { appointmentId: conflict.id },
+    );
+  }
+  return transaction.timeBlock.create({
+    data: {
+      tenantId: input.tenantId,
+      startAt: input.startAt,
+      endAt: input.endAt,
+      reason: input.reason,
+      kind: input.kind ?? "BLOCK",
+      title: input.title ?? null,
+      seriesId: input.seriesId,
+      occurrenceDate: input.occurrenceDate
+        ? new Date(`${input.occurrenceDate}T00:00:00.000Z`)
+        : undefined,
+    },
   });
 }
 

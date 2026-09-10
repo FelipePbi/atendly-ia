@@ -24,6 +24,10 @@ export interface AvailabilitySettingsInput {
     startTime: string;
   }>;
   timezone: string;
+  /** Regras de oferta do negócio (Goal009); ausentes preservam o valor gravado. */
+  granularityMinutes?: number;
+  maxLeadDays?: number;
+  minLeadMinutes?: number;
 }
 
 export class BffSettingsService {

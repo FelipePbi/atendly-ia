@@ -6,10 +6,14 @@ import {
   appointmentHoldSchema,
   appointmentLifecycleSchema,
   appointmentSchema,
+  availabilityExceptionSchema,
   availabilitySlotSchema,
+  blockSeriesSchema,
   calendarStateSchema,
   deletedSchema,
+  seriesOccurrencePreviewSchema,
   timeBlockSchema,
+  type TimeBlockKind,
 } from "../mappers/publicApiSchemas";
 
 export interface ListAppointmentsQuery {
@@ -67,6 +71,75 @@ export interface CreateTimeBlockInput {
   endAt: string;
   reason?: string | null;
   startAt: string;
+  /** Compromisso pessoal ou bloqueio operacional (Goal009); default `BLOCK`. */
+  kind?: TimeBlockKind;
+  title?: string | null;
+}
+
+export interface MoveBlockOccurrenceInput {
+  endAt: string;
+  startAt: string;
+}
+
+export interface CreateExtraAvailabilityInput {
+  date: string;
+  endTime: string;
+  startTime: string;
+}
+
+export interface CreateUnavailabilityInput {
+  date: string;
+  /** Ausentes para dia inteiro. */
+  endTime?: string;
+  startTime?: string;
+  reason?: string;
+  /** Decisão humana explícita quando a indisponibilidade cobre atendimento confirmado. */
+  decidedBy?: string;
+  decidedReason?: string;
+}
+
+export interface BlockSeriesRuleInput {
+  daysOfWeek: number[];
+  endTime: string;
+  kind?: TimeBlockKind;
+  occurrenceCount?: number;
+  seriesEndDate?: string;
+  seriesStartDate: string;
+  startTime: string;
+  title?: string | null;
+}
+
+export interface CreateBlockSeriesInput {
+  rule: BlockSeriesRuleInput;
+  skipConflicts?: boolean;
+  forceOverlapReason?: string;
+}
+
+export interface EditBlockSeriesFromDateInput {
+  fromDate: string;
+  rule: Partial<BlockSeriesRuleInput>;
+  skipConflicts?: boolean;
+  forceOverlapReason?: string;
+}
+
+export interface PreviewAppointmentSeriesInput {
+  contactRef?: string;
+  customerId?: string;
+  firstDate: string;
+  firstStartTime: string;
+  intervalDays?: number;
+  occurrenceCount: number;
+  serviceIds: string[];
+}
+
+export interface ConfirmAppointmentSeriesInput {
+  comments?: string;
+  customerId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  intervalDays: number;
+  occurrences: Array<{ holdId: string }>;
+  serviceIds: string[];
 }
 
 export interface CalendarIntegrationInput {
@@ -276,6 +349,144 @@ export class BffCalendarService {
       method: "DELETE",
       path: `/v1/time-blocks/${encodeURIComponent(id)}`,
       schema: deletedSchema,
+      signal,
+    });
+  }
+
+  /** Remove uma única ocorrência de uma série, sem tocar a série (Goal009). */
+  removeBlockOccurrence(id: string, signal?: AbortSignal) {
+    return this.http.request({
+      method: "DELETE",
+      path: `/v1/time-blocks/${encodeURIComponent(id)}/occurrence`,
+      schema: deletedSchema,
+      signal,
+    });
+  }
+
+  moveBlockOccurrence(
+    id: string,
+    input: MoveBlockOccurrenceInput,
+    signal?: AbortSignal,
+  ) {
+    return this.http.request({
+      body: input,
+      method: "PATCH",
+      path: `/v1/time-blocks/${encodeURIComponent(id)}/occurrence`,
+      schema: timeBlockSchema,
+      signal,
+    });
+  }
+
+  // --- Exceções de disponibilidade (Goal009) ------------------------------
+
+  listAvailabilityExceptions(
+    query: { endDate: string; startDate: string },
+    signal?: AbortSignal,
+  ) {
+    return this.http.request({
+      path: "/v1/availability-exceptions",
+      query,
+      schema: z.array(availabilityExceptionSchema),
+      signal,
+    });
+  }
+
+  createExtraAvailability(
+    input: CreateExtraAvailabilityInput,
+    signal?: AbortSignal,
+  ) {
+    return this.http.request({
+      body: input,
+      method: "POST",
+      path: "/v1/availability-exceptions/extra",
+      schema: availabilityExceptionSchema,
+      signal,
+    });
+  }
+
+  createUnavailability(
+    input: CreateUnavailabilityInput,
+    signal?: AbortSignal,
+  ) {
+    return this.http.request({
+      body: input,
+      method: "POST",
+      path: "/v1/availability-exceptions/unavailable",
+      schema: availabilityExceptionSchema,
+      signal,
+    });
+  }
+
+  removeAvailabilityException(id: string, signal?: AbortSignal) {
+    return this.http.request({
+      method: "DELETE",
+      path: `/v1/availability-exceptions/${encodeURIComponent(id)}`,
+      schema: deletedSchema,
+      signal,
+    });
+  }
+
+  // --- Séries de bloqueio/compromisso (Goal009) ----------------------------
+
+  createBlockSeries(input: CreateBlockSeriesInput, signal?: AbortSignal) {
+    return this.http.request({
+      body: input,
+      method: "POST",
+      path: "/v1/block-series",
+      schema: blockSeriesSchema,
+      signal,
+    });
+  }
+
+  editBlockSeriesFromDate(
+    id: string,
+    input: EditBlockSeriesFromDateInput,
+    signal?: AbortSignal,
+  ) {
+    return this.http.request({
+      body: input,
+      method: "PATCH",
+      path: `/v1/block-series/${encodeURIComponent(id)}/from-date`,
+      schema: blockSeriesSchema,
+      signal,
+    });
+  }
+
+  removeBlockSeries(id: string, signal?: AbortSignal) {
+    return this.http.request({
+      method: "DELETE",
+      path: `/v1/block-series/${encodeURIComponent(id)}`,
+      schema: deletedSchema,
+      signal,
+    });
+  }
+
+  // --- Série de atendimento (Goal009) ---------------------------------------
+
+  previewAppointmentSeries(
+    input: PreviewAppointmentSeriesInput,
+    signal?: AbortSignal,
+  ) {
+    return this.http.request({
+      body: input,
+      method: "POST",
+      path: "/v1/appointments/series/preview",
+      schema: z.array(seriesOccurrencePreviewSchema),
+      signal,
+    });
+  }
+
+  confirmAppointmentSeries(
+    input: ConfirmAppointmentSeriesInput,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ) {
+    return this.http.request({
+      body: input,
+      headers: { "idempotency-key": idempotencyKey },
+      method: "POST",
+      path: "/v1/appointments/series/confirm",
+      schema: z.array(appointmentSchema),
       signal,
     });
   }

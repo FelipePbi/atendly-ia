@@ -59,6 +59,11 @@ const calendarAppointmentSchema: z.ZodType<CalendarAppointment> = z.object({
   totalPriceType: z.enum(["FIXED", "STARTING_AT", "NONE"]),
   comments: z.string().nullable(),
   status: z.string(),
+  // Ausentes em replay gravado antes do Goal009 (Goal009: buffer sem efeito
+  // operacional ate agora, entao zero e o valor que a ocupacao ja tinha).
+  bufferBeforeMinutes: z.number().default(0),
+  bufferAfterMinutes: z.number().default(0),
+  seriesId: z.string().nullable().default(null),
 });
 
 /**
@@ -70,7 +75,9 @@ const calendarAppointmentSchema: z.ZodType<CalendarAppointment> = z.object({
  * para um acordo que tinha total fechado mudaria a resposta de uma chave ja
  * respondida.
  */
-function parseCalendarAppointment(value: unknown): CalendarAppointment {
+export function parseCalendarAppointment(
+  value: unknown,
+): CalendarAppointment {
   if (
     value &&
     typeof value === "object" &&

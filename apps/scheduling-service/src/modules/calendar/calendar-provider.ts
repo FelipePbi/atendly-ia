@@ -80,6 +80,18 @@ export interface CalendarAppointment {
   totalPriceType: AgreementTotalType;
   comments: string | null;
   status: string;
+  /**
+   * Ocupacao externa por buffer (Goal009), gravada como snapshot na
+   * confirmacao — nunca recalculada do catalogo. `startTime`/`endTime`
+   * continuam sendo o horario exibido do atendimento; a ocupacao estendida
+   * (`startAt - bufferBeforeMinutes`, `endAt + bufferAfterMinutes`) e dado
+   * separado. Zero para atendimento anterior a este Goal e para o manual sem
+   * servico.
+   */
+  bufferBeforeMinutes: number;
+  bufferAfterMinutes: number;
+  /** Serie de atendimento (Goal009); nula fora de uma serie. So referencia de leitura. */
+  seriesId: string | null;
 }
 
 export interface AvailableSlot {
@@ -101,7 +113,13 @@ export interface GetAvailabilityInput {
   serviceIds: string[];
   startDate: string;
   days: number;
-  stepMinutes: number;
+  /**
+   * So a fonte externa (Minha Agenda) ainda le este campo (Goal009): ela nao
+   * tem regra de oferta propria, entao o passo continua vindo de quem
+   * pergunta. A Agenda Atendly ignora — a granularidade e sempre a do
+   * negocio, nunca a do chamador.
+   */
+  stepMinutes?: number;
   maxSlots: number;
 }
 
@@ -148,7 +166,8 @@ export interface CreateCalendarHoldInput {
   serviceIds: string[];
   date: string;
   startTime: string;
-  stepMinutes: number;
+  /** Ignorado pela Agenda Atendly (Goal009): a granularidade e sempre a do negocio. */
+  stepMinutes?: number;
   customerId?: string;
   contactRef?: string;
   idempotencyKey: string;
@@ -212,7 +231,12 @@ export interface CancelCalendarAppointmentInput {
  * cujo efeito ja existe, em vez de reexecutar a mutacao.
  */
 export type CalendarEffectEntityType =
-  "APPOINTMENT" | "APPOINTMENT_HOLD" | "TIME_BLOCK";
+  | "APPOINTMENT"
+  | "APPOINTMENT_HOLD"
+  | "TIME_BLOCK"
+  // Goal009: a serie de atendimento e o efeito de uma unica mutacao, e e por
+  // ela que a chave idempotente recupera os N atendimentos criados juntos.
+  | "APPOINTMENT_SERIES";
 
 export interface CalendarMutationEffect {
   entityType: CalendarEffectEntityType;

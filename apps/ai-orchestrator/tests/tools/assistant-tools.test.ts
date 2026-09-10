@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_BUSINESS_CONTEXT } from "../../src/modules/tenant-config/business-context.js";
 import { AssistantToolRegistry } from "../../src/modules/tools/assistant-tools.js";
 import type {
+  ConfirmAppointmentSeriesInput,
   CreateSchedulingHoldInput,
+  PreviewAppointmentSeriesInput,
   RescheduleAppointmentInput,
   ScheduleAppointmentInput,
   SchedulingAppointment,
@@ -1002,6 +1004,128 @@ describe("AssistantToolRegistry hold", () => {
   });
 });
 
+describe("AssistantToolRegistry recurring appointments (Goal009)", () => {
+  it("prepares a finite series with one hold per occurrence, adjusted to the business grid", async () => {
+    const { prisma } = createPrismaMock({});
+    const { agenda, calls } = createAgendaMock();
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const result = await registry.execute(
+      {
+        id: "call-series-prepare",
+        name: "prepare_recurring_appointments",
+        args: {
+          serviceId: service.id,
+          occurrenceCount: 3,
+          intervalDays: 7,
+          firstDate: slot.date,
+          firstStartTime: slot.startTime,
+        },
+      },
+      context(),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(calls.previewAppointmentSeries).toEqual([
+      expect.objectContaining({
+        serviceIds: [service.id],
+        occurrenceCount: 3,
+        intervalDays: 7,
+      }),
+    ]);
+    expect((result as { data: { occurrences: unknown[] } }).data.occurrences).toHaveLength(3);
+  });
+
+  it("confirms every occurrence of a prepared series at once", async () => {
+    const { prisma } = createPrismaMock({});
+    const { agenda, calls } = createAgendaMock();
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const result = await registry.execute(
+      {
+        id: "call-series-confirm",
+        name: "confirm_recurring_appointments",
+        args: {
+          serviceId: service.id,
+          holdIds: [`${holdId}-series-0`, `${holdId}-series-1`],
+          intervalDays: 7,
+          customerName: "Thais",
+        },
+      },
+      context(),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(calls.confirmAppointmentSeries).toEqual([
+      expect.objectContaining({
+        holdIds: [`${holdId}-series-0`, `${holdId}-series-1`],
+        serviceIds: [service.id],
+        intervalDays: 7,
+      }),
+    ]);
+    expect((result as { data: { appointments: unknown[] } }).data.appointments).toHaveLength(2);
+  });
+
+  it("[RED] an expired hold confirms nothing from the series, and the tool fails instead of forcing", async () => {
+    const { prisma } = createPrismaMock({});
+    const { agenda, calls } = createAgendaMock([], [service, browService], {
+      seriesHoldExpired: true,
+    });
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const result = await registry.execute(
+      {
+        id: "call-series-confirm-expired",
+        name: "confirm_recurring_appointments",
+        args: {
+          serviceId: service.id,
+          holdIds: [`${holdId}-series-0`],
+          intervalDays: 7,
+          customerName: "Thais",
+        },
+      },
+      context(),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "APPOINTMENT_HOLD_EXPIRED" },
+    });
+    expect(calls.confirmAppointmentSeries).toHaveLength(1);
+  });
+
+  it("no tool ever creates an exception, block, personal commitment or overlap override", async () => {
+    const { prisma } = createPrismaMock({});
+    const { agenda } = createAgendaMock();
+    // O dublê não expõe nenhum desses métodos: uma tool que tentasse chamá-los
+    // quebraria aqui, na chamada em si, não numa asserção que o teste
+    // poderia esquecer de escrever.
+    for (const forbidden of [
+      "createBlock",
+      "createPersonalCommitment",
+      "createAvailabilityException",
+      "createBlockSeries",
+    ] as const) {
+      expect((agenda as unknown as Record<string, unknown>)[forbidden]).toBeUndefined();
+    }
+    const registry = new AssistantToolRegistry(prisma, agenda);
+    const definitions = registry.createDefinitions({
+      ...context(),
+    });
+    const toolNames = definitions.map((definition) => definition.name);
+    // Nenhuma tool desta lista existe para a IA — bloqueio, compromisso,
+    // excecao e serie de bloqueio sao sempre decisao humana (Goal009).
+    for (const forbiddenTool of [
+      "create_block",
+      "create_personal_commitment",
+      "create_availability_exception",
+      "create_block_series",
+    ]) {
+      expect(toolNames).not.toContain(forbiddenTool);
+    }
+  });
+});
+
 function context() {
   return {
     conversationId,
@@ -1101,6 +1225,8 @@ function createAgendaMock(
     holdExpired?: boolean;
     /** Agenda já ocupada por este número, para os caminhos de remarcação. */
     futureAppointments?: SchedulingAppointment[];
+    /** Hold da série vencido entre a preparação e a confirmação (Goal009). */
+    seriesHoldExpired?: boolean;
   } = {},
 ) {
   const calls: {
@@ -1112,6 +1238,8 @@ function createAgendaMock(
     findCustomerCandidatesByPhone: string[];
     findFutureAppointmentsForCustomer: string[];
     findFutureAppointmentsForPhone: string[];
+    previewAppointmentSeries: PreviewAppointmentSeriesInput[];
+    confirmAppointmentSeries: ConfirmAppointmentSeriesInput[];
   } = {
     createAppointment: [],
     rescheduleAppointment: [],
@@ -1121,6 +1249,8 @@ function createAgendaMock(
     findCustomerCandidatesByPhone: [],
     findFutureAppointmentsForCustomer: [],
     findFutureAppointmentsForPhone: [],
+    previewAppointmentSeries: [],
+    confirmAppointmentSeries: [],
   };
   const services = servicesOverride;
   const agenda = {
@@ -1211,6 +1341,36 @@ function createAgendaMock(
         customerName: "Thais",
         customerPhone: phone,
       });
+    },
+    previewAppointmentSeries: async (input: PreviewAppointmentSeriesInput) => {
+      calls.previewAppointmentSeries.push(input);
+      return Array.from({ length: input.occurrenceCount }, (_, index) => ({
+        index,
+        requestedDate: slot.date,
+        date: slot.date,
+        startTime: input.firstStartTime,
+        endTime: slot.endTime,
+        adjusted: false,
+        holdId: `${holdId}-series-${index}`,
+        unavailable: false,
+      }));
+    },
+    confirmAppointmentSeries: async (input: ConfirmAppointmentSeriesInput) => {
+      calls.confirmAppointmentSeries.push(input);
+      if (options.seriesHoldExpired) {
+        throw schedulingError("APPOINTMENT_HOLD_EXPIRED");
+      }
+      return input.holdIds.map((holdIdValue, index) => ({
+        ...createAppointment({
+          date: slot.date,
+          startTime: slot.startTime,
+          serviceId: input.serviceIds[0] ?? service.id,
+          serviceIds: input.serviceIds,
+          customerName: input.customerName ?? "Thais",
+          customerPhone: phone,
+        }),
+        id: `${holdIdValue}-appointment-${index}`,
+      }));
     },
   };
 

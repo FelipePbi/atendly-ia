@@ -699,3 +699,104 @@ abaixo, verificados no [review008](reviews/008-review.md) sobre a base
   token do chamador; a IA não libera o hold de um rascunho substituído por
   nova proposta; não há teste dedicado do BFF nem de schema do frontend para
   as rotas e campos novos; `createdAt`/`occurredAt` continuam `TIMESTAMP`.
+
+## Delta implementado — Goal009, 2026-09-09 (ACCEPTED na rodada 2)
+
+A fotografia histórica acima permanece como registro da baseline. O FATO de
+"Scheduling, catálogo, clientes e importação" que descreve o motor de
+disponibilidade gerando slots a partir do `stepMinutes` da requisição, sem
+antecedência mínima ou máxima e sem buffers, `AvailabilityException` sem rota
+de gestão, `TimeBlock` sem tipo, título nem recorrência, e buffers e
+`recurrenceIntervalDays` do catálogo sem efeito operacional, está superado
+pelos fatos abaixo, verificados no [review009](reviews/009-review.md) sobre a
+base `9013f14`.
+
+- **FATO atual:** `CalendarSettings` guarda as regras de oferta do negócio —
+  `minLeadMinutes`, `maxLeadDays` e `granularityMinutes`, com defaults iguais
+  ao comportamento anterior (0/90/30) e `CalendarSettings_offer_rules_check`
+  (granularidade múltipla de 5 entre 5 e 120, mínima menor que a máxima).
+  `atendly-availability.ts` as lê do banco em toda oferta e as aplica dentro
+  do motor: nenhum slot antes de `now()` do banco mais a antecedência mínima,
+  nenhum depois da máxima, passo sempre igual à granularidade do negócio.
+  `GET /v1/availability` e `GET /internal/availability` não aceitam mais
+  `stepMinutes`; a confirmação e o hold ainda aceitam o campo no corpo, e o
+  ignoram. Só o override humano de sobreposição (Goal008) escapa da grade — a
+  IA nunca.
+- **FATO atual:** buffer do serviço passou a ocupar tempo. O atendimento e o
+  hold ocupam `[startAt − bufferBefore, endAt + bufferAfter]` para terceiros,
+  a partir de `bufferBeforeMinutesSnapshot`/`bufferAfterMinutesSnapshot` e de
+  `proposedBufferBeforeMinutes`/`proposedBufferAfterMinutes` gravados na
+  linha, nunca recalculados do catálogo. Em multi-serviço o buffer externo é o
+  **maior** de cada lado (`maxServiceBuffer`), nunca a soma; os intermediários
+  não existem. `startTime`/`endTime` do DTO não mudam — a ocupação estendida é
+  dado separado. Como a busca de ocupação compara colunas cruas, a janela
+  consultada é alargada pelo maior buffer gravado no tenant somado ao do
+  conjunto proposto, para que um vizinho fora do range cru (a fronteira da
+  meia-noite, com `assertAvailable` consultando um dia) ainda bloqueie o slot.
+- **FATO atual:** `calendar/availability-exceptions.ts` gere exceções sob a
+  política única de escrita: disponibilidade extra em data normalmente
+  fechada, indisponibilidade pontual ou de dia inteiro, listagem por período e
+  remoção. Indisponibilidade que cobre atendimento confirmado é recusada com
+  `EXCEPTION_APPOINTMENT_CONFLICT`, salvo decisão humana explícita gravada na
+  própria exceção (`decidedBy`/`decidedReason`). Exceção nunca altera
+  atendimento existente.
+- **FATO atual:** `TimeBlock` distingue bloqueio operacional de compromisso
+  pessoal (`kind` `BLOCK`/`PERSONAL`, default `BLOCK`), tem `title` opcional e
+  `seriesId`/`occurrenceDate` para ocorrência de série.
+  `calendar/block-series.ts` cria séries semanais **sempre finitas** — por
+  data ou por contagem, nunca as duas nem nenhuma
+  (`BlockSeries_termination_check`, `INVALID_BLOCK_SERIES_TERMINATION`) — com
+  teto configurável (`BLOCK_SERIES_MAX_OCCURRENCES`, 104 por default) e
+  ocorrências **materializadas** como `TimeBlock` na criação, nunca geradas
+  sob demanda. Conflito é reportado por ocorrência
+  (`BLOCK_SERIES_APPOINTMENT_CONFLICT`) e só uma decisão humana o resolve —
+  pular as ocorrências em conflito ou forçar a sobreposição com motivo.
+  Remover ou mover uma ocorrência não toca a série; editar "desta data em
+  diante" encerra a série atual (`supersededById`) e cria outra, preservando
+  as ocorrências passadas; remover a série remove só as futuras.
+- **FATO atual:** `appointments/appointment-series-service.ts` implementa a
+  recorrência de atendimento como série finita a partir do serviço. A
+  pré-visualização calcula cada ocorrência no intervalo alvo
+  (`recurrenceIntervalDays` do serviço ou intervalo explícito), ajusta ao
+  horário disponível mais próximo dentro de
+  `APPOINTMENT_SERIES_ADJUST_WINDOW_DAYS` sob as regras de oferta e os
+  buffers, e cria um hold por ocorrência. A confirmação roda em uma única
+  transação com lock de todos os dias afetados: consome cada hold, cria todos
+  os atendimentos com `seriesId`, snapshots e um evento `CREATED` cada; se
+  qualquer ocorrência falhar, **nada** é criado e a resposta identifica a
+  ocorrência (`occurrenceIndex`, `holdId`, `occurrenceDate`) com alternativas
+  — `APPOINTMENT_HOLD_EXPIRED` quando o hold morreu,
+  `SLOT_UNAVAILABLE` quando o horário foi tomado entre a pré-visualização e a
+  confirmação. O resultado é gravado como efeito idempotente
+  `APPOINTMENT_SERIES`, então a mesma `Idempotency-Key` faz replay da série já
+  criada. O teto (`APPOINTMENT_SERIES_MAX_OCCURRENCES`, 52 por default) vale
+  na pré-visualização e na confirmação. Depois de criados, os atendimentos são
+  independentes: `seriesId` é referência de leitura.
+- **FATO atual:** as rotas internas de agenda derivam a origem do chamador
+  autenticado (`callerSource`: BFF → `USER`, IA → `AI`) e ignoram `source` do
+  corpo — o resíduo apontado na observação 1 do [review008](reviews/008-review.md).
+  `requireHumanCaller` recusa a IA (`AI_CALLER_NOT_ALLOWED`) em exceção,
+  bloqueio, compromisso pessoal, séries deles e regras de oferta. Do lado da
+  IA existem apenas `prepare_recurring_appointments` e
+  `confirm_recurring_appointments`, sem granularidade própria e sem qualquer
+  caminho para override, exceção ou bloqueio; `get_availability` deixou de
+  fixar o passo. O provider Minha Agenda recusa o que só a Agenda Atendly
+  garante.
+- **FATO atual:** o BFF expõe as operações equivalentes com tenant da sessão e
+  CSRF por cookie — `/v1/availability-exceptions/*`, `/v1/block-series/*`,
+  `/v1/time-blocks/:id/occurrence` (remover e mover) e
+  `/v1/appointments/series/preview|confirm` —, `PATCH /v1/settings/availability`
+  aceita as regras de oferta de forma aditiva, `PUBLIC_API_V1.md` documenta
+  tudo isso, e `internal-http-client` propaga `upstreamDetails` para que a
+  ocorrência que falhou e suas alternativas cheguem ao cliente sem reescrita.
+  O frontend só ganhou schemas e serviços de dados (bloco com `kind`/`title`/
+  `seriesId`, atendimento com buffers e `seriesId`, exceções, séries e
+  pré-visualização), com as respostas anteriores continuando decodificáveis;
+  não há tela — Goal016 e Goal018.
+- **Limites do fechamento:** valem os mesmos limites do Goal008 — sem
+  WhatsApp real, deploy, CI hospedada, Minha Agenda real ou credencial real em
+  fixture. Nenhum tenant real foi migrado. `decidedBy` da decisão humana na
+  indisponibilidade ainda vem do corpo, não do chamador autenticado;
+  `maxNeighborBuffer()` agrega por tenant sem recorte de intervalo a cada
+  busca de slots; a IA continua sem liberar o hold de rascunho substituído
+  (Goal011).

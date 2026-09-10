@@ -22,6 +22,10 @@ export async function resetTenant(
   await prisma.appointmentEvent.deleteMany({ where: { tenantId } });
   await prisma.appointmentItem.deleteMany({ where: { tenantId } });
   await prisma.appointment.deleteMany({ where: { tenantId } });
+  // Goal009: series so referenciadas por SET NULL (Appointment.seriesId,
+  // TimeBlock.seriesId), entao podem ser apagadas depois de quem as
+  // referencia sem violar FK.
+  await prisma.appointmentSeries.deleteMany({ where: { tenantId } });
   await prisma.appointmentHold.deleteMany({ where: { tenantId } });
   await prisma.calendarMutationIdempotency.deleteMany({ where: { tenantId } });
   await prisma.customerNote.deleteMany({ where: { tenantId } });
@@ -32,4 +36,5 @@ export async function resetTenant(
   await prisma.availabilityException.deleteMany({ where: { tenantId } });
   await prisma.availabilityRule.deleteMany({ where: { tenantId } });
   await prisma.timeBlock.deleteMany({ where: { tenantId } });
+  await prisma.blockSeries.deleteMany({ where: { tenantId } });
 }

@@ -822,10 +822,10 @@
     "semantic_hash": "8ab18dc01648d2df3588938038dd1039"
   },
   "apps/evolution-go/pkg/instance/handler/instance_handler.go": {
-    "mtime": 1785763922.8386064,
-    "seen": 1788578458.9895535,
-    "ast_hash": "731a72245ce22d8260a9d4f4d8258f3f",
-    "semantic_hash": "731a72245ce22d8260a9d4f4d8258f3f"
+    "mtime": 1788648660.12591,
+    "seen": 1788658388.389227,
+    "ast_hash": "6c4ee2af36993bfa51e052b52d46d632",
+    "semantic_hash": ""
   },
   "apps/evolution-go/pkg/instance/model/instance_model.go": {
     "mtime": 1785763922.8386064,
@@ -2577,6 +2577,18 @@
     "mtime": 1785763923.0229762,
     "seen": 1788578879.6942623,
     "ast_hash": "a2760511c65806022ad20adf74370ff3",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/pkg/instance/handler/instance_authorization.go": {
+    "mtime": 1788648660.1619377,
+    "seen": 1788658388.3892243,
+    "ast_hash": "2b4169e63e8658b4afbc279513584fdf",
+    "semantic_hash": ""
+  },
+  "apps/evolution-go/pkg/instance/handler/instance_authorization_test.go": {
+    "mtime": 1788649545.5557888,
+    "seen": 1788658388.389226,
+    "ast_hash": "df8e76284fd108568fbae0ab984ee09b",
     "semantic_hash": ""
   }
 }

@@ -655,7 +655,10 @@ async function main() {
     title: 'DEVELOPER',
     supportedProfiles: SELECTABLE_DEVELOPER_PROFILES.map(describeProfile),
     sessionLine: 'Session strategy: STATELESS',
-    extra: [`Log level: ${LOG_LEVEL}`],
+    extra: [
+      `Execution: ${WORK_UNIT_CONFIG.enabled ? 'WORK_UNITS' : 'MONOLITHIC_COMPAT'}`,
+      `Log level: ${LOG_LEVEL}`,
+    ],
   });
 
   workerState = 'IDLE';

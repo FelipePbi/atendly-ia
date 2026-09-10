@@ -33,13 +33,15 @@ Responsabilidades:
 **Modelo atual:** escolhido pelo router, não fixo, e não necessariamente um só
 por Goal.
 
-- Execução legada (uma rodada, uma chamada): Claude Sonnet 5 (`claude-sonnet-5`)
-  como padrão, Claude Opus 5 (`claude-opus-5`) por escalada com evidência.
-- Execução por **Work Units** (`IA_LOOP_WORK_UNIT_EXECUTION=1`): cada unidade do
-  plano é roteada pela sua natureza — trabalho determinístico é executado pelo
-  próprio orchestrator sem modelo nenhum, mecânico em Claude Haiku 4.5
-  (`claude-haiku-4-5-20251001`), normal em Sonnet, e genuinamente difícil em
-  Opus. O Tech Lead declara tipo, complexidade e risco; **nunca** o modelo.
+- Execução por **Work Units** (padrão; `IA_LOOP_WORK_UNIT_EXECUTION=0` é
+  rollback explícito): cada unidade do plano é roteada pela sua natureza —
+  trabalho determinístico é executado pelo próprio orchestrator sem modelo
+  nenhum, mecânico em Claude Haiku 4.5 (`claude-haiku-4-5-20251001`), normal em
+  Sonnet, e genuinamente difícil em Opus. O Tech Lead declara tipo,
+  complexidade e risco; **nunca** o modelo.
+- Execução legada (uma rodada, uma chamada), sob rollback: Claude Sonnet 5
+  (`claude-sonnet-5`) como padrão, Claude Opus 5 (`claude-opus-5`) por escalada
+  com evidência.
 
 Tabela canônica em `tools/ia-loop/lib/model-routing.mjs`; a arquitetura está em
 [tools/ia-loop/README.md](../../tools/ia-loop/README.md), seção V18.

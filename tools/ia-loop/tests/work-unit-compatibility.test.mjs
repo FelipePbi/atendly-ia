@@ -1,10 +1,12 @@
 /**
  * The feature flag, the plan hand-off, and the compatibility path.
  *
- * What this file states: turning Work Unit execution OFF leaves the Developer
- * exactly as it was, turning it ON does not require every Goal to have been
- * planned for it, and the plan that carries a Goal across the gap between
- * planning and execution is durable and validated at both ends.
+ * What this file states: Work Unit execution is now the standard path and
+ * requires no env var to be on, an explicit `IA_LOOP_WORK_UNIT_EXECUTION=0`
+ * still leaves the Developer exactly as it was before Work Units existed, ON
+ * does not require every Goal to have been planned for it, and the plan that
+ * carries a Goal across the gap between planning and execution is durable and
+ * validated at both ends.
  */
 
 import test from 'node:test';
@@ -74,25 +76,33 @@ const PLAN = Object.freeze({
 // 37 / 58. The feature flag
 // ===========================================================================
 
-test('37. Work Unit execution is OFF unless someone turned it on', () => {
-  assert.equal(isWorkUnitExecutionEnabled({}), false);
-  assert.equal(workUnitConfig({}).enabled, false);
+test('37. Work Unit execution is ON by default, with no env var set at all', () => {
+  assert.equal(isWorkUnitExecutionEnabled({}), true);
+  assert.equal(workUnitConfig({}).enabled, true);
+});
+
+test('37. IA_LOOP_WORK_UNIT_EXECUTION=0 is an explicit, working rollback', () => {
+  assert.equal(isWorkUnitExecutionEnabled({ [WORK_UNIT_EXECUTION_FLAG]: '0' }), false);
+  assert.equal(workUnitConfig({ [WORK_UNIT_EXECUTION_FLAG]: '0' }).enabled, false);
 });
 
 test('37. the flag accepts the usual spellings and nothing else', () => {
   for (const value of ['1', 'true', 'on', 'yes', 'TRUE']) {
     assert.equal(isWorkUnitExecutionEnabled({ [WORK_UNIT_EXECUTION_FLAG]: value }), true, value);
   }
-  for (const value of ['0', 'false', 'off', 'no', 'maybe', '']) {
+  for (const value of ['0', 'false', 'off', 'no', 'maybe']) {
     assert.equal(isWorkUnitExecutionEnabled({ [WORK_UNIT_EXECUTION_FLAG]: value }), false, value);
   }
+  // An explicitly empty value is the same as "not set": it falls back to the
+  // default (ON), it does not mean "off".
+  assert.equal(isWorkUnitExecutionEnabled({ [WORK_UNIT_EXECUTION_FLAG]: '' }), true);
 });
 
-test('58. with the flag off, nothing about the legacy Developer contract changes', async () => {
+test('58. with the flag explicitly off, nothing about the legacy Developer contract changes', async () => {
   // The legacy path is the one the existing suite already proves end to end.
   // What matters here is that the switch is the ONLY thing that selects it,
   // and that reading the config never has a side effect on the old path.
-  const legacy = workUnitConfig({});
+  const legacy = workUnitConfig({ [WORK_UNIT_EXECUTION_FLAG]: '0' });
   assert.equal(legacy.enabled, false);
 
   const { validateDeveloperResult, DEVELOPER_STATUSES_V2 } = await import('../lib/contracts-v2.mjs');

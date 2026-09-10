@@ -374,8 +374,17 @@ async function main() {
     await persistClosure({ planningWorktreeCreated: true, planningBase: newBaseline }, LOOP_STATES.BASELINE_ACCEPTED);
   }
 
-  if (!closure.planningJobId) {
-    machine.transitionTo(LOOP_STATES.NEXT_GOAL_PLANNING);
+  /**
+   * Publishes one NEXT_GOAL_PLANNING job and waits for its result.
+   *
+   * `feedback`, when given, is the previous attempt's contract violation
+   * (jobId, code, diagnostic) — carried in `planningContext` so
+   * `buildPlanningPrompt` can hand it to the Tech Lead as explicit, directed
+   * correction context. The previous job's own job/result files are never
+   * touched: this always mints a NEW jobId, so the invalid attempt stays on
+   * disk as history.
+   */
+  async function publishAndAwaitPlanning({ feedback = null } = {}) {
     const jobId = store.newJobId(goalId, accepted.decision.round, 'tech_lead');
 
     // --- Planning routing --------------------------------------------------
@@ -397,6 +406,7 @@ async function main() {
     emit(`Planning routing: ${planningAssessment.classification} (score ${planningAssessment.riskScore})`
       + ` → ${planningRouting.label} effort ${planningRouting.effort}`);
     if (planningAssessment.signals.length > 0) emit(`  signals: ${planningAssessment.signals.join(', ')}`);
+    if (feedback) emit(`Directed retry of ${feedback.previousJobId}: feeding back [${feedback.code}] as explicit correction context`);
 
     await store.publishJob('tech_lead', {
       protocolVersion: PROTOCOL_VERSION_V2,
@@ -416,14 +426,18 @@ async function main() {
         closureDocuments: closure.closureDocs ?? [],
         writeScope: CLOSURE_WRITE_PREFIX,
         instruction: 'Escreva SOMENTE o próximo Goal e marque apenas ele READY.',
+        ...(feedback ? { priorAttemptFeedback: feedback } : {}),
       },
     });
     emit(`Planning job published: ${jobId}`);
     await persistClosure({ planningJobId: jobId }, machine.state);
 
     const envelope = await waitForResult(store, 'tech_lead', jobId, { leaseStore });
-    if (!envelope.ok) throw new SpikeError('PLANNING_FAILED', `[${envelope.code}] ${envelope.message}`);
+    return { jobId, envelope };
+  }
 
+  /** Applies a successfully validated PlanningDecision. Never called on a failed envelope. */
+  async function applyPlanningResult(envelope) {
     const planChanges = await collectWorktreeChanges(absPlan, newBaseline);
     assertClosureScope(planChanges.changedFiles);
 
@@ -516,40 +530,104 @@ async function main() {
         planningDocs: planChanges.changedFiles,
       }, machine.state);
     }
+  }
+
+  if (!closure.planningJobId) {
+    machine.transitionTo(LOOP_STATES.NEXT_GOAL_PLANNING);
+    const { envelope } = await publishAndAwaitPlanning();
+    if (!envelope.ok) throw new SpikeError('PLANNING_FAILED', `[${envelope.code}] ${envelope.message}`);
+    await applyPlanningResult(envelope);
   } else {
     machine.transitionTo(LOOP_STATES.NEXT_GOAL_PLANNING);
 
     if (closure.nextGoalId) {
       emit(`Planning already done (job ${closure.planningJobId}), next Goal ${closure.nextGoalId}.`);
     } else {
-      // The planning job ran and the Tech Lead's work is on disk, but the
-      // result was not recorded — a harness failure after the inference. The
-      // work is recovered from the worktree instead of paying for it twice.
-      emit(`Planning job ${closure.planningJobId} already ran; recovering its result from the worktree.`);
+      const priorEnvelope = await store.readResult('tech_lead', closure.planningJobId);
 
-      const planChanges = await collectWorktreeChanges(absPlan, newBaseline);
-      assertClosureScope(planChanges.changedFiles);
-
-      const goalFiles = planChanges.changedFiles.filter((p) => /^docs\/migration\/goals\/\d{3}-.+\.md$/.test(p));
-      const newGoals = goalFiles.filter((p) => !p.includes(`/${goalId}-`));
-      if (newGoals.length !== 1) {
+      if (priorEnvelope === null) {
+        // No result recorded at all: the job may still be running, or the
+        // worker crashed before ever publishing. Neither case is safe to
+        // guess through — worktree recovery below assumes a completed,
+        // validated inference, and a directed retry needs the real violation.
         throw new SpikeError(
-          'PLANNING_RESULT_AMBIGUOUS',
-          `Expected exactly one new Goal in the planning worktree, found ${newGoals.length}: ${newGoals.join(', ')}`,
+          'PLANNING_RESULT_MISSING',
+          `No result recorded yet for planning job ${closure.planningJobId}. `
+          + 'If the tech_lead worker is still running, wait for it; if it crashed, use ia-loop:recover.',
         );
+      } else if (priorEnvelope.ok) {
+        // The planning job ran and the Tech Lead's work is on disk, but the
+        // result was not recorded — a harness failure after the inference. The
+        // work is recovered from the worktree instead of paying for it twice.
+        emit(`Planning job ${closure.planningJobId} already ran; recovering its result from the worktree.`);
+
+        const planChanges = await collectWorktreeChanges(absPlan, newBaseline);
+        assertClosureScope(planChanges.changedFiles);
+
+        const goalFiles = planChanges.changedFiles.filter((p) => /^docs\/migration\/goals\/\d{3}-.+\.md$/.test(p));
+        const newGoals = goalFiles.filter((p) => !p.includes(`/${goalId}-`));
+        if (newGoals.length !== 1) {
+          throw new SpikeError(
+            'PLANNING_RESULT_AMBIGUOUS',
+            `Expected exactly one new Goal in the planning worktree, found ${newGoals.length}: ${newGoals.join(', ')}`,
+          );
+        }
+
+        const nextGoalPath = newGoals[0];
+        const nextGoalId = nextGoalPath.match(/goals\/(\d{3})-/)[1];
+        const heading = (await fs.readFile(join(absPlan, nextGoalPath), 'utf8')).split('\n')[0];
+        const nextGoalTitle = heading.replace(/^#\s*Goal\s+\d{3}\s*[—-]\s*/, '').trim();
+
+        emit(`  recovered: Goal ${nextGoalId} — ${nextGoalTitle}`);
+        await persistClosure({
+          nextGoalId, nextGoalTitle, nextGoalPath,
+          planningDocs: planChanges.changedFiles,
+          planningRecovered: true,
+        }, machine.state);
+      } else {
+        // A completed, validated inference never reached this envelope: the
+        // Tech Lead's own answer was rejected (a contract violation, e.g.
+        // PLAN_INVALID), not lost to a harness crash. Worktree recovery would
+        // silently accept whatever the worktree happens to hold — exactly the
+        // "edit the plan to make it pass" shortcut this must not take.
+        //
+        // The envelope's own `code` is the capacity/failure-taxonomy REASON
+        // (e.g. UNKNOWN_FATAL), not the underlying contract code — that lives
+        // only on the AGENT_FAILURE event, which also carries the sanitized
+        // diagnostic text a directed retry needs.
+        const events = await store.readEvents();
+        const failureEvent = [...events].reverse()
+          .find((e) => e.type === 'AGENT_FAILURE' && e.jobId === closure.planningJobId);
+
+        if (failureEvent?.code !== 'PLAN_INVALID') {
+          throw new SpikeError(
+            'PLANNING_FAILED',
+            `Planning job ${closure.planningJobId} did not complete successfully `
+            + `(${priorEnvelope.code ?? 'UNKNOWN'}: ${priorEnvelope.message ?? 'no diagnostic recorded'}) `
+            + 'and is not an automatically-retryable content violation. Resolve manually.',
+          );
+        }
+
+        emit(`Planning job ${closure.planningJobId} failed PLAN_INVALID; retrying with the violation as explicit feedback.`);
+        emit(`  violation: ${failureEvent.diagnostic}`);
+
+        const { envelope } = await publishAndAwaitPlanning({
+          feedback: {
+            previousJobId: closure.planningJobId,
+            code: failureEvent.code,
+            diagnostic: failureEvent.diagnostic,
+          },
+        });
+
+        if (!envelope.ok) {
+          throw new SpikeError(
+            'PLANNING_FAILED',
+            `Directed retry also failed: [${envelope.code}] ${envelope.message}. `
+            + 'Re-run ia-loop:close to retry again using this new violation as feedback.',
+          );
+        }
+        await applyPlanningResult(envelope);
       }
-
-      const nextGoalPath = newGoals[0];
-      const nextGoalId = nextGoalPath.match(/goals\/(\d{3})-/)[1];
-      const heading = (await fs.readFile(join(absPlan, nextGoalPath), 'utf8')).split('\n')[0];
-      const nextGoalTitle = heading.replace(/^#\s*Goal\s+\d{3}\s*[—-]\s*/, '').trim();
-
-      emit(`  recovered: Goal ${nextGoalId} — ${nextGoalTitle}`);
-      await persistClosure({
-        nextGoalId, nextGoalTitle, nextGoalPath,
-        planningDocs: planChanges.changedFiles,
-        planningRecovered: true,
-      }, machine.state);
     }
   }
   emit('');

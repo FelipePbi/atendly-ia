@@ -18,7 +18,7 @@ Duas etapas concluídas:
 | V6 — Job Ownership and Leases | uma execução por operação lógica; timeout de observador não duplica trabalho |
 | V13 — Identidade do modelo por evidência explícita | `modelUsage`/`usage` viram observabilidade; identidade vem de `message.model` do stream |
 | V14 — Adaptive Model Routing | modelo escolhido por risco: Opus padrão no Tech Lead, Sonnet no Developer, Fable só para HIGH/CRITICAL |
-| V18 — Work Unit Execution | rodada decomposta em DAG de Work Units; determinístico sem modelo, mecânico em Haiku, normal em Sonnet, difícil em Opus; contexto por unidade. Atrás de `IA_LOOP_WORK_UNIT_EXECUTION` (padrão: desligado) |
+| V18 — Work Unit Execution | rodada decomposta em DAG de Work Units; determinístico sem modelo, mecânico em Haiku, normal em Sonnet, difícil em Opus; contexto por unidade. Caminho padrão; `IA_LOOP_WORK_UNIT_EXECUTION=0` é rollback explícito para o Developer legado |
 | V19 — Closure documentation roteada | fechamento deixa de cair em Fable por padrão; stage e política próprios, `routeClosureDocumentation` |
 
 ---
@@ -3462,13 +3462,15 @@ tentativas, escalations, expansões, arquivos por unidade, contagem de chamadas)
 ### Feature flag
 
 ```bash
-IA_LOOP_WORK_UNIT_EXECUTION=1   # execução por Work Units
-IA_LOOP_WORK_UNIT_EXECUTION=0   # Developer legado (padrão)
+IA_LOOP_WORK_UNIT_EXECUTION=1   # execução por Work Units (padrão)
+IA_LOOP_WORK_UNIT_EXECUTION=0   # rollback explícito: Developer legado
 ```
 
-Padrão **desligado**. Vira quando o caminho novo tiver executado um Goal real de
-ponta a ponta — até lá, "a flag existe e os testes estão verdes" não é a mesma
-afirmação que "é assim que Goals rodam agora", e ligar por padrão faria dela uma.
+Padrão **ligado**. Work Unit execution, as unidades determinísticas e o
+roteamento MECHANICAL→Haiku / STANDARD→Sonnet / COMPLEX→Opus já rodaram e
+foram validados — isso é como Goals rodam agora. Qualquer valor diferente de
+`0`/`false`/`off`/`no` (incluindo a variável ausente ou vazia) mantém o caminho
+novo; o rollback é sempre explícito.
 
 Orçamento do loop (nenhum deles nomeia modelo; essa política vive em
 `model-routing.mjs`):

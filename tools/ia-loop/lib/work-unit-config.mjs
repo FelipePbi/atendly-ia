@@ -9,8 +9,10 @@
  * at the end, so nothing downstream of the Developer needs to know which path
  * produced it.
  *
- * That equivalence is the whole reason the flag is safe to have: rolling back
- * is `IA_LOOP_WORK_UNIT_EXECUTION=0`, not a revert.
+ * That equivalence is the whole reason the flag was safe to flip: Work Unit
+ * execution, the deterministic units, and the MECHANICAL→Haiku / STANDARD→
+ * Sonnet / COMPLEX→Opus routing have run and been validated, so this is now
+ * how Goals run. Rolling back is `IA_LOOP_WORK_UNIT_EXECUTION=0`, not a revert.
  *
  * The model policy is NOT here. It lives in `model-routing.mjs` with every
  * other model decision, and a second place to configure models is exactly what
@@ -37,13 +39,13 @@ function envInt(name, fallback, env) {
 /**
  * Whether this process executes Goals as Work Unit DAGs.
  *
- * Defaults to OFF. The default flips only once the new path has executed a
- * real Goal end to end — until then, "the flag exists and the tests are green"
- * is not the same claim as "this is how Goals run now", and defaulting to on
- * would quietly make it one.
+ * Defaults to ON: this is the standard execution path. Set
+ * `IA_LOOP_WORK_UNIT_EXECUTION=0` (or `false`/`off`/`no`) for an explicit,
+ * temporary rollback to the legacy one-job-one-call Developer — never assumed,
+ * always a deliberate operator choice.
  */
 export function isWorkUnitExecutionEnabled(env = process.env) {
-  return envFlag(WORK_UNIT_EXECUTION_FLAG, false, env);
+  return envFlag(WORK_UNIT_EXECUTION_FLAG, true, env);
 }
 
 export function workUnitConfig(env = process.env) {

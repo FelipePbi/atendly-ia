@@ -586,34 +586,17 @@ async function main() {
           + 'If the tech_lead worker is still running, wait for it; if it crashed, use ia-loop:recover.',
         );
       } else if (priorEnvelope.ok) {
-        // The planning job ran and the Tech Lead's work is on disk, but the
-        // result was not recorded — a harness failure after the inference. The
-        // work is recovered from the worktree instead of paying for it twice.
-        emit(`Planning job ${closure.planningJobId} already ran; recovering its result from the worktree.`);
-
-        const planChanges = await collectWorktreeChanges(absPlan, newBaseline);
-        assertClosureScope(planChanges.changedFiles);
-
-        const goalFiles = planChanges.changedFiles.filter((p) => /^docs\/migration\/goals\/\d{3}-.+\.md$/.test(p));
-        const newGoals = goalFiles.filter((p) => !p.includes(`/${goalId}-`));
-        if (newGoals.length !== 1) {
-          throw new SpikeError(
-            'PLANNING_RESULT_AMBIGUOUS',
-            `Expected exactly one new Goal in the planning worktree, found ${newGoals.length}: ${newGoals.join(', ')}`,
-          );
-        }
-
-        const nextGoalPath = newGoals[0];
-        const nextGoalId = nextGoalPath.match(/goals\/(\d{3})-/)[1];
-        const heading = (await fs.readFile(join(absPlan, nextGoalPath), 'utf8')).split('\n')[0];
-        const nextGoalTitle = heading.replace(/^#\s*Goal\s+\d{3}\s*[—-]\s*/, '').trim();
-
-        emit(`  recovered: Goal ${nextGoalId} — ${nextGoalTitle}`);
-        await persistClosure({
-          nextGoalId, nextGoalTitle, nextGoalPath,
-          planningDocs: planChanges.changedFiles,
-          planningRecovered: true,
-        }, machine.state);
+        // priorEnvelope IS the completed, validated PlanningDecision — the same
+        // shape `applyPlanningResult` already knows how to apply. Re-deriving
+        // nextGoalId from a raw worktree diff here (as this branch used to)
+        // duplicated that logic AND silently dropped everything next to it in
+        // the same result: the developer profile and the execution plan were
+        // never persisted, so the Goal ran the single-unit compatibility
+        // fallback instead of the DAG the Tech Lead actually produced and had
+        // approved. That is exactly what happened resuming Goal009: nextGoalId
+        // 010 got recorded, its 20-unit plan and OPUS_HIGH profile did not.
+        emit(`Planning job ${closure.planningJobId} already ran; applying its recorded result.`);
+        await applyPlanningResult(priorEnvelope);
       } else {
         // A completed, validated inference never reached this envelope: the
         // Tech Lead's own answer was rejected (a contract violation, e.g.

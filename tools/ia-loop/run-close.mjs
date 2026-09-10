@@ -198,6 +198,23 @@ async function main() {
   const priorClosure = runtime.closure ?? {};
   const resumePoint = resolveClosureResumePoint(priorClosure);
 
+  // Closure already integrated AND the next Goal's planning already integrated:
+  // nothing left to verify against the documents at all. `discoverGoal`'s
+  // baseline check in particular could never pass here on purpose — the
+  // planning commit that just ran is what advanced MIGRATION_STATUS.md's
+  // global baseline past what Goal009's OWN document still (correctly,
+  // permanently) declares it was written against. Idempotent means returning
+  // before touching the documents or the event log at all, not discovering
+  // a "divergence" this closure itself just produced.
+  if (resumePoint === CLOSURE_RESUME_POINTS.ALREADY_CLOSED) {
+    emit(`Goal ${goalId} is already closed. Nothing to do.`);
+    emit(`  integratedClosureCommit: ${priorClosure.integratedClosureCommit}`);
+    emit(`  newMigrationBaseline:    ${priorClosure.newMigrationBaseline}`);
+    emit(`  next Goal:               ${priorClosure.nextGoalId} — ${priorClosure.nextGoalTitle ?? ''}`);
+    emit('');
+    return 0;
+  }
+
   const goal = await discoverGoal({
     repoRoot: REPO_ROOT, goalId, resolveSha: (sha) => probe.commitExists(sha),
     requiredStatus: requiredGoalStatusFor(resumePoint),
@@ -208,19 +225,6 @@ async function main() {
   emit(`Goal ${goalId}: ACCEPTED (round ${accepted.decision.round}, review job ${accepted.jobId})`);
   emit('No new review is performed and the Developer is not called.');
   emit('');
-
-  // Closure already integrated AND a next Goal already planned: every step
-  // below would check its own `closure.*` field and skip, but would still
-  // append a second GOAL_CLOSED event and rewrite the runtime as if something
-  // had just happened. Idempotent means returning before any of that.
-  if (resumePoint === CLOSURE_RESUME_POINTS.ALREADY_CLOSED) {
-    emit(`Goal ${goalId} is already closed. Nothing to do.`);
-    emit(`  integratedClosureCommit: ${priorClosure.integratedClosureCommit}`);
-    emit(`  newMigrationBaseline:    ${priorClosure.newMigrationBaseline}`);
-    emit(`  next Goal:               ${priorClosure.nextGoalId} — ${priorClosure.nextGoalTitle ?? ''}`);
-    emit('');
-    return 0;
-  }
 
   if (resumePoint === CLOSURE_RESUME_POINTS.RESUME_PLANNING) {
     emit(`Closure already integrated (${priorClosure.integratedClosureCommit}); resuming only NEXT_GOAL_PLANNING.`);

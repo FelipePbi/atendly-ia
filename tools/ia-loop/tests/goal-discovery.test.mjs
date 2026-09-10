@@ -141,6 +141,37 @@ test('a status divergence between Goal and MIGRATION_STATUS fails closed', async
   );
 });
 
+test('a caller that knows it is resuming a closure may accept a document ahead of the ledger row', async () => {
+  // Exactly the Goal009 shape: closure documentation already moved the
+  // document to ACCEPTED, but MIGRATION_STATUS's row is written later, by
+  // NEXT_GOAL_PLANNING, so it still reads READY. A caller that KNOWS this
+  // (run-close.mjs, mid-resume) may say so explicitly.
+  await withRepo(
+    async (root) => {
+      const goal = await discoverGoal({
+        repoRoot: root, goalId: '003', resolveSha: alwaysResolves,
+        requiredStatus: 'ACCEPTED', expectedMigrationStatusRow: 'READY',
+      });
+      assert.equal(goal.status, 'ACCEPTED');
+    },
+    { goal: goalDoc({ status: 'ACCEPTED' }), migration: migrationDoc({ goal003: 'READY' }) },
+  );
+});
+
+test('without that explicit opt-in, the same gap still fails closed exactly as before', async () => {
+  await withRepo(
+    async (root) => {
+      await assert.rejects(
+        discoverGoal({
+          repoRoot: root, goalId: '003', resolveSha: alwaysResolves, requiredStatus: 'ACCEPTED',
+        }),
+        codeIs('GOAL_STATUS_DIVERGENCE'),
+      );
+    },
+    { goal: goalDoc({ status: 'ACCEPTED' }), migration: migrationDoc({ goal003: 'READY' }) },
+  );
+});
+
 test('a previous Goal that is not ACCEPTED blocks the run', async () => {
   await withRepo(
     async (root) => {

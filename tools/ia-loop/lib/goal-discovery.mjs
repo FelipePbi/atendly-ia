@@ -124,6 +124,11 @@ export async function discoverGoal({
   goalId,
   resolveSha,
   requiredStatus = 'READY',
+  // Defaults to requiredStatus: by the time the check below runs, goal.status
+  // has already been proven to equal requiredStatus, so this preserves the
+  // original "row must equal the document" behavior for every caller that
+  // does not know about a resumable, multi-commit closure in progress.
+  expectedMigrationStatusRow = requiredStatus,
 }) {
   const migrationDir = join(repoRoot, 'docs', 'migration');
   const goalsDir = join(migrationDir, 'goals');
@@ -166,7 +171,7 @@ export async function discoverGoal({
   if (!tableStatus) {
     fail('MIGRATION_STATUS_ROW_MISSING', `MIGRATION_STATUS.md has no row for Goal ${goalId}`);
   }
-  if (tableStatus !== goal.status) {
+  if (tableStatus !== expectedMigrationStatusRow) {
     fail(
       'GOAL_STATUS_DIVERGENCE',
       `Goal ${goalId} declares ${goal.status} but MIGRATION_STATUS lists ${tableStatus}`,

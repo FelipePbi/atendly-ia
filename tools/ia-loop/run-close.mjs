@@ -27,6 +27,9 @@ import {
   toJobRouting,
 } from './lib/model-routing.mjs';
 import { discoverGoal } from './lib/goal-discovery.mjs';
+import {
+  CLOSURE_RESUME_POINTS, expectedMigrationStatusRowFor, requiredGoalStatusFor, resolveClosureResumePoint,
+} from './lib/closure-resume.mjs';
 import { readWorkerHealth, WORKER_HEALTH } from './lib/worker-registry.mjs';
 import { LOOP_STATES, createLoopStateMachine } from './lib/loop-state.mjs';
 import { PROTOCOL_VERSION_V2 } from './lib/contracts-v2.mjs';
@@ -192,8 +195,13 @@ async function main() {
   emit('');
 
   const runtime = await store.readRuntime();
+  const priorClosure = runtime.closure ?? {};
+  const resumePoint = resolveClosureResumePoint(priorClosure);
+
   const goal = await discoverGoal({
     repoRoot: REPO_ROOT, goalId, resolveSha: (sha) => probe.commitExists(sha),
+    requiredStatus: requiredGoalStatusFor(resumePoint),
+    expectedMigrationStatusRow: expectedMigrationStatusRowFor(resumePoint),
   });
 
   const accepted = await findAcceptedDecision(store, runtime, goalId);
@@ -201,13 +209,31 @@ async function main() {
   emit('No new review is performed and the Developer is not called.');
   emit('');
 
+  // Closure already integrated AND a next Goal already planned: every step
+  // below would check its own `closure.*` field and skip, but would still
+  // append a second GOAL_CLOSED event and rewrite the runtime as if something
+  // had just happened. Idempotent means returning before any of that.
+  if (resumePoint === CLOSURE_RESUME_POINTS.ALREADY_CLOSED) {
+    emit(`Goal ${goalId} is already closed. Nothing to do.`);
+    emit(`  integratedClosureCommit: ${priorClosure.integratedClosureCommit}`);
+    emit(`  newMigrationBaseline:    ${priorClosure.newMigrationBaseline}`);
+    emit(`  next Goal:               ${priorClosure.nextGoalId} — ${priorClosure.nextGoalTitle ?? ''}`);
+    emit('');
+    return 0;
+  }
+
+  if (resumePoint === CLOSURE_RESUME_POINTS.RESUME_PLANNING) {
+    emit(`Closure already integrated (${priorClosure.integratedClosureCommit}); resuming only NEXT_GOAL_PLANNING.`);
+    emit('');
+  }
+
   const worktreePath = runtime.worktreePath;
   const absWorktree = join(REPO_ROOT, worktreePath);
   const initialHead = runtime.worktreeInitialHead;
   const previousBaseline = goal.migrationAcceptedBaseline;
 
   // Everything already done is recorded here; each step checks before acting.
-  const closure = { ...(runtime.closure ?? {}), goal: goalId, round: accepted.decision.round };
+  const closure = { ...priorClosure, goal: goalId, round: accepted.decision.round };
   const persistClosure = async (patch, state) => {
     Object.assign(closure, patch);
     await store.writeRuntime({ ...(await store.readRuntime()), state, closure });

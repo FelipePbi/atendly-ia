@@ -127,10 +127,19 @@ function sortBy(rows: Row[], orderBy: unknown): Row[] {
   });
 }
 
+/**
+ * Chave única declarada ao dublê. A forma com `where` é o índice único
+ * **parcial** do PostgreSQL, que o Prisma não modela e que o Goal010 usa para
+ * a conclusão única da importação: só as linhas que satisfazem o predicado
+ * entram no índice, e é por isso que uma sessão `FAILED` ou `SUPERSEDED` não
+ * consome direito nenhum.
+ */
+type UniqueKey = string[] | { fields: string[]; where: (row: Row) => boolean };
+
 interface TableOptions {
   journal?: Journal;
   /** Chaves únicas cuja violação o dublê precisa recusar, como o banco. */
-  unique?: string[][];
+  unique?: UniqueKey[];
   /** Colunas com `@default` no schema, preenchidas quando ausentes. */
   defaults?: Record<string, () => unknown>;
 }
@@ -138,7 +147,7 @@ interface TableOptions {
 class Table {
   readonly rows: Row[] = [];
   private readonly journal?: Journal;
-  private readonly uniqueKeys: string[][];
+  private readonly uniqueKeys: UniqueKey[];
   private readonly defaults: Record<string, () => unknown>;
   private readonly pendingFailures: unknown[] = [];
 
@@ -185,12 +194,30 @@ class Table {
     return where;
   }
 
-  private assertUnique(data: Record<string, unknown>): void {
-    for (const fields of this.uniqueKeys) {
+  /**
+   * Recusa a violação de unicidade como o banco recusaria — `P2002` —, tanto
+   * em `create` quanto em `update`: no PostgreSQL um índice único vale para a
+   * linha **resultante**, e uma UPDATE que empurra a linha para dentro do
+   * índice (é o caso de gravar `completedAt` na conclusão da importação) é
+   * recusada exatamente como uma INSERT seria. `current` é a própria linha
+   * sendo alterada, que nunca conflita consigo mesma.
+   */
+  private assertUnique(candidate: Row, current?: Row): void {
+    for (const key of this.uniqueKeys) {
+      const fields = Array.isArray(key) ? key : key.fields;
+      const predicate = Array.isArray(key) ? undefined : key.where;
+      // Linha fora do predicado não entra no índice parcial, então não colide.
+      if (predicate && !predicate(candidate)) continue;
       const where = Object.fromEntries(
-        fields.map((field) => [field, data[field]]),
+        fields.map((field) => [field, candidate[field]]),
       );
-      if (this.rows.some((row) => matches(row, where))) {
+      const conflicting = this.rows.some(
+        (row) =>
+          row !== current &&
+          (!predicate || predicate(row)) &&
+          matches(row, where),
+      );
+      if (conflicting) {
         throw Object.assign(
           new Error(`Unique constraint failed on ${this.prefix}`),
           { code: "P2002" },
@@ -266,7 +293,6 @@ class Table {
 
   async create(args: { data: Record<string, unknown> }) {
     this.throwIfFailing();
-    this.assertUnique(args.data);
     const now = new Date();
     const defaults = Object.fromEntries(
       Object.entries(this.defaults).map(([field, value]) => [field, value()]),
@@ -278,6 +304,9 @@ class Table {
       ...defaults,
       ...args.data,
     } as Row;
+    // Sobre a linha já com os defaults: um índice parcial olha o valor que a
+    // linha vai ter, não o que o chamador digitou.
+    this.assertUnique(row);
     this.rows.push(row);
     this.journal?.record(this.prefix, "create");
     return row;
@@ -290,6 +319,7 @@ class Table {
     this.throwIfFailing();
     const row = await this.findUnique(args);
     if (!row) throw new Error(`${this.prefix} not found`);
+    this.assertUnique({ ...row, ...args.data } as Row, row);
     Object.assign(row, args.data, { updatedAt: new Date() });
     this.journal?.record(this.prefix, "update");
     return row;
@@ -302,6 +332,7 @@ class Table {
     this.throwIfFailing();
     const found = this.rows.filter((row) => matches(row, args.where));
     for (const row of found) {
+      this.assertUnique({ ...row, ...args.data } as Row, row);
       Object.assign(row, args.data, { updatedAt: new Date() });
     }
     if (found.length > 0) this.journal?.record(this.prefix, "updateMany");
@@ -470,6 +501,157 @@ export function createDatabaseDouble() {
       defaults: { lockedAt: () => new Date() },
     },
   );
+  // A unicidade `(tenantId, provider, entityType, externalId)` e a chave de
+  // idempotencia por origem/item da importacao: com ela declarada aqui, uma
+  // segunda criacao do mesmo registro de origem e recusada pelo dublê como o
+  // banco recusaria, em vez de passar silenciosamente.
+  const externalEntityMap = new Table(
+    "externalEntityMap",
+    { tenantId_id: ["tenantId", "id"] },
+    { unique: [["tenantId", "provider", "entityType", "externalId"]] },
+  );
+  // Preview de importacao (Goal010, WU-03): os defaults espelham o schema —
+  // nenhum caminho de teste precisa repetir o que o Postgres ja preencheria.
+  const importSession = new Table(
+    "importSession",
+    { tenantId_id: ["tenantId", "id"] },
+    {
+      journal,
+      // `ImportSession_one_completed_per_tenant` (Goal010, WU-01): indice
+      // unico PARCIAL sobre `("tenantId") WHERE "completedAt" IS NOT NULL`.
+      // Declarado aqui para que a segunda conclusao de importacao de um
+      // negocio seja recusada pelo dublê pelo mesmo motivo por que o
+      // PostgreSQL a recusa — a linha entra no indice — e nao por uma
+      // checagem de codigo, que e justamente o que duas conexoes atropelam.
+      //
+      // O outro indice parcial da sessao, `ImportSession_one_live_per_tenant`,
+      // NAO e declarado aqui: ele e do ciclo de vida da execucao (WU-05), que
+      // e provado contra PostgreSQL, e declara-lo mudaria fixtures de suites
+      // ja aceitas.
+      unique: [
+        {
+          fields: ["tenantId"],
+          where: (row) =>
+            row.completedAt !== null && row.completedAt !== undefined,
+        },
+      ],
+      defaults: {
+        provider: () => "MINHA_AGENDA",
+        status: () => "DRAFT",
+        previewVersion: () => 0,
+        previewGeneratedAt: () => null,
+        sourceFingerprint: () => null,
+        pendingCount: () => 0,
+        importedCount: () => 0,
+        skippedCount: () => 0,
+        failedCount: () => 0,
+        needsReviewCount: () => 0,
+        leaseOwner: () => null,
+        leaseAcquiredAt: () => null,
+        leaseExpiresAt: () => null,
+        leaseHeartbeatAt: () => null,
+        startedAt: () => null,
+        finishedAt: () => null,
+        completedAt: () => null,
+        completedBy: () => null,
+        pendingAcceptedAt: () => null,
+        pendingAcceptedBy: () => null,
+        pendingAcceptedCount: () => null,
+        errorCode: () => null,
+        errorMessage: () => null,
+      },
+    },
+  );
+  const importSessionCategory = new Table(
+    "importSessionCategory",
+    {
+      tenantId_id: ["tenantId", "id"],
+      tenantId_sessionId_category: ["tenantId", "sessionId", "category"],
+    },
+    {
+      unique: [["tenantId", "sessionId", "category"]],
+      defaults: {
+        selected: () => true,
+        sourceSupported: () => true,
+        limitationCode: () => null,
+        limitationDetail: () => null,
+        sourceReportedCount: () => null,
+        readCount: () => 0,
+        discoveredCount: () => 0,
+        pendingCount: () => 0,
+        importedCount: () => 0,
+        skippedCount: () => 0,
+        failedCount: () => 0,
+        needsReviewCount: () => 0,
+        cursor: () => null,
+        checkpointAt: () => null,
+        previewVersion: () => 0,
+      },
+    },
+  );
+  const importItem = new Table(
+    "importItem",
+    {
+      tenantId_id: ["tenantId", "id"],
+      tenantId_sessionId_category_externalId: [
+        "tenantId",
+        "sessionId",
+        "category",
+        "externalId",
+      ],
+    },
+    {
+      unique: [["tenantId", "sessionId", "category", "externalId"]],
+      defaults: {
+        label: () => null,
+        status: () => "PENDING",
+        reasonCode: () => null,
+        reasonDetail: () => null,
+        entityType: () => null,
+        internalId: () => null,
+        fingerprint: () => null,
+        firstSeenPreviewVersion: () => 0,
+        lastSeenPreviewVersion: () => 0,
+        disappearedAt: () => null,
+        attemptCount: () => 0,
+        lastAttemptAt: () => null,
+        processedAt: () => null,
+      },
+    },
+  );
+  const importDecision = new Table(
+    "importDecision",
+    { tenantId_id: ["tenantId", "id"] },
+    {
+      defaults: {
+        category: () => null,
+        itemId: () => null,
+        externalId: () => null,
+        previewVersion: () => 0,
+        targetInternalId: () => null,
+        noteCode: () => null,
+        decidedAt: () => new Date(),
+      },
+    },
+  );
+  // Cofre da credencial de origem (Goal010, WU-08): so o que as rotas de
+  // importacao precisam para achar a conexao do tenant e montar o leitor —
+  // nenhuma regra de sincronizacao vive aqui.
+  const integrationConnection = new Table(
+    "integrationConnection",
+    {
+      tenantId_id: ["tenantId", "id"],
+      tenantId_provider: ["tenantId", "provider"],
+    },
+    {
+      unique: [["tenantId", "provider"]],
+      defaults: {
+        lastSuccessfulSyncAt: () => null,
+        lastErrorAt: () => null,
+        lastErrorCode: () => null,
+      },
+    },
+  );
 
   // `include: { relatedCustomer: true }` é resolvido aqui porque o serviço o
   // usa para devolver o responsável junto com a relação.
@@ -570,6 +752,12 @@ export function createDatabaseDouble() {
     blockSeries,
     appointmentSeries,
     calendarMutationIdempotency,
+    externalEntityMap,
+    importSession,
+    importSessionCategory,
+    importItem,
+    importDecision,
+    integrationConnection,
     appointment: appointmentClient,
     customerRelation: {
       ...customerRelation,
@@ -664,6 +852,12 @@ export function createDatabaseDouble() {
       blockSeries,
       appointmentSeries,
       calendarMutationIdempotency,
+      externalEntityMap,
+      importSession,
+      importSessionCategory,
+      importItem,
+      importDecision,
+      integrationConnection,
     },
   };
 }

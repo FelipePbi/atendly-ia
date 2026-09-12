@@ -20,6 +20,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Disponibilidade e bloqueios | `GET /v1/availability`; `POST /v1/time-blocks`; `DELETE /v1/time-blocks/:id`; `DELETE /v1/time-blocks/:id/occurrence`; `PATCH /v1/time-blocks/:id/occurrence` |
 | Exceções de disponibilidade (Goal009) | `GET /v1/availability-exceptions`; `POST /v1/availability-exceptions/extra`; `POST /v1/availability-exceptions/unavailable`; `DELETE /v1/availability-exceptions/:id` |
 | Séries de bloqueio/compromisso (Goal009) | `POST /v1/block-series`; `PATCH /v1/block-series/:id/from-date`; `DELETE /v1/block-series/:id` |
+| Importação única (Goal010) | `POST /v1/calendar/imports`; `POST /v1/calendar/imports/:sessionId/analyze`; `GET /v1/calendar/imports/:sessionId/categories/:category/items`; `POST /v1/calendar/imports/:sessionId/items/:itemId/decision`; `POST /v1/calendar/imports/:sessionId/execute`; `GET /v1/calendar/imports/:sessionId/progress`; `POST /v1/calendar/imports/:sessionId/complete` |
 | Clientes | `GET /v1/customers`; `GET /v1/customers/:id`; `POST /v1/customers`; `PATCH /v1/customers/:id`; `PUT /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/primary-guardian/confirm`; `DELETE /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/notes`; `PATCH /v1/customers/:id/notes/:noteId`; `DELETE /v1/customers/:id/notes/:noteId`; `POST /v1/customers/:id/tags`; `PATCH /v1/customers/:id/tags/:tagId`; `DELETE /v1/customers/:id/tags/:tagId` |
 | Serviços | `GET /v1/services`; `POST /v1/services`; `PATCH /v1/services/:id` |
 | Configurações | `GET /v1/settings`; `PATCH /v1/settings/business`; `PATCH /v1/settings/ai`; `PATCH /v1/settings/availability` |
@@ -66,8 +67,10 @@ As rotas abaixo também estão registradas e possuem consumidores no frontend at
 | Conceito legado | Rotas atuais |
 | --- | --- |
 | Estado/fonte de calendário | `GET /v1/calendar` |
-| Conexão operacional de agenda externa | `POST /v1/calendar/integration/connect`; `POST /v1/calendar/integration/reconnect`; `DELETE /v1/calendar/integration` |
-| Migração bidirecional | `POST /v1/calendar/migrations/diagnose`; `POST /v1/calendar/migrations`; `GET /v1/calendar/migrations/:id` |
+| Conexão da origem de importação (antes: conexão operacional de agenda externa) | `POST /v1/calendar/integration/connect`; `POST /v1/calendar/integration/reconnect`; `DELETE /v1/calendar/integration` |
+| Protocolo de migração pré-Goal010, sem consumidor no frontend vigente | `POST /v1/calendar/migrations/diagnose`; `POST /v1/calendar/migrations`; `GET /v1/calendar/migrations/:id` |
+
+Essas três rotas foram reescopadas pelo Goal010 e continuam com o mesmo contrato: elas guardam, testam e removem a **credencial da origem de importação** e nada mais. Conectar não muda a fonte da agenda operacional e não exige que ela seja externa — exigir isso deixaria a importação inalcançável depois do corte do writer remoto. Credencial que se declara de escrita é recusada com `409 INTEGRATION_WRITES_NOT_SUPPORTED`: a origem é somente leitura. Desconectar remove a credencial e **nunca** desativa a Agenda Atendly.
 
 O contrato público ainda expõe `ATENDLY | EXTERNAL`, e onboarding/configurações ainda expõem `PROFESSIONAL_OBJECTIVE | LIGHT_CLOSE`. Esses valores são fatos do runtime atual e dívida técnica, não opções válidas para novos fluxos.
 
@@ -233,6 +236,26 @@ Estas rotas exigem sessão de pessoa: a IA nunca cria exceção, bloqueio, compr
 A confirmação roda em uma única transação: se qualquer ocorrência não puder ser confirmada, **nada é criado**. O código depende do motivo: hold vencido, consumido ou liberado responde `409 APPOINTMENT_HOLD_EXPIRED`; horário tomado entre a pré-visualização e a confirmação responde `409 SLOT_UNAVAILABLE` — o hold ainda era válido, quem recusou foi a disponibilidade. Nos dois casos a resposta identifica **qual** ocorrência falhou e oferece alternativas, em `error.details.upstreamDetails`: `occurrenceIndex`, `holdId`, `occurrenceDate` e `alternatives`. Confirmada, cada ocorrência vira um atendimento independente com `seriesId` comum — cancelar, remarcar ou concluir uma não toca as demais.
 
 O número de ocorrências é limitado por um teto configurável (`APPOINTMENT_SERIES_MAX_OCCURRENCES`), validado tanto na pré-visualização quanto na confirmação: acima dele a resposta é `400 APPOINTMENT_SERIES_TOO_LONG`, com o teto vigente em `details.cap`. Repetir a confirmação com a mesma `Idempotency-Key` devolve a série já criada, sem criar nada novo.
+
+## Importação única do Minha Agenda (Goal010)
+
+Substitui a migração bidirecional: um negócio importa do Minha Agenda **uma vez**, sem escrita de volta e sem opção de trocar de fonte pela API pública. Nenhuma rota abaixo aceita `source`/`target`; a origem é sempre a integração Minha Agenda já conectada do negócio (`POST /v1/calendar/integration/connect`), e o negócio/ator vêm sempre da sessão — nenhum corpo aceita `tenantId` ou `userId`.
+
+| Rota | O que faz |
+| --- | --- |
+| `POST /v1/calendar/imports` | abre a sessão de importação (`sourceAccountId`, `sourceAccountLabel?`, `replace?`); exige `Idempotency-Key` |
+| `POST /v1/calendar/imports/:sessionId/analyze` | lê a origem e grava/atualiza os itens da sessão; devolve o resumo por categoria, não os itens; exige `Idempotency-Key` |
+| `GET /v1/calendar/imports/:sessionId/categories/:category/items` | lista os itens de uma categoria, paginado (`status?`, `limit`, `offset`) |
+| `POST /v1/calendar/imports/:sessionId/items/:itemId/decision` | decide um item em conflito (`decision`: `INCLUDE`, `EXCLUDE`, `MERGE_WITH_EXISTING`, `CREATE_NEW`, `KEEP_EXISTING`; `targetInternalId` obrigatório nos dois últimos); exige `Idempotency-Key` |
+| `POST /v1/calendar/imports/:sessionId/execute` | processa os itens pendentes, criando os registros na Agenda Atendly (`previewVersion` obrigatória, `maxItems?`); exige `Idempotency-Key` |
+| `GET /v1/calendar/imports/:sessionId/progress` | progresso lido do banco a cada chamada, por categoria e total |
+| `POST /v1/calendar/imports/:sessionId/complete` | conclui a sessão, consumindo o direito único de importação do negócio (`acceptPending?` aceita concluir com itens ainda pendentes); exige `Idempotency-Key` |
+
+Estas rotas são **só humano**: não existe contrato de importação do lado da IA, no mesmo padrão de bloqueio/exceção do Goal009.
+
+`previewVersion` é obrigatória em `execute` de propósito: executar é executar o preview que o negócio aprovou. Se a origem mudou desde a análise, a versão vigente é outra e a resposta é `409 IMPORT_PREVIEW_STALE` — sem o campo, omitir a versão executaria a análise vigente qualquer que fosse ela, e a recusa de preview obsoleto viraria opt-in de quem chama. Agendamento futuro cujo horário já está ocupado por um atendimento da Agenda Atendly não é sobreposto: o item fica em `NEEDS_REVIEW` com `APPOINTMENT_SLOT_TAKEN` e a decisão volta para o negócio.
+
+Uma vez concluída (`POST .../complete`), a sessão é o único registro definitivo do negócio: `POST /v1/calendar/imports` para o mesmo negócio devolve `409 IMPORT_ALREADY_COMPLETED` — não existe uma segunda importação. Decisão já tomada em um item, ou item já resolvido pela execução, recusa uma segunda decisão com `409 IMPORT_ITEM_ALREADY_DECIDED`.
 
 ## Vínculo WhatsApp: estados ambíguos
 

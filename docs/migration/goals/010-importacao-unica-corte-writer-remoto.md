@@ -1,6 +1,6 @@
 # Goal 010 — Importação única do Minha Agenda e corte do writer remoto
 
-**Status: READY.** Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-09 pelo Tech Lead Agent após [Goal009 ACCEPTED](../reviews/009-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
+**Status: ACCEPTED.** Aceito em 2026-09-12 na [rodada 2 do review010](../reviews/010-review.md); o SHA do commit de fechamento é registrado em MIGRATION_STATUS na etapa posterior do IA Loop (D-017/D-018). Texto original preservado abaixo. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-09 pelo Tech Lead Agent após [Goal009 ACCEPTED](../reviews/009-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
 
 Developer execution profile: OPUS_HIGH
 

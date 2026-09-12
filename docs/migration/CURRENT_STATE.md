@@ -800,3 +800,114 @@ base `9013f14`.
   `maxNeighborBuffer()` agrega por tenant sem recorte de intervalo a cada
   busca de slots; a IA continua sem liberar o hold de rascunho substituído
   (Goal011).
+
+## Delta implementado — Goal010, 2026-09-12 (ACCEPTED na rodada 2)
+
+A fotografia histórica acima permanece como registro da baseline. O FATO de
+"Scheduling, catálogo, clientes e importação" que descreve Minha Agenda
+recebendo leitura e escrita operacional, o snapshot de migração consultando
+dez anos à frente e filtrando `deleted`, a migração exigindo destino vazio,
+bloqueando todos os itens quando há conflito e concluindo/trocando fonte
+automaticamente, e a execução por `Set`/`queueMicrotask` locais com
+recuperação global no boot sem lease, está superado pelos fatos abaixo,
+verificados no [review010](reviews/010-review.md) sobre a base `e381c15`.
+
+- **FATO atual:** a importação tem modelo de dados próprio — `ImportSession`,
+  `ImportSessionCategory`, `ImportItem` e `ImportDecision`, com os enums
+  `ImportCategory` (oito categorias: serviço, cliente, disponibilidade,
+  bloqueio, futuro, histórico, cancelado e falta), `ImportSessionStatus`,
+  `ImportItemStatus`, `ImportDecisionScope` e `ImportDecisionKind`. A sessão
+  guarda a identidade da conta de origem, a `previewVersion`, o lease da
+  execução, os contadores e a conclusão. Duas invariantes existem **só em
+  SQL**, porque o Prisma não modela índice único parcial:
+  `ImportSession_one_completed_per_tenant` sobre `("tenantId") WHERE
+  "completedAt" IS NOT NULL` — a conclusão única e irreversível por negócio,
+  recusada pelo **banco** inclusive com duas conexões concorrentes — e
+  `ImportSession_one_live_per_tenant`, restrito aos estados vivos, que é a
+  "uma sessão por negócio". `ImportSession_completion_check` amarra `status =
+  COMPLETED` a `completedAt` nos dois sentidos; `ImportItem_status_check`
+  fecha o conjunto de estados do item. `ExternalEntityType` ganhou
+  `TIME_BLOCK` e `AVAILABILITY_EXCEPTION` de forma aditiva.
+- **FATO atual:** a análise não escreve dado operacional.
+  `ImportPreviewService.analyze` persiste apenas preview e contadores e em
+  nenhum caminho toca `Customer`, `Service`, `Appointment`,
+  `AvailabilityRule` ou `TimeBlock`. Cada reanálise incrementa
+  `previewVersion` e reconcilia por `(category, externalId)`: a linha do item
+  nunca é apagada nem recriada, e item já resolvido por execução anterior
+  (`IMPORTED`/`SKIPPED`/`FAILED`) nunca é revertido por análise nova.
+  Conflito com a base já preenchida é classificado por item em `EXACT`
+  (mesclável), `SIMILAR` (apenas sugere) e `DIVERGENT` (exige decisão), com
+  fingerprint do registro de origem. Executar exige `previewVersion` no
+  corpo, no Scheduling e no BFF: preview obsoleto é recusado com `409
+  IMPORT_PREVIEW_STALE`, e sem o campo a requisição nem chega a executar
+  (`400 VALIDATION_ERROR`).
+- **FATO atual:** o adaptador do Minha Agenda valida a resposta por schema
+  antes de qualquer mapeamento e lê **por categoria**, com cobertura
+  explícita por categoria (`sourceSupported`, `sourceReportedCount`,
+  `readCount`, `limitationCode`, `limitationDetail`). Duas limitações da
+  origem estão declaradas e quantificadas em vez de contornadas:
+  `CUSTOMER_DIRECTORY_UNAVAILABLE` — a origem não expõe endpoint de listagem
+  de clientes, então só fica visível quem estiver vinculado a um agendamento
+  ou bloqueio lido no período — e `NO_SHOW_NOT_MODELED_BY_SOURCE` — a origem
+  não modela falta como estado distinto de cancelado. Nenhuma
+  disponibilidade, duração, preço ou status é fabricado a partir de dado
+  ausente.
+- **FATO atual:** a transação monolítica do `importToAtendly` deixou de ser o
+  caminho. `ImportExecutionService` processa item a item sob `runCalendarWrite`
+  e os locks do Goal008, gravando efeito, mapa de origem
+  (`ExternalEntityMap`, a chave de idempotência por origem/item) e checkpoint
+  no **mesmo commit**; `maxItems` recorta o lote e é também como uma queda no
+  meio é exercitada. Falha ou conflito de um item marca aquele item e o lote
+  segue. Agendamento futuro cujo intervalo já está ocupado por atendimento
+  vigente que não veio da importação não é sobreposto: `findSlotHolder` lê a
+  ocupação dentro do lock de dia e o item vai para `NEEDS_REVIEW` com
+  `APPOINTMENT_SLOT_TAKEN`, sem escrever. A checagem vale só para
+  `FUTURE_APPOINTMENT` — histórico, cancelado e falta não ocupam agenda.
+- **FATO atual:** a execução é coordenada por lease pelo relógio do banco
+  (`import-lease.ts`), na própria linha de `ImportSession`: a reivindicação é
+  um único UPDATE condicional (`leaseOwner IS NULL OR leaseExpiresAt <= now()
+  OR leaseOwner = :owner`), sem leitura-antes-de-escrever decidindo direito,
+  com TTL em `IMPORT_LEASE_TTL_SECONDS` (120s por default). `resumeIncomplete`
+  — que varria `MigrationJob` de todos os negócios no boot, sem lease e sem
+  recorte por tenant, reiniciando inclusive job vivo — **não existe mais**; a
+  retomada é por tenant e sob lease, em `resumeImportSessions`.
+- **FATO atual:** `CalendarProviderFactory` não importa mais
+  `MinhaAgendaCalendarProvider`. Escrita ou oferta operacional com fonte
+  remota recebe `409 MINHA_AGENDA_OPERATIONAL_SOURCE_DISABLED`; a leitura da
+  origem sobrevive apenas dentro da importação, chamada direto pelo módulo.
+  Os endpoints de integração foram reescopados para o ciclo da importação:
+  `connect` não exige mais que a agenda seja externa e recusa `enableWrites`
+  com `409 INTEGRATION_WRITES_NOT_SUPPORTED` — a origem é somente leitura — e
+  `DELETE /internal/calendar/integration` não toca mais `CalendarSettings`,
+  ou seja, desconectar a origem de importação não desativa a agenda
+  operacional.
+- **FATO atual:** os `MigrationJob` legados são classificados, nunca
+  convertidos (U-02). `LegacyMigrationJobReconciliation` preenche
+  `legacyClass` (`UNCLASSIFIED`, `TECHNICAL_COMPLETED`,
+  `TECHNICAL_INCOMPLETE`, `TECHNICAL_FAILED`, `NEEDS_REVIEW`) e os campos de
+  auditoria, é idempotente — job já classificado não é reclassificado — e
+  oferece inventário por classe e a lista dos casos isolados. `COMPLETED` sem
+  a prova esperada (`summary.imported`) vira `NEEDS_REVIEW`, nunca conclusão
+  presumida. O direito de importação é estrutural: mora só em
+  `ImportSession.completedAt`, e as duas tabelas não se comunicam. O
+  protocolo antigo continua alcançável como compatibilidade declarada até o
+  Goal024, mas seu `start` chama `assertImportAvailable` — depois da
+  conclusão única nem por ali se reprocessa a origem.
+- **FATO atual:** sete rotas por operação existem no Scheduling e no BFF
+  (`POST /v1/calendar/imports`, `analyze`, `GET
+  .../categories/:category/items`, `decision`, `execute`, `progress`,
+  `complete`), com `Idempotency-Key` onde há efeito, tenant e ator sempre da
+  sessão, e `PUBLIC_API_V1.md` atualizado — a linha "Migração bidirecional"
+  foi substituída. Não existe contrato de importação do lado da IA, e isso é
+  asserção executável: `apps/ai-orchestrator/tests/tools/import-out-of-reach.test.ts`
+  falha se alguma tool passar a tocar o caminho de importação. O frontend
+  aceita as operações e campos novos mantendo os schemas antigos de migração
+  decodificáveis; não há tela (Goal019).
+- **Limite verificado:** a capacidade da API real do Minha Agenda continua
+  **sem prova** — não há credencial autorizada no ambiente de migração. Toda
+  origem exercitada é dublê ou fixture, M4 não foi exercitado e nenhum tenant
+  real foi importado. Tenant legado com `CalendarSettings.source =
+  MINHA_AGENDA` ainda não tem caminho novo para voltar a `ATENDLY`: a
+  conclusão da importação não move a fonte e só o `importToAtendly` legado o
+  faz. O inventário do U-02 existe como serviço e é exercitado por ensaio e
+  por suíte de unidade, mas ainda não tem rota.

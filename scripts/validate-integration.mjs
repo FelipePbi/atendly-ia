@@ -355,6 +355,20 @@ export function integrationSteps(target) {
       args: ["scripts/goal009-migration-rehearsal.mjs"],
       env,
     },
+    // Gate M0-M3 do Goal010: ensaio da migração da sessão de importação
+    // única contra o estoque legado do protocolo bidirecional anterior
+    // (MigrationJob em cinco estados, MigrationConflict, ExternalEntityMap),
+    // em banco próprio e descartável, passo único aditivo. Prova
+    // preservação linha a linha, classificação conservadora do job legado
+    // sem criar nem consumir conclusão de importação, e repetição sem
+    // mudança. M4 (corte contra a origem real) não é exercitado aqui.
+    {
+      name: "rehearse:goal010-import-session-migration",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal010-migration-rehearsal.mjs"],
+      env,
+    },
     // Identidade de cliente contra PostgreSQL real: telefone compartilhado,
     // cliente sem telefone, criação só na confirmação e isolamento por tenant.
     // Não pertence ao core porque exige banco.

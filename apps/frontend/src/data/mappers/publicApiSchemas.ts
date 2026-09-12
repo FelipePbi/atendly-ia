@@ -624,9 +624,209 @@ export type CustomerTag = z.infer<typeof customerTagSchema>;
 export type CustomerList = z.infer<typeof customerListSchema>;
 export type Dashboard = z.infer<typeof dashboardSchema>;
 export type Message = z.infer<typeof messageSchema>;
+
+// --- Importacao unica do Minha Agenda (Goal010) ----------------------------
+// Substitui a migracao bidirecional como caminho de produto. Os schemas
+// antigos (`migrationSchema` e companhia) continuam acima e continuam
+// decodificando as respostas ja gravadas do protocolo anterior — o corte
+// deles e do Goal024, nao deste. Aqui nao ha tela (Goal019): so o contrato
+// que a camada de dados precisa entender.
+export const importCategorySchema = z.enum([
+  "SERVICE",
+  "CUSTOMER",
+  "AVAILABILITY",
+  "TIME_BLOCK",
+  "FUTURE_APPOINTMENT",
+  "PAST_APPOINTMENT",
+  "CANCELLED_APPOINTMENT",
+  "NO_SHOW_APPOINTMENT",
+]);
+export const importItemStatusSchema = z.enum([
+  "PENDING",
+  "IMPORTED",
+  "SKIPPED",
+  "FAILED",
+  "NEEDS_REVIEW",
+]);
+export const importSessionStatusSchema = z.enum([
+  "DRAFT",
+  "ANALYZING",
+  "READY",
+  "EXECUTING",
+  "PARTIAL",
+  "FAILED",
+  "SUPERSEDED",
+  "COMPLETED",
+]);
+export const importDecisionScopeSchema = z.enum([
+  "SESSION",
+  "CATEGORY",
+  "ITEM",
+]);
+export const importDecisionKindSchema = z.enum([
+  "IMPORT_ALL",
+  "INCLUDE",
+  "EXCLUDE",
+  "MERGE_WITH_EXISTING",
+  "CREATE_NEW",
+  "KEEP_EXISTING",
+  "ACCEPT_PENDING_COMPLETION",
+]);
+
+const importCountsSchema = z.object({
+  pending: z.number().int().nonnegative(),
+  imported: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  needsReview: z.number().int().nonnegative(),
+});
+const importCategoryCountsSchema = importCountsSchema.extend({
+  category: importCategorySchema,
+});
+
+export const importSessionStartSchema = z.object({
+  sessionId: z.string().min(1),
+  status: importSessionStatusSchema,
+  created: z.boolean(),
+  replacedSessionId: z.string().nullable(),
+});
+
+export const importItemSchema = z.object({
+  id: z.string().min(1),
+  category: importCategorySchema,
+  externalId: z.string(),
+  label: z.string().nullable(),
+  status: importItemStatusSchema,
+  reasonCode: z.string().nullable(),
+  reasonDetail: z.string().nullable(),
+  entityType: z.string().nullable(),
+  internalId: z.string().nullable(),
+  attemptCount: z.number().int().nonnegative(),
+  lastAttemptAt: isoDateTimeSchema.nullable(),
+  processedAt: isoDateTimeSchema.nullable(),
+  disappearedAt: isoDateTimeSchema.nullable(),
+});
+
+// Contagens por categoria, nunca uma contagem generica de agendamentos; a
+// limitacao declarada da origem vem junto com a categoria que a sofreu.
+export const importPreviewCategorySchema = z.object({
+  category: importCategorySchema,
+  sourceSupported: z.boolean(),
+  limitationCode: z.string().nullable(),
+  limitationDetail: z.string().nullable(),
+  sourceReportedCount: z.number().int().nullable(),
+  readCount: z.number().int().nonnegative(),
+  discoveredCount: z.number().int().nonnegative(),
+  pendingCount: z.number().int().nonnegative(),
+  needsReviewCount: z.number().int().nonnegative(),
+  importedCount: z.number().int().nonnegative(),
+  skippedCount: z.number().int().nonnegative(),
+  failedCount: z.number().int().nonnegative(),
+});
+
+export const importPreviewSchema = z.object({
+  sessionId: z.string().min(1),
+  previewVersion: z.number().int().nonnegative(),
+  generatedAt: isoDateTimeSchema,
+  categories: z.array(importPreviewCategorySchema),
+  changesSincePreviousVersion: z.object({
+    newCount: z.number().int().nonnegative(),
+    changedCount: z.number().int().nonnegative(),
+    disappearedCount: z.number().int().nonnegative(),
+  }),
+});
+
+export const importItemsPageSchema = z.object({
+  sessionId: z.string().min(1),
+  category: importCategorySchema,
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  offset: z.number().int().nonnegative(),
+  items: z.array(importItemSchema),
+});
+
+export const importDecisionSchema = z.object({
+  item: importItemSchema,
+  decision: z.object({
+    id: z.string().min(1),
+    scope: importDecisionScopeSchema,
+    decision: importDecisionKindSchema,
+    category: importCategorySchema.nullable(),
+    itemId: z.string().nullable(),
+    externalId: z.string().nullable(),
+    targetInternalId: z.string().nullable(),
+    noteCode: z.string().nullable(),
+    decidedBy: z.string().min(1),
+    decidedAt: isoDateTimeSchema,
+  }),
+});
+
+export const importExecutionSchema = z.object({
+  sessionId: z.string().min(1),
+  previewVersion: z.number().int().nonnegative(),
+  status: z.enum(["PARTIAL", "READY"]),
+  processed: z.number().int().nonnegative(),
+  counts: importCountsSchema,
+  categories: z.array(importCategoryCountsSchema),
+  leaseOwner: z.string().min(1),
+  leaseLost: z.boolean(),
+});
+
+export const importProgressSchema = z.object({
+  sessionId: z.string().min(1),
+  status: importSessionStatusSchema,
+  previewVersion: z.number().int().nonnegative(),
+  startedAt: isoDateTimeSchema.nullable(),
+  finishedAt: isoDateTimeSchema.nullable(),
+  counts: importCountsSchema,
+  categories: z.array(importCategoryCountsSchema),
+});
+
+export const importCompletionSchema = z.object({
+  sessionId: z.string().min(1),
+  provider: z.enum(["MINHA_AGENDA"]),
+  sourceAccountId: z.string().min(1),
+  sourceAccountLabel: z.string().nullable(),
+  status: z.literal("COMPLETED"),
+  completedAt: isoDateTimeSchema,
+  completedBy: z.string().min(1),
+  counts: importCountsSchema,
+  categories: z.array(
+    importCountsSchema.extend({
+      category: importCategorySchema,
+      discovered: z.number().int().nonnegative(),
+      sourceSupported: z.boolean(),
+      limitationCode: z.string().nullable(),
+    }),
+  ),
+  // Aceite explicito de pendentes: autor, data e a contagem no momento da
+  // decisao; nulo quando nao havia pendencia nenhuma.
+  pendingAcceptance: z
+    .object({
+      acceptedBy: z.string().min(1),
+      acceptedAt: isoDateTimeSchema,
+      pendingCount: z.number().int().nonnegative(),
+    })
+    .nullable(),
+});
+
 export type Migration = z.infer<typeof migrationSchema>;
 export type MigrationDiagnosis = z.infer<typeof migrationDiagnosisSchema>;
 export type MigrationStart = z.infer<typeof migrationStartSchema>;
+export type ImportCategory = z.infer<typeof importCategorySchema>;
+export type ImportItemStatus = z.infer<typeof importItemStatusSchema>;
+export type ImportSessionStatus = z.infer<typeof importSessionStatusSchema>;
+export type ImportDecisionScope = z.infer<typeof importDecisionScopeSchema>;
+export type ImportDecisionKind = z.infer<typeof importDecisionKindSchema>;
+export type ImportSessionStart = z.infer<typeof importSessionStartSchema>;
+export type ImportItem = z.infer<typeof importItemSchema>;
+export type ImportPreview = z.infer<typeof importPreviewSchema>;
+export type ImportPreviewCategory = z.infer<typeof importPreviewCategorySchema>;
+export type ImportItemsPage = z.infer<typeof importItemsPageSchema>;
+export type ImportDecision = z.infer<typeof importDecisionSchema>;
+export type ImportExecution = z.infer<typeof importExecutionSchema>;
+export type ImportProgress = z.infer<typeof importProgressSchema>;
+export type ImportCompletion = z.infer<typeof importCompletionSchema>;
 export type OnboardingState = z.infer<typeof onboardingStateSchema>;
 export type Service = z.infer<typeof serviceSchema>;
 export type ServiceList = z.infer<typeof serviceListSchema>;

@@ -66,6 +66,13 @@ const envSchema = z.object({
   // decisão operacional, não invariante de domínio.
   BLOCK_SERIES_MAX_OCCURRENCES: intEnv(104),
   APPOINTMENT_SERIES_MAX_OCCURRENCES: intEnv(52),
+  // Lease da execucao da importacao (Goal010): por quantos segundos uma
+  // instancia detem a sessao antes de o lease vencer e ficar reivindicavel
+  // por outra. Como no hold, a vigencia e decidida pelo relogio do banco;
+  // este valor so define o TTL somado a `now()` na reivindicacao e em cada
+  // renovacao. Curto demais faz o lote ser roubado no meio; longo demais
+  // atrasa a retomada depois de uma queda.
+  IMPORT_LEASE_TTL_SECONDS: intEnv(120),
   // Janela de ajuste da recorrência de atendimento (Goal009): quantos dias
   // para trás/frente do intervalo alvo o preview busca o horário disponível
   // mais próximo antes de reportar a ocorrência como não encontrável.

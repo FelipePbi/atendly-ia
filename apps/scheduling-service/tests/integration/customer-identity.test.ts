@@ -5,6 +5,7 @@ import { PrismaClient } from "../../src/generated/prisma/client.js";
 import { AtendlyCalendarProvider } from "../../src/modules/integrations/atendly/provider.js";
 import { AtendlyCustomerService } from "../../src/modules/customers/atendly-customer-service.js";
 import { resetTenant } from "./support/reset-tenant.js";
+import { upcomingDate } from "./support/test-date.js";
 
 const connectionString = process.env.SCHEDULING_TEST_DATABASE_URL?.trim();
 
@@ -15,7 +16,8 @@ const describeWithDatabase = connectionString ? describe : describe.skip;
 const tenantA = "tenant-a";
 const tenantB = "tenant-b";
 const timeZone = "America/Sao_Paulo";
-const date = "2026-09-10";
+// Dia sempre à frente de hoje: ver `support/test-date.ts`.
+const date = upcomingDate();
 
 let prisma: PrismaClient;
 

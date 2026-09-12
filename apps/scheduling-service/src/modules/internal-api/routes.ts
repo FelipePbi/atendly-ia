@@ -3,9 +3,13 @@ import { z } from "zod";
 
 import { env } from "../../config/env.js";
 import type { PrismaClient } from "../../generated/prisma/client.js";
+import type {
+  ExternalEntityType,
+  ImportCategory,
+  ImportItemStatus,
+} from "../../generated/prisma/enums.js";
 import { getPrisma } from "../../infrastructure/database/prisma.js";
 import {
-  callerSource,
   currentInternalContext,
   requireHumanCaller,
   requireInternalAuth,
@@ -35,15 +39,25 @@ import {
   type CalendarRequestContext,
   CalendarService,
 } from "../calendar/calendar-service.js";
-import {
-  createTimeBlock,
-  removeTimeBlock,
-} from "../calendar/time-blocks.js";
+import { CalendarMutationIdempotency } from "../calendar/idempotency.js";
+import { createTimeBlock, removeTimeBlock } from "../calendar/time-blocks.js";
 import { AtendlyCustomerService } from "../customers/atendly-customer-service.js";
 import { encryptIntegrationCredentials } from "../integrations/credentials.js";
 import { parseMinhaAgendaConnection } from "../integrations/minha-agenda/config.js";
-import { MinhaAgendaCalendarProvider } from "../integrations/minha-agenda/provider.js";
-import { CalendarMigrationService } from "../migrations/calendar-migration-service.js";
+import { todayInTimeZone } from "../integrations/minha-agenda/date-time.js";
+import {
+  type GetImportSnapshotInput,
+  MinhaAgendaCalendarProvider,
+} from "../integrations/minha-agenda/provider.js";
+import {
+  CalendarMigrationService,
+  CATEGORY_ENTITY_TYPE,
+  type ImportCompletionResult,
+  ImportCompletionService,
+  ImportExecutionService,
+  type ImportPreviewResult,
+  ImportPreviewService,
+} from "../migrations/index.js";
 import { AtendlyServiceService } from "../services/atendly-service-service.js";
 
 const sourceSchema = z.enum(["ATENDLY", "MINHA_AGENDA"]);
@@ -279,13 +293,92 @@ const integrationBodySchema = z.object({
 });
 const migrationBodySchema = z.object({ target: sourceSchema });
 
+// --- Importacao unica (Goal010, WU-08) -------------------------------------
+const importCategorySchema = z.enum([
+  "SERVICE",
+  "CUSTOMER",
+  "AVAILABILITY",
+  "TIME_BLOCK",
+  "FUTURE_APPOINTMENT",
+  "PAST_APPOINTMENT",
+  "CANCELLED_APPOINTMENT",
+  "NO_SHOW_APPOINTMENT",
+]);
+const importItemStatusSchema = z.enum([
+  "PENDING",
+  "IMPORTED",
+  "SKIPPED",
+  "FAILED",
+  "NEEDS_REVIEW",
+]);
+const importDecisionKindSchema = z.enum([
+  "INCLUDE",
+  "EXCLUDE",
+  "MERGE_WITH_EXISTING",
+  "CREATE_NEW",
+  "KEEP_EXISTING",
+]);
+const importSessionParamsSchema = z.object({
+  sessionId: z.string().trim().min(1).max(128),
+});
+const importCategoryParamsSchema = importSessionParamsSchema.extend({
+  category: importCategorySchema,
+});
+const importItemParamsSchema = importSessionParamsSchema.extend({
+  itemId: z.string().trim().min(1).max(128),
+});
+const importItemsQuerySchema = z.object({
+  status: importItemStatusSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+const startImportBodySchema = z.object({
+  sourceAccountId: z.string().trim().min(1).max(200),
+  sourceAccountLabel: z.string().trim().max(200).nullable().optional(),
+  // Descarta a sessao viva e abre uma nova (ImportCompletionService).
+  replace: z.boolean().optional(),
+});
+// `previewVersion` e obrigatoria: executar e sempre executar o preview que o
+// negocio aprovou. Fosse opcional, omitir o campo executaria a versao vigente
+// qualquer que fosse ela — a recusa de preview obsoleto viraria opt-in.
+const executeImportBodySchema = z.object({
+  previewVersion: z.number().int().nonnegative(),
+  maxItems: z.number().int().positive().max(5_000).optional(),
+});
+const completeImportBodySchema = z.object({
+  acceptPending: z.boolean().optional(),
+});
+// `MERGE_WITH_EXISTING`/`KEEP_EXISTING` apontam para um registro ja
+// cadastrado: sem alvo explicito a decisao nao tem o que preservar.
+const importDecisionBodySchema = z
+  .object({
+    decision: importDecisionKindSchema,
+    targetInternalId: z.string().trim().min(1).max(128).optional(),
+    noteCode: z.string().trim().min(1).max(100).optional(),
+  })
+  .refine(
+    (value) =>
+      (value.decision !== "MERGE_WITH_EXISTING" &&
+        value.decision !== "KEEP_EXISTING") ||
+      Boolean(value.targetInternalId),
+    {
+      path: ["targetInternalId"],
+      message:
+        "MERGE_WITH_EXISTING and KEEP_EXISTING require a targetInternalId.",
+    },
+  );
+
 export async function registerManagementRoutes(
   app: FastifyInstance,
+  prismaClient: PrismaClient = getPrisma(),
 ): Promise<void> {
-  const prisma = getPrisma();
+  const prisma = prismaClient;
   const internalOnly = { preHandler: requireInternalAuth };
   const migrations = new CalendarMigrationService(prisma);
-  await migrations.resumeIncomplete();
+  // Sem recuperacao global no boot (Goal010, WU-05): subir o servico nao
+  // reprocessa job de negocio nenhum. A retomada da importacao e por tenant e
+  // sob lease (`resumeImportSessions`), pedida por quem tem o negocio em
+  // maos — nunca por quem acabou de subir uma instancia.
 
   app.get("/internal/calendar", internalOnly, async (request) =>
     data(
@@ -906,29 +999,54 @@ export async function registerManagementRoutes(
   // uma vez, sem esperar o timer. Existe para o teste de integracao provar o
   // relogio do banco e o lease entre duas instancias sem depender de
   // `sleep`; em operacao, o loop no proprio processo e quem a chama.
-  app.post("/internal/appointments/auto-complete", internalOnly, async (request) => {
-    const context = currentInternalContext(request);
-    // Escopo por tenant confirmado antes da varredura: a rota so responde a
-    // um tenant com agenda Atendly, mesmo que a varredura em si seja global
-    // (o loop no processo atende todos os tenants do banco do dono).
-    await requireAtendlyCalendar(prisma, context.tenantId);
-    const result = await runAutoCompleteSweep(prisma, {
-      graceMinutes: env.CALENDAR_AUTO_COMPLETE_GRACE_MINUTES,
-    });
-    return data(request, result);
-  });
+  app.post(
+    "/internal/appointments/auto-complete",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      // Escopo por tenant confirmado antes da varredura: a rota so responde a
+      // um tenant com agenda Atendly, mesmo que a varredura em si seja global
+      // (o loop no processo atende todos os tenants do banco do dono).
+      await requireAtendlyCalendar(prisma, context.tenantId);
+      const result = await runAutoCompleteSweep(prisma, {
+        graceMinutes: env.CALENDAR_AUTO_COMPLETE_GRACE_MINUTES,
+      });
+      return data(request, result);
+    },
+  );
 
+  // --- Integracao Minha Agenda (Goal010, WU-07) ---------------------------
+  // Compatibilidade temporaria e declarada: `connect`/`reconnect`/`disconnect`
+  // e o par `diagnose`/`migrations` abaixo continuam com o mesmo contrato
+  // (enums, campos de `source`/`target`, respostas idempotentes ja gravadas),
+  // mas deixaram de habilitar qualquer operacao no calendario operacional —
+  // `CalendarProviderFactory` recusa MINHA_AGENDA para escrita, leitura e
+  // oferta de horarios (Goal010). O papel dessas rotas agora e so o ciclo da
+  // importacao unica: guardar/testar a credencial e disparar a leitura da
+  // origem. Desconectar a integracao nunca desativa a Agenda Atendly, que
+  // nao depende de `IntegrationConnection`. Remocao definitiva no Goal024,
+  // quando o ciclo novo de importacao (ImportSession) assumir esta rota.
   app.post(
     "/internal/calendar/integration/connect",
     internalOnly,
     async (request) => {
       const context = currentInternalContext(request);
       const body = parse(integrationBodySchema, request.body);
-      const calendar = await requireCalendar(prisma, context.tenantId);
-      if (calendar.source !== "MINHA_AGENDA") {
+      // A conexao existe agora **so** para o ciclo da importacao unica:
+      // guardar e testar a credencial da origem. Ela nao muda a fonte da
+      // agenda operacional e nao e mais exigida para operar a agenda.
+      // Exigir aqui `calendar.source === "MINHA_AGENDA"` tornaria a
+      // importacao inalcancavel depois do corte do writer remoto: o negocio
+      // que opera na Agenda Atendly — que e todo negocio novo — nunca
+      // conseguiria conectar a origem que ele quer importar.
+      await requireCalendar(prisma, context.tenantId);
+      if (body.configuration.enableWrites) {
+        // Corte do writer remoto (Goal010 §6): a origem de importacao e
+        // somente leitura. Guardar uma credencial que se declara de escrita
+        // seria guardar uma promessa que o produto nao cumpre mais.
         throw new AppError(
-          "CALENDAR_SOURCE_MISMATCH",
-          "External integration can only be connected for its active calendar source.",
+          "INTEGRATION_WRITES_NOT_SUPPORTED",
+          "The Minha Agenda connection is read-only: it exists only to import into the Atendly calendar.",
           409,
         );
       }
@@ -1011,14 +1129,11 @@ export async function registerManagementRoutes(
     internalOnly,
     async (request) => {
       const context = currentInternalContext(request);
-      const calendar = await requireCalendar(prisma, context.tenantId);
-      if (calendar.source === "MINHA_AGENDA") {
-        throw new AppError(
-          "CALENDAR_MIGRATION_REQUIRED",
-          "Migrate to Atendly Calendar before disconnecting the official source.",
-          409,
-        );
-      }
+      // Desconectar a origem de importacao **nunca** desativa a agenda
+      // operacional: a Agenda Atendly nao depende de `IntegrationConnection`,
+      // e por isso desconectar deixou de exigir migracao previa. O que sai e
+      // a credencial da origem; a agenda do negocio segue igual.
+      await requireCalendar(prisma, context.tenantId);
       await prisma.integrationConnection.deleteMany({
         where: { tenantId: context.tenantId, provider: "MINHA_AGENDA" },
       });
@@ -1026,6 +1141,13 @@ export async function registerManagementRoutes(
     },
   );
 
+  // Protocolo antigo de migracao bidirecional (`MigrationJob`), mantido por
+  // compatibilidade temporaria: enums, `source`/`target` e as respostas
+  // idempotentes ja gravadas continuam legiveis. E substituido pela
+  // importacao unica (`ImportSession`, Goal010) e removido no Goal024. Todo
+  // `MigrationJob` deste protocolo, mesmo `COMPLETED`, e classificado como
+  // legado (`legacyClass`) e nunca conta como a conclusao unica do negocio —
+  // ver `modules/migrations/legacy-job-reconciliation.ts`.
   app.post(
     "/internal/calendar/migrations/diagnose",
     internalOnly,
@@ -1055,6 +1177,231 @@ export async function registerManagementRoutes(
       const context = currentInternalContext(request);
       const { id } = parse(idParamsSchema, request.params);
       return data(request, await migrations.get(context.tenantId, id));
+    },
+  );
+
+  // --- Importacao unica (Goal010, WU-08) -----------------------------------
+  // Uma rota por operacao do ciclo de ImportSession. So humano (BFF): a IA
+  // nunca decide o que importar, no mesmo padrao de bloqueio/excecao do
+  // Goal009. `source` e ator vem sempre do chamador autenticado
+  // (`currentInternalContext`) — nenhum corpo abaixo aceita `tenantId`,
+  // `userId`, `source` ou `actor`, entao um corpo que declare esses campos e
+  // silenciosamente ignorado pelo `zod` (`z.object` descarta chave
+  // desconhecida por padrao).
+
+  app.post("/internal/calendar/imports", internalOnly, async (request) => {
+    const context = currentInternalContext(request);
+    requireHumanCaller(context);
+    const key = idempotencyKey(request);
+    const body = parse(startImportBodySchema, request.body);
+    const connection = await requireIntegration(prisma, context.tenantId);
+    const result = await withImportIdempotency(
+      prisma,
+      {
+        tenantId: context.tenantId,
+        key,
+        operation: "import.start",
+        request: body,
+      },
+      async () => ({
+        ...(await new ImportCompletionService(prisma).startSession({
+          tenantId: context.tenantId,
+          userId: context.userId,
+          sourceAccountId: body.sourceAccountId,
+          sourceAccountLabel: body.sourceAccountLabel ?? null,
+          provider: connection.provider,
+          connectionId: connection.id,
+          replace: body.replace,
+        })),
+      }),
+    );
+    return data(request, result);
+  });
+
+  app.post(
+    "/internal/calendar/imports/:sessionId/analyze",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      requireHumanCaller(context);
+      const key = idempotencyKey(request);
+      const { sessionId } = parse(importSessionParamsSchema, request.params);
+      const calendar = await requireCalendar(prisma, context.tenantId);
+      const reader = await buildMinhaAgendaReader(prisma, context.tenantId);
+      const snapshotInput = importSnapshotWindow(calendar.timezone);
+      const result = await withImportIdempotency(
+        prisma,
+        {
+          tenantId: context.tenantId,
+          key,
+          operation: "import.analyze",
+          request: { sessionId },
+        },
+        async () =>
+          importPreviewSummaryDto(
+            await new ImportPreviewService(prisma).analyze(
+              { tenantId: context.tenantId, sessionId },
+              reader,
+              snapshotInput,
+            ),
+          ),
+      );
+      return data(request, result);
+    },
+  );
+
+  // Lista os itens (e, com `status=NEEDS_REVIEW`, os conflitos) de uma
+  // categoria da sessao, paginados. So leitura: nenhum efeito, nenhuma
+  // `Idempotency-Key`.
+  app.get(
+    "/internal/calendar/imports/:sessionId/categories/:category/items",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      requireHumanCaller(context);
+      const { sessionId, category } = parse(
+        importCategoryParamsSchema,
+        request.params,
+      );
+      const query = parse(importItemsQuerySchema, request.query ?? {});
+      await requireImportSession(prisma, context.tenantId, sessionId);
+      const where = {
+        tenantId: context.tenantId,
+        sessionId,
+        category,
+        ...(query.status ? { status: query.status } : {}),
+      };
+      const all = await prisma.importItem.findMany({
+        where,
+        orderBy: [{ externalId: "asc" as const }],
+      });
+      const page = all.slice(query.offset, query.offset + query.limit);
+      return data(request, {
+        sessionId,
+        category,
+        total: all.length,
+        limit: query.limit,
+        offset: query.offset,
+        items: page.map(importItemDto),
+      });
+    },
+  );
+
+  app.post(
+    "/internal/calendar/imports/:sessionId/items/:itemId/decision",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      requireHumanCaller(context);
+      const key = idempotencyKey(request);
+      const { sessionId, itemId } = parse(
+        importItemParamsSchema,
+        request.params,
+      );
+      const body = parse(importDecisionBodySchema, request.body);
+      const result = await withImportIdempotency(
+        prisma,
+        {
+          tenantId: context.tenantId,
+          key,
+          operation: "import.decision",
+          request: { sessionId, itemId, ...body },
+        },
+        () =>
+          applyImportDecision(prisma, {
+            tenantId: context.tenantId,
+            sessionId,
+            itemId,
+            decidedBy: context.userId,
+            decision: body.decision,
+            targetInternalId: body.targetInternalId,
+            noteCode: body.noteCode,
+          }),
+      );
+      return data(request, result);
+    },
+  );
+
+  app.post(
+    "/internal/calendar/imports/:sessionId/execute",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      requireHumanCaller(context);
+      const key = idempotencyKey(request);
+      const { sessionId } = parse(importSessionParamsSchema, request.params);
+      const body = parse(executeImportBodySchema, request.body ?? {});
+      const calendar = await requireCalendar(prisma, context.tenantId);
+      const reader = await buildMinhaAgendaReader(prisma, context.tenantId);
+      const snapshotInput = importSnapshotWindow(calendar.timezone);
+      const result = await withImportIdempotency(
+        prisma,
+        {
+          tenantId: context.tenantId,
+          key,
+          operation: "import.execute",
+          request: { sessionId, ...body },
+        },
+        async () => ({
+          ...(await new ImportExecutionService(prisma).execute(
+            { tenantId: context.tenantId, sessionId, userId: context.userId },
+            reader,
+            snapshotInput,
+            { previewVersion: body.previewVersion, maxItems: body.maxItems },
+          )),
+        }),
+      );
+      return data(request, result);
+    },
+  );
+
+  // Progresso lido do banco a cada chamada: nenhuma contagem fica em memoria
+  // entre passadas de execucao.
+  app.get(
+    "/internal/calendar/imports/:sessionId/progress",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      requireHumanCaller(context);
+      const { sessionId } = parse(importSessionParamsSchema, request.params);
+      const session = await requireImportSession(
+        prisma,
+        context.tenantId,
+        sessionId,
+      );
+      const items = await prisma.importItem.findMany({
+        where: { tenantId: context.tenantId, sessionId },
+      });
+      const categories = IMPORT_CATEGORY_ORDER.map((category) => {
+        const rows = items.filter((item) => item.category === category);
+        return rows.length === 0 ? null : { category, ...tallyItems(rows) };
+      }).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+      return data(request, {
+        sessionId: session.id,
+        status: session.status,
+        previewVersion: session.previewVersion,
+        startedAt: session.startedAt?.toISOString() ?? null,
+        finishedAt: session.finishedAt?.toISOString() ?? null,
+        counts: tallyItems(items),
+        categories,
+      });
+    },
+  );
+
+  app.post(
+    "/internal/calendar/imports/:sessionId/complete",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      requireHumanCaller(context);
+      const key = idempotencyKey(request);
+      const { sessionId } = parse(importSessionParamsSchema, request.params);
+      const body = parse(completeImportBodySchema, request.body ?? {});
+      const result = await new ImportCompletionService(prisma).complete(
+        { tenantId: context.tenantId, sessionId, userId: context.userId },
+        { acceptPending: body.acceptPending, idempotencyKey: key },
+      );
+      return data(request, importCompletionDto(result));
     },
   );
 
@@ -1103,10 +1450,6 @@ async function calendarOverview(
     }),
   ]);
   const source = settings?.source ?? null;
-  const externalWritesEnabled = integration
-    ? minhaAgendaWritesSchema.safeParse(integration.config).data
-        ?.enableWrites === true
-    : false;
   const operationalServices = await countOperationalServices(
     prisma,
     context,
@@ -1128,11 +1471,11 @@ async function calendarOverview(
       manageAvailability: source === "ATENDLY",
       manageServices: source === "ATENDLY",
       manageCustomers: source === "ATENDLY",
-      createAppointments:
-        source === "ATENDLY" ||
-        (source === "MINHA_AGENDA" &&
-          integration?.status === "CONNECTED" &&
-          externalWritesEnabled),
+      // Corte do writer remoto (Goal010): a Agenda Atendly e a unica fonte
+      // operacional. `CalendarProviderFactory` recusa MINHA_AGENDA para
+      // qualquer operacao, entao anunciar essa capacidade para a fonte
+      // externa prometeria uma escrita que a factory sempre recusaria.
+      createAppointments: source === "ATENDLY",
       migrate: source !== null,
       // "Pelo menos um serviço operacional" (Goal007): lido do que
       // `/internal/services` devolveria para a fonte vigente — mesmo
@@ -1154,17 +1497,12 @@ async function countOperationalServices(
 ): Promise<number> {
   if (source !== "ATENDLY" && source !== "MINHA_AGENDA") return 0;
   try {
-    return (
-      await new CalendarService(prisma).listOperationalServices(context)
-    ).length;
+    return (await new CalendarService(prisma).listOperationalServices(context))
+      .length;
   } catch {
     return 0;
   }
 }
-
-const minhaAgendaWritesSchema = z.object({
-  enableWrites: z.boolean().default(false),
-});
 
 async function requireCalendar(prisma: PrismaClient, tenantId: string) {
   const calendar = await prisma.calendarSettings.findUnique({
@@ -1460,6 +1798,396 @@ function blockSeriesDto(series: {
     occurrenceCount: series.occurrenceCount,
     status: series.status,
     supersededById: series.supersededById,
+  };
+}
+
+function idempotencyKey(request: FastifyRequest): string {
+  const value = request.headers["idempotency-key"];
+  const key = Array.isArray(value) ? value[0] : value;
+  if (!key || key.length > 200) {
+    throw new AppError(
+      "IDEMPOTENCY_KEY_REQUIRED",
+      "A valid Idempotency-Key header is required for mutations.",
+      400,
+    );
+  }
+  return key;
+}
+
+/** Envolve uma mutacao da importacao na mesma idempotencia da agenda (Goal008). */
+async function withImportIdempotency<TResult extends Record<string, unknown>>(
+  prisma: PrismaClient,
+  input: { tenantId: string; key: string; operation: string; request: unknown },
+  run: () => Promise<TResult>,
+): Promise<TResult> {
+  return new CalendarMutationIdempotency(prisma).execute<TResult>({
+    tenantId: input.tenantId,
+    key: input.key,
+    operation: input.operation,
+    request: input.request,
+    execute: () => run(),
+    parseResponse: (value) => value as TResult,
+  });
+}
+
+async function requireImportSession(
+  prisma: PrismaClient,
+  tenantId: string,
+  sessionId: string,
+) {
+  const session = await prisma.importSession.findUnique({
+    where: { tenantId_id: { tenantId, id: sessionId } },
+  });
+  if (!session) {
+    throw new AppError(
+      "IMPORT_SESSION_NOT_FOUND",
+      "Import session was not found.",
+      404,
+    );
+  }
+  return session;
+}
+
+async function buildMinhaAgendaReader(
+  prisma: PrismaClient,
+  tenantId: string,
+): Promise<MinhaAgendaCalendarProvider> {
+  const connection = await requireIntegration(prisma, tenantId);
+  return new MinhaAgendaCalendarProvider(
+    parseMinhaAgendaConnection(connection),
+  );
+}
+
+/**
+ * Janela da leitura da origem: dez anos para tras (historico de agendamento
+ * passado/cancelado/falta) e dez anos para frente (agenda futura), com
+ * "hoje" no fuso do negocio como referencia que separa passado de futuro.
+ */
+function importSnapshotWindow(timezone: string): GetImportSnapshotInput {
+  const referenceDate = todayInTimeZone(timezone);
+  return {
+    referenceDate,
+    startDate: addDays(referenceDate, -3_650),
+    endDate: addDays(referenceDate, 3_650),
+  };
+}
+
+/**
+ * Resumo da analise devolvido pela rota: os itens em si sao lidos pela rota
+ * de listagem paginada, nunca inteiros aqui — uma sessao com milhares de
+ * registros nao cabe, de novo, no corpo de `analyze` nem na resposta gravada
+ * pela `Idempotency-Key`.
+ */
+function importPreviewSummaryDto(
+  result: ImportPreviewResult,
+): Record<string, unknown> {
+  return {
+    sessionId: result.sessionId,
+    previewVersion: result.previewVersion,
+    generatedAt: result.generatedAt,
+    categories: result.categories,
+    changesSincePreviousVersion: result.changesSincePreviousVersion,
+  };
+}
+
+const IMPORT_CATEGORY_ORDER: ImportCategory[] = [
+  "SERVICE",
+  "CUSTOMER",
+  "AVAILABILITY",
+  "TIME_BLOCK",
+  "FUTURE_APPOINTMENT",
+  "PAST_APPOINTMENT",
+  "CANCELLED_APPOINTMENT",
+  "NO_SHOW_APPOINTMENT",
+];
+
+/** Um item ja resolvido, ou ja decidido, nao recebe uma segunda decisao. */
+const DECIDED_ITEM_STATUSES = new Set<ImportItemStatus>([
+  "IMPORTED",
+  "SKIPPED",
+  "FAILED",
+]);
+
+function tallyItems(rows: Array<{ status: ImportItemStatus }>) {
+  const counts = {
+    pending: 0,
+    imported: 0,
+    skipped: 0,
+    failed: 0,
+    needsReview: 0,
+  };
+  for (const row of rows) {
+    if (row.status === "PENDING") counts.pending += 1;
+    else if (row.status === "IMPORTED") counts.imported += 1;
+    else if (row.status === "SKIPPED") counts.skipped += 1;
+    else if (row.status === "FAILED") counts.failed += 1;
+    else if (row.status === "NEEDS_REVIEW") counts.needsReview += 1;
+  }
+  return counts;
+}
+
+function importItemDto(item: {
+  id: string;
+  category: ImportCategory;
+  externalId: string;
+  label: string | null;
+  status: ImportItemStatus;
+  reasonCode: string | null;
+  reasonDetail: string | null;
+  entityType: ExternalEntityType | null;
+  internalId: string | null;
+  attemptCount: number;
+  lastAttemptAt: Date | null;
+  processedAt: Date | null;
+  disappearedAt: Date | null;
+}) {
+  return {
+    id: item.id,
+    category: item.category,
+    externalId: item.externalId,
+    label: item.label,
+    status: item.status,
+    reasonCode: item.reasonCode,
+    reasonDetail: item.reasonDetail,
+    entityType: item.entityType,
+    internalId: item.internalId,
+    attemptCount: item.attemptCount,
+    lastAttemptAt: item.lastAttemptAt?.toISOString() ?? null,
+    processedAt: item.processedAt?.toISOString() ?? null,
+    disappearedAt: item.disappearedAt?.toISOString() ?? null,
+  };
+}
+
+function importDecisionDto(decision: {
+  id: string;
+  scope: string;
+  decision: string;
+  category: ImportCategory | null;
+  itemId: string | null;
+  externalId: string | null;
+  targetInternalId: string | null;
+  noteCode: string | null;
+  decidedBy: string;
+  decidedAt: Date;
+}) {
+  return {
+    id: decision.id,
+    scope: decision.scope,
+    decision: decision.decision,
+    category: decision.category,
+    itemId: decision.itemId,
+    externalId: decision.externalId,
+    targetInternalId: decision.targetInternalId,
+    noteCode: decision.noteCode,
+    decidedBy: decision.decidedBy,
+    decidedAt: decision.decidedAt.toISOString(),
+  };
+}
+
+function importCompletionDto(
+  result: ImportCompletionResult,
+): Record<string, unknown> {
+  return {
+    ...result,
+    completedAt: result.completedAt.toISOString(),
+    pendingAcceptance: result.pendingAcceptance
+      ? {
+          ...result.pendingAcceptance,
+          acceptedAt: result.pendingAcceptance.acceptedAt.toISOString(),
+        }
+      : null,
+  };
+}
+
+type ImportItemUpdateData = Parameters<
+  PrismaClient["importItem"]["update"]
+>[0]["data"];
+
+/**
+ * Aplica a decisao de um item da importacao (Goal010, WU-08).
+ *
+ * `EXCLUDE` resolve o item como `SKIPPED` — nunca mais reprocessado.
+ * `INCLUDE`/`CREATE_NEW` devolvem o item a `PENDING`, ignorando a
+ * correspondencia que o preview sugeriu: a proxima execucao cria um registro
+ * novo. `MERGE_WITH_EXISTING`/`KEEP_EXISTING` resolvem o item como
+ * `IMPORTED` apontando para o registro ja cadastrado escolhido, e gravam
+ * `ExternalEntityMap` no mesmo commit para que uma reanalise ou nova
+ * execucao reconhecam o item como ja tratado. So `SERVICE` e `CUSTOMER` tem
+ * correspondencia calculada pelo preview (Goal010, WU-03): as demais
+ * categorias nunca recebem essas duas decisoes.
+ */
+async function applyImportDecision(
+  prisma: PrismaClient,
+  input: {
+    tenantId: string;
+    sessionId: string;
+    itemId: string;
+    decidedBy: string;
+    decision:
+      | "INCLUDE"
+      | "EXCLUDE"
+      | "MERGE_WITH_EXISTING"
+      | "CREATE_NEW"
+      | "KEEP_EXISTING";
+    targetInternalId?: string;
+    noteCode?: string;
+  },
+): Promise<Record<string, unknown>> {
+  const session = await requireImportSession(
+    prisma,
+    input.tenantId,
+    input.sessionId,
+  );
+  if (session.status === "COMPLETED") {
+    throw new AppError(
+      "IMPORT_ALREADY_COMPLETED",
+      "This business has already completed its single import; there is no second one.",
+      409,
+      { sessionId: session.id, completedAt: session.completedAt },
+    );
+  }
+  const item = await prisma.importItem.findUnique({
+    where: { tenantId_id: { tenantId: input.tenantId, id: input.itemId } },
+  });
+  if (!item || item.sessionId !== input.sessionId) {
+    throw new AppError(
+      "IMPORT_ITEM_NOT_FOUND",
+      "Import item was not found.",
+      404,
+    );
+  }
+  const existingDecision = await prisma.importDecision.findFirst({
+    where: { tenantId: input.tenantId, itemId: item.id, scope: "ITEM" },
+  });
+  if (existingDecision || DECIDED_ITEM_STATUSES.has(item.status)) {
+    throw new AppError(
+      "IMPORT_ITEM_ALREADY_DECIDED",
+      "This item already has a decision; a decision is registered once.",
+      409,
+      { itemId: item.id, status: item.status },
+    );
+  }
+
+  const entityType = CATEGORY_ENTITY_TYPE[item.category];
+  const mergeable =
+    input.decision === "MERGE_WITH_EXISTING" ||
+    input.decision === "KEEP_EXISTING";
+  if (mergeable && entityType !== "SERVICE" && entityType !== "CUSTOMER") {
+    throw new AppError(
+      "IMPORT_DECISION_NOT_SUPPORTED_FOR_CATEGORY",
+      `${input.decision} is not supported for category ${item.category}.`,
+      422,
+      { category: item.category },
+    );
+  }
+
+  const now = new Date();
+  const [updatedItem, decision] = await prisma.$transaction(
+    async (transaction) => {
+      let itemUpdate: ImportItemUpdateData;
+      if (input.decision === "EXCLUDE") {
+        itemUpdate = {
+          status: "SKIPPED",
+          reasonCode: "EXCLUDED_BY_DECISION",
+          reasonDetail: "Item excluído da importação por decisão explícita.",
+          processedAt: now,
+        };
+      } else if (mergeable) {
+        const targetId = input.targetInternalId as string;
+        const target =
+          entityType === "SERVICE"
+            ? await transaction.service.findUnique({
+                where: {
+                  tenantId_id: { tenantId: input.tenantId, id: targetId },
+                },
+              })
+            : await transaction.customer.findUnique({
+                where: {
+                  tenantId_id: { tenantId: input.tenantId, id: targetId },
+                },
+              });
+        if (!target) {
+          throw new AppError(
+            "IMPORT_DECISION_TARGET_NOT_FOUND",
+            "The chosen existing record was not found.",
+            404,
+            { targetInternalId: targetId },
+          );
+        }
+        await transaction.externalEntityMap.upsert({
+          where: {
+            tenantId_provider_entityType_externalId: {
+              tenantId: input.tenantId,
+              provider: session.provider,
+              entityType,
+              externalId: item.externalId,
+            },
+          },
+          create: {
+            tenantId: input.tenantId,
+            provider: session.provider,
+            entityType,
+            externalId: item.externalId,
+            internalId: targetId,
+          },
+          update: { internalId: targetId },
+        });
+        itemUpdate = {
+          status: "IMPORTED",
+          entityType,
+          internalId: targetId,
+          reasonCode:
+            input.decision === "MERGE_WITH_EXISTING"
+              ? "MERGED_BY_DECISION"
+              : "KEPT_EXISTING_BY_DECISION",
+          reasonDetail:
+            input.decision === "MERGE_WITH_EXISTING"
+              ? "Registro mesclado com um já cadastrado, por decisão explícita."
+              : "Registro existente mantido; nada foi criado, por decisão explícita.",
+          processedAt: now,
+        };
+      } else {
+        // INCLUDE ou CREATE_NEW: volta a ser um item pendente comum, e o
+        // motor cria um registro novo na proxima execucao — ignorando a
+        // correspondencia sugerida.
+        itemUpdate = {
+          status: "PENDING",
+          reasonCode:
+            input.decision === "CREATE_NEW"
+              ? "CREATE_NEW_BY_DECISION"
+              : "INCLUDED_BY_DECISION",
+          reasonDetail:
+            "Inclusão confirmada por decisão explícita, ignorando a correspondência sugerida.",
+        };
+      }
+
+      const updated = await transaction.importItem.update({
+        where: { tenantId_id: { tenantId: input.tenantId, id: item.id } },
+        data: itemUpdate,
+      });
+      const createdDecision = await transaction.importDecision.create({
+        data: {
+          tenantId: input.tenantId,
+          sessionId: input.sessionId,
+          scope: "ITEM",
+          decision: input.decision,
+          category: item.category,
+          itemId: item.id,
+          externalId: item.externalId,
+          previewVersion: session.previewVersion,
+          targetInternalId: input.targetInternalId ?? null,
+          noteCode: input.noteCode ?? null,
+          decidedBy: input.decidedBy,
+          decidedAt: now,
+        },
+      });
+      return [updated, createdDecision] as const;
+    },
+  );
+
+  return {
+    item: importItemDto(updatedItem),
+    decision: importDecisionDto(decision),
   };
 }
 

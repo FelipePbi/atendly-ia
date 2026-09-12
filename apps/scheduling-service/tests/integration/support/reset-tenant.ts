@@ -37,4 +37,15 @@ export async function resetTenant(
   await prisma.availabilityRule.deleteMany({ where: { tenantId } });
   await prisma.timeBlock.deleteMany({ where: { tenantId } });
   await prisma.blockSeries.deleteMany({ where: { tenantId } });
+  // Goal010: a sessao de importacao e o pai de decisao, item e categoria
+  // (`ON DELETE CASCADE`), mas a ordem explicita continua aqui pelo mesmo
+  // motivo dos demais: quem le esta funcao ve a dependencia sem precisar
+  // abrir a migration. `ExternalEntityMap` vem junto porque a execucao da
+  // importacao o preenche, e um mapa deixado para tras faria o cenario
+  // seguinte encontrar o registro como "ja importado".
+  await prisma.importDecision.deleteMany({ where: { tenantId } });
+  await prisma.importItem.deleteMany({ where: { tenantId } });
+  await prisma.importSessionCategory.deleteMany({ where: { tenantId } });
+  await prisma.importSession.deleteMany({ where: { tenantId } });
+  await prisma.externalEntityMap.deleteMany({ where: { tenantId } });
 }

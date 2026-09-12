@@ -9,6 +9,7 @@ import { CalendarService } from "../../src/modules/calendar/calendar-service.js"
 import { createTimeBlock } from "../../src/modules/calendar/time-blocks.js";
 import { AtendlyCalendarProvider } from "../../src/modules/integrations/atendly/provider.js";
 import { resetTenant } from "./support/reset-tenant.js";
+import { upcomingDate } from "./support/test-date.js";
 
 /**
  * Goal008 contra PostgreSQL real: política única de escrita, hold pelo
@@ -29,7 +30,8 @@ const describeWithDatabase = connectionString ? describe : describe.skip;
 const tenantA = "goal008-tenant-a";
 const tenantB = "goal008-tenant-b";
 const timeZone = "America/Sao_Paulo";
-const date = "2026-09-10";
+// Dia sempre à frente de hoje: ver `support/test-date.ts`.
+const date = upcomingDate();
 const stepMinutes = 30;
 
 let prisma: PrismaClient;

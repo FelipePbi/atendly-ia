@@ -313,6 +313,168 @@ const migrationSchema = z.object({
     }),
   ),
 });
+// --- Importacao unica (Goal010, WU-09) -------------------------------------
+const importCategorySchema = z.enum([
+  "SERVICE",
+  "CUSTOMER",
+  "AVAILABILITY",
+  "TIME_BLOCK",
+  "FUTURE_APPOINTMENT",
+  "PAST_APPOINTMENT",
+  "CANCELLED_APPOINTMENT",
+  "NO_SHOW_APPOINTMENT",
+]);
+const importItemStatusSchema = z.enum([
+  "PENDING",
+  "IMPORTED",
+  "SKIPPED",
+  "FAILED",
+  "NEEDS_REVIEW",
+]);
+const importSessionStatusSchema = z.enum([
+  "DRAFT",
+  "ANALYZING",
+  "READY",
+  "EXECUTING",
+  "PARTIAL",
+  "FAILED",
+  "SUPERSEDED",
+  "COMPLETED",
+]);
+const importDecisionScopeSchema = z.enum(["SESSION", "CATEGORY", "ITEM"]);
+const importDecisionKindSchema = z.enum([
+  "IMPORT_ALL",
+  "INCLUDE",
+  "EXCLUDE",
+  "MERGE_WITH_EXISTING",
+  "CREATE_NEW",
+  "KEEP_EXISTING",
+  "ACCEPT_PENDING_COMPLETION",
+]);
+const importCountsSchema = z.object({
+  pending: z.number().int().nonnegative(),
+  imported: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  needsReview: z.number().int().nonnegative(),
+});
+const importItemSchema = z.object({
+  id: z.string(),
+  category: importCategorySchema,
+  externalId: z.string(),
+  label: z.string().nullable(),
+  status: importItemStatusSchema,
+  reasonCode: z.string().nullable(),
+  reasonDetail: z.string().nullable(),
+  entityType: z.string().nullable(),
+  internalId: z.string().nullable(),
+  attemptCount: z.number().int().nonnegative(),
+  lastAttemptAt: z.string().nullable(),
+  processedAt: z.string().nullable(),
+  disappearedAt: z.string().nullable(),
+});
+const importDecisionResultSchema = z.object({
+  id: z.string(),
+  scope: importDecisionScopeSchema,
+  decision: importDecisionKindSchema,
+  category: importCategorySchema.nullable(),
+  itemId: z.string().nullable(),
+  externalId: z.string().nullable(),
+  targetInternalId: z.string().nullable(),
+  noteCode: z.string().nullable(),
+  decidedBy: z.string(),
+  decidedAt: z.string(),
+});
+const startImportSessionResultSchema = z.object({
+  sessionId: z.string(),
+  status: importSessionStatusSchema,
+  created: z.boolean(),
+  replacedSessionId: z.string().nullable(),
+});
+const importPreviewCategorySchema = z.object({
+  category: importCategorySchema,
+  sourceSupported: z.boolean(),
+  limitationCode: z.string().nullable(),
+  limitationDetail: z.string().nullable(),
+  sourceReportedCount: z.number().int().nullable(),
+  readCount: z.number().int().nonnegative(),
+  discoveredCount: z.number().int().nonnegative(),
+  pendingCount: z.number().int().nonnegative(),
+  needsReviewCount: z.number().int().nonnegative(),
+  importedCount: z.number().int().nonnegative(),
+  skippedCount: z.number().int().nonnegative(),
+  failedCount: z.number().int().nonnegative(),
+});
+const importPreviewSummarySchema = z.object({
+  sessionId: z.string(),
+  previewVersion: z.number().int().nonnegative(),
+  generatedAt: z.string(),
+  categories: z.array(importPreviewCategorySchema),
+  changesSincePreviousVersion: z.object({
+    newCount: z.number().int().nonnegative(),
+    changedCount: z.number().int().nonnegative(),
+    disappearedCount: z.number().int().nonnegative(),
+  }),
+});
+const importItemsPageSchema = z.object({
+  sessionId: z.string(),
+  category: importCategorySchema,
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  offset: z.number().int().nonnegative(),
+  items: z.array(importItemSchema),
+});
+const importDecisionResponseSchema = z.object({
+  item: importItemSchema,
+  decision: importDecisionResultSchema,
+});
+const importCategoryCountsSchema = importCountsSchema.extend({
+  category: importCategorySchema,
+});
+const importExecutionResultSchema = z.object({
+  sessionId: z.string(),
+  previewVersion: z.number().int().nonnegative(),
+  status: z.enum(["PARTIAL", "READY"]),
+  processed: z.number().int().nonnegative(),
+  counts: importCountsSchema,
+  categories: z.array(importCategoryCountsSchema),
+  leaseOwner: z.string(),
+  leaseLost: z.boolean(),
+});
+const importProgressSchema = z.object({
+  sessionId: z.string(),
+  status: importSessionStatusSchema,
+  previewVersion: z.number().int().nonnegative(),
+  startedAt: z.string().nullable(),
+  finishedAt: z.string().nullable(),
+  counts: importCountsSchema,
+  categories: z.array(importCategoryCountsSchema),
+});
+const importCompletionCategorySchema = importCountsSchema.extend({
+  category: importCategorySchema,
+  discovered: z.number().int().nonnegative(),
+  sourceSupported: z.boolean(),
+  limitationCode: z.string().nullable(),
+});
+const importCompletionResultSchema = z.object({
+  sessionId: z.string(),
+  provider: z.enum(["MINHA_AGENDA"]),
+  sourceAccountId: z.string(),
+  sourceAccountLabel: z.string().nullable(),
+  status: z.literal("COMPLETED"),
+  completedAt: z.string(),
+  completedBy: z.string(),
+  counts: importCountsSchema,
+  categories: z.array(importCompletionCategorySchema),
+  pendingAcceptance: z
+    .object({
+      acceptedBy: z.string(),
+      acceptedAt: z.string(),
+      pendingCount: z.number().int().nonnegative(),
+    })
+    .nullable(),
+});
+
 const envelope = <T extends z.ZodType>(schema: T) =>
   z.object({ data: schema, requestId: z.string() });
 
@@ -966,6 +1128,113 @@ export class SchedulingClient {
       context,
       `/internal/calendar/migrations/${encodeURIComponent(id)}`,
       migrationSchema,
+    );
+  }
+
+  // --- Importacao unica (Goal010, WU-09) -----------------------------------
+
+  async startImport(
+    context: InternalRequestContext,
+    input: {
+      sourceAccountId: string;
+      sourceAccountLabel?: string | null;
+      replace?: boolean;
+    },
+    idempotencyKey: string,
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      "/internal/calendar/imports",
+      input,
+      startImportSessionResultSchema,
+      idempotencyKey,
+    );
+  }
+
+  async analyzeImport(
+    context: InternalRequestContext,
+    sessionId: string,
+    idempotencyKey: string,
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      `/internal/calendar/imports/${encodeURIComponent(sessionId)}/analyze`,
+      undefined,
+      importPreviewSummarySchema,
+      idempotencyKey,
+    );
+  }
+
+  async listImportItems(
+    context: InternalRequestContext,
+    sessionId: string,
+    category: string,
+    query: { status?: string; limit?: number; offset?: number },
+  ) {
+    return this.get(
+      context,
+      `/internal/calendar/imports/${encodeURIComponent(sessionId)}/categories/${encodeURIComponent(category)}/items`,
+      importItemsPageSchema,
+      query,
+    );
+  }
+
+  async decideImportItem(
+    context: InternalRequestContext,
+    sessionId: string,
+    itemId: string,
+    input: unknown,
+    idempotencyKey: string,
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      `/internal/calendar/imports/${encodeURIComponent(sessionId)}/items/${encodeURIComponent(itemId)}/decision`,
+      input,
+      importDecisionResponseSchema,
+      idempotencyKey,
+    );
+  }
+
+  async executeImport(
+    context: InternalRequestContext,
+    sessionId: string,
+    input: { previewVersion: number; maxItems?: number },
+    idempotencyKey: string,
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      `/internal/calendar/imports/${encodeURIComponent(sessionId)}/execute`,
+      input,
+      importExecutionResultSchema,
+      idempotencyKey,
+    );
+  }
+
+  async importProgress(context: InternalRequestContext, sessionId: string) {
+    return this.get(
+      context,
+      `/internal/calendar/imports/${encodeURIComponent(sessionId)}/progress`,
+      importProgressSchema,
+    );
+  }
+
+  async completeImport(
+    context: InternalRequestContext,
+    sessionId: string,
+    input: { acceptPending?: boolean },
+    idempotencyKey: string,
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      `/internal/calendar/imports/${encodeURIComponent(sessionId)}/complete`,
+      input,
+      importCompletionResultSchema,
+      idempotencyKey,
     );
   }
 

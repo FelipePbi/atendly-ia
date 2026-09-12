@@ -15,6 +15,7 @@ import {
 import { AtendlyAvailability } from "../../src/modules/availability/atendly-availability.js";
 import { AtendlyCalendarProvider } from "../../src/modules/integrations/atendly/provider.js";
 import { resetTenant } from "./support/reset-tenant.js";
+import { upcomingDate } from "./support/test-date.js";
 
 /**
  * Goal009 contra PostgreSQL real: ocupacao com buffers e regras de oferta
@@ -30,7 +31,8 @@ const describeWithDatabase = connectionString ? describe : describe.skip;
 const tenantA = "goal009-tenant-a";
 const tenantB = "goal009-tenant-b";
 const timeZone = "America/Sao_Paulo";
-const date = "2026-09-10";
+// Dia sempre à frente de hoje: ver `support/test-date.ts`.
+const date = upcomingDate();
 
 let prisma: PrismaClient;
 let other: PrismaClient;

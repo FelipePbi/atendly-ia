@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
+import type { ExternalEntityType } from "../../generated/prisma/enums.js";
 import {
   addDays,
   addMinutes,
@@ -11,6 +12,7 @@ import { AtendlyCustomerService } from "../customers/atendly-customer-service.js
 import { parseMinhaAgendaConnection } from "../integrations/minha-agenda/config.js";
 import { MinhaAgendaCalendarProvider } from "../integrations/minha-agenda/provider.js";
 import { AtendlyServiceService } from "../services/atendly-service-service.js";
+import { ImportCompletionService } from "./import-completion-service.js";
 
 type CalendarSource = "ATENDLY" | "MINHA_AGENDA";
 type MigrationStatus =
@@ -62,6 +64,27 @@ interface Analysis {
 
 const activeStatuses: MigrationStatus[] = ["PENDING", "ANALYZING", "RUNNING"];
 
+/**
+ * Protocolo antigo de migracao bidirecional. Compatibilidade temporaria
+ * declarada (Goal010, WU-07): continua funcionando pelas rotas
+ * `/internal/calendar/migrations*` exatamente como antes, mas e substituido
+ * pela importacao unica (`ImportSession`) e removido no Goal024. Um
+ * `MigrationJob` criado por este servico, mesmo `COMPLETED`, nunca e a
+ * conclusao unica de importacao do usuario — ele e classificado como legado
+ * por `LegacyMigrationJobReconciliation` e nao consome o direito de
+ * importacao nem habilita uma segunda `ImportSession`.
+ *
+ * A recuperacao global de boot (`resumeIncomplete`) **nao existe mais**
+ * (Goal010, WU-05). Ela varria `MigrationJob` de todos os negocios, sem
+ * lease e sem recorte por tenant, e reagendava cada job em memoria: bastava
+ * subir uma segunda instancia para dois processos reprocessarem o mesmo job,
+ * e um job vivo era reiniciado por quem acabara de subir. A retomada passou
+ * a ser por tenant e sob lease, em `resumeImportSessions` (`import-lease.ts`),
+ * sobre `ImportSession`. Job legado que ficou pendurado em estado nao
+ * terminal nao e mais mexido as cegas: `classifyLegacyJob` o isola como
+ * `NEEDS_REVIEW`, que e a leitura honesta de um job cujo protocolo nunca
+ * declarou resultado.
+ */
 export class CalendarMigrationService {
   private readonly scheduled = new Set<string>();
 
@@ -75,6 +98,16 @@ export class CalendarMigrationService {
   }
 
   async start(context: MigrationContext, target: CalendarSource) {
+    // Goal010, WU-06: o direito de importacao e do NEGOCIO, nao da sessao nem
+    // do protocolo. Concluida a importacao unica, nao existe caminho de
+    // reprocessar a origem — nem por aqui, que sobrevive apenas como
+    // compatibilidade declarada ate o Goal024. Na direcao oposta a regra e a
+    // de WU-07 e continua valendo: job legado nao consome o direito nem
+    // habilita uma segunda importacao.
+    await new ImportCompletionService(this.prisma).assertImportAvailable(
+      context.tenantId,
+    );
+
     const active = await this.prisma.migrationJob.findFirst({
       where: { tenantId: context.tenantId, status: { in: activeStatuses } },
       orderBy: { createdAt: "desc" },
@@ -139,26 +172,12 @@ export class CalendarMigrationService {
     return migrationDto(job);
   }
 
-  async resumeIncomplete(): Promise<void> {
-    await this.prisma.migrationJob.updateMany({
-      where: {
-        status: { in: ["ANALYZING", "RUNNING"] },
-      },
-      data: { status: "PENDING", currentStep: "RECOVERING", progress: 0 },
-    });
-    const jobs = await this.prisma.migrationJob.findMany({
-      where: { status: "PENDING" },
-      orderBy: { createdAt: "asc" },
-    });
-    for (const job of jobs) {
-      this.schedule(job.id, {
-        tenantId: job.tenantId,
-        userId: job.requestedBy,
-        requestId: `migration-recovery-${job.id}`,
-      });
-    }
-  }
-
+  /**
+   * Agendamento em memoria do job que **este** processo acabou de criar. Nao
+   * e coordenacao entre instancias e nunca foi: o `Set` so evita agendar
+   * duas vezes dentro do mesmo processo. Quem coordena a importacao nova e o
+   * lease de `import-lease.ts`, na linha de `ImportSession`.
+   */
   private schedule(id: string, context: MigrationContext): void {
     if (this.scheduled.has(id)) return;
     this.scheduled.add(id);
@@ -823,7 +842,11 @@ function migrationDto(job: {
   updatedAt: Date;
   conflicts: Array<{
     id: string;
-    entityType: EntityType;
+    // Lido da coluna `MigrationConflict.entityType`, que compartilha o enum
+    // `ExternalEntityType` do Goal010 (WU-01): mais amplo do que os valores
+    // que este protocolo antigo produz (`EntityType`, abaixo), mas o tipo de
+    // leitura precisa aceitar qualquer valor que a coluna possa guardar.
+    entityType: ExternalEntityType;
     status: string;
     details: unknown;
   }>;

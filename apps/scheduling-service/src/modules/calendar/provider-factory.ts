@@ -1,10 +1,16 @@
 import type { PrismaClient } from "../../generated/prisma/client.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { AtendlyCalendarProvider } from "../integrations/atendly/provider.js";
-import { parseMinhaAgendaConnection } from "../integrations/minha-agenda/config.js";
-import { MinhaAgendaCalendarProvider } from "../integrations/minha-agenda/provider.js";
 import type { CalendarProvider } from "./calendar-provider.js";
 
+/**
+ * Corte do writer remoto (Goal010, WU-07): a Agenda Atendly e a unica fonte
+ * operacional. `MinhaAgendaCalendarProvider` nao e importado aqui de
+ * proposito — nenhum caminho operacional (escrita ou oferta de horarios)
+ * pode instanciar o provider remoto, nem por engano. A leitura da origem
+ * sobrevive apenas dentro da importacao (`getImportSnapshot`, Goal010),
+ * chamada direto pelo modulo de importacao, nunca por esta factory.
+ */
 export class CalendarProviderFactory {
   constructor(private readonly prisma: PrismaClient) {}
 
@@ -23,28 +29,10 @@ export class CalendarProviderFactory {
       );
     }
 
-    const connection = await this.prisma.integrationConnection.findUnique({
-      where: {
-        tenantId_provider: {
-          tenantId: input.tenantId,
-          provider: "MINHA_AGENDA",
-        },
-      },
-    });
-    if (!connection) {
-      throw new AppError(
-        "INTEGRATION_CONNECTION_NOT_FOUND",
-        "Minha Agenda connection was not found for this tenant.",
-        404,
-      );
-    }
-
-    return new MinhaAgendaCalendarProvider(
-      parseMinhaAgendaConnection({
-        tenantId: connection.tenantId,
-        credentialsEncrypted: connection.credentialsEncrypted,
-        config: connection.config,
-      }),
+    throw new AppError(
+      "MINHA_AGENDA_OPERATIONAL_SOURCE_DISABLED",
+      "Minha Agenda no longer serves operational reads, writes or availability offers; it can only be read from during the one-time import.",
+      409,
     );
   }
 }

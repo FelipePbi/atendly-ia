@@ -1,15 +1,21 @@
+import { z } from "zod";
+
 import { AppError } from "../../../shared/errors/app-error.js";
 import type { MinhaAgendaConnectionConfig } from "./config.js";
-import type {
-  AppointmentRangeQuery,
-  CreateAppointmentInput,
-  CreateCustomerInput,
-  MinhaAgendaAppointment,
-  MinhaAgendaAuthResponse,
-  MinhaAgendaCustomer,
-  MinhaAgendaService,
-  UpdateAppointmentInput,
-  WorkSchedule,
+import {
+  type AppointmentRangeQuery,
+  type CreateAppointmentInput,
+  type CreateCustomerInput,
+  type MinhaAgendaAppointment,
+  minhaAgendaAppointmentSchema,
+  minhaAgendaAuthResponseSchema,
+  type MinhaAgendaCustomer,
+  minhaAgendaCustomerSchema,
+  type MinhaAgendaService,
+  minhaAgendaServiceSchema,
+  type UpdateAppointmentInput,
+  type WorkSchedule,
+  workScheduleSchema,
 } from "./types.js";
 
 interface TokenCache {
@@ -17,22 +23,68 @@ interface TokenCache {
   expiresAtMs: number;
 }
 
-export class MinhaAgendaClient {
+/**
+ * Superficie publica usada por quem le a origem (provider/leitor de
+ * importacao). Extraida para permitir um dublê nos testes sem depender da
+ * implementacao HTTP concreta.
+ */
+export interface MinhaAgendaSourceClient {
+  listServices(): Promise<MinhaAgendaService[]>;
+  searchCustomers(query: string): Promise<MinhaAgendaCustomer[]>;
+  createCustomer(
+    input: CreateCustomerInput,
+    idempotencyKey: string,
+  ): Promise<MinhaAgendaCustomer>;
+  findAppointmentsByDateRange(
+    query: AppointmentRangeQuery,
+  ): Promise<MinhaAgendaAppointment[]>;
+  appointmentExists(query: {
+    employeeId: number;
+    date: string;
+    startTime: string;
+    exceptForId?: number;
+  }): Promise<boolean>;
+  getAppointment(id: number): Promise<MinhaAgendaAppointment>;
+  createAppointment(
+    input: CreateAppointmentInput,
+    idempotencyKey: string,
+  ): Promise<MinhaAgendaAppointment>;
+  updateAppointment(
+    id: number,
+    input: UpdateAppointmentInput,
+    idempotencyKey: string,
+  ): Promise<MinhaAgendaAppointment>;
+  cancelWithComments(
+    id: number,
+    comments: string,
+    idempotencyKey: string,
+  ): Promise<void>;
+  getCompanyWorkSchedule(): Promise<WorkSchedule>;
+  getEmployeeWorkScheduleByEmployeeId(
+    employeeId: number,
+  ): Promise<WorkSchedule>;
+}
+
+export class MinhaAgendaClient implements MinhaAgendaSourceClient {
   private tokenCache: TokenCache | null = null;
 
   constructor(private readonly config: MinhaAgendaConnectionConfig) {}
 
   async listServices(): Promise<MinhaAgendaService[]> {
-    return this.request<MinhaAgendaService[]>("/services");
+    return this.request(
+      "/services",
+      minhaAgendaServiceSchema.array(),
+      "services",
+    );
   }
 
   async searchCustomers(query: string): Promise<MinhaAgendaCustomer[]> {
-    return this.request<MinhaAgendaCustomer[]>(
+    return this.request(
       "/customers/search",
+      minhaAgendaCustomerSchema.array(),
+      "customers.search",
       {},
-      {
-        query,
-      },
+      { query },
     );
   }
 
@@ -40,18 +92,21 @@ export class MinhaAgendaClient {
     input: CreateCustomerInput,
     idempotencyKey: string,
   ): Promise<MinhaAgendaCustomer> {
-    return this.request<MinhaAgendaCustomer>("/customers", {
-      method: "POST",
-      body: input,
-      idempotencyKey,
-    });
+    return this.request(
+      "/customers",
+      minhaAgendaCustomerSchema,
+      "customers.create",
+      { method: "POST", body: input, idempotencyKey },
+    );
   }
 
   async findAppointmentsByDateRange(
     query: AppointmentRangeQuery,
   ): Promise<MinhaAgendaAppointment[]> {
-    return this.request<MinhaAgendaAppointment[]>(
+    return this.request(
       "/appointments/appsByDateRange",
+      minhaAgendaAppointmentSchema.array(),
+      "appointments.byDateRange",
       {},
       { ...query },
     );
@@ -63,22 +118,33 @@ export class MinhaAgendaClient {
     startTime: string;
     exceptForId?: number;
   }): Promise<boolean> {
-    return this.request<boolean>("/appointments/exists", {}, query);
+    return this.request(
+      "/appointments/exists",
+      z.boolean(),
+      "appointments.exists",
+      {},
+      query,
+    );
   }
 
   async getAppointment(id: number): Promise<MinhaAgendaAppointment> {
-    return this.request<MinhaAgendaAppointment>(`/appointments/${id}`);
+    return this.request(
+      `/appointments/${id}`,
+      minhaAgendaAppointmentSchema,
+      "appointments.get",
+    );
   }
 
   async createAppointment(
     input: CreateAppointmentInput,
     idempotencyKey: string,
   ): Promise<MinhaAgendaAppointment> {
-    return this.request<MinhaAgendaAppointment>("/appointments", {
-      method: "POST",
-      body: input,
-      idempotencyKey,
-    });
+    return this.request(
+      "/appointments",
+      minhaAgendaAppointmentSchema,
+      "appointments.create",
+      { method: "POST", body: input, idempotencyKey },
+    );
   }
 
   async updateAppointment(
@@ -86,11 +152,12 @@ export class MinhaAgendaClient {
     input: UpdateAppointmentInput,
     idempotencyKey: string,
   ): Promise<MinhaAgendaAppointment> {
-    return this.request<MinhaAgendaAppointment>(`/appointments/${id}`, {
-      method: "PUT",
-      body: input,
-      idempotencyKey,
-    });
+    return this.request(
+      `/appointments/${id}`,
+      minhaAgendaAppointmentSchema,
+      "appointments.update",
+      { method: "PUT", body: input, idempotencyKey },
+    );
   }
 
   async cancelWithComments(
@@ -98,27 +165,36 @@ export class MinhaAgendaClient {
     comments: string,
     idempotencyKey: string,
   ): Promise<void> {
-    await this.request<void>(`/appointments/cancelWithComments/${id}`, {
-      method: "PUT",
-      body: { comments },
-      idempotencyKey,
-    });
+    await this.request(
+      `/appointments/cancelWithComments/${id}`,
+      z.unknown(),
+      "appointments.cancel",
+      { method: "PUT", body: { comments }, idempotencyKey },
+    );
   }
 
   async getCompanyWorkSchedule(): Promise<WorkSchedule> {
-    return this.request<WorkSchedule>("/companyWorkSchedule");
+    return this.request(
+      "/companyWorkSchedule",
+      workScheduleSchema,
+      "schedule.company",
+    );
   }
 
   async getEmployeeWorkScheduleByEmployeeId(
     employeeId: number,
   ): Promise<WorkSchedule> {
-    return this.request<WorkSchedule>(
+    return this.request(
       `/employeeWorkScheduleByEmployeeId/${employeeId}`,
+      workScheduleSchema,
+      "schedule.employee",
     );
   }
 
   private async request<T>(
     path: string,
+    schema: z.ZodType<T>,
+    context: string,
     options: {
       method?: "GET" | "POST" | "PUT";
       body?: unknown;
@@ -132,8 +208,9 @@ export class MinhaAgendaClient {
       headers["idempotency-key"] = options.idempotencyKey;
     }
 
+    let raw: unknown;
     try {
-      return await fetchJson<T>(url, options, headers, this.config.timeoutMs);
+      raw = await fetchJson(url, options, headers, this.config.timeoutMs);
     } catch (error) {
       if (error instanceof AppError && error.statusCode === 401) {
         this.tokenCache = null;
@@ -141,10 +218,18 @@ export class MinhaAgendaClient {
         if (options.idempotencyKey) {
           retryHeaders["idempotency-key"] = options.idempotencyKey;
         }
-        return fetchJson<T>(url, options, retryHeaders, this.config.timeoutMs);
+        raw = await fetchJson(
+          url,
+          options,
+          retryHeaders,
+          this.config.timeoutMs,
+        );
+      } else {
+        throw error;
       }
-      throw error;
     }
+
+    return parseSourceResponse(schema, raw, context);
   }
 
   private async authHeaders(
@@ -192,7 +277,12 @@ export class MinhaAgendaClient {
       );
     }
 
-    const parsed = (await response.json()) as MinhaAgendaAuthResponse;
+    const rawAuth: unknown = await response.json();
+    const parsed = parseSourceResponse(
+      minhaAgendaAuthResponseSchema,
+      rawAuth,
+      "auth.token",
+    );
     const ttlMs = Math.max(
       0,
       parsed.expires_in * 1_000 - this.config.refreshSkewSeconds * 1_000,
@@ -211,12 +301,45 @@ export function createMinhaAgendaClient(
   return new MinhaAgendaClient(config);
 }
 
-async function fetchJson<T>(
+/**
+ * A resposta do Minha Agenda passa por schema antes de qualquer mapeamento
+ * (Goal010): resposta fora do contrato falha identificada pela categoria da
+ * chamada e por uma causa sanitizada — nunca vira `undefined` silencioso.
+ * A causa fica limitada a caminho e codigo do erro Zod; o payload da origem
+ * nunca entra na mensagem nem nos `details`.
+ */
+function parseSourceResponse<T>(
+  schema: z.ZodType<T>,
+  raw: unknown,
+  context: string,
+): T {
+  const result = schema.safeParse(raw);
+  if (!result.success) {
+    throw new AppError(
+      "MINHA_AGENDA_INVALID_RESPONSE",
+      `Minha Agenda response for "${context}" did not match the expected contract.`,
+      502,
+      { context, issues: sanitizeIssues(result.error) },
+    );
+  }
+  return result.data;
+}
+
+function sanitizeIssues(
+  error: z.ZodError,
+): Array<{ path: string; code: string }> {
+  return error.issues.slice(0, 10).map((issue) => ({
+    path: issue.path.join(".") || "(root)",
+    code: issue.code,
+  }));
+}
+
+async function fetchJson(
   url: string,
   options: { method?: string; body?: unknown },
   headers: Record<string, string>,
   timeoutMs: number,
-): Promise<T> {
+): Promise<unknown> {
   let response: Response;
   try {
     response = await fetch(url, {
@@ -251,8 +374,8 @@ async function fetchJson<T>(
       response.status,
     );
   }
-  if (!text) return undefined as T;
-  return JSON.parse(text) as T;
+  if (!text) return undefined;
+  return JSON.parse(text) as unknown;
 }
 
 function buildUrl(

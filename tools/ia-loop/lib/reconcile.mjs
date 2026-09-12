@@ -73,6 +73,11 @@ export function buildStageLedger(jobs, { goal = null } = {}) {
         status: STAGE_STATUS.NOT_STARTED,
         attempts: [],
         completedBy: null,
+        // The developer job THIS stage's completing job says it was produced
+        // for — carried only by review jobs today (a developer/correction job
+        // has no developer job of its own to name). Null when the completing
+        // job predates the field: absence is "unknown", never "stale".
+        developerJobId: null,
         result: null,
         duplicates: [],
       });
@@ -89,13 +94,18 @@ export function buildStageLedger(jobs, { goal = null } = {}) {
       hasResult: Boolean(entry.result),
     });
 
-    if (entry.result) {
+    // A job superseded is a job that stops counting, whatever it produced.
+    // Marking it SUPERSEDED changes nothing on its own — the result file is
+    // untouched, on purpose, so history stays readable — but a stage's
+    // completion must not keep resting on a result its own job now disowns.
+    if (entry.result && entry.status !== 'SUPERSEDED') {
       if (stage.completedBy && stage.completedBy !== entry.job.jobId) {
         // Two successful results for one stage should be impossible. Record it
         // rather than silently picking one.
         stage.duplicates.push(entry.job.jobId);
       } else {
         stage.completedBy = entry.job.jobId;
+        stage.developerJobId = entry.job.developerJobId ?? null;
         stage.result = entry.result;
         stage.status = STAGE_STATUS.COMPLETED;
       }
@@ -164,6 +174,27 @@ export function needsNewAttempt(stage) {
 }
 
 /**
+ * A completed review stage is stale when it names a developer job that no
+ * longer matches the one that actually completed this round's implementation
+ * or correction stage — a round can only genuinely be reviewed once its own
+ * work exists, and "a review is filed under this round number" was never
+ * proof that it reviewed this round's actual result. That gap is exactly what
+ * let Goal010 reuse round 1's own BLOCKED result across three rounds: nothing
+ * checked the review against WHICH developer result it had in hand.
+ *
+ * Absent provenance (a review written before `developerJobId` existed) is NOT
+ * evidence of staleness — an unknown answer is not a wrong one, and treating
+ * every historical review as stale the first time this runs would supersede
+ * Goal003 through Goal009's entire accepted history.
+ */
+export function isReviewStale({ implementation, review }) {
+  if (!review || review.status !== STAGE_STATUS.COMPLETED) return false;
+  if (!review.developerJobId) return false;
+  if (!implementation?.completedBy) return false;
+  return review.developerJobId !== implementation.completedBy;
+}
+
+/**
  * Works out the one thing that should happen next.
  *
  * Reads only from the ledger — never from currentJobId, which is a pointer that
@@ -190,8 +221,9 @@ export function decideNextDispatch({ ledger, goal, maxRounds = 3 }) {
       };
     }
 
-    // Implemented but not reviewed.
-    if (!review || review.status !== STAGE_STATUS.COMPLETED) {
+    // Implemented but not reviewed — including reviewed by something that no
+    // longer names this round's actual implementation.
+    if (!review || review.status !== STAGE_STATUS.COMPLETED || isReviewStale({ implementation, review })) {
       return {
         kind: DISPATCH_KINDS.REVIEW,
         goal, round, stage: STAGES.REVIEW, role: 'tech_lead',
@@ -344,6 +376,18 @@ export async function reconcileExecutionState({ store, goal, maxRounds = 3 }) {
   const duplicates = [...ledger.values()].flatMap((s) => s.duplicates.map((jobId) => ({
     jobId, stageKey: s.stageKey, completedBy: s.completedBy,
   })));
+
+  // A review is not a duplicate ATTEMPT — nothing raced it — but a completed
+  // result that stopped being true is the same fate: the caller supersedes it
+  // through the exact same mechanism, so no worker or later reconciliation
+  // ever treats it as satisfying the review stage again.
+  for (const round of new Set([...ledger.values()].map((s) => s.round))) {
+    const implementation = get(ledger, goal, round, round === 1 ? STAGES.IMPLEMENTATION : STAGES.CORRECTION);
+    const review = get(ledger, goal, round, STAGES.REVIEW);
+    if (isReviewStale({ implementation, review })) {
+      duplicates.push({ jobId: review.completedBy, stageKey: review.stageKey, completedBy: implementation.completedBy });
+    }
+  }
 
   return { ledger, next, duplicates };
 }

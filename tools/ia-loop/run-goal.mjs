@@ -813,6 +813,12 @@ async function main() {
     const revJob = validateReviewJob({
       protocolVersion: PROTOCOL_VERSION_V2,
       jobId: revJobId, role: 'tech_lead', goal: goal.goalId, round,
+      // The developer/correction job this review is actually FOR — not just
+      // "some result exists under this round number". Reconciliation cross-
+      // checks this against whichever job genuinely completed the round's
+      // implementation stage, so a review can never outlive the result it
+      // reviewed (see lib/reconcile.mjs's isReviewStale).
+      developerJobId: devJobId,
       reviewLevel: REVIEW_LEVEL,
       routing: toJobRouting(reviewRouting),
       migrationAcceptedBaseline: goal.migrationAcceptedBaseline,

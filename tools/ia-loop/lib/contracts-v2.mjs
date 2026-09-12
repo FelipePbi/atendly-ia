@@ -287,6 +287,10 @@ export function validateReviewJob(payload) {
   assertNonEmptyString(payload.jobId, 'jobId');
   assertNonEmptyString(payload.goal, 'goal');
   assertRound(payload.round);
+  // Which developer/correction job this review is actually FOR. Required, not
+  // inferred from the round number: a round number is not proof a review
+  // reviewed THIS round's result rather than an earlier one reused under it.
+  assertNonEmptyString(payload.developerJobId, 'developerJobId');
 
   if (payload.role !== 'tech_lead') {
     fail('ROLE_MISMATCH', `ReviewJob must target role "tech_lead", got ${JSON.stringify(payload.role)}`);

@@ -23,7 +23,7 @@ import { join } from 'node:path';
 
 import {
   DISPATCH_KINDS, STAGE_STATUS, assertNoDuplicateStageDispatch,
-  buildStageLedger, decideNextDispatch, reconcileExecutionState,
+  buildStageLedger, decideNextDispatch, isReviewStale, reconcileExecutionState,
 } from '../lib/reconcile.mjs';
 import { STAGES, roleForStage, stageKey, stageKeyOfJob } from '../lib/stage-identity.mjs';
 import { CLOSURE_JOB_TYPES } from '../lib/closure-contracts.mjs';
@@ -218,8 +218,8 @@ const GOAL010_BLOCKERS = [
 const devJob010 = (jobId, round, type = 'IMPLEMENTATION') => ({
   role: 'developer', job: { jobId, role: 'developer', goal: GOAL_010, round, type },
 });
-const revJob010 = (jobId, round) => ({
-  role: 'tech_lead', job: { jobId, role: 'tech_lead', goal: GOAL_010, round },
+const revJob010 = (jobId, round, developerJobId = null) => ({
+  role: 'tech_lead', job: { jobId, role: 'tech_lead', goal: GOAL_010, round, developerJobId },
 });
 
 test('R1 BLOCKED + CHANGES_REQUIRED: the next step is a NEW correction R2, never R1 replayed', () => {
@@ -312,6 +312,93 @@ test('reconciling twice across a round boundary must not answer round 2 with rou
   assert.equal(decisionAfterR1.kind, DISPATCH_KINDS.CORRECTION);
   assert.equal(decisionAfterR1.round, 2);
   assert.equal(decisionAfterR1.resumeAttempt, null);
+});
+
+// ===========================================================================
+// A stale R2 review on disk — a real review, genuinely completed, but FOR
+// round 1's own result (published under round 2's label, the way the actual
+// Goal010 incident's reviews were). Provenance is what tells them apart; the
+// round number alone does not.
+// ===========================================================================
+
+test('an R2 review filed over R1\'s own result cannot satisfy R2, even once a genuine R2 correction exists', () => {
+  // 1-2. R1 Developer BLOCKED, R1 review CHANGES_REQUIRED — the real starting
+  // point of the incident.
+  const r1Entries = [
+    withResult(devJob010(DEV_R1_010, 1), { status: 'BLOCKED', jobId: DEV_R1_010 }),
+    withResult(revJob010(REV_R1_010, 1, DEV_R1_010), { decision: 'CHANGES_REQUIRED', blockers: GOAL010_BLOCKERS, jobId: REV_R1_010 }),
+  ];
+
+  // 3. A stale R2 review exists — completed, filed under round 2, but its own
+  // `developerJobId` names R1's job: exactly what a review published while
+  // `reconciled` was stuck resuming R1 would look like on disk.
+  const STALE_REV_R2 = '010-r2-tech_lead-staleaaaa';
+  const staleLedger = buildStageLedger([
+    ...r1Entries,
+    withResult(revJob010(STALE_REV_R2, 2, DEV_R1_010), { decision: 'CHANGES_REQUIRED', blockers: GOAL010_BLOCKERS, jobId: STALE_REV_R2 }),
+  ], { goal: GOAL_010 });
+
+  // 4. Reconciliation still says R2 Developer correction is what's next — the
+  // stale review filed under round 2 changes nothing, because the loop never
+  // even reaches round 2 until round 1's own review sends it there, and it
+  // sends it to CORRECTION, not to inspecting round 2's review.
+  const beforeCorrection = decideNextDispatch({ ledger: staleLedger, goal: GOAL_010 });
+  assert.equal(beforeCorrection.kind, DISPATCH_KINDS.CORRECTION);
+  assert.equal(beforeCorrection.round, 2);
+  assert.equal(beforeCorrection.resumeAttempt, null, 'nothing legitimate to resume for a correction that never ran');
+
+  // 5. A genuine new R2 DeveloperResult is produced, under its OWN job id.
+  const DEV_R2_010_NEW = '010-r2-correction-genuine1';
+  const ledgerWithNewCorrection = buildStageLedger([
+    ...r1Entries,
+    withResult(revJob010(STALE_REV_R2, 2, DEV_R1_010), { decision: 'CHANGES_REQUIRED', blockers: GOAL010_BLOCKERS, jobId: STALE_REV_R2 }),
+    withResult(devJob010(DEV_R2_010_NEW, 2, 'CORRECTION'), { status: 'REVIEW_REQUIRED', jobId: DEV_R2_010_NEW }),
+  ], { goal: GOAL_010 });
+
+  // 6-8. The stale review cannot satisfy R2's review stage: a NEW review is
+  // what's next, and its provenance target is the NEW result, never the old one.
+  const next = decideNextDispatch({ ledger: ledgerWithNewCorrection, goal: GOAL_010 });
+  assert.equal(next.kind, DISPATCH_KINDS.REVIEW, 'the stale review is not reuse — a new review is owed');
+  assert.equal(next.round, 2);
+  assert.equal(next.implementationJobId, DEV_R2_010_NEW, 'provenance points at the genuine R2 result, never R1\'s');
+  assert.notEqual(next.implementationJobId, DEV_R1_010);
+  assert.equal(next.resumeAttempt, null, 'the stale review\'s own (completed) attempt is never offered back');
+
+  // The staleness is visible directly, too — `reconcileExecutionState`'s own
+  // supersede-queue integration test (below, using a real store) proves the
+  // native supersede pipeline picks this up with no special-casing needed.
+  const r2Review = ledgerWithNewCorrection.get('010:r2:review');
+  const r2Correction = ledgerWithNewCorrection.get('010:r2:correction');
+  assert.equal(isReviewStale({ implementation: r2Correction, review: r2Review }), true);
+});
+
+test('a review whose provenance is simply unrecorded (pre-existing history) is never treated as stale', () => {
+  // Every review Goal003 through Goal009 ever produced predates
+  // `developerJobId`. None of that accepted history is retroactively stale.
+  const ledger = buildStageLedger([
+    withResult(devJob010(DEV_R1_010, 1), { status: 'BLOCKED', jobId: DEV_R1_010 }),
+    withResult(revJob010(REV_R1_010, 1 /* no developerJobId */), { decision: 'CHANGES_REQUIRED', blockers: GOAL010_BLOCKERS, jobId: REV_R1_010 }),
+  ], { goal: GOAL_010 });
+
+  assert.equal(isReviewStale({
+    implementation: ledger.get('010:r1:implementation'),
+    review: ledger.get('010:r1:review'),
+  }), false);
+});
+
+test('a job marked SUPERSEDED never satisfies a stage again, even though its result file is untouched', () => {
+  // The other half of the fix: buildStageLedger itself must stop crediting a
+  // superseded job's (still-present, deliberately never deleted) result.
+  const ledger = buildStageLedger([
+    withResult(revJob010(REV_R1_010, 1), { decision: 'CHANGES_REQUIRED', blockers: GOAL010_BLOCKERS, jobId: REV_R1_010 }, 'SUPERSEDED'),
+  ], { goal: GOAL_010 });
+
+  const stage = ledger.get('010:r1:review');
+  assert.equal(stage.status, STAGE_STATUS.NOT_STARTED, 'a superseded job\'s result no longer completes the stage');
+  assert.equal(stage.completedBy, null);
+  // The attempt itself stays visible in the record — nothing is deleted.
+  assert.equal(stage.attempts.length, 1);
+  assert.equal(stage.attempts[0].jobId, REV_R1_010);
 });
 
 test('5. a completed stage refuses a new attempt; the completing attempt is idempotent', () => {
@@ -651,6 +738,88 @@ test('the same integration with the duplicate already published classifies it', 
     ]);
     assert.equal(reconciled.next.kind, DISPATCH_KINDS.CORRECTION);
     assert.equal(reconciled.next.round, 2);
+  });
+});
+
+test('THE FULL INTEGRATION: a stale R2 review, filed over R1\'s result, reaches the supersede queue '
+  + 'through reconcileExecutionState itself — the same pipeline run-goal.mjs already consumes', async () => {
+  await withDir(async (dir) => {
+    const store = createJobStore(dir);
+    const DEV_R1_G = '010-r1-developer-real0001';
+    const REV_R1_G = '010-r1-tech_lead-real0001';
+    const STALE_REV_R2_G = '010-r2-tech_lead-stale001';
+    const DEV_R2_G = '010-r2-correction-real0001';
+
+    // R1: implemented (BLOCKED, same terminal status as the real incident)
+    // and genuinely reviewed (CHANGES_REQUIRED).
+    await store.publishJob('developer', {
+      protocolVersion: PROTOCOL_VERSION_V2, jobId: DEV_R1_G, role: 'developer',
+      goal: GOAL_010, round: 1, type: 'IMPLEMENTATION',
+    });
+    await store.publishResult('developer', DEV_R1_G, {
+      ok: true,
+      result: { protocolVersion: PROTOCOL_VERSION_V2, jobId: DEV_R1_G, goal: GOAL_010, round: 1, status: 'BLOCKED', summary: 's' },
+    }, { attemptId: (await store.readAttemptState('developer', DEV_R1_G))?.attemptId });
+    await store.setJobStatus('developer', DEV_R1_G, 'COMPLETED');
+
+    await store.publishJob('tech_lead', {
+      protocolVersion: PROTOCOL_VERSION_V2, jobId: REV_R1_G, role: 'tech_lead',
+      goal: GOAL_010, round: 1, developerJobId: DEV_R1_G,
+    });
+    await store.publishResult('tech_lead', REV_R1_G, {
+      ok: true,
+      result: {
+        protocolVersion: PROTOCOL_VERSION_V2, jobId: REV_R1_G, goal: GOAL_010, round: 1,
+        decision: 'CHANGES_REQUIRED', blockers: GOAL010_BLOCKERS, summary: 's',
+      },
+    }, { attemptId: (await store.readAttemptState('tech_lead', REV_R1_G))?.attemptId });
+    await store.setJobStatus('tech_lead', REV_R1_G, 'COMPLETED');
+
+    // A stale R2 review: completed, filed under round 2, `developerJobId`
+    // still naming R1's own job — the exact shape the incident left behind.
+    await store.publishJob('tech_lead', {
+      protocolVersion: PROTOCOL_VERSION_V2, jobId: STALE_REV_R2_G, role: 'tech_lead',
+      goal: GOAL_010, round: 2, developerJobId: DEV_R1_G,
+    });
+    await store.publishResult('tech_lead', STALE_REV_R2_G, {
+      ok: true,
+      result: {
+        protocolVersion: PROTOCOL_VERSION_V2, jobId: STALE_REV_R2_G, goal: GOAL_010, round: 2,
+        decision: 'CHANGES_REQUIRED', blockers: GOAL010_BLOCKERS, summary: 's',
+      },
+    }, { attemptId: (await store.readAttemptState('tech_lead', STALE_REV_R2_G))?.attemptId });
+    await store.setJobStatus('tech_lead', STALE_REV_R2_G, 'COMPLETED');
+
+    // Before the genuine R2 correction exists: reconciliation still says
+    // CORRECTION is next, exactly as if the stale review were not there.
+    const beforeCorrection = await reconcileExecutionState({ store, goal: GOAL_010 });
+    assert.equal(beforeCorrection.next.kind, DISPATCH_KINDS.CORRECTION);
+    assert.equal(beforeCorrection.next.round, 2);
+
+    // Now a genuine R2 correction runs and completes, under its own job id.
+    await store.publishJob('developer', {
+      protocolVersion: PROTOCOL_VERSION_V2, jobId: DEV_R2_G, role: 'developer',
+      goal: GOAL_010, round: 2, type: 'CORRECTION',
+    });
+    await store.publishResult('developer', DEV_R2_G, {
+      ok: true,
+      result: { protocolVersion: PROTOCOL_VERSION_V2, jobId: DEV_R2_G, goal: GOAL_010, round: 2, status: 'REVIEW_REQUIRED', summary: 's' },
+    }, { attemptId: (await store.readAttemptState('developer', DEV_R2_G))?.attemptId });
+    await store.setJobStatus('developer', DEV_R2_G, 'COMPLETED');
+
+    const after = await reconcileExecutionState({ store, goal: GOAL_010 });
+
+    // The stale review does not satisfy R2: a fresh review is what's next,
+    // pointed at the genuine result.
+    assert.equal(after.next.kind, DISPATCH_KINDS.REVIEW);
+    assert.equal(after.next.round, 2);
+    assert.equal(after.next.implementationJobId, DEV_R2_G);
+
+    // And it is queued for the caller to supersede through the exact
+    // pipeline run-goal.mjs's own duplicate-superseding loop already reads.
+    assert.deepEqual(after.duplicates, [
+      { jobId: STALE_REV_R2_G, stageKey: '010:r2:review', completedBy: DEV_R2_G },
+    ]);
   });
 });
 

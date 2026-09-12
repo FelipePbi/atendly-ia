@@ -61,6 +61,7 @@ function reviewJob(overrides = {}) {
     role: 'tech_lead',
     goal: '003',
     round: 1,
+    developerJobId: '003-r1-developer-aaaa1111',
     reviewLevel: 'DEEP',
     migrationAcceptedBaseline: BASELINE,
     executionBase: EXEC_BASE,

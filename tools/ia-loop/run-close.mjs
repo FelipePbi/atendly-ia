@@ -34,11 +34,10 @@ import { readWorkerHealth, WORKER_HEALTH } from './lib/worker-registry.mjs';
 import { LOOP_STATES, createLoopStateMachine } from './lib/loop-state.mjs';
 import { PROTOCOL_VERSION_V2 } from './lib/contracts-v2.mjs';
 import { assertClosureScope, CLOSURE_WRITE_PREFIX } from './lib/closure-contracts.mjs';
-import { assertMigrationComplete } from './lib/planning-decision.mjs';
-import { createDeveloperProfileStore, resolveDeveloperProfile } from './lib/developer-profiles.mjs';
+import { createDeveloperProfileStore } from './lib/developer-profiles.mjs';
 import { createExecutionPlanStore } from './lib/execution-plan-store.mjs';
-import { parseMigrationStatus } from './lib/goal-discovery.mjs';
 import { classifyLease, createLeaseStore } from './lib/leases.mjs';
+import { applyPlanningResult } from './lib/planning-application.mjs';
 import { isDirectExecution } from './lib/direct-execution.mjs';
 import {
   createGitProbe,
@@ -466,107 +465,21 @@ async function main() {
     return { jobId, envelope };
   }
 
-  /** Applies a successfully validated PlanningDecision. Never called on a failed envelope. */
-  async function applyPlanningResult(envelope) {
-    const planChanges = await collectWorktreeChanges(absPlan, newBaseline);
-    assertClosureScope(planChanges.changedFiles);
-
-    const planning = envelope.result;
-
-    if (planning.decision === 'HUMAN_REQUIRED') {
-      throw new SpikeError('PRODUCT_DECISION',
-        `The Tech Lead asked for a human before the next Goal: ${planning.reason}`);
-    }
-
-    if (planning.decision === 'MIGRATION_COMPLETE') {
-      // The declaration is checked against the repository: a Goal still READY
-      // means the migration demonstrably is not finished, whatever was claimed.
-      const statusText = await fs.readFile(join(REPO_ROOT, 'docs/migration/MIGRATION_STATUS.md'), 'utf8');
-      const { goalStatuses } = parseMigrationStatus(statusText);
-      goalStatuses.delete(goalId);
-      assertMigrationComplete({ decision: planning, goalStatuses });
-
-      emit(`  MIGRATION_COMPLETE: ${planning.reason}`);
-      await persistClosure({
-        migrationComplete: true,
-        migrationCompleteReason: planning.reason,
-        planningDocs: planChanges.changedFiles,
-      }, machine.state);
-    } else {
-      emit(`  next goal: ${planning.nextGoalId} — ${planning.nextGoalTitle}`);
-      emit(`  developer profile: ${planning.developerProfile}`);
-      emit(`  documents updated: ${planChanges.changedFiles.length}`);
-
-      // The routing decision outlives this process: the Goal it applies to is
-      // executed later, by `run-goal`. Recorded durably here so a restart in
-      // between cannot lose it and nothing has to re-derive it from prose.
-      await profileStore.write(planning.nextGoalId, {
-        profile: planning.developerProfile,
-        reason: planning.developerProfileReason,
-        selectedBy: 'tech_lead',
-        stage: 'NEXT_GOAL_PLANNING',
-      });
-      await store.appendEvent({
-        type: 'DEVELOPER_PROFILE_SELECTED',
-        goal: planning.nextGoalId,
-        round: 1,
-        stage: 'NEXT_GOAL_PLANNING',
-        profile: planning.developerProfile,
-        model: resolveDeveloperProfile(planning.developerProfile).model,
-        effort: resolveDeveloperProfile(planning.developerProfile).effort,
-        selectedBy: 'tech_lead',
-        reason: planning.developerProfileReason ?? null,
-      });
-
-      // The Work Unit DAG, if the Tech Lead produced one. Same lifetime and
-      // same failure modes as the profile above — written later, executed by a
-      // different process — so it is carried by the same kind of durable
-      // hand-off rather than re-derived from the Goal document.
-      //
-      // Absent is legitimate and recorded as such: the Goal then runs as a
-      // single STANDARD unit, which is what every Goal did before this existed.
-      if (planning.executionPlan) {
-        const record = await planStore.write(planning.nextGoalId, {
-          plan: planning.executionPlan,
-          selectedBy: 'tech_lead',
-          stage: 'NEXT_GOAL_PLANNING',
-        });
-        emit(`  execution plan: ${record.workUnitCount} work unit(s) `
-          + `(${Object.entries(record.types).map(([type, count]) => `${count} ${type}`).join(', ')})`);
-        await store.appendEvent({
-          type: 'EXECUTION_PLAN_RECORDED',
-          goal: planning.nextGoalId,
-          stage: 'NEXT_GOAL_PLANNING',
-          units: record.workUnitCount,
-          types: record.types,
-          fragmentation: record.fragmentation,
-          selectedBy: 'tech_lead',
-        });
-      } else {
-        emit('  execution plan: none — the Goal will run as a single STANDARD work unit.');
-        await store.appendEvent({
-          type: 'EXECUTION_PLAN_ABSENT',
-          goal: planning.nextGoalId,
-          stage: 'NEXT_GOAL_PLANNING',
-          reason: 'PLANNING_PRODUCED_NO_PLAN',
-        });
-      }
-
-      await persistClosure({
-        nextGoalId: planning.nextGoalId,
-        nextGoalTitle: planning.nextGoalTitle,
-        nextGoalPath: planning.nextGoalPath,
-        nextGoalDeveloperProfile: planning.developerProfile,
-        planningDocs: planChanges.changedFiles,
-      }, machine.state);
-    }
-  }
+  // Applies a successfully validated PlanningDecision — profileStore, planStore
+  // and their events, and finally closure.nextGoalId. Shared by every call site
+  // below so recovering an already-completed envelope can never diverge from
+  // what a fresh one does (see lib/planning-application.mjs for why that
+  // divergence was the bug). Never called on a failed envelope.
+  const applyPlanning = (envelope) => applyPlanningResult({
+    envelope, goalId, absPlan, newBaseline, repoRoot: REPO_ROOT, emit,
+    machineState: machine.state, persistClosure, profileStore, planStore, store,
+  });
 
   if (!closure.planningJobId) {
     machine.transitionTo(LOOP_STATES.NEXT_GOAL_PLANNING);
     const { envelope } = await publishAndAwaitPlanning();
     if (!envelope.ok) throw new SpikeError('PLANNING_FAILED', `[${envelope.code}] ${envelope.message}`);
-    await applyPlanningResult(envelope);
+    await applyPlanning(envelope);
   } else {
     machine.transitionTo(LOOP_STATES.NEXT_GOAL_PLANNING);
 
@@ -596,7 +509,7 @@ async function main() {
         // approved. That is exactly what happened resuming Goal009: nextGoalId
         // 010 got recorded, its 20-unit plan and OPUS_HIGH profile did not.
         emit(`Planning job ${closure.planningJobId} already ran; applying its recorded result.`);
-        await applyPlanningResult(priorEnvelope);
+        await applyPlanning(priorEnvelope);
       } else {
         // A completed, validated inference never reached this envelope: the
         // Tech Lead's own answer was rejected (a contract violation, e.g.
@@ -639,7 +552,7 @@ async function main() {
             + 'Re-run ia-loop:close to retry again using this new violation as feedback.',
           );
         }
-        await applyPlanningResult(envelope);
+        await applyPlanning(envelope);
       }
     }
   }

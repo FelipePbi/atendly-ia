@@ -340,7 +340,7 @@ async function main() {
   //
   // Completion is now derived from the results, the only durable proof that an
   // inference happened.
-  const reconciled = await reconcileExecutionState({
+  let reconciled = await reconcileExecutionState({
     store, goal: goal.goalId, maxRounds: LOOP_CONFIG.maxCorrectionRounds,
   });
 
@@ -478,6 +478,25 @@ async function main() {
   let lastDevResult = null;
 
   for (;;) {
+    // Refreshed every pass, never trusted from before the loop started: this
+    // process may carry several rounds in one run (a correction dispatched,
+    // reviewed and requeued without ever restarting), and the ledger built
+    // once, before round 1, is what round 1 completing changed. A snapshot
+    // taken then keeps answering for round 2, 3, ... with round 1's own
+    // resumable attempt — `reconciled.next.resumeAttempt` for THAT round is a
+    // completely different stage from this round's, but the fallback chain
+    // below cannot tell a stale hint from a fresh one, only a present value
+    // from an absent one. Rebuilt from the job/result files on disk, which is
+    // exactly what `reconcileExecutionState` already does and exactly why it
+    // is idempotent and cheap to call again: no model call, no dispatch, only
+    // reads. Only `.ledger` and `.next.resumeAttempt` are read below;
+    // duplicate-superseding and the HUMAN_REQUIRED/CLOSE_GOAL short-circuit
+    // stay one-time, above the loop — the loop's own decision after each
+    // review is what actually governs whether another round happens.
+    reconciled = await reconcileExecutionState({
+      store, goal: goal.goalId, maxRounds: LOOP_CONFIG.maxCorrectionRounds,
+    });
+
     const isCorrection = startAsCorrection || round > 1;
     const phaseQueued = isCorrection ? LOOP_STATES.CORRECTION_QUEUED : LOOP_STATES.DEVELOPER_QUEUED;
     const phaseRunning = isCorrection ? LOOP_STATES.CORRECTION_RUNNING : LOOP_STATES.DEVELOPER_RUNNING;

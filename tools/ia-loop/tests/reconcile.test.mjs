@@ -190,6 +190,130 @@ test('12. the only legitimate next model call is the Developer on correction R2'
   assert.equal(next.round, 2);
 });
 
+// ===========================================================================
+// The real Goal010 incident: a terminal BLOCKED result, reused across three
+// rounds because `run-goal.mjs` reconciled once, before round 1, and kept
+// asking that same stale object for round 2 and round 3's job ids.
+//
+// `DEVELOPER_STATUSES_V2` is `['REVIEW_REQUIRED', 'BLOCKED', 'ESCALATION_REQUIRED']`
+// — BLOCKED is just as terminal a Developer result as REVIEW_REQUIRED. Nothing
+// here should special-case it, and that is exactly the point: a Work Unit
+// round can end BLOCKED with real completed work behind it (11 of 22 units, in
+// the real incident) and still owe a genuine correction round, not a silent
+// "nothing more to try."
+// ===========================================================================
+
+const GOAL_010 = '010';
+const DEV_R1_010 = '010-r1-developer-5e17af67';
+const REV_R1_010 = '010-r1-tech_lead-6d2efb1c';
+
+const GOAL010_BLOCKERS = [
+  { id: 'C1', title: 'importação sobrescreve confirmação já existente no mesmo horário' },
+  { id: 'C2', title: 'schemas e serviço de migração ausentes no frontend' },
+];
+
+// `devJob`/`revJob` above hardcode `goal: GOAL` ('004') — fine for every
+// Goal004 test, wrong here. Goal010's own incident is reproduced against its
+// real goal id, not against whatever the shared fixtures happen to default to.
+const devJob010 = (jobId, round, type = 'IMPLEMENTATION') => ({
+  role: 'developer', job: { jobId, role: 'developer', goal: GOAL_010, round, type },
+});
+const revJob010 = (jobId, round) => ({
+  role: 'tech_lead', job: { jobId, role: 'tech_lead', goal: GOAL_010, round },
+});
+
+test('R1 BLOCKED + CHANGES_REQUIRED: the next step is a NEW correction R2, never R1 replayed', () => {
+  const ledger = buildStageLedger([
+    withResult(devJob010(DEV_R1_010, 1), { status: 'BLOCKED', jobId: DEV_R1_010 }),
+    withResult(revJob010(REV_R1_010, 1), { decision: 'CHANGES_REQUIRED', blockers: GOAL010_BLOCKERS, jobId: REV_R1_010 }),
+  ], { goal: GOAL_010 });
+
+  const next = decideNextDispatch({ ledger, goal: GOAL_010 });
+
+  // 3. a new correction job is what's needed.
+  assert.equal(next.kind, DISPATCH_KINDS.CORRECTION);
+  assert.equal(next.round, 2, 'round 2, not a second round 1');
+  assert.equal(next.stageKey, '010:r2:correction');
+  // 4. the review's own blockers travel with it, verbatim.
+  assert.deepEqual(next.blockers, GOAL010_BLOCKERS);
+  // 5. nothing points back at the R1 job — there is no completed attempt for
+  // R2's correction stage yet, so there is nothing to resume.
+  assert.equal(next.resumeAttempt, null);
+  assert.notEqual(next.resumeAttempt, DEV_R1_010);
+
+  // The R1 stage itself is untouched: still exactly what it was, still
+  // completed by the same job, never rewritten into looking like R2's.
+  const r1 = ledger.get('010:r1:implementation');
+  assert.equal(r1.completedBy, DEV_R1_010);
+  assert.equal(r1.status, STAGE_STATUS.COMPLETED);
+  // And R2's correction stage does not exist at all yet — not "completed by
+  // R1's job", genuinely absent.
+  assert.equal(ledger.get('010:r2:correction'), undefined);
+});
+
+test('6. R2 review cannot happen before R2 has its OWN completed correction result', () => {
+  // Only what R1/R2 would credibly have on disk if the bug had never fired:
+  // R1 done and reviewed, R2 correction dispatched but not yet finished.
+  const DEV_R2_010 = '010-r2-correction-aaaa1111';
+  const ledgerInFlight = buildStageLedger([
+    withResult(devJob010(DEV_R1_010, 1), { status: 'BLOCKED', jobId: DEV_R1_010 }),
+    withResult(revJob010(REV_R1_010, 1), { decision: 'CHANGES_REQUIRED', blockers: GOAL010_BLOCKERS, jobId: REV_R1_010 }),
+    { ...devJob010(DEV_R2_010, 2, 'CORRECTION'), status: 'RUNNING', result: null },
+  ], { goal: GOAL_010 });
+
+  const stillCorrection = decideNextDispatch({ ledger: ledgerInFlight, goal: GOAL_010 });
+  assert.equal(stillCorrection.kind, DISPATCH_KINDS.CORRECTION, 'no review yet: R2 correction has not produced a result');
+  assert.equal(stillCorrection.round, 2);
+  assert.equal(stillCorrection.resumeAttempt, DEV_R2_010, 'the in-flight R2 attempt is offered back, not a fresh id');
+
+  // Now R2's correction genuinely completes, with ITS OWN job id.
+  const ledgerDone = buildStageLedger([
+    withResult(devJob010(DEV_R1_010, 1), { status: 'BLOCKED', jobId: DEV_R1_010 }),
+    withResult(revJob010(REV_R1_010, 1), { decision: 'CHANGES_REQUIRED', blockers: GOAL010_BLOCKERS, jobId: REV_R1_010 }),
+    withResult(devJob010(DEV_R2_010, 2, 'CORRECTION'), { status: 'REVIEW_REQUIRED', jobId: DEV_R2_010 }),
+  ], { goal: GOAL_010 });
+
+  const nowReview = decideNextDispatch({ ledger: ledgerDone, goal: GOAL_010 });
+  assert.equal(nowReview.kind, DISPATCH_KINDS.REVIEW, 'only now does R2 review become legitimate');
+  assert.equal(nowReview.round, 2);
+  assert.equal(nowReview.implementationJobId, DEV_R2_010, 'the review is FOR the R2 job, not the R1 one');
+});
+
+test('reconciling twice across a round boundary must not answer round 2 with round 1\'s stale hint', () => {
+  // This is the actual mechanism of the incident, reproduced directly: the
+  // SAME kind of object `run-goal.mjs` used to cache once, before its loop,
+  // and keep querying for every later round in the same process.
+  //
+  // Snapshot #1: taken when only R1's (interrupted, then completed) attempt
+  // exists — legitimately resolves to something naming the R1 job.
+  const snapshotAtStart = buildStageLedger([
+    { ...devJob010(DEV_R1_010, 1), status: 'INTERRUPTED', attemptStatus: 'INTERRUPTED', result: null },
+  ], { goal: GOAL_010 });
+  const decisionAtStart = decideNextDispatch({ ledger: snapshotAtStart, goal: GOAL_010 });
+  assert.equal(decisionAtStart.kind, DISPATCH_KINDS.IMPLEMENTATION);
+  assert.equal(decisionAtStart.resumeAttempt, DEV_R1_010, 'legitimate for THIS decision: resuming R1 itself');
+
+  // R1 finishes (BLOCKED) and is reviewed (CHANGES_REQUIRED) — all within the
+  // same long-running process, without it ever restarting.
+  const snapshotAfterR1 = buildStageLedger([
+    withResult(devJob010(DEV_R1_010, 1), { status: 'BLOCKED', jobId: DEV_R1_010 }),
+    withResult(revJob010(REV_R1_010, 1), { decision: 'CHANGES_REQUIRED', blockers: GOAL010_BLOCKERS, jobId: REV_R1_010 }),
+  ], { goal: GOAL_010 });
+  const decisionAfterR1 = decideNextDispatch({ ledger: snapshotAfterR1, goal: GOAL_010 });
+
+  // The whole bug, in one assertion: re-deriving the ledger after R1 finished
+  // gives a DIFFERENT decision than the one taken at start — proving that
+  // holding on to `decisionAtStart` (or `snapshotAtStart`) and reusing it for
+  // round 2 was never a caching optimisation, it was answering a question
+  // nobody asked with an answer that used to be true.
+  assert.notEqual(decisionAfterR1.kind, decisionAtStart.kind);
+  assert.notEqual(decisionAfterR1.round, decisionAtStart.round);
+  assert.notEqual(decisionAfterR1.resumeAttempt, decisionAtStart.resumeAttempt);
+  assert.equal(decisionAfterR1.kind, DISPATCH_KINDS.CORRECTION);
+  assert.equal(decisionAfterR1.round, 2);
+  assert.equal(decisionAfterR1.resumeAttempt, null);
+});
+
 test('5. a completed stage refuses a new attempt; the completing attempt is idempotent', () => {
   const ledger = buildStageLedger(goal004Entries());
 

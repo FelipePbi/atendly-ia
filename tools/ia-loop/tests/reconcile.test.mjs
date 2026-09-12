@@ -22,8 +22,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
-  DISPATCH_KINDS, STAGE_STATUS, assertNoDuplicateStageDispatch,
-  buildStageLedger, decideNextDispatch, isReviewStale, reconcileExecutionState,
+  DISPATCH_KINDS, STAGE_STATUS, STAGE_JOB_SOURCE, assertNoDuplicateStageDispatch,
+  buildStageLedger, decideNextDispatch, isReviewStale, reconcileExecutionState, resolveStageJobId,
 } from '../lib/reconcile.mjs';
 import { STAGES, roleForStage, stageKey, stageKeyOfJob } from '../lib/stage-identity.mjs';
 import { CLOSURE_JOB_TYPES } from '../lib/closure-contracts.mjs';
@@ -821,6 +821,136 @@ test('THE FULL INTEGRATION: a stale R2 review, filed over R1\'s result, reaches 
       { jobId: STALE_REV_R2_G, stageKey: '010:r2:review', completedBy: DEV_R2_G },
     ]);
   });
+});
+
+// ===========================================================================
+// resolveStageJobId — the SECOND incident: a raw runtime.jobIdsByRound hint
+// resurrecting a job the ledger had already moved past. Not a caching bug
+// this time (that was fixed already) — a genuinely separate fallback that
+// read the same wrong, historical, once-buggy-written field directly.
+//
+// The fix removed that fallback entirely, so these tests do not simulate a
+// `runtime` object at all: `resolveStageJobId`'s signature does not accept
+// one, which is itself the proof there is no channel left for a stale hint
+// to reach the answer through.
+// ===========================================================================
+
+test('12-step reproduction: R2 correction resolves to NEW_JOB_REQUIRED, never round 1\'s BLOCKED result', () => {
+  // 1. R1 Developer BLOCKED.
+  // 2. R1 review CHANGES_REQUIRED.
+  // 3-6. What a corrupted runtime.json.jobIdsByRound would have claimed for
+  // rounds 2 and 3 (R1's own developer job; the two SUPERSEDED reviews) is
+  // deliberately NOT represented anywhere below — there is no `runtime`
+  // parameter for it to occupy.
+  const ledger = buildStageLedger([
+    withResult(devJob010(DEV_R1_010, 1), { status: 'BLOCKED', jobId: DEV_R1_010 }),
+    withResult(revJob010(REV_R1_010, 1, DEV_R1_010), { decision: 'CHANGES_REQUIRED', blockers: GOAL010_BLOCKERS, jobId: REV_R1_010 }),
+    // The two SUPERSEDED reviews genuinely exist on disk (as they do for the
+    // real Goal010), filed under rounds 2 and 3 — SUPERSEDED status means
+    // buildStageLedger already refuses to let them complete anything.
+    { ...revJob010('010-r2-tech_lead-stale0001', 2, DEV_R1_010), status: 'SUPERSEDED', result: { decision: 'CHANGES_REQUIRED', blockers: GOAL010_BLOCKERS } },
+    { ...revJob010('010-r3-tech_lead-stale0002', 3, DEV_R1_010), status: 'SUPERSEDED', result: { decision: 'CHANGES_REQUIRED', blockers: GOAL010_BLOCKERS } },
+  ], { goal: GOAL_010 });
+
+  // 7. Reconciliation returns CORRECTION, round 2.
+  const next = decideNextDispatch({ ledger, goal: GOAL_010 });
+  assert.equal(next.kind, DISPATCH_KINDS.CORRECTION);
+  assert.equal(next.round, 2);
+  assert.deepEqual(next.blockers, GOAL010_BLOCKERS);
+  assert.equal(next.fromReviewJobId, REV_R1_010);
+
+  // 8-9. Resolving R2's developer/correction stage: NEW_JOB_REQUIRED. Round
+  // 1's job is never offered back, at either tier.
+  const devResolved = resolveStageJobId({ ledger, goal: GOAL_010, round: 2, stage: STAGES.CORRECTION });
+  assert.equal(devResolved.source, STAGE_JOB_SOURCE.NEW_JOB_REQUIRED);
+  assert.equal(devResolved.jobId, null);
+  assert.notEqual(devResolved.jobId, DEV_R1_010);
+
+  // 10. Resolving R2's review stage: also NEW_JOB_REQUIRED — the SUPERSEDED
+  // review is not offered back either, at either tier.
+  const revResolved = resolveStageJobId({ ledger, goal: GOAL_010, round: 2, stage: STAGES.REVIEW });
+  assert.equal(revResolved.source, STAGE_JOB_SOURCE.NEW_JOB_REQUIRED);
+  assert.equal(revResolved.jobId, null);
+  assert.notEqual(revResolved.jobId, '010-r2-tech_lead-stale0001');
+
+  // Same for round 3 — it must never be reachable anyway once round 2 is
+  // genuinely pending, but confirm it independently.
+  const rev3Resolved = resolveStageJobId({ ledger, goal: GOAL_010, round: 3, stage: STAGES.REVIEW });
+  assert.equal(rev3Resolved.source, STAGE_JOB_SOURCE.NEW_JOB_REQUIRED);
+  assert.notEqual(rev3Resolved.jobId, '010-r3-tech_lead-stale0002');
+});
+
+test('11-12. once a genuine R2 DeveloperResult exists, review resolves to NEW_JOB_REQUIRED with the new job as its provenance target', () => {
+  const DEV_R2_010_NEW = '010-r2-correction-genuine2';
+  const ledger = buildStageLedger([
+    withResult(devJob010(DEV_R1_010, 1), { status: 'BLOCKED', jobId: DEV_R1_010 }),
+    withResult(revJob010(REV_R1_010, 1, DEV_R1_010), { decision: 'CHANGES_REQUIRED', blockers: GOAL010_BLOCKERS, jobId: REV_R1_010 }),
+    { ...revJob010('010-r2-tech_lead-stale0001', 2, DEV_R1_010), status: 'SUPERSEDED', result: { decision: 'CHANGES_REQUIRED', blockers: GOAL010_BLOCKERS } },
+    withResult(devJob010(DEV_R2_010_NEW, 2, 'CORRECTION'), { status: 'REVIEW_REQUIRED', jobId: DEV_R2_010_NEW }),
+  ], { goal: GOAL_010 });
+
+  // The correction is satisfied now — resolving it returns the genuine job.
+  const devResolved = resolveStageJobId({ ledger, goal: GOAL_010, round: 2, stage: STAGES.CORRECTION });
+  assert.equal(devResolved.source, STAGE_JOB_SOURCE.COMPLETED);
+  assert.equal(devResolved.jobId, DEV_R2_010_NEW);
+
+  // The review is still owed — a NEW one, never the superseded one.
+  const revResolved = resolveStageJobId({ ledger, goal: GOAL_010, round: 2, stage: STAGES.REVIEW });
+  assert.equal(revResolved.source, STAGE_JOB_SOURCE.NEW_JOB_REQUIRED);
+
+  // And whatever review eventually gets published must name DEV_R2_010_NEW as
+  // its developerJobId to ever satisfy this stage (isReviewStale enforces it).
+  const implementation = ledger.get('010:r2:correction');
+  assert.equal(implementation.completedBy, DEV_R2_010_NEW);
+});
+
+// ===========================================================================
+// resolveStageJobId — legitimate crash recovery must keep working
+// ===========================================================================
+
+test('an interrupted attempt of the SAME stage is resumed, not replaced with a fresh mint', () => {
+  const INTERRUPTED = '010-r2-correction-crashed01';
+  const ledger = buildStageLedger([
+    withResult(devJob010(DEV_R1_010, 1), { status: 'BLOCKED', jobId: DEV_R1_010 }),
+    withResult(revJob010(REV_R1_010, 1, DEV_R1_010), { decision: 'CHANGES_REQUIRED', blockers: GOAL010_BLOCKERS, jobId: REV_R1_010 }),
+    { ...devJob010(INTERRUPTED, 2, 'CORRECTION'), status: 'INTERRUPTED', attemptStatus: 'INTERRUPTED', result: null },
+  ], { goal: GOAL_010 });
+
+  const resolved = resolveStageJobId({ ledger, goal: GOAL_010, round: 2, stage: STAGES.CORRECTION });
+  assert.equal(resolved.source, STAGE_JOB_SOURCE.RESUMED_ATTEMPT, 'the crashed attempt is resumed, not orphaned');
+  assert.equal(resolved.jobId, INTERRUPTED);
+});
+
+test('a review still QUEUED when the process died is resumed under the same job id', () => {
+  const QUEUED_REVIEW = '010-r1-tech_lead-inflight1';
+  const ledger = buildStageLedger([
+    withResult(devJob010(DEV_R1_010, 1), { status: 'REVIEW_REQUIRED', jobId: DEV_R1_010 }),
+    { ...revJob010(QUEUED_REVIEW, 1, DEV_R1_010), status: 'QUEUED', attemptStatus: 'QUEUED', result: null },
+  ], { goal: GOAL_010 });
+
+  const resolved = resolveStageJobId({ ledger, goal: GOAL_010, round: 1, stage: STAGES.REVIEW });
+  assert.equal(resolved.source, STAGE_JOB_SOURCE.RESUMED_ATTEMPT);
+  assert.equal(resolved.jobId, QUEUED_REVIEW);
+});
+
+test('a review parked WAITING_FOR_CAPACITY is resumed too, not re-published under a new id', () => {
+  // The exact shape a genuine capacity wait leaves: no result yet, and the
+  // one thing that must never happen is paying for the packet twice.
+  const CAPACITY_WAIT = '010-r1-tech_lead-capacitywait';
+  const ledger = buildStageLedger([
+    withResult(devJob010(DEV_R1_010, 1), { status: 'REVIEW_REQUIRED', jobId: DEV_R1_010 }),
+    { ...revJob010(CAPACITY_WAIT, 1, DEV_R1_010), status: 'WAITING_FOR_CAPACITY', attemptStatus: 'WAITING_FOR_CAPACITY', result: null },
+  ], { goal: GOAL_010 });
+
+  const resolved = resolveStageJobId({ ledger, goal: GOAL_010, round: 1, stage: STAGES.REVIEW });
+  assert.equal(resolved.source, STAGE_JOB_SOURCE.RESUMED_ATTEMPT);
+  assert.equal(resolved.jobId, CAPACITY_WAIT);
+});
+
+test('nothing at all on disk for a stage resolves to NEW_JOB_REQUIRED, exactly like a fresh Goal', () => {
+  const resolved = resolveStageJobId({ ledger: buildStageLedger([], { goal: GOAL_010 }), goal: GOAL_010, round: 1, stage: STAGES.IMPLEMENTATION });
+  assert.equal(resolved.source, STAGE_JOB_SOURCE.NEW_JOB_REQUIRED);
+  assert.equal(resolved.jobId, null);
 });
 
 // ===========================================================================

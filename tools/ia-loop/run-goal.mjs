@@ -21,11 +21,11 @@ import { fileURLToPath } from 'node:url';
 import { SpikeError } from './lib/claude-process.mjs';
 import { JOB_DISPATCH, createJobStore, readJson } from './lib/job-store.mjs';
 import {
-  DISPATCH_KINDS, assertNoDuplicateStageDispatch, reconcileExecutionState,
+  DISPATCH_KINDS, assertNoDuplicateStageDispatch, reconcileExecutionState, resolveStageJobId,
 } from './lib/reconcile.mjs';
 import {
   assertBelongsToGoal, goalExecutionOf, initializeGoalExecutionState,
-  jobIdForGoal, readJobForGoal, staleGoalPointers,
+  readJobForGoal, staleGoalPointers,
 } from './lib/goal-execution.mjs';
 import { STAGES } from './lib/stage-identity.mjs';
 import { fullWorktreeFingerprint } from './lib/worktree-fingerprint.mjs';
@@ -126,12 +126,17 @@ function dispatchMessage(dispatched, label) {
   }
 }
 
-/** Job ids recorded for one round, by role. */
-function jobIdsFor(runtime, round) {
-  return runtime?.jobIdsByRound?.[String(round)] ?? {};
-}
-
-/** Records a role's job id for a round without disturbing the others. */
+/**
+ * Records a role's job id for a round without disturbing the others.
+ *
+ * `jobIdsByRound` is written here for the same reason it always was —
+ * display, audit, and the one legitimate reader left: `staleGoalPointers`,
+ * which reports a pointer naming another Goal, never resurrects one. Nothing
+ * in this file reads it back as a candidate job id any more: the ledger is
+ * comprehensive over the same job files this was ever derived from, and a
+ * fallback that trusted it is what let a wrong id, once written for a round,
+ * keep answering for that round forever — see the fix at devJobId/revJobId.
+ */
 function withJobId(runtime, round, role, jobId) {
   const byRound = { ...(runtime?.jobIdsByRound ?? {}) };
   byRound[String(round)] = { ...(byRound[String(round)] ?? {}), [role]: jobId };
@@ -552,20 +557,22 @@ async function main() {
     // it, and would have re-run Opus under a job id that belonged to the Tech
     // Lead. Two inferences, one of them already paid for.
     // The attempt to use: the one the ledger says already completed this stage,
-    // then whichever was left in flight, then a new one. The recorded id is a
-    // hint now; the ledger is the authority.
-    //
-    // Every candidate is scoped to this Goal before it is considered. The
-    // ledger and the reconciled resume point already are; the recorded hint is
-    // read through `priorGoalExecution`, which is null for any other Goal, and
-    // `jobIdForGoal` drops an id whose own name says it belongs elsewhere. A
-    // freshly minted id is the answer whenever nothing legitimate survives —
-    // never an inherited one.
+    // then whichever was left in flight, then a new one — `resolveStageJobId`,
+    // and the ledger ALONE. There used to be a third fallback here that read
+    // `runtime.jobIdsByRound` directly, and it is gone on purpose: that field
+    // is written by this very step, so once a bug (or a stale process) ever
+    // wrote a wrong id into it for a round, the fallback would keep
+    // resurrecting that wrong id forever, on every future resume, even after
+    // the ledger itself had been fixed. That is exactly how Goal010's round 2
+    // and round 3 kept reusing round 1's own BLOCKED result — the ledger
+    // correctly said nothing had been dispatched, and the raw hint answered
+    // anyway. A resumable attempt is still found, from the same job files a
+    // hint was ever derived from — that is the only thing a hint could have
+    // offered for free. A freshly minted id is the answer whenever nothing
+    // legitimate survives — never an inherited one.
     const devStage = isCorrection ? STAGES.CORRECTION : STAGES.IMPLEMENTATION;
-    const devLedger = reconciled.ledger.get(`${goal.goalId}:r${round}:${devStage}`);
-    const devJobId = devLedger?.completedBy
-      ?? reconciled.next.resumeAttempt
-      ?? jobIdForGoal(jobIdsFor(priorGoalExecution, round).developer, goal.goalId)
+    const devResolved = resolveStageJobId({ ledger: reconciled.ledger, goal: goal.goalId, round, stage: devStage });
+    const devJobId = devResolved.jobId
       ?? store.newJobId(goal.goalId, round, isCorrection ? 'correction' : 'developer');
     assertBelongsToGoal(devJobId, goal.goalId, `developer job ${devJobId}`);
     await readJobForGoal(store, 'developer', devJobId, goal.goalId);
@@ -780,11 +787,14 @@ async function main() {
     // The reviewer's job id was previously minted fresh on every pass, so any
     // resume re-published the review and called Fable again — even when its
     // answer was already on disk. It is now recorded and reused like the
-    // Developer's.
-    const revLedger = reconciled.ledger.get(`${goal.goalId}:r${round}:${STAGES.REVIEW}`);
-    const revJobId = revLedger?.completedBy
-      ?? jobIdForGoal(jobIdsFor(priorGoalExecution, round).tech_lead, goal.goalId)
-      ?? store.newJobId(goal.goalId, round, 'tech_lead');
+    // Developer's — through the ledger alone, via `resolveStageJobId`. This
+    // used to fall back to a raw `runtime.jobIdsByRound` hint, which is
+    // exactly what let Goal010 reuse a SUPERSEDED review across rounds 2 and
+    // 3: the hint named a real job, but one the ledger had already excluded
+    // from completing this stage, and nothing here asked the ledger before
+    // trusting it.
+    const revResolved = resolveStageJobId({ ledger: reconciled.ledger, goal: goal.goalId, round, stage: STAGES.REVIEW });
+    const revJobId = revResolved.jobId ?? store.newJobId(goal.goalId, round, 'tech_lead');
     assertBelongsToGoal(revJobId, goal.goalId, `review job ${revJobId}`);
     await readJobForGoal(store, 'tech_lead', revJobId, goal.goalId);
     const reviewAlreadyDone = await store.hasCompletedResult('tech_lead', revJobId);

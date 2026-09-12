@@ -145,7 +145,7 @@ const get = (ledger, goal, round, stage) => ledger.get(stageKey({ goal, round, s
  * confusion the stage ledger exists to remove. The jobId IS the stage's job;
  * what changes between tries is the attempt number.
  */
-function reusableAttempt(stage) {
+export function reusableAttempt(stage) {
   const attempts = stage?.attempts ?? [];
   const live = attempts.find((a) => a.attemptStatus === 'RUNNING' || a.attemptStatus === 'QUEUED');
   if (live) return live;
@@ -156,6 +156,33 @@ function reusableAttempt(stage) {
   // review that had waited out a quota would have been dispatched under a
   // brand new job id, losing its packet and its attempt history.
   return attempts.find((a) => RETRYABLE_JOB_STATUSES.includes(a.attemptStatus)) ?? null;
+}
+
+export const STAGE_JOB_SOURCE = Object.freeze({
+  COMPLETED: 'COMPLETED',
+  RESUMED_ATTEMPT: 'RESUMED_ATTEMPT',
+  NEW_JOB_REQUIRED: 'NEW_JOB_REQUIRED',
+});
+
+/**
+ * The job id a dispatch should use for one stage — the ledger's own
+ * completed job, then a genuinely resumable attempt of that SAME stage, then
+ * "nothing legitimate survives, a caller must mint a fresh one".
+ *
+ * Deliberately blind to any runtime hint (`jobIdsByRound`, `currentJobId`):
+ * both tiers here are already derived from every job file this Goal has ever
+ * had, which is a superset of what a hint could ever have named. A hint that
+ * disagreed with this was never more correct, only older — and a hint that
+ * was WRONG when it was written (the actual Goal010 incident) would otherwise
+ * keep answering for that round forever, on every future resume, even after
+ * the bug that wrote it was fixed.
+ */
+export function resolveStageJobId({ ledger, goal, round, stage }) {
+  const record = get(ledger, goal, round, stage);
+  if (record?.completedBy) return { jobId: record.completedBy, source: STAGE_JOB_SOURCE.COMPLETED };
+  const resumable = reusableAttempt(record)?.jobId ?? null;
+  if (resumable) return { jobId: resumable, source: STAGE_JOB_SOURCE.RESUMED_ATTEMPT };
+  return { jobId: null, source: STAGE_JOB_SOURCE.NEW_JOB_REQUIRED };
 }
 
 /**

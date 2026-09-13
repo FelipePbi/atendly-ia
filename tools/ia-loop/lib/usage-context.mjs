@@ -30,6 +30,14 @@ export const USAGE_OPERATIONS = Object.freeze({
   REVIEW: 'review',
   WORK_UNIT: 'work_unit',
   CLOSURE_DOCUMENTATION: 'closure_documentation',
+  /**
+   * A shadow-benchmark call (Goal 013's `lib/benchmark.mjs`) — real tokens,
+   * deliberately never a production stage. `run-metrics.mjs` excludes this
+   * operation from its default population, exactly BECAUSE it is a
+   * recognised category rather than an unattributed one: an operational
+   * report must never quietly include a comparison run in its totals.
+   */
+  BENCHMARK: 'benchmark',
   /** A real inference we could not attribute to a stage. Never silently dropped. */
   UNKNOWN: 'UNKNOWN',
 });
@@ -67,6 +75,7 @@ const STAGE_TO_OPERATION = Object.freeze({
   correction: USAGE_OPERATIONS.CORRECTION,
   work_unit: USAGE_OPERATIONS.WORK_UNIT,
   closure: USAGE_OPERATIONS.CLOSURE_DOCUMENTATION,
+  benchmark: USAGE_OPERATIONS.BENCHMARK,
 });
 
 export function operationForStage(stage) {

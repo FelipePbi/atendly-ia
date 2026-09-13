@@ -4219,6 +4219,1130 @@ banco já v2 não tenta re-adicionar a coluna.
 bloqueio; preserva `state` e todo o resto do runtime; nunca limpa o bloqueio
 de um job diferente; no-op seguro sem bloqueio algum ou sem runtime algum.
 
+## V23 — Contabilidade de uso: primary/auxiliary/all, cobertura de custo e outcomes
+
+O ledger da V20 já gravava, por linha, tudo que uma execução real produzia. Mas
+`run-usage.mjs`, a camada que **lê** o ledger, tinha duas lacunas que faziam o
+relatório parecer mais completo do que os dados realmente eram:
+
+1. **Custo ausente virava zero.** `Number.isFinite(value) ? value : 0` é certo
+   para somar contadores (turns, tool calls), mas não para custo: uma linha sem
+   `provider_reported_cost_usd` está com o dado **ausente**, não custou `$0`. Um
+   total que soma silenciosamente os dois casos parece completo mesmo quando não
+   está.
+2. **Consumo auxiliar ficava fora do total.** `auxiliary_usage_json` sempre foi
+   gravado (V20), mas `summarise()` só somava o modelo primário — então "total
+   tokens" era, na prática, "tokens do modelo roteado", escondendo qualquer
+   Haiku/Sonnet auxiliar chamado dentro da mesma execução.
+
+Esta etapa não muda o que é gravado. Muda como o que já está gravado é lido,
+separado e reportado — puramente read-side, sem coluna nova no SQLite (ver
+"Persistência" abaixo).
+
+### PRIMARY / AUXILIARY / ALL, sempre separados
+
+`lib/auxiliary-usage.mjs` exporta `normalizeAuxiliaryUsage(raw)`, uma função
+pura (sem I/O, sem CLI, sem relógio) que transforma o `auxiliary_usage_json` de
+**uma linha** num breakdown por modelo:
+
+```js
+normalizeAuxiliaryUsage('[{"model":"claude-haiku-4-5","inputTokens":1200,...}]')
+// -> { byModel: { 'claude-haiku-4-5': { inputTokens, outputTokens,
+//        cacheReadTokens, cacheCreationTokens, totalTokens, costUsd } },
+//      totalTokens, costUsd, flags: [] }
+```
+
+Ausência nunca vira zero: zero modelos auxiliares devolve `totalTokens: null` e
+`costUsd: null`, não `0` — a mesma distinção que o Goal exige para custo,
+aplicada aqui a tokens. Suporta zero, um ou vários modelos por linha; duas
+entradas do mesmo modelo numa linha são somadas, não sobrescritas; um payload
+não-JSON, não-array ou com campo não numérico é sinalizado
+(`AUXILIARY_USAGE_INVALID`) e tratado como vazio, nunca lançado como exceção;
+uma contagem negativa é preservada e sinalizada (`AUXILIARY_NEGATIVE_COUNT`),
+nunca descartada silenciosamente.
+
+`run-usage.mjs`'s `summarise(rows)` chama essa função uma vez por linha e soma
+o resultado ao longo do relatório, produzindo:
+
+```text
+primaryInputTokens / primaryOutputTokens / primaryThinkingTokens /
+primaryCacheReadTokens / primaryCacheCreationTokens / primaryTotalTokens
+
+auxiliaryInputTokens / auxiliaryOutputTokens / auxiliaryCacheReadTokens /
+auxiliaryCacheCreationTokens / auxiliaryTotalTokens / auxiliaryByModel
+
+allModelTokens = primaryTotalTokens + auxiliaryTotalTokens
+```
+
+`thinkingTokens` nunca é somado ao total — está dentro de `outputTokens`, exatamente
+como a V20 já documentava; isto só estende a mesma regra à soma agregada.
+
+### Custo com cobertura explícita
+
+Nenhum campo de custo é somado com um "ou zero" implícito. Cada linha entra em
+`executionsWithProviderCost` **ou** `executionsWithoutProviderCost`, nunca as
+duas, e `providerCostCoveragePercent` é a fração exata (`17/19` → `89.5%`,
+arredondado a uma casa). `providerReportedCostUsd`, `primaryModelCostUsd` e
+`auxiliaryModelCostUsd` só somam os valores que **existem**; se nenhuma linha
+tiver custo numa categoria, o total é `null`, nunca `0`.
+
+`allModelCostUsd = primaryModelCostUsd + auxiliaryModelCostUsd` **não** é
+assumido igual a `providerReportedCostUsd` — são campos diferentes do CLI
+(`total_cost_usd` vs. `modelUsage[modelo].costUSD`) e podem legitimamente
+divergir (ex.: uma linha cujo `modelUsage` não trouxe `costUSD`). Quando a
+diferença excede `COST_MISMATCH_TOLERANCE_USD` ($0,01), a divergência é
+sinalizada (`COST_ACCOUNTING_MISMATCH`) e reportada como `costAccountingDeltaUsd`
+— nunca reconciliada em silêncio.
+
+### Outcomes, não mutuamente exclusivos
+
+`completedCalls`/`failedCalls`, `retryCalls` (linhas com `attempt > 1`),
+`fallbackCalls` (`is_fallback`) e `escalationCalls` (`is_escalation`) somam
+tokens (`allModelTokens` da própria linha) e, quando disponível, custo, cada um
+de forma independente. Uma linha `FAILED` que também é retry e também é
+fallback conta nas três categorias ao mesmo tempo — são fatos que coexistem
+sobre a mesma execução, não estados de uma máquina.
+
+### Work Units: fatos do próprio executor, nunca estimados
+
+`summariseWorkUnits({ stateDir, goal })` lê `events.jsonl` — não o SQLite — e
+conta o que o Work Unit executor já emite (`lib/work-unit-executor.mjs`):
+`WORK_UNIT_COMPLETED` (unidades MODEL) e `WORK_UNIT_DETERMINISTIC_EXECUTED`
+(unidades DETERMINISTIC, cujo próprio evento já declara `modelCalls: 0`).
+`deterministicModelCalls` é a **soma** desse campo através dos eventos, não uma
+constante `0` hardcoded — se algum dia uma unidade determinística passasse a
+chamar um modelo, o número deixaria de ser zero em vez de mentir por
+construção. Nenhum evento é reprocessado em restart: tanto a unidade MODEL
+quanto a DETERMINISTIC só publicam seu evento a primeira vez (ver
+`hasCompletedResult` em `lib/work-unit-executor.mjs`), então reexecutar o
+relatório nunca conta a mesma unidade duas vezes. Leitura best-effort: um
+`events.jsonl` ilegível é reportado em `workUnits.error`, sem derrubar o resto
+do relatório.
+
+### Persistência: nada novo no SQLite
+
+Todo agregado acima é derivado no read-side, de colunas e arquivos que já
+existiam: `model_usage`, `auxiliary_usage_json` e `events.jsonl`. Nenhuma
+coluna foi adicionada ao schema — não há informação primária nova que não possa
+ser reconstruída do que já está gravado.
+
+### CLI
+
+```bash
+npm run ia-loop:usage -- --goal 010
+npm run ia-loop:usage -- --goal 010 --json
+```
+
+O texto ganha as seções `Model usage`, `Cache`, `Cost`, `Execution` e `Work
+Units`; `--json` expõe os mesmos números em `totals` e `workUnits`. Os filtros
+existentes (`--goal`, `--run`, `--job`, `--model`, `--role`, `--limit`,
+`--started`, `--integrity`) continuam idênticos — `Work Units` só entende
+`--goal`, porque round/job/model/role não fazem sentido para uma ação
+determinística sem modelo.
+
+### Testes
+
+`tests/auxiliary-usage.test.mjs` (15): zero/um/vários modelos auxiliares; custo
+parcialmente informado somado apenas pelo que existe; duas entradas do mesmo
+modelo somadas em vez de sobrescritas; payload não-JSON, não-array, com campo
+não numérico ou sem nome de modelo — sinalizado, nunca lançado; contagem
+negativa preservada e sinalizada; payload legado sem colunas novas ainda
+normaliza; `sumDefined` ignora `null`/`undefined` e distingue zero de ausência.
+
+`tests/usage-cli.test.mjs` (28, de 6): filtros run/job/model/role continuam
+funcionando; PRIMARY/AUXILIARY/ALL somando corretamente através de várias
+linhas (`ALL = PRIMARY + AUXILIARY`); thinking nunca contado duas vezes no
+agregado; custo ausente nunca vira `$0` (zero, cobertura total, cobertura
+parcial batendo com o exemplo do Goal, zero linhas com custo); divergência
+`COST_ACCOUNTING_MISMATCH` disparada e não disparada dentro da tolerância;
+FAILED preserva tokens/custo; retry conta separado do attempt 1; fallback e
+escalation contabilizados; uma linha em três categorias de outcome ao mesmo
+tempo; linha em formato de schema antigo (sem `attempt`, sem colunas de custo,
+sem `auxiliary_usage_json`) não quebra o relatório; texto e JSON concordam nos
+mesmos números; Work Units a partir de eventos reais, escopados por Goal, e
+zero Work Units quando não há `events.jsonl`.
+
+### Validação real — VALIDATED
+
+Auditado contra o ledger de produção existente (`schema_version` 2,
+`collector_version` 2.0.0), sem alterar nenhum dado:
+
+**Goal 010** (62 linhas: Work Units, `attempt` > 1, fallback, escalation, 4
+modelos):
+
+```text
+primary tokens:     198.394.009
+auxiliary tokens:    0
+all-model tokens:   198.394.009   (nenhuma chamada auxiliar neste Goal)
+provider cost:      $198,6603 · cobertura 61/62 (98,4%) · 1 execução sem custo
+failed:             38 calls ·  23.144.355 tokens · $31,1611
+retry (attempt>1):  38 calls ·  13.977.398 tokens · $13,9834
+fallback:            4 calls ·   3.966.964 tokens ·  $5,8374
+escalation:          2 calls ·           0 tokens ·  $0,0000
+model units:        16   ·   deterministic units: 3 (9ms, 0 model calls)
+```
+
+As duas linhas de escalation explicam o `0` sem ambiguidade, e não foram
+"corrigidas" para fechar o Goal: uma está `STARTED` — órfã real, pré-existente,
+achada por esta auditoria — e a outra é `FAILED` com `total_tokens = 0` e
+`provider_reported_cost_usd = 0` genuínos (o modelo respondeu e falhou antes de
+consumir nada, não que o dado esteja faltando).
+
+**Ledger inteiro** (75 linhas, Goals 008–010): confirma o mesmo invariante —
+`allModelTokens` (362.634.606) = `primaryTotalTokens` (362.632.065) +
+`auxiliaryTotalTokens` (2.541) — e traz o único caso real de modelo auxiliar do
+ledger: Goal 008, round 2, `tech_lead`/`closure_documentation` em Opus, com um
+Haiku auxiliar (`claude-haiku-4-5-20251001`, 2.522 input + 19 output tokens,
+$0,002617) corretamente separado do total do Opus e somado a `allModelTokens`.
+`costAccountingDeltaUsd` é `0` neste ledger — `providerReportedCostUsd`
+($276,5594) e `allModelCostUsd` batem exatamente — e nenhuma linha dispara
+`ALL_MODEL_TOTAL_MISMATCH`.
+
+## V24 — Savings & counterfactual analytics: OBSERVED / CALCULATED / ESTIMATED
+
+A V23 deixou o ledger auditável. Esta etapa constrói a primeira camada de
+analytics **sobre** ele: quanto o routing real custou, quanto teria custado
+usar só Opus, e quanto isso já economizou — sem nunca deixar um número
+inventado se passar por um número medido.
+
+### O princípio: toda métrica pertence a exatamente uma classe
+
+```text
+OBSERVED     registrado diretamente pelo runtime (V20/V23): tokens, modelos,
+             cache, custo reportado pelo provider, failures, retries,
+             fallbacks, escalations, Work Units determinísticas, model calls.
+
+CALCULATED   aritmética determinística sobre tokens OBSERVED, sob um pricing
+             snapshot explícito. ALL_OPUS reprecifica os MESMOS tokens — nunca
+             assume quantos tokens um modelo diferente teria produzido.
+
+ESTIMATED    exigiria inferir comportamento que nunca aconteceu (quantos
+             tokens uma Work Unit determinística teria usado num modelo).
+             Reportado como ausência honesta (`BASELINE_REQUIRED`,
+             `INSUFFICIENT_DATA`), nunca inventado.
+```
+
+Nenhuma linha do `--json` mistura as três. `observed` nunca contém um campo
+`status`/`BASELINE_REQUIRED`; `calculated` nunca contém um valor estimado.
+
+### Pricing Registry (`lib/pricing-registry.mjs`)
+
+Um snapshot versionado, imutável uma vez publicado — mudança de preço é um
+snapshot NOVO (`id`, `effectiveFrom` próprios), nunca uma edição retroativa.
+Cada modelo canônico tem preços **por categoria** (`input`, `output`,
+`cacheRead`, `cacheCreation`, e o par `cacheCreation5m`/`cacheCreation1h` usado
+quando a linha carrega esse split) — nunca `totalTokens × preço médio` quando
+as categorias originais existem.
+
+Resolução de modelo observado → modelo canônico (`resolveCanonicalModel`) é
+explícita: nome exato, depois alias declarado (`claude-haiku-4-5-20251001` →
+`claude-haiku-4-5`), depois um fallback que remove um sufixo de data à direita
+(cobre um build futuro do mesmo modelo sem exigir editar uma tabela de alias
+toda vez). Nenhuma das duas rotas inventa um modelo: sem correspondência é
+`null`, e o pricing engine converte isso em `UNKNOWN_MODEL` — nunca um preço
+emprestado de outro modelo.
+
+**Os quatro preços não foram um palpite não verificado — ver "Validação real"
+abaixo**: foram reconstruídos algebricamente a partir do próprio
+`provider_reported_cost_usd` real do ledger, e batem exatamente com ele em
+35 de 35 linhas com split de cache confiável.
+
+### Pricing Engine (`lib/pricing-engine.mjs`)
+
+`calculateUsageCost(usage, pricingSnapshot, model)` — pura, sem ledger, sem
+CLI, sem `provider_reported_cost_usd` em lugar nenhum. Preço cada categoria
+separadamente e soma; usa o split `cacheCreation5m`/`cacheCreation1h` quando
+ele soma exatamente ao total de `cacheCreationTokens` (caso contrário cai para
+a taxa `cacheCreation` combinada — um split parcial vale menos que o número
+que se sabe completo). Modelo desconhecido ou snapshot ausente devolvem
+`costUsd: null` e `pricingStatus` (`UNKNOWN_MODEL`/`SNAPSHOT_MISSING`) — nunca
+`$0`. `components` expõe tokens, taxa e custo por categoria, o que torna o
+resultado explicável sem ler código.
+
+### ACTUAL vs. ALL_OPUS (`lib/cost-baselines.mjs`)
+
+Cada linha do ledger vira uma ou mais **invocações** (`invocationsOf`): a
+chamada primária, mais uma por modelo auxiliar (V23) — cada uma com seus
+próprios tokens e, no baseline ACTUAL, seu próprio modelo roteado. ALL_OPUS
+reprecifica CADA invocação observada (primária e auxiliar) como Opus, mantendo
+os tokens exatamente como foram observados — nunca estimando quantos tokens
+Opus teria de fato produzido. As duas são, portanto, `CALCULATED
+COUNTERFACTUAL`, nunca `ESTIMATED`.
+
+```text
+routingSavingsUsd     = allOpusCostUsd - actualCostUsd
+routingSavingsPercent = routingSavingsUsd / allOpusCostUsd × 100
+```
+
+`savingsByModel` atribui a economia de cada linha ao modelo que ela realmente
+rodou, e a soma dos buckets reconcilia exatamente com o total. `savingsBreakdown`
+generaliza o mesmo cálculo para qualquer dimensão já presente na telemetria
+(Goal, run, round, role, operation, stage, Work Unit, modelo) — usada pelo CLI
+para a quebra por `operation`.
+
+**ALL_OPUS não é um teto assumido.** Neste ledger, Fable é o modelo mais caro
+por token, não Opus (ver "Validação real"). Recalcular uma chamada Fable como
+Opus pode custar MENOS, e a economia dá negativa — reportada exatamente assim,
+nunca zerada. `savingsByModel['claude-fable-5-1']` é o exemplo real disso
+abaixo.
+
+### Provider reported × Calculated (diagnóstico, nunca correção)
+
+Comparados apenas nas linhas onde AMBOS existem e o cálculo está completo —
+nunca uma comparação torta entre uma soma parcial e uma completa.
+`differenceUsd`/`differencePercent` existem para expor divergência, nunca para
+"corrigir" um dos dois. O ledger nunca é reescrito para fazê-los coincidir.
+
+### Overhead: failure/retry/fallback/escalation
+
+Reaproveita — não recalcula — os buckets de outcome que a V23 já mantém
+(`failedTokens`/`failedCostUsd`, `retryTokens`/`retryCostUsd`, etc.), apenas
+renomeados para `failureOverheadTokens`/`failureOverheadCostUsd` e o
+equivalente para retry/fallback/escalation. São OBSERVED (o Goal os lista como
+tal), não uma segunda precificação. Categorias continuam não-exclusivas: uma
+linha `FAILED` que também é retry conta nas duas.
+
+`computeEfficiency` deriva `successfulTokenSharePercent`/`failedTokenSharePercent`/
+`retryTokenSharePercent`/... de `allModelTokens` — percentuais que
+deliberadamente não somam 100%, porque as categorias de origem não são uma
+partição.
+
+### O que NÃO é inventado nesta etapa
+
+- **`deterministicSavings`** fica `{ classification: 'ESTIMATED', status:
+  'BASELINE_REQUIRED' }` sempre. Quantos tokens uma Work Unit DETERMINISTIC
+  teria usado num modelo não está no ledger — inventar um número aqui seria
+  fabricar exatamente o dado que este projeto existe para não conter.
+- **`legacyMonolithicBaseline()`** devolve sempre `INSUFFICIENT_DATA`: comparar
+  um Goal atual (Work Units) com um Goal anterior ao V18 só porque estão no
+  mesmo repositório seria comparar workloads diferentes como se fossem iguais.
+  Nenhuma metodologia de pareamento existe ainda — ficará para um Goal
+  seguinte.
+- **`computeHistoricalBaseline(rows, matcher)`** existe como infraestrutura —
+  p25/p50/p75/mean sobre uma amostra que o CALLER define (operação,
+  complexidade, família de modelo, o que for defensável), com confidence
+  determinística (`< 5` → `LOW`, `5–19` → `MEDIUM`, `>= 20` → `HIGH`, nunca via
+  modelo). Não é chamada automaticamente pelo CLI nem soma-se a savings — é
+  exatamente a base estatística que um Goal futuro poderá usar, sem que este
+  Goal precise adivinhar o contrafactual primeiro.
+
+### CLI
+
+```bash
+npm run ia-loop:metrics
+npm run ia-loop:metrics -- --goal 010
+npm run ia-loop:metrics -- --goal 010 --json
+npm run ia-loop:metrics -- --goal 010 --pricing-snapshot claude-ledger-calibrated-2026-09
+npm run ia-loop:metrics -- --goal 010 --group-by operation
+```
+
+Reaproveita `parseUsageArgs`'s vocabulário de filtro (`--goal`/`--run`/`--job`/
+`--model`/`--role`) via `buildUsageQuery` (V20), mas com um default de
+`--limit` bem maior (1.000.000 em vez de 200): um relatório de savings tem de
+agregar a população filtrada INTEIRA, nunca uma página dela — um `--limit`
+de exibição truncando silenciosamente uma soma seria um bug de integridade
+pior do que qualquer um que a V23 corrigiu. `--json` estrutura exatamente
+`{ observed, calculated, estimated, baselines, pricing, integrity }`.
+
+Leitura pura: abre o ledger, lê `events.jsonl` (Work Units, V23), calcula,
+imprime. Nenhuma escrita — ver o teste de integridade abaixo.
+
+### Testes
+
+`tests/pricing-registry.test.mjs` (11): snapshot versionado e completo;
+snapshot desconhecido; resolução de alias e de sufixo de data; modelo
+desconhecido nunca herda preço; a razão estrutural (output 5×, cache read
+0.1×, cache write 5m/1h 1.25×/2× do input) vale para todo modelo canônico;
+Fable — não Opus — é o mais caro por token neste ledger.
+
+`tests/pricing-engine.test.mjs` (12): input, output, cache read e cache
+creation isolados; split 5m/1h confiável reprecificado por tier em vez do
+blend; split incompleto ou contraditório cai para o blend; múltiplas
+categorias somadas independentemente (nunca `totalTokens × média`); modelo
+desconhecido e snapshot ausente nunca viram `$0`; alias resolvido através do
+engine; zero tokens é `$0` real com `coverage 1`, não `null`.
+
+`tests/cost-baselines.test.mjs` (25): ACTUAL preços por invocação; ALL_OPUS
+mantém tokens fixos; chamada originalmente Opus tem economia ~zero; Sonnet e
+Haiku recalculados como Opus mostram economia positiva (Haiku
+proporcionalmente maior); auxiliary usage incluído no ACTUAL e precificado no
+seu próprio modelo; zero auxiliary usage é equivalente a campo ausente;
+routing savings positivo, zero, e um contrafactual sintético mais barato que o
+real (prova que a aritmética não assume qual lado é mais caro); savingsByModel
+reconcilia com o total; savingsBreakdown agrupa por dimensão arbitrária e
+nunca descarta uma linha sem chave; provider × calculated comparados só onde
+ambos existem; modelo desconhecido excluído do total e sinalizado
+(`PRICING_MODEL_UNKNOWN`/`CALCULATED_COST_INCOMPLETE`), nunca zerado; snapshot
+ausente sinalizado (`PRICING_SNAPSHOT_MISSING`); efficiency shares não somam
+100% por design; historical baseline com amostra vazia, com p25/p50/p75/mean
+corretos, e confidence determinística nas três faixas; LEGACY_MONOLITHIC
+sempre `INSUFFICIENT_DATA`.
+
+`tests/metrics-cli.test.mjs` (12, ledger real via `buildUsageRecord` +
+`openUsageLedger`, nunca sintético em memória): filtros idênticos aos de
+`ia-loop:usage`; limite-default de agregação bem maior que o de exibição;
+`--pricing-snapshot` sobrepõe o default; overhead de failure/retry/fallback/
+escalation passa pelos totais da V23 sem modificação; uma linha conta em mais
+de uma categoria de overhead ao mesmo tempo; Work Units determinísticas
+permanecem um fato OBSERVED enquanto `deterministicSavings` continua
+`BASELINE_REQUIRED`; nenhum campo estimado vaza para `observed`/`calculated`;
+texto e JSON concordam nos mesmos números; **gerar um relatório não altera
+`model_usage`, `model_usage_integrity` nem `model_usage_correction`** —
+contagem de linhas idêntica antes e depois; modelo desconhecido numa linha
+real não lança exceção e é reportado.
+
+A invariante "`runClaudeProcess` é chamado de um único arquivo"
+(`usage-collector.mjs`, V20) continua valendo sem teste novo: nenhum arquivo
+desta etapa importa `claude-process.mjs` para invocar um modelo — analytics é
+puramente `Node.js`/SQL sobre dados já gravados.
+
+### Validação real — VALIDATED
+
+Executado sobre o ledger de produção existente (Goals 008–010, 75 linhas),
+sem alterar nenhum dado.
+
+**A descoberta que decidiu o pricing snapshot.** A primeira versão deste
+registry usava preços de mercado plausíveis (Opus $15/$75, Sonnet $3/$15,
+Haiku $1/$5 por milhão, por categoria) — e o diagnóstico "provider reported ×
+calculated" acusou uma divergência sistemática de até **+80%** no ledger
+inteiro. Antes de aceitar isso como "divergência esperada", foi feita a
+auditoria manual que o Goal pede: resolver
+`provider_reported_cost_usd = Σ(tokens_categoria × taxa_categoria)` usando as
+linhas cujo split `cache_creation_ephemeral_5m/1h` soma exatamente ao total
+(evita ambiguidade de qual taxa se aplica). O resultado, conferido em **35 de
+35** dessas linhas em TODOS os 4 modelos:
+
+```text
+razão estrutural igual em todo modelo:
+  output = 5× input · cache read = 0,1× input
+  cache write 5m = 1,25× input · cache write 1h = 2× input
+
+taxa de input real por modelo:
+  claude-haiku-4-5     $1/M   (3/3 linhas, match exato)
+  claude-sonnet-5      $2/M   (11/11 linhas, match exato)
+  claude-opus-5        $5/M   (19/19 linhas, 1 com arredondamento de ponto flutuante)
+  claude-fable-5-1    $10/M   (2/2 linhas com split limpo; match exato)
+```
+
+Ou seja: os preços originais estavam certos na FORMA (a mesma razão de
+mercado real da Anthropic) e errados no VALOR — por um fator de ~3× em Opus e
+~1,5× em Sonnet — e, mais importante, **Fable é o modelo mais caro por token
+neste ledger, não Opus**. O registry foi atualizado para os valores reais
+encontrados; usar o valor certo (obtido por auditoria, não por ajuste para
+"fechar a conta") não colide com OBSERVED continuar sendo OBSERVED e
+CALCULATED continuar sendo CALCULATED — o engine nunca lê
+`provider_reported_cost_usd`, e linhas com split de cache incompleto (2 das 4
+linhas de Fable) ou sob o contrafactual ALL_OPUS continuam divergindo do
+observado por razões reais e auditáveis.
+
+**Depois da correção**, `provider reported × calculated`:
+
+```text
+Goal 008 (a única linha com auxiliary usage do ledger): diferença $0,0000 (0%)
+Goal 009 (multi-modelo, fallback, retry, failure):      diferença $0,0000 (0%)
+Goal 010 (abaixo, com o detalhe da divergência restante): diferença -$7,39 (-3,7%)
+```
+
+**Goal 010** (62 linhas: Work Units, `attempt` > 1, fallback, escalation, 4
+modelos — a mesma amostra que a V23 validou):
+
+```text
+primary tokens:      198.394.009  ·  auxiliary: 0  ·  all-model: 198.394.009
+provider cost:       $198,6603  ·  cobertura 61/62 (98,4%)
+
+actual routing cost (CALCULATED):  $206,0467  (62/62 invocações precificadas)
+all-Opus baseline (CALCULATED):    $196,7466
+routing savings:                   -$9,30 (-4,7%)   ← negativo, e correto
+
+savings by model:
+  Sonnet   +$32,84   Haiku   +$5,997   Opus   $0,00   Fable   -$48,13
+
+failure overhead:    23.144.355 tokens · $31,1611
+retry overhead:      13.977.398 tokens · $13,9834
+fallback overhead:    3.966.964 tokens ·  $5,8374
+escalation overhead:          0 tokens ·  $0,0000  (uma linha STARTED órfã pré-
+                                                      existente + uma FAILED
+                                                      com 0 tokens reais — ver V23)
+
+deterministic units: 3  ·  deterministic model calls: 0  ·  9ms nativo
+```
+
+A economia NEGATIVA de Goal 010 é o achado central desta validação: Goal 010
+usa Fable pesadamente (35 chamadas de `tech_lead` planning/review), e Fable
+custa 2× mais por token que Opus neste ledger. Rotear para Fable ali custou
+**$9,30 A MAIS** do que rotear tudo para Opus teria custado — o oposto do que
+"ALL_OPUS como contrafactual caro" normalmente sugere, e exatamente o tipo de
+sinal que esta camada existe para não esconder. Nenhum número foi ajustado
+para tornar essa conclusão mais confortável.
+
+Amostra conferida manualmente linha a linha (não só em agregado): 5 invocações
+reais (Sonnet, Opus ×3, Haiku) tiveram seu `calculateUsageCost` comparado
+contra um cálculo manual independente e contra `provider_reported_cost_usd` —
+todas batem exatamente quando o split de cache é confiável.
+
+## V25 — Deterministic & legacy baseline benchmarking
+
+A V24 respondeu "quanto o routing economizou" comparando chamadas reais contra
+um contrafactual de preço (ALL_OPUS). Esta etapa vai atrás do que a V24
+deliberadamente deixou de fora: quanto uma Work Unit **determinística** (zero
+model calls, por definição) provavelmente teria custado se um modelo a
+tivesse executado — e faz isso sem nunca fingir que uma estimativa é um fato
+observado.
+
+### Provenance de pricing, tornado explícito
+
+Cada snapshot em `lib/pricing-registry.mjs` agora carrega:
+
+```text
+provenance    OFFICIAL | EMPIRICALLY_CALIBRATED | MANUAL | UNKNOWN
+derivedFrom   'provider_reported_cost_usd'
+sampleRows    35
+validatedAt   '2026-09-12'
+```
+
+O snapshot padrão da V24 chamava-se `anthropic-2026-09` — um nome que soa como
+"a tabela oficial da Anthropic", quando na verdade foi reconstruído
+algebricamente a partir do próprio `provider_reported_cost_usd` do ledger (ver
+V24). Renomeado para `claude-ledger-calibrated-2026-09` e marcado
+`EMPIRICALLY_CALIBRATED`, nunca `OFFICIAL` — o nome do id já deixa de sugerir
+autoridade que ele não tem. `npm run ia-loop:metrics` imprime isso sempre:
+
+```text
+Pricing snapshot   claude-ledger-calibrated-2026-09 (effective 2026-09-01)
+Source             EMPIRICALLY_CALIBRATED (calibrated against 35 production rows)
+```
+
+### Comparando Work Units sem LLM (`lib/work-unit-matching.mjs`)
+
+Uma assinatura canônica (`workUnitSignature`) reduz uma linha do ledger (ou um
+evento enriquecido) a `operation, role, stage, complexity, riskBucket,
+modelFamily, workUnitType, deterministicAction, repositoryArea` — cada campo
+lido de uma coluna real, nunca de texto livre. `repositoryArea` fica `null`
+sempre hoje: nenhuma coluna do ledger nem evento carrega essa informação, e
+declarar o campo (em vez de omiti-lo) deixa claro que é uma lacuna conhecida,
+não um esquecimento.
+
+`matchTier(current, candidate)` classifica em quatro níveis, só por igualdade
+de campo — nunca embedding, nunca LLM, nunca um score:
+
+```text
+EXACT    operation + complexity + role + workUnitType iguais
+STRONG   operation + role iguais, complexidade compatível (igual ou 1 nível)
+WEAK     apenas operation igual
+NONE     operation diferente (ou desconhecida) — nenhum baseline defensável
+```
+
+### Distribuições históricas e a regra de confidence (`lib/historical-distributions.mjs`)
+
+`groupIntoWorkUnits(rows)` agrupa linhas por `goal::round::workUnitId` — uma
+Work Unit que foi reexecutada (retry, escalation) vira UM agregado com
+`modelCalls` = número de linhas, `finalStatus` = status da tentativa MAIS
+recente (não da primeira). `percentileStats` calcula `count/p25/p50/p75/mean/
+min/max` sobre qualquer amostra — `null`, nunca zero, quando vazia.
+
+A regra de confidence é uma função pura, central, testada:
+
+```text
+EXACT com >= 20 amostras      → HIGH
+EXACT ou STRONG com >= 5      → MEDIUM
+WEAK, ou qualquer coisa < 5   → LOW
+sem tier nenhum (NONE) ou 0   → INSUFFICIENT_DATA
+```
+
+`findHistoricalBaseline` prefere EXACT sobre STRONG sobre WEAK — o primeiro
+tier com pelo menos uma amostra vence, em vez de misturar tiers e diluir um
+match forte com matches fracos.
+
+### Deterministic savings (`lib/deterministic-savings.mjs`) — sempre `ESTIMATED`
+
+Para cada Work Unit determinística observada (Goal 011/012: `modelCalls = 0`,
+`tokens = 0`), busca o melhor baseline histórico disponível e reporta:
+
+```text
+modelCallsAvoided      (ponto — mediana histórica de calls/unidade)
+tokensAvoided          { lower: p25, central: p50, upper: p75 }
+costUsdAvoided         { lower: p25, central: p50, upper: p75 }
+```
+
+Nunca uma constante. Não existe `"cada deterministic unit economiza Xk
+tokens"` em lugar nenhum deste módulo — o número vem inteiramente da
+distribuição encontrada, e sem amostra comparável o resultado é
+`INSUFFICIENT_DATA`, nunca um valor inventado.
+
+**Achado real**: uma Work Unit determinística e uma Work Unit modelo
+raramente compartilham `role`/`complexity` (naturezas diferentes de trabalho),
+então essa comparação específica hoje só alcança tier `WEAK` — e `WEAK` é
+`LOW` confidence por definição, não importa quantas amostras existam. Isso é
+o comportamento CORRETO, não uma limitação a esconder: comparar "o que uma
+tarefa de lint teria custado num modelo" contra "o que Work Units modelo em
+geral custaram" é uma comparação frouxa, e a confidence LOW diz isso
+honestamente em vez de emprestar confiança de uma amostra grande mas mal
+pareada.
+
+### LEGACY_MONOLITHIC, com metodologia explícita (`lib/legacy-baseline.mjs`)
+
+`classifyRunMatch(current, candidate)` grava exatamente o que a V24 tinha
+deixado como interface: `MATCHED` só para um rerun do MESMO Goal ou um
+`replayOf` explícito; `PARTIALLY_MATCHED` para um conjunto de `operation`
+sobreposto; `UNMATCHED` para tudo o mais — inclusive dois Goals do mesmo
+repositório sem nenhuma dessas evidências. **Sequência nunca é equivalência**:
+"Goal 003 usou 4M tokens, Goal 010 usou 2M, logo economizou 50%" é
+exatamente o raciocínio que este módulo se recusa a produzir. Sem candidato
+`MATCHED`, o resultado é `INSUFFICIENT_DATA` — o resultado esperado e correto
+para este repositório hoje (ver Validação real).
+
+### Context reduction, em caracteres — nunca em tokens (`lib/legacy-baseline.mjs`)
+
+`legacyContextBaseline` compara `contextChars` (mediana OBSERVED, do campo
+`contextChars` que `WORK_UNIT_COMPLETED` já emite desde o V18) entre uma
+população legada e uma atual, e é `CALCULATED` quando ambas existem. **Nunca
+convertido para tokens ou custo**: 70% menos caracteres não prova
+proporcionalmente 70% menos tokens de input, e a saída desta função nem
+contém um campo `tokensAvoided`. Sem uma fonte de contexto pré-Work-Units no
+ledger, o resultado hoje é `INSUFFICIENT_DATA` — outro resultado honesto e
+esperado.
+
+### Model outcomes e custo por unidade bem-sucedida (`lib/model-outcomes.mjs`)
+
+A V24 mostrou Fable mais caro que Opus por token. `computeModelOutcomes`
+responde a pergunta seguinte — calls/successfulCalls/failedCalls/retryCalls/
+fallbackCalls e as taxas derivadas, por modelo — sem concluir qual modelo é
+"melhor": custo é uma dimensão, não um veredito. `costPerSuccessfulWorkUnit`
+usa o `finalStatus` de cada unidade agregada (a tentativa MAIS RECENTE, nunca
+a primeira) para que uma unidade que falhou e teve sucesso no retry conte como
+UMA unidade bem-sucedida que levou duas chamadas — não duas unidades.
+
+### Composição sem double counting (`lib/architecture-savings.mjs`)
+
+Routing savings (CALCULATED) só existe para linhas que estão no ledger —
+invocações reais. Deterministic savings (ESTIMATED) só existe para Work Units
+que geraram ZERO linhas (`deterministicModelCalls = 0`). Uma chamada real está
+em exatamente um desses dois conjuntos — nunca nos dois — então somá-los é
+aditivo por construção, não por convenção. `combineArchitectureSavings`
+soma o que está disponível, marca como `missing` o que não está (nunca zero),
+e a classificação do total é a MAIS FRACA entre os componentes presentes: um
+componente `ESTIMATED` torna o total `ESTIMATED`, nunca o contrário. Context
+reduction fica de fora da soma em dólares por definição (é medido em
+caracteres — ver acima).
+
+`describeSavingsDelta` resolve a ambiguidade que a Goal pede: um routing
+delta negativo nunca aparece como `"-$9.30"` (que um leitor apressado lê como
+"9 dólares e trinta, só que negativo, ok") — aparece como `"$9.3001
+additional cost"`, sem qualquer chance de leitura errada.
+
+### CLI
+
+```bash
+npm run ia-loop:metrics -- --goal 010
+npm run ia-loop:metrics -- --goal 010 --deterministic-savings   # evidência verbosa
+npm run ia-loop:metrics -- --goal 010 --baseline legacy         # evidência verbosa
+```
+
+Nova seção `ARCHITECTURAL SAVINGS` no texto; `--json` ganha `estimated.
+deterministicSavings/legacyArchitectureSavings/contextSavings/
+totalArchitectureSavings`, `baselines.ACTUAL/ALL_OPUS`, `pricing` (agora com
+provenance), `benchmarks` (linhas excluídas) e `confidence` (um resumo por
+estimativa). Nenhum default anterior mudou — os dois flags novos só
+acrescentam detalhe ao texto.
+
+### Shadow benchmark: infraestrutura opt-in, nunca automática (`lib/benchmark.mjs`, `run-benchmark.mjs`)
+
+```bash
+npm run ia-loop:benchmark -- --scenario deterministic-vs-model
+npm run ia-loop:benchmark -- --scenario deterministic-vs-model --confirm
+```
+
+Sem `--confirm`, sempre um dry-run — descreve o que aconteceria e não gasta
+nada. Com `--confirm`, ainda não executa nada real: rodar de fato a
+comparação DETERMINISTIC/MODEL exigiria acionar `work-unit-executor.mjs`
+contra um worktree real, o que este Goal deixa **fora de escopo** de
+propósito ("executar benchmarks pagos automaticamente"). O que existe — e é
+testado — é a parte que precisa existir ANTES de qualquer execução real ser
+seguro adicionar: o registro de cenários, o gate opt-in, e o contrato de
+marcação (`benchmarkContext`) que torna uma chamada de benchmark identificável.
+
+Toda chamada de benchmark publicaria `stage: 'benchmark'` como contexto de
+uso, que `usage-context.mjs` mapeia para `operation: 'benchmark'` — uma
+categoria nova, não uma reaproveitada, para que uma linha de benchmark nunca
+seja confundida com uma chamada operacional. `ia-loop:metrics` exclui
+`operation: 'benchmark'` da população padrão de todo relatório (a linha
+continua no ledger — a exclusão é do relatório, não da gravação — e
+`benchmarks.excludedRows` no JSON diz quantas foram tiradas).
+
+### Testes
+
+`tests/work-unit-matching.test.mjs` (11): EXACT/STRONG/WEAK/NONE cobrindo
+cada regra da definição; EXACT permanece válido quando `workUnitType` é
+desconhecido dos dois lados; `riskBucketOf` determinístico; agrupamento de
+uma população inteira por tier.
+
+`tests/historical-distributions.test.mjs` (16): agrupamento por Work Unit
+somando tokens/calls e usando o status da tentativa mais recente; p25/p50/
+p75/mean/min/max; amostra vazia e amostra única; as três faixas de
+confidence e o caso sem baseline algum; preferência EXACT > STRONG > WEAK;
+toda distribuição do Goal presente, incluindo `calculatedCostUsd`.
+
+`tests/deterministic-savings.test.mjs` (7): unidade sem e com baseline;
+calls avoided como figura própria; ranges de tokens e custo nunca como ponto
+único; agregação sobre N unidades escalando o MESMO baseline; zero unidades
+observadas é `INSUFFICIENT_DATA`, nunca economia zero.
+
+`tests/legacy-baseline.test.mjs` (12): réplica explícita e rerun do mesmo
+Goal são `MATCHED`; sobreposição parcial de operações é só
+`PARTIALLY_MATCHED`; nada em comum (inclusive Goals sequenciais do mesmo
+repo) é `UNMATCHED`; `LEGACY_MONOLITHIC` só é `OK` com candidato `MATCHED`;
+redução de contexto calculada e explicitamente nunca convertida a tokens.
+
+`tests/model-outcomes.test.mjs` (8): Fable e Opus comparáveis lado a lado sem
+veredito; falha e retry contam corretamente por modelo; taxas independentes
+entre si; custo por unidade bem-sucedida usa o desfecho final da unidade, não
+o de uma linha isolada.
+
+`tests/architecture-savings.test.mjs` (9): routing e deterministic somados
+como componentes SEPARADOS (nunca double counting); classificação do total é
+a mais fraca presente; componente ausente nunca vira zero; delta negativo
+preservado e rotulado sem ambiguidade.
+
+`tests/benchmark.test.mjs` (11) e adições em `tests/pricing-registry.test.mjs`
+(4) e `tests/metrics-cli.test.mjs` (+3): gate opt-in do CLI de benchmark;
+contrato de marcação; comparação só com `resultSignature` idêntico;
+provenance obrigatório e nunca `OFFICIAL` por engano; linha `operation:
+'benchmark'` excluída do relatório mas presente no ledger; estimativa de
+deterministic savings explicável só pelo JSON (método, sample size, ids das
+Work Units exatas).
+
+### Validação real — VALIDATED
+
+Executado sobre Goals 008–010 (o mesmo ledger de produção da V23/V24), sem
+alterar nenhum dado. Matriz pedida pelo Goal:
+
+```text
+Metric                     Goal 008        Goal 009        Goal 010
+──────────────────────────────────────────────────────────────────────
+Routing impact             AVAILABLE       AVAILABLE       AVAILABLE
+                            +$0.01 savings  +$39.39 savings -$9.30 (cost)
+Deterministic units         OBSERVED: 0     OBSERVED: 0     OBSERVED: 3
+Deterministic savings       INSUFFICIENT   INSUFFICIENT    AVAILABLE
+                            (no det. units) (no det. units) (LOW, WEAK, n=17)
+Legacy comparison           INSUFFICIENT_DATA (no MATCHED run — see above)
+Context reduction           INSUFFICIENT_DATA (no legacy contextChars source)
+Cost per successful unit    INSUFFICIENT   INSUFFICIENT    AVAILABLE
+                            (no Work Units) (no Work Units) ($5.66/unit, n=16)
+```
+
+Nenhuma métrica foi forçada a `AVAILABLE`: Goals 008/009 não usaram Work
+Units (V18 ainda não fazia parte do fluxo delas), então `deterministicUnits`,
+`deterministicSavings` e `costPerSuccessfulWorkUnit` são honestamente
+`INSUFFICIENT_DATA`/`0` para as duas. `legacyArchitectureSavings` e
+`contextSavings` ficam `INSUFFICIENT_DATA` nos três Goals — não por bug, mas
+porque nenhum dado deste repositório satisfaz a metodologia declarada (nenhum
+rerun/replay registrado, nenhuma fonte de contexto pré-Work-Units).
+
+Para Goal 010, o achado central: `deterministicSavings` estima **3 model
+calls evitadas** e **$3,69–$24,39 (central $10,01)** economizados pela
+execução nativa das 3 Work Units determinísticas — com confidence `LOW`
+porque o único tier alcançável entre unidades determinísticas e unidades
+modelo é `WEAK` (nenhum campo além de `operation` é compartilhado — ver
+acima). Combinado com o `routing delta` de **-$9,30** (Goal 010 gastou mais
+roteando para Fable do que gastaria se tudo fosse Opus — achado da V24), o
+`totalArchitectureSavings` fecha em **-$5,61 a $15,09 (central $0,71)**,
+classificado `ESTIMATED` porque um dos dois componentes é. A soma não
+double-conta nada: as 3 Work Units determinísticas não geraram nenhuma linha
+no ledger, então nunca entraram no cálculo de routing savings — os dois
+conjuntos de evidência são disjuntos por construção, exatamente como o
+desenho do módulo garante.
+
+`pricing.provenance` aparece em todo relatório como `EMPIRICALLY_CALIBRATED`,
+nunca `OFFICIAL` — e o próprio id do snapshot
+(`claude-ledger-calibrated-2026-09`) já deixa de sugerir o contrário.
+
+## V26 — Model cost × outcome effectiveness
+
+A V24 mostrou que Fable custa mais por token que Opus neste ledger. Esta
+etapa pergunta a questão seguinte, que custo sozinho não responde: **Fable
+entrega o suficiente a mais para justificar isso?** Sem inventar um "quality
+score" — cost, acceptance, retry, repair e duração ficam separados, cada um
+lido diretamente do que já está gravado.
+
+### Três níveis de análise
+
+```text
+INVOCATION   uma linha do ledger — pode concluir, falhar, ter retry, ser
+             fallback ou escalation.
+WORK UNIT    1..N invocations agrupadas por goal::round::workUnitId
+             (`groupIntoWorkUnits`, V25) — uma unidade retried é UMA unidade,
+             não N.
+OUTCOME      o resultado final observável: SUCCESS, FAILED, ACCEPTED,
+             CHANGES_REQUIRED, REPAIRED, ABORTED, UNKNOWN.
+```
+
+### Attribution: nunca promover uma consequência a responsabilidade direta
+
+`lib/outcome-attribution.mjs` correlaciona por ID — `work_unit_id`,
+`forVerification`, `goal`/`round` — nunca por proximidade temporal. Todo
+outcome carrega uma confiança de atribuição:
+
+```text
+DIRECT         uma única invocation, sem retry/fallback/escalation.
+SHARED         uma cadeia (retry, fallback, escalation, ou um repair que
+               mirou esta unidade) produziu o resultado — pertence à cadeia.
+INDIRECT       um sinal de Goal/round (uma decisão de review) toca a unidade
+               sem link estrutural específico a ela.
+UNATTRIBUTED   nenhuma evidência terminal existe para esta unidade.
+```
+
+Uma decisão de review (`REVIEW_DECISION_PUBLISHED`) é sempre `SHARED` com
+toda unidade da rodada — nunca `DIRECT` a uma unidade específica, porque o
+harness não registra qual unidade uma review realmente examinou (Goal §8).
+Um repair (`WORK_UNIT_FIX_CREATED.forVerification`) É um link estrutural
+real; `attributedTo` (se o repair foi causado pelo modelo ou por
+infraestrutura) existe no shape do evento mas **não é populado pelo harness
+hoje** — lido defensivamente e reportado como `UNKNOWN`, nunca adivinhado.
+
+### Taxonomia de falha reaproveitada, não duplicada
+
+`classifyFailureRelevance` mapeia `failure_family`/`failure_reason` — as
+MESMAS colunas que `lib/failure-taxonomy.mjs`/`capacity-classifier.mjs` já
+escrevem desde antes deste Goal — para `qualityRelevant: boolean`:
+`TIMEOUT`/`CAPACITY_FAILURE`/`RATE_LIMIT`/`INFRA_FAILURE` nunca são
+relevantes para qualidade; `VALIDATION_FAILURE` (`AGENT_CONTRACT`) sempre é;
+`UNKNOWN` é tratado como relevante por padrão — não há evidência de que seja
+infra, e assumir o contrário seria o erro mais perigoso dos dois. Isto
+produz `rawFailureRate` e `qualityRelevantFailureRate` como métricas
+distintas — nunca uma única taxa de falha "de qualidade".
+
+### `lib/model-effectiveness.mjs`: o registro por modelo
+
+Para cada modelo canônico, `computeModelEffectiveness` produz `sample` (calls,
+Work Units, unidades aceitas), `cost`/`tokens`/`calls`/`duration` (total, por
+chamada, por Work Unit bem-sucedida, por Work Unit aceita — duração como
+p25/p50/p75, nunca só média), `quality` (firstPassSuccessRate, retryRate,
+acceptanceRate, changesRequiredRate, repairRate, as duas taxas de falha),
+`fallback`/`escalation` (source vs. destination sempre separados — um modelo
+que CAUSA um fallback e um modelo que o RECEBE nunca se misturam no mesmo
+campo), e `confidence` (`sampleConfidenceFor`, regra centralizada: `< 5` →
+`INSUFFICIENT_DATA`, `5–19` → `LOW_CONFIDENCE`, `20–49` →
+`MEDIUM_CONFIDENCE`, `>= 50` → `HIGH_CONFIDENCE`).
+
+`fallback_from_model`/`escalation_from_model` guardam a MODEL KEY curta do
+roteamento (`'sonnet'`, não `'claude-sonnet-5'`) — resolvida através da MESMA
+tabela que `lib/model-routing.mjs` usa para rotear (`resolveModel`), nunca
+uma segunda tabela de mapeamento inventada aqui.
+
+### Resolution chains, ROI de escalation/retry, falhas terminais
+
+`computeResolutionChains` nomeia a sequência exata de modelos que resolveu
+cada unidade (`"Sonnet → Opus"`) e o custo da CADEIA INTEIRA por unidade
+resolvida — nunca só o custo do último link, que esconderia o gasto de quem
+falhou antes. `computeEscalationROI`/`computeRetryROI` calculam
+`incrementalCostPerRecoveredWorkUnit` — "recuperada" exige que a chamada
+escalada tenha êxito **E** a unidade feche com sucesso; uma chamada escalada
+bem-sucedida numa unidade que falha depois não conta como recuperação.
+`computeTerminalFailureCost` isola cadeias que gastaram tokens reais e
+terminaram sem resultado útil — mais perto de desperdício genuíno que
+"retry overhead" (V23/V24), que inclui cadeias que eventualmente
+recuperaram.
+
+### Nenhuma alegação causal
+
+`computeIncrementalValue(candidato, baseline)` devolve
+`incrementalCostPerAcceptedUsd`/`incrementalAcceptanceRate`/
+`incrementalRetryReduction`/`incrementalRepairReduction` — nunca um campo
+`winner`. A trilha inteira usa linguagem de associação (`associated with`,
+`observed among`), nunca causal (`caused`): não existe experimento
+randomizado aqui, só correlação observacional.
+
+### Selection bias: `MODEL_COHORT_IMBALANCE`
+
+`detectCohortImbalance` compara a fração de Work Units `HIGH` complexity por
+modelo; quando a razão entre o maior e o menor share ultrapassa 2×, sinaliza
+`MODEL_COHORT_IMBALANCE` — um aviso, não uma correção. Um modelo que só
+recebe trabalho já escalado (mais difícil por construção) vai parecer pior
+em retry/failure por razões que nada têm a ver com o modelo em si.
+
+### CLI e JSON
+
+Seção nova no texto de `npm run ia-loop:metrics`, habilitada por padrão
+(sem flag — degrada para `INSUFFICIENT_DATA`/`—` por modelo quando a amostra
+é pequena, o que é o caso normal deste ledger):
+
+```text
+MODEL EFFECTIVENESS
+RESOLUTION CHAINS
+```
+
+`--json` ganha `effectiveness: { byModel, byCohort, resolutionChains,
+escalations, retries, terminalFailures }` e `confidence.byModel`. Um
+`MODEL_COHORT_IMBALANCE` detectado entra em `integrity.flags` como qualquer
+outro diagnóstico das etapas anteriores.
+
+### Testes
+
+`tests/outcome-attribution.test.mjs` (17): correlação por ID nunca por
+tempo; DIRECT/SHARED/UNATTRIBUTED; um evento `BLOCKED` do harness sobrepõe
+uma inferência só-de-ledger; decisão de review sempre `SHARED`; repair
+linkado por `forVerification`, com causa `UNKNOWN` quando `attributedTo`
+não vem populado (o caso real de hoje); taxonomia de falha reaproveitada —
+`HARNESS`/`MODEL_CAPACITY`/timeout nunca quality-relevant, `AGENT_CONTRACT`
+sempre, `UNCLASSIFIED` relevante por padrão.
+
+`tests/model-effectiveness.test.mjs` (25): regra de confidence exata;
+first-pass success; retry recuperado vs. falha terminal; fallback/escalation
+source separado de destination; unidade recuperada exige sucesso da chamada
+E da unidade; cost/tokens/calls/duração por Work Unit bem-sucedida e aceita;
+resolution chain nomeando a sequência e o custo da cadeia inteira; cohort
+por complexidade e o flag de imbalance disparando e não disparando; amostra
+insuficiente; Fable mais caro por chamada; Fable com sucesso observado
+melhor OU pior que Opus — ambos aceitos como resultado válido; incremental
+value sem campo `winner`; ROI de escalation e retry nunca conflados; custo
+de falha terminal; dados de acceptance ausentes viram `null`, nunca zero;
+categorias sobrepostas (retry + escalation na mesma unidade); nenhuma
+duplicação de custo entre chains e registros por modelo.
+
+Adições em `tests/metrics-cli.test.mjs` (+4): tabela de texto e
+`effectiveness.byModel` concordando nos mesmos números; confidence
+`INSUFFICIENT_DATA` para amostra `< 5`; zero chamadas de modelo e ledger
+intocado ao computar a seção inteira.
+
+### Validação real — VALIDATED
+
+Executado sobre o ledger de produção (Goals 008–010), sem alterar nenhum
+dado. **A pergunta central do Goal**: o custo adicional de Fable (+$9,30 no
+Goal 010 vs. ALL_OPUS — achado da V24) esteve associado a mais acceptance,
+menos retries, menos repairs, mais first-pass success, menos tempo, ou mais
+recuperação por escalation?
+
+```text
+Resposta: INSUFFICIENT_DATA para todas — e a razão é estrutural, não uma
+amostra pequena que uma amostra maior resolveria.
+```
+
+Fable tem **zero Work Units** no ledger inteiro (008–010): ele participa
+exclusivamente de planning/review no nível de rodada, nunca dentro de uma
+Work Unit. Toda métrica deste Goal que depende de unidade de trabalho
+(`firstPassSuccessRate`, `retryRate`, `acceptanceRate`, `repairRate`, custo
+por unidade bem-sucedida/aceita) fica `null` para Fable — não por falta de
+amostra, mas porque a pergunta "Fable resolve mais Work Units na primeira
+tentativa que Opus" não tem sentido para um modelo que nunca executa uma
+Work Unit. O achado em si é valioso: **para justificar ou refutar o custo do
+Fable com dados de qualidade, seria preciso medir qualidade de review no
+nível de rodada — uma métrica diferente da que este Goal constrói**, não uma
+amostra maior da mesma métrica.
+
+O que os dados reais confirmam sobre Fable:
+
+```text
+calls: 40 (ledger inteiro)          rawFailureRate: 95%
+workUnits: 0                        qualityRelevantFailureRate: 2.5%
+fallbackSourceCalls: 8              escalationsReceived: 1, resolved: 0
+confidence: INSUFFICIENT_DATA
+```
+
+O `rawFailureRate` de 95% soa alarmante isolado — mas `qualityRelevantFailureRate`
+de apenas 2,5% mostra que quase toda essa falha é `MODEL_CAPACITY`/`RATE_LIMIT`
+(o taxonomy reaproveitado da V9/V11 fazendo exatamente o trabalho para o qual
+foi desenhado), não o modelo produzindo output ruim.
+
+**Goal 010** (a amostra com Work Units reais de Sonnet/Opus/Haiku):
+
+```text
+                sonnet    opus   haiku
+Calls               10      14       3
+Cost           $21.89   $86.39   $1.50
+First-pass       66.7%   71.4%      0%
+Retry rate       22.2%   14.3%     50%
+Cost/success    $2.95   $11.86       —
+Confidence        LOW     LOW  INSUF.
+```
+
+`MODEL_COHORT_IMBALANCE` disparado: Opus recebe 58–61% de Work Units `HIGH`
+complexity contra 20% do Sonnet e 6–10% do Fable (quando ele participa) — a
+comparação de retry/failure entre eles é direcional, nunca um ranking forte,
+exatamente como a V26 avisa no próprio relatório.
+
+Nenhuma chamada de modelo foi feita para gerar esta análise; nenhuma linha
+do ledger foi alterada; nenhum routing foi mudado.
+
+## V27 — Stage & Round outcome telemetry: a unidade correta para modelos de orquestração
+
+A V26 mostrou o buraco: Fable tem **zero Work Units** no ledger inteiro (008–010)
+— ele só participa de planning/review/closure no nível de rodada. "Work Unit
+effectiveness" não é a unidade certa para medi-lo. Esta etapa introduz a
+unidade que É: STAGE EXECUTION, ROUND, GOAL.
+
+### A decisão que evitou uma migração de schema: auditar antes de persistir
+
+O Goal pede uma identidade própria por stage (`stageExecutionId`), explicitamente
+**não** reaproveitada de `jobId`/`attemptId`/`invocationId` — mas também pede,
+antes de qualquer persistência nova, auditar `events.jsonl`/`model_usage` e
+**nunca duplicar** o que já existe de forma inequívoca.
+
+A auditoria (contra o ledger real, não suposição) mostrou que `job_id` **já é**
+exatamente essa identidade, para todo o histórico existente: é estável através
+de todo retry/fallback/escalation dentro de uma tentativa de stage (um
+fallback gera `attemptId` novo, nunca `jobId` novo — mesmo mecanismo da V22),
+e distinto entre tentativas de stage diferentes. Nenhum código do harness
+minta um `stageExecutionId` dedicado hoje, então **toda** correlação desta
+etapa é honestamente classificada `LEGACY_RECONSTRUCTED` — nunca `EXACT` — em
+vez de fingir uma identidade de primeira classe que não existe. Isso significa
+zero coluna nova, zero evento novo, zero mudança em `tech-lead.mjs` ou em
+qualquer código que orquestra uma chamada real: a etapa inteira é read-side,
+com o mesmo perfil de risco das V23–V26 (nenhum código que gasta dinheiro foi
+tocado).
+
+```text
+groupIntoStageExecutions(rows)   agrupa por job_id — o Work Unit equivalente
+                                  para planning/review/correction(repair)/closure
+```
+
+### Stage types e o que fica de fora de propósito
+
+```text
+PLANNING     operation: 'planning'
+REVIEW       operation: 'review'
+REPAIR       operation: 'correction'
+CLOSURE      operation: 'closure_documentation'
+```
+
+`work_unit` e `implementation` ficam de fora — são o domínio da V26 (Work Unit
+effectiveness), e misturar os dois faria a mesma invocação contar em duas
+unidades de análise diferentes.
+
+### Outcome do stage ≠ status da invocation
+
+`attributeStageOutcome` separa os dois fatos que o Goal pede (§16):
+`providerAttemptSuccess` (a última chamada respondeu) de `stageOutcome`
+(ACCEPTED/CHANGES_REQUIRED/PLAN_PRODUCED/CLOSURE_PUBLISHED/FAILED/UNKNOWN).
+`REVIEW_DECISION_PUBLISHED` carrega o `jobId` exato da review que a produziu
+— um link estrutural **mais forte** que a V26 conseguia no nível de Work
+Unit (lá, uma review de rodada só podia ser `SHARED` com toda unidade da
+rodada; aqui, o stage tem o `jobId` exato, então a atribuição é `DIRECT`).
+Um processo que termina sem exceção nunca vira `ACCEPTED` sem o evento —
+fica `UNKNOWN`, honestamente.
+
+### O achado que corrigiu a correlação review → repair
+
+A tentativa inicial ligava review e repair pela MESMA rodada. Auditando a
+timeline real do Goal 009 (`DEVELOPER_PROFILE_CHANGED round=2 "Correções
+envolvem..."` logo após `REVIEW_DECISION_PUBLISHED round=1 CHANGES_REQUIRED`),
+ficou claro que o harness **avança a rodada antes do reparo rodar** — a
+correção do round N mora no round N+1, nunca no mesmo round. `correlateReviewToRepair`
+agora busca a rodada mais próxima **estritamente posterior** com uma execução
+`REPAIR` — adjacência de round (um fato estrutural da state machine), nunca
+proximidade de timestamp. Reconstruído contra o Goal 009 real:
+
+```text
+review (round 1, CHANGES_REQUIRED)
+   → repair (round 2)
+      → review (round 2, ACCEPTED)
+```
+
+### `metricApplicability`: NOT_APPLICABLE ≠ INSUFFICIENT_DATA
+
+```text
+Fable + costPerAcceptedWorkUnit  → NOT_APPLICABLE     (zero Work Unit calls —
+                                                        nenhuma amostra futura resolve isso)
+Fable + reviewStageResolution    → APPLICABLE          (36 review calls no ledger)
+```
+
+A diferença importa: `INSUFFICIENT_DATA` promete que mais dados ajudariam;
+`NOT_APPLICABLE` diz que a pergunta não faz sentido para este modelo, ponto.
+Confundir os dois é exatamente como "Fable é ruim em Work Units" nasce de um
+denominador que nunca existiu.
+
+### CLI e JSON
+
+Nova seção no texto de `npm run ia-loop:metrics`, sem flag (aparece sempre
+que houver stage-scoped rows):
+
+```text
+STAGE TELEMETRY (observational — no effectiveness ranking; see Goal 015)
+```
+
+Deliberadamente sem ranking, sem "resolved stages" — só cobertura e
+correlação (contagens de chamada por stage type, capacity vs. quality
+failures, coverage da correlação). Conclusões de eficiência (`Fable is
+better`, `use Opus for review`) são explicitamente adiadas para o próximo
+Goal. `--json` ganha `stageTelemetry: { coverage, byModel }`.
+
+### Testes
+
+`tests/stage-execution.test.mjs` (35): identidade única por `job_id`; os
+quatro stage types e a exclusão explícita de `work_unit`; retry/fallback/
+escalation preservando `job_id` estável e nomeando source/destination;
+capacity/rate-limit/quality failure via a MESMA taxonomia (nenhuma nova);
+outcome de invocation separado de outcome de negócio, com `DIRECT` via
+`jobId` exato; review → repair → review usando adjacência de round (com o
+caso real do Goal 009 como fixture, e um caso adversarial provando que
+round vence proximidade temporal); round outcome pela decisão mais recente;
+Goal outcome de `GOAL_CLOSED`, nunca do último modelo usado; `LEGACY_RECONSTRUCTED`
+sempre, `UNATTRIBUTED` para uma linha sem `job_id`.
+
+`tests/stage-telemetry.test.mjs` (11): coverage report; `NOT_APPLICABLE` vs.
+`INSUFFICIENT_DATA` nos dois sentidos; Fable com zero Work Unit calls e
+chamadas de stage reais lado a lado; um modelo dated-build resolvendo para
+UM bucket canônico só.
+
+Adições em `tests/metrics-cli.test.mjs` (+2): a seção aparece no texto e no
+JSON com os mesmos números; zero chamadas de modelo e ledger intocado ao
+computar a seção inteira.
+
+### Validação real — VALIDATED
+
+Executado sobre Goals 008–010, sem alterar nenhum dado:
+
+```text
+Model            Work Units   Planning   Review   Closure
+──────────────────────────────────────────────────────────
+Haiku                     3          0        0        0
+Sonnet                   10          0        0        0
+Opus                      7          4        6        3
+Fable                     0          4       36        0
+```
+
+Fable: **zero** Work Unit calls, **40** stage calls — a demonstração que o
+Goal pediu explicitamente. `capacityFailures: 37` contra `qualityFailures: 0`
+para Fable confirma de novo o achado da V26 (raw failure rate alto, quase
+todo capacity) usando a MESMA taxonomia reaproveitada, agora no nível de
+stage.
+
+Coverage do ledger inteiro: **14 stage executions**, 14/14 com link de
+invocation, 14/14 com status terminal, 13/14 com outcome de negócio (1
+`UNKNOWN` — uma review cujo job não publicou decisão, ver abaixo), 14/14
+com correlação de round. `LEGACY_RECONSTRUCTED`: 14. `EXACT`: 0 (nenhum
+`stageExecutionId` dedicado existe ainda). `UNATTRIBUTED`: 0.
+
+Seis reconstruções manuais pedidas pelo Goal, conferidas contra `events.jsonl`:
+
+1. **Stage resolvido diretamente** — Goal 010 round 2, `job=010-r2-tech_lead-5b21ccbd`:
+   Fable, uma única chamada, `COMPLETED` → `REVIEW_DECISION_PUBLISHED ACCEPTED`
+   no mesmo `jobId`. `DIRECT`.
+2. **Capacity/rate-limit failure** — Goal 010 round 1, review: primeira
+   tentativa `resolved_model=null`, `failure_family=MODEL_CAPACITY`,
+   `failure_reason=USAGE_LIMIT` — a chamada nem chegou a ser servida.
+3. **Fallback** — mesma execução: tentativa 2 sobe para Opus com
+   `is_fallback=1`, `fallback_from_model='fable'`, `COMPLETED`.
+4. **Review CHANGES_REQUIRED** — Goal 009 round 1,
+   `job=009-r1-tech_lead-ed717112`: Fable falha, Opus assume por fallback,
+   `COMPLETED` → `REVIEW_DECISION_PUBLISHED CHANGES_REQUIRED`, mesmo `jobId`.
+5. **Review ACCEPTED** — Goal 009 round 2, `job=009-r2-tech_lead-b183a51e`:
+   mesma forma, decisão `ACCEPTED`.
+6. **Review → repair → review** — exatamente a cadeia acima
+   (`009-r1-tech_lead-ed717112` CHANGES_REQUIRED → `009-r2-correction-942514ff`
+   → `009-r2-tech_lead-b183a51e` ACCEPTED), reconstruída automaticamente por
+   `correlateReviewToRepair` e conferida linha a linha contra `events.jsonl`.
+
+**Achado real não escondido**: `Goal 010 round 3`, `job=010-r3-tech_lead-8d40936f`
+tem **28 tentativas** sob o mesmo `job_id` — a tentativa 3 respondeu
+`COMPLETED`, mas as tentativas 4–28 continuam como `MODEL_CAPACITY` depois
+disso. A regra desta etapa ("a última tentativa decide o resultado do
+stage") classifica essa execução como `FAILED`/`SHARED`, o que pode não
+refletir com precisão o que realmente aconteceu com uma resposta já
+completa no meio da cadeia. Isto não foi "corrigido" para o coverage parecer
+mais limpo — fica registrado aqui como uma anomalia real do ledger que
+merece investigação separada (possivelmente um artefato de reconciliação/
+resume), não uma falha desta camada de telemetria.
+
 ## Limitações conhecidas
 
 1. **Auth não é herdável por subprocesso a partir do app desktop.** O que
@@ -4254,6 +5378,59 @@ de um job diferente; no-op seguro sem bloqueio algum ou sem runtime algum.
    inconsistência real dos dados que o provider devolveu, não um bug do
    normalizer. Nunca se infere ou fabrica um modelo para eliminar a flag;
    ela existe exatamente para tornar essa lacuna visível.
+10. **`providerReportedCostUsd`, `primaryModelCostUsd` e `auxiliaryModelCostUsd`
+    podem legitimamente divergir** (V23): são três campos diferentes do CLI
+    (`total_cost_usd` do envelope vs. `costUSD` por modelo dentro de
+    `modelUsage`), não uma soma garantida. Divergência acima de $0,01 vira
+    `COST_ACCOUNTING_MISMATCH` no relatório, nunca reconciliação silenciosa —
+    ver V23.
+11. **Fable é o modelo mais caro por token neste ledger, não Opus** (V24) —
+    confirmado reconstruindo o pricing real a partir de
+    `provider_reported_cost_usd`. `ALL_OPUS` não é, portanto, um teto de
+    gasto universal: uma chamada roteada para Fable recalculada como Opus
+    pode mostrar economia NEGATIVA (o roteamento real gastou mais do que o
+    contrafactual), e o relatório mostra esse número exatamente assim. Não
+    assuma, lendo `routingSavingsUsd`, que ele é sempre >= 0.
+12. **`deterministicSavings` hoje só alcança confidence `LOW`** (V25) — uma
+    Work Unit DETERMINISTIC e uma Work Unit MODEL raramente compartilham
+    `role`/`complexity` (naturezas de trabalho diferentes), então o melhor
+    tier que `matchTier` consegue provar entre elas é `WEAK`, e `WEAK` é
+    `LOW` por definição da regra de confidence — não importa quantas
+    Work Units modelo existam no ledger. Isto é o comportamento correto, não
+    um bug: a estimativa não finge mais certeza do que a comparação suporta.
+13. **`LEGACY_MONOLITHIC` e a redução de contexto ficam `INSUFFICIENT_DATA`
+    neste repositório hoje** (V25) — não por falha de implementação, mas
+    porque o ledger não tem (ainda) nenhum rerun/replay explícito de um Goal,
+    nem uma fonte de `contextChars` de antes da V18 (Work Units) para
+    comparar. Ambas as metodologias existem e são testadas; faltam os dados
+    que as tornariam `OK`.
+14. **Fable não tem nenhuma métrica de qualidade no nível de Work Unit** (V26)
+    — ele nunca executa uma, então `firstPassSuccessRate`/`retryRate`/
+    `acceptanceRate`/`repairRate`/custo-por-unidade ficam `null` para ele em
+    todo relatório. Não é uma amostra pequena — é a ausência estrutural da
+    própria unidade de medida. Comparar Fable a Opus nessas métricas nunca vai
+    ficar `HIGH_CONFIDENCE`; vai continuar `INSUFFICIENT_DATA` até que exista
+    uma métrica de qualidade de review no nível de rodada.
+15. **`WORK_UNIT_FIX_CREATED.attributedTo` existe no shape do evento mas não é
+    populado pelo harness hoje** (V26) — `repairCause` fica sempre `UNKNOWN`
+    em dados reais, nunca `MODEL_OUTPUT`, porque nenhum worker grava essa
+    atribuição ainda. `classifyFailureRelevance`/`repairCause` estão prontos
+    para o dia em que essa informação existir; não a inventam enquanto isso.
+16. **Nenhum `stageExecutionId` dedicado é minted pelo harness ainda** (V27)
+    — `job_id` serve como a identidade de stage execution para TODO o
+    histórico, sempre classificado `LEGACY_RECONSTRUCTED`, nunca `EXACT`.
+    Introduzir uma identidade de primeira classe (mintada antes do dispatch,
+    publicada como evento `STAGE_STARTED`) tocaria `tech-lead.mjs`/
+    `capacity-runner.mjs` — código que orquestra chamadas reais — e foi
+    deliberadamente deixado fora desta etapa, que se manteve puramente
+    read-side. Se essa identidade for introduzida no futuro, é o único caso
+    em que `correlationQuality` poderá legitimamente reportar `EXACT`.
+17. **`job=010-r3-tech_lead-8d40936f` tem 28 tentativas sob o mesmo `job_id`,
+    com uma resposta `COMPLETED` na tentativa 3 seguida de 25 falhas de
+    capacidade** (V27) — a regra "a última tentativa decide" classifica essa
+    execução como `FAILED`, o que pode não refletir com precisão o que
+    aconteceu. Registrado como anomalia real, não corrigido silenciosamente;
+    merece investigação separada (possível artefato de reconciliação/resume).
 
 ### Validação real — VALIDATED
 

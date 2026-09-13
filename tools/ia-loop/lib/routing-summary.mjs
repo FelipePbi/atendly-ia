@@ -57,12 +57,22 @@ export function summarizeRouting(events, { goal } = {}) {
     total: 0,
     byType: {},
     byState: {},
+    // Every attempt at a DETERMINISTIC action, successful or not — this is
+    // "how many times a model was not called", true regardless of outcome.
     deterministicRuns: 0,
+    deterministicSuccesses: 0,
     deterministicFailures: 0,
     contextExpansions: 0,
     attempts: 0,
-    // Explicitly counted, because "how many commands ran without a model" is
-    // the number that says whether the deterministic tier is earning its keep.
+    // "Model calls avoided" means a model call was genuinely made unnecessary
+    // — which only a SUCCESSFUL deterministic check does. A failed attempt
+    // (Goal 011: spawn ENOENT on Windows, all 10) still spent zero model
+    // calls, but it verified nothing; the unit still needed a model-based fix
+    // afterwards, so nothing was actually avoided. Counting it here would
+    // report a Windows spawn bug as a savings win. Equal to
+    // deterministicSuccesses; kept as its own field because the two answer
+    // different questions ("what worked" vs. "what this replaced") and a
+    // future caller should not have to know they happen to be the same number.
     modelCallsAvoided: 0,
   };
 
@@ -79,8 +89,12 @@ export function summarizeRouting(events, { goal } = {}) {
       workUnits.attempts += event.attempts ?? 0;
     } else if (event.type === DETERMINISTIC_EXECUTED) {
       workUnits.deterministicRuns += 1;
-      workUnits.modelCallsAvoided += 1;
-      if (!event.ok) workUnits.deterministicFailures += 1;
+      if (event.ok) {
+        workUnits.deterministicSuccesses += 1;
+        workUnits.modelCallsAvoided += 1;
+      } else {
+        workUnits.deterministicFailures += 1;
+      }
       workUnits.byState[event.ok ? 'COMPLETED' : 'FAILED'] = (workUnits.byState[event.ok ? 'COMPLETED' : 'FAILED'] ?? 0) + 1;
     } else if (event.type === CONTEXT_EXPANDED) {
       // Counted from the GRANT, not from the unit's final record: an expansion
@@ -177,10 +191,12 @@ export function renderRoutingSummary(summary) {
     lines.push(`    executed: ${units.total} · states: `
       + `${Object.entries(units.byState).map(([state, count]) => `${count} ${state}`).join(' · ') || 'none'}`);
     lines.push(`    attempts: ${units.attempts} · context expansions: ${units.contextExpansions}`);
-    // The headline number: commands the orchestrator ran itself, each one an
-    // inference the old architecture would have paid for.
-    lines.push(`    deterministic runs: ${units.deterministicRuns} (${units.deterministicFailures} failed)`
-      + ` — model calls avoided: ${units.modelCallsAvoided}`);
+    // Attempts and outcome kept apart on purpose: a failed attempt still cost
+    // zero model calls, but it verified nothing, so it is not a savings win —
+    // "model calls avoided" only counts the runs that actually succeeded.
+    lines.push(`    deterministic: ${units.deterministicRuns} attempt(s)`
+      + ` — ${units.deterministicSuccesses} succeeded · ${units.deterministicFailures} failed`
+      + ` · model calls: 0 · model calls avoided (successful only): ${units.modelCallsAvoided}`);
   }
   lines.push(`  Fallbacks: ${summary.fallbacks.length}`);
   for (const item of summary.fallbacks) {

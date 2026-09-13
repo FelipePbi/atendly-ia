@@ -25,7 +25,8 @@ import {
   isRecoveryEligible,
   judgeOwner,
 } from '../lib/orphan-evidence.mjs';
-import { RECOVERY_ACTIONS, AGENT_EXECUTION_STATES, planRecovery } from '../lib/recovery-plan.mjs';
+import { RECOVERY_ACTIONS, AGENT_EXECUTION_STATES, planRecovery, resolveRecoveryJob } from '../lib/recovery-plan.mjs';
+import { buildStageLedger, STAGE_JOB_SOURCE } from '../lib/reconcile.mjs';
 import { createLeaseStore } from '../lib/leases.mjs';
 import { createAutonomousStore } from '../lib/autonomous-state.mjs';
 import {
@@ -280,8 +281,14 @@ const confirmed = { status: OWNER_STATUS.ORPHAN_CONFIRMED, proof: 'DIFFERENT_BOO
 const runtimeAt = (state, over = {}) => ({
   mode: 'REAL_EXECUTION', goal: '004', round: 1, state, currentJobId: 'job-1', ...over,
 });
+// jobId defaults to the runtime's own currentJobId here only because these
+// tests are checking planRecovery's DECISION given an already-resolved job,
+// not the resolution itself (see the "hint never overrides the ledger"
+// section below for that). The real caller (run-recover.mjs) never passes
+// runtime.currentJobId itself — it resolves this from the stage ledger via
+// resolveRecoveryJob first.
 const plan = (state, over = {}, facts = {}) => planRecovery({
-  runtime: runtimeAt(state, over), ownerVerdict: confirmed, leaseExists: true, ...facts,
+  runtime: runtimeAt(state, over), ownerVerdict: confirmed, leaseExists: true, jobId: 'job-1', ...facts,
 });
 
 test('10. REVIEWER_RUNNING with the review already on disk does not call the Tech Lead again', () => {
@@ -321,6 +328,81 @@ test('14. a correction round recovers exactly like the implementation round', ()
   assert.equal(requeue.agent, 'developer');
 });
 
+// ===========================================================================
+// 14b-14e. resolveRecoveryJob: the ledger decides, the runtime pointer never
+// does. The Goal010 shape, one level down from run-goal.mjs's dispatch: a
+// crash can leave runtime.currentJobId aimed at a job the ledger has since
+// disowned (SUPERSEDED, or from a round that already moved on), and
+// setJobStatus has no guard against flipping a SUPERSEDED job back to
+// INTERRUPTED — which is exactly what would make it claimable again.
+// ===========================================================================
+
+const recoveryJob = (jobId, { role = 'developer', round = 2, type = 'IMPLEMENTATION', status = 'QUEUED', result = null } = {}) => ({
+  role, status, result,
+  job: { jobId, role, goal: '010', round, type },
+});
+
+test('14b. a genuinely interrupted attempt at the current stage is resumed by its own id', () => {
+  const ledger = buildStageLedger([recoveryJob('010-r2-developer-aaaaaaaa', { status: 'INTERRUPTED' })]);
+  const runtime = { goal: '010', round: 2, state: LOOP_STATES.DEVELOPER_RUNNING, currentJobId: '010-r2-developer-aaaaaaaa' };
+  const resolved = resolveRecoveryJob({ reconciled: { ledger }, runtime });
+  assert.equal(resolved.jobId, '010-r2-developer-aaaaaaaa');
+  assert.equal(resolved.resultExists, false);
+  assert.equal(resolved.source, STAGE_JOB_SOURCE.RESUMED_ATTEMPT);
+});
+
+test('14c. a completed stage resolves to the completing job even when the runtime pointer disagrees', () => {
+  const ledger = buildStageLedger([recoveryJob('010-r1-tech_lead-real0001', {
+    role: 'tech_lead', round: 1, status: 'COMPLETED', result: { decision: 'CHANGES_REQUIRED' },
+  })]);
+  const runtime = { goal: '010', round: 1, state: LOOP_STATES.REVIEWER_RUNNING, currentJobId: 'stale-pointer' };
+  const resolved = resolveRecoveryJob({ reconciled: { ledger }, runtime });
+  assert.equal(resolved.jobId, '010-r1-tech_lead-real0001');
+  assert.equal(resolved.resultExists, true);
+  assert.equal(resolved.source, STAGE_JOB_SOURCE.COMPLETED);
+});
+
+test('14d. a SUPERSEDED job named by a stale runtime pointer is never revived', () => {
+  // Exactly the Goal010 incident shape: the runtime still points at the
+  // review that was superseded for having reviewed the wrong DeveloperResult.
+  const ledger = buildStageLedger([recoveryJob('010-r2-tech_lead-stale001', {
+    role: 'tech_lead', round: 2, status: 'SUPERSEDED',
+  })]);
+  const runtime = { goal: '010', round: 2, state: LOOP_STATES.REVIEWER_RUNNING, currentJobId: '010-r2-tech_lead-stale001' };
+
+  const resolved = resolveRecoveryJob({ reconciled: { ledger }, runtime });
+  assert.equal(resolved.jobId, null, 'the ledger disowns it; recovery must not name it');
+  assert.equal(resolved.resultExists, false);
+  assert.equal(resolved.source, STAGE_JOB_SOURCE.NEW_JOB_REQUIRED);
+
+  // planRecovery, given that answer, admits it does not know rather than
+  // resurrecting the pointer itself — it never reaches the REQUEUE_JOB path
+  // that would flip the SUPERSEDED job's status to INTERRUPTED.
+  const p = planRecovery({ runtime, resultExists: resolved.resultExists, jobId: resolved.jobId, leaseExists: false });
+  assert.equal(p.action, RECOVERY_ACTIONS.BLOCKED);
+  assert.equal(p.reason, 'STATE_INCONSISTENT');
+});
+
+test('14e. a pointer left over from a finished round is ignored; the new round is judged on its own ledger', () => {
+  // runtime.round says 2, but currentJobId still names round 1's job — the
+  // same failure shape run-goal.mjs had for dispatch (jobIdsByRound), here for
+  // recovery instead.
+  const ledger = buildStageLedger([recoveryJob('010-r1-developer-real0001', {
+    round: 1, status: 'COMPLETED', result: { status: 'BLOCKED' },
+  })]);
+  const runtime = { goal: '010', round: 2, state: LOOP_STATES.DEVELOPER_RUNNING, currentJobId: '010-r1-developer-real0001' };
+  const resolved = resolveRecoveryJob({ reconciled: { ledger }, runtime });
+  assert.equal(resolved.jobId, null, 'round 2 has no attempt of its own yet');
+  assert.equal(resolved.source, STAGE_JOB_SOURCE.NEW_JOB_REQUIRED);
+});
+
+test('run-recover.mjs resolves the stage job from the ledger; the old runtime-pointer fallback cannot reappear', async () => {
+  const source = await readFile(new URL('../run-recover.mjs', import.meta.url), 'utf8');
+  assert.match(source, /resolveRecoveryJob\(/, 'the ledger-only resolver must actually be wired in');
+  assert.doesNotMatch(source, /\?\?\s*runtime\??\.currentJobId/,
+    'no fallback to the runtime pointer may reappear as an "or else" after a reconciled/ledger lookup');
+});
+
 test('a queued job that was never picked up is simply re-queued', () => {
   for (const state of [LOOP_STATES.DEVELOPER_QUEUED, LOOP_STATES.CORRECTION_QUEUED, LOOP_STATES.REVIEWER_QUEUED]) {
     assert.equal(plan(state, {}, { resultExists: false }).action, RECOVERY_ACTIONS.REQUEUE_JOB, state);
@@ -339,7 +421,10 @@ test('every state where an agent works has a recovery rule, derived not hand-lis
 });
 
 test('an execution state with no recorded job is refused rather than guessed', () => {
-  const p = plan(LOOP_STATES.REVIEWER_RUNNING, { currentJobId: null });
+  // "No recorded job" means the caller's own resolution (jobId) came back
+  // empty — runtime.currentJobId being null is no longer what this turns on,
+  // since planRecovery does not read that field at all.
+  const p = plan(LOOP_STATES.REVIEWER_RUNNING, { currentJobId: null }, { jobId: null });
   assert.equal(p.action, RECOVERY_ACTIONS.BLOCKED);
   assert.equal(p.reason, 'STATE_INCONSISTENT');
 });
@@ -509,7 +594,7 @@ test('a live or merely suspected owner blocks recovery', () => {
 
 test('with no lease at all there is nothing to take over, and recovery proceeds', () => {
   const p = planRecovery({
-    runtime: runtimeAt(LOOP_STATES.REVIEWER_RUNNING), leaseExists: false, resultExists: true,
+    runtime: runtimeAt(LOOP_STATES.REVIEWER_RUNNING), leaseExists: false, resultExists: true, jobId: 'job-1',
   });
   assert.equal(p.action, RECOVERY_ACTIONS.CONSUME_RESULT);
 });

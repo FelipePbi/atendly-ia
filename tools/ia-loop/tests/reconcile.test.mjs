@@ -658,6 +658,9 @@ test('THE INTEGRATION: R1 done and reviewed, reboot, recover, attach — next is
       ownerVerdict: { status: OWNER_STATUS.ORPHAN_CONFIRMED, proof: 'DIFFERENT_BOOT', detail: 'rebooted' },
       leaseExists: false,
       resultExists: reviewStage.status === STAGE_STATUS.COMPLETED,
+      // Resolved from the ledger, exactly like resolveRecoveryJob does — never
+      // from runtime.currentJobId, which planRecovery no longer falls back to.
+      jobId: reviewStage.completedBy,
     });
     assert.equal(plan.action, RECOVERY_ACTIONS.CONSUME_RESULT);
 
@@ -1048,17 +1051,24 @@ test('INVARIANT: a completed stage is never dispatched again, by any route', () 
   }), true);
 });
 
-test('7b. the recovery plan names the attempt that owns the stage, not the pointer', () => {
-  // planRecovery used to read runtime.currentJobId itself, so it reported the
-  // duplicate as the thing whose result was on disk — the same "trust the
-  // pointer" mistake one level down.
+test('7b. the recovery plan never falls back to the runtime pointer', () => {
+  // planRecovery used to read runtime.currentJobId itself when the caller gave
+  // no reconciled jobId, so a stale pointer — here, the duplicate attempt that
+  // should never have been dispatched — was still treated as the attempt that
+  // owns the stage. It no longer reads runtime.currentJobId at all: without a
+  // reconciled answer, recovery admits it does not know rather than guessing
+  // from the hint (see resolveRecoveryJob in lib/recovery-plan.mjs, which is
+  // what a real caller uses to produce that answer).
   const runtime = {
     mode: 'REAL_EXECUTION', goal: GOAL, round: 1, state: LOOP_STATES.DEVELOPER_RUNNING,
     currentJobId: DUPE_R1, executionBase: EXECUTION_BASE, worktreeInitialHead: EXECUTION_BASE,
   };
 
-  const withPointer = planRecovery({ runtime, resultExists: true, leaseExists: false });
-  assert.equal(withPointer.jobId, DUPE_R1, 'the fallback is still the pointer');
+  const withoutReconciliation = planRecovery({ runtime, resultExists: true, leaseExists: false });
+  assert.equal(withoutReconciliation.action, RECOVERY_ACTIONS.BLOCKED);
+  assert.equal(withoutReconciliation.reason, 'STATE_INCONSISTENT');
+  assert.doesNotMatch(withoutReconciliation.message ?? '', new RegExp(DUPE_R1),
+    'the stale pointer must never surface as the answer');
 
   const reconciledPlan = planRecovery({ runtime, resultExists: true, leaseExists: false, jobId: DEV_R1 });
   assert.equal(reconciledPlan.action, RECOVERY_ACTIONS.CONSUME_RESULT);

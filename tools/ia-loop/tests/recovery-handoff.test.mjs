@@ -312,6 +312,9 @@ test('10/11/12. the recovered Goal004 consumes the review and calls no model', (
     autonomousRun: { autonomousRunId: RUN_ID, status: RUN_STATUS.RUNNING },
     ownerVerdict: { status: OWNER_STATUS.ORPHAN_CONFIRMED, proof: 'DIFFERENT_BOOT', detail: 'rebooted' },
     leaseExists: true, resultExists: true,
+    // As a real caller (run-recover.mjs) would hand it in: resolved from the
+    // stage ledger, not read here from runtime.currentJobId.
+    jobId: REVIEW_JOB,
   });
 
   assert.equal(p.action, RECOVERY_ACTIONS.CONSUME_RESULT);

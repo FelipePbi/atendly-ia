@@ -31,7 +31,7 @@ import { createLeaseStore } from './lib/leases.mjs';
 import { createAutonomousStore, LOOP_LEASE_KEY } from './lib/autonomous-state.mjs';
 import { createProcessInspector } from './lib/process-inspector.mjs';
 import { OWNER_STATUS, collectOwnerEvidence, isRecoveryEligible, judgeOwner } from './lib/orphan-evidence.mjs';
-import { RECOVERY_ACTIONS, planRecovery } from './lib/recovery-plan.mjs';
+import { RECOVERY_ACTIONS, planRecovery, resolveRecoveryJob, stageForState } from './lib/recovery-plan.mjs';
 import { reconcileExecutionState } from './lib/reconcile.mjs';
 import { STAGES } from './lib/stage-identity.mjs';
 import { LOOP_CONFIG } from './lib/loop-config.mjs';
@@ -143,19 +143,12 @@ async function main() {
     emit('');
   }
 
-  // The stage the stored state claims to have been in, judged by the ledger.
-  const stateStage = runtime?.state?.startsWith('REVIEWER') ? STAGES.REVIEW
-    : runtime?.state?.startsWith('CORRECTION') ? STAGES.CORRECTION
-      : STAGES.IMPLEMENTATION;
-  const stageRecord = reconciled && runtime?.goal && Number.isInteger(Number(runtime?.round))
-    ? reconciled.ledger.get(`${runtime.goal}:r${runtime.round}:${stateStage}`)
-    : null;
-
-  const resultExists = stageRecord?.status === 'COMPLETED';
-  // The ORIGINAL attempt that produced the result — not whatever the runtime
-  // happens to point at.
-  const jobId = stageRecord?.completedBy ?? runtime?.currentJobId ?? null;
-  const roleForState = stateStage === STAGES.REVIEW ? 'tech_lead' : 'developer';
+  // The stage the stored state claims to have been in, and the job that owns
+  // it — both resolved from the ledger alone, the same way a fresh dispatch
+  // would (resolveStageJobId). runtime.currentJobId is never consulted as a
+  // fallback: see the note on resolveRecoveryJob for why.
+  const { jobId, resultExists } = resolveRecoveryJob({ reconciled, runtime });
+  const roleForState = stageForState(runtime?.state) === STAGES.REVIEW ? 'tech_lead' : 'developer';
   const jobStatus = jobId ? await store.readJobStatus(roleForState, jobId).catch(() => null) : null;
 
   const plan = planRecovery({

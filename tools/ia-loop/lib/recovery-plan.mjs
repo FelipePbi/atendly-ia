@@ -13,7 +13,8 @@
  */
 
 import { LOOP_STATES, STATE_REGISTRY } from './state-registry.mjs';
-import { jobIdForGoal } from './goal-execution.mjs';
+import { STAGES } from './stage-identity.mjs';
+import { resolveStageJobId, STAGE_JOB_SOURCE } from './reconcile.mjs';
 
 export const RECOVERY_ACTIONS = Object.freeze({
   NOTHING_TO_RECOVER: 'NOTHING_TO_RECOVER',
@@ -71,6 +72,33 @@ export function agentForState(state) {
   return STATE_REGISTRY[state]?.agent ?? null;
 }
 
+/** Which stage the persisted state claims was in flight, from the name alone. */
+export function stageForState(state) {
+  if (state?.startsWith('REVIEWER')) return STAGES.REVIEW;
+  if (state?.startsWith('CORRECTION')) return STAGES.CORRECTION;
+  return STAGES.IMPLEMENTATION;
+}
+
+/**
+ * The job (and whether it already has a result) that recovery should act on
+ * for the stage `runtime.state` claims was running — resolved from the stage
+ * ledger alone, via the same resolveStageJobId a fresh dispatch would use.
+ *
+ * runtime.currentJobId never enters this: it is a hint, and a hint that
+ * disagrees with the ledger was never more correct, only older. See the note
+ * in planRecovery for the incident this is closing off.
+ */
+export function resolveRecoveryJob({ reconciled, runtime }) {
+  const round = Number(runtime?.round);
+  if (!reconciled || !runtime?.goal || !Number.isInteger(round) || round < 1) {
+    return { jobId: null, resultExists: false, source: STAGE_JOB_SOURCE.NEW_JOB_REQUIRED };
+  }
+  const resolved = resolveStageJobId({
+    ledger: reconciled.ledger, goal: runtime.goal, round, stage: stageForState(runtime.state),
+  });
+  return { ...resolved, resultExists: resolved.source === STAGE_JOB_SOURCE.COMPLETED };
+}
+
 /**
  * @param facts.runtime          persisted loop runtime
  * @param facts.autonomousRun    persisted autonomous run, if any
@@ -78,13 +106,13 @@ export function agentForState(state) {
  * @param facts.leaseExists      whether a loop lease is on disk at all
  * @param facts.resultExists     true when the stage already has a result
  * @param facts.jobStatus        stored status of that attempt
- * @param facts.jobId            the attempt that OWNS the stage, when the caller
- *                               has reconciled it. Without one this falls back to
- *                               runtime.currentJobId, which is a pointer a crash
- *                               can leave aimed at an attempt that should never
- *                               have existed — naming it here would make a
- *                               duplicate look more authoritative than the
- *                               original result.
+ * @param facts.jobId            the attempt that OWNS the stage, as the caller
+ *                               resolved it from the stage ledger (see
+ *                               resolveRecoveryJob). Null means the ledger
+ *                               named nothing legitimate for this stage — there
+ *                               is no fallback to runtime.currentJobId, which is
+ *                               a pointer a crash can leave aimed at an attempt
+ *                               the ledger has since disowned.
  */
 export function planRecovery({
   runtime,
@@ -142,12 +170,18 @@ export function planRecovery({
 
   // --- What was interrupted? ------------------------------------------------
 
-  // The fallback pointer is only usable if it names an attempt at THIS Goal.
-  // After a Goal boundary it can name the previous one's — that is how a
-  // superseded attempt at Goal 004 was offered as Goal 005's next safe action —
-  // and an id that belongs elsewhere is dropped rather than followed.
-  const inheritedJobId = jobIdForGoal(runtime.currentJobId, runtime.goal);
-  const jobId = reconciledJobId ?? inheritedJobId ?? null;
+  // No runtime-hint fallback. The caller resolves this from the stage ledger
+  // (see resolveRecoveryJob / resolveStageJobId below) and passes the answer
+  // in as `jobId`; if that resolution found nothing, `runtime.currentJobId` is
+  // deliberately never consulted as a substitute. That pointer is exactly what
+  // a crash can leave aimed at a job the ledger has since disowned —
+  // SUPERSEDED, from a different round, or superseded by a genuine correction
+  // — and REQUEUE_JOB below flips the target's status to INTERRUPTED with no
+  // check on what it was before, which would have made a superseded job
+  // claimable again. The equivalent hint in run-goal.mjs (jobIdsByRound) had
+  // exactly this failure shape; resolveStageJobId is the ledger-only fix for
+  // both.
+  const jobId = reconciledJobId ?? null;
   const agent = agentForState(runtime.state);
 
   if (AGENT_EXECUTION_STATES.includes(runtime.state) || QUEUED_STATES.includes(runtime.state)) {

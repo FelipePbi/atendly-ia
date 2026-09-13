@@ -25,6 +25,7 @@ import { join } from 'node:path';
 
 import { SpikeError } from './claude-process.mjs';
 import { ACTION_CWD, assertDeterministicAction } from './deterministic-actions.mjs';
+import { resolveSpawnTarget } from './windows-command-resolver.mjs';
 
 /** Output kept per stream. Enough to diagnose, far from enough to exhaust memory. */
 export const OUTPUT_LIMIT = 64_000;
@@ -54,6 +55,7 @@ export async function runDeterministicAction({
   timeoutMs = DEFAULT_ACTION_TIMEOUT_MS,
   spawnFn = spawn,
   env = process.env,
+  resolveTarget = resolveSpawnTarget,
 }) {
   const spec = assertDeterministicAction(unit.action, `${unit.id}.action`);
   if (!worktree) throw new SpikeError('INVALID_ARGS', 'a worktree is required to run a deterministic action');
@@ -90,9 +92,20 @@ export async function runDeterministicAction({
       }));
     };
 
+    // npm/npx on Windows are .cmd wrappers, not something `shell: false` can
+    // launch directly — resolved to the real JS entry point they would have
+    // delegated to and run under node.exe instead. Every other platform and
+    // every other command (git, and anything else the registry ever adds)
+    // passes through unchanged. See windows-command-resolver.mjs.
+    const target = resolveTarget(argv, { env });
+    if (target.resolutionError) {
+      finish({ ok: false, exitCode: null, signal: null, error: `SPAWN_FAILED: ${target.resolutionError}` });
+      return;
+    }
+
     let child;
     try {
-      child = spawnFn(argv[0], argv.slice(1), {
+      child = spawnFn(target.command, target.args, {
         cwd,
         env,
         // Never a shell. See the header.

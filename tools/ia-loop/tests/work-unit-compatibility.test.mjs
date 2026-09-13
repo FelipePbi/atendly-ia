@@ -316,7 +316,14 @@ test('a deterministic action is spawned as argv with no shell', async () => {
     acceptanceCriteria: [],
   });
 
-  const outcome = await runDeterministicAction({ unit, worktree: '/tmp/wt', spawnFn: fakeSpawn });
+  // Identity passthrough: this test is about argv/no-shell in general, not
+  // about Windows npm/npx resolution specifically — that has its own
+  // dedicated coverage in windows-command-resolver.test.mjs and
+  // deterministic-executor.test.mjs, and runs differently depending on the
+  // platform this suite happens to execute on.
+  const resolveTarget = (argv) => ({ command: argv[0], args: argv.slice(1) });
+
+  const outcome = await runDeterministicAction({ unit, worktree: '/tmp/wt', spawnFn: fakeSpawn, resolveTarget });
 
   assert.equal(observed.command, 'npx');
   assert.deepEqual(observed.args, ['vitest', 'run', 'tests/notifications']);

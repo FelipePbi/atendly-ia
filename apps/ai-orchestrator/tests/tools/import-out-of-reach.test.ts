@@ -55,6 +55,7 @@ const REGISTERED_TOOLS = [
 function context() {
   return {
     conversationId: "conversation-1",
+    turnId: "channel-1:message-1",
     tenantId: "tenant-1",
     channelId: "channel-1",
     userId: "user-1",

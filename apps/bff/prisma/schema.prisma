@@ -18,8 +18,24 @@ enum WhatsAppInstanceStatus {
   ERROR
 }
 
+/// Estilo de conversa da IA: influencia registro, emoji e informalidade, nunca
+/// decisao operacional. Os tres valores do produto (Goal011) sao PROFESSIONAL,
+/// BALANCED e CASUAL. Os dois valores antigos continuam declarados porque
+/// `ALTER TYPE ... ADD VALUE` nao remove valor do tipo do banco: eles seguem
+/// legiveis e aceitos na entrada como alias normalizado ate o Goal024, enquanto
+/// a saida ja usa so o vocabulario novo.
+///
+/// DIVERGENCIA DE SCHEMA INTENCIONAL: o Prisma geraria `CREATE TYPE` novo com a
+/// lista final de valores, o que reescreveria a coluna e derrubaria o binario
+/// anterior. `prisma migrate diff` pode relatar a ordem/composicao dos valores;
+/// a diferenca e esperada e nao deve ser "corrigida" recriando o tipo.
 enum AiTone {
+  PROFESSIONAL
+  BALANCED
+  CASUAL
+  /// Legado, alias de PROFESSIONAL. Nenhuma linha nasce aqui.
   PROFESSIONAL_OBJECTIVE
+  /// Legado, alias de BALANCED. Nenhuma linha nasce aqui.
   LIGHT_CLOSE
 }
 
@@ -158,9 +174,14 @@ model WhatsAppInstance {
 }
 
 model AiSettings {
-  id        String   @id @default(cuid())
-  tenantId  String   @unique
-  enabled   Boolean  @default(false)
+  id       String  @id @default(cuid())
+  tenantId String  @unique
+  enabled  Boolean @default(false)
+  /// Nulo enquanto o negocio nao escolheu um estilo: onboarding trata isso como
+  /// pendencia (`AI_TONE_NOT_SELECTED`). Por isso a coluna nao tem `@default` —
+  /// diferente de `AiTenantConfig.tone` na IA, aqui o equilibrado so vale como
+  /// projecao enviada a IA quando o negocio ainda nao escolheu, nunca como valor
+  /// gravado silenciosamente para esta linha.
   tone      AiTone?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -16,6 +16,10 @@ export type ErrorCode =
   // Credencial de instância indisponível: chave ausente, envelope inválido ou
   // vínculo não resolvido. Nunca degrada para chave global.
   | "CREDENTIAL_UNAVAILABLE"
+  // Estilo de conversa da IA fora do vocabulario aceito (os tres valores do
+  // produto ou os dois alias legados). Erro proprio para nao se confundir com
+  // VALIDATION_ERROR generico.
+  | "AI_CONVERSATION_STYLE_UNKNOWN"
   | "INTERNAL_ERROR";
 
 export class AppError extends Error {

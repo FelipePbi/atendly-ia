@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { env } from "../../config/env.js";
 import { addDays, todayInTimeZone } from "../../lib/dates.js";
-import { AppError } from "../../lib/errors.js";
+import { DomainError, InfrastructureError } from "../../lib/errors.js";
 import {
   CALLER_ID,
   deriveInternalToken,
@@ -39,6 +39,9 @@ const serviceSchema = z.object({
   price: z.number().nullable(),
   active: z.boolean(),
   colorId: z.number().nullable().optional(),
+  // Ausente/nulo quando o servico nao tem intervalo de referencia cadastrado
+  // (Goal007): a IA so pode oferecer recorrencia quando este campo existe.
+  recurrenceIntervalDays: z.number().int().positive().nullable().optional(),
 });
 const appointmentSchema = z.object({
   id: z.string(),
@@ -228,7 +231,7 @@ export class SchedulingClient implements SchedulingGateway {
       (item) => item.id === serviceId,
     );
     if (!service) {
-      throw new AppError("Servico nao encontrado na agenda.", {
+      throw new DomainError("Servico nao encontrado na agenda.", {
         statusCode: 404,
         code: "SERVICE_NOT_FOUND",
       });
@@ -512,43 +515,72 @@ export class SchedulingClient implements SchedulingGateway {
   ): Promise<z.output<TSchema>> {
     const context = requireContext(options.context);
     const baseUrl = normalizeBaseUrl(env.SCHEDULING_SERVICE_BASE_URL);
-    const response = await fetch(`${baseUrl}${path}`, {
-      method: options.method ?? "GET",
-      headers: {
-        accept: "application/json",
-        // Credencial própria deste chamador/uso, distinta da que o BFF
-        // apresenta e da que a IA aceita nas rotas internas.
-        authorization: `Bearer ${schedulingCommandToken()}`,
-        "x-service-audience": "scheduling-service",
-        "x-tenant-id": context.tenantId,
-        "x-user-id": context.userId,
-        "x-request-id": context.requestId,
-        ...(options.idempotencyKey
-          ? { "idempotency-key": options.idempotencyKey }
-          : {}),
-        ...(options.body === undefined
-          ? {}
-          : { "content-type": "application/json" }),
-      },
-      body:
-        options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal: AbortSignal.timeout(10_000),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${baseUrl}${path}`, {
+        method: options.method ?? "GET",
+        headers: {
+          accept: "application/json",
+          // Credencial própria deste chamador/uso, distinta da que o BFF
+          // apresenta e da que a IA aceita nas rotas internas.
+          authorization: `Bearer ${schedulingCommandToken()}`,
+          "x-service-audience": "scheduling-service",
+          "x-tenant-id": context.tenantId,
+          "x-user-id": context.userId,
+          "x-request-id": context.requestId,
+          ...(options.idempotencyKey
+            ? { "idempotency-key": options.idempotencyKey }
+            : {}),
+          ...(options.body === undefined
+            ? {}
+            : { "content-type": "application/json" }),
+        },
+        body:
+          options.body === undefined
+            ? undefined
+            : JSON.stringify(options.body),
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch (error) {
+      // Timeout (AbortSignal) ou rede indisponivel: nunca falha de dominio,
+      // sempre infraestrutura. O detalhe real (nome/mensagem da excecao) so
+      // interessa ao log.
+      throw new InfrastructureError(
+        "Scheduling Service request failed before receiving a response.",
+        {
+          code: isTimeoutError(error)
+            ? "SCHEDULING_TIMEOUT"
+            : "SCHEDULING_UNAVAILABLE",
+          details: toDetailMessage(error),
+        },
+      );
+    }
     const text = await response.text();
     const payload = text ? parseJson(text) : null;
     if (!response.ok) {
-      const error = extractUpstreamError(payload);
-      throw new AppError(error.message, {
-        statusCode: response.status >= 500 ? 502 : response.status,
-        code: error.code,
+      const upstream = extractUpstreamError(payload);
+      // Classificacao pelo status e pelo codigo da resposta, nunca pelo
+      // texto: 5xx (ou corpo de erro que nao decodifica) e sempre
+      // infraestrutura; 4xx com codigo decodificavel e sempre dominio, e o
+      // codigo chega ao modelo como o Scheduling o descreveu.
+      if (response.status >= 500) {
+        throw new InfrastructureError(upstream.message, {
+          code: "SCHEDULING_UPSTREAM_UNAVAILABLE",
+          statusCode: 502,
+          details: { upstreamStatus: response.status, upstreamCode: upstream.code },
+        });
+      }
+      throw new DomainError(upstream.message, {
+        code: upstream.code,
+        statusCode: response.status,
       });
     }
     const parsed = z.object({ data: z.unknown() }).safeParse(payload);
     if (!parsed.success) {
-      throw new AppError("Scheduling Service returned an invalid response.", {
-        statusCode: 502,
-        code: "SCHEDULING_INVALID_RESPONSE",
-      });
+      throw new InfrastructureError(
+        "Scheduling Service returned an invalid response.",
+        { code: "SCHEDULING_INVALID_RESPONSE", statusCode: 502 },
+      );
     }
     return schema.parse(parsed.data.data);
   }
@@ -563,18 +595,29 @@ function requireContext(
   context: SchedulingRequestContext | undefined,
 ): SchedulingRequestContext {
   if (!context?.tenantId || !context.userId || !context.requestId) {
-    throw new AppError("Trusted scheduling context is required.", {
-      statusCode: 500,
+    throw new InfrastructureError("Trusted scheduling context is required.", {
       code: "SCHEDULING_CONTEXT_REQUIRED",
+      statusCode: 500,
     });
   }
   if (!schedulingCommandToken()) {
-    throw new AppError("Scheduling Service authentication is not configured.", {
-      statusCode: 500,
-      code: "SCHEDULING_AUTH_NOT_CONFIGURED",
-    });
+    throw new InfrastructureError(
+      "Scheduling Service authentication is not configured.",
+      { code: "SCHEDULING_AUTH_NOT_CONFIGURED", statusCode: 500 },
+    );
   }
   return context;
+}
+
+function isTimeoutError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === "TimeoutError" || error.name === "AbortError")
+  );
+}
+
+function toDetailMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function schedulingCommandToken(): string {
@@ -600,6 +643,7 @@ function toService(
     priceType: service.priceType,
     price: service.price,
     colorId: service.colorId ?? null,
+    recurrenceIntervalDays: service.recurrenceIntervalDays ?? null,
   };
 }
 

@@ -22,6 +22,12 @@ import { classifySendFailure } from "../outbox/outbox-policy.js";
 import { OutboxStore } from "../outbox/OutboxStore.js";
 import { SessionService } from "../session/SessionService.js";
 import {
+  AI_CONVERSATION_STYLES,
+  aiConversationStyleSchema,
+  LEGACY_AI_CONVERSATION_STYLE_ALIASES,
+  UNKNOWN_AI_CONVERSATION_STYLE_CODE,
+} from "../tenant-config/ai-settings.js";
+import {
   businessContextSchema,
   normalizeBusinessContext,
 } from "../tenant-config/business-context.js";
@@ -34,9 +40,12 @@ const provisionChannelSchema = z.object({
   instanceCredential: z.string().min(16).max(512),
 });
 
+// Projecao do estilo vinda do BFF: os tres valores do produto passam, os dois
+// legados passam normalizados para o vocabulario novo e qualquer outro valor e
+// recusado com erro proprio. Sem `tone` no corpo, fica no equilibrado.
 const aiTenantConfigSchema = z.object({
   enabled: z.boolean(),
-  tone: z.enum(["PROFESSIONAL_OBJECTIVE", "LIGHT_CLOSE"]),
+  tone: aiConversationStyleSchema,
   businessContext: businessContextSchema,
 });
 
@@ -129,6 +138,24 @@ export async function registerInternalRoutes(
     const context = trustedTenantContext(request);
     const parsed = aiTenantConfigSchema.safeParse(request.body);
     if (!parsed.success) {
+      // Estilo desconhecido tem erro proprio: quem escreveu a configuracao
+      // precisa distinguir "vocabulario invalido" de corpo malformado.
+      const unknownStyle = parsed.error.issues.some(
+        (issue) =>
+          issue.path[0] === "tone" &&
+          issue.message === UNKNOWN_AI_CONVERSATION_STYLE_CODE,
+      );
+      if (unknownStyle) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: UNKNOWN_AI_CONVERSATION_STYLE_CODE,
+            message: "Unknown AI conversation style.",
+            accepted: [...AI_CONVERSATION_STYLES],
+            legacyAliases: Object.keys(LEGACY_AI_CONVERSATION_STYLE_ALIASES),
+          },
+        });
+      }
       return reply.code(400).send({ ok: false, error: parsed.error.flatten() });
     }
 

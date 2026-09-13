@@ -28,6 +28,7 @@ import { classifySendFailure } from "../outbox/outbox-policy.js";
 import type { GraphSessionPort } from "../session/SessionService.js";
 import type { GraphRuntimePort } from "./graph-runtime.js";
 import {
+  deriveTurnId,
   type GraphIntent,
   MessageGraphState,
   type MessageGraphStateUpdate,
@@ -122,6 +123,7 @@ export class MessageGraphWorkflow {
         channelId: input.message.channelId,
         invocationStartedAt: new Date().toISOString(),
         inboundMessage: input.message,
+        turnId: deriveTurnId(input.message),
         inboundText: input.text ?? input.message.text ?? "",
         inputMessageIds: input.messageRecordIds ?? [],
         deferResponse: input.deferResponse ?? false,
@@ -653,6 +655,9 @@ export class MessageGraphWorkflow {
             aiSettings: message.aiSettings,
             channelMessage: message,
             messageRecordIds: state.inputMessageIds,
+            // Turno de origem do rascunho: e o que permite a tool com efeito
+            // recusar confirmar no mesmo turno em que preparou.
+            turnId: state.turnId,
             knowledgeRequested: state.intent === "knowledge",
             retrievedKnowledge: state.retrievedKnowledge,
             // `Retomar IA` reavalia o contexto atual: o turno seguinte le a

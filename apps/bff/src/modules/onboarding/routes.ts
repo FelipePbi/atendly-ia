@@ -4,8 +4,14 @@ import { z } from "zod";
 import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
 import { EvolutionClient } from "../../clients/evolution/index.js";
 import { SchedulingClient } from "../../clients/scheduling/index.js";
+import {
+  type AiConversationStyle,
+  aiConversationStyleSchema,
+  normalizeStoredAiConversationStyle,
+  parseBodyWithAiConversationStyle,
+} from "../../lib/ai-conversation-style.js";
 import { AppError } from "../../lib/errors.js";
-import { dataResponse, parseBody } from "../../lib/http.js";
+import { dataResponse } from "../../lib/http.js";
 import { getPrisma } from "../../lib/prisma.js";
 import {
   currentTenantContext,
@@ -14,7 +20,9 @@ import {
 import { internalContext } from "../tenant/context.js";
 
 const sourceSchema = z.enum(["ATENDLY", "EXTERNAL"]);
-const toneSchema = z.enum(["PROFESSIONAL_OBJECTIVE", "LIGHT_CLOSE"]);
+// Os tres estilos do produto e os dois valores antigos como alias declarado
+// (Goal011); a resposta sempre devolve o vocabulario novo.
+const toneSchema = aiConversationStyleSchema;
 const patchSchema = z
   .object({
     business: z
@@ -77,7 +85,7 @@ export async function registerV1OnboardingRoutes(
     "/v1/onboarding",
     { preHandler: requireTenantContext },
     async (request) => {
-      const body = parseBody(patchSchema, request.body);
+      const body = parseBodyWithAiConversationStyle(patchSchema, request.body);
       const context = internalContext(request);
       const tenant = currentTenantContext(request);
       const prisma = getPrisma();
@@ -164,10 +172,7 @@ export async function registerV1OnboardingRoutes(
         issues.push("BUSINESS_PROFILE_INCOMPLETE");
       }
       if (!calendar.source) issues.push("CALENDAR_NOT_SELECTED");
-      if (
-        settings?.tone !== "PROFESSIONAL_OBJECTIVE" &&
-        settings?.tone !== "LIGHT_CLOSE"
-      ) {
+      if (!normalizeStoredAiConversationStyle(settings?.tone)) {
         issues.push("AI_TONE_NOT_SELECTED");
       }
       if (!instance) issues.push("WHATSAPP_NOT_CONFIGURED");
@@ -252,7 +257,7 @@ async function onboardingState(
       integration: calendar.integration,
     },
     ai: {
-      tone: settings?.tone ?? null,
+      tone: normalizeStoredAiConversationStyle(settings?.tone),
     },
     service: services.find((service) => service.active) ?? null,
     availability,
@@ -268,7 +273,7 @@ async function syncAiConfig(
   request: FastifyRequest,
   ai: AiOrchestratorClient,
   enabled: boolean,
-  tone: "PROFESSIONAL_OBJECTIVE" | "LIGHT_CLOSE",
+  tone: AiConversationStyle,
 ): Promise<void> {
   const tenant = currentTenantContext(request);
   const businessProfile = await getPrisma().businessProfile.upsert({

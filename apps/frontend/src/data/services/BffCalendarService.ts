@@ -12,8 +12,8 @@ import {
   calendarStateSchema,
   deletedSchema,
   seriesOccurrencePreviewSchema,
-  timeBlockSchema,
   type TimeBlockKind,
+  timeBlockSchema,
 } from "../mappers/publicApiSchemas";
 
 export interface ListAppointmentsQuery {

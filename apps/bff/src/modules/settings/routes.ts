@@ -3,6 +3,12 @@ import { z } from "zod";
 
 import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
 import { SchedulingClient } from "../../clients/scheduling/index.js";
+import {
+  aiConversationStyleSchema,
+  normalizeStoredAiConversationStyle,
+  parseBodyWithAiConversationStyle,
+  resolveAiConversationStyle,
+} from "../../lib/ai-conversation-style.js";
 import { AppError } from "../../lib/errors.js";
 import { dataResponse, parseBody } from "../../lib/http.js";
 import { getPrisma } from "../../lib/prisma.js";
@@ -19,7 +25,9 @@ const businessSchema = z.object({
 });
 const aiSchema = z.object({
   enabled: z.boolean(),
-  tone: z.enum(["PROFESSIONAL_OBJECTIVE", "LIGHT_CLOSE"]),
+  // Os tres estilos do produto e os dois valores antigos como alias
+  // declarado (Goal011); a resposta sempre devolve o vocabulario novo.
+  tone: aiConversationStyleSchema,
 });
 const availabilitySchema = z.object({
   timezone: z.string().trim().min(1).max(100),
@@ -88,7 +96,7 @@ export async function registerV1SettingsRoutes(
     "/v1/settings/ai",
     { preHandler: requireTenantContext },
     async (request) => {
-      const body = parseBody(aiSchema, request.body);
+      const body = parseBodyWithAiConversationStyle(aiSchema, request.body);
       if (body.enabled) {
         const calendar = await scheduling.calendar(internalContext(request));
         if (!calendar.capabilities.aiActivationReady) {
@@ -162,7 +170,7 @@ async function settingsState(
       : null,
     ai: {
       enabled: Boolean(aiSettings?.enabled),
-      tone: aiSettings?.tone ?? null,
+      tone: normalizeStoredAiConversationStyle(aiSettings?.tone),
     },
     calendar: {
       ...calendar,
@@ -196,7 +204,7 @@ async function syncAi(
   ]);
   await ai.updateTenantConfig(internalContext(request), {
     enabled: settings.enabled,
-    tone: settings.tone ?? "LIGHT_CLOSE",
+    tone: resolveAiConversationStyle(settings.tone),
     businessContext: {
       businessName: businessProfile.businessName,
       timezone: businessProfile.timezone,

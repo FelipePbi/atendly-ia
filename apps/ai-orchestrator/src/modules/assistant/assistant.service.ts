@@ -7,8 +7,13 @@ import {
   type DiagnosticLogger,
   noopDiagnosticLogger,
 } from "../../lib/diagnostic-log.js";
-import { toErrorMessage } from "../../lib/errors.js";
+import {
+  AppError,
+  InfrastructureError,
+  toErrorMessage,
+} from "../../lib/errors.js";
 import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
+import { deriveTurnId } from "../graph/graph-state.js";
 import type { KnowledgeSearchResult } from "../knowledge/knowledge-vector-store.js";
 import {
   LangChainModelProvider,
@@ -19,6 +24,7 @@ import {
   type ModelToolResult,
   type ModelTurn,
 } from "../model/model-provider.js";
+import { buildStyleGreeting } from "../prompts/style.js";
 import { buildSystemPrompt } from "../prompts/system.js";
 import type { CategorySuggestionPort } from "../session/SessionService.js";
 import {
@@ -68,10 +74,18 @@ export interface AssistantGraphSession {
   userId: string;
   requestId: string;
   inputMessageIds: string[];
+  /**
+   * Turno de entrada deste ciclo (`deriveTurnId`). Chega as tools pelo
+   * contexto de execucao: rascunho preparado neste turno nao pode ser
+   * confirmado neste turno.
+   */
+  turnId: string;
   phone: string;
   customerName?: string | null;
   businessContext: BusinessContext;
   instructions: string;
+  /** Versao do prompt efetivamente montado para este turno, ver `derivePromptVersion`. */
+  promptVersion: string;
   input: ModelInputMessage[];
   turns: ModelTurn[];
   iteration: number;
@@ -290,7 +304,10 @@ export class AssistantService {
   }
 
   async prepareGraphTurn(
-    input: IncomingAssistantMessage & { messageRecordIds: string[] },
+    input: IncomingAssistantMessage & {
+      messageRecordIds: string[];
+      turnId?: string;
+    },
   ): Promise<AssistantGraphSession> {
     const channelMessage = requireChannelMessage(input.channelMessage);
     const phone = channelMessage.customerPhone;
@@ -332,6 +349,15 @@ export class AssistantService {
     const immediateDecision = !businessContextConfigured(businessContext)
       ? incompleteBusinessContextDecision()
       : buildImmediateDecision(input.text, previousMessageCount, aiSettings);
+    const prompt = buildSystemPrompt({
+      state,
+      groupedMessages: input.text,
+      currentDateTime: new Date().toISOString(),
+      businessContext,
+      aiSettings,
+      knowledgeRequested: input.knowledgeRequested,
+      retrievedKnowledge: input.retrievedKnowledge,
+    });
 
     return {
       conversationId: conversation.id,
@@ -340,19 +366,14 @@ export class AssistantService {
       userId: channelMessage.userId,
       requestId: channelMessage.requestId,
       inputMessageIds: input.messageRecordIds,
+      // Sem turno vindo do grafo, a derivacao e a mesma: o turno e a mensagem
+      // que entrou, nunca o relogio.
+      turnId: input.turnId ?? deriveTurnId(channelMessage),
       phone,
       customerName,
       businessContext,
-      instructions: buildSystemPrompt({
-        state,
-        promptVersion: env.AI_PROMPT_VERSION,
-        groupedMessages: input.text,
-        currentDateTime: new Date().toISOString(),
-        businessContext,
-        aiSettings,
-        knowledgeRequested: input.knowledgeRequested,
-        retrievedKnowledge: input.retrievedKnowledge,
-      }),
+      instructions: prompt.text,
+      promptVersion: prompt.version,
       input: chronologicalMessages,
       turns: [],
       iteration: 0,
@@ -496,6 +517,11 @@ export class AssistantService {
           content: JSON.stringify(result),
         });
       } catch (error) {
+        // Erro de infraestrutura (Goal011) nunca chega ao modelo com o
+        // detalhe real: `graphToolFailure` ja devolve mensagem/codigo
+        // sanitizados nesse caso. O log, sim, guarda o detalhe real —
+        // sempre com requestId e aiRunId — porque e o unico lugar que deve
+        // ve-lo.
         const result = graphToolFailure(session, call, error);
         await this.prisma.aiToolCall.update({
           where: { id: toolCall.id },
@@ -516,7 +542,8 @@ export class AssistantService {
             externalToolCallId: call.id,
             toolName: call.name,
             status: "FAILED",
-            error: result.error.message,
+            infrastructure: error instanceof InfrastructureError,
+            error: toErrorMessage(error),
           },
           "AI tool call failed",
         );
@@ -559,6 +586,7 @@ export class AssistantService {
       phone: session.phone,
       customerName: session.customerName,
       inputMessageIds: session.inputMessageIds,
+      promptVersion: session.promptVersion,
       decision,
     });
     const text = composeReplyText(decision);
@@ -620,7 +648,7 @@ export class AssistantService {
         conversationId: session.conversationId,
         provider: "openai",
         model: env.OPENAI_MODEL,
-        promptVersion: env.AI_PROMPT_VERSION,
+        promptVersion: session.promptVersion,
         inputMessageIds: session.inputMessageIds,
       },
     });
@@ -814,6 +842,7 @@ export class AssistantService {
     phone: string;
     customerName?: string | null;
     inputMessageIds: string[];
+    promptVersion: string;
     decision: AiDecision;
   }): Promise<void> {
     const conversation = await this.prisma.conversation.findUnique({
@@ -858,14 +887,14 @@ export class AssistantService {
         pauseReason: input.decision.pauseReason,
         lastProcessedMessageIds: input.inputMessageIds,
         lastAiResponseAt: now,
-        promptVersion: env.AI_PROMPT_VERSION,
+        promptVersion: input.promptVersion,
       },
       conversationMemory: memory,
       appointmentDraft,
       aiDecisionLogs: [
         {
           inputMessageIds: input.inputMessageIds,
-          promptVersion: env.AI_PROMPT_VERSION,
+          promptVersion: input.promptVersion,
           action: input.decision.action,
           confidence: input.decision.confidence,
           toolName: input.decision.toolName,
@@ -891,7 +920,7 @@ export class AssistantService {
       tenantId: conversation.tenantId,
       conversationId: input.conversationId,
       classification,
-      provenance: `agent:${env.AI_PROMPT_VERSION}`,
+      provenance: `agent:${input.promptVersion}`,
     });
 
     if (
@@ -951,6 +980,7 @@ function graphToolContext(session: AssistantGraphSession, aiRunId: string) {
     channelId: session.channelId,
     userId: session.userId,
     requestId: session.requestId,
+    turnId: session.turnId,
     phone: session.phone,
     customerName: session.customerName,
     businessContext: session.businessContext,
@@ -958,12 +988,22 @@ function graphToolContext(session: AssistantGraphSession, aiRunId: string) {
   };
 }
 
+/**
+ * Mensagem generica para falha de infraestrutura (Goal011): nunca descreve o
+ * problema real (autenticacao, timeout, indisponibilidade, 5xx) porque isso
+ * nao e algo que a cliente ou o modelo devam ver ou tentar interpretar. Quem
+ * trata o detalhe real e o log, em `recordToolResults`.
+ */
+const INFRASTRUCTURE_TOOL_FAILURE_MESSAGE =
+  "Não foi possível completar essa ação agora. Tente novamente em instantes ou peça para falar com a equipe.";
+
 function graphToolFailure(
   session: AssistantGraphSession,
   call: ModelToolCall,
   error: unknown,
 ) {
   const aiRunId = session.aiRunId ?? "missing-ai-run";
+  const isInfrastructure = error instanceof InfrastructureError;
   return {
     ok: false as const,
     requestId: session.requestId,
@@ -972,10 +1012,24 @@ function graphToolFailure(
     toolCallId: call.id,
     idempotencyKey: `${aiRunId}:${call.id}:${call.name}`,
     error: {
-      code: "TOOL_EXECUTION_FAILED",
-      message: toErrorMessage(error),
+      // Erro de dominio chega ao modelo com o codigo proprio dele (ver
+      // `DomainError`/`SchedulingClient`), para poder oferecer alternativa.
+      // Erro de infraestrutura vira sempre o mesmo codigo/mensagem
+      // genericos, sem nenhum detalhe do problema real.
+      code: isInfrastructure
+        ? "TOOL_INFRASTRUCTURE_ERROR"
+        : errorCode(error),
+      message: isInfrastructure
+        ? INFRASTRUCTURE_TOOL_FAILURE_MESSAGE
+        : toErrorMessage(error),
     },
   };
+}
+
+function errorCode(error: unknown): string {
+  return error instanceof AppError && error.code
+    ? error.code
+    : "TOOL_EXECUTION_FAILED";
 }
 
 function toInputJsonObject(value: object): Prisma.InputJsonObject {
@@ -1065,7 +1119,7 @@ function buildImmediateDecision(
   if (previousMessageCount === 0 && isOnlyGenericGreeting(normalized)) {
     return {
       action: "send_message",
-      messages: [genericGreetingReply(aiSettings)],
+      messages: [buildStyleGreeting(aiSettings.tone)],
       conversationStage: "QUALIFYING_CONTACT",
       classification: "unknown",
       confidence: 0.92,
@@ -1075,14 +1129,6 @@ function buildImmediateDecision(
   }
 
   return null;
-}
-
-function genericGreetingReply(settings: AiTenantSettings): string {
-  if (settings.tone === "PROFESSIONAL_OBJECTIVE") {
-    return "Olá, tudo bem? Como posso te ajudar hoje?";
-  }
-
-  return "Oii, tudo bem? Como posso te ajudar hoje?";
 }
 
 function parseAiDecision(raw: string): AiDecision {

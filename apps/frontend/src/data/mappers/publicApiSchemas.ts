@@ -1,7 +1,10 @@
 import { z } from "zod";
 
 export const calendarSourceSchema = z.enum(["ATENDLY", "EXTERNAL"]);
-export const aiToneSchema = z.enum(["PROFESSIONAL_OBJECTIVE", "LIGHT_CLOSE"]);
+// Três estilos do produto (Goal011): Profissional, Equilibrada e
+// Descontraída. O BFF aceita os dois valores antigos como alias de entrada
+// mas nunca os devolve — o schema de leitura só precisa do vocabulário novo.
+export const aiToneSchema = z.enum(["PROFESSIONAL", "BALANCED", "CASUAL"]);
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);

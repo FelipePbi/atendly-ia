@@ -1,6 +1,7 @@
 import type { PrismaClient } from "../../src/generated/prisma/client.js";
 import { describe, expect, it, vi } from "vitest";
 import { AssistantService } from "../../src/modules/assistant/assistant.service.js";
+import { derivePromptVersion } from "../../src/modules/prompts/system.js";
 import { DEFAULT_BUSINESS_CONTEXT } from "../../src/modules/tenant-config/business-context.js";
 
 const phone = "5511999999999";
@@ -30,8 +31,33 @@ describe("AssistantService conversational decisions", () => {
     });
     expect(store.state.aiDecisionLogs[0]).toMatchObject({
       action: "send_message",
-      promptVersion: "scheduling_v1.0.0",
+      promptVersion: derivePromptVersion("BALANCED"),
     });
+  });
+
+  it("registers the prompt version of the style effectively used, not a fixed constant", async () => {
+    const { prisma: professionalPrisma, store: professionalStore } =
+      createPrismaMock();
+    const professionalAssistant = new AssistantService(
+      professionalPrisma,
+      undefined,
+      { invoke: vi.fn() } as never,
+    );
+
+    await professionalAssistant.handleIncomingText({
+      phone,
+      text: "Oi",
+      channelMessage: channelMessage(),
+      businessContext: configuredBusinessContext(),
+      aiSettings: { aiEnabled: true, tone: "PROFESSIONAL" },
+    });
+
+    expect(professionalStore.state.aiDecisionLogs[0]).toMatchObject({
+      promptVersion: derivePromptVersion("PROFESSIONAL"),
+    });
+    expect(professionalStore.state.aiDecisionLogs[0].promptVersion).not.toBe(
+      derivePromptVersion("BALANCED"),
+    );
   });
 
   it("uses the light and close tone without inventing an assistant identity", async () => {
@@ -50,7 +76,7 @@ describe("AssistantService conversational decisions", () => {
       businessContext: configuredBusinessContext(),
       aiSettings: {
         aiEnabled: true,
-        tone: "LIGHT_CLOSE",
+        tone: "BALANCED",
       },
     });
 
@@ -74,11 +100,35 @@ describe("AssistantService conversational decisions", () => {
       businessContext: configuredBusinessContext(),
       aiSettings: {
         aiEnabled: true,
-        tone: "PROFESSIONAL_OBJECTIVE",
+        tone: "PROFESSIONAL",
       },
     });
 
     expect(reply.text).toBe("Olá, tudo bem? Como posso te ajudar hoje?");
+    expect(modelProvider.invoke).not.toHaveBeenCalled();
+  });
+
+  it("uses the casual tone", async () => {
+    const { prisma } = createPrismaMock();
+    const modelProvider = { invoke: vi.fn() };
+    const assistant = new AssistantService(
+      prisma,
+      undefined,
+      modelProvider as never,
+    );
+
+    const reply = await assistant.handleIncomingText({
+      phone,
+      text: "Oi",
+      channelMessage: channelMessage(),
+      businessContext: configuredBusinessContext(),
+      aiSettings: {
+        aiEnabled: true,
+        tone: "CASUAL",
+      },
+    });
+
+    expect(reply.text).toBe("Oii, tudo bem? Como posso te ajudar hoje? 😊");
     expect(modelProvider.invoke).not.toHaveBeenCalled();
   });
 
@@ -120,7 +170,7 @@ describe("AssistantService conversational decisions", () => {
       businessContext: configuredBusinessContext(),
       aiSettings: {
         aiEnabled: true,
-        tone: "LIGHT_CLOSE",
+        tone: "BALANCED",
       },
     });
 

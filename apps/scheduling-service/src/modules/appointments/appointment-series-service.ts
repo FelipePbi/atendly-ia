@@ -27,11 +27,11 @@ import {
   findHoldForConsumption,
   holdUnusable,
 } from "../holds/appointment-hold-service.js";
-import { AtendlyServiceService } from "../services/atendly-service-service.js";
 import {
   appointmentInclude,
   toAtendlyAppointment,
 } from "../integrations/atendly/provider.js";
+import { AtendlyServiceService } from "../services/atendly-service-service.js";
 import { recordAppointmentEvent } from "./appointment-event-service.js";
 
 /**
@@ -553,8 +553,11 @@ interface ConfirmedSeries {
 function parseConfirmedSeries(value: unknown): ConfirmedSeries {
   const record = (value ?? {}) as Record<string, unknown>;
   const list = Array.isArray(record.appointments) ? record.appointments : [];
+  const rawSeriesId = record.seriesId;
+  const seriesId =
+    typeof rawSeriesId === "string" || typeof rawSeriesId === "number" ? String(rawSeriesId) : "";
   return {
-    seriesId: String(record.seriesId ?? ""),
+    seriesId,
     appointments: list.map(parseCalendarAppointment),
   };
 }

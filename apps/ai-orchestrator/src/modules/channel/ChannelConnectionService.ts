@@ -6,6 +6,7 @@ import {
 } from "../../lib/channel-credentials.js";
 import { AppError } from "../../lib/errors.js";
 import {
+  type AiConversationStyle,
   type AiTenantSettings,
   normalizeAiSettings,
 } from "../tenant-config/ai-settings.js";
@@ -35,7 +36,7 @@ export interface ProvisionEvolutionChannelInput {
 export interface UpdateAiTenantConfigInput {
   tenantId: string;
   enabled: boolean;
-  tone: "PROFESSIONAL_OBJECTIVE" | "LIGHT_CLOSE";
+  tone: AiConversationStyle;
   promptVersion: string;
   businessContext: BusinessContext;
 }
@@ -178,7 +179,9 @@ export class ChannelConnectionService {
     });
     const aiSettings = normalizeAiSettings({
       aiEnabled: config?.enabled ?? false,
-      tone: config?.tone ?? "LIGHT_CLOSE",
+      // Estilo legado gravado antes do Goal011 sai daqui ja no vocabulario
+      // novo; tenant sem configuracao sai no equilibrado.
+      tone: config?.tone,
     });
 
     return {

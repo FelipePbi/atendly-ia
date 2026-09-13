@@ -139,7 +139,7 @@ function buildSubject(
       channelConnected: options.channelConnected ?? true,
       tenantConfig: {
         aiEnabled: options.aiEnabled ?? true,
-        tone: "LIGHT_CLOSE",
+        tone: "BALANCED",
         promptVersion: "scheduling_v1.0.0",
       },
     }),

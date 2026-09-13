@@ -13,6 +13,13 @@ export interface SchedulingServiceDefinition {
   priceType: SchedulingPriceType;
   price: number | null;
   colorId: number | null;
+  /**
+   * Intervalo de referencia para recorrencia (Goal007), em dias. Nulo quando
+   * o servico nao tem cadencia cadastrada — nesse caso a IA pode **oferecer**
+   * a serie recorrente (Goal009), mas nunca inventa um intervalo por conta
+   * propria.
+   */
+  recurrenceIntervalDays: number | null;
 }
 
 export interface SchedulingCustomerSummary {
@@ -162,6 +169,31 @@ export interface CreateSchedulingHoldInput {
  * consultando a disponibilidade de novo — nunca confirmando assim mesmo.
  */
 export const APPOINTMENT_HOLD_EXPIRED = "APPOINTMENT_HOLD_EXPIRED";
+
+/**
+ * Fronteira entre falha de negócio e falha de infraestrutura do Scheduling
+ * (Goal011). `SchedulingClient` classifica pelo **status HTTP e pelo código**
+ * devolvido, nunca pelo texto:
+ *
+ * - Resposta 4xx com corpo de erro decodificável é sempre falha de negócio
+ *   (`DomainError`): o código chega ao modelo como veio do Scheduling
+ *   (ex.: `SLOT_UNAVAILABLE`, `APPOINTMENT_HOLD_EXPIRED`, `CUSTOMER_NOT_FOUND`).
+ * - Autenticação interna ausente, contexto de chamada não confiável, timeout,
+ *   resposta 5xx e resposta com formato inesperado são sempre
+ *   `InfrastructureError`: o detalhe real vai só para o log (requestId,
+ *   aiRunId), nunca para o modelo nem para a mensagem enviada.
+ */
+export const SCHEDULING_INFRASTRUCTURE_ERROR_CODES = [
+  "SCHEDULING_CONTEXT_REQUIRED",
+  "SCHEDULING_AUTH_NOT_CONFIGURED",
+  "SCHEDULING_TIMEOUT",
+  "SCHEDULING_UNAVAILABLE",
+  "SCHEDULING_UPSTREAM_UNAVAILABLE",
+  "SCHEDULING_INVALID_RESPONSE",
+] as const;
+
+export type SchedulingInfrastructureErrorCode =
+  (typeof SCHEDULING_INFRASTRUCTURE_ERROR_CODES)[number];
 
 export interface SchedulingRequestContext {
   tenantId: string;

@@ -389,6 +389,7 @@ export function toCalendarService(service: {
   price: Prisma.Decimal | null;
   active: boolean;
   colorToken?: ServiceColorToken | null;
+  recurrenceIntervalDays?: number | null;
 }): CalendarServiceDefinition {
   return {
     id: service.id,
@@ -399,5 +400,6 @@ export function toCalendarService(service: {
     active: service.active,
     colorId: null,
     colorToken: service.colorToken ?? null,
+    recurrenceIntervalDays: service.recurrenceIntervalDays ?? null,
   };
 }

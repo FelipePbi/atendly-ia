@@ -2,8 +2,7 @@ export function buildResponsePrompt(): string[] {
   return [
     "TOM DE VOZ:",
     "- Portugues brasileiro natural.",
-    "- Respeite a persona configurada na Atendente Virtual.",
-    "- Use emoji somente conforme a persona.",
+    "- Siga o estilo de conversa configurado para registro e uso de emoji.",
     "- Evite frases longas, linguagem corporativa e respostas roboticas.",
     "- Adapte o tom ao jeito da cliente.",
     "",

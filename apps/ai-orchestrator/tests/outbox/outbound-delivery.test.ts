@@ -80,7 +80,7 @@ function buildSubject(options: { outboundGate?: OutboundGate } = {}) {
       channelConnected: true,
       tenantConfig: {
         aiEnabled: true,
-        tone: "LIGHT_CLOSE",
+        tone: "BALANCED",
         promptVersion: "scheduling_v1.0.0",
       },
     }),

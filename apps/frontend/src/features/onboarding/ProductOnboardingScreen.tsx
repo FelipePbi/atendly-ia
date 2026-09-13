@@ -175,7 +175,7 @@ export function ProductOnboardingScreen({
         return;
       case "tom-da-ia":
         if (!draft.tone) {
-          setError("Escolha um dos dois tons disponíveis.");
+          setError("Escolha um dos três estilos disponíveis.");
           return;
         }
         await onboarding.update({ ai: { tone: draft.tone } });
@@ -527,20 +527,24 @@ function StepBody({
     return (
       <div className="choice-grid">
         <Choice
-          selected={draft.tone === "PROFESSIONAL_OBJECTIVE"}
-          title="Profissional e objetiva"
+          selected={draft.tone === "PROFESSIONAL"}
+          title="Profissional"
           copy="Direta, clara e cordial."
           onClick={() =>
-            setDraft((value) => ({ ...value, tone: "PROFESSIONAL_OBJECTIVE" }))
+            setDraft((value) => ({ ...value, tone: "PROFESSIONAL" }))
           }
         />
         <Choice
-          selected={draft.tone === "LIGHT_CLOSE"}
-          title="Leve e próxima"
+          selected={draft.tone === "BALANCED"}
+          title="Equilibrada"
+          copy="Cordial com um toque natural."
+          onClick={() => setDraft((value) => ({ ...value, tone: "BALANCED" }))}
+        />
+        <Choice
+          selected={draft.tone === "CASUAL"}
+          title="Descontraída"
           copy="Natural, acolhedora e simples."
-          onClick={() =>
-            setDraft((value) => ({ ...value, tone: "LIGHT_CLOSE" }))
-          }
+          onClick={() => setDraft((value) => ({ ...value, tone: "CASUAL" }))}
         />
       </div>
     );

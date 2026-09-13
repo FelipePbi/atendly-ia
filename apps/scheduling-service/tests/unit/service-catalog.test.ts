@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { CalendarService } from "../../src/modules/calendar/calendar-service.js";
 import {
   AtendlyServiceService,
   isOperationalService,
@@ -303,6 +304,51 @@ describe("service catalog: MVP attributes", () => {
         recurrenceIntervalDays: 0,
       }),
     ).rejects.toMatchObject({ code: "INVALID_SERVICE_RECURRENCE" });
+  });
+});
+
+describe("service catalog: recurrenceIntervalDays reaches the /internal/services DTO", () => {
+  it("carries recurrenceIntervalDays through CalendarService.listOperationalServices, the method GET /internal/services calls", async () => {
+    const { database, services } = service();
+    database.tables.calendarSettings.rows.push({
+      id: tenantId,
+      tenantId,
+      source: "ATENDLY",
+      timezone: "America/Sao_Paulo",
+    });
+    const withRecurrence = await services.create({
+      name: "Manicure",
+      durationMinutes: 60,
+      priceType: "FIXED",
+      price: 80,
+      recurrenceIntervalDays: 14,
+    });
+    const withoutRecurrence = await services.create({
+      name: "Corte",
+      durationMinutes: 30,
+      priceType: "FIXED",
+      price: 50,
+    });
+
+    const calendar = new CalendarService(database.client as never);
+    const dto = await calendar.listOperationalServices({
+      tenantId,
+      userId: "user-1",
+      requestId: "request-1",
+    });
+
+    expect(dto).toContainEqual(
+      expect.objectContaining({
+        id: withRecurrence.id,
+        recurrenceIntervalDays: 14,
+      }),
+    );
+    expect(dto).toContainEqual(
+      expect.objectContaining({
+        id: withoutRecurrence.id,
+        recurrenceIntervalDays: null,
+      }),
+    );
   });
 });
 

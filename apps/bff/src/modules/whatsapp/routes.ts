@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
 import { EvolutionClient } from "../../clients/evolution/index.js";
+import { resolveAiConversationStyle } from "../../lib/ai-conversation-style.js";
 import { AppError } from "../../lib/errors.js";
 import { dataResponse, parseBody } from "../../lib/http.js";
 import { normalizeBrazilianWhatsappPhone } from "../../lib/phone.js";
@@ -305,7 +306,7 @@ async function provisionChannel(
   ]);
   await ai.updateTenantConfig(internalContext(request), {
     enabled: settings.enabled,
-    tone: settings.tone ?? "LIGHT_CLOSE",
+    tone: resolveAiConversationStyle(settings.tone),
     businessContext: {
       businessName: businessProfile.businessName,
       timezone: businessProfile.timezone,

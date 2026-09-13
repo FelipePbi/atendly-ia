@@ -15,6 +15,12 @@ export interface CalendarServiceDefinition {
   colorId?: number | null;
   /** Token estavel da identidade visual do servico (Agenda Atendly). */
   colorToken?: string | null;
+  /**
+   * Intervalo de referencia para recorrencia (Agenda Atendly, Goal009).
+   * Ausente/nulo para a origem Minha Agenda, que nao tem este cadastro — a IA
+   * so pode ofertar recorrencia quando este campo existe.
+   */
+  recurrenceIntervalDays?: number | null;
 }
 
 export interface CalendarCustomerSummary {

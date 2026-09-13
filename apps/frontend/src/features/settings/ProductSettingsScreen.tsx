@@ -350,9 +350,7 @@ function AiSettings({
   onSaved: (state: SettingsState) => void;
 }) {
   const [enabled, setEnabled] = useState(settings.ai.enabled);
-  const [tone, setTone] = useState<AiTone>(
-    settings.ai.tone ?? "PROFESSIONAL_OBJECTIVE",
-  );
+  const [tone, setTone] = useState<AiTone>(settings.ai.tone ?? "BALANCED");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [pauseConfirmationOpen, setPauseConfirmationOpen] = useState(false);
@@ -371,7 +369,7 @@ function AiSettings({
   return (
     <Page
       title="Atendente virtual"
-      description="Ative o atendimento automático e escolha um dos dois tons disponíveis."
+      description="Ative o atendimento automático e escolha um dos três estilos disponíveis."
     >
       <section className="settings-panel">
         <label className="switch-row">
@@ -390,14 +388,19 @@ function AiSettings({
         </label>
         <div className="settings-choice-grid">
           <ToneChoice
-            checked={tone === "PROFESSIONAL_OBJECTIVE"}
-            label="Profissional e objetiva"
-            onChange={() => setTone("PROFESSIONAL_OBJECTIVE")}
+            checked={tone === "PROFESSIONAL"}
+            label="Profissional"
+            onChange={() => setTone("PROFESSIONAL")}
           />
           <ToneChoice
-            checked={tone === "LIGHT_CLOSE"}
-            label="Leve e próxima"
-            onChange={() => setTone("LIGHT_CLOSE")}
+            checked={tone === "BALANCED"}
+            label="Equilibrada"
+            onChange={() => setTone("BALANCED")}
+          />
+          <ToneChoice
+            checked={tone === "CASUAL"}
+            label="Descontraída"
+            onChange={() => setTone("CASUAL")}
           />
         </div>
         <SaveActions
@@ -774,11 +777,13 @@ function sourceLabel(source: SettingsState["calendar"]["source"]) {
       : "Não configurada";
 }
 function toneLabel(tone: AiTone | null) {
-  return tone === "PROFESSIONAL_OBJECTIVE"
-    ? "Profissional e objetiva"
-    : tone === "LIGHT_CLOSE"
-      ? "Leve e próxima"
-      : "Não configurado";
+  return tone === "PROFESSIONAL"
+    ? "Profissional"
+    : tone === "BALANCED"
+      ? "Equilibrada"
+      : tone === "CASUAL"
+        ? "Descontraída"
+        : "Não configurado";
 }
 const weekdayLabels = [
   "Domingo",

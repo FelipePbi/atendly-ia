@@ -911,3 +911,92 @@ verificados no [review010](reviews/010-review.md) sobre a base `e381c15`.
   conclusão da importação não move a fonte e só o `importToAtendly` legado o
   faz. O inventário do U-02 existe como serviço e é exercitado por ensaio e
   por suíte de unidade, mas ainda não tem rota.
+
+## Delta implementado — Goal011, 2026-09-13 (ACCEPTED na rodada 3)
+
+A fotografia histórica acima permanece como registro da baseline. O FATO de
+"AI Orchestrator e conversas" que descreve o estilo como enum de **dois**
+valores, o prompt mandando respeitar a persona configurada, a versão do
+prompt como string de ambiente, o erro de infraestrutura chegando cru ao
+modelo e a ausência de qualquer suíte de políticas de conversa está superado
+pelos fatos abaixo, verificados no [review011](reviews/011-review.md) sobre a
+base `0f4ac74`.
+
+- **FATO atual:** o estilo de conversa é dado do negócio com **três** valores
+  — `PROFESSIONAL`, `BALANCED` (equilibrado, o default) e `CASUAL` — nos dois
+  bancos. O enum `AiTone` foi expandido por migration **aditiva em passos
+  separados** (`ALTER TYPE ... ADD VALUE IF NOT EXISTS`, depois backfill,
+  depois default), porque no PostgreSQL um valor de enum criado numa transação
+  não pode ser usado nela. O mapa de backfill é único e declarado:
+  `PROFESSIONAL_OBJECTIVE` → `PROFESSIONAL` e `LIGHT_CLOSE` → `BALANCED`;
+  nenhuma linha nasce em `CASUAL`. A IA fecha com o passo de default
+  (`BALANCED`); o BFF **não** tem default de banco, porque `AiSettings.tone`
+  nulo significa "o negócio ainda não escolheu" — distinção que sustenta a
+  pendência `AI_TONE_NOT_SELECTED` do onboarding. Os dois valores antigos
+  continuam membros válidos do tipo e de `schema.prisma`, legíveis até o
+  Goal024.
+- **FATO atual:** o vocabulário do estilo é o mesmo nos dois lados
+  (`apps/bff/src/lib/ai-conversation-style.ts` e
+  `apps/ai-orchestrator/src/modules/tenant-config/ai-settings.ts`): entrada
+  aceita os três valores novos e os dois antigos como **alias declarado**,
+  valor fora desses cinco é recusado com `AI_CONVERSATION_STYLE_UNKNOWN` (com
+  `details.accepted` e `details.legacyAliases`) e toda saída — settings,
+  onboarding, projeção interna para a IA e schemas do frontend — usa sempre o
+  vocabulário novo, inclusive para linha gravada antes desta versão. Negócio
+  sem configuração é projetado no equilibrado sem que isso seja gravado como
+  escolha.
+- **FATO atual:** o prompt não tem persona. Não há instrução de respeitar
+  personagem, nem de parecer ou fingir ser humana; a IA responde como extensão
+  do negócio e se identifica como assistente virtual quando perguntada
+  diretamente. A versão do prompt é **derivada do conteúdo**:
+  `derivePromptVersion(style)` devolve `prompt-v1-<estilo>-<hash>`, com hash
+  sobre o texto estável montado (identidade, regras, contexto do negócio,
+  scheduling, os três ramos de conhecimento, estilo, handoff e resposta).
+  Mudar texto estático sem mudar o identificador semântico derruba os hashes
+  fixados em `tests/prompts/system.test.ts`, e o log de decisão de cada turno
+  registra a versão do prompt efetivamente enviado, por estilo.
+  `AiTenantConfig.promptVersion`, projetado por `internal/routes.ts`, continua
+  vindo de `env.AI_PROMPT_VERSION` — conceito distinto, ainda não reconciliado.
+- **FATO atual:** confirmação explícita é exigida por **código**. O turno vem
+  de `deriveTurnId(message)` (`channelId:messageId`), atravessa o grafo
+  (`graph-state`/`message-graph`) e fica gravado em
+  `pendingAction.preparedInTurnId`. Tool com efeito só executa sobre rascunho
+  preparado em turno **anterior**: preparar e confirmar no mesmo turno é
+  recusado com `CONFIRMATION_REQUIRED_SAME_TURN` e confirmar sem rascunho com
+  `NO_PENDING_CONFIRMATION`. A série de atendimento entrou na mesma regra, com
+  compatibilidade declarada para rascunho legado sem turno; o guard antes de
+  efeito do Goal005 continua valendo.
+- **FATO atual:** erro de domínio e erro de infraestrutura são vocabulários
+  distintos. O `SchedulingClient` classifica na origem — 5xx, timeout,
+  resposta fora do formato e falha de autenticação/contexto interno viram
+  `InfrastructureError`; 4xx de negócio viram `DomainError` com o código real.
+  `graphToolFailure` entrega ao modelo o código de domínio, mas colapsa toda
+  infraestrutura num único `TOOL_INFRASTRUCTURE_ERROR` com mensagem genérica;
+  o detalhe real vai só para o log, com `requestId` e `aiRunId`, e o turno
+  segue pela mensagem genérica com handoff. Nenhum host, URL, token ou nome de
+  serviço interno chega ao contexto do modelo ou a mensagem enviada.
+- **FATO atual:** rascunho substituído ou descartado **libera** o hold que
+  segurava. `releasePendingHolds` roda dentro de `setPendingAction` e de
+  `clearPendingAction`, no mesmo caminho que grava o novo estado; falha ao
+  liberar não derruba o turno, mas é registrada com `requestId`/`aiRunId`.
+  `releaseHold` é idempotente no Scheduling. Provado contra PostgreSQL real em
+  `tests/integration/hold-release.test.ts`, olhando o hold no banco.
+- **FATO atual:** `/internal/services` emite `recurrenceIntervalDays` —
+  `CalendarServiceDefinition` e `toCalendarService` passaram a carregá-lo — e a
+  IA o projeta no catálogo, então serviço com intervalo de referência é
+  ofertável. Oferecer não cria nada: a série continua exigindo hold por
+  ocorrência e confirmação global explícita (Goal009), e sem intervalo
+  cadastrado a IA não propõe cadência.
+- **FATO atual:** existe suíte de **evals determinísticos** no `validate:core`
+  (`apps/ai-orchestrator/tests/evals/`), com modelo dublê, gateway do
+  Scheduling em memória e `fetch` interceptado para falhar se qualquer eval
+  abrir rede — sem chave e sem custo. Os casos cobrem condução da conversa,
+  equivalência operacional entre os três estilos, transparência sobre ser
+  assistente virtual, desconto e encaixe levando a handoff com irritação
+  resolvível não levando, e a separação entre falha de domínio e de
+  infraestrutura. Cada arquivo termina com um caso que falha se algum passo do
+  roteiro do dublê não tiver sido consumido.
+- **Limite verificado:** os evals provam o que o runtime executou, recusou e
+  persistiu — **não** qualidade de modelo real. Nenhum modelo real foi chamado
+  em teste. Mídia (G-23) e conhecimento, memória e sugestões (G-24) continuam
+  fora: são dos Goals 013 e 012.

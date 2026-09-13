@@ -72,16 +72,25 @@ As rotas abaixo também estão registradas e possuem consumidores no frontend at
 
 Essas três rotas foram reescopadas pelo Goal010 e continuam com o mesmo contrato: elas guardam, testam e removem a **credencial da origem de importação** e nada mais. Conectar não muda a fonte da agenda operacional e não exige que ela seja externa — exigir isso deixaria a importação inalcançável depois do corte do writer remoto. Credencial que se declara de escrita é recusada com `409 INTEGRATION_WRITES_NOT_SUPPORTED`: a origem é somente leitura. Desconectar remove a credencial e **nunca** desativa a Agenda Atendly.
 
-O contrato público ainda expõe `ATENDLY | EXTERNAL`, e onboarding/configurações ainda expõem `PROFESSIONAL_OBJECTIVE | LIGHT_CLOSE`. Esses valores são fatos do runtime atual e dívida técnica, não opções válidas para novos fluxos.
+O contrato público ainda expõe `ATENDLY | EXTERNAL`. Esse valor é fato do runtime atual e dívida técnica, não opção válida para novos fluxos.
 
 Pela regra de produto vigente:
 
 - Agenda Atendly é a única agenda operacional;
 - Minha Agenda só pode participar da importação única;
-- não existe conexão operacional, troca de fonte ou migração reversa;
-- os estilos da IA são Profissional, Equilibrada e Descontraída.
+- não existe conexão operacional, troca de fonte ou migração reversa.
 
-A futura revisão técnica deve migrar consumidores antes de remover ou alterar essas rotas e enums. Este documento não determina o desenho do contrato substituto.
+A futura revisão técnica deve migrar consumidores antes de remover ou alterar essa rota e enum. Este documento não determina o desenho do contrato substituto.
+
+## Estilo de conversa da IA: três valores (Goal011)
+
+`tone` em `PATCH /v1/settings/ai` e em `ai.tone` de `PATCH /v1/onboarding` aceita os três estilos do produto — `PROFESSIONAL`, `BALANCED` (equilibrado) e `CASUAL` — e, como alias de entrada declarado, os dois valores antigos: `PROFESSIONAL_OBJECTIVE` (alias de `PROFESSIONAL`) e `LIGHT_CLOSE` (alias de `BALANCED`). `CASUAL` é estilo novo, sem alias.
+
+A entrada aceita qualquer um dos cinco valores; a saída — em `GET/PATCH /v1/settings` (`ai.tone`) e `GET/PATCH /v1/onboarding` (`ai.tone`) — devolve **sempre** o vocabulário novo, mesmo para um tenant cuja linha ainda guarda o valor antigo gravado antes desta versão. Um valor fora desses cinco é recusado com `400 AI_CONVERSATION_STYLE_UNKNOWN`, sem gravar nada; a resposta inclui `error.details.accepted` (os três valores novos) e `error.details.legacyAliases` (os dois antigos ainda aceitos).
+
+`tone` ausente é distinto de `tone` escolhido: `ai.tone` vem `null` enquanto o negócio não passou por `PATCH /v1/settings/ai` nem por `PATCH /v1/onboarding` com `ai`, e `POST /v1/onboarding/complete` recusa com `AI_TONE_NOT_SELECTED` enquanto isso for verdade. A projeção enviada à IA (interna, não neste contrato) sempre carrega um valor concreto no vocabulário novo — o equilibrado quando o negócio ainda não escolheu —, mas isso nunca é gravado como se fosse a escolha do negócio.
+
+Os dois valores antigos saem do vocabulário aceito no Goal024.
 
 ## Clientes: identidade por ID
 

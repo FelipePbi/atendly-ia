@@ -1,5 +1,6 @@
 import type { PrismaClient } from "../../generated/prisma/client.js";
 import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
+import { resolveAiConversationStyle } from "../tenant-config/ai-settings.js";
 import type {
   GraphConversationContext,
   GraphTenantConfig,
@@ -72,7 +73,11 @@ export class PrismaGraphRuntime implements GraphRuntimePort {
       channelConnected: trustedChannel && channel.status === "ACTIVE",
       tenantConfig: {
         aiEnabled: config?.enabled ?? message.aiSettings?.aiEnabled ?? false,
-        tone: config?.tone ?? message.aiSettings?.tone ?? "LIGHT_CLOSE",
+        // Config do banco vence o payload; estilo legado ou ausente vira o
+        // equilibrado antes de chegar ao grafo.
+        tone: resolveAiConversationStyle(
+          config?.tone ?? message.aiSettings?.tone,
+        ),
         promptVersion: config?.promptVersion ?? "scheduling_v1.0.0",
       },
     };

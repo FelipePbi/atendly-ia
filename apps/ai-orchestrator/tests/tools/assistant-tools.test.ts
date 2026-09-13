@@ -1,7 +1,6 @@
+import { describe, expect, it, vi } from "vitest";
+
 import type { PrismaClient } from "../../src/generated/prisma/client.js";
-import { describe, expect, it } from "vitest";
-import { DEFAULT_BUSINESS_CONTEXT } from "../../src/modules/tenant-config/business-context.js";
-import { AssistantToolRegistry } from "../../src/modules/tools/assistant-tools.js";
 import type {
   ConfirmAppointmentSeriesInput,
   CreateSchedulingHoldInput,
@@ -12,8 +11,12 @@ import type {
   SchedulingHold,
   SchedulingServiceDefinition,
 } from "../../src/modules/scheduling-service/types.js";
+import { DEFAULT_BUSINESS_CONTEXT } from "../../src/modules/tenant-config/business-context.js";
+import { AssistantToolRegistry } from "../../src/modules/tools/assistant-tools.js";
 
 const conversationId = "conversation-1";
+/** Turno seguinte ao do `prepare`: e nele que a cliente responde e confirma. */
+const nextTurn = "channel-1:message-2";
 const phone = "555591359589";
 const service: SchedulingServiceDefinition = {
   id: "5114873",
@@ -22,6 +25,7 @@ const service: SchedulingServiceDefinition = {
   priceType: "FIXED",
   price: 190,
   colorId: 3,
+  recurrenceIntervalDays: null,
 };
 const browService: SchedulingServiceDefinition = {
   id: "5114888",
@@ -30,6 +34,7 @@ const browService: SchedulingServiceDefinition = {
   priceType: "FIXED",
   price: 40,
   colorId: 4,
+  recurrenceIntervalDays: null,
 };
 const startingAtService: SchedulingServiceDefinition = {
   id: "5114900",
@@ -38,6 +43,7 @@ const startingAtService: SchedulingServiceDefinition = {
   priceType: "STARTING_AT",
   price: 80,
   colorId: null,
+  recurrenceIntervalDays: null,
 };
 const onRequestService: SchedulingServiceDefinition = {
   id: "5114911",
@@ -46,6 +52,7 @@ const onRequestService: SchedulingServiceDefinition = {
   priceType: "ON_REQUEST",
   price: null,
   colorId: null,
+  recurrenceIntervalDays: null,
 };
 const notInformedService: SchedulingServiceDefinition = {
   id: "5114922",
@@ -54,6 +61,18 @@ const notInformedService: SchedulingServiceDefinition = {
   priceType: "NOT_INFORMED",
   price: null,
   colorId: null,
+  recurrenceIntervalDays: null,
+};
+// Intervalo de referencia cadastrado (Goal007): so este servico pode ser
+// ofertado com recorrencia; os demais fixtures acima nao tem cadencia.
+const recurringService: SchedulingServiceDefinition = {
+  id: "5114933",
+  name: "Manutencao mensal",
+  duration: 40,
+  priceType: "FIXED",
+  price: 120,
+  colorId: null,
+  recurrenceIntervalDays: 30,
 };
 const slot = {
   date: "2026-06-08",
@@ -287,7 +306,7 @@ describe("AssistantToolRegistry scheduling service resolution", () => {
         name: "create_appointment",
         args: { action: "confirm" },
       },
-      context(),
+      context(nextTurn),
     );
 
     expect(confirmed.ok).toBe(true);
@@ -377,7 +396,7 @@ describe("AssistantToolRegistry customer identity", () => {
         name: "create_appointment",
         args: { action: "confirm" },
       },
-      context(),
+      context(nextTurn),
     );
 
     expect(calls.createAppointment[0]).toMatchObject({
@@ -422,7 +441,7 @@ describe("AssistantToolRegistry customer identity", () => {
         name: "create_appointment",
         args: { action: "confirm" },
       },
-      context(),
+      context(nextTurn),
     );
 
     expect(calls.createAppointment[0]).toMatchObject({ customerId: pedro.id });
@@ -457,7 +476,7 @@ describe("AssistantToolRegistry customer identity", () => {
         name: "create_appointment",
         args: { action: "confirm" },
       },
-      context(),
+      context(nextTurn),
     );
 
     // Sem pessoa resolvida, o cadastro nasce no Scheduling, dentro da
@@ -501,7 +520,7 @@ describe("AssistantToolRegistry customer identity", () => {
           name: "create_appointment",
           args: { action: "confirm" },
         },
-        context(),
+        context(nextTurn),
       );
     }
 
@@ -652,7 +671,7 @@ describe("AssistantToolRegistry price semantics", () => {
           name: "create_appointment",
           args: { action: "confirm" },
         },
-        context(),
+        context(nextTurn),
       );
 
       expect(calls.createAppointment[0].comments).toContain(expected);
@@ -695,6 +714,53 @@ describe("AssistantToolRegistry price semantics", () => {
       error: { code: "SERVICE_NOT_FOUND" },
     });
     expect(calls.createAppointment).toHaveLength(0);
+  });
+});
+
+/**
+ * Recorrência ofertável (Goal011, resíduo dos reviews 007/009).
+ *
+ * `list_services` carrega `recurrenceIntervalDays` sem descartar o campo:
+ * presente, a IA pode oferecer a série recorrente; ausente, ela não inventa
+ * cadência nenhuma. Oferecer nunca cria nada — a série continua exigindo
+ * `prepare_recurring_appointments`/`confirm_recurring_appointments`.
+ */
+describe("AssistantToolRegistry recurrence offer (Goal011)", () => {
+  it("carries recurrenceIntervalDays for a service that has a reference interval", async () => {
+    const { prisma } = createPrismaMock({});
+    const { agenda } = createAgendaMock([], [service, recurringService]);
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const result = await registry.execute(
+      { id: "call-list-recurrence", name: "list_services", args: {} },
+      context(),
+    );
+
+    expect(result.ok).toBe(true);
+    const listed = (
+      result as unknown as { data: { services: Array<Record<string, unknown>> } }
+    ).data.services;
+    expect(listed).toMatchObject([
+      { id: service.id, recurrenceIntervalDays: null },
+      { id: recurringService.id, recurrenceIntervalDays: 30 },
+    ]);
+  });
+
+  it("never invents a cadence for a service without a registered interval", async () => {
+    const { prisma } = createPrismaMock({});
+    const { agenda } = createAgendaMock([], [service]);
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const result = await registry.execute(
+      { id: "call-list-no-recurrence", name: "list_services", args: {} },
+      context(),
+    );
+
+    const listed = (
+      result as unknown as { data: { services: Array<Record<string, unknown>> } }
+    ).data.services;
+    // Explicitamente nulo, nunca um número inventado.
+    expect(listed[0]).toMatchObject({ recurrenceIntervalDays: null });
   });
 });
 
@@ -993,7 +1059,7 @@ describe("AssistantToolRegistry hold", () => {
         name: "create_appointment",
         args: { action: "confirm" },
       },
-      context(),
+      context(nextTurn),
     );
 
     expect(confirmed.ok).toBe(true);
@@ -1001,6 +1067,213 @@ describe("AssistantToolRegistry hold", () => {
     expect(calls.createAppointment[0]).not.toHaveProperty("overlapOverride");
     expect(calls.createAppointment[0].serviceIds).toEqual([service.id]);
     expect(calls.createHold[0]).not.toHaveProperty("overlapOverride");
+  });
+});
+
+/**
+ * Liberação do hold do rascunho substituído (Goal011).
+ *
+ * `setPendingAction` e `clearPendingAction` liberam, no mesmo caminho que
+ * grava o novo estado, o hold que o rascunho **anterior** segurava — nunca o
+ * hold que acabou de ser criado para o novo rascunho.
+ */
+describe("AssistantToolRegistry releases the hold of a replaced or discarded draft", () => {
+  it("releases A's hold when B is proposed in the next turn, without touching B's own hold", async () => {
+    const { prisma, store } = createPrismaMock({});
+    const { agenda, calls } = createAgendaMock();
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    const first = await registry.execute(
+      {
+        id: "call-prepare-a",
+        name: "create_appointment",
+        args: {
+          action: "prepare",
+          serviceId: service.id,
+          date: slot.date,
+          startTime: slot.startTime,
+          customerName: "Thais",
+        },
+      },
+      context(),
+    );
+    expect(first).toMatchObject({ ok: true, data: { hold: { id: holdId } } });
+    expect(calls.releaseHold).toHaveLength(0);
+
+    const second = await registry.execute(
+      {
+        id: "call-prepare-b",
+        name: "create_appointment",
+        args: {
+          action: "prepare",
+          serviceId: service.id,
+          date: "2026-06-09",
+          startTime: "09:00",
+          customerName: "Thais",
+        },
+      },
+      context(nextTurn),
+    );
+
+    expect(second.ok).toBe(true);
+    const holdB = (
+      second as unknown as { data: { hold: { id: string } | null } }
+    ).data.hold?.id;
+    expect(holdB).toBeDefined();
+    expect(holdB).not.toBe(holdId);
+
+    // Só o hold do rascunho substituído (A) sai; o de B, recém-criado, fica.
+    expect(calls.releaseHold).toEqual([holdId]);
+    expect(store.state.pendingAction).toMatchObject({ holdId: holdB });
+  });
+
+  it("releases the schedule draft's hold when it is discarded for a different intention", async () => {
+    const existing = createAppointment({
+      date: slot.date,
+      startTime: slot.startTime,
+      serviceId: service.id,
+      serviceIds: [service.id],
+      customerName: "Thais",
+      customerPhone: phone,
+    });
+    const { prisma, store } = createPrismaMock({});
+    const { agenda, calls } = createAgendaMock([], [service, browService], {
+      futureAppointments: [existing],
+    });
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    await registry.execute(
+      {
+        id: "call-prepare-schedule",
+        name: "create_appointment",
+        args: {
+          action: "prepare",
+          serviceId: service.id,
+          date: slot.date,
+          startTime: slot.startTime,
+          customerName: "Thais",
+        },
+      },
+      context(),
+    );
+    expect(calls.releaseHold).toHaveLength(0);
+
+    // A cliente muda de ideia: em vez de agendar, quer cancelar outro
+    // atendimento. O rascunho de agendamento é descartado.
+    await registry.execute(
+      {
+        id: "call-prepare-cancel",
+        name: "cancel_appointment",
+        args: { action: "prepare", appointmentId: existing.id },
+      },
+      context(nextTurn),
+    );
+
+    expect(calls.releaseHold).toEqual([holdId]);
+    expect(store.state.pendingAction).toMatchObject({
+      type: "cancel",
+      appointmentId: existing.id,
+    });
+  });
+
+  it("confirming B does not leave A's hold occupied", async () => {
+    const { prisma, store } = createPrismaMock({});
+    const { agenda, calls } = createAgendaMock();
+    const registry = new AssistantToolRegistry(prisma, agenda);
+
+    await registry.execute(
+      {
+        id: "call-prepare-a2",
+        name: "create_appointment",
+        args: {
+          action: "prepare",
+          serviceId: service.id,
+          date: slot.date,
+          startTime: slot.startTime,
+          customerName: "Thais",
+        },
+      },
+      context(),
+    );
+
+    await registry.execute(
+      {
+        id: "call-prepare-b2",
+        name: "create_appointment",
+        args: {
+          action: "prepare",
+          serviceId: service.id,
+          date: "2026-06-09",
+          startTime: "09:00",
+          customerName: "Thais",
+        },
+      },
+      context(nextTurn),
+    );
+    expect(calls.releaseHold).toEqual([holdId]);
+
+    const confirmed = await registry.execute(
+      {
+        id: "call-confirm-b2",
+        name: "create_appointment",
+        args: { action: "confirm" },
+      },
+      context("channel-1:message-3"),
+    );
+
+    expect(confirmed.ok).toBe(true);
+    // A segue liberado: nenhuma chamada de confirmação de B o reocupou nem
+    // precisou liberá-lo de novo além da única liberação já registrada.
+    expect(calls.releaseHold.filter((id) => id === holdId)).toHaveLength(1);
+    expect(store.state.pendingAction).toBeUndefined();
+  });
+
+  it("does not fail the turn when releasing the previous hold fails, and logs it", async () => {
+    const { prisma } = createPrismaMock({});
+    const { agenda } = createAgendaMock([], [service, browService], {
+      releaseHoldFails: true,
+    });
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const registry = new AssistantToolRegistry(prisma, agenda, undefined, logger);
+
+    await registry.execute(
+      {
+        id: "call-prepare-fail-a",
+        name: "create_appointment",
+        args: {
+          action: "prepare",
+          serviceId: service.id,
+          date: slot.date,
+          startTime: slot.startTime,
+          customerName: "Thais",
+        },
+      },
+      context(),
+    );
+
+    const second = await registry.execute(
+      {
+        id: "call-prepare-fail-b",
+        name: "create_appointment",
+        args: {
+          action: "prepare",
+          serviceId: service.id,
+          date: "2026-06-09",
+          startTime: "09:00",
+          customerName: "Thais",
+        },
+      },
+      context(nextTurn),
+    );
+
+    // A falha ao liberar o hold de A não derruba o turno: B é preparado
+    // normalmente, com o próprio hold.
+    expect(second).toMatchObject({ ok: true, data: { requiresConfirmation: true } });
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn.mock.calls[0][0]).toMatchObject({
+      requestId: "request-1",
+      holdId,
+    });
   });
 });
 
@@ -1041,6 +1314,22 @@ describe("AssistantToolRegistry recurring appointments (Goal009)", () => {
     const { agenda, calls } = createAgendaMock();
     const registry = new AssistantToolRegistry(prisma, agenda);
 
+    // A serie tambem precisa de um turno de conversa entre propor e confirmar.
+    await registry.execute(
+      {
+        id: "call-series-prepare",
+        name: "prepare_recurring_appointments",
+        args: {
+          serviceId: service.id,
+          occurrenceCount: 2,
+          intervalDays: 7,
+          firstDate: slot.date,
+          firstStartTime: slot.startTime,
+        },
+      },
+      context(),
+    );
+
     const result = await registry.execute(
       {
         id: "call-series-confirm",
@@ -1052,7 +1341,7 @@ describe("AssistantToolRegistry recurring appointments (Goal009)", () => {
           customerName: "Thais",
         },
       },
-      context(),
+      context(nextTurn),
     );
 
     expect(result.ok).toBe(true);
@@ -1073,6 +1362,21 @@ describe("AssistantToolRegistry recurring appointments (Goal009)", () => {
     });
     const registry = new AssistantToolRegistry(prisma, agenda);
 
+    await registry.execute(
+      {
+        id: "call-series-prepare-expired",
+        name: "prepare_recurring_appointments",
+        args: {
+          serviceId: service.id,
+          occurrenceCount: 1,
+          intervalDays: 7,
+          firstDate: slot.date,
+          firstStartTime: slot.startTime,
+        },
+      },
+      context(),
+    );
+
     const result = await registry.execute(
       {
         id: "call-series-confirm-expired",
@@ -1084,7 +1388,7 @@ describe("AssistantToolRegistry recurring appointments (Goal009)", () => {
           customerName: "Thais",
         },
       },
-      context(),
+      context(nextTurn),
     );
 
     expect(result).toMatchObject({
@@ -1126,8 +1430,17 @@ describe("AssistantToolRegistry recurring appointments (Goal009)", () => {
   });
 });
 
-function context() {
+/**
+ * Contexto de execucao de um turno.
+ *
+ * `turnId` e obrigatorio desde a confirmacao explicita por codigo: preparar e
+ * confirmar no mesmo turno e recusado, entao todo teste que confirma um
+ * rascunho preparado no proprio teste confirma com o turno seguinte, como a
+ * conversa real faz.
+ */
+function context(turnId = "channel-1:message-1") {
   return {
+    turnId,
     conversationId,
     tenantId: "tenant-1",
     channelId: "channel-1",
@@ -1227,6 +1540,11 @@ function createAgendaMock(
     futureAppointments?: SchedulingAppointment[];
     /** Hold da série vencido entre a preparação e a confirmação (Goal009). */
     seriesHoldExpired?: boolean;
+    /**
+     * `releaseHold` do dublê falha sempre (Goal011): prova que a falha ao
+     * liberar o hold do rascunho anterior não derruba o turno.
+     */
+    releaseHoldFails?: boolean;
   } = {},
 ) {
   const calls: {
@@ -1280,8 +1598,15 @@ function createAgendaMock(
       if (options.holds === "unsupported") {
         throw schedulingError("EXTERNAL_CALENDAR_HOLD_UNSUPPORTED");
       }
+      // Primeira chamada preserva `holdId` literal para não quebrar os testes
+      // existentes; chamadas seguintes (propor B depois de A) recebem um id
+      // distinto, para que a liberação de A seja distinguível da de B.
+      const sequentialId =
+        calls.createHold.length === 1
+          ? holdId
+          : `${holdId}-${calls.createHold.length}`;
       return {
-        id: holdId,
+        id: sequentialId,
         date: input.date,
         startTime: input.startTime,
         endTime: slot.endTime,
@@ -1293,6 +1618,9 @@ function createAgendaMock(
     },
     releaseHold: async (id: string): Promise<SchedulingHold> => {
       calls.releaseHold.push(id);
+      if (options.releaseHoldFails) {
+        throw schedulingError("SCHEDULING_UNAVAILABLE");
+      }
       return {
         id,
         date: slot.date,

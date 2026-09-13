@@ -4,7 +4,11 @@ import { z } from "zod";
 
 import { env } from "../../config/env.js";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
-import { AppError } from "../../lib/errors.js";
+import {
+  type DiagnosticLogger,
+  noopDiagnosticLogger,
+} from "../../lib/diagnostic-log.js";
+import { AppError, InfrastructureError } from "../../lib/errors.js";
 import {
   isOperationalKnowledgeQuery,
   type KnowledgeVectorStore,
@@ -26,6 +30,14 @@ export interface ToolExecutionContext {
   channelId: string;
   userId: string;
   requestId: string;
+  /**
+   * Turno de entrada em que esta execucao acontece (`deriveTurnId`).
+   *
+   * E o que torna "confirmacao explicita" uma regra de codigo e nao de
+   * prompt: o rascunho guarda o turno em que nasceu e a tool com efeito
+   * recusa agir enquanto esse turno for o turno atual.
+   */
+  turnId: string;
   phone: string;
   customerName?: string | null;
   businessContext: BusinessContext;
@@ -60,6 +72,17 @@ export type StructuredToolResult<T> =
       error: { code: string; message: string; details?: unknown };
     });
 
+/**
+ * Confirmar no mesmo turno de entrada em que o rascunho foi preparado
+ * significa confirmar sem ter perguntado: a cliente nao teve turno nenhum
+ * para dizer sim. Codigo proprio porque o modelo precisa distinguir isto de
+ * "nao ha nada para confirmar" — aqui ele deve **perguntar e parar**, nao
+ * preparar de novo.
+ */
+export const CONFIRMATION_SAME_TURN = "CONFIRMATION_REQUIRED_SAME_TURN";
+/** Confirmar sem rascunho: nao ha o que confirmar, e nada tem efeito. */
+export const CONFIRMATION_WITHOUT_DRAFT = "NO_PENDING_CONFIRMATION";
+
 type PendingAction =
   | {
       type: "schedule";
@@ -88,11 +111,19 @@ type PendingAction =
       holdId?: string | null;
       holdExpiresAt?: string | null;
       idempotencyKey: string;
+      /**
+       * Turno de entrada em que o rascunho nasceu. Ausente em rascunho
+       * gravado antes deste Goal: confirmar um desses segue permitido, porque
+       * derrubar conversa em andamento no deploy seria pior do que aceitar o
+       * ultimo rascunho legado.
+       */
+      preparedInTurnId?: string;
     }
   | {
       type: "cancel";
       appointmentId: string;
       idempotencyKey: string;
+      preparedInTurnId?: string;
     }
   | {
       type: "reschedule";
@@ -103,6 +134,17 @@ type PendingAction =
       holdId?: string | null;
       holdExpiresAt?: string | null;
       idempotencyKey: string;
+      preparedInTurnId?: string;
+    }
+  | {
+      // Serie recorrente (Goal009): a confirmacao global tambem e efeito, e
+      // tambem precisa de um turno de conversa entre a proposta e o sim.
+      type: "recurring";
+      holdIds: string[];
+      serviceIds: string[];
+      intervalDays?: number;
+      idempotencyKey: string;
+      preparedInTurnId?: string;
     };
 
 type ServicePriceType = "FIXED" | "STARTING_AT" | "ON_REQUEST" | "NOT_INFORMED";
@@ -113,6 +155,12 @@ interface ServiceSummary {
   duration: number;
   priceType: ServicePriceType;
   price: number | null;
+  /**
+   * Intervalo de referencia para recorrencia (Goal007), em dias. Ausente em
+   * `AvailabilityLookup` persistido antes deste Goal; nulo quando o servico
+   * nao tem cadencia cadastrada. Nos dois casos a IA nao inventa intervalo.
+   */
+  recurrenceIntervalDays?: number | null;
 }
 
 interface AvailabilityLookup {
@@ -283,6 +331,7 @@ export class AssistantToolRegistry {
     private readonly prisma: PrismaClient,
     private readonly scheduling: SchedulingGateway = new SchedulingClient(),
     private readonly knowledge?: KnowledgeVectorStore,
+    private readonly logger: DiagnosticLogger = noopDiagnosticLogger,
   ) {}
 
   createDefinitions(context: ToolBindingContext): StructuredToolInterface[] {
@@ -323,6 +372,10 @@ export class AssistantToolRegistry {
             `Tool ${call.name} returned an invalid result.`,
           );
     } catch (error) {
+      // Falha de infraestrutura nunca vira mensagem de "entrada invalida":
+      // ela segue subindo para o caminho generico de falha de tool, que
+      // sanitiza e loga com requestId/aiRunId.
+      if (error instanceof InfrastructureError) throw error;
       return this.failure(
         executionContext,
         "INVALID_TOOL_INPUT",
@@ -340,7 +393,7 @@ export class AssistantToolRegistry {
         {
           name: "list_services",
           description:
-            "Lista servicos reais da fonte oficial do tenant via Scheduling Service. Inclua precos somente quando a cliente perguntou por valores.",
+            "Lista servicos reais da fonte oficial do tenant via Scheduling Service. Inclua precos somente quando a cliente perguntou por valores. recurrenceIntervalDays, quando presente, e o intervalo em dias que permite OFERECER recorrencia para esse servico; oferecer nunca cria a serie sozinho, que continua exigindo prepare_recurring_appointments e confirm_recurring_appointments. Quando recurrenceIntervalDays for nulo, o servico nao tem cadencia cadastrada e nenhum intervalo deve ser inventado.",
           schema: listServicesSchema,
         },
       ),
@@ -565,6 +618,11 @@ export class AssistantToolRegistry {
       }
       return { ...resultContext(context), ok: true, data };
     } catch (error) {
+      // Falha de infraestrutura (Goal011): nunca vira resultado estruturado
+      // visivel ao modelo aqui. Sobe para `execute` e dali para o caminho
+      // generico de falha de tool em `AssistantService`, que sanitiza a
+      // mensagem e loga o detalhe real com requestId/aiRunId.
+      if (error instanceof InfrastructureError) throw error;
       return this.failure(
         context,
         error instanceof AppError ? error.code : "TOOL_EXECUTION_FAILED",
@@ -609,6 +667,10 @@ export class AssistantToolRegistry {
           ? { price: service.price }
           : {}),
         colorId: service.colorId,
+        // Sempre presente, como `priceType`: nulo e informacao (nao ha
+        // cadencia cadastrada), nao ausencia de dado. A IA so pode oferecer
+        // recorrencia quando este valor nao e nulo.
+        recurrenceIntervalDays: service.recurrenceIntervalDays,
       })),
     };
   }
@@ -678,6 +740,20 @@ export class AssistantToolRegistry {
       schedulingContext(context),
       context.idempotencyKey,
     );
+    // Preparar a serie tambem grava rascunho: sem ele a confirmacao global
+    // seria a unica tool com efeito capaz de agir a partir de argumentos que o
+    // proprio modelo escreveu, no turno que quisesse.
+    const holdIds = occurrences
+      .map((occurrence) => occurrence.holdId)
+      .filter((holdId): holdId is string => Boolean(holdId));
+    await this.setPendingAction(context, {
+      type: "recurring",
+      holdIds,
+      serviceIds: serviceResult.serviceIds,
+      intervalDays: args.intervalDays,
+      idempotencyKey: context.idempotencyKey,
+      preparedInTurnId: context.turnId,
+    });
     return {
       services: serviceResult.services,
       intervalDays: args.intervalDays,
@@ -701,6 +777,28 @@ export class AssistantToolRegistry {
     });
     if (!serviceResult.ok) return serviceResult;
 
+    const draft = await this.draftReadyForEffect(
+      "recurring",
+      context,
+      "Nao ha serie preparada para confirmar. Prepare a serie e peca a confirmacao antes de confirmar.",
+    );
+    if (!draft.ok) return draft;
+    // Hold que nao veio do rascunho nao existe para a confirmacao: o
+    // identificador chega no argumento escrito pelo modelo, e aceitar
+    // qualquer um seria confirmar sobre reserva que a conversa nunca propos.
+    const unknownHoldIds = args.holdIds.filter(
+      (holdId) => !draft.pending.holdIds.includes(holdId),
+    );
+    if (unknownHoldIds.length > 0) {
+      return {
+        ok: false as const,
+        code: CONFIRMATION_WITHOUT_DRAFT,
+        error:
+          "Essas reservas nao vieram da serie preparada nesta conversa. Prepare a serie de novo antes de confirmar.",
+        details: { unknownHoldIds },
+      };
+    }
+
     try {
       const appointments = await this.scheduling.confirmAppointmentSeries(
         {
@@ -714,6 +812,7 @@ export class AssistantToolRegistry {
         schedulingContext(context),
         context.idempotencyKey,
       );
+      await this.clearPendingAction(context);
       return { appointments };
     } catch (error) {
       if (!isHoldExpired(error)) throw error;
@@ -819,8 +918,9 @@ export class AssistantToolRegistry {
       holdId: hold?.id ?? null,
       holdExpiresAt: hold?.expiresAt ?? null,
       idempotencyKey: context.idempotencyKey,
+      preparedInTurnId: context.turnId,
     };
-    await this.setPendingAction(context.conversationId, pending);
+    await this.setPendingAction(context, pending);
     return {
       requiresConfirmation: true,
       pendingAction: pending,
@@ -932,13 +1032,13 @@ export class AssistantToolRegistry {
   }
 
   private async confirmSchedule(context: ToolExecutionContext) {
-    const pending = await this.getPendingAction(context.conversationId);
-    if (!pending || pending.type !== "schedule") {
-      return {
-        ok: false,
-        error: "Nao ha agendamento pendente para confirmar.",
-      };
-    }
+    const draft = await this.draftReadyForEffect(
+      "schedule",
+      context,
+      "Nao ha agendamento pendente para confirmar.",
+    );
+    if (!draft.ok) return draft;
+    const pending = draft.pending;
 
     const serviceResult = await this.resolveScheduleServices({
       conversationId: context.conversationId,
@@ -987,7 +1087,7 @@ export class AssistantToolRegistry {
     }
 
     await this.linkContactToCustomer(context, appointment.customerId);
-    await this.clearPendingAction(context.conversationId);
+    await this.clearPendingAction(context);
     return { appointment: this.presentAppointment(appointment) };
   }
 
@@ -1012,7 +1112,7 @@ export class AssistantToolRegistry {
       context.businessContext,
       schedulingContext(context),
     );
-    await this.setPendingAction(context.conversationId, pending);
+    await this.setPendingAction(context, pending);
     return {
       ok: false as const,
       code: APPOINTMENT_HOLD_EXPIRED,
@@ -1112,8 +1212,9 @@ export class AssistantToolRegistry {
       type: "cancel",
       appointmentId: args.appointmentId,
       idempotencyKey: context.idempotencyKey,
+      preparedInTurnId: context.turnId,
     };
-    await this.setPendingAction(context.conversationId, pending);
+    await this.setPendingAction(context, pending);
     return {
       requiresConfirmation: true,
       appointment: this.presentAppointment(appointment),
@@ -1121,20 +1222,20 @@ export class AssistantToolRegistry {
   }
 
   private async cancelAppointment(context: ToolExecutionContext) {
-    const pending = await this.getPendingAction(context.conversationId);
-    if (!pending || pending.type !== "cancel") {
-      return {
-        ok: false,
-        error: "Nao ha cancelamento pendente para confirmar.",
-      };
-    }
+    const draft = await this.draftReadyForEffect(
+      "cancel",
+      context,
+      "Nao ha cancelamento pendente para confirmar.",
+    );
+    if (!draft.ok) return draft;
+    const pending = draft.pending;
 
     const result = await this.scheduling.cancelAppointment(
       pending.appointmentId,
       schedulingContext(context),
       pending.idempotencyKey || context.idempotencyKey,
     );
-    await this.clearPendingAction(context.conversationId);
+    await this.clearPendingAction(context);
     return result;
   }
 
@@ -1178,8 +1279,9 @@ export class AssistantToolRegistry {
       holdId: hold?.id ?? null,
       holdExpiresAt: hold?.expiresAt ?? null,
       idempotencyKey: context.idempotencyKey,
+      preparedInTurnId: context.turnId,
     };
-    await this.setPendingAction(context.conversationId, pending);
+    await this.setPendingAction(context, pending);
     return {
       requiresConfirmation: true,
       currentAppointment: this.presentAppointment(appointment),
@@ -1190,10 +1292,13 @@ export class AssistantToolRegistry {
   }
 
   private async rescheduleAppointment(context: ToolExecutionContext) {
-    const pending = await this.getPendingAction(context.conversationId);
-    if (!pending || pending.type !== "reschedule") {
-      return { ok: false, error: "Nao ha remarcacao pendente para confirmar." };
-    }
+    const draft = await this.draftReadyForEffect(
+      "reschedule",
+      context,
+      "Nao ha remarcacao pendente para confirmar.",
+    );
+    if (!draft.ok) return draft;
+    const pending = draft.pending;
 
     let appointment;
     try {
@@ -1227,7 +1332,7 @@ export class AssistantToolRegistry {
       );
     }
 
-    await this.clearPendingAction(context.conversationId);
+    await this.clearPendingAction(context);
     return { appointment: this.presentAppointment(appointment) };
   }
 
@@ -1280,6 +1385,47 @@ export class AssistantToolRegistry {
     return { handoffId: handoff.id, reused: existing !== null };
   }
 
+  /**
+   * Rascunho elegivel para efeito.
+   *
+   * Confirmacao explicita deixa de ser instrucao de prompt e passa a ser
+   * condicao de execucao: criar, remarcar, cancelar e confirmar serie so
+   * rodam sobre um rascunho preparado em **turno anterior**. Preparar e
+   * confirmar dentro do mesmo turno de entrada e, por definicao, confirmar
+   * sem ter perguntado — nao existe turno em que a cliente pudesse ter dito
+   * sim.
+   *
+   * Sao duas recusas com codigos diferentes porque sao dois erros diferentes:
+   * "nao ha nada preparado" pede preparar; "preparado agora mesmo" pede
+   * perguntar e esperar a proxima mensagem.
+   */
+  private async draftReadyForEffect<T extends PendingAction["type"]>(
+    type: T,
+    context: ToolExecutionContext,
+    absentMessage: string,
+  ): Promise<
+    | { ok: true; pending: Extract<PendingAction, { type: T }> }
+    | { ok: false; code: string; error: string }
+  > {
+    const pending = await this.getPendingAction(context.conversationId);
+    if (!pending || pending.type !== type) {
+      return {
+        ok: false,
+        code: CONFIRMATION_WITHOUT_DRAFT,
+        error: absentMessage,
+      };
+    }
+    if (pending.preparedInTurnId === context.turnId) {
+      return {
+        ok: false,
+        code: CONFIRMATION_SAME_TURN,
+        error:
+          "O rascunho foi preparado nesta mesma mensagem. Enuncie o resumo, peca a confirmacao da cliente e so confirme depois que ela responder.",
+      };
+    }
+    return { ok: true, pending: pending as Extract<PendingAction, { type: T }> };
+  }
+
   private async getPendingAction(
     conversationId: string,
   ): Promise<PendingAction | null> {
@@ -1287,24 +1433,69 @@ export class AssistantToolRegistry {
     return state.pendingAction ?? null;
   }
 
+  /**
+   * Grava o novo rascunho e libera, no mesmo caminho, o hold que o rascunho
+   * anterior segurava (Goal011): propor B depois de A não pode deixar A
+   * ocupado até o TTL vencer.
+   */
   private async setPendingAction(
-    conversationId: string,
+    context: ToolExecutionContext,
     pendingAction: PendingAction,
   ): Promise<void> {
-    const state = await this.getConversationState(conversationId);
+    const state = await this.getConversationState(context.conversationId);
+    await this.releasePendingHolds(context, state.pendingAction);
     await this.prisma.conversation.update({
-      where: { id: conversationId },
+      where: { id: context.conversationId },
       data: { state: { ...state, pendingAction } as Prisma.InputJsonValue },
     });
   }
 
-  private async clearPendingAction(conversationId: string): Promise<void> {
-    const state = await this.getConversationState(conversationId);
+  /**
+   * Remove o rascunho e libera, no mesmo caminho, o hold que ele segurava.
+   * Chamado tanto depois de uma confirmação bem-sucedida (o hold, nesse
+   * caso, já foi consumido pela própria operação, e liberar de novo é
+   * inofensivo — `releaseHold` é idempotente) quanto quando o rascunho é
+   * descartado sem nunca ter sido confirmado.
+   */
+  private async clearPendingAction(
+    context: ToolExecutionContext,
+  ): Promise<void> {
+    const state = await this.getConversationState(context.conversationId);
+    await this.releasePendingHolds(context, state.pendingAction);
     delete state.pendingAction;
     await this.prisma.conversation.update({
-      where: { id: conversationId },
+      where: { id: context.conversationId },
       data: { state: state as Prisma.InputJsonValue },
     });
+  }
+
+  /**
+   * Libera todo hold que o rascunho anterior segurava. Falha ao liberar não
+   * derruba o turno — o pior caso é o hold expirar sozinho pelo TTL — mas
+   * fica registrada no log com `requestId`/`aiRunId`, nunca silenciosa.
+   */
+  private async releasePendingHolds(
+    context: ToolExecutionContext,
+    previous: PendingAction | undefined,
+  ): Promise<void> {
+    if (!previous) return;
+    for (const holdId of pendingActionHoldIds(previous)) {
+      try {
+        await this.scheduling.releaseHold(holdId, schedulingContext(context));
+      } catch (error) {
+        this.logger.warn(
+          {
+            requestId: context.requestId,
+            tenantId: context.tenantId,
+            aiRunId: context.aiRunId,
+            conversationId: context.conversationId,
+            holdId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "Failed to release the hold of a replaced or discarded draft.",
+        );
+      }
+    }
   }
 
   private async resolveScheduleServices(input: {
@@ -1415,6 +1606,10 @@ export class AssistantToolRegistry {
         totalPriceType: total.type,
       };
     } catch (error) {
+      // Servico inexistente e dominio; falha de infraestrutura durante a
+      // busca (auth, timeout, 5xx) nao vira "servico nao encontrado" — sobe
+      // para o caminho generico, que nunca expoe o detalhe real ao modelo.
+      if (error instanceof InfrastructureError) throw error;
       return {
         ok: false,
         code: "SERVICE_NOT_FOUND",
@@ -1542,6 +1737,19 @@ function isHoldExpired(error: unknown): boolean {
   return errorCode(error) === APPOINTMENT_HOLD_EXPIRED;
 }
 
+/** Todo hold que um rascunho segura, qualquer que seja o tipo dele. */
+function pendingActionHoldIds(pending: PendingAction): string[] {
+  switch (pending.type) {
+    case "schedule":
+    case "reschedule":
+      return pending.holdId ? [pending.holdId] : [];
+    case "recurring":
+      return pending.holdIds;
+    case "cancel":
+      return [];
+  }
+}
+
 /**
  * Fonte de agenda que nao tem hold: a proposta segue sem reserva.
  *
@@ -1597,6 +1805,7 @@ function toServiceSummary(service: {
   duration: number;
   priceType: ServicePriceType;
   price: number | null;
+  recurrenceIntervalDays?: number | null;
 }): ServiceSummary {
   return {
     id: service.id,
@@ -1604,6 +1813,7 @@ function toServiceSummary(service: {
     duration: service.duration,
     priceType: service.priceType,
     price: service.price,
+    recurrenceIntervalDays: service.recurrenceIntervalDays ?? null,
   };
 }
 
@@ -1611,9 +1821,9 @@ function schedulingContext(
   context: ToolExecutionContext,
 ): SchedulingRequestContext {
   if (!context.tenantId || !context.userId || !context.requestId) {
-    throw new AppError("Trusted scheduling context is required.", {
-      statusCode: 500,
+    throw new InfrastructureError("Trusted scheduling context is required.", {
       code: "SCHEDULING_CONTEXT_REQUIRED",
+      statusCode: 500,
     });
   }
   return {

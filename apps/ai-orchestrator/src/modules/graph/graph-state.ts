@@ -8,6 +8,20 @@ import type {
   ModelToolResult,
 } from "../model/model-provider.js";
 import type { SessionSnapshot } from "../session/SessionService.js";
+import type { AiConversationStyle } from "../tenant-config/ai-settings.js";
+
+/**
+ * Identidade do turno de entrada.
+ *
+ * O turno e a mensagem que entrou, nao o instante em que ela foi processada:
+ * relogio nao serve aqui porque duas iteracoes do mesmo turno acontecem com
+ * milissegundos de diferenca e um retry do mesmo webhook acontece minutos
+ * depois — os dois casos precisam ser o **mesmo** turno. O identificador do
+ * provedor e estavel nas duas situacoes.
+ */
+export function deriveTurnId(message: ChannelInboundMessage): string {
+  return `${message.channelId}:${message.messageId}`;
+}
 
 export type GraphIntent =
   | "simple_response"
@@ -31,7 +45,7 @@ export type GraphGuardDecision =
 
 export interface GraphTenantConfig {
   aiEnabled: boolean;
-  tone: "PROFESSIONAL_OBJECTIVE" | "LIGHT_CLOSE";
+  tone: AiConversationStyle;
   promptVersion: string;
 }
 
@@ -102,6 +116,11 @@ export const MessageGraphState = Annotation.Root({
   channelId: Annotation<string>(),
   invocationStartedAt: Annotation<string>(),
   inboundMessage: Annotation<ChannelInboundMessage>(),
+  /**
+   * Turno de entrada deste ciclo, ver `deriveTurnId`. Atravessa o grafo ate as
+   * tools para que o rascunho saiba em que turno nasceu.
+   */
+  turnId: Annotation<string>(),
   inboundText: Annotation<string>(),
   inputMessageIds: Annotation<string[]>(),
   deferResponse: Annotation<boolean>(),

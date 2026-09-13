@@ -96,8 +96,19 @@ enum HumanControlSource {
   BACKFILL
 }
 
+/// Estilo de conversa do negocio: influencia registro, emoji e informalidade,
+/// nunca decisao operacional. Os tres valores do produto sao PROFESSIONAL,
+/// BALANCED (default) e CASUAL. Os dois valores antigos continuam declarados
+/// porque `ALTER TYPE ... ADD VALUE` nao remove valor do tipo do banco: eles
+/// seguem legiveis e aceitos na entrada como alias normalizado ate o Goal024,
+/// enquanto a saida ja usa so o vocabulario novo.
 enum AiTone {
+  PROFESSIONAL
+  BALANCED
+  CASUAL
+  /// Legado, alias de PROFESSIONAL. Nenhuma linha nasce aqui.
   PROFESSIONAL_OBJECTIVE
+  /// Legado, alias de BALANCED. Nenhuma linha nasce aqui.
   LIGHT_CLOSE
 }
 
@@ -436,7 +447,7 @@ model Handoff {
 model AiTenantConfig {
   tenantId      String   @id
   enabled       Boolean  @default(false)
-  tone          AiTone   @default(LIGHT_CLOSE)
+  tone          AiTone   @default(BALANCED)
   promptVersion String   @default("scheduling_v1.0.0")
   settings      Json?
   createdAt     DateTime @default(now())

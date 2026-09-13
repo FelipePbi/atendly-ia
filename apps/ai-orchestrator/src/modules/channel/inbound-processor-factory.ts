@@ -46,6 +46,7 @@ export function buildInboundMessageProcessor(input: InboundProcessorInput) {
     input.prisma,
     new SchedulingClient(),
     knowledge,
+    input.logger,
   );
   const sessions = new SessionService(input.prisma);
   const assistant = new AssistantService(

@@ -182,7 +182,7 @@ describe.skipIf(!databaseUrl)("human control across sessions against PostgreSQL"
         channelConnected: true,
         tenantConfig: {
           aiEnabled: true,
-          tone: "LIGHT_CLOSE",
+          tone: "BALANCED",
           promptVersion: "scheduling_v1.0.0",
         },
       }),

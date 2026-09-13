@@ -188,7 +188,7 @@ export const onboardingScenarios = {
   "tom-da-ia": [
     "Atendente virtual",
     "Como a Atendly deve conversar?",
-    "Escolha um dos dois tons disponíveis nesta versão.",
+    "Escolha um dos três estilos disponíveis.",
     "tone",
   ],
   whatsapp: [

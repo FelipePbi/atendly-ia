@@ -369,6 +369,19 @@ export function integrationSteps(target) {
       args: ["scripts/goal010-migration-rehearsal.mjs"],
       env,
     },
+    // Gate M0/M1 do Goal011: ensaio das migrations de estilo de conversa com
+    // tres valores nos dois bancos que declaram o enum "AiTone" — IA (tres
+    // passos: vocabulario, backfill, default) e BFF (dois passos: vocabulario,
+    // backfill, sem default). Dois bancos proprios e descartaveis, derivados
+    // do mesmo alvo ja validado. Prova backfill linha a linha, leitura do
+    // valor legado depois do corte e repeticao sem mudanca de estado.
+    {
+      name: "rehearse:goal011-ai-style-migration",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal011-ai-style-migration-rehearsal.mjs"],
+      env,
+    },
     // Identidade de cliente contra PostgreSQL real: telefone compartilhado,
     // cliente sem telefone, criação só na confirmação e isolamento por tenant.
     // Não pertence ao core porque exige banco.

@@ -2,9 +2,12 @@ import { type BffHttpClient } from "../http/BffHttpClient";
 import {
   customerDetailSchema,
   customerListSchema,
+  type CustomerMemoryKind,
+  customerMemorySchema,
   customerNoteSchema,
   customerPrimaryGuardianSchema,
   customerSchema,
+  customerSummarySchema,
   customerTagSchema,
   deletedSchema,
 } from "../mappers/publicApiSchemas";
@@ -37,6 +40,13 @@ export interface CreateCustomerNoteInput {
 export interface CreateCustomerTagInput {
   label: string;
   aiAuthorized?: boolean;
+}
+
+export interface CreateCustomerMemoryInput {
+  kind: CustomerMemoryKind;
+  value: string;
+  /** Cadastro pela profissional nasce negado, como as notas do cliente. */
+  aiAllowed?: boolean;
 }
 
 export class BffCustomerService {
@@ -196,6 +206,72 @@ export class BffCustomerService {
       method: "DELETE",
       path: `/v1/customers/${encodeURIComponent(id)}/tags/${encodeURIComponent(tagId)}`,
       schema: deletedSchema,
+      signal,
+    });
+  }
+
+  /** Memoria vigente do cliente: nem removida, nem substituida. */
+  listMemory(id: string, signal?: AbortSignal) {
+    return this.http.request({
+      path: `/v1/customers/${encodeURIComponent(id)}/memory`,
+      schema: customerMemorySchema.array(),
+      signal,
+    });
+  }
+
+  /**
+   * Origem sempre `PROFESSIONAL` — a rota não aceita origem no corpo, para o
+   * painel não conseguir se passar por "informado pela cliente".
+   */
+  createMemory(
+    id: string,
+    input: CreateCustomerMemoryInput,
+    signal?: AbortSignal,
+  ) {
+    return this.http.request({
+      body: input,
+      method: "POST",
+      path: `/v1/customers/${encodeURIComponent(id)}/memory`,
+      schema: customerMemorySchema,
+      signal,
+    });
+  }
+
+  /** Único campo alterável no item: a permissão de uso pela IA. */
+  setMemoryPermission(
+    id: string,
+    memoryId: string,
+    aiAllowed: boolean,
+    signal?: AbortSignal,
+  ) {
+    return this.http.request({
+      body: { aiAllowed },
+      method: "PATCH",
+      path: `/v1/customers/${encodeURIComponent(id)}/memory/${encodeURIComponent(memoryId)}`,
+      schema: customerMemorySchema,
+      signal,
+    });
+  }
+
+  /** Remove qualquer item, inclusive memória inferida pela IA. */
+  deleteMemory(id: string, memoryId: string, signal?: AbortSignal) {
+    return this.http.request({
+      method: "DELETE",
+      path: `/v1/customers/${encodeURIComponent(id)}/memory/${encodeURIComponent(memoryId)}`,
+      schema: customerMemorySchema,
+      signal,
+    });
+  }
+
+  /**
+   * Resumo gerado sob demanda, exclusivamente a partir de material
+   * autorizado. Nunca persistido como memória, nota nem cadastro.
+   */
+  generateSummary(id: string, signal?: AbortSignal) {
+    return this.http.request({
+      method: "POST",
+      path: `/v1/customers/${encodeURIComponent(id)}/summary`,
+      schema: customerSummarySchema,
       signal,
     });
   }

@@ -1,23 +1,29 @@
+/**
+ * Ferramenta de desenvolvimento, não interface operacional.
+ *
+ * Antes do Goal012 este script era o único caminho de escrita de
+ * conhecimento; a partir daqui a interface operacional são as rotas
+ * `/internal/knowledge/*`, servidas por `KnowledgeDocumentService`. Este
+ * script chama o mesmo serviço para popular um tenant de desenvolvimento a
+ * partir de um arquivo JSON, sem duplicar a lógica de versionamento.
+ */
 import { readFile } from "node:fs/promises";
 
 import { z } from "zod";
 
-import { env, requireEnv } from "../config/env.js";
+import { requireEnv } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
 import { OpenAIEmbeddingProvider } from "../modules/knowledge/embedding-provider.js";
-import {
-  KNOWLEDGE_DOCUMENT_TYPES,
-  type KnowledgeIndexDocumentInput,
-} from "../modules/knowledge/knowledge-vector-store.js";
-import { PGVectorKnowledgeStore } from "../modules/knowledge/pgvector-knowledge-store.js";
+import { PgVectorKnowledgeChunkIndexer } from "../modules/knowledge/knowledge-chunk-indexer.js";
+import { KnowledgeDocumentService } from "../modules/knowledge/knowledge-document-service.js";
+import { KNOWLEDGE_DOCUMENT_TYPES } from "../modules/knowledge/knowledge-vector-store.js";
 
 const seedSchema = z
   .object({
     type: z.enum(KNOWLEDGE_DOCUMENT_TYPES),
     title: z.string().trim().min(1),
     source: z.string().trim().min(1),
-    version: z.string().trim().min(1),
-    status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
+    serviceId: z.string().trim().min(1).optional(),
     chunks: z
       .array(
         z
@@ -37,17 +43,19 @@ const tenantId = requireProcessEnv("KNOWLEDGE_SEED_TENANT_ID");
 const filePath = requireProcessEnv("KNOWLEDGE_SEED_FILE");
 const raw = await readFile(filePath, "utf8");
 const seed = seedSchema.parse(JSON.parse(raw));
-const store = new PGVectorKnowledgeStore(
+const service = new KnowledgeDocumentService(
   prisma,
-  new OpenAIEmbeddingProvider(),
-  env.KNOWLEDGE_SEARCH_MIN_SCORE,
+  new PgVectorKnowledgeChunkIndexer(new OpenAIEmbeddingProvider()),
 );
 
 try {
-  const result = await store.indexDocument({
-    tenantId,
-    ...seed,
-  } satisfies KnowledgeIndexDocumentInput);
+  const result =
+    seed.type === "BUSINESS_INFO"
+      ? await service.saveOtherInfo({
+          tenantId,
+          content: seed.chunks.map((chunk) => chunk.content).join("\n\n"),
+        })
+      : await service.create({ tenantId, ...seed });
   process.stdout.write(`${JSON.stringify(result)}\n`);
 } finally {
   await prisma.$disconnect();

@@ -35,12 +35,20 @@ export interface KnowledgeSearchInput {
   tenantId: string;
   query: string;
   limit: number;
+  /**
+   * Servico em foco da conversa (rascunho, acao pendente ou serviceIds ja
+   * resolvidos), nunca texto livre inferido pelo modelo. Documento sem
+   * servico continua geral; documento de outro servico nao entra no
+   * resultado.
+   */
+  focusServiceIds?: string[];
 }
 
 export interface KnowledgeSearchResult {
   documentId: string;
   chunkId: string;
   type: KnowledgeDocumentType;
+  serviceId: string | null;
   title: string;
   source: string;
   version: string;

@@ -11,6 +11,7 @@ import {
   authorizeInternalRequest,
   type InternalScope,
 } from "../../lib/internal-credentials.js";
+import { AssistantService } from "../assistant/assistant.service.js";
 import { EvolutionProvider } from "../channel/adapters/evolution/EvolutionProvider.js";
 import { ChannelConnectionService } from "../channel/ChannelConnectionService.js";
 import {
@@ -18,8 +19,24 @@ import {
   inboxRetryPolicyFromEnv,
   InboxStore,
 } from "../inbox/InboxStore.js";
+import { OpenAIEmbeddingProvider } from "../knowledge/embedding-provider.js";
+import { PgVectorKnowledgeChunkIndexer } from "../knowledge/knowledge-chunk-indexer.js";
+import {
+  type KnowledgeDocumentRecord,
+  KnowledgeDocumentService,
+} from "../knowledge/knowledge-document-service.js";
+import { KNOWLEDGE_DOCUMENT_TYPES } from "../knowledge/knowledge-vector-store.js";
+import { PGVectorKnowledgeStore } from "../knowledge/pgvector-knowledge-store.js";
+import {
+  CUSTOMER_MEMORY_KINDS,
+  type CustomerMemoryRecord,
+} from "../memory/customer-memory.js";
+import { CustomerMemoryService } from "../memory/customer-memory-service.js";
+import { CustomerSummaryService } from "../memory/customer-summary-service.js";
+import { LangChainModelProvider } from "../model/model-provider.js";
 import { classifySendFailure } from "../outbox/outbox-policy.js";
 import { OutboxStore } from "../outbox/OutboxStore.js";
+import { SchedulingClient } from "../scheduling-service/client.js";
 import { SessionService } from "../session/SessionService.js";
 import {
   AI_CONVERSATION_STYLES,
@@ -31,6 +48,7 @@ import {
   businessContextSchema,
   normalizeBusinessContext,
 } from "../tenant-config/business-context.js";
+import { AssistantToolRegistry } from "../tools/assistant-tools.js";
 
 const provisionChannelSchema = z.object({
   externalInstanceId: z.string().min(1),
@@ -78,6 +96,71 @@ const sendOwnerMessageSchema = z.object({
   instanceToken: z.string().min(16).max(512).optional(),
 });
 
+const knowledgeDocumentTypeSchema = z.enum(KNOWLEDGE_DOCUMENT_TYPES);
+
+const knowledgeChunkSchema = z
+  .object({
+    content: z.string().trim().min(1),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
+
+const createKnowledgeDocumentSchema = z
+  .object({
+    type: knowledgeDocumentTypeSchema,
+    serviceId: z.string().trim().min(1).optional(),
+    title: z.string().trim().min(1),
+    source: z.string().trim().min(1).optional(),
+    chunks: z.array(knowledgeChunkSchema).min(1),
+  })
+  .strict();
+
+const editKnowledgeDocumentSchema = z
+  .object({
+    title: z.string().trim().min(1).optional(),
+    serviceId: z.string().trim().min(1).nullable().optional(),
+    chunks: z.array(knowledgeChunkSchema).min(1),
+  })
+  .strict();
+
+const listKnowledgeDocumentsQuerySchema = z.object({
+  type: knowledgeDocumentTypeSchema.optional(),
+  serviceId: z.string().trim().min(1).optional(),
+  status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
+});
+
+const knowledgeDocumentParamsSchema = z.object({
+  id: z.string().trim().min(1).max(128),
+});
+
+const customerParamsSchema = z.object({
+  id: z.string().trim().min(1).max(128),
+});
+
+const customerMemoryParamsSchema = z.object({
+  id: z.string().trim().min(1).max(128),
+  memoryId: z.string().trim().min(1).max(128),
+});
+
+// Criacao pela profissional: origem sempre PROFESSIONAL (a rota nao aceita
+// declarar origem, senao o painel poderia forjar "informado pela cliente") e
+// permissao **explicita**, negada por omissao, como as notas do cadastro.
+const createCustomerMemorySchema = z
+  .object({
+    kind: z.enum(CUSTOMER_MEMORY_KINDS),
+    value: z.string().trim().min(1).max(500),
+    aiAllowed: z.boolean().default(false),
+  })
+  .strict();
+
+const updateCustomerMemorySchema = z
+  .object({ aiAllowed: z.boolean() })
+  .strict();
+
+const otherInfoSchema = z
+  .object({ content: z.string().trim().min(1) })
+  .strict();
+
 export interface InternalRoutesOptions {
   /** Inbox duravel: o dead-letter aparece como atencao no painel. */
   inbox?: Pick<InboxPort, "countDeadLetters">;
@@ -91,6 +174,22 @@ export interface InternalRoutesOptions {
     | "releaseToAi"
     | "assumeHumanControl"
   >;
+  /** Ciclo de vida do documento de conhecimento (Goal012/WU-01). */
+  knowledgeDocuments?: Pick<
+    KnowledgeDocumentService,
+    "list" | "get" | "create" | "edit" | "deactivate" | "saveOtherInfo"
+  >;
+  /** Memoria da pessoa: listar, criar, permitir e remover (Goal012). */
+  customerMemory?: Pick<
+    CustomerMemoryService,
+    "list" | "create" | "setPermission" | "remove"
+  >;
+  /** Resumo sob demanda, so a partir de material autorizado (Goal012). */
+  customerSummary?: Pick<CustomerSummaryService, "generate">;
+  /**
+   * Sugestoes de resposta ao atendimento humano, sem efeito (Goal012/WU-04).
+   */
+  suggestions?: Pick<AssistantService, "generateSuggestions">;
 }
 
 export async function registerInternalRoutes(
@@ -102,6 +201,37 @@ export async function registerInternalRoutes(
   const sessions = options.sessions ?? new SessionService(prisma);
   const inbox =
     options.inbox ?? new InboxStore(prisma, inboxRetryPolicyFromEnv());
+  const knowledgeDocuments =
+    options.knowledgeDocuments ??
+    new KnowledgeDocumentService(
+      prisma,
+      new PgVectorKnowledgeChunkIndexer(new OpenAIEmbeddingProvider()),
+    );
+  const customerMemoryService = new CustomerMemoryService(prisma);
+  const customerMemory = options.customerMemory ?? customerMemoryService;
+  const customerSummary =
+    options.customerSummary ??
+    new CustomerSummaryService(
+      prisma,
+      customerMemoryService,
+      new SchedulingClient(),
+      new LangChainModelProvider(),
+    );
+  const suggestions =
+    options.suggestions ??
+    new AssistantService(
+      prisma,
+      app.log,
+      undefined,
+      new AssistantToolRegistry(prisma, new SchedulingClient(), undefined, app.log),
+      undefined,
+      customerMemoryService,
+      new PGVectorKnowledgeStore(
+        prisma,
+        new OpenAIEmbeddingProvider(),
+        env.KNOWLEDGE_SEARCH_MIN_SCORE,
+      ),
+    );
 
   // Autorização por escopo, com negação por omissão: um caminho `/internal/`
   // sem escopo declarado no mapa abaixo é recusado, então rota nova não nasce
@@ -329,7 +459,9 @@ export async function registerInternalRoutes(
       });
       // 202: a tentativa foi aceita e esta registrada, a entrega nao foi
       // confirmada. O estado real vai no DTO, nao num sucesso presumido.
-      return reply.code(202).send(internalData(request, messageDto(undelivered)));
+      return reply
+        .code(202)
+        .send(internalData(request, messageDto(undelivered)));
     }
 
     await outbox.markSent({
@@ -491,6 +623,179 @@ export async function registerInternalRoutes(
       request,
       conversationDto(await requireConversation(prisma, tenantId, id)),
     );
+  });
+
+  /**
+   * Sugestoes de resposta ao atendimento humano, sem efeito (Goal012/WU-04).
+   *
+   * Nao e o caminho de envio: nao cria Message, hold, rascunho nem outbox. As
+   * cinco recusas proprias viram `409` com o motivo no `code`, no mesmo
+   * envelope de erro das demais rotas internas.
+   */
+  app.post("/internal/conversations/:id/suggestions", async (request) => {
+    const { tenantId, userId } = trustedTenantContext(request);
+    const { id } = parseOrThrow(conversationParamsSchema, request.params);
+    const result = await suggestions.generateSuggestions({
+      tenantId,
+      conversationId: id,
+      userId,
+      requestId: String(request.id),
+    });
+    if (!result.ok) {
+      throw new AppError(
+        "Suggestions are not available for this conversation.",
+        { statusCode: 409, code: result.reason },
+      );
+    }
+    // Contrato unico com o consumidor: o mesmo objeto que o BFF e o frontend
+    // decodificam (`conversationSuggestionsSchema`), incluindo a conversa a
+    // que as sugestoes pertencem e a versao efetiva do prompt.
+    return internalData(request, {
+      conversationId: id,
+      suggestions: result.suggestions,
+      aiRunId: result.aiRunId,
+      promptVersion: result.promptVersion,
+    });
+  });
+
+  app.get("/internal/knowledge/documents", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    const query = parseOrThrow(
+      listKnowledgeDocumentsQuerySchema,
+      request.query,
+    );
+    const documents = await knowledgeDocuments.list({ tenantId, ...query });
+    return internalData(request, documents.map(knowledgeDocumentDto));
+  });
+
+  app.post("/internal/knowledge/documents", async (request, reply) => {
+    const { tenantId } = trustedTenantContext(request);
+    const body = parseOrThrow(createKnowledgeDocumentSchema, request.body);
+    const document = await knowledgeDocuments.create({ tenantId, ...body });
+    return reply
+      .code(201)
+      .send(internalData(request, knowledgeDocumentDto(document)));
+  });
+
+  app.get("/internal/knowledge/documents/:id", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    const { id } = parseOrThrow(knowledgeDocumentParamsSchema, request.params);
+    const document = await knowledgeDocuments.get(tenantId, id);
+    return internalData(request, knowledgeDocumentDto(document));
+  });
+
+  app.put("/internal/knowledge/documents/:id", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    const { id } = parseOrThrow(knowledgeDocumentParamsSchema, request.params);
+    const body = parseOrThrow(editKnowledgeDocumentSchema, request.body);
+    const document = await knowledgeDocuments.edit({ tenantId, id, ...body });
+    return internalData(request, knowledgeDocumentDto(document));
+  });
+
+  app.delete("/internal/knowledge/documents/:id", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    const { id } = parseOrThrow(knowledgeDocumentParamsSchema, request.params);
+    const document = await knowledgeDocuments.deactivate(tenantId, id);
+    return internalData(request, knowledgeDocumentDto(document));
+  });
+
+  /** Campo livre "Outras informações importantes": documento BUSINESS_INFO
+   * único por negocio, com source fixa, salvo so por esta rota. */
+  app.put("/internal/knowledge/other-info", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    const body = parseOrThrow(otherInfoSchema, request.body);
+    const document = await knowledgeDocuments.saveOtherInfo({
+      tenantId,
+      content: body.content,
+    });
+    return internalData(request, knowledgeDocumentDto(document));
+  });
+
+  /**
+   * Memoria da pessoa.
+   *
+   * A colecao lista o que esta vigente (nem removido, nem substituido) e cria
+   * com origem `PROFESSIONAL`; o item altera a permissao e remove — inclusive
+   * memoria inferida pela IA, que e o ponto do controle existir.
+   */
+  app.get("/internal/customers/:id/memory", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    const { id } = parseOrThrow(customerParamsSchema, request.params);
+    const memories = await customerMemory.list({ tenantId, customerId: id });
+    return internalData(request, memories.map(customerMemoryDto));
+  });
+
+  app.post("/internal/customers/:id/memory", async (request, reply) => {
+    const { tenantId } = trustedTenantContext(request);
+    const { id } = parseOrThrow(customerParamsSchema, request.params);
+    const body = parseOrThrow(createCustomerMemorySchema, request.body);
+    const memory = await customerMemory.create({
+      tenantId,
+      customerId: id,
+      kind: body.kind,
+      value: body.value,
+      // A rota nao aceita origem do chamador: cadastro pelo painel e sempre
+      // cadastro da profissional.
+      origin: "PROFESSIONAL",
+      aiAllowed: body.aiAllowed,
+    });
+    return reply
+      .code(201)
+      .send(internalData(request, customerMemoryDto(memory)));
+  });
+
+  app.patch("/internal/customers/:id/memory/:memoryId", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    const { id, memoryId } = parseOrThrow(
+      customerMemoryParamsSchema,
+      request.params,
+    );
+    const body = parseOrThrow(updateCustomerMemorySchema, request.body);
+    const memory = await customerMemory.setPermission({
+      tenantId,
+      customerId: id,
+      memoryId,
+      aiAllowed: body.aiAllowed,
+    });
+    return internalData(request, customerMemoryDto(memory));
+  });
+
+  app.delete("/internal/customers/:id/memory/:memoryId", async (request) => {
+    const { tenantId, userId } = trustedTenantContext(request);
+    const { id, memoryId } = parseOrThrow(
+      customerMemoryParamsSchema,
+      request.params,
+    );
+    const memory = await customerMemory.remove({
+      tenantId,
+      customerId: id,
+      memoryId,
+      removedBy: userId,
+    });
+    return internalData(request, customerMemoryDto(memory));
+  });
+
+  /**
+   * Resumo do cliente, gerado pelo modelo sob demanda.
+   *
+   * Nao persiste verdade nenhuma: a unica escrita e o `AiRun` de auditoria, com
+   * `kind = SUMMARY` e a versao do prompt de resumo.
+   */
+  app.post("/internal/customers/:id/summary", async (request) => {
+    const { tenantId, userId } = trustedTenantContext(request);
+    const { id } = parseOrThrow(customerParamsSchema, request.params);
+    const tenantConfig = await prisma.aiTenantConfig.findUnique({
+      where: { tenantId },
+      select: { settings: true },
+    });
+    const summary = await customerSummary.generate({
+      tenantId,
+      userId,
+      requestId: String(request.id),
+      customerId: id,
+      businessContext: normalizeBusinessContext(tenantConfig?.settings),
+    });
+    return internalData(request, summary);
   });
 
   app.get("/internal/dashboard", async (request) => {
@@ -672,8 +977,7 @@ function conversationDto(conversation: ConversationDtoInput) {
           expiresAt: session.expiresAt.toISOString(),
           lastContactMessageAt:
             session.lastContactMessageAt?.toISOString() ?? null,
-          humanHandlingSince:
-            session.humanHandlingSince?.toISOString() ?? null,
+          humanHandlingSince: session.humanHandlingSince?.toISOString() ?? null,
         }
       : null,
   };
@@ -698,6 +1002,40 @@ function messageDto(message: {
     // campo como opcional.
     deliveryState: message.deliveryState ?? null,
     deliveryDetail: message.deliveryDetail ?? null,
+  };
+}
+
+function knowledgeDocumentDto(document: KnowledgeDocumentRecord) {
+  return {
+    id: document.id,
+    type: document.type,
+    serviceId: document.serviceId,
+    title: document.title,
+    source: document.source,
+    version: document.version,
+    checksum: document.checksum,
+    status: document.status,
+    createdAt: document.createdAt.toISOString(),
+    updatedAt: document.updatedAt.toISOString(),
+  };
+}
+
+function customerMemoryDto(memory: CustomerMemoryRecord) {
+  return {
+    id: memory.id,
+    customerId: memory.customerId,
+    kind: memory.kind,
+    value: memory.value,
+    origin: memory.origin,
+    aiAllowed: memory.aiAllowed,
+    confidence: memory.confidence,
+    sourceConversationId: memory.sourceConversationId,
+    sourceMessageIds: memory.sourceMessageIds,
+    observedAt: memory.observedAt.toISOString(),
+    lastReinforcedAt: memory.lastReinforcedAt?.toISOString() ?? null,
+    supersededById: memory.supersededById,
+    removedAt: memory.removedAt?.toISOString() ?? null,
+    removedBy: memory.removedBy,
   };
 }
 
@@ -780,6 +1118,17 @@ export function requiredScope(request: FastifyRequest): InternalScope {
   }
   if (path === "/internal/dashboard" && method === "GET") {
     return "dashboard:read";
+  }
+  if (path.startsWith("/internal/knowledge/")) {
+    return method === "GET" ? "knowledge:read" : "knowledge:write";
+  }
+  // Resumo antes da memoria: os dois caem sob `/internal/customers/`, e gerar
+  // resumo e uma credencial propria, nao "escrever memoria".
+  if (/^\/internal\/customers\/[^/]+\/summary$/u.test(path)) {
+    if (method === "POST") return "customer-summary:write";
+  }
+  if (/^\/internal\/customers\/[^/]+\/memory(\/[^/]+)?$/u.test(path)) {
+    return method === "GET" ? "customer-memory:read" : "customer-memory:write";
   }
   if (path.startsWith("/internal/conversations")) {
     if (method === "GET") return "conversations:read";

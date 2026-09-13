@@ -24,6 +24,7 @@ import type {
 } from "../channel/InboundMessageProcessor.js";
 import type { WhatsAppProvider } from "../channel/ports/WhatsAppProvider.js";
 import type { KnowledgeVectorStore } from "../knowledge/knowledge-vector-store.js";
+import type { CustomerMemoryPromptPort } from "../memory/customer-memory-service.js";
 import { classifySendFailure } from "../outbox/outbox-policy.js";
 import type { GraphSessionPort } from "../session/SessionService.js";
 import type { GraphRuntimePort } from "./graph-runtime.js";
@@ -90,6 +91,11 @@ export interface MessageGraphDependencies {
    * categoria nem ignore.
    */
   sessions?: GraphSessionPort;
+  /**
+   * Memoria da pessoa (Goal012). Opcional: sem a porta, o prompt segue sem a
+   * secao de memoria, como antes do Goal012.
+   */
+  customerMemory?: CustomerMemoryPromptPort;
 }
 
 export class MessageGraphWorkflow {
@@ -132,6 +138,7 @@ export class MessageGraphWorkflow {
         session: undefined,
         observedInboundVersion: 0,
         retrievedKnowledge: [],
+        customerMemory: [],
         toolResults: [],
         assistantSession: undefined,
         modelResponse: undefined,
@@ -170,6 +177,7 @@ export class MessageGraphWorkflow {
       .addNode("sessionGate", (state) => this.sessionGate(state))
       .addNode("bufferInbound", (state) => this.bufferInbound(state))
       .addNode("retrieveKnowledge", (state) => this.retrieveKnowledge(state))
+      .addNode("loadCustomerMemory", (state) => this.loadCustomerMemory(state))
       .addNode("agent", (state) => this.agent(state))
       .addNode("executeTool", (state) => this.executeTool(state))
       .addNode("validateToolResult", (state) => this.validateToolResult(state))
@@ -198,9 +206,10 @@ export class MessageGraphWorkflow {
       .addConditionalEdges("understandMessage", routeAfterUnderstanding, {
         end: END,
         retrieval: "retrieveKnowledge",
-        agent: "agent",
+        agent: "loadCustomerMemory",
       })
-      .addEdge("retrieveKnowledge", "agent")
+      .addEdge("retrieveKnowledge", "loadCustomerMemory")
+      .addEdge("loadCustomerMemory", "agent")
       .addConditionalEdges("agent", routeAfterAgent, {
         end: END,
         tools: "executeTool",
@@ -353,9 +362,7 @@ export class MessageGraphWorkflow {
    * `Message` e continua aparecendo na lista de conversas do BFF, mesmo com a
    * IA desligada, em handoff, em sessao pessoal ou com contato ignorado.
    */
-  private sessionGate(
-    state: MessageGraphStateValue,
-  ): MessageGraphStateUpdate {
+  private sessionGate(state: MessageGraphStateValue): MessageGraphStateUpdate {
     switch (state.guardDecision) {
       case "ignored_contact":
         return { result: { ok: true, action: "ignored_contact" } };
@@ -479,6 +486,9 @@ export class MessageGraphWorkflow {
           tenantId: state.tenantId,
           query: state.inboundText,
           limit: env.KNOWLEDGE_SEARCH_LIMIT,
+          // Servico em foco vem do estado persistido da conversa (rascunho ou
+          // acao pendente), nunca de texto livre inferido pelo modelo.
+          focusServiceIds: state.conversation.focusServiceIds,
         }),
       };
     } catch (error) {
@@ -490,6 +500,40 @@ export class MessageGraphWorkflow {
         "Knowledge retrieval failed",
       );
       return { retrievedKnowledge: [] };
+    }
+  }
+
+  /**
+   * Memoria permitida da pessoa vinculada ao contato.
+   *
+   * Roda depois do `sessionGate` e antes do agente, nos dois caminhos (com e
+   * sem recuperacao de conhecimento): contato ignorado e sessao pessoal
+   * encerram a execucao antes daqui, entao memoria bloqueada nunca e lida. A
+   * falha da carga nao derruba o turno — o prompt segue sem a secao, que e o
+   * comportamento anterior ao Goal012, em vez de o atendimento parar.
+   */
+  private async loadCustomerMemory(
+    state: MessageGraphStateValue,
+  ): Promise<MessageGraphStateUpdate> {
+    const memory = this.dependencies.customerMemory;
+    if (!memory) return { customerMemory: [] };
+    try {
+      return {
+        customerMemory: await memory.loadForPrompt({
+          tenantId: state.tenantId,
+          contactId:
+            state.session?.contactId ?? state.conversation.contactId ?? null,
+        }),
+      };
+    } catch (error) {
+      this.logger.warn(
+        {
+          ...channelMessageLogContext(state.inboundMessage),
+          err: toErrorMessage(error),
+        },
+        "Customer memory load failed",
+      );
+      return { customerMemory: [] };
     }
   }
 
@@ -660,6 +704,7 @@ export class MessageGraphWorkflow {
             turnId: state.turnId,
             knowledgeRequested: state.intent === "knowledge",
             retrievedKnowledge: state.retrievedKnowledge,
+            customerMemory: state.customerMemory,
             // `Retomar IA` reavalia o contexto atual: o turno seguinte le a
             // conversa a partir do instante da retomada, nao do ponto anterior.
             contextSince: state.session?.contextResetAt ?? undefined,

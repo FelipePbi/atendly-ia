@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
+import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
 import { SchedulingClient } from "../../clients/scheduling/index.js";
 import {
   dataResponse,
@@ -16,6 +17,26 @@ const childSchema = z.object({
   id: z.string().trim().min(1).max(128),
   childId: z.string().trim().min(1).max(128),
 });
+const memoryChildSchema = z.object({
+  id: z.string().trim().min(1).max(128),
+  memoryId: z.string().trim().min(1).max(128),
+});
+// Mesmo vocabulario de `CustomerMemory.kind` fixado pelo WU-01 da IA.
+const CUSTOMER_MEMORY_KINDS = [
+  "PREFERRED_PERIOD",
+  "PREFERRED_DAY",
+  "RECURRING_SERVICE",
+  "OBSERVATION",
+] as const;
+const createMemorySchema = z
+  .object({
+    kind: z.enum(CUSTOMER_MEMORY_KINDS),
+    value: z.string().trim().min(1).max(500),
+    // Cadastro pela profissional nasce negado, como as notas do cliente.
+    aiAllowed: z.boolean().default(false),
+  })
+  .strict();
+const memoryPermissionSchema = z.object({ aiAllowed: z.boolean() }).strict();
 const listQuerySchema = z.object({
   // Busca por telefone devolve candidatos, não uma pessoa: o número não prova
   // identidade (D-005).
@@ -70,6 +91,7 @@ export async function registerV1CustomerRoutes(
   app: FastifyInstance,
 ): Promise<void> {
   const scheduling = new SchedulingClient();
+  const ai = new AiOrchestratorClient();
   const authenticated = { preHandler: requireTenantContext };
 
   app.get("/v1/customers", authenticated, async (request) => {
@@ -246,4 +268,78 @@ export async function registerV1CustomerRoutes(
       );
     },
   );
+
+  /**
+   * Memoria do cliente (Goal012): a colecao lista o que esta vigente e cria
+   * com origem PROFESSIONAL; o item altera a permissao e remove, inclusive
+   * memoria inferida pela IA — o ponto do controle existir.
+   */
+  app.get("/v1/customers/:id/memory", authenticated, async (request) => {
+    const { id } = parseParams(idSchema, request.params);
+    return dataResponse(
+      request,
+      await ai.listCustomerMemory(internalContext(request), id),
+    );
+  });
+
+  app.post(
+    "/v1/customers/:id/memory",
+    authenticated,
+    async (request, reply) => {
+      const { id } = parseParams(idSchema, request.params);
+      const body = parseBody(createMemorySchema, request.body);
+      const memory = await ai.createCustomerMemory(
+        internalContext(request),
+        id,
+        body,
+      );
+      return reply.code(201).send(dataResponse(request, memory));
+    },
+  );
+
+  app.patch(
+    "/v1/customers/:id/memory/:memoryId",
+    authenticated,
+    async (request) => {
+      const params = parseParams(memoryChildSchema, request.params);
+      const body = parseBody(memoryPermissionSchema, request.body);
+      return dataResponse(
+        request,
+        await ai.setCustomerMemoryPermission(
+          internalContext(request),
+          params.id,
+          params.memoryId,
+          body,
+        ),
+      );
+    },
+  );
+
+  app.delete(
+    "/v1/customers/:id/memory/:memoryId",
+    authenticated,
+    async (request) => {
+      const params = parseParams(memoryChildSchema, request.params);
+      return dataResponse(
+        request,
+        await ai.removeCustomerMemory(
+          internalContext(request),
+          params.id,
+          params.memoryId,
+        ),
+      );
+    },
+  );
+
+  /**
+   * Resumo sob demanda, gerado pelo modelo so a partir do material
+   * autorizado (Goal012). Nao persiste verdade nenhuma no lado do BFF.
+   */
+  app.post("/v1/customers/:id/summary", authenticated, async (request) => {
+    const { id } = parseParams(idSchema, request.params);
+    return dataResponse(
+      request,
+      await ai.generateCustomerSummary(internalContext(request), id),
+    );
+  });
 }

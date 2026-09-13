@@ -39,9 +39,11 @@ const serviceSchema = z.object({
   price: z.number().nullable(),
   active: z.boolean(),
   colorId: z.number().nullable().optional(),
-  // Ausente/nulo quando o servico nao tem intervalo de referencia cadastrado
-  // (Goal007): a IA so pode oferecer recorrencia quando este campo existe.
-  recurrenceIntervalDays: z.number().int().positive().nullable().optional(),
+  // Obrigatorio e nulavel (Goal012, residuo do review011): o Scheduling
+  // sempre declara o campo, nulo quando o servico nao tem intervalo de
+  // referencia cadastrado. Resposta que omite o campo e resposta invalida,
+  // nunca um intervalo inventado por omissao.
+  recurrenceIntervalDays: z.number().int().positive().nullable(),
 });
 const appointmentSchema = z.object({
   id: z.string(),
@@ -582,7 +584,21 @@ export class SchedulingClient implements SchedulingGateway {
         { code: "SCHEDULING_INVALID_RESPONSE", statusCode: 502 },
       );
     }
-    return schema.parse(parsed.data.data);
+    const body = schema.safeParse(parsed.data.data);
+    if (!body.success) {
+      // Payload decodifica como JSON mas nao respeita o contrato (campo
+      // obrigatorio ausente, tipo errado): resposta invalida, nunca um
+      // valor inventado para preencher a lacuna.
+      throw new InfrastructureError(
+        "Scheduling Service returned a response that does not match the expected contract.",
+        {
+          code: "SCHEDULING_INVALID_RESPONSE",
+          statusCode: 502,
+          details: body.error.issues,
+        },
+      );
+    }
+    return body.data;
   }
 }
 

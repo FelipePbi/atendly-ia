@@ -14,7 +14,16 @@ import {
 } from "../../lib/errors.js";
 import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
 import { deriveTurnId } from "../graph/graph-state.js";
-import type { KnowledgeSearchResult } from "../knowledge/knowledge-vector-store.js";
+import type {
+  KnowledgeSearchResult,
+  KnowledgeVectorStore,
+} from "../knowledge/knowledge-vector-store.js";
+import type { CustomerMemoryPromptItem } from "../memory/customer-memory.js";
+import type {
+  CustomerMemoryInferencePort,
+  CustomerMemoryPromptPort,
+} from "../memory/customer-memory-service.js";
+import type { TurnAppointmentEvidence } from "../memory/memory-inference.js";
 import {
   LangChainModelProvider,
   type ModelInputMessage,
@@ -30,6 +39,7 @@ import type { CategorySuggestionPort } from "../session/SessionService.js";
 import {
   type AiTenantSettings,
   normalizeAiSettings,
+  resolveAiConversationStyle,
 } from "../tenant-config/ai-settings.js";
 import {
   type BusinessContext,
@@ -50,6 +60,12 @@ export interface IncomingAssistantMessage {
   knowledgeRequested?: boolean;
   retrievedKnowledge?: KnowledgeSearchResult[];
   /**
+   * Memoria **permitida** da pessoa vinculada ao contato, carregada pelo grafo
+   * antes do turno. Vazia ou ausente quando o contato nao tem pessoa vinculada,
+   * esta ignorado ou nada foi autorizado — e ai o prompt nao ganha a secao.
+   */
+  customerMemory?: CustomerMemoryPromptItem[];
+  /**
    * Instante a partir do qual o contexto vale.
    *
    * `Retomar IA` grava a marca na sessao e ela chega aqui: o turno seguinte
@@ -66,6 +82,35 @@ export interface AssistantReply {
   /** Operation-id da tentativa de saida, ja persistido com estado PENDING. */
   correlationId?: string;
 }
+
+export interface GenerateSuggestionsInput {
+  tenantId: string;
+  conversationId: string;
+  userId: string;
+  requestId: string;
+}
+
+/**
+ * Recusa propria de sugestao (Goal012/WU-04), na ordem em que a porta de
+ * entrada as avalia: regra do contato antes de regra de sessao, privacidade
+ * antes de precondicao de atendimento, atendimento antes de configuracao do
+ * negocio, configuracao do negocio antes do conteudo textual da mensagem.
+ */
+export type SuggestionRefusalReason =
+  | "CONTACT_IGNORED"
+  | "SESSION_PERSONAL"
+  | "HUMAN_HANDLING_REQUIRED"
+  | "AI_DISABLED"
+  | "NO_TEXTUAL_MESSAGE";
+
+export type GenerateSuggestionsResult =
+  | {
+      ok: true;
+      suggestions: string[];
+      aiRunId: string;
+      promptVersion: string;
+    }
+  | { ok: false; reason: SuggestionRefusalReason };
 
 export interface AssistantGraphSession {
   conversationId: string;
@@ -232,6 +277,21 @@ export class AssistantService {
      * decide sozinha se a IA responde.
      */
     private readonly sessions?: CategorySuggestionPort,
+    /**
+     * Memoria da pessoa (Goal012). Opcional: sem a porta, o turno segue
+     * exatamente como antes e nenhuma memoria e inferida — nunca o contrario.
+     * O modo sugestao tambem carrega memoria permitida no prompt, por isso a
+     * porta cobre os dois papeis: quem injeta `CustomerMemoryService` (que
+     * implementa ambos) satisfaz os dois sem mudar a assinatura.
+     */
+    private readonly customerMemory?: CustomerMemoryInferencePort &
+      Partial<CustomerMemoryPromptPort>,
+    /**
+     * Conhecimento textual do negocio (Goal012). Usado so pelo modo sugestao
+     * para recuperar trechos antes de montar o prompt — o turno normal recupera
+     * pelo grafo (`MessageGraphWorkflow`), que ja tem sua propria instancia.
+     */
+    private readonly knowledge?: KnowledgeVectorStore,
   ) {}
 
   async handleIncomingText(
@@ -357,6 +417,7 @@ export class AssistantService {
       aiSettings,
       knowledgeRequested: input.knowledgeRequested,
       retrievedKnowledge: input.retrievedKnowledge,
+      customerMemory: input.customerMemory,
     });
 
     return {
@@ -588,6 +649,7 @@ export class AssistantService {
       inputMessageIds: session.inputMessageIds,
       promptVersion: session.promptVersion,
       decision,
+      aiRunId: session.aiRunId,
     });
     const text = composeReplyText(decision);
     // A saida existe antes de qualquer chamada ao transporte, com
@@ -678,6 +740,272 @@ export class AssistantService {
     } catch (error) {
       await this.failGraphTurn(session, error);
       throw error;
+    }
+  }
+
+  /**
+   * Sugestoes de resposta para o atendimento humano (Goal012/WU-04).
+   *
+   * Nao e um turno de conversa: nao passa pelo grafo, nao grava mensagem de
+   * entrada (`recordInboundText`), nao aplica `sessionGate` e nao envia nada
+   * (`sendResponse`). E uma invocacao direta do modelo, com o mesmo prompt de
+   * politica/estilo, o conhecimento recuperado e a memoria permitida, mas com
+   * um binding **somente leitura** — nenhuma tool com efeito chega ao modelo,
+   * entao nenhum hold, rascunho, Message, outbox ou envio pode nascer daqui.
+   *
+   * A porta de entrada e a regra inteira, na ordem do produto: contato
+   * ignorado e sessao pessoal recusam antes de qualquer leitura; sugestao so
+   * faz sentido com atendimento humano **vigente** (e exatamente o oposto da
+   * elegibilidade da IA para o turno normal); e a IA precisa estar ligada para
+   * o negocio, senao nao ha prompt de negocio configurado para seguir.
+   */
+  async generateSuggestions(
+    input: GenerateSuggestionsInput,
+  ): Promise<GenerateSuggestionsResult> {
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { tenantId: input.tenantId, id: input.conversationId },
+      select: {
+        id: true,
+        channelId: true,
+        contactId: true,
+        externalContactId: true,
+        humanHandoff: true,
+        state: true,
+      },
+    });
+    if (!conversation) {
+      throw new AppError(
+        "Conversation was not found while generating suggestions.",
+        { statusCode: 404, code: "CONVERSATION_NOT_FOUND" },
+      );
+    }
+
+    const contact = conversation.contactId
+      ? await this.prisma.contact.findUnique({
+          where: {
+            tenantId_id: {
+              tenantId: input.tenantId,
+              id: conversation.contactId,
+            },
+          },
+          select: { ignored: true, categoryOverride: true },
+        })
+      : null;
+    if (contact?.ignored) return { ok: false, reason: "CONTACT_IGNORED" };
+    // Mesma checagem dupla de `CustomerMemoryService.recordTurnInference`: o
+    // override do contato e a categoria efetiva da sessao (que ja o reflete,
+    // ver `SessionService.setCategoryOverride`) sao verificados separadamente,
+    // para uma sessao nova ainda nao sincronizada nao escapar da regra.
+    if (contact?.categoryOverride === "PERSONAL") {
+      return { ok: false, reason: "SESSION_PERSONAL" };
+    }
+
+    const session = await this.prisma.conversationSession.findFirst({
+      where: {
+        tenantId: input.tenantId,
+        conversationId: input.conversationId,
+        endedAt: null,
+      },
+      orderBy: { startedAt: "desc" },
+      select: { category: true, humanHandling: true },
+    });
+    if (session?.category === "PERSONAL") {
+      return { ok: false, reason: "SESSION_PERSONAL" };
+    }
+
+    // Oposto da elegibilidade do turno normal (`session-policy.ts`): la, humano
+    // atendendo tira a IA do caminho; aqui, sugestao so existe **para** quem
+    // esta atendendo. Sem atendimento humano vigente, nao ha para quem sugerir.
+    const humanHandling = session?.humanHandling ?? conversation.humanHandoff;
+    if (!humanHandling) {
+      return { ok: false, reason: "HUMAN_HANDLING_REQUIRED" };
+    }
+
+    const tenantConfig = await this.prisma.aiTenantConfig.findUnique({
+      where: { tenantId: input.tenantId },
+      select: { enabled: true, tone: true, settings: true },
+    });
+    if (!tenantConfig?.enabled) return { ok: false, reason: "AI_DISABLED" };
+
+    const businessContext = normalizeBusinessContext(tenantConfig.settings);
+    const aiSettings = normalizeAiSettings({
+      aiEnabled: tenantConfig.enabled,
+      tone: resolveAiConversationStyle(tenantConfig.tone),
+    });
+
+    const recentMessages = await this.prisma.message.findMany({
+      where: { conversationId: input.conversationId },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+    });
+    const lastInboundText = recentMessages.find(
+      (message) => message.direction === "INBOUND",
+    )?.body;
+    // Mensagem de midia (imagem, audio, etc.) grava `body` vazio no estoque
+    // (`InboundMessageProcessor`/`MessageGraphWorkflow`): sem texto do
+    // cliente para embasar a sugestao, a porta recusa antes de tocar o
+    // modelo, o mesmo padrao das demais recusas proprias acima.
+    if (!lastInboundText) {
+      return { ok: false, reason: "NO_TEXTUAL_MESSAGE" };
+    }
+    const chronologicalMessages: ModelInputMessage[] = recentMessages
+      .reverse()
+      .map((message) => ({
+        role: message.role === "assistant" ? "assistant" : "user",
+        content: message.body,
+      }));
+
+    const retrievedKnowledge = await this.retrieveSuggestionKnowledge(
+      input.tenantId,
+      lastInboundText,
+    );
+
+    const prompt = buildSystemPrompt({
+      state: conversation.state ?? {},
+      groupedMessages: lastInboundText,
+      currentDateTime: new Date().toISOString(),
+      businessContext,
+      aiSettings,
+      knowledgeRequested: retrievedKnowledge.length > 0,
+      retrievedKnowledge,
+      customerMemory: await this.loadSuggestionMemory(
+        input.tenantId,
+        conversation.contactId,
+      ),
+      mode: "suggestion",
+    });
+
+    const aiRun = await this.prisma.aiRun.create({
+      data: {
+        tenantId: input.tenantId,
+        channelId: conversation.channelId,
+        conversationId: input.conversationId,
+        provider: "openai",
+        model: env.OPENAI_MODEL,
+        promptVersion: prompt.version,
+        kind: "SUGGESTION",
+        inputMessageIds: [],
+      },
+    });
+
+    try {
+      const suggestions = await this.runSuggestionModel({
+        instructions: prompt.text,
+        messages: chronologicalMessages,
+        toolContext: {
+          conversationId: input.conversationId,
+          tenantId: input.tenantId,
+          channelId: conversation.channelId,
+          userId: input.userId,
+          requestId: input.requestId,
+          turnId: `suggestion:${aiRun.id}`,
+          phone: conversation.externalContactId,
+          businessContext,
+          aiRunId: aiRun.id,
+        },
+      });
+      await this.prisma.aiRun.update({
+        where: { id: aiRun.id },
+        data: {
+          status: "SUCCEEDED",
+          outputText: JSON.stringify({ suggestions }),
+          completedAt: new Date(),
+        },
+      });
+      return {
+        ok: true,
+        suggestions,
+        aiRunId: aiRun.id,
+        promptVersion: prompt.version,
+      };
+    } catch (error) {
+      await this.prisma.aiRun.update({
+        where: { id: aiRun.id },
+        data: {
+          status: "FAILED",
+          error: toErrorMessage(error),
+          completedAt: new Date(),
+        },
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Laco de invocacao do modo sugestao: mesmo formato tools-then-respond do
+   * turno normal, mas com o binding somente leitura (`createReadOnlyDefinitions`
+   * / `executeReadOnly`) e sem `AiToolCall` de auditoria — nao ha efeito para
+   * auditar, e o `AiRun` com `kind = SUGGESTION` ja registra a execucao.
+   */
+  private async runSuggestionModel(input: {
+    instructions: string;
+    messages: ModelInputMessage[];
+    toolContext: Parameters<AssistantToolRegistry["createReadOnlyDefinitions"]>[0];
+  }): Promise<string[]> {
+    const turns: ModelTurn[] = [];
+    for (let iteration = 0; iteration < 4; iteration += 1) {
+      const response = await this.modelProvider.invoke({
+        instructions: input.instructions,
+        messages: input.messages,
+        turns,
+        tools: this.tools.createReadOnlyDefinitions(input.toolContext),
+      });
+      if (response.toolCalls.length === 0) {
+        return parseSuggestions(response.text);
+      }
+      const toolResults: ModelToolResult[] = [];
+      for (const call of response.toolCalls) {
+        const result = await this.tools.executeReadOnly(
+          call,
+          input.toolContext,
+        );
+        toolResults.push({
+          toolCallId: call.id,
+          toolName: call.name,
+          content: JSON.stringify(result),
+        });
+      }
+      turns.push({ response, toolResults });
+    }
+    // Limite de iteracoes: devolve o que o modelo ja tiver dito por texto, ou
+    // nenhuma sugestao — nunca lanca por esgotar tentativas de leitura.
+    const lastText = turns[turns.length - 1]?.response.text ?? "";
+    return parseSuggestions(lastText);
+  }
+
+  private async retrieveSuggestionKnowledge(
+    tenantId: string,
+    query: string | undefined,
+  ): Promise<KnowledgeSearchResult[]> {
+    if (!this.knowledge || !query?.trim()) return [];
+    try {
+      return await this.knowledge.search({
+        tenantId,
+        query,
+        limit: env.KNOWLEDGE_SEARCH_LIMIT,
+      });
+    } catch (error) {
+      this.logger.warn(
+        { tenantId, err: toErrorMessage(error) },
+        "Suggestion knowledge retrieval failed",
+      );
+      return [];
+    }
+  }
+
+  private async loadSuggestionMemory(
+    tenantId: string,
+    contactId: string | null,
+  ): Promise<CustomerMemoryPromptItem[]> {
+    if (!this.customerMemory?.loadForPrompt) return [];
+    try {
+      return await this.customerMemory.loadForPrompt({ tenantId, contactId });
+    } catch (error) {
+      this.logger.warn(
+        { tenantId, err: toErrorMessage(error) },
+        "Suggestion customer memory load failed",
+      );
+      return [];
     }
   }
 
@@ -780,7 +1108,9 @@ export class AssistantService {
         deliveryState: input.state,
         deliveryDetail: input.detail ?? null,
         deliveryUpdatedAt: new Date(),
-        ...(input.state === "SENT" ? {} : { deliveryAttempts: { increment: 1 } }),
+        ...(input.state === "SENT"
+          ? {}
+          : { deliveryAttempts: { increment: 1 } }),
       },
     });
   }
@@ -837,6 +1167,99 @@ export class AssistantService {
     });
   }
 
+  /**
+   * Memoria da pessoa a partir do que este turno **confirmou**.
+   *
+   * Roda depois de a decisao estar aplicada e **nunca** derruba o turno: a
+   * resposta a cliente ja foi decidida, e falhar em lembrar de uma preferencia
+   * nao pode custar a conversa. Quem decide se o turno pode virar memoria e o
+   * servico, que checa contato vinculado, ignore, sessao pessoal e atendimento
+   * humano contra o banco.
+   *
+   * O que o turno confirmou nao sai do JSON da decisao — o modelo pode
+   * escrever `status: "confirmed"` num rascunho que ninguem marcou. Sai das
+   * `AiToolCall` deste `AiRun`: so agendamento que existe no Scheduling vira
+   * preferencia da pessoa.
+   */
+  private async inferCustomerMemory(input: {
+    tenantId: string;
+    conversationId: string;
+    inputMessageIds: string[];
+    appointment?: AppointmentDraft;
+    aiRunId?: string;
+  }): Promise<void> {
+    if (!this.customerMemory) return;
+    try {
+      const evidence = await this.loadTurnAppointmentEvidence(
+        input.tenantId,
+        input.aiRunId,
+      );
+      const outcome = await this.customerMemory.recordTurnInference({
+        tenantId: input.tenantId,
+        conversationId: input.conversationId,
+        appointment: input.appointment,
+        evidence,
+        sourceMessageIds: input.inputMessageIds,
+      });
+      if (outcome.skipped) {
+        this.logger.info(
+          {
+            tenantId: input.tenantId,
+            conversationId: input.conversationId,
+            reason: outcome.skipped,
+          },
+          "Customer memory inference skipped",
+        );
+      }
+    } catch (error) {
+      this.logger.warn(
+        {
+          tenantId: input.tenantId,
+          conversationId: input.conversationId,
+          err: toErrorMessage(error),
+        },
+        "Customer memory inference failed",
+      );
+    }
+  }
+
+  /**
+   * O que este turno confirmou de verdade, lido do rastro de auditoria.
+   *
+   * `AiToolCall` so fica `SUCCEEDED` quando a tool devolveu `ok`, entao uma
+   * confirmacao aqui e um agendamento que existe no Scheduling. `prepare` nao
+   * conta: preparar e segurar horario para a cliente decidir, nao marcar.
+   */
+  private async loadTurnAppointmentEvidence(
+    tenantId: string,
+    aiRunId?: string,
+  ): Promise<TurnAppointmentEvidence> {
+    if (!aiRunId) {
+      return { appointmentConfirmed: false, recurringSeriesConfirmed: false };
+    }
+    const calls = await this.prisma.aiToolCall.findMany({
+      where: {
+        tenantId,
+        aiRunId,
+        status: "SUCCEEDED",
+        name: { in: ["create_appointment", "confirm_recurring_appointments"] },
+      },
+      select: { name: true, arguments: true },
+    });
+    const recurringSeriesConfirmed = calls.some(
+      (call) => call.name === "confirm_recurring_appointments",
+    );
+    const appointmentConfirmed =
+      recurringSeriesConfirmed ||
+      calls.some(
+        (call) =>
+          call.name === "create_appointment" &&
+          isRecord(call.arguments) &&
+          call.arguments.action === "confirm",
+      );
+    return { appointmentConfirmed, recurringSeriesConfirmed };
+  }
+
   private async applyDecision(input: {
     conversationId: string;
     phone: string;
@@ -844,6 +1267,8 @@ export class AssistantService {
     inputMessageIds: string[];
     promptVersion: string;
     decision: AiDecision;
+    /** Turno auditado: e nele que estao as tools que confirmaram alguma coisa. */
+    aiRunId?: string;
   }): Promise<void> {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id: input.conversationId },
@@ -921,6 +1346,14 @@ export class AssistantService {
       conversationId: input.conversationId,
       classification,
       provenance: `agent:${input.promptVersion}`,
+    });
+
+    await this.inferCustomerMemory({
+      tenantId: conversation.tenantId,
+      conversationId: input.conversationId,
+      inputMessageIds: input.inputMessageIds,
+      appointment: appointmentDraft,
+      aiRunId: input.aiRunId,
     });
 
     if (
@@ -1016,9 +1449,7 @@ function graphToolFailure(
       // `DomainError`/`SchedulingClient`), para poder oferecer alternativa.
       // Erro de infraestrutura vira sempre o mesmo codigo/mensagem
       // genericos, sem nenhum detalhe do problema real.
-      code: isInfrastructure
-        ? "TOOL_INFRASTRUCTURE_ERROR"
-        : errorCode(error),
+      code: isInfrastructure ? "TOOL_INFRASTRUCTURE_ERROR" : errorCode(error),
       message: isInfrastructure
         ? INFRASTRUCTURE_TOOL_FAILURE_MESSAGE
         : toErrorMessage(error),
@@ -1351,6 +1782,25 @@ function parseJsonLike(value: string): unknown {
 function parseStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === "string");
+}
+
+/**
+ * Sugestoes do modo sugestao: `{ "suggestions": [...] }`, ate 3, cada uma
+ * aparada e nao vazia. Resposta fora do formato nunca lanca — vira uma unica
+ * sugestao com o texto bruto, mesma tolerancia de `parseAiDecision` para
+ * saida do modelo fora do JSON esperado.
+ */
+function parseSuggestions(raw: string): string[] {
+  const parsed = parseJsonLike(extractJsonCandidate(raw));
+  if (isRecord(parsed)) {
+    const suggestions = parseStringArray(parsed.suggestions)
+      .map((suggestion) => suggestion.trim())
+      .filter(Boolean)
+      .slice(0, 3);
+    if (suggestions.length > 0) return suggestions;
+  }
+  const fallback = raw.trim();
+  return fallback ? [fallback] : [];
 }
 
 function isAiDecisionAction(value: unknown): value is AiDecisionAction {

@@ -3,6 +3,7 @@ import { Annotation } from "@langchain/langgraph";
 import type { AssistantGraphSession } from "../assistant/assistant.service.js";
 import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
 import type { KnowledgeSearchResult } from "../knowledge/knowledge-vector-store.js";
+import type { CustomerMemoryPromptItem } from "../memory/customer-memory.js";
 import type {
   ModelResponse,
   ModelToolResult,
@@ -63,6 +64,12 @@ export interface GraphConversationContext {
    */
   externalContactId?: string;
   contactId?: string | null;
+  /**
+   * Servico em foco lido do estado persistido da conversa (rascunho de
+   * agendamento ou acao pendente), nunca inferido por texto livre. Alimenta a
+   * precedencia de conhecimento por servico em `retrieveKnowledge`.
+   */
+  focusServiceIds?: string[];
 }
 
 export interface GraphToolResult {
@@ -136,6 +143,12 @@ export const MessageGraphState = Annotation.Root({
   observedInboundVersion: Annotation<number>(),
   intent: Annotation<GraphIntent>(),
   retrievedKnowledge: Annotation<KnowledgeSearchResult[]>(),
+  /**
+   * Memoria permitida da pessoa vinculada ao contato desta conversa. Carregada
+   * depois do `sessionGate`, entao contato ignorado e sessao pessoal nunca
+   * chegam a ler memoria.
+   */
+  customerMemory: Annotation<CustomerMemoryPromptItem[]>(),
   toolResults: Annotation<GraphToolResult[]>(),
   assistantSession: Annotation<AssistantGraphSession | undefined>(),
   modelResponse: Annotation<ModelResponse | undefined>(),

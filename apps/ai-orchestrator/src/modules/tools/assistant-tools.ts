@@ -384,6 +384,119 @@ export class AssistantToolRegistry {
     }
   }
 
+  /**
+   * Binding somente leitura (Goal012/WU-04): subconjunto **explicito**, nao um
+   * filtro por nome sobre `createTools`. Sugestao ao atendimento humano nunca
+   * oferece ao modelo nenhuma tool com efeito — nada que agende, cancele,
+   * remarque, crie reserva ou acione handoff existe nesta lista.
+   */
+  createReadOnlyDefinitions(
+    context: ToolBindingContext,
+  ): StructuredToolInterface[] {
+    return this.createReadOnlyTools({
+      ...context,
+      toolCallId: "model-binding",
+      idempotencyKey: `${context.aiRunId}:model-binding`,
+    });
+  }
+
+  /**
+   * Execucao do modo sugestao. Procura o nome chamado **apenas** entre as
+   * tools somente leitura: mesmo que o modelo tente invocar uma tool com
+   * efeito por engano ou alucinacao, ela nao existe nesta lista e a chamada
+   * recusa como `UNKNOWN_TOOL`, nunca chega ao Scheduling.
+   */
+  async executeReadOnly(
+    call: AssistantToolCall,
+    context: ToolBindingContext,
+  ): Promise<StructuredToolResult<unknown>> {
+    const executionContext: ToolExecutionContext = {
+      ...context,
+      toolCallId: call.id,
+      idempotencyKey: `${context.aiRunId}:${call.id}:${call.name}`,
+    };
+    const selected = this.createReadOnlyTools(executionContext).find(
+      (candidate) => candidate.name === call.name,
+    );
+    if (!selected) {
+      return this.failure(
+        executionContext,
+        "UNKNOWN_TOOL",
+        `Unknown tool: ${call.name}`,
+      );
+    }
+
+    try {
+      const result: unknown = await selected.invoke(call.args);
+      return isStructuredToolResult(result)
+        ? result
+        : this.failure(
+            executionContext,
+            "INVALID_TOOL_RESULT",
+            `Tool ${call.name} returned an invalid result.`,
+          );
+    } catch (error) {
+      if (error instanceof InfrastructureError) throw error;
+      return this.failure(
+        executionContext,
+        "INVALID_TOOL_INPUT",
+        error instanceof Error ? error.message : "Invalid tool input.",
+      );
+    }
+  }
+
+  private createReadOnlyTools(
+    context: ToolExecutionContext,
+  ): StructuredToolInterface[] {
+    return [
+      tool(
+        (args) => this.run(context, () => this.listServices(args, context)),
+        {
+          name: "list_services",
+          description:
+            "Lista servicos reais da fonte oficial do tenant via Scheduling Service. Inclua precos somente quando a cliente perguntou por valores.",
+          schema: listServicesSchema,
+        },
+      ),
+      tool(
+        (args) =>
+          this.run(context, () => this.findAvailableSlots(args, context)),
+        {
+          name: "get_availability",
+          description:
+            "Busca disponibilidade real para um ou mais serviceIds retornados por list_services. Multiplos servicos usam bloco continuo.",
+          schema: availableSlotsSchema,
+        },
+      ),
+      tool(
+        (args) =>
+          this.run(context, () =>
+            this.getAuthorizedCustomerContext(args, context),
+          ),
+        {
+          name: "get_customer_context",
+          description:
+            "Observacoes e tags de uma pessoa que estao autorizadas para uso pela IA. O que nao foi autorizado nao existe para esta ferramenta.",
+          schema: customerContextSchema,
+        },
+      ),
+      tool(
+        (args) => {
+          noArgsSchema.parse(args);
+          return this.run(context, () =>
+            this.findCustomerAppointments(context),
+          );
+        },
+        {
+          name: "list_customer_appointments",
+          description:
+            "Lista agendamentos futuros reais da cliente identificada pelo telefone do WhatsApp.",
+          schema: noArgsSchema,
+        },
+      ),
+    ];
+  }
+
   private createTools(
     context: ToolExecutionContext,
   ): StructuredToolInterface[] {

@@ -126,6 +126,23 @@ enum KnowledgeDocumentStatus {
   INACTIVE
 }
 
+/// De onde vem uma linha de CustomerMemory. CUSTOMER_STATED e PROFESSIONAL sao
+/// afirmacao humana; AI_INFERRED e a unica que carrega `confidence`.
+enum CustomerMemoryOrigin {
+  CUSTOMER_STATED
+  AI_INFERRED
+  PROFESSIONAL
+}
+
+/// Proposito de um AiRun. TURN e o turno normal de conversa (default, unico
+/// valor que o binario anterior ao Goal012 escreve). SUGGESTION e SUMMARY sao
+/// execucoes sem efeito sobre a conversa, so para auditoria.
+enum AiRunKind {
+  TURN
+  SUGGESTION
+  SUMMARY
+}
+
 model ChannelConnection {
   id                  String                  @id @default(cuid())
   tenantId            String
@@ -394,6 +411,9 @@ model AiRun {
   promptVersion   String
   inputMessageIds String[]
   status          AiRunStatus @default(STARTED)
+  /// TURN e o turno de conversa normal; SUGGESTION e SUMMARY sao execucoes sem
+  /// efeito sobre a conversa (Goal012), registradas so para auditoria.
+  kind            AiRunKind   @default(TURN)
   outputText      String?
   error           String?
   startedAt       DateTime    @default(now())
@@ -455,9 +475,13 @@ model AiTenantConfig {
 }
 
 model KnowledgeDocument {
-  id        String                  @id @default(cuid())
-  tenantId  String
-  type      KnowledgeDocumentType
+  id       String                @id @default(cuid())
+  tenantId String
+  type     KnowledgeDocumentType
+  /// ID da pessoa/servico do Scheduling, sem FK entre bancos (mesmo padrao de
+  /// `Contact.customerId`). Nulo significa documento geral, nao ligado a um
+  /// servico especifico; documento legado (anterior ao Goal012) nasce geral.
+  serviceId String?
   title     String
   source    String
   version   String
@@ -471,6 +495,40 @@ model KnowledgeDocument {
   @@unique([tenantId, id])
   @@unique([tenantId, type, source, version])
   @@index([tenantId, status, updatedAt])
+  @@index([tenantId, serviceId])
+}
+
+/// Memoria do cliente, por `(tenantId, customerId)` da pessoa do Scheduling
+/// (sem FK entre bancos). Cada linha e um fato observado, nunca sobrescrito:
+/// contradicao nova marca `supersededById` na linha anterior em vez de apagar,
+/// e a profissional remove marcando `removedAt`/`removedBy`. `aiAllowed`
+/// decide se a linha pode entrar no prompt; a inferencia e a carga no prompt
+/// sao do Goal012/WU-03, nao deste modulo.
+model CustomerMemory {
+  id         String               @id @default(cuid())
+  tenantId   String
+  customerId String
+  kind       String
+  value      String
+  origin     CustomerMemoryOrigin
+  aiAllowed  Boolean              @default(false)
+  /// So preenchido quando `origin = AI_INFERRED`.
+  confidence           Float?
+  sourceConversationId String?
+  sourceMessageIds     String[]  @default([])
+  observedAt           DateTime  @default(now())
+  lastReinforcedAt     DateTime?
+  /// ID de outra linha de CustomerMemory que substitui esta (mesmo tenant e
+  /// cliente). Sem FK: a substituicao e responsabilidade de quem grava.
+  supersededById String?
+  removedAt      DateTime?
+  removedBy      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([tenantId, id])
+  @@index([tenantId, customerId])
+  @@index([tenantId, customerId, removedAt])
 }
 
 model KnowledgeChunk {

@@ -1,14 +1,18 @@
 /**
- * Recorrência ofertável (Goal011, resíduo dos reviews 007/009).
+ * Recorrência ofertável (Goal011, resíduo dos reviews 007/009, fechado no
+ * Goal012).
  *
  * `/internal/services` carrega `recurrenceIntervalDays`; `SchedulingClient`
  * não pode descartar o campo ao decodificar a resposta, senão `list_services`
- * nunca teria como oferecer a série recorrente. Ausência do campo (resposta
- * anterior a este Goal) vira `null`, nunca um intervalo inventado.
+ * nunca teria como oferecer a série recorrente. O campo é obrigatório e
+ * nulável: o Scheduling sempre o declara (nulo quando o serviço não tem
+ * intervalo cadastrado). Resposta que omite o campo é resposta inválida,
+ * nunca um intervalo inventado por omissão.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { env } from "../../src/config/env.js";
+import { InfrastructureError } from "../../src/lib/errors.js";
 import { SchedulingClient } from "../../src/modules/scheduling-service/client.js";
 import type { SchedulingRequestContext } from "../../src/modules/scheduling-service/types.js";
 
@@ -60,7 +64,21 @@ describe("SchedulingClient recurrence interval", () => {
     expect(services).toMatchObject([{ id: "service-1", recurrenceIntervalDays: 30 }]);
   });
 
-  it("normalizes an absent recurrenceIntervalDays to null, never inventing a cadence", async () => {
+  it("carries an explicit null recurrenceIntervalDays through as null", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ data: [serviceResponse({ recurrenceIntervalDays: null })] }),
+        { status: 200 },
+      ),
+    );
+    const client = new SchedulingClient();
+
+    const services = await client.listActiveServices(context);
+
+    expect(services).toMatchObject([{ id: "service-1", recurrenceIntervalDays: null }]);
+  });
+
+  it("rejects a response that omits recurrenceIntervalDays as an invalid response, never inventing a cadence", async () => {
     global.fetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ data: [serviceResponse()] }), {
         status: 200,
@@ -68,8 +86,16 @@ describe("SchedulingClient recurrence interval", () => {
     );
     const client = new SchedulingClient();
 
-    const services = await client.listActiveServices(context);
+    let caught: unknown;
+    try {
+      await client.listActiveServices(context);
+    } catch (error) {
+      caught = error;
+    }
 
-    expect(services).toMatchObject([{ id: "service-1", recurrenceIntervalDays: null }]);
+    expect(caught).toBeInstanceOf(InfrastructureError);
+    expect((caught as InstanceType<typeof InfrastructureError>).code).toBe(
+      "SCHEDULING_INVALID_RESPONSE",
+    );
   });
 });

@@ -27,8 +27,22 @@ import { afterAll, beforeAll, expect, vi } from "vitest";
 import type { PrismaClient } from "../../src/generated/prisma/client.js";
 import type { DiagnosticLogger } from "../../src/lib/diagnostic-log.js";
 import { DomainError } from "../../src/lib/errors.js";
+import type {
+  GenerateSuggestionsInput,
+  GenerateSuggestionsResult,
+} from "../../src/modules/assistant/assistant.service.js";
 import { AssistantService } from "../../src/modules/assistant/assistant.service.js";
 import type { ChannelInboundMessage } from "../../src/modules/channel/domain/ChannelMessage.js";
+import type {
+  KnowledgeSearchInput,
+  KnowledgeSearchResult,
+  KnowledgeVectorStore,
+} from "../../src/modules/knowledge/knowledge-vector-store.js";
+import type { CustomerMemoryPromptItem } from "../../src/modules/memory/customer-memory.js";
+import {
+  CustomerMemoryService,
+  type CustomerMemoryPolicy,
+} from "../../src/modules/memory/customer-memory-service.js";
 import type {
   ModelRequest,
   ModelResponse,
@@ -48,6 +62,12 @@ import type {
 import type { AiConversationStyle } from "../../src/modules/tenant-config/ai-settings.js";
 import { DEFAULT_BUSINESS_CONTEXT } from "../../src/modules/tenant-config/business-context.js";
 import { AssistantToolRegistry } from "../../src/modules/tools/assistant-tools.js";
+import {
+  fakeMemoryPrisma,
+  type ContactRow,
+  type MemoryRow,
+  type SessionRow,
+} from "../memory/fake-memory-prisma.js";
 
 export interface EvalSlot {
   date: string;
@@ -72,6 +92,15 @@ export interface EvalTurn {
   cliente: string;
   /** Roteiro do dublê para este turno. Vazio quando o runtime não chama o modelo. */
   modelo?: EvalModelStep[];
+  /**
+   * Conhecimento e memoria da pessoa (Goal012), ja recuperados como o grafo
+   * faria antes do turno (`retrieveKnowledge`/`loadCustomerMemory`). O eval
+   * calcula estes valores a partir de `world.knowledge`/`world.customerMemory`
+   * — a bancada nao refaz sozinha o filtro de tenant, servico ou permissao.
+   */
+  knowledgeRequested?: boolean;
+  retrievedKnowledge?: KnowledgeSearchResult[];
+  customerMemory?: CustomerMemoryPromptItem[];
 }
 
 /** Uma execução de tool como o runtime a registrou em `aiToolCall`. */
@@ -110,6 +139,36 @@ export interface EvalWorldOptions {
   futureAppointments?: SchedulingAppointment[];
   /** Substitui membros do gateway (falha de infraestrutura, de domínio, etc.). */
   gateway?: Partial<SchedulingGateway>;
+  /**
+   * Catalogo de conhecimento em memoria (Goal012): mesmo contrato de
+   * `KnowledgeVectorStore.search` de `tests/knowledge/knowledge-retrieval-focus.test.ts`
+   * (tenant + servico geral ou em foco, nunca de outro servico), sem Postgres
+   * nem pgvector. Presente, `world.knowledge` fica disponivel e e injetado no
+   * `AssistantService` para o modo sugestao recuperar sozinho.
+   */
+  knowledgeCatalog?: Array<KnowledgeSearchResult & { tenantId: string }>;
+  /**
+   * Memoria do cliente em memoria (Goal012): mesmo servico real
+   * (`CustomerMemoryService`) do resto do produto, sobre o dublê de Prisma de
+   * `tests/memory/fake-memory-prisma.ts` — o filtro de permissao, remocao e
+   * substituicao e o filtro de verdade, nao uma reimplementacao do eval.
+   */
+  customerMemoryRows?: MemoryRow[];
+  customerMemoryPolicy?: Partial<CustomerMemoryPolicy>;
+  /** Contato do turno (Goal012): usado pela porta de entrada de sugestao. */
+  contact?: {
+    id?: string;
+    ignored?: boolean;
+    categoryOverride?: ContactRow["categoryOverride"];
+    customerId?: string | null;
+  };
+  /** Sessao vigente (Goal012): usada pela porta de entrada de sugestao. */
+  session?: {
+    category?: SessionRow["category"];
+    humanHandling?: boolean;
+  };
+  /** Config do negocio para o modo sugestao (Goal012). */
+  aiTenantConfig?: { enabled?: boolean; tone?: AiConversationStyle };
 }
 
 /**
@@ -186,9 +245,47 @@ export function createEvalWorld(options: EvalWorldOptions = {}) {
   const style = options.style ?? "BALANCED";
   const services = options.services ?? CATALOGO_PADRAO;
 
+  const contact = {
+    id: options.contact?.id ?? "contact-1",
+    ignored: options.contact?.ignored ?? false,
+    categoryOverride: options.contact?.categoryOverride ?? null,
+    customerId:
+      options.contact?.customerId === undefined
+        ? "customer-1"
+        : options.contact.customerId,
+  };
+  const session = {
+    category: options.session?.category ?? "COMMERCIAL",
+    humanHandling: options.session?.humanHandling ?? false,
+  };
+  const aiTenantConfig = {
+    enabled: options.aiTenantConfig?.enabled ?? true,
+    tone: options.aiTenantConfig?.tone ?? style,
+  };
+
   const logger = createLoggerSpy();
-  const { prisma, store } = createPrismaStub({ conversationId, phone });
+  const { prisma, store } = createPrismaStub({
+    conversationId,
+    phone,
+    contact,
+    session,
+    aiTenantConfig,
+    businessName,
+  });
   const agenda = createAgendaStub({ ...options, services });
+  const knowledge = options.knowledgeCatalog
+    ? createKnowledgeStub(options.knowledgeCatalog)
+    : undefined;
+  const customerMemory = options.customerMemoryRows
+    ? createCustomerMemoryStub({
+        tenantId,
+        conversationId,
+        contact,
+        session,
+        rows: options.customerMemoryRows,
+        policy: options.customerMemoryPolicy,
+      })
+    : undefined;
   const model = createScriptedModel();
   const registry = new AssistantToolRegistry(
     prisma,
@@ -196,7 +293,15 @@ export function createEvalWorld(options: EvalWorldOptions = {}) {
     undefined,
     logger,
   );
-  const assistant = new AssistantService(prisma, logger, model, registry);
+  const assistant = new AssistantService(
+    prisma,
+    logger,
+    model,
+    registry,
+    undefined,
+    customerMemory?.service,
+    knowledge?.store,
+  );
 
   let inboundCounter = 0;
 
@@ -225,6 +330,9 @@ export function createEvalWorld(options: EvalWorldOptions = {}) {
       } as ChannelInboundMessage,
       businessContext: { ...DEFAULT_BUSINESS_CONTEXT, businessName },
       aiSettings: { aiEnabled: true, tone: style },
+      knowledgeRequested: turn.knowledgeRequested,
+      retrievedKnowledge: turn.retrievedKnowledge,
+      customerMemory: turn.customerMemory,
     });
     // Falha legível no ponto exato: o roteiro deste turno tem que ter sido
     // todo consumido, senão o caso está afirmando menos do que escreveu.
@@ -235,18 +343,36 @@ export function createEvalWorld(options: EvalWorldOptions = {}) {
     return reply;
   }
 
+  async function generateSuggestions(
+    overrides: Partial<GenerateSuggestionsInput> = {},
+  ): Promise<GenerateSuggestionsResult> {
+    return assistant.generateSuggestions({
+      tenantId,
+      conversationId,
+      userId,
+      requestId,
+      ...overrides,
+    });
+  }
+
   return {
     tenantId,
     channelId,
+    conversationId,
     phone,
     style,
     services,
+    contact,
+    session,
     assistant,
     agenda,
+    knowledge: knowledge?.store,
+    customerMemory,
     model,
     logger,
     store,
     send,
+    generateSuggestions,
     /** Tools que o runtime realmente executou, na ordem, com desfecho. */
     execucoes: () => store.toolLedger.map(toToolExecution),
     /** Só os nomes, na ordem: a "sequência de tools" das asserções. */
@@ -256,6 +382,7 @@ export function createEvalWorld(options: EvalWorldOptions = {}) {
     estado: () => store.state,
     conversa: () => store.conversation,
     handoffs: () => store.handoffs,
+    aiRuns: () => store.aiRuns,
   };
 }
 
@@ -568,7 +695,19 @@ export type EvalLogger = ReturnType<typeof createLoggerSpy>;
  * mesmo objeto que `AssistantToolRegistry` e `AssistantService` leem e
  * escrevem, como em produção.
  */
-function createPrismaStub(input: { conversationId: string; phone: string }) {
+function createPrismaStub(input: {
+  conversationId: string;
+  phone: string;
+  contact: {
+    id: string;
+    ignored: boolean;
+    categoryOverride: ContactRow["categoryOverride"];
+    customerId: string | null;
+  };
+  session: { category: SessionRow["category"]; humanHandling: boolean };
+  aiTenantConfig: { enabled: boolean; tone: AiConversationStyle };
+  businessName: string;
+}) {
   const store = {
     state: {} as Record<string, unknown>,
     conversation: {
@@ -576,6 +715,7 @@ function createPrismaStub(input: { conversationId: string; phone: string }) {
       tenantId: "tenant-1",
       channelId: "channel-1",
       externalContactId: input.phone,
+      contactId: input.contact.id as string | null,
       customerName: null as string | null,
       humanHandoff: false,
       status: "ACTIVE",
@@ -601,6 +741,7 @@ function createPrismaStub(input: { conversationId: string; phone: string }) {
   let messageCounter = 0;
   let handoffCounter = 0;
   let toolCallCounter = 0;
+  let aiRunCounter = 0;
 
   const prisma = {
     conversation: {
@@ -621,6 +762,10 @@ function createPrismaStub(input: { conversationId: string; phone: string }) {
         return { ...store.conversation, state: store.state };
       },
       findUnique: async () => ({ ...store.conversation, state: store.state }),
+      // Usado só pela porta de entrada de sugestão (Goal012): mesmo estado da
+      // conversa única deste mundo, com `contactId` para a checagem de
+      // contato ignorado/sessão pessoal.
+      findFirst: async () => ({ ...store.conversation, state: store.state }),
       update: async (args: any) => {
         if (args.data.state) store.state = args.data.state;
         store.conversation = {
@@ -663,13 +808,15 @@ function createPrismaStub(input: { conversationId: string; phone: string }) {
     },
     aiRun: {
       create: async (args: any) => {
-        const run = { id: "ai-run-1", ...args.data };
+        aiRunCounter += 1;
+        const run = { id: `ai-run-${aiRunCounter}`, ...args.data };
         store.aiRuns.push(run);
         return run;
       },
       update: async (args: any) => {
-        Object.assign(store.aiRuns[store.aiRuns.length - 1] ?? {}, args.data);
-        return store.aiRuns[store.aiRuns.length - 1];
+        const run = store.aiRuns.find((item) => item.id === args.where.id);
+        Object.assign(run ?? {}, args.data);
+        return run;
       },
     },
     aiToolCall: {
@@ -680,6 +827,16 @@ function createPrismaStub(input: { conversationId: string; phone: string }) {
             entry.name === args.where.name &&
             entry.completedAt,
         ) ?? null,
+      // Evidência do turno (Goal012): a inferência de memória lê o mesmo
+      // ledger que o runtime escreveu, nunca o JSON que o modelo devolveu.
+      findMany: async (args: any) =>
+        store.toolLedger.filter(
+          (entry: any) =>
+            (!args?.where?.aiRunId || entry.aiRunId === args.where.aiRunId) &&
+            (!args?.where?.status || entry.status === args.where.status) &&
+            (!args?.where?.name?.in ||
+              args.where.name.in.includes(entry.name)),
+        ),
       create: async (args: any) => {
         toolCallCounter += 1;
         const record = { id: `tool-call-${toolCallCounter}`, ...args.data };
@@ -705,16 +862,127 @@ function createPrismaStub(input: { conversationId: string; phone: string }) {
       },
     },
     contact: {
-      findUnique: async () => null,
+      // Usado pela porta de entrada de sugestão (Goal012): o mesmo contato
+      // configurado no mundo, nunca um segundo contato inventado pelo dublê.
+      findUnique: async () => ({
+        ignored: input.contact.ignored,
+        categoryOverride: input.contact.categoryOverride,
+        customerId: input.contact.customerId,
+      }),
       updateMany: async (args: unknown) => {
         store.contactLinks.push(args);
         return { count: 1 };
       },
     },
+    conversationSession: {
+      findFirst: async () => ({
+        category: input.session.category,
+        humanHandling: input.session.humanHandling,
+      }),
+    },
+    aiTenantConfig: {
+      findUnique: async () => ({
+        enabled: input.aiTenantConfig.enabled,
+        tone: input.aiTenantConfig.tone,
+        settings: { businessName: input.businessName, timezone: "America/Sao_Paulo" },
+      }),
+    },
   } as unknown as PrismaClient;
 
   return { prisma, store };
 }
+
+/**
+ * Conhecimento em memória (Goal012): mesmo contrato de
+ * `PGVectorKnowledgeStore.search` (tenant do turno, documento geral ou preso
+ * ao serviço em foco, nunca de outro serviço), sem Postgres nem pgvector —
+ * mesmo padrão de `tests/knowledge/knowledge-retrieval-focus.test.ts`.
+ */
+function createKnowledgeStub(
+  catalog: Array<KnowledgeSearchResult & { tenantId: string }>,
+) {
+  const calls: KnowledgeSearchInput[] = [];
+  const store: KnowledgeVectorStore = {
+    indexDocument: async () => {
+      throw new Error("Eval knowledge store nao indexa: e somente leitura.");
+    },
+    search: async (search) => {
+      calls.push(search);
+      const focusServiceIds = search.focusServiceIds ?? [];
+      return catalog
+        .filter((doc) => doc.tenantId === search.tenantId)
+        .filter(
+          (doc) =>
+            doc.serviceId === null || focusServiceIds.includes(doc.serviceId),
+        )
+        .map(({ tenantId: _tenantId, ...result }) => result);
+    },
+  };
+  return { store, calls };
+}
+
+export type EvalKnowledge = ReturnType<typeof createKnowledgeStub>;
+
+/**
+ * Memória do cliente em memória (Goal012): o `CustomerMemoryService` real —
+ * não um dublê da regra — sobre o Prisma dublê de
+ * `tests/memory/fake-memory-prisma.ts`. O filtro de permissão, remoção e
+ * substituição é o filtro de verdade do produto; o contato, a conversa e a
+ * sessão semeados aqui são os **mesmos** do resto do mundo do eval, para que
+ * "contato ignorado" ou "sessão em atendimento humano" valham igual para a
+ * porta de entrada de sugestão e para a inferência de memória.
+ */
+function createCustomerMemoryStub(input: {
+  tenantId: string;
+  conversationId: string;
+  contact: {
+    id: string;
+    ignored: boolean;
+    categoryOverride: ContactRow["categoryOverride"];
+    customerId: string | null;
+  };
+  session: { category: SessionRow["category"]; humanHandling: boolean };
+  rows: MemoryRow[];
+  policy?: Partial<CustomerMemoryPolicy>;
+}) {
+  const { prisma, state } = fakeMemoryPrisma({
+    memories: input.rows,
+    contacts: [
+      {
+        id: input.contact.id,
+        tenantId: input.tenantId,
+        ignored: input.contact.ignored,
+        customerId: input.contact.customerId,
+        categoryOverride: input.contact.categoryOverride,
+      },
+    ],
+    conversations: [
+      {
+        id: input.conversationId,
+        tenantId: input.tenantId,
+        contactId: input.contact.id,
+      },
+    ],
+    sessions: [
+      {
+        id: `${input.conversationId}-session-1`,
+        tenantId: input.tenantId,
+        conversationId: input.conversationId,
+        category: input.session.category,
+        humanHandling: input.session.humanHandling,
+        endedAt: null,
+        startedAt: new Date("2026-06-04T12:00:00.000Z"),
+      },
+    ],
+  });
+  const service = new CustomerMemoryService(prisma, {
+    staleDays: input.policy?.staleDays ?? 180,
+    promptLimit: input.policy?.promptLimit ?? 12,
+  });
+  return { service, state };
+}
+
+export type EvalCustomerMemory = ReturnType<typeof createCustomerMemoryStub>;
 
 function toToolExecution(entry: Record<string, unknown>): EvalToolExecution {
   const result = (entry.result ?? undefined) as

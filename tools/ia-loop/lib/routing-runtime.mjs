@@ -196,23 +196,48 @@ export function createWorkUnitAttemptRouter({
     },
 
     /**
-     * A unit that answered under contract and asked for a stronger tier.
+     * A unit that answered under contract and asked for a stronger tier — OR
+     * a MECHANICAL unit that came back BLOCKED while the CLI itself recorded
+     * real permission_denials for the attempt.
+     *
+     * The second case is not the model asking: Haiku, across three separate
+     * real runs (Goal010 twice, Goal011 once), reported BLOCKED and blamed
+     * "permission" in prose without ever reliably naming it as an escalation
+     * request. Trusting that prose was the mistake — this instead only acts
+     * on the CLI's OWN record of which tool_use calls it denied, which is
+     * infrastructure evidence, not a claim. A BLOCKED result with no denial
+     * evidence at all is a normal outcome and is never escalated automatically
+     * — only a confirmed tooling limitation does.
      *
      * `failedAttempts` is read from the history rather than trusted from the
      * request, because REPEATED_EXECUTION_FAILURE is the one reason that makes
      * a claim about the past — and a claim about the past is checkable.
      */
-    async escalationFor({ result, attempt }) {
-      if (result?.status !== 'ESCALATION_REQUIRED') return null;
+    async escalationFor({ result, attempt, permissionDenials = [] }) {
+      const { tier, escalations } = await current();
+
+      const hasPermissionDenials = Array.isArray(permissionDenials) && permissionDenials.length > 0;
+      const isToolingBlocked = result?.status === 'BLOCKED' && tier === 'MECHANICAL' && hasPermissionDenials;
+
+      if (result?.status !== 'ESCALATION_REQUIRED' && !isToolingBlocked) return null;
 
       const entries = await history();
-      const { tier, escalations } = await current();
       const failedAttempts = entries.filter((entry) => entry?.status === 'FAILED'
         || entry?.reason === 'AGENT_FAILURE'
         || entry?.status === 'INTERRUPTED').length;
 
+      const request = isToolingBlocked
+        ? {
+          reason: 'TOOLING_PERMISSION_DENIED',
+          confidence: 'HIGH',
+          detail: `The CLI recorded ${permissionDenials.length} permission denial(s) during this attempt `
+            + `(${[...new Set(permissionDenials.map((d) => d.tool_name).filter(Boolean))].join(', ') || 'unknown tool'}).`,
+          evidence: permissionDenials.map((d) => `${d.tool_name ?? 'unknown tool'} denied (tool_use_id ${d.tool_use_id ?? 'unknown'})`),
+        }
+        : result.escalation;
+
       const verdict = authorizeWorkUnitEscalation({
-        request: result.escalation,
+        request,
         currentTier: tier,
         escalations,
         // The attempt that is asking has itself not succeeded, so it counts.
@@ -221,7 +246,7 @@ export function createWorkUnitAttemptRouter({
       });
 
       if (verdict.verdict !== ESCALATION_VERDICTS.AUTHORIZED) {
-        await refuse({ verdict: verdict.verdict, reason: verdict.reason, request: result.escalation, attempt });
+        await refuse({ verdict: verdict.verdict, reason: verdict.reason, request, attempt });
         return null;
       }
 

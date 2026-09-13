@@ -292,7 +292,9 @@ export async function runWithCapacity({
     // request is judged by the router, and a granted one becomes a successor
     // attempt on the escalated model.
     if (!failed && router?.escalationFor) {
-      const escalation = await router.escalationFor({ result: agentOutcome.payload, attempt });
+      const escalation = await router.escalationFor({
+        result: agentOutcome.payload, attempt, permissionDenials: agentOutcome.permissionDenials,
+      });
       if (escalation) {
         await rerouteAttempt({
           store, role, jobId, goal, round, attempt, attemptId: currentAttemptId,

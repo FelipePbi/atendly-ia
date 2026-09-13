@@ -744,6 +744,11 @@ export async function invokeAgent({
     // anything; see resolvePrimaryModel's docstring.
     usageAccounting: { matched: null, resolvedByAccounting: null, error: null },
     error: null,
+    // The CLI's own record of which tool_use calls it denied — real
+    // infrastructure evidence, not the model's textual account of what
+    // happened. See work-unit-executor.mjs's use of this for why a BLOCKED
+    // MECHANICAL unit may only escalate on THIS, never on the model's prose.
+    permissionDenials: [],
   };
 
   // Always requested: this is the only channel that carries the CLI's
@@ -843,6 +848,13 @@ export async function invokeAgent({
     envelope = parseEnvelope(processResult.stdout);
   } catch (error) {
     envelopeError = toReportableError(error);
+  }
+
+  // Captured regardless of exit code or payload validity: a denial is a fact
+  // about what happened during the run, not a property of whether the model's
+  // final answer parsed.
+  if (Array.isArray(envelope?.permission_denials)) {
+    outcome.permissionDenials = envelope.permission_denials;
   }
 
   if (processResult.exitCode !== 0) {

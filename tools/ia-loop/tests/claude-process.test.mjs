@@ -115,6 +115,7 @@ function streamEnvelope({
   omitUsage = false,
   omitModelUsage = false,
   servedModels = [],
+  permissionDenials,
 }) {
   const lines = [
     JSON.stringify({ type: 'system', subtype: 'init', session_id: '00000000-0000-4000-8000-000000000000' }),
@@ -126,6 +127,7 @@ function streamEnvelope({
   const resultPayload = { type: 'result', subtype: 'success', is_error: isError, result };
   if (!omitUsage) resultPayload.usage = usage;
   if (!omitModelUsage) resultPayload.modelUsage = models;
+  if (permissionDenials !== undefined) resultPayload.permission_denials = permissionDenials;
   lines.push(JSON.stringify(resultPayload));
   return lines.join('\n');
 }
@@ -207,6 +209,43 @@ test('2. Fable primary with Haiku auxiliary passes', async () => {
   assert.equal(outcome.structuredOutput, true);
   assert.equal(outcome.resolvedPrimaryModel, FABLE);
   assert.deepEqual(outcome.auxiliaryModels, [HAIKU]);
+});
+
+test("the CLI's own permission_denials record is surfaced on the outcome, verbatim", async () => {
+  const denials = [
+    { tool_name: 'Edit', tool_use_id: 'toolu_1', tool_input: { file_path: 'apps/x/y.ts' } },
+    { tool_name: 'Bash', tool_use_id: 'toolu_2', tool_input: { command: 'rtk lint' } },
+  ];
+  const outcome = await invokeAgent({
+    ...DEVELOPER,
+    spawnFn: fakeSpawn({
+      stdout: streamEnvelope({
+        result: '{"role":"developer","ok":true}',
+        usage: topLevelUsage(OPUS_USAGE),
+        models: { [OPUS]: modelUsage(OPUS_USAGE) },
+        servedModels: [OPUS],
+        permissionDenials: denials,
+      }),
+    }),
+  });
+
+  assert.deepEqual(outcome.permissionDenials, denials);
+});
+
+test('permissionDenials defaults to an empty array when the CLI reported none', async () => {
+  const outcome = await invokeAgent({
+    ...DEVELOPER,
+    spawnFn: fakeSpawn({
+      stdout: streamEnvelope({
+        result: '{"role":"developer","ok":true}',
+        usage: topLevelUsage(OPUS_USAGE),
+        models: { [OPUS]: modelUsage(OPUS_USAGE) },
+        servedModels: [OPUS],
+      }),
+    }),
+  });
+
+  assert.deepEqual(outcome.permissionDenials, []);
 });
 
 test('7/8. multiple assistant turns naming the same served model are one identity, and an auxiliary never becomes a fallback', async () => {

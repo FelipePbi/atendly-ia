@@ -319,6 +319,137 @@ test('50. an escalation the router refuses does not change the model', async () 
 });
 
 // ===========================================================================
+// Haiku BLOCKED with a real permission denial — the Goal010/Goal011 incident
+// ===========================================================================
+
+const blocked = (unitJobId, unit, blockedReason) => ({
+  protocolVersion: PROTOCOL_VERSION_V2,
+  jobId: unitJobId,
+  goal: GOAL,
+  round: ROUND,
+  workUnitId: unit.id,
+  status: 'BLOCKED',
+  summary: `${unit.id} bloqueada`,
+  report: 'não foi possível prosseguir',
+  changedFiles: [],
+  blockedReason,
+});
+
+const PERMISSION_DENIALS = Object.freeze([
+  { tool_name: 'Edit', tool_use_id: 'toolu_edit_1', tool_input: { file_path: 'apps/x/y.ts' } },
+  { tool_name: 'Bash', tool_use_id: 'toolu_bash_1', tool_input: { command: 'rtk lint' } },
+]);
+
+test('a MECHANICAL unit BLOCKED with real permission denials escalates Haiku -> Sonnet as a new attempt', async () => {
+  await withStore(async (store) => {
+    const unitId = workUnitJobId({ goal: GOAL, round: ROUND, unitId: 'WU-001' });
+    const seen = [];
+
+    const outcome = await run(store, {
+      plan: plan([mechanical('WU-001')]),
+      invokeUnit: async ({ unit, routing, unitJobId, validatePayload }) => {
+        seen.push(routing.modelKey);
+        if (routing.modelKey === 'haiku') {
+          // Exactly what invokeAgent hands back for a real denied attempt:
+          // a structurally valid BLOCKED payload, plus the CLI's own
+          // permission_denials record — never a status the model chose to
+          // call "ESCALATION_REQUIRED" itself.
+          return {
+            error: null, structuredOutput: true, available: true,
+            payload: blocked(unitJobId, unit, 'Edit tool requires approval not available in this session.'),
+            permissionDenials: PERMISSION_DENIALS,
+          };
+        }
+        return ok(completed(unitJobId, unit), validatePayload);
+      },
+    });
+
+    assert.deepEqual(seen, ['haiku', 'sonnet'], 'promoted exactly one step, on real evidence');
+
+    const record = outcome.records.get('WU-001');
+    assert.equal(record.state, 'COMPLETED');
+    assert.equal(record.escalations, 1);
+    assert.equal(record.tier, 'STANDARD');
+    assert.equal(record.model, 'sonnet');
+
+    // 3. The Haiku attempt's history is preserved, not overwritten.
+    const state = await store.readAttemptState(WORK_UNIT_NAMESPACE, unitId);
+    assert.equal(state.attempt, 2, '4. a new attempt number, not a retry under the same one');
+    assert.equal(state.history.length, 1);
+    assert.equal(state.history[0].attempt, 1);
+    assert.equal(state.history[0].status, 'REROUTED');
+    assert.equal(state.history[0].routedTo.modelKey, 'sonnet');
+
+    const candidate = await store.readCandidateResult(WORK_UNIT_NAMESPACE, unitId, `${unitId}-a1`);
+    assert.equal(candidate.payload.status, 'BLOCKED', 'the BLOCKED answer itself is kept, not discarded');
+
+    // 4. A distinct job/attempt for the Sonnet retry — same unit job id (a
+    // Work Unit's identity is (goal, round, unitId), not a new job entirely),
+    // but a genuinely new, numbered attempt the worker can claim.
+    assert.equal(state.attemptId, `${unitId}-a2`);
+
+    // 5. Telemetry records why the promotion happened.
+    const escalated = (await store.readEvents()).filter((event) => event.type === 'MODEL_ESCALATED');
+    assert.equal(escalated.length, 1);
+    assert.equal(escalated[0].from, 'haiku');
+    assert.equal(escalated[0].to, 'sonnet');
+    assert.equal(escalated[0].reason, 'TOOLING_PERMISSION_DENIED');
+  });
+});
+
+test('a MECHANICAL unit BLOCKED with no permission-denial evidence never escalates automatically', async () => {
+  await withStore(async (store) => {
+    const seen = [];
+    const outcome = await run(store, {
+      plan: plan([mechanical('WU-001')]),
+      invokeUnit: async ({ unit, routing, unitJobId }) => {
+        seen.push(routing.modelKey);
+        // A perfectly ordinary BLOCKED — the model just could not do the
+        // work — with no permission_denials at all. This must stay BLOCKED
+        // on Haiku, exactly as it always did before this fix, and go to
+        // review as a real gap rather than being quietly promoted.
+        return {
+          error: null, structuredOutput: true, available: true,
+          payload: blocked(unitJobId, unit, 'Could not determine the correct fix.'),
+          permissionDenials: [],
+        };
+      },
+    });
+
+    assert.deepEqual(seen, ['haiku'], 'never retried on a stronger model without real evidence');
+    const record = outcome.records.get('WU-001');
+    assert.equal(record.state, 'BLOCKED');
+    assert.equal(record.escalations, 0);
+    assert.equal(record.model, 'haiku');
+
+    const escalated = (await store.readEvents()).filter((event) => event.type === 'MODEL_ESCALATED');
+    assert.equal(escalated.length, 0);
+  });
+});
+
+test('a MECHANICAL unit that COMPLETES is never escalated even if permission_denials happened along the way', async () => {
+  await withStore(async (store) => {
+    // A unit can hit and recover from a transient denial within the same
+    // attempt and still finish the job — permission_denials describes the
+    // attempt's history, not its outcome, and only a BLOCKED outcome is ever
+    // a candidate for this escalation.
+    const outcome = await run(store, {
+      plan: plan([mechanical('WU-001')]),
+      invokeUnit: async ({ unit, unitJobId, validatePayload }) => ({
+        error: null, structuredOutput: true, available: true,
+        payload: (() => { validatePayload?.(completed(unitJobId, unit)); return completed(unitJobId, unit); })(),
+        permissionDenials: PERMISSION_DENIALS,
+      }),
+    });
+
+    const record = outcome.records.get('WU-001');
+    assert.equal(record.state, 'COMPLETED');
+    assert.equal(record.model, 'haiku');
+    assert.equal(record.escalations, 0);
+  });
+});
+
+// ===========================================================================
 // 51. Sonnet -> Opus
 // ===========================================================================
 
@@ -851,6 +982,8 @@ test('43. the routing summary counts the DAG, the models and the calls avoided',
     assert.equal(summary.workUnits.plans, 1);
     assert.deepEqual(summary.workUnits.byType, { MECHANICAL: 1, STANDARD: 1, DETERMINISTIC: 2 });
     assert.equal(summary.workUnits.deterministicRuns, 2);
+    assert.equal(summary.workUnits.deterministicSuccesses, 2);
+    assert.equal(summary.workUnits.deterministicFailures, 0);
     assert.equal(summary.workUnits.modelCallsAvoided, 2, 'two commands the old architecture would have paid a model for');
 
     // Each unit gets its own row instead of the last one standing in for the round.
@@ -860,8 +993,73 @@ test('43. the routing summary counts the DAG, the models and the calls avoided',
 
     const rendered = renderRoutingSummary(summary).join('\n');
     assert.ok(rendered.includes('haiku 1'));
-    assert.ok(rendered.includes('model calls avoided: 2'));
+    assert.ok(rendered.includes('2 succeeded · 0 failed'));
+    assert.ok(rendered.includes('model calls avoided (successful only): 2'));
     assert.ok(rendered.includes('Work Unit WU-001'));
+  });
+});
+
+test('a DETERMINISTIC unit that fails every attempt is never counted as a model call avoided', async () => {
+  // The Goal 011 shape exactly: 10 attempts at native `npm`/`npx` actions,
+  // every one of them SPAWN_FAILED (Windows ENOENT), zero successes. The
+  // old metric reported "model calls avoided: 10" — a Windows spawn bug
+  // presented as a savings win, because it only ever counted attempts, never
+  // outcomes.
+  await withStore(async (store) => {
+    // A realistic Goal also has at least one routed model call — otherwise
+    // renderRoutingSummary takes its own "nothing routed at all" short
+    // circuit before ever reaching the Work Units block, which is a
+    // property of the renderer this test is not about.
+    await store.appendEvent({
+      type: 'MODEL_ROUTED', goal: GOAL, round: 1, agent: 'work_unit', jobId: `${GOAL}-r1-unit-wu-standard`,
+      attempt: 1, attemptId: `${GOAL}-r1-unit-wu-standard-a1`, stage: 'work_unit',
+      complexity: 'MEDIUM', selectedModel: 'sonnet', effort: 'high', reason: 'STANDARD_WORK_UNIT', mode: 'AUTO',
+    });
+    await store.appendEvent({
+      type: 'WORK_UNIT_PLAN_RESOLVED', goal: GOAL, round: 1, jobId: `${GOAL}-r1-developer-x`,
+      source: 'TECH_LEAD_PLAN', units: 10, order: [], levels: [], types: { DETERMINISTIC: 10 },
+    });
+    for (let i = 0; i < 10; i += 1) {
+      await store.appendEvent({
+        type: 'WORK_UNIT_DETERMINISTIC_EXECUTED',
+        goal: GOAL, round: 1, workUnitId: `WU-${i}`, jobId: `${GOAL}-r1-unit-wu-${i}`,
+        action: 'lint', ok: false, exitCode: null, signal: null, durationMs: 3, modelCalls: 0,
+      });
+    }
+
+    const summary = summarizeRouting(await store.readEvents(), { goal: GOAL });
+    assert.equal(summary.workUnits.deterministicRuns, 10, 'every attempt is still counted — a model genuinely was not called');
+    assert.equal(summary.workUnits.deterministicFailures, 10);
+    assert.equal(summary.workUnits.deterministicSuccesses, 0);
+    assert.equal(summary.workUnits.modelCallsAvoided, 0, 'nothing was actually avoided: no check ran to completion');
+
+    const rendered = renderRoutingSummary(summary).join('\n');
+    assert.ok(rendered.includes('10 attempt(s)'));
+    assert.ok(rendered.includes('0 succeeded · 10 failed'));
+    assert.ok(rendered.includes('model calls avoided (successful only): 0'));
+  });
+});
+
+test('a mix of successful and failed DETERMINISTIC attempts only credits the successes', async () => {
+  await withStore(async (store) => {
+    await store.appendEvent({
+      type: 'WORK_UNIT_PLAN_RESOLVED', goal: GOAL, round: 1, jobId: `${GOAL}-r1-developer-x`,
+      source: 'TECH_LEAD_PLAN', units: 2, order: [], levels: [], types: { DETERMINISTIC: 2 },
+    });
+    await store.appendEvent({
+      type: 'WORK_UNIT_DETERMINISTIC_EXECUTED', goal: GOAL, round: 1, workUnitId: 'WU-1',
+      jobId: `${GOAL}-r1-unit-wu-1`, action: 'lint', ok: true, exitCode: 0, modelCalls: 0,
+    });
+    await store.appendEvent({
+      type: 'WORK_UNIT_DETERMINISTIC_EXECUTED', goal: GOAL, round: 1, workUnitId: 'WU-2',
+      jobId: `${GOAL}-r1-unit-wu-2`, action: 'typecheck', ok: false, exitCode: 1, modelCalls: 0,
+    });
+
+    const summary = summarizeRouting(await store.readEvents(), { goal: GOAL });
+    assert.equal(summary.workUnits.deterministicRuns, 2);
+    assert.equal(summary.workUnits.deterministicSuccesses, 1);
+    assert.equal(summary.workUnits.deterministicFailures, 1);
+    assert.equal(summary.workUnits.modelCallsAvoided, 1);
   });
 });
 

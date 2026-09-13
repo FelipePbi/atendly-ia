@@ -884,6 +884,12 @@ export const WORK_UNIT_ESCALATION_REASONS = Object.freeze({
     'CROSS_MODULE_IMPACT_DISCOVERED',
     'REPEATED_EXECUTION_FAILURE',
     'LOW_CONFIDENCE',
+    // Not requested by the model — synthesised by the harness itself (see
+    // createWorkUnitAttemptRouter.escalationFor) from the CLI's own
+    // permission_denials record on a BLOCKED attempt. A generic BLOCKED with
+    // no such evidence never reaches this reason at all; see model-routing's
+    // tests for the Goal010/Goal011 incidents this closes.
+    'TOOLING_PERMISSION_DENIED',
   ]),
   STANDARD: Object.freeze([
     'REPEATED_EXECUTION_FAILURE',

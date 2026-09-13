@@ -27,6 +27,7 @@ import {
   toJobRouting,
 } from './lib/model-routing.mjs';
 import { discoverGoal } from './lib/goal-discovery.mjs';
+import { ensureGoalAcceptedStatus } from './lib/goal-status-transition.mjs';
 import {
   CLOSURE_RESUME_POINTS, expectedMigrationStatusRowFor, requiredGoalStatusFor, resolveClosureResumePoint,
 } from './lib/closure-resume.mjs';
@@ -214,13 +215,44 @@ async function main() {
     return 0;
   }
 
+  // The Goal document's own "Status: ACCEPTED" line is structural fact once
+  // the closure commit is proven integrated — not something a closure
+  // documentation model call is trusted to remember to write (see
+  // lib/goal-status-transition.mjs for the incident this closes). Applied
+  // BEFORE discoverGoal, deterministically and without a model call, so its
+  // own requiredStatus check for this resume point can actually pass. FRESH
+  // never reaches here: nothing is integrated yet, so there is no evidence to
+  // act on and the document must still read exactly what the review left it.
+  const accepted = await findAcceptedDecision(store, runtime, goalId);
+  if (resumePoint !== CLOSURE_RESUME_POINTS.FRESH) {
+    const statusFix = await ensureGoalAcceptedStatus({
+      repoRoot: REPO_ROOT, goalId,
+      reviewDecision: runtime.decision,
+      closureDocsJobId: priorClosure.closureDocsJobId,
+      integratedClosureCommit: priorClosure.integratedClosureCommit,
+      newMigrationBaseline: priorClosure.newMigrationBaseline,
+      emit,
+    });
+    // A new, independent commit — never amending the integration commit
+    // already on main, never touching the worktree or the baseline. Staged
+    // by exact path, so nothing else that happens to be dirty on this
+    // checkout is swept in.
+    if (statusFix.changed) {
+      const fix = await stageAndCommit({
+        cwd: REPO_ROOT,
+        paths: [statusFix.path],
+        message: `docs(migration): mark Goal ${goalId} ACCEPTED (closure documentation omitted it)`,
+      });
+      emit(`  committed: ${fix.sha}`);
+    }
+  }
+
   const goal = await discoverGoal({
     repoRoot: REPO_ROOT, goalId, resolveSha: (sha) => probe.commitExists(sha),
     requiredStatus: requiredGoalStatusFor(resumePoint),
     expectedMigrationStatusRow: expectedMigrationStatusRowFor(resumePoint),
   });
 
-  const accepted = await findAcceptedDecision(store, runtime, goalId);
   emit(`Goal ${goalId}: ACCEPTED (round ${accepted.decision.round}, review job ${accepted.jobId})`);
   emit('No new review is performed and the Developer is not called.');
   emit('');

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { KnowledgeSearchResult } from "../knowledge/knowledge-vector-store.js";
+import type { CustomerMemoryPromptItem } from "../memory/customer-memory.js";
 import {
   type AiConversationStyle,
   type AiTenantSettings,
@@ -11,12 +12,22 @@ import {
   DEFAULT_BUSINESS_CONTEXT,
   normalizeBusinessContext,
 } from "../tenant-config/business-context.js";
+import { buildCustomerMemoryPrompt } from "./customer-memory.js";
 import { buildHandoffPrompt } from "./handoff.js";
 import { buildKnowledgePrompt } from "./knowledge.js";
 import { buildResponsePrompt } from "./response.js";
 import { buildSchedulingPrompt } from "./scheduling.js";
 import { buildAiTonePromptSection } from "./style.js";
+import { buildSuggestionModePrompt } from "./suggestion.js";
 import { buildTenantContextPrompt } from "./tenant-context.js";
+
+/**
+ * `assistant` monta o turno de conversa normal, com tools de efeito e saida
+ * que vira Message. `suggestion` monta o mesmo pano de fundo (politica,
+ * estilo, conhecimento, memoria) para uma invocacao sem efeito (Goal012/WU-04):
+ * a saida e sugestao para revisao humana, nunca um turno real.
+ */
+export type SystemPromptMode = "assistant" | "suggestion";
 
 export interface BuildSystemPromptInput {
   state?: unknown;
@@ -26,6 +37,14 @@ export interface BuildSystemPromptInput {
   aiSettings?: AiTenantSettings;
   knowledgeRequested?: boolean;
   retrievedKnowledge?: KnowledgeSearchResult[];
+  /**
+   * Memoria **permitida** da pessoa vinculada ao contato, ja filtrada por
+   * `CustomerMemoryService.loadForPrompt`. Ausente quando nao ha pessoa
+   * vinculada, o contato esta ignorado ou nada foi autorizado.
+   */
+  customerMemory?: CustomerMemoryPromptItem[];
+  /** Ausente equivale a `"assistant"`, o turno de conversa de sempre. */
+  mode?: SystemPromptMode;
 }
 
 export interface BuiltSystemPrompt {
@@ -63,19 +82,24 @@ const MAIN_RULES = [
  * Identificador semantico legivel do template de prompt. So muda quando
  * alguem decide, de proposito, que o prompt ganhou um novo significado —
  * o hash em `derivePromptVersion` ja pega qualquer mudanca de conteudo.
+ *
+ * v2 (Goal012/WU-04): o template ganhou o modo sugestao, sem efeito sobre o
+ * turno de conversa normal.
  */
-const PROMPT_TEMPLATE_VERSION = "v1";
+const PROMPT_TEMPLATE_VERSION = "v2";
 
 /**
  * Amostra fixa, nunca usada no prompt real: existe so para que o hash em
- * `buildStablePromptContent` cubra o texto estatico dos tres ramos de
- * `buildKnowledgePrompt` (sem trecho, com trechos e sem pedido de RAG).
- * Mudar a instrucao de qualquer ramo em `knowledge.ts` muda este hash.
+ * `buildStablePromptContent` cubra o texto estatico dos ramos de
+ * `buildKnowledgePrompt` (sem pedido de RAG, sem trecho, com trecho geral e
+ * com trecho preso ao servico em foco). Mudar a instrucao ou a precedencia de
+ * qualquer ramo em `knowledge.ts` muda este hash.
  */
 const STABLE_KNOWLEDGE_SAMPLE: KnowledgeSearchResult = {
   documentId: "stable-sample",
   chunkId: "stable-sample-chunk",
   type: "FAQ",
+  serviceId: null,
   title: "stable-sample",
   source: "stable-sample",
   version: "0",
@@ -83,6 +107,38 @@ const STABLE_KNOWLEDGE_SAMPLE: KnowledgeSearchResult = {
   metadata: null,
   score: 0,
 };
+
+const STABLE_SERVICE_KNOWLEDGE_SAMPLE: KnowledgeSearchResult = {
+  ...STABLE_KNOWLEDGE_SAMPLE,
+  documentId: "stable-service-sample",
+  chunkId: "stable-service-sample-chunk",
+  type: "PROCEDURE",
+  serviceId: "stable-service",
+  title: "stable-service-sample",
+  source: "stable-service-sample",
+};
+
+/**
+ * Amostra fixa da memoria da pessoa, nunca usada no prompt real: cobre no hash
+ * os dois ramos de `buildCustomerMemoryPrompt` (sem memoria autorizada e com
+ * item recente + item marcado como antigo).
+ */
+const STABLE_CUSTOMER_MEMORY_SAMPLE: CustomerMemoryPromptItem[] = [
+  {
+    kind: "PREFERRED_PERIOD",
+    value: "stable-sample",
+    origin: "AI_INFERRED",
+    ageDays: 0,
+    stale: false,
+  },
+  {
+    kind: "OBSERVATION",
+    value: "stable-sample",
+    origin: "PROFESSIONAL",
+    ageDays: 999,
+    stale: true,
+  },
+];
 
 /**
  * Conteudo estavel do prompt: tudo que nao muda por turno, tenant ou
@@ -101,9 +157,16 @@ function buildStablePromptContent(style: AiConversationStyle): string {
       requested: true,
       results: [STABLE_KNOWLEDGE_SAMPLE],
     }),
+    ...buildKnowledgePrompt({
+      requested: true,
+      results: [STABLE_SERVICE_KNOWLEDGE_SAMPLE, STABLE_KNOWLEDGE_SAMPLE],
+    }),
+    ...buildCustomerMemoryPrompt([]),
+    ...buildCustomerMemoryPrompt(STABLE_CUSTOMER_MEMORY_SAMPLE),
     buildAiTonePromptSection({ aiEnabled: true, tone: style }),
     ...buildHandoffPrompt(),
     ...buildResponsePrompt(),
+    ...buildSuggestionModePrompt(),
   ].join("\n");
 }
 
@@ -125,6 +188,7 @@ export function derivePromptVersion(style: AiConversationStyle): string {
 export function buildSystemPrompt(input: unknown): BuiltSystemPrompt {
   const args = isPromptInput(input) ? input : { state: input };
   const state = args.state ?? {};
+  const mode: SystemPromptMode = args.mode ?? "assistant";
   const businessContext = normalizeBusinessContext(args.businessContext);
   const aiSettings = normalizeAiSettings(args.aiSettings);
   const version = derivePromptVersion(aiSettings.tone);
@@ -146,11 +210,16 @@ export function buildSystemPrompt(input: unknown): BuiltSystemPrompt {
       results: args.retrievedKnowledge ?? [],
     }),
     "",
+    ...buildCustomerMemoryPrompt(args.customerMemory ?? []),
+    "",
     buildAiTonePromptSection(aiSettings),
     "",
     ...buildHandoffPrompt(),
     "",
-    ...buildResponsePrompt(),
+    // Modo sugestao substitui o formato de saida e sobrepoe as instrucoes de
+    // efeito acima: nenhuma tool de efeito e oferecida ao modelo neste modo,
+    // entao agendar, cancelar, remarcar, pausar e handoff nao se aplicam.
+    ...(mode === "suggestion" ? buildSuggestionModePrompt() : buildResponsePrompt()),
     "",
     "Novas mensagens agrupadas:",
     args.groupedMessages || "[nao informado]",
@@ -171,6 +240,8 @@ function isPromptInput(value: unknown): value is BuildSystemPromptInput {
       "businessContext" in value ||
       "aiSettings" in value ||
       "knowledgeRequested" in value ||
-      "retrievedKnowledge" in value)
+      "retrievedKnowledge" in value ||
+      "customerMemory" in value ||
+      "mode" in value)
   );
 }

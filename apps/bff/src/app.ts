@@ -15,6 +15,7 @@ import { registerV1CalendarRoutes } from "./modules/calendar/routes.js";
 import { registerV1ConversationRoutes } from "./modules/conversations/routes.js";
 import { registerV1CustomerRoutes } from "./modules/customers/routes.js";
 import { registerV1DashboardRoutes } from "./modules/dashboard/routes.js";
+import { registerV1KnowledgeRoutes } from "./modules/knowledge/routes.js";
 import { registerV1MigrationRoutes } from "./modules/migrations/routes.js";
 import { registerV1OnboardingRoutes } from "./modules/onboarding/routes.js";
 import { registerV1ServiceRoutes } from "./modules/services/routes.js";
@@ -109,6 +110,7 @@ export async function buildApp() {
   await registerV1CalendarRoutes(app);
   await registerV1MigrationRoutes(app);
   await registerV1CustomerRoutes(app);
+  await registerV1KnowledgeRoutes(app);
   await registerV1ServiceRoutes(app);
   await registerV1SettingsRoutes(app);
   await registerV1WhatsAppRoutes(app);

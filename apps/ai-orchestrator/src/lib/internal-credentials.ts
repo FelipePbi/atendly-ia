@@ -34,6 +34,11 @@ export type InternalScope =
   | "conversations:write"
   | "messages:send"
   | "dashboard:read"
+  | "knowledge:read"
+  | "knowledge:write"
+  | "customer-memory:read"
+  | "customer-memory:write"
+  | "customer-summary:write"
   // Escopo deliberadamente não concedido a nenhuma credencial: é o destino de
   // caminho interno sem escopo declarado, para que rota nova falhe fechada.
   | "internal:unmapped";
@@ -50,6 +55,11 @@ const SCOPES_BY_USE: Record<InternalUse, readonly InternalScope[]> = {
     "conversations:write",
     "messages:send",
     "dashboard:read",
+    "knowledge:read",
+    "knowledge:write",
+    "customer-memory:read",
+    "customer-memory:write",
+    "customer-summary:write",
   ],
 };
 

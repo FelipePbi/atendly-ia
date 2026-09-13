@@ -609,6 +609,113 @@ export const whatsappDisconnectResultSchema = z.object({
   disconnected: z.literal(true),
 });
 
+// --- Conhecimento, memoria do cliente, resumo e sugestoes (Goal012) --------
+// Sem tela: a experiencia e dos Goals 015, 017 e 023. Aqui e so o contrato
+// que a camada de dados precisa entender, incluindo a recusa de vocabulario
+// desconhecido em campos fechados (`type`/`status` do documento, `kind` e
+// `origin` da memoria).
+export const knowledgeDocumentTypeSchema = z.enum([
+  "FAQ",
+  "GUIDANCE",
+  "CARE",
+  "PROCEDURE",
+  "BUSINESS_INFO",
+  "TEXT_POLICY",
+]);
+
+export const knowledgeDocumentStatusSchema = z.enum(["ACTIVE", "INACTIVE"]);
+
+export const knowledgeChunkSchema = z.object({
+  content: z.string().min(1),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const knowledgeDocumentSchema = z.object({
+  id: z.string().min(1),
+  type: knowledgeDocumentTypeSchema,
+  // Liga o documento a um servico do catalogo por ID; ausente, e geral.
+  serviceId: z.string().nullable(),
+  title: z.string(),
+  source: z.string(),
+  // Cada edicao gera versao nova e inativa a anterior; nunca apaga.
+  version: z.string(),
+  checksum: z.string(),
+  status: knowledgeDocumentStatusSchema,
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+});
+
+export const customerMemoryKindSchema = z.enum([
+  "PREFERRED_PERIOD",
+  "PREFERRED_DAY",
+  "RECURRING_SERVICE",
+  "OBSERVATION",
+]);
+
+export const customerMemoryOriginSchema = z.enum([
+  "CUSTOMER_STATED",
+  "AI_INFERRED",
+  "PROFESSIONAL",
+]);
+
+export const customerMemorySchema = z.object({
+  id: z.string().min(1),
+  customerId: z.string().min(1),
+  kind: customerMemoryKindSchema,
+  value: z.string(),
+  origin: customerMemoryOriginSchema,
+  // Permissao explicita de uso pela IA; nasce negada por padrao.
+  aiAllowed: z.boolean(),
+  // So preenchida quando a memoria foi inferida pela IA.
+  confidence: z.number().nullable(),
+  sourceConversationId: z.string().nullable(),
+  sourceMessageIds: z.array(z.string()),
+  observedAt: isoDateTimeSchema,
+  lastReinforcedAt: isoDateTimeSchema.nullable(),
+  // Inferencia nova que contradiz a anterior substitui, sem apagar.
+  supersededById: z.string().nullable(),
+  removedAt: isoDateTimeSchema.nullable(),
+  removedBy: z.string().nullable(),
+});
+
+export const customerSummarySchema = z.object({
+  customerId: z.string().min(1),
+  summary: z.string(),
+  promptVersion: z.string(),
+  // Auditoria obrigatoria: resumo sem AiRun nao e gerado, entao nunca chega
+  // nulo aqui.
+  aiRunId: z.string().min(1),
+  sources: z.object({
+    memory: z.number().int().nonnegative(),
+    notes: z.number().int().nonnegative(),
+    tags: z.number().int().nonnegative(),
+    upcomingAppointments: z.number().int().nonnegative(),
+  }),
+});
+
+export const conversationSuggestionsSchema = z.object({
+  conversationId: z.string().min(1),
+  suggestions: z.array(z.string()),
+  // Auditoria (`AiRun.kind = SUGGESTION`) e versao do prompt de sugestao:
+  // ambas nascem antes da chamada ao modelo, entao sempre chegam.
+  aiRunId: z.string().min(1),
+  promptVersion: z.string(),
+});
+
+export type KnowledgeDocumentType = z.infer<typeof knowledgeDocumentTypeSchema>;
+export type KnowledgeDocumentStatus = z.infer<
+  typeof knowledgeDocumentStatusSchema
+>;
+export type KnowledgeChunk = z.infer<typeof knowledgeChunkSchema>;
+export type KnowledgeDocument = z.infer<typeof knowledgeDocumentSchema>;
+export type CustomerMemoryKind = z.infer<typeof customerMemoryKindSchema>;
+export type CustomerMemoryOrigin = z.infer<typeof customerMemoryOriginSchema>;
+export type CustomerMemory = z.infer<typeof customerMemorySchema>;
+export type CustomerSummary = z.infer<typeof customerSummarySchema>;
+export type ConversationSuggestions = z.infer<
+  typeof conversationSuggestionsSchema
+>;
+
 export type AiTone = z.infer<typeof aiToneSchema>;
 export type Appointment = z.infer<typeof appointmentSchema>;
 export type AppointmentLifecycle = z.infer<typeof appointmentLifecycleSchema>;

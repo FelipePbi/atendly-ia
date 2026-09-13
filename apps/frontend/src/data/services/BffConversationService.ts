@@ -3,6 +3,7 @@ import { z } from "zod";
 import { type BffHttpClient } from "../http/BffHttpClient";
 import {
   conversationSchema,
+  conversationSuggestionsSchema,
   messageSchema,
   type SessionCategory,
 } from "../mappers/publicApiSchemas";
@@ -95,6 +96,19 @@ export class BffConversationService {
 
   resolve(id: string, signal?: AbortSignal) {
     return this.mutateState(id, "resolve", signal);
+  }
+
+  /**
+   * Até três sugestões de resposta para a profissional editar e, se quiser,
+   * enviar por `sendMessage` — esta rota nunca envia nada sozinha.
+   */
+  generateSuggestions(id: string, signal?: AbortSignal) {
+    return this.http.request({
+      method: "POST",
+      path: `/v1/conversations/${encodeURIComponent(id)}/suggestions`,
+      schema: conversationSuggestionsSchema,
+      signal,
+    });
   }
 
   private mutateState(

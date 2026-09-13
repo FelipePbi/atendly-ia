@@ -382,6 +382,19 @@ export function integrationSteps(target) {
       args: ["scripts/goal011-ai-style-migration-rehearsal.mjs"],
       env,
     },
+    // Gate M0/M1 do Goal012: ensaio da migração de conhecimento por serviço
+    // (KnowledgeDocument.serviceId), memória do cliente (CustomerMemory) e
+    // propósito do AiRun (AiRun.kind) contra estoque legado, em banco próprio
+    // e descartável, sem depender da extensão pgvector. Expande também o
+    // banco de durabilidade da IA (Goal004) com a mesma migração, antes da
+    // suíte de persistência logo abaixo.
+    {
+      name: "rehearse:goal012-knowledge-memory-migration",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal012-knowledge-memory-migration-rehearsal.mjs"],
+      env,
+    },
     // Identidade de cliente contra PostgreSQL real: telefone compartilhado,
     // cliente sem telefone, criação só na confirmação e isolamento por tenant.
     // Não pertence ao core porque exige banco.

@@ -18,6 +18,7 @@ interface RawKnowledgeSearchRow {
   documentId: string;
   chunkId: string;
   type: KnowledgeSearchResult["type"];
+  serviceId: string | null;
   title: string;
   source: string;
   version: string;
@@ -118,6 +119,7 @@ export class PGVectorKnowledgeStore implements KnowledgeVectorStore {
       throw new Error("limit must be an integer.");
     }
     const limit = Math.min(MAX_SEARCH_LIMIT, Math.max(1, input.limit));
+    const focusServiceIds = input.focusServiceIds ?? [];
     const embedding = await this.embeddings.embedQuery(query);
     assertValidEmbedding(embedding);
     const vector = toVectorLiteral(embedding);
@@ -129,6 +131,7 @@ export class PGVectorKnowledgeStore implements KnowledgeVectorStore {
             document."id" AS "documentId",
             chunk."id" AS "chunkId",
             document."type"::text AS "type",
+            document."serviceId" AS "serviceId",
             document."title" AS "title",
             document."source" AS "source",
             document."version" AS "version",
@@ -142,11 +145,15 @@ export class PGVectorKnowledgeStore implements KnowledgeVectorStore {
           WHERE chunk."tenantId" = ${tenantId}
             AND document."tenantId" = ${tenantId}
             AND document."status" = 'ACTIVE'::"KnowledgeDocumentStatus"
+            AND (
+              document."serviceId" IS NULL
+              OR document."serviceId" = ANY(${focusServiceIds}::text[])
+            )
         )
         SELECT *
         FROM ranked
         WHERE "score" >= ${this.minScore}
-        ORDER BY "score" DESC
+        ORDER BY ("serviceId" IS NOT NULL) DESC, "score" DESC
         LIMIT ${limit}
       `,
     );

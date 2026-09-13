@@ -123,6 +123,25 @@ export async function registerV1ConversationRoutes(
     },
   );
 
+  /**
+   * Sugestoes de resposta no atendimento humano (Goal012), sem autoenvio: a
+   * profissional edita ou nao e envia pelo caminho humano ja existente
+   * (`POST /v1/conversations/:id/messages`). Recusas proprias da IA (contato
+   * ignorado, sessao pessoal, sem atendimento humano vigente, IA desligada)
+   * chegam como qualquer outro erro da IA, pelo envelope de `UPSTREAM_ERROR`.
+   */
+  app.post(
+    "/v1/conversations/:id/suggestions",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      return dataResponse(
+        request,
+        await ai.generateSuggestions(internalContext(request), id),
+      );
+    },
+  );
+
   for (const action of ["takeover", "release", "resolve"] as const) {
     app.post(
       `/v1/conversations/:id/${action}`,

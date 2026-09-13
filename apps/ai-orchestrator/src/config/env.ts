@@ -50,6 +50,13 @@ const envSchema = z.object({
   OPENAI_MAX_OUTPUT_TOKENS: intEnv(600),
   KNOWLEDGE_SEARCH_LIMIT: intEnv(4),
   KNOWLEDGE_SEARCH_MIN_SCORE: numberEnv(0.65),
+  // Memoria do cliente: idade a partir da qual um item entra no prompt
+  // **marcado como antigo**, de menor peso. Nao apaga e nao filtra — preferencia
+  // inferida nao e verdade eterna, mas continua sendo material da conversa.
+  CUSTOMER_MEMORY_STALE_DAYS: intEnv(180),
+  // Teto do que entra no prompt por pessoa. O corte e por relevancia (recente
+  // primeiro), nunca aleatorio.
+  CUSTOMER_MEMORY_PROMPT_LIMIT: intEnv(12),
   EVOLUTION_WEBHOOK_TOKEN: stringEnv(),
   EVOLUTION_BASE_URL: stringEnv("http://evolution-go:8080"),
   EVOLUTION_API_KEY: stringEnv(),

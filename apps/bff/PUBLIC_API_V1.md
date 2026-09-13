@@ -12,7 +12,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Autenticação | `POST /v1/auth/register`; `POST /v1/auth/login`; `POST /v1/auth/logout`; `GET /v1/auth/session`; `PATCH /v1/auth/password`; `POST /v1/auth/forgot-password`; `POST /v1/auth/reset-password` |
 | Onboarding | `GET /v1/onboarding`; `PATCH /v1/onboarding`; `POST /v1/onboarding/complete` |
 | Home | `GET /v1/dashboard` |
-| Conversas | `GET /v1/conversations`; `GET /v1/conversations/:id`; `GET /v1/conversations/:id/messages`; `POST /v1/conversations/:id/messages`; `POST /v1/conversations/:id/takeover`; `POST /v1/conversations/:id/release`; `POST /v1/conversations/:id/resolve`; `PUT /v1/conversations/:id/category`; `PUT /v1/conversations/:id/ignore` |
+| Conversas | `GET /v1/conversations`; `GET /v1/conversations/:id`; `GET /v1/conversations/:id/messages`; `POST /v1/conversations/:id/messages`; `POST /v1/conversations/:id/takeover`; `POST /v1/conversations/:id/release`; `POST /v1/conversations/:id/resolve`; `PUT /v1/conversations/:id/category`; `PUT /v1/conversations/:id/ignore`; `POST /v1/conversations/:id/suggestions` (Goal012) |
 | Agendamentos | `GET /v1/appointments`; `GET /v1/appointments/:id`; `POST /v1/appointments`; `POST /v1/appointments/:id/reschedule`; `POST /v1/appointments/:id/cancel` |
 | Ciclo de vida do atendimento | `POST /v1/appointments/:id/complete`; `POST /v1/appointments/:id/no-show`; `POST /v1/appointments/:id/final-value`; `POST /v1/appointments/:id/presence`; `GET /v1/appointments/:id/events` |
 | Reserva temporária (hold) | `POST /v1/holds`; `GET /v1/holds`; `DELETE /v1/holds/:id` |
@@ -21,7 +21,8 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Exceções de disponibilidade (Goal009) | `GET /v1/availability-exceptions`; `POST /v1/availability-exceptions/extra`; `POST /v1/availability-exceptions/unavailable`; `DELETE /v1/availability-exceptions/:id` |
 | Séries de bloqueio/compromisso (Goal009) | `POST /v1/block-series`; `PATCH /v1/block-series/:id/from-date`; `DELETE /v1/block-series/:id` |
 | Importação única (Goal010) | `POST /v1/calendar/imports`; `POST /v1/calendar/imports/:sessionId/analyze`; `GET /v1/calendar/imports/:sessionId/categories/:category/items`; `POST /v1/calendar/imports/:sessionId/items/:itemId/decision`; `POST /v1/calendar/imports/:sessionId/execute`; `GET /v1/calendar/imports/:sessionId/progress`; `POST /v1/calendar/imports/:sessionId/complete` |
-| Clientes | `GET /v1/customers`; `GET /v1/customers/:id`; `POST /v1/customers`; `PATCH /v1/customers/:id`; `PUT /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/primary-guardian/confirm`; `DELETE /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/notes`; `PATCH /v1/customers/:id/notes/:noteId`; `DELETE /v1/customers/:id/notes/:noteId`; `POST /v1/customers/:id/tags`; `PATCH /v1/customers/:id/tags/:tagId`; `DELETE /v1/customers/:id/tags/:tagId` |
+| Clientes | `GET /v1/customers`; `GET /v1/customers/:id`; `POST /v1/customers`; `PATCH /v1/customers/:id`; `PUT /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/primary-guardian/confirm`; `DELETE /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/notes`; `PATCH /v1/customers/:id/notes/:noteId`; `DELETE /v1/customers/:id/notes/:noteId`; `POST /v1/customers/:id/tags`; `PATCH /v1/customers/:id/tags/:tagId`; `DELETE /v1/customers/:id/tags/:tagId`; `GET/POST /v1/customers/:id/memory`; `PATCH/DELETE /v1/customers/:id/memory/:memoryId`; `POST /v1/customers/:id/summary` (Goal012) |
+| Conhecimento do negócio (Goal012) | `GET/POST /v1/knowledge/documents`; `GET/PUT/DELETE /v1/knowledge/documents/:id`; `PUT /v1/knowledge/other-info` |
 | Serviços | `GET /v1/services`; `POST /v1/services`; `PATCH /v1/services/:id` |
 | Configurações | `GET /v1/settings`; `PATCH /v1/settings/business`; `PATCH /v1/settings/ai`; `PATCH /v1/settings/availability` |
 | WhatsApp | `GET /v1/whatsapp`; `POST /v1/whatsapp/connect`; `POST /v1/whatsapp/reconnect`; `DELETE /v1/whatsapp` |
@@ -331,3 +332,41 @@ Como as demais mutações, ambas resolvem o negócio pela sessão autenticada e 
 Agora o controle humano é gravado antes do transporte e a saída automática ainda não enviada é cancelada. O mesmo vale para a mensagem manual enviada pelo próprio WhatsApp conectado. Abrir ou ler a conversa (`GET`) não muda estado nenhum.
 
 `POST /v1/conversations/:id/release` é o `Retomar IA`: devolve a conversa à IA e faz o próximo turno reavaliar o contexto atual em vez de continuar do ponto anterior. Dentro de uma sessão viva não existe retomada automática por relógio — a IA só volta por essa rota ou em uma sessão nova, aberta após a expiração por inatividade do contato (~24 h), e nunca para contato ignorado. Nenhuma mensagem automática anuncia a troca entre IA e humano.
+
+## Conhecimento, memória do cliente, resumo e sugestões (Goal012)
+
+Todas as rotas desta seção resolvem o negócio pela sessão autenticada e exigem CSRF na mutação, como as demais. Nenhuma aceita `tenantId` por header, body ou query. São proxies finos para as rotas internas equivalentes da IA (`/internal/knowledge/...`, `/internal/customers/:id/memory...`, `/internal/customers/:id/summary`, `/internal/conversations/:id/suggestions`); o BFF valida entrada e repassa o DTO exatamente como a IA devolve.
+
+### Conhecimento do negócio, versionado
+
+`type` de `KnowledgeDocument` é um de `FAQ`, `GUIDANCE` (orientação), `CARE` (cuidado), `PROCEDURE`, `BUSINESS_INFO` ou `TEXT_POLICY`. `GET /v1/knowledge/documents` lista os documentos `ACTIVE` do negócio (filtráveis por `type`, `serviceId` e `status`); `POST` cria a primeira versão; `PUT /v1/knowledge/documents/:id` edita a versão vigente — cada edição gera uma **versão nova** e inativa a anterior na mesma transação do lado da IA, nunca apaga; `DELETE` desativa (`INACTIVE`), nunca remove a linha. `serviceId` liga o documento a um serviço do catálogo por ID, sem FK entre bancos; ausente, o documento é geral.
+
+Existe exatamente um documento `BUSINESS_INFO` por negócio para o campo livre "Outras informações importantes", com `source` fixa — só `PUT /v1/knowledge/other-info` grava nele. `POST`/`PUT /v1/knowledge/documents` recusam `type: "BUSINESS_INFO"` com `409` (repassado da IA, `upstreamCode: "KNOWLEDGE_BUSINESS_INFO_RESERVED"`).
+
+Cada documento carrega um ou mais `chunks` (`content` + `metadata` livre), reindexados a cada versão nova. Se o provider de embedding falhar, nada muda no banco da IA e a resposta chega como erro de infraestrutura próprio (`502`, `error.details.upstreamCode: "KNOWLEDGE_INDEX_UNAVAILABLE"`) — nunca um documento ativo sem chunks, nunca um `500` genérico.
+
+Precedência na recuperação usada pela IA (não é uma rota, é contrato de produto): regra de serviço em foco > FAQ geral > dados estruturados > campo livre; documento de outro serviço nunca entra no contexto de um serviço diferente.
+
+### Memória do cliente: origem, permissão e idade
+
+`CustomerMemory` é por `(tenantId, customerId)` da pessoa do Scheduling. Cada item tem `kind` (`PREFERRED_PERIOD`, `PREFERRED_DAY`, `RECURRING_SERVICE`, `OBSERVATION`), `value`, `origin` (`CUSTOMER_STATED`, `AI_INFERRED`, `PROFESSIONAL`), `aiAllowed` (permissão explícita de uso pela IA), `confidence` (só quando inferida), `sourceConversationId`/`sourceMessageIds`, `observedAt`, `lastReinforcedAt`, `supersededById` e `removedAt`/`removedBy`.
+
+`GET /v1/customers/:id/memory` lista o que está vigente (nem removido, nem substituído). `POST` cria com origem sempre `PROFESSIONAL` — a rota não aceita origem no corpo, para o painel não conseguir se passar por "informado pela cliente" — e permissão **nasce negada** por padrão, como as notas do cadastro (`aiAllowed: false` a menos que declarado). `PATCH /v1/customers/:id/memory/:memoryId` só altera `aiAllowed`. `DELETE` remove qualquer item, inclusive memória inferida pela IA — é o ponto do controle existir.
+
+Memória inferida pela IA (`AI_INFERRED`) nasce fora desta rota, a partir de turnos que a própria IA processou; uma inferência nova que contradiz a anterior do mesmo tipo **substitui** (`supersededById`), sem apagar. Só memória com `aiAllowed: true` entra no prompt da IA; item mais antigo que o limite de validade do produto entra marcado como antigo, de menor peso.
+
+### Resumo do cliente
+
+`POST /v1/customers/:id/summary` gera, sob demanda e pelo modelo, um resumo textual **exclusivamente** a partir de material autorizado: memória permitida (`aiAllowed: true`), notas e tags autorizadas do Scheduling (`aiAuthorized: true`) e próximos atendimentos. A resposta traz `summary`, `promptVersion`, `aiRunId` (auditoria, `kind = SUMMARY`, sempre presente) e `sources` (contagem do que foi efetivamente usado: `memory`, `notes`, `tags`, `upcomingAppointments`). O resumo **não é persistido** como memória, nota nem cadastro — a única escrita do lado da IA é o `AiRun` de auditoria.
+
+Resumo sem auditoria não é gerado: sem pessoa vinculada a um contato a IA recusa com `CUSTOMER_NOT_LINKED` (404) e, quando não há conversa onde ancorar o `AiRun`, com `SUMMARY_NOT_AUDITABLE` (409) — em nenhum dos dois casos o modelo chega a ser chamado.
+
+### Sugestões de resposta no atendimento humano
+
+`POST /v1/conversations/:id/suggestions` devolve até três sugestões de resposta para a profissional editar e, se quiser, enviar pelo caminho humano já existente (`POST /v1/conversations/:id/messages`, inalterado) — a rota de sugestão nunca envia nada sozinha. A resposta traz `conversationId`, `suggestions` (array de texto, até três itens), `aiRunId` (auditoria, `kind = SUGGESTION`) e `promptVersion` (versão efetiva do prompt de sugestão); os quatro campos são obrigatórios e vêm da IA sem reescrita.
+
+A geração usa um binding **somente leitura** de tools: nenhuma tool com efeito é oferecida ao modelo, nenhum hold é criado, nenhum rascunho é gravado, nenhuma `Message` nem linha de outbox nasce. Recusas próprias e verificáveis da IA — contato ignorado, sessão pessoal, conversa sem atendimento humano vigente, IA desligada para o negócio, ou mensagem do cliente não textual — chegam como qualquer outro erro próprio dela (ver abaixo), nunca como sugestão vazia silenciosa.
+
+### Erros próprios da IA nesta seção
+
+O BFF não reescreve o código de erro da IA como algo genérico: a resposta chega com `error.code: "UPSTREAM_ERROR"`, `error.statusCode` igual ao devolvido pela IA (ou `502` quando ela falhou com `5xx`) e o código original da IA em `error.details.upstreamCode` — o mesmo mecanismo já usado por todo proxy do BFF para a IA e o Scheduling. Nenhuma rota desta seção degrada uma recusa de negócio da IA para `500` genérico.

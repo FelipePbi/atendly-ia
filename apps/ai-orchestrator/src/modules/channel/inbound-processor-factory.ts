@@ -10,6 +10,7 @@ import { HandoffService } from "../handoff/HandoffService.js";
 import { IdempotencyStore } from "../idempotency/IdempotencyStore.js";
 import { OpenAIEmbeddingProvider } from "../knowledge/embedding-provider.js";
 import { PGVectorKnowledgeStore } from "../knowledge/pgvector-knowledge-store.js";
+import { CustomerMemoryService } from "../memory/customer-memory-service.js";
 import { SchedulingClient } from "../scheduling-service/client.js";
 import { SessionService } from "../session/SessionService.js";
 import { AssistantToolRegistry } from "../tools/assistant-tools.js";
@@ -49,12 +50,14 @@ export function buildInboundMessageProcessor(input: InboundProcessorInput) {
     input.logger,
   );
   const sessions = new SessionService(input.prisma);
+  const customerMemory = new CustomerMemoryService(input.prisma);
   const assistant = new AssistantService(
     input.prisma,
     input.logger,
     undefined,
     tools,
     sessions,
+    customerMemory,
   );
   const provider = new EvolutionProvider(
     input.logger,
@@ -81,6 +84,7 @@ export function buildInboundMessageProcessor(input: InboundProcessorInput) {
       debounce: input.debounce,
       outboundGate: input.outboundGate,
       sessions,
+      customerMemory,
     },
   );
 }

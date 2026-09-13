@@ -139,7 +139,7 @@ Inventário de entidades, constraints SQL adicionais ao Prisma, caminhos com loc
 
 AiRun/AiToolCall guardam modelo, promptVersion, status, argumentos, resultados e erros: base útil de auditabilidade, também conteúdo potencialmente pessoal. Message/ProcessedEvent guardam rawPayload. Handoff tem status e pausa; não é entidade de sessão de contato. AiTenantConfig replica enabled/tone/contexto do BFF. Conhecimento guarda versão/checksum/status e embedding `vector(1536)`. `pgvector-knowledge-store.ts:142–149` filtra tenant do chunk e do documento e somente documentos ACTIVE: proteção concreta, sem prova de RLS ou teste de invasão.
 
-Checkpointer usa schema PostgreSQL `langgraph` e executa setup no boot (`graph/checkpointer.ts:3–12`); thread_id é conversationId (`message-graph.ts:78`). Tabelas de checkpoints são persistência adicional fora do schema Prisma. Não há rotina de retenção de conteúdo/checkpoints/runs localizada. O seed de conhecimento não representa CRUD de FAQ pronto no produto.
+Checkpointer usa schema PostgreSQL `langgraph` e executa setup no boot (`graph/checkpointer.ts:3–12`); thread_id é conversationId (`message-graph.ts:78`). Tabelas de checkpoints são persistência adicional fora do schema Prisma. Não há rotina de retenção de conteúdo/checkpoints/runs localizada. O seed de conhecimento não representa CRUD de FAQ pronto no produto. **Superado no Goal012** na parte de conhecimento, memória do cliente e propósito do `AiRun` — ver o delta ao final deste documento; a retenção continua aberta (Goal022).
 
 ## WhatsApp / Evolution Go
 
@@ -1000,3 +1000,89 @@ base `0f4ac74`.
   persistiu — **não** qualidade de modelo real. Nenhum modelo real foi chamado
   em teste. Mídia (G-23) e conhecimento, memória e sugestões (G-24) continuam
   fora: são dos Goals 013 e 012.
+
+## Delta implementado — Goal012, 2026-09-13 (ACCEPTED na rodada 3)
+
+A fotografia histórica acima permanece como registro da baseline. Os FATOS de
+"Dados e memória da IA" que descrevem o conhecimento como algo que só entra por
+seed, sem CRUD de FAQ no produto, e a memória da IA como JSON por conversa
+estão superados pelos fatos abaixo, verificados no
+[review012](reviews/012-review.md) sobre a base `4116149`.
+
+- **FATO atual:** conhecimento é editável por rota, não por seed. `GET/POST
+  /internal/knowledge/documents`, `GET/PUT/DELETE
+  /internal/knowledge/documents/:id` e `PUT /internal/knowledge/other-info` na
+  IA, expostos no BFF sob `/v1/knowledge/...` com tenant de sessão e CSRF,
+  criam, editam, listam e desativam FAQ geral, FAQ por serviço, orientação,
+  cuidado, procedimento, política textual e o campo livre. Cada salvamento cria
+  **versão nova e inativa a anterior na mesma transação**; desativar é
+  `INACTIVE`, nunca apagar; a identidade estável é o `source` e a chave única
+  `(tenantId, type, source, version)` continua valendo. Conteúdo igual (mesmo
+  `checksum`) não gera versão nem reindexação. `npm run knowledge:seed` passou a
+  usar o mesmo serviço e é ferramenta de desenvolvimento, não interface
+  operacional.
+- **FATO atual:** o embedding é calculado **antes** da transação. Falha do
+  provider devolve `KNOWLEDGE_INDEX_UNAVAILABLE` e não altera nada no banco —
+  não existe documento `ACTIVE` sem chunks correspondentes.
+- **FATO atual:** `KnowledgeDocument` tem `serviceId` (nulo, índice
+  `(tenantId, serviceId)`), então FAQ pode ser **do serviço**. A recuperação
+  continua restrita ao tenant e a `ACTIVE` e passou a filtrar `serviceId IS NULL
+  OR = ANY(focus)`, com o serviço em foco lido só do estado persistido (rascunho
+  ou ação pendente): documento de outro serviço não entra. O prompt apresenta os
+  trechos na precedência do produto — regra do serviço em foco > FAQ > dados
+  estruturados do negócio > campo livre — e manda seguir apenas a fonte de maior
+  precedência em caso de conflito. Pergunta secundária desconhecida recebe
+  resposta simples sem handoff; pergunta material para decisão ou segurança vai
+  para handoff; a IA não completa com conhecimento geral o que o negócio não
+  cadastrou.
+- **FATO atual:** existe `CustomerMemory` no banco da IA, por `(tenantId,
+  customerId)` da pessoa do Scheduling — quatro tipos (`PREFERRED_PERIOD`,
+  `PREFERRED_DAY`, `RECURRING_SERVICE`, `OBSERVATION`), origem
+  `CUSTOMER_STATED`/`AI_INFERRED`/`PROFESSIONAL`, `aiAllowed` **por linha** com
+  default `false` e filtrado na própria consulta, confiança, conversa e
+  mensagens de origem, `observedAt`/`lastReinforcedAt`, `supersededById` e
+  `removedAt`/`removedBy`. Contradição **substitui** sem apagar. No prompt, item
+  mais antigo que `CUSTOMER_MEMORY_STALE_DAYS` (180) entra marcado como antigo e
+  `CUSTOMER_MEMORY_PROMPT_LIMIT` (12) corta por relevância, recente primeiro. A
+  `ConversationMemory` de sessão continua existindo, separada, e não vira
+  memória da pessoa por si só.
+- **FATO atual:** a IA só infere memória a partir de **efeito verificável** do
+  turno — `AiToolCall` `SUCCEEDED` do `AiRun` daquele turno, `create_appointment`
+  com `action = confirm` ou `confirm_recurring_appointments` —, nunca do JSON de
+  decisão nem de rascunho não confirmado. `RECURRING_SERVICE` só nasce de série
+  recorrente confirmada; atendimento avulso apenas reforça e nunca cria linha.
+  Não há inferência de contato ignorado, sessão pessoal ou turno atendido por
+  humano. A profissional lista, cria (origem `PROFESSIONAL`, permissão explícita
+  e negada por padrão), altera a permissão e remove qualquer item, inclusive
+  inferido, por `GET/POST /internal/customers/:id/memory` e `PATCH/DELETE
+  .../:memoryId`.
+- **FATO atual:** o resumo do cliente é gerado sob demanda por `POST
+  /internal/customers/:id/summary` **exclusivamente** a partir de material
+  autorizado (memória permitida, notas e tags `aiAuthorized` do Scheduling,
+  próximos atendimentos), não é persistido como verdade e **sempre** tem
+  `AiRun` com `kind = SUMMARY`: sem pessoa vinculada recusa `CUSTOMER_NOT_LINKED`
+  e sem conversa para ancorar o registro recusa `SUMMARY_NOT_AUDITABLE` (409),
+  antes de qualquer chamada ao modelo. `aiRunId` é obrigatório no DTO da IA, do
+  BFF e do frontend.
+- **FATO atual:** a única sugestão da IA deixou de ser a categoria da sessão.
+  `POST /internal/conversations/:id/suggestions` (BFF
+  `/v1/conversations/:id/suggestions`) devolve até três sugestões de resposta em
+  `{ conversationId, suggestions, aiRunId, promptVersion }`, **fora do grafo**,
+  com binding de tools somente leitura: nenhuma tool com efeito é oferecida ao
+  modelo e nenhum hold, rascunho, `Message` ou linha de outbox nasce, provado
+  por asserção de alcance com contagem. O registro é `AiRun` com
+  `kind = SUGGESTION`. Cinco recusas próprias, todas anteriores ao modelo:
+  `CONTACT_IGNORED`, `SESSION_PERSONAL`, `HUMAN_HANDLING_REQUIRED`,
+  `AI_DISABLED` e `NO_TEXTUAL_MESSAGE`. O envio continua sendo o caminho humano
+  existente, inalterado.
+- **FATO atual:** `AiRun` tem `kind` (`TURN` default, `SUGGESTION`, `SUMMARY`),
+  então toda chamada de modelo da IA — turno, sugestão e resumo — é auditável
+  pela mesma tabela e distinguível por propósito. As rotas novas têm escopo
+  interno próprio (`knowledge:read/write`, `customer-memory:read/write`,
+  `customer-summary:write`), com o destino `internal:unmapped` preservado: rota
+  interna sem escopo declarado continua falhando fechada.
+- **Limite verificado:** a persistência de `KnowledgeChunk` com embedding
+  continua sem prova contra banco nesta máquina — o PostgreSQL descartável dos
+  gates não tem a extensão `vector`, e o ensaio do Goal012 a pula com skip
+  nomeado. Nenhum modelo e nenhum provider de embedding real foi chamado em
+  teste. Mídia (G-23) continua fora: é do Goal013.

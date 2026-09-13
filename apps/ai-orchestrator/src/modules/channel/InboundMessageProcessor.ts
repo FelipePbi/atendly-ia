@@ -23,6 +23,7 @@ import type {
 } from "../handoff/HandoffService.js";
 import type { IdempotencyStore } from "../idempotency/IdempotencyStore.js";
 import type { KnowledgeVectorStore } from "../knowledge/knowledge-vector-store.js";
+import type { CustomerMemoryPromptPort } from "../memory/customer-memory-service.js";
 import type { GraphSessionPort } from "../session/SessionService.js";
 import type { BusinessContext } from "../tenant-config/business-context.js";
 import type { ChannelInboundMessage } from "./domain/ChannelMessage.js";
@@ -167,6 +168,8 @@ export interface InboundMessageProcessorOptions {
   outboundGate?: OutboundGate;
   /** Contato, sessao, categoria e controle humano persistidos (Goal005). */
   sessions?: GraphSessionPort;
+  /** Memoria permitida da pessoa vinculada ao contato (Goal012). */
+  customerMemory?: CustomerMemoryPromptPort;
 }
 
 interface BufferedMessage {
@@ -213,6 +216,7 @@ export class InboundMessageProcessor {
       checkpointer: options.checkpointer,
       outboundGate: options.outboundGate,
       sessions: options.sessions,
+      customerMemory: options.customerMemory,
       logger,
     });
   }

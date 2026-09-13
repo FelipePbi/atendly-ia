@@ -101,12 +101,14 @@ export class PrismaGraphRuntime implements GraphRuntimePort {
         humanHandoff: true,
         externalContactId: true,
         contactId: true,
+        state: true,
       },
     });
     if (!conversation) {
       throw new Error("Conversation was not found for LangGraph execution.");
     }
-    return conversation;
+    const { state, ...rest } = conversation;
+    return { ...rest, focusServiceIds: resolveFocusServiceIds(state) };
   }
 
   async loadToolResults(input: {
@@ -135,4 +137,47 @@ export class PrismaGraphRuntime implements GraphRuntimePort {
       error: call.error ?? undefined,
     }));
   }
+}
+
+/**
+ * Extrai o servico em foco do `state` persistido da conversa: servicos do
+ * rascunho de agendamento (`appointmentDraft`) e da acao pendente
+ * (`pendingAction`), nunca texto livre. `state` e JSON de forma livre e pode
+ * vir vazio, nulo ou com formato inesperado de um binario anterior.
+ */
+function resolveFocusServiceIds(state: unknown): string[] {
+  if (!state || typeof state !== "object") return [];
+  const record = state as Record<string, unknown>;
+  const ids = new Set<string>();
+
+  const draft = record.appointmentDraft;
+  if (draft && typeof draft === "object") {
+    const services = (draft as Record<string, unknown>).services;
+    if (Array.isArray(services)) {
+      for (const service of services) {
+        const serviceId = (service as Record<string, unknown> | null)
+          ?.serviceId;
+        if (typeof serviceId === "string" || typeof serviceId === "number") {
+          ids.add(String(serviceId));
+        }
+      }
+    }
+  }
+
+  const pendingAction = record.pendingAction;
+  if (pendingAction && typeof pendingAction === "object") {
+    const pending = pendingAction as Record<string, unknown>;
+    if (typeof pending.serviceId === "string" || typeof pending.serviceId === "number") {
+      ids.add(String(pending.serviceId));
+    }
+    if (Array.isArray(pending.serviceIds)) {
+      for (const serviceId of pending.serviceIds) {
+        if (typeof serviceId === "string" || typeof serviceId === "number") {
+          ids.add(String(serviceId));
+        }
+      }
+    }
+  }
+
+  return [...ids];
 }

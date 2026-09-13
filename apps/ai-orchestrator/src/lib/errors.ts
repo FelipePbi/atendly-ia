@@ -24,7 +24,7 @@ export class AppError extends Error {
  * sem checar o que ele significa.
  */
 export const DOMAIN_ERROR_CODES = {
-  /** Horário que a cliente pediu não está mais disponível. */
+  /** Horário que a cliente pediu não está mais disponível (emitido pelo Scheduling, repassado sem reescrever). */
   SLOT_UNAVAILABLE: "SLOT_UNAVAILABLE",
   /** Reserva temporária (hold) venceu antes da confirmação. */
   HOLD_EXPIRED: "APPOINTMENT_HOLD_EXPIRED",
@@ -32,6 +32,15 @@ export const DOMAIN_ERROR_CODES = {
   CUSTOMER_IDENTITY_AMBIGUOUS: "CUSTOMER_IDENTITY_AMBIGUOUS",
   /** O serviço pedido não existe (ou não está mais ativo) na agenda do tenant. */
   SERVICE_NOT_FOUND: "SERVICE_NOT_FOUND",
+} as const;
+
+/**
+ * Códigos reservados (Goal011 review, resíduo do 012): descrevem uma
+ * situação de negócio prevista mas que nenhuma tool ou cliente emite hoje.
+ * Reservado, não removido, porque o nome já é contrato de vocabulário para
+ * quando a janela de oferta existir; não usar sem implementar a emissão.
+ */
+export const RESERVED_DOMAIN_ERROR_CODES = {
   /** Horário pedido está fora da janela de antecedência/oferta do negócio. */
   OUTSIDE_OFFER_WINDOW: "OUTSIDE_OFFER_WINDOW",
 } as const;

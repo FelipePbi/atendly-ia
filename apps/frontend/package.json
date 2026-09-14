@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "legal:check": "node scripts/check-legal-config.mjs"
+    "legal:check": "node scripts/check-legal-config.mjs",
+    "test:ui": "playwright test"
   },
   "engines": {
     "node": ">=20"
@@ -26,7 +27,9 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^9.35.0",
+    "@playwright/test": "^1.63.0",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",

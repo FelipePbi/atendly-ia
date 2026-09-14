@@ -129,10 +129,42 @@ Prove pelo que o usuário encontra, não pela classe CSS:
 - **Estado nunca só por cor** — afirme o atributo (`aria-busy`, `disabled`,
   `aria-current`), nunca a cor.
 
-O que essa camada **não** alcança: layout real, largura de viewport e fidelidade
-visual à referência aprovada. jsdom não tem layout. Matriz de larguras e
-fidelidade visual continuam sendo conferência humana até existir navegador no
-circuito — não declare nenhuma das duas como provada por teste.
+O que essa camada **não** alcança: layout real e largura de viewport. jsdom não
+tem layout nem cascata — por isso contraste está desligado nela.
+
+## O gate renderizado (`npm run validate:ui`)
+
+Playwright em `e2e/`, rodando Chromium contra `next start`, nas cinco larguras
+do vault: 360, 390, 768, 1024 e 1440. É **unidade DETERMINISTIC** — o
+orquestrador roda, custo zero de modelo — e o revisor lê o resultado em vez de
+operar o navegador.
+
+O que só ele consegue responder:
+
+- **Overflow horizontal** em cada largura, nomeando o elemento culpado.
+- **Touch targets**, com dois níveis: abaixo de 24px (WCAG 2.5.8 AA) **falha**;
+  entre 24 e 44px é anexado como relatório, porque "confortável" é AAA e um gate
+  vermelho de nascença é um gate que alguém desliga. Link dentro de frase é
+  isento, como a própria norma prevê.
+- **Contraste real**, computado da paleta renderizada. É o único lugar onde
+  contraste é decidido.
+- **Foco visível** e **`prefers-reduced-motion`** de verdade.
+
+`KNOWN_SMALL_TARGETS` em `viewport-matrix.spec.ts` lista a dívida anterior ao
+gate, com motivo e dono. A lista é estrita nos dois sentidos: uma entrada que
+**deixou de reproduzir falha**, para que a correção leve a exceção junto em vez
+de deixar cemitério.
+
+Screenshot de página inteira é anexado por rota e por largura. É **evidência
+para pessoa**, nunca pass/fail: fidelidade à direção aprovada não é decidida por
+verificação automática, e não deve ser declarada como provada por teste.
+
+A saída vai para `e2e-results/`, que está no `.gitignore` de propósito — o
+revisor do IA Loop é fingerprintado por `git status --porcelain` na worktree, e
+artefato rastreado ali viraria `REVIEWER_MUTATED_WORKTREE`.
+
+Rotas cobertas: só as públicas (`e2e/routes.ts`). Tela autenticada exigiria
+sessão real, e sessão falsa provaria layout sobre dado que ninguém vê.
 
 `tests/support/a11y.test.tsx` existe para provar que o portão morde: ele aponta
 o axe para markup quebrado de propósito e exige que falhe. Um axe mal

@@ -47,6 +47,13 @@ Thumbs.db
 /graphify-out/.graphify_root
 /.playwright-mcp/
 
+# Saída do gate de UI (validate:ui). Fica fora do Git de propósito: o revisor do
+# IA Loop é fingerprintado por `git status --porcelain` na worktree, e artefato
+# rastreado ali viraria REVIEWER_MUTATED_WORKTREE.
+apps/frontend/e2e-results/
+apps/frontend/playwright-report/
+apps/frontend/test-results/
+
 # Evolution Go Dockerfile expects this bundled manager asset.
 !/apps/evolution-go/manager/
 !/apps/evolution-go/manager/dist/

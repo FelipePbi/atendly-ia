@@ -40,7 +40,8 @@
     "ia-loop:worker": "node tools/ia-loop/run-worker.mjs",
     "test:ia-loop": "node --test tools/ia-loop/tests/**/*.test.mjs",
     "validate:core": "node scripts/validate-core.mjs",
-    "validate:integration": "node scripts/validate-integration.mjs"
+    "validate:integration": "node scripts/validate-integration.mjs",
+    "validate:ui": "cd apps/frontend && npm run test:ui"
   },
   "engines": {
     "node": ">=20"

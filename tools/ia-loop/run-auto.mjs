@@ -203,6 +203,8 @@ async function main() {
 
   // --- Acquire or re-attach to the run ------------------------------------
   let run;
+  /** A retired run's pause intent, so `--from` does not silently disarm it. */
+  let retiredPauseIntent = null;
   const attached = await auto.attach();
 
   if (attached && !attached.attached) {
@@ -317,6 +319,12 @@ async function main() {
         reason: archived.humanRequired?.reason ?? null, note: resolvedNote,
       });
       emit(`Run ${archived.autonomousRunId} retired: ${resolvedNote}`);
+      // The operator armed the stop against the campaign, not against this run
+      // id, so it travels to the run that replaces this one.
+      retiredPauseIntent = archived;
+      if (archived.pauseRequested) {
+        emit(`  Pause intent carried over: ${archived.pauseAfterGoal ? 'after the current Goal' : 'at the next safe boundary'}.`);
+      }
       run = null;
     }
   }
@@ -330,7 +338,11 @@ async function main() {
       await failAfterAttach(auto, 'INVALID_ARGS', 'Pass --from <goalId> to start a new autonomous run');
     }
 
-    run = await auto.start({ fromGoal: startGoal, migrationAcceptedBaseline: acceptedBaseline });
+    run = await auto.start({
+      fromGoal: startGoal,
+      migrationAcceptedBaseline: acceptedBaseline,
+      inheritPause: retiredPauseIntent,
+    });
     await store.appendEvent({
       type: 'AUTONOMOUS_RUN_STARTED', autonomousRunId: run.autonomousRunId,
       fromGoal: startGoal, baseline: acceptedBaseline,

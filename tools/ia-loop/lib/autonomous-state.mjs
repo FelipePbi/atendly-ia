@@ -109,7 +109,7 @@ export function createAutonomousStore(stateDir) {
      * Starts a run, but only if no healthy orchestrator already owns the loop.
      * The claim is the same atomic filesystem primitive used for jobs.
      */
-    async start({ fromGoal, migrationAcceptedBaseline }) {
+    async start({ fromGoal, migrationAcceptedBaseline, inheritPause = null }) {
       const existing = await this.read();
       const lease = await leases.readJobLease(LOOP_LEASE_KEY);
 
@@ -144,6 +144,15 @@ export function createAutonomousStore(stateDir) {
         );
       }
 
+      // The pause intent survives the run that carried it. `pauseAfterGoal`
+      // only means anything while `pauseRequested` holds, so it is never
+      // inherited on its own.
+      const source = inheritPause ?? existing ?? null;
+      const inherited = {
+        pauseRequested: source?.pauseRequested === true,
+        pauseAfterGoal: source?.pauseRequested === true && source?.pauseAfterGoal === true,
+      };
+
       const autonomousRunId = `auto-${randomUUID().slice(0, 8)}`;
       const claim = await leases.claimJob(LOOP_LEASE_KEY, loopLeasePayload({ autonomousRunId, attempt: 1 }));
       if (!claim.acquired) {
@@ -159,8 +168,15 @@ export function createAutonomousStore(stateDir) {
         currentGoal: fromGoal,
         completedGoals: [],
         migrationAcceptedBaseline,
-        pauseRequested: false,
-        pauseAfterGoal: false,
+        // Inherited from the run this one replaces, because the operator armed
+        // it against the CAMPAIGN, not against a run id. `--from` archives the
+        // previous run — which deletes the live record, so `existing` is null
+        // on that path and the caller passes the archived intent instead.
+        // A fresh `false` here silently disarmed the stop: on Goal 014 the loop
+        // closed the Goal it was asked to close and then started the next one
+        // by itself.
+        pauseRequested: inherited.pauseRequested,
+        pauseAfterGoal: inherited.pauseAfterGoal,
         attempt: 1,
         ownerInstanceId: claim.lease.workerInstanceId,
       };

@@ -120,6 +120,22 @@ export const DETERMINISTIC_ACTIONS = Object.freeze({
     requiresPattern: false,
     targeted: false,
   }),
+  /**
+   * The integration gate, which needs databases the harness does not yet
+   * provision.
+   *
+   * `scripts/validate-integration.mjs` refuses to run unless every
+   * `*_TEST_DATABASE_URL` names a disposable cluster — deliberately, so it can
+   * never fall back to an inherited `DATABASE_URL` and write to something
+   * real. The orchestrator does not start one (`lib/temporary-postgres.mjs`
+   * exists and has no caller), so the command exits instantly.
+   *
+   * Measured on Goal 014: three attempts, exit 2 every time, each one spending
+   * a fix unit on a defect no model can repair, and the gate reported as a
+   * failure of the Goal rather than of its own precondition. Declaring the
+   * requirement turns that into one honest skip. It does NOT make the gate
+   * pass — provisioning the cluster is separate work.
+   */
   'validate-integration': Object.freeze({
     name: 'validate-integration',
     label: 'Integration validation gate',
@@ -128,6 +144,12 @@ export const DETERMINISTIC_ACTIONS = Object.freeze({
     requiresScope: false,
     requiresPattern: false,
     targeted: false,
+    requiresEnv: Object.freeze([
+      'BFF_TEST_DATABASE_URL',
+      'AI_TEST_DATABASE_URL',
+      'EVOLUTION_TEST_DATABASE_URL',
+      'SCHEDULING_TEST_DATABASE_URL',
+    ]),
   }),
   /**
    * The rendered gate: Playwright over Chromium at the five widths the vault

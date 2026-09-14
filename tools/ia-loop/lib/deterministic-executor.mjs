@@ -67,6 +67,33 @@ export async function runDeterministicAction({
   const argv = [...spec.command, ...(spec.appendPattern && unit.pattern ? [unit.pattern] : [])];
   const startedAt = Date.now();
 
+  // A precondition the harness cannot satisfy is not a failure of the Goal,
+  // and answering it as one costs a fix unit per attempt on a defect no model
+  // can repair. Checked BEFORE the spawn: the command would only exit
+  // instantly anyway, and the exit code would say nothing about why.
+  const missingEnv = (spec.requiresEnv ?? []).filter((name) => {
+    const value = env[name];
+    return typeof value !== 'string' || value.trim() === '';
+  });
+  if (missingEnv.length > 0) {
+    return Object.freeze({
+      unitId: unit.id,
+      action: spec.name,
+      label: spec.label,
+      argv: Object.freeze([...argv]),
+      cwd,
+      durationMs: 0,
+      ok: false,
+      skipped: true,
+      missingEnv: Object.freeze(missingEnv),
+      exitCode: null,
+      signal: null,
+      error: null,
+      stdout: '',
+      stderr: '',
+    });
+  }
+
   return new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
@@ -203,6 +230,39 @@ export function toDeterministicResult({ unit, outcome, goal, round, jobId }) {
   const detail = outcome.ok
     ? tail(outcome.stdout, PERSISTED_OUTPUT_LIMIT)
     : tail(`${outcome.stdout}\n${outcome.stderr}`.trim(), PERSISTED_OUTPUT_LIMIT);
+
+  // Three states, not two. A gate that never ran is not a gate that failed,
+  // and collapsing them is what made Goal 014 report "4 FAILED" for a Goal
+  // whose product code was fine.
+  if (outcome.skipped) {
+    const names = [...(outcome.missingEnv ?? [])].join(', ');
+    return Object.freeze({
+      protocolVersion: 2,
+      jobId,
+      goal,
+      round,
+      workUnitId: unit.id,
+      status: 'SKIPPED',
+      executor: 'native',
+      action: outcome.action,
+      argv: outcome.argv,
+      exitCode: null,
+      signal: null,
+      durationMs: outcome.durationMs,
+      summary: `${outcome.label} não rodou: pré-condição ausente (${names}).`,
+      report:
+        `O comando não foi executado. Ele exige ${names}, que o orchestrator não provisiona.\n`
+        + 'Isto é uma limitação do harness, não uma falha desta implementação: '
+        + 'nenhuma correção no código do produto faria este gate passar.',
+      changedFiles: Object.freeze([]),
+      acceptance: Object.freeze([]),
+      escalation: null,
+      contextRequest: null,
+      blockedReason: null,
+      missingEnv: Object.freeze([...(outcome.missingEnv ?? [])]),
+      failurePaths: Object.freeze([]),
+    });
+  }
 
   return Object.freeze({
     protocolVersion: 2,

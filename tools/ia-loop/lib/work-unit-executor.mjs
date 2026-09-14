@@ -265,6 +265,20 @@ export async function executeWorkUnitPlan({
 
     records.set(unitId, record);
 
+    // A gate whose precondition the harness cannot meet never ran, so there is
+    // nothing to attribute and nothing for a fix unit to repair. Recorded as
+    // its own event so the round stays honest about what was and was not
+    // verified, and skipped over rather than counted as a red gate.
+    if (unit.type === 'DETERMINISTIC' && record.state === 'SKIPPED') {
+      await store.appendEvent({
+        type: 'WORK_UNIT_VERIFICATION_SKIPPED',
+        goal, round, workUnitId: unitId, action: unit.action,
+        missingEnv: record.missingEnv ?? [],
+      });
+      emit(`  ${unitId} SKIPPED — pré-condição ausente; o gate não rodou e nenhuma correção é criada.`);
+      continue;
+    }
+
     // A failed verification is the one thing that can change the plan while it
     // runs. Everything else is decided before execution starts.
     if (unit.type === 'DETERMINISTIC' && record.state !== 'COMPLETED') {
@@ -372,18 +386,24 @@ async function executeDeterministicUnit({ store, unit, unitJobId, goal, round, w
   const outcome = await runAction({ unit, worktree });
   const result = toDeterministicResult({ unit, outcome, goal, round, jobId: unitJobId });
 
+  // A skipped gate is not a failed job: leaving it FAILED would make a
+  // resume treat an unmet precondition as work that could be retried.
+  const jobStatus = outcome.skipped ? 'SKIPPED' : (outcome.ok ? 'COMPLETED' : 'FAILED');
   await store.publishResult(WORK_UNIT_NAMESPACE, unitJobId, { ok: outcome.ok, result }, { attemptId });
-  await store.setJobStatus(WORK_UNIT_NAMESPACE, unitJobId, outcome.ok ? 'COMPLETED' : 'FAILED');
+  await store.setJobStatus(WORK_UNIT_NAMESPACE, unitJobId, jobStatus);
 
   await store.appendEvent({
     type: 'WORK_UNIT_DETERMINISTIC_EXECUTED',
     goal, round, workUnitId: unit.id, jobId: unitJobId,
-    action: unit.action, ok: outcome.ok, exitCode: outcome.exitCode,
+    action: unit.action, ok: outcome.ok, skipped: outcome.skipped ?? false,
+    missingEnv: outcome.missingEnv ?? [], exitCode: outcome.exitCode,
     signal: outcome.signal, durationMs: outcome.durationMs,
     // Stated explicitly because it is the whole point of the type.
     modelCalls: 0,
   });
-  emit(`    ${outcome.ok ? 'PASS' : 'FAIL'} — exit ${outcome.exitCode ?? 'n/a'} (${outcome.durationMs}ms)`);
+  emit(`    ${outcome.skipped ? 'SKIP' : (outcome.ok ? 'PASS' : 'FAIL')}`
+    + ` — ${outcome.skipped ? `faltam ${(outcome.missingEnv ?? []).join(', ')}` : `exit ${outcome.exitCode ?? 'n/a'}`}`
+    + ` (${outcome.durationMs}ms)`);
 
   return fromPersisted(unit, result, { reused: false });
 }
@@ -410,6 +430,7 @@ function fromPersisted(unit, result, { reused }) {
     exitCode: result?.exitCode ?? null,
     durationMs: result?.durationMs ?? 0,
     failurePaths: [...(result?.failurePaths ?? [])],
+    missingEnv: [...(result?.missingEnv ?? [])],
     reused,
   };
 }

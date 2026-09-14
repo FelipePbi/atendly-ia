@@ -35,6 +35,8 @@ export function businessProfileDto(profile: BusinessProfile | null) {
     timezone: profile.timezone,
     language: profile.language,
     currency: profile.currency,
+    modalities: profile.modalities,
+    address: profile.address,
     createdAt: toIso(profile.createdAt),
     updatedAt: toIso(profile.updatedAt),
   };

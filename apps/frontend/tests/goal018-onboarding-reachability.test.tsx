@@ -1,0 +1,691 @@
+// @vitest-environment jsdom
+/**
+ * Goal018 (WU-07) — decomposição do onboarding em módulos por bloco.
+ *
+ * `features/onboarding` deixou de ser dois arquivos que concentravam o fluxo
+ * inteiro (`OnboardingScreen.tsx` com o protótipo e `ProductOnboardingScreen.tsx`
+ * com produto + persistência + navegação) e passou a ser um despachante
+ * (`OnboardingScreen.tsx`) que delega corpo e persistência a
+ * `features/onboarding/blocks/*`, um por bloco do vault.
+ *
+ * Esta suíte prova alcançabilidade pelo que o usuário encontra: a rota real
+ * (`app/onboarding/[step]/page.tsx`) monta cada cenário sobrevivente, e cada
+ * etapa oferece o link/submit real que leva à próxima — não apenas um import
+ * de teste sem consumidor de produção.
+ *
+ * Cenários removidos (protótipo sem consumidor real): as 8 variações
+ * `importar-*` (só existiam no fluxo do protótipo descontinuado; a
+ * importação real é do Goal019) e 12 das 13 variações `minha-agenda-*`
+ * (`minha-agenda-conectar` é a única alcançada pelo produto hoje — as demais
+ * simulavam etapas de uma integração externa que ainda não existe, o que
+ * contradiz "não inventar feature"). `onboardingOrder` e `generateStaticParams`
+ * não geram mais rota estática para nenhum desses 20 cenários.
+ */
+
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+
+import { BffHttpError, type OnboardingState } from "@/data";
+
+const push = vi.fn();
+const replace = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push, replace }),
+}));
+
+const getOnboarding = vi.fn();
+const updateOnboarding = vi.fn();
+const completeOnboarding = vi.fn();
+const getWhatsapp = vi.fn();
+const logout = vi.fn();
+const refreshSession = vi.fn();
+const setUnauthenticated = vi.fn();
+
+vi.mock("@/shared/runtime/ProductRuntime", () => ({
+  getProductServices: () => ({
+    auth: { logout },
+    onboarding: {
+      complete: completeOnboarding,
+      get: getOnboarding,
+      update: updateOnboarding,
+    },
+    whatsapp: { get: getWhatsapp },
+  }),
+  useProductRuntime: () => ({ refreshSession, setUnauthenticated }),
+}));
+
+vi.mock("@/features/whatsapp/WhatsAppConnectionPanel", () => ({
+  WhatsAppConnectionPanel: () => <div>Painel de conexão do WhatsApp</div>,
+}));
+
+import OnboardingPage from "@/app/onboarding/[step]/page";
+import { onboardingError } from "@/features/onboarding/blocks/registry";
+import {
+  nextRequiredStep,
+  OnboardingRuntimeProvider,
+} from "@/features/onboarding/OnboardingRuntime";
+import { OnboardingScreen } from "@/features/onboarding/OnboardingScreen";
+import * as OnboardingScreenModule from "@/features/onboarding/OnboardingScreen";
+import {
+  isOnboardingScenario,
+  onboardingOrder,
+  onboardingScenarios,
+} from "@/features/onboarding/scenarios";
+
+function emptyState(): OnboardingState {
+  return {
+    ai: { tone: null },
+    availability: null,
+    business: null,
+    calendar: { integration: null, source: null, timezone: null },
+    completed: false,
+    completedAt: null,
+    service: null,
+    whatsapp: null,
+  };
+}
+
+function stateFixture(
+  overrides: Partial<OnboardingState> = {},
+): OnboardingState {
+  return { ...emptyState(), ...overrides };
+}
+
+const businessDone: Partial<OnboardingState> = {
+  business: {
+    address: null,
+    category: "Beleza",
+    modalities: ["ONLINE"],
+    name: "Studio Aurora",
+    timezone: "America/Sao_Paulo",
+  },
+};
+const calendarDone = {
+  calendar: {
+    integration: null,
+    source: "ATENDLY" as const,
+    timezone: "America/Sao_Paulo",
+  },
+};
+const serviceDone = {
+  service: {
+    active: true,
+    durationMinutes: 60,
+    id: "svc-1",
+    name: "Corte",
+    price: 100,
+    priceType: "FIXED" as const,
+  },
+};
+const availabilityDone = {
+  availability: {
+    granularityMinutes: 30,
+    maxLeadDays: 90,
+    minLeadMinutes: 0,
+    rules: [
+      {
+        active: true,
+        dayOfWeek: 1,
+        endTime: "18:00",
+        id: "rule-1",
+        startTime: "09:00",
+      },
+    ],
+    timezone: "America/Sao_Paulo",
+  },
+};
+const toneDone = { ai: { tone: "PROFESSIONAL" as const } };
+
+function renderScreen(scenario: string, state: OnboardingState) {
+  getOnboarding.mockResolvedValue(state);
+  return render(
+    <OnboardingRuntimeProvider>
+      <OnboardingScreen scenario={scenario as never} />
+    </OnboardingRuntimeProvider>,
+  );
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  updateOnboarding.mockResolvedValue(emptyState());
+  completeOnboarding.mockResolvedValue(emptyState());
+  refreshSession.mockResolvedValue(null);
+});
+
+describe("cenários do protótipo sem consumidor real foram removidos", () => {
+  test("nenhum dos 20 cenários órfãos continua declarado", () => {
+    const removed = [
+      "importar-conectar",
+      "importar-analisar",
+      "importar-previa",
+      "importar-confirmar",
+      "importar-progresso",
+      "importar-sucesso",
+      "importar-parcial",
+      "importar-erro",
+      "minha-agenda-introducao",
+      "minha-agenda-autenticando",
+      "minha-agenda-conectada",
+      "minha-agenda-verificar",
+      "minha-agenda-servicos",
+      "minha-agenda-clientes",
+      "minha-agenda-agendamentos",
+      "minha-agenda-disponibilidade",
+      "minha-agenda-valida",
+      "minha-agenda-incompleta",
+      "minha-agenda-falha",
+      "minha-agenda-indisponivel",
+    ];
+    for (const scenario of removed) {
+      expect(isOnboardingScenario(scenario)).toBe(false);
+    }
+    expect(onboardingOrder).toHaveLength(15);
+  });
+
+  test("PrototypeOnboardingScreen não existe mais no módulo despachante", () => {
+    expect(Object.keys(OnboardingScreenModule)).toEqual(["OnboardingScreen"]);
+  });
+});
+
+describe("todo cenário sobrevivente é montado pela rota real", () => {
+  test.each(onboardingOrder)(
+    "%s monta sem 404 e mostra seu título",
+    async (step) => {
+      getOnboarding.mockResolvedValue(stateFixture());
+      render(
+        <OnboardingRuntimeProvider>
+          {await OnboardingPage({ params: Promise.resolve({ step }) })}
+        </OnboardingRuntimeProvider>,
+      );
+      const [, title] = onboardingScenarios[step];
+      expect(
+        await screen.findByRole("heading", { level: 1, name: title }),
+      ).toBeVisible();
+    },
+  );
+});
+
+describe("o progresso nomeia o bloco corrente, sem contagem de telas", () => {
+  test("dados-do-negocio mostra o bloco 'Seu negócio' e nenhuma contagem de etapas", async () => {
+    renderScreen("dados-do-negocio", stateFixture());
+    expect(await screen.findByText("Seu negócio")).toBeVisible();
+    expect(screen.queryByText(/Etapa \d+ de \d+/)).toBeNull();
+  });
+
+  test("servico-nome mostra o bloco 'Sua agenda'", async () => {
+    renderScreen(
+      "servico-nome",
+      stateFixture({ ...businessDone, ...calendarDone }),
+    );
+    expect(await screen.findByText("Sua agenda")).toBeVisible();
+    expect(screen.queryByText(/Etapa \d+ de \d+/)).toBeNull();
+  });
+
+  test("tom-da-ia mostra o bloco 'Sua IA'", async () => {
+    renderScreen(
+      "tom-da-ia",
+      stateFixture({
+        ...businessDone,
+        ...calendarDone,
+        ...serviceDone,
+        ...availabilityDone,
+      }),
+    );
+    expect(await screen.findByText("Sua IA")).toBeVisible();
+  });
+
+  test("whatsapp mostra o bloco 'WhatsApp'", async () => {
+    renderScreen(
+      "whatsapp",
+      stateFixture({
+        ...businessDone,
+        ...calendarDone,
+        ...serviceDone,
+        ...availabilityDone,
+        ...toneDone,
+      }),
+    );
+    expect(await screen.findByText("WhatsApp")).toBeVisible();
+  });
+});
+
+describe("o encadeamento real de dados-do-negocio até validação", () => {
+  test("dados-do-negocio salva e leva a fonte-da-agenda", async () => {
+    const user = userEvent.setup();
+    renderScreen("dados-do-negocio", emptyState());
+    await user.type(
+      await screen.findByLabelText("Nome do negócio"),
+      "Studio Aurora",
+    );
+    await user.click(screen.getByRole("button", { name: "Outro" }));
+    await user.type(
+      screen.getByPlaceholderText("Qual é o seu segmento?"),
+      "Beleza",
+    );
+    await user.click(screen.getByText("Online"));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+
+    expect(updateOnboarding).toHaveBeenCalledWith({
+      business: {
+        category: "Beleza",
+        modalities: ["ONLINE"],
+        name: "Studio Aurora",
+        timezone: "America/Sao_Paulo",
+      },
+    });
+    expect(push).toHaveBeenCalledWith("/onboarding/fonte-da-agenda");
+  });
+
+  test("fonte-da-agenda com Agenda Atendly volta para dados-do-negocio e avança para agenda-atendly-confirmar", async () => {
+    const user = userEvent.setup();
+    renderScreen("fonte-da-agenda", stateFixture(businessDone));
+    expect(await screen.findByRole("link", { name: "Voltar" })).toHaveAttribute(
+      "href",
+      "/onboarding/dados-do-negocio",
+    );
+
+    await user.click(screen.getByRole("button", { name: /^Agenda Atendly/ }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+
+    expect(updateOnboarding).toHaveBeenCalledWith(
+      expect.objectContaining({
+        calendar: { source: "ATENDLY", timezone: "America/Sao_Paulo" },
+      }),
+    );
+    expect(push).toHaveBeenCalledWith("/onboarding/agenda-atendly-confirmar");
+  });
+
+  test("fonte-da-agenda com Minha Agenda desvia para minha-agenda-conectar sem salvar", async () => {
+    const user = userEvent.setup();
+    renderScreen("fonte-da-agenda", stateFixture(businessDone));
+
+    await user.click(
+      await screen.findByRole("button", { name: /^Minha Agenda/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+
+    expect(updateOnboarding).not.toHaveBeenCalled();
+    expect(push).toHaveBeenCalledWith("/onboarding/minha-agenda-conectar");
+  });
+
+  test("minha-agenda-conectar é a recusa honesta: só oferece voltar para fonte-da-agenda", async () => {
+    renderScreen("minha-agenda-conectar", stateFixture(businessDone));
+
+    expect(
+      await screen.findByRole("link", { name: "Escolher Agenda Atendly" }),
+    ).toHaveAttribute("href", "/onboarding/fonte-da-agenda");
+    expect(screen.queryByRole("button", { name: "Continuar" })).toBeNull();
+  });
+
+  test("agenda-atendly-confirmar avança para agenda-atendly-metodo", async () => {
+    const user = userEvent.setup();
+    renderScreen(
+      "agenda-atendly-confirmar",
+      stateFixture({ ...businessDone, ...calendarDone }),
+    );
+    await user.click(await screen.findByRole("button", { name: "Continuar" }));
+    expect(push).toHaveBeenCalledWith("/onboarding/agenda-atendly-metodo");
+  });
+
+  test("agenda-atendly-metodo avança para servico-nome", async () => {
+    const user = userEvent.setup();
+    renderScreen(
+      "agenda-atendly-metodo",
+      stateFixture({ ...businessDone, ...calendarDone }),
+    );
+    await user.click(await screen.findByRole("button", { name: "Continuar" }));
+    expect(push).toHaveBeenCalledWith("/onboarding/servico-nome");
+  });
+
+  test("servico-nome salva e avança para servico-duracao", async () => {
+    const user = userEvent.setup();
+    renderScreen(
+      "servico-nome",
+      stateFixture({ ...businessDone, ...calendarDone }),
+    );
+    await user.type(
+      await screen.findByLabelText("Nome do serviço"),
+      "Corte feminino",
+    );
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    expect(push).toHaveBeenCalledWith("/onboarding/servico-duracao");
+  });
+
+  test("servico-duracao avança para servico-preco", async () => {
+    const user = userEvent.setup();
+    renderScreen(
+      "servico-duracao",
+      stateFixture({ ...businessDone, ...calendarDone }),
+    );
+    const input = await screen.findByLabelText("Duração em minutos");
+    await user.clear(input);
+    await user.type(input, "45");
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    expect(push).toHaveBeenCalledWith("/onboarding/servico-preco");
+  });
+
+  test("servico-preco salva preço fixo e avança para dias-de-atendimento", async () => {
+    const user = userEvent.setup();
+    renderScreen(
+      "servico-preco",
+      stateFixture({ ...businessDone, ...calendarDone }),
+    );
+    await user.type(await screen.findByLabelText("Preço em reais"), "150");
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+
+    const [patch] = updateOnboarding.mock.calls.at(-1) as [
+      { service: { price: number; priceType: string } },
+    ];
+    expect(patch.service.price).toBe(150);
+    expect(patch.service.priceType).toBe("FIXED");
+    expect(push).toHaveBeenCalledWith("/onboarding/dias-de-atendimento");
+  });
+
+  test("dias-de-atendimento com dias padrão avança para horarios", async () => {
+    const user = userEvent.setup();
+    renderScreen(
+      "dias-de-atendimento",
+      stateFixture({ ...businessDone, ...calendarDone }),
+    );
+    await user.click(await screen.findByRole("button", { name: "Continuar" }));
+    expect(push).toHaveBeenCalledWith("/onboarding/horarios");
+  });
+
+  test("horarios salva a disponibilidade e avança para agenda-atendly-pronta", async () => {
+    const user = userEvent.setup();
+    renderScreen(
+      "horarios",
+      stateFixture({ ...businessDone, ...calendarDone }),
+    );
+    await user.click(await screen.findByRole("button", { name: "Continuar" }));
+
+    const [patch] = updateOnboarding.mock.calls.at(-1) as [
+      { availability: unknown },
+    ];
+    expect(patch.availability).toBeDefined();
+    expect(push).toHaveBeenCalledWith("/onboarding/agenda-atendly-pronta");
+  });
+
+  test("agenda-atendly-pronta avança para tom-da-ia", async () => {
+    const user = userEvent.setup();
+    renderScreen(
+      "agenda-atendly-pronta",
+      stateFixture({ ...businessDone, ...calendarDone, ...serviceDone }),
+    );
+    await user.click(await screen.findByRole("button", { name: "Continuar" }));
+    expect(push).toHaveBeenCalledWith("/onboarding/tom-da-ia");
+  });
+
+  test("tom-da-ia salva o estilo escolhido e avança para whatsapp", async () => {
+    const user = userEvent.setup();
+    renderScreen(
+      "tom-da-ia",
+      stateFixture({ ...businessDone, ...calendarDone, ...serviceDone }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /^Profissional/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+
+    expect(updateOnboarding).toHaveBeenCalledWith({
+      ai: { tone: "PROFESSIONAL" },
+    });
+    expect(push).toHaveBeenCalledWith("/onboarding/whatsapp");
+  });
+
+  test("whatsapp mostra a orientação sobre número pessoal e avança para whatsapp-conectar", async () => {
+    const user = userEvent.setup();
+    renderScreen(
+      "whatsapp",
+      stateFixture({
+        ...businessDone,
+        ...calendarDone,
+        ...serviceDone,
+        ...toneDone,
+      }),
+    );
+    expect(
+      await screen.findByText(
+        "Você pode usar um número de WhatsApp pessoal ou comercial.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "A Atendly organiza todas as suas conversas automaticamente.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Você pode desativar a IA para pessoas específicas, como família e amigos.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Quando você responde uma conversa manualmente, a IA sai de cena.",
+      ),
+    ).toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", { name: "Conectar meu WhatsApp" }),
+    );
+    expect(push).toHaveBeenCalledWith("/onboarding/whatsapp-conectar");
+  });
+
+  test("whatsapp: Fazer isso depois conclui o onboarding e leva a whatsapp-concluido", async () => {
+    const user = userEvent.setup();
+    renderScreen(
+      "whatsapp",
+      stateFixture({
+        ...businessDone,
+        ...calendarDone,
+        ...serviceDone,
+        ...toneDone,
+      }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Fazer isso depois" }),
+    );
+
+    expect(completeOnboarding).toHaveBeenCalled();
+    expect(refreshSession).toHaveBeenCalled();
+    expect(push).toHaveBeenCalledWith("/onboarding/whatsapp-concluido");
+  });
+
+  test("whatsapp-concluido mostra a copy do vault com as duas ações", async () => {
+    renderScreen(
+      "whatsapp-concluido",
+      stateFixture({
+        ...businessDone,
+        ...calendarDone,
+        ...serviceDone,
+        ...toneDone,
+      }),
+    );
+    expect(
+      await screen.findByRole("heading", {
+        level: 1,
+        name: "Sua Atendly está configurada.",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Conecte seu WhatsApp quando quiser colocar a IA para atender seus clientes.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Ir para o início" }),
+    ).toHaveAttribute("href", "/inicio");
+    expect(
+      screen.getByRole("link", { name: "Conectar agora" }),
+    ).toHaveAttribute("href", "/configuracoes/whatsapp");
+  });
+
+  test("whatsapp-conectar conectado conclui o onboarding e substitui a rota por /inicio", async () => {
+    getWhatsapp.mockResolvedValue({ status: "CONNECTED" });
+    const user = userEvent.setup();
+    renderScreen(
+      "whatsapp-conectar",
+      stateFixture({
+        ...businessDone,
+        ...calendarDone,
+        ...serviceDone,
+        ...toneDone,
+        whatsapp: { phoneNumber: "+5511999990000", status: "CONNECTED" },
+      }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Concluir configuração" }),
+    );
+
+    expect(completeOnboarding).toHaveBeenCalled();
+    expect(refreshSession).toHaveBeenCalled();
+    expect(replace).toHaveBeenCalledWith("/inicio");
+  });
+
+  test("whatsapp-conectar sem conexão concluída bloqueia com erro, sem avançar", async () => {
+    getWhatsapp.mockResolvedValue({ status: "PENDING" });
+    const user = userEvent.setup();
+    renderScreen(
+      "whatsapp-conectar",
+      stateFixture({
+        ...businessDone,
+        ...calendarDone,
+        ...serviceDone,
+        ...toneDone,
+      }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Concluir configuração" }),
+    );
+    expect(
+      await screen.findByText(
+        "Conclua a vinculação no WhatsApp antes de continuar.",
+      ),
+    ).toBeVisible();
+    expect(completeOnboarding).not.toHaveBeenCalled();
+  });
+});
+
+describe("erro 409 ao salvar uma etapa não cita WhatsApp", () => {
+  function conflictError(): BffHttpError {
+    return new BffHttpError({
+      code: "ONBOARDING_INCOMPLETE",
+      message: "conflict",
+      requestId: "req-1",
+      status: 409,
+    });
+  }
+
+  test("onboardingError traduz 409 para a copy de itens obrigatórios pendentes", () => {
+    expect(onboardingError(conflictError())).toBe(
+      "Ainda há itens obrigatórios pendentes. Revise negócio, agenda, serviço, disponibilidade e tom da IA.",
+    );
+  });
+
+  test("tom-da-ia: 409 ao salvar mostra a copy de itens pendentes, sem citar WhatsApp", async () => {
+    updateOnboarding.mockRejectedValueOnce(conflictError());
+    const user = userEvent.setup();
+    renderScreen(
+      "tom-da-ia",
+      stateFixture({ ...businessDone, ...calendarDone, ...serviceDone }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /^Profissional/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+
+    expect(
+      await screen.findByText(
+        "Ainda há itens obrigatórios pendentes. Revise negócio, agenda, serviço, disponibilidade e tom da IA.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText(/WhatsApp/)).toBeNull();
+    expect(push).not.toHaveBeenCalledWith("/onboarding/whatsapp");
+  });
+});
+
+describe("a retomada abre a próxima pendência real", () => {
+  test("com o negócio pendente, a retomada não força o passo de WhatsApp", () => {
+    expect(nextRequiredStep(emptyState())).toBe("dados-do-negocio");
+  });
+
+  test("com nome e categoria preenchidos mas sem modalidade escolhida, a retomada continua em dados-do-negocio", () => {
+    expect(
+      nextRequiredStep(
+        stateFixture({
+          business: {
+            address: null,
+            category: "Beleza",
+            modalities: [],
+            name: "Studio Aurora",
+            timezone: "America/Sao_Paulo",
+          },
+          ...calendarDone,
+          ...serviceDone,
+          ...availabilityDone,
+          ...toneDone,
+          whatsapp: { phoneNumber: "+5511999990000", status: "CONNECTED" },
+        }),
+      ),
+    ).toBe("dados-do-negocio");
+  });
+
+  test("com ON_SITE escolhido e sem endereço, a retomada continua em dados-do-negocio", () => {
+    expect(
+      nextRequiredStep(
+        stateFixture({
+          business: {
+            address: null,
+            category: "Beleza",
+            modalities: ["ON_SITE"],
+            name: "Studio Aurora",
+            timezone: "America/Sao_Paulo",
+          },
+          ...calendarDone,
+          ...serviceDone,
+          ...availabilityDone,
+          ...toneDone,
+          whatsapp: { phoneNumber: "+5511999990000", status: "CONNECTED" },
+        }),
+      ),
+    ).toBe("dados-do-negocio");
+  });
+
+  test("com tudo pendente só o WhatsApp, a próxima pendência real é whatsapp", () => {
+    expect(
+      nextRequiredStep(
+        stateFixture({
+          ...businessDone,
+          ...calendarDone,
+          ...serviceDone,
+          ...availabilityDone,
+          ...toneDone,
+        }),
+      ),
+    ).toBe("whatsapp");
+  });
+
+  test("com disponibilidade pendente, mesmo sem WhatsApp conectado, a retomada abre dias-de-atendimento", () => {
+    expect(
+      nextRequiredStep(
+        stateFixture({ ...businessDone, ...calendarDone, ...serviceDone }),
+      ),
+    ).toBe("dias-de-atendimento");
+  });
+
+  test("com o WhatsApp já conectado, a retomada abre whatsapp-conectar para concluir", () => {
+    expect(
+      nextRequiredStep(
+        stateFixture({
+          ...businessDone,
+          ...calendarDone,
+          ...serviceDone,
+          ...availabilityDone,
+          ...toneDone,
+          whatsapp: { phoneNumber: "+5511999990000", status: "CONNECTED" },
+        }),
+      ),
+    ).toBe("whatsapp-conectar");
+  });
+});

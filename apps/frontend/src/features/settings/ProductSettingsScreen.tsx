@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 
-import type { AiTone, SettingsState } from "@/data";
+import type { AiTone, BusinessModality, SettingsState } from "@/data";
+import {
+  BUSINESS_MODALITY_OPTIONS,
+  FREQUENT_BUSINESS_SEGMENTS,
+} from "@/features/onboarding/blocks/business";
 import { WhatsAppConnectionPanel } from "@/features/whatsapp/WhatsAppConnectionPanel";
 import { Icon, type IconName } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
@@ -207,6 +211,15 @@ function BusinessSettings({
   const { refreshSession } = useProductRuntime();
   const [name, setName] = useState(settings.business?.name ?? "");
   const [category, setCategory] = useState(settings.business?.category ?? "");
+  const [customSegment, setCustomSegment] = useState(
+    () =>
+      !!settings.business?.category &&
+      !FREQUENT_BUSINESS_SEGMENTS.includes(settings.business.category),
+  );
+  const [modalities, setModalities] = useState<BusinessModality[]>(
+    settings.business?.modalities ?? [],
+  );
+  const [address, setAddress] = useState(settings.business?.address ?? "");
   const [timezone, setTimezone] = useState(
     settings.business?.timezone ?? "America/Sao_Paulo",
   );
@@ -214,8 +227,19 @@ function BusinessSettings({
   const [message, setMessage] = useState<string | null>(null);
   const [timezoneConfirmationOpen, setTimezoneConfirmationOpen] =
     useState(false);
+  const requiresAddress = modalities.includes("ON_SITE");
+  const pendingProjection =
+    settings.business?.contextProjectionStatus === "PENDING";
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (modalities.length === 0) {
+      setMessage("Escolha ao menos uma modalidade de atendimento.");
+      return;
+    }
+    if (requiresAddress && !address.trim()) {
+      setMessage("Informe o endereço do seu espaço.");
+      return;
+    }
     if (timezone !== settings.business?.timezone) {
       setTimezoneConfirmationOpen(true);
       return;
@@ -228,8 +252,10 @@ function BusinessSettings({
     try {
       onSaved(
         await getProductServices().settings.updateBusiness({
-          name,
+          ...(requiresAddress ? { address: address.trim() } : {}),
           category,
+          modalities,
+          name,
           timezone,
         }),
       );
@@ -259,15 +285,43 @@ function BusinessSettings({
               onChange={(event) => setName(event.target.value)}
             />
           </label>
-          <label className="field">
-            <span className="label">Categoria</span>
-            <input
-              className="input"
-              required
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
-            />
-          </label>
+          <div className="field is-wide">
+            <span className="label">Qual é o seu segmento?</span>
+            <div className="chip-row">
+              {FREQUENT_BUSINESS_SEGMENTS.map((segment) => (
+                <button
+                  className={`chip${!customSegment && category === segment ? " is-active" : ""}`}
+                  key={segment}
+                  type="button"
+                  onClick={() => {
+                    setCustomSegment(false);
+                    setCategory(segment);
+                  }}
+                >
+                  {segment}
+                </button>
+              ))}
+              <button
+                className={`chip${customSegment ? " is-active" : ""}`}
+                type="button"
+                onClick={() => {
+                  setCustomSegment(true);
+                  setCategory("");
+                }}
+              >
+                Outro
+              </button>
+            </div>
+            {customSegment && (
+              <input
+                className="input"
+                required
+                placeholder="Qual é o seu segmento?"
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+              />
+            )}
+          </div>
           <label className="field">
             <span className="label">Idioma</span>
             <span className="input-wrap">
@@ -310,7 +364,57 @@ function BusinessSettings({
               A mudança exige revisão porque altera horários futuros.
             </span>
           </label>
+          <div className="field is-wide">
+            <span className="label">Modalidade de atendimento</span>
+            <div className="choice-grid">
+              {BUSINESS_MODALITY_OPTIONS.map((option) => {
+                const selected = modalities.includes(option.value);
+                return (
+                  <label
+                    className={`choice-card${selected ? " is-selected" : ""}`}
+                    key={option.value}
+                  >
+                    <input
+                      checked={selected}
+                      className="sr-only"
+                      type="checkbox"
+                      onChange={(event) =>
+                        setModalities((current) =>
+                          event.target.checked
+                            ? [...current, option.value]
+                            : current.filter((item) => item !== option.value),
+                        )
+                      }
+                    />
+                    <h3>{option.title}</h3>
+                    <p>{option.copy}</p>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+          {requiresAddress && (
+            <label className="field is-wide">
+              <span className="label">Endereço do seu espaço</span>
+              <input
+                className="input"
+                maxLength={300}
+                required
+                value={address}
+                onChange={(event) => setAddress(event.target.value)}
+              />
+            </label>
+          )}
         </div>
+        {pendingProjection && (
+          <div className="onboarding-note is-important">
+            <Icon name="info" />
+            <span>
+              Os dados do negócio foram salvos. A IA ainda está atualizando o
+              contexto com essa mudança.
+            </span>
+          </div>
+        )}
         <SaveActions busy={busy} message={message} />
       </form>
       <Dialog

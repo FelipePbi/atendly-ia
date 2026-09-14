@@ -102,11 +102,11 @@ describe("mapeamento de status (WhatsApp e IA)", () => {
     expect(whatsappStatusView("loaded", "DISCONNECTED")).toBe("off");
   });
 
-  test("IA: ACTIVE é 'active', UNKNOWN é 'unknown', OFF e PENDING são 'off'", () => {
+  test("IA: ACTIVE é 'active', UNKNOWN é 'unknown', OFF é 'off', PENDING tem apresentação própria (Goal018/WU-10)", () => {
     expect(aiStatusView("loaded", "ACTIVE")).toBe("active");
     expect(aiStatusView("loaded", "UNKNOWN")).toBe("unknown");
     expect(aiStatusView("loaded", "OFF")).toBe("off");
-    expect(aiStatusView("loaded", "PENDING")).toBe("off");
+    expect(aiStatusView("loaded", "PENDING")).toBe("pending");
   });
 
   test("nenhuma combinação produz 'active' sem uma leitura 'loaded' e um estado confirmado", () => {

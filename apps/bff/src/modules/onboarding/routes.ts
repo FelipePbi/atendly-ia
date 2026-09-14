@@ -2,7 +2,6 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
 import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
-import { EvolutionClient } from "../../clients/evolution/index.js";
 import { SchedulingClient } from "../../clients/scheduling/index.js";
 import {
   type AiConversationStyle,
@@ -10,6 +9,13 @@ import {
   normalizeStoredAiConversationStyle,
   parseBodyWithAiConversationStyle,
 } from "../../lib/ai-conversation-style.js";
+import {
+  businessAddressSchema,
+  businessContextPayload,
+  businessContextProjectionState,
+  businessModalitySchema,
+  resolveBusinessProfileFields,
+} from "../../lib/business-profile.js";
 import { AppError } from "../../lib/errors.js";
 import { dataResponse } from "../../lib/http.js";
 import { getPrisma } from "../../lib/prisma.js";
@@ -30,6 +36,10 @@ const patchSchema = z
         name: z.string().trim().min(2).max(160),
         category: z.string().trim().min(1).max(120),
         timezone: z.string().trim().min(1).max(100),
+        // Ausente preserva o que esta gravado; nunca grava conjunto vazio so
+        // por omissao (Goal018/WU-01).
+        modalities: z.array(businessModalitySchema).optional(),
+        address: businessAddressSchema.optional(),
       })
       .optional(),
     calendar: z
@@ -72,7 +82,6 @@ export async function registerV1OnboardingRoutes(
 ): Promise<void> {
   const scheduling = new SchedulingClient();
   const ai = new AiOrchestratorClient();
-  const evolution = new EvolutionClient();
 
   app.get(
     "/v1/onboarding",
@@ -92,6 +101,13 @@ export async function registerV1OnboardingRoutes(
 
       if (body.business) {
         assertTimezone(body.business.timezone);
+        const currentProfile = await prisma.businessProfile.findUnique({
+          where: { tenantId: tenant.tenantId },
+        });
+        const { modalities, address } = resolveBusinessProfileFields(
+          currentProfile,
+          body.business,
+        );
         await prisma.$transaction([
           prisma.tenant.update({
             where: { id: tenant.tenantId },
@@ -104,11 +120,16 @@ export async function registerV1OnboardingRoutes(
               businessName: body.business.name,
               category: body.business.category,
               timezone: body.business.timezone,
+              modalities,
+              address,
             },
             update: {
               businessName: body.business.name,
               category: body.business.category,
               timezone: body.business.timezone,
+              modalities,
+              address,
+              businessContextVersion: { increment: 1 },
             },
           }),
         ]);
@@ -157,25 +178,27 @@ export async function registerV1OnboardingRoutes(
       const tenant = currentTenantContext(request);
       const context = internalContext(request);
       const prisma = getPrisma();
-      const [profile, settings, instance, calendar] = await Promise.all([
+      const [profile, settings, calendar] = await Promise.all([
         prisma.businessProfile.findUnique({
           where: { tenantId: tenant.tenantId },
         }),
         prisma.aiSettings.findUnique({ where: { tenantId: tenant.tenantId } }),
-        prisma.whatsAppInstance.findUnique({
-          where: { userId: tenant.userId },
-        }),
         scheduling.calendar(context),
       ]);
       const issues: string[] = [];
       if (!profile?.businessName.trim() || !profile.category?.trim()) {
         issues.push("BUSINESS_PROFILE_INCOMPLETE");
       }
+      if (!profile?.modalities.length) {
+        issues.push("BUSINESS_MODALITY_NOT_SELECTED");
+      }
+      if (profile?.modalities.includes("ON_SITE") && !profile.address?.trim()) {
+        issues.push("BUSINESS_ADDRESS_REQUIRED");
+      }
       if (!calendar.source) issues.push("CALENDAR_NOT_SELECTED");
       if (!normalizeStoredAiConversationStyle(settings?.tone)) {
         issues.push("AI_TONE_NOT_SELECTED");
       }
-      if (!instance) issues.push("WHATSAPP_NOT_CONFIGURED");
 
       if (calendar.source) {
         const services = await scheduling.listServices(context);
@@ -192,13 +215,6 @@ export async function registerV1OnboardingRoutes(
         }
       }
 
-      if (instance) {
-        const status = await evolution.getStatus(
-          instance.evolutionInstanceToken,
-          request.id,
-        );
-        if (!status.connected) issues.push("WHATSAPP_NOT_CONNECTED");
-      }
       if (issues.length > 0) {
         throw new AppError(
           "CONFLICT",
@@ -249,6 +265,11 @@ async function onboardingState(
           name: profile.businessName,
           category: profile.category,
           timezone: profile.timezone,
+          modalities: profile.modalities,
+          address: profile.address,
+          contextVersion: profile.businessContextVersion,
+          contextProjectedVersion: profile.businessContextProjectedVersion,
+          contextProjectionStatus: businessContextProjectionState(profile),
         }
       : null,
     calendar: {
@@ -269,6 +290,12 @@ async function onboardingState(
   };
 }
 
+/**
+ * Falha de projecao nunca vira erro da requisicao: o dado do negocio ja foi
+ * gravado antes desta chamada, e o estado projetado/pendente exposto em
+ * `onboardingState` e o unico aviso — sem retentativa automatica, sem 500
+ * (Goal018/WU-03).
+ */
 async function syncAiConfig(
   request: FastifyRequest,
   ai: AiOrchestratorClient,
@@ -281,14 +308,30 @@ async function syncAiConfig(
     create: { tenantId: tenant.tenantId },
     update: {},
   });
-  await ai.updateTenantConfig(internalContext(request), {
-    enabled,
-    tone,
-    businessContext: {
-      businessName: businessProfile.businessName,
-      timezone: businessProfile.timezone,
-    },
-  });
+  try {
+    await ai.updateTenantConfig(internalContext(request), {
+      enabled,
+      tone,
+      businessContext: businessContextPayload(businessProfile),
+    });
+    if (
+      businessProfile.businessContextProjectedVersion !==
+      businessProfile.businessContextVersion
+    ) {
+      await getPrisma().businessProfile.update({
+        where: { tenantId: tenant.tenantId },
+        data: {
+          businessContextProjectedVersion:
+            businessProfile.businessContextVersion,
+        },
+      });
+    }
+  } catch (error) {
+    request.log.warn(
+      { err: error, tenantId: tenant.tenantId },
+      "AI tenant config projection failed; business context stays pending.",
+    );
+  }
 }
 
 function internalSource(source: "ATENDLY" | "EXTERNAL") {

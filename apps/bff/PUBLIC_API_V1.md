@@ -93,6 +93,54 @@ A entrada aceita qualquer um dos cinco valores; a saída — em `GET/PATCH /v1/s
 
 Os dois valores antigos saem do vocabulário aceito no Goal024.
 
+## Negócio: modalidades de atendimento, endereço e versão do contexto (Goal018/WU-01)
+
+`GET/PATCH /v1/settings/business` e a seção `business` de `GET/PATCH /v1/onboarding` ganharam três campos aditivos, sempre presentes na leitura e opcionais na escrita:
+
+| Campo | Valores | Significado |
+| --- | --- | --- |
+| `modalities` | array de `ON_SITE`, `AT_HOME`, `ONLINE` (seleção múltipla) | modalidades de atendimento do negócio; `[]` significa "ainda não escolheu" — `POST /v1/onboarding/complete` recusa com `BUSINESS_MODALITY_NOT_SELECTED` enquanto isso for verdade |
+| `address` | texto ou `null` | endereço do local próprio; `null` enquanto o negócio não tem `ON_SITE` |
+| `contextVersion` | inteiro, começa em `1` | contador incrementado a cada gravação de negócio (nome, categoria, timezone, modalidade, endereço); nunca timestamp, só leitura pelo contrato público |
+
+`category` continua sendo o único campo de segmento — os três campos acima não criam uma segunda forma de classificar o negócio.
+
+Regra de gravação, igual nas duas rotas: `modalities` ausente no corpo preserva o que já está gravado, e nunca grava conjunto vazio só por omissão — um array vazio só é gravado quando enviado explicitamente. `address` segue a mesma distinção: chave ausente preserva o valor gravado; `null` ou uma string apagam/substituem. `ON_SITE` presente em `modalities` (seja o valor enviado, seja o já gravado quando `modalities` está ausente) exige `address` não vazio; corpo que viole isso é recusado com `400 BUSINESS_ADDRESS_REQUIRED` e `error.details.field: "address"`, sem gravar nada. Retirar `ON_SITE` de um perfil que já tem endereço não apaga o endereço — só um corpo que envie `address` explicitamente muda o que está gravado.
+
+A migration que introduziu essas colunas é aditiva: nenhuma linha existente teve modalidade, endereço, nome ou categoria fabricados a partir de dado já gravado. Toda linha — nova ou pré-existente — nasce com `modalities: []`, `address: null` e a versão do contexto ainda não projetada para a IA.
+
+Nenhum dos três campos é enviado ao Scheduling: o negócio (`BusinessProfile`) e a agenda operacional continuam sem esse acoplamento.
+
+### Estado de projeção do contexto para a IA (Goal018/WU-03)
+
+O objeto `business` em `GET/PATCH /v1/settings` e na seção `business` de `GET/PATCH /v1/onboarding` traz mais dois campos, só leitura:
+
+| Campo | Valores | Significado |
+| --- | --- | --- |
+| `contextProjectedVersion` | inteiro, começa em `0` | última `contextVersion` que a IA efetivamente confirmou ter recebido |
+| `contextProjectionStatus` | `PROJECTED`, `PENDING` | `PROJECTED` quando `contextProjectedVersion === contextVersion`; `PENDING` quando a versão gravada é mais nova que a última projetada com sucesso |
+
+A projeção acontece nos mesmos pontos que já enviam configuração para a IA (gravação de negócio ou de IA em `/v1/settings`; seção `ai` de `PATCH /v1/onboarding`). Uma tentativa de projeção que falhe **não** vira erro da requisição: o dado do negócio já foi gravado antes dessa chamada, a resposta continua `200`/`201` com `contextProjectionStatus: "PENDING"` como aviso explícito, e nada é retentado automaticamente — só uma gravação de negócio ou de IA subsequente tenta projetar de novo.
+
+## Onboarding: conclusão não exige mais WhatsApp (Goal018/WU-04)
+
+**Mudança subtrativa:** até esta versão, `POST /v1/onboarding/complete` consultava `WhatsAppInstance` e o status do Evolution nesta própria requisição, recusando com `WHATSAPP_NOT_CONFIGURED` (sem instância vinculada) ou `WHATSAPP_NOT_CONNECTED` (vinculada mas não conectada). Essa exigência foi **removida**: os dois códigos não existem mais e concluir o onboarding não olha para WhatsApp em nenhuma forma. Concluir também não conecta, não liga IA e não projeta nada — só registra `onboardingCompletedAt`. WhatsApp continua configurável por `GET/POST/DELETE /v1/whatsapp`, e se a IA está de fato ativa continua sendo o que `GET /v1/status` responde (ver "Status honesto do WhatsApp e da IA", Goal014), não o que `complete` decide.
+
+`error.details.issues` (array de códigos, resposta `409 CONFLICT`) hoje pode trazer qualquer um destes, em qualquer combinação:
+
+| Código | Significado | Como se resolve |
+| --- | --- | --- |
+| `BUSINESS_PROFILE_INCOMPLETE` | nome ou categoria do negócio ainda vazios | gravar `name`/`category` (`PATCH /v1/settings/business` ou seção `business` de `PATCH /v1/onboarding`) |
+| `BUSINESS_MODALITY_NOT_SELECTED` | `modalities` do negócio ainda é `[]` (Goal018/WU-01) | gravar ao menos uma modalidade em `modalities` |
+| `BUSINESS_ADDRESS_REQUIRED` | `modalities` inclui `ON_SITE` sem `address` preenchido (Goal018/WU-01) | gravar `address` |
+| `CALENDAR_NOT_SELECTED` | negócio ainda não escolheu fonte de agenda | escolher `calendar.source` em `PATCH /v1/onboarding` |
+| `AI_TONE_NOT_SELECTED` | `ai.tone` ainda é `null` | gravar `tone` (`PATCH /v1/settings/ai` ou seção `ai` de `PATCH /v1/onboarding`) |
+| `ACTIVE_SERVICE_REQUIRED` | catálogo sem nenhum serviço `active`; só avaliado com fonte já escolhida | ativar ou cadastrar serviço em `POST/PATCH /v1/services` |
+| `AVAILABILITY_REQUIRED` | fonte `ATENDLY` sem nenhuma regra de disponibilidade ativa | gravar regra em `PATCH /v1/settings/availability` |
+| `CALENDAR_INTEGRATION_NOT_CONNECTED` | fonte `EXTERNAL` cuja integração (Minha Agenda) não está `CONNECTED` | conectar em `POST /v1/calendar/integration/connect` |
+
+`ACTIVE_SERVICE_REQUIRED`, `AVAILABILITY_REQUIRED` e `CALENDAR_INTEGRATION_NOT_CONNECTED` só entram depois que uma fonte foi escolhida — sem fonte, a área de agenda aparece só como `CALENDAR_NOT_SELECTED`. `AVAILABILITY_REQUIRED` é exclusivo de `ATENDLY`; `EXTERNAL` dispensa disponibilidade própria e cobra `CALENDAR_INTEGRATION_NOT_CONNECTED` no lugar. Nenhuma avaliação tem efeito colateral no banco — a rota só grava algo depois que a lista de `issues` está vazia.
+
 ## Clientes: identidade por ID
 
 O cliente é uma **pessoa**, identificada pelo ID dentro do negócio. O telefone é contato, não identidade:
@@ -293,6 +341,19 @@ Uma vez concluída (`POST .../complete`), a sessão é o único registro definit
 | `degraded` | booleano | `true` quando o Evolution ou a IA não responderam nesta requisição |
 
 Indisponibilidade de qualquer dependência vira `UNKNOWN` (nunca um valor otimista) e nunca `500`: o erro é registrado e a resposta segue `200` com `degraded: true`. O tenant é sempre o da sessão autenticada, como em `GET /v1/dashboard`; não é possível ler ou influenciar o status de outro negócio.
+
+## Checklist pós-onboarding da Home (Goal018/WU-10)
+
+`GET /v1/dashboard` acrescenta dois booleanos a `scheduling.data.calendar.capabilities`, ambos leitura real, nunca configuração local:
+
+| Campo | Significado |
+| --- | --- |
+| `capabilities.aiActivationReady` | ao menos um serviço operacional (já existia no Scheduling — usado por `PATCH /v1/settings/ai`, ver "Catálogo" acima — e passa a ser devolvido também aqui) |
+| `capabilities.hoursConfigured` | fonte `ATENDLY` com ao menos uma regra de disponibilidade ativa, ou fonte `EXTERNAL` com integração `CONNECTED`; sem fonte escolhida é `false`. Mesmo predicado de `AVAILABILITY_REQUIRED`/`CALENDAR_INTEGRATION_NOT_CONNECTED` em `POST /v1/onboarding/complete` |
+
+Os dois campos, somados a `whatsapp.status` de `GET /v1/status`, alimentam o checklist de `/inicio` ("Cadastrar um serviço", "Definir horários de atendimento", "Conectar o WhatsApp"): enquanto a IA não estiver efetivamente ativa (`GET /v1/status`.`ai.state` diferente de `ACTIVE`), a Home mostra o que falta, com item concluído marcado. O quarto item do vault, "teste concluído", não está aqui: não existe produtor em camada nenhuma até o Goal018B.
+
+`ai.state: "PENDING"` ganhou apresentação própria na Home e no shell — antes caía sob "IA desligada" (resíduo do [review014](../../docs/migration/reviews/014-review.md)), agora é visualmente distinto tanto de `OFF` quanto de `UNKNOWN`.
 
 ## Vínculo WhatsApp: estados ambíguos
 

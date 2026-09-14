@@ -2214,6 +2214,32 @@ p {
   border-color: color-mix(in oklch, var(--warning), white 62%);
   background: var(--warning-soft);
 }
+.onboarding-points {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.onboarding-points li {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+  line-height: 1.4;
+}
+.onboarding-points li:last-child {
+  border-bottom: none;
+}
+.onboarding-points .icon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+  color: var(--accent);
+}
 .source-card {
   min-height: 168px;
   color: var(--fg);
@@ -2724,6 +2750,49 @@ p {
   font-size: 13px;
   font-weight: 600;
   text-decoration: none;
+}
+.checklist-card {
+  margin-bottom: 16px;
+}
+.checklist-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  background: var(--surface-secondary);
+  color: var(--fg);
+}
+.checklist-item.is-done {
+  color: var(--fg-soft);
+  text-decoration: line-through;
+}
+.checklist-marker {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.checklist-item.is-done .checklist-marker {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--surface);
+}
+.checklist-item.is-done .checklist-marker .icon {
+  width: 12px;
+  height: 12px;
 }
 .agenda-stack {
   display: grid;

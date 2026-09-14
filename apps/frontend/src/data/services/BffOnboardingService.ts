@@ -1,5 +1,9 @@
 import { type BffHttpClient } from "../http/BffHttpClient";
-import type { AiTone, CalendarSource } from "../mappers/publicApiSchemas";
+import type {
+  AiTone,
+  BusinessModality,
+  CalendarSource,
+} from "../mappers/publicApiSchemas";
 import { onboardingStateSchema } from "../mappers/publicApiSchemas";
 
 export interface OnboardingPatch {
@@ -17,6 +21,10 @@ export interface OnboardingPatch {
     category: string;
     name: string;
     timezone: string;
+    /** Ausente preserva o que já está gravado (Goal018/WU-01). */
+    modalities?: BusinessModality[];
+    /** Chave ausente preserva o valor gravado; `null` apaga. */
+    address?: string | null;
   };
   calendar?: {
     source: CalendarSource;

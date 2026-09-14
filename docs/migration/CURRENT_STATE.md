@@ -58,7 +58,7 @@ Inventário registrado: [PUBLIC_API_V1](../../apps/bff/PUBLIC_API_V1.md). Montag
 | Família pública | Dono da operação / observação |
 | --- | --- |
 | `/v1/auth/*` | BFF, sessão e conta |
-| `/v1/onboarding` + `/complete` | BFF compõe perfil, catálogo, disponibilidade, IA e WhatsApp |
+| `/v1/onboarding` + `/complete` | BFF compõe perfil, catálogo, disponibilidade e IA; WhatsApp saiu da composição no Goal018 — `complete` não verifica mais instância nem status do Evolution |
 | `/v1/dashboard` | Composição com estado degradado por dependência, sem zerar silenciosamente erro como sucesso |
 | `/v1/appointments`, `/availability`, `/time-blocks` | Proxy validado para Scheduling; create/reschedule/cancel transportam idempotency key |
 | `/v1/customers`, `/v1/services` | CRUD parcial via Scheduling; telefone obrigatório no create cliente BFF |
@@ -67,7 +67,7 @@ Inventário registrado: [PUBLIC_API_V1](../../apps/bff/PUBLIC_API_V1.md). Montag
 | `/v1/whatsapp/*` | BFF controla provisionamento/QR/pairing/status/disconnect em Evolution e provisiona vínculo na IA |
 | `/v1/calendar/integration/*`, `/calendar/migrations/*` | Contratos legados ainda montados e consumidos |
 
-`onboarding/routes.ts:166–195` exige fonte escolhida, dois tons antigos e WhatsApp conectado; fonte externa dispensa disponibilidade interna, exigindo integração conectada. `settings/routes.ts:88–100` persiste AI settings antes de sincronizar IA: falha remota deixa duas cópias divergentes. Atualização de negócio também precede sincronização. Não há transação distribuída ou reconciliação durável nesse caminho.
+`onboarding/routes.ts:174–235` exige fonte escolhida, dois tons antigos, modalidade selecionada e endereço quando `ON_SITE` (Goal018); fonte externa dispensa disponibilidade interna, exigindo integração conectada. WhatsApp deixou de ser exigência de conclusão no Goal018 — a rota não consulta mais `WhatsAppInstance` nem o status do Evolution. `settings/routes.ts:88–100` persiste AI settings antes de sincronizar IA: falha remota deixa duas cópias divergentes. Atualização de negócio também precede sincronização. Não há transação distribuída ou reconciliação durável nesse caminho.
 
 WhatsApp é criado remotamente antes da inserção local (`whatsapp/routes.ts:144–160`), e depois provisionado na IA. Concorrência/falha parcial pode deixar instância órfã; não foi observado incidente real. GET status atualiza a projeção local, podendo reduzir estados intermediários a CONNECTED/DISCONNECTED.
 
@@ -79,7 +79,7 @@ Schema: `apps/bff/prisma/schema.prisma`.
 | --- | --- |
 | User | CUID, email global único, passwordHash, created/updated |
 | Tenant / TenantMember | Tenant ID canônico; membership com papel OWNER; FKs locais |
-| BusinessProfile | tenantId único; nome, categoria, timezone, idioma, moeda, onboardingCompletedAt |
+| BusinessProfile | tenantId único; nome, categoria, timezone, idioma, moeda, onboardingCompletedAt; `modalities` (array), `address` (nulável) e `businessContextVersion`/`businessContextProjectedVersion` (contador gravado x versão confirmada pela IA) desde o Goal018 |
 | AiSettings | tenantId único; enabled e enum de dois tons; cópia funcional na IA |
 | WhatsAppInstance | userId único; id/name/token externo, número/status/QR/timestamps; token armazenado como String sem cifra neste schema/rota |
 | LegalAcceptance | User + versões termos/privacidade únicas; acceptedAt |
@@ -1496,3 +1496,91 @@ tocados; o contrato público mudou em um campo aditivo e na semântica documenta
   públicas**. As telas de conversas foram verificadas em jsdom — estrutura, papéis, teclado e axe
   —, não em largura, contraste ou foco reais. Nenhum WhatsApp real, transcrição real, modelo real
   ou CI hospedada foi exercitado.
+
+## Delta implementado — Goal018, 2026-09-14 (ACCEPTED na rodada 3)
+
+A fotografia histórica acima permanece como registro da baseline. Os FATOS que descrevem o
+negócio como um par de campos, o onboarding como monolito com protótipo embutido e WhatsApp
+obrigatório, e o status da IA sem distinguir `PENDING`, estão superados pelos fatos abaixo,
+verificados no [review018](reviews/018-review.md) sobre a base `4606f54`. Há **uma migration**,
+aditiva, e o contrato público mudou em três pontos aditivos mais uma remoção declarada.
+
+- **FATO atual:** `BusinessProfile` deixou de ser nome, categoria, timezone, idioma e moeda.
+  `20260914000000_goal018_business_profile_modalities` cria o enum `BusinessModality`
+  (`ON_SITE`, `AT_HOME`, `ONLINE`) e acrescenta `modalities` (array, `DEFAULT '{}'`), `address`
+  (`TEXT` nulável), `businessContextVersion` (`DEFAULT 1`) e `businessContextProjectedVersion`
+  (`DEFAULT 0`). Só `ADD COLUMN`, nenhum `UPDATE`: linha existente nasce sem modalidade, sem
+  endereço e com a versão projetada atrás da corrente. `category` continua sendo o único campo de
+  segmento; nenhuma taxonomia concorrente entrou no banco.
+- **FATO atual:** a regra de endereço vive num lugar só. `apps/bff/src/lib/business-profile.ts`
+  funde corpo e estado gravado e distingue omissão de valor explícito (`"address" in patch`):
+  `modalities` ausente preserva o gravado e nunca grava conjunto vazio por omissão; retirar
+  `ON_SITE` não apaga o endereço. `ON_SITE` sem endereço não vazio é recusado com
+  `400 BUSINESS_ADDRESS_REQUIRED` e `details.field: "address"`, sem gravar nada. As duas telas que
+  editam negócio — onboarding e `configuracoes/negocio` — omitem a chave `address` em vez de
+  enviar `null`, que é o que faz a garantia valer pelo caminho que o produto oferece.
+- **FATO atual:** nada de negócio é projetado para o Scheduling. Segmento, modalidade e endereço
+  ficam no BFF; nenhum consumidor de lá os lê.
+- **FATO atual:** o contexto enviado à IA deixou de ter dois campos. `businessContextSchema`
+  ganhou `version`, `segment`, `modalities` e `address` com defaults, então `AiTenantConfig.settings`
+  gravado antes deste Goal continua parseando sem cair no default inteiro;
+  `buildTenantContextPrompt` imprime os campos novos e diz `[nao configurado]` para o que faltar,
+  sem inventar — modalidade vazia nunca vira afirmação de que o negócio não atende daquele jeito.
+  `PROMPT_TEMPLATE_VERSION` subiu de `v3` para `v4`. `businessContextConfigured` **não** mudou:
+  continua sendo `businessName`.
+- **FATO atual:** falha de projeção deixou de ser invisível. O BFF grava a versão corrente do
+  contexto e a última projetada com sucesso, e `businessContextProjectionState` deriva
+  `PROJECTED`/`PENDING` da comparação das duas — nunca de um booleano, que ficaria mentindo depois
+  da próxima mudança. `GET/PATCH /v1/settings` e a seção `business` de `GET/PATCH /v1/onboarding`
+  expõem `contextVersion`, `contextProjectedVersion` e `contextProjectionStatus`. Projeção falha
+  **não** vira `500`: o dado do BFF já foi gravado, a resposta é de sucesso com `PENDING` como
+  aviso. Reconciliação automática continua não existindo — é do Goal018B.
+- **FATO atual:** `POST /v1/onboarding/complete` não olha mais para WhatsApp. A consulta a
+  `WhatsAppInstance` e ao status do Evolution saiu da rota, e `WHATSAPP_NOT_CONFIGURED` e
+  `WHATSAPP_NOT_CONNECTED` não existem mais — é a única mudança subtrativa do Goal, declarada em
+  `PUBLIC_API_V1.md`. Os oito códigos que restam em `error.details.issues` passaram a estar
+  nomeados no contrato, incluindo `BUSINESS_MODALITY_NOT_SELECTED` e `BUSINESS_ADDRESS_REQUIRED`.
+  Concluir continua gravando só `onboardingCompletedAt` e **não** liga a IA, agora sob teste que
+  falha se alguém acoplar as duas coisas.
+- **FATO atual:** `features/onboarding/` não é mais um monolito com protótipo embutido. Passou de
+  2 437 linhas para 1 376, em dez módulos: despachante (`OnboardingScreen.tsx`), casca
+  (`OnboardingShell.tsx`), `OnboardingRuntime.tsx`, `blocks.ts` (rótulos, ordem e progresso),
+  `blocks/registry.ts` e os quatro blocos `business`/`schedule`/`ai`/`whatsapp` mais `shared.tsx`.
+  `PrototypeOnboardingScreen`, a prop `preview` e `features/onboarding/types.ts` não existem mais —
+  nenhum deles tinha chamador.
+- **FATO atual:** `scenarios.ts` foi de 34 entradas para 15, e cada uma é alcançável pelo fluxo do
+  produto. Saíram os oito `importar-*` (a importação na UI é do Goal019), onze dos doze
+  `minha-agenda-*` — fica `minha-agenda-conectar`, que ainda serve a recusa honesta — e
+  `validacao`, o resumo de texto fixo que afirmava "WhatsApp: Conectado" e "Negócio: Configurado"
+  sem ler estado. Entraram `whatsapp-conectar` e `whatsapp-concluido`. Como `onboardingOrder`
+  alimenta `generateStaticParams`, cenário removido deixou de virar rota estática.
+- **FATO atual:** o progresso é por bloco — Seu negócio, Sua agenda, Sua IA, WhatsApp — com o bloco
+  corrente nomeado e nenhuma contagem de telas em tela. `nextRequiredStep` checa nome, categoria,
+  modalidade e endereço condicional antes da agenda, e WhatsApp deixou de ser pendência
+  bloqueante: o bloco explica o uso de número pessoal antes de oferecer a conexão e dá duas ações,
+  `Conectar meu WhatsApp` e `Fazer isso depois` — esta conclui o onboarding com a IA inativa.
+- **FATO atual:** `/inicio` tem checklist pós-onboarding derivado de leitura real.
+  `GET /v1/dashboard` passou a devolver `capabilities.aiActivationReady` e
+  `capabilities.hoursConfigured` (mesmo predicado de `AVAILABILITY_REQUIRED`/
+  `CALENDAR_INTEGRATION_NOT_CONNECTED`), que somados a `whatsapp.status` de `GET /v1/status`
+  alimentam os três itens; o bloco some quando a IA está efetivamente ativa. "Teste concluído" não
+  aparece, porque nenhuma camada o calcula.
+- **FATO atual:** os dois resíduos de status do [review014](reviews/014-review.md) foram fechados.
+  `StatusView` ganhou o valor `pending`, então os quatro estados de `GET /v1/status` mais o
+  carregamento inicial são distinguíveis em tela e `PENDING` deixou de se apresentar como "IA
+  desligada"; e `SystemStatusProvider` monta o único poller da árvore, com `AppShell` envolvendo o
+  próprio chrome — chrome e tela filha leem o mesmo resultado, provado por render da Home dentro do
+  shell real.
+- **LIMITE:** ativação por teste real, autoativação, demonstração da IA, consentimento/contatos
+  ignorados no onboarding, reconciliação automática desired/effective e o item "teste concluído" do
+  checklist são do **Goal018B**. `PATCH /v1/settings/ai` mantém a regra vigente — ao menos um
+  serviço operacional — e nada mais.
+- **LIMITE:** em `PATCH /v1/settings/ai`, falha de projeção continua não marcando `PENDING` em
+  `contextProjectionStatus`; o estado só fica observável por `GET /v1/status` (`ai.state`).
+- **LIMITE:** a migration foi aplicada em PostgreSQL descartável recriado do zero pelo gate
+  `validate:integration` (23/23 passos, exit 0). Nenhum banco implantado foi tocado, e o efeito
+  sobre estoque real continua não observado.
+- **LIMITE:** o gate de browser (`validate:ui`, cinco larguras) continua cobrindo **apenas rotas
+  públicas**, e as rotas de onboarding exigem sessão. As telas novas foram verificadas em jsdom —
+  estrutura, papéis, teclado e axe —, não em largura, contraste ou foco reais. Nenhum WhatsApp
+  real, modelo real ou CI hospedada foi exercitado.

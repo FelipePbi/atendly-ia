@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 
 import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
 import { EvolutionClient } from "../../clients/evolution/index.js";
+import type { InternalRequestContext } from "../../clients/internal-http-client.js";
 import { SchedulingClient } from "../../clients/scheduling/index.js";
 import { dataResponse } from "../../lib/http.js";
 import { getPrisma } from "../../lib/prisma.js";
@@ -28,9 +29,7 @@ export async function registerV1DashboardRoutes(
         await Promise.all([
           platformSummary(tenant.tenantId),
           settled(ai.dashboard(context)),
-          settled(
-            scheduling.dashboard(context).then(publicSchedulingDashboard),
-          ),
+          settled(schedulingDashboardWithReadiness(context, scheduling)),
           settled(whatsappSummary(tenant.userId, request.id, evolution)),
         ]);
       return dataResponse(request, {
@@ -62,6 +61,41 @@ function publicSchedulingDashboard<
           : dashboard.calendar.source === "ATENDLY"
             ? ("ATENDLY" as const)
             : ("EXTERNAL" as const),
+    },
+  };
+}
+
+/**
+ * Acrescenta `calendar.capabilities.hoursConfigured` ao dashboard do
+ * Scheduling: mesmo predicado de `POST /v1/onboarding/complete`
+ * (`AVAILABILITY_REQUIRED`/`CALENDAR_INTEGRATION_NOT_CONNECTED`) — fonte
+ * ATENDLY exige ao menos uma regra de disponibilidade ativa, fonte EXTERNAL
+ * exige integração `CONNECTED`, sem fonte é `false`. Alimenta o checklist
+ * pós-onboarding da Home (Goal018/WU-10), que não pode inferir de
+ * configuração local, só de leitura real.
+ */
+async function schedulingDashboardWithReadiness(
+  context: InternalRequestContext,
+  scheduling: SchedulingClient,
+) {
+  const raw = await scheduling.dashboard(context);
+  const hoursConfigured =
+    raw.calendar.source === "ATENDLY"
+      ? (await scheduling.availabilitySettings(context)).rules.some(
+          (rule) => rule.active,
+        )
+      : raw.calendar.source === "MINHA_AGENDA"
+        ? raw.calendar.integration?.status === "CONNECTED"
+        : false;
+  const dashboard = publicSchedulingDashboard(raw);
+  return {
+    ...dashboard,
+    calendar: {
+      ...dashboard.calendar,
+      capabilities: {
+        ...dashboard.calendar.capabilities,
+        hoursConfigured,
+      },
     },
   };
 }

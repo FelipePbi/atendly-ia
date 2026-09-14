@@ -24,12 +24,21 @@ import type {
 } from "../channel/InboundMessageProcessor.js";
 import type { WhatsAppProvider } from "../channel/ports/WhatsAppProvider.js";
 import type { KnowledgeVectorStore } from "../knowledge/knowledge-vector-store.js";
+import type {
+  InboundAudioTranscriptionPort,
+  InboundTranscription,
+} from "../media/audio-transcription.js";
+import {
+  hasTranscribedAudioMarker,
+  markTranscribedAudioTurn,
+} from "../media/audio-turn.js";
 import type { CustomerMemoryPromptPort } from "../memory/customer-memory-service.js";
 import { classifySendFailure } from "../outbox/outbox-policy.js";
 import type { GraphSessionPort } from "../session/SessionService.js";
 import type { GraphRuntimePort } from "./graph-runtime.js";
 import {
   deriveTurnId,
+  type GraphBufferedRecord,
   type GraphIntent,
   MessageGraphState,
   type MessageGraphStateUpdate,
@@ -40,6 +49,30 @@ const unsupportedMessageReply =
   "Recebi sua mensagem, mas por enquanto consigo responder melhor por texto. Me envie sua pergunta em texto que continuo por aqui.";
 const processingErrorReply =
   "Tive um problema para consultar o sistema agora. Vou chamar a profissional para continuar seu atendimento.";
+/**
+ * Audio que nao virou texto.
+ *
+ * Pede o texto em vez de arriscar um palpite: sem transcricao a IA nao sabe o
+ * que a cliente disse, e responder qualquer coisa aqui seria inventar conteudo
+ * de audio.
+ */
+const audioNotUnderstoodReply =
+  "Recebi seu audio, mas nao consegui entender o conteudo dele agora. Pode me mandar em texto, por favor? Assim continuo seu atendimento por aqui.";
+/**
+ * Imagem recebida com IA elegivel.
+ *
+ * A profissional ve a imagem, nao a IA: a resposta so avisa o encaminhamento,
+ * sem tentar interpretar o que foi enviado nem a legenda (Goal013).
+ */
+const imageReceivedReply =
+  "Recebi sua imagem e ja chamei a profissional para dar uma olhada com voce. Ela continua seu atendimento por aqui.";
+const documentReceivedReply =
+  "Recebi seu documento e ele ja esta aqui na conversa. Por enquanto nao consigo abrir arquivos, entao me conta em texto o que voce precisa que eu ajudo.";
+const videoReceivedReply =
+  "Recebi seu video e ele ja esta aqui na conversa. Por enquanto nao consigo assistir por aqui, entao me conta em texto o que voce precisa que eu ajudo.";
+/** Resumo do handoff de imagem, gravado no `Handoff` em vez do texto de falha. */
+const imageHandoffSummary =
+  "Cliente enviou uma imagem; a IA nao interpreta imagens no MVP.";
 
 export interface MessageGraphInput {
   message: ChannelInboundMessage;
@@ -52,7 +85,7 @@ export interface MessageGraphInput {
 
 export interface MessageGraphExecution {
   result: InboundProcessingResult;
-  bufferedRecord?: { conversationId: string; messageRecordId: string };
+  bufferedRecord?: GraphBufferedRecord;
 }
 
 /**
@@ -96,6 +129,11 @@ export interface MessageGraphDependencies {
    * secao de memoria, como antes do Goal012.
    */
   customerMemory?: CustomerMemoryPromptPort;
+  /**
+   * Transcricao de audio (Goal013). Opcional: sem a porta, audio volta a cair
+   * na resposta generica anterior a este Goal, sem transcrever nada.
+   */
+  transcription?: InboundAudioTranscriptionPort;
 }
 
 export class MessageGraphWorkflow {
@@ -132,6 +170,8 @@ export class MessageGraphWorkflow {
         turnId: deriveTurnId(input.message),
         inboundText: input.text ?? input.message.text ?? "",
         inputMessageIds: input.messageRecordIds ?? [],
+        inboundRecordId: undefined,
+        audioTranscription: undefined,
         deferResponse: input.deferResponse ?? false,
         eventAlreadyGuarded: input.eventAlreadyGuarded ?? false,
         bufferedRecord: undefined,
@@ -146,6 +186,7 @@ export class MessageGraphWorkflow {
         toolResultsValid: true,
         handoffRequired: false,
         handoffReason: "",
+        handoffSummary: undefined,
         response: undefined,
         result: undefined,
       },
@@ -164,6 +205,13 @@ export class MessageGraphWorkflow {
    * `recordInbound`. Assim a mensagem do cliente existe em `Message` antes de
    * qualquer decisao, e o conteudo bloqueado nunca chega a
    * `understandMessage`, ao RAG, ao modelo nem a memoria.
+   *
+   * `transcribeAudio` (Goal013) fica entre os dois, e essa posicao e a regra:
+   * depois de `recordInbound` porque a transcricao precisa do attachment ja
+   * persistido, e antes de `sessionGate` porque audio e transcrito tambem com
+   * a IA desligada, em pausa e em atendimento humano — a inbox mostra o texto
+   * de qualquer jeito. O que o no le do guard e o que o proibe: contato
+   * ignorado e sessao pessoal nunca chegam ao provedor de transcricao.
    */
   private buildGraph(checkpointer: BaseCheckpointSaver) {
     return new StateGraph(MessageGraphState)
@@ -174,8 +222,12 @@ export class MessageGraphWorkflow {
       .addNode("ownerActivity", (state) => this.handleOwnerActivity(state))
       .addNode("understandMessage", (state) => this.understandMessage(state))
       .addNode("recordInbound", (state) => this.recordInbound(state))
+      .addNode("transcribeAudio", (state) => this.transcribeAudio(state))
       .addNode("sessionGate", (state) => this.sessionGate(state))
       .addNode("bufferInbound", (state) => this.bufferInbound(state))
+      .addNode("bufferRecordedInbound", (state) =>
+        this.bufferRecordedInbound(state),
+      )
       .addNode("retrieveKnowledge", (state) => this.retrieveKnowledge(state))
       .addNode("loadCustomerMemory", (state) => this.loadCustomerMemory(state))
       .addNode("agent", (state) => this.agent(state))
@@ -197,7 +249,15 @@ export class MessageGraphWorkflow {
       })
       .addEdge("ownerActivity", END)
       .addEdge("bufferInbound", END)
-      .addEdge("recordInbound", "sessionGate")
+      .addEdge("bufferRecordedInbound", END)
+      .addEdge("recordInbound", "transcribeAudio")
+      .addConditionalEdges(
+        "transcribeAudio",
+        // Fragmento diferido ja persistido (e ja transcrito, quando audio) sai
+        // aqui para o lote; o resto segue para a porta de sessao.
+        (state) => (state.deferResponse ? "buffer" : "gate"),
+        { buffer: "bufferRecordedInbound", gate: "sessionGate" },
+      )
       .addConditionalEdges(
         "sessionGate",
         (state) => (state.result ? "end" : "understand"),
@@ -356,6 +416,62 @@ export class MessageGraphWorkflow {
   }
 
   /**
+   * Transcricao do audio recebido, antes da porta de sessao.
+   *
+   * O que decide aqui e o guard, nao a IA: contato ignorado e sessao pessoal
+   * viram `SKIPPED` e **nao chegam ao provedor**; qualquer outro estado
+   * transcreve, inclusive com a IA desligada, em pausa ou em atendimento
+   * humano, porque a transcricao e o que a inbox mostra para a profissional.
+   *
+   * A transcricao concluida vira o texto do turno, marcada como audio. No lote
+   * ja agrupado o texto recebido ja contem este audio (marcado na passagem
+   * diferida), entao ele nao e reescrito.
+   *
+   * Falha de transcricao nao derruba o turno: fica gravada no attachment com
+   * motivo e a resposta pede texto, sem inventar o que a cliente disse.
+   */
+  private async transcribeAudio(
+    state: MessageGraphStateValue,
+  ): Promise<MessageGraphStateUpdate> {
+    const transcription = this.dependencies.transcription;
+    const message = state.inboundMessage;
+    if (!transcription || message.kind !== "audio") return {};
+
+    let outcome: InboundTranscription;
+    try {
+      outcome = await transcription.transcribeInboundAudio({
+        message,
+        messageRecordId: state.inboundRecordId,
+        policyBlock:
+          state.guardDecision === "ignored_contact"
+            ? "CONTACT_IGNORED"
+            : state.guardDecision === "personal_session"
+              ? "PERSONAL_SESSION"
+              : undefined,
+      });
+    } catch (error) {
+      this.logger.error(
+        {
+          ...channelMessageLogContext(message),
+          err: toErrorMessage(error),
+        },
+        "LangGraph could not transcribe the inbound audio",
+      );
+      outcome = { status: "FAILED", reason: "PROVIDER_FAILED" };
+    }
+
+    const update: MessageGraphStateUpdate = { audioTranscription: outcome };
+    if (
+      outcome.status === "DONE" &&
+      outcome.text &&
+      !state.inboundText.trim()
+    ) {
+      update.inboundText = markTranscribedAudioTurn(outcome.text);
+    }
+    return update;
+  }
+
+  /**
    * Onde a decisao de nao processar vira fim de execucao.
    *
    * Roda depois de `recordInbound`: a mensagem do cliente ja existe em
@@ -376,15 +492,38 @@ export class MessageGraphWorkflow {
       case "human_takeover":
         return { result: { ok: true, action: "paused_conversation" } };
       default:
+        // Sticker, GIF e mensagem de kind desconhecido ja estao persistidos
+        // (recordInbound), mas nao renovam sessao nem geram resposta —
+        // diferente de audio/imagem/documento/video, que seguem para o agente.
+        // So vale com a porta de sessao ligada: sem ela, a mensagem continua
+        // caindo na resposta generica anterior a este Goal.
+        if (
+          this.dependencies.sessions &&
+          state.session &&
+          isUnsupportedMediaKind(state.inboundMessage)
+        ) {
+          return { result: { ok: true, action: "unsupported_media_kind" } };
+        }
         return {};
     }
   }
 
+  /**
+   * Audio transcrito e texto do turno: classifica, recupera conhecimento,
+   * chama o modelo e executa tools pelo mesmo caminho do texto digitado —
+   * nenhuma rota paralela e nenhuma excecao de guard (Goal013).
+   */
   private understandMessage(
     state: MessageGraphStateValue,
   ): MessageGraphStateUpdate {
-    if (!isTextMessage(state.inboundMessage)) return { intent: "unsupported" };
-    return { intent: classifyMessageIntent(state.inboundText) };
+    if (
+      isTextMessage(state.inboundMessage) ||
+      hasTranscribedAudioMarker(state.inboundText) ||
+      isDocumentCaption(state.inboundMessage, state.inboundText)
+    ) {
+      return { intent: classifyMessageIntent(state.inboundText) };
+    }
+    return { intent: "unsupported" };
   }
 
   private async handleOwnerActivity(
@@ -564,10 +703,37 @@ export class MessageGraphWorkflow {
           })
         : undefined;
     return {
-      bufferedRecord: recorded,
+      bufferedRecord: { ...recorded, text: state.inboundText.trim() },
       ...(session
         ? { session, observedInboundVersion: session.inboundVersion }
         : {}),
+      result: { ok: true, action: "buffered" },
+    };
+  }
+
+  /**
+   * Fragmento que ja passou por `recordInbound` (e por `transcribeAudio`)
+   * entrando no lote.
+   *
+   * Existe separado de `bufferInbound` porque o audio precisa ser persistido e
+   * transcrito **antes** de virar fragmento: sem isso ele entraria no
+   * agrupamento sem texto nenhum. Nada e persistido aqui de novo — a sessao ja
+   * foi renovada por `recordInbound`.
+   */
+  private bufferRecordedInbound(
+    state: MessageGraphStateValue,
+  ): MessageGraphStateUpdate {
+    if (!state.inboundRecordId) {
+      throw new Error(
+        "LangGraph deferred an inbound message that was not recorded.",
+      );
+    }
+    return {
+      bufferedRecord: {
+        conversationId: state.conversationId,
+        messageRecordId: state.inboundRecordId,
+        text: state.inboundText.trim(),
+      },
       result: { ok: true, action: "buffered" },
     };
   }
@@ -616,6 +782,11 @@ export class MessageGraphWorkflow {
    * O guard nao encerra mais antes deste no: com a IA desligada, em handoff,
    * em sessao pessoal ou com contato ignorado, a mensagem existe do mesmo
    * jeito. So o que ja foi gravado no lote (`inputMessageIds`) e pulado.
+   *
+   * Toda mensagem do contato vira `Message`, qualquer que seja o `kind`
+   * (Goal013): texto, audio, imagem, documento, video, sticker ou
+   * desconhecida. So a renovacao de sessao distingue por kind — sticker, GIF
+   * e kind desconhecido nao renovam, o resto renova.
    */
   private async recordInbound(
     state: MessageGraphStateValue,
@@ -623,7 +794,6 @@ export class MessageGraphWorkflow {
     const update: MessageGraphStateUpdate = {};
     if (
       state.inputMessageIds.length === 0 &&
-      isTextMessage(state.inboundMessage) &&
       hasRecordInboundAutomation(this.dependencies.automation) &&
       hasGraphAutomation(this.dependencies.automation)
     ) {
@@ -635,12 +805,21 @@ export class MessageGraphWorkflow {
         channelMessage: state.inboundMessage,
       });
       update.inputMessageIds = [recorded.messageRecordId];
+      update.inboundRecordId = recorded.messageRecordId;
+    } else {
+      // Lote ja agrupado: os fragmentos entram na ordem de recebimento, entao
+      // a mensagem deste turno e a ultima.
+      update.inboundRecordId = state.inputMessageIds.at(-1);
     }
 
     // Interacao do contato renova a sessao e avanca a versao de entrada, que e
     // o que os guards de tool e de envio comparam depois.
     const sessions = this.dependencies.sessions;
-    if (sessions && state.session && isTextMessage(state.inboundMessage)) {
+    if (
+      sessions &&
+      state.session &&
+      !isUnsupportedMediaKind(state.inboundMessage)
+    ) {
       const session = await sessions.recordContactMessage({
         tenantId: state.tenantId,
         sessionId: state.session.sessionId,
@@ -678,7 +857,18 @@ export class MessageGraphWorkflow {
   ): Promise<MessageGraphStateUpdate> {
     const message = state.inboundMessage;
     if (state.intent === "unsupported") {
-      return { response: { text: unsupportedMessageReply } };
+      // Imagem recebida com IA elegivel vai para a profissional: handoff
+      // deterministico pelo no `handoff`, sem chamar o modelo e sem
+      // interpretar a legenda como pedido (Goal013).
+      if (message.kind === "image") {
+        return {
+          response: { text: imageReceivedReply },
+          handoffRequired: true,
+          handoffReason: "image_received",
+          handoffSummary: imageHandoffSummary,
+        };
+      }
+      return { response: { text: unsupportedReplyFor(state) } };
     }
 
     const pausedBeforeAgent = await this.dependencies.handoff.isBotPaused(
@@ -853,7 +1043,8 @@ export class MessageGraphWorkflow {
       await this.dependencies.handoff.pauseIndefinitely(
         state.customerContext.phone,
         state.handoffReason,
-        "Falha durante processamento automatico da mensagem.",
+        state.handoffSummary ??
+          "Falha durante processamento automatico da mensagem.",
       );
     }
     return { handoffRequired: true };
@@ -1018,7 +1209,9 @@ export class MessageGraphWorkflow {
       result: {
         ok: true,
         action: state.handoffReason
-          ? "error_handoff"
+          ? state.handoffReason === "image_received"
+            ? "unsupported_handoff"
+            : "error_handoff"
           : state.intent === "unsupported"
             ? "unsupported_message"
             : "replied",
@@ -1110,6 +1303,68 @@ function isTextMessage(
   message: ChannelInboundMessage,
 ): message is ChannelInboundMessage & { kind: "text"; text: string } {
   return message.kind === "text" && Boolean(message.text?.trim());
+}
+
+/**
+ * Resposta do que a IA nao consegue ler.
+ *
+ * Audio sem transcricao ganha resposta propria: a cliente falou, e dizer
+ * "consigo responder melhor por texto" sem reconhecer o audio soa como se a
+ * mensagem tivesse sido ignorada. Documento e video ganham confirmacao de
+ * recebimento propria, em vez do texto generico — imagem nao passa por aqui,
+ * ela tem resposta e handoff proprios em `agent` (Goal013).
+ */
+function unsupportedReplyFor(state: MessageGraphStateValue): string {
+  const message = state.inboundMessage;
+  if (message.kind === "audio") {
+    const status = state.audioTranscription?.status;
+    if (status === "FAILED" || status === "SKIPPED") {
+      return audioNotUnderstoodReply;
+    }
+  }
+  if (message.kind === "document") return documentReceivedReply;
+  if (message.kind === "video" && !isGifMessage(message))
+    return videoReceivedReply;
+  return unsupportedMessageReply;
+}
+
+/**
+ * Legenda de documento e texto do contato (Goal013): o arquivo fica fora do
+ * modelo, mas o que a cliente escreveu junto segue o caminho normal de
+ * classificacao e resposta, como se fosse texto.
+ */
+function isDocumentCaption(
+  message: ChannelInboundMessage,
+  inboundText: string,
+): boolean {
+  return message.kind === "document" && Boolean(inboundText.trim());
+}
+
+/**
+ * GIF do WhatsApp: `videoMessage` com `gifPlayback: true`.
+ *
+ * Nao existe kind proprio para GIF no proto nem no dominio — o arquivo e um
+ * video curto e como video ele e persistido. O que muda e a decisao: o
+ * produto poe GIF ao lado de sticker, entao ele nao responde, nao gera
+ * handoff e nao renova a sessao (Goal013).
+ */
+function isGifMessage(message: ChannelInboundMessage): boolean {
+  return message.kind === "video" && message.media?.gifPlayback === true;
+}
+
+/**
+ * Sticker, GIF e kind desconhecido: persistem (recordInbound roda sempre) mas
+ * nao renovam sessao nem chegam ao agente. Audio, imagem, documento e video
+ * de verdade seguem para `understandMessage` e cada um tem resposta propria
+ * no agente (Goal013): audio pede texto quando a transcricao falha, imagem
+ * gera handoff, documento e video confirmam o recebimento.
+ */
+function isUnsupportedMediaKind(message: ChannelInboundMessage): boolean {
+  return (
+    message.kind === "sticker" ||
+    message.kind === "unknown" ||
+    isGifMessage(message)
+  );
 }
 
 function isSelfChatMessage(message: ChannelInboundMessage): boolean {

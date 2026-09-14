@@ -12,6 +12,7 @@ import {
   DEFAULT_BUSINESS_CONTEXT,
   normalizeBusinessContext,
 } from "../tenant-config/business-context.js";
+import { buildAudioPrompt } from "./audio.js";
 import { buildCustomerMemoryPrompt } from "./customer-memory.js";
 import { buildHandoffPrompt } from "./handoff.js";
 import { buildKnowledgePrompt } from "./knowledge.js";
@@ -85,8 +86,12 @@ const MAIN_RULES = [
  *
  * v2 (Goal012/WU-04): o template ganhou o modo sugestao, sem efeito sobre o
  * turno de conversa normal.
+ *
+ * v3 (Goal013/WU-03): o template ganhou a secao de audio transcrito. O turno
+ * passa a poder chegar como voz virada em texto por maquina, e o que o modelo
+ * pode concluir dela — inclusive aceitar confirmacao — mudou de significado.
  */
-const PROMPT_TEMPLATE_VERSION = "v2";
+const PROMPT_TEMPLATE_VERSION = "v3";
 
 /**
  * Amostra fixa, nunca usada no prompt real: existe so para que o hash em
@@ -151,6 +156,7 @@ function buildStablePromptContent(style: AiConversationStyle): string {
     ...MAIN_RULES,
     ...buildTenantContextPrompt(DEFAULT_BUSINESS_CONTEXT),
     ...buildSchedulingPrompt(),
+    ...buildAudioPrompt(),
     ...buildKnowledgePrompt({ requested: false, results: [] }),
     ...buildKnowledgePrompt({ requested: true, results: [] }),
     ...buildKnowledgePrompt({
@@ -204,6 +210,8 @@ export function buildSystemPrompt(input: unknown): BuiltSystemPrompt {
     ...buildTenantContextPrompt(businessContext),
     "",
     ...buildSchedulingPrompt(),
+    "",
+    ...buildAudioPrompt(),
     "",
     ...buildKnowledgePrompt({
       requested: args.knowledgeRequested ?? false,

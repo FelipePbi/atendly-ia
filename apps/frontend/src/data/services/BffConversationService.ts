@@ -52,6 +52,18 @@ export class BffConversationService {
     });
   }
 
+  /**
+   * Bytes de mídia de um attachment, sob demanda (Goal013). Sem tela: o
+   * player e a exibição são do Goal017 — este método só busca o corpo bruto
+   * via o proxy de mídia do BFF.
+   */
+  getMedia(conversationId: string, messageId: string, signal?: AbortSignal) {
+    return this.http.requestBinary({
+      path: `/v1/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/media`,
+      signal,
+    });
+  }
+
   sendMessage(id: string, text: string, signal?: AbortSignal) {
     return this.http.request({
       body: { text },

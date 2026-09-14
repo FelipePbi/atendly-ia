@@ -17,6 +17,10 @@ import { internalContext } from "../tenant/context.js";
 import { findLinkedInstance } from "../whatsapp/instance-link.js";
 
 const idSchema = z.object({ id: z.string().trim().min(1).max(128) });
+const mediaParamsSchema = z.object({
+  id: z.string().trim().min(1).max(128),
+  messageId: z.string().trim().min(1).max(128),
+});
 const querySchema = z.object({
   status: z.enum(["ACTIVE", "HUMAN_HANDOFF", "CLOSED"]).optional(),
   // Organizacao da inbox e estado de atendimento. A inbox em tres abas e do
@@ -71,6 +75,30 @@ export async function registerV1ConversationRoutes(
         request,
         await ai.listMessages(internalContext(request), id),
       );
+    },
+  );
+
+  /**
+   * Bytes de mídia de um attachment, sob demanda (Goal013/WU-06). Proxy fino
+   * para a rota interna equivalente da IA: repassa o tenant da sessão, os
+   * bytes e os cabeçalhos (`content-type`, nome). Recusas próprias da IA
+   * (sem attachment, `tooLarge`, origem indisponível) chegam pelo mesmo
+   * envelope de `UPSTREAM_ERROR` que as demais rotas, nunca `500` genérico.
+   */
+  app.get(
+    "/v1/conversations/:id/messages/:messageId/media",
+    { preHandler: requireTenantContext },
+    async (request, reply) => {
+      const { id, messageId } = parseParams(mediaParamsSchema, request.params);
+      const media = await ai.getMedia(internalContext(request), id, messageId);
+      reply.header("content-type", media.contentType);
+      if (media.fileName) {
+        reply.header(
+          "content-disposition",
+          `inline; filename="${media.fileName.replace(/"/gu, "")}"`,
+        );
+      }
+      return reply.send(media.body);
     },
   );
 

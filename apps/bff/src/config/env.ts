@@ -62,6 +62,10 @@ const envSchema = z.object({
   WHATSAPP_CREDENTIAL_ACTIVE_KEY_ID: stringEnv(),
   INTERNAL_HTTP_TIMEOUT_MS: intEnv(10_000),
   INTERNAL_HTTP_GET_RETRIES: intEnv(2),
+  // Teto de bytes que o BFF aceita repassar de um corpo binário do serviço
+  // interno (Goal013: rota de mídia). Nao e o teto de mídia embutida do
+  // webhook nem o de transcrição — é so a salvaguarda de transporte do BFF.
+  INTERNAL_HTTP_MEDIA_MAX_BYTES: intEnv(32 * 1024 * 1024),
   PASSWORD_RESET_TOKEN_TTL_MINUTES: intEnv(30),
   PASSWORD_RESET_PUBLIC_URL: stringEnv("http://localhost:3001/nova-senha"),
   PASSWORD_RESET_DELIVERY_URL: stringEnv(),

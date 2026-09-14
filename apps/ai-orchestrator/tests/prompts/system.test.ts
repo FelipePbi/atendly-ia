@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { AUDIO_TURN_MARKER } from "../../src/modules/media/audio-turn.js";
+import { buildAudioPrompt } from "../../src/modules/prompts/audio.js";
 import {
   buildSystemPrompt,
   derivePromptVersion,
@@ -77,12 +79,12 @@ describe("prompt montado: sem persona, identidade transparente e versao por esti
 
   it("a versao e um hash estavel do conteudo montado: um teste que muda sozinho aqui sinaliza que o prompt mudou sem bump consciente da versao semantica", () => {
     expect(derivePromptVersion("PROFESSIONAL")).toBe(
-      "prompt-v2-professional-d2c5eead05",
+      "prompt-v3-professional-8a08266b6e",
     );
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v2-balanced-0372165039",
+      "prompt-v3-balanced-04995d48b1",
     );
-    expect(derivePromptVersion("CASUAL")).toBe("prompt-v2-casual-9bf361dcf5");
+    expect(derivePromptVersion("CASUAL")).toBe("prompt-v3-casual-64e9afb011");
   });
 
   it("o prompt montado embute exatamente a versao retornada para o estilo usado", () => {
@@ -127,7 +129,7 @@ describe("prompt montado: modo sugestao (Goal012/WU-04)", () => {
 
   it("a secao do modo sugestao entra no hash estavel: mudar o template de sugestao muda a versao do prompt normal tambem", () => {
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v2-balanced-0372165039",
+      "prompt-v3-balanced-04995d48b1",
     );
   });
 
@@ -149,6 +151,42 @@ describe("prompt montado: modo sugestao (Goal012/WU-04)", () => {
     });
 
     expect(new Set(withoutToneSection).size).toBe(1);
+  });
+});
+
+describe("prompt montado: audio transcrito (Goal013/WU-03)", () => {
+  it.each(STYLES)(
+    "prompt montado para %s explica o marcador do audio transcrito, o risco de erro e a confirmacao por audio",
+    (style) => {
+      const { text } = assemblePrompt(style);
+
+      expect(text).toContain("AUDIO TRANSCRITO:");
+      expect(text).toContain(AUDIO_TURN_MARKER);
+      expect(text).toContain("transcricao automatica da voz da cliente");
+      expect(text).toContain(
+        "vale como confirmacao da cliente, exatamente como valeria por texto",
+      );
+      expect(text).toContain(
+        "Nunca invente conteudo de audio que nao esteja transcrito aqui",
+      );
+    },
+  );
+
+  it("a secao de audio entra inteira no prompt montado", () => {
+    const { text } = assemblePrompt("BALANCED");
+
+    for (const line of buildAudioPrompt()) {
+      expect(text).toContain(line);
+    }
+  });
+
+  it("a secao de audio entra no hash estavel: o bump para v3 e o hash novo sao a versao conscientemente atualizada por causa dela", () => {
+    // O identificador semantico subiu de v2 para v3 porque o turno passou a
+    // poder chegar como voz virada em texto; o hash abaixo muda sozinho se
+    // alguem mexer na secao sem decidir isso de novo.
+    expect(derivePromptVersion("BALANCED")).toBe(
+      "prompt-v3-balanced-04995d48b1",
+    );
   });
 });
 

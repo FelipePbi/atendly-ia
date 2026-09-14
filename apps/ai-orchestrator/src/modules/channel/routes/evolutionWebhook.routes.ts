@@ -52,6 +52,10 @@ export async function registerEvolutionWebhookRoutes(
 
   app.post(
     "/webhooks/evolution",
+    // Mídia inline chega em base64 dentro do corpo JSON: o limite padrão do
+    // Fastify (1 MiB) rejeitaria um áudio ou imagem comuns antes de qualquer
+    // mapeamento. O teto vale só para esta rota, não para o servidor inteiro.
+    { bodyLimit: env.EVOLUTION_WEBHOOK_BODY_LIMIT_BYTES },
     async (request: FastifyRequest, reply: FastifyReply) => {
       if (!isValidWebhookToken(request)) {
         app.log.warn(

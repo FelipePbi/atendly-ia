@@ -6,6 +6,34 @@ import {
   type InternalRequestContext,
 } from "../internal-http-client.js";
 
+// Goal013/WU-06: tipo de conteudo e attachment de midia. Opcionais de
+// proposito — mensagem de texto e o estoque anterior a este Goal nao trazem
+// os dois campos, e o consumidor trata a ausencia como TEXT sem attachment.
+const messageKindSchema = z.enum([
+  "TEXT",
+  "AUDIO",
+  "IMAGE",
+  "DOCUMENT",
+  "VIDEO",
+  "STICKER",
+  "UNKNOWN",
+]);
+
+const messageAttachmentSchema = z.object({
+  kind: z.enum(["AUDIO", "IMAGE", "DOCUMENT", "VIDEO", "STICKER"]),
+  mimetype: z.string().nullable(),
+  fileName: z.string().nullable(),
+  sizeBytes: z.number().int().nonnegative().nullable(),
+  durationSeconds: z.number().int().nonnegative().nullable(),
+  tooLarge: z.boolean(),
+  transcript: z.string().nullable(),
+  transcriptStatus: z.enum(["PENDING", "DONE", "FAILED", "SKIPPED"]).nullable(),
+  transcriptError: z.string().nullable(),
+  // A IA decide se os bytes ainda podem ser buscados (mediaUrl vigente ou
+  // download sob demanda possivel); o DTO nunca expoe mediaUrl bruta.
+  mediaAvailable: z.boolean(),
+});
+
 const messageSchema = z.object({
   id: z.string(),
   direction: z.enum(["INBOUND", "OUTBOUND"]),
@@ -20,6 +48,8 @@ const messageSchema = z.object({
     .nullish()
     .optional(),
   deliveryDetail: z.string().nullish().optional(),
+  kind: messageKindSchema.nullish().optional(),
+  attachment: messageAttachmentSchema.nullish().optional(),
 });
 
 const sessionCategorySchema = z.enum([
@@ -192,6 +222,23 @@ export class AiOrchestratorClient {
         schema: envelope(z.array(messageSchema)),
       })
     ).data;
+  }
+
+  /**
+   * Bytes de mídia de um attachment, sob demanda (Goal013/WU-06). Repassa
+   * `content-type` e nome exatamente como a rota interna devolve; recusas
+   * próprias da IA (sem attachment, `tooLarge`, origem indisponível) chegam
+   * como `UPSTREAM_ERROR` com `upstreamCode`, nunca `500` genérico.
+   */
+  async getMedia(
+    context: InternalRequestContext,
+    conversationId: string,
+    messageId: string,
+  ) {
+    return this.http.requestBinary({
+      path: `/internal/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/media`,
+      context,
+    });
   }
 
   // A credencial da instância não viaja mais aqui: a IA a resolve pelo vínculo

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { env } from "../../config/env.js";
 import { Prisma, type PrismaClient } from "../../generated/prisma/client.js";
+import { stripMediaBase64 } from "../media/raw-payload-sanitizer.js";
 import {
   conversationWindowMs,
   type ConversationWindowPolicy,
@@ -201,6 +202,12 @@ export class InboxStore implements InboxPort {
   async record(input: InboxRecordInput): Promise<InboxRecordResult> {
     const status = input.status ?? "RECEIVED";
     const now = new Date();
+    // Evento tecnico nasce ja concluido (IGNORED): o base64, se algum dia
+    // existir aqui, nao tem mais funcao a partir deste ponto.
+    const rawPayload =
+      status === "IGNORED"
+        ? stripMediaBase64(input.rawPayload)
+        : input.rawPayload;
     try {
       const created = await this.prisma.processedEvent.create({
         data: {
@@ -211,7 +218,7 @@ export class InboxStore implements InboxPort {
           messageId: input.messageId,
           eventType: input.eventType,
           conversationKey: input.conversationKey,
-          rawPayload: input.rawPayload as object,
+          rawPayload: rawPayload as object,
           status,
           completedAt: status === "IGNORED" ? now : null,
           nextAttemptAt:
@@ -488,6 +495,12 @@ export class InboxStore implements InboxPort {
     return updated.count;
   }
 
+  /**
+   * DONE e IGNORED sao terminais: o evento nao volta para a fila. O base64
+   * embutido no rawPayload perde a funcao no mesmo instante — WU-03 usa os
+   * bytes durante o processamento deste lote, nunca depois de concluido — e a
+   * purga acontece na mesma atualizacao que fecha o evento.
+   */
   async complete(input: {
     ids: string[];
     leaseToken: string;
@@ -495,20 +508,31 @@ export class InboxStore implements InboxPort {
     result?: unknown;
   }): Promise<number> {
     if (input.ids.length === 0) return 0;
-    const updated = await this.prisma.processedEvent.updateMany({
+    const rows = await this.prisma.processedEvent.findMany({
       where: { id: { in: input.ids }, leaseToken: input.leaseToken },
-      data: {
-        status: input.status,
-        completedAt: new Date(),
-        leaseOwner: null,
-        leaseToken: null,
-        leaseExpiresAt: null,
-        nextAttemptAt: null,
-        error: null,
-        result: (input.result ?? undefined),
-      },
+      select: { id: true, rawPayload: true },
     });
-    return updated.count;
+    if (rows.length === 0) return 0;
+
+    const updates = await this.prisma.$transaction(
+      rows.map((row) =>
+        this.prisma.processedEvent.updateMany({
+          where: { id: row.id, leaseToken: input.leaseToken },
+          data: {
+            status: input.status,
+            completedAt: new Date(),
+            leaseOwner: null,
+            leaseToken: null,
+            leaseExpiresAt: null,
+            nextAttemptAt: null,
+            error: null,
+            result: (input.result ?? undefined),
+            rawPayload: stripMediaBase64(row.rawPayload) as object,
+          },
+        }),
+      ),
+    );
+    return updates.reduce((total, update) => total + update.count, 0);
   }
 
   async fail(input: {
@@ -531,19 +555,30 @@ export class InboxStore implements InboxPort {
     const exhausted = !input.retryable || isDeadLettered(attempts, this.retry);
     if (exhausted) {
       // Dead-letter: para de tentar e fica visível como atenção. Não existe
-      // reenvio em massa; retomar é decisão explícita, evento a evento.
-      await this.prisma.processedEvent.updateMany({
+      // reenvio em massa; retomar é decisão explícita, evento a evento. É
+      // terminal como DONE/IGNORED, entao o base64 embutido tambem perde a
+      // funcao aqui e e purgado junto.
+      const dying = await this.prisma.processedEvent.findMany({
         where: { id: { in: input.ids }, leaseToken: input.leaseToken },
-        data: {
-          status: "FAILED",
-          error: message,
-          completedAt: new Date(),
-          leaseOwner: null,
-          leaseToken: null,
-          leaseExpiresAt: null,
-          nextAttemptAt: null,
-        },
+        select: { id: true, rawPayload: true },
       });
+      await this.prisma.$transaction(
+        dying.map((row) =>
+          this.prisma.processedEvent.updateMany({
+            where: { id: row.id, leaseToken: input.leaseToken },
+            data: {
+              status: "FAILED",
+              error: message,
+              completedAt: new Date(),
+              leaseOwner: null,
+              leaseToken: null,
+              leaseExpiresAt: null,
+              nextAttemptAt: null,
+              rawPayload: stripMediaBase64(row.rawPayload) as object,
+            },
+          }),
+        ),
+      );
       return { retrying: false, deadLettered: true };
     }
 

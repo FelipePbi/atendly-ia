@@ -51,6 +51,29 @@ describe.skipIf(!databaseUrl)("durable transport against PostgreSQL", () => {
     availableInMs,
   });
 
+  const mediaEvent = (key: string, contact: string) => ({
+    tenantId: TENANT,
+    channelId: CHANNEL,
+    eventKey: key,
+    messageId: key,
+    eventType: "message",
+    conversationKey: buildConversationKey({
+      tenantId: TENANT,
+      channelId: CHANNEL,
+      externalContactId: contact,
+    }),
+    rawPayload: {
+      event: "Message",
+      data: {
+        Info: { ID: key },
+        Message: {
+          audioMessage: { mimetype: "audio/ogg", fileSHA256: "aGVsbG8=" },
+          base64: "d2hhdHNhcHAtYXVkaW8=",
+        },
+      },
+    },
+  });
+
   // Politica de janela do teste, explicita para nao depender da configuracao do
   // processo: fragmentos de 8 s a 35 s (limite de 60 s desde o primeiro) e
   // espera de mensagem ambigua de 2 min, ate 5 min desde a primeira.
@@ -452,6 +475,79 @@ describe.skipIf(!databaseUrl)("durable transport against PostgreSQL", () => {
     });
     expect(stored.status).toBe("FAILED");
     expect(stored.error).not.toContain("super-secret");
+  });
+
+  it("strips the inline base64 once the event is concluded (DONE)", async () => {
+    await inbox.record(mediaEvent("evt-media-done", CONTACT_A));
+    const claim = await inbox.claimNext(claimOptions);
+
+    await inbox.complete({
+      ids: claim!.events.map((event) => event.id),
+      leaseToken: claim!.leaseToken,
+      status: "DONE",
+      result: { kind: "message" },
+    });
+
+    const stored = await prisma.processedEvent.findFirstOrThrow({
+      where: { tenantId: TENANT, eventKey: "evt-media-done" },
+    });
+    const rawPayload = stored.rawPayload as {
+      data: { Message: Record<string, unknown> };
+    };
+    expect(rawPayload.data.Message).not.toHaveProperty("base64");
+    // O resto do proto de midia continua: e a chave do download sob demanda.
+    expect(rawPayload.data.Message.audioMessage).toEqual({
+      mimetype: "audio/ogg",
+      fileSHA256: "aGVsbG8=",
+    });
+  });
+
+  it("strips the inline base64 once the event is dead-lettered (FAILED)", async () => {
+    const strict = new InboxStore(prisma, {
+      maxAttempts: 1,
+      baseSeconds: 1,
+      maxSeconds: 5,
+    });
+    await strict.record(mediaEvent("evt-media-dead", CONTACT_A));
+    const claim = await strict.claimNext(claimOptions);
+
+    await strict.fail({
+      ids: claim!.events.map((event) => event.id),
+      leaseToken: claim!.leaseToken,
+      error: new Error("assistant is down"),
+      retryable: true,
+    });
+
+    const stored = await prisma.processedEvent.findFirstOrThrow({
+      where: { tenantId: TENANT, eventKey: "evt-media-dead" },
+    });
+    const rawPayload = stored.rawPayload as {
+      data: { Message: Record<string, unknown> };
+    };
+    expect(stored.status).toBe("FAILED");
+    expect(rawPayload.data.Message).not.toHaveProperty("base64");
+  });
+
+  it("keeps the inline base64 while an event is only retrying", async () => {
+    await inbox.record(mediaEvent("evt-media-retry", CONTACT_A));
+    const claim = await inbox.claimNext(claimOptions);
+
+    await inbox.fail({
+      ids: claim!.events.map((event) => event.id),
+      leaseToken: claim!.leaseToken,
+      error: new Error("transient"),
+      retryable: true,
+    });
+
+    const stored = await prisma.processedEvent.findFirstOrThrow({
+      where: { tenantId: TENANT, eventKey: "evt-media-retry" },
+    });
+    const rawPayload = stored.rawPayload as {
+      data: { Message: Record<string, unknown> };
+    };
+    expect(stored.status).toBe("RECEIVED");
+    // Ainda vai tentar de novo: os bytes continuam disponiveis para o retry.
+    expect(rawPayload.data.Message.base64).toBe("d2hhdHNhcHAtYXVkaW8=");
   });
 
   it("retries with backoff before giving up", async () => {

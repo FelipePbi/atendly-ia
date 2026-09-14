@@ -48,6 +48,24 @@ const envSchema = z.object({
   OPENAI_MODEL: stringEnv("gpt-5.4-mini"),
   OPENAI_EMBEDDING_MODEL: stringEnv("text-embedding-3-small"),
   OPENAI_MAX_OUTPUT_TOKENS: intEnv(600),
+  // Transcricao de audio (Goal013): mesma conta OpenAI ja configurada, sem
+  // provider novo e sem SDK novo — a chamada e HTTP direta.
+  OPENAI_BASE_URL: stringEnv("https://api.openai.com/v1"),
+  OPENAI_TRANSCRIPTION_MODEL: stringEnv("gpt-4o-mini-transcribe"),
+  // Idioma esperado do audio. Informar o idioma e o que evita a transcricao
+  // "traduzir" sozinha um audio em portugues.
+  OPENAI_TRANSCRIPTION_LANGUAGE: stringEnv("pt"),
+  // Timeout proprio da transcricao: ela e chamada de rede dentro do lease da
+  // inbox, que so continua valendo porque o heartbeat renova enquanto o lote
+  // executa. Sem teto, um audio pendurado seguraria o lote inteiro.
+  OPENAI_TRANSCRIPTION_TIMEOUT_MS: intEnv(120_000),
+  // Tetos da transcricao, avaliados **antes** de qualquer byte ser buscado.
+  // Acima deles o audio e SKIPPED com motivo nomeado, nunca transcrito pela
+  // metade. O teto de tamanho e o da propria API de audio da OpenAI (25 MB);
+  // ele fica acima do teto de embutir inline do Go de proposito: entre os
+  // dois, o audio ainda e transcrito, so que por download sob demanda.
+  AUDIO_TRANSCRIPTION_MAX_BYTES: intEnv(25 * 1024 * 1024),
+  AUDIO_TRANSCRIPTION_MAX_SECONDS: intEnv(600),
   KNOWLEDGE_SEARCH_LIMIT: intEnv(4),
   KNOWLEDGE_SEARCH_MIN_SCORE: numberEnv(0.65),
   // Memoria do cliente: idade a partir da qual um item entra no prompt
@@ -61,9 +79,19 @@ const envSchema = z.object({
   EVOLUTION_BASE_URL: stringEnv("http://evolution-go:8080"),
   EVOLUTION_API_KEY: stringEnv(),
   EVOLUTION_SEND_TEXT_PATH: stringEnv("/send/text"),
+  // Download sob demanda da midia (Goal013): mesma credencial de instancia do
+  // envio, nunca a chave global.
+  EVOLUTION_DOWNLOAD_MEDIA_PATH: stringEnv("/message/downloadmedia"),
+  // Baixar do WhatsApp demora mais que responder um envio de texto, entao o
+  // teto e proprio em vez de reaproveitar EVOLUTION_SEND_TIMEOUT_MS.
+  EVOLUTION_DOWNLOAD_MEDIA_TIMEOUT_MS: intEnv(60_000),
   EVOLUTION_IGNORE_GROUPS: boolEnv(true),
   EVOLUTION_BOT_ENABLED: boolEnv(true),
   EVOLUTION_ALLOW_SELF_CHAT: boolEnv(false),
+  // Teto do corpo aceito pela rota do webhook (Goal013): mídia inline chega em
+  // base64 dentro do JSON, então o limite padrão do Fastify (1 MiB) rejeitaria
+  // um áudio ou imagem comuns antes de qualquer mapeamento.
+  EVOLUTION_WEBHOOK_BODY_LIMIT_BYTES: intEnv(32 * 1024 * 1024),
   HUMAN_HANDOFF_PAUSE_MINUTES: intEnv(120),
   AI_DEBOUNCE_MIN_SECONDS: intEnv(8),
   AI_DEBOUNCE_MAX_SECONDS: intEnv(35),

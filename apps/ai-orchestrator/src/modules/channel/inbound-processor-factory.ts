@@ -10,6 +10,9 @@ import { HandoffService } from "../handoff/HandoffService.js";
 import { IdempotencyStore } from "../idempotency/IdempotencyStore.js";
 import { OpenAIEmbeddingProvider } from "../knowledge/embedding-provider.js";
 import { PGVectorKnowledgeStore } from "../knowledge/pgvector-knowledge-store.js";
+import { AudioTranscriptionService } from "../media/audio-transcription.js";
+import { PrismaMessageAttachmentStore } from "../media/message-attachment-store.js";
+import { OpenAiTranscriptionProvider } from "../media/openai-transcription-provider.js";
 import { CustomerMemoryService } from "../memory/customer-memory-service.js";
 import { SchedulingClient } from "../scheduling-service/client.js";
 import { SessionService } from "../session/SessionService.js";
@@ -71,6 +74,14 @@ export function buildInboundMessageProcessor(input: InboundProcessorInput) {
     sessions,
   );
   const runtime = new PrismaGraphRuntime(input.prisma);
+  // O mesmo `provider` baixa a midia sob demanda: a credencial de instancia
+  // que assina o envio e a que autoriza o download.
+  const transcription = new AudioTranscriptionService(
+    new PrismaMessageAttachmentStore(input.prisma),
+    new OpenAiTranscriptionProvider(input.logger),
+    provider,
+    input.logger,
+  );
   return new InboundMessageProcessor(
     assistant,
     provider,
@@ -85,6 +96,7 @@ export function buildInboundMessageProcessor(input: InboundProcessorInput) {
       outboundGate: input.outboundGate,
       sessions,
       customerMemory,
+      transcription,
     },
   );
 }

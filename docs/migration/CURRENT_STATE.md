@@ -129,15 +129,15 @@ Inventário de entidades, constraints SQL adicionais ao Prisma, caminhos com loc
 - `channel/routes/evolutionWebhook.routes.ts:60–99`: processor novo por request; HTTP 202 precede `handleInboundMessage`. O buffer é Map por processor (`InboundMessageProcessor.ts:154`). Consequência inferida: debounce/cancelamento não coordena requests distintos e queda após ACK pode perder trabalho. **Superado no Goal004** — ver o delta ao final deste documento.
 - `graph/message-graph.ts:206`: ProcessedEvent é criado antes do processamento. A tabela tem dedupe único, mas não estados de execução/retry. Guard de IA desligada/handoff pode encerrar antes de Message. Deduplicação não equivale a processamento concluído.
 - `message-graph.ts:273` e `assistant.service.ts:622`: `fromMe` comum grava OWNER, sem acionar a pausa; comandos especiais de pausa existem. Mensagem humana no chat interno exige takeover prévio (`internal/routes.ts:167`), enquanto o produto pede que o envio assuma. Abrir conversa não deve assumir. **Superado no Goal005** — ver o delta ao final deste documento.
-- `message-graph.ts:269/401`: conteúdo não textual vai para resposta genérica unsupported. Não foi localizado pipeline de transcrição; áudio, imagem e documento ainda não têm tratamentos distintos do MVP.
+- `message-graph.ts:269/401`: conteúdo não textual vai para resposta genérica unsupported. Não foi localizado pipeline de transcrição; áudio, imagem e documento ainda não têm tratamentos distintos do MVP. **Superado no Goal013.** **FATO atual:** toda mensagem recebida do contato é persistida como `Message` com `kind` (`TEXT`/`AUDIO`/`IMAGE`/`DOCUMENT`/`VIDEO`/`STICKER`/`UNKNOWN`) e mídia ganha uma linha `MessageAttachment` com metadados, sem byte de mídia retido no PostgreSQL da IA; existe pipeline de transcrição (`modules/media/`, provider por porta com implementação OpenAI por HTTP e dublê em teste), num nó do grafo entre `recordInbound` e `sessionGate`, que não roda para contato ignorado nem sessão pessoal e cuja transcrição vira o texto do turno sob os mesmos guards do Goal011; e cada tipo tem tratamento próprio: imagem gera handoff determinístico sem chamar o modelo, documento e vídeo são confirmados sem interpretação (a legenda do documento segue como texto do contato), e sticker, GIF (`videoMessage` com `gifPlayback`) e `unknown` persistem sem resposta, sem handoff e sem renovar a sessão.
 - `message-graph.ts:581–631`: registro de outbound é marcado com ID local antes de send e depois atualizado; não há estado separado de entrega. Envio humano remove mensagem pendente se send falha (`internal/routes.ts:174–208`), inclusive quando timeout não prova ausência de entrega. **Superado no Goal004** — ver o delta ao final deste documento.
 - Classificação existente em `assistant.service.ts` usa `potential_customer`, `supplier_or_partner`, `personal_contact`, `unknown` dentro de JSON do agente. Não equivale às três abas, override manual, Contact ignorado e sessão de aproximadamente 24h do produto. Não há esses modelos explícitos no schema. **Superado no Goal005** — ver o delta ao final deste documento.
 
 ### Dados e memória da IA
 
-`apps/ai-orchestrator/prisma/schema.prisma`: ChannelConnection (único provider/instance e tenant/provider), Conversation (único tenant/channel/contact), Message (dedupe tenant/channel/externalMessageId), ProcessedEvent, AiRun, AiToolCall, Handoff, AiTenantConfig, KnowledgeDocument e KnowledgeChunk. FKs compostas protegem tenant/channel nas relações internas. Não há FK cross-database para User, Customer ou Appointment.
+`apps/ai-orchestrator/prisma/schema.prisma`: ChannelConnection (único provider/instance e tenant/provider), Conversation (único tenant/channel/contact), Message (dedupe tenant/channel/externalMessageId), ProcessedEvent, AiRun, AiToolCall, Handoff, AiTenantConfig, KnowledgeDocument e KnowledgeChunk. FKs compostas protegem tenant/channel nas relações internas. **Superado nos Goals 012 e 013** na lista de entidades: o schema vigente também tem `CustomerMemory` (Goal012) e `Message.kind` com a tabela `MessageAttachment` (Goal013) — ver os deltas ao final deste documento. Não há FK cross-database para User, Customer ou Appointment.
 
-AiRun/AiToolCall guardam modelo, promptVersion, status, argumentos, resultados e erros: base útil de auditabilidade, também conteúdo potencialmente pessoal. Message/ProcessedEvent guardam rawPayload. Handoff tem status e pausa; não é entidade de sessão de contato. AiTenantConfig replica enabled/tone/contexto do BFF. Conhecimento guarda versão/checksum/status e embedding `vector(1536)`. `pgvector-knowledge-store.ts:142–149` filtra tenant do chunk e do documento e somente documentos ACTIVE: proteção concreta, sem prova de RLS ou teste de invasão.
+AiRun/AiToolCall guardam modelo, promptVersion, status, argumentos, resultados e erros: base útil de auditabilidade, também conteúdo potencialmente pessoal. Message/ProcessedEvent guardam rawPayload. **Superado no Goal013** na parte de mídia: nenhum dos dois retém o `base64` do provedor — ele é purgado ao concluir o evento e no estoque por backfill, preservando o restante do proto; ver o delta ao final deste documento. Handoff tem status e pausa; não é entidade de sessão de contato. AiTenantConfig replica enabled/tone/contexto do BFF. Conhecimento guarda versão/checksum/status e embedding `vector(1536)`. `pgvector-knowledge-store.ts:142–149` filtra tenant do chunk e do documento e somente documentos ACTIVE: proteção concreta, sem prova de RLS ou teste de invasão.
 
 Checkpointer usa schema PostgreSQL `langgraph` e executa setup no boot (`graph/checkpointer.ts:3–12`); thread_id é conversationId (`message-graph.ts:78`). Tabelas de checkpoints são persistência adicional fora do schema Prisma. Não há rotina de retenção de conteúdo/checkpoints/runs localizada. O seed de conhecimento não representa CRUD de FAQ pronto no produto. **Superado no Goal012** na parte de conhecimento, memória do cliente e propósito do `AiRun` — ver o delta ao final deste documento; a retenção continua aberta (Goal022).
 
@@ -1086,3 +1086,79 @@ estão superados pelos fatos abaixo, verificados no
   gates não tem a extensão `vector`, e o ensaio do Goal012 a pula com skip
   nomeado. Nenhum modelo e nenhum provider de embedding real foi chamado em
   teste. Mídia (G-23) continua fora: é do Goal013.
+
+## Delta implementado — Goal013, 2026-09-13 (ACCEPTED na rodada 2)
+
+A fotografia histórica acima permanece como registro da baseline. Os FATOS que
+descrevem conteúdo não textual como resposta genérica `unsupported`, o schema da
+IA sem tipo de mensagem nem anexo, e o payload do provedor guardado inteiro na
+inbox durável estão superados pelos fatos abaixo, verificados no
+[review013](reviews/013-review.md) sobre a base `e602b4b`.
+
+- **FATO atual:** toda mensagem recebida do contato é persistida como `Message`,
+  texto ou não, com `kind` (`TEXT` default, `AUDIO`, `IMAGE`, `DOCUMENT`,
+  `VIDEO`, `STICKER`, `UNKNOWN`). Mídia ganha uma linha `MessageAttachment` por
+  `(tenantId, messageId)` com mimetype, nome, tamanho, duração de áudio,
+  `mediaUrl` quando o provedor hospedou, `tooLarge` e o resultado da transcrição
+  com proveniência (texto, status, erro, motivo de pulo, provider, modelo,
+  `transcribedAt`). Índices `(tenantId, messageId)` e
+  `(tenantId, transcriptStatus)`.
+- **FATO atual:** a IA **não retém byte de mídia**. `stripMediaBase64` remove
+  `data.Message.base64` do `Message.rawPayload` na persistência e do
+  `ProcessedEvent.rawPayload` nos três pontos terminais do `InboxStore`
+  (registro já ignorado, conclusão e falha exaurida), com o fencing por
+  `leaseToken` preservado, e o backfill da migration
+  `20260913140000_goal013_media_kinds_attachments` faz o mesmo no estoque de
+  evento **concluído** — evento pendente nunca é tocado. As demais chaves do
+  proto (`url`, `mediaKey`, `directPath`, `fileSHA256`) são preservadas: são a
+  chave do download sob demanda, não os bytes.
+- **FATO atual:** mídia não é mais perdida por tamanho. A rota do webhook da
+  Evolution declara `bodyLimit` próprio (`EVOLUTION_WEBHOOK_BODY_LIMIT_BYTES`,
+  32 MiB) em vez do 1 MiB default do Fastify, e o Evolution Go aplica
+  `WEBHOOK_MEDIA_INLINE_MAX_BYTES` (16 MiB) por `decideMediaInline`: acima do
+  teto o webhook segue sem `base64`, com `mimetype`, `mediaSize`, `fileName` e
+  `mediaTooLarge: true`. A política de entrega do webhook no Go (retry e
+  rejeição definitiva por `4xx`) não mudou — o que mudou é não haver mais `4xx`
+  por tamanho.
+- **FATO atual:** existe pipeline de transcrição em `modules/media/`, com porta
+  `TranscriptionProvider`, implementação OpenAI por HTTP
+  (`OPENAI_TRANSCRIPTION_MODEL`, padrão `gpt-4o-mini-transcribe`, idioma `pt`) e
+  dublê em teste. O nó `transcribeAudio` do grafo fica **entre `recordInbound` e
+  `sessionGate`**: áudio é transcrito também com a IA desligada, em pausa e em
+  atendimento humano, porque a inbox mostra o texto de qualquer jeito, e é
+  bloqueado apenas por contato ignorado e sessão pessoal, que gravam `SKIPPED`
+  com motivo nomeado antes de qualquer byte ou chamada de rede. Os bytes vêm do
+  `base64` do evento em processamento ou de `POST /message/downloadmedia` no Go,
+  pela mesma credencial de instância do envio.
+- **FATO atual:** a transcrição concluída vira o texto do turno, marcada com
+  `[audio transcrito]`, e o template de prompt subiu para **v3** por causa da
+  seção de áudio em `buildStablePromptContent`. Confirmação clara em áudio vale
+  como confirmação sob exatamente os mesmos guards de rascunho preparado e
+  confirmação explícita do Goal011, sem exceção nova. Falha grava `FAILED` com
+  motivo e **não inventa texto**: a IA pede o conteúdo por escrito.
+- **FATO atual:** cada tipo de mídia tem tratamento próprio. Imagem com a IA
+  elegível vai para handoff determinístico (`reason` `image_received`) decidido
+  antes de qualquer chamada de modelo e sem interpretar a legenda; documento e
+  vídeo recebem confirmação fixa, sem interpretação e sem handoff, com a legenda
+  de documento seguindo como texto do contato; sticker, GIF (`videoMessage` com
+  `gifPlayback: true`) e `unknown` persistem sem resposta, sem handoff e sem
+  renovar a sessão. Áudio, imagem, documento e vídeo renovam.
+- **FATO atual:** a mídia é exibível sob demanda.
+  `GET /internal/conversations/:id/messages/:messageId/media` devolve os bytes
+  com `content-type` e nome, por `mediaUrl` ou por download no Go, com recusas
+  próprias (`MESSAGE_NOT_FOUND`, `MEDIA_TOO_LARGE`, `MEDIA_UNAVAILABLE`) em vez
+  de `500`; o BFF expõe o equivalente em `/v1/...` com o tenant da sessão. O DTO
+  de mensagem ganhou `kind` e `attachment` (ambos opcionais) na IA, no BFF e no
+  frontend, sem expor a URL real da mídia — só `mediaAvailable`.
+  `generateSuggestions` passou a aceitar a transcrição `DONE` do último áudio
+  como texto do cliente; imagem, documento e transcrição indisponível continuam
+  recusados como `NO_TEXTUAL_MESSAGE`.
+- **Limite verificado:** nenhuma transcrição real foi executada — todo provider
+  é dublê, e os evals provam roteamento e guards, não qualidade de
+  reconhecimento de voz. A plataforma **não guarda cópia** dos bytes: a exibição
+  depende da origem (WhatsApp pelo `directPath`, ou MinIO quando habilitado), e
+  a purga do `base64` não é reversível. Armazenamento durável próprio (MinIO/S3)
+  segue como decisão de infraestrutura fora deste Goal; player, visualizador e
+  envio de mídia pela profissional são do Goal017; retenção é do Goal022.
+  `webhook_deliveries` no Go continua guardando o payload integral do evento,
+  incluindo o `base64` — o mesmo limite já registrado em G-04.

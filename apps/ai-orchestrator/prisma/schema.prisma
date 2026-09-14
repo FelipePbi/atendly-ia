@@ -143,6 +143,39 @@ enum AiRunKind {
   SUMMARY
 }
 
+/// Tipo de conteudo de uma `Message`. `TEXT` e o default: toda linha gravada
+/// antes do Goal013 e todo turno de texto continuam TEXT sem backfill. Mídia
+/// vem com uma linha em `MessageAttachment` (Goal013/WU-02).
+enum MessageKind {
+  TEXT
+  AUDIO
+  IMAGE
+  DOCUMENT
+  VIDEO
+  STICKER
+  UNKNOWN
+}
+
+/// Kind da mídia anexada. Sem TEXT nem UNKNOWN: as duas nunca geram
+/// `MessageAttachment`.
+enum MessageAttachmentKind {
+  AUDIO
+  IMAGE
+  DOCUMENT
+  VIDEO
+  STICKER
+}
+
+/// Estado da transcrição de uma mídia com áudio (Goal013/WU-03). PENDING e
+/// SKIPPED não têm o mesmo significado: SKIPPED é decisão explícita (mídia
+/// grande demais, tipo sem áudio), PENDING é fila.
+enum TranscriptStatus {
+  PENDING
+  DONE
+  FAILED
+  SKIPPED
+}
+
 model ChannelConnection {
   id                  String                  @id @default(cuid())
   tenantId            String
@@ -190,7 +223,7 @@ model Conversation {
 
   /// Vinculo com o Contato do canal. Opcional por compatibilidade: binario
   /// anterior ignora a coluna e o backfill preenche sem apagar nada.
-  contactId          String?
+  contactId String?
 
   channel  ChannelConnection     @relation(fields: [tenantId, channelId], references: [tenantId, id], onDelete: Cascade)
   contact  Contact?              @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: SetNull)
@@ -215,7 +248,7 @@ model Conversation {
 /// Nao existe identidade de pessoa, nota, tag nem memoria estruturada aqui:
 /// isso e dos Goals 006 e 012.
 model Contact {
-  id                String   @id @default(cuid())
+  id                String  @id @default(cuid())
   tenantId          String
   channelId         String
   externalContactId String
@@ -223,31 +256,31 @@ model Contact {
 
   /// Contato ignorado: a IA nunca atende, em nenhuma sessao. Guarda quando e
   /// por quem foi marcado, porque rollback nao pode desfazer a decisao.
-  ignored           Boolean   @default(false)
-  ignoredAt         DateTime?
-  ignoredBy         String?
-  ignoredSource     String?
+  ignored       Boolean   @default(false)
+  ignoredAt     DateTime?
+  ignoredBy     String?
+  ignoredSource String?
 
   /// Pausa explicita da IA para este contato (`/bot off`, `/ia_pause`). Vive
   /// no contato, e nao na sessao, para que a expiracao de ~24 h nao devolva a
   /// conversa a IA sem alguem ter pedido.
-  aiPaused          Boolean   @default(false)
-  aiPausedAt        DateTime?
-  aiPausedReason    String?
+  aiPaused       Boolean   @default(false)
+  aiPausedAt     DateTime?
+  aiPausedReason String?
 
   /// Override manual de categoria. Prevalece sobre qualquer classificacao
   /// automatica e atravessa a troca de sessao.
-  categoryOverride       SessionCategory?
-  categoryOverrideAt     DateTime?
-  categoryOverrideBy     String?
+  categoryOverride   SessionCategory?
+  categoryOverrideAt DateTime?
+  categoryOverrideBy String?
 
   /// Pessoa do Scheduling resolvida a partir deste contato, preenchida quando
   /// um agendamento e confirmado. Referencia por ID e tenant: nenhuma FK
   /// atravessa bancos. Um contato pode apontar para pessoas diferentes ao
   /// longo do tempo (mae que agenda para o filho) sem fundir contato nem
   /// cliente.
-  customerId             String?
-  customerLinkedAt       DateTime?
+  customerId       String?
+  customerLinkedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -274,21 +307,21 @@ model ConversationSession {
   conversationId String
   contactId      String
 
-  startedAt           DateTime  @default(now())
+  startedAt            DateTime  @default(now())
   /// Ultima interacao do contato. E ela, e nao a resposta da IA, que renova a
   /// sessao: cliente que sumiu deixa a sessao expirar.
   lastContactMessageAt DateTime?
-  expiresAt           DateTime
-  endedAt             DateTime?
-  endedReason         String?
+  expiresAt            DateTime
+  endedAt              DateTime?
+  endedReason          String?
 
-  category        SessionCategory @default(UNCLASSIFIED)
-  categorySource  CategorySource  @default(AUTOMATIC)
+  category          SessionCategory @default(UNCLASSIFIED)
+  categorySource    CategorySource  @default(AUTOMATIC)
   categoryUpdatedAt DateTime?
   categoryUpdatedBy String?
 
   /// Sugestao do agente, com proveniencia. Nunca vira override manual.
-  suggestedCategory   SessionCategory?
+  suggestedCategory    SessionCategory?
   suggestionProvenance String?
   suggestedAt          DateTime?
 
@@ -337,6 +370,9 @@ model Message {
   source            MessageSource?
   role              String
   body              String
+  /// Tipo de conteudo (Goal013). Default TEXT: nao muda nada do estoque
+  /// anterior a este Goal.
+  kind              MessageKind      @default(TEXT)
   rawPayload        Json?
   createdAt         DateTime         @default(now())
 
@@ -350,13 +386,55 @@ model Message {
   deliveryAttempts  Int                   @default(0)
   deliveryUpdatedAt DateTime?
 
-  channel      ChannelConnection @relation(fields: [tenantId, channelId], references: [tenantId, id], onDelete: Cascade)
-  conversation Conversation      @relation(fields: [tenantId, channelId, conversationId], references: [tenantId, channelId, id], onDelete: Cascade)
+  channel      ChannelConnection   @relation(fields: [tenantId, channelId], references: [tenantId, id], onDelete: Cascade)
+  conversation Conversation        @relation(fields: [tenantId, channelId, conversationId], references: [tenantId, channelId, id], onDelete: Cascade)
+  attachments  MessageAttachment[]
 
+  @@unique([tenantId, id])
   @@unique([tenantId, channelId, externalMessageId])
   @@unique([tenantId, channelId, correlationId])
   @@index([tenantId, conversationId, createdAt])
   @@index([tenantId, deliveryState, deliveryUpdatedAt])
+}
+
+/// Mídia de uma `Message` (Goal013/WU-02). Nunca guarda bytes nem base64: só
+/// metadados e, quando o provedor hospedou o arquivo, a URL. Os bytes vivem no
+/// `ProcessedEvent.rawPayload` só enquanto o evento está pendente, ou são
+/// buscados sob demanda (Goal013/WU-03) pelos campos do proto no `raw` do
+/// canal.
+model MessageAttachment {
+  id              String                @id @default(cuid())
+  tenantId        String
+  messageId       String
+  kind            MessageAttachmentKind
+  mimetype        String?
+  fileName        String?
+  sizeBytes       Int?
+  durationSeconds Int?
+  mediaUrl        String?
+  tooLarge        Boolean               @default(false)
+
+  /// Preenchidos pelo Goal013/WU-03. Nascem nulos aqui: esta Work Unit so
+  /// cria a linha, nao transcreve.
+  transcript         String?
+  transcriptStatus   TranscriptStatus?
+  transcriptError    String?
+  transcriptProvider String?
+  transcriptModel    String?
+  transcribedAt      DateTime?
+  skipReason         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  message Message @relation(fields: [tenantId, messageId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, messageId])
+  /// Varredura por estado de transcrição dentro do tenant: fila pendente,
+  /// retomada de falha e auditoria do que foi pulado por política
+  /// (Goal013).
+  @@index([tenantId, transcriptStatus])
 }
 
 /// Inbox duravel do transporte. A linha e gravada antes do ACK; o dedupe
@@ -475,9 +553,9 @@ model AiTenantConfig {
 }
 
 model KnowledgeDocument {
-  id       String                @id @default(cuid())
-  tenantId String
-  type     KnowledgeDocumentType
+  id        String                  @id @default(cuid())
+  tenantId  String
+  type      KnowledgeDocumentType
   /// ID da pessoa/servico do Scheduling, sem FK entre bancos (mesmo padrao de
   /// `Contact.customerId`). Nulo significa documento geral, nao ligado a um
   /// servico especifico; documento legado (anterior ao Goal012) nasce geral.
@@ -505,26 +583,26 @@ model KnowledgeDocument {
 /// decide se a linha pode entrar no prompt; a inferencia e a carga no prompt
 /// sao do Goal012/WU-03, nao deste modulo.
 model CustomerMemory {
-  id         String               @id @default(cuid())
-  tenantId   String
-  customerId String
-  kind       String
-  value      String
-  origin     CustomerMemoryOrigin
-  aiAllowed  Boolean              @default(false)
+  id                   String               @id @default(cuid())
+  tenantId             String
+  customerId           String
+  kind                 String
+  value                String
+  origin               CustomerMemoryOrigin
+  aiAllowed            Boolean              @default(false)
   /// So preenchido quando `origin = AI_INFERRED`.
   confidence           Float?
   sourceConversationId String?
-  sourceMessageIds     String[]  @default([])
-  observedAt           DateTime  @default(now())
+  sourceMessageIds     String[]             @default([])
+  observedAt           DateTime             @default(now())
   lastReinforcedAt     DateTime?
   /// ID de outra linha de CustomerMemory que substitui esta (mesmo tenant e
   /// cliente). Sem FK: a substituicao e responsabilidade de quem grava.
-  supersededById String?
-  removedAt      DateTime?
-  removedBy      String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  supersededById       String?
+  removedAt            DateTime?
+  removedBy            String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
 
   @@unique([tenantId, id])
   @@index([tenantId, customerId])

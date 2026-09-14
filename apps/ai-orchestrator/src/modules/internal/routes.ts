@@ -27,6 +27,12 @@ import {
 } from "../knowledge/knowledge-document-service.js";
 import { KNOWLEDGE_DOCUMENT_TYPES } from "../knowledge/knowledge-vector-store.js";
 import { PGVectorKnowledgeStore } from "../knowledge/pgvector-knowledge-store.js";
+import type {
+  MessageAttachmentKindValue,
+  MessageKindValue,
+} from "../media/media-metadata.js";
+import type { TranscriptStatusValue } from "../media/message-attachment-store.js";
+import { MessageMediaService } from "../media/message-media-service.js";
 import {
   CUSTOMER_MEMORY_KINDS,
   type CustomerMemoryRecord,
@@ -69,6 +75,11 @@ const aiTenantConfigSchema = z.object({
 
 const conversationParamsSchema = z.object({
   id: z.string().trim().min(1).max(128),
+});
+
+const messageMediaParamsSchema = z.object({
+  id: z.string().trim().min(1).max(128),
+  messageId: z.string().trim().min(1).max(128),
 });
 
 const conversationQuerySchema = z.object({
@@ -190,6 +201,8 @@ export interface InternalRoutesOptions {
    * Sugestoes de resposta ao atendimento humano, sem efeito (Goal012/WU-04).
    */
   suggestions?: Pick<AssistantService, "generateSuggestions">;
+  /** Bytes de mídia sob demanda, com recusa própria (Goal013/WU-05). */
+  media?: Pick<MessageMediaService, "resolve">;
 }
 
 export async function registerInternalRoutes(
@@ -232,6 +245,12 @@ export async function registerInternalRoutes(
         env.KNOWLEDGE_SEARCH_MIN_SCORE,
       ),
     );
+  const messageMedia =
+    options.media ??
+    new MessageMediaService(prisma, (channel) => {
+      const credential = channelConnections.resolveChannelCredential(channel);
+      return new EvolutionProvider(app.log, credential, channel.externalInstanceId);
+    });
 
   // Autorização por escopo, com negação por omissão: um caminho `/internal/`
   // sem escopo declarado no mapa abaixo é recusado, então rota nova não nasce
@@ -371,9 +390,56 @@ export async function registerInternalRoutes(
       where: { tenantId, conversationId: id },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       take: 500,
+      include: { attachments: { orderBy: { createdAt: "asc" }, take: 1 } },
     });
     return internalData(request, messages.map(messageDto));
   });
+
+  /**
+   * Bytes de mídia sob demanda (Goal013/WU-05).
+   *
+   * Não é JSON: `mediaUrl` hospedada é buscada direto, e na falta dela o
+   * download acontece pela credencial da instância a partir do proto guardado
+   * em `Message.rawPayload`. Cada recusa tem código próprio — mensagem sem
+   * attachment, mídia marcada grande demais (nunca tenta baixar) e
+   * indisponível — nunca um 500 genérico.
+   */
+  app.get(
+    "/internal/conversations/:id/messages/:messageId/media",
+    async (request, reply) => {
+      const { tenantId } = trustedTenantContext(request);
+      const { id, messageId } = parseOrThrow(
+        messageMediaParamsSchema,
+        request.params,
+      );
+      await requireConversation(prisma, tenantId, id);
+      const outcome = await messageMedia.resolve({
+        tenantId,
+        conversationId: id,
+        messageId,
+        requestId: String(request.id),
+      });
+      if (!outcome.ok) {
+        const statusCode =
+          outcome.reason === "MESSAGE_NOT_FOUND" ||
+          outcome.reason === "MESSAGE_ATTACHMENT_NOT_FOUND"
+            ? 404
+            : 409;
+        throw new AppError("Media is not available for this message.", {
+          statusCode,
+          code: outcome.reason,
+        });
+      }
+      reply.header("content-type", outcome.media.mimetype);
+      if (outcome.media.fileName) {
+        reply.header(
+          "content-disposition",
+          `inline; filename="${sanitizeFileNameHeader(outcome.media.fileName)}"`,
+        );
+      }
+      return reply.send(Buffer.from(outcome.media.data));
+    },
+  );
 
   app.post("/internal/conversations/:id/messages", async (request, reply) => {
     const { tenantId } = trustedTenantContext(request);
@@ -891,7 +957,11 @@ async function requireConversation(
  * corrida tiver aberto duas.
  */
 const conversationInclude = {
-  messages: { orderBy: { createdAt: "desc" }, take: 1 },
+  messages: {
+    orderBy: { createdAt: "desc" },
+    take: 1,
+    include: { attachments: { orderBy: { createdAt: "asc" }, take: 1 } },
+  },
   handoffs: {
     where: { status: "OPEN" },
     orderBy: { createdAt: "desc" },
@@ -919,6 +989,8 @@ interface ConversationDtoInput {
     source: "CUSTOMER" | "AI" | "OWNER" | null;
     body: string;
     createdAt: Date;
+    kind?: MessageKindValue;
+    attachments?: MessageDtoAttachment[];
   }>;
   contact?: {
     ignored: boolean;
@@ -983,25 +1055,61 @@ function conversationDto(conversation: ConversationDtoInput) {
   };
 }
 
+interface MessageDtoAttachment {
+  kind: MessageAttachmentKindValue;
+  mimetype: string | null;
+  fileName: string | null;
+  sizeBytes: number | null;
+  durationSeconds: number | null;
+  mediaUrl: string | null;
+  tooLarge: boolean;
+  transcript: string | null;
+  transcriptStatus: TranscriptStatusValue | null;
+  transcriptError: string | null;
+}
+
 function messageDto(message: {
   id: string;
   direction: "INBOUND" | "OUTBOUND";
   source: "CUSTOMER" | "AI" | "OWNER" | null;
   body: string;
   createdAt: Date;
+  kind?: MessageKindValue;
   deliveryState?: "PENDING" | "SENT" | "FAILED" | "UNKNOWN" | null;
   deliveryDetail?: string | null;
+  attachments?: MessageDtoAttachment[];
 }) {
+  const attachment = message.attachments?.[0];
   return {
     id: message.id,
     direction: message.direction,
     source: message.source,
     body: message.body,
     createdAt: message.createdAt.toISOString(),
+    // Legado sem backfill continua TEXT: a coluna nasceu com esse default
+    // (Goal013/WU-02), entao toda linha anterior ja responde assim sozinha.
+    kind: message.kind ?? "TEXT",
     // Nulo em INBOUND e no estoque anterior ao Goal004; o consumidor trata o
     // campo como opcional.
     deliveryState: message.deliveryState ?? null,
     deliveryDetail: message.deliveryDetail ?? null,
+    attachment: attachment
+      ? {
+          kind: attachment.kind,
+          mimetype: attachment.mimetype,
+          fileName: attachment.fileName,
+          sizeBytes: attachment.sizeBytes,
+          durationSeconds: attachment.durationSeconds,
+          tooLarge: attachment.tooLarge,
+          transcript: attachment.transcript,
+          transcriptStatus: attachment.transcriptStatus,
+          transcriptError: attachment.transcriptError,
+          // Dica para a UI decidir se oferece "ver midia": so falsa quando ja
+          // se sabe de antemao que a midia e grande demais. Nao garante que o
+          // download sob demanda vai ter sucesso — isso so a rota sabe.
+          mediaAvailable: !attachment.tooLarge,
+        }
+      : null,
   };
 }
 
@@ -1063,6 +1171,11 @@ function contactNumber(value: string): string {
     });
   }
   return number;
+}
+
+/** Remove aspas e quebras de linha do nome do arquivo antes de ir ao header. */
+function sanitizeFileNameHeader(fileName: string): string {
+  return fileName.replace(/["\r\n]/gu, "");
 }
 
 function jsonValue(value: unknown): Prisma.InputJsonValue {

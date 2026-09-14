@@ -427,6 +427,51 @@ export const serviceListSchema = z.object({
   editable: z.boolean(),
 });
 
+// --- Kind e attachment de midia (Goal013) -----------------------------------
+// Sem tela: o player e a exibicao sao do Goal017. Aqui o schema so passa a
+// aceitar os campos, incluindo a recusa de vocabulario desconhecido — mensagem
+// de texto e o estoque anterior a este Goal continuam sem os dois campos.
+export const messageKindSchema = z.enum([
+  "TEXT",
+  "AUDIO",
+  "IMAGE",
+  "DOCUMENT",
+  "VIDEO",
+  "STICKER",
+  "UNKNOWN",
+]);
+
+export const messageAttachmentKindSchema = z.enum([
+  "AUDIO",
+  "IMAGE",
+  "DOCUMENT",
+  "VIDEO",
+  "STICKER",
+]);
+
+export const transcriptStatusSchema = z.enum([
+  "PENDING",
+  "DONE",
+  "FAILED",
+  "SKIPPED",
+]);
+
+export const messageAttachmentSchema = z.object({
+  kind: messageAttachmentKindSchema,
+  mimetype: z.string().nullable(),
+  fileName: z.string().nullable(),
+  sizeBytes: z.number().int().nonnegative().nullable(),
+  durationSeconds: z.number().int().nonnegative().nullable(),
+  tooLarge: z.boolean(),
+  // Preenchido so quando ha audio (ver garantias em PUBLIC_API_V1.md).
+  transcript: z.string().nullable(),
+  transcriptStatus: transcriptStatusSchema.nullable(),
+  transcriptError: z.string().nullable(),
+  // Dica para a UI decidir se oferece "ver midia"; nao garante que o download
+  // sob demanda vai ter sucesso — so a rota de midia sabe.
+  mediaAvailable: z.boolean(),
+});
+
 export const messageSchema = z.object({
   id: z.string().min(1),
   direction: z.enum(["INBOUND", "OUTBOUND"]),
@@ -441,6 +486,8 @@ export const messageSchema = z.object({
     .nullish()
     .optional(),
   deliveryDetail: z.string().nullish().optional(),
+  kind: messageKindSchema.nullish().optional(),
+  attachment: messageAttachmentSchema.nullish().optional(),
 });
 
 export const sessionCategorySchema = z.enum([
@@ -734,6 +781,10 @@ export type CustomerTag = z.infer<typeof customerTagSchema>;
 export type CustomerList = z.infer<typeof customerListSchema>;
 export type Dashboard = z.infer<typeof dashboardSchema>;
 export type Message = z.infer<typeof messageSchema>;
+export type MessageKind = z.infer<typeof messageKindSchema>;
+export type MessageAttachmentKind = z.infer<typeof messageAttachmentKindSchema>;
+export type TranscriptStatus = z.infer<typeof transcriptStatusSchema>;
+export type MessageAttachment = z.infer<typeof messageAttachmentSchema>;
 
 // --- Importacao unica do Minha Agenda (Goal010) ----------------------------
 // Substitui a migracao bidirecional como caminho de produto. Os schemas

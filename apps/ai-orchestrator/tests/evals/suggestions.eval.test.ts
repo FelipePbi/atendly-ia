@@ -118,6 +118,111 @@ describe("sugestão recusa mensagem do cliente não textual", () => {
     expect(world.model.calls).toEqual([]);
     expect(world.aiRuns()).toHaveLength(0);
   });
+
+  it("política: recusa com imagem, mesma sem legenda, antes de chamar o modelo (Goal013/WU-05)", async () => {
+    const world = cenarioEmAtendimentoHumano();
+    world.store.messages.push({
+      id: "message-seed-image",
+      conversationId: world.conversationId,
+      direction: "INBOUND",
+      role: "user",
+      body: "",
+      kind: "IMAGE",
+      createdAt: new Date("2026-06-08T09:00:00.000Z"),
+    });
+
+    const result = await world.generateSuggestions();
+
+    expect(result).toEqual({ ok: false, reason: "NO_TEXTUAL_MESSAGE" });
+    expect(world.model.calls).toEqual([]);
+    expect(world.aiRuns()).toHaveLength(0);
+  });
+});
+
+describe("sugestão aceita a transcrição concluída do último áudio (Goal013/WU-05)", () => {
+  it("política: áudio transcrito vale como texto do cliente, marcado como transcrição automática", async () => {
+    const world = cenarioEmAtendimentoHumano();
+    // Áudio persiste com `body` vazio (mesmo formato do turno normal); o
+    // texto vem da transcrição concluída no attachment, não da Message.
+    world.store.messages.push({
+      id: "message-seed-audio",
+      conversationId: world.conversationId,
+      direction: "INBOUND",
+      role: "user",
+      body: "",
+      kind: "AUDIO",
+      createdAt: new Date("2026-06-08T09:00:00.000Z"),
+    });
+    world.store.attachments.push({
+      id: "attachment-seed-audio",
+      tenantId: world.tenantId,
+      messageId: "message-seed-audio",
+      kind: "AUDIO",
+      transcriptStatus: "DONE",
+      transcript: "Quanto custa a Aplicacao 5D?",
+    });
+
+    world.model.carregar([
+      {
+        nota: "le disponibilidade antes de sugerir, a partir do audio transcrito",
+        toolCalls: [
+          {
+            id: "call-availability",
+            name: "get_availability",
+            args: { serviceId: "service-1", startDate: "2026-06-08" },
+          },
+        ],
+      },
+      {
+        nota: "devolve sugestoes em texto",
+        text: JSON.stringify({
+          suggestions: ["Tenho horario na segunda as 13:30 para a Aplicacao 5D."],
+        }),
+      },
+    ]);
+
+    const result = await world.generateSuggestions();
+
+    expect(world.model.passosPendentes()).toEqual([]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.suggestions.length).toBeGreaterThan(0);
+    // O texto que chegou ao modelo carrega o marcador de audio transcrito,
+    // igual ao turno normal (`AUDIO_TURN_MARKER`), nunca a transcricao crua.
+    expect(
+      world.model
+        .chamada(0)
+        .messages.some((message) =>
+          message.content.includes("[audio transcrito]"),
+        ),
+    ).toBe(true);
+  });
+
+  it("política: audio sem transcricao concluida (falhou/pendente/nunca chegou) continua sem texto", async () => {
+    const world = cenarioEmAtendimentoHumano();
+    world.store.messages.push({
+      id: "message-seed-audio-failed",
+      conversationId: world.conversationId,
+      direction: "INBOUND",
+      role: "user",
+      body: "",
+      kind: "AUDIO",
+      createdAt: new Date("2026-06-08T09:00:00.000Z"),
+    });
+    world.store.attachments.push({
+      id: "attachment-seed-audio-failed",
+      tenantId: world.tenantId,
+      messageId: "message-seed-audio-failed",
+      kind: "AUDIO",
+      transcriptStatus: "FAILED",
+      transcript: null,
+    });
+
+    const result = await world.generateSuggestions();
+
+    expect(result).toEqual({ ok: false, reason: "NO_TEXTUAL_MESSAGE" });
+    expect(world.model.calls).toEqual([]);
+  });
 });
 
 describe("estilo não muda a sugestão operacional", () => {

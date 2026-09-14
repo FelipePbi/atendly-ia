@@ -59,6 +59,76 @@ export class InternalHttpClient {
     throw lastError;
   }
 
+  /**
+   * Caminho de bytes para rotas que devolvem mídia crua (Goal013), sem schema
+   * JSON: só `GET`, mesma credencial e tratamento de recusa do serviço
+   * interno, mas o corpo é lido como buffer, com teto de tamanho e sem retry
+   * (mídia grande não deve ser buscada duas vezes por engano).
+   */
+  async requestBinary(input: {
+    path: string;
+    context: InternalRequestContext;
+    query?: Record<string, string | number | boolean | undefined>;
+  }): Promise<{ body: Buffer; contentType: string; fileName: string | null }> {
+    const url = new URL(input.path, normalizedBaseUrl(this.baseUrl));
+    for (const [key, value] of Object.entries(input.query ?? {})) {
+      if (value !== undefined) url.searchParams.set(key, String(value));
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "x-service-audience": this.audience,
+          ...(this.authMode === "internal"
+            ? { authorization: `Bearer ${this.credential("command")}` }
+            : {}),
+          "x-tenant-id": input.context.tenantId,
+          "x-user-id": input.context.userId,
+          "x-request-id": input.context.requestId,
+        },
+        signal: AbortSignal.timeout(env.INTERNAL_HTTP_TIMEOUT_MS),
+      });
+    } catch (error) {
+      throw new AppError(
+        "UPSTREAM_ERROR",
+        `${this.audience} request failed.`,
+        502,
+        { cause: error instanceof Error ? error.name : "NETWORK_ERROR" },
+      );
+    }
+
+    if (!response.ok) {
+      const payload = await parseJson(response);
+      const normalized = upstreamError(payload);
+      throw new AppError(
+        "UPSTREAM_ERROR",
+        normalized.message,
+        response.status >= 500 ? 502 : response.status,
+        {
+          upstream: this.audience,
+          upstreamCode: normalized.code,
+          upstreamRequestId: normalized.requestId,
+          ...(normalized.details ? { upstreamDetails: normalized.details } : {}),
+        },
+      );
+    }
+
+    const body = await readLimitedBody(
+      response,
+      env.INTERNAL_HTTP_MEDIA_MAX_BYTES,
+      this.audience,
+    );
+    return {
+      body,
+      contentType: response.headers.get("content-type") ?? "application/octet-stream",
+      fileName: fileNameFromContentDisposition(
+        response.headers.get("content-disposition"),
+      ),
+    };
+  }
+
   private async perform<T>(input: {
     method: HttpMethod;
     path: string;
@@ -203,6 +273,57 @@ function upstreamError(value: unknown): {
     code: "UPSTREAM_ERROR",
     message: "Internal service returned an error.",
   };
+}
+
+async function readLimitedBody(
+  response: Response,
+  maxBytes: number,
+  audience: string,
+): Promise<Buffer> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.byteLength > maxBytes) {
+      throw new AppError(
+        "UPSTREAM_ERROR",
+        `${audience} media exceeds the size limit.`,
+        502,
+      );
+    }
+    return buffer;
+  }
+
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      throw new AppError(
+        "UPSTREAM_ERROR",
+        `${audience} media exceeds the size limit.`,
+        502,
+      );
+    }
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks);
+}
+
+function fileNameFromContentDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const encoded = /filename\*=UTF-8''([^;]+)/iu.exec(header);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1]);
+    } catch {
+      // Segue para o formato simples abaixo.
+    }
+  }
+  const plain = /filename="?([^";]+)"?/iu.exec(header);
+  return plain ? plain[1] : null;
 }
 
 function shouldRetry(method: HttpMethod, error: unknown): boolean {

@@ -278,6 +278,77 @@ describe("AssistantService conversational decisions", () => {
   });
 });
 
+describe("AssistantService.recordInboundText media persistence", () => {
+  it("persists kind, an attachment and strips the base64 from rawPayload", async () => {
+    const { prisma, store } = createPrismaMock();
+    const assistant = new AssistantService(prisma, undefined, {
+      invoke: vi.fn(),
+    } as never);
+
+    await assistant.recordInboundText({
+      phone,
+      text: "",
+      channelMessage: {
+        ...channelMessage(),
+        kind: "audio",
+        text: undefined,
+        media: {
+          mimetype: "audio/ogg; codecs=opus",
+          sizeBytes: 12_345,
+          durationSeconds: 7,
+          hasBase64: true,
+          hasMediaUrl: false,
+          tooLarge: false,
+        },
+        raw: {
+          event: "Message",
+          data: {
+            Info: { ID: "external-message-1" },
+            Message: {
+              audioMessage: { mimetype: "audio/ogg; codecs=opus" },
+              base64: "d2hhdHNhcHAtYXVkaW8=",
+            },
+          },
+        },
+      },
+    });
+
+    expect(store.messages).toHaveLength(1);
+    expect(store.messages[0].kind).toBe("AUDIO");
+    const rawPayload = store.messages[0].rawPayload as {
+      data: { Message: Record<string, unknown> };
+    };
+    expect(rawPayload.data.Message).not.toHaveProperty("base64");
+
+    expect(store.attachments).toHaveLength(1);
+    expect(store.attachments[0]).toMatchObject({
+      tenantId: "tenant-1",
+      messageId: store.messages[0].id,
+      kind: "AUDIO",
+      mimetype: "audio/ogg; codecs=opus",
+      sizeBytes: 12_345,
+      durationSeconds: 7,
+      tooLarge: false,
+    });
+  });
+
+  it("does not create an attachment for a plain text message", async () => {
+    const { prisma, store } = createPrismaMock();
+    const assistant = new AssistantService(prisma, undefined, {
+      invoke: vi.fn(),
+    } as never);
+
+    await assistant.recordInboundText({
+      phone,
+      text: "Oi",
+      channelMessage: channelMessage(),
+    });
+
+    expect(store.messages[0].kind).toBe("TEXT");
+    expect(store.attachments).toHaveLength(0);
+  });
+});
+
 function createPrismaMock() {
   const store = {
     state: {} as Record<string, any>,
@@ -298,8 +369,11 @@ function createPrismaMock() {
       source?: "CUSTOMER" | "AI" | "OWNER" | null;
       role: string;
       body: string;
+      kind?: string;
+      rawPayload?: unknown;
       createdAt: Date;
     }>,
+    attachments: [] as Array<Record<string, unknown>>,
     handoffs: [] as unknown[],
   };
 
@@ -345,6 +419,8 @@ function createPrismaMock() {
           source: args.data.source,
           role: args.data.role,
           body: args.data.body,
+          kind: args.data.kind,
+          rawPayload: args.data.rawPayload,
           createdAt: new Date(Date.UTC(2026, 5, 4, 12, messageCounter)),
         };
         store.messages.push(message);
@@ -356,6 +432,13 @@ function createPrismaMock() {
           (item) => item.id === args.where.id,
         );
         return { ...message, ...args.data };
+      },
+    },
+    messageAttachment: {
+      create: async (args: any) => {
+        const attachment = { id: `attachment-${store.attachments.length + 1}`, ...args.data };
+        store.attachments.push(attachment);
+        return attachment;
       },
     },
     aiRun: {

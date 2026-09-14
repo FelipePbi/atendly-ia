@@ -395,6 +395,18 @@ export function integrationSteps(target) {
       args: ["scripts/goal012-knowledge-memory-migration-rehearsal.mjs"],
       env,
     },
+    // Gate M0/M1 do Goal013: ensaio da migração de kinds de mídia
+    // (Message.kind), MessageAttachment e purga do base64 embutido do
+    // ProcessedEvent concluído, contra estoque legado, em banco próprio e
+    // descartável. Expande também o banco de durabilidade da IA (Goal004)
+    // com a mesma migração, antes da suíte de persistência mais abaixo.
+    {
+      name: "rehearse:goal013-media-migration",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal013-media-migration-rehearsal.mjs"],
+      env,
+    },
     // Identidade de cliente contra PostgreSQL real: telefone compartilhado,
     // cliente sem telefone, criação só na confirmação e isolamento por tenant.
     // Não pertence ao core porque exige banco.

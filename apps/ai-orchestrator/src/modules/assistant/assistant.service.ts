@@ -18,6 +18,12 @@ import type {
   KnowledgeSearchResult,
   KnowledgeVectorStore,
 } from "../knowledge/knowledge-vector-store.js";
+import { markTranscribedAudioTurn } from "../media/audio-turn.js";
+import {
+  toMessageAttachmentKind,
+  toMessageKind,
+} from "../media/media-metadata.js";
+import { stripMediaBase64 } from "../media/raw-payload-sanitizer.js";
 import type { CustomerMemoryPromptItem } from "../memory/customer-memory.js";
 import type {
   CustomerMemoryInferencePort,
@@ -311,8 +317,14 @@ export class AssistantService {
     const customerName = channelMessage.customerName ?? input.customerName;
     const externalMessageId =
       channelMessage.messageId ?? input.whatsappMessageId;
-    const rawPayload = channelMessage.raw ?? input.rawPayload;
+    // Base64 nunca chega a `Message.rawPayload`: os bytes vivem no
+    // `ProcessedEvent` so enquanto o evento esta pendente (Goal013).
+    const rawPayload = stripMediaBase64(
+      channelMessage.raw ?? input.rawPayload,
+    );
     const baseContext = channelMessageLogContext(channelMessage);
+    const attachmentKind = toMessageAttachmentKind(channelMessage.kind);
+    const media = channelMessage.media;
 
     this.logger.info(baseContext, "Assistant recording inbound text");
 
@@ -345,10 +357,26 @@ export class AssistantService {
         source: "CUSTOMER",
         role: "user",
         body: input.text,
+        kind: toMessageKind(channelMessage.kind),
         externalMessageId,
         rawPayload: rawPayload as object,
       },
     });
+    if (attachmentKind) {
+      await this.prisma.messageAttachment.create({
+        data: {
+          tenantId: channelMessage.tenantId,
+          messageId: message.id,
+          kind: attachmentKind,
+          mimetype: media?.mimetype,
+          fileName: media?.fileName,
+          sizeBytes: media?.sizeBytes,
+          durationSeconds: media?.durationSeconds,
+          mediaUrl: media?.mediaUrl,
+          tooLarge: media?.tooLarge ?? false,
+        },
+      });
+    }
     this.logger.info(
       {
         ...baseContext,
@@ -838,13 +866,32 @@ export class AssistantService {
       orderBy: { createdAt: "desc" },
       take: 30,
     });
-    const lastInboundText = recentMessages.find(
+    const lastInboundMessage = recentMessages.find(
       (message) => message.direction === "INBOUND",
-    )?.body;
-    // Mensagem de midia (imagem, audio, etc.) grava `body` vazio no estoque
-    // (`InboundMessageProcessor`/`MessageGraphWorkflow`): sem texto do
-    // cliente para embasar a sugestao, a porta recusa antes de tocar o
-    // modelo, o mesmo padrao das demais recusas proprias acima.
+    );
+    // Mensagem de midia (imagem, documento sem legenda, etc.) grava `body`
+    // vazio no estoque (`InboundMessageProcessor`/`MessageGraphWorkflow`): sem
+    // texto do cliente para embasar a sugestao, a porta recusa antes de tocar
+    // o modelo, o mesmo padrao das demais recusas proprias acima. Audio e a
+    // excecao: a transcricao concluida do ultimo audio vale como texto, pelo
+    // mesmo marcador que o turno normal usa (Goal013/WU-05); sem transcricao
+    // concluida (pendente, falhou ou foi ignorada), continua sem texto.
+    let lastInboundText = lastInboundMessage?.body?.trim()
+      ? lastInboundMessage.body
+      : undefined;
+    if (!lastInboundText && lastInboundMessage?.kind === "AUDIO") {
+      const attachment = await this.prisma.messageAttachment.findFirst({
+        where: {
+          tenantId: input.tenantId,
+          messageId: lastInboundMessage.id,
+          kind: "AUDIO",
+        },
+        orderBy: { createdAt: "asc" },
+      });
+      if (attachment?.transcriptStatus === "DONE" && attachment.transcript?.trim()) {
+        lastInboundText = markTranscribedAudioTurn(attachment.transcript.trim());
+      }
+    }
     if (!lastInboundText) {
       return { ok: false, reason: "NO_TEXTUAL_MESSAGE" };
     }
@@ -852,7 +899,8 @@ export class AssistantService {
       .reverse()
       .map((message) => ({
         role: message.role === "assistant" ? "assistant" : "user",
-        content: message.body,
+        content:
+          message.id === lastInboundMessage?.id ? lastInboundText : message.body,
       }));
 
     const retrievedKnowledge = await this.retrieveSuggestionKnowledge(

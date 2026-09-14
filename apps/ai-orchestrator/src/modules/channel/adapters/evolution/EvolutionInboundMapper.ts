@@ -2,6 +2,7 @@ import { normalizePhone } from "../../../../lib/phone.js";
 import type {
   ChannelMessageKind,
   MappedChannelInboundMessage,
+  MediaMetadata,
 } from "../../domain/ChannelMessage.js";
 
 const messageEvents = new Set([
@@ -209,6 +210,7 @@ export function mapEvolutionInbound(
   const fromMe = booleanValue(info.IsFromMe);
   const kind = resolveKind(infoType, mediaType);
   const text = extractText(message);
+  const media = extractMediaMetadata(message, kind);
   const customerJid = fromMe ? chatId : stringValue(info.Sender) || chatId;
 
   return {
@@ -222,6 +224,7 @@ export function mapEvolutionInbound(
     isGroup: booleanValue(info.IsGroup) || chatId.endsWith("@g.us"),
     kind,
     text,
+    media,
     timestamp: stringValue(info.Timestamp),
     raw: payload,
   };
@@ -287,6 +290,8 @@ function resolveKind(
   if (normalizedMediaType === "audio") return "audio";
   if (normalizedMediaType === "image") return "image";
   if (normalizedMediaType === "document") return "document";
+  if (normalizedMediaType === "video") return "video";
+  if (normalizedMediaType === "sticker") return "sticker";
 
   const normalizedInfoType = infoType?.toLowerCase();
   if (
@@ -298,8 +303,52 @@ function resolveKind(
   if (normalizedInfoType.includes("audio")) return "audio";
   if (normalizedInfoType.includes("image")) return "image";
   if (normalizedInfoType.includes("document")) return "document";
+  if (normalizedInfoType.includes("video")) return "video";
+  if (normalizedInfoType.includes("sticker")) return "sticker";
 
   return "unknown";
+}
+
+const mediaMessageKeyByKind: Partial<Record<ChannelMessageKind, string>> = {
+  audio: "audioMessage",
+  image: "imageMessage",
+  document: "documentMessage",
+  video: "videoMessage",
+  sticker: "stickerMessage",
+};
+
+/**
+ * Metadados da mídia, sem os bytes.
+ *
+ * `mimetype`/`fileName`/`sizeBytes` preferem o objeto do proto (`audioMessage`,
+ * `imageMessage`, ...) e caem para os campos que o Go mescla em `data.Message`
+ * só quando a mídia excedeu o teto de embutir inline (`mediaTooLarge`), caso em
+ * que o proto ainda descreve o arquivo mas os bytes nunca chegaram embutidos.
+ */
+function extractMediaMetadata(
+  message: Record<string, unknown>,
+  kind: ChannelMessageKind,
+): MediaMetadata | undefined {
+  const key = mediaMessageKeyByKind[kind];
+  if (!key) return undefined;
+  const nested = recordValue(message[key]);
+
+  const mediaUrl = stringValue(message.mediaUrl);
+  return {
+    mimetype: stringValue(nested?.mimetype) ?? stringValue(message.mimetype),
+    fileName: stringValue(nested?.fileName) ?? stringValue(message.fileName),
+    sizeBytes:
+      numberValue(nested?.fileLength) ?? numberValue(message.mediaSize),
+    durationSeconds: numberValue(nested?.seconds),
+    sha256: stringValue(nested?.fileSHA256),
+    hasBase64: Boolean(stringValue(message.base64)),
+    hasMediaUrl: Boolean(mediaUrl),
+    mediaUrl,
+    tooLarge: message.mediaTooLarge === true,
+    // Só quando verdadeiro: o proto só traz a chave em vídeo, e um `false`
+    // explícito em áudio, imagem ou documento seria ruído no metadado.
+    gifPlayback: booleanValue(nested?.gifPlayback) || undefined,
+  };
 }
 
 function extractText(message: Record<string, unknown>): string | undefined {
@@ -318,6 +367,10 @@ function extractText(message: Record<string, unknown>): string | undefined {
   const documentCaption = stringValue(documentMessage?.caption);
   if (documentCaption) return documentCaption;
 
+  const videoMessage = recordValue(message.videoMessage);
+  const videoCaption = stringValue(videoMessage?.caption);
+  if (videoCaption) return videoCaption;
+
   return undefined;
 }
 
@@ -335,4 +388,10 @@ function stringValue(value: unknown): string | undefined {
 
 function booleanValue(value: unknown): boolean {
   return value === true;
+}
+
+function numberValue(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }

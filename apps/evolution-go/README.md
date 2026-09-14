@@ -120,6 +120,7 @@ LOGTYPE=console
 | `GLOBAL_API_KEY` | API authentication key | **Required** |
 | `DATABASE_SAVE_MESSAGES` | Enable message storage | `false` |
 | `WADEBUG` | WhatsApp debug level | `INFO` |
+| `WEBHOOK_MEDIA_INLINE_MAX_BYTES` | Max size, in bytes, of downloaded media embedded as base64 in the webhook payload (`data.Message.base64`). Above this cap, the webhook carries `mimetype`, `mediaSize`, `fileName` and `mediaTooLarge: true` instead of the bytes; delivery policy (retry, final rejection) is unchanged. Does not affect the MinIO storage path, which never embeds base64. | `16777216` (16 MiB) |
 
 When `EVOLUTION_ENV=local`, per-instance webhook dispatch uses `webhookUrlLocal` from `/instance/connect` if it is set. Otherwise it falls back to the existing `webhookUrl`. Any value other than `local` uses `webhookUrl`.
 

@@ -20,7 +20,9 @@
  */
 import { describe, expect, it } from "vitest";
 
+import type { ChannelInboundMessage } from "../../src/modules/channel/domain/ChannelMessage.js";
 import type { PrismaClient } from "../../src/generated/prisma/client.js";
+import { deriveTurnId } from "../../src/modules/graph/graph-state.js";
 import type { SchedulingGateway } from "../../src/modules/scheduling-service/client.js";
 import type {
   ConfirmAppointmentSeriesInput,
@@ -445,6 +447,66 @@ describe("o turno seguinte confirma normalmente", () => {
     await expect(
       registry.execute(confirmScheduleCall, context("channel-1:message-3")),
     ).resolves.toMatchObject({ ok: true });
+    expect(effects.createAppointment).toHaveLength(1);
+  });
+});
+
+/**
+ * Confirmacao clara **em audio** (Goal013/WU-03).
+ *
+ * A transcricao vira o texto do turno, e o turno de um audio nasce da mesma
+ * `deriveTurnId` do texto: por isso a confirmacao por voz nao ganha nenhuma
+ * excecao aqui. Os dois casos abaixo sao os mesmos do texto, so que o turno e
+ * de audio — preparar e confirmar no mesmo audio continua recusado, e o audio
+ * seguinte confirma.
+ */
+function audioTurn(messageId: string): string {
+  const message: ChannelInboundMessage = {
+    provider: "evolution-go",
+    tenantId: "tenant-1",
+    channelId: "channel-1",
+    userId: "user-1",
+    requestId: "request-1",
+    instanceId: "instance-1",
+    messageId,
+    chatId: `${phone}@s.whatsapp.net`,
+    customerPhone: phone,
+    fromMe: false,
+    isGroup: false,
+    kind: "audio",
+    raw: {},
+  };
+  return deriveTurnId(message);
+}
+
+describe("confirmacao clara em audio segue os mesmos guards do Goal011", () => {
+  const firstAudioTurn = audioTurn("message-audio-1");
+  const secondAudioTurn = audioTurn("message-audio-2");
+
+  it("nao confirma no mesmo audio em que preparou", async () => {
+    const { registry, effects } = subject();
+
+    await registry.execute(prepareScheduleCall, context(firstAudioTurn));
+    const confirmed = await registry.execute(
+      confirmScheduleCall,
+      context(firstAudioTurn),
+    );
+
+    expect(confirmed).toMatchObject({
+      ok: false,
+      error: { code: "CONFIRMATION_REQUIRED_SAME_TURN" },
+    });
+    expect(effects.createAppointment).toEqual([]);
+  });
+
+  it("confirma quando a confirmacao clara chega no audio seguinte", async () => {
+    const { registry, effects } = subject();
+
+    await registry.execute(prepareScheduleCall, context(firstAudioTurn));
+    await expect(
+      registry.execute(confirmScheduleCall, context(secondAudioTurn)),
+    ).resolves.toMatchObject({ ok: true });
+
     expect(effects.createAppointment).toHaveLength(1);
   });
 });

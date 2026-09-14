@@ -266,6 +266,54 @@ describe("inbox independente do processamento", () => {
     expect(subject.automation.recordInboundText).toHaveBeenCalledTimes(1);
     expect(subject.provider.sendText).toHaveBeenCalledTimes(1);
   });
+
+  it.each(["audio", "image", "document", "video"] as const)(
+    "persiste e renova a sessao para mensagem de kind %s",
+    async (kind) => {
+      const subject = buildSubject();
+
+      await subject.processor.handleInboundMessage(
+        baseMessage({ kind, text: undefined }),
+      );
+
+      expect(subject.automation.recordInboundText).toHaveBeenCalledTimes(1);
+      expect(subject.sessions.recordContactMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionId: "session-1" }),
+      );
+    },
+  );
+
+  it.each(["sticker", "unknown"] as const)(
+    "persiste sem renovar a sessao nem responder para mensagem de kind %s",
+    async (kind) => {
+      const subject = buildSubject();
+
+      await expect(
+        subject.processor.handleInboundMessage(
+          baseMessage({ kind, text: undefined }),
+        ),
+      ).resolves.toMatchObject({ action: "unsupported_media_kind" });
+
+      expect(subject.automation.recordInboundText).toHaveBeenCalledTimes(1);
+      expect(subject.sessions.recordContactMessage).not.toHaveBeenCalled();
+      expect(subject.automation.prepareGraphTurn).not.toHaveBeenCalled();
+      expect(subject.provider.sendText).not.toHaveBeenCalled();
+    },
+  );
+
+  it("mantem a resposta generica anterior para kind desconhecido sem porta de sessao", async () => {
+    // Sem sessions, o novo comportamento por kind nao se aplica: cai na
+    // politica anterior a este Goal (resposta generica de nao suportado).
+    const subject = buildSubject({ withSessions: false });
+
+    await expect(
+      subject.processor.handleInboundMessage(
+        baseMessage({ kind: "unknown", text: undefined }),
+      ),
+    ).resolves.toMatchObject({ action: "unsupported_message" });
+
+    expect(subject.provider.sendText).toHaveBeenCalled();
+  });
 });
 
 describe("controle humano deterministico", () => {

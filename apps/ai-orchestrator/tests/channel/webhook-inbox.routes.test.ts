@@ -299,6 +299,39 @@ describe("Evolution webhook inbox", () => {
     expect(records).toHaveLength(0);
   });
 
+  it("accepts a media webhook body well above the default 1 MiB Fastify limit", async () => {
+    const { inbox, records } = fakeInbox();
+    await registerEvolutionWebhookRoutes(app, prisma, { inbox });
+
+    // ~5 MiB de base64, dentro do teto explicito da rota (32 MiB).
+    const base64 = "A".repeat(5 * 1024 * 1024);
+    const response = await app.inject({
+      method: "POST",
+      url: "/webhooks/evolution?token=secret",
+      payload: {
+        event: "Message",
+        instanceId: "instance-a",
+        data: {
+          Info: {
+            ID: "3EB0MEDIA",
+            Chat: "5511999999999@s.whatsapp.net",
+            Sender: "5511999999999@s.whatsapp.net",
+            PushName: "Cliente",
+            Type: "media",
+            MediaType: "image",
+          },
+          Message: {
+            imageMessage: { mimetype: "image/jpeg" },
+            base64,
+          },
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(records).toHaveLength(1);
+  });
+
   it("still refuses a payload that is not a readable event", async () => {
     const { inbox } = fakeInbox();
     await registerEvolutionWebhookRoutes(app, prisma, { inbox });

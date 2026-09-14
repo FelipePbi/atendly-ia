@@ -8,6 +8,8 @@ import {
 import { AppError } from "../../../../lib/errors.js";
 import { redactSensitive } from "../../../../lib/redact.js";
 import type {
+  DownloadMediaInput,
+  DownloadMediaResult,
   SendTextInput,
   SendTextResult,
   WhatsAppProvider,
@@ -134,6 +136,101 @@ export class EvolutionProvider implements WhatsAppProvider {
       raw: redactSensitive(raw),
     };
   }
+
+  /**
+   * Download sob demanda da mídia, a partir do proto guardado no evento.
+   *
+   * Mesma credencial de instância do envio, pela mesma razão: a rota do Go
+   * está sob `authMiddleware.Auth` e o download acontece **na conta daquela
+   * instância**. A chave global não substitui a credencial — sem ela o
+   * download falha, e a falha vira `MEDIA_UNAVAILABLE` para quem chamou, em
+   * vez de derrubar o turno.
+   *
+   * Nada do que volta é persistido: os bytes existem só durante o processamento
+   * (transcrição, exibição) e são descartados.
+   */
+  async downloadMedia(input: DownloadMediaInput): Promise<DownloadMediaResult> {
+    requireEnv(["EVOLUTION_BASE_URL"]);
+    const instanceId = this.instanceIdOverride;
+    const apiKey =
+      typeof this.instanceToken === "function"
+        ? this.instanceToken()
+        : this.instanceToken;
+    if (!instanceId || !apiKey) {
+      throw new AppError("Evolution channel credentials are not configured.", {
+        statusCode: 500,
+        code: "EVOLUTION_CHANNEL_NOT_CONFIGURED",
+      });
+    }
+
+    const url = joinUrl(
+      env.EVOLUTION_BASE_URL,
+      env.EVOLUTION_DOWNLOAD_MEDIA_PATH,
+    );
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: buildHeaders(apiKey, instanceId, input.requestId),
+        body: JSON.stringify({ message: input.message }),
+        signal: AbortSignal.timeout(env.EVOLUTION_DOWNLOAD_MEDIA_TIMEOUT_MS),
+      });
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw new AppError("Evolution Go media download timed out.", {
+          statusCode: 504,
+          code: "EVOLUTION_DOWNLOAD_MEDIA_TIMEOUT",
+        });
+      }
+      throw error;
+    }
+
+    const raw = await parseResponse(response);
+    if (!response.ok) {
+      this.logger.warn(
+        {
+          url,
+          status: response.status,
+          requestId: input.requestId,
+          response: truncateDiagnostic(redactSensitive(raw)),
+        },
+        "EvolutionProvider media download failed",
+      );
+      throw new AppError(
+        `Evolution Go media download failed with HTTP ${response.status}`,
+        {
+          statusCode: response.status,
+          code: "EVOLUTION_DOWNLOAD_MEDIA_FAILED",
+        },
+      );
+    }
+
+    const base64 = extractDownloadedBase64(raw);
+    if (!base64) {
+      throw new AppError("Evolution Go media download returned no content.", {
+        statusCode: 502,
+        code: "EVOLUTION_DOWNLOAD_MEDIA_EMPTY",
+      });
+    }
+
+    this.logger.info(
+      {
+        url,
+        status: response.status,
+        requestId: input.requestId,
+        bytes: base64.length,
+      },
+      "EvolutionProvider media download succeeded",
+    );
+    return { provider: "evolution-go", base64 };
+  }
+}
+
+/** `{ message: "success", data: { base64: "data:...", timestamp } }`. */
+function extractDownloadedBase64(raw: unknown): string | undefined {
+  if (!isRecord(raw) || !isRecord(raw.data)) return undefined;
+  const base64 = raw.data.base64;
+  return typeof base64 === "string" && base64.trim() ? base64 : undefined;
 }
 
 function isAbortError(error: unknown): boolean {

@@ -1443,8 +1443,9 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 
 				// Only process storage if download was successful
 				if err == nil && len(data) > 0 {
+					fileName := evt.Info.ID + extension
+
 					if mycli.config.MinioEnabled {
-						fileName := evt.Info.ID + extension
 						storageStart := time.Now()
 
 						mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Uploading to S3/Minio - ID: %s, FileName: %s, Size: %d bytes", mycli.userID, evt.Info.ID, fileName, len(data))
@@ -1462,7 +1463,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 							messageMap["mediaUrl"] = mediaURL
 							messageMap["mimetype"] = mimeType
 						}
-					} else {
+					} else if decideMediaInline(len(data), mycli.config.WebhookMediaInlineMaxBytes) {
 						mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Encoding to base64 - ID: %s, Size: %d bytes", mycli.userID, evt.Info.ID, len(data))
 						encodeStart := time.Now()
 
@@ -1471,6 +1472,12 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 
 						mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Base64 encoding completed - ID: %s, Original: %d bytes, Encoded: %d chars, Duration: %v", mycli.userID, evt.Info.ID, len(data), len(encodeData), encodeDuration)
 						messageMap["base64"] = encodeData
+					} else {
+						mycli.loggerWrapper.GetLogger(mycli.userID).LogInfo("[%s] Media exceeds inline cap (%d bytes > %d bytes) - ID: %s, skipping base64 embed", mycli.userID, len(data), mycli.config.WebhookMediaInlineMaxBytes, evt.Info.ID)
+						messageMap["mimetype"] = mimeType
+						messageMap["mediaSize"] = len(data)
+						messageMap["fileName"] = fileName
+						messageMap["mediaTooLarge"] = true
 					}
 				} else {
 					mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn("[%s] Skipping media storage due to download failure - ID: %s", mycli.userID, evt.Info.ID)
@@ -1587,8 +1594,8 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 					"timestamp":  evt.Info.Timestamp.Unix(),
 					"extraData":  buttonClickData,
 				},
-				"instanceId":    mycli.userID,
-				"instanceName":  mycli.Instance.Name,
+				"instanceId":   mycli.userID,
+				"instanceName": mycli.Instance.Name,
 			}
 
 			buttonClickJSON, err := json.Marshal(buttonClickMap)
@@ -2315,6 +2322,17 @@ func isTransientStartupDisconnectReason(reason string) bool {
 	default:
 		return false
 	}
+}
+
+// decideMediaInline reports whether downloaded media of sizeBytes should be embedded as
+// base64 in the webhook payload, given the configured inline cap maxInlineBytes. A
+// non-positive cap disables the check and always embeds, preserving pre-existing behavior
+// for callers that don't configure WEBHOOK_MEDIA_INLINE_MAX_BYTES.
+func decideMediaInline(sizeBytes int, maxInlineBytes int64) bool {
+	if maxInlineBytes <= 0 {
+		return true
+	}
+	return int64(sizeBytes) <= maxInlineBytes
 }
 
 func getExtensionFromMimeType(mimeType string) string {

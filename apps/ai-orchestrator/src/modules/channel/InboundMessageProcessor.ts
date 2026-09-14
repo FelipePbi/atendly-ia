@@ -23,6 +23,7 @@ import type {
 } from "../handoff/HandoffService.js";
 import type { IdempotencyStore } from "../idempotency/IdempotencyStore.js";
 import type { KnowledgeVectorStore } from "../knowledge/knowledge-vector-store.js";
+import type { InboundAudioTranscriptionPort } from "../media/audio-transcription.js";
 import type { CustomerMemoryPromptPort } from "../memory/customer-memory-service.js";
 import type { GraphSessionPort } from "../session/SessionService.js";
 import type { BusinessContext } from "../tenant-config/business-context.js";
@@ -56,6 +57,9 @@ export interface InboundProcessingResult {
     // processamento nao aconteceu. Nao e erro nem pausa.
     | "ignored_contact"
     | "personal_session"
+    // Sticker e mensagem de kind desconhecido: persistida, sessao nao renova,
+    // nada e enviado (Goal013).
+    | "unsupported_media_kind"
     | "buffered"
     | "replied"
     | "superseded"
@@ -170,6 +174,8 @@ export interface InboundMessageProcessorOptions {
   sessions?: GraphSessionPort;
   /** Memoria permitida da pessoa vinculada ao contato (Goal012). */
   customerMemory?: CustomerMemoryPromptPort;
+  /** Transcricao de audio recebido (Goal013). */
+  transcription?: InboundAudioTranscriptionPort;
 }
 
 interface BufferedMessage {
@@ -217,6 +223,7 @@ export class InboundMessageProcessor {
       outboundGate: options.outboundGate,
       sessions: options.sessions,
       customerMemory: options.customerMemory,
+      transcription: options.transcription,
       logger,
     });
   }
@@ -282,8 +289,11 @@ export class InboundMessageProcessor {
       });
     }
 
+    // Audio agrupa como texto (Goal013): a transcricao acontece na passagem
+    // diferida de cada fragmento, entao o turno final ja recebe a voz virada
+    // em texto junto dos fragmentos digitados.
     const groupable = messages.every(
-      (message) => isTextMessage(message) && !message.fromMe,
+      (message) => isGroupableInbound(message) && !message.fromMe,
     );
     if (!groupable || !hasBufferedAutomation(this.automation)) {
       let last: InboundProcessingResult | undefined;
@@ -298,6 +308,7 @@ export class InboundMessageProcessor {
     const latest = messages[messages.length - 1];
     const conversationId = await this.runtime.resolveConversationId(latest);
     const messageRecordIds: string[] = [];
+    const fragments: string[] = [];
     for (const message of messages) {
       const execution = await this.workflow.invoke({
         message,
@@ -311,12 +322,17 @@ export class InboundMessageProcessor {
         throw new Error("LangGraph buffered input without a message record.");
       }
       messageRecordIds.push(execution.bufferedRecord.messageRecordId);
+      // O texto do fragmento vem do grafo, nao do payload: audio so tem texto
+      // depois de transcrito.
+      const fragment = (
+        execution.bufferedRecord.text ??
+        message.text ??
+        ""
+      ).trim();
+      if (fragment) fragments.push(fragment);
     }
 
-    const text = messages
-      .map((message) => (message.text ?? "").trim())
-      .filter(Boolean)
-      .join("\n");
+    const text = fragments.join("\n");
     const execution = await this.workflow.invoke({
       message: latest,
       conversationId,
@@ -426,6 +442,17 @@ function isTextMessage(
   message: ChannelInboundMessage,
 ): message is ChannelInboundMessage & { kind: "text"; text: string } {
   return message.kind === "text" && Boolean(message.text?.trim());
+}
+
+/**
+ * O que pode entrar num turno agrupado: texto e audio.
+ *
+ * Audio entra porque a transcricao vira o texto do turno; imagem, documento,
+ * video e sticker nao, porque cada um tem tratamento proprio e agrupa-los
+ * misturaria decisoes diferentes num turno so.
+ */
+function isGroupableInbound(message: ChannelInboundMessage): boolean {
+  return isTextMessage(message) || message.kind === "audio";
 }
 
 function hasBufferedAutomation(

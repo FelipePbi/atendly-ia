@@ -297,6 +297,21 @@ Os campos são opcionais e podem vir `null`: mensagem recebida (`INBOUND`) não 
 
 `POST /v1/conversations/:id/messages` continua respondendo `201` com a mensagem criada. O sucesso do HTTP significa que a tentativa foi registrada de forma durável, não que o WhatsApp já entregou: quem diz isso é `deliveryState`.
 
+## Mensagem: kind e attachment de mídia, rota de mídia sob demanda (Goal013)
+
+O DTO de mensagem ganhou dois campos **opcionais**, presentes em `GET /v1/conversations/:id/messages`, `POST /v1/conversations/:id/messages` e no `lastMessage` de conversa; mensagem de texto e o estoque anterior a esta versão continuam sem os dois campos, e o consumidor trata a ausência como `TEXT` sem attachment:
+
+| Campo | Valores | Significado |
+| --- | --- | --- |
+| `kind` | `TEXT`, `AUDIO`, `IMAGE`, `DOCUMENT`, `VIDEO`, `STICKER`, `UNKNOWN` | tipo de conteúdo da mensagem |
+| `attachment` | objeto ou ausente | metadados da mídia, só quando `kind` é mídia |
+
+`attachment`, quando presente, traz `kind` (mesma lista, sem `TEXT`/`UNKNOWN`), `mimetype`, `fileName`, `sizeBytes`, `durationSeconds` (só áudio), `tooLarge` (mídia acima do teto de transporte, sem bytes disponíveis), `transcript`/`transcriptStatus`/`transcriptError` (só áudio; ver garantias abaixo) e `mediaAvailable` (booleano: se `GET .../media` tem chance de devolver bytes agora). A URL real da mídia (`mediaUrl` do WhatsApp ou do MinIO) nunca sai no DTO — só a rota de mídia abaixo dá acesso a ela.
+
+O que a transcrição garante: quando `transcriptStatus` é `DONE`, `transcript` é o texto que a IA efetivamente usou como turno do cliente, nunca inventado — falha de reconhecimento grava `FAILED` com `transcriptError`, e ausência de transcrição por política (contato ignorado, sessão pessoal, mídia sem áudio) grava `SKIPPED`. O que ela **não** garante: exatidão do texto (a IA trata como podendo conter erro), disponibilidade contra o WhatsApp além do que a origem permite, nem persistência de bytes — nenhum byte de mídia fica retido pela IA além do processamento do evento.
+
+`GET /v1/conversations/:id/messages/:messageId/media` devolve o **corpo bruto** da mídia (não JSON), com `content-type` e, quando a origem informou, `content-disposition` com o nome do arquivo — proxy fino para a rota interna equivalente da IA, resolvendo o tenant pela sessão autenticada como as demais rotas, sem CSRF por ser leitura. Recusas próprias da IA (mensagem sem attachment, attachment `tooLarge`, mídia indisponível na origem) chegam pelo mesmo envelope de `UPSTREAM_ERROR` com `upstreamCode` das demais rotas desta API, nunca um `500` genérico; o consumidor deve tratar essas recusas como estado de exibição (ex.: "mídia indisponível"), não como falha do próprio BFF.
+
 ## Conversa: categoria, sessão e atendimento humano
 
 `GET /v1/conversations` aceita, além de `status`, `search` e `limit`:

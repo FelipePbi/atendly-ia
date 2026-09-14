@@ -3,6 +3,7 @@ import { Annotation } from "@langchain/langgraph";
 import type { AssistantGraphSession } from "../assistant/assistant.service.js";
 import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
 import type { KnowledgeSearchResult } from "../knowledge/knowledge-vector-store.js";
+import type { InboundTranscription } from "../media/audio-transcription.js";
 import type { CustomerMemoryPromptItem } from "../memory/customer-memory.js";
 import type {
   ModelResponse,
@@ -92,6 +93,12 @@ export interface GraphResponse {
 export interface GraphBufferedRecord {
   conversationId: string;
   messageRecordId: string;
+  /**
+   * Texto do fragmento como o grafo o entendeu, ja marcado quando veio de
+   * audio transcrito. E ele, e nao o texto bruto do transporte, que o lote
+   * agrupa: um fragmento de voz nao tem texto no payload do canal.
+   */
+  text?: string;
 }
 
 export interface GraphResult {
@@ -107,8 +114,12 @@ export interface GraphResult {
     | "paused_conversation"
     | "channel_disconnected"
     | "unsupported_message"
+    // Imagem com IA elegivel: handoff deterministico, sem chamada de modelo
+    // (Goal013).
+    | "unsupported_handoff"
     | "ignored_contact"
     | "personal_session"
+    | "unsupported_media_kind"
     | "buffered"
     | "replied"
     | "superseded"
@@ -130,6 +141,16 @@ export const MessageGraphState = Annotation.Root({
   turnId: Annotation<string>(),
   inboundText: Annotation<string>(),
   inputMessageIds: Annotation<string[]>(),
+  /**
+   * `Message.id` da mensagem **deste** turno, quando ela foi persistida.
+   *
+   * Diferente de `inputMessageIds`, que no lote agrupado carrega todos os
+   * fragmentos: a transcricao precisa do attachment desta mensagem, nao do
+   * primeiro fragmento do lote.
+   */
+  inboundRecordId: Annotation<string | undefined>(),
+  /** Desfecho da transcricao deste turno, ver `transcribeAudio`. */
+  audioTranscription: Annotation<InboundTranscription | undefined>(),
   deferResponse: Annotation<boolean>(),
   eventAlreadyGuarded: Annotation<boolean>(),
   bufferedRecord: Annotation<GraphBufferedRecord | undefined>(),
@@ -157,6 +178,12 @@ export const MessageGraphState = Annotation.Root({
   response: Annotation<GraphResponse | undefined>(),
   handoffRequired: Annotation<boolean>(),
   handoffReason: Annotation<string>(),
+  /**
+   * Resumo do handoff quando difere da falha de processamento generica, ex.
+   * imagem recebida (Goal013). Sem valor, o no `handoff` usa o resumo de
+   * falha de sempre.
+   */
+  handoffSummary: Annotation<string | undefined>(),
   result: Annotation<GraphResult | undefined>(),
 });
 

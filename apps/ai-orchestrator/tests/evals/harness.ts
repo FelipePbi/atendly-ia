@@ -731,11 +731,27 @@ function createPrismaStub(input: {
       body: string;
       createdAt: Date;
       correlationId?: string | null;
+      /** Kind da mensagem (Goal013), so populado quando o eval semeia midia. */
+      kind?: string;
     }>,
     handoffs: [] as Array<Record<string, unknown>>,
     aiRuns: [] as Array<Record<string, unknown>>,
     toolLedger: [] as Array<Record<string, unknown>>,
     contactLinks: [] as unknown[],
+    /**
+     * Attachments em memoria (Goal013/WU-05): so usado pelos evals de
+     * sugestao com audio, que semeiam a transcricao diretamente aqui em vez
+     * de refazer o grafo inteiro (transcricao e node do grafo, nao de
+     * `AssistantService`).
+     */
+    attachments: [] as Array<{
+      id: string;
+      tenantId: string;
+      messageId: string;
+      kind: string;
+      transcriptStatus: string | null;
+      transcript: string | null;
+    }>,
   };
 
   let messageCounter = 0;
@@ -793,6 +809,7 @@ function createPrismaStub(input: {
           role: args.data.role,
           body: args.data.body,
           correlationId: args.data.correlationId ?? null,
+          kind: args.data.kind,
           createdAt: new Date(Date.UTC(2026, 5, 4, 12, messageCounter)),
         };
         store.messages.push(message);
@@ -886,6 +903,17 @@ function createPrismaStub(input: {
         tone: input.aiTenantConfig.tone,
         settings: { businessName: input.businessName, timezone: "America/Sao_Paulo" },
       }),
+    },
+    // Goal013/WU-05: so a leitura que `generateSuggestions` usa para aceitar a
+    // transcricao concluida do ultimo audio como texto.
+    messageAttachment: {
+      findFirst: async (args: any) =>
+        store.attachments.find(
+          (item) =>
+            item.tenantId === args.where.tenantId &&
+            item.messageId === args.where.messageId &&
+            item.kind === args.where.kind,
+        ) ?? null,
     },
   } as unknown as PrismaClient;
 

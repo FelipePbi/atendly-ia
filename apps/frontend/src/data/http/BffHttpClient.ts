@@ -205,6 +205,81 @@ export class BffHttpClient {
 
     return parsedData.data;
   }
+
+  /**
+   * Corpo bruto (não JSON) de uma rota de mídia — proxy fino para o BFF, que
+   * por sua vez repassa a rota interna da IA. Recusas próprias chegam como o
+   * mesmo envelope de erro JSON das demais rotas.
+   */
+  async requestBinary(options: {
+    path: string;
+    headers?: Readonly<Record<string, string>>;
+    requestId?: string;
+    signal?: AbortSignal;
+  }): Promise<{ blob: Blob; contentType: string; fileName: string | null }> {
+    const requestId = options.requestId ?? createRequestId();
+    const headers = new Headers(options.headers);
+    headers.set("x-request-id", requestId);
+
+    let response: Response;
+    try {
+      response = await this.fetchImplementation(
+        buildUrl(this.baseUrl, options.path),
+        { credentials: "include", headers, method: "GET", signal: options.signal },
+      );
+    } catch (error: unknown) {
+      if (isAbortError(error) || options.signal?.aborted) {
+        throw new BffHttpError({
+          code: "REQUEST_ABORTED",
+          message: "A requisição foi cancelada.",
+          requestId,
+          status: 0,
+        });
+      }
+
+      throw new BffHttpError({
+        code: "NETWORK_ERROR",
+        details: error instanceof Error ? { name: error.name } : undefined,
+        message: "Não foi possível acessar a Atendly.",
+        requestId,
+        status: 0,
+      });
+    }
+
+    const issuedCsrfToken = response.headers.get(this.csrfHeaderName);
+    if (issuedCsrfToken) this.csrfToken = issuedCsrfToken;
+    const responseRequestId = response.headers.get("x-request-id") ?? requestId;
+
+    if (!response.ok) {
+      const payload = await parseJson(response, responseRequestId);
+      const parsedError = errorEnvelopeSchema.safeParse(payload);
+      if (parsedError.success) {
+        throw new BffHttpError({
+          code: parsedError.data.error.code,
+          details: parsedError.data.error.details,
+          message: parsedError.data.error.message,
+          requestId: parsedError.data.requestId,
+          status: response.status,
+        });
+      }
+
+      throw new BffHttpError({
+        code: "HTTP_ERROR",
+        details: payload,
+        message: response.statusText || "A requisição falhou.",
+        requestId: responseRequestId,
+        status: response.status,
+      });
+    }
+
+    return {
+      blob: await response.blob(),
+      contentType: response.headers.get("content-type") ?? "application/octet-stream",
+      fileName: fileNameFromContentDisposition(
+        response.headers.get("content-disposition"),
+      ),
+    };
+  }
 }
 
 function normalizeBaseUrl(value: string): URL {
@@ -274,6 +349,12 @@ function isAbortError(error: unknown): boolean {
 
 function isSafeMethod(method: HttpMethod): boolean {
   return method === "GET";
+}
+
+function fileNameFromContentDisposition(value: string | null): string | null {
+  if (!value) return null;
+  const match = /filename="([^"]*)"/u.exec(value);
+  return match ? match[1] : null;
 }
 
 function readCookie(name: string): string | undefined {

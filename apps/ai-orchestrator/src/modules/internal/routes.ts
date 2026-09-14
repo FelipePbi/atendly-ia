@@ -326,6 +326,30 @@ export async function registerInternalRoutes(
     });
   });
 
+  /**
+   * Leitura da configuração efetiva do tenant do contexto (Goal014/WU-01).
+   *
+   * `null` quando o tenant nunca foi projetado — sem valor default fabricado
+   * aqui, o consumidor decide o que fazer com a ausência.
+   */
+  app.get("/internal/ai-tenant-config", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    const config = await prisma.aiTenantConfig.findUnique({
+      where: { tenantId },
+      select: { enabled: true, tone: true, promptVersion: true },
+    });
+    return internalData(
+      request,
+      config
+        ? {
+            enabled: config.enabled,
+            tone: config.tone,
+            promptVersion: config.promptVersion,
+          }
+        : null,
+    );
+  });
+
   app.get("/internal/conversations", async (request) => {
     const { tenantId } = trustedTenantContext(request);
     const query = parseOrThrow(conversationQuerySchema, request.query);
@@ -1228,6 +1252,9 @@ export function requiredScope(request: FastifyRequest): InternalScope {
   }
   if (path === "/internal/ai-tenant-config" && method === "PUT") {
     return "tenant-config:write";
+  }
+  if (path === "/internal/ai-tenant-config" && method === "GET") {
+    return "tenant-config:read";
   }
   if (path === "/internal/dashboard" && method === "GET") {
     return "dashboard:read";

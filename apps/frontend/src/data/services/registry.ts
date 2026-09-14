@@ -12,6 +12,7 @@ import { BffMigrationService } from "./BffMigrationService";
 import { BffOnboardingService } from "./BffOnboardingService";
 import { BffServiceCatalogService } from "./BffServiceCatalogService";
 import { BffSettingsService } from "./BffSettingsService";
+import { BffStatusService } from "./BffStatusService";
 import { BffWhatsAppService } from "./BffWhatsAppService";
 
 export interface BffServiceRegistry {
@@ -25,6 +26,7 @@ export interface BffServiceRegistry {
   onboarding: BffOnboardingService;
   serviceCatalog: BffServiceCatalogService;
   settings: BffSettingsService;
+  status: BffStatusService;
   whatsapp: BffWhatsAppService;
 }
 
@@ -54,6 +56,7 @@ export function createBffServiceRegistry(
     onboarding: new BffOnboardingService(http),
     serviceCatalog: new BffServiceCatalogService(http),
     settings: new BffSettingsService(http),
+    status: new BffStatusService(http),
     whatsapp: new BffWhatsAppService(http),
   };
 }

@@ -7,7 +7,7 @@ import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import type { AiTone, SettingsState } from "@/data";
 import { WhatsAppConnectionPanel } from "@/features/whatsapp/WhatsAppConnectionPanel";
 import { Icon, type IconName } from "@/shared/icons/Icon";
-import { AppShell } from "@/shared/layout/AppShell";
+import { useShellConfig } from "@/shared/layout/ShellConfig";
 import {
   getProductServices,
   useProductRuntime,
@@ -22,7 +22,7 @@ export function ProductSettingsScreen({
   scenario: SettingsScenario;
 }) {
   const [settings, setSettings] = useState<SettingsState | null>(null);
-  const [whatsappConnected, setWhatsappConnected] = useState(false);
+  const [, setWhatsappConnected] = useState(false);
   const [error, setError] = useState(false);
 
   useEffect(() => {
@@ -42,34 +42,38 @@ export function ProductSettingsScreen({
 
   const source =
     settings?.calendar.source === "EXTERNAL" ? "external" : "atendly";
+  useShellConfig({
+    active: "configuracoes",
+    loading: !settings && !error,
+    module: "settings",
+    source,
+    title: "Configurações",
+  });
+
+  if (!settings && !error) {
+    return (
+      <SettingsMessage
+        title="Carregando configurações"
+        copy="Buscando o estado atual do seu negócio."
+      />
+    );
+  }
+  if (error || !settings) {
+    return (
+      <SettingsMessage
+        title="Configurações indisponíveis"
+        copy="Nada foi alterado. Tente carregar a página novamente."
+        error
+      />
+    );
+  }
   return (
-    <AppShell
-      active="configuracoes"
-      module="settings"
-      source={source}
-      loading={!settings && !error}
-      whatsapp={whatsappConnected ? "connected" : "disconnected"}
-    >
-      {!settings && !error ? (
-        <SettingsMessage
-          title="Carregando configurações"
-          copy="Buscando o estado atual do seu negócio."
-        />
-      ) : error || !settings ? (
-        <SettingsMessage
-          title="Configurações indisponíveis"
-          copy="Nada foi alterado. Tente carregar a página novamente."
-          error
-        />
-      ) : (
-        <SettingsContent
-          scenario={scenario}
-          settings={settings}
-          setSettings={setSettings}
-          setWhatsappConnected={setWhatsappConnected}
-        />
-      )}
-    </AppShell>
+    <SettingsContent
+      scenario={scenario}
+      settings={settings}
+      setSettings={setSettings}
+      setWhatsappConnected={setWhatsappConnected}
+    />
   );
 }
 

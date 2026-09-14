@@ -23,7 +23,7 @@ import {
   type TimeBlock,
 } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
-import { AppShell } from "@/shared/layout/AppShell";
+import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Button } from "@/shared/ui/Button";
 import { Dialog } from "@/shared/ui/Dialog";
@@ -103,14 +103,19 @@ function AppointmentList() {
     .filter((item) => isActiveAppointmentStatus(item.status))
     .sort(compareAppointments)[0];
   const external = calendar?.source === "EXTERNAL";
+  useShellConfig({
+    action: calendar?.capabilities.createAppointments
+      ? { href: "/agenda/novo", icon: "plus", label: "Novo agendamento" }
+      : undefined,
+    active: "agenda",
+    loading,
+    module: "agenda",
+    source: external ? "external" : "atendly",
+    title: "Agenda",
+  });
 
   return (
-    <AppShell
-      active="agenda"
-      loading={loading}
-      module="agenda"
-      source={external ? "external" : "atendly"}
-    >
+    <>
       <div className="agenda-page">
         <header className="agenda-page-header">
           <div>
@@ -254,7 +259,7 @@ function AppointmentList() {
           </>
         )}
       </div>
-    </AppShell>
+    </>
   );
 }
 
@@ -1256,13 +1261,15 @@ function FlowShell({
   loading: boolean;
   title: string;
 }) {
+  useShellConfig({
+    active: "agenda",
+    loading,
+    module: "agenda",
+    source: calendar?.source === "EXTERNAL" ? "external" : "atendly",
+    title,
+  });
   return (
-    <AppShell
-      active="agenda"
-      loading={loading}
-      module="agenda"
-      source={calendar?.source === "EXTERNAL" ? "external" : "atendly"}
-    >
+    <>
       <div className="agenda-flow-page">
         <header className="agenda-flow-header">
           <Link className="back-link" href="/agenda">
@@ -1275,7 +1282,7 @@ function FlowShell({
         {calendar && <SourceStrip calendar={calendar} />}
         {loading ? <AgendaLoading /> : children}
       </div>
-    </AppShell>
+    </>
   );
 }
 

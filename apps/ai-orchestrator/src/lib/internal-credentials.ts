@@ -30,6 +30,7 @@ export type InternalUse = "provisioning" | "command";
 export type InternalScope =
   | "channel:provision"
   | "tenant-config:write"
+  | "tenant-config:read"
   | "conversations:read"
   | "conversations:write"
   | "messages:send"
@@ -60,6 +61,7 @@ const SCOPES_BY_USE: Record<InternalUse, readonly InternalScope[]> = {
     "customer-memory:read",
     "customer-memory:write",
     "customer-summary:write",
+    "tenant-config:read",
   ],
 };
 

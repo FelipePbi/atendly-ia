@@ -69,7 +69,6 @@ export function ProductRuntimeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (isPreviewPath(pathname)) return;
     const timer = window.setTimeout(() => {
       void refreshSession().catch(() => undefined);
     }, 0);
@@ -92,7 +91,6 @@ export function ProductRuntimeProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (isPreviewPath(pathname)) return;
     if (phase === "unauthenticated") router.replace("/login");
     if (phase === "onboarding") router.replace("/onboarding");
   }, [pathname, phase, router]);
@@ -102,7 +100,7 @@ export function ProductRuntimeProvider({ children }: { children: ReactNode }) {
     [phase, refreshSession, session, setUnauthenticated],
   );
 
-  if (isPreviewPath(pathname) || isPublicDocument(pathname)) {
+  if (isPublicDocument(pathname)) {
     return (
       <ProductRuntimeContext.Provider value={value}>
         {children}
@@ -192,10 +190,6 @@ function isAuthPath(pathname: string): boolean {
 
 function isOnboardingPath(pathname: string): boolean {
   return pathname === "/onboarding" || pathname.startsWith("/onboarding/");
-}
-
-function isPreviewPath(pathname: string): boolean {
-  return pathname === "/_preview" || pathname.startsWith("/_preview/");
 }
 
 function isPublicDocument(pathname: string): boolean {

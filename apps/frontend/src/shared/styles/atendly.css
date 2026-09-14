@@ -1,91 +1,58 @@
-@font-face {
-  font-family: "Inter";
-  src: url("/fonts/inter-400.ttf") format("truetype");
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Inter";
-  src: url("/fonts/inter-500.ttf") format("truetype");
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Inter";
-  src: url("/fonts/inter-600.ttf") format("truetype");
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Inter";
-  src: url("/fonts/inter-700.ttf") format("truetype");
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-}
-@font-face {
-  font-family: "IBM Plex Mono";
-  src: url("/fonts/ibm-plex-mono-500.ttf") format("truetype");
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-}
-
+/*
+ * Paleta, tipografia, espaçamento e movimento vêm de src/shared/styles/tokens.css
+ * (direção Recepção). Os nomes abaixo são mantidos para não quebrar o CSS por
+ * módulo (atendly-*.css) e as telas existentes, que continuam consumindo-os.
+ */
 :root {
-  --bg: oklch(97.8% 0.004 160);
-  --surface: oklch(100% 0 0);
-  --fg: oklch(19.7% 0.032 252);
-  --muted: oklch(53% 0.018 164);
-  --border: oklch(91.3% 0.009 160);
-  --accent: oklch(51.7% 0.119 164);
-  --accent-vivid: oklch(74.7% 0.161 163);
-  --accent-soft: oklch(96.4% 0.025 163);
-  --navy: oklch(19.7% 0.032 252);
-  --violet: oklch(58.2% 0.205 291);
-  --violet-soft: oklch(96% 0.025 292);
-  --coral: oklch(70.9% 0.169 33);
-  --coral-soft: oklch(96.5% 0.026 35);
-  --danger: oklch(54.9% 0.188 28);
-  --danger-soft: oklch(96.7% 0.023 25);
-  --warning: oklch(52.5% 0.117 76);
-  --warning-soft: oklch(97.7% 0.032 85);
-  --info: oklch(55% 0.204 288);
-  --info-soft: oklch(96.2% 0.025 291);
-  --surface-secondary: oklch(99.1% 0.002 160);
-  --surface-interactive: oklch(95.8% 0.007 160);
-  --border-strong: oklch(85.9% 0.013 162);
-  --fg-soft: oklch(35.5% 0.018 163);
-  --disabled-bg: oklch(94.8% 0.006 160);
-  --disabled-fg: oklch(67.3% 0.013 160);
-  --focus: oklch(51.7% 0.119 164 / 0.28);
-  --overlay: oklch(12% 0.025 252 / 0.48);
-  --shadow-sm: 0 1px 2px oklch(19.7% 0.032 252 / 0.05);
-  --shadow-md: 0 8px 24px oklch(19.7% 0.032 252 / 0.08);
-  --shadow-lg: 0 18px 50px oklch(19.7% 0.032 252 / 0.12);
-  --font-display:
-    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-body:
-    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
-  --s1: 4px;
-  --s2: 8px;
-  --s3: 12px;
-  --s4: 16px;
-  --s5: 20px;
-  --s6: 24px;
-  --s8: 32px;
-  --s10: 40px;
+  --bg: var(--at-color-canvas);
+  --surface: var(--at-color-surface);
+  --fg: var(--at-color-ink);
+  --muted: var(--at-color-ink-muted);
+  --border: var(--at-color-border);
+  --accent: var(--at-color-primary);
+  --accent-vivid: var(--at-color-primary-on-dark);
+  --accent-soft: var(--at-color-primary-tint);
+  --navy: var(--at-color-ink);
+  --violet: #8e5a86;
+  --violet-soft: color-mix(in oklch, var(--violet), white 90%);
+  --coral: #b8674a;
+  --coral-soft: color-mix(in oklch, var(--coral), white 88%);
+  --danger: var(--at-color-danger-border);
+  --danger-soft: var(--at-color-danger-bg);
+  --warning: var(--at-color-warning-ink);
+  --warning-soft: var(--at-color-warning-bg);
+  --info: var(--at-color-primary);
+  --info-soft: var(--at-color-primary-tint);
+  --surface-secondary: var(--at-color-surface-hover);
+  --surface-interactive: var(--at-color-surface-active);
+  --border-strong: var(--at-color-border-strong);
+  --fg-soft: var(--at-color-ink-soft);
+  --disabled-bg: var(--at-color-surface-hover);
+  --disabled-fg: var(--at-color-ink-muted);
+  --focus: color-mix(in oklch, var(--at-focus-ring-color), transparent 72%);
+  --overlay: rgba(34, 30, 26, 0.48);
+  --shadow-sm: var(--at-shadow-sm);
+  --shadow-md: var(--at-shadow-md);
+  --shadow-lg: var(--at-shadow-lg);
+  --font-display: var(--at-font-display);
+  --font-body: var(--at-font-body);
+  --font-mono: var(--at-font-mono);
+  --s1: var(--at-space-1);
+  --s2: var(--at-space-2);
+  --s3: var(--at-space-3);
+  --s4: var(--at-space-4);
+  --s5: var(--at-space-5);
+  --s6: var(--at-space-6);
+  --s8: var(--at-space-8);
+  --s10: var(--at-space-10);
   --s12: 48px;
   --s16: 64px;
-  --r-sm: 8px;
-  --r-input: 12px;
-  --r-card: 16px;
-  --r-lg: 20px;
-  --r-panel: 24px;
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --r-sm: var(--at-radius-sm);
+  --r-input: var(--at-radius-md);
+  --r-card: var(--at-radius-lg);
+  --r-lg: var(--at-radius-lg);
+  --r-panel: var(--at-radius-xl);
+  --ease: var(--at-ease-standard);
 }
 
 * {
@@ -130,12 +97,12 @@ svg {
   display: block;
 }
 .icon {
-  width: 20px;
-  height: 20px;
+  width: var(--at-icon-size);
+  height: var(--at-icon-size);
   flex: 0 0 auto;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.8;
+  stroke-width: var(--at-icon-stroke);
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -162,13 +129,13 @@ svg {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: var(--at-focus-ring-offset);
 }
 
 .skip-link {
   position: fixed;
-  z-index: 120;
+  z-index: var(--at-z-skip-link);
   left: 16px;
   top: 12px;
   padding: 10px 14px;
@@ -372,6 +339,12 @@ p {
 .spinner-accent {
   color: var(--accent);
 }
+.spinner-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+}
 .icon-btn {
   width: 44px;
   height: 44px;
@@ -552,8 +525,8 @@ p {
 }
 .check input:focus-visible + .check-box,
 .radio input:focus-visible + .radio-dot {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: var(--at-focus-ring-offset);
 }
 .check input:disabled ~ *,
 .radio input:disabled ~ * {
@@ -685,6 +658,10 @@ p {
   font-weight: 600;
   letter-spacing: 0.015em;
 }
+.badge .icon {
+  width: 14px;
+  height: 14px;
+}
 .badge-dot {
   width: 7px;
   height: 7px;
@@ -728,6 +705,10 @@ p {
 .status-dot.danger {
   background: var(--danger);
   box-shadow: 0 0 0 3px var(--danger-soft);
+}
+.status-dot.neutral {
+  background: var(--muted);
+  box-shadow: 0 0 0 3px var(--surface-secondary);
 }
 
 .banner,
@@ -808,6 +789,18 @@ p {
   gap: var(--s3);
   border-bottom: 1px solid var(--border);
   transition: 140ms;
+}
+.list-item-button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+.list-item-button:disabled {
+  color: var(--disabled-fg);
+  cursor: not-allowed;
 }
 .list-item:last-child {
   border-bottom: 0;
@@ -898,13 +891,13 @@ p {
 
 .overlay {
   position: fixed;
-  z-index: 80;
+  z-index: var(--at-z-dialog);
   inset: 0;
   padding: var(--s5);
   background: var(--overlay);
   display: grid;
   place-items: center;
-  animation: fade 180ms;
+  animation: fade var(--at-duration-base) var(--ease);
 }
 .modal {
   width: min(100%, 480px);
@@ -914,7 +907,7 @@ p {
   background: var(--surface);
   border-radius: var(--r-panel);
   box-shadow: var(--shadow-lg);
-  animation: rise 240ms var(--ease);
+  animation: rise var(--at-duration-moderate) var(--ease);
 }
 .modal-header {
   display: flex;
@@ -943,7 +936,7 @@ p {
   border-radius: 24px 24px 0 0;
   background: var(--surface);
   box-shadow: var(--shadow-lg);
-  animation: sheet 260ms var(--ease);
+  animation: sheet var(--at-duration-slow) var(--ease);
 }
 .sheet-handle {
   width: 40px;
@@ -951,6 +944,24 @@ p {
   margin: 0 auto 20px;
   border-radius: 999px;
   background: var(--border-strong);
+}
+.drawer-wrap {
+  justify-content: end;
+  padding: 0;
+}
+.drawer {
+  width: min(100%, 400px);
+  max-width: 400px;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow-y: auto;
+  padding: var(--s5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  animation: drawer-in var(--at-duration-slow) var(--ease);
 }
 .tooltip-trigger {
   position: relative;
@@ -1043,7 +1054,7 @@ p {
 
 .toast {
   position: fixed;
-  z-index: 100;
+  z-index: var(--at-z-toast);
   left: 50%;
   bottom: 24px;
   transform: translateX(-50%);
@@ -1058,7 +1069,38 @@ p {
   background: var(--navy);
   box-shadow: var(--shadow-md);
   font-size: 14px;
-  animation: toast-in 220ms var(--ease);
+  animation: toast-in var(--at-duration-base) var(--ease);
+}
+.toast-success {
+  background: var(--at-color-success-ink);
+}
+.toast-danger {
+  background: var(--danger);
+}
+.toast .icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.toast-dismiss {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin: -6px -6px -6px auto;
+  border: 0;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  color: inherit;
+  background: transparent;
+  transition: background var(--at-duration-fast) var(--ease);
+}
+.toast-dismiss:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.toast-dismiss .icon {
+  width: 14px;
+  height: 14px;
 }
 
 @media (forced-colors: active) {
@@ -1846,6 +1888,39 @@ p {
   min-height: 48px;
 }
 
+/**
+ * Ação `+` contextual do módulo (Goal014): só existe no mobile, onde a barra
+ * inferior deixa a ação principal fora da rolagem. Em telas maiores, a
+ * própria tela já expõe a ação no cabeçalho — reaproveitar o `.fab` ali
+ * duplicaria o botão.
+ */
+.fab {
+  display: none;
+}
+@media (max-width: 767px) {
+  .fab {
+    position: fixed;
+    z-index: 51;
+    right: 16px;
+    bottom: calc(84px + env(safe-area-inset-bottom));
+    width: 56px;
+    height: 56px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    color: var(--surface);
+    background: var(--accent);
+    box-shadow: 0 8px 20px -6px color-mix(in oklch, var(--accent), black 20%);
+  }
+  .fab:hover {
+    background: color-mix(in oklch, var(--accent), black 12%);
+  }
+  .fab .icon {
+    width: 24px;
+    height: 24px;
+  }
+}
+
 @container (max-width: 380px) {
   .mobile-global-slot,
   .mobile-content {
@@ -1892,6 +1967,12 @@ p {
 @keyframes sheet {
   from {
     transform: translateY(100%);
+  }
+}
+@keyframes drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(32px);
   }
 }
 @keyframes toast-in {
@@ -2935,7 +3016,7 @@ p {
     min-height: calc(68px + env(safe-area-inset-bottom));
     padding: 6px 8px env(safe-area-inset-bottom);
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     background: var(--surface);
     border-top: 1px solid var(--border);
   }

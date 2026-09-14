@@ -1,3 +1,4 @@
+@import "../shared/styles/tokens.css";
 @import "../shared/styles/atendly.css";
 @import "../shared/styles/atendly-conversations.css";
 @import "../shared/styles/atendly-agenda.css";
@@ -77,15 +78,4 @@ a {
 }
 [aria-busy="true"] {
   cursor: progress;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
 }

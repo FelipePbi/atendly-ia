@@ -9,5 +9,6 @@ export * from "./services/BffMigrationService";
 export * from "./services/BffOnboardingService";
 export * from "./services/BffServiceCatalogService";
 export * from "./services/BffSettingsService";
+export * from "./services/BffStatusService";
 export * from "./services/BffWhatsAppService";
 export * from "./services/registry";

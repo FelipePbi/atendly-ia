@@ -2,10 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type ReactNode, useReducer, useState } from "react";
 
 import { CURRENT_LEGAL_VERSIONS } from "@/config/legal-versions";
 import { BffHttpError } from "@/data";
+import {
+  initialRecoveryState,
+  recoveryReducer,
+} from "@/features/auth/recoveryMachine";
 import { previewServices } from "@/mocks";
 import { Icon } from "@/shared/icons/Icon";
 import {
@@ -45,12 +49,12 @@ const story: Record<
   "forgot-password": {
     eyebrow: "Recupere seu acesso",
     title: "Volte à sua rotina com segurança.",
-    copy: "Enviaremos instruções para o e-mail usado na sua conta.",
+    copy: "Um passo a passo simples para criar uma nova senha.",
   },
   "request-sent": {
     eyebrow: "Acesso protegido",
-    title: "Um passo seguro para voltar.",
-    copy: "O link temporário evita alterações não autorizadas na sua conta.",
+    title: "Prontinho para continuar.",
+    copy: "Sua nova senha já está pronta para uso.",
   },
   "new-password": {
     eyebrow: "Nova senha",
@@ -159,6 +163,15 @@ export function AuthScreen({
   const { refreshSession } = useProductRuntime();
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    if (scenario === "signup-errors") {
+      initial.email = "Digite um e-mail completo, como nome@empresa.com.br.";
+      initial["signup-password"] =
+        "Sua senha precisa ter pelo menos 8 caracteres.";
+    }
+    return initial;
+  });
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -169,6 +182,7 @@ export function AuthScreen({
     const data = new FormData(event.currentTarget);
     setLoading(true);
     setSubmitError(null);
+    setFieldErrors({});
     try {
       if (preview) {
         await previewServices.auth.submit(scenario);
@@ -196,9 +210,6 @@ export function AuthScreen({
         });
         const session = await refreshSession();
         router.push(session?.onboardingCompleted ? "/inicio" : "/onboarding");
-      } else if (scenario === "forgot-password") {
-        await auth.forgotPassword(formString(data, "email"));
-        router.push("/solicitacao-enviada");
       } else if (scenario === "new-password") {
         const token = new URLSearchParams(window.location.search).get("token");
         if (!token) {
@@ -213,11 +224,25 @@ export function AuthScreen({
         router.push("/login");
       }
     } catch (error: unknown) {
-      setSubmitError(authErrorMessage(error, scenario));
+      if (
+        scenario === "new-password" &&
+        error instanceof BffHttpError &&
+        error.code === "VALIDATION_ERROR"
+      ) {
+        // Token de reset inválido ou expirado: a tela dedicada já explica o
+        // motivo e oferece o próximo passo, então não há campo para apontar.
+        router.push("/link-expirado");
+        return;
+      }
+      const mapped = mapAuthError(error, scenario);
+      setFieldErrors(mapped.fieldErrors);
+      setSubmitError(mapped.formError ?? null);
     } finally {
       setLoading(false);
     }
   }
+
+  if (scenario === "forgot-password") return <RecoveryFlow />;
 
   if (scenario === "request-sent" || scenario === "link-expired") {
     const expired = scenario === "link-expired";
@@ -227,33 +252,25 @@ export function AuthScreen({
           <span className={`state-icon${expired ? " is-error" : ""}`}>
             <Icon name={expired ? "alert" : "check"} />
           </span>
-          <h1>{expired ? "Este link expirou" : "Confira seu e-mail"}</h1>
+          <h1>{expired ? "Este link expirou" : "Senha redefinida"}</h1>
           <p>
             {expired
               ? "Por segurança, links de recuperação deixam de funcionar depois de um período. Solicite um novo para criar sua senha."
-              : "Se houver uma conta associada ao endereço informado, você receberá um link para criar uma nova senha."}
+              : "Você já pode entrar na Atendly com sua nova senha."}
           </p>
           <Link
             className="btn btn-primary"
             href={expired ? "/recuperar-senha" : "/login"}
           >
-            {expired ? "Solicitar novo link" : "Voltar para entrar"}
+            {expired ? "Solicitar novo link" : "Ir para entrar"}
           </Link>
-          <p className="auth-footer">
-            {expired ? (
+          {expired && (
+            <p className="auth-footer">
               <Link className="auth-link" href="/login">
                 Voltar para entrar
               </Link>
-            ) : (
-              <>
-                Não recebeu? Verifique spam ou{" "}
-                <Link className="auth-link" href="/recuperar-senha">
-                  tente novamente
-                </Link>
-                .
-              </>
-            )}
-          </p>
+            </p>
+          )}
         </div>
       </AuthLayout>
     );
@@ -261,47 +278,43 @@ export function AuthScreen({
 
   const signup = scenario === "signup" || scenario === "signup-errors";
   const errors = scenario === "signup-errors";
-  const forgot = scenario === "forgot-password";
   const newPassword = scenario === "new-password";
+  const passwordFieldId = newPassword
+    ? "new-password"
+    : signup
+      ? "signup-password"
+      : "login-password";
   const title = errors
     ? "Revise seus dados"
     : signup
       ? "Crie sua conta"
-      : forgot
-        ? "Esqueceu sua senha?"
-        : newPassword
-          ? "Crie uma nova senha"
-          : "Boas-vindas de volta";
+      : newPassword
+        ? "Crie uma nova senha"
+        : "Boas-vindas de volta";
   const subtitle = errors
     ? "Encontramos duas informações que precisam de ajuste."
     : signup
       ? "Use seus dados de acesso. Informações do negócio vêm na próxima etapa."
-      : forgot
-        ? "Digite seu e-mail para receber um link de recuperação."
-        : newPassword
-          ? "Use pelo menos 8 caracteres."
-          : "Entre para acompanhar conversas e agendamentos.";
+      : newPassword
+        ? "Use pelo menos 8 caracteres."
+        : "Entre para acompanhar conversas e agendamentos.";
   const destination = signup
     ? "/onboarding/dados-do-negocio"
-    : forgot
-      ? "/solicitacao-enviada"
-      : newPassword
-        ? "/login"
-        : "/inicio";
+    : newPassword
+      ? "/login"
+      : "/inicio";
   const submitLabel = errors
     ? "Revisar e criar conta"
     : signup
       ? "Criar conta"
-      : forgot
-        ? "Enviar link de recuperação"
-        : newPassword
-          ? "Salvar nova senha"
-          : "Entrar";
+      : newPassword
+        ? "Salvar nova senha"
+        : "Entrar";
 
   return (
     <AuthLayout scenario={scenario}>
       <div className="auth-card">
-        {(signup || forgot) && (
+        {signup && (
           <Link className="auth-back" href="/login">
             ← Voltar para entrar
           </Link>
@@ -335,7 +348,9 @@ export function AuthScreen({
           noValidate
         >
           {!newPassword && (
-            <label className={`field${errors ? " field-error" : ""}`}>
+            <label
+              className={`field${fieldErrors.email ? " field-error" : ""}`}
+            >
               <span className="label">E-mail</span>
               <input
                 className="input"
@@ -344,43 +359,33 @@ export function AuthScreen({
                 autoComplete="email"
                 placeholder="voce@seunegocio.com.br"
                 required
-                aria-invalid={errors || undefined}
-                aria-describedby={errors ? "email-error" : undefined}
+                aria-invalid={fieldErrors.email ? true : undefined}
+                aria-describedby={fieldErrors.email ? "email-error" : undefined}
                 defaultValue={errors ? "felipe@" : undefined}
               />
-              {errors && (
+              {fieldErrors.email && (
                 <span id="email-error" className="field-help">
-                  Digite um e-mail completo, como nome@empresa.com.br.
+                  {fieldErrors.email}
                 </span>
               )}
             </label>
           )}
-          {!forgot && (
-            <PasswordField
-              id={
-                newPassword
-                  ? "new-password"
-                  : signup
-                    ? "signup-password"
-                    : "login-password"
-              }
-              label={
-                newPassword ? "Nova senha" : signup ? "Crie uma senha" : "Senha"
-              }
-              error={
-                errors
-                  ? "Sua senha precisa ter pelo menos 8 caracteres."
-                  : undefined
-              }
-              help={
-                scenario === "signup"
-                  ? "Use pelo menos 8 caracteres."
-                  : undefined
-              }
-            />
-          )}
+          <PasswordField
+            id={passwordFieldId}
+            label={
+              newPassword ? "Nova senha" : signup ? "Crie uma senha" : "Senha"
+            }
+            error={fieldErrors[passwordFieldId]}
+            help={
+              scenario === "signup" ? "Use pelo menos 8 caracteres." : undefined
+            }
+          />
           {(newPassword || (signup && !preview)) && (
-            <PasswordField id="confirm-password" label="Repita a nova senha" />
+            <PasswordField
+              id="confirm-password"
+              label="Repita a nova senha"
+              error={fieldErrors["confirm-password"]}
+            />
           )}
           {signup && !preview && (
             <label className="check">
@@ -426,7 +431,7 @@ export function AuthScreen({
             .
           </p>
         )}
-        {!forgot && !newPassword && !errors && (
+        {!newPassword && !errors && (
           <p className="auth-footer">
             {signup ? (
               <>
@@ -450,20 +455,227 @@ export function AuthScreen({
   );
 }
 
-function authErrorMessage(error: unknown, scenario: AuthScenario): string {
-  if (error instanceof BffHttpError) {
-    if (scenario === "login" && error.status === 401) {
-      return "E-mail ou senha incorretos.";
+/**
+ * Recuperação de senha visual (G-34): e-mail → código → nova senha → sucesso,
+ * sem tocar em `/v1/auth/forgot-password`. A máquina de estados fica em
+ * `recoveryMachine.ts`, pura e testada isoladamente; este componente só lê o
+ * passo atual e decide o que desenhar.
+ */
+function RecoveryFlow() {
+  const router = useRouter();
+  const [state, dispatch] = useReducer(recoveryReducer, initialRecoveryState);
+  const [fieldError, setFieldError] = useState<string | null>(null);
+
+  function submitEmail(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!event.currentTarget.checkValidity()) {
+      event.currentTarget.reportValidity();
+      return;
     }
-    if (error.code === "RESET_TOKEN_INVALID") {
-      return "Este link expirou ou já foi utilizado.";
-    }
-    if (error.code === "EMAIL_ALREADY_EXISTS") {
-      return "Já existe uma conta com este e-mail.";
-    }
-    if (error.status === 400) return "Revise os dados informados.";
+    const email = formString(new FormData(event.currentTarget), "email");
+    setFieldError(null);
+    dispatch({ type: "SUBMIT_EMAIL", email });
   }
-  return "Não foi possível falar com a Atendly. Tente novamente.";
+
+  function submitCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const code = formString(new FormData(event.currentTarget), "code");
+    if (!/^\d{6}$/.test(code)) {
+      setFieldError("Digite os 6 dígitos do código.");
+      return;
+    }
+    setFieldError(null);
+    dispatch({ type: "SUBMIT_CODE" });
+  }
+
+  function submitNewPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!event.currentTarget.checkValidity()) {
+      event.currentTarget.reportValidity();
+      return;
+    }
+    const data = new FormData(event.currentTarget);
+    const password = formString(data, "new-password");
+    const confirmPassword = formString(data, "confirm-password");
+    if (password !== confirmPassword) {
+      setFieldError("As senhas precisam ser iguais.");
+      return;
+    }
+    setFieldError(null);
+    dispatch({ type: "SUBMIT_NEW_PASSWORD" });
+    router.push("/solicitacao-enviada");
+  }
+
+  const backButtonStyle = { background: "none", border: 0, padding: 0 };
+
+  if (state.step === "done") {
+    // O passo seguinte já disparou a navegação para /solicitacao-enviada;
+    // nada para desenhar aqui além de evitar um flash da tela de e-mail.
+    return null;
+  }
+
+  if (state.step === "code") {
+    return (
+      <AuthLayout scenario="forgot-password">
+        <div className="auth-card">
+          <button
+            className="auth-back"
+            onClick={() => dispatch({ type: "BACK" })}
+            style={backButtonStyle}
+            type="button"
+          >
+            ← Alterar e-mail
+          </button>
+          <header className="auth-heading">
+            <h1>Digite o código</h1>
+            <p>Informe o código de verificação de 6 dígitos para continuar.</p>
+          </header>
+          <form className="auth-form" onSubmit={submitCode} noValidate>
+            <label className={`field${fieldError ? " field-error" : ""}`}>
+              <span className="label">Código</span>
+              <input
+                aria-describedby={fieldError ? "code-error" : undefined}
+                aria-invalid={fieldError ? true : undefined}
+                autoComplete="one-time-code"
+                className="input"
+                inputMode="numeric"
+                maxLength={6}
+                name="code"
+                placeholder="000000"
+                required
+              />
+              {fieldError && (
+                <span className="field-help" id="code-error">
+                  {fieldError}
+                </span>
+              )}
+            </label>
+            <button className="btn btn-primary" type="submit">
+              Continuar
+            </button>
+          </form>
+        </div>
+      </AuthLayout>
+    );
+  }
+
+  if (state.step === "new-password") {
+    return (
+      <AuthLayout scenario="forgot-password">
+        <div className="auth-card">
+          <button
+            className="auth-back"
+            onClick={() => dispatch({ type: "BACK" })}
+            style={backButtonStyle}
+            type="button"
+          >
+            ← Voltar ao código
+          </button>
+          <header className="auth-heading">
+            <h1>Crie uma nova senha</h1>
+            <p>Use pelo menos 8 caracteres.</p>
+          </header>
+          <form className="auth-form" onSubmit={submitNewPassword} noValidate>
+            <PasswordField id="new-password" label="Nova senha" />
+            <PasswordField
+              error={fieldError ?? undefined}
+              id="confirm-password"
+              label="Repita a nova senha"
+            />
+            <button className="btn btn-primary" type="submit">
+              Salvar nova senha
+            </button>
+          </form>
+        </div>
+      </AuthLayout>
+    );
+  }
+
+  return (
+    <AuthLayout scenario="forgot-password">
+      <div className="auth-card">
+        <Link className="auth-back" href="/login">
+          ← Voltar para entrar
+        </Link>
+        <header className="auth-heading">
+          <h1>Esqueceu sua senha?</h1>
+          <p>Informe o e-mail da sua conta para continuar.</p>
+        </header>
+        <form className="auth-form" onSubmit={submitEmail} noValidate>
+          <label className="field">
+            <span className="label">E-mail</span>
+            <input
+              autoComplete="email"
+              className="input"
+              name="email"
+              placeholder="voce@seunegocio.com.br"
+              required
+              type="email"
+            />
+          </label>
+          <button className="btn btn-primary" type="submit">
+            Continuar
+          </button>
+        </form>
+      </div>
+    </AuthLayout>
+  );
+}
+
+const validationFieldIdByScenario: Partial<
+  Record<AuthScenario, Record<string, string>>
+> = {
+  login: { email: "email", password: "login-password" },
+  signup: {
+    confirmPassword: "confirm-password",
+    email: "email",
+    password: "signup-password",
+  },
+};
+
+function mapAuthError(
+  error: unknown,
+  scenario: AuthScenario,
+): { fieldErrors: Record<string, string>; formError?: string } {
+  if (error instanceof BffHttpError) {
+    if (error.code === "VALIDATION_ERROR") {
+      const mapping = validationFieldIdByScenario[scenario];
+      const details = error.details as
+        { fieldErrors?: Record<string, string[]> } | undefined;
+      const zodFieldErrors = mapping ? details?.fieldErrors : undefined;
+      if (zodFieldErrors) {
+        const fieldErrors: Record<string, string> = {};
+        for (const key of Object.keys(zodFieldErrors)) {
+          const fieldId = mapping?.[key];
+          if (fieldId) fieldErrors[fieldId] = friendlyValidationMessage(key);
+        }
+        if (Object.keys(fieldErrors).length > 0) return { fieldErrors };
+      }
+    }
+    if (scenario === "login" && error.status === 401) {
+      return {
+        fieldErrors: { "login-password": "E-mail ou senha incorretos." },
+      };
+    }
+    if (scenario === "signup" && error.code === "CONFLICT") {
+      return {
+        fieldErrors: { email: "Já existe uma conta com este e-mail." },
+      };
+    }
+  }
+  return {
+    fieldErrors: {},
+    formError: "Não foi possível falar com a Atendly. Tente novamente.",
+  };
+}
+
+function friendlyValidationMessage(field: string): string {
+  if (field === "email") return "Digite um e-mail válido.";
+  if (field === "password") {
+    return "A senha precisa ter pelo menos 8 caracteres.";
+  }
+  if (field === "confirmPassword") return "As senhas precisam ser iguais.";
+  return "Revise esta informação.";
 }
 
 function formString(data: FormData, name: string): string {

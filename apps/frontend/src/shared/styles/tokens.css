@@ -1,0 +1,195 @@
+/*
+ * Fonte única dos tokens semânticos do frontend Atendly.
+ * Direção visual "Recepção" — ver docs/design-reference/claude-design/prototype/project/
+ * (Marca.dc.html, Acabamento.dc.html, Movimento.dc.html, QA-Global.dc.html) e
+ * docs/product-vault/03-UX-UI/05-Design-System-Conceitual.md.
+ * Tema claro apenas — não declarar esquema escuro aqui.
+ */
+
+@font-face {
+  font-family: "Literata";
+  src: url("/fonts/literata/literata-latin-400-normal.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Literata";
+  src: url("/fonts/literata/literata-latin-500-normal.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Literata";
+  src: url("/fonts/literata/literata-latin-600-normal.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Hanken Grotesk";
+  src: url("/fonts/hanken-grotesk/hanken-grotesk-latin-400-normal.woff2")
+    format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Hanken Grotesk";
+  src: url("/fonts/hanken-grotesk/hanken-grotesk-latin-500-normal.woff2")
+    format("woff2");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Hanken Grotesk";
+  src: url("/fonts/hanken-grotesk/hanken-grotesk-latin-600-normal.woff2")
+    format("woff2");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Hanken Grotesk";
+  src: url("/fonts/hanken-grotesk/hanken-grotesk-latin-700-normal.woff2")
+    format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light;
+
+  /* Cor — papel, superfície, tinta, petróleo (Marca.dc.html, Home.dc.html, Login.dc.html) */
+  --at-color-canvas: #f7f4ef;
+  --at-color-surface: #fffdfa;
+  --at-color-surface-hover: #f3efe8;
+  --at-color-surface-active: #efeae2;
+  --at-color-ink: #221e1a;
+  --at-color-ink-soft: #5f574e;
+  --at-color-ink-muted: #716859;
+  --at-color-border: #e5ded4;
+  --at-color-border-strong: #d6cec2;
+
+  --at-color-primary: #0f5f63;
+  --at-color-primary-hover: #0b484c;
+  --at-color-primary-active: #0b484c;
+  --at-color-primary-ink: #0b4a4e;
+  --at-color-primary-tint: #edf4f3;
+  --at-color-primary-tint-strong: #dceceb;
+  --at-color-primary-on-dark: #b9dad7;
+  --at-color-on-primary: #f7f4ef;
+
+  --at-color-success: #2e7d4f;
+  --at-color-success-ink: #1f5c39;
+  --at-color-warning-bg: #f8ecd5;
+  --at-color-warning-ink: #7a4e0a;
+  --at-color-warning-border: #b7791b;
+  --at-color-warning-strong: #9a6410;
+  --at-color-danger-bg: #f8e2de;
+  --at-color-danger-border: #b3392e;
+  --at-color-danger-hover: #9e3128;
+  --at-color-danger-ink: #8a2a21;
+  --at-color-danger-ink-soft: #6e2a22;
+
+  /* Tipografia — Literata (display) + Hanken Grotesk (corpo); fallback declarado, sem terceiros em runtime */
+  --at-font-display: "Literata", Georgia, serif;
+  --at-font-body:
+    "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --at-font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --at-font-weight-regular: 400;
+  --at-font-weight-medium: 500;
+  --at-font-weight-semibold: 600;
+  --at-font-weight-bold: 700;
+
+  --at-font-size-2xs: 11px;
+  --at-font-size-xs: 12px;
+  --at-font-size-sm: 13px;
+  --at-font-size-base: 14px;
+  --at-font-size-md: 15px;
+  --at-font-size-lg: 18px;
+  --at-font-size-xl: 20px;
+  --at-font-size-2xl: 22px;
+  --at-font-size-3xl: 26px;
+  --at-font-size-4xl: 28px;
+  --at-font-size-5xl: 36px;
+
+  --at-line-height-tight: 1.1;
+  --at-line-height-snug: 1.15;
+  --at-line-height-normal: 1.4;
+  --at-line-height-relaxed: 1.5;
+  --at-line-height-loose: 1.55;
+
+  --at-tracking-tight: -0.02em;
+  --at-tracking-snug: -0.015em;
+  --at-tracking-normal: 0;
+  --at-tracking-wide: 0.08em;
+
+  /* Espaçamento — escala 4/8/12/16/20/24/32/40 (Acabamento.dc.html) */
+  --at-space-1: 4px;
+  --at-space-2: 8px;
+  --at-space-3: 12px;
+  --at-space-4: 16px;
+  --at-space-5: 20px;
+  --at-space-6: 24px;
+  --at-space-8: 32px;
+  --at-space-10: 40px;
+
+  /* Raio — 10/14/16/24 (Acabamento.dc.html) */
+  --at-radius-sm: 10px;
+  --at-radius-md: 14px;
+  --at-radius-lg: 16px;
+  --at-radius-xl: 24px;
+  --at-radius-pill: 999px;
+  --at-radius-full: 50%;
+
+  /* Ícone — 24px, traço 1,75 (Acabamento.dc.html) */
+  --at-icon-size: 24px;
+  --at-icon-stroke: 1.75;
+
+  /* Sombra — sutil; separação por borda/superfície/espaço é a preferência (Design-System-Conceitual) */
+  --at-shadow-sm: 0 1px 2px rgba(34, 30, 26, 0.06);
+  --at-shadow-md: 0 8px 20px rgba(34, 30, 26, 0.08);
+  --at-shadow-lg: 0 16px 40px rgba(34, 30, 26, 0.1);
+
+  /* Foco — nunca só cor, sempre anel visível */
+  --at-focus-ring-color: var(--at-color-primary);
+  --at-focus-ring-width: 2px;
+  --at-focus-ring-offset: 2px;
+
+  /* z-index — camadas da aplicação */
+  --at-z-base: 0;
+  --at-z-dropdown: 100;
+  --at-z-sticky: 200;
+  --at-z-overlay: 300;
+  --at-z-drawer: 400;
+  --at-z-dialog: 500;
+  --at-z-toast: 600;
+  --at-z-skip-link: 700;
+
+  /* Movimento — poucos tempos, duas curvas (Movimento.dc.html) */
+  --at-duration-instant: 120ms;
+  --at-duration-fast: 160ms;
+  --at-duration-base: 200ms;
+  --at-duration-moderate: 240ms;
+  --at-duration-slow: 320ms;
+  --at-ease-standard: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --at-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --at-ease-linear: linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

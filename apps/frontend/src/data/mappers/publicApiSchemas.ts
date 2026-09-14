@@ -656,6 +656,38 @@ export const whatsappDisconnectResultSchema = z.object({
   disconnected: z.literal(true),
 });
 
+// --- Status honesto de WhatsApp e IA (Goal014) ------------------------------
+// Read model dedicado de `GET /v1/status`: nunca deduz de configuração salva,
+// só do que a verificação desta requisição encontrou. Ver PUBLIC_API_V1.md.
+export const whatsappStatusValueSchema = z.enum([
+  "CONNECTED",
+  "DISCONNECTED",
+  "UNKNOWN",
+]);
+export const aiStateValueSchema = z.enum([
+  "ACTIVE",
+  "OFF",
+  "PENDING",
+  "UNKNOWN",
+]);
+
+export const systemStatusSchema = z.object({
+  whatsapp: z.object({
+    status: whatsappStatusValueSchema,
+    phoneNumber: z.string().nullable(),
+    checkedAt: z.string(),
+  }),
+  ai: z.object({
+    desiredEnabled: z.boolean(),
+    effectiveEnabled: z.boolean().nullable(),
+    state: aiStateValueSchema,
+  }),
+  degraded: z.boolean(),
+});
+export type WhatsAppStatusValue = z.infer<typeof whatsappStatusValueSchema>;
+export type AiStateValue = z.infer<typeof aiStateValueSchema>;
+export type SystemStatus = z.infer<typeof systemStatusSchema>;
+
 // --- Conhecimento, memoria do cliente, resumo e sugestoes (Goal012) --------
 // Sem tela: a experiencia e dos Goals 015, 017 e 023. Aqui e so o contrato
 // que a camada de dados precisa entender, incluindo a recusa de vocabulario

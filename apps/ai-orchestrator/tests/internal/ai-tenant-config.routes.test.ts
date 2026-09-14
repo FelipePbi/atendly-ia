@@ -39,13 +39,19 @@ function fakePrisma(store: { config: StoredConfig | null }) {
             : { ...create };
         return store.config;
       },
+      findUnique: async ({ where }: { where: { tenantId: string } }) => {
+        if (!store.config || store.config.tenantId !== where.tenantId) {
+          return null;
+        }
+        return store.config;
+      },
     },
   } as never;
 }
 
-function headers(tenantId: string) {
+function headers(tenantId: string, token = expectedToken("provisioning")) {
   return {
-    authorization: `Bearer ${expectedToken("provisioning")}`,
+    authorization: `Bearer ${token}`,
     "x-service-audience": "ai-orchestrator",
     "x-tenant-id": tenantId,
     "x-user-id": `user-${tenantId}`,
@@ -136,5 +142,91 @@ describe("projecao interna do estilo de conversa", () => {
       legacyAliases: ["PROFESSIONAL_OBJECTIVE", "LIGHT_CLOSE"],
     });
     expect(store.config).toBeNull();
+  });
+});
+
+describe("leitura interna da configuracao efetiva do tenant", () => {
+  let app: FastifyInstance;
+  let store: { config: StoredConfig | null };
+
+  beforeEach(async () => {
+    store = {
+      config: {
+        tenantId: "tenant-a",
+        enabled: true,
+        tone: "CASUAL",
+        promptVersion: "scheduling_v1.0.0",
+        settings: null,
+      },
+    };
+    app = Fastify();
+    await registerInternalRoutes(app, fakePrisma(store), {
+      inbox: { countDeadLetters: async () => 0 },
+    });
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it("devolve o efetivo do tenant do contexto", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/internal/ai-tenant-config",
+      headers: headers("tenant-a", expectedToken("command")),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual({
+      enabled: true,
+      tone: "CASUAL",
+      promptVersion: "scheduling_v1.0.0",
+    });
+  });
+
+  it("devolve null quando o tenant nunca foi projetado", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/internal/ai-tenant-config",
+      headers: headers("tenant-nunca-projetado", expectedToken("command")),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toBeNull();
+  });
+
+  it("nunca le a configuracao de outro tenant", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/internal/ai-tenant-config",
+      headers: headers("tenant-b", expectedToken("command")),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toBeNull();
+  });
+
+  it("recusa chamada sem credencial", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/internal/ai-tenant-config",
+      headers: {
+        "x-tenant-id": "tenant-a",
+        "x-user-id": "user-tenant-a",
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("recusa credencial de provisionamento: leitura e uso comando", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/internal/ai-tenant-config",
+      headers: headers("tenant-a", expectedToken("provisioning")),
+    });
+
+    expect(response.statusCode).toBe(403);
   });
 });

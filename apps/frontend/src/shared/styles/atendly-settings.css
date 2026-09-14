@@ -776,7 +776,7 @@
     min-height: calc(68px + env(safe-area-inset-bottom));
     padding: 6px 8px env(safe-area-inset-bottom);
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     border-top: 1px solid var(--border);
     background: var(--surface);
   }

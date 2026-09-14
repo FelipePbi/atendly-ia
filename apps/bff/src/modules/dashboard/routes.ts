@@ -78,11 +78,15 @@ async function platformSummary(tenantId: string) {
   };
 }
 
-async function whatsappSummary(
+/** Reaproveitada pelo read model `GET /v1/status` (Goal014/WU-02). */
+export async function whatsappSummary(
   userId: string,
   requestId: string,
   evolution: EvolutionClient,
-) {
+): Promise<{
+  status: "CONNECTED" | "DISCONNECTED";
+  phoneNumber: string | null;
+} | null> {
   const instance = await getPrisma().whatsAppInstance.findUnique({
     where: { userId },
   });
@@ -97,7 +101,8 @@ async function whatsappSummary(
   };
 }
 
-async function settled<T>(
+/** Reaproveitada pelo read model `GET /v1/status` (Goal014/WU-02). */
+export async function settled<T>(
   promise: Promise<T>,
 ): Promise<
   | { status: "ok"; data: T }

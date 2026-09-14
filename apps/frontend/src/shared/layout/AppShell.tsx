@@ -3,115 +3,92 @@
 import clsx from "clsx";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
-import { Icon, type IconName } from "@/shared/icons/Icon";
+import { Icon } from "@/shared/icons/Icon";
 import {
   getProductServices,
   useProductRuntime,
 } from "@/shared/runtime/ProductRuntime";
+import { useSystemStatus } from "@/shared/runtime/systemStatus";
 import { Brand } from "@/shared/ui/Brand";
 import { Dialog } from "@/shared/ui/Dialog";
 
-export type PlatformSection =
-  "inicio" | "conversas" | "agenda" | "clientes" | "servicos" | "configuracoes";
-export type ShellModule =
-  | "dashboard"
-  | "conversations"
-  | "agenda"
-  | "directory"
-  | "settings"
-  | "migration"
-  | "system";
+import {
+  isDestinationActive,
+  isMobileTab,
+  isMoreActive,
+  MORE_DESTINATIONS,
+  SIDEBAR_DESTINATIONS,
+} from "./navigation";
+import type { ShellConfig } from "./ShellConfig";
 
-const navigation: {
-  href: string;
-  icon: IconName;
-  label: string;
-  section: PlatformSection;
-}[] = [
-  { href: "/inicio", icon: "home", label: "Início", section: "inicio" },
-  {
-    href: "/conversas",
-    icon: "chat",
-    label: "Conversas",
-    section: "conversas",
-  },
-  { href: "/agenda", icon: "calendar", label: "Agenda", section: "agenda" },
-  { href: "/clientes", icon: "users", label: "Clientes", section: "clientes" },
-  {
-    href: "/servicos",
-    icon: "briefcase",
-    label: "Serviços",
-    section: "servicos",
-  },
-];
+export type { PlatformSection, ShellContextualAction, ShellModule } from "./navigation";
 
-type AppShellProps = {
-  active: PlatformSection;
+export type AppShellProps = ShellConfig & {
   children: ReactNode;
-  module: ShellModule;
-  source?: "atendly" | "external";
-  whatsapp?: "connected" | "disconnected";
-  loading?: boolean;
-  mainClassName?: string;
-  showBottomNav?: boolean;
-  showMobileHeader?: boolean;
-  attention?: boolean;
 };
 
 export function AppShell({
+  action,
   active,
+  attention = false,
   children,
-  module,
-  source = "atendly",
-  whatsapp = "connected",
   loading = false,
   mainClassName,
+  module,
   showBottomNav = true,
   showMobileHeader = true,
-  attention = false,
+  source = "atendly",
+  title,
 }: AppShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { session, setUnauthenticated } = useProductRuntime();
+  const status = useSystemStatus();
   const [accountOpen, setAccountOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
+  const firstRender = useRef(true);
+
   const styleModule =
     module === "system" || module === "migration" ? "settings" : module;
-  const shellClass = `${styleModule}-shell`;
+  const shellClass = styleModule ? `${styleModule}-shell` : "platform-shell";
   const mobileHeaderClass =
     module === "dashboard"
       ? "dashboard-mobile-header"
-      : `${styleModule}-mobile-header`;
+      : `${styleModule ?? "platform"}-mobile-header`;
   const bottomNavClass =
     module === "dashboard"
       ? "dashboard-bottom-nav"
-      : `${styleModule}-bottom-nav`;
-  const mainClass = mainClassName ?? `${styleModule}-main`;
+      : `${styleModule ?? "platform"}-bottom-nav`;
+  const mainClass = mainClassName ?? `${styleModule ?? "platform"}-main`;
   const officialSource =
     source === "external" ? "Minha Agenda" : "Agenda Atendly";
   const systemAttention = module === "system";
   const mobileAttention = systemAttention || attention;
-  const compactAccount = ["settings", "migration", "system"].includes(module);
-  const preview = pathname.startsWith("/_preview");
-  const sourceContext = preview
-    ? "Ambiente de demonstração"
-    : `${officialSource} oficial`;
-  const businessName = preview
-    ? "Studio Aurora"
-    : (session?.businessProfile?.businessName ??
-      session?.tenant.name ??
-      "Seu negócio");
-  const userLabel = preview
-    ? "Felipe Martins"
-    : (session?.user.email ?? "Conta principal");
+  const compactAccount = ["settings", "migration", "system"].includes(
+    module ?? "",
+  );
+  const businessName =
+    session?.businessProfile?.businessName ??
+    session?.tenant.name ??
+    "Seu negócio";
+  const userLabel = session?.user.email ?? "Conta principal";
 
-  async function logout() {
-    if (preview) {
-      router.push("/_preview/auth-login");
+  useEffect(() => {
+    document.title = title ? `${title} — Atendly` : "Atendly";
+  }, [title]);
+
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
       return;
     }
+    mainRef.current?.focus();
+  }, [pathname]);
+
+  async function logout() {
     await getProductServices()
       .auth.logout()
       .catch(() => undefined);
@@ -142,36 +119,33 @@ export function AppShell({
             </span>
             <span className="business-name">
               <strong>{businessName}</strong>
-              <span>{sourceContext}</span>
+              <span>{officialSource} oficial</span>
             </span>
           </div>
-          <div className="wa-status status-line">
-            <span
-              className={clsx(
-                "status-dot",
-                whatsapp === "disconnected" && "danger",
-                systemAttention && "warning",
-              )}
-              aria-hidden="true"
-            />
-            <span>
-              {loading
-                ? "Verificando conexões"
-                : systemAttention
-                  ? "Operação requer atenção"
-                  : `WhatsApp ${whatsapp === "connected" ? "conectado" : "desconectado"}`}
-            </span>
-          </div>
+          <StatusLine
+            label="WhatsApp"
+            view={status.whatsappView}
+            activeCopy="WhatsApp conectado"
+            offCopy="WhatsApp desconectado"
+          />
+          <StatusLine
+            label="IA"
+            view={status.aiView}
+            activeCopy="IA ativa"
+            offCopy="IA desligada"
+          />
           <nav className="nav" aria-label="Navegação principal">
-            {navigation.map((item) => (
+            {SIDEBAR_DESTINATIONS.map((item) => (
               <Link
                 className={clsx(
                   "nav-item",
-                  item.section === active && "is-active",
+                  isDestinationActive(item.section, active) && "is-active",
                 )}
                 href={item.href}
                 key={item.section}
-                aria-current={item.section === active ? "page" : undefined}
+                aria-current={
+                  isDestinationActive(item.section, active) ? "page" : undefined
+                }
               >
                 <Icon name={item.icon} />
                 <span>{item.label}</span>
@@ -186,62 +160,61 @@ export function AppShell({
                   active === "configuracoes" && "is-active",
                 )}
                 href="/configuracoes"
+                aria-current={active === "configuracoes" ? "page" : undefined}
               >
                 <Icon name="settings" />
                 <span>Configurações</span>
               </Link>
             </nav>
-            {!loading && (
-              <div
-                className="dropdown sidebar-account-menu"
-                onKeyDown={(event) => {
-                  if (event.key !== "Escape" || !accountOpen) return;
-                  event.preventDefault();
-                  setAccountOpen(false);
-                  event.currentTarget
-                    .querySelector<HTMLButtonElement>(".account-button")
-                    ?.focus();
-                }}
+            <div
+              className="dropdown sidebar-account-menu"
+              onKeyDown={(event) => {
+                if (event.key !== "Escape" || !accountOpen) return;
+                event.preventDefault();
+                setAccountOpen(false);
+                event.currentTarget
+                  .querySelector<HTMLButtonElement>(".account-button")
+                  ?.focus();
+              }}
+            >
+              <button
+                className="account-button"
+                type="button"
+                onClick={() => setAccountOpen((value) => !value)}
+                aria-expanded={accountOpen}
+                aria-controls="account-menu"
               >
-                <button
-                  className="account-button"
-                  type="button"
-                  onClick={() => setAccountOpen((value) => !value)}
-                  aria-expanded={accountOpen}
-                  aria-controls="account-menu"
-                >
-                  <span className="avatar" aria-hidden="true">
-                    {initials(userLabel)}
+                <span className="avatar" aria-hidden="true">
+                  {initials(userLabel)}
+                </span>
+                <span className="business-name">
+                  <strong>{userLabel}</strong>
+                  <span>Conta proprietária</span>
+                </span>
+                <Icon name={compactAccount ? "chevron-right" : "more"} />
+              </button>
+              {accountOpen && (
+                <div className="menu" id="account-menu">
+                  <Link className="menu-item" href="/configuracoes/conta">
+                    Minha conta
+                  </Link>
+                  <span className="menu-item" aria-disabled="true">
+                    Ajuda
                   </span>
-                  <span className="business-name">
-                    <strong>{userLabel}</strong>
-                    <span>Conta proprietária</span>
-                  </span>
-                  <Icon name={compactAccount ? "chevron-right" : "more"} />
-                </button>
-                {accountOpen && (
-                  <div className="menu" id="account-menu">
-                    <Link className="menu-item" href="/configuracoes/conta">
-                      Minha conta
-                    </Link>
-                    <span className="menu-item" aria-disabled="true">
-                      Ajuda
-                    </span>
-                    <div className="menu-divider" />
-                    <button
-                      className="menu-item danger"
-                      type="button"
-                      onClick={() => void logout()}
-                    >
-                      Sair
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+                  <div className="menu-divider" />
+                  <button
+                    className="menu-item danger"
+                    type="button"
+                    onClick={() => void logout()}
+                  >
+                    Sair
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </aside>
-        <main className={mainClass} id="main-content" tabIndex={-1}>
+        <main className={mainClass} id="main-content" ref={mainRef} tabIndex={-1}>
           {showMobileHeader && (
             <header className={mobileHeaderClass}>
               <Brand />
@@ -264,32 +237,43 @@ export function AppShell({
           )}
           {children}
         </main>
+        {showBottomNav && action && (
+          <Link className="fab" href={action.href} aria-label={action.label}>
+            <Icon name={action.icon} />
+          </Link>
+        )}
         {showBottomNav && (
           <nav className={bottomNavClass} aria-label="Navegação principal">
-            {navigation.slice(0, 3).map((item) => (
-              <Link
-                className={clsx(
-                  "bottom-nav-item",
-                  item.section === active && "is-active",
-                )}
-                href={item.href}
-                key={item.section}
-                aria-current={item.section === active ? "page" : undefined}
-              >
-                <Icon name={item.icon} />
-                <span>{item.label}</span>
-              </Link>
-            ))}
+            {SIDEBAR_DESTINATIONS.filter((item) => isMobileTab(item.section)).map(
+              (item) => (
+                <Link
+                  className={clsx(
+                    "bottom-nav-item",
+                    isDestinationActive(item.section, active) && "is-active",
+                  )}
+                  href={item.href}
+                  key={item.section}
+                  aria-current={
+                    isDestinationActive(item.section, active)
+                      ? "page"
+                      : undefined
+                  }
+                >
+                  <Icon name={item.icon} />
+                  <span>{item.label}</span>
+                </Link>
+              ),
+            )}
             <button
               className={clsx(
                 "bottom-nav-item",
-                ["clientes", "servicos", "configuracoes"].includes(active) &&
-                  "is-active",
+                isMoreActive(active) && "is-active",
               )}
               type="button"
               onClick={() => setMoreOpen(true)}
               aria-haspopup="dialog"
               aria-expanded={moreOpen}
+              aria-current={isMoreActive(active) ? "page" : undefined}
             >
               <Icon name="more" />
               <span>Mais</span>
@@ -305,18 +289,12 @@ export function AppShell({
         variant="sheet"
       >
         <div className="list">
-          <Link className="menu-item" href="/clientes">
-            <Icon name="users" />
-            Clientes
-          </Link>
-          <Link className="menu-item" href="/servicos">
-            <Icon name="briefcase" />
-            Serviços
-          </Link>
-          <Link className="menu-item" href="/configuracoes">
-            <Icon name="settings" />
-            Configurações
-          </Link>
+          {MORE_DESTINATIONS.map((item) => (
+            <Link className="menu-item" href={item.href} key={item.section}>
+              <Icon name={item.icon} />
+              {item.label}
+            </Link>
+          ))}
           <span className="menu-item" aria-disabled="true">
             <Icon name="help" />
             Ajuda
@@ -331,12 +309,42 @@ export function AppShell({
             Sair
           </button>
         </div>
-        <p className="sr-only">
-          Fonte oficial:{" "}
-          {source === "atendly" ? "Agenda Atendly" : "Minha Agenda"}
-        </p>
       </Dialog>
     </>
+  );
+}
+
+function StatusLine({
+  activeCopy,
+  label,
+  offCopy,
+  view,
+}: {
+  activeCopy: string;
+  label: string;
+  offCopy: string;
+  view: "active" | "loading" | "off" | "unknown";
+}) {
+  const copy =
+    view === "loading"
+      ? `Verificando ${label}`
+      : view === "unknown"
+        ? `${label} não confirmado`
+        : view === "active"
+          ? activeCopy
+          : offCopy;
+  return (
+    <div className="wa-status status-line" role="status">
+      <span
+        className={clsx(
+          "status-dot",
+          view === "off" && "danger",
+          (view === "loading" || view === "unknown") && "neutral",
+        )}
+        aria-hidden="true"
+      />
+      <span>{copy}</span>
+    </div>
   );
 }
 

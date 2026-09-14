@@ -1,83 +1,19 @@
 "use client";
 
+import clsx from "clsx";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { BffHttpError, type Dashboard } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
-import { AppShell } from "@/shared/layout/AppShell";
+import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
-import { Skeleton } from "@/shared/ui/States";
-
-import type { DashboardScenario } from "./types";
-
-const scenarioContent: Record<
-  Exclude<DashboardScenario, "loading">,
-  {
-    agendaBadge: string;
-    agendaCopy: string;
-    agendaTitle: string;
-    attentionCopy: string;
-    attentionTitle: string;
-    metricCopy: string;
-    nextCopy: string;
-    source: "atendly" | "external";
-  }
-> = {
-  atendly: {
-    agendaBadge: "Agenda Atendly",
-    agendaCopy:
-      "Horário, cliente e serviço serão carregados da Agenda Atendly.",
-    agendaTitle: "Dados reais aparecerão aqui",
-    attentionCopy: "A lista será preenchida com dados reais.",
-    attentionTitle: "Conversas aguardando você",
-    metricCopy: "Preenchido com dados operacionais reais",
-    nextCopy: "Nenhum dado real foi fornecido para este protótipo.",
-    source: "atendly",
-  },
-  external: {
-    agendaBadge: "Fonte externa",
-    agendaCopy: "Horários serão consultados na Minha Agenda.",
-    agendaTitle: "Dados reais aparecerão aqui",
-    attentionCopy: "A lista será preenchida com dados reais.",
-    attentionTitle: "Conversas aguardando você",
-    metricCopy: "Confirmados somente após sucesso na Minha Agenda",
-    nextCopy: "Exibido somente após consulta bem-sucedida na fonte oficial.",
-    source: "external",
-  },
-  empty: {
-    agendaBadge: "Fonte oficial",
-    agendaCopy:
-      "Agendamentos criados manualmente ou pela Atendly aparecerão aqui.",
-    agendaTitle: "Ainda não há agendamentos hoje",
-    attentionCopy: "Novas conversas que exigirem ação humana aparecerão aqui.",
-    attentionTitle: "Nenhuma conversa pendente",
-    metricCopy: "Sem agendamentos registrados hoje",
-    nextCopy: "Nenhum atendimento futuro disponível.",
-    source: "atendly",
-  },
-  "integration-error": {
-    agendaBadge: "Desatualizada",
-    agendaCopy:
-      "Os horários não serão apresentados como atuais enquanto a fonte oficial não responder.",
-    agendaTitle: "Consulta indisponível",
-    attentionCopy: "Evita oferecer horários desatualizados.",
-    attentionTitle: "Reconectar agenda oficial",
-    metricCopy: "Métrica suspensa enquanto a fonte oficial está indisponível",
-    nextCopy: "Não disponível sem consulta segura.",
-    source: "external",
-  },
-  "whatsapp-disconnected": {
-    agendaBadge: "Operacional",
-    agendaCopy: "Dados reais serão carregados da Agenda Atendly.",
-    agendaTitle: "Agenda continua disponível",
-    attentionCopy: "Clientes não estão recebendo atendimento automático.",
-    attentionTitle: "Reconectar WhatsApp",
-    metricCopy: "Novos atendimentos automáticos estão pausados",
-    nextCopy: "Nenhum dado real foi fornecido.",
-    source: "atendly",
-  },
-};
+import {
+  type StatusView,
+  useSystemStatus,
+  type UseSystemStatusResult,
+} from "@/shared/runtime/systemStatus";
+import { Skeleton, StatePanel } from "@/shared/ui/States";
 
 function LoadingDashboard() {
   return (
@@ -175,6 +111,7 @@ export function ProductDashboardScreen() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  const status = useSystemStatus();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -196,41 +133,165 @@ export function ProductDashboardScreen() {
     return () => controller.abort();
   }, [reload]);
 
+  /**
+   * Único ponto de `useShellConfig` desta tela: `RealDashboard` é filho no
+   * mesmo render e, se também chamasse o hook, os dois configs (formatos
+   * diferentes — `loading` aqui, `source` lá) se alternariam a cada commit,
+   * cada um invalidando o outro, num loop infinito de render.
+   */
+  useShellConfig(
+    dashboard
+      ? {
+          active: "inicio",
+          attention: dashboardNeedsAttention(dashboard),
+          module: "dashboard",
+          source: dashboardSource(dashboard),
+          title: "Início",
+        }
+      : {
+          active: "inicio",
+          attention: Boolean(error),
+          loading: !error,
+          module: "dashboard",
+          title: "Início",
+        },
+  );
+
   if (!dashboard && !error) {
-    return (
-      <AppShell active="inicio" module="dashboard" loading>
-        <LoadingDashboard />
-      </AppShell>
-    );
+    return <LoadingDashboard />;
   }
 
   if (!dashboard) {
     return (
-      <AppShell active="inicio" module="dashboard" attention>
-        <div className="dashboard-page">
-          <div className="error-state" role="alert">
-            <span className="state-icon">
-              <Icon name="alert" />
-            </span>
-            <h1>Não foi possível carregar o início</h1>
-            <p>{error}</p>
-            <button
-              className="btn btn-primary"
-              type="button"
-              onClick={() => setReload((value) => value + 1)}
-            >
-              Tentar novamente
-            </button>
+      <div className="dashboard-page">
+        <header className="dashboard-header">
+          <div>
+            <h1>Início</h1>
           </div>
-        </div>
-      </AppShell>
+        </header>
+        <StatusStrip status={status} />
+        <StatePanel
+          actionLabel="Tentar novamente"
+          description={error ?? "Tente novamente em instantes."}
+          icon="alert"
+          onAction={() => setReload((value) => value + 1)}
+          title="Não foi possível carregar o início"
+          tone="error"
+        />
+      </div>
     );
   }
 
-  return <RealDashboard dashboard={dashboard} />;
+  return (
+    <RealDashboard
+      dashboard={dashboard}
+      onRetry={() => setReload((value) => value + 1)}
+      status={status}
+    />
+  );
 }
 
-function RealDashboard({ dashboard }: { dashboard: Dashboard }) {
+function dashboardSource(dashboard: Dashboard): "atendly" | "external" {
+  const scheduling =
+    dashboard.scheduling.status === "ok" ? dashboard.scheduling.data : null;
+  return scheduling?.calendar.source === "EXTERNAL" ? "external" : "atendly";
+}
+
+function dashboardNeedsAttention(dashboard: Dashboard): boolean {
+  const scheduling =
+    dashboard.scheduling.status === "ok" ? dashboard.scheduling.data : null;
+  const ai = dashboard.ai.status === "ok" ? dashboard.ai.data : null;
+  const whatsapp =
+    dashboard.whatsapp.status === "ok" ? dashboard.whatsapp.data : null;
+  const external = scheduling?.calendar.source === "EXTERNAL";
+  const calendarUnavailable =
+    dashboard.scheduling.status === "error" ||
+    Boolean(
+      external && scheduling?.calendar.integration?.status !== "CONNECTED",
+    );
+  const aiUnavailable = dashboard.ai.status === "error";
+  const whatsappDisconnected = whatsapp?.status !== "CONNECTED";
+  const attentionCount = ai?.conversationsNeedingAttentionCount ?? 0;
+  const primaryIssue =
+    calendarUnavailable || whatsappDisconnected || aiUnavailable;
+  return primaryIssue || attentionCount > 0;
+}
+
+function StatusStrip({ status }: { status: UseSystemStatusResult }) {
+  return (
+    <section
+      id="operational-status"
+      className="operational-strip"
+      aria-label="Status operacional"
+    >
+      <span className="operational-icon">
+        <Icon name="shield" />
+      </span>
+      <div className="operational-copy">
+        <strong>Status honesto</strong>
+        <span>WhatsApp e IA conforme a última verificação real.</span>
+      </div>
+      <div className="operational-points">
+        <StatusPoint
+          activeCopy="WhatsApp conectado"
+          label="WhatsApp"
+          offCopy="WhatsApp desconectado"
+          view={status.whatsappView}
+        />
+        <StatusPoint
+          activeCopy="IA ativa"
+          label="IA"
+          offCopy="IA desligada"
+          view={status.aiView}
+        />
+      </div>
+    </section>
+  );
+}
+
+function StatusPoint({
+  activeCopy,
+  label,
+  offCopy,
+  view,
+}: {
+  activeCopy: string;
+  label: string;
+  offCopy: string;
+  view: StatusView;
+}) {
+  const copy =
+    view === "loading"
+      ? `Verificando ${label}`
+      : view === "unknown"
+        ? `${label} não confirmado`
+        : view === "active"
+          ? activeCopy
+          : offCopy;
+  return (
+    <span className="status-line" role="status">
+      <span
+        className={clsx(
+          "status-dot",
+          view === "off" && "danger",
+          (view === "loading" || view === "unknown") && "neutral",
+        )}
+        aria-hidden="true"
+      />
+      {copy}
+    </span>
+  );
+}
+
+function RealDashboard({
+  dashboard,
+  onRetry,
+  status,
+}: {
+  dashboard: Dashboard;
+  onRetry: () => void;
+  status: UseSystemStatusResult;
+}) {
   const scheduling =
     dashboard.scheduling.status === "ok" ? dashboard.scheduling.data : null;
   const ai = dashboard.ai.status === "ok" ? dashboard.ai.data : null;
@@ -268,13 +329,7 @@ function RealDashboard({ dashboard }: { dashboard: Dashboard }) {
   }).format(new Date());
 
   return (
-    <AppShell
-      active="inicio"
-      module="dashboard"
-      source={external ? "external" : "atendly"}
-      whatsapp={whatsappDisconnected ? "disconnected" : "connected"}
-      attention={Boolean(primaryIssue) || attentionCount > 0}
-    >
+    <>
       <div className="dashboard-page">
         <header className="dashboard-header">
           <div>
@@ -352,12 +407,18 @@ function RealDashboard({ dashboard }: { dashboard: Dashboard }) {
             </span>
           </div>
           <div className="operational-points">
-            <span className="status-line">
-              <span
-                className={`status-dot${whatsappDisconnected ? " danger" : ""}`}
-              />
-              WhatsApp
-            </span>
+            <StatusPoint
+              activeCopy="WhatsApp conectado"
+              label="WhatsApp"
+              offCopy="WhatsApp desconectado"
+              view={status.whatsappView}
+            />
+            <StatusPoint
+              activeCopy="IA ativa"
+              label="IA"
+              offCopy="IA desligada"
+              view={status.aiView}
+            />
             <span className="status-line">
               <span
                 className={`status-dot${calendarUnavailable ? " danger" : ""}`}
@@ -399,6 +460,13 @@ function RealDashboard({ dashboard }: { dashboard: Dashboard }) {
                 </span>
                 <h3>Consulta indisponível</h3>
                 <p>Horários antigos não serão apresentados como atuais.</p>
+                <button
+                  className="btn btn-secondary"
+                  onClick={onRetry}
+                  type="button"
+                >
+                  Tentar novamente
+                </button>
               </div>
             ) : todayAppointments.length === 0 ? (
               <div className="dashboard-empty">
@@ -564,6 +632,15 @@ function RealDashboard({ dashboard }: { dashboard: Dashboard }) {
                       ? "Novas conversas que exigirem ação humana aparecerão aqui."
                       : "Tente novamente antes de concluir que não há pendências."}
                   </p>
+                  {!ai && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={onRetry}
+                      type="button"
+                    >
+                      Tentar novamente
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -590,7 +667,7 @@ function RealDashboard({ dashboard }: { dashboard: Dashboard }) {
         </div>
         {empty && <span className="sr-only">Ambiente sem atividade hoje.</span>}
       </div>
-    </AppShell>
+    </>
   );
 }
 
@@ -607,287 +684,4 @@ function formatDateTime(value: string, timeZone: string): string {
     timeStyle: "short",
     timeZone,
   }).format(new Date(value));
-}
-
-export function DashboardScreen({
-  scenario = "atendly",
-}: {
-  scenario?: DashboardScenario;
-}) {
-  if (scenario === "loading")
-    return (
-      <AppShell active="inicio" module="dashboard" loading>
-        <LoadingDashboard />
-      </AppShell>
-    );
-  const content = scenarioContent[scenario];
-  const isError = scenario === "integration-error";
-  const disconnected = scenario === "whatsapp-disconnected";
-  const empty = scenario === "empty";
-  const external = content.source === "external";
-  const operationalTitle = isError
-    ? "Integração com problema"
-    : disconnected
-      ? "Atendimento automático pausado"
-      : external
-        ? "Integração disponível"
-        : "Tudo funcionando";
-  const operationalCopy = isError
-    ? "Minha Agenda permanece fonte oficial, mas não respondeu."
-    : disconnected
-      ? "Reconecte o WhatsApp para a Atendly voltar a responder clientes."
-      : external
-        ? "Minha Agenda continua controlando seus agendamentos."
-        : "WhatsApp conectado e Agenda Atendly disponível.";
-  const today = new Intl.DateTimeFormat("pt-BR", {
-    day: "numeric",
-    month: "long",
-    timeZone: "America/Sao_Paulo",
-    weekday: "long",
-  }).format(new Date());
-
-  return (
-    <AppShell
-      active="inicio"
-      module="dashboard"
-      source={content.source}
-      whatsapp={disconnected ? "disconnected" : "connected"}
-      attention={isError}
-    >
-      <div className="dashboard-page">
-        <header className="dashboard-header">
-          <div>
-            <h1>Olá, Felipe</h1>
-            <p className="dashboard-date">{today}</p>
-          </div>
-          <span className="dashboard-source">
-            <Icon name={external ? "refresh" : "calendar"} />
-            {external ? "Minha Agenda" : "Agenda Atendly"} · fonte oficial
-          </span>
-        </header>
-        {(isError || disconnected) && (
-          <div className="alert alert-error dashboard-banner" role="alert">
-            <Icon name="alert" />
-            <div>
-              <p className="alert-title">
-                {isError
-                  ? "Não foi possível consultar a Minha Agenda"
-                  : "WhatsApp desconectado"}
-              </p>
-              <p className="alert-text">
-                {isError
-                  ? "Horários podem estar desatualizados. Não confirme novos agendamentos pela Atendly até reconectar."
-                  : "Atendimento automático está pausado. Sua agenda continua disponível para uso manual."}
-              </p>
-            </div>
-            <Link
-              className="btn btn-primary"
-              href={
-                isError
-                  ? "/inicio?scenario=external"
-                  : "/configuracoes/whatsapp"
-              }
-            >
-              {isError ? "Tentar consultar novamente" : "Reconectar WhatsApp"}
-            </Link>
-          </div>
-        )}
-        <section id="operational-status" className="operational-strip">
-          <span
-            className={`operational-icon${isError || disconnected ? " danger" : ""}`}
-          >
-            <Icon name={isError || disconnected ? "alert" : "shield"} />
-          </span>
-          <div className="operational-copy">
-            <strong>{operationalTitle}</strong>
-            <span>{operationalCopy}</span>
-          </div>
-          <div className="operational-points">
-            <span className="status-line">
-              <span className={`status-dot${disconnected ? " danger" : ""}`} />
-              WhatsApp
-            </span>
-            <span className="status-line">
-              <span className={`status-dot${isError ? " danger" : ""}`} />
-              {external
-                ? isError
-                  ? "Agenda indisponível"
-                  : "Consulta concluída"
-                : "Agenda"}
-            </span>
-          </div>
-        </section>
-        {external && !isError && (
-          <div className="external-source-banner">
-            <Icon name="calendar" />
-            Minha Agenda é a fonte oficial · última consulta concluída nesta
-            sessão
-          </div>
-        )}
-        <div className="dashboard-grid">
-          <article id="agenda-today" className="card dashboard-card today-card">
-            <header className="dashboard-card-head">
-              <h2>Agenda de hoje</h2>
-              <span className={`badge${isError ? " badge-danger" : ""}`}>
-                {empty ? "0 atendimentos" : content.agendaBadge}
-              </span>
-            </header>
-            {isError ? (
-              <div className="error-state" style={{ padding: "24px 16px" }}>
-                <span className="state-icon">
-                  <Icon name="refresh" />
-                </span>
-                <h3>{content.agendaTitle}</h3>
-                <p>{content.agendaCopy}</p>
-              </div>
-            ) : empty ? (
-              <div className="dashboard-empty">
-                <div className="dashboard-empty-inner">
-                  <span className="state-icon">
-                    <Icon name="calendar" />
-                  </span>
-                  <h3>{content.agendaTitle}</h3>
-                  <p>{content.agendaCopy}</p>
-                </div>
-              </div>
-            ) : (
-              <div className="agenda-stack">
-                <div className="agenda-row">
-                  <strong className="agenda-time">—</strong>
-                  <div className="agenda-copy">
-                    <strong>{content.agendaTitle}</strong>
-                    <span>{content.agendaCopy}</span>
-                  </div>
-                  <span
-                    className={`badge${disconnected ? " badge-success" : ""}`}
-                  >
-                    {content.agendaBadge}
-                  </span>
-                </div>
-              </div>
-            )}
-          </article>
-          <article className="card dashboard-card next-card">
-            <header className="dashboard-card-head">
-              <h2>Próximo atendimento</h2>
-            </header>
-            <div className="next-focus">
-              <div>
-                <div className="next-focus-time">—</div>
-                <p>{content.nextCopy}</p>
-              </div>
-              <span className={`badge${isError ? " badge-danger" : ""}`}>
-                {isError
-                  ? "Não atualizado"
-                  : empty
-                    ? "Agenda livre"
-                    : external
-                      ? "Minha Agenda"
-                      : "Agenda Atendly"}
-              </span>
-            </div>
-          </article>
-          <article className="card dashboard-card outcomes-card">
-            <header className="dashboard-card-head">
-              <h2>O que a Atendly fez hoje</h2>
-            </header>
-            <div className="outcome-layout">
-              <div className="outcome-lead">
-                <div>
-                  <div className="outcome-value">{empty ? "0" : "—"}</div>
-                  <div className="outcome-label">
-                    Agendamentos feitos pela IA
-                  </div>
-                </div>
-                <small>{content.metricCopy}</small>
-              </div>
-              <div className="outcome-minis">
-                <div className="outcome-mini">
-                  <div>
-                    <strong>—</strong>
-                    <small>Horas economizadas</small>
-                  </div>
-                </div>
-                <div className="outcome-mini">
-                  <div>
-                    <strong>—</strong>
-                    <small>
-                      {isError || empty
-                        ? "Receita estimada"
-                        : "Receita estimada, quando disponível"}
-                    </small>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </article>
-          <article
-            id="attention"
-            className="card dashboard-card attention-card"
-          >
-            <header className="dashboard-card-head">
-              <h2>Precisam de atenção</h2>
-              <span
-                className={`badge ${empty ? "badge-success" : isError || disconnected ? "badge-attention" : "badge-attention"}`}
-              >
-                {empty
-                  ? "Nenhuma"
-                  : isError || disconnected
-                    ? "Ação necessária"
-                    : "— conversas"}
-              </span>
-            </header>
-            <div className={empty ? "dashboard-empty" : "attention-list"}>
-              <div
-                className={empty ? "dashboard-empty-inner" : "attention-row"}
-              >
-                {!empty && (
-                  <span className="avatar">
-                    <Icon name={isError ? "alert" : "chat"} />
-                  </span>
-                )}
-                <div className="attention-row-main">
-                  <strong>{content.attentionTitle}</strong>
-                  <span>{content.attentionCopy}</span>
-                </div>
-              </div>
-            </div>
-          </article>
-          <section className="card dashboard-card quick-card">
-            <header className="dashboard-card-head">
-              <h2>Ações rápidas</h2>
-            </header>
-            <div className="quick-actions">
-              <Link
-                className="btn btn-primary"
-                href={
-                  isError
-                    ? "/configuracoes/agenda"
-                    : disconnected
-                      ? "/configuracoes/whatsapp"
-                      : "#agenda-today"
-                }
-              >
-                {isError
-                  ? "Tentar novamente"
-                  : disconnected
-                    ? "Reconectar WhatsApp"
-                    : external
-                      ? "Ver agenda consultada"
-                      : "Ver agenda de hoje"}
-              </Link>
-              {!isError && !empty && (
-                <Link className="btn btn-secondary" href="/conversas">
-                  Ver conversas com atenção
-                </Link>
-              )}
-              <a className="btn btn-secondary" href="#operational-status">
-                Revisar status
-              </a>
-            </div>
-          </section>
-        </div>
-      </div>
-    </AppShell>
-  );
 }

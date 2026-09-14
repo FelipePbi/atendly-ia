@@ -11,7 +11,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Saúde | `GET /health`; `GET /health/dependencies` |
 | Autenticação | `POST /v1/auth/register`; `POST /v1/auth/login`; `POST /v1/auth/logout`; `GET /v1/auth/session`; `PATCH /v1/auth/password`; `POST /v1/auth/forgot-password`; `POST /v1/auth/reset-password` |
 | Onboarding | `GET /v1/onboarding`; `PATCH /v1/onboarding`; `POST /v1/onboarding/complete` |
-| Home | `GET /v1/dashboard` |
+| Home | `GET /v1/dashboard`; `GET /v1/status` (Goal014) |
 | Conversas | `GET /v1/conversations`; `GET /v1/conversations/:id`; `GET /v1/conversations/:id/messages`; `POST /v1/conversations/:id/messages`; `POST /v1/conversations/:id/takeover`; `POST /v1/conversations/:id/release`; `POST /v1/conversations/:id/resolve`; `PUT /v1/conversations/:id/category`; `PUT /v1/conversations/:id/ignore`; `POST /v1/conversations/:id/suggestions` (Goal012) |
 | Agendamentos | `GET /v1/appointments`; `GET /v1/appointments/:id`; `POST /v1/appointments`; `POST /v1/appointments/:id/reschedule`; `POST /v1/appointments/:id/cancel` |
 | Ciclo de vida do atendimento | `POST /v1/appointments/:id/complete`; `POST /v1/appointments/:id/no-show`; `POST /v1/appointments/:id/final-value`; `POST /v1/appointments/:id/presence`; `GET /v1/appointments/:id/events` |
@@ -266,6 +266,32 @@ Estas rotas são **só humano**: não existe contrato de importação do lado da
 `previewVersion` é obrigatória em `execute` de propósito: executar é executar o preview que o negócio aprovou. Se a origem mudou desde a análise, a versão vigente é outra e a resposta é `409 IMPORT_PREVIEW_STALE` — sem o campo, omitir a versão executaria a análise vigente qualquer que fosse ela, e a recusa de preview obsoleto viraria opt-in de quem chama. Agendamento futuro cujo horário já está ocupado por um atendimento da Agenda Atendly não é sobreposto: o item fica em `NEEDS_REVIEW` com `APPOINTMENT_SLOT_TAKEN` e a decisão volta para o negócio.
 
 Uma vez concluída (`POST .../complete`), a sessão é o único registro definitivo do negócio: `POST /v1/calendar/imports` para o mesmo negócio devolve `409 IMPORT_ALREADY_COMPLETED` — não existe uma segunda importação. Decisão já tomada em um item, ou item já resolvido pela execução, recusa uma segunda decisão com `409 IMPORT_ITEM_ALREADY_DECIDED`.
+
+## Status honesto do WhatsApp e da IA (Goal014)
+
+`GET /v1/status` é um read model dedicado — não substitui `GET /v1/dashboard`, que continua com seu próprio contrato. Ele existe para o shell mostrar, em qualquer tela, se o número está de fato conectado e se a IA está de fato respondendo, sem inferir a partir de configuração local: `whatsapp.status` só é `CONNECTED` depois de consultar o Evolution nesta própria requisição, e `ai.state` só é `ACTIVE` depois de consultar a IA. Nenhum dos dois é deduzido do que foi salvo — dado salvo é *desejado*, não *efetivo*.
+
+```json
+{
+  "data": {
+    "whatsapp": { "status": "CONNECTED", "phoneNumber": "5511999999999", "checkedAt": "2026-09-14T12:00:00.000Z" },
+    "ai": { "desiredEnabled": true, "effectiveEnabled": true, "state": "ACTIVE" },
+    "degraded": false
+  }
+}
+```
+
+| Campo | Valores | Significado |
+| --- | --- | --- |
+| `whatsapp.status` | `CONNECTED`, `DISCONNECTED`, `UNKNOWN` | `CONNECTED`/`DISCONNECTED` vêm da verificação real no Evolution, feita nesta requisição, do mesmo jeito que `GET /v1/dashboard` verifica; `UNKNOWN` é quando o Evolution não respondeu, e não quando não existe vínculo — negócio sem número ligado é `DISCONNECTED` |
+| `whatsapp.phoneNumber` | telefone ou `null` | número reportado pelo Evolution, ou o último guardado quando ele não informou um novo |
+| `whatsapp.checkedAt` | timestamp ISO | instante desta verificação, sempre "agora" — a rota nunca reaproveita uma leitura antiga |
+| `ai.desiredEnabled` | booleano | o que o negócio configurou em `PATCH /v1/settings/ai` (`AiSettings.enabled`), local ao BFF |
+| `ai.effectiveEnabled` | booleano ou `null` | o que a IA relata como configuração ativa; `null` quando o tenant ainda não foi projetado lá ou quando a IA não respondeu |
+| `ai.state` | `ACTIVE`, `OFF`, `PENDING`, `UNKNOWN` | `ACTIVE`: desejado ligado e a IA confirma ligado. `OFF`: desejado desligado — não importa o que a IA relate. `PENDING`: desejado ligado mas a IA relata desligado, `null` ou ainda não foi projetado. `UNKNOWN`: a IA não respondeu a esta requisição |
+| `degraded` | booleano | `true` quando o Evolution ou a IA não responderam nesta requisição |
+
+Indisponibilidade de qualquer dependência vira `UNKNOWN` (nunca um valor otimista) e nunca `500`: o erro é registrado e a resposta segue `200` com `degraded: true`. O tenant é sempre o da sessão autenticada, como em `GET /v1/dashboard`; não é possível ler ou influenciar o status de outro negócio.
 
 ## Vínculo WhatsApp: estados ambíguos
 

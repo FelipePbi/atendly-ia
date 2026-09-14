@@ -1,5 +1,6 @@
 "use client";
 
+import clsx from "clsx";
 import { type ReactNode, useEffect, useId, useRef } from "react";
 
 import { Icon } from "@/shared/icons/Icon";
@@ -10,7 +11,7 @@ type DialogProps = {
   onClose: () => void;
   open: boolean;
   title: string;
-  variant?: "modal" | "sheet";
+  variant?: "modal" | "sheet" | "drawer";
 };
 
 export function Dialog({
@@ -59,9 +60,18 @@ export function Dialog({
   }, [onClose, open]);
 
   if (!open) return null;
+  const wrapClassName = clsx("overlay", {
+    "bottom-sheet-wrap": variant === "sheet",
+    "drawer-wrap": variant === "drawer",
+  });
+  const panelClassName = clsx({
+    modal: variant === "modal",
+    "bottom-sheet": variant === "sheet",
+    drawer: variant === "drawer",
+  });
   return (
     <div
-      className={`overlay${variant === "sheet" ? " bottom-sheet-wrap" : ""}`}
+      className={wrapClassName}
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -70,7 +80,7 @@ export function Dialog({
       <section
         aria-labelledby={titleId}
         aria-modal="true"
-        className={variant === "sheet" ? "bottom-sheet" : "modal"}
+        className={panelClassName}
         ref={panelRef}
         role="dialog"
       >

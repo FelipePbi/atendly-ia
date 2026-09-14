@@ -4,11 +4,10 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 
 const routeTitles: [RegExp, string][] = [
-  [/^\/_preview\//, "Pré-visualização"],
   [/^\/login$/, "Entrar"],
   [/^\/cadastro$/, "Criar conta"],
   [/^\/recuperar-senha$/, "Recuperar senha"],
-  [/^\/solicitacao-enviada$/, "Solicitação enviada"],
+  [/^\/solicitacao-enviada$/, "Senha redefinida"],
   [/^\/nova-senha$/, "Nova senha"],
   [/^\/link-expirado$/, "Link expirado"],
   [/^\/onboarding/, "Configuração inicial"],

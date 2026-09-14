@@ -12,7 +12,7 @@ import {
 
 import { BffHttpError, type Conversation, type Message } from "@/data";
 import { Icon, type IconName } from "@/shared/icons/Icon";
-import { AppShell } from "@/shared/layout/AppShell";
+import { useShellConfig } from "@/shared/layout/ShellConfig";
 import {
   getProductServices,
   useProductRuntime,
@@ -115,13 +115,15 @@ function ConversationList() {
     [conversations],
   );
 
+  useShellConfig({
+    active: "conversas",
+    attention: counts.waiting > 0,
+    loading,
+    module: "conversations",
+    title: "Conversas",
+  });
   return (
-    <AppShell
-      active="conversas"
-      attention={counts.waiting > 0}
-      loading={loading}
-      module="conversations"
-    >
+    <>
       <div className="conversation-list-page">
         <header className="conversation-page-header">
           <div>
@@ -255,7 +257,7 @@ function ConversationList() {
             ))}
         </section>
       </div>
-    </AppShell>
+    </>
   );
 }
 
@@ -367,28 +369,39 @@ function ConversationDetail({ conversationId }: { conversationId: string }) {
     }
   }
 
+  const ready = !loading && !error && Boolean(conversation);
+  const earlyState = conversation ? conversationViewState(conversation) : null;
+  useShellConfig({
+    active: "conversas",
+    attention: earlyState === "waiting" || earlyState === "paused",
+    loading,
+    mainClassName: ready ? "conversation-detail-main" : undefined,
+    module: "conversations",
+    showBottomNav: !ready,
+    showMobileHeader: !ready,
+    title: conversation ? conversationLabel(conversation) : "Conversas",
+  });
+
   if (loading || error || !conversation) {
     return (
-      <AppShell active="conversas" loading={loading} module="conversations">
-        <div className="conversation-list-page">
-          <section className="conversation-list-surface conversation-list-state">
-            {loading ? (
-              <ConversationListLoading />
-            ) : (
-              <StatePanel
-                actionHref="/conversas"
-                actionLabel="Voltar para conversas"
-                description={
-                  error ?? "A conversa solicitada não está disponível."
-                }
-                icon="alert"
-                title="Não foi possível abrir a conversa"
-                tone="error"
-              />
-            )}
-          </section>
-        </div>
-      </AppShell>
+      <div className="conversation-list-page">
+        <section className="conversation-list-surface conversation-list-state">
+          {loading ? (
+            <ConversationListLoading />
+          ) : (
+            <StatePanel
+              actionHref="/conversas"
+              actionLabel="Voltar para conversas"
+              description={
+                error ?? "A conversa solicitada não está disponível."
+              }
+              icon="alert"
+              title="Não foi possível abrir a conversa"
+              tone="error"
+            />
+          )}
+        </section>
+      </div>
     );
   }
 
@@ -409,14 +422,7 @@ function ConversationDetail({ conversationId }: { conversationId: string }) {
   );
 
   return (
-    <AppShell
-      active="conversas"
-      attention={state === "waiting" || state === "paused"}
-      mainClassName="conversation-detail-main"
-      module="conversations"
-      showBottomNav={false}
-      showMobileHeader={false}
-    >
+    <>
       <div className="conversation-workspace">
         <aside className="conversation-rail" aria-label="Conversas recentes">
           <header className="conversation-rail-header">
@@ -663,7 +669,7 @@ function ConversationDetail({ conversationId }: { conversationId: string }) {
           </button>
         </div>
       </Dialog>
-    </AppShell>
+    </>
   );
 }
 

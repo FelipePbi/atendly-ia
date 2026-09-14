@@ -20,6 +20,7 @@ import { registerV1MigrationRoutes } from "./modules/migrations/routes.js";
 import { registerV1OnboardingRoutes } from "./modules/onboarding/routes.js";
 import { registerV1ServiceRoutes } from "./modules/services/routes.js";
 import { registerV1SettingsRoutes } from "./modules/settings/routes.js";
+import { registerV1StatusRoutes } from "./modules/status/routes.js";
 import { registerV1WhatsAppRoutes } from "./modules/whatsapp/routes.js";
 import { registerHealthRoutes } from "./routes/health.js";
 
@@ -106,6 +107,7 @@ export async function buildApp() {
   await registerV1AuthRoutes(app);
   await registerV1OnboardingRoutes(app);
   await registerV1DashboardRoutes(app);
+  await registerV1StatusRoutes(app);
   await registerV1ConversationRoutes(app);
   await registerV1CalendarRoutes(app);
   await registerV1MigrationRoutes(app);

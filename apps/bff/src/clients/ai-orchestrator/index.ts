@@ -174,6 +174,18 @@ const conversationSuggestionsSchema = z.object({
   promptVersion: z.string(),
 });
 
+// Goal014/WU-02: leitura da configuração efetiva do tenant na IA, para o read
+// model de status. `null` é resposta válida — tenant ainda não projetado —,
+// distinta de indisponibilidade, que o chamador trata pelo próprio erro da
+// requisição (`UPSTREAM_ERROR`), nunca fabricado aqui.
+const aiTenantConfigStateSchema = z
+  .object({
+    enabled: z.boolean(),
+    tone: z.string(),
+    promptVersion: z.string(),
+  })
+  .nullable();
+
 export class AiOrchestratorClient {
   private readonly http = new InternalHttpClient(
     env.AI_ORCHESTRATOR_BASE_URL,
@@ -338,6 +350,17 @@ export class AiOrchestratorClient {
       use: "provisioning",
       schema: z.object({ ok: z.literal(true), config: z.unknown() }),
     });
+  }
+
+  async getAiTenantConfig(context: InternalRequestContext) {
+    return (
+      await this.http.request({
+        method: "GET",
+        path: "/internal/ai-tenant-config",
+        context,
+        schema: envelope(aiTenantConfigStateSchema),
+      })
+    ).data;
   }
 
   async provisionEvolutionChannel(

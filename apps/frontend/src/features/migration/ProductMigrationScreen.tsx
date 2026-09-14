@@ -11,7 +11,7 @@ import {
   type MigrationDiagnosis,
 } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
-import { AppShell } from "@/shared/layout/AppShell";
+import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { StatePanel } from "@/shared/ui/States";
 
@@ -758,15 +758,13 @@ function MigrationShell({
     : target === "ATENDLY"
       ? "EXTERNAL"
       : "ATENDLY";
-  return (
-    <AppShell
-      active="configuracoes"
-      module="migration"
-      source={source === "EXTERNAL" ? "external" : "atendly"}
-    >
-      {children}
-    </AppShell>
-  );
+  useShellConfig({
+    active: "configuracoes",
+    module: "migration",
+    source: source === "EXTERNAL" ? "external" : "atendly",
+    title: "Migração de agenda",
+  });
+  return <>{children}</>;
 }
 
 function MigrationLoading() {

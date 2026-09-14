@@ -24,7 +24,10 @@ export function StatePanel({
   onAction,
 }: StateProps) {
   return (
-    <div className={tone === "error" ? "error-state" : "empty-state"}>
+    <div
+      className={tone === "error" ? "error-state" : "empty-state"}
+      role={tone === "error" ? "alert" : undefined}
+    >
       <div className="state-icon">
         <Icon name={icon} />
       </div>

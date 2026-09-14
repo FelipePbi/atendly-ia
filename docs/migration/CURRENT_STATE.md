@@ -1162,3 +1162,79 @@ inbox durável estão superados pelos fatos abaixo, verificados no
   envio de mídia pela profissional são do Goal017; retenção é do Goal022.
   `webhook_deliveries` no Go continua guardando o payload integral do evento,
   incluindo o `base64` — o mesmo limite já registrado em G-04.
+
+## Delta implementado — Goal014, 2026-09-14 (ACCEPTED na rodada 3)
+
+A fotografia histórica acima permanece como registro da baseline. Os FATOS da seção
+"Frontend, referência visual e contratos" que descrevem WhatsApp `connected` presumido,
+bottom nav com três destinos escondendo Clientes, identidade Inter/IBM Plex Mono e
+telas de preview como parte do frontend estão superados pelos fatos abaixo, verificados
+no [review014](reviews/014-review.md) sobre a base `7ad3b66`.
+
+- **FATO atual:** `src/shared/styles/tokens.css` é a fonte única dos tokens semânticos
+  do frontend — cor da direção Recepção (papel `#F7F4EF`, superfície `#FFFDFA`,
+  petróleo `#0F5F63`, tinta `#221E1A` e as funcionais de estado), tipografia,
+  espaçamento, raio, sombra, anel de foco, escala de z-index nomeada e movimento com
+  durações, easing e `prefers-reduced-motion`. Literata (display) e Hanken Grotesk
+  (corpo) são servidas localmente de `public/fonts/` em woff2, com `OFL.txt` de cada
+  família no repositório e fallback declarado; nenhuma fonte é carregada de terceiro em
+  runtime. Inter e IBM Plex Mono saíram da base e os `.ttf` foram removidos. Os
+  `atendly-*.css` por módulo continuam valendo para as telas ainda não redesenhadas,
+  mas herdam os tokens pelos nomes de variável que já usavam. Tema claro apenas.
+- **FATO atual:** o shell é mobile-first com **cinco** destinos. `shared/layout/navigation.ts`
+  guarda o modelo como dado testável: sidebar com Início, Conversas, Agenda, Clientes e
+  Serviços; bottom nav mobile com Início, Conversas, Agenda, Clientes e "Mais", sendo
+  "Mais" uma **lista de destinos** (Serviços, Negócio, Agenda, IA, WhatsApp, Importação,
+  Conta) e não um painel de cards. Clientes deixou de estar escondido. `+` é contextual
+  por módulo. Skip link, `aria-current` (inclusive em "Mais" para qualquer destino fora
+  das quatro abas), anúncio de rota e menu de conta por teclado seguem existindo.
+- **FATO atual:** o `AppShell` é montado **uma vez** por `src/app/(platform)/layout.tsx`,
+  sobre `ShellConfigProvider`. As telas não renderizam mais o próprio shell: declaram
+  destino ativo, título, ação contextual e sinalizadores por `useShellConfig`, e uma tela
+  pode pedir `chrome: false` para sair do shell. Trocar de rota não remonta sidebar,
+  bottom nav nem o status. Vale a invariante **uma chamada de `useShellConfig` por
+  árvore renderizada**: o hook roda um layout effect sem lista de dependências, então
+  duas declarações vivas na mesma cadeia pai/filho com configs divergentes produzem
+  `Maximum update depth exceeded` — foi o blocker das rodadas 1 e 2.
+- **FATO atual:** as telas de demonstração sem prefixo `Product` (`AgendaScreen`,
+  `ConversationsScreen`, `DirectoryScreen`, `PreviewScreen`), as rotas
+  `src/app/%5Fpreview/` e a pasta `public/personas-ui/` não existem mais. O inventário do
+  frontend deixou de misturar caminho real com cenário de demonstração.
+- **FATO atual:** existe read model honesto de status. Na IA,
+  `GET /internal/ai-tenant-config` devolve `enabled`, `tone` e `promptVersion` efetivos do
+  tenant do contexto confiável, ou `null` quando o tenant nunca foi projetado, sob escopo
+  próprio `tenant-config:read` concedido só ao uso `command` — o `PUT` continua em
+  `tenant-config:write`. No BFF, `GET /v1/status` verifica Evolution e IA **na própria
+  requisição**, em paralelo com a leitura local de `AiSettings`, e devolve `whatsapp`
+  (`CONNECTED | DISCONNECTED | UNKNOWN`, `phoneNumber`, `checkedAt` do instante da
+  verificação), `ai` (`desiredEnabled` do BFF, `effectiveEnabled` da IA ou `null` e o
+  `state` derivado `ACTIVE | OFF | PENDING | UNKNOWN`) e `degraded`. Dependência
+  indisponível vira `UNKNOWN` com `200` e `degraded: true`, nunca `500`. O tenant é
+  sempre o da sessão. `GET /v1/dashboard` não mudou de contrato.
+- **FATO atual:** `shared/runtime/systemStatus.ts` mapeia fase da requisição mais valor do
+  read model para quatro estados visuais distintos — `loading` antes da primeira resposta,
+  `unknown` quando a requisição falha, `active` só com leitura confirmada e `off` no resto.
+  Não existe mais default `connected` no código. `PENDING` é um estado do contrato, mas na
+  UI ainda se apresenta como "IA desligada": copy própria fica para o Goal018, junto com a
+  reconciliação desired/effective e a autoativação.
+- **FATO atual:** login e cadastro estão no visual aprovado **sem** perder a integração
+  real do Goal003 (`/v1/auth/login`, `/v1/auth/register` com aceite de Termos e Política,
+  `/v1/auth/session`, `/v1/auth/logout`), com erro do BFF junto ao campo certo e os demais
+  valores preservados. A recuperação de senha é experiência **visual**: máquina de estados
+  pura em `features/auth/recoveryMachine.ts` com quatro passos (e-mail, código, nova senha,
+  sucesso), sem chamada de rede e sem copy que afirme envio de e-mail. O fluxo por link do
+  Goal003 — `/nova-senha`, `/link-expirado` e as rotas do BFF — continua intacto e
+  funcional, apenas sem entrada a partir da UI.
+- **FATO atual:** `/inicio` usa as primitivas e o read model para status de IA e WhatsApp,
+  pendências e próximos atendimentos do `GET /v1/dashboard`, com skeleton, erro recuperável
+  que preserva a estrutura e empty states. `shared/ui/` passou a ter `Badge`, `Field`,
+  `ListItem`, `PageHeader`, `Spinner` e `Toast` ao lado de `Button`, `Dialog` (modal, sheet
+  e drawer), `States` e `RouteAnnouncer`. `Field`, `ListItem`, `Toast` e `Spinner` ainda não
+  têm consumidor de tela.
+- **LIMITE:** nenhuma tela autenticada é exercitada renderizada. O gate `validate:ui`
+  (Playwright em 360, 390, 768, 1024 e 1440) cobre apenas rotas públicas — login, cadastro,
+  recuperação, política de privacidade e solicitação enviada —, e `tests/` não monta nenhuma
+  tela de dentro do shell. Sidebar, bottom nav, "Mais" e a linha de status não passaram por
+  render em nenhuma largura. Em ≤1099px, a regra legada `.sidebar .wa-status span` esconde
+  também o `.status-dot`, então o rail fica sem indicador de status — herdado do CSS
+  anterior, não introduzido aqui.

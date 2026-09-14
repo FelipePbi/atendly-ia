@@ -23,7 +23,7 @@ import {
   type ServiceList,
 } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
-import { AppShell } from "@/shared/layout/AppShell";
+import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { CurrencyInput } from "@/shared/ui/CurrencyInput";
 import { Dialog } from "@/shared/ui/Dialog";
@@ -99,19 +99,25 @@ function CustomerListPage() {
   }, [filter, query, result]);
 
   const external = result?.source === "EXTERNAL";
+  const canCreate = Boolean(result && !result.managedExternally);
+  useShellConfig({
+    action: canCreate
+      ? { href: "/clientes/novo", icon: "plus", label: "Novo cliente" }
+      : undefined,
+    active: "clientes",
+    loading: !result && !error,
+    module: "directory",
+    source: external ? "external" : "atendly",
+    title: "Clientes",
+  });
   return (
-    <AppShell
-      active="clientes"
-      module="directory"
-      source={external ? "external" : "atendly"}
-      loading={!result && !error}
-    >
+    <>
       <section className="directory-page">
         <DirectoryHeader
           description="Informações úteis para identificar clientes e acompanhar agendamentos."
           title="Clientes"
           action={
-            result && !result.managedExternally ? (
+            canCreate ? (
               <Link className="btn btn-primary" href="/clientes/novo">
                 <Icon name="plus" />
                 <span>Novo cliente</span>
@@ -227,7 +233,7 @@ function CustomerListPage() {
           </>
         )}
       </section>
-    </AppShell>
+    </>
   );
 }
 
@@ -293,13 +299,18 @@ function ServiceListPage() {
     }
   }
 
+  useShellConfig({
+    action: result?.editable
+      ? { href: "/servicos/novo", icon: "plus", label: "Novo serviço" }
+      : undefined,
+    active: "servicos",
+    loading: !result && !error,
+    module: "directory",
+    source: external ? "external" : "atendly",
+    title: "Serviços",
+  });
   return (
-    <AppShell
-      active="servicos"
-      module="directory"
-      source={external ? "external" : "atendly"}
-      loading={!result && !error}
-    >
+    <>
       <section className="directory-page">
         <DirectoryHeader
           description="Organize o que pode ser agendado, com duração, preço e estado claros."
@@ -489,7 +500,7 @@ function ServiceListPage() {
           </button>
         </div>
       </Dialog>
-    </AppShell>
+    </>
   );
 }
 
@@ -536,13 +547,15 @@ function CustomerDetail({ customerId }: { customerId?: string }) {
   }, [customerId]);
 
   const external = calendar?.source === "EXTERNAL";
+  useShellConfig({
+    active: "clientes",
+    loading: !customer && !error,
+    module: "directory",
+    source: external ? "external" : "atendly",
+    title: "Detalhes do cliente",
+  });
   return (
-    <AppShell
-      active="clientes"
-      module="directory"
-      source={external ? "external" : "atendly"}
-      loading={!customer && !error}
-    >
+    <>
       <section className="directory-page">
         <header className="directory-page-header">
           <Link className="btn btn-tertiary" href="/clientes">
@@ -650,7 +663,7 @@ function CustomerDetail({ customerId }: { customerId?: string }) {
           </>
         )}
       </section>
-    </AppShell>
+    </>
   );
 }
 
@@ -697,13 +710,15 @@ function CustomerForm() {
   }
 
   const external = calendar?.source === "EXTERNAL";
+  useShellConfig({
+    active: "clientes",
+    loading: !calendar && !loadingError,
+    module: "directory",
+    source: external ? "external" : "atendly",
+    title: "Novo cliente",
+  });
   return (
-    <AppShell
-      active="clientes"
-      module="directory"
-      source={external ? "external" : "atendly"}
-      loading={!calendar && !loadingError}
-    >
+    <>
       <section className="directory-page is-form-page">
         <DirectoryHeader
           title="Novo cliente"
@@ -783,7 +798,7 @@ function CustomerForm() {
           </form>
         )}
       </section>
-    </AppShell>
+    </>
   );
 }
 
@@ -863,13 +878,15 @@ function ServiceForm({
   }
 
   const external = catalog?.source === "EXTERNAL";
+  useShellConfig({
+    active: "servicos",
+    loading: !catalog && !error,
+    module: "directory",
+    source: external ? "external" : "atendly",
+    title: edit ? "Editar serviço" : "Novo serviço",
+  });
   return (
-    <AppShell
-      active="servicos"
-      module="directory"
-      source={external ? "external" : "atendly"}
-      loading={!catalog && !error}
-    >
+    <>
       <section className="directory-page is-form-page">
         <DirectoryHeader
           title={edit ? "Editar serviço" : "Novo serviço"}
@@ -1021,7 +1038,7 @@ function ServiceForm({
           </form>
         )}
       </section>
-    </AppShell>
+    </>
   );
 }
 

@@ -27,9 +27,19 @@ import {
   COMPLEXITY,
   ROUTING_STAGES,
   routeDeveloper,
+  authorizeReviewEscalation,
   routeTechLead,
   toJobRouting,
 } from '../lib/model-routing.mjs';
+
+/**
+ * A review job already running on the specialist. Routing never selects Fable
+ * on its own any more, so the only way to be on it is to have escalated there.
+ */
+const escalatedToFable = (assessment) => authorizeReviewEscalation({
+  request: { reason: 'ARCHITECTURAL_RISK_DISCOVERED', evidence: ['the Opus round could not settle the question'] },
+  current: routeTechLead({ stage: ROUTING_STAGES.REVIEW, assessment }),
+}).decision;
 import { renderRoutingSummary, summarizeRouting } from '../lib/routing-summary.mjs';
 
 const NOW = Date.parse('2026-09-09T10:00:00.000Z');
@@ -253,9 +263,8 @@ test('28. a Sonnet usage limit falls back to Opus, recorded as CAPACITY and not 
 
 test('26. a harness failure on Fable stops for a human instead of falling back', async () => {
   await withStore(async (store) => {
-    const base = toJobRouting(routeTechLead({
-      stage: ROUTING_STAGES.REVIEW,
-      assessment: { classification: COMPLEXITY.CRITICAL, riskScore: 8, signals: ['MIGRATION'] },
+    const base = toJobRouting(escalatedToFable({
+      classification: COMPLEXITY.CRITICAL, riskScore: 8, signals: ['MIGRATION'],
     }));
     await store.publishJob('tech_lead', revJob(base));
     const router = createAttemptRouter({
@@ -290,9 +299,8 @@ test('26. a harness failure on Fable stops for a human instead of falling back',
 
 test('20. a Fable usage limit falls back to Opus rather than parking the pipeline for days', async () => {
   await withStore(async (store) => {
-    const base = toJobRouting(routeTechLead({
-      stage: ROUTING_STAGES.REVIEW,
-      assessment: { classification: COMPLEXITY.HIGH, riskScore: 5, signals: ['MIGRATION'] },
+    const base = toJobRouting(escalatedToFable({
+      classification: COMPLEXITY.HIGH, riskScore: 5, signals: ['MIGRATION'],
     }));
     await store.publishJob('tech_lead', revJob(base));
     const router = createAttemptRouter({

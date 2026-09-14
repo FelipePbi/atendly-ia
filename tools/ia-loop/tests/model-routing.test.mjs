@@ -44,26 +44,39 @@ const at = (classification, riskScore = 0, signals = []) => ({ classification, r
 // 25. Routing tables
 // ===========================================================================
 
-test('25. planning: LOW and MEDIUM go to Opus, HIGH and CRITICAL go to Fable', () => {
-  for (const level of [COMPLEXITY.LOW, COMPLEXITY.MEDIUM]) {
+test('25. planning goes to Opus at every complexity the classifier can produce', () => {
+  for (const level of [COMPLEXITY.LOW, COMPLEXITY.MEDIUM, COMPLEXITY.HIGH, COMPLEXITY.CRITICAL]) {
     const routed = routeTechLead({ stage: ROUTING_STAGES.PLANNING, assessment: at(level) });
     assert.equal(routed.modelKey, 'opus', level);
     assert.equal(routed.effort, 'high', level);
     assert.equal(routed.fallbackAllowed, false, 'the standard model has nothing to fall back to');
   }
-  for (const level of [COMPLEXITY.HIGH, COMPLEXITY.CRITICAL]) {
-    const routed = routeTechLead({ stage: ROUTING_STAGES.PLANNING, assessment: at(level) });
-    assert.equal(routed.modelKey, 'fable', level);
-    assert.equal(routed.effort, 'high', level);
-    assert.equal(routed.fallbackAllowed, true, 'the specialist may fall back on a quota');
-  }
 });
 
 test('25. review routes on the same table as planning', () => {
-  assert.equal(routeTechLead({ stage: ROUTING_STAGES.REVIEW, assessment: at(COMPLEXITY.LOW) }).modelKey, 'opus');
-  assert.equal(routeTechLead({ stage: ROUTING_STAGES.REVIEW, assessment: at(COMPLEXITY.MEDIUM) }).modelKey, 'opus');
-  assert.equal(routeTechLead({ stage: ROUTING_STAGES.REVIEW, assessment: at(COMPLEXITY.HIGH) }).modelKey, 'fable');
-  assert.equal(routeTechLead({ stage: ROUTING_STAGES.REVIEW, assessment: at(COMPLEXITY.CRITICAL) }).modelKey, 'fable');
+  for (const level of [COMPLEXITY.LOW, COMPLEXITY.MEDIUM, COMPLEXITY.HIGH, COMPLEXITY.CRITICAL]) {
+    assert.equal(routeTechLead({ stage: ROUTING_STAGES.REVIEW, assessment: at(level) }).modelKey, 'opus', level);
+  }
+});
+
+test('25. the classification is recorded even though it no longer picks the model', () => {
+  const routed = routeTechLead({
+    stage: ROUTING_STAGES.REVIEW,
+    assessment: at(COMPLEXITY.CRITICAL, 17, ['SECURITY', 'MIGRATION']),
+  });
+  assert.equal(routed.modelKey, 'opus');
+  assert.equal(routed.complexity, COMPLEXITY.CRITICAL, 'the audit keeps what the classifier saw');
+  assert.equal(routed.riskScore, 17);
+  assert.deepEqual(routed.signals, ['SECURITY', 'MIGRATION']);
+});
+
+test('25. no assessment reaches the specialist by routing alone', () => {
+  for (const stage of [ROUTING_STAGES.PLANNING, ROUTING_STAGES.REVIEW]) {
+    for (const score of [0, 4, 7, 20, 99]) {
+      const routed = routeTechLead({ stage, assessment: at(COMPLEXITY.CRITICAL, score) });
+      assert.notEqual(routed.modelKey, 'fable', `${stage} @ ${score}`);
+    }
+  }
 });
 
 test('25. the Developer default is Sonnet, and escalation is Opus', () => {
@@ -141,7 +154,6 @@ test('planning reaches HIGH when something actually went wrong', () => {
     history: { previousRoundRejected: true, previousDeveloperEscalation: true },
   });
   assert.ok(assessment.riskScore >= RISK_THRESHOLDS.HIGH, `score ${assessment.riskScore}`);
-  assert.equal(routeTechLead({ stage: ROUTING_STAGES.PLANNING, assessment }).modelKey, 'fable');
 });
 
 test('a review reaches HIGH on evidence the diff carries, not on wording', () => {
@@ -158,7 +170,6 @@ test('a review reaches HIGH on evidence the diff carries, not on wording', () =>
     ],
   });
   assert.ok(real.riskScore >= RISK_THRESHOLDS.HIGH, `score ${real.riskScore}`);
-  assert.equal(routeTechLead({ stage: ROUTING_STAGES.REVIEW, assessment: real }).modelKey, 'fable');
 });
 
 test('the classifier reads Portuguese and English alike', () => {
@@ -205,7 +216,7 @@ test('review risk is scored from the diff that exists, not from prose', () => {
   assert.ok(assessment.signals.includes('MIGRATION'), 'a migration path IS a migration');
   assert.ok(assessment.signals.includes('SECURITY'), 'a session file is security surface');
   assert.ok(assessment.signals.includes('CROSS_CUTTING'), 'three apps is cross-cutting');
-  assert.equal(routeTechLead({ stage: ROUTING_STAGES.REVIEW, assessment }).modelKey, 'fable');
+  assert.ok(assessment.riskScore >= RISK_THRESHOLDS.HIGH, `score ${assessment.riskScore}`);
 });
 
 test('18. a Developer escalation raises the review risk by itself', () => {
@@ -220,7 +231,15 @@ test('18. a Developer escalation raises the review risk by itself', () => {
 // 26. Fallback — availability only
 // ===========================================================================
 
-const fableReview = () => routeTechLead({ stage: ROUTING_STAGES.REVIEW, assessment: at(COMPLEXITY.HIGH) });
+/**
+ * A Fable review. Routing no longer produces one at any complexity — the
+ * specialist is reachable only through an authorized escalation, so that is
+ * how a test gets one.
+ */
+const fableReview = () => authorizeReviewEscalation({
+  request: { reason: 'REVIEW_INCONCLUSIVE', evidence: ['two Opus rounds left the same question open'] },
+  current: routeTechLead({ stage: ROUTING_STAGES.REVIEW, assessment: at(COMPLEXITY.HIGH) }),
+}).decision;
 
 test('26. Fable falls back to Opus on a usage limit, a rate limit and an unavailable model', () => {
   for (const reason of [CAPACITY_REASONS.USAGE_LIMIT, CAPACITY_REASONS.RATE_LIMIT, CAPACITY_REASONS.MODEL_UNAVAILABLE]) {
@@ -401,15 +420,15 @@ test('31. an escalation recorded in history is replayed, not re-decided', () => 
 });
 
 test('31. replay keeps what the classifier saw, even after the model changed', () => {
-  const base = routeTechLead({ stage: ROUTING_STAGES.REVIEW, assessment: at(COMPLEXITY.CRITICAL, 8, ['MIGRATION']) });
+  const base = fableReview();
   const fallback = planCapacityFallback({ current: base, reason: CAPACITY_REASONS.USAGE_LIMIT });
   const { routing, fellBack } = resolveRoutingForAttempt({
     base,
     attemptHistory: [{ attempt: 1, reason: REROUTE_REASONS.MODEL_FALLBACK, routedTo: toRoutedRecord(fallback) }],
   });
   assert.equal(routing.modelKey, 'opus');
-  assert.equal(routing.complexity, COMPLEXITY.CRITICAL, 'the risk did not change because the model did');
-  assert.deepEqual([...routing.signals], ['MIGRATION']);
+  assert.equal(routing.complexity, base.complexity, 'the risk did not change because the model did');
+  assert.deepEqual([...routing.signals], [...base.signals]);
   assert.equal(fellBack, true);
 });
 

@@ -7,11 +7,13 @@
  * planning call had named. That spent the scarcest model on work that did not
  * need it, and left no way to ask afterwards WHY a model had been chosen.
  *
- * The policy, in one sentence: Fable is the specialist for genuinely complex
- * work, Opus is the standard Tech Lead, and Sonnet is the standard executor.
+ * The policy, in one sentence: Opus is the Tech Lead, Sonnet is the standard
+ * executor, and Fable is a specialist no default reaches — only an authorized
+ * escalation or a human override puts a job on it.
  *
- *   tech_lead / planning   LOW·MEDIUM → Opus high      HIGH·CRITICAL → Fable high
- *   tech_lead / review     LOW·MEDIUM → Opus high      HIGH·CRITICAL → Fable high
+ *   tech_lead / planning   → Opus high      escalation → Fable high
+ *   tech_lead / review     → Opus high      escalation → Fable high
+ *   tech_lead / closure    → Opus high
  *   developer              default    → Sonnet high    escalation    → Opus high
  *                                                      deep          → Opus xhigh
  *
@@ -97,13 +99,34 @@ export const ROUTING_STAGES = Object.freeze({
 
 export const ROUTING_CONFIG = Object.freeze({
   tech_lead: Object.freeze({
+    /**
+     * Planning and review both run on the standard model, whatever the risk
+     * classification says. `specialist` is NOT a tier the router can select:
+     * it is the target of an authorized escalation, and of a manual override.
+     *
+     * It used to be the `deep` tier, chosen whenever the classifier scored
+     * HIGH or above. Measured over Goals 009-013, that fired on every single
+     * planning and review call — planning scored exactly 5 every time (3 for
+     * roadmap prose, +2 for `round > 1`, which is always true here) and review
+     * scored 14-20, because the file signals are uncapped and this repository's
+     * paths match the security regex on every diff. A tier that never refuses
+     * is not a classification, it is a default with extra steps.
+     *
+     * The quota limit then ran the experiment by accident: capacity fallbacks
+     * put round-1 review on Opus for Goals 009, 010 and 013, which found 7, 6
+     * and 5 blockers and closed in two rounds each, while the two goals the
+     * specialist reviewed end to end (011, 012) found 4 and 3 and needed a
+     * third round, both because round 1 had not demanded the proof it asked
+     * for. Opus also inspected more (49/37/60 turns against 40/22) at roughly
+     * a sixth of the cost.
+     */
     planning: Object.freeze({
       standard: Object.freeze({ model: 'opus', effort: 'high' }),
-      deep: Object.freeze({ model: 'fable', effort: 'high' }),
+      specialist: Object.freeze({ model: 'fable', effort: 'high' }),
     }),
     review: Object.freeze({
       standard: Object.freeze({ model: 'opus', effort: 'high' }),
-      deep: Object.freeze({ model: 'fable', effort: 'high' }),
+      specialist: Object.freeze({ model: 'fable', effort: 'high' }),
     }),
     /**
      * Closure documentation: recording what a Goal already ACCEPTED changed.
@@ -191,12 +214,6 @@ export const COMPLEXITY = Object.freeze({
  */
 export const RISK_THRESHOLDS = Object.freeze({ MEDIUM: 2, HIGH: 4, CRITICAL: 7 });
 
-/** Complexity levels that route to the specialist rather than the standard model. */
-const DEEP_COMPLEXITY = Object.freeze([COMPLEXITY.HIGH, COMPLEXITY.CRITICAL]);
-
-export function isDeepComplexity(classification) {
-  return DEEP_COMPLEXITY.includes(classification);
-}
 
 export function classificationForScore(riskScore) {
   const score = Number.isFinite(riskScore) ? riskScore : 0;
@@ -510,9 +527,10 @@ export function routeTechLead({
   if (stage !== ROUTING_STAGES.PLANNING && stage !== ROUTING_STAGES.REVIEW) {
     throw new SpikeError('INVALID_ARGS', `Unknown Tech Lead stage ${JSON.stringify(stage)}`);
   }
-  const deep = isDeepComplexity(assessment?.classification);
-  const table = config.tech_lead[stage];
-  const chosen = deep ? table.deep : table.standard;
+  // The classification is recorded, never used to pick the model: the
+  // specialist is reachable only through an authorized escalation or a manual
+  // override. See the comment on ROUTING_CONFIG.tech_lead for the evidence.
+  const chosen = config.tech_lead[stage].standard;
   const forced = FORCED_MODEL[mode] ?? null;
 
   return decision({
@@ -523,9 +541,7 @@ export function routeTechLead({
     signals: assessment?.signals ?? [],
     modelKey: forced ?? chosen.model,
     effort: chosen.effort,
-    reason: forced
-      ? `MANUAL_OVERRIDE_${mode}`
-      : (deep ? 'HIGH_RISK_SPECIALIST_REVIEW' : 'STANDARD_RISK'),
+    reason: forced ? `MANUAL_OVERRIDE_${mode}` : 'TECH_LEAD_STANDARD_MODEL',
     // Fable is the only model with a weekly quota tight enough to strand the
     // pipeline, so only a Fable selection carries a fallback.
     fallbackAllowed: (forced ?? chosen.model) === 'fable',
@@ -1044,7 +1060,7 @@ export function authorizeReviewEscalation({
       riskScore: current?.riskScore ?? RISK_THRESHOLDS.HIGH,
       signals: [...(current?.signals ?? []), request.reason],
       modelKey: 'fable',
-      effort: ROUTING_CONFIG.tech_lead.review.deep.effort,
+      effort: ROUTING_CONFIG.tech_lead.review.specialist.effort,
       reason: request.reason,
       fallbackAllowed: true,
       mode,

@@ -20,6 +20,7 @@ Duas etapas concluídas:
 | V14 — Adaptive Model Routing | modelo escolhido por risco: Opus padrão no Tech Lead, Sonnet no Developer, Fable só para HIGH/CRITICAL |
 | V18 — Work Unit Execution | rodada decomposta em DAG de Work Units; determinístico sem modelo, mecânico em Haiku, normal em Sonnet, difícil em Opus; contexto por unidade. Caminho padrão; `IA_LOOP_WORK_UNIT_EXECUTION=0` é rollback explícito para o Developer legado |
 | V19 — Closure documentation roteada | fechamento deixa de cair em Fable por padrão; stage e política próprios, `routeClosureDocumentation` |
+| V28 — Fable deixa de ser default | medido nos Goals 009–013, o portão de risco nunca recusou: planning e review vão para Opus sempre, e Fable só por escalonamento autorizado ou override manual |
 
 ---
 
@@ -5443,3 +5444,86 @@ real sob o mesmo `attemptId`; fallback automático Fable → Opus (criando
 independentes preservadas append-only; zero duplicatas; zero `STARTED`
 órfãs; tokens, custos, tool calls e status reconciliados contra
 `events.jsonl` e o sink observacional do worker, de forma independente.
+
+---
+
+## V28 — Fable deixa de ser default: o especialista vira destino de escalonamento
+
+A V14 criou a classificação de risco para reservar Fable ao trabalho
+genuinamente difícil. Medido sobre os Goals 009–013, o portão **nunca recusou
+uma vez**: das 25 decisões de planning/review registradas no ledger, toda
+escolha por mérito deu Fable, e toda linha com Opus é `CAPACITY_FALLBACK_*` —
+ou seja, a única coisa que já tirou uma review do especialista foi a quota
+acabar.
+
+O motivo é calibragem contra o vocabulário deste repositório, não bug:
+
+- **planning** marcou exatamente **5** em todos os Goals — 3 por palavra HIGH
+  na prosa do roadmap (`arquitetura`, `segurança`, `migrations`) e +2 por
+  `round > 1`, que é sempre verdade aqui, porque nenhum Goal desde o 009 foi
+  aceito na rodada 1. Um ponto acima do limiar, sempre, e o ponto decisivo vem
+  de um sinal que nada tem a ver com a dificuldade de planejar o Goal seguinte.
+- **review** marcou **14 a 20**, de três a cinco vezes o limiar, porque os
+  file signals não têm teto e a regex de segurança é
+  `(auth|session|tenant|security|permission|credential)` — e este projeto é
+  literalmente tenant/sessão/WhatsApp. Todo diff bate.
+
+Um tier que nunca recusa não é classificação, é default com passos extras.
+
+### O experimento que a quota rodou sozinha
+
+Os fallbacks de capacidade puseram a review da rodada 1 em Opus nos Goals 009,
+010 e 013, e deixaram 011 e 012 inteiramente no especialista:
+
+| Goal | modelo na R1 | turnos | blockers | rodadas até ACCEPTED |
+| --- | --- | --- | --- | --- |
+| 009 | Opus | 49 | 7 | 2 |
+| 010 | Opus | 37 | 6 | 2 |
+| 011 | Fable | 40 | 4 | **3** |
+| 012 | Fable | 22 | 3 | **3** |
+| 013 | Opus | 60 | 5 | 2 |
+
+Os três Goals cuja R1 caiu no Opus fecharam em duas rodadas. Os dois revisados
+pelo especialista de ponta a ponta precisaram de três — e o motivo está nos
+próprios reviews: no 011, dois blockers voltaram como residuais na rodada 2
+"por falta das provas pedidas"; no 012, um, pelo mesmo motivo. É lacuna do
+revisor, não do executor. Opus também inspecionou mais (49/37/60 turnos contra
+40/22), a $1,4–$4,9 por review contra $6,7–$45,4.
+
+Detalhe que fecha o caso: as duas tentativas de Fable que **abortaram em 2
+turnos** custaram $12 e $17,1, porque cada chamada cria ~850k tokens de cache
+antes de fazer qualquer coisa. Uma review do especialista que falhou custa mais
+que uma review completa do Opus.
+
+### O que mudou
+
+```text
+ROUTING_CONFIG.tech_lead.{planning,review}
+  antes:  standard → opus · deep       → fable    (deep escolhido por score ≥ 4)
+  agora:  standard → opus · specialist → fable    (specialist nunca é escolhido)
+```
+
+`routeTechLead` passa a resolver sempre `standard`. A classificação continua
+sendo calculada e **gravada** na decisão (`complexity`, `riskScore`, `signals`),
+porque ela ainda é a melhor evidência sobre o que o classificador enxergou —
+ela só não escolhe mais o modelo. O `reason` deixa de ser
+`HIGH_RISK_SPECIALIST_REVIEW`/`STANDARD_RISK` e passa a ser
+`TECH_LEAD_STANDARD_MODEL`, porque afirmar risco no campo que explica a escolha
+do modelo virou mentira quando a escolha não depende mais do risco.
+
+Fable continua alcançável por exatamente dois caminhos, ambos explícitos e
+ambos já existentes:
+
+- `authorizeReviewEscalation` — pedido do próprio revisor, com motivo
+  reconhecido e evidência, recusado se já estiver em Fable;
+- override manual de operador (`FORCE_FABLE`).
+
+O que **não** mudou de propósito: `routingOf` continua resolvendo um job legado
+sem `routing` para o especialista, porque aquele caminho responde "em que modelo
+este job de fato rodou", não "em que modelo ele deveria rodar" — redecidir na
+leitura mudaria o que um restart está retomando. A sessão persistente do worker
+também continua de pé; ela só passa a ser exercida quando um escalonamento
+acontece, e todo planning/review normal segue o caminho stateless que o Opus já
+usava.
+
+`isDeepComplexity` foi removida: sem tier `deep`, nada mais a chamava.

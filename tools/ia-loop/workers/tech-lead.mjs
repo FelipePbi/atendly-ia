@@ -3,10 +3,10 @@
  * IA Loop — Tech Lead worker.
  *
  * ONE worker, two models. Which one runs is NOT a property of this process: it
- * arrives on the job, decided by the router from the risk of the work
- * (`lib/model-routing.mjs`). Opus is the standard Tech Lead; Fable is the
- * specialist, reserved for HIGH and CRITICAL work and for a review Opus could
- * not conclude.
+ * arrives on the job, decided by the router (`lib/model-routing.mjs`). Opus is
+ * the Tech Lead for every planning and review, whatever the risk score says;
+ * Fable is a specialist the router never selects on its own, reached only by an
+ * authorized escalation from a review Opus could not conclude.
  *
  * The session strategy follows the model, because the models differ:
  *
@@ -147,7 +147,7 @@ export function routingOf(job, stage) {
     modelKey: specialist.key,
     model: SPECIALIST_MODEL,
     family: specialist.family,
-    effort: ROUTING_CONFIG.tech_lead[stage]?.deep.effort ?? null,
+    effort: ROUTING_CONFIG.tech_lead[stage]?.specialist.effort ?? null,
     complexity: null,
     riskScore: null,
     signals: [],
@@ -711,9 +711,9 @@ async function main() {
     sessionLine: `Specialist session: ${session.sessionId.slice(0, 8)} (${resumed ? 'resumed from registry' : 'new'})`,
     extra: [
       `Standard: ${resolveModel(ROUTING_CONFIG.tech_lead.review.standard.model).label}`
-      + ` · effort ${ROUTING_CONFIG.tech_lead.review.standard.effort} (stateless)`,
-      `Specialist: ${resolveModel(ROUTING_CONFIG.tech_lead.review.deep.model).label}`
-      + ` · effort ${ROUTING_CONFIG.tech_lead.review.deep.effort} (persistent session)`,
+      + ` · effort ${ROUTING_CONFIG.tech_lead.review.standard.effort} (stateless) — every planning and review`,
+      `Specialist: ${resolveModel(ROUTING_CONFIG.tech_lead.review.specialist.model).label}`
+      + ` · effort ${ROUTING_CONFIG.tech_lead.review.specialist.effort} (persistent session) — escalation only`,
       `Routing mode: ${mode}`,
       `Log level: ${LOG_LEVEL}`,
     ],

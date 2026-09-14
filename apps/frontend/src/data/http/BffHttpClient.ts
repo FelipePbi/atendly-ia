@@ -102,6 +102,19 @@ export class BffHttpClient {
   async request<TSchema extends z.ZodType>(
     options: BffRequestOptions<TSchema>,
   ): Promise<z.output<TSchema>> {
+    const { data } = await this.requestWithStatus(options);
+    return data;
+  }
+
+  /**
+   * Igual a `request`, mas também devolve o status HTTP da resposta — a
+   * maioria das chamadas não precisa disso (o envelope já diz sucesso ou
+   * erro), mas o envio de mensagem distingue `201` confirmado de `202`
+   * tentativa registrada, e só o status bruto carrega essa diferença.
+   */
+  async requestWithStatus<TSchema extends z.ZodType>(
+    options: BffRequestOptions<TSchema>,
+  ): Promise<{ data: z.output<TSchema>; status: number }> {
     const method = options.method ?? "GET";
     const requestId = options.requestId ?? createRequestId();
     const headers = new Headers(options.headers);
@@ -203,7 +216,7 @@ export class BffHttpClient {
       });
     }
 
-    return parsedData.data;
+    return { data: parsedData.data, status: response.status };
   }
 
   /**

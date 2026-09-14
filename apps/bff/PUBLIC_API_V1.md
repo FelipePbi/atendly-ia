@@ -322,7 +322,14 @@ Os campos são opcionais e podem vir `null`: mensagem recebida (`INBOUND`) não 
 
 `FAILED` significa que a saída comprovadamente não foi entregue: recusa definitiva do transporte, credencial do canal ainda não projetada, ou resposta cancelada porque o cliente mandou mensagem nova antes do envio. A entrega é *at-least-once* com dedupe e reconciliação; a API não promete exactly-once.
 
-`POST /v1/conversations/:id/messages` continua respondendo `201` com a mensagem criada. O sucesso do HTTP significa que a tentativa foi registrada de forma durável, não que o WhatsApp já entregou: quem diz isso é `deliveryState`.
+`POST /v1/conversations/:id/messages` tem **dois** sucessos, com sentidos distintos, e o BFF repassa o status que a IA respondeu — não colapsa os dois em `201`:
+
+| Status | O que aconteceu | O que ainda não aconteceu |
+| --- | --- | --- |
+| `201` | a saída foi gravada e o transporte aceitou o despacho | a entrega no WhatsApp — quem diz isso é `deliveryState` |
+| `202` | a saída foi gravada e a tentativa está registrada | o despacho não foi confirmado; a mensagem volta com `deliveryState` `FAILED` ou `UNKNOWN` |
+
+Nos dois casos o corpo é o mesmo envelope com a mensagem criada, e nenhum dos dois significa que o WhatsApp entregou. Um cliente que trate `202` como `201` apresenta como enviada uma tentativa que a plataforma não conseguiu despachar; quem só precisa saber se houve escrita durável pode tratar qualquer `2xx` como sucesso e ler `deliveryState`.
 
 ## Mensagem: kind e attachment de mídia, rota de mídia sob demanda (Goal013)
 
@@ -359,6 +366,7 @@ O DTO de conversa ganhou campos **opcionais**; respostas anteriores a esta vers�
 | `handling` | `AI`, `HUMAN` | quem está atendendo agora |
 | `ignored`, `ignoredAt` | booleano, data ou `null` | contato ignorado, regra do contato |
 | `aiPaused` | booleano | pausa explícita da IA para o contato (`/bot off`, `/ia_pause`) |
+| `customerId` | string ou `null` | vínculo do contato com a pessoa do Scheduling (Goal017); `null` quando o contato ainda não está vinculado, ausente no estoque anterior a este campo |
 | `session` | objeto ou `null` | `id`, `startedAt`, `expiresAt`, `lastContactMessageAt`, `humanHandlingSince` |
 
 Precedência: `ignored` do contato prevalece sobre a sessão; o override manual (`categorySource: MANUAL`) prevalece sobre `suggestedCategory` e atravessa a troca de sessão. A classificação automática nunca escreve override.
@@ -407,7 +415,17 @@ Resumo sem auditoria não é gerado: sem pessoa vinculada a um contato a IA recu
 
 `POST /v1/conversations/:id/suggestions` devolve até três sugestões de resposta para a profissional editar e, se quiser, enviar pelo caminho humano já existente (`POST /v1/conversations/:id/messages`, inalterado) — a rota de sugestão nunca envia nada sozinha. A resposta traz `conversationId`, `suggestions` (array de texto, até três itens), `aiRunId` (auditoria, `kind = SUGGESTION`) e `promptVersion` (versão efetiva do prompt de sugestão); os quatro campos são obrigatórios e vêm da IA sem reescrita.
 
-A geração usa um binding **somente leitura** de tools: nenhuma tool com efeito é oferecida ao modelo, nenhum hold é criado, nenhum rascunho é gravado, nenhuma `Message` nem linha de outbox nasce. Recusas próprias e verificáveis da IA — contato ignorado, sessão pessoal, conversa sem atendimento humano vigente, IA desligada para o negócio, ou mensagem do cliente não textual — chegam como qualquer outro erro próprio dela (ver abaixo), nunca como sugestão vazia silenciosa.
+A geração usa um binding **somente leitura** de tools: nenhuma tool com efeito é oferecida ao modelo, nenhum hold é criado, nenhum rascunho é gravado, nenhuma `Message` nem linha de outbox nasce. Recusas próprias e verificáveis da IA chegam como qualquer outro erro próprio dela (ver abaixo), nunca como sugestão vazia silenciosa, com `upstreamCode` sendo um de:
+
+| `upstreamCode` | Significado |
+| --- | --- |
+| `CONTACT_IGNORED` | contato em `Ignorar IA` |
+| `SESSION_PERSONAL` | sessão vigente é `PERSONAL` |
+| `HUMAN_HANDLING_REQUIRED` | conversa sem atendimento humano vigente |
+| `AI_DISABLED` | IA desligada para o negócio |
+| `NO_TEXTUAL_MESSAGE` | última mensagem do cliente não é textual |
+
+A ordem de avaliação é a da tabela: regra do contato antes de regra de sessão, privacidade antes de precondição de atendimento, atendimento antes de configuração do negócio, configuração do negócio antes do conteúdo textual da mensagem.
 
 ### Erros próprios da IA nesta seção
 

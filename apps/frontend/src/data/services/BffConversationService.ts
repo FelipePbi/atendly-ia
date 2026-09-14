@@ -53,9 +53,9 @@ export class BffConversationService {
   }
 
   /**
-   * Bytes de mídia de um attachment, sob demanda (Goal013). Sem tela: o
-   * player e a exibição são do Goal017 — este método só busca o corpo bruto
-   * via o proxy de mídia do BFF.
+   * Bytes de mídia de um attachment, sob demanda (Goal013). Serve o player de
+   * áudio e o visualizador do chat (Goal017), que pedem os bytes só quando a
+   * profissional pede — aqui só se busca o corpo bruto pelo proxy do BFF.
    */
   getMedia(conversationId: string, messageId: string, signal?: AbortSignal) {
     return this.http.requestBinary({
@@ -64,14 +64,25 @@ export class BffConversationService {
     });
   }
 
-  sendMessage(id: string, text: string, signal?: AbortSignal) {
-    return this.http.request({
+  /**
+   * `status` acompanha a mensagem porque `201` é a saída gravada e despachada
+   * ao transporte e `202` é a tentativa gravada sem confirmação de envio — o
+   * mesmo sucesso HTTP em dois sentidos distintos, que só o status bruto
+   * diferencia. Nenhum dos dois afirma entrega: isso é `deliveryState`.
+   */
+  async sendMessage(
+    id: string,
+    text: string,
+    signal?: AbortSignal,
+  ): Promise<{ message: z.infer<typeof messageSchema>; status: number }> {
+    const { data, status } = await this.http.requestWithStatus({
       body: { text },
       method: "POST",
       path: `/v1/conversations/${encodeURIComponent(id)}/messages`,
       schema: messageSchema,
       signal,
     });
+    return { message: data, status };
   }
 
   /**

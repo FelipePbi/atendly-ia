@@ -526,6 +526,9 @@ export const conversationSchema = z.object({
     })
     .nullish()
     .optional(),
+  // Vínculo com a pessoa do Scheduling (Goal017): `null` quando o contato
+  // ainda não está vinculado, ausente no estoque anterior a este campo.
+  customerId: z.string().nullish().optional(),
 });
 
 const dependencyErrorSchema = z.object({

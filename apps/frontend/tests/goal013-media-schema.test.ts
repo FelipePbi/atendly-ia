@@ -121,7 +121,7 @@ describe("BffConversationService.getMedia (Goal013)", () => {
     const bytes = new Uint8Array([1, 2, 3]);
     const fetchImplementation: typeof fetch = async (input, init) => {
       calls.push({
-        url: new Request(input as RequestInfo, init).url,
+        url: new Request(input, init).url,
         method: init?.method ?? "GET",
       });
       return new Response(bytes, {

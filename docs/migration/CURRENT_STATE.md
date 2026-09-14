@@ -1399,3 +1399,100 @@ foram tocados; o contrato público mudou em dois pontos.
   públicas**. As telas de agenda foram verificadas em jsdom — estrutura, papéis, teclado e axe —,
   não em largura, contraste ou foco reais. Nenhum backend real, WhatsApp real, tenant com Minha
   Agenda real ou CI hospedada foi exercitado.
+
+## Delta implementado — Goal017, 2026-09-14 (ACCEPTED na rodada 3)
+
+A fotografia histórica acima permanece como registro da baseline. Os FATOS que descrevem a tela
+de conversas como monolito com filtros locais, sem abas de privacidade, sem mídia, sem
+transcrição e sem estado de entrega estão superados pelos fatos abaixo, verificados no
+[review017](reviews/017-review.md) sobre a base `6582a65`. Nenhuma migration e nenhum dado foram
+tocados; o contrato público mudou em um campo aditivo e na semântica documentada do envio.
+
+- **FATO atual:** `conversationDto` projeta `contact.customerId` (`internal/routes.ts:1070`), e o
+  campo atravessa o schema do cliente da IA no BFF e o `conversationSchema` do frontend como
+  **opcional e nulável**. Resposta anterior a este campo continua decodificando. É o único campo
+  novo do Goal, e existe porque sem ele o painel de contato só poderia casar pessoa por telefone.
+- **FATO atual:** `POST /v1/conversations/:id/messages` tem **dois** sucessos e o BFF repassa o
+  status da IA em vez de colapsar tudo em `201`. `InternalHttpClient.requestWithStatus` preserva o
+  status do serviço interno, `AiOrchestratorClient.sendMessage` devolve `{ message, status }` e
+  `modules/conversations/routes.ts:118-130` responde `202` quando a IA respondeu `202`. `201` é
+  gravado e despachado ao transporte; `202` é tentativa registrada sem confirmação de despacho.
+  Nenhum dos dois significa entrega — quem diz isso continua sendo `deliveryState`.
+- **FATO atual:** o proxy de mídia do BFF tem teto próprio. `INTERNAL_HTTP_MEDIA_TIMEOUT_MS`
+  (default 90 s) vale só em `requestBinary`; as rotas JSON seguem em `INTERNAL_HTTP_TIMEOUT_MS`
+  (10 s). O teto é maior que o `EVOLUTION_DOWNLOAD_MEDIA_TIMEOUT_MS` de 60 s da IA, então áudio
+  grande deixa de virar `UPSTREAM_ERROR` 502 antes de a IA responder. Fecha o resíduo do
+  [review013](reviews/013-review.md).
+- **FATO atual:** `features/conversations/ProductConversationsScreen.tsx` não é mais um monolito.
+  São 28 linhas de despachante sobre doze módulos de `features/conversations/` (2 326 linhas), com
+  **um call site de `useShellConfig` por cenário vivo** — `ConversationInbox` (`/conversas`) e
+  `ConversationThread` (`/conversas/[id]`). `tests/goal017-shell-invariant.test.tsx` monta
+  `ShellConfigProvider` com as telas reais e falha em `Maximum update depth` se a invariante
+  quebrar. Nenhuma rota nova nasceu: as duas existentes continuam servindo os dois cenários.
+- **FATO atual:** a inbox é servida pelo backend, não por filtro em memória. `lensQuery`
+  (`inboxLenses.ts`) traduz as abas Comercial, Não classificadas e Pessoal em `category`, a
+  entrada de ignorados em `ignored`, e a busca em `search` viajando junto da aba corrente, com
+  debounce de 300 ms e teto explícito de 50 itens — a tela apresenta recorte, nunca total.
+  "Buscando", "sem resultado" e "aba vazia" são estados distintos. `prioritizeWaiting` sobe
+  conversa em `Aguardando você` ao topo da aba Comercial e não reordena as demais.
+- **FATO atual:** os seis estados de linguagem interna do vault — IA ativa, IA pausada, IA
+  atendendo, IA com instabilidade, Aguardando você, Você atendendo — são derivados em
+  `conversationState.ts` a partir de `status`, `humanHandoff`, `handling`, `aiPaused`, `ignored`,
+  `category` e `session`. O componente automatizado é chamado de **IA**, e `handoffReason` é
+  apresentado quando existe.
+- **FATO atual:** aba, contador e badge de `unreadCount` não existem mais em tela. Enquanto
+  `conversationDto` devolve zero literal e nenhuma camada calcula leitura, a interface não afirma
+  o que ninguém sabe. Estado de leitura por usuário continua sem contrato em camada alguma.
+- **FATO atual:** override de categoria e ignorados existem na tela. `setCategory` cobre os três
+  valores e `null` (volta à classificação automática), com `categorySource` distinguindo decisão
+  da profissional de classificação da plataforma e `suggestedCategory` apresentada como sugestão a
+  aceitar ou recusar. `setIgnored` marca e desmarca pela mesma operação, atrás de confirmação que
+  diz o efeito antes de aplicar: a IA deixa de usar a conversa como contexto, e nada é apagado.
+- **FATO atual:** o chat compõe `deliveryState` nos quatro valores (`MessageTimeline.tsx`), com
+  `deliveryDetail` quando existe. `UNKNOWN` se apresenta como **não confirmado** e não oferece
+  reenvio, porque reenviar o que pode ter chegado duplica no WhatsApp do cliente; `FAILED` oferece
+  nova tentativa; mensagem sem o campo aparece sem badge, e mensagem recebida nunca exibe estado
+  de entrega. Autoria `CUSTOMER`, `AI` e `OWNER` é distinguível, e o que a IA escreveu se
+  apresenta como escrito pela IA.
+- **FATO atual:** mídia e transcrição são exibidas, sempre pelo proxy. `useAttachmentMedia`
+  (`MessageAttachment.tsx`) busca os bytes por `getMedia` sob demanda, cria blob local, permite
+  cancelar e libera a URL depois; nenhuma URL da origem entra na árvore. Áudio tem player quando
+  `mediaAvailable`, e sem bytes na origem a tela diz isso em vez de oferecer reprodução;
+  `tooLarge` aparece como metadado. As três recusas próprias
+  (`MESSAGE_ATTACHMENT_NOT_FOUND`, `MEDIA_TOO_LARGE`, `MEDIA_UNAVAILABLE`) são lidas de
+  `error.details.upstreamCode` e têm copy própria. Os quatro `transcriptStatus` são apresentados
+  distintamente, e `FAILED` nunca exibe texto no lugar da transcrição.
+- **FATO atual:** enviar assume. A tela avisa junto ao campo, antes do envio, que responder assume
+  o atendimento — o backend grava o controle humano antes do transporte desde o Goal005 — e
+  reflete `Você atendendo` depois. `takeover`, `release` e `resolve` continuam alcançáveis, com
+  "Retomar IA" explicando que a IA reavalia o contexto atual. Abrir a conversa não altera estado.
+- **FATO atual:** sugestões só são oferecidas com atendimento humano vigente, até três, para usar,
+  editar ou ignorar; nenhuma é enviada sozinha. As cinco recusas — `CONTACT_IGNORED`,
+  `SESSION_PERSONAL`, `HUMAN_HANDLING_REQUIRED`, `AI_DISABLED` e `NO_TEXTUAL_MESSAGE` — têm copy
+  própria na tela e estão nominalmente em `PUBLIC_API_V1.md`, fechando o resíduo do
+  [review012](reviews/012-review.md).
+- **FATO atual:** o painel de contato liga para a pessoa por `customerId` quando há vínculo e, sem
+  vínculo, diz que o contato ainda não é cliente cadastrado — sem casar por telefone. Nada de
+  memória, nota ou tag é criado ou editado no chat.
+- **FATO atual:** `npm run lint` do frontend é `eslint src tests --max-warnings=0`. O buraco que o
+  [review016](reviews/016-review.md) registrou está fechado: `tests/` passou a ser lintado, e o
+  que a ampliação acusou foi corrigido na origem — inclusive nas suítes dos Goals 013 e 016 e no
+  helper de axe — sem afrouxar regra nenhuma. `src/mocks/data/conversations.ts` e
+  `features/conversations/types.ts` saíram do repositório.
+- **LIMITE:** envio de mídia pela profissional continua fora. `POST /v1/conversations/:id/messages`
+  aceita só texto e o transporte expõe apenas `sendText`; habilitar mídia seria contrato novo em
+  três serviços e no adapter de transporte.
+- **LIMITE:** eventos internos (handoff, pausa, assunção, mudança de categoria) não chegam ao chat
+  como eventos próprios: `source` admite apenas `CUSTOMER`, `AI` e `OWNER`, e não há contrato para
+  linha de evento no histórico de mensagens.
+- **LIMITE:** "IA com instabilidade" é derivada por substring sobre o `handoffReason` livre —
+  única fonte disponível hoje. Um vocabulário fechado de motivo tornaria a derivação
+  determinística.
+- **LIMITE:** `apps/bff/tests/goal017-send-status.integration.test.ts` existe e nunca foi
+  executado: roda no gate `validate:integration`, que exige PostgreSQL descartável provisionado. O
+  repasse de `201`/`202` foi verificado por leitura da rota e pelo teste unitário do cliente
+  interno.
+- **LIMITE:** o gate de browser (`validate:ui`, cinco larguras) continua cobrindo **apenas rotas
+  públicas**. As telas de conversas foram verificadas em jsdom — estrutura, papéis, teclado e axe
+  —, não em largura, contraste ou foco reais. Nenhum WhatsApp real, transcrição real, modelo real
+  ou CI hospedada foi exercitado.

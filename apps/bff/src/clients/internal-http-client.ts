@@ -30,18 +30,21 @@ export class InternalHttpClient {
     return internalToken(this.audience as InternalAudience, use);
   }
 
-  async request<T>(input: {
-    method: HttpMethod;
-    path: string;
-    context?: InternalRequestContext;
-    schema: z.ZodType<T>;
-    query?: Record<string, string | number | boolean | undefined>;
-    body?: unknown;
-    idempotencyKey?: string;
-    headers?: Record<string, string>;
-    requestId?: string;
-    use?: InternalUse;
-  }): Promise<T> {
+  async request<T>(input: InternalJsonRequest<T>): Promise<T> {
+    return (await this.requestWithStatus(input)).data;
+  }
+
+  /**
+   * Igual a `request`, mas devolve também o status HTTP do serviço interno.
+   * O envelope só distingue sucesso de erro; quando o serviço interno usa dois
+   * sucessos com sentidos distintos — `201` gravado e despachado, `202`
+   * tentativa registrada sem confirmação de envio —, essa diferença só existe
+   * no status bruto, e descartá-la aqui tornaria o segundo inalcançável para
+   * quem consome o BFF.
+   */
+  async requestWithStatus<T>(
+    input: InternalJsonRequest<T>,
+  ): Promise<{ data: T; status: number }> {
     const attempts =
       input.method === "GET" ? env.INTERNAL_HTTP_GET_RETRIES + 1 : 1;
     let lastError: unknown;
@@ -88,7 +91,10 @@ export class InternalHttpClient {
           "x-user-id": input.context.userId,
           "x-request-id": input.context.requestId,
         },
-        signal: AbortSignal.timeout(env.INTERNAL_HTTP_TIMEOUT_MS),
+        // Teto proprio (Goal017/WU-01): maior que
+        // EVOLUTION_DOWNLOAD_MEDIA_TIMEOUT_MS da IA, distinto do
+        // INTERNAL_HTTP_TIMEOUT_MS das rotas JSON.
+        signal: AbortSignal.timeout(env.INTERNAL_HTTP_MEDIA_TIMEOUT_MS),
       });
     } catch (error) {
       throw new AppError(
@@ -129,18 +135,9 @@ export class InternalHttpClient {
     };
   }
 
-  private async perform<T>(input: {
-    method: HttpMethod;
-    path: string;
-    context?: InternalRequestContext;
-    schema: z.ZodType<T>;
-    query?: Record<string, string | number | boolean | undefined>;
-    body?: unknown;
-    idempotencyKey?: string;
-    headers?: Record<string, string>;
-    requestId?: string;
-    use?: InternalUse;
-  }): Promise<T> {
+  private async perform<T>(
+    input: InternalJsonRequest<T>,
+  ): Promise<{ data: T; status: number }> {
     const url = new URL(input.path, normalizedBaseUrl(this.baseUrl));
     for (const [key, value] of Object.entries(input.query ?? {})) {
       if (value !== undefined) url.searchParams.set(key, String(value));
@@ -215,8 +212,21 @@ export class InternalHttpClient {
         { issues: parsed.error.issues },
       );
     }
-    return parsed.data;
+    return { data: parsed.data, status: response.status };
   }
+}
+
+interface InternalJsonRequest<T> {
+  method: HttpMethod;
+  path: string;
+  context?: InternalRequestContext;
+  schema: z.ZodType<T>;
+  query?: Record<string, string | number | boolean | undefined>;
+  body?: unknown;
+  idempotencyKey?: string;
+  headers?: Record<string, string>;
+  requestId?: string;
+  use?: InternalUse;
 }
 
 function normalizedBaseUrl(baseUrl: string): string {

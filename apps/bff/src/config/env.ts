@@ -66,6 +66,11 @@ const envSchema = z.object({
   // interno (Goal013: rota de mídia). Nao e o teto de mídia embutida do
   // webhook nem o de transcrição — é so a salvaguarda de transporte do BFF.
   INTERNAL_HTTP_MEDIA_MAX_BYTES: intEnv(32 * 1024 * 1024),
+  // Teto proprio do proxy de midia (Goal017/WU-01), maior que
+  // EVOLUTION_DOWNLOAD_MEDIA_TIMEOUT_MS (60s) da IA: o download upstream da
+  // Evolution acontece dentro daquele prazo antes da IA responder ao BFF, e
+  // INTERNAL_HTTP_TIMEOUT_MS (rotas JSON) e curto demais para esperar por ele.
+  INTERNAL_HTTP_MEDIA_TIMEOUT_MS: intEnv(90_000),
   PASSWORD_RESET_TOKEN_TTL_MINUTES: intEnv(30),
   PASSWORD_RESET_PUBLIC_URL: stringEnv("http://localhost:3001/nova-senha"),
   PASSWORD_RESET_DELIVERY_URL: stringEnv(),

@@ -1017,6 +1017,7 @@ interface ConversationDtoInput {
     attachments?: MessageDtoAttachment[];
   }>;
   contact?: {
+    customerId: string | null;
     ignored: boolean;
     ignoredAt: Date | null;
     aiPaused: boolean;
@@ -1066,6 +1067,7 @@ function conversationDto(conversation: ConversationDtoInput) {
     ignored: conversation.contact?.ignored ?? false,
     ignoredAt: conversation.contact?.ignoredAt?.toISOString() ?? null,
     aiPaused: conversation.contact?.aiPaused ?? false,
+    customerId: conversation.contact?.customerId ?? null,
     session: session
       ? {
           id: session.id,

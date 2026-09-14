@@ -78,6 +78,10 @@ const conversationSchema = z.object({
   ignored: z.boolean().optional(),
   ignoredAt: z.string().nullish().optional(),
   aiPaused: z.boolean().optional(),
+  // Goal017: vinculo do contato com o cliente do Scheduling. Nulo quando o
+  // contato ainda nao foi vinculado; ausente quando o estoque anterior a
+  // este Goal ainda nao repassa o campo.
+  customerId: z.string().nullish().optional(),
   session: z
     .object({
       id: z.string(),
@@ -253,22 +257,28 @@ export class AiOrchestratorClient {
     });
   }
 
-  // A credencial da instância não viaja mais aqui: a IA a resolve pelo vínculo
-  // interno projetado no provisionamento.
+  /**
+   * A credencial da instância não viaja mais aqui: a IA a resolve pelo vínculo
+   * interno projetado no provisionamento.
+   *
+   * O status acompanha a mensagem: a IA responde `201` quando o transporte
+   * aceitou a saída e `202` quando a tentativa ficou gravada sem confirmação
+   * de envio (`internal/routes.ts`). São dois sucessos com sentidos distintos,
+   * e só o status bruto os separa — o envelope é igual nos dois.
+   */
   async sendMessage(
     context: InternalRequestContext,
     id: string,
     input: { text: string },
   ) {
-    return (
-      await this.http.request({
-        method: "POST",
-        path: `/internal/conversations/${encodeURIComponent(id)}/messages`,
-        context,
-        body: input,
-        schema: envelope(messageSchema),
-      })
-    ).data;
+    const { data, status } = await this.http.requestWithStatus({
+      method: "POST",
+      path: `/internal/conversations/${encodeURIComponent(id)}/messages`,
+      context,
+      body: input,
+      schema: envelope(messageSchema),
+    });
+    return { message: data.data, status };
   }
 
   /**

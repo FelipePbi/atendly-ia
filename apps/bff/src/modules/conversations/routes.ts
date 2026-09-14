@@ -115,10 +115,19 @@ export async function registerV1ConversationRoutes(
       if (!instance || instance.status !== "CONNECTED") {
         throw new AppError("CONFLICT", "WhatsApp is not connected.", 409);
       }
-      const message = await ai.sendMessage(internalContext(request), id, {
-        text: body.text,
-      });
-      return reply.code(201).send(dataResponse(request, message));
+      const { message, status } = await ai.sendMessage(
+        internalContext(request),
+        id,
+        { text: body.text },
+      );
+      // 201 e 202 sao os dois sucessos da rota interna, com sentidos
+      // distintos: gravado e despachado ao transporte, ou gravado com a
+      // entrega ainda nao confirmada. O BFF repassa o que a IA respondeu em
+      // vez de apresentar o segundo como o primeiro; o estado real continua
+      // em `deliveryState`.
+      return reply
+        .code(status === 202 ? 202 : 201)
+        .send(dataResponse(request, message));
     },
   );
 

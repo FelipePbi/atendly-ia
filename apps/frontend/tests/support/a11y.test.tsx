@@ -17,7 +17,11 @@ import { expectNoA11yViolations } from "./a11y";
 
 describe("expectNoA11yViolations", () => {
   test("it catches an image with no text alternative", async () => {
-    const { container } = render(<img src="/x.png" />);
+    // Raw HTML, not a JSX <img>, so the broken markup doesn't also trip the
+    // project's own no-img-element / alt-text lint rules.
+    const { container } = render(
+      <div dangerouslySetInnerHTML={{ __html: '<img src="/x.png" />' }} />,
+    );
 
     await expect(expectNoA11yViolations(container)).rejects.toThrow(/image-alt/);
   });
@@ -33,7 +37,9 @@ describe("expectNoA11yViolations", () => {
   });
 
   test("the failure names the rule, the impact and the offending markup", async () => {
-    const { container } = render(<img src="/x.png" />);
+    const { container } = render(
+      <div dangerouslySetInnerHTML={{ __html: '<img src="/x.png" />' }} />,
+    );
 
     // An agent reading "expected 0, got 1" has to guess. It must not have to.
     const error = await expectNoA11yViolations(container).catch((e: Error) => e);
@@ -47,7 +53,11 @@ describe("expectNoA11yViolations", () => {
     const { container } = render(
       <main>
         <h1>Título</h1>
-        <img src="/x.png" alt="Uma descrição" />
+        <div
+          dangerouslySetInnerHTML={{
+            __html: '<img src="/x.png" alt="Uma descrição" />',
+          }}
+        />
         <button type="button">Salvar</button>
       </main>,
     );

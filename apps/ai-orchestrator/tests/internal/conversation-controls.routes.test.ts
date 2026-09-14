@@ -21,7 +21,12 @@ interface Row {
   status: "ACTIVE" | "HUMAN_HANDOFF" | "CLOSED";
   humanHandoff: boolean;
   updatedAt: Date;
-  contact: { ignored: boolean; ignoredAt: Date | null; aiPaused: boolean };
+  contact: {
+    customerId: string | null;
+    ignored: boolean;
+    ignoredAt: Date | null;
+    aiPaused: boolean;
+  };
   session: {
     id: string;
     startedAt: Date;
@@ -45,7 +50,12 @@ function row(id: string, tenantId: string): Row {
     status: "ACTIVE",
     humanHandoff: false,
     updatedAt: new Date("2026-09-07T10:00:00.000Z"),
-    contact: { ignored: false, ignoredAt: null, aiPaused: false },
+    contact: {
+      customerId: null,
+      ignored: false,
+      ignoredAt: null,
+      aiPaused: false,
+    },
     session: {
       id: `session-${id}`,
       startedAt: new Date("2026-09-07T09:00:00.000Z"),
@@ -239,6 +249,28 @@ describe("contratos de categoria, ignore e atendimento", () => {
       aiPaused: false,
       session: { id: "session-conversation-a" },
     });
+  });
+
+  it("expoe customerId nulo quando o contato nao tem vinculo com o Scheduling", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/internal/conversations/conversation-a",
+      headers: headers("tenant-a"),
+    });
+
+    expect(response.json().data).toMatchObject({ customerId: null });
+  });
+
+  it("expoe customerId quando o contato tem vinculo com o Scheduling", async () => {
+    rows[0].contact.customerId = "customer-123";
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/internal/conversations/conversation-a",
+      headers: headers("tenant-a"),
+    });
+
+    expect(response.json().data).toMatchObject({ customerId: "customer-123" });
   });
 
   it("ler a conversa nao muda estado de atendimento", async () => {

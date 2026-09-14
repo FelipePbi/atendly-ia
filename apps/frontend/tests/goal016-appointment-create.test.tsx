@@ -22,8 +22,12 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
   type Appointment,
   type AppointmentHold,
+  type AvailabilityQuery,
+  type AvailabilitySlot,
   BffHttpError,
   type CalendarState,
+  type CreateAppointmentInput,
+  type CreateHoldInput,
   type Customer,
   type Service,
   type TimeBlock,
@@ -42,10 +46,27 @@ vi.mock("next/navigation", () => ({
 }));
 
 const cancelAppointment = vi.fn();
-const createAppointment = vi.fn();
-const createHold = vi.fn();
+const createAppointment = vi.fn<
+  (
+    input: CreateAppointmentInput,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ) => Promise<Appointment>
+>();
+const createHold = vi.fn<
+  (
+    input: CreateHoldInput,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ) => Promise<AppointmentHold>
+>();
 const getAppointment = vi.fn();
-const getAvailability = vi.fn();
+const getAvailability = vi.fn<
+  (
+    query: AvailabilityQuery,
+    signal?: AbortSignal,
+  ) => Promise<AvailabilitySlot[]>
+>();
 const getCalendar = vi.fn();
 const listAppointments = vi.fn();
 const listTimeBlocks = vi.fn();

@@ -59,11 +59,11 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
   }),
 }));
 
-import AgendaPage from "@/app/(platform)/agenda/page";
-import BlockSeriesPage from "@/app/(platform)/agenda/bloquear/serie/page";
 import BlockTimePage from "@/app/(platform)/agenda/bloquear/page";
+import BlockSeriesPage from "@/app/(platform)/agenda/bloquear/serie/page";
 import AvailabilityExceptionsPage from "@/app/(platform)/agenda/excecoes/page";
 import NewAppointmentPage from "@/app/(platform)/agenda/novo/page";
+import AgendaPage from "@/app/(platform)/agenda/page";
 import AppointmentSeriesPage from "@/app/(platform)/agenda/serie/page";
 
 const today = new Date();

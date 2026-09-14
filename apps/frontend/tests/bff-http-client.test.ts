@@ -29,7 +29,7 @@ function stubFetch(
   let index = 0;
 
   const implementation: typeof fetch = async (input, init) => {
-    const request = new Request(input as RequestInfo, init);
+    const request = new Request(input, init);
     calls.push({
       method: request.method,
       url: request.url,

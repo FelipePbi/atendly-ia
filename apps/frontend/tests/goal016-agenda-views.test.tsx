@@ -46,9 +46,6 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 
 const today = new Date();
 const ISO_TODAY = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-const yesterday = new Date(today);
-yesterday.setDate(yesterday.getDate() - 1);
-const ISO_YESTERDAY = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;
 
 function calendarFixture(
   overrides: Partial<CalendarState> = {},
@@ -383,7 +380,7 @@ describe("Dia na posição real do tempo", () => {
     listAppointments.mockResolvedValue([]);
     listTimeBlocks.mockResolvedValue([
       timeBlockFixture({
-        // 23:00 de ISO_YESTERDAY até 00:30 de ISO_TODAY em America/Sao_Paulo
+        // 23:00 do dia anterior até 00:30 de ISO_TODAY em America/Sao_Paulo
         // (UTC-3): a virada cai dentro do bloco.
         endAt: `${ISO_TODAY}T03:30:00.000Z`,
         id: "block-midnight",

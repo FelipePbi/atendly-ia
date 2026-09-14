@@ -108,6 +108,36 @@ Não adicionar UI para features fora do MVP sem decisão explícita, incluindo:
 - app nativo;
 - IA interpretando imagem/documento.
 
+## Como provar o que está acima
+
+`npm test` renderiza componente de verdade. `tests/**/*.test.tsx` com o docblock
+`// @vitest-environment jsdom` no topo tem DOM, Testing Library e `userEvent`;
+os testes de dados continuam em `node`, sem DOM, e não mudaram.
+
+Prove pelo que o usuário encontra, não pela classe CSS:
+
+- **UX states** — renderize o estado e afirme o papel e o texto (`getByRole`,
+  `toBeVisible`). Placeholder de loading fica fora da árvore acessível
+  (`aria-hidden`), erro recuperável tem ação alcançável pelo teclado.
+- **Acessibilidade** — `expectNoA11yViolations(container)` de
+  `tests/support/a11y` roda axe-core em WCAG 2.1 A/AA e falha nomeando regra,
+  impacto e o HTML culpado. Contraste é a única regra desligada: jsdom não faz
+  layout nem cascata, então cor se confere onde o token é definido, não aqui.
+- **Teclado e foco** — `userEvent.tab()` e `userEvent.keyboard()`. Foco que
+  entra num diálogo, fica preso nele e volta para quem o abriu é invisível em
+  screenshot e visível aqui.
+- **Estado nunca só por cor** — afirme o atributo (`aria-busy`, `disabled`,
+  `aria-current`), nunca a cor.
+
+O que essa camada **não** alcança: layout real, largura de viewport e fidelidade
+visual à referência aprovada. jsdom não tem layout. Matriz de larguras e
+fidelidade visual continuam sendo conferência humana até existir navegador no
+circuito — não declare nenhuma das duas como provada por teste.
+
+`tests/support/a11y.test.tsx` existe para provar que o portão morde: ele aponta
+o axe para markup quebrado de propósito e exige que falhe. Um axe mal
+configurado não falha alto, ele aprova tudo em silêncio.
+
 ## Limite técnico
 
 Mantenha as regras técnicas locais existentes do app quando não contradisserem o produto. Não use uma refatoração visual/produtiva como justificativa para alterar arquitetura técnica sem escopo explícito.

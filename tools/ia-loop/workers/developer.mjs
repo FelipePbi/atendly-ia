@@ -271,6 +271,8 @@ async function resolveRoundPlan(job) {
       plan: fallbackExecutionPlan({
         goal: job.goal, round: job.round, blockers: [...job.blockers], goalSummary,
         unitType, unitTypeReason,
+        // Collected from git by the orchestrator, never claimed by a model.
+        changedFiles: [...(job.changedFiles ?? [])],
       }),
       goalSummary,
       planned: false,

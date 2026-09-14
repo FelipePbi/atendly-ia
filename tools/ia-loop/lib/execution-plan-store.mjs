@@ -125,6 +125,14 @@ export const SINGLE_UNIT_PLAN_SOURCES = Object.freeze({
 });
 
 /**
+ * Pointers carried by a single-unit plan.
+ *
+ * Matches the packet's own `MAX_RELEVANT_FILES`, so a large diff is trimmed
+ * here rather than silently trimmed again downstream.
+ */
+export const FALLBACK_RELEVANT_FILES = 40;
+
+/**
  * The plan a round runs when there is no per-unit DAG for it.
  *
  * Two different situations land here, and neither is a defect.
@@ -170,6 +178,18 @@ export function fallbackExecutionPlan({
    */
   unitType = 'STANDARD',
   unitTypeReason = null,
+  /**
+   * What the previous round actually changed, collected from git by the
+   * orchestrator and already carried on the job.
+   *
+   * A correction round has no planned DAG, so its single unit used to be the
+   * only one in the whole pipeline with no file pointers at all — which meant
+   * it started every round from zero knowledge of the diff it was correcting,
+   * and the graph orientation had nothing to resolve (`NO_FILES` on two of the
+   * three rounds of Goal 015). The reviewer was already being handed this
+   * exact list; the unit that has to act on the review was not.
+   */
+  changedFiles = [],
 }) {
   const isCorrection = blockers.length > 0;
 
@@ -199,6 +219,11 @@ export function fallbackExecutionPlan({
         complexity: unitType === 'COMPLEX' ? 'HIGH' : 'MEDIUM',
         risk: 'MEDIUM',
         dependencies: [],
+        // Pointers, not scope: the unit may only touch what the blockers
+        // require, and `objective` says so. These are where to look first.
+        relevantFiles: [...new Set(
+          (changedFiles ?? []).filter((file) => typeof file === 'string' && file.trim() !== ''),
+        )].slice(0, FALLBACK_RELEVANT_FILES),
         acceptanceCriteria: isCorrection
           ? blockers.map((blocker, index) => `Blocker ${index + 1} resolvido: ${String(blocker).slice(0, 400)}`)
           : ['Todos os critérios de aceite do documento do Goal estão atendidos e verificados.'],

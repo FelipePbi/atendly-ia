@@ -426,6 +426,34 @@ describe("número compartilhado no cadastro exige escolha explícita", () => {
     });
     expect(replace).toHaveBeenCalledWith("/clientes/detalhes?id=c3");
   });
+
+  test("'Revisar dados' preserva o nome e o telefone já digitados", async () => {
+    calendarGetCalendar.mockResolvedValue(calendarStateFixture());
+    customersListCandidatesByPhone.mockResolvedValue({
+      items: [
+        customerFixture({ id: "c1", name: "Marina Duarte", phone: "11999990000" }),
+      ],
+      managedExternally: false,
+      source: "ATENDLY",
+    });
+
+    const user = userEvent.setup();
+    render(
+      <ShellConfigProvider>
+        <ProductCustomersScreen scenario="new" />
+      </ShellConfigProvider>,
+    );
+
+    await user.type(await screen.findByLabelText("Nome"), "Cliente Novo");
+    await user.type(screen.getByLabelText("Telefone"), "11999990000");
+    await user.click(screen.getByRole("button", { name: "Criar cliente" }));
+
+    await screen.findByText(/Encontramos 1 cadastro com o telefone/);
+    await user.click(screen.getByRole("button", { name: "Revisar dados" }));
+
+    expect(screen.getByLabelText("Nome")).toHaveValue("Cliente Novo");
+    expect(screen.getByLabelText("Telefone")).toHaveValue("11999990000");
+  });
 });
 
 describe("acessibilidade das telas novas de Clientes", () => {

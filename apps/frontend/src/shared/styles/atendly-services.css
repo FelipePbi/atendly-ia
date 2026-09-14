@@ -72,3 +72,386 @@
 .service-swatch[data-color="SLATE"] {
   --swatch: #64748b;
 }
+
+.directory-toolbar {
+  margin-bottom: 16px;
+  display: grid;
+  grid-template-columns: minmax(280px, 460px) minmax(0, 1fr);
+  align-items: end;
+  gap: 16px;
+}
+.directory-search {
+  position: relative;
+}
+.directory-search .input {
+  padding-left: 44px;
+}
+.directory-search .icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+.directory-filters {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px;
+  scrollbar-width: none;
+}
+.directory-filter {
+  min-height: 44px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--fg-soft);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.directory-filter:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-secondary);
+}
+.directory-filter.is-active {
+  color: var(--surface);
+  background: var(--navy);
+  border-color: var(--navy);
+}
+.directory-list-surface {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+.directory-list-meta {
+  min-height: 48px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--muted);
+  font-size: 12px;
+  background: var(--surface-secondary);
+}
+.directory-list-meta strong {
+  color: var(--fg);
+  font-size: 13px;
+}
+.directory-grid-head,
+.directory-row {
+  display: grid;
+  align-items: center;
+  gap: 16px;
+}
+.directory-grid-head {
+  min-height: 44px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  background: var(--surface-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.service-grid {
+  grid-template-columns:
+    minmax(220px, 1.3fr) 110px 140px 130px minmax(130px, 0.8fr)
+    44px;
+}
+.directory-row {
+  position: relative;
+  min-height: 76px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  color: var(--fg);
+  text-decoration: none;
+  transition: background 140ms var(--ease);
+}
+.directory-row:last-of-type {
+  border-bottom: 0;
+}
+.directory-row:hover {
+  background: var(--surface-secondary);
+}
+.directory-row-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.directory-row-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.directory-row-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+.directory-row-copy span,
+.directory-cell {
+  color: var(--muted);
+  font-size: 13px;
+}
+.directory-cell strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+.directory-cell-label {
+  display: none;
+  color: var(--muted);
+  font-size: 11px;
+}
+.directory-row-action {
+  justify-self: end;
+  color: var(--muted);
+}
+.directory-row-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.directory-no-results {
+  padding: 56px 20px;
+  color: var(--muted);
+  text-align: center;
+}
+.directory-state-surface {
+  min-height: 500px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+}
+.directory-state-surface .empty-state,
+.directory-state-surface .error-state {
+  padding: 56px 24px;
+}
+.directory-state-surface h2 {
+  margin-bottom: 8px;
+  font-size: 22px;
+}
+.directory-retry-status {
+  min-height: 20px;
+  margin-top: 12px;
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.directory-form-card {
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+.directory-form-card h2 {
+  margin-bottom: 18px;
+  font-size: 18px;
+}
+.directory-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px 16px;
+}
+.directory-form-grid .is-wide {
+  grid-column: 1 / -1;
+}
+.directory-form-card textarea {
+  min-height: 96px;
+  padding-block: 12px;
+  resize: vertical;
+}
+.directory-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.directory-fieldset legend {
+  margin-bottom: 9px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.directory-segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.directory-segmented label {
+  position: relative;
+}
+.directory-segmented input {
+  position: absolute;
+  opacity: 0;
+}
+.directory-segmented span {
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: var(--fg-soft);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.directory-segmented input:checked + span {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.directory-segmented input:focus-visible + span {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.directory-form-note {
+  padding: 12px 14px;
+  border-radius: var(--r-input);
+  color: var(--muted);
+  background: var(--surface-interactive);
+  font-size: 12px;
+}
+.directory-active-control {
+  min-height: 68px;
+  padding: 12px 14px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  background: var(--surface-secondary);
+}
+.directory-active-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.directory-active-copy strong,
+.directory-active-copy .field-help {
+  display: block;
+}
+.directory-form-footer {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.directory-inline-error {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in oklch, var(--danger), white 68%);
+  border-radius: var(--r-input);
+  color: var(--danger);
+  background: var(--danger-soft);
+  font-size: 13px;
+}
+
+@media (max-width: 1099px) {
+  .service-grid {
+    grid-template-columns: minmax(200px, 1.25fr) 100px 130px 120px 44px;
+  }
+  .service-grid > :nth-child(5) {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .directory-toolbar {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .directory-filters {
+    justify-content: flex-start;
+    margin-inline: -16px;
+    padding-inline: 16px;
+  }
+  .directory-list-surface,
+  .directory-state-surface {
+    margin-inline: -16px;
+    border-inline: 0;
+    border-radius: 0;
+  }
+  .directory-grid-head {
+    display: none;
+  }
+  .directory-list-meta {
+    padding-inline: 16px;
+  }
+  .directory-row.service-grid {
+    min-height: 0;
+    padding: 16px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px 10px;
+  }
+  .directory-row.service-grid > :nth-child(5) {
+    display: grid;
+  }
+  .directory-row-main {
+    grid-column: 1;
+  }
+  .directory-row-action {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+  }
+  .directory-cell {
+    display: grid !important;
+    gap: 2px;
+  }
+  .directory-cell-label {
+    display: block;
+  }
+  .service-grid .directory-cell:nth-child(2),
+  .service-grid .directory-cell:nth-child(3) {
+    grid-column: auto;
+  }
+  .service-grid .directory-cell:nth-child(4),
+  .service-grid .directory-cell:nth-child(5) {
+    grid-column: span 2;
+  }
+  .directory-state-surface {
+    min-height: 470px;
+  }
+  .directory-form-card {
+    padding: 20px 16px;
+  }
+  .directory-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .directory-form-grid .is-wide {
+    grid-column: auto;
+  }
+  .directory-form-footer {
+    flex-direction: column-reverse;
+  }
+  .directory-form-footer .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 390px) {
+  .directory-segmented {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .directory-row,
+  .directory-filter {
+    transition: none;
+  }
+}

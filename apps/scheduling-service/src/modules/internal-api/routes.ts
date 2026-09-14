@@ -40,7 +40,11 @@ import {
   CalendarService,
 } from "../calendar/calendar-service.js";
 import { CalendarMutationIdempotency } from "../calendar/idempotency.js";
-import { createTimeBlock, removeTimeBlock } from "../calendar/time-blocks.js";
+import {
+  createTimeBlock,
+  listTimeBlocks,
+  removeTimeBlock,
+} from "../calendar/time-blocks.js";
 import { AtendlyCustomerService } from "../customers/atendly-customer-service.js";
 import { encryptIntegrationCredentials } from "../integrations/credentials.js";
 import { parseMinhaAgendaConnection } from "../integrations/minha-agenda/config.js";
@@ -961,6 +965,21 @@ export async function registerManagementRoutes(
       return data(request, timeBlockDto(block));
     },
   );
+
+  // Leitura da grade (Goal016): so leitura, nenhuma sobreposicao de janela
+  // permitida — startDate/endDate sao obrigatorios.
+  app.get("/internal/time-blocks", internalOnly, async (request) => {
+    const context = currentInternalContext(request);
+    const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+    const query = parse(exceptionListQuerySchema, request.query);
+    const blocks = await listTimeBlocks(prisma, {
+      tenantId: context.tenantId,
+      timeZone: calendar.timezone,
+      startDate: query.startDate,
+      endDate: query.endDate,
+    });
+    return data(request, blocks.map(timeBlockDto));
+  });
 
   // Bloqueio ocupa e libera tempo como qualquer atendimento: mesma transacao,
   // mesmo lock e conflito checado dentro dela (Goal008).

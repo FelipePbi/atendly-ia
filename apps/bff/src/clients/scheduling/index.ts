@@ -705,6 +705,18 @@ export class SchedulingClient {
     );
   }
 
+  async listTimeBlocks(
+    context: InternalRequestContext,
+    query: { startDate: string; endDate: string },
+  ) {
+    return this.get(
+      context,
+      "/internal/time-blocks",
+      z.array(timeBlockSchema),
+      query,
+    );
+  }
+
   async createTimeBlock(context: InternalRequestContext, input: unknown) {
     return this.mutate(
       context,

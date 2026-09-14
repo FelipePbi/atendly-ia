@@ -93,7 +93,6 @@ export function CustomerForm() {
 
   function backToEdit() {
     setCandidates(null);
-    setPending(null);
     setMessage(null);
   }
 
@@ -193,6 +192,7 @@ export function CustomerForm() {
           <div className="customer-form-grid">
             <Field
               autoComplete="name"
+              defaultValue={pending?.name}
               help="Use o nome que ajuda você a reconhecer este cliente."
               label="Nome"
               maxLength={200}
@@ -200,6 +200,7 @@ export function CustomerForm() {
             />
             <Field
               autoComplete="tel"
+              defaultValue={pending?.phone}
               help="O telefone identifica o cliente apenas neste negócio. Pode ficar em branco."
               inputMode="tel"
               label="Telefone"

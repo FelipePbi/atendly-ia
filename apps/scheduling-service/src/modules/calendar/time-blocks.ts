@@ -1,4 +1,8 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
+import {
+  addMinutes,
+  localDateTimeToInstant,
+} from "../../shared/date-time/calendar-date-time.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import {
   calendarDaysBetween,
@@ -92,6 +96,32 @@ export async function createTimeBlockRow(
         ? new Date(`${input.occurrenceDate}T00:00:00.000Z`)
         : undefined,
     },
+  });
+}
+
+// Leitura da grade (Goal016): janela local -> instante, mesma conversao que
+// a checagem de conflito de excecao ja faz. A janela e obrigatoria — sem ela
+// a rota seria uma varredura sem limite do tenant inteiro.
+export async function listTimeBlocks(
+  prisma: PrismaClient,
+  input: TimeBlockScope & { startDate: string; endDate: string },
+) {
+  const rangeStart = localDateTimeToInstant(
+    input.startDate,
+    "00:00",
+    input.timeZone,
+  );
+  const rangeEnd = addMinutes(
+    localDateTimeToInstant(input.endDate, "00:00", input.timeZone),
+    24 * 60,
+  );
+  return prisma.timeBlock.findMany({
+    where: {
+      tenantId: input.tenantId,
+      startAt: { lt: rangeEnd },
+      endAt: { gt: rangeStart },
+    },
+    orderBy: [{ startAt: "asc" }],
   });
 }
 

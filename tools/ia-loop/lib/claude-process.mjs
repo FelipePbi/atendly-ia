@@ -199,7 +199,7 @@ export function assertArgvCompatible(args) {
 
   // A duplicated flag is a builder bug, and a silent one: the CLI would take
   // the last occurrence and the argv would no longer say what we think it says.
-  const duplicated = ['--verbose', '--output-format', '--model', '--effort', '--print', '--json-schema']
+  const duplicated = ['--verbose', '--output-format', '--model', '--effort', '--print', '--json-schema', '--max-turns']
     .filter((flag) => argv.filter((a) => a === flag).length > 1);
   if (duplicated.length > 0) {
     throw new SpikeError(
@@ -242,6 +242,14 @@ export function buildArgs({
   permissionMode = null,
   addDirs = [],
   safeMode = true,
+  /**
+   * Ceiling on agent turns, or null for none.
+   *
+   * A budget rather than a deadline: `timeoutMs` bounds the wall clock, and
+   * this bounds the token cost, which grows with the SQUARE of the turn count
+   * because every turn re-reads the whole accumulated transcript.
+   */
+  maxTurns = null,
 }) {
   if (!prompt) throw new SpikeError('INVALID_ARGS', 'prompt is required');
   if (!model) throw new SpikeError('INVALID_ARGS', 'model is required');
@@ -290,6 +298,12 @@ export function buildArgs({
   // Only when the profile asks for one. Omitting the flag is what every
   // pre-routing execution did, and is how a legacy Goal keeps its behaviour.
   if (effort !== null && effort !== undefined) args.push('--effort', effort);
+
+  // Let the CLI stop itself. Killing the process at turn N would leave the
+  // worktree edited with no report and no envelope to read; `--max-turns` ends
+  // the loop cleanly and still emits the result, so the unit can be recorded
+  // as having hit its budget rather than as a harness failure.
+  if (Number.isInteger(maxTurns) && maxTurns > 0) args.push('--max-turns', String(maxTurns));
 
   if (safeMode) args.push('--safe-mode');
   // Measured: only "auto" authorises both file writes and Bash without a
@@ -694,6 +708,8 @@ export async function invokeAgent({
   safeMode = true,
   // Developer profile effort. null keeps the CLI's default and passes no flag.
   effort = null,
+  // Turn budget. null keeps the CLI's default and passes no flag.
+  maxTurns = null,
   /**
    * Observational telemetry sink. Purely a forwarding target: when given, the
    * events the CLI stream was already producing are reported as they arrive.
@@ -817,7 +833,7 @@ export async function invokeAgent({
       executable,
       args: buildArgs({
         prompt, model, jsonSchema, sessionId, persistSession, resume,
-        tools, permissionMode, addDirs, safeMode, effort,
+        tools, permissionMode, addDirs, safeMode, effort, maxTurns,
         outputFormat: 'stream-json',
       }),
       stdinData: prompt,

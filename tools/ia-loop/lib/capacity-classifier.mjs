@@ -20,6 +20,17 @@ export const CAPACITY_REASONS = Object.freeze({
   UNKNOWN_TRANSIENT: 'UNKNOWN_TRANSIENT',
   UNKNOWN_FATAL: 'UNKNOWN_FATAL',
   /**
+   * The harness's OWN turn budget, reached — not a limit of the model, the
+   * account or the machine.
+   *
+   * It exists as a separate reason because every other fatal one escalates to
+   * a human, and this one must not: the operator set the ceiling on purpose,
+   * the worktree holds whatever the unit managed to write, and the answer is
+   * to record the unit as blocked and let the review see it. Classifying it as
+   * UNKNOWN_FATAL would turn a cost control into a run-stopper.
+   */
+  TURN_BUDGET_EXHAUSTED: 'TURN_BUDGET_EXHAUSTED',
+  /**
    * A local failure of the harness itself — a bad spawn, an argument list too
    * long, a missing executable. It is NOT a model or capacity limit and must
    * never be reported as one or waited out: no amount of waiting fixes it.
@@ -317,6 +328,16 @@ export function classifyFailure(outcome, { envelope = null, now = Date.now(), ti
 
   // Structured first: our own codes are unambiguous.
   let reason = code ? CODE_MAP[code] ?? null : null;
+
+  // The CLI names this one in the envelope, so it never has to be matched out
+  // of prose: `--max-turns` ends the loop with `subtype: "error_max_turns"`,
+  // `is_error: true`, an empty `result` and exit 1. Measured, not assumed.
+  // Checked before the text patterns because "Reached maximum number of turns"
+  // otherwise falls through to UNKNOWN_FATAL, which escalates to a human — and
+  // a budget the operator set is not something a human needs to resolve.
+  if (!reason && envelope?.subtype === 'error_max_turns') {
+    reason = CAPACITY_REASONS.TURN_BUDGET_EXHAUSTED;
+  }
 
   // NON_ZERO_EXIT carries the CLI's own message, which is where API causes live.
   if (!reason) {

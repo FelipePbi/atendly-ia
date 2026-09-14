@@ -77,6 +77,32 @@ export function workUnitConfig(env = process.env) {
     unitTimeoutMs: envInt('IA_LOOP_WU_TIMEOUT_MS', 90 * 60 * 1000, env),
 
     /**
+     * How many turns one Work Unit's model call may take.
+     *
+     * The budget that was missing. A session's token cost is QUADRATIC in its
+     * turns — fitted over 57 ledger rows, `tokens/turn ≈ 29k + 872·n`, with a
+     * 1M context window that nothing saturates — so a long unit is not
+     * linearly more expensive than a short one, it is quadratically more
+     * expensive. Goal 014's WU-04 ran 234 turns and spent 59.8M tokens and
+     * $15.08 by itself: 41% of that Goal's entire token volume in one unit.
+     *
+     * DEFAULT 0 — off — and that is not timidity, it is a measured fact about
+     * what hitting the ceiling currently costs. `--max-turns` ends the CLI with
+     * `subtype: "error_max_turns"`, `is_error: true`, an EMPTY result and exit
+     * 1: no report, no contract payload, nothing the round can use. That lands
+     * in `capacity-policy`, which has exactly two answers — wait, or stop for a
+     * human — and neither is right for a budget the operator set on purpose.
+     * The right answer is a third one: record the unit as blocked, keep what it
+     * wrote in the worktree, and let the review see it. Until that exists,
+     * turning this on trades a cost problem for a stopped run.
+     *
+     * 80 is the figure the model points at when it is turned on: splitting at
+     * 40 costs more in repeated re-orientation than it saves, and above 100 the
+     * quadratic dominates again.
+     */
+    maxTurnsPerUnit: envInt('IA_LOOP_WU_MAX_TURNS', 0, env),
+
+    /**
      * Whether a compatibility fallback may run at all.
      *
      * On by default: a Goal planned before execution plans existed must not

@@ -23,6 +23,17 @@ const ESCALATE_IMMEDIATELY = Object.freeze([
   CAPACITY_REASONS.UNKNOWN_FATAL,
   // Waiting cannot fix a local tooling failure.
   CAPACITY_REASONS.HARNESS_ERROR,
+  /**
+   * Not because a human is the right answer — they are not — but because the
+   * right answer does not exist here yet.
+   *
+   * A unit that spends its turn budget should be recorded as blocked and left
+   * for the review, which is a THIRD action this policy deliberately does not
+   * have. Until it does, escalating is the honest failure mode: visible, and
+   * it stops rather than waiting out a limit that no amount of waiting lifts.
+   * This is why `maxTurnsPerUnit` defaults to 0.
+   */
+  CAPACITY_REASONS.TURN_BUDGET_EXHAUSTED,
 ]);
 
 /**

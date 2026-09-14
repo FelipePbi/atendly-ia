@@ -129,6 +129,30 @@ export const DETERMINISTIC_ACTIONS = Object.freeze({
     requiresPattern: false,
     targeted: false,
   }),
+  /**
+   * The rendered gate: Playwright over Chromium at the five widths the vault
+   * names.
+   *
+   * It belongs HERE, as a command the orchestrator runs, rather than as
+   * something the reviewer drives, for the same reason as every other action:
+   * a model that starts a browser pays for inference to produce a string, and
+   * pays again to read output it never needed to read. It also keeps browser
+   * flakiness out of a review, where a spurious failure costs a whole round
+   * instead of a re-run.
+   *
+   * `global`, and it must be placed after `validate-core`: the gate serves the
+   * built app with `next start`, and `validate:core` is what produces the
+   * build it serves.
+   */
+  'validate-ui': Object.freeze({
+    name: 'validate-ui',
+    label: 'Rendered UI gate',
+    command: Object.freeze(['npm', 'run', 'validate:ui']),
+    cwd: ACTION_CWD.WORKTREE,
+    requiresScope: false,
+    requiresPattern: false,
+    targeted: false,
+  }),
 });
 
 export const DETERMINISTIC_ACTION_NAMES = Object.freeze(Object.keys(DETERMINISTIC_ACTIONS));

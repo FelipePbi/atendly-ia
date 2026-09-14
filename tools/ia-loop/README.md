@@ -22,6 +22,7 @@ Duas etapas concluídas:
 | V19 — Closure documentation roteada | fechamento deixa de cair em Fable por padrão; stage e política próprios, `routeClosureDocumentation` |
 | V28 — Fable deixa de ser default | medido nos Goals 009–013, o portão de risco nunca recusou: planning e review vão para Opus sempre, e Fable só por escalonamento autorizado ou override manual |
 | V29 — Posição da campanha reconciliada | um Goal fechado fora da run deixa de congelar o `autonomous-run.json`: closure integrado e alcançável do HEAD avança o registro em vez de parar como `GOAL_BOUNDARY_AMBIGUOUS` |
+| V30 — Gate renderizado no registro determinístico | `validate-ui` entra no registro fechado de ações; Playwright roda como unidade determinística, não como ferramenta do revisor |
 
 ---
 
@@ -5588,3 +5589,35 @@ indistinguível de um que o próprio loop tivesse feito.
 Verificado contra o estado travado real: com `HEAD` em `708e4813` e o closure em
 `108f88d4`, a decisão é `ADVANCE` de 013 para 014 com a baseline correta; um sha
 inventado devolve `false` na alcançabilidade e a decisão vira `NONE`.
+
+---
+
+## V30 — O registro determinístico ganha o gate renderizado
+
+O registro de ações é fechado de propósito: um plano nomeia uma **ação**, nunca
+uma linha de comando, e string de shell escrita por modelo não é algo que este
+harness executa. Então colocar o Playwright no circuito é uma entrada nova no
+registro, não uma configuração.
+
+`validate-ui` → `npm run validate:ui`, `cwd` na raiz da worktree, `targeted:
+false`. Global porque serve o app já construído: um plano coloca a unidade uma
+vez, depois de `validate-core`, que é quem produz o build que o `next start`
+serve. Rodar antes serviria uma árvore `.next` velha ou nenhuma.
+
+Por que **ação determinística** e não ferramenta do revisor, que era a pergunta
+em aberto: um modelo que sobe um navegador paga inferência para produzir uma
+string que o orquestrador já conhece, e paga de novo para ler uma saída que
+nunca precisaria ler — o mesmo argumento que já vale para `lint` e `typecheck`.
+E mantém a instabilidade de navegador fora de uma review, onde uma falha
+espúria custa uma rodada inteira em vez de uma re-execução. O revisor continua
+lendo um resultado reproduzível, como já faz com `validate:integration`.
+
+O artefato do gate (`apps/frontend/e2e-results/`) fica no `.gitignore` porque o
+revisor é fingerprintado por `git status --porcelain` na worktree: artefato
+rastreado ali viraria `REVIEWER_MUTATED_WORKTREE`. Verificado — 15 MB em disco,
+zero visível ao git.
+
+O plano gravado do Goal014 recebeu `WU-16` com essa ação, dependendo de `WU-14`.
+A gravação passou pelo `validateExecutionPlan` do próprio harness, não por
+edição de JSON à mão: 16 unidades, banda `OVER_GUIDANCE` — reportada, não
+recusada, e a mesma banda dos Goals 008–013.

@@ -22,7 +22,11 @@ import {
   validateExecutionPlan,
   validateWorkUnit,
 } from '../lib/work-units.mjs';
-import { DETERMINISTIC_ACTION_NAMES } from '../lib/deterministic-actions.mjs';
+import {
+  ACTION_CWD,
+  DETERMINISTIC_ACTION_NAMES,
+  assertDeterministicAction,
+} from '../lib/deterministic-actions.mjs';
 
 const unit = (over = {}) => ({
   id: 'WU-001',
@@ -183,6 +187,19 @@ test('every registered deterministic action is nameable by a plan', () => {
   assert.ok(DETERMINISTIC_ACTION_NAMES.length > 0);
   assert.ok(DETERMINISTIC_ACTION_NAMES.includes('typecheck'));
   assert.ok(DETERMINISTIC_ACTION_NAMES.includes('git-diff-check'));
+});
+
+test('the rendered UI gate runs the gate script, at the worktree root, as a global step', () => {
+  // The registry being closed is the security property, so what each entry
+  // actually spawns is pinned rather than trusted: an action is argv, and this
+  // one must stay `npm run validate:ui` and nothing else.
+  const spec = assertDeterministicAction('validate-ui');
+  assert.deepEqual([...spec.command], ['npm', 'run', 'validate:ui']);
+  assert.equal(spec.cwd, ACTION_CWD.WORKTREE);
+  assert.equal(spec.requiresScope, false);
+  // Global, not targeted: it serves the built app, so a plan places it once,
+  // after the build exists, never per unit.
+  assert.equal(spec.targeted, false);
 });
 
 // ===========================================================================

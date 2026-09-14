@@ -891,7 +891,7 @@ verificados no [review010](reviews/010-review.md) sobre a base `e381c15`.
   presumida. O direito de importação é estrutural: mora só em
   `ImportSession.completedAt`, e as duas tabelas não se comunicam. O
   protocolo antigo continua alcançável como compatibilidade declarada até o
-  Goal024, mas seu `start` chama `assertImportAvailable` — depois da
+  Goal025, mas seu `start` chama `assertImportAvailable` — depois da
   conclusão única nem por ali se reprocessa a origem.
 - **FATO atual:** sete rotas por operação existem no Scheduling e no BFF
   (`POST /v1/calendar/imports`, `analyze`, `GET
@@ -902,7 +902,7 @@ verificados no [review010](reviews/010-review.md) sobre a base `e381c15`.
   asserção executável: `apps/ai-orchestrator/tests/tools/import-out-of-reach.test.ts`
   falha se alguma tool passar a tocar o caminho de importação. O frontend
   aceita as operações e campos novos mantendo os schemas antigos de migração
-  decodificáveis; não há tela (Goal019).
+  decodificáveis; não há tela (Goal020).
 - **Limite verificado:** a capacidade da API real do Minha Agenda continua
   **sem prova** — não há credencial autorizada no ambiente de migração. Toda
   origem exercitada é dublê ou fixture, M4 não foi exercitado e nenhum tenant
@@ -934,7 +934,7 @@ base `0f4ac74`.
   nulo significa "o negócio ainda não escolheu" — distinção que sustenta a
   pendência `AI_TONE_NOT_SELECTED` do onboarding. Os dois valores antigos
   continuam membros válidos do tipo e de `schema.prisma`, legíveis até o
-  Goal024.
+  Goal025.
 - **FATO atual:** o vocabulário do estilo é o mesmo nos dois lados
   (`apps/bff/src/lib/ai-conversation-style.ts` e
   `apps/ai-orchestrator/src/modules/tenant-config/ai-settings.ts`): entrada
@@ -1159,7 +1159,7 @@ inbox durável estão superados pelos fatos abaixo, verificados no
   depende da origem (WhatsApp pelo `directPath`, ou MinIO quando habilitado), e
   a purga do `base64` não é reversível. Armazenamento durável próprio (MinIO/S3)
   segue como decisão de infraestrutura fora deste Goal; player, visualizador e
-  envio de mídia pela profissional são do Goal017; retenção é do Goal022.
+  envio de mídia pela profissional são do Goal017; retenção é do Goal023.
   `webhook_deliveries` no Go continua guardando o payload integral do evento,
   incluindo o `base64` — o mesmo limite já registrado em G-04.
 
@@ -1534,7 +1534,7 @@ aditiva, e o contrato público mudou em três pontos aditivos mais uma remoção
   da próxima mudança. `GET/PATCH /v1/settings` e a seção `business` de `GET/PATCH /v1/onboarding`
   expõem `contextVersion`, `contextProjectedVersion` e `contextProjectionStatus`. Projeção falha
   **não** vira `500`: o dado do BFF já foi gravado, a resposta é de sucesso com `PENDING` como
-  aviso. Reconciliação automática continua não existindo — é do Goal018B.
+  aviso. Reconciliação automática continua não existindo — é do Goal019.
 - **FATO atual:** `POST /v1/onboarding/complete` não olha mais para WhatsApp. A consulta a
   `WhatsAppInstance` e ao status do Evolution saiu da rota, e `WHATSAPP_NOT_CONFIGURED` e
   `WHATSAPP_NOT_CONNECTED` não existem mais — é a única mudança subtrativa do Goal, declarada em
@@ -1549,7 +1549,7 @@ aditiva, e o contrato público mudou em três pontos aditivos mais uma remoção
   `PrototypeOnboardingScreen`, a prop `preview` e `features/onboarding/types.ts` não existem mais —
   nenhum deles tinha chamador.
 - **FATO atual:** `scenarios.ts` foi de 34 entradas para 15, e cada uma é alcançável pelo fluxo do
-  produto. Saíram os oito `importar-*` (a importação na UI é do Goal019), onze dos doze
+  produto. Saíram os oito `importar-*` (a importação na UI é do Goal020), onze dos doze
   `minha-agenda-*` — fica `minha-agenda-conectar`, que ainda serve a recusa honesta — e
   `validacao`, o resumo de texto fixo que afirmava "WhatsApp: Conectado" e "Negócio: Configurado"
   sem ler estado. Entraram `whatsapp-conectar` e `whatsapp-concluido`. Como `onboardingOrder`
@@ -1573,7 +1573,7 @@ aditiva, e o contrato público mudou em três pontos aditivos mais uma remoção
   shell real.
 - **LIMITE:** ativação por teste real, autoativação, demonstração da IA, consentimento/contatos
   ignorados no onboarding, reconciliação automática desired/effective e o item "teste concluído" do
-  checklist são do **Goal018B**. `PATCH /v1/settings/ai` mantém a regra vigente — ao menos um
+  checklist são do **Goal019**. `PATCH /v1/settings/ai` mantém a regra vigente — ao menos um
   serviço operacional — e nada mais.
 - **LIMITE:** em `PATCH /v1/settings/ai`, falha de projeção continua não marcando `PENDING` em
   `contextProjectionStatus`; o estado só fica observável por `GET /v1/status` (`ai.state`).

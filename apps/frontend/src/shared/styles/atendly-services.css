@@ -1,0 +1,74 @@
+/* Serviços — Goal015 */
+.service-form-advanced {
+  margin-top: var(--s5);
+  padding-top: var(--s5);
+  border-top: 1px solid var(--border);
+}
+.service-form-advanced summary {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--fg-soft);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  list-style: none;
+}
+.service-form-advanced summary::-webkit-details-marker {
+  display: none;
+}
+.service-form-advanced summary::after {
+  content: "+";
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--fg);
+  font: 500 14px/1 var(--font-mono);
+}
+.service-form-advanced summary:hover {
+  color: var(--fg);
+}
+.service-form-advanced[open] summary::after {
+  content: "\2212";
+}
+.service-form-advanced .directory-form-grid {
+  margin-top: 18px;
+}
+.service-color-preview {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.service-color-preview .field-help {
+  margin: 0;
+}
+.service-swatch {
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  flex: 0 0 auto;
+  border-radius: 8px;
+}
+.service-swatch[data-color="ROSE"] {
+  --swatch: #b76e79;
+}
+.service-swatch[data-color="AMBER"] {
+  --swatch: #c08a3e;
+}
+.service-swatch[data-color="EMERALD"] {
+  --swatch: #4f9d78;
+}
+.service-swatch[data-color="SKY"] {
+  --swatch: #5b8fb0;
+}
+.service-swatch[data-color="VIOLET"] {
+  --swatch: var(--violet);
+}
+.service-swatch[data-color="SLATE"] {
+  --swatch: #64748b;
+}

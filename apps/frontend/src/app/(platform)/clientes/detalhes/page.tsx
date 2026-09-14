@@ -1,15 +1,9 @@
-import { ProductDirectoryScreen } from "@/features/directory/ProductDirectoryScreen";
+import { ProductCustomersScreen } from "@/features/customers/ProductCustomersScreen";
 export default async function CustomerDetailPage({
   searchParams,
 }: {
   searchParams: Promise<{ id?: string }>;
 }) {
   const { id } = await searchParams;
-  return (
-    <ProductDirectoryScreen
-      area="customers"
-      customerId={id}
-      scenario="detail"
-    />
-  );
+  return <ProductCustomersScreen customerId={id} scenario="detail" />;
 }

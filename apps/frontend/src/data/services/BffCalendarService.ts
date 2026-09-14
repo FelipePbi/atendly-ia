@@ -17,6 +17,7 @@ import {
 } from "../mappers/publicApiSchemas";
 
 export interface ListAppointmentsQuery {
+  customerId?: string;
   customerPhone?: string;
   endDate: string;
   startDate: string;
@@ -167,6 +168,7 @@ export class BffCalendarService {
     return this.http.request({
       path: "/v1/appointments",
       query: {
+        customerId: query.customerId,
         customerPhone: query.customerPhone,
         endDate: query.endDate,
         startDate: query.startDate,

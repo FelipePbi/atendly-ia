@@ -1238,3 +1238,73 @@ no [review014](reviews/014-review.md) sobre a base `7ad3b66`.
   render em nenhuma largura. Em ≤1099px, a regra legada `.sidebar .wa-status span` esconde
   também o `.status-dot`, então o rail fica sem indicador de status — herdado do CSS
   anterior, não introduzido aqui.
+
+## Delta implementado — Goal015, 2026-09-14 (ACCEPTED na rodada 3)
+
+A fotografia histórica acima permanece como registro da baseline. Os FATOS que descrevem
+o diretório como uma tela única de clientes e serviços estão superados pelos fatos abaixo,
+verificados no [review015](reviews/015-review.md) sobre a base `908c4a1`. Nenhum contrato
+público, migration, serviço ou dado foi tocado: o diff é inteiramente de frontend.
+
+- **FATO atual:** `features/directory/ProductDirectoryScreen.tsx` não existe mais. O arquivo
+  de 1318 linhas que servia sete rotas e fazia cinco chamadas de `useShellConfig` foi
+  decomposto em `features/customers/` (`ProductCustomersScreen`, `CustomerList`,
+  `CustomerForm`, `CustomerProfile`, `CustomerAgenda`, `CustomerNotes`, `CustomerTags`,
+  `CustomerMemory`, `CustomerSummary`, `PrimaryGuardianPanel`, `AuthorizationControl`) e
+  `features/services/` (`ProductServicesScreen`, `ServiceList`, `ServiceForm`), com CSS de
+  módulo próprio em `atendly-customers.css` e `atendly-services.css`. As sete rotas de
+  `app/(platform)/clientes/**` e `app/(platform)/servicos/**` apontam para os dois
+  despachantes, que escolhem lista, criação, perfil ou edição.
+- **FATO atual:** cada tela declara `useShellConfig` **uma única vez**, no topo do seu branch
+  mutuamente exclusivo, com os valores derivados do estado. `tests/goal015-shell-invariant.test.tsx`
+  monta `ShellConfigProvider` mais as telas reais e falha em `Maximum update depth` — é a
+  primeira prova renderizada de tela autenticada no repositório, e fecha na parte que não
+  exige sessão fabricada o resíduo que o [review014](reviews/014-review.md) dirigiu aos
+  Goals 015–018.
+- **FATO atual:** o perfil do cliente é por **ID** e mostra o que os Goals 006, 007 e 012 já
+  persistiam e nenhuma tela alcançava: nome e telefone editáveis com ausência explícita,
+  responsável principal com proveniência (`PROPOSED`/`CONFIRMED`, quem propôs e quando) e as
+  ações propor, confirmar e remover, observações e tags com criar/alternar autorização/remover,
+  memória com origem, permissão e idade, e resumo sob demanda que declara cobrir apenas o
+  material autorizado.
+- **FATO atual:** observação, tag e memória criadas pela profissional nascem **não autorizadas**
+  para a IA — nenhum formulário envia `aiAuthorized`/`aiAllowed` — e a autorização só muda por
+  ação explícita. `AuthorizationControl` comunica o estado por texto mais ícone, nunca só por cor.
+  Há teste por superfície.
+- **FATO atual:** a agenda e o histórico do perfil são requisitados por `customerId`.
+  `ListAppointmentsQuery` em `data/services/BffCalendarService.ts` ganhou o campo, de forma
+  aditiva — `customerPhone` continua no adapter para os outros chamadores —, e o perfil não usa
+  telefone em nenhuma requisição. Cliente sem telefone passou a ter agenda, e número
+  compartilhado deixou de misturar agendas de pessoas distintas.
+- **FATO atual:** a lista de clientes não mostra último atendimento, próximo atendimento nem
+  contagem, porque `GET /v1/customers` não os devolve; a busca é **local** sobre a lista
+  carregada e a tela não sugere paginação ou filtro de servidor. Cliente sem nome e cliente sem
+  telefone têm apresentação própria, sem placeholder fabricado. Criar cliente não exige telefone;
+  número já pertencente a outras pessoas apresenta os candidatos de `listCandidatesByPhone` e
+  exige escolha explícita, sem fusão automática.
+- **FATO atual:** a lista de serviços mostra as quatro semânticas de preço distintas
+  (`FIXED`, `STARTING_AT`, `ON_REQUEST`, `NOT_INFORMED`), duração ausente como ausente,
+  ativo/inativo e `needsReview` com a origem (`IMPORT`/`MANUAL`) em texto. O formulário usa
+  progressive disclosure com `<details>`: nome, duração, preço e tipo visíveis; descrição,
+  `colorToken` com preview, buffers antes/depois, recorrência e status atrás da revelação, que
+  já nasce aberta quando o serviço editado usa algum desses campos. Preço sem valor em `FIXED`
+  ou `STARTING_AT` é recusado junto ao campo.
+- **FATO atual:** `features/customers/types.ts` não declara mais `lastContact`,
+  `nextAppointment` nem `appointments`; reexporta o `Customer` dos schemas, com nome e telefone
+  nuláveis. `src/mocks/data/directory.ts` saiu do repositório. `Field`, `ListItem`, `Spinner` e
+  `Toast`, entregues sem consumidor no Goal014, passaram a ser a base da composição; `ListItem`
+  envolve as variantes link e botão num `.list-row` com `role="listitem"`, preservando os papéis
+  implícitos.
+- **LIMITE:** o gate de browser (`validate:ui`, cinco larguras) continua cobrindo **apenas rotas
+  públicas**. As telas novas foram verificadas em jsdom — estrutura, papéis, teclado e axe —, não
+  em largura, contraste ou foco reais. Nenhum backend real foi exercitado: as suítes usam dublê
+  do registry de serviços.
+- **LIMITE:** em tenant com fonte externa, o perfil não funciona e não deve ser lido como tela de
+  Minha Agenda: `GET /internal/customers/:id` está atrás de `requireAtendlyCalendar` e responde
+  `409 OPERATION_MANAGED_EXTERNALLY`. O provider Minha Agenda ignora `customerId` e só filtra por
+  `customerPhone`, então qualquer tela futura de agenda em fonte externa precisa de guard
+  explícito por fonte — resíduo dirigido ao Goal016.
+- **LIMITE:** métricas do cliente continuam sem read model; `features/customers/types.ts` e
+  `features/services/types.ts` ficaram sem importador e o segundo ainda descreve um catálogo
+  fictício; `shared/styles/atendly-directory.css` segue importado por `globals.css` com
+  `features/directory/` vazia. São resíduos de limpeza, não comportamento.

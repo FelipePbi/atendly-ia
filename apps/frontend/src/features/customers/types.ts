@@ -1,3 +1,5 @@
+import type { Customer } from "@/data/mappers/publicApiSchemas";
+
 export type CustomerScenario =
   | "list"
   | "external"
@@ -7,14 +9,7 @@ export type CustomerScenario =
   | "detail"
   | "detail-external"
   | "new";
-export interface Customer {
-  id: string;
-  name: string;
-  phone: string;
-  lastContact: string;
-  nextAppointment?: string;
-  appointments: number;
-}
+export type { Customer };
 export interface CustomerService {
   list(): Promise<Customer[]>;
   create(customer: Customer): Promise<Customer>;

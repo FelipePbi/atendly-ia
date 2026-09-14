@@ -805,6 +805,15 @@ p {
 .list-item:last-child {
   border-bottom: 0;
 }
+/* O item interativo mora dentro de `.list-row`, o invólucro que carrega
+   `role="listitem"`: a separação volta a ser calculada pela posição da
+   linha na lista, e não pela posição do item dentro do invólucro. */
+.list-row > .list-item {
+  border-bottom: 1px solid var(--border);
+}
+.list-row:last-child > .list-item {
+  border-bottom: 0;
+}
 .list-item:hover {
   background: var(--surface-secondary);
 }

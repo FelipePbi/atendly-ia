@@ -1,6 +1,6 @@
 # Goal 014 — Fundação visual, shell e autenticação
 
-**Status: READY.** Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-13 pelo Tech Lead Agent após [Goal013 ACCEPTED](../reviews/013-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
+**Status: ACCEPTED.** Aceito na rodada 3 do [review014](../reviews/014-review.md); commit de fechamento `0bbfbf35c6855aca71dc96c986879dec1ed91985`. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-13 pelo Tech Lead Agent após [Goal013 ACCEPTED](../reviews/013-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
 
 Developer execution profile: OPUS_MEDIUM
 

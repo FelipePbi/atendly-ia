@@ -1,6 +1,6 @@
 # Goal 013 — Áudio e mídia: transcrição, imagem para o humano e documento visível
 
-**Status: READY.** Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-13 pelo Tech Lead Agent após [Goal012 ACCEPTED](../reviews/012-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
+**Status: ACCEPTED.** Aceito na rodada 2 do [review013](../reviews/013-review.md); commit de fechamento `108f88d4463498fc7fed0096955b0a241bcff71b`. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-13 pelo Tech Lead Agent após [Goal012 ACCEPTED](../reviews/012-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
 
 Developer execution profile: OPUS_MEDIUM
 

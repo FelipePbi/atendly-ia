@@ -1,6 +1,6 @@
 # Goal 012 — Conhecimento do negócio, memória do cliente e sugestões ao humano
 
-**Status: READY.** Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-13 pelo Tech Lead Agent após [Goal011 ACCEPTED](../reviews/011-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
+**Status: ACCEPTED.** Aceito na rodada 3 do [review012](../reviews/012-review.md); commit de fechamento `90ffa2361fd18bb811e85687d06653cc09a0fc76`. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-13 pelo Tech Lead Agent após [Goal011 ACCEPTED](../reviews/011-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
 
 Developer execution profile: OPUS_MEDIUM
 

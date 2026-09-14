@@ -1,6 +1,6 @@
 # Goal 015 — Clientes e Serviços na UI
 
-**Status: READY.** Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-14 pelo Tech Lead Agent após [Goal014 ACCEPTED](../reviews/014-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
+**Status: ACCEPTED.** Aceito na rodada 3 do [review015](../reviews/015-review.md); commit de fechamento `3c3cc16b5f0add1046ba4e0e2978076913601019`. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-14 pelo Tech Lead Agent após [Goal014 ACCEPTED](../reviews/014-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
 
 Developer execution profile: OPUS_MEDIUM
 

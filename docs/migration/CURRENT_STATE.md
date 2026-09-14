@@ -1308,3 +1308,94 @@ público, migration, serviço ou dado foi tocado: o diff é inteiramente de fron
   `features/services/types.ts` ficaram sem importador e o segundo ainda descreve um catálogo
   fictício; `shared/styles/atendly-directory.css` segue importado por `globals.css` com
   `features/directory/` vazia. São resíduos de limpeza, não comportamento.
+
+## Delta implementado — Goal016, 2026-09-14 (ACCEPTED na rodada 4)
+
+A fotografia histórica acima permanece como registro da baseline. Os FATOS que descrevem a
+agenda como lista semanal de uma tela só, e os que dizem que nenhuma tela consome hold,
+ciclo de vida, histórico, exceção ou série, estão superados pelos fatos abaixo, verificados no
+[review016](reviews/016-review.md) sobre a base `2297b71`. Nenhuma migration e nenhum dado
+foram tocados; o contrato público mudou em dois pontos.
+
+- **FATO atual:** existe leitura de bloqueio em todas as camadas. `GET /internal/time-blocks`
+  no Scheduling (`calendar/time-blocks.ts` + `internal-api/routes.ts:971`) e
+  `GET /v1/time-blocks?startDate&endDate` no BFF são escopados por tenant, exigem a janela e
+  devolvem `id`, `startAt`, `endAt`, `reason`, `kind`, `title` e `seriesId` — a mesma forma das
+  respostas de escrita. A mudança é aditiva: nenhuma rota existente mudou de forma. Antes deste
+  Goal não havia rota de leitura de bloco em camada alguma, e a agenda mentia sobre ocupação.
+- **FATO atual:** `POST /v1/availability-exceptions/unavailable` não aceita mais `decidedBy` no
+  corpo. O BFF o deriva de `internalContext(request).userId` (`calendar/routes.ts:520`),
+  preservando o par ambos-ou-nenhum que o refine do Scheduling exige; `decidedReason` continua
+  vindo do corpo, porque é conteúdo humano e não identidade. Corpo antigo que ainda envie
+  `decidedBy` é aceito com o valor ignorado, nunca `400`. Fecha o resíduo do
+  [review009](reviews/009-review.md): quem decide não se autodeclara.
+- **FATO atual:** `features/calendar/ProductAgendaScreen.tsx` não existe mais. A agenda vive em
+  `features/agenda/` — 24 módulos, cerca de 6,4 mil linhas — com `ProductAgendaScreen` como
+  despachante de nove cenários mutuamente exclusivos e **apenas dois call sites** de
+  `useShellConfig` (`AgendaBoard` e o `AppointmentFlowShell` compartilhado pelos fluxos).
+  `tests/goal016-shell-invariant.test.tsx` monta `ShellConfigProvider` mais as telas reais e
+  falha em `Maximum update depth`.
+- **FATO atual:** as rotas de agenda são nove. Às seis existentes somam-se `/agenda/serie`
+  (série de atendimento), `/agenda/bloquear/serie` (série de bloqueio) e `/agenda/excecoes`
+  (exceções de disponibilidade), criadas porque fluxos obrigatórios as exigiam. Todo cenário do
+  despachante é alcançável por rota.
+- **FATO atual:** Dia, Semana e Mês existem sobre a mesma janela de dados, alternáveis com a
+  escolha visível e compartilhando a mecânica `--start`/`--span`/lane de `timeGrid.ts`. A grade
+  mostra atendimentos, bloqueios operacionais, compromissos pessoais, exceções de
+  disponibilidade e a ocupação por buffer, distinguíveis por texto e forma; cancelado e falta
+  ficam distintos de confirmado. O Dia filtra por data antes de posicionar, então bloco que
+  atravessa a meia-noite não é desenhado no dia seguinte.
+- **FATO atual:** criar atendimento identifica a pessoa por `customerId`; nome e telefone só são
+  enviados para cliente novo, criado na confirmação. Cliente sem telefone pode ser agendado.
+  `serviceIds` é lista: a duração somada é apresentada e o total obedece `totalPriceType` — com
+  serviço `ON_REQUEST` ou `NOT_INFORMED` nenhum valor fechado é exibido.
+- **FATO atual:** o hold tem ciclo de vida na UI (`holdSession.ts`): escolher horário reserva,
+  confirmar consome (`holdId` no corpo), abandonar o fluxo ou trocar de horário libera, e
+  expiração tem mensagem própria que leva a reescolher. Conflito apresenta o que ocupa o
+  intervalo e oferece outro horário ou sobreposição explícita; sem `overlapOverrideReason` o
+  envio não sai, e com motivo o evento `OVERLAP_OVERRIDE` aparece no histórico.
+- **FATO atual:** bloqueio operacional e compromisso pessoal são criados como `kind` distintos.
+  Série finita aceita **um** entre data final e contagem; conflito oferece pular
+  (`skipConflicts`) ou forçar com motivo (`forceOverlapReason`), mostrando antes o que será
+  pulado. "Esta ocorrência" (remover/mover) e "a série a partir daqui" (editar/remover) são
+  ações distintas com chamadas distintas, e a tela diz que editar a partir de uma data encerra a
+  série atual e preserva o passado.
+- **FATO atual:** a série de atendimento segue o contrato: a pré-visualização mostra ocorrência
+  `adjusted` como ajustada e `unavailable` como indisponível, e a confirmação é única, com
+  `Idempotency-Key` estável por conjunto de holds. A tela não oferece confirmação parcial.
+- **FATO atual:** o detalhe do atendimento mantém os três eixos do Goal008 separados — estado,
+  `presenceConfirmedAt` e `finalValue` —, com concluir, marcar falta com nota, confirmar
+  presença e registrar valor final como ações próprias; `completionOrigin: "AUTO"` é apresentado
+  como conclusão automática. O histórico por evento ordena por `occurredAt` com desempate por
+  `sequence` e mostra tipo, origem, ator e motivo: o que a IA fez aparece como feito pela IA.
+- **FATO atual:** exceções de disponibilidade são geridas por data na tela — disponibilidade
+  extra e indisponibilidade total ou parcial, criar e remover. Indisponibilidade que cobre
+  atendimento confirmado mostra o afetado e só reenvia com `decidedReason`; não existe campo
+  `decidedBy` no formulário.
+- **FATO atual:** o guard por fonte é explícito. `getCalendar` é resolvido antes de qualquer
+  outra requisição; bloco e exceção só são pedidos em `source === "ATENDLY"`; `source: null` tem
+  painel próprio; cada fluxo consulta a capability antes de se oferecer, e `sourceGuard.ts`
+  nomeia a operação indisponível em vez de erro genérico. Fecha o resíduo que o
+  [review015](reviews/015-review.md) dirigiu a este Goal.
+- **FATO atual:** o resíduo de limpeza do Goal015 saiu. `features/calendar/types.ts`,
+  `src/mocks/data/appointments.ts`, `features/customers/types.ts`, `features/services/types.ts` e
+  `shared/styles/atendly-directory.css` (889 linhas) não existem mais, com o `@import` removido
+  de `globals.css`; o que ainda tinha dono migrou para `atendly-customers.css`,
+  `atendly-services.css` e `atendly.css`. "Revisar dados" do `CustomerForm` preserva nome e
+  telefone digitados.
+- **LIMITE:** bloco que atravessa a meia-noite não é exibido depois da virada.
+  `timeBlockEntries` atribui ao bloco o dia de início e trunca em 24h, então o trecho a partir de
+  00:00 do dia seguinte não aparece em visualização alguma. Hoje não há produtor na UI —
+  `BlockForm` só cria bloco intra-dia —, mas a rota devolve esses blocos por sobreposição de
+  janela.
+- **LIMITE:** `minha-agenda/provider.ts` continua ignorando `customerId` e filtrando por
+  `customerPhone`. O risco foi fechado pela via da interface (em `EXTERNAL` a agenda por pessoa
+  não é requisitada), não pelo provider; qualquer leitura futura por pessoa em fonte externa
+  precisa do mesmo guard.
+- **LIMITE:** nenhum gate cobre `apps/frontend/tests/`. `npm run lint` é `eslint src`,
+  `validate-core.mjs` não tem passo de lint e o workflow de CI também não — variável sem uso em
+  arquivo de teste passa despercebida.
+- **LIMITE:** o gate de browser (`validate:ui`, cinco larguras) continua cobrindo **apenas rotas
+  públicas**. As telas de agenda foram verificadas em jsdom — estrutura, papéis, teclado e axe —,
+  não em largura, contraste ou foco reais. Nenhum backend real, WhatsApp real, tenant com Minha
+  Agenda real ou CI hospedada foi exercitado.

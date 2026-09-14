@@ -17,7 +17,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Ciclo de vida do atendimento | `POST /v1/appointments/:id/complete`; `POST /v1/appointments/:id/no-show`; `POST /v1/appointments/:id/final-value`; `POST /v1/appointments/:id/presence`; `GET /v1/appointments/:id/events` |
 | Reserva temporária (hold) | `POST /v1/holds`; `GET /v1/holds`; `DELETE /v1/holds/:id` |
 | Série de atendimento (Goal009) | `POST /v1/appointments/series/preview`; `POST /v1/appointments/series/confirm` |
-| Disponibilidade e bloqueios | `GET /v1/availability`; `POST /v1/time-blocks`; `DELETE /v1/time-blocks/:id`; `DELETE /v1/time-blocks/:id/occurrence`; `PATCH /v1/time-blocks/:id/occurrence` |
+| Disponibilidade e bloqueios | `GET /v1/availability`; `GET /v1/time-blocks`; `POST /v1/time-blocks`; `DELETE /v1/time-blocks/:id`; `DELETE /v1/time-blocks/:id/occurrence`; `PATCH /v1/time-blocks/:id/occurrence` |
 | Exceções de disponibilidade (Goal009) | `GET /v1/availability-exceptions`; `POST /v1/availability-exceptions/extra`; `POST /v1/availability-exceptions/unavailable`; `DELETE /v1/availability-exceptions/:id` |
 | Séries de bloqueio/compromisso (Goal009) | `POST /v1/block-series`; `PATCH /v1/block-series/:id/from-date`; `DELETE /v1/block-series/:id` |
 | Importação única (Goal010) | `POST /v1/calendar/imports`; `POST /v1/calendar/imports/:sessionId/analyze`; `GET /v1/calendar/imports/:sessionId/categories/:category/items`; `POST /v1/calendar/imports/:sessionId/items/:itemId/decision`; `POST /v1/calendar/imports/:sessionId/execute`; `GET /v1/calendar/imports/:sessionId/progress`; `POST /v1/calendar/imports/:sessionId/complete` |
@@ -218,7 +218,7 @@ O atendimento ocupa `[startAt − bufferBeforeMinutes, endAt + bufferAfterMinute
 | `POST /v1/availability-exceptions/unavailable` | cria indisponibilidade pontual (`date`, `startTime`/`endTime` opcionais para dia inteiro, `reason`) |
 | `DELETE /v1/availability-exceptions/:id` | remove |
 
-Indisponibilidade que cobre um atendimento confirmado é recusada com `409 EXCEPTION_APPOINTMENT_CONFLICT`, salvo decisão humana explícita: `decidedBy` + `decidedReason` no corpo, gravados na própria exceção. A exceção nunca altera atendimento existente.
+Indisponibilidade que cobre um atendimento confirmado é recusada com `409 EXCEPTION_APPOINTMENT_CONFLICT`, salvo decisão humana explícita: `decidedReason` no corpo, gravada na própria exceção junto com quem decidiu. `decidedBy` não é mais um campo do corpo (Goal016): o ator é sempre derivado da sessão autenticada; um corpo antigo que ainda envie `decidedBy` é aceito e o valor é ignorado. A exceção nunca altera atendimento existente.
 
 ### Séries de bloqueio e compromisso pessoal
 
@@ -226,6 +226,7 @@ Indisponibilidade que cobre um atendimento confirmado é recusada com `409 EXCEP
 
 | Rota | O que faz |
 | --- | --- |
+| `GET /v1/time-blocks?startDate&endDate` | lista blocos do período, escopado por tenant; a janela é obrigatória. Mesma forma de `POST /v1/time-blocks` |
 | `POST /v1/block-series` | cria série (`rule`: `kind`, `title`, `daysOfWeek`, `startTime`, `endTime`, `seriesStartDate`, e **um** entre `seriesEndDate`/`occurrenceCount`); materializa as ocorrências na criação |
 | `PATCH /v1/block-series/:id/from-date` | edita a série a partir de `fromDate`: encerra a série atual (ocorrências passadas intocadas) e cria outra com o novo `rule` |
 | `DELETE /v1/block-series/:id` | remove as ocorrências futuras da série (a partir de hoje); passadas preservadas |

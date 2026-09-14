@@ -374,6 +374,174 @@
   border-color: var(--accent);
   background: var(--accent-soft);
 }
+.week-day-head {
+  appearance: none;
+  background: transparent;
+  border-block: 0;
+  border-left: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.agenda-item-kind,
+.week-appointment-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.agenda-item-kind .icon,
+.week-appointment-kind .icon {
+  width: 12px;
+  height: 12px;
+}
+.week-appointment.is-buffer {
+  border-style: dotted;
+  color: var(--muted);
+  background: transparent;
+}
+.week-appointment.is-block {
+  border-style: dashed;
+  color: var(--muted);
+  background: repeating-linear-gradient(
+    135deg,
+    var(--surface-interactive) 0 6px,
+    var(--surface) 6px 12px
+  );
+}
+.week-appointment.is-personal {
+  border-style: dashed;
+  background: var(--surface);
+}
+.week-appointment.is-exception-unavailable {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+.week-appointment.is-exception-extra {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.week-appointment.is-no-show strong {
+  text-decoration: line-through;
+}
+
+.agenda-month-panel {
+  overflow: hidden;
+}
+.month-weekday-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-secondary);
+}
+.month-weekday {
+  padding: 10px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+.month-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.month-day {
+  min-height: 96px;
+  padding: 6px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  text-align: left;
+  color: var(--fg);
+  background: var(--surface);
+}
+.month-day:nth-child(7n) {
+  border-right: 0;
+}
+.month-day:hover {
+  background: var(--surface-secondary);
+}
+.month-day.is-outside {
+  color: var(--muted);
+  background: var(--surface-secondary);
+}
+.month-day-number {
+  align-self: flex-start;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+.month-day.is-today .month-day-number {
+  color: var(--surface);
+  background: var(--accent);
+}
+.month-day.is-selected {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.month-day-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.month-entry {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  padding: 1px 4px;
+  border-radius: 4px;
+  color: var(--fg-soft);
+  background: var(--surface-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.month-entry .icon {
+  width: 10px;
+  height: 10px;
+  flex: none;
+}
+.month-entry span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.month-entry.is-block {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--surface-interactive) 0 4px,
+    var(--surface) 4px 8px
+  );
+}
+.month-entry.is-personal {
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+}
+.month-entry.is-exception-unavailable {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+.month-entry.is-exception-extra {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.month-day-more {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
 
 .agenda-day-panel,
 .agenda-list-panel {
@@ -426,57 +594,48 @@
   color: var(--muted);
   font-size: 12px;
 }
-.agenda-day-list {
-  padding: 4px 18px 18px;
+
+/* Dia: mesma grade cronologica da Semana, com uma coluna so. A entrada fica na
+   posicao real do tempo (--start/--span); entradas que se sobrepoem dividem a
+   largura (--lane/--lanes) em vez de uma esconder a outra. */
+.agenda-day-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: 70vh;
 }
-.agenda-item {
+.agenda-day-column {
   position: relative;
-  min-height: 88px;
-  padding: 16px 8px 16px 82px;
-  display: block;
-  color: var(--fg);
-  text-decoration: none;
+  border-left: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 71px,
+    var(--border) 71px,
+    var(--border) 72px
+  );
 }
-.agenda-item + .agenda-item {
-  border-top: 1px solid var(--border);
+.agenda-day-entry {
+  --lane: 0;
+  --lanes: 1;
+  left: calc(6px + var(--lane) * (100% - 12px) / var(--lanes));
+  right: auto;
+  width: calc((100% - 12px) / var(--lanes) - 4px);
+  appearance: none;
+  text-align: left;
+  font: inherit;
 }
-.agenda-item:hover {
-  background: var(--surface-secondary);
+.agenda-day-entry.is-readonly:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+  transform: none;
 }
-.agenda-item.is-readonly:hover {
-  background: transparent;
+.agenda-day-entry.is-selected {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
 }
-.agenda-item-time {
-  position: absolute;
-  left: 8px;
-  top: 18px;
-  width: 58px;
-  color: var(--fg);
-  font: 600 13px/1.3 var(--font-mono);
-}
-.agenda-item-copy {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-}
-.agenda-item-copy strong {
-  font-size: 14px;
-}
-.agenda-item-copy span {
-  color: var(--muted);
-  font-size: 13px;
-}
-.agenda-item-signals {
-  margin-top: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.agenda-item.is-blocked {
-  color: var(--muted);
-}
-.agenda-item.is-blocked .agenda-item-time {
-  color: var(--muted);
+.agenda-day-entry .badge {
+  display: inline-flex;
+  margin-top: 4px;
 }
 .agenda-list-group + .agenda-list-group {
   border-top: 1px solid var(--border);
@@ -754,6 +913,12 @@
   grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
   gap: 20px;
 }
+/* Acoes da ocorrencia selecionada no Dia: mesma superficie do detalhe, aberta
+   abaixo da grade em vez de outra rota. */
+.agenda-occurrence-panel {
+  display: grid;
+  gap: 12px;
+}
 .agenda-detail-section {
   padding: 22px 24px;
   border: 1px solid var(--border);
@@ -805,6 +970,37 @@
   margin-top: 2px;
   color: var(--muted);
   font-size: 12px;
+}
+.agenda-lifecycle {
+  display: grid;
+  gap: 16px;
+}
+.agenda-lifecycle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.agenda-lifecycle-row strong,
+.agenda-lifecycle-row span {
+  display: block;
+}
+.agenda-lifecycle-row span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.agenda-lifecycle-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.agenda-lifecycle-form {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  background: var(--surface-secondary);
 }
 .agenda-danger-zone {
   margin-top: 20px;
@@ -860,6 +1056,105 @@
   font-size: 12px;
 }
 
+/* --- Escolha de serviços, reserva e conflito (Goal016) ------------------- */
+.agenda-service-options {
+  display: grid;
+  gap: 8px;
+}
+.agenda-service-option {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: pointer;
+}
+.agenda-service-option input:checked ~ span {
+  color: var(--accent);
+  font-weight: 600;
+}
+.agenda-service-option:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.agenda-manual-time {
+  margin-top: 18px;
+  display: grid;
+  gap: 10px;
+  align-items: end;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.agenda-manual-time p {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 12px;
+}
+.agenda-hold-status {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  background: var(--surface-secondary);
+  color: var(--fg-soft);
+  font-size: 13px;
+}
+.agenda-conflict {
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+.agenda-conflict-list {
+  margin: 14px 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+.agenda-conflict-list li {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  background: var(--surface-secondary);
+}
+.agenda-conflict-list .badge {
+  justify-self: start;
+}
+
+/* --- Série de atendimento (Goal016) -------------------------------------- */
+.agenda-series-list {
+  margin: 14px 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+.agenda-series-item {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--r-input);
+  background: var(--surface-secondary);
+}
+.agenda-series-item.is-adjusted {
+  border-left-color: var(--violet);
+}
+.agenda-series-item.is-unavailable {
+  border-left-color: var(--danger);
+  background: var(--danger-soft);
+}
+.agenda-series-actions {
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 1099px) {
   .agenda-shell {
     grid-template-columns: 88px minmax(0, 1fr);
@@ -895,6 +1190,9 @@
 }
 
 @media (max-width: 767px) {
+  .agenda-manual-time {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .agenda-shell {
     display: block;
     min-height: 100dvh;
@@ -1008,16 +1306,6 @@
   .agenda-day-summary {
     padding-inline: 16px;
   }
-  .agenda-day-list {
-    padding-inline: 8px;
-  }
-  .agenda-item {
-    padding-left: 74px;
-    padding-right: 8px;
-  }
-  .agenda-item-time {
-    left: 8px;
-  }
   .agenda-state-surface {
     min-height: 470px;
     margin-inline: -16px;
@@ -1040,6 +1328,18 @@
   }
   .agenda-loading-grid > :nth-child(n + 3) {
     display: none;
+  }
+  .month-day {
+    min-height: 64px;
+    padding: 4px;
+  }
+  .month-day-number {
+    width: 22px;
+    height: 22px;
+    font-size: 12px;
+  }
+  .month-entry {
+    font-size: 9px;
   }
   .agenda-flow-header {
     grid-template-columns: auto minmax(0, 1fr);

@@ -122,12 +122,15 @@ const extraAvailabilitySchema = z.object({
   startTime: timeSchema,
   endTime: timeSchema,
 });
+// `decidedBy` nao vem mais do corpo (Goal016): quem decide e a sessao
+// autenticada, nunca o cliente. Um corpo antigo que ainda envie `decidedBy`
+// e aceito e o valor e ignorado, sem erro — `z.object` descarta chave
+// desconhecida por padrao.
 const unavailabilitySchema = z.object({
   date: dateSchema,
   startTime: timeSchema.optional(),
   endTime: timeSchema.optional(),
   reason: z.string().trim().max(500).optional(),
-  decidedBy: z.string().trim().min(1).max(200).optional(),
   decidedReason: z.string().trim().min(1).max(500).optional(),
 });
 
@@ -411,6 +414,18 @@ export async function registerV1CalendarRoutes(
     },
   );
 
+  app.get(
+    "/v1/time-blocks",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const query = parseQuery(exceptionsQuerySchema, request.query);
+      return dataResponse(
+        request,
+        await scheduling.listTimeBlocks(internalContext(request), query),
+      );
+    },
+  );
+
   app.post(
     "/v1/time-blocks",
     { preHandler: requireTenantContext },
@@ -496,10 +511,14 @@ export async function registerV1CalendarRoutes(
     "/v1/availability-exceptions/unavailable",
     { preHandler: requireTenantContext },
     async (request, reply) => {
-      const exception = await scheduling.createUnavailability(
-        internalContext(request),
-        parseBody(unavailabilitySchema, request.body),
-      );
+      const context = internalContext(request);
+      const body = parseBody(unavailabilitySchema, request.body);
+      const exception = await scheduling.createUnavailability(context, {
+        ...body,
+        // Decisao humana explicita: o ator e sempre quem esta autenticado
+        // nesta sessao, nunca um valor vindo do corpo.
+        decidedBy: body.decidedReason ? context.userId : undefined,
+      });
       return reply.code(201).send(dataResponse(request, exception));
     },
   );

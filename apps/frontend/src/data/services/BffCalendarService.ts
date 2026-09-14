@@ -25,8 +25,10 @@ export interface ListAppointmentsQuery {
 
 export interface CreateAppointmentInput {
   comments?: string;
-  customerName: string;
-  customerPhone: string;
+  /** Pessoa já resolvida; alternativa a `customerName`/`customerPhone`. */
+  customerId?: string;
+  customerName?: string;
+  customerPhone?: string;
   date: string;
   /** Duração do atendimento manual excepcional sem serviço cadastrado. */
   durationMinutes?: number;
@@ -94,8 +96,7 @@ export interface CreateUnavailabilityInput {
   endTime?: string;
   startTime?: string;
   reason?: string;
-  /** Decisão humana explícita quando a indisponibilidade cobre atendimento confirmado. */
-  decidedBy?: string;
+  /** Decisão humana explícita quando a indisponibilidade cobre atendimento confirmado; o ator vem sempre da sessão (Goal016). */
   decidedReason?: string;
 }
 
@@ -332,6 +333,18 @@ export class BffCalendarService {
       path: "/v1/availability",
       query: { ...query, serviceIds: query.serviceIds.join(",") },
       schema: z.array(availabilitySlotSchema),
+      signal,
+    });
+  }
+
+  listTimeBlocks(
+    query: { endDate: string; startDate: string },
+    signal?: AbortSignal,
+  ) {
+    return this.http.request({
+      path: "/v1/time-blocks",
+      query,
+      schema: z.array(timeBlockSchema),
       signal,
     });
   }

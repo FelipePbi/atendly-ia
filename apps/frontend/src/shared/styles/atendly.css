@@ -4097,3 +4097,158 @@ p {
     transform: none;
   }
 }
+
+.directory-page {
+  width: min(1240px, 100%);
+  margin: 0 auto;
+  padding: 28px 36px 64px;
+}
+.directory-page.is-form-page {
+  width: min(920px, 100%);
+}
+.directory-page-header {
+  margin-bottom: 22px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+.directory-page-header h1 {
+  margin-bottom: 4px;
+}
+.directory-page-header p {
+  max-width: 62ch;
+  color: var(--muted);
+  font-size: 14px;
+}
+.directory-page-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.directory-source-strip {
+  min-height: 58px;
+  margin-bottom: 18px;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--surface);
+}
+.directory-source-copy {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.directory-source-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.directory-source-copy > div > strong,
+.directory-source-copy > div > span {
+  display: block;
+}
+.directory-source-copy > div > strong {
+  font-size: 14px;
+}
+.directory-source-copy > div > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.directory-loading-shell {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+.directory-loading-row {
+  min-height: 76px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: 48px 1.4fr 1fr 1fr 0.7fr;
+  align-items: center;
+  gap: 16px;
+}
+.directory-loading-row:last-child {
+  border-bottom: 0;
+}
+.directory-loading-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+}
+.directory-loading-copy {
+  display: grid;
+  gap: 9px;
+}
+.directory-loading-copy .skeleton-line:last-child {
+  width: 62%;
+}
+
+@media (max-width: 767px) {
+  .directory-page {
+    padding: 20px 16px 32px;
+  }
+  .directory-page-header {
+    margin-bottom: 18px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+  }
+  .directory-page-header h1 {
+    font-size: 26px;
+  }
+  .directory-page-header p {
+    font-size: 13px;
+  }
+  .directory-page-actions .btn span {
+    display: none;
+  }
+  .directory-page-actions .btn {
+    width: 52px;
+    padding-inline: 0;
+  }
+  .directory-source-strip {
+    align-items: flex-start;
+  }
+  .directory-source-strip > .badge {
+    flex: 0 0 auto;
+  }
+  .directory-loading-shell {
+    margin-inline: -16px;
+    border-inline: 0;
+    border-radius: 0;
+  }
+  .directory-loading-row {
+    grid-template-columns: 44px 1fr;
+    padding-inline: 16px;
+  }
+  .directory-loading-row > :nth-child(n + 3) {
+    display: none;
+  }
+}
+
+@media (max-width: 390px) {
+  .directory-source-strip {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .directory-source-strip > .badge {
+    justify-self: start;
+  }
+  .directory-source-copy > div > span {
+    max-width: 30ch;
+  }
+}

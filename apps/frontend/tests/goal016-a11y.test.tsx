@@ -1,0 +1,477 @@
+// @vitest-environment jsdom
+/**
+ * Goal016 (WU-11): prova transversal de acessibilidade das telas novas de
+ * Agenda, com o que o axe sozinho não cobre.
+ *
+ * `expectNoA11yViolations` já roda nas superfícies de cada Work Unit
+ * (goal016-appointment-create, goal016-blocks-series, goal016-exceptions-source,
+ * goal016-lifecycle-history, goal016-appointment-series). Esta suíte fecha três
+ * lacunas que nenhuma delas cobre: a grade da Agenda (Dia/Semana/Mês) nunca
+ * passou pelo axe, e nenhuma suíte afirma foco por teclado — nem nas grades,
+ * nem nos diálogos de confirmação, nem nos controles de decisão de
+ * sobreposição. A regra `aria-allowed-role` é best-practice e fica fora do
+ * `RULE_SET` de `tests/support/a11y.ts` (que só roda tags WCAG): o axe não
+ * acusa um `<Link>` estilizado como botão ou um botão com papel trocado — por
+ * isso o papel de cada controle aqui é afirmado explicitamente, não inferido
+ * da classe CSS.
+ *
+ * O que esta suíte não prova: layout real, largura de viewport, contraste
+ * computado. Isso é `npm run validate:ui`, não jsdom.
+ */
+
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent, { type UserEvent } from "@testing-library/user-event";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+
+import {
+  type Appointment,
+  type AppointmentHold,
+  BffHttpError,
+  type CalendarState,
+  type Customer,
+  type Service,
+  type TimeBlock,
+} from "@/data";
+import { AgendaBoard } from "@/features/agenda/AgendaBoard";
+import { AppointmentForm } from "@/features/agenda/AppointmentForm";
+import { BlockSeriesForm } from "@/features/agenda/BlockSeriesForm";
+import { CancelFlow } from "@/features/agenda/CancelFlow";
+import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
+
+import { expectNoA11yViolations } from "./support/a11y";
+
+const push = vi.fn();
+const replace = vi.fn();
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push, replace }),
+}));
+
+const cancelAppointment = vi.fn();
+const createAppointment = vi.fn();
+const createBlockSeries = vi.fn();
+const createHold = vi.fn();
+const getAppointment = vi.fn();
+const getAvailability = vi.fn();
+const getCalendar = vi.fn();
+const listAppointments = vi.fn();
+const listAvailabilityExceptions = vi.fn();
+const listTimeBlocks = vi.fn();
+const releaseHold = vi.fn();
+const listCustomers = vi.fn();
+const listServices = vi.fn();
+
+vi.mock("@/shared/runtime/ProductRuntime", () => ({
+  getProductServices: () => ({
+    calendar: {
+      cancelAppointment,
+      createAppointment,
+      createBlockSeries,
+      createHold,
+      getAppointment,
+      getAvailability,
+      getCalendar,
+      listAppointments,
+      listAvailabilityExceptions,
+      listTimeBlocks,
+      releaseHold,
+    },
+    customers: { list: listCustomers },
+    serviceCatalog: { list: listServices },
+  }),
+}));
+
+const ISO_TODAY = "2026-09-14";
+
+function calendarFixture(overrides: Partial<CalendarState> = {}): CalendarState {
+  return {
+    capabilities: {
+      createAppointments: true,
+      manageAvailability: true,
+      manageCustomers: true,
+      manageServices: true,
+      migrate: false,
+    },
+    integration: null,
+    source: "ATENDLY",
+    timezone: "America/Sao_Paulo",
+    ...overrides,
+  };
+}
+
+function serviceFixture(overrides: Partial<Service> = {}): Service {
+  return {
+    active: true,
+    bufferAfterMinutes: 0,
+    bufferBeforeMinutes: 0,
+    durationMinutes: 60,
+    id: "svc-corte",
+    name: "Corte feminino",
+    needsReview: false,
+    price: 90,
+    priceType: "FIXED",
+    ...overrides,
+  };
+}
+
+function customerFixture(overrides: Partial<Customer> = {}): Customer {
+  return {
+    id: "cus-ana",
+    name: "Ana Paula",
+    phone: "+5511999990000",
+    ...overrides,
+  };
+}
+
+function holdFixture(overrides: Partial<AppointmentHold> = {}): AppointmentHold {
+  return {
+    contactRef: null,
+    customerId: undefined,
+    date: ISO_TODAY,
+    durationMinutes: 60,
+    endTime: "10:00",
+    expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+    id: "hold-1",
+    serviceIds: ["svc-corte"],
+    source: "USER",
+    startTime: "09:00",
+    status: "ACTIVE",
+    ...overrides,
+  } as AppointmentHold;
+}
+
+function appointmentFixture(overrides: Partial<Appointment> = {}): Appointment {
+  return {
+    bufferAfterMinutes: 0,
+    bufferBeforeMinutes: 0,
+    comments: null,
+    completedAt: null,
+    completionOrigin: null,
+    customer: customerFixture(),
+    customerId: "cus-ana",
+    date: ISO_TODAY,
+    durationMinutes: 60,
+    endTime: "11:00",
+    finalValue: null,
+    id: "apt-1",
+    noShowAt: null,
+    noShowNote: null,
+    presenceConfirmedAt: null,
+    seriesId: null,
+    services: [
+      {
+        durationMinutes: 60,
+        name: "Corte feminino",
+        price: 90,
+        priceType: "FIXED",
+        serviceId: "svc-corte",
+      },
+    ],
+    source: "USER",
+    startTime: "10:00",
+    status: "CONFIRMED",
+    title: null,
+    totalPrice: 90,
+    totalPriceType: "FIXED",
+    ...overrides,
+  };
+}
+
+function timeBlockFixture(overrides: Partial<TimeBlock> = {}): TimeBlock {
+  return {
+    endAt: `${ISO_TODAY}T16:00:00.000Z`,
+    id: "block-1",
+    kind: "BLOCK",
+    reason: "Almoço",
+    seriesId: null,
+    startAt: `${ISO_TODAY}T15:00:00.000Z`,
+    title: null,
+    ...overrides,
+  };
+}
+
+function conflictError(): BffHttpError {
+  return new BffHttpError({
+    code: "SLOT_UNAVAILABLE",
+    message: "Slot is unavailable for the service duration.",
+    requestId: "req-1",
+    status: 409,
+  });
+}
+
+function seriesConflictError(
+  conflicts: Array<{ appointmentId: string; date: string }>,
+): BffHttpError {
+  return new BffHttpError({
+    code: "BLOCK_SERIES_APPOINTMENT_CONFLICT",
+    details: { conflicts },
+    message: "One or more occurrences overlap a confirmed appointment.",
+    requestId: "req-2",
+    status: 409,
+  });
+}
+
+/** Avança Tab até o alvo receber foco, ou até o limite — nunca em loop indefinido. */
+async function tabUntilFocused(
+  user: UserEvent,
+  target: HTMLElement,
+  max = 40,
+): Promise<void> {
+  for (let attempt = 0; attempt < max && document.activeElement !== target; attempt += 1) {
+    await user.tab();
+  }
+}
+
+beforeEach(() => {
+  for (const spy of [
+    push,
+    replace,
+    cancelAppointment,
+    createAppointment,
+    createBlockSeries,
+    createHold,
+    getAppointment,
+    getAvailability,
+    getCalendar,
+    listAppointments,
+    listAvailabilityExceptions,
+    listTimeBlocks,
+    releaseHold,
+    listCustomers,
+    listServices,
+  ]) {
+    spy.mockReset();
+  }
+  getCalendar.mockResolvedValue(calendarFixture());
+  listServices.mockResolvedValue({
+    editable: true,
+    items: [serviceFixture()],
+    source: "ATENDLY",
+  });
+  listCustomers.mockResolvedValue({
+    items: [],
+    managedExternally: false,
+    source: "ATENDLY",
+  });
+  listAppointments.mockResolvedValue([]);
+  listAvailabilityExceptions.mockResolvedValue([]);
+  listTimeBlocks.mockResolvedValue([]);
+  releaseHold.mockResolvedValue(holdFixture({ status: "RELEASED" }));
+});
+
+describe("grades da agenda (Dia, Semana e Mês)", () => {
+  test("grade do Dia: sem violação de acessibilidade e atendimento alcançável por link e por teclado", async () => {
+    listAppointments.mockResolvedValue([appointmentFixture()]);
+    listTimeBlocks.mockResolvedValue([timeBlockFixture()]);
+    const user = userEvent.setup();
+
+    const { container } = render(
+      <ShellConfigProvider>
+        <AgendaBoard />
+      </ShellConfigProvider>,
+    );
+
+    const daySection = await screen.findByLabelText(/Agenda de/);
+    await expectNoA11yViolations(container);
+
+    // Atendimento e bloqueio levam a lugares diferentes e o papel diz isso:
+    // o atendimento é um Link para o detalhe, o bloqueio é um botão que abre
+    // as ações da ocorrência (remover/mover esta, ou a série a partir daqui).
+    // A diferença não pode ser deduzida da classe CSS, só afirmada.
+    const appointmentLink = within(daySection).getByRole("link", {
+      name: /Ana Paula/,
+    });
+    expect(
+      within(daySection).queryByRole("link", { name: /Almoço/ }),
+    ).not.toBeInTheDocument();
+    const blockButton = within(daySection).getByRole("button", {
+      name: /Almoço/,
+    });
+    expect(blockButton).toHaveAttribute("aria-pressed", "false");
+
+    await tabUntilFocused(user, appointmentLink);
+    expect(appointmentLink).toHaveFocus();
+  });
+
+  test("grade da Semana: sem violação de acessibilidade e cabeçalho de dia alcançável por teclado", async () => {
+    listAppointments.mockResolvedValue([appointmentFixture()]);
+    const user = userEvent.setup();
+
+    const { container } = render(
+      <ShellConfigProvider>
+        <AgendaBoard />
+      </ShellConfigProvider>,
+    );
+
+    await screen.findByLabelText(/Agenda de/);
+    await user.click(screen.getByRole("tab", { name: "Semana" }));
+    const weekSection = await screen.findByLabelText("Mapa da semana");
+    await expectNoA11yViolations(container);
+
+    const dayHeadButtons = within(weekSection).getAllByRole("button");
+    expect(dayHeadButtons.length).toBe(7);
+    const firstDayHead = dayHeadButtons[0];
+
+    await tabUntilFocused(user, firstDayHead);
+    expect(firstDayHead).toHaveFocus();
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByLabelText(/Agenda de/)).toBeVisible();
+  });
+
+  test("grade do Mês: sem violação de acessibilidade e seleção de dia alcançável por teclado", async () => {
+    const user = userEvent.setup();
+
+    const { container } = render(
+      <ShellConfigProvider>
+        <AgendaBoard />
+      </ShellConfigProvider>,
+    );
+
+    await screen.findByLabelText(/Agenda de/);
+    await user.click(screen.getByRole("tab", { name: "Mês" }));
+    const monthSection = await screen.findByLabelText("Mapa do mês");
+    await expectNoA11yViolations(container);
+
+    const dayButtons = within(monthSection).getAllByRole("button");
+    const target = dayButtons[10];
+    expect(target).toHaveAttribute("aria-pressed");
+
+    await tabUntilFocused(user, target);
+    expect(target).toHaveFocus();
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByLabelText(/Agenda de/)).toBeVisible();
+  });
+});
+
+describe("diálogos de confirmação", () => {
+  async function renderCreateWithConfirm(user: UserEvent) {
+    getAvailability.mockResolvedValue([
+      { date: ISO_TODAY, endTime: "10:00", startTime: "09:00" },
+    ]);
+    createHold.mockResolvedValue(holdFixture());
+    createAppointment.mockResolvedValue(appointmentFixture());
+
+    const result = render(
+      <ShellConfigProvider>
+        <AppointmentForm />
+      </ShellConfigProvider>,
+    );
+    await user.click(await screen.findByRole("checkbox", { name: /Corte feminino/ }));
+    await user.type(screen.getByLabelText("Nome do cliente"), "Carla Nunes");
+    await user.click(await screen.findByRole("radio", { name: "09:00" }));
+    await waitFor(() => expect(createHold).toHaveBeenCalled());
+    const trigger = screen.getByRole("button", { name: "Revisar e criar" });
+    await user.click(trigger);
+    const dialog = await screen.findByRole("dialog");
+    return { ...result, dialog, trigger };
+  }
+
+  test("confirmação de novo agendamento: foco entra no diálogo, Tab fica preso e Esc devolve o foco a quem abriu", async () => {
+    const user = userEvent.setup();
+    const { container, dialog, trigger } = await renderCreateWithConfirm(user);
+
+    await expectNoA11yViolations(container);
+    expect(within(dialog).getByRole("button", { name: "Fechar" })).toHaveFocus();
+
+    await user.tab({ shift: true });
+    expect(
+      within(dialog).getByRole("button", { name: "Confirmar agendamento" }),
+    ).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
+  });
+
+  test("confirmação de cancelamento: mesma garantia de foco na integração real", async () => {
+    getAppointment.mockResolvedValue(appointmentFixture());
+    cancelAppointment.mockResolvedValue(appointmentFixture({ status: "CANCELLED" }));
+    const user = userEvent.setup();
+
+    const { container } = render(
+      <ShellConfigProvider>
+        <CancelFlow appointmentId="apt-1" />
+      </ShellConfigProvider>,
+    );
+    const trigger = await screen.findByRole("button", {
+      name: "Revisar cancelamento",
+    });
+    await user.click(trigger);
+    const dialog = await screen.findByRole("dialog");
+
+    await expectNoA11yViolations(container);
+    expect(within(dialog).getByRole("button", { name: "Fechar" })).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
+    expect(cancelAppointment).not.toHaveBeenCalled();
+  });
+});
+
+describe("controles de decisão de sobreposição", () => {
+  test("conflito de horário na criação: os dois botões de decisão são alcançáveis por teclado", async () => {
+    getAvailability.mockResolvedValue([]);
+    createHold.mockRejectedValue(conflictError());
+    const user = userEvent.setup();
+
+    const { container } = render(
+      <ShellConfigProvider>
+        <AppointmentForm />
+      </ShellConfigProvider>,
+    );
+    await user.click(await screen.findByRole("checkbox", { name: /Corte feminino/ }));
+    await user.type(screen.getByLabelText("Nome do cliente"), "Carla Nunes");
+    await user.type(
+      screen.getByLabelText("Outro horário, fora dos oferecidos"),
+      "1200",
+    );
+    await user.click(screen.getByRole("button", { name: "Usar este horário" }));
+
+    const chooseAnother = await screen.findByRole("button", {
+      name: "Escolher outro horário",
+    });
+    const override = screen.getByRole("button", { name: "Sobrepor mesmo assim" });
+    await expectNoA11yViolations(container);
+
+    await user.type(screen.getByLabelText("Motivo da sobreposição"), "Retorno urgente");
+    await tabUntilFocused(user, chooseAnother);
+    expect(chooseAnother).toHaveFocus();
+    await user.tab();
+    expect(override).toHaveFocus();
+  });
+
+  test("conflito de série de bloqueio: os três botões de decisão são alcançáveis por teclado", async () => {
+    createBlockSeries.mockRejectedValueOnce(
+      seriesConflictError([{ appointmentId: "apt-9", date: "2026-09-28" }]),
+    );
+    const user = userEvent.setup();
+
+    const { container } = render(
+      <ShellConfigProvider>
+        <BlockSeriesForm />
+      </ShellConfigProvider>,
+    );
+    await screen.findByRole("heading", { name: "Criar série de bloqueio" });
+    await user.click(screen.getByRole("checkbox", { name: "Seg" }));
+    await user.click(screen.getByRole("button", { name: "Criar série" }));
+
+    const adjust = await screen.findByRole("button", { name: "Ajustar a série" });
+    const skip = screen.getByRole("button", { name: "Pular estas ocorrências" });
+    const force = screen.getByRole("button", { name: "Forçar sobreposição" });
+    await expectNoA11yViolations(container);
+
+    await user.type(
+      screen.getByLabelText("Motivo da sobreposição (para forçar)"),
+      "Cliente avisado",
+    );
+    await tabUntilFocused(user, adjust);
+    expect(adjust).toHaveFocus();
+    await user.tab();
+    expect(skip).toHaveFocus();
+    await user.tab();
+    expect(force).toHaveFocus();
+  });
+});

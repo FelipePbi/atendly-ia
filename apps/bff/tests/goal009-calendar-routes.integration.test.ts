@@ -322,12 +322,12 @@ describe.skipIf(!RUN_INTEGRATION)("Goal009: rotas públicas de agenda", () => {
     expect(upstream[0].tenantId).toBe(owner.tenantId);
   });
 
-  it("a indisponibilidade sobre atendimento confirmado leva ator e motivo da decisão humana", async () => {
+  it("a indisponibilidade sobre atendimento confirmado leva o motivo da decisão humana, e o ator vem da sessão (Goal016)", async () => {
     const owner = created[0]!;
     stubScheduling(
       {
         data: exceptionPayload({
-          decidedBy: "user-1",
+          decidedBy: owner.userId,
           decidedReason: "emergência médica",
         }),
         requestId: "upstream-decision",
@@ -342,18 +342,17 @@ describe.skipIf(!RUN_INTEGRATION)("Goal009: rotas públicas de agenda", () => {
       payload: {
         date: "2026-09-10",
         reason: "emergência médica",
-        decidedBy: "user-1",
         decidedReason: "emergência médica",
       },
     });
 
     expect(response.statusCode).toBe(201);
     expect(response.json().data).toMatchObject({
-      decidedBy: "user-1",
+      decidedBy: owner.userId,
       decidedReason: "emergência médica",
     });
     expect(JSON.parse(upstream[0].body ?? "{}")).toMatchObject({
-      decidedBy: "user-1",
+      decidedBy: owner.userId,
       decidedReason: "emergência médica",
     });
   });

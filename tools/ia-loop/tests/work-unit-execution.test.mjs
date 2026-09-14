@@ -527,11 +527,27 @@ test('52. a unit receives its own context and not the round\'s', async () => {
       'a dependency\'s real output is the most reliable pointer there is',
     );
 
-    // What it does NOT get: a sibling it has no relationship with.
+    // What it does NOT get: a sibling's WORK. Its report, its summary, its
+    // objective and its attempt history all stay where they were produced.
+    //
+    // A sibling's FILE PATHS may now reach it, and only through the findings
+    // ledger — the deliberate, bounded relaxation this invariant took so that
+    // a unit stops re-deriving what the unit before it just opened. The line
+    // moved from "no trace of another unit" to "no other unit's reasoning",
+    // and that is what is asserted here.
     const flattened = JSON.stringify(second);
-    assert.ok(!flattened.includes('WU-003'), 'an unrelated unit is not in the packet');
-    assert.ok(!flattened.includes('src/billing/invoice.ts'), 'an unrelated unit\'s files are not either');
     assert.ok(!flattened.includes('relatório de WU-001'), 'a dependency\'s full report is summarised, not shipped');
+
+    const withoutLedger = JSON.stringify({ ...second, findingsLedger: [] });
+    assert.ok(!withoutLedger.includes('WU-003'), 'outside the ledger, an unrelated unit leaves no trace');
+
+    // WU-003 runs before WU-002 (it has no dependencies), so what it touched
+    // is what the ledger has to offer here.
+    const sibling = second.findingsLedger.find((entry) => entry.by.includes('WU-003'));
+    assert.ok(sibling, 'a sibling\'s file IS carried — that is the point of the ledger');
+    assert.deepEqual(Object.keys(sibling).sort(), ['by', 'file', 'touch'],
+      'as a path, a touch and unit ids — never prose, never a report');
+    assert.equal(sibling.touch, 'CHANGED', 'collected from git, not claimed by the unit');
 
     // A unit with no dependencies gets no dependency context at all.
     assert.equal(packets.get('WU-001').dependenciesCompleted.length, 0);

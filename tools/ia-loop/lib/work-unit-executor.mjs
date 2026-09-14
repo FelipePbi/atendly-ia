@@ -59,6 +59,7 @@ import { withTestDatabases } from './temporary-postgres.mjs';
 import { workUnitConfig } from './work-unit-config.mjs';
 import { validateWorkUnit } from './work-units.mjs';
 import { resolveGraphOrientation } from './graph-orientation.mjs';
+import { createFindingsLedger } from './findings-ledger.mjs';
 
 /**
  * The job id of one execution of one unit.
@@ -118,6 +119,18 @@ export function collectUnitChanges({ before, after, reported = [] }) {
     confirmed,
     unconfirmed,
   };
+}
+
+/**
+ * The paths a packet is already going to carry in `relevantFiles`.
+ *
+ * Mirrors what `buildWorkUnitContextPacket` derives, so the findings ledger can
+ * exclude them and spend its budget on what the unit has NOT been told.
+ */
+function packetRelevantFiles(unit, records) {
+  const fromDependencies = (unit.dependencies ?? [])
+    .flatMap((id) => records.get(id)?.changedFiles ?? []);
+  return [...(unit.expectedFiles ?? []), ...(unit.relevantFiles ?? []), ...fromDependencies];
 }
 
 /** The next unused FIX/DIAG id, so a corrective unit never collides. */
@@ -217,6 +230,9 @@ export async function executeWorkUnitPlan({
   const generations = new Map();
   const fixesByVerification = new Map();
   let fixBudget = config.maxFixUnitsPerRound;
+  // Scoped to this round's plan, which is scoped to this Goal's worktree. An
+  // entry only ever describes a tree that is still the one being edited.
+  const findings = createFindingsLedger();
 
   await store.appendEvent({
     type: 'WORK_UNIT_PLAN_RESOLVED',
@@ -264,7 +280,7 @@ export async function executeWorkUnitPlan({
       })
       : await executeModelUnit({
         store, plan, unit, unitJobId, job, goal, round, worktree, executionBase, goalPath,
-        goalSummary, invokeUnit, changedFilesSnapshot, config, mode, resumeFrom, emit, records,
+        goalSummary, invokeUnit, changedFilesSnapshot, config, mode, resumeFrom, emit, records, findings,
       });
 
     records.set(unitId, record);
@@ -517,7 +533,7 @@ function unitJobDocument({ unit, unitJobId, goal, round, worktree, routing, pare
  */
 async function executeModelUnit({
   store, plan, unit, unitJobId, job, goal, round, worktree, executionBase, goalPath,
-  goalSummary, invokeUnit, changedFilesSnapshot, config, mode, resumeFrom, emit, records,
+  goalSummary, invokeUnit, changedFilesSnapshot, config, mode, resumeFrom, emit, records, findings,
 }) {
   if (await store.hasCompletedResult(WORK_UNIT_NAMESPACE, unitJobId)) {
     const existing = await store.readResult(WORK_UNIT_NAMESPACE, unitJobId);
@@ -666,6 +682,10 @@ async function executeModelUnit({
         previousFailures: await previousFailuresFor(store, unitJobId),
         expansions,
         graphOrientation,
+        // Resolved per attempt, so a retry sees what the units that ran in
+        // between discovered. `relevantFiles` is excluded: repeating what the
+        // packet already lists would spend the budget saying nothing.
+        findingsLedger: findings?.forPacket({ exclude: packetRelevantFiles(unit, records) }) ?? [],
       });
       lastPacket = packet;
 
@@ -678,6 +698,10 @@ async function executeModelUnit({
         unitJobId,
         attempt,
         timeoutMs: config.unitTimeoutMs,
+        // Observational only: the ledger reads the tool stream as it goes, so
+        // what this unit opens is available to the next one without anybody
+        // being asked to summarise it.
+        onToolEvent: (event) => findings?.observe(unit.id, event),
         jsonSchema: workUnitResultSchemaFor({ jobId: unitJobId, goal, round, workUnitId: unit.id }),
         validatePayload: (payload) => validateWorkUnitResult(payload, {
           jobId: unitJobId,
@@ -697,6 +721,9 @@ async function executeModelUnit({
     after,
     reported: payload?.changedFiles ?? [],
   });
+  // Recorded from git, so a unit that reported a file it never wrote does not
+  // get to put it in front of the next unit.
+  findings?.completeUnit(unit.id, { changedFiles: changes.changedFiles });
 
   const attemptState = await store.readAttemptState(WORK_UNIT_NAMESPACE, unitJobId);
   const { routing: finalRouting, tier, escalations } = await router.current();

@@ -26,6 +26,16 @@
  * the full attempt history of the round, the review packet, the diff, the
  * event log, the previous round's implementation report.
  *
+ * ONE deliberate exception, added after orientation held at ~60% of every
+ * agent action across Goals 014-016 and refused to fall: `findingsLedger`
+ * carries the PATHS earlier units of this Goal opened or edited, with who
+ * touched them. The line is between facts and work — a sibling's file is a
+ * pointer worth one Read to verify, while its report is a conclusion that
+ * would propagate. The first crosses; the second still does not. It is
+ * bounded (40 entries, 3 KB), derived from git and the tool stream rather
+ * than authored by any model, and scoped to the Goal, because the tree moves
+ * when the baseline does.
+ *
  * `goalPath` IS carried, and that is not a loophole. The unit is told where
  * the Goal is so that legitimate exploration stays possible — the rule is
  * "small context first, expand when needed", not "you may not look". What the
@@ -125,6 +135,16 @@ export function buildWorkUnitContextPacket({
   expansions = [],
   executionStrategy = null,
   graphOrientation = null,
+  /**
+   * Files earlier units of THIS Goal already touched, and how.
+   *
+   * Not another unit's report and not its reasoning — paths and who touched
+   * them, which git and the tool stream already prove. It exists because
+   * `relevantFiles` only ever carried the plan's guesses plus what a DECLARED
+   * dependency changed, so a sibling unit's work was invisible and every
+   * unit's reading was thrown away.
+   */
+  findingsLedger = [],
 }) {
   if (!goal) fail('INVALID_ARGS', 'goal is required');
   if (!unit?.id) fail('INVALID_ARGS', 'a Work Unit is required');
@@ -178,6 +198,10 @@ export function buildWorkUnitContextPacket({
     // handed no map should be able to say so, and the ledger should show it.
     graphOrientation,
 
+    // What this Goal has already opened and edited. Pointers to verify, never
+    // an authority to trust: a stale entry costs one Read to disprove.
+    findingsLedger: Object.freeze([...findingsLedger]),
+
     worktree,
     constraints: WORK_UNIT_CONSTRAINTS,
 
@@ -225,6 +249,12 @@ export function buildWorkUnitPrompt(context, job) {
     'qualquer grep — ele nomeia arquivo e linha. Depois vá aos arquivos em relevantFiles.',
     'Você PODE explorar além disso quando precisar; o que não vale a pena é redescobrir',
     'por grep aquilo que graphOrientation já respondeu.',
+    '',
+    'findingsLedger lista os arquivos que outras unidades DESTE Goal já abriram ou alteraram,',
+    'com `touch: CHANGED` para o que já foi editado e `READ` para o que foi apenas consultado.',
+    'São ponteiros verificáveis, não autoridade: um CHANGED é o lugar mais provável de estar',
+    'o que você procura, e um caminho que não bater mais com a árvore custa um Read para',
+    'descartar. Prefira conferir um desses a varrer o repositório por grep.',
     '',
     'Se, e somente se, faltar contexto que você não consegue obter sozinho, responda com',
     'status "CONTEXT_EXPANSION_REQUIRED" e um contextRequest nomeando os arquivos que faltam.',

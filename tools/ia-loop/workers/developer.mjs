@@ -365,7 +365,7 @@ async function handleWorkUnitJob(job, { profile, isCorrection }) {
      * checked against what actually served the call, and no `--fallback-model`.
      * What changed is the size of the prompt, not the guarantees around it.
      */
-    invokeUnit: async ({ unit, prompt, routing, jsonSchema, validatePayload, timeoutMs, attempt }) => {
+    invokeUnit: async ({ unit, prompt, routing, jsonSchema, validatePayload, timeoutMs, attempt, onToolEvent }) => {
       const attemptSessionId = randomUUID();
       currentJob.sessionId = attemptSessionId;
       currentProfile = { name: `WU_${routing.modelKey.toUpperCase()}`, model: routing.model, effort: routing.effort };
@@ -379,7 +379,13 @@ async function handleWorkUnitJob(job, { profile, isCorrection }) {
         effort: routing.effort,
         expectedFamily: routing.family,
         expectedRole: ROLE,
-        onTelemetryEvent: STREAM_EVENTS ? (event) => telemetry.emit(event) : null,
+        // One stream, two observers. The findings ledger must see tool events
+        // even when stream telemetry is switched off, because it feeds the
+        // next unit's packet rather than a log a human reads.
+        onTelemetryEvent: (event) => {
+          if (STREAM_EVENTS) telemetry.emit(event);
+          onToolEvent?.(event);
+        },
         telemetryRoot: job.worktree,
         prompt,
         jsonSchema,

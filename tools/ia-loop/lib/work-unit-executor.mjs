@@ -53,6 +53,9 @@ import {
   runDeterministicAction,
   toDeterministicResult,
 } from './deterministic-executor.mjs';
+import { DETERMINISTIC_ACTIONS } from './deterministic-actions.mjs';
+import { createResourceRegistry } from './resource-registry.mjs';
+import { withTestDatabases } from './temporary-postgres.mjs';
 import { workUnitConfig } from './work-unit-config.mjs';
 import { validateWorkUnit } from './work-units.mjs';
 import { resolveGraphOrientation } from './graph-orientation.mjs';
@@ -366,6 +369,50 @@ function blockedRecord(unit, reason) {
  * idempotency is not about models: a restart must not re-run a fifteen-minute
  * build whose answer is already on disk.
  */
+/**
+ * Runs a deterministic action, provisioning the databases it declares.
+ *
+ * The gate scripts refuse to run without a disposable cluster, and until now
+ * the orchestrator started none — so `validate:integration` exited 2 instantly
+ * on every attempt and the reviewer ran the suite by hand. This starts one,
+ * creates a database per declared variable, and tears it down in a `finally`
+ * whose net is the worker loop's per-attempt resource sweep.
+ *
+ * Provisioning that FAILS is not an error of the Goal: the action falls
+ * through to the ordinary run, where the missing variables are detected before
+ * the spawn and the unit is recorded as SKIPPED with them named. A machine
+ * without PostgreSQL installed reports that, rather than failing the round.
+ */
+async function runActionWithDatabases({ store, unit, worktree, attemptId, goal, round, unitJobId, runAction, emit }) {
+  const spec = DETERMINISTIC_ACTIONS[unit.action];
+  const required = spec?.requiresEnv ?? [];
+  const missing = required.filter((name) => (process.env[name] ?? '').trim() === '');
+  if (missing.length === 0 || !attemptId) return runAction({ unit, worktree });
+
+  try {
+    return await withTestDatabases(
+      {
+        registry: createResourceRegistry(store.paths.root),
+        stateDir: store.paths.root,
+        jobId: unitJobId,
+        attemptId,
+        goalId: goal,
+        round,
+        stage: 'work_unit',
+        role: 'developer',
+      },
+      missing,
+      (env) => {
+        emit(`    provisionando PostgreSQL descartável para ${missing.join(', ')}`);
+        return runAction({ unit, worktree, env: { ...process.env, ...env } });
+      },
+    );
+  } catch (error) {
+    emit(`    PostgreSQL descartável indisponível (${error.message}); o gate será pulado por pré-condição.`);
+    return runAction({ unit, worktree });
+  }
+}
+
 async function executeDeterministicUnit({ store, unit, unitJobId, goal, round, worktree, runAction, emit }) {
   if (await store.hasCompletedResult(WORK_UNIT_NAMESPACE, unitJobId)) {
     const existing = await store.readResult(WORK_UNIT_NAMESPACE, unitJobId);
@@ -384,7 +431,9 @@ async function executeDeterministicUnit({ store, unit, unitJobId, goal, round, w
   });
   emit(`  ${unit.id} DETERMINISTIC → native (${unit.action}${unit.scope ? ` @ ${unit.scope}` : ''})`);
 
-  const outcome = await runAction({ unit, worktree });
+  const outcome = await runActionWithDatabases({
+    store, unit, worktree, attemptId, goal, round, unitJobId, runAction, emit,
+  });
   const result = toDeterministicResult({ unit, outcome, goal, round, jobId: unitJobId });
 
   // A skipped gate is not a failed job: leaving it FAILED would make a

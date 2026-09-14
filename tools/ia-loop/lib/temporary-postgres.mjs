@@ -149,10 +149,29 @@ export function createPostgresDriver({ pgBin = resolvePgBinDirectory() } = {}) {
       }
     },
 
+    /**
+     * Creates one more database on a cluster this process already owns.
+     *
+     * `initdb` makes exactly one, and a gate that validates four services
+     * needs four: pointing them all at the same database would let one
+     * service's migrations decide another's schema, which is the opposite of
+     * what an isolation gate is for.
+     */
+    async createDatabase({ port, user, database }) {
+      await execFileAsync(binPath(pgBin, 'createdb'), [
+        '-h', '127.0.0.1', '-p', String(port), '-U', user, database,
+      ], { timeout: 30_000, windowsHide: true });
+    },
+
     isReady(port) {
       return canConnect(port);
     },
   };
+}
+
+/** A database name derived from an env var name: BFF_TEST_DATABASE_URL -> bff. */
+export function databaseNameForEnv(name) {
+  return `ia_${String(name).toLowerCase().replace(/_test_database_url$/, '').replace(/[^a-z0-9]+/g, '_')}`;
 }
 
 /** Reads the postgres data directory's postmaster.pid for the live PID, if any. */
@@ -362,4 +381,36 @@ export async function withTemporaryPostgres(ctx, fn, opts = {}) {
   } finally {
     await stopTemporaryPostgres(ctx.registry, resource.resourceId, opts);
   }
+}
+
+/**
+ * Runs `fn` against a cluster carrying one database per requested env var.
+ *
+ * The gate scripts refuse to run unless every `*_TEST_DATABASE_URL` names a
+ * disposable cluster — deliberately, so they can never fall back to an
+ * inherited `DATABASE_URL` and write somewhere real. This is what makes that
+ * refusal satisfiable from the orchestrator instead of only from a human at a
+ * terminal.
+ *
+ * `fn` receives the env additions and nothing else: the caller never learns
+ * the resource id, so it cannot keep the cluster alive past this call. Cleanup
+ * is `withTemporaryPostgres`'s `finally`, and the worker loop's per-attempt
+ * sweep is the net under that.
+ */
+export async function withTestDatabases(ctx, envNames, fn, opts = {}) {
+  const names = [...new Set((envNames ?? []).filter((n) => typeof n === 'string' && n.trim() !== ''))];
+  if (names.length === 0) return fn({});
+
+  const driver = opts.driver ?? createPostgresDriver();
+  return withTemporaryPostgres(ctx, async (resource) => {
+    const { port, user } = resource.metadata;
+    const env = {};
+    for (const envName of names) {
+      const database = databaseNameForEnv(envName);
+      // eslint-disable-next-line no-await-in-loop -- createdb is serial by nature
+      await driver.createDatabase({ port, user, database });
+      env[envName] = `postgresql://${user}@127.0.0.1:${port}/${database}`;
+    }
+    return fn(env);
+  }, { ...opts, driver });
 }

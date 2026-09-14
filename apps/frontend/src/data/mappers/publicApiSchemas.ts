@@ -1,6 +1,15 @@
 import { z } from "zod";
 
 export const calendarSourceSchema = z.enum(["ATENDLY", "EXTERNAL"]);
+// Modalidades de atendimento do negócio (Goal018/WU-01), seleção múltipla.
+export const businessModalitySchema = z.enum(["ON_SITE", "AT_HOME", "ONLINE"]);
+// Estado de projeção do contexto de negócio para a IA (Goal018/WU-03):
+// `PROJECTED` quando a última versão gravada já chegou na IA, `PENDING`
+// quando a gravação é mais nova que a última projeção bem-sucedida.
+export const businessContextProjectionStatusSchema = z.enum([
+  "PROJECTED",
+  "PENDING",
+]);
 // Três estilos do produto (Goal011): Profissional, Equilibrada e
 // Descontraída. O BFF aceita os dois valores antigos como alias de entrada
 // mas nunca os devolve — o schema de leitura só precisa do vocabulário novo.
@@ -65,6 +74,13 @@ export const calendarCapabilitiesSchema = z.object({
   manageCustomers: z.boolean(),
   createAppointments: z.boolean(),
   migrate: z.boolean(),
+  // Leitura real, nunca de configuração local (Goal018/WU-10): ao menos um
+  // serviço operacional (já existia no BFF, só passa a ser decodificado) e ao
+  // menos uma regra de disponibilidade ativa / integração conectada. Ausente
+  // em respostas de `/v1/settings` e `/v1/onboarding`, que não computam o
+  // segundo — a Home é a única leitora.
+  aiActivationReady: z.boolean().optional(),
+  hoursConfigured: z.boolean().optional(),
 });
 
 export const calendarStateSchema = z.object({
@@ -98,6 +114,14 @@ export const onboardingStateSchema = z.object({
       name: z.string(),
       category: z.string().nullable(),
       timezone: z.string().min(1),
+      // Modalidades, endereço e versionamento do contexto de negócio
+      // (Goal018/WU-01, WU-03). Opcionais: resposta anterior a este Goal
+      // continua decodificando sem eles.
+      modalities: z.array(businessModalitySchema).optional(),
+      address: z.string().nullable().optional(),
+      contextVersion: z.number().int().nonnegative().optional(),
+      contextProjectedVersion: z.number().int().nonnegative().optional(),
+      contextProjectionStatus: businessContextProjectionStatusSchema.optional(),
     })
     .nullable(),
   calendar: z.object({
@@ -135,6 +159,14 @@ export const settingsStateSchema = z.object({
       timezone: z.string().min(1),
       language: z.string().min(1),
       currency: z.string().min(1),
+      // Modalidades, endereço e versionamento do contexto de negócio
+      // (Goal018/WU-01, WU-03). Opcionais: resposta anterior a este Goal
+      // continua decodificando sem eles.
+      modalities: z.array(businessModalitySchema).optional(),
+      address: z.string().nullable().optional(),
+      contextVersion: z.number().int().nonnegative().optional(),
+      contextProjectedVersion: z.number().int().nonnegative().optional(),
+      contextProjectionStatus: businessContextProjectionStatusSchema.optional(),
     })
     .nullable(),
   ai: z.object({
@@ -799,6 +831,10 @@ export type ConversationSuggestions = z.infer<
 >;
 
 export type AiTone = z.infer<typeof aiToneSchema>;
+export type BusinessModality = z.infer<typeof businessModalitySchema>;
+export type BusinessContextProjectionStatus = z.infer<
+  typeof businessContextProjectionStatusSchema
+>;
 export type Appointment = z.infer<typeof appointmentSchema>;
 export type AppointmentLifecycle = z.infer<typeof appointmentLifecycleSchema>;
 export type AppointmentEvent = z.infer<typeof appointmentEventSchema>;

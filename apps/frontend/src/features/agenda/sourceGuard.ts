@@ -1,6 +1,16 @@
 import type { CalendarState } from "@/data";
 
-export type CalendarCapabilityKey = keyof CalendarState["capabilities"];
+/**
+ * Só as capabilities de escrita, nunca os sinais de leitura de prontidão
+ * (`aiActivationReady`, `hoursConfigured` — Goal018/WU-10, consumidos pelo
+ * checklist da Home, não por um guard de operação).
+ */
+export type CalendarCapabilityKey =
+  | "createAppointments"
+  | "manageAvailability"
+  | "manageCustomers"
+  | "manageServices"
+  | "migrate";
 
 /**
  * Rótulo da operação por capability — nunca um "operação indisponível"

@@ -43,6 +43,15 @@ enum TenantRole {
   OWNER
 }
 
+/// Modalidade de atendimento do negocio (Goal018/WU-01). Selecao multipla,
+/// gravada como lista de enum no Postgres — vazio e distinto de nulo por
+/// constraint de coluna (NOT NULL DEFAULT '{}'), nunca por convencao de JSON.
+enum BusinessModality {
+  ON_SITE
+  AT_HOME
+  ONLINE
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -116,16 +125,29 @@ model TenantMember {
 }
 
 model BusinessProfile {
-  id                    String    @id @default(cuid())
-  tenantId              String    @unique
-  businessName          String    @default("")
+  id                    String             @id @default(cuid())
+  tenantId              String             @unique
+  businessName          String             @default("")
   category              String?
-  timezone              String    @default("America/Sao_Paulo")
-  language              String    @default("pt-BR")
-  currency              String    @default("BRL")
+  timezone              String             @default("America/Sao_Paulo")
+  language              String             @default("pt-BR")
+  currency              String             @default("BRL")
+  /// Selecao multipla, nunca fabricada por backfill; vazia por default.
+  modalities            BusinessModality[] @default([])
+  /// Nulo enquanto o negocio nao tem local proprio. So exigido (nao vazio)
+  /// quando `modalities` contem ON_SITE; retirar ON_SITE nao apaga o valor.
+  address               String?
+  /// Contador simples incrementado a cada mudanca de dado de negocio (nome,
+  /// categoria, timezone, modalidade, endereco) — nunca timestamp, que empata
+  /// sob relogio grosso.
+  businessContextVersion          Int      @default(1)
+  /// Ultima versao efetivamente projetada para a IA por outra Work Unit deste
+  /// Goal. Nasce atras da corrente (default 0 contra 1) para toda linha, nova
+  /// ou existente: o contexto ganhou campos que ainda nao foram projetados.
+  businessContextProjectedVersion Int      @default(0)
   onboardingCompletedAt DateTime?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }

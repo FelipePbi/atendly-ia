@@ -10,11 +10,18 @@ import {
   useState,
 } from "react";
 
-import type { AiTone, CalendarSource, OnboardingState } from "@/data";
+import type {
+  AiTone,
+  BusinessModality,
+  CalendarSource,
+  OnboardingState,
+} from "@/data";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
 export type OnboardingDraft = {
+  businessAddress: string;
   businessCategory: string;
+  businessModalities: BusinessModality[];
   businessName: string;
   calendarSource: CalendarSource | null;
   days: number[];
@@ -39,7 +46,9 @@ type OnboardingRuntimeValue = {
 };
 
 const initialDraft: OnboardingDraft = {
+  businessAddress: "",
   businessCategory: "",
+  businessModalities: [],
   businessName: "",
   calendarSource: null,
   days: [1, 2, 3, 4, 5],
@@ -127,7 +136,13 @@ export function OnboardingResume() {
 }
 
 export function nextRequiredStep(state: OnboardingState): string {
-  if (!state.business?.name || !state.business.category)
+  const modalities = state.business?.modalities ?? [];
+  if (
+    !state.business?.name ||
+    !state.business.category ||
+    modalities.length === 0 ||
+    (modalities.includes("ON_SITE") && !state.business.address)
+  )
     return "dados-do-negocio";
   if (!state.calendar.source) return "fonte-da-agenda";
   if (state.calendar.source === "EXTERNAL") return "minha-agenda-conectar";
@@ -137,7 +152,7 @@ export function nextRequiredStep(state: OnboardingState): string {
   }
   if (!state.ai.tone) return "tom-da-ia";
   if (state.whatsapp?.status !== "CONNECTED") return "whatsapp";
-  return "validacao";
+  return "whatsapp-conectar";
 }
 
 export function onboardingPriceType(
@@ -156,7 +171,10 @@ function draftFromState(
     state.availability?.rules.filter((rule) => rule.active) ?? [];
   return {
     ...current,
+    businessAddress: state.business?.address ?? current.businessAddress,
     businessCategory: state.business?.category ?? current.businessCategory,
+    businessModalities:
+      state.business?.modalities ?? current.businessModalities,
     businessName: state.business?.name ?? current.businessName,
     calendarSource: state.calendar.source,
     days: activeRules.length

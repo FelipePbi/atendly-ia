@@ -148,6 +148,7 @@ function AgendaRow({ appointment }: { appointment: Appointment }) {
 function AgendaLoading() {
   return (
     <div
+      role="status"
       aria-busy="true"
       aria-label="Carregando agenda"
       className="directory-loading-shell"

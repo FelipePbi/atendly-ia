@@ -1,0 +1,243 @@
+// @vitest-environment jsdom
+/**
+ * Goal018 (WU-11): prova transversal de acessibilidade das telas novas ou
+ * reescritas por este Goal — o bloco de negócio (onboarding e Configurações),
+ * a orientação/conclusão do bloco WhatsApp e o checklist da Home já tem sua
+ * própria prova em `goal018-dashboard-status.test.tsx`.
+ *
+ * As suítes de cada Work Unit (`goal018-onboarding-reachability`,
+ * `goal018-business-block`) já provam comportamento pelo que a usuária
+ * encontra, mas nenhuma delas roda o axe. Esta suíte fecha essa lacuna, no
+ * mesmo padrão que `goal017-a11y.test.tsx` fechou para Conversas.
+ *
+ * O que esta suíte não prova: layout real, largura de viewport, contraste
+ * computado. Isso é `npm run validate:ui`, não jsdom.
+ */
+
+import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, test, vi } from "vitest";
+
+import type { OnboardingState, SettingsState } from "@/data";
+import { OnboardingRuntimeProvider } from "@/features/onboarding/OnboardingRuntime";
+import { OnboardingScreen } from "@/features/onboarding/OnboardingScreen";
+import { ProductSettingsScreen } from "@/features/settings/ProductSettingsScreen";
+import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
+
+import { expectNoA11yViolations } from "./support/a11y";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+}));
+
+const getOnboarding = vi.fn();
+const updateOnboarding = vi.fn();
+const completeOnboarding = vi.fn();
+const getSettings = vi.fn();
+const getWhatsapp = vi.fn();
+const logout = vi.fn();
+const refreshSession = vi.fn();
+
+vi.mock("@/shared/runtime/ProductRuntime", () => ({
+  getProductServices: () => ({
+    auth: { logout },
+    onboarding: {
+      complete: completeOnboarding,
+      get: getOnboarding,
+      update: updateOnboarding,
+    },
+    settings: { get: getSettings },
+    whatsapp: { get: getWhatsapp },
+  }),
+  useProductRuntime: () => ({
+    refreshSession,
+    session: { businessProfile: { businessName: "Studio Marina" } },
+    setUnauthenticated: vi.fn(),
+  }),
+}));
+
+vi.mock("@/features/whatsapp/WhatsAppConnectionPanel", () => ({
+  WhatsAppConnectionPanel: () => <div>Painel de conexão do WhatsApp</div>,
+}));
+
+function emptyOnboardingState(): OnboardingState {
+  return {
+    ai: { tone: null },
+    availability: null,
+    business: null,
+    calendar: { integration: null, source: null, timezone: null },
+    completed: false,
+    completedAt: null,
+    service: null,
+    whatsapp: null,
+  };
+}
+
+const businessDone = {
+  business: {
+    category: "Beleza",
+    name: "Studio Aurora",
+    timezone: "America/Sao_Paulo",
+  },
+};
+const calendarDone = {
+  calendar: {
+    integration: null,
+    source: "ATENDLY" as const,
+    timezone: "America/Sao_Paulo",
+  },
+};
+const serviceDone = {
+  service: {
+    active: true,
+    durationMinutes: 60,
+    id: "svc-1",
+    name: "Corte",
+    price: 100,
+    priceType: "FIXED" as const,
+  },
+};
+const toneDone = { ai: { tone: "PROFESSIONAL" as const } };
+
+function settingsFixture(
+  overrides: Partial<NonNullable<SettingsState["business"]>> = {},
+): SettingsState {
+  return {
+    ai: { enabled: false, tone: null },
+    availability: null,
+    business: {
+      address: null,
+      category: "Beleza",
+      contextProjectionStatus: "PROJECTED",
+      currency: "BRL",
+      language: "pt-BR",
+      modalities: [],
+      name: "Studio Marina",
+      timezone: "America/Sao_Paulo",
+      ...overrides,
+    },
+    calendar: {
+      capabilities: {
+        createAppointments: false,
+        manageAvailability: false,
+        manageCustomers: false,
+        manageServices: false,
+        migrate: false,
+      },
+      integration: null,
+      source: null,
+      timezone: null,
+    },
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  updateOnboarding.mockResolvedValue(emptyOnboardingState());
+  completeOnboarding.mockResolvedValue(emptyOnboardingState());
+  refreshSession.mockResolvedValue(null);
+  getWhatsapp.mockResolvedValue(null);
+});
+
+describe("onboarding: bloco Seu negócio", () => {
+  test("dados-do-negocio sem local próprio selecionado", async () => {
+    getOnboarding.mockResolvedValue(emptyOnboardingState());
+    const { container } = render(
+      <OnboardingRuntimeProvider>
+        <OnboardingScreen scenario="dados-do-negocio" />
+      </OnboardingRuntimeProvider>,
+    );
+    await screen.findByLabelText("Nome do negócio");
+    await expectNoA11yViolations(container);
+  });
+
+  test("dados-do-negocio com ON_SITE já gravado, campo de endereço visível", async () => {
+    getOnboarding.mockResolvedValue({
+      ...emptyOnboardingState(),
+      business: {
+        address: "Rua das Flores, 100",
+        category: "Beleza",
+        modalities: ["ON_SITE"],
+        name: "Studio Aurora",
+        timezone: "America/Sao_Paulo",
+      },
+    });
+    const { container } = render(
+      <OnboardingRuntimeProvider>
+        <OnboardingScreen scenario="dados-do-negocio" />
+      </OnboardingRuntimeProvider>,
+    );
+    await screen.findByLabelText("Endereço do seu espaço");
+    await expectNoA11yViolations(container);
+  });
+});
+
+describe("onboarding: bloco WhatsApp", () => {
+  test("whatsapp: orientação sobre número pessoal antes de oferecer a conexão", async () => {
+    getOnboarding.mockResolvedValue({
+      ...emptyOnboardingState(),
+      ...businessDone,
+      ...calendarDone,
+      ...serviceDone,
+      ...toneDone,
+    });
+    const { container } = render(
+      <OnboardingRuntimeProvider>
+        <OnboardingScreen scenario="whatsapp" />
+      </OnboardingRuntimeProvider>,
+    );
+    await screen.findByText(
+      "Você pode usar um número de WhatsApp pessoal ou comercial.",
+    );
+    await expectNoA11yViolations(container);
+  });
+
+  test("whatsapp-concluido: conclusão sem WhatsApp, com as duas ações do vault", async () => {
+    getOnboarding.mockResolvedValue({
+      ...emptyOnboardingState(),
+      ...businessDone,
+      ...calendarDone,
+      ...serviceDone,
+      ...toneDone,
+    });
+    const { container } = render(
+      <OnboardingRuntimeProvider>
+        <OnboardingScreen scenario="whatsapp-concluido" />
+      </OnboardingRuntimeProvider>,
+    );
+    await screen.findByRole("heading", {
+      level: 1,
+      name: "Sua Atendly está configurada.",
+    });
+    await expectNoA11yViolations(container);
+  });
+});
+
+describe("configurações/negocio: BusinessSettings", () => {
+  test("sem local próprio selecionado", async () => {
+    getSettings.mockResolvedValue(settingsFixture({ modalities: ["ONLINE"] }));
+    const { container } = render(
+      <ShellConfigProvider>
+        <ProductSettingsScreen scenario="business" />
+      </ShellConfigProvider>,
+    );
+    await screen.findByLabelText("Nome do negócio");
+    await expectNoA11yViolations(container);
+  });
+
+  test("com ON_SITE gravado, campo de endereço e aviso de projeção pendente visíveis", async () => {
+    getSettings.mockResolvedValue(
+      settingsFixture({
+        address: "Av. Central, 456",
+        contextProjectionStatus: "PENDING",
+        modalities: ["ON_SITE"],
+      }),
+    );
+    const { container } = render(
+      <ShellConfigProvider>
+        <ProductSettingsScreen scenario="business" />
+      </ShellConfigProvider>,
+    );
+    await screen.findByLabelText("Endereço do seu espaço");
+    await expectNoA11yViolations(container);
+  });
+});

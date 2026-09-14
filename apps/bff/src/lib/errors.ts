@@ -20,6 +20,9 @@ export type ErrorCode =
   // produto ou os dois alias legados). Erro proprio para nao se confundir com
   // VALIDATION_ERROR generico.
   | "AI_CONVERSATION_STYLE_UNKNOWN"
+  // Modalidade ON_SITE exige endereco nao vazio (Goal018/WU-01). Erro proprio
+  // para o frontend apontar o campo, em vez de um VALIDATION_ERROR generico.
+  | "BUSINESS_ADDRESS_REQUIRED"
   | "INTERNAL_ERROR";
 
 export class AppError extends Error {

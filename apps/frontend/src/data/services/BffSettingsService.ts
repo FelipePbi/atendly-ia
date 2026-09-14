@@ -1,5 +1,5 @@
 import { type BffHttpClient } from "../http/BffHttpClient";
-import type { AiTone } from "../mappers/publicApiSchemas";
+import type { AiTone, BusinessModality } from "../mappers/publicApiSchemas";
 import {
   availabilitySettingsSchema,
   settingsStateSchema,
@@ -9,6 +9,10 @@ export interface BusinessSettingsInput {
   category: string;
   name: string;
   timezone: string;
+  /** Ausente preserva o que já está gravado (Goal018/WU-01). */
+  modalities?: BusinessModality[];
+  /** Chave ausente preserva o valor gravado; `null` apaga. */
+  address?: string | null;
 }
 
 export interface AiSettingsInput {

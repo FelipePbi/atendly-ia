@@ -10,7 +10,11 @@ import {
   getProductServices,
   useProductRuntime,
 } from "@/shared/runtime/ProductRuntime";
-import { useSystemStatus } from "@/shared/runtime/systemStatus";
+import {
+  type StatusView,
+  SystemStatusProvider,
+  useSystemStatus,
+} from "@/shared/runtime/systemStatus";
 import { Brand } from "@/shared/ui/Brand";
 import { Dialog } from "@/shared/ui/Dialog";
 
@@ -29,7 +33,21 @@ export type AppShellProps = ShellConfig & {
   children: ReactNode;
 };
 
-export function AppShell({
+/**
+ * `SystemStatusProvider` monta o único poller de `GET /v1/status` da árvore
+ * (Goal018/WU-10): o chrome do shell e a tela filha (ex.: `DashboardScreen`)
+ * leem o mesmo resultado via `useSystemStatus`, em vez de cada um abrir seu
+ * próprio `setInterval`/listener de `focus`.
+ */
+export function AppShell(props: AppShellProps) {
+  return (
+    <SystemStatusProvider>
+      <AppShellChrome {...props} />
+    </SystemStatusProvider>
+  );
+}
+
+function AppShellChrome({
   action,
   active,
   attention = false,
@@ -133,6 +151,7 @@ export function AppShell({
             view={status.aiView}
             activeCopy="IA ativa"
             offCopy="IA desligada"
+            pendingCopy="IA em ativação"
           />
           <nav className="nav" aria-label="Navegação principal">
             {SIDEBAR_DESTINATIONS.map((item) => (
@@ -318,12 +337,14 @@ function StatusLine({
   activeCopy,
   label,
   offCopy,
+  pendingCopy,
   view,
 }: {
   activeCopy: string;
   label: string;
   offCopy: string;
-  view: "active" | "loading" | "off" | "unknown";
+  pendingCopy?: string;
+  view: StatusView;
 }) {
   const copy =
     view === "loading"
@@ -332,13 +353,16 @@ function StatusLine({
         ? `${label} não confirmado`
         : view === "active"
           ? activeCopy
-          : offCopy;
+          : view === "pending"
+            ? (pendingCopy ?? `${label} em ativação`)
+            : offCopy;
   return (
     <div className="wa-status status-line" role="status">
       <span
         className={clsx(
           "status-dot",
           view === "off" && "danger",
+          view === "pending" && "warning",
           (view === "loading" || view === "unknown") && "neutral",
         )}
         aria-hidden="true"

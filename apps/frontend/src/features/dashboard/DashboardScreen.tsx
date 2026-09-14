@@ -4,7 +4,7 @@ import clsx from "clsx";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { BffHttpError, type Dashboard } from "@/data";
+import { BffHttpError, type CalendarState, type Dashboard } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
@@ -242,6 +242,7 @@ function StatusStrip({ status }: { status: UseSystemStatusResult }) {
           activeCopy="IA ativa"
           label="IA"
           offCopy="IA desligada"
+          pendingCopy="IA em ativação"
           view={status.aiView}
         />
       </div>
@@ -253,11 +254,13 @@ function StatusPoint({
   activeCopy,
   label,
   offCopy,
+  pendingCopy,
   view,
 }: {
   activeCopy: string;
   label: string;
   offCopy: string;
+  pendingCopy?: string;
   view: StatusView;
 }) {
   const copy =
@@ -267,13 +270,16 @@ function StatusPoint({
         ? `${label} não confirmado`
         : view === "active"
           ? activeCopy
-          : offCopy;
+          : view === "pending"
+            ? (pendingCopy ?? `${label} em ativação`)
+            : offCopy;
   return (
     <span className="status-line" role="status">
       <span
         className={clsx(
           "status-dot",
           view === "off" && "danger",
+          view === "pending" && "warning",
           (view === "loading" || view === "unknown") && "neutral",
         )}
         aria-hidden="true"
@@ -321,6 +327,12 @@ function RealDashboard({
       : aiUnavailable
         ? "ai"
         : null;
+  /**
+   * Checklist pós-onboarding (Goal018/WU-10): só aparece com uma leitura
+   * confirmada de `GET /v1/status` (nunca durante `loading`, para não afirmar
+   * pendência antes de saber) e some assim que a IA está efetivamente ativa.
+   */
+  const checklistVisible = status.phase !== "loading" && status.aiView !== "active";
   const today = new Intl.DateTimeFormat("pt-BR", {
     day: "numeric",
     month: "long",
@@ -417,6 +429,7 @@ function RealDashboard({
               activeCopy="IA ativa"
               label="IA"
               offCopy="IA desligada"
+              pendingCopy="IA em ativação"
               view={status.aiView}
             />
             <span className="status-line">
@@ -439,6 +452,13 @@ function RealDashboard({
                 )}`
               : ""}
           </div>
+        )}
+
+        {checklistVisible && (
+          <PostOnboardingChecklist
+            capabilities={scheduling?.calendar.capabilities ?? null}
+            whatsappActive={status.whatsappView === "active"}
+          />
         )}
 
         <div className="dashboard-grid">
@@ -668,6 +688,69 @@ function RealDashboard({
         {empty && <span className="sr-only">Ambiente sem atividade hoje.</span>}
       </div>
     </>
+  );
+}
+
+type ChecklistItem = { done: boolean; key: string; label: string };
+
+/**
+ * Checklist pós-onboarding do vault (`docs/product-vault/02-Fluxos/01-Onboarding.md`):
+ * cada item vem de uma leitura real de `GET /v1/dashboard`/`GET /v1/status`,
+ * nunca de configuração local. "Teste concluído" — o quarto item do vault —
+ * não entra: não existe produtor em camada nenhuma até o Goal018B.
+ */
+function PostOnboardingChecklist({
+  capabilities,
+  whatsappActive,
+}: {
+  capabilities: CalendarState["capabilities"] | null;
+  whatsappActive: boolean;
+}) {
+  const items: ChecklistItem[] = [
+    {
+      done: Boolean(capabilities?.aiActivationReady),
+      key: "service",
+      label: "Cadastrar um serviço",
+    },
+    {
+      done: Boolean(capabilities?.hoursConfigured),
+      key: "hours",
+      label: "Definir horários de atendimento",
+    },
+    {
+      done: whatsappActive,
+      key: "whatsapp",
+      label: "Conectar o WhatsApp",
+    },
+  ];
+  const doneCount = items.filter((item) => item.done).length;
+
+  return (
+    <section
+      className="card dashboard-card checklist-card"
+      aria-labelledby="checklist-heading"
+    >
+      <header className="dashboard-card-head">
+        <h2 id="checklist-heading">Ative sua IA</h2>
+        <span className="badge">
+          {doneCount} de {items.length} passos concluídos
+        </span>
+      </header>
+      <ul className="checklist-list">
+        {items.map((item) => (
+          <li
+            aria-label={`${item.label}: ${item.done ? "concluído" : "pendente"}`}
+            className={clsx("checklist-item", item.done && "is-done")}
+            key={item.key}
+          >
+            <span className="checklist-marker" aria-hidden="true">
+              {item.done && <Icon name="check" />}
+            </span>
+            <span aria-hidden="true">{item.label}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

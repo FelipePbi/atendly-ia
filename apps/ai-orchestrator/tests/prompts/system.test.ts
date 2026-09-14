@@ -79,12 +79,12 @@ describe("prompt montado: sem persona, identidade transparente e versao por esti
 
   it("a versao e um hash estavel do conteudo montado: um teste que muda sozinho aqui sinaliza que o prompt mudou sem bump consciente da versao semantica", () => {
     expect(derivePromptVersion("PROFESSIONAL")).toBe(
-      "prompt-v3-professional-8a08266b6e",
+      "prompt-v4-professional-ff40f676f9",
     );
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v3-balanced-04995d48b1",
+      "prompt-v4-balanced-91e9d792a4",
     );
-    expect(derivePromptVersion("CASUAL")).toBe("prompt-v3-casual-64e9afb011");
+    expect(derivePromptVersion("CASUAL")).toBe("prompt-v4-casual-89cf7a5560");
   });
 
   it("o prompt montado embute exatamente a versao retornada para o estilo usado", () => {
@@ -129,7 +129,7 @@ describe("prompt montado: modo sugestao (Goal012/WU-04)", () => {
 
   it("a secao do modo sugestao entra no hash estavel: mudar o template de sugestao muda a versao do prompt normal tambem", () => {
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v3-balanced-04995d48b1",
+      "prompt-v4-balanced-91e9d792a4",
     );
   });
 
@@ -185,7 +185,7 @@ describe("prompt montado: audio transcrito (Goal013/WU-03)", () => {
     // poder chegar como voz virada em texto; o hash abaixo muda sozinho se
     // alguem mexer na secao sem decidir isso de novo.
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v3-balanced-04995d48b1",
+      "prompt-v4-balanced-91e9d792a4",
     );
   });
 });

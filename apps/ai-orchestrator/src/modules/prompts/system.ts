@@ -90,8 +90,12 @@ const MAIN_RULES = [
  * v3 (Goal013/WU-03): o template ganhou a secao de audio transcrito. O turno
  * passa a poder chegar como voz virada em texto por maquina, e o que o modelo
  * pode concluir dela — inclusive aceitar confirmacao — mudou de significado.
+ *
+ * v4 (Goal018/WU-02): os dados do negocio ganharam segmento, modalidades de
+ * atendimento e endereco. O modelo passa a poder responder com base nesses
+ * campos, cada um dizendo explicitamente quando nao esta configurado.
  */
-const PROMPT_TEMPLATE_VERSION = "v3";
+const PROMPT_TEMPLATE_VERSION = "v4";
 
 /**
  * Amostra fixa, nunca usada no prompt real: existe so para que o hash em

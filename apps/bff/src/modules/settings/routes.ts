@@ -9,6 +9,13 @@ import {
   parseBodyWithAiConversationStyle,
   resolveAiConversationStyle,
 } from "../../lib/ai-conversation-style.js";
+import {
+  businessAddressSchema,
+  businessContextPayload,
+  businessContextProjectionState,
+  businessModalitySchema,
+  resolveBusinessProfileFields,
+} from "../../lib/business-profile.js";
 import { AppError } from "../../lib/errors.js";
 import { dataResponse, parseBody } from "../../lib/http.js";
 import { getPrisma } from "../../lib/prisma.js";
@@ -22,6 +29,10 @@ const businessSchema = z.object({
   name: z.string().trim().min(2).max(160),
   category: z.string().trim().min(1).max(120),
   timezone: z.string().trim().min(1).max(100),
+  // Ausente preserva o que esta gravado; nunca grava conjunto vazio so por
+  // omissao (Goal018/WU-01).
+  modalities: z.array(businessModalitySchema).optional(),
+  address: businessAddressSchema.optional(),
 });
 const aiSchema = z.object({
   enabled: z.boolean(),
@@ -67,6 +78,13 @@ export async function registerV1SettingsRoutes(
       assertTimezone(body.timezone);
       const tenant = currentTenantContext(request);
       const prisma = getPrisma();
+      const current = await prisma.businessProfile.findUnique({
+        where: { tenantId: tenant.tenantId },
+      });
+      const { modalities, address } = resolveBusinessProfileFields(
+        current,
+        body,
+      );
       await prisma.$transaction([
         prisma.tenant.update({
           where: { id: tenant.tenantId },
@@ -79,11 +97,16 @@ export async function registerV1SettingsRoutes(
             businessName: body.name,
             category: body.category,
             timezone: body.timezone,
+            modalities,
+            address,
           },
           update: {
             businessName: body.name,
             category: body.category,
             timezone: body.timezone,
+            modalities,
+            address,
+            businessContextVersion: { increment: 1 },
           },
         }),
       ]);
@@ -166,6 +189,11 @@ async function settingsState(
           timezone: profile.timezone,
           language: profile.language,
           currency: profile.currency,
+          modalities: profile.modalities,
+          address: profile.address,
+          contextVersion: profile.businessContextVersion,
+          contextProjectedVersion: profile.businessContextProjectedVersion,
+          contextProjectionStatus: businessContextProjectionState(profile),
         }
       : null,
     ai: {
@@ -185,6 +213,12 @@ async function settingsState(
   };
 }
 
+/**
+ * Falha de projecao nunca vira erro da requisicao: o dado do negocio ja foi
+ * gravado antes desta chamada, e o estado projetado/pendente exposto em
+ * `settingsState` e o unico aviso — sem retentativa automatica, sem 500
+ * (Goal018/WU-03).
+ */
 async function syncAi(
   request: FastifyRequest,
   ai: AiOrchestratorClient,
@@ -202,14 +236,30 @@ async function syncAi(
       update: {},
     }),
   ]);
-  await ai.updateTenantConfig(internalContext(request), {
-    enabled: settings.enabled,
-    tone: resolveAiConversationStyle(settings.tone),
-    businessContext: {
-      businessName: businessProfile.businessName,
-      timezone: businessProfile.timezone,
-    },
-  });
+  try {
+    await ai.updateTenantConfig(internalContext(request), {
+      enabled: settings.enabled,
+      tone: resolveAiConversationStyle(settings.tone),
+      businessContext: businessContextPayload(businessProfile),
+    });
+    if (
+      businessProfile.businessContextProjectedVersion !==
+      businessProfile.businessContextVersion
+    ) {
+      await getPrisma().businessProfile.update({
+        where: { tenantId: tenant.tenantId },
+        data: {
+          businessContextProjectedVersion:
+            businessProfile.businessContextVersion,
+        },
+      });
+    }
+  } catch (error) {
+    request.log.warn(
+      { err: error, tenantId: tenant.tenantId },
+      "AI tenant config projection failed; business context stays pending.",
+    );
+  }
 }
 
 function assertTimezone(value: string): void {

@@ -35,6 +35,7 @@ import {
   requiresHuman,
   shouldPauseAt,
 } from './lib/autonomous-state.mjs';
+import { RECONCILIATION_ACTIONS, reconcileCampaignPosition } from './lib/campaign-reconciliation.mjs';
 import { goalExecutionOf, initializeGoalExecutionState, staleGoalPointers } from './lib/goal-execution.mjs';
 import { LOOP_STATES } from './lib/loop-state.mjs';
 import { startLeaseHeartbeat } from './lib/leases.mjs';
@@ -372,6 +373,31 @@ async function main() {
   try {
     // ===================== The loop ========================================
     for (;;) {
+      // Before the boundary is judged: did the Goal this run is pointing at
+      // already close without it? A closure integrated into HEAD that names the
+      // next Goal is evidence, not ambiguity, and the record can catch up.
+      // Without this the run stops as GOAL_BOUNDARY_AMBIGUOUS and stays stopped,
+      // because nothing but this loop ever writes the campaign position.
+      const recordedClosure = (await store.readRuntime())?.closure ?? null;
+      const reconciliation = reconcileCampaignPosition({
+        run,
+        closure: recordedClosure,
+        closureIntegrated: await probe
+          .isAncestorOfHead(recordedClosure?.integratedClosureCommit)
+          .catch(() => false),
+      });
+      if (reconciliation.action === RECONCILIATION_ACTIONS.ADVANCE) {
+        run = await auto.recordGoalCompleted(reconciliation.completedGoal, reconciliation.baseline);
+        run = await auto.setCurrentGoal(reconciliation.nextGoal);
+        await store.appendEvent({
+          type: 'CAMPAIGN_POSITION_RECONCILED', autonomousRunId: run.autonomousRunId,
+          goal: reconciliation.completedGoal, nextGoal: reconciliation.nextGoal,
+          baseline: reconciliation.baseline, evidence: reconciliation.evidence,
+        });
+        emit(`Goal ${reconciliation.completedGoal} closed outside this run; `
+          + `campaign moved to Goal ${reconciliation.nextGoal} (${reconciliation.evidence}).`);
+      }
+
       const goalId = run.currentGoal;
       emit('');
       emit(`══ Goal ${goalId} ══`);

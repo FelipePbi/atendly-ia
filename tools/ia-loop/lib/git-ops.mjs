@@ -87,6 +87,19 @@ export function createGitProbe(repoRoot) {
       return (await gitOrNull(['rev-parse', '--verify', `${sha}^{commit}`], { cwd: repoRoot })) !== null;
     },
 
+    /**
+     * Is this commit in the history HEAD is standing on?
+     *
+     * Deliberately stronger than `commitExists`: a commit can sit in the object
+     * database after a reset, an abandoned branch or a fetch without being part
+     * of what the repository currently says happened. Anything that reads a
+     * recorded sha as proof that work LANDED needs reachability, not existence.
+     */
+    async isAncestorOfHead(sha) {
+      if (typeof sha !== 'string' || sha.trim() === '') return false;
+      return (await gitOrNull(['merge-base', '--is-ancestor', sha, 'HEAD'], { cwd: repoRoot })) !== null;
+    },
+
     async worktrees() {
       const out = await git(['worktree', 'list', '--porcelain'], { cwd: repoRoot });
       const entries = [];

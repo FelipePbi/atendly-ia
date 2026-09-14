@@ -21,6 +21,7 @@ Duas etapas concluídas:
 | V18 — Work Unit Execution | rodada decomposta em DAG de Work Units; determinístico sem modelo, mecânico em Haiku, normal em Sonnet, difícil em Opus; contexto por unidade. Caminho padrão; `IA_LOOP_WORK_UNIT_EXECUTION=0` é rollback explícito para o Developer legado |
 | V19 — Closure documentation roteada | fechamento deixa de cair em Fable por padrão; stage e política próprios, `routeClosureDocumentation` |
 | V28 — Fable deixa de ser default | medido nos Goals 009–013, o portão de risco nunca recusou: planning e review vão para Opus sempre, e Fable só por escalonamento autorizado ou override manual |
+| V29 — Posição da campanha reconciliada | um Goal fechado fora da run deixa de congelar o `autonomous-run.json`: closure integrado e alcançável do HEAD avança o registro em vez de parar como `GOAL_BOUNDARY_AMBIGUOUS` |
 
 ---
 
@@ -5527,3 +5528,63 @@ acontece, e todo planning/review normal segue o caminho stateless que o Opus já
 usava.
 
 `isDeepComplexity` foi removida: sem tier `deep`, nada mais a chamava.
+
+---
+
+## V29 — A posição da campanha se reconcilia com a evidência, em vez de congelar
+
+O `autonomous-run.json` guarda onde a campanha está: Goal atual, Goals
+concluídos, baseline aceita. Ele tem **um único escritor** — o `run-auto`,
+num único momento, depois que o `run-close` retorna para ele.
+
+Consequência: qualquer fechamento que aconteça sem o `run-auto` no circuito
+congela o registro para sempre, porque nada mais escreve ali. E isso é o caso
+comum, não a exceção. Dos Goals com evento `GOAL_CLOSED`, só 004, 005, 006 e
+012 têm também o `MIGRATION_BASELINE_UPDATED` que prova que a run os registrou.
+007 a 011 e 013 não têm. A run `auto-987b6c55` ficou apontando para o Goal 007
+por quatro dias enquanto 008, 009, 010 e 011 fechavam à sua volta, e acabou
+arquivada como `GOAL_BOUNDARY_AMBIGUOUS`.
+
+O incidente que motivou a correção: no Goal 013 a máquina reiniciou em
+`2026-09-14T00:46:37Z`, 23 minutos depois do último heartbeat do orquestrador
+(`00:23:29Z`, lease `migration-loop`, pid 32856, boot `2026-09-12T17:27:49Z`).
+Os workers foram religados, o `run-auto` não. Review, closure e planning
+rodaram sem orquestrador — e faltam exatamente os dois eventos que só ele
+escreve, `GOAL_ACCEPTED` e `MIGRATION_BASELINE_UPDATED`.
+
+### A leitura que faltava
+
+A deriva já era **detectada** — o `evaluateGoalBoundary` a enxergava e parava.
+O que faltava era distinguir ambiguidade de evidência: um closure gravado no
+runtime, **alcançável a partir do HEAD** e nomeando o próximo Goal, não é uma
+ambiguidade. É um Goal que terminou enquanto o registro não estava olhando.
+
+`reconcileCampaignPosition` (`lib/campaign-reconciliation.mjs`) decide isso e
+mais nada — não escreve, não toca git. Falha fechado: todas as condições abaixo
+precisam valer, e qualquer outra coisa devolve `NONE` com o motivo, deixando a
+checagem de fronteira parar a run como antes. Chutar aqui **pularia um Goal em
+silêncio**, que é pior que qualquer parada.
+
+```text
+closure.goal === run.currentGoal          o recibo é deste Goal, não do anterior
+closure.goal ∉ run.completedGoals         ainda não contado
+closure.integratedClosureCommit presente
+closure.newMigrationBaseline presente
+closure.nextGoalId presente e ≠ o próprio  ausência NUNCA vira "migração acabou"
+closureIntegrated                          provado pelo chamador, nunca inferido
+```
+
+A última é a decisiva, e é por isso que `createGitProbe` ganhou
+`isAncestorOfHead`: `commitExists` é fraco demais: um commit pode estar no banco
+de objetos depois de um reset ou de um branch abandonado sem fazer parte do que
+o repositório diz que aconteceu. Quem lê um sha gravado como prova de que o
+trabalho **entrou** precisa de alcançabilidade, não de existência.
+
+O `run-auto` chama isso no topo de cada volta, antes da fronteira, e aplica o
+resultado pelos escritores que já existiam (`recordGoalCompleted` +
+`setCurrentGoal`), gravando `CAMPAIGN_POSITION_RECONCILED`. O avanço fica
+indistinguível de um que o próprio loop tivesse feito.
+
+Verificado contra o estado travado real: com `HEAD` em `708e4813` e o closure em
+`108f88d4`, a decisão é `ADVANCE` de 013 para 014 com a baseline correta; um sha
+inventado devolve `false` na alcançabilidade e a decisão vira `NONE`.

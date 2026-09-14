@@ -41,6 +41,7 @@ import {
   routeClosureDocumentation,
   toJobRouting,
 } from '../lib/model-routing.mjs';
+import { DETERMINISTIC_ACTION_NAMES } from '../lib/deterministic-actions.mjs';
 import { createAttemptRouter } from '../lib/routing-runtime.mjs';
 import { createJobStore } from '../lib/job-store.mjs';
 import { createPersistentSession } from '../lib/persistent-session.mjs';
@@ -266,7 +267,8 @@ function buildClosureDocPrompt(job) {
   ].join('\n');
 }
 
-function buildPlanningPrompt(job) {
+/** Exported for the regression test below; nothing else calls it. */
+export function buildPlanningPrompt(job) {
   return [
     'Você está atuando como Tech Lead no PLANEJAMENTO do próximo Goal.',
     '',
@@ -343,10 +345,13 @@ function buildPlanningPrompt(job) {
     'Para um Goal pequeno espere 1–3 unidades; médio 3–8; grande 5–15.',
     '',
     'Classifique cada unidade em type:',
-    '- DETERMINISTIC: um COMANDO, sem modelo nenhum. Informe action (typecheck, lint,',
-    '  targeted-tests, unit-tests, tooling-tests, gate-tests, git-diff-check, build,',
-    '  validate-core, validate-integration), scope quando a action exigir (ex.: apps/bff)',
-    '  e pattern quando for targeted-tests. Não invente linha de comando: só essas actions existem.',
+    '- DETERMINISTIC: um COMANDO, sem modelo nenhum. Informe action, scope quando a action',
+    '  exigir (ex.: apps/bff) e pattern quando for targeted-tests.',
+    // Derived, never retyped. This list was hardcoded and drifted the moment an
+    // action was added: the registry knew about `validate-ui` and the prompt did
+    // not, so the planner could not name a gate that existed.
+    `  As actions que existem são exatamente estas: ${DETERMINISTIC_ACTION_NAMES.join(', ')}.`,
+    '  Não invente linha de comando: o registro é fechado e nada fora dessa lista roda.',
     '- MECHANICAL: comportamento já definido e padrão já existente no código — boilerplate,',
     '  DTO totalmente especificado, export, rota trivial seguindo padrão, mock simples, rename.',
     '- STANDARD: implementação normal — regra de negócio, service, repository, integração,',
@@ -365,6 +370,15 @@ function buildPlanningPrompt(job) {
     'Ordene com dependências reais (é um DAG, sem ciclos: um ciclo invalida o plano inteiro).',
     'Coloque a verificação determinística no fim: primeiro as dirigidas (typecheck/lint/targeted-tests',
     'do que foi tocado), depois as globais (validate-core, build) se o Goal exigir.',
+    '',
+    'Se o Goal tocar apps/frontend, inclua uma unidade DETERMINISTIC com action validate-ui,',
+    'depois de validate-core. É o gate renderizado: Playwright nas larguras 360, 390, 768, 1024',
+    'e 1440, medindo overflow horizontal, touch target (mínimo AA de 24px), contraste real',
+    'computado, foco visível e prefers-reduced-motion — tudo que jsdom não alcança porque não',
+    'tem layout nem cascata. Depende de validate-core porque é ele que produz o build servido.',
+    'Critério de aceite que fale de largura, contraste, foco ou estado de tela deve apontar para',
+    'esse gate; o que ele NÃO decide é fidelidade visual à referência aprovada, que continua',
+    'sendo conferência humana e não pode ser declarada como provada por teste.',
     '',
     'Retorne exclusivamente o JSON do contrato PlanningDecision, com um destes:',
     '',

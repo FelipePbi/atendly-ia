@@ -95,6 +95,7 @@ export function buildTechLeadContext({
   implementationReport,
   validations = [],
   previousBlockers = [],
+  graphOrientation = null,
 }) {
   if (!goal) fail('INVALID_ARGS', 'goal is required');
   if (!Number.isInteger(round) || round < 1) fail('INVALID_ARGS', 'round must be an integer >= 1');
@@ -114,6 +115,12 @@ export function buildTechLeadContext({
     implementationReport,
     validations: [...validations],
     previousBlockers: [...previousBlockers],
+
+    // What the changed files reach, answered from the graph before the review
+    // starts. A reviewer that has to grep for blast radius spends its budget
+    // rediscovering the map instead of judging the diff.
+    graphOrientation,
+
     mustRead: ['AGENTS.md', goalPath],
     note: 'O repositório é a autoridade. A sessão persistente serve para continuidade recente, não como registro oficial.',
   });

@@ -55,6 +55,7 @@ import {
 } from './deterministic-executor.mjs';
 import { workUnitConfig } from './work-unit-config.mjs';
 import { validateWorkUnit } from './work-units.mjs';
+import { resolveGraphOrientation } from './graph-orientation.mjs';
 
 /**
  * The job id of one execution of one unit.
@@ -576,6 +577,34 @@ async function executeModelUnit({
 
     invoke: async ({ attempt }) => {
       const { routing } = await router.current();
+      // Resolved here, not inside the builder: the builder stays pure and
+      // synchronous, and a retry of the same unit re-runs the query against
+      // whatever the previous attempts already wrote into the worktree.
+      const graphOrientation = await resolveGraphOrientation({
+        // relevantFiles first: they already exist, so they have nodes.
+        // expectedFiles often name files this unit is about to create, which
+        // the graph cannot know about yet and simply skips.
+        files: [...(unit.relevantFiles ?? []), ...(unit.expectedFiles ?? [])],
+        cwd: worktree,
+      });
+      // Recorded per attempt, because otherwise the change is unmeasurable:
+      // the ledger already carries this unit's turns and tokens, and this is
+      // the row that says whether it started with a map or without one. A
+      // NO_GRAPH or EMPTY status is exactly as interesting as an OK.
+      await store.appendEvent({
+        type: 'WORK_UNIT_ORIENTED',
+        goal,
+        round,
+        workUnitId: unit.id,
+        jobId: unitJobId,
+        attempt,
+        status: graphOrientation.status,
+        nodes: graphOrientation.nodes ?? [],
+        chars: graphOrientation.text?.length ?? 0,
+        partial: graphOrientation.partial ?? false,
+        durationMs: graphOrientation.durationMs ?? null,
+        reason: graphOrientation.reason ?? null,
+      });
       const packet = buildWorkUnitContextPacket({
         goal,
         goalPath,
@@ -587,6 +616,7 @@ async function executeModelUnit({
         dependencyResults: new Map([...records.entries()]),
         previousFailures: await previousFailuresFor(store, unitJobId),
         expansions,
+        graphOrientation,
       });
       lastPacket = packet;
 

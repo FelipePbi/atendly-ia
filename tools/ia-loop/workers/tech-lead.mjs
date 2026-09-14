@@ -59,6 +59,7 @@ import { runWithCapacity, RUN_OUTCOMES } from '../lib/capacity-runner.mjs';
 import { LOOP_STATES } from '../lib/loop-state.mjs';
 import { reviewDecisionSchemaFor, validateReviewJob, validateReviewDecision } from '../lib/contracts-v2.mjs';
 import { buildTechLeadContext } from '../lib/context-builders.mjs';
+import { resolveGraphOrientation } from '../lib/graph-orientation.mjs';
 import { renderReviewPrompt } from '../lib/review-packet.mjs';
 import {
   CLOSURE_WRITE_PREFIX,
@@ -561,7 +562,23 @@ async function restoreSession(executable) {
     cwd: record?.cwd ?? SESSION_CWD,
     sessionId: record?.sessionId,
     started: resumed,
+    // Lifetime count, so a restart continues it instead of restarting it.
+    turns: record?.turns,
     timeoutMs: TIMEOUT_MS,
+    onLifecycle: (event) => store.appendEvent(event),
+  });
+
+  // The only periodic signal there is about this conversation's size. A
+  // persistent session has no ceiling and no rotation, so the count carried
+  // here is how an operator finds out it has grown to thousands of turns
+  // before a compaction silently drops what a review depended on.
+  await store.appendEvent({
+    type: 'AGENT_SESSION_OPENED',
+    role: ROLE,
+    sessionId: session.sessionId,
+    model: SPECIALIST_MODEL,
+    resumed,
+    turns: session.turns,
   });
 
   return resumed;
@@ -582,6 +599,10 @@ function buildPrompt(context) {
     '',
     'Pacote de review (o repositório é a autoridade, não a sua memória):',
     JSON.stringify(context, null, 2),
+    '',
+    'graphOrientation traz o que os arquivos alterados alcançam, já consultado no grafo de',
+    'código pelo harness. Use-o para julgar impacto em vez de procurar por grep; só consulte',
+    'o grafo por conta própria para uma pergunta que ele não responde.',
     '',
     'Avalie a entrega contra o Goal e os guardrails do AGENTS.md.',
     '',
@@ -605,6 +626,20 @@ async function handleJob(rawJob) {
   telemetry.event('JOB', `${job.goal}/R${job.round} REVIEW ${job.reviewLevel}`);
   await store.appendEvent({ type: 'REVIEW_JOB_RECEIVED', jobId: job.jobId, goal: job.goal, round: job.round });
 
+  const graphOrientation = await resolveGraphOrientation({
+    files: job.changedFiles,
+    cwd: job.worktree,
+  });
+  await store.appendEvent({
+    type: 'REVIEW_ORIENTED',
+    jobId: job.jobId,
+    goal: job.goal,
+    round: job.round,
+    status: graphOrientation.status,
+    nodes: graphOrientation.nodes ?? [],
+    chars: graphOrientation.text?.length ?? 0,
+  });
+
   const context = buildTechLeadContext({
     goal: job.goal,
     goalPath: job.goalPath,
@@ -618,6 +653,7 @@ async function handleJob(rawJob) {
     implementationReport: job.implementationReport,
     validations: job.validations ?? [],
     previousBlockers: [...job.previousBlockers],
+    graphOrientation,
   });
 
   // A real review reads the packet the orchestrator persisted, which carries

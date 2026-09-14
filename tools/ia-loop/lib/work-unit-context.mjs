@@ -16,6 +16,8 @@
  *   dependenciesCompleted     a SUMMARY of each dependency, never its logs
  *   relevantFiles             the plan's pointers, plus files the dependencies
  *                             actually changed
+ *   graphOrientation          the code-graph answer for this unit's objective,
+ *                             resolved by the harness before the model runs
  *   constraints               what may not be done, which is not negotiable
  *   previousRelevantFailures  this unit's OWN earlier attempts, nobody else's
  *   expandedContext           files an earlier attempt of this unit asked for
@@ -122,6 +124,7 @@ export function buildWorkUnitContextPacket({
   previousFailures = [],
   expansions = [],
   executionStrategy = null,
+  graphOrientation = null,
 }) {
   if (!goal) fail('INVALID_ARGS', 'goal is required');
   if (!unit?.id) fail('INVALID_ARGS', 'a Work Unit is required');
@@ -170,6 +173,11 @@ export function buildWorkUnitContextPacket({
     relevantFiles: Object.freeze(relevantFiles),
     expandedContext: Object.freeze([...expansions]),
 
+    // Already answered, so the unit does not spend its first thirty actions
+    // asking it. Carried with its status even when it failed: a unit that was
+    // handed no map should be able to say so, and the ledger should show it.
+    graphOrientation,
+
     worktree,
     constraints: WORK_UNIT_CONSTRAINTS,
 
@@ -184,8 +192,9 @@ export function buildWorkUnitContextPacket({
     }))),
 
     consultSelectively: Object.freeze([
-      'graphify query "<pergunta>" --budget 800 para call paths e impacto',
+      'graphOrientation, que já responde onde o código desta unidade vive',
       'os arquivos listados em relevantFiles, antes de procurar outros',
+      'graphify query "<pergunta>" --budget 800 para uma pergunta NOVA, não para repetir a de graphOrientation',
       `o Goal completo em ${goalPath}, se e somente se os critérios desta unidade não bastarem`,
     ]),
   });
@@ -211,8 +220,11 @@ export function buildWorkUnitPrompt(context, job) {
     `Trabalhe exclusivamente dentro de: ${job.worktree}`,
     '',
     'O contexto acima é DELIBERADAMENTE reduzido ao que esta unidade precisa.',
-    'Comece pelos arquivos em relevantFiles. Você PODE abrir outros arquivos e usar Graphify',
-    'quando precisar — exploração legítima não é proibida.',
+    'graphOrientation já traz a resposta do grafo de código para o objetivo desta unidade:',
+    'o harness rodou a consulta por você. Leia-o antes de abrir qualquer arquivo e antes de',
+    'qualquer grep — ele nomeia arquivo e linha. Depois vá aos arquivos em relevantFiles.',
+    'Você PODE explorar além disso quando precisar; o que não vale a pena é redescobrir',
+    'por grep aquilo que graphOrientation já respondeu.',
     '',
     'Se, e somente se, faltar contexto que você não consegue obter sozinho, responda com',
     'status "CONTEXT_EXPANSION_REQUIRED" e um contextRequest nomeando os arquivos que faltam.',

@@ -26,9 +26,14 @@ export type OnboardingDraft = {
   calendarSource: CalendarSource | null;
   days: number[];
   endTime: string;
+  // Lidos do estado real do negócio (não editáveis pelo formulário): guardam
+  // a demonstração da IA (WU-07) sem serviço inoperante nem horário vazio,
+  // mesma definição de "operacional" do checklist pós-onboarding.
+  hoursValid: boolean;
   serviceDuration: number;
   serviceId?: string;
   serviceName: string;
+  serviceOperational: boolean;
   servicePrice: string;
   servicePriceType: "FIXED" | "STARTING_AT" | "ON_REQUEST" | "NOT_INFORMED";
   startTime: string;
@@ -53,8 +58,10 @@ const initialDraft: OnboardingDraft = {
   calendarSource: null,
   days: [1, 2, 3, 4, 5],
   endTime: "18:00",
+  hoursValid: false,
   serviceDuration: 60,
   serviceName: "",
+  serviceOperational: false,
   servicePrice: "",
   servicePriceType: "FIXED",
   startTime: "09:00",
@@ -150,9 +157,9 @@ export function nextRequiredStep(state: OnboardingState): string {
   if (!state.availability?.rules.some((rule) => rule.active)) {
     return "dias-de-atendimento";
   }
-  if (!state.ai.tone) return "tom-da-ia";
+  if (!state.ai.tone) return "demonstracao-da-ia";
   if (state.whatsapp?.status !== "CONNECTED") return "whatsapp";
-  return "whatsapp-conectar";
+  return "contatos-ignorados";
 }
 
 export function onboardingPriceType(
@@ -181,9 +188,15 @@ function draftFromState(
       ? [...new Set(activeRules.map((rule) => rule.dayOfWeek))]
       : current.days,
     endTime: activeRules[0]?.endTime ?? current.endTime,
+    // Mesma definição de "operacional" do checklist pós-onboarding e do
+    // Scheduling (`isOperationalService`): ativo e com duração definida.
+    hoursValid: activeRules.length > 0,
     serviceDuration: state.service?.durationMinutes ?? current.serviceDuration,
     serviceId: state.service?.id ?? current.serviceId,
     serviceName: state.service?.name ?? current.serviceName,
+    serviceOperational: Boolean(
+      state.service?.active && state.service.durationMinutes !== null,
+    ),
     servicePrice:
       state.service?.price === null || state.service?.price === undefined
         ? current.servicePrice

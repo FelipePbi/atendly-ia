@@ -81,6 +81,10 @@ export const calendarCapabilitiesSchema = z.object({
   // segundo — a Home é a única leitora.
   aiActivationReady: z.boolean().optional(),
   hoursConfigured: z.boolean().optional(),
+  // Quarto item do checklist (Goal019 §9): `true` so com execucao do teste
+  // real em `SUCCEEDED` que ainda vale para o WhatsApp de hoje. Ausente fora
+  // da Home, pela mesma razao que `hoursConfigured`.
+  activationTestCompleted: z.boolean().optional(),
 });
 
 export const calendarStateSchema = z.object({
@@ -561,6 +565,99 @@ export const conversationSchema = z.object({
   // Vínculo com a pessoa do Scheduling (Goal017): `null` quando o contato
   // ainda não está vinculado, ausente no estoque anterior a este campo.
   customerId: z.string().nullish().optional(),
+});
+
+// Contato ignorado por telefone, sem conversa ainda (Goal019/WU-07): a etapa
+// opcional entre conectar e testar aceita numero informado manualmente,
+// criando o contato quando ele nao existe.
+export const ignoredContactSchema = z.object({
+  contactId: z.string().min(1),
+  externalContactId: z.string().min(1),
+  ignored: z.boolean(),
+  ignoredAt: isoDateTimeSchema.nullable(),
+});
+
+// Execucao do teste real da ativacao (Goal019). Espelha `GET/POST
+// /v1/activation-test` em `apps/bff/PUBLIC_API_V1.md`. Nada aqui e derivado
+// de tempo: os seis marcos so ficam `reached` quando ha fato gravado atras
+// deles, e a tela nunca preenche o que a leitura nao trouxe.
+export const activationTestStepSchema = z.enum([
+  "TEST_NOTICE",
+  "CLIENT_ASKS_PRICE",
+  "AI_IDENTIFIES_SERVICE",
+  "AI_ANSWERS_PRICE",
+  "CLIENT_ASKS_SLOT",
+  "AI_CHECKS_AVAILABILITY",
+  "CLIENT_ACCEPTS_SLOT",
+  "AI_CONFIRMS_APPOINTMENT",
+]);
+
+export const activationTestMilestoneNameSchema = z.enum([
+  "MESSAGE_SENT",
+  "SERVICE_IDENTIFIED",
+  "PRICE_INFORMED",
+  "AVAILABILITY_CHECKED",
+  "SLOT_SELECTED",
+  "APPOINTMENT_CONFIRMED",
+]);
+
+export const activationTestRunSchema = z.object({
+  id: z.string().min(1),
+  state: z.enum([
+    "RUNNING",
+    "PAUSED_BY_HUMAN",
+    "SUCCEEDED",
+    "FAILED",
+    "DISCARDED",
+  ]),
+  terminal: z.boolean(),
+  startedAt: isoDateTimeSchema,
+  finishedAt: isoDateTimeSchema.nullable(),
+  pausedAt: isoDateTimeSchema.nullable(),
+  currentStep: activationTestStepSchema.nullable(),
+  completedStep: activationTestStepSchema.nullable(),
+  attempts: z.number().int().nonnegative(),
+  maxAttempts: z.number().int().nonnegative(),
+  failedStep: activationTestStepSchema.nullable(),
+  /** Passo que falhou em linguagem do negocio, vindo pronto do servidor. */
+  failedStepLabel: z.string().nullable(),
+  failureCode: z.string().nullable(),
+  appointmentId: z.string().nullable(),
+  channelId: z.string(),
+  supersededByChannelChange: z.boolean(),
+  cleanupState: z.enum(["PENDING", "CLEAN", "RESIDUAL"]),
+  cleanupAt: isoDateTimeSchema.nullable(),
+  cleanupResidue: z.array(
+    z.object({
+      target: z.enum([
+        "MESSAGE",
+        "CONVERSATION",
+        "CONTACT",
+        "APPOINTMENT",
+        "CUSTOMER",
+      ]),
+      id: z.string(),
+      reason: z.enum([
+        "OPERATION_UNAVAILABLE",
+        "WOULD_TOUCH_OTHER_ROWS",
+        "REMOVAL_FAILED",
+        "STILL_VISIBLE",
+      ]),
+      label: z.string(),
+      explanation: z.string(),
+    }),
+  ),
+  milestones: z.array(
+    z.object({
+      milestone: activationTestMilestoneNameSchema,
+      reached: z.boolean(),
+      reachedAt: isoDateTimeSchema.nullable(),
+      sourceKind: z
+        .enum(["MESSAGE", "SERVICE", "AVAILABILITY", "APPOINTMENT"])
+        .nullable(),
+      sourceId: z.string().nullable(),
+    }),
+  ),
 });
 
 const dependencyErrorSchema = z.object({
@@ -1059,6 +1156,7 @@ export type ImportDecision = z.infer<typeof importDecisionSchema>;
 export type ImportExecution = z.infer<typeof importExecutionSchema>;
 export type ImportProgress = z.infer<typeof importProgressSchema>;
 export type ImportCompletion = z.infer<typeof importCompletionSchema>;
+export type IgnoredContact = z.infer<typeof ignoredContactSchema>;
 export type OnboardingState = z.infer<typeof onboardingStateSchema>;
 export type Service = z.infer<typeof serviceSchema>;
 export type ServiceList = z.infer<typeof serviceListSchema>;
@@ -1072,3 +1170,10 @@ export type SeriesOccurrencePreview = z.infer<
   typeof seriesOccurrencePreviewSchema
 >;
 export type WhatsAppConnection = z.infer<typeof whatsappConnectionSchema>;
+export type ActivationTestRun = z.infer<typeof activationTestRunSchema>;
+export type ActivationTestMilestoneName = z.infer<
+  typeof activationTestMilestoneNameSchema
+>;
+export type ActivationTestMilestone = ActivationTestRun["milestones"][number];
+export type ActivationTestResidueItem =
+  ActivationTestRun["cleanupResidue"][number];

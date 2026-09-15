@@ -1,10 +1,32 @@
+import { useEffect, useState } from "react";
+
+import type { Conversation } from "@/data";
 import { WhatsAppConnectionPanel } from "@/features/whatsapp/WhatsAppConnectionPanel";
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
 import type { OnboardingDraft } from "../OnboardingRuntime";
 import type { OnboardingScenario } from "../scenarios";
+import {
+  activationTestStepBody,
+  persistActivationTestStep,
+} from "./activation-test";
 import type { OnboardingStepContext } from "./shared";
+
+/** Cenários do teste real, todos dentro do bloco "WhatsApp". */
+const ACTIVATION_TEST_SCENARIOS = new Set<OnboardingScenario>([
+  "teste-real",
+  "teste-real-progresso",
+  "teste-real-interferencia",
+  "teste-real-falha",
+  "teste-real-sucesso",
+]);
+
+export function isActivationTestScenario(
+  scenario: OnboardingScenario,
+): boolean {
+  return ACTIVATION_TEST_SCENARIOS.has(scenario);
+}
 
 /** Os quatro pontos do vault (docs/product-vault/02-Fluxos/02-Ativacao-e-Teste-do-WhatsApp.md
  * §"Orientação sobre número pessoal"), explicados antes de oferecer a conexão. */
@@ -15,6 +37,172 @@ const PERSONAL_NUMBER_POINTS = [
   "Quando você responde uma conversa manualmente, a IA sai de cena.",
 ];
 
+/**
+ * Contatos ignorados, etapa opcional entre conectar e testar (vault
+ * `02-Ativacao-e-Teste-do-WhatsApp.md` §"Contatos ignorados"). Marcar uma
+ * conversa existente reusa `PUT /v1/conversations/:id/ignore`, o mesmo
+ * caminho que a IA já respeita; marcar por telefone usa a rota nova que cria
+ * o contato quando ele ainda não existe. Cada confirmação em tela só aparece
+ * depois da resposta da API — nada é afirmado como ignorado sem a marcação
+ * gravada.
+ */
+function IgnoredContactsStepBody() {
+  const [conversations, setConversations] = useState<Conversation[] | null>(
+    null,
+  );
+  const [listError, setListError] = useState<string | null>(null);
+  const [markedConversationIds, setMarkedConversationIds] = useState<
+    Set<string>
+  >(new Set());
+  const [pendingConversationId, setPendingConversationId] = useState<
+    string | null
+  >(null);
+  const [phone, setPhone] = useState("");
+  const [phoneBusy, setPhoneBusy] = useState(false);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [markedPhones, setMarkedPhones] = useState<string[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    getProductServices()
+      .conversations.list({ ignored: false, limit: 20 })
+      .then((list) => {
+        if (active) setConversations(list);
+      })
+      .catch(() => {
+        if (active) setListError("Não foi possível carregar suas conversas.");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function markConversation(id: string) {
+    setPendingConversationId(id);
+    setListError(null);
+    try {
+      await getProductServices().conversations.setIgnored(id, true);
+      setMarkedConversationIds((current) => new Set(current).add(id));
+    } catch {
+      setListError("Não foi possível marcar este contato. Tente novamente.");
+    } finally {
+      setPendingConversationId(null);
+    }
+  }
+
+  async function addPhone() {
+    const trimmed = phone.trim();
+    if (!trimmed) {
+      setPhoneError("Informe um número de telefone.");
+      return;
+    }
+    setPhoneBusy(true);
+    setPhoneError(null);
+    try {
+      const contact = await getProductServices().conversations.ignoreByPhone(
+        trimmed,
+        true,
+      );
+      setMarkedPhones((current) => [...current, contact.externalContactId]);
+      setPhone("");
+    } catch {
+      setPhoneError("Não foi possível marcar este número. Tente novamente.");
+    } finally {
+      setPhoneBusy(false);
+    }
+  }
+
+  return (
+    <div className="onboarding-form">
+      <div className="field">
+        <span className="label">Conversas já existentes</span>
+        {conversations === null && !listError && (
+          <p className="field-help">Carregando conversas...</p>
+        )}
+        {listError && (
+          <div className="onboarding-note is-important" role="alert">
+            <Icon name="alert" />
+            <span>{listError}</span>
+          </div>
+        )}
+        {conversations !== null && conversations.length === 0 && (
+          <p className="field-help">
+            Nenhuma conversa disponível ainda para escolher.
+          </p>
+        )}
+        {conversations !== null && conversations.length > 0 && (
+          <ul className="onboarding-points">
+            {conversations.map((conversation) => {
+              const marked = markedConversationIds.has(conversation.id);
+              return (
+                <li key={conversation.id}>
+                  <Icon name={marked ? "check" : "user"} />
+                  <span>
+                    {conversation.customerName ?? conversation.externalContactId}
+                  </span>
+                  <button
+                    className="btn btn-secondary"
+                    disabled={marked || pendingConversationId === conversation.id}
+                    type="button"
+                    onClick={() => void markConversation(conversation.id)}
+                  >
+                    {marked
+                      ? "Ignorado"
+                      : pendingConversationId === conversation.id
+                        ? "Marcando..."
+                        : "Ignorar"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+      <div className="field">
+        <span className="label">Informar um número manualmente</span>
+        <div className="choice-grid">
+          <input
+            className="input"
+            placeholder="+55 11 99999-0000"
+            type="tel"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              void addPhone();
+            }}
+          />
+          <button
+            className="btn btn-secondary"
+            disabled={phoneBusy}
+            type="button"
+            onClick={() => void addPhone()}
+          >
+            {phoneBusy ? "Adicionando..." : "Adicionar"}
+          </button>
+        </div>
+        {phoneError && (
+          <div className="onboarding-note is-important" role="alert">
+            <Icon name="alert" />
+            <span>{phoneError}</span>
+          </div>
+        )}
+        {markedPhones.length > 0 && (
+          <ul className="onboarding-points">
+            {markedPhones.map((externalContactId) => (
+              <li key={externalContactId}>
+                <Icon name="check" />
+                <span>{externalContactId} ignorado</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function whatsappStepBody(
   scenario: OnboardingScenario,
   _draft: OnboardingDraft,
@@ -22,6 +210,10 @@ export function whatsappStepBody(
 ) {
   if (scenario === "whatsapp-conectar") return <WhatsAppConnectionPanel />;
   if (scenario === "whatsapp-concluido") return null;
+  if (scenario === "contatos-ignorados") return <IgnoredContactsStepBody />;
+  if (isActivationTestScenario(scenario)) {
+    return activationTestStepBody(scenario);
+  }
   return (
     <ul className="onboarding-points">
       {PERSONAL_NUMBER_POINTS.map((point) => (
@@ -48,9 +240,19 @@ export async function persistWhatsappStep(
       ctx.setError("Conclua a vinculação no WhatsApp antes de continuar.");
       return;
     }
+    ctx.go("contatos-ignorados");
+    return;
+  }
+  if (scenario === "contatos-ignorados") {
+    // O onboarding é concluído aqui, mas a IA continua desligada: quem a liga
+    // é o teste real que termina bem. A etapa seguinte é o teste.
     await getProductServices().onboarding.complete();
     await ctx.refreshSession();
-    ctx.router.replace("/inicio");
+    ctx.go("teste-real");
+    return;
+  }
+  if (isActivationTestScenario(scenario)) {
+    await persistActivationTestStep(scenario, ctx);
   }
 }
 
@@ -63,4 +265,17 @@ export async function skipWhatsappStep(
   await getProductServices().onboarding.complete();
   await ctx.refreshSession();
   ctx.go("whatsapp-concluido");
+}
+
+/**
+ * Pular contatos ignorados: etapa opcional, não bloqueia a conclusão (vault
+ * `02-Ativacao-e-Teste-do-WhatsApp.md` §"Contatos ignorados"). Nenhuma
+ * marcação é gravada ao pular.
+ */
+export async function skipIgnoredContactsStep(
+  ctx: OnboardingStepContext,
+): Promise<void> {
+  await getProductServices().onboarding.complete();
+  await ctx.refreshSession();
+  ctx.go("teste-real");
 }

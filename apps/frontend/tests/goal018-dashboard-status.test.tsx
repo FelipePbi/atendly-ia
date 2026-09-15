@@ -63,6 +63,7 @@ function calendarCapabilitiesFixture(
   overrides: Partial<CalendarState["capabilities"]> = {},
 ): CalendarState["capabilities"] {
   return {
+    activationTestCompleted: false,
     aiActivationReady: false,
     createAppointments: true,
     hoursConfigured: false,
@@ -138,7 +139,7 @@ beforeEach(() => {
 });
 
 describe("checklist pós-onboarding da Home", () => {
-  test("mostra os três itens com fonte real, cada um marcado conforme a leitura", async () => {
+  test("mostra os quatro itens com fonte real, cada um marcado conforme a leitura", async () => {
     dashboardGet.mockResolvedValue(
       dashboardFixture({
         scheduling: {
@@ -146,6 +147,7 @@ describe("checklist pós-onboarding da Home", () => {
             appointmentsToday: 0,
             calendar: {
               capabilities: calendarCapabilitiesFixture({
+                activationTestCompleted: false,
                 aiActivationReady: true,
                 hoursConfigured: false,
               }),
@@ -183,7 +185,12 @@ describe("checklist pós-onboarding da Home", () => {
     expect(
       screen.getByRole("listitem", { name: "Conectar o WhatsApp: pendente" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("1 de 3 passos concluídos")).toBeVisible();
+    // Quarto item do vault, agora com produtor real (Goal019 §9): `false` na
+    // leitura é "ainda não testou", nunca "concluído".
+    expect(
+      screen.getByRole("listitem", { name: "Concluir o teste da IA: pendente" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("1 de 4 passos concluídos")).toBeVisible();
     expect(screen.queryByText(/teste concluído/i)).toBeNull();
   });
 

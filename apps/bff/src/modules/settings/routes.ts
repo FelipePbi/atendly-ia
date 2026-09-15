@@ -110,8 +110,11 @@ export async function registerV1SettingsRoutes(
           },
         }),
       ]);
-      await syncAi(request, ai);
-      return dataResponse(request, await settingsState(request, scheduling));
+      const projected = await syncAi(request, ai);
+      return dataResponse(
+        request,
+        await settingsState(request, scheduling, projected),
+      );
     },
   );
 
@@ -143,8 +146,11 @@ export async function registerV1SettingsRoutes(
           tone: body.tone,
         },
       });
-      await syncAi(request, ai);
-      return dataResponse(request, await settingsState(request, scheduling));
+      const projected = await syncAi(request, ai);
+      return dataResponse(
+        request,
+        await settingsState(request, scheduling, projected),
+      );
     },
   );
 
@@ -165,6 +171,15 @@ export async function registerV1SettingsRoutes(
 async function settingsState(
   request: FastifyRequest,
   scheduling: SchedulingClient,
+  /**
+   * A projecao tentada **nesta requisicao** chegou na IA?
+   *
+   * `undefined` e "esta requisicao nao projetou nada" — leitura pura, em que
+   * o estado vem so da comparacao entre as versoes gravadas. `false` e a
+   * tentativa que falhou agora: a resposta continua sendo sucesso, porque o
+   * dado do BFF foi gravado, mas o estado de projecao e o real.
+   */
+  projectedNow?: boolean,
 ) {
   const tenant = currentTenantContext(request);
   const context = internalContext(request);
@@ -193,7 +208,10 @@ async function settingsState(
           address: profile.address,
           contextVersion: profile.businessContextVersion,
           contextProjectedVersion: profile.businessContextProjectedVersion,
-          contextProjectionStatus: businessContextProjectionState(profile),
+          contextProjectionStatus:
+            projectedNow === false
+              ? "PENDING"
+              : businessContextProjectionState(profile),
         }
       : null,
     ai: {
@@ -218,11 +236,17 @@ async function settingsState(
  * gravado antes desta chamada, e o estado projetado/pendente exposto em
  * `settingsState` e o unico aviso — sem retentativa automatica, sem 500
  * (Goal018/WU-03).
+ *
+ * Devolve se a projecao **desta** chamada chegou na IA (Goal019 §7, residuo
+ * nominal do review018). Sem isso a resposta de `PATCH /v1/settings/ai`
+ * afirmava `PROJECTED` mesmo com a projecao falhada: o contexto de negocio
+ * nao muda de versao nesse caminho, entao a comparacao entre versoes gravadas
+ * continuava batendo e escondia a falha que acabara de acontecer.
  */
 async function syncAi(
   request: FastifyRequest,
   ai: AiOrchestratorClient,
-): Promise<void> {
+): Promise<boolean> {
   const tenant = currentTenantContext(request);
   const [settings, businessProfile] = await Promise.all([
     getPrisma().aiSettings.upsert({
@@ -254,11 +278,13 @@ async function syncAi(
         },
       });
     }
+    return true;
   } catch (error) {
     request.log.warn(
       { err: error, tenantId: tenant.tenantId },
       "AI tenant config projection failed; business context stays pending.",
     );
+    return false;
   }
 }
 

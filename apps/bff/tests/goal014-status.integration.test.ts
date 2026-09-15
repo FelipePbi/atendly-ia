@@ -52,6 +52,12 @@ function jsonResponse(body: unknown, status = 200): Response {
 function stubUpstream(handlers: {
   ai?: (call: UpstreamCall) => Response;
   evolution?: (call: UpstreamCall) => Response;
+  /**
+   * `GET /internal/activation-test`, lido pela reconciliação desired/effective
+   * do Goal019 antes de a rota responder. Sem handler, o padrão é "nunca
+   * testou" — que é o estado destes testes, todos anteriores ao teste real.
+   */
+  activationTest?: (call: UpstreamCall) => Response;
 }) {
   vi.stubGlobal(
     "fetch",
@@ -64,8 +70,22 @@ function stubUpstream(handlers: {
         tenantId: request.headers.get("x-tenant-id"),
       };
       if (call.path === "/internal/ai-tenant-config") {
+        // A reconciliação do Goal019 tenta convergir antes de a rota ler. A
+        // projeção é aceita, mas este dublê é estático: o que o `GET` devolve
+        // não muda por causa dela, de propósito — o que estes testes provam é
+        // que `ai.state` deriva da **leitura** desta requisição, não do que o
+        // BFF tentou escrever.
+        if (call.method === "PUT") {
+          return jsonResponse({ ok: true, config: null });
+        }
         if (!handlers.ai) throw new Error(`Unexpected AI call: ${call.path}`);
         return handlers.ai(call);
+      }
+      if (call.path === "/internal/activation-test") {
+        return (
+          handlers.activationTest?.(call) ??
+          jsonResponse({ data: null, requestId: "up-activation-test" })
+        );
       }
       if (call.path === "/instance/status") {
         if (!handlers.evolution) {
@@ -184,6 +204,8 @@ describe.skipIf(!RUN_INTEGRATION)("Goal014: GET /v1/status", () => {
       desiredEnabled: true,
       effectiveEnabled: true,
       state: "ACTIVE",
+      // Nada divergia: a reconciliação do Goal019 não teve o que convergir.
+      reconciled: "NOOP",
     });
     expect(body.degraded).toBe(false);
   });
@@ -262,6 +284,10 @@ describe.skipIf(!RUN_INTEGRATION)("Goal014: GET /v1/status", () => {
       desiredEnabled: false,
       effectiveEnabled: true,
       state: "OFF",
+      // Divergia, então a reconciliação tentou convergir. Mesmo assim o estado
+      // lido continua sendo o real: `OFF` porque o desejado manda, e o efetivo
+      // continua sendo o que a IA respondeu nesta requisição.
+      reconciled: "CONVERGED",
     });
   });
 
@@ -283,6 +309,8 @@ describe.skipIf(!RUN_INTEGRATION)("Goal014: GET /v1/status", () => {
       desiredEnabled: true,
       effectiveEnabled: null,
       state: "PENDING",
+      // Tenant nunca projetado: projetar o desejado é convergir, não inventar.
+      reconciled: "CONVERGED",
     });
   });
 
@@ -304,6 +332,9 @@ describe.skipIf(!RUN_INTEGRATION)("Goal014: GET /v1/status", () => {
       desiredEnabled: true,
       effectiveEnabled: false,
       state: "PENDING",
+      // A convergência foi tentada; o dublê é estático e continua relatando
+      // desligado, então `PENDING` é o estado honesto — não `ACTIVE`.
+      reconciled: "CONVERGED",
     });
   });
 
@@ -324,6 +355,9 @@ describe.skipIf(!RUN_INTEGRATION)("Goal014: GET /v1/status", () => {
       desiredEnabled: true,
       effectiveEnabled: null,
       state: "UNKNOWN",
+      // A IA está fora do ar: a tentativa de convergir não deu certo, e isso
+      // é dito em vez de escondido. A leitura continua respondendo 200.
+      reconciled: "FAILED",
     });
     expect(body.degraded).toBe(true);
   });
@@ -360,6 +394,7 @@ describe.skipIf(!RUN_INTEGRATION)("Goal014: GET /v1/status", () => {
       desiredEnabled: false,
       effectiveEnabled: false,
       state: "OFF",
+      reconciled: "NOOP",
     });
   });
 });

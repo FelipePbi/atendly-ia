@@ -1584,3 +1584,96 @@ aditiva, e o contrato público mudou em três pontos aditivos mais uma remoção
   públicas**, e as rotas de onboarding exigem sessão. As telas novas foram verificadas em jsdom —
   estrutura, papéis, teclado e axe —, não em largura, contraste ou foco reais. Nenhum WhatsApp
   real, modelo real ou CI hospedada foi exercitado.
+
+## Delta implementado — Goal019, 2026-09-14 (ACCEPTED na rodada 4 do [review019](reviews/019-review.md))
+
+A fotografia acima permanece como registro. Os FATOS que descrevem o número da plataforma como
+inexistente, o teste real como ausente, a ativação da IA como decidida só por "ao menos um serviço
+operacional" e a reconciliação desired/effective como inexistente estão superados pelos fatos
+abaixo. Há **três migrations** na IA e **uma** no BFF, todas aditivas e sem backfill.
+
+- **FATO atual:** a instância oficial da Atendly é configuração do serviço, não vínculo de negócio.
+  `apps/ai-orchestrator/src/config/platform-whatsapp.ts` resolve instância, credencial e número a
+  partir do ambiente, e `PlatformWhatsAppSender` só envia para o número do tenant que está
+  executando um teste. Nenhuma linha de `ChannelConnection` ou `WhatsAppInstance` é criada para
+  ela, e a credencial da plataforma não é alcançável pelo caminho que resolve credencial de
+  negócio. Sem configuração, o teste é recusado com `PLATFORM_NUMBER_NOT_CONFIGURED` — não há
+  queda para a demonstração nem progresso simulado.
+- **FATO atual:** a execução do teste real é entidade persistida. `ActivationTestRun` e
+  `ActivationTestMilestone` (migrations `20260914120000`, `20260914130000` e `20260914140000`)
+  guardam estado, passo corrente e concluído, tentativas, o limite declarado em código, o passo que
+  falhou, a pausa por interferência, os IDs do que a execução criou, o estado da limpeza e o
+  resíduo. Índice único parcial em `finishedAt IS NULL` garante **uma** execução viva por tenant;
+  `factKind`/`factId` são `NOT NULL`, então marco sem fonte não é representável no banco.
+- **FATO atual:** o teste **exercita a IA**. Cada fala do cliente simulado entra por
+  `AssistantService.handleIncomingText` (porta `ActivationTestAiPort`,
+  `ActivationTestAiDriver`), com o mesmo agente, o mesmo prompt e as mesmas ferramentas de
+  qualquer atendimento. Os marcos de IA derivam do que **ela** registrou: `SERVICE_IDENTIFIED` da
+  chamada de `list_services`, `AVAILABILITY_CHECKED` da de `get_availability`,
+  `PRICE_INFORMED` da mensagem `source: AI` gravada na conversa e `APPOINTMENT_CONFIRMED` do
+  agendamento criado pela ferramenta `create_appointment` dela. `ActivationTestService` não compõe
+  nenhum texto de resposta, não consulta disponibilidade e não cria agendamento — se a IA não
+  atender, o passo correspondente falha.
+- **FATO atual:** a resposta da IA no teste **sai pelo canal do tenant**, e não fica só gravada.
+  O envio é nó do grafo, então o driver não o alcança por chamar o assistente: quem entrega é
+  `TenantChannelReplySender`, pela mesma porta do atendimento normal, com o `deliveryState` da
+  linha reconciliado depois. Mensagem registrada sem entrega confirmada é recusa própria
+  (`ACTIVATION_TEST_AI_REPLY_NOT_DELIVERED`), não passo concluído — o negócio não vê uma conversa
+  de teste de um lado só.
+- **FATO atual:** o que a execução grava em `createdMessageIds` é o **id da linha** em `Message`,
+  não o id externo do envio. `ActivationTestAiDriver` chama `recordInboundText` e
+  `handleBufferedText` — o par que `handleIncomingText` encadeia internamente — justamente para ter
+  o id da fala do cliente simulado, que `handleIncomingText` descarta. Sem isso, a remoção por
+  chave primária não alcançaria nenhuma mensagem da execução, e conversa e contato de teste
+  sobreviveriam com resíduo de motivo falso.
+- **FATO atual:** a remoção dos dados de teste remove de verdade. O vault manda remover
+  agendamento e cliente de teste, e cancelar não é remover — atendimento cancelado continua na
+  agenda. `CalendarRemovalService` no Scheduling (`DELETE /internal/appointments/:id` e
+  `DELETE /internal/customers/:id`, ambas internas e só para a agenda própria) apaga **por ID**;
+  a remoção da pessoa é recusada com `CUSTOMER_HAS_APPOINTMENTS` enquanto sobrar atendimento dela.
+  A limpeza só chama essas operações com os IDs que a execução gravou na criação, confere os read
+  models depois e grava o que sobrou em `cleanupResidue`, com alvo e razão. `CLEAN` só existe com
+  resíduo vazio.
+- **FATO atual:** execução `RUNNING` órfã deixou de travar o tenant. `POST /internal/activation-test`
+  continua respondendo `202` com a execução rodando no servidor, mas uma execução que para de dar
+  sinal de vida por mais de `ACTIVATION_TEST_STALE_AFTER_MS` (cinco minutos, declarado em código) é
+  encerrada como `FAILED` com `ACTIVATION_TEST_ABANDONED` na leitura seguinte — uma por requisição,
+  idempotente, sempre para estado terminal, e ela **não** ativa a IA.
+- **FATO atual:** sucesso, e só sucesso, liga a IA. `apps/bff/src/lib/ai-activation.ts` reconcilia
+  em `GET /v1/status` e `GET /v1/dashboard`: execução `SUCCEEDED` que ainda vale liga a IA **pela
+  regra vigente** (sem serviço operacional não liga nem por teste bem-sucedido), gravando a
+  execução que autorizou em `AiSettings.activatedByRunId` (migration
+  `20260914150000_goal019_ai_activated_by_test`). Reconciliar a mesma execução duas vezes não
+  duplica ativação nem projeção. A reconciliação é limitada a uma tentativa por requisição, nunca
+  lança e deixa `ai.reconciled` legível em `GET /v1/status`.
+- **FATO atual:** trocar ou revincular o WhatsApp invalida o teste.
+  `ActivationTestRun.channelInstanceId` grava a instância contra a qual o teste rodou, e o DTO
+  interno deriva `supersededByChannelChange` comparando-a com o vínculo ativo — comparar só o `id`
+  de `ChannelConnection` não bastaria, porque revincular atualiza a mesma linha. Execução superada
+  não ativa, e desliga a IA que ela mesma tinha ligado.
+- **FATO atual:** `PATCH /v1/settings/ai` deixou de afirmar projeção que não aconteceu. `syncAi`
+  devolve se a projeção **daquela requisição** chegou na IA, e `settingsState` responde `PENDING`
+  quando ela falhou. A resposta continua sendo sucesso: o dado do BFF foi gravado.
+- **FATO atual:** o checklist da Home tem os quatro itens do vault.
+  `calendar.capabilities.activationTestCompleted` em `GET /v1/dashboard` é `true` só com execução
+  `SUCCEEDED` que ainda vale para o WhatsApp de hoje.
+- **FATO atual:** o onboarding ganhou sete cenários novos e todos são alcançáveis pelo fluxo:
+  `demonstracao-da-ia`, `contatos-ignorados` e as cinco telas do teste real (`teste-real`,
+  `teste-real-progresso`, `teste-real-interferencia`, `teste-real-falha`, `teste-real-sucesso`).
+  A leitura de progresso tem intervalo próprio e **para** em estado terminal; continua existindo um
+  poller de `GET /v1/status` por árvore renderizada.
+
+- **LIMITE:** nada disso prova envio real. Nenhum WhatsApp real, número da plataforma real, modelo
+  real ou CI hospedada foi exercitado: a porta de envio e a IA são exercitadas contra dublê, e o
+  PostgreSQL é descartável. O envio real continua sendo gate operacional, na mesma classe do M4 do
+  Goal010.
+- **LIMITE:** a reconciliação cobre `AiSettings.enabled` e o contexto de negócio. O timezone
+  replicado entre `BusinessProfile`, `CalendarSettings` e o contexto da IA continua sem
+  reconciliação.
+- **LIMITE:** `DELETE /internal/appointments/:id` e `DELETE /internal/customers/:id` existem só
+  para a agenda própria (`ATENDLY`) e só nas rotas internas; não há entrada por `/v1` e nenhuma
+  tela as alcança. Retenção e exclusão de conta continuam sendo do Goal023.
+- **LIMITE:** o gate de browser (`validate:ui`) continua cobrindo apenas rotas públicas, e as telas
+  do teste exigem sessão. Elas foram verificadas em jsdom — estrutura, papéis e axe —, não em
+  largura, contraste ou foco reais. Fidelidade visual à referência aprovada continua sendo
+  conferência humana.

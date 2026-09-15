@@ -36,6 +36,13 @@ const categorySchema = z.object({
   category: z.enum(["COMMERCIAL", "UNCLASSIFIED", "PERSONAL"]).nullable(),
 });
 const ignoreSchema = z.object({ ignored: z.boolean() });
+// Goal019/WU-07: mesmo limite de `tenantPhone` do teste real — validar aqui
+// falha rápido, sem depender de uma viagem à IA para um corpo obviamente
+// inválido.
+const ignoreByPhoneSchema = z.object({
+  phone: z.string().trim().min(8).max(20),
+  ignored: z.boolean(),
+});
 
 export async function registerV1ConversationRoutes(
   app: FastifyInstance,
@@ -156,6 +163,23 @@ export async function registerV1ConversationRoutes(
       return dataResponse(
         request,
         await ai.setIgnored(internalContext(request), id, body),
+      );
+    },
+  );
+
+  /**
+   * Contato ignorado por telefone, sem conversa aberta ainda (Goal019/WU-07):
+   * a etapa opcional de onboarding entre conectar e testar também aceita
+   * número informado manualmente, criando o contato quando ele não existe.
+   */
+  app.put(
+    "/v1/conversations/ignored-contacts",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const body = parseBody(ignoreByPhoneSchema, request.body);
+      return dataResponse(
+        request,
+        await ai.ignoreContactByPhone(internalContext(request), body),
       );
     },
   );

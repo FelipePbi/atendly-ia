@@ -5,15 +5,12 @@ import {
   sealChannelCredential,
 } from "../../lib/channel-credentials.js";
 import { AppError } from "../../lib/errors.js";
-import {
-  type AiConversationStyle,
-  type AiTenantSettings,
-  normalizeAiSettings,
+import type {
+  AiConversationStyle,
+  AiTenantSettings,
 } from "../tenant-config/ai-settings.js";
-import {
-  type BusinessContext,
-  normalizeBusinessContext,
-} from "../tenant-config/business-context.js";
+import type { BusinessContext } from "../tenant-config/business-context.js";
+import { loadTenantExecutionContext } from "../tenant-config/tenant-execution-context.js";
 import type {
   ChannelInboundMessage,
   MappedChannelInboundMessage,
@@ -174,15 +171,13 @@ export class ChannelConnectionService {
       );
     }
 
-    const config = await this.prisma.aiTenantConfig.findUnique({
-      where: { tenantId: connection.tenantId },
-    });
-    const aiSettings = normalizeAiSettings({
-      aiEnabled: config?.enabled ?? false,
-      // Estilo legado gravado antes do Goal011 sai daqui ja no vocabulario
-      // novo; tenant sem configuracao sai no equilibrado.
-      tone: config?.tone,
-    });
+    // Mesma montagem que a execucao do teste real usa
+    // (`loadTenantExecutionContext`): os dois caminhos que entregam mensagem a
+    // IA leem o contexto do negocio pelo mesmo lugar, de proposito.
+    const { businessContext, aiSettings } = await loadTenantExecutionContext(
+      this.prisma,
+      connection.tenantId,
+    );
 
     return {
       message: {
@@ -191,8 +186,7 @@ export class ChannelConnectionService {
         channelId: connection.id,
         userId: connection.userId,
         requestId: input.requestId,
-        businessContext:
-          input.businessContext ?? normalizeBusinessContext(config?.settings),
+        businessContext: input.businessContext ?? businessContext,
         aiSettings: input.aiSettings ?? aiSettings,
       },
       connection,

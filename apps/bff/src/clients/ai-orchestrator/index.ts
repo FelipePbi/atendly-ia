@@ -97,6 +97,16 @@ const conversationSchema = z.object({
 const envelope = <T extends z.ZodType>(schema: T) =>
   z.object({ data: schema, requestId: z.string() });
 
+// Goal019/WU-07: contato ignorado por telefone, sem conversa aberta ainda —
+// a etapa opcional entre conectar e testar tambem aceita numero informado
+// manualmente, criando o contato quando ele nao existe.
+const ignoredContactSchema = z.object({
+  contactId: z.string(),
+  externalContactId: z.string(),
+  ignored: z.boolean(),
+  ignoredAt: z.string().nullable(),
+});
+
 // Goal012/WU-01: tipos do documento de conhecimento (`KnowledgeDocument`).
 const knowledgeDocumentTypeSchema = z.enum([
   "FAQ",
@@ -189,6 +199,94 @@ const aiTenantConfigStateSchema = z
     promptVersion: z.string(),
   })
   .nullable();
+
+// Goal019/WU-05: execucao do teste real. Espelha o DTO de
+// `activation-test/routes.ts` na IA — os oito passos e os seis marcos do
+// vault, cada marco com a fonte do fato que o sustenta.
+const activationTestStepSchema = z.enum([
+  "TEST_NOTICE",
+  "CLIENT_ASKS_PRICE",
+  "AI_IDENTIFIES_SERVICE",
+  "AI_ANSWERS_PRICE",
+  "CLIENT_ASKS_SLOT",
+  "AI_CHECKS_AVAILABILITY",
+  "CLIENT_ACCEPTS_SLOT",
+  "AI_CONFIRMS_APPOINTMENT",
+]);
+
+const activationTestRunSchema = z.object({
+  id: z.string(),
+  state: z.enum([
+    "RUNNING",
+    "PAUSED_BY_HUMAN",
+    "SUCCEEDED",
+    "FAILED",
+    "DISCARDED",
+  ]),
+  terminal: z.boolean(),
+  startedAt: z.string(),
+  finishedAt: z.string().nullable(),
+  pausedAt: z.string().nullable(),
+  currentStep: activationTestStepSchema.nullable(),
+  completedStep: activationTestStepSchema.nullable(),
+  attempts: z.number().int().nonnegative(),
+  maxAttempts: z.number().int().nonnegative(),
+  failedStep: activationTestStepSchema.nullable(),
+  failedStepLabel: z.string().nullable(),
+  failureCode: z.string().nullable(),
+  appointmentId: z.string().nullable(),
+  // Vínculo de WhatsApp contra o qual o teste rodou, e se ele ainda é o do
+  // negócio. Trocar ou revincular o número faz o teste deixar de valer — o
+  // vault exige teste novo —, e a IA não pode continuar ativa por uma prova
+  // que já não existe. Derivado pela IA, nunca por um booleano local.
+  channelId: z.string(),
+  supersededByChannelChange: z.boolean(),
+  // Estado da limpeza e o que sobrou dela. Declarados aqui porque §6 do
+  // Goal019 exige que a tela diga o que ficou: sem estes campos o consumidor
+  // so conseguiria afirmar limpeza completa, que e a falha de aceite nomeada.
+  // `CLEAN` **so** existe com residuo vazio — quem produz o par e a IA.
+  cleanupState: z.enum(["PENDING", "CLEAN", "RESIDUAL"]),
+  cleanupAt: z.string().nullable(),
+  cleanupResidue: z.array(
+    z.object({
+      target: z.enum([
+        "MESSAGE",
+        "CONVERSATION",
+        "CONTACT",
+        "APPOINTMENT",
+        "CUSTOMER",
+      ]),
+      id: z.string(),
+      reason: z.enum([
+        "OPERATION_UNAVAILABLE",
+        "WOULD_TOUCH_OTHER_ROWS",
+        "REMOVAL_FAILED",
+        "STILL_VISIBLE",
+      ]),
+      /** Alvo em linguagem do negocio; a tela nao traduz enum por conta propria. */
+      label: z.string(),
+      explanation: z.string(),
+    }),
+  ),
+  milestones: z.array(
+    z.object({
+      milestone: z.enum([
+        "MESSAGE_SENT",
+        "SERVICE_IDENTIFIED",
+        "PRICE_INFORMED",
+        "AVAILABILITY_CHECKED",
+        "SLOT_SELECTED",
+        "APPOINTMENT_CONFIRMED",
+      ]),
+      reached: z.boolean(),
+      reachedAt: z.string().nullable(),
+      sourceKind: z
+        .enum(["MESSAGE", "SERVICE", "AVAILABILITY", "APPOINTMENT"])
+        .nullable(),
+      sourceId: z.string().nullable(),
+    }),
+  ),
+});
 
 export class AiOrchestratorClient {
   private readonly http = new InternalHttpClient(
@@ -314,6 +412,26 @@ export class AiOrchestratorClient {
         context,
         body: input,
         schema: envelope(conversationSchema),
+      })
+    ).data;
+  }
+
+  /**
+   * Contato ignorado por telefone, sem conversa aberta ainda (Goal019/WU-07):
+   * a etapa opcional do onboarding entre conectar e testar também aceita
+   * número informado manualmente, criando o contato quando ele não existe.
+   */
+  async ignoreContactByPhone(
+    context: InternalRequestContext,
+    input: { phone: string; ignored: boolean },
+  ) {
+    return (
+      await this.http.request({
+        method: "PUT",
+        path: "/internal/contacts/ignore",
+        context,
+        body: input,
+        schema: envelope(ignoredContactSchema),
       })
     ).data;
   }
@@ -595,6 +713,54 @@ export class AiOrchestratorClient {
         schema: envelope(conversationSuggestionsSchema),
       })
     ).data;
+  }
+
+  /**
+   * Execucao corrente do teste real (Goal019/WU-05). `null` e "nunca testou",
+   * nunca fabricado a partir de outro estado.
+   */
+  async getActivationTest(context: InternalRequestContext) {
+    return (
+      await this.http.request({
+        method: "GET",
+        path: "/internal/activation-test",
+        context,
+        schema: envelope(activationTestRunSchema.nullable()),
+      })
+    ).data;
+  }
+
+  /**
+   * Inicia o teste real. A IA responde `202`: a execucao ja esta persistida e
+   * roda no servidor a partir daqui, sem depender desta requisicao terminar.
+   */
+  async startActivationTest(
+    context: InternalRequestContext,
+    input: { tenantPhone: string },
+  ) {
+    const { data, status } = await this.http.requestWithStatus({
+      method: "POST",
+      path: "/internal/activation-test",
+      context,
+      body: input,
+      schema: envelope(activationTestRunSchema),
+    });
+    return { run: data.data, status };
+  }
+
+  /** Reinicia depois de interferencia humana: a execucao pausada e descartada. */
+  async restartActivationTest(
+    context: InternalRequestContext,
+    input: { tenantPhone: string },
+  ) {
+    const { data, status } = await this.http.requestWithStatus({
+      method: "POST",
+      path: "/internal/activation-test/restart",
+      context,
+      body: input,
+      schema: envelope(activationTestRunSchema),
+    });
+    return { run: data.data, status };
   }
 
   private async mutateConversation(

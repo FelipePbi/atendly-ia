@@ -135,6 +135,14 @@ const envSchema = z.object({
   // bytes>", separadas por vírgula.
   CHANNEL_CREDENTIAL_KEYS: stringEnv(),
   CHANNEL_CREDENTIAL_ACTIVE_KEY_ID: stringEnv(),
+  // Instancia oficial da Atendly (Goal019): **configuracao do servico**, nunca
+  // vinculo de negocio. Ela nao cabe como linha de `ChannelConnection` — que e
+  // unica por (tenantId, provider) — e nao pertence a nenhum tenant, entao mora
+  // aqui e e lida por resolvedor proprio (`config/platform-whatsapp.ts`).
+  // O caminho que resolve credencial de negocio nao le nenhuma destas chaves.
+  PLATFORM_WHATSAPP_INSTANCE_ID: stringEnv(),
+  PLATFORM_WHATSAPP_CREDENTIAL: stringEnv(),
+  PLATFORM_WHATSAPP_NUMBER: stringEnv(),
 });
 
 export const env = envSchema.parse(process.env);

@@ -10,6 +10,7 @@ import { sendCsrfToken, sessionCsrfToken } from "./lib/auth.js";
 import { AppError, toErrorMessage } from "./lib/errors.js";
 import { redactRequestUrl } from "./lib/logging.js";
 import { disconnectPrisma } from "./lib/prisma.js";
+import { registerV1ActivationTestRoutes } from "./modules/activation-test/routes.js";
 import { registerV1AuthRoutes } from "./modules/auth/routes.js";
 import { registerV1CalendarRoutes } from "./modules/calendar/routes.js";
 import { registerV1ConversationRoutes } from "./modules/conversations/routes.js";
@@ -116,6 +117,7 @@ export async function buildApp() {
   await registerV1ServiceRoutes(app);
   await registerV1SettingsRoutes(app);
   await registerV1WhatsAppRoutes(app);
+  await registerV1ActivationTestRoutes(app);
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof AppError) {

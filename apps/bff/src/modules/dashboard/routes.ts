@@ -4,6 +4,7 @@ import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
 import { EvolutionClient } from "../../clients/evolution/index.js";
 import type { InternalRequestContext } from "../../clients/internal-http-client.js";
 import { SchedulingClient } from "../../clients/scheduling/index.js";
+import { reconcileAiActivation } from "../../lib/ai-activation.js";
 import { dataResponse } from "../../lib/http.js";
 import { getPrisma } from "../../lib/prisma.js";
 import {
@@ -25,11 +26,18 @@ export async function registerV1DashboardRoutes(
     async (request) => {
       const tenant = currentTenantContext(request);
       const context = internalContext(request);
+      // Mesma reconciliação limitada de `GET /v1/status` (Goal019 §7): uma
+      // tentativa por requisição, nunca lança. A Home é onde o checklist
+      // pós-onboarding vive, então é aqui que a autoativação por teste
+      // bem-sucedido chega ao negócio sem ele precisar apertar nada.
+      await reconcileAiActivation(request, { ai, scheduling });
       const [platform, aiResult, schedulingResult, whatsappResult] =
         await Promise.all([
           platformSummary(tenant.tenantId),
           settled(ai.dashboard(context)),
-          settled(schedulingDashboardWithReadiness(context, scheduling)),
+          settled(
+            schedulingDashboardWithReadiness(context, scheduling, ai),
+          ),
           settled(whatsappSummary(tenant.userId, request.id, evolution)),
         ]);
       return dataResponse(request, {
@@ -77,6 +85,7 @@ function publicSchedulingDashboard<
 async function schedulingDashboardWithReadiness(
   context: InternalRequestContext,
   scheduling: SchedulingClient,
+  ai: Pick<AiOrchestratorClient, "getActivationTest">,
 ) {
   const raw = await scheduling.dashboard(context);
   const hoursConfigured =
@@ -95,9 +104,26 @@ async function schedulingDashboardWithReadiness(
       capabilities: {
         ...dashboard.calendar.capabilities,
         hoursConfigured,
+        activationTestCompleted: await activationTestCompleted(context, ai),
       },
     },
   };
+}
+
+/**
+ * Quarto item do checklist pós-onboarding: "teste concluído" (Goal019 §9).
+ *
+ * `true` **só** com execução em `SUCCEEDED` que ainda vale — teste feito
+ * contra um vínculo de WhatsApp que já não é o do negócio não conta, porque o
+ * vault exige teste novo ao trocar/revincular. Sem execução é `false`, que é
+ * "nunca testou", não "falhou": o produtor não fabrica conclusão nenhuma.
+ */
+async function activationTestCompleted(
+  context: InternalRequestContext,
+  ai: Pick<AiOrchestratorClient, "getActivationTest">,
+): Promise<boolean> {
+  const run = await ai.getActivationTest(context);
+  return run?.state === "SUCCEEDED" && !run.supersededByChannelChange;
 }
 
 async function platformSummary(tenantId: string) {

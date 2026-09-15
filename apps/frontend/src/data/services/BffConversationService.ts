@@ -4,6 +4,7 @@ import { type BffHttpClient } from "../http/BffHttpClient";
 import {
   conversationSchema,
   conversationSuggestionsSchema,
+  ignoredContactSchema,
   messageSchema,
   type SessionCategory,
 } from "../mappers/publicApiSchemas";
@@ -105,6 +106,20 @@ export class BffConversationService {
       method: "PUT",
       path: `/v1/conversations/${encodeURIComponent(id)}/ignore`,
       schema: conversationSchema,
+      signal,
+    });
+  }
+
+  /**
+   * Contato ignorado por telefone informado manualmente, sem conversa ainda
+   * (Goal019/WU-07). Cria o contato quando ele não existe.
+   */
+  ignoreByPhone(phone: string, ignored: boolean, signal?: AbortSignal) {
+    return this.http.request({
+      body: { phone, ignored },
+      method: "PUT",
+      path: "/v1/conversations/ignored-contacts",
+      schema: ignoredContactSchema,
       signal,
     });
   }

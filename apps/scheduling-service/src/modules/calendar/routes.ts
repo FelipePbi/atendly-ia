@@ -11,6 +11,7 @@ import {
 import { AppError } from "../../shared/errors/app-error.js";
 import { AtendlyAppointmentSeriesService } from "../appointments/appointment-series-service.js";
 import { CalendarService } from "./calendar-service.js";
+import { CalendarRemovalService } from "./removal.js";
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const timeSchema = z.string().regex(/^\d{2}:\d{2}$/);
@@ -242,6 +243,57 @@ export async function registerCalendarRoutes(
       };
     },
   );
+
+  /**
+   * Remocao definitiva do atendimento, por ID (Goal019).
+   *
+   * Cancelar nao e remover: um atendimento cancelado continua na agenda do
+   * negocio, e o fluxo do vault do teste de ativacao termina com o
+   * atendimento de teste **removido**. Esta rota e o unico caminho que apaga,
+   * ela so aceita o ID e ela existe apenas para a agenda propria — calendario
+   * externo e gerido la, e a recusa diz isso.
+   *
+   * Remover de novo o que ja saiu devolve `removed: false`, nunca erro: a
+   * limpeza que chama isto e idempotente por contrato.
+   */
+  app.delete("/internal/appointments/:id", internalOnly, async (request) => {
+    const context = currentInternalContext(request);
+    const prisma = getPrisma();
+    await requireAtendlyCalendarForSeries(prisma, context.tenantId);
+    const params = parse(idParamsSchema, request.params);
+    return {
+      data: {
+        removed: await new CalendarRemovalService(
+          prisma,
+          context.tenantId,
+        ).deleteAppointment(params.id),
+      },
+      requestId: request.id,
+    };
+  });
+
+  /**
+   * Remocao definitiva da pessoa, por ID (Goal019).
+   *
+   * Recusa com `CUSTOMER_HAS_APPOINTMENTS` quando ainda ha atendimento dela:
+   * apagar a pessoa arrastaria historico de agenda que esta operacao nao
+   * criou. Quem remove os dois — atendimento e pessoa — remove nesta ordem.
+   */
+  app.delete("/internal/customers/:id", internalOnly, async (request) => {
+    const context = currentInternalContext(request);
+    const prisma = getPrisma();
+    await requireAtendlyCalendarForSeries(prisma, context.tenantId);
+    const params = parse(idParamsSchema, request.params);
+    return {
+      data: {
+        removed: await new CalendarRemovalService(
+          prisma,
+          context.tenantId,
+        ).deleteCustomer(params.id),
+      },
+      requestId: request.id,
+    };
+  });
 
   // --- Holds (Goal008) ---------------------------------------------------
   // Criar hold ocupa tempo, então exige `Idempotency-Key` como qualquer

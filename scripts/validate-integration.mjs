@@ -407,6 +407,19 @@ export function integrationSteps(target) {
       args: ["scripts/goal013-media-migration-rehearsal.mjs"],
       env,
     },
+    // Gate M0/M1 do Goal019: ensaio da migration da execução do teste real
+    // (`ActivationTestRun`, `ActivationTestMilestone`) contra um tenant que já
+    // existia, em banco próprio e descartável — aditividade, ausência de
+    // backfill, uma execução viva por tenant e marco sem fonte impossível.
+    // Expande também o banco de durabilidade da IA (Goal004) com a mesma
+    // migração, antes da suíte de persistência mais abaixo.
+    {
+      name: "rehearse:goal019-activation-test-migration",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal019-activation-test-migration-rehearsal.mjs"],
+      env,
+    },
     // Identidade de cliente contra PostgreSQL real: telefone compartilhado,
     // cliente sem telefone, criação só na confirmação e isolamento por tenant.
     // Não pertence ao core porque exige banco.

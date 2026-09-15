@@ -696,8 +696,13 @@ type ChecklistItem = { done: boolean; key: string; label: string };
 /**
  * Checklist pós-onboarding do vault (`docs/product-vault/02-Fluxos/01-Onboarding.md`):
  * cada item vem de uma leitura real de `GET /v1/dashboard`/`GET /v1/status`,
- * nunca de configuração local. "Teste concluído" — o quarto item do vault —
- * não entra: não existe produtor em camada nenhuma até o Goal018B.
+ * nunca de configuração local.
+ *
+ * "Teste concluído" é o quarto item, e ele entra agora que existe produtor:
+ * `capabilities.activationTestCompleted`, que o BFF só marca com execução do
+ * teste real em `SUCCEEDED` e ainda válida para o WhatsApp de hoje. Ausente na
+ * resposta (dependência indisponível) é `false` — "não sei" nunca vira
+ * "concluído".
  */
 function PostOnboardingChecklist({
   capabilities,
@@ -721,6 +726,11 @@ function PostOnboardingChecklist({
       done: whatsappActive,
       key: "whatsapp",
       label: "Conectar o WhatsApp",
+    },
+    {
+      done: Boolean(capabilities?.activationTestCompleted),
+      key: "activation-test",
+      label: "Concluir o teste da IA",
     },
   ];
   const doneCount = items.filter((item) => item.done).length;

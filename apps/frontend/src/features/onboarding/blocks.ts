@@ -11,7 +11,7 @@ export const onboardingBlockLabels: Record<OnboardingBlockId, string> = {
 
 const blockScenarios: Record<OnboardingBlockId, readonly OnboardingScenario[]> =
   {
-    ai: ["tom-da-ia"],
+    ai: ["demonstracao-da-ia", "tom-da-ia"],
     business: ["dados-do-negocio"],
     schedule: [
       "fonte-da-agenda",
@@ -25,13 +25,31 @@ const blockScenarios: Record<OnboardingBlockId, readonly OnboardingScenario[]> =
       "agenda-atendly-pronta",
       "minha-agenda-conectar",
     ],
-    whatsapp: ["whatsapp", "whatsapp-conectar", "whatsapp-concluido"],
+    whatsapp: [
+      "whatsapp",
+      "whatsapp-conectar",
+      "contatos-ignorados",
+      "teste-real",
+      "teste-real-progresso",
+      "teste-real-interferencia",
+      "teste-real-falha",
+      "teste-real-sucesso",
+      "whatsapp-concluido",
+    ],
   };
 
 /** Ordem real de navegação do produto. `minha-agenda-conectar` é um desvio a
  * partir de `fonte-da-agenda`, e `whatsapp-concluido` é um desvio a partir de
  * `whatsapp` (destino de "Fazer isso depois") — nenhum dos dois é um passo
- * sequencial, por isso ficam fora. */
+ * sequencial, por isso ficam fora. `demonstracao-da-ia` (antes do estilo) e
+ * `contatos-ignorados` (entre conectar e testar, opcional mas sequencial)
+ * são passos reais do caminho principal.
+ *
+ * Do teste real, só `teste-real` e `teste-real-progresso` são sequenciais: as
+ * outras três telas são **estados da execução**, alcançadas a partir do
+ * progresso quando o servidor diz que a execução pausou, falhou ou terminou
+ * bem — nunca por avançar um passo. Colocá-las na sequência faria a barra de
+ * progresso prometer telas que a maioria dos negócios nunca vê. */
 export const onboardingFlow: OnboardingScenario[] = [
   "dados-do-negocio",
   "fonte-da-agenda",
@@ -43,9 +61,13 @@ export const onboardingFlow: OnboardingScenario[] = [
   "dias-de-atendimento",
   "horarios",
   "agenda-atendly-pronta",
+  "demonstracao-da-ia",
   "tom-da-ia",
   "whatsapp",
   "whatsapp-conectar",
+  "contatos-ignorados",
+  "teste-real",
+  "teste-real-progresso",
 ];
 
 export function blockForScenario(
@@ -62,6 +84,13 @@ export function blockForScenario(
 
 export function progressPercent(scenario: OnboardingScenario): number {
   if (scenario === "whatsapp-concluido") return 100;
+  // Estados terminais do teste real: o fluxo acabou, bem ou mal, e a barra
+  // não volta atrás. `teste-real-interferencia` fica no ponto do progresso,
+  // porque a execução continua sendo aquela.
+  if (scenario === "teste-real-sucesso") return 100;
+  if (scenario === "teste-real-falha" || scenario === "teste-real-interferencia") {
+    return progressPercent("teste-real-progresso");
+  }
   const index = onboardingFlow.indexOf(scenario);
   const position =
     index >= 0 ? index : onboardingFlow.indexOf("fonte-da-agenda");

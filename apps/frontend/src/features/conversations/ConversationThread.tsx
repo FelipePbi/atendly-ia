@@ -465,6 +465,7 @@ export function ConversationThread({
 
           <MessageTimeline
             businessName={businessName}
+            contentExpiredThrough={conversation.contentExpiredThrough ?? null}
             conversationId={conversation.id}
             messages={messages}
             onResend={(message) => void resend(message)}

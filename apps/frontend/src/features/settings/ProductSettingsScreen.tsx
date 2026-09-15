@@ -11,6 +11,7 @@ import {
   FREQUENT_BUSINESS_SEGMENTS,
 } from "@/features/onboarding/blocks/business";
 import { ReminderSettingsSection } from "@/features/reminders/ReminderSettingsSection";
+import { RetentionSection } from "@/features/settings/RetentionSection";
 import { WhatsAppConnectionPanel } from "@/features/whatsapp/WhatsAppConnectionPanel";
 import { Icon, type IconName } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
@@ -104,6 +105,7 @@ function SettingsContent({
     return <CalendarSettings settings={settings} />;
   if (scenario === "availability")
     return <AvailabilitySettings settings={settings} onSaved={setSettings} />;
+  if (scenario === "conversations") return <ConversationsSettings />;
   if (scenario === "account") return <AccountSettings />;
   return <SettingsHub settings={settings} />;
 }
@@ -165,6 +167,12 @@ function SettingsHub({ settings }: { settings: SettingsState }) {
       icon: "calendar",
       title: "Agenda",
       copy: sourceLabel(settings.calendar.source),
+    },
+    {
+      href: "/configuracoes/conversas",
+      icon: "chat",
+      title: "Conversas",
+      copy: "Prazo de retenção das mensagens",
     },
     {
       href: "/configuracoes/conta",
@@ -712,6 +720,28 @@ function AvailabilitySettings({
           onClick={() => void save()}
         />
       </section>
+    </Page>
+  );
+}
+
+/**
+ * Configurações → Conversas (Goal023/§8, G-29).
+ *
+ * Página própria, no mesmo padrão das seções vigentes e sem redecompor a tela
+ * (que é do 024): a retenção é decisão sobre **conteúdo de conversa**, não
+ * sobre credencial de acesso, e escondê-la dentro de Conta faria a única
+ * superfície que apaga mensagem do cliente morar atrás de um card que se
+ * descreve como "Senha e acesso".
+ */
+function ConversationsSettings() {
+  return (
+    <Page
+      title="Conversas"
+      description="Por quanto tempo o conteúdo das mensagens fica guardado."
+    >
+      <div className="settings-stack">
+        <RetentionSection />
+      </div>
     </Page>
   );
 }

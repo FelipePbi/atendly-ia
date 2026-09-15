@@ -17,7 +17,7 @@ git diff --check
 | Comando | Cobre | Não cobre |
 | --- | --- | --- |
 | `validate:core` | Builds de contracts, Scheduling, IA, BFF e frontend; `npm run check` do health-worker; suíte da IA; suíte do adapter HTTP do frontend; `go build`/`go vet`/`go test` do Evolution Go; testes dos próprios scripts de gate; auditoria estática | Qualquer escrita em banco. Nenhum passo abre conexão de banco |
-| `validate:integration` | 26 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, o outbox do Evolution Go e um ensaio por migration de Goal — o último deles `rehearse:goal022-notification-center-migration` | Qualquer camada acima do dado: nenhuma jornada de interface, nenhum envio real por WhatsApp e nenhuma origem real do Minha Agenda |
+| `validate:integration` | 28 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, a purga de conteúdo de conversa (Goal023), o outbox do Evolution Go e um ensaio por migration de Goal — o último deles `rehearse:goal023-retention-migration` | Qualquer camada acima do dado: nenhuma jornada de interface, nenhum envio real por WhatsApp e nenhuma origem real do Minha Agenda |
 | `git diff --check` | Espaço em branco/conflito no diff | Correção do diff |
 
 Comandos auxiliares: `npm run test:gate` (só os testes dos scripts de gate) e
@@ -125,12 +125,12 @@ npm ci --prefix apps/bff
 BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_bff_test" npm run validate:integration
 ```
 
-São 26 passos. A lista abaixo enumera o núcleo, na ordem em que roda — o item
+São 28 passos. A lista abaixo enumera o núcleo, na ordem em que roda — o item
 5 agrupa o par do Evolution Go. Entre os itens 6 e 7 rodam, nesta ordem, os demais
-ensaios de migration por Goal (005 a 013, 019, 021 e 022) e o trio do Scheduling
-(`generate:scheduling-prisma-client`, `provision:scheduling-test-database`,
-`test:scheduling-integration`). A lista autoritativa é
-`scripts/validate-integration.mjs`:
+ensaios de migration por Goal (005 a 013, 019, 021, 022 e 023) e o trio do
+Scheduling (`generate:scheduling-prisma-client`,
+`provision:scheduling-test-database`, `test:scheduling-integration`). A lista
+autoritativa é `scripts/validate-integration.mjs`:
 
 1. `generate:bff-prisma-client` produz `apps/bff/src/generated/prisma`;
 2. `migrate:bff-test-database` aplica as migrations existentes
@@ -149,8 +149,20 @@ ensaios de migration por Goal (005 a 013, 019, 021 e 022) e o trio do Scheduling
    `apps/ai-orchestrator/src/generated/prisma`;
 8. `test:ai-orchestrator-transport-durability` roda a suíte de persistência e
    concorrência da IA sobre o resultado do ensaio;
-9. `test:evolution-go-webhook-outbox` roda o outbox técnico do Evolution Go no
-   mesmo servidor descartável.
+9. `test:ai-orchestrator-content-purge` roda `tests/retention` da IA
+   (Goal023) contra o mesmo banco: a purga de conteúdo de conversa e a
+   retenção técnica do inbox durável (`ProcessedEvent`) — o que cada uma
+   apaga e, sobretudo, o que ela não alcança (não classificado, órfão de
+   sessão, trabalho vivo, evidência de falha e o negócio vizinho);
+10. `test:evolution-go-webhook-outbox` roda o outbox técnico do Evolution Go
+    no mesmo servidor descartável.
+
+`rehearse:goal023-retention-migration` (Goal023/WU-09), entre os ensaios de
+migration por Goal enumerados acima, ensaia as quatro migrations deste Goal —
+`RetentionSettings`/`RetentionSweepState` no BFF, `Conversation.
+contentExpiredThrough` na IA, o índice de `AppointmentNotificationIntent` no
+Scheduling — em três bancos próprios e descartáveis, aplicando cada uma duas
+vezes para provar retomada: ver [DATA_MIGRATION §12](DATA_MIGRATION.md#12-migração-de-retenção-configurável-e-purga-de-conteúdo-goal023).
 
 Nada de `migrate reset` sobre URL herdada, e nenhuma migration é reescrita.
 

@@ -27,6 +27,9 @@ export type ErrorCode =
   // (Goal019/WU-05). Recusa propria do BFF, verificada antes de chamar a IA:
   // testar nao e ferramenta recorrente depois que a IA esta no ar.
   | "ACTIVATION_TEST_AI_ALREADY_ACTIVE"
+  // PATCH /v1/settings/retention reduzindo Comercial ou Pessoal sem
+  // `confirmReduction: true` (Goal023/WU-01, G-29). Aumentar nunca cai aqui.
+  | "RETENTION_REDUCTION_REQUIRES_CONFIRMATION"
   | "INTERNAL_ERROR";
 
 export class AppError extends Error {

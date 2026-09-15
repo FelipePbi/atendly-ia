@@ -61,6 +61,11 @@ type DeliveryStore interface {
 	MarkFailed(id string, statusCode int, reason string) error
 	Reschedule(id string, attempts int, nextAttemptAt time.Time, statusCode int, reason string) error
 	ClaimPending(limit int, now time.Time) ([]WebhookDelivery, error)
+	// PruneTerminal remove, no maximo `limit` linhas por chamada, as entregas
+	// em estado terminal (done ou failed) cuja ultima atualizacao e anterior a
+	// `before`. Pendente e reagendada nunca sao terminais, entao nunca entram
+	// aqui independentemente da idade.
+	PruneTerminal(before time.Time, limit int) (int64, error)
 }
 
 type gormDeliveryStore struct {
@@ -121,6 +126,26 @@ func (s *gormDeliveryStore) ClaimPending(limit int, now time.Time) ([]WebhookDel
 		Limit(limit).
 		Find(&pending).Error
 	return pending, err
+}
+
+// PruneTerminal seleciona os ids elegiveis primeiro e apaga por id, em vez de
+// um DELETE ... LIMIT direto: nem todo backend suportado (Postgres em
+// producao) aceita LIMIT em DELETE, e o duplo passo funciona nos dois.
+func (s *gormDeliveryStore) PruneTerminal(before time.Time, limit int) (int64, error) {
+	if limit <= 0 {
+		return 0, nil
+	}
+	var ids []string
+	err := s.db.Model(&WebhookDelivery{}).
+		Where("status IN ? AND updated_at < ?", []string{DeliveryDone, DeliveryFailed}, before).
+		Order("updated_at asc").
+		Limit(limit).
+		Pluck("id", &ids).Error
+	if err != nil || len(ids) == 0 {
+		return 0, err
+	}
+	result := s.db.Where("id IN ?", ids).Delete(&WebhookDelivery{})
+	return result.RowsAffected, result.Error
 }
 
 // redactWebhookURL devolve apenas esquema, host e caminho.

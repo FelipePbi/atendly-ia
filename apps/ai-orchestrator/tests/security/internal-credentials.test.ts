@@ -170,6 +170,32 @@ describe("scope routing", () => {
         request({ method: "POST", url: "/internal/conversations/c1/takeover" }),
       ),
     ).toBe("conversations:write");
+    expect(
+      requiredScope(
+        request({
+          method: "POST",
+          url: "/internal/retention/conversation-content",
+        }),
+      ),
+    ).toBe("retention:purge");
+  });
+
+  // Goal023: apagar conteudo de cliente tem escopo proprio. Quem so provisiona
+  // canal nao purga, e a credencial de comando so purga porque isto esta
+  // escrito — nao por ser a credencial "geral".
+  it("keeps the purge scope out of the provisioning credential", () => {
+    expect(() =>
+      authorizeInternalRequest(
+        request({ token: provisioningToken }),
+        "retention:purge",
+      ),
+    ).toThrowError(expect.objectContaining({ statusCode: 403 }));
+    expect(
+      authorizeInternalRequest(
+        request({ token: commandToken }),
+        "retention:purge",
+      ).use,
+    ).toBe("command");
   });
 
   it("denies an internal path with no declared scope, for every credential", () => {

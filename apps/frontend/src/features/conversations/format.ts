@@ -48,6 +48,15 @@ export function formatMessageTime(value: string): string {
   }).format(new Date(value));
 }
 
+/** Data completa de `contentExpiredThrough`, sem hora: é um corte de dias de retenção, não um instante. */
+export function formatExpiredThroughDate(value: string): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
 export function requestError(error: unknown, fallback: string): string {
   if (error instanceof BffHttpError)
     return `${error.message} (ID ${error.requestId})`;

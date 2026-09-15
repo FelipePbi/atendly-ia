@@ -1477,6 +1477,38 @@ export class SchedulingClient {
     );
   }
 
+  /**
+   * Esvaziamento do conteúdo das intenções de envio já liquidadas
+   * (Goal023/WU-05 chamando a porta do WU-03).
+   *
+   * O instante vai **calculado** daqui e o Scheduling não deriva janela por
+   * conta própria — mas o prazo que o chamador aplica aqui é o **técnico**,
+   * `RETENTION_INTENT_CONTENT_DAYS`, e não o prazo escolhido em Configurações:
+   * `facts`/`detail` são rastro de execução do envio e não dizem se a conversa
+   * era comercial ou pessoal. O cálculo e o motivo estão em
+   * `modules/retention/sweep.ts` (`intentContentCutoff`). O teto limita a
+   * passada e `hasMore` diz se sobrou trabalho. Chamador: a varredura, nunca
+   * uma rota pública.
+   */
+  async purgeNotificationIntentContent(
+    context: InternalRequestContext,
+    input: { settledBefore: Date; maxRows: number },
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      "/internal/notification-intents/content-retention",
+      {
+        settledBefore: input.settledBefore.toISOString(),
+        maxRows: input.maxRows,
+      },
+      z.object({
+        cleared: z.number().int().nonnegative(),
+        hasMore: z.boolean(),
+      }),
+    );
+  }
+
   async dashboard(context: InternalRequestContext) {
     return this.get(
       context,

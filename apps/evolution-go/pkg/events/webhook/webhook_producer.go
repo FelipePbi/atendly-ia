@@ -9,18 +9,33 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	producer_interfaces "github.com/EvolutionAPI/evolution-go/pkg/events/interfaces"
 	logger_wrapper "github.com/EvolutionAPI/evolution-go/pkg/logger"
+	global_logger "github.com/gomessguii/logger"
 )
 
 const (
 	defaultMaxAttempts   = 5
 	defaultRetryInterval = 30 * time.Second
 	defaultResumeLimit   = 100
+
+	// Retencao tecnica do outbox: entrega terminal (done ou failed) e log
+	// operacional do transporte, nao dado de produto, entao o prazo default e
+	// folgado de proposito. Teto de lote evita que uma varredura tardia vire
+	// uma transacao gigante.
+	defaultRetentionMaxAge = 30 * 24 * time.Hour
+	defaultRetentionSweep  = 6 * time.Hour
+	defaultRetentionBatch  = 500
+
+	envRetentionMaxAgeHours  = "WEBHOOK_OUTBOX_RETENTION_HOURS"
+	envRetentionSweepMinutes = "WEBHOOK_OUTBOX_RETENTION_SWEEP_MINUTES"
+	envRetentionBatchSize    = "WEBHOOK_OUTBOX_RETENTION_BATCH_SIZE"
 )
 
 type webhookProducer struct {
@@ -41,6 +56,15 @@ type webhookProducer struct {
 	// fechar o logger da instancia. Sem isso o log de sucesso e escrito depois
 	// da resposta HTTP e mantem instance.log aberto no cleanup.
 	inflight sync.WaitGroup
+
+	retentionMaxAge time.Duration
+	retentionSweep  time.Duration
+	retentionBatch  int
+	// retentionStop/retentionDone existem so para os testes encerrarem a
+	// varredura periodica sem vazar goroutine entre casos; o processo de
+	// producao roda a varredura ate o transporte cair.
+	retentionStop chan struct{}
+	retentionDone chan struct{}
 }
 
 // Option configura o produtor sem quebrar quem so precisa do logger.
@@ -69,20 +93,78 @@ func WithRetryPolicy(maxAttempts int, interval time.Duration) Option {
 	}
 }
 
+// WithRetentionPolicy ajusta prazo, intervalo de varredura e teto de lote da
+// retencao tecnica do outbox. Usado pelos testes para nao depender das
+// duracoes default, que sao propositalmente longas em producao.
+func WithRetentionPolicy(maxAge, sweep time.Duration, batchSize int) Option {
+	return func(p *webhookProducer) {
+		if maxAge > 0 {
+			p.retentionMaxAge = maxAge
+		}
+		if sweep > 0 {
+			p.retentionSweep = sweep
+		}
+		if batchSize > 0 {
+			p.retentionBatch = batchSize
+		}
+	}
+}
+
 func NewWebhookProducer(
 	loggerWrapper *logger_wrapper.LoggerManager,
 	options ...Option,
 ) producer_interfaces.Producer {
 	producer := &webhookProducer{
-		loggerWrapper: loggerWrapper,
-		maxAttempts:   defaultMaxAttempts,
-		retryInterval: defaultRetryInterval,
-		now:           time.Now,
+		loggerWrapper:   loggerWrapper,
+		maxAttempts:     defaultMaxAttempts,
+		retryInterval:   defaultRetryInterval,
+		now:             time.Now,
+		retentionMaxAge: retentionMaxAgeFromEnv(),
+		retentionSweep:  retentionSweepFromEnv(),
+		retentionBatch:  retentionBatchFromEnv(),
 	}
 	for _, option := range options {
 		option(producer)
 	}
+	// A varredura so faz sentido com outbox durável: sem store nao ha o que
+	// apagar, e e o mesmo guard que ResumePending ja usa.
+	if producer.store != nil {
+		producer.startRetentionSweep()
+	}
 	return producer
+}
+
+func retentionMaxAgeFromEnv() time.Duration {
+	if hours, ok := positiveIntEnv(envRetentionMaxAgeHours); ok {
+		return time.Duration(hours) * time.Hour
+	}
+	return defaultRetentionMaxAge
+}
+
+func retentionSweepFromEnv() time.Duration {
+	if minutes, ok := positiveIntEnv(envRetentionSweepMinutes); ok {
+		return time.Duration(minutes) * time.Minute
+	}
+	return defaultRetentionSweep
+}
+
+func retentionBatchFromEnv() int {
+	if batch, ok := positiveIntEnv(envRetentionBatchSize); ok {
+		return batch
+	}
+	return defaultRetentionBatch
+}
+
+func positiveIntEnv(name string) (int, bool) {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return 0, false
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return 0, false
+	}
+	return value, true
 }
 
 func (p *webhookProducer) Produce(
@@ -165,6 +247,58 @@ func (p *webhookProducer) ResumePending(limit int) (int, error) {
 		}(delivery, target)
 	}
 	return resumed, nil
+}
+
+// startRetentionSweep roda a primeira varredura no boot -- junto do resto do
+// que ja acontece na construcao do produtor, como ResumePending -- e depois
+// periodicamente, no proprio processo do transporte. O prune e do transporte
+// porque o payload do webhook e dado do transporte: nenhum outro servico
+// manda o Go apagar sua propria tabela.
+func (p *webhookProducer) startRetentionSweep() {
+	p.retentionStop = make(chan struct{})
+	p.retentionDone = make(chan struct{})
+	go func() {
+		defer close(p.retentionDone)
+		p.pruneTerminal()
+		ticker := time.NewTicker(p.retentionSweep)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				p.pruneTerminal()
+			case <-p.retentionStop:
+				return
+			}
+		}
+	}()
+}
+
+// pruneTerminal remove, em uma chamada limitada ao teto de lote, as entregas
+// terminais (done ou failed) mais velhas que o prazo configurado. Pendente e
+// reagendada nunca sao terminais e por isso nunca sao candidatas, independente
+// da idade.
+func (p *webhookProducer) pruneTerminal() {
+	if p.store == nil {
+		return
+	}
+	removed, err := p.store.PruneTerminal(p.now().Add(-p.retentionMaxAge), p.retentionBatch)
+	if err != nil {
+		global_logger.LogWarn("webhook outbox retention sweep failed: %v", err)
+		return
+	}
+	if removed > 0 {
+		global_logger.LogInfo("webhook outbox retention sweep removed %d terminal deliveries older than %s", removed, p.retentionMaxAge)
+	}
+}
+
+// Close encerra a varredura periodica de retencao. Existe para os testes nao
+// vazarem goroutine entre casos; o transporte em producao roda ate cair.
+func (p *webhookProducer) Close() {
+	if p.retentionStop == nil {
+		return
+	}
+	close(p.retentionStop)
+	<-p.retentionDone
 }
 
 func (p *webhookProducer) persist(

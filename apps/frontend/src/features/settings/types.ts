@@ -11,6 +11,7 @@ export type SettingsScenario =
   | "calendar"
   | "calendar-external"
   | "availability"
+  | "conversations"
   | "account"
   | "loading"
   | "error";

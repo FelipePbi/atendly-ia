@@ -2004,13 +2004,13 @@ notificações está superado pelos fatos abaixo.
   Goals 010/019/021. Retenção/purga de `TenantNotification` além da janela de
   leitura de 90 dias não tem prazo definido, no mesmo estado que
   `AppointmentNotificationIntent.facts` desde o Goal021.
-- **LIMITE (contador e lista com janelas diferentes):** `unreadCount` de
-  `GET /v1/notifications/summary` conta toda notificação não lida do negócio,
-  sem filtro de `occurredAt`, enquanto `GET /v1/notifications` limita a lista
-  aos últimos 90 dias. Uma não lida mais antiga que isso entra no contador do
-  chrome e não aparece na tela; `POST /v1/notifications/read` com
-  `{ all: true }` também ignora a janela, então marcar todas recupera o
-  alinhamento. Some quando a retenção do Goal023 definir prazo.
+- **LIMITE (contador e lista com janelas diferentes) — FECHADO no diff023:**
+  `unreadCount` de `GET /v1/notifications/summary` contava toda notificação
+  não lida do negócio, sem filtro de `occurredAt`, enquanto
+  `GET /v1/notifications` limitava a lista aos últimos 90 dias. O Goal023/WU-04
+  alinhou os dois: `historyWindowSince()` é agora a única função que vira janela
+  em instante, chamada pela lista, pelo `unreadCount` e pela purga — ver o delta
+  Goal023 abaixo.
 - **LIMITE (prova da reabertura):** os oito gates declarados do Goal rodaram
   na rodada 1, antes de `reopenResolvedConditions` existir. A semântica de
   reabertura está provada em unidade sobre o dublê de Prisma
@@ -2020,3 +2020,121 @@ notificações está superado pelos fatos abaixo.
   desligado no ambiente do executor. Rodar `validate:integration` sobre esta
   árvore fecha a lacuna sem mudar nada. Detalhe em
   [review022](reviews/022-review.md).
+
+## Delta implementado — Goal023, 2026-09-15
+
+A fotografia acima permanece como registro. Os fatos abaixo descrevem o que o
+diff do Goal023 entrega para **G-29** na parte de conteúdo: prazo de retenção
+configurável por negócio e purga cross-store. Não há um único processo de
+retenção — cada dono apaga o próprio dado, e a retenção **executa** em
+lugares diferentes:
+
+- **FATO atual (BFF, onde o negócio decide):** `RetentionSettings` por
+  tenant (`commercialRetentionDays`/`personalRetentionDays`, allowlist 30/
+  90/180/365, mais `updatedBy` — o `userId` da sessão que gravou, rastro de
+  decisão que nada lê para decidir prazo e que não sai no contrato público —,
+  migration `20260915150000_goal023_retention`), sob
+  `GET`/`PATCH /v1/settings/retention`
+  ([PUBLIC_API_V1](../../apps/bff/PUBLIC_API_V1.md#prazo-de-retenção-configurável-goal023-wu-01-g-29)).
+  Ausência de linha vale Comercial90/Pessoal30; reduzir qualquer categoria
+  sem `confirmReduction: true` é recusado com `409
+  RETENTION_REDUCTION_REQUIRES_CONFIRMATION`, sem gravar nada; a rota nunca
+  apaga — a resposta diz `appliesFrom: "NEXT_SWEEP"`.
+- **FATO atual (BFF, onde a varredura roda):** `RetentionSweepWorker`
+  (`apps/bff/src/modules/retention/`) roda **dentro do processo do BFF**,
+  ligado por `RETENTION_SWEEP_ENABLED` (default `false`), com
+  `RetentionSweepState` por negócio (migration
+  `20260915180000_goal023_retention_sweep`) guardando lease `TIMESTAMPTZ`
+  com fencing por token — o mesmo desenho do Goal021 — e contagens da
+  última passada por store. Não há worker externo, fila nem cron do
+  sistema operacional: é `setTimeout` com reagendamento, um negócio por
+  vez até `RETENTION_SWEEP_TENANT_BATCH`, teto de linhas por
+  `RETENTION_SWEEP_MAX_ROWS_PER_STORE`, piso entre duas passadas completas
+  do mesmo negócio por `RETENTION_SWEEP_MIN_TENANT_INTERVAL_SECONDS`
+  (default 3600; quem parou no teto não espera o piso, porque sobra é
+  continuação e não repetição), e falha de uma fonte isolada das demais
+  (registrada em `lastError`, sem interromper as outras). `lastRunAt` marca
+  toda passada terminada e `lastCompletedAt` só as que terminaram sem
+  nenhuma fonte falhando — é `lastCompletedAt` que
+  `GET /v1/settings/retention` devolve como última varredura concluída.
+  Desligado, nada muda: nenhuma rota, leitura ou tela depende do laço.
+- **FATO atual (IA, onde o conteúdo de conversa é apagado):**
+  `apps/ai-orchestrator/src/modules/retention/content-purge-service.ts`,
+  chamado só pela varredura via rota interna, apaga `Message` (com
+  `MessageAttachment`/transcrição por cascade) e `AiRun` (com `AiToolCall`
+  por cascade) mais antigos que o cutoff da categoria que governa cada
+  linha; `Conversation`, `ConversationSession`, `Contact`, `Handoff`,
+  `CustomerMemory` e conhecimento nunca são tocados aqui — não são
+  conteúdo de conversa. `Conversation.contentExpiredThrough`
+  (migration `20260915160000_goal023_conversation_content_expiry`) só
+  avança, nunca retrocede, e é o que a interface lê para dizer que
+  mensagens antigas expiraram — nunca se infere expiração pela ausência de
+  mensagem.
+- **FATO atual (IA, onde o rastro técnico do inbox expira):**
+  `apps/ai-orchestrator/src/modules/retention/inbox-retention.ts`, chamado
+  na mesma passada da rota interna de purga, apaga `ProcessedEvent` com
+  status `DONE`, `IGNORED` ou `LEGACY` e `receivedAt` fora de
+  `INBOX_RETENTION_DAYS` (default 180) — é o que faz `rawPayload` deixar de
+  ser retenção indefinida. `RECEIVED` e `PROCESSING` são trabalho vivo e
+  `FAILED` é evidência retomável: os três nunca são tocados. O prazo é
+  **técnico**: ele não vem do BFF, não sai de `RetentionSettings` e não
+  aparece na interface. A consequência sobre o dedupe de entrada
+  (`(tenantId, provider, eventKey)`) está escrita junto da constante, e é
+  ela que justifica o default folgado.
+- **FATO atual (Scheduling, onde o esvaziamento de intenção acontece):**
+  `apps/scheduling-service/src/modules/reminders/notification-retention-service.ts`,
+  por rota interna, esvazia `facts`/`detail` de
+  `AppointmentNotificationIntent` em estado **terminal** fora do prazo
+  **técnico** `RETENTION_INTENT_CONTENT_DAYS` (default 90, no BFF) — não do
+  prazo que o negócio escolheu em Configurações → Conversas, porque
+  `facts`/`detail` não carregam a categoria da sessão que os originou. A
+  linha e o histórico do agendamento continuam existindo, só o conteúdo
+  do lembrete some. O índice `AppointmentNotificationIntent_tenantId_
+  state_settledAt_idx` (migration `20260915170000_goal023_notification_
+  content_retention_index`) é o que a varredura usa para encontrar essas
+  linhas sem varrer a tabela inteira.
+- **FATO atual (BFF, onde a notificação da central é apagada):**
+  `apps/bff/src/modules/notifications/retention.ts` apaga
+  `TenantNotification` fora da mesma janela de 90 dias que
+  `GET /v1/notifications` já usava — `historyWindowSince()` (Goal022) é
+  agora a única função que vira essa janela em instante, chamada pela
+  lista, pelo `unreadCount` de `/summary` e por esta purga, fechando a
+  divergência de contador/lista que o review022 registrou (ver LIMITE
+  correspondente no delta Goal022 acima).
+- **FATO atual (Evolution Go, independente do resto):** a varredura técnica
+  do outbox (`apps/evolution-go/pkg/events/webhook/webhook_outbox.go`,
+  `startRetentionSweep`) roda **no próprio processo do transporte**, sem
+  rota nova nem chamada a outro serviço, reusando o ciclo de vida que já
+  chamava `ResumePending` no boot: primeira varredura na construção do
+  produtor, depois periódica, apagando só entrega **terminal** e mais
+  antiga que o prazo configurado — nunca uma entrega em voo.
+- **FATO atual (frontend):** `features/settings/RetentionSection.tsx` lê e
+  grava `/v1/settings/retention` em **Configurações → Conversas**, seção
+  própria e navegável do hub (`/configuracoes/conversas`, cenário
+  `conversations` de `ProductSettingsScreen`, sem redecompor a tela), com
+  as quatro opções **lidas da allowlist que o servidor devolve**,
+  confirmação obrigatória ao reduzir e texto que não promete remover o
+  grupo Não classificadas; `MessageTimeline.tsx` mostra a marca de
+  conteúdo expirado quando `contentExpiredThrough` vem preenchido no DTO da
+  conversa.
+- **FATO atual:** o gate `validate:integration` ganhou os passos
+  `test:ai-orchestrator-content-purge` (Goal023/WU-02, que cobre também a
+  retenção técnica do inbox) e
+  `rehearse:goal023-retention-migration` (Goal023/WU-09), de 26 para 28
+  passos ([VALIDATION_GATE](VALIDATION_GATE.md)). O ensaio de migration
+  prova, em PostgreSQL real e em três bancos próprios (BFF, IA,
+  Scheduling), o que nenhuma das quatro migrations deste Goal provava
+  isolada: reaplicada sobre um banco já migrado, nenhuma delas falha nem
+  muda uma linha — a correção, **para si mesmas**, da divergência de
+  retomada que o review022 registrou contra a migration do Goal022 (que
+  **não** foi reescrita).
+- **LIMITE:** não há prazo, coluna, parâmetro nem default para o grupo Não
+  classificadas em nenhuma camada — permanece bloqueado por **U-01**, e
+  nenhuma copy da interface promete removê-lo.
+- **LIMITE:** exclusão de conta, suspensão de WhatsApp/automações e restore
+  continuam fora — G-29 fecha aqui só na parte de conteúdo; a parte de
+  conta é o **Goal024**.
+- **LIMITE:** nenhuma varredura real foi executada contra dado de negócio
+  implantado — o laço nasce desligado por default, e ligá-lo é decisão de
+  operação posterior a este diff, na mesma classe de gate operacional já
+  declarada nos Goals 010/019/021/022.

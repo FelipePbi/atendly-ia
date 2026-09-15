@@ -63,6 +63,14 @@ import { CustomerSummaryService } from "../memory/customer-summary-service.js";
 import { LangChainModelProvider } from "../model/model-provider.js";
 import { classifySendFailure } from "../outbox/outbox-policy.js";
 import { OutboxStore } from "../outbox/OutboxStore.js";
+import {
+  CONTENT_PURGE_MAX_ROWS_LIMIT,
+  ContentPurgeService,
+} from "../retention/content-purge-service.js";
+import {
+  inboxRetentionCutoff,
+  purgeExpiredInboxEvents,
+} from "../retention/inbox-retention.js";
 import { SchedulingClient } from "../scheduling-service/client.js";
 import { SessionService } from "../session/SessionService.js";
 import {
@@ -124,6 +132,16 @@ const categoryOverrideSchema = z.object({
 });
 
 const ignoreContactSchema = z.object({ ignored: z.boolean() });
+
+// Purga de conteudo (Goal023/WU-02). Os cutoffs chegam **calculados** pelo
+// BFF, que e quem conhece o prazo do negocio; esta rota nao le configuracao,
+// nao deriva prazo de relogio proprio e nao tem default de janela. Sem teto
+// explicito nao ha passada: "apague tudo" nao e um pedido aceitavel.
+const contentPurgeSchema = z.object({
+  commercialCutoff: z.iso.datetime({ offset: true }),
+  personalCutoff: z.iso.datetime({ offset: true }),
+  maxRows: z.number().int().min(1).max(CONTENT_PURGE_MAX_ROWS_LIMIT),
+});
 
 // Goal019/WU-07: ignorar por telefone, sem conversa aberta ainda — o mesmo
 // limite de `startActivationTestSchema.tenantPhone` (validar aqui falha
@@ -272,6 +290,7 @@ export async function registerInternalRoutes(
       prisma,
       new PgVectorKnowledgeChunkIndexer(new OpenAIEmbeddingProvider()),
     );
+  const contentPurge = new ContentPurgeService(prisma);
   const customerMemoryService = new CustomerMemoryService(prisma);
   const customerMemory = options.customerMemory ?? customerMemoryService;
   const customerSummary =
@@ -1170,6 +1189,54 @@ export async function registerInternalRoutes(
   });
 
   /**
+   * Purga de conteudo de conversa (Goal023/WU-02).
+   *
+   * Tenant-scoped como todas as internas: o `tenantId` vem do contexto de
+   * negocio ja autenticado e e o unico filtro de todas as consultas — a purga
+   * de um negocio nao alcanca linha de outro, nem para apagar nem para marcar.
+   *
+   * DUAS JANELAS, DE DONOS DIFERENTES, NA MESMA PASSADA:
+   *
+   * - **Conteudo de conversa** (`Message`, `AiRun` e filhos) expira pelos
+   *   cutoffs que chegam calculados pelo BFF, porque o prazo e do negocio.
+   * - **Inbox duravel** (`ProcessedEvent`) expira pelo prazo **tecnico** desta
+   *   casa (`INBOX_RETENTION_DAYS`), que nao e escolha da profissional e por
+   *   isso nunca vem no corpo: rastro de execucao do transporte nao e
+   *   conteudo de conversa (Goal023/§6).
+   *
+   * O log diz **quantas linhas, de qual tabela, de qual negocio**. Nunca o que
+   * havia nelas: purga que registra o conteudo purgado nao purgou nada.
+   */
+  app.post("/internal/retention/conversation-content", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    const body = parseOrThrow(contentPurgeSchema, request.body);
+    const now = new Date();
+    const content = await contentPurge.purge({
+      tenantId,
+      commercialCutoff: new Date(body.commercialCutoff),
+      personalCutoff: new Date(body.personalCutoff),
+      maxRows: body.maxRows,
+    });
+    // Teto proprio: o inbox e outra tabela e outro prazo, e gastar nele o
+    // orcamento do conteudo faria uma fila atrasar a outra.
+    const inbox = await purgeExpiredInboxEvents(prisma, {
+      tenantId,
+      receivedBefore: inboxRetentionCutoff(now, env.INBOX_RETENTION_DAYS),
+      maxRows: body.maxRows,
+    });
+    const result = {
+      ...content,
+      processedEvents: inbox.processedEvents,
+      hasMore: content.hasMore || inbox.hasMore,
+    };
+    app.log.info(
+      { tenantId, ...result },
+      "Conversation content purge pass completed",
+    );
+    return internalData(request, result);
+  });
+
+  /**
    * Toca a execucao fora da requisicao.
    *
    * O resultado do teste vive na linha da execucao, nao nesta resposta: falhar
@@ -1343,6 +1410,7 @@ interface ConversationDtoInput {
   status: "ACTIVE" | "HUMAN_HANDOFF" | "CLOSED";
   humanHandoff: boolean;
   updatedAt: Date;
+  contentExpiredThrough?: Date | null;
   handoffs: Array<{ reason: string }>;
   messages: Array<{
     id: string;
@@ -1395,6 +1463,11 @@ function conversationDto(conversation: ConversationDtoInput) {
       : null,
     unreadCount: 0,
     updatedAt: conversation.updatedAt.toISOString(),
+    // Goal023/WU-02: ate quando o conteudo desta conversa ja foi purgado.
+    // Aditivo e nulo enquanto nada expirou — a tela le isto em vez de inferir
+    // expiracao pela ausencia de mensagem.
+    contentExpiredThrough:
+      conversation.contentExpiredThrough?.toISOString() ?? null,
     category: session?.category ?? "UNCLASSIFIED",
     categorySource: session?.categorySource ?? "AUTOMATIC",
     suggestedCategory: session?.suggestedCategory ?? null,
@@ -1643,6 +1716,15 @@ export function requiredScope(request: FastifyRequest): InternalScope {
   // conversa, so que sem conversa aberta ainda: mesmo escopo de escrita.
   if (path === "/internal/contacts/ignore" && method === "PUT") {
     return "conversations:write";
+  }
+  // Purga (Goal023) tem escopo proprio: apagar conteudo de cliente nao e
+  // consequencia de poder escrever na conversa, e nenhuma credencial existente
+  // passa a poder apagar sem que isto esteja escrito aqui.
+  if (
+    path === "/internal/retention/conversation-content" &&
+    method === "POST"
+  ) {
+    return "retention:purge";
   }
 
   return "internal:unmapped";

@@ -28,7 +28,17 @@ const NOTIFICATION_LEVELS = ["INFO", "ATTENTION", "CRITICAL"] as const;
  * despejando anos de notificação resolvida. */
 const DEFAULT_PAGE_LIMIT = 20;
 const MAX_PAGE_LIMIT = 100;
-const HISTORY_WINDOW_DAYS = 90;
+export const HISTORY_WINDOW_DAYS = 90;
+
+/**
+ * O único lugar onde a janela vira instante. `GET /v1/notifications`, o
+ * `unreadCount` de `/v1/notifications/summary` e a purga (Goal023/WU-04)
+ * chamam esta função em vez de recalcular — é o que impede lista e contador
+ * de divergirem de novo (review022).
+ */
+export function historyWindowSince(now: Date = new Date()): Date {
+  return new Date(now.getTime() - HISTORY_WINDOW_DAYS * 24 * 60 * 60 * 1_000);
+}
 
 const optionalBooleanQuery = z.preprocess((value) => {
   if (value === undefined) return undefined;
@@ -67,9 +77,7 @@ export async function registerV1NotificationRoutes(
       const tenant = currentTenantContext(request);
       const query = parseQuery(listQuerySchema, request.query ?? {});
       const prisma = getPrisma();
-      const since = new Date(
-        Date.now() - HISTORY_WINDOW_DAYS * 24 * 60 * 60 * 1_000,
-      );
+      const since = historyWindowSince();
       const where = {
         tenantId: tenant.tenantId,
         occurredAt: { gte: since },
@@ -109,10 +117,15 @@ export async function registerV1NotificationRoutes(
 
       const tenant = currentTenantContext(request);
       const prisma = getPrisma();
+      const since = historyWindowSince();
       const [byLevel, openConditionsCount] = await Promise.all([
         prisma.tenantNotification.groupBy({
           by: ["level"],
-          where: { tenantId: tenant.tenantId, readAt: null },
+          where: {
+            tenantId: tenant.tenantId,
+            readAt: null,
+            occurredAt: { gte: since },
+          },
           _count: { _all: true },
         }),
         prisma.tenantNotification.count({

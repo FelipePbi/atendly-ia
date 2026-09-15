@@ -77,6 +77,44 @@ const envSchema = z.object({
   // cada poll em uma rodada de leituras nos donos. Configuravel de proposito:
   // nao e constante magica espalhada pelo codigo.
   NOTIFICATIONS_RECONCILE_MIN_INTERVAL_SECONDS: intEnv(60),
+  // Varredura de retencao (Goal023/WU-05). Defaults conservadores e
+  // declarados: **desligada**, porque purga e destrutiva e ligar por omissao
+  // seria apagar conteudo de negocio sem ninguem ter pedido. Desligada, nada
+  // mais do produto muda — nenhuma rota, leitura ou tela depende do laco — e
+  // as suites nunca o sobem.
+  RETENTION_SWEEP_ENABLED: boolEnv(false),
+  // Intervalo entre passadas quando a anterior nao deixou trabalho. Com
+  // trabalho restante o laco reagenda imediato, como o entregador do Goal021.
+  RETENTION_SWEEP_INTERVAL_SECONDS: intEnv(900),
+  // Validade do lease por negocio. Folgado em relacao a uma passada (tres
+  // chamadas com teto de linhas), curto o bastante para que um processo morto
+  // nao prenda o negocio por muito tempo.
+  RETENTION_SWEEP_LEASE_TTL_SECONDS: intEnv(300),
+  // Quantos negocios uma passada tenta varrer. Teto do fôlego do ciclo, nao
+  // do trabalho: o que sobra fica para a passada seguinte, mais antigo
+  // primeiro.
+  RETENTION_SWEEP_TENANT_BATCH: intEnv(20),
+  // Teto de linhas por store, por negocio, por passada. O que passar dele
+  // volta como `hasMore` e espera a proxima — nenhuma passada varre sem fim.
+  RETENTION_SWEEP_MAX_ROWS_PER_STORE: intEnv(500),
+  // Piso entre duas passadas **completas** do mesmo negocio. Varrer o mesmo
+  // negocio de novo minutos depois nao apaga nada (a passada e idempotente) e
+  // so gastaria chamada interna nos tres donos; uma hora e folgado para um
+  // prazo medido em dezenas de dias. O piso nao se aplica a passada que parou
+  // no teto: `lastHasMore` significa que ainda ha resto declarado, e o resto
+  // continua imediatamente, como o laco ja reagenda.
+  RETENTION_SWEEP_MIN_TENANT_INTERVAL_SECONDS: intEnv(3_600),
+  // Prazo **tecnico** do conteudo das intencoes de lembrete (Goal023/§6).
+  // `facts`/`detail` sao rastro de execucao do envio, nao conteudo de
+  // conversa: eles nao carregam a categoria da sessao que os originou e por
+  // isso nao podem herdar o prazo que a profissional escolheu em
+  // Configuracoes -> Conversas. Um negocio que escolhe 365/365 nao esta
+  // pedindo para guardar telefone de lembrete por um ano, e um que escolhe
+  // 30/30 nao esta pedindo para apagar rastro de entrega em um mes. 90 dias
+  // cobre com folga qualquer auditoria de "o lembrete saiu?" — que e a unica
+  // pergunta que esses campos respondem — sem virar deposito indefinido. A
+  // **linha** nunca e apagada: ela e a identidade de dedupe do Goal021.
+  RETENTION_INTENT_CONTENT_DAYS: intEnv(90),
   PASSWORD_RESET_TOKEN_TTL_MINUTES: intEnv(30),
   PASSWORD_RESET_PUBLIC_URL: stringEnv("http://localhost:3001/nova-senha"),
   PASSWORD_RESET_DELIVERY_URL: stringEnv(),

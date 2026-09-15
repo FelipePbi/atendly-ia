@@ -5,16 +5,21 @@ import clsx from "clsx";
 import type { Message } from "@/data";
 import { Icon, type IconName } from "@/shared/icons/Icon";
 
-import { formatMessageTime } from "./format";
+import { formatExpiredThroughDate, formatMessageTime } from "./format";
 import { MessageAttachmentView } from "./MessageAttachment";
 
 /**
  * O histórico da conversa. Autoria discreta e honesta: o que a IA escreveu
  * aparece como escrito pela IA, nunca com nome de pessoa nem com o nome da
  * plataforma.
+ *
+ * `contentExpiredThrough` vem da marca durável do DTO (Goal023) — a
+ * expiração nunca é inferida pela lista de mensagens vir vazia, que também
+ * acontece numa conversa nova.
  */
 export function MessageTimeline({
   businessName,
+  contentExpiredThrough,
   conversationId,
   messages,
   onResend,
@@ -22,12 +27,16 @@ export function MessageTimeline({
   resendingId,
 }: {
   businessName: string;
+  contentExpiredThrough: string | null;
   conversationId: string;
   messages: Message[];
   onResend: (message: Message) => void;
   person: string;
   resendingId: string | null;
 }) {
+  const expiredDate = contentExpiredThrough
+    ? formatExpiredThroughDate(contentExpiredThrough)
+    : null;
   return (
     <div
       aria-label={`Histórico da conversa com ${person}`}
@@ -38,12 +47,37 @@ export function MessageTimeline({
       <div className="message-date">
         <span>Histórico</span>
       </div>
+      {expiredDate && (
+        <div className="message-system" role="status">
+          <Icon name="info" />
+          <div>
+            <strong>Mensagens antigas expiraram</strong>
+            <span>
+              Conteúdo anterior a {expiredDate} foi removido pela política de
+              retenção. Mensagens mais recentes continuam abaixo.
+            </span>
+          </div>
+        </div>
+      )}
       {messages.length === 0 ? (
         <div className="message-system" role="status">
           <Icon name="info" />
           <div>
-            <strong>Nenhuma mensagem registrada</strong>
-            <span>Novas mensagens aparecerão aqui automaticamente.</span>
+            {expiredDate ? (
+              <>
+                <strong>Nenhuma mensagem recente</strong>
+                <span>
+                  Todo o conteúdo desta conversa até {expiredDate} expirou pela
+                  política de retenção. Novas mensagens aparecerão aqui
+                  automaticamente.
+                </span>
+              </>
+            ) : (
+              <>
+                <strong>Nenhuma mensagem registrada</strong>
+                <span>Novas mensagens aparecerão aqui automaticamente.</span>
+              </>
+            )}
           </div>
         </div>
       ) : (

@@ -75,6 +75,12 @@ func (s *fakeStore) Reschedule(id string, attempts int, nextAttemptAt time.Time,
 	return nil
 }
 
+// PruneTerminal e um no-op: estes testes exercitam entrega e retomada, nao
+// retencao (coberta em webhook_retention_test.go).
+func (s *fakeStore) PruneTerminal(before time.Time, limit int) (int64, error) {
+	return 0, nil
+}
+
 func (s *fakeStore) ClaimPending(limit int, now time.Time) ([]WebhookDelivery, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -142,6 +148,7 @@ func TestProducePersistsBeforeDispatchingAndCompletesOn2xx(t *testing.T) {
 	loggerWrapper := testLogger(t)
 	producer := NewWebhookProducer(loggerWrapper, WithDeliveryStore(store)).(*webhookProducer)
 	t.Cleanup(func() {
+		producer.Close()
 		waitFor(t, producer, 10*time.Second)
 		if err := loggerWrapper.GetLogger("instance-1").Close(); err != nil {
 			t.Errorf("logger Close() error = %v", err)
@@ -197,6 +204,7 @@ func TestDefiniteRejectionIsNotRetried(t *testing.T) {
 		WithRetryPolicy(3, time.Millisecond),
 	).(*webhookProducer)
 	t.Cleanup(func() {
+		producer.Close()
 		waitFor(t, producer, 10*time.Second)
 		if err := loggerWrapper.GetLogger("instance-1").Close(); err != nil {
 			t.Errorf("logger Close() error = %v", err)
@@ -247,6 +255,7 @@ func TestTransientFailureStaysPendingAndIsResumed(t *testing.T) {
 		WithURLResolver(func(instanceID string) (string, error) { return server.URL, nil }),
 	).(*webhookProducer)
 	t.Cleanup(func() {
+		producer.Close()
 		waitFor(t, producer, 10*time.Second)
 		if err := loggerWrapper.GetLogger("instance-1").Close(); err != nil {
 			t.Errorf("logger Close() error = %v", err)

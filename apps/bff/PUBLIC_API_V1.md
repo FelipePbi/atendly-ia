@@ -24,7 +24,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Clientes | `GET /v1/customers`; `GET /v1/customers/:id`; `POST /v1/customers`; `PATCH /v1/customers/:id`; `PUT /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/primary-guardian/confirm`; `DELETE /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/notes`; `PATCH /v1/customers/:id/notes/:noteId`; `DELETE /v1/customers/:id/notes/:noteId`; `POST /v1/customers/:id/tags`; `PATCH /v1/customers/:id/tags/:tagId`; `DELETE /v1/customers/:id/tags/:tagId`; `GET/POST /v1/customers/:id/memory`; `PATCH/DELETE /v1/customers/:id/memory/:memoryId`; `POST /v1/customers/:id/summary` (Goal012) |
 | Conhecimento do negócio (Goal012) | `GET/POST /v1/knowledge/documents`; `GET/PUT/DELETE /v1/knowledge/documents/:id`; `PUT /v1/knowledge/other-info` |
 | Serviços | `GET /v1/services`; `POST /v1/services`; `PATCH /v1/services/:id` |
-| Configurações | `GET /v1/settings`; `PATCH /v1/settings/business`; `PATCH /v1/settings/ai`; `PATCH /v1/settings/availability`; `GET /v1/settings/reminders`; `PATCH /v1/settings/reminders` (Goal021) |
+| Configurações | `GET /v1/settings`; `PATCH /v1/settings/business`; `PATCH /v1/settings/ai`; `PATCH /v1/settings/availability`; `GET /v1/settings/reminders`; `PATCH /v1/settings/reminders` (Goal021); `GET/PATCH /v1/settings/retention` (Goal023/WU-01) |
 | WhatsApp | `GET /v1/whatsapp`; `POST /v1/whatsapp/connect`; `POST /v1/whatsapp/reconnect`; `DELETE /v1/whatsapp` |
 | Teste real de ativação (Goal019/WU-05) | `GET /v1/activation-test`; `POST /v1/activation-test`; `POST /v1/activation-test/restart` |
 | Central de notificações (Goal022/WU-04) | `GET /v1/notifications`; `GET /v1/notifications/summary`; `POST /v1/notifications/read`; `GET/PATCH /v1/notifications/preferences` |
@@ -556,6 +556,7 @@ O DTO de conversa ganhou campos **opcionais**; respostas anteriores a esta vers�
 | `aiPaused` | booleano | pausa explícita da IA para o contato (`/bot off`, `/ia_pause`) |
 | `customerId` | string ou `null` | vínculo do contato com a pessoa do Scheduling (Goal017); `null` quando o contato ainda não está vinculado, ausente no estoque anterior a este campo |
 | `session` | objeto ou `null` | `id`, `startedAt`, `expiresAt`, `lastContactMessageAt`, `humanHandlingSince` |
+| `contentExpiredThrough` | data ISO ou `null` | até quando o conteúdo desta conversa já foi purgado (Goal023); `null` enquanto nada expirou. Só avança, nunca retrocede. É o campo que a interface lê para dizer que mensagens antigas expiraram — não se infere expiração pela ausência de mensagem. A exclusão é assíncrona e irreversível: o conteúdo apagado não volta, nem aumentando o prazo depois |
 
 Precedência: `ignored` do contato prevalece sobre a sessão; o override manual (`categorySource: MANUAL`) prevalece sobre `suggestedCategory` e atravessa a troca de sessão. A classificação automática nunca escreve override.
 
@@ -657,6 +658,54 @@ Corpo/resposta:
 | `rules` | array de até dois itens, `{ slot: "FIRST" \| "SECOND", leadMinutes: inteiro positivo até 43200 }` | posição e antecedência (minutos) de cada lembrete; **obrigatório** em `PATCH`, mesmo vazio — `rules: []` é a escolha explícita de desligar os lembretes, distinta de nunca ter configurado |
 
 `PATCH` recusa mais de dois itens, posição repetida ou antecedência fora do intervalo com `400 VALIDATION_ERROR`, sem gravar nada e sem chamar o Scheduling — a mesma validação que a constraint SQL `ReminderRule_leadMinutes_check` espelha do lado de lá. Esta é a única leitura/escrita de configuração de lembrete no contrato público; não existe equivalente do lado da IA — quem configura é sempre humano, no mesmo padrão de disponibilidade e oferta (Goal009).
+
+## Prazo de retenção configurável (Goal023, WU-01, G-29)
+
+Duas rotas sob `requireTenantContext`; `tenantId` vem sempre da sessão, nunca do corpo. A **existência da linha** não é a escolha: sem linha gravada, o negócio vale Comercial 90 dias / Pessoal 30 dias, o default do produto.
+
+| Rota | O que faz |
+| --- | --- |
+| `GET /v1/settings/retention` | lê o prazo de retenção corrente do negócio |
+| `PATCH /v1/settings/retention` | grava uma ou as duas categorias |
+
+Corpo do `PATCH` (ambos os campos opcionais, mas ao menos um é obrigatório):
+
+```json
+{
+  "commercialRetentionDays": 180,
+  "personalRetentionDays": 30,
+  "confirmReduction": false
+}
+```
+
+Resposta de ambas as rotas:
+
+```json
+{
+  "commercialRetentionDays": 90,
+  "personalRetentionDays": 30,
+  "retentionDaysOptions": [30, 90, 180, 365],
+  "unclassifiedPurged": false,
+  "lastSweepCompletedAt": "2026-09-14T03:10:22.481Z",
+  "appliesFrom": "NEXT_SWEEP"
+}
+```
+
+| Campo | Valores | Significado |
+| --- | --- | --- |
+| `commercialRetentionDays` | `30`, `90`, `180` ou `365` | prazo do conteúdo comercial; fora da allowlist é `400 VALIDATION_ERROR`, sem gravar nada |
+| `personalRetentionDays` | `30`, `90`, `180` ou `365` | prazo do conteúdo pessoal; mesma allowlist |
+| `retentionDaysOptions` | `[30, 90, 180, 365]`, só leitura | a allowlist **do servidor**; o cliente lê as opções daqui em vez de declarar a própria lista |
+| `unclassifiedPurged` | `false`, só leitura | invariante, não estado: conteúdo de sessão não classificada não tem prazo, não tem opção e **não é purgado** |
+| `lastSweepCompletedAt` | ISO-8601 ou `null`, só leitura | instante da última varredura **concluída** deste negócio (todas as fontes de pé); `null` enquanto nenhuma concluiu. Uma passada que degradou terminou, mas não concluiu, e não avança este campo |
+| `confirmReduction` | booleano, só na escrita | exigido quando o `PATCH` **reduz** qualquer uma das duas categorias; aumentar nunca exige |
+| `appliesFrom` | `"NEXT_SWEEP"`, só leitura | uma redução aceita só passa a valer na próxima varredura de purga — esta rota nunca apaga dado |
+
+Reduzir uma categoria (ou as duas) sem `confirmReduction: true` é recusado com `409 RETENTION_REDUCTION_REQUIRES_CONFIRMATION`, sem gravar nada; `error.details.reductions` lista cada categoria reduzida com `from`/`to`. Não existe categoria, coluna, parâmetro ou default para conteúdo "não classificado" — só Comercial e Pessoal.
+
+O `PATCH` devolve a mesma forma do `GET`, inclusive `lastSweepCompletedAt`: gravar prazo não varre, e a resposta não pode sugerir que varreu.
+
+**O que estas rotas não configuram.** Três prazos são **técnicos** e não aparecem aqui nem na interface, porque não são conteúdo de conversa e sim rastro de transporte e execução: o inbox durável da IA (`INBOX_RETENTION_DAYS`, default 180 dias), o conteúdo das intenções de lembrete (`RETENTION_INTENT_CONTENT_DAYS`, default 90 dias) e o outbox do transporte em Go (`WEBHOOK_OUTBOX_RETENTION_HOURS`, default 30 dias). Todos vêm de variável de ambiente, e nenhum deles muda quando o negócio muda o prazo das categorias.
 
 ### Estado de envio de um agendamento
 

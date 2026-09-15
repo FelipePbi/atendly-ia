@@ -451,6 +451,21 @@ export function integrationSteps(target) {
       args: ["scripts/goal022-notification-center-migration-rehearsal.mjs"],
       env,
     },
+    // Gate M0/M1 do Goal023: ensaio das quatro migrations de retencao
+    // configuravel e purga de conteudo multistore (BFF `RetentionSettings` e
+    // `RetentionSweepState`, IA `Conversation.contentExpiredThrough`,
+    // Scheduling indice `tenantId/state/settledAt`), tres bancos próprios e
+    // descartáveis. Prova aditividade, ausência de backfill, cascata onde há
+    // FK de tenant e — o que nenhum ensaio anterior deste Goal prova — que
+    // reaplicar qualquer uma das quatro sobre banco já migrado não falha nem
+    // muda uma linha (a divergência que o review022 registrou).
+    {
+      name: "rehearse:goal023-retention-migration",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal023-retention-migration-rehearsal.mjs"],
+      env,
+    },
     // Identidade de cliente contra PostgreSQL real: telefone compartilhado,
     // cliente sem telefone, criação só na confirmação e isolamento por tenant.
     // Não pertence ao core porque exige banco.
@@ -493,6 +508,17 @@ export function integrationSteps(target) {
       cwd: "apps/ai-orchestrator",
       command: "npx",
       args: ["vitest", "run", "tests/integration"],
+      env,
+    },
+    // Purga de conteúdo de conversa (Goal023) contra o mesmo banco: o que a
+    // purga apaga, e sobretudo o que ela não alcança — não classificado,
+    // órfão de sessão, dentro do prazo e o negócio vizinho. Passo próprio
+    // porque apagar dado de cliente não é "mais um caso de durabilidade".
+    {
+      name: "test:ai-orchestrator-content-purge",
+      cwd: "apps/ai-orchestrator",
+      command: "npx",
+      args: ["vitest", "run", "tests/retention"],
       env,
     },
     // Outbox técnico do Evolution Go contra o mesmo servidor descartável.

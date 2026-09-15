@@ -201,6 +201,24 @@ export const reminderSettingsSchema = z.object({
   rules: z.array(reminderRuleSchema).max(2),
 });
 
+export const retentionDaysSchema = z.union([
+  z.literal(30),
+  z.literal(90),
+  z.literal(180),
+  z.literal(365),
+]);
+export const retentionSettingsSchema = z.object({
+  commercialRetentionDays: retentionDaysSchema,
+  personalRetentionDays: retentionDaysSchema,
+  // A allowlist e do servidor: o seletor a le, nao a declara.
+  retentionDaysOptions: z.array(retentionDaysSchema),
+  // U-01 no contrato, nao so na tela: conteudo nao classificado nao e purgado.
+  unclassifiedPurged: z.literal(false),
+  // Ultima varredura concluida deste negocio; nula enquanto nenhuma concluiu.
+  lastSweepCompletedAt: z.string().nullable(),
+  appliesFrom: z.literal("NEXT_SWEEP"),
+});
+
 const serviceColorTokenSchema = z.enum([
   "ROSE",
   "AMBER",
@@ -643,6 +661,11 @@ export const conversationSchema = z.object({
   // Vínculo com a pessoa do Scheduling (Goal017): `null` quando o contato
   // ainda não está vinculado, ausente no estoque anterior a este campo.
   customerId: z.string().nullish().optional(),
+  // Ate quando o conteudo desta conversa ja foi purgado (Goal023). Nulo
+  // enquanto nada expirou, ausente no estoque anterior a este campo. So
+  // avanca, nunca retrocede — e a marca que a tela le para dizer que
+  // mensagens antigas expiraram, nunca inferida pela ausencia de mensagem.
+  contentExpiredThrough: isoDateTimeSchema.nullish().optional(),
 });
 
 // Contato ignorado por telefone, sem conversa ainda (Goal019/WU-07): a etapa
@@ -1103,6 +1126,8 @@ export type ReminderSlot = z.infer<typeof reminderSlotSchema>;
 export type ReminderPricePolicy = z.infer<typeof reminderPricePolicySchema>;
 export type ReminderRule = z.infer<typeof reminderRuleSchema>;
 export type ReminderSettings = z.infer<typeof reminderSettingsSchema>;
+export type RetentionDays = z.infer<typeof retentionDaysSchema>;
+export type RetentionSettings = z.infer<typeof retentionSettingsSchema>;
 export type CalendarSource = z.infer<typeof calendarSourceSchema>;
 export type CalendarState = z.infer<typeof calendarStateSchema>;
 export type Conversation = z.infer<typeof conversationSchema>;

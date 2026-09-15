@@ -225,6 +225,15 @@ model Conversation {
   /// anterior ignora a coluna e o backfill preenche sem apagar nada.
   contactId String?
 
+  /// Ate quando o conteudo desta conversa ja foi purgado (Goal023/WU-02).
+  ///
+  /// Nulo enquanto nada expirou — e nulo nunca e fabricado por default de
+  /// coluna. So avanca: a purga nunca escreve um instante anterior ao ja
+  /// gravado, porque o que foi apagado nao volta. E o que a interface le para
+  /// dizer que mensagens antigas expiraram, em vez de inferir expiracao pela
+  /// ausencia de mensagem.
+  contentExpiredThrough DateTime?
+
   channel  ChannelConnection     @relation(fields: [tenantId, channelId], references: [tenantId, id], onDelete: Cascade)
   contact  Contact?              @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: SetNull)
   messages Message[]

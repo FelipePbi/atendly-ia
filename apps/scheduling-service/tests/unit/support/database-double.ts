@@ -50,6 +50,18 @@ let sequence = 0;
 const nextId = (prefix: string) => `${prefix}-${(sequence += 1)}`;
 
 /**
+ * Prisma representa "grave NULL nesta coluna JSON" com um marcador
+ * (`Prisma.DbNull`), não com `null` puro — o Postgres real não distingue os
+ * dois. O dublê também não distingue, e por isso desembrulha o marcador para
+ * `null` antes de comparar ou gravar.
+ */
+function unwrapJsonNullMarker(value: unknown): unknown {
+  const ctorName = (value as { constructor?: { name?: string } } | null)
+    ?.constructor?.name;
+  return ctorName === "DbNull" || ctorName === "JsonNull" ? null : value;
+}
+
+/**
  * Operacao atomica de numero do Prisma (`{ increment }` / `{ decrement }`),
  * resolvida contra a linha corrente. Sem isto, `Object.assign` gravaria o
  * proprio objeto `{ increment: 1 }` na coluna — e um teste que compara
@@ -60,7 +72,8 @@ function resolveWrite(
   data: Record<string, unknown>,
 ): Record<string, unknown> {
   const resolved: Record<string, unknown> = {};
-  for (const [field, value] of Object.entries(data)) {
+  for (const [field, rawValue] of Object.entries(data)) {
+    const value = unwrapJsonNullMarker(rawValue);
     const operation =
       value !== null && typeof value === "object" && !(value instanceof Date)
         ? (value as { increment?: number; decrement?: number })
@@ -97,8 +110,9 @@ function matches(row: Row, where: Record<string, unknown>): boolean {
       !(value instanceof Date)
     ) {
       return Object.entries(value as Record<string, unknown>).every(
-        ([operator, operand]) => {
+        ([operator, rawOperand]) => {
           const field = row[key];
+          const operand = unwrapJsonNullMarker(rawOperand);
           switch (operator) {
             case "in":
               return (operand as unknown[]).includes(field);

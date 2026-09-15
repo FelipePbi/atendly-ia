@@ -9,7 +9,7 @@ import { env } from "./config/env.js";
 import { sendCsrfToken, sessionCsrfToken } from "./lib/auth.js";
 import { AppError, toErrorMessage } from "./lib/errors.js";
 import { redactRequestUrl } from "./lib/logging.js";
-import { disconnectPrisma } from "./lib/prisma.js";
+import { disconnectPrisma, getPrisma } from "./lib/prisma.js";
 import { registerV1ActivationTestRoutes } from "./modules/activation-test/routes.js";
 import { registerV1AuthRoutes } from "./modules/auth/routes.js";
 import { registerV1CalendarRoutes } from "./modules/calendar/routes.js";
@@ -20,6 +20,9 @@ import { registerV1KnowledgeRoutes } from "./modules/knowledge/routes.js";
 import { registerV1MigrationRoutes } from "./modules/migrations/routes.js";
 import { registerV1NotificationRoutes } from "./modules/notifications/routes.js";
 import { registerV1OnboardingRoutes } from "./modules/onboarding/routes.js";
+import { RetentionSweepWorker } from "./modules/retention/RetentionSweepWorker.js";
+import { registerV1RetentionSettingsRoutes } from "./modules/retention/routes.js";
+import { defaultRetentionPorts } from "./modules/retention/sweep.js";
 import { registerV1ServiceRoutes } from "./modules/services/routes.js";
 import { registerV1SettingsRoutes } from "./modules/settings/routes.js";
 import { registerV1StatusRoutes } from "./modules/status/routes.js";
@@ -117,6 +120,7 @@ export async function buildApp() {
   await registerV1KnowledgeRoutes(app);
   await registerV1ServiceRoutes(app);
   await registerV1SettingsRoutes(app);
+  await registerV1RetentionSettingsRoutes(app);
   await registerV1NotificationRoutes(app);
   await registerV1WhatsAppRoutes(app);
   await registerV1ActivationTestRoutes(app);
@@ -158,7 +162,33 @@ export async function buildApp() {
     });
   });
 
+  // Varredura de retenção (Goal023/WU-05). Desligada por default e por
+  // escolha: purga é destrutiva, e ligar por omissão seria apagar conteúdo de
+  // negócio sem ninguém ter pedido. Desligada, nada acima muda — nenhuma rota,
+  // leitura reconciliada ou tela depende do laço, e as suítes nunca o sobem.
+  const retentionSweep = env.RETENTION_SWEEP_ENABLED
+    ? new RetentionSweepWorker(
+        getPrisma(),
+        defaultRetentionPorts(getPrisma()),
+        {
+          pollIntervalMs: env.RETENTION_SWEEP_INTERVAL_SECONDS * 1_000,
+          leaseTtlSeconds: env.RETENTION_SWEEP_LEASE_TTL_SECONDS,
+          tenantBatchLimit: env.RETENTION_SWEEP_TENANT_BATCH,
+          maxRowsPerStore: env.RETENTION_SWEEP_MAX_ROWS_PER_STORE,
+          minTenantIntervalSeconds:
+            env.RETENTION_SWEEP_MIN_TENANT_INTERVAL_SECONDS,
+        },
+        app.log,
+      )
+    : null;
+  retentionSweep?.start();
+
   app.addHook("onClose", async () => {
+    // Ordem deliberada: parar o laço antes de soltar o Prisma, para que o
+    // ciclo em voo termine com a conexão que ele já estava usando. O `stop`
+    // cancela o próximo tick e espera só o ciclo atual, que nunca lança — o
+    // desligamento não fica preso por causa de trabalho de fundo.
+    await retentionSweep?.stop();
     await disconnectPrisma();
   });
 

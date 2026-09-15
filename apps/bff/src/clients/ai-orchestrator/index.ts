@@ -92,7 +92,28 @@ const conversationSchema = z.object({
     })
     .nullish()
     .optional(),
+  // Goal023: ate quando o conteudo desta conversa ja foi purgado. Aditivo,
+  // como os anteriores — nulo quando nada expirou, ausente quando a IA ainda
+  // nao repassa o campo. Nenhum campo acima muda de forma, tipo ou
+  // significado por causa dele.
+  contentExpiredThrough: z.string().nullish().optional(),
 });
+
+// Contagens de uma passada de purga na IA (Goal023/WU-02). Linhas, por tabela:
+// nada aqui descreve o que foi apagado, e nada disto chega ao cliente final.
+const contentPurgeResultSchema = z.object({
+  messages: z.number().int().nonnegative(),
+  messageAttachments: z.number().int().nonnegative(),
+  aiRuns: z.number().int().nonnegative(),
+  aiToolCalls: z.number().int().nonnegative(),
+  conversationsMarked: z.number().int().nonnegative(),
+  // Inbox duravel da IA (Goal023/§6). O prazo dele e tecnico e mora na IA: o
+  // BFF nao o envia, nao o conhece e so registra o que voltou.
+  processedEvents: z.number().int().nonnegative(),
+  hasMore: z.boolean(),
+});
+
+export type ContentPurgeResult = z.infer<typeof contentPurgeResultSchema>;
 
 // Central de notificacoes (Goal022): uma entrada por conversa que espera
 // atendimento humano. `contactName` e o nome do contato quando a conversa tem
@@ -794,6 +815,33 @@ export class AiOrchestratorClient {
       schema: envelope(activationTestRunSchema),
     });
     return { run: data.data, status };
+  }
+
+  /**
+   * Purga de conteudo de conversa na IA (Goal023/WU-02).
+   *
+   * Os cutoffs vao **calculados** daqui: o prazo e do negocio e vive no BFF, e
+   * a IA nao deriva janela por conta propria. O teto limita a passada; `hasMore`
+   * diz se sobrou trabalho para a proxima. Chamador: a varredura, nunca uma
+   * rota publica.
+   */
+  async purgeConversationContent(
+    context: InternalRequestContext,
+    input: { commercialCutoff: Date; personalCutoff: Date; maxRows: number },
+  ): Promise<ContentPurgeResult> {
+    return (
+      await this.http.request({
+        method: "POST",
+        path: "/internal/retention/conversation-content",
+        context,
+        body: {
+          commercialCutoff: input.commercialCutoff.toISOString(),
+          personalCutoff: input.personalCutoff.toISOString(),
+          maxRows: input.maxRows,
+        },
+        schema: envelope(contentPurgeResultSchema),
+      })
+    ).data;
   }
 
   private async mutateConversation(

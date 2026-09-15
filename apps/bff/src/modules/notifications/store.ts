@@ -229,6 +229,50 @@ export async function saveSyncState(
   await prisma.notificationSyncState.update({ where: { tenantId }, data });
 }
 
+export interface ExpiredNotificationCandidate {
+  id: string;
+}
+
+/**
+ * Candidatas a purga (Goal023/WU-04, G-29): `EVENT` em qualquer estado, ou
+ * `CONDITION` já resolvida, com `occurredAt` anterior a `olderThan`. Uma
+ * condição sem `resolvedAt` nunca aparece aqui — não há filtro que a inclua,
+ * por mais antigo que seja o seu `occurredAt`.
+ */
+export async function findExpiredNotifications(
+  prisma: NotificationPrisma,
+  tenantId: string,
+  olderThan: Date,
+  limit: number,
+): Promise<ExpiredNotificationCandidate[]> {
+  if (limit <= 0) return [];
+  return prisma.tenantNotification.findMany({
+    where: {
+      tenantId,
+      occurredAt: { lt: olderThan },
+      OR: [
+        { shape: "EVENT" },
+        { shape: "CONDITION", resolvedAt: { not: null } },
+      ],
+    },
+    orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
+    take: limit,
+    select: { id: true },
+  });
+}
+
+export async function deleteNotifications(
+  prisma: NotificationPrisma,
+  tenantId: string,
+  ids: string[],
+): Promise<number> {
+  if (ids.length === 0) return 0;
+  const result = await prisma.tenantNotification.deleteMany({
+    where: { tenantId, id: { in: ids } },
+  });
+  return result.count;
+}
+
 /**
  * Preferência do negócio. Ausência de linha **é** o default desligado: nenhum
  * negócio recebe `AI_APPOINTMENT_CREATED` sem ter pedido.

@@ -2,6 +2,8 @@ import "dotenv/config";
 
 import { z } from "zod";
 
+import { DEFAULT_INBOX_RETENTION_DAYS } from "../modules/retention/inbox-retention.js";
+
 const stringEnv = (defaultValue = "") =>
   z.preprocess((value) => {
     if (typeof value !== "string") return value;
@@ -118,6 +120,13 @@ const envSchema = z.object({
   // enquanto executa, em vez de perde-lo para outro ciclo no meio do trabalho.
   INBOX_LEASE_HEARTBEAT_SECONDS: intEnv(30),
   INBOX_GROUP_BATCH_LIMIT: intEnv(20),
+  // Retencao tecnica do inbox duravel (Goal023/§6). Nao e conteudo de
+  // conversa e nao e escolha da profissional: `ProcessedEvent` e rastro de
+  // execucao do transporte, entao o prazo vem daqui e nunca de
+  // `RetentionSettings`. O default folgado e deliberado — a consequencia
+  // sobre o dedupe de entrada esta escrita junto da constante, em
+  // `modules/retention/inbox-retention.ts`.
+  INBOX_RETENTION_DAYS: intEnv(DEFAULT_INBOX_RETENTION_DAYS),
   // Entrega das intencoes de envio (Goal021). Mesmo desenho da inbox: o loop
   // roda no proprio processo da IA, sem broker novo e sem servico novo.
   NOTIFICATION_DELIVERY_ENABLED: boolEnv(true),

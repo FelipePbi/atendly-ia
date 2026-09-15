@@ -112,6 +112,8 @@ model Tenant {
   notifications          TenantNotification[]
   notificationPreference NotificationPreference?
   notificationSyncState  NotificationSyncState?
+  retentionSettings      RetentionSettings?
+  retentionSweepState    RetentionSweepState?
 }
 
 model TenantMember {
@@ -221,6 +223,83 @@ model AiSettings {
   updatedAt DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+/// Prazo de retencao configuravel por negocio (Goal023, G-29).
+///
+/// A **ausencia da linha** e a escolha do produto: Comercial 90 dias / Pessoal
+/// 30 dias, resolvido em codigo (`modules/retention/settings.ts`), nunca por
+/// linha fabricada em boot ou por `@default` interpretado como valor gravado.
+/// Mesma regra que o Goal018 aplicou a `modalities` e o Goal021 aplicou a
+/// `ReminderSettings`.
+///
+/// So duas categorias, as unicas que o produto reconhece hoje. Nao existe
+/// campo, parametro ou default para uma terceira categoria "nao classificada".
+model RetentionSettings {
+  tenantId String @id
+  /// Prazo do conteudo comercial, em dias. Allowlist fechada em codigo
+  /// (30/90/180/365); o banco nao valida o valor.
+  commercialRetentionDays Int @default(90)
+  /// Prazo do conteudo pessoal, em dias. Mesma allowlist.
+  personalRetentionDays   Int @default(30)
+  /// Quem gravou o prazo vigente (`TenantMember.userId` da sessao que fez o
+  /// `PATCH`). Rastro de decisao, nunca controle: nada le esta coluna para
+  /// decidir prazo, purga ou permissao. TEXT solto e nulavel, no mesmo padrao
+  /// de `IgnoredContact.createdByUserId` — apagar a pessoa nao pode apagar
+  /// nem falsear o prazo que o negocio escolheu, e linha gravada antes desta
+  /// coluna existir nao tem autor para inventar.
+  updatedBy               String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+/// Estado da varredura de purga, por negocio (Goal023/WU-05, G-29).
+///
+/// A linha e do **laco**, nao do produto: ausencia de linha significa "este
+/// negocio nunca foi varrido", nunca um prazo diferente. Nada aqui muda o que
+/// qualquer rota publica responde, e desligar o laco deixa estas colunas
+/// paradas sem afetar o resto.
+///
+/// LEASE PELO RELOGIO DO BANCO, como no Goal021: `leaseAcquiredAt`,
+/// `leaseExpiresAt` e `lastRunAt` sao TIMESTAMPTZ, nao TIMESTAMP, porque sao
+/// sempre comparados com `now()` do servidor e precisam continuar corretos
+/// independentemente do fuso da sessao que grava ou le. `leaseToken` e o
+/// fencing: a liquidacao so vale para quem ainda segura o token que reivindicou.
+model RetentionSweepState {
+  tenantId             String    @id
+  /// Identidade da instancia que segura o lease. Diagnostico, nunca controle:
+  /// quem exclui e o par (`leaseExpiresAt`, `leaseToken`).
+  leaseOwner           String?
+  leaseToken           String?
+  leaseAcquiredAt      DateTime? @db.Timestamptz(3)
+  leaseExpiresAt       DateTime? @db.Timestamptz(3)
+  /// Instante da ultima passada **terminada**, e por ele que a fila de
+  /// negocios a varrer se ordena e que o piso por negocio e medido. Nulo ate a
+  /// primeira.
+  lastRunAt            DateTime? @db.Timestamptz(3)
+  /// Instante da ultima passada terminada **sem nenhuma fonte falhando** — o
+  /// que o contrato publico chama de "ultima varredura concluida". Uma passada
+  /// degradada termina e avanca `lastRunAt`, mas nao avanca este.
+  lastCompletedAt      DateTime? @db.Timestamptz(3)
+  /// Nomes das fontes que falharam na ultima passada, separados por virgula.
+  /// Nunca a mensagem crua do upstream e nunca conteudo purgado.
+  lastError            String?
+  /// Contagens da ultima passada, por fonte. Linhas, so isso.
+  lastAiRows           Int       @default(0)
+  lastSchedulingRows   Int       @default(0)
+  lastNotificationRows Int       @default(0)
+  /// `true` quando a ultima passada parou no teto e restou trabalho.
+  lastHasMore          Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// A unica leitura do laco: quem esta livre, mais antigo primeiro.
+  @@index([leaseExpiresAt])
+  @@index([lastRunAt])
 }
 
 /// Espécie da notificação da central (Goal022). Vocabulário fechado: cada

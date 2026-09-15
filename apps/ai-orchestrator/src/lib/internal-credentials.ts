@@ -42,6 +42,7 @@ export type InternalScope =
   | "customer-summary:write"
   | "activation-test:read"
   | "activation-test:write"
+  | "retention:purge"
   // Escopo deliberadamente não concedido a nenhuma credencial: é o destino de
   // caminho interno sem escopo declarado, para que rota nova falhe fechada.
   | "internal:unmapped";
@@ -68,6 +69,10 @@ const SCOPES_BY_USE: Record<InternalUse, readonly InternalScope[]> = {
     // execucao sao comando comum, nunca provisionamento.
     "activation-test:read",
     "activation-test:write",
+    // Purga de conteudo de conversa (Goal023): comando comum vindo da
+    // varredura do BFF. Escopo proprio de proposito — quem pode ler conversa
+    // nao passa a poder apagar conteudo por consequencia.
+    "retention:purge",
   ],
 };
 

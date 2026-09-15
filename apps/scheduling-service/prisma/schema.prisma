@@ -835,6 +835,10 @@ model AppointmentNotificationIntent {
   /// `state`/`dueAt` sem tenant na frente. O teto por tenant e do codigo.
   @@index([state, dueAt])
   @@index([leaseExpiresAt])
+  /// Esvaziamento de conteudo das intencoes terminais (Goal023, WU-03): a
+  /// varredura filtra por negocio, estado terminal e `settledAt`, que o
+  /// indice de `dueAt` acima nao cobre.
+  @@index([tenantId, state, settledAt])
 }
 
 model ExternalEntityMap {

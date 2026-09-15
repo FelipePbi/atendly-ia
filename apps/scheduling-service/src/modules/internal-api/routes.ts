@@ -79,6 +79,10 @@ import {
   listFailedNotificationIntents,
 } from "../reminders/notification-read-service.js";
 import {
+  clearExpiredNotificationContent,
+  NOTIFICATION_CONTENT_RETENTION_MAX_ROWS_LIMIT,
+} from "../reminders/notification-retention-service.js";
+import {
   MAX_REMINDER_LEAD_MINUTES,
   ReminderService,
 } from "../reminders/reminder-service.js";
@@ -174,6 +178,15 @@ const failedNotificationIntentsQuerySchema = z.object({
     .min(1)
     .max(FAILED_NOTIFICATION_INTENTS_MAX_LIMIT)
     .optional(),
+});
+// --- Esvaziamento de conteúdo das intenções terminais (Goal023, WU-03) ----
+const notificationContentRetentionBodySchema = z.object({
+  settledBefore: z.iso.datetime({ offset: true }),
+  maxRows: z
+    .number()
+    .int()
+    .min(1)
+    .max(NOTIFICATION_CONTENT_RETENTION_MAX_ROWS_LIMIT),
 });
 const aiCreatedAppointmentEventsQuerySchema = z.object({
   // BigInt de `AppointmentEvent.sequence`, sempre nao negativo; a validacao
@@ -967,6 +980,31 @@ export async function registerManagementRoutes(
       return data(
         request,
         await listFailedNotificationIntents(prisma, context.tenantId, query),
+      );
+    },
+  );
+
+  // --- Esvaziamento de conteúdo das intenções terminais (Goal023, WU-03) --
+  // So o BFF (pessoa humana): quem decide o prazo e quem varre e a central de
+  // retenção do negócio, nunca a IA. A linha nunca é apagada aqui — só
+  // `facts` e `detail`, e só de intenção já liquidada (`SENT`, `FAILED`,
+  // `DISMISSED`, `CANCELLED`); `PENDING`/`CLAIMED` não têm `settledAt` e
+  // portanto nunca são candidatas.
+
+  app.post(
+    "/internal/notification-intents/content-retention",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      requireHumanCaller(context);
+      const body = parse(notificationContentRetentionBodySchema, request.body);
+      return data(
+        request,
+        await clearExpiredNotificationContent(prisma, {
+          tenantId: context.tenantId,
+          settledBefore: new Date(body.settledBefore),
+          maxRows: body.maxRows,
+        }),
       );
     },
   );

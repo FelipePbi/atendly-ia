@@ -30,7 +30,21 @@ export async function applyPlanningResult({
   envelope,
   goalId,
   absPlan,
-  newBaseline,
+  /**
+   * The commit the PLANNING WORKTREE was branched from — not the accepted
+   * migration baseline, which is a different fact and was the name this
+   * parameter used to carry.
+   *
+   * The two were the same commit until the worktree started branching from
+   * main's tip, and the rename is the point: this value is used for exactly
+   * one thing, the diff below, and calling it `newBaseline` is what hid a
+   * second call site when the other one was fixed. Goal022 stopped as
+   * TECH_LEAD_CLOSURE_SCOPE_VIOLATION naming three `tools/ia-loop/` files the
+   * Tech Lead never touched — they were harness commits that landed on main
+   * between the accepted baseline and the branch point, and diffing against
+   * the baseline attributed them to the planner.
+   */
+  planningDiffBase,
   repoRoot,
   emit = () => {},
   machineState,
@@ -44,7 +58,7 @@ export async function applyPlanningResult({
   collectWorktreeChanges = realCollectWorktreeChanges,
   assertClosureScope = realAssertClosureScope,
 }) {
-  const planChanges = await collectWorktreeChanges(absPlan, newBaseline);
+  const planChanges = await collectWorktreeChanges(absPlan, planningDiffBase);
   assertClosureScope(planChanges.changedFiles);
 
   const planning = envelope.result;

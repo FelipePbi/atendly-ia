@@ -592,7 +592,7 @@ async function main() {
   // what a fresh one does (see lib/planning-application.mjs for why that
   // divergence was the bug). Never called on a failed envelope.
   const applyPlanning = (envelope) => applyPlanningResult({
-    envelope, goalId, absPlan, newBaseline, repoRoot: REPO_ROOT, emit,
+    envelope, goalId, absPlan, planningDiffBase, repoRoot: REPO_ROOT, emit,
     machineState: machine.state, persistClosure, profileStore, planStore, store,
   });
 

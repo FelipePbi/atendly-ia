@@ -73,7 +73,7 @@ async function apply(dir, envelope, { changedFiles } = {}) {
   const persistClosure = async (patch, state) => { persisted.push({ patch, state }); };
 
   await applyPlanningResult({
-    envelope, goalId: '009', absPlan: '/irrelevant', newBaseline: 'b'.repeat(40),
+    envelope, goalId: '009', absPlan: '/irrelevant', planningDiffBase: 'b'.repeat(40),
     repoRoot: dir, emit: () => {}, machineState: 'NEXT_GOAL_PLANNING',
     persistClosure, profileStore, planStore, store,
     ...noopFakes(changedFiles),
@@ -152,7 +152,7 @@ test('HUMAN_REQUIRED throws and persists nothing', async () => {
     await assert.rejects(
       applyPlanningResult({
         envelope: { ok: true, result: { decision: 'HUMAN_REQUIRED', reason: 'produto precisa decidir' } },
-        goalId: '009', absPlan: '/irrelevant', newBaseline: 'b'.repeat(40), repoRoot: dir,
+        goalId: '009', absPlan: '/irrelevant', planningDiffBase: 'b'.repeat(40), repoRoot: dir,
         machineState: 'NEXT_GOAL_PLANNING',
         persistClosure: async () => { persistClosureCalled = true; },
         profileStore, planStore, store, ...noopFakes(),
@@ -163,4 +163,53 @@ test('HUMAN_REQUIRED throws and persists nothing', async () => {
     assert.equal(persistClosureCalled, false);
     assert.equal(await planStore.read('010'), null);
   });
+});
+
+// ===========================================================================
+// The diff base — which commit the planner is judged against
+// ===========================================================================
+
+test('the planning diff is taken against the base it was GIVEN, not against any baseline', async () => {
+  // Goal022 stopped as TECH_LEAD_CLOSURE_SCOPE_VIOLATION naming three
+  // `tools/ia-loop/` files the Tech Lead never touched. They were harness
+  // commits that landed on main between the accepted baseline and the commit
+  // the planning worktree was branched from — and this function was still
+  // diffing against the baseline, so it attributed them to the planner.
+  //
+  // `run-close` had already been fixed to pass the branch point; this call
+  // site kept its own copy of the old behaviour behind a parameter named
+  // `newBaseline`. The name is why it was missed, which is why it is now
+  // named after what it is.
+  const seen = [];
+  const collectWorktreeChanges = async (absPlan, baseSha) => {
+    seen.push({ absPlan, baseSha });
+    return { changedFiles: ['docs/migration/MASTER_PLAN.md'] };
+  };
+
+  await applyPlanningResult({
+    envelope: {
+      ok: true,
+      result: {
+        decision: 'NEXT_GOAL', nextGoalId: '023', nextGoalTitle: 'x',
+        nextGoalPath: 'docs/migration/goals/023-x.md',
+        developerProfile: 'SONNET_HIGH', developerProfileReason: null,
+      },
+    },
+    goalId: '022',
+    absPlan: '/plan',
+    planningDiffBase: 'f'.repeat(40),
+    repoRoot: '/repo',
+    emit: () => {},
+    machineState: 'NEXT_GOAL_PLANNING',
+    persistClosure: async () => {},
+    profileStore: { write: async () => {} },
+    planStore: { write: async () => ({ workUnitCount: 0, types: {}, fragmentation: null }) },
+    store: { appendEvent: async () => {} },
+    collectWorktreeChanges,
+    assertClosureScope: () => true,
+  });
+
+  assert.equal(seen.length, 1, 'exactly one diff, so there is one answer to disagree with');
+  assert.equal(seen[0].baseSha, 'f'.repeat(40), 'the branch point, whatever the accepted baseline happens to be');
+  assert.equal(seen[0].absPlan, '/plan');
 });

@@ -34,6 +34,7 @@ export type OnboardingDraft = {
   serviceId?: string;
   serviceName: string;
   serviceOperational: boolean;
+  servicePopulation: "IMPORT" | "SCRATCH";
   servicePrice: string;
   servicePriceType: "FIXED" | "STARTING_AT" | "ON_REQUEST" | "NOT_INFORMED";
   startTime: string;
@@ -62,6 +63,7 @@ const initialDraft: OnboardingDraft = {
   serviceDuration: 60,
   serviceName: "",
   serviceOperational: false,
+  servicePopulation: "SCRATCH",
   servicePrice: "",
   servicePriceType: "FIXED",
   startTime: "09:00",

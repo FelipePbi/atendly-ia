@@ -328,6 +328,44 @@ describe("ImportExecutionService: processamento por item com checkpoint", () => 
   });
 });
 
+describe("ImportExecutionService: categoria desmarcada em 'Escolher o que importar' (Goal020, WU-02)", () => {
+  it("pula os itens da categoria desmarcada com motivo, e importa as demais normalmente", async () => {
+    const { database, preview, execution } = setup();
+    const snapshot = buildSnapshot({
+      services: category("SERVICE", [
+        { externalId: "900", raw: sourceService() },
+      ]),
+      customers: category("CUSTOMER", [
+        { externalId: "500", raw: sourceCustomer() },
+      ]),
+    });
+    const { sessionId, reader } = await analyzed(database, preview, snapshot);
+
+    await preview.setCategorySelection(
+      { tenantId, sessionId },
+      "CUSTOMER",
+      false,
+    );
+
+    const result = await execution.execute(
+      { tenantId, sessionId, userId: "user-1" },
+      reader,
+      snapshotInput,
+      { previewVersion: 1 },
+    );
+
+    const services = itemsByCategory(database, "SERVICE");
+    const customers = itemsByCategory(database, "CUSTOMER");
+    expect(services[0]?.status).toBe("IMPORTED");
+    expect(customers[0]?.status).toBe("SKIPPED");
+    expect(customers[0]?.reasonCode).toBe("CATEGORY_NOT_SELECTED");
+    // Motivo, nunca silêncio: nenhum cliente foi criado, mas o item deixa
+    // rastro do porquê.
+    expect(database.tables.customer.rows).toHaveLength(0);
+    expect(result.counts.skipped).toBe(1);
+  });
+});
+
 describe("ImportExecutionService: falha parcial e contagens reais", () => {
   it("um registro fora do contrato marca só aquele item e a sessão fica parcial", async () => {
     const { database, preview, execution } = setup();

@@ -431,6 +431,34 @@ const importDecisionResponseSchema = z.object({
 const importCategoryCountsSchema = importCountsSchema.extend({
   category: importCategorySchema,
 });
+// --- Estado da importacao e selecao de categoria (Goal020, WU-003) ---------
+const importRightSchema = z.object({
+  available: z.boolean(),
+  sessionId: z.string().nullable(),
+  completedAt: z.string().nullable(),
+});
+const importLiveSessionCategorySchema = importCategoryCountsSchema.extend({
+  selected: z.boolean(),
+});
+const importLiveSessionSchema = z.object({
+  sessionId: z.string(),
+  status: importSessionStatusSchema,
+  previewVersion: z.number().int().nonnegative(),
+  provider: z.enum(["MINHA_AGENDA"]),
+  sourceAccountId: z.string(),
+  sourceAccountLabel: z.string().nullable(),
+  createdAt: z.string(),
+  startedAt: z.string().nullable(),
+  finishedAt: z.string().nullable(),
+  previewGeneratedAt: z.string().nullable(),
+  counts: importCountsSchema,
+  categories: z.array(importLiveSessionCategorySchema),
+});
+const importCategorySelectionResultSchema = z.object({
+  sessionId: z.string(),
+  category: importCategorySchema,
+  selected: z.boolean(),
+});
 const importExecutionResultSchema = z.object({
   sessionId: z.string(),
   previewVersion: z.number().int().nonnegative(),
@@ -473,6 +501,16 @@ const importCompletionResultSchema = z.object({
       pendingCount: z.number().int().nonnegative(),
     })
     .nullable(),
+});
+
+const importHistoryResultSchema = importCompletionResultSchema.extend({
+  startedAt: z.string().nullable(),
+  finishedAt: z.string().nullable(),
+});
+const importStateSchema = z.object({
+  right: importRightSchema,
+  session: importLiveSessionSchema.nullable(),
+  history: importHistoryResultSchema.nullable(),
 });
 
 const envelope = <T extends z.ZodType>(schema: T) =>
@@ -1144,6 +1182,30 @@ export class SchedulingClient {
   }
 
   // --- Importacao unica (Goal010, WU-09) -----------------------------------
+
+  // Leitura pura do estado da importacao (direito, sessao viva e historico),
+  // sem nenhum efeito: negocio sem conexao, sem sessao e sem historico e
+  // estado valido e vazio, nunca erro.
+  async importState(context: InternalRequestContext) {
+    return this.get(context, "/internal/calendar/imports", importStateSchema);
+  }
+
+  async setImportCategorySelection(
+    context: InternalRequestContext,
+    sessionId: string,
+    category: string,
+    input: { selected: boolean },
+    idempotencyKey: string,
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      `/internal/calendar/imports/${encodeURIComponent(sessionId)}/categories/${encodeURIComponent(category)}/selection`,
+      input,
+      importCategorySelectionResultSchema,
+      idempotencyKey,
+    );
+  }
 
   async startImport(
     context: InternalRequestContext,

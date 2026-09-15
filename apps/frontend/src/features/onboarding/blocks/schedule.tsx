@@ -62,16 +62,33 @@ export function scheduleStepBody(
   if (scenario === "agenda-atendly-metodo")
     return (
       <>
-        <Choice
-          selected
-          title="Começar do zero"
-          copy="Cadastre seu primeiro serviço e disponibilidade agora."
-          onClick={() => undefined}
-        />
-        <div className="onboarding-note">
-          <Icon name="info" />
-          <span>A importação única será habilitada no fluxo de migração.</span>
+        <div className="choice-grid">
+          <Choice
+            selected={draft.servicePopulation === "SCRATCH"}
+            title="Começar do zero"
+            copy="Cadastre seu primeiro serviço e disponibilidade agora."
+            onClick={() =>
+              setDraft((value) => ({ ...value, servicePopulation: "SCRATCH" }))
+            }
+          />
+          <Choice
+            selected={draft.servicePopulation === "IMPORT"}
+            title="Importar do Minha Agenda"
+            copy="Traga serviços, clientes, horários e agendamentos de uma vez."
+            onClick={() =>
+              setDraft((value) => ({ ...value, servicePopulation: "IMPORT" }))
+            }
+          />
         </div>
+        {draft.servicePopulation === "IMPORT" && (
+          <div className="onboarding-note">
+            <Icon name="info" />
+            <span>
+              A importação acontece depois, em Configurações → Agenda. Cadastre
+              pelo menos um serviço agora para já ver a IA em ação.
+            </span>
+          </div>
+        )}
       </>
     );
   if (scenario === "servico-nome")

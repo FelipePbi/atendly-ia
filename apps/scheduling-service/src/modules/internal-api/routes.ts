@@ -59,8 +59,11 @@ import {
   type ImportCompletionResult,
   ImportCompletionService,
   ImportExecutionService,
+  type ImportHistoryEntry,
+  type ImportLiveSession,
   type ImportPreviewResult,
   ImportPreviewService,
+  type ImportRight,
 } from "../migrations/index.js";
 import { AtendlyServiceService } from "../services/atendly-service-service.js";
 
@@ -351,6 +354,9 @@ const executeImportBodySchema = z.object({
 });
 const completeImportBodySchema = z.object({
   acceptPending: z.boolean().optional(),
+});
+const setImportCategorySelectionBodySchema = z.object({
+  selected: z.boolean(),
 });
 // `MERGE_WITH_EXISTING`/`KEEP_EXISTING` apontam para um registro ja
 // cadastrado: sem alvo explicito a decisao nao tem o que preservar.
@@ -1208,6 +1214,27 @@ export async function registerManagementRoutes(
   // silenciosamente ignorado pelo `zod` (`z.object` descarta chave
   // desconhecida por padrao).
 
+  // Leitura pura do estado da importação do negócio: direito, sessão viva
+  // (quando houver) e histórico (quando concluída). Nunca abre sessão, muda
+  // status, incrementa previewVersion ou consome o direito — é por isso que
+  // ela não passa por `requireIntegration`: negócio sem conexão, sem sessão
+  // e sem histórico é estado válido e vazio, não erro.
+  app.get("/internal/calendar/imports", internalOnly, async (request) => {
+    const context = currentInternalContext(request);
+    requireHumanCaller(context);
+    const completion = new ImportCompletionService(prisma);
+    const [right, session, history] = await Promise.all([
+      completion.getImportRight(context.tenantId),
+      completion.getLiveSession(context.tenantId),
+      completion.getHistory(context.tenantId),
+    ]);
+    return data(request, {
+      right: importRightDto(right),
+      session: session ? importLiveSessionDto(session) : null,
+      history: history ? importHistoryDto(history) : null,
+    });
+  });
+
   app.post("/internal/calendar/imports", internalOnly, async (request) => {
     const context = currentInternalContext(request);
     requireHumanCaller(context);
@@ -1303,6 +1330,42 @@ export async function registerManagementRoutes(
         offset: query.offset,
         items: page.map(importItemDto),
       });
+    },
+  );
+
+  // Escolher o que importar (Goal020, WU-02): marca/desmarca uma categoria
+  // inteira da sessao. So muda `selected` — nunca invalida o preview nem
+  // mexe em `previewVersion`, porque a escolha de categoria e ortogonal a
+  // reanalise da origem (`ImportPreviewService.analyze` preserva o valor
+  // vigente na reanalise, ver import-preview-service.ts).
+  app.post(
+    "/internal/calendar/imports/:sessionId/categories/:category/selection",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      requireHumanCaller(context);
+      const key = idempotencyKey(request);
+      const { sessionId, category } = parse(
+        importCategoryParamsSchema,
+        request.params,
+      );
+      const body = parse(setImportCategorySelectionBodySchema, request.body);
+      const result = await withImportIdempotency(
+        prisma,
+        {
+          tenantId: context.tenantId,
+          key,
+          operation: "import.category.selection",
+          request: { sessionId, category, ...body },
+        },
+        () =>
+          new ImportPreviewService(prisma).setCategorySelection(
+            { tenantId: context.tenantId, sessionId },
+            category,
+            body.selected,
+          ),
+      );
+      return data(request, result);
     },
   );
 
@@ -2015,6 +2078,33 @@ function importCompletionDto(
           acceptedAt: result.pendingAcceptance.acceptedAt.toISOString(),
         }
       : null,
+  };
+}
+
+function importRightDto(right: ImportRight): Record<string, unknown> {
+  return {
+    ...right,
+    completedAt: right.completedAt?.toISOString() ?? null,
+  };
+}
+
+function importLiveSessionDto(
+  session: ImportLiveSession,
+): Record<string, unknown> {
+  return {
+    ...session,
+    createdAt: session.createdAt.toISOString(),
+    startedAt: session.startedAt?.toISOString() ?? null,
+    finishedAt: session.finishedAt?.toISOString() ?? null,
+    previewGeneratedAt: session.previewGeneratedAt?.toISOString() ?? null,
+  };
+}
+
+function importHistoryDto(entry: ImportHistoryEntry): Record<string, unknown> {
+  return {
+    ...importCompletionDto(entry),
+    startedAt: entry.startedAt?.toISOString() ?? null,
+    finishedAt: entry.finishedAt?.toISOString() ?? null,
   };
 }
 

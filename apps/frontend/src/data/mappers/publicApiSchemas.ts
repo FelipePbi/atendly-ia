@@ -1139,6 +1139,52 @@ export const importCompletionSchema = z.object({
     .nullable(),
 });
 
+// --- Estado da importação e seleção de categoria (Goal020, WU-003/WU-004) --
+// Espelham `GET /v1/calendar/imports` e `POST .../categories/:category/
+// selection` em PUBLIC_API_V1.md: leitura pura do direito/sessão/histórico e
+// a marcação de categoria, que não muda `previewVersion` nem os itens.
+export const importRightSchema = z.object({
+  available: z.boolean(),
+  sessionId: z.string().nullable(),
+  completedAt: isoDateTimeSchema.nullable(),
+});
+
+const importLiveSessionCategorySchema = importCategoryCountsSchema.extend({
+  selected: z.boolean(),
+});
+
+export const importLiveSessionSchema = z.object({
+  sessionId: z.string().min(1),
+  status: importSessionStatusSchema,
+  previewVersion: z.number().int().nonnegative(),
+  provider: z.enum(["MINHA_AGENDA"]),
+  sourceAccountId: z.string().min(1),
+  sourceAccountLabel: z.string().nullable(),
+  createdAt: isoDateTimeSchema,
+  startedAt: isoDateTimeSchema.nullable(),
+  finishedAt: isoDateTimeSchema.nullable(),
+  previewGeneratedAt: isoDateTimeSchema.nullable(),
+  counts: importCountsSchema,
+  categories: z.array(importLiveSessionCategorySchema),
+});
+
+export const importHistorySchema = importCompletionSchema.extend({
+  startedAt: isoDateTimeSchema.nullable(),
+  finishedAt: isoDateTimeSchema.nullable(),
+});
+
+export const importStateSchema = z.object({
+  right: importRightSchema,
+  session: importLiveSessionSchema.nullable(),
+  history: importHistorySchema.nullable(),
+});
+
+export const importCategorySelectionResultSchema = z.object({
+  sessionId: z.string().min(1),
+  category: importCategorySchema,
+  selected: z.boolean(),
+});
+
 export type Migration = z.infer<typeof migrationSchema>;
 export type MigrationDiagnosis = z.infer<typeof migrationDiagnosisSchema>;
 export type MigrationStart = z.infer<typeof migrationStartSchema>;
@@ -1156,6 +1202,13 @@ export type ImportDecision = z.infer<typeof importDecisionSchema>;
 export type ImportExecution = z.infer<typeof importExecutionSchema>;
 export type ImportProgress = z.infer<typeof importProgressSchema>;
 export type ImportCompletion = z.infer<typeof importCompletionSchema>;
+export type ImportRight = z.infer<typeof importRightSchema>;
+export type ImportLiveSession = z.infer<typeof importLiveSessionSchema>;
+export type ImportHistory = z.infer<typeof importHistorySchema>;
+export type ImportState = z.infer<typeof importStateSchema>;
+export type ImportCategorySelectionResult = z.infer<
+  typeof importCategorySelectionResultSchema
+>;
 export type IgnoredContact = z.infer<typeof ignoredContactSchema>;
 export type OnboardingState = z.infer<typeof onboardingStateSchema>;
 export type Service = z.infer<typeof serviceSchema>;

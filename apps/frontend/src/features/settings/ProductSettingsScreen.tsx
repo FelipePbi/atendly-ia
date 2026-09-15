@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 
 import type { AiTone, BusinessModality, SettingsState } from "@/data";
+import { ImportSettingsSection } from "@/features/imports/ImportSettingsSection";
 import {
   BUSINESS_MODALITY_OPTIONS,
   FREQUENT_BUSINESS_SEGMENTS,
@@ -594,6 +595,7 @@ function CalendarSettings({ settings }: { settings: SettingsState }) {
           </span>
         </div>
       </section>
+      <ImportSettingsSection />
     </Page>
   );
 }

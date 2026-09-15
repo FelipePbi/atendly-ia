@@ -10,6 +10,8 @@ export {
   type ImportCompletionResult,
   ImportCompletionService,
   type ImportHistoryEntry,
+  type ImportLiveSession,
+  type ImportLiveSessionCategoryResult,
   type ImportPendingAcceptance,
   type ImportRight,
   type StartImportSessionInput,
@@ -41,6 +43,8 @@ export {
 } from "./import-lease.js";
 export {
   CATEGORY_ENTITY_TYPE,
+  IMPORT_SESSION_CATEGORY_NOT_FOUND,
+  IMPORT_SESSION_NOT_SELECTABLE,
   type ImportMatchClass,
   type ImportPreviewCategoryResult,
   type ImportPreviewItemResult,

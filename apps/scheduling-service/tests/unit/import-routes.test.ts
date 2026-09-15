@@ -151,6 +151,22 @@ function seedItem(
   });
 }
 
+function seedCategory(
+  db: Database,
+  sessionId: string,
+  overrides: Partial<Record<string, unknown>> = {},
+) {
+  return db.client.importSessionCategory.create({
+    data: {
+      tenantId,
+      sessionId,
+      category: "SERVICE",
+      selected: true,
+      ...overrides,
+    },
+  });
+}
+
 describe("import routes (Goal010, WU-08)", () => {
   let db: Database;
   let app: FastifyInstance;
@@ -162,6 +178,156 @@ describe("import routes (Goal010, WU-08)", () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  describe("GET /internal/calendar/imports (estado)", () => {
+    it("is a valid, empty response for a business without connection, session or history", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/internal/calendar/imports",
+        headers: headers(),
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data).toEqual({
+        right: { available: true, sessionId: null, completedAt: null },
+        session: null,
+        history: null,
+      });
+    });
+
+    it("reflects the live session's counts, selected flags and source identity", async () => {
+      const session = await seedSession(db, {
+        sourceAccountId: "external-account-9",
+        sourceAccountLabel: "Salao da Ana",
+        status: "PARTIAL",
+        previewVersion: 2,
+      });
+      await seedCategory(db, session.id, { category: "SERVICE", selected: true });
+      await seedCategory(db, session.id, {
+        category: "CUSTOMER",
+        selected: false,
+      });
+      await seedItem(db, session.id, { externalId: "s-1", status: "IMPORTED" });
+      await seedItem(db, session.id, {
+        category: "CUSTOMER",
+        externalId: "c-1",
+        status: "PENDING",
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/internal/calendar/imports",
+        headers: headers(),
+      });
+      expect(response.statusCode).toBe(200);
+      const body = response.json().data;
+      expect(body.right).toEqual({
+        available: true,
+        sessionId: null,
+        completedAt: null,
+      });
+      expect(body.history).toBeNull();
+      expect(body.session).toMatchObject({
+        sessionId: session.id,
+        status: "PARTIAL",
+        previewVersion: 2,
+        sourceAccountId: "external-account-9",
+        sourceAccountLabel: "Salao da Ana",
+      });
+      expect(body.session.counts).toEqual({
+        pending: 1,
+        imported: 1,
+        skipped: 0,
+        failed: 0,
+        needsReview: 0,
+      });
+      const serviceCategory = body.session.categories.find(
+        (entry: { category: string }) => entry.category === "SERVICE",
+      );
+      expect(serviceCategory).toMatchObject({ selected: true, imported: 1 });
+      const customerCategory = body.session.categories.find(
+        (entry: { category: string }) => entry.category === "CUSTOMER",
+      );
+      expect(customerCategory).toMatchObject({ selected: false, pending: 1 });
+    });
+
+    it("reflects the history and no live session once completed, never the stored credential", async () => {
+      seedConnection(db);
+      const session = await seedSession(db, { status: "READY" });
+      await seedItem(db, session.id, { status: "IMPORTED" });
+      await app.inject({
+        method: "POST",
+        url: `/internal/calendar/imports/${session.id}/complete`,
+        headers: { ...headers(), "idempotency-key": "complete-state-1" },
+        payload: {},
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/internal/calendar/imports",
+        headers: headers(),
+      });
+      expect(response.statusCode).toBe(200);
+      const body = response.json().data;
+      expect(body.session).toBeNull();
+      expect(body.right).toMatchObject({
+        available: false,
+        sessionId: session.id,
+      });
+      expect(body.history).toMatchObject({
+        sessionId: session.id,
+        status: "COMPLETED",
+      });
+      const raw = JSON.stringify(response.json());
+      expect(raw).not.toContain(rawCredentials.basicAuth);
+      expect(raw).not.toContain(rawCredentials.password);
+    });
+
+    it("does not open a session, change status or bump previewVersion by being called", async () => {
+      const session = await seedSession(db, {
+        status: "READY",
+        previewVersion: 2,
+      });
+      await app.inject({
+        method: "GET",
+        url: "/internal/calendar/imports",
+        headers: headers(),
+      });
+      const row = db.tables.importSession.rows.find(
+        (candidate) => candidate.id === session.id,
+      );
+      expect(row?.status).toBe("READY");
+      expect(row?.previewVersion).toBe(2);
+      expect(db.tables.importSession.rows).toHaveLength(1);
+    });
+
+    it("rejects the AI caller", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/internal/calendar/imports",
+        headers: headers({ token: aiToken }),
+      });
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.code).toBe("AI_CALLER_NOT_ALLOWED");
+    });
+  });
+
+  describe("tenant isolation of the imports state", () => {
+    it("does not see another tenant's live session or history", async () => {
+      const session = await seedSession(db);
+      await seedItem(db, session.id, { status: "IMPORTED" });
+      const response = await app.inject({
+        method: "GET",
+        url: "/internal/calendar/imports",
+        headers: { ...headers(), "x-tenant-id": otherTenantId },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data).toEqual({
+        right: { available: true, sessionId: null, completedAt: null },
+        session: null,
+        history: null,
+      });
+    });
   });
 
   describe("POST /internal/calendar/imports (registrar origem)", () => {
@@ -311,6 +477,126 @@ describe("import routes (Goal010, WU-08)", () => {
           (item: { status: string }) => item.status === "NEEDS_REVIEW",
         ),
       ).toBe(true);
+    });
+  });
+
+  describe("POST /internal/calendar/imports/:sessionId/categories/:category/selection", () => {
+    it("requires Idempotency-Key", async () => {
+      const session = await seedSession(db);
+      await seedCategory(db, session.id, { category: "SERVICE" });
+      const response = await app.inject({
+        method: "POST",
+        url: `/internal/calendar/imports/${session.id}/categories/SERVICE/selection`,
+        headers: headers(),
+        payload: { selected: false },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe("IDEMPOTENCY_KEY_REQUIRED");
+    });
+
+    it("404s for an unknown session", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/internal/calendar/imports/missing/categories/SERVICE/selection",
+        headers: { ...headers(), "idempotency-key": "selection-missing-session" },
+        payload: { selected: false },
+      });
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error.code).toBe("IMPORT_SESSION_NOT_FOUND");
+    });
+
+    it("404s for a category this session never discovered", async () => {
+      const session = await seedSession(db);
+      const response = await app.inject({
+        method: "POST",
+        url: `/internal/calendar/imports/${session.id}/categories/SERVICE/selection`,
+        headers: { ...headers(), "idempotency-key": "selection-missing-category" },
+        payload: { selected: false },
+      });
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error.code).toBe("IMPORT_SESSION_CATEGORY_NOT_FOUND");
+    });
+
+    it("deselects a category without touching previewVersion or the items", async () => {
+      const session = await seedSession(db, { previewVersion: 5 });
+      await seedCategory(db, session.id, { category: "SERVICE", selected: true });
+      const item = await seedItem(db, session.id, {
+        category: "SERVICE",
+        status: "PENDING",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/internal/calendar/imports/${session.id}/categories/SERVICE/selection`,
+        headers: { ...headers(), "idempotency-key": "selection-1" },
+        payload: { selected: false },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json().data;
+      expect(body).toEqual({
+        sessionId: session.id,
+        category: "SERVICE",
+        selected: false,
+      });
+      const row = db.tables.importSessionCategory.rows.find(
+        (candidate) => candidate.sessionId === session.id,
+      );
+      expect(row?.selected).toBe(false);
+      const refreshedSession = db.tables.importSession.rows.find(
+        (candidate) => candidate.id === session.id,
+      );
+      expect(refreshedSession?.previewVersion).toBe(5);
+      const refreshedItem = db.tables.importItem.rows.find(
+        (candidate) => candidate.id === item.id,
+      );
+      expect(refreshedItem?.status).toBe("PENDING");
+    });
+
+    it("reselects a category back to true", async () => {
+      const session = await seedSession(db);
+      await seedCategory(db, session.id, { category: "SERVICE", selected: false });
+      const response = await app.inject({
+        method: "POST",
+        url: `/internal/calendar/imports/${session.id}/categories/SERVICE/selection`,
+        headers: { ...headers(), "idempotency-key": "selection-2" },
+        payload: { selected: true },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.selected).toBe(true);
+    });
+
+    it.each(["COMPLETED", "FAILED", "SUPERSEDED"] as const)(
+      "refuses to choose categories once the session is %s",
+      async (status) => {
+        const session = await seedSession(db, { status });
+        await seedCategory(db, session.id, { category: "SERVICE" });
+        const response = await app.inject({
+          method: "POST",
+          url: `/internal/calendar/imports/${session.id}/categories/SERVICE/selection`,
+          headers: { ...headers(), "idempotency-key": `selection-terminal-${status}` },
+          payload: { selected: false },
+        });
+        expect(response.statusCode).toBe(409);
+        expect(response.json().error.code).toBe("IMPORT_SESSION_NOT_SELECTABLE");
+      },
+    );
+
+    it("does not choose another tenant's category", async () => {
+      const session = await seedSession(db);
+      await seedCategory(db, session.id, { category: "SERVICE" });
+      const response = await app.inject({
+        method: "POST",
+        url: `/internal/calendar/imports/${session.id}/categories/SERVICE/selection`,
+        headers: {
+          ...headers(),
+          "x-tenant-id": otherTenantId,
+          "idempotency-key": "selection-cross-tenant",
+        },
+        payload: { selected: false },
+      });
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error.code).toBe("IMPORT_SESSION_NOT_FOUND");
     });
   });
 

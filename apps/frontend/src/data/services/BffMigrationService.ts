@@ -2,6 +2,7 @@ import { type BffHttpClient } from "../http/BffHttpClient";
 import {
   type CalendarSource,
   type ImportCategory,
+  importCategorySelectionResultSchema,
   importCompletionSchema,
   type ImportDecisionKind,
   importDecisionSchema,
@@ -11,6 +12,7 @@ import {
   importPreviewSchema,
   importProgressSchema,
   importSessionStartSchema,
+  importStateSchema,
   migrationDiagnosisSchema,
   migrationSchema,
   migrationStartSchema,
@@ -30,6 +32,10 @@ export interface ImportDecisionInput {
   decision: ImportDecisionKind;
   targetInternalId?: string;
   noteCode?: string;
+}
+
+export interface SetImportCategorySelectionInput {
+  selected: boolean;
 }
 
 export interface ExecuteImportInput {
@@ -82,6 +88,15 @@ export class BffMigrationService {
     });
   }
 
+  /** Direito, sessão viva e histórico da importação do negócio; sem efeito. */
+  getImportState(signal?: AbortSignal) {
+    return this.http.request({
+      path: "/v1/calendar/imports",
+      schema: importStateSchema,
+      signal,
+    });
+  }
+
   /** Abre a sessão de importação do negócio. */
   startImport(
     input: StartImportInput,
@@ -125,6 +140,24 @@ export class BffMigrationService {
       path: `/v1/calendar/imports/${encodeURIComponent(sessionId)}/categories/${encodeURIComponent(category)}/items`,
       query,
       schema: importItemsPageSchema,
+      signal,
+    });
+  }
+
+  /** Marca/desmarca uma categoria inteira; não muda `previewVersion` nem os itens. */
+  setImportCategorySelection(
+    sessionId: string,
+    category: ImportCategory,
+    input: SetImportCategorySelectionInput,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ) {
+    return this.http.request({
+      body: input,
+      headers: { "idempotency-key": idempotencyKey },
+      method: "POST",
+      path: `/v1/calendar/imports/${encodeURIComponent(sessionId)}/categories/${encodeURIComponent(category)}/selection`,
+      schema: importCategorySelectionResultSchema,
       signal,
     });
   }

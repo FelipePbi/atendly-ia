@@ -40,6 +40,7 @@ describe("RouteAnnouncer", () => {
       ["/conversas", "Conversas"],
       ["/agenda", "Agenda"],
       ["/clientes", "Clientes"],
+      ["/importacao", "Importação"],
       ["/login", "Entrar"],
       ["/configuracoes/ia", "Configurações"],
     ] as const) {

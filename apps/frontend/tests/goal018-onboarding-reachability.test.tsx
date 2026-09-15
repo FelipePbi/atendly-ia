@@ -356,6 +356,37 @@ describe("o encadeamento real de dados-do-negocio até validação", () => {
     expect(push).toHaveBeenCalledWith("/onboarding/servico-nome");
   });
 
+  test("agenda-atendly-metodo oferece as duas opções como escolha real, sem promessa de habilitação futura", async () => {
+    const user = userEvent.setup();
+    renderScreen(
+      "agenda-atendly-metodo",
+      stateFixture({ ...businessDone, ...calendarDone }),
+    );
+    expect(
+      screen.queryByText("A importação única será habilitada no fluxo de migração."),
+    ).not.toBeInTheDocument();
+
+    const scratch = await screen.findByRole("button", {
+      name: /Começar do zero/,
+    });
+    const imported = screen.getByRole("button", {
+      name: /Importar do Minha Agenda/,
+    });
+    expect(scratch.className).toContain("is-selected");
+    expect(imported.className).not.toContain("is-selected");
+
+    await user.click(imported);
+    expect(imported.className).toContain("is-selected");
+    expect(scratch.className).not.toContain("is-selected");
+    expect(
+      screen.getByText(/A importação acontece depois, em Configurações/),
+    ).toBeInTheDocument();
+
+    // Continua alcançando servico-nome independente da escolha (Goal020/WU-09).
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    expect(push).toHaveBeenCalledWith("/onboarding/servico-nome");
+  });
+
   test("servico-nome salva e avança para servico-duracao", async () => {
     const user = userEvent.setup();
     renderScreen(

@@ -148,6 +148,28 @@ export interface ImportRight {
   completedAt: Date | null;
 }
 
+export interface ImportLiveSessionCategoryResult extends ImportCompletionCounts {
+  category: ImportCategory;
+  /** "Importar tudo" nasce selecionada; "Escolher o que importar" desmarca. */
+  selected: boolean;
+}
+
+/** Estado da sessão viva, para a tela de importação ler ao abrir. */
+export interface ImportLiveSession {
+  sessionId: string;
+  status: ImportSessionStatus;
+  previewVersion: number;
+  provider: IntegrationProvider;
+  sourceAccountId: string;
+  sourceAccountLabel: string | null;
+  createdAt: Date;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  previewGeneratedAt: Date | null;
+  counts: ImportCompletionCounts;
+  categories: ImportLiveSessionCategoryResult[];
+}
+
 export interface StartImportSessionInput {
   tenantId: string;
   userId: string;
@@ -273,6 +295,61 @@ export class ImportCompletionService {
       available: false,
       sessionId: completed.id,
       completedAt: completed.completedAt,
+    };
+  }
+
+  /**
+   * A sessão viva do negócio, se houver — mesmo critério de `startSession`
+   * (`LIVE_STATUSES`). `null` quando não há sessão em curso, o que é resposta
+   * válida (nunca abriu, ou já concluiu). As contagens vêm de `ImportItem`,
+   * não dos contadores cacheados na sessão, pelo mesmo motivo de
+   * {@link describe}: o item é a linha que existe.
+   */
+  async getLiveSession(tenantId: string): Promise<ImportLiveSession | null> {
+    const session = await this.prisma.importSession.findFirst({
+      where: { tenantId, status: { in: LIVE_STATUSES } },
+      orderBy: { createdAt: "asc" },
+    });
+    if (!session) return null;
+
+    const [items, categories] = await Promise.all([
+      this.prisma.importItem.findMany({
+        where: { tenantId, sessionId: session.id },
+      }),
+      this.prisma.importSessionCategory.findMany({
+        where: { tenantId, sessionId: session.id },
+      }),
+    ]);
+    const selectedByCategory = new Map(
+      categories.map((entry) => [entry.category, entry.selected]),
+    );
+    const seen = new Set<ImportCategory>([
+      ...categories.map((entry) => entry.category),
+      ...items.map((item) => item.category),
+    ]);
+    const perCategory: ImportLiveSessionCategoryResult[] = [];
+    for (const category of CATEGORY_ORDER) {
+      if (!seen.has(category)) continue;
+      perCategory.push({
+        category,
+        selected: selectedByCategory.get(category) ?? true,
+        ...tally(items.filter((item) => item.category === category)),
+      });
+    }
+
+    return {
+      sessionId: session.id,
+      status: session.status,
+      previewVersion: session.previewVersion,
+      provider: session.provider,
+      sourceAccountId: session.sourceAccountId,
+      sourceAccountLabel: session.sourceAccountLabel,
+      createdAt: session.createdAt,
+      startedAt: session.startedAt,
+      finishedAt: session.finishedAt,
+      previewGeneratedAt: session.previewGeneratedAt,
+      counts: tally(items),
+      categories: perCategory,
     };
   }
 

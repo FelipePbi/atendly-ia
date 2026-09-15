@@ -21,7 +21,7 @@
 
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
   type Appointment,
@@ -223,6 +223,10 @@ async function tabUntilFocused(
 }
 
 beforeEach(() => {
+  // AgendaBoard usa `new Date()` para o cursor inicial; as fixtures abaixo
+  // são todas ancoradas em ISO_TODAY, então o relógio precisa ficar preso
+  // nela — sem isso a suíte quebra sozinha assim que o dia real avança.
+  vi.setSystemTime(new Date(`${ISO_TODAY}T12:00:00.000Z`));
   for (const spy of [
     push,
     replace,
@@ -257,6 +261,10 @@ beforeEach(() => {
   listAvailabilityExceptions.mockResolvedValue([]);
   listTimeBlocks.mockResolvedValue([]);
   releaseHold.mockResolvedValue(holdFixture({ status: "RELEASED" }));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("grades da agenda (Dia, Semana e Mês)", () => {

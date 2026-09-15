@@ -92,6 +92,22 @@ export const CATEGORY_ENTITY_TYPE: Record<ImportCategory, ExternalEntityType> = 
 /** Sessao ainda analisavel: nao comecou execucao nem chegou a um terminal. */
 const ANALYZABLE_STATUSES = new Set(["DRAFT", "ANALYZING", "READY", "PARTIAL"]);
 
+/** A sessao ja terminou (Goal020, WU-02): nao ha mais o que escolher. */
+export const IMPORT_SESSION_NOT_SELECTABLE = "IMPORT_SESSION_NOT_SELECTABLE";
+/** A categoria pedida nunca foi descoberta por uma analise desta sessao. */
+export const IMPORT_SESSION_CATEGORY_NOT_FOUND =
+  "IMPORT_SESSION_CATEGORY_NOT_FOUND";
+
+/**
+ * `COMPLETED` ja importou, `FAILED` e `SUPERSEDED` nao seguem para execucao
+ * nenhuma: escolher categoria depois disso e decisao sem efeito. `EXECUTING`
+ * fica de fora de proposito, no mesmo espirito do WU-06 — a escolha so vale
+ * na proxima passada, e recusa-la no meio de uma corrente ja em andamento
+ * nao protege nada que a leitura fresca de categorias no inicio de cada
+ * `execute()` nao ja resolva.
+ */
+const TERMINAL_SESSION_STATUSES = new Set(["COMPLETED", "FAILED", "SUPERSEDED"]);
+
 /** Item ja resolvido por uma execucao anterior: reanalise nunca reverte. */
 const RESOLVED_ITEM_STATUSES = new Set<ImportItemStatus>([
   "IMPORTED",
@@ -471,6 +487,67 @@ export class ImportPreviewService {
         },
       );
     }
+  }
+
+  /**
+   * Escreve `selected` por sessao e categoria (Goal020, WU-02): o unico
+   * outro escritor deste campo e o upsert do preview acima, que so cria com
+   * o default do schema e nunca toca `selected` numa reanalise — a escolha
+   * do negocio sobrevive a qualquer numero de reanalises. Esta escrita, por
+   * simetria, nunca toca `previewVersion` nem os itens da categoria: quem
+   * honra a escolha e o motor de execucao, lendo a mesma tabela no inicio de
+   * cada passada.
+   */
+  async setCategorySelection(
+    context: { tenantId: string; sessionId: string },
+    category: ImportCategory,
+    selected: boolean,
+  ): Promise<{ sessionId: string; category: ImportCategory; selected: boolean }> {
+    const session = await this.prisma.importSession.findUnique({
+      where: {
+        tenantId_id: { tenantId: context.tenantId, id: context.sessionId },
+      },
+    });
+    if (!session) {
+      throw new AppError(
+        "IMPORT_SESSION_NOT_FOUND",
+        "Import session was not found.",
+        404,
+      );
+    }
+    if (TERMINAL_SESSION_STATUSES.has(session.status)) {
+      throw new AppError(
+        IMPORT_SESSION_NOT_SELECTABLE,
+        `Import session cannot have its categories chosen while in status ${session.status}.`,
+        409,
+        { status: session.status },
+      );
+    }
+    const row = await this.prisma.importSessionCategory.findUnique({
+      where: {
+        tenantId_sessionId_category: {
+          tenantId: context.tenantId,
+          sessionId: context.sessionId,
+          category,
+        },
+      },
+    });
+    if (!row) {
+      throw new AppError(
+        IMPORT_SESSION_CATEGORY_NOT_FOUND,
+        "This session has not discovered this category yet.",
+        404,
+      );
+    }
+    const updated = await this.prisma.importSessionCategory.update({
+      where: { tenantId_id: { tenantId: context.tenantId, id: row.id } },
+      data: { selected },
+    });
+    return {
+      sessionId: context.sessionId,
+      category: updated.category,
+      selected: updated.selected,
+    };
   }
 }
 

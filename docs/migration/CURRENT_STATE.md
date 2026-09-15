@@ -1677,3 +1677,85 @@ abaixo. Há **três migrations** na IA e **uma** no BFF, todas aditivas e sem ba
   do teste exigem sessão. Elas foram verificadas em jsdom — estrutura, papéis e axe —, não em
   largura, contraste ou foco reais. Fidelidade visual à referência aprovada continua sendo
   conferência humana.
+
+## Delta aceito — Goal020, 2026-09-15 ([review020](reviews/020-review.md))
+
+A fotografia acima permanece como registro. Os fatos abaixo são do diff aceito na rodada 2 sobre a
+base `c977cbf`, sem commit nem deploy. O FATO de "Frontend, referência visual e contratos" que
+descreve a agenda/importação como não redesenhada e o residual do G-19/G-10 na fotografia de
+GAP_ANALYSIS estão parcialmente superados pelos fatos abaixo.
+
+- **FATO atual:** `GET /v1/calendar/imports` (BFF) e `GET /internal/calendar/imports`
+  (Scheduling) leem o estado da importação do negócio sem efeito — direito (`right`), sessão viva
+  (`session`, `null` se não houver) e histórico (`history`, `null` até a conclusão) — e nunca abrem
+  sessão, mudam status nem consomem o direito. `ImportCompletionService.getLiveSession` monta a
+  sessão viva a partir de `ImportItem`/`ImportSessionCategory` (mesma fonte de `describe`, não os
+  contadores cacheados na sessão), com `selected` por categoria e contagem por categoria.
+- **FATO atual:** `POST /v1/calendar/imports/:sessionId/categories/:category/selection` (BFF) e o
+  equivalente interno marcam/desmarcam uma categoria inteira da sessão (`selected`) sem tocar
+  `previewVersion` nem os itens; recusam com `IMPORT_SESSION_NOT_SELECTABLE` (409) em sessão
+  terminal (`COMPLETED`/`FAILED`/`SUPERSEDED`) e com `IMPORT_SESSION_CATEGORY_NOT_FOUND` (404)
+  quando a categoria nunca foi descoberta por uma análise da sessão; a escrita passa pela mesma
+  `withImportIdempotency` das demais rotas de importação, exigindo `Idempotency-Key`.
+- **FATO atual:** a experiência que o G-19 registrava como ausente existe. `/importacao`
+  (`features/imports/ImportsScreen`) lê o estado acima e decide a tela sem tentativa própria de
+  abrir sessão: conexão da origem (`ConnectSourceScreen`) quando não há sessão nem histórico,
+  retomar a sessão viva (`ImportPreviewScreen` antes da primeira execução, `ImportRunScreen`
+  depois) quando há sessão, ou só o histórico (`ImportHistoryCard`) quando concluída — sem oferecer
+  nova importação depois da conclusão. `ImportConflictsScreen` cobre as cinco decisões por item.
+  `ImportSettingsSection` é o ponto de entrada equivalente dentro de Configurações → Agenda, e o
+  item "Importação" do menu Mais passou a apontar para `/importacao` (antes
+  `/migracao/para-atendly`). `features/migration/` (`MigrationScreen`, `ProductMigrationScreen`,
+  `types.ts`), as rotas `app/(platform)/migracao/[step]` e `migracao/layout.tsx` e
+  `shared/styles/atendly-migration.css` (628 linhas, substituído por `atendly-imports.css`) saíram
+  do repositório; `RouteAnnouncer` perdeu o título de `/migracao`, sem consumidor restante.
+- **FATO atual:** o onboarding oferece uma escolha real entre começar do zero e importar. No bloco
+  `schedule`, `draft.servicePopulation` (`SCRATCH`/`IMPORT`) substitui a nota estática anterior; a
+  importação em si não roda no onboarding — a opção só orienta por copy para Configurações →
+  Agenda depois —, e o onboarding continua exigindo cadastro de ao menos um serviço na hora,
+  independentemente da escolha.
+- **FATO atual:** `PUBLIC_API_V1.md` passou a datar a ausência de consumidor de frontend do
+  protocolo pré-Goal010 (`POST /v1/calendar/migrations/diagnose`, `POST /v1/calendar/migrations`,
+  `GET /v1/calendar/migrations/:id`) a partir do fechamento do Goal010 (2026-09-12); o único
+  consumidor de frontend que ainda apresentava diagnóstico/status/source-target da agenda externa
+  (`ProductMigrationScreen`) foi removido neste diff.
+- **FATO atual:** "Importar tudo" não pode importar menos do que promete. O resumo de
+  `ImportPreviewScreen` inicializa a seleção a partir de `session.categories[].selected` e só cai
+  no "tudo" do `@default(true)` quando a sessão ainda não tem categoria nenhuma (sessão `DRAFT`
+  antes da primeira análise) — `collectCategorySnapshots` grava linha para as oito categorias em
+  qualquer `analyze`, então não há categoria "nova" que a tela marcaria como fora por engano. Com
+  alguma categoria desmarcada, o rótulo do CTA passa a `Importar N registros`, o painel diz que o
+  que ficar de fora não poderá ser importado depois e o botão fica desabilitado em `N = 0`. Isso
+  importa porque a execução marca categoria desmarcada como `SKIPPED/CATEGORY_NOT_SELECTED`, status
+  que `RESOLVED_ITEM_STATUSES` nunca reprocessa e que a conta de `outstanding` da conclusão exclui:
+  o que o resumo deixasse de fora sairia da única importação do negócio sem aparecer nem na
+  confirmação final nem no histórico.
+- **FATO atual:** a conclusão usa `Idempotency-Key` por corpo, não por tela. `ImportRunScreen`
+  guarda `{acceptPending, key}` e gera chave nova quando `acceptPending` muda, reusando-a na
+  retentativa do mesmo corpo. O domínio inclui `acceptPending` no hash da requisição idempotente e
+  `CalendarMutationIdempotency.claim` recusa a mesma chave com hash diferente (`409
+  IDEMPOTENCY_KEY_REUSED`) antes de qualquer reclaim — reusar a chave faria o caminho
+  `IMPORT_PENDING_ACCEPTANCE_REQUIRED` → confirmar → concluir falhar contra o backend real, com a
+  decisão irreversível sem saída dentro da tela. O guarda de dupla submissão continua sendo `ref`
+  antes de qualquer `await`.
+- **FATO atual:** `PUBLIC_API_V1.md` nomeia as recusas das duas rotas novas —
+  `IMPORT_SESSION_NOT_FOUND` (404, indistinguível de sessão de outro negócio),
+  `IMPORT_SESSION_NOT_SELECTABLE` (409, sessão terminal, com o `status` em `upstreamDetails`) e
+  `IMPORT_SESSION_CATEGORY_NOT_FOUND` (404, categoria que esta sessão nunca descobriu) —, declara
+  que `GET /v1/calendar/imports` não recusa por estado e registra que as duas chegam ao cliente
+  pelo envelope `UPSTREAM_ERROR` + `details.upstreamCode`.
+- **FATO atual:** `/importacao` tem título próprio no `RouteAnnouncer` (`Importação`); a entrada de
+  `/migracao` saiu junto com a rota, e `tests/ui/route-announcer.test.tsx` cobre o caso.
+- **LIMITE:** as nove suítes `goal020-*` novas no frontend (entrada por
+  estado, preview/seleção, conflitos, execução/conclusão, seção de Configurações, alcançabilidade,
+  invariante de shell, axe, schema) e as suítes de scheduling/BFF listadas no diff cobrem estrutura,
+  papéis, teclado e o contrato lido em `node`/jsdom — não largura, contraste, foco reais nem
+  execução contra a origem real do Minha Agenda. O gate de browser (`validate:ui`) continua
+  cobrindo só rotas públicas, e a fidelidade visual à referência aprovada continua sendo
+  conferência humana.
+- **LIMITE:** com origem que devolve zero registro em todas as categorias suportadas,
+  `selectedCount === 0` desabilita o CTA enquanto `everythingSelected` continua verdadeiro: o
+  rótulo fica "Importar tudo" desabilitado e o painel de explicação não renderiza, porque ele só
+  aparece quando algo está fora. Não há perda de dado nem decisão irreversível envolvida — a saída
+  "Descartar e conectar outra conta" segue disponível —, e o [review020](reviews/020-review.md)
+  registrou isso como observação não bloqueante.

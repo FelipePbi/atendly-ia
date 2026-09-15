@@ -16,8 +16,8 @@ const routeTitles: [RegExp, string][] = [
   [/^\/agenda/, "Agenda"],
   [/^\/clientes/, "Clientes"],
   [/^\/servicos/, "Serviços"],
+  [/^\/importacao/, "Importação"],
   [/^\/configuracoes/, "Configurações"],
-  [/^\/migracao/, "Migração de agenda"],
   [/^\/termos-de-uso$/, "Termos de Uso"],
   [/^\/politica-de-privacidade$/, "Política de Privacidade"],
 ];

@@ -77,7 +77,7 @@ export const MORE_DESTINATIONS: NavDestination[] = [
     section: "whatsapp",
   },
   {
-    href: "/migracao/para-atendly",
+    href: "/importacao",
     icon: "refresh",
     label: "Importação",
     section: "importacao",

@@ -1,0 +1,302 @@
+/*
+ * Importação única do Minha Agenda (Goal020). Não reaproveita
+ * `atendly-migration.css`: aquele arquivo é do protocolo de migração
+ * bidirecional legado, com saída prevista quando este módulo assumir os
+ * pontos de entrada.
+ */
+.imports-page {
+  display: grid;
+  gap: var(--s5);
+  max-width: 720px;
+}
+
+.imports-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  width: fit-content;
+}
+.imports-back:hover {
+  color: var(--fg);
+}
+.imports-back .icon {
+  width: 16px;
+  height: 16px;
+  transform: rotate(180deg);
+}
+
+.imports-header p.eyebrow {
+  margin-bottom: 4px;
+}
+.imports-header h1 {
+  font-size: 26px;
+}
+.imports-header p:last-child {
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+.imports-panel {
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  gap: 16px;
+}
+
+.imports-panel-header h2 {
+  font-size: 18px;
+}
+.imports-panel-header p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.imports-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.imports-rows li {
+  min-height: 56px;
+  padding: 12px 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  border-top: 1px solid var(--border);
+}
+.imports-rows li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.imports-rows li:last-child {
+  padding-bottom: 0;
+}
+.imports-rows strong {
+  display: block;
+  font-size: 15px;
+}
+.imports-rows small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.imports-rows .imports-row-count {
+  font-family: var(--font-serif, inherit);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.imports-facts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 14px;
+}
+.imports-facts li {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 12px;
+}
+.imports-facts .icon {
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  color: var(--accent);
+}
+.imports-facts span {
+  display: block;
+  font-size: 14px;
+}
+
+.imports-actions {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.imports-actions.is-split {
+  justify-content: space-between;
+}
+.imports-actions.is-stacked {
+  flex-direction: column;
+  align-items: stretch;
+}
+.imports-actions.is-stacked .btn-tertiary {
+  align-self: center;
+}
+
+.imports-skeleton-rows {
+  display: grid;
+  gap: 12px;
+}
+.imports-skeleton-row {
+  min-height: 44px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 14px;
+}
+.imports-skeleton-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.imports-select-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.imports-select-rows li {
+  border-top: 1px solid var(--border);
+}
+.imports-select-rows li:first-child {
+  border-top: 0;
+}
+.imports-select-row {
+  min-height: 56px;
+  padding: 12px 0;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  cursor: pointer;
+}
+.imports-select-row input[type="checkbox"] {
+  width: 24px;
+  height: 24px;
+  accent-color: var(--accent);
+}
+.imports-select-row strong {
+  display: block;
+  font-size: 15px;
+}
+.imports-select-row small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.imports-select-row .imports-row-count {
+  font-family: var(--font-serif, inherit);
+  font-size: 15px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.imports-note {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.imports-danger-zone {
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 10px;
+}
+
+.imports-conflicts-zone {
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 10px;
+}
+
+/* Conflitos resolvidos por item (Goal020, WU-07). */
+.imports-conflict-row {
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.imports-conflict-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 16px;
+}
+.imports-conflict-item {
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 12px;
+}
+.imports-conflict-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.imports-conflict-item > div > strong {
+  display: block;
+  font-size: 15px;
+}
+.imports-conflict-item.is-expanded {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.imports-decision-options {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: 8px;
+}
+.imports-decision-options legend {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.imports-decision-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.imports-decision-option input[type="radio"] {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+/* Execução, progresso e conclusão (Goal020, WU-08). */
+.imports-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.imports-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 240ms ease;
+}
+.imports-progress-summary {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}

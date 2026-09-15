@@ -74,6 +74,9 @@ const executeImportBodySchema = z.object({
 const completeImportBodySchema = z.object({
   acceptPending: z.boolean().optional(),
 });
+const setImportCategorySelectionBodySchema = z.object({
+  selected: z.boolean(),
+});
 const importDecisionBodySchema = z
   .object({
     decision: importDecisionKindSchema,
@@ -144,6 +147,18 @@ export async function registerV1MigrationRoutes(
 
   // --- Importacao unica (Goal010, WU-09) -----------------------------------
 
+  // Leitura pura do estado da importacao (direito, sessao viva e historico):
+  // nunca abre sessao, muda status nem consome o direito.
+  app.get(
+    "/v1/calendar/imports",
+    { preHandler: requireTenantContext },
+    async (request) =>
+      dataResponse(
+        request,
+        await scheduling.importState(internalContext(request)),
+      ),
+  );
+
   app.post(
     "/v1/calendar/imports",
     { preHandler: requireTenantContext },
@@ -193,6 +208,34 @@ export async function registerV1MigrationRoutes(
           sessionId,
           category,
           query,
+        ),
+      );
+    },
+  );
+
+  // Escolher o que importar (Goal020, WU-02): marca/desmarca uma categoria
+  // inteira da sessao. So muda `selected` — nunca invalida o preview nem
+  // mexe em `previewVersion`.
+  app.post(
+    "/v1/calendar/imports/:sessionId/categories/:category/selection",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { sessionId, category } = parseParams(
+        importCategoryParamsSchema,
+        request.params,
+      );
+      const body = parseBody(
+        setImportCategorySelectionBodySchema,
+        request.body,
+      );
+      return dataResponse(
+        request,
+        await scheduling.setImportCategorySelection(
+          internalContext(request),
+          sessionId,
+          category,
+          body,
+          idempotencyKey(request),
         ),
       );
     },

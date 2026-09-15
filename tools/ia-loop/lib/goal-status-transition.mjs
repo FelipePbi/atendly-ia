@@ -31,7 +31,28 @@ import { join } from 'node:path';
 import { SpikeError } from './claude-process.mjs';
 import { findGoalFile } from './goal-discovery.mjs';
 
-const STATUS_LINE = /^(\*\*Status:\s*)([A-Z_]+)(\.\*\*.*)$/m;
+/**
+ * The status line, recognised exactly as `discoverGoal` recognises it.
+ *
+ * The full stop is OPTIONAL, and that single character is not a detail. Both
+ * shapes are written in practice — `**Status: READY.** Executor: …` by the
+ * Goal template, `**Status: ACCEPTED** na rodada 2 (…)` by the closure
+ * documentation — and `goal-discovery.mjs:60` has always accepted both
+ * (`\.?\*\*`). This regex required it, so the two parsers disagreed about the
+ * same line: discovery read the document fine while the repair refused it as
+ * unrecognised.
+ *
+ * That disagreement was unreachable while the repair only ran on a RESUMED
+ * closure. The moment it also ran inside a fresh one — right after
+ * integration, so an omitted status is caught in the same run — Goal022 hit
+ * it and stopped as GOAL_STATUS_LINE_UNRECOGNISED with its document ALREADY
+ * reading ACCEPTED. The repair had nothing to repair and killed the run over
+ * a full stop.
+ *
+ * Group 3 keeps whatever followed the status word, including the `**`, so a
+ * rewrite preserves the sentence the closure wrote around it.
+ */
+const STATUS_LINE = /^(\*\*Status:\s*)([A-Z_]+)(\.?\*\*.*)$/m;
 
 /**
  * Pure decision: given the document's current text and the evidence for one

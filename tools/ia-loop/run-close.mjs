@@ -467,11 +467,29 @@ async function main() {
   // sentence into a worktree branched before the correction. Two commits
   // changing one line, and the cherry-pick of the planning commit stopped as
   // CHERRY_PICK_CONFLICT with "a human must integrate it".
-  await commitAcceptedStatusIfMissing({
-    closureDocsJobId: closure.closureDocsJobId,
-    integratedClosureCommit: closure.integratedClosureCommit,
-    newMigrationBaseline: newBaseline,
-  });
+  //
+  // Never fatal HERE, and only here. The closure commit is already on main at
+  // this point: dying over a document the repair could not parse would leave
+  // the Goal integrated, the campaign unable to advance, and a person holding
+  // a run that stopped for a full stop — which is exactly what Goal022 did,
+  // with its document already reading ACCEPTED. The repair is a repair; when
+  // it cannot act, the fact is recorded and the closure carries on. The
+  // resume-path call above keeps throwing, because there the document is
+  // about to be checked by `discoverGoal` anyway.
+  try {
+    await commitAcceptedStatusIfMissing({
+      closureDocsJobId: closure.closureDocsJobId,
+      integratedClosureCommit: closure.integratedClosureCommit,
+      newMigrationBaseline: newBaseline,
+    });
+  } catch (error) {
+    if (error?.code !== 'GOAL_STATUS_LINE_UNRECOGNISED') throw error;
+    emit(`Goal document status not repairable: ${error.message}`);
+    emit('  Continuing: the closure is already integrated, and this is a repair, not a gate.');
+    await store.appendEvent({
+      type: 'GOAL_STATUS_LINE_UNRECOGNISED', goal: goalId, stage: 'POST_INTEGRATION_REPAIR',
+    });
+  }
 
   // ---------- Next Goal planning -----------------------------------------
   // A deterministic, unique name per Goal. Reusing one generic path across

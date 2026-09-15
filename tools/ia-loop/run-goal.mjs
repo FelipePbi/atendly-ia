@@ -44,6 +44,8 @@ import {
 import { captureSnapshot, checkDeveloperPolicy, checkReviewerPolicy, formatViolations } from './lib/policy-guards.mjs';
 import { createLeaseStore } from './lib/leases.mjs';
 import { buildReviewPacket } from './lib/review-packet.mjs';
+import { createExecutionPlanStore } from './lib/execution-plan-store.mjs';
+import { deriveGoalGateStatus } from './lib/goal-gate-status.mjs';
 import { createDeveloperProfileStore } from './lib/developer-profiles.mjs';
 import { PROFILE_SOURCES, resolveProfileForRound, toExecutionRecord } from './lib/profile-routing.mjs';
 import { renderRoutingSummary, summarizeRouting } from './lib/routing-summary.mjs';
@@ -750,6 +752,20 @@ async function main() {
     machine.transitionTo(LOOP_STATES.REVIEW_REQUIRED);
 
     // --- Review ------------------------------------------------------------
+    //
+    // Read across the WHOLE Goal, not this round: the gates live in the round-1
+    // plan, and by the round that accepts the Goal that plan is several rounds
+    // behind. Asking the round is what let Goal019 become the baseline having
+    // run one gate of seven.
+    const goalPlan = await createExecutionPlanStore(STATE_DIR).read(goal.goalId).catch(() => null);
+    const goalGates = deriveGoalGateStatus({
+      declaredGates: (goalPlan?.workUnits ?? [])
+        .filter((unit) => unit.type === 'DETERMINISTIC')
+        .map((unit) => ({ id: unit.id, action: unit.action, scope: unit.scope ?? null })),
+      events: (await store.readEvents()).filter((event) => event.goal === goal.goalId),
+      currentRound: round,
+    });
+
     const packet = buildReviewPacket({
       goal: goal.goalId, goalPath: goal.goalPath, round, reviewLevel: REVIEW_LEVEL,
       migrationAcceptedBaseline: goal.migrationAcceptedBaseline,
@@ -759,6 +775,7 @@ async function main() {
       // So the reviewer decides an escalation against the profile that
       // actually ran, not against an assumption.
       developerProfile: routing.profile.name,
+      goalGates,
     });
     // The exact tree being reviewed, hashed in full. The review packet already
     // carried the tracked diff; what was missing was the content of untracked

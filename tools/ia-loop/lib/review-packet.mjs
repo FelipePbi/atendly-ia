@@ -13,6 +13,7 @@
  */
 
 import { SpikeError } from './claude-process.mjs';
+import { summarizeGoalGateStatus } from './goal-gate-status.mjs';
 
 /** Diff kept inline in the packet; the full diff stays on disk. */
 const INLINE_DIFF_LIMIT = 200_000;
@@ -31,6 +32,14 @@ export function buildReviewPacket({
   previousBlockers = [],
   diffPath = null,
   developerProfile = null,
+  /**
+   * Every gate this Goal declared, and whether it has run in ANY round.
+   *
+   * `validations` below answers a round-shaped question and goes empty in a
+   * correction round by construction — it declares no gates. The decision
+   * being made is goal-shaped, so this is the field that answers it.
+   */
+  goalGates = [],
 }) {
   if (!goal) throw new SpikeError('INVALID_ARGS', 'goal is required');
   if (!worktreeInitialHead) throw new SpikeError('INVALID_ARGS', 'worktreeInitialHead is required');
@@ -70,6 +79,16 @@ export function buildReviewPacket({
     implementationReport: developerResult?.implementationReport ?? '',
     developerSummary: developerResult?.summary ?? '',
     validations: Object.freeze([...(developerResult?.validations ?? [])]),
+    validationsNote:
+      'validations é o que o plano DESTA rodada verificou. Numa rodada de correção ele é '
+      + 'vazio por construção, porque a rodada tem uma unidade só e não declara gate algum. '
+      + 'Para saber se esta árvore foi verificada, leia goalGates.',
+
+    // The goal-shaped answer, and the summary line so a list of NEVER_RAN
+    // cannot be skimmed as "nothing to report".
+    goalGates: Object.freeze(goalGates.map((row) => Object.freeze({ ...row }))),
+    goalGatesSummary: summarizeGoalGateStatus(goalGates),
+
     developerResult,
 
     previousBlockers: Object.freeze([...previousBlockers]),
@@ -187,8 +206,20 @@ export function renderReviewPrompt(packet) {
     'Relatório de implementação do Developer (evidência declarada, não substitui inspeção):',
     packet.implementationReport || '(vazio)',
     '',
-    'Validações declaradas:',
+    'Validações declaradas NESTA rodada:',
     JSON.stringify(packet.validations, null, 2),
+    packet.validationsNote ?? '',
+    '',
+    // Above the blockers and above the review instructions on purpose: it is
+    // the one fact that decides whether the rest is being judged against a
+    // verified tree or against a read of the diff alone.
+    'ESTADO DOS GATES DESTE GOAL (todas as rodadas):',
+    packet.goalGatesSummary ?? '(não apurado)',
+    ...(packet.goalGates?.length
+      ? packet.goalGates.map((g) => `  - ${g.id} ${g.action}${g.scope ? ` @ ${g.scope}` : ''}: ${g.outcome}`
+        + (g.round ? ` (rodada ${g.round}${g.roundsStale > 0 ? `, ${g.roundsStale} rodada(s) atrás` : ''})` : '')
+        + (g.outcome === 'FAILED' && g.exitCode !== null ? ` exit ${g.exitCode}` : ''))
+      : []),
     '',
     packet.previousBlockers.length > 0
       ? `Blockers da rodada anterior:\n${packet.previousBlockers.map((b) => `  - ${b}`).join('\n')}`

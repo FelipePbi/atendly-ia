@@ -377,7 +377,13 @@ async function main() {
     const { sha, stagedFiles } = await stageAndCommit({
       cwd: absWorktree,
       paths,
-      message: `feat(security): complete goal ${goalId} - tenant session whatsapp ownership`,
+      // Derived from the Goal being closed, never a fixed string. The subject
+      // was hardcoded to one Goal's subject — "tenant session whatsapp
+      // ownership" — so every closure from Goal015 to Goal020 went into the
+      // history describing work it did not contain. `goal.title` is mandatory
+      // (`discoverGoal` fails GOAL_TITLE_MISSING without it), so there is
+      // nothing to fall back to and no way for this to go empty.
+      message: `feat(migration): complete goal ${goalId} - ${goal.title}`,
       excludePaths: ['graphify-out', 'tools/ia-loop'],
     });
 

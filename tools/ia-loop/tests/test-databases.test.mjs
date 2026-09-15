@@ -93,9 +93,23 @@ async function withTempRoot(body) {
 // --- naming --------------------------------------------------------------
 
 test('a database name is derived from the variable that asked for it', () => {
-  assert.equal(databaseNameForEnv('BFF_TEST_DATABASE_URL'), 'ia_bff');
-  assert.equal(databaseNameForEnv('AI_TEST_DATABASE_URL'), 'ia_ai');
-  assert.equal(databaseNameForEnv('SCHEDULING_TEST_DATABASE_URL'), 'ia_scheduling');
+  assert.equal(databaseNameForEnv('BFF_TEST_DATABASE_URL'), 'ia_bff_test');
+  assert.equal(databaseNameForEnv('AI_TEST_DATABASE_URL'), 'ia_ai_test');
+  assert.equal(databaseNameForEnv('SCHEDULING_TEST_DATABASE_URL'), 'ia_scheduling_test');
+});
+
+/**
+ * `scripts/validate-integration.mjs` recognises a database as disposable only
+ * when its name contains "test" as a delimited word (DISPOSABLE_NAME there).
+ * `ia_bff` alone once passed this file's assertions while failing that guard
+ * for real — this test fails loudly if `test` is ever dropped again.
+ */
+test('every generated name satisfies the gate\'s DISPOSABLE_NAME guard', () => {
+  const DISPOSABLE_NAME = /(?:^|[_-])test(?:[_-]|$)/iu;
+  for (const envName of ['BFF_TEST_DATABASE_URL', 'AI_TEST_DATABASE_URL', 'SCHEDULING_TEST_DATABASE_URL']) {
+    const database = databaseNameForEnv(envName);
+    assert.match(database, DISPOSABLE_NAME, `${database} (from ${envName}) is not recognised as disposable`);
+  }
 });
 
 test('each service gets its OWN database, so one migration cannot decide another schema', () => {
@@ -129,7 +143,7 @@ test('the cluster is stopped after the action, on the happy path', async () => {
       { registry, stateDir, attemptId: 'a1' }, ['BFF_TEST_DATABASE_URL'], () => 'ok', { driver, tempRoot },
     );
     assert.ok(stopped(log), 'the cluster must not outlive the action');
-    assert.ok(log.indexOf('createdb:ia_bff') < log.findIndex((l) => l === 'status:STOPPING'));
+    assert.ok(log.indexOf('createdb:ia_bff_test') < log.findIndex((l) => l === 'status:STOPPING'));
   });
 });
 
@@ -149,7 +163,7 @@ test('the cluster is stopped even when the action THROWS', async () => {
 
 test('the cluster is stopped even when creating a database fails halfway', async () => {
   await withTempRoot(async ({ stateDir, tempRoot }) => {
-    const { registry, driver, log, created } = harness({ failOn: 'ia_ai' });
+    const { registry, driver, log, created } = harness({ failOn: 'ia_ai_test' });
     await assert.rejects(
       () => withTestDatabases(
         { registry, stateDir, attemptId: 'a1' },
@@ -158,7 +172,7 @@ test('the cluster is stopped even when creating a database fails halfway', async
       ),
       /createdb refused/,
     );
-    assert.deepEqual(created, ['ia_bff'], 'the first one was made');
+    assert.deepEqual(created, ['ia_bff_test'], 'the first one was made');
     assert.ok(stopped(log), 'and the cluster was still torn down');
   });
 });
@@ -179,8 +193,8 @@ test('the action receives one URL per variable, on the cluster that was started'
     // The port is chosen from a free one in the configured range, so it is
     // asserted by shape rather than pinned to a number a parallel run could
     // legitimately take.
-    assert.match(env.BFF_TEST_DATABASE_URL, new RegExp(`^postgresql://${USER}@127\\.0\\.0\\.1:555\\d\\d/ia_bff$`));
-    assert.match(env.AI_TEST_DATABASE_URL, /\/ia_ai$/);
+    assert.match(env.BFF_TEST_DATABASE_URL, new RegExp(`^postgresql://${USER}@127\\.0\\.0\\.1:555\\d\\d/ia_bff_test$`));
+    assert.match(env.AI_TEST_DATABASE_URL, /\/ia_ai_test$/);
     const port = (url) => url.match(/:(\d+)\//)[1];
     assert.equal(port(env.BFF_TEST_DATABASE_URL), port(env.AI_TEST_DATABASE_URL),
       'both databases live on the ONE cluster that was started, not two');
@@ -199,6 +213,6 @@ test('a repeated variable is one database, not two', async () => {
       ['BFF_TEST_DATABASE_URL', 'BFF_TEST_DATABASE_URL', '  ', null],
       () => {}, { driver, tempRoot },
     );
-    assert.deepEqual(created, ['ia_bff']);
+    assert.deepEqual(created, ['ia_bff_test']);
   });
 });

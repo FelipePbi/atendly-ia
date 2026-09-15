@@ -22,6 +22,7 @@ import {
   CLOSURE_RESUME_POINTS,
   expectedMigrationStatusRowFor,
   isClosureIntegrated,
+  planningDiffBaseFor,
   requiredGoalStatusFor,
   resolveClosureResumePoint,
 } from '../lib/closure-resume.mjs';
@@ -246,4 +247,56 @@ test('the 009 story: READY -> closure docs -> integrated -> ACCEPTED -> baseline
   assert.equal(resolveClosureResumePoint(closure), CLOSURE_RESUME_POINTS.ALREADY_CLOSED, 'step 13: idempotent');
   assert.equal(requiredGoalStatusFor(resolveClosureResumePoint(closure)), 'ACCEPTED');
   assert.equal(expectedMigrationStatusRowFor(resolveClosureResumePoint(closure)), 'ACCEPTED');
+});
+
+// ===========================================================================
+// The planning worktree's diff base
+// ===========================================================================
+
+const BASELINE = 'a'.repeat(40);
+const TIP = 'b'.repeat(40);
+
+test('the planning diff is taken against the commit the worktree was branched from', () => {
+  // Main moved after integration — the deterministic Goal-status fix, or a
+  // harness commit landing while the run was stopped — so the worktree was
+  // branched from the tip, not from the baseline.
+  assert.equal(planningDiffBaseFor({ planningBase: TIP }, BASELINE), TIP);
+});
+
+test('a closure recorded before the branch point could move falls back to the baseline', () => {
+  // Those closures wrote nothing into planningBase, or wrote the baseline,
+  // because the two were then always the same commit. Resuming one must
+  // behave exactly as it did.
+  assert.equal(planningDiffBaseFor({}, BASELINE), BASELINE);
+  assert.equal(planningDiffBaseFor({ planningBase: BASELINE }, BASELINE), BASELINE);
+});
+
+test('an empty or non-string planningBase is not read as a base', () => {
+  // Diffing against '' means diffing against nothing, which would sweep the
+  // whole tree into the planning commit.
+  assert.equal(planningDiffBaseFor({ planningBase: '' }, BASELINE), BASELINE);
+  assert.equal(planningDiffBaseFor({ planningBase: null }, BASELINE), BASELINE);
+  assert.equal(planningDiffBaseFor({ planningBase: 42 }, BASELINE), BASELINE);
+});
+
+test('a missing closure is tolerated and yields the baseline', () => {
+  assert.equal(planningDiffBaseFor(undefined, BASELINE), BASELINE);
+  assert.equal(planningDiffBaseFor(), null);
+});
+
+test('the Goal020 shape: branching from the tip is what makes the cherry-pick clean', () => {
+  // Goal020: the closure documentation omitted the status line, the NEXT
+  // invocation corrected it on main, and the planning worktree had been
+  // branched before that correction. Both sides then changed one line and the
+  // planning commit stopped as CHERRY_PICK_CONFLICT.
+  //
+  // With the branch point at the tip, the correction is already IN the
+  // worktree, and the diff against that same tip contains only what the
+  // planner wrote.
+  const statusFixOnMain = 'c'.repeat(40);
+  const closure = { planningBase: statusFixOnMain };
+
+  assert.equal(planningDiffBaseFor(closure, BASELINE), statusFixOnMain);
+  assert.notEqual(planningDiffBaseFor(closure, BASELINE), BASELINE,
+    'the accepted baseline stays a published fact; it is not the branch point');
 });

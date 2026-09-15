@@ -48,6 +48,27 @@ export function isClosureIntegrated(closure = {}) {
 }
 
 /**
+ * The commit the planning worktree's diff must be taken against.
+ *
+ * It is the commit that worktree was BRANCHED FROM, which is not necessarily
+ * the accepted baseline. The planning worktree is branched from main's tip so
+ * that anything landing on main between integration and planning — the
+ * deterministic Goal-status fix, a harness commit made while the run was
+ * stopped — is already present, and the planning commit therefore cherry-picks
+ * cleanly. Diffing such a worktree against the BASELINE instead would attribute
+ * those commits to the planner and sweep them into its commit.
+ *
+ * `acceptedBaseline` is the fallback and exists only for closures recorded
+ * before the branch point could move, which wrote the baseline into
+ * `planningBase` because the two were then always the same commit. Resuming
+ * one of those must behave exactly as it did.
+ */
+export function planningDiffBaseFor(closure = {}, acceptedBaseline = null) {
+  const recorded = closure?.planningBase;
+  return typeof recorded === 'string' && recorded !== '' ? recorded : acceptedBaseline;
+}
+
+/**
  * Where a `ia-loop:close` invocation should resume from, given only the
  * closure evidence already on disk.
  *

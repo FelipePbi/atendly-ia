@@ -29,7 +29,8 @@ import {
 import { discoverGoal } from './lib/goal-discovery.mjs';
 import { ensureGoalAcceptedStatus } from './lib/goal-status-transition.mjs';
 import {
-  CLOSURE_RESUME_POINTS, expectedMigrationStatusRowFor, requiredGoalStatusFor, resolveClosureResumePoint,
+  CLOSURE_RESUME_POINTS, expectedMigrationStatusRowFor, planningDiffBaseFor, requiredGoalStatusFor,
+  resolveClosureResumePoint,
 } from './lib/closure-resume.mjs';
 import { readWorkerHealth, WORKER_HEALTH } from './lib/worker-registry.mjs';
 import { LOOP_STATES, createLoopStateMachine } from './lib/loop-state.mjs';
@@ -223,33 +224,56 @@ async function main() {
   // The Goal document's own "Status: ACCEPTED" line is structural fact once
   // the closure commit is proven integrated — not something a closure
   // documentation model call is trusted to remember to write (see
-  // lib/goal-status-transition.mjs for the incident this closes). Applied
-  // BEFORE discoverGoal, deterministically and without a model call, so its
-  // own requiredStatus check for this resume point can actually pass. FRESH
-  // never reaches here: nothing is integrated yet, so there is no evidence to
-  // act on and the document must still read exactly what the review left it.
+  // lib/goal-status-transition.mjs for the incident this closes).
+  //
+  // It is checked at the two moments the evidence can first be complete, and
+  // only those. HERE, before discoverGoal, for a run that resumes one already
+  // integrated — so discoverGoal's own requiredStatus check for that resume
+  // point can pass. And again immediately AFTER integration further down, for
+  // a FRESH run, which cannot be checked at this point because nothing is
+  // integrated yet and the document must still read exactly what the review
+  // left it.
   const accepted = await findAcceptedDecision(store, runtime, goalId);
-  if (resumePoint !== CLOSURE_RESUME_POINTS.FRESH) {
+
+  /**
+   * The Goal document's status line, made true on main and committed if it
+   * was not already.
+   *
+   * Shared by the two moments the evidence can first be complete: the top of
+   * a RESUMED run, and the instant integration proves it inside a FRESH one.
+   * `ensureGoalAcceptedStatus` refuses to act on anything less than the full
+   * evidence set, so calling it at both is safe and the second is a no-op
+   * whenever the first already fired.
+   */
+  async function commitAcceptedStatusIfMissing({
+    closureDocsJobId, integratedClosureCommit, newMigrationBaseline,
+  }) {
     const statusFix = await ensureGoalAcceptedStatus({
       repoRoot: REPO_ROOT, goalId,
       reviewDecision: runtime.decision,
-      closureDocsJobId: priorClosure.closureDocsJobId,
-      integratedClosureCommit: priorClosure.integratedClosureCommit,
-      newMigrationBaseline: priorClosure.newMigrationBaseline,
+      closureDocsJobId, integratedClosureCommit, newMigrationBaseline,
       emit,
     });
     // A new, independent commit — never amending the integration commit
     // already on main, never touching the worktree or the baseline. Staged
     // by exact path, so nothing else that happens to be dirty on this
     // checkout is swept in.
-    if (statusFix.changed) {
-      const fix = await stageAndCommit({
-        cwd: REPO_ROOT,
-        paths: [statusFix.path],
-        message: `docs(migration): mark Goal ${goalId} ACCEPTED (closure documentation omitted it)`,
-      });
-      emit(`  committed: ${fix.sha}`);
-    }
+    if (!statusFix.changed) return null;
+    const fix = await stageAndCommit({
+      cwd: REPO_ROOT,
+      paths: [statusFix.path],
+      message: `docs(migration): mark Goal ${goalId} ACCEPTED (closure documentation omitted it)`,
+    });
+    emit(`  committed: ${fix.sha}`);
+    return fix.sha;
+  }
+
+  if (resumePoint !== CLOSURE_RESUME_POINTS.FRESH) {
+    await commitAcceptedStatusIfMissing({
+      closureDocsJobId: priorClosure.closureDocsJobId,
+      integratedClosureCommit: priorClosure.integratedClosureCommit,
+      newMigrationBaseline: priorClosure.newMigrationBaseline,
+    });
   }
 
   const goal = await discoverGoal({
@@ -432,6 +456,23 @@ async function main() {
   emit(`  new:      ${newBaseline}`);
   emit('');
 
+  // Integration just proved the last piece of evidence the status line needs,
+  // so this is the earliest moment a FRESH run can know the closure
+  // documentation omitted it — and the last moment before the planning
+  // worktree exists.
+  //
+  // Detecting it later is what produced the Goal020 conflict. The omission
+  // went unnoticed for a whole run; the NEXT invocation corrected it on main,
+  // by which time the planner had already written its own (richer) ACCEPTED
+  // sentence into a worktree branched before the correction. Two commits
+  // changing one line, and the cherry-pick of the planning commit stopped as
+  // CHERRY_PICK_CONFLICT with "a human must integrate it".
+  await commitAcceptedStatusIfMissing({
+    closureDocsJobId: closure.closureDocsJobId,
+    integratedClosureCommit: closure.integratedClosureCommit,
+    newMigrationBaseline: newBaseline,
+  });
+
   // ---------- Next Goal planning -----------------------------------------
   // A deterministic, unique name per Goal. Reusing one generic path across
   // cycles would collide the moment the loop runs unattended, and would lose the
@@ -442,9 +483,28 @@ async function main() {
 
   if (!closure.planningWorktreeCreated) {
     emit('Creating the planning worktree…');
-    await gitCreateWorktree({ repoRoot: REPO_ROOT, path: planPath, branch: planBranch, base: newBaseline });
-    await persistClosure({ planningWorktreeCreated: true, planningBase: newBaseline }, LOOP_STATES.BASELINE_ACCEPTED);
+    // Branched from main's TIP, not from the accepted baseline. The two are
+    // usually the same commit and the difference only shows when they are
+    // not: anything that lands on main between integration and this point —
+    // the deterministic status fix above, a harness commit made while the run
+    // was stopped — would otherwise be absent here, and the planning commit
+    // would be built against a main that had moved on. Its cherry-pick then
+    // conflicts on a line both sides changed, which is exactly how Goal020
+    // ended in CHERRY_PICK_CONFLICT.
+    //
+    // The accepted baseline is unaffected: it is a published fact the next
+    // Goal must declare, and it reaches the planner through
+    // `planningContext.migrationAcceptedBaseline`, not through this branch
+    // point.
+    const tip = await probe.head();
+    await gitCreateWorktree({ repoRoot: REPO_ROOT, path: planPath, branch: planBranch, base: tip });
+    await persistClosure({ planningWorktreeCreated: true, planningBase: tip }, LOOP_STATES.BASELINE_ACCEPTED);
   }
+
+  // What the worktree was ACTUALLY branched from, which is what its diff has
+  // to be taken against. `planningBase` was recorded from the start and never
+  // read; reading it is what lets the branch point move at all.
+  const planningDiffBase = planningDiffBaseFor(closure, newBaseline);
 
   /**
    * Publishes one NEXT_GOAL_PLANNING job and waits for its result.
@@ -634,7 +694,7 @@ async function main() {
 
   // ---------- Commit and integrate the planning ---------------------------
   if (!closure.sourcePlanningCommit) {
-    const planChanges = await collectWorktreeChanges(absPlan, newBaseline);
+    const planChanges = await collectWorktreeChanges(absPlan, planningDiffBase);
     assertClosureScope(planChanges.changedFiles);
 
     const { sha } = await stageAndCommit({

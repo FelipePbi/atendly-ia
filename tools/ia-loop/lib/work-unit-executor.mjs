@@ -261,8 +261,21 @@ export async function executeWorkUnitPlan({
     // A unit whose dependency did not complete can never become READY. It is
     // BLOCKED, not FAILED: nothing was attempted, and recording it as a
     // failure would make the report claim work that never ran.
+    //
+    // A GATE is the exception, because a gate does not build the tree — it
+    // OBSERVES it. `VERIFY-001 depends on WU-004` states an order (typecheck
+    // after the code is written); the scheduler used to read it as a
+    // condition (if WU-004 did not complete, never typecheck at all).
+    //
+    // Goal019 is what that cost. One refused escalation left eight of fifteen
+    // units with zero attempts, six of them gates, and the reviewer went
+    // through 84 changed files across three rounds with no typecheck, no lint
+    // and no suite in the packet — so the only way left to find a defect was
+    // Opus reading the diff by hand. It found real ones, at the highest price
+    // the harness can charge.
     const unmet = unit.dependencies.filter((dependency) => records.get(dependency)?.state !== 'COMPLETED');
-    if (unmet.length > 0) {
+    const isGate = unit.type === 'DETERMINISTIC';
+    if (unmet.length > 0 && !isGate) {
       records.set(unitId, blockedRecord(unit, `Depende de ${unmet.join(', ')}, que não completou.`));
       await store.appendEvent({
         type: 'WORK_UNIT_BLOCKED', goal, round, workUnitId: unitId, blockedBy: unmet,
@@ -270,6 +283,9 @@ export async function executeWorkUnitPlan({
       emit(`  ${unitId} BLOCKED — depende de ${unmet.join(', ')}`);
       continue;
     }
+    // Carried so the answer is never mistaken for a verdict: what a gate says
+    // about a half-built tree is information, not acceptance.
+    const incompleteTree = unmet.length > 0 ? [...unmet] : null;
 
     const generation = generations.get(unitId) ?? 1;
     const unitJobId = workUnitJobId({ goal, round, unitId, generation });
@@ -282,6 +298,17 @@ export async function executeWorkUnitPlan({
         store, plan, unit, unitJobId, job, goal, round, worktree, executionBase, goalPath,
         goalSummary, invokeUnit, changedFilesSnapshot, config, mode, resumeFrom, emit, records, findings,
       });
+
+    // OBSERVED, never COMPLETED — and that is the whole safety of running it.
+    // A green gate over a tree whose upstream unit never ran has not verified
+    // the Goal, and leaving it COMPLETED would let anything depending on the
+    // gate read it as one.
+    if (incompleteTree && record.state !== 'SKIPPED') {
+      record.state = 'OBSERVED';
+      record.incompleteTree = incompleteTree;
+      record.blockedReason = `Rodou sobre árvore incompleta (${incompleteTree.join(', ')} não completou): `
+        + `exit ${record.exitCode ?? 'n/a'}. Informativo, não é veredito.`;
+    }
 
     records.set(unitId, record);
 
@@ -296,6 +323,24 @@ export async function executeWorkUnitPlan({
         missingEnv: record.missingEnv ?? [],
       });
       emit(`  ${unitId} SKIPPED — pré-condição ausente; o gate não rodou e nenhuma correção é criada.`);
+      continue;
+    }
+
+    // It ran, and what it found reaches the reviewer. What it does NOT do is
+    // create a fix unit: the failure it reports may well be the missing work
+    // upstream, and attributing that to a file this round touched would send a
+    // corrective unit chasing a symptom.
+    if (record.state === 'OBSERVED') {
+      await store.appendEvent({
+        type: 'WORK_UNIT_VERIFICATION_ON_INCOMPLETE_TREE',
+        goal, round, workUnitId: unitId, action: unit.action,
+        blockedBy: record.incompleteTree,
+        exitCode: record.exitCode ?? null,
+        passed: record.exitCode === 0,
+      });
+      emit(`  ${unitId} OBSERVED — ${unit.action ?? 'gate'} rodou sobre árvore incompleta `
+        + `(${record.incompleteTree.join(', ')} não completou): exit ${record.exitCode ?? 'n/a'}. `
+        + 'Informativo, não é veredito; nenhuma correção é criada.');
       continue;
     }
 
@@ -823,12 +868,22 @@ export function summarise({ plan, records, goal, round, jobId, unitsById }) {
   const ordered = [...records.values()];
   const failed = ordered.filter((record) => record.state !== 'COMPLETED');
 
+  // `passed` keeps meaning exactly what it always meant — did the command
+  // exit 0 — because the contract requires a boolean and a gate's exit code
+  // is a fact either way. What CHANGES over an incomplete tree is what that
+  // fact licenses, so the caveat rides in the name, where nothing reading the
+  // packet can miss it.
   const validations = ordered
     .filter((record) => record.executor === 'native')
     .map((record) => ({
-      name: record.action ?? record.id,
-      passed: record.state === 'COMPLETED',
-      detail: `${record.id}: exit ${record.exitCode ?? 'n/a'} (${record.durationMs}ms)`,
+      name: record.incompleteTree
+        ? `${record.action ?? record.id} (árvore incompleta: ${record.incompleteTree.join(', ')})`
+        : (record.action ?? record.id),
+      passed: record.incompleteTree
+        ? record.exitCode === 0
+        : record.state === 'COMPLETED',
+      detail: `${record.id}: exit ${record.exitCode ?? 'n/a'} (${record.durationMs}ms)`
+        + (record.incompleteTree ? ' — observado, não é veredito' : ''),
     }));
 
   const routing = {

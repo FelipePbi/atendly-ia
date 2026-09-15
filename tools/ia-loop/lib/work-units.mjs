@@ -60,9 +60,12 @@ export const WORK_UNIT_RISK = Object.freeze(['LOW', 'MEDIUM', 'HIGH']);
  * ESCALATED its attempt ended because the router moved it to a stronger model
  * BLOCKED   a dependency failed, so it can never become READY
  * SKIPPED   normalisation merged it away, or the round retired it
+ * OBSERVED  a gate ran over a tree a dependency left incomplete. Its answer
+ *           is real and reaches the reviewer; it is not acceptance, which is
+ *           why it is its own state and never COMPLETED.
  */
 export const WORK_UNIT_STATES = Object.freeze([
-  'PENDING', 'READY', 'RUNNING', 'COMPLETED', 'FAILED', 'ESCALATED', 'BLOCKED', 'SKIPPED',
+  'PENDING', 'READY', 'RUNNING', 'COMPLETED', 'FAILED', 'ESCALATED', 'BLOCKED', 'SKIPPED', 'OBSERVED',
 ]);
 
 /** Id prefixes with a meaning. Closed, so an id always says what it is. */

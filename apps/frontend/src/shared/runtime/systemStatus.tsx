@@ -8,7 +8,12 @@ import {
   useState,
 } from "react";
 
-import type { AiStateValue, SystemStatus, WhatsAppStatusValue } from "@/data";
+import type {
+  AiStateValue,
+  NotificationSummary,
+  SystemStatus,
+  WhatsAppStatusValue,
+} from "@/data";
 
 import { getProductServices } from "./ProductRuntime";
 
@@ -58,20 +63,34 @@ export type UseSystemStatusResult = {
   phase: StatusFetchPhase;
   whatsapp: SystemStatus["whatsapp"] | null;
   whatsappView: StatusView;
+  notificationsPhase: StatusFetchPhase;
+  notificationsSummary: NotificationSummary | null;
 };
 
-/** Carrega `GET /v1/status` uma vez por montagem, com revalidação por intervalo e foco. */
+/**
+ * Carrega `GET /v1/status` e o resumo da central de notificações
+ * (`GET /v1/notifications/summary`, Goal022/WU-06) sob o mesmo tick — uma
+ * montagem, um intervalo, um listener de foco. O resumo tem fase própria:
+ * uma falha nele nunca deve aparentar que WhatsApp ou IA caíram, e
+ * vice-versa.
+ */
 function useSystemStatusPolling(): UseSystemStatusResult {
   const [phase, setPhase] = useState<StatusFetchPhase>("loading");
   const [data, setData] = useState<SystemStatus | null>(null);
+  const [notificationsPhase, setNotificationsPhase] =
+    useState<StatusFetchPhase>("loading");
+  const [notificationsSummary, setNotificationsSummary] =
+    useState<NotificationSummary | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
 
     function load() {
-      getProductServices()
-        .status.get(controller.signal)
+      const services = getProductServices();
+
+      services.status
+        .get(controller.signal)
         .then((result) => {
           if (cancelled) return;
           setData(result);
@@ -80,6 +99,18 @@ function useSystemStatusPolling(): UseSystemStatusResult {
         .catch(() => {
           if (cancelled || controller.signal.aborted) return;
           setPhase("error");
+        });
+
+      services.notifications
+        .summary(controller.signal)
+        .then((result) => {
+          if (cancelled) return;
+          setNotificationsSummary(result);
+          setNotificationsPhase("loaded");
+        })
+        .catch(() => {
+          if (cancelled || controller.signal.aborted) return;
+          setNotificationsPhase("error");
         });
     }
 
@@ -100,6 +131,8 @@ function useSystemStatusPolling(): UseSystemStatusResult {
     phase,
     whatsapp: data?.whatsapp ?? null,
     whatsappView: whatsappStatusView(phase, data?.whatsapp.status),
+    notificationsPhase,
+    notificationsSummary,
   };
 }
 

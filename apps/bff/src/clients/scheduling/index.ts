@@ -567,6 +567,38 @@ const importStateSchema = z.object({
   history: importHistoryResultSchema.nullable(),
 });
 
+// --- Central de notificacoes (Goal022, WU-03) ------------------------------
+// As duas leituras por negocio que a central materializa. Nenhuma delas traz
+// `facts`, `leaseToken`, telefone ou payload cru — o recorte e o do dono, e o
+// BFF nao alarga o que ele decidiu nao expor.
+const failedNotificationIntentSchema = z.object({
+  id: z.string(),
+  appointmentId: z.string(),
+  kind: z.string(),
+  slot: z.string(),
+  appointmentVersion: z.number().int().nonnegative(),
+  reason: z.string().nullable(),
+  detail: z.string().nullable(),
+  attemptCount: z.number().int().nonnegative(),
+  dueAt: z.string(),
+  settledAt: z.string().nullable(),
+});
+const failedNotificationIntentsPageSchema = z.object({
+  items: z.array(failedNotificationIntentSchema),
+  nextCursor: z.string().nullable(),
+});
+const aiCreatedAppointmentEventSchema = z.object({
+  id: z.string(),
+  appointmentId: z.string(),
+  after: z.unknown().nullable(),
+  occurredAt: z.string(),
+  sequence: z.string(),
+});
+const aiCreatedAppointmentEventsPageSchema = z.object({
+  items: z.array(aiCreatedAppointmentEventSchema),
+  nextCursor: z.string().nullable(),
+});
+
 const envelope = <T extends z.ZodType>(schema: T) =>
   z.object({ data: schema, requestId: z.string() });
 
@@ -1397,6 +1429,51 @@ export class SchedulingClient {
       input,
       importCompletionResultSchema,
       idempotencyKey,
+    );
+  }
+
+  // --- Central de notificacoes (Goal022, WU-03) ---------------------------
+
+  /**
+   * Falhas de entrega do negocio (`state = FAILED`), por cursor estavel.
+   *
+   * O filtro por `FAILED` e do dono, e nao do BFF: `DISMISSED` e `CANCELLED`
+   * sao decisoes legitimas do dominio (antecedencia vencida, cliente sem
+   * telefone, versao superada) e nunca chegam aqui. Notificar funcionamento
+   * correto seria transformar decisao em alarme.
+   */
+  async listFailedNotificationIntents(
+    context: InternalRequestContext,
+    query: { cursor?: string | null; limit?: number } = {},
+  ) {
+    return this.get(
+      context,
+      "/internal/notification-intents/failed",
+      failedNotificationIntentsPageSchema,
+      {
+        cursor: query.cursor ?? undefined,
+        limit: query.limit,
+      },
+    );
+  }
+
+  /**
+   * Feed de compromissos criados pela IA, avancando por `sequence` — unico e
+   * monotonico, e por isso cursor confiavel onde `occurredAt` nao e (eventos
+   * da mesma transacao compartilham o instante).
+   */
+  async listAiCreatedAppointmentEvents(
+    context: InternalRequestContext,
+    query: { afterSequence?: string | null; limit?: number } = {},
+  ) {
+    return this.get(
+      context,
+      "/internal/appointment-events/ai-created",
+      aiCreatedAppointmentEventsPageSchema,
+      {
+        afterSequence: query.afterSequence ?? undefined,
+        limit: query.limit,
+      },
     );
   }
 

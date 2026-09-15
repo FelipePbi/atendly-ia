@@ -6,18 +6,20 @@ import { SchedulingClient } from "../../clients/scheduling/index.js";
 import {
   type AiConversationStyle,
   aiConversationStyleSchema,
-  normalizeStoredAiConversationStyle,
   parseBodyWithAiConversationStyle,
 } from "../../lib/ai-conversation-style.js";
 import {
   businessAddressSchema,
   businessContextPayload,
-  businessContextProjectionState,
   businessModalitySchema,
   resolveBusinessProfileFields,
 } from "../../lib/business-profile.js";
 import { AppError } from "../../lib/errors.js";
 import { dataResponse } from "../../lib/http.js";
+import {
+  onboardingIssues,
+  onboardingState,
+} from "../../lib/onboarding-state.js";
 import { getPrisma } from "../../lib/prisma.js";
 import {
   currentTenantContext,
@@ -176,44 +178,13 @@ export async function registerV1OnboardingRoutes(
     { preHandler: requireTenantContext },
     async (request) => {
       const tenant = currentTenantContext(request);
-      const context = internalContext(request);
       const prisma = getPrisma();
-      const [profile, settings, calendar] = await Promise.all([
-        prisma.businessProfile.findUnique({
-          where: { tenantId: tenant.tenantId },
-        }),
-        prisma.aiSettings.findUnique({ where: { tenantId: tenant.tenantId } }),
-        scheduling.calendar(context),
-      ]);
-      const issues: string[] = [];
-      if (!profile?.businessName.trim() || !profile.category?.trim()) {
-        issues.push("BUSINESS_PROFILE_INCOMPLETE");
-      }
-      if (!profile?.modalities.length) {
-        issues.push("BUSINESS_MODALITY_NOT_SELECTED");
-      }
-      if (profile?.modalities.includes("ON_SITE") && !profile.address?.trim()) {
-        issues.push("BUSINESS_ADDRESS_REQUIRED");
-      }
-      if (!calendar.source) issues.push("CALENDAR_NOT_SELECTED");
-      if (!normalizeStoredAiConversationStyle(settings?.tone)) {
-        issues.push("AI_TONE_NOT_SELECTED");
-      }
-
-      if (calendar.source) {
-        const services = await scheduling.listServices(context);
-        if (!services.some((service) => service.active)) {
-          issues.push("ACTIVE_SERVICE_REQUIRED");
-        }
-        if (calendar.source === "ATENDLY") {
-          const availability = await scheduling.availabilitySettings(context);
-          if (!availability.rules.some((rule) => rule.active)) {
-            issues.push("AVAILABILITY_REQUIRED");
-          }
-        } else if (calendar.integration?.status !== "CONNECTED") {
-          issues.push("CALENDAR_INTEGRATION_NOT_CONNECTED");
-        }
-      }
+      // A conclusao usa exatamente a mesma definicao de configuracao
+      // essencial que a central de notificacoes le para SETUP_INCOMPLETE. Uma
+      // definicao so: duas poderiam divergir e deixar o negocio concluir o
+      // onboarding com uma condicao aberta, ou o contrario.
+      const state = await onboardingState(request, scheduling);
+      const issues = onboardingIssues(state);
 
       if (issues.length > 0) {
         throw new AppError(
@@ -227,67 +198,14 @@ export async function registerV1OnboardingRoutes(
       await prisma.businessProfile.update({
         where: { tenantId: tenant.tenantId },
         data: {
-          onboardingCompletedAt: profile?.onboardingCompletedAt ?? new Date(),
+          onboardingCompletedAt: state.completedAt
+            ? new Date(state.completedAt)
+            : new Date(),
         },
       });
       return dataResponse(request, await onboardingState(request, scheduling));
     },
   );
-}
-
-async function onboardingState(
-  request: FastifyRequest,
-  scheduling: SchedulingClient,
-) {
-  const tenant = currentTenantContext(request);
-  const context = internalContext(request);
-  const [profile, settings, instance, calendar] = await Promise.all([
-    getPrisma().businessProfile.findUnique({
-      where: { tenantId: tenant.tenantId },
-    }),
-    getPrisma().aiSettings.findUnique({
-      where: { tenantId: tenant.tenantId },
-    }),
-    getPrisma().whatsAppInstance.findUnique({
-      where: { userId: tenant.userId },
-    }),
-    scheduling.calendar(context),
-  ]);
-  const [services, availability] = await Promise.all([
-    calendar.source ? scheduling.listServices(context) : Promise.resolve([]),
-    calendar.source === "ATENDLY"
-      ? scheduling.availabilitySettings(context)
-      : Promise.resolve(null),
-  ]);
-  return {
-    business: profile
-      ? {
-          name: profile.businessName,
-          category: profile.category,
-          timezone: profile.timezone,
-          modalities: profile.modalities,
-          address: profile.address,
-          contextVersion: profile.businessContextVersion,
-          contextProjectedVersion: profile.businessContextProjectedVersion,
-          contextProjectionStatus: businessContextProjectionState(profile),
-        }
-      : null,
-    calendar: {
-      source: publicSource(calendar.source),
-      timezone: calendar.timezone,
-      integration: calendar.integration,
-    },
-    ai: {
-      tone: normalizeStoredAiConversationStyle(settings?.tone),
-    },
-    service: services.find((service) => service.active) ?? null,
-    availability,
-    whatsapp: instance
-      ? { status: instance.status, phoneNumber: instance.phoneNumber }
-      : null,
-    completed: Boolean(profile?.onboardingCompletedAt),
-    completedAt: profile?.onboardingCompletedAt?.toISOString() ?? null,
-  };
 }
 
 /**
@@ -338,11 +256,6 @@ function internalSource(source: "ATENDLY" | "EXTERNAL") {
   return source === "ATENDLY"
     ? ("ATENDLY" as const)
     : ("MINHA_AGENDA" as const);
-}
-
-function publicSource(source: "ATENDLY" | "MINHA_AGENDA" | null) {
-  if (source === null) return null;
-  return source === "ATENDLY" ? ("ATENDLY" as const) : ("EXTERNAL" as const);
 }
 
 function assertTimezone(value: string): void {

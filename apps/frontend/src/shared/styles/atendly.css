@@ -1443,6 +1443,19 @@ p {
   border-radius: 50%;
   background: currentColor;
 }
+.badge-count {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--danger);
+  color: var(--surface);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
 .sidebar-bottom {
   margin-top: auto;
 }
@@ -2678,6 +2691,9 @@ p {
   font-weight: 600;
 }
 .dashboard-banner {
+  margin-bottom: 16px;
+}
+.shell-status-banner {
   margin-bottom: 16px;
 }
 .operational-strip {

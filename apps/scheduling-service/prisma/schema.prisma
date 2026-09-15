@@ -756,6 +756,10 @@ model AppointmentEvent {
 
   @@index([tenantId, appointmentId, occurredAt])
   @@index([tenantId, appointmentId, sequence])
+  /// Central de notificacoes (Goal022, WU-01): feed de `type=CREATED,
+  /// source=AI` por negocio, avancando por `sequence` — atravessa
+  /// atendimentos, entao o par com `appointmentId` acima nao serve aqui.
+  @@index([tenantId, sequence])
 }
 
 /// Intencao de envio ao cliente (Goal021): trabalho duravel no banco do **dono

@@ -274,12 +274,19 @@ class Table {
   }
 
   async findMany(
-    args: { where?: Record<string, unknown>; orderBy?: unknown } = {},
+    args: {
+      where?: Record<string, unknown>;
+      orderBy?: unknown;
+      take?: number;
+    } = {},
   ) {
     const found: Row[] = this.rows
       .filter((row) => matches(row, args.where ?? {}))
       .map((row) => this.withDefaults(row));
-    return args.orderBy ? sortBy(found, args.orderBy) : found;
+    const ordered = args.orderBy ? sortBy(found, args.orderBy) : found;
+    return typeof args.take === "number"
+      ? ordered.slice(0, args.take)
+      : ordered;
   }
 
   /**

@@ -898,6 +898,74 @@ export type WhatsAppStatusValue = z.infer<typeof whatsappStatusValueSchema>;
 export type AiStateValue = z.infer<typeof aiStateValueSchema>;
 export type SystemStatus = z.infer<typeof systemStatusSchema>;
 
+// --- Central de notificacoes e alertas persistentes (Goal022/WU-04) --------
+// `kind`, `level` e `shape` sao vocabulario fechado do dono (BFF): recusar um
+// valor desconhecido em vez de deixá-lo passar como texto livre é o mesmo
+// princípio já aplicado ao estado de envio de lembretes
+// (`appointmentNotificationKindSchema` etc.) — a tela nunca renderiza espécie
+// que o produto não reconhece em silêncio.
+export const notificationKindSchema = z.enum([
+  "CUSTOMER_WAITING_HUMAN",
+  "REMINDER_FAILED",
+  "IMPORT_COMPLETED",
+  "AI_APPOINTMENT_CREATED",
+  "WHATSAPP_DISCONNECTED",
+  "AI_UNAVAILABLE",
+  "SETUP_INCOMPLETE",
+]);
+export const notificationLevelSchema = z.enum(["INFO", "ATTENTION", "CRITICAL"]);
+export const notificationShapeSchema = z.enum(["EVENT", "CONDITION"]);
+
+export const notificationSchema = z.object({
+  id: z.string().min(1),
+  kind: notificationKindSchema,
+  level: notificationLevelSchema,
+  shape: notificationShapeSchema,
+  subjectId: z.string().nullable(),
+  occurredAt: z.string(),
+  readAt: z.string().nullable(),
+  resolvedAt: z.string().nullable(),
+  // Copy pronta por espécie; nunca telefone, credencial ou payload cru do
+  // dono (PUBLIC_API_V1.md) — a forma exata varia por `kind`, então aqui é
+  // só o que sobrevive à validação do dono.
+  payload: z.unknown(),
+});
+
+export const notificationListSchema = z.object({
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  offset: z.number().int().nonnegative(),
+  items: z.array(notificationSchema),
+});
+
+export const notificationSummarySchema = z.object({
+  byLevel: z.object({
+    INFO: z.number().int().nonnegative(),
+    ATTENTION: z.number().int().nonnegative(),
+    CRITICAL: z.number().int().nonnegative(),
+  }),
+  unreadCount: z.number().int().nonnegative(),
+  openConditionsCount: z.number().int().nonnegative(),
+});
+
+export const notificationMarkReadResultSchema = z.object({
+  updated: z.number().int().nonnegative(),
+});
+
+export const notificationPreferencesSchema = z.object({
+  aiAppointmentCreated: z.boolean(),
+});
+
+export type NotificationKind = z.infer<typeof notificationKindSchema>;
+export type NotificationLevel = z.infer<typeof notificationLevelSchema>;
+export type NotificationShape = z.infer<typeof notificationShapeSchema>;
+export type Notification = z.infer<typeof notificationSchema>;
+export type NotificationList = z.infer<typeof notificationListSchema>;
+export type NotificationSummary = z.infer<typeof notificationSummarySchema>;
+export type NotificationPreferences = z.infer<
+  typeof notificationPreferencesSchema
+>;
+
 // --- Conhecimento, memoria do cliente, resumo e sugestoes (Goal012) --------
 // Sem tela: a experiencia e dos Goals 015, 017 e 023. Aqui e so o contrato
 // que a camada de dados precisa entender, incluindo a recusa de vocabulario

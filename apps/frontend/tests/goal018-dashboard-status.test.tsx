@@ -41,12 +41,14 @@ vi.mock("next/navigation", () => ({
 
 const dashboardGet = vi.fn();
 const statusGet = vi.fn();
+const notificationsSummary = vi.fn();
 const logout = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
     auth: { logout },
     dashboard: { get: dashboardGet },
+    notifications: { summary: notificationsSummary },
     status: { get: statusGet },
   }),
   useProductRuntime: () => ({
@@ -135,6 +137,12 @@ function aiStatus(state: AiStateValue): SystemStatus {
 beforeEach(() => {
   dashboardGet.mockReset();
   statusGet.mockReset();
+  notificationsSummary.mockReset();
+  notificationsSummary.mockResolvedValue({
+    byLevel: { INFO: 0, ATTENTION: 0, CRITICAL: 0 },
+    unreadCount: 0,
+    openConditionsCount: 0,
+  });
   logout.mockReset();
 });
 

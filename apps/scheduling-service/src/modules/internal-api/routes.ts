@@ -22,6 +22,10 @@ import {
   timeFromMinutes,
 } from "../../shared/date-time/calendar-date-time.js";
 import { AppError } from "../../shared/errors/app-error.js";
+import {
+  AI_CREATED_APPOINTMENT_EVENTS_MAX_LIMIT,
+  listAiCreatedAppointmentEvents,
+} from "../appointments/appointment-event-service.js";
 import { runAutoCompleteSweep } from "../appointments/auto-complete-loop.js";
 import {
   createExtraAvailability,
@@ -70,6 +74,10 @@ import {
   claimDueNotificationIntents,
   settleNotificationIntent,
 } from "../reminders/notification-dispatch-service.js";
+import {
+  FAILED_NOTIFICATION_INTENTS_MAX_LIMIT,
+  listFailedNotificationIntents,
+} from "../reminders/notification-read-service.js";
 import {
   MAX_REMINDER_LEAD_MINUTES,
   ReminderService,
@@ -155,6 +163,33 @@ const notificationSettleBodySchema = z.object({
   // cru nem credencial.
   detail: z.string().trim().min(1).max(500).optional(),
   correlationId: z.string().trim().min(1).max(200).optional(),
+});
+
+// --- Central de notificacoes e alertas persistentes (Goal022, WU-01) ------
+const failedNotificationIntentsQuerySchema = z.object({
+  cursor: z.string().trim().min(1).max(500).optional(),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(FAILED_NOTIFICATION_INTENTS_MAX_LIMIT)
+    .optional(),
+});
+const aiCreatedAppointmentEventsQuerySchema = z.object({
+  // BigInt de `AppointmentEvent.sequence`, sempre nao negativo; a validacao
+  // de forma so aceita digitos e a validacao de valor fica no service, que e
+  // quem sabe converter para `BigInt` com seguranca.
+  afterSequence: z
+    .string()
+    .trim()
+    .regex(/^\d+$/)
+    .optional(),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(AI_CREATED_APPOINTMENT_EVENTS_MAX_LIMIT)
+    .optional(),
 });
 
 const serviceColorTokenSchema = z.enum([
@@ -911,6 +946,42 @@ export async function registerManagementRoutes(
           intentId: id,
           ...body,
         }),
+      );
+    },
+  );
+
+  // --- Central de notificacoes e alertas persistentes (Goal022, WU-01) ----
+  // So o BFF (pessoa humana): estas duas leituras alimentam a central que o
+  // negocio ve, no mesmo padrao de disponibilidade e lembrete acima. Sempre
+  // por negocio — tenantId vem so do cabecalho autenticado, nunca do corpo
+  // ou da query.
+
+  app.get(
+    "/internal/notification-intents/failed",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      requireHumanCaller(context);
+      await requireCalendar(prisma, context.tenantId);
+      const query = parse(failedNotificationIntentsQuerySchema, request.query ?? {});
+      return data(
+        request,
+        await listFailedNotificationIntents(prisma, context.tenantId, query),
+      );
+    },
+  );
+
+  app.get(
+    "/internal/appointment-events/ai-created",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      requireHumanCaller(context);
+      await requireCalendar(prisma, context.tenantId);
+      const query = parse(aiCreatedAppointmentEventsQuerySchema, request.query ?? {});
+      return data(
+        request,
+        await listAiCreatedAppointmentEvents(prisma, context.tenantId, query),
       );
     },
   );

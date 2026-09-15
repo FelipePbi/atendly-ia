@@ -1,6 +1,6 @@
 # Goal 022 — Central de notificações e alertas persistentes
 
-**Status: READY.** Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-15 pelo Tech Lead Agent após [Goal021 ACCEPTED](../reviews/021-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
+**Status: ACCEPTED** na rodada 2 ([review022](../reviews/022-review.md)). Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-15 pelo Tech Lead Agent após [Goal021 ACCEPTED](../reviews/021-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação delimitada abaixo; não registra implementação ou deploy.
 
 Developer execution profile: OPUS_MEDIUM
 

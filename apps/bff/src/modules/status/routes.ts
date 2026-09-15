@@ -11,6 +11,7 @@ import {
   requireTenantContext,
 } from "../../lib/tenant-context.js";
 import { settled, whatsappSummary } from "../dashboard/routes.js";
+import { reconcileStatusConditions } from "../notifications/reconcile.js";
 import { internalContext } from "../tenant/context.js";
 
 type WhatsAppStatus = "CONNECTED" | "DISCONNECTED" | "UNKNOWN";
@@ -87,6 +88,15 @@ export async function registerV1StatusRoutes(
         ),
         reconciled,
       };
+
+      // Goal022 §6: as condições de canal da central reconciliam **aqui**,
+      // reusando os valores que esta requisição já computou — zero chamada
+      // remota a mais. A escrita é local, nunca lança e não muda a forma da
+      // resposta: consumidor de status não passa a depender da central.
+      await reconcileStatusConditions(request, {
+        whatsapp: whatsapp.status,
+        ai: ai_.state,
+      });
 
       return dataResponse(request, {
         whatsapp,

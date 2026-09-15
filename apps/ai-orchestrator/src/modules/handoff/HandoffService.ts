@@ -22,6 +22,82 @@ export interface HandoffTenantScope {
   channelId: string;
 }
 
+/** Motivo gravado pela rota de takeover do dono (`/internal/conversations/:id/takeover`). */
+export const OWNER_TAKEOVER_REASON = "OWNER_TAKEOVER";
+
+export interface ConversationAwaitingHuman {
+  conversationId: string;
+  /**
+   * Nome do contato quando a conversa ja tem um, e `null` quando nao tem.
+   *
+   * **Nunca o telefone**, nem cru nem formatado: esta leitura atravessa a
+   * fronteira interna e alimenta `payload` de notificacao persistida, onde
+   * telefone nao pode entrar (Goal022 criterio 5). Sem nome, quem exibe usa a
+   * frase generica da especie; a identificacao completa continua na tela de
+   * Conversas, que le a conversa direto.
+   */
+  contactName: string | null;
+  reason: string;
+  openedAt: Date;
+}
+
+/**
+ * Quem esta aguardando humano, por tenant (Goal022/WU-02).
+ *
+ * `pauseForHuman` cria uma linha `Handoff` OPEN sem checar se ja existe uma
+ * para a mesma conversa, entao pode haver mais de uma. Aqui elas colapsam em
+ * **uma** entrada por conversa, pela mais antiga: e o instante em que a
+ * conversa comecou a esperar, nao o da ultima tentativa. Handoff de takeover
+ * do dono (`OWNER_TAKEOVER`) nunca e a fonte da entrada, porque a profissional
+ * assumindo a conversa nao e cliente esperando por ela.
+ */
+export async function listConversationsAwaitingHuman(
+  prisma: PrismaClient,
+  tenantId: string,
+  limit: number,
+): Promise<ConversationAwaitingHuman[]> {
+  const handoffs = await prisma.handoff.findMany({
+    where: {
+      tenantId,
+      status: "OPEN",
+      conversationId: { not: null },
+      reason: { not: OWNER_TAKEOVER_REASON },
+    },
+    orderBy: { createdAt: "asc" },
+    include: {
+      conversation: { select: { customerName: true } },
+    },
+  });
+
+  const byConversation = new Map<string, ConversationAwaitingHuman>();
+  for (const handoff of handoffs) {
+    const conversationId = handoff.conversationId;
+    if (!conversationId || byConversation.has(conversationId)) continue;
+    byConversation.set(conversationId, {
+      conversationId,
+      contactName: contactName(handoff.conversation?.customerName ?? null),
+      reason: handoff.reason,
+      openedAt: handoff.createdAt,
+    });
+  }
+
+  return [...byConversation.values()].slice(0, limit);
+}
+
+/**
+ * Nome quando existe, `null` quando nao.
+ *
+ * Diferente das telas de Conversas, esta leitura **nao** cai no telefone
+ * formatado como identificacao alternativa. A tela mostra telefone porque o
+ * dono ja esta olhando a propria conversa; aqui o valor sai do servico, cruza
+ * o BFF e fica gravado em `TenantNotification.payload` — e telefone gravado
+ * continua sendo telefone, formatado ou nao.
+ */
+function contactName(customerName: string | null): string | null {
+  const trimmed = customerName?.trim();
+  return trimmed ? trimmed : null;
+}
+
 /**
  * Leitura de sessao usada pela pausa.
  *

@@ -94,6 +94,17 @@ const conversationSchema = z.object({
     .optional(),
 });
 
+// Central de notificacoes (Goal022): uma entrada por conversa que espera
+// atendimento humano. `contactName` e o nome do contato quando a conversa tem
+// um e `null` quando nao tem: telefone nao atravessa esta fronteira em forma
+// nenhuma, porque o valor termina gravado em `TenantNotification.payload`.
+const conversationAwaitingHumanSchema = z.object({
+  conversationId: z.string(),
+  contactName: z.string().nullable(),
+  reason: z.string(),
+  openedAt: z.string(),
+});
+
 const envelope = <T extends z.ZodType>(schema: T) =>
   z.object({ data: schema, requestId: z.string() });
 
@@ -711,6 +722,28 @@ export class AiOrchestratorClient {
         path: `/internal/conversations/${encodeURIComponent(conversationId)}/suggestions`,
         context,
         schema: envelope(conversationSuggestionsSchema),
+      })
+    ).data;
+  }
+
+  /**
+   * Quem esta aguardando humano, por negocio (Goal022).
+   *
+   * Uma entrada por **conversa**, mesmo quando a IA gravou mais de uma linha
+   * `Handoff` OPEN para ela, e sem o takeover do dono: as duas regras moram na
+   * leitura da IA, nao aqui. A central so materializa o que veio.
+   */
+  async listConversationsAwaitingHuman(
+    context: InternalRequestContext,
+    query: { limit?: number } = {},
+  ) {
+    return (
+      await this.http.request({
+        method: "GET",
+        path: "/internal/handoffs/awaiting-human",
+        context,
+        query: { limit: query.limit },
+        schema: envelope(z.array(conversationAwaitingHumanSchema)),
       })
     ).data;
   }

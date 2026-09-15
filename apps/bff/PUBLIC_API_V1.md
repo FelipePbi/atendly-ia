@@ -27,6 +27,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Configurações | `GET /v1/settings`; `PATCH /v1/settings/business`; `PATCH /v1/settings/ai`; `PATCH /v1/settings/availability`; `GET /v1/settings/reminders`; `PATCH /v1/settings/reminders` (Goal021) |
 | WhatsApp | `GET /v1/whatsapp`; `POST /v1/whatsapp/connect`; `POST /v1/whatsapp/reconnect`; `DELETE /v1/whatsapp` |
 | Teste real de ativação (Goal019/WU-05) | `GET /v1/activation-test`; `POST /v1/activation-test`; `POST /v1/activation-test/restart` |
+| Central de notificações (Goal022/WU-04) | `GET /v1/notifications`; `GET /v1/notifications/summary`; `POST /v1/notifications/read`; `GET/PATCH /v1/notifications/preferences` |
 
 As rotas autenticadas resolvem o negócio a partir da sessão; `tenantId` enviado isoladamente pelo browser não concede autorização.
 
@@ -684,3 +685,68 @@ A resposta **não** traz os fatos compostos para a entrega (nome e telefone do c
 | `true` | pedido explícito de aviso: se a mutação de fato mudou algo que o cliente precisaria saber (horário, serviços ou estado), nasce um aviso de alteração para ele |
 
 Cancelar sempre cancela os lembretes pendentes do horário anterior, com `notifyCustomer` ou sem — as duas decisões são independentes. `notifyCustomer` só decide o aviso de alteração, nunca os lembretes em si, e só existe nestas duas rotas: a IA cancela e remarca a pedido do próprio cliente dentro da conversa, e avisá-lo do que ele acabou de pedir seria ruído — por isso ela nunca tem este campo em nenhum contrato dela, e a interface manda-o sempre, explicitamente, marcado por padrão. A recomputação de lembretes e o aviso em si são regra do Scheduling, provada nas suítes de lá; o que este contrato garante é só o transporte do pedido.
+
+## Central de notificações e alertas persistentes (Goal022/WU-04)
+
+Quatro rotas, todas sob `requireTenantContext` e escopadas pelo tenant da sessão; nenhuma aceita `tenantId` no corpo ou na query — um valor estranho ali é simplesmente ignorado, o escopo vem sempre da sessão. A reconciliação das espécies que dependem dos donos (`CUSTOMER_WAITING_HUMAN`, `REMINDER_FAILED`, `IMPORT_COMPLETED`, `AI_APPOINTMENT_CREATED`, `SETUP_INCOMPLETE`) roda dentro de `GET /v1/notifications` e `GET /v1/notifications/summary`, sob o throttle persistido do motor (`NOTIFICATIONS_RECONCILE_MIN_INTERVAL_SECONDS`); as condições de canal (`WHATSAPP_DISCONNECTED`, `AI_UNAVAILABLE`) reconciliam dentro de `GET /v1/status` (Goal022/WU-03). Fonte indisponível nunca vira `500`: a leitura responde `200` com o que está gravado.
+
+| Rota | O que faz |
+| --- | --- |
+| `GET /v1/notifications` | lista paginada, com filtro por `level`, `unread` e `resolved` |
+| `GET /v1/notifications/summary` | contadores baratos para o chrome: não lidas por nível e condições abertas |
+| `POST /v1/notifications/read` | marca uma notificação (`{ id }`) ou todas as não lidas (`{ all: true }`) como lidas |
+| `GET /v1/notifications/preferences` | lê a preferência da central |
+| `PATCH /v1/notifications/preferences` | grava a preferência da central |
+
+### `GET /v1/notifications`
+
+Query opcional: `level` (`INFO`, `ATTENTION`, `CRITICAL`), `unread` (booleano), `resolved` (booleano — só notificações cuja `resolvedAt` está ou não preenchida; toda `EVENT` tem `resolvedAt` sempre nulo, então `resolved=false` inclui histórico e condição aberta), `limit` (1–100, default 20) e `offset` (default 0). A lista só enxerga os últimos 90 dias (`occurredAt`); não é retenção — é janela de leitura, a purga é do Goal023.
+
+```json
+{
+  "total": 3,
+  "limit": 20,
+  "offset": 0,
+  "items": [
+    {
+      "id": "…",
+      "kind": "CUSTOMER_WAITING_HUMAN",
+      "level": "ATTENTION",
+      "shape": "CONDITION",
+      "subjectId": "conversa-1",
+      "occurredAt": "2026-09-15T12:30:00.000Z",
+      "readAt": null,
+      "resolvedAt": null,
+      "payload": { "contactName": "Marina", "reason": "EXPLICIT_REQUEST" }
+    }
+  ]
+}
+```
+
+`kind` e `subjectId` são o alvo de navegação — quem lê decide para onde levar o negócio (a conversa, o agendamento, a sessão de importação); o BFF não embute URL de frontend no contrato. `payload` traz só o que a copy precisa, nunca telefone, credencial ou payload cru do dono (Goal022/WU-03) — em `CUSTOMER_WAITING_HUMAN`, `contactName` é o nome do contato e **não aparece** quando a conversa ainda não tem um; não há queda para telefone formatado, e quem exibe usa a frase genérica da espécie.
+
+`shape: CONDITION` é estado corrente, e uma condição pode acontecer de novo: quando a fonte volta a reportar uma condição que já tinha sido resolvida, a **mesma** notificação reabre — `resolvedAt` volta a `null`, `occurredAt` passa a ser o instante do episódio novo e ela conta como **não lida** outra vez. O identificador é estável ao longo dos episódios; o WhatsApp que cai, volta e cai de novo é uma linha só, aberta de novo, nunca uma segunda linha e nunca silêncio. Condição ainda aberta não é tocada: `readAt` de quem já viu sobrevive à reconciliação seguinte.
+
+### `GET /v1/notifications/summary`
+
+```json
+{
+  "byLevel": { "INFO": 0, "ATTENTION": 1, "CRITICAL": 1 },
+  "unreadCount": 2,
+  "openConditionsCount": 1
+}
+```
+
+`byLevel` e `unreadCount` contam só não lidas; `openConditionsCount` conta condições abertas (`shape: CONDITION`, `resolvedAt: null`) independente do estado de leitura — é o alerta operacional, não o contador de caixa de entrada.
+
+### `POST /v1/notifications/read`
+
+Idempotente nos dois formatos. Marcar como lida um `id` que não existe, que já está lido, ou que pertence a outro tenant produz exatamente a mesma resposta — `{ "updated": 0 }` — porque a notificação de outro tenant nunca aparece no filtro para começar; não há distinção informativa entre "não existe" e "não é seu". `{ "all": true }` marca todas as não lidas do tenant como lidas nesta chamada; repetir devolve `updated: 0`.
+
+### Preferências
+
+```json
+{ "aiAppointmentCreated": false }
+```
+
+Único campo do contrato hoje, com **default desligado** (Goal022/WU-03 — "default silencioso"): negócio que nunca configurou não recebe `AI_APPOINTMENT_CREATED`. Não existe campo de canal de e-mail em nenhuma rota da central; um campo que nenhuma camada honra não entra no contrato.

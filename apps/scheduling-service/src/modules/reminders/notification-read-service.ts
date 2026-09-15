@@ -5,6 +5,7 @@ import type {
   AppointmentNotificationSlot,
   AppointmentNotificationState,
 } from "../../generated/prisma/enums.js";
+import { AppError } from "../../shared/errors/app-error.js";
 
 /**
  * Leitura das intencoes de envio **de um compromisso** (Goal021, item 8).
@@ -60,4 +61,147 @@ export async function listAppointmentNotifications(
     sentAt: row.sentAt ? row.sentAt.toISOString() : null,
     settledAt: row.settledAt ? row.settledAt.toISOString() : null,
   }));
+}
+
+/** Teto padrão e máximo do lote da central de notificações (Goal022, WU-01). */
+export const FAILED_NOTIFICATION_INTENTS_DEFAULT_LIMIT = 50;
+export const FAILED_NOTIFICATION_INTENTS_MAX_LIMIT = 200;
+
+/**
+ * Falha entregável à central: o mesmo recorte de {@link
+ * AppointmentNotificationRecord}, mais `appointmentId` porque esta leitura
+ * atravessa todos os atendimentos do negócio. Nunca `facts` nem `leaseToken`
+ * — o primeiro carrega telefone e conteúdo formatado do cliente, o segundo é
+ * credencial de reivindicação; nenhum dos dois é assunto da central.
+ */
+export interface FailedNotificationIntentRecord {
+  id: string;
+  appointmentId: string;
+  kind: AppointmentNotificationKind;
+  slot: AppointmentNotificationSlot;
+  appointmentVersion: number;
+  reason: AppointmentNotificationReason | null;
+  detail: string | null;
+  attemptCount: number;
+  dueAt: string;
+  settledAt: string | null;
+}
+
+export interface ListFailedNotificationIntentsInput {
+  /** Cursor opaco devolvido por uma página anterior; ausente lê do início. */
+  cursor?: string | null;
+  /** Aplicado ao teto máximo antes de ir ao banco. */
+  limit?: number;
+}
+
+export interface ListFailedNotificationIntentsResult {
+  items: FailedNotificationIntentRecord[];
+  /** Presente somente quando a página veio cheia — pode haver mais. */
+  nextCursor: string | null;
+}
+
+interface FailedNotificationCursor {
+  dueAt: Date;
+  id: string;
+}
+
+/** Cursor opaco em `(dueAt, id)`: o par que a ordenação usa para desempate. */
+function encodeFailedNotificationCursor(row: FailedNotificationCursor): string {
+  return Buffer.from(
+    JSON.stringify({ dueAt: row.dueAt.toISOString(), id: row.id }),
+  ).toString("base64url");
+}
+
+function decodeFailedNotificationCursor(
+  cursor: string,
+): FailedNotificationCursor {
+  try {
+    const parsed: unknown = JSON.parse(
+      Buffer.from(cursor, "base64url").toString("utf8"),
+    );
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      typeof (parsed as Record<string, unknown>).dueAt !== "string" ||
+      typeof (parsed as Record<string, unknown>).id !== "string"
+    ) {
+      throw new Error("malformed cursor");
+    }
+    const { dueAt: dueAtRaw, id } = parsed as { dueAt: string; id: string };
+    const dueAt = new Date(dueAtRaw);
+    if (id.length === 0 || Number.isNaN(dueAt.getTime())) {
+      throw new Error("malformed cursor");
+    }
+    return { dueAt, id };
+  } catch {
+    throw new AppError(
+      "INVALID_CURSOR",
+      "The cursor is not a valid page token for this listing.",
+      400,
+    );
+  }
+}
+
+/**
+ * Falhas de entrega do negócio, para a central de notificações (Goal022,
+ * WU-01): só `state = FAILED`, nunca `PENDING`, `CLAIMED`, `SENT`,
+ * `DISMISSED` ou `CANCELLED` — a central mostra o que precisa de atenção
+ * humana, não o funil inteiro.
+ *
+ * Cursor **estável** em `(dueAt, id)`, não `offset`: uma falha nova que
+ * chega entre duas páginas não desloca o que a central já mostrou. O
+ * desempate por `id` existe pelo mesmo motivo de {@link
+ * listAppointmentNotifications} — duas intenções podem vencer no mesmo
+ * instante.
+ */
+export async function listFailedNotificationIntents(
+  prisma: Pick<PrismaClient, "appointmentNotificationIntent">,
+  tenantId: string,
+  input: ListFailedNotificationIntentsInput = {},
+): Promise<ListFailedNotificationIntentsResult> {
+  const limit = Math.min(
+    Math.max(1, input.limit ?? FAILED_NOTIFICATION_INTENTS_DEFAULT_LIMIT),
+    FAILED_NOTIFICATION_INTENTS_MAX_LIMIT,
+  );
+  const after = input.cursor
+    ? decodeFailedNotificationCursor(input.cursor)
+    : null;
+
+  const rows = await prisma.appointmentNotificationIntent.findMany({
+    where: {
+      tenantId,
+      state: "FAILED",
+      ...(after
+        ? {
+            OR: [
+              { dueAt: { gt: after.dueAt } },
+              { dueAt: after.dueAt, id: { gt: after.id } },
+            ],
+          }
+        : {}),
+    },
+    orderBy: [{ dueAt: "asc" }, { id: "asc" }],
+    take: limit,
+  });
+
+  const items = rows.map((row) => ({
+    id: row.id,
+    appointmentId: row.appointmentId,
+    kind: row.kind,
+    slot: row.slot,
+    appointmentVersion: row.appointmentVersion,
+    reason: row.reason,
+    detail: row.detail,
+    attemptCount: row.attemptCount,
+    dueAt: row.dueAt.toISOString(),
+    settledAt: row.settledAt ? row.settledAt.toISOString() : null,
+  }));
+
+  const last = rows.at(-1);
+  const nextCursor =
+    rows.length === limit && last
+      ? encodeFailedNotificationCursor(last)
+      : null;
+
+  return { items, nextCursor };
 }

@@ -108,6 +108,10 @@ model Tenant {
   businessProfile  BusinessProfile?
   aiSettings       AiSettings?
   whatsappInstance WhatsAppInstance?
+
+  notifications          TenantNotification[]
+  notificationPreference NotificationPreference?
+  notificationSyncState  NotificationSyncState?
 }
 
 model TenantMember {
@@ -215,6 +219,112 @@ model AiSettings {
   activatedByRunId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+/// Espécie da notificação da central (Goal022). Vocabulário fechado: cada
+/// espécie tem uma fonte, uma chave de dedupe e uma regra de resolução
+/// declaradas em `modules/notifications/species.ts`. Espécie nova é decisão de
+/// produto, não campo livre de chamador.
+enum NotificationKind {
+  CUSTOMER_WAITING_HUMAN
+  REMINDER_FAILED
+  IMPORT_COMPLETED
+  AI_APPOINTMENT_CREATED
+  WHATSAPP_DISCONNECTED
+  AI_UNAVAILABLE
+  SETUP_INCOMPLETE
+}
+
+/// Os tres niveis do produto. Derivado de `kind` por tabela fixa no codigo,
+/// nunca escolhido por quem materializa.
+enum NotificationLevel {
+  INFO
+  ATTENTION
+  CRITICAL
+}
+
+/// `EVENT` aconteceu e fica no historico; `CONDITION` esta aberta ou foi
+/// resolvida. So `CONDITION` recebe `resolvedAt`.
+enum NotificationShape {
+  EVENT
+  CONDITION
+}
+
+/// Registro duravel da central de notificacoes (Goal022).
+///
+/// `(tenantId, dedupeKey)` e `@@unique` **no banco**: e essa chave, e nao
+/// verificacao em codigo, que torna a materializacao idempotente —
+/// reconciliar dez vezes a mesma fonte produz uma linha. `dedupeKey` deriva
+/// da identidade do fato no dono (conversa, intencao, sessao de importacao,
+/// `sequence` do evento) ou do par tenant+especie para as condicoes; nunca de
+/// `now()`, de contador local ou do texto exibido.
+///
+/// `payload` guarda **apenas** o que a copy e o link precisam. Nunca telefone,
+/// credencial, `facts` de intencao, `leaseToken` nem payload cru: o que nao
+/// sai do dono nao passa a sair pelo BFF.
+model TenantNotification {
+  id         String            @id @default(cuid())
+  tenantId   String
+  kind       NotificationKind
+  level      NotificationLevel
+  shape      NotificationShape
+  dedupeKey  String
+  /// Identidade do alvo dentro da especie (conversa, compromisso, sessao).
+  /// Nulo nas condicoes de tenant, que nao tem alvo alem do proprio negocio.
+  subjectId  String?
+  /// Instante do fato no dono, nunca o da materializacao.
+  occurredAt DateTime
+  readAt     DateTime?
+  /// So `CONDITION`. Preenchido quando a fonte deixa de reportar a condicao;
+  /// a linha permanece no historico, nada e deletado.
+  resolvedAt DateTime?
+  payload    Json              @default("{}")
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, dedupeKey])
+  /// As tres leituras reais: nao lidas, condicoes abertas e historico recente.
+  @@index([tenantId, readAt])
+  @@index([tenantId, shape, resolvedAt])
+  @@index([tenantId, occurredAt(sort: Desc)])
+}
+
+/// Preferencia humana da central. Hoje so `AI_APPOINTMENT_CREATED`, com
+/// **default desligado** (vault: "default silencioso"). Sem canal de e-mail ou
+/// push: campo que nenhuma camada honra nao entra no contrato.
+model NotificationPreference {
+  id                   String   @id @default(cuid())
+  tenantId             String   @unique
+  aiAppointmentCreated Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+/// Throttle e cursores da reconciliacao, por negocio (Goal022). Persistido
+/// porque a materializacao roda dentro de requisicao que ja existe: sem estado
+/// no banco, cada requisicao releria tudo de novo.
+///
+/// `seededAt` e o instante da primeira reconciliacao do tenant e existe para
+/// uma regra de produto: **nenhum negocio ganha notificacao retroativa**.
+/// Evento anterior a ele avanca o cursor sem criar linha. Condicoes nao
+/// dependem disso — sao estado corrente e nascem refletindo o agora.
+model NotificationSyncState {
+  id                       String    @id @default(cuid())
+  tenantId                 String    @unique
+  seededAt                 DateTime  @default(now())
+  lastReconciledAt         DateTime?
+  /// Cursor opaco `(dueAt, id)` devolvido pela leitura de falhas do Scheduling.
+  reminderFailedCursor     String?
+  /// `sequence` do ultimo `AppointmentEvent` ja lido. Texto porque e BigInt.
+  aiAppointmentEventCursor String?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }

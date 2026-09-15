@@ -1896,3 +1896,127 @@ abaixo.
   partir de `GET /v1/appointments/:id/notifications`. `TRANSPORT_UNKNOWN`
   aparece nesse detalhe como envio sem confirmação, nunca como "não
   enviado": a tela não afirma mais do que a liquidação sabe.
+
+## Delta implementado — Goal022, 2026-09-15 (ACCEPTED na rodada 2 do [review022](reviews/022-review.md))
+
+A fotografia acima permanece como registro. Os fatos abaixo descrevem o que o
+diff do Goal022 entrega para G-28 ("central/alertas"): a central de
+notificações persistida e suas condições de canal. O FATO de "Dados
+pertencentes ao BFF" que dizia não haver entidades para central de
+notificações está superado pelos fatos abaixo.
+
+- **FATO atual:** `apps/bff/prisma/schema.prisma` ganhou `TenantNotification`
+  (`kind`/`level`/`shape`/`dedupeKey`/`subjectId`/`occurredAt`/`readAt`/
+  `resolvedAt`/`payload`, único por `(tenantId, dedupeKey)`), `NotificationPreference`
+  (hoje só `aiAppointmentCreated`, default `false`) e `NotificationSyncState`
+  (throttle e cursores por negócio), na migration única e aditiva
+  `20260915140000_goal022_notification_center`. Sete espécies em vocabulário
+  fechado (`apps/bff/src/modules/notifications/species.ts`), com nível e forma
+  derivados do `kind` por tabela fixa no código, nunca escolha de quem
+  materializa: `CUSTOMER_WAITING_HUMAN` (atenção, condição),
+  `REMINDER_FAILED` (atenção, evento), `IMPORT_COMPLETED` (informativo,
+  evento), `AI_APPOINTMENT_CREATED` (informativo, evento),
+  `WHATSAPP_DISCONNECTED` (crítico, condição), `AI_UNAVAILABLE` (crítico,
+  condição) e `SETUP_INCOMPLETE` (atenção, condição).
+- **FATO atual:** não há worker, cron nem fila. A reconciliação roda dentro de
+  requisições que já existiam, sob throttle persistido em
+  `NotificationSyncState` (`NOTIFICATIONS_RECONCILE_MIN_INTERVAL_SECONDS`,
+  default 60s). As condições de canal (`WHATSAPP_DISCONNECTED`,
+  `AI_UNAVAILABLE`) reconciliam dentro de `GET /v1/status`
+  (`status/routes.ts` chama `reconcileStatusConditions` com os valores que a
+  própria requisição já computou, sem chamada remota extra); as demais
+  espécies reconciliam dentro de `GET /v1/notifications` e
+  `GET /v1/notifications/summary`. Fonte indisponível deixa o `kind` dela
+  intocado (nem materializa, nem resolve) e nunca vira `500`.
+- **FATO atual:** materializar de novo não reescreve `readAt` nem `occurredAt`
+  da linha aberta (a idempotência é do `ON CONFLICT DO NOTHING` sobre
+  `(tenantId, dedupeKey)`), mas condição **já resolvida** que a fonte volta a
+  reportar **reabre**: `store.materialize` completa o `createMany` com um
+  `UPDATE` filtrado por `resolvedAt IS NOT NULL` que devolve `resolvedAt` a
+  nulo, zera `readAt` e move `occurredAt` para o instante do episódio novo. A
+  chave de dedupe de uma condição é a identidade da condição, não a da
+  ocorrência — sem essa reabertura o canal que cai pela segunda vez não seria
+  reportado. É uma linha por condição ao longo dos episódios, nunca uma
+  segunda linha.
+- **FATO atual:** os donos ganharam leitura própria para a central, sem
+  segunda cópia dos dados: `GET /internal/handoffs/awaiting-human` na IA
+  (`HandoffService.listConversationsAwaitingHuman`, uma entrada por conversa
+  mesmo com mais de um `Handoff` OPEN) alimenta `CUSTOMER_WAITING_HUMAN`;
+  `GET /internal/notification-intents/failed` e
+  `GET /internal/appointment-events/ai-created` no Scheduling (cursor
+  estável, o segundo por `sequence` por ser monotônico) alimentam
+  `REMINDER_FAILED` e `AI_APPOINTMENT_CREATED`; `IMPORT_COMPLETED` reusa a
+  leitura de `importState` já existente da importação (Goal010/Goal020); e
+  `SETUP_INCOMPLETE` reusa `onboardingIssues` sobre o mesmo `onboardingState`
+  que `POST /v1/onboarding/complete` usa para recusar conclusão — extraído
+  para `apps/bff/src/lib/onboarding-state.ts` neste diff para que as duas
+  rotas dependam de uma única definição de "configuração essencial".
+  Nenhuma dessas leituras devolve telefone, credencial, `facts` de intenção
+  ou `leaseToken`; `payload` da notificação carrega só o que a copy e a
+  navegação precisam. Em particular, `awaiting-human` devolve `contactName`
+  como o nome do contato ou `null` — sem queda para telefone formatado, que
+  seria telefone gravado em `payload` do mesmo jeito; a tela de Conversas
+  continua identificando pelo número porque lê a conversa direto, sem
+  persistir nada.
+- **FATO atual:** quatro rotas públicas sob `requireTenantContext`, sem
+  aceitar `tenantId` do chamador: `GET /v1/notifications` (paginada, filtros
+  `level`/`unread`/`resolved`, janela de leitura de 90 dias — não é
+  retenção), `GET /v1/notifications/summary` (`byLevel`, `unreadCount`,
+  `openConditionsCount`), `POST /v1/notifications/read` (por `id` ou
+  `{ all: true }`, idempotente nos dois formatos) e
+  `GET`/`PATCH /v1/notifications/preferences`
+  ([PUBLIC_API_V1](../../apps/bff/PUBLIC_API_V1.md#central-de-notificações-e-alertas-persistentes-goal022wu-04)).
+- **FATO atual:** o frontend ganhou a entrada `/notificacoes`
+  (`features/notifications/NotificationsScreen.tsx`) com os três níveis, não
+  lida destacada, marcar uma ou todas como lidas, condição resolvida
+  identificada, estado vazio explicado, e a seção de preferência
+  (`NotificationPreferenceSection.tsx`) para `AI_APPOINTMENT_CREATED`, que
+  nasce desligada. No chrome (`AppShell.tsx`, `navigation.ts`), Notificações
+  entrou como destino de sidebar/"Mais" — nunca como quinta aba do bottom nav,
+  que continua com as quatro de `MOBILE_TAB_SECTIONS` mais "Mais" —, com
+  contador de não lidas com teto de exibição `9+`
+  (`notificationsBadgeLabel`) lido do mesmo polling que já buscava
+  `GET /v1/status` (`useSystemStatusPolling` ganhou uma segunda fase para
+  `GET /v1/notifications/summary`, sem novo intervalo nem novo listener), e
+  dois banners persistentes — WhatsApp desconectado e IA indisponível —
+  derivados de `whatsappView`/`aiView` da mesma leitura de status, com copy
+  distinta dos chips já existentes na sidebar.
+- **FATO atual:** o gate `validate:integration` ganhou o passo
+  `rehearse:goal022-notification-center-migration`
+  (`scripts/goal022-notification-center-migration-rehearsal.mjs`), de 25 para
+  26 passos ([VALIDATION_GATE](VALIDATION_GATE.md)).
+- **LIMITE (divergência de padrão, declarada pelo próprio ensaio):**
+  diferente de toda outra migration deste repositório desde o Goal009,
+  `20260915140000_goal022_notification_center` não guarda `CREATE
+  TYPE`/`CREATE TABLE` contra reexecução (sem `IF NOT EXISTS` nem bloco
+  `duplicate_object`); reaplicá-la sobre um banco já migrado falha. Detalhe
+  em [DATA_MIGRATION §9](DATA_MIGRATION.md#9-migração-bff-ia-e-transporte).
+- **LIMITE (G-28 aberto na parte de alerta externo):** a central é
+  inteiramente in-app — não há e-mail crítico, push nem aplicativo nativo.
+  E-mail crítico depende de uma decisão de capacidade/custo ainda não tomada
+  (**U-03**, isolada em
+  [GAP_ANALYSIS §Incertezas isoladas](GAP_ANALYSIS.md#incertezas-isoladas-e-decisões-necessárias):
+  "capacidade contínua do deploy e email crítico" exige ambiente/custo/contas
+  efetivos antes de comprometer um provedor ou assumir capacidade sempre
+  ativa) e continua fora deste diff.
+- **LIMITE:** nenhuma mensagem real de nenhuma fonte foi exercitada por este
+  trabalho documental — mesma classe de gate operacional já declarada nos
+  Goals 010/019/021. Retenção/purga de `TenantNotification` além da janela de
+  leitura de 90 dias não tem prazo definido, no mesmo estado que
+  `AppointmentNotificationIntent.facts` desde o Goal021.
+- **LIMITE (contador e lista com janelas diferentes):** `unreadCount` de
+  `GET /v1/notifications/summary` conta toda notificação não lida do negócio,
+  sem filtro de `occurredAt`, enquanto `GET /v1/notifications` limita a lista
+  aos últimos 90 dias. Uma não lida mais antiga que isso entra no contador do
+  chrome e não aparece na tela; `POST /v1/notifications/read` com
+  `{ all: true }` também ignora a janela, então marcar todas recupera o
+  alinhamento. Some quando a retenção do Goal023 definir prazo.
+- **LIMITE (prova da reabertura):** os oito gates declarados do Goal rodaram
+  na rodada 1, antes de `reopenResolvedConditions` existir. A semântica de
+  reabertura está provada em unidade sobre o dublê de Prisma
+  (`goal022-notification-engine.test.ts`, três casos novos), mas os dois casos
+  correspondentes de `goal022-notification-center.integration.test.ts` foram
+  escritos e **nunca executados** contra PostgreSQL — `RUN_INTEGRATION` estava
+  desligado no ambiente do executor. Rodar `validate:integration` sobre esta
+  árvore fecha a lacuna sem mudar nada. Detalhe em
+  [review022](reviews/022-review.md).

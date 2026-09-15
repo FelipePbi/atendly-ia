@@ -71,6 +71,12 @@ const envSchema = z.object({
   // Evolution acontece dentro daquele prazo antes da IA responder ao BFF, e
   // INTERNAL_HTTP_TIMEOUT_MS (rotas JSON) e curto demais para esperar por ele.
   INTERNAL_HTTP_MEDIA_TIMEOUT_MS: intEnv(90_000),
+  // Janela minima entre duas reconciliacoes da central de notificacoes do
+  // mesmo negocio (Goal022). A materializacao roda dentro de requisicao que ja
+  // existe, entao o throttle e o que impede uma tela aberta de transformar
+  // cada poll em uma rodada de leituras nos donos. Configuravel de proposito:
+  // nao e constante magica espalhada pelo codigo.
+  NOTIFICATIONS_RECONCILE_MIN_INTERVAL_SECONDS: intEnv(60),
   PASSWORD_RESET_TOKEN_TTL_MINUTES: intEnv(30),
   PASSWORD_RESET_PUBLIC_URL: stringEnv("http://localhost:3001/nova-senha"),
   PASSWORD_RESET_DELIVERY_URL: stringEnv(),

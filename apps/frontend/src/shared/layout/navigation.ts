@@ -11,6 +11,7 @@ export type PlatformSection =
   | "importacao"
   | "inicio"
   | "negocio"
+  | "notificacoes"
   | "servicos"
   | "whatsapp";
 
@@ -57,10 +58,23 @@ export const MOBILE_TAB_SECTIONS: PlatformSection[] = [
 ];
 
 /**
- * Destinos que só aparecem dentro do "Mais" no mobile: Serviços e o que a
- * Especificação das Telas lista sob "Mais / Configurações".
+ * Notificações (Goal022/WU-08): entrada de chrome, não um sexto destino
+ * primário — vive na sidebar (tablet/notebook/desktop) e dentro de "Mais" no
+ * mobile, nunca como quinta aba do bottom nav.
+ */
+export const NOTIFICATIONS_DESTINATION: NavDestination = {
+  href: "/notificacoes",
+  icon: "inbox",
+  label: "Notificações",
+  section: "notificacoes",
+};
+
+/**
+ * Destinos que só aparecem dentro do "Mais" no mobile: Notificações,
+ * Serviços e o que a Especificação das Telas lista sob "Mais / Configurações".
  */
 export const MORE_DESTINATIONS: NavDestination[] = [
+  NOTIFICATIONS_DESTINATION,
   { href: "/servicos", icon: "briefcase", label: "Serviços", section: "servicos" },
   { href: "/configuracoes/negocio", icon: "info", label: "Negócio", section: "negocio" },
   {
@@ -106,3 +120,16 @@ export type ShellContextualAction = {
   icon: IconName;
   label: string;
 };
+
+const NOTIFICATIONS_BADGE_CAP = 9;
+
+/**
+ * Teto de exibição do contador de não lidas do chrome: acima do teto, mostra
+ * `"9+"` em vez do número exato — o contador é um sinal de atenção, não um
+ * substituto da central. `null` quando não há nada para destacar.
+ */
+export function notificationsBadgeLabel(unreadCount: number): string | null {
+  if (unreadCount <= 0) return null;
+  if (unreadCount > NOTIFICATIONS_BADGE_CAP) return `${NOTIFICATIONS_BADGE_CAP}+`;
+  return String(unreadCount);
+}

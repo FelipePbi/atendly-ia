@@ -23,6 +23,8 @@ import {
   isMobileTab,
   isMoreActive,
   MORE_DESTINATIONS,
+  NOTIFICATIONS_DESTINATION,
+  notificationsBadgeLabel,
   SIDEBAR_DESTINATIONS,
 } from "./navigation";
 import type { ShellConfig } from "./ShellConfig";
@@ -93,6 +95,12 @@ function AppShellChrome({
     session?.tenant.name ??
     "Seu negócio";
   const userLabel = session?.user.email ?? "Conta principal";
+  const notificationsBadge = notificationsBadgeLabel(
+    status.notificationsSummary?.unreadCount ?? 0,
+  );
+  const whatsappDisconnected = status.whatsappView === "off";
+  const aiUnavailable =
+    status.aiView === "pending" || status.aiView === "unknown";
 
   useEffect(() => {
     document.title = title ? `${title} — Atendly` : "Atendly";
@@ -176,6 +184,20 @@ function AppShellChrome({
               <Link
                 className={clsx(
                   "nav-item",
+                  active === "notificacoes" && "is-active",
+                )}
+                href={NOTIFICATIONS_DESTINATION.href}
+                aria-current={active === "notificacoes" ? "page" : undefined}
+              >
+                <Icon name={NOTIFICATIONS_DESTINATION.icon} />
+                <span>{NOTIFICATIONS_DESTINATION.label}</span>
+                {notificationsBadge && (
+                  <span className="badge-count">{notificationsBadge}</span>
+                )}
+              </Link>
+              <Link
+                className={clsx(
+                  "nav-item",
                   active === "configuracoes" && "is-active",
                 )}
                 href="/configuracoes"
@@ -254,6 +276,22 @@ function AppShellChrome({
               </span>
             </header>
           )}
+          {whatsappDisconnected && (
+            <PersistentStatusBanner
+              text="Reconecte o WhatsApp para a IA voltar a responder."
+              title="Atendimento automático parado"
+              href="/configuracoes/whatsapp"
+              linkLabel="Reconectar WhatsApp"
+            />
+          )}
+          {aiUnavailable && (
+            <PersistentStatusBanner
+              text="A IA não está respondendo. As conversas seguem para atendimento humano."
+              title="IA indisponível"
+              href="/configuracoes/ia"
+              linkLabel="Ver configurações da IA"
+            />
+          )}
           {children}
         </main>
         {showBottomNav && action && (
@@ -312,6 +350,9 @@ function AppShellChrome({
             <Link className="menu-item" href={item.href} key={item.section}>
               <Icon name={item.icon} />
               {item.label}
+              {item.section === "notificacoes" && notificationsBadge && (
+                <span className="badge-count">{notificationsBadge}</span>
+              )}
             </Link>
           ))}
           <span className="menu-item" aria-disabled="true">
@@ -330,6 +371,38 @@ function AppShellChrome({
         </div>
       </Dialog>
     </>
+  );
+}
+
+/**
+ * Deriva de `/v1/status` (via `useSystemStatus`, mesmo tick do shell), não da
+ * central de notificações: o banner afirma a condição agora, a central guarda
+ * desde quando e até quando (Goal022/WU-08). A frase nunca repete a dos chips
+ * de estado da sidebar (`StatusLine`), que são "WhatsApp desconectado" /
+ * "IA desligada" / "IA em ativação" / etc.
+ */
+function PersistentStatusBanner({
+  href,
+  linkLabel,
+  text,
+  title,
+}: {
+  href: string;
+  linkLabel: string;
+  text: string;
+  title: string;
+}) {
+  return (
+    <div className="alert alert-error shell-status-banner" role="alert">
+      <Icon name="alert" />
+      <div>
+        <p className="alert-title">{title}</p>
+        <p className="alert-text">{text}</p>
+      </div>
+      <Link className="btn btn-secondary" href={href}>
+        {linkLabel}
+      </Link>
+    </div>
   );
 }
 

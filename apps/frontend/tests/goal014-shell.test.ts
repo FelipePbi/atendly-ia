@@ -39,8 +39,9 @@ describe("modelo de navegação", () => {
     ]);
   });
 
-  test("'Mais' lista Serviços e os destinos de Configurações da Especificação das Telas", () => {
+  test("'Mais' lista Notificações, Serviços e os destinos de Configurações da Especificação das Telas", () => {
     expect(MORE_DESTINATIONS.map((item) => item.section)).toEqual([
+      "notificacoes",
       "servicos",
       "negocio",
       "config-agenda",
@@ -60,6 +61,7 @@ describe("modelo de navegação", () => {
   );
 
   test.each([
+    "notificacoes",
     "servicos",
     "negocio",
     "config-agenda",

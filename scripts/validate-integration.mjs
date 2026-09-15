@@ -435,6 +435,22 @@ export function integrationSteps(target) {
       args: ["scripts/goal021-reminder-migration-rehearsal.mjs"],
       env,
     },
+    // Gate M0/M1 do Goal022: ensaio da migration da central de notificacoes
+    // no BFF (`TenantNotification`, `NotificationPreference`,
+    // `NotificationSyncState`) contra estoque legado de negocios, em banco
+    // próprio e descartável, passo único aditivo. Prova aditividade coluna a
+    // coluna, ausência de backfill, o dedupe por (tenantId, dedupeKey) por
+    // inserção duplicada — a mesma chave que `createMany({ skipDuplicates })`
+    // usa em produção —, vocabulário fechado de kind/level/shape, no máximo
+    // uma preferência e um cursor por negócio, cascata de negócio removido
+    // e repetição sem mudança.
+    {
+      name: "rehearse:goal022-notification-center-migration",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal022-notification-center-migration-rehearsal.mjs"],
+      env,
+    },
     // Identidade de cliente contra PostgreSQL real: telefone compartilhado,
     // cliente sem telefone, criação só na confirmação e isolamento por tenant.
     // Não pertence ao core porque exige banco.

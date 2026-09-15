@@ -32,6 +32,10 @@ import { EvolutionProvider } from "../channel/adapters/evolution/EvolutionProvid
 import { ChannelConnectionService } from "../channel/ChannelConnectionService.js";
 import { PlatformWhatsAppSender } from "../channel/platform/PlatformWhatsAppSender.js";
 import {
+  type ConversationAwaitingHuman,
+  listConversationsAwaitingHuman,
+} from "../handoff/HandoffService.js";
+import {
   type InboxPort,
   inboxRetryPolicyFromEnv,
   InboxStore,
@@ -108,6 +112,10 @@ const conversationQuerySchema = z.object({
   handling: z.enum(["AI", "HUMAN"]).optional(),
   ignored: z.enum(["true", "false"]).optional(),
   search: z.string().trim().max(160).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+const awaitingHumanQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
@@ -515,6 +523,24 @@ export async function registerInternalRoutes(
       include: { attachments: { orderBy: { createdAt: "asc" }, take: 1 } },
     });
     return internalData(request, messages.map(messageDto));
+  });
+
+  /**
+   * Quem esta aguardando humano, por tenant (Goal022/WU-02).
+   *
+   * Uma entrada por conversa, mesmo quando `pauseForHuman` grava mais de uma
+   * linha `Handoff` OPEN para ela. Takeover do dono nunca aparece: a exclusao
+   * acontece aqui, na leitura da IA, e nao no consumidor.
+   */
+  app.get("/internal/handoffs/awaiting-human", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    const query = parseOrThrow(awaitingHumanQuerySchema, request.query);
+    const entries = await listConversationsAwaitingHuman(
+      prisma,
+      tenantId,
+      query.limit,
+    );
+    return internalData(request, entries.map(awaitingHumanDto));
   });
 
   /**
@@ -1450,6 +1476,18 @@ function messageDto(message: {
   };
 }
 
+function awaitingHumanDto(entry: ConversationAwaitingHuman) {
+  return {
+    conversationId: entry.conversationId,
+    // Nome quando a conversa tem um, `null` quando nao. Telefone nao sai desta
+    // rota em nenhuma forma — quem precisa identificar o contato abre a
+    // conversa.
+    contactName: entry.contactName,
+    reason: entry.reason,
+    openedAt: entry.openedAt.toISOString(),
+  };
+}
+
 function knowledgeDocumentDto(document: KnowledgeDocumentRecord) {
   return {
     id: document.id,
@@ -1585,6 +1623,11 @@ export function requiredScope(request: FastifyRequest): InternalScope {
   }
   if (/^\/internal\/customers\/[^/]+\/memory(\/[^/]+)?$/u.test(path)) {
     return method === "GET" ? "customer-memory:read" : "customer-memory:write";
+  }
+  // Mesma decisao de leitura de conversas: quem esta aguardando humano e uma
+  // projecao delas, nao uma decisao de escrita.
+  if (path === "/internal/handoffs/awaiting-human" && method === "GET") {
+    return "conversations:read";
   }
   if (path.startsWith("/internal/conversations")) {
     if (method === "GET") return "conversations:read";

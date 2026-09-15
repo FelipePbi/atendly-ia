@@ -11,9 +11,26 @@ import {
   authorizeInternalRequest,
   type InternalScope,
 } from "../../lib/internal-credentials.js";
+import { normalizePhone } from "../../lib/phone.js";
+import { activationTestResidueReport } from "../activation-test/activation-test-cleanup.js";
+import {
+  ACTIVATION_TEST_STEP_LABELS,
+  type ActivationTestMilestoneRecord,
+  activationTestProgress,
+  isTerminalActivationTestState,
+} from "../activation-test/activation-test-run.js";
+import { ActivationTestAiDriver } from "../activation-test/ActivationTestAiDriver.js";
+import { TenantChannelReplySender } from "../activation-test/ActivationTestReplySender.js";
+import {
+  type ActivationTestChannel,
+  type ActivationTestRunRecord,
+  ActivationTestRunStore,
+} from "../activation-test/ActivationTestRunStore.js";
+import { ActivationTestService } from "../activation-test/ActivationTestService.js";
 import { AssistantService } from "../assistant/assistant.service.js";
 import { EvolutionProvider } from "../channel/adapters/evolution/EvolutionProvider.js";
 import { ChannelConnectionService } from "../channel/ChannelConnectionService.js";
+import { PlatformWhatsAppSender } from "../channel/platform/PlatformWhatsAppSender.js";
 import {
   type InboxPort,
   inboxRetryPolicyFromEnv,
@@ -54,6 +71,7 @@ import {
   businessContextSchema,
   normalizeBusinessContext,
 } from "../tenant-config/business-context.js";
+import { loadTenantExecutionContext } from "../tenant-config/tenant-execution-context.js";
 import { AssistantToolRegistry } from "../tools/assistant-tools.js";
 
 const provisionChannelSchema = z.object({
@@ -98,6 +116,14 @@ const categoryOverrideSchema = z.object({
 });
 
 const ignoreContactSchema = z.object({ ignored: z.boolean() });
+
+// Goal019/WU-07: ignorar por telefone, sem conversa aberta ainda — o mesmo
+// limite de `startActivationTestSchema.tenantPhone` (validar aqui falha
+// rapido, sem depender do upsert para um numero obviamente invalido).
+const ignoreContactByPhoneSchema = z.object({
+  phone: z.string().trim().min(8).max(20),
+  ignored: z.boolean(),
+});
 
 const sendOwnerMessageSchema = z.object({
   text: z.string().trim().min(1).max(4_000),
@@ -172,6 +198,13 @@ const otherInfoSchema = z
   .object({ content: z.string().trim().min(1) })
   .strict();
 
+// Numero do WhatsApp do negocio, projetado por quem pede o teste: e para ele
+// que o numero oficial da Atendly manda a conversa de teste. Nao ha default e
+// nao ha descoberta por busca — sem numero valido a execucao e recusada.
+const startActivationTestSchema = z
+  .object({ tenantPhone: z.string().trim().min(8).max(20) })
+  .strict();
+
 export interface InternalRoutesOptions {
   /** Inbox duravel: o dead-letter aparece como atencao no painel. */
   inbox?: Pick<InboxPort, "countDeadLetters">;
@@ -182,6 +215,7 @@ export interface InternalRoutesOptions {
     | "currentSession"
     | "setCategoryOverride"
     | "setIgnored"
+    | "setIgnoredByExternalContact"
     | "releaseToAi"
     | "assumeHumanControl"
   >;
@@ -203,6 +237,16 @@ export interface InternalRoutesOptions {
   suggestions?: Pick<AssistantService, "generateSuggestions">;
   /** Bytes de mídia sob demanda, com recusa própria (Goal013/WU-05). */
   media?: Pick<MessageMediaService, "resolve">;
+  /** Execução do teste real da ativação (Goal019/WU-03). */
+  activationTest?: Pick<
+    ActivationTestService,
+    | "start"
+    | "restart"
+    | "execute"
+    | "current"
+    | "milestones"
+    | "activeChannel"
+  >;
 }
 
 export async function registerInternalRoutes(
@@ -236,7 +280,12 @@ export async function registerInternalRoutes(
       prisma,
       app.log,
       undefined,
-      new AssistantToolRegistry(prisma, new SchedulingClient(), undefined, app.log),
+      new AssistantToolRegistry(
+        prisma,
+        new SchedulingClient(),
+        undefined,
+        app.log,
+      ),
       undefined,
       customerMemoryService,
       new PGVectorKnowledgeStore(
@@ -245,11 +294,60 @@ export async function registerInternalRoutes(
         env.KNOWLEDGE_SEARCH_MIN_SCORE,
       ),
     );
+  const activationTest =
+    options.activationTest ??
+    new ActivationTestService({
+      runs: new ActivationTestRunStore(prisma),
+      scheduling: new SchedulingClient(),
+      sender: new PlatformWhatsAppSender(app.log),
+      // A IA que o teste exercita e a mesma que atende qualquer cliente:
+      // mesma porta de entrada, mesmo agente, mesmas ferramentas. Nao existe
+      // aqui um assistente "de teste" com prompt ou catalogo proprio — se
+      // existisse, o teste nao provaria nada sobre o atendimento real.
+      ai: new ActivationTestAiDriver({
+        assistant: new AssistantService(
+          prisma,
+          app.log,
+          undefined,
+          new AssistantToolRegistry(
+            prisma,
+            new SchedulingClient(),
+            undefined,
+            app.log,
+          ),
+          undefined,
+          customerMemoryService,
+        ),
+        // Mesmo contexto de negocio que o webhook do canal entrega: sem ele o
+        // turno inteiro vira "contexto incompleto" e a IA nao chega a
+        // consultar catalogo nem agenda.
+        tenantContext: (tenantId) =>
+          loadTenantExecutionContext(prisma, tenantId),
+        // A resposta da IA sai pelo canal **do tenant**, com a credencial do
+        // vinculo dele: `handleIncomingText` grava a linha e nao envia.
+        replySender: new TenantChannelReplySender(prisma, app.log),
+        readToolCalls: async ({ tenantId, conversationId, since }) =>
+          prisma.aiToolCall.findMany({
+            where: {
+              tenantId,
+              createdAt: { gte: since },
+              aiRun: { conversationId },
+            },
+            orderBy: { createdAt: "asc" },
+            select: { id: true, name: true, status: true, result: true },
+          }),
+      }),
+      logger: app.log,
+    });
   const messageMedia =
     options.media ??
     new MessageMediaService(prisma, (channel) => {
       const credential = channelConnections.resolveChannelCredential(channel);
-      return new EvolutionProvider(app.log, credential, channel.externalInstanceId);
+      return new EvolutionProvider(
+        app.log,
+        credential,
+        channel.externalInstanceId,
+      );
     });
 
   // Autorização por escopo, com negação por omissão: um caminho `/internal/`
@@ -700,6 +798,41 @@ export async function registerInternalRoutes(
     );
   });
 
+  /**
+   * Contato ignorado por telefone, sem conversa aberta ainda (Goal019/WU-07):
+   * a etapa opcional entre conectar e testar tambem aceita numero informado
+   * manualmente. O canal e o vinculo ativo do WhatsApp do tenant — sem ele
+   * nao ha `channelId` para a chave do contato.
+   */
+  app.put("/internal/contacts/ignore", async (request) => {
+    const { tenantId, userId } = trustedTenantContext(request);
+    const body = parseOrThrow(ignoreContactByPhoneSchema, request.body);
+    const externalContactId = normalizePhone(body.phone);
+    if (!externalContactId) {
+      throw new AppError("Phone number is invalid after normalization.", {
+        statusCode: 400,
+        code: "CONTACT_PHONE_INVALID",
+      });
+    }
+    const channel = await channelConnections.resolveTenantEvolutionChannel(
+      tenantId,
+    );
+    const contact = await sessions.setIgnoredByExternalContact({
+      tenantId,
+      channelId: channel.id,
+      externalContactId,
+      ignored: body.ignored,
+      actor: userId,
+      source: "onboarding",
+    });
+    return internalData(request, {
+      contactId: contact.contactId,
+      externalContactId: contact.externalContactId,
+      ignored: contact.ignored,
+      ignoredAt: contact.ignoredAt?.toISOString() ?? null,
+    });
+  });
+
   app.post("/internal/conversations/:id/resolve", async (request) => {
     const { tenantId } = trustedTenantContext(request);
     const { id } = parseOrThrow(conversationParamsSchema, request.params);
@@ -938,6 +1071,184 @@ export async function registerInternalRoutes(
       ).size,
     });
   });
+
+  /**
+   * Execucao corrente do teste real (Goal019/WU-03).
+   *
+   * `null` e "nunca testou". Nao existe execucao fabricada para tenant que
+   * nunca pediu teste, e o progresso vem dos marcos gravados, nunca do tempo
+   * decorrido desde o inicio.
+   */
+  app.get("/internal/activation-test", async (request) => {
+    const { tenantId, userId } = trustedTenantContext(request);
+    // A leitura reconcilia execucao abandonada (uma por requisicao, sempre
+    // para estado terminal), entao ela precisa do mesmo contexto que a
+    // limpeza usa para falar com a agenda.
+    const run = await activationTest.current({
+      tenantId,
+      userId,
+      requestId: String(request.id),
+    });
+    if (!run) return internalData(request, null);
+    const [milestones, activeChannel] = await Promise.all([
+      activationTest.milestones(tenantId, run.id),
+      activationTest.activeChannel(tenantId),
+    ]);
+    return internalData(
+      request,
+      activationTestRunDto(run, milestones, { activeChannel }),
+    );
+  });
+
+  /**
+   * Inicia o teste real.
+   *
+   * Responde `202` com a execucao ja persistida e seguidamente executa no
+   * servidor: a partir daqui a execucao nao depende de tela nenhuma — fechar o
+   * navegador nao cancela nada, e reabrir le o estado corrente daqui.
+   *
+   * Cada recusa tem codigo proprio e nenhuma delas e `500`; quem traduz
+   * `AppError` em resposta e o error handler do app.
+   */
+  app.post("/internal/activation-test", async (request, reply) => {
+    const { tenantId, userId } = trustedTenantContext(request);
+    const body = parseOrThrow(startActivationTestSchema, request.body);
+    const run = await activationTest.start({
+      tenantId,
+      userId,
+      requestId: String(request.id),
+      tenantPhone: body.tenantPhone,
+    });
+    executeActivationTest(run.id, tenantId, userId, String(request.id));
+    const milestones = await activationTest.milestones(tenantId, run.id);
+    return reply
+      .code(202)
+      .send(internalData(request, activationTestRunDto(run, milestones)));
+  });
+
+  /** Reiniciar depois de interferencia humana: a pausada e descartada. */
+  app.post("/internal/activation-test/restart", async (request, reply) => {
+    const { tenantId, userId } = trustedTenantContext(request);
+    const body = parseOrThrow(startActivationTestSchema, request.body);
+    const run = await activationTest.restart({
+      tenantId,
+      userId,
+      requestId: String(request.id),
+      tenantPhone: body.tenantPhone,
+    });
+    executeActivationTest(run.id, tenantId, userId, String(request.id));
+    const milestones = await activationTest.milestones(tenantId, run.id);
+    return reply
+      .code(202)
+      .send(internalData(request, activationTestRunDto(run, milestones)));
+  });
+
+  /**
+   * Toca a execucao fora da requisicao.
+   *
+   * O resultado do teste vive na linha da execucao, nao nesta resposta: falhar
+   * o teste e resultado gravado, e por isso o erro aqui so vira log — devolver
+   * 500 para quem pediu o inicio diria que o pedido falhou, o que nao e
+   * verdade.
+   */
+  function executeActivationTest(
+    runId: string,
+    tenantId: string,
+    userId: string,
+    requestId: string,
+  ): void {
+    void activationTest
+      .execute({ tenantId, runId, userId, requestId })
+      .catch((error: unknown) => {
+        app.log.error(
+          { tenantId, runId, err: toErrorMessage(error) },
+          "Activation test execution could not be driven to a terminal state",
+        );
+      });
+  }
+}
+
+/**
+ * DTO da execucao.
+ *
+ * Os seis marcos saem um a um, cada um com a fonte do fato que o sustenta.
+ * `sourceId` nulo so acontece junto de `reached: false` — nao existe marco
+ * concluido sem fonte para o consumidor mostrar.
+ */
+function activationTestRunDto(
+  run: ActivationTestRunRecord,
+  milestones: readonly ActivationTestMilestoneRecord[],
+  /**
+   * Vinculo ativo do tenant **agora**. Chave ausente significa "nao
+   * consultado" — e o caso das rotas de escrita, que acabaram de criar a
+   * execucao contra o vinculo corrente e por isso nao podem estar superadas.
+   */
+  channel: { activeChannel?: ActivationTestChannel | null } = {},
+) {
+  const failedStep = run.failedStep;
+  return {
+    id: run.id,
+    state: run.state,
+    // Vinculo contra o qual este teste foi feito, e se ele ainda e o do
+    // negocio. Trocar ou revincular o WhatsApp faz o teste deixar de valer:
+    // derivado da comparacao, nunca de um booleano que alguem tem de lembrar
+    // de virar na troca.
+    channelId: run.channelId,
+    supersededByChannelChange: supersededByChannelChange(run, channel),
+    terminal: isTerminalActivationTestState(run.state),
+    startedAt: run.startedAt,
+    finishedAt: run.finishedAt,
+    pausedAt: run.pausedAt,
+    currentStep: run.currentStep,
+    completedStep: run.completedStep,
+    attempts: run.attempts,
+    maxAttempts: run.maxAttempts,
+    failedStep,
+    failedStepLabel: failedStep
+      ? ACTIVATION_TEST_STEP_LABELS[failedStep]
+      : null,
+    failureCode: run.failureCode,
+    appointmentId: run.appointmentId,
+    // §6 exige que "a tela diz o que ficou": o estado da limpeza e o residuo
+    // saem daqui com alvo e razao ja em linguagem do negocio. Sem isto o
+    // consumidor so conseguiria afirmar limpeza completa — que e exatamente a
+    // falha de aceite que o Goal nomeia.
+    cleanupState: run.cleanupState,
+    cleanupAt: run.cleanupAt,
+    cleanupResidue: activationTestResidueReport(run.cleanupResidue),
+    milestones: activationTestProgress(milestones).map((item) => ({
+      milestone: item.milestone,
+      reached: item.reached,
+      reachedAt: item.reachedAt,
+      sourceKind: item.source?.kind ?? null,
+      sourceId: item.source?.id ?? null,
+    })),
+  };
+}
+
+/**
+ * O teste ainda vale para o WhatsApp que o negocio usa hoje?
+ *
+ * Sem vinculo ativo, nao vale: nao ha numero para o qual aquele teste sirva.
+ * Com vinculo, a comparacao e pela **instancia**, nao pelo `id` da linha:
+ * `ChannelConnection` e unica por `(tenantId, provider)`, entao revincular
+ * atualiza a mesma linha e troca `externalInstanceId` sem mudar o `id`.
+ * Comparar so o `id` deixaria o teste de um numero valendo para outro.
+ *
+ * Execucao anterior a coluna `channelInstanceId` (nula) cai na comparacao por
+ * `id`: e o maximo que se pode afirmar sobre ela sem inventar instancia.
+ */
+function supersededByChannelChange(
+  run: ActivationTestRunRecord,
+  channel: { activeChannel?: ActivationTestChannel | null },
+): boolean {
+  if (!("activeChannel" in channel)) return false;
+  const active = channel.activeChannel;
+  if (!active) return true;
+  if (active.id !== run.channelId) return true;
+  return run.channelInstanceId !== null
+    ? active.externalInstanceId !== run.channelInstanceId
+    : false;
 }
 
 function parseOrThrow<TSchema extends z.ZodType>(
@@ -1261,6 +1572,9 @@ export function requiredScope(request: FastifyRequest): InternalScope {
   if (path === "/internal/dashboard" && method === "GET") {
     return "dashboard:read";
   }
+  if (path.startsWith("/internal/activation-test")) {
+    return method === "GET" ? "activation-test:read" : "activation-test:write";
+  }
   if (path.startsWith("/internal/knowledge/")) {
     return method === "GET" ? "knowledge:read" : "knowledge:write";
   }
@@ -1281,6 +1595,11 @@ export function requiredScope(request: FastifyRequest): InternalScope {
     // Categoria e ignore sao decisao sobre a conversa, no mesmo escopo de
     // takeover/release: `PUT` sem escopo declarado cairia em `internal:unmapped`.
     if (method === "PUT") return "conversations:write";
+  }
+  // Ignorar por telefone (Goal019/WU-07) e a mesma decisao de `ignore` por
+  // conversa, so que sem conversa aberta ainda: mesmo escopo de escrita.
+  if (path === "/internal/contacts/ignore" && method === "PUT") {
+    return "conversations:write";
   }
 
   return "internal:unmapped";

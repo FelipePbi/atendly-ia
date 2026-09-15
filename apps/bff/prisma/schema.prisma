@@ -205,6 +205,14 @@ model AiSettings {
   /// projecao enviada a IA quando o negocio ainda nao escolheu, nunca como valor
   /// gravado silenciosamente para esta linha.
   tone      AiTone?
+  /// Execucao do teste real que autorizou a ativacao automatica (Goal019).
+  ///
+  /// Nulo e "nao foi ligada por teste" — nunca "o teste falhou". Guarda o ID
+  /// da execucao, e nao um booleano, porque duas perguntas dependem de
+  /// **qual** execucao foi: reconciliar a mesma duas vezes nao pode ativar
+  /// duas vezes, e trocar o WhatsApp invalida a execucao que autorizou, o que
+  /// so e verificavel comparando o vinculo dela com o vinculo corrente.
+  activatedByRunId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -242,6 +242,14 @@ describeWithDatabases("AssistantToolRegistry hold release against PostgreSQL", (
         appointmentId,
         cancelled: true as const,
       }),
+      deleteAppointment: async (appointmentId: string) => ({
+        appointmentId,
+        removed: true,
+      }),
+      deleteCustomer: async (customerId: string) => ({
+        customerId,
+        removed: true,
+      }),
       rescheduleAppointment: async (input: RescheduleAppointmentInput) => ({
         id: input.appointmentId,
         title: null,

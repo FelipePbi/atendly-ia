@@ -623,3 +623,195 @@ model KnowledgeChunk {
 
   @@index([tenantId, documentId])
 }
+
+/// Estado da execucao do teste real (Goal019). Terminal e nao terminal sao
+/// valores distintos, de proposito: uma execucao em andamento, uma pausada por
+/// interferencia humana, uma que falhou e uma que teve sucesso nao podem ser o
+/// mesmo valor com interpretacoes diferentes na tela.
+///
+/// Nao terminais: RUNNING e PAUSED_BY_HUMAN (`finishedAt` nulo).
+/// Terminais: SUCCEEDED, FAILED e DISCARDED (`finishedAt` preenchido).
+/// DISCARDED e a execucao pausada que a pessoa mandou reiniciar — nao e falha,
+/// e nao vira falha so para caber num estado existente.
+enum ActivationTestRunState {
+  RUNNING
+  PAUSED_BY_HUMAN
+  SUCCEEDED
+  FAILED
+  DISCARDED
+}
+
+/// Passos do caminho feliz do vault, na ordem do vault. O aviso de conversa de
+/// teste e passo separado e nao produz marco: ele avisa, nao demonstra nada.
+enum ActivationTestStep {
+  TEST_NOTICE
+  CLIENT_ASKS_PRICE
+  AI_IDENTIFIES_SERVICE
+  AI_ANSWERS_PRICE
+  CLIENT_ASKS_SLOT
+  AI_CHECKS_AVAILABILITY
+  CLIENT_ACCEPTS_SLOT
+  AI_CONFIRMS_APPOINTMENT
+}
+
+/// Os seis marcos do vault. Sao os unicos valores que a tela pode mostrar como
+/// progresso; nao existe marco "generico" nem marco de tempo decorrido.
+enum ActivationTestMilestoneName {
+  MESSAGE_SENT
+  SERVICE_IDENTIFIED
+  PRICE_INFORMED
+  AVAILABILITY_CHECKED
+  SLOT_SELECTED
+  APPOINTMENT_CONFIRMED
+}
+
+/// Natureza do fato que sustenta um marco: mensagem gravada, servico lido da
+/// agenda, disponibilidade consultada ou agendamento criado. Nao ha valor para
+/// "tempo passou".
+enum ActivationTestFactKind {
+  MESSAGE
+  SERVICE
+  AVAILABILITY
+  APPOINTMENT
+}
+
+/// Estado da remocao dos dados de teste.
+///
+/// Sao tres e nao dois de proposito: `PENDING` (ainda nao limpou) nao pode ser
+/// lido como sucesso, e `RESIDUAL` (limpou o que sabia limpar e algo ficou)
+/// nao pode ser lido como `CLEAN`. Nao existe valor para "limpeza parcial que
+/// conta como completa".
+enum ActivationTestCleanupState {
+  PENDING
+  CLEAN
+  RESIDUAL
+}
+
+/// Execucao do teste real da IA (Goal019).
+///
+/// Entidade com dono: existe no servidor, nao na tela. Fechar o navegador nao
+/// cancela nem invalida a execucao — reabrir le esta linha.
+///
+/// DIVERGENCIA DE SCHEMA CONHECIDA: existe tambem um indice unico **parcial**
+/// `ActivationTestRun_one_live_per_tenant` sobre `("tenantId") WHERE
+/// "finishedAt" IS NULL`, criado em SQL na migration
+/// `20260914120000_goal019_activation_test_run`. O Prisma nao modela indice
+/// parcial, entao ele nao aparece aqui e `prisma migrate diff` vai relatar a
+/// diferenca; ela e intencional e e o que garante uma unica execucao viva por
+/// tenant mesmo sob duas chamadas concorrentes de inicio.
+model ActivationTestRun {
+  id       String                 @id @default(cuid())
+  tenantId String
+  state    ActivationTestRunState @default(RUNNING)
+
+  startedAt DateTime @default(now())
+  /// Preenchido **apenas** em estado terminal. `finishedAt IS NULL` e a
+  /// definicao de "execucao viva" usada pelo indice unico parcial.
+  finishedAt DateTime?
+
+  /// Passo em andamento e ultimo passo concluido. Progresso de operacao, nunca
+  /// substituto dos marcos: marco so existe em `ActivationTestMilestone`.
+  currentStep   ActivationTestStep?
+  completedStep ActivationTestStep?
+
+  /// Tentativas do passo corrente e o limite declarado no codigo
+  /// (`ACTIVATION_TEST_MAX_ATTEMPTS`), copiado na criacao para que a execucao
+  /// continue legivel se o limite mudar depois.
+  attempts    Int @default(0)
+  maxAttempts Int
+
+  lastError   String?
+  lastErrorAt DateTime?
+
+  /// Preenchidos so quando a execucao termina em falha. `failedStep` e o passo
+  /// que falhou, em vocabulario do dominio, para a tela nomear o que quebrou.
+  failedStep    ActivationTestStep?
+  failureCode   String?
+  failureReason String?
+
+  /// Pausa por interferencia humana: a mensagem de origem humana que pausou.
+  /// Sem ela nao ha pausa — a deteccao usa o que o sistema ja sabe distinguir.
+  pausedAt          DateTime?
+  pausedByMessageId String?
+
+  /// Alvo do teste: vinculo do tenant, numero do tenant e numero da plataforma
+  /// que conversa com ele. Gravados na criacao porque a execucao nao pode
+  /// depender de reler configuracao que pode ter mudado no meio.
+  channelId      String
+  /// Instancia de WhatsApp contra a qual o teste rodou, gravada na criacao.
+  ///
+  /// `ChannelConnection` e unica por `(tenantId, provider)`: revincular
+  /// atualiza a mesma linha e troca `externalInstanceId` sem mudar o `id`.
+  /// Sem esta coluna, um teste feito com um numero continuaria valendo para
+  /// outro. Nula so em execucao anterior a coluna.
+  channelInstanceId String?
+  tenantPhone    String
+  platformNumber String
+
+  /// Servico escolhido pelo sistema e horario aceito pelo cliente simulado.
+  serviceId     String?
+  serviceName   String?
+  slotDate      String?
+  slotStartTime String?
+
+  /// IDs do que a execucao criou, gravados **no momento da criacao**. A limpeza
+  /// remove exatamente isto, nunca por busca por telefone, nome ou data.
+  conversationId    String?
+  contactId         String?
+  createdMessageIds String[] @default([])
+  appointmentId     String?
+  customerId        String?
+
+  /// Criado **por esta execucao**, nao apenas encontrado por ela.
+  ///
+  /// `conversationId`/`contactId` acima sao o alvo por onde a execucao
+  /// conversa — a conversa de teste pode ja existir de uma execucao anterior.
+  /// Os dois campos abaixo sao preenchidos so quando a linha nasceu nesta
+  /// execucao, e sao os unicos que a limpeza apaga. Sem essa distincao, uma
+  /// conversa preexistente com o numero da plataforma seria removida por uma
+  /// execucao que nao a criou.
+  createdConversationId String?
+  createdContactId      String?
+
+  /// Remocao dos dados de teste.
+  ///
+  /// `PENDING` e "ainda nao limpou", nunca "limpou e deu certo". `RESIDUAL`
+  /// guarda em `cleanupResidue` o que ficou, com o ID gravado e a razao, para
+  /// a tela dizer o que sobrou: limpeza parcial relatada como completa e falha
+  /// de aceite, entao ela nao tem representacao neste schema.
+  cleanupState   ActivationTestCleanupState @default(PENDING)
+  cleanupAt      DateTime?
+  cleanupResidue Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  milestones ActivationTestMilestone[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, startedAt])
+  @@index([tenantId, state])
+  @@index([tenantId, cleanupState])
+}
+
+/// Marco alcancado por uma execucao, com a fonte do fato.
+///
+/// `factKind` e `factId` sao obrigatorios: e estruturalmente impossivel gravar
+/// marco sem fonte. Progresso e derivado **destas linhas** — nunca de
+/// temporizador, animacao ou texto fixo.
+model ActivationTestMilestone {
+  id        String                      @id @default(cuid())
+  tenantId  String
+  runId     String
+  milestone ActivationTestMilestoneName
+  reachedAt DateTime                    @default(now())
+
+  factKind   ActivationTestFactKind
+  factId     String
+  factDetail Json?
+
+  run ActivationTestRun @relation(fields: [tenantId, runId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, runId, milestone])
+  @@index([tenantId, runId, reachedAt])
+}

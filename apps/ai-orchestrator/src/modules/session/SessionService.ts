@@ -420,6 +420,58 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
   }
 
   /**
+   * Contato ignorado por telefone, sem conversa nem sessao vigente
+   * (Goal019/WU-07: etapa opcional do onboarding, entre conectar e testar).
+   * `Contact.upsert` cria o contato quando ele ainda nao existe — a marcacao
+   * e a mesma regra absoluta de `setIgnored`, so que a origem ("onboarding")
+   * distingue quem marcou sem session/conversa aberta.
+   */
+  async setIgnoredByExternalContact(input: {
+    tenantId: string;
+    channelId: string;
+    externalContactId: string;
+    ignored: boolean;
+    actor?: string | null;
+    source?: string;
+    now?: Date;
+  }): Promise<{
+    contactId: string;
+    externalContactId: string;
+    ignored: boolean;
+    ignoredAt: Date | null;
+  }> {
+    const now = input.now ?? new Date();
+    const ignoredFields = {
+      ignored: input.ignored,
+      ignoredAt: input.ignored ? now : null,
+      ignoredBy: input.ignored ? (input.actor ?? null) : null,
+      ignoredSource: input.ignored ? (input.source ?? "onboarding") : null,
+    };
+    const contact = await this.prisma.contact.upsert({
+      where: {
+        tenantId_channelId_externalContactId: {
+          tenantId: input.tenantId,
+          channelId: input.channelId,
+          externalContactId: input.externalContactId,
+        },
+      },
+      update: ignoredFields,
+      create: {
+        tenantId: input.tenantId,
+        channelId: input.channelId,
+        externalContactId: input.externalContactId,
+        ...ignoredFields,
+      },
+    });
+    return {
+      contactId: contact.id,
+      externalContactId: contact.externalContactId,
+      ignored: contact.ignored,
+      ignoredAt: contact.ignoredAt,
+    };
+  }
+
+  /**
    * `Retomar IA`.
    *
    * Devolve a conversa a IA e marca `contextResetAt`: o proximo turno reavalia

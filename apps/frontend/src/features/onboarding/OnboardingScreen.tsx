@@ -15,12 +15,13 @@ import {
   onboardingFlow,
   progressPercent,
 } from "./blocks";
+import { skipActivationTestStep } from "./blocks/activation-test";
 import {
   onboardingError,
   stepBodyByBlock,
   stepPersistByBlock,
 } from "./blocks/registry";
-import { skipWhatsappStep } from "./blocks/whatsapp";
+import { skipIgnoredContactsStep, skipWhatsappStep } from "./blocks/whatsapp";
 import { useOnboardingRuntime } from "./OnboardingRuntime";
 import { OnboardingShell } from "./OnboardingShell";
 import { type OnboardingScenario, onboardingScenarios } from "./scenarios";
@@ -54,6 +55,12 @@ export function OnboardingScreen({
   const external = scenario.startsWith("minha-agenda-");
   const isWhatsappIntro = scenario === "whatsapp";
   const isWhatsappConclusion = scenario === "whatsapp-concluido";
+  const isIgnoredContactsStep = scenario === "contatos-ignorados";
+  const isActivationTestIntro = scenario === "teste-real";
+  const isActivationTestProgress = scenario === "teste-real-progresso";
+  const isActivationTestPaused = scenario === "teste-real-interferencia";
+  const isActivationTestFailed = scenario === "teste-real-falha";
+  const isActivationTestSucceeded = scenario === "teste-real-sucesso";
   const index = onboardingFlow.indexOf(scenario);
   const previous = index > 0 ? onboardingFlow[index - 1] : undefined;
 
@@ -104,6 +111,44 @@ export function OnboardingScreen({
     }
   }
 
+  async function skipActivationTest() {
+    setBusy(true);
+    setError(null);
+    try {
+      await skipActivationTestStep({
+        draft,
+        go,
+        refresh,
+        refreshSession,
+        router,
+        setError,
+      });
+    } catch (caught: unknown) {
+      setError(onboardingError(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function skipIgnoredContacts() {
+    setBusy(true);
+    setError(null);
+    try {
+      await skipIgnoredContactsStep({
+        draft,
+        go,
+        refresh,
+        refreshSession,
+        router,
+        setError,
+      });
+    } catch (caught: unknown) {
+      setError(onboardingError(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function logout() {
     await getProductServices()
       .auth.logout()
@@ -112,7 +157,65 @@ export function OnboardingScreen({
     router.replace("/login");
   }
 
-  const actions = external ? (
+  const actions = isActivationTestSucceeded ? (
+    // Sucesso: só o CTA do vault. Não há "voltar" para um teste que terminou.
+    <button className="btn btn-primary" disabled={busy} type="submit">
+      {busy ? "Abrindo..." : "Ir para o início"}
+    </button>
+  ) : isActivationTestProgress ? (
+    // Em andamento não há nada a submeter: a execução é do servidor, e sair
+    // desta tela não a cancela. "Continuar" existe para quando ela termina.
+    <>
+      <button
+        className="btn btn-secondary"
+        disabled={busy}
+        type="button"
+        onClick={() => void skipActivationTest()}
+      >
+        {busy ? "Salvando..." : "Continuar depois"}
+      </button>
+      <button className="btn btn-primary" disabled={busy} type="submit">
+        {busy ? "Lendo..." : "Continuar"}
+      </button>
+    </>
+  ) : isActivationTestPaused ? (
+    <button className="btn btn-primary" disabled={busy} type="submit">
+      {busy ? "Reiniciando..." : "Reiniciar teste"}
+    </button>
+  ) : isActivationTestFailed ? (
+    <>
+      <button
+        className="btn btn-secondary"
+        disabled={busy}
+        type="button"
+        onClick={() => void skipActivationTest()}
+      >
+        {busy ? "Salvando..." : "Fazer isso depois"}
+      </button>
+      <button className="btn btn-primary" disabled={busy} type="submit">
+        {busy ? "Iniciando..." : "Tentar novamente"}
+      </button>
+    </>
+  ) : isActivationTestIntro ? (
+    <>
+      {previous && (
+        <Link className="btn btn-secondary" href={`/onboarding/${previous}`}>
+          Voltar
+        </Link>
+      )}
+      <button
+        className="btn btn-secondary"
+        disabled={busy}
+        type="button"
+        onClick={() => void skipActivationTest()}
+      >
+        {busy ? "Salvando..." : "Fazer isso depois"}
+      </button>
+      <button className="btn btn-primary" disabled={busy} type="submit">
+        {busy ? "Iniciando..." : "Iniciar teste"}
+      </button>
+    </>
+  ) : external ? (
     <Link className="btn btn-secondary" href="/onboarding/fonte-da-agenda">
       Escolher Agenda Atendly
     </Link>
@@ -144,6 +247,25 @@ export function OnboardingScreen({
         {busy ? "Salvando..." : "Conectar meu WhatsApp"}
       </button>
     </>
+  ) : isIgnoredContactsStep ? (
+    <>
+      {previous && (
+        <Link className="btn btn-secondary" href={`/onboarding/${previous}`}>
+          Voltar
+        </Link>
+      )}
+      <button
+        className="btn btn-secondary"
+        disabled={busy}
+        type="button"
+        onClick={() => void skipIgnoredContacts()}
+      >
+        {busy ? "Salvando..." : "Pular esta etapa"}
+      </button>
+      <button className="btn btn-primary" disabled={busy} type="submit">
+        {busy ? "Salvando..." : "Ir para o teste"}
+      </button>
+    </>
   ) : (
     <>
       {previous && (
@@ -152,11 +274,7 @@ export function OnboardingScreen({
         </Link>
       )}
       <button className="btn btn-primary" disabled={busy} type="submit">
-        {busy
-          ? "Salvando..."
-          : scenario === "whatsapp-conectar"
-            ? "Concluir configuração"
-            : "Continuar"}
+        {busy ? "Salvando..." : "Continuar"}
       </button>
     </>
   );

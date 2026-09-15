@@ -65,6 +65,12 @@ export const onboardingScenarios = {
     "A forma exata de autenticação depende da integração disponível.",
     "external-connect",
   ],
+  "demonstracao-da-ia": [
+    "Antes de escolher o estilo",
+    "Veja sua IA simulando um atendimento",
+    "Uma demonstração rápida, usando o serviço, o preço e o horário reais do seu negócio.",
+    "ai-demo",
+  ],
   "tom-da-ia": [
     "Atendente virtual",
     "Como a Atendly deve conversar?",
@@ -82,6 +88,47 @@ export const onboardingScenarios = {
     "Ative o atendimento no seu número",
     "No celular, use o código de vinculação. No computador, escaneie o QR Code.",
     "whatsapp-connect",
+  ],
+  "contatos-ignorados": [
+    "Antes de testar",
+    "Quer impedir que a IA responda algumas pessoas?",
+    "Escolha conversas já existentes ou informe um número manualmente. A IA nunca responde a quem está nesta lista.",
+    "ignored-contacts",
+  ],
+  // Telas do teste real, na ordem do vault
+  // (docs/product-vault/02-Fluxos/02-Ativacao-e-Teste-do-WhatsApp.md §"Teste
+  // real" em diante). Cada estado da execucao tem tela propria: o vault
+  // descreve cinco momentos distintos, e juntar dois deles obrigaria a tela a
+  // interpretar o mesmo valor de duas formas.
+  "teste-real": [
+    "Teste real",
+    "Vamos testar sua IA de verdade",
+    "A Atendly vai enviar uma mensagem de teste simulando um cliente. Você não precisa responder. A IA fará o atendimento automaticamente.",
+    "activation-test",
+  ],
+  "teste-real-progresso": [
+    "Teste em andamento",
+    "Sua IA está atendendo o cliente de teste",
+    "Acompanhe cada etapa. O teste continua mesmo se você trocar de aplicativo ou fechar esta tela.",
+    "activation-test-progress",
+  ],
+  "teste-real-interferencia": [
+    "Teste pausado",
+    "O teste foi pausado porque você respondeu",
+    "Nesta conversa você só precisa observar: quem responde é a IA. Reinicie para tentar de novo.",
+    "activation-test-paused",
+  ],
+  "teste-real-falha": [
+    "Teste não concluído",
+    "O teste não chegou ao fim",
+    "Sua IA não foi ativada. Veja abaixo em qual etapa o teste parou e tente novamente.",
+    "activation-test-failed",
+  ],
+  "teste-real-sucesso": [
+    "Teste concluído",
+    "Tudo pronto!",
+    "Sua IA está ativa e pronta para atender seus clientes.",
+    "activation-test-succeeded",
   ],
   "whatsapp-concluido": [
     "Onboarding concluído",

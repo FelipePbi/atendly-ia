@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 
 import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
 import { EvolutionClient } from "../../clients/evolution/index.js";
+import { SchedulingClient } from "../../clients/scheduling/index.js";
+import { reconcileAiActivation } from "../../lib/ai-activation.js";
 import { dataResponse } from "../../lib/http.js";
 import { getPrisma } from "../../lib/prisma.js";
 import {
@@ -20,13 +22,21 @@ type AiState = "ACTIVE" | "OFF" | "PENDING" | "UNKNOWN";
  * `whatsapp` e `ai` nunca chegam a `CONNECTED`/`ACTIVE` sem verificação real
  * contra Evolution e a IA nesta própria requisição; dependência indisponível
  * vira `UNKNOWN`, com o erro registrado no `settled` de cada uma — nunca
- * `500`. Reconciliação e autoativação são do Goal018; esta rota só lê.
+ * `500`.
+ *
+ * Goal019 §7: esta rota deixa de apenas relatar `PENDING` e passa a **tentar
+ * convergir** antes de ler. A reconciliação é limitada (uma tentativa por
+ * requisição), idempotente, nunca lança e nunca entra em laço; a leitura que
+ * vem depois dela é a leitura real do que ficou, não uma promessa do que foi
+ * tentado. `ai.reconciled` diz o que aconteceu, para o estado continuar
+ * honesto mesmo quando a convergência não deu certo.
  */
 export async function registerV1StatusRoutes(
   app: FastifyInstance,
 ): Promise<void> {
   const ai = new AiOrchestratorClient();
   const evolution = new EvolutionClient();
+  const scheduling = new SchedulingClient();
 
   app.get(
     "/v1/status",
@@ -34,6 +44,12 @@ export async function registerV1StatusRoutes(
     async (request) => {
       const tenant = currentTenantContext(request);
       const context = internalContext(request);
+      // Antes de ler: uma tentativa de convergir. Ela nunca lança, então a
+      // leitura abaixo acontece sempre, com ou sem sucesso da convergência.
+      const reconciled = await reconcileAiActivation(request, {
+        ai,
+        scheduling,
+      });
       const [whatsappResult, aiConfigResult, aiSettings] = await Promise.all([
         settled(whatsappSummary(tenant.userId, request.id, evolution)),
         settled(ai.getAiTenantConfig(context)),
@@ -69,6 +85,7 @@ export async function registerV1StatusRoutes(
           effectiveEnabled,
           aiConfigResult.status === "ok",
         ),
+        reconciled,
       };
 
       return dataResponse(request, {

@@ -624,6 +624,16 @@ function createAgendaStub(
       effects.cancelAppointment.push(appointmentId);
       return { appointmentId, cancelled: true as const };
     },
+    // Remoção definitiva existe só para a limpeza do teste de ativação; nenhuma
+    // tool da IA a alcança, e o duble registra para que isso continue visível.
+    deleteAppointment: async (appointmentId, context) => {
+      record("deleteAppointment", { appointmentId }, context);
+      return { appointmentId, removed: true };
+    },
+    deleteCustomer: async (customerId, context) => {
+      record("deleteCustomer", { customerId }, context);
+      return { customerId, removed: true };
+    },
     previewAppointmentSeries: async (input, context) => {
       record("previewAppointmentSeries", input, context);
       return Array.from({ length: input.occurrenceCount }, (_, index) => ({

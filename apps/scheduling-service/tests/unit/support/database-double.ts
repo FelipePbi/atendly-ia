@@ -339,6 +339,21 @@ class Table {
     return { count: found.length };
   }
 
+  /** Contagem simples, como `prisma.<model>.count({ where })`. */
+  async count(args: { where?: Record<string, unknown> } = {}) {
+    return this.rows.filter((row) => matches(row, args.where ?? {})).length;
+  }
+
+  /** Remocao por chave, como `prisma.<model>.delete({ where })`. */
+  async delete(args: { where: Record<string, unknown> }) {
+    const row = await this.findUnique(args);
+    if (!row) throw new Error(`${this.prefix} not found`);
+    const index = this.rows.indexOf(row);
+    this.rows.splice(index, 1);
+    this.journal?.record(this.prefix, "delete");
+    return row;
+  }
+
   async deleteMany(args: { where: Record<string, unknown> }) {
     const kept = this.rows.filter((row) => !matches(row, args.where));
     const count = this.rows.length - kept.length;
@@ -731,6 +746,35 @@ export function createDatabaseDouble() {
     },
     update: async (args: Parameters<Table["update"]>[0]) =>
       withAppointmentRelations(await appointment.update(args)),
+    count: (args: Parameters<Table["count"]>[0] = {}) =>
+      appointment.count(args),
+    /**
+     * `ON DELETE RESTRICT`, como no banco.
+     *
+     * `AppointmentItem` e `AppointmentEvent` referenciam `Appointment` com
+     * `onDelete: Restrict` (schema.prisma), e o FK no Postgres recusa com
+     * `P2003` enquanto houver filho. O dublê cascateava — e por isso a suite
+     * ficava verde com um `appointment.delete` direto que quebra em producao.
+     * Mentir aqui a favor do codigo e pior do que nao ter dublê nenhum: quem
+     * apaga o atendimento tem de apagar item e evento antes, de proposito.
+     */
+    delete: async (args: Parameters<Table["delete"]>[0]) => {
+      const target = await appointment.findUnique(
+        args as Parameters<Table["findUnique"]>[0],
+      );
+      if (target) {
+        const where = { tenantId: target.tenantId, appointmentId: target.id };
+        const blocking =
+          (await appointmentItem.count({ where })) +
+          (await appointmentEvent.count({ where }));
+        if (blocking > 0) {
+          throw foreignKeyViolation(
+            "AppointmentItem_appointment_fkey / AppointmentEvent_appointment_fkey",
+          );
+        }
+      }
+      return appointment.delete(args);
+    },
   };
 
   const pendingFailures: unknown[] = [];
@@ -860,6 +904,19 @@ export function createDatabaseDouble() {
       integrationConnection,
     },
   };
+}
+
+/**
+ * Recusa de chave estrangeira, como o Postgres recusaria: `P2003`.
+ *
+ * Mesmo formato do `P2002` que o dublê ja produz — um `Error` com `code` —,
+ * porque e assim que o Prisma entrega o erro para quem chama.
+ */
+function foreignKeyViolation(constraint: string): Error {
+  return Object.assign(
+    new Error(`Foreign key constraint failed on ${constraint}`),
+    { code: "P2003", meta: { field_name: constraint } },
+  );
 }
 
 interface Connect {

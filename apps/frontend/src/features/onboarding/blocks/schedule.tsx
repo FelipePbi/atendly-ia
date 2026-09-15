@@ -292,7 +292,7 @@ export async function persistScheduleStep(
       ctx.go("agenda-atendly-pronta");
       return;
     case "agenda-atendly-pronta":
-      ctx.go("tom-da-ia");
+      ctx.go("demonstracao-da-ia");
       return;
     default:
       ctx.go("fonte-da-agenda");

@@ -26,6 +26,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Serviços | `GET /v1/services`; `POST /v1/services`; `PATCH /v1/services/:id` |
 | Configurações | `GET /v1/settings`; `PATCH /v1/settings/business`; `PATCH /v1/settings/ai`; `PATCH /v1/settings/availability` |
 | WhatsApp | `GET /v1/whatsapp`; `POST /v1/whatsapp/connect`; `POST /v1/whatsapp/reconnect`; `DELETE /v1/whatsapp` |
+| Teste real de ativação (Goal019/WU-05) | `GET /v1/activation-test`; `POST /v1/activation-test`; `POST /v1/activation-test/restart` |
 
 As rotas autenticadas resolvem o negócio a partir da sessão; `tenantId` enviado isoladamente pelo browser não concede autorização.
 
@@ -342,16 +343,126 @@ Uma vez concluída (`POST .../complete`), a sessão é o único registro definit
 
 Indisponibilidade de qualquer dependência vira `UNKNOWN` (nunca um valor otimista) e nunca `500`: o erro é registrado e a resposta segue `200` com `degraded: true`. O tenant é sempre o da sessão autenticada, como em `GET /v1/dashboard`; não é possível ler ou influenciar o status de outro negócio.
 
+## Teste real de ativação da IA (Goal019/WU-05)
+
+Três rotas, todas resolvendo o negócio pela sessão autenticada, iguais às demais mutações desta API (`requireTenantContext` + CSRF):
+
+- `GET /v1/activation-test` lê a execução corrente do negócio (viva ou a última terminada). `data: null` significa "nunca testou" — nunca é fabricado progresso, estado ou sucesso para preencher a tela; se a IA não responder, o erro sobe como `UPSTREAM_ERROR` (ver abaixo), nunca vira `null` silencioso.
+- `POST /v1/activation-test` inicia o teste. Corpo `{ "tenantPhone": string }` (o número do WhatsApp do negócio, 8 a 20 caracteres). Responde `202` com a execução já persistida — a partir daqui ela roda no servidor, sem depender de tela nenhuma; fechar o navegador não cancela nada.
+- `POST /v1/activation-test/restart` reinicia depois de interferência humana: a execução pausada é **descartada**, não marcada como falha. Mesmo corpo e mesma resposta `202` de `POST /v1/activation-test`.
+
+Corpo de `data` nas três rotas (ou `null`, só na leitura sem execução):
+
+| Campo | Valores | Significado |
+| --- | --- | --- |
+| `id` | string | identificador da execução |
+| `state` | `RUNNING`, `PAUSED_BY_HUMAN`, `SUCCEEDED`, `FAILED`, `DISCARDED` | estado corrente da execução |
+| `terminal` | booleano | `true` para `SUCCEEDED`, `FAILED` e `DISCARDED`; `false` para `RUNNING` e `PAUSED_BY_HUMAN` — terminal e não terminal nunca são o mesmo valor com interpretações diferentes |
+| `startedAt` / `finishedAt` / `pausedAt` | timestamp ISO ou `null` | `finishedAt` só em estado terminal; `pausedAt` só em `PAUSED_BY_HUMAN` |
+| `currentStep` / `completedStep` | um dos oito passos do vault (`TEST_NOTICE`, `CLIENT_ASKS_PRICE`, `AI_IDENTIFIES_SERVICE`, `AI_ANSWERS_PRICE`, `CLIENT_ASKS_SLOT`, `AI_CHECKS_AVAILABILITY`, `CLIENT_ACCEPTS_SLOT`, `AI_CONFIRMS_APPOINTMENT`) ou `null` | passo em andamento e último passo concluído |
+| `attempts` / `maxAttempts` | inteiro | tentativas já usadas e limite declarado no código (3: a primeira tentativa mais duas repetições) |
+| `failedStep` / `failedStepLabel` | um dos oito passos ou `null` / texto em linguagem do negócio ou `null` | passo que falhou; só presentes quando `state: "FAILED"` |
+| `failureCode` | string ou `null` | código da falha, só em `FAILED`; conjunto fechado, descrito em "Códigos de falha da execução" abaixo. Nenhuma execução falha **não** ativa a IA, seja qual for o código, e `failedStep` continua nomeando onde ela parou |
+| `appointmentId` | string ou `null` | agendamento real criado pelo teste, presente assim que o passo de confirmação é alcançado |
+| `cleanupState` | `PENDING`, `CLEAN`, `RESIDUAL` | estado da remoção dos dados de teste — ver abaixo |
+| `cleanupAt` | timestamp ISO ou `null` | quando a limpeza rodou; `null` enquanto `cleanupState: "PENDING"` |
+| `cleanupResidue` | array, vazio em `PENDING` e em `CLEAN` | o que sobrou da limpeza — ver abaixo |
+| `milestones` | array de 6 itens, sempre nesta ordem, sempre os 6 presentes | os seis marcos do vault — ver abaixo |
+
+`milestones` é fechado: progresso que não está nesta lista não existe, e cada item só é `reached: true` quando há fato gravado que o sustenta — nunca por tempo decorrido, animação ou passo corrente.
+
+| Campo do item | Valores | Significado |
+| --- | --- | --- |
+| `milestone` | `MESSAGE_SENT`, `SERVICE_IDENTIFIED`, `PRICE_INFORMED`, `AVAILABILITY_CHECKED`, `SLOT_SELECTED`, `APPOINTMENT_CONFIRMED` | nome do marco, nesta ordem fixa |
+| `reached` | booleano | `true` só quando existe o fato gravado que sustenta o marco |
+| `reachedAt` | timestamp ISO ou `null` | `null` exatamente quando `reached: false` |
+| `sourceKind` | `MESSAGE`, `SERVICE`, `AVAILABILITY`, `APPOINTMENT` ou `null` | tipo do fato que sustenta o marco; `null` só junto de `reached: false` |
+| `sourceId` | string ou `null` | id do fato (mensagem, serviço lido, consulta de disponibilidade ou agendamento criado); mesmo par que `sourceKind` |
+
+### Estado da limpeza e resíduo
+
+A execução remove **exatamente o que ela criou**, pelos IDs que gravou no momento da criação — nunca por busca por telefone, nome, data ou padrão. O que sobrar é relatado, e é por isso que estes campos existem: limpeza parcial apresentada como completa é mentira de tela, e o contrato não permite representá-la.
+
+| `cleanupState` | Significado |
+| --- | --- |
+| `PENDING` | a limpeza ainda não rodou. **Não** é "limpou e deu certo": em `PENDING` a tela não pode afirmar que nada ficou |
+| `CLEAN` | a limpeza rodou e `cleanupResidue` está vazio. Este é o único estado em que a tela pode dizer que os dados de teste saíram |
+| `RESIDUAL` | a limpeza rodou e alguma coisa ficou. `cleanupResidue` nomeia o quê, item a item |
+
+Cada item de `cleanupResidue`:
+
+| Campo | Valores | Significado |
+| --- | --- | --- |
+| `target` | `MESSAGE`, `CONVERSATION`, `CONTACT`, `APPOINTMENT`, `CUSTOMER` | o que ficou. Conjunto fechado: resíduo de alvo fora desta lista não é representável |
+| `id` | string | o ID que a execução gravou. É por ele que a tela nomeia o que ficou — não por telefone nem por nome |
+| `reason` | `OPERATION_UNAVAILABLE`, `WOULD_TOUCH_OTHER_ROWS`, `REMOVAL_FAILED`, `STILL_VISIBLE` | por que sobrou — ver abaixo |
+| `label` | texto | o alvo em linguagem do negócio ("agendamento de teste", "pessoa de teste"), para a tela não traduzir enum por conta própria |
+| `explanation` | texto | a razão em linguagem do negócio, já pronta para exibição |
+
+| `reason` | Significado | Como se resolve |
+| --- | --- | --- |
+| `OPERATION_UNAVAILABLE` | o produto não tem operação de remoção para aquele dado | remoção manual; a tela diz o que ficou em vez de afirmar limpeza completa |
+| `WOULD_TOUCH_OTHER_ROWS` | apagar arrastaria junto, por cascade, linha que a execução não criou — a limpeza **recusa** | nada a fazer: manter o dado de teste é menos grave do que remover dado de terceiro |
+| `REMOVAL_FAILED` | a remoção foi tentada e não foi concluída, ou a conferência do read model não pôde ser feita | tentar o teste de novo; a limpeza é idempotente e repetir não apaga nada além do já apagado |
+| `STILL_VISIBLE` | a remoção foi aceita mas o dado continua visível na leitura | remoção manual |
+
+### Códigos de falha da execução (`failureCode`)
+
+Só aparecem com `state: "FAILED"`, e **nenhum** deles ativa a IA. O código diz o que falhou; `failedStep` e `failedStepLabel` dizem onde. Cada causa tem código próprio de propósito: reaproveitar o código de outra causa manda corrigir o que não está errado.
+
+| Código | Significado | Como se resolve |
+| --- | --- | --- |
+| `ACTIVATION_TEST_AI_DID_NOT_ACT` | a IA não registrou a ação que o passo exige — consultar o catálogo, consultar a agenda ou criar o agendamento. `failedStep` diz qual | tentar o teste de novo; se repetir, é o atendimento da IA que não está acontecendo. **Não** é problema de catálogo nem de agenda: os dois são verificados antes de a execução começar |
+| `ACTIVATION_TEST_AI_DID_NOT_REPLY` | a IA não escreveu resposta nenhuma na conversa de teste | tentar de novo; é o mesmo caso acima visto pela resposta em vez da ferramenta |
+| `ACTIVATION_TEST_AI_REPLY_NOT_DELIVERED` | a IA respondeu, mas a resposta não saiu pelo WhatsApp do negócio: a mensagem ficou registrada sem entrega confirmada | conferir a conexão do WhatsApp (`GET /v1/status`) e testar de novo — a IA atendeu, o transporte do negócio é que não confirmou |
+| `ACTIVATION_TEST_AI_DID_NOT_CONFIRM_APPOINTMENT` | a IA chamou a ferramenta de agendamento sem confirmar agendamento nenhum: preparar não é confirmar | tentar de novo; a agenda já tinha horário válido quando o teste começou |
+| `ACTIVATION_TEST_ABANDONED` | a execução parou de dar sinal de vida (o processo do servidor caiu no meio) e o produto a encerrou como falha na leitura seguinte, em vez de deixar o negócio preso a um `RUNNING` eterno | iniciar o teste de novo; o negócio não fica travado |
+| `ACTIVATION_TEST_STEP_FAILED` | o passo falhou sem código próprio — tipicamente transporte ou dependência indisponível depois de esgotadas as tentativas (`attempts` = `maxAttempts`) | tentar de novo |
+
+### Recusas nomeadas de `POST /v1/activation-test` e `POST /v1/activation-test/restart`
+
+Toda recusa tem código próprio e nenhuma vira `500` para o consumidor. `ACTIVATION_TEST_AI_ALREADY_ACTIVE` é recusa própria do BFF, verificada antes de qualquer chamada à IA; as demais são decisão da IA e chegam pelo mecanismo padrão desta API — `error.code: "UPSTREAM_ERROR"` e o código original em `error.details.upstreamCode` (ver "Erros próprios da IA nesta seção" mais abaixo).
+
+| Código | Onde aparece | `error.statusCode` | Significado | Como se resolve |
+| --- | --- | --- | --- | --- |
+| `ACTIVATION_TEST_AI_ALREADY_ACTIVE` | `error.code` | `409` | a IA já está ativa para o negócio (`AiSettings.enabled`, o desejado gravado pelo BFF); testar não é ferramenta recorrente depois que a IA está no ar | desligar a IA em `PATCH /v1/settings/ai` antes de testar de novo, ou reconectar/trocar o WhatsApp, que volta a exigir teste |
+| `PLATFORM_NUMBER_NOT_CONFIGURED` | `error.details.upstreamCode` | `502` (a IA falhou com `503`) | a instância oficial da Atendly não está configurada neste ambiente | configuração de ambiente, fora do autoatendimento; a tela diz que o teste não está disponível, sem simular progresso |
+| `ACTIVATION_TEST_WHATSAPP_NOT_CONNECTED` | `error.details.upstreamCode` | `409` | não há vínculo de WhatsApp ativo para o negócio | conectar o WhatsApp (`POST /v1/whatsapp/connect`) antes de testar |
+| `ACTIVATION_TEST_TENANT_PHONE_UNKNOWN` | `error.details.upstreamCode` | `409` | `tenantPhone` enviado está vazio (depois de normalizado) ou é igual ao número da própria plataforma | enviar o número real do WhatsApp do negócio |
+| `ACTIVATION_TEST_NO_ELIGIBLE_SERVICE` | `error.details.upstreamCode` | `409` | o catálogo não tem nenhum serviço apto a agendamento normal | cadastrar ou ativar um serviço (`POST`/`PATCH /v1/services`) |
+| `ACTIVATION_TEST_NO_AVAILABILITY` | `error.details.upstreamCode` | `409` | a agenda não oferece nenhum horário para o serviço escolhido pelo sistema | corrigir a disponibilidade (`PATCH /v1/settings/availability` ou a integração externa) antes de testar |
+| `ACTIVATION_TEST_ALREADY_RUNNING` | `error.details.upstreamCode` | `409` | já existe execução viva (em andamento ou pausada) para o negócio | ler `GET /v1/activation-test`; se estiver pausada, `POST /v1/activation-test/restart` |
+
+`202` é a única resposta de sucesso das duas rotas de escrita: a execução foi persistida e passa a rodar no servidor, sem confirmação de resultado nesta mesma resposta.
+
 ## Checklist pós-onboarding da Home (Goal018/WU-10)
 
-`GET /v1/dashboard` acrescenta dois booleanos a `scheduling.data.calendar.capabilities`, ambos leitura real, nunca configuração local:
+`GET /v1/dashboard` acrescenta três booleanos a `scheduling.data.calendar.capabilities`, todos leitura real, nunca configuração local:
 
 | Campo | Significado |
 | --- | --- |
 | `capabilities.aiActivationReady` | ao menos um serviço operacional (já existia no Scheduling — usado por `PATCH /v1/settings/ai`, ver "Catálogo" acima — e passa a ser devolvido também aqui) |
 | `capabilities.hoursConfigured` | fonte `ATENDLY` com ao menos uma regra de disponibilidade ativa, ou fonte `EXTERNAL` com integração `CONNECTED`; sem fonte escolhida é `false`. Mesmo predicado de `AVAILABILITY_REQUIRED`/`CALENDAR_INTEGRATION_NOT_CONNECTED` em `POST /v1/onboarding/complete` |
+| `capabilities.activationTestCompleted` (Goal019) | execução do teste real em `SUCCEEDED` **que ainda vale** para o WhatsApp de hoje. Negócio que nunca testou é `false` — "nunca testou", não "falhou" —, e teste feito contra um número que foi trocado ou revinculado deixa de contar, porque o vault exige teste novo nesse caso. Dependência indisponível também é `false`: "não sei" nunca vira "concluído" |
 
-Os dois campos, somados a `whatsapp.status` de `GET /v1/status`, alimentam o checklist de `/inicio` ("Cadastrar um serviço", "Definir horários de atendimento", "Conectar o WhatsApp"): enquanto a IA não estiver efetivamente ativa (`GET /v1/status`.`ai.state` diferente de `ACTIVE`), a Home mostra o que falta, com item concluído marcado. O quarto item do vault, "teste concluído", não está aqui: não existe produtor em camada nenhuma até o Goal018B.
+Os três campos, somados a `whatsapp.status` de `GET /v1/status`, alimentam o checklist de `/inicio` ("Cadastrar um serviço", "Definir horários de atendimento", "Conectar o WhatsApp", "Concluir o teste da IA"): enquanto a IA não estiver efetivamente ativa (`GET /v1/status`.`ai.state` diferente de `ACTIVE`), a Home mostra o que falta, com item concluído marcado.
+
+### Reconciliação desired/effective em `GET /v1/status` (Goal019)
+
+`GET /v1/status` e `GET /v1/dashboard` deixaram de apenas relatar divergência entre o que o negócio pediu (`ai.desiredEnabled`, do BFF) e o que a IA aplicou (`ai.effectiveEnabled`): antes de ler, os dois **tentam convergir**, uma vez por requisição. A reconciliação nunca lança — a leitura continua respondendo `200` mesmo quando ela falha — e nunca entra em laço.
+
+`ai.reconciled` diz o que aconteceu nesta requisição:
+
+| Valor | Significado |
+| --- | --- |
+| `NOOP` | nada divergia; não havia o que convergir |
+| `ACTIVATED` | execução do teste real em `SUCCEEDED` ligou a IA agora. Só sucesso ativa, e sempre pela regra vigente (ao menos um serviço operacional) — sem ela o valor é `NOOP`, não `ACTIVATED` |
+| `DEACTIVATED_BY_CHANNEL_CHANGE` | o WhatsApp foi trocado ou revinculado, a execução que autorizou a ativação deixou de valer e a IA foi desligada. "Testado" não sobrevive à troca |
+| `CONVERGED` | o desejado já estava gravado e foi reaplicado na IA |
+| `FAILED` | havia divergência e a tentativa de convergir não deu certo. O estado lido continua sendo o real, não o pretendido |
+| `UNKNOWN` | faltou leitura para decidir; nada foi mudado |
+
+Ativar a partir da **mesma** execução bem-sucedida duas vezes não gera duas ativações nem duas projeções: a execução consumida fica gravada no BFF.
 
 `ai.state: "PENDING"` ganhou apresentação própria na Home e no shell — antes caía sob "IA desligada" (resíduo do [review014](../../docs/migration/reviews/014-review.md)), agora é visualmente distinto tanto de `OFF` quanto de `UNKNOWN`.
 
@@ -435,6 +546,14 @@ Precedência: `ignored` do contato prevalece sobre a sessão; o override manual 
 `PUT /v1/conversations/:id/category` recebe `{ "category": "COMMERCIAL" | "UNCLASSIFIED" | "PERSONAL" | null }`; `null` limpa o override e devolve a conversa à classificação automática. `PUT /v1/conversations/:id/ignore` recebe `{ "ignored": true | false }`. As duas respondem com o DTO de conversa completo.
 
 Como as demais mutações, ambas resolvem o negócio pela sessão autenticada e exigem CSRF quando a credencial é o cookie. Nenhuma delas aceita `tenantId` por header, body ou query.
+
+### Contato ignorado por telefone, sem conversa ainda (Goal019/WU-07)
+
+`PUT /v1/conversations/ignored-contacts` marca (ou desmarca) um contato como ignorado a partir de um número informado manualmente, sem exigir uma conversa já existente — a etapa opcional do onboarding entre conectar o WhatsApp e testar (vault `02-Ativacao-e-Teste-do-WhatsApp.md` §"Contatos ignorados"). Corpo `{ "phone": string, "ignored": boolean }` (8 a 20 caracteres antes de normalizar). O telefone chega à IA como dígitos (mesma normalização de `tenantPhone` no teste real); o contato é **criado** quando ainda não existe, pela mesma chave `(tenantId, channelId, externalContactId)` usada pelo canal conectado.
+
+Resposta: `{ "contactId": string, "externalContactId": string, "ignored": boolean, "ignoredAt": string | null }`. A origem gravada no contato (`ignoredSource: "onboarding"`) é distinta da marcação feita a partir de uma conversa existente (`"panel"`, via `PUT /v1/conversations/:id/ignore`) — mesma regra do contato, mesmo caminho de recusa da IA (contato ignorado nunca recebe resposta automática), origem apenas para auditoria.
+
+Resolve o negócio pela sessão autenticada e exige CSRF, como as demais mutações. Sem vínculo de WhatsApp ativo para o negócio, a recusa chega como `UPSTREAM_ERROR` com `error.details.upstreamCode: "CHANNEL_CONNECTION_NOT_FOUND"` (`404`) — não há canal para a chave do contato.
 
 ## Envio manual assume a conversa
 

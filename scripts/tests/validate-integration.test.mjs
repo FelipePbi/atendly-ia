@@ -90,6 +90,7 @@ test("points the subprocess at the declared test database with synthetic secrets
       "rehearse:goal011-ai-style-migration",
       "rehearse:goal012-knowledge-memory-migration",
       "rehearse:goal013-media-migration",
+      "rehearse:goal019-activation-test-migration",
       "generate:scheduling-prisma-client",
       "provision:scheduling-test-database",
       "test:scheduling-integration",
@@ -323,6 +324,22 @@ test("runs the Goal013 media rehearsal before the AI durability suite", () => {
 
   const rehearsal = steps.findIndex(
     (step) => step.name === "rehearse:goal013-media-migration",
+  );
+  const durability = steps.findIndex(
+    (step) => step.name === "test:ai-orchestrator-transport-durability",
+  );
+  assert.ok(rehearsal >= 0 && durability > rehearsal);
+});
+
+// Goal019: o ensaio expande o banco de durabilidade da IA (Goal004) com a
+// migração da execução do teste real antes de a suíte de persistência rodar —
+// sem ele, a suíte não encontraria `ActivationTestRun`.
+test("runs the Goal019 activation test rehearsal before the AI durability suite", () => {
+  const target = resolveIntegrationTarget({ BFF_TEST_DATABASE_URL: validUrl });
+  const steps = integrationSteps(target);
+
+  const rehearsal = steps.findIndex(
+    (step) => step.name === "rehearse:goal019-activation-test-migration",
   );
   const durability = steps.findIndex(
     (step) => step.name === "test:ai-orchestrator-transport-durability",

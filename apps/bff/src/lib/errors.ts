@@ -23,6 +23,10 @@ export type ErrorCode =
   // Modalidade ON_SITE exige endereco nao vazio (Goal018/WU-01). Erro proprio
   // para o frontend apontar o campo, em vez de um VALIDATION_ERROR generico.
   | "BUSINESS_ADDRESS_REQUIRED"
+  // Iniciar/reiniciar o teste real com a IA ja ativa para o negocio
+  // (Goal019/WU-05). Recusa propria do BFF, verificada antes de chamar a IA:
+  // testar nao e ferramenta recorrente depois que a IA esta no ar.
+  | "ACTIVATION_TEST_AI_ALREADY_ACTIVE"
   | "INTERNAL_ERROR";
 
 export class AppError extends Error {

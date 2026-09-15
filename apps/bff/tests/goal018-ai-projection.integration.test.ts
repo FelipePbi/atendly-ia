@@ -241,5 +241,66 @@ describe.skipIf(!RUN_INTEGRATION)(
         "PROJECTED",
       );
     });
+
+    /**
+     * Resíduo nominal do review018, fechado pelo Goal019 §7.
+     *
+     * `PATCH /v1/settings/ai` não muda a versão do contexto de negócio, então a
+     * comparação entre versões gravadas continua batendo mesmo quando a
+     * projeção acabou de falhar — e a resposta dizia `PROJECTED` para uma
+     * projeção que não aconteceu. Este teste falha se a resposta voltar a
+     * afirmar isso.
+     */
+    it("PATCH /v1/settings/ai com projeção falha responde sucesso com o estado real, nunca PROJECTED", async () => {
+      const owner = await business("projection-settings-ai-residue");
+      stubUpstream();
+
+      // Contexto de negócio gravado e projetado: daqui em diante as duas
+      // versões batem, que é a condição em que o resíduo aparecia.
+      const patchBusiness = await app.inject({
+        method: "PATCH",
+        url: "/v1/settings/business",
+        headers: browserMutation(owner),
+        payload: {
+          name: "Studio Residuo",
+          category: "Beleza",
+          timezone: "America/Sao_Paulo",
+        },
+      });
+      expect(patchBusiness.statusCode).toBe(200);
+      expect(patchBusiness.json().data.business.contextProjectionStatus).toBe(
+        "PROJECTED",
+      );
+
+      aiTenantConfigShouldFail = true;
+      stubUpstream();
+      const failing = await app.inject({
+        method: "PATCH",
+        url: "/v1/settings/ai",
+        headers: browserMutation(owner),
+        payload: { enabled: false, tone: "BALANCED" },
+      });
+
+      // Continua sendo sucesso: o dado do BFF foi gravado.
+      expect(failing.statusCode).toBe(200);
+      expect(failing.json().data.ai.tone).toBe("BALANCED");
+      // Mas o estado de projeção é o real.
+      expect(failing.json().data.business.contextProjectionStatus).toBe(
+        "PENDING",
+      );
+
+      aiTenantConfigShouldFail = false;
+      stubUpstream();
+      const recovered = await app.inject({
+        method: "PATCH",
+        url: "/v1/settings/ai",
+        headers: browserMutation(owner),
+        payload: { enabled: false, tone: "BALANCED" },
+      });
+      expect(recovered.statusCode).toBe(200);
+      expect(recovered.json().data.business.contextProjectionStatus).toBe(
+        "PROJECTED",
+      );
+    });
   },
 );

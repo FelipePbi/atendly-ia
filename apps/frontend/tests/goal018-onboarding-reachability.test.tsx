@@ -41,10 +41,26 @@ const getWhatsapp = vi.fn();
 const logout = vi.fn();
 const refreshSession = vi.fn();
 const setUnauthenticated = vi.fn();
+const listConversations = vi.fn();
+const setIgnoredConversation = vi.fn();
+const ignoreByPhone = vi.fn();
+const getActivationTest = vi.fn();
+const startActivationTest = vi.fn();
+const restartActivationTest = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
+    activationTest: {
+      get: getActivationTest,
+      restart: restartActivationTest,
+      start: startActivationTest,
+    },
     auth: { logout },
+    conversations: {
+      ignoreByPhone,
+      list: listConversations,
+      setIgnored: setIgnoredConversation,
+    },
     onboarding: {
       complete: completeOnboarding,
       get: getOnboarding,
@@ -151,6 +167,7 @@ beforeEach(() => {
   updateOnboarding.mockResolvedValue(emptyState());
   completeOnboarding.mockResolvedValue(emptyState());
   refreshSession.mockResolvedValue(null);
+  listConversations.mockResolvedValue([]);
 });
 
 describe("cenários do protótipo sem consumidor real foram removidos", () => {
@@ -180,7 +197,8 @@ describe("cenários do protótipo sem consumidor real foram removidos", () => {
     for (const scenario of removed) {
       expect(isOnboardingScenario(scenario)).toBe(false);
     }
-    expect(onboardingOrder).toHaveLength(15);
+    // 17 do Goal018 mais as cinco telas do teste real (Goal019 §9).
+    expect(onboardingOrder).toHaveLength(22);
   });
 
   test("PrototypeOnboardingScreen não existe mais no módulo despachante", () => {
@@ -407,14 +425,49 @@ describe("o encadeamento real de dados-do-negocio até validação", () => {
     expect(push).toHaveBeenCalledWith("/onboarding/agenda-atendly-pronta");
   });
 
-  test("agenda-atendly-pronta avança para tom-da-ia", async () => {
+  test("agenda-atendly-pronta avança para demonstracao-da-ia", async () => {
     const user = userEvent.setup();
     renderScreen(
       "agenda-atendly-pronta",
       stateFixture({ ...businessDone, ...calendarDone, ...serviceDone }),
     );
     await user.click(await screen.findByRole("button", { name: "Continuar" }));
+    expect(push).toHaveBeenCalledWith("/onboarding/demonstracao-da-ia");
+  });
+
+  test("demonstracao-da-ia sem serviço operacional nem horário válido explica o que falta, sem oferecer a demonstração", async () => {
+    renderScreen("demonstracao-da-ia", stateFixture());
+    expect(
+      await screen.findByText(
+        "Configure um serviço ativo com duração definida e um horário de atendimento configurado para ver a demonstração da IA.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText(/simulado/u)).toBeNull();
+  });
+
+  test("demonstracao-da-ia com serviço e horário reais mostra a demonstração simulada com o preço e o horário reais, e avança para tom-da-ia sem escrever nem enviar", async () => {
+    const user = userEvent.setup();
+    renderScreen(
+      "demonstracao-da-ia",
+      stateFixture({
+        ...businessDone,
+        ...calendarDone,
+        ...serviceDone,
+        ...availabilityDone,
+      }),
+    );
+    expect(
+      await screen.findByText("Demonstração simulada", { exact: false }),
+    ).toBeVisible();
+    expect(screen.getByText("O Corte custa R$ 100,00.")).toBeVisible();
+    expect(screen.getAllByText(/09:00/u).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+
     expect(push).toHaveBeenCalledWith("/onboarding/tom-da-ia");
+    // A demonstração é simulada: nenhuma escrita nem porta de envio.
+    expect(updateOnboarding).not.toHaveBeenCalled();
+    expect(completeOnboarding).not.toHaveBeenCalled();
   });
 
   test("tom-da-ia salva o estilo escolhido e avança para whatsapp", async () => {
@@ -521,7 +574,7 @@ describe("o encadeamento real de dados-do-negocio até validação", () => {
     ).toHaveAttribute("href", "/configuracoes/whatsapp");
   });
 
-  test("whatsapp-conectar conectado conclui o onboarding e substitui a rota por /inicio", async () => {
+  test("whatsapp-conectar conectado avança para contatos-ignorados, sem concluir ainda", async () => {
     getWhatsapp.mockResolvedValue({ status: "CONNECTED" });
     const user = userEvent.setup();
     renderScreen(
@@ -534,13 +587,10 @@ describe("o encadeamento real de dados-do-negocio até validação", () => {
         whatsapp: { phoneNumber: "+5511999990000", status: "CONNECTED" },
       }),
     );
-    await user.click(
-      await screen.findByRole("button", { name: "Concluir configuração" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "Continuar" }));
 
-    expect(completeOnboarding).toHaveBeenCalled();
-    expect(refreshSession).toHaveBeenCalled();
-    expect(replace).toHaveBeenCalledWith("/inicio");
+    expect(push).toHaveBeenCalledWith("/onboarding/contatos-ignorados");
+    expect(completeOnboarding).not.toHaveBeenCalled();
   });
 
   test("whatsapp-conectar sem conexão concluída bloqueia com erro, sem avançar", async () => {
@@ -555,15 +605,113 @@ describe("o encadeamento real de dados-do-negocio até validação", () => {
         ...toneDone,
       }),
     );
-    await user.click(
-      await screen.findByRole("button", { name: "Concluir configuração" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "Continuar" }));
     expect(
       await screen.findByText(
         "Conclua a vinculação no WhatsApp antes de continuar.",
       ),
     ).toBeVisible();
     expect(completeOnboarding).not.toHaveBeenCalled();
+  });
+
+  test("contatos-ignorados: marcar uma conversa existente chama o mesmo caminho de ignore já existente", async () => {
+    listConversations.mockResolvedValue([
+      { id: "conv-1", externalContactId: "5511988880000", customerName: "Maria" },
+    ]);
+    setIgnoredConversation.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderScreen(
+      "contatos-ignorados",
+      stateFixture({
+        ...businessDone,
+        ...calendarDone,
+        ...serviceDone,
+        ...toneDone,
+        whatsapp: { phoneNumber: "+5511999990000", status: "CONNECTED" },
+      }),
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Ignorar" }));
+
+    expect(setIgnoredConversation).toHaveBeenCalledWith("conv-1", true);
+    expect(await screen.findByRole("button", { name: "Ignorado" })).toBeDisabled();
+  });
+
+  test("contatos-ignorados: marcar por telefone cria o contato e mostra a confirmação só após a resposta", async () => {
+    ignoreByPhone.mockResolvedValue({
+      contactId: "contact-1",
+      externalContactId: "5511977770000",
+      ignored: true,
+      ignoredAt: new Date().toISOString(),
+    });
+    const user = userEvent.setup();
+    renderScreen(
+      "contatos-ignorados",
+      stateFixture({
+        ...businessDone,
+        ...calendarDone,
+        ...serviceDone,
+        ...toneDone,
+        whatsapp: { phoneNumber: "+5511999990000", status: "CONNECTED" },
+      }),
+    );
+
+    expect(screen.queryByText(/ignorado/iu)).toBeNull();
+    await user.type(
+      await screen.findByPlaceholderText("+55 11 99999-0000"),
+      "+55 11 97777-0000",
+    );
+    await user.click(screen.getByRole("button", { name: "Adicionar" }));
+
+    expect(ignoreByPhone).toHaveBeenCalledWith("+55 11 97777-0000", true);
+    expect(await screen.findByText("5511977770000 ignorado")).toBeVisible();
+  });
+
+  test("contatos-ignorados: pular não bloqueia e não afirma ninguém ignorado sem marcação gravada", async () => {
+    const user = userEvent.setup();
+    renderScreen(
+      "contatos-ignorados",
+      stateFixture({
+        ...businessDone,
+        ...calendarDone,
+        ...serviceDone,
+        ...toneDone,
+        whatsapp: { phoneNumber: "+5511999990000", status: "CONNECTED" },
+      }),
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Pular esta etapa" }),
+    );
+
+    expect(setIgnoredConversation).not.toHaveBeenCalled();
+    expect(ignoreByPhone).not.toHaveBeenCalled();
+    expect(completeOnboarding).toHaveBeenCalled();
+    // Pular a etapa opcional não pula o teste real: o vault põe o teste
+    // **depois** dos contatos ignorados, e é ele que ativa a IA.
+    expect(push).toHaveBeenCalledWith("/onboarding/teste-real");
+  });
+
+  test("contatos-ignorados: concluir configuração finaliza o onboarding", async () => {
+    const user = userEvent.setup();
+    renderScreen(
+      "contatos-ignorados",
+      stateFixture({
+        ...businessDone,
+        ...calendarDone,
+        ...serviceDone,
+        ...toneDone,
+        whatsapp: { phoneNumber: "+5511999990000", status: "CONNECTED" },
+      }),
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Ir para o teste" }),
+    );
+
+    expect(completeOnboarding).toHaveBeenCalled();
+    expect(refreshSession).toHaveBeenCalled();
+    expect(push).toHaveBeenCalledWith("/onboarding/teste-real");
   });
 });
 
@@ -674,7 +822,7 @@ describe("a retomada abre a próxima pendência real", () => {
     ).toBe("dias-de-atendimento");
   });
 
-  test("com o WhatsApp já conectado, a retomada abre whatsapp-conectar para concluir", () => {
+  test("com o WhatsApp já conectado, a retomada abre contatos-ignorados para concluir", () => {
     expect(
       nextRequiredStep(
         stateFixture({
@@ -686,6 +834,19 @@ describe("a retomada abre a próxima pendência real", () => {
           whatsapp: { phoneNumber: "+5511999990000", status: "CONNECTED" },
         }),
       ),
-    ).toBe("whatsapp-conectar");
+    ).toBe("contatos-ignorados");
+  });
+
+  test("com o estilo da IA pendente, mesmo com agenda pronta, a retomada abre demonstracao-da-ia", () => {
+    expect(
+      nextRequiredStep(
+        stateFixture({
+          ...businessDone,
+          ...calendarDone,
+          ...serviceDone,
+          ...availabilityDone,
+        }),
+      ),
+    ).toBe("demonstracao-da-ia");
   });
 });

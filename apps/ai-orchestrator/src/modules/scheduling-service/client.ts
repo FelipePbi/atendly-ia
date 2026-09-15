@@ -99,6 +99,12 @@ const authorizedCustomerSchema = z.object({
     .nullable()
     .default(null),
 });
+/**
+ * Resposta das remoções por ID. `removed: false` é "já não existia" — a
+ * resposta honesta para a segunda passada de uma limpeza idempotente.
+ */
+const removalSchema = z.object({ removed: z.boolean() });
+
 const slotSchema = z.object({
   date: z.string(),
   startTime: z.string(),
@@ -174,6 +180,28 @@ export interface SchedulingGateway {
     context?: SchedulingRequestContext,
     idempotencyKey?: string,
   ): Promise<{ appointmentId: string; cancelled: true }>;
+  /**
+   * Remoção definitiva por ID (Goal019).
+   *
+   * Cancelar não é remover: o atendimento cancelado continua na agenda do
+   * negócio. As duas operações abaixo existem para o único caso em que o
+   * produto desfaz o que ele mesmo criou — o teste de ativação, cujo fluxo no
+   * vault termina com o atendimento de teste e a pessoa de teste
+   * **removidos**.
+   *
+   * Recebem só o ID, de propósito: não há aqui como expressar remoção por
+   * telefone, nome ou data, então a limpeza não consegue fazer busca
+   * heurística nem por engano. `removed: false` é o caso de já não existir —
+   * repetir é no-op, não erro.
+   */
+  deleteAppointment(
+    appointmentId: string,
+    context?: SchedulingRequestContext,
+  ): Promise<{ appointmentId: string; removed: boolean }>;
+  deleteCustomer(
+    customerId: string,
+    context?: SchedulingRequestContext,
+  ): Promise<{ customerId: string; removed: boolean }>;
   rescheduleAppointment(
     input: RescheduleAppointmentInput,
     context?: SchedulingRequestContext,
@@ -477,6 +505,30 @@ export class SchedulingClient implements SchedulingGateway {
       { method: "POST", context, idempotencyKey, body: {} },
     );
     return { appointmentId, cancelled: true };
+  }
+
+  async deleteAppointment(
+    appointmentId: string,
+    context?: SchedulingRequestContext,
+  ): Promise<{ appointmentId: string; removed: boolean }> {
+    const result = await this.request(
+      `/internal/appointments/${appointmentId}`,
+      removalSchema,
+      { method: "DELETE", context },
+    );
+    return { appointmentId, removed: result.removed };
+  }
+
+  async deleteCustomer(
+    customerId: string,
+    context?: SchedulingRequestContext,
+  ): Promise<{ customerId: string; removed: boolean }> {
+    const result = await this.request(
+      `/internal/customers/${customerId}`,
+      removalSchema,
+      { method: "DELETE", context },
+    );
+    return { customerId, removed: result.removed };
   }
 
   async rescheduleAppointment(

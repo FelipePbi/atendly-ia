@@ -40,6 +40,8 @@ export type InternalScope =
   | "customer-memory:read"
   | "customer-memory:write"
   | "customer-summary:write"
+  | "activation-test:read"
+  | "activation-test:write"
   // Escopo deliberadamente não concedido a nenhuma credencial: é o destino de
   // caminho interno sem escopo declarado, para que rota nova falhe fechada.
   | "internal:unmapped";
@@ -62,6 +64,10 @@ const SCOPES_BY_USE: Record<InternalUse, readonly InternalScope[]> = {
     "customer-memory:write",
     "customer-summary:write",
     "tenant-config:read",
+    // Teste real da ativacao (Goal019): ler o progresso e iniciar/reiniciar a
+    // execucao sao comando comum, nunca provisionamento.
+    "activation-test:read",
+    "activation-test:write",
   ],
 };
 

@@ -44,10 +44,18 @@ export const STORE_VERSION = 1;
  * model with a wider packet, not on a different model. Collapsing the two
  * would make "the slicing was too narrow" indistinguishable from "the tier was
  * too low", and those have opposite fixes.
+ *
+ * CEILING_DECLARED: the attempt asked for a stronger model and the router
+ * answered that there is none above it. Like the two above, something WAS
+ * learned and the successor exists because of it — and like CONTEXT_EXPANDED,
+ * the successor runs on the SAME model. What changes is neither the model nor
+ * the packet but what the unit KNOWS: that no stronger model is coming, so
+ * what it cannot finish belongs in its unmet criteria rather than in a second
+ * request nobody can grant.
  */
 export const JOB_STATUSES = Object.freeze([
   'QUEUED', 'RUNNING', 'WAITING_FOR_CAPACITY', 'INTERRUPTED', 'REROUTED', 'CONTEXT_EXPANDED',
-  'COMPLETED', 'FAILED', 'SUPERSEDED',
+  'CEILING_DECLARED', 'COMPLETED', 'FAILED', 'SUPERSEDED',
 ]);
 
 /**
@@ -112,13 +120,17 @@ export const JOB_DISPATCH = Object.freeze({
  * model with a wider packet. Bounded by the loop's own budget, so "ask for
  * more files" can never become an unbounded retry.
  *
+ * CEILING_DECLARED: the attempt asked for a model that does not exist above
+ * it. The successor runs on the same model, told so. Bounded at one, because
+ * the second telling would carry no information the first did not.
+ *
  * FAILED is deliberately absent: the work was attempted and did not succeed,
  * and whether to try again is a policy decision a person makes — not something
  * a restart assumes. That distinction is the whole point of keeping a capacity
  * wait out of FAILED.
  */
 export const RETRYABLE_JOB_STATUSES = Object.freeze([
-  'INTERRUPTED', 'WAITING_FOR_CAPACITY', 'REROUTED', 'CONTEXT_EXPANDED',
+  'INTERRUPTED', 'WAITING_FOR_CAPACITY', 'REROUTED', 'CONTEXT_EXPANDED', 'CEILING_DECLARED',
 ]);
 
 /**

@@ -950,6 +950,12 @@ export function authorizeWorkUnitEscalation({
       verdict: ESCALATION_VERDICTS.REFUSED,
       decision: null,
       reason: `A ${currentTier} Work Unit is already at the top of the table; anything beyond it is a human decision.`,
+      // Flagged, not just phrased, because this refusal is the only one that
+      // says nothing against the unit: every other one means it asked badly —
+      // no evidence, an inadmissible reason, a claim about the past that does
+      // not check out — while this one means the TABLE ran out. A caller that
+      // wants to treat the two differently should not have to match on prose.
+      atTopOfTable: true,
     };
   }
   if (mode !== ROUTING_MODES.AUTO) {

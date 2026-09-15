@@ -147,6 +147,26 @@ export async function runWithCapacity({
    */
   continuationFor = null,
   /**
+   * An answer that asked for a model the table does not have above it.
+   *
+   * The third hook, and the one that changes LEAST: `escalationFor` changes
+   * the model, `continuationFor` changes the context, and this one changes
+   * neither. It changes what the unit knows — that no stronger model is
+   * coming — and gives it one more attempt on the same model to deliver what
+   * it can and declare the rest as unmet criteria.
+   *
+   * It exists because the alternative was measured. In Goal019 one refusal at
+   * the top of the table published ESCALATION_REQUIRED as a COMPLEX unit's
+   * answer; eight of the round's fifteen units were behind it and ended with
+   * zero attempts, six of them gates. Refusing the request is right — there
+   * IS nothing above COMPLEX — but ending the unit over it threw away work
+   * the unit had already done and everything downstream of it.
+   *
+   * Same shape as the other two: null to publish normally, or
+   * `{ reason, detail, event }` to end this attempt and let a successor run.
+   */
+  finalAttemptFor = null,
+  /**
    * Extra ia-loop facts the ledger should attribute this call to, for whatever
    * only the caller knows. One caller today: a Work Unit, which is the only
    * thing here that has an id the runner cannot see. Never influences routing,
@@ -318,6 +338,37 @@ export async function runWithCapacity({
             fromModel: escalation.from ?? null,
           },
         };
+        continue;
+      }
+    }
+
+    // Reachable only when the escalation hook refused, which is what makes it
+    // safe: a request the router GRANTED has already left through `continue`
+    // above, so nothing here can turn an authorised escalation into a retry on
+    // the model the unit was trying to leave.
+    if (!failed && typeof finalAttemptFor === 'function') {
+      const final = await finalAttemptFor({ result: agentOutcome.payload, attempt });
+      if (final) {
+        // Preserved before the attempt closes, for the same reason a reroute
+        // and an expansion preserve theirs: a crash between the two must leave
+        // the answer readable rather than lost.
+        await store.publishCandidateResult(role, jobId, {
+          requestedModel: agentOutcome?.requestedModel ?? null,
+          modelVerificationError: null,
+          observedModels: agentOutcome?.observedModels ?? [],
+          payload: agentOutcome.payload,
+        }, { attemptId: currentAttemptId });
+
+        await store.setJobStatus(role, jobId, 'CEILING_DECLARED');
+        await store.appendEvent({
+          type: 'WORK_UNIT_CEILING_DECLARED',
+          goal, round, agent: role, jobId, attempt, attemptId: currentAttemptId,
+          reason: final.reason ?? null,
+          ...(final.event ?? {}),
+        });
+        onEvent({ type: 'CEILING_DECLARED', jobId, attempt, reason: final.reason ?? null });
+
+        pendingRetry = { reason: 'CEILING_DECLARED', detail: final.detail ?? null };
         continue;
       }
     }

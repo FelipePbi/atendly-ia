@@ -170,19 +170,31 @@ export function createWorkUnitAttemptRouter({
     };
   }
 
-  async function refuse({ verdict, reason, request, attempt }) {
+  // The last refusal this router issued, in memory only. It exists so a caller
+  // can tell the one refusal that is not the unit's fault — the table ran out —
+  // from the ones that are, without matching on the reason's prose.
+  let lastRefusal = null;
+
+  async function refuse({
+    verdict, reason, request, attempt, atTopOfTable = false,
+  }) {
+    lastRefusal = { verdict, reason, attempt, atTopOfTable, requested: request?.reason ?? null };
     await store.appendEvent({
       type: 'MODEL_ESCALATION_REFUSED',
       goal, round, agent: role, jobId, attempt,
       workUnitId: unit.id,
       verdict,
       requested: request?.reason ?? null,
+      atTopOfTable,
       reason,
     });
   }
 
   return {
     current,
+
+    /** What the router last said no to, or null if it has said no to nothing. */
+    lastRefusal: () => (lastRefusal ? { ...lastRefusal } : null),
 
     /** Availability only, exactly as for a role. */
     async fallbackFor({ reason, attempt }) {
@@ -246,7 +258,13 @@ export function createWorkUnitAttemptRouter({
       });
 
       if (verdict.verdict !== ESCALATION_VERDICTS.AUTHORIZED) {
-        await refuse({ verdict: verdict.verdict, reason: verdict.reason, request, attempt });
+        await refuse({
+          verdict: verdict.verdict,
+          reason: verdict.reason,
+          request,
+          attempt,
+          atTopOfTable: verdict.atTopOfTable === true,
+        });
         return null;
       }
 

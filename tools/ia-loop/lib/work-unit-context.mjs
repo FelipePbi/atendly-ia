@@ -21,6 +21,8 @@
  *   constraints               what may not be done, which is not negotiable
  *   previousRelevantFailures  this unit's OWN earlier attempts, nobody else's
  *   expandedContext           files an earlier attempt of this unit asked for
+ *   modelCeiling              null except on the one attempt that follows a
+ *                             refused escalation at the top of the table
  *
  * Deliberately NOT carried: the Goal document's body, other units' reports,
  * the full attempt history of the round, the review packet, the diff, the
@@ -145,6 +147,13 @@ export function buildWorkUnitContextPacket({
    * unit's reading was thrown away.
    */
   findingsLedger = [],
+  /**
+   * Set only on the attempt that follows a refused escalation at the top of
+   * the table. The unit asked for a stronger model; there is none. Telling it
+   * so is the difference between a unit that asks again and ends with nothing
+   * delivered, and a unit that finishes what it can and names what it cannot.
+   */
+  ceiling = null,
 }) {
   if (!goal) fail('INVALID_ARGS', 'goal is required');
   if (!unit?.id) fail('INVALID_ARGS', 'a Work Unit is required');
@@ -201,6 +210,15 @@ export function buildWorkUnitContextPacket({
     // What this Goal has already opened and edited. Pointers to verify, never
     // an authority to trust: a stale entry costs one Read to disprove.
     findingsLedger: Object.freeze([...findingsLedger]),
+
+    // Null on every attempt but the one after a refused top-of-table request.
+    modelCeiling: ceiling
+      ? Object.freeze({
+        tier: ceiling.tier ?? null,
+        requested: ceiling.requested ?? null,
+        reason: typeof ceiling.reason === 'string' ? ceiling.reason.slice(0, 400) : null,
+      })
+      : null,
 
     worktree,
     constraints: WORK_UNIT_CONSTRAINTS,
@@ -260,10 +278,25 @@ export function buildWorkUnitPrompt(context, job) {
     'status "CONTEXT_EXPANSION_REQUIRED" e um contextRequest nomeando os arquivos que faltam.',
     'Isso não é falha: é como o harness aprende que o recorte foi estreito demais.',
     '',
-    'Se a unidade se revelar mais difícil do que o plano classificou, responda com status',
-    '"ESCALATION_REQUIRED" e uma escalation com evidência concreta. Confiança sozinha não é',
-    'evidência e será recusada pelo router.',
-    '',
+    ...(context.modelCeiling
+      ? [
+        'ATENÇÃO — esta é sua última tentativa e você já pediu um modelo mais forte.',
+        `O router recusou: ${context.modelCeiling.reason}`,
+        'Não existe modelo acima deste. Pedir de novo não muda nada e gasta a tentativa.',
+        'Entregue o que for possível AGORA e declare como met: false, com detail explicando',
+        'exatamente o que falta e por quê, os critérios que você não conseguir atender.',
+        'Uma unidade que entrega metade e diz com precisão qual metade é muito mais útil à',
+        'rodada do que uma que não entrega nada: o que você escrever na árvore fica, e o que',
+        'você nomear vira o trabalho da próxima rodada. Se nada puder ser entregue, responda',
+        '"BLOCKED" com a evidência — nunca "ESCALATION_REQUIRED" de novo.',
+        '',
+      ]
+      : [
+        'Se a unidade se revelar mais difícil do que o plano classificou, responda com status',
+        '"ESCALATION_REQUIRED" e uma escalation com evidência concreta. Confiança sozinha não é',
+        'evidência e será recusada pelo router.',
+        '',
+      ]),
     'Restrições (o orchestrator verifica no Git depois; violação encerra a execução):',
     ...context.constraints.map((constraint) => `- ${constraint}`),
     '',

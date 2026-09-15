@@ -621,6 +621,11 @@ async function executeModelUnit({
   const startedAt = Date.now();
   let lastPacket = null;
 
+  // Set once, when the router refuses an escalation because there is nothing
+  // above this unit. Carried into the next packet so the unit is TOLD, rather
+  // than left to ask a second time for something nobody can grant.
+  let ceiling = null;
+
   const run = await runWithCapacity({
     store,
     role: WORK_UNIT_NAMESPACE,
@@ -642,7 +647,40 @@ async function executeModelUnit({
         emit(`    ${unit.id} capacity fallback: ${event.from} → ${event.to} (${event.reason})`);
       } else if (event.type === 'CONTEXT_EXPANDED') {
         emit(`    ${unit.id} asked for more context (${event.reason})`);
+      } else if (event.type === 'CEILING_DECLARED') {
+        emit(`    ${unit.id} pediu modelo mais forte e não há; última tentativa no mesmo modelo, ciente disso`);
       }
+    },
+
+    /**
+     * The unit asked for a stronger model and the router answered that there
+     * is none. That refusal is correct and stays — what changes is that it no
+     * longer ENDS the unit.
+     *
+     * Bounded at exactly one: the second telling would carry nothing the first
+     * did not, and an unbounded version would be a COMPLEX unit retrying
+     * itself on Opus for as long as it kept asking. If the extra attempt still
+     * cannot finish, the unit's own answer is what gets published — which is
+     * the honest outcome, now with whatever it managed to deliver in the tree
+     * and its unmet criteria named for the reviewer.
+     */
+    finalAttemptFor: async ({ result }) => {
+      if (result?.status !== 'ESCALATION_REQUIRED') return null;
+      if (ceiling) return null;
+
+      const refusal = router.lastRefusal();
+      if (!refusal?.atTopOfTable) return null;
+
+      ceiling = {
+        tier: unit.type,
+        requested: refusal.requested ?? result?.escalation?.reason ?? null,
+        reason: refusal.reason,
+      };
+      return {
+        reason: refusal.reason,
+        detail: { workUnitId: unit.id, requested: ceiling.requested },
+        event: { workUnitId: unit.id, tier: ceiling.tier, requested: ceiling.requested },
+      };
     },
 
     /**
@@ -727,6 +765,7 @@ async function executeModelUnit({
         previousFailures: await previousFailuresFor(store, unitJobId),
         expansions,
         graphOrientation,
+        ceiling,
         // Resolved per attempt, so a retry sees what the units that ran in
         // between discovered. `relevantFiles` is excluded: repeating what the
         // packet already lists would spend the budget saying nothing.

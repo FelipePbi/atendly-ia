@@ -620,6 +620,9 @@ describe("remarcar", () => {
     expect(rescheduleAppointment.mock.calls[0][1]).toEqual({
       date: ISO_TODAY,
       holdId: "hold-r",
+      // Notificar cliente vem marcado por padrão e é sempre enviado
+      // explicitamente (Goal021), nunca omitido.
+      notifyCustomer: true,
       overlapOverride: undefined,
       overlapOverrideReason: undefined,
       startTime: "10:00",
@@ -692,6 +695,12 @@ describe("cancelar", () => {
 
     await waitFor(() => expect(cancelAppointment).toHaveBeenCalledTimes(1));
     expect(cancelAppointment.mock.calls[0][0]).toBe("apt-1");
+    // Notificar cliente vem marcado por padrão e é sempre enviado
+    // explicitamente (Goal021), nunca omitido.
+    expect(cancelAppointment.mock.calls[0][1]).toEqual({
+      comments: undefined,
+      notifyCustomer: true,
+    });
     expect(replace).toHaveBeenCalledWith("/agenda/agendamento?id=apt-1");
   });
 });

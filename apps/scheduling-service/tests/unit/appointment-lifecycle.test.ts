@@ -267,7 +267,7 @@ describe("ciclo de vida: presença", () => {
     const { calendar, lifecycle } = setup();
     const appointment = await createConfirmedAppointment(calendar);
 
-    const snapshot = await lifecycle.confirmPresence(appointment.id);
+    const snapshot = await lifecycle.confirmPresence(appointment.id, "USER");
 
     expect(snapshot.presenceConfirmedAt).not.toBeNull();
     expect(snapshot.status).toBe("CONFIRMED");
@@ -277,10 +277,10 @@ describe("ciclo de vida: presença", () => {
   it("é idempotente: confirmar de novo não duplica o evento", async () => {
     const { calendar, lifecycle, database } = setup();
     const appointment = await createConfirmedAppointment(calendar);
-    const first = await lifecycle.confirmPresence(appointment.id);
+    const first = await lifecycle.confirmPresence(appointment.id, "USER");
     const eventsBefore = database.tables.appointmentEvent.rows.length;
 
-    const second = await lifecycle.confirmPresence(appointment.id);
+    const second = await lifecycle.confirmPresence(appointment.id, "USER");
 
     expect(second.presenceConfirmedAt).toBe(first.presenceConfirmedAt);
     expect(database.tables.appointmentEvent.rows).toHaveLength(eventsBefore);

@@ -64,6 +64,7 @@ const getAppointment = vi.fn();
 const getAvailability = vi.fn();
 const getCalendar = vi.fn();
 const listAppointmentEvents = vi.fn();
+const listAppointmentNotifications = vi.fn();
 const listAppointments = vi.fn();
 const listAvailabilityExceptions = vi.fn();
 const listTimeBlocks = vi.fn();
@@ -94,6 +95,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       getAvailability,
       getCalendar,
       listAppointmentEvents,
+      listAppointmentNotifications,
       listAppointments,
       listAvailabilityExceptions,
       listTimeBlocks,
@@ -244,6 +246,7 @@ beforeEach(() => {
     getAvailability,
     getCalendar,
     listAppointmentEvents,
+    listAppointmentNotifications,
     listAppointments,
     listAvailabilityExceptions,
     listTimeBlocks,
@@ -262,6 +265,7 @@ beforeEach(() => {
   listAvailabilityExceptions.mockResolvedValue([]);
   listCustomers.mockResolvedValue(customerListFixture());
   listServices.mockResolvedValue(serviceListFixture());
+  listAppointmentNotifications.mockResolvedValue([]);
 });
 
 function renderWithShell(node: React.ReactElement) {
@@ -390,7 +394,7 @@ describe("ShellConfigProvider + Detalhe do agendamento (ciclo de vida e históri
     await user.click(toggle);
     await user.click(toggle);
 
-    expect(await screen.findByText("Presença ainda não confirmada")).toBeVisible();
+    expect(await screen.findByText("Aguardando confirmação")).toBeVisible();
   });
 });
 

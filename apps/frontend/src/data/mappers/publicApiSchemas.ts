@@ -181,6 +181,26 @@ export const settingsStateSchema = z.object({
   availability: availabilitySettingsSchema.nullable(),
 });
 
+// --- Lembretes e confirmação de presença (Goal021, WU-010) ------------------
+// Espelha `GET/PATCH /v1/settings/reminders` em PUBLIC_API_V1.md: só humano
+// configura, no mesmo padrão de disponibilidade e oferta (Goal009). `rules`
+// tem no máximo dois itens, um por posição — a restrição de "até dois" nasce
+// da forma, não de validação extra aqui.
+export const reminderSlotSchema = z.enum(["FIRST", "SECOND"]);
+export const reminderPricePolicySchema = z.enum(["NEVER", "WHEN_FIXED"]);
+export const reminderRuleSchema = z.object({
+  slot: reminderSlotSchema,
+  leadMinutes: z.number().int().positive().max(43_200),
+});
+export const reminderSettingsSchema = z.object({
+  // `false` quando o negócio nunca gravou a configuração: a resposta traz o
+  // default do produto (um lembrete a 24h, FIRST), não um estado vazio.
+  configured: z.boolean(),
+  confirmationEnabled: z.boolean(),
+  pricePolicy: reminderPricePolicySchema,
+  rules: z.array(reminderRuleSchema).max(2),
+});
+
 const serviceColorTokenSchema = z.enum([
   "ROSE",
   "AMBER",
@@ -287,7 +307,10 @@ export const appointmentSchema = z.object({
     }),
   ),
   totalPrice: z.number().nonnegative().nullable(),
-  totalPriceType: z.enum(["FIXED", "STARTING_AT", "NONE"]).optional().default("NONE"),
+  totalPriceType: z
+    .enum(["FIXED", "STARTING_AT", "NONE"])
+    .optional()
+    .default("NONE"),
   comments: z.string().nullable(),
   // Texto livre, não enum, de propósito: os estados do produto são
   // `CONFIRMED | COMPLETED | CANCELLED | NO_SHOW`, mas uma resposta antiga
@@ -299,7 +322,11 @@ export const appointmentSchema = z.object({
   // traz quando a rota de ciclo respondeu, e a listagem continua válida sem
   // eles.
   completedAt: z.string().nullable().optional().default(null),
-  completionOrigin: z.enum(["MANUAL", "AUTO"]).nullable().optional().default(null),
+  completionOrigin: z
+    .enum(["MANUAL", "AUTO"])
+    .nullable()
+    .optional()
+    .default(null),
   noShowAt: z.string().nullable().optional().default(null),
   noShowNote: z.string().nullable().optional().default(null),
   presenceConfirmedAt: z.string().nullable().optional().default(null),
@@ -347,6 +374,57 @@ export const appointmentLifecycleSchema = z.object({
   finalValue: z.number().nullable(),
   finalValueSetAt: z.string().nullable(),
   finalValueSetBy: z.string().nullable(),
+});
+
+/**
+ * Estado de envio ao cliente **deste** agendamento (Goal021). É a resposta
+ * para "o lembrete desta ocorrência saiu?" — pergunta que `ReminderSettings`
+ * não responde: a configuração diz só com quanta antecedência ele sairia.
+ */
+export const appointmentNotificationKindSchema = z.enum([
+  "REMINDER",
+  "CHANGE_NOTICE",
+]);
+export const appointmentNotificationSlotSchema = z.enum([
+  "FIRST",
+  "SECOND",
+  "CHANGE_NOTICE",
+]);
+export const appointmentNotificationStateSchema = z.enum([
+  "PENDING",
+  "CLAIMED",
+  "SENT",
+  "FAILED",
+  "DISMISSED",
+  "CANCELLED",
+]);
+export const appointmentNotificationReasonSchema = z.enum([
+  "LEAD_ALREADY_PASSED",
+  "APPOINTMENT_VERSION_SUPERSEDED",
+  "APPOINTMENT_NOT_CONFIRMED",
+  "APPOINTMENT_CANCELLED",
+  "APPOINTMENT_ALREADY_STARTED",
+  "REMINDER_CONFIGURATION_CHANGED",
+  "CUSTOMER_WITHOUT_PHONE",
+  "CONTACT_IGNORED",
+  "AI_NOT_ENABLED",
+  "CHANNEL_NOT_CONNECTED",
+  "TRANSPORT_FAILED",
+  "TRANSPORT_UNKNOWN",
+  "ATTEMPTS_EXHAUSTED",
+]);
+export const appointmentNotificationSchema = z.object({
+  id: z.string().min(1),
+  kind: appointmentNotificationKindSchema,
+  slot: appointmentNotificationSlotSchema,
+  appointmentVersion: z.number().int().nonnegative(),
+  state: appointmentNotificationStateSchema,
+  // Obrigatório nos estados terminais que o exigem e proibido nos demais —
+  // invariante do banco, não da tela; aqui ele é só lido.
+  reason: appointmentNotificationReasonSchema.nullable(),
+  dueAt: z.string(),
+  sentAt: z.string().nullable(),
+  settledAt: z.string().nullable(),
 });
 
 /** Histórico operacional: um evento por mutação, em ordem cronológica. */
@@ -935,9 +1013,28 @@ export type BusinessContextProjectionStatus = z.infer<
 export type Appointment = z.infer<typeof appointmentSchema>;
 export type AppointmentLifecycle = z.infer<typeof appointmentLifecycleSchema>;
 export type AppointmentEvent = z.infer<typeof appointmentEventSchema>;
+export type AppointmentNotificationKind = z.infer<
+  typeof appointmentNotificationKindSchema
+>;
+export type AppointmentNotificationSlot = z.infer<
+  typeof appointmentNotificationSlotSchema
+>;
+export type AppointmentNotificationState = z.infer<
+  typeof appointmentNotificationStateSchema
+>;
+export type AppointmentNotificationReason = z.infer<
+  typeof appointmentNotificationReasonSchema
+>;
+export type AppointmentNotification = z.infer<
+  typeof appointmentNotificationSchema
+>;
 export type AppointmentHold = z.infer<typeof appointmentHoldSchema>;
 export type AvailabilitySlot = z.infer<typeof availabilitySlotSchema>;
 export type AvailabilitySettings = z.infer<typeof availabilitySettingsSchema>;
+export type ReminderSlot = z.infer<typeof reminderSlotSchema>;
+export type ReminderPricePolicy = z.infer<typeof reminderPricePolicySchema>;
+export type ReminderRule = z.infer<typeof reminderRuleSchema>;
+export type ReminderSettings = z.infer<typeof reminderSettingsSchema>;
 export type CalendarSource = z.infer<typeof calendarSourceSchema>;
 export type CalendarState = z.infer<typeof calendarStateSchema>;
 export type Conversation = z.infer<typeof conversationSchema>;

@@ -5,6 +5,7 @@ import {
   appointmentEventSchema,
   appointmentHoldSchema,
   appointmentLifecycleSchema,
+  appointmentNotificationSchema,
   appointmentSchema,
   availabilityExceptionSchema,
   availabilitySlotSchema,
@@ -47,6 +48,8 @@ export interface CreateAppointmentInput {
 export interface RescheduleAppointmentInput {
   date: string;
   holdId?: string;
+  /** Aviso de alteração ao cliente (Goal021); a interface manda-o sempre explicitamente. */
+  notifyCustomer?: boolean;
   overlapOverride?: boolean;
   overlapOverrideReason?: string;
   startTime: string;
@@ -220,7 +223,12 @@ export class BffCalendarService {
 
   cancelAppointment(
     id: string,
-    input: { comments?: string; reason?: string },
+    input: {
+      comments?: string;
+      /** Aviso de alteração ao cliente (Goal021); a interface manda-o sempre explicitamente. */
+      notifyCustomer?: boolean;
+      reason?: string;
+    },
     idempotencyKey: string,
     signal?: AbortSignal,
   ) {
@@ -291,6 +299,20 @@ export class BffCalendarService {
     return this.http.request({
       path: `/v1/appointments/${encodeURIComponent(id)}/events`,
       schema: z.array(appointmentEventSchema),
+      signal,
+    });
+  }
+
+  /**
+   * Estado de envio ao cliente deste agendamento (Goal021): os lembretes e o
+   * aviso de alteração desta ocorrência. Leitura separada da configuração do
+   * negócio — `settings.getReminders` diz a antecedência configurada, nunca
+   * se o lembrete deste compromisso saiu.
+   */
+  listAppointmentNotifications(id: string, signal?: AbortSignal) {
+    return this.http.request({
+      path: `/v1/appointments/${encodeURIComponent(id)}/notifications`,
+      schema: z.array(appointmentNotificationSchema),
       signal,
     });
   }

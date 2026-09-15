@@ -1,4 +1,5 @@
 import type { PrismaClient } from "../../generated/prisma/client.js";
+import { resolveChannelConversation } from "../channel/conversation-resolution.js";
 import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
 import { resolveAiConversationStyle } from "../tenant-config/ai-settings.js";
 import type {
@@ -29,25 +30,18 @@ export interface GraphRuntimePort {
 export class PrismaGraphRuntime implements GraphRuntimePort {
   constructor(private readonly prisma: PrismaClient) {}
 
+  /**
+   * A resolucao em si vive em `conversation-resolution.ts`: a entrega de
+   * lembrete (Goal021) precisa da **mesma** conversa em que o cliente
+   * responde, e duas implementacoes do mesmo upsert seriam, com o tempo, duas
+   * formas de uma conversa existir.
+   */
   async resolveConversationId(message: ChannelInboundMessage): Promise<string> {
-    const conversation = await this.prisma.conversation.upsert({
-      where: {
-        tenantId_channelId_externalContactId: {
-          tenantId: message.tenantId,
-          channelId: message.channelId,
-          externalContactId: message.customerPhone,
-        },
-      },
-      update: {
-        customerName: message.customerName ?? undefined,
-      },
-      create: {
-        tenantId: message.tenantId,
-        channelId: message.channelId,
-        externalContactId: message.customerPhone,
-        customerName: message.customerName ?? null,
-        state: {},
-      },
+    const conversation = await resolveChannelConversation(this.prisma, {
+      tenantId: message.tenantId,
+      channelId: message.channelId,
+      externalContactId: message.customerPhone,
+      customerName: message.customerName,
     });
     return conversation.id;
   }

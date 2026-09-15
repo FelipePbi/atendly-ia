@@ -9,9 +9,14 @@ import {
 } from "../../lib/internal-credentials.js";
 import type { BusinessContext } from "../tenant-config/business-context.js";
 import type {
+  AppointmentPresenceConfirmation,
+  ClaimNotificationIntentsInput,
   ConfirmAppointmentSeriesInput,
   CreateSchedulingHoldInput,
+  NotificationClaimResult,
+  NotificationIntentSettlement,
   PreviewAppointmentSeriesInput,
+  ReminderConfirmationSettings,
   RescheduleAppointmentInput,
   ScheduleAppointmentInput,
   SchedulingAppointment,
@@ -21,7 +26,9 @@ import type {
   SchedulingRequestContext,
   SchedulingSeriesOccurrencePreview,
   SchedulingServiceDefinition,
+  SettleNotificationIntentInput,
 } from "./types.js";
+import { NOTIFICATION_INTENT_REASONS } from "./types.js";
 
 const priceTypeSchema = z.enum([
   "FIXED",
@@ -133,6 +140,91 @@ const seriesOccurrenceSchema = z.object({
   holdId: z.string().nullable(),
   unavailable: z.boolean(),
 });
+// --- Intencao de envio (Goal021) -------------------------------------------
+// Decodificacao estrita: resposta que nao casa com o contrato e resposta
+// invalida, nunca um lembrete montado com campo inventado por omissao. E o
+// mesmo principio dos schemas acima, e aqui ele vale dobrado — o dano deste
+// Goal e mandar ao cliente um horario que nao existe.
+const notificationReasonSchema = z.enum(NOTIFICATION_INTENT_REASONS);
+const notificationFactsSchema = z.object({
+  kind: z.enum(["REMINDER", "CHANGE_NOTICE"]),
+  appointmentStatus: z.string(),
+  customerId: z.string(),
+  customerName: z.string().nullable(),
+  customerPhone: z.string(),
+  services: z.array(z.string()),
+  title: z.string().nullable(),
+  timezone: z.string(),
+  // Data e hora chegam prontas do dono. A IA nunca as recalcula, entao aqui
+  // elas sao apenas texto — e texto ausente e resposta invalida.
+  date: z.string(),
+  time: z.string(),
+  startAt: z.string(),
+  price: z.number().nullable(),
+  confirmationRequested: z.boolean(),
+});
+const claimedNotificationIntentSchema = z.object({
+  id: z.string(),
+  tenantId: z.string(),
+  appointmentId: z.string(),
+  kind: z.enum(["REMINDER", "CHANGE_NOTICE"]),
+  slot: z.enum(["FIRST", "SECOND", "CHANGE_NOTICE"]),
+  appointmentVersion: z.number().int(),
+  dueAt: z.string(),
+  attemptCount: z.number().int(),
+  leaseToken: z.string(),
+  leaseExpiresAt: z.string(),
+  correlationId: z.string(),
+  facts: notificationFactsSchema,
+});
+const notificationClaimResultSchema = z.object({
+  owner: z.string(),
+  claimed: z.array(claimedNotificationIntentSchema),
+  settled: z.array(
+    z.object({
+      id: z.string(),
+      tenantId: z.string(),
+      appointmentId: z.string(),
+      state: z.string(),
+      reason: notificationReasonSchema.nullable(),
+    }),
+  ),
+  released: z.number().int(),
+  exhausted: z.number().int(),
+  skipped: z.number().int(),
+});
+const notificationSettlementSchema = z.object({
+  applied: z.boolean(),
+  intent: z.object({
+    id: z.string(),
+    tenantId: z.string(),
+    appointmentId: z.string(),
+    state: z.string(),
+    reason: notificationReasonSchema.nullable(),
+    detail: z.string().nullable(),
+    attemptCount: z.number().int(),
+    sentAt: z.string().nullable(),
+    settledAt: z.string().nullable(),
+    correlationId: z.string().nullable(),
+  }),
+});
+// --- Confirmacao de presenca pela resposta ao lembrete (Goal021) -----------
+const reminderConfirmationSettingsSchema = z.object({
+  configured: z.boolean(),
+  confirmationEnabled: z.boolean(),
+});
+// Recorte do snapshot de ciclo de vida do atendimento. `status`,
+// `completedAt` e `noShowAt` sao decodificados nao porque a confirmacao os
+// mude, mas justamente porque ela nao pode muda-los: sem le-los nao ha como
+// provar isso do lado da IA.
+const appointmentPresenceSchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  presenceConfirmedAt: z.string().nullable(),
+  completedAt: z.string().nullable(),
+  noShowAt: z.string().nullable(),
+});
+
 const DEFAULT_AVAILABILITY_DAYS = 14;
 const DEFAULT_APPOINTMENT_LOOKUP_DAYS = 90;
 const DEFAULT_MAX_SLOTS = 3;
@@ -243,6 +335,31 @@ export interface SchedulingGateway {
     context?: SchedulingRequestContext,
     idempotencyKey?: string,
   ): Promise<SchedulingAppointment[]>;
+  /**
+   * Configuracao de lembrete do negocio, em leitura (Goal021).
+   *
+   * Existe aqui **so** para o gate da confirmacao de presenca: e o negocio
+   * que decide se a resposta ao lembrete vira registro. Nao ha contrapartida
+   * de escrita nesta interface, de proposito — configurar lembrete e decisao
+   * humana, e o que a IA nao consegue expressar ela nao configura por engano.
+   */
+  getReminderConfirmationSettings(
+    context?: SchedulingRequestContext,
+  ): Promise<ReminderConfirmationSettings>;
+  /**
+   * Registra presenca confirmada (Goal021).
+   *
+   * Recebe **so** o id: nao ha como expressar "nao vem" nem "faltou" por
+   * este caminho. Recusar, cancelar e remarcar continuam sendo as tools com
+   * prepare/confirm, e ausencia de resposta nao chega aqui de forma nenhuma.
+   * A origem do evento e derivada da credencial no dono — a IA chamando
+   * grava `AI`, sem dizer nada sobre isso no corpo.
+   */
+  confirmAppointmentPresence(
+    appointmentId: string,
+    context?: SchedulingRequestContext,
+    idempotencyKey?: string,
+  ): Promise<AppointmentPresenceConfirmation>;
 }
 
 export class SchedulingClient implements SchedulingGateway {
@@ -555,6 +672,108 @@ export class SchedulingClient implements SchedulingGateway {
         },
       ),
     );
+  }
+
+  /**
+   * Reivindica o lote de intencoes vencidas (Goal021).
+   *
+   * E a **unica** chamada interna que atravessa negocios: quem entrega atende
+   * todos, e a fila vence por `dueAt`. O tenant do cabecalho e contexto de
+   * requisicao, nao autorizacao — quem autoriza e a credencial do entregador,
+   * conferida por `requireDeliveryCaller` no dono. A justica entre negocios e
+   * o teto por tenant, aplicado la, nao aqui.
+   */
+  async claimDueNotificationIntents(
+    input: ClaimNotificationIntentsInput,
+    context?: SchedulingRequestContext,
+  ): Promise<NotificationClaimResult> {
+    return this.request(
+      "/internal/notification-intents/claim",
+      notificationClaimResultSchema,
+      {
+        method: "POST",
+        context,
+        body: {
+          owner: input.owner,
+          limit: input.limit,
+          perTenantLimit: input.perTenantLimit,
+          leaseTtlSeconds: input.leaseTtlSeconds,
+        },
+      },
+    );
+  }
+
+  /**
+   * Liquida uma intencao nomeada. Volta a ser por negocio: o tenant do
+   * cabecalho delimita a intencao, e o `leaseToken` prova que quem liquida e
+   * quem reivindicou.
+   */
+  async settleNotificationIntent(
+    input: SettleNotificationIntentInput,
+    context?: SchedulingRequestContext,
+  ): Promise<NotificationIntentSettlement> {
+    const settled = await this.request(
+      `/internal/notification-intents/${encodeURIComponent(input.intentId)}/settle`,
+      notificationSettlementSchema,
+      {
+        method: "POST",
+        context: context ?? {
+          tenantId: input.tenantId,
+          userId: CALLER_ID,
+          requestId: input.intentId,
+        },
+        body: {
+          leaseToken: input.leaseToken,
+          outcome: input.outcome,
+          reason: input.reason ?? undefined,
+          detail: input.detail ?? undefined,
+          correlationId: input.correlationId ?? undefined,
+        },
+      },
+    );
+    return settled.intent;
+  }
+
+  /**
+   * Le a configuracao de lembrete do negocio (Goal021). Leitura pura: a IA
+   * nunca escreve nesta rota.
+   */
+  async getReminderConfirmationSettings(
+    context?: SchedulingRequestContext,
+  ): Promise<ReminderConfirmationSettings> {
+    const settings = await this.request(
+      "/internal/reminder-settings",
+      reminderConfirmationSettingsSchema,
+      { context },
+    );
+    return {
+      configured: settings.configured,
+      confirmationEnabled: settings.confirmationEnabled,
+    };
+  }
+
+  /**
+   * Registra presenca confirmada. Corpo vazio de proposito: nao ha nada a
+   * dizer alem de "esta pessoa confirmou", e a origem do evento e derivada
+   * da credencial no dono.
+   */
+  async confirmAppointmentPresence(
+    appointmentId: string,
+    context?: SchedulingRequestContext,
+    idempotencyKey?: string,
+  ): Promise<AppointmentPresenceConfirmation> {
+    const snapshot = await this.request(
+      `/internal/appointments/${encodeURIComponent(appointmentId)}/presence`,
+      appointmentPresenceSchema,
+      { method: "POST", context, idempotencyKey, body: {} },
+    );
+    return {
+      appointmentId: snapshot.id,
+      status: snapshot.status,
+      presenceConfirmedAt: snapshot.presenceConfirmedAt,
+      completedAt: snapshot.completedAt,
+      noShowAt: snapshot.noShowAt,
+    };
   }
 
   private async request<TSchema extends z.ZodType>(

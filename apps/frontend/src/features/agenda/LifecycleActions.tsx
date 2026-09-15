@@ -1,8 +1,13 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 
-import { type Appointment, type AppointmentLifecycle } from "@/data";
+import {
+  type Appointment,
+  type AppointmentLifecycle,
+  type AppointmentNotification,
+  type AppointmentNotificationReason,
+} from "@/data";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Button } from "@/shared/ui/Button";
 
@@ -10,6 +15,94 @@ import { formatMoney } from "./AppointmentFlowShell";
 import { requestError, statusLabel } from "./occupancy";
 
 type Busy = "complete" | "confirm-presence" | "final-value" | "no-show" | null;
+
+/**
+ * Motivo no vocabulário fechado do dono do dado, traduzido num lugar só. A
+ * tela nunca inventa motivo: o que não está aqui não chega aqui.
+ */
+const NOTIFICATION_REASON_LABELS: Record<
+  AppointmentNotificationReason,
+  string
+> = {
+  LEAD_ALREADY_PASSED: "a antecedência configurada já tinha passado",
+  APPOINTMENT_VERSION_SUPERSEDED: "o agendamento mudou antes do envio",
+  APPOINTMENT_NOT_CONFIRMED: "o agendamento não estava confirmado",
+  APPOINTMENT_CANCELLED: "o agendamento foi cancelado",
+  APPOINTMENT_ALREADY_STARTED: "o atendimento já tinha começado",
+  REMINDER_CONFIGURATION_CHANGED: "a configuração de lembretes mudou",
+  CUSTOMER_WITHOUT_PHONE: "o cliente não tem telefone",
+  CONTACT_IGNORED: "o contato está ignorado na IA",
+  AI_NOT_ENABLED: "a IA não está habilitada",
+  CHANNEL_NOT_CONNECTED: "o canal não está conectado",
+  TRANSPORT_FAILED: "o canal recusou o envio",
+  TRANSPORT_UNKNOWN: "não foi possível confirmar o envio",
+  ATTEMPTS_EXHAUSTED: "as tentativas se esgotaram",
+};
+
+function formatInstant(value: string): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function reasonLabel(reason: AppointmentNotificationReason | null): string {
+  return reason ? NOTIFICATION_REASON_LABELS[reason] : "motivo não registrado";
+}
+
+/**
+ * O que aconteceu com **esta** intenção, lido do estado gravado. A entrega é
+ * no mínimo uma vez e `TRANSPORT_UNKNOWN` é estado terminal de "pode ter
+ * saído": dizer "não enviado" nesse caso seria afirmar mais do que qualquer
+ * camada sabe, então ele tem texto próprio.
+ */
+function notificationStateLabel(notification: AppointmentNotification): string {
+  switch (notification.state) {
+    case "SENT":
+      return notification.sentAt
+        ? `Enviado em ${formatInstant(notification.sentAt)}`
+        : "Enviado";
+    case "PENDING":
+    case "CLAIMED":
+      return `Agendado para ${formatInstant(notification.dueAt)}`;
+    case "FAILED":
+      return notification.reason === "TRANSPORT_UNKNOWN"
+        ? `Envio sem confirmação: ${reasonLabel(notification.reason)}`
+        : `Não enviado: ${reasonLabel(notification.reason)}`;
+    // `CANCELLED` nunca chega aqui: a intenção que deixou de valer é
+    // filtrada antes de virar linha de tela.
+    default:
+      return `Não enviado: ${reasonLabel(notification.reason)}`;
+  }
+}
+
+/**
+ * Só o que aconteceu ou ainda vai acontecer com este compromisso. A intenção
+ * `CANCELLED` deixou de valer — remarcar substitui o lembrete do horário
+ * velho pelo do novo — e mostrá-la seria encher o detalhe de linhas que não
+ * descrevem nem um envio nem uma espera. O lembrete que **já saiu** continua
+ * na lista mesmo depois de uma remarcação: ele saiu de verdade.
+ */
+function visibleNotifications(
+  notifications: AppointmentNotification[],
+): AppointmentNotification[] {
+  return notifications.filter(
+    (notification) => notification.state !== "CANCELLED",
+  );
+}
+
+/**
+ * "Lembrete" quando há um só; "1º lembrete"/"2º lembrete" quando os dois
+ * aparecem — a posição vem da configuração do negócio, e repetir o mesmo
+ * rótulo em duas linhas não diria qual é qual.
+ */
+function reminderLineLabel(
+  notification: AppointmentNotification,
+  total: number,
+): string {
+  if (total < 2) return "Lembrete";
+  return notification.slot === "SECOND" ? "2º lembrete" : "1º lembrete";
+}
 
 /**
  * `SCHEDULED` é o legado pré-Goal008: para decidir transição, ele é lido
@@ -39,6 +132,28 @@ export function LifecycleActions({
   const [noShowNote, setNoShowNote] = useState("");
   const [finalValueOpen, setFinalValueOpen] = useState(false);
   const [finalValueInput, setFinalValueInput] = useState("");
+  const [notifications, setNotifications] = useState<AppointmentNotification[]>(
+    [],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getProductServices()
+      .calendar.listAppointmentNotifications(appointment.id, controller.signal)
+      .then(setNotifications)
+      // Leitura auxiliar: falhar aqui não afirma nem esconde um estado real,
+      // só deixa de mostrar as linhas de envio — nunca bloqueia o ciclo.
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [appointment.id]);
+
+  const visible = visibleNotifications(notifications);
+  const reminders = visible.filter(
+    (notification) => notification.kind === "REMINDER",
+  );
+  const changeNotices = visible.filter(
+    (notification) => notification.kind === "CHANGE_NOTICE",
+  );
 
   const status = normalizedStatus(appointment.status);
   const canComplete = status === "CONFIRMED";
@@ -203,7 +318,7 @@ export function LifecycleActions({
           <span>
             {appointment.presenceConfirmedAt
               ? "Presença confirmada"
-              : "Presença ainda não confirmada"}
+              : "Aguardando confirmação"}
           </span>
         </div>
         {canConfirmPresence && (
@@ -217,6 +332,41 @@ export function LifecycleActions({
           </Button>
         )}
       </div>
+
+      {/* Estado do lembrete **desta ocorrência**, lido das intenções que a
+          própria mutação criou — não da configuração do negócio, que só diz
+          com quanta antecedência ele sairia. Sem nenhuma intenção (negócio
+          sem lembrete configurado, atendimento passado, importação antiga),
+          nenhum estado de lembrete é afirmado. */}
+      {reminders.length > 0 && (
+        <div className="agenda-lifecycle-row">
+          <div>
+            <strong>Lembrete</strong>
+            {reminders.map((notification) => (
+              <span key={notification.id}>
+                {reminderLineLabel(notification, reminders.length)} ·{" "}
+                {notificationStateLabel(notification)}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Aviso de alteração pedido em cancelar ou remarcar: eixo próprio, e
+          não uma variação do lembrete. Um lembrete já enviado não é desfeito
+          por remarcação posterior — os dois convivem no detalhe. */}
+      {changeNotices.length > 0 && (
+        <div className="agenda-lifecycle-row">
+          <div>
+            <strong>Aviso de alteração</strong>
+            {changeNotices.map((notification) => (
+              <span key={notification.id}>
+                {notificationStateLabel(notification)}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="agenda-lifecycle-row">
         <div>

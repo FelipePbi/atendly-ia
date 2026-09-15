@@ -30,6 +30,7 @@ const confirmAppointmentPresence = vi.fn();
 const getAppointment = vi.fn();
 const getCalendar = vi.fn();
 const listAppointmentEvents = vi.fn();
+const listAppointmentNotifications = vi.fn();
 const markAppointmentNoShow = vi.fn();
 const setAppointmentFinalValue = vi.fn();
 
@@ -41,6 +42,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       getAppointment,
       getCalendar,
       listAppointmentEvents,
+      listAppointmentNotifications,
       markAppointmentNoShow,
       setAppointmentFinalValue,
     },
@@ -141,6 +143,7 @@ beforeEach(() => {
     getAppointment,
     getCalendar,
     listAppointmentEvents,
+    listAppointmentNotifications,
     markAppointmentNoShow,
     setAppointmentFinalValue,
   ]) {
@@ -148,6 +151,7 @@ beforeEach(() => {
   }
   getCalendar.mockResolvedValue(calendarFixture());
   listAppointmentEvents.mockResolvedValue([eventFixture()]);
+  listAppointmentNotifications.mockResolvedValue([]);
 });
 
 function renderDetail() {
@@ -183,7 +187,7 @@ describe("eixos distintos do ciclo de vida", () => {
     const section = await waitFor(() => lifecycleSection());
     expect(within(section).getByText("Concluído")).toBeVisible();
     // Concluir não mexe nos outros dois eixos.
-    expect(within(section).getByText("Presença ainda não confirmada")).toBeVisible();
+    expect(within(section).getByText("Aguardando confirmação")).toBeVisible();
     expect(within(section).getByText("Ainda não registrado")).toBeVisible();
   });
 

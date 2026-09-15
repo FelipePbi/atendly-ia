@@ -420,6 +420,21 @@ export function integrationSteps(target) {
       args: ["scripts/goal019-activation-test-migration-rehearsal.mjs"],
       env,
     },
+    // Gate M0/M1 do Goal021: ensaio da migration de lembretes no Scheduling
+    // (`ReminderSettings`, `ReminderRule`, `Appointment.notifiableVersion`,
+    // `AppointmentNotificationIntent`) contra estoque legado, em banco próprio
+    // e descartável, passo único aditivo. Prova aditividade coluna a coluna,
+    // ausência de backfill (nenhum atendimento existente ganha lembrete
+    // retroativo), a impossibilidade do terceiro lembrete, o dedupe por
+    // inserção duplicada — inclusive do aviso de alteração, com posição
+    // própria e não nula — e repetição sem mudança.
+    {
+      name: "rehearse:goal021-reminder-migration",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal021-reminder-migration-rehearsal.mjs"],
+      env,
+    },
     // Identidade de cliente contra PostgreSQL real: telefone compartilhado,
     // cliente sem telefone, criação só na confirmação e isolamento por tenant.
     // Não pertence ao core porque exige banco.

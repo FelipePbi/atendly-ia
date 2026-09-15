@@ -33,6 +33,10 @@ export function CancelFlow({ appointmentId }: { appointmentId?: string }) {
   const [appointment, setAppointment] = useState<Appointment | null>(null);
   const [calendar, setCalendar] = useState<CalendarState | null>(null);
   const [comments, setComments] = useState("");
+  // Cancelar é sempre uma alteração relevante para o cliente (Goal021):
+  // marcado por padrão, e a interface manda o campo sempre explicitamente —
+  // nunca se apoia no default do contrato, que é o oposto.
+  const [notifyCustomer, setNotifyCustomer] = useState(true);
   const [loading, setLoading] = useState(Boolean(appointmentId));
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -73,7 +77,7 @@ export function CancelFlow({ appointmentId }: { appointmentId?: string }) {
     try {
       const result = await getProductServices().calendar.cancelAppointment(
         appointment.id,
-        { comments: comments.trim() || undefined },
+        { comments: comments.trim() || undefined, notifyCustomer },
         newIdempotencyKey(),
       );
       router.replace(`/agenda/agendamento?id=${encodeURIComponent(result.id)}`);
@@ -120,6 +124,20 @@ export function CancelFlow({ appointmentId }: { appointmentId?: string }) {
                   rows={4}
                   value={comments}
                   onChange={(event) => setComments(event.target.value)}
+                />
+              </label>
+              <label className="switch-row">
+                <span>
+                  <strong>Notificar cliente</strong>
+                  <small>
+                    Cancelamento é uma alteração relevante: recomendamos
+                    avisar o cliente.
+                  </small>
+                </span>
+                <input
+                  checked={notifyCustomer}
+                  type="checkbox"
+                  onChange={(event) => setNotifyCustomer(event.target.checked)}
                 />
               </label>
               <div className="agenda-form-footer">

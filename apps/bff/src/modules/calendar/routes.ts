@@ -60,12 +60,23 @@ const appointmentBodySchema = z
         "Informe customerId de uma pessoa já cadastrada, ou nome/telefone para criá-la na confirmação.",
     },
   );
+/**
+ * `Notificar cliente` na alteração manual (Goal021, WU-009, item 7 do G-27).
+ * **Omitir é não notificar**: o default do contrato é silêncio, e quem
+ * notifica é quem pede. A IA cancela e remarca a pedido do próprio cliente —
+ * avisá-lo do que ele acabou de pedir seria ruído — e nunca tem este campo em
+ * nenhum contrato dela; ele só existe aqui, na rota que a interface chama.
+ */
+const notifyCustomerShape = {
+  notifyCustomer: z.boolean().optional(),
+};
 const rescheduleSchema = z.object({
   date: dateSchema,
   startTime: timeSchema,
   stepMinutes: z.number().int().min(1).max(180).default(30),
   holdId: z.string().trim().min(1).max(128).optional(),
   ...overlapOverrideShape,
+  ...notifyCustomerShape,
 });
 const cancelSchema = z.object({
   // Motivo do cancelamento (Goal008): vai para o evento e para o comentário
@@ -73,6 +84,7 @@ const cancelSchema = z.object({
   // campo, para não quebrar quem já chama a rota.
   reason: z.string().trim().max(2_000).optional(),
   comments: z.string().trim().max(2_000).optional(),
+  ...notifyCustomerShape,
 });
 const holdBodySchema = z.object({
   serviceIds: z.array(z.string().trim().min(1).max(128)).min(1).max(10),
@@ -272,6 +284,7 @@ export async function registerV1CalendarRoutes(
           {
             source: "USER",
             comments: body.reason ?? body.comments,
+            notifyCustomer: body.notifyCustomer,
           },
           idempotencyKey(request),
         ),
@@ -388,6 +401,24 @@ export async function registerV1CalendarRoutes(
       return dataResponse(
         request,
         await scheduling.listAppointmentEvents(internalContext(request), id),
+      );
+    },
+  );
+
+  // Estado de envio ao cliente deste agendamento (Goal021): o detalhe le
+  // daqui se o lembrete desta ocorrencia saiu, e nao da configuracao do
+  // negocio, que responde outra pergunta.
+  app.get(
+    "/v1/appointments/:id/notifications",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      return dataResponse(
+        request,
+        await scheduling.listAppointmentNotifications(
+          internalContext(request),
+          id,
+        ),
       );
     },
   );

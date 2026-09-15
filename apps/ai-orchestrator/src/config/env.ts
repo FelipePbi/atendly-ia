@@ -118,6 +118,19 @@ const envSchema = z.object({
   // enquanto executa, em vez de perde-lo para outro ciclo no meio do trabalho.
   INBOX_LEASE_HEARTBEAT_SECONDS: intEnv(30),
   INBOX_GROUP_BATCH_LIMIT: intEnv(20),
+  // Entrega das intencoes de envio (Goal021). Mesmo desenho da inbox: o loop
+  // roda no proprio processo da IA, sem broker novo e sem servico novo.
+  NOTIFICATION_DELIVERY_ENABLED: boolEnv(true),
+  // Varrer a cada 15s e suficiente: a antecedencia do lembrete e medida em
+  // horas, e varrer mais rapido so gastaria chamada interna.
+  NOTIFICATION_DELIVERY_POLL_INTERVAL_MS: intEnv(15_000),
+  // Tetos do lote. O de tenant existe contra a rajada: uma importacao recem
+  // concluida nao pode virar dezenas de lembretes de um negocio so.
+  NOTIFICATION_DELIVERY_BATCH_LIMIT: intEnv(50),
+  NOTIFICATION_DELIVERY_TENANT_LIMIT: intEnv(10),
+  // Lease pedido ao dono. Folgado em relacao ao envio de texto, para que uma
+  // entrega lenta nao seja recuperada por outra varredura no meio do caminho.
+  NOTIFICATION_DELIVERY_LEASE_SECONDS: intEnv(120),
   // Timeout do envio: sem ele o transporte fica pendurado e o estado da saida
   // nunca sai de PENDING.
   EVOLUTION_SEND_TIMEOUT_MS: intEnv(15000),

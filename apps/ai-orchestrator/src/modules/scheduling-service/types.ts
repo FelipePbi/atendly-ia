@@ -239,3 +239,166 @@ export interface ConfirmAppointmentSeriesInput {
   customerPhone?: string | null;
   comments?: string;
 }
+
+// --- Intencao de envio (Goal021) -------------------------------------------
+// O dono da agenda decide QUANDO e COM QUE FATOS; a IA decide SE o contato
+// esta apto e COMO o texto soa. Nada abaixo carrega texto de mensagem: o que
+// viaja sao fatos, e e por isso que a IA nunca precisa formatar instante.
+
+export type NotificationIntentKind = "REMINDER" | "CHANGE_NOTICE";
+export type NotificationIntentSlot = "FIRST" | "SECOND" | "CHANGE_NOTICE";
+
+/**
+ * Vocabulario **fechado** do motivo, identico ao enum do dono. A entrega
+ * escolhe dentro dele e nunca manda texto livre no lugar do motivo.
+ */
+export const NOTIFICATION_INTENT_REASONS = [
+  "LEAD_ALREADY_PASSED",
+  "APPOINTMENT_VERSION_SUPERSEDED",
+  "APPOINTMENT_NOT_CONFIRMED",
+  "APPOINTMENT_CANCELLED",
+  "APPOINTMENT_ALREADY_STARTED",
+  "REMINDER_CONFIGURATION_CHANGED",
+  "CUSTOMER_WITHOUT_PHONE",
+  "CONTACT_IGNORED",
+  "AI_NOT_ENABLED",
+  "CHANNEL_NOT_CONNECTED",
+  "TRANSPORT_FAILED",
+  "TRANSPORT_UNKNOWN",
+  "ATTEMPTS_EXHAUSTED",
+] as const;
+
+export type NotificationIntentReason =
+  (typeof NOTIFICATION_INTENT_REASONS)[number];
+
+/** Desfechos que a entrega pode declarar. Cancelar e decisao do dono. */
+export type NotificationSettlementOutcome = "SENT" | "FAILED" | "DISMISSED";
+
+/**
+ * Fatos prontos compostos pelo dono. **Sem endereco** e sem texto de
+ * mensagem, de proposito: o que nao chega aqui nao pode ser repetido numa
+ * mensagem automatica.
+ */
+export interface NotificationFacts {
+  kind: NotificationIntentKind;
+  appointmentStatus: string;
+  customerId: string;
+  customerName: string | null;
+  customerPhone: string;
+  /** Nomes dos servicos pelo snapshot do acordo, nunca pelo catalogo de hoje. */
+  services: string[];
+  /** Titulo do atendimento manual sem servico cadastrado. */
+  title: string | null;
+  timezone: string;
+  /** Data local **ja formatada** no fuso do negocio (`AAAA-MM-DD`). */
+  date: string;
+  /** Hora local **ja formatada** no fuso do negocio (`HH:MM`). */
+  time: string;
+  /** O instante junto, para quem precisar comparar sem reformatar. */
+  startAt: string;
+  price: number | null;
+  confirmationRequested: boolean;
+}
+
+export interface ClaimedNotificationIntent {
+  id: string;
+  tenantId: string;
+  appointmentId: string;
+  kind: NotificationIntentKind;
+  slot: NotificationIntentSlot;
+  appointmentVersion: number;
+  dueAt: string;
+  attemptCount: number;
+  /** Prova de posse do lease; exigida na liquidacao. */
+  leaseToken: string;
+  leaseExpiresAt: string;
+  /** `correlationId` deterministico da saida, derivado da identidade. */
+  correlationId: string;
+  facts: NotificationFacts;
+}
+
+export interface NotificationClaimResult {
+  owner: string;
+  claimed: ClaimedNotificationIntent[];
+  /** Liquidadas pela revalidacao do dono, em vez de entregues. */
+  settled: Array<{
+    id: string;
+    tenantId: string;
+    appointmentId: string;
+    state: string;
+    reason: NotificationIntentReason | null;
+  }>;
+  released: number;
+  exhausted: number;
+  skipped: number;
+}
+
+export interface NotificationIntentSettlement {
+  id: string;
+  tenantId: string;
+  appointmentId: string;
+  state: string;
+  reason: NotificationIntentReason | null;
+  detail: string | null;
+  attemptCount: number;
+  sentAt: string | null;
+  settledAt: string | null;
+  correlationId: string | null;
+}
+
+export interface SettleNotificationIntentInput {
+  tenantId: string;
+  intentId: string;
+  leaseToken: string;
+  outcome: NotificationSettlementOutcome;
+  reason?: NotificationIntentReason | null;
+  detail?: string | null;
+  correlationId?: string | null;
+}
+
+export interface ClaimNotificationIntentsInput {
+  owner?: string;
+  limit?: number;
+  perTenantLimit?: number;
+  leaseTtlSeconds?: number;
+}
+
+// --- Confirmacao de presenca pela resposta ao lembrete (Goal021) -----------
+// O lembrete pergunta; a resposta do cliente chega como turno normal de
+// conversa. Presenca confirmada e dado operacional separado: nao confirma,
+// nao conclui e nao cancela nada.
+
+/**
+ * Recorte de `GET /internal/reminder-settings` que a IA precisa ler.
+ *
+ * So `confirmationEnabled` decide se a resposta ao lembrete pode virar
+ * presenca registrada. `configured` distingue "o negocio escolheu" de "o
+ * default do produto vale" — sem linha gravada, o negocio nunca habilitou
+ * confirmacao, e a IA nao a trata.
+ */
+export interface ReminderConfirmationSettings {
+  configured: boolean;
+  confirmationEnabled: boolean;
+}
+
+/**
+ * Resposta de `POST /internal/appointments/:id/presence`.
+ *
+ * Carrega `status`, `completedAt` e `noShowAt` **de proposito**: sao os
+ * campos que confirmar presenca nao pode mexer, e devolve-los e o que
+ * permite provar que nao mexeu.
+ */
+export interface AppointmentPresenceConfirmation {
+  appointmentId: string;
+  status: string;
+  presenceConfirmedAt: string | null;
+  completedAt: string | null;
+  noShowAt: string | null;
+}
+
+/**
+ * Negocio que nao habilitou confirmacao pelo lembrete: a resposta do cliente
+ * segue sendo conversa, nunca registro. Codigo, nao prompt.
+ */
+export const PRESENCE_CONFIRMATION_NOT_ENABLED =
+  "PRESENCE_CONFIRMATION_NOT_ENABLED";

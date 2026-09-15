@@ -145,3 +145,109 @@ export function isSerializationFailure(error: unknown, depth = 0): boolean {
 function isSerializationCode(code: unknown): boolean {
   return code === "P2034" || code === "40001" || code === "40P01";
 }
+
+/**
+ * Campos do compromisso que o **cliente** precisaria saber: quando começa,
+ * quando termina, o que foi acordado e em que estado está. Mudar qualquer um
+ * deles é o que o Goal021 chama de alteração relevante.
+ *
+ * O que não está aqui é alteração **somente interna** — observação, valor
+ * final, presença confirmada e snapshot de buffer —, e alteração somente
+ * interna não avisa ninguém.
+ */
+export interface NotifiableAppointmentFields {
+  startAt: Date;
+  endAt: Date;
+  status: string;
+  /** Serviços do acordo: o conjunto importa, a ordem não. */
+  serviceIds: string[];
+}
+
+/**
+ * Projeta a linha persistida (relida **dentro** da transação) nos campos
+ * notificáveis, para comparar com o que a mutação vai escrever.
+ */
+export function notifiableAppointmentFields(row: {
+  startAt: Date;
+  endAt: Date;
+  status: string;
+  items?: Array<{ serviceId: string }>;
+}): NotifiableAppointmentFields {
+  return {
+    startAt: row.startAt,
+    endAt: row.endAt,
+    status: row.status,
+    serviceIds: (row.items ?? []).map((item) => item.serviceId),
+  };
+}
+
+/**
+ * **Único** lugar que incrementa `Appointment.notifiableVersion` (Goal021).
+ *
+ * Devolve o pedaço de `data` que a mutação anexa ao próprio `update` /
+ * `updateMany`: o incremento acontece na mesma linha, no mesmo comando e
+ * portanto na mesma transação do efeito — nunca por trigger paralelo, nunca
+ * por um segundo `update` depois e nunca por um segundo caminho de escrita.
+ * `{ increment: 1 }` é operação do banco, não leitura e soma na aplicação:
+ * duas transações que incrementarem a mesma linha não perdem uma da outra.
+ *
+ * `after` descreve **apenas o que a mutação escreve**. Campo não escrito não
+ * entra na comparação: cancelar não mexe no horário, remarcar não mexe no
+ * estado. E escrever o mesmo valor não é mudança — remarcar para o horário
+ * em que o atendimento já está não gera versão nova, porque o cliente não
+ * teria nada para saber.
+ *
+ * `before` pode ser parcial: basta trazer os campos que `after` escreve. Um
+ * campo escrito cujo valor anterior é desconhecido conta como mudança —
+ * "não sei se mudou" nunca vira "não mudou".
+ */
+export function appointmentVersionWrite(
+  before: Partial<NotifiableAppointmentFields>,
+  after: Partial<NotifiableAppointmentFields>,
+): { notifiableVersion?: { increment: number } } {
+  return hasNotifiableChange(before, after)
+    ? { notifiableVersion: { increment: 1 } }
+    : {};
+}
+
+/** A decisão, isolada do formato do `data` do Prisma. */
+export function hasNotifiableChange(
+  before: Partial<NotifiableAppointmentFields>,
+  after: Partial<NotifiableAppointmentFields>,
+): boolean {
+  if (
+    after.startAt !== undefined &&
+    !sameInstant(before.startAt, after.startAt)
+  )
+    return true;
+  if (after.endAt !== undefined && !sameInstant(before.endAt, after.endAt))
+    return true;
+  if (after.status !== undefined && before.status !== after.status) return true;
+  if (
+    after.serviceIds !== undefined &&
+    !sameServiceSet(before.serviceIds, after.serviceIds)
+  )
+    return true;
+  return false;
+}
+
+function sameInstant(before: Date | undefined, after: Date): boolean {
+  return before instanceof Date && before.getTime() === after.getTime();
+}
+
+/**
+ * Mesmo conjunto de serviços, comparado sem ordem e sem repetição: reordenar
+ * o acordo não muda o que o cliente contratou.
+ */
+function sameServiceSet(
+  before: string[] | undefined,
+  after: string[],
+): boolean {
+  if (!before) return false;
+  const previous = [...new Set(before)].sort();
+  const current = [...new Set(after)].sort();
+  return (
+    previous.length === current.length &&
+    previous.every((serviceId, index) => serviceId === current[index])
+  );
+}

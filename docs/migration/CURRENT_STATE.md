@@ -1759,3 +1759,140 @@ GAP_ANALYSIS estão parcialmente superados pelos fatos abaixo.
   aparece quando algo está fora. Não há perda de dado nem decisão irreversível envolvida — a saída
   "Descartar e conectar outra conta" segue disponível —, e o [review020](reviews/020-review.md)
   registrou isso como observação não bloqueante.
+
+## Delta implementado — Goal021, 2026-09-15 (ACCEPTED na rodada 2)
+
+A fotografia acima permanece como registro. Os fatos abaixo descrevem o diff
+aceito em [review021](reviews/021-review.md) — 79 arquivos, sobre a base
+`9df7bf7`, cuja baseline aceita era `24b744d` —, sem commit nem deploy. O
+FATO de "Scheduling, catálogo, clientes e importação" que
+descreve ausência de mecanismo de lembrete e o resíduo do G-18/G-27 na
+fotografia de [GAP_ANALYSIS](GAP_ANALYSIS.md) estão superados pelos fatos
+abaixo.
+
+- **FATO atual:** `apps/scheduling-service/prisma/schema.prisma` ganhou
+  `ReminderSettings`/`ReminderRule` (config do negócio: até dois lembretes por
+  posição `FIRST`/`SECOND`, garantido por `ReminderRule_pkey` +
+  `ReminderRule_slot_check` — invariante de **esquema**, nunca validação de
+  aplicação; ausência de linha é "nunca configurou", linha com zero regras é
+  "desligou de propósito", mesma regra que `BusinessProfile.modalities` no
+  Goal018), `Appointment.notifiableVersion` (contador monotônico do que o
+  cliente precisaria saber: data, horário, serviços do acordo e status —
+  observação, valor final, presença e buffer não o movem) e
+  `AppointmentNotificationIntent` (trabalho durável no banco do Scheduling,
+  dedupe por `(tenantId, appointmentId, kind, slot, appointmentVersion)`,
+  lease por `TIMESTAMPTZ` no padrão de `AppointmentHold`/`ImportSession`, seis
+  estados e vocabulário fechado de motivo). Migration única e aditiva
+  `20260915120000_goal021_reminder_schedule`: nenhuma linha existente é
+  reescrita, as três tabelas novas nascem vazias e nenhum compromisso ganha
+  lembrete retroativo (detalhe completo em
+  [DATA_MIGRATION §9](DATA_MIGRATION.md#9-migração-bff-ia-e-transporte)).
+- **FATO atual:** `write-policy.ts` ganhou `appointmentVersionWrite`/
+  `notifiableAppointmentFields`, o único lugar que incrementa a versão —
+  sempre no mesmo `update` do efeito, nunca por trigger nem por um segundo
+  caminho de escrita. `AtendlyCalendarProvider` chama
+  `recomputeAppointmentIntentsWithin` na mesma transação de criar, remarcar e
+  cancelar, e `appointment-lifecycle-service.ts` faz o mesmo em concluir e
+  marcar falta: intenções pendentes da versão anterior são canceladas com
+  motivo e as da nova nascem no mesmo commit — nunca há instante em que o
+  compromisso existe sem que o lembrete dele tenha sido decidido.
+- **FATO atual:** aviso de alteração (item 7 do G-27) nasce só quando
+  `notifyCustomer === true` chega na mutação **e** a versão mudou; cancelar
+  sempre cancela as intenções pendentes, independente do aviso — são duas
+  decisões diferentes, e só a segunda é opcional. `notifyCustomer` chegou a
+  `PATCH /v1/appointments/:id/reschedule` e `POST /v1/appointments/:id/cancel`
+  (`apps/bff/src/modules/calendar/routes.ts`), com omitir == não notificar
+  como default explícito, e ao frontend (`CancelFlow.tsx`,
+  `RescheduleFlow.tsx`) marcado por padrão.
+- **FATO atual:** entrega e revalidação vivem em
+  `notification-dispatch-service.ts` (Scheduling): a reivindicação é um
+  `UPDATE` condicional que atravessa negócios de propósito (fila por `dueAt`,
+  justiça por teto de lote e por tenant —
+  `NOTIFICATION_CLAIM_BATCH_LIMIT`/`NOTIFICATION_CLAIM_TENANT_LIMIT`), a
+  revalidação roda dentro da própria transação do claim contra o estado do
+  momento (versão divergente cancela, nunca envia; posição que a configuração
+  deixou de prever é dispensada com motivo; cliente sem telefone é dispensa,
+  não erro), e os fatos (nome, telefone, serviços, data/hora já formatadas no
+  fuso do tenant, preço só quando a política manda e o acordo inteiro é fixo)
+  são compostos pelo dono, nunca pela IA. `POST
+  /internal/notification-intents/claim` e `/:id/settle` são as únicas rotas
+  atrás de `requireDeliveryCaller` (`internal-auth.ts`) — simétrico a
+  `requireHumanCaller`, mas para o papel de entregador (hoje só a IA).
+- **FATO atual:** a IA reivindica e entrega em
+  `NotificationDeliveryWorker`/`NotificationDeliveryService`
+  (`apps/ai-orchestrator/src/modules/reminders/`), segundo loop no mesmo
+  processo da IA, mesmo desenho do `InboxWorker` (sem broker, sem serviço
+  novo), sem heartbeat de lease — a entrega é um envio de texto, não um lote
+  de modelo com tools, e a devolução por vencimento não duplica porque a
+  saída carrega `correlationId` determinístico, verificado antes do envio.
+  Três desfechos distintos e nomeados: contato `ignored` dispensa, canal
+  desconectado é falha auditável (problema do negócio, não decisão do
+  cliente), IA não efetivamente habilitada dispensa. A entrega nunca chama
+  `assumeHumanControl` nem a rota de envio humano, de propósito: lembrete não
+  é a profissional assumindo a conversa.
+- **FATO atual:** o texto do lembrete/aviso é montado por modelo de mensagem
+  (`notification-message.ts`), nunca por chamada de LLM — as frases factuais
+  são geradas uma única vez e entram idênticas nos três estilos de conversa;
+  estilo muda só registro, informalidade e emoji. Instante nunca é formatado
+  pela IA: `facts.date`/`facts.time` chegam prontos do dono, no fuso do
+  negócio, e são usados literalmente.
+- **FATO atual:** confirmação de presença pela resposta ao lembrete é gate do
+  negócio (`ReminderSettings.confirmationEnabled`, lido antes de qualquer
+  registro) mais tool própria (`confirm_appointment_presence`, só o id do
+  agendamento — sem booleano "não vem"; recusa continua exigindo cancelar ou
+  remarcar explícito). `confirmPresenceWithin` passou a receber `source`
+  derivado do chamador (`AppointmentEventSource`), então o evento deixa de
+  gravar `"USER"` literal para toda confirmação — a que vem da conversa é da
+  IA, a da tela é da profissional; nada além do evento muda: confirmar
+  presença continua não confirmando, não concluindo e não cancelando
+  (Goal008).
+- **FATO atual:** `GET/PATCH /v1/settings/reminders` (BFF) expõem a
+  configuração — só humano, a IA nunca configura lembrete, no mesmo padrão de
+  disponibilidade/oferta do negócio — e
+  `features/reminders/ReminderSettingsSection.tsx` entrega o bloco em
+  Configurações → Agenda.
+- **FATO atual:** `GET /v1/appointments/:id/notifications` (BFF) expõe as
+  intenções de envio **daquele** compromisso — lembretes desta ocorrência e
+  aviso de alteração, com estado, motivo do vocabulário fechado e instantes —
+  lidas por `listAppointmentNotifications` no Scheduling. A resposta não
+  carrega `facts` nem lease: o telefone e os fatos compostos são do envio,
+  não da leitura. O detalhe do agendamento (`LifecycleActions.tsx`) mostra o
+  estado de lembrete **deste** agendamento a partir dessa leitura — enviado
+  com o instante, ainda agendado, ou não enviado com o motivo traduzido — e a
+  confirmação de presença (discreta), sem escrever nada. Sem nenhuma
+  intenção (negócio sem lembrete configurado, atendimento passado, linha
+  importada antes deste Goal), nenhum estado de lembrete é afirmado: a
+  configuração do negócio responde outra pergunta e não substitui esta
+  leitura.
+- **FATO atual:** `apps/scheduling-service/tests/integration/goal021-reminders.test.ts`
+  prova agendamento, dedupe, concorrência de lease/claim e isolamento por
+  tenant contra PostgreSQL real, mais leitura isolada por tenant sem `facts` e
+  lembrete enviado convivendo com o aviso após remarcação (11 testes). O gate
+  `validate:integration` ganhou o passo `rehearse:goal021-reminder-migration`
+  (de 24 para 25 passos) e foi executado inteiro pelo Tech Lead sobre a árvore
+  aceita: 25/25 passos, 0 falhas, incluindo `test:scheduling-integration` (10
+  arquivos, 81 testes contra PostgreSQL real) e `test:bff-integration`.
+- **LIMITE (gate operacional declarado):** nenhuma mensagem saiu para um
+  número real. A entrega roda contra `EvolutionProvider`/dublê de teste, sem
+  prova de recebimento pelo WhatsApp — mesma classe de gate operacional do
+  Goal010 (M4) e do Goal019. Central de alertas, falha de lembrete visível ao
+  negócio e e-mail crítico continuam fora (G-28, Goal022); retenção do que
+  fica em `AppointmentNotificationIntent.facts`/`detail` segue sem prazo
+  definido (Goal022).
+- **LIMITE (janela de duplicata declarada, não escondida):** a entrega é **no
+  mínimo uma vez**, não exatamente uma vez, e a defesa contra duplicata é o
+  `correlationId` determinístico verificado antes do envio — não a
+  eliminação do risco. A janela em que a duplicata ainda é possível é o
+  processo morto **entre o transporte aceitar o envio e a gravação do
+  resultado** (`outbox.markSent`/liquidação em `settleNotificationIntent`):
+  sem heartbeat de lease (deliberado — o orçamento de uma entrega é um envio
+  de texto, não um lote de modelo), o lease pode expirar enquanto essa
+  gravação ainda não aconteceu, e uma segunda varredura reivindica a mesma
+  intenção. É a mesma classe de janela do outbox do Goal004; `UNKNOWN` é
+  estado terminal, não motivo para reenviar. Um lembrete já enviado também
+  não é desfeito por remarcação posterior: a recomputação só cancela intenção
+  `PENDING`, então quem corre depois do envio é o aviso de alteração, e o
+  detalhe do agendamento mostra os dois — o lembrete enviado e o aviso — a
+  partir de `GET /v1/appointments/:id/notifications`. `TRANSPORT_UNKNOWN`
+  aparece nesse detalhe como envio sem confirmação, nunca como "não
+  enviado": a tela não afirma mais do que a liquidação sabe.

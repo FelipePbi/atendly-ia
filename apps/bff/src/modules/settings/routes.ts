@@ -40,6 +40,23 @@ const aiSchema = z.object({
   // declarado (Goal011); a resposta sempre devolve o vocabulario novo.
   tone: aiConversationStyleSchema,
 });
+// --- Lembretes e confirmacao de presenca (Goal021, WU-009, G-27) -----------
+// So humano: a IA nunca configura lembrete, no mesmo padrao de disponibilidade
+// e oferta acima. Mesmos tetos do Scheduling (`ReminderRule_leadMinutes_check`
+// e `ReminderService`): ate dois lembretes, trinta dias de antecedencia no
+// maximo.
+const reminderSlotSchema = z.enum(["FIRST", "SECOND"]);
+const reminderPricePolicySchema = z.enum(["NEVER", "WHEN_FIXED"]);
+const reminderRuleSchema = z.object({
+  slot: reminderSlotSchema,
+  leadMinutes: z.number().int().positive().max(43_200),
+});
+const reminderSettingsSchema = z.object({
+  confirmationEnabled: z.boolean().optional(),
+  pricePolicy: reminderPricePolicySchema.optional(),
+  // Vazio e escolha legitima: desligar os lembretes de proposito.
+  rules: z.array(reminderRuleSchema).max(2),
+});
 const availabilitySchema = z.object({
   timezone: z.string().trim().min(1).max(100),
   rules: z.array(
@@ -163,6 +180,29 @@ export async function registerV1SettingsRoutes(
         await scheduling.updateAvailabilitySettings(
           internalContext(request),
           parseBody(availabilitySchema, request.body),
+        ),
+      ),
+  );
+
+  app.get(
+    "/v1/settings/reminders",
+    { preHandler: requireTenantContext },
+    async (request) =>
+      dataResponse(
+        request,
+        await scheduling.reminderSettings(internalContext(request)),
+      ),
+  );
+
+  app.patch(
+    "/v1/settings/reminders",
+    { preHandler: requireTenantContext },
+    async (request) =>
+      dataResponse(
+        request,
+        await scheduling.updateReminderSettings(
+          internalContext(request),
+          parseBody(reminderSettingsSchema, request.body),
         ),
       ),
   );

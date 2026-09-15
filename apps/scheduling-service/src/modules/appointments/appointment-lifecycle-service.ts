@@ -1,6 +1,11 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
+import type { AppointmentEventSource } from "../../generated/prisma/enums.js";
 import { AppError } from "../../shared/errors/app-error.js";
-import { databaseNow } from "../calendar/write-policy.js";
+import {
+  appointmentVersionWrite,
+  databaseNow,
+} from "../calendar/write-policy.js";
+import { recomputeAppointmentIntentsWithin } from "../reminders/notification-intent-service.js";
 import { recordAppointmentEvent } from "./appointment-event-service.js";
 
 /**
@@ -17,6 +22,9 @@ interface AppointmentRow {
   id: string;
   tenantId: string;
   status: string;
+  startAt: Date;
+  /** Versao notificavel (Goal021): quem decide a identidade das intencoes. */
+  notifiableVersion: number;
   completedAt: Date | null;
   completedBy: string | null;
   completionOrigin: "MANUAL" | "AUTO" | null;
@@ -126,6 +134,13 @@ export async function completeAppointmentWithin(
       completedAt: input.now,
       completedBy: input.actor,
       completionOrigin: input.origin,
+      // Estado e campo notificável (Goal021), e a versão sobe no mesmo
+      // `updateMany` do efeito. O `before` é exato: a condição acima só casa
+      // com a linha que ainda estava em `CONFIRMED`.
+      ...appointmentVersionWrite(
+        { status: "CONFIRMED" },
+        { status: "COMPLETED" },
+      ),
     },
   });
   if (applied.count === 0) {
@@ -162,6 +177,14 @@ export async function completeAppointmentWithin(
       after: { status: "COMPLETED", completionOrigin: input.origin },
     },
   );
+  // Atendimento concluído deixa de ser compromisso futuro e confirmado: as
+  // intenções pendentes da versão anterior são canceladas com motivo, e
+  // nenhuma nasce para a versão nova (Goal021).
+  await recomputeAppointmentIntentsWithin(transaction, {
+    tenantId: input.tenantId,
+    appointment: updated,
+    now: input.now,
+  });
   return { applied: true, snapshot: toSnapshot(updated) };
 }
 
@@ -212,6 +235,12 @@ export async function markNoShowWithin(
       completedAt: null,
       completedBy: null,
       completionOrigin: null,
+      // Muda o estado, então muda o que o cliente precisaria saber; a
+      // observação da falta, sozinha, não moveria a versão.
+      ...appointmentVersionWrite(
+        { status: before.status },
+        { status: "NO_SHOW" },
+      ),
     },
   });
   if (applied.count === 0) {
@@ -239,6 +268,14 @@ export async function markNoShowWithin(
       after: { status: "NO_SHOW", noShowNote: input.note },
     },
   );
+  // Falta é o mesmo caso da conclusão: o compromisso deixou de ser confirmado,
+  // então o que estava agendado para o cliente é cancelado com motivo e nada
+  // novo é criado (Goal021).
+  await recomputeAppointmentIntentsWithin(transaction, {
+    tenantId: input.tenantId,
+    appointment: updated,
+    now: input.now,
+  });
   return { applied: true, snapshot: toSnapshot(updated) };
 }
 
@@ -276,6 +313,9 @@ export async function setFinalValueWithin(
       tenantId_id: { tenantId: input.tenantId, id: input.appointmentId },
     },
     data: {
+      // Sem `appointmentVersionWrite`: valor final é registro interno do
+      // atendimento, não muda data, horário, serviços nem estado, e portanto
+      // não gera notificação automática ao cliente (Goal021).
       finalValue: input.amount,
       finalValueSetAt: input.now,
       finalValueSetBy: input.actor,
@@ -296,13 +336,24 @@ export async function setFinalValueWithin(
   return toSnapshot(updated);
 }
 
-/** Presença confirmada: campo separado da conclusão, idempotente. */
+/**
+ * Presença confirmada: campo separado da conclusão, idempotente.
+ *
+ * `source` é a origem **derivada do chamador** (Goal021): a confirmação que
+ * chega pela resposta do cliente ao lembrete é da IA, e a que a profissional
+ * registra na tela é dela — o evento precisa saber a diferença. Até o Goal021
+ * este evento gravava `"USER"` literal, o que fazia toda confirmação pela
+ * conversa parecer ato da profissional. Nada além do evento muda: confirmar
+ * presença não confirma, não conclui e não cancela nada, como o Goal008
+ * fixou.
+ */
 export async function confirmPresenceWithin(
   transaction: TransactionClient,
   input: {
     tenantId: string;
     appointmentId: string;
     actor: string;
+    source: AppointmentEventSource;
     now: Date;
   },
 ): Promise<{ applied: boolean; snapshot: AppointmentLifecycleSnapshot }> {
@@ -312,6 +363,9 @@ export async function confirmPresenceWithin(
       id: input.appointmentId,
       presenceConfirmedAt: null,
     },
+    // Sem `appointmentVersionWrite`: presença confirmada é dado operacional
+    // do negócio — o compromisso continua no mesmo dia, horário, acordo e
+    // estado, então não há alteração para avisar (Goal021).
     data: { presenceConfirmedAt: input.now },
   });
   if (applied.count === 0) {
@@ -333,7 +387,7 @@ export async function confirmPresenceWithin(
     input.appointmentId,
     {
       type: "PRESENCE_CONFIRMED",
-      source: "USER",
+      source: input.source,
       actor: input.actor,
       after: { presenceConfirmedAt: input.now.toISOString() },
     },
@@ -404,8 +458,13 @@ export class AtendlyAppointmentLifecycleService {
     });
   }
 
+  /**
+   * `source` e obrigatorio: sem ele o evento voltaria a afirmar `USER` para
+   * uma confirmacao que veio da conversa com o cliente.
+   */
   async confirmPresence(
     appointmentId: string,
+    source: AppointmentEventSource,
   ): Promise<AppointmentLifecycleSnapshot> {
     return this.prisma.$transaction(async (transaction) => {
       const now = await databaseNow(transaction);
@@ -413,6 +472,7 @@ export class AtendlyAppointmentLifecycleService {
         tenantId: this.tenantId,
         appointmentId,
         actor: this.actor,
+        source,
         now,
       });
       return snapshot;

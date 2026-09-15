@@ -73,6 +73,21 @@ const envSchema = z.object({
   // renovacao. Curto demais faz o lote ser roubado no meio; longo demais
   // atrasa a retomada depois de uma queda.
   IMPORT_LEASE_TTL_SECONDS: intEnv(120),
+  // Reivindicação das intenções de envio ao cliente (Goal021). Os dois tetos
+  // existem para que uma importação recém-concluída não vire rajada: o de
+  // lote limita a varredura inteira, e o por negócio impede que um único
+  // tenant ocupe o lote todo enquanto os demais esperam.
+  NOTIFICATION_CLAIM_BATCH_LIMIT: intEnv(100),
+  NOTIFICATION_CLAIM_TENANT_LIMIT: intEnv(20),
+  // Lease da entrega (Goal021), no mesmo espírito de `IMPORT_LEASE_TTL_SECONDS`:
+  // a vigência é decidida pelo relógio do banco, e este valor só define o TTL
+  // somado a `now()` na reivindicação e em cada renovação. Curto demais faz a
+  // intenção ser devolvida no meio da entrega; longo demais atrasa a retomada
+  // depois de uma queda.
+  NOTIFICATION_LEASE_TTL_SECONDS: intEnv(120),
+  // Quantas tentativas uma intenção gasta antes de virar falha auditável com
+  // `ATTEMPTS_EXHAUSTED`. Ela nunca desaparece: esgotada, fica registrada.
+  NOTIFICATION_MAX_ATTEMPTS: intEnv(3),
   // Janela de ajuste da recorrência de atendimento (Goal009): quantos dias
   // para trás/frente do intervalo alvo o preview busca o horário disponível
   // mais próximo antes de reportar a ocorrência como não encontrável.

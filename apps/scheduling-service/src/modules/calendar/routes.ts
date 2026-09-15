@@ -89,6 +89,11 @@ const createAppointmentBodySchema = z
         "Provide customerId for a resolved person, or a name/phone to create one on confirmation.",
     },
   );
+// `notifyCustomer` (Goal021, WU-009): omitir e nao notificar, o default do
+// contrato e silencio. So o BFF manda este campo — a IA nunca tem.
+const notifyCustomerShape = {
+  notifyCustomer: z.boolean().optional(),
+};
 const rescheduleBodySchema = z.object({
   source: z.enum(["AI", "USER"]).optional(),
   date: dateSchema,
@@ -97,10 +102,12 @@ const rescheduleBodySchema = z.object({
   /** Hold do NOVO horário; o original continua ocupado até o commit. */
   holdId: z.string().trim().min(1).max(128).optional(),
   ...overlapOverrideShape,
+  ...notifyCustomerShape,
 });
 const cancelBodySchema = z.object({
   source: z.enum(["AI", "USER"]).optional(),
   comments: z.string().trim().max(2_000).optional(),
+  ...notifyCustomerShape,
 });
 
 const createHoldBodySchema = z.object({
@@ -396,11 +403,15 @@ export async function registerCalendarRoutes(
     "/internal/appointments/:id/presence",
     internalOnly,
     async (request) => {
+      const context = currentInternalContext(request);
       const params = parse(idParamsSchema, request.params);
       return {
         data: await calendarService().confirmPresence(
-          currentInternalContext(request),
+          context,
           params.id,
+          // Origem derivada da credencial, como nas demais mutacoes: a
+          // confirmacao pela resposta ao lembrete e da IA (Goal021).
+          callerSource(context.caller),
         ),
         requestId: request.id,
       };
@@ -414,6 +425,24 @@ export async function registerCalendarRoutes(
       const params = parse(idParamsSchema, request.params);
       return {
         data: await calendarService().listAppointmentHistory(
+          currentInternalContext(request),
+          params.id,
+        ),
+        requestId: request.id,
+      };
+    },
+  );
+
+  // Estado de envio ao cliente deste atendimento (Goal021): o que o detalhe
+  // do agendamento lê para dizer se o lembrete saiu, e o que a central de
+  // notificações do Goal022 vai reaproveitar.
+  app.get(
+    "/internal/appointments/:id/notifications",
+    internalOnly,
+    async (request) => {
+      const params = parse(idParamsSchema, request.params);
+      return {
+        data: await calendarService().listAppointmentNotifications(
           currentInternalContext(request),
           params.id,
         ),

@@ -214,8 +214,19 @@ export interface CreateCalendarAppointmentInput
   idempotencyKey: string;
 }
 
+/**
+ * `Notificar cliente` na alteracao manual (Goal021). **Omitir e nao
+ * notificar**: o default do contrato e silencio, e quem notifica e quem pede.
+ * A interface manda o campo sempre, explicitamente, marcado por padrao; a IA
+ * remarca e cancela a pedido do proprio cliente, e avisa-lo do que ele acabou
+ * de pedir seria ruido.
+ */
+export interface NotifyCustomerInput {
+  notifyCustomer?: boolean;
+}
+
 export interface RescheduleCalendarAppointmentInput
-  extends OverlapOverrideInput, HoldConsumptionInput {
+  extends OverlapOverrideInput, HoldConsumptionInput, NotifyCustomerInput {
   source?: "AI" | "USER";
   appointmentId: string;
   date: string;
@@ -224,7 +235,7 @@ export interface RescheduleCalendarAppointmentInput
   idempotencyKey: string;
 }
 
-export interface CancelCalendarAppointmentInput {
+export interface CancelCalendarAppointmentInput extends NotifyCustomerInput {
   source?: "AI" | "USER";
   appointmentId: string;
   comments?: string;

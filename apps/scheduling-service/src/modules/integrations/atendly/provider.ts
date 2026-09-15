@@ -25,8 +25,10 @@ import {
   type RescheduleCalendarAppointmentInput,
 } from "../../calendar/calendar-provider.js";
 import {
+  appointmentVersionWrite,
   databaseNow,
   lockCalendarDays,
+  notifiableAppointmentFields,
   runCalendarWrite,
 } from "../../calendar/write-policy.js";
 import { AtendlyCustomerService } from "../../customers/atendly-customer-service.js";
@@ -38,6 +40,7 @@ import {
   intendedInterval,
   releaseHoldWithin,
 } from "../../holds/appointment-hold-service.js";
+import { recomputeAppointmentIntentsWithin } from "../../reminders/notification-intent-service.js";
 import {
   AtendlyServiceService,
   maxServiceBuffer,
@@ -311,6 +314,15 @@ export class AtendlyCalendarProvider implements CalendarProvider {
           },
         });
       }
+      // As intencoes de envio nascem na MESMA transacao do atendimento
+      // (Goal021): um compromisso futuro e confirmado ja sai daqui com os
+      // lembretes da configuracao vigente agendados, e nunca ha um instante em
+      // que o atendimento existe sem que o lembrete dele tenha sido decidido.
+      await recomputeAppointmentIntentsWithin(transaction, {
+        tenantId: this.tenantId,
+        appointment: created,
+        now: hold?.now ?? (await databaseNow(transaction)),
+      });
       return this.commitAppointment(transaction, created, commit);
     });
   }
@@ -388,6 +400,10 @@ export class AtendlyCalendarProvider implements CalendarProvider {
             excludeHoldId: hold?.holdId,
           });
       const before = this.toAppointment(persisted);
+      // Horario e o que o cliente precisaria saber: a versao notificavel sobe
+      // no mesmo `update`, e nao sobe se a remarcacao cair no horario em que o
+      // atendimento ja estava.
+      const notifiable = { startAt: slot.startAt, endAt: slot.endAt };
       const updated = await transaction.appointment.update({
         where: {
           tenantId_id: {
@@ -395,7 +411,13 @@ export class AtendlyCalendarProvider implements CalendarProvider {
             id: persisted.id,
           },
         },
-        data: { startAt: slot.startAt, endAt: slot.endAt },
+        data: {
+          ...notifiable,
+          ...appointmentVersionWrite(
+            notifiableAppointmentFields(persisted),
+            notifiable,
+          ),
+        },
         include: appointmentInclude,
       });
       if (hold) {
@@ -424,6 +446,16 @@ export class AtendlyCalendarProvider implements CalendarProvider {
           reason: overrideReason,
         });
       }
+      // Remarcar nao deixa para tras o lembrete do horario velho: as
+      // pendentes da versao anterior sao canceladas e as da nova nascem aqui,
+      // no mesmo commit da mutacao.
+      await recomputeAppointmentIntentsWithin(transaction, {
+        tenantId: this.tenantId,
+        appointment: updated,
+        now: hold?.now ?? (await databaseNow(transaction)),
+        previousVersion: persisted.notifiableVersion,
+        notifyCustomer: input.notifyCustomer === true,
+      });
       return this.commitAppointment(transaction, updated, commit);
     });
   }
@@ -472,6 +504,11 @@ export class AtendlyCalendarProvider implements CalendarProvider {
           // ja esta em `status`, sem precisar de segunda copia.
           status: "CANCELLED",
           comments: appendComment(persisted.comments, input.comments),
+          // O estado muda; a observacao anexada, sozinha, nunca moveria a
+          // versao — ela e alteracao somente interna.
+          ...appointmentVersionWrite(notifiableAppointmentFields(persisted), {
+            status: "CANCELLED",
+          }),
         },
         include: appointmentInclude,
       });
@@ -482,6 +519,16 @@ export class AtendlyCalendarProvider implements CalendarProvider {
         reason: input.comments ?? null,
         before: { status: persisted.status },
         after: { status: "CANCELLED" },
+      });
+      // Cancelar SEMPRE cancela as intencoes pendentes; o aviso de alteracao
+      // so nasce quando a notificacao foi pedida. Sao duas decisoes
+      // diferentes, e so a segunda e opcional (Goal021, item 7).
+      await recomputeAppointmentIntentsWithin(transaction, {
+        tenantId: this.tenantId,
+        appointment: cancelled,
+        now: await databaseNow(transaction),
+        previousVersion: persisted.notifiableVersion,
+        notifyCustomer: input.notifyCustomer === true,
       });
       return this.commitAppointment(transaction, cancelled, commit);
     });

@@ -197,6 +197,60 @@ const calendarSchema = z.object({
     aiActivationReady: z.boolean().default(false),
   }),
 });
+// --- Lembretes e confirmacao de presenca (Goal021, WU-009) -----------------
+const reminderSlotSchema = z.enum(["FIRST", "SECOND"]);
+const reminderPricePolicySchema = z.enum(["NEVER", "WHEN_FIXED"]);
+const reminderConfigSchema = z.object({
+  configured: z.boolean(),
+  confirmationEnabled: z.boolean(),
+  pricePolicy: reminderPricePolicySchema,
+  rules: z.array(
+    z.object({
+      slot: reminderSlotSchema,
+      leadMinutes: z.number().int().positive(),
+    }),
+  ),
+});
+/**
+ * Estado de envio ao cliente de um compromisso (Goal021, item 8). O
+ * vocabulario de estado e de motivo e o do dono do dado, repassado sem
+ * traducao: quem traduz para texto de tela e o frontend, num lugar so.
+ */
+const appointmentNotificationSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["REMINDER", "CHANGE_NOTICE"]),
+  slot: z.enum(["FIRST", "SECOND", "CHANGE_NOTICE"]),
+  appointmentVersion: z.number().int().nonnegative(),
+  state: z.enum([
+    "PENDING",
+    "CLAIMED",
+    "SENT",
+    "FAILED",
+    "DISMISSED",
+    "CANCELLED",
+  ]),
+  reason: z
+    .enum([
+      "LEAD_ALREADY_PASSED",
+      "APPOINTMENT_VERSION_SUPERSEDED",
+      "APPOINTMENT_NOT_CONFIRMED",
+      "APPOINTMENT_CANCELLED",
+      "APPOINTMENT_ALREADY_STARTED",
+      "REMINDER_CONFIGURATION_CHANGED",
+      "CUSTOMER_WITHOUT_PHONE",
+      "CONTACT_IGNORED",
+      "AI_NOT_ENABLED",
+      "CHANNEL_NOT_CONNECTED",
+      "TRANSPORT_FAILED",
+      "TRANSPORT_UNKNOWN",
+      "ATTEMPTS_EXHAUSTED",
+    ])
+    .nullable(),
+  dueAt: z.string(),
+  sentAt: z.string().nullable(),
+  settledAt: z.string().nullable(),
+});
+
 const availabilitySettingsSchema = z.object({
   timezone: z.string(),
   rules: z.array(
@@ -704,6 +758,17 @@ export class SchedulingClient {
     );
   }
 
+  async listAppointmentNotifications(
+    context: InternalRequestContext,
+    id: string,
+  ) {
+    return this.get(
+      context,
+      `/internal/appointments/${encodeURIComponent(id)}/notifications`,
+      z.array(appointmentNotificationSchema),
+    );
+  }
+
   async availability(
     context: InternalRequestContext,
     query: Record<string, string | number | boolean | undefined>,
@@ -740,6 +805,29 @@ export class SchedulingClient {
       "/internal/availability-settings",
       input,
       availabilitySettingsSchema,
+    );
+  }
+
+  // --- Lembretes e confirmacao de presenca (Goal021, WU-009) ---------------
+
+  async reminderSettings(context: InternalRequestContext) {
+    return this.get(
+      context,
+      "/internal/reminder-settings",
+      reminderConfigSchema,
+    );
+  }
+
+  async updateReminderSettings(
+    context: InternalRequestContext,
+    input: unknown,
+  ) {
+    return this.mutate(
+      context,
+      "PATCH",
+      "/internal/reminder-settings",
+      input,
+      reminderConfigSchema,
     );
   }
 

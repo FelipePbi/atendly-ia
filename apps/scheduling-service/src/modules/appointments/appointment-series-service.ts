@@ -31,6 +31,7 @@ import {
   appointmentInclude,
   toAtendlyAppointment,
 } from "../integrations/atendly/provider.js";
+import { recomputeAppointmentIntentsWithin } from "../reminders/notification-intent-service.js";
 import { AtendlyServiceService } from "../services/atendly-service-service.js";
 import { recordAppointmentEvent } from "./appointment-event-service.js";
 
@@ -357,6 +358,14 @@ export class AtendlyAppointmentSeriesService {
                 after: { holdId: hold.id },
               },
             );
+            // Cada ocorrencia da serie e um atendimento confirmado como
+            // qualquer outro: os lembretes dela nascem na mesma transacao que
+            // a criou (Goal021).
+            await recomputeAppointmentIntentsWithin(transaction, {
+              tenantId: this.tenantId,
+              appointment: record,
+              now,
+            });
             created.push(appointment);
           } catch (error) {
             // A ocorrencia que falhou precisa ser identificavel na resposta

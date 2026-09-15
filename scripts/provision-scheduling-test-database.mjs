@@ -68,6 +68,19 @@ try {
   } else {
     console.log(`reusing disposable database ${host}:${url.port || 5432}/${database}`);
   }
+  // Fuso do banco descartável fixado em UTC, como em produção.
+  //
+  // Não é preferência de formatação: as colunas de instante do Scheduling são
+  // `timestamp` sem fuso e o Prisma as grava e lê em UTC, enquanto `now()`
+  // avaliado no SQL é `timestamptz` e cai para a hora de parede da SESSÃO ao
+  // entrar nessas colunas. Num servidor cujo `TimeZone` é o da máquina — o
+  // caso de um cluster temporário criado por `initdb` no Windows —, o relógio
+  // do banco e os instantes gravados pelo processo ficam em escalas
+  // diferentes, e comparações de vencimento erram pelo deslocamento do fuso.
+  // Produção roda em UTC; o banco que prova o comportamento também.
+  await client.query(
+    `ALTER DATABASE "${database.replace(/"/gu, '""')}" SET TimeZone = 'UTC'`,
+  );
 } finally {
   await client.end();
 }

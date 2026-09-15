@@ -16,6 +16,7 @@ import { buildAudioPrompt } from "./audio.js";
 import { buildCustomerMemoryPrompt } from "./customer-memory.js";
 import { buildHandoffPrompt } from "./handoff.js";
 import { buildKnowledgePrompt } from "./knowledge.js";
+import { buildPresencePrompt } from "./presence.js";
 import { buildResponsePrompt } from "./response.js";
 import { buildSchedulingPrompt } from "./scheduling.js";
 import { buildAiTonePromptSection } from "./style.js";
@@ -94,8 +95,13 @@ const MAIN_RULES = [
  * v4 (Goal018/WU-02): os dados do negocio ganharam segmento, modalidades de
  * atendimento e endereco. O modelo passa a poder responder com base nesses
  * campos, cada um dizendo explicitamente quando nao esta configurado.
+ *
+ * v5 (Goal021/WU-008): o template ganhou a secao de resposta ao lembrete. Um
+ * turno passa a poder ser resposta a uma pergunta que a plataforma fez sem a
+ * cliente ter pedido nada, e o que o modelo deve concluir de um sim, de um
+ * nao e de uma resposta vaga mudou de significado.
  */
-const PROMPT_TEMPLATE_VERSION = "v4";
+const PROMPT_TEMPLATE_VERSION = "v5";
 
 /**
  * Amostra fixa, nunca usada no prompt real: existe so para que o hash em
@@ -160,6 +166,7 @@ function buildStablePromptContent(style: AiConversationStyle): string {
     ...MAIN_RULES,
     ...buildTenantContextPrompt(DEFAULT_BUSINESS_CONTEXT),
     ...buildSchedulingPrompt(),
+    ...buildPresencePrompt(),
     ...buildAudioPrompt(),
     ...buildKnowledgePrompt({ requested: false, results: [] }),
     ...buildKnowledgePrompt({ requested: true, results: [] }),
@@ -214,6 +221,8 @@ export function buildSystemPrompt(input: unknown): BuiltSystemPrompt {
     ...buildTenantContextPrompt(businessContext),
     "",
     ...buildSchedulingPrompt(),
+    "",
+    ...buildPresencePrompt(),
     "",
     ...buildAudioPrompt(),
     "",

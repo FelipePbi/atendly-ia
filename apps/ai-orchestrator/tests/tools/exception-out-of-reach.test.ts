@@ -147,6 +147,7 @@ const VALID_ARGS: Record<string, Record<string, unknown>> = {
     startTime: "10:00",
   },
   cancel_appointment: { action: "prepare", appointmentId: appointment.id },
+  confirm_appointment_presence: { appointmentId: appointment.id },
   request_human_handoff: { reason: "cliente pediu um encaixe" },
 };
 
@@ -218,6 +219,23 @@ function createExceptionTrap() {
     confirmAppointmentSeries: async (input: unknown) => {
       record("confirmAppointmentSeries", input);
       return [appointment];
+    },
+    // Confirmacao de presenca pela resposta ao lembrete (Goal021): habilitada
+    // aqui para que a tool chegue de fato ao gateway — uma tool que para no
+    // gate do negocio nao prova nada sobre excecao, encaixe e desconto.
+    getReminderConfirmationSettings: async () => ({
+      configured: true,
+      confirmationEnabled: true,
+    }),
+    confirmAppointmentPresence: async (appointmentId: string) => {
+      record("confirmAppointmentPresence", { appointmentId });
+      return {
+        appointmentId,
+        status: appointment.status,
+        presenceConfirmedAt: "2026-06-08T13:30:00.000Z",
+        completedAt: null,
+        noShowAt: null,
+      };
     },
   };
   const gateway = new Proxy(base, {

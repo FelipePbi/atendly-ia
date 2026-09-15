@@ -10,6 +10,7 @@ import {
   BUSINESS_MODALITY_OPTIONS,
   FREQUENT_BUSINESS_SEGMENTS,
 } from "@/features/onboarding/blocks/business";
+import { ReminderSettingsSection } from "@/features/reminders/ReminderSettingsSection";
 import { WhatsAppConnectionPanel } from "@/features/whatsapp/WhatsAppConnectionPanel";
 import { Icon, type IconName } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
@@ -595,6 +596,7 @@ function CalendarSettings({ settings }: { settings: SettingsState }) {
           </span>
         </div>
       </section>
+      <ReminderSettingsSection />
       <ImportSettingsSection />
     </Page>
   );

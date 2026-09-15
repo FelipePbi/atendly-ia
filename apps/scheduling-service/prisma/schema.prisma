@@ -130,6 +130,104 @@ enum BlockSeriesStatus {
   ENDED
 }
 
+/// Politica de preco no texto do lembrete (Goal021), no vocabulario do vault:
+/// `NEVER` e o padrao, e `WHEN_FIXED` mostra o preco **apenas** quando o
+/// acordo do atendimento tem preco fixo (`PriceType.FIXED`). Nao existe
+/// "sempre": "a partir de", "sob consulta" e "nao informado" nunca viram
+/// numero numa mensagem que sai sozinha para o cliente.
+enum ReminderPricePolicy {
+  NEVER
+  WHEN_FIXED
+}
+
+/// Posicao de uma intencao de envio ao cliente (Goal021). `FIRST` e `SECOND`
+/// sao as duas — e so as duas — posicoes de lembrete que o negocio pode
+/// configurar; `CHANGE_NOTICE` e a posicao propria do aviso de alteracao.
+///
+/// O aviso tem posicao **propria e nao nula** de proposito: unicidade com
+/// `NULL` nao deduplica no PostgreSQL, e o indice unico da intencao ficaria
+/// decorativo justamente para a especie que sai depois de uma remarcacao.
+///
+/// `ReminderRule.slot` so admite `FIRST`/`SECOND`, pela constraint SQL
+/// `ReminderRule_slot_check`: o "ate dois lembretes" e invariante de
+/// **esquema**, nao validacao de aplicacao.
+enum AppointmentNotificationSlot {
+  FIRST
+  SECOND
+  CHANGE_NOTICE
+}
+
+/// Especie da intencao de envio (Goal021): lembrete do compromisso ou aviso de
+/// alteracao (remarcacao ou cancelamento manual com notificacao pedida).
+enum AppointmentNotificationKind {
+  REMINDER
+  CHANGE_NOTICE
+}
+
+/// Estado da intencao de envio (Goal021). Os seis valores existem para separar
+/// tres coisas que a auditoria e a tela precisam distinguir: **nao saiu**
+/// (`PENDING`, `CLAIMED`), **pode ter saido** (`SENT`, `FAILED`) e **nao devia
+/// sair** (`DISMISSED`, `CANCELLED`).
+///
+/// - `PENDING`: agendada, ainda nao reivindicada;
+/// - `CLAIMED`: reivindicada sob lease; volta para `PENDING` com tentativa
+///   contada quando o lease expira sem liquidacao;
+/// - `SENT`: entregue ao transporte, com sucesso classificado;
+/// - `FAILED`: falha auditavel (canal desconectado, transporte recusou,
+///   tentativas esgotadas) — sempre com motivo;
+/// - `DISMISSED`: nao devia sair, por decisao legitima (antecedencia ja
+///   vencida, cliente sem telefone, contato ignorado, IA nao habilitada);
+/// - `CANCELLED`: deixou de valer (versao do compromisso mudou, compromisso
+///   cancelado ou ja comecado).
+///
+/// `SENT`, `FAILED`, `DISMISSED` e `CANCELLED` sao terminais: liquidar duas
+/// vezes a mesma intencao nao reverte estado terminal nem soma tentativa.
+enum AppointmentNotificationState {
+  PENDING
+  CLAIMED
+  SENT
+  FAILED
+  DISMISSED
+  CANCELLED
+}
+
+/// Motivo da intencao que nao foi enviada (Goal021). Vocabulario **fechado**,
+/// nunca texto livre: e o que a central de notificacoes do Goal022 vai ler e o
+/// que a tela de detalhe do agendamento traduz. Obrigatorio em `FAILED`,
+/// `DISMISSED` e `CANCELLED`, e proibido nos demais estados, pela constraint
+/// SQL `AppointmentNotificationIntent_reason_check`.
+enum AppointmentNotificationReason {
+  /// A antecedencia configurada ja tinha passado quando o compromisso foi
+  /// agendado: marcar as 22h para amanha as 9h nao dispara agora um lembrete
+  /// de "24 horas antes".
+  LEAD_ALREADY_PASSED
+  /// `Appointment.notifiableVersion` mudou depois de a intencao nascer.
+  APPOINTMENT_VERSION_SUPERSEDED
+  /// Lembrete exige compromisso confirmado.
+  APPOINTMENT_NOT_CONFIRMED
+  /// Compromisso cancelado: cancelar sempre cancela as intencoes pendentes.
+  APPOINTMENT_CANCELLED
+  /// Lembrete exige inicio ainda no futuro no momento do envio.
+  APPOINTMENT_ALREADY_STARTED
+  /// A configuracao do negocio deixou de prever esta posicao de lembrete.
+  REMINDER_CONFIGURATION_CHANGED
+  /// Cliente sem telefone e situacao normal desde o Goal006, nao erro.
+  CUSTOMER_WITHOUT_PHONE
+  /// `Contact.ignored` na IA: regra absoluta, prevalece sobre a sessao.
+  CONTACT_IGNORED
+  /// IA nao efetivamente habilitada para o negocio.
+  AI_NOT_ENABLED
+  /// Canal do negocio nao conectado. E falha auditavel, nao dispensa: o
+  /// problema e operacional do negocio, nao decisao do cliente.
+  CHANNEL_NOT_CONNECTED
+  /// Transporte recusou e a saida comprovadamente nao saiu.
+  TRANSPORT_FAILED
+  /// Transporte nao permite afirmar se a saida saiu (`classifySendFailure`).
+  TRANSPORT_UNKNOWN
+  /// Tentativas esgotadas: a intencao vira falha, nunca desaparece.
+  ATTEMPTS_EXHAUSTED
+}
+
 model CalendarSettings {
   tenantId  String         @id
   source    CalendarSource
@@ -145,6 +243,50 @@ model CalendarSettings {
   granularityMinutes Int @default(30)
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
+}
+
+/// Configuracao de lembrete do negocio (Goal021).
+///
+/// A **existencia da linha** e a escolha. Negocio sem linha nunca configurou e
+/// vale como um lembrete a vinte e quatro horas, pela constante nomeada do
+/// dominio — nao por backfill e nao por linha fabricada. Negocio com linha e
+/// **zero** `ReminderRule` desligou os lembretes de proposito, o que continua
+/// distinguivel de nunca ter escolhido. E a mesma regra que o Goal018 aplicou
+/// a `modalities`.
+model ReminderSettings {
+  tenantId String @id
+  /// Confirmacao de presenca pela resposta ao lembrete (liga/desliga). Nasce
+  /// desligada: perguntar "confirma?" e decisao explicita do negocio.
+  confirmationEnabled Boolean             @default(false)
+  /// Preco no texto do lembrete. `NEVER` e o padrao do vault.
+  pricePolicy         ReminderPricePolicy @default(NEVER)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  rules ReminderRule[]
+}
+
+/// Um lembrete configurado, por posicao (Goal021).
+///
+/// **Ate dois, garantido pelo esquema:** `slot` so admite `FIRST`/`SECOND`
+/// (constraint SQL `ReminderRule_slot_check`) e a chave primaria composta
+/// `(tenantId, slot)` impede a segunda linha da mesma posicao. Nao existe
+/// caminho — rota, importacao, correcao operacional em SQL cru — que grave um
+/// terceiro lembrete para o mesmo negocio.
+model ReminderRule {
+  tenantId String
+  slot     AppointmentNotificationSlot
+  /// Antecedencia em minutos. Positiva e limitada a um teto declarado de
+  /// trinta dias (43200), pela constraint SQL `ReminderRule_leadMinutes_check`:
+  /// antecedencia zero ou negativa e recusada pelo **banco**, alem do codigo
+  /// proprio que a rota devolve.
+  leadMinutes Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  settings ReminderSettings @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+
+  @@id([tenantId, slot])
 }
 
 model IntegrationConnection {
@@ -483,6 +625,19 @@ model Appointment {
   /// uma serie. Cancelar, remarcar ou concluir uma ocorrencia nunca toca as
   /// demais, entao nao ha cascata aqui.
   seriesId   String?
+  /// Versao monotonica do que o cliente precisaria saber (Goal021),
+  /// incrementada **na mesma transacao** da mutacao, pela politica unica de
+  /// escrita — nunca por trigger paralelo e nunca por um segundo caminho de
+  /// escrita. Incrementa em data, horario, servicos do acordo e status;
+  /// **nao** incrementa em observacao, valor final, presenca confirmada nem
+  /// snapshot de buffer, que e a traducao literal de "alteracoes somente
+  /// internas nao geram notificacao automatica".
+  ///
+  /// E ela que da identidade a uma intencao de envio: o que foi agendado para
+  /// a versao 3 nao vale mais quando o compromisso esta na versao 4.
+  /// Atendimento que ja existia nasce na versao 1 ("nunca mudou"), sem UPDATE
+  /// e sem lembrete retroativo.
+  notifiableVersion Int @default(1)
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
 
@@ -490,6 +645,14 @@ model Appointment {
   items    AppointmentItem[]
   events   AppointmentEvent[]
   series   AppointmentSeries? @relation(fields: [tenantId, seriesId], references: [tenantId, id], onDelete: SetNull)
+  /// Intencoes de envio ao cliente (Goal021). `Cascade` e deliberado: a
+  /// intencao e trabalho operacional que so existe enquanto o compromisso
+  /// existe, e o historico de registro do atendimento continua sendo
+  /// `AppointmentEvent`, que permanece `Restrict`. Sem isso, a remocao do
+  /// atendimento do teste de ativacao (Goal019, `calendar/removal.ts`)
+  /// passaria a falhar por chave estrangeira no primeiro atendimento que
+  /// tivesse lembrete.
+  notificationIntents AppointmentNotificationIntent[]
 
   @@unique([tenantId, id])
   @@index([tenantId, startAt, endAt])
@@ -593,6 +756,81 @@ model AppointmentEvent {
 
   @@index([tenantId, appointmentId, occurredAt])
   @@index([tenantId, appointmentId, sequence])
+}
+
+/// Intencao de envio ao cliente (Goal021): trabalho duravel no banco do **dono
+/// da agenda**, no espirito de D-008 — sem broker, fila externa, cron do
+/// sistema operacional ou servico novo. O Scheduling agenda e revalida; a IA
+/// reivindica, entrega e liquida.
+///
+/// **Dedupe** e `(tenantId, appointmentId, kind, slot, appointmentVersion)` em
+/// indice unico (`AppointmentNotificationIntent_identity_key`): duas
+/// recomputacoes, duas remarcacoes ou duas varreduras nao criam duas intencoes
+/// para o mesmo fato. O aviso de alteracao usa a posicao propria
+/// `CHANGE_NOTICE`, **nao nula**, porque unicidade com `NULL` nao deduplica no
+/// PostgreSQL e o indice ficaria decorativo justamente para a especie que sai
+/// depois de uma remarcacao.
+///
+/// **Lease pelo relogio do banco** (`TIMESTAMPTZ`, licao do `AppointmentHold`
+/// no Goal008 e do `ImportSession` no Goal010): a exclusao vem do claim, o
+/// lease expira sozinho quando o processo morre e e renovado enquanto o
+/// trabalho corre.
+model AppointmentNotificationIntent {
+  id            String @id @default(cuid())
+  tenantId      String
+  appointmentId String
+  kind          AppointmentNotificationKind
+  /// Posicao. `REMINDER` usa `FIRST`/`SECOND`; `CHANGE_NOTICE` usa
+  /// `CHANGE_NOTICE`. Os dois sentidos sao amarrados pela constraint SQL
+  /// `AppointmentNotificationIntent_kind_slot_check`.
+  slot          AppointmentNotificationSlot
+  /// `Appointment.notifiableVersion` no momento em que a intencao nasceu.
+  /// Divergiu da versao vigente, a reivindicacao **cancela** em vez de enviar.
+  appointmentVersion Int
+  state              AppointmentNotificationState   @default(PENDING)
+  reason             AppointmentNotificationReason?
+  /// Quando a intencao vence. Lembrete: inicio do compromisso menos a
+  /// antecedencia configurada. Aviso de alteracao: o instante da mutacao.
+  /// `TIMESTAMPTZ` porque e sempre comparada com `now()` do banco.
+  dueAt DateTime @db.Timestamptz(3)
+  /// Fatos prontos, compostos **pelo dono** na reivindicacao: nome do cliente,
+  /// telefone, servicos, e a data e a hora ja formatadas no fuso do tenant
+  /// (`CalendarSettings.timezone`) com o instante junto. Nulo enquanto
+  /// pendente. A IA nunca formata instante, e aqui nunca ha texto de lembrete:
+  /// a composicao por estilo e da entrega, nao do dono.
+  facts Json?
+  /// Tentativas ja gastas. Lease expirado devolve a intencao para `PENDING`
+  /// somando uma; esgotadas, ela vira `FAILED` com `ATTEMPTS_EXHAUSTED`.
+  attemptCount     Int       @default(0)
+  lastAttemptAt    DateTime? @db.Timestamptz(3)
+  leaseOwner       String?
+  leaseToken       String?
+  leaseAcquiredAt  DateTime? @db.Timestamptz(3)
+  leaseExpiresAt   DateTime? @db.Timestamptz(3)
+  leaseHeartbeatAt DateTime? @db.Timestamptz(3)
+  /// `correlationId` deterministico da saida, derivado da identidade da
+  /// intencao. E por ele que a reivindicacao repetida depois de uma queda do
+  /// processo nao produz uma segunda mensagem ao cliente.
+  outboundCorrelationId String?
+  sentAt                DateTime? @db.Timestamptz(3)
+  /// Instante da liquidacao, em qualquer estado terminal.
+  settledAt             DateTime? @db.Timestamptz(3)
+  /// Detalhe sanitizado do motivo. Nunca substitui `reason`, que e o
+  /// vocabulario fechado, e nunca carrega credencial nem payload cru.
+  detail    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  appointment Appointment @relation(fields: [tenantId, appointmentId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, appointmentId, kind, slot, appointmentVersion], map: "AppointmentNotificationIntent_identity_key")
+  @@index([tenantId, appointmentId])
+  @@index([tenantId, state, dueAt])
+  /// Varredura da IA: ela atende todos os negocios, entao a fila vence por
+  /// `state`/`dueAt` sem tenant na frente. O teto por tenant e do codigo.
+  @@index([state, dueAt])
+  @@index([leaseExpiresAt])
 }
 
 model ExternalEntityMap {

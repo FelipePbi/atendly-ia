@@ -17,7 +17,7 @@ git diff --check
 | Comando | Cobre | Não cobre |
 | --- | --- | --- |
 | `validate:core` | Builds de contracts, Scheduling, IA, BFF e frontend; `npm run check` do health-worker; suíte da IA; suíte do adapter HTTP do frontend; `go build`/`go vet`/`go test` do Evolution Go; testes dos próprios scripts de gate; auditoria estática | Qualquer escrita em banco. Nenhum passo abre conexão de banco |
-| `validate:integration` | Geração do client Prisma, migrations e o teste real de cadastro do BFF contra um PostgreSQL descartável | Todo o resto do produto; um único fluxo (`POST /v1/auth/register`) é exercitado |
+| `validate:integration` | 25 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, o outbox do Evolution Go e um ensaio por migration de Goal — o último deles `rehearse:goal021-reminder-migration` | Qualquer camada acima do dado: nenhuma jornada de interface, nenhum envio real por WhatsApp e nenhuma origem real do Minha Agenda |
 | `git diff --check` | Espaço em branco/conflito no diff | Correção do diff |
 
 Comandos auxiliares: `npm run test:gate` (só os testes dos scripts de gate) e
@@ -103,12 +103,20 @@ PGBIN="$LOCALAPPDATA/Programs/PostgreSQL/18/pgsql/bin"
 PGDIR=/c/tmp/atendly-pgtest
 
 "$PGBIN/initdb.exe" -D "$PGDIR/data" -U pgtest -A trust -E UTF8 --locale=C
-"$PGBIN/pg_ctl.exe" -D "$PGDIR/data" -l "$PGDIR/server.log" -o "-p 55432 -c listen_addresses=127.0.0.1" start
+"$PGBIN/pg_ctl.exe" -D "$PGDIR/data" -l "$PGDIR/server.log" -o "-p 55432 -c listen_addresses=127.0.0.1 -c timezone=UTC" start
 psql -h 127.0.0.1 -p 55432 -U pgtest -d postgres -c "CREATE DATABASE atendly_bff_test;"
 ```
 
 O cluster usa autenticação `trust` em loopback e existe apenas para teste;
 não há credencial real envolvida.
+
+O `-c timezone=UTC` importa: `initdb` herda o fuso da máquina, e produção roda
+em UTC. Como as colunas de instante são `timestamp` sem fuso — gravadas e
+lidas em UTC pelo Prisma — enquanto `now()` avaliado no SQL cai para a hora de
+parede da sessão, um cluster em outro fuso põe o relógio do banco e os
+instantes do processo em escalas diferentes, e vencimentos passam a errar pelo
+deslocamento. `provision:scheduling-test-database` fixa isso no próprio banco
+descartável do Scheduling; o cluster criado à mão deve começar já em UTC.
 
 ### Execução
 
@@ -117,7 +125,12 @@ npm ci --prefix apps/bff
 BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_bff_test" npm run validate:integration
 ```
 
-São dez passos, nesta ordem — o item 5 agrupa o par do Evolution Go:
+São 25 passos. A lista abaixo enumera o núcleo, na ordem em que roda — o item
+5 agrupa o par do Evolution Go. Entre os itens 6 e 7 rodam, nesta ordem, os demais
+ensaios de migration por Goal (005 a 013, 019 e 021) e o trio do Scheduling
+(`generate:scheduling-prisma-client`, `provision:scheduling-test-database`,
+`test:scheduling-integration`). A lista autoritativa é
+`scripts/validate-integration.mjs`:
 
 1. `generate:bff-prisma-client` produz `apps/bff/src/generated/prisma`;
 2. `migrate:bff-test-database` aplica as migrations existentes

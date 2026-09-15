@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { AUDIO_TURN_MARKER } from "../../src/modules/media/audio-turn.js";
 import { buildAudioPrompt } from "../../src/modules/prompts/audio.js";
+import { buildPresencePrompt } from "../../src/modules/prompts/presence.js";
 import {
   buildSystemPrompt,
   derivePromptVersion,
@@ -79,12 +80,12 @@ describe("prompt montado: sem persona, identidade transparente e versao por esti
 
   it("a versao e um hash estavel do conteudo montado: um teste que muda sozinho aqui sinaliza que o prompt mudou sem bump consciente da versao semantica", () => {
     expect(derivePromptVersion("PROFESSIONAL")).toBe(
-      "prompt-v4-professional-ff40f676f9",
+      "prompt-v5-professional-e02615be3b",
     );
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v4-balanced-91e9d792a4",
+      "prompt-v5-balanced-aada3ecb78",
     );
-    expect(derivePromptVersion("CASUAL")).toBe("prompt-v4-casual-89cf7a5560");
+    expect(derivePromptVersion("CASUAL")).toBe("prompt-v5-casual-2993c32b91");
   });
 
   it("o prompt montado embute exatamente a versao retornada para o estilo usado", () => {
@@ -129,7 +130,7 @@ describe("prompt montado: modo sugestao (Goal012/WU-04)", () => {
 
   it("a secao do modo sugestao entra no hash estavel: mudar o template de sugestao muda a versao do prompt normal tambem", () => {
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v4-balanced-91e9d792a4",
+      "prompt-v5-balanced-aada3ecb78",
     );
   });
 
@@ -185,7 +186,7 @@ describe("prompt montado: audio transcrito (Goal013/WU-03)", () => {
     // poder chegar como voz virada em texto; o hash abaixo muda sozinho se
     // alguem mexer na secao sem decidir isso de novo.
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v4-balanced-91e9d792a4",
+      "prompt-v5-balanced-aada3ecb78",
     );
   });
 });
@@ -323,6 +324,45 @@ describe("prompt montado: precedencia do conhecimento e regra de pergunta descon
     expect(text).toContain("regra do servico em foco");
     expect(text).toContain(
       "Nunca use conhecimento geral fora destes trechos",
+    );
+  });
+});
+
+describe("prompt montado: resposta ao lembrete (Goal021/WU-008)", () => {
+  it.each(STYLES)(
+    "prompt montado para %s descreve as quatro saidas da resposta ao lembrete",
+    (style) => {
+      const { text } = assemblePrompt(style);
+
+      expect(text).toContain("RESPOSTA AO LEMBRETE DE ATENDIMENTO:");
+      // Sim: registra e responde curto.
+      expect(text).toContain("use confirm_appointment_presence");
+      // Nao: oferece cancelar ou remarcar sem decidir sozinha.
+      expect(text).toContain(
+        "pergunte se ela prefere cancelar ou remarcar e espere a escolha",
+      );
+      // Vaga: tenta esclarecer, sem registrar.
+      expect(text).toContain(
+        "vaga, curta demais ou ambigua, nao registre presenca",
+      );
+      // Confirmar presenca nao move status, conclusao nem cancelamento.
+      expect(text).toContain(
+        "Confirmar presenca nao muda o status do atendimento",
+      );
+    },
+  );
+
+  it("a secao de resposta ao lembrete entra inteira no prompt montado", () => {
+    const { text } = assemblePrompt("BALANCED");
+
+    for (const line of buildPresencePrompt()) {
+      expect(text).toContain(line);
+    }
+  });
+
+  it("a secao de resposta ao lembrete entra no hash estavel: o bump para v5 e a versao conscientemente atualizada por causa dela", () => {
+    expect(derivePromptVersion("BALANCED")).toBe(
+      "prompt-v5-balanced-aada3ecb78",
     );
   });
 });

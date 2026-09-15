@@ -869,6 +869,11 @@ describe("ImportExecutionService: fidelidade do que foi importado", () => {
     );
     expect(cancelled?.status).toBe("CANCELLED");
     expect(cancelled?.statusRaw).toBe("CANCELLED");
+    // Goal021: o atendimento importado passa pela mesma recomputação das
+    // mutações da agenda, e nenhum atendimento passado ou cancelado vira
+    // lembrete — os milhares que uma importação única cria de uma vez
+    // tampouco.
+    expect(database.tables.appointmentNotificationIntent.rows).toHaveLength(0);
   });
 
   it("disponibilidade é importada como grupo dependente e não vira segunda jornada", async () => {

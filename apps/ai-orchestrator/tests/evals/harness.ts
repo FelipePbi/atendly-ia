@@ -472,6 +472,7 @@ function createAgendaStub(
     confirmAppointmentSeries: [] as ConfirmAppointmentSeriesInput[],
     createHold: [] as CreateSchedulingHoldInput[],
     releaseHold: [] as string[],
+    confirmAppointmentPresence: [] as string[],
   };
   const services = options.services;
   const slotsFor = (serviceIds: string[], startDate: string | undefined) => {
@@ -655,6 +656,28 @@ function createAgendaStub(
       effects.confirmAppointmentSeries.push(input);
       return [];
     },
+    // Confirmacao de presenca pela resposta ao lembrete (Goal021). O default
+    // do duble e o negocio que nao habilitou confirmacao: nenhum cenario
+    // anterior a este Goal pedia presenca, e ligar isso por omissao seria o
+    // harness decidindo por um negocio.
+    getReminderConfirmationSettings: async (context) => {
+      record("getReminderConfirmationSettings", null, context);
+      return {
+        configured: false,
+        confirmationEnabled: false,
+      };
+    },
+    confirmAppointmentPresence: async (appointmentId, context) => {
+      record("confirmAppointmentPresence", { appointmentId }, context);
+      effects.confirmAppointmentPresence.push(appointmentId);
+      return {
+        appointmentId,
+        status: "CONFIRMED",
+        presenceConfirmedAt: new Date().toISOString(),
+        completedAt: null,
+        noShowAt: null,
+      };
+    },
   };
 
   const gateway = { ...base, ...(options.gateway ?? {}) } as SchedulingGateway;
@@ -681,6 +704,13 @@ function createAgendaStub(
       })),
       ...effects.confirmAppointmentSeries.map((input) => ({
         member: "confirmAppointmentSeries",
+        input,
+      })),
+      // Presenca confirmada nao muda status, conclusao nem cancelamento
+      // (Goal021), mas continua sendo escrita da IA no dono da agenda: quem
+      // assere "nada aconteceu" precisa ver isto tambem.
+      ...effects.confirmAppointmentPresence.map((input) => ({
+        member: "confirmAppointmentPresence",
         input,
       })),
     ],

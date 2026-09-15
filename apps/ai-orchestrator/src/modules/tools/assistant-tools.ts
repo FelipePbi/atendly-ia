@@ -19,6 +19,7 @@ import {
 } from "../scheduling-service/client.js";
 import {
   APPOINTMENT_HOLD_EXPIRED,
+  PRESENCE_CONFIRMATION_NOT_ENABLED,
   type SchedulingAppointment,
   type SchedulingHold,
   type SchedulingRequestContext,
@@ -311,6 +312,18 @@ const rescheduleAppointmentSchema = z
       }
     }
   });
+/**
+ * Confirmacao de presenca pela resposta ao lembrete (Goal021).
+ *
+ * **So o id, e nenhum booleano.** Nao ha como dizer "nao vem", "faltou" nem
+ * "talvez" por esta tool: recusar, cancelar e remarcar continuam sendo as
+ * tools com prepare/confirm, e resposta vaga nao tem representacao nenhuma
+ * aqui. E o mesmo principio de `createHold` nao aceitar sobreposicao — o que
+ * a IA nao consegue expressar ela nao faz por engano.
+ */
+const confirmPresenceSchema = z
+  .object({ appointmentId: z.string().min(1) })
+  .strict();
 const handoffSchema = z
   .object({
     reason: z.string().min(3),
@@ -656,6 +669,18 @@ export class AssistantToolRegistry {
           description:
             "Prepara ou confirma cancelamento. Use action=prepare antes de pedir confirmacao; action=confirm somente apos confirmacao clara.",
           schema: cancelAppointmentSchema,
+        },
+      ),
+      tool(
+        (args) =>
+          this.run(context, () =>
+            this.confirmAppointmentPresence(args, context),
+          ),
+        {
+          name: "confirm_appointment_presence",
+          description:
+            "Registra que a cliente confirmou presenca em resposta ao lembrete. Use somente quando a resposta for um sim claro para a pergunta de confirmacao do lembrete. Resposta negativa, duvidosa ou ambigua nunca chama esta tool: pergunte o que a cliente prefere. Confirmar presenca nao confirma, nao conclui, nao cancela e nao remarca nada.",
+          schema: confirmPresenceSchema,
         },
       ),
       tool(
@@ -1299,6 +1324,71 @@ export class AssistantToolRegistry {
       appointments: appointments.map((appointment) =>
         this.presentAppointment(appointment),
       ),
+    };
+  }
+
+  /**
+   * Presenca confirmada pela resposta ao lembrete (Goal021, G-27).
+   *
+   * Tres coisas que este metodo faz de proposito, e que nao sao do prompt:
+   *
+   * 1. **Gate do negocio.** Le `reminder-settings` antes de qualquer coisa.
+   *    Negocio que nao habilitou confirmacao pelo lembrete nunca registra
+   *    presenca, mesmo que o modelo chame a tool — a decisao e do negocio, e
+   *    uma instrucao de prompt nao e garantia.
+   * 2. **Dono do telefone.** So confirma atendimento que aparece na agenda
+   *    futura deste numero, como `prepareCancel` e `prepareReschedule`. Um id
+   *    vindo de outro lugar nao vira registro.
+   * 3. **Nada alem do registro.** Nao ha rascunho, nao ha efeito colateral e
+   *    a resposta devolve `status`, `completedAt` e `noShowAt` exatamente
+   *    como o dono os tem: confirmar presenca nao confirma, nao conclui e nao
+   *    cancela.
+   */
+  private async confirmAppointmentPresence(
+    args: z.infer<typeof confirmPresenceSchema>,
+    context: ToolExecutionContext,
+  ) {
+    const settings = await this.scheduling.getReminderConfirmationSettings(
+      schedulingContext(context),
+    );
+    if (!settings.confirmationEnabled) {
+      return {
+        ok: false,
+        code: PRESENCE_CONFIRMATION_NOT_ENABLED,
+        error:
+          "Este negocio nao usa confirmacao de presenca pelo lembrete. Siga a conversa normalmente, sem registrar nada.",
+      };
+    }
+
+    const appointments = await this.scheduling.findFutureAppointmentsForPhone(
+      context.phone,
+      context.businessContext,
+      schedulingContext(context),
+    );
+    const appointment = appointments.find(
+      (item) => item.id === args.appointmentId,
+    );
+    if (!appointment) {
+      return {
+        ok: false,
+        error: "Agendamento nao encontrado para esse telefone.",
+      };
+    }
+
+    const confirmation = await this.scheduling.confirmAppointmentPresence(
+      appointment.id,
+      schedulingContext(context),
+      context.idempotencyKey,
+    );
+    return {
+      presenceConfirmed: true,
+      presenceConfirmedAt: confirmation.presenceConfirmedAt,
+      // Devolvidos para o modelo saber que continuam como estavam: a resposta
+      // ao lembrete e agradecimento curto, nunca anuncio de mudanca.
+      status: confirmation.status,
+      completedAt: confirmation.completedAt,
+      noShowAt: confirmation.noShowAt,
+      appointment: this.presentAppointment(appointment),
     };
   }
 

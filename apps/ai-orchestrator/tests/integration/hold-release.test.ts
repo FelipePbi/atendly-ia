@@ -281,6 +281,17 @@ describeWithDatabases("AssistantToolRegistry hold release against PostgreSQL", (
           unavailable: false,
         })),
       confirmAppointmentSeries: async (_input: ConfirmAppointmentSeriesInput) => [],
+      // Fora do assunto deste arquivo (hold): o negocio nao usa confirmacao
+      // pelo lembrete, entao presenca nunca e registrada por aqui.
+      getReminderConfirmationSettings: async () => ({
+        configured: false,
+        confirmationEnabled: false,
+      }),
+      confirmAppointmentPresence: async () => {
+        throw new Error(
+          "Confirmar presenca nao faz parte do fluxo de hold deste teste.",
+        );
+      },
     };
     return new AssistantToolRegistry(prisma, agenda);
   }

@@ -14,7 +14,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Home | `GET /v1/dashboard`; `GET /v1/status` (Goal014) |
 | Conversas | `GET /v1/conversations`; `GET /v1/conversations/:id`; `GET /v1/conversations/:id/messages`; `POST /v1/conversations/:id/messages`; `POST /v1/conversations/:id/takeover`; `POST /v1/conversations/:id/release`; `POST /v1/conversations/:id/resolve`; `PUT /v1/conversations/:id/category`; `PUT /v1/conversations/:id/ignore`; `POST /v1/conversations/:id/suggestions` (Goal012) |
 | Agendamentos | `GET /v1/appointments`; `GET /v1/appointments/:id`; `POST /v1/appointments`; `POST /v1/appointments/:id/reschedule`; `POST /v1/appointments/:id/cancel` |
-| Ciclo de vida do atendimento | `POST /v1/appointments/:id/complete`; `POST /v1/appointments/:id/no-show`; `POST /v1/appointments/:id/final-value`; `POST /v1/appointments/:id/presence`; `GET /v1/appointments/:id/events` |
+| Ciclo de vida do atendimento | `POST /v1/appointments/:id/complete`; `POST /v1/appointments/:id/no-show`; `POST /v1/appointments/:id/final-value`; `POST /v1/appointments/:id/presence`; `GET /v1/appointments/:id/events`; `GET /v1/appointments/:id/notifications` (Goal021) |
 | Reserva temporária (hold) | `POST /v1/holds`; `GET /v1/holds`; `DELETE /v1/holds/:id` |
 | Série de atendimento (Goal009) | `POST /v1/appointments/series/preview`; `POST /v1/appointments/series/confirm` |
 | Disponibilidade e bloqueios | `GET /v1/availability`; `GET /v1/time-blocks`; `POST /v1/time-blocks`; `DELETE /v1/time-blocks/:id`; `DELETE /v1/time-blocks/:id/occurrence`; `PATCH /v1/time-blocks/:id/occurrence` |
@@ -24,7 +24,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Clientes | `GET /v1/customers`; `GET /v1/customers/:id`; `POST /v1/customers`; `PATCH /v1/customers/:id`; `PUT /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/primary-guardian/confirm`; `DELETE /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/notes`; `PATCH /v1/customers/:id/notes/:noteId`; `DELETE /v1/customers/:id/notes/:noteId`; `POST /v1/customers/:id/tags`; `PATCH /v1/customers/:id/tags/:tagId`; `DELETE /v1/customers/:id/tags/:tagId`; `GET/POST /v1/customers/:id/memory`; `PATCH/DELETE /v1/customers/:id/memory/:memoryId`; `POST /v1/customers/:id/summary` (Goal012) |
 | Conhecimento do negócio (Goal012) | `GET/POST /v1/knowledge/documents`; `GET/PUT/DELETE /v1/knowledge/documents/:id`; `PUT /v1/knowledge/other-info` |
 | Serviços | `GET /v1/services`; `POST /v1/services`; `PATCH /v1/services/:id` |
-| Configurações | `GET /v1/settings`; `PATCH /v1/settings/business`; `PATCH /v1/settings/ai`; `PATCH /v1/settings/availability` |
+| Configurações | `GET /v1/settings`; `PATCH /v1/settings/business`; `PATCH /v1/settings/ai`; `PATCH /v1/settings/availability`; `GET /v1/settings/reminders`; `PATCH /v1/settings/reminders` (Goal021) |
 | WhatsApp | `GET /v1/whatsapp`; `POST /v1/whatsapp/connect`; `POST /v1/whatsapp/reconnect`; `DELETE /v1/whatsapp` |
 | Teste real de ativação (Goal019/WU-05) | `GET /v1/activation-test`; `POST /v1/activation-test`; `POST /v1/activation-test/restart` |
 
@@ -625,3 +625,62 @@ A ordem de avaliação é a da tabela: regra do contato antes de regra de sessã
 ### Erros próprios da IA nesta seção
 
 O BFF não reescreve o código de erro da IA como algo genérico: a resposta chega com `error.code: "UPSTREAM_ERROR"`, `error.statusCode` igual ao devolvido pela IA (ou `502` quando ela falhou com `5xx`) e o código original da IA em `error.details.upstreamCode` — o mesmo mecanismo já usado por todo proxy do BFF para a IA e o Scheduling. Nenhuma rota desta seção degrada uma recusa de negócio da IA para `500` genérico.
+
+## Lembretes, confirmação de presença e notificação de alteração (Goal021, WU-009, G-27)
+
+### Configuração de lembrete
+
+Duas rotas novas, proxy fino para `GET`/`PATCH /internal/reminder-settings` do Scheduling, no mesmo padrão de `PATCH /v1/settings/availability`: resolvem o negócio pela sessão autenticada (`requireTenantContext`), a leitura não exige CSRF e a escrita exige — sem sessão, `401 UNAUTHORIZED`; mutação sem CSRF, `403 CSRF_TOKEN_REJECTED`/`403 CSRF_ORIGIN_REJECTED`, antes de qualquer chamada ao Scheduling.
+
+| Rota | O que faz |
+| --- | --- |
+| `GET /v1/settings/reminders` | lê a configuração de lembrete e confirmação de presença do negócio |
+| `PATCH /v1/settings/reminders` | grava a configuração inteira |
+
+Corpo/resposta:
+
+```json
+{
+  "configured": true,
+  "confirmationEnabled": false,
+  "pricePolicy": "NEVER",
+  "rules": [{ "slot": "FIRST", "leadMinutes": 1440 }]
+}
+```
+
+| Campo | Valores | Significado |
+| --- | --- | --- |
+| `configured` | booleano, só leitura | `false` quando o negócio nunca gravou a configuração — a resposta traz o default do produto (um lembrete a 24h, `FIRST`); `true` sempre que já gravou, mesmo com `rules: []` |
+| `confirmationEnabled` | booleano | confirmação de presença separada da conclusão (G-27); ausente na escrita grava `false` |
+| `pricePolicy` | `NEVER`, `WHEN_FIXED` | quando o lembrete menciona o preço do atendimento; ausente na escrita grava `NEVER` |
+| `rules` | array de até dois itens, `{ slot: "FIRST" \| "SECOND", leadMinutes: inteiro positivo até 43200 }` | posição e antecedência (minutos) de cada lembrete; **obrigatório** em `PATCH`, mesmo vazio — `rules: []` é a escolha explícita de desligar os lembretes, distinta de nunca ter configurado |
+
+`PATCH` recusa mais de dois itens, posição repetida ou antecedência fora do intervalo com `400 VALIDATION_ERROR`, sem gravar nada e sem chamar o Scheduling — a mesma validação que a constraint SQL `ReminderRule_leadMinutes_check` espelha do lado de lá. Esta é a única leitura/escrita de configuração de lembrete no contrato público; não existe equivalente do lado da IA — quem configura é sempre humano, no mesmo padrão de disponibilidade e oferta (Goal009).
+
+### Estado de envio de um agendamento
+
+`GET /v1/appointments/:id/notifications` devolve as intenções de envio ao cliente **daquele** compromisso — os lembretes desta ocorrência e o aviso de alteração —, em ordem de vencimento (`dueAt`, desempatado por `id`). É uma pergunta diferente da que `GET /v1/settings/reminders` responde: a configuração diz com quanta antecedência o lembrete sairia; só esta rota diz o que aconteceu com o lembrete **deste** agendamento.
+
+| Campo | Valores |
+| --- | --- |
+| `kind` | `REMINDER`, `CHANGE_NOTICE` |
+| `slot` | `FIRST`, `SECOND` (lembrete) ou `CHANGE_NOTICE` (aviso) |
+| `appointmentVersion` | versão notificável do compromisso para a qual a intenção nasceu |
+| `state` | `PENDING`, `CLAIMED` (não saiu), `SENT`, `FAILED` (pode ter saído), `DISMISSED`, `CANCELLED` (não devia sair) |
+| `reason` | vocabulário fechado, obrigatório em `FAILED`/`DISMISSED`/`CANCELLED` e `null` nos demais |
+| `dueAt`, `sentAt`, `settledAt` | quando vence, quando saiu e quando foi liquidada |
+
+`reason` assume `LEAD_ALREADY_PASSED`, `APPOINTMENT_VERSION_SUPERSEDED`, `APPOINTMENT_NOT_CONFIRMED`, `APPOINTMENT_CANCELLED`, `APPOINTMENT_ALREADY_STARTED`, `REMINDER_CONFIGURATION_CHANGED`, `CUSTOMER_WITHOUT_PHONE`, `CONTACT_IGNORED`, `AI_NOT_ENABLED`, `CHANNEL_NOT_CONNECTED`, `TRANSPORT_FAILED`, `TRANSPORT_UNKNOWN` ou `ATTEMPTS_EXHAUSTED`. `TRANSPORT_UNKNOWN` é terminal e significa "não dá para afirmar se saiu" — quem lê não deve traduzi-lo como "não enviado".
+
+A resposta **não** traz os fatos compostos para a entrega (nome e telefone do cliente já formatados) nem qualquer dado de lease: eles são do envio, não da leitura. Lista vazia é resposta normal — negócio sem lembrete configurado, atendimento passado ou importado antes deste Goal simplesmente não têm intenção nenhuma, e a interface não afirma estado de lembrete nesse caso. Como o histórico, só existe na Agenda Atendly; com agenda externa, recusa com `409 EXTERNAL_CALENDAR_LIFECYCLE_UNSUPPORTED`.
+
+### `notifyCustomer` em cancelar e remarcar
+
+`POST /v1/appointments/:id/reschedule` e `POST /v1/appointments/:id/cancel` ganham um campo aditivo e opcional no corpo: `notifyCustomer: boolean`. **Nenhuma rota pública existente muda de forma**: o campo é opcional, sua ausência preserva exatamente o comportamento anterior a esta versão, e a resposta das duas rotas não muda.
+
+| Valor | Efeito |
+| --- | --- |
+| ausente, ou `false` | não notifica — o default do contrato é silêncio |
+| `true` | pedido explícito de aviso: se a mutação de fato mudou algo que o cliente precisaria saber (horário, serviços ou estado), nasce um aviso de alteração para ele |
+
+Cancelar sempre cancela os lembretes pendentes do horário anterior, com `notifyCustomer` ou sem — as duas decisões são independentes. `notifyCustomer` só decide o aviso de alteração, nunca os lembretes em si, e só existe nestas duas rotas: a IA cancela e remarca a pedido do próprio cliente dentro da conversa, e avisá-lo do que ele acabou de pedir seria ruído — por isso ela nunca tem este campo em nenhum contrato dela, e a interface manda-o sempre, explicitamente, marcado por padrão. A recomputação de lembretes e o aviso em si são regra do Scheduling, provada nas suítes de lá; o que este contrato garante é só o transporte do pedido.

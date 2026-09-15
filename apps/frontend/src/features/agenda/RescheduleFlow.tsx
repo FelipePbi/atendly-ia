@@ -54,6 +54,10 @@ export function RescheduleFlow({ appointmentId }: { appointmentId?: string }) {
   const [slotsLoading, setSlotsLoading] = useState(Boolean(appointmentId));
   const [startTime, setStartTime] = useState("");
   const [manualTime, setManualTime] = useState("");
+  // Remarcar é sempre uma alteração relevante para o cliente (Goal021):
+  // marcado por padrão, e a interface manda o campo sempre explicitamente —
+  // nunca se apoia no default do contrato, que é o oposto.
+  const [notifyCustomer, setNotifyCustomer] = useState(true);
   const [loading, setLoading] = useState(Boolean(appointmentId));
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -199,6 +203,7 @@ export function RescheduleFlow({ appointmentId }: { appointmentId?: string }) {
       const input: RescheduleAppointmentInput = {
         date,
         holdId: hold.holdId ?? undefined,
+        notifyCustomer,
         overlapOverride: overlapReason ? true : undefined,
         overlapOverrideReason: overlapReason,
         startTime,
@@ -291,6 +296,20 @@ export function RescheduleFlow({ appointmentId }: { appointmentId?: string }) {
                 slotsLoading={slotsLoading}
                 timezone={calendar?.timezone}
               />
+              <label className="switch-row">
+                <span>
+                  <strong>Notificar cliente</strong>
+                  <small>
+                    Remarcar é uma alteração relevante: recomendamos avisar
+                    o cliente do novo horário.
+                  </small>
+                </span>
+                <input
+                  checked={notifyCustomer}
+                  type="checkbox"
+                  onChange={(event) => setNotifyCustomer(event.target.checked)}
+                />
+              </label>
               <div className="agenda-form-footer">
                 <Button
                   href={`/agenda/agendamento?id=${encodeURIComponent(appointment.id)}`}

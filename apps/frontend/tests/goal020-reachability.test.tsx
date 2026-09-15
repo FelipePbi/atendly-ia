@@ -44,6 +44,7 @@ const listImportItems = vi.fn();
 const decideImportItem = vi.fn();
 const completeImport = vi.fn();
 const getSettings = vi.fn();
+const getReminders = vi.fn();
 const getWhatsapp = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
@@ -60,7 +61,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       setImportCategorySelection,
       startImport,
     },
-    settings: { get: getSettings },
+    settings: { get: getSettings, getReminders },
     whatsapp: { get: getWhatsapp },
   }),
   useProductRuntime: () => ({
@@ -81,7 +82,9 @@ function availableStateFixture(): ImportState {
   };
 }
 
-function sessionFixture(overrides: Partial<ImportLiveSession> = {}): ImportLiveSession {
+function sessionFixture(
+  overrides: Partial<ImportLiveSession> = {},
+): ImportLiveSession {
   return {
     categories: [],
     counts: { failed: 0, imported: 0, needsReview: 1, pending: 12, skipped: 0 },
@@ -135,7 +138,11 @@ function previewWithConflicts(): ImportPreview {
         sourceSupported: true,
       },
     ],
-    changesSincePreviousVersion: { changedCount: 0, disappearedCount: 0, newCount: 12 },
+    changesSincePreviousVersion: {
+      changedCount: 0,
+      disappearedCount: 0,
+      newCount: 12,
+    },
     generatedAt: "2026-09-15T10:05:00.000Z",
     previewVersion: 1,
     sessionId: "session-1",
@@ -205,7 +212,9 @@ function completedState(): ImportState {
   };
 }
 
-function settingsFixture(overrides: Partial<SettingsState> = {}): SettingsState {
+function settingsFixture(
+  overrides: Partial<SettingsState> = {},
+): SettingsState {
   return {
     ai: { enabled: true, tone: "BALANCED" },
     availability: null,
@@ -239,6 +248,14 @@ function renderPage(page: React.ReactElement) {
 beforeEach(() => {
   vi.clearAllMocks();
   getWhatsapp.mockResolvedValue(null);
+  // Bloco de Lembretes (Goal021/WU-010) monta junto de CalendarSettingsPage;
+  // esta suíte prova alcançabilidade da importação, não lembretes.
+  getReminders.mockResolvedValue({
+    configured: false,
+    confirmationEnabled: false,
+    pricePolicy: "NEVER",
+    rules: [{ slot: "FIRST", leadMinutes: 1_440 }],
+  });
 });
 
 describe("/importacao monta a jornada real pela própria rota", () => {
@@ -262,17 +279,23 @@ describe("/importacao monta a jornada real pela própria rota", () => {
     analyzeImport.mockResolvedValue(previewWithConflicts());
     renderPage(<ImportacaoPage />);
 
-    await screen.findByRole("heading", { name: "Encontramos isto no Minha Agenda" });
+    await screen.findByRole("heading", {
+      name: "Encontramos isto no Minha Agenda",
+    });
     await user.click(screen.getByRole("button", { name: "Revisar conflitos" }));
 
     expect(
-      await screen.findByRole("heading", { name: "Itens que precisam da sua decisão" }),
+      await screen.findByRole("heading", {
+        name: "Itens que precisam da sua decisão",
+      }),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: /serviços/ })).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Voltar" }));
     expect(
-      await screen.findByRole("heading", { name: "Encontramos isto no Minha Agenda" }),
+      await screen.findByRole("heading", {
+        name: "Encontramos isto no Minha Agenda",
+      }),
     ).toBeVisible();
   });
 
@@ -291,12 +314,18 @@ describe("/importacao monta a jornada real pela própria rota", () => {
     renderPage(<ImportacaoPage />);
 
     expect(
-      await screen.findByRole("progressbar", { name: "Andamento da importação" }),
+      await screen.findByRole("progressbar", {
+        name: "Andamento da importação",
+      }),
     ).toBeVisible();
-    await user.click(await screen.findByRole("button", { name: "Revisar itens" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Revisar itens" }),
+    );
 
     expect(
-      await screen.findByRole("heading", { name: "Itens que precisam da sua decisão" }),
+      await screen.findByRole("heading", {
+        name: "Itens que precisam da sua decisão",
+      }),
     ).toBeVisible();
   });
 
@@ -318,7 +347,9 @@ describe("Configurações → Agenda aponta para a mesma rota que a navegação 
     getImportState.mockResolvedValue(availableStateFixture());
     renderPage(<CalendarSettingsPage />);
 
-    const link = await screen.findByRole("link", { name: "Começar importação" });
+    const link = await screen.findByRole("link", {
+      name: "Começar importação",
+    });
     expect(link).toHaveAttribute("href", "/importacao");
   });
 
@@ -330,7 +361,9 @@ describe("Configurações → Agenda aponta para a mesma rota que a navegação 
     expect(
       await screen.findByRole("heading", { name: "Importação concluída" }),
     ).toBeVisible();
-    expect(screen.queryByRole("link", { name: /Começar importação/ })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: /Começar importação/ }),
+    ).toBeNull();
   });
 
   test("a entrada 'Importação' do menu Mais aponta para a mesma rota que existe e monta conteúdo real", async () => {

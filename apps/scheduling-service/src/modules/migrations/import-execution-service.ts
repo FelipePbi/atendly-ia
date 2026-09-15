@@ -15,6 +15,7 @@ import { AppError, toErrorMessage } from "../../shared/errors/app-error.js";
 import { recordAppointmentEvent } from "../appointments/appointment-event-service.js";
 import {
   calendarDaysBetween,
+  databaseNow,
   lockCalendarDays,
   runCalendarWrite,
 } from "../calendar/write-policy.js";
@@ -35,6 +36,7 @@ import {
   type WorkSchedule,
   workScheduleSchema,
 } from "../integrations/minha-agenda/types.js";
+import { recomputeAppointmentIntentsWithin } from "../reminders/notification-intent-service.js";
 import { AtendlyServiceService } from "../services/atendly-service-service.js";
 import {
   acquireImportLease,
@@ -966,6 +968,16 @@ export class ImportExecutionService {
           },
         },
       );
+      // Mesma recomputacao das mutacoes da agenda (Goal021): o atendimento
+      // importado passa pela mesma regra, e por isso os milhares de
+      // atendimentos antigos, concluidos ou cancelados de uma importacao unica
+      // nao produzem um unico lembrete — so o que e futuro e confirmado
+      // produz.
+      await recomputeAppointmentIntentsWithin(transaction, {
+        tenantId: environment.tenantId,
+        appointment: created,
+        now: await databaseNow(transaction),
+      });
       await this.commitItem(
         transaction,
         environment,

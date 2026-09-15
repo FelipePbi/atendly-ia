@@ -1,7 +1,13 @@
 import { type BffHttpClient } from "../http/BffHttpClient";
-import type { AiTone, BusinessModality } from "../mappers/publicApiSchemas";
+import type {
+  AiTone,
+  BusinessModality,
+  ReminderPricePolicy,
+  ReminderSlot,
+} from "../mappers/publicApiSchemas";
 import {
   availabilitySettingsSchema,
+  reminderSettingsSchema,
   settingsStateSchema,
 } from "../mappers/publicApiSchemas";
 
@@ -32,6 +38,14 @@ export interface AvailabilitySettingsInput {
   granularityMinutes?: number;
   maxLeadDays?: number;
   minLeadMinutes?: number;
+}
+
+export interface ReminderSettingsInput {
+  // `rules` é sempre obrigatório na escrita, mesmo vazio (`[]` desliga os
+  // lembretes de propósito, distinto de nunca ter configurado).
+  rules: Array<{ slot: ReminderSlot; leadMinutes: number }>;
+  confirmationEnabled?: boolean;
+  pricePolicy?: ReminderPricePolicy;
 }
 
 export class BffSettingsService {
@@ -71,6 +85,24 @@ export class BffSettingsService {
       method: "PATCH",
       path: "/v1/settings/availability",
       schema: availabilitySettingsSchema,
+      signal,
+    });
+  }
+
+  getReminders(signal?: AbortSignal) {
+    return this.http.request({
+      path: "/v1/settings/reminders",
+      schema: reminderSettingsSchema,
+      signal,
+    });
+  }
+
+  updateReminders(input: ReminderSettingsInput, signal?: AbortSignal) {
+    return this.http.request({
+      body: input,
+      method: "PATCH",
+      path: "/v1/settings/reminders",
+      schema: reminderSettingsSchema,
       signal,
     });
   }

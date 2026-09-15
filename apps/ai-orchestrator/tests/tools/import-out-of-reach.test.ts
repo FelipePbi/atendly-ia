@@ -49,6 +49,7 @@ const REGISTERED_TOOLS = [
   "list_customer_appointments",
   "reschedule_appointment",
   "cancel_appointment",
+  "confirm_appointment_presence",
   "request_human_handoff",
 ];
 

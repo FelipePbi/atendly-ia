@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { PrismaClient } from "../../generated/prisma/client.js";
+import type { AppointmentEventSource } from "../../generated/prisma/enums.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import {
   type AppointmentEventRecord,
@@ -10,6 +11,10 @@ import {
   type AppointmentLifecycleSnapshot,
   AtendlyAppointmentLifecycleService,
 } from "../appointments/appointment-lifecycle-service.js";
+import {
+  type AppointmentNotificationRecord,
+  listAppointmentNotifications,
+} from "../reminders/notification-read-service.js";
 import { isOperationalService } from "../services/atendly-service-service.js";
 import type {
   CalendarAppointment,
@@ -240,11 +245,41 @@ export class CalendarService {
     return (await this.lifecycle(context)).setFinalValue(appointmentId, amount);
   }
 
+  /**
+   * `source` vem da credencial do chamador, nunca do corpo (Goal021): a
+   * confirmacao que chega pela resposta do cliente ao lembrete e da IA, e a
+   * que a profissional registra na tela e dela.
+   */
   async confirmPresence(
     context: CalendarRequestContext,
     appointmentId: string,
+    source: AppointmentEventSource,
   ): Promise<AppointmentLifecycleSnapshot> {
-    return (await this.lifecycle(context)).confirmPresence(appointmentId);
+    return (await this.lifecycle(context)).confirmPresence(
+      appointmentId,
+      source,
+    );
+  }
+
+  /**
+   * Estado de envio ao cliente **deste** atendimento (Goal021): os lembretes
+   * e o aviso de alteração desta ocorrência, com o que aconteceu com cada
+   * um. A configuração do negócio responde outra pergunta — com quanta
+   * antecedência o lembrete sairia — e não substitui esta leitura.
+   */
+  async listAppointmentNotifications(
+    context: CalendarRequestContext,
+    appointmentId: string,
+  ): Promise<AppointmentNotificationRecord[]> {
+    await this.requireAtendlySource(context);
+    // Mesma porta do histórico: um id de outro negócio não vira leitura
+    // autorizada só por ser um id válido em algum lugar.
+    await this.getAppointment(context, appointmentId);
+    return listAppointmentNotifications(
+      this.prisma,
+      context.tenantId,
+      appointmentId,
+    );
   }
 
   /** Leitura cronológica do histórico operacional de um atendimento. */

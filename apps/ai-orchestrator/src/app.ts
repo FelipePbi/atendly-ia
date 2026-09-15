@@ -18,6 +18,10 @@ import {
 import { InboxWorker } from "./modules/inbox/InboxWorker.js";
 import { registerInternalRoutes } from "./modules/internal/routes.js";
 import { OutboxStore } from "./modules/outbox/OutboxStore.js";
+import { NotificationDeliveryService } from "./modules/reminders/NotificationDeliveryService.js";
+import { NotificationDeliveryWorker } from "./modules/reminders/NotificationDeliveryWorker.js";
+import { SchedulingClient } from "./modules/scheduling-service/client.js";
+import { SessionService } from "./modules/session/SessionService.js";
 
 export async function buildApp() {
   requireEnv(["DATABASE_URL"]);
@@ -88,6 +92,28 @@ export async function buildApp() {
     app.log,
   );
 
+  // Entrega das intencoes de envio (Goal021): segundo loop no mesmo processo,
+  // com o mesmo desenho do primeiro. O trabalho duravel vive no PostgreSQL do
+  // dono da agenda, e a IA o reivindica — e por isso que nao existe uma
+  // segunda direcao de chamada interna, do Scheduling para a IA.
+  const scheduling = new SchedulingClient();
+  const notifications = new NotificationDeliveryWorker(
+    scheduling,
+    new NotificationDeliveryService({
+      prisma,
+      settlement: scheduling,
+      sessions: new SessionService(prisma),
+      logger: app.log,
+    }),
+    {
+      pollIntervalMs: env.NOTIFICATION_DELIVERY_POLL_INTERVAL_MS,
+      leaseTtlSeconds: env.NOTIFICATION_DELIVERY_LEASE_SECONDS,
+      batchLimit: env.NOTIFICATION_DELIVERY_BATCH_LIMIT,
+      perTenantLimit: env.NOTIFICATION_DELIVERY_TENANT_LIMIT,
+    },
+    app.log,
+  );
+
   await registerEvolutionWebhookRoutes(app, prisma, {
     inbox,
     onEventStored: () => worker.nudge(),
@@ -95,6 +121,7 @@ export async function buildApp() {
   await registerInternalRoutes(app, prisma, { inbox });
 
   if (env.INBOX_WORKER_ENABLED) worker.start();
+  if (env.NOTIFICATION_DELIVERY_ENABLED) notifications.start();
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof AppError) {
@@ -117,6 +144,7 @@ export async function buildApp() {
 
   app.addHook("onClose", async () => {
     await worker.stop();
+    await notifications.stop();
     await graphCheckpointer.end();
     await prisma.$disconnect();
   });

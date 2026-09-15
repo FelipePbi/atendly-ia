@@ -49,6 +49,35 @@ class Journal {
 let sequence = 0;
 const nextId = (prefix: string) => `${prefix}-${(sequence += 1)}`;
 
+/**
+ * Operacao atomica de numero do Prisma (`{ increment }` / `{ decrement }`),
+ * resolvida contra a linha corrente. Sem isto, `Object.assign` gravaria o
+ * proprio objeto `{ increment: 1 }` na coluna — e um teste que compara
+ * versao com numero passaria a comparar com um objeto.
+ */
+function resolveWrite(
+  row: Row,
+  data: Record<string, unknown>,
+): Record<string, unknown> {
+  const resolved: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(data)) {
+    const operation =
+      value !== null && typeof value === "object" && !(value instanceof Date)
+        ? (value as { increment?: number; decrement?: number })
+        : null;
+    if (operation && typeof operation.increment === "number") {
+      resolved[field] = Number(row[field] ?? 0) + operation.increment;
+      continue;
+    }
+    if (operation && typeof operation.decrement === "number") {
+      resolved[field] = Number(row[field] ?? 0) - operation.decrement;
+      continue;
+    }
+    resolved[field] = value;
+  }
+  return resolved;
+}
+
 function matches(row: Row, where: Record<string, unknown>): boolean {
   return Object.entries(where).every(([key, value]) => {
     if (value === undefined) return true;
@@ -319,8 +348,9 @@ class Table {
     this.throwIfFailing();
     const row = await this.findUnique(args);
     if (!row) throw new Error(`${this.prefix} not found`);
-    this.assertUnique({ ...row, ...args.data } as Row, row);
-    Object.assign(row, args.data, { updatedAt: new Date() });
+    const data = resolveWrite(row, args.data);
+    this.assertUnique({ ...row, ...data } as Row, row);
+    Object.assign(row, data, { updatedAt: new Date() });
     this.journal?.record(this.prefix, "update");
     return row;
   }
@@ -332,8 +362,9 @@ class Table {
     this.throwIfFailing();
     const found = this.rows.filter((row) => matches(row, args.where));
     for (const row of found) {
-      this.assertUnique({ ...row, ...args.data } as Row, row);
-      Object.assign(row, args.data, { updatedAt: new Date() });
+      const data = resolveWrite(row, args.data);
+      this.assertUnique({ ...row, ...data } as Row, row);
+      Object.assign(row, data, { updatedAt: new Date() });
     }
     if (found.length > 0) this.journal?.record(this.prefix, "updateMany");
     return { count: found.length };
@@ -417,6 +448,40 @@ export function createDatabaseDouble() {
   );
   const availabilityRule = new Table("rule", {});
   const availabilityException = new Table("exception", {});
+  // Configuracao de lembrete (Goal021, WU-002): `reminderSettings` usa
+  // `tenantId` como chave primaria (nenhuma composta a resolver), e
+  // `reminderRule` usa a chave composta `(tenantId, slot)` que o schema real
+  // declara (`ReminderRule_pkey`), o "ate dois" que a constraint SQL garante.
+  const reminderSettings = new Table(
+    "reminderSettings",
+    {},
+    {
+      defaults: {
+        confirmationEnabled: () => false,
+        pricePolicy: () => "NEVER",
+      },
+    },
+  );
+  const reminderRule = new Table(
+    "reminderRule",
+    { tenantId_slot: ["tenantId", "slot"] },
+    { unique: [["tenantId", "slot"]] },
+  );
+  const reminderSettingsClient = {
+    rows: reminderSettings.rows,
+    // `include: { rules: true }` do `ReminderService.get()`: junta as
+    // `ReminderRule` do mesmo tenant, como o Prisma faria com a relacao real.
+    findUnique: async (args: Parameters<Table["findUnique"]>[0]) => {
+      const row = await reminderSettings.findUnique(args);
+      if (!row) return null;
+      const rules = await reminderRule.findMany({
+        where: { tenantId: row.tenantId },
+      });
+      return { ...row, rules };
+    },
+    upsert: (args: Parameters<Table["upsert"]>[0]) =>
+      reminderSettings.upsert(args),
+  };
   const appointment = new Table(
     "appointment",
     { tenantId_id: ["tenantId", "id"] },
@@ -443,6 +508,50 @@ export function createDatabaseDouble() {
         bufferBeforeMinutesSnapshot: () => 0,
         bufferAfterMinutesSnapshot: () => 0,
         seriesId: () => null,
+        // Versao notificavel (Goal021): o mesmo `DEFAULT 1` do schema real —
+        // atendimento novo nasce na versao 1 ("nunca mudou").
+        notifiableVersion: () => 1,
+      },
+    },
+  );
+  // Intencao de envio ao cliente (Goal021, WU-004). Duas coisas do banco real
+  // importam aqui e por isso estao declaradas: a chave composta da identidade
+  // — compromisso, especie, posicao e versao — que o `upsert` da recomputacao
+  // usa, e o indice unico sobre ela (`AppointmentNotificationIntent_identity_key`),
+  // sem o qual uma recomputacao repetida criaria a segunda intencao em silencio
+  // no dublê e seria recusada so em producao.
+  const appointmentNotificationIntent = new Table(
+    "appointmentNotificationIntent",
+    {
+      tenantId_id: ["tenantId", "id"],
+      tenantId_appointmentId_kind_slot_appointmentVersion: [
+        "tenantId",
+        "appointmentId",
+        "kind",
+        "slot",
+        "appointmentVersion",
+      ],
+    },
+    {
+      journal,
+      unique: [
+        ["tenantId", "appointmentId", "kind", "slot", "appointmentVersion"],
+      ],
+      defaults: {
+        state: () => "PENDING",
+        reason: () => null,
+        facts: () => null,
+        attemptCount: () => 0,
+        lastAttemptAt: () => null,
+        leaseOwner: () => null,
+        leaseToken: () => null,
+        leaseAcquiredAt: () => null,
+        leaseExpiresAt: () => null,
+        leaseHeartbeatAt: () => null,
+        outboundCorrelationId: () => null,
+        sentAt: () => null,
+        settledAt: () => null,
+        detail: () => null,
       },
     },
   );
@@ -789,10 +898,13 @@ export function createDatabaseDouble() {
     calendarSettings,
     availabilityRule,
     availabilityException,
+    reminderSettings: reminderSettingsClient,
+    reminderRule,
     timeBlock,
     appointmentHold,
     appointmentEvent,
     appointmentItem,
+    appointmentNotificationIntent,
     blockSeries,
     appointmentSeries,
     calendarMutationIdempotency,
@@ -888,10 +1000,13 @@ export function createDatabaseDouble() {
       calendarSettings,
       availabilityRule,
       availabilityException,
+      reminderSettings,
+      reminderRule,
       appointment,
       appointmentItem,
       appointmentHold,
       appointmentEvent,
+      appointmentNotificationIntent,
       timeBlock,
       blockSeries,
       appointmentSeries,

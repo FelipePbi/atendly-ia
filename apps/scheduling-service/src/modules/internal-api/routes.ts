@@ -11,6 +11,7 @@ import type {
 import { getPrisma } from "../../infrastructure/database/prisma.js";
 import {
   currentInternalContext,
+  requireDeliveryCaller,
   requireHumanCaller,
   requireInternalAuth,
 } from "../../shared/auth/internal-auth.js";
@@ -65,6 +66,14 @@ import {
   ImportPreviewService,
   type ImportRight,
 } from "../migrations/index.js";
+import {
+  claimDueNotificationIntents,
+  settleNotificationIntent,
+} from "../reminders/notification-dispatch-service.js";
+import {
+  MAX_REMINDER_LEAD_MINUTES,
+  ReminderService,
+} from "../reminders/reminder-service.js";
 import { AtendlyServiceService } from "../services/atendly-service-service.js";
 
 const sourceSchema = z.enum(["ATENDLY", "MINHA_AGENDA"]);
@@ -98,6 +107,56 @@ const availabilityBodySchema = z.object({
     .max(28),
   ...offerRulesShape,
 });
+// --- Configuracao de lembrete (Goal021, WU-002) -----------------------------
+const reminderSlotSchema = z.enum(["FIRST", "SECOND"]);
+const reminderPricePolicySchema = z.enum(["NEVER", "WHEN_FIXED"]);
+const reminderRuleBodySchema = z.object({
+  slot: reminderSlotSchema,
+  leadMinutes: z.number().int().positive().max(MAX_REMINDER_LEAD_MINUTES),
+});
+const reminderSettingsBodySchema = z.object({
+  confirmationEnabled: z.boolean().optional(),
+  pricePolicy: reminderPricePolicySchema.optional(),
+  // Zero e escolha legitima: desligar os lembretes de proposito.
+  rules: z.array(reminderRuleBodySchema).max(2),
+});
+
+// --- Reivindicacao e liquidacao da entrega (Goal021, WU-005) ---------------
+// Vocabulario fechado do motivo, o mesmo do enum do banco: a entrega escolhe
+// dentro dele e nunca manda texto livre no lugar do motivo.
+const notificationReasonSchema = z.enum([
+  "LEAD_ALREADY_PASSED",
+  "APPOINTMENT_VERSION_SUPERSEDED",
+  "APPOINTMENT_NOT_CONFIRMED",
+  "APPOINTMENT_CANCELLED",
+  "APPOINTMENT_ALREADY_STARTED",
+  "REMINDER_CONFIGURATION_CHANGED",
+  "CUSTOMER_WITHOUT_PHONE",
+  "CONTACT_IGNORED",
+  "AI_NOT_ENABLED",
+  "CHANNEL_NOT_CONNECTED",
+  "TRANSPORT_FAILED",
+  "TRANSPORT_UNKNOWN",
+  "ATTEMPTS_EXHAUSTED",
+]);
+const notificationClaimBodySchema = z.object({
+  owner: z.string().trim().min(1).max(128).optional(),
+  // Os tetos do corpo só apertam o padrão configurado; nenhum deles afrouxa
+  // o que o ambiente declarou, porque o teto existe contra a rajada.
+  limit: z.number().int().positive().max(500).optional(),
+  perTenantLimit: z.number().int().positive().max(500).optional(),
+  leaseTtlSeconds: z.number().int().positive().max(3_600).optional(),
+});
+const notificationSettleBodySchema = z.object({
+  leaseToken: z.string().trim().min(1).max(128),
+  outcome: z.enum(["SENT", "FAILED", "DISMISSED"]),
+  reason: notificationReasonSchema.optional(),
+  // Complemento sanitizado; nunca substitui o motivo e nunca carrega payload
+  // cru nem credencial.
+  detail: z.string().trim().min(1).max(500).optional(),
+  correlationId: z.string().trim().min(1).max(200).optional(),
+});
+
 const serviceColorTokenSchema = z.enum([
   "ROSE",
   "AMBER",
@@ -791,6 +850,68 @@ export async function registerManagementRoutes(
         maxLeadDays,
         granularityMinutes,
       });
+    },
+  );
+
+  // --- Configuracao de lembrete (Goal021, WU-002, G-27) --------------------
+  // So humano (BFF): quantos lembretes, antecedencia, confirmacao de
+  // presenca e politica de preco sao decisao do negocio, no mesmo padrao de
+  // disponibilidade e oferta acima. A IA nunca configura lembrete.
+
+  app.get("/internal/reminder-settings", internalOnly, async (request) => {
+    const context = currentInternalContext(request);
+    await requireCalendar(prisma, context.tenantId);
+    const reminders = new ReminderService(prisma, context.tenantId);
+    return data(request, reminderConfigDto(await reminders.get()));
+  });
+
+  app.patch("/internal/reminder-settings", internalOnly, async (request) => {
+    const context = currentInternalContext(request);
+    requireHumanCaller(context);
+    await requireCalendar(prisma, context.tenantId);
+    const body = parse(reminderSettingsBodySchema, request.body);
+    const reminders = new ReminderService(prisma, context.tenantId);
+    const config = await reminders.set(body);
+    return data(request, reminderConfigDto(config));
+  });
+
+  // --- Entrega das intencoes de envio (Goal021, WU-005) -------------------
+  // So o entregador (IA): reivindicar e liquidar sao o trabalho de quem fala
+  // com o cliente, e o BFF nao tem o que fazer aqui.
+  //
+  // A reivindicacao e a UNICA rota interna que atravessa negocios, de
+  // proposito: quem entrega atende todos, e a fila vence por `dueAt`. A
+  // justica entre negocios e o teto por tenant, aplicado no dono. A
+  // liquidacao volta a ser por negocio — ela e endereçada a uma intencao
+  // nomeada, e o tenant do cabecalho e quem a delimita.
+
+  app.post(
+    "/internal/notification-intents/claim",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      requireDeliveryCaller(context);
+      const body = parse(notificationClaimBodySchema, request.body ?? {});
+      return data(request, await claimDueNotificationIntents(prisma, body));
+    },
+  );
+
+  app.post(
+    "/internal/notification-intents/:id/settle",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      requireDeliveryCaller(context);
+      const { id } = parse(idParamsSchema, request.params);
+      const body = parse(notificationSettleBodySchema, request.body);
+      return data(
+        request,
+        await settleNotificationIntent(prisma, {
+          tenantId: context.tenantId,
+          intentId: id,
+          ...body,
+        }),
+      );
     },
   );
 
@@ -1825,6 +1946,23 @@ function assertOfferRules(rules: {
       400,
     );
   }
+}
+
+function reminderConfigDto(config: {
+  configured: boolean;
+  confirmationEnabled: boolean;
+  pricePolicy: string;
+  rules: Array<{ slot: string; leadMinutes: number }>;
+}) {
+  return {
+    configured: config.configured,
+    confirmationEnabled: config.confirmationEnabled,
+    pricePolicy: config.pricePolicy,
+    rules: config.rules.map((rule) => ({
+      slot: rule.slot,
+      leadMinutes: rule.leadMinutes,
+    })),
+  };
 }
 
 function exceptionDto(exception: {

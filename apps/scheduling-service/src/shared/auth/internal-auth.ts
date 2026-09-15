@@ -112,3 +112,22 @@ export function requireHumanCaller(
     );
   }
 }
+
+/**
+ * Só quem entrega ao cliente reivindica e liquida intenção de envio
+ * (Goal021). É o inverso de {@link requireHumanCaller}: a varredura é do
+ * entregador — hoje a IA —, e ela é a única rota interna que atravessa
+ * negócios, porque a fila de envio vence por `dueAt` e não por tenant. O BFF
+ * fala em nome de uma pessoa de um negócio só e não tem o que fazer aqui.
+ */
+export function requireDeliveryCaller(
+  context: InternalRequestContext,
+): void {
+  if (context.caller !== "ai-orchestrator") {
+    throw new AppError(
+      "DELIVERY_CALLER_REQUIRED",
+      "Only the delivery caller can claim or settle notification intents.",
+      403,
+    );
+  }
+}

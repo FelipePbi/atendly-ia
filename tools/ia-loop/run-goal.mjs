@@ -31,6 +31,7 @@ import { STAGES } from './lib/stage-identity.mjs';
 import { fullWorktreeFingerprint } from './lib/worktree-fingerprint.mjs';
 import { discoverGoal } from './lib/goal-discovery.mjs';
 import { planWorktree, createWorktreeForGoal, branchNameFor } from './lib/worktree-manager.mjs';
+import { provisionWorktreeDependencies } from './lib/worktree-dependencies.mjs';
 import { readWorkerHealth, WORKER_HEALTH, SESSION_STRATEGY } from './lib/worker-registry.mjs';
 import { LOOP_STATES, createLoopStateMachine, stateForDecision } from './lib/loop-state.mjs';
 import { LOOP_CONFIG, planAfterReview } from './lib/loop-config.mjs';
@@ -292,6 +293,25 @@ async function main() {
   emit(`  branch: ${worktree.branch}`);
   emit(`  initialHead: ${worktree.worktreeInitialHead}`);
   emit(`  executionBase (original): ${executionBase}`);
+  emit('');
+
+  // `node_modules` is gitignored, so the worktree is born with none. Until
+  // now the gap was filled by accident — whichever unit ran `npm install` to
+  // check its own work — which is why the GLOBAL gates have a history of
+  // dying on a missing dependency while the scoped ones pass. Deterministic,
+  // idempotent, and placed after the resume branch on purpose: a resumed
+  // worktree can be missing them just as easily as a new one.
+  const provisioning = await provisionWorktreeDependencies({ worktreePath: absWorktree, emit });
+  if (provisioning.failed.length > 0) {
+    // Not fatal. Whatever will not install is something the gates are about to
+    // report in far more detail, and stopping here would trade a red gate for
+    // a dead run.
+    await store.appendEvent({
+      type: 'WORKTREE_DEPENDENCIES_INCOMPLETE',
+      goal: goalId,
+      packages: provisioning.failed.map((failure) => failure.dir),
+    });
+  }
   emit('');
 
   await store.writeCurrentGoal({

@@ -39,6 +39,11 @@ import { createDeveloperProfileStore } from './lib/developer-profiles.mjs';
 import { createExecutionPlanStore } from './lib/execution-plan-store.mjs';
 import { classifyLease, createLeaseStore } from './lib/leases.mjs';
 import { applyPlanningResult } from './lib/planning-application.mjs';
+import {
+  PLANNING_FAILURE_ACTIONS,
+  classifyPlanningFailure,
+  findPlanningFailureEvent,
+} from './lib/planning-retry.mjs';
 import { isDirectExecution } from './lib/direct-execution.mjs';
 import {
   createGitProbe,
@@ -507,11 +512,71 @@ async function main() {
     machineState: machine.state, persistClosure, profileStore, planStore, store,
   });
 
+  /**
+   * One directed retry when the planner's own output violated the contract.
+   *
+   * PLAN_INVALID is the one failure class whose remedy is another sample: the
+   * inference completed, the Tech Lead answered, and the answer was malformed
+   * — a unit id shaped `WU1` instead of `WU-001`, a gate with no scope. The
+   * violation is a fact the next prompt can carry, which is what makes the
+   * retry directed rather than a reroll.
+   *
+   * This lived ONLY on the re-entry path below, and the asymmetry was the bug:
+   * the same failure got a retry when a person re-ran `ia-loop:close`, and
+   * stopped the autonomous run as UNKNOWN_FATAL when it happened the first
+   * time. Goal020 ended there — `Work Unit id "WU1" is not in the expected
+   * shape`, seven minutes of Opus discarded, HUMAN_REQUIRED, and the campaign
+   * frozen behind it because a closure that names no next Goal is read as a
+   * stop by `reconcileCampaignPosition` (deliberately, and rightly).
+   *
+   * Every other failure still stops. This is a narrow instrument: a contract
+   * violation in the answer, never a way to retry whatever is inconvenient.
+   */
+  async function planningWithDirectedRetry({ jobId, envelope }) {
+    if (envelope.ok) return envelope;
+
+    // The envelope's own `code` is the capacity/failure-taxonomy REASON (e.g.
+    // UNKNOWN_FATAL), not the underlying contract code — that lives only on
+    // the AGENT_FAILURE event, which also carries the sanitized diagnostic
+    // text a directed retry needs. `lib/planning-retry.mjs` owns that
+    // distinction, and owns it in one place so the answer cannot depend on
+    // which invocation is asking.
+    const failureEvent = findPlanningFailureEvent(await store.readEvents(), jobId);
+    const decision = classifyPlanningFailure({ envelope, failureEvent, jobId });
+
+    if (decision.action !== PLANNING_FAILURE_ACTIONS.RETRY_WITH_FEEDBACK) {
+      throw new SpikeError('PLANNING_FAILED', decision.message);
+    }
+
+    emit(decision.message);
+    if (decision.diagnostic) emit(`  violation: ${decision.diagnostic}`);
+
+    // A NEW jobId, so the invalid attempt stays on disk as history. The
+    // feedback comes from the DECISION, not from the raw event: one place
+    // normalised it, and reading around that place is how the two paths
+    // drifted apart in the first place.
+    const { envelope: retried } = await publishAndAwaitPlanning({
+      feedback: {
+        previousJobId: jobId,
+        code: decision.code,
+        diagnostic: decision.diagnostic,
+      },
+    });
+
+    if (!retried.ok) {
+      throw new SpikeError(
+        'PLANNING_FAILED',
+        `Directed retry also failed: [${retried.code}] ${retried.message}. `
+        + 'Re-run ia-loop:close to retry again using this new violation as feedback.',
+      );
+    }
+    return retried;
+  }
+
   if (!closure.planningJobId) {
     machine.transitionTo(LOOP_STATES.NEXT_GOAL_PLANNING);
-    const { envelope } = await publishAndAwaitPlanning();
-    if (!envelope.ok) throw new SpikeError('PLANNING_FAILED', `[${envelope.code}] ${envelope.message}`);
-    await applyPlanning(envelope);
+    const { jobId, envelope } = await publishAndAwaitPlanning();
+    await applyPlanning(await planningWithDirectedRetry({ jobId, envelope }));
   } else {
     machine.transitionTo(LOOP_STATES.NEXT_GOAL_PLANNING);
 
@@ -549,42 +614,13 @@ async function main() {
         // silently accept whatever the worktree happens to hold — exactly the
         // "edit the plan to make it pass" shortcut this must not take.
         //
-        // The envelope's own `code` is the capacity/failure-taxonomy REASON
-        // (e.g. UNKNOWN_FATAL), not the underlying contract code — that lives
-        // only on the AGENT_FAILURE event, which also carries the sanitized
-        // diagnostic text a directed retry needs.
-        const events = await store.readEvents();
-        const failureEvent = [...events].reverse()
-          .find((e) => e.type === 'AGENT_FAILURE' && e.jobId === closure.planningJobId);
-
-        if (failureEvent?.code !== 'PLAN_INVALID') {
-          throw new SpikeError(
-            'PLANNING_FAILED',
-            `Planning job ${closure.planningJobId} did not complete successfully `
-            + `(${priorEnvelope.code ?? 'UNKNOWN'}: ${priorEnvelope.message ?? 'no diagnostic recorded'}) `
-            + 'and is not an automatically-retryable content violation. Resolve manually.',
-          );
-        }
-
-        emit(`Planning job ${closure.planningJobId} failed PLAN_INVALID; retrying with the violation as explicit feedback.`);
-        emit(`  violation: ${failureEvent.diagnostic}`);
-
-        const { envelope } = await publishAndAwaitPlanning({
-          feedback: {
-            previousJobId: closure.planningJobId,
-            code: failureEvent.code,
-            diagnostic: failureEvent.diagnostic,
-          },
-        });
-
-        if (!envelope.ok) {
-          throw new SpikeError(
-            'PLANNING_FAILED',
-            `Directed retry also failed: [${envelope.code}] ${envelope.message}. `
-            + 'Re-run ia-loop:close to retry again using this new violation as feedback.',
-          );
-        }
-        await applyPlanning(envelope);
+        // Same instrument the first attempt uses, so the two can never drift:
+        // whether the violation happened moments ago or on a previous run, it
+        // is the same failure and it gets the same directed retry.
+        await applyPlanning(await planningWithDirectedRetry({
+          jobId: closure.planningJobId,
+          envelope: priorEnvelope,
+        }));
       }
     }
   }

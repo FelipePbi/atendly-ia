@@ -1703,8 +1703,10 @@ GAP_ANALYSIS estão parcialmente superados pelos fatos abaixo.
   retomar a sessão viva (`ImportPreviewScreen` antes da primeira execução, `ImportRunScreen`
   depois) quando há sessão, ou só o histórico (`ImportHistoryCard`) quando concluída — sem oferecer
   nova importação depois da conclusão. `ImportConflictsScreen` cobre as cinco decisões por item.
-  `ImportSettingsSection` é o ponto de entrada equivalente dentro de Configurações → Agenda, e o
-  item "Importação" do menu Mais passou a apontar para `/importacao` (antes
+  `ImportSettingsSection` foi o ponto de entrada equivalente dentro de Configurações → Agenda entre
+  o Goal020 e o Goal024; o hub de Configurações (Goal024) passou a apontar direto para
+  `/importacao`, e o bloco saiu do repositório por perder o único consumidor que tinha. O item
+  "Importação" do menu Mais passou a apontar para `/importacao` (antes
   `/migracao/para-atendly`). `features/migration/` (`MigrationScreen`, `ProductMigrationScreen`,
   `types.ts`), as rotas `app/(platform)/migracao/[step]` e `migracao/layout.tsx` e
   `shared/styles/atendly-migration.css` (628 linhas, substituído por `atendly-imports.css`) saíram
@@ -2138,3 +2140,93 @@ lugares diferentes:
   implantado — o laço nasce desligado por default, e ligá-lo é decisão de
   operação posterior a este diff, na mesma classe de gate operacional já
   declarada nos Goals 010/019/021/022.
+
+## Delta implementado — Goal024, 2026-09-16 (ACCEPTED na rodada 2 do [review024](reviews/024-review.md))
+
+A fotografia acima permanece como registro. Os fatos abaixo descrevem o
+que o diff aceito do Goal024 entrega para **G-31** na parte de
+Configurações — a última superfície de tela ainda não redesenhada — e
+para o resíduo de tela de **G-24**; nenhum contrato de conhecimento,
+retenção, lembrete ou central mudou.
+
+- **FATO atual (frontend, Configurações):** `ProductSettingsScreen.tsx`
+  deixou de conter as dezesseis seções embutidas (942 linhas) e virou
+  despachante de 105 linhas sobre módulos em `features/settings/` —
+  `SettingsHub.tsx`, `BusinessSettings.tsx`, `AiSettings.tsx`,
+  `AvailabilitySettings.tsx`, `CalendarSettings.tsx`,
+  `ConversationsSettings.tsx`, `WhatsAppSettings.tsx` e
+  `AccountSettings.tsx`. O único call site de `useShellConfig` do módulo
+  continua em `ProductSettingsScreen.tsx`, declarando a configuração de
+  shell uma vez por cenário vivo — os módulos de seção não chamam o hook,
+  idêntico à baseline. As primitivas antes embutidas na tela
+  (`Page`, `Password`, `SaveActions`, `SettingsMessage`, `ToneChoice`,
+  rótulos) saíram para `features/settings/shared/fields.tsx`,
+  `labels.ts` e `SettingsPage.tsx`. `RetentionSection` (Goal023),
+  `ReminderSettingsSection` (Goal021) e o painel de conexão de
+  `features/whatsapp/` não foram reescritos — continuam sendo montados
+  como já eram, agora pelos módulos novos. O hub ganhou entrada própria
+  para Importação apontando direto para `/importacao`, e
+  `ImportSettingsSection` (Goal020, o bloco que vivia dentro de
+  `CalendarSettings`) saiu do repositório por perder o único consumidor
+  que tinha. As oito rotas de
+  `app/(platform)/configuracoes/` continuam nos mesmos caminhos.
+- **FATO atual (frontend, conhecimento):** `features/knowledge/`
+  (`KnowledgeSection.tsx`, `KnowledgeDocumentForm.tsx`,
+  `OtherInfoSection.tsx`), consumido dentro de Configurações → IA, dá a
+  `BffKnowledgeService` seu primeiro consumidor real — listar, criar,
+  editar, desativar e o campo livre único (`PUT /v1/knowledge/other-info`)
+  —, com `BUSINESS_INFO` fora de todo seletor de tipo e tratamento
+  próprio para `502`/`KNOWLEDGE_INDEX_UNAVAILABLE` (a tela diz que nada
+  foi salvo). Nenhuma rota de conhecimento mudou; a tela consome
+  `GET/POST /v1/knowledge/documents`, `GET/PUT/DELETE
+  /v1/knowledge/documents/:id` e `PUT /v1/knowledge/other-info` como o
+  Goal012 os deixou.
+- **LIMITE (conhecimento, escrita-apenas):** o DTO de conhecimento
+  (`knowledgeDocumentDto`) **nunca devolve o texto indexado**, então a
+  tela não consegue reexibir o conteúdo vigente nem do documento nem do
+  campo livre. A caixa de conteúdo nasce vazia tanto em `OtherInfoSection`
+  quanto no modo edição de `KnowledgeDocumentForm`, e o que for digitado
+  substitui o texto anterior por completo — corrigir só o título obriga a
+  reescrever o conteúdo. As duas superfícies dizem isso na tela, e os
+  testes afirmam que dizem; fechar o limite exige mudar o contrato de
+  conhecimento, o que o Goal024 proibia e que D-040 registra como gatilho
+  de revisão.
+- **FATO atual (BFF, rotas de autenticação):** `POST /v1/auth/logout-all`
+  é rota pública nova e aditiva — sessão e CSRF como as demais mutações,
+  sem aceitar `userId`/`tenantId` do chamador — que reusa
+  `revokeAllUserSessions(userId, reason)` (já existente desde o Goal003 e
+  já usada em `PATCH /v1/auth/password`) com o motivo próprio
+  `LOGOUT_ALL_DEVICES`. A sessão que fez a chamada também é revogada;
+  como `UserSession` é consultada a cada requisição desde o Goal003, a
+  revogação derruba os outros dispositivos na requisição seguinte deles.
+  A frase da fotografia original em "BFF e autenticação" — "tokens já
+  emitidos não têm revogação por sessão ou mudança de senha" — está
+  **superada desde o Goal003** (revogação por sessão) e o Goal024
+  acrescenta a revogação **sob demanda do próprio usuário**, disparada
+  pela tela (`AccountSettings.tsx`, seção Conta), além das já existentes
+  por troca de senha e reset. Prova: teste de integração no BFF contra
+  PostgreSQL descartável (`apps/bff/tests/goal024-session-revocation.
+  integration.test.ts`) que a sessão anterior deixa de autenticar na
+  requisição seguinte e que a rota não aceita identidade do chamador.
+- **FATO atual (Home, conferência):** `features/dashboard/
+  DashboardScreen.tsx` foi conferida contra a seção "Início" do vault
+  ("status IA/WhatsApp; pendências; próximos atendimentos; poucas
+  métricas secundárias") e contra o que `GET /v1/status` e
+  `GET /v1/dashboard` efetivamente devolvem (`dashboardSchema` e
+  `systemStatusSchema` em `publicApiSchemas.ts`, rotas em
+  `modules/dashboard/routes.ts` e `modules/status/routes.ts`). **Nenhuma
+  divergência real foi encontrada** entre o que a tela afirma e o que os
+  dois contratos devolvem: a faixa de status, "Agenda de hoje", "Próximo
+  atendimento", "O que a Atendly fez hoje", "Precisam de atenção",
+  "Ações rápidas" e o checklist pós-onboarding leem exatamente os campos
+  que os schemas expõem, sem inventar métrica nem inferir estado de
+  configuração local. `DashboardScreen.tsx` não foi tocada neste diff.
+- **LIMITE:** exclusão de conta, suspensão de WhatsApp/automações,
+  cancelamento dentro do prazo e restore com novo teste de ativação
+  continuam fora — a parte de conta de **G-29** segue **explicitamente
+  aberta**, redirecionada ao **Goal024B**.
+- **LIMITE:** esta seção descreve o diff aceito na rodada 2, não um
+  commit nem um deploy. `validate:ui` cobre só rota pública, e
+  Configurações é autenticada inteira: a não regressão provada é a das
+  superfícies públicas e do chrome, e a fidelidade visual à referência
+  aprovada continua sendo conferência humana.

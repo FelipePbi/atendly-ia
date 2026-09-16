@@ -13,6 +13,7 @@ import { getPrisma } from "./prisma.js";
  */
 export type SessionRevocationReason =
   | "LOGOUT"
+  | "LOGOUT_ALL_DEVICES"
   | "PASSWORD_CHANGED"
   | "PASSWORD_RESET";
 

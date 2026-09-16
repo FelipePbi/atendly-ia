@@ -7,11 +7,13 @@
  * rota real `app/(platform)/importacao/page.tsx` — não `ImportsScreen`
  * importado direto — pelas quatro etapas da jornada (conexão, análise com
  * conflitos, execução com pendências, histórico concluído), e a rota real
- * `app/(platform)/configuracoes/agenda/page.tsx`, provando que o ponto de
- * entrada de Configurações → Agenda aponta para `/importacao` com o mesmo
- * `href` que a entrada "Mais" da navegação declara. Nenhuma das telas do
- * módulo (`ImportConflictsScreen`, `ImportHistoryCard`) fica sem importador
- * de produção: todas são alcançadas por uma dessas duas rotas.
+ * `app/(platform)/configuracoes/page.tsx` (hub), provando que o ponto de
+ * entrada de Configurações aponta para `/importacao` com o mesmo `href` que
+ * a entrada "Mais" da navegação declara. Desde o Goal024/WU-02 esse ponto de
+ * entrada vive só no hub — `ImportSettingsSection` não é mais montada dentro
+ * de Configurações → Agenda. Nenhuma das telas do módulo
+ * (`ImportConflictsScreen`, `ImportHistoryCard`) fica sem importador de
+ * produção: todas são alcançadas por uma dessas duas rotas.
  */
 
 import { render, screen } from "@testing-library/react";
@@ -71,7 +73,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
   }),
 }));
 
-import CalendarSettingsPage from "@/app/(platform)/configuracoes/agenda/page";
+import SettingsHubPage from "@/app/(platform)/configuracoes/page";
 import ImportacaoPage from "@/app/(platform)/importacao/page";
 
 function availableStateFixture(): ImportState {
@@ -341,29 +343,13 @@ describe("/importacao monta a jornada real pela própria rota", () => {
   });
 });
 
-describe("Configurações → Agenda aponta para a mesma rota que a navegação declara", () => {
-  test("/configuracoes/agenda mostra o ponto de entrada para /importacao", async () => {
+describe("Configurações → hub aponta para a mesma rota que a navegação declara", () => {
+  test("o hub de Configurações mostra o ponto de entrada para /importacao", async () => {
     getSettings.mockResolvedValue(settingsFixture());
-    getImportState.mockResolvedValue(availableStateFixture());
-    renderPage(<CalendarSettingsPage />);
+    renderPage(<SettingsHubPage />);
 
-    const link = await screen.findByRole("link", {
-      name: "Começar importação",
-    });
+    const link = await screen.findByRole("link", { name: /Importação/ });
     expect(link).toHaveAttribute("href", "/importacao");
-  });
-
-  test("com a importação concluída, o mesmo bloco mostra o histórico, sem CTA de nova importação", async () => {
-    getSettings.mockResolvedValue(settingsFixture());
-    getImportState.mockResolvedValue(completedState());
-    renderPage(<CalendarSettingsPage />);
-
-    expect(
-      await screen.findByRole("heading", { name: "Importação concluída" }),
-    ).toBeVisible();
-    expect(
-      screen.queryByRole("link", { name: /Começar importação/ }),
-    ).toBeNull();
   });
 
   test("a entrada 'Importação' do menu Mais aponta para a mesma rota que existe e monta conteúdo real", async () => {

@@ -45,6 +45,7 @@ import {
 import { captureSnapshot, checkDeveloperPolicy, checkReviewerPolicy, formatViolations } from './lib/policy-guards.mjs';
 import { createLeaseStore } from './lib/leases.mjs';
 import { buildReviewPacket } from './lib/review-packet.mjs';
+import { extractGoalRequirements } from './lib/evidence-trace.mjs';
 import { createExecutionPlanStore } from './lib/execution-plan-store.mjs';
 import { deriveGoalGateStatus } from './lib/goal-gate-status.mjs';
 import { createDeveloperProfileStore } from './lib/developer-profiles.mjs';
@@ -786,8 +787,30 @@ async function main() {
       currentRound: round,
     });
 
+    // --- Criteria coverage, before the expensive review --------------------
+    //
+    // Eleven of the eighteen blockers across Goals 020–023 are one shape: a
+    // numbered item the Goal document declares and the diff does not deliver.
+    // A DEEP review in Opus found each of them by reading. This asks the same
+    // question first, narrowly and on the standard model, so the answer is a
+    // fact in the packet rather than something the reviewer has to derive.
+    //
+    // Entirely optional. It never gates, never refuses, and any failure leaves
+    // `criteriaCoverage` null — a missing convenience must not cost a review.
+    const coverage = await assessCriteriaCoverage({
+      store, goal, round, changes, worktree: absWorktree, emit, leaseStore,
+    }).catch(async (error) => {
+      emit(`  cobertura de critérios não apurada: ${error.message}`);
+      await store.appendEvent({
+        type: 'CRITERIA_COVERAGE_SKIPPED', goal: goal.goalId, round, reason: error.code ?? 'UNKNOWN',
+      }).catch(() => {});
+      return null;
+    });
+
     const packet = buildReviewPacket({
       goal: goal.goalId, goalPath: goal.goalPath, round, reviewLevel: REVIEW_LEVEL,
+      criteriaCoverage: coverage?.result ?? null,
+      criteriaDeclared: coverage?.declared ?? 0,
       migrationAcceptedBaseline: goal.migrationAcceptedBaseline,
       executionBase, worktreeInitialHead: worktree.worktreeInitialHead,
       worktreePath: absWorktree, changes, developerResult: lastDevResult,
@@ -1086,6 +1109,50 @@ async function reportObserverStop({ store, emit, role, jobId, observed, goal, ro
 }
 
 /** Blockers may be plain strings or structured records; both must render. */
+/**
+ * Asks the standard model which of the Goal's numbered items this diff covers.
+ *
+ * Runs before the review and reports into its packet. It is a cheap reading of
+ * the diff against a written specification, NOT a second review: it answers one
+ * question per item and points at evidence.
+ *
+ * Returns null whenever it cannot answer — no requirements parsed out of the
+ * Goal document, the worker refused, the call failed. Every one of those is a
+ * missing convenience, and the caller treats it as such.
+ */
+async function assessCriteriaCoverage({ store, goal, round, changes, worktree, emit, leaseStore }) {
+  const goalText = await fs.readFile(goal.goalPath, 'utf8').catch(() => '');
+  const requirements = extractGoalRequirements(goalText);
+  if (requirements.length === 0) {
+    emit('  cobertura de critérios: o documento não declara itens numerados; nada a apurar.');
+    return null;
+  }
+
+  const jobId = store.newJobId(goal.goalId, round, 'tech_lead');
+  emit(`Cobertura de critérios: ${requirements.length} item(ns) → ${jobId}`);
+
+  await store.publishJob('tech_lead', {
+    protocolVersion: PROTOCOL_VERSION_V2,
+    jobId, role: 'tech_lead', type: 'CRITERIA_COVERAGE',
+    goal: goal.goalId, round,
+    worktree,
+    coverageContext: {
+      requirements,
+      changedFiles: changes.changedFiles,
+      diffStat: changes.diffStat,
+      diff: changes.diff,
+    },
+  });
+
+  const envelope = await waitForResult(store, 'tech_lead', jobId, { leaseStore });
+  if (!envelope?.ok) {
+    emit(`  cobertura de critérios: sem resposta utilizável (${envelope?.code ?? 'desconhecido'}).`);
+    return null;
+  }
+
+  return { result: envelope.result, declared: requirements.length };
+}
+
 function blockerText(blocker) {
   if (typeof blocker === 'string') return blocker;
   const id = blocker.id ? `${blocker.id}: ` : '';

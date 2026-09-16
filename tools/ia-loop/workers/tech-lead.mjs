@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 
-import { invokeAgent, resolveClaudeExecutable } from '../lib/claude-process.mjs';
+import { SpikeError, invokeAgent, resolveClaudeExecutable } from '../lib/claude-process.mjs';
 import {
   MODELS,
   ROUTING_CONFIG,
@@ -67,6 +67,11 @@ import {
   validateClosureDocResult,
 } from '../lib/closure-contracts.mjs';
 import { planningDecisionSchemaFor, validatePlanningDecision } from '../lib/planning-decision.mjs';
+import {
+  buildCriteriaCoveragePrompt,
+  criteriaCoverageSchemaFor,
+  validateCriteriaCoverage,
+} from '../lib/criteria-coverage.mjs';
 import { readJson } from '../lib/job-store.mjs';
 import { isDirectExecution } from '../lib/direct-execution.mjs';
 import { exitCodeForError, nameForExitCode } from '../lib/worker-exit.mjs';
@@ -108,7 +113,23 @@ const REVIEWER_TOOLS = ['Read', 'Glob', 'Grep', 'Bash'];
 const CLOSURE_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'];
 
 /** Job kinds this worker handles besides a review. */
-const CLOSURE_KINDS = ['CLOSURE_DOCUMENTATION', 'NEXT_GOAL_PLANNING'];
+const CLOSURE_KINDS = ['CLOSURE_DOCUMENTATION', 'NEXT_GOAL_PLANNING', 'CRITERIA_COVERAGE'];
+
+/**
+ * Which of those kinds OWN a stage of the loop.
+ *
+ * The two closure kinds are stages: they move the state machine and say so.
+ * CRITERIA_COVERAGE is not — it runs inside a round that is still being
+ * implemented and reviewed, and writing a closure state there would tell
+ * `resolveClosureResumePoint` that a Goal nobody has reviewed is being closed.
+ *
+ * One place decides this, read before the kind table exists and again by it.
+ */
+const KIND_OWNS_LOOP_STAGE = Object.freeze({
+  CLOSURE_DOCUMENTATION: true,
+  NEXT_GOAL_PLANNING: true,
+  CRITERIA_COVERAGE: false,
+});
 
 /**
  * The routing a job carries, or the stage's default when it does not carry
@@ -406,20 +427,56 @@ async function handleClosureJob(job) {
   telemetry.event('JOB', `${job.goal} ${kind}`);
   await store.appendEvent({ type: `${kind}_RECEIVED`, jobId: job.jobId, goal: job.goal });
 
-  await store.writeRuntime({
-    ...(await store.readRuntime()),
-    state: kind === 'CLOSURE_DOCUMENTATION' ? 'CLOSURE_DOCUMENTING' : 'NEXT_GOAL_PLANNING',
-    currentJobId: job.jobId,
-  });
+  // A kind that does not own a stage of the loop must not move the loop. The
+  // two closure kinds ARE stages and say so; CRITERIA_COVERAGE runs inside a
+  // round that is still being implemented and reviewed.
+  if (KIND_OWNS_LOOP_STAGE[kind] !== false) {
+    await store.writeRuntime({
+      ...(await store.readRuntime()),
+      state: kind === 'CLOSURE_DOCUMENTATION' ? 'CLOSURE_DOCUMENTING' : 'NEXT_GOAL_PLANNING',
+      currentJobId: job.jobId,
+    });
+  }
 
   const isPlanning = kind === 'NEXT_GOAL_PLANNING';
-  const prompt = isPlanning ? buildPlanningPrompt(job) : buildClosureDocPrompt(job);
-  const schema = isPlanning
-    ? planningDecisionSchemaFor({ jobId: job.jobId, goal: job.goal })
-    : closureDocSchemaFor({ jobId: job.jobId, goal: job.goal });
-  const validate = isPlanning
-    ? (p) => validatePlanningDecision(p, { jobId: job.jobId, goal: job.goal })
-    : (p) => validateClosureDocResult(p, { jobId: job.jobId, goal: job.goal });
+  // A table rather than nested ternaries: a third kind is data here, not
+  // another branch every future reader has to unpick.
+  const KINDS = {
+    NEXT_GOAL_PLANNING: {
+      prompt: () => buildPlanningPrompt(job),
+      schema: () => planningDecisionSchemaFor({ jobId: job.jobId, goal: job.goal }),
+      validate: (p) => validatePlanningDecision(p, { jobId: job.jobId, goal: job.goal }),
+    },
+    CLOSURE_DOCUMENTATION: {
+      prompt: () => buildClosureDocPrompt(job),
+      schema: () => closureDocSchemaFor({ jobId: job.jobId, goal: job.goal }),
+      validate: (p) => validateClosureDocResult(p, { jobId: job.jobId, goal: job.goal }),
+    },
+    CRITERIA_COVERAGE: {
+      prompt: () => buildCriteriaCoveragePrompt({
+        goal: job.goal,
+        requirements: job.coverageContext?.requirements ?? [],
+        diffStat: job.coverageContext?.diffStat ?? null,
+        diff: job.coverageContext?.diff ?? null,
+        changedFiles: job.coverageContext?.changedFiles ?? [],
+      }),
+      schema: () => criteriaCoverageSchemaFor({ jobId: job.jobId, goal: job.goal }),
+      validate: (p) => validateCriteriaCoverage(p, { jobId: job.jobId, goal: job.goal }),
+      // Read-only. Coverage reads a diff and answers a question; it has no
+      // business writing, and CLOSURE_TOOLS carries Write and Edit.
+      tools: ['Read', 'Glob', 'Grep'],
+      // It runs mid-round, before the review — NOT during closure. Writing a
+      // closure state here would tell `resolveClosureResumePoint` that a Goal
+      // it has not finished reviewing is being closed.
+      resumeFrom: LOOP_STATES.REVIEW_REQUIRED,
+    },
+  };
+  const handler = KINDS[kind];
+  if (!handler) throw new SpikeError('UNSUPPORTED_JOB_TYPE', `Closure kind ${kind} has no handler`);
+
+  const prompt = handler.prompt();
+  const schema = handler.schema();
+  const validate = handler.validate;
 
   // Planning is routed by risk; closure documentation is bookkeeping over a
   // decision already taken, so it runs on the standard model unless the job
@@ -438,7 +495,8 @@ async function handleClosureJob(job) {
     jobId: job.jobId,
     goal: job.goal,
     round: job.round ?? 0,
-    resumeFrom: isPlanning ? LOOP_STATES.NEXT_GOAL_PLANNING : LOOP_STATES.CLOSURE_DOCUMENTING,
+    resumeFrom: handler.resumeFrom
+      ?? (isPlanning ? LOOP_STATES.NEXT_GOAL_PLANNING : LOOP_STATES.CLOSURE_DOCUMENTING),
     onEvent: onCapacityEvent,
     router,
     invoke: async ({ attempt }) => {
@@ -451,7 +509,7 @@ async function handleClosureJob(job) {
         prompt,
         jsonSchema: schema,
         validatePayload: validate,
-        tools: CLOSURE_TOOLS,
+        tools: handler.tools ?? CLOSURE_TOOLS,
         worktree: job.worktree,
       });
     },

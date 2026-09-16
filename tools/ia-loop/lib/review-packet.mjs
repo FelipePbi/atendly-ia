@@ -14,6 +14,8 @@
 
 import { SpikeError } from './claude-process.mjs';
 import { summarizeGoalGateStatus } from './goal-gate-status.mjs';
+import { blockersAsItems, summarizeBlockerTrace, traceAll } from './evidence-trace.mjs';
+import { summarizeCriteriaCoverage } from './criteria-coverage.mjs';
 
 /** Diff kept inline in the packet; the full diff stays on disk. */
 const INLINE_DIFF_LIMIT = 200_000;
@@ -40,6 +42,14 @@ export function buildReviewPacket({
    * being made is goal-shaped, so this is the field that answers it.
    */
   goalGates = [],
+  /**
+   * The cheap reading of the Goal's numbered items against this diff, or null
+   * when it did not run. Null and "nothing missing" are different answers and
+   * `summarizeCriteriaCoverage` keeps them apart.
+   */
+  criteriaCoverage = null,
+  /** How many numbered items the Goal declares, so a partial answer shows as one. */
+  criteriaDeclared = 0,
 }) {
   if (!goal) throw new SpikeError('INVALID_ARGS', 'goal is required');
   if (!worktreeInitialHead) throw new SpikeError('INVALID_ARGS', 'worktreeInitialHead is required');
@@ -88,6 +98,32 @@ export function buildReviewPacket({
     // cannot be skimmed as "nothing to report".
     goalGates: Object.freeze(goalGates.map((row) => Object.freeze({ ...row }))),
     goalGatesSummary: summarizeGoalGateStatus(goalGates),
+
+    // What the previous round's blockers NAMED that this round's diff does not
+    // contain. Computed here from the packet's own diff, so it costs no call
+    // and cannot disagree with what the reviewer is reading.
+    //
+    // Never fatal: a failure to trace is a missing convenience, not a reason
+    // for the review not to happen.
+    ...(() => {
+      try {
+        const rows = traceAll(blockersAsItems(previousBlockers), {
+          changedFiles: changes.changedFiles ?? [],
+          diff: changes.diff ?? '',
+        });
+        return {
+          blockerTrace: Object.freeze(rows),
+          blockerTraceSummary: summarizeBlockerTrace(rows),
+        };
+      } catch {
+        return { blockerTrace: Object.freeze([]), blockerTraceSummary: '(não apurado)' };
+      }
+    })(),
+
+    // The Goal's own numbered items, read against this diff before the review.
+    // A fact next to the others; the reviewer still decides.
+    criteriaCoverage: criteriaCoverage ? Object.freeze({ ...criteriaCoverage }) : null,
+    criteriaCoverageSummary: summarizeCriteriaCoverage(criteriaCoverage, criteriaDeclared),
 
     developerResult,
 
@@ -213,6 +249,15 @@ export function renderReviewPrompt(packet) {
     // Above the blockers and above the review instructions on purpose: it is
     // the one fact that decides whether the rest is being judged against a
     // verified tree or against a read of the diff alone.
+    // Next to the gates, because the two answer the same worry from opposite
+    // sides: the gates say whether the tree was verified, this says whether the
+    // Goal's own written items were addressed.
+    'COBERTURA DOS ITENS NUMERADOS DO GOAL (leitura barata do diff, NÃO é a sua revisão):',
+    packet.criteriaCoverageSummary ?? '(não apurado)',
+    ...(packet.criteriaCoverage?.items ?? [])
+      .filter((item) => item.verdict === 'NOT_COVERED')
+      .map((item) => `  - ${item.id}: sem nada no diff${item.evidence ? ` — ${item.evidence}` : ''}`),
+    '',
     'ESTADO DOS GATES DESTE GOAL (todas as rodadas):',
     packet.goalGatesSummary ?? '(não apurado)',
     ...(packet.goalGates?.length
@@ -224,6 +269,19 @@ export function renderReviewPrompt(packet) {
     packet.previousBlockers.length > 0
       ? `Blockers da rodada anterior:\n${packet.previousBlockers.map((b) => `  - ${b}`).join('\n')}`
       : 'Blockers anteriores: nenhum (primeira rodada).',
+    // Right under the blockers, because it is about them and about nothing
+    // else. A correction round can answer every blocker `met: true` truthfully
+    // and still have missed the one thing each blocker named last.
+    ...(packet.blockerTrace?.length
+      ? [
+        '',
+        'O QUE OS BLOCKERS CITAM E ESTA RODADA NÃO TOCOU:',
+        packet.blockerTraceSummary ?? '(não apurado)',
+        ...packet.blockerTrace
+          .filter((row) => row.absent?.length > 0)
+          .map((row) => `  - ${row.id}: ${row.absent.join(', ')}`),
+      ]
+      : []),
     '',
     'Faça um review DEEP dirigido, conforme o próprio Goal exige:',
     '- inspecione o diff real e os arquivos alterados;',

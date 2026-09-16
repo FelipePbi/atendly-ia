@@ -934,7 +934,8 @@ base `0f4ac74`.
   nulo significa "o negócio ainda não escolheu" — distinção que sustenta a
   pendência `AI_TONE_NOT_SELECTED` do onboarding. Os dois valores antigos
   continuam membros válidos do tipo e de `schema.prisma`, legíveis até o
-  Goal026.
+  Goal027 — a v47 redirecionou para lá toda retirada de **valor legado de
+  dado**, porque o Goal026 retira código e contrato sem criar migration.
 - **FATO atual:** o vocabulário do estilo é o mesmo nos dois lados
   (`apps/bff/src/lib/ai-conversation-style.ts` e
   `apps/ai-orchestrator/src/modules/tenant-config/ai-settings.ts`): entrada

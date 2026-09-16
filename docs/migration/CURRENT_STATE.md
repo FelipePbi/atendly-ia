@@ -891,7 +891,7 @@ verificados no [review010](reviews/010-review.md) sobre a base `e381c15`.
   presumida. O direito de importação é estrutural: mora só em
   `ImportSession.completedAt`, e as duas tabelas não se comunicam. O
   protocolo antigo continua alcançável como compatibilidade declarada até o
-  Goal025, mas seu `start` chama `assertImportAvailable` — depois da
+  Goal026, mas seu `start` chama `assertImportAvailable` — depois da
   conclusão única nem por ali se reprocessa a origem.
 - **FATO atual:** sete rotas por operação existem no Scheduling e no BFF
   (`POST /v1/calendar/imports`, `analyze`, `GET
@@ -934,7 +934,7 @@ base `0f4ac74`.
   nulo significa "o negócio ainda não escolheu" — distinção que sustenta a
   pendência `AI_TONE_NOT_SELECTED` do onboarding. Os dois valores antigos
   continuam membros válidos do tipo e de `schema.prisma`, legíveis até o
-  Goal025.
+  Goal026.
 - **FATO atual:** o vocabulário do estilo é o mesmo nos dois lados
   (`apps/bff/src/lib/ai-conversation-style.ts` e
   `apps/ai-orchestrator/src/modules/tenant-config/ai-settings.ts`): entrada
@@ -2224,7 +2224,7 @@ retenção, lembrete ou central mudou.
 - **LIMITE:** exclusão de conta, suspensão de WhatsApp/automações,
   cancelamento dentro do prazo e restore com novo teste de ativação
   continuam fora — a parte de conta de **G-29** segue **explicitamente
-  aberta**, redirecionada ao **Goal024B**.
+  aberta**, redirecionada ao **Goal025**.
 - **LIMITE:** esta seção descreve o diff aceito na rodada 2, não um
   commit nem um deploy. `validate:ui` cobre só rota pública, e
   Configurações é autenticada inteira: a não regressão provada é a das

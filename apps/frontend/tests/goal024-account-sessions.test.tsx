@@ -17,14 +17,15 @@
  *   recuperável dentro do próprio diálogo, sem concluir silenciosamente que
  *   derrubou os outros aparelhos quando na verdade a chamada não foi adiante;
  * - "Sair da conta" continua chamando só `auth.logout`, sem tocar
- *   `logoutAllDevices`;
- * - "Excluir conta" é copy de indisponibilidade futura, com o botão
- *   desabilitado — não promete uma ação que não existe.
+ *   `logoutAllDevices`.
+ *
+ * O fluxo real de "Excluir conta" (Goal025/WU-08) tem suíte própria em
+ * `goal025-account-deletion-screen.test.tsx`.
  */
 
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 
 import { AccountSettings } from "@/features/settings/AccountSettings";
 
@@ -41,12 +42,21 @@ const setUnauthenticated = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
+    account: { requestDeletion: vi.fn(), cancelDeletion: vi.fn() },
     auth: { changePassword, logout, logoutAllDevices },
   }),
   useProductRuntime: () => ({
     refreshSession: vi.fn(),
     session: { user: { email: "marina@studio.com" } },
     setUnauthenticated,
+  }),
+}));
+
+vi.mock("@/shared/runtime/systemStatus", () => ({
+  useSystemStatus: () => ({
+    accountDeletion: { status: "NONE", dueAt: null },
+    phase: "loaded",
+    refresh: vi.fn(),
   }),
 }));
 
@@ -153,19 +163,4 @@ test("'Sair da conta' continua chamando só o logout simples", async () => {
   expect(logoutAllDevices).not.toHaveBeenCalled();
   await waitFor(() => expect(setUnauthenticated).toHaveBeenCalledTimes(1));
   expect(replace).toHaveBeenCalledWith("/login");
-});
-
-describe("excluir conta", () => {
-  test("é copy de indisponibilidade futura, com o botão desabilitado", () => {
-    render(<AccountSettings />);
-
-    expect(
-      screen.getByText(
-        "A exclusão de conta faz parte de uma etapa futura do produto e ainda não está disponível.",
-      ),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Exclusão indisponível" }),
-    ).toBeDisabled();
-  });
 });

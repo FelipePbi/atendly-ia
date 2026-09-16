@@ -115,6 +115,30 @@ const envSchema = z.object({
   // pergunta que esses campos respondem — sem virar deposito indefinido. A
   // **linha** nunca e apagada: ela e a identidade de dedupe do Goal021.
   RETENTION_INTENT_CONTENT_DAYS: intEnv(90),
+  // Purga da conta vencida (Goal025/WU-07). Variavel **propria**, separada da
+  // varredura de retencao de proposito: ligar a expiracao de conteudo nao pode
+  // ligar, por consequencia, o apagamento de contas inteiras. Desligada por
+  // default pelo mesmo motivo do Goal023, agora mais forte — a passada apaga o
+  // negocio e o dono. Desligada, nada mais do produto muda: nenhuma rota,
+  // leitura ou tela depende do laco, e as suites nunca o sobem.
+  ACCOUNT_PURGE_ENABLED: boolEnv(false),
+  // Intervalo entre passadas quando a anterior nao deixou trabalho. Uma conta
+  // vencida ha 15 minutos e uma vencida ha 1 minuto sao a mesma coisa para um
+  // prazo de sete dias.
+  ACCOUNT_PURGE_INTERVAL_SECONDS: intEnv(900),
+  // Validade do lease por conta. Folgado em relacao a uma passada (duas
+  // chamadas internas com teto de linhas mais o apagamento local), curto o
+  // bastante para que um processo morto nao prenda a conta por muito tempo.
+  ACCOUNT_PURGE_LEASE_TTL_SECONDS: intEnv(300),
+  // Quantas contas uma passada tenta purgar. Baixo de proposito: o volume
+  // normal de exclusoes vencidas no mesmo minuto e proximo de zero, e cada
+  // conta custa duas chamadas internas e um DELETE em cascata.
+  ACCOUNT_PURGE_BATCH: intEnv(5),
+  // Teto de linhas por loja remota, por conta, por passada. O que passar dele
+  // volta como `hasMore`, a conta continua SCHEDULED e a passada seguinte
+  // continua de onde parou — nenhuma passada purga sem fim. O teto das rotas
+  // internas (WU-05/WU-06) e 5000; ficar abaixo dele e escolha do chamador.
+  ACCOUNT_PURGE_MAX_ROWS_PER_STORE: intEnv(2_000),
   PASSWORD_RESET_TOKEN_TTL_MINUTES: intEnv(30),
   PASSWORD_RESET_PUBLIC_URL: stringEnv("http://localhost:3001/nova-senha"),
   PASSWORD_RESET_DELIVERY_URL: stringEnv(),

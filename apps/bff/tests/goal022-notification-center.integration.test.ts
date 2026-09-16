@@ -251,6 +251,7 @@ describe.skipIf(!RUN_INTEGRATION)("Goal022: central contra PostgreSQL", () => {
 
     const body = await readStatus(owner);
     expect(Object.keys(body.data).sort()).toEqual([
+      "accountDeletion",
       "ai",
       "degraded",
       "whatsapp",

@@ -178,6 +178,11 @@ describe("scope routing", () => {
         }),
       ),
     ).toBe("retention:purge");
+    expect(
+      requiredScope(
+        request({ method: "POST", url: "/internal/retention/tenant" }),
+      ),
+    ).toBe("tenant:purge");
   });
 
   // Goal023: apagar conteudo de cliente tem escopo proprio. Quem so provisiona
@@ -194,6 +199,24 @@ describe("scope routing", () => {
       authorizeInternalRequest(
         request({ token: commandToken }),
         "retention:purge",
+      ).use,
+    ).toBe("command");
+  });
+
+  // Goal025/WU-05: apagar o negocio inteiro tem escopo proprio, distinto de
+  // `retention:purge` — quem pode purgar conteudo de conversa nao passa a
+  // poder apagar o negocio inteiro por consequencia.
+  it("keeps the tenant purge scope distinct from the content purge scope", () => {
+    expect(() =>
+      authorizeInternalRequest(
+        request({ token: provisioningToken }),
+        "tenant:purge",
+      ),
+    ).toThrowError(expect.objectContaining({ statusCode: 403 }));
+    expect(
+      authorizeInternalRequest(
+        request({ token: commandToken }),
+        "tenant:purge",
       ).use,
     ).toBe("command");
   });

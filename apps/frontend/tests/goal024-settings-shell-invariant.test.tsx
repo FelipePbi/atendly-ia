@@ -60,6 +60,7 @@ const setUnauthenticated = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
+    account: { requestDeletion: vi.fn(), cancelDeletion: vi.fn() },
     auth: { changePassword, logout, logoutAllDevices },
     knowledge: { list: knowledgeList, create: knowledgeCreate },
     retention: { get: getRetention, update: updateRetention },
@@ -78,6 +79,17 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
     refreshSession,
     session: { user: { email: "marina@studio.com" } },
     setUnauthenticated,
+  }),
+}));
+
+// `AccountSettings` lê `accountDeletion` de `useSystemStatus` (Goal025/WU-08);
+// esta suíte não testa o ciclo de vida da conta, só a invariante do shell, e
+// não monta `SystemStatusProvider` — dublar aqui evita acoplar as duas coisas.
+vi.mock("@/shared/runtime/systemStatus", () => ({
+  useSystemStatus: () => ({
+    accountDeletion: { status: "NONE", dueAt: null },
+    phase: "loaded",
+    refresh: vi.fn(),
   }),
 }));
 

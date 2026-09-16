@@ -1,7 +1,9 @@
 import type { FastifyRequest } from "fastify";
 
 import type { AiOrchestratorClient } from "../clients/ai-orchestrator/index.js";
+import type { InternalRequestContext } from "../clients/internal-http-client.js";
 import type { SchedulingClient } from "../clients/scheduling/index.js";
+import { isDeletionPending } from "../modules/account/state.js";
 import { internalContext } from "../modules/tenant/context.js";
 import { resolveAiConversationStyle } from "./ai-conversation-style.js";
 import { businessContextPayload } from "./business-profile.js";
@@ -56,6 +58,10 @@ export interface AiActivationDeps {
  *    vigente de ativação (ao menos um serviço operacional) ter sido conferida
  *    nesta mesma passada. Este Goal **acrescenta** a exigência do teste; ele
  *    não substitui nem contorna a que já existia.
+ * 5. **Não ressuscita conta em exclusão.** Com `AccountDeletion` `SCHEDULED`,
+ *    o desejado é `false` e a autoativação não roda (Goal025/WU-04). Negócio
+ *    sem exclusão agendada não sente nada disso: o comportamento é o mesmo,
+ *    linha por linha.
  */
 export async function reconcileAiActivation(
   request: FastifyRequest,
@@ -83,6 +89,23 @@ async function reconcile(
   const settings = await prisma.aiSettings.findUnique({
     where: { tenantId: tenant.tenantId },
   });
+  // A guarda de não-reativação (Goal025/WU-04). Está **aqui**, no caminho
+  // comum, e não em `GET /v1/status` ou em qualquer outro chamador: a
+  // reconciliação roda em toda requisição que a invoca, e uma guarda por
+  // chamador seria uma guarda que o próximo chamador esquece.
+  //
+  // Enquanto a exclusão está `SCHEDULED`, o desejado do negócio deixa de ser
+  // lido de `AiSettings` e passa a ser `false` — não basta pular a
+  // autoativação. O início da exclusão desliga o desejado na mesma transação
+  // em que grava (WU-02), mas a **projeção** daquele momento é tolerante a
+  // falha: se a IA estava fora do ar, o efetivo ficou `true`. Forçar o
+  // desejado a `false` aqui é o que faz a próxima requisição desligar de
+  // verdade, em vez de reprojetar um `true` que ninguém mais quer.
+  const deletionPending = isDeletionPending(
+    await prisma.accountDeletion.findUnique({
+      where: { tenantId: tenant.tenantId },
+    }),
+  );
   const run = await deps.ai.getActivationTest(context);
 
   // A execução que autorizou a ativação deixou de valer: trocar ou revincular
@@ -103,8 +126,10 @@ async function reconcile(
     return "DEACTIVATED_BY_CHANNEL_CHANGE";
   }
 
-  // Autoativação: **só** execução bem-sucedida, e só uma vez por execução.
+  // Autoativação: **só** execução bem-sucedida, e só uma vez por execução —
+  // e nunca com exclusão em vigor, por mais bem-sucedida que a execução seja.
   if (
+    !deletionPending &&
     !settings?.enabled &&
     run?.state === "SUCCEEDED" &&
     !run.supersededByChannelChange &&
@@ -130,7 +155,7 @@ async function reconcile(
   // Convergência do que já está decidido: o desejado é o do BFF, e a IA
   // precisa refleti-lo. Uma tentativa, e só quando há divergência de fato.
   const effective = await deps.ai.getAiTenantConfig(context);
-  const desired = Boolean(settings?.enabled);
+  const desired = deletionPending ? false : Boolean(settings?.enabled);
   if (effective === null) {
     // Tenant nunca projetado. Projetar o desejado é convergir, não inventar.
     return (await project(request, deps, desired)) ? "CONVERGED" : "FAILED";
@@ -150,26 +175,60 @@ async function project(
   deps: AiActivationDeps,
   enabled: boolean,
 ): Promise<boolean> {
-  const tenant = currentTenantContext(request);
+  return projectAiDesiredState(internalContext(request), deps, enabled, {
+    warn: (payload, message) => request.log.warn(payload, message),
+  });
+}
+
+/** O mínimo de cliente que a projeção do desejado precisa. */
+export interface AiProjectionDeps {
+  ai: Pick<AiOrchestratorClient, "updateTenantConfig">;
+}
+
+/** O mínimo de log que a projeção precisa; existe para não arrastar a request. */
+export interface AiProjectionLogger {
+  warn(payload: Record<string, unknown>, message: string): void;
+}
+
+/**
+ * A projeção do desejado, sem depender da requisição (Goal025/WU-02).
+ *
+ * `project` acima delega para cá e nada mudou para ele. O que muda é que o
+ * início da exclusão de conta — que roda fora da reconciliação e precisa
+ * projetar `enabled: false` — chama **esta** função em vez de montar um
+ * `updateTenantConfig` próprio. Uma cópia ali significaria dois lugares
+ * decidindo o que é "o desejado do negócio": este lê `AiSettings.tone` e o
+ * `BusinessProfile` como sempre leu.
+ *
+ * Continua sem lançar. Para a exclusão isso é o ponto: a IA fora do ar não
+ * pode impedir o dono de pedir a exclusão da própria conta, e o desejado já
+ * está gravado no BFF de qualquer forma.
+ */
+export async function projectAiDesiredState(
+  context: InternalRequestContext,
+  deps: AiProjectionDeps,
+  enabled: boolean,
+  log: AiProjectionLogger,
+): Promise<boolean> {
   const prisma = getPrisma();
   const [settings, profile] = await Promise.all([
-    prisma.aiSettings.findUnique({ where: { tenantId: tenant.tenantId } }),
+    prisma.aiSettings.findUnique({ where: { tenantId: context.tenantId } }),
     prisma.businessProfile.upsert({
-      where: { tenantId: tenant.tenantId },
-      create: { tenantId: tenant.tenantId },
+      where: { tenantId: context.tenantId },
+      create: { tenantId: context.tenantId },
       update: {},
     }),
   ]);
   try {
-    await deps.ai.updateTenantConfig(internalContext(request), {
+    await deps.ai.updateTenantConfig(context, {
       enabled,
       tone: resolveAiConversationStyle(settings?.tone),
       businessContext: businessContextPayload(profile),
     });
     return true;
   } catch (error) {
-    request.log.warn(
-      { err: toErrorMessage(error), tenantId: tenant.tenantId },
+    log.warn(
+      { err: toErrorMessage(error), tenantId: context.tenantId },
       "AI tenant config projection failed during reconciliation.",
     );
     return false;

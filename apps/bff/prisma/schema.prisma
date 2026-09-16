@@ -302,6 +302,56 @@ model RetentionSweepState {
   @@index([lastRunAt])
 }
 
+/// Estado do ciclo de vida da exclusao de conta (Goal025). Vocabulario
+/// fechado: `SCHEDULED` aguarda o vencimento, `CANCELLED` e `PURGED` sao
+/// terminais.
+enum AccountDeletionStatus {
+  SCHEDULED
+  CANCELLED
+  PURGED
+}
+
+/// Estado duravel da exclusao de conta, uma linha por negocio (Goal025,
+/// WU-01). Pedido novo sobre linha `CANCELLED` reescreve a mesma linha —
+/// `tenantId` e a identidade estavel do pedido, nao um evento entre varios.
+///
+/// SEM RELACAO PRISMA PARA `Tenant` NEM `User`, de proposito: esta linha e a
+/// prova de que a exclusao aconteceu, e por isso precisa sobreviver a purga
+/// dos dois (o Goal purga o Tenant e, por ultimo, o User). Uma FK com
+/// `onDelete: Cascade` apagaria a prova junto com o dono; uma FK sem cascade
+/// bloquearia a propria purga. `tenantId` e `requestedByUserId` sao so os
+/// IDs, sem constraint de chave estrangeira no banco. Depois de `PURGED` a
+/// linha nao guarda nenhum dado pessoal: nenhum e-mail, nome de negocio,
+/// telefone ou conteudo passa por aqui.
+///
+/// LEASE PELO RELOGIO DO BANCO, como no Goal023: `leaseAcquiredAt` e
+/// `leaseExpiresAt` sao TIMESTAMPTZ, sempre comparadas com `now()` do
+/// servidor. `leaseToken` e o fencing: a purga so vale para quem ainda
+/// segura o token que reivindicou.
+model AccountDeletion {
+  tenantId          String                @id
+  requestedByUserId String
+  status            AccountDeletionStatus @default(SCHEDULED)
+  requestedAt       DateTime              @db.Timestamptz(3)
+  dueAt             DateTime              @db.Timestamptz(3)
+  cancelledAt       DateTime?             @db.Timestamptz(3)
+  purgedAt          DateTime?             @db.Timestamptz(3)
+
+  /// Identidade da instancia que segura o lease. Diagnostico, nunca
+  /// controle: quem purga e o par (`leaseExpiresAt`, `leaseToken`).
+  leaseOwner      String?
+  leaseToken      String?
+  leaseAcquiredAt DateTime? @db.Timestamptz(3)
+  leaseExpiresAt  DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// A leitura do laco de purga: quem venceu e ainda esta `SCHEDULED`.
+  @@index([status, dueAt])
+  @@index([leaseExpiresAt])
+}
+
 /// Espécie da notificação da central (Goal022). Vocabulário fechado: cada
 /// espécie tem uma fonte, uma chave de dedupe e uma regra de resolução
 /// declaradas em `modules/notifications/species.ts`. Espécie nova é decisão de

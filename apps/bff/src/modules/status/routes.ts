@@ -10,6 +10,7 @@ import {
   currentTenantContext,
   requireTenantContext,
 } from "../../lib/tenant-context.js";
+import { accountDeletionStore } from "../account/service.js";
 import { settled, whatsappSummary } from "../dashboard/routes.js";
 import { reconcileStatusConditions } from "../notifications/reconcile.js";
 import { internalContext } from "../tenant/context.js";
@@ -31,6 +32,12 @@ type AiState = "ACTIVE" | "OFF" | "PENDING" | "UNKNOWN";
  * vem depois dela é a leitura real do que ficou, não uma promessa do que foi
  * tentado. `ai.reconciled` diz o que aconteceu, para o estado continuar
  * honesto mesmo quando a convergência não deu certo.
+ *
+ * Goal025/WU-03: `accountDeletion` lê a mesma linha que `POST`/`DELETE
+ * /v1/account/deletion` gravam, pela mesma loja (`accountDeletionStore`) —
+ * não uma segunda leitura reinventada aqui. `status: "NONE"` é o negócio sem
+ * exclusão nenhuma; `dueAt` é o vencimento que a tela usa para contar os
+ * sete dias.
  */
 export async function registerV1StatusRoutes(
   app: FastifyInstance,
@@ -38,6 +45,7 @@ export async function registerV1StatusRoutes(
   const ai = new AiOrchestratorClient();
   const evolution = new EvolutionClient();
   const scheduling = new SchedulingClient();
+  const accountDeletion = accountDeletionStore();
 
   app.get(
     "/v1/status",
@@ -51,13 +59,15 @@ export async function registerV1StatusRoutes(
         ai,
         scheduling,
       });
-      const [whatsappResult, aiConfigResult, aiSettings] = await Promise.all([
-        settled(whatsappSummary(tenant.userId, request.id, evolution)),
-        settled(ai.getAiTenantConfig(context)),
-        getPrisma().aiSettings.findUnique({
-          where: { tenantId: tenant.tenantId },
-        }),
-      ]);
+      const [whatsappResult, aiConfigResult, aiSettings, deletion] =
+        await Promise.all([
+          settled(whatsappSummary(tenant.userId, request.id, evolution)),
+          settled(ai.getAiTenantConfig(context)),
+          getPrisma().aiSettings.findUnique({
+            where: { tenantId: tenant.tenantId },
+          }),
+          accountDeletion.find(tenant.tenantId),
+        ]);
 
       const checkedAt = new Date().toISOString();
       const whatsapp: {
@@ -101,6 +111,12 @@ export async function registerV1StatusRoutes(
       return dataResponse(request, {
         whatsapp,
         ai: ai_,
+        // Goal025/WU-03: o estado da exclusão de conta, para a tela contar os
+        // dias até a purga. `dueAt` só existe junto de uma linha; sem exclusão
+        // pedida nunca houve o que vencer.
+        accountDeletion: deletion
+          ? { status: deletion.status, dueAt: deletion.dueAt.toISOString() }
+          : { status: "NONE" as const, dueAt: null },
         degraded:
           whatsappResult.status === "error" ||
           aiConfigResult.status === "error",

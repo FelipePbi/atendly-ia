@@ -15,12 +15,12 @@ import {
   requireTenantContext,
 } from "../../lib/tenant-context.js";
 import { internalContext } from "../tenant/context.js";
+import { disconnectWhatsApp } from "./disconnect.js";
 import {
   findLinkedInstance,
   type LinkedInstance,
   requireLinkedInstance,
   resolveInstanceCredential,
-  resolveLinkState,
   sealedInstanceCredentialData,
 } from "./instance-link.js";
 
@@ -106,34 +106,16 @@ export async function registerV1WhatsAppRoutes(
     { preHandler: requireTenantContext },
     async (request) => {
       const tenant = currentTenantContext(request);
-      const state = await resolveLinkState(tenant);
-      if (state.kind === "divergent" || state.kind === "absent") {
-        // Recusa igual à das demais rotas: na divergência já haveria outro
-        // negócio no meio, e apagar seria decidir por ele.
-        if (state.kind === "divergent") await findLinkedInstance(tenant);
-        return dataResponse(request, { disconnected: true });
-      }
-
-      const instance = state.instance;
-      // Sem dono de negócio a credencial não é abrível — a cifra está ligada ao
-      // vínculo. O logout autenticado é pulado; a instância remota ainda é
-      // removida pela credencial administrativa.
-      if (state.kind === "linked") {
-        const credential = await resolveInstanceCredential(instance);
-        await evolution
-          .logoutInstance(credential, request.id)
-          .catch(() => null);
-      }
-      await evolution
-        .deleteInstance(
-          instance.evolutionInstanceId ?? instance.evolutionInstanceName,
-          request.id,
-        )
-        .catch(() => null);
-      await getPrisma().whatsAppInstance.delete({ where: { id: instance.id } });
-      if (state.kind === "pending") {
+      // O caminho em si mora em `disconnect.ts` desde o Goal025/WU-02: a
+      // exclusão de conta precisa executar exatamente este, e não uma cópia.
+      // A divergência continua recusando com `CONFLICT` de dentro dele.
+      const result = await disconnectWhatsApp(tenant, {
+        evolution,
+        requestId: request.id,
+      });
+      if (result.outcome === "PENDING_DISCARDED") {
         request.log.info(
-          { instanceId: instance.id },
+          { instanceId: result.instanceId },
           "Pending WhatsApp link discarded by its own owner",
         );
       }

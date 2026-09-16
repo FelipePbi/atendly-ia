@@ -115,6 +115,18 @@ const contentPurgeResultSchema = z.object({
 
 export type ContentPurgeResult = z.infer<typeof contentPurgeResultSchema>;
 
+// Contagens de uma passada de purga do negocio inteiro (Goal025/WU-05). As
+// tabelas sao as da IA e a lista e dela: o BFF registra o que voltou e nao
+// replica aqui um schema que nao e seu — um modelo novo na IA nao pode exigir
+// deploy do BFF para continuar sendo purgado.
+const tenantPurgeResultSchema = z.object({
+  deleted: z.record(z.string(), z.number().int().nonnegative()),
+  totalDeleted: z.number().int().nonnegative(),
+  hasMore: z.boolean(),
+});
+
+export type TenantPurgeResult = z.infer<typeof tenantPurgeResultSchema>;
+
 // Central de notificacoes (Goal022): uma entrada por conversa que espera
 // atendimento humano. `contactName` e o nome do contato quando a conversa tem
 // um e `null` quando nao tem: telefone nao atravessa esta fronteira em forma
@@ -542,6 +554,30 @@ export class AiOrchestratorClient {
   }
 
   /**
+   * Derruba o canal do negocio na IA (Goal025/WU-02).
+   *
+   * Usado pelo inicio da exclusao de conta. Sem canal ativo a IA responde
+   * `supersededByChannelChange: true` para a execucao que autorizou a
+   * ativacao, e `reconcileAiActivation` deixa de ter como religar a IA — a
+   * nao-reativacao vira propriedade verificavel, nao promessa.
+   *
+   * Mesma credencial de `provisionEvolutionChannel` (`provisioning`): desligar
+   * o vinculo e a outra ponta da autoridade que o liga.
+   */
+  async deactivateEvolutionChannel(
+    context: InternalRequestContext,
+  ): Promise<number> {
+    const result = await this.http.request({
+      method: "DELETE",
+      path: "/internal/channel-connections/evolution",
+      context,
+      use: "provisioning",
+      schema: z.object({ ok: z.literal(true), deactivated: z.number() }),
+    });
+    return result.deactivated;
+  }
+
+  /**
    * Conhecimento do negocio, editavel pelo modulo (Goal012/WU-01).
    *
    * Cada salvamento cria versao nova e inativa a anterior no lado da IA;
@@ -840,6 +876,31 @@ export class AiOrchestratorClient {
           maxRows: input.maxRows,
         },
         schema: envelope(contentPurgeResultSchema),
+      })
+    ).data;
+  }
+
+  /**
+   * Purga do negocio inteiro na IA (Goal025/WU-07 chamando a rota do WU-05).
+   *
+   * Sem cutoff nenhum, ao contrario de `purgeConversationContent`: aqui nao ha
+   * janela de prazo, o negocio inteiro vai embora. O tenant viaja so no
+   * contexto interno ja autenticado — nao existe campo de corpo para apagar
+   * outro negocio. O teto limita a passada e `hasMore` diz se sobrou trabalho;
+   * rodar de novo sobre negocio ja purgado nao e erro. Chamador: a purga de
+   * conta vencida, nunca uma rota publica.
+   */
+  async purgeTenant(
+    context: InternalRequestContext,
+    input: { maxRows: number },
+  ): Promise<TenantPurgeResult> {
+    return (
+      await this.http.request({
+        method: "POST",
+        path: "/internal/retention/tenant",
+        context,
+        body: { maxRows: input.maxRows },
+        schema: envelope(tenantPurgeResultSchema),
       })
     ).data;
   }

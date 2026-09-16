@@ -87,6 +87,10 @@ import {
   ReminderService,
 } from "../reminders/reminder-service.js";
 import { AtendlyServiceService } from "../services/atendly-service-service.js";
+import {
+  TENANT_PURGE_MAX_ROWS_LIMIT,
+  TenantPurgeService,
+} from "./tenantPurge.js";
 
 const sourceSchema = z.enum(["ATENDLY", "MINHA_AGENDA"]);
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
@@ -188,6 +192,17 @@ const notificationContentRetentionBodySchema = z.object({
     .min(1)
     .max(NOTIFICATION_CONTENT_RETENTION_MAX_ROWS_LIMIT),
 });
+
+// Purga do negocio inteiro (Goal025/WU-06). `.strict()` recusa qualquer campo
+// alem de `maxRows`: nao existe forma de mandar lista de negocios nem sinal de
+// "apague tudo" pelo corpo, e o tenant nunca vem daqui — vem so do contexto
+// interno ja autenticado (`currentInternalContext`). Sem `maxRows` nao ha
+// passada.
+const tenantPurgeBodySchema = z
+  .object({
+    maxRows: z.number().int().min(1).max(TENANT_PURGE_MAX_ROWS_LIMIT),
+  })
+  .strict();
 const aiCreatedAppointmentEventsQuerySchema = z.object({
   // BigInt de `AppointmentEvent.sequence`, sempre nao negativo; a validacao
   // de forma so aceita digitos e a validacao de valor fica no service, que e
@@ -492,6 +507,7 @@ export async function registerManagementRoutes(
   const prisma = prismaClient;
   const internalOnly = { preHandler: requireInternalAuth };
   const migrations = new CalendarMigrationService(prisma);
+  const tenantPurge = new TenantPurgeService(prisma);
   // Sem recuperacao global no boot (Goal010, WU-05): subir o servico nao
   // reprocessa job de negocio nenhum. A retomada da importacao e por tenant e
   // sob lease (`resumeImportSessions`), pedida por quem tem o negocio em
@@ -1745,6 +1761,32 @@ export async function registerManagementRoutes(
       estimatedRevenueToday: revenue(todayAppointments),
       calendar: await calendarOverview(prisma, context),
     });
+  });
+
+  /**
+   * Purga do negocio inteiro (Goal025/WU-06).
+   *
+   * Chamada pela exclusao de conta, depois do prazo de arrependimento: apaga
+   * tudo do negocio nas ~27 tabelas com `tenantId` do schema do Scheduling,
+   * na ordem segura de chave estrangeira declarada em `TENANT_PURGE_TABLES`.
+   *
+   * O tenant vem so do contexto interno ja autenticado, nunca do corpo — nao
+   * ha campo para apagar outro negocio, nem lista, nem "apague tudo". Sob
+   * teto por passada e idempotente: rodar de novo sobre negocio ja purgado
+   * nao encontra linha e nao e erro.
+   */
+  app.post("/internal/retention/tenant", internalOnly, async (request) => {
+    const context = currentInternalContext(request);
+    const body = parse(tenantPurgeBodySchema, request.body);
+    const result = await tenantPurge.purge({
+      tenantId: context.tenantId,
+      maxRows: body.maxRows,
+    });
+    app.log.info(
+      { tenantId: context.tenantId, ...result },
+      "Tenant purge pass completed",
+    );
+    return data(request, result);
   });
 }
 

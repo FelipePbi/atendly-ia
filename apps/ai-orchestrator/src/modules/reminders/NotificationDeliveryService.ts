@@ -34,11 +34,13 @@ import { composeNotificationText } from "./notification-message.js";
  *
  * - **contato `ignored`** → dispensada. Regra absoluta do produto, que
  *   prevalece sobre a sessao;
- * - **canal do negocio nao conectado** → **falha** auditavel. E problema
- *   operacional do negocio, nao decisao do cliente, e some da vista se for
- *   tratado como dispensa;
- * - **IA nao efetivamente habilitada** → dispensada. Perguntar "confirma?"
- *   para um numero que ninguem vai ler e pior do que lembrete nenhum.
+ * - **IA nao efetivamente habilitada** → dispensada, e **avaliada primeiro**.
+ *   Perguntar "confirma?" para um numero que ninguem vai ler e pior do que
+ *   lembrete nenhum; e negocio com a automacao desligada nao produz alerta
+ *   operacional por nao ter canal (Goal025/WU-04);
+ * - **canal do negocio nao conectado, com a IA ligada** → **falha** auditavel.
+ *   E problema operacional do negocio, nao decisao do cliente, e some da vista
+ *   se for tratado como dispensa;
  *
  * A saida e gravada **antes** do transporte, com o `correlationId`
  * deterministico que o dono derivou da identidade da intencao. Antes de
@@ -160,22 +162,18 @@ export class NotificationDeliveryService {
       correlationId: intent.correlationId,
     };
 
-    // 1. Vinculo do negocio. Vem primeiro porque contato e conversa so tem
-    //    identidade dentro de um canal: sem vinculo nao ha o que resolver.
-    //    Vinculo ausente, inativo ou sem credencial projetada e a mesma
-    //    situacao para quem espera a mensagem — o negocio nao esta conectado.
-    const channel = await this.resolveChannel(intent.tenantId);
-    if (!channel) {
-      return {
-        ...base,
-        outcome: "FAILED",
-        reason: "CHANNEL_NOT_CONNECTED",
-        detail: "tenant has no active WhatsApp channel to deliver from",
-      };
-    }
-
-    // 2. Aptidao efetiva da IA para o negocio, pelo mesmo caminho que o turno
+    // 1. Aptidao efetiva da IA para o negocio, pelo mesmo caminho que o turno
     //    de entrada le (Goal019): `AiTenantConfig` do banco, nunca payload.
+    //
+    //    Vem **antes** do vinculo (Goal025/WU-04). Negocio com a automacao
+    //    desligada nao ia enviar de qualquer jeito, e a ordem anterior fazia
+    //    a ausencia de canal falar mais alto: a conta cujo dono pediu a
+    //    exclusao — que desliga a IA e derruba o canal na mesma passada —
+    //    ganhava `CHANNEL_NOT_CONNECTED`, ou seja, falha auditavel e alerta
+    //    `REMINDER_FAILED` na central por ter obedecido ao proprio dono.
+    //    Para todo o resto nada muda: canal ausente com a IA ligada continua
+    //    sendo falha, que e o caso operacional que o alerta existe para
+    //    mostrar.
     const { aiSettings } = await loadTenantExecutionContext(
       this.prisma,
       intent.tenantId,
@@ -186,6 +184,20 @@ export class NotificationDeliveryService {
         outcome: "DISMISSED",
         reason: "AI_NOT_ENABLED",
         detail: "AI is not enabled for this tenant",
+      };
+    }
+
+    // 2. Vinculo do negocio. Contato e conversa so tem identidade dentro de um
+    //    canal: sem vinculo nao ha o que resolver adiante. Vinculo ausente,
+    //    inativo ou sem credencial projetada e a mesma situacao para quem
+    //    espera a mensagem — o negocio nao esta conectado.
+    const channel = await this.resolveChannel(intent.tenantId);
+    if (!channel) {
+      return {
+        ...base,
+        outcome: "FAILED",
+        reason: "CHANNEL_NOT_CONNECTED",
+        detail: "tenant has no active WhatsApp channel to deliver from",
       };
     }
 

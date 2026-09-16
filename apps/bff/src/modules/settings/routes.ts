@@ -23,6 +23,7 @@ import {
   currentTenantContext,
   requireTenantContext,
 } from "../../lib/tenant-context.js";
+import { assertAiActivationNotBlockedByDeletion } from "../account/service.js";
 import { internalContext } from "../tenant/context.js";
 
 const businessSchema = z.object({
@@ -140,7 +141,15 @@ export async function registerV1SettingsRoutes(
     { preHandler: requireTenantContext },
     async (request) => {
       const body = parseBodyWithAiConversationStyle(aiSchema, request.body);
+      const tenant = currentTenantContext(request);
       if (body.enabled) {
+        // Goal025 §3: conta em exclusao nao religa a IA por nenhum caminho, e
+        // este e o unico caminho de pedido humano que grava `enabled: true`.
+        // Antes da checagem de servico operacional de proposito: a exclusao e
+        // sobre a conta inteira, e perguntar ao Scheduling se da para ativar
+        // uma conta que esta sendo apagada nao faz sentido nem em ordem nem em
+        // custo.
+        await assertAiActivationNotBlockedByDeletion(tenant.tenantId);
         const calendar = await scheduling.calendar(internalContext(request));
         if (!calendar.capabilities.aiActivationReady) {
           throw new AppError(
@@ -150,7 +159,6 @@ export async function registerV1SettingsRoutes(
           );
         }
       }
-      const tenant = currentTenantContext(request);
       await getPrisma().aiSettings.upsert({
         where: { tenantId: tenant.tenantId },
         create: {

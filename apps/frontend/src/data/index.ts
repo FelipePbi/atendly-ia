@@ -1,5 +1,6 @@
 export * from "./http/BffHttpClient";
 export * from "./mappers/publicApiSchemas";
+export * from "./services/BffAccountService";
 export * from "./services/BffActivationTestService";
 export * from "./services/BffAuthService";
 export * from "./services/BffCalendarService";

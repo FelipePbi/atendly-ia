@@ -3,20 +3,57 @@
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
+import { BffHttpError } from "@/data";
 import { getProductServices, useProductRuntime } from "@/shared/runtime/ProductRuntime";
+import {
+  accountDeletionDaysRemaining,
+  useSystemStatus,
+} from "@/shared/runtime/systemStatus";
 import { Dialog } from "@/shared/ui/Dialog";
 
 import { formString, Password, SaveActions } from "./shared/fields";
 import { SettingsPage } from "./shared/SettingsPage";
 
+/**
+ * A contagem de dias é a de `systemStatus`, a mesma que o aviso persistente do
+ * shell usa: o prazo mostrado aqui e o mostrado lá não podem divergir.
+ */
+function daysRemainingCopy(days: number): string {
+  if (days <= 0) {
+    return "O prazo para cancelar termina hoje. Depois disso os dados são apagados e não é possível recuperar a conta.";
+  }
+  if (days === 1) {
+    return "Falta 1 dia para os dados serem apagados definitivamente.";
+  }
+  return `Faltam ${days} dias para os dados serem apagados definitivamente.`;
+}
+
 export function AccountSettings() {
   const router = useRouter();
   const { session, setUnauthenticated } = useProductRuntime();
+  const {
+    accountDeletion,
+    phase: statusPhase,
+    refresh: refreshStatus,
+  } = useSystemStatus();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [confirmingLogoutAll, setConfirmingLogoutAll] = useState(false);
   const [loggingOutAll, setLoggingOutAll] = useState(false);
   const [logoutAllError, setLogoutAllError] = useState<string | null>(null);
+
+  const [requestingDeletion, setRequestingDeletion] = useState(false);
+  const [requestingDeletionBusy, setRequestingDeletionBusy] = useState(false);
+  const [requestingDeletionError, setRequestingDeletionError] = useState<
+    string | null
+  >(null);
+
+  const [cancellingDeletion, setCancellingDeletion] = useState(false);
+  const [cancellingDeletionBusy, setCancellingDeletionBusy] = useState(false);
+  const [cancellingDeletionError, setCancellingDeletionError] = useState<
+    string | null
+  >(null);
+
   async function changePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -61,6 +98,47 @@ export function AccountSettings() {
     setUnauthenticated();
     router.replace("/login");
   }
+
+  async function requestAccountDeletion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const password = formString(new FormData(event.currentTarget), "password");
+    setRequestingDeletionBusy(true);
+    setRequestingDeletionError(null);
+    try {
+      await getProductServices().account.requestDeletion(password);
+    } catch (error: unknown) {
+      setRequestingDeletionBusy(false);
+      setRequestingDeletionError(
+        error instanceof BffHttpError && error.status === 401
+          ? "Senha atual incorreta."
+          : "Não foi possível pedir a exclusão agora. Tente novamente.",
+      );
+      return;
+    }
+    setRequestingDeletionBusy(false);
+    setRequestingDeletion(false);
+    // O pedido já foi aceito pelo servidor; reler `GET /v1/status` é o único
+    // jeito de a tela mostrar o vencimento real sem inventar um estado local.
+    refreshStatus();
+  }
+
+  async function cancelAccountDeletionRequest() {
+    setCancellingDeletionBusy(true);
+    setCancellingDeletionError(null);
+    try {
+      await getProductServices().account.cancelDeletion();
+    } catch {
+      setCancellingDeletionBusy(false);
+      setCancellingDeletionError(
+        "Não foi possível cancelar agora. Tente novamente.",
+      );
+      return;
+    }
+    setCancellingDeletionBusy(false);
+    setCancellingDeletion(false);
+    refreshStatus();
+  }
+
   return (
     <SettingsPage title="Conta" description="Gerencie credenciais e acesso.">
       <div className="settings-stack">
@@ -101,20 +179,12 @@ export function AccountSettings() {
             </button>
           </div>
         </section>
-        <section className="settings-panel settings-danger-zone">
-          <div className="settings-panel-header">
-            <div>
-              <h2>Excluir conta</h2>
-              <p>
-                A exclusão de conta faz parte de uma etapa futura do produto e
-                ainda não está disponível.
-              </p>
-            </div>
-          </div>
-          <button className="btn btn-danger" disabled type="button">
-            Exclusão indisponível
-          </button>
-        </section>
+        <AccountDeletionSection
+          accountDeletion={accountDeletion}
+          onCancelOpen={() => setCancellingDeletion(true)}
+          onRequestOpen={() => setRequestingDeletion(true)}
+          statusPhase={statusPhase}
+        />
       </div>
       <Dialog
         eyebrow="Sair de todos os dispositivos"
@@ -156,6 +226,197 @@ export function AccountSettings() {
           </button>
         </div>
       </Dialog>
+      <Dialog
+        eyebrow="Excluir conta"
+        onClose={() => {
+          setRequestingDeletion(false);
+          setRequestingDeletionError(null);
+        }}
+        open={requestingDeletion}
+        title="Excluir sua conta?"
+      >
+        <ul className="settings-modal-list">
+          <li>As automações são desligadas agora.</li>
+          <li>O WhatsApp é desconectado agora.</li>
+          <li>Você tem sete dias para cancelar a exclusão.</li>
+          <li>
+            Depois desse prazo, os dados são apagados e não é possível
+            recuperar.
+          </li>
+        </ul>
+        <form onSubmit={(event) => void requestAccountDeletion(event)}>
+          <Password name="password" label="Senha atual" />
+          {requestingDeletionError && (
+            <p className="field-help" role="alert">
+              {requestingDeletionError}
+            </p>
+          )}
+          <div className="modal-actions">
+            <button
+              className="btn btn-secondary"
+              disabled={requestingDeletionBusy}
+              type="button"
+              onClick={() => {
+                setRequestingDeletion(false);
+                setRequestingDeletionError(null);
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              className="btn btn-danger"
+              disabled={requestingDeletionBusy}
+              type="submit"
+            >
+              {requestingDeletionBusy ? "Pedindo exclusão..." : "Pedir exclusão"}
+            </button>
+          </div>
+        </form>
+      </Dialog>
+      <Dialog
+        eyebrow="Cancelar exclusão"
+        onClose={() => {
+          setCancellingDeletion(false);
+          setCancellingDeletionError(null);
+        }}
+        open={cancellingDeletion}
+        title="Cancelar a exclusão da conta?"
+      >
+        <p className="settings-modal-copy">
+          O WhatsApp e a IA não voltam a funcionar sozinhos. Para voltar a
+          operar, reconecte o WhatsApp e refaça o teste real de ativação.
+        </p>
+        {cancellingDeletionError && (
+          <p className="field-help" role="alert">
+            {cancellingDeletionError}
+          </p>
+        )}
+        <div className="modal-actions">
+          <button
+            className="btn btn-secondary"
+            disabled={cancellingDeletionBusy}
+            type="button"
+            onClick={() => {
+              setCancellingDeletion(false);
+              setCancellingDeletionError(null);
+            }}
+          >
+            Voltar
+          </button>
+          <button
+            className="btn btn-primary"
+            disabled={cancellingDeletionBusy}
+            type="button"
+            onClick={() => void cancelAccountDeletionRequest()}
+          >
+            {cancellingDeletionBusy ? "Cancelando..." : "Cancelar exclusão"}
+          </button>
+        </div>
+      </Dialog>
     </SettingsPage>
+  );
+}
+
+type AccountDeletionSummary = { status: string; dueAt: string | null } | null;
+
+/**
+ * A zona de risco de Excluir conta, com quatro leituras do mesmo
+ * `GET /v1/status`: carregando, indisponível, sem pedido (ou cancelado, que
+ * admite pedir de novo) e agendado. Nunca assume "sem pedido" enquanto a
+ * primeira leitura não chegou — isso esconderia uma exclusão já agendada.
+ */
+function AccountDeletionSection({
+  accountDeletion,
+  onCancelOpen,
+  onRequestOpen,
+  statusPhase,
+}: {
+  accountDeletion: AccountDeletionSummary;
+  onCancelOpen: () => void;
+  onRequestOpen: () => void;
+  statusPhase: "error" | "loaded" | "loading";
+}) {
+  if (!accountDeletion && statusPhase === "loading") {
+    return (
+      <section
+        aria-hidden="true"
+        className="settings-panel settings-danger-zone"
+      >
+        <div className="settings-panel-header">
+          <div>
+            <h2>Excluir conta</h2>
+            <p>Carregando o estado da exclusão...</p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (!accountDeletion) {
+    return (
+      <section className="settings-panel settings-danger-zone">
+        <div className="settings-panel-header">
+          <div>
+            <h2>Excluir conta</h2>
+            <p role="alert">
+              Não foi possível carregar o estado da exclusão agora. Atualize a
+              página e tente de novo.
+            </p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (accountDeletion.status === "SCHEDULED" && accountDeletion.dueAt) {
+    const days = accountDeletionDaysRemaining(accountDeletion.dueAt);
+    return (
+      <section className="settings-panel settings-danger-zone">
+        <div className="settings-panel-header">
+          <div>
+            <h2>Exclusão da conta agendada</h2>
+            <p role="status">{daysRemainingCopy(days)}</p>
+          </div>
+        </div>
+        <button
+          className="btn btn-secondary"
+          type="button"
+          onClick={onCancelOpen}
+        >
+          Cancelar exclusão
+        </button>
+      </section>
+    );
+  }
+
+  if (accountDeletion.status === "PURGED") {
+    return (
+      <section className="settings-panel settings-danger-zone">
+        <div className="settings-panel-header">
+          <div>
+            <h2>Conta excluída</h2>
+            <p>Os dados desta conta já foram apagados.</p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="settings-panel settings-danger-zone">
+      <div className="settings-panel-header">
+        <div>
+          <h2>Excluir conta</h2>
+          <p>
+            Encerre o uso da Atendly. Automações e WhatsApp são desligados na
+            hora, e você tem sete dias para cancelar antes de os dados serem
+            apagados sem volta.
+          </p>
+        </div>
+      </div>
+      <button className="btn btn-danger" type="button" onClick={onRequestOpen}>
+        Excluir conta
+      </button>
+    </section>
   );
 }

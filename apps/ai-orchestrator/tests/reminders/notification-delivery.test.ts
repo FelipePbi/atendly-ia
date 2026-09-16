@@ -319,6 +319,28 @@ describe("notification delivery", () => {
     expect(world.messages.size).toBe(0);
   });
 
+  it("dispensa por IA desligada mesmo sem canal, sem inventar falha operacional", async () => {
+    // Goal025/WU-04: e o estado da conta cujo dono pediu a exclusao — a IA
+    // desligada e o canal derrubado na mesma passada. A aptidao da IA e
+    // avaliada primeiro, entao a intencao pendente termina DISMISSED com
+    // AI_NOT_ENABLED, do vocabulario fechado vigente, e nao FAILED com
+    // CHANNEL_NOT_CONNECTED — que viraria alerta REMINDER_FAILED na central
+    // contra uma conta que esta desligada porque assim foi pedido.
+    const world = harness({ aiEnabled: false, channelStatus: "DISCONNECTED" });
+
+    const outcome = await world.service.deliver(intent());
+
+    expect(outcome.outcome).toBe("DISMISSED");
+    expect(outcome.reason).toBe("AI_NOT_ENABLED");
+    expect(world.sendText).not.toHaveBeenCalled();
+    expect(world.settleNotificationIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: "DISMISSED",
+        reason: "AI_NOT_ENABLED",
+      }),
+    );
+  });
+
   it("writes the same factual body in the three styles", async () => {
     const bodies = new Map<string, string>();
     for (const tone of ["PROFESSIONAL", "BALANCED", "CASUAL"]) {

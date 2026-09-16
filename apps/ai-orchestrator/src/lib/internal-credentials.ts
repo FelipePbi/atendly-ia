@@ -43,6 +43,10 @@ export type InternalScope =
   | "activation-test:read"
   | "activation-test:write"
   | "retention:purge"
+  // Purga do negocio inteiro (Goal025/WU-05): escopo proprio, deliberadamente
+  // distinto de `retention:purge` — apagar todo o rastro do negocio na IA nao
+  // e consequencia de poder apagar so o conteudo de conversa.
+  | "tenant:purge"
   // Escopo deliberadamente não concedido a nenhuma credencial: é o destino de
   // caminho interno sem escopo declarado, para que rota nova falhe fechada.
   | "internal:unmapped";
@@ -73,6 +77,9 @@ const SCOPES_BY_USE: Record<InternalUse, readonly InternalScope[]> = {
     // varredura do BFF. Escopo proprio de proposito — quem pode ler conversa
     // nao passa a poder apagar conteudo por consequencia.
     "retention:purge",
+    // Purga do negocio inteiro na exclusao de conta (Goal025/WU-05): mesmo
+    // chamador e mesmo uso (comando comum), escopo proprio.
+    "tenant:purge",
   ],
 };
 

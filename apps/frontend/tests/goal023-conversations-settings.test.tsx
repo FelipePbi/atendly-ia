@@ -32,6 +32,7 @@ const getWhatsapp = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
+    account: { requestDeletion: vi.fn(), cancelDeletion: vi.fn() },
     auth: { changePassword: vi.fn(), logout: vi.fn() },
     retention: { get: getRetention, update: updateRetention },
     settings: { get: getSettings },
@@ -41,6 +42,17 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
     refreshSession: vi.fn(),
     session: { user: { email: "marina@studio.com" } },
     setUnauthenticated: vi.fn(),
+  }),
+}));
+
+// `AccountSettings` lê `accountDeletion` de `useSystemStatus` (Goal025/WU-08);
+// esta suíte é sobre Conversas hospedar a retenção, não sobre o ciclo de vida
+// da conta, e não monta `SystemStatusProvider`.
+vi.mock("@/shared/runtime/systemStatus", () => ({
+  useSystemStatus: () => ({
+    accountDeletion: { status: "NONE", dueAt: null },
+    phase: "loaded",
+    refresh: vi.fn(),
   }),
 }));
 

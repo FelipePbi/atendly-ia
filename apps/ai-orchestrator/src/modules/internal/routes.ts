@@ -85,6 +85,10 @@ import {
 } from "../tenant-config/business-context.js";
 import { loadTenantExecutionContext } from "../tenant-config/tenant-execution-context.js";
 import { AssistantToolRegistry } from "../tools/assistant-tools.js";
+import {
+  TENANT_PURGE_MAX_ROWS_LIMIT,
+  TenantPurgeService,
+} from "./tenantPurge.js";
 
 const provisionChannelSchema = z.object({
   externalInstanceId: z.string().min(1),
@@ -142,6 +146,17 @@ const contentPurgeSchema = z.object({
   personalCutoff: z.iso.datetime({ offset: true }),
   maxRows: z.number().int().min(1).max(CONTENT_PURGE_MAX_ROWS_LIMIT),
 });
+
+// Purga do negocio inteiro (Goal025/WU-05). `.strict()` recusa qualquer campo
+// alem de `maxRows`: nao existe forma de mandar lista de negocios nem sinal de
+// "apague tudo" pelo corpo, e o tenant nunca vem daqui — vem so do contexto
+// interno ja autenticado (`trustedTenantContext`). Sem `maxRows` nao ha
+// passada: e o mesmo principio do Goal023, agora sobre o negocio inteiro.
+const tenantPurgeSchema = z
+  .object({
+    maxRows: z.number().int().min(1).max(TENANT_PURGE_MAX_ROWS_LIMIT),
+  })
+  .strict();
 
 // Goal019/WU-07: ignorar por telefone, sem conversa aberta ainda — o mesmo
 // limite de `startActivationTestSchema.tenantPhone` (validar aqui falha
@@ -291,6 +306,7 @@ export async function registerInternalRoutes(
       new PgVectorKnowledgeChunkIndexer(new OpenAIEmbeddingProvider()),
     );
   const contentPurge = new ContentPurgeService(prisma);
+  const tenantPurge = new TenantPurgeService(prisma);
   const customerMemoryService = new CustomerMemoryService(prisma);
   const customerMemory = options.customerMemory ?? customerMemoryService;
   const customerSummary =
@@ -406,6 +422,27 @@ export async function registerInternalRoutes(
         status: connection.status,
       },
     });
+  });
+
+  /**
+   * Derruba o canal do negocio (Goal025/WU-02).
+   *
+   * Chamada pelo inicio da exclusao de conta, nunca por varredura: o negocio
+   * deixa de ter canal ativo e, com isso, `supersededByChannelChange` passa a
+   * valer — e a reconciliacao do BFF nao tem como religar a IA.
+   *
+   * O tenant vem so do contexto interno ja autenticado, como no `PUT` acima, e
+   * o escopo e o mesmo `channel:provision`: derrubar o canal e a outra ponta
+   * da mesma autoridade que o provisiona, nao uma autoridade nova.
+   *
+   * Idempotente: negocio sem canal ativo devolve `deactivated: 0` e `200`.
+   */
+  app.delete("/internal/channel-connections/evolution", async (request, reply) => {
+    const context = trustedTenantContext(request);
+    const deactivated = await channelConnections.deactivateTenantChannels(
+      context.tenantId,
+    );
+    return reply.send({ ok: true, deactivated });
   });
 
   app.put("/internal/ai-tenant-config", async (request, reply) => {
@@ -1237,6 +1274,34 @@ export async function registerInternalRoutes(
   });
 
   /**
+   * Purga do negocio inteiro (Goal025/WU-05).
+   *
+   * Chamada pela exclusao de conta, depois do prazo de arrependimento: nao e
+   * varredura periodica de conteudo (isso e `/internal/retention/conversation-content`,
+   * Goal023), e apaga tudo do negocio nas ~16 tabelas com `tenantId` do schema
+   * da IA, na ordem segura de chave estrangeira declarada em
+   * `TENANT_PURGE_TABLES`.
+   *
+   * O tenant vem so do contexto interno ja autenticado, nunca do corpo — nao
+   * ha campo para apagar outro negocio, nem lista, nem "apague tudo". Sob
+   * teto por passada e idempotente: rodar de novo sobre negocio ja purgado
+   * nao encontra linha e nao e erro.
+   */
+  app.post("/internal/retention/tenant", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    const body = parseOrThrow(tenantPurgeSchema, request.body);
+    const result = await tenantPurge.purge({
+      tenantId,
+      maxRows: body.maxRows,
+    });
+    app.log.info(
+      { tenantId, ...result },
+      "Tenant purge pass completed",
+    );
+    return internalData(request, result);
+  });
+
+  /**
    * Toca a execucao fora da requisicao.
    *
    * O resultado do teste vive na linha da execucao, nao nesta resposta: falhar
@@ -1674,6 +1739,16 @@ export function requiredScope(request: FastifyRequest): InternalScope {
   if (path === "/internal/channel-connections/evolution" && method === "PUT") {
     return "channel:provision";
   }
+  // Derrubar o canal (Goal025/WU-02) e a outra ponta da mesma autoridade que o
+  // provisiona: quem pode ligar o vinculo pode desliga-lo. Escopo novo aqui
+  // exigiria credencial nova para uma operacao que a credencial de
+  // provisionamento ja domina.
+  if (
+    path === "/internal/channel-connections/evolution" &&
+    method === "DELETE"
+  ) {
+    return "channel:provision";
+  }
   if (path === "/internal/ai-tenant-config" && method === "PUT") {
     return "tenant-config:write";
   }
@@ -1725,6 +1800,12 @@ export function requiredScope(request: FastifyRequest): InternalScope {
     method === "POST"
   ) {
     return "retention:purge";
+  }
+  // Purga do negocio inteiro (Goal025/WU-05) tem escopo proprio, distinto de
+  // `retention:purge`: apagar tudo do negocio nao e consequencia de poder
+  // apagar so o conteudo de conversa.
+  if (path === "/internal/retention/tenant" && method === "POST") {
+    return "tenant:purge";
   }
 
   return "internal:unmapped";

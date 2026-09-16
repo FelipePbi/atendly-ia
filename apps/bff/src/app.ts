@@ -10,6 +10,9 @@ import { sendCsrfToken, sessionCsrfToken } from "./lib/auth.js";
 import { AppError, toErrorMessage } from "./lib/errors.js";
 import { redactRequestUrl } from "./lib/logging.js";
 import { disconnectPrisma, getPrisma } from "./lib/prisma.js";
+import { defaultAccountPurgePorts } from "./modules/account/purge.js";
+import { registerV1AccountRoutes } from "./modules/account/routes.js";
+import { AccountPurgeWorker } from "./modules/account/worker.js";
 import { registerV1ActivationTestRoutes } from "./modules/activation-test/routes.js";
 import { registerV1AuthRoutes } from "./modules/auth/routes.js";
 import { registerV1CalendarRoutes } from "./modules/calendar/routes.js";
@@ -109,6 +112,7 @@ export async function buildApp() {
   });
 
   await registerHealthRoutes(app);
+  await registerV1AccountRoutes(app);
   await registerV1AuthRoutes(app);
   await registerV1OnboardingRoutes(app);
   await registerV1DashboardRoutes(app);
@@ -183,12 +187,33 @@ export async function buildApp() {
     : null;
   retentionSweep?.start();
 
+  // Purga da conta vencida (Goal025/WU-07). Variável própria e também
+  // desligada por default: ligar a expiração de conteúdo não pode ligar, por
+  // consequência, o apagamento de contas inteiras. Desligada, nada acima muda
+  // — nenhuma rota, leitura ou tela depende do laço, e as suítes nunca o
+  // sobem, porque chamam `runAccountPurge`/`purgeAccount` diretamente.
+  const accountPurge = env.ACCOUNT_PURGE_ENABLED
+    ? new AccountPurgeWorker(
+        getPrisma(),
+        defaultAccountPurgePorts(getPrisma()),
+        {
+          pollIntervalMs: env.ACCOUNT_PURGE_INTERVAL_SECONDS * 1_000,
+          leaseTtlSeconds: env.ACCOUNT_PURGE_LEASE_TTL_SECONDS,
+          accountBatchLimit: env.ACCOUNT_PURGE_BATCH,
+          maxRowsPerStore: env.ACCOUNT_PURGE_MAX_ROWS_PER_STORE,
+        },
+        app.log,
+      )
+    : null;
+  accountPurge?.start();
+
   app.addHook("onClose", async () => {
     // Ordem deliberada: parar o laço antes de soltar o Prisma, para que o
     // ciclo em voo termine com a conexão que ele já estava usando. O `stop`
     // cancela o próximo tick e espera só o ciclo atual, que nunca lança — o
     // desligamento não fica preso por causa de trabalho de fundo.
     await retentionSweep?.stop();
+    await accountPurge?.stop();
     await disconnectPrisma();
   });
 

@@ -105,6 +105,31 @@ export class ChannelConnectionService {
     return connection;
   }
 
+  /**
+   * Derruba o canal do negocio (Goal025/WU-02).
+   *
+   * Chamado quando o dono pede a exclusao da conta: a partir daqui o negocio
+   * deixa de ter canal ativo, e `supersededByChannelChange` passa a valer para
+   * qualquer execucao do teste real que tenha ligado a IA. E assim que a
+   * nao-reativacao fica **verificavel** em vez de prometida — nenhum caminho
+   * do produto religa a IA sem canal ativo.
+   *
+   * NAO APAGA A LINHA, de proposito: a purga (WU-05) e que apaga, depois do
+   * prazo. Aqui o vinculo so deixa de estar `ACTIVE`, entao cancelar dentro do
+   * prazo encontra o historico no lugar — e continua exigindo reconectar o
+   * numero e refazer o teste, porque status `INACTIVE` nao volta sozinho.
+   *
+   * Idempotente: negocio sem canal, ou com canal ja inativo, devolve `0` e nao
+   * e erro. Pedir exclusao duas vezes nao "derruba duas vezes".
+   */
+  async deactivateTenantChannels(tenantId: string): Promise<number> {
+    const { count } = await this.prisma.channelConnection.updateMany({
+      where: { tenantId, status: "ACTIVE" },
+      data: { status: "INACTIVE" },
+    });
+    return count;
+  }
+
   async updateAiTenantConfig(input: UpdateAiTenantConfigInput) {
     return this.prisma.aiTenantConfig.upsert({
       where: { tenantId: input.tenantId },

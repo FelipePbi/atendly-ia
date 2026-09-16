@@ -28,6 +28,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | WhatsApp | `GET /v1/whatsapp`; `POST /v1/whatsapp/connect`; `POST /v1/whatsapp/reconnect`; `DELETE /v1/whatsapp` |
 | Teste real de ativação (Goal019/WU-05) | `GET /v1/activation-test`; `POST /v1/activation-test`; `POST /v1/activation-test/restart` |
 | Central de notificações (Goal022/WU-04) | `GET /v1/notifications`; `GET /v1/notifications/summary`; `POST /v1/notifications/read`; `GET/PATCH /v1/notifications/preferences` |
+| Ciclo de vida da conta (Goal025/WU-03) | `POST /v1/account/deletion`; `DELETE /v1/account/deletion` |
 
 As rotas autenticadas resolvem o negócio a partir da sessão; `tenantId` enviado isoladamente pelo browser não concede autorização.
 
@@ -342,6 +343,7 @@ Uma vez concluída (`POST .../complete`), a sessão é o único registro definit
   "data": {
     "whatsapp": { "status": "CONNECTED", "phoneNumber": "5511999999999", "checkedAt": "2026-09-14T12:00:00.000Z" },
     "ai": { "desiredEnabled": true, "effectiveEnabled": true, "state": "ACTIVE" },
+    "accountDeletion": { "status": "NONE", "dueAt": null },
     "degraded": false
   }
 }
@@ -355,6 +357,8 @@ Uma vez concluída (`POST .../complete`), a sessão é o único registro definit
 | `ai.desiredEnabled` | booleano | o que o negócio configurou em `PATCH /v1/settings/ai` (`AiSettings.enabled`), local ao BFF |
 | `ai.effectiveEnabled` | booleano ou `null` | o que a IA relata como configuração ativa; `null` quando o tenant ainda não foi projetado lá ou quando a IA não respondeu |
 | `ai.state` | `ACTIVE`, `OFF`, `PENDING`, `UNKNOWN` | `ACTIVE`: desejado ligado e a IA confirma ligado. `OFF`: desejado desligado — não importa o que a IA relate. `PENDING`: desejado ligado mas a IA relata desligado, `null` ou ainda não foi projetado. `UNKNOWN`: a IA não respondeu a esta requisição |
+| `accountDeletion.status` (Goal025/WU-03) | `NONE`, `SCHEDULED`, `CANCELLED`, `PURGED` | a mesma linha que `POST`/`DELETE /v1/account/deletion` gravam; `NONE` é o negócio que nunca pediu exclusão |
+| `accountDeletion.dueAt` (Goal025/WU-03) | timestamp ISO ou `null` | vencimento do prazo de sete dias, usado pela tela para contar os dias até a purga; `null` exatamente quando `status: "NONE"` |
 | `degraded` | booleano | `true` quando o Evolution ou a IA não responderam nesta requisição |
 
 Indisponibilidade de qualquer dependência vira `UNKNOWN` (nunca um valor otimista) e nunca `500`: o erro é registrado e a resposta segue `200` com `degraded: true`. O tenant é sempre o da sessão autenticada, como em `GET /v1/dashboard`; não é possível ler ou influenciar o status de outro negócio.
@@ -805,3 +809,40 @@ Idempotente nos dois formatos. Marcar como lida um `id` que não existe, que já
 `POST /v1/auth/logout-all` revoga **todas** as sessões vivas do usuário autenticado — cookie e Bearer, em qualquer dispositivo —, reusando `revokeAllUserSessions` com o motivo próprio `LOGOUT_ALL_DEVICES`. Sob sessão e CSRF, como as demais mutações; não aceita `userId` nem `tenantId` no corpo — a identidade vem sempre da sessão.
 
 A sessão que fez a chamada **também** é revogada: "todos os dispositivos" inclui este. Diferente de `PATCH /v1/auth/password`, a rota não estabelece uma sessão nova no mesmo response — o cookie de sessão é limpo, e o cliente segue para `/login`.
+
+## Ciclo de vida da conta (Goal025/WU-03)
+
+Duas rotas, ambas sob sessão e CSRF; nenhuma aceita `userId` nem `tenantId` no corpo — a identidade é sempre a do negócio da sessão autenticada, como em toda mutação desta API.
+
+### `POST /v1/account/deletion`
+
+```json
+{ "password": "a senha atual do usuário" }
+```
+
+Pede a exclusão da conta do negócio. Exige a senha atual, com o mesmo grau de reautenticação de `PATCH /v1/auth/password`: a rota lê o usuário da sessão, confere a senha apresentada contra o hash gravado e só então prossegue. Senha errada é `401 UNAUTHORIZED` e **nenhum efeito é iniciado** — nem a linha de exclusão é gravada, nem a IA é desligada, nem o WhatsApp é desconectado.
+
+Com a senha correta, o pedido é aceito e a exclusão nasce `SCHEDULED`, com vencimento sete dias à frente. Na mesma transação a IA desejada do negócio é desligada; a derrubada do canal na IA e a desconexão do WhatsApp são tentadas em seguida, mas uma falha remota **não** derruba o pedido — o dono continua podendo excluir a própria conta mesmo com uma dependência fora do ar.
+
+```json
+{ "data": { "status": "SCHEDULED", "dueAt": "2026-09-23T12:00:00.000Z" } }
+```
+
+Pedir de novo com uma exclusão já `SCHEDULED` recusa com `409 ACCOUNT_DELETION_ALREADY_SCHEDULED`, sem empurrar o vencimento — o `dueAt` que vale continua sendo o do primeiro pedido, legível em `GET /v1/status`. Pedir sobre uma conta já `PURGED` recusa com `409 ACCOUNT_DELETION_ALREADY_PURGED`.
+
+### `DELETE /v1/account/deletion`
+
+Cancela a exclusão agendada, sem corpo e sem pedir a senha de novo — a sessão vigente já basta, como as demais mutações. Só é aceito dentro do prazo de sete dias e só sobre uma exclusão `SCHEDULED`; devolve `{ "data": { "status": "CANCELLED", "dueAt": "..." } }`.
+
+Cancelar **não restaura nada**: o WhatsApp continua desconectado e a IA continua desligada. Voltar a operar exige reconectar o número e refazer o teste real de ativação, pelos fluxos que já existem — não há efeito de "religar" nesta rota.
+
+| Código | Quando |
+| --- | --- |
+| `409 ACCOUNT_DELETION_NOT_SCHEDULED` | não há exclusão agendada para cancelar |
+| `409 ACCOUNT_DELETION_GRACE_PERIOD_EXPIRED` | o prazo de sete dias já venceu; a purga pode já estar em curso |
+| `409 ACCOUNT_DELETION_ALREADY_CANCELLED` | já foi cancelada antes |
+| `409 ACCOUNT_DELETION_ALREADY_PURGED` | a conta já foi purgada; não há mais o que cancelar |
+
+`GET /v1/status` devolve o mesmo estado sob `accountDeletion`, para a tela contar os dias sem precisar de uma leitura própria — ver a seção "Status honesto do WhatsApp e da IA" acima.
+
+Enquanto o estado é `SCHEDULED`, **nenhum caminho religa a IA do negócio**. `PATCH /v1/settings/ai` com `enabled: true` recusa com `409 CONFLICT` — o mesmo código e a mesma forma com que já recusava sem serviço operacional, sem `details` novo —, e a reconciliação de ativação mantém o desejado em `false`. Cancelar dentro do prazo devolve a conta ao estado normal: a partir daí `PATCH /v1/settings/ai` volta a valer exatamente como antes, e religar a IA continua exigindo reconectar o WhatsApp e refazer o teste real de ativação.

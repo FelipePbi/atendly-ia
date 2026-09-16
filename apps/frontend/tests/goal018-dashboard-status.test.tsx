@@ -121,6 +121,7 @@ function systemStatusFixture(
   overrides: Partial<SystemStatus> = {},
 ): SystemStatus {
   return {
+    accountDeletion: { status: "NONE", dueAt: null },
     ai: { desiredEnabled: true, effectiveEnabled: false, state: "PENDING" },
     degraded: false,
     whatsapp: { checkedAt: "2026-09-14T12:00:00.000Z", phoneNumber: null, status: "DISCONNECTED" },

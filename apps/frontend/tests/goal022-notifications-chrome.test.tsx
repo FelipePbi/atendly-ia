@@ -54,6 +54,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 
 function statusFixture(overrides: Partial<SystemStatus> = {}): SystemStatus {
   return {
+    accountDeletion: { status: "NONE", dueAt: null },
     ai: { desiredEnabled: true, effectiveEnabled: true, state: "ACTIVE" },
     degraded: false,
     whatsapp: {

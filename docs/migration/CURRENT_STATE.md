@@ -2230,3 +2230,130 @@ retenção, lembrete ou central mudou.
   Configurações é autenticada inteira: a não regressão provada é a das
   superfícies públicas e do chrome, e a fidelidade visual à referência
   aprovada continua sendo conferência humana.
+
+## Delta aceito — Goal025, 2026-09-16 ([review025](reviews/025-review.md), rodada 5; ver [D-041](DECISIONS.md))
+
+A fotografia acima permanece como registro. Os fatos abaixo descrevem o que o
+diff aceito do Goal025 entrega para **G-29 na parte de conta** — a que o
+Goal023 fechou só na parte de conteúdo e que o Goal024 deixou explicitamente
+aberta. O aceite é da rodada 5, depois de quatro rodadas de CHANGES_REQUIRED;
+é o estado real do código na árvore aceita, não a intenção do Goal.
+
+- **FATO atual (BFF, máquina de estados da conta):** `AccountDeletion` é
+  tabela nova por negócio (`tenantId` como chave primária, sem FK para
+  `Tenant` nem `User` de propósito), com três estados —
+  `SCHEDULED`/`CANCELLED`/`PURGED` — decididos em
+  `apps/bff/src/modules/account/state.ts`, que não abre o Prisma nem chama
+  serviço nenhum. `POST /v1/account/deletion` exige a senha atual (mesmo
+  grau de reautenticação de `PATCH /v1/auth/password`), recusa senha errada
+  com `401` sem tocar em nenhum efeito, e sobre acerto grava
+  `status: SCHEDULED` com vencimento sete dias à frente
+  (`ACCOUNT_DELETION_GRACE_PERIOD_DAYS`, constante de produto) **na mesma
+  transação** que desliga `AiSettings.enabled`; a derrubada do canal na IA
+  e a desconexão do WhatsApp são tentadas em seguida, toleradas se
+  falharem. `DELETE /v1/account/deletion` cancela dentro do prazo, só com a
+  sessão vigente, e **não restaura nada** — sem porta de efeito no módulo,
+  por decisão de produto declarada em `service.ts`. Pedir de novo sobre
+  `SCHEDULED` recusa com `409 ACCOUNT_DELETION_ALREADY_SCHEDULED` sem
+  empurrar o vencimento; os cinco códigos de recusa do módulo (
+  `apps/bff/src/modules/account/errors.ts`) são todos `409` próprios,
+  fora do vocabulário genérico de `lib/errors.ts`. `GET /v1/status`
+  devolve o mesmo estado sob `accountDeletion` (`status`, `dueAt`) para a
+  tela contar os dias sem leitura própria.
+- **FATO atual (BFF, guarda contra reativação automática):**
+  `reconcileAiActivation` (`apps/bff/src/lib/ai-activation.ts`) passa a
+  consultar `AccountDeletion` a cada passada; com exclusão `SCHEDULED` em
+  vigor, o desejado do negócio deixa de vir de `AiSettings.enabled` e
+  passa a ser `false` — inclusive contra uma execução de teste real
+  `SUCCEEDED`, que em qualquer outra conta autoativaria (Goal019/D-035).
+  Essa guarda está no caminho comum de reconciliação, então nenhum
+  chamador que só projeta o já gravado pode esquecer de checá-la. Ela não
+  é a única: `PATCH /v1/settings/ai` grava `enabled: true` e projeta na IA
+  na mesma requisição, sem passar pela reconciliação, e por isso tem
+  guarda própria de escrita — `assertAiActivationNotBlockedByDeletion`
+  (`apps/bff/src/modules/account/service.ts`), chamada só por
+  `apps/bff/src/modules/settings/routes.ts` antes da checagem de serviço
+  operacional, recusando com o `409 CONFLICT` que a rota já usava, sem
+  `details` novo. Ler só metade desse mecanismo foi o defeito que a
+  rodada 3 registrou nesta própria seção.
+- **FATO atual (BFF, purga da conta vencida):** `AccountPurgeWorker`
+  (`apps/bff/src/modules/account/worker.ts`) é um segundo laço batido no
+  processo do BFF, independente do `RetentionSweepWorker` do Goal023,
+  desligado por default por variável própria (`ACCOUNT_PURGE_ENABLED`,
+  separada de `RETENTION_SWEEP_ENABLED`). Uma passada (`purgeAccount` em
+  `apps/bff/src/modules/account/purge.ts`) reivindica a conta vencida por
+  `UPDATE` atômico com lease em `TIMESTAMPTZ` e fencing por
+  `leaseToken`, purga IA e Scheduling pela rota interna de cada um, depois
+  remove a instância na Evolution (antes do apagamento local, porque a
+  credencial selada vive em `WhatsAppInstance`, que o `DELETE` do `Tenant`
+  cascatearia embora) e só então apaga `Tenant`/`TenantMember` e, se
+  nenhum outro negócio os usa, os `User` donos. `status: PURGED` só é
+  escrito quando as três lojas confirmaram nesta passada; falha ou teto
+  de linhas atingido mantém `SCHEDULED` para a passada seguinte retomar.
+  A linha `AccountDeletion` sobrevive à purga como prova, sem dado
+  pessoal depois de `PURGED`.
+- **FATO atual (IA, purga por negócio e derrubada de canal):**
+  `apps/ai-orchestrator/src/modules/internal/tenantPurge.ts` enumera as
+  ~16 tabelas do schema da IA com `tenantId` próprio
+  (`TENANT_PURGE_TABLES`, ordem segura de chave estrangeira), exposta por
+  `POST /internal/retention/tenant` sob o escopo interno novo
+  `tenant:purge` (deliberadamente distinto de `retention:purge` do
+  Goal023: apagar todo o rastro do negócio não é consequência de poder
+  apagar só conteúdo de conversa), idempotente e sob teto de linhas por
+  passada. `DELETE /internal/channel-connections/evolution` é rota nova
+  que derruba o canal do negócio (`deactivateTenantChannels`), chamada
+  pelo início da exclusão para que `supersededByChannelChange` passe a
+  valer e a reconciliação não tenha como religar a IA por esse caminho.
+- **FATO atual (IA, intenção de notificação de negócio em exclusão):**
+  `NotificationDeliveryService` passou a avaliar a IA desligada **antes**
+  de canal ausente, com a razão escrita na linha. A intenção pendente de
+  um negócio em exclusão termina como `AI_NOT_ENABLED`/`DISMISSED` —
+  dispensa — em vez de `CHANNEL_NOT_CONNECTED`/`FAILED`, que abriria
+  alerta na central para uma conta que o próprio dono mandou excluir.
+  Nenhum valor novo entrou no vocabulário fechado de
+  `AppointmentNotificationReason`; a mudança é de ordem de avaliação e
+  vale para qualquer negócio com a IA desligada, não só para os que estão
+  em exclusão.
+- **FATO atual (Scheduling, purga por negócio):**
+  `apps/scheduling-service/src/modules/internal-api/tenantPurge.ts` segue
+  o mesmo contrato da IA sobre as ~27 tabelas do próprio schema com
+  `tenantId`, exposta pela mesma forma de rota
+  (`POST /internal/retention/tenant`), sob autenticação interna
+  (`requireInternalAuth`) e o mesmo corpo `{ maxRows }` sem campo para
+  identificar outro negócio.
+- **FATO atual (frontend, Configurações → Conta):**
+  `features/settings/AccountSettings.tsx` deixou de ser só a seção
+  decomposta pelo Goal024 e passou a consumir `GET /v1/status` (campo
+  `accountDeletion`) e `POST`/`DELETE /v1/account/deletion` de verdade:
+  pedir a exclusão pede a senha atual, mostra o vencimento contado a
+  partir de `dueAt`, e cancelar dentro do prazo devolve a seção ao estado
+  normal. Enquanto a exclusão está `SCHEDULED`, o aviso persistente do
+  shell (`shared/layout/AppShell.tsx`, alimentado pelo mesmo
+  `useSystemStatus`) vem do estado do servidor, é o **primeiro** bloco do
+  `<main>` e **suprime** os dois banners do Goal022 — "Atendimento
+  automático parado / Reconecte o WhatsApp" e "IA indisponível" —, porque
+  o WhatsApp desconectado é consequência da própria exclusão e reconectar
+  não faz a IA voltar a responder enquanto o prazo corre. Conviver com
+  eles foi o defeito das rodadas 1 e 2.
+  `data/services/BffAccountService.ts` é o primeiro consumidor
+  desses dois contratos.
+- **FATO atual (suíte, prova contra banco real):**
+  `apps/bff/tests/goal025-account-lifecycle.integration.test.ts` prova
+  contra PostgreSQL descartável o ciclo inteiro: pedir e cancelar,
+  vencimento e purga com retomada depois de falha simulada numa loja,
+  purga dupla idempotente, e recusa de login com a senha antiga e de
+  sessões anteriores depois que a conta foi purgada.
+- **LIMITE:** nenhuma purga foi executada contra dado real — toda prova é
+  contra PostgreSQL descartável e dublês das rotas internas remotas. O
+  gate operacional de capacidade contínua de execução (mesma classe do
+  M4/Goal010/Goal019/Goal023) também vale aqui: `ACCOUNT_PURGE_ENABLED`
+  nasce desligado, e ligá-lo em produção é decisão de operação, não deste
+  diff.
+- **LIMITE:** o teto de linhas por passada vale para as duas lojas
+  remotas (IA e Scheduling, por `maxRows` na rota interna); o apagamento
+  local do BFF é um `DELETE` em cascata a partir de `Tenant`, sem teto.
+  Aceito porque as tabelas por tenant do BFF são limitadas por natureza,
+  mas é a única loja em que uma conta grande roda numa transação só.
+- **LIMITE:** `decideCancel` usa o relógio do processo enquanto o claim
+  da purga usa o do banco — mesma tolerância já praticada no Goal023, e
+  não uma divergência nova deste Goal.

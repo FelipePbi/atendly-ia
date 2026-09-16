@@ -904,6 +904,29 @@ export const aiStateValueSchema = z.enum([
   "UNKNOWN",
 ]);
 
+// --- Ciclo de vida da conta (Goal025/WU-03) ---------------------------------
+// `NONE` é o negócio que nunca pediu exclusão; `CANCELLED` também admite pedir
+// de novo (a mesma linha é reescrita). Ver PUBLIC_API_V1.md.
+export const accountDeletionStatusSchema = z.enum([
+  "NONE",
+  "SCHEDULED",
+  "CANCELLED",
+  "PURGED",
+]);
+export const accountDeletionStateSchema = z.object({
+  status: accountDeletionStatusSchema,
+  dueAt: isoDateTimeSchema.nullable(),
+});
+// `POST`/`DELETE /v1/account/deletion` sempre gravam algo antes de responder:
+// `dueAt` nunca é `null` na resposta dessas duas rotas, diferente da leitura
+// de `GET /v1/status` (que também cobre o negócio sem pedido nenhum).
+export const accountDeletionResultSchema = z.object({
+  status: accountDeletionStatusSchema,
+  dueAt: isoDateTimeSchema,
+});
+export type AccountDeletionStatus = z.infer<typeof accountDeletionStatusSchema>;
+export type AccountDeletionState = z.infer<typeof accountDeletionStateSchema>;
+
 export const systemStatusSchema = z.object({
   whatsapp: z.object({
     status: whatsappStatusValueSchema,
@@ -915,6 +938,7 @@ export const systemStatusSchema = z.object({
     effectiveEnabled: z.boolean().nullable(),
     state: aiStateValueSchema,
   }),
+  accountDeletion: accountDeletionStateSchema,
   degraded: z.boolean(),
 });
 export type WhatsAppStatusValue = z.infer<typeof whatsappStatusValueSchema>;

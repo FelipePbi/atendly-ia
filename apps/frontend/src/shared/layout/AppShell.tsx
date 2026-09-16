@@ -11,6 +11,7 @@ import {
   useProductRuntime,
 } from "@/shared/runtime/ProductRuntime";
 import {
+  accountDeletionDaysRemaining,
   type StatusView,
   SystemStatusProvider,
   useSystemStatus,
@@ -101,6 +102,15 @@ function AppShellChrome({
   const whatsappDisconnected = status.whatsappView === "off";
   const aiUnavailable =
     status.aiView === "pending" || status.aiView === "unknown";
+  // Goal025 §7: o aviso persistente do prazo de exclusão. Vem do mesmo
+  // `GET /v1/status` que os outros dois banners, e não de um segundo estado
+  // inventado no cliente — `dueAt` é o vencimento que o servidor devolve.
+  // Enquanto a resposta não chega, `accountDeletion` é `null` e não há banner:
+  // anunciar exclusão por suposição seria pior que não anunciar.
+  const deletionDueAt =
+    status.accountDeletion?.status === "SCHEDULED"
+      ? status.accountDeletion.dueAt
+      : null;
 
   useEffect(() => {
     document.title = title ? `${title} — Atendly` : "Atendly";
@@ -276,7 +286,17 @@ function AppShellChrome({
               </span>
             </header>
           )}
-          {whatsappDisconnected && (
+          {deletionDueAt && (
+            <PersistentStatusBanner
+              text={accountDeletionBannerCopy(
+                accountDeletionDaysRemaining(deletionDueAt),
+              )}
+              title="Exclusão de conta agendada"
+              href="/configuracoes/conta"
+              linkLabel="Ver exclusão da conta"
+            />
+          )}
+          {!deletionDueAt && whatsappDisconnected && (
             <PersistentStatusBanner
               text="Reconecte o WhatsApp para a IA voltar a responder."
               title="Atendimento automático parado"
@@ -284,7 +304,7 @@ function AppShellChrome({
               linkLabel="Reconectar WhatsApp"
             />
           )}
-          {aiUnavailable && (
+          {!deletionDueAt && aiUnavailable && (
             <PersistentStatusBanner
               text="A IA não está respondendo. As conversas seguem para atendimento humano."
               title="IA indisponível"
@@ -372,6 +392,21 @@ function AppShellChrome({
       </Dialog>
     </>
   );
+}
+
+/**
+ * A frase do aviso de exclusão, separada porque o singular importa: "1 dia" e
+ * "2 dias" não podem virar "1 dias". O dia zero não é "faltam 0 dias" — é o
+ * último dia em que ainda dá para cancelar.
+ */
+function accountDeletionBannerCopy(days: number): string {
+  if (days <= 0) {
+    return "Hoje é o último dia para cancelar. Depois disso os dados são apagados sem volta.";
+  }
+  if (days === 1) {
+    return "Falta 1 dia para os dados serem apagados. Cancele em Configurações → Conta enquanto o prazo corre.";
+  }
+  return `Faltam ${days} dias para os dados serem apagados. Cancele em Configurações → Conta enquanto o prazo corre.`;
 }
 
 /**

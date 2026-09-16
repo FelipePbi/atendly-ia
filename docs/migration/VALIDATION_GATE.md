@@ -17,7 +17,7 @@ git diff --check
 | Comando | Cobre | Não cobre |
 | --- | --- | --- |
 | `validate:core` | Builds de contracts, Scheduling, IA, BFF e frontend; `npm run check` do health-worker; suíte da IA; suíte do adapter HTTP do frontend; `go build`/`go vet`/`go test` do Evolution Go; testes dos próprios scripts de gate; auditoria estática | Qualquer escrita em banco. Nenhum passo abre conexão de banco |
-| `validate:integration` | 28 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, a purga de conteúdo de conversa (Goal023), o outbox do Evolution Go e um ensaio por migration de Goal — o último deles `rehearse:goal023-retention-migration` | Qualquer camada acima do dado: nenhuma jornada de interface, nenhum envio real por WhatsApp e nenhuma origem real do Minha Agenda |
+| `validate:integration` | 28 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, a purga de conteúdo de conversa (Goal023) e a purga por negócio da IA (Goal025), o outbox do Evolution Go e um ensaio por migration de Goal — o último deles `rehearse:goal023-retention-migration` | Qualquer camada acima do dado: nenhuma jornada de interface, nenhum envio real por WhatsApp e nenhuma origem real do Minha Agenda |
 | `git diff --check` | Espaço em branco/conflito no diff | Correção do diff |
 
 Comandos auxiliares: `npm run test:gate` (só os testes dos scripts de gate) e
@@ -150,10 +150,15 @@ autoritativa é `scripts/validate-integration.mjs`:
 8. `test:ai-orchestrator-transport-durability` roda a suíte de persistência e
    concorrência da IA sobre o resultado do ensaio;
 9. `test:ai-orchestrator-content-purge` roda `tests/retention` da IA
-   (Goal023) contra o mesmo banco: a purga de conteúdo de conversa e a
-   retenção técnica do inbox durável (`ProcessedEvent`) — o que cada uma
+   contra o mesmo banco: a purga de conteúdo de conversa e a retenção
+   técnica do inbox durável (`ProcessedEvent`) do Goal023 — o que cada uma
    apaga e, sobretudo, o que ela não alcança (não classificado, órfão de
-   sessão, trabalho vivo, evidência de falha e o negócio vizinho);
+   sessão, trabalho vivo, evidência de falha e o negócio vizinho) — e,
+   desde o Goal025, a purga por negócio
+   (`tests/retention/tenant-purge.test.ts`), incluindo a prova de
+   isolamento com dois negócios povoados;
+   é por causa dela que o banco deste passo precisa ter `KnowledgeChunk`
+   (ver abaixo);
 10. `test:evolution-go-webhook-outbox` roda o outbox técnico do Evolution Go
     no mesmo servidor descartável.
 
@@ -176,6 +181,19 @@ reconstruído em SQL porque o cluster descartável não tem pgvector. Depois das
 asserções do ensaio, o script cria as tabelas de apoio que o caminho durável
 toca (`AiTenantConfig`, `AiRun`, `Handoff`) sem semear linha alguma, para que o
 passo 8 exercite o fluxo inteiro com um alvo só.
+
+Pelo mesmo motivo, `KnowledgeChunk` ficava de fora desse banco por pulo
+nomeado — `embedding` é `vector(1536)` no schema da IA e nem o cluster local
+nem o `postgres:16-alpine` do CI instalam pgvector. O Goal025 foi o primeiro a
+rodar contra esse banco um teste que exige a tabela existir (a purga por
+negócio atravessa as 16 tabelas com `tenantId`, e ela é uma delas), então
+`rehearse:goal012-knowledge-memory-migration` passou a criar a tabela como
+fixture idempotente com `embedding` em `TEXT`. O pulo continua nomeado e
+estreito: a purga apaga a linha sem ler nem comparar embedding, nenhuma busca
+por similaridade roda neste banco, e o que precisa ser fiel — `tenantId`, a
+FK composta para `KnowledgeDocument` com `ON DELETE CASCADE` e a ordem
+folha-para-raiz — continua igual à produção. Nenhum passo novo entrou no
+gate: continuam 28.
 
 O runner também injeta chaves de cifra **sintéticas**
 (`WHATSAPP_CREDENTIAL_KEYS`, `CHANNEL_CREDENTIAL_KEYS`) para que selagem,

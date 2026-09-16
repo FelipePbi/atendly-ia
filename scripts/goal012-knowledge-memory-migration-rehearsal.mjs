@@ -170,6 +170,50 @@ CREATE TABLE "KnowledgeDocument" (
 );
 `;
 
+// `KnowledgeChunk` no banco de durabilidade, com `embedding` em `TEXT`.
+//
+// A tabela ficou de fora ate aqui por um pulo nomeado: a coluna `embedding` e
+// `vector(1536)` no `schema.prisma`, e nem o cluster descartavel local nem o
+// `postgres:16-alpine` do CI instalam `pgvector`. O Goal025 e o primeiro a
+// rodar um teste contra este banco que precisa da tabela existir — a purga por
+// negocio atravessa as 16 tabelas com `tenantId`, e `KnowledgeChunk` e uma
+// delas; sem ela a suite falha em `deleteMany` antes de exercitar regra
+// nenhuma de purga (`The table public.KnowledgeChunk does not exist`).
+//
+// O tipo da coluna e a unica diferenca em relacao a producao, e ela e inocua
+// para o que roda aqui: a purga nunca le, compara nem interpreta embedding —
+// apaga a linha. Nenhuma busca por similaridade existe neste banco (o ensaio
+// do Goal012 ja nao cria indice vetorial), entao trocar `vector(1536)` por
+// `TEXT` nao esconde comportamento nenhum que o gate afirme. O que a tabela
+// precisa ser fiel — `tenantId`, a FK composta para `KnowledgeDocument` com
+// `ON DELETE CASCADE` e a ordem folha-para-raiz da purga — continua igual.
+//
+// Nao e migration: e o mesmo tipo de fixture que `AiRun`/`Handoff` usam em
+// `goal004-migration-rehearsal.mjs` e que `AiToolCall` recebeu no ensaio do
+// Goal023, aplicado aqui porque e aqui que as tabelas de conhecimento deste
+// banco nascem.
+const KNOWLEDGE_CHUNK_FIXTURE = `
+CREATE TABLE IF NOT EXISTS "KnowledgeChunk" (
+  "id" TEXT PRIMARY KEY,
+  "tenantId" TEXT NOT NULL,
+  "documentId" TEXT NOT NULL,
+  "content" TEXT NOT NULL,
+  "metadata" JSONB,
+  "embedding" TEXT NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+DO $$ BEGIN
+    ALTER TABLE "KnowledgeChunk"
+        ADD CONSTRAINT "KnowledgeChunk_tenantId_documentId_fkey"
+        FOREIGN KEY ("tenantId", "documentId") REFERENCES "KnowledgeDocument"("tenantId", "id") ON DELETE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE INDEX IF NOT EXISTS "KnowledgeChunk_tenantId_documentId_idx"
+    ON "KnowledgeChunk"("tenantId", "documentId");
+`;
+
 // Um canal/conversa de apoio, dois turnos legados (um sucedido, um falho) e
 // dois documentos legados (um FAQ, uma politica de texto) — nenhum dos dois
 // jamais teve nocao de servico.
@@ -190,8 +234,7 @@ INSERT INTO "KnowledgeDocument" ("id", "tenantId", "type", "title", "source", "v
 `;
 
 // Schema minimo de `KnowledgeDocument` para o banco de durabilidade (Goal004),
-// que nasce sem nenhuma tabela de conhecimento. Sem `KnowledgeChunk` — pulo
-// nomeado, mesma razao do schema legado acima. Guardas idempotentes porque o
+// que nasce sem nenhuma tabela de conhecimento. Guardas idempotentes porque o
 // banco de durabilidade pode ja ter recebido este passo numa execucao anterior
 // do gate.
 const MINIMAL_KNOWLEDGE_DOCUMENT_SCHEMA = `
@@ -228,16 +271,20 @@ function assert(condition, message) {
   return true;
 }
 
-async function applyMigrationFile(client, filePath) {
+async function applyMigrationSql(client, sql) {
   await client.query("BEGIN");
   try {
-    await client.query(readFileSync(filePath, "utf8"));
+    await client.query(sql);
     await client.query("COMMIT");
     return true;
   } catch (error) {
     await client.query("ROLLBACK");
     return error;
   }
+}
+
+async function applyMigrationFile(client, filePath) {
+  return applyMigrationSql(client, readFileSync(filePath, "utf8"));
 }
 
 async function recreateDatabase(target) {
@@ -483,11 +530,24 @@ async function prepareAiDurabilityTarget(target) {
     );
     if (!knowledgeDocumentTable.rows[0].present) {
       console.log(
-        "durability target has no knowledge tables — creating a minimal KnowledgeDocument without KnowledgeChunk " +
-          "(named skip: KnowledgeChunk requires the pgvector extension, which this disposable server never " +
-          "installs, and the Goal012 migration does not touch it)",
+        "durability target has no knowledge tables — creating a minimal KnowledgeDocument",
       );
       await client.query(MINIMAL_KNOWLEDGE_DOCUMENT_SCHEMA);
+    }
+
+    // `KnowledgeChunk` sempre, fora do `if` acima: o banco de durabilidade de
+    // uma execucao anterior ja tem `KnowledgeDocument` e nao teria a tabela
+    // nova. O DDL e idempotente.
+    const chunkFixtureApplied = await applyMigrationSql(
+      client,
+      KNOWLEDGE_CHUNK_FIXTURE,
+    );
+    if (chunkFixtureApplied !== true) {
+      console.error(
+        `goal012:knowledge-memory-migration-rehearsal FAILED — durability target expansion failed creating KnowledgeChunk: ${chunkFixtureApplied}`,
+      );
+      process.exitCode = 1;
+      return;
     }
 
     const applied = await applyMigrationFile(client, MIGRATION_SQL);

@@ -3,6 +3,7 @@
 import {
   createContext,
   type ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -55,12 +56,34 @@ export function aiStatusView(
   return "off";
 }
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Dias que faltam até a purga, a partir do vencimento que `GET /v1/status`
+ * devolve — nunca contados no cliente a partir do instante do pedido.
+ *
+ * Mora aqui, junto das outras derivações de `/v1/status`, porque tem dois
+ * consumidores: o aviso persistente do shell e a seção Conta. Duas cópias
+ * poderiam arredondar diferente e mostrar prazos diferentes para a mesma
+ * exclusão, na mesma tela.
+ */
+export function accountDeletionDaysRemaining(
+  dueAt: string,
+  now: Date = new Date(),
+): number {
+  const diff = new Date(dueAt).getTime() - now.getTime();
+  return Math.max(0, Math.ceil(diff / MS_PER_DAY));
+}
+
 const REVALIDATE_MS = 45_000;
 
 export type UseSystemStatusResult = {
+  accountDeletion: SystemStatus["accountDeletion"] | null;
   ai: SystemStatus["ai"] | null;
   aiView: StatusView;
   phase: StatusFetchPhase;
+  /** Refaz `GET /v1/status` fora do intervalo de 45s, sem inventar estado. */
+  refresh: () => void;
   whatsapp: SystemStatus["whatsapp"] | null;
   whatsappView: StatusView;
   notificationsPhase: StatusFetchPhase;
@@ -81,6 +104,8 @@ function useSystemStatusPolling(): UseSystemStatusResult {
     useState<StatusFetchPhase>("loading");
   const [notificationsSummary, setNotificationsSummary] =
     useState<NotificationSummary | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const refresh = useCallback(() => setReloadToken((token) => token + 1), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -123,12 +148,18 @@ function useSystemStatusPolling(): UseSystemStatusResult {
       window.clearInterval(interval);
       window.removeEventListener("focus", load);
     };
-  }, []);
+    // `reloadToken` existe só para permitir que `refresh()` force uma nova
+    // passada (ex.: depois de pedir/cancelar a exclusão de conta) sem esperar
+    // os 45s do intervalo — o efeito reabre o listener/intervalo, mas o
+    // estado exposto continua vindo sempre de `GET /v1/status`.
+  }, [reloadToken]);
 
   return {
+    accountDeletion: data?.accountDeletion ?? null,
     ai: data?.ai ?? null,
     aiView: aiStatusView(phase, data?.ai.state),
     phase,
+    refresh,
     whatsapp: data?.whatsapp ?? null,
     whatsappView: whatsappStatusView(phase, data?.whatsapp.status),
     notificationsPhase,

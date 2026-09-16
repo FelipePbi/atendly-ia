@@ -35,7 +35,15 @@ async function business(label: string): Promise<SessionHandle> {
   return session;
 }
 
-const NOW = new Date("2026-09-15T12:00:00.000Z");
+// Ancorado no relogio real, nao numa data fixa. `purgeExpiredNotifications`
+// recebe `now` explicito, mas `GET /v1/notifications` e
+// `/v1/notifications/summary` calculam a janela de `HISTORY_WINDOW_DAYS` a
+// partir do relogio do processo. Com um `NOW` de calendario os dois relogios
+// se afastam um dia por dia, e a notificacao "dentro da janela" (`NOW` menos
+// 89 dias, de proposito na borda) cai para fora do corte do endpoint assim que
+// a diferenca passa de 24h: o teste passava na data em que foi escrito e
+// falhava depois, sem nada ter mudado no produto.
+const NOW = new Date();
 const insideWindow = new Date(
   NOW.getTime() - (HISTORY_WINDOW_DAYS - 1) * 24 * 60 * 60 * 1_000,
 );

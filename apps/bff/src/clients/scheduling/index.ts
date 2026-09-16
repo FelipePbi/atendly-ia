@@ -1509,6 +1509,37 @@ export class SchedulingClient {
     );
   }
 
+  /**
+   * Purga do negócio inteiro no Scheduling (Goal025/WU-07 chamando a rota do
+   * WU-06).
+   *
+   * Sem instante de corte, ao contrário de `purgeNotificationIntentContent`:
+   * não há janela de prazo aqui, o negócio inteiro vai embora. O tenant viaja
+   * só no contexto interno já autenticado — não existe campo de corpo para
+   * apagar outro negócio. O teto limita a passada e `hasMore` diz se sobrou
+   * trabalho; rodar de novo sobre negócio já purgado não é erro. Chamador: a
+   * purga de conta vencida, nunca uma rota pública.
+   *
+   * As tabelas são as do Scheduling e a lista é dele: o BFF registra o que
+   * voltou, sem replicar aqui um schema que não é seu.
+   */
+  async purgeTenant(
+    context: InternalRequestContext,
+    input: { maxRows: number },
+  ) {
+    return this.mutate(
+      context,
+      "POST",
+      "/internal/retention/tenant",
+      { maxRows: input.maxRows },
+      z.object({
+        deleted: z.record(z.string(), z.number().int().nonnegative()),
+        totalDeleted: z.number().int().nonnegative(),
+        hasMore: z.boolean(),
+      }),
+    );
+  }
+
   async dashboard(context: InternalRequestContext) {
     return this.get(
       context,

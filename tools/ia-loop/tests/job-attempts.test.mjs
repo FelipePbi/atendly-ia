@@ -359,3 +359,46 @@ test('no R1 dispatch is possible at any point in this sequence', async () => {
     assert.equal(reconciled.next.round, 2);
   });
 });
+
+// ===========================================================================
+// SKIPPED — the status the skip path wrote for a year without it existing
+// ===========================================================================
+
+test('every status a work unit can write is a status the job store accepts', async () => {
+  // `work-unit-executor` has always written SKIPPED for a gate whose
+  // precondition the harness could not meet. It was never in JOB_STATUSES,
+  // and the path had never once run — every earlier Goal either ran the gate
+  // or died before reaching it. Goal024's first real skip was refused as
+  // INVALID_JOB_STATUS and took the whole Developer job down with it.
+  const { JOB_STATUSES } = await import('../lib/job-store.mjs');
+  for (const written of ['COMPLETED', 'FAILED', 'SKIPPED']) {
+    assert.ok(JOB_STATUSES.includes(written), `work-unit-executor writes ${written}`);
+  }
+});
+
+test('SKIPPED is terminal, unclaimable and not retryable — in that order', async () => {
+  // Terminal because a retry of THIS job cannot produce the precondition it
+  // lacked. Unclaimable and non-retryable follow from that, and the lease is
+  // released on terminal — leaving SKIPPED out held the lease forever.
+  const store = await import('../lib/job-store.mjs');
+  assert.equal(store.isTerminalJobStatus('SKIPPED'), true);
+  assert.equal(store.isClaimableJobStatus('SKIPPED'), false);
+  assert.equal(store.RETRYABLE_JOB_STATUSES.includes('SKIPPED'), false);
+});
+
+test('the lease agrees with the job store about what is terminal', async () => {
+  // The literal list in `canStartNewAttempt` was a third copy of this
+  // vocabulary, and it is how SKIPPED came to be terminal in one place and
+  // ambiguous in another.
+  const { JOB_STATUSES, isTerminalJobStatus } = await import('../lib/job-store.mjs');
+  const { canStartNewAttempt } = await import('../lib/leases.mjs');
+
+  for (const status of JOB_STATUSES) {
+    if (!isTerminalJobStatus(status) && status !== 'QUEUED') continue;
+    assert.equal(
+      canStartNewAttempt({ lease: null, jobStatus: status }).allowed,
+      true,
+      `a terminal job (${status}) with no lease must allow a new attempt`,
+    );
+  }
+});

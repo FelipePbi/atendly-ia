@@ -25,6 +25,7 @@ import { dirname, join } from 'node:path';
 
 import { SpikeError } from './claude-process.mjs';
 import { selfIdentity } from './process-inspector.mjs';
+import { isTerminalJobStatus } from './job-store.mjs';
 
 export const LEASE_CONFIG = Object.freeze({
   /** How often a holder renews while the model is running. */
@@ -407,7 +408,11 @@ export function classifyLease(lease, { now = Date.now(), config = LEASE_CONFIG }
 export function canStartNewAttempt({ lease, jobStatus, workerHealth, now = Date.now(), config = LEASE_CONFIG }) {
   // No lease and a terminal job: the previous attempt is done.
   if (!lease) {
-    if (jobStatus === 'COMPLETED' || jobStatus === 'FAILED' || jobStatus === 'SUPERSEDED' || jobStatus === 'QUEUED' || jobStatus === null || jobStatus === undefined) {
+    // The terminal vocabulary lives in ONE place. Spelling it out here as a
+    // literal list is how SKIPPED came to be terminal in `job-store` and still
+    // ambiguous here — a third copy of the same decision, which is the shape
+    // of bug this harness keeps paying for.
+    if (isTerminalJobStatus(jobStatus) || jobStatus === 'QUEUED' || jobStatus === null || jobStatus === undefined) {
       return { allowed: true, reason: 'NO_ACTIVE_LEASE' };
     }
     // RUNNING without a lease is ambiguous: the holder may have died mid-write.

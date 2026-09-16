@@ -56,6 +56,20 @@ export const STORE_VERSION = 1;
 export const JOB_STATUSES = Object.freeze([
   'QUEUED', 'RUNNING', 'WAITING_FOR_CAPACITY', 'INTERRUPTED', 'REROUTED', 'CONTEXT_EXPANDED',
   'CEILING_DECLARED', 'COMPLETED', 'FAILED', 'SUPERSEDED',
+  /**
+   * A deterministic gate the harness could not give a precondition to — a
+   * missing disposable database, typically. Nothing was spawned, so it is
+   * neither COMPLETED nor FAILED, and `work-unit-executor` has written it
+   * since the skip path was built: "a skipped gate is not a failed job:
+   * leaving it FAILED would make a resume treat an unmet precondition as work
+   * that could be retried."
+   *
+   * It was never in this list. The skip path had never once been exercised —
+   * every earlier Goal either ran the gate or died before reaching it — so the
+   * first real skip, in Goal024, was refused here as INVALID_JOB_STATUS and
+   * took the whole Developer job down with it.
+   */
+  'SKIPPED',
 ]);
 
 /**
@@ -64,7 +78,14 @@ export const JOB_STATUSES = Object.freeze([
  * failed inference that a human has not looked at yet. Only an explicit
  * transition may create a NEW jobId for a retry or a correction round.
  */
-export const TERMINAL_JOB_STATUSES = Object.freeze(['COMPLETED', 'FAILED', 'SUPERSEDED']);
+export const TERMINAL_JOB_STATUSES = Object.freeze([
+  'COMPLETED', 'FAILED', 'SUPERSEDED',
+  // SKIPPED is terminal for the same reason the others are: the precondition
+  // it lacked is not something a retry of THIS job can produce. Leaving it
+  // out would make a skipped gate claimable again on every resume, and would
+  // hold its lease forever — `canStartNewAttempt` releases on terminal.
+  'SKIPPED',
+]);
 
 export function isTerminalJobStatus(status) {
   return TERMINAL_JOB_STATUSES.includes(status);

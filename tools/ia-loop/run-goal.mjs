@@ -1144,12 +1144,27 @@ async function assessCriteriaCoverage({ store, goal, round, changes, worktree, e
     },
   });
 
-  const envelope = await waitForResult(store, 'tech_lead', jobId, { leaseStore });
+  // `waitForResult` returns an OBSERVATION — `{ envelope, observerTimeout,
+  // workerOffline }` — not the envelope. Reading `.ok` off the observation
+  // made every coverage answer look unusable: both calls of Goal024 produced
+  // forty-five valid verdicts and both were thrown away here, so the reviewer
+  // saw "não apurada" while the work sat completed on disk.
+  const observed = await waitForResult(store, 'tech_lead', jobId, {
+    emit, leaseStore, goal: goal.goalId, round,
+  });
+  if (observed?.observerTimeout || observed?.workerOffline) {
+    emit('  cobertura de critérios: o worker não respondeu; seguindo sem ela.');
+    return null;
+  }
+
+  const envelope = observed?.envelope;
   if (!envelope?.ok) {
     emit(`  cobertura de critérios: sem resposta utilizável (${envelope?.code ?? 'desconhecido'}).`);
     return null;
   }
 
+  // The envelope carries `{ ok, result }`; the coverage itself is the inner
+  // `result`, which is what `buildReviewPacket` renders.
   return { result: envelope.result, declared: requirements.length };
 }
 

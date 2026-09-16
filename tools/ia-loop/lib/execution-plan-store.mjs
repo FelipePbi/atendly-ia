@@ -190,8 +190,33 @@ export function fallbackExecutionPlan({
    * exact list; the unit that has to act on the review was not.
    */
   changedFiles = [],
+  /**
+   * The DETERMINISTIC units the GOAL'S OWN plan declared, re-run over the tree
+   * this correction produced.
+   *
+   * The paragraph above says no verification units are synthesised here, and
+   * that still holds: nothing is invented. These are the planner's own gates,
+   * read back from the stored plan, and a Goal that declared none still gets
+   * none.
+   *
+   * Why they have to come back. A correction round declared no gates at all,
+   * so `validations` arrived empty and the Goal's gates aged one round every
+   * time the Developer touched the tree. Goal025 is where that closed into a
+   * loop: `validate:integration` went red in round 1, the fix landed in round
+   * 2, and nothing could ever re-run it — so the reviewer refused round after
+   * round for a gate that was, in fact, already green. Both the reviewer and
+   * the operator proved it green by hand, from outside the harness, and had
+   * nowhere to record it. Four rounds ended at MAX_CORRECTION_ROUNDS_REACHED
+   * with every content blocker resolved and only missing PROOF left.
+   */
+  goalGates = [],
 }) {
   const isCorrection = blockers.length > 0;
+  const correctionUnitId = isCorrection ? 'FIX-001' : 'WU-001';
+  // Gates only come back on a correction round. The compatibility fallback is
+  // for a Goal planned before execution plans existed, which by definition has
+  // no declared gates to re-run.
+  const gates = isCorrection ? gatesForCorrection(goalGates, correctionUnitId) : [];
 
   return validateExecutionPlan({
     goal,
@@ -228,6 +253,42 @@ export function fallbackExecutionPlan({
           ? blockers.map((blocker, index) => `Blocker ${index + 1} resolvido: ${String(blocker).slice(0, 400)}`)
           : ['Todos os critérios de aceite do documento do Goal estão atendidos e verificados.'],
       },
+      ...gates,
     ],
   }, { goal });
+}
+
+/**
+ * The Goal's declared gates, re-pointed at the correction unit.
+ *
+ * Their recorded dependencies name model units — `VERIFY-001 depends on
+ * WU-004` — and those units do not exist in a correction round, which has one
+ * unit and a different vocabulary of ids. So a dependency is kept when it
+ * names another GATE, and replaced by the correction unit when it does not:
+ * the order the planner declared AMONG the gates is preserved, and the whole
+ * chain hangs off the work this round did.
+ *
+ * Nothing else about a gate is touched — not its action, not its scope, not
+ * its pattern. A gate that means `npm run validate:integration` in round 1
+ * means exactly that in round 4, which is the entire point of re-running it.
+ *
+ * Pure, and exported for the test: the remapping is the part that can silently
+ * be wrong.
+ */
+export function gatesForCorrection(goalGates = [], correctionUnitId = 'FIX-001') {
+  if (!Array.isArray(goalGates) || goalGates.length === 0) return [];
+
+  const declared = goalGates.filter((gate) => gate?.type === 'DETERMINISTIC' && typeof gate.id === 'string');
+  const gateIds = new Set(declared.map((gate) => gate.id));
+
+  return declared.map((gate) => {
+    const amongGates = (gate.dependencies ?? []).filter((dependency) => gateIds.has(dependency));
+    return {
+      ...gate,
+      // A gate whose only dependencies were model units now waits for the
+      // correction; one that also waited for another gate keeps doing so, and
+      // reaches the correction transitively through it.
+      dependencies: amongGates.length > 0 ? amongGates : [correctionUnitId],
+    };
+  });
 }

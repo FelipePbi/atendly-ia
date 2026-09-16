@@ -267,12 +267,27 @@ async function resolveRoundPlan(job) {
   const { type: unitType, reason: unitTypeReason } = unitTypeForProfile(job.developerProfile);
 
   if (job.type === 'CORRECTION') {
+    // The Goal's OWN gates, so this round can prove the tree it just changed.
+    //
+    // A correction round used to declare none, which meant the Goal's gates
+    // aged one round every time the Developer touched anything and could never
+    // be re-run. Goal025 closed that into a loop: the gate went red in round 1,
+    // the fix landed in round 2, and four rounds ended at
+    // MAX_CORRECTION_ROUNDS_REACHED over a gate that was already green.
+    //
+    // A plan that no longer validates degrades to no gates rather than failing
+    // the round: an implementation round already ran on this plan, so a
+    // correction is not the place to discover it is broken — and no gates is
+    // exactly the behaviour every correction round had until now.
+    const goalPlan = await planStore.read(job.goal).catch(() => null);
+
     return {
       plan: fallbackExecutionPlan({
         goal: job.goal, round: job.round, blockers: [...job.blockers], goalSummary,
         unitType, unitTypeReason,
         // Collected from git by the orchestrator, never claimed by a model.
         changedFiles: [...(job.changedFiles ?? [])],
+        goalGates: (goalPlan?.workUnits ?? []).filter((unit) => unit.type === 'DETERMINISTIC'),
       }),
       goalSummary,
       planned: false,

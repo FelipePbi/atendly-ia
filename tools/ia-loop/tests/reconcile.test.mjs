@@ -1108,3 +1108,43 @@ test('recovery repairs consistency on every run, not only the first', async () =
   assert.ok(repairs < alreadyRecovered, 'repairs must run before the idempotent return');
   assert.match(source.slice(0, repairs), /if \(dryRun\)|if \(!dryRun\)/, 'and still write nothing on a dry run');
 });
+
+// ===========================================================================
+// Only a review claims a round's review stage
+// ===========================================================================
+
+test('no Tech Lead job type other than a review claims the round review stage', async () => {
+  // This failed twice, three years of commits apart, for the same reason: the
+  // guard was keyed to a LIST named after one of its members instead of to the
+  // question. After Goal006 it was CLOSURE_DOCS/PLANNING; in Goal025 round 3 it
+  // was CRITERIA_COVERAGE, which won the stage over the real review and made
+  // `reconcile` report "the review of round 3 carries no usable decision".
+  const { TECH_LEAD_NON_REVIEW_JOB_TYPES } = await import('../lib/closure-contracts.mjs');
+  const { stageOfJob } = await import('../lib/stage-identity.mjs');
+
+  for (const type of TECH_LEAD_NON_REVIEW_JOB_TYPES) {
+    assert.equal(
+      stageOfJob({ role: 'tech_lead', goal: '025', round: 3, type }),
+      null,
+      `${type} must not claim the round's review stage`,
+    );
+  }
+});
+
+test('every kind the Tech Lead worker handles besides a review is excluded from the review stage', async () => {
+  // The worker's handler table and the stage guard must name the same set.
+  // Registering a kind in one and not the other is exactly how Goal025 broke.
+  const { TECH_LEAD_NON_REVIEW_JOB_TYPES } = await import('../lib/closure-contracts.mjs');
+
+  assert.ok(TECH_LEAD_NON_REVIEW_JOB_TYPES.includes('CRITERIA_COVERAGE'));
+  assert.ok(TECH_LEAD_NON_REVIEW_JOB_TYPES.includes('CLOSURE_DOCUMENTATION'));
+  assert.ok(TECH_LEAD_NON_REVIEW_JOB_TYPES.includes('NEXT_GOAL_PLANNING'));
+});
+
+test('a review still claims its stage, so the guard did not swallow everything', async () => {
+  const { stageOfJob } = await import('../lib/stage-identity.mjs');
+  const stage = stageOfJob({ role: 'tech_lead', goal: '025', round: 3, type: undefined });
+
+  assert.equal(stage?.stage, 'review');
+  assert.equal(stage?.round, 3);
+});

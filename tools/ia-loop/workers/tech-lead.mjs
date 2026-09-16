@@ -63,6 +63,7 @@ import { resolveGraphOrientation } from '../lib/graph-orientation.mjs';
 import { renderReviewPrompt } from '../lib/review-packet.mjs';
 import {
   CLOSURE_WRITE_PREFIX,
+  TECH_LEAD_NON_REVIEW_JOB_TYPES,
   closureDocSchemaFor,
   validateClosureDocResult,
 } from '../lib/closure-contracts.mjs';
@@ -113,7 +114,7 @@ const REVIEWER_TOOLS = ['Read', 'Glob', 'Grep', 'Bash'];
 const CLOSURE_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'];
 
 /** Job kinds this worker handles besides a review. */
-const CLOSURE_KINDS = ['CLOSURE_DOCUMENTATION', 'NEXT_GOAL_PLANNING', 'CRITERIA_COVERAGE'];
+const CLOSURE_KINDS = TECH_LEAD_NON_REVIEW_JOB_TYPES;
 
 /**
  * Which of those kinds OWN a stage of the loop.

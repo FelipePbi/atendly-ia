@@ -19,7 +19,7 @@
  */
 
 import { SpikeError } from './claude-process.mjs';
-import { CLOSURE_JOB_TYPES } from './closure-contracts.mjs';
+import { TECH_LEAD_NON_REVIEW_JOB_TYPES } from './closure-contracts.mjs';
 
 export const STAGES = Object.freeze({
   IMPLEMENTATION: 'implementation',
@@ -94,7 +94,7 @@ export function stageOfJob(job) {
     // read the PLANNING job as the round-1 review, found `decision:
     // "NEXT_GOAL"` where a ReviewDecision was expected, and reported a
     // permanent AGENT_CONTRACT_ERROR for a Goal that was already accepted.
-    if (CLOSURE_JOB_TYPES.includes(job.type)) return null;
+    if (TECH_LEAD_NON_REVIEW_JOB_TYPES.includes(job.type)) return null;
     return { goal: job.goal, round, stage: STAGES.REVIEW };
   }
 

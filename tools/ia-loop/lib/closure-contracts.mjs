@@ -14,6 +14,31 @@ import { PROTOCOL_VERSION_V2 } from './contracts-v2.mjs';
 
 export const CLOSURE_JOB_TYPES = Object.freeze(['CLOSURE_DOCUMENTATION', 'NEXT_GOAL_PLANNING']);
 
+/**
+ * Every Tech Lead job type that is NOT a round's review.
+ *
+ * `stageOfJob` asks exactly this question, and it used to ask it through
+ * `CLOSURE_JOB_TYPES` — a list whose NAME is about closure and whose only
+ * real job was answering "does this claim the round's review stage". The two
+ * drifted the moment a third kind of Tech Lead job existed.
+ *
+ * CRITERIA_COVERAGE is that third kind. It carries the same `goal` and `round`
+ * as the review it runs before, so without this it claimed the round's review
+ * stage, collided with the real review in the ledger, and whichever the ledger
+ * enumerated first won. Goal025 round 3 is where that landed: the coverage job
+ * won, `reconcile` read a result with no `decision`, and a Goal whose review
+ * had said CHANGES_REQUIRED was reported as AGENT_CONTRACT_ERROR — "the review
+ * of round 3 carries no usable decision (undefined)".
+ *
+ * That is the SAME failure the comment in `stage-identity` already describes
+ * for CLOSURE_DOCS/PLANNING after Goal006. It recurred because the guard was
+ * keyed to a list named after one of its members instead of to the question.
+ */
+export const TECH_LEAD_NON_REVIEW_JOB_TYPES = Object.freeze([
+  ...CLOSURE_JOB_TYPES,
+  'CRITERIA_COVERAGE',
+]);
+
 /** The only tree the Tech Lead may write to during closure or planning. */
 export const CLOSURE_WRITE_PREFIX = 'docs/migration/';
 

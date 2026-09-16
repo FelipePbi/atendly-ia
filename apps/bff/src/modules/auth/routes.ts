@@ -259,6 +259,20 @@ export async function registerV1AuthRoutes(
     },
   );
 
+  // "Sair de todos os dispositivos": revoga toda sessão viva do usuário,
+  // inclusive a que fez esta chamada — por isso o cookie desta resposta é
+  // limpo, e não substituído por uma sessão nova como em PATCH .../password.
+  app.post(
+    "/v1/auth/logout-all",
+    { preHandler: requireTenantContext },
+    async (request, reply) => {
+      const sessionUser = currentUser(request);
+      await revokeAllUserSessions(sessionUser.id, "LOGOUT_ALL_DEVICES");
+      clearSessionCookie(reply);
+      return dataResponse(request, { ok: true });
+    },
+  );
+
   app.post(
     "/v1/auth/forgot-password",
     {

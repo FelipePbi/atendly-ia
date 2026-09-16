@@ -108,4 +108,19 @@ export class BffAuthService {
       signal,
     });
   }
+
+  async logoutAllDevices(signal?: AbortSignal) {
+    try {
+      return await this.http.request({
+        method: "POST",
+        path: "/v1/auth/logout-all",
+        schema: okSchema,
+        signal,
+      });
+    } finally {
+      // A sessão corrente também foi revogada; o token de CSRF guardado
+      // morreu junto com ela.
+      this.http.resetCsrfToken();
+    }
+  }
 }

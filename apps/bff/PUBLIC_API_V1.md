@@ -9,7 +9,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Área | Rotas |
 | --- | --- |
 | Saúde | `GET /health`; `GET /health/dependencies` |
-| Autenticação | `POST /v1/auth/register`; `POST /v1/auth/login`; `POST /v1/auth/logout`; `GET /v1/auth/session`; `PATCH /v1/auth/password`; `POST /v1/auth/forgot-password`; `POST /v1/auth/reset-password` |
+| Autenticação | `POST /v1/auth/register`; `POST /v1/auth/login`; `POST /v1/auth/logout`; `POST /v1/auth/logout-all` (Goal024/WU-05); `GET /v1/auth/session`; `PATCH /v1/auth/password`; `POST /v1/auth/forgot-password`; `POST /v1/auth/reset-password` |
 | Onboarding | `GET /v1/onboarding`; `PATCH /v1/onboarding`; `POST /v1/onboarding/complete` |
 | Home | `GET /v1/dashboard`; `GET /v1/status` (Goal014) |
 | Conversas | `GET /v1/conversations`; `GET /v1/conversations/:id`; `GET /v1/conversations/:id/messages`; `POST /v1/conversations/:id/messages`; `POST /v1/conversations/:id/takeover`; `POST /v1/conversations/:id/release`; `POST /v1/conversations/:id/resolve`; `PUT /v1/conversations/:id/category`; `PUT /v1/conversations/:id/ignore`; `POST /v1/conversations/:id/suggestions` (Goal012) |
@@ -799,3 +799,9 @@ Idempotente nos dois formatos. Marcar como lida um `id` que não existe, que já
 ```
 
 Único campo do contrato hoje, com **default desligado** (Goal022/WU-03 — "default silencioso"): negócio que nunca configurou não recebe `AI_APPOINTMENT_CREATED`. Não existe campo de canal de e-mail em nenhuma rota da central; um campo que nenhuma camada honra não entra no contrato.
+
+## Sair de todos os dispositivos (Goal024/WU-05)
+
+`POST /v1/auth/logout-all` revoga **todas** as sessões vivas do usuário autenticado — cookie e Bearer, em qualquer dispositivo —, reusando `revokeAllUserSessions` com o motivo próprio `LOGOUT_ALL_DEVICES`. Sob sessão e CSRF, como as demais mutações; não aceita `userId` nem `tenantId` no corpo — a identidade vem sempre da sessão.
+
+A sessão que fez a chamada **também** é revogada: "todos os dispositivos" inclui este. Diferente de `PATCH /v1/auth/password`, a rota não estabelece uma sessão nova no mesmo response — o cookie de sessão é limpo, e o cliente segue para `/login`.

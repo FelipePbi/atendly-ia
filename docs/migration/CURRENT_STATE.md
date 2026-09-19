@@ -2358,3 +2358,96 @@ aberta. O aceite é da rodada 5, depois de quatro rodadas de CHANGES_REQUIRED;
 - **LIMITE:** `decideCancel` usa o relógio do processo enquanto o claim
   da purga usa o do banco — mesma tolerância já praticada no Goal023, e
   não uma divergência nova deste Goal.
+
+## Delta aceito — diff026, 2026-09-19 ([review026](reviews/026-review.md), rodada 3; [D-042](DECISIONS.md))
+
+A fotografia acima permanece como registro. Os fatos abaixo descrevem o
+diff026 aceito: a retirada do protocolo de migração pré-Goal010, do writer
+remoto e do pacote de contratos vazio, com regra estática contra o retorno.
+
+- **FATO atual (Scheduling, protocolo antigo removido):**
+  `CalendarMigrationService` (939 linhas) foi apagada, e as três rotas
+  internas que a expunham (`POST /internal/calendar/migrations/diagnose`,
+  `POST /internal/calendar/migrations`,
+  `GET /internal/calendar/migrations/:id`) saíram de
+  `apps/scheduling-service/src/modules/internal-api/routes.ts`. Nenhuma
+  migration acompanha a mudança: a tabela `MigrationJob` e as linhas já
+  gravadas não são tocadas, e `LegacyMigrationJobReconciliation`
+  (classificação de legado, U-02) continua lendo-as do mesmo jeito.
+- **FATO atual (Scheduling, writer remoto removido):** a classe que
+  implementava `CalendarProvider` para o Minha Agenda
+  (`minha-agenda/provider.ts`, `MinhaAgendaCalendarProvider`) foi renomeada
+  para `MinhaAgendaImportSourceReader`
+  (`minha-agenda/import-source-reader.ts`) e deixou de implementar essa
+  interface: `createAppointment`, `rescheduleAppointment`,
+  `cancelAppointment`, `getAvailability`, `listAppointments` e
+  `getMigrationSnapshot` saíram junto (~600 linhas). A retirada alcança também
+  o client HTTP da origem (`minha-agenda/client.ts`) e seus tipos:
+  `createAppointment`, `updateAppointment`, `cancelWithComments`,
+  `createCustomer`, `getAppointment`, `appointmentExists` e `searchCustomers`
+  saíram da classe `MinhaAgendaClient` e da interface
+  `MinhaAgendaSourceClient`, porque o adapter apagado era o último chamador;
+  sobraram as quatro leituras que `import-source-reader.ts` consome
+  (`listServices`, `findAppointmentsByDateRange`, `getCompanyWorkSchedule`,
+  `getEmployeeWorkScheduleByEmployeeId`). Não há mais nenhum método de
+  escrita, hold, disponibilidade ou leitura operacional em `minha-agenda/`.
+  No adapter, só `listServices` e
+  `getImportSnapshot` permanecem — as duas leituras que o ciclo de
+  importação única (`ImportSession`, Goal010) efetivamente chama, nos
+  mesmos dois pontos de instanciação de antes (validação de `connect` e
+  `buildMinhaAgendaReader`). Nenhum comportamento do ciclo de importação
+  muda.
+- **FATO atual (BFF, protocolo antigo removido):** as três rotas públicas
+  (`POST /v1/calendar/migrations/diagnose`, `POST /v1/calendar/migrations`,
+  `GET /v1/calendar/migrations/:id`) saíram de
+  `apps/bff/src/modules/migrations/routes.ts` junto dos helpers
+  `publicMigration`/`internalSource`/`publicSource`, e os métodos
+  correspondentes (`diagnoseMigration`/`createMigration`/`getMigration`) e
+  os schemas de resposta saíram do client interno para o Scheduling
+  (`apps/bff/src/clients/scheduling/index.ts`). `PUBLIC_API_V1.md` retirou
+  a linha dessas três rotas da tabela de contratos legados e registrou a
+  retirada como a primeira remoção subtrativa de rota pública desta
+  migração.
+- **FATO atual (frontend, schemas e resíduo de auth removidos):**
+  `migrationDiagnosisSchema`/`migrationStartSchema`/`migrationSchema` e os
+  tipos derivados saíram de
+  `apps/frontend/src/data/mappers/publicApiSchemas.ts` — não tinham
+  consumidor desde a remoção de `ProductMigrationScreen` no diff020. Na
+  mesma varredura, o resíduo de auth morto desde o Goal014 e apontado pelo
+  [review015](reviews/015-review.md) — `src/mocks/services/MockAuthService.ts`,
+  seu export em `src/mocks/index.ts`, e o branch `preview` de
+  `features/auth/AuthScreen.tsx`/`features/auth/types.ts` — foi removido:
+  nenhuma rota passava `preview=true`, então nada de comportamento real
+  muda.
+- **FATO atual (pacote de contratos vazio removido):** `packages/contracts`
+  inteiro — código, `package.json`, `tsconfig.json`, lockfile — saiu do
+  repositório, junto dos passos `build:contracts`/`test:contracts` do gate
+  (`scripts/validate-core.mjs`, `scripts/build-all.sh`, `package.json`
+  raiz) e do loop de `npm ci` do CI em `.github/workflows/validate.yml`, sem o
+  que o job quebraria na instalação antes de chegar ao gate. Os skips
+  declarados de `validate:core` passaram de três para dois (`test:bff`,
+  `test:health-worker`). O pacote nunca teve import de runtime em nenhum app
+  (linha "Monorepo e fronteiras" acima); a remoção **não fecha G-32** — os três
+  parsers duplicados (frontend, client interno do BFF, rotas do
+  Scheduling) continuam duplicados exatamente como estavam.
+- **FATO atual (regra estática contra o retorno):**
+  `scripts/final-production-audit.mjs` ganhou quatro checagens — nenhuma
+  fonte sob `apps/` referencia rota de migração antiga; nenhuma fonte
+  referencia `CalendarMigrationService`; nenhum arquivo sob
+  `apps/scheduling-service/src/modules/integrations/minha-agenda` declara
+  `MinhaAgendaCalendarProvider`, `implements CalendarProvider` ou qualquer um
+  dos dezesseis nomes de método de escrita, hold, disponibilidade ou leitura
+  operacional da origem; `apps/frontend/src/mocks` não existe — cada uma com
+  caso positivo e negativo em
+  `scripts/tests/final-production-audit-legacy-regression.test.mjs`
+  (16 casos). O audit roda com 20 checagens, 19 verdes e o skip declarado
+  `production_health`.
+- **LIMITE:** nada disto muda o gate M4 sobre a origem real do Minha
+  Agenda (ver [DATA_MIGRATION §11](DATA_MIGRATION.md)): é retirada de
+  código morto do lado do produto, não prova contra a API real, que segue
+  sem credencial autorizada.
+- **LIMITE:** este delta descreve o diff aceito na rodada 3 do Goal026 sobre
+  a base `7253ce0`, ainda sem commit de fechamento integrado em `main`. A
+  linha "Monorepo e fronteiras" da fotografia acima ainda cita
+  `packages/contracts` como package do monorepo: é registro histórico, não
+  estado atual.

@@ -56,10 +56,9 @@ import { parseMinhaAgendaConnection } from "../integrations/minha-agenda/config.
 import { todayInTimeZone } from "../integrations/minha-agenda/date-time.js";
 import {
   type GetImportSnapshotInput,
-  MinhaAgendaCalendarProvider,
-} from "../integrations/minha-agenda/provider.js";
+  MinhaAgendaImportSourceReader,
+} from "../integrations/minha-agenda/import-source-reader.js";
 import {
-  CalendarMigrationService,
   CATEGORY_ENTITY_TYPE,
   type ImportCompletionResult,
   ImportCompletionService,
@@ -420,7 +419,6 @@ const integrationBodySchema = z.object({
     bufferBetweenServicesMinutes: z.number().int().nonnegative().default(0),
   }),
 });
-const migrationBodySchema = z.object({ target: sourceSchema });
 
 // --- Importacao unica (Goal010, WU-08) -------------------------------------
 const importCategorySchema = z.enum([
@@ -506,7 +504,6 @@ export async function registerManagementRoutes(
 ): Promise<void> {
   const prisma = prismaClient;
   const internalOnly = { preHandler: requireInternalAuth };
-  const migrations = new CalendarMigrationService(prisma);
   const tenantPurge = new TenantPurgeService(prisma);
   // Sem recuperacao global no boot (Goal010, WU-05): subir o servico nao
   // reprocessa job de negocio nenhum. A retomada da importacao e por tenant e
@@ -1295,8 +1292,7 @@ export async function registerManagementRoutes(
   // oferta de horarios (Goal010). O papel dessas rotas agora e so o ciclo da
   // importacao unica: guardar/testar a credencial e disparar a leitura da
   // origem. Desconectar a integracao nunca desativa a Agenda Atendly, que
-  // nao depende de `IntegrationConnection`. Remocao definitiva no Goal024,
-  // quando o ciclo novo de importacao (ImportSession) assumir esta rota.
+  // nao depende de `IntegrationConnection`.
   app.post(
     "/internal/calendar/integration/connect",
     internalOnly,
@@ -1321,7 +1317,7 @@ export async function registerManagementRoutes(
           409,
         );
       }
-      const provider = new MinhaAgendaCalendarProvider({
+      const provider = new MinhaAgendaImportSourceReader({
         tenantId: context.tenantId,
         ...body.credentials,
         ...body.configuration,
@@ -1367,7 +1363,7 @@ export async function registerManagementRoutes(
       const context = currentInternalContext(request);
       const connection = await requireIntegration(prisma, context.tenantId);
       try {
-        await new MinhaAgendaCalendarProvider(
+        await new MinhaAgendaImportSourceReader(
           parseMinhaAgendaConnection(connection),
         ).listServices();
         await prisma.integrationConnection.update({
@@ -1409,45 +1405,6 @@ export async function registerManagementRoutes(
         where: { tenantId: context.tenantId, provider: "MINHA_AGENDA" },
       });
       return data(request, await calendarOverview(prisma, context));
-    },
-  );
-
-  // Protocolo antigo de migracao bidirecional (`MigrationJob`), mantido por
-  // compatibilidade temporaria: enums, `source`/`target` e as respostas
-  // idempotentes ja gravadas continuam legiveis. E substituido pela
-  // importacao unica (`ImportSession`, Goal010) e removido no Goal024. Todo
-  // `MigrationJob` deste protocolo, mesmo `COMPLETED`, e classificado como
-  // legado (`legacyClass`) e nunca conta como a conclusao unica do negocio —
-  // ver `modules/migrations/legacy-job-reconciliation.ts`.
-  app.post(
-    "/internal/calendar/migrations/diagnose",
-    internalOnly,
-    async (request) => {
-      const context = currentInternalContext(request);
-      const body = parse(migrationBodySchema, request.body);
-      return data(request, await migrations.diagnose(context, body.target));
-    },
-  );
-
-  app.post(
-    "/internal/calendar/migrations",
-    internalOnly,
-    async (request, reply) => {
-      const context = currentInternalContext(request);
-      const body = parse(migrationBodySchema, request.body);
-      return reply
-        .code(201)
-        .send(data(request, await migrations.start(context, body.target)));
-    },
-  );
-
-  app.get(
-    "/internal/calendar/migrations/:id",
-    internalOnly,
-    async (request) => {
-      const context = currentInternalContext(request);
-      const { id } = parse(idParamsSchema, request.params);
-      return data(request, await migrations.get(context.tenantId, id));
     },
   );
 
@@ -2222,9 +2179,9 @@ async function requireImportSession(
 async function buildMinhaAgendaReader(
   prisma: PrismaClient,
   tenantId: string,
-): Promise<MinhaAgendaCalendarProvider> {
+): Promise<MinhaAgendaImportSourceReader> {
   const connection = await requireIntegration(prisma, tenantId);
-  return new MinhaAgendaCalendarProvider(
+  return new MinhaAgendaImportSourceReader(
     parseMinhaAgendaConnection(connection),
   );
 }

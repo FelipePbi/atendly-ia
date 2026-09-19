@@ -25,7 +25,7 @@ import type {
   GetImportSnapshotInput,
   MinhaAgendaImportRecord,
   MinhaAgendaImportSnapshot,
-} from "../integrations/minha-agenda/provider.js";
+} from "../integrations/minha-agenda/import-source-reader.js";
 import {
   type MinhaAgendaAppointment,
   minhaAgendaAppointmentSchema,

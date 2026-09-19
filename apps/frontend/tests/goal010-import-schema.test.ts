@@ -8,16 +8,11 @@ import {
   importPreviewSchema,
   importProgressSchema,
   importSessionStartSchema,
-  migrationDiagnosisSchema,
-  migrationSchema,
-  migrationStartSchema,
 } from "../src/data/mappers/publicApiSchemas";
 
 /**
- * Goal010: a importação única entra como contrato novo, e o protocolo
- * bidirecional anterior continua decodificável — as respostas de
- * `MigrationJob` já gravadas não deixam de existir porque o produto mudou de
- * caminho (o corte delas é do Goal024). Sem tela: isto é só o contrato que a
+ * Goal010: a importação única entra como contrato novo, e substitui o
+ * protocolo bidirecional anterior. Sem tela: isto é só o contrato que a
  * camada de dados precisa entender (a experiência é do Goal019).
  */
 
@@ -239,55 +234,5 @@ describe("contrato da importação única (Goal010)", () => {
         items: [],
       }),
     ).toThrow();
-  });
-
-  it("mantém decodificável a resposta antiga da migração bidirecional", () => {
-    expect(
-      migrationDiagnosisSchema.parse({
-        source: "EXTERNAL",
-        target: "ATENDLY",
-        supported: true,
-        conflicts: [
-          {
-            entityType: "customer",
-            externalId: "500",
-            code: "DUPLICATE_PHONE",
-            message: "Telefone repetido",
-          },
-        ],
-        entities: {
-          services: { total: 4, importable: 4 },
-          customers: { total: 10, importable: 9 },
-          appointments: { total: 30, importable: 30 },
-          availability: { total: 1, importable: 1 },
-        },
-        warnings: [],
-        limitations: [],
-      }).supported,
-    ).toBe(true);
-
-    expect(
-      migrationStartSchema.parse({ migrationId: "migration-1" }).migrationId,
-    ).toBe("migration-1");
-
-    expect(
-      migrationSchema.parse({
-        migrationId: "migration-1",
-        source: "EXTERNAL",
-        target: "ATENDLY",
-        status: "COMPLETED",
-        progress: 100,
-        currentStep: null,
-        summary: { services: 4 },
-        warnings: [],
-        limitations: [],
-        error: null,
-        startedAt: "2026-09-01T10:00:00.000Z",
-        finishedAt: "2026-09-01T10:05:00.000Z",
-        createdAt: "2026-09-01T09:59:00.000Z",
-        updatedAt: "2026-09-01T10:05:00.000Z",
-        conflicts: [],
-      }).status,
-    ).toBe("COMPLETED");
   });
 });

@@ -20,8 +20,6 @@ const npm = (cwd, name, ...args) => ({
 });
 
 export const coreSteps = [
-  // contracts primeiro: os apps consumidores compilam contra o build dele.
-  npm("packages/contracts", "build:contracts", "run", "build"),
   npm("apps/scheduling-service", "build:scheduling-service", "run", "build"),
   npm("apps/ai-orchestrator", "build:ai-orchestrator", "run", "build"),
   npm("apps/bff", "build:bff", "run", "build"),
@@ -75,11 +73,6 @@ export const coreSteps = [
     name: "test:bff",
     cwd: "apps/bff",
     skip: "only the integration suite exists; it runs in validate:integration",
-  },
-  {
-    name: "test:contracts",
-    cwd: "packages/contracts",
-    skip: "package has no automated test suite",
   },
   {
     name: "test:health-worker",

@@ -9,6 +9,8 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
+import { isMain } from "./lib/gate.mjs";
+
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -24,7 +26,7 @@ const expectedServices = [
   "atendly-ia-health-worker",
 ];
 
-async function main() {
+export async function main() {
   const renderBlueprint = read("render.yaml");
   const frontendSources = sourceFiles("apps/frontend/src");
   const bffSchema = read("apps/bff/prisma/schema.prisma");
@@ -198,8 +200,121 @@ async function main() {
     "authorization, cookies, credentials, provider tokens and customer phones",
   );
 
+  const appsSources = sourceFiles("apps").map((file) => ({
+    path: file,
+    content: read(file),
+  }));
+  const minhaAgendaSources = sourceFiles(
+    "apps/scheduling-service/src/modules/integrations/minha-agenda",
+  ).map((file) => ({ path: file, content: read(file) }));
+
+  const legacyRouteFiles = findLegacyMigrationRouteReferences(
+    appsSources,
+  ).filter(
+    (file) =>
+      file !== "apps/ai-orchestrator/tests/tools/import-out-of-reach.test.ts",
+  );
+  check(
+    "no_legacy_calendar_migration_routes",
+    legacyRouteFiles.length === 0,
+    legacyRouteFiles.length
+      ? legacyRouteFiles.join(", ")
+      : "no source under apps/ references /v1/calendar/migrations or /internal/calendar/migrations",
+  );
+
+  const calendarMigrationServiceFiles =
+    findCalendarMigrationServiceReferences(appsSources);
+  check(
+    "no_calendar_migration_service_reference",
+    calendarMigrationServiceFiles.length === 0,
+    calendarMigrationServiceFiles.length
+      ? calendarMigrationServiceFiles.join(", ")
+      : "CalendarMigrationService has no file, import, export, class or instantiation left",
+  );
+
+  const minhaAgendaWriterFiles =
+    findMinhaAgendaWriterReferences(minhaAgendaSources);
+  check(
+    "minha_agenda_origin_has_no_writer",
+    minhaAgendaWriterFiles.length === 0,
+    minhaAgendaWriterFiles.length
+      ? minhaAgendaWriterFiles.join(", ")
+      : "no CalendarProvider implementation remains in the Minha Agenda origin",
+  );
+
+  check(
+    "frontend_mocks_directory_is_absent",
+    !frontendMocksDirectoryExists(repositoryRoot),
+    "apps/frontend/src/mocks",
+  );
+
   await auditProductionHealth();
   summarize();
+}
+
+// As quatro funções abaixo são puras (recebem conteúdo, não lêem o disco)
+// para que scripts/tests possa provar o caso negativo — uma árvore que
+// contém o padrão de volta — sem depender de repositoryRoot.
+export function findLegacyMigrationRouteReferences(files) {
+  const pattern = /\/v1\/calendar\/migrations|\/internal\/calendar\/migrations/u;
+  return files
+    .filter(({ content }) => pattern.test(content))
+    .map(({ path: filePath }) => filePath);
+}
+
+export function findCalendarMigrationServiceReferences(files) {
+  const contentPatterns = [
+    /\bimport\b[^;]*\bCalendarMigrationService\b/u,
+    /\bexport\b[^;]*\bCalendarMigrationService\b/u,
+    /\bclass\s+CalendarMigrationService\b/u,
+    /\bnew\s+CalendarMigrationService\s*\(/u,
+  ];
+  return files
+    .filter(
+      ({ path: filePath, content }) =>
+        /calendar-migration-service/iu.test(filePath) ||
+        contentPatterns.some((pattern) => pattern.test(content)),
+    )
+    .map(({ path: filePath }) => filePath);
+}
+
+const MINHA_AGENDA_WRITER_METHOD_NAMES = [
+  "createAppointment",
+  "rescheduleAppointment",
+  "cancelAppointment",
+  "createHold",
+  "listHolds",
+  "getHold",
+  "releaseHold",
+  "getAvailability",
+  "getAppointment",
+  "listAppointments",
+  "getMigrationSnapshot",
+  "updateAppointment",
+  "cancelWithComments",
+  "createCustomer",
+  "appointmentExists",
+  "searchCustomers",
+];
+
+export function findMinhaAgendaWriterReferences(files) {
+  const contentPatterns = [
+    /\bMinhaAgendaCalendarProvider\b/u,
+    /\bimplements\s+CalendarProvider\b/u,
+    new RegExp(
+      `\\b(?:${MINHA_AGENDA_WRITER_METHOD_NAMES.join("|")})\\s*\\(`,
+      "u",
+    ),
+  ];
+  return files
+    .filter(({ content }) =>
+      contentPatterns.some((pattern) => pattern.test(content)),
+    )
+    .map(({ path: filePath }) => filePath);
+}
+
+export function frontendMocksDirectoryExists(root) {
+  return existsSync(path.join(root, "apps/frontend/src/mocks"));
 }
 
 async function auditProductionHealth() {
@@ -320,7 +435,9 @@ function summarize() {
   if (failed.length > 0) process.exitCode = 1;
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
+if (isMain(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  });
+}

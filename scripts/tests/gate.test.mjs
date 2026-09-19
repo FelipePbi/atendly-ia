@@ -70,13 +70,7 @@ test("validate:core declares the Scheduling Service build", () => {
   ]);
 
   const executed = coreSteps.filter((step) => !step.skip).map((s) => s.name);
-  assert.ok(
-    executed.indexOf("build:contracts") <
-      executed.indexOf("build:scheduling-service"),
-    "contracts must build before the consuming apps",
-  );
   for (const expected of [
-    "build:contracts",
     "build:scheduling-service",
     "build:ai-orchestrator",
     "build:bff",

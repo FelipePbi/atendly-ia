@@ -91,48 +91,6 @@ export type MinhaAgendaAppointment = z.infer<
   typeof minhaAgendaAppointmentSchema
 >;
 
-export interface CreateCustomerInput {
-  name: string;
-  phone1: string;
-  phone2?: string;
-  birthDate?: string | null;
-  address?: string;
-  remarks?: string;
-  cpf?: string;
-  cnpj?: string | null;
-  comments?: string;
-  phoneInternational?: string;
-  email?: string;
-  isCnpj?: boolean;
-}
-
-export interface CreateAppointmentInput {
-  date: string;
-  startTime: string;
-  duration: number;
-  customerId: number;
-  paymentMethod: string;
-  comments: string;
-  colorId: number | null;
-  materialCost: number | null;
-  reminder: boolean;
-  userId: number;
-  roomId: string | null;
-  modelVersion: number;
-  loyaltyCardCustomerId: number | null;
-  items: Array<{ serviceId: number; price: string | number }>;
-  productItems: unknown[];
-}
-
-export interface UpdateAppointmentInput extends CreateAppointmentInput {
-  id: number;
-  accountsReceivableId: number | null;
-  appointmentRepeatInfoForm: unknown;
-  discount: number | null;
-  discountInPercentage: boolean;
-  tag: string | null;
-}
-
 export const workScheduleSchema = z.record(
   z.string(),
   z.union([z.string(), z.number(), z.boolean()]).nullish(),

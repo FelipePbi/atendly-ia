@@ -707,6 +707,32 @@ export function createDatabaseDouble() {
       },
     },
   );
+  // Protocolo antigo de migracao (Goal026, WU-01): so leitor restante e
+  // `legacy-job-reconciliation.ts`, que nunca toca `ImportSession`. Seminada
+  // direto pelo Prisma do dublê para provar que um `MigrationJob`, mesmo
+  // `COMPLETED`, nao e visto por `getImportRight`/`resumeImportSessions` —
+  // essas leem so `ImportSession`, tabela que esta nem conhece.
+  const migrationJob = new Table(
+    "migrationJob",
+    { tenantId_id: ["tenantId", "id"] },
+    {
+      defaults: {
+        progress: () => 0,
+        currentStep: () => null,
+        summary: () => null,
+        warnings: () => [],
+        limitations: () => [],
+        errorCode: () => null,
+        errorMessage: () => null,
+        startedAt: () => null,
+        finishedAt: () => null,
+        legacyClass: () => "UNCLASSIFIED",
+        legacyClassifiedAt: () => null,
+        legacyClassifiedBy: () => null,
+        legacyReviewReason: () => null,
+      },
+    },
+  );
   const importSessionCategory = new Table(
     "importSessionCategory",
     {
@@ -935,6 +961,7 @@ export function createDatabaseDouble() {
     importItem,
     importDecision,
     integrationConnection,
+    migrationJob,
     appointment: appointmentClient,
     customerRelation: {
       ...customerRelation,
@@ -1038,6 +1065,7 @@ export function createDatabaseDouble() {
       importItem,
       importDecision,
       integrationConnection,
+      migrationJob,
     },
   };
 }

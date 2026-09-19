@@ -42,7 +42,7 @@ jobs:
         # Git. O client Prisma de cada app é produzido pelo próprio
         # `npm run build`, que roda antes das suítes dentro de validate:core.
         run: |
-          for dir in packages/contracts apps/scheduling-service apps/ai-orchestrator apps/bff apps/frontend apps/health-worker; do
+          for dir in apps/scheduling-service apps/ai-orchestrator apps/bff apps/frontend apps/health-worker; do
             npm ci --prefix "$dir"
           done
       - name: npm run validate:core

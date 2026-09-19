@@ -4,7 +4,7 @@
  * Cobre o que é responsabilidade da rota — autenticação, derivação de
  * source/ator do chamador, `Idempotency-Key`, erros próprios e distinguíveis,
  * paginação e progresso lido do banco — sem reprovar o que já é do domínio
- * (WU-02 a WU-07): a leitura de rede da origem (`MinhaAgendaCalendarProvider`)
+ * (WU-02 a WU-07): a leitura de rede da origem (`MinhaAgendaImportSourceReader`)
  * nunca é exercitada aqui, porque nenhum destes testes chega ao ponto em que
  * `analyze`/`execute` a invocariam de verdade (a checagem de estado da sessão
  * e de versão do preview sempre decide antes disso).

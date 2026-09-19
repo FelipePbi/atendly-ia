@@ -72,7 +72,6 @@ As rotas abaixo também estão registradas e possuem consumidores no frontend at
 | --- | --- |
 | Estado/fonte de calendário | `GET /v1/calendar` |
 | Conexão da origem de importação (antes: conexão operacional de agenda externa) | `POST /v1/calendar/integration/connect`; `POST /v1/calendar/integration/reconnect`; `DELETE /v1/calendar/integration` |
-| Protocolo de migração pré-Goal010, sem consumidor no frontend vigente desde o fechamento do Goal010 (2026-09-12) | `POST /v1/calendar/migrations/diagnose`; `POST /v1/calendar/migrations`; `GET /v1/calendar/migrations/:id` |
 
 Essas três rotas foram reescopadas pelo Goal010 e continuam com o mesmo contrato: elas guardam, testam e removem a **credencial da origem de importação** e nada mais. Conectar não muda a fonte da agenda operacional e não exige que ela seja externa — exigir isso deixaria a importação inalcançável depois do corte do writer remoto. Credencial que se declara de escrita é recusada com `409 INTEGRATION_WRITES_NOT_SUPPORTED`: a origem é somente leitura. Desconectar remove a credencial e **nunca** desativa a Agenda Atendly.
 
@@ -85,6 +84,10 @@ Pela regra de produto vigente:
 - não existe conexão operacional, troca de fonte ou migração reversa.
 
 A futura revisão técnica deve migrar consumidores antes de remover ou alterar essa rota e enum. Este documento não determina o desenho do contrato substituto.
+
+### Retirada do protocolo de migração pré-Goal010 (Goal026, 2026-09-19)
+
+As três rotas do protocolo de migração bidirecional pré-Goal010 — `POST /v1/calendar/migrations/diagnose`, `POST /v1/calendar/migrations`, `GET /v1/calendar/migrations/:id` — saíram deste contrato. É a **primeira remoção subtrativa de rota pública** desta migração: até aqui, toda mudança de contrato tinha sido aditiva, reescopo de rota existente ou troca de vocabulário, nunca a retirada de uma rota do ar. Elas não tinham consumidor de frontend desde o fechamento do Goal010 (2026-09-12, quando esta seção passou a registrar essa ausência) e o writer remoto que as sustentava foi removido do código no mesmo Goal026 (D-042). O que a importação única precisa da origem continua servido pelas três rotas de "Conexão da origem de importação" acima; nenhuma capacidade de leitura da origem foi perdida.
 
 ## Estilo de conversa da IA: três valores (Goal011)
 

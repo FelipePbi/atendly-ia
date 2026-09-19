@@ -11,7 +11,7 @@ import type {
   MinhaAgendaImportCategorySnapshot,
   MinhaAgendaImportRecord,
   MinhaAgendaImportSnapshot,
-} from "../integrations/minha-agenda/provider.js";
+} from "../integrations/minha-agenda/import-source-reader.js";
 
 /**
  * Superficie minima que o preview precisa da origem: so a leitura por

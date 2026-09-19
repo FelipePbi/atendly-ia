@@ -807,69 +807,6 @@ export const dashboardSchema = z.object({
   degraded: z.boolean(),
 });
 
-const migrationEntityCountSchema = z.object({
-  total: z.number().int().nonnegative(),
-  importable: z.number().int().nonnegative(),
-});
-
-export const migrationDiagnosisSchema = z.object({
-  source: calendarSourceSchema,
-  target: calendarSourceSchema,
-  supported: z.boolean(),
-  conflicts: z.array(
-    z.object({
-      entityType: z.string(),
-      externalId: z.string().nullable(),
-      code: z.string(),
-      message: z.string(),
-    }),
-  ),
-  entities: z.object({
-    services: migrationEntityCountSchema,
-    customers: migrationEntityCountSchema,
-    appointments: migrationEntityCountSchema,
-    availability: migrationEntityCountSchema,
-  }),
-  warnings: z.array(z.string()),
-  limitations: z.array(z.string()),
-});
-
-export const migrationStartSchema = z.object({
-  migrationId: z.string().min(1),
-});
-
-export const migrationSchema = z.object({
-  migrationId: z.string().min(1),
-  source: calendarSourceSchema,
-  target: calendarSourceSchema,
-  status: z.enum([
-    "PENDING",
-    "ANALYZING",
-    "RUNNING",
-    "PARTIAL",
-    "COMPLETED",
-    "FAILED",
-  ]),
-  progress: z.number().int().min(0).max(100),
-  currentStep: z.string().nullable(),
-  summary: z.unknown().nullable(),
-  warnings: z.array(z.string()),
-  limitations: z.array(z.string()),
-  error: z.object({ code: z.string(), message: z.string() }).nullable(),
-  startedAt: isoDateTimeSchema.nullable(),
-  finishedAt: isoDateTimeSchema.nullable(),
-  createdAt: isoDateTimeSchema,
-  updatedAt: isoDateTimeSchema,
-  conflicts: z.array(
-    z.object({
-      id: z.string().min(1),
-      entityType: z.string(),
-      status: z.string(),
-      details: z.unknown(),
-    }),
-  ),
-});
-
 export const whatsappConnectionSchema = z.object({
   id: z.string().min(1),
   phoneNumber: z.string().nullable(),
@@ -1169,11 +1106,8 @@ export type TranscriptStatus = z.infer<typeof transcriptStatusSchema>;
 export type MessageAttachment = z.infer<typeof messageAttachmentSchema>;
 
 // --- Importacao unica do Minha Agenda (Goal010) ----------------------------
-// Substitui a migracao bidirecional como caminho de produto. Os schemas
-// antigos (`migrationSchema` e companhia) continuam acima e continuam
-// decodificando as respostas ja gravadas do protocolo anterior — o corte
-// deles e do Goal024, nao deste. Aqui nao ha tela (Goal019): so o contrato
-// que a camada de dados precisa entender.
+// Substitui a migracao bidirecional como caminho de produto. Aqui nao ha
+// tela (Goal019): so o contrato que a camada de dados precisa entender.
 export const importCategorySchema = z.enum([
   "SERVICE",
   "CUSTOMER",
@@ -1399,9 +1333,6 @@ export const importCategorySelectionResultSchema = z.object({
   selected: z.boolean(),
 });
 
-export type Migration = z.infer<typeof migrationSchema>;
-export type MigrationDiagnosis = z.infer<typeof migrationDiagnosisSchema>;
-export type MigrationStart = z.infer<typeof migrationStartSchema>;
 export type ImportCategory = z.infer<typeof importCategorySchema>;
 export type ImportItemStatus = z.infer<typeof importItemStatusSchema>;
 export type ImportSessionStatus = z.infer<typeof importSessionStatusSchema>;

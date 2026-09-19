@@ -6,7 +6,7 @@ import { Prisma, type PrismaClient } from "../../generated/prisma/client.js";
  * Nao existe tabela raiz de tenant na IA: `tenantId` esta espalhado por cerca
  * de 80 ocorrencias em 16 modelos do schema, entao a purga e enumeracao, nao
  * uma unica exclusao em cascata a partir de uma linha "Tenant". A lista abaixo
- * e o contrato com {@link ../../../tests/internal/tenantPurge.spec.ts}: toda
+ * e o contrato com {@link ../../../tests/internal/tenant-purge.schema.test.ts}: toda
  * tabela com `tenantId` no schema precisa aparecer aqui, na ordem segura de
  * chave estrangeira (quem referencia primeiro, quem e referenciado depois).
  *

@@ -2,22 +2,25 @@
  * Corte do writer remoto (Goal010, WU-07): `CalendarProviderFactory` recusa
  * MINHA_AGENDA para qualquer operacao operacional — escrita, oferta de
  * horarios e leitura — com erro proprio e identificavel. O dublê de
- * `MinhaAgendaCalendarProvider` abaixo falha se for instanciado: ele prova
- * que nenhum caminho novo constroi o provider remoto fora da importacao,
- * porque o teste falharia com o erro do dublê em vez do erro esperado da
- * factory caso algum caminho ainda o chamasse.
+ * `MinhaAgendaImportSourceReader` abaixo falha se for instanciado: ele
+ * prova que nenhum caminho novo constroi o leitor remoto fora da
+ * importacao, porque o teste falharia com o erro do dublê em vez do erro
+ * esperado da factory caso algum caminho ainda o chamasse.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../src/modules/integrations/minha-agenda/provider.js", () => ({
-  MinhaAgendaCalendarProvider: class {
-    constructor() {
-      throw new Error(
-        "dublê: MinhaAgendaCalendarProvider não deve ser instanciado fora da importação",
-      );
-    }
-  },
-}));
+vi.mock(
+  "../../src/modules/integrations/minha-agenda/import-source-reader.js",
+  () => ({
+    MinhaAgendaImportSourceReader: class {
+      constructor() {
+        throw new Error(
+          "dublê: MinhaAgendaImportSourceReader não deve ser instanciado fora da importação",
+        );
+      }
+    },
+  }),
+);
 
 import { CalendarService } from "../../src/modules/calendar/calendar-service.js";
 import { CalendarProviderFactory } from "../../src/modules/calendar/provider-factory.js";

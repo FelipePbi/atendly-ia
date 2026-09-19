@@ -311,62 +311,6 @@ const seriesOccurrencePreviewSchema = z.object({
   holdId: z.string().nullable(),
   unavailable: z.boolean(),
 });
-const migrationEntityCountSchema = z.object({
-  total: z.number().int().nonnegative(),
-  importable: z.number().int().nonnegative(),
-});
-const migrationDiagnosisSchema = z.object({
-  source: sourceSchema,
-  target: sourceSchema,
-  supported: z.boolean(),
-  conflicts: z.array(
-    z.object({
-      entityType: z.string(),
-      externalId: z.string().nullable(),
-      code: z.string(),
-      message: z.string(),
-    }),
-  ),
-  entities: z.object({
-    services: migrationEntityCountSchema,
-    customers: migrationEntityCountSchema,
-    appointments: migrationEntityCountSchema,
-    availability: migrationEntityCountSchema,
-  }),
-  warnings: z.array(z.string()),
-  limitations: z.array(z.string()),
-});
-const migrationSchema = z.object({
-  migrationId: z.string(),
-  source: sourceSchema,
-  target: sourceSchema,
-  status: z.enum([
-    "PENDING",
-    "ANALYZING",
-    "RUNNING",
-    "PARTIAL",
-    "COMPLETED",
-    "FAILED",
-  ]),
-  progress: z.number().int().min(0).max(100),
-  currentStep: z.string().nullable(),
-  summary: z.unknown().nullable(),
-  warnings: z.array(z.string()),
-  limitations: z.array(z.string()),
-  error: z.object({ code: z.string(), message: z.string() }).nullable(),
-  startedAt: z.string().nullable(),
-  finishedAt: z.string().nullable(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-  conflicts: z.array(
-    z.object({
-      id: z.string(),
-      entityType: z.string(),
-      status: z.string(),
-      details: z.unknown(),
-    }),
-  ),
-});
 // --- Importacao unica (Goal010, WU-09) -------------------------------------
 const importCategorySchema = z.enum([
   "SERVICE",
@@ -1270,34 +1214,6 @@ export class SchedulingClient {
       "/internal/calendar/integration",
       undefined,
       calendarSchema,
-    );
-  }
-
-  async diagnoseMigration(context: InternalRequestContext, input: unknown) {
-    return this.mutate(
-      context,
-      "POST",
-      "/internal/calendar/migrations/diagnose",
-      input,
-      migrationDiagnosisSchema,
-    );
-  }
-
-  async createMigration(context: InternalRequestContext, input: unknown) {
-    return this.mutate(
-      context,
-      "POST",
-      "/internal/calendar/migrations",
-      input,
-      migrationSchema,
-    );
-  }
-
-  async getMigration(context: InternalRequestContext, id: string) {
-    return this.get(
-      context,
-      `/internal/calendar/migrations/${encodeURIComponent(id)}`,
-      migrationSchema,
     );
   }
 

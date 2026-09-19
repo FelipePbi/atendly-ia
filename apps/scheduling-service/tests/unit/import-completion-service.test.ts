@@ -14,7 +14,6 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { CalendarMigrationService } from "../../src/modules/migrations/calendar-migration-service.js";
 import { ImportCompletionService } from "../../src/modules/migrations/import-completion-service.js";
 import { ImportExecutionService } from "../../src/modules/migrations/import-execution-service.js";
 import {
@@ -265,6 +264,44 @@ describe("ImportCompletionService: conclusão única garantida pelo banco", () =
   });
 });
 
+describe("ImportCompletionService: protocolo legado de migração não consome o direito", () => {
+  it("um MigrationJob COMPLETED, semeado direto pelo Prisma, não torna o direito indisponível", async () => {
+    const { database, completion } = setup();
+
+    // Protocolo antigo removido no Goal026 (WU-01): a linha que ele gravava é
+    // semeada direto pelo Prisma do dublê, sem a classe que a produzia.
+    // `getImportRight` nem conhece `MigrationJob` — só `ImportSession` conta.
+    await database.client.migrationJob.create({
+      data: {
+        tenantId,
+        requestedBy: "user-1",
+        source: "MINHA_AGENDA",
+        target: "ATENDLY",
+        status: "COMPLETED",
+        summary: {
+          imported: {
+            services: 1,
+            customers: 1,
+            appointments: 1,
+            availability: 1,
+          },
+        },
+      } as never,
+    });
+
+    expect(await completion.getImportRight(tenantId)).toMatchObject({
+      available: true,
+      sessionId: null,
+    });
+    const started = await completion.startSession({
+      tenantId,
+      userId: "user-1",
+      sourceAccountId: "account-1",
+    });
+    expect(started.created).toBe(true);
+  });
+});
+
 describe("ImportCompletionService: pendentes exigem aceite explícito", () => {
   it("recusa concluir com itens não importados sem o aceite", async () => {
     const { database, completion } = setup();
@@ -453,29 +490,6 @@ describe("ImportCompletionService: depois de concluída não há segunda importa
         { previewVersion: 1 },
       ),
     ).rejects.toMatchObject({ code: "IMPORT_SESSION_NOT_EXECUTABLE" });
-  });
-
-  it("recusa também o protocolo antigo, que sobrevive por compatibilidade", async () => {
-    const { database, completion } = setup();
-    const sessionId = await seedSession(database, [
-      {
-        category: "SERVICE",
-        externalId: "900",
-        status: "IMPORTED",
-        internalId: "service-1",
-      },
-    ]);
-    await completion.complete({ tenantId, sessionId, userId: "user-1" });
-    const legacy = new CalendarMigrationService(database.client as never);
-
-    // A migracao bidirecional antiga ainda esta roteada ate o Goal024; ela
-    // tambem le a origem, entao tambem precisa parar na conclusao.
-    await expect(
-      legacy.start(
-        { tenantId, userId: "user-1", requestId: "req-1" },
-        "ATENDLY",
-      ),
-    ).rejects.toMatchObject({ code: "IMPORT_ALREADY_COMPLETED" });
   });
 
   it("não oferece sincronização contínua nem troca de fonte em nenhum método", async () => {

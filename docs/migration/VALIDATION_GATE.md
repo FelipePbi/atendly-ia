@@ -16,7 +16,7 @@ git diff --check
 
 | Comando | Cobre | Não cobre |
 | --- | --- | --- |
-| `validate:core` | Builds de contracts, Scheduling, IA, BFF e frontend; `npm run check` do health-worker; suíte da IA; suíte do adapter HTTP do frontend; `go build`/`go vet`/`go test` do Evolution Go; testes dos próprios scripts de gate; auditoria estática | Qualquer escrita em banco. Nenhum passo abre conexão de banco |
+| `validate:core` | Builds de Scheduling, IA, BFF e frontend; `npm run check` do health-worker; suíte da IA; suíte do adapter HTTP do frontend; `go build`/`go vet`/`go test` do Evolution Go; testes dos próprios scripts de gate; auditoria estática | Qualquer escrita em banco. Nenhum passo abre conexão de banco |
 | `validate:integration` | 28 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, a purga de conteúdo de conversa (Goal023) e a purga por negócio da IA (Goal025), o outbox do Evolution Go e um ensaio por migration de Goal — o último deles `rehearse:goal023-retention-migration` | Qualquer camada acima do dado: nenhuma jornada de interface, nenhum envio real por WhatsApp e nenhuma origem real do Minha Agenda |
 | `git diff --check` | Espaço em branco/conflito no diff | Correção do diff |
 
@@ -36,9 +36,14 @@ Service; ele é o agregador histórico, não o gate.
 | PostgreSQL | 18.4 local descartável (CI: `postgres:16-alpine`) | binários já instalados na estação |
 
 Dependências de cada package precisam estar instaladas antes do gate
-(`npm ci` em `packages/contracts`, `apps/scheduling-service`,
-`apps/ai-orchestrator`, `apps/bff`, `apps/frontend`, `apps/health-worker`).
+(`npm ci` em `apps/scheduling-service`, `apps/ai-orchestrator`, `apps/bff`,
+`apps/frontend`, `apps/health-worker`).
 Nenhuma dependência de produção foi adicionada ou atualizada pelo Goal002.
+`packages/contracts` — que nunca teve import de runtime em nenhum app — e os
+passos `build:contracts`/`test:contracts` do gate saíram no diff026
+([review026](reviews/026-review.md); [DECISIONS D-042](DECISIONS.md)). O loop de
+`npm ci` do CI (`.github/workflows/validate.yml`) deixou de instalar o pacote no
+mesmo diff.
 
 Nada além disso precisa existir no checkout. O client Prisma é gerado dentro
 dos gates: em `validate:core` pelo `npm run build` de cada app, em
@@ -245,8 +250,9 @@ Códigos de saída: `0` sucesso, `1` alguma etapa falhou, `2` (só integração)
 alvo de banco recusado. `skipped` e `not_run` jamais viram `passed`.
 
 Packages sem suíte automatizada aparecem explicitamente como `skipped` em
-`validate:core`: `apps/bff` (só integração), `apps/scheduling-service`,
-`packages/contracts` e `apps/health-worker`.
+`validate:core`: `apps/bff` (só integração) e `apps/health-worker`.
+`packages/contracts` tinha o mesmo tratamento até o diff026, quando o pacote
+e o passo saíram do gate junto — os skips declarados passaram de três para dois.
 
 `apps/frontend` deixou de ser skip: o Goal003 acrescentou `test:frontend`
 (`vitest run`), que exercita o adapter HTTP contra o BFF — sessão e CSRF sem

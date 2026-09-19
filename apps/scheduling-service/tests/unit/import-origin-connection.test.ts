@@ -30,21 +30,24 @@ import { TEST_INTERNAL_SERVICE_TOKEN } from "./support/test-env.js";
 
 const origin = vi.hoisted(() => ({ credentialChecks: [] as unknown[] }));
 
-vi.mock("../../src/modules/integrations/minha-agenda/provider.js", async () => {
-  const actual = await vi.importActual<
-    typeof import("../../src/modules/integrations/minha-agenda/provider.js")
-  >("../../src/modules/integrations/minha-agenda/provider.js");
-  return {
-    ...actual,
-    MinhaAgendaCalendarProvider: class {
-      constructor(private readonly config: { tenantId: string }) {}
-      async listServices() {
-        origin.credentialChecks.push(this.config);
-        return [];
-      }
-    },
-  };
-});
+vi.mock(
+  "../../src/modules/integrations/minha-agenda/import-source-reader.js",
+  async () => {
+    const actual = await vi.importActual<
+      typeof import("../../src/modules/integrations/minha-agenda/import-source-reader.js")
+    >("../../src/modules/integrations/minha-agenda/import-source-reader.js");
+    return {
+      ...actual,
+      MinhaAgendaImportSourceReader: class {
+        constructor(private readonly config: { tenantId: string }) {}
+        async listServices() {
+          origin.credentialChecks.push(this.config);
+          return [];
+        }
+      },
+    };
+  },
+);
 
 type Database = ReturnType<typeof createDatabaseDouble>;
 

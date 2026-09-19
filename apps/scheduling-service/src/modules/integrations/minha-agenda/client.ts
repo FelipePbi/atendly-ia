@@ -1,19 +1,14 @@
-import { z } from "zod";
+import type { z } from "zod";
 
 import { AppError } from "../../../shared/errors/app-error.js";
 import type { MinhaAgendaConnectionConfig } from "./config.js";
 import {
   type AppointmentRangeQuery,
-  type CreateAppointmentInput,
-  type CreateCustomerInput,
   type MinhaAgendaAppointment,
   minhaAgendaAppointmentSchema,
   minhaAgendaAuthResponseSchema,
-  type MinhaAgendaCustomer,
-  minhaAgendaCustomerSchema,
   type MinhaAgendaService,
   minhaAgendaServiceSchema,
-  type UpdateAppointmentInput,
   type WorkSchedule,
   workScheduleSchema,
 } from "./types.js";
@@ -30,35 +25,9 @@ interface TokenCache {
  */
 export interface MinhaAgendaSourceClient {
   listServices(): Promise<MinhaAgendaService[]>;
-  searchCustomers(query: string): Promise<MinhaAgendaCustomer[]>;
-  createCustomer(
-    input: CreateCustomerInput,
-    idempotencyKey: string,
-  ): Promise<MinhaAgendaCustomer>;
   findAppointmentsByDateRange(
     query: AppointmentRangeQuery,
   ): Promise<MinhaAgendaAppointment[]>;
-  appointmentExists(query: {
-    employeeId: number;
-    date: string;
-    startTime: string;
-    exceptForId?: number;
-  }): Promise<boolean>;
-  getAppointment(id: number): Promise<MinhaAgendaAppointment>;
-  createAppointment(
-    input: CreateAppointmentInput,
-    idempotencyKey: string,
-  ): Promise<MinhaAgendaAppointment>;
-  updateAppointment(
-    id: number,
-    input: UpdateAppointmentInput,
-    idempotencyKey: string,
-  ): Promise<MinhaAgendaAppointment>;
-  cancelWithComments(
-    id: number,
-    comments: string,
-    idempotencyKey: string,
-  ): Promise<void>;
   getCompanyWorkSchedule(): Promise<WorkSchedule>;
   getEmployeeWorkScheduleByEmployeeId(
     employeeId: number,
@@ -78,28 +47,6 @@ export class MinhaAgendaClient implements MinhaAgendaSourceClient {
     );
   }
 
-  async searchCustomers(query: string): Promise<MinhaAgendaCustomer[]> {
-    return this.request(
-      "/customers/search",
-      minhaAgendaCustomerSchema.array(),
-      "customers.search",
-      {},
-      { query },
-    );
-  }
-
-  async createCustomer(
-    input: CreateCustomerInput,
-    idempotencyKey: string,
-  ): Promise<MinhaAgendaCustomer> {
-    return this.request(
-      "/customers",
-      minhaAgendaCustomerSchema,
-      "customers.create",
-      { method: "POST", body: input, idempotencyKey },
-    );
-  }
-
   async findAppointmentsByDateRange(
     query: AppointmentRangeQuery,
   ): Promise<MinhaAgendaAppointment[]> {
@@ -109,67 +56,6 @@ export class MinhaAgendaClient implements MinhaAgendaSourceClient {
       "appointments.byDateRange",
       {},
       { ...query },
-    );
-  }
-
-  async appointmentExists(query: {
-    employeeId: number;
-    date: string;
-    startTime: string;
-    exceptForId?: number;
-  }): Promise<boolean> {
-    return this.request(
-      "/appointments/exists",
-      z.boolean(),
-      "appointments.exists",
-      {},
-      query,
-    );
-  }
-
-  async getAppointment(id: number): Promise<MinhaAgendaAppointment> {
-    return this.request(
-      `/appointments/${id}`,
-      minhaAgendaAppointmentSchema,
-      "appointments.get",
-    );
-  }
-
-  async createAppointment(
-    input: CreateAppointmentInput,
-    idempotencyKey: string,
-  ): Promise<MinhaAgendaAppointment> {
-    return this.request(
-      "/appointments",
-      minhaAgendaAppointmentSchema,
-      "appointments.create",
-      { method: "POST", body: input, idempotencyKey },
-    );
-  }
-
-  async updateAppointment(
-    id: number,
-    input: UpdateAppointmentInput,
-    idempotencyKey: string,
-  ): Promise<MinhaAgendaAppointment> {
-    return this.request(
-      `/appointments/${id}`,
-      minhaAgendaAppointmentSchema,
-      "appointments.update",
-      { method: "PUT", body: input, idempotencyKey },
-    );
-  }
-
-  async cancelWithComments(
-    id: number,
-    comments: string,
-    idempotencyKey: string,
-  ): Promise<void> {
-    await this.request(
-      `/appointments/cancelWithComments/${id}`,
-      z.unknown(),
-      "appointments.cancel",
-      { method: "PUT", body: { comments }, idempotencyKey },
     );
   }
 

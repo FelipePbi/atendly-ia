@@ -4,12 +4,12 @@ import { AtendlyCalendarProvider } from "../integrations/atendly/provider.js";
 import type { CalendarProvider } from "./calendar-provider.js";
 
 /**
- * Corte do writer remoto (Goal010, WU-07): a Agenda Atendly e a unica fonte
- * operacional. `MinhaAgendaCalendarProvider` nao e importado aqui de
- * proposito — nenhum caminho operacional (escrita ou oferta de horarios)
- * pode instanciar o provider remoto, nem por engano. A leitura da origem
- * sobrevive apenas dentro da importacao (`getImportSnapshot`, Goal010),
- * chamada direto pelo modulo de importacao, nunca por esta factory.
+ * Corte do writer remoto (Goal010, WU-07; retirado por completo no
+ * Goal026): a Agenda Atendly e a unica fonte operacional. Nao existe mais
+ * um provider remoto para instanciar — `MinhaAgendaImportSourceReader` nao
+ * implementa `CalendarProvider` e so serve a leitura da importacao unica
+ * (`getImportSnapshot`, Goal010), chamada direto pelo modulo de importacao,
+ * nunca por esta factory.
  */
 export class CalendarProviderFactory {
   constructor(private readonly prisma: PrismaClient) {}

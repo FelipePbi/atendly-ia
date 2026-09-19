@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { MinhaAgendaSourceClient } from "../../src/modules/integrations/minha-agenda/client.js";
 import type { MinhaAgendaConnectionConfig } from "../../src/modules/integrations/minha-agenda/config.js";
-import { MinhaAgendaCalendarProvider } from "../../src/modules/integrations/minha-agenda/provider.js";
+import { MinhaAgendaImportSourceReader } from "../../src/modules/integrations/minha-agenda/import-source-reader.js";
 import type {
   MinhaAgendaAppointment,
   MinhaAgendaService,
@@ -63,12 +63,6 @@ class FakeSourceClient implements MinhaAgendaSourceClient {
   async listServices(): Promise<MinhaAgendaService[]> {
     return this.services;
   }
-  async searchCustomers() {
-    return [];
-  }
-  async createCustomer(): Promise<never> {
-    throw new Error("not used by the import reader");
-  }
   async findAppointmentsByDateRange(query: {
     startDate: string;
     endDate: string;
@@ -91,19 +85,6 @@ class FakeSourceClient implements MinhaAgendaSourceClient {
       (item) => item.date >= query.startDate && item.date <= query.endDate,
     );
   }
-  async appointmentExists() {
-    return false;
-  }
-  async getAppointment(): Promise<never> {
-    throw new Error("not used by the import reader");
-  }
-  async createAppointment(): Promise<never> {
-    throw new Error("not used by the import reader");
-  }
-  async updateAppointment(): Promise<never> {
-    throw new Error("not used by the import reader");
-  }
-  async cancelWithComments(): Promise<void> {}
   async getCompanyWorkSchedule(): Promise<WorkSchedule> {
     return this.companySchedule;
   }
@@ -113,10 +94,10 @@ class FakeSourceClient implements MinhaAgendaSourceClient {
 }
 
 function provider(client: FakeSourceClient) {
-  return new MinhaAgendaCalendarProvider(config(), client);
+  return new MinhaAgendaImportSourceReader(config(), client);
 }
 
-describe("MinhaAgendaCalendarProvider.getImportSnapshot: leitura por categoria", () => {
+describe("MinhaAgendaImportSourceReader.getImportSnapshot: leitura por categoria", () => {
   it("le por categoria sem reaproveitar os filtros operacionais de servico e agendamento", async () => {
     const client = new FakeSourceClient();
     client.services = [

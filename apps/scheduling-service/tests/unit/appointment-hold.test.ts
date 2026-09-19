@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { CalendarService } from "../../src/modules/calendar/calendar-service.js";
-import { MinhaAgendaCalendarProvider } from "../../src/modules/integrations/minha-agenda/provider.js";
 import { AppError } from "../../src/shared/errors/app-error.js";
 import { createDatabaseDouble } from "./support/database-double.js";
 
@@ -365,52 +364,5 @@ describe("agenda: hold de confirmação", () => {
         .writesFor("appointmentHold")
         .filter((write) => write.operation === "updateMany"),
     ).toHaveLength(1);
-  });
-
-  it("recusa hold na fonte externa com erro próprio", async () => {
-    const provider = new MinhaAgendaCalendarProvider({
-      tenantId,
-      baseUrl: "https://example.invalid",
-      basicAuth: "basic",
-      username: "user",
-      password: "secret",
-      employeeId: 1,
-      paymentMethod: "dinheiro",
-      modelVersion: 2,
-      timeoutMs: 1_000,
-      refreshSkewSeconds: 300,
-      enableWrites: true,
-      bufferBetweenServicesMinutes: 0,
-    });
-
-    await expectAppError(
-      provider.createHold({
-        serviceIds: [serviceId],
-        date: futureDate(7),
-        startTime: "09:00",
-        stepMinutes: 30,
-        idempotencyKey: "key-external-hold",
-      }),
-      "EXTERNAL_CALENDAR_HOLD_UNSUPPORTED",
-    );
-    await expectAppError(
-      provider.listHolds(),
-      "EXTERNAL_CALENDAR_HOLD_UNSUPPORTED",
-    );
-    // Confirmar apresentando hold também é recusado: a fonte externa não tem
-    // como honrar a reserva que o hold promete.
-    await expectAppError(
-      provider.createAppointment({
-        serviceIds: [serviceId],
-        date: futureDate(7),
-        startTime: "09:00",
-        customerName: "Ana",
-        customerPhone: "+5511999990000",
-        stepMinutes: 30,
-        holdId: "hold-1",
-        idempotencyKey: "key-external-create",
-      }),
-      "EXTERNAL_CALENDAR_HOLD_UNSUPPORTED",
-    );
   });
 });

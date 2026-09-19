@@ -21,7 +21,7 @@ export const DEFAULT_AI_CONVERSATION_STYLE: AiConversationStyle = "BALANCED";
 /**
  * Os dois valores antigos continuam aceitos na entrada como alias declarado.
  * Mesmo mapa do backfill da migration
- * `20260913140100_goal011_bff_ai_style_backfill`. Sai no Goal024.
+ * `20260913140100_goal011_bff_ai_style_backfill`.
  */
 export const LEGACY_AI_CONVERSATION_STYLE_ALIASES: Readonly<
   Record<string, AiConversationStyle>

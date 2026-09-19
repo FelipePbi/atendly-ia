@@ -12,9 +12,6 @@ import {
 import { requireTenantContext } from "../../lib/tenant-context.js";
 import { internalContext } from "../tenant/context.js";
 
-const idSchema = z.object({ id: z.string().trim().min(1).max(128) });
-const migrationSchema = z.object({ target: z.enum(["ATENDLY", "EXTERNAL"]) });
-
 // --- Importacao unica (Goal010, WU-09) --------------------------------------
 // Uma rota por operacao do ciclo de importacao, todas so humano: nao existe
 // contrato de importacao para a IA. `source`/`target` nunca aparecem aqui —
@@ -99,51 +96,6 @@ export async function registerV1MigrationRoutes(
   app: FastifyInstance,
 ): Promise<void> {
   const scheduling = new SchedulingClient();
-
-  app.post(
-    "/v1/calendar/migrations/diagnose",
-    { preHandler: requireTenantContext },
-    async (request) => {
-      const body = parseBody(migrationSchema, request.body);
-      return dataResponse(
-        request,
-        publicMigration(
-          await scheduling.diagnoseMigration(internalContext(request), {
-            target: internalSource(body.target),
-          }),
-        ),
-      );
-    },
-  );
-
-  app.post(
-    "/v1/calendar/migrations",
-    { preHandler: requireTenantContext },
-    async (request, reply) => {
-      const body = parseBody(migrationSchema, request.body);
-      const migration = await scheduling.createMigration(
-        internalContext(request),
-        { target: internalSource(body.target) },
-      );
-      return reply
-        .code(201)
-        .send(dataResponse(request, { migrationId: migration.migrationId }));
-    },
-  );
-
-  app.get(
-    "/v1/calendar/migrations/:id",
-    { preHandler: requireTenantContext },
-    async (request) => {
-      const { id } = parseParams(idSchema, request.params);
-      return dataResponse(
-        request,
-        publicMigration(
-          await scheduling.getMigration(internalContext(request), id),
-        ),
-      );
-    },
-  );
 
   // --- Importacao unica (Goal010, WU-09) -----------------------------------
 
@@ -332,26 +284,4 @@ function idempotencyKey(request: FastifyRequest): string {
     );
   }
   return key;
-}
-
-function publicMigration<T extends Record<string, unknown>>(migration: T) {
-  return {
-    ...migration,
-    ...(typeof migration.source === "string"
-      ? { source: publicSource(migration.source) }
-      : {}),
-    ...(typeof migration.target === "string"
-      ? { target: publicSource(migration.target) }
-      : {}),
-  };
-}
-
-function internalSource(source: "ATENDLY" | "EXTERNAL") {
-  return source === "ATENDLY"
-    ? ("ATENDLY" as const)
-    : ("MINHA_AGENDA" as const);
-}
-
-function publicSource(source: string) {
-  return source === "ATENDLY" ? "ATENDLY" : "EXTERNAL";
 }

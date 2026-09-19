@@ -10,7 +10,6 @@ import {
   initialRecoveryState,
   recoveryReducer,
 } from "@/features/auth/recoveryMachine";
-import { previewServices } from "@/mocks";
 import { Icon } from "@/shared/icons/Icon";
 import {
   getProductServices,
@@ -152,13 +151,7 @@ function PasswordField({
   );
 }
 
-export function AuthScreen({
-  scenario,
-  preview = false,
-}: {
-  scenario: AuthScenario;
-  preview?: boolean;
-}) {
+export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
   const router = useRouter();
   const { refreshSession } = useProductRuntime();
   const [loading, setLoading] = useState(false);
@@ -184,12 +177,6 @@ export function AuthScreen({
     setSubmitError(null);
     setFieldErrors({});
     try {
-      if (preview) {
-        await previewServices.auth.submit(scenario);
-        router.push(destination);
-        return;
-      }
-
       const auth = getProductServices().auth;
       if (scenario === "signup") {
         const password = formString(data, "signup-password");
@@ -298,11 +285,6 @@ export function AuthScreen({
       : newPassword
         ? "Use pelo menos 8 caracteres."
         : "Entre para acompanhar conversas e agendamentos.";
-  const destination = signup
-    ? "/onboarding/dados-do-negocio"
-    : newPassword
-      ? "/login"
-      : "/inicio";
   const submitLabel = errors
     ? "Revisar e criar conta"
     : signup
@@ -380,14 +362,14 @@ export function AuthScreen({
               scenario === "signup" ? "Use pelo menos 8 caracteres." : undefined
             }
           />
-          {(newPassword || (signup && !preview)) && (
+          {(newPassword || signup) && (
             <PasswordField
               id="confirm-password"
               label="Repita a nova senha"
               error={fieldErrors["confirm-password"]}
             />
           )}
-          {signup && !preview && (
+          {signup && (
             <label className="check">
               <input name="terms" type="checkbox" required />
               <span className="check-box" aria-hidden="true" />

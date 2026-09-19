@@ -12,7 +12,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { CalendarMigrationService } from "../../src/modules/migrations/calendar-migration-service.js";
+import { ImportCompletionService } from "../../src/modules/migrations/import-completion-service.js";
 import { ImportExecutionService } from "../../src/modules/migrations/import-execution-service.js";
 import {
   acquireImportLease,
@@ -347,15 +347,56 @@ describe("Lease da importação: expiração pelo relógio do banco", () => {
 });
 
 describe("Retomada por tenant e sob lease", () => {
-  it("o serviço legado não expõe mais recuperação global no boot", () => {
-    const { database } = setup();
-    const legacy = new CalendarMigrationService(database.client as never);
-    // Guarda de regressão: `resumeIncomplete` varria `MigrationJob` de todos
-    // os negócios, sem lease, e reagendava cada job em memória. Subir uma
-    // instância deixou de ser um evento que mexe em job de negócio.
-    expect(
-      (legacy as unknown as Record<string, unknown>).resumeIncomplete,
-    ).toBeUndefined();
+  it("um MigrationJob legado COMPLETED, semeado direto pelo Prisma, não é retomado nem consome o direito", async () => {
+    const { database, preview } = setup();
+    const client = database.client as never;
+    const alive = await analyzed(database, preview);
+
+    // Lease parado: é o único caso que `resumeImportSessions` deve enxergar.
+    await acquireImportLease(client, {
+      tenantId,
+      sessionId: alive,
+      owner: "dead-instance",
+      ttlSeconds,
+      onClaim: { status: "EXECUTING" },
+    });
+    database.advanceDatabaseClock((ttlSeconds + 1) * 1_000);
+
+    // Protocolo antigo removido no Goal026 (WU-01): a linha que ele gravava é
+    // semeada direto pelo Prisma, sem a classe que a produzia.
+    await database.client.migrationJob.create({
+      data: {
+        tenantId,
+        requestedBy: "user-1",
+        source: "MINHA_AGENDA",
+        target: "ATENDLY",
+        status: "COMPLETED",
+        summary: {
+          imported: {
+            services: 1,
+            customers: 1,
+            appointments: 1,
+            availability: 1,
+          },
+        },
+      } as never,
+    });
+
+    const resumed = await resumeImportSessions(client, {
+      tenantId,
+      owner: "recovery-instance",
+      ttlSeconds,
+    });
+
+    // `resumeImportSessions` só lê `ImportSession`: o job legado nunca
+    // aparece na retomada, mesmo `COMPLETED` e do mesmo negócio.
+    expect(resumed.map((entry) => entry.sessionId)).toEqual([alive]);
+    // E o direito de importação único do negócio segue disponível: o job
+    // legado gravado direto no banco não é a conclusão que o consome.
+    const completion = new ImportCompletionService(client);
+    expect(await completion.getImportRight(tenantId)).toMatchObject({
+      available: true,
+    });
   });
 
   it("retoma só as sessões do tenant pedido, e só as que estão realmente paradas", async () => {

@@ -12,7 +12,6 @@ import {
   isSerializationFailure,
   runCalendarWrite,
 } from "../../src/modules/calendar/write-policy.js";
-import { MinhaAgendaCalendarProvider } from "../../src/modules/integrations/minha-agenda/provider.js";
 import { createDatabaseDouble } from "./support/database-double.js";
 
 const tenantId = "tenant-a";
@@ -566,57 +565,6 @@ describe("agenda: sobreposição e atendimento manual", () => {
     // override humano, que é decisão de produto.
     expect(sql).not.toMatch(/EXCLUDE\s+USING/i);
     expect(sql).not.toMatch(/tstzrange|tsrange/i);
-  });
-
-  it("a fonte externa mantém a interface e recusa as operações novas", async () => {
-    const provider = new MinhaAgendaCalendarProvider({
-      tenantId,
-      baseUrl: "https://example.invalid",
-      basicAuth: "basic",
-      username: "user",
-      password: "secret",
-      employeeId: 1,
-      paymentMethod: "dinheiro",
-      modelVersion: 2,
-      timeoutMs: 1_000,
-      refreshSkewSeconds: 300,
-      enableWrites: true,
-      bufferBetweenServicesMinutes: 0,
-    });
-
-    await expect(
-      provider.createAppointment({
-        serviceIds: [serviceId],
-        date: futureDate(7),
-        startTime: "09:00",
-        customerName: "Ana",
-        customerPhone: "+5511999990000",
-        stepMinutes: 30,
-        idempotencyKey: "key-external",
-        source: "USER",
-        overlapOverride: true,
-        overlapOverrideReason: "encaixe",
-      }),
-    ).rejects.toMatchObject({
-      code: "EXTERNAL_CALENDAR_OVERLAP_OVERRIDE_UNSUPPORTED",
-    });
-
-    await expect(
-      provider.createAppointment({
-        serviceIds: [],
-        date: futureDate(7),
-        startTime: "09:00",
-        customerName: "Ana",
-        customerPhone: "+5511999990000",
-        stepMinutes: 30,
-        idempotencyKey: "key-external-2",
-        source: "USER",
-        title: "Encaixe",
-        durationMinutes: 30,
-      }),
-    ).rejects.toMatchObject({
-      code: "EXTERNAL_CALENDAR_MANUAL_APPOINTMENT_UNSUPPORTED",
-    });
   });
 });
 

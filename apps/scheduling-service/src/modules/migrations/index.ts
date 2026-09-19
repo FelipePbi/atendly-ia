@@ -1,4 +1,3 @@
-export { CalendarMigrationService } from "./calendar-migration-service.js";
 export {
   IMPORT_ALREADY_COMPLETED,
   IMPORT_PENDING_ACCEPTANCE_REQUIRED,

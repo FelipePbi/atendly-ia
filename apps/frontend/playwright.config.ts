@@ -33,6 +33,12 @@ export const VIEWPORTS = [
 
 export default defineConfig({
   testDir: "./e2e",
+  // The authenticated matrix (Goal033) lives in the same directory and is run
+  // by `playwright.authenticated.config.ts`, against a stack that is already
+  // up. It has no place here: this gate starts its own server and has no
+  // session, no database and no seeded tenant — exactly why it stays the one
+  // rendered gate with no precondition.
+  testIgnore: /authenticated-matrix\.spec\.ts$/,
   outputDir: "./e2e-results/artifacts",
   // Serial by default: a shared Next server and five viewports are enough
   // concurrency. Flakiness here is expensive in a way unit flakiness is not —

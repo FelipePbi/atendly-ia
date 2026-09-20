@@ -1,6 +1,11 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
+import {
+  hasFocusIndicator,
+  measureFirstTabFocus,
+  measureRunningAnimations,
+} from "./measure";
 import { PUBLIC_ROUTES } from "./routes";
 
 /**
@@ -70,50 +75,18 @@ test.describe("the gate, checked against itself", () => {
 test.describe("keyboard and motion", () => {
   test("the first Tab reaches something visible, with a focus indicator", async ({ page }) => {
     await page.goto("/login", { waitUntil: "networkidle" });
-    await page.keyboard.press("Tab");
-
-    const focused = await page.evaluate(() => {
-      const el = document.activeElement;
-      if (!el || el === document.body) return null;
-      const style = getComputedStyle(el);
-      const box = el.getBoundingClientRect();
-      return {
-        tag: el.tagName.toLowerCase(),
-        visible: box.width > 0 && box.height > 0,
-        outlineWidth: style.outlineWidth,
-        outlineStyle: style.outlineStyle,
-        boxShadow: style.boxShadow,
-      };
-    });
+    const focused = await measureFirstTabFocus(page);
 
     expect(focused, "Tab moved focus nowhere: the page has no keyboard entry point").not.toBeNull();
     expect(focused?.visible, "focus landed on something with no box").toBe(true);
-
-    // A focus ring may be an outline or a shadow; what is forbidden is neither,
-    // which is a keyboard user who cannot tell where they are.
-    const hasIndicator =
-      (focused?.outlineStyle !== "none" && focused?.outlineWidth !== "0px")
-      || (focused?.boxShadow !== "none" && focused?.boxShadow !== "");
-    expect(hasIndicator, `no visible focus indicator on <${focused?.tag}>`).toBe(true);
+    expect(hasFocusIndicator(focused), `no visible focus indicator on <${focused?.tag}>`).toBe(true);
   });
 
   test("reduced motion is honoured, not merely declared", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/login", { waitUntil: "networkidle" });
 
-    const moving = await page.evaluate(() => {
-      const offenders: string[] = [];
-      for (const el of Array.from(document.querySelectorAll("*"))) {
-        const style = getComputedStyle(el);
-        const duration = parseFloat(style.animationDuration) + parseFloat(style.transitionDuration);
-        // Anything still running for a noticeable time under `reduce` is an
-        // animation that ignored the preference.
-        if (duration > 0.2) {
-          offenders.push(`${el.tagName.toLowerCase()}.${el.className}: ${style.animationDuration}/${style.transitionDuration}`);
-        }
-      }
-      return offenders.slice(0, 10);
-    });
+    const moving = await measureRunningAnimations(page);
 
     expect(moving, `animation still running under prefers-reduced-motion:\n${moving.join("\n")}`).toEqual([]);
   });

@@ -17,7 +17,7 @@ git diff --check
 | Comando | Cobre | Não cobre |
 | --- | --- | --- |
 | `validate:core` | Builds de Scheduling, IA, BFF e frontend; `npm run check` do health-worker; suíte da IA; suíte do adapter HTTP do frontend; `go build`/`go vet`/`go test` do Evolution Go; testes dos próprios scripts de gate; auditoria estática | Qualquer escrita em banco. Nenhum passo abre conexão de banco |
-| `validate:integration` | 34 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, a purga de conteúdo de conversa (Goal023) e a purga por negócio da IA (Goal025), o outbox do Evolution Go, um ensaio por migration de Goal — o mais recente deles `rehearse:goal027-calendar-source-migration` —, a reconciliação do fuso único do negócio (`rehearse:goal029-timezone-reconciliation`, Goal029) e, desde o Goal028, o ensaio de release (`rehearse:goal028-release-migrations`) e o de dump/restore (`rehearse:goal028-restore`); desde o Goal030, o percurso único de produto ponta a ponta (`rehearse:goal030-mvp-journey`); desde o Goal032, a resposta automática ponta a ponta (`rehearse:goal032-auto-reply`, último da lista) | Qualquer camada acima do dado: nenhuma jornada de interface, nenhum envio real por WhatsApp e nenhuma origem real do Minha Agenda. Nem o percurso do Goal030 nem o ensaio do Goal032 cobrem isso — ver a nota abaixo |
+| `validate:integration` | 35 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, a purga de conteúdo de conversa (Goal023) e a purga por negócio da IA (Goal025), o outbox do Evolution Go, um ensaio por migration de Goal — o mais recente deles `rehearse:goal027-calendar-source-migration` —, a reconciliação do fuso único do negócio (`rehearse:goal029-timezone-reconciliation`, Goal029) e, desde o Goal028, o ensaio de release (`rehearse:goal028-release-migrations`) e o de dump/restore (`rehearse:goal028-restore`); desde o Goal030, o percurso único de produto ponta a ponta (`rehearse:goal030-mvp-journey`); desde o Goal032, a resposta automática ponta a ponta (`rehearse:goal032-auto-reply`); desde o Goal033, o gate renderizado nas sete telas autenticadas (`rehearse:goal033-authenticated-ui`, último da lista) | Envio real por WhatsApp e origem real do Minha Agenda, em qualquer passo. Jornada de interface passou a ter cobertura **parcial**, só pelo que o Goal033 mede — ver a nota abaixo |
 | `git diff --check` | Espaço em branco/conflito no diff | Correção do diff |
 
 Comandos auxiliares: `npm run test:gate` (só os testes dos scripts de gate) e
@@ -267,6 +267,31 @@ LLM real nem a WhatsApp real — **M4** (envio real a número real) continua
 aberto como gate operacional —, o laço de ferramentas contra o Scheduling
 real, áudio, mídia e grupo, nem nada sobre a origem real do Minha Agenda. Ver
 [DATA_MIGRATION §18](DATA_MIGRATION.md#18-resposta-automática-provada-ponta-a-ponta-goal032).
+
+`rehearse:goal033-authenticated-ui` (Goal033, diff033 — [D-049](DECISIONS.md)),
+o passo mais novo e o último da lista, fecha **A-02**
+([FINAL_AUDIT §10](FINAL_AUDIT.md#10-fechamento-de-a-02--goal033-2026-09-20)):
+sobe o BFF, o Scheduling e a IA reais em três bancos descartáveis **próprios**
+(não os de nenhum passo acima), semeia um negócio inteiramente pelas rotas do
+produto, constrói o frontend com `NEXT_PUBLIC_BFF_URL` embutida e o serve em
+porta fixa própria, e entrega ao Playwright um e-mail e uma senha para digitar
+em `/login` — nenhuma sessão fabricada. **O que ele prova, e que nenhum outro
+passo prova:** as cinco medidas do gate renderizado — overflow horizontal,
+alvo de toque mínimo AA, contraste real computado, foco visível e
+`prefers-reduced-motion` — sobre as sete telas que só existem para quem está
+autenticado (`/inicio`, `/agenda`, `/clientes`, `/conversas`,
+`/configuracoes`, `/servicos`, `/notificacoes`), com a mesma régua
+(`apps/frontend/e2e/measure.ts`) que o gate público usa, nunca uma cópia mais
+frouxa. Um controle negativo, no padrão dos passos acima, prova que overflow,
+alvo de toque, contraste e login quebrado cada um derruba o gate ou o ensaio
+com falha nomeada. **O que ele não prova:** fidelidade visual à referência
+aprovada — segue sendo conferência humana sobre o screenshot anexado —, nem
+M4, nem nada sobre a origem real do Minha Agenda. **`validate:ui` não mudou**:
+continua as mesmas sete rotas públicas, as mesmas cinco larguras, `npm run
+start` e nenhuma pré-condição de banco — amarrar o gate público a PostgreSQL
+transformaria o único gate renderizado sem pré-condição em mais um passo
+dependente de ambiente. Ver
+[DATA_MIGRATION §19](DATA_MIGRATION.md#19-gate-renderizado-nas-telas-autenticadas-goal033).
 
 Nada de `migrate reset` sobre URL herdada, e nenhuma migration é reescrita.
 
@@ -652,5 +677,27 @@ as credenciais do service container são sintéticas e morrem com o runner.
   renomeado ou enfraquecido. **M4** (envio real a número real) continua aberto
   como gate operacional; nenhuma chamada saiu para provedor de LLM real nem
   para WhatsApp real.
+- **Diff033 (D-049):** `validate:integration` passa de 34 para 35 passos com
+  `rehearse:goal033-authenticated-ui` — ver a nota acima e
+  [DATA_MIGRATION §19](DATA_MIGRATION.md#19-gate-renderizado-nas-telas-autenticadas-goal033).
+  A régua de `apps/frontend/e2e/viewport-matrix.spec.ts` saiu para o módulo
+  compartilhado `apps/frontend/e2e/measure.ts`, sem mudar geometria nem
+  limiar; `apps/frontend/e2e/routes.ts` ganhou `AUTHENTICATED_ROUTES` com as
+  sete rotas autenticadas. Duas telas reprovaram a régua na primeira medição
+  (`/agenda` em `mobile-360`, `<h1>Agenda</h1>` comprimido a uma caixa 0×33px
+  porque `grid-template-columns` dava a largura inteira à coluna de ações;
+  `/notificacoes` em mobile, checkbox nativo de 13×13px) e as duas foram
+  corrigidas em `apps/frontend/src/**`;
+  `KNOWN_SMALL_TARGETS` e `KNOWN_CONTRAST_FAILURES` do spec autenticado ficam
+  vazios — nenhuma linha de base nova, nenhum achado a partir de A-20.
+  `npm run test:gate` ganhou os guards de `resolveRehearsalPlan` e
+  `assertPortsFree` do ensaio novo. Nenhuma migration nova, nenhum passo
+  existente removido, renomeado ou enfraquecido. **`validate:ui` não mudou**:
+  execução desta rodada, exit 0, 42,4 s, 169 `expected`, 21 `skipped`, 0
+  `unexpected` — idêntico ao resultado de
+  [FINAL_AUDIT §5.1/§8](FINAL_AUDIT.md#51-resultado-real-por-largura). **A-02**
+  fecha em [FINAL_AUDIT §10](FINAL_AUDIT.md#10-fechamento-de-a-02--goal033-2026-09-20);
+  fidelidade visual à referência aprovada continua sendo conferência humana, e
+  **M4** continua aberto.
 - A execução hospedada dos workflows ainda não ocorreu; o estado atual é
   "configuração validada localmente". Ver [MIGRATION_STATUS](MIGRATION_STATUS.md).

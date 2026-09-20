@@ -745,3 +745,125 @@ mídia ou grupo foi exercitado — seguem declaradamente fora
 (`SCHEDULING_SERVICE_BASE_URL` aponta para loopback onde nada escuta). E não
 altera a contagem de achados do veredito de §7: nenhum achado de A-02 a A-19
 foi corrigido, reclassificado ou tocado por este diff.
+
+## 10. Fechamento de A-02 — Goal033, 2026-09-20
+
+Seção nova, escrita depois da última mudança de árvore do diff033 (WU-01 a
+WU-06). Ela **não reescreve** §6, §7, §8 nem §9: os registros de A-01 a A-19,
+o veredito de §7 e as duas seções de fechamento anteriores continuam
+exatamente como estavam. Esta seção acrescenta o que o diff033 passou a medir
+sobre as telas **autenticadas** — o achado que §5.3 já nomeava (`A-02`) e que
+nenhum Goal tinha assumido até agora.
+
+### O que mudou
+
+A régua de medição de `apps/frontend/e2e/viewport-matrix.spec.ts` saiu para um
+módulo próprio, `apps/frontend/e2e/measure.ts`, sem mudar geometria nem
+limiar: `TOUCH_TARGET_AA` (24px), `TOUCH_TARGET_COMFORTABLE` (44px),
+`OVERFLOW_TOLERANCE` (1px), a regra de rótulo associado
+(`targetBox = labelBox ?? ownBox`, sem união de caixas) e a asserção de
+exceção obsoleta são os mesmos que o Goal031 tinha corrigido — a extração é
+extração, não uma segunda implementação. `apps/frontend/e2e/routes.ts` ganhou
+`AUTHENTICATED_ROUTES`, as sete rotas `/inicio`, `/agenda`, `/clientes`,
+`/conversas`, `/configuracoes`, `/servicos` e `/notificacoes`, cada uma com o
+marcador de destino ativo (`aria-current="page"`) e o marcador do próprio
+conteúdo carregado. `/importacao`, `/sistema` e `/onboarding` ficam fora, com
+o motivo escrito no comentário do arquivo (URL única sem layout único).
+
+`scripts/goal033-authenticated-ui-rehearsal.mjs` sobe os três serviços
+próprios reais em três bancos PostgreSQL descartáveis **próprios**, semeia um
+negócio inteiramente pelas rotas do produto (`POST /v1/auth/register`,
+onboarding, catálogo, cliente, atendimento no dia medido, canal do WhatsApp
+contra o dublê da Evolution Go, mensagem entrante real pelo webhook), constrói
+o frontend com `NEXT_PUBLIC_BFF_URL` embutida e o serve em porta fixa
+declarada, e entrega ao gate um e-mail e uma senha. `apps/frontend/e2e/
+authenticated-matrix.spec.ts` digita as duas em `/login` — nenhum
+`addCookies`, nenhum `storageState` escrito à mão, nenhuma chamada à rota de
+sessão para montar contexto — e só mede depois de provar, para cada rota, que
+a URL final é a pedida, que o destino ativo do shell autenticado está montado,
+que o negócio semeado aparece na tela e que o conteúdo real (não o esqueleto)
+carregou. O ensaio virou o 35º passo de `validate:integration`
+(`rehearse:goal033-authenticated-ui`), depois de `rehearse:goal032-auto-reply`
+— ver [DATA_MIGRATION §19](DATA_MIGRATION.md#19-gate-renderizado-nas-telas-autenticadas-goal033).
+
+### O que a régua encontrou, e o que foi corrigido
+
+Duas telas reprovaram na primeira medição, e as duas foram corrigidas em
+`apps/frontend/src/**` porque a correção coube no controle, sem decidir
+composição visual nova:
+
+| Rota | Defeito medido | Correção | Medida depois |
+| --- | --- | --- | --- |
+| `/agenda`, `mobile-360` | `<h1>Agenda</h1>` com caixa 0×33px e o cabeçalho vazando uma palavra por linha: `grid-template-columns: minmax(0, 1fr) auto` dava à coluna de ações a largura inteira | `apps/frontend/src/shared/styles/atendly-agenda.css`: `.agenda-page-header` para uma coluna (`minmax(0, 1fr)`) abaixo de 767px, `.agenda-page-actions` para `flex-wrap: wrap` | coluna do título com 328px de largura, `<h1>` com caixa 328×33px |
+| `/notificacoes`, `mobile-360`/`mobile-390` | `<input type="checkbox">` nativo do `.switch-row` sem tamanho declarado, 13×13px — abaixo do mínimo AA de 24px | `apps/frontend/src/shared/styles/atendly.css`: `.switch-row input[type="checkbox"]` ganhou `width: 24px; height: 24px`, mesmo tamanho e `accent-color` que `.imports-select-row` já usava | 24×24px |
+
+Nenhuma outra rota, largura ou controle reprovou. `KNOWN_SMALL_TARGETS` e
+`KNOWN_CONTRAST_FAILURES`, os dois arrays de linha de base do spec
+autenticado, estão **vazios**: as duas telas reprovadas caíram na regra
+"corrigido quando a correção cabe no controle" (§4 do Goal), nenhuma exigiu
+decidir composição visual nova, e por isso nenhuma linha de base foi nomeada —
+e, por consequência, não há achado a numerar a partir de A-20. A lista
+permanece no arquivo, estrita nos dois sentidos, para a próxima dívida real
+ter onde ser nomeada.
+
+### Resultado real da execução
+
+Lido de `apps/frontend/e2e-results/authenticated/results.json`, produzido
+pela execução do ensaio nesta rodada: 85419 ms, 35 testes (7 rotas × 5
+larguras), 34 `expected`, 0 `unexpected`, 1 `flaky` — `/agenda` em
+`desktop-1440` estourou uma vez o teto de 20s esperando o nome do cliente
+semeado sob carga e passou na segunda tentativa; não é achado da régua, é
+timing de execução, e o teste passou nas duas rotas restantes das outras
+quatro larguras sem retry. Nenhum controle de toque abaixo de 24px apareceu em
+nenhuma das sete rotas nas duas larguras com toque (`mobile-360`,
+`mobile-390`); os anexos informativos `below-44px-*` (nunca falha) mostram só
+os mesmos elementos de chrome já conhecidos do gate público na faixa
+24–44px — a marca "Atendly" no topo e o link "Ir para o conteúdo" — mais o
+botão "Mais" da navegação inferior em `/clientes`, `/conversas` e `/servicos`
+(38×56px, acima de AA) e o checkbox recém-corrigido de `/notificacoes`, agora
+exatamente nos 24×24px da correção, acima do mínimo AA e ainda abaixo do
+confortável.
+
+Quatro controles negativos foram executados e revertidos nesta rodada, um por
+medida obrigatória: overflow horizontal forçado numa rota autenticada, alvo de
+toque real encolhido abaixo de 24px, par de cores reprovado por contraste
+aplicado a uma tela medida, e login quebrado (credencial errada) — os quatro
+derrubaram o gate ou o ensaio com falha nomeada, e nenhuma das quatro quebras
+sobrou na árvore final: `git status --porcelain` desta rodada não lista
+nenhum arquivo de `apps/frontend/src/**`, `apps/frontend/e2e/**` ou
+`scripts/goal033-authenticated-ui-rehearsal.mjs` fora dos listados acima.
+
+Gates determinísticos sobre a árvore final desta rodada: `npm run validate:ui`
+exit 0, 42,4 s, 169 `passed`, 21 `skipped` (o mesmo `test.skip` declarado de
+sempre), 0 `unexpected` — **idêntico** ao resultado de §5.1/§8, confirmando
+que o gate público não mudou; `npm run test:gate` exit 0, 175 `pass`, 0
+`fail`, 444 ms, incluindo os guards novos de `resolveRehearsalPlan` e
+`assertPortsFree` do ensaio autenticado; `npm run validate:core` exit 0 (13
+`passed`, 0 `failed`, 2 `skipped` declarados — `test:bff`, `test:health-worker`
+— e a auditoria estática em 27 de 28, com o mesmo skip declarado
+`production_health`).
+
+### Veredito recontado
+
+A contagem desta auditoria muda em uma linha: A-02 deixa de reproduzir — o
+gate renderizado agora mede as sete telas autenticadas nas cinco larguras — e
+sai da categoria `PENDENCIA-POS-MVP`. O identificador `A-02` permanece — não é
+renumerado nem reaproveitado —, e o registro original em §6 continua
+descrevendo o que a auditoria do Goal030 encontrou, sem reescrita. **Esta
+auditoria passa a ter 0 achados `BLOQUEADOR-MVP`, 10 `PENDENCIA-POS-MVP`**
+(era 11) **e 7 `LIMITE-DECLARADO`** — exatamente os mesmos de A-03 a A-19,
+nenhum deles tocado, corrigido ou reclassificado por esta unidade. Nenhum
+achado novo entra a partir de A-20: as duas telas que a régua reprovou foram
+corrigidas, não baselineadas.
+
+Duas coisas que este recontar não diz, pela mesma razão que §7, §8 e §9 já não
+diziam. **Não diz que a interface está fiel à referência aprovada**
+(`docs/design-reference/claude-design/`): o gate autenticado decide exatamente
+as mesmas cinco medidas que o público — overflow horizontal, alvo de toque
+mínimo AA, contraste computado, foco visível e `prefers-reduced-motion` —,
+nunca fidelidade visual; o screenshot de página inteira anexado por
+`authenticated-matrix.spec.ts` continua sendo evidência para pessoa, nunca
+pass/fail. **E não diz que M4 foi fechado**: nenhuma chamada saiu, neste diff,
+para um provedor de LLM real nem para o WhatsApp real — o vínculo do canal é
+sintético e a mensagem entrante da semeadura passa pelo dublê da Evolution Go,
+não por um número real.

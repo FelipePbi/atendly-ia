@@ -1,5 +1,14 @@
 import { expect, test } from "@playwright/test";
 
+import {
+  findStaleExceptions,
+  type KnownSmallTarget,
+  measureOverflow,
+  measureTouchTargets,
+  OVERFLOW_TOLERANCE,
+  TOUCH_TARGET_AA,
+  TOUCH_TARGET_COMFORTABLE,
+} from "./measure";
 import { PUBLIC_ROUTES } from "./routes";
 
 /**
@@ -8,23 +17,10 @@ import { PUBLIC_ROUTES } from "./routes";
  * Every assertion here is a layout fact that only a real engine can produce.
  * The vault's mobile-first rule is not "it compiles at 360px", it is "nothing
  * runs off the side, the touch targets can be hit, and the text can be read" —
- * and each of those is a measurement.
+ * and each of those is a measurement. The ruler itself (thresholds, the
+ * overflow/touch-target measurement, the associated-label rule) lives in
+ * `./measure.ts`, shared with the authenticated spec.
  */
-
-/**
- * Two touch-target bars, because WCAG has two and they are not the same claim.
- *
- * 24px is 2.5.8 Target Size (Minimum), level AA — the bar the rest of this
- * layer is set to, so it is the one that FAILS. 44px is 2.5.5 Target Size
- * (Enhanced), level AAA, and "confortável" in the vault's words — it is
- * reported so the gap is visible, never as a failure, because a gate that is
- * red on arrival is a gate somebody switches off.
- */
-const TOUCH_TARGET_AA = 24;
-const TOUCH_TARGET_COMFORTABLE = 44;
-
-/** A few pixels of tolerance: sub-pixel rounding is not a horizontal scroll. */
-const OVERFLOW_TOLERANCE = 1;
 
 /**
  * Accessibility debt that existed before this gate did.
@@ -61,7 +57,7 @@ const OVERFLOW_TOLERANCE = 1;
  *   "entrar.*touch targets" --project=mobile-390`, which failed naming the
  *   `<button>` at 16×16px before being reverted.
  */
-const KNOWN_SMALL_TARGETS: { html: string; route: string; why: string }[] = [];
+const KNOWN_SMALL_TARGETS: KnownSmallTarget[] = [];
 
 for (const route of PUBLIC_ROUTES) {
   test.describe(route.name, () => {
@@ -70,27 +66,7 @@ for (const route of PUBLIC_ROUTES) {
     });
 
     test("nothing overflows sideways", async ({ page }, testInfo) => {
-      const overflow = await page.evaluate(() => {
-        const doc = document.documentElement;
-        const offenders: { tag: string; right: number; text: string }[] = [];
-        const limit = doc.clientWidth;
-        for (const el of Array.from(document.body.querySelectorAll("*"))) {
-          const box = el.getBoundingClientRect();
-          if (box.width === 0 || box.height === 0) continue;
-          if (box.right > limit + 1) {
-            offenders.push({
-              tag: el.tagName.toLowerCase(),
-              right: Math.round(box.right),
-              text: (el.textContent ?? "").trim().slice(0, 40),
-            });
-          }
-        }
-        return {
-          scrollWidth: doc.scrollWidth,
-          clientWidth: doc.clientWidth,
-          offenders: offenders.slice(0, 5),
-        };
-      });
+      const overflow = await measureOverflow(page);
 
       expect(
         overflow.scrollWidth,
@@ -108,92 +84,7 @@ for (const route of PUBLIC_ROUTES) {
     test("touch targets are reachable on a touch screen", async ({ page }, testInfo) => {
       test.skip(!testInfo.project.name.startsWith("mobile"), "touch targets are a touch-screen rule");
 
-      const measured = await page.evaluate(() => {
-        const selector = 'a[href], button:not([disabled]), input:not([type="hidden"]), select, textarea';
-        const controls: {
-          tag: string;
-          label: string;
-          w: number;
-          h: number;
-          exempt: string | null;
-          html: string;
-        }[] = [];
-
-        // A native control can be visually hidden (opacity 0, absolute) and
-        // toggled by an associated <label> instead — nested, or matched by
-        // `for`/`id`. Clicking that label is what actually reaches the
-        // control, so the label is part of the pointer target, not the
-        // control's own (possibly tiny, off-path) box.
-        //
-        // This only applies when the control itself is visually hidden: a
-        // visible control (a text input, a button) that merely sits inside a
-        // <label> used for accessible naming is not this pattern — its own
-        // box already is the real pointer target, and unioning it with the
-        // whole label would hide a genuinely small target instead of finding one.
-        const isVisuallyHidden = (el: Element): boolean => {
-          const style = window.getComputedStyle(el);
-          return style.opacity === "0" || style.visibility === "hidden" || style.display === "none";
-        };
-        const associatedLabel = (el: Element): Element | null => {
-          if (el.tagName !== "INPUT" || !isVisuallyHidden(el)) return null;
-          const nested = el.closest("label");
-          if (nested) return nested;
-          const id = el.getAttribute("id");
-          if (!id) return null;
-          return document.querySelector(`label[for="${CSS.escape(id)}"]`);
-        };
-
-        for (const el of Array.from(document.querySelectorAll(selector))) {
-          const ownBox = el.getBoundingClientRect();
-          const label = associatedLabel(el);
-          const labelBox = label?.getBoundingClientRect() ?? null;
-
-          // The target region: the associated label's own box when the
-          // control is visually hidden and has one, otherwise the control's
-          // own box. Not a union of the two — a visually hidden control
-          // (especially `display: none`) reports a degenerate box (Chromium
-          // gives `display: none` elements a (0,0,0,0) rect regardless of
-          // where the label actually sits), so widening by `Math.min`/`Math.max`
-          // against it stretches the measured region from the viewport origin
-          // to the label's far corner instead of measuring the label itself.
-          // The label is the real pointer target in this case; the control's
-          // own box is not part of what a finger can reach.
-          const targetBox = labelBox ?? ownBox;
-          const left = targetBox.left;
-          const top = targetBox.top;
-          const right = targetBox.right;
-          const bottom = targetBox.bottom;
-          const w = right - left;
-          const h = bottom - top;
-
-          let exempt: string | null = null;
-          if (w === 0 || h === 0) {
-            exempt = "not-rendered";
-          } else {
-            // 2.5.8 exempts a link sitting inside a sentence: its size is set
-            // by the text around it, and padding it out would break the
-            // paragraph.
-            const parent = el.parentElement;
-            const isInlineLink = el.tagName === "A"
-              && parent !== null
-              && ["P", "LI", "SPAN", "LABEL", "TD"].includes(parent.tagName)
-              && (parent.textContent ?? "").trim() !== (el.textContent ?? "").trim();
-            if (isInlineLink) exempt = "inline-link";
-          }
-
-          controls.push({
-            tag: el.tagName.toLowerCase(),
-            label: (el.getAttribute("aria-label") ?? el.textContent ?? "").trim().slice(0, 30),
-            w: Math.round(w),
-            h: Math.round(h),
-            exempt,
-            // Naming the offender is the difference between a finding someone
-            // can act on and a number someone has to go hunting for.
-            html: el.outerHTML.slice(0, 160),
-          });
-        }
-        return controls;
-      });
+      const measured = await measureTouchTargets(page);
 
       // Every control the selector reaches ends up here, measured or
       // exempted by name — never silently dropped. A route where the
@@ -216,7 +107,7 @@ for (const route of PUBLIC_ROUTES) {
       );
 
       const baselined = KNOWN_SMALL_TARGETS.filter((k) => k.route === route.name);
-      const stale = baselined.filter((k) => !undersized.some((c) => c.html === k.html));
+      const stale = findStaleExceptions(route.name, undersized, KNOWN_SMALL_TARGETS);
       expect(
         stale,
         `these exceptions no longer reproduce and must be deleted:\n${JSON.stringify(stale, null, 2)}`,

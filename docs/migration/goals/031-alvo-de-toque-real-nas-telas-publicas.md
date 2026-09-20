@@ -1,6 +1,6 @@
 # Goal 031 — Alvo de toque real nas telas públicas
 
-**Status: READY.** Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-20 pelo Tech Lead Agent após [Goal030 ACCEPTED](../reviews/030-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED.** Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-20 pelo Tech Lead Agent após [Goal030 ACCEPTED](../reviews/030-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: OPUS_MEDIUM
 

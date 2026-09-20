@@ -867,3 +867,110 @@ pass/fail. **E não diz que M4 foi fechado**: nenhuma chamada saiu, neste diff,
 para um provedor de LLM real nem para o WhatsApp real — o vínculo do canal é
 sintético e a mensagem entrante da semeadura passa pelo dublê da Evolution Go,
 não por um número real.
+
+## 11. Fechamento de A-09, A-10 e A-18 — Goal034, 2026-09-20
+
+Seção nova, escrita depois da última mudança de árvore do diff034 (WU-01 a
+WU-08). Ela **não reescreve** §4, §6, §7, §8, §9 nem §10: os registros de
+A-01 a A-19, o veredito de §7 e as três seções de fechamento anteriores
+continuam exatamente como estavam. Esta seção acrescenta o que o diff034
+passou a garantir sobre três guardrails de `AGENTS.md` que §4 e §6 já
+inventariavam como dependentes de configuração, de ausência na árvore ou de
+nada.
+
+### O que mudou
+
+**A-10 — grupos, as três camadas.** `EVOLUTION_IGNORE_GROUPS` saiu de
+`apps/ai-orchestrator/src/config/env.ts`, `.env.example` e
+`docker-compose.yml`; o descarte em `InboundMessageProcessor.ts:243`–`:244`
+é incondicional, no mesmo ponto do fluxo de antes. `message-graph.ts` ganhou
+uma segunda camada — `GroupDispatchRefusedError`, recusando despachar a
+resposta da IA quando o destino é grupo, pelo mesmo predicado `isGroupJid`
+que o mapper usa. `audit:static` ganhou `group_discard_is_not_configuration`,
+provado nos dois sentidos, e `scripts/goal032-auto-reply-rehearsal.mjs` ganhou
+o quinto elo de controle (`group`), provando na pilha real — leitura de banco
+e o que o dublê de transporte recebeu — que um evento de grupo não produz
+`Message` `OUTBOUND` nem envio. Ver
+[DATA_MIGRATION §20](DATA_MIGRATION.md#20-elo-de-controle-de-grupo-no-ensaio-da-resposta-automática-goal034)
+e [VALIDATION_GATE](VALIDATION_GATE.md#checks-estáticos-novos-do-goal034).
+
+**A-09 — mensagem técnica de espera, as duas metades separadas.** O que o
+**código garante**: os textos que `assistant.service.ts` emite por conta
+própria — sem passar pelo modelo — estão reunidos, sem mudar uma vírgula, em
+`PRODUCT_OWN_TEXTS`; teste permanente reprova vocabulário de espera em
+qualquer um deles e prova que o conjunto é fechado (um literal novo em
+`messages: [...]` fora da lista fica vermelho). O que o **prompt orienta**:
+`MAIN_RULES` ganhou a regra de não anunciar consulta em andamento nem pedir
+espera, e `PROMPT_TEMPLATE_VERSION` subiu de `v5` para `v6`. A eval nova
+(`tests/evals/waiting-message-vocabulary.eval.test.ts`) prova que o turno de
+tool não emite mensagem própria — só a decisão final do roteiro vira
+mensagem de saída — e o próprio cabeçalho da eval declara, por escrito, que
+aderência do modelo real ao prompt não é demonstrável com um dublê
+roteirizado.
+
+**A-18 — tema claro.** `audit:static` ganhou `frontend_has_no_dark_theme_css`,
+que falha se algum CSS de `apps/frontend/src` declarar
+`prefers-color-scheme: dark` ou um seletor comum de alternância manual de
+tema escuro, provado nos dois sentidos pela mesma suíte de regressão. O tema
+claro deixa de ser só ausência na árvore e passa a ser regra que um gate
+aplica.
+
+### Resultado real da execução
+
+`npm run validate:core` exit 0 nesta rodada: `audit:static` com 30 checks (29
+`ok`, 1 `skipped` declarado — `production_health`, sem
+`PRODUCTION_HEALTH_TARGETS`), incluindo `group_discard_is_not_configuration`
+e `frontend_has_no_dark_theme_css`, ambos `ok: true`; `test:ai-orchestrator`
+dentro do mesmo `validate:core` também verde. `npm run test:gate` exit 0, 181
+`pass`, 0 `fail`, incluindo as seis regressões nos dois sentidos dos dois
+checks novos (`group_discard_is_not_configuration`: passa com descarte
+incondicional, falha com `EVOLUTION_IGNORE_GROUPS` de volta, falha com a
+condição `isGroup`+`env` de volta; `frontend_has_no_dark_theme_css`: passa em
+CSS só de tema claro, falha com `prefers-color-scheme` de volta, falha com
+seletor manual de tema escuro de volta) e a prova de que os cinco elos de
+`BREAKABLE_LINKS` do ensaio do Goal032 — incluindo o `group` novo — estão
+registrados, cada um com mensagem própria. Execução direcionada de
+`tests/evals/waiting-message-vocabulary.eval.test.ts` e
+`tests/assistant/assistant.service.test.ts`: 2 arquivos, 16 testes, 0 falhas.
+Quatro dos cinco controles negativos obrigatórios do Goal (entrada de grupo,
+saída de grupo, vocabulário de espera, tema escuro) foram executados e
+revertidos pela WU-08 desta rodada, cada um derrubando o gate ou o ensaio
+correspondente com falha nomeada; esta seção não os reexecutou. O quinto —
+pilha real de grupo — não tinha sido executado até a rodada 3: a FIX-001
+rodou `validate:integration` inteiro (35/35 passos, incluindo
+`rehearse:goal032-auto-reply` com os cinco elos de `BREAKABLE_LINKS`, o
+`group` entre eles, íntegros contra o cluster descartável em
+`127.0.0.1:55432`) e, em seguida, `node scripts/goal032-auto-reply-rehearsal.mjs`
+isolado com `GOAL032_BREAK_LINK=group`, que derrubou o ensaio com a falha
+nomeada `group: an inbound event from a group chat must never become an
+outbound message, call the model double or reach the transport double` —
+prova nos dois sentidos, na pilha real, sem alterar código de produção.
+
+Esta seção **não** afirma ter executado `validate:integration` nem
+`validate:ui` nesta unidade — WU-09 é documentação, escrita depois da última
+mudança de árvore, e lê o que as unidades de implementação e de controle
+negativo já deixaram provado.
+
+### Veredito recontado
+
+A contagem desta auditoria muda em três linhas: **A-09** e **A-10** deixam de
+reproduzir e saem da categoria `PENDENCIA-POS-MVP`; **A-18** deixa de
+reproduzir e sai da categoria `LIMITE-DECLARADO`. Os três identificadores
+permanecem — não são renumerados nem reaproveitados —, e os registros
+originais em §6 continuam descrevendo o que a auditoria do Goal030 encontrou,
+sem reescrita. **Esta auditoria passa a ter 0 achados `BLOQUEADOR-MVP`, 8
+`PENDENCIA-POS-MVP`** (era 10) **e 6 `LIMITE-DECLARADO`** (era 7) — os
+demais de A-03 a A-19, nenhum deles tocado, corrigido ou reclassificado por
+esta unidade. Nenhum achado novo entra a partir de A-20: nenhum defeito de
+produto fora do escopo dos três guardrails foi encontrado por este diff.
+
+Três coisas que este recontar não diz. **Não diz que A-09 está provado por
+eval**: a eval nova prova o que o runtime controla — o turno de tool não
+emite mensagem própria —, nunca que o modelo real, em produção, obedece à
+regra 16 de `MAIN_RULES`; isso só é verificável por avaliação com o modelo de
+verdade, fora do escopo determinístico deste Goal. **Não diz que M4 foi
+fechado**: nenhuma chamada saiu, neste diff, para um provedor de LLM real
+nem para o WhatsApp real. **E não diz que a interface está fiel à referência
+aprovada**: este diff não toca `apps/frontend/e2e/`, nem o gate renderizado,
+nem a fidelidade visual — que segue sendo conferência humana, como §5.3, §7,
+§8, §9 e §10 já declaravam.

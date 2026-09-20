@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { env } from "../../src/config/env.js";
 import type { ChannelInboundMessage } from "../../src/modules/channel/domain/ChannelMessage.js";
 import { InboundMessageProcessor } from "../../src/modules/channel/InboundMessageProcessor.js";
 import type { GraphRuntimePort } from "../../src/modules/graph/graph-runtime.js";
@@ -447,16 +446,14 @@ describe("controle humano deterministico", () => {
     expect(subject.automation.recordInboundText).toHaveBeenCalledTimes(1);
   });
 
-  it("ignora grupos apenas enquanto a configuracao mandar", async () => {
-    const original = env.EVOLUTION_IGNORE_GROUPS;
-    env.EVOLUTION_IGNORE_GROUPS = true;
-    try {
-      const subject = buildSubject();
-      await expect(
-        subject.processor.handleInboundMessage(baseMessage({ isGroup: true })),
-      ).resolves.toMatchObject({ action: "ignored_group" });
-    } finally {
-      env.EVOLUTION_IGNORE_GROUPS = original;
-    }
+  it("ignora grupos incondicionalmente, sem depender de configuracao", async () => {
+    const subject = buildSubject();
+
+    await expect(
+      subject.processor.handleInboundMessage(baseMessage({ isGroup: true })),
+    ).resolves.toMatchObject({ action: "ignored_group" });
+
+    expect(subject.automation.recordInboundText).not.toHaveBeenCalled();
+    expect(subject.provider.sendText).not.toHaveBeenCalled();
   });
 });

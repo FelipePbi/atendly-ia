@@ -378,6 +378,19 @@ e o passo saíram do gate junto — os skips declarados passaram de três para d
 cookie jar compartilhado, com `fetch` injetado. Não abre banco nem rede, por
 isso pertence ao core.
 
+## Checks estáticos novos do Goal034
+
+Dois checks novos em `audit:static` (`scripts/final-production-audit.mjs`),
+cada um função pura exportada e provado nos dois sentidos por
+`scripts/tests/final-production-audit-legacy-regression.test.mjs`. Nenhum dos
+dois abre banco, sobe serviço ou executa o produto — os dois são leitura de
+texto com expressão regular, no mesmo padrão dos checks existentes.
+
+| Check | O que decide | O que não decide |
+| --- | --- | --- |
+| `group_discard_is_not_configuration` (`findGroupDiscardConfigurationViolations`) | Sobre `apps/**`: falha se o literal `EVOLUTION_IGNORE_GROUPS` reaparecer em qualquer arquivo, ou se algum `if (...)` cuja condição contenha `isGroup` também contiver `env`, `process.env` ou `config` — a mesma forma de regressão sob outro nome de variável | Não prova que o descarte de grupo acontece cedo o bastante no fluxo (isso é `apps/ai-orchestrator/tests/channel/inbound-message-processor.test.ts`, passo `test:ai-orchestrator`), nem que a resposta da IA recusa destino de grupo no despacho (isso é a suíte de `message-graph.ts`, mesmo passo). É guarda de regressão sobre o texto-fonte, não prova de comportamento em execução |
+| `frontend_has_no_dark_theme_css` (`findDarkThemeCssReferences`) | Sobre o CSS de `apps/frontend/src`: falha se algum arquivo contiver `prefers-color-scheme: dark` ou um seletor comum de alternância manual de tema escuro (`[data-theme="dark"]`, `.dark`, `:root.dark`, `html.dark`) | Não prova que nenhuma tela **parece** escura — cor pode ser escrita sem media query nem seletor de tema; e não impede alguém de escrever CSS de tema escuro fora de `apps/frontend/src`. É a mesma classe de guarda que os demais checks estáticos: gate contra a forma reconhecida de regressão, não contra toda forma possível |
+
 ## Ordem de corte do Goal003
 
 Duas transições deste Goal têm consumidor e produtor em serviços diferentes.

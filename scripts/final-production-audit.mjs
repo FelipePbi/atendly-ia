@@ -275,6 +275,37 @@ export async function main() {
     "apps/frontend/src/mocks",
   );
 
+  const groupDiscardSources = [
+    ...appsSources,
+    ...configurationFiles("apps").map((file) => ({
+      path: file,
+      content: read(file),
+    })),
+  ];
+  const groupDiscardConfigurationFiles =
+    findGroupDiscardConfigurationViolations(groupDiscardSources);
+  check(
+    "group_discard_is_not_configuration",
+    groupDiscardConfigurationFiles.length === 0,
+    groupDiscardConfigurationFiles.length
+      ? groupDiscardConfigurationFiles.join(", ")
+      : "group discard is unconditional and EVOLUTION_IGNORE_GROUPS does not appear in apps/",
+  );
+
+  const darkThemeCssFiles = findDarkThemeCssReferences(
+    styleFiles("apps/frontend/src").map((file) => ({
+      path: file,
+      content: read(file),
+    })),
+  );
+  check(
+    "frontend_has_no_dark_theme_css",
+    darkThemeCssFiles.length === 0,
+    darkThemeCssFiles.length
+      ? darkThemeCssFiles.join(", ")
+      : "no CSS under apps/frontend/src declares prefers-color-scheme or a dark theme selector",
+  );
+
   const renderYaml = read("render.yaml");
   const configEnvSources = {
     "atendly-ia-bff": read("apps/bff/src/config/env.ts"),
@@ -507,6 +538,52 @@ export function excludeLegitimateAbsenceAssertions(files) {
 
 export function frontendMocksDirectoryExists(root) {
   return existsSync(path.join(root, "apps/frontend/src/mocks"));
+}
+
+// Goal034/WU-03: descarte de grupo (Goal031/WU-01 deste Goal) voltou a ser
+// incondicional e sem env. Duas formas de regredir: (1) `EVOLUTION_IGNORE_
+// GROUPS` reaparece em apps/**, texto que só existia como a variável que
+// condicionava o descarte; (2) um `if` que testa `isGroup` volta a carregar
+// uma leitura de env/config na mesma condição, mesmo sob outro nome de
+// variável. As duas viram uma unica lista de arquivos violadores. A forma (1)
+// tipicamente reaparece em `.env.example`/`docker-compose.yml`, não em
+// código-fonte — por isso o chamador junta `configurationFiles("apps")` a
+// `appsSources` antes de rodar esta função.
+const EVOLUTION_IGNORE_GROUPS_PATTERN = /EVOLUTION_IGNORE_GROUPS/u;
+const IF_CONDITION_PATTERN = /if\s*\(([\s\S]*?)\)\s*\{/gu;
+const GROUP_DISCARD_CONDITION_TOKEN = /\bisGroup\b/u;
+const ENV_CONDITION_TOKEN = /\benv\b|process\.env|\bconfig\b/iu;
+
+export function findGroupDiscardConfigurationViolations(files) {
+  return files
+    .filter(({ content }) => {
+      if (EVOLUTION_IGNORE_GROUPS_PATTERN.test(content)) return true;
+      for (const match of content.matchAll(IF_CONDITION_PATTERN)) {
+        const condition = match[1];
+        if (
+          GROUP_DISCARD_CONDITION_TOKEN.test(condition) &&
+          ENV_CONDITION_TOKEN.test(condition)
+        ) {
+          return true;
+        }
+      }
+      return false;
+    })
+    .map(({ path: filePath }) => filePath);
+}
+
+// Goal034/WU-03: `tokens.css` documenta "tema claro apenas — não declarar
+// esquema escuro aqui" (linha 6); esta regra prova a promessa. `prefers-
+// color-scheme` é a media query nativa; os seletores cobrem os nomes comuns
+// de toggle manual de tema (classe, atributo ou combinação com `:root`/
+// `html`) para que a regra não valha só contra o media query.
+const DARK_THEME_CSS_PATTERN =
+  /prefers-color-scheme\s*:\s*dark|\[\s*data-theme\s*=\s*["']?dark["']?\s*\]|(?:^|[^\w-])\.dark\b|:root\.dark\b|html\.dark\b/imu;
+
+export function findDarkThemeCssReferences(files) {
+  return files
+    .filter(({ content }) => DARK_THEME_CSS_PATTERN.test(content))
+    .map(({ path: filePath }) => filePath);
 }
 
 async function auditProductionHealth() {
@@ -831,6 +908,52 @@ function sourceFiles(relativeRoot) {
       if (statSync(absolutePath).isDirectory()) {
         visit(absolutePath);
       } else if (/\.(?:cjs|js|jsx|mjs|ts|tsx)$/u.test(entry)) {
+        files.push(
+          path.relative(repositoryRoot, absolutePath).replaceAll("\\", "/"),
+        );
+      }
+    }
+  };
+  visit(absoluteRoot);
+  return files;
+}
+
+// `.env.example` e `docker-compose*.yml` não são código-fonte, então
+// `sourceFiles` não os coleta — e é exatamente onde `EVOLUTION_IGNORE_GROUPS`
+// reapareceria numa regressão. Coletor à parte, só para os checks que
+// precisam ler configuração além de código.
+const CONFIGURATION_FILENAME_PATTERN = /^(?:\.env\.example|docker-compose(?:\..+)?\.yml)$/u;
+
+function configurationFiles(relativeRoot) {
+  const absoluteRoot = path.join(repositoryRoot, relativeRoot);
+  const files = [];
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory)) {
+      if (["dist", "generated", "node_modules"].includes(entry)) continue;
+      const absolutePath = path.join(directory, entry);
+      if (statSync(absolutePath).isDirectory()) {
+        visit(absolutePath);
+      } else if (CONFIGURATION_FILENAME_PATTERN.test(entry)) {
+        files.push(
+          path.relative(repositoryRoot, absolutePath).replaceAll("\\", "/"),
+        );
+      }
+    }
+  };
+  visit(absoluteRoot);
+  return files;
+}
+
+function styleFiles(relativeRoot) {
+  const absoluteRoot = path.join(repositoryRoot, relativeRoot);
+  const files = [];
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory)) {
+      if (["dist", "generated", "node_modules"].includes(entry)) continue;
+      const absolutePath = path.join(directory, entry);
+      if (statSync(absolutePath).isDirectory()) {
+        visit(absolutePath);
+      } else if (/\.css$/u.test(entry)) {
         files.push(
           path.relative(repositoryRoot, absolutePath).replaceAll("\\", "/"),
         );

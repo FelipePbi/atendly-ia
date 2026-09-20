@@ -15,7 +15,10 @@ import {
 } from "../../lib/diagnostic-log.js";
 import { toErrorMessage } from "../../lib/errors.js";
 import type { AssistantService } from "../assistant/assistant.service.js";
-import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
+import {
+  type ChannelInboundMessage,
+  isGroupJid,
+} from "../channel/domain/ChannelMessage.js";
 import type {
   AutomationPort,
   HandoffPort,
@@ -73,6 +76,20 @@ const videoReceivedReply =
 /** Resumo do handoff de imagem, gravado no `Handoff` em vez do texto de falha. */
 const imageHandoffSummary =
   "Cliente enviou uma imagem; a IA nao interpreta imagens no MVP.";
+
+/**
+ * Jid de grupo chegando no despacho da resposta da IA e estado impossivel:
+ * a entrada ja descarta grupo antes da conversa e do automation (Goal034,
+ * WU-01). Falhar alto com este erro nomeado, em vez de enviar, e o
+ * backstop do guardrail de AGENTS.md que proibe a IA de atender grupo —
+ * o profissional continua livre para usar o proprio WhatsApp em grupo.
+ */
+export class GroupDispatchRefusedError extends Error {
+  constructor(chatId: string) {
+    super(`AI response dispatch refused: destination ${chatId} is a group.`);
+    this.name = "GroupDispatchRefusedError";
+  }
+}
 
 export interface MessageGraphInput {
   message: ChannelInboundMessage;
@@ -1157,6 +1174,23 @@ export class MessageGraphWorkflow {
         "LangGraph cancelled a response that had not been sent yet",
       );
       return { result: { ok: true, action: "superseded" } };
+    }
+
+    if (isGroupJid(message.isGroup, message.chatId)) {
+      const error = new GroupDispatchRefusedError(message.chatId);
+      await this.recordDelivery(state.response.messageRecordId, {
+        state: "FAILED",
+        detail: error.message,
+      });
+      this.logger.error(
+        {
+          ...channelMessageLogContext(message),
+          messageRecordId: state.response.messageRecordId,
+          err: toErrorMessage(error),
+        },
+        "LangGraph refused to dispatch the AI response to a group",
+      );
+      return { result: { ok: true, action: "send_refused_group" } };
     }
 
     const correlationId =

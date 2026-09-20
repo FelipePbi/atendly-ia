@@ -23,7 +23,6 @@ async function load() {
   vi.stubEnv("CHANNEL_CREDENTIAL_ACTIVE_KEY_ID", "v1");
   vi.stubEnv("EVOLUTION_BASE_URL", "https://evolution.example.invalid");
   vi.stubEnv("EVOLUTION_API_KEY", GLOBAL_API_KEY);
-  vi.stubEnv("EVOLUTION_IGNORE_GROUPS", "true");
 
   const [
     { ChannelConnectionService },

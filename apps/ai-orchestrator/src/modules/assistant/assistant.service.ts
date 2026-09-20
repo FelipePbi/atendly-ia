@@ -43,6 +43,7 @@ import { buildStyleGreeting } from "../prompts/style.js";
 import { buildSystemPrompt } from "../prompts/system.js";
 import type { CategorySuggestionPort } from "../session/SessionService.js";
 import {
+  AI_CONVERSATION_STYLES,
   type AiTenantSettings,
   normalizeAiSettings,
   resolveAiConversationStyle,
@@ -268,8 +269,36 @@ interface StoredConversationState extends Record<string, unknown> {
   }>;
 }
 
-const defaultHandoffMessage =
-  "Vou chamar uma pessoa da equipe pra te responder com atencao por aqui, ta?";
+/**
+ * Textos que o produto emite por conta própria, sem passar pelo modelo:
+ * handoffs/pausas determinísticos e fallbacks de decisão malformada. Conjunto
+ * fechado — coberto por `PRODUCT_OWN_TEXTS` e testado em
+ * `tests/assistant/assistant.service.test.ts`. Um texto novo emitido pelo
+ * produto precisa entrar aqui, senão o teste de fechamento acusa.
+ */
+const PRODUCT_OWN_FIXED_TEXTS = {
+  handoffToTeam:
+    "Vou chamar uma pessoa da equipe pra te responder com atencao por aqui, ta?",
+  iterationLimitFallback:
+    "Vou chamar a profissional para continuar seu atendimento.",
+  incompleteBusinessContextHandoff:
+    "Vou deixar essa conversa para a profissional responder, ta?",
+  humanRequestedOrSensitiveComplaint:
+    "Sinto muito por isso. Vou chamar uma pessoa da equipe pra te atender com atencao por aqui, ta?",
+  supplierOrPartner:
+    "Oi! Vou deixar essa mensagem para a equipe verificar e te responder direitinho, ta bom?",
+  personalContact:
+    "Vou deixar essa mensagem para ela responder pessoalmente.",
+  genericReplyFallback: "Certo, vou te ajudar por aqui.",
+} as const;
+
+/** `PRODUCT_OWN_FIXED_TEXTS` mais a saudação de estilo, nos três tons. */
+export const PRODUCT_OWN_TEXTS: readonly string[] = [
+  ...Object.values(PRODUCT_OWN_FIXED_TEXTS),
+  ...AI_CONVERSATION_STYLES.map((style) => buildStyleGreeting(style)),
+];
+
+const defaultHandoffMessage = PRODUCT_OWN_FIXED_TEXTS.handoffToTeam;
 
 export class AssistantService {
   constructor(
@@ -481,7 +510,7 @@ export class AssistantService {
           id: `iteration-limit:${session.aiRunId ?? session.conversationId}`,
           text:
             session.lastResponseText ||
-            "Vou chamar a profissional para continuar seu atendimento.",
+            PRODUCT_OWN_FIXED_TEXTS.iterationLimitFallback,
           toolCalls: [],
           continuation: null,
         },
@@ -668,7 +697,7 @@ export class AssistantService {
       parseAiDecision(
         response?.text ||
           session.lastResponseText ||
-          "Vou chamar a profissional para continuar seu atendimento.",
+          PRODUCT_OWN_FIXED_TEXTS.iterationLimitFallback,
       );
     await this.applyDecision({
       conversationId: session.conversationId,
@@ -1444,7 +1473,7 @@ export class AssistantService {
 function incompleteBusinessContextDecision(): AiDecision {
   return {
     action: "handoff_human",
-    messages: ["Vou deixar essa conversa para a profissional responder, ta?"],
+    messages: [PRODUCT_OWN_FIXED_TEXTS.incompleteBusinessContextHandoff],
     pauseReason: "manual_handoff",
     conversationStage: "HUMAN_HANDOFF",
     classification: "potential_customer",
@@ -1557,9 +1586,7 @@ function buildImmediateDecision(
   if (isHumanRequested(normalized) || isSensitiveComplaint(normalized)) {
     return {
       action: "handoff_human",
-      messages: [
-        "Sinto muito por isso. Vou chamar uma pessoa da equipe pra te atender com atencao por aqui, ta?",
-      ],
+      messages: [PRODUCT_OWN_FIXED_TEXTS.humanRequestedOrSensitiveComplaint],
       pauseReason: "complaint_or_sensitive",
       conversationStage: "HUMAN_HANDOFF",
       classification: "potential_customer",
@@ -1572,9 +1599,7 @@ function buildImmediateDecision(
   if (isSupplierOrPartner(normalized)) {
     return {
       action: "pause_ai",
-      messages: [
-        "Oi! Vou deixar essa mensagem para a equipe verificar e te responder direitinho, ta bom?",
-      ],
+      messages: [PRODUCT_OWN_FIXED_TEXTS.supplierOrPartner],
       pauseReason: "supplier_or_partner",
       conversationStage: "AI_PAUSED",
       classification: "supplier_or_partner",
@@ -1586,7 +1611,7 @@ function buildImmediateDecision(
   if (isPersonalContact(normalized)) {
     return {
       action: "pause_ai",
-      messages: ["Vou deixar essa mensagem para ela responder pessoalmente."],
+      messages: [PRODUCT_OWN_FIXED_TEXTS.personalContact],
       pauseReason: "personal_contact",
       conversationStage: "AI_PAUSED",
       classification: "personal_contact",
@@ -1643,7 +1668,7 @@ function parseAiDecision(raw: string): AiDecision {
 
   return {
     action: "send_message",
-    messages: [raw.trim() || "Certo, vou te ajudar por aqui."],
+    messages: [raw.trim() || PRODUCT_OWN_FIXED_TEXTS.genericReplyFallback],
     conversationStage: "GENERAL_CONVERSATION",
     classification: "potential_customer",
     confidence: 0.6,
@@ -1663,7 +1688,7 @@ function composeReplyText(decision: AiDecision): string {
     return defaultHandoffMessage;
   }
 
-  return "Certo, vou te ajudar por aqui.";
+  return PRODUCT_OWN_FIXED_TEXTS.genericReplyFallback;
 }
 
 function normalizeStoredState(value: unknown): StoredConversationState {

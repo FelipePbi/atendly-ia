@@ -87,7 +87,6 @@ const envSchema = z.object({
   // Baixar do WhatsApp demora mais que responder um envio de texto, entao o
   // teto e proprio em vez de reaproveitar EVOLUTION_SEND_TIMEOUT_MS.
   EVOLUTION_DOWNLOAD_MEDIA_TIMEOUT_MS: intEnv(60_000),
-  EVOLUTION_IGNORE_GROUPS: boolEnv(true),
   EVOLUTION_BOT_ENABLED: boolEnv(true),
   EVOLUTION_ALLOW_SELF_CHAT: boolEnv(false),
   // Teto do corpo aceito pela rota do webhook (Goal013): mídia inline chega em

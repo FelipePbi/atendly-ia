@@ -1,6 +1,14 @@
-import type { PrismaClient } from "../../src/generated/prisma/client.js";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it, vi } from "vitest";
-import { AssistantService } from "../../src/modules/assistant/assistant.service.js";
+
+import type { PrismaClient } from "../../src/generated/prisma/client.js";
+import {
+  AssistantService,
+  PRODUCT_OWN_TEXTS,
+} from "../../src/modules/assistant/assistant.service.js";
 import { derivePromptVersion } from "../../src/modules/prompts/system.js";
 import { DEFAULT_BUSINESS_CONTEXT } from "../../src/modules/tenant-config/business-context.js";
 
@@ -488,3 +496,87 @@ function configuredBusinessContext() {
     configured: true,
   };
 }
+
+/**
+ * Qualquer vocabulário que faça o texto soar como "estou processando, espera
+ * aí" em vez da decisão determinística que ele realmente é (A-09 / Goal034).
+ */
+const VOCABULARIO_DE_ESPERA =
+  /aguard|\bespera(ndo)?\b|\bum (instante|momento|minuto|minutinho)\b|em breve|daqui a pouco|s[oó] um (instante|momento|minuto|minutinho)|verificando|processando|consultando|analisando/i;
+
+const assistantServiceSourcePath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../src/modules/assistant/assistant.service.ts",
+);
+
+/** Extrai literais de string dentro de todo array `messages: [...]` do arquivo. */
+function extractMessagesArrayLiterals(source: string): string[] {
+  const literals: string[] = [];
+  const arrayBlockPattern = /messages:\s*\[([\s\S]*?)\]/g;
+  const stringLiteralPattern = /"((?:[^"\\]|\\.)*)"/g;
+  let arrayMatch: RegExpExecArray | null;
+  while ((arrayMatch = arrayBlockPattern.exec(source))) {
+    stringLiteralPattern.lastIndex = 0;
+    let literalMatch: RegExpExecArray | null;
+    while ((literalMatch = stringLiteralPattern.exec(arrayMatch[1]))) {
+      literals.push(JSON.parse(`"${literalMatch[1]}"`) as string);
+    }
+  }
+  return literals;
+}
+
+describe("conjunto fechado dos textos que o produto emite por conta própria (A-09 / Goal034)", () => {
+  const baselineFixedTexts = [
+    "Vou chamar uma pessoa da equipe pra te responder com atencao por aqui, ta?",
+    "Vou chamar a profissional para continuar seu atendimento.",
+    "Vou deixar essa conversa para a profissional responder, ta?",
+    "Sinto muito por isso. Vou chamar uma pessoa da equipe pra te atender com atencao por aqui, ta?",
+    "Oi! Vou deixar essa mensagem para a equipe verificar e te responder direitinho, ta bom?",
+    "Vou deixar essa mensagem para ela responder pessoalmente.",
+    "Certo, vou te ajudar por aqui.",
+  ];
+  const baselineGreetings = [
+    "Olá, tudo bem? Como posso te ajudar hoje?",
+    "Oii, tudo bem? Como posso te ajudar hoje?",
+    "Oii, tudo bem? Como posso te ajudar hoje? 😊",
+  ];
+
+  it("reúne exatamente os textos da baseline, sem alterar uma vírgula", () => {
+    for (const text of [...baselineFixedTexts, ...baselineGreetings]) {
+      expect(PRODUCT_OWN_TEXTS).toContain(text);
+    }
+    expect(PRODUCT_OWN_TEXTS).toHaveLength(
+      baselineFixedTexts.length + baselineGreetings.length,
+    );
+  });
+
+  it("reprova vocabulário de espera em qualquer texto do conjunto", () => {
+    for (const text of PRODUCT_OWN_TEXTS) {
+      expect(text).not.toMatch(VOCABULARIO_DE_ESPERA);
+    }
+  });
+
+  it("fecha o conjunto: todo literal em `messages: [...]` do arquivo pertence a ele", () => {
+    const source = readFileSync(assistantServiceSourcePath, "utf8");
+    const literals = extractMessagesArrayLiterals(source);
+    for (const literal of literals) {
+      expect(
+        PRODUCT_OWN_TEXTS,
+        `texto novo do produto fora do conjunto: "${literal}"`,
+      ).toContain(literal);
+    }
+  });
+
+  it("o fechamento acima realmente acusa um texto novo ausente do conjunto", () => {
+    const fixtureComTextoNovo = `
+      return {
+        messages: ["Esse texto novo nao esta no conjunto e deveria acusar."],
+      };
+    `;
+    const literals = extractMessagesArrayLiterals(fixtureComTextoNovo);
+    expect(literals).toEqual([
+      "Esse texto novo nao esta no conjunto e deveria acusar.",
+    ]);
+    expect(PRODUCT_OWN_TEXTS).not.toContain(literals[0]);
+  });
+});

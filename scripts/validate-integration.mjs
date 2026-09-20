@@ -606,7 +606,8 @@ export function integrationSteps(target) {
     },
     // Ensaio da resposta automática do Goal032: webhook real, worker de inbox
     // real e o grafo de IA real, contra um banco PostgreSQL descartável
-    // próprio, com prova positiva e os quatro elos de controle negativo.
+    // próprio, com prova positiva e os cinco elos de controle negativo
+    // (human-control, ignore-ai, idempotency, supersede, group).
     // Fecha a lacuna que o ensaio do Goal030 deixou declarada em aberto.
     {
       name: "rehearse:goal032-auto-reply",

@@ -66,3 +66,12 @@ export interface ChannelExecutionContext {
 
 export type ChannelInboundMessage = MappedChannelInboundMessage &
   ChannelExecutionContext;
+
+/**
+ * Predicado único de "isto é grupo": mapper e despacho de saída da IA usam
+ * a mesma regra (AGENTS.md proíbe a IA de atender grupo). Uma segunda
+ * definição divergindo é o jeito mais fácil de furar o guardrail sem notar.
+ */
+export function isGroupJid(isGroupFlag: boolean, chatId: string): boolean {
+  return isGroupFlag || chatId.endsWith("@g.us");
+}

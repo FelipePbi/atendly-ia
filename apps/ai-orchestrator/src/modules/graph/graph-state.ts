@@ -124,6 +124,10 @@ export interface GraphResult {
     | "replied"
     | "superseded"
     | "send_failed"
+    // Resposta da IA recusada no despacho porque o destino e grupo
+    // (AGENTS.md proibe a IA de atender grupo). Estado impossivel quando a
+    // ponta de entrada funciona: ver GroupDispatchRefusedError (Goal034).
+    | "send_refused_group"
     | "error_handoff";
   outboundMessage?: GraphResponse;
 }

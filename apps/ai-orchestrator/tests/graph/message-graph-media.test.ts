@@ -364,3 +364,28 @@ describe("sticker e kind desconhecido: nao decidem nada", () => {
     },
   );
 });
+
+describe("despacho da resposta da IA recusa destino de grupo (Goal034)", () => {
+  it("chatId de grupo chegando ao despacho recusa o envio em vez de mandar", async () => {
+    // `isGroup: false` reproduz o estado impossivel: a entrada nao marcou o
+    // jid como grupo, mas o chatId e um jid de grupo (mesmo predicado do
+    // mapper). O despacho e o backstop, nao a primeira linha de defesa.
+    const subject = buildSubject();
+
+    await expect(
+      subject.processor.handleInboundMessage(
+        baseMessage({
+          chatId: "120363012345678901@g.us",
+          isGroup: false,
+          kind: "text",
+          text: "quero agendar",
+        }),
+      ),
+    ).resolves.toMatchObject({ action: "send_refused_group" });
+
+    expect(subject.provider.sendText).not.toHaveBeenCalled();
+    expect(subject.automation.markOutboundDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({ state: "FAILED" }),
+    );
+  });
+});

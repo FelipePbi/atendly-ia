@@ -1,7 +1,7 @@
 // Guard permanente do ensaio do Goal032: recusa ANTES de qualquer conexão
 // qualquer alvo que não seja loopback ou que não carregue a marca de
 // descartável, e recusa um `GOAL032_BREAK_LINK` que não esteja registrado nos
-// quatro elos declarados — nunca com skip, sempre com exit 2 e sem nenhuma
+// cinco elos declarados — nunca com skip, sempre com exit 2 e sem nenhuma
 // credencial na saída.
 
 import assert from "node:assert/strict";
@@ -103,8 +103,9 @@ test("refuses with exit 2 and no credential when the target is entirely unset", 
   assert.ok(!outcome.stderr.includes("pgtest:pgtest@"));
 });
 
-test("the four required links are registered, each with its own message", () => {
+test("the five required links are registered, each with its own message", () => {
   assert.deepEqual(Object.keys(BREAKABLE_LINKS).sort(), [
+    "group",
     "human-control",
     "idempotency",
     "ignore-ai",
@@ -123,7 +124,7 @@ test("refuses an unknown GOAL032_BREAK_LINK with exit 2 and no credential, befor
   assert.equal(outcome.status, 2);
   assert.match(
     outcome.stderr,
-    /^goal032:auto-reply-rehearsal REFUSED — Unknown GOAL032_BREAK_LINK "not-a-real-link"\. Known links: human-control, ignore-ai, idempotency, supersede\./mu,
+    /^goal032:auto-reply-rehearsal REFUSED — Unknown GOAL032_BREAK_LINK "not-a-real-link"\. Known links: human-control, ignore-ai, idempotency, supersede, group\./mu,
   );
   assert.ok(!outcome.stdout.includes("pgtest:pgtest@"));
   assert.ok(!outcome.stderr.includes("pgtest:pgtest@"));

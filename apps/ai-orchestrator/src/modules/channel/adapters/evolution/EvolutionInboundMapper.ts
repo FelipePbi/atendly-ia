@@ -4,6 +4,7 @@ import type {
   MappedChannelInboundMessage,
   MediaMetadata,
 } from "../../domain/ChannelMessage.js";
+import { isGroupJid } from "../../domain/ChannelMessage.js";
 
 const messageEvents = new Set([
   "Message",
@@ -221,7 +222,7 @@ export function mapEvolutionInbound(
     customerPhone: normalizePhone(customerJid),
     customerName: stringValue(info.PushName),
     fromMe,
-    isGroup: booleanValue(info.IsGroup) || chatId.endsWith("@g.us"),
+    isGroup: isGroupJid(booleanValue(info.IsGroup), chatId),
     kind,
     text,
     media,

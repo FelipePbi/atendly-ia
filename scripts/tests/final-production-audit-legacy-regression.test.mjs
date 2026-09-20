@@ -8,6 +8,8 @@ import {
   excludeLegitimateAbsenceAssertions,
   findCalendarMigrationServiceReferences,
   findCalendarSourceExternalComparisons,
+  findDarkThemeCssReferences,
+  findGroupDiscardConfigurationViolations,
   findLegacyMigrationRouteReferences,
   findMinhaAgendaWriterReferences,
   findRemovedCalendarErrorCodeReferences,
@@ -382,5 +384,75 @@ test("excludeLegitimateAbsenceAssertions: does not swallow a real regression alo
   ];
   assert.deepEqual(excludeLegitimateAbsenceAssertions(flagged), [
     "apps/scheduling-service/src/modules/migrations/routes.ts",
+  ]);
+});
+
+test("group_discard_is_not_configuration: passes when the discard is unconditional and the env flag is gone", () => {
+  const files = [
+    {
+      path: "apps/ai-orchestrator/src/modules/channel/InboundMessageProcessor.ts",
+      content:
+        "if (message.isGroup) {\n  return { ok: true, action: \"ignored_group\" };\n}",
+    },
+  ];
+  assert.deepEqual(findGroupDiscardConfigurationViolations(files), []);
+});
+
+test("group_discard_is_not_configuration: fails when EVOLUTION_IGNORE_GROUPS reappears", () => {
+  const files = [
+    {
+      path: "apps/ai-orchestrator/.env.example",
+      content: "EVOLUTION_IGNORE_GROUPS=true",
+    },
+  ];
+  assert.deepEqual(findGroupDiscardConfigurationViolations(files), [
+    "apps/ai-orchestrator/.env.example",
+  ]);
+});
+
+test("group_discard_is_not_configuration: fails when the discard is conditioned on an env read again", () => {
+  const files = [
+    {
+      path: "apps/ai-orchestrator/src/modules/channel/InboundMessageProcessor.ts",
+      content:
+        "if (this.env.ignoreGroups && message.isGroup) {\n  return { ok: true, action: \"ignored_group\" };\n}",
+    },
+  ];
+  assert.deepEqual(findGroupDiscardConfigurationViolations(files), [
+    "apps/ai-orchestrator/src/modules/channel/InboundMessageProcessor.ts",
+  ]);
+});
+
+test("frontend_has_no_dark_theme_css: passes on a light-theme-only stylesheet", () => {
+  const files = [
+    {
+      path: "apps/frontend/src/shared/styles/tokens.css",
+      content: ":root {\n  color-scheme: light;\n  --at-color-canvas: #f7f4ef;\n}",
+    },
+  ];
+  assert.deepEqual(findDarkThemeCssReferences(files), []);
+});
+
+test("frontend_has_no_dark_theme_css: fails when prefers-color-scheme comes back", () => {
+  const files = [
+    {
+      path: "apps/frontend/src/shared/styles/tokens.css",
+      content: "@media (prefers-color-scheme: dark) {\n  :root { --at-color-canvas: #111; }\n}",
+    },
+  ];
+  assert.deepEqual(findDarkThemeCssReferences(files), [
+    "apps/frontend/src/shared/styles/tokens.css",
+  ]);
+});
+
+test("frontend_has_no_dark_theme_css: fails when a manual dark theme selector comes back", () => {
+  const files = [
+    {
+      path: "apps/frontend/src/shared/styles/atendly.css",
+      content: "html.dark {\n  --at-color-canvas: #111;\n}",
+    },
+  ];
+  assert.deepEqual(findDarkThemeCssReferences(files), [
+    "apps/frontend/src/shared/styles/atendly.css",
   ]);
 });

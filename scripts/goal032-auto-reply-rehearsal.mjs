@@ -47,18 +47,20 @@
 //   escuta: o laço de ferramentas fica declaradamente fora deste ensaio.
 //
 // Limites declarados: o laço de entrega de notificações, a varredura de
-// retenção e a purga de conta ficam desligados; áudio, mídia, grupos e o laço
-// de ferramentas contra o Scheduling real não são exercitados; e **M4** —
-// envio real a número real — continua aberto como gate operacional.
+// retenção e a purga de conta ficam desligados; áudio, mídia e o laço de
+// ferramentas contra o Scheduling real não são exercitados; e **M4** — envio
+// real a número real — continua aberto como gate operacional. Grupo é
+// exercitado, mas só o suficiente para provar o descarte: nenhum caminho de
+// resposta de grupo passa por aqui.
 //
 // Controle negativo: `GOAL032_BREAK_LINK` quebra um elo declarado do ensaio
 // para demonstrar que ele cai (`exit 1`) quando a composição deixa de valer.
-// Os quatro elos obrigatórios — `human-control`, `ignore-ai`, `idempotency` e
-// `supersede` — estão em `BREAKABLE_LINKS`, e cada um reprova com mensagem
-// própria. Quebrar um elo é **pular uma etapa do percurso**, nunca relaxar uma
-// asserção nem alterar código de produção. Sem a variável o caminho verde é
-// idêntico; e elo quebrado que mesmo assim passe também reprova, porque aí o
-// ensaio não estaria provando o que diz provar.
+// Os cinco elos obrigatórios — `human-control`, `ignore-ai`, `idempotency`,
+// `supersede` e `group` — estão em `BREAKABLE_LINKS`, e cada um reprova com
+// mensagem própria. Quebrar um elo é **pular uma etapa do percurso**, nunca
+// relaxar uma asserção nem alterar código de produção. Sem a variável o
+// caminho verde é idêntico; e elo quebrado que mesmo assim passe também
+// reprova, porque aí o ensaio não estaria provando o que diz provar.
 //
 // Códigos de saída: 0 sucesso, 1 falha de asserção, 2 recusa (destino inválido
 // ou dependência ausente). Sem caminho de skip.
@@ -161,10 +163,12 @@ export const BREAKABLE_LINKS = Object.freeze({
     "entrega o segundo evento com outro `messageId`, então ele deixa de ser o mesmo evento; nascem duas respostas e dois envios, e o elo da idempotência cai",
   supersede:
     "não entrega a mensagem nova enquanto a resposta está pendente; nada pede a reavaliação, a saída pendente sai e o elo do supersede cai",
+  group:
+    "entrega o mesmo evento sem a marca de grupo no `Chat`; a mensagem vira conversa pessoal comum, é atendida pelo modelo e o elo do grupo cai",
 });
 
 /**
- * Os contatos dos quatro elos de controle negativo.
+ * Os contatos dos cinco elos de controle negativo.
  *
  * Um contato por elo, e nenhum deles é o da prova positiva: cada elo precisa da
  * própria conversa para que a contagem lida do banco seja dele, e não do que o
@@ -203,6 +207,18 @@ export const NEGATIVE_CONTROL = Object.freeze({
     name: "Elis do Supersede",
     firstMessageId: "goal032-supersede-inbound-1",
     secondMessageId: "goal032-supersede-inbound-2",
+  }),
+  group: Object.freeze({
+    link: "group",
+    // Sufixo `@g.us`: a marca de grupo que `isGroupJid` lê direto do `Chat`,
+    // sem depender de nenhuma flag do provedor.
+    chatId: "120363019876543210@g.us",
+    senderJid: "5511990000037@s.whatsapp.net",
+    name: "Grupo do Goal034",
+    messageId: "goal034-group-inbound-1",
+    // Só o elo quebrado usa isto: sem o sufixo `@g.us` no `Chat`, o mesmo
+    // evento vira uma conversa pessoal comum.
+    brokenPhone: "5511990000037",
   }),
 });
 
@@ -901,14 +917,19 @@ export function inboundWebhookPayload(overrides = {}) {
   // o próprio telefone e o próprio nome, porque cada elo tem conversa própria.
   const phone = overrides.phone ?? contact.phone;
   const pushName = overrides.name ?? contact.name;
+  // O elo do grupo passa `chat`/`sender` explícitos: um JID `@g.us` não deriva
+  // de telefone nenhum. Os demais elos continuam derivando os dois do phone,
+  // como sempre.
+  const chat = overrides.chat ?? `${phone}@s.whatsapp.net`;
+  const sender = overrides.sender ?? chat;
   return {
     event: "Message",
     instanceId: overrides.instanceId ?? instanceId,
     data: {
       Info: {
         ID: overrides.messageId ?? contact.messageId,
-        Chat: `${phone}@s.whatsapp.net`,
-        Sender: `${phone}@s.whatsapp.net`,
+        Chat: chat,
+        Sender: sender,
         PushName: pushName,
         Type: "text",
       },
@@ -1360,7 +1381,7 @@ async function internalRequest(baseUrl, method, route, { token, body }) {
   return { status: response.status, payload };
 }
 
-// --- Controle negativo: os quatro elos obrigatórios ------------------------
+// --- Controle negativo: os cinco elos obrigatórios --------------------------
 //
 // Cada elo é um cenário completo pelo mesmo caminho de produção da prova
 // positiva — webhook real, worker real, dispatcher real, grafo real — só que
@@ -1386,7 +1407,10 @@ function countersDelta(before, after) {
 }
 
 /** Uma mensagem do contato do elo, pelo webhook real, por HTTP real. */
-async function deliverInbound(address, { phone, name, messageId, text }) {
+async function deliverInbound(
+  address,
+  { phone, name, messageId, text, chat, sender },
+) {
   const response = await fetch(
     new URL(
       `/webhooks/evolution?token=${encodeURIComponent(WEBHOOK_TOKEN)}`,
@@ -1396,7 +1420,7 @@ async function deliverInbound(address, { phone, name, messageId, text }) {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(
-        inboundWebhookPayload({ phone, name, messageId, text }),
+        inboundWebhookPayload({ phone, name, messageId, text, chat, sender }),
       ),
     },
   );
@@ -1436,13 +1460,14 @@ async function messagesOf(aiDb, conversationId) {
   }));
 }
 
-/** Os quatro elos, em ordem, um depois do outro. */
+/** Os cinco elos, em ordem, um depois do outro. */
 async function exerciseNegativeControlLinks(context) {
   return {
     "human-control": await exerciseHumanControlLink(context),
     "ignore-ai": await exerciseIgnoreAiLink(context),
     idempotency: await exerciseIdempotencyLink(context),
     supersede: await exerciseSupersedeLink(context),
+    group: await exerciseGroupLink(context),
   };
 }
 
@@ -1715,6 +1740,53 @@ async function exerciseSupersedeLink({
   };
 }
 
+/**
+ * Elo 5 — grupo.
+ *
+ * Um evento de grupo entra pelo mesmo webhook real e nunca vira `Message`
+ * OUTBOUND, nunca chama o dublê de modelo e nunca chega ao dublê de
+ * transporte: `InboundMessageProcessor` devolve `ignored_group` antes de
+ * resolver conversa. O elo quebrado troca exatamente a marca de grupo no
+ * `Chat` — sem o sufixo `@g.us` a mesma mensagem vira conversa pessoal comum
+ * e é atendida pelo modelo.
+ */
+async function exerciseGroupLink({ aiDb, address, openAi, evolution, breakLink }) {
+  const contact = NEGATIVE_CONTROL.group;
+  const broken = breakLink === contact.link;
+
+  const before = doubleCounters(openAi, evolution);
+  const outboundBefore = await aiDb.query(
+    `SELECT count(*)::int AS "total" FROM "Message" WHERE "direction" = 'OUTBOUND'`,
+  );
+
+  await deliverInbound(address, {
+    messageId: contact.messageId,
+    name: contact.name,
+    text: REHEARSAL.contact.text,
+    chat: broken ? `${contact.brokenPhone}@s.whatsapp.net` : contact.chatId,
+    sender: broken
+      ? `${contact.brokenPhone}@s.whatsapp.net`
+      : contact.senderJid,
+  });
+  const settled = await waitForEventsSettled({
+    aiDb,
+    messageIds: [contact.messageId],
+  });
+  const delta = countersDelta(before, doubleCounters(openAi, evolution));
+  const outboundAfter = await aiDb.query(
+    `SELECT count(*)::int AS "total" FROM "Message" WHERE "direction" = 'OUTBOUND'`,
+  );
+
+  return {
+    link: contact.link,
+    broken,
+    waitedMs: settled.waitedMs,
+    event: settled.events[0] ?? null,
+    delta,
+    outboundDelta: outboundAfter.rows[0].total - outboundBefore.rows[0].total,
+  };
+}
+
 // --- Prova positiva: a resposta automática, ponta a ponta ------------------
 //
 // O texto conferido em cada asserção é `result.model.returnedTexts[0]` — o
@@ -1790,7 +1862,7 @@ export function assertAutoReply(result) {
 }
 
 /**
- * Os quatro elos obrigatórios de controle negativo, cada um com asserção e
+ * Os cinco elos obrigatórios de controle negativo, cada um com asserção e
  * mensagem próprias.
  *
  * A prova de cada elo tem sempre a mesma forma: o que a produção deixou no
@@ -1806,6 +1878,7 @@ export function assertNegativeControlLinks(result) {
     checkIgnoreAiLink(links["ignore-ai"]),
     checkIdempotencyLink(links.idempotency),
     checkSupersedeLink(links.supersede),
+    checkGroupLink(links.group),
   ];
 
   for (const check of checks) {
@@ -1911,6 +1984,25 @@ function checkSupersedeLink(observed) {
   };
 }
 
+function checkGroupLink(observed) {
+  if (!observed) return missingLink("group");
+  const { delta } = observed;
+  const { status, action } = eventOutcome(observed.event);
+  return {
+    link: "group",
+    name: "a group event never becomes an outbound message and never calls the model double",
+    counts: `model=${delta.modelResponses} response(s), ${delta.modelEmbeddings} embedding(s), transport=${delta.sends} send(s), outbound-delta=${observed.outboundDelta}, event=${status}/${action}`,
+    pass:
+      delta.modelResponses === 0 &&
+      delta.modelEmbeddings === 0 &&
+      delta.sends === 0 &&
+      observed.outboundDelta === 0 &&
+      status === "DONE" &&
+      action === "ignored_group",
+    message: `group: an inbound event from a group chat must never become an outbound message, call the model double or reach the transport double, but the model double answered ${delta.modelResponses} time(s) and embedded ${delta.modelEmbeddings} time(s), the transport double received ${delta.sends} send(s), the outbound message count changed by ${observed.outboundDelta}, and the event settled ${status}/${action} instead of DONE/ignored_group. Observed: ${JSON.stringify(observed)}`,
+  };
+}
+
 // --- Orquestração do processo pai ------------------------------------------
 
 export async function rehearse(plan) {
@@ -1983,7 +2075,7 @@ export async function rehearse(plan) {
   const linksStartedAt = Date.now();
   assertNegativeControlLinks(result);
   console.log(
-    `goal032: the four negative-control links held in ${Date.now() - linksStartedAt} ms.`,
+    `goal032: the five negative-control links held in ${Date.now() - linksStartedAt} ms.`,
   );
 
   return process.exitCode ?? 0;

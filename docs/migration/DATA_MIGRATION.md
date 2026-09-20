@@ -771,3 +771,51 @@ banco — ver [VALIDATION_GATE](VALIDATION_GATE.md). Amarrar o gate público a
 PostgreSQL transformaria o único gate renderizado que roda sem pré-condição em
 mais um passo dependente de ambiente; por isso o ensaio autenticado vive
 inteiramente em `validate:integration`.
+
+## 20. Elo de controle de grupo no ensaio da resposta automática (Goal034)
+
+Diff034, [D-050](DECISIONS.md). Este Goal não muda schema, contrato público
+nem rota: fecha **A-10** ([FINAL_AUDIT §11](FINAL_AUDIT.md#11-fechamento-de-a-09-a-10-e-a-18--goal034-2026-09-20))
+na ponta em que [§18](#18-resposta-automática-provada-ponta-a-ponta-goal032)
+já tinha a pilha real de pé — o mesmo caminho de produção do ensaio do
+Goal032, sem worker novo, sem banco novo e sem passo novo em
+`validate:integration`.
+
+**O que mudou no ensaio.** `scripts/goal032-auto-reply-rehearsal.mjs` ganhou
+um quinto elo — `group`, ao lado dos quatro já existentes (controle humano,
+`Ignorar IA`, idempotência, supersede) em `BREAKABLE_LINKS` — sem criar
+worker, banco ou passo de `validate:integration` novos: continua sendo
+`rehearse:goal032-auto-reply`, 34º passo da lista de 35. `exerciseGroupLink`
+entrega, pelo mesmo `POST /webhooks/evolution` real dos demais elos, um
+evento cujo `Chat` traz a marca de grupo que `isGroupJid` lê — o mesmo
+predicado do descarte de produção, nunca uma segunda regra copiada para o
+ensaio.
+
+**O que este elo prova, por leitura direta do banco e pelo que o dublê de
+transporte recebeu — nunca só pelo `200` da resposta HTTP:** um evento de
+grupo entrando pelo caminho durável real **não** produz nenhuma `Message`
+`OUTBOUND` na conversa, **não** chama o dublê do modelo e **não** produz
+nenhum envio ao dublê de transporte. `checkGroupLink` é a mesma dupla
+asserção (nada persistido para responder, nada chamado) que os elos de
+controle humano e `Ignorar IA` já usavam — o descarte de grupo se comporta,
+na pilha real, como os outros dois casos em que o produto decide não
+responder.
+
+**Controle negativo.** `GOAL032_BREAK_LINK=group` faz o elo aceitar resposta
+a um evento de grupo — no mesmo padrão dos outros quatro `BREAKABLE_LINKS` —
+e derruba o ensaio com `exit 1` e mensagem própria nomeando o elo quebrado.
+`scripts/tests/goal032-auto-reply-rehearsal.test.mjs` prova, como suíte
+permanente rodada por `npm run test:gate`, que os **cinco** elos obrigatórios
+estão registrados, cada um com sua própria mensagem — o guard fica vermelho
+se um elo for removido da lista ou perder o nome.
+
+**O que este elo não prova.** Não prova que o descarte acontece **cedo** no
+fluxo — antes de idempotência, conversa e automação —, isso continua sendo
+`apps/ai-orchestrator/tests/channel/inbound-message-processor.test.ts`
+(passo `test:ai-orchestrator`); não prova que a recusa no despacho da
+resposta da IA (`message-graph.ts`, `GroupDispatchRefusedError`) nunca é
+alcançada, porque a pilha real já descarta a mensagem antes desse ponto —
+essa segunda linha de defesa tem teste próprio, também no passo
+`test:ai-orchestrator`; e não prova nada sobre conversa de grupo com
+histórico prévio, mídia ou ferramenta, que continuam fora do escopo já
+declarado em [§18](#18-resposta-automática-provada-ponta-a-ponta-goal032).

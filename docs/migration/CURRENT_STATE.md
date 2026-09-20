@@ -2931,3 +2931,77 @@ seu teste —, declarados em [D-049](DECISIONS.md) e aceitos como desvio no
   em `desktop-1440` `flaky` com retry, e o controle negativo de login quebrado
   executado com o config reduzido a `mobile-360`. Nenhum achado de A-03 a
   A-19 foi corrigido ou reclassificado por este delta.
+
+## Delta implementado — diff034, 2026-09-20 ([D-050](DECISIONS.md))
+
+Este delta fecha **A-09**, **A-10** e **A-18**: três guardrails de
+`AGENTS.md` que dependiam de default de ambiente, de ausência na árvore ou de
+nada, e passam a depender de código e de gate. Nenhum arquivo fora de
+`apps/ai-orchestrator/`, `scripts/` e `docs/migration/` mudou; nenhuma
+migration, schema, rota ou contrato público mudou.
+
+- **FATO atual (o descarte de grupo é incondicional):** `EVOLUTION_IGNORE_GROUPS`
+  saiu de `apps/ai-orchestrator/src/config/env.ts`, `.env.example` e
+  `docker-compose.yml`. `InboundMessageProcessor.ts:243`–`:244` descarta toda
+  mensagem de grupo (`if (message.isGroup) { return { ok: true, action:
+  "ignored_group" }; }`), sempre, no mesmo ponto de antes — antes de
+  idempotência, conversa e automação. O teste que afirmava o descarte
+  "apenas enquanto a configuração mandar" foi substituído por um que prova o
+  descarte incondicional; nenhum teste de grupo foi removido.
+- **FATO atual (a resposta da IA recusa destino de grupo na saída):**
+  `message-graph.ts` ganhou `GroupDispatchRefusedError` e recusa despachar a
+  resposta da IA (`action: "send_refused_group"`) quando `isGroupJid` — o
+  mesmo predicado do mapper, nunca uma segunda regra — identifica o destino
+  como grupo, antes de chamar `provider.sendText`. É a segunda linha de
+  defesa: se a ponta de entrada falhar, esta recusa impede a IA de responder
+  em grupo. Envio humano, lembrete e teste de ativação não foram tocados.
+- **FATO atual (a condição não pode voltar sem que um gate fique vermelho):**
+  `audit:static` (`scripts/final-production-audit.mjs`) ganhou
+  `group_discard_is_not_configuration` — falha se `EVOLUTION_IGNORE_GROUPS`
+  reaparecer em `apps/**` ou se um `if` que testa `isGroup` voltar a
+  condicionar o descarte a `env`/`config` — provado nos dois sentidos por
+  `scripts/tests/final-production-audit-legacy-regression.test.mjs`. Ver
+  [VALIDATION_GATE](VALIDATION_GATE.md#checks-estáticos-novos-do-goal034).
+- **FATO atual (a pilha real também prova o descarte de grupo):**
+  `scripts/goal032-auto-reply-rehearsal.mjs` ganhou o quinto elo de controle,
+  `group`, provando por leitura de banco e pelo que o dublê de transporte
+  recebeu que um evento de grupo, entrando pelo webhook real, não produz
+  `Message` `OUTBOUND` nem envio — ver
+  [DATA_MIGRATION §20](DATA_MIGRATION.md#20-elo-de-controle-de-grupo-no-ensaio-da-resposta-automática-goal034).
+  Continua sendo o mesmo 34º passo de `validate:integration`; a lista de 35
+  passos não mudou.
+- **FATO atual (o que o produto emite por conta própria é um conjunto
+  fechado):** os textos que `apps/ai-orchestrator/src/modules/assistant/assistant.service.ts`
+  emite por conta própria — sem passar pelo modelo — estão reunidos em
+  `PRODUCT_OWN_TEXTS`, sem mudar uma vírgula de nenhum deles. Teste permanente
+  em `tests/assistant/assistant.service.test.ts` reprova qualquer texto do
+  conjunto que soe como aviso de espera, e prova que o conjunto é fechado: um
+  literal novo em `messages: [...]` que não esteja em `PRODUCT_OWN_TEXTS` fica
+  vermelho.
+- **FATO atual (o prompt orienta o modelo a não anunciar espera):**
+  `MAIN_RULES` (`apps/ai-orchestrator/src/modules/prompts/system.ts`) ganhou a
+  regra de não anunciar consulta em andamento nem pedir para a cliente
+  esperar; `PROMPT_TEMPLATE_VERSION` subiu de `v5` para `v6`, com o parágrafo
+  de justificativa no padrão dos anteriores. Eval nova
+  (`tests/evals/waiting-message-vocabulary.eval.test.ts`) prova que o turno de
+  tool não emite mensagem própria — só a decisão final vira mensagem de
+  saída.
+- **FATO atual (o tema claro passou a ser regra, não só ausência):**
+  `audit:static` ganhou `frontend_has_no_dark_theme_css` — falha se algum CSS
+  de `apps/frontend/src` declarar `prefers-color-scheme: dark` ou um seletor
+  comum de alternância manual de tema escuro. Provado nos dois sentidos pela
+  mesma suíte de regressão.
+- **FATO revelado (a auditoria final recontada):** com A-09, A-10 e A-18
+  fechados, a auditoria passa de 0 `BLOQUEADOR-MVP`, 10 `PENDENCIA-POS-MVP` e
+  7 `LIMITE-DECLARADO` para 0 `BLOQUEADOR-MVP`, 8 `PENDENCIA-POS-MVP` e 6
+  `LIMITE-DECLARADO`. Os identificadores A-03 a A-08, A-11 a A-17 e A-19 não
+  foram tocados, corrigidos nem reclassificados. Ver
+  [FINAL_AUDIT §11](FINAL_AUDIT.md#11-fechamento-de-a-09-a-10-e-a-18--goal034-2026-09-20).
+- **LIMITE:** este delta não afirma que o modelo real obedece à regra nova de
+  `MAIN_RULES` — a eval de A-09 usa um dublê roteirizado pelo próprio teste, e
+  aderência do modelo real ao prompt não é verificável por eval
+  determinístico. Não fecha **M4** (envio real a número real, gate
+  operacional) e não afirma fidelidade visual à referência aprovada.
+- **LIMITE:** este delta descreve o diff034 (WU-01 a WU-08) sobre a baseline
+  aceita `090ee2897835142b59c979ddb24d4372c2f4398e` (fechamento do Goal033),
+  decidido em [D-050](DECISIONS.md), sem commit e sem deploy.

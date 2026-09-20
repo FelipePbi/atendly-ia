@@ -80,12 +80,12 @@ describe("prompt montado: sem persona, identidade transparente e versao por esti
 
   it("a versao e um hash estavel do conteudo montado: um teste que muda sozinho aqui sinaliza que o prompt mudou sem bump consciente da versao semantica", () => {
     expect(derivePromptVersion("PROFESSIONAL")).toBe(
-      "prompt-v5-professional-e02615be3b",
+      "prompt-v6-professional-162d0c285c",
     );
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v5-balanced-aada3ecb78",
+      "prompt-v6-balanced-1d0be808a2",
     );
-    expect(derivePromptVersion("CASUAL")).toBe("prompt-v5-casual-2993c32b91");
+    expect(derivePromptVersion("CASUAL")).toBe("prompt-v6-casual-5666453f95");
   });
 
   it("o prompt montado embute exatamente a versao retornada para o estilo usado", () => {
@@ -96,6 +96,19 @@ describe("prompt montado: sem persona, identidade transparente e versao por esti
       expect(text).toContain(`Versao do prompt: ${version}`);
     }
   });
+});
+
+describe("prompt montado: guardrail de nao anunciar consulta em andamento (Goal034/WU-06)", () => {
+  it.each(STYLES)(
+    "prompt montado para %s proibe anunciar consulta em andamento ou pedir para a cliente aguardar",
+    (style) => {
+      const { text } = assemblePrompt(style);
+
+      expect(text).toContain(
+        "Nunca anuncie que esta consultando, verificando ou processando algo, nem peca para a cliente aguardar ou esperar.",
+      );
+    },
+  );
 });
 
 describe("prompt montado: modo sugestao (Goal012/WU-04)", () => {
@@ -130,7 +143,7 @@ describe("prompt montado: modo sugestao (Goal012/WU-04)", () => {
 
   it("a secao do modo sugestao entra no hash estavel: mudar o template de sugestao muda a versao do prompt normal tambem", () => {
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v5-balanced-aada3ecb78",
+      "prompt-v6-balanced-1d0be808a2",
     );
   });
 
@@ -186,7 +199,7 @@ describe("prompt montado: audio transcrito (Goal013/WU-03)", () => {
     // poder chegar como voz virada em texto; o hash abaixo muda sozinho se
     // alguem mexer na secao sem decidir isso de novo.
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v5-balanced-aada3ecb78",
+      "prompt-v6-balanced-1d0be808a2",
     );
   });
 });
@@ -362,7 +375,7 @@ describe("prompt montado: resposta ao lembrete (Goal021/WU-008)", () => {
 
   it("a secao de resposta ao lembrete entra no hash estavel: o bump para v5 e a versao conscientemente atualizada por causa dela", () => {
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v5-balanced-aada3ecb78",
+      "prompt-v6-balanced-1d0be808a2",
     );
   });
 });

@@ -106,6 +106,7 @@ test("points the subprocess at the declared test database with synthetic secrets
       "test:ai-orchestrator-content-purge",
       "test:evolution-go-webhook-outbox",
       "rehearse:goal030-mvp-journey",
+      "rehearse:goal032-auto-reply",
     ],
   );
   for (const step of steps) {

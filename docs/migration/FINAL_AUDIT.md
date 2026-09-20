@@ -695,3 +695,53 @@ contraste computado, foco visível e `prefers-reduced-motion` (§5.2), e a
 fidelidade visual **segue sendo conferência humana**, nunca provada por teste.
 E não diz que A-02 mudou de estado: nenhuma tela autenticada é medida pelo
 gate, e isso continua aberto, sem Goal atribuído.
+
+## 9. Resposta automática provada ponta a ponta — Goal032, 2026-09-20
+
+Seção nova, escrita depois da última mudança de árvore do diff032 (WU-01 a
+WU-06). Ela **não reescreve** §6, §7 nem §8: os registros de A-01 a A-19 e o
+veredito de §7 continuam exatamente como estavam. Esta seção acrescenta o que
+a composição do Goal032 passou a provar sobre a resposta automática da IA —
+um fato que §1 e §2 já inventariavam pelo lado do código e do teste unitário
+de domínio, mas que nenhuma execução tinha atravessado pelo caminho de
+produção inteiro.
+
+**O que mudou.** `scripts/goal032-auto-reply-rehearsal.mjs`
+(`rehearse:goal032-auto-reply`, 34º e último passo de `validate:integration`)
+sobe o orquestrador de IA real, com `INBOX_WORKER_ENABLED` **ligado**, contra
+um banco PostgreSQL descartável próprio. `POST /webhooks/evolution` real
+entrega a mensagem; `InboundEventDispatcher` cai em
+`buildInboundMessageProcessor` **sem** `buildProcessor` injetado — grafo,
+assistente, sessão, memória e ferramentas reais; `EvolutionProvider` real
+chama o dublê de transporte. As duas únicas fronteiras dublê são as duas
+**externas** (OpenAI e Evolution Go), redirecionadas por `OPENAI_BASE_URL` e
+`EVOLUTION_BASE_URL` — a primeira passou a valer para
+`LangChainModelProvider` e `OpenAIEmbeddingProvider`
+(`apps/ai-orchestrator/src/modules/model/model-provider.ts`,
+`apps/ai-orchestrator/src/modules/knowledge/embedding-provider.ts`), do mesmo
+jeito que já valia para a transcrição — para dois servidores HTTP em
+`127.0.0.1`, com o endereço efetivo conferido depois do `listen`.
+
+**O que a execução prova, por leitura direta do banco e pelo que o dublê de
+transporte recebeu:** o evento termina `DONE`; existe exatamente uma
+`Message` `OUTBOUND` na conversa, com o texto que o dublê de modelo produziu
+naquela execução; o dublê de transporte recebeu exatamente um envio, para o
+telefone do contato, com esse mesmo texto; e a linha `OUTBOUND` já existia
+quando o transporte foi chamado — a ordem que G-09 declara, conferida na
+execução, não só no código. Um controle negativo (`GOAL032_BREAK_LINK`) prova
+que o ensaio cai com `exit 1` quando um dos quatro elos obrigatórios deixa de
+acontecer — controle humano, `Ignorar IA`, idempotência, supersede —, e os
+dois primeiros também provam que o dublê de modelo não é chamado. Os guards do
+ensaio (recusa de destino não descartável, registro dos quatro elos) têm
+teste permanente em `scripts/tests/goal032-auto-reply-rehearsal.test.mjs`,
+rodado por `npm run test:gate`.
+
+**O que esta seção não diz.** Não diz que M4 (envio real a número real) foi
+fechado: nenhuma chamada saiu, neste diff, para um provedor de LLM real nem
+para o WhatsApp real, e M4 continua aberto como gate operacional, fora do
+inventário M0–M6 de §2 (que audita o corte de dado da migração, não este
+gate). Não diz que o laço de ferramentas contra o Scheduling real, áudio,
+mídia ou grupo foi exercitado — seguem declaradamente fora
+(`SCHEDULING_SERVICE_BASE_URL` aponta para loopback onde nada escuta). E não
+altera a contagem de achados do veredito de §7: nenhum achado de A-02 a A-19
+foi corrigido, reclassificado ou tocado por este diff.

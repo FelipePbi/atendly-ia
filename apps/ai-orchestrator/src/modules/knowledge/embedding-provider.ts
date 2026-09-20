@@ -14,6 +14,7 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
     apiKey: env.OPENAI_API_KEY,
     model: env.OPENAI_EMBEDDING_MODEL,
     dimensions: KNOWLEDGE_EMBEDDING_DIMENSIONS,
+    configuration: { baseURL: env.OPENAI_BASE_URL },
   });
 
   async embedQuery(query: string): Promise<number[]> {

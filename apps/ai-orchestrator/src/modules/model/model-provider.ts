@@ -54,18 +54,23 @@ export interface ModelProvider {
   invoke(request: ModelRequest): Promise<ModelResponse>;
 }
 
+export function createChatOpenAI(): ChatOpenAI {
+  return new ChatOpenAI({
+    apiKey: env.OPENAI_API_KEY,
+    model: env.OPENAI_MODEL,
+    maxCompletionTokens: env.OPENAI_MAX_OUTPUT_TOKENS,
+    maxRetries: 2,
+    useResponsesApi: true,
+    zdrEnabled: true,
+    configuration: { baseURL: env.OPENAI_BASE_URL },
+  });
+}
+
 export class LangChainModelProvider implements ModelProvider {
   async invoke(request: ModelRequest): Promise<ModelResponse> {
     requireOpenAiEnv();
 
-    const model = new ChatOpenAI({
-      apiKey: env.OPENAI_API_KEY,
-      model: env.OPENAI_MODEL,
-      maxCompletionTokens: env.OPENAI_MAX_OUTPUT_TOKENS,
-      maxRetries: 2,
-      useResponsesApi: true,
-      zdrEnabled: true,
-    }).bindTools(request.tools, {
+    const model = createChatOpenAI().bindTools(request.tools, {
       parallel_tool_calls: false,
     });
 

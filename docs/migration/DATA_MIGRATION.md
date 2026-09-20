@@ -601,3 +601,73 @@ o que segue é o veredito desta rodada sobre cada uma):
 Nenhuma dessas linhas fecha por este Goal: auditoria não corrige nem migra,
 só confere na árvore e registra o veredito. Detalhe completo, achado a
 achado, em [FINAL_AUDIT](FINAL_AUDIT.md).
+
+## 18. Resposta automática provada ponta a ponta (Goal032)
+
+Diff032, [D-048](DECISIONS.md). Este Goal não muda schema e não executa
+migration nenhuma: o único código novo em `apps/*/src` é a fronteira
+configurável do OpenAI, e o único artefato de ensaio é o percurso que fecha a
+lacuna que o Goal030 tinha declarado no próprio cabeçalho — a resposta
+automática da IA nunca tinha sido exercitada pelo caminho de produção.
+
+**Costura (`apps/ai-orchestrator/src/modules/model/model-provider.ts`,
+`apps/ai-orchestrator/src/modules/knowledge/embedding-provider.ts`).**
+`LangChainModelProvider` e `OpenAIEmbeddingProvider` passam a usar
+`env.OPENAI_BASE_URL`, do mesmo jeito que
+`openai-transcription-provider.ts` já usava. O default não muda
+(`https://api.openai.com/v1`), nenhuma variável de ambiente nova foi criada, e
+`requireOpenAiEnv()`/`requireEmbeddingEnv()` continuam exigindo o que já
+exigiam. É a única costura de ambiente que este Goal introduz: nenhum
+parâmetro novo em `buildInboundMessageProcessor`, nenhuma injeção na fábrica
+de produção.
+
+**Ensaio (`scripts/goal032-auto-reply-rehearsal.mjs`, passo
+`rehearse:goal032-auto-reply` de `validate:integration`, último da lista).**
+Sobe o orquestrador de IA real, com `INBOX_WORKER_ENABLED` **ligado**, contra
+um banco PostgreSQL descartável **próprio**. O caminho é o de produção sem
+substituto interno: `POST /webhooks/evolution` por HTTP real → `ProcessedEvent`
+gravado antes do `202` → claim pelo `InboxWorker` real → `InboundEventDispatcher`
+**sem** `buildProcessor` injetado → `buildInboundMessageProcessor` — grafo,
+assistente, sessão, memória e ferramentas reais → `EvolutionProvider` real
+chamando o dublê de transporte. Os dois únicos dublês são as duas fronteiras
+**externas** — um servidor compatível com a Responses API mais o endpoint de
+embeddings, e um servidor que responde ao envio de texto do Evolution Go —,
+os dois em `127.0.0.1`, com o endereço efetivo conferido depois do `listen`.
+As janelas que adiam o trabalho (`AI_DEBOUNCE_*`, `AI_AMBIGUOUS_*`,
+`INBOX_POLL_INTERVAL_MS`) são encurtadas por ambiente; não há claim manual
+nem relógio falso — quem reivindica o lote é o worker de produção, com teto de
+espera declarado (`WORKER_WAIT_TIMEOUT_MS`) e mensagem própria no estouro.
+
+**O que este ensaio prova, e que nenhum outro prova:** por leitura direta do
+banco e pelo que o dublê de transporte recebeu — nunca só pelo `200` da
+resposta HTTP —, que o evento termina `DONE`, que existe exatamente uma
+`Message` `OUTBOUND` na conversa com o texto que o dublê de modelo produziu
+naquela execução, que o dublê de transporte recebeu exatamente um envio para o
+telefone do contato com esse mesmo texto, e que a linha `OUTBOUND` já existia
+quando o transporte foi chamado — a ordem do G-09 conferida na execução, não
+só no código.
+
+**Controle negativo.** No padrão `GOAL030_BREAK_LINK`, com
+`GOAL032_BREAK_LINK` e registro nomeado por elo (`BREAKABLE_LINKS`). Os quatro
+elos obrigatórios: **controle humano** (sessão sob takeover não recebe
+resposta automática, e o dublê de modelo não é chamado), **`Ignorar IA`**
+(contato ignorado não é atendido nem processado, mesma dupla asserção),
+**idempotência** (o mesmo evento entregue duas vezes produz uma resposta e um
+envio) e **supersede** (mensagem nova do mesmo contato antes da saída pendente
+sair cancela essa saída, em vez de mandar as duas). Cada elo é uma etapa do
+percurso deixando de acontecer — nunca uma asserção relaxada nem código de
+produção alterado — e derruba o ensaio com `exit 1` e mensagem própria quando
+quebrado.
+
+**O que ele não prova, por dublê declarado:** nenhuma chamada a provedor de
+LLM real nem a WhatsApp real — **M4** (envio real a número real) continua
+aberto como gate operacional; o laço de ferramentas contra o Scheduling real,
+áudio, mídia e grupo (`SCHEDULING_SERVICE_BASE_URL` aponta para loopback onde
+nada escuta); e nada sobre a origem real da Minha Agenda ou deploy hospedado,
+que este ensaio não usa.
+
+**Guards com teste permanente.** A recusa de destino não descartável
+(`resolveRehearsalPlan`) e o registro dos quatro elos (`BREAKABLE_LINKS`) têm
+suíte própria em `scripts/tests/goal032-auto-reply-rehearsal.test.mjs`, rodada
+por `npm run test:gate` — fechando, para este ensaio, o resíduo que o
+[review029](reviews/029-review.md) declarou e o Goal030 herdou.

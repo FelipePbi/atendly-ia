@@ -604,6 +604,17 @@ export function integrationSteps(target) {
       args: ["scripts/goal030-mvp-journey-rehearsal.mjs"],
       env,
     },
+    // Ensaio da resposta automática do Goal032: webhook real, worker de inbox
+    // real e o grafo de IA real, contra um banco PostgreSQL descartável
+    // próprio, com prova positiva e os quatro elos de controle negativo.
+    // Fecha a lacuna que o ensaio do Goal030 deixou declarada em aberto.
+    {
+      name: "rehearse:goal032-auto-reply",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal032-auto-reply-rehearsal.mjs"],
+      env,
+    },
   ];
 }
 

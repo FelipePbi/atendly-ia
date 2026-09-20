@@ -17,7 +17,7 @@ git diff --check
 | Comando | Cobre | Não cobre |
 | --- | --- | --- |
 | `validate:core` | Builds de Scheduling, IA, BFF e frontend; `npm run check` do health-worker; suíte da IA; suíte do adapter HTTP do frontend; `go build`/`go vet`/`go test` do Evolution Go; testes dos próprios scripts de gate; auditoria estática | Qualquer escrita em banco. Nenhum passo abre conexão de banco |
-| `validate:integration` | 33 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, a purga de conteúdo de conversa (Goal023) e a purga por negócio da IA (Goal025), o outbox do Evolution Go, um ensaio por migration de Goal — o mais recente deles `rehearse:goal027-calendar-source-migration` —, a reconciliação do fuso único do negócio (`rehearse:goal029-timezone-reconciliation`, Goal029) e, desde o Goal028, o ensaio de release (`rehearse:goal028-release-migrations`) e o de dump/restore (`rehearse:goal028-restore`); desde o Goal030, o percurso único de produto ponta a ponta (`rehearse:goal030-mvp-journey`) | Qualquer camada acima do dado: nenhuma jornada de interface, nenhum envio real por WhatsApp e nenhuma origem real do Minha Agenda. O próprio percurso do Goal030 também não cobre isso — ver a nota abaixo |
+| `validate:integration` | 34 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, a purga de conteúdo de conversa (Goal023) e a purga por negócio da IA (Goal025), o outbox do Evolution Go, um ensaio por migration de Goal — o mais recente deles `rehearse:goal027-calendar-source-migration` —, a reconciliação do fuso único do negócio (`rehearse:goal029-timezone-reconciliation`, Goal029) e, desde o Goal028, o ensaio de release (`rehearse:goal028-release-migrations`) e o de dump/restore (`rehearse:goal028-restore`); desde o Goal030, o percurso único de produto ponta a ponta (`rehearse:goal030-mvp-journey`); desde o Goal032, a resposta automática ponta a ponta (`rehearse:goal032-auto-reply`, último da lista) | Qualquer camada acima do dado: nenhuma jornada de interface, nenhum envio real por WhatsApp e nenhuma origem real do Minha Agenda. Nem o percurso do Goal030 nem o ensaio do Goal032 cobrem isso — ver a nota abaixo |
 | `git diff --check` | Espaço em branco/conflito no diff | Correção do diff |
 
 Comandos auxiliares: `npm run test:gate` (só os testes dos scripts de gate) e
@@ -242,6 +242,31 @@ envio real por WhatsApp, porque o vínculo do canal é sintético e a Evolution 
 nunca é contactada; e nada sobre a origem real do Minha Agenda, que este
 percurso não usa. Ver
 [DATA_MIGRATION §17](DATA_MIGRATION.md#17-percurso-único-de-produto-ponta-a-ponta-goal030).
+
+`rehearse:goal032-auto-reply` (Goal032, diff032 — [D-048](DECISIONS.md)), o
+passo mais novo e o último da lista, fecha a lacuna que o passo acima deixou
+declarada em aberto: sobe o orquestrador de IA real, com
+`INBOX_WORKER_ENABLED` **ligado**, contra um banco descartável **próprio**
+(não o do trio de migrations nem o do percurso do Goal030), e entrega a
+mensagem pelo caminho de produção inteiro — `POST /webhooks/evolution` real →
+`ProcessedEvent` gravado antes do `202` → claim pelo worker real →
+`InboundEventDispatcher` **sem** `buildProcessor` injetado →
+`buildInboundMessageProcessor` — grafo, assistente, sessão, memória e
+ferramentas reais → `EvolutionProvider` real chamando o dublê de transporte.
+**O que ele prova, e que nenhum outro passo prova:** por leitura direta do
+banco e pelo que o dublê de transporte recebeu, que existe exatamente uma
+`Message` `OUTBOUND` com o texto que o dublê de modelo produziu naquela
+execução, que o transporte recebeu exatamente um envio com esse texto para o
+telefone do contato, e que a linha `OUTBOUND` já existia quando o transporte
+foi chamado — a ordem do G-09 conferida na execução. Um controle negativo
+(`GOAL032_BREAK_LINK`) prova que o ensaio cai com `exit 1` quando qualquer um
+dos quatro elos obrigatórios (controle humano, `Ignorar IA`, idempotência,
+supersede) deixa de acontecer; os dois primeiros também provam que o dublê de
+modelo não é chamado. **O que ele não prova:** nenhuma chamada a provedor de
+LLM real nem a WhatsApp real — **M4** (envio real a número real) continua
+aberto como gate operacional —, o laço de ferramentas contra o Scheduling
+real, áudio, mídia e grupo, nem nada sobre a origem real do Minha Agenda. Ver
+[DATA_MIGRATION §18](DATA_MIGRATION.md#18-resposta-automática-provada-ponta-a-ponta-goal032).
 
 Nada de `migrate reset` sobre URL herdada, e nenhuma migration é reescrita.
 
@@ -615,5 +640,17 @@ as credenciais do service container são sintéticas e morrem com o runner.
   segue sendo anexado como evidência para conferência humana, nunca como
   pass/fail. `npm run validate:ui` desta rodada (execução da WU-08): exit 0,
   47546 ms.
+- **Diff032 ([D-048](DECISIONS.md)):** `validate:integration` passa de 33 para
+  34 passos com `rehearse:goal032-auto-reply` — ver a nota acima e
+  [DATA_MIGRATION §18](DATA_MIGRATION.md#18-resposta-automática-provada-ponta-a-ponta-goal032).
+  A única costura em `apps/*/src` é `OPENAI_BASE_URL` passar a valer também
+  para `LangChainModelProvider` e `OpenAIEmbeddingProvider`, com o default
+  inalterado. Os guards do ensaio (recusa de destino não descartável, registro
+  dos quatro elos de controle negativo) ganham teste permanente em
+  `scripts/tests/goal032-auto-reply-rehearsal.test.mjs`, rodado por
+  `npm run test:gate`. Nenhuma migration nova, nenhum passo existente removido,
+  renomeado ou enfraquecido. **M4** (envio real a número real) continua aberto
+  como gate operacional; nenhuma chamada saiu para provedor de LLM real nem
+  para WhatsApp real.
 - A execução hospedada dos workflows ainda não ocorreu; o estado atual é
   "configuração validada localmente". Ver [MIGRATION_STATUS](MIGRATION_STATUS.md).

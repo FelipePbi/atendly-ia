@@ -2777,3 +2777,71 @@ público e nenhuma migration mudou.
   MVP está pronto para produção de forma absoluta: é o registro do que mudou
   na árvore e do que a auditoria recontada, em FINAL_AUDIT §8, passa a dizer
   sobre A-01 especificamente.
+
+## Delta implementado — diff032, 2026-09-20 ([D-048](DECISIONS.md))
+
+Este delta fecha a lacuna que o delta030 tinha revelado e deixado para este
+Goal: a resposta automática da IA nunca tinha sido provada ponta a ponta.
+Nenhuma rota, nenhum contrato público, nenhuma migration e nenhum arquivo fora
+de `apps/ai-orchestrator/`, `scripts/`, `package.json` e `docs/migration/`
+mudou.
+
+- **FATO atual (a fronteira do OpenAI é configurável por ambiente, como a do
+  WhatsApp já era):** `LangChainModelProvider.createChatOpenAI()`
+  (`apps/ai-orchestrator/src/modules/model/model-provider.ts:57`–`:66`) e
+  `OpenAIEmbeddingProvider`
+  (`apps/ai-orchestrator/src/modules/knowledge/embedding-provider.ts:12`–`:18`)
+  passam a usar `env.OPENAI_BASE_URL`, do mesmo jeito que
+  `openai-transcription-provider.ts:41` já usava. O default continua
+  `https://api.openai.com/v1`, nenhuma variável de ambiente nova foi criada, e
+  `requireOpenAiEnv()`/`requireEmbeddingEnv()` continuam exigindo o que já
+  exigiam. `apps/ai-orchestrator/tests/model/openai-base-url.test.ts` afirma a
+  base efetiva dos dois provedores, no default e redirecionada.
+- **FATO atual (a resposta automática roda pelo caminho de produção inteiro,
+  sem substituto interno):** `scripts/goal032-auto-reply-rehearsal.mjs` sobe o
+  orquestrador de IA real com `INBOX_WORKER_ENABLED` ligado contra um banco
+  descartável próprio, entrega a mensagem por `POST /webhooks/evolution` real
+  e deixa o `InboundEventDispatcher` cair em `buildInboundMessageProcessor`
+  **sem** `buildProcessor` injetado — grafo, assistente, sessão, memória e
+  ferramentas reais. Os dois únicos dublês são as duas fronteiras externas
+  (OpenAI e Evolution Go), redirecionadas por `OPENAI_BASE_URL`/
+  `EVOLUTION_BASE_URL` para servidores em `127.0.0.1`, com o endereço efetivo
+  conferido depois do `listen`. As janelas que adiam o trabalho são encurtadas
+  por ambiente; não há claim manual nem relógio falso — quem reivindica o
+  evento é o worker real, com teto de espera declarado
+  (`WORKER_WAIT_TIMEOUT_MS`).
+- **FATO atual (a prova é por leitura do banco e pelo que o transporte
+  recebeu):** o ensaio confere, contra `ProcessedEvent`/`Message` do banco do
+  dono e contra as chamadas recebidas pelo dublê de transporte, que a linha
+  `OUTBOUND` já existia quando o transporte foi chamado — a ordem do G-09 —
+  com o mesmo texto que o dublê de modelo devolveu naquela execução, nunca um
+  texto fixo comparado consigo mesmo.
+- **FATO atual (controle negativo por elo declarado):**
+  `GOAL032_BREAK_LINK` derruba o ensaio com `exit 1` e mensagem própria quando
+  um dos quatro elos obrigatórios deixa de acontecer — `human-control`,
+  `ignore-ai`, `idempotency`, `supersede` (`BREAKABLE_LINKS`). Os dois
+  primeiros também afirmam que o dublê de modelo **não** foi chamado. Quebrar
+  um elo é sempre pular uma etapa do percurso, nunca relaxar uma asserção nem
+  tocar código de produção.
+- **FATO atual (os guards do ensaio têm teste permanente e o ensaio é passo do
+  gate):** a recusa de destino não descartável (`resolveRehearsalPlan`) e o
+  registro dos quatro elos (`BREAKABLE_LINKS`) têm suíte própria em
+  `scripts/tests/goal032-auto-reply-rehearsal.test.mjs`, rodada por
+  `npm run test:gate` — fechando, para este ensaio, o resíduo de ferramental
+  que o [review029](reviews/029-review.md) declarou e o Goal030 herdou. O
+  ensaio é o 34º passo de `validate:integration`
+  (`rehearse:goal032-auto-reply`), depois de `rehearse:goal030-mvp-journey`.
+- **LIMITE:** **M4** — envio real a número real — continua aberto como gate
+  operacional: nenhuma chamada saiu, neste diff, para um provedor de LLM real
+  nem para o WhatsApp real. O laço de ferramentas contra o Scheduling real,
+  áudio, mídia e grupo continuam declaradamente fora do ensaio
+  (`SCHEDULING_SERVICE_BASE_URL` aponta para loopback onde nada escuta). A
+  origem real da Minha Agenda e o deploy hospedado seguem fora do que esta
+  árvore prova.
+- **LIMITE:** este delta descreve o diff032 sobre a baseline aceita
+  `dcc00466abf82cdfabadf14ead54648e2181d260` (fechamento do Goal031),
+  **ACCEPTED na rodada 1 de 1 do [review032](reviews/032-review.md)** (zero
+  blockers, com execução própria do reviewer: ensaio exit 0 contra cluster
+  descartável e os quatro elos quebrados um a um com `exit 1`), sem commit e
+  sem deploy. Nenhum achado de A-02 a A-19 foi corrigido ou reclassificado por
+  este delta, e a contagem do veredito de FINAL_AUDIT §7 não muda.

@@ -9,90 +9,63 @@ import { Badge } from "@/shared/ui/Badge";
 import { Brand } from "@/shared/ui/Brand";
 import { PageHeader } from "@/shared/ui/PageHeader";
 
-export type SystemScenario =
-  "offline" | "external-unavailable" | "error" | "session-expired";
+export type SystemScenario = "offline" | "error" | "session-expired";
 
 export function SystemScreen({ scenario }: { scenario: SystemScenario }) {
   useShellConfig({
     active: "inicio",
     chrome: scenario !== "session-expired",
     module: "system",
-    source: scenario === "external-unavailable" ? "external" : "atendly",
     title: scenarioTitle(scenario),
   });
 
   if (scenario === "session-expired") return <SessionExpired />;
 
-  const external = scenario === "external-unavailable";
   const unexpected = scenario === "error";
   const title = scenarioTitle(scenario);
   const description =
     scenario === "offline"
       ? "Você pode consultar dados já carregados, mas ações que dependem de conexão estão bloqueadas."
-      : external
-        ? "Até a agenda responder, horários antigos não serão mostrados como disponibilidade atual."
-        : "Não conseguimos concluir a última ação. Seus dados anteriores foram preservados.";
+      : "Não conseguimos concluir a última ação. Seus dados anteriores foram preservados.";
   const panelTitle =
     scenario === "offline"
       ? "Você está sem conexão"
-      : external
-        ? "Minha Agenda está indisponível"
-        : "Algo não saiu como esperado";
+      : "Algo não saiu como esperado";
   const panelDescription =
     scenario === "offline"
       ? "Consultas seguras serão tentadas novamente quando a internet voltar. Nenhuma ação remota será apresentada como concluída."
-      : external
-        ? "A Atendly não consegue consultar a fonte oficial agora. Horários antigos não são apresentados como disponibilidade atual."
-        : "A ação não foi confirmada. Tente novamente ou volte ao Início sem interpretar esta tela como sucesso.";
-  const details = external
+      : "A ação não foi confirmada. Tente novamente ou volte ao Início sem interpretar esta tela como sucesso.";
+  const details = unexpected
     ? ([
+        ["x", "Resultado da ação:", " não confirmado."],
         [
-          "clock",
-          "Última sincronização válida:",
-          " não informada pela integração.",
+          "shield",
+          "Dados anteriores:",
+          " preservados até uma resposta válida.",
         ],
         [
-          "x",
-          "Novos horários não podem ser confirmados.",
-          " Aguarde a consulta da fonte oficial.",
-        ],
-        [
-          "user",
-          "Atendimento humano recomendado.",
-          " Explique ao cliente que a disponibilidade precisa ser verificada.",
+          "info",
+          "Identificador de suporte:",
+          " não disponível neste estado demonstrativo.",
         ],
       ] as const)
-    : unexpected
-      ? ([
-          ["x", "Resultado da ação:", " não confirmado."],
-          [
-            "shield",
-            "Dados anteriores:",
-            " preservados até uma resposta válida.",
-          ],
-          [
-            "info",
-            "Identificador de suporte:",
-            " não disponível neste estado demonstrativo.",
-          ],
-        ] as const)
-      : ([
-          [
-            "x",
-            "Novos agendamentos estão bloqueados.",
-            " A Atendly não consegue confirmar disponibilidade nem persistência agora.",
-          ],
-          [
-            "info",
-            "Dados visíveis podem estar desatualizados.",
-            " Consulte a última informação apenas como referência.",
-          ],
-          [
-            "refresh",
-            "Retentativas são seguras.",
-            " A interface não duplica uma operação ao tentar consultar novamente.",
-          ],
-        ] as const);
+    : ([
+        [
+          "x",
+          "Novos agendamentos estão bloqueados.",
+          " A Atendly não consegue confirmar disponibilidade nem persistência agora.",
+        ],
+        [
+          "info",
+          "Dados visíveis podem estar desatualizados.",
+          " Consulte a última informação apenas como referência.",
+        ],
+        [
+          "refresh",
+          "Retentativas são seguras.",
+          " A interface não duplica uma operação ao tentar consultar novamente.",
+        ],
+      ] as const);
 
   return (
     <div className="system-page">
@@ -101,14 +74,8 @@ export function SystemScreen({ scenario }: { scenario: SystemScenario }) {
         description={description}
         actions={
           <Badge
-            tone={unexpected || external ? "danger" : "warning"}
-            label={
-              external
-                ? "Minha Agenda indisponível"
-                : unexpected
-                  ? "Erro"
-                  : "Atenção operacional"
-            }
+            tone={unexpected ? "danger" : "warning"}
+            label={unexpected ? "Erro" : "Atenção operacional"}
           />
         }
       />
@@ -118,16 +85,12 @@ export function SystemScreen({ scenario }: { scenario: SystemScenario }) {
           <strong>
             {scenario === "offline"
               ? "Atendly está offline"
-              : external
-                ? "Não conseguimos consultar a Minha Agenda"
-                : "A última ação não foi concluída"}
+              : "A última ação não foi concluída"}
           </strong>
           <p>
             {scenario === "offline"
               ? "Ações que dependem da agenda, do WhatsApp ou de serviços online estão temporariamente indisponíveis."
-              : external
-                ? "O atendimento automático não deve confirmar agendamentos até a conexão voltar."
-                : "Revise o resultado antes de tentar novamente."}
+              : "Revise o resultado antes de tentar novamente."}
           </p>
         </div>
         <Link className="btn btn-secondary" href="/configuracoes">
@@ -180,7 +143,6 @@ function SystemPanel({
   unexpected: boolean;
 }) {
   const [status, setStatus] = useState("Nenhuma alteração foi enviada.");
-  const external = scenario === "external-unavailable";
   return (
     <section className="system-state-panel">
       <span
@@ -188,7 +150,7 @@ function SystemPanel({
           unexpected ? "system-state-mark is-danger" : "system-state-mark"
         }
       >
-        <Icon name={unexpected ? "alert" : external ? "calendar" : "x"} />
+        <Icon name={unexpected ? "alert" : "x"} />
       </span>
       <h2>{title}</h2>
       <p>{description}</p>
@@ -226,11 +188,8 @@ function SystemPanel({
         >
           Tentar novamente
         </button>
-        <Link
-          className="btn btn-secondary"
-          href={external ? "/conversas" : "/inicio"}
-        >
-          {external ? "Assumir atendimento" : "Voltar para Início"}
+        <Link className="btn btn-secondary" href="/inicio">
+          Voltar para Início
         </Link>
       </div>
       <p className="system-retry-status" role="status">
@@ -273,7 +232,5 @@ function SessionExpired() {
 function scenarioTitle(scenario: SystemScenario): string {
   if (scenario === "session-expired") return "Sessão expirada";
   if (scenario === "offline") return "Conexão interrompida";
-  if (scenario === "external-unavailable")
-    return "A agenda oficial não respondeu";
   return "Erro inesperado";
 }

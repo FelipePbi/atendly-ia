@@ -100,7 +100,6 @@ export function CustomerForm() {
     active: "clientes",
     loading: !calendar && !loadingError,
     module: "directory",
-    source: "atendly",
     title: "Novo cliente",
   });
 

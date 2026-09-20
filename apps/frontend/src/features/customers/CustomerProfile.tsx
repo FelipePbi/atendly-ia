@@ -102,7 +102,6 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
     active: "clientes",
     loading: !customer && !error,
     module: "directory",
-    source: "atendly",
     title: "Detalhes do cliente",
   });
 

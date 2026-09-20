@@ -78,7 +78,14 @@ jobs:
     services:
       postgres:
         # Banco descartável do job; morre junto com o runner.
-        image: postgres:16-alpine
+        # pgvector/pgvector:pg16 é o PostgreSQL 16 oficial com a biblioteca
+        # pgvector já instalada no servidor. `postgres:16-alpine` não a traz, e
+        # `CREATE EXTENSION vector` — que o histórico da IA exige desde
+        # `20260829180000_rag_pgvector` — não consegue instalá-la: extensão é
+        # arquivo no servidor, nenhuma migration a provisiona. Sem esta imagem
+        # o passo `rehearse:goal028-release-migrations` recusa com exit 2 antes
+        # de criar banco, e o job falha por configuração, não por defeito.
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: bff_test
           POSTGRES_PASSWORD: bff_test_synthetic_password
@@ -106,6 +113,19 @@ jobs:
         run: |
           if [ -e apps/bff/src/generated/prisma ]; then
             echo "apps/bff/src/generated/prisma must not come from the checkout"
+            exit 1
+          fi
+      - name: Assert PostgreSQL client tools are present and not older than the server
+        # `rehearse:goal028-restore` recusa com exit 2 sem `pg_dump`/`pg_restore`
+        # no PATH, e um cliente mais antigo que o servidor recusa o dump. A
+        # imagem do runner já traz o cliente 16; este passo falha cedo e com
+        # mensagem própria caso isso mude, em vez de virar um exit 2 opaco.
+        run: |
+          pg_dump --version
+          pg_restore --version
+          major=$(pg_dump --version | grep -oE '[0-9]+' | head -1)
+          if [ "$major" -lt 16 ]; then
+            echo "pg_dump $major is older than the PostgreSQL 16 service; install postgresql-client-16"
             exit 1
           fi
       - name: npm run validate:integration

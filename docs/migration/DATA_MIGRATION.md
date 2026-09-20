@@ -329,12 +329,12 @@ Divergências e limites, todos deliberados:
 
 | Gate | Evidência objetiva para passar |
 | --- | --- |
-| M0 — inventário | Versões de migrations/bancos, contagens por tenant, backups com restore ensaiado, ownership e ambiguidades registrados; sem segredos no relatório |
+| M0 — inventário | Versões de migrations/bancos, contagens por tenant, backups com restore ensaiado, ownership e ambiguidades registrados; sem segredos no relatório. **O "restore ensaiado" passou a existir no Goal028** ([§15](#15-ensaio-de-release-restore-e-configuração-de-produção-goal028)), contra banco descartável e conjunto semeado mínimo — não contra estoque de produção, que continua sem inventário por falta de ambiente |
 | M1 — expand | Banco vazio e upgrade de cópia sintética representativa passam; constraints novas não fabricam dados; binário anterior compatível com expansão |
 | M2 — readers | BFF/IA/frontend e jobs entendem novos campos/estados antes de produtores emiti-los; fixtures de replay antigo e schema incompatível testadas |
 | M3 — backfill | Processo retomável por lote/tenant, contagens de entrada/saída, órfãos zero ou explicitamente isolados, null/preço/horário/histórico reconciliados |
 | M4 — corte | Bloquear novos efeitos antigos, drenar pendentes, freeze da fonte remota quando aplicável, transferir controle exclusivamente à Agenda Atendly; testes funcionais/contratos verdes. **Goal010 entregou o corte no código** — a factory recusa a fonte remota para escrita e oferta — mas o gate **permanece aberto**: ele só fecha contra a origem real, com credencial autorizada e inventário por tenant, que não existem no ambiente de migração |
-| M5 — observar | Nenhuma chamada ao writer legado, nenhuma divergência de outbox/projeção sem tratamento; erros e backlog dentro do limite medido no ensaio |
+| M5 — observar | Nenhuma chamada ao writer legado, nenhuma divergência de outbox/projeção sem tratamento; erros e backlog dentro do limite medido no ensaio. **Goal028 entregou a parte observável em máquina descartável** — histórico completo aplicando do zero, ausência de drift contra `schema.prisma` e restore com integridade verificada ([§15](#15-ensaio-de-release-restore-e-configuração-de-produção-goal028)) —, e deixou explicitamente aberta a parte que exige ambiente hospedado: backlog e erro **em operação real** continuam sem medição |
 | M6 — retirar | Consumers, replays e jobs legados zerados ou arquivados; janela compatível encerrada e plano de restore seguro; então remover campos/rotas/código obsoletos |
 
 **M6 executado no diff026 para o protocolo pré-Goal010 e o writer remoto** ([review026](reviews/026-review.md), rodada 3)**:** o protocolo de migração bidirecional e o adapter de escrita (`MinhaAgendaCalendarProvider`) estavam inertes desde o corte operacional do Goal010 — nenhum consumidor de frontend, nenhuma escrita possível, nenhum job novo. O Goal026 removeu esse código morto (rotas, `CalendarMigrationService`, os métodos de escrita do adapter) e as três rotas do protocolo saíram de `PUBLIC_API_V1.md` ([DECISIONS D-042](DECISIONS.md)); uma regra estática em `scripts/final-production-audit.mjs` passou a recusar o retorno de qualquer um dos três. Nenhum `MigrationJob` já gravado foi tocado ou apagado: a classificação (`legacyClass`, U-02) continua lendo essas linhas como histórico, exatamente como D-026 estabeleceu. **O gate M4 sobre a origem real do Minha Agenda continua aberto** — esta retirada é limpeza de código morto do lado do produto, não prova contra a API real, que segue sem credencial autorizada e sem M4 exercitado (ver M4 acima).
@@ -437,3 +437,86 @@ Diff027, aceito no [review027](reviews/027-review.md) ([D-043](DECISIONS.md)). F
 **Inventário real, não executado:** como em todo Goal anterior desta migração, não há credencial, ambiente nem tenant real disponível — a quantificação acima é contra fixture sintética em banco descartável, não contra produção. Isso não é uma lacuna nova deste Goal: é a mesma classe de gate operacional que M4 (§11) já declara para o Minha Agenda, aqui aplicada ao próprio dado de `CalendarSettings.source` em vez de à API de leitura da origem.
 
 **Limite de reversão:** um binário anterior ao Goal025 ignora a tabela nova e os dois escopos/rotas internas novos — nenhum é lido nem escrito por ele —, então reverter o binário não perde nenhuma linha pré-existente; só deixa de aceitar pedido, cancelamento e purga de conta até o binário novo voltar. **O que a purga apaga não é reversível**: a migration em si não apaga nada — é a primeira passada do laço, com `ACCOUNT_PURGE_ENABLED=true` e depois do deploy, que apaga o negócio nas três lojas e a instância na Evolution, sempre por conta, sob lease e com o resultado registrado em log.
+
+## 15. Ensaio de release, restore e configuração de produção (Goal028)
+
+Diff028, aceito na rodada 2 do [review028](reviews/028-review.md) ([D-044](DECISIONS.md)). **Nenhuma migration nova, em nenhum serviço.** Este Goal não move
+dado: ele prova, contra PostgreSQL descartável, que o histórico já versionado
+aplica do zero e que um dump dele restaura íntegro. Os dois passos novos de
+`validate:integration` são `rehearse:goal028-release-migrations` e
+`rehearse:goal028-restore`; o que cada um prova e o que declaradamente não
+prova está em [VALIDATION_GATE](VALIDATION_GATE.md).
+
+**O que M5 ganha, e o que continua faltando.** A parte de M5 que é observável
+sem ambiente hospedado está entregue: o histórico completo dos três serviços
+aplica em banco vazio, a segunda execução é *no-op*, não há drift entre banco
+migrado e `schema.prisma`, e um `pg_dump`/`pg_restore` preserva contagens,
+índices, constraints nomeadas e enums. A parte que exige operação real — erro
+e backlog **medidos em produção** — continua aberta, pelo mesmo motivo de
+sempre: não há ambiente, credencial nem tenant real nesta migração.
+
+**O que de M6 este Goal alcança.** Só a exigência de "plano de restore seguro"
+que M6 lista como pré-condição de remoção: ela deixa de ser plano escrito e
+passa a ser passo executável do gate, com prova negativa real — a constraint
+`CalendarSettings_source_atendly_check` do Goal027 sobrevive ao restore e
+recusa `MINHA_AGENDA` com `23514` no banco **restaurado**. Nada mais de M6 se
+move: nenhum consumidor, replay ou job legado foi zerado ou arquivado por este
+Goal, e **M4 continua aberto**.
+
+### Achado: o `schema.prisma` da IA e do Scheduling não descrevia o próprio histórico
+
+O passo de drift (`prisma migrate diff` entre o banco migrado do zero e o
+datamodel) rodou **vermelho na primeira execução contra a árvore real**, nos
+dois serviços cujo histórico foi construído em mais Goals:
+
+- **IA (6 itens):** `Contact.updatedAt` e `ConversationSession.updatedAt` sem
+  `@default(now())`, que as migrations criam; os nomes explícitos de três FKs
+  (`Conversation_contact_fkey`, `ConversationSession_conversation_fkey`,
+  `ConversationSession_contact_fkey`), que o histórico grava mas o datamodel
+  deixava o Prisma rebatizar; e — o item que só um banco migrado do zero
+  revela — a relação `Contact.channel`, cuja FK `Contact_channel_fkey` existe
+  no banco desde a migration do Goal005 e **não estava declarada** no
+  `schema.prisma`.
+- **Scheduling (25 itens):** a mesma classe, em escala maior — 13 colunas
+  `updatedAt` sem `@default(now())`, 8 FKs sem `map:` explícito e o restante
+  de nomes derivados.
+
+**Correção, e por que ela não é migration.** A divergência estava na
+**declaração**, não no banco: o histórico de migrations já produzia o estado
+correto, e o `schema.prisma` é que o descrevia errado. A correção editou
+`schema.prisma` nos dois serviços para declarar o que as migrations já criam;
+ela emite **zero SQL**, nenhuma migration existente foi editada, renomeada ou
+removida, e nenhuma migration nova foi criada. Uma migration "aditiva" aqui
+não teria conteúdo: não há nada para adicionar ao banco. Depois da correção,
+`prisma migrate diff` sai vazio nos três serviços.
+
+**Por que isso passou despercebido até agora.** Todos os ensaios anteriores
+aplicam **uma** migration sobre um recorte de schema reconstruído à mão; o
+`prisma migrate deploy` de `migrate:bff-test-database` roda só no BFF. Nenhum
+deles compara o resultado do histórico **completo** com o datamodel, que é
+exatamente o que a primeira subida de produção faria. A lacuna era de
+cobertura do gate, não de dado.
+
+### Achado: o histórico da IA exige pgvector no servidor
+
+`CREATE EXTENSION vector` aparece no histórico da IA desde
+`20260829180000_rag_pgvector`, e nenhuma migration consegue instalar uma
+extensão — a biblioteca precisa estar no servidor antes. Um PostgreSQL sem
+pgvector **não recebe o serviço de IA do zero**, nem em ensaio nem em
+produção. O ensaio de release recusa com `exit 2` e mensagem própria antes de
+criar banco, em vez de falhar no meio da aplicação. O CI declarado usava
+`postgres:16-alpine`, que não traz a biblioteca; `.github/workflows/validate.yml`
+passou a usar `pgvector/pgvector:pg16` por causa deste achado. Isto é
+requisito de infraestrutura de produção, não detalhe de teste.
+
+### Limites declarados
+
+- O Evolution Go fica **fora** dos dois ensaios: ele cria as próprias tabelas
+  em código Go, sem histórico versionado de migrations, então não há o que
+  aplicar do zero nem histórico para conferir.
+- O conjunto semeado antes do dump é **mínimo e representativo** — um tenant
+  com dado em cadeia por serviço —, escolhido para que a asserção de
+  integridade signifique algo, não para medir tempo de dump de volume real.
+- Nenhum banco implantado foi tocado: os guards dos dois scripts recusam
+  destino que não seja loopback com nome reconhecidamente descartável, com
+  `exit 2` e mensagem `REFUSED — …`, sem imprimir credencial.

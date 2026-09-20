@@ -17,7 +17,7 @@ git diff --check
 | Comando | Cobre | Não cobre |
 | --- | --- | --- |
 | `validate:core` | Builds de Scheduling, IA, BFF e frontend; `npm run check` do health-worker; suíte da IA; suíte do adapter HTTP do frontend; `go build`/`go vet`/`go test` do Evolution Go; testes dos próprios scripts de gate; auditoria estática | Qualquer escrita em banco. Nenhum passo abre conexão de banco |
-| `validate:integration` | 29 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, a purga de conteúdo de conversa (Goal023) e a purga por negócio da IA (Goal025), o outbox do Evolution Go e um ensaio por migration de Goal — o mais recente deles `rehearse:goal027-calendar-source-migration` | Qualquer camada acima do dado: nenhuma jornada de interface, nenhum envio real por WhatsApp e nenhuma origem real do Minha Agenda |
+| `validate:integration` | 31 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, a purga de conteúdo de conversa (Goal023) e a purga por negócio da IA (Goal025), o outbox do Evolution Go, um ensaio por migration de Goal — o mais recente deles `rehearse:goal027-calendar-source-migration` — e, desde o Goal028, o ensaio de release (`rehearse:goal028-release-migrations`) e o de dump/restore (`rehearse:goal028-restore`) | Qualquer camada acima do dado: nenhuma jornada de interface, nenhum envio real por WhatsApp e nenhuma origem real do Minha Agenda |
 | `git diff --check` | Espaço em branco/conflito no diff | Correção do diff |
 
 Comandos auxiliares: `npm run test:gate` (só os testes dos scripts de gate) e
@@ -123,6 +123,29 @@ instantes do processo em escalas diferentes, e vencimentos passam a errar pelo
 deslocamento. `provision:scheduling-test-database` fixa isso no próprio banco
 descartável do Scheduling; o cluster criado à mão deve começar já em UTC.
 
+### Extensão de servidor exigida pelo histórico (pgvector)
+
+O histórico de migrations do `ai-orchestrator` executa `CREATE EXTENSION IF NOT
+EXISTS vector` desde `20260829180000_rag_pgvector`. Nenhuma migration instala
+uma extensão: a biblioteca precisa já existir **no servidor**, no cluster
+descartável e em produção igualmente. Sem pgvector, `prisma migrate deploy`
+para no meio do histórico com `P3018` / `0A000 extension "vector" is not
+available`, e o ensaio de release recusa antes de criar banco, com exit 2.
+
+No Windows, sem Docker, pgvector é compilado contra a instalação local e
+copiado para dentro dela:
+
+```bash
+git clone --branch v0.8.6 https://github.com/pgvector/pgvector.git
+# num shell do Visual Studio (vcvars64.bat), com
+# PGROOT apontando para .../Programs/PostgreSQL/18/pgsql
+nmake /F Makefile.win
+nmake /F Makefile.win install
+```
+
+Isso instala `lib/vector.dll` e `share/extension/vector*` na instalação do
+PostgreSQL; é reversível apagando esses arquivos.
+
 ### Execução
 
 ```bash
@@ -130,9 +153,17 @@ npm ci --prefix apps/bff
 BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_bff_test" npm run validate:integration
 ```
 
-São 29 passos. A lista abaixo enumera o núcleo, na ordem em que roda — o item
+São 31 passos. A lista abaixo enumera o núcleo, na ordem em que roda — o item
 5 agrupa o par do Evolution Go. Entre os itens 6 e 7 rodam, nesta ordem, os demais
-ensaios de migration por Goal (005 a 013, 019, 021, 022, 023 e 027) e o trio do
+ensaios de migration por Goal (005 a 013, 019, 021, 022, 023 e 027), o ensaio de
+release do Goal028 (`rehearse:goal028-release-migrations`), o ensaio de
+dump/restore do Goal028 (`rehearse:goal028-restore`, que semeia dado em cadeia
+nos três bancos que o ensaio de release deixou migrados, executa `pg_dump` em
+formato custom, restaura em banco novo `<origem>_restore` e compara contagem por
+tabela, `_prisma_migrations`, índices, constraints nomeadas e enums — provando
+por `UPDATE` real que `CalendarSettings_source_atendly_check` sobrevive ao
+restore e recusa `MINHA_AGENDA` com `23514`; o Evolution Go fica de fora porque
+cria as próprias tabelas em código Go, sem histórico versionado) e o trio do
 Scheduling (`generate:scheduling-prisma-client`,
 `provision:scheduling-test-database`, `test:scheduling-integration`). A lista
 autoritativa é `scripts/validate-integration.mjs`:
@@ -349,6 +380,67 @@ O que os dois passos novos trancam, além do que a lista acima descreve:
 Capacidade de execução contínua do worker (quantas instâncias, com que
 disponibilidade) continua sendo decisão de operação, fora do gate.
 
+## Inventário de loops de fundo (Goal028 §4)
+
+Os cinco laços de fundo do produto, lidos do código na baseline do Goal028.
+Este inventário **não** mede throughput, não simula carga e não recomenda
+plano: ele existe para que a decisão de capacidade — **U-03**, que continua
+aberta em [DECISIONS](DECISIONS.md) — seja tomada por uma pessoa com os
+números da árvore à vista.
+
+| Loop | Arquivo | Flag | Default | Intervalo | Lote | Lease | Consultas por ciclo |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Varredura de retenção (BFF) | `apps/bff/src/modules/retention/RetentionSweepWorker.ts`, ciclo em `retention/sweep.ts` | `RETENTION_SWEEP_ENABLED` | `false` | `RETENTION_SWEEP_INTERVAL_SECONDS` = 900 s | `RETENTION_SWEEP_TENANT_BATCH` = 20 negócios; `RETENTION_SWEEP_MAX_ROWS_PER_STORE` = 500 linhas por loja; `RETENTION_SWEEP_MIN_TENANT_INTERVAL_SECONDS` = 3600 s entre passadas do mesmo negócio | `RETENTION_SWEEP_LEASE_TTL_SECONDS` = 300 s | Ciclo ocioso: **1** — `dueTenants`, um `SELECT` com `LEFT JOIN RetentionSweepState`. Por negócio reivindicado: lease, leitura de `RetentionSettings`, as três lojas (IA, Scheduling, notificações) e a liberação do lease. Teto por ciclo ≈ 1 + 20 × 6 |
+| Purga de conta (BFF) | `apps/bff/src/modules/account/worker.ts`, ciclo em `account/purge.ts` | `ACCOUNT_PURGE_ENABLED` | `false` | `ACCOUNT_PURGE_INTERVAL_SECONDS` = 900 s | `ACCOUNT_PURGE_BATCH` = 5 contas; `ACCOUNT_PURGE_MAX_ROWS_PER_STORE` = 2000 linhas por loja | `ACCOUNT_PURGE_LEASE_TTL_SECONDS` = 300 s | Ciclo ocioso: **1** — `dueAccounts`. Por conta reivindicada: lease, leitura dos membros, as lojas de cada serviço e a liberação do lease |
+| Inbox durável (IA) | `apps/ai-orchestrator/src/modules/inbox/InboxWorker.ts` | `INBOX_WORKER_ENABLED` | `true` | `INBOX_POLL_INTERVAL_MS` = 1000 ms quando o ciclo anterior não processou nada; 0 ms enquanto houver trabalho, e `nudge()` acorda o laço no webhook | `INBOX_GROUP_BATCH_LIMIT` = 20 eventos por conversa; `INBOX_MAX_CONCURRENT_CONVERSATIONS` = 4 conversas em voo | `INBOX_LEASE_SECONDS` = 120 s, renovado a cada `INBOX_LEASE_HEARTBEAT_SECONDS` = 30 s | Ciclo ocioso: até **4** `claimNext`, um por slot de concorrência; o primeiro claim vazio corta o restante. Por conversa em voo: mais 1 heartbeat a cada 30 s e 1 `settle` no fim |
+| Entrega de notificação (IA) | `apps/ai-orchestrator/src/modules/reminders/NotificationDeliveryWorker.ts` | `NOTIFICATION_DELIVERY_ENABLED` | `true` | `NOTIFICATION_DELIVERY_POLL_INTERVAL_MS` = 15000 ms quando nada foi entregue; 0 ms enquanto houver fila | `NOTIFICATION_DELIVERY_BATCH_LIMIT` = 50 intenções; `NOTIFICATION_DELIVERY_TENANT_LIMIT` = 10 por negócio | `NOTIFICATION_DELIVERY_LEASE_SECONDS` = 120 s | Ciclo ocioso: **1 chamada interna** ao Scheduling (`claimDueNotificationIntents`), que lá dentro é 1 consulta de claim. A IA não consulta o banco do dono da agenda direto: o custo de banco do claim é do Scheduling |
+| Autoconclusão de atendimento (Scheduling) | `apps/scheduling-service/src/modules/appointments/auto-complete-loop.ts` | `CALENDAR_AUTO_COMPLETE_ENABLED` | `true` | `CALENDAR_AUTO_COMPLETE_POLL_INTERVAL_MS` = 60000 ms | Sem teto de lote declarado: o ciclo varre todo `Appointment` com status confirmado e `endAt` anterior ao corte de `CALENDAR_AUTO_COMPLETE_GRACE_MINUTES` = 30 min | Sem lease em tabela: exclusão mútua por `pg_try_advisory_xact_lock` dentro da transação do ciclo | Ciclo ocioso: **3** — lock consultivo, relógio do banco e o `findMany` dos vencidos, tudo numa transação. Por atendimento vencido: mais as escritas de `completeAppointmentWithin` |
+
+O que este inventário **não** prova:
+
+- que os loops sustentam volume real — nenhuma carga foi simulada e nenhum
+  throughput foi medido;
+- que um plano de hospedagem gratuito mantém os processos vivos entre ciclos;
+- que o deploy hospedado funciona. **M4** continua aberto.
+
+O valor de cada flag em `render.yaml` é decisão de operação escrita, nunca
+efeito colateral de default: a checagem estática
+`production_config_loop_flags_explicit` reprova o blueprint que omitir
+qualquer um dos cinco.
+
+## O que os ensaios de release e de restore provam, e o que não provam
+
+`rehearse:goal028-release-migrations` **prova**, por serviço (BFF, IA e
+Scheduling) e em banco vazio recém-criado:
+
+- que `prisma migrate deploy` leva um banco vazio até o schema vigente com o
+  histórico completo, e não só a migration do Goal da vez;
+- que o número de linhas de `_prisma_migrations` com `finished_at IS NOT NULL`
+  bate com o número de diretórios lido de `prisma/migrations`, sem nenhuma
+  linha com `rolled_back_at`;
+- que uma segunda execução no mesmo banco não aplica nada e não falha;
+- que o banco migrado não divergiu do `schema.prisma` — `prisma migrate diff`
+  com saída vazia.
+
+`rehearse:goal028-restore` **prova**, sobre esses mesmos bancos:
+
+- que um `pg_dump` em formato custom restaurado em banco novo e vazio preserva
+  contagem de linhas por tabela, linhas de `_prisma_migrations`, índices,
+  constraints nomeadas e valores de enum;
+- que `CalendarSettings_source_atendly_check`, do Goal027, sobrevive ao
+  restore: uma tentativa real de `UPDATE` no banco **restaurado** falha com
+  `23514`.
+
+Nenhum dos dois **prova**:
+
+- que a subida em produção funciona — o alvo é um PostgreSQL descartável em
+  loopback, não a infraestrutura hospedada;
+- que o volume de dados de produção cabe numa janela de manutenção: o conjunto
+  semeado é mínimo e representativo, escolhido para que a asserção de
+  integridade signifique algo, não para medir tempo de dump;
+- nada sobre o Evolution Go, que cria as próprias tabelas em código Go, sem
+  histórico versionado, e por isso fica declaradamente fora dos dois ensaios.
+
 ## CI
 
 `.github/workflows/validate.yml` roda os mesmos comandos:
@@ -375,6 +467,9 @@ as credenciais do service container são sintéticas e morrem com o runner.
 | `REFUSED — The PostgreSQL driver resolves …` | Autoridade da URL e destino efetivo divergem. Corrija a URL; não relaxe o guard |
 | `REFUSED — Cannot verify the effective PostgreSQL destination` | Dependências do BFF ausentes. Rode `npm ci --prefix apps/bff` |
 | `Cannot find module '../generated/prisma/client.js'` | Client Prisma não gerado. Use `npm run validate:integration` (gera no primeiro passo) ou `npm run prisma:generate` em `apps/bff`; não versione o código gerado |
+| `goal028:release-rehearsal REFUSED — The target server does not offer the extension(s) vector` | O servidor descartável não tem pgvector. Instalar conforme a seção acima; não remover a exigência do ensaio |
+| `goal028:restore-rehearsal REFUSED — pg_dump is not available on PATH` | Faltam as ferramentas de cliente do PostgreSQL (`pg_dump`/`pg_restore`). Instalar as mesmas que o runbook de restore usa; o ensaio recusa com exit 2 e nunca faz skip |
+| `goal028:restore-rehearsal REFUSED — The source database … does not exist` | O ensaio de restore parte dos bancos que `rehearse:goal028-release-migrations` deixa migrados. Rodar `validate:integration`, que executa os dois na ordem, ou o ensaio de release antes |
 | Porta 55432 ocupada | Outro cluster de teste rodando. Parar com `pg_ctl ... stop -m immediate` ou usar outra porta na URL |
 | `Route POST:/auth/register not found` | Rota antiga; a pública é `POST /v1/auth/register` |
 | `Test timed out in 5000ms` num teste que faz `vi.resetModules()` | O import dinâmico do módulo pesado está sendo pago dentro do corpo do caso. Prepare o ambiente e importe o módulo uma vez na avaliação do arquivo de teste; não aumente o timeout |
@@ -391,6 +486,17 @@ as credenciais do service container são sintéticas e morrem com o runner.
 - Só um fluxo de integração existe hoje (cadastro). Persistência dos demais
   domínios continua **NÃO VERIFICADA**.
 - A auditoria estática não verifica concorrência, isolamento real nem deploy.
+  A fronteira exata mudou no Goal028 sem que essa frase deixe de ser verdadeira:
+  a auditoria passou a verificar a **declaração** de configuração de produção —
+  que toda chave de `config/env.ts` está contabilizada em `render.yaml`, que os
+  cinco flags de loop têm valor explícito, que nenhum `*_BASE_URL`,
+  `FRONTEND_ORIGIN` ou `PASSWORD_RESET_PUBLIC_URL` resolve para host de
+  desenvolvimento, que `NODE_ENV`/`COOKIE_SECURE` têm valor de produção, que
+  nenhum segredo entra literal no arquivo, que todo `rootDir` e todo
+  `buildFilter.paths` existe na árvore e que `.env.example` e `config/env.ts`
+  declaram o mesmo conjunto de chaves. Ela continua sem verificar que o serviço
+  **sobe** com essa configuração: o blueprint é lido como texto, nenhum deploy
+  é feito e nenhum endereço é chamado.
 - **Diff027 ([D-043](DECISIONS.md), aceito no [review027](reviews/027-review.md)):**
   `scripts/final-production-audit.mjs` ganhou três checagens (23 no total).
   `no_external_calendar_source_comparison` rodou **vermelha contra a árvore
@@ -406,5 +512,24 @@ as credenciais do service container são sintéticas e morrem com o runner.
   `{ source: "ATENDLY"; timezone: string }` na rodada 3; ver
   [DATA_MIGRATION §14](DATA_MIGRATION.md#14-migração-da-fonte-da-agenda-para-atendly-goal027)
   e [GAP_ANALYSIS G-10](GAP_ANALYSIS.md).
+- **Diff028 ([D-044](DECISIONS.md), aceito no [review028](reviews/028-review.md)):**
+  `scripts/final-production-audit.mjs` ganhou cinco checagens (28 no total,
+  27 pass e o skip declarado `production_health`). Três coisas rodaram
+  **vermelhas contra a árvore real** na rodada 1, e as correções são de
+  natureza diferente: (a) chaves ausentes de `render.yaml`, `NODE_ENV`
+  faltando no BFF e os cinco flags de loop implícitos foram corrigidos **na
+  árvore** (`render.yaml` e `.env.example`); (b) o passo de drift acusou
+  divergência entre `schema.prisma` e o histórico na IA e no Scheduling,
+  corrigida na **declaração**, com zero SQL e nenhuma migration criada ou
+  editada — ver
+  [DATA_MIGRATION §15](DATA_MIGRATION.md#15-ensaio-de-release-restore-e-configuração-de-produção-goal028);
+  (c) a sub-regra de segredo literal reprovava `PASSWORD_RESET_PUBLIC_URL`
+  por casar `PASSWORD` como substring, contradizendo a sub-regra de host de
+  desenvolvimento, que exige `value:` literal na mesma chave — este era
+  defeito **da regra**, corrigido por `isPublicUrlKey()` com dois casos
+  negativos que provam que segredo real com valor literal continua
+  reprovando. `validate:integration` passou de 29 para 31 passos, e o CI
+  exige agora imagem com pgvector e cliente `pg_dump`/`pg_restore` não mais
+  antigo que o servidor.
 - A execução hospedada dos workflows ainda não ocorreu; o estado atual é
   "configuração validada localmente". Ver [MIGRATION_STATUS](MIGRATION_STATUS.md).

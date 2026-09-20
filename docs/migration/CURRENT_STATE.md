@@ -2556,3 +2556,83 @@ pelo delta do diff026 para a linha "Monorepo e fronteiras".
   corrigiu os blockers apontados pela revisão da rodada 5. Aceito na
   rodada 6 ([review027](reviews/027-review.md)), ainda sem commit de
   fechamento integrado em `main`.
+
+## Delta implementado — diff028, 2026-09-20 ([D-044](DECISIONS.md))
+
+A fotografia acima permanece como registro. Os fatos abaixo descrevem o
+diff028: ferramental de gate (ensaio de release, ensaio de restore e gate
+estático de configuração de produção) e o resíduo de tela do Goal027. Nenhuma
+migration nova, nenhum dado de produto movido.
+
+- **FATO atual (gate, dois passos novos de integração):**
+  `scripts/validate-integration.mjs` passou de 29 para 31 passos.
+  `rehearse:goal028-release-migrations`
+  (`scripts/goal028-release-rehearsal.mjs`) cria um banco descartável **vazio**
+  por serviço (BFF, IA, Scheduling), aplica `prisma migrate deploy` do zero,
+  compara o número de linhas de `_prisma_migrations` com `finished_at IS NOT
+  NULL` contra o número de diretórios lido de `prisma/migrations`, exige
+  nenhuma linha com `rolled_back_at`, reexecuta sem aplicar nada e exige
+  `prisma migrate diff` vazio entre o banco migrado e o `schema.prisma`.
+  `rehearse:goal028-restore` (`scripts/goal028-restore-rehearsal.mjs`) semeia
+  dado em cadeia nesses bancos, faz `pg_dump` em formato custom, restaura em
+  banco novo e compara contagem por tabela, `_prisma_migrations`, índices,
+  constraints nomeadas e enums — provando por `UPDATE` real que
+  `CalendarSettings_source_atendly_check` sobrevive ao restore e recusa
+  `MINHA_AGENDA` com `23514`. Os dois recusam com `exit 2` e mensagem
+  `REFUSED — …` quando falta variável, o destino não é loopback descartável ou
+  `pg_dump`/`pg_restore` não está no PATH; nenhum caminho de skip silencioso
+  foi introduzido.
+- **FATO atual (gate estático, cinco regras novas):**
+  `scripts/final-production-audit.mjs` passou de 23 para 28 checagens —
+  `production_config_render_env_coverage`,
+  `production_config_loop_flags_explicit`,
+  `production_config_no_development_defaults`,
+  `production_config_build_paths_exist` e
+  `production_config_env_example_parity` —, cada uma como função pura com caso
+  negativo executável em `scripts/tests/goal028-production-config.test.mjs`.
+  Hoje 27 passam e 1 é o skip declarado `production_health`.
+- **FATO atual (`render.yaml`):** os cinco flags de loop têm valor explícito
+  no blueprint, com o motivo escrito ao lado: `RETENTION_SWEEP_ENABLED=false` e
+  `ACCOUNT_PURGE_ENABLED=false` (a purga é destrutiva e nenhuma rota, leitura
+  ou tela depende do laço), `INBOX_WORKER_ENABLED=true`,
+  `NOTIFICATION_DELIVERY_ENABLED=true` (são o próprio caminho de mensagem e de
+  lembrete) e `CALENDAR_AUTO_COMPLETE_ENABLED=true`. O inventário dos cinco —
+  arquivo, flag, default, intervalo, lote, lease e consultas por ciclo — está
+  em [VALIDATION_GATE](VALIDATION_GATE.md).
+- **FATO atual (CI):** `.github/workflows/validate.yml` usa
+  `pgvector/pgvector:pg16` no service container de `validate:integration`.
+  `postgres:16-alpine` não traz a biblioteca pgvector, e o histórico da IA
+  exige `CREATE EXTENSION vector` desde `20260829180000_rag_pgvector`.
+- **FATO atual (tela de sistema):** `SystemScenario` é
+  `"offline" | "error" | "session-expired"`. O cenário `external-unavailable`,
+  a rota `"agenda-indisponivel"` e a frase "Minha Agenda está indisponível"
+  não existem mais no frontend. O `ShellConfig` perdeu o campo
+  `source?: "atendly" | "external"` inteiro, e `AppShell` deixou de ramificar
+  o rótulo de agenda oficial: ele é a constante `"Agenda Atendly"`.
+  `apps/frontend/tests/goal028-system-scenarios.test.tsx` prova que cada
+  cenário sobrevivente renderiza seu texto e sua ação e que a rota removida não
+  resolve para cenário nenhum.
+- **FATO atual (`schema.prisma` da IA e do Scheduling):** o datamodel dos dois
+  serviços passou a declarar o que o histórico de migrations já cria —
+  `@default(now())` nas colunas `updatedAt` que as migrations criam com
+  default, `map:` explícito nas FKs cujo nome o histórico grava, e a relação
+  `Contact.channel` (`Contact_channel_fkey`), que existe no banco desde o
+  Goal005 e não estava no `schema.prisma`. **Zero SQL emitido, nenhuma
+  migration criada ou editada** — a divergência era de declaração, e é o passo
+  de drift novo que a revelou. Ver
+  [DATA_MIGRATION §15](DATA_MIGRATION.md#15-ensaio-de-release-restore-e-configuração-de-produção-goal028).
+- **LIMITE:** a auditoria estática continua sem verificar deploy. Ela passou a
+  verificar a **declaração** de configuração de produção; nenhum serviço é
+  subido, nenhum endereço é chamado e nenhum banco implantado é tocado.
+- **LIMITE:** **U-03** (capacidade e custo do deploy contínuo) continua aberta
+  e **M4** continua aberto. O inventário de loops é insumo para a decisão de
+  uma pessoa, não a decisão: nenhuma carga foi simulada, nenhum throughput foi
+  medido, nenhum plano foi recomendado e nada foi contratado.
+- **LIMITE:** este delta descreve o diff028 da rodada 1 mais as correções da
+  rodada 2, que fecharam os seis blockers da revisão — entre eles o falso
+  positivo da própria regra de segredo literal e o campo `source` residual do
+  `ShellConfig`. Aceito na rodada 2 ([review028](reviews/028-review.md)),
+  ainda sem commit de fechamento integrado em `main`. O reviewer não
+  reexecutou `validate:integration` na rodada 2 (o cluster descartável usado
+  pela execução não existia mais) e aceitou o log nativo com saída real; o
+  limite está declarado no review.

@@ -54,7 +54,6 @@ export function CustomerList() {
     active: "clientes",
     loading,
     module: "directory",
-    source: "atendly",
     title: "Clientes",
   });
 

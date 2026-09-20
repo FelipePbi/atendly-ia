@@ -278,7 +278,7 @@ model ReminderSettings {
   /// Preco no texto do lembrete. `NEVER` e o padrao do vault.
   pricePolicy         ReminderPricePolicy @default(NEVER)
   createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  updatedAt           DateTime            @default(now()) @updatedAt
 
   rules ReminderRule[]
 }
@@ -299,7 +299,7 @@ model ReminderRule {
   /// proprio que a rota devolve.
   leadMinutes Int
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt
 
   settings ReminderSettings @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
 
@@ -400,10 +400,10 @@ model CustomerRelation {
   confirmedByActor  String?
   confirmedAt       DateTime?
   createdAt         DateTime               @default(now())
-  updatedAt         DateTime               @updatedAt
+  updatedAt         DateTime               @default(now()) @updatedAt
 
-  customer        Customer @relation("CustomerRelationSubject", fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade)
-  relatedCustomer Customer @relation("CustomerRelationRelated", fields: [tenantId, relatedCustomerId], references: [tenantId, id], onDelete: Cascade)
+  customer        Customer @relation("CustomerRelationSubject", fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade, map: "CustomerRelation_customer_fkey")
+  relatedCustomer Customer @relation("CustomerRelationRelated", fields: [tenantId, relatedCustomerId], references: [tenantId, id], onDelete: Cascade, map: "CustomerRelation_relatedCustomer_fkey")
 
   @@unique([tenantId, id])
   @@unique([tenantId, customerId, type])
@@ -422,9 +422,9 @@ model CustomerNote {
   authorizedBy   String?
   createdBy      String?
   createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  updatedAt      DateTime  @default(now()) @updatedAt
 
-  customer Customer @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade)
+  customer Customer @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade, map: "CustomerNote_customer_fkey")
 
   @@unique([tenantId, id])
   @@index([tenantId, customerId, createdAt])
@@ -442,9 +442,9 @@ model CustomerTag {
   authorizedBy String?
   createdBy    String?
   createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  updatedAt    DateTime  @default(now()) @updatedAt
 
-  customer Customer @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade)
+  customer Customer @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade, map: "CustomerTag_customer_fkey")
 
   @@unique([tenantId, id])
   @@unique([tenantId, customerId, label])
@@ -538,7 +538,7 @@ model BlockSeries {
   supersededById String?
   createdBy      String
   createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  updatedAt      DateTime  @default(now()) @updatedAt
 
   occurrences TimeBlock[]
 
@@ -564,7 +564,7 @@ model TimeBlock {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  series BlockSeries? @relation(fields: [tenantId, seriesId], references: [tenantId, id], onDelete: SetNull)
+  series BlockSeries? @relation(fields: [tenantId, seriesId], references: [tenantId, id], onDelete: SetNull, map: "TimeBlock_series_fkey")
 
   @@index([tenantId, startAt, endAt])
   @@index([tenantId, seriesId, occurrenceDate])
@@ -661,7 +661,7 @@ model Appointment {
   customer Customer          @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
   items    AppointmentItem[]
   events   AppointmentEvent[]
-  series   AppointmentSeries? @relation(fields: [tenantId, seriesId], references: [tenantId, id], onDelete: SetNull)
+  series   AppointmentSeries? @relation(fields: [tenantId, seriesId], references: [tenantId, id], onDelete: SetNull, map: "Appointment_series_fkey")
   /// Intencoes de envio ao cliente (Goal021). `Cascade` e deliberado: a
   /// intencao e trabalho operacional que so existe enquanto o compromisso
   /// existe, e o historico de registro do atendimento continua sendo
@@ -735,9 +735,9 @@ model AppointmentHold {
   consumedAt  DateTime?
   releasedAt  DateTime?
   createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  updatedAt   DateTime  @default(now()) @updatedAt
 
-  customer Customer? @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: SetNull)
+  customer Customer? @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: SetNull, map: "AppointmentHold_customer_fkey")
 
   @@unique([tenantId, id])
   @@index([tenantId, startAt, endAt])
@@ -769,7 +769,7 @@ model AppointmentEvent {
   /// fisica das linhas.
   sequence      BigInt                 @unique @default(autoincrement())
 
-  appointment Appointment @relation(fields: [tenantId, appointmentId], references: [tenantId, id], onDelete: Restrict)
+  appointment Appointment @relation(fields: [tenantId, appointmentId], references: [tenantId, id], onDelete: Restrict, map: "AppointmentEvent_appointment_fkey")
 
   @@index([tenantId, appointmentId, occurredAt])
   @@index([tenantId, appointmentId, sequence])
@@ -840,7 +840,7 @@ model AppointmentNotificationIntent {
   /// vocabulario fechado, e nunca carrega credencial nem payload cru.
   detail    String?
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 
   appointment Appointment @relation(fields: [tenantId, appointmentId], references: [tenantId, id], onDelete: Cascade)
 
@@ -1104,7 +1104,7 @@ model ImportSession {
 
   createdBy String
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 
   connection IntegrationConnection? @relation(fields: [tenantId, connectionId], references: [tenantId, id], onDelete: Restrict)
   categories ImportSessionCategory[]
@@ -1158,7 +1158,7 @@ model ImportSessionCategory {
 
   previewVersion Int      @default(0)
   createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  updatedAt      DateTime @default(now()) @updatedAt
 
   session ImportSession @relation(fields: [tenantId, sessionId], references: [tenantId, id], onDelete: Cascade)
 
@@ -1210,7 +1210,7 @@ model ImportItem {
   processedAt   DateTime?
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 
   session   ImportSession    @relation(fields: [tenantId, sessionId], references: [tenantId, id], onDelete: Cascade)
   decisions ImportDecision[]

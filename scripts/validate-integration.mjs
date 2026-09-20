@@ -484,6 +484,39 @@ export function integrationSteps(target) {
       args: ["scripts/goal027-calendar-source-migration-rehearsal.mjs"],
       env,
     },
+    // Ensaio de release do Goal028: o historico COMPLETO de migrations dos
+    // tres servicos aplicado DO ZERO em banco vazio e descartavel proprio.
+    // Os ensaios por Goal acima exercitam UMA migration cada um sobre um
+    // recorte de schema reconstruido a mao; nenhum deles prova que
+    // `prisma migrate deploy` leva um banco vazio ate o schema vigente, que e
+    // o que a primeira subida de producao faz. Prova, por servico, que a
+    // contagem de migrations aplicadas bate com o numero de diretorios lido da
+    // arvore, que nenhuma ficou pela metade ou revertida, que a segunda
+    // execucao nao aplica nada e que o banco migrado nao divergiu do
+    // `schema.prisma`.
+    {
+      name: "rehearse:goal028-release-migrations",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal028-release-rehearsal.mjs"],
+      env,
+    },
+    // Ensaio de dump/restore do Goal028: dado real semeado em cadeia nos tres
+    // bancos que o passo acima acaba de migrar do zero, `pg_dump` em formato
+    // custom, `pg_restore` em banco NOVO e comparacao entre origem e destino —
+    // contagem por tabela, `_prisma_migrations`, indices, constraints nomeadas
+    // e enums. Depende do passo anterior de proposito: ele produz os bancos de
+    // origem. Prova, por tentativa real de `UPDATE` contra o banco RESTAURADO,
+    // que `CalendarSettings_source_atendly_check` sobrevive ao restore e ainda
+    // recusa `MINHA_AGENDA` com `23514`. Ausencia de `pg_dump`/`pg_restore` no
+    // PATH e recusa com exit 2, nunca skip.
+    {
+      name: "rehearse:goal028-restore",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal028-restore-rehearsal.mjs"],
+      env,
+    },
     // Identidade de cliente contra PostgreSQL real: telefone compartilhado,
     // cliente sem telefone, criação só na confirmação e isolamento por tenant.
     // Não pertence ao core porque exige banco.

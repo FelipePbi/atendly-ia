@@ -35,7 +35,6 @@ export type ShellConfig = {
   module?: ShellModule;
   showBottomNav?: boolean;
   showMobileHeader?: boolean;
-  source?: "atendly" | "external";
   title: string;
 };
 
@@ -58,7 +57,6 @@ function sameConfig(a: ShellConfig | null, b: ShellConfig): boolean {
     a.module === b.module &&
     a.showBottomNav === b.showBottomNav &&
     a.showMobileHeader === b.showMobileHeader &&
-    a.source === b.source &&
     a.action?.href === b.action?.href &&
     a.action?.label === b.action?.label &&
     a.action?.icon === b.action?.icon

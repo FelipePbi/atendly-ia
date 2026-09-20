@@ -36,6 +36,8 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 24.13.0
+      - key: NODE_ENV
+        value: production
       - key: PORT
         value: 3002
       - key: DATABASE_URL
@@ -48,6 +50,14 @@ services:
         value: https://atendly-ia-frontend.onrender.com
       - key: COOKIE_SECURE
         value: true
+      # Varredura de retencao e purga de conta (Goal023/Goal025): explicitas
+      # aqui, ligado/desligado em producao nao pode ser efeito colateral do
+      # default do schema. Desligadas ate a operacao decidir ligar: purga e
+      # destrutiva, e nenhuma rota, leitura ou tela depende do laco.
+      - key: RETENTION_SWEEP_ENABLED
+        value: false
+      - key: ACCOUNT_PURGE_ENABLED
+        value: false
       - key: COOKIE_SAME_SITE
         value: none
       - key: AI_ORCHESTRATOR_BASE_URL
@@ -74,6 +84,15 @@ services:
       - key: WHATSAPP_CREDENTIAL_KEYS
         sync: false
       - key: WHATSAPP_CREDENTIAL_ACTIVE_KEY_ID
+        sync: false
+      # Recuperacao de senha. Delivery URL/token recebem o disparo do envio; a
+      # URL publica precisa apontar para o dominio real do frontend, nunca
+      # para o host de desenvolvimento.
+      - key: PASSWORD_RESET_PUBLIC_URL
+        value: https://atendly-ia-frontend.onrender.com/nova-senha
+      - key: PASSWORD_RESET_DELIVERY_URL
+        sync: false
+      - key: PASSWORD_RESET_DELIVERY_TOKEN
         sync: false
 
   - type: web
@@ -120,6 +139,23 @@ services:
         sync: false
       - key: SCHEDULING_SERVICE_BASE_URL
         value: https://atendly-ia-scheduling-service.onrender.com
+      # Numero oficial da Atendly usado no teste real da IA (Goal019).
+      # Configuracao do servico, nunca vinculo de negocio; nao vira linha de
+      # ChannelConnection nem aparece em listagem de conexoes de tenant.
+      - key: PLATFORM_WHATSAPP_INSTANCE_ID
+        sync: false
+      - key: PLATFORM_WHATSAPP_CREDENTIAL
+        sync: false
+      - key: PLATFORM_WHATSAPP_NUMBER
+        sync: false
+      # Inbox duravel e entrega de intencoes (Goal013/Goal021): explicitas
+      # aqui, ligado/desligado em producao nao pode ser efeito colateral do
+      # default do schema. Ligadas porque sao o proprio caminho de mensagem e
+      # de lembrete, nao uma varredura destrutiva opcional.
+      - key: INBOX_WORKER_ENABLED
+        value: true
+      - key: NOTIFICATION_DELIVERY_ENABLED
+        value: true
 
   - type: web
     name: atendly-ia-scheduling-service
@@ -152,6 +188,12 @@ services:
           envVarKey: INTERNAL_SERVICE_TOKEN
       - key: INTEGRATION_CREDENTIALS_KEY
         generateValue: true
+      # Conclusao automatica de atendimentos (Goal008): explicita aqui,
+      # ligado/desligado em producao nao pode ser efeito colateral do default
+      # do schema. Ligada porque e o proprio ciclo de vida do atendimento
+      # confirmado, nao uma varredura destrutiva opcional.
+      - key: CALENDAR_AUTO_COMPLETE_ENABLED
+        value: true
 
   - type: web
     name: atendly-ia-evolution-go

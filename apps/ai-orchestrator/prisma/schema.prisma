@@ -194,6 +194,7 @@ model ChannelConnection {
   createdAt           DateTime                @default(now())
   updatedAt           DateTime                @updatedAt
 
+  contacts        Contact[]
   conversations   Conversation[]
   messages        Message[]
   processedEvents ProcessedEvent[]
@@ -235,7 +236,7 @@ model Conversation {
   contentExpiredThrough DateTime?
 
   channel  ChannelConnection     @relation(fields: [tenantId, channelId], references: [tenantId, id], onDelete: Cascade)
-  contact  Contact?              @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: SetNull)
+  contact  Contact?              @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: SetNull, map: "Conversation_contact_fkey")
   messages Message[]
   aiRuns   AiRun[]
   handoffs Handoff[]
@@ -292,7 +293,12 @@ model Contact {
   customerLinkedAt DateTime?
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
+
+  /// Canal a que o contato pertence. A FK existe no banco desde a migration
+  /// do Goal005 (`Contact_channel_fkey`); declara-la aqui e o que mantem
+  /// `schema.prisma` e o historico de migrations dizendo a mesma coisa.
+  channel ChannelConnection @relation(fields: [tenantId, channelId], references: [tenantId, id], onDelete: Cascade, map: "Contact_channel_fkey")
 
   conversations Conversation[]
   sessions      ConversationSession[]
@@ -352,10 +358,10 @@ model ConversationSession {
   backfillNote String?
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 
-  conversation Conversation @relation(fields: [tenantId, channelId, conversationId], references: [tenantId, channelId, id], onDelete: Cascade)
-  contact      Contact      @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [tenantId, channelId, conversationId], references: [tenantId, channelId, id], onDelete: Cascade, map: "ConversationSession_conversation_fkey")
+  contact      Contact      @relation(fields: [tenantId, contactId], references: [tenantId, id], onDelete: Cascade, map: "ConversationSession_contact_fkey")
 
   /// DIVERGENCIA DE SCHEMA CONHECIDA: existe tambem um indice unico **parcial**
   /// `ConversationSession_one_open_per_conversation` sobre

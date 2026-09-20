@@ -36,7 +36,6 @@ function PlatformShellFrame({ children }: { children: ReactNode }) {
       module={config?.module}
       showBottomNav={config?.showBottomNav}
       showMobileHeader={config?.showMobileHeader}
-      source={config?.source}
       title={config?.title ?? "Atendly"}
     >
       {children}

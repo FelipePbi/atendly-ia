@@ -145,7 +145,6 @@ export function ProductDashboardScreen() {
           active: "inicio",
           attention: dashboardNeedsAttention(dashboard),
           module: "dashboard",
-          source: "atendly",
           title: "Início",
         }
       : {

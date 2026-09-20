@@ -37,6 +37,13 @@ export type AppShellProps = ShellConfig & {
 };
 
 /**
+ * Agenda Atendly é a única agenda oficial desde o Goal027. O shell tinha um
+ * `source` que alternava esse rótulo para "Minha Agenda"; a fonte externa saiu
+ * e o rótulo deixou de ser variável (Goal028 §5).
+ */
+const OFFICIAL_SOURCE_LABEL = "Agenda Atendly";
+
+/**
  * `SystemStatusProvider` monta o único poller de `GET /v1/status` da árvore
  * (Goal018/WU-10): o chrome do shell e a tela filha (ex.: `DashboardScreen`)
  * leem o mesmo resultado via `useSystemStatus`, em vez de cada um abrir seu
@@ -60,7 +67,6 @@ function AppShellChrome({
   module,
   showBottomNav = true,
   showMobileHeader = true,
-  source = "atendly",
   title,
 }: AppShellProps) {
   const router = useRouter();
@@ -84,8 +90,6 @@ function AppShellChrome({
       ? "dashboard-bottom-nav"
       : `${styleModule ?? "platform"}-bottom-nav`;
   const mainClass = mainClassName ?? `${styleModule ?? "platform"}-main`;
-  const officialSource =
-    source === "external" ? "Minha Agenda" : "Agenda Atendly";
   const systemAttention = module === "system";
   const mobileAttention = systemAttention || attention;
   const compactAccount = ["settings", "migration", "system"].includes(
@@ -155,7 +159,7 @@ function AppShellChrome({
             </span>
             <span className="business-name">
               <strong>{businessName}</strong>
-              <span>{officialSource} oficial</span>
+              <span>{OFFICIAL_SOURCE_LABEL} oficial</span>
             </span>
           </div>
           <StatusLine
@@ -279,7 +283,7 @@ function AppShellChrome({
                 {loading
                   ? "Carregando"
                   : module === "migration"
-                    ? officialSource
+                    ? OFFICIAL_SOURCE_LABEL
                     : mobileAttention
                       ? "Atenção"
                       : businessName}

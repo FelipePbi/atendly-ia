@@ -6,7 +6,6 @@ import {
 } from "@/features/system/SystemScreen";
 const states: Record<string, SystemScenario> = {
   offline: "offline",
-  "agenda-indisponivel": "external-unavailable",
   erro: "error",
   "sessao-expirada": "session-expired",
 };

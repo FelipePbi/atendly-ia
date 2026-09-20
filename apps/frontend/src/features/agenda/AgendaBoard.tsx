@@ -151,7 +151,6 @@ export function AgendaBoard() {
     active: "agenda",
     loading,
     module: "agenda",
-    source: "atendly",
     title: "Agenda",
   });
 

@@ -150,7 +150,6 @@ export function ServiceForm({
     active: "servicos",
     loading: !catalog && !error,
     module: "directory",
-    source: "atendly",
     title: edit ? "Editar serviço" : "Novo serviço",
   });
   return (

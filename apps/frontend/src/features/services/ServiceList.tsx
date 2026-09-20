@@ -79,7 +79,6 @@ export function ServiceList() {
     active: "servicos",
     loading: !result && !error,
     module: "directory",
-    source: "atendly",
     title: "Serviços",
   });
   return (

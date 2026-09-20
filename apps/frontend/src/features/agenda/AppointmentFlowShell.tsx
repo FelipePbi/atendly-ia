@@ -27,7 +27,6 @@ export function AppointmentFlowShell({
     active: "agenda",
     loading,
     module: "agenda",
-    source: "atendly",
     title,
   });
   return (

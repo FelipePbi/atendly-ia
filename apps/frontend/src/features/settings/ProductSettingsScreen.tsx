@@ -45,7 +45,6 @@ export function ProductSettingsScreen({
     active: "configuracoes",
     loading: !settings && !error,
     module: "settings",
-    source: "atendly",
     title: "Configurações",
   });
 

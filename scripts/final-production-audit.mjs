@@ -275,6 +275,93 @@ export async function main() {
     "apps/frontend/src/mocks",
   );
 
+  const renderYaml = read("render.yaml");
+  const configEnvSources = {
+    "atendly-ia-bff": read("apps/bff/src/config/env.ts"),
+    "atendly-ia-ai-orchestrator": read("apps/ai-orchestrator/src/config/env.ts"),
+    "atendly-ia-scheduling-service": read(
+      "apps/scheduling-service/src/config/env.ts",
+    ),
+  };
+  const envExamplesByService = {
+    "atendly-ia-bff": read("apps/bff/.env.example"),
+    "atendly-ia-ai-orchestrator": read("apps/ai-orchestrator/.env.example"),
+    "atendly-ia-scheduling-service": read(
+      "apps/scheduling-service/.env.example",
+    ),
+  };
+
+  const missingRenderEnvKeys = Object.entries(configEnvSources).flatMap(
+    ([serviceName, envSource]) =>
+      findMissingRequiredEnvKeys(envSource, renderYaml, serviceName).map(
+        (key) => `${serviceName}:${key}`,
+      ),
+  );
+  check(
+    "production_config_render_env_coverage",
+    missingRenderEnvKeys.length === 0,
+    missingRenderEnvKeys.length
+      ? missingRenderEnvKeys.join(", ")
+      : "every required config/env.ts key is declared in render.yaml or HMAC-derived",
+  );
+
+  const missingLoopFlags = findMissingExplicitLoopFlags(renderYaml);
+  check(
+    "production_config_loop_flags_explicit",
+    missingLoopFlags.length === 0,
+    missingLoopFlags.length
+      ? missingLoopFlags.join(", ")
+      : "RETENTION_SWEEP_ENABLED, ACCOUNT_PURGE_ENABLED, INBOX_WORKER_ENABLED, NOTIFICATION_DELIVERY_ENABLED and CALENDAR_AUTO_COMPLETE_ENABLED all have an explicit value in render.yaml",
+  );
+
+  const developmentDefaultViolations = findDevelopmentDefaultViolations(
+    renderYaml,
+    configEnvSources,
+  );
+  check(
+    "production_config_no_development_defaults",
+    developmentDefaultViolations.length === 0,
+    developmentDefaultViolations.length
+      ? developmentDefaultViolations.join(", ")
+      : "no *_BASE_URL/FRONTEND_ORIGIN/PASSWORD_RESET_PUBLIC_URL resolves to a development host, NODE_ENV and COOKIE_SECURE are production-ready, and no secret-like key has a literal value",
+  );
+
+  const missingBuildPaths = findMissingBuildPaths(renderYaml, (relativePath) =>
+    existsSync(path.join(repositoryRoot, relativePath)),
+  );
+  check(
+    "production_config_build_paths_exist",
+    missingBuildPaths.length === 0,
+    missingBuildPaths.length
+      ? missingBuildPaths.join(", ")
+      : "every rootDir and buildFilter.paths entry exists in the tree",
+  );
+
+  const envExampleParityMismatches = Object.entries(configEnvSources).flatMap(
+    ([serviceName, envSource]) => {
+      const { missingFromExample, extraInExample } =
+        findEnvExampleParityMismatches(
+          envExamplesByService[serviceName],
+          envSource,
+        );
+      return [
+        ...missingFromExample.map(
+          (key) => `${serviceName}:missing from .env.example:${key}`,
+        ),
+        ...extraInExample.map(
+          (key) => `${serviceName}:extra in .env.example:${key}`,
+        ),
+      ];
+    },
+  );
+  check(
+    "production_config_env_example_parity",
+    envExampleParityMismatches.length === 0,
+    envExampleParityMismatches.length
+      ? envExampleParityMismatches.join(", ")
+      : "every service's .env.example has exactly the keys declared in its config/env.ts",
+  );
+
   await auditProductionHealth();
   summarize();
 }
@@ -468,6 +555,263 @@ async function auditProductionHealth() {
     evidence.every((item) => item.ok),
     JSON.stringify(evidence),
   );
+}
+
+// Regras de configuracao de producao (Goal028/WU-03). Todas puras: recebem
+// texto de render.yaml / config/env.ts / .env.example, nunca leem o disco
+// sozinhas, para que o caso negativo passe um contraexemplo sintetico sem
+// depender da arvore real.
+
+// Vazios, estes tokens sao derivados de INTERNAL_SERVICE_TOKEN por HMAC
+// (nunca o valor bruto) — ver apps/bff/src/config/env.ts:53-55,
+// apps/ai-orchestrator/src/config/env.ts:149-151 e
+// apps/scheduling-service/src/config/env.ts:40-41. Por isso ficam
+// legitimamente ausentes de render.yaml mesmo sendo obrigatorios no schema, e
+// a regra de cobertura nao pode reprova-los por essa ausencia.
+export const HMAC_DERIVED_SERVICE_TOKEN_KEYS = [
+  "AI_ORCHESTRATOR_PROVISIONING_TOKEN",
+  "AI_ORCHESTRATOR_COMMAND_TOKEN",
+  "SCHEDULING_SERVICE_COMMAND_TOKEN",
+  "BFF_COMMAND_TOKEN",
+  "INTERNAL_PROVISIONING_TOKEN",
+  "INTERNAL_COMMAND_TOKEN",
+];
+
+export const LOOP_FLAG_OWNERS = Object.freeze({
+  RETENTION_SWEEP_ENABLED: "atendly-ia-bff",
+  ACCOUNT_PURGE_ENABLED: "atendly-ia-bff",
+  INBOX_WORKER_ENABLED: "atendly-ia-ai-orchestrator",
+  NOTIFICATION_DELIVERY_ENABLED: "atendly-ia-ai-orchestrator",
+  CALENDAR_AUTO_COMPLETE_ENABLED: "atendly-ia-scheduling-service",
+});
+
+// Extrai as chaves de `const envSchema = z.object({ ... });`. Uma chave e
+// "obrigatoria" (sem default seguro) quando e `stringEnv()`/`serviceTokenEnv()`
+// sem argumento — as duas fabricas cujo default e string vazia.
+export function parseEnvSchemaKeys(envSource) {
+  const schemaBody = envSource.match(
+    /const envSchema = z\.object\(\{([\s\S]*?)\n\}\);/u,
+  );
+  if (!schemaBody) throw new Error("envSchema block not found");
+  return schemaBody[1]
+    .split("\n")
+    .map((line) => line.match(/^\s*([A-Z][A-Z0-9_]*):\s*(.+),\s*$/u))
+    .filter((match) => match !== null)
+    .map(([, name, expression]) => {
+      const stringDefault = expression.match(/^stringEnv\(\s*"([^"]*)"\s*\)/u);
+      const required =
+        /^serviceTokenEnv\(\s*\)/u.test(expression) ||
+        /^stringEnv\(\s*\)/u.test(expression);
+      return {
+        name,
+        required,
+        defaultValue: stringDefault ? stringDefault[1] : null,
+      };
+    });
+}
+
+export function parseEnvExampleKeys(envExampleContent) {
+  return envExampleContent
+    .split("\n")
+    .map((line) => line.match(/^([A-Z][A-Z0-9_]*)=/u))
+    .filter((match) => match !== null)
+    .map((match) => match[1]);
+}
+
+function parseRenderEnvVarEntries(envVarsText) {
+  return envVarsText
+    .split(/(?=- key: )/u)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.startsWith("- key:"))
+    .map((entry) => {
+      const lines = entry
+        .split("\n")
+        .filter((line) => !line.trim().startsWith("#"));
+      const key = lines[0].match(/^-\s*key:\s*(\S+)/u)?.[1] ?? null;
+      const valueLine = lines.find((line) => /^\s*value:\s*\S+/u.test(line));
+      return {
+        key,
+        hasExplicitValue: Boolean(valueLine),
+        value: valueLine
+          ? valueLine.replace(/^\s*value:\s*/u, "").trim()
+          : null,
+      };
+    })
+    .filter((entry) => entry.key !== null);
+}
+
+// Parser de render.yaml deliberadamente tolerante a indentacao (usa `\s+` em
+// vez de contar espacos): o formato do arquivo e estavel, mas casar a
+// indentacao exata deixaria o parser fragil a uma reindentacao inofensiva.
+export function parseRenderServices(renderYamlContent) {
+  const withoutDatabases = renderYamlContent.split(/\ndatabases:\n/u)[0];
+  return withoutDatabases
+    .split(/\n(?=  - type: )/u)
+    .map((block) => block.trim())
+    .filter((block) => block.startsWith("- type:"))
+    .map((block) => {
+      const name = block.match(/\n\s*name:\s*(\S+)/u)?.[1] ?? null;
+      const rootDir = block.match(/\n\s*rootDir:\s*(\S+)/u)?.[1] ?? null;
+      const pathsBlock = block.match(
+        /buildFilter:\s*\n\s*paths:\s*\n((?:\s*-\s*\S+\n?)+)/u,
+      );
+      const buildFilterPaths = pathsBlock
+        ? [...pathsBlock[1].matchAll(/-\s*(\S+)/gu)].map((match) => match[1])
+        : [];
+      const envVarsBlock = block.match(/envVars:\s*\n([\s\S]*)$/u);
+      const envVars = envVarsBlock
+        ? parseRenderEnvVarEntries(envVarsBlock[1])
+        : [];
+      return { name, rootDir, buildFilterPaths, envVars };
+    });
+}
+
+export function findMissingRequiredEnvKeys(
+  envSource,
+  renderYamlContent,
+  serviceName,
+) {
+  const service = parseRenderServices(renderYamlContent).find(
+    (entry) => entry.name === serviceName,
+  );
+  const declaredKeys = new Set(
+    (service?.envVars ?? []).map((entry) => entry.key),
+  );
+  return parseEnvSchemaKeys(envSource)
+    .filter((key) => key.required)
+    .filter((key) => !declaredKeys.has(key.name))
+    .filter((key) => !HMAC_DERIVED_SERVICE_TOKEN_KEYS.includes(key.name))
+    .map((key) => key.name);
+}
+
+export function findMissingExplicitLoopFlags(renderYamlContent) {
+  const services = parseRenderServices(renderYamlContent);
+  return Object.entries(LOOP_FLAG_OWNERS)
+    .filter(([flagName, serviceName]) => {
+      const service = services.find((entry) => entry.name === serviceName);
+      const entry = service?.envVars.find((item) => item.key === flagName);
+      return !entry || !entry.hasExplicitValue;
+    })
+    .map(([flagName]) => flagName);
+}
+
+const DEVELOPMENT_HOST_PATTERN = /localhost|127\.0\.0\.1/iu;
+const SECRET_LIKE_KEY_PATTERN = /SECRET|TOKEN|PASSWORD|API_KEY|CREDENTIAL/u;
+const NODE_ENV_PRODUCTION_SERVICES = [
+  "atendly-ia-bff",
+  "atendly-ia-ai-orchestrator",
+  "atendly-ia-scheduling-service",
+];
+
+function isDevelopmentSensitiveUrlKey(name) {
+  return (
+    /_BASE_URL$/u.test(name) ||
+    name === "FRONTEND_ORIGIN" ||
+    name === "PASSWORD_RESET_PUBLIC_URL"
+  );
+}
+
+// Chave de endereco publico nao e segredo mesmo quando o nome contem uma
+// palavra da lista de segredos (PASSWORD_RESET_PUBLIC_URL e o caso real).
+// Ela precisa de valor literal em render.yaml justamente para a checagem de
+// host de desenvolvimento acima poder conferir o dominio de producao.
+function isPublicUrlKey(name) {
+  return isDevelopmentSensitiveUrlKey(name) || /_PUBLIC_URL$/u.test(name);
+}
+
+// Reprova valor efetivo de producao que resolve para host de desenvolvimento
+// (declarado em render.yaml ou, na ausencia, o default do proprio schema),
+// NODE_ENV/COOKIE_SECURE sem valor de producao, e segredo literal em
+// render.yaml (deveria usar generateValue/fromService/sync: false).
+export function findDevelopmentDefaultViolations(
+  renderYamlContent,
+  envSourcesByService,
+) {
+  const violations = [];
+  const services = parseRenderServices(renderYamlContent);
+
+  for (const [serviceName, envSource] of Object.entries(
+    envSourcesByService,
+  )) {
+    const service = services.find((entry) => entry.name === serviceName);
+    const renderEnvVars = service?.envVars ?? [];
+    for (const schemaKey of parseEnvSchemaKeys(envSource)) {
+      if (!isDevelopmentSensitiveUrlKey(schemaKey.name)) continue;
+      const renderEntry = renderEnvVars.find(
+        (entry) => entry.key === schemaKey.name,
+      );
+      const effectiveValue = renderEntry?.value ?? schemaKey.defaultValue;
+      if (effectiveValue && DEVELOPMENT_HOST_PATTERN.test(effectiveValue)) {
+        violations.push(
+          `${serviceName}:${schemaKey.name} resolves to a development host (${effectiveValue})`,
+        );
+      }
+    }
+  }
+
+  for (const serviceName of NODE_ENV_PRODUCTION_SERVICES) {
+    const service = services.find((entry) => entry.name === serviceName);
+    const nodeEnv = service?.envVars.find((entry) => entry.key === "NODE_ENV");
+    if (!nodeEnv || nodeEnv.value !== "production") {
+      violations.push(`${serviceName}:NODE_ENV is not declared as production`);
+    }
+  }
+
+  const bffService = services.find(
+    (entry) => entry.name === "atendly-ia-bff",
+  );
+  const cookieSecure = bffService?.envVars.find(
+    (entry) => entry.key === "COOKIE_SECURE",
+  );
+  if (!cookieSecure || cookieSecure.value !== "true") {
+    violations.push("atendly-ia-bff:COOKIE_SECURE is not declared as true");
+  }
+
+  for (const service of services) {
+    for (const entry of service.envVars) {
+      if (
+        SECRET_LIKE_KEY_PATTERN.test(entry.key) &&
+        !isPublicUrlKey(entry.key) &&
+        entry.hasExplicitValue &&
+        entry.value &&
+        entry.value !== "true" &&
+        entry.value !== "false"
+      ) {
+        violations.push(
+          `${service.name}:${entry.key} declares a literal secret value in render.yaml`,
+        );
+      }
+    }
+  }
+
+  return violations;
+}
+
+export function findMissingBuildPaths(renderYamlContent, pathExists) {
+  const missing = [];
+  for (const service of parseRenderServices(renderYamlContent)) {
+    if (service.rootDir && !pathExists(service.rootDir)) {
+      missing.push(`${service.name}:rootDir:${service.rootDir}`);
+    }
+    for (const buildPath of service.buildFilterPaths) {
+      const literalPath = buildPath.replace(/\/\*\*?$/u, "");
+      if (!pathExists(literalPath)) {
+        missing.push(`${service.name}:buildFilter:${buildPath}`);
+      }
+    }
+  }
+  return missing;
+}
+
+export function findEnvExampleParityMismatches(envExampleContent, envSource) {
+  const exampleKeys = new Set(parseEnvExampleKeys(envExampleContent));
+  const schemaKeys = new Set(
+    parseEnvSchemaKeys(envSource).map((key) => key.name),
+  );
+  return {
+    missingFromExample: [...schemaKeys].filter((key) => !exampleKeys.has(key)),
+    extraInExample: [...exampleKeys].filter((key) => !schemaKeys.has(key)),
+  };
 }
 
 function read(relativePath) {

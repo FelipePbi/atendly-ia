@@ -253,7 +253,7 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
           </Link>
           {expired && (
             <p className="auth-footer">
-              <Link className="auth-link" href="/login">
+              <Link className="auth-link auth-link--standalone" href="/login">
                 Voltar para entrar
               </Link>
             </p>

@@ -589,5 +589,31 @@ as credenciais do service container são sintéticas e morrem com o runner.
   `BLOQUEADOR-MVP` (A-01) e reprodução executável própria para o achado sem
   cobertura de gate existente (A-03,
   `apps/bff/tests/goal030-a03-contract-drift.repro.mjs`).
+- **Diff031 ([ACCEPTED na rodada 4 do review031](reviews/031-review.md)):** a régua de alvo de
+  toque de `apps/frontend/e2e/viewport-matrix.spec.ts` mudou o que ela mede,
+  sem mudar o que o gate cobre. Continua medindo: só as sete rotas públicas de
+  `e2e/routes.ts`, só nas duas larguras com toque (`mobile-360`, `mobile-390`),
+  o mínimo AA de 24px (WCAG 2.5.8) como falha e o "confortável" de 44px (WCAG
+  2.5.5 AAA) só como anexo informativo. O que mudou é a geometria da medição:
+  em vez da caixa isolada do elemento nativo, ela agora mede a caixa do
+  `<label>` associado (aninhado ou por `for`/`id`) quando o controle é um
+  `<input>` visualmente escondido (`opacity: 0`, `visibility: hidden` ou
+  `display: none`) — não uma união das duas caixas: um controle escondido por
+  `display: none` reporta caixa degenerada `(0,0,0,0)`, e uma união por
+  `Math.min`/`Math.max` esticaria a região medida em vez de medir o rótulo.
+  Nos demais controles a régua mede a caixa própria do elemento, como antes.
+  Um checkbox nativo dentro de `<label>` passa a ser medido pelo alvo que um
+  dedo realmente toca, não pelo quadrado de 13×13px do input; e uma rota cujo
+  seletor não coleta nenhum controle agora falha, em vez de passar em
+  silêncio. `KNOWN_SMALL_TARGETS` está vazio: os três alvos que a auditoria
+  do Goal030 encontrou abaixo de 24px (`A-01`) não reproduzem mais na régua
+  corrigida — ver [FINAL_AUDIT §8](FINAL_AUDIT.md#8-fechamento-de-a-01--goal031-2026-09-20)
+  e [GAP_ANALYSIS G-31](GAP_ANALYSIS.md). **Continua sem medir:** qualquer tela
+  autenticada (Home, Agenda, Inbox, Clientes, Serviços, Configurações — `A-02`,
+  aberto, sem Goal atribuído) e fidelidade visual à referência aprovada
+  (`docs/design-reference/claude-design/`) — o screenshot de página inteira
+  segue sendo anexado como evidência para conferência humana, nunca como
+  pass/fail. `npm run validate:ui` desta rodada (execução da WU-08): exit 0,
+  47546 ms.
 - A execução hospedada dos workflows ainda não ocorreu; o estado atual é
   "configuração validada localmente". Ver [MIGRATION_STATUS](MIGRATION_STATUS.md).

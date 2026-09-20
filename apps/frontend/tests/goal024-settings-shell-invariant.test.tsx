@@ -415,7 +415,9 @@ describe("ShellConfigProvider + Conversas não excede a profundidade de atualiza
 
     await screen.findByRole("heading", { level: 1, name: "Conversas" });
     for (let i = 0; i < 4; i += 1) {
-      await user.click(screen.getByRole("button", { name: "Comercial: 30 dias" }));
+      await user.click(
+        await screen.findByRole("button", { name: "Comercial: 30 dias" }),
+      );
       await screen.findByRole("dialog");
       await user.click(screen.getByRole("button", { name: "Manter prazo atual" }));
     }

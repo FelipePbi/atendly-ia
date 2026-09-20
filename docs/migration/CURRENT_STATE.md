@@ -2705,3 +2705,75 @@ domínio contra fixture ou banco próprio, tinha condição de revelar.
   por este fechamento. A reprodução de A-03
   (`apps/bff/tests/goal030-a03-contract-drift.repro.mjs`) continua em exit 1 de
   propósito, fora do caminho verde do gate, até alguém fechar G-32.
+
+## Delta implementado — diff031, 2026-09-20 ([D-047](DECISIONS.md))
+
+Este delta muda um fato do frontend público: o defeito de A-01, o único achado
+`BLOQUEADOR-MVP` que o Goal030 tinha encontrado. Nenhuma rota, nenhum contrato
+público e nenhuma migration mudou.
+
+- **FATO atual (a régua de alvo de toque mede o alvo real):**
+  `apps/frontend/e2e/viewport-matrix.spec.ts` passou a medir, para um
+  `<input>` visualmente escondido (`opacity: 0`, `visibility: hidden` ou
+  `display: none`) com um `<label>` associado (aninhado ou por `for`/`id`), a
+  caixa do próprio `<label>` — o alvo real que um dedo toca — em vez da caixa
+  do `<input>`; nos demais controles a régua continua medindo a caixa própria
+  do elemento, sem unir as duas caixas. Não é uma união: um controle escondido
+  por `display: none` reporta caixa degenerada `(0,0,0,0)`, e unir essa caixa
+  à do rótulo por `Math.min`/`Math.max` esticaria a região medida da origem do
+  viewport até o canto do rótulo. Uma rota cujo seletor não coleta nenhum
+  controle agora falha o teste, em vez de passar em silêncio.
+  `KNOWN_SMALL_TARGETS` está vazia; a asserção "exceção que deixou de
+  reproduzir falha" continua no arquivo para a próxima regressão real ter onde
+  ser nomeada.
+- **FATO atual (dois dos três achados de A-01 eram defeito de medição, não de
+  produto):** os checkboxes `remember` (`/login`) e `terms` (`/cadastro`) já
+  eram, na árvore, `<input>` aninhado dentro de `<label className="check">`
+  com o texto inteiro clicável — o alvo real sempre foi maior que 24px. A
+  régua antiga só media o `<input type="checkbox">` nativo, visualmente
+  escondido (`opacity: 0`) e do tamanho padrão do navegador (13×13px) — não o
+  marcador visual (`<span class="check-box">`, que sempre teve 22×22px,
+  `atendly.css:492`–`:506`) e não o alvo que um dedo toca. Nenhuma linha de
+  produto mudou para esses dois controles.
+- **FATO atual (um dos três era defeito real, corrigido):** o link
+  `Voltar para entrar` em `/link-expirado` dependia só da altura de linha do
+  texto (115×18px). `apps/frontend/src/features/auth/AuthScreen.tsx` deu a ele
+  a classe `auth-link--standalone`, e
+  `apps/frontend/src/shared/styles/atendly.css` define
+  `min-height: 24px` com `display: inline-flex` e `padding: 4px 2px` — larga
+  o alvo de toque sem alterar fonte nem cor. Medida nova: 119×29px nas duas
+  larguras com toque.
+- **FATO atual (a régua ainda morde):** o comentário em
+  `viewport-matrix.spec.ts:31`–`:54` registra três mutações de controle
+  negativo aplicadas e revertidas, cada uma contra um seletor diferente:
+  `.check` (`remember` em `/login`, `terms` em `/cadastro` — o `<input>`
+  nativo segue `opacity: 0`, o `<label>` encolhido a `height: 16px; overflow:
+  hidden`, vermelho nomeando o `<input>` a 350×16px — a caixa do rótulo, pela
+  regra de rótulo associado — nas duas rotas); `.auth-link--standalone`
+  (`link-expirado`, encolhido a 16px de altura com `overflow: hidden`,
+  vermelho nomeando o link a 115×16px); e `.field-action` (o botão de olho
+  visível de `PasswordField` em `/login`, encolhido a 16×16px, medido pela
+  própria caixa — nunca pela união com o rótulo, porque é um `<button>`, não
+  um `<input>` escondido — vermelho nomeando o botão a 16×16px). As três
+  rodaram nesta unidade (`npm run build && npx playwright test -g
+  "<rota>.*touch targets" --project=mobile-390`), cada uma revertida depois de
+  confirmado o vermelho. Ver [FINAL_AUDIT §8](FINAL_AUDIT.md#8-fechamento-de-a-01--goal031-2026-09-20)
+  e [GAP_ANALYSIS G-31](GAP_ANALYSIS.md).
+- **FATO revelado (a auditoria final recontada):** com A-01 corrigido, a
+  contagem de achados `BLOQUEADOR-MVP` do inventário de FINAL_AUDIT passa de 1
+  para 0. Os 11 `PENDENCIA-POS-MVP` e os 7 `LIMITE-DECLARADO` (A-02 a A-19)
+  não foram tocados, corrigidos nem reclassificados por este delta — A-02
+  (nenhuma tela autenticada é medida pelo gate) continua aberto, sem Goal
+  atribuído.
+- **LIMITE:** este delta não afirma fidelidade visual à referência aprovada
+  (`docs/design-reference/claude-design/`) — continua sendo conferência
+  humana — nem estende o gate renderizado a nenhuma tela autenticada.
+- **LIMITE:** este delta descreve o diff031 (WU-01 a WU-08), **ACCEPTED na
+  rodada 4 de 4 do [review031](reviews/031-review.md)** (três rodadas
+  anteriores de `CHANGES_REQUIRED`, todas sobre o mesmo risco: régua capaz de
+  aprovar um controle real abaixo de 24px e documento enunciando regra mais
+  ampla que a do código), sem commit e sem deploy. O aceite é deste diff — não
+  é declaração de que o
+  MVP está pronto para produção de forma absoluta: é o registro do que mudou
+  na árvore e do que a auditoria recontada, em FINAL_AUDIT §8, passa a dizer
+  sobre A-01 especificamente.

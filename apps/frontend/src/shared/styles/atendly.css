@@ -3391,6 +3391,16 @@ p {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+/* Link isolated in its own line (no surrounding sentence text), so the AA
+   touch-target minimum applies: widen the pointer target with padding
+   instead of raising font-size or changing the visual token. */
+.auth-link--standalone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 4px 2px;
+}
 .auth-footer {
   margin-top: 26px;
   padding-top: 22px;

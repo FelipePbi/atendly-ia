@@ -579,3 +579,119 @@ a interface está fiel à referência aprovada: o gate renderizado decide overfl
 horizontal, alvo de toque mínimo AA, contraste computado, foco visível e
 `prefers-reduced-motion` (§5.2), enquanto a fidelidade visual segue sendo
 conferência humana (§5.3).
+
+## 8. Fechamento de A-01 — Goal031, 2026-09-20
+
+Seção nova, escrita depois da última mudança de árvore desta rodada (WU-01 a
+WU-08 do Goal031). Ela **não reescreve** o registro original de A-01 em §6:
+aquele texto continua descrevendo exatamente o que a auditoria do Goal030
+encontrou, com as medidas de então. Esta seção é o que mudou depois dele.
+
+### O que mudou na régua
+
+A régua de alvo de toque em `apps/frontend/e2e/viewport-matrix.spec.ts` tinha
+ela própria um defeito de medição: lia só a caixa do elemento nativo
+(`getBoundingClientRect()` do `<input>`), sem considerar que dois dos três
+controles de A-01 (`remember` em `/login`, `terms` em `/cadastro`) são
+checkboxes envolvidos por `<label className="check">`, com o rótulo inteiro —
+não só o quadrado de 13×13px — clicável. A WU-01 corrigiu a régua para medir,
+quando um `<input>` visualmente escondido (`opacity: 0`, `visibility: hidden`
+ou `display: none`) tem um rótulo associado (`el.closest("label")` ou
+`label[for="id"]`), a caixa do próprio rótulo — o alvo real que um dedo toca —
+em vez da caixa do `<input>`; nos demais controles a régua continua medindo a
+caixa própria do elemento. Não é união das duas caixas: um controle escondido
+por `display: none` reporta caixa degenerada `(0,0,0,0)`, e uma união por
+`Math.min`/`Math.max` esticaria a região medida da origem do viewport até o
+canto do rótulo em vez de medir o rótulo. Geometria pura, sem exceção por
+seletor, classe ou rota. A régua também ganhou um guard novo — uma rota cujo
+seletor não coleta nenhum controle agora falha
+(`expect(measured.length).toBeGreaterThan(0)`), porque página quebrada não deve
+passar como "nada para medir". `KNOWN_SMALL_TARGETS` está vazio agora; o
+mecanismo e a asserção "exceção que deixou de reproduzir falha" continuam no
+arquivo, para a próxima regressão real ter onde ser nomeada. O comentário em
+`viewport-matrix.spec.ts:31`–`:54` registra três mutações de controle
+negativo revertidas nesta rodada, cada uma contra um seletor diferente:
+`.check` (`remember` em `/login`, `terms` em `/cadastro`, o `<label>`
+encolhido a `height: 16px; overflow: hidden`, vermelha nomeando o `<input>`
+a 350×16px pela caixa do rótulo associado nas duas rotas); `.auth-link
+--standalone` (o link `Voltar para entrar` em `/link-expirado`, encolhido a
+16px de altura, vermelha nomeando o controle a 115×16px); e `.field-action`
+(o botão de olho visível de `PasswordField` em `/login`, encolhido a
+16×16px, medido pela própria caixa — nunca pela união com um rótulo, porque
+é `<button>`, não `<input>` escondido — vermelha nomeando o botão a
+16×16px). Todas rodaram com `npm run build && npx playwright test -g
+"<rota>.*touch targets" --project=mobile-390` e foram revertidas depois de
+confirmado o vermelho — provando que a régua nova ainda reprova um controle
+real abaixo de 24px.
+
+### O que mudou no produto
+
+A WU-02 corrigiu o único dos três controles de A-01 que a régua nova confirma
+como defeito real de produto: o link `Voltar para entrar` em
+`/link-expirado`, cujo alvo dependia só da altura de linha do texto
+(115×18px). `AuthScreen.tsx` passou a dar a ele a classe
+`auth-link--standalone`, e `atendly.css` define
+`min-height: 24px` com `display: inline-flex` e `padding: 4px 2px` — larga o
+alvo de toque sem alterar tamanho de fonte nem cor. Os dois checkboxes não
+precisaram de mudança de produto: o `<input type="checkbox">` nativo, visualmente
+escondido (`opacity: 0`) e medido pela régua antiga, tem o tamanho padrão do
+navegador (13×13px); o marcador visual (`<span class="check-box">`) sempre teve
+22×22px (`atendly.css:492`–`:506`), mas nenhum dos dois é o alvo real — o alvo
+que um dedo toca é o `<label>` inteiro, que já continha o texto ("Manter acesso
+neste dispositivo", "Li e aceito os Termos de Uso…") — a régua antiga estava
+medindo o elemento errado, não o produto tinha o defeito errado.
+
+### Medidas novas por largura
+
+Lidas de `apps/frontend/e2e-results/results.json`, produzido pela execução da
+WU-08 desta rodada (`npm run validate:ui`, exit 0, 47546 ms) — esta seção não
+reexecutou o gate.
+
+| Projeto | Viewport | Passou | Falhou | Pulado |
+| --- | --- | --- | --- | --- |
+| `mobile-360` | 360×740, com toque | 38 | 0 | 0 |
+| `mobile-390` | 390×844, com toque | 38 | 0 | 0 |
+| `tablet-768` | 768×1024 | 31 | 0 | 7 |
+| `notebook-1024` | 1024×768 | 31 | 0 | 7 |
+| `desktop-1440` | 1440×900 | 31 | 0 | 7 |
+
+Contagem de passou/falhou/pulado idêntica à §5.1 — mesmo número de testes,
+régua diferente por trás. Nas duas larguras com toque (`mobile-360`,
+`mobile-390`), o teste `touch targets are reachable on a touch screen` não
+gerou nenhum anexo `below-24px-*` em nenhuma das sete rotas públicas: zero
+controles abaixo do mínimo AA. Os anexos `below-44px-*` (informativo, nunca
+falha) desta execução mostram:
+
+| Rota | Controle | `mobile-360` | `mobile-390` | Régua |
+| --- | --- | --- | --- | --- |
+| todas as sete | `<a>Atendly — Início</a>` (marca no topo) | 320×28 | 350×28 | abaixo dos 44px confortáveis, acima de AA — sem mudança |
+| `/login` | `<a>Esqueci minha senha</a>` | 109×42 | 120×42 | abaixo dos 44px confortáveis, acima de AA — sem mudança |
+| `/link-expirado` | `<a class="auth-link auth-link--standalone">Voltar para entrar</a>` | 119×29 | 119×29 | era 115×18 e abaixo de AA; agora acima de AA, ainda abaixo dos 44px confortáveis |
+
+Os dois checkboxes (`remember`, `terms`) não aparecem em nenhum anexo —
+`below-24px-*` nem `below-44px-*` — porque a caixa do próprio `<label>`
+associado (o alvo real, nunca uma união com a caixa do `<input>`) passa dos
+44px confortáveis nas duas larguras.
+
+### Veredito recontado
+
+A contagem desta auditoria muda em uma linha: A-01 deixa de reproduzir e sai
+da categoria `BLOQUEADOR-MVP`. O identificador `A-01` permanece — não é
+renumerado nem reaproveitado — e o registro original em §6 continua descrevendo
+o que a auditoria do Goal030 encontrou, sem reescrita. **Esta auditoria passa a
+ter 0 achados `BLOQUEADOR-MVP`** (era 1), 11 `PENDENCIA-POS-MVP` e 7
+`LIMITE-DECLARADO` — exatamente os mesmos de A-02 a A-19, nenhum deles tocado,
+corrigido ou reclassificado por esta unidade.
+
+O diff031 foi aceito pelo Tech Lead Agent na rodada 4 de 4 do
+[review031](reviews/031-review.md) — o aceite é deste diff (régua corrigida,
+um alvo corrigido e esta recontagem), e **não** uma nova declaração de que o
+MVP está pronto para o primeiro
+usuário real de forma absoluta: é o recontar desta auditoria especificamente
+sobre A-01. Duas coisas que este recontar não diz, pela mesma razão que §7 já
+não dizia. Não diz que a interface está fiel à referência aprovada: o gate
+renderizado continua decidindo overflow horizontal, alvo de toque mínimo AA,
+contraste computado, foco visível e `prefers-reduced-motion` (§5.2), e a
+fidelidade visual **segue sendo conferência humana**, nunca provada por teste.
+E não diz que A-02 mudou de estado: nenhuma tela autenticada é medida pelo
+gate, e isso continua aberto, sem Goal atribuído.

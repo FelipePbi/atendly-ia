@@ -13,7 +13,9 @@
 // hoje: `BusinessProfile.timezone` (dono) já mudou, `CalendarSettings.
 // timezone` (réplica) ficou para trás. Duas linhas nascem divergentes desse
 // jeito, uma nasce já convergida — para provar que a passada de leitura não
-// reescreve à toa quem já está certo (propriedade 2 de D-010: idempotente).
+// reescreve à toa quem já está certo (propriedade 2 de D-010: idempotente) —
+// e uma nasce sem `CalendarSettings` nenhuma, para provar que a passada nunca
+// cria a réplica que não existe (propriedade 5 de D-010).
 //
 // A convergência é provada por LEITURA DIRETA das duas bases depois da
 // passada, nunca só pelo que a função de reconciliação devolveu: o ensaio
@@ -108,7 +110,8 @@ function bffRequire() {
 }
 
 /**
- * Três tenants sintéticos, cada um com a rota pública que o exercita.
+ * Quatro tenants sintéticos, cada um com a(s) rota(s) pública(s) que o
+ * exercita(m).
  *
  * Dois nascem divergentes (dono já mudou, réplica ficou para trás — o estado
  * real de qualquer negócio que já passou por `PATCH /v1/settings/business`
@@ -120,6 +123,12 @@ function bffRequire() {
  *
  * O terceiro nasce já convergido e é lido pelas duas, para provar que nenhuma
  * das rotas escreve à toa sobre quem já está certo.
+ *
+ * O quarto nasce com dono gravado e SEM `CalendarSettings` nenhuma —
+ * `replicaTimezone: null` significa "não semear a réplica", não "réplica
+ * vazia" — e é lido pelas duas rotas, para provar a propriedade 5 de D-010:
+ * réplica ausente sai `ABSENT`, sem escrita, e continua ausente depois de
+ * qualquer leitura reconciliadora.
  */
 export const TENANT_FIXTURES = Object.freeze([
   Object.freeze({
@@ -141,6 +150,13 @@ export const TENANT_FIXTURES = Object.freeze([
     businessName: "Goal029 Rehearsal Convergent",
     ownerTimezone: "America/Sao_Paulo",
     replicaTimezone: "America/Sao_Paulo",
+    routes: Object.freeze(["/v1/settings", "/v1/calendar"]),
+  }),
+  Object.freeze({
+    tenantId: "goal029-rehearsal-absent-replica",
+    businessName: "Goal029 Rehearsal Absent Replica",
+    ownerTimezone: "America/Fortaleza",
+    replicaTimezone: null,
     routes: Object.freeze(["/v1/settings", "/v1/calendar"]),
   }),
 ]);
@@ -337,13 +353,20 @@ async function seedBff(url, fixtures) {
   }
 }
 
-/** Semeia CalendarSettings (a réplica) direto no banco do Scheduling. */
+/**
+ * Semeia CalendarSettings (a réplica) direto no banco do Scheduling.
+ *
+ * `replicaTimezone: null` num fixture significa "esta réplica não existe" —
+ * a linha não é inserida, para que o tenant chegue às rotas do jeito que a
+ * propriedade 5 de D-010 precisa provar (tenant sem agenda nunca escolhida).
+ */
 async function seedScheduling(url, fixtures) {
   const { Client } = bffRequire()("pg");
   const client = new Client({ connectionString: url });
   await client.connect();
   try {
     for (const fixture of fixtures) {
+      if (fixture.replicaTimezone === null) continue;
       await client.query(
         `INSERT INTO "CalendarSettings" ("tenantId", "source", "timezone", "updatedAt")
          VALUES ($1, 'ATENDLY', $2, now())`,
@@ -578,16 +601,30 @@ export async function rehearse(plan) {
 
   const tenantIds = fixtures.map((fixture) => fixture.tenantId);
   const before = await readState(plan.bff.url, plan.scheduling.url, tenantIds);
-  const divergencesCreated = before.filter((row) => row.owner !== row.replica).length;
+  // Réplica ausente (`row.replica === null`) não é réplica divergente: é o
+  // caso separado da propriedade 5, contado abaixo.
+  const divergencesCreated = before.filter(
+    (row) => row.replica !== null && row.owner !== row.replica,
+  ).length;
+  const absentReplicas = before.filter((row) => row.replica === null).length;
 
   console.log(
     `goal029:timezone-reconciliation-rehearsal seeded ${fixtures.length} tenant(s), ` +
-      `${divergencesCreated} with a divergent replica (owner already changed, replica stale)`,
+      `${divergencesCreated} with a divergent replica (owner already changed, replica stale), ` +
+      `${absentReplicas} with no CalendarSettings replica at all`,
   );
   if (
     !assert(
       divergencesCreated >= 1,
       "the fixture must seed at least one tenant with a divergent replica — otherwise the rehearsal proves nothing about convergence",
+    )
+  ) {
+    return;
+  }
+  if (
+    !assert(
+      absentReplicas >= 1,
+      "the fixture must seed at least one tenant with no CalendarSettings replica — otherwise the rehearsal proves nothing about property 5 (never create the replica)",
     )
   ) {
     return;
@@ -665,13 +702,22 @@ export async function rehearse(plan) {
         read.status === 200,
         `${fixture.tenantId}: ${route} must answer 200, got ${read.status}`,
       );
-      // E a resposta não afirma convergência que não houve: o `timezone` que a
-      // rota devolve é o da réplica depois da passada, e com o Scheduling de
-      // pé ele tem de ser o do dono.
-      assert(
-        read.calendarTimezone === fixture.ownerTimezone,
-        `${fixture.tenantId}: ${route} must report the owner's timezone (${fixture.ownerTimezone}) after reconciling — got ${read.calendarTimezone}`,
-      );
+      if (fixture.replicaTimezone === null) {
+        // Propriedade 5: sem `CalendarSettings`, a leitura nunca inventa um
+        // fuso de réplica — o outcome é `ABSENT`, não `CONVERGED`.
+        assert(
+          read.calendarTimezone === null,
+          `${fixture.tenantId}: ${route} must report no calendar timezone (CalendarSettings absent, reconciliation must never create it) — got ${read.calendarTimezone}`,
+        );
+      } else {
+        // E a resposta não afirma convergência que não houve: o `timezone` que
+        // a rota devolve é o da réplica depois da passada, e com o Scheduling
+        // de pé ele tem de ser o do dono.
+        assert(
+          read.calendarTimezone === fixture.ownerTimezone,
+          `${fixture.tenantId}: ${route} must report the owner's timezone (${fixture.ownerTimezone}) after reconciling — got ${read.calendarTimezone}`,
+        );
+      }
       if (route === "/v1/settings") {
         assert(
           read.businessTimezone === fixture.ownerTimezone,
@@ -682,21 +728,36 @@ export async function rehearse(plan) {
   }
 
   const after = await readState(plan.bff.url, plan.scheduling.url, tenantIds);
-  const convergedCount = after.filter((row) => row.owner !== null && row.owner === row.replica).length;
+  // Só tenants seguidos com réplica podem convergir; o tenant sem
+  // `CalendarSettings` é provado à parte, abaixo, contra `null`.
+  const replicatedFixtures = fixtures.filter((fixture) => fixture.replicaTimezone !== null);
+  const convergedCount = after.filter(
+    (row) =>
+      replicatedFixtures.some((fixture) => fixture.tenantId === row.tenantId) &&
+      row.owner !== null &&
+      row.owner === row.replica,
+  ).length;
 
   console.log(
     `goal029:timezone-reconciliation-rehearsal direct read of both databases after the reconciling reads: ` +
-      `${convergedCount} of ${fixtures.length} tenant(s) converged`,
+      `${convergedCount} of ${replicatedFixtures.length} tenant(s) with a replica converged`,
   );
 
   assert(
-    convergedCount === fixtures.length,
-    `every seeded tenant must converge (owner timezone equal to replica timezone), reading both databases directly — got ${convergedCount} of ${fixtures.length}`,
+    convergedCount === replicatedFixtures.length,
+    `every seeded tenant with a CalendarSettings replica must converge (owner timezone equal to replica timezone), reading both databases directly — got ${convergedCount} of ${replicatedFixtures.length}`,
   );
 
   for (const row of before) {
     const afterRow = after.find((entry) => entry.tenantId === row.tenantId);
-    if (row.owner !== row.replica) {
+    if (row.replica === null) {
+      // Propriedade 5, provada por leitura direta do banco: nenhuma passada
+      // cria a linha que não existia.
+      assert(
+        afterRow?.replica === null,
+        `${row.tenantId}: a tenant with no CalendarSettings must still have none after the reconciling reads, reading CalendarSettings directly — found ${afterRow?.replica}`,
+      );
+    } else if (row.owner !== row.replica) {
       assert(
         afterRow?.replica === row.owner,
         `${row.tenantId}: the replica must be rewritten to the owner's timezone (${row.owner}), reading CalendarSettings directly — found ${afterRow?.replica}`,
@@ -744,10 +805,11 @@ export async function main() {
     console.log(
       "\ngoal029:timezone-reconciliation-rehearsal PASSED — against two disposable PostgreSQL databases, the real " +
         "public reconciling reads (GET /v1/settings and GET /v1/calendar on the real BFF, against a real Scheduling " +
-        "service) converged every seeded tenant, each route proving its own divergent tenant, and the convergence is " +
-        "proved by reading BusinessProfile.timezone and CalendarSettings.timezone directly, not by the HTTP " +
-        "response — with the divergent replicas rewritten to the owner's timezone and the already-converged tenant " +
-        "left untouched by either route.",
+        "service) converged every seeded tenant that had a CalendarSettings replica, each route proving its own " +
+        "divergent tenant, and the convergence is proved by reading BusinessProfile.timezone and " +
+        "CalendarSettings.timezone directly, not by the HTTP response — with the divergent replicas rewritten to " +
+        "the owner's timezone, the already-converged tenant left untouched by either route, and the tenant with no " +
+        "CalendarSettings left without one after both routes.",
     );
   }
 }

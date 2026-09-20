@@ -538,3 +538,66 @@ Diff029, aceito na rodada 3 pelo Tech Lead Agent ([review029](reviews/029-review
 **O que nenhuma linha de agenda perde.** O único efeito de escrita provado pelo ensaio é `UPDATE`/`PATCH` de `CalendarSettings.timezone`. **Nenhuma linha de `Appointment`, `AvailabilityRule`, `AvailabilityException` ou `TimeBlock` é lida ou escrita** por este mecanismo, em nenhum dos três pontos (escrita do dono, `GET /v1/settings`, `GET /v1/calendar`) nem pelo ensaio: reconciliar fuso é convergir duas cópias de configuração, não migrar dado de agenda.
 
 **Limite declarado.** A cópia do fuso projetada para a IA (`AiTenantConfig.settings.businessContext.timezone`) não foi tocada por este Goal: continua a seguir `BusinessProfile.timezone` pela mesma projeção versionada de `modalities`/`address` que o Goal018/019 já entrega, e não foi exercitada por este ensaio. Nenhum banco implantado foi tocado — os dois bancos do ensaio são derivados e descartáveis, recriados a cada execução.
+
+## 17. Percurso único de produto ponta a ponta (Goal030)
+
+Diff030, [D-046](DECISIONS.md). Este Goal não muda schema e não executa
+migration nenhuma: é a auditoria final do MVP, e o único artefato de código
+que ela produz é o ensaio de composição — a prova de que as 29 fatias fechadas
+Goal a Goal, cada uma com prova própria, continuam encaixando quando um
+negócio único as atravessa na ordem em que uma pessoa real as atravessaria.
+Nenhum ensaio anterior tinha percorrido cadastro → onboarding → catálogo →
+cliente → agenda → conversa → lembrete → notificação → fuso → retenção →
+exclusão de conta sobre o mesmo tenant.
+
+**Ensaio (`scripts/goal030-mvp-journey-rehearsal.mjs`, passo
+`rehearse:goal030-mvp-journey` de `validate:integration`, último da lista).**
+Sobe o BFF, o Scheduling e a IA reais em três bancos PostgreSQL descartáveis
+**próprios** (não os do resto do gate), cada um migrado do zero com
+`prisma migrate deploy` do histórico real. Um único tenant, semeado só pelo
+caminho público — nenhum `INSERT` de conveniência —, atravessa as onze etapas
+descritas no cabeçalho do arquivo, com sessão emitida por
+`POST /v1/auth/register` e cookie/CSRF reapresentados como o frontend
+publicado faz. Cada etapa é provada por leitura direta do banco do serviço
+dono do dado, com `pg` puro, além da resposta HTTP — resposta `200` não é
+evidência de persistência, foi assim que o defeito da rodada 2 do Goal029
+passou. Três fronteiras são dublê, cada uma no lugar de algo que não é
+produto próprio: a Evolution Go (o vínculo do canal é escrito pelo cliente
+real do BFF contra a rota interna real da IA, com credencial sintética;
+nenhuma instância remota existe), o provedor de LLM (`ModelProvider` que
+lança se chamado — prova que o modelo não é chamado, em vez de prometer) e o
+relógio das duas etapas que dependem de tempo futuro (retenção e purga de
+conta). Um controle negativo (`GOAL030_BREAK_LINK`, nove elos nomeados) prova
+que o ensaio cai com `exit 1` quando qualquer elo declarado deixa de
+acontecer. Depois da etapa 11 (exclusão de conta), o processo pai relê as
+três bases em conexões novas, com os três serviços já mortos, e prova
+contagem zero em toda tabela do percurso — é a única forma honesta de provar
+exclusão, porque o `200` do pedido só diz que ele foi aceito.
+
+**O que este ensaio prova, e que nenhum outro prova:** a composição das
+fatias sobre um negócio único, ponta a ponta, contra serviços próprios reais
+e bancos descartáveis reais — não contra dublê de banco nem contra payload
+sintético isolado por domínio.
+
+**O que ele não prova, por dublê declarado:** a resposta automática da IA (o
+grafo, o modelo e o envio pelo transporte); o envio real de WhatsApp (a
+Evolution Go nunca é contactada); e nada sobre a origem real da Minha Agenda,
+que este percurso não usa.
+
+**Estado final dos gates M0–M6 depois desta auditoria** (tabela completa em
+[§11](#11-gates-de-rollout-e-remoção); nenhuma linha da tabela foi reescrita —
+o que segue é o veredito desta rodada sobre cada uma):
+
+| Gate | Estado final |
+| --- | --- |
+| M0 — inventário | Fechado em parte. O restore ensaiado existe (Goal028). O inventário de **operação** (contagens por tenant, ownership e ambiguidades em banco implantado) continua inexistente, porque não há ambiente implantado a inventariar |
+| M1 — expand | Fechado. Todos os ensaios de migration por Goal, mais o percurso deste Goal, sobem banco vazio e provam expansão sem fabricar dado |
+| M2 — readers | Fechado em parte. Os ensaios provam que o formato novo é lido e escrito; nenhum gate executa o **binário anterior de verdade** contra o schema novo |
+| M3 — backfill | Fechado em parte. Contagens de entrada/saída existem contra estoque **sintético** semeado pelos próprios ensaios; não há contagem por tenant sobre dado de operação |
+| M4 — corte | Fechado em parte. O corte está no código e travado por `CHECK` (Goal027). O freeze da fonte remota nunca foi executado, porque não existe origem real conectada a gate nenhum |
+| M5 — observar | Fechado em parte. A observação existe em máquina descartável (Goal028); backlog, taxa de erro e divergência de projeção em operação continuam sem medição |
+| M6 — retirar | Fechado em parte. O protocolo pré-Goal010, o writer remoto e o dado de `calendar.source` foram retirados (Goal026/Goal027); "janela compatível encerrada e plano de restore seguro" não tem artefato próprio além do ensaio de restore |
+
+Nenhuma dessas linhas fecha por este Goal: auditoria não corrige nem migra,
+só confere na árvore e registra o veredito. Detalhe completo, achado a
+achado, em [FINAL_AUDIT](FINAL_AUDIT.md).

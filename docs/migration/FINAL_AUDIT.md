@@ -1,0 +1,581 @@
+# Auditoria final do MVP — inventário de conformidade por critério
+
+Documento do Goal030. Cada linha abaixo é **um critério de MVP** conferido
+contra a árvore de código desta worktree, não contra a documentação que o
+descreve. Uma auditoria que só relê documento repete o erro que ela deveria
+encontrar: o diff028 e o diff029 mostraram gate verde sobre fato falso.
+
+Origem dos identificadores (é de onde vêm os IDs, **não** é evidência de
+conformidade): os gaps `G-01`–`G-35` e as cinco incertezas sem ID estão em
+`docs/migration/GAP_ANALYSIS.md`; os gates `M0`–`M6` estão na §10 de
+`docs/migration/DATA_MIGRATION.md`; as incertezas `U-01`–`U-03` estão em
+`docs/migration/DECISIONS.md`; os guardrails estão em `AGENTS.md`.
+
+## Como ler as quatro colunas
+
+**Estado** — vocabulário fechado: `fechado`, `fechado em parte`, `aberto`,
+`não aplicável ao MVP`.
+
+**Evidência apontável** — `arquivo:linha`, nome exato de teste ou nome exato de
+passo de gate. Nunca link para documento de migração: nenhum documento deste
+diretório é evidência de si mesmo.
+
+**Força** — vocabulário fechado:
+
+| Força | Significa |
+| --- | --- |
+| `EXECUTADO` | existe passo de gate ou teste automatizado **nomeado na própria linha** que fica vermelho se o fato deixar de valer, e esse gate rodou verde nesta rodada |
+| `INSPECIONADO` | o fato foi conferido na árvore (arquivo e linha citados), mas o auditor **não sabe nomear** o que ficaria vermelho se ele deixasse de valer |
+| `DECLARADO` | só existe afirmação; não há artefato de código nem execução que a sustente |
+
+A regra é assimétrica de propósito: quando não dá para nomear o que quebraria,
+a força correta é `INSPECIONADO`, nunca `EXECUTADO`.
+
+**Achado** — o que a conferência encontrou além do estado, quando encontrou.
+
+## Procedência das execuções citadas
+
+| Gate | Quem executou | Resultado |
+| --- | --- | --- |
+| `npm run validate:core` | esta unidade (Goal030/WU-10), 2026-09-20 | exit 0 — 15 passos: 13 `passed`, 0 `failed`, 2 `skipped` (`test:bff`, `test:health-worker`) |
+| `npm run validate:integration` | Goal030/WU-09 desta rodada | exit 0, 88652 ms (resultado recebido da unidade; esta unidade não o reexecutou) |
+| `npm run validate:ui` (gate de UI renderizada, Playwright) | Goal030/WU-08 desta rodada | exit 0, 48878 ms (resultado recebido da unidade; esta unidade não o reexecutou) |
+
+Passo de gate citado sem qualificação pertence a um desses três comandos: os
+passos de `validate:core` estão em `scripts/validate-core.mjs:22`; os de
+`validate:integration` em `scripts/validate-integration.mjs`; os checks
+nomeados do passo `audit:static` estão em `scripts/final-production-audit.mjs`.
+
+## 1. Gaps de produto e implementação — G-01 a G-35
+
+| Critério | Estado | Evidência apontável | Força | Achado |
+| --- | --- | --- | --- | --- |
+| G-01 — isolamento entre negócios no alvo WhatsApp | fechado | `apps/evolution-go/pkg/instance/handler/instance_authorization.go:34` (`authorizeInstanceTarget`), consumido em `instance_handler.go:591`; vermelho em `TestAdvancedSettingsAuthorizationOverGinChain` e `TestAdvancedSettingsRejectInvalidAuthenticatedContext` (passo `test:evolution-go`) | EXECUTADO | — |
+| G-02 — um usuário/profissional/número por negócio | fechado | `apps/bff/prisma/schema.prisma:179` (`tenantId String? @unique`); vermelho em `apps/bff/tests/tenant-instance-link.integration.test.ts` (passo `test:bff-integration`) | EXECUTADO | A coluna é nulável por decisão declarada em `schema.prisma:177`: no PostgreSQL `@unique` não restringe múltiplos `NULL`, então o estoque legado ambíguo convive com a unicidade — é o guard de rota, não a constraint, que impede essas linhas de autorizarem uso |
+| G-03 — sessão revogável e CSRF | fechado | `apps/bff/prisma/schema.prisma:72` (`model UserSession`), `apps/bff/src/lib/session.ts:10`, `apps/bff/src/lib/csrf.ts`; vermelho em `apps/bff/tests/session-csrf.integration.test.ts` e `apps/bff/tests/goal024-session-revocation.integration.test.ts` (passo `test:bff-integration`) | EXECUTADO | — |
+| G-04 — segredos fora de log e payload | fechado | `apps/bff/src/lib/instance-credentials.ts:50` e `apps/ai-orchestrator/src/lib/channel-credentials.ts:38` (`createCipheriv("aes-256-gcm", …)`); vermelho em `apps/ai-orchestrator/tests/security/channel-credentials.test.ts` (passo `test:ai-orchestrator`) e no check `sensitive_log_redaction_is_configured` (passo `audit:static`) | EXECUTADO | — |
+| G-05 — mensagem recebida não desaparece após aceite | fechado | `apps/ai-orchestrator/src/modules/channel/routes/evolutionWebhook.routes.ts:206` (202 só depois de persistir), `apps/ai-orchestrator/prisma/schema.prisma:458` (`model ProcessedEvent`); vermelho no passo `test:ai-orchestrator-transport-durability` | EXECUTADO | — |
+| G-06 — janela de fragmentos e reavaliação | fechado | `apps/ai-orchestrator/prisma/schema.prisma:476` (`nextAttemptAt`), `apps/ai-orchestrator/src/modules/channel/InboundMessageProcessor.ts:295`; vermelho em `apps/ai-orchestrator/tests/inbox/inbox-worker.test.ts` (passo `test:ai-orchestrator`) e no passo `test:ai-orchestrator-transport-durability` | EXECUTADO | — |
+| G-07 — controle humano pausa a IA na conversa | fechado | `apps/ai-orchestrator/src/modules/graph/message-graph.ts:601` (`assumeHumanControl`); vermelho em `apps/ai-orchestrator/tests/integration/human-control-graph.test.ts` (passo `test:ai-orchestrator-transport-durability`) e em `apps/ai-orchestrator/tests/session/human-control-across-sessions.test.ts` (passo `test:ai-orchestrator`) | EXECUTADO | — |
+| G-08 — inbox independe da decisão de IA | fechado | `apps/ai-orchestrator/src/modules/graph/message-graph.ts:221` e `:226` (`operationalGuard` só anota; `sessionGate` encerra depois da persistência); vermelho em `apps/ai-orchestrator/tests/inbox/inbox-policy.test.ts` (passo `test:ai-orchestrator`) | EXECUTADO | — |
+| G-09 — resultado real de envio | fechado | `apps/ai-orchestrator/prisma/schema.prisma:399` (`deliveryState`); vermelho em `apps/ai-orchestrator/tests/outbox/outbound-delivery.test.ts` (passo `test:ai-orchestrator`) e em `apps/frontend/tests/goal017-delivery-state.test.tsx` (passo `test:frontend`) | EXECUTADO | — |
+| G-10 — Agenda Atendly como única agenda oficial | fechado | `apps/scheduling-service/prisma/migrations/20260919120000_goal027_calendar_source_atendly/migration.sql:51` (`CalendarSettings_source_atendly_check`), `apps/scheduling-service/prisma/schema.prisma:250`; vermelho no passo `rehearse:goal027-calendar-source-migration` e nos checks `no_legacy_calendar_migration_routes` e `no_calendar_migration_service_reference` (passo `audit:static`) | EXECUTADO | — |
+| G-11 — atomicidade e replay idempotente | fechado | `apps/scheduling-service/prisma/schema.prisma:1278` (`effectEntityType`); vermelho em `apps/scheduling-service/tests/integration/goal008-agenda.test.ts` (passo `test:scheduling-integration`) | EXECUTADO | — |
+| G-12 — sobreposição, remarcação e holds de 5 min | fechado | `apps/scheduling-service/prisma/schema.prisma:706` (`model AppointmentHold`) e `:734` (`expiresAt … @db.Timestamptz(3)`); vermelho em `apps/scheduling-service/tests/unit/appointment-hold.test.ts` (passo `test:scheduling-service`) e em `apps/scheduling-service/tests/integration/goal009-occupancy.test.ts` (passo `test:scheduling-integration`) | EXECUTADO | — |
+| G-13 — agenda completa (Dia/Semana/Mês, exceções, bloqueios) | fechado | domínio em `apps/scheduling-service/tests/unit/goal009-occupancy.test.ts` e `apps/scheduling-service/tests/unit/goal016-time-blocks.test.ts` (passo `test:scheduling-service`); interface em `apps/frontend/src/features/agenda/AgendaBoard.tsx:54` (`type AgendaView = "day" \| "week" \| "month"`), vermelho em `apps/frontend/tests/goal016-agenda-views.test.tsx` (passo `test:frontend`) | EXECUTADO | — |
+| G-14 — identidade do cliente por pessoa | fechado | `apps/scheduling-service/prisma/schema.prisma:342` (`model Customer`, telefone opcional e não exclusivo); vermelho em `apps/scheduling-service/tests/integration/customer-identity.test.ts` (passo `test:scheduling-integration`) e nos checks `no_global_phone_unique_constraint` e `no_tenant_scoped_phone_unique_constraint` (passo `audit:static`) | EXECUTADO | — |
+| G-15 — clientes e memória autorizada | fechado | `apps/scheduling-service/prisma/schema.prisma:420` e `:440` (`aiAuthorized Boolean @default(false)` em `CustomerNote` e `CustomerTag`); vermelho em `apps/scheduling-service/tests/unit/customer-identity.test.ts` (passo `test:scheduling-service`) e em `apps/frontend/tests/goal015-customers.test.tsx` (passo `test:frontend`) | EXECUTADO | — |
+| G-16 — acordo comercial com quatro preços e snapshot | fechado | `apps/scheduling-service/prisma/schema.prisma:57` (`enum PriceType`), `:460` (`Service.priceType`), `:690` (`priceTypeSnapshot`); vermelho em `apps/scheduling-service/tests/unit/agreement-total.test.ts` (passo `test:scheduling-service`) | EXECUTADO | — |
+| G-17 — catálogo completo | fechado | `apps/scheduling-service/prisma/schema.prisma:466` (`needsReview`) e `:467` (`reviewOrigin`); vermelho em `apps/scheduling-service/tests/unit/service-catalog.test.ts` (passo `test:scheduling-service`) e em `apps/frontend/tests/goal015-services.test.tsx` (passo `test:frontend`) | EXECUTADO | — |
+| G-18 — histórico com quatro estados e presença separada | fechado | `apps/scheduling-service/prisma/migrations/20260909181000_goal008_appointment_status/migration.sql:66` (`Appointment_status_check`); vermelho em `apps/scheduling-service/tests/unit/appointment-lifecycle.test.ts` (passo `test:scheduling-service`) e no passo `rehearse:goal008-agenda-migration` | EXECUTADO | — |
+| G-19 — importação única com preview e conclusão explícita | fechado | `apps/scheduling-service/prisma/schema.prisma:1032` (`model ImportSession`), `:1176` (`model ImportItem`), `:1231` (`model ImportDecision`); vermelho em `apps/scheduling-service/tests/integration/goal010-import-completion.test.ts` (passo `test:scheduling-integration`) e no passo `rehearse:goal010-import-session-migration` | EXECUTADO | — |
+| G-20 — fidelidade do dado importado | fechado em parte | `apps/scheduling-service/src/modules/integrations/minha-agenda/client.ts` (validação por schema antes de qualquer mapeamento) e `types.ts`; vermelho em `apps/scheduling-service/tests/unit/minha-agenda-client.test.ts` e `apps/scheduling-service/tests/unit/minha-agenda-import-snapshot.test.ts` (passo `test:scheduling-service`) | EXECUTADO | O que está provado é o mapeamento contra payload sintético. **Nenhuma execução contra a origem real existe na árvore**: a capacidade efetiva da API Minha Agenda continua sendo incerteza aberta, e nenhum gate a cobre |
+| G-21 — três estilos de IA, sem persona | fechado | `apps/ai-orchestrator/prisma/schema.prisma:106`–`:108` (`PROFESSIONAL`, `BALANCED`, `CASUAL`), `apps/ai-orchestrator/src/modules/prompts/style.ts:12`; vermelho em `apps/ai-orchestrator/tests/prompts/system.test.ts:27` ("prompt montado: sem persona, identidade transparente e versao por estilo") e em `apps/ai-orchestrator/tests/tenant-config/ai-conversation-style.test.ts` (passo `test:ai-orchestrator`) | EXECUTADO | — |
+| G-22 — privacidade da conversa e Ignorar IA | fechado | `apps/ai-orchestrator/prisma/schema.prisma:79`–`:81` (`COMMERCIAL`/`UNCLASSIFIED`/`PERSONAL`), `:269` (`Contact.ignored`), `:333` (`ConversationSession.category`); vermelho em `apps/ai-orchestrator/tests/internal/ignored-contacts.routes.test.ts` (passo `test:ai-orchestrator`) e em `apps/frontend/tests/goal017-inbox-tabs.test.tsx` (passo `test:frontend`) | EXECUTADO | — |
+| G-23 — mídia entendida por tipo | fechado | `apps/ai-orchestrator/prisma/schema.prisma:420` (`model MessageAttachment`, só metadados); vermelho em `apps/ai-orchestrator/tests/media/media-metadata.test.ts` (passo `test:ai-orchestrator`), no passo `test:evolution-go-webhook-outbox` e no passo `rehearse:goal013-media-migration` | EXECUTADO | — |
+| G-24 — conhecimento e sugestões | fechado | `apps/ai-orchestrator/src/modules/internal/routes.ts:966` (`/internal/knowledge/documents`), `apps/ai-orchestrator/src/modules/knowledge/knowledge-document-service.ts`; vermelho em `apps/ai-orchestrator/tests/internal/knowledge.routes.test.ts` (passo `test:ai-orchestrator`) e no check `rag_is_tenant_scoped` (passo `audit:static`) | EXECUTADO | — |
+| G-25 — onboarding conclui sem WhatsApp; teste real ativa | fechado em parte | `apps/bff/src/modules/onboarding/routes.ts:206` (`POST /v1/onboarding/complete`); vermelho em `apps/bff/tests/goal018-onboarding-complete.integration.test.ts` (passo `test:bff-integration`) e na etapa 2 do passo `rehearse:goal030-mvp-journey` (elo `onboarding-ai-block`) | EXECUTADO | A ativação por **envio real** de WhatsApp continua sendo gate operacional: `apps/ai-orchestrator/tests/activation-test/activation-test-service.test.ts` exercita o driver com dublê, e nenhum passo de gate chega à fronteira Evolution real |
+| G-26 — dados do negócio consistentes, timezone único | fechado | `apps/bff/prisma/schema.prisma:138` (`timezone String @default("America/Sao_Paulo")`), `apps/bff/src/lib/timezone-reconciliation.ts`; vermelho no passo `rehearse:goal029-timezone-reconciliation` e na etapa 9 do passo `rehearse:goal030-mvp-journey` (elo `business-timezone`) | EXECUTADO | — |
+| G-27 — até dois lembretes, defaults e notificação de mudança | fechado | `apps/scheduling-service/prisma/schema.prisma:273` (`model ReminderSettings`) e `:293` (`model ReminderRule`), com `ReminderRule_slot_check` em `apps/scheduling-service/prisma/migrations/20260915120000_goal021_reminder_schedule/migration.sql:178`; vermelho no passo `rehearse:goal021-reminder-migration`, em `apps/scheduling-service/tests/unit/reminder-service.test.ts` (passo `test:scheduling-service`) e na etapa 7 do passo `rehearse:goal030-mvp-journey` (elo `reminder-rule`) | EXECUTADO | — |
+| G-28 — central de notificações e alerta externo | fechado em parte | central: `apps/bff/prisma/schema.prisma:396` (`model TenantNotification`) e `:428` (`model NotificationPreference`); vermelho em `apps/bff/tests/goal022-notification-center.integration.test.ts` (passo `test:bff-integration`) e na etapa 8 do passo `rehearse:goal030-mvp-journey` (elo `notification-read`) | EXECUTADO | **Alerta externo continua aberto e sem código**: busca por `nodemailer`, `sendgrid`, `resend` e `smtp` em `apps/*/src/**/*.ts` não retorna nenhuma ocorrência. Não existe provider de e-mail crítico na árvore; depende de U-03 |
+| G-29 — retenção de conteúdo e ciclo de vida da conta | fechado em parte | `apps/bff/prisma/schema.prisma:238` (`model RetentionSettings`), `:270` (`model RetentionSweepState`), `:331` (`model AccountDeletion`); vermelho no passo `test:ai-orchestrator-content-purge`, em `apps/bff/tests/goal025-account-lifecycle.integration.test.ts` (passo `test:bff-integration`) e nas etapas 10 e 11 do passo `rehearse:goal030-mvp-journey` | EXECUTADO | Não há prazo para o grupo `Não classificadas` em camada nenhuma — `RetentionSettings` tem só `commercialRetentionDays` (`schema.prisma:242`) e `personalRetentionDays` (`:244`). É U-01, e `apps/ai-orchestrator/tests/retention/content-purge.test.ts:276` existe justamente para provar que nada desse grupo é apagado |
+| G-30 — status honesto de IA e WhatsApp | fechado | `apps/bff/src/modules/status/routes.ts:51` (`GET /v1/status`); vermelho em `apps/bff/tests/goal014-status.integration.test.ts` (passo `test:bff-integration`) e em `apps/frontend/tests/goal018-dashboard-status.test.tsx` (passo `test:frontend`) | EXECUTADO | — |
+| G-31 — navegação e visual mobile-first | fechado | `apps/frontend/src/shared/layout/AppShell.tsx` e `ShellConfig.tsx`; vermelho em `apps/frontend/e2e/viewport-matrix.spec.ts` e `apps/frontend/e2e/accessibility.spec.ts` (gate `npm run validate:ui`) e nos testes `goal015-shell-invariant.test.tsx`, `goal016-shell-invariant.test.tsx`, `goal017-shell-invariant.test.tsx`, `goal020-shell-invariant.test.tsx`, `goal021-shell-invariant.test.tsx` e `goal024-settings-shell-invariant.test.tsx` (passo `test:frontend`) | EXECUTADO | — |
+| G-32 — contratos compartilhados entre frontend e backend | aberto | `packages/` contém apenas `legal-contract/`; não existe pacote de contratos na árvore. O alinhamento é sustentado por schemas Zod duplicados por app, conferidos só do lado do frontend (`apps/frontend/tests/goal016-schema.test.ts`, `goal020-schema.test.ts`, `goal021-reminders-schema.test.ts`, `goal022-notifications-schema.test.ts`) | INSPECIONADO | Não sei nomear passo de gate ou teste que fique vermelho quando o **BFF** divergir do schema que o frontend declara: os testes de schema afirmam o lado do consumidor contra fixture, não contra a rota real |
+| G-33 — repositório validável a cada Goal | fechado em parte | `scripts/validate-core.mjs:22` (lista `coreSteps`), `scripts/validate-integration.mjs`, `.github/workflows/validate.yml:48` e `:132`; vermelho no passo `test:gate-scripts`, que exercita os próprios scripts de gate | EXECUTADO | A parte de **deploy** continua sem prova: `render.yaml` declara `plan: free` para os quatro serviços web e nenhum passo de gate executa ou observa um deploy. O check `production_health` do passo `audit:static` é registrado como `skipped` quando `PRODUCTION_HEALTH_TARGETS` não é fornecido — e não foi, em nenhuma execução desta rodada |
+| G-34 — recuperação de senha somente visual no MVP | fechado | `apps/frontend/src/features/auth/recoveryMachine.ts:27` (`recoveryReducer`, redutor puro de quatro passos, sem `fetch`); vermelho em `apps/frontend/tests/goal014-auth.test.tsx` (passo `test:frontend`) | EXECUTADO | — |
+| G-35 — ownership de status de mensagem entre instâncias | fechado | `apps/evolution-go/pkg/message/repository/message_repository.go:42` (conflito resolvido por `(instance_id, message_id)`) e `:53`; vermelho em `TestMessageStatusOwnershipOverGinChain` e em `pkg/message/repository/message_ownership_test.go` (passo `test:evolution-go`) | EXECUTADO | — |
+
+## 2. Gates de migração — M0 a M6
+
+| Critério | Estado | Evidência apontável | Força | Achado |
+| --- | --- | --- | --- | --- |
+| M0 — inventário (versões, contagens, backup com restore ensaiado) | fechado em parte | `scripts/goal028-restore-rehearsal.mjs`, exercido pelo passo `rehearse:goal028-restore` | EXECUTADO | O restore ensaiado existe e roda. O **inventário de operação** (contagens por tenant, ownership e ambiguidades em banco implantado) não existe em lugar nenhum da árvore, porque não há ambiente implantado a inventariar |
+| M1 — expand (banco vazio e cópia sintética sobem) | fechado | passos `rehearse:goal003-link-migration`, `rehearse:goal004-transport-migration`, `rehearse:goal005-contact-session-migration`, `rehearse:goal006-customer-identity-migration`, `rehearse:goal006-ai-migration`, `rehearse:goal007-catalog-migration`, `rehearse:goal008-agenda-migration`, `rehearse:goal009-occupancy-migration`, `rehearse:goal010-import-session-migration`, `rehearse:goal011-ai-style-migration`, `rehearse:goal012-knowledge-memory-migration`, `rehearse:goal013-media-migration`, `rehearse:goal019-activation-test-migration`, `rehearse:goal021-reminder-migration`, `rehearse:goal022-notification-center-migration`, `rehearse:goal023-retention-migration`, `rehearse:goal027-calendar-source-migration` e `rehearse:goal028-release-migrations` | EXECUTADO | — |
+| M2 — readers entendem o novo antes de o producer emitir | fechado em parte | passos `test:bff-integration`, `test:scheduling-integration`, `test:ai-orchestrator-transport-durability` e `test:frontend` | EXECUTADO | "Binário anterior compatível" é conferido pelos ensaios de migration lendo e escrevendo no formato antigo; **nenhum gate executa o binário anterior de verdade**. Essa parte específica é `INSPECIONADO` |
+| M3 — backfill retomável, com contagens e órfãos isolados | fechado em parte | passos `rehearse:goal004-transport-migration`, `rehearse:goal013-media-migration` e `rehearse:goal023-retention-migration` (retomada e contagem linha a linha) | EXECUTADO | As contagens de entrada e saída existem contra estoque **sintético** semeado pelo próprio ensaio. Não há contagem por tenant sobre dado de operação |
+| M4 — corte do writer legado e transferência de controle | fechado em parte | `apps/scheduling-service/prisma/migrations/20260919120000_goal027_calendar_source_atendly/migration.sql:51`; vermelho em `apps/scheduling-service/tests/unit/calendar-provider-factory.test.ts` e `apps/scheduling-service/tests/unit/goal027-calendar-guard.test.ts` (passo `test:scheduling-service`) | EXECUTADO | O corte está no código e é travado por constraint. O **freeze da fonte remota** nunca foi executado: não existe origem real conectada a nenhum gate |
+| M5 — observar (sem chamada ao writer legado, sem drift) | fechado em parte | passos `rehearse:goal028-release-migrations` (histórico aplicado do zero e ausência de drift contra `schema.prisma`) e `rehearse:goal028-restore` | EXECUTADO | A observação existe apenas em máquina descartável. Backlog, taxa de erro e divergência de projeção em operação continuam sem medição |
+| M6 — retirar código, rotas e campos obsoletos | fechado em parte | checks `no_legacy_calendar_migration_routes`, `no_calendar_migration_service_reference`, `minha_agenda_origin_has_no_writer`, `no_external_calendar_source_comparison`, `no_removed_calendar_error_codes`, `no_require_atendly_calendar_reference` e `ai_does_not_access_minha_agenda`, todos do passo `audit:static`; busca por `MinhaAgendaCalendarProvider` em `apps/**/*.ts` não retorna nenhuma ocorrência | EXECUTADO | O que foi retirado é o protocolo pré-Goal010, o writer remoto e o dado de `calendar.source`. A leitura de importação (`apps/scheduling-service/src/modules/integrations/minha-agenda/`) **permanece de propósito** — é a fonte da importação única, não legado a retirar. "Janela compatível encerrada e plano de restore seguro" não tem artefato próprio além do ensaio de restore |
+
+## 3. Incertezas isoladas
+
+### 3.1 Incertezas com ID
+
+| Critério | Estado | Evidência apontável | Força | Achado |
+| --- | --- | --- | --- | --- |
+| U-01 — prazo de conteúdo do grupo `Não classificadas` | aberto | `apps/bff/prisma/schema.prisma:242` e `:244`: `RetentionSettings` só tem `commercialRetentionDays` e `personalRetentionDays`; `apps/ai-orchestrator/tests/retention/content-purge.test.ts:276` ("nunca apaga mensagem governada por sessao nao classificada (U-01)") fica vermelho se alguém passar a apagar esse grupo (passo `test:ai-orchestrator-content-purge`) | EXECUTADO | A incerteza segue aberta como decisão de produto, e a árvore a mantém segura por teste: nada do grupo é apagado enquanto a decisão não existir. Nenhuma copy da interface promete removê-lo |
+| U-02 — tratamento de `MigrationJob.COMPLETED` legado | fechado | `apps/scheduling-service/prisma/schema.prisma:901` (`legacyClass … @default(UNCLASSIFIED)`) e `:905` (`legacyReviewReason`, motivo sanitizado de `NEEDS_REVIEW`); vermelho em `apps/scheduling-service/tests/unit/legacy-job-reconciliation.test.ts` (passo `test:scheduling-service`) | EXECUTADO | Resolvida por classificação, nunca por conversão: nenhuma linha é apagada ou reescrita |
+| U-03 — custo e provider para execução contínua e e-mail crítico | aberto | busca por `nodemailer`, `sendgrid`, `resend` e `smtp` em `apps/*/src/**/*.ts` não retorna ocorrência; `render.yaml:5`, `:26`, `:101` e `:163` declaram `plan: free` nos quatro serviços web | INSPECIONADO | Não sei nomear gate ou teste que fique vermelho se a capacidade contínua deixar de existir — por construção, nenhum gate observa processo em operação. O check `production_health` do passo `audit:static` só sai de `skipped` com `PRODUCTION_HEALTH_TARGETS`, que nenhuma execução desta rodada forneceu |
+
+### 3.2 Incertezas sem ID
+
+Cinco questões isoladas em `GAP_ANALYSIS`, sem identificador próprio. Estão no
+inventário porque o critério da auditoria é a incerteza, não o rótulo dela.
+
+| Critério | Estado | Evidência apontável | Força | Achado |
+| --- | --- | --- | --- | --- |
+| Há tenants e dados legados em operação? | aberto | nenhum artefato da árvore responde; o único inventário existente é o sintético semeado por `scripts/goal028-restore-rehearsal.mjs` | DECLARADO | Não há banco implantado acessível a este repositório: a pergunta não é respondível pela árvore |
+| Capacidade completa da API Minha Agenda | aberto | `apps/scheduling-service/src/modules/integrations/minha-agenda/types.ts` declara o que o mapper aceita; `apps/scheduling-service/tests/unit/minha-agenda-client.test.ts` exercita só payload sintético | INSPECIONADO | Limitação do mapper não prova limitação da origem. Nenhum gate chama a origem real |
+| Conclusão de importação legada conta como única? | fechado | `apps/scheduling-service/prisma/schema.prisma:901`; vermelho em `apps/scheduling-service/tests/unit/legacy-job-reconciliation.test.ts` (passo `test:scheduling-service`) | EXECUTADO | Resolvida junto com U-02 |
+| Capacidade contínua do deploy e e-mail crítico | aberto | ausência de provider em `apps/*/src` e `plan: free` em `render.yaml:5`, `:26`, `:101`, `:163` | INSPECIONADO | Mesma limitação de U-03 |
+| SLA, RPO/RTO e volume | aberto | `scripts/goal028-restore-rehearsal.mjs` mede restore em máquina descartável; nenhum artefato da árvore mede volume ou janela de indisponibilidade | INSPECIONADO | Medição real depende de operação que não existe. Nenhum número de SLA, RPO ou RTO é afirmado por código |
+
+## 4. Guardrails de `AGENTS.md` verificáveis em código
+
+| Critério | Estado | Evidência apontável | Força | Achado |
+| --- | --- | --- | --- | --- |
+| Agenda Atendly é a única fonte oficial da operação | fechado | `apps/scheduling-service/prisma/migrations/20260919120000_goal027_calendar_source_atendly/migration.sql:51`; checks `no_external_calendar_source_comparison` e `no_require_atendly_calendar_reference` (passo `audit:static`) | EXECUTADO | — |
+| Minha Agenda existe só como fonte de uma importação única | fechado | checks `minha_agenda_origin_has_no_writer` e `ai_does_not_access_minha_agenda` (passo `audit:static`) | EXECUTADO | — |
+| Não há sincronização contínua, troca de fonte ativa, reimportação ou modo híbrido | fechado | checks `no_legacy_calendar_migration_routes` e `no_calendar_migration_service_reference` (passo `audit:static`); vermelho em `apps/scheduling-service/tests/unit/calendar-provider-factory.test.ts` (passo `test:scheduling-service`) | EXECUTADO | — |
+| Depois de `Concluir importação` não existe nova importação | fechado | `apps/scheduling-service/src/modules/migrations/import-completion-service.ts`; vermelho em `apps/scheduling-service/tests/integration/goal010-import-completion.test.ts` (passo `test:scheduling-integration`) | EXECUTADO | — |
+| Nunca inventar disponibilidade, preço, serviço ou confirmação | fechado | check `llm_cannot_create_appointments_directly` (passo `audit:static`); vermelho em `apps/ai-orchestrator/tests/tools/effect-guard.test.ts` e `apps/ai-orchestrator/tests/evals/out-of-reach-and-handoff.eval.test.ts:29` (passo `test:ai-orchestrator`) | EXECUTADO | — |
+| Nunca mostrar sucesso antes de a operação concluir | fechado | vermelho em `apps/ai-orchestrator/tests/tools/explicit-confirmation.test.ts` e em `apps/ai-orchestrator/tests/evals/conversation-policies.eval.test.ts:287` ("confirmação explícita e rascunho que sobrevive à conversa"), passo `test:ai-orchestrator` | EXECUTADO | — |
+| Remarcação preserva o horário anterior até confirmar o novo | fechado | `apps/scheduling-service/prisma/schema.prisma:706`; vermelho em `apps/scheduling-service/tests/unit/appointment-hold.test.ts` (passo `test:scheduling-service`) | EXECUTADO | — |
+| Cancelamento preserva histórico | fechado | `apps/scheduling-service/prisma/migrations/20260909181000_goal008_appointment_status/migration.sql:66`; vermelho em `apps/scheduling-service/tests/unit/appointment-lifecycle.test.ts` (passo `test:scheduling-service`) | EXECUTADO | — |
+| Alterações no catálogo não reescrevem agendamentos combinados | fechado | `apps/scheduling-service/prisma/schema.prisma:690` (`priceTypeSnapshot` em `AppointmentItem`); vermelho em `apps/scheduling-service/tests/unit/agreement-total.test.ts` (passo `test:scheduling-service`) | EXECUTADO | — |
+| Um negócio usa um único número de WhatsApp | fechado | `apps/bff/prisma/schema.prisma:179`; vermelho em `apps/bff/tests/tenant-instance-link.integration.test.ts` (passo `test:bff-integration`) | EXECUTADO | Mesmo achado de G-02 sobre `NULL` no índice único |
+| O número pode ser pessoal e profissional ao mesmo tempo | fechado | checks `no_global_phone_unique_constraint` e `no_tenant_scoped_phone_unique_constraint` (passo `audit:static`); `apps/scheduling-service/prisma/schema.prisma:342` | EXECUTADO | — |
+| Quando o profissional responde manualmente, a IA sai de cena | fechado | `apps/ai-orchestrator/src/modules/graph/message-graph.ts:579` e `:601`; vermelho em `apps/ai-orchestrator/tests/integration/human-control-graph.test.ts` (passo `test:ai-orchestrator-transport-durability`) | EXECUTADO | — |
+| Conversas organizadas em `Comercial`, `Não classificadas` e `Pessoal` | fechado | `apps/ai-orchestrator/prisma/schema.prisma:79`–`:81`; vermelho em `apps/frontend/tests/goal017-inbox-tabs.test.tsx` (passo `test:frontend`) | EXECUTADO | — |
+| Contatos em `Ignorar IA` nunca são atendidos pela IA | fechado | `apps/ai-orchestrator/prisma/schema.prisma:269` (`Contact.ignored`), aplicado em `apps/ai-orchestrator/src/modules/graph/graph-state.ts:169`; vermelho em `apps/ai-orchestrator/tests/internal/ignored-contacts.routes.test.ts` e `apps/ai-orchestrator/tests/inbox/inbox-policy.test.ts` (passo `test:ai-orchestrator`) | EXECUTADO | — |
+| Grupos não são atendidos pela IA no MVP | fechado | `apps/ai-orchestrator/src/modules/channel/InboundMessageProcessor.ts:239` (`if (message.isGroup && env.EVOLUTION_IGNORE_GROUPS)`), com default `true` em `apps/ai-orchestrator/src/config/env.ts:90`; vermelho em `apps/ai-orchestrator/tests/channel/inbound-message-processor.test.ts` (passo `test:ai-orchestrator`) | EXECUTADO | O guardrail é **condicionado a variável de ambiente**, não a invariante de código: `EVOLUTION_IGNORE_GROUPS=false` em operação reabre o atendimento de grupos sem nenhum gate ficar vermelho. O default seguro é o que sustenta a regra hoje |
+| Três estilos de IA (`Profissional`, `Equilibrada`, `Descontraída`), sem persona nem opção personalizada | fechado | `apps/ai-orchestrator/src/modules/prompts/style.ts:12` e `:30`; `apps/ai-orchestrator/src/modules/prompts/system.ts:80`; vermelho em `apps/ai-orchestrator/tests/prompts/system.test.ts:27` (passo `test:ai-orchestrator`) | EXECUTADO | — |
+| A IA fala em nome do negócio e não alega ser humana | fechado | `apps/ai-orchestrator/src/modules/prompts/system.ts:59` e `:80`; vermelho em `apps/ai-orchestrator/tests/evals/style-and-persona.eval.test.ts` (passo `test:ai-orchestrator`) | EXECUTADO | — |
+| A IA não negocia desconto nem cria encaixe sozinha | fechado | `apps/ai-orchestrator/tests/evals/out-of-reach-and-handoff.eval.test.ts:29` (predicado aplicado ao que o runtime ofereceu ao modelo); vermelho no passo `test:ai-orchestrator` | EXECUTADO | — |
+| A IA faz handoff quando não consegue resolver com segurança | fechado | `apps/ai-orchestrator/tests/evals/out-of-reach-and-handoff.eval.test.ts:31` ("pedido fora do alcance da IA termina em handoff"); vermelho no passo `test:ai-orchestrator` | EXECUTADO | — |
+| A IA usa histórico para reduzir perguntas, mas confirma o que altera um agendamento | fechado | vermelho em `apps/ai-orchestrator/tests/evals/customer-memory.eval.test.ts` e `apps/ai-orchestrator/tests/tools/explicit-confirmation.test.ts` (passo `test:ai-orchestrator`) | EXECUTADO | — |
+| A IA não envia mensagem técnica de "aguarde enquanto consulto" | aberto | `apps/ai-orchestrator/src/modules/prompts/system.ts` não contém nenhuma regra sobre mensagem de espera: busca por `espera`, `aguarde`, `vou consultar` e `um momento` no arquivo não retorna ocorrência | INSPECIONADO | **Achado da auditoria.** Este guardrail não está no prompt nem em teste algum. Não sei nomear nada que fique vermelho se o modelo passar a anunciar consulta. `apps/ai-orchestrator/tests/evals/tool-failure-vocabulary.eval.test.ts` cobre vocabulário de **falha** de tool, que é outro caso |
+| Mobile → Tablet → Notebook → Desktop, com mobile como experiência primária | fechado | `apps/frontend/playwright.config.ts:26` (`VIEWPORTS`, começando em `mobile-360`); vermelho em `apps/frontend/e2e/viewport-matrix.spec.ts` (gate `npm run validate:ui`) | EXECUTADO | — |
+| Acessibilidade, contraste e touch targets preservados | fechado | vermelho em `apps/frontend/e2e/accessibility.spec.ts` (gate `npm run validate:ui`) e nos testes `goal016-a11y.test.tsx`, `goal017-a11y.test.tsx`, `goal018-a11y.test.tsx`, `goal019-a11y.test.tsx`, `goal020-a11y.test.tsx` e `goal021-a11y.test.tsx` (passo `test:frontend`) | EXECUTADO | — |
+| MVP em tema claro | fechado | `apps/frontend/src/app/globals.css` não contém `dark` nem `prefers-color-scheme` (zero ocorrências) | INSPECIONADO | Nenhum gate fica vermelho se alguém introduzir tema escuro: a ausência é fato da árvore, não invariante verificada |
+| Onboarding em quatro blocos; pular WhatsApp encerra o onboarding e deixa checklist na Home | fechado | `apps/bff/src/lib/onboarding-state.ts:89` (`onboardingIssues`) e `apps/bff/src/modules/dashboard/routes.ts:73` (mesmo predicado); vermelho em `apps/bff/tests/goal018-onboarding-complete.integration.test.ts` e `apps/bff/tests/goal027-onboarding-issues.test.ts`, e na etapa 2 do passo `rehearse:goal030-mvp-journey` | EXECUTADO | — |
+| Frontend fala só com o BFF e não carrega mocks | fechado | checks `frontend_calls_only_bff` e `frontend_mocks_directory_is_absent` (passo `audit:static`) | EXECUTADO | — |
+| Estados de IA e WhatsApp não induzem o usuário a acreditar que algo funciona quando não funciona | fechado | `apps/bff/src/modules/status/routes.ts:51` (estado `UNKNOWN` explícito); vermelho em `apps/bff/tests/goal014-status.integration.test.ts` (passo `test:bff-integration`) e em `apps/frontend/tests/goal018-dashboard-status.test.tsx` (passo `test:frontend`) | EXECUTADO | — |
+
+### Guardrails de `AGENTS.md` fora do inventário, e por quê
+
+Não são verificáveis em código porque regulam o **trabalho**, não o produto em
+execução: a ordem de autoridade entre vault, `AGENTS.md` e implementação; a
+leitura seletiva do vault; a regra para documentação antiga; o limite entre
+produto e engenharia; o checklist de qualidade de produto; e o uso de Graphify
+e RTK. A regra "existe um único MVP" também fica fora: ela proíbe uma decisão
+de planejamento, não um estado de código.
+
+## 5. Interface — o que o gate renderizado decide e o que ele não decide
+
+O gate renderizado é `npm run validate:ui`: Playwright sobre Chromium, com
+`apps/frontend/playwright.config.ts:26` (`VIEWPORTS`) definindo as cinco
+larguras e `apps/frontend/e2e/viewport-matrix.spec.ts` e
+`apps/frontend/e2e/accessibility.spec.ts` definindo o que é medido. Quem
+executou foi a WU-08 desta rodada (exit 0, 48878 ms). Esta seção não reexecutou
+o gate: ela lê o relatório que aquela execução deixou em
+`apps/frontend/e2e-results/results.json` — 47896 ms de suíte, 169 `expected`,
+21 `skipped`, 0 `unexpected`, 0 `flaky`.
+
+### 5.1 Resultado real por largura
+
+| Projeto | Viewport | Passou | Falhou | Pulado |
+| --- | --- | --- | --- | --- |
+| `mobile-360` | 360×740, com toque | 38 | 0 | 0 |
+| `mobile-390` | 390×844, com toque | 38 | 0 | 0 |
+| `tablet-768` | 768×1024 | 31 | 0 | 7 |
+| `notebook-1024` | 1024×768 | 31 | 0 | 7 |
+| `desktop-1440` | 1440×900 | 31 | 0 | 7 |
+
+Os 21 pulos são um único teste — `touch targets are reachable on a touch
+screen` — nas sete rotas das três larguras sem toque, por `test.skip` declarado
+em `apps/frontend/e2e/viewport-matrix.spec.ts:102` ("touch targets are a
+touch-screen rule"). Nenhum outro teste foi pulado em nenhuma largura.
+
+### 5.2 O que o gate decide
+
+| O gate decide | Como decide | Onde |
+| --- | --- | --- |
+| Overflow horizontal | `document.scrollWidth` não passa de `clientWidth` mais 1px de tolerância, e o primeiro elemento que estoura é nomeado no erro | `viewport-matrix.spec.ts:65` ("nothing overflows sideways"), 7 rotas × 5 larguras |
+| Alvo de toque mínimo AA de 24px | mede cada `a[href]`, `button`, `input`, `select` e `textarea` renderizado e falha abaixo de 24px em qualquer eixo (WCAG 2.5.8 AA), isentando link dentro de frase | `viewport-matrix.spec.ts:101`, só em `mobile-360` e `mobile-390` |
+| Contraste real computado | axe-core sobre a página renderizada, com as tags `wcag2a`, `wcag2aa`, `wcag21a` e `wcag21aa`; é o único lugar onde `color-contrast` roda, porque jsdom não resolve cor computada | `accessibility.spec.ts:18`, 7 rotas × 5 larguras |
+| Que o próprio contraste está sendo avaliado | injeta texto `#bbbbbb` sobre `#cccccc` e exige que o axe aponte `color-contrast`; sem isso, contraste poderia estar desligado em toda parte com suíte verde | `accessibility.spec.ts:45` ("contrast really is being evaluated here") |
+| Foco visível | o primeiro `Tab` precisa sair do `body`, cair em elemento com caixa e ter `outline` ou `box-shadow` | `accessibility.spec.ts:71`, apenas em `/login` |
+| `prefers-reduced-motion` | com `reducedMotion: "reduce"`, nenhum elemento pode ter animação ou transição acima de 0,2s | `accessibility.spec.ts:100`, apenas em `/login` |
+| Um único `h1` por rota | `expect(page.locator("h1")).toHaveCount(1)` | `viewport-matrix.spec.ts:95`, 7 rotas × 5 larguras |
+
+### 5.3 O que o gate não decide
+
+| O gate não decide | Por quê |
+| --- | --- |
+| **Fidelidade visual à referência aprovada** (`docs/design-reference/claude-design/`) | o screenshot de página inteira é anexado como artefato para uma pessoa olhar, nunca como aprovação ou reprovação — está escrito no próprio teste (`viewport-matrix.spec.ts:174`). **Continua sendo conferência humana, e este relatório não afirma em nenhum ponto que a fidelidade visual está provada por teste** |
+| Qualquer tela autenticada | `apps/frontend/e2e/routes.ts:9` lista sete rotas públicas (`/login`, `/cadastro`, `/recuperar-senha`, `/solicitacao-enviada`, `/link-expirado`, `/termos-de-uso`, `/politica-de-privacidade`). Home, Agenda, Inbox, Clientes, Serviços e Configurações não são medidas em largura nenhuma — é o achado A-02 |
+| Alvo de toque em tablet, notebook e desktop | pulado por decisão declarada: são os 21 `skipped` da §5.1 |
+| O alvo "confortável" de 44px (WCAG 2.5.5 AAA) | medido e anexado como relatório, nunca como falha (`viewport-matrix.spec.ts:161`), para que o gate não nasça vermelho |
+| Comportamento em Firefox e WebKit | os cinco projetos usam `devices["Desktop Chrome"]` (`playwright.config.ts:58` e `:61`); só o motor Chromium é exercitado |
+| Layout sobre dado real de um negócio | o gate não fabrica sessão, de propósito: uma sessão falsa provaria layout sobre dado que nenhum usuário vê (`routes.ts:4`) |
+
+### 5.4 O que a medição de toque devolveu
+
+Os três alvos abaixo de 24px que o gate carrega como exceção nomeada em
+`KNOWN_SMALL_TARGETS` (`viewport-matrix.spec.ts:41`) **continuam
+reproduzindo**: o próprio teste falha se uma exceção deixar de reproduzir, e
+ele passou. Medidas reais lidas dos anexos da execução da WU-08:
+
+| Rota | Controle | `mobile-360` | `mobile-390` | Régua |
+| --- | --- | --- | --- | --- |
+| `/login` | `<input type="checkbox" name="remember">` | 13×13 | 13×13 | abaixo dos 24px de AA |
+| `/cadastro` | `<input type="checkbox" required name="terms">` | 13×13 | 13×13 | abaixo dos 24px de AA |
+| `/link-expirado` | `<a class="auth-link">Voltar para entrar</a>` | 115×18 | 115×18 | abaixo dos 24px de AA |
+| todas as sete | `<a>Atendly — Início</a>` (marca no topo) | 320×28 | 350×28 | abaixo dos 44px confortáveis, acima de AA |
+| `/login` | `<a>Esqueci minha senha</a>` | 109×42 | 120×42 | abaixo dos 44px confortáveis, acima de AA |
+
+## 6. Achados — A-01 a A-19
+
+Cada achado tem identificador estável `A-NN`, classificação em vocabulário
+fechado, reprodução e impacto de produto em uma frase. O identificador é
+estável: um achado corrigido não é renumerado nem reaproveitado.
+
+**Classificação** — vocabulário fechado:
+
+| Classificação | Significa |
+| --- | --- |
+| `BLOQUEADOR-MVP` | o produto não deveria chegar ao primeiro usuário real assim, e existe **reprodução executável** do defeito |
+| `PENDENCIA-POS-MVP` | precisa ser resolvido, mas não impede o primeiro usuário real — ou impediria, e foi rebaixado por não ter reprodução executável, com o motivo escrito no próprio achado |
+| `LIMITE-DECLARADO` | limite conhecido e assumido do MVP ou desta auditoria; não há o que corrigir, há o que não prometer |
+
+Duas regras que esta lista obedece. A primeira: **`BLOQUEADOR-MVP` sem
+reprodução executável é rebaixado a `PENDENCIA-POS-MVP` com o motivo escrito** —
+sem isso, "bloqueador" viraria opinião. A segunda: **auditoria não corrige
+defeito de produto**; nenhum arquivo de `apps/*/src` foi tocado por esta
+unidade, e toda correção listada abaixo pertence a um Goal próprio.
+
+| ID | Achado | Classificação | Origem no inventário |
+| --- | --- | --- | --- |
+| A-01 | Alvos de toque abaixo do mínimo AA de 24px nas telas públicas em mobile | BLOQUEADOR-MVP | §5.4 e o guardrail "Acessibilidade, contraste e touch targets preservados" |
+| A-02 | O gate renderizado não mede nenhuma tela autenticada | PENDENCIA-POS-MVP | §5.3, G-31 |
+| A-03 | Não existe contrato compartilhado entre BFF e frontend, e o BFF não valida a própria resposta | PENDENCIA-POS-MVP | G-32 |
+| A-04 | Nenhum deploy real foi executado ou observado | PENDENCIA-POS-MVP (rebaixado) | G-33 |
+| A-05 | Capacidade contínua e provider de e-mail crítico seguem sem decisão e sem código | PENDENCIA-POS-MVP | U-03 e a incerteza sem ID equivalente |
+| A-06 | O alerta externo da central de notificações não existe em código | PENDENCIA-POS-MVP | G-28 |
+| A-07 | O freeze da fonte remota nunca foi executado | PENDENCIA-POS-MVP (rebaixado) | M4 |
+| A-08 | A ativação por envio real de WhatsApp nunca foi exercida | PENDENCIA-POS-MVP (rebaixado) | G-25 |
+| A-09 | O guardrail "não envia mensagem técnica de espera" não existe no prompt nem em teste | PENDENCIA-POS-MVP | guardrail de `AGENTS.md` |
+| A-10 | "Grupos não são atendidos pela IA" depende de variável de ambiente, não de invariante | PENDENCIA-POS-MVP | guardrail de `AGENTS.md` |
+| A-11 | A unicidade de `tenantId` não restringe múltiplos `NULL` | LIMITE-DECLARADO | G-02 |
+| A-12 | O grupo `Não classificadas` segue sem prazo de retenção | LIMITE-DECLARADO | U-01 e G-29 |
+| A-13 | A origem real da Minha Agenda nunca foi chamada por gate nenhum | PENDENCIA-POS-MVP | G-20 e a incerteza sem ID equivalente |
+| A-14 | Não se sabe se existem tenants e dados legados em operação | PENDENCIA-POS-MVP | única linha `DECLARADO` do inventário (§3.2) |
+| A-15 | M0, M3 e M5 são verdes sobre estoque sintético | LIMITE-DECLARADO | M0, M3, M5 |
+| A-16 | O binário anterior nunca foi executado de verdade contra o schema novo | LIMITE-DECLARADO | M2 |
+| A-17 | "Janela compatível encerrada e plano de restore seguro" não tem artefato próprio | LIMITE-DECLARADO | M6 |
+| A-18 | O tema claro é fato da árvore, não invariante verificada | LIMITE-DECLARADO | guardrail "MVP em tema claro" |
+| A-19 | SLA, RPO/RTO e volume não têm medição | LIMITE-DECLARADO | incerteza sem ID equivalente |
+
+### A-01 — Alvos de toque abaixo do mínimo AA de 24px nas telas públicas em mobile
+
+**Classificação:** `BLOQUEADOR-MVP`.
+
+**Reprodução (executável):**
+
+```
+cd apps/frontend
+npx playwright test --project=mobile-360 e2e/viewport-matrix.spec.ts -g "touch targets"
+```
+
+O teste passa **porque os três alvos continuam pequenos**: eles estão em
+`KNOWN_SMALL_TARGETS` (`apps/frontend/e2e/viewport-matrix.spec.ts:41`) e a
+asserção de exceção obsoleta (`:143`–`:147`) fica vermelha se algum deles deixar de
+reproduzir. Apagar as três entradas dessa lista e repetir o comando deixa o
+gate vermelho com as medidas exatas. Na execução da WU-08 desta rodada, as
+medidas são as da §5.4, lidas de `apps/frontend/e2e-results/results.json`
+(anexos `below-44px-entrar`, `below-44px-criar-conta` e
+`below-44px-link-expirado`, projetos `mobile-360` e `mobile-390`): checkbox de
+13×13 em `/login` e em `/cadastro`, link de 115×18 em `/link-expirado`.
+
+**Impacto de produto:** na experiência primária do produto, o controle que
+aceita os termos legais do cadastro tem 13×13 pixels e é difícil de acertar com
+o dedo, o que é falha de WCAG 2.5.8 AA em um passo obrigatório de entrada.
+
+**Por que não é `LIMITE-DECLARADO`:** a exceção foi registrada com prazo
+explícito — "Goal014 refaz o login no visual aprovado (critério 6)" e "Goal014
+refaz o cadastro e o aceite legal (critério 6)". O Goal014 foi concluído e a
+dívida sobreviveu a ele. Registrar isso não reabre Goal aceito e não é correção
+de produto: a correção é Goal próprio, e o que a auditoria deve a esse Goal é o
+identificador `A-01`, a medida real e o comando que a reproduz.
+
+### A-02 — O gate renderizado não mede nenhuma tela autenticada
+
+**Classificação:** `PENDENCIA-POS-MVP`.
+
+**Reprodução:** `apps/frontend/e2e/routes.ts:9` lista as sete rotas públicas
+que o gate alcança; nenhuma rota de Home, Agenda, Inbox, Clientes, Serviços ou
+Configurações aparece ali, e o comentário do arquivo diz por quê — estender o
+gate exige dar a ele uma sessão real, que é decisão própria.
+
+**Impacto de produto:** overflow horizontal, contraste e alvo de toque estão
+medidos apenas nas telas que o usuário vê antes de entrar, e a Agenda em 360px
+— que é onde o produto realmente vive — não tem medição nenhuma.
+
+### A-03 — Não existe contrato compartilhado entre BFF e frontend
+
+**Classificação:** `PENDENCIA-POS-MVP`.
+
+**Reprodução (executável, declarada como reprodução de achado):**
+
+```
+node apps/bff/tests/goal030-a03-contract-drift.repro.mjs
+```
+
+O arquivo é reprodução de achado, não teste do gate: o nome termina em
+`.repro.mjs`, o Vitest só coleta arquivo cujo nome contém `.test.` ou `.spec.`,
+e `npx vitest list --filesOnly` em `apps/bff` devolve 40 arquivos, nenhum deles
+este. Ele fica **fora do caminho verde** de `test:bff-integration` de propósito
+e não é pulado em silêncio: está declarado aqui, com o resultado que produziu
+nesta rodada — **exit 1** ("A-03 REPRODUZ"), com 106 formatos de resposta
+declarados pelo frontend em
+`apps/frontend/src/data/mappers/publicApiSchemas.ts`, 0 consumidores dessas
+declarações fora de `apps/frontend`, `packages/` contendo apenas
+`legal-contract` e **0 das 115 rotas públicas do BFF validando a própria
+resposta**. Exit 0 passaria a significar que alguém fechou G-32.
+
+**Impacto de produto:** o BFF pode mudar o corpo que devolve sem nada ficar
+vermelho, e a divergência aparece pela primeira vez como tela quebrada para o
+usuário.
+
+**Nota:** a fronteira oposta é guardada — o BFF valida com Zod o que recebe do
+ai-orchestrator (`apps/bff/src/clients/ai-orchestrator/index.ts:141`,
+`envelope`). É a fronteira pública, a que o usuário vê, que está sem guarda.
+
+### A-04 — Nenhum deploy real foi executado ou observado
+
+**Classificação:** `PENDENCIA-POS-MVP`, **rebaixado de `BLOQUEADOR-MVP`**.
+
+**Motivo do rebaixamento (escrito, conforme a regra):** não existe reprodução
+executável dentro desta árvore. O único passo que olharia um ambiente é
+`production_health`, do passo `audit:static`, e ele se declara `skipped` sem
+`PRODUCTION_HEALTH_TARGETS` — variável que nenhuma execução desta rodada
+forneceu, porque não há URL implantada para apontar. Um achado cuja reprodução
+depende de um ambiente que não existe não pode ser `BLOQUEADOR-MVP` por esta
+regra, e afirmar o contrário seria a mesma inversão que esta auditoria existe
+para evitar.
+
+**Reprodução:** `node scripts/final-production-audit.mjs` e ler o check
+`production_health` como `skipped`; `render.yaml` declara `plan: free` em sete
+pontos, entre eles os quatro serviços web (`:5`, `:26`, `:101`, `:163`).
+
+**Impacto de produto:** nada nesta árvore prova que o produto sobe, responde e
+continua de pé fora da máquina do desenvolvedor, então "MVP pronto" significa
+hoje "pronto até a fronteira do deploy".
+
+### A-05 — Capacidade contínua e e-mail crítico sem decisão e sem código
+
+**Classificação:** `PENDENCIA-POS-MVP`.
+
+**Reprodução:** busca por `nodemailer`, `sendgrid`, `resend` e `smtp` em
+`apps/*/src/**/*.ts` não retorna nenhuma ocorrência; `render.yaml:5`, `:26`,
+`:101` e `:163` declaram `plan: free` nos quatro serviços web.
+
+**Impacto de produto:** um plano que hiberna e a ausência de qualquer provider
+de e-mail significam que um lembrete no horário e um alerta crítico fora do
+aplicativo são promessas que nenhuma parte do sistema pode cumprir hoje.
+
+### A-06 — O alerta externo da central de notificações não existe em código
+
+**Classificação:** `PENDENCIA-POS-MVP`.
+
+**Reprodução:** a central existe e é exercitada
+(`apps/bff/tests/goal022-notification-center.integration.test.ts`, passo
+`test:bff-integration`); a busca da A-05 mostra que o canal externo não tem
+nenhuma implementação.
+
+**Impacto de produto:** o profissional só descobre um evento crítico se abrir o
+aplicativo, que é exatamente o caso que o alerta externo deveria cobrir.
+
+### A-07 — O freeze da fonte remota nunca foi executado
+
+**Classificação:** `PENDENCIA-POS-MVP`, **rebaixado de `BLOQUEADOR-MVP`**.
+
+**Motivo do rebaixamento (escrito):** o freeze é ato operacional sobre uma
+origem externa; não existe origem real conectada a gate nenhum, então não há
+reprodução executável possível dentro da árvore.
+
+**Reprodução:** o corte do writer legado está no código e é travado por
+constraint
+(`apps/scheduling-service/prisma/migrations/20260919120000_goal027_calendar_source_atendly/migration.sql:51`,
+vermelho em `apps/scheduling-service/tests/unit/goal027-calendar-guard.test.ts`);
+nenhum passo de `validate:integration` toca a origem remota.
+
+**Impacto de produto:** se a origem continuar aceitando escrita durante a
+importação de um negócio real, o dado importado nasce desatualizado e ninguém é
+avisado.
+
+### A-08 — A ativação por envio real de WhatsApp nunca foi exercida
+
+**Classificação:** `PENDENCIA-POS-MVP`, **rebaixado de `BLOQUEADOR-MVP`**.
+
+**Motivo do rebaixamento (escrito):** a reprodução exigiria um número real
+conectado à Evolution;
+`apps/ai-orchestrator/tests/activation-test/activation-test-service.test.ts`
+exercita o driver com dublê e nenhum passo de gate chega à fronteira real.
+
+**Reprodução:** seguir a etapa 2 do passo `rehearse:goal030-mvp-journey` e
+observar que ela termina no bloqueio de onboarding (elo `onboarding-ai-block`),
+sem nenhum envio real.
+
+**Impacto de produto:** o negócio conclui o onboarding sem WhatsApp, como o
+produto promete, mas ninguém provou que a primeira mensagem real chega ao
+cliente.
+
+### A-09 — O guardrail "não envia mensagem técnica de espera" não existe
+
+**Classificação:** `PENDENCIA-POS-MVP`.
+
+**Reprodução:** buscar `aguarde`, `espera`, `vou consultar` e `um momento` em
+`apps/ai-orchestrator/src/modules/prompts/system.ts` não retorna nenhuma
+ocorrência, e nenhum eval cobre o caso —
+`apps/ai-orchestrator/tests/evals/tool-failure-vocabulary.eval.test.ts` trata
+de vocabulário de **falha** de tool, que é outro caso.
+
+**Impacto de produto:** a IA pode anunciar "vou consultar a agenda" e deixar o
+cliente esperando uma resposta que ela já ia dar, sem que nada fique vermelho.
+
+### A-10 — "Grupos não são atendidos pela IA" depende de variável de ambiente
+
+**Classificação:** `PENDENCIA-POS-MVP`.
+
+**Reprodução:**
+`apps/ai-orchestrator/src/modules/channel/InboundMessageProcessor.ts:239`
+condiciona o descarte a `env.EVOLUTION_IGNORE_GROUPS`, cujo default é `true` em
+`apps/ai-orchestrator/src/config/env.ts:90`; subir o serviço com
+`EVOLUTION_IGNORE_GROUPS=false` reabre o atendimento de grupos sem nenhum gate
+ficar vermelho.
+
+**Impacto de produto:** um guardrail absoluto do produto é, na prática, uma
+configuração de operação, e uma variável trocada por engano coloca a IA
+respondendo em grupo.
+
+### A-11 — A unicidade de `tenantId` não restringe múltiplos `NULL`
+
+**Classificação:** `LIMITE-DECLARADO`.
+
+**Reprodução:** `apps/bff/prisma/schema.prisma:179`
+(`tenantId String? @unique`), com a decisão escrita em `:177`; no PostgreSQL,
+`@unique` não impede várias linhas com `NULL`.
+
+**Impacto de produto:** estoque legado ambíguo pode coexistir no banco, e quem
+impede essas linhas de autorizarem uso é o guard de rota, não a constraint.
+
+### A-12 — O grupo `Não classificadas` segue sem prazo de retenção
+
+**Classificação:** `LIMITE-DECLARADO`.
+
+**Reprodução:** `RetentionSettings` tem apenas `commercialRetentionDays`
+(`apps/bff/prisma/schema.prisma:242`) e `personalRetentionDays` (`:244`);
+`apps/ai-orchestrator/tests/retention/content-purge.test.ts:276` fica vermelho
+se alguém passar a apagar esse grupo.
+
+**Impacto de produto:** conteúdo não classificado é guardado por tempo
+indefinido, que é o comportamento seguro enquanto a decisão de produto não
+existir, e nenhuma copy da interface promete outra coisa.
+
+### A-13 — A origem real da Minha Agenda nunca foi chamada
+
+**Classificação:** `PENDENCIA-POS-MVP`.
+
+**Reprodução:** `apps/scheduling-service/tests/unit/minha-agenda-client.test.ts`
+e `apps/scheduling-service/tests/unit/minha-agenda-import-snapshot.test.ts`
+exercitam só payload sintético; nenhum passo de `validate:integration` chama a
+origem.
+
+**Impacto de produto:** a importação única pode falhar ou perder campo no
+primeiro negócio real, porque a capacidade efetiva da API de origem nunca foi
+observada.
+
+### A-14 — Não se sabe se existem tenants e dados legados em operação
+
+**Classificação:** `PENDENCIA-POS-MVP`. É a única linha `DECLARADO` do
+inventário (§3.2), e vira achado por isso.
+
+**Reprodução:** nenhum artefato da árvore responde à pergunta; o único
+inventário existente é o sintético semeado por
+`scripts/goal028-restore-rehearsal.mjs`.
+
+**Impacto de produto:** o plano de migração não sabe quantos negócios reais
+precisa migrar, e essa contagem é o que decide se a janela de corte é de
+minutos ou de horas.
+
+### A-15 — M0, M3 e M5 são verdes sobre estoque sintético
+
+**Classificação:** `LIMITE-DECLARADO`.
+
+**Reprodução:** os ensaios semeiam o próprio estoque e o descartam
+(`rehearse:goal004-transport-migration`, `rehearse:goal013-media-migration`,
+`rehearse:goal023-retention-migration`, `rehearse:goal028-restore`); nenhum
+deles se conecta a banco de operação.
+
+**Impacto de produto:** a migração está provada como procedimento e não como
+resultado sobre o dado de ninguém, que é o máximo possível sem ambiente.
+
+### A-16 — O binário anterior nunca foi executado de verdade
+
+**Classificação:** `LIMITE-DECLARADO`.
+
+**Reprodução:** os ensaios de migration leem e escrevem no formato antigo, mas
+nenhum passo de gate sobe o binário anterior contra o schema novo.
+
+**Impacto de produto:** "o binário anterior continua compatível" é conclusão
+por leitura de formato, não observação, e vale como tal.
+
+### A-17 — "Janela compatível encerrada e restore seguro" sem artefato próprio
+
+**Classificação:** `LIMITE-DECLARADO`.
+
+**Reprodução:** o passo `rehearse:goal028-restore` é o único artefato que
+sustenta a frase; não existe outro.
+
+**Impacto de produto:** o encerramento da janela de compatibilidade é decisão
+operacional que ninguém pode conferir na árvore.
+
+### A-18 — O tema claro é fato da árvore, não invariante verificada
+
+**Classificação:** `LIMITE-DECLARADO`.
+
+**Reprodução:** `apps/frontend/src/app/globals.css` não contém `dark` nem
+`prefers-color-scheme`; nenhum teste fica vermelho se alguém introduzir tema
+escuro.
+
+**Impacto de produto:** o MVP é claro hoje por ausência, não por regra, e uma
+introdução acidental de tema escuro passaria por todos os gates.
+
+### A-19 — SLA, RPO/RTO e volume não têm medição
+
+**Classificação:** `LIMITE-DECLARADO`.
+
+**Reprodução:** `scripts/goal028-restore-rehearsal.mjs` mede restore em máquina
+descartável; nenhum artefato da árvore mede volume ou janela de
+indisponibilidade.
+
+**Impacto de produto:** nenhum número de disponibilidade pode ser prometido a
+um negócio, porque nenhum foi medido.
+
+### Como estes achados se relacionam com o histórico
+
+Nenhum achado desta lista reabre Goal aceito, e nenhum deles foi corrigido
+aqui. A-04, A-05, A-06, A-07, A-08, A-13, A-14, A-15, A-16, A-17 e A-19 já
+estavam declarados como limite em algum ponto do histórico, e esta auditoria os
+confirma **na árvore**, que é a diferença que ela existe para fazer. A-01,
+A-02, A-03, A-09, A-10, A-11, A-12 e A-18 são o que a conferência encontrou
+além do que já estava declarado.
+
+## 7. Veredito
+
+**O MVP tem 1 achado `BLOQUEADOR-MVP` — A-01, alvo de toque de 13×13 pixels no
+aceite legal do cadastro e no `/login` em mobile —, além de 11
+`PENDENCIA-POS-MVP` e 7 `LIMITE-DECLARADO`, e por isso não está pronto para o
+primeiro usuário real enquanto A-01 não for corrigido em Goal próprio.**
+
+Duas coisas que este veredito não diz. Não diz que as pendências de MVP são
+zero: são onze, e três delas (A-04, A-07 e A-08) só não são bloqueadores porque
+a regra desta auditoria rebaixa o que não tem reprodução executável — o deploy
+real continua sendo a fronteira que nada nesta árvore atravessa. E não diz que
+a interface está fiel à referência aprovada: o gate renderizado decide overflow
+horizontal, alvo de toque mínimo AA, contraste computado, foco visível e
+`prefers-reduced-motion` (§5.2), enquanto a fidelidade visual segue sendo
+conferência humana (§5.3).

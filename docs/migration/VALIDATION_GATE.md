@@ -17,7 +17,7 @@ git diff --check
 | Comando | Cobre | Não cobre |
 | --- | --- | --- |
 | `validate:core` | Builds de Scheduling, IA, BFF e frontend; `npm run check` do health-worker; suíte da IA; suíte do adapter HTTP do frontend; `go build`/`go vet`/`go test` do Evolution Go; testes dos próprios scripts de gate; auditoria estática | Qualquer escrita em banco. Nenhum passo abre conexão de banco |
-| `validate:integration` | 32 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, a purga de conteúdo de conversa (Goal023) e a purga por negócio da IA (Goal025), o outbox do Evolution Go, um ensaio por migration de Goal — o mais recente deles `rehearse:goal027-calendar-source-migration` —, a reconciliação do fuso único do negócio (`rehearse:goal029-timezone-reconciliation`, Goal029) e, desde o Goal028, o ensaio de release (`rehearse:goal028-release-migrations`) e o de dump/restore (`rehearse:goal028-restore`) | Qualquer camada acima do dado: nenhuma jornada de interface, nenhum envio real por WhatsApp e nenhuma origem real do Minha Agenda |
+| `validate:integration` | 33 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, a purga de conteúdo de conversa (Goal023) e a purga por negócio da IA (Goal025), o outbox do Evolution Go, um ensaio por migration de Goal — o mais recente deles `rehearse:goal027-calendar-source-migration` —, a reconciliação do fuso único do negócio (`rehearse:goal029-timezone-reconciliation`, Goal029) e, desde o Goal028, o ensaio de release (`rehearse:goal028-release-migrations`) e o de dump/restore (`rehearse:goal028-restore`); desde o Goal030, o percurso único de produto ponta a ponta (`rehearse:goal030-mvp-journey`) | Qualquer camada acima do dado: nenhuma jornada de interface, nenhum envio real por WhatsApp e nenhuma origem real do Minha Agenda. O próprio percurso do Goal030 também não cobre isso — ver a nota abaixo |
 | `git diff --check` | Espaço em branco/conflito no diff | Correção do diff |
 
 Comandos auxiliares: `npm run test:gate` (só os testes dos scripts de gate) e
@@ -153,7 +153,7 @@ npm ci --prefix apps/bff
 BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_bff_test" npm run validate:integration
 ```
 
-São 32 passos. A lista abaixo enumera o núcleo, na ordem em que roda — o item
+São 33 passos. A lista abaixo enumera o núcleo, na ordem em que roda — o item
 5 agrupa o par do Evolution Go. Entre os itens 6 e 7 rodam, nesta ordem, os demais
 ensaios de migration por Goal (005 a 013, 019, 021, 022, 023 e 027), o ensaio de
 release do Goal028 (`rehearse:goal028-release-migrations`), o ensaio de
@@ -219,6 +219,29 @@ repositório que **reescreve** dado existente (`CalendarSettings.source` de
 `MINHA_AGENDA` para `ATENDLY`), com a contagem de linhas reescritas reportada
 pelo ensaio e a `CHECK` nova provada por `UPDATE`/`INSERT` reais recusados com
 `23514`: ver [DATA_MIGRATION §14](DATA_MIGRATION.md#14-migração-da-fonte-da-agenda-para-atendly-goal027).
+
+`rehearse:goal030-mvp-journey` (Goal030, diff030 — [D-046](DECISIONS.md)), o
+passo mais novo e o último da lista, é o único que não ensaia uma migration:
+ele sobe o BFF, o Scheduling e a IA reais em três bancos descartáveis PRÓPRIOS
+(não os do trio acima) e atravessa, com um único tenant, o percurso inteiro do
+produto — cadastro e sessão pelo caminho de produção, onboarding nos quatro
+blocos com as três recusas por mínimo faltando, catálogo, cliente, agendamento
+com ocupação refletida, mensagem recebida pelo transporte durável, lembrete
+programado, notificação central, alteração de fuso pelo mecanismo do Goal029,
+retenção com purga e exclusão de conta recuperável até o fim. **O que ele
+prova, e que nenhum outro passo prova:** a composição das fatias — que
+onboarding, catálogo, agenda, conversa, lembrete, notificação, fuso, retenção e
+exclusão continuam encaixando quando um negócio real os atravessa na ordem em
+que uma pessoa os atravessaria, cada etapa provada por leitura direta do banco
+do serviço dono do dado, nunca só pelo `200` da resposta HTTP. Um controle
+negativo (`GOAL030_BREAK_LINK`) prova que o ensaio cai com `exit 1` quando
+qualquer um dos nove elos declarados deixa de acontecer. **O que ele não
+prova:** a resposta automática da IA — o grafo, o modelo e o envio pelo
+transporte — porque o provedor de modelo é um dublê que lança se chamado; o
+envio real por WhatsApp, porque o vínculo do canal é sintético e a Evolution Go
+nunca é contactada; e nada sobre a origem real do Minha Agenda, que este
+percurso não usa. Ver
+[DATA_MIGRATION §17](DATA_MIGRATION.md#17-percurso-único-de-produto-ponta-a-ponta-goal030).
 
 Nada de `migrate reset` sobre URL herdada, e nenhuma migration é reescrita.
 
@@ -551,5 +574,20 @@ as credenciais do service container são sintéticas e morrem com o runner.
   têm teste permanente em `scripts/tests/` — existem em
   `resolveRehearsalPlan`/`refuse` e foram exercitados por controle negativo
   manual.
+- **Diff030 ([D-046](DECISIONS.md)):** auditoria final do MVP. `validate:integration`
+  passou de 32 para 33 passos com `rehearse:goal030-mvp-journey` — ver a nota
+  acima e [DATA_MIGRATION §17](DATA_MIGRATION.md#17-percurso-único-de-produto-ponta-a-ponta-goal030).
+  Nenhuma migration nova, nenhum passo existente removido, renomeado ou
+  enfraquecido. Resultado real dos três gates determinísticos sobre a árvore
+  final desta rodada: `validate:core` exit 0 (15 passos: 13 `passed`, 0
+  `failed`, 2 `skipped` — `test:bff`, `test:health-worker`); `validate:integration`
+  exit 0 em 88652 ms, incluindo o passo novo; `validate:ui` exit 0 em 48878 ms
+  (suíte Playwright 47896 ms, 169 `expected`, 21 `skipped` por `test.skip`
+  declarado, 0 `unexpected`, 0 `flaky` — ver [FINAL_AUDIT §5](FINAL_AUDIT.md#5-interface--o-que-o-gate-renderizado-decide-e-o-que-ele-não-decide)).
+  A auditoria em si não é gate automatizado: é conferência linha a linha da
+  árvore, registrada em [FINAL_AUDIT](FINAL_AUDIT.md), com 1 achado
+  `BLOQUEADOR-MVP` (A-01) e reprodução executável própria para o achado sem
+  cobertura de gate existente (A-03,
+  `apps/bff/tests/goal030-a03-contract-drift.repro.mjs`).
 - A execução hospedada dos workflows ainda não ocorreu; o estado atual é
   "configuração validada localmente". Ver [MIGRATION_STATUS](MIGRATION_STATUS.md).

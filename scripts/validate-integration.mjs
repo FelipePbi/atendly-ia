@@ -594,6 +594,16 @@ export function integrationSteps(target) {
       args: ["test", "-count=1", "./pkg/events/..."],
       env,
     },
+    // Ensaio do percurso ponta a ponta do Goal030: mesmo tenant exercitado nas
+    // etapas 6 a 11 contra BFF, Scheduling e IA reais, em três bancos
+    // descartáveis, com controle negativo, idempotência e contagens por etapa.
+    {
+      name: "rehearse:goal030-mvp-journey",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal030-mvp-journey-rehearsal.mjs"],
+      env,
+    },
   ];
 }
 

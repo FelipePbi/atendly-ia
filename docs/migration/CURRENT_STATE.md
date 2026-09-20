@@ -2649,3 +2649,59 @@ A fotografia acima permanece como registro, inclusive a nota de "Dados pertencen
 - **LIMITE:** o único efeito de escrita provado é a atualização de `CalendarSettings.timezone` em linha já existente — nenhum caminho deste mecanismo cria `CalendarSettings`. Nenhuma linha de `Appointment`, `AvailabilityRule`, `AvailabilityException` ou `TimeBlock` é lida ou escrita por este mecanismo, em nenhum dos três pontos nem pelo ensaio.
 - **LIMITE:** a cópia do fuso projetada para a IA (`AiTenantConfig.settings.businessContext.timezone`) não foi tocada por este Goal — continua a seguir `BusinessProfile.timezone` pela mesma projeção versionada de `modalities`/`address` do Goal018/019, sem exercício novo deste diff.
 - **LIMITE:** este delta descreve o diff029 aceito na rodada 3 pelo Tech Lead Agent ([review029](reviews/029-review.md)), sem deploy. Duas lacunas de prova estão declaradas ali: o ensaio contra banco real só semeia tenants **com** `CalendarSettings` — a prova de que leitura não cria a linha vem dos testes de integração do BFF —, e os guards de destino descartável do ensaio novo não têm teste permanente em `scripts/tests/`, diferente dos ensaios do Goal028.
+
+## Delta implementado — diff030, 2026-09-20 ([D-046](DECISIONS.md))
+
+Este delta não muda nenhum fato de schema, rota ou runtime descrito acima: o
+diff030 é a auditoria final do MVP, e o único código que produz é o ensaio de
+composição. A fotografia dos deltas anteriores permanece exatamente como
+estava. O que segue é o que a **composição** de 29 Goals fechados revelou
+sobre o produto vigente — fatos que nenhum delta isolado, provando o próprio
+domínio contra fixture ou banco próprio, tinha condição de revelar.
+
+- **FATO revelado (a composição encaixa):** `scripts/goal030-mvp-journey-rehearsal.mjs`
+  (passo `rehearse:goal030-mvp-journey`, último de `validate:integration`, 33
+  passos) prova, contra BFF, Scheduling e IA reais em três bancos descartáveis
+  próprios e um único tenant, que cadastro, onboarding, catálogo, cliente,
+  agenda, conversa, lembrete, notificação, fuso (Goal029), retenção e exclusão
+  de conta continuam encaixando quando atravessados na ordem em que um negócio
+  real os atravessaria — nenhum Goal anterior tinha exercitado essa cadeia
+  inteira sobre o mesmo tenant. Nove elos são cobertos por controle negativo
+  nomeado (`GOAL030_BREAK_LINK`), e cada um derruba o ensaio com `exit 1`
+  quando deixa de acontecer. Ver [DATA_MIGRATION §17](DATA_MIGRATION.md#17-percurso-único-de-produto-ponta-a-ponta-goal030).
+- **FATO revelado (a exclusão de conta é honesta):** depois da etapa 11, o
+  processo pai relê as três bases em conexões novas, com os três serviços já
+  mortos, e a contagem por tabela do percurso é zero nas três — a prova de
+  exclusão não é o `200` do pedido, é a releitura.
+- **FATO revelado (a resposta automática da IA nunca foi provada ponta a
+  ponta):** a etapa 6 deste percurso — e nenhuma suíte anterior fora dela —
+  monta o `AssistantService` real com um `ModelProvider` dublê que **lança**
+  se for chamado, e ele não é chamado: o que existe provado, em qualquer Goal
+  deste repositório, é recebimento durável e persistência na conversa, nunca a
+  resposta que o cliente receberia. Isso não é regressão do Goal030; é o
+  primeiro Goal em posição de revelar essa lacuna, porque é o primeiro a
+  montar as três fatias vivas ao mesmo tempo.
+- **FATO revelado (o inventário de conformidade encontrou um bloqueador
+  novo):** [FINAL_AUDIT](FINAL_AUDIT.md) — a auditoria linha a linha dos
+  gaps G-01 a G-35, dos gates M0 a M6, das incertezas U-01 a U-03 e dos
+  guardrails de `AGENTS.md`, contra a árvore e não contra a documentação que a
+  descreve — encontrou 1 achado `BLOQUEADOR-MVP` com reprodução executável
+  (A-01, alvo de toque de 13×13 pixels no aceite legal do cadastro e no
+  `/login` em mobile, herdado de uma exceção do diff014 sem prazo cumprido),
+  11 `PENDENCIA-POS-MVP` e 7 `LIMITE-DECLARADO`. Nenhum arquivo de `apps/*/src`
+  foi tocado por esta auditoria; toda correção listada em FINAL_AUDIT pertence
+  a Goal próprio.
+- **LIMITE:** este delta não afirma fidelidade visual à referência aprovada
+  (`docs/design-reference/claude-design/`) — o gate renderizado decide
+  overflow horizontal, alvo de toque mínimo AA, contraste computado, foco
+  visível e `prefers-reduced-motion`; fidelidade visual continua sendo
+  conferência humana. Também não afirma nada sobre deploy hospedado, sobre a
+  origem real da Minha Agenda, nem sobre envio real de WhatsApp — os três
+  seguem como gate operacional fora do que esta árvore pode provar.
+- **LIMITE:** este delta descreve o diff030 aceito na rodada 1 pelo Tech Lead
+  Agent ([review030](reviews/030-review.md)), sem commit e sem deploy. O aceite
+  é do trabalho de auditoria, **não** de conformidade do produto: A-01
+  permanece aberto como `BLOQUEADOR-MVP`, e nenhum Goal de correção foi criado
+  por este fechamento. A reprodução de A-03
+  (`apps/bff/tests/goal030-a03-contract-drift.repro.mjs`) continua em exit 1 de
+  propósito, fora do caminho verde do gate, até alguém fechar G-32.

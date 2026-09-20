@@ -9,7 +9,12 @@ import {
   parseParams,
   parseQuery,
 } from "../../lib/http.js";
-import { requireTenantContext } from "../../lib/tenant-context.js";
+import { getPrisma } from "../../lib/prisma.js";
+import {
+  currentTenantContext,
+  requireTenantContext,
+} from "../../lib/tenant-context.js";
+import { reconcileBusinessTimezone } from "../../lib/timezone-reconciliation.js";
 import { internalContext } from "../tenant/context.js";
 
 const idSchema = z.object({ id: z.string().trim().min(1).max(128) });
@@ -641,11 +646,48 @@ export async function registerV1CalendarRoutes(
   app.get(
     "/v1/calendar",
     { preHandler: requireTenantContext },
-    async (request) =>
-      dataResponse(
+    async (request) => {
+      const context = internalContext(request);
+      // A agenda do frontend le o `timezone` daqui para renderizar dia,
+      // semana, mes, formulario e bloqueios. Por isso este e o segundo ponto
+      // de reconciliacao obrigatorio do fuso unico do negocio (Goal029/WU-04,
+      // D-010): quem le estado e quem tem o dado para decidir.
+      //
+      // O dono vem do Prisma do proprio BFF, em paralelo com a leitura que
+      // esta rota ja fazia — nenhuma consulta nova ao Scheduling, e o
+      // Scheduling continua sem consultar o BFF: a direcao e sempre
+      // BFF -> Scheduling.
+      const [profile, calendar] = await Promise.all([
+        getPrisma().businessProfile.findUnique({
+          where: { tenantId: currentTenantContext(request).tenantId },
+          select: { timezone: true },
+        }),
+        scheduling.calendar(context),
+      ]);
+      // Nunca lanca: tenant convergido devolve `NOOP` sem escrita, e a
+      // divergencia que nao converge sai como o fuso que continua gravado no
+      // Scheduling, sem `500` e sem afirmar convergencia que nao houve.
+      const reconciliation = await reconcileBusinessTimezone(
+        context,
+        {
+          scheduling,
+          log: {
+            warn: (payload, message) => request.log.warn(payload, message),
+          },
+        },
+        {
+          businessTimezone: profile?.timezone ?? null,
+          calendarTimezone: calendar.timezone,
+        },
+      );
+      return dataResponse(
         request,
-        publicCalendar(await scheduling.calendar(internalContext(request))),
-      ),
+        publicCalendar({
+          ...calendar,
+          timezone: reconciliation.calendarTimezone,
+        }),
+      );
+    },
   );
 
   app.post(

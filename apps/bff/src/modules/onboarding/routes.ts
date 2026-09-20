@@ -47,7 +47,8 @@ const patchSchema = z
     calendar: z
       .object({
         source: sourceSchema,
-        timezone: z.string().trim().min(1).max(100),
+        // Ausente resolve para o fuso do negocio (Goal029/WU-03).
+        timezone: z.string().trim().min(1).max(100).optional(),
       })
       .optional(),
     service: z
@@ -62,7 +63,8 @@ const patchSchema = z
       .optional(),
     availability: z
       .object({
-        timezone: z.string().trim().min(1).max(100),
+        // Ausente resolve para o fuso do negocio (Goal029/WU-03).
+        timezone: z.string().trim().min(1).max(100).optional(),
         rules: z.array(
           z.object({
             dayOfWeek: z.number().int().min(0).max(6),
@@ -137,10 +139,30 @@ export async function registerV1OnboardingRoutes(
         ]);
       }
 
+      // Fuso unico do negocio (Goal029/WU-03): calendar/availability nao
+      // decidem mais fuso proprio, so herdam ou confirmam o de `business`.
+      // Nesta mesma requisicao, `body.business.timezone` ja e o valor que
+      // acabou de ser gravado acima; sem `business` nesta requisicao, o unico
+      // dono possivel e o que ja estava gravado.
+      let businessTimezone: string | null = body.business
+        ? body.business.timezone
+        : null;
+      if (!body.business && (body.calendar || body.availability)) {
+        const profile = await prisma.businessProfile.findUnique({
+          where: { tenantId: tenant.tenantId },
+          select: { timezone: true },
+        });
+        businessTimezone = profile?.timezone ?? null;
+      }
+
       if (body.calendar) {
         await scheduling.configureCalendar(context, {
           source: body.calendar.source,
-          timezone: body.calendar.timezone,
+          timezone: resolveSectionTimezone(
+            "calendar",
+            body.calendar.timezone,
+            businessTimezone,
+          ),
         });
       }
 
@@ -151,7 +173,14 @@ export async function registerV1OnboardingRoutes(
       }
 
       if (body.availability) {
-        await scheduling.updateAvailabilitySettings(context, body.availability);
+        await scheduling.updateAvailabilitySettings(context, {
+          ...body.availability,
+          timezone: resolveSectionTimezone(
+            "availability",
+            body.availability.timezone,
+            businessTimezone,
+          ),
+        });
       }
 
       if (body.ai) {
@@ -258,4 +287,34 @@ function assertTimezone(value: string): void {
   } catch {
     throw new AppError("VALIDATION_ERROR", "Invalid IANA timezone.", 400);
   }
+}
+
+/**
+ * Reduz o dominio de `calendar.timezone`/`availability.timezone` ao fuso
+ * unico do negocio (Goal029/WU-03, D-010): ausente herda o fuso do negocio,
+ * presente e divergente e recusado, e sem `business.timezone` gravado nao ha
+ * dono contra o qual resolver ou comparar — recusa em vez de deixar a
+ * secao virar dona por um caminho que nao e `business.timezone`.
+ */
+function resolveSectionTimezone(
+  section: "calendar" | "availability",
+  provided: string | undefined,
+  businessTimezone: string | null,
+): string {
+  if (provided !== undefined) assertTimezone(provided);
+  if (businessTimezone === null) {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      `Business timezone must be set before ${section}.timezone can be resolved.`,
+      400,
+    );
+  }
+  if (provided !== undefined && provided !== businessTimezone) {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      `${section}.timezone must match the business timezone.`,
+      400,
+    );
+  }
+  return businessTimezone;
 }

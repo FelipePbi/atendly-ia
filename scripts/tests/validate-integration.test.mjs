@@ -100,6 +100,7 @@ test("points the subprocess at the declared test database with synthetic secrets
       "generate:scheduling-prisma-client",
       "provision:scheduling-test-database",
       "test:scheduling-integration",
+      "rehearse:goal029-timezone-reconciliation",
       "generate:ai-orchestrator-prisma-client",
       "test:ai-orchestrator-transport-durability",
       "test:ai-orchestrator-content-purge",

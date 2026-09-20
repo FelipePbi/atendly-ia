@@ -542,6 +542,20 @@ export function integrationSteps(target) {
       args: ["vitest", "run", "--dir", "tests/integration"],
       env,
     },
+    // Ensaio da reconciliação dono/réplica do fuso do negócio (Goal029/D-010):
+    // duas bases descartáveis PRÓPRIAS (não as de cima), estado semeado com
+    // divergência real entre BusinessProfile.timezone e CalendarSettings.
+    // timezone, leitura reconciliadora real exercida contra um
+    // scheduling-service real numa porta efêmera, convergência provada por
+    // leitura direta das duas bases. Ausência de pg/prisma/tsx é recusa com
+    // exit 2, nunca skip.
+    {
+      name: "rehearse:goal029-timezone-reconciliation",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal029-timezone-reconciliation-rehearsal.mjs"],
+      env,
+    },
     {
       // Checkout limpo não tem `src/generated/prisma`; sem isto a suíte falha
       // na importação do client.

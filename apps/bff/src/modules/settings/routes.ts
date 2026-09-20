@@ -23,6 +23,7 @@ import {
   currentTenantContext,
   requireTenantContext,
 } from "../../lib/tenant-context.js";
+import { reconcileBusinessTimezone } from "../../lib/timezone-reconciliation.js";
 import { assertAiActivationNotBlockedByDeletion } from "../account/service.js";
 import { internalContext } from "../tenant/context.js";
 
@@ -59,7 +60,8 @@ const reminderSettingsSchema = z.object({
   rules: z.array(reminderRuleSchema).max(2),
 });
 const availabilitySchema = z.object({
-  timezone: z.string().trim().min(1).max(100),
+  // Ausente resolve para o fuso do negocio (Goal029/WU-03).
+  timezone: z.string().trim().min(1).max(100).optional(),
   rules: z.array(
     z.object({
       dayOfWeek: z.number().int().min(0).max(6),
@@ -103,6 +105,11 @@ export async function registerV1SettingsRoutes(
         current,
         body,
       );
+      // O dono do fuso muda, ou nao, nesta gravacao (D-010). So propaga
+      // quando muda: negocio sem mudanca nao deve custa uma chamada ao
+      // Scheduling nem arriscar `FAILED` por um servico que nao precisava
+      // ser chamado.
+      const timezoneChanged = current?.timezone !== body.timezone;
       await prisma.$transaction([
         prisma.tenant.update({
           where: { id: tenant.tenantId },
@@ -129,9 +136,26 @@ export async function registerV1SettingsRoutes(
         }),
       ]);
       const projected = await syncAi(request, ai);
+      // Fora da transacao do BFF, de proposito: BFF e Scheduling sao bases
+      // distintas sem transacao comum, e o dado do dono ja esta gravado e
+      // comitado antes desta chamada. `reconcileBusinessTimezone` nunca
+      // lanca; a nao convergencia fica legivel no `calendar` da resposta,
+      // que `settingsState` le de novo do Scheduling logo abaixo.
+      if (timezoneChanged) {
+        await reconcileBusinessTimezone(
+          internalContext(request),
+          {
+            scheduling,
+            log: {
+              warn: (payload, message) => request.log.warn(payload, message),
+            },
+          },
+          { businessTimezone: body.timezone },
+        );
+      }
       return dataResponse(
         request,
-        await settingsState(request, scheduling, projected),
+        await settingsState(request, scheduling, projected, timezoneChanged),
       );
     },
   );
@@ -182,14 +206,26 @@ export async function registerV1SettingsRoutes(
   app.patch(
     "/v1/settings/availability",
     { preHandler: requireTenantContext },
-    async (request) =>
-      dataResponse(
+    async (request) => {
+      const body = parseBody(availabilitySchema, request.body);
+      const tenant = currentTenantContext(request);
+      // Fuso unico do negocio (Goal029/WU-03): `timezone` nao decide mais
+      // sozinho, so herda ou confirma `BusinessProfile.timezone` (D-010).
+      const profile = await getPrisma().businessProfile.findUnique({
+        where: { tenantId: tenant.tenantId },
+        select: { timezone: true },
+      });
+      return dataResponse(
         request,
-        await scheduling.updateAvailabilitySettings(
-          internalContext(request),
-          parseBody(availabilitySchema, request.body),
-        ),
-      ),
+        await scheduling.updateAvailabilitySettings(internalContext(request), {
+          ...body,
+          timezone: resolveAvailabilityTimezone(
+            body.timezone,
+            profile?.timezone ?? null,
+          ),
+        }),
+      );
+    },
   );
 
   app.get(
@@ -228,6 +264,16 @@ async function settingsState(
    * dado do BFF foi gravado, mas o estado de projecao e o real.
    */
   projectedNow?: boolean,
+  /**
+   * O fuso do negocio ja foi reconciliado **nesta requisicao** por quem
+   * chamou (`PATCH /v1/settings/business` quando o fuso mudou)?
+   *
+   * Existe para manter a propriedade 1 de D-010 valendo por requisicao, e
+   * nao por chamada: sem isso a gravacao que ja tentou propagar tentaria uma
+   * segunda escrita no Scheduling na mesma requisicao. Leitura pura passa
+   * `false` e reconcilia normalmente.
+   */
+  timezoneAlreadyReconciled = false,
 ) {
   const tenant = currentTenantContext(request);
   const context = internalContext(request);
@@ -238,8 +284,38 @@ async function settingsState(
     getPrisma().aiSettings.findUnique({
       where: { tenantId: tenant.tenantId },
     }),
+    // Leitura do calendario, como sempre foi: falha dela continua sendo falha
+    // da requisicao. Este Goal so acrescenta a reconciliacao do fuso, e ela
+    // nunca transforma um calendario ilegivel em um calendario vazio de
+    // mentira — `source: null` e `capabilities` todas `false` sao um estado
+    // de produto que existe (negocio sem agenda operacional), e devolve-lo
+    // porque o Scheduling nao respondeu faria a tela afirmar exatamente o que
+    // ela nao sabe.
     scheduling.calendar(context),
   ]);
+  // Reconciliacao em requisicao do fuso unico do negocio (Goal029/WU-04,
+  // D-010). As duas copias ja foram lidas acima, entao decidir aqui nao
+  // custa consulta nova ao Scheduling: tenant convergido devolve `NOOP` sem
+  // escrita nenhuma, e tenant divergente gasta uma unica tentativa. A
+  // tentativa e um efeito de favor: `reconcileBusinessTimezone` nunca lanca,
+  // entao o Scheduling recusando a escrita deixa esta leitura responder do
+  // mesmo jeito, com a divergencia legivel entre `business.timezone` e
+  // `calendar.timezone` na mesma resposta.
+  const reconciliation = timezoneAlreadyReconciled
+    ? null
+    : await reconcileBusinessTimezone(
+        context,
+        {
+          scheduling,
+          log: {
+            warn: (payload, message) => request.log.warn(payload, message),
+          },
+        },
+        {
+          businessTimezone: profile?.timezone ?? null,
+          calendarTimezone: calendar.timezone,
+        },
+      );
   const availability =
     calendar.source === "ATENDLY"
       ? await scheduling.availabilitySettings(context)
@@ -269,6 +345,13 @@ async function settingsState(
     calendar: {
       ...calendar,
       source: calendar.source === "ATENDLY" ? "ATENDLY" : null,
+      // O fuso da replica **depois** desta passada. Convergiu: sai o fuso do
+      // dono. Nao convergiu: sai o valor que continua gravado no Scheduling,
+      // divergente de `business.timezone` na mesma resposta. Nenhum caminho
+      // aqui afirma convergencia que nao aconteceu.
+      timezone: reconciliation
+        ? reconciliation.calendarTimezone
+        : calendar.timezone,
     },
     availability,
   };
@@ -337,4 +420,33 @@ function assertTimezone(value: string): void {
   } catch {
     throw new AppError("VALIDATION_ERROR", "Invalid IANA timezone.", 400);
   }
+}
+
+/**
+ * Reduz o dominio de `availability.timezone` ao fuso unico do negocio
+ * (Goal029/WU-03, D-010): ausente herda o fuso do negocio, presente e
+ * divergente e recusado, e sem `business.timezone` gravado nao ha dono
+ * contra o qual resolver ou comparar — recusa em vez de deixar a
+ * disponibilidade virar dona por um caminho que nao e `business.timezone`.
+ */
+function resolveAvailabilityTimezone(
+  provided: string | undefined,
+  businessTimezone: string | null,
+): string {
+  if (provided !== undefined) assertTimezone(provided);
+  if (businessTimezone === null) {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      "Business timezone must be set before availability.timezone can be resolved.",
+      400,
+    );
+  }
+  if (provided !== undefined && provided !== businessTimezone) {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      "availability.timezone must match the business timezone.",
+      400,
+    );
+  }
+  return businessTimezone;
 }

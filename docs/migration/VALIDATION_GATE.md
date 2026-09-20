@@ -17,7 +17,7 @@ git diff --check
 | Comando | Cobre | Não cobre |
 | --- | --- | --- |
 | `validate:core` | Builds de Scheduling, IA, BFF e frontend; `npm run check` do health-worker; suíte da IA; suíte do adapter HTTP do frontend; `go build`/`go vet`/`go test` do Evolution Go; testes dos próprios scripts de gate; auditoria estática | Qualquer escrita em banco. Nenhum passo abre conexão de banco |
-| `validate:integration` | 31 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, a purga de conteúdo de conversa (Goal023) e a purga por negócio da IA (Goal025), o outbox do Evolution Go, um ensaio por migration de Goal — o mais recente deles `rehearse:goal027-calendar-source-migration` — e, desde o Goal028, o ensaio de release (`rehearse:goal028-release-migrations`) e o de dump/restore (`rehearse:goal028-restore`) | Qualquer camada acima do dado: nenhuma jornada de interface, nenhum envio real por WhatsApp e nenhuma origem real do Minha Agenda |
+| `validate:integration` | 32 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, a purga de conteúdo de conversa (Goal023) e a purga por negócio da IA (Goal025), o outbox do Evolution Go, um ensaio por migration de Goal — o mais recente deles `rehearse:goal027-calendar-source-migration` —, a reconciliação do fuso único do negócio (`rehearse:goal029-timezone-reconciliation`, Goal029) e, desde o Goal028, o ensaio de release (`rehearse:goal028-release-migrations`) e o de dump/restore (`rehearse:goal028-restore`) | Qualquer camada acima do dado: nenhuma jornada de interface, nenhum envio real por WhatsApp e nenhuma origem real do Minha Agenda |
 | `git diff --check` | Espaço em branco/conflito no diff | Correção do diff |
 
 Comandos auxiliares: `npm run test:gate` (só os testes dos scripts de gate) e
@@ -153,7 +153,7 @@ npm ci --prefix apps/bff
 BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_bff_test" npm run validate:integration
 ```
 
-São 31 passos. A lista abaixo enumera o núcleo, na ordem em que roda — o item
+São 32 passos. A lista abaixo enumera o núcleo, na ordem em que roda — o item
 5 agrupa o par do Evolution Go. Entre os itens 6 e 7 rodam, nesta ordem, os demais
 ensaios de migration por Goal (005 a 013, 019, 021, 022, 023 e 027), o ensaio de
 release do Goal028 (`rehearse:goal028-release-migrations`), o ensaio de
@@ -163,9 +163,16 @@ formato custom, restaura em banco novo `<origem>_restore` e compara contagem por
 tabela, `_prisma_migrations`, índices, constraints nomeadas e enums — provando
 por `UPDATE` real que `CalendarSettings_source_atendly_check` sobrevive ao
 restore e recusa `MINHA_AGENDA` com `23514`; o Evolution Go fica de fora porque
-cria as próprias tabelas em código Go, sem histórico versionado) e o trio do
+cria as próprias tabelas em código Go, sem histórico versionado), o trio do
 Scheduling (`generate:scheduling-prisma-client`,
-`provision:scheduling-test-database`, `test:scheduling-integration`). A lista
+`provision:scheduling-test-database`, `test:scheduling-integration`) e, logo em
+seguida, `rehearse:goal029-timezone-reconciliation` (Goal029): duas bases
+descartáveis próprias, distintas do trio acima, com divergência real semeada
+entre `BusinessProfile.timezone` e `CalendarSettings.timezone`, exercida pelas
+rotas públicas `GET /v1/settings` e `GET /v1/calendar` do BFF real (cada uma
+com o seu próprio tenant divergente) contra um `scheduling-service` real, e
+convergência provada por leitura direta das duas bases depois delas, nunca pela
+resposta HTTP. A lista
 autoritativa é `scripts/validate-integration.mjs`:
 
 1. `generate:bff-prisma-client` produz `apps/bff/src/generated/prisma`;
@@ -531,5 +538,18 @@ as credenciais do service container são sintéticas e morrem com o runner.
   reprovando. `validate:integration` passou de 29 para 31 passos, e o CI
   exige agora imagem com pgvector e cliente `pg_dump`/`pg_restore` não mais
   antigo que o servidor.
+- **Diff029 ([D-045](DECISIONS.md), aceito no [review029](reviews/029-review.md)):**
+  `validate:integration`
+  passou de 31 para 32 passos com `rehearse:goal029-timezone-reconciliation`,
+  que prova a reconciliação dono/réplica do fuso do negócio contra duas bases
+  descartáveis próprias — ver
+  [DATA_MIGRATION §16](DATA_MIGRATION.md#16-reconciliação-do-fuso-único-do-negócio-goal029).
+  Nenhuma migration nova, nenhuma linha de `Appointment`, `AvailabilityRule`,
+  `AvailabilityException` ou `TimeBlock` tocada. Nenhum passo existente foi
+  removido, renomeado ou enfraquecido. Limite declarado no review: diferente
+  dos ensaios do Goal028, os guards de destino descartável deste ensaio não
+  têm teste permanente em `scripts/tests/` — existem em
+  `resolveRehearsalPlan`/`refuse` e foram exercitados por controle negativo
+  manual.
 - A execução hospedada dos workflows ainda não ocorreu; o estado atual é
   "configuração validada localmente". Ver [MIGRATION_STATUS](MIGRATION_STATUS.md).

@@ -2845,3 +2845,89 @@ mudou.
   descartável e os quatro elos quebrados um a um com `exit 1`), sem commit e
   sem deploy. Nenhum achado de A-02 a A-19 foi corrigido ou reclassificado por
   este delta, e a contagem do veredito de FINAL_AUDIT §7 não muda.
+
+## Delta implementado — diff033, 2026-09-20 ([D-049](DECISIONS.md))
+
+Este delta fecha **A-02**: o gate renderizado nunca tinha medido nenhuma tela
+autenticada, porque nunca tinha uma sessão real para medir com. Nenhuma rota,
+nenhum contrato público e nenhuma migration mudou; nenhum arquivo de
+`apps/bff/`, `apps/ai-orchestrator/`, `apps/scheduling-service/` ou
+`apps/evolution-go/` foi tocado. Fora de `apps/frontend/`, `scripts/` e
+`docs/migration/`, os dois únicos arquivos alterados são o harness do IA Loop
+— `tools/ia-loop/lib/deterministic-executor.mjs` (`patternRelativeToScope`) e
+seu teste —, declarados em [D-049](DECISIONS.md) e aceitos como desvio no
+[review033](reviews/033-review.md).
+
+- **FATO atual (a régua é uma só, extraída para um módulo, consumida pelos
+  dois specs):** a medição do Goal031 saiu de dentro de
+  `apps/frontend/e2e/viewport-matrix.spec.ts` para
+  `apps/frontend/e2e/measure.ts`, sem mudar geometria nem limiar
+  (`TOUCH_TARGET_AA` 24px, `TOUCH_TARGET_COMFORTABLE` 44px,
+  `OVERFLOW_TOLERANCE` 1px, a regra de rótulo associado
+  `targetBox = labelBox ?? ownBox`). O gate público (`validate:ui`) não muda:
+  mesmas sete rotas, mesmas cinco larguras, mesmo resultado.
+  `apps/frontend/e2e/routes.ts` ganhou `AUTHENTICATED_ROUTES` — `/inicio`,
+  `/agenda`, `/clientes`, `/conversas`, `/configuracoes`, `/servicos`,
+  `/notificacoes` —, cada uma com o marcador do destino ativo do shell e o
+  marcador do próprio conteúdo carregado. `/importacao`, `/sistema` e
+  `/onboarding` ficam fora, com o motivo escrito no comentário do arquivo:
+  URL única, sem layout fixo para o spec medir.
+- **FATO atual (a sessão é real, digitada em `/login`, contra a pilha própria
+  em processo):** `scripts/goal033-authenticated-ui-rehearsal.mjs` sobe o BFF,
+  o Scheduling e a IA reais em três bancos PostgreSQL descartáveis
+  **próprios**, semeia um negócio inteiramente pelas rotas do produto — sem
+  nenhum `INSERT` direto, inclusive a mensagem entrante da conversa, que entra
+  pelo caminho durável real do webhook — constrói o frontend com
+  `NEXT_PUBLIC_BFF_URL` já embutida e o serve em porta fixa própria.
+  `apps/frontend/e2e/authenticated-matrix.spec.ts` recebe só um e-mail e uma
+  senha e os digita em `/login` — nenhum `addCookies`, nenhum `storageState`
+  escrito à mão, nenhuma chamada à rota de sessão para montar contexto de
+  browser. Antes de medir, cada teste prova que a URL final é a rota pedida,
+  que o destino ativo do shell está marcado, que o negócio semeado aparece na
+  tela e que o conteúdo real — não o esqueleto — carregou. O ensaio é o 35º e
+  último passo de `validate:integration`
+  (`rehearse:goal033-authenticated-ui`), depois de
+  `rehearse:goal032-auto-reply`.
+- **FATO atual (duas telas reprovaram a régua, e as duas foram corrigidas, não
+  baselineadas):** `/agenda` em `mobile-360` tinha `<h1>Agenda</h1>` com caixa
+  0×33px e o cabeçalho vazando uma palavra por linha
+  (`grid-template-columns: minmax(0, 1fr) auto` dava à coluna de ações a
+  largura inteira); `apps/frontend/src/shared/styles/atendly-agenda.css`
+  passou `.agenda-page-header` para uma coluna abaixo de 767px, com
+  `.agenda-page-actions` em `flex-wrap: wrap`. `/notificacoes` em mobile tinha
+  o `<input type="checkbox">` de `.switch-row` em 13×13px, abaixo do mínimo
+  AA; `apps/frontend/src/shared/styles/atendly.css` deu a ele
+  `width: 24px; height: 24px`. `KNOWN_SMALL_TARGETS` e
+  `KNOWN_CONTRAST_FAILURES` do spec autenticado ficam **vazios** — nenhuma
+  outra rota, largura ou controle reprovou, nenhuma linha de base foi
+  nomeada, e por isso nenhum achado abre a partir de A-20.
+- **FATO atual (a régua ainda morde na tela autenticada):** quatro controles
+  negativos foram executados e revertidos, um por medida obrigatória —
+  overflow horizontal forçado, alvo de toque real encolhido abaixo de 24px,
+  par de cores reprovado por contraste e login quebrado por credencial
+  errada —, cada um derrubando o gate ou o ensaio com falha nomeada, sem
+  sobrar quebra nenhuma na árvore final.
+- **FATO revelado (a auditoria final recontada):** com A-02 corrigido, a
+  contagem de achados `PENDENCIA-POS-MVP` do inventário de FINAL_AUDIT passa
+  de 11 para 10. Os 7 `LIMITE-DECLARADO` e os demais `PENDENCIA-POS-MVP` (A-03
+  a A-19, exceto A-02) não foram tocados, corrigidos nem reclassificados por
+  este delta. Ver
+  [FINAL_AUDIT §10](FINAL_AUDIT.md#10-fechamento-de-a-02--goal033-2026-09-20).
+- **LIMITE:** este delta não afirma fidelidade visual à referência aprovada
+  (`docs/design-reference/claude-design/`) — continua sendo conferência
+  humana — nem fecha **M4** (envio real a número real, gate operacional):
+  nenhuma chamada saiu, neste diff, para provedor de LLM real nem para
+  WhatsApp real.
+- **LIMITE:** `/importacao`, `/sistema` e `/onboarding` continuam fora do gate
+  renderizado autenticado, com o motivo escrito no código: são URL única sem
+  layout fixo, não decisão de escopo por omissão.
+- **LIMITE:** este delta descreve o diff033 (WU-01 a WU-06) sobre a baseline
+  aceita `dbea66416e8025a75cedf51a60a7cc921ac45fd0` (fechamento do Goal032),
+  decidido em [D-049](DECISIONS.md) e **ACCEPTED na rodada 3 de 3 do
+  [review033](reviews/033-review.md)** (zero blockers; as duas recusas
+  anteriores foram de precisão documental e de deduplicação de duas medidas,
+  nenhuma sobre a sessão ou a régua), sem commit e sem deploy. Três desvios
+  ficaram aceitos e nomeados no review: a mudança de harness acima, `/agenda`
+  em `desktop-1440` `flaky` com retry, e o controle negativo de login quebrado
+  executado com o config reduzido a `mobile-360`. Nenhum achado de A-03 a
+  A-19 foi corrigido ou reclassificado por este delta.

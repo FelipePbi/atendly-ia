@@ -615,6 +615,19 @@ export function integrationSteps(target) {
       args: ["scripts/goal032-auto-reply-rehearsal.mjs"],
       env,
     },
+    // Ensaio do gate renderizado nas telas AUTENTICADAS (Goal033, A-02 da
+    // auditoria final): três bancos descartáveis próprios, os três serviços
+    // reais em processo, um negócio semeado inteiramente pelas rotas do
+    // produto e o frontend publicado, construído com NEXT_PUBLIC_BFF_URL
+    // embutida e servido em loopback, medido pelo gate autenticado do
+    // Playwright depois de uma sessão de verdade estabelecida em /login.
+    {
+      name: "rehearse:goal033-authenticated-ui",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal033-authenticated-ui-rehearsal.mjs"],
+      env,
+    },
   ];
 }
 

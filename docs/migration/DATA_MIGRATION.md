@@ -671,3 +671,103 @@ que este ensaio não usa.
 suíte própria em `scripts/tests/goal032-auto-reply-rehearsal.test.mjs`, rodada
 por `npm run test:gate` — fechando, para este ensaio, o resíduo que o
 [review029](reviews/029-review.md) declarou e o Goal030 herdou.
+
+## 19. Gate renderizado nas telas autenticadas (Goal033)
+
+Diff033, [D-049](DECISIONS.md). Este Goal não muda schema, contrato público
+nem rota nova: fecha **A-02** ([FINAL_AUDIT §10](FINAL_AUDIT.md#10-fechamento-de-a-02--goal033-2026-09-20)),
+o achado que a auditoria do Goal030 tinha nomeado e nenhum Goal tinha
+assumido — o gate renderizado nunca media nenhuma tela autenticada, porque
+nunca teve uma sessão real para medir com.
+
+**Régua compartilhada (`apps/frontend/e2e/measure.ts`).** A medição do
+Goal031 saiu de dentro de `viewport-matrix.spec.ts` para um módulo próprio,
+sem mudar geometria nem limiar: `TOUCH_TARGET_AA` (24px),
+`TOUCH_TARGET_COMFORTABLE` (44px), `OVERFLOW_TOLERANCE` (1px) e a regra de
+rótulo associado (`targetBox = labelBox ?? ownBox`, nunca uma união das duas
+caixas) são consumidos pelos dois specs — o público continua medindo as
+mesmas sete rotas e as mesmas cinco larguras, com o mesmo resultado.
+`apps/frontend/e2e/routes.ts` ganhou `AUTHENTICATED_ROUTES`: `/inicio`,
+`/agenda`, `/clientes`, `/conversas`, `/configuracoes`, `/servicos` e
+`/notificacoes`, cada uma com o destino que o shell autenticado marca
+(`aria-current="page"`) e o marcador do próprio conteúdo carregado.
+`/importacao`, `/sistema` e `/onboarding` ficam fora, com o motivo escrito no
+comentário do arquivo: uma URL só, sem layout único para o spec medir.
+
+**Ensaio (`scripts/goal033-authenticated-ui-rehearsal.mjs`, passo
+`rehearse:goal033-authenticated-ui` de `validate:integration`, 35º e último da
+lista, depois de `rehearse:goal032-auto-reply`).** Sobe o BFF, o Scheduling e
+a IA reais em três bancos PostgreSQL descartáveis **próprios**, cada um
+migrado do zero. Um negócio único é semeado inteiramente pelas rotas do
+produto, por HTTP real — cadastro, onboarding, catálogo, cliente, atendimento
+no dia medido (o horário sai de `GET /v1/availability`, a mesma oferta que a
+interface mostra), canal do WhatsApp contra o dublê da Evolution Go, e a
+mensagem **entrante** que materializa a conversa de `/conversas`, que é
+entrada externa e por isso entra pelo caminho durável real do webhook, não
+por `INSERT`. **Não há nenhum `INSERT` direto neste ensaio.** O frontend é
+então construído com `NEXT_PUBLIC_BFF_URL` já embutida — a variável é lida no
+`next build`, então a porta do BFF precisa estar decidida antes dele — e
+servido em porta fixa própria, distinta das do resto do gate. O Playwright
+recebe só um e-mail e uma senha; `apps/frontend/e2e/authenticated-matrix.spec.ts`
+os digita em `/login` e submete o formulário — nenhum `addCookies`, nenhum
+`storageState` escrito à mão, nenhuma chamada à rota de sessão para montar
+contexto de browser. A sessão é digitada **uma vez** por worker e reusada
+entre os testes daquele worker: o login do produto tem limite de dez
+tentativas por IP a cada quinze minutos, e sete rotas vezes cinco larguras são
+35 medições — logar a cada uma bateria no limite a partir da décima primeira.
+Antes de medir, cada teste prova que a URL final é a rota pedida (não
+`/login` nem `/onboarding`, os dois destinos para onde `ProductRuntime`
+redireciona uma sessão que não é a certa), que o destino ativo do shell está
+marcado, que o negócio semeado aparece na tela e que o conteúdo real — não o
+esqueleto (`[aria-busy="true"]`, `.skeleton`) — carregou.
+
+**O que este ensaio prova, e que nenhum outro prova:** as cinco medidas do
+gate renderizado — overflow horizontal, alvo de toque mínimo AA de 24px,
+contraste real computado, foco visível no primeiro `Tab` e
+`prefers-reduced-motion` honrado — sobre as sete telas que o produto só
+mostra a quem está autenticado, contra dado que um negócio real semeou pelas
+próprias rotas, nunca contra dado fabricado ou sessão fabricada.
+
+**O que a régua encontrou, e o que foi corrigido em `apps/frontend/src/**`:**
+duas telas reprovaram na primeira medição, e as duas couberam na correção do
+próprio controle, sem decidir composição visual nova — nenhuma virou linha de
+base:
+
+- `/agenda`, `mobile-360`: `.agenda-page-header` usava
+  `grid-template-columns: minmax(0, 1fr) auto`, e a coluna `auto` das três
+  ações (`<a class="btn">`) tomava a largura inteira, deixando o título com
+  caixa 0×33px e o texto vazando uma palavra por linha.
+  `apps/frontend/src/shared/styles/atendly-agenda.css` passou a uma coluna
+  (`minmax(0, 1fr)`) abaixo de 767px, com `.agenda-page-actions` em
+  `flex-wrap: wrap` para as ações não estourarem a largura da tela.
+- `/notificacoes`, `mobile-360`/`mobile-390`: o `<input type="checkbox">`
+  nativo de `.switch-row` não tinha tamanho declarado e o Chromium o desenhava
+  em 13×13px, abaixo do mínimo AA. `apps/frontend/src/shared/styles/atendly.css`
+  deu a ele `width: 24px; height: 24px` e o mesmo `accent-color` que
+  `.imports-select-row` já usava.
+
+`KNOWN_SMALL_TARGETS` e `KNOWN_CONTRAST_FAILURES`, os dois arrays de linha de
+base do spec autenticado, ficam **vazios** — nenhum achado A-20+ foi aberto
+por este diff, porque nenhuma dívida foi baselineada em vez de corrigida.
+
+**Controle negativo.** No padrão dos Goals 031 e 032, com saída real e
+reversão obrigatória: overflow horizontal forçado numa rota autenticada,
+alvo de toque real encolhido abaixo de 24px, par de cores reprovado por
+contraste numa tela medida, e login quebrado por credencial errada — os
+quatro derrubaram o gate ou o ensaio com falha nomeada, cada um revertido
+depois de confirmada a falha, sem sobrar na árvore final.
+
+**O que ele não prova, por dublê ou limite declarado:** fidelidade visual à
+referência aprovada (`docs/design-reference/claude-design/`), que continua
+sendo conferência humana sobre o screenshot anexado; nenhuma chamada a
+provedor de LLM real nem a WhatsApp real — **M4** continua aberto como gate
+operacional; o laço de ferramentas contra o Scheduling real, áudio, mídia e
+grupo (fora do que a semeadura deste ensaio exercita); e nada sobre a origem
+real da Minha Agenda.
+
+**`validate:ui` não mudou.** O gate público continua as mesmas sete rotas
+públicas, as mesmas cinco larguras, `npm run start` e nenhuma pré-condição de
+banco — ver [VALIDATION_GATE](VALIDATION_GATE.md). Amarrar o gate público a
+PostgreSQL transformaria o único gate renderizado que roda sem pré-condição em
+mais um passo dependente de ambiente; por isso o ensaio autenticado vive
+inteiramente em `validate:integration`.

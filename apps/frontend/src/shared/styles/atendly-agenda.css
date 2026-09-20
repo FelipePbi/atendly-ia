@@ -1218,10 +1218,18 @@
   .agenda-flow-page {
     padding: 20px 16px 32px;
   }
+  /* Uma coluna no celular, medido (Goal033).
+     Com `minmax(0, 1fr) auto` a coluna `auto` das ações ficava com a largura
+     inteira — as três ações da Agenda são `<a class="btn">`, e o
+     `.agenda-page-actions .btn span { display: none }` abaixo só alcança o
+     `<span>` que o `Button` cria na variante `<button>`. Resultado medido a
+     360px: a coluna do título com 0px de largura, `<h1>Agenda</h1>` com caixa
+     0×33px (invisível para qualquer medição) e o texto vazando uma palavra por
+     linha. Em uma coluna: 328px de largura e caixa 328×33px. */
   .agenda-page-header {
     margin-bottom: 18px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     align-items: flex-start;
     gap: 12px;
   }
@@ -1231,8 +1239,10 @@
   .agenda-page-header p {
     font-size: 13px;
   }
+  /* Em uma coluna as ações têm a largura da tela; `nowrap` as empurraria para
+     fora dela. */
   .agenda-page-actions {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 8px;
   }
   .agenda-page-actions .btn {

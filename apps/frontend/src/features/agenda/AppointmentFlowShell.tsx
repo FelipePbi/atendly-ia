@@ -27,7 +27,7 @@ export function AppointmentFlowShell({
     active: "agenda",
     loading,
     module: "agenda",
-    source: calendar?.source === "EXTERNAL" ? "external" : "atendly",
+    source: "atendly",
     title,
   });
   return (
@@ -41,26 +41,20 @@ export function AppointmentFlowShell({
           <h1>{title}</h1>
           <p>{description}</p>
         </header>
-        {calendar && <SourceStrip calendar={calendar} />}
+        {calendar && <SourceStrip />}
         {loading ? <AgendaLoading /> : children}
       </div>
     </>
   );
 }
 
-export function ReadOnlyState({
-  calendar,
-  operation,
-}: {
-  calendar: CalendarState;
-  operation: string;
-}) {
+export function ReadOnlyState({ operation }: { operation: string }) {
   return (
     <div className="agenda-state-surface">
       <StatePanel
         actionHref="/agenda"
         actionLabel="Voltar à agenda"
-        description={`A configuração atual de ${calendar.source === "EXTERNAL" ? "Minha Agenda" : "Agenda Atendly"} não permite ${operation} por aqui.`}
+        description={`A configuração atual de Agenda Atendly não permite ${operation} por aqui.`}
         icon="lock"
         title="Operação indisponível"
       />

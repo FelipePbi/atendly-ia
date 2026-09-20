@@ -1,13 +1,12 @@
 "use client";
 
-import { type ReactNode, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   type Appointment,
   type CalendarState,
   isActiveAppointmentStatus,
 } from "@/data";
-import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Button } from "@/shared/ui/Button";
 import { StatePanel } from "@/shared/ui/States";
@@ -64,8 +63,7 @@ export function AppointmentDetail({ appointmentId }: { appointmentId?: string })
     calendar?.capabilities.createAppointments &&
     appointment ? isActiveAppointmentStatus(appointment.status) : false,
   );
-  // Ciclo de vida e histórico só existem na Agenda Atendly (Goal016): agenda
-  // externa recusa essas rotas com `EXTERNAL_CALENDAR_LIFECYCLE_UNSUPPORTED`.
+  // Ciclo de vida e histórico exigem fonte configurada (Goal016).
   const lifecycleAvailable = calendar?.source === "ATENDLY";
 
   return (
@@ -115,13 +113,6 @@ export function AppointmentDetail({ appointmentId }: { appointmentId?: string })
               </div>
             )}
           </section>
-          {calendar?.source === "EXTERNAL" &&
-            !calendar.capabilities.createAppointments && (
-              <ReadOnlyNotice>
-                Este calendário está em modo de consulta. Alterações devem ser
-                feitas na fonte oficial.
-              </ReadOnlyNotice>
-            )}
           <div className="agenda-detail-grid">
             <section className="agenda-detail-section">
               <h2>Cliente</h2>
@@ -197,14 +188,5 @@ export function AppointmentDetail({ appointmentId }: { appointmentId?: string })
         </>
       )}
     </AppointmentFlowShell>
-  );
-}
-
-function ReadOnlyNotice({ children }: { children: ReactNode }) {
-  return (
-    <div className="agenda-demo-note">
-      <Icon name="lock" />
-      <span>{children}</span>
-    </div>
   );
 }

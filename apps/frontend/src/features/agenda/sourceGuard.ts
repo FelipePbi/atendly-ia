@@ -45,13 +45,9 @@ export interface PersonAgendaGuardResult {
 }
 
 /**
- * A leitura de agenda por pessoa nunca é oferecida em fonte externa: o
- * provider de Minha Agenda ignora `customerId` e só filtra por
- * `customerPhone` (`minha-agenda/provider.ts`), então confiar nele para
- * "a agenda desta pessoa" sem telefone devolveria a agenda inteira do
- * profissional disfarçada de agenda de uma pessoa só. Não é ausência de
- * capability — é ausência de oferta, e por isso é explicada, nunca um erro
- * genérico nem um filtro silenciosamente incorreto (Goal016).
+ * A leitura de agenda por pessoa exige fonte oficial escolhida: sem
+ * `CalendarSettings`, não há agenda nenhuma para filtrar por pessoa. Por isso
+ * é explicada, nunca um erro genérico (Goal016).
  */
 export function personAgendaGuard(
   calendar: CalendarState | null,
@@ -61,13 +57,6 @@ export function personAgendaGuard(
       allowed: false,
       reason:
         "Configure a fonte oficial da agenda antes de consultar atendimentos por pessoa.",
-    };
-  }
-  if (calendar.source === "EXTERNAL") {
-    return {
-      allowed: false,
-      reason:
-        "A fonte Minha Agenda não oferece agenda filtrada por pessoa: a consulta aqui é sempre pela agenda inteira, por data.",
     };
   }
   return { allowed: true, reason: null };

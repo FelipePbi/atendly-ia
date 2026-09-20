@@ -262,7 +262,7 @@ export function RescheduleFlow({ appointmentId }: { appointmentId?: string }) {
         </p>
       )}
       {!loading && calendar && !calendar.capabilities.createAppointments ? (
-        <ReadOnlyState calendar={calendar} operation="reagendar" />
+        <ReadOnlyState operation="reagendar" />
       ) : (
         appointment && (
           <div className="agenda-flow-layout">

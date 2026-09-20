@@ -23,7 +23,6 @@ const blockScenarios: Record<OnboardingBlockId, readonly OnboardingScenario[]> =
       "dias-de-atendimento",
       "horarios",
       "agenda-atendly-pronta",
-      "minha-agenda-conectar",
     ],
     whatsapp: [
       "whatsapp",
@@ -38,10 +37,9 @@ const blockScenarios: Record<OnboardingBlockId, readonly OnboardingScenario[]> =
     ],
   };
 
-/** Ordem real de navegação do produto. `minha-agenda-conectar` é um desvio a
- * partir de `fonte-da-agenda`, e `whatsapp-concluido` é um desvio a partir de
- * `whatsapp` (destino de "Fazer isso depois") — nenhum dos dois é um passo
- * sequencial, por isso ficam fora. `demonstracao-da-ia` (antes do estilo) e
+/** Ordem real de navegação do produto. `whatsapp-concluido` é um desvio a
+ * partir de `whatsapp` (destino de "Fazer isso depois") — não é um passo
+ * sequencial, por isso fica fora. `demonstracao-da-ia` (antes do estilo) e
  * `contatos-ignorados` (entre conectar e testar, opcional mas sequencial)
  * são passos reais do caminho principal.
  *

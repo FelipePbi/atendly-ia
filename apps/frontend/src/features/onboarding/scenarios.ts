@@ -59,12 +59,6 @@ export const onboardingScenarios = {
     "Serviço e disponibilidade foram salvos. O restante da ativação continua em uma próxima etapa do produto.",
     "ready",
   ],
-  "minha-agenda-conectar": [
-    "Conectar fonte oficial",
-    "Autorize a consulta da sua agenda",
-    "A forma exata de autenticação depende da integração disponível.",
-    "external-connect",
-  ],
   "demonstracao-da-ia": [
     "Antes de escolher o estilo",
     "Veja sua IA simulando um atendimento",

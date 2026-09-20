@@ -45,7 +45,6 @@ export function CustomerList() {
     );
   }, [result, query]);
 
-  const external = result?.source === "EXTERNAL";
   const canCreate = Boolean(result) && !result?.managedExternally;
   const loading = !result && !error;
   useShellConfig({
@@ -55,7 +54,7 @@ export function CustomerList() {
     active: "clientes",
     loading,
     module: "directory",
-    source: external ? "external" : "atendly",
+    source: "atendly",
     title: "Clientes",
   });
 
@@ -95,11 +94,7 @@ export function CustomerList() {
         <StatePanel
           actionHref={canCreate ? "/clientes/novo" : undefined}
           actionLabel={canCreate ? "Cadastrar cliente" : undefined}
-          description={
-            external
-              ? "Clientes externos são usados durante o agendamento quando a integração permite gravações."
-              : "Depois do primeiro cadastro ou agendamento, os clientes aparecerão aqui."
-          }
+          description="Depois do primeiro cadastro ou agendamento, os clientes aparecerão aqui."
           icon="users"
           title="Seus clientes aparecerão aqui"
         />
@@ -173,8 +168,6 @@ function CustomerListSkeleton() {
 function requestError(error: unknown, fallback: string): string {
   if (!(error instanceof BffHttpError)) return fallback;
   const messages: Record<string, string> = {
-    OPERATION_MANAGED_EXTERNALLY:
-      "Esta ação deve ser realizada na fonte oficial.",
     NETWORK_ERROR: "Não foi possível acessar a Atendly. Confira sua conexão.",
   };
   const message = messages[error.code] ?? fallback;

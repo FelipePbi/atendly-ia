@@ -199,7 +199,7 @@ export function BlockSeriesForm() {
         </p>
       )}
       {!loading && calendar && !calendar.capabilities.manageAvailability ? (
-        <ReadOnlyState calendar={calendar} operation="criar séries de bloqueio" />
+        <ReadOnlyState operation="criar séries de bloqueio" />
       ) : created ? (
         <div className="agenda-flow-layout">
           <section className="agenda-form-card">

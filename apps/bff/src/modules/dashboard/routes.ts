@@ -63,12 +63,7 @@ function publicSchedulingDashboard<
     ...dashboard,
     calendar: {
       ...dashboard.calendar,
-      source:
-        dashboard.calendar.source === null
-          ? null
-          : dashboard.calendar.source === "ATENDLY"
-            ? ("ATENDLY" as const)
-            : ("EXTERNAL" as const),
+      source: dashboard.calendar.source === "ATENDLY" ? "ATENDLY" : null,
     },
   };
 }
@@ -76,9 +71,8 @@ function publicSchedulingDashboard<
 /**
  * Acrescenta `calendar.capabilities.hoursConfigured` ao dashboard do
  * Scheduling: mesmo predicado de `POST /v1/onboarding/complete`
- * (`AVAILABILITY_REQUIRED`/`CALENDAR_INTEGRATION_NOT_CONNECTED`) — fonte
- * ATENDLY exige ao menos uma regra de disponibilidade ativa, fonte EXTERNAL
- * exige integração `CONNECTED`, sem fonte é `false`. Alimenta o checklist
+ * (`AVAILABILITY_REQUIRED`) — toda fonte escolhida exige ao menos uma regra
+ * de disponibilidade ativa, sem fonte é `false`. Alimenta o checklist
  * pós-onboarding da Home (Goal018/WU-10), que não pode inferir de
  * configuração local, só de leitura real.
  */
@@ -88,14 +82,11 @@ async function schedulingDashboardWithReadiness(
   ai: Pick<AiOrchestratorClient, "getActivationTest">,
 ) {
   const raw = await scheduling.dashboard(context);
-  const hoursConfigured =
-    raw.calendar.source === "ATENDLY"
-      ? (await scheduling.availabilitySettings(context)).rules.some(
-          (rule) => rule.active,
-        )
-      : raw.calendar.source === "MINHA_AGENDA"
-        ? raw.calendar.integration?.status === "CONNECTED"
-        : false;
+  const hoursConfigured = raw.calendar.source
+    ? (await scheduling.availabilitySettings(context)).rules.some(
+        (rule) => rule.active,
+      )
+    : false;
   const dashboard = publicSchedulingDashboard(raw);
   return {
     ...dashboard,

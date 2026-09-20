@@ -127,17 +127,16 @@ export class CalendarService {
     this.idempotency = new CalendarMutationIdempotency(prisma);
   }
 
-  /** Catálogo completo da fonte vigente: serviço em revisão continua listável (Goal007). */
+  /** Catálogo completo da agenda: serviço em revisão continua listável (Goal007). */
   async listServices(context: CalendarRequestContext) {
     return (await this.provider(context)).listServices();
   }
 
   /**
-   * "Operacional" (Goal007): o mesmo predicado para todas as fontes, usado
-   * por `/internal/services` (o que a IA pode oferecer) e pela capacidade de
-   * ativação lida pelo BFF. A Agenda Atendly já filtra em `listForScheduling`;
-   * a origem externa não tem estado de revisão, então só ativo e duração
-   * conhecida se aplicam.
+   * "Operacional" (Goal007): o mesmo predicado usado por `/internal/services`
+   * (o que a IA pode oferecer) e pela capacidade de ativação lida pelo BFF.
+   * A Agenda Atendly já filtra em `listForScheduling`; o filtro daqui é o que
+   * torna o predicado explícito no contrato desta leitura.
    */
   async listOperationalServices(context: CalendarRequestContext) {
     const services = await this.listServices(context);
@@ -214,13 +213,13 @@ export class CalendarService {
   }
 
   /**
-   * Ciclo de vida e histórico (Goal008) só existem na Agenda Atendly.
+   * Ciclo de vida e histórico (Goal008) exigem calendário configurado.
    *
-   * Não é uma limitação temporária: concluir, marcar falta, registrar valor
-   * final e gravar evento no mesmo commit do efeito dependem de o
-   * atendimento ser uma linha **deste** banco. Do outro lado de uma fonte
-   * externa não há transação para compartilhar, então a operação é recusada
-   * com erro próprio em vez de simulada.
+   * Concluir, marcar falta, registrar valor final e gravar evento no mesmo
+   * commit do efeito dependem de o atendimento ser uma linha **deste** banco.
+   * Desde a retirada da fonte externa (Goal027) não existe outra origem para
+   * recusar: o que resta exigir é a linha de `CalendarSettings`, e tenant sem
+   * ela continua recebendo `404 CALENDAR_SETTINGS_NOT_FOUND`.
    */
   async completeAppointment(
     context: CalendarRequestContext,
@@ -271,7 +270,7 @@ export class CalendarService {
     context: CalendarRequestContext,
     appointmentId: string,
   ): Promise<AppointmentNotificationRecord[]> {
-    await this.requireAtendlySource(context);
+    await this.requireSettings(context);
     // Mesma porta do histórico: um id de outro negócio não vira leitura
     // autorizada só por ser um id válido em algum lugar.
     await this.getAppointment(context, appointmentId);
@@ -287,7 +286,7 @@ export class CalendarService {
     context: CalendarRequestContext,
     appointmentId: string,
   ): Promise<AppointmentEventRecord[]> {
-    await this.requireAtendlySource(context);
+    await this.requireSettings(context);
     // Confirma que o atendimento é do tenant antes de devolver histórico:
     // um id de outro negócio não pode virar leitura autorizada.
     await this.getAppointment(context, appointmentId);
@@ -299,25 +298,12 @@ export class CalendarService {
   }
 
   private async lifecycle(context: CalendarRequestContext) {
-    await this.requireAtendlySource(context);
+    await this.requireSettings(context);
     return new AtendlyAppointmentLifecycleService(
       this.prisma,
       context.tenantId,
       context.userId,
     );
-  }
-
-  private async requireAtendlySource(
-    context: CalendarRequestContext,
-  ): Promise<void> {
-    const settings = await this.requireSettings(context);
-    if (settings.source !== "ATENDLY") {
-      throw new AppError(
-        "EXTERNAL_CALENDAR_LIFECYCLE_UNSUPPORTED",
-        "Appointment lifecycle and history are only available for the Atendly calendar.",
-        409,
-      );
-    }
   }
 
   async rescheduleAppointment(
@@ -429,7 +415,6 @@ export class CalendarService {
       tenantId: context.tenantId,
       userId: context.userId,
       timeZone: settings.timezone,
-      source: settings.source,
     });
   }
 }

@@ -1,11 +1,19 @@
 /**
- * Corte do writer remoto (Goal010, WU-07): `CalendarProviderFactory` recusa
- * MINHA_AGENDA para qualquer operacao operacional — escrita, oferta de
- * horarios e leitura — com erro proprio e identificavel. O dublê de
- * `MinhaAgendaImportSourceReader` abaixo falha se for instanciado: ele
- * prova que nenhum caminho novo constroi o leitor remoto fora da
- * importacao, porque o teste falharia com o erro do dublê em vez do erro
- * esperado da factory caso algum caminho ainda o chamasse.
+ * Retirada da fonte externa (Goal027): `CalendarProviderFactory` nao escolhe
+ * mais fonte nenhuma — ela instancia a Agenda Atendly e pronto. O que antes
+ * era provado pelo erro `MINHA_AGENDA_OPERATIONAL_SOURCE_DISABLED` continua
+ * provado aqui de outro jeito, e e o que importa: **nenhum caminho do
+ * calendario constroi o leitor remoto**. O dublê de
+ * `MinhaAgendaImportSourceReader` abaixo falha se for instanciado, entao um
+ * caminho novo que o chamasse quebraria estes testes com o erro do dublê.
+ *
+ * A invariante que o `if` da factory defendia mora agora na constraint
+ * `CHECK` de `CalendarSettings.source` (Goal027, WU-01), provada em
+ * integracao pelo ensaio da migration — nao num ramo de codigo inalcancavel.
+ *
+ * O que sobrou de exigencia no caminho do provider e ter calendario
+ * configurado: tenant sem linha de `CalendarSettings` continua recebendo
+ * `404 CALENDAR_SETTINGS_NOT_FOUND`.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,6 +30,7 @@ vi.mock(
   }),
 );
 
+import { AtendlyCalendarProvider } from "../../src/modules/integrations/atendly/provider.js";
 import { CalendarService } from "../../src/modules/calendar/calendar-service.js";
 import { CalendarProviderFactory } from "../../src/modules/calendar/provider-factory.js";
 import { createDatabaseDouble } from "./support/database-double.js";
@@ -29,42 +38,40 @@ import { createDatabaseDouble } from "./support/database-double.js";
 const tenantId = "tenant-a";
 const context = { tenantId, userId: "user-1", requestId: "request-1" };
 
-describe("CalendarProviderFactory: corte do writer remoto (Goal010)", () => {
-  it("recusa MINHA_AGENDA com erro próprio, sem consultar a conexão nem instanciar o provider remoto", async () => {
+describe("CalendarProviderFactory: uma fonte so (Goal027)", () => {
+  it("instancia a Agenda Atendly sem consultar a conexão da integração", async () => {
     const prisma = {
       integrationConnection: {
         findUnique: () => {
           throw new Error(
-            "não deveria consultar IntegrationConnection para uma operação recusada",
+            "não deveria consultar IntegrationConnection para montar o provider",
           );
         },
       },
     };
     const factory = new CalendarProviderFactory(prisma as never);
 
-    await expect(
-      factory.create({
-        tenantId,
-        userId: "user-1",
-        timeZone: "America/Sao_Paulo",
-        source: "MINHA_AGENDA",
-      }),
-    ).rejects.toMatchObject({
-      code: "MINHA_AGENDA_OPERATIONAL_SOURCE_DISABLED",
-      statusCode: 409,
+    const provider = await factory.create({
+      tenantId,
+      userId: "user-1",
+      timeZone: "America/Sao_Paulo",
     });
+
+    expect(provider).toBeInstanceOf(AtendlyCalendarProvider);
   });
 });
 
-describe("CalendarService: nenhuma operação instancia o provider remoto (Goal010)", () => {
-  function setup(source: "ATENDLY" | "MINHA_AGENDA") {
+describe("CalendarService: nenhuma operação instancia o provider remoto (Goal010/Goal027)", () => {
+  function setup(options: { withCalendar: boolean }) {
     const database = createDatabaseDouble();
-    database.tables.calendarSettings.rows.push({
-      id: tenantId,
-      tenantId,
-      source,
-      timezone: "America/Sao_Paulo",
-    });
+    if (options.withCalendar) {
+      database.tables.calendarSettings.rows.push({
+        id: tenantId,
+        tenantId,
+        source: "ATENDLY",
+        timezone: "America/Sao_Paulo",
+      });
+    }
     return { calendar: new CalendarService(database.client as never) };
   }
 
@@ -72,15 +79,21 @@ describe("CalendarService: nenhuma operação instancia o provider remoto (Goal0
     vi.clearAllMocks();
   });
 
-  it("recusa listServices com fonte MINHA_AGENDA", async () => {
-    const { calendar } = setup("MINHA_AGENDA");
+  it("opera normalmente para tenant com calendário configurado", async () => {
+    const { calendar } = setup({ withCalendar: true });
+    await expect(calendar.listServices(context)).resolves.toEqual([]);
+  });
+
+  it("recusa listServices sem calendário configurado, com 404", async () => {
+    const { calendar } = setup({ withCalendar: false });
     await expect(calendar.listServices(context)).rejects.toMatchObject({
-      code: "MINHA_AGENDA_OPERATIONAL_SOURCE_DISABLED",
+      code: "CALENDAR_SETTINGS_NOT_FOUND",
+      statusCode: 404,
     });
   });
 
-  it("recusa a oferta de horários (getAvailability) com fonte MINHA_AGENDA", async () => {
-    const { calendar } = setup("MINHA_AGENDA");
+  it("recusa a oferta de horários (getAvailability) sem calendário configurado", async () => {
+    const { calendar } = setup({ withCalendar: false });
     await expect(
       calendar.getAvailability(context, {
         serviceIds: ["service-1"],
@@ -88,11 +101,14 @@ describe("CalendarService: nenhuma operação instancia o provider remoto (Goal0
         days: 1,
         maxSlots: 10,
       }),
-    ).rejects.toMatchObject({ code: "MINHA_AGENDA_OPERATIONAL_SOURCE_DISABLED" });
+    ).rejects.toMatchObject({
+      code: "CALENDAR_SETTINGS_NOT_FOUND",
+      statusCode: 404,
+    });
   });
 
-  it("recusa createAppointment com fonte MINHA_AGENDA", async () => {
-    const { calendar } = setup("MINHA_AGENDA");
+  it("recusa createAppointment sem calendário configurado", async () => {
+    const { calendar } = setup({ withCalendar: false });
     await expect(
       calendar.createAppointment(context, {
         serviceIds: ["service-1"],
@@ -102,11 +118,19 @@ describe("CalendarService: nenhuma operação instancia o provider remoto (Goal0
         stepMinutes: 30,
         idempotencyKey: "key-1",
       }),
-    ).rejects.toMatchObject({ code: "MINHA_AGENDA_OPERATIONAL_SOURCE_DISABLED" });
+    ).rejects.toMatchObject({
+      code: "CALENDAR_SETTINGS_NOT_FOUND",
+      statusCode: 404,
+    });
   });
 
-  it("continua operando normalmente com fonte ATENDLY", async () => {
-    const { calendar } = setup("ATENDLY");
-    await expect(calendar.listServices(context)).resolves.toEqual([]);
+  it("recusa o ciclo de vida sem calendário configurado, no lugar do antigo 409 de fonte externa", async () => {
+    const { calendar } = setup({ withCalendar: false });
+    await expect(
+      calendar.listAppointmentHistory(context, "appointment-1"),
+    ).rejects.toMatchObject({
+      code: "CALENDAR_SETTINGS_NOT_FOUND",
+      statusCode: 404,
+    });
   });
 });

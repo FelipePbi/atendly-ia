@@ -466,6 +466,24 @@ export function integrationSteps(target) {
       args: ["scripts/goal023-retention-migration-rehearsal.mjs"],
       env,
     },
+    // Gate M0/M1 do Goal027: ensaio da migration que trava
+    // `CalendarSettings.source` em `ATENDLY` no Scheduling, em banco próprio e
+    // descartável. É a primeira migration do repositório que REESCREVE dado
+    // existente, e o ensaio prova coluna a coluna o que mudou e o que não
+    // mudou: negócio já `ATENDLY` intocado (nem `updatedAt` se move), negócios
+    // `MINHA_AGENDA` reescritos com a contagem REPORTADA, negócio sem linha
+    // continua sem, `MigrationJob` com `source`/`target` legados preservado
+    // (é por ele que o enum mantém os dois valores, D-026), nada apagado, a
+    // constraint `CalendarSettings_source_atendly_check` recusando `UPDATE` e
+    // `INSERT` reais com `23514` — contra um valor que o mesmo banco aceitava
+    // antes da migration — e segunda execução sem efeito.
+    {
+      name: "rehearse:goal027-calendar-source-migration",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal027-calendar-source-migration-rehearsal.mjs"],
+      env,
+    },
     // Identidade de cliente contra PostgreSQL real: telefone compartilhado,
     // cliente sem telefone, criação só na confirmação e isolamento por tenant.
     // Não pertence ao core porque exige banco.

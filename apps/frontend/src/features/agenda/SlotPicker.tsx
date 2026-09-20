@@ -2,11 +2,7 @@
 
 import { type AvailabilitySlot } from "@/data";
 
-import {
-  HOLD_EXPIRED_NOTICE,
-  HOLD_UNSUPPORTED_NOTICE,
-  type HoldSession,
-} from "./holdSession";
+import { HOLD_EXPIRED_NOTICE, type HoldSession } from "./holdSession";
 import { isoDate } from "./occupancy";
 
 /**
@@ -118,7 +114,6 @@ export function SlotPicker({
 
 function holdNotice(hold: HoldSession, timezone?: string | null): string {
   if (hold.phase === "reserving") return "Reservando o horário…";
-  if (hold.phase === "unsupported") return HOLD_UNSUPPORTED_NOTICE;
   if (hold.phase === "expired") return HOLD_EXPIRED_NOTICE;
   if (hold.phase === "held" && hold.expiresAt) {
     return `Horário reservado para você até ${formatClock(hold.expiresAt, timezone)}. Depois disso a reserva cai sozinha e é preciso escolher de novo.`;

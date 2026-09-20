@@ -369,7 +369,7 @@ describe("ShellConfigProvider + Agenda não excede a profundidade de atualizaç�
             migrate: true,
           },
           integration: null,
-          source: "EXTERNAL",
+          source: "ATENDLY",
           timezone: "America/Sao_Paulo",
         },
       }),

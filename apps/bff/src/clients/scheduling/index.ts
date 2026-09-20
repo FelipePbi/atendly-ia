@@ -6,7 +6,7 @@ import {
   type InternalRequestContext,
 } from "../internal-http-client.js";
 
-const sourceSchema = z.enum(["ATENDLY", "MINHA_AGENDA"]);
+const sourceSchema = z.enum(["ATENDLY"]);
 const priceTypeSchema = z.enum([
   "FIXED",
   "STARTING_AT",
@@ -558,7 +558,7 @@ export class SchedulingClient {
 
   async configureCalendar(
     context: InternalRequestContext,
-    input: { source: "ATENDLY" | "MINHA_AGENDA"; timezone: string },
+    input: { source: "ATENDLY"; timezone: string },
   ) {
     return this.mutate(
       context,

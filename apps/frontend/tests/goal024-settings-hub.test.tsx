@@ -8,8 +8,8 @@
  *
  * - com a fonte de agenda ATENDLY, os oito cartões existem, cada um apontando
  *   para a rota certa, na ordem do vault;
- * - "Disponibilidade" só aparece quando `calendar.source === "ATENDLY"` — com
- *   fonte EXTERNAL o cartão não existe, não fica só desabilitado;
+ * - "Disponibilidade" só aparece quando `calendar.source === "ATENDLY"` — sem
+ *   fonte escolhida o cartão não existe, não fica só desabilitado;
  * - a copy de cada cartão reflete o estado real (nome do negócio salvo, fonte
  *   de agenda, tom da IA), não um texto fixo.
  */
@@ -108,21 +108,21 @@ describe("hub com fonte de agenda Atendly", () => {
   });
 });
 
-describe("hub com fonte de agenda externa (Minha Agenda)", () => {
-  test("o cartão Disponibilidade não existe — a agenda externa é dona dos horários", () => {
+describe("hub sem fonte de agenda escolhida", () => {
+  test("o cartão Disponibilidade não existe — não há fonte para ter horários", () => {
     render(
       <SettingsHub
         settings={settingsFixture({
           calendar: {
             capabilities: {
-              createAppointments: true,
+              createAppointments: false,
               manageAvailability: false,
-              manageCustomers: true,
-              manageServices: true,
+              manageCustomers: false,
+              manageServices: false,
               migrate: false,
             },
             integration: null,
-            source: "EXTERNAL",
+            source: null,
             timezone: "America/Sao_Paulo",
           },
         })}
@@ -133,7 +133,7 @@ describe("hub com fonte de agenda externa (Minha Agenda)", () => {
       screen.queryByRole("link", { name: /Disponibilidade/ }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /^Agenda/ })).toHaveTextContent(
-      "Minha Agenda",
+      "Não configurada",
     );
     expect(cardLinks()).toHaveLength(7);
   });

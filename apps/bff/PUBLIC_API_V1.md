@@ -75,19 +75,19 @@ As rotas abaixo também estão registradas e possuem consumidores no frontend at
 
 Essas três rotas foram reescopadas pelo Goal010 e continuam com o mesmo contrato: elas guardam, testam e removem a **credencial da origem de importação** e nada mais. Conectar não muda a fonte da agenda operacional e não exige que ela seja externa — exigir isso deixaria a importação inalcançável depois do corte do writer remoto. Credencial que se declara de escrita é recusada com `409 INTEGRATION_WRITES_NOT_SUPPORTED`: a origem é somente leitura. Desconectar remove a credencial e **nunca** desativa a Agenda Atendly.
 
-O contrato público ainda expõe `ATENDLY | EXTERNAL`. Esse valor é fato do runtime atual e dívida técnica, não opção válida para novos fluxos.
-
 Pela regra de produto vigente:
 
 - Agenda Atendly é a única agenda operacional;
 - Minha Agenda só pode participar da importação única;
 - não existe conexão operacional, troca de fonte ou migração reversa.
 
-A futura revisão técnica deve migrar consumidores antes de remover ou alterar essa rota e enum. Este documento não determina o desenho do contrato substituto.
-
 ### Retirada do protocolo de migração pré-Goal010 (Goal026, 2026-09-19)
 
 As três rotas do protocolo de migração bidirecional pré-Goal010 — `POST /v1/calendar/migrations/diagnose`, `POST /v1/calendar/migrations`, `GET /v1/calendar/migrations/:id` — saíram deste contrato. É a **primeira remoção subtrativa de rota pública** desta migração: até aqui, toda mudança de contrato tinha sido aditiva, reescopo de rota existente ou troca de vocabulário, nunca a retirada de uma rota do ar. Elas não tinham consumidor de frontend desde o fechamento do Goal010 (2026-09-12, quando esta seção passou a registrar essa ausência) e o writer remoto que as sustentava foi removido do código no mesmo Goal026 (D-042). O que a importação única precisa da origem continua servido pelas três rotas de "Conexão da origem de importação" acima; nenhuma capacidade de leitura da origem foi perdida.
+
+### `calendar.source` perde `EXTERNAL` (Goal027, 2026-09-19)
+
+**Segunda remoção subtrativa do contrato público**, no mesmo sentido da anterior — não a retirada de uma rota, mas a redução do domínio de um campo que continua existindo. `calendar.source`, em toda rota que o expõe (`GET/PATCH /v1/onboarding`, `GET /v1/calendar`, `GET/PATCH /v1/settings`, `GET /v1/dashboard`), é agora `"ATENDLY" | null`; `EXTERNAL` não é mais um valor possível de leitura. Em `PATCH /v1/onboarding`, `calendar.source` continua aceito na escrita, mas só `"ATENDLY"` é válido — qualquer outro valor é recusado com `400`. O campo não desapareceu: o domínio dele encolheu, porque a agenda externa deixou de ser fonte operacional (D-043).
 
 ## Estilo de conversa da IA: três valores (Goal011)
 
@@ -142,10 +142,9 @@ A projeção acontece nos mesmos pontos que já enviam configuração para a IA 
 | `CALENDAR_NOT_SELECTED` | negócio ainda não escolheu fonte de agenda | escolher `calendar.source` em `PATCH /v1/onboarding` |
 | `AI_TONE_NOT_SELECTED` | `ai.tone` ainda é `null` | gravar `tone` (`PATCH /v1/settings/ai` ou seção `ai` de `PATCH /v1/onboarding`) |
 | `ACTIVE_SERVICE_REQUIRED` | catálogo sem nenhum serviço `active`; só avaliado com fonte já escolhida | ativar ou cadastrar serviço em `POST/PATCH /v1/services` |
-| `AVAILABILITY_REQUIRED` | fonte `ATENDLY` sem nenhuma regra de disponibilidade ativa | gravar regra em `PATCH /v1/settings/availability` |
-| `CALENDAR_INTEGRATION_NOT_CONNECTED` | fonte `EXTERNAL` cuja integração (Minha Agenda) não está `CONNECTED` | conectar em `POST /v1/calendar/integration/connect` |
+| `AVAILABILITY_REQUIRED` | fonte já escolhida sem nenhuma regra de disponibilidade ativa | gravar regra em `PATCH /v1/settings/availability` |
 
-`ACTIVE_SERVICE_REQUIRED`, `AVAILABILITY_REQUIRED` e `CALENDAR_INTEGRATION_NOT_CONNECTED` só entram depois que uma fonte foi escolhida — sem fonte, a área de agenda aparece só como `CALENDAR_NOT_SELECTED`. `AVAILABILITY_REQUIRED` é exclusivo de `ATENDLY`; `EXTERNAL` dispensa disponibilidade própria e cobra `CALENDAR_INTEGRATION_NOT_CONNECTED` no lugar. Nenhuma avaliação tem efeito colateral no banco — a rota só grava algo depois que a lista de `issues` está vazia.
+`ACTIVE_SERVICE_REQUIRED` e `AVAILABILITY_REQUIRED` só entram depois que uma fonte foi escolhida — sem fonte, a área de agenda aparece só como `CALENDAR_NOT_SELECTED`. `AVAILABILITY_REQUIRED` vale para toda fonte escolhida (Goal027) — `CALENDAR_INTEGRATION_NOT_CONNECTED` saiu do vocabulário porque não existe mais fonte cuja disponibilidade dependa de uma integração conectada. Nenhuma avaliação tem efeito colateral no banco — a rota só grava algo depois que a lista de `issues` está vazia.
 
 ## Clientes: identidade por ID
 
@@ -202,7 +201,7 @@ Um hold segura um horário enquanto a confirmação acontece — cinco minutos p
 
 Na remarcação, o hold é do horário **novo**; o original continua ocupado pelo próprio atendimento até a remarcação commitar.
 
-Holds só existem na Agenda Atendly. Com agenda externa, as rotas recusam com `409 EXTERNAL_CALENDAR_HOLD_UNSUPPORTED`.
+Holds só existem na Agenda Atendly, a única agenda operacional (Goal027).
 
 ### Sobreposição e atendimento manual: só por decisão humana
 
@@ -245,7 +244,7 @@ O histórico nunca é apagado nem reescrito. Eventos de criação **não** foram
 
 `POST /v1/appointments/:id/cancel` aceita `reason` (o nome anterior, `comments`, continua aceito): o motivo vai para o evento de cancelamento.
 
-Ciclo de vida e histórico só existem na Agenda Atendly; com agenda externa, recusam com `409 EXTERNAL_CALENDAR_LIFECYCLE_UNSUPPORTED`.
+Ciclo de vida e histórico só existem na Agenda Atendly, a única agenda operacional (Goal027).
 
 ### Agenda disputada
 
@@ -453,7 +452,7 @@ Toda recusa tem código próprio e nenhuma vira `500` para o consumidor. `ACTIVA
 | `ACTIVATION_TEST_WHATSAPP_NOT_CONNECTED` | `error.details.upstreamCode` | `409` | não há vínculo de WhatsApp ativo para o negócio | conectar o WhatsApp (`POST /v1/whatsapp/connect`) antes de testar |
 | `ACTIVATION_TEST_TENANT_PHONE_UNKNOWN` | `error.details.upstreamCode` | `409` | `tenantPhone` enviado está vazio (depois de normalizado) ou é igual ao número da própria plataforma | enviar o número real do WhatsApp do negócio |
 | `ACTIVATION_TEST_NO_ELIGIBLE_SERVICE` | `error.details.upstreamCode` | `409` | o catálogo não tem nenhum serviço apto a agendamento normal | cadastrar ou ativar um serviço (`POST`/`PATCH /v1/services`) |
-| `ACTIVATION_TEST_NO_AVAILABILITY` | `error.details.upstreamCode` | `409` | a agenda não oferece nenhum horário para o serviço escolhido pelo sistema | corrigir a disponibilidade (`PATCH /v1/settings/availability` ou a integração externa) antes de testar |
+| `ACTIVATION_TEST_NO_AVAILABILITY` | `error.details.upstreamCode` | `409` | a agenda não oferece nenhum horário para o serviço escolhido pelo sistema | corrigir a disponibilidade em `PATCH /v1/settings/availability` antes de testar |
 | `ACTIVATION_TEST_ALREADY_RUNNING` | `error.details.upstreamCode` | `409` | já existe execução viva (em andamento ou pausada) para o negócio | ler `GET /v1/activation-test`; se estiver pausada, `POST /v1/activation-test/restart` |
 
 `202` é a única resposta de sucesso das duas rotas de escrita: a execução foi persistida e passa a rodar no servidor, sem confirmação de resultado nesta mesma resposta.
@@ -465,7 +464,7 @@ Toda recusa tem código próprio e nenhuma vira `500` para o consumidor. `ACTIVA
 | Campo | Significado |
 | --- | --- |
 | `capabilities.aiActivationReady` | ao menos um serviço operacional (já existia no Scheduling — usado por `PATCH /v1/settings/ai`, ver "Catálogo" acima — e passa a ser devolvido também aqui) |
-| `capabilities.hoursConfigured` | fonte `ATENDLY` com ao menos uma regra de disponibilidade ativa, ou fonte `EXTERNAL` com integração `CONNECTED`; sem fonte escolhida é `false`. Mesmo predicado de `AVAILABILITY_REQUIRED`/`CALENDAR_INTEGRATION_NOT_CONNECTED` em `POST /v1/onboarding/complete` |
+| `capabilities.hoursConfigured` | fonte escolhida com ao menos uma regra de disponibilidade ativa; sem fonte escolhida é `false` (Goal027). Mesmo predicado de `AVAILABILITY_REQUIRED` em `POST /v1/onboarding/complete` |
 | `capabilities.activationTestCompleted` (Goal019) | execução do teste real em `SUCCEEDED` **que ainda vale** para o WhatsApp de hoje. Negócio que nunca testou é `false` — "nunca testou", não "falhou" —, e teste feito contra um número que foi trocado ou revinculado deixa de contar, porque o vault exige teste novo nesse caso. Dependência indisponível também é `false`: "não sei" nunca vira "concluído" |
 
 Os três campos, somados a `whatsapp.status` de `GET /v1/status`, alimentam o checklist de `/inicio` ("Cadastrar um serviço", "Definir horários de atendimento", "Conectar o WhatsApp", "Concluir o teste da IA"): enquanto a IA não estiver efetivamente ativa (`GET /v1/status`.`ai.state` diferente de `ACTIVE`), a Home mostra o que falta, com item concluído marcado.
@@ -729,7 +728,7 @@ O `PATCH` devolve a mesma forma do `GET`, inclusive `lastSweepCompletedAt`: grav
 
 `reason` assume `LEAD_ALREADY_PASSED`, `APPOINTMENT_VERSION_SUPERSEDED`, `APPOINTMENT_NOT_CONFIRMED`, `APPOINTMENT_CANCELLED`, `APPOINTMENT_ALREADY_STARTED`, `REMINDER_CONFIGURATION_CHANGED`, `CUSTOMER_WITHOUT_PHONE`, `CONTACT_IGNORED`, `AI_NOT_ENABLED`, `CHANNEL_NOT_CONNECTED`, `TRANSPORT_FAILED`, `TRANSPORT_UNKNOWN` ou `ATTEMPTS_EXHAUSTED`. `TRANSPORT_UNKNOWN` é terminal e significa "não dá para afirmar se saiu" — quem lê não deve traduzi-lo como "não enviado".
 
-A resposta **não** traz os fatos compostos para a entrega (nome e telefone do cliente já formatados) nem qualquer dado de lease: eles são do envio, não da leitura. Lista vazia é resposta normal — negócio sem lembrete configurado, atendimento passado ou importado antes deste Goal simplesmente não têm intenção nenhuma, e a interface não afirma estado de lembrete nesse caso. Como o histórico, só existe na Agenda Atendly; com agenda externa, recusa com `409 EXTERNAL_CALENDAR_LIFECYCLE_UNSUPPORTED`.
+A resposta **não** traz os fatos compostos para a entrega (nome e telefone do cliente já formatados) nem qualquer dado de lease: eles são do envio, não da leitura. Lista vazia é resposta normal — negócio sem lembrete configurado, atendimento passado ou importado antes deste Goal simplesmente não têm intenção nenhuma, e a interface não afirma estado de lembrete nesse caso. Como o histórico, só existe na Agenda Atendly, a única agenda operacional (Goal027).
 
 ### `notifyCustomer` em cancelar e remarcar
 

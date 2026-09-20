@@ -262,10 +262,7 @@ export function AvailabilityExceptions() {
         </p>
       )}
       {!loading && calendar && !allowed ? (
-        <ReadOnlyState
-          calendar={calendar}
-          operation={operationLabel("manageAvailability")}
-        />
+        <ReadOnlyState operation={operationLabel("manageAvailability")} />
       ) : (
         !loading &&
         calendar && (

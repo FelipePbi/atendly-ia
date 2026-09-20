@@ -2451,3 +2451,108 @@ remoto e do pacote de contratos vazio, com regra estática contra o retorno.
   linha "Monorepo e fronteiras" da fotografia acima ainda cita
   `packages/contracts` como package do monorepo: é registro histórico, não
   estado atual.
+
+## Delta aceito — diff027, 2026-09-19 ([review027](reviews/027-review.md), rodada 6; [D-043](DECISIONS.md))
+
+A fotografia acima permanece como registro. Os fatos abaixo descrevem o diff027
+aceito: a retirada da fonte externa da agenda do dado, dos guards
+operacionais e do contrato público. Todo trecho anterior que cita `fonte
+externa`, `EXTERNAL`, `requireAtendlyCalendar`, `CALENDAR_INTEGRATION_NOT_CONNECTED`
+ou o predicado duplo de `capabilities.hoursConfigured` (Goals 015, 016, 018)
+é histórico superado por este delta, não estado atual — o padrão já usado
+pelo delta do diff026 para a linha "Monorepo e fronteiras".
+
+- **FATO atual (Scheduling, dado reescrito e travado):** a migration
+  `20260919120000_goal027_calendar_source_atendly` primeiro reescreve toda
+  linha de `CalendarSettings` com `source <> 'ATENDLY'` para `ATENDLY`
+  (`updatedAt` avança só nas linhas tocadas) e depois acrescenta
+  `CalendarSettings_source_atendly_check CHECK (source = 'ATENDLY')`. É a
+  primeira migration deste repositório que reescreve dado existente, não só
+  acrescenta estrutura. `scripts/goal027-calendar-source-migration-rehearsal.mjs`
+  prova contra PostgreSQL descartável, coluna a coluna: negócio já `ATENDLY`
+  fica intocado (nem `updatedAt` se move); negócio `MINHA_AGENDA` só muda
+  `source`/`updatedAt`, com a contagem de linhas reescritas **reportada**, não
+  silenciosa; negócio sem linha de `CalendarSettings` continua sem;
+  `MigrationJob` com `source`/`target` legados sobrevive sem alteração; um
+  `UPDATE`/`INSERT` de volta para `MINHA_AGENDA` depois da migration é
+  recusado pelo banco com `23514` (o mesmo `UPDATE` era aceito antes da
+  migration, provando que a trava é nova); e a segunda execução da migration
+  não muda uma linha. O enum `CalendarSource` **não** é reduzido: continua com
+  `ATENDLY` e `MINHA_AGENDA` porque `MigrationJob.source`/`target` são
+  histórico preservado por D-026/D-042 — só a tabela `CalendarSettings` passa
+  a exigir `ATENDLY`.
+- **FATO atual (Scheduling, guards removidos):** `CalendarProviderFactory.create`
+  só instancia `AtendlyCalendarProvider`; o parâmetro `source` e o ramo de
+  recusa (`409 MINHA_AGENDA_OPERATIONAL_SOURCE_DISABLED`) saíram —
+  `provider-factory.ts` não tem mais o que escolher. `calendar-service.ts`
+  perdeu o método `requireAtendlySource` (que recusava histórico e ciclo de
+  vida com `409 EXTERNAL_CALENDAR_LIFECYCLE_UNSUPPORTED`): as chamadas que
+  dependiam de fonte para histórico, eventos e notificações passaram a exigir
+  só `CalendarSettings` existir, preservando o `404 CALENDAR_SETTINGS_NOT_FOUND`
+  para tenant sem calendário configurado, sem o `409` condicional por fonte.
+- **FATO atual (BFF, contrato público reduzido):** `calendar.source` é
+  `"ATENDLY" | null` em toda rota que o expõe (`GET`/`PATCH /v1/onboarding`,
+  `GET /v1/calendar`, `GET`/`PATCH /v1/settings`, `GET /v1/dashboard`) —
+  `EXTERNAL` saiu do domínio de leitura. O schema público de
+  `PATCH /v1/onboarding` foi de `z.enum(["ATENDLY", "EXTERNAL"])` para
+  `z.enum(["ATENDLY"])`; qualquer outro valor é `400` antes de chegar ao
+  Scheduling, e o mapeador que convertia `MINHA_AGENDA` em `EXTERNAL` para o
+  consumidor (`onboarding-state.ts`, `calendar/routes.ts`) foi removido, sem
+  outro valor para mapear. `CALENDAR_INTEGRATION_NOT_CONNECTED` saiu do
+  vocabulário de `onboardingIssues`: `AVAILABILITY_REQUIRED` passa a valer
+  para toda fonte já escolhida, e `capabilities.hoursConfigured` usa o mesmo
+  predicado único em vez de dois predicados por fonte. `PUBLIC_API_V1.md`
+  registra essa redução como a **segunda remoção subtrativa** do contrato
+  público desta migração — a primeira foi de rota, no Goal026; esta é de
+  domínio de um campo que continua existindo.
+- **FATO atual (IA, hold sem exceção silenciosa):** `holdProposedSlot` deixou
+  de engolir falha de hold com um `catch` que devolvia `null` — `holdsUnsupported`
+  e o `catch` que o chamava saíram inteiros de `assistant-tools.ts`. Antes
+  deste Goal, fonte externa sem hold fazia a proposta seguir sem reserva
+  (comportamento correto enquanto existia uma fonte legitimamente sem essa
+  capacidade); hoje toda agenda tem hold, então uma falha ao criar hold é
+  informação real sobre a agenda — da mesma classe de "horário não está
+  livre" — e propaga pelo caminho normal de erro da tool, coberto por teste
+  (`assistant-tools.test.ts`).
+- **FATO atual (regra estática nova, distinguindo fonte de origem de
+  importação):** `scripts/final-production-audit.mjs` ganhou três checagens.
+  `findCalendarSourceExternalComparisons` recusa comparação
+  (`===`/`!==`/`==`/`!=`) entre `source`/`calendarSource` e
+  `"EXTERNAL"`/`"MINHA_AGENDA"`, exigindo o operador colado ao campo — o que a
+  separa de `IntegrationProvider.MINHA_AGENDA` e `provider: "MINHA_AGENDA"`
+  da importação única, que continuam legítimos. As outras duas recusam os
+  cinco códigos de erro retirados (`EXTERNAL_CALENDAR_HOLD_UNSUPPORTED`,
+  `EXTERNAL_CALENDAR_LIFECYCLE_UNSUPPORTED`, `EXTERNAL_CALENDAR_SERIES_UNSUPPORTED`,
+  `MINHA_AGENDA_OPERATIONAL_SOURCE_DISABLED`, `OPERATION_MANAGED_EXTERNALLY`)
+  como string literal e qualquer referência a `requireAtendlyCalendar`. Vinte
+  casos positivo/negativo em
+  `scripts/tests/final-production-audit-legacy-regression.test.mjs`.
+- **Residual encontrado pela regra nova, corrigido na rodada 2 (FIX-001):** a
+  primeira rodada de `no_external_calendar_source_comparison` contra a árvore
+  real citava três arquivos fora do escopo das WU-01 a WU-06:
+  `apps/frontend/src/features/settings/shared/labels.ts` (`sourceLabel` ainda
+  ramificava em `"EXTERNAL"`), `apps/scheduling-service/src/modules/internal-api/routes.ts`
+  (`sourceSchema = z.enum(["ATENDLY", "MINHA_AGENDA"])` ainda validava
+  `MINHA_AGENDA` em `PATCH /internal/calendar`, e `/internal/customers`/
+  `/internal/service-catalog` ainda ramificavam por
+  `settings.source === "MINHA_AGENDA"`/`"ATENDLY"`) e
+  `apps/bff/tests/goal018-onboarding-complete.integration.test.ts` (o tipo do
+  fixture de teste ainda declarava `calendarSource?: "ATENDLY" | "MINHA_AGENDA" | null`).
+  Os três foram corrigidos: `sourceLabel` só reconhece `"ATENDLY"`,
+  `sourceSchema` interno virou `z.enum(["ATENDLY"])`, os dois ramos mortos por
+  `MINHA_AGENDA` saíram de `internal-api/routes.ts`, e o fixture de teste
+  declara só `"ATENDLY" | null`. `scripts/final-production-audit.mjs` roda
+  hoje com 23 checagens: 22 passam (incluindo
+  `no_external_calendar_source_comparison`) e 1 é o skip declarado
+  `production_health` — **`smoke:final-audit`/`validate:core` fecham limpos.**
+  O tipo de `SchedulingClient.configureCalendar` foi estreitado na rodada 3:
+  `{ source: "ATENDLY"; timezone: string }`, sem `MINHA_AGENDA`.
+- **LIMITE:** nada disto muda o gate M4 sobre a origem real do Minha Agenda
+  (ver [DATA_MIGRATION §11](DATA_MIGRATION.md#11-gates-de-rollout-e-remoção)):
+  é dado/contrato/código do lado do produto, não prova contra a API real. A
+  leitura de importação (`listServices`, `getImportSnapshot`) não é tocada.
+- **LIMITE:** este delta descreve o diff das WU-01 a WU-07 do Goal027,
+  round 1, mais as correções das rodadas 2 a 6 — a rodada 6 (FIX-001)
+  corrigiu os blockers apontados pela revisão da rodada 5. Aceito na
+  rodada 6 ([review027](reviews/027-review.md)), ainda sem commit de
+  fechamento integrado em `main`.

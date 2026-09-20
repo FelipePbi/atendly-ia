@@ -154,7 +154,6 @@ export function nextRequiredStep(state: OnboardingState): string {
   )
     return "dados-do-negocio";
   if (!state.calendar.source) return "fonte-da-agenda";
-  if (state.calendar.source === "EXTERNAL") return "minha-agenda-conectar";
   if (!state.service) return "servico-nome";
   if (!state.availability?.rules.some((rule) => rule.active)) {
     return "dias-de-atendimento";

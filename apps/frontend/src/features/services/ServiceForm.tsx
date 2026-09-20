@@ -146,12 +146,11 @@ export function ServiceForm({
     }
   }
 
-  const external = catalog?.source === "EXTERNAL";
   useShellConfig({
     active: "servicos",
     loading: !catalog && !error,
     module: "directory",
-    source: external ? "external" : "atendly",
+    source: "atendly",
     title: edit ? "Editar serviço" : "Novo serviço",
   });
   return (
@@ -162,10 +161,7 @@ export function ServiceForm({
           description="Defina o que a IA pode oferecer ao criar novos agendamentos."
           back="/servicos"
         />
-        <DirectorySourceStrip
-          external={external}
-          editable={Boolean(catalog?.editable)}
-        />
+        <DirectorySourceStrip />
         {error ? (
           <DirectoryState
             actionHref="/servicos"

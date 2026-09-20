@@ -96,12 +96,11 @@ export function CustomerForm() {
     setMessage(null);
   }
 
-  const external = calendar?.source === "EXTERNAL";
   useShellConfig({
     active: "clientes",
     loading: !calendar && !loadingError,
     module: "directory",
-    source: external ? "external" : "atendly",
+    source: "atendly",
     title: "Novo cliente",
   });
 
@@ -237,8 +236,6 @@ export function CustomerForm() {
 function requestError(error: unknown, fallback: string): string {
   if (!(error instanceof BffHttpError)) return fallback;
   const messages: Record<string, string> = {
-    OPERATION_MANAGED_EXTERNALLY:
-      "Esta ação deve ser realizada na fonte oficial.",
     NETWORK_ERROR: "Não foi possível acessar a Atendly. Confira sua conexão.",
   };
   const message = messages[error.code] ?? fallback;

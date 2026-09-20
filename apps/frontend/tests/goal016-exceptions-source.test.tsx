@@ -6,8 +6,8 @@
  * Cobre a criação e remoção de disponibilidade extra e indisponibilidade
  * (total e parcial); a indisponibilidade que cobre atendimento confirmado
  * mostrando o que será afetado e só reenviando com `decidedReason`; a
- * ausência de qualquer campo `decidedBy` no formulário; a fonte EXTERNAL
- * explicada pela capability correspondente sem nenhuma leitura de agenda
+ * ausência de qualquer campo `decidedBy` no formulário; a ausência de
+ * capability explicada por ela mesma, sem nenhuma leitura de agenda
  * requisitada; e o guard puro de `sourceGuard.ts`.
  */
 
@@ -331,9 +331,19 @@ describe("nenhum campo decidedBy existe em formulário algum", () => {
   });
 });
 
-describe("em fonte EXTERNAL nenhuma leitura de agenda por pessoa é requisitada", () => {
+describe("sem capability de manageAvailability nenhuma leitura de agenda por pessoa é requisitada", () => {
   test("a operação é explicada pela capability, sem nenhuma requisição de exceções ou atendimentos", async () => {
-    getCalendar.mockResolvedValue(calendarFixture({ source: "EXTERNAL" }));
+    getCalendar.mockResolvedValue(
+      calendarFixture({
+        capabilities: {
+          createAppointments: true,
+          manageAvailability: false,
+          manageCustomers: true,
+          manageServices: true,
+          migrate: false,
+        },
+      }),
+    );
     const { container } = renderScreen();
 
     expect(
@@ -341,7 +351,7 @@ describe("em fonte EXTERNAL nenhuma leitura de agenda por pessoa é requisitada"
     ).toBeVisible();
     expect(
       screen.getByText(
-        `A configuração atual de Minha Agenda não permite ${operationLabel("manageAvailability")} por aqui.`,
+        `A configuração atual de Agenda Atendly não permite ${operationLabel("manageAvailability")} por aqui.`,
       ),
     ).toBeVisible();
     expect(screen.queryByText(/algo deu errado/i)).toBeNull();
@@ -357,19 +367,26 @@ describe("sourceGuard: guard explícito por calendar.source e calendar.capabilit
   test("canPerform e operationLabel refletem a capability, não um texto fixo", () => {
     expect(canPerform(calendarFixture(), "manageAvailability")).toBe(true);
     expect(
-      canPerform(calendarFixture({ source: "EXTERNAL" }), "manageAvailability"),
+      canPerform(
+        calendarFixture({
+          capabilities: {
+            createAppointments: true,
+            manageAvailability: false,
+            manageCustomers: true,
+            manageServices: true,
+            migrate: false,
+          },
+        }),
+        "manageAvailability",
+      ),
     ).toBe(false);
     expect(canPerform(null, "manageAvailability")).toBe(false);
     expect(operationLabel("createAppointments")).toBe("criar agendamentos");
   });
 
-  test("personAgendaGuard recusa fonte externa e ausência de fonte, e permite ATENDLY", () => {
+  test("personAgendaGuard recusa ausência de fonte e permite ATENDLY", () => {
     expect(personAgendaGuard(calendarFixture()).allowed).toBe(true);
     expect(personAgendaGuard(calendarFixture()).reason).toBeNull();
-
-    const external = personAgendaGuard(calendarFixture({ source: "EXTERNAL" }));
-    expect(external.allowed).toBe(false);
-    expect(external.reason).toMatch(/pessoa/i);
 
     const unset = personAgendaGuard(calendarFixture({ source: null }));
     expect(unset.allowed).toBe(false);

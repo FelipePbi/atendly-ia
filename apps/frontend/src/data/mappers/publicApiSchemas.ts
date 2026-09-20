@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const calendarSourceSchema = z.enum(["ATENDLY", "EXTERNAL"]);
+export const calendarSourceSchema = z.enum(["ATENDLY"]);
 // Modalidades de atendimento do negócio (Goal018/WU-01), seleção múltipla.
 export const businessModalitySchema = z.enum(["ON_SITE", "AT_HOME", "ONLINE"]);
 // Estado de projeção do contexto de negócio para a IA (Goal018/WU-03):

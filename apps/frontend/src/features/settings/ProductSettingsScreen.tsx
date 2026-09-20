@@ -41,13 +41,11 @@ export function ProductSettingsScreen({
     return () => controller.abort();
   }, []);
 
-  const source =
-    settings?.calendar.source === "EXTERNAL" ? "external" : "atendly";
   useShellConfig({
     active: "configuracoes",
     loading: !settings && !error,
     module: "settings",
-    source,
+    source: "atendly",
     title: "Configurações",
   });
 

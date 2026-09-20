@@ -63,18 +63,6 @@ export function Summary({ rows }: { rows: Array<[string, string]> }) {
   );
 }
 
-export function ExternalUnavailable() {
-  return (
-    <div className="onboarding-note is-important">
-      <Icon name="info" />
-      <span>
-        A autenticação da Minha Agenda ainda depende da definição do provedor.
-        Nenhuma conexão será simulada ou marcada como concluída.
-      </span>
-    </div>
-  );
-}
-
 export function onboardingError(error: unknown): string {
   if (error instanceof BffHttpError && error.status === 409) {
     return "Ainda há itens obrigatórios pendentes. Revise negócio, agenda, serviço, disponibilidade e tom da IA.";

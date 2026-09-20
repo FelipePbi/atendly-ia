@@ -91,7 +91,7 @@ import {
   TenantPurgeService,
 } from "./tenantPurge.js";
 
-const sourceSchema = z.enum(["ATENDLY", "MINHA_AGENDA"]);
+const sourceSchema = z.enum(["ATENDLY"]);
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const idParamsSchema = z.object({ id: z.string().trim().min(1).max(128) });
@@ -541,13 +541,10 @@ export async function registerManagementRoutes(
 
   app.get("/internal/service-catalog", internalOnly, async (request) => {
     const context = currentInternalContext(request);
-    const settings = await requireCalendar(prisma, context.tenantId);
-    const services =
-      settings.source === "ATENDLY"
-        ? (
-            await new AtendlyServiceService(prisma, context.tenantId).list()
-          ).map(serviceDto)
-        : await new CalendarService(prisma).listServices(context);
+    await requireCalendar(prisma, context.tenantId);
+    const services = (
+      await new AtendlyServiceService(prisma, context.tenantId).list()
+    ).map(serviceDto);
     return data(request, services);
   });
 
@@ -556,7 +553,7 @@ export async function registerManagementRoutes(
     internalOnly,
     async (request, reply) => {
       const context = currentInternalContext(request);
-      await requireAtendlyCalendar(prisma, context.tenantId);
+      await requireCalendar(prisma, context.tenantId);
       const service = await new AtendlyServiceService(
         prisma,
         context.tenantId,
@@ -567,7 +564,7 @@ export async function registerManagementRoutes(
 
   app.patch("/internal/service-catalog/:id", internalOnly, async (request) => {
     const context = currentInternalContext(request);
-    await requireAtendlyCalendar(prisma, context.tenantId);
+    await requireCalendar(prisma, context.tenantId);
     const { id } = parse(idParamsSchema, request.params);
     const body = parse(servicePatchSchema, request.body);
     const serviceManager = new AtendlyServiceService(prisma, context.tenantId);
@@ -581,13 +578,6 @@ export async function registerManagementRoutes(
   app.get("/internal/customers", internalOnly, async (request) => {
     const context = currentInternalContext(request);
     const settings = await requireCalendar(prisma, context.tenantId);
-    if (settings.source === "MINHA_AGENDA") {
-      return data(request, {
-        items: [],
-        source: settings.source,
-        managedExternally: true,
-      });
-    }
     const query = parse(customerQuerySchema, request.query ?? {});
     const customers = await new AtendlyCustomerService(
       prisma,
@@ -605,7 +595,7 @@ export async function registerManagementRoutes(
 
   app.get("/internal/customers/:id", internalOnly, async (request) => {
     const context = currentInternalContext(request);
-    await requireAtendlyCalendar(prisma, context.tenantId);
+    await requireCalendar(prisma, context.tenantId);
     const { id } = parse(idParamsSchema, request.params);
     const customers = new AtendlyCustomerService(prisma, context.tenantId);
     const [customer, guardian, notes, tags] = await Promise.all([
@@ -633,7 +623,7 @@ export async function registerManagementRoutes(
     internalOnly,
     async (request) => {
       const context = currentInternalContext(request);
-      await requireAtendlyCalendar(prisma, context.tenantId);
+      await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       const authorized = await new AtendlyCustomerService(
         prisma,
@@ -650,7 +640,7 @@ export async function registerManagementRoutes(
 
   app.post("/internal/customers", internalOnly, async (request, reply) => {
     const context = currentInternalContext(request);
-    await requireAtendlyCalendar(prisma, context.tenantId);
+    await requireCalendar(prisma, context.tenantId);
     const customer = await new AtendlyCustomerService(
       prisma,
       context.tenantId,
@@ -661,7 +651,7 @@ export async function registerManagementRoutes(
   /** Nome e telefone só mudam por esta operação explícita. */
   app.patch("/internal/customers/:id", internalOnly, async (request) => {
     const context = currentInternalContext(request);
-    await requireAtendlyCalendar(prisma, context.tenantId);
+    await requireCalendar(prisma, context.tenantId);
     const { id } = parse(idParamsSchema, request.params);
     const body = parse(customerPatchSchema, request.body);
     const customer = await new AtendlyCustomerService(
@@ -676,7 +666,7 @@ export async function registerManagementRoutes(
     internalOnly,
     async (request) => {
       const context = currentInternalContext(request);
-      await requireAtendlyCalendar(prisma, context.tenantId);
+      await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       const body = parse(primaryGuardianBodySchema, request.body);
       const relation = await new AtendlyCustomerService(
@@ -692,7 +682,7 @@ export async function registerManagementRoutes(
     internalOnly,
     async (request) => {
       const context = currentInternalContext(request);
-      await requireAtendlyCalendar(prisma, context.tenantId);
+      await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       const body = parse(primaryGuardianConfirmSchema, request.body);
       const relation = await new AtendlyCustomerService(
@@ -711,7 +701,7 @@ export async function registerManagementRoutes(
     internalOnly,
     async (request) => {
       const context = currentInternalContext(request);
-      await requireAtendlyCalendar(prisma, context.tenantId);
+      await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       return data(
         request,
@@ -725,7 +715,7 @@ export async function registerManagementRoutes(
 
   app.get("/internal/customers/:id/notes", internalOnly, async (request) => {
     const context = currentInternalContext(request);
-    await requireAtendlyCalendar(prisma, context.tenantId);
+    await requireCalendar(prisma, context.tenantId);
     const { id } = parse(idParamsSchema, request.params);
     const notes = await new AtendlyCustomerService(
       prisma,
@@ -739,7 +729,7 @@ export async function registerManagementRoutes(
     internalOnly,
     async (request, reply) => {
       const context = currentInternalContext(request);
-      await requireAtendlyCalendar(prisma, context.tenantId);
+      await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       const body = parse(customerNoteBodySchema, request.body);
       const note = await new AtendlyCustomerService(
@@ -755,7 +745,7 @@ export async function registerManagementRoutes(
     internalOnly,
     async (request) => {
       const context = currentInternalContext(request);
-      await requireAtendlyCalendar(prisma, context.tenantId);
+      await requireCalendar(prisma, context.tenantId);
       const params = parse(customerChildParamsSchema, request.params);
       const body = parse(authorizationPatchSchema, request.body);
       const note = await new AtendlyCustomerService(
@@ -771,7 +761,7 @@ export async function registerManagementRoutes(
     internalOnly,
     async (request) => {
       const context = currentInternalContext(request);
-      await requireAtendlyCalendar(prisma, context.tenantId);
+      await requireCalendar(prisma, context.tenantId);
       const params = parse(customerChildParamsSchema, request.params);
       return data(
         request,
@@ -785,7 +775,7 @@ export async function registerManagementRoutes(
 
   app.get("/internal/customers/:id/tags", internalOnly, async (request) => {
     const context = currentInternalContext(request);
-    await requireAtendlyCalendar(prisma, context.tenantId);
+    await requireCalendar(prisma, context.tenantId);
     const { id } = parse(idParamsSchema, request.params);
     const tags = await new AtendlyCustomerService(
       prisma,
@@ -799,7 +789,7 @@ export async function registerManagementRoutes(
     internalOnly,
     async (request, reply) => {
       const context = currentInternalContext(request);
-      await requireAtendlyCalendar(prisma, context.tenantId);
+      await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       const body = parse(customerTagBodySchema, request.body);
       const tag = await new AtendlyCustomerService(
@@ -815,7 +805,7 @@ export async function registerManagementRoutes(
     internalOnly,
     async (request) => {
       const context = currentInternalContext(request);
-      await requireAtendlyCalendar(prisma, context.tenantId);
+      await requireCalendar(prisma, context.tenantId);
       const params = parse(customerChildParamsSchema, request.params);
       const body = parse(authorizationPatchSchema, request.body);
       const tag = await new AtendlyCustomerService(
@@ -831,7 +821,7 @@ export async function registerManagementRoutes(
     internalOnly,
     async (request) => {
       const context = currentInternalContext(request);
-      await requireAtendlyCalendar(prisma, context.tenantId);
+      await requireCalendar(prisma, context.tenantId);
       const params = parse(customerChildParamsSchema, request.params);
       return data(
         request,
@@ -845,7 +835,7 @@ export async function registerManagementRoutes(
 
   app.get("/internal/availability-settings", internalOnly, async (request) => {
     const context = currentInternalContext(request);
-    const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+    const calendar = await requireCalendar(prisma, context.tenantId);
     const rules = await prisma.availabilityRule.findMany({
       where: { tenantId: context.tenantId },
       orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
@@ -866,7 +856,7 @@ export async function registerManagementRoutes(
       // IA nunca decide granularidade, antecedencia nem disponibilidade
       // semanal do negocio.
       requireHumanCaller(context);
-      const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+      const calendar = await requireCalendar(prisma, context.tenantId);
       const body = parse(availabilityBodySchema, request.body);
       assertTimezone(body.timezone);
       assertNonOverlappingRules(body.rules);
@@ -1046,7 +1036,7 @@ export async function registerManagementRoutes(
     internalOnly,
     async (request) => {
       const context = currentInternalContext(request);
-      await requireAtendlyCalendar(prisma, context.tenantId);
+      await requireCalendar(prisma, context.tenantId);
       const query = parse(exceptionListQuerySchema, request.query);
       const exceptions = await listAvailabilityExceptions(prisma, {
         tenantId: context.tenantId,
@@ -1063,7 +1053,7 @@ export async function registerManagementRoutes(
     async (request, reply) => {
       const context = currentInternalContext(request);
       requireHumanCaller(context);
-      const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+      const calendar = await requireCalendar(prisma, context.tenantId);
       const body = parse(extraAvailabilityBodySchema, request.body);
       const exception = await createExtraAvailability(prisma, {
         tenantId: context.tenantId,
@@ -1080,7 +1070,7 @@ export async function registerManagementRoutes(
     async (request, reply) => {
       const context = currentInternalContext(request);
       requireHumanCaller(context);
-      const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+      const calendar = await requireCalendar(prisma, context.tenantId);
       const body = parse(unavailabilityBodySchema, request.body);
       const exception = await createUnavailability(prisma, {
         tenantId: context.tenantId,
@@ -1104,7 +1094,7 @@ export async function registerManagementRoutes(
     async (request) => {
       const context = currentInternalContext(request);
       requireHumanCaller(context);
-      const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+      const calendar = await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       await removeAvailabilityException(prisma, {
         tenantId: context.tenantId,
@@ -1124,7 +1114,7 @@ export async function registerManagementRoutes(
     async (request, reply) => {
       const context = currentInternalContext(request);
       requireHumanCaller(context);
-      const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+      const calendar = await requireCalendar(prisma, context.tenantId);
       const body = parse(blockSeriesBodySchema, request.body);
       const series = await createBlockSeries(prisma, {
         tenantId: context.tenantId,
@@ -1144,7 +1134,7 @@ export async function registerManagementRoutes(
     async (request) => {
       const context = currentInternalContext(request);
       requireHumanCaller(context);
-      const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+      const calendar = await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       const body = parse(blockSeriesEditBodySchema, request.body);
       const series = await editBlockSeriesFromDate(prisma, {
@@ -1167,7 +1157,7 @@ export async function registerManagementRoutes(
     async (request) => {
       const context = currentInternalContext(request);
       requireHumanCaller(context);
-      const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+      const calendar = await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       await removeBlockSeriesFuture(prisma, {
         tenantId: context.tenantId,
@@ -1184,7 +1174,7 @@ export async function registerManagementRoutes(
     async (request) => {
       const context = currentInternalContext(request);
       requireHumanCaller(context);
-      const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+      const calendar = await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       await removeBlockOccurrence(prisma, {
         tenantId: context.tenantId,
@@ -1201,7 +1191,7 @@ export async function registerManagementRoutes(
     async (request) => {
       const context = currentInternalContext(request);
       requireHumanCaller(context);
-      const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+      const calendar = await requireCalendar(prisma, context.tenantId);
       const { id } = parse(idParamsSchema, request.params);
       const body = parse(moveOccurrenceBodySchema, request.body);
       const block = await moveBlockOccurrence(prisma, {
@@ -1219,7 +1209,7 @@ export async function registerManagementRoutes(
   // permitida — startDate/endDate sao obrigatorios.
   app.get("/internal/time-blocks", internalOnly, async (request) => {
     const context = currentInternalContext(request);
-    const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+    const calendar = await requireCalendar(prisma, context.tenantId);
     const query = parse(exceptionListQuerySchema, request.query);
     const blocks = await listTimeBlocks(prisma, {
       tenantId: context.tenantId,
@@ -1236,7 +1226,7 @@ export async function registerManagementRoutes(
     const context = currentInternalContext(request);
     // Bloqueio, compromisso pessoal e excecao nunca sao da IA (Goal009).
     requireHumanCaller(context);
-    const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+    const calendar = await requireCalendar(prisma, context.tenantId);
     const body = parse(timeBlockBodySchema, request.body);
     const block = await createTimeBlock(prisma, {
       tenantId: context.tenantId,
@@ -1253,7 +1243,7 @@ export async function registerManagementRoutes(
   app.delete("/internal/time-blocks/:id", internalOnly, async (request) => {
     const context = currentInternalContext(request);
     requireHumanCaller(context);
-    const calendar = await requireAtendlyCalendar(prisma, context.tenantId);
+    const calendar = await requireCalendar(prisma, context.tenantId);
     const { id } = parse(idParamsSchema, request.params);
     await removeTimeBlock(prisma, {
       tenantId: context.tenantId,
@@ -1273,9 +1263,10 @@ export async function registerManagementRoutes(
     async (request) => {
       const context = currentInternalContext(request);
       // Escopo por tenant confirmado antes da varredura: a rota so responde a
-      // um tenant com agenda Atendly, mesmo que a varredura em si seja global
-      // (o loop no processo atende todos os tenants do banco do dono).
-      await requireAtendlyCalendar(prisma, context.tenantId);
+      // um tenant com calendario configurado, mesmo que a varredura em si
+      // seja global (o loop no processo atende todos os tenants do banco do
+      // dono).
+      await requireCalendar(prisma, context.tenantId);
       const result = await runAutoCompleteSweep(prisma, {
         graceMinutes: env.CALENDAR_AUTO_COMPLETE_GRACE_MINUTES,
       });
@@ -1287,12 +1278,13 @@ export async function registerManagementRoutes(
   // Compatibilidade temporaria e declarada: `connect`/`reconnect`/`disconnect`
   // e o par `diagnose`/`migrations` abaixo continuam com o mesmo contrato
   // (enums, campos de `source`/`target`, respostas idempotentes ja gravadas),
-  // mas deixaram de habilitar qualquer operacao no calendario operacional —
-  // `CalendarProviderFactory` recusa MINHA_AGENDA para escrita, leitura e
-  // oferta de horarios (Goal010). O papel dessas rotas agora e so o ciclo da
-  // importacao unica: guardar/testar a credencial e disparar a leitura da
-  // origem. Desconectar a integracao nunca desativa a Agenda Atendly, que
-  // nao depende de `IntegrationConnection`.
+  // mas nao habilitam operacao nenhuma no calendario operacional: a Agenda
+  // Atendly e a unica fonte que existe (Goal010; fonte externa retirada no
+  // Goal027) e `CalendarProviderFactory` nao instancia outra coisa. O papel
+  // dessas rotas e so o ciclo da importacao unica: guardar/testar a
+  // credencial e disparar a leitura da origem. `IntegrationProvider` e
+  // `CalendarSource` sao enums diferentes — desconectar a integracao nunca
+  // desativa a Agenda Atendly, que nao depende de `IntegrationConnection`.
   app.post(
     "/internal/calendar/integration/connect",
     internalOnly,
@@ -1302,7 +1294,7 @@ export async function registerManagementRoutes(
       // A conexao existe agora **so** para o ciclo da importacao unica:
       // guardar e testar a credencial da origem. Ela nao muda a fonte da
       // agenda operacional e nao e mais exigida para operar a agenda.
-      // Exigir aqui `calendar.source === "MINHA_AGENDA"` tornaria a
+      // Exigir aqui que `calendar.source` seja `MINHA_AGENDA` tornaria a
       // importacao inalcancavel depois do corte do writer remoto: o negocio
       // que opera na Agenda Atendly — que e todo negocio novo — nunca
       // conseguiria conectar a origem que ele quer importar.
@@ -1761,6 +1753,7 @@ async function calendarOverview(
     }),
   ]);
   const source = settings?.source ?? null;
+  const hasCalendar = settings !== null;
   const operationalServices = await countOperationalServices(
     prisma,
     context,
@@ -1779,14 +1772,16 @@ async function calendarOverview(
         }
       : null,
     capabilities: {
-      manageAvailability: source === "ATENDLY",
-      manageServices: source === "ATENDLY",
-      manageCustomers: source === "ATENDLY",
-      // Corte do writer remoto (Goal010): a Agenda Atendly e a unica fonte
-      // operacional. `CalendarProviderFactory` recusa MINHA_AGENDA para
-      // qualquer operacao, entao anunciar essa capacidade para a fonte
-      // externa prometeria uma escrita que a factory sempre recusaria.
-      createAppointments: source === "ATENDLY",
+      // Retirada da fonte externa (Goal027): as quatro capacidades abaixo
+      // eram `source === "ATENDLY"` e passam a ser "tem calendario
+      // configurado". Nao e afrouxamento: `CalendarSettings.source` so
+      // admite `ATENDLY` (constraint `CHECK` no banco), entao haver a linha
+      // e exatamente o que a comparacao por fonte ja significava. Nenhuma
+      // capability muda de nome nem entra ou sai do payload.
+      manageAvailability: hasCalendar,
+      manageServices: hasCalendar,
+      manageCustomers: hasCalendar,
+      createAppointments: hasCalendar,
       migrate: source !== null,
       // "Pelo menos um serviço operacional" (Goal007): lido do que
       // `/internal/services` devolveria para a fonte vigente — mesmo
@@ -1796,17 +1791,17 @@ async function calendarOverview(
   };
 }
 
-// Mesma fonte que a IA consulta (`CalendarService.listServices`, ja filtrada
-// para "operacional"): evita reimplementar o predicado por fonte e cobre a
-// Agenda Atendly e o Minha Agenda igualmente. Origem sem calendario
-// configurado ou integracao indisponivel conta como zero, sem derrubar a
-// tela de configuracoes.
+// Mesma leitura que a IA consulta (`CalendarService.listServices`, ja
+// filtrada para "operacional"): evita reimplementar o predicado. Tenant sem
+// calendario configurado conta como zero, e leitura indisponivel tambem, sem
+// derrubar a tela de configuracoes. O significado de `aiActivationReady` nao
+// muda com a retirada da fonte externa (Goal027).
 async function countOperationalServices(
   prisma: PrismaClient,
   context: CalendarRequestContext,
   source: "ATENDLY" | "MINHA_AGENDA" | null,
 ): Promise<number> {
-  if (source !== "ATENDLY" && source !== "MINHA_AGENDA") return 0;
+  if (source === null) return 0;
   try {
     return (await new CalendarService(prisma).listOperationalServices(context))
       .length;
@@ -1824,18 +1819,6 @@ async function requireCalendar(prisma: PrismaClient, tenantId: string) {
       "CALENDAR_SETTINGS_NOT_FOUND",
       "Calendar settings were not found for this tenant.",
       404,
-    );
-  }
-  return calendar;
-}
-
-async function requireAtendlyCalendar(prisma: PrismaClient, tenantId: string) {
-  const calendar = await requireCalendar(prisma, tenantId);
-  if (calendar.source !== "ATENDLY") {
-    throw new AppError(
-      "OPERATION_MANAGED_EXTERNALLY",
-      "This operation is managed by the official external calendar.",
-      409,
     );
   }
   return calendar;

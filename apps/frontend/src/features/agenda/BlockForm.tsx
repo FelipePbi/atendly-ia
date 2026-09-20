@@ -135,7 +135,7 @@ export function BlockForm() {
         </p>
       )}
       {!loading && calendar && !calendar.capabilities.manageAvailability ? (
-        <ReadOnlyState calendar={calendar} operation="bloquear horários" />
+        <ReadOnlyState operation="bloquear horários" />
       ) : created ? (
         <div className="agenda-flow-layout">
           <section className="agenda-form-card">

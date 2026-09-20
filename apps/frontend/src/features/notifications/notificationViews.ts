@@ -49,7 +49,6 @@ const SETUP_ISSUE_LABELS: Record<string, string> = {
   AI_TONE_NOT_SELECTED: "estilo da IA não escolhido",
   ACTIVE_SERVICE_REQUIRED: "nenhum serviço ativo cadastrado",
   AVAILABILITY_REQUIRED: "disponibilidade não configurada",
-  CALENDAR_INTEGRATION_NOT_CONNECTED: "conexão com a agenda externa pendente",
 };
 
 const KIND_TITLES: Record<NotificationKind, string> = {

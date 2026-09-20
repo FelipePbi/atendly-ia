@@ -5,9 +5,13 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  excludeLegitimateAbsenceAssertions,
   findCalendarMigrationServiceReferences,
+  findCalendarSourceExternalComparisons,
   findLegacyMigrationRouteReferences,
   findMinhaAgendaWriterReferences,
+  findRemovedCalendarErrorCodeReferences,
+  findRequireAtendlyCalendarReferences,
   frontendMocksDirectoryExists,
 } from "../final-production-audit.mjs";
 
@@ -191,4 +195,192 @@ test("frontend_mocks_directory_is_absent: fails when apps/frontend/src/mocks com
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("no_external_calendar_source_comparison: passes when nothing compares source to EXTERNAL or MINHA_AGENDA", () => {
+  const files = [
+    {
+      path: "apps/scheduling-service/src/modules/calendar/routes.ts",
+      content:
+        'if (settings.source !== "ATENDLY") { throw new Error("unreachable"); }',
+    },
+  ];
+  assert.deepEqual(findCalendarSourceExternalComparisons(files), []);
+});
+
+test("no_external_calendar_source_comparison: fails when settings.source is compared to MINHA_AGENDA again", () => {
+  const files = [
+    {
+      path: "apps/scheduling-service/src/modules/internal-api/routes.ts",
+      content: 'if (settings.source === "MINHA_AGENDA") { return legacy(); }',
+    },
+  ];
+  assert.deepEqual(findCalendarSourceExternalComparisons(files), [
+    "apps/scheduling-service/src/modules/internal-api/routes.ts",
+  ]);
+});
+
+test("no_external_calendar_source_comparison: fails when a UI label compares source to EXTERNAL again", () => {
+  const files = [
+    {
+      path: "apps/frontend/src/features/settings/shared/labels.ts",
+      content:
+        'export function sourceLabel(source) { return source === "EXTERNAL" ? "Minha Agenda" : "Agenda Atendly"; }',
+    },
+  ];
+  assert.deepEqual(findCalendarSourceExternalComparisons(files), [
+    "apps/frontend/src/features/settings/shared/labels.ts",
+  ]);
+});
+
+test("no_external_calendar_source_comparison: fails when the string literal comes first", () => {
+  const files = [
+    {
+      path: "apps/frontend/src/features/agenda/sourceGuard.ts",
+      content: 'const isExternal = "EXTERNAL" === calendar.source;',
+    },
+  ];
+  assert.deepEqual(findCalendarSourceExternalComparisons(files), [
+    "apps/frontend/src/features/agenda/sourceGuard.ts",
+  ]);
+});
+
+test("no_external_calendar_source_comparison: IntegrationProvider.MINHA_AGENDA keeps passing", () => {
+  const files = [
+    {
+      path: "apps/scheduling-service/prisma/schema.prisma",
+      content: "enum IntegrationProvider {\n  MINHA_AGENDA\n}",
+    },
+    {
+      path: "apps/scheduling-service/src/modules/migrations/import-execution-service.ts",
+      content:
+        'const connection = await prisma.integrationConnection.findUnique({\n  where: { tenantId_provider: { tenantId, provider: "MINHA_AGENDA" } },\n});',
+    },
+  ];
+  assert.deepEqual(findCalendarSourceExternalComparisons(files), []);
+});
+
+test("no_removed_calendar_error_codes: passes when only the survivor code is used", () => {
+  const files = [
+    {
+      path: "apps/scheduling-service/src/modules/calendar/routes.ts",
+      content: 'throw new AppError("CALENDAR_SETTINGS_NOT_FOUND", "msg", 404);',
+    },
+  ];
+  assert.deepEqual(findRemovedCalendarErrorCodeReferences(files), []);
+});
+
+test("no_removed_calendar_error_codes: passes when a comment only cites the retired name in prose", () => {
+  const files = [
+    {
+      path: "apps/scheduling-service/src/modules/calendar/provider-factory.ts",
+      content:
+        "/**\n * O ramo de recusa saiu junto com o codigo `MINHA_AGENDA_OPERATIONAL_SOURCE_DISABLED`.\n */\nexport function noop() {}",
+    },
+  ];
+  assert.deepEqual(findRemovedCalendarErrorCodeReferences(files), []);
+});
+
+test("no_removed_calendar_error_codes: fails when a retired code is thrown again", () => {
+  const files = [
+    {
+      path: "apps/scheduling-service/src/modules/calendar/calendar-service.ts",
+      content:
+        'throw new AppError("EXTERNAL_CALENDAR_LIFECYCLE_UNSUPPORTED", "msg", 409);',
+    },
+  ];
+  assert.deepEqual(findRemovedCalendarErrorCodeReferences(files), [
+    "apps/scheduling-service/src/modules/calendar/calendar-service.ts",
+  ]);
+});
+
+test("no_removed_calendar_error_codes: fails when a retired code is asserted in a test again", () => {
+  const files = [
+    {
+      path: "apps/scheduling-service/tests/unit/calendar-provider-factory.test.ts",
+      content:
+        'await expect(create()).rejects.toMatchObject({ code: "MINHA_AGENDA_OPERATIONAL_SOURCE_DISABLED" });',
+    },
+  ];
+  assert.deepEqual(findRemovedCalendarErrorCodeReferences(files), [
+    "apps/scheduling-service/tests/unit/calendar-provider-factory.test.ts",
+  ]);
+});
+
+test("no_require_atendly_calendar_reference: passes when only the replacement guard is called", () => {
+  const files = [
+    {
+      path: "apps/scheduling-service/src/modules/calendar/routes.ts",
+      content: "async function requireCalendar(prisma, tenantId) {}",
+    },
+  ];
+  assert.deepEqual(findRequireAtendlyCalendarReferences(files), []);
+});
+
+test("no_require_atendly_calendar_reference: passes when a comment only cites the retired name in prose", () => {
+  const files = [
+    {
+      path: "apps/scheduling-service/src/modules/calendar/routes.ts",
+      content:
+        "// O guard antigo `requireAtendlyCalendarForSeries` somava duas exigencias.",
+    },
+  ];
+  assert.deepEqual(findRequireAtendlyCalendarReferences(files), []);
+});
+
+test("no_require_atendly_calendar_reference: fails when the guard is declared again", () => {
+  const files = [
+    {
+      path: "apps/scheduling-service/src/modules/internal-api/routes.ts",
+      content: "async function requireAtendlyCalendar(prisma, tenantId) {}",
+    },
+  ];
+  assert.deepEqual(findRequireAtendlyCalendarReferences(files), [
+    "apps/scheduling-service/src/modules/internal-api/routes.ts",
+  ]);
+});
+
+test("no_require_atendly_calendar_reference: fails when the guard is called again", () => {
+  const files = [
+    {
+      path: "apps/scheduling-service/src/modules/calendar/routes.ts",
+      content: "await requireAtendlyCalendarForSeries(prisma, context.tenantId);",
+    },
+  ];
+  assert.deepEqual(findRequireAtendlyCalendarReferences(files), [
+    "apps/scheduling-service/src/modules/calendar/routes.ts",
+  ]);
+});
+
+test("no_legacy_calendar_migration_routes: the absence-assertion file is exactly what the pure finder would flag without the exclusion", () => {
+  const files = [
+    {
+      path: "apps/ai-orchestrator/tests/tools/import-out-of-reach.test.ts",
+      content:
+        'expect(source).not.toContain("/internal/calendar/migrations");',
+    },
+  ];
+  assert.deepEqual(findLegacyMigrationRouteReferences(files), [
+    "apps/ai-orchestrator/tests/tools/import-out-of-reach.test.ts",
+  ]);
+});
+
+test("excludeLegitimateAbsenceAssertions: removes only the documented absence-assertion file", () => {
+  const flagged = [
+    "apps/ai-orchestrator/tests/tools/import-out-of-reach.test.ts",
+    "apps/bff/src/routes/calendar.ts",
+  ];
+  assert.deepEqual(excludeLegitimateAbsenceAssertions(flagged), [
+    "apps/bff/src/routes/calendar.ts",
+  ]);
+});
+
+test("excludeLegitimateAbsenceAssertions: does not swallow a real regression alongside the excluded file", () => {
+  const flagged = [
+    "apps/ai-orchestrator/tests/tools/import-out-of-reach.test.ts",
+    "apps/scheduling-service/src/modules/migrations/routes.ts",
+  ];
+  assert.deepEqual(excludeLegitimateAbsenceAssertions(flagged), [
+    "apps/scheduling-service/src/modules/migrations/routes.ts",
+  ]);
 });

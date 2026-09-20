@@ -52,7 +52,6 @@ export function OnboardingScreen({
 
   const blockId = blockForScenario(scenario);
   const blockLabel = onboardingBlockLabels[blockId];
-  const external = scenario.startsWith("minha-agenda-");
   const isWhatsappIntro = scenario === "whatsapp";
   const isWhatsappConclusion = scenario === "whatsapp-concluido";
   const isIgnoredContactsStep = scenario === "contatos-ignorados";
@@ -215,10 +214,6 @@ export function OnboardingScreen({
         {busy ? "Iniciando..." : "Iniciar teste"}
       </button>
     </>
-  ) : external ? (
-    <Link className="btn btn-secondary" href="/onboarding/fonte-da-agenda">
-      Escolher Agenda Atendly
-    </Link>
   ) : isWhatsappConclusion ? (
     <>
       <Link className="btn btn-secondary" href="/configuracoes/whatsapp">

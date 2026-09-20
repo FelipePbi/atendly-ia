@@ -1053,8 +1053,8 @@ export class AssistantToolRegistry {
       customerPhone: context.phone,
       customerId: identity.customerId,
       proposedCustomerId: identity.proposedCustomerId,
-      holdId: hold?.id ?? null,
-      holdExpiresAt: hold?.expiresAt ?? null,
+      holdId: hold.id,
+      holdExpiresAt: hold.expiresAt,
       idempotencyKey: context.idempotencyKey,
       preparedInTurnId: context.turnId,
     };
@@ -1063,19 +1063,16 @@ export class AssistantToolRegistry {
       requiresConfirmation: true,
       pendingAction: pending,
       customerIdentity: identity,
-      hold: hold ? { id: hold.id, expiresAt: hold.expiresAt } : null,
+      hold: { id: hold.id, expiresAt: hold.expiresAt },
     };
   }
 
   /**
    * Segura o horario proposto, sem transformar a proposta em confirmacao.
    *
-   * Duas falhas sao tratadas de formas opostas de proposito. Uma fonte de
-   * agenda externa nao tem hold — recusar a proposta inteira por isso seria
-   * quebrar quem depende dessa fonte, entao a proposta segue **sem** reserva,
-   * como antes deste Goal. Ja "o horario nao esta livre" e informacao real
-   * sobre a agenda: propagar e o certo, porque propor um horario ocupado e
-   * pior do que nao propor.
+   * Toda agenda tem hold agora: uma falha ao criar o hold e informacao real
+   * sobre a agenda — igual a "o horario nao esta livre" — entao propaga para
+   * o caminho normal de erro da tool em vez de virar proposta sem reserva.
    */
   private async holdProposedSlot(
     input: {
@@ -1085,25 +1082,20 @@ export class AssistantToolRegistry {
       customerId?: string | null;
     },
     context: ToolExecutionContext,
-  ): Promise<SchedulingHold | null> {
-    try {
-      return await this.scheduling.createHold(
-        {
-          serviceIds: input.serviceIds,
-          date: input.date,
-          startTime: input.startTime,
-          customerId: input.customerId ?? null,
-          // Contato ainda nao resolvido para uma pessoa: referencia livre,
-          // nunca fusao de identidade por telefone (D-005).
-          contactRef: input.customerId ? null : context.phone,
-        },
-        schedulingContext(context),
-        `${context.idempotencyKey}:hold`,
-      );
-    } catch (error) {
-      if (holdsUnsupported(error)) return null;
-      throw error;
-    }
+  ): Promise<SchedulingHold> {
+    return this.scheduling.createHold(
+      {
+        serviceIds: input.serviceIds,
+        date: input.date,
+        startTime: input.startTime,
+        customerId: input.customerId ?? null,
+        // Contato ainda nao resolvido para uma pessoa: referencia livre,
+        // nunca fusao de identidade por telefone (D-005).
+        contactRef: input.customerId ? null : context.phone,
+      },
+      schedulingContext(context),
+      `${context.idempotencyKey}:hold`,
+    );
   }
 
   /**
@@ -1479,8 +1471,8 @@ export class AssistantToolRegistry {
       appointmentId: args.appointmentId,
       date: args.date,
       startTime: args.startTime,
-      holdId: hold?.id ?? null,
-      holdExpiresAt: hold?.expiresAt ?? null,
+      holdId: hold.id,
+      holdExpiresAt: hold.expiresAt,
       idempotencyKey: context.idempotencyKey,
       preparedInTurnId: context.turnId,
     };
@@ -1490,7 +1482,7 @@ export class AssistantToolRegistry {
       currentAppointment: this.presentAppointment(appointment),
       newDate: args.date,
       newStartTime: args.startTime,
-      hold: hold ? { id: hold.id, expiresAt: hold.expiresAt } : null,
+      hold: { id: hold.id, expiresAt: hold.expiresAt },
     };
   }
 
@@ -1951,17 +1943,6 @@ function pendingActionHoldIds(pending: PendingAction): string[] {
     case "cancel":
       return [];
   }
-}
-
-/**
- * Fonte de agenda que nao tem hold: a proposta segue sem reserva.
- *
- * Um codigo unico e generico, e nao a lista dos integradores que nao
- * suportam hold: a IA enxerga apenas o gateway de agenda, e quem sabe qual
- * fonte esta por tras — e por que ela recusa — e o Scheduling.
- */
-function holdsUnsupported(error: unknown): boolean {
-  return errorCode(error) === "EXTERNAL_CALENDAR_HOLD_UNSUPPORTED";
 }
 
 function errorCode(error: unknown): string | null {

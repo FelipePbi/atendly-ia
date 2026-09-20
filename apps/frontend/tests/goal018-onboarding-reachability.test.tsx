@@ -15,11 +15,12 @@
  *
  * Cenários removidos (protótipo sem consumidor real): as 8 variações
  * `importar-*` (só existiam no fluxo do protótipo descontinuado; a
- * importação real é do Goal019) e 12 das 13 variações `minha-agenda-*`
- * (`minha-agenda-conectar` é a única alcançada pelo produto hoje — as demais
- * simulavam etapas de uma integração externa que ainda não existe, o que
- * contradiz "não inventar feature"). `onboardingOrder` e `generateStaticParams`
- * não geram mais rota estática para nenhum desses 20 cenários.
+ * importação real é do Goal019) e as 13 variações `minha-agenda-*`, incluindo
+ * `minha-agenda-conectar` (Goal027: a Atendly é a única fonte oficial, então
+ * "Minha Agenda" deixou de ser uma escolha de agenda — só sobrevive como
+ * importação única em `agenda-atendly-metodo`). `onboardingOrder` e
+ * `generateStaticParams` não geram mais rota estática para nenhum desses 21
+ * cenários.
  */
 
 import { render, screen } from "@testing-library/react";
@@ -181,6 +182,7 @@ describe("cenários do protótipo sem consumidor real foram removidos", () => {
       "importar-sucesso",
       "importar-parcial",
       "importar-erro",
+      "minha-agenda-conectar",
       "minha-agenda-introducao",
       "minha-agenda-autenticando",
       "minha-agenda-conectada",
@@ -197,8 +199,9 @@ describe("cenários do protótipo sem consumidor real foram removidos", () => {
     for (const scenario of removed) {
       expect(isOnboardingScenario(scenario)).toBe(false);
     }
-    // 17 do Goal018 mais as cinco telas do teste real (Goal019 §9).
-    expect(onboardingOrder).toHaveLength(22);
+    // 16 do Goal018 (Goal027 retirou `minha-agenda-conectar`) mais as cinco
+    // telas do teste real (Goal019 §9).
+    expect(onboardingOrder).toHaveLength(21);
   });
 
   test("PrototypeOnboardingScreen não existe mais no módulo despachante", () => {
@@ -314,26 +317,19 @@ describe("o encadeamento real de dados-do-negocio até validação", () => {
     expect(push).toHaveBeenCalledWith("/onboarding/agenda-atendly-confirmar");
   });
 
-  test("fonte-da-agenda com Minha Agenda desvia para minha-agenda-conectar sem salvar", async () => {
+  test("fonte-da-agenda sem escolher a Agenda Atendly bloqueia com erro, sem salvar", async () => {
     const user = userEvent.setup();
     renderScreen("fonte-da-agenda", stateFixture(businessDone));
 
     await user.click(
-      await screen.findByRole("button", { name: /^Minha Agenda/ }),
+      await screen.findByRole("button", { name: "Continuar" }),
     );
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
-
-    expect(updateOnboarding).not.toHaveBeenCalled();
-    expect(push).toHaveBeenCalledWith("/onboarding/minha-agenda-conectar");
-  });
-
-  test("minha-agenda-conectar é a recusa honesta: só oferece voltar para fonte-da-agenda", async () => {
-    renderScreen("minha-agenda-conectar", stateFixture(businessDone));
 
     expect(
-      await screen.findByRole("link", { name: "Escolher Agenda Atendly" }),
-    ).toHaveAttribute("href", "/onboarding/fonte-da-agenda");
-    expect(screen.queryByRole("button", { name: "Continuar" })).toBeNull();
+      await screen.findByText("Escolha uma fonte oficial para continuar."),
+    ).toBeVisible();
+    expect(updateOnboarding).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalledWith("/onboarding/agenda-atendly-confirmar");
   });
 
   test("agenda-atendly-confirmar avança para agenda-atendly-metodo", async () => {

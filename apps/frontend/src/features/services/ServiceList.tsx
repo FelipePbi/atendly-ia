@@ -46,7 +46,6 @@ export function ServiceList() {
     );
   }, [filter, query, result]);
 
-  const external = result?.source === "EXTERNAL";
   async function changeStatus() {
     if (!pending || !result?.editable) return;
     setBusy(true);
@@ -80,7 +79,7 @@ export function ServiceList() {
     active: "servicos",
     loading: !result && !error,
     module: "directory",
-    source: external ? "external" : "atendly",
+    source: "atendly",
     title: "Serviços",
   });
   return (
@@ -98,10 +97,7 @@ export function ServiceList() {
             ) : null
           }
         />
-        <DirectorySourceStrip
-          external={external}
-          editable={Boolean(result?.editable)}
-        />
+        <DirectorySourceStrip />
         {feedback && (
           <p className="directory-retry-status" role="status">
             {feedback}
@@ -126,16 +122,8 @@ export function ServiceList() {
             actionLabel={
               result?.editable ? "Cadastrar primeiro serviço" : undefined
             }
-            description={
-              external
-                ? "Nenhum serviço foi recebido da fonte oficial. Verifique a sincronização no Minha Agenda."
-                : "A IA só oferece serviços ativos com duração e preço ou valor sob consulta."
-            }
-            title={
-              external
-                ? "Nenhum serviço sincronizado"
-                : "Cadastre seu primeiro serviço"
-            }
+            description="A IA só oferece serviços ativos com duração e preço ou valor sob consulta."
+            title="Cadastre seu primeiro serviço"
           />
         ) : (
           <>
@@ -178,9 +166,7 @@ export function ServiceList() {
                       </span>
                       <span className="directory-row-copy">
                         <strong>{service.name}</strong>
-                        <span>
-                          {external ? "Minha Agenda" : "Agenda Atendly"}
-                        </span>
+                        <span>Agenda Atendly</span>
                       </span>
                     </span>
                     <span className="directory-cell">
@@ -311,41 +297,19 @@ export function DirectoryHeader({
   );
 }
 
-export function DirectorySourceStrip({
-  editable,
-  external,
-}: {
-  editable: boolean;
-  external: boolean;
-}) {
+export function DirectorySourceStrip() {
   return (
     <section className="directory-source-strip">
       <div className="directory-source-copy">
         <span className="directory-source-icon">
-          <Icon name={external ? "link" : "briefcase"} />
+          <Icon name="briefcase" />
         </span>
         <div>
-          <strong>
-            {external
-              ? "Dados sincronizados com Minha Agenda"
-              : "Gerenciado pela Agenda Atendly"}
-          </strong>
-          <span>
-            {external
-              ? editable
-                ? "Ações disponíveis respeitam a capacidade confirmada da integração."
-                : "Dados externos ficam somente para consulta nesta tela."
-              : "Serviços podem ser criados, editados e desativados aqui."}
-          </span>
+          <strong>Gerenciado pela Agenda Atendly</strong>
+          <span>Serviços podem ser criados, editados e desativados aqui.</span>
         </div>
       </div>
-      <span className={external ? "badge" : "badge badge-success"}>
-        {external
-          ? editable
-            ? "Operações disponíveis"
-            : "Somente leitura"
-          : "Controle completo"}
-      </span>
+      <span className="badge badge-success">Controle completo</span>
     </section>
   );
 }
@@ -459,8 +423,6 @@ export function DirectoryState({
 export function requestError(error: unknown, fallback: string): string {
   if (!(error instanceof BffHttpError)) return fallback;
   const messages: Record<string, string> = {
-    OPERATION_MANAGED_EXTERNALLY:
-      "Esta ação deve ser realizada na fonte oficial.",
     SERVICE_NAME_ALREADY_EXISTS: "Já existe um serviço com este nome.",
     NETWORK_ERROR: "Não foi possível acessar a Atendly. Confira sua conexão.",
   };

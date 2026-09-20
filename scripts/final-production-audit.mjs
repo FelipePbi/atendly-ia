@@ -208,11 +208,8 @@ export async function main() {
     "apps/scheduling-service/src/modules/integrations/minha-agenda",
   ).map((file) => ({ path: file, content: read(file) }));
 
-  const legacyRouteFiles = findLegacyMigrationRouteReferences(
-    appsSources,
-  ).filter(
-    (file) =>
-      file !== "apps/ai-orchestrator/tests/tools/import-out-of-reach.test.ts",
+  const legacyRouteFiles = excludeLegitimateAbsenceAssertions(
+    findLegacyMigrationRouteReferences(appsSources),
   );
   check(
     "no_legacy_calendar_migration_routes",
@@ -242,6 +239,36 @@ export async function main() {
       : "no CalendarProvider implementation remains in the Minha Agenda origin",
   );
 
+  const externalCalendarSourceFiles =
+    findCalendarSourceExternalComparisons(appsSources);
+  check(
+    "no_external_calendar_source_comparison",
+    externalCalendarSourceFiles.length === 0,
+    externalCalendarSourceFiles.length
+      ? externalCalendarSourceFiles.join(", ")
+      : "no comparison treats EXTERNAL or MINHA_AGENDA as a calendar source; IntegrationProvider.MINHA_AGENDA and the import origin are untouched",
+  );
+
+  const removedCalendarErrorCodeFiles =
+    findRemovedCalendarErrorCodeReferences(appsSources);
+  check(
+    "no_removed_calendar_error_codes",
+    removedCalendarErrorCodeFiles.length === 0,
+    removedCalendarErrorCodeFiles.length
+      ? removedCalendarErrorCodeFiles.join(", ")
+      : "none of the retired external-source error codes appear as a string literal",
+  );
+
+  const requireAtendlyCalendarFiles =
+    findRequireAtendlyCalendarReferences(appsSources);
+  check(
+    "no_require_atendly_calendar_reference",
+    requireAtendlyCalendarFiles.length === 0,
+    requireAtendlyCalendarFiles.length
+      ? requireAtendlyCalendarFiles.join(", ")
+      : "requireAtendlyCalendar was retired along with the source guard it enforced",
+  );
+
   check(
     "frontend_mocks_directory_is_absent",
     !frontendMocksDirectoryExists(repositoryRoot),
@@ -252,9 +279,9 @@ export async function main() {
   summarize();
 }
 
-// As quatro funções abaixo são puras (recebem conteúdo, não lêem o disco)
-// para que scripts/tests possa provar o caso negativo — uma árvore que
-// contém o padrão de volta — sem depender de repositoryRoot.
+// As funções abaixo são puras (recebem conteúdo, não lêem o disco) para que
+// scripts/tests possa provar o caso negativo — uma árvore que contém o
+// padrão de volta — sem depender de repositoryRoot.
 export function findLegacyMigrationRouteReferences(files) {
   const pattern = /\/v1\/calendar\/migrations|\/internal\/calendar\/migrations/u;
   return files
@@ -311,6 +338,84 @@ export function findMinhaAgendaWriterReferences(files) {
       contentPatterns.some((pattern) => pattern.test(content)),
     )
     .map(({ path: filePath }) => filePath);
+}
+
+// `source`/`calendarSource` é o campo de fonte de agenda (CalendarSettings,
+// capabilities, UI). `provider` é a origem da importação única
+// (IntegrationProvider, ImportSession) — enum diferente, mesmo valor
+// MINHA_AGENDA, e continua legítimo. Exigir o operador de comparação
+// colado ao nome do campo é o que separa os dois: `IntegrationProvider.
+// MINHA_AGENDA` e `provider: "MINHA_AGENDA"` não têm `source`/`calendarSource`
+// adjacente a `===`/`!==`/`==`/`!=`, então passam.
+const CALENDAR_SOURCE_EXTERNAL_COMPARISON = new RegExp(
+  String.raw`\b(?:calendarSource|source)\b\s*(?:===|!==|==|!=)\s*["'](?:EXTERNAL|MINHA_AGENDA)["']` +
+    "|" +
+    String.raw`["'](?:EXTERNAL|MINHA_AGENDA)["']\s*(?:===|!==|==|!=)\s*(?:[\w$]+\??\.)*\b(?:calendarSource|source)\b`,
+  "u",
+);
+
+export function findCalendarSourceExternalComparisons(files) {
+  return files
+    .filter(({ content }) => CALENDAR_SOURCE_EXTERNAL_COMPARISON.test(content))
+    .map(({ path: filePath }) => filePath);
+}
+
+// Códigos de erro que só existiam para recusar a fonte externa (Goal027).
+// Casados só entre aspas de string literal: os comentários que explicam a
+// retirada citam o mesmo nome entre crases (` `` `), nunca entre aspas, então
+// prosa não aciona a regra — só um `throw`/`.code ===`/`toBe(...)` novo aciona.
+const REMOVED_CALENDAR_ERROR_CODES = [
+  "EXTERNAL_CALENDAR_HOLD_UNSUPPORTED",
+  "EXTERNAL_CALENDAR_LIFECYCLE_UNSUPPORTED",
+  "EXTERNAL_CALENDAR_SERIES_UNSUPPORTED",
+  "MINHA_AGENDA_OPERATIONAL_SOURCE_DISABLED",
+  "OPERATION_MANAGED_EXTERNALLY",
+];
+const REMOVED_CALENDAR_ERROR_CODE_PATTERN = new RegExp(
+  `["'](?:${REMOVED_CALENDAR_ERROR_CODES.join("|")})["']`,
+  "u",
+);
+
+export function findRemovedCalendarErrorCodeReferences(files) {
+  return files
+    .filter(({ content }) => REMOVED_CALENDAR_ERROR_CODE_PATTERN.test(content))
+    .map(({ path: filePath }) => filePath);
+}
+
+// Mesmo raciocínio de `findCalendarMigrationServiceReferences`: só código
+// estrutural aciona a regra (chamada ou declaração de função), não prosa.
+export function findRequireAtendlyCalendarReferences(files) {
+  const contentPatterns = [
+    /\bimport\b[^;]*\brequireAtendlyCalendar\w*\b/u,
+    /\bexport\b[^;]*\brequireAtendlyCalendar\w*\b/u,
+    /\bfunction\s+requireAtendlyCalendar\w*\b/u,
+    /\brequireAtendlyCalendar\w*\s*\(/u,
+  ];
+  return files
+    .filter(({ content }) =>
+      contentPatterns.some((pattern) => pattern.test(content)),
+    )
+    .map(({ path: filePath }) => filePath);
+}
+
+// import-out-of-reach.test.ts (Goal010) prova que nenhuma tool da IA alcança
+// importação via `expect(source).not.toContain("/internal/calendar/
+// migrations")`: a asserção de ausência grava o caminho legado no próprio
+// arquivo de teste para provar que ele não aparece em outro lugar.
+// `findLegacyMigrationRouteReferences` não distingue "contém o texto" de
+// "prova que o texto não aparece alhures", então sinalizaria esse arquivo
+// mesmo ele fazendo exatamente o que a regra pede. Excluir é a única forma de
+// manter a suíte verde sem esvaziar a asserção negativa que ela prova; a
+// exclusão é só este arquivo, e o teste da função pura verifica os dois lados
+// (que ele seria sinalizado sem a exclusão, e que só ele é removido por ela).
+const LEGITIMATE_ABSENCE_ASSERTION_FILES = [
+  "apps/ai-orchestrator/tests/tools/import-out-of-reach.test.ts",
+];
+
+export function excludeLegitimateAbsenceAssertions(files) {
+  return files.filter(
+    (file) => !LEGITIMATE_ABSENCE_ASSERTION_FILES.includes(file),
+  );
 }
 
 export function frontendMocksDirectoryExists(root) {

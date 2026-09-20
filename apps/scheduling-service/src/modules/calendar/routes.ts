@@ -256,9 +256,8 @@ export async function registerCalendarRoutes(
    *
    * Cancelar nao e remover: um atendimento cancelado continua na agenda do
    * negocio, e o fluxo do vault do teste de ativacao termina com o
-   * atendimento de teste **removido**. Esta rota e o unico caminho que apaga,
-   * ela so aceita o ID e ela existe apenas para a agenda propria — calendario
-   * externo e gerido la, e a recusa diz isso.
+   * atendimento de teste **removido**. Esta rota e o unico caminho que apaga
+   * e ela so aceita o ID.
    *
    * Remover de novo o que ja saiu devolve `removed: false`, nunca erro: a
    * limpeza que chama isto e idempotente por contrato.
@@ -266,7 +265,7 @@ export async function registerCalendarRoutes(
   app.delete("/internal/appointments/:id", internalOnly, async (request) => {
     const context = currentInternalContext(request);
     const prisma = getPrisma();
-    await requireAtendlyCalendarForSeries(prisma, context.tenantId);
+    await requireCalendar(prisma, context.tenantId);
     const params = parse(idParamsSchema, request.params);
     return {
       data: {
@@ -289,7 +288,7 @@ export async function registerCalendarRoutes(
   app.delete("/internal/customers/:id", internalOnly, async (request) => {
     const context = currentInternalContext(request);
     const prisma = getPrisma();
-    await requireAtendlyCalendarForSeries(prisma, context.tenantId);
+    await requireCalendar(prisma, context.tenantId);
     const params = parse(idParamsSchema, request.params);
     return {
       data: {
@@ -452,8 +451,8 @@ export async function registerCalendarRoutes(
   );
 
   // --- Serie de atendimento (Goal009) -------------------------------------
-  // So a Agenda Atendly: preview cria um hold por ocorrencia, e a
-  // confirmacao consome todos em uma unica transacao.
+  // Preview cria um hold por ocorrencia, e a confirmacao consome todos em
+  // uma unica transacao.
   const prisma = getPrisma();
 
   app.post(
@@ -461,7 +460,7 @@ export async function registerCalendarRoutes(
     internalOnly,
     async (request) => {
       const context = currentInternalContext(request);
-      const calendar = await requireAtendlyCalendarForSeries(prisma, context.tenantId);
+      const calendar = await requireCalendar(prisma, context.tenantId);
       const body = parse(seriesPreviewBodySchema, request.body);
       const service = new AtendlyAppointmentSeriesService(
         prisma,
@@ -483,7 +482,7 @@ export async function registerCalendarRoutes(
     internalOnly,
     async (request, reply) => {
       const context = currentInternalContext(request);
-      const calendar = await requireAtendlyCalendarForSeries(prisma, context.tenantId);
+      const calendar = await requireCalendar(prisma, context.tenantId);
       const body = parse(seriesConfirmBodySchema, request.body);
       const service = new AtendlyAppointmentSeriesService(
         prisma,
@@ -501,10 +500,15 @@ export async function registerCalendarRoutes(
   );
 }
 
-async function requireAtendlyCalendarForSeries(
-  prisma: PrismaClient,
-  tenantId: string,
-) {
+/**
+ * Exige calendario configurado, e so isso (Goal027).
+ *
+ * O guard antigo deste modulo somava duas exigencias; a de fonte saiu junto
+ * com `EXTERNAL_CALENDAR_SERIES_UNSUPPORTED`, porque so existe uma fonte. O
+ * `404 CALENDAR_SETTINGS_NOT_FOUND` de tenant sem a linha e a garantia que
+ * continua valendo, identica, em toda rota que chamava o guard antigo.
+ */
+async function requireCalendar(prisma: PrismaClient, tenantId: string) {
   const settings = await prisma.calendarSettings.findUnique({
     where: { tenantId },
   });
@@ -513,13 +517,6 @@ async function requireAtendlyCalendarForSeries(
       "CALENDAR_SETTINGS_NOT_FOUND",
       "Calendar settings were not found for this tenant.",
       404,
-    );
-  }
-  if (settings.source !== "ATENDLY") {
-    throw new AppError(
-      "EXTERNAL_CALENDAR_SERIES_UNSUPPORTED",
-      "Appointment series are only available for the Atendly calendar.",
-      409,
     );
   }
   return settings;

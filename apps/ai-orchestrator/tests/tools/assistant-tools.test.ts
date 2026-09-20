@@ -969,16 +969,16 @@ describe("AssistantToolRegistry hold", () => {
     });
   });
 
-  it("keeps proposing without a reservation when the source has no hold", async () => {
+  it("fails the tool through the normal error path when creating the hold fails", async () => {
     const { prisma, store } = createPrismaMock({});
     const { agenda, calls } = createAgendaMock([], [service, browService], {
-      holds: "unsupported",
+      holds: "fails",
     });
     const registry = new AssistantToolRegistry(prisma, agenda);
 
     const result = await registry.execute(
       {
-        id: "call-hold-unsupported",
+        id: "call-hold-fails",
         name: "create_appointment",
         args: {
           action: "prepare",
@@ -991,14 +991,14 @@ describe("AssistantToolRegistry hold", () => {
       context(),
     );
 
-    // A Minha Agenda não tem hold; recusar a proposta inteira por isso
-    // quebraria quem usa a fonte externa.
+    // Não existe mais fonte de agenda sem hold: a falha vira erro tratado
+    // pelo caminho normal de erro da tool, não uma proposta sem reserva.
     expect(result).toMatchObject({
-      ok: true,
-      data: { requiresConfirmation: true, hold: null },
+      ok: false,
+      error: { message: "SCHEDULING_UNAVAILABLE" },
     });
     expect(calls.createHold).toHaveLength(1);
-    expect(store.state.pendingAction).toMatchObject({ holdId: null });
+    expect(store.state.pendingAction).toBeUndefined();
   });
 
   it("never forwards an overlap override or a service-less appointment", async () => {
@@ -1527,10 +1527,10 @@ function createAgendaMock(
   servicesOverride: SchedulingServiceDefinition[] = [service, browService],
   options: {
     /**
-     * `unsupported` é a Minha Agenda: a fonte externa recusa hold, e a
-     * proposta precisa continuar acontecendo sem reserva.
+     * `fails` prova que uma falha ao criar o hold segue o caminho normal de
+     * erro da tool (Goal027): não existe mais fonte de agenda sem hold.
      */
-    holds?: "supported" | "unsupported";
+    holds?: "supported" | "fails";
     /**
      * Hold vencido entre a proposta e a confirmação — o caso que o relógio
      * do banco decide e que nenhum `sleep` deste teste conseguiria produzir.
@@ -1595,8 +1595,8 @@ function createAgendaMock(
     },
     createHold: async (input: CreateSchedulingHoldInput): Promise<SchedulingHold> => {
       calls.createHold.push(input);
-      if (options.holds === "unsupported") {
-        throw schedulingError("EXTERNAL_CALENDAR_HOLD_UNSUPPORTED");
+      if (options.holds === "fails") {
+        throw schedulingError("SCHEDULING_UNAVAILABLE");
       }
       // Primeira chamada preserva `holdId` literal para não quebrar os testes
       // existentes; chamadas seguintes (propor B depois de A) recebem um id

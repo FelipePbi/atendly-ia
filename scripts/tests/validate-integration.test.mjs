@@ -94,6 +94,7 @@ test("points the subprocess at the declared test database with synthetic secrets
       "rehearse:goal021-reminder-migration",
       "rehearse:goal022-notification-center-migration",
       "rehearse:goal023-retention-migration",
+      "rehearse:goal027-calendar-source-migration",
       "generate:scheduling-prisma-client",
       "provision:scheduling-test-database",
       "test:scheduling-integration",

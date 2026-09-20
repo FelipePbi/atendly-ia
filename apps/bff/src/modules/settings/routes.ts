@@ -268,12 +268,7 @@ async function settingsState(
     },
     calendar: {
       ...calendar,
-      source:
-        calendar.source === null
-          ? null
-          : calendar.source === "ATENDLY"
-            ? "ATENDLY"
-            : "EXTERNAL",
+      source: calendar.source === "ATENDLY" ? "ATENDLY" : null,
     },
     availability,
   };

@@ -19,12 +19,7 @@ import { getProductServices } from "@/shared/runtime/ProductRuntime";
  * `held` autoriza enviar `holdId`, e qualquer perda leva a reescolher
  * horário com mensagem própria, nunca a um erro genérico.
  */
-export type HoldPhase =
-  | "none"
-  | "reserving"
-  | "held"
-  | "expired"
-  | "unsupported";
+export type HoldPhase = "none" | "reserving" | "held" | "expired";
 
 export interface HoldSession {
   /** Instante em que a reserva vence; só existe enquanto ela vale. */
@@ -44,9 +39,6 @@ export const HOLD_LOST_MESSAGE =
 
 export const HOLD_EXPIRED_NOTICE =
   "A reserva deste horário venceu. O horário não está mais garantido — escolha o horário de novo.";
-
-export const HOLD_UNSUPPORTED_NOTICE =
-  "Esta agenda não reserva horário antes da confirmação: até você confirmar, o horário segue aberto a quem mais agenda nela.";
 
 export function isHoldLostError(caught: unknown): boolean {
   return (
@@ -167,13 +159,7 @@ export function useHoldSession(): HoldSession {
       } catch (caught) {
         if (current !== attempt.current) return;
         setHold(null);
-        // Agenda externa não tem hold. Seguir sem reserva é legítimo —
-        // fingir que o horário está reservado não é.
-        const unsupported =
-          caught instanceof BffHttpError &&
-          caught.code === "EXTERNAL_CALENDAR_HOLD_UNSUPPORTED";
-        setPhase(unsupported ? "unsupported" : "none");
-        if (unsupported) return;
+        setPhase("none");
         throw caught;
       }
       if (current !== attempt.current) {

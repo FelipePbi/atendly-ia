@@ -6,12 +6,7 @@ import {
   onboardingPriceType,
 } from "../OnboardingRuntime";
 import type { OnboardingScenario } from "../scenarios";
-import {
-  Choice,
-  ExternalUnavailable,
-  type OnboardingStepContext,
-  Summary,
-} from "./shared";
+import { Choice, type OnboardingStepContext, Summary } from "./shared";
 
 const weekdayLabels = [
   "Domingo",
@@ -28,7 +23,6 @@ export function scheduleStepBody(
   draft: OnboardingDraft,
   setDraft: (updater: (value: OnboardingDraft) => OnboardingDraft) => void,
 ) {
-  if (scenario.startsWith("minha-agenda-")) return <ExternalUnavailable />;
   if (scenario === "fonte-da-agenda")
     return (
       <div className="choice-grid">
@@ -38,14 +32,6 @@ export function scheduleStepBody(
           copy="Gerencie serviços, disponibilidade e agendamentos na Atendly."
           onClick={() =>
             setDraft((value) => ({ ...value, calendarSource: "ATENDLY" }))
-          }
-        />
-        <Choice
-          selected={draft.calendarSource === "EXTERNAL"}
-          title="Minha Agenda"
-          copy="Use a integração externa como fonte oficial."
-          onClick={() =>
-            setDraft((value) => ({ ...value, calendarSource: "EXTERNAL" }))
           }
         />
       </div>
@@ -236,10 +222,6 @@ export async function persistScheduleStep(
   const onboarding = getProductServices().onboarding;
   switch (scenario) {
     case "fonte-da-agenda":
-      if (ctx.draft.calendarSource === "EXTERNAL") {
-        ctx.go("minha-agenda-conectar");
-        return;
-      }
       if (ctx.draft.calendarSource !== "ATENDLY") {
         ctx.setError("Escolha uma fonte oficial para continuar.");
         return;

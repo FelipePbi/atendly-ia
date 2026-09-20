@@ -313,7 +313,7 @@ export function AppointmentForm() {
         </p>
       )}
       {!loading && calendar && !calendar.capabilities.createAppointments ? (
-        <ReadOnlyState calendar={calendar} operation="criar agendamentos" />
+        <ReadOnlyState operation="criar agendamentos" />
       ) : (
         <div className="agenda-flow-layout">
           <form

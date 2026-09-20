@@ -102,7 +102,7 @@ export function CancelFlow({ appointmentId }: { appointmentId?: string }) {
         </p>
       )}
       {!loading && calendar && !calendar.capabilities.createAppointments ? (
-        <ReadOnlyState calendar={calendar} operation="cancelar agendamentos" />
+        <ReadOnlyState operation="cancelar agendamentos" />
       ) : (
         appointment && (
           <div className="agenda-flow-layout">

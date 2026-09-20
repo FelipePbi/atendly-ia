@@ -23,11 +23,12 @@ interface Classification {
  * E classificacao pura, nunca conversao: o resultado nunca vira conclusao de
  * importacao do usuario nem consome o direito — isso vive so em
  * `ImportSession.completedAt`, uma tabela que esta nem le. `COMPLETED` sem a
- * prova esperada (o `summary.imported` que {@link CalendarMigrationService}
- * grava ao terminar) e tratado como `NEEDS_REVIEW`, nunca presumido
- * concluido; o mesmo vale para um job parado em estado nao terminal, que o
- * protocolo antigo pode deixar para tras sem nunca declarar sucesso ou
- * falha.
+ * prova esperada (o campo `summary.imported` que o servico do protocolo
+ * antigo gravava ao terminar, e que so sobrevive nas linhas ja gravadas de
+ * `MigrationJob` — o servico em si foi retirado no Goal026) e tratado como
+ * `NEEDS_REVIEW`, nunca presumido concluido; o mesmo vale para um job parado
+ * em estado nao terminal, que o protocolo antigo pode deixar para tras sem
+ * nunca declarar sucesso ou falha.
  */
 export function classifyLegacyJob(job: ClassifiableJob): Classification {
   if (job.status === "COMPLETED") {

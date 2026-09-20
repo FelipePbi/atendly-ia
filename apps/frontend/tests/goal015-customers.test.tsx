@@ -6,9 +6,8 @@
  * não vira dado inventado; observação, tag e memória nascem sem autorização
  * de uso pela IA e só mudam por ação explícita; a agenda do perfil é pedida
  * sempre por `customerId`, nunca por `customerPhone`, mesmo quando duas
- * pessoas compartilham o mesmo número ou a fonte é externa; e o número
- * compartilhado no cadastro exige escolha explícita entre um cadastro
- * existente ou uma pessoa nova.
+ * pessoas compartilham o mesmo número; e o número compartilhado no cadastro
+ * exige escolha explícita entre um cadastro existente ou uma pessoa nova.
  */
 
 import { render, screen, within } from "@testing-library/react";
@@ -501,14 +500,12 @@ describe("acessibilidade das telas novas de Clientes", () => {
   });
 });
 
-describe("em fonte externa a agenda do perfil também pede por customerId", () => {
-  test("a requisição sai por customerId, mesmo com fonte externa e telefone cadastrado", async () => {
+describe("a agenda do perfil sempre pede por customerId, nunca por customerPhone", () => {
+  test("a requisição sai por customerId, mesmo com telefone cadastrado", async () => {
     customersGet.mockResolvedValue(
       customerDetailFixture({ id: "c1", phone: "11999990000" }),
     );
-    calendarGetCalendar.mockResolvedValue(
-      calendarStateFixture({ source: "EXTERNAL" }),
-    );
+    calendarGetCalendar.mockResolvedValue(calendarStateFixture());
     calendarListAppointments.mockResolvedValue([]);
     customersListMemory.mockResolvedValue([]);
     render(
@@ -526,13 +523,11 @@ describe("em fonte externa a agenda do perfil também pede por customerId", () =
     expect(query).not.toHaveProperty("customerPhone");
   });
 
-  test("sem telefone no cadastro externo, a agenda continua sendo pedida por customerId", async () => {
+  test("sem telefone no cadastro, a agenda continua sendo pedida por customerId", async () => {
     customersGet.mockResolvedValue(
       customerDetailFixture({ id: "c1", phone: null }),
     );
-    calendarGetCalendar.mockResolvedValue(
-      calendarStateFixture({ source: "EXTERNAL" }),
-    );
+    calendarGetCalendar.mockResolvedValue(calendarStateFixture());
     calendarListAppointments.mockResolvedValue([]);
     customersListMemory.mockResolvedValue([]);
     render(

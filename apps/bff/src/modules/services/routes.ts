@@ -51,7 +51,7 @@ export async function registerV1ServiceRoutes(
       ]);
       return dataResponse(request, {
         items,
-        source: calendar.source === "ATENDLY" ? "ATENDLY" : "EXTERNAL",
+        source: "ATENDLY" as const,
         editable: calendar.capabilities.manageServices,
       });
     },

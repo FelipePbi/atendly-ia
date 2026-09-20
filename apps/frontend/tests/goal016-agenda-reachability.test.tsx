@@ -8,20 +8,19 @@
  * que o usuário encontra — a página de cada rota monta a tela certa, e a tela
  * de onde se parte oferece o link para chegar lá.
  *
- * **Blocker 2 — a grade em fonte externa.** `listTimeBlocks` e
- * `listAvailabilityExceptions` caem em `requireAtendlyCalendar` no Scheduling
- * e respondem `409 OPERATION_MANAGED_EXTERNALLY` fora da Agenda Atendly.
- * Pedidas incondicionalmente, derrubavam a agenda inteira em tenant EXTERNAL
- * e em tenant sem fonte escolhida. A consulta a `calendar.source` acontece
- * **antes** da leitura (item 9), então aqui se afirma a chamada que NÃO é
- * feita, além da tela que aparece.
+ * **Blocker 2 — a grade sem fonte escolhida.** `listAppointments`,
+ * `listTimeBlocks` e `listAvailabilityExceptions` exigem calendário
+ * configurado no Scheduling (`requireCalendar`). Pedidas incondicionalmente,
+ * derrubavam a agenda inteira em tenant sem fonte escolhida. A consulta a
+ * `calendar.source` acontece **antes** da leitura (item 9), então aqui se
+ * afirma a chamada que NÃO é feita, além da tela que aparece.
  */
 
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { Appointment, CalendarState, TimeBlock } from "@/data";
+import type { CalendarState, TimeBlock } from "@/data";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
 const push = vi.fn();
@@ -83,43 +82,6 @@ function calendarFixture(
     integration: null,
     source: "ATENDLY",
     timezone: "America/Sao_Paulo",
-    ...overrides,
-  };
-}
-
-function appointmentFixture(overrides: Partial<Appointment> = {}): Appointment {
-  return {
-    bufferAfterMinutes: 0,
-    bufferBeforeMinutes: 0,
-    comments: null,
-    completedAt: null,
-    completionOrigin: null,
-    customer: { id: "cus-ana", name: "Ana Paula", phone: "+5511999990000" },
-    customerId: "cus-ana",
-    date: ISO_TODAY,
-    durationMinutes: 60,
-    endTime: "11:00",
-    finalValue: null,
-    id: "apt-1",
-    noShowAt: null,
-    noShowNote: null,
-    presenceConfirmedAt: null,
-    seriesId: null,
-    services: [
-      {
-        durationMinutes: 60,
-        name: "Corte feminino",
-        price: 90,
-        priceType: "FIXED",
-        serviceId: "svc-corte",
-      },
-    ],
-    source: "USER",
-    startTime: "10:00",
-    status: "CONFIRMED",
-    title: null,
-    totalPrice: 90,
-    totalPriceType: "FIXED",
     ...overrides,
   };
 }
@@ -204,37 +166,6 @@ describe("cada fluxo obrigatório tem rota própria e é alcançável", () => {
 });
 
 describe("a grade consulta a fonte oficial antes de ler", () => {
-  test("em fonte externa a agenda carrega sem pedir bloqueios nem exceções", async () => {
-    getCalendar.mockResolvedValue(
-      calendarFixture({
-        capabilities: {
-          createAppointments: false,
-          manageAvailability: false,
-          manageCustomers: false,
-          manageServices: false,
-          migrate: false,
-        },
-        integration: {
-          lastErrorAt: null,
-          lastErrorCode: null,
-          lastSuccessfulSyncAt: null,
-          status: "CONNECTED",
-        },
-        source: "EXTERNAL",
-      }),
-    );
-    listAppointments.mockResolvedValue([appointmentFixture()]);
-
-    renderPage(<AgendaPage />);
-
-    expect((await screen.findAllByText("Ana Paula")).length).toBeGreaterThan(0);
-    expect(listTimeBlocks).not.toHaveBeenCalled();
-    expect(listAvailabilityExceptions).not.toHaveBeenCalled();
-    expect(
-      screen.queryByText("Não foi possível carregar a agenda."),
-    ).toBeNull();
-  });
-
   test("sem fonte escolhida a agenda explica a configuração e não lê nada", async () => {
     getCalendar.mockResolvedValue(
       calendarFixture({ source: null, timezone: null }),

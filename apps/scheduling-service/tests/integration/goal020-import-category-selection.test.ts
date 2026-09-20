@@ -70,7 +70,7 @@ class FixtureReader {
 async function seedCalendar(tenantId: string) {
   await prisma.calendarSettings.upsert({
     where: { tenantId },
-    create: { tenantId, source: "MINHA_AGENDA", timezone: timeZone },
+    create: { tenantId, source: "ATENDLY", timezone: timeZone },
     update: {},
   });
 }

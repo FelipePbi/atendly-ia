@@ -7,6 +7,20 @@ datasource db {
   provider = "postgresql"
 }
 
+/// Fonte da agenda do negocio.
+///
+/// `ATENDLY` e a UNICA fonte que o produto honra. Desde o Goal027 a constraint
+/// SQL `CalendarSettings_source_atendly_check` recusa qualquer outro valor em
+/// `CalendarSettings`, e a migration daquele Goal reescreveu para `ATENDLY` as
+/// linhas legadas que ainda diziam `MINHA_AGENDA` — negocios que, desde o
+/// corte do Goal010, recebiam `409` em toda escrita, oferta e leitura
+/// operacional.
+///
+/// `MINHA_AGENDA` sobrevive no enum EXCLUSIVAMENTE por causa de
+/// `MigrationJob.source` e `MigrationJob.target`, que sao historico preservado
+/// (D-026, Goal026): um job antigo continua dizendo de onde para onde a
+/// importacao foi, e remover o valor reescreveria esse historico. O valor nao
+/// e mais alcancavel como fonte de agenda de negocio nenhum.
 enum CalendarSource {
   ATENDLY
   MINHA_AGENDA
@@ -230,6 +244,9 @@ enum AppointmentNotificationReason {
 
 model CalendarSettings {
   tenantId  String         @id
+  /// Sempre `ATENDLY`: a constraint SQL `CalendarSettings_source_atendly_check`
+  /// (Goal027) recusa qualquer outro valor. O campo sobrevive porque o enum
+  /// sobrevive por `MigrationJob`; ele nao e mais uma escolha do negocio.
   source    CalendarSource
   timezone  String
   /// Regras de oferta do negocio (Goal009), aplicadas pelo proprio motor de

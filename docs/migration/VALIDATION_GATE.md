@@ -17,7 +17,7 @@ git diff --check
 | Comando | Cobre | Não cobre |
 | --- | --- | --- |
 | `validate:core` | Builds de Scheduling, IA, BFF e frontend; `npm run check` do health-worker; suíte da IA; suíte do adapter HTTP do frontend; `go build`/`go vet`/`go test` do Evolution Go; testes dos próprios scripts de gate; auditoria estática | Qualquer escrita em banco. Nenhum passo abre conexão de banco |
-| `validate:integration` | 28 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, a purga de conteúdo de conversa (Goal023) e a purga por negócio da IA (Goal025), o outbox do Evolution Go e um ensaio por migration de Goal — o último deles `rehearse:goal023-retention-migration` | Qualquer camada acima do dado: nenhuma jornada de interface, nenhum envio real por WhatsApp e nenhuma origem real do Minha Agenda |
+| `validate:integration` | 29 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, a purga de conteúdo de conversa (Goal023) e a purga por negócio da IA (Goal025), o outbox do Evolution Go e um ensaio por migration de Goal — o mais recente deles `rehearse:goal027-calendar-source-migration` | Qualquer camada acima do dado: nenhuma jornada de interface, nenhum envio real por WhatsApp e nenhuma origem real do Minha Agenda |
 | `git diff --check` | Espaço em branco/conflito no diff | Correção do diff |
 
 Comandos auxiliares: `npm run test:gate` (só os testes dos scripts de gate) e
@@ -130,9 +130,9 @@ npm ci --prefix apps/bff
 BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_bff_test" npm run validate:integration
 ```
 
-São 28 passos. A lista abaixo enumera o núcleo, na ordem em que roda — o item
+São 29 passos. A lista abaixo enumera o núcleo, na ordem em que roda — o item
 5 agrupa o par do Evolution Go. Entre os itens 6 e 7 rodam, nesta ordem, os demais
-ensaios de migration por Goal (005 a 013, 019, 021, 022 e 023) e o trio do
+ensaios de migration por Goal (005 a 013, 019, 021, 022, 023 e 027) e o trio do
 Scheduling (`generate:scheduling-prisma-client`,
 `provision:scheduling-test-database`, `test:scheduling-integration`). A lista
 autoritativa é `scripts/validate-integration.mjs`:
@@ -173,6 +173,14 @@ migration por Goal enumerados acima, ensaia as quatro migrations deste Goal —
 contentExpiredThrough` na IA, o índice de `AppointmentNotificationIntent` no
 Scheduling — em três bancos próprios e descartáveis, aplicando cada uma duas
 vezes para provar retomada: ver [DATA_MIGRATION §12](DATA_MIGRATION.md#12-migração-de-retenção-configurável-e-purga-de-conteúdo-goal023).
+
+`rehearse:goal027-calendar-source-migration` (Goal027/WU-01, diff027 —
+aceito no [review027](reviews/027-review.md)), o mais recente dos ensaios de migration por Goal,
+ensaia contra um banco próprio e descartável a primeira migration deste
+repositório que **reescreve** dado existente (`CalendarSettings.source` de
+`MINHA_AGENDA` para `ATENDLY`), com a contagem de linhas reescritas reportada
+pelo ensaio e a `CHECK` nova provada por `UPDATE`/`INSERT` reais recusados com
+`23514`: ver [DATA_MIGRATION §14](DATA_MIGRATION.md#14-migração-da-fonte-da-agenda-para-atendly-goal027).
 
 Nada de `migrate reset` sobre URL herdada, e nenhuma migration é reescrita.
 
@@ -383,5 +391,20 @@ as credenciais do service container são sintéticas e morrem com o runner.
 - Só um fluxo de integração existe hoje (cadastro). Persistência dos demais
   domínios continua **NÃO VERIFICADA**.
 - A auditoria estática não verifica concorrência, isolamento real nem deploy.
+- **Diff027 ([D-043](DECISIONS.md), aceito no [review027](reviews/027-review.md)):**
+  `scripts/final-production-audit.mjs` ganhou três checagens (23 no total).
+  `no_external_calendar_source_comparison` rodou **vermelha contra a árvore
+  real** na rodada 1: três arquivos fora do escopo do diff027 ainda
+  declaravam `EXTERNAL`/`MINHA_AGENDA` como valor de fonte de agenda —
+  `apps/frontend/src/features/settings/shared/labels.ts`,
+  `apps/scheduling-service/src/modules/internal-api/routes.ts` e
+  `apps/bff/tests/goal018-onboarding-complete.integration.test.ts` — sem
+  caminho vivo capaz de escrever esse valor de volta em `CalendarSettings`
+  (a `CHECK` da migration recusaria). A rodada 2 (FIX-001) corrigiu os três;
+  `smoke:final-audit` e `validate:core` fecham limpos nessa checagem. O tipo
+  de `SchedulingClient.configureCalendar` foi estreitado para
+  `{ source: "ATENDLY"; timezone: string }` na rodada 3; ver
+  [DATA_MIGRATION §14](DATA_MIGRATION.md#14-migração-da-fonte-da-agenda-para-atendly-goal027)
+  e [GAP_ANALYSIS G-10](GAP_ANALYSIS.md).
 - A execução hospedada dos workflows ainda não ocorreu; o estado atual é
   "configuração validada localmente". Ver [MIGRATION_STATUS](MIGRATION_STATUS.md).

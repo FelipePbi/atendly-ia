@@ -145,7 +145,7 @@ export function ProductDashboardScreen() {
           active: "inicio",
           attention: dashboardNeedsAttention(dashboard),
           module: "dashboard",
-          source: dashboardSource(dashboard),
+          source: "atendly",
           title: "Início",
         }
       : {
@@ -191,24 +191,11 @@ export function ProductDashboardScreen() {
   );
 }
 
-function dashboardSource(dashboard: Dashboard): "atendly" | "external" {
-  const scheduling =
-    dashboard.scheduling.status === "ok" ? dashboard.scheduling.data : null;
-  return scheduling?.calendar.source === "EXTERNAL" ? "external" : "atendly";
-}
-
 function dashboardNeedsAttention(dashboard: Dashboard): boolean {
-  const scheduling =
-    dashboard.scheduling.status === "ok" ? dashboard.scheduling.data : null;
   const ai = dashboard.ai.status === "ok" ? dashboard.ai.data : null;
   const whatsapp =
     dashboard.whatsapp.status === "ok" ? dashboard.whatsapp.data : null;
-  const external = scheduling?.calendar.source === "EXTERNAL";
-  const calendarUnavailable =
-    dashboard.scheduling.status === "error" ||
-    Boolean(
-      external && scheduling?.calendar.integration?.status !== "CONNECTED",
-    );
+  const calendarUnavailable = dashboard.scheduling.status === "error";
   const aiUnavailable = dashboard.ai.status === "error";
   const whatsappDisconnected = whatsapp?.status !== "CONNECTED";
   const attentionCount = ai?.conversationsNeedingAttentionCount ?? 0;
@@ -303,12 +290,7 @@ function RealDashboard({
   const ai = dashboard.ai.status === "ok" ? dashboard.ai.data : null;
   const whatsapp =
     dashboard.whatsapp.status === "ok" ? dashboard.whatsapp.data : null;
-  const external = scheduling?.calendar.source === "EXTERNAL";
-  const calendarUnavailable =
-    dashboard.scheduling.status === "error" ||
-    Boolean(
-      external && scheduling?.calendar.integration?.status !== "CONNECTED",
-    );
+  const calendarUnavailable = dashboard.scheduling.status === "error";
   const aiUnavailable = dashboard.ai.status === "error";
   const whatsappDisconnected = whatsapp?.status !== "CONNECTED";
   const todayAppointments = scheduling?.todayAppointments ?? [];
@@ -349,8 +331,8 @@ function RealDashboard({
             <p className="dashboard-date">{today}</p>
           </div>
           <span className="dashboard-source">
-            <Icon name={external ? "refresh" : "calendar"} />
-            {external ? "Minha Agenda" : "Agenda Atendly"} · fonte oficial
+            <Icon name="calendar" />
+            Agenda Atendly · fonte oficial
           </span>
         </header>
 
@@ -413,9 +395,7 @@ function RealDashboard({
                   ? "Reconecte o WhatsApp para a Atendly voltar a responder clientes."
                   : aiUnavailable
                     ? "A agenda está disponível, mas os dados da IA não responderam."
-                    : external
-                      ? "WhatsApp conectado e Minha Agenda disponível."
-                      : "WhatsApp conectado e Agenda Atendly disponível."}
+                    : "WhatsApp conectado e Agenda Atendly disponível."}
             </span>
           </div>
           <div className="operational-points">
@@ -440,19 +420,6 @@ function RealDashboard({
             </span>
           </div>
         </section>
-
-        {external && !calendarUnavailable && (
-          <div className="external-source-banner">
-            <Icon name="calendar" />
-            Minha Agenda é a fonte oficial
-            {scheduling?.calendar.integration?.lastSuccessfulSyncAt
-              ? ` · última sincronização ${formatDateTime(
-                  scheduling.calendar.integration.lastSuccessfulSyncAt,
-                  dashboard.platform.timezone,
-                )}`
-              : ""}
-          </div>
-        )}
 
         {checklistVisible && (
           <PostOnboardingChecklist
@@ -769,12 +736,4 @@ function formatCurrency(value: number): string {
     style: "currency",
     currency: "BRL",
   }).format(value);
-}
-
-function formatDateTime(value: string, timeZone: string): string {
-  return new Intl.DateTimeFormat("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
-    timeZone,
-  }).format(new Date(value));
 }

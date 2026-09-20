@@ -27,7 +27,7 @@ import {
 } from "../../lib/tenant-context.js";
 import { internalContext } from "../tenant/context.js";
 
-const sourceSchema = z.enum(["ATENDLY", "EXTERNAL"]);
+const sourceSchema = z.enum(["ATENDLY"]);
 // Os tres estilos do produto e os dois valores antigos como alias declarado
 // (Goal011); a resposta sempre devolve o vocabulario novo.
 const toneSchema = aiConversationStyleSchema;
@@ -139,7 +139,7 @@ export async function registerV1OnboardingRoutes(
 
       if (body.calendar) {
         await scheduling.configureCalendar(context, {
-          source: internalSource(body.calendar.source),
+          source: body.calendar.source,
           timezone: body.calendar.timezone,
         });
       }
@@ -250,12 +250,6 @@ async function syncAiConfig(
       "AI tenant config projection failed; business context stays pending.",
     );
   }
-}
-
-function internalSource(source: "ATENDLY" | "EXTERNAL") {
-  return source === "ATENDLY"
-    ? ("ATENDLY" as const)
-    : ("MINHA_AGENDA" as const);
 }
 
 function assertTimezone(value: string): void {

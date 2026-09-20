@@ -97,13 +97,12 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
     setCustomer((current) => (current ? { ...current, tags } : current));
   }, []);
 
-  const external = calendar?.source === "EXTERNAL";
   const editable = Boolean(calendar?.capabilities.manageCustomers);
   useShellConfig({
     active: "clientes",
     loading: !customer && !error,
     module: "directory",
-    source: external ? "external" : "atendly",
+    source: "atendly",
     title: "Detalhes do cliente",
   });
 
@@ -136,7 +135,7 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
         />
       ) : (
         <>
-          <SourceStrip editable={editable} external={external} />
+          <SourceStrip />
           <section className="directory-detail-hero">
             <div className="directory-detail-identity">
               <span className="avatar" aria-hidden="true">
@@ -148,9 +147,7 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
                   {customer.phone || "Telefone não informado"}
                 </p>
                 <div className="directory-detail-signals">
-                  <span className="badge">
-                    {external ? "Minha Agenda" : "Agenda Atendly"}
-                  </span>
+                  <span className="badge">Agenda Atendly</span>
                 </div>
               </div>
             </div>
@@ -256,41 +253,19 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
   );
 }
 
-function SourceStrip({
-  editable,
-  external,
-}: {
-  editable: boolean;
-  external: boolean;
-}) {
+function SourceStrip() {
   return (
     <section className="directory-source-strip">
       <div className="directory-source-copy">
         <span className="directory-source-icon">
-          <Icon name={external ? "link" : "users"} />
+          <Icon name="users" />
         </span>
         <div>
-          <strong>
-            {external
-              ? "Dados sincronizados com Minha Agenda"
-              : "Gerenciado pela Agenda Atendly"}
-          </strong>
-          <span>
-            {external
-              ? editable
-                ? "Ações disponíveis respeitam a capacidade confirmada da integração."
-                : "Dados externos ficam somente para consulta nesta tela."
-              : "Cadastros pertencem somente a este negócio."}
-          </span>
+          <strong>Gerenciado pela Agenda Atendly</strong>
+          <span>Cadastros pertencem somente a este negócio.</span>
         </div>
       </div>
-      <span className={external ? "badge" : "badge badge-success"}>
-        {external
-          ? editable
-            ? "Operações disponíveis"
-            : "Somente leitura"
-          : "Controle completo"}
-      </span>
+      <span className="badge badge-success">Controle completo</span>
     </section>
   );
 }
@@ -320,8 +295,6 @@ function ProfileLoading() {
 function requestError(error: unknown, fallback: string): string {
   if (!(error instanceof BffHttpError)) return fallback;
   const messages: Record<string, string> = {
-    OPERATION_MANAGED_EXTERNALLY:
-      "Esta ação deve ser realizada na fonte oficial.",
     NETWORK_ERROR: "Não foi possível acessar a Atendly. Confira sua conexão.",
   };
   const message = messages[error.code] ?? fallback;

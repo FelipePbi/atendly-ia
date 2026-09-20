@@ -31,10 +31,15 @@ let prisma: PrismaClient;
 let other: PrismaClient;
 
 async function seedTenant(tenantId: string) {
+  // `ATENDLY` e a unica fonte de agenda gravavel desde o Goal027: a constraint
+  // `CalendarSettings_source_atendly_check` recusa qualquer outra. Fonte da
+  // agenda e origem da importacao sao coisas distintas — o negocio que importa
+  // de fora continua sendo identificado pela `ImportSession`
+  // (`sourceAccountId`), nunca pelo rotulo da propria agenda.
   await prisma.calendarSettings.upsert({
     where: { tenantId },
-    create: { tenantId, source: "MINHA_AGENDA", timezone: timeZone },
-    update: { source: "MINHA_AGENDA", timezone: timeZone },
+    create: { tenantId, source: "ATENDLY", timezone: timeZone },
+    update: { source: "ATENDLY", timezone: timeZone },
   });
 }
 

@@ -102,7 +102,7 @@ export async function registerV1CustomerRoutes(
     );
     return dataResponse(request, {
       ...result,
-      source: result.source === "ATENDLY" ? "ATENDLY" : "EXTERNAL",
+      source: "ATENDLY" as const,
     });
   });
 

@@ -19,9 +19,9 @@
  *   nao instantes: `endDate` cobre o dia inteiro (+24h no fuso do tenant),
  *   entao pedir 14 a 14 de setembro devolve o dia 14 inteiro.
  *
- * A rota acrescenta o que so ela decide: `requireAtendlyCalendar` (fonte
- * externa nao tem bloqueio da Atendly para ler) e a janela obrigatoria — sem
- * ela a rota seria uma varredura sem limite do tenant.
+ * A rota acrescenta o que so ela decide: `requireCalendar` (ler a grade de
+ * um tenant sem `CalendarSettings` e `404`, nunca lista vazia) e a janela
+ * obrigatoria — sem ela a rota seria uma varredura sem limite do tenant.
  */
 import "./support/test-env.js";
 
@@ -79,15 +79,11 @@ async function buildTestApp(client: PrismaClient): Promise<FastifyInstance> {
   return app;
 }
 
-function seedCalendar(
-  database: Database,
-  scope: string,
-  source: "ATENDLY" | "MINHA_AGENDA" = "ATENDLY",
-) {
+function seedCalendar(database: Database, scope: string) {
   database.client.calendarSettings.rows.push({
     id: `settings-${scope}`,
     tenantId: scope,
-    source,
+    source: "ATENDLY",
     timezone: timeZone,
   } as never);
 }
@@ -292,8 +288,10 @@ describe("GET /internal/time-blocks", () => {
     expect(response.json().data).toEqual([]);
   });
 
-  it("recusa a leitura quando a fonte oficial e externa", async () => {
-    seedCalendar(database, tenantId, "MINHA_AGENDA");
+  // Retirada da fonte externa (Goal027): o guard desta rota deixou de olhar a
+  // fonte, mas nao deixou de exigir calendario configurado. Sem esta prova, a
+  // simplificacao poderia ter trocado o `404` por um `200` com lista vazia.
+  it("recusa a leitura quando o tenant nao tem calendario configurado", async () => {
     app = await buildTestApp(database.client as never);
 
     const response = await app.inject({
@@ -302,8 +300,8 @@ describe("GET /internal/time-blocks", () => {
       url: "/internal/time-blocks?startDate=2026-09-14&endDate=2026-09-14",
     });
 
-    expect(response.statusCode).toBe(409);
-    expect(response.json().error.code).toBe("OPERATION_MANAGED_EXTERNALLY");
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.code).toBe("CALENDAR_SETTINGS_NOT_FOUND");
   });
 
   it("recusa a leitura sem janela: a rota nunca varre o tenant inteiro", async () => {

@@ -85,11 +85,10 @@ export function AgendaBoard() {
   const range = useMemo(() => rangeForView(view, cursor), [view, cursor]);
 
   // A fonte oficial decide o que pode ser lido, e decide ANTES da leitura:
-  // bloqueio e exceção de disponibilidade só existem na Agenda Atendly, e o
-  // Scheduling recusa as duas rotas com 409 OPERATION_MANAGED_EXTERNALLY em
-  // tenant EXTERNAL (`requireAtendlyCalendar`). Pedi-las junto num
-  // `Promise.all` derrubava a agenda inteira para quem usa fonte externa — e
-  // também para quem ainda não escolheu fonte, onde nem calendário há.
+  // bloqueio e exceção de disponibilidade exigem calendário configurado
+  // (`requireCalendar`). Pedi-las junto num `Promise.all` incondicional
+  // derrubava a agenda inteira para quem ainda não escolheu fonte, onde nem
+  // calendário há.
   useEffect(() => {
     const controller = new AbortController();
     const services = getProductServices().calendar;
@@ -145,7 +144,6 @@ export function AgendaBoard() {
   const next = [...appointments]
     .filter((item) => isActiveAppointmentStatus(item.status))
     .sort(compareAppointments)[0];
-  const external = calendar?.source === "EXTERNAL";
   useShellConfig({
     action: calendar?.capabilities.createAppointments
       ? { href: "/agenda/novo", icon: "plus", label: "Novo agendamento" }
@@ -153,7 +151,7 @@ export function AgendaBoard() {
     active: "agenda",
     loading,
     module: "agenda",
-    source: external ? "external" : "atendly",
+    source: "atendly",
     title: "Agenda",
   });
 
@@ -223,7 +221,7 @@ export function AgendaBoard() {
           )}
         </header>
 
-        {calendar && <SourceStrip calendar={calendar} />}
+        {calendar && <SourceStrip />}
         {error && (
           <div className="agenda-state-surface">
             <StatePanel
@@ -368,40 +366,19 @@ export function AgendaBoard() {
   );
 }
 
-export function SourceStrip({ calendar }: { calendar: CalendarState }) {
-  const external = calendar.source === "EXTERNAL";
-  const integrationFailed =
-    external && calendar.integration?.status !== "CONNECTED";
+export function SourceStrip() {
   return (
     <section className="agenda-source-strip">
       <div className="agenda-source-copy">
         <span className="agenda-source-icon">
-          <Icon name={external ? "link" : "calendar"} />
+          <Icon name="calendar" />
         </span>
         <div>
-          <strong>
-            {external ? "Minha Agenda" : "Agenda Atendly"} é a fonte oficial
-          </strong>
-          <span>
-            {external
-              ? "A Atendly exibe e altera apenas o que a conexão permite."
-              : "Disponibilidade e alterações são controladas aqui."}
-          </span>
+          <strong>Agenda Atendly é a fonte oficial</strong>
+          <span>Disponibilidade e alterações são controladas aqui.</span>
         </div>
       </div>
-      <span
-        className={clsx(
-          "badge",
-          !external && "badge-success",
-          integrationFailed && "badge-danger",
-        )}
-      >
-        {integrationFailed
-          ? "Conexão requer atenção"
-          : external
-            ? lastSyncLabel(calendar)
-            : "Operacional"}
-      </span>
+      <span className="badge badge-success">Operacional</span>
     </section>
   );
 }
@@ -475,10 +452,4 @@ function periodLabel(
 
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function lastSyncLabel(calendar: CalendarState): string {
-  const value = calendar.integration?.lastSuccessfulSyncAt;
-  if (!value) return "Conectada";
-  return `Atualizada ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value))}`;
 }

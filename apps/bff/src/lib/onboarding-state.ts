@@ -40,7 +40,7 @@ export async function onboardingState(
   ]);
   const [services, availability] = await Promise.all([
     calendar.source ? scheduling.listServices(context) : Promise.resolve([]),
-    calendar.source === "ATENDLY"
+    calendar.source
       ? scheduling.availabilitySettings(context)
       : Promise.resolve(null),
   ]);
@@ -58,7 +58,7 @@ export async function onboardingState(
         }
       : null,
     calendar: {
-      source: publicSource(calendar.source),
+      source: calendar.source === "ATENDLY" ? "ATENDLY" : null,
       timezone: calendar.timezone,
       integration: calendar.integration,
     },
@@ -103,19 +103,10 @@ export function onboardingIssues(state: OnboardingState): string[] {
 
   if (state.calendar.source) {
     if (!state.service) issues.push("ACTIVE_SERVICE_REQUIRED");
-    if (state.calendar.source === "ATENDLY") {
-      if (!state.availability?.rules.some((rule) => rule.active)) {
-        issues.push("AVAILABILITY_REQUIRED");
-      }
-    } else if (state.calendar.integration?.status !== "CONNECTED") {
-      issues.push("CALENDAR_INTEGRATION_NOT_CONNECTED");
+    if (!state.availability?.rules.some((rule) => rule.active)) {
+      issues.push("AVAILABILITY_REQUIRED");
     }
   }
 
   return issues;
-}
-
-function publicSource(source: "ATENDLY" | "MINHA_AGENDA" | null) {
-  if (source === null) return null;
-  return source === "ATENDLY" ? ("ATENDLY" as const) : ("EXTERNAL" as const);
 }

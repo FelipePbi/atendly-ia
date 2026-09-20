@@ -214,7 +214,7 @@ export function SeriesPreview() {
         </p>
       )}
       {!loading && calendar && !calendar.capabilities.createAppointments ? (
-        <ReadOnlyState calendar={calendar} operation="criar séries de atendimento" />
+        <ReadOnlyState operation="criar séries de atendimento" />
       ) : created ? (
         <div className="agenda-flow-layout">
           <section className="agenda-form-card">

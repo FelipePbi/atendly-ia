@@ -22,26 +22,18 @@ let app: FastifyInstance;
 const created: SessionHandle[] = [];
 
 interface UpstreamOptions {
-  calendarSource?: "ATENDLY" | "MINHA_AGENDA" | null;
+  calendarSource?: "ATENDLY" | null;
   hasActiveService?: boolean;
   hasActiveAvailabilityRule?: boolean;
 }
 
 const aiTenantConfigCalls: unknown[] = [];
 
-function calendarPayload(source: "ATENDLY" | "MINHA_AGENDA" | null) {
+function calendarPayload(source: "ATENDLY" | null) {
   return {
     source,
     timezone: source ? "America/Sao_Paulo" : null,
-    integration:
-      source === "MINHA_AGENDA"
-        ? {
-            status: "CONNECTED",
-            lastSuccessfulSyncAt: null,
-            lastErrorAt: null,
-            lastErrorCode: null,
-          }
-        : null,
+    integration: null,
     capabilities: {
       manageAvailability: true,
       manageServices: true,
@@ -343,6 +335,28 @@ describe.skipIf(!RUN_INTEGRATION)(
       for (const call of aiTenantConfigCalls) {
         expect((call as { enabled?: boolean } | null)?.enabled).not.toBe(true);
       }
+    });
+  },
+);
+
+describe.skipIf(!RUN_INTEGRATION)(
+  "Goal027/WU-03: PATCH /v1/onboarding recusa calendar.source fora do domínio",
+  () => {
+    it("calendar.source: EXTERNAL falha o parse Zod e devolve 400, sem tocar o upstream", async () => {
+      const owner = await business("calendar-source-out-of-domain");
+      stubUpstream({ calendarSource: "ATENDLY" });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/v1/onboarding",
+        headers: browserMutation(owner),
+        payload: {
+          calendar: { source: "EXTERNAL", timezone: "America/Sao_Paulo" },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe("VALIDATION_ERROR");
     });
   },
 );

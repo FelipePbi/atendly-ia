@@ -19,7 +19,10 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  transpilePackages: ["@atendly-ia/legal-contract"],
+  transpilePackages: [
+    "@atendly-ia/legal-contract",
+    "@atendly-ia/public-api-contract",
+  ],
   turbopack: {
     root: fileURLToPath(new URL("../..", import.meta.url)),
   },

@@ -3005,3 +3005,90 @@ migration, schema, rota ou contrato público mudou.
 - **LIMITE:** este delta descreve o diff034 (WU-01 a WU-08) sobre a baseline
   aceita `090ee2897835142b59c979ddb24d4372c2f4398e` (fechamento do Goal033),
   decidido em [D-050](DECISIONS.md), sem commit e sem deploy.
+
+## Delta implementado — diff035, 2026-09-20 ([D-051](DECISIONS.md))
+
+Este delta fecha **A-03**: o BFF podia mudar o corpo que devolve sem nada
+ficar vermelho, e a divergência aparecia pela primeira vez como tela quebrada.
+Fora de `packages/public-api-contract/`, `apps/bff/`, `apps/frontend/`,
+`scripts/` e `docs/migration/`, nenhum app mudou; nenhuma migration, nenhum
+`schema.prisma`, nenhuma rota, nenhum verbo e nenhum campo do contrato público
+mudou.
+
+- **FATO atual (o contrato é um artefato só):** `packages/public-api-contract/`
+  nasceu no padrão de dependência `file:` de `packages/legal-contract`, mas
+  com build próprio (`tsc`) emitindo `dist/*.js` e `dist/*.d.ts`. Os 106
+  schemas de `apps/frontend/src/data/mappers/publicApiSchemas.ts` foram
+  movidos, sem alteração de conteúdo, para
+  `packages/public-api-contract/src/schemas.ts`; o arquivo antigo virou
+  reexport de uma linha (`export * from "@atendly-ia/public-api-contract"`).
+  Zod entra como `peerDependency` do pacote, nunca como dependência própria —
+  `apps/bff` e `apps/frontend` resolvem, cada um, uma só cópia de Zod
+  (`4.4.3`) depois da instalação.
+- **FATO atual (a tabela de rotas é o contrato, e ela é computada):**
+  `packages/public-api-contract/src/routes.ts` exporta 116 entradas
+  (método, padrão de path como o BFF registra, schema do `data`), derivadas
+  do pareamento `path`+`schema` que já existia nos dezessete
+  `Bff*Service.ts`. A contagem é a do próprio artefato, não do texto-fonte:
+  `node -e "import('./packages/public-api-contract/dist/index.js').then((m) => console.log(m.publicApiRoutes.length))"`
+  imprime `116`. O check `public_api_route_coverage` (novo em
+  `scripts/final-production-audit.mjs`) computa, a cada execução, o conjunto
+  de rotas `/v1` do BFF sem chamador no frontend — hoje uma só,
+  `GET /v1/conversations/:id/messages/:messageId/media` — e não exige entrada
+  na tabela para elas; nenhuma lista de exceção é mantida à mão. O check
+  `public_api_response_schema_single_source` falha se algum arquivo de
+  `apps/frontend/src` fora do pacote redeclarar um schema de resposta pública.
+  Ver [VALIDATION_GATE](VALIDATION_GATE.md#checks-estáticos-novos-do-goal035).
+- **FATO atual (o BFF valida a própria resposta, fora de produção):**
+  `apps/bff/src/lib/response-contract.ts` registra um hook único de `onSend`
+  (`apps/bff/src/app.ts`) que compara o `data` já serializado contra a
+  entrada da rota, por `request.routeOptions.url` (o padrão da rota). Rota
+  sem entrada não é validada e não é erro em runtime — quem cobra a entrada é
+  o check estático. Divergência derruba o processo com
+  `ResponseContractViolationError`, nomeando método, padrão da rota e os
+  caminhos de campo divergentes. `RESPONSE_CONTRACT_CHECK_ENABLED` é
+  `env.NODE_ENV !== "production"`: liga em `development` e `test`, onde a
+  falha custa uma suíte vermelha, e fica **desligada em produção**, onde
+  custaria transformar um bug de contrato em `500` para quem está
+  comprando — o motivo está escrito no próprio arquivo. A verificação só lê o
+  payload já pronto: não remove, reordena, coage nem preenche nada, e a
+  resposta de erro (`AppError`) não é tocada.
+- **FATO atual (a reprodução de A-03 saiu do limbo):**
+  `apps/bff/tests/goal030-a03-contract-drift.repro.mjs` passa a sair
+  **`exit 0`** na árvore final — sobre a baseline `f1fb6203` (Goal034
+  fechado) ela ainda sai `exit 1`. O cabeçalho foi reescrito para descrever o
+  que ela verifica agora (a ligação existe e está viva), preservando o texto
+  histórico do que ela reproduzia (Goal030, G-32). O arquivo passou a rodar
+  em gate, como o passo `repro:a03-contract-drift` de `validate:core`
+  (`scripts/validate-core.mjs`), depois de `audit:static`.
+- **FATO atual (o build do pacote precede os dois apps):** `validate:core`
+  ganhou o passo `build:public-api-contract`
+  (`node scripts/build-public-api-contract.mjs`), posicionado antes de
+  `build:bff` e `build:frontend`; `scripts/tests/gate.test.mjs` afirma essa
+  precedência e que o passo existe. O script constrói o pacote e atualiza a
+  cópia dele em `apps/*/node_modules`, porque os dois apps o instalam por
+  cópia e não por symlink (ver o item seguinte): compilar a fonte sem
+  atualizar a cópia mediria o pacote velho.
+- **FATO atual (instalação limpa constrói o pacote):** `apps/bff/.npmrc` e
+  `apps/frontend/.npmrc` declaram `install-links=true`, então o npm copia o
+  diretório do pacote para `node_modules` em vez de criar symlink — é a cópia
+  que mantém uma só instância de Zod por app, já que a resolução de um
+  symlink partiria de `packages/public-api-contract/node_modules`. `dist/`
+  continua fora do Git (`.gitignore`): quem o produz na instalação é o
+  `prepare` do pacote (`npm ci --ignore-scripts && npm run build`), que o npm
+  executa ao copiar o diretório. Por isso o `buildCommand` de `render.yaml`
+  (`npm ci && npm run build`, com `rootDir` em cada app) funciona em checkout
+  limpo, sem passo novo de deploy e sem `dist/` versionado.
+- **FATO atual (divergências reais viraram achados):** a verificação de
+  resposta encontrou quatro divergências entre o que o BFF devolve e o que a
+  tela declarava, nenhuma corrigível dentro deste Goal sem alterar contrato
+  público ou schema movido: **A-20** a **A-23**, registradas em
+  [FINAL_AUDIT §12](FINAL_AUDIT.md#12-fechamento-de-a-03--goal035-2026-09-20).
+- **LIMITE:** este delta não liga a verificação de resposta em produção e não
+  afirma que ligá-la algum dia seria seguro sem decisão própria. Não fecha
+  **M4** (envio real a número real, gate operacional) e não afirma fidelidade
+  visual à referência aprovada — nenhuma tela, componente, texto ou CSS do
+  frontend mudou neste diff.
+- **LIMITE:** este delta descreve o diff035 (WU-01 a WU-19) sobre a baseline
+  aceita `f1fb6203d11270053c8e702d155b98ff7915e7bc` (fechamento do Goal034),
+  decidido em [D-051](DECISIONS.md), sem commit e sem deploy.

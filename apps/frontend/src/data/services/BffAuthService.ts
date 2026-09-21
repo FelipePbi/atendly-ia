@@ -1,11 +1,18 @@
-import { type BffHttpClient } from "../http/BffHttpClient";
+import { type z } from "zod";
+
+import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
 import {
-  loginResultSchema,
-  messageResultSchema,
-  okSchema,
-  registerResultSchema,
-  sessionSchema,
+  type loginResultSchema,
+  type messageResultSchema,
+  type okSchema,
+  type registerResultSchema,
+  type Session,
 } from "../mappers/publicApiSchemas";
+
+type RegisterResult = z.infer<typeof registerResultSchema>;
+type LoginResult = z.infer<typeof loginResultSchema>;
+type Ok = z.infer<typeof okSchema>;
+type MessageResult = z.infer<typeof messageResultSchema>;
 
 export interface RegisterInput {
   confirmPassword: string;
@@ -41,7 +48,7 @@ export class BffAuthService {
       body: input,
       method: "POST",
       path: "/v1/auth/register",
-      schema: registerResultSchema,
+      schema: routeSchema<RegisterResult>("POST", "/v1/auth/register"),
       signal,
     });
   }
@@ -51,7 +58,7 @@ export class BffAuthService {
       body: input,
       method: "POST",
       path: "/v1/auth/login",
-      schema: loginResultSchema,
+      schema: routeSchema<LoginResult>("POST", "/v1/auth/login"),
       signal,
     });
   }
@@ -61,7 +68,7 @@ export class BffAuthService {
       return await this.http.request({
         method: "POST",
         path: "/v1/auth/logout",
-        schema: okSchema,
+        schema: routeSchema<Ok>("POST", "/v1/auth/logout"),
         signal,
       });
     } finally {
@@ -74,7 +81,7 @@ export class BffAuthService {
   session(signal?: AbortSignal) {
     return this.http.request({
       path: "/v1/auth/session",
-      schema: sessionSchema,
+      schema: routeSchema<Session>("GET", "/v1/auth/session"),
       signal,
     });
   }
@@ -84,7 +91,7 @@ export class BffAuthService {
       body: input,
       method: "PATCH",
       path: "/v1/auth/password",
-      schema: okSchema,
+      schema: routeSchema<Ok>("PATCH", "/v1/auth/password"),
       signal,
     });
   }
@@ -94,7 +101,7 @@ export class BffAuthService {
       body: { email },
       method: "POST",
       path: "/v1/auth/forgot-password",
-      schema: messageResultSchema,
+      schema: routeSchema<MessageResult>("POST", "/v1/auth/forgot-password"),
       signal,
     });
   }
@@ -104,7 +111,7 @@ export class BffAuthService {
       body: input,
       method: "POST",
       path: "/v1/auth/reset-password",
-      schema: okSchema,
+      schema: routeSchema<Ok>("POST", "/v1/auth/reset-password"),
       signal,
     });
   }
@@ -114,7 +121,7 @@ export class BffAuthService {
       return await this.http.request({
         method: "POST",
         path: "/v1/auth/logout-all",
-        schema: okSchema,
+        schema: routeSchema<Ok>("POST", "/v1/auth/logout-all"),
         signal,
       });
     } finally {

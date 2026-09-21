@@ -73,6 +73,7 @@ test("validate:core declares the Scheduling Service build", () => {
   for (const expected of [
     "build:scheduling-service",
     "build:ai-orchestrator",
+    "build:public-api-contract",
     "build:bff",
     "build:frontend",
     "check:health-worker",
@@ -83,6 +84,34 @@ test("validate:core declares the Scheduling Service build", () => {
   ]) {
     assert.ok(executed.includes(expected), `missing core step: ${expected}`);
   }
+});
+
+test("validate:core builds the public API contract package before the apps that consume it", () => {
+  const contract = coreSteps.find(
+    (step) => step.name === "build:public-api-contract" && !step.skip,
+  );
+  assert.ok(
+    contract,
+    "packages/public-api-contract must be built as part of validate:core",
+  );
+  assert.equal(contract.cwd, ".");
+  assert.deepEqual([contract.command, ...contract.args], [
+    "node",
+    "scripts/build-public-api-contract.mjs",
+  ]);
+
+  const executed = coreSteps.filter((step) => !step.skip).map((s) => s.name);
+  const contractIndex = executed.indexOf("build:public-api-contract");
+  const bffIndex = executed.indexOf("build:bff");
+  const frontendIndex = executed.indexOf("build:frontend");
+  assert.ok(
+    contractIndex < bffIndex,
+    "build:public-api-contract must precede build:bff",
+  );
+  assert.ok(
+    contractIndex < frontendIndex,
+    "build:public-api-contract must precede build:frontend",
+  );
 });
 
 test("validate:core does not run the BFF integration suite", () => {

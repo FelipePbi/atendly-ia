@@ -22,6 +22,15 @@ const npm = (cwd, name, ...args) => ({
 export const coreSteps = [
   npm("apps/scheduling-service", "build:scheduling-service", "run", "build"),
   npm("apps/ai-orchestrator", "build:ai-orchestrator", "run", "build"),
+  // Constrói o pacote de contrato e atualiza a cópia dele em
+  // apps/*/node_modules — os dois apps o instalam por cópia (`install-links`),
+  // então compilar a fonte sem atualizar a cópia mediria o pacote velho.
+  {
+    name: "build:public-api-contract",
+    cwd: ".",
+    command: "node",
+    args: ["scripts/build-public-api-contract.mjs"],
+  },
   npm("apps/bff", "build:bff", "run", "build"),
   npm("apps/frontend", "build:frontend", "run", "build"),
   npm("apps/health-worker", "check:health-worker", "run", "check"),
@@ -65,6 +74,14 @@ export const coreSteps = [
     cwd: ".",
     command: "node",
     args: ["scripts/final-production-audit.mjs"],
+  },
+  // Goal035/WU-09 — reprodução do achado A-03 (Goal030). Exit 1 se o contrato
+  // compartilhado entre BFF e frontend sumir ou for desligado; exit 0 hoje.
+  {
+    name: "repro:a03-contract-drift",
+    cwd: ".",
+    command: "node",
+    args: ["apps/bff/tests/goal030-a03-contract-drift.repro.mjs"],
   },
 
   // Declarados explicitamente para que "sem suíte" não se confunda com

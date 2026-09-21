@@ -1,5 +1,5 @@
-import { type BffHttpClient } from "../http/BffHttpClient";
-import { activationTestRunSchema } from "../mappers/publicApiSchemas";
+import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
+import { type ActivationTestRun } from "../mappers/publicApiSchemas";
 
 /**
  * Teste real da ativação (Goal019).
@@ -15,7 +15,10 @@ export class BffActivationTestService {
   get(signal?: AbortSignal) {
     return this.http.request({
       path: "/v1/activation-test",
-      schema: activationTestRunSchema.nullable(),
+      schema: routeSchema<ActivationTestRun | null>(
+        "GET",
+        "/v1/activation-test",
+      ),
       signal,
     });
   }
@@ -29,7 +32,7 @@ export class BffActivationTestService {
       body: { tenantPhone },
       method: "POST",
       path: "/v1/activation-test",
-      schema: activationTestRunSchema,
+      schema: routeSchema<ActivationTestRun>("POST", "/v1/activation-test"),
       signal,
     });
   }
@@ -40,7 +43,10 @@ export class BffActivationTestService {
       body: { tenantPhone },
       method: "POST",
       path: "/v1/activation-test/restart",
-      schema: activationTestRunSchema,
+      schema: routeSchema<ActivationTestRun>(
+        "POST",
+        "/v1/activation-test/restart",
+      ),
       signal,
     });
   }

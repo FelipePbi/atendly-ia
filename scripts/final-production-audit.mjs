@@ -393,6 +393,58 @@ export async function main() {
       : "every service's .env.example has exactly the keys declared in its config/env.ts",
   );
 
+  const bffSources = sourceFiles("apps/bff/src").map((file) => ({
+    path: file,
+    content: read(file),
+  }));
+  const frontendServiceSources = sourceFiles(
+    "apps/frontend/src/data/services",
+  ).map((file) => ({ path: file, content: read(file) }));
+  const publicApiRoutesTableSource = read(
+    "packages/public-api-contract/src/routes.ts",
+  );
+  const publicApiSchemasSource = read(
+    "packages/public-api-contract/src/schemas.ts",
+  );
+
+  const { missingFromTable, routesWithoutCaller } =
+    findUncoveredPublicApiRoutes(
+      bffSources,
+      frontendServiceSources,
+      publicApiRoutesTableSource,
+    );
+  check(
+    "public_api_route_coverage",
+    missingFromTable.length === 0,
+    `read ${bffSources.length} files under apps/bff/src for /v1 route registrations, ` +
+      `${frontendServiceSources.length} files under apps/frontend/src/data/services for routeSchema() callers, ` +
+      `and packages/public-api-contract/src/routes.ts for the route table. ` +
+      (missingFromTable.length
+        ? `missing from the table despite a frontend caller: ${missingFromTable.join(", ")}. `
+        : "every BFF /v1 route with a frontend caller has a table entry. ") +
+      `routes with no frontend caller (table entry not required): ${
+        routesWithoutCaller.length ? routesWithoutCaller.join(", ") : "none"
+      }`,
+  );
+
+  const frontendAllSources = frontendSources.map((file) => ({
+    path: file,
+    content: read(file),
+  }));
+  const duplicateResponseSchemaFiles =
+    findDuplicatePublicResponseSchemaDeclarations(
+      frontendAllSources,
+      publicApiSchemasSource,
+    );
+  check(
+    "public_api_response_schema_single_source",
+    duplicateResponseSchemaFiles.length === 0,
+    `read ${frontendAllSources.length} files under apps/frontend/src and packages/public-api-contract/src/schemas.ts for public route response schema names. ` +
+      (duplicateResponseSchemaFiles.length
+        ? `declared outside the package: ${duplicateResponseSchemaFiles.join(", ")}`
+        : "no file outside the package declares a public route response schema"),
+  );
+
   await auditProductionHealth();
   summarize();
 }
@@ -889,6 +941,113 @@ export function findEnvExampleParityMismatches(envExampleContent, envSource) {
     missingFromExample: [...schemaKeys].filter((key) => !exampleKeys.has(key)),
     extraInExample: [...exampleKeys].filter((key) => !schemaKeys.has(key)),
   };
+}
+
+// Goal035/WU-07: as duas regras abaixo comparam quem registra rota `/v1` no
+// BFF, quem a chama no frontend e o que a tabela em
+// `packages/public-api-contract/src/routes.ts` sabe descrever. Puras como as
+// demais: recebem conteudo ja lido, nunca tocam o disco, para que o teste de
+// regressao passe uma arvore sintetica sem depender do repositorio real.
+const BFF_V1_ROUTE_REGISTRATION_PATTERN =
+  /\bapp\.(get|post|put|patch|delete)\(\s*["'](\/v1\/[^"']*)["']/gu;
+const FRONTEND_ROUTE_SCHEMA_CALL_PATTERN =
+  /\brouteSchema<[\s\S]*?>\(\s*["'](GET|POST|PUT|PATCH|DELETE)["'],\s*["']([^"']+)["']/gu;
+const PUBLIC_API_ROUTE_TABLE_ENTRY_PATTERN =
+  /\{\s*method:\s*["'](GET|POST|PUT|PATCH|DELETE)["'],\s*pathPattern:\s*["']([^"']+)["']/gu;
+
+function routeRegistrationKey({ method, pathPattern }) {
+  return `${method} ${pathPattern}`;
+}
+
+function extractBffV1RouteRegistrations(files) {
+  const routes = new Map();
+  for (const { content } of files) {
+    for (const match of content.matchAll(BFF_V1_ROUTE_REGISTRATION_PATTERN)) {
+      const route = { method: match[1].toUpperCase(), pathPattern: match[2] };
+      routes.set(routeRegistrationKey(route), route);
+    }
+  }
+  return [...routes.values()];
+}
+
+function extractFrontendRouteSchemaCalls(files) {
+  const routes = [];
+  for (const { content } of files) {
+    for (const match of content.matchAll(FRONTEND_ROUTE_SCHEMA_CALL_PATTERN)) {
+      routes.push({ method: match[1], pathPattern: match[2] });
+    }
+  }
+  return routes;
+}
+
+function extractPublicApiRouteTableEntries(routesTableSource) {
+  return [...routesTableSource.matchAll(PUBLIC_API_ROUTE_TABLE_ENTRY_PATTERN)].map(
+    (match) => ({ method: match[1], pathPattern: match[2] }),
+  );
+}
+
+// COBERTURA: toda rota `/v1` registrada no BFF que tem pelo menos um chamador
+// em `apps/frontend/src/data/services` precisa de entrada na tabela. Uma rota
+// sem chamador nao exige entrada — ninguem no frontend depende do schema dela
+// — mas o conjunto e computado e devolvido, nunca mantido a mao.
+export function findUncoveredPublicApiRoutes(
+  bffSourceFiles,
+  frontendServiceFiles,
+  routesTableSource,
+) {
+  const bffRoutes = extractBffV1RouteRegistrations(bffSourceFiles);
+  const calledKeys = new Set(
+    extractFrontendRouteSchemaCalls(frontendServiceFiles).map(
+      routeRegistrationKey,
+    ),
+  );
+  const tableKeys = new Set(
+    extractPublicApiRouteTableEntries(routesTableSource).map(
+      routeRegistrationKey,
+    ),
+  );
+
+  const routesWithoutCaller = [];
+  const missingFromTable = [];
+  for (const route of bffRoutes) {
+    const key = routeRegistrationKey(route);
+    if (!calledKeys.has(key)) {
+      routesWithoutCaller.push(key);
+      continue;
+    }
+    if (!tableKeys.has(key)) missingFromTable.push(key);
+  }
+  return { missingFromTable, routesWithoutCaller };
+}
+
+const PUBLIC_SCHEMA_EXPORT_PATTERN = /^export const (\w+Schema) = z\./gmu;
+const SCHEMA_DECLARATION_PATTERN = /\bconst\s+(\w+Schema)\s*=\s*z\./gu;
+
+// FONTE UNICA: nenhum arquivo de `apps/frontend/src` pode redeclarar, com o
+// mesmo nome, um schema de resposta que ja vive em
+// `packages/public-api-contract/src/schemas.ts`. Importar o schema (ou
+// reexportar o pacote inteiro, como `publicApiSchemas.ts` faz) nao aciona a
+// regra — so uma nova declaracao `const nomeSchema = z....` aciona.
+export function findDuplicatePublicResponseSchemaDeclarations(
+  frontendFiles,
+  schemasSource,
+) {
+  const publicSchemaNames = new Set(
+    [...schemasSource.matchAll(PUBLIC_SCHEMA_EXPORT_PATTERN)].map(
+      (match) => match[1],
+    ),
+  );
+
+  const violations = [];
+  for (const { path: filePath, content } of frontendFiles) {
+    for (const match of content.matchAll(SCHEMA_DECLARATION_PATTERN)) {
+      if (publicSchemaNames.has(match[1])) {
+        violations.push(filePath);
+        break;
+      }
+    }
+  }
+  return violations;
 }
 
 function read(relativePath) {

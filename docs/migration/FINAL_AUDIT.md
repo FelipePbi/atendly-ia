@@ -673,6 +673,110 @@ Os dois checkboxes (`remember`, `terms`) não aparecem em nenhum anexo —
 associado (o alvo real, nunca uma união com a caixa do `<input>`) passa dos
 44px confortáveis nas duas larguras.
 
+### Achados novos — A-20 a A-23
+
+A verificação de resposta, ligada na suíte de integração do BFF, encontrou
+quatro divergências entre o que o BFF devolve e o que a tela declarava.
+Nenhuma foi corrigida neste diff: nos quatro casos o produtor concorda com o
+comportamento de produto e com `apps/bff/PUBLIC_API_V1.md`, e a correção
+passaria por alterar o contrato público ou afrouxar um schema movido — as
+duas coisas proibidas pelo Goal035. Os identificadores seguem a numeração de
+§6 e a classificação usa o mesmo vocabulário fechado; §6 não foi reescrita.
+
+| ID | Achado | Classificação | Lado errado |
+| --- | --- | --- | --- |
+| A-20 | `DELETE /v1/customers/:id/primary-guardian` devolve `{ deleted: false }`, corpo que o contrato não admite | PENDENCIA-POS-MVP | o contrato: o produtor cumpre a remoção idempotente documentada |
+| A-21 | `GET /v1/status` devolve `ai.reconciled`, documentado em `PUBLIC_API_V1.md`, que o contrato não declara | PENDENCIA-POS-MVP | o contrato: o campo existe, é documentado e é descartado |
+| A-22 | `GET /v1/auth/session` devolve `businessProfile.modalities` e `businessProfile.address`, não declarados | PENDENCIA-POS-MVP | o contrato: as mesmas chaves são declaradas em `/v1/onboarding` e `/v1/settings` |
+| A-23 | `PATCH /v1/onboarding` e `POST /v1/onboarding/complete` devolvem sete campos de serviço não declarados | PENDENCIA-POS-MVP | o contrato: os sete campos já existem no `serviceSchema` cheio do pacote |
+
+#### A-20 — `DELETE /v1/customers/:id/primary-guardian` devolve `{ deleted: false }`
+
+**Classificação:** `PENDENCIA-POS-MVP`.
+
+**Reprodução:** estática, em três arquivos. `clearPrimaryGuardian` devolve
+`{ deleted: deleted.count > 0 }`
+(`apps/scheduling-service/src/modules/customers/atendly-customer-service.ts:263`);
+o BFF repassa sem tocar, tipando a resposta do produtor como
+`z.object({ deleted: z.boolean() })`
+(`apps/bff/src/clients/scheduling/index.ts:1068`,
+`apps/bff/src/modules/customers/routes.ts:178`); a entrada da tabela é
+`deletedSchema.or(customerPrimaryGuardianSchema)`
+(`packages/public-api-contract/src/routes.ts`), com `deletedSchema` =
+`z.object({ deleted: z.literal(true) })` (`src/schemas.ts`). Executada na
+rodada 1 com o Scheduling dublado devolvendo `{data:{deleted:false}}`: a rota
+respondeu `500` com
+`Response of DELETE /v1/customers/:id/primary-guardian does not match the public API contract: data: Invalid input`.
+O dublê era temporário e foi apagado — **não** há reprodução executável
+permanente na árvore, e é por isso que o achado não é classificado como
+`BLOQUEADOR-MVP`, na mesma regra que §6 aplica a A-04, A-07 e A-08.
+
+**Impacto de produto:** remover o responsável principal de um cliente que não
+tem nenhum devolve um corpo que a própria tela não decodifica — o caso
+idempotente que `apps/frontend/src/data/services/BffCustomerService.ts`
+documenta em comentário desde a baseline.
+
+**Por que não foi corrigido aqui:** alargar `deletedSchema` para aceitar
+`false` é afrouxar schema movido (proibido pelo Goal035 §7), e fazer a rota
+devolver outra coisa é mudar contrato público (também proibido). A decisão de
+qual lado muda é de Goal próprio.
+
+#### A-21 — `GET /v1/status` devolve `ai.reconciled`, que o contrato não declara
+
+**Classificação:** `PENDENCIA-POS-MVP`.
+
+**Reprodução:** `apps/bff/PUBLIC_API_V1.md`, seção "Reconciliação
+desired/effective em `GET /v1/status` (Goal019)", descreve `ai.reconciled` com
+seis valores possíveis; `systemStatusSchema` não declara o campo, e `z.object`
+o remove silenciosamente. Observado 37 vezes na suíte de integração da rodada
+1, com o hook instrumentado para comparar o `data` enviado com o `data`
+devolvido pelo `safeParse`: `NOOP` (24), `FAILED` (5), `CONVERGED` (4),
+`ACTIVATED` (3), `DEACTIVATED_BY_CHANNEL_CHANGE` (1). A instrumentação era
+temporária e foi revertida.
+
+**Impacto de produto:** a tela não distingue "convergiu agora" de "nada
+divergia", embora o BFF envie a informação.
+
+#### A-22 — `GET /v1/auth/session` devolve dois campos de perfil não declarados
+
+**Classificação:** `PENDENCIA-POS-MVP`.
+
+**Reprodução:** mesma instrumentação de A-21, 10 observações
+(`modalities: []`, `address: null`). `businessProfileSchema` declara só `id`,
+`businessName`, `category`, `timezone`, `language`, `currency`, `createdAt` e
+`updatedAt`; em `/v1/onboarding` e `/v1/settings` os dois campos são
+declarados — a assimetria é só na sessão.
+
+**Impacto de produto:** quem lê a sessão precisa de uma segunda chamada para
+modalidade e endereço, dados que já vieram na primeira.
+
+#### A-23 — `PATCH /v1/onboarding` e `POST /v1/onboarding/complete` devolvem sete campos de serviço não declarados
+
+**Classificação:** `PENDENCIA-POS-MVP`.
+
+**Reprodução:** mesma instrumentação de A-21, 3 respostas de cada rota. O
+objeto `service` inline de `onboardingStateSchema` declara `id`, `name`,
+`durationMinutes`, `priceType`, `price` e `active`; as respostas trazem também
+`needsReview`, `reviewOrigin`, `description`, `colorToken`,
+`bufferBeforeMinutes`, `bufferAfterMinutes` e `recurrenceIntervalDays` — todos
+já declarados no `serviceSchema` cheio do pacote.
+
+**Impacto de produto:** `needsReview` (pendência de revisão de serviço,
+Goal007) não chega à tela por essas duas rotas.
+
+#### Limite da verificação: campo a mais não reprova
+
+A-21, A-22 e A-23 só apareceram porque o hook foi instrumentado para comparar
+o `data` enviado com o `data` que o `safeParse` devolve. `z.object` **remove**
+chave não declarada em vez de recusá-la, então drift por campo a mais nunca
+deixa a verificação vermelha: o controle negativo da rodada 1 com um campo
+extra (`conversationDays` em `/v1/settings/retention`) passou verde, enquanto
+o controle com valor fora do vocabulário (`appliesFrom: "NOW"`) derrubou cinco
+testes com o erro nomeado. O que este gate cobre hoje é campo faltando, tipo
+errado, nulo indevido e valor fora do vocabulário; campo a mais, não. O limite
+é desta verificação, não do produto, e está declarado aqui para não ser
+descoberto como surpresa.
+
 ### Veredito recontado
 
 A contagem desta auditoria muda em uma linha: A-01 deixa de reproduzir e sai
@@ -974,3 +1078,131 @@ nem para o WhatsApp real. **E não diz que a interface está fiel à referência
 aprovada**: este diff não toca `apps/frontend/e2e/`, nem o gate renderizado,
 nem a fidelidade visual — que segue sendo conferência humana, como §5.3, §7,
 §8, §9 e §10 já declaravam.
+
+## 12. Fechamento de A-03 — Goal035, 2026-09-20
+
+Seção nova, escrita depois da última mudança de árvore do diff035 (WU-01 a
+WU-19). Ela **não reescreve** §4 a §11: os registros de A-01 a A-19, o
+veredito de §7 e as quatro seções de fechamento anteriores continuam
+exatamente como estavam. Esta seção acrescenta o que o diff035 passou a
+garantir sobre o achado que §6 registrava como "não existe contrato
+compartilhado entre BFF e frontend, e o BFF não valida a própria resposta"
+(G-32).
+
+### O que mudou
+
+**O contrato virou artefato único.** Os 106 schemas de
+`apps/frontend/src/data/mappers/publicApiSchemas.ts` foram movidos, sem
+alteração de conteúdo, para `packages/public-api-contract/src/schemas.ts`; o
+arquivo antigo do frontend virou reexport de uma linha. O pacote exporta uma
+tabela de **116** entradas (`src/routes.ts`), uma por rota `/v1` com chamador
+no frontend, derivada do pareamento `path`+`schema` que já existia nos
+dezessete `Bff*Service.ts`. A contagem é a do artefato construído, não a do
+texto-fonte:
+`node -e "import('./packages/public-api-contract/dist/index.js').then((m) => console.log(m.publicApiRoutes.length))"`
+imprime `116`. (O texto `pathPattern:` aparece 119 vezes no arquivo porque a
+interface `PublicApiRoute` e os comentários também o escrevem; contar
+ocorrências de texto contava três linhas que não são entrada.) `audit:static` ganhou `public_api_route_coverage` — que
+computa e imprime, a cada execução, o conjunto de rotas sem chamador (hoje
+uma só, `GET /v1/conversations/:id/messages/:messageId/media`, que por não
+ter chamador não exige entrada) — e `public_api_response_schema_single_source`
+— que falha se algum arquivo de `apps/frontend/src` redeclarar, fora do
+pacote, um schema já exportado por ele.
+
+**O BFF passou a validar a própria resposta.** `apps/bff/src/lib/response-contract.ts`
+registra um hook único de `onSend` que compara o `data` serializado contra a
+entrada da rota e derruba o processo com `ResponseContractViolationError`,
+nomeando método, padrão da rota e os campos divergentes, quando os dois lados
+discordam. `RESPONSE_CONTRACT_CHECK_ENABLED` é `env.NODE_ENV !== "production"`
+— a verificação **não roda em produção**: o motivo, escrito no próprio
+arquivo, é que um corpo divergente já saiu do handler quando o hook o vê, e
+recusá-lo ali trocaria um bug de contrato por uma indisponibilidade real. Ver
+[VALIDATION_GATE](VALIDATION_GATE.md#checks-estáticos-novos-do-goal035).
+
+**A reprodução de A-03 deixou de reproduzir.** `apps/bff/tests/goal030-a03-contract-drift.repro.mjs`,
+executado nesta unidade contra a árvore final, imprime pacote de contrato
+compartilhado, zero schemas declarados localmente no frontend, os dois lados
+importando o pacote e a verificação registrada no bootstrap do BFF, e sai
+`exit 0`. O planejamento deste Goal já tinha confirmado, na baseline aceita
+`f1fb6203d11270053c8e702d155b98ff7915e7bc` (fechamento do Goal034), que o
+mesmo arquivo saía `exit 1` ali — esta unidade não reexecutou a baseline, e
+não afirma tê-lo feito. O arquivo passou a rodar em gate, como o passo
+`repro:a03-contract-drift` de `validate:core`, depois de `audit:static`.
+`validate:core` também ganhou `build:public-api-contract`, antes de
+`build:bff` e `build:frontend`, afirmado por `scripts/tests/gate.test.mjs`.
+
+### Resultado real da execução
+
+Executado por esta unidade (WU-20), sobre a árvore final: `node
+scripts/final-production-audit.mjs` — exit 0, 32 checks, 31 `passed`, 1
+`skipped` declarado (`production_health`, sem `PRODUCTION_HEALTH_TARGETS`),
+incluindo `public_api_route_coverage` e `public_api_response_schema_single_source`
+ambos `ok: true`, com `details` de cada um declarando os arquivos lidos.
+`npm run test:gate` — exit 0, 188 `pass`, 0 `fail`, incluindo as duas
+regressões nos dois sentidos dos dois checks novos e a asserção de
+precedência de `build:public-api-contract`. `node
+apps/bff/tests/goal030-a03-contract-drift.repro.mjs` — exit 0 (saída
+reproduzida acima). `npm test` em `apps/bff` — 10 arquivos, 96 testes,
+0 falhas (30 arquivos de integração ficam `skipped` de propósito, fora do
+core). `npm test` em `apps/frontend` — 72 arquivos, 666 testes, 0 falhas.
+Cópia única de Zod por app confirmada por `require.resolve`:
+`apps/bff/node_modules/zod` e `apps/frontend/node_modules/zod` resolvem
+`4.4.3`; `packages/public-api-contract` tem Zod só como `devDependency` do
+próprio build (`peerDependency` em produção), sem ser dependência
+transitiva de nenhum dos dois apps.
+
+### Correção da rodada 2
+
+A rodada 1 foi recusada com quatro blockers, e três deles são desta seção: a
+contagem errada da tabela (corrigida acima), a afirmação de que não havia
+achado novo (corrigida abaixo) e a versão de Zod citada. O quarto é de
+árvore: a instalação limpa não funcionava, porque `dist/` não é versionado e
+nada o construía no caminho de deploy. Passou a construir: o pacote ganhou um
+script `prepare` (`npm ci --ignore-scripts && npm run build`) que o npm
+executa ao copiar o diretório do pacote por `install-links`, e
+`build:public-api-contract` virou `node scripts/build-public-api-contract.mjs`,
+que constrói e **atualiza a cópia** em `apps/*/node_modules` — a cópia de
+`install-links` é congelada na instalação. Provado por execução, a partir de
+uma árvore sem `dist/` e sem `node_modules` no pacote e no app:
+`npm ci --prefix apps/bff` seguido de `npm run build --prefix apps/bff` —
+Prisma Client gerado e `tsc` sem erro, com
+`apps/bff/node_modules/@atendly-ia/public-api-contract/dist/` presente depois
+da instalação; o mesmo para `apps/frontend` (`next build` completo). É
+exatamente a sequência do `buildCommand` de `render.yaml`. Os dois
+`package-lock.json` foram refeitos a partir dos da baseline: o diff de cada um
+é a entrada nova mais a mudança de forma que o modo de instalação exige,
+sem alterar versão de dependência existente.
+
+Esta seção **não** reexecutou `validate:integration` nem `validate:ui`
+nesta unidade — WU-20 é documentação, escrita depois da última mudança de
+árvore, e cita o que unidades anteriores desta rodada já deixaram provado:
+`validate:integration` exit 0 (192740ms, WU-18) e `validate:ui` exit 0
+(43711ms, WU-19). Também não reexecutou os cinco controles negativos
+obrigatórios do Goal — essas provas pertencem às unidades de controle
+negativo, não a esta unidade de fechamento documental. A instalação limpa dos
+dois apps, essa sim, foi executada na correção da rodada 2, acima.
+
+### Veredito recontado
+
+A contagem desta auditoria muda em duas direções: **A-03** deixa de
+reproduzir e sai da categoria `PENDENCIA-POS-MVP`, e entram os quatro achados
+novos acima, todos `PENDENCIA-POS-MVP`. O identificador permanece — não é
+renumerado nem reaproveitado —, e o registro original em §6 continua
+descrevendo o que a auditoria do Goal030 encontrou, sem reescrita. **Esta
+auditoria passa a ter 0 achados `BLOQUEADOR-MVP`, 11 `PENDENCIA-POS-MVP`**
+(era 8: menos A-03, mais A-20, A-21, A-22 e A-23) **e 6 `LIMITE-DECLARADO`**
+(inalterado) — os demais de A-04 a A-19, nenhum deles tocado, corrigido ou
+reclassificado por esta unidade. A afirmação contrária da rodada 1 ("nenhum
+achado novo entra a partir de A-20") estava errada e foi substituída pelos
+registros acima.
+
+Três coisas que este recontar não diz. **Não diz que M4 foi fechado**:
+nenhuma chamada saiu, neste diff, para um provedor de LLM real nem para o
+WhatsApp real. **Não diz que a interface está fiel à referência aprovada**:
+este diff não toca `apps/frontend/e2e/`, nenhuma tela, componente, texto ou
+CSS — a fidelidade visual segue sendo conferência humana, como §5.3, §7,
+§8, §9, §10 e §11 já declaravam. **E não diz que a verificação de resposta
+roda em produção**: ela é gate de drift, ligada em `development` e `test`,
+e desligada onde o produto realmente responde — o limite está escrito em
+`apps/bff/src/lib/response-contract.ts` e em
+[VALIDATION_GATE](VALIDATION_GATE.md#checks-estáticos-novos-do-goal035).

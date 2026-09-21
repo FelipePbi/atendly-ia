@@ -1,16 +1,21 @@
-import { type BffHttpClient } from "../http/BffHttpClient";
+import { type z } from "zod";
+
+import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
 import {
-  customerDetailSchema,
-  customerListSchema,
+  type Customer,
+  type CustomerDetail,
+  type CustomerList,
+  type CustomerMemory,
   type CustomerMemoryKind,
-  customerMemorySchema,
-  customerNoteSchema,
-  customerPrimaryGuardianSchema,
-  customerSchema,
-  customerSummarySchema,
-  customerTagSchema,
-  deletedSchema,
+  type CustomerNote,
+  type customerPrimaryGuardianSchema,
+  type CustomerSummary,
+  type CustomerTag,
+  type deletedSchema,
 } from "../mappers/publicApiSchemas";
+
+type Deleted = z.infer<typeof deletedSchema>;
+type CustomerPrimaryGuardian = z.infer<typeof customerPrimaryGuardianSchema>;
 
 export interface CreateCustomerInput {
   name?: string | null;
@@ -55,7 +60,7 @@ export class BffCustomerService {
   list(signal?: AbortSignal) {
     return this.http.request({
       path: "/v1/customers",
-      schema: customerListSchema,
+      schema: routeSchema<CustomerList>("GET", "/v1/customers"),
       signal,
     });
   }
@@ -69,7 +74,7 @@ export class BffCustomerService {
   listCandidatesByPhone(phone: string, signal?: AbortSignal) {
     return this.http.request({
       path: `/v1/customers?phone=${encodeURIComponent(phone)}`,
-      schema: customerListSchema,
+      schema: routeSchema<CustomerList>("GET", "/v1/customers"),
       signal,
     });
   }
@@ -77,7 +82,7 @@ export class BffCustomerService {
   get(id: string, signal?: AbortSignal) {
     return this.http.request({
       path: `/v1/customers/${encodeURIComponent(id)}`,
-      schema: customerDetailSchema,
+      schema: routeSchema<CustomerDetail>("GET", "/v1/customers/:id"),
       signal,
     });
   }
@@ -87,7 +92,7 @@ export class BffCustomerService {
       body: input,
       method: "POST",
       path: "/v1/customers",
-      schema: customerSchema,
+      schema: routeSchema<Customer>("POST", "/v1/customers"),
       signal,
     });
   }
@@ -97,7 +102,7 @@ export class BffCustomerService {
       body: input,
       method: "PATCH",
       path: `/v1/customers/${encodeURIComponent(id)}`,
-      schema: customerSchema,
+      schema: routeSchema<Customer>("PATCH", "/v1/customers/:id"),
       signal,
     });
   }
@@ -111,7 +116,10 @@ export class BffCustomerService {
       body: input,
       method: "PUT",
       path: `/v1/customers/${encodeURIComponent(id)}/primary-guardian`,
-      schema: customerPrimaryGuardianSchema,
+      schema: routeSchema<CustomerPrimaryGuardian>(
+        "PUT",
+        "/v1/customers/:id/primary-guardian",
+      ),
       signal,
     });
   }
@@ -125,7 +133,10 @@ export class BffCustomerService {
       body: input,
       method: "POST",
       path: `/v1/customers/${encodeURIComponent(id)}/primary-guardian/confirm`,
-      schema: customerPrimaryGuardianSchema,
+      schema: routeSchema<CustomerPrimaryGuardian>(
+        "POST",
+        "/v1/customers/:id/primary-guardian/confirm",
+      ),
       signal,
     });
   }
@@ -134,9 +145,10 @@ export class BffCustomerService {
     return this.http.request({
       method: "DELETE",
       path: `/v1/customers/${encodeURIComponent(id)}/primary-guardian`,
-      schema: deletedSchema.or(
-        // A remoção é idempotente: `deleted: false` quando não havia relação.
-        customerPrimaryGuardianSchema,
+      // A remoção é idempotente: `deleted: false` quando não havia relação.
+      schema: routeSchema<Deleted | CustomerPrimaryGuardian>(
+        "DELETE",
+        "/v1/customers/:id/primary-guardian",
       ),
       signal,
     });
@@ -147,7 +159,7 @@ export class BffCustomerService {
       body: input,
       method: "POST",
       path: `/v1/customers/${encodeURIComponent(id)}/notes`,
-      schema: customerNoteSchema,
+      schema: routeSchema<CustomerNote>("POST", "/v1/customers/:id/notes"),
       signal,
     });
   }
@@ -162,7 +174,10 @@ export class BffCustomerService {
       body: { aiAuthorized },
       method: "PATCH",
       path: `/v1/customers/${encodeURIComponent(id)}/notes/${encodeURIComponent(noteId)}`,
-      schema: customerNoteSchema,
+      schema: routeSchema<CustomerNote>(
+        "PATCH",
+        "/v1/customers/:id/notes/:childId",
+      ),
       signal,
     });
   }
@@ -171,7 +186,10 @@ export class BffCustomerService {
     return this.http.request({
       method: "DELETE",
       path: `/v1/customers/${encodeURIComponent(id)}/notes/${encodeURIComponent(noteId)}`,
-      schema: deletedSchema,
+      schema: routeSchema<Deleted>(
+        "DELETE",
+        "/v1/customers/:id/notes/:childId",
+      ),
       signal,
     });
   }
@@ -181,7 +199,7 @@ export class BffCustomerService {
       body: input,
       method: "POST",
       path: `/v1/customers/${encodeURIComponent(id)}/tags`,
-      schema: customerTagSchema,
+      schema: routeSchema<CustomerTag>("POST", "/v1/customers/:id/tags"),
       signal,
     });
   }
@@ -196,7 +214,10 @@ export class BffCustomerService {
       body: { aiAuthorized },
       method: "PATCH",
       path: `/v1/customers/${encodeURIComponent(id)}/tags/${encodeURIComponent(tagId)}`,
-      schema: customerTagSchema,
+      schema: routeSchema<CustomerTag>(
+        "PATCH",
+        "/v1/customers/:id/tags/:childId",
+      ),
       signal,
     });
   }
@@ -205,7 +226,7 @@ export class BffCustomerService {
     return this.http.request({
       method: "DELETE",
       path: `/v1/customers/${encodeURIComponent(id)}/tags/${encodeURIComponent(tagId)}`,
-      schema: deletedSchema,
+      schema: routeSchema<Deleted>("DELETE", "/v1/customers/:id/tags/:childId"),
       signal,
     });
   }
@@ -214,7 +235,7 @@ export class BffCustomerService {
   listMemory(id: string, signal?: AbortSignal) {
     return this.http.request({
       path: `/v1/customers/${encodeURIComponent(id)}/memory`,
-      schema: customerMemorySchema.array(),
+      schema: routeSchema<CustomerMemory[]>("GET", "/v1/customers/:id/memory"),
       signal,
     });
   }
@@ -232,7 +253,7 @@ export class BffCustomerService {
       body: input,
       method: "POST",
       path: `/v1/customers/${encodeURIComponent(id)}/memory`,
-      schema: customerMemorySchema,
+      schema: routeSchema<CustomerMemory>("POST", "/v1/customers/:id/memory"),
       signal,
     });
   }
@@ -248,7 +269,10 @@ export class BffCustomerService {
       body: { aiAllowed },
       method: "PATCH",
       path: `/v1/customers/${encodeURIComponent(id)}/memory/${encodeURIComponent(memoryId)}`,
-      schema: customerMemorySchema,
+      schema: routeSchema<CustomerMemory>(
+        "PATCH",
+        "/v1/customers/:id/memory/:memoryId",
+      ),
       signal,
     });
   }
@@ -258,7 +282,10 @@ export class BffCustomerService {
     return this.http.request({
       method: "DELETE",
       path: `/v1/customers/${encodeURIComponent(id)}/memory/${encodeURIComponent(memoryId)}`,
-      schema: customerMemorySchema,
+      schema: routeSchema<CustomerMemory>(
+        "DELETE",
+        "/v1/customers/:id/memory/:memoryId",
+      ),
       signal,
     });
   }
@@ -271,7 +298,7 @@ export class BffCustomerService {
     return this.http.request({
       method: "POST",
       path: `/v1/customers/${encodeURIComponent(id)}/summary`,
-      schema: customerSummarySchema,
+      schema: routeSchema<CustomerSummary>("POST", "/v1/customers/:id/summary"),
       signal,
     });
   }

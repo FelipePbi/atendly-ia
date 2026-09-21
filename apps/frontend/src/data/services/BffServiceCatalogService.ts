@@ -1,13 +1,8 @@
-import { type BffHttpClient } from "../http/BffHttpClient";
-import { serviceListSchema, serviceSchema } from "../mappers/publicApiSchemas";
+import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
+import type { Service, ServiceList } from "../mappers/publicApiSchemas";
 
 export type ServiceColorToken =
-  | "ROSE"
-  | "AMBER"
-  | "EMERALD"
-  | "SKY"
-  | "VIOLET"
-  | "SLATE";
+  "ROSE" | "AMBER" | "EMERALD" | "SKY" | "VIOLET" | "SLATE";
 
 export interface ServiceInput {
   active?: boolean;
@@ -31,7 +26,7 @@ export class BffServiceCatalogService {
   list(signal?: AbortSignal) {
     return this.http.request({
       path: "/v1/services",
-      schema: serviceListSchema,
+      schema: routeSchema<ServiceList>("GET", "/v1/services"),
       signal,
     });
   }
@@ -41,7 +36,7 @@ export class BffServiceCatalogService {
       body: input,
       method: "POST",
       path: "/v1/services",
-      schema: serviceSchema,
+      schema: routeSchema<Service>("POST", "/v1/services"),
       signal,
     });
   }
@@ -51,7 +46,7 @@ export class BffServiceCatalogService {
       body: input,
       method: "PATCH",
       path: `/v1/services/${encodeURIComponent(id)}`,
-      schema: serviceSchema,
+      schema: routeSchema<Service>("PATCH", "/v1/services/:id"),
       signal,
     });
   }

@@ -1,21 +1,23 @@
-import { z } from "zod";
+import { type z } from "zod";
 
-import { type BffHttpClient } from "../http/BffHttpClient";
+import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
 import {
-  appointmentEventSchema,
-  appointmentHoldSchema,
-  appointmentLifecycleSchema,
-  appointmentNotificationSchema,
-  appointmentSchema,
-  availabilityExceptionSchema,
-  availabilitySlotSchema,
-  blockSeriesSchema,
-  calendarStateSchema,
-  deletedSchema,
-  seriesOccurrencePreviewSchema,
+  type Appointment,
+  type AppointmentEvent,
+  type AppointmentHold,
+  type AppointmentLifecycle,
+  type AppointmentNotification,
+  type AvailabilityException,
+  type AvailabilitySlot,
+  type BlockSeries,
+  type CalendarState,
+  type deletedSchema,
+  type SeriesOccurrencePreview,
+  type TimeBlock,
   type TimeBlockKind,
-  timeBlockSchema,
 } from "../mappers/publicApiSchemas";
+
+type Deleted = z.infer<typeof deletedSchema>;
 
 export interface ListAppointmentsQuery {
   customerId?: string;
@@ -177,7 +179,7 @@ export class BffCalendarService {
         endDate: query.endDate,
         startDate: query.startDate,
       },
-      schema: z.array(appointmentSchema),
+      schema: routeSchema<Appointment[]>("GET", "/v1/appointments"),
       signal,
     });
   }
@@ -185,7 +187,7 @@ export class BffCalendarService {
   getAppointment(id: string, signal?: AbortSignal) {
     return this.http.request({
       path: `/v1/appointments/${encodeURIComponent(id)}`,
-      schema: appointmentSchema,
+      schema: routeSchema<Appointment>("GET", "/v1/appointments/:id"),
       signal,
     });
   }
@@ -200,7 +202,7 @@ export class BffCalendarService {
       headers: { "idempotency-key": idempotencyKey },
       method: "POST",
       path: "/v1/appointments",
-      schema: appointmentSchema,
+      schema: routeSchema<Appointment>("POST", "/v1/appointments"),
       signal,
     });
   }
@@ -216,7 +218,10 @@ export class BffCalendarService {
       headers: { "idempotency-key": idempotencyKey },
       method: "POST",
       path: `/v1/appointments/${encodeURIComponent(id)}/reschedule`,
-      schema: appointmentSchema,
+      schema: routeSchema<Appointment>(
+        "POST",
+        "/v1/appointments/:id/reschedule",
+      ),
       signal,
     });
   }
@@ -237,7 +242,7 @@ export class BffCalendarService {
       headers: { "idempotency-key": idempotencyKey },
       method: "POST",
       path: `/v1/appointments/${encodeURIComponent(id)}/cancel`,
-      schema: appointmentSchema,
+      schema: routeSchema<Appointment>("POST", "/v1/appointments/:id/cancel"),
       signal,
     });
   }
@@ -252,7 +257,10 @@ export class BffCalendarService {
       body: {},
       method: "POST",
       path: `/v1/appointments/${encodeURIComponent(id)}/complete`,
-      schema: appointmentLifecycleSchema,
+      schema: routeSchema<AppointmentLifecycle>(
+        "POST",
+        "/v1/appointments/:id/complete",
+      ),
       signal,
     });
   }
@@ -266,7 +274,10 @@ export class BffCalendarService {
       body: input,
       method: "POST",
       path: `/v1/appointments/${encodeURIComponent(id)}/no-show`,
-      schema: appointmentLifecycleSchema,
+      schema: routeSchema<AppointmentLifecycle>(
+        "POST",
+        "/v1/appointments/:id/no-show",
+      ),
       signal,
     });
   }
@@ -280,7 +291,10 @@ export class BffCalendarService {
       body: input,
       method: "POST",
       path: `/v1/appointments/${encodeURIComponent(id)}/final-value`,
-      schema: appointmentLifecycleSchema,
+      schema: routeSchema<AppointmentLifecycle>(
+        "POST",
+        "/v1/appointments/:id/final-value",
+      ),
       signal,
     });
   }
@@ -290,7 +304,10 @@ export class BffCalendarService {
       body: {},
       method: "POST",
       path: `/v1/appointments/${encodeURIComponent(id)}/presence`,
-      schema: appointmentLifecycleSchema,
+      schema: routeSchema<AppointmentLifecycle>(
+        "POST",
+        "/v1/appointments/:id/presence",
+      ),
       signal,
     });
   }
@@ -298,7 +315,10 @@ export class BffCalendarService {
   listAppointmentEvents(id: string, signal?: AbortSignal) {
     return this.http.request({
       path: `/v1/appointments/${encodeURIComponent(id)}/events`,
-      schema: z.array(appointmentEventSchema),
+      schema: routeSchema<AppointmentEvent[]>(
+        "GET",
+        "/v1/appointments/:id/events",
+      ),
       signal,
     });
   }
@@ -312,7 +332,10 @@ export class BffCalendarService {
   listAppointmentNotifications(id: string, signal?: AbortSignal) {
     return this.http.request({
       path: `/v1/appointments/${encodeURIComponent(id)}/notifications`,
-      schema: z.array(appointmentNotificationSchema),
+      schema: routeSchema<AppointmentNotification[]>(
+        "GET",
+        "/v1/appointments/:id/notifications",
+      ),
       signal,
     });
   }
@@ -328,7 +351,7 @@ export class BffCalendarService {
       headers: { "idempotency-key": idempotencyKey },
       method: "POST",
       path: "/v1/holds",
-      schema: appointmentHoldSchema,
+      schema: routeSchema<AppointmentHold>("POST", "/v1/holds"),
       signal,
     });
   }
@@ -336,7 +359,7 @@ export class BffCalendarService {
   listHolds(signal?: AbortSignal) {
     return this.http.request({
       path: "/v1/holds",
-      schema: z.array(appointmentHoldSchema),
+      schema: routeSchema<AppointmentHold[]>("GET", "/v1/holds"),
       signal,
     });
   }
@@ -345,7 +368,7 @@ export class BffCalendarService {
     return this.http.request({
       method: "DELETE",
       path: `/v1/holds/${encodeURIComponent(id)}`,
-      schema: appointmentHoldSchema,
+      schema: routeSchema<AppointmentHold>("DELETE", "/v1/holds/:id"),
       signal,
     });
   }
@@ -354,7 +377,7 @@ export class BffCalendarService {
     return this.http.request({
       path: "/v1/availability",
       query: { ...query, serviceIds: query.serviceIds.join(",") },
-      schema: z.array(availabilitySlotSchema),
+      schema: routeSchema<AvailabilitySlot[]>("GET", "/v1/availability"),
       signal,
     });
   }
@@ -366,7 +389,7 @@ export class BffCalendarService {
     return this.http.request({
       path: "/v1/time-blocks",
       query,
-      schema: z.array(timeBlockSchema),
+      schema: routeSchema<TimeBlock[]>("GET", "/v1/time-blocks"),
       signal,
     });
   }
@@ -376,7 +399,7 @@ export class BffCalendarService {
       body: input,
       method: "POST",
       path: "/v1/time-blocks",
-      schema: timeBlockSchema,
+      schema: routeSchema<TimeBlock>("POST", "/v1/time-blocks"),
       signal,
     });
   }
@@ -385,7 +408,7 @@ export class BffCalendarService {
     return this.http.request({
       method: "DELETE",
       path: `/v1/time-blocks/${encodeURIComponent(id)}`,
-      schema: deletedSchema,
+      schema: routeSchema<Deleted>("DELETE", "/v1/time-blocks/:id"),
       signal,
     });
   }
@@ -395,7 +418,7 @@ export class BffCalendarService {
     return this.http.request({
       method: "DELETE",
       path: `/v1/time-blocks/${encodeURIComponent(id)}/occurrence`,
-      schema: deletedSchema,
+      schema: routeSchema<Deleted>("DELETE", "/v1/time-blocks/:id/occurrence"),
       signal,
     });
   }
@@ -409,7 +432,7 @@ export class BffCalendarService {
       body: input,
       method: "PATCH",
       path: `/v1/time-blocks/${encodeURIComponent(id)}/occurrence`,
-      schema: timeBlockSchema,
+      schema: routeSchema<TimeBlock>("PATCH", "/v1/time-blocks/:id/occurrence"),
       signal,
     });
   }
@@ -423,7 +446,10 @@ export class BffCalendarService {
     return this.http.request({
       path: "/v1/availability-exceptions",
       query,
-      schema: z.array(availabilityExceptionSchema),
+      schema: routeSchema<AvailabilityException[]>(
+        "GET",
+        "/v1/availability-exceptions",
+      ),
       signal,
     });
   }
@@ -436,20 +462,23 @@ export class BffCalendarService {
       body: input,
       method: "POST",
       path: "/v1/availability-exceptions/extra",
-      schema: availabilityExceptionSchema,
+      schema: routeSchema<AvailabilityException>(
+        "POST",
+        "/v1/availability-exceptions/extra",
+      ),
       signal,
     });
   }
 
-  createUnavailability(
-    input: CreateUnavailabilityInput,
-    signal?: AbortSignal,
-  ) {
+  createUnavailability(input: CreateUnavailabilityInput, signal?: AbortSignal) {
     return this.http.request({
       body: input,
       method: "POST",
       path: "/v1/availability-exceptions/unavailable",
-      schema: availabilityExceptionSchema,
+      schema: routeSchema<AvailabilityException>(
+        "POST",
+        "/v1/availability-exceptions/unavailable",
+      ),
       signal,
     });
   }
@@ -458,7 +487,7 @@ export class BffCalendarService {
     return this.http.request({
       method: "DELETE",
       path: `/v1/availability-exceptions/${encodeURIComponent(id)}`,
-      schema: deletedSchema,
+      schema: routeSchema<Deleted>("DELETE", "/v1/availability-exceptions/:id"),
       signal,
     });
   }
@@ -470,7 +499,7 @@ export class BffCalendarService {
       body: input,
       method: "POST",
       path: "/v1/block-series",
-      schema: blockSeriesSchema,
+      schema: routeSchema<BlockSeries>("POST", "/v1/block-series"),
       signal,
     });
   }
@@ -484,7 +513,10 @@ export class BffCalendarService {
       body: input,
       method: "PATCH",
       path: `/v1/block-series/${encodeURIComponent(id)}/from-date`,
-      schema: blockSeriesSchema,
+      schema: routeSchema<BlockSeries>(
+        "PATCH",
+        "/v1/block-series/:id/from-date",
+      ),
       signal,
     });
   }
@@ -493,7 +525,7 @@ export class BffCalendarService {
     return this.http.request({
       method: "DELETE",
       path: `/v1/block-series/${encodeURIComponent(id)}`,
-      schema: deletedSchema,
+      schema: routeSchema<Deleted>("DELETE", "/v1/block-series/:id"),
       signal,
     });
   }
@@ -508,7 +540,10 @@ export class BffCalendarService {
       body: input,
       method: "POST",
       path: "/v1/appointments/series/preview",
-      schema: z.array(seriesOccurrencePreviewSchema),
+      schema: routeSchema<SeriesOccurrencePreview[]>(
+        "POST",
+        "/v1/appointments/series/preview",
+      ),
       signal,
     });
   }
@@ -523,7 +558,10 @@ export class BffCalendarService {
       headers: { "idempotency-key": idempotencyKey },
       method: "POST",
       path: "/v1/appointments/series/confirm",
-      schema: z.array(appointmentSchema),
+      schema: routeSchema<Appointment[]>(
+        "POST",
+        "/v1/appointments/series/confirm",
+      ),
       signal,
     });
   }
@@ -531,7 +569,7 @@ export class BffCalendarService {
   getCalendar(signal?: AbortSignal) {
     return this.http.request({
       path: "/v1/calendar",
-      schema: calendarStateSchema,
+      schema: routeSchema<CalendarState>("GET", "/v1/calendar"),
       signal,
     });
   }
@@ -541,7 +579,10 @@ export class BffCalendarService {
       body: input,
       method: "POST",
       path: "/v1/calendar/integration/connect",
-      schema: calendarStateSchema,
+      schema: routeSchema<CalendarState>(
+        "POST",
+        "/v1/calendar/integration/connect",
+      ),
       signal,
     });
   }
@@ -550,7 +591,10 @@ export class BffCalendarService {
     return this.http.request({
       method: "POST",
       path: "/v1/calendar/integration/reconnect",
-      schema: calendarStateSchema,
+      schema: routeSchema<CalendarState>(
+        "POST",
+        "/v1/calendar/integration/reconnect",
+      ),
       signal,
     });
   }
@@ -559,7 +603,7 @@ export class BffCalendarService {
     return this.http.request({
       method: "DELETE",
       path: "/v1/calendar/integration",
-      schema: calendarStateSchema,
+      schema: routeSchema<CalendarState>("DELETE", "/v1/calendar/integration"),
       signal,
     });
   }

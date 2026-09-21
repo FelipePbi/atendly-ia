@@ -1,5 +1,9 @@
-import { type BffHttpClient } from "../http/BffHttpClient";
-import { accountDeletionResultSchema } from "../mappers/publicApiSchemas";
+import { type z } from "zod";
+
+import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
+import { type accountDeletionResultSchema } from "../mappers/publicApiSchemas";
+
+type AccountDeletionResult = z.infer<typeof accountDeletionResultSchema>;
 
 export class BffAccountService {
   constructor(private readonly http: BffHttpClient) {}
@@ -9,7 +13,10 @@ export class BffAccountService {
       body: { password },
       method: "POST",
       path: "/v1/account/deletion",
-      schema: accountDeletionResultSchema,
+      schema: routeSchema<AccountDeletionResult>(
+        "POST",
+        "/v1/account/deletion",
+      ),
       signal,
     });
   }
@@ -18,7 +25,10 @@ export class BffAccountService {
     return this.http.request({
       method: "DELETE",
       path: "/v1/account/deletion",
-      schema: accountDeletionResultSchema,
+      schema: routeSchema<AccountDeletionResult>(
+        "DELETE",
+        "/v1/account/deletion",
+      ),
       signal,
     });
   }

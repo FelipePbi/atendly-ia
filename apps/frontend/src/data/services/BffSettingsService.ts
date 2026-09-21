@@ -1,14 +1,12 @@
-import { type BffHttpClient } from "../http/BffHttpClient";
+import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
 import type {
   AiTone,
+  AvailabilitySettings,
   BusinessModality,
   ReminderPricePolicy,
+  ReminderSettings,
   ReminderSlot,
-} from "../mappers/publicApiSchemas";
-import {
-  availabilitySettingsSchema,
-  reminderSettingsSchema,
-  settingsStateSchema,
+  SettingsState,
 } from "../mappers/publicApiSchemas";
 
 export interface BusinessSettingsInput {
@@ -54,7 +52,7 @@ export class BffSettingsService {
   get(signal?: AbortSignal) {
     return this.http.request({
       path: "/v1/settings",
-      schema: settingsStateSchema,
+      schema: routeSchema<SettingsState>("GET", "/v1/settings"),
       signal,
     });
   }
@@ -64,7 +62,7 @@ export class BffSettingsService {
       body: input,
       method: "PATCH",
       path: "/v1/settings/business",
-      schema: settingsStateSchema,
+      schema: routeSchema<SettingsState>("PATCH", "/v1/settings/business"),
       signal,
     });
   }
@@ -74,7 +72,7 @@ export class BffSettingsService {
       body: input,
       method: "PATCH",
       path: "/v1/settings/ai",
-      schema: settingsStateSchema,
+      schema: routeSchema<SettingsState>("PATCH", "/v1/settings/ai"),
       signal,
     });
   }
@@ -84,7 +82,10 @@ export class BffSettingsService {
       body: input,
       method: "PATCH",
       path: "/v1/settings/availability",
-      schema: availabilitySettingsSchema,
+      schema: routeSchema<AvailabilitySettings>(
+        "PATCH",
+        "/v1/settings/availability",
+      ),
       signal,
     });
   }
@@ -92,7 +93,7 @@ export class BffSettingsService {
   getReminders(signal?: AbortSignal) {
     return this.http.request({
       path: "/v1/settings/reminders",
-      schema: reminderSettingsSchema,
+      schema: routeSchema<ReminderSettings>("GET", "/v1/settings/reminders"),
       signal,
     });
   }
@@ -102,7 +103,7 @@ export class BffSettingsService {
       body: input,
       method: "PATCH",
       path: "/v1/settings/reminders",
-      schema: reminderSettingsSchema,
+      schema: routeSchema<ReminderSettings>("PATCH", "/v1/settings/reminders"),
       signal,
     });
   }

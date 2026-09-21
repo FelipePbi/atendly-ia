@@ -1,6 +1,8 @@
-import { type BffHttpClient } from "../http/BffHttpClient";
-import type { RetentionDays } from "../mappers/publicApiSchemas";
-import { retentionSettingsSchema } from "../mappers/publicApiSchemas";
+import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
+import type {
+  RetentionDays,
+  RetentionSettings,
+} from "../mappers/publicApiSchemas";
 
 export interface RetentionPatchInput {
   commercialRetentionDays?: RetentionDays;
@@ -15,7 +17,7 @@ export class BffRetentionService {
   get(signal?: AbortSignal) {
     return this.http.request({
       path: "/v1/settings/retention",
-      schema: retentionSettingsSchema,
+      schema: routeSchema<RetentionSettings>("GET", "/v1/settings/retention"),
       signal,
     });
   }
@@ -25,7 +27,7 @@ export class BffRetentionService {
       body: input,
       method: "PATCH",
       path: "/v1/settings/retention",
-      schema: retentionSettingsSchema,
+      schema: routeSchema<RetentionSettings>("PATCH", "/v1/settings/retention"),
       signal,
     });
   }

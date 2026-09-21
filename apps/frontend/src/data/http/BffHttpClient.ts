@@ -1,3 +1,4 @@
+import { findPublicApiRoute } from "@atendly-ia/public-api-contract";
 import { z } from "zod";
 
 const errorEnvelopeSchema = z.object({
@@ -35,6 +36,23 @@ export interface BffRequestOptions<TSchema extends z.ZodType> {
   requestId?: string;
   schema: TSchema;
   signal?: AbortSignal;
+}
+
+/**
+ * Schema de `data` da rota pública, lido da tabela em
+ * `@atendly-ia/public-api-contract` em vez de importado solto. `T` é o tipo
+ * de saída esperado (o mesmo que a validação da tabela já produz); a tabela
+ * é dona do schema, aqui só se recupera a instância pelo par método/padrão.
+ */
+export function routeSchema<T>(
+  method: HttpMethod,
+  pathPattern: string,
+): z.ZodType<T> {
+  const route = findPublicApiRoute(method, pathPattern);
+  if (!route) {
+    throw new Error(`Unknown public API route: ${method} ${pathPattern}`);
+  }
+  return route.schema as unknown as z.ZodType<T>;
 }
 
 export class BffHttpError extends Error {
@@ -238,7 +256,12 @@ export class BffHttpClient {
     try {
       response = await this.fetchImplementation(
         buildUrl(this.baseUrl, options.path),
-        { credentials: "include", headers, method: "GET", signal: options.signal },
+        {
+          credentials: "include",
+          headers,
+          method: "GET",
+          signal: options.signal,
+        },
       );
     } catch (error: unknown) {
       if (isAbortError(error) || options.signal?.aborted) {
@@ -287,7 +310,8 @@ export class BffHttpClient {
 
     return {
       blob: await response.blob(),
-      contentType: response.headers.get("content-type") ?? "application/octet-stream",
+      contentType:
+        response.headers.get("content-type") ?? "application/octet-stream",
       fileName: fileNameFromContentDisposition(
         response.headers.get("content-disposition"),
       ),

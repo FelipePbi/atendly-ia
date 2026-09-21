@@ -9,11 +9,13 @@ import {
   findCalendarMigrationServiceReferences,
   findCalendarSourceExternalComparisons,
   findDarkThemeCssReferences,
+  findDuplicatePublicResponseSchemaDeclarations,
   findGroupDiscardConfigurationViolations,
   findLegacyMigrationRouteReferences,
   findMinhaAgendaWriterReferences,
   findRemovedCalendarErrorCodeReferences,
   findRequireAtendlyCalendarReferences,
+  findUncoveredPublicApiRoutes,
   frontendMocksDirectoryExists,
 } from "../final-production-audit.mjs";
 
@@ -455,4 +457,137 @@ test("frontend_has_no_dark_theme_css: fails when a manual dark theme selector co
   assert.deepEqual(findDarkThemeCssReferences(files), [
     "apps/frontend/src/shared/styles/atendly.css",
   ]);
+});
+
+// Goal035/WU-07: findUncoveredPublicApiRoutes recebe exatamente o que
+// scripts/final-production-audit.mjs le de verdade — arquivos de rota do BFF,
+// arquivos de servico do frontend e a fonte crua de routes.ts — nunca uma
+// lista de rotas mantida a mao no teste.
+test("public_api_route_coverage: passes when a called route has a table entry", () => {
+  const bffSourceFiles = [
+    {
+      path: "apps/bff/src/modules/whatsapp/routes.ts",
+      content:
+        'app.get(\n  "/v1/whatsapp",\n  { preHandler: requireTenantContext },\n  async (request) => {},\n);',
+    },
+  ];
+  const frontendServiceFiles = [
+    {
+      path: "apps/frontend/src/data/services/BffWhatsAppService.ts",
+      content:
+        'schema: routeSchema<WhatsAppConnection | null>("GET", "/v1/whatsapp"),',
+    },
+  ];
+  const routesTableSource =
+    '{ method: "GET", pathPattern: "/v1/whatsapp", schema: whatsappConnectionSchema.nullable() },';
+
+  assert.deepEqual(
+    findUncoveredPublicApiRoutes(
+      bffSourceFiles,
+      frontendServiceFiles,
+      routesTableSource,
+    ),
+    { missingFromTable: [], routesWithoutCaller: [] },
+  );
+});
+
+test("public_api_route_coverage: fails when a called route has no table entry", () => {
+  const bffSourceFiles = [
+    {
+      path: "apps/bff/src/modules/whatsapp/routes.ts",
+      content:
+        'app.get(\n  "/v1/whatsapp",\n  { preHandler: requireTenantContext },\n  async (request) => {},\n);',
+    },
+  ];
+  const frontendServiceFiles = [
+    {
+      path: "apps/frontend/src/data/services/BffWhatsAppService.ts",
+      content:
+        'schema: routeSchema<WhatsAppConnection | null>("GET", "/v1/whatsapp"),',
+    },
+  ];
+  const routesTableSource = "export const publicApiRoutes = [];";
+
+  assert.deepEqual(
+    findUncoveredPublicApiRoutes(
+      bffSourceFiles,
+      frontendServiceFiles,
+      routesTableSource,
+    ),
+    { missingFromTable: ["GET /v1/whatsapp"], routesWithoutCaller: [] },
+  );
+});
+
+test("public_api_route_coverage: a registered route with no frontend caller is reported, not failed", () => {
+  const bffSourceFiles = [
+    {
+      path: "apps/bff/src/modules/conversations/routes.ts",
+      content:
+        'app.get(\n  "/v1/conversations/:id/messages/:messageId/media",\n  { preHandler: requireTenantContext },\n  async (request) => {},\n);',
+    },
+  ];
+  const frontendServiceFiles = [
+    {
+      path: "apps/frontend/src/data/services/BffConversationService.ts",
+      content: 'schema: routeSchema<Conversation[]>("GET", "/v1/conversations"),',
+    },
+  ];
+  const routesTableSource =
+    '{ method: "GET", pathPattern: "/v1/conversations", schema: z.array(conversationSchema) },';
+
+  assert.deepEqual(
+    findUncoveredPublicApiRoutes(
+      bffSourceFiles,
+      frontendServiceFiles,
+      routesTableSource,
+    ),
+    {
+      missingFromTable: [],
+      routesWithoutCaller: [
+        "GET /v1/conversations/:id/messages/:messageId/media",
+      ],
+    },
+  );
+});
+
+// Goal035/WU-07: findDuplicatePublicResponseSchemaDeclarations recebe a fonte
+// crua de packages/public-api-contract/src/schemas.ts e os arquivos de
+// apps/frontend/src exatamente como o script os le — nao uma lista de nomes
+// de schema mantida a mao.
+test("public_api_response_schema_single_source: passes when the frontend only re-exports the package", () => {
+  const schemasSource =
+    'export const appointmentSchema = z.object({ id: z.string() });';
+  const frontendFiles = [
+    {
+      path: "apps/frontend/src/data/mappers/publicApiSchemas.ts",
+      content: 'export * from "@atendly-ia/public-api-contract";',
+    },
+    {
+      path: "apps/frontend/src/data/services/BffCalendarService.ts",
+      content:
+        'import { type appointmentSchema } from "../mappers/publicApiSchemas";',
+    },
+  ];
+
+  assert.deepEqual(
+    findDuplicatePublicResponseSchemaDeclarations(frontendFiles, schemasSource),
+    [],
+  );
+});
+
+test("public_api_response_schema_single_source: fails when a frontend file redeclares a public response schema", () => {
+  const schemasSource =
+    'export const appointmentSchema = z.object({ id: z.string() });';
+  const frontendFiles = [
+    {
+      path: "apps/frontend/src/data/services/BffCalendarService.ts",
+      content:
+        "const appointmentSchema = z.object({ id: z.string() });\nexport function parse(value) { return appointmentSchema.parse(value); }",
+    },
+  ];
+
+  assert.deepEqual(
+    findDuplicatePublicResponseSchemaDeclarations(frontendFiles, schemasSource),
+    ["apps/frontend/src/data/services/BffCalendarService.ts"],
+  );
 });

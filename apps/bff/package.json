@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@atendly-ia/legal-contract": "file:../../packages/legal-contract",
+    "@atendly-ia/public-api-contract": "file:../../packages/public-api-contract",
     "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.1.0",
     "@fastify/rate-limit": "^10.3.0",

@@ -1,11 +1,9 @@
-import { z } from "zod";
-
-import { type BffHttpClient } from "../http/BffHttpClient";
+import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
 import {
-  conversationSchema,
-  conversationSuggestionsSchema,
-  ignoredContactSchema,
-  messageSchema,
+  type Conversation,
+  type ConversationSuggestions,
+  type IgnoredContact,
+  type Message,
   type SessionCategory,
 } from "../mappers/publicApiSchemas";
 
@@ -27,12 +25,13 @@ export class BffConversationService {
       query: {
         category: query.category,
         handling: query.handling,
-        ignored: query.ignored === undefined ? undefined : String(query.ignored),
+        ignored:
+          query.ignored === undefined ? undefined : String(query.ignored),
         limit: query.limit,
         search: query.search,
         status: query.status,
       },
-      schema: z.array(conversationSchema),
+      schema: routeSchema<Conversation[]>("GET", "/v1/conversations"),
       signal,
     });
   }
@@ -40,7 +39,7 @@ export class BffConversationService {
   get(id: string, signal?: AbortSignal) {
     return this.http.request({
       path: `/v1/conversations/${encodeURIComponent(id)}`,
-      schema: conversationSchema,
+      schema: routeSchema<Conversation>("GET", "/v1/conversations/:id"),
       signal,
     });
   }
@@ -48,7 +47,7 @@ export class BffConversationService {
   listMessages(id: string, signal?: AbortSignal) {
     return this.http.request({
       path: `/v1/conversations/${encodeURIComponent(id)}/messages`,
-      schema: z.array(messageSchema),
+      schema: routeSchema<Message[]>("GET", "/v1/conversations/:id/messages"),
       signal,
     });
   }
@@ -75,12 +74,12 @@ export class BffConversationService {
     id: string,
     text: string,
     signal?: AbortSignal,
-  ): Promise<{ message: z.infer<typeof messageSchema>; status: number }> {
+  ): Promise<{ message: Message; status: number }> {
     const { data, status } = await this.http.requestWithStatus({
       body: { text },
       method: "POST",
       path: `/v1/conversations/${encodeURIComponent(id)}/messages`,
-      schema: messageSchema,
+      schema: routeSchema<Message>("POST", "/v1/conversations/:id/messages"),
       signal,
     });
     return { message: data, status };
@@ -90,12 +89,19 @@ export class BffConversationService {
    * Override manual da categoria. `null` limpa o override e devolve a conversa
    * a classificacao automatica.
    */
-  setCategory(id: string, category: SessionCategory | null, signal?: AbortSignal) {
+  setCategory(
+    id: string,
+    category: SessionCategory | null,
+    signal?: AbortSignal,
+  ) {
     return this.http.request({
       body: { category },
       method: "PUT",
       path: `/v1/conversations/${encodeURIComponent(id)}/category`,
-      schema: conversationSchema,
+      schema: routeSchema<Conversation>(
+        "PUT",
+        "/v1/conversations/:id/category",
+      ),
       signal,
     });
   }
@@ -105,7 +111,7 @@ export class BffConversationService {
       body: { ignored },
       method: "PUT",
       path: `/v1/conversations/${encodeURIComponent(id)}/ignore`,
-      schema: conversationSchema,
+      schema: routeSchema<Conversation>("PUT", "/v1/conversations/:id/ignore"),
       signal,
     });
   }
@@ -119,7 +125,10 @@ export class BffConversationService {
       body: { phone, ignored },
       method: "PUT",
       path: "/v1/conversations/ignored-contacts",
-      schema: ignoredContactSchema,
+      schema: routeSchema<IgnoredContact>(
+        "PUT",
+        "/v1/conversations/ignored-contacts",
+      ),
       signal,
     });
   }
@@ -144,7 +153,10 @@ export class BffConversationService {
     return this.http.request({
       method: "POST",
       path: `/v1/conversations/${encodeURIComponent(id)}/suggestions`,
-      schema: conversationSuggestionsSchema,
+      schema: routeSchema<ConversationSuggestions>(
+        "POST",
+        "/v1/conversations/:id/suggestions",
+      ),
       signal,
     });
   }
@@ -157,7 +169,10 @@ export class BffConversationService {
     return this.http.request({
       method: "POST",
       path: `/v1/conversations/${encodeURIComponent(id)}/${action}`,
-      schema: conversationSchema,
+      schema: routeSchema<Conversation>(
+        "POST",
+        `/v1/conversations/:id/${action}`,
+      ),
       signal,
     });
   }

@@ -16,7 +16,7 @@ git diff --check
 
 | Comando | Cobre | Não cobre |
 | --- | --- | --- |
-| `validate:core` | Builds de Scheduling, IA, BFF e frontend; `npm run check` do health-worker; suíte da IA; suíte do adapter HTTP do frontend; `go build`/`go vet`/`go test` do Evolution Go; testes dos próprios scripts de gate; auditoria estática | Qualquer escrita em banco. Nenhum passo abre conexão de banco |
+| `validate:core` | Build de `packages/public-api-contract` (antes de BFF e frontend, desde o Goal035); builds de Scheduling, IA, BFF e frontend; `npm run check` do health-worker; suíte da IA; suíte do adapter HTTP do frontend; `go build`/`go vet`/`go test` do Evolution Go; testes dos próprios scripts de gate; auditoria estática; a reprodução de A-03 (`repro:a03-contract-drift`) | Qualquer escrita em banco. Nenhum passo abre conexão de banco. A verificação de resposta do BFF contra o contrato **não** roda aqui — ela liga dentro da suíte de integração do BFF (`test:bff`, fora de produção), nunca em `validate:core` |
 | `validate:integration` | 35 passos contra um PostgreSQL descartável: geração de client Prisma, migrations, a suíte de integração do BFF, a suíte de integração do Scheduling, a persistência da IA, a purga de conteúdo de conversa (Goal023) e a purga por negócio da IA (Goal025), o outbox do Evolution Go, um ensaio por migration de Goal — o mais recente deles `rehearse:goal027-calendar-source-migration` —, a reconciliação do fuso único do negócio (`rehearse:goal029-timezone-reconciliation`, Goal029) e, desde o Goal028, o ensaio de release (`rehearse:goal028-release-migrations`) e o de dump/restore (`rehearse:goal028-restore`); desde o Goal030, o percurso único de produto ponta a ponta (`rehearse:goal030-mvp-journey`); desde o Goal032, a resposta automática ponta a ponta (`rehearse:goal032-auto-reply`); desde o Goal033, o gate renderizado nas sete telas autenticadas (`rehearse:goal033-authenticated-ui`, último da lista) | Envio real por WhatsApp e origem real do Minha Agenda, em qualquer passo. Jornada de interface passou a ter cobertura **parcial**, só pelo que o Goal033 mede — ver a nota abaixo |
 | `git diff --check` | Espaço em branco/conflito no diff | Correção do diff |
 
@@ -37,7 +37,14 @@ Service; ele é o agregador histórico, não o gate.
 
 Dependências de cada package precisam estar instaladas antes do gate
 (`npm ci` em `apps/scheduling-service`, `apps/ai-orchestrator`, `apps/bff`,
-`apps/frontend`, `apps/health-worker`).
+`apps/frontend` e `apps/health-worker`). Desde o Goal035, `apps/bff` e
+`apps/frontend` resolvem `@atendly-ia/public-api-contract` como dependência
+`file:` com `install-links=true` (`apps/bff/.npmrc`, `apps/frontend/.npmrc`):
+o npm copia o pacote para `node_modules` — o que mantém uma só cópia de Zod
+por app — e executa o `prepare` do pacote
+(`npm ci --ignore-scripts && npm run build`) nessa cópia, de modo que o
+`npm ci` de cada app já produz `dist/`. `packages/public-api-contract` não
+precisa de `npm ci` próprio antes do gate, e `dist/` continua fora do Git.
 Nenhuma dependência de produção foi adicionada ou atualizada pelo Goal002.
 `packages/contracts` — que nunca teve import de runtime em nenhum app — e os
 passos `build:contracts`/`test:contracts` do gate saíram no diff026
@@ -390,6 +397,53 @@ texto com expressão regular, no mesmo padrão dos checks existentes.
 | --- | --- | --- |
 | `group_discard_is_not_configuration` (`findGroupDiscardConfigurationViolations`) | Sobre `apps/**`: falha se o literal `EVOLUTION_IGNORE_GROUPS` reaparecer em qualquer arquivo, ou se algum `if (...)` cuja condição contenha `isGroup` também contiver `env`, `process.env` ou `config` — a mesma forma de regressão sob outro nome de variável | Não prova que o descarte de grupo acontece cedo o bastante no fluxo (isso é `apps/ai-orchestrator/tests/channel/inbound-message-processor.test.ts`, passo `test:ai-orchestrator`), nem que a resposta da IA recusa destino de grupo no despacho (isso é a suíte de `message-graph.ts`, mesmo passo). É guarda de regressão sobre o texto-fonte, não prova de comportamento em execução |
 | `frontend_has_no_dark_theme_css` (`findDarkThemeCssReferences`) | Sobre o CSS de `apps/frontend/src`: falha se algum arquivo contiver `prefers-color-scheme: dark` ou um seletor comum de alternância manual de tema escuro (`[data-theme="dark"]`, `.dark`, `:root.dark`, `html.dark`) | Não prova que nenhuma tela **parece** escura — cor pode ser escrita sem media query nem seletor de tema; e não impede alguém de escrever CSS de tema escuro fora de `apps/frontend/src`. É a mesma classe de guarda que os demais checks estáticos: gate contra a forma reconhecida de regressão, não contra toda forma possível |
+
+## Checks estáticos novos do Goal035
+
+Dois checks novos em `audit:static` (`scripts/final-production-audit.mjs`),
+cada um função pura exportada e provado nos dois sentidos por
+`scripts/tests/final-production-audit-legacy-regression.test.mjs`. Nenhum dos
+dois abre banco, sobe serviço ou executa o produto — os dois são leitura de
+texto com expressão regular, no mesmo padrão dos checks existentes.
+
+| Check | O que decide | O que não decide |
+| --- | --- | --- |
+| `public_api_route_coverage` (`findUncoveredPublicApiRoutes`) | Toda rota `/v1` registrada em `apps/bff/src` (`app.<verbo>("/v1/...")`) que tem pelo menos um chamador (`routeSchema(...)`) em `apps/frontend/src/data/services` precisa de entrada em `packages/public-api-contract/src/routes.ts`. O conjunto de rotas sem chamador é **computado e impresso** no `details`, nunca mantido como lista escrita à mão | Não prova que o schema da entrada descreve corretamente o que a rota devolve — isso é o check de runtime abaixo. Não decide sobre rota sem chamador nenhum: essas ficam fora da tabela por definição, não por omissão. **Não enxerga rota cujo path não seja literal entre aspas**: o padrão de extração exige `app.<verbo>("/v1/...")`, então as três rotas que `apps/bff/src/modules/conversations/routes.ts` registra em laço por template literal (`takeover`, `release`, `resolve`) são invisíveis aos dois lados da regra — hoje sem lacuna, porque as três têm entrada na tabela e chamador no frontend, mas uma rota futura escrita nessa forma escaparia do check em silêncio ([review035](reviews/035-review.md)) |
+| `public_api_response_schema_single_source` (`findDuplicatePublicResponseSchemaDeclarations`) | Nenhum arquivo de `apps/frontend/src` pode declarar (`const nomeSchema = z....`) um schema cujo nome já é exportado por `packages/public-api-contract/src/schemas.ts`. Importar ou reexportar o pacote (como `publicApiSchemas.ts` faz) não aciona a regra | Não impede um schema de nome diferente, mas de forma equivalente, de ser declarado fora do pacote — a regra compara nome, não estrutura |
+
+A verificação de **runtime** correspondente não é `audit:static`: é o hook
+`onSend` de `apps/bff/src/lib/response-contract.ts`
+(`registerResponseContractCheck`), que compara o `data` já serializado contra
+a entrada da rota e derruba o processo com `ResponseContractViolationError`
+nomeando rota, método e campo divergente quando os dois lados discordam. Ela
+só liga fora de `NODE_ENV=production` (`RESPONSE_CONTRACT_CHECK_ENABLED`) —
+**a verificação de resposta não roda em produção**, de propósito: um corpo
+divergente já saiu do handler quando o hook o vê, e transformar isso em `500`
+trocaria um bug de contrato por uma indisponibilidade real para quem está
+comprando. Ela não prova que a tabela está completa (isso é
+`public_api_route_coverage`, acima) nem que nenhum outro arquivo declarou
+schema fora do pacote (isso é `public_api_response_schema_single_source`) —
+ela só prova, quando ligada, que o que já foi decidido bate com o que o BFF
+devolveu naquela chamada. Ela também não vê resposta que não seja texto: o
+hook sai antes de comparar quando o payload não é string, o que deixa de fora
+`GET /v1/conversations/:id/messages/:messageId/media` (bytes crus, fora do
+envelope) — a entrada `z.unknown()` dessa rota na tabela **documenta** a
+exceção, não a verifica ([review035](reviews/035-review.md)).
+
+`validate:core` ganhou o passo `build:public-api-contract`
+(`node scripts/build-public-api-contract.mjs`), posicionado antes de
+`build:bff` e `build:frontend` — `scripts/tests/gate.test.mjs` afirma a
+precedência — e o passo `repro:a03-contract-drift`
+(`apps/bff/tests/goal030-a03-contract-drift.repro.mjs`), depois de
+`audit:static`. O passo de build não roda só `tsc`: ele também atualiza a
+cópia do pacote em `apps/bff/node_modules` e `apps/frontend/node_modules`.
+Com `install-links=true` a cópia é congelada no instante da instalação, e sem
+essa atualização o gate compilaria a fonte nova e continuaria medindo o
+pacote instalado antes dela.
+
+O que este passo **não** decide: ele não instala dependência de app nenhum,
+não toca lockfile e não verifica que a cópia instalada veio de um `npm ci`
+recente — ele a sobrescreve a partir do `dist/` recém-construído.
 
 ## Ordem de corte do Goal003
 

@@ -10,6 +10,7 @@ import { sendCsrfToken, sessionCsrfToken } from "./lib/auth.js";
 import { AppError, toErrorMessage } from "./lib/errors.js";
 import { redactRequestUrl } from "./lib/logging.js";
 import { disconnectPrisma, getPrisma } from "./lib/prisma.js";
+import { registerResponseContractCheck } from "./lib/response-contract.js";
 import { defaultAccountPurgePorts } from "./modules/account/purge.js";
 import { registerV1AccountRoutes } from "./modules/account/routes.js";
 import { AccountPurgeWorker } from "./modules/account/worker.js";
@@ -110,6 +111,12 @@ export async function buildApp() {
     }
     return payload;
   });
+
+  // Goal035/WU-04: hook único que compara o `data` devolvido com a entrada da
+  // rota na tabela pública. Registrado antes das rotas para valer para todas
+  // elas, e depois do hook de CSRF para ver o payload final. Fora de produção
+  // apenas — o motivo está em `lib/response-contract.ts`.
+  registerResponseContractCheck(app);
 
   await registerHealthRoutes(app);
   await registerV1AccountRoutes(app);

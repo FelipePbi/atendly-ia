@@ -9,6 +9,10 @@ npm run build
 cd "$ROOT_DIR/apps/ai-orchestrator"
 npm run build
 
+# Contrato público compartilhado: precisa estar construído, e com a cópia de
+# apps/*/node_modules atualizada, antes dos builds que o consomem.
+node "$ROOT_DIR/scripts/build-public-api-contract.mjs"
+
 cd "$ROOT_DIR/apps/bff"
 npm run build
 

@@ -1,10 +1,10 @@
-import { type BffHttpClient } from "../http/BffHttpClient";
+import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
 import type {
   AiTone,
   BusinessModality,
   CalendarSource,
+  OnboardingState,
 } from "../mappers/publicApiSchemas";
-import { onboardingStateSchema } from "../mappers/publicApiSchemas";
 
 export interface OnboardingPatch {
   ai?: { tone: AiTone };
@@ -46,7 +46,7 @@ export class BffOnboardingService {
   get(signal?: AbortSignal) {
     return this.http.request({
       path: "/v1/onboarding",
-      schema: onboardingStateSchema,
+      schema: routeSchema<OnboardingState>("GET", "/v1/onboarding"),
       signal,
     });
   }
@@ -56,7 +56,7 @@ export class BffOnboardingService {
       body: input,
       method: "PATCH",
       path: "/v1/onboarding",
-      schema: onboardingStateSchema,
+      schema: routeSchema<OnboardingState>("PATCH", "/v1/onboarding"),
       signal,
     });
   }
@@ -65,7 +65,7 @@ export class BffOnboardingService {
     return this.http.request({
       method: "POST",
       path: "/v1/onboarding/complete",
-      schema: onboardingStateSchema,
+      schema: routeSchema<OnboardingState>("POST", "/v1/onboarding/complete"),
       signal,
     });
   }

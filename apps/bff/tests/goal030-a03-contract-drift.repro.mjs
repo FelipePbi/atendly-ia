@@ -1,23 +1,39 @@
 #!/usr/bin/env node
 
 /**
- * Reprodução do achado A-03 da auditoria final (Goal030) — NÃO é um teste do gate.
+ * Reprodução do achado A-03 da auditoria final (Goal030) — E VERIFICAÇÃO DE
+ * FECHAMENTO do Goal035/WU-09.
  *
  * O nome do arquivo termina em `.repro.mjs` de propósito: o padrão padrão do
  * Vitest só coleta arquivo cujo nome contém `.test.` ou `.spec.`, então ele fica
  * fora do caminho verde de `test:bff-integration` e não pode deixar o gate
  * vermelho por acidente. Ele também não é pulado em silêncio: está declarado no
  * achado A-03 de `docs/migration/FINAL_AUDIT.md`, com o comando e o código de
- * saída que produziu.
+ * saída que produziu, e agora roda dentro de `validate:core` (passo
+ * `repro:a03-contract-drift` em `scripts/validate-core.mjs`).
  *
- * O que ele reproduz: G-32 — não existe contrato compartilhado entre o BFF e o
- * frontend, e nada fica vermelho quando o BFF passa a responder outra coisa.
- * O frontend declara o formato que espera; o BFF não declara formato de
- * resposta nenhum; nenhum artefato liga os dois lados.
+ * O que ele reproduzia (estado do Goal030): G-32 — não existia contrato
+ * compartilhado entre o BFF e o frontend, e nada ficava vermelho quando o BFF
+ * passava a responder outra coisa. O frontend declarava o formato que
+ * esperava; o BFF não declarava formato de resposta nenhum; nenhum artefato
+ * ligava os dois lados.
+ *
+ * O que ele verifica agora (Goal035): que essa ligação existe e está viva —
+ * não que ela nunca existiu. Ele confere, na árvore atual:
+ *   1. existe um pacote de contrato compartilhado em `packages/`;
+ *   2. o frontend consome os schemas desse pacote em vez de declará-los
+ *      localmente (checado em `apps/frontend/src/data/mappers/publicApiSchemas.ts`);
+ *   3. o BFF importa o mesmo pacote;
+ *   4. o BFF registra, a partir de um arquivo que importa esse pacote e usa
+ *      `.safeParse(`, uma verificação chamada no bootstrap do app — a
+ *      verificação de fato ligada, não apenas escrita.
+ * Se qualquer um desses quatro elos faltar, o achado volta a reproduzir: a
+ * ligação foi removida ou nunca chegou a existir de ponta a ponta.
  *
  * Código de saída:
- *   1 — o achado REPRODUZ (estado esperado hoje);
- *   0 — o achado deixou de reproduzir, isto é, alguém fechou G-32.
+ *   1 — o achado REPRODUZ (contrato ausente ou desligado);
+ *   0 — o achado não reproduz: existe contrato compartilhado, usado pelos dois
+ *       lados e verificado no bootstrap do BFF.
  *
  * Esta reprodução é estática de propósito: não sobe banco, não sobe servidor e
  * não depende de ambiente, para que qualquer pessoa possa repeti-la.
@@ -49,56 +65,93 @@ function walk(dir, acc = []) {
 const WINDOWS_SEPARATOR = String.fromCharCode(92);
 const posix = (path) => path.split(WINDOWS_SEPARATOR).join("/");
 
+function packageName(dir) {
+  try {
+    const pkg = JSON.parse(readFileSync(join(REPO, "packages", dir, "package.json"), "utf8"));
+    return pkg.name ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function exportedFunctionNames(source) {
+  return [...source.matchAll(/^export function (\w+)/gm)].map((m) => m[1]);
+}
+
 const findings = [];
 
-// 1. Quantos formatos de resposta o frontend declara por conta própria.
-const schemaSource = readFileSync(join(REPO, SCHEMAS), "utf8");
-const declared = [...schemaSource.matchAll(/^export const (\w+Schema)\b/gm)].map((m) => m[1]);
-
-// 2. Quem, fora do frontend, consome essas declarações. O esperado é ninguém:
-//    é isso que torna a declaração um palpite do consumidor, não um contrato.
-const consumersOutsideFrontend = walk(join(REPO, "apps"))
-  .filter((file) => !posix(relative(REPO, file)).startsWith("apps/frontend/"))
-  .filter((file) => readFileSync(file, "utf8").includes("publicApiSchemas"))
-  .map((file) => posix(relative(REPO, file)));
-
-// 3. Se existe pacote de contrato compartilhado no monorepo.
-const packages = readdirSync(join(REPO, "packages")).filter((name) =>
+// 1. Existe pacote de contrato compartilhado no monorepo?
+const packageDirs = readdirSync(join(REPO, "packages")).filter((name) =>
   statSync(join(REPO, "packages", name)).isDirectory(),
 );
-
-// 4. Se o BFF valida a própria resposta pública. `response:` em opção de rota e
-//    `serializerCompiler` são as duas formas de fazê-lo no Fastify.
-const bffSources = walk(join(REPO, "apps/bff/src"));
-const publicRoutes = bffSources.flatMap((file) =>
-  [...readFileSync(file, "utf8").matchAll(/\bapp\.(get|post|put|patch|delete)\(\s*"([^"]+)"/g)]
-    .map((m) => `${m[1].toUpperCase()} ${m[2]}`),
+const contractDir = packageDirs.find(
+  (name) => /contract|contrato|api|schema/i.test(name) && name !== "legal-contract",
 );
-const responseValidation = bffSources.filter((file) => {
-  const source = readFileSync(file, "utf8");
-  return source.includes("serializerCompiler") || /schema:\s*\{[^}]*response\s*:/s.test(source);
-});
+const contractPackageName = contractDir ? packageName(contractDir) : null;
+
+// 2. O frontend consome os schemas do pacote compartilhado, ou ainda os
+//    declara por conta própria? Redeclaração local é o sintoma original de
+//    A-03: um palpite do consumidor, não um contrato.
+const schemaSource = readFileSync(join(REPO, SCHEMAS), "utf8");
+const localDeclarations = [...schemaSource.matchAll(/^export const (\w+Schema)\s*=/gm)].map((m) => m[1]);
+const frontendImportsContract = contractPackageName
+  ? schemaSource.includes(contractPackageName)
+  : false;
+
+// 3. O BFF importa o mesmo pacote?
+const bffFiles = walk(join(REPO, "apps/bff/src"));
+const bffImportsContract = contractPackageName
+  ? bffFiles.some((file) => readFileSync(file, "utf8").includes(contractPackageName))
+  : false;
+
+// 4. O BFF valida a própria resposta pública contra esse pacote, e essa
+//    verificação está de fato ligada no bootstrap — não apenas escrita e
+//    nunca chamada.
+const validatorFiles = contractPackageName
+  ? bffFiles.filter((file) => {
+      const source = readFileSync(file, "utf8");
+      return source.includes(contractPackageName) && /\.safeParse\(/.test(source);
+    })
+  : [];
+const validatorExports = validatorFiles.flatMap((file) =>
+  exportedFunctionNames(readFileSync(file, "utf8")),
+);
+const appFile = bffFiles.find((file) => posix(relative(REPO, file)) === "apps/bff/src/app.ts");
+const appSource = appFile ? readFileSync(appFile, "utf8") : "";
+const validationRegistered =
+  validatorFiles.length > 0 &&
+  validatorExports.some((name) => new RegExp(`\\b${name}\\s*\\(`).test(appSource));
 
 console.log("A-03 — contrato entre BFF e frontend (reprodução estática)\n");
-console.log(`  formatos de resposta declarados pelo frontend em ${SCHEMAS}: ${declared.length}`);
-console.log(`  consumidores dessas declarações fora de apps/frontend: ${consumersOutsideFrontend.length}`
-  + (consumersOutsideFrontend.length > 0 ? ` (${consumersOutsideFrontend.join(", ")})` : ""));
-console.log(`  pacotes em packages/: ${packages.join(", ") || "(nenhum)"}`);
-console.log(`  rotas públicas registradas no BFF: ${publicRoutes.length}`);
-console.log(`  arquivos do BFF que validam a resposta pública: ${responseValidation.length}`);
+console.log(`  pacote de contrato compartilhado em packages/: ${contractPackageName ?? "(nenhum)"}`);
+console.log(`  schemas declarados localmente em ${SCHEMAS}: ${localDeclarations.length}`);
+console.log(`  ${SCHEMAS} importa o pacote compartilhado: ${frontendImportsContract}`);
+console.log(`  BFF importa o pacote compartilhado: ${bffImportsContract}`);
+console.log(
+  `  BFF registra verificação de resposta contra o contrato no bootstrap: ${validationRegistered}`
+    + (validatorFiles.length > 0
+      ? ` (${validatorFiles.map((f) => posix(relative(REPO, f))).join(", ")})`
+      : ""),
+);
 
-if (consumersOutsideFrontend.length === 0) {
-  findings.push(
-    "o formato que o frontend espera não é lido por nenhum outro app: é declaração do consumidor, não contrato",
-  );
-}
-if (!packages.some((name) => /contract|contrato|api|schema/i.test(name) && name !== "legal-contract")) {
+if (!contractPackageName) {
   findings.push("não existe pacote de contrato compartilhado em packages/");
 }
-if (responseValidation.length === 0) {
+if (localDeclarations.length > 0) {
   findings.push(
-    `nenhuma das ${publicRoutes.length} rotas públicas do BFF valida a própria resposta: `
-      + "mudar o corpo devolvido não deixa nada vermelho do lado do produtor",
+    `${SCHEMAS} ainda declara ${localDeclarations.length} schema(s) localmente em vez de importar do contrato compartilhado`,
+  );
+}
+if (contractPackageName && !frontendImportsContract) {
+  findings.push(`${SCHEMAS} não importa o pacote de contrato compartilhado`);
+}
+if (contractPackageName && !bffImportsContract) {
+  findings.push("o BFF não importa o pacote de contrato compartilhado");
+}
+if (contractPackageName && !validationRegistered) {
+  findings.push(
+    "o BFF não tem, ligada no bootstrap, uma verificação da própria resposta pública contra o "
+      + "contrato compartilhado: mudar o corpo devolvido não deixa nada vermelho do lado do produtor",
   );
 }
 
@@ -106,10 +159,12 @@ if (findings.length > 0) {
   console.error("\nA-03 REPRODUZ:");
   for (const line of findings) console.error(`  - ${line}`);
   console.error(
-    "\nConsequência: uma divergência entre o BFF e o frontend só aparece na tela do usuário.\n"
-      + "Corrigir isto é Goal próprio; esta auditoria apenas registra.",
+    "\nConsequência: uma divergência entre o BFF e o frontend só aparece na tela do usuário.",
   );
   process.exit(1);
 }
 
-console.log("\nA-03 não reproduz mais: existe ligação verificável entre os dois lados.");
+console.log(
+  "\nA-03 não reproduz: existe pacote de contrato compartilhado, consumido pelos dois lados, "
+    + "com a resposta do BFF verificada contra ele no bootstrap.",
+);

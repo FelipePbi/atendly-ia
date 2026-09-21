@@ -1,7 +1,7 @@
-import { type BffHttpClient } from "../http/BffHttpClient";
+import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
 import {
   type KnowledgeChunk,
-  knowledgeDocumentSchema,
+  type KnowledgeDocument,
   type KnowledgeDocumentStatus,
   type KnowledgeDocumentType,
 } from "../mappers/publicApiSchemas";
@@ -43,7 +43,10 @@ export class BffKnowledgeService {
         serviceId: query.serviceId,
         status: query.status,
       },
-      schema: knowledgeDocumentSchema.array(),
+      schema: routeSchema<KnowledgeDocument[]>(
+        "GET",
+        "/v1/knowledge/documents",
+      ),
       signal,
     });
   }
@@ -53,7 +56,7 @@ export class BffKnowledgeService {
       body: input,
       method: "POST",
       path: "/v1/knowledge/documents",
-      schema: knowledgeDocumentSchema,
+      schema: routeSchema<KnowledgeDocument>("POST", "/v1/knowledge/documents"),
       signal,
     });
   }
@@ -61,7 +64,10 @@ export class BffKnowledgeService {
   get(id: string, signal?: AbortSignal) {
     return this.http.request({
       path: `/v1/knowledge/documents/${encodeURIComponent(id)}`,
-      schema: knowledgeDocumentSchema,
+      schema: routeSchema<KnowledgeDocument>(
+        "GET",
+        "/v1/knowledge/documents/:id",
+      ),
       signal,
     });
   }
@@ -72,7 +78,10 @@ export class BffKnowledgeService {
       body: input,
       method: "PUT",
       path: `/v1/knowledge/documents/${encodeURIComponent(id)}`,
-      schema: knowledgeDocumentSchema,
+      schema: routeSchema<KnowledgeDocument>(
+        "PUT",
+        "/v1/knowledge/documents/:id",
+      ),
       signal,
     });
   }
@@ -82,7 +91,10 @@ export class BffKnowledgeService {
     return this.http.request({
       method: "DELETE",
       path: `/v1/knowledge/documents/${encodeURIComponent(id)}`,
-      schema: knowledgeDocumentSchema,
+      schema: routeSchema<KnowledgeDocument>(
+        "DELETE",
+        "/v1/knowledge/documents/:id",
+      ),
       signal,
     });
   }
@@ -93,7 +105,7 @@ export class BffKnowledgeService {
       body: { content },
       method: "PUT",
       path: "/v1/knowledge/other-info",
-      schema: knowledgeDocumentSchema,
+      schema: routeSchema<KnowledgeDocument>("PUT", "/v1/knowledge/other-info"),
       signal,
     });
   }

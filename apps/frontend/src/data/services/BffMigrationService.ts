@@ -1,17 +1,17 @@
-import { type BffHttpClient } from "../http/BffHttpClient";
+import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
 import {
   type ImportCategory,
-  importCategorySelectionResultSchema,
-  importCompletionSchema,
+  type ImportCategorySelectionResult,
+  type ImportCompletion,
+  type ImportDecision,
   type ImportDecisionKind,
-  importDecisionSchema,
-  importExecutionSchema,
-  importItemsPageSchema,
+  type ImportExecution,
+  type ImportItemsPage,
   type ImportItemStatus,
-  importPreviewSchema,
-  importProgressSchema,
-  importSessionStartSchema,
-  importStateSchema,
+  type ImportPreview,
+  type ImportProgress,
+  type ImportSessionStart,
+  type ImportState,
 } from "../mappers/publicApiSchemas";
 
 export interface StartImportInput {
@@ -57,7 +57,7 @@ export class BffMigrationService {
   getImportState(signal?: AbortSignal) {
     return this.http.request({
       path: "/v1/calendar/imports",
-      schema: importStateSchema,
+      schema: routeSchema<ImportState>("GET", "/v1/calendar/imports"),
       signal,
     });
   }
@@ -73,7 +73,7 @@ export class BffMigrationService {
       headers: { "idempotency-key": idempotencyKey },
       method: "POST",
       path: "/v1/calendar/imports",
-      schema: importSessionStartSchema,
+      schema: routeSchema<ImportSessionStart>("POST", "/v1/calendar/imports"),
       signal,
     });
   }
@@ -89,7 +89,10 @@ export class BffMigrationService {
       headers: { "idempotency-key": idempotencyKey },
       method: "POST",
       path: `/v1/calendar/imports/${encodeURIComponent(sessionId)}/analyze`,
-      schema: importPreviewSchema,
+      schema: routeSchema<ImportPreview>(
+        "POST",
+        "/v1/calendar/imports/:sessionId/analyze",
+      ),
       signal,
     });
   }
@@ -104,7 +107,10 @@ export class BffMigrationService {
     return this.http.request({
       path: `/v1/calendar/imports/${encodeURIComponent(sessionId)}/categories/${encodeURIComponent(category)}/items`,
       query,
-      schema: importItemsPageSchema,
+      schema: routeSchema<ImportItemsPage>(
+        "GET",
+        "/v1/calendar/imports/:sessionId/categories/:category/items",
+      ),
       signal,
     });
   }
@@ -122,7 +128,10 @@ export class BffMigrationService {
       headers: { "idempotency-key": idempotencyKey },
       method: "POST",
       path: `/v1/calendar/imports/${encodeURIComponent(sessionId)}/categories/${encodeURIComponent(category)}/selection`,
-      schema: importCategorySelectionResultSchema,
+      schema: routeSchema<ImportCategorySelectionResult>(
+        "POST",
+        "/v1/calendar/imports/:sessionId/categories/:category/selection",
+      ),
       signal,
     });
   }
@@ -140,7 +149,10 @@ export class BffMigrationService {
       headers: { "idempotency-key": idempotencyKey },
       method: "POST",
       path: `/v1/calendar/imports/${encodeURIComponent(sessionId)}/items/${encodeURIComponent(itemId)}/decision`,
-      schema: importDecisionSchema,
+      schema: routeSchema<ImportDecision>(
+        "POST",
+        "/v1/calendar/imports/:sessionId/items/:itemId/decision",
+      ),
       signal,
     });
   }
@@ -157,7 +169,10 @@ export class BffMigrationService {
       headers: { "idempotency-key": idempotencyKey },
       method: "POST",
       path: `/v1/calendar/imports/${encodeURIComponent(sessionId)}/execute`,
-      schema: importExecutionSchema,
+      schema: routeSchema<ImportExecution>(
+        "POST",
+        "/v1/calendar/imports/:sessionId/execute",
+      ),
       signal,
     });
   }
@@ -166,7 +181,10 @@ export class BffMigrationService {
   getImportProgress(sessionId: string, signal?: AbortSignal) {
     return this.http.request({
       path: `/v1/calendar/imports/${encodeURIComponent(sessionId)}/progress`,
-      schema: importProgressSchema,
+      schema: routeSchema<ImportProgress>(
+        "GET",
+        "/v1/calendar/imports/:sessionId/progress",
+      ),
       signal,
     });
   }
@@ -186,7 +204,10 @@ export class BffMigrationService {
       headers: { "idempotency-key": idempotencyKey },
       method: "POST",
       path: `/v1/calendar/imports/${encodeURIComponent(sessionId)}/complete`,
-      schema: importCompletionSchema,
+      schema: routeSchema<ImportCompletion>(
+        "POST",
+        "/v1/calendar/imports/:sessionId/complete",
+      ),
       signal,
     });
   }

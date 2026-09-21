@@ -4040,3 +4040,136 @@ intocados, e nenhuma dependência nova entrou.
   fonte das declarações de proto. **A-24 continua `PENDENCIA-POS-MVP`,
   não corrigido** — este delta é camada de teste, e nenhum arquivo Go de
   produção deste fork pode ser editado por ele.
+
+## Delta implementado — diff044, 2026-09-21 ([D-060](DECISIONS.md))
+
+Fecha as duas bordas não bloqueantes que o
+[review043](reviews/043-review.md) tinha registrado sobre a completude do
+conjunto de 10 rotas do Goal043: chamador de `caller_resolved_base_url_via_*`
+lido só no mesmo arquivo do sítio, e superfície do cliente HTTP interno
+reconhecida por três nomes de método fixos. Só dois arquivos de
+`apps/ai-orchestrator/tests/` mudaram; nenhum arquivo de
+`apps/frontend/src/`, `apps/bff/src/`, `apps/ai-orchestrator/src/` ou
+qualquer arquivo Go mudou, `go.mod` e `go.sum` continuam intocados, e o
+conjunto de 10 rotas e de 27 literais que os Goals 042 e 043 já asseriam
+não muda.
+
+- **O chamador seguido por ligação importada atravessa arquivo.**
+  `findCrossFileCallerBindings` (`http-egress-sites.ts`) lê toda
+  declaração `import ... from` das duas árvores, resolve especificador
+  relativo a caminho de arquivo e liga o alias local ao nome exportado
+  pelo sítio; `discoverCallerResolvedGoBoundRequests` varre os chamadores
+  reais do arquivo do sítio mais os de todo arquivo ligado dessa forma.
+  Forma que a resolução não converte em arquivo conhecido — reexportação
+  (nomeada ou `export *`), import dinâmico, especificador não relativo,
+  referência importada e reexportada adiante — derruba a leitura com
+  `arquivo:linha`, nunca vira ausência de chamador tratada em silêncio.
+- **A superfície do cliente HTTP interno é derivada por alcançabilidade,
+  não por uma lista de três nomes.** `computeInternalClientMemberSurface`
+  varre todo membro de topo da classe, marcando como alcançando `fetch` o
+  que chama `fetch` no próprio corpo ou delega — via `this.<membro>(...)` —
+  a outro membro que alcança, seguindo a cadeia até o fim; um ciclo de
+  delegação derruba a leitura nomeando o membro. Membro `private`/
+  `protected` que alcança `fetch` é excluído da superfície com o motivo
+  escrito. O método HTTP default de um membro é o do único `fetch` do
+  próprio corpo, quando estático.
+- **Nenhum motivo devolvido em `notGoBound` afirma algo sobre um chamador
+  não lido.** Todo sítio `caller_resolved_base_url_via_*` contado fora do
+  conjunto relata quantos chamadores foram lidos e em quantos arquivos
+  (`"N chamador(es) lido(s) em M arquivo(s)"`), e quantos arquivos das duas
+  árvores foram varridos atrás da ligação. Sete afirmações permanentes
+  sobre a árvore real consomem os dois mecanismos, ao lado das que o
+  Goal043 já deixava — nenhuma delas foi relaxada, pulada ou removida.
+- **Os quatro controles negativos obrigatórios deste critério existem e
+  mordem**, cada um sobre árvore sintética em diretório temporário,
+  removido ao fim, sem nunca tocar a árvore real: chamada por outro
+  arquivo, ligada por import com alias, não reconhecida antes do mecanismo
+  e reconhecida depois (par antes/depois); método público **sem `fetch`
+  próprio** que passa a delegar ao membro `private` que tem o `fetch` —
+  antes da delegação existir, a chamada a ele não vira rota e é contada
+  fora com o motivo derivado da declaração; depois dela, a mesma chamada
+  entra no conjunto (par antes/depois, mais o caso-limite em que o membro
+  público ainda não foi acrescentado à classe e a leitura derruba com
+  `arquivo:linha`); reexportação e import dinâmico derrubam a leitura em
+  vez de afirmar que o chamador não passa chave de base; e mover e
+  renomear helper, classe, arquivos e pastas das duas mecânicas não muda a
+  classificação computada.
+- **Forma de exportação é reconhecida por ligação, e forma não reconhecida
+  derruba.** `resolveModuleExportBindings` computa **todas** as ligações
+  pelas quais o nome sai do módulo, a partir das construções `export` do
+  arquivo: `export function`, `export default function`,
+  `export const/let/var`, lista `export { nome }`, lista com alias
+  (`export { nome as outro }`, e o import do outro arquivo é resolvido pelo
+  **nome exportado**) e `export default nome;`. Quando o mesmo nome sai por
+  duas construções — a declaração exportada e uma lista com alias, por
+  exemplo —, as duas viram ligação e as duas são varridas: reconhecer a
+  primeira não silencia as seguintes, e construção `export` posterior em
+  forma não convertível derruba a leitura do mesmo jeito. Ela devolve lista
+  vazia (`not_exported` no relatório) só depois de conferir que o nome está
+  declarado no arquivo e que nenhuma construção `export` o menciona; menção
+  em forma que a resolução não converte em ligação importável derruba a
+  leitura com `arquivo:linha`. Antes, uma forma não reconhecida — ou uma
+  segunda ligação depois da primeira reconhecida — desligava a varredura
+  entre arquivos em silêncio.
+- **O egresso genérico também é varrido pelo nome local de cada import com
+  alias.** A varredura de chamadores do primitivo genérico lia só o nome da
+  declaração, solto, em cada arquivo: um chamador em outro arquivo que
+  importasse a função sob outro nome ficava invisível, e o motivo escrito
+  afirmava zero chamador onde existia um. Agora a mesma resolução de
+  ligação (`resolveModuleExportBindings` mais `findCrossFileCallerBindings`)
+  dá o nome local em cada arquivo, e cada arquivo é varrido pelo nome da
+  declaração mais esses nomes locais. `genericEgressCallersByPrimitive`
+  separa os chamadores por primitivo, e o motivo escrito do sítio genérico
+  cita o número **daquele** primitivo — chamador sob alias com destino no
+  serviço Go derruba a leitura, como qualquer outro.
+- **O nome de um membro de classe é derivado da declaração e conferido.**
+  `methodNameSpanAtBrace` deriva o nome andando para trás da lista de
+  parâmetros e trata também a forma de propriedade-arrow
+  (`nome = async (…) => {}`), em que a palavra antes do `(` é `async` ou
+  nenhuma. O nome derivado é validado: forma que não produz identificador —
+  nome computado, por exemplo — derruba a leitura com `arquivo:linha`, em
+  vez de classificar o membro sob o nome errado.
+- **Chamada a membro fora da superfície é lida, não ignorada.** A varredura
+  de `this.<campo>.<membro>(` sobre um cliente apontado ao serviço Go casa
+  **qualquer** membro, não só os da superfície: membro que a classe declara
+  e que não alcança `fetch` (ou alcança e é `private`) é contado fora em
+  `nonTransportMemberCalls`, com o motivo que a derivação escreveu; membro
+  que a declaração da classe não tem derruba a leitura com `arquivo:linha`.
+- **A enumeração que §2 e §3 exigem sai do descobridor.**
+  `discoverGoServiceHttpRequests` devolve `internalClientSurfaces` (por
+  classe: os membros que alcançam `fetch` e, com motivo escrito, os que
+  não alcançam), `nonTransportMemberCalls` e `callerResolutions` (por
+  sítio resolvido no chamador: forma de exportação, arquivos das duas
+  árvores varridos, arquivos que importam a ligação, arquivos com chamador
+  lido, chamadores lidos e requisições produzidas). Duas afirmações
+  permanentes conferem essa saída sobre a árvore real e provam que o
+  motivo escrito de `notGoBound` repete exatamente os números do
+  relatório do mesmo sítio.
+- **Prova executada:** `npx vitest run
+  tests/assistant/assistant.service.test.ts` (em `apps/ai-orchestrator`):
+  **113** testes, 0 falhas — os **85** da baseline mais **28** deste delta
+  (7 afirmações permanentes sobre a árvore real, 9 controles sintéticos de
+  fail-closed dos dois mecanismos, 4 do egresso genérico varrido pelo nome
+  local do import com alias, 8 nos quatro controles negativos
+  obrigatórios). `npx vitest run` completo de `apps/ai-orchestrator`:
+  **837** passando, 88 pulados (baseline: 809 passando, 88 pulados). `npm run lint` e `npm run
+  typecheck` em `apps/ai-orchestrator`: sem erro. `cd apps/evolution-go &&
+  go test ./...`: PASS em todos os pacotes com teste, 0 falhas — nenhum
+  pacote Go foi tocado por este diff. `npm run validate:core`: `PASSED`,
+  15 passos verdes e 2 pulados declarados (`test:bff`,
+  `test:health-worker`), com `audit:static` mantendo os **34** checks.
+  `npm run test:gate`: **226** testes, 0 falhas — mesma contagem da
+  baseline.
+- **LIMITE:** `validate:integration` **não roda neste ambiente de
+  execução**: `npm run validate:integration` termina com `exit 2` e
+  `validate:integration REFUSED — BFF_TEST_DATABASE_URL is not set`. O
+  valor real das variáveis de ambiente de produção não é lido por nada
+  aqui — só o default do schema e o `.env.example`.
+- **LIMITE:** nada aqui prova comportamento em runtime do serviço Go, nem
+  que o binário em produção é o desta árvore, nem que **M4** fechou. O
+  que se prova é o que a árvore de código diz, lida por forma de
+  declaração e por import. **A-24 continua `PENDENCIA-POS-MVP`, não
+  corrigido** — este delta fecha duas bordas de leitura do lado
+  TypeScript, nunca o critério que decide o conjunto de rotas ou de
+  literais, e nenhum arquivo Go de produção deste fork foi editado por
+  ele.

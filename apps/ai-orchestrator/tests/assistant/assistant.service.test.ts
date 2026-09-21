@@ -3173,3 +3173,1369 @@ describe("controle negativo 5 — destino resolvido por forma: cliente genérico
     }
   });
 });
+
+/* =========================================================================
+ * Afirmações permanentes que consomem os dois mecanismos do Goal044: o
+ * chamador seguido por ligação importada, atravessando arquivo (WU-01), e a
+ * superfície do cliente HTTP interno derivada da classe (WU-02). Nenhuma
+ * asserção do Goal043 acima foi relaxada, pulada ou removida — estas são
+ * adições (Goal044 / WU-03).
+ * ========================================================================= */
+
+describe("WU-01 na árvore real: nenhum motivo de notGoBound afirma algo sobre chamador não lido (Goal044 / WU-03)", () => {
+  it("todo sítio 'caller_resolved_base_url_via_*' contado fora do conjunto relata quantos chamadores foram lidos e em quantos arquivos", () => {
+    const { notGoBound } = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+    const callerResolvedNotGoBound = notGoBound.filter((counted) =>
+      counted.category.startsWith("caller_resolved_base_url_via_"),
+    );
+    for (const counted of callerResolvedNotGoBound) {
+      expect(counted.reason).toMatch(/\d+ chamador\(es\) lido\(s\) em \d+ arquivo\(s\)/u);
+      expect(counted.reason).not.toMatch(/não lido/u);
+    }
+  });
+});
+
+describe("WU-01 é exercitado: o chamador que vive em outro arquivo, ligado por import (com alias), continua alcançando o serviço Go (Goal044 / WU-03)", () => {
+  it("a requisição cujo único chamador real está em outro arquivo, importado sob outro nome, entra no conjunto alcançado", () => {
+    const envSchema = [
+      "export const env = {",
+      '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+      '  SCHEDULING_SERVICE_BASE_URL: stringEnv("http://scheduling:9090"),',
+      "};",
+      "",
+    ].join("\n");
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "modules/transport/check-health.ts": [
+        "export async function checkHealthUpstream(baseUrl: string, path: string) {",
+        "  return fetch(`${baseUrl}${path}`);",
+        "}",
+        "",
+        // Chamador no mesmo arquivo, para uma base que não é o serviço Go —
+        // é o que classifica o sítio como "caller_resolved_base_url_via_*"
+        // (categoria da qual a resolução de chamadores parte). O chamador
+        // que de fato alcança o serviço Go vive só em routes/status.ts.
+        "export async function checkOtherService() {",
+        '  return checkHealthUpstream(env.SCHEDULING_SERVICE_BASE_URL, "/status");',
+        "}",
+        "",
+      ].join("\n"),
+      "routes/status.ts": [
+        'import { checkHealthUpstream as probe } from "../modules/transport/check-health.js";',
+        "",
+        "export async function registerStatusRoute() {",
+        '  return probe(env.EVOLUTION_GO_BASE_URL, "/health");',
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, notGoBound } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      expect(
+        requests.map((request) => ({ method: request.method, path: request.pathExpression })),
+      ).toEqual([{ method: "GET", path: "/health" }]);
+      // O chamador que alcança o serviço Go está em routes/status.ts, não
+      // no arquivo do sítio — é essa travessia de arquivo que o Goal043
+      // (chamador só no mesmo arquivo) não seguia.
+      expect(requests[0].filePath).toBe(join(tree, "routes", "status.ts"));
+      expect(requests[0].reason).toContain("probe");
+      expect(requests[0].reason).toContain("checkHealthUpstream");
+      expect(notGoBound).toEqual([]);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("quando nenhum chamador resolve ao serviço Go, o motivo relata os chamadores lidos — um no mesmo arquivo, um em outro arquivo — nunca um deles como não lido", () => {
+    const envSchema = [
+      "export const env = {",
+      '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+      '  SCHEDULING_SERVICE_BASE_URL: stringEnv("http://scheduling:9090"),',
+      "};",
+      "",
+    ].join("\n");
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "modules/transport/probe.ts": [
+        "export async function probeUpstream(baseUrl: string, path: string) {",
+        "  return fetch(`${baseUrl}${path}`);",
+        "}",
+        "",
+        "export async function callFromSameFile() {",
+        '  return probeUpstream(env.SCHEDULING_SERVICE_BASE_URL, "/slots");',
+        "}",
+        "",
+      ].join("\n"),
+      "routes/other.ts": [
+        'import { probeUpstream } from "../modules/transport/probe.js";',
+        "",
+        "export async function callFromOtherFile() {",
+        '  return probeUpstream(env.SCHEDULING_SERVICE_BASE_URL, "/other");',
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, notGoBound } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      expect(requests).toEqual([]);
+      expect(notGoBound).toHaveLength(1);
+      expect(notGoBound[0].category).toBe("caller_resolved_base_url_via_probeUpstream");
+      // Dois chamadores reais foram lidos — um no arquivo do sítio, um em
+      // outro arquivo ligado por import — e os dois arquivos entram na
+      // contagem. Antes do WU-01, só o chamador do mesmo arquivo era lido;
+      // o motivo abaixo prova que o segundo não ficou "não lido".
+      expect(notGoBound[0].reason).toContain("2 chamador(es) lido(s) em 2 arquivo(s)");
+      expect(notGoBound[0].reason).not.toMatch(/não lido/u);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("WU-02 é exercitado na árvore real: a superfície do cliente HTTP interno é derivada por alcançabilidade, não por uma lista de três nomes (Goal044 / WU-03)", () => {
+  it("ao menos um membro exercitado por uma requisição real chegou por delegação (não tem fetch no próprio corpo), e nenhum membro exercitado é private/protected na declaração real", () => {
+    const discovery = discoverHttpEgressSites(aiOrchestratorSrcPath, bffSrcPath);
+    const { requests } = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+
+    const directFetchMemberNames = new Set(
+      discovery.sites
+        .filter((site) => site.category.startsWith("constructor_base_url_"))
+        .map((site) => site.category.slice("constructor_base_url_".length)),
+    );
+
+    const clientCallPattern = /this\.\w+\.(\w+)\(/u;
+    const exercisedMemberNames = Array.from(
+      new Set(
+        requests
+          .map((request) => request.reason.match(clientCallPattern)?.[1])
+          .filter((name): name is string => name !== undefined),
+      ),
+    );
+
+    // Não-vacuidade do mecanismo: a superfície derivada realmente produziu
+    // requisição sobre a árvore real.
+    expect(exercisedMemberNames.length).toBeGreaterThan(0);
+
+    // Ao menos um membro exercitado não é, ele próprio, o sítio direto de
+    // fetch (`constructor_base_url_<nome>`) — chegou à superfície por
+    // delegação (`this.<outro>()`), a diferença entre a lista de três
+    // nomes que existia antes e a superfície computada por alcançabilidade.
+    const delegatedMembersInUse = exercisedMemberNames.filter(
+      (name) => !directFetchMemberNames.has(name),
+    );
+    expect(delegatedMembersInUse.length).toBeGreaterThan(0);
+
+    const clientSite = discovery.sites.find((site) => site.category.startsWith("constructor_base_url_"));
+    expect(clientSite).toBeDefined();
+    const clientSource = readFileSync(clientSite!.filePath, "utf8");
+    for (const memberName of exercisedMemberNames) {
+      const nonPublicDeclaration = new RegExp(
+        `(private|protected)\\s+(?:readonly\\s+|async\\s+|static\\s+)*${memberName}\\s*[(<]`,
+        "u",
+      );
+      expect(nonPublicDeclaration.test(clientSource)).toBe(false);
+    }
+  });
+});
+
+describe("WU-02 é exercitado: delegação de dois níveis alcança fetch, membro private que alcança fetch fica fora da superfície, e membro que não delega nem chama fetch também fica fora (Goal044 / WU-03)", () => {
+  it("as duas requisições vêm de membros públicos que só alcançam fetch por delegação; o membro private e o membro que não alcança fetch não geram requisição nenhuma", () => {
+    const envSchema = [
+      "export const env = {",
+      '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+      "};",
+      "",
+    ].join("\n");
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": [
+        "export class InternalHttpClient {",
+        "  constructor(private baseUrl: string) {}",
+        "  async request(options: { method: string; path: string }) {",
+        "    return this.requestWithStatus(options);",
+        "  }",
+        "  async requestWithStatus(options: { method: string; path: string }) {",
+        "    return this.perform(options);",
+        "  }",
+        "  private async perform(options: { method: string; path: string }) {",
+        "    const url = new URL(options.path, this.baseUrl);",
+        "    return fetch(url, { method: options.method });",
+        "  }",
+        "  ping(): string {",
+        '    return "pong";',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      "clients/evolution-client.ts": [
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "  async createInstanceWithStatus() {",
+        '    return this.http.requestWithStatus({ method: "POST", path: "/instance/create-with-status" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests } = discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts"));
+      expect(
+        requests.map((request) => ({ method: request.method, path: request.pathExpression })),
+      ).toEqual([
+        { method: "POST", path: "/instance/create" },
+        { method: "POST", path: "/instance/create-with-status" },
+      ]);
+      // "request" só alcança fetch delegando a "requestWithStatus", que por
+      // sua vez delega a "perform" — dois níveis de delegação, não um
+      // fetch direto no próprio membro.
+      expect(requests[0].reason).toContain("this.http.request(...)");
+      expect(requests[1].reason).toContain("this.http.requestWithStatus(...)");
+      // "perform" alcança fetch mas é private: não integra a superfície
+      // chamável de fora, e nenhuma requisição é atribuída a ele.
+      expect(requests.some((request) => request.reason.includes(".perform("))).toBe(false);
+      // "ping" não chama fetch nem delega: fica fora da superfície, e
+      // nenhuma requisição é atribuída a ele.
+      expect(requests.some((request) => request.reason.includes(".ping("))).toBe(false);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+/* =========================================================================
+ * Os quatro controles negativos de WU-04 (Goal044). Cada um monta a própria
+ * árvore sintética em diretório temporário e roda o descobridor real sobre
+ * ela — nunca a árvore real —, removendo todo diretório no `finally`. Nenhum
+ * amplia nem estreita o conjunto de 10 rotas que a suíte permanente assere.
+ * ========================================================================= */
+
+describe("controle negativo 1 (Goal044 / WU-04) — helper com chamador que passa a base do serviço Go em outro arquivo, ligado por import com alias: antes do arquivo existir, o sítio fica em notGoBound; depois, entra no conjunto", () => {
+  const envSchema = [
+    "export const env = {",
+    '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+    '  SCHEDULING_SERVICE_BASE_URL: stringEnv("http://scheduling:9090"),',
+    "};",
+    "",
+  ].join("\n");
+
+  const helperModule = [
+    "export async function reachUpstream(baseUrl: string, path: string) {",
+    "  return fetch(`${baseUrl}${path}`);",
+    "}",
+    "",
+    "export async function callFromSameFile() {",
+    '  return reachUpstream(env.SCHEDULING_SERVICE_BASE_URL, "/other");',
+    "}",
+    "",
+  ].join("\n");
+
+  it("antes: só o chamador do mesmo arquivo existe, e ele não passa a base do serviço Go — o sítio fica fora do conjunto, contado em notGoBound", () => {
+    const beforeTree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "modules/upstream.ts": helperModule,
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, notGoBound } = discoverGoServiceHttpRequests(
+        beforeTree,
+        emptyTree,
+        join(beforeTree, "config/env.ts"),
+      );
+      expect(requests).toEqual([]);
+      expect(notGoBound).toHaveLength(1);
+      expect(notGoBound[0].category).toBe("caller_resolved_base_url_via_reachUpstream");
+      expect(notGoBound[0].reason).toContain("nenhum deles passa uma chave de base do serviço Go");
+    } finally {
+      rmSync(beforeTree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("depois: um arquivo novo importa o helper sob alias e chama com a base do serviço Go — a mesma classificação passa a entrar no conjunto alcançado", () => {
+    const afterTree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "modules/upstream.ts": helperModule,
+      "routes/health.ts": [
+        // O import liga a função a outro nome local: o chamador não usa o
+        // nome da declaração em lugar nenhum. É a ligação por alias que o
+        // par antes/depois deste controle exercita.
+        'import { reachUpstream as probeHealth } from "../modules/upstream.js";',
+        "",
+        "export async function registerHealthRoute() {",
+        '  return probeHealth(env.EVOLUTION_GO_BASE_URL, "/health");',
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, notGoBound } = discoverGoServiceHttpRequests(
+        afterTree,
+        emptyTree,
+        join(afterTree, "config/env.ts"),
+      );
+      expect(
+        requests.map((request) => ({ method: request.method, path: request.pathExpression })),
+      ).toEqual([{ method: "GET", path: "/health" }]);
+      expect(requests[0].filePath).toBe(join(afterTree, "routes", "health.ts"));
+      // O motivo escrito nomeia o alias local e a declaração de origem.
+      expect(requests[0].reason).toContain("probeHealth");
+      expect(requests[0].reason).toContain("reachUpstream");
+      expect(notGoBound).toEqual([]);
+    } finally {
+      rmSync(afterTree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("controle negativo 2 (Goal044 / WU-04) — método público sem fetch próprio, delegando ao membro privado que tem o fetch: sem a delegação a chamada não vira rota; com ela, a rota entra no conjunto", () => {
+  const envSchema = [
+    "export const env = {",
+    '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+    "};",
+    "",
+  ].join("\n");
+
+  /** O chamador é o mesmo nas três árvores: só a declaração do cliente muda. */
+  const evolutionClient = [
+    "export class EvolutionClient {",
+    "  private http: InternalHttpClient;",
+    "  constructor() {",
+    "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+    "  }",
+    "  async createInstance() {",
+    '    return this.http.performPublic({ method: "POST", path: "/instance/create" });',
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+
+  const internalClient = (performPublicBody: string): string =>
+    [
+      "export class InternalHttpClient {",
+      "  constructor(private baseUrl: string) {}",
+      "  async request(options: { method: string; path: string }) {",
+      "    const url = new URL(options.path, this.baseUrl);",
+      '    return fetch(url, { method: "GET" });',
+      "  }",
+      "  async performPublic(options: { method: string; path: string }) {",
+      `    ${performPublicBody}`,
+      "  }",
+      "  private async perform(options: { method: string; path: string }) {",
+      "    const url = new URL(options.path, this.baseUrl);",
+      "    return fetch(url, { method: options.method });",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+
+  it("antes: o membro público existe mas ainda não delega ao membro privado que tem o fetch — a chamada não vira rota, e é contada fora com o motivo derivado da declaração", () => {
+    const beforeTree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": internalClient("return { accepted: false, options };"),
+      "clients/evolution-client.ts": evolutionClient,
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, nonTransportMemberCalls, internalClientSurfaces } =
+        discoverGoServiceHttpRequests(beforeTree, emptyTree, join(beforeTree, "config/env.ts"));
+
+      // Nenhuma rota: o membro chamado não alcança fetch, nem direto nem por
+      // delegação, então ele não está na superfície de transporte.
+      expect(requests.some((request) => request.pathExpression === "/instance/create")).toBe(false);
+
+      // E a chamada não some: ela é contada fora, com o motivo que a
+      // derivação escreveu para o membro.
+      expect(nonTransportMemberCalls).toHaveLength(1);
+      expect(nonTransportMemberCalls[0].memberName).toBe("performPublic");
+      expect(nonTransportMemberCalls[0].filePath).toBe(join(beforeTree, "clients", "evolution-client.ts"));
+      expect(nonTransportMemberCalls[0].reason).toContain("não chama fetch nem delega");
+
+      const surface = internalClientSurfaces[0];
+      expect(surface.reachingMembers).not.toContain("performPublic");
+      expect(surface.excludedMembers.map((member) => member.name)).toContain("performPublic");
+    } finally {
+      rmSync(beforeTree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("depois: o mesmo membro público passa a delegar ao membro privado que tem o fetch — sem fetch próprio, a rota entra no conjunto alcançado", () => {
+    const afterTree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": internalClient("return this.perform(options);"),
+      "clients/evolution-client.ts": evolutionClient,
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, nonTransportMemberCalls, internalClientSurfaces } =
+        discoverGoServiceHttpRequests(afterTree, emptyTree, join(afterTree, "config/env.ts"));
+
+      expect(
+        requests
+          .filter((request) => request.pathExpression === "/instance/create")
+          .map((request) => ({ method: request.method, path: request.pathExpression })),
+      ).toEqual([{ method: "POST", path: "/instance/create" }]);
+      expect(nonTransportMemberCalls).toEqual([]);
+
+      const surface = internalClientSurfaces[0];
+      // O membro entrou na superfície sem ter fetch próprio: o único fetch
+      // que ele alcança está no membro privado a que ele delega, e o membro
+      // privado continua fora da superfície.
+      expect(surface.reachingMembers).toContain("performPublic");
+      expect(surface.excludedMembers.map((member) => member.name)).toContain("perform");
+      const excludedPrivate = surface.excludedMembers.find((member) => member.name === "perform");
+      expect(excludedPrivate?.reason).toContain("private/protected");
+    } finally {
+      rmSync(afterTree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("antes, no limite: o membro público ainda não foi acrescentado à classe — a chamada não é reconhecida e a leitura derruba nomeando arquivo e linha, em vez de sumir com ela", () => {
+    const withoutMemberTree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": [
+        "export class InternalHttpClient {",
+        "  constructor(private baseUrl: string) {}",
+        "  async request(options: { method: string; path: string }) {",
+        "    const url = new URL(options.path, this.baseUrl);",
+        '    return fetch(url, { method: "GET" });',
+        "  }",
+        "  private async perform(options: { method: string; path: string }) {",
+        "    const url = new URL(options.path, this.baseUrl);",
+        "    return fetch(url, { method: options.method });",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      "clients/evolution-client.ts": evolutionClient,
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      let thrown: unknown;
+      try {
+        discoverGoServiceHttpRequests(
+          withoutMemberTree,
+          emptyTree,
+          join(withoutMemberTree, "config/env.ts"),
+        );
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(Error);
+      expect((thrown as Error).message).toMatch(
+        /evolution-client\.ts:\d+: chamada this\.http\.performPublic\(\.\.\.\).*não é membro de topo da declaração de InternalHttpClient/u,
+      );
+    } finally {
+      rmSync(withoutMemberTree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("controle negativo 3 (Goal044 / WU-04) — ligação alcançável só por reexportação ou import dinâmico derruba a leitura, sem afirmar que os chamadores não passam chave de base", () => {
+  const envSchema = [
+    "export const env = {",
+    '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+    '  SCHEDULING_SERVICE_BASE_URL: stringEnv("http://scheduling:9090"),',
+    "};",
+    "",
+  ].join("\n");
+
+  const checkHealthModule = [
+    "export async function checkHealthUpstream(baseUrl: string, path: string) {",
+    "  return fetch(`${baseUrl}${path}`);",
+    "}",
+    "",
+    "export async function checkOtherService() {",
+    '  return checkHealthUpstream(env.SCHEDULING_SERVICE_BASE_URL, "/status");',
+    "}",
+    "",
+  ].join("\n");
+
+  it("o único chamador real está atrás de uma reexportação — a leitura derruba nomeando o arquivo e a linha da reexportação, não o motivo de notGoBound", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "modules/transport/check-health.ts": checkHealthModule,
+      "modules/transport/reexport.ts": [
+        'export { checkHealthUpstream } from "./check-health.js";',
+        "",
+      ].join("\n"),
+      "routes/status.ts": [
+        'import { checkHealthUpstream } from "../modules/transport/reexport.js";',
+        "",
+        "export async function registerStatusRoute() {",
+        '  return checkHealthUpstream(env.EVOLUTION_GO_BASE_URL, "/health");',
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      let thrown: unknown;
+      try {
+        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts"));
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(Error);
+      const message = (thrown as Error).message;
+      expect(message).toMatch(
+        /reexport\.ts:\d+: "checkHealthUpstream" \(exportado por .*check-health\.ts\) é reexportado daqui/u,
+      );
+      expect(message).not.toMatch(/passa uma chave de base do serviço Go/u);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("o único chamador real está atrás de um import dinâmico — a leitura derruba nomeando o arquivo e a linha do import, não o motivo de notGoBound", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "modules/transport/check-health.ts": checkHealthModule,
+      "routes/lazy-status.ts": [
+        "export async function registerLazyStatusRoute() {",
+        '  const mod = await import("../modules/transport/check-health.js");',
+        '  return mod.checkHealthUpstream(env.EVOLUTION_GO_BASE_URL, "/health");',
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      let thrown: unknown;
+      try {
+        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts"));
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(Error);
+      const message = (thrown as Error).message;
+      expect(message).toMatch(
+        /lazy-status\.ts:\d+: import dinâmico de "\.\.\/modules\/transport\/check-health\.js" pode carregar "checkHealthUpstream"/u,
+      );
+      expect(message).not.toMatch(/passa uma chave de base do serviço Go/u);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("controle negativo 4 (Goal044 / WU-04) — mover e renomear o helper (WU-01) e a classe do cliente HTTP interno (WU-02) não muda a classificação computada", () => {
+  it("a mesma forma, com helper, classe, arquivos e pastas de outro nome, produz exatamente os mesmos método+caminho+categoria", () => {
+    const envSchema = [
+      "export const env = {",
+      '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+      '  SCHEDULING_SERVICE_BASE_URL: stringEnv("http://scheduling:9090"),',
+      "};",
+      "",
+    ].join("\n");
+
+    const before = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "modules/transport/base.ts": [
+        "export async function reachUpstream(baseUrl: string, path: string) {",
+        "  return fetch(`${baseUrl}${path}`);",
+        "}",
+        "",
+        "export async function callFromSameFile() {",
+        '  return reachUpstream(env.SCHEDULING_SERVICE_BASE_URL, "/other");',
+        "}",
+        "",
+      ].join("\n"),
+      "routes/status.ts": [
+        'import { reachUpstream as probe } from "../modules/transport/base.js";',
+        "",
+        "export async function registerStatusRoute() {",
+        '  return probe(env.EVOLUTION_GO_BASE_URL, "/health");',
+        "}",
+        "",
+      ].join("\n"),
+      "clients/internal-http-client.ts": [
+        "export class HttpGateway {",
+        "  constructor(private baseUrl: string) {}",
+        "  async send(options: { method: string; path: string }) {",
+        "    const url = new URL(options.path, this.baseUrl);",
+        "    return fetch(url, { method: options.method });",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      "clients/evolution-client.ts": [
+        "export class ServiceClient {",
+        "  private gateway: HttpGateway;",
+        "  constructor() {",
+        "    this.gateway = new HttpGateway(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createThing() {",
+        '    return this.gateway.send({ method: "POST", path: "/thing/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+
+    const after = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "gateways/lookup.ts": [
+        "export async function fetchUpstreamStatus(baseUrl: string, path: string) {",
+        "  return fetch(`${baseUrl}${path}`);",
+        "}",
+        "",
+        "export async function unrelatedProbe() {",
+        '  return fetchUpstreamStatus(env.SCHEDULING_SERVICE_BASE_URL, "/other");',
+        "}",
+        "",
+      ].join("\n"),
+      "entrypoints/health-route.ts": [
+        'import { fetchUpstreamStatus as probeAlias } from "../gateways/lookup.js";',
+        "",
+        "export async function mountHealthRoute() {",
+        '  return probeAlias(env.EVOLUTION_GO_BASE_URL, "/health");',
+        "}",
+        "",
+      ].join("\n"),
+      "infra/transport-client.ts": [
+        "export class TransportClient {",
+        "  constructor(private baseUrl: string) {}",
+        "  async dispatch(options: { method: string; path: string }) {",
+        "    const url = new URL(options.path, this.baseUrl);",
+        "    return fetch(url, { method: options.method });",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      "infra/thing-service.ts": [
+        "export class ThingService {",
+        "  private transport: TransportClient;",
+        "  constructor() {",
+        "    this.transport = new TransportClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createThing() {",
+        '    return this.transport.dispatch({ method: "POST", path: "/thing/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const beforeRequests = discoverGoServiceHttpRequests(before, emptyTree, join(before, "config/env.ts"))
+        .requests.map((request) => ({
+          method: request.method,
+          path: request.pathExpression,
+          category: request.category,
+        }))
+        .sort((a, b) => a.path.localeCompare(b.path));
+      const afterRequests = discoverGoServiceHttpRequests(after, emptyTree, join(after, "config/env.ts"))
+        .requests.map((request) => ({
+          method: request.method,
+          path: request.pathExpression,
+          category: request.category,
+        }))
+        .sort((a, b) => a.path.localeCompare(b.path));
+
+      expect(beforeRequests).toEqual([
+        { method: "GET", path: "/health", category: "env_var_EVOLUTION_GO_BASE_URL" },
+        { method: "POST", path: "/thing/create", category: "env_var_EVOLUTION_GO_BASE_URL" },
+      ]);
+      expect(afterRequests).toEqual(beforeRequests);
+    } finally {
+      rmSync(before, { recursive: true, force: true });
+      rmSync(after, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+/* =========================================================================
+ * As bordas que a rodada 1 deixou abertas, fechadas e exercitadas
+ * (Goal044 / WU-03): forma de exportação reconhecida por ligação e não por
+ * uma única sintaxe; nome de membro de classe derivado também na forma de
+ * propriedade-arrow; chamada a membro fora da superfície lida em vez de
+ * ignorada; e a enumeração que §2/§3 exigem saindo do descobridor.
+ * ========================================================================= */
+
+describe("WU-01 é fail-closed na forma de exportação: a ligação é reconhecida por lista de export, com alias, e forma não reconhecida derruba (Goal044 / WU-03)", () => {
+  const envSchema = [
+    "export const env = {",
+    '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+    '  SCHEDULING_SERVICE_BASE_URL: stringEnv("http://scheduling:9090"),',
+    "};",
+    "",
+  ].join("\n");
+
+  /** O helper e o chamador do mesmo arquivo; só a linha de exportação muda entre os casos. */
+  const helperModule = (exportLine: string): string =>
+    [
+      "async function reachUpstream(baseUrl: string, path: string) {",
+      "  return fetch(`${baseUrl}${path}`);",
+      "}",
+      "",
+      "export async function callFromSameFile() {",
+      '  return reachUpstream(env.SCHEDULING_SERVICE_BASE_URL, "/other");',
+      "}",
+      "",
+      exportLine,
+      "",
+    ].join("\n");
+
+  it("declaração sem `export` na própria linha, exportada por `export { reachUpstream };`: o chamador do outro arquivo é lido, e a rota entra no conjunto", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "modules/upstream.ts": helperModule("export { reachUpstream };"),
+      "routes/health.ts": [
+        'import { reachUpstream } from "../modules/upstream.js";',
+        "",
+        "export async function registerHealthRoute() {",
+        '  return reachUpstream(env.EVOLUTION_GO_BASE_URL, "/health");',
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, notGoBound, callerResolutions } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      expect(
+        requests.map((request) => ({ method: request.method, path: request.pathExpression })),
+      ).toEqual([{ method: "GET", path: "/health" }]);
+      expect(notGoBound).toEqual([]);
+      // A forma foi reconhecida como ligação nomeada, e a varredura entre
+      // arquivos de fato rodou — antes, a forma não reconhecida devolvia
+      // "sem export" e desligava essa varredura em silêncio.
+      expect(callerResolutions).toHaveLength(1);
+      expect(callerResolutions[0].exportForm).toBe("named");
+      expect(callerResolutions[0].importingFilePaths).toEqual([join(tree, "routes", "health.ts")]);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("exportada sob outro nome (`export { reachUpstream as probeUpstream };`), o import é resolvido pelo nome exportado, não pelo nome da declaração", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "modules/upstream.ts": helperModule("export { reachUpstream as probeUpstream };"),
+      "routes/health.ts": [
+        'import { probeUpstream } from "../modules/upstream.js";',
+        "",
+        "export async function registerHealthRoute() {",
+        '  return probeUpstream(env.EVOLUTION_GO_BASE_URL, "/health");',
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, callerResolutions } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      expect(
+        requests.map((request) => ({ method: request.method, path: request.pathExpression })),
+      ).toEqual([{ method: "GET", path: "/health" }]);
+      expect(callerResolutions[0].callerCount).toBe(2);
+      expect(callerResolutions[0].callerFilePaths).toContain(join(tree, "routes", "health.ts"));
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("forma de exportação que a resolução não converte em ligação importável derruba a leitura com arquivo:linha, em vez de desligar a varredura entre arquivos", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "modules/upstream.ts": helperModule("export default { reachUpstream };"),
+      "routes/health.ts": [
+        'import upstream from "../modules/upstream.js";',
+        "",
+        "export async function registerHealthRoute() {",
+        '  return upstream.reachUpstream(env.EVOLUTION_GO_BASE_URL, "/health");',
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      let thrown: unknown;
+      try {
+        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts"));
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(Error);
+      const message = (thrown as Error).message;
+      expect(message).toMatch(
+        /upstream\.ts:\d+: "reachUpstream" é mencionado por "export default \{ reachUpstream \}"/u,
+      );
+      expect(message).not.toMatch(/passa uma chave de base do serviço Go/u);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  /** O mesmo helper, exportado duas vezes: pela declaração e pela linha dada. */
+  const helperExportedTwice = (secondExportLine: string): string =>
+    [
+      "export async function reachUpstream(baseUrl: string, path: string) {",
+      "  return fetch(`${baseUrl}${path}`);",
+      "}",
+      "",
+      "export async function callFromSameFile() {",
+      '  return reachUpstream(env.SCHEDULING_SERVICE_BASE_URL, "/other");',
+      "}",
+      "",
+      secondExportLine,
+      "",
+    ].join("\n");
+
+  it("o mesmo nome saindo por duas ligações (declaração exportada e `export { reachUpstream as probeUpstream };`): o chamador que importa pela segunda é lido, não silenciado pela primeira", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "modules/upstream.ts": helperExportedTwice("export { reachUpstream as probeUpstream };"),
+      "routes/health.ts": [
+        'import { probeUpstream } from "../modules/upstream.js";',
+        "",
+        "export async function registerHealthRoute() {",
+        '  return probeUpstream(env.EVOLUTION_GO_BASE_URL, "/health");',
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, notGoBound, callerResolutions } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      // A primeira ligação (a declaração exportada) não alcança
+      // routes/health.ts, que importa pela segunda. Parar na primeira
+      // deixaria esta rota fora do conjunto, sem nada escrito a respeito.
+      expect(
+        requests.map((request) => ({ method: request.method, path: request.pathExpression })),
+      ).toEqual([{ method: "GET", path: "/health" }]);
+      expect(notGoBound).toEqual([]);
+      expect(callerResolutions).toHaveLength(1);
+      expect(callerResolutions[0].exportForm).toBe("named");
+      expect(callerResolutions[0].importingFilePaths).toEqual([join(tree, "routes", "health.ts")]);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("segunda construção `export` em forma não convertível derruba a leitura mesmo com a primeira já reconhecida — reconhecer uma ligação não silencia as outras", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "modules/upstream.ts": helperExportedTwice("export default { reachUpstream };"),
+      "routes/health.ts": [
+        'import upstream from "../modules/upstream.js";',
+        "",
+        "export async function registerHealthRoute() {",
+        '  return upstream.reachUpstream(env.EVOLUTION_GO_BASE_URL, "/health");',
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      let thrown: unknown;
+      try {
+        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts"));
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(Error);
+      const message = (thrown as Error).message;
+      expect(message).toMatch(
+        /upstream\.ts:\d+: "reachUpstream" é mencionado por "export default \{ reachUpstream \}"/u,
+      );
+      expect(message).not.toMatch(/passa uma chave de base do serviço Go/u);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("o egresso genérico é varrido também pelo nome local do import com alias — o motivo escrito nunca afirma zero chamador onde existe um (Goal044 / WU-03)", () => {
+  const envSchema = [
+    "export const env = {",
+    '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+    '  THING_URL: stringEnv("http://thing:7070"),',
+    "};",
+    "",
+  ].join("\n");
+
+  const primitiveModule = [
+    "export async function requestJson(destino: string, options: RequestInit) {",
+    "  return fetch(destino, options);",
+    "}",
+    "",
+  ].join("\n");
+
+  /** O arquivo que chama o primitivo sob alias, com a base dada. */
+  const aliasCaller = (baseEnvVar: string): string =>
+    [
+      'import { requestJson as sendJson } from "./net/send.js";',
+      "",
+      "export async function fetchThing() {",
+      `  return sendJson(env.${baseEnvVar}, {});`,
+      "}",
+      "",
+    ].join("\n");
+
+  it("o chamador em outro arquivo, ligado por import com alias, é lido como chamador do primitivo genérico", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "net/send.ts": primitiveModule,
+      "caller.ts": aliasCaller("THING_URL"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const discovery = discoverHttpEgressSites(tree, emptyTree);
+      expect(
+        discovery.genericEgressCallers.map((caller) => ({
+          filePath: caller.filePath,
+          line: caller.line,
+          category: caller.category,
+        })),
+      ).toEqual([{ filePath: join(tree, "caller.ts"), line: 4, category: "env_var_THING_URL" }]);
+      expect(
+        discovery.genericEgressCallersByPrimitive.map((entry) => ({
+          functionName: entry.functionName,
+          callerCount: entry.callers.length,
+        })),
+      ).toEqual([{ functionName: "requestJson", callerCount: 1 }]);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("o motivo escrito do sítio genérico conta esse chamador, em vez de afirmar zero", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "net/send.ts": primitiveModule,
+      "caller.ts": aliasCaller("THING_URL"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, notGoBound } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      expect(requests).toEqual([]);
+      expect(notGoBound).toHaveLength(1);
+      expect(notGoBound[0].category).toBe(
+        "generic_egress_destination_decided_by_caller_requestJson",
+      );
+      expect(notGoBound[0].reason).toContain('egresso genérico "requestJson": 1 chamador(es)');
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("o chamador sob alias que passa a base do serviço Go derruba a leitura, em vez de sumir da contagem", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "net/send.ts": primitiveModule,
+      "caller.ts": aliasCaller("EVOLUTION_GO_BASE_URL"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      expect(() =>
+        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+      ).toThrowError(/o egresso genérico "requestJson" tem chamador com destino no serviço Go/u);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("dois primitivos homônimos em arquivos diferentes não colidem: o chamador sob alias do SEGUNDO arquivo com base do serviço Go também derruba a leitura", () => {
+    // Regressão do blocker da rodada 3 (Goal044): a varredura indexava
+    // `scannedPrimitiveNames` só pelo nome da função. Com dois arquivos
+    // declarando o mesmo nome, o segundo era pulado inteiro — sua varredura
+    // de alias nunca rodava, e o relatório final afirmava "0 chamador(es),
+    // nenhum com destino no serviço Go" para um chamador que existia e
+    // passava a base do serviço Go.
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "net/first.ts": primitiveModule,
+      "net/second.ts": primitiveModule,
+      "caller.ts": [
+        'import { requestJson as probe } from "./net/second.js";',
+        "",
+        "export async function fetchThing() {",
+        "  return probe(env.EVOLUTION_GO_BASE_URL, {});",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      expect(() =>
+        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+      ).toThrowError(/o egresso genérico "requestJson" tem chamador com destino no serviço Go/u);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("WU-02 é fail-closed no nome do membro: a forma de propriedade-arrow dá o nome declarado, e forma sem nome derivável derruba (Goal044 / WU-03)", () => {
+  const envSchema = [
+    "export const env = {",
+    '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+    "};",
+    "",
+  ].join("\n");
+
+  it("membro declarado como propriedade-arrow entra na superfície com o nome da declaração, e a chamada a ele vira rota", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": [
+        "export class InternalHttpClient {",
+        "  constructor(private baseUrl: string) {}",
+        "  sendIt = async (options: { method: string; path: string }) => {",
+        "    const url = new URL(options.path, this.baseUrl);",
+        "    return fetch(url, { method: options.method });",
+        "  };",
+        "}",
+        "",
+      ].join("\n"),
+      "clients/evolution-client.ts": [
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.sendIt({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, internalClientSurfaces } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      // O nome derivado é o da declaração. Antes, a derivação andava para
+      // trás do "(" e parava em "async" (ou em nada), e a chamada
+      // this.http.sendIt(...) não casava com superfície alguma.
+      expect(internalClientSurfaces[0].reachingMembers).toEqual(["sendIt"]);
+      expect(
+        requests.map((request) => ({ method: request.method, path: request.pathExpression })),
+      ).toEqual([{ method: "POST", path: "/instance/create" }]);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("membro cuja forma não dá nome derivável da declaração derruba a leitura com arquivo:linha", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": [
+        'const dynamicMember = "send";',
+        "export class InternalHttpClient {",
+        "  constructor(private baseUrl: string) {}",
+        "  async request(options: { method: string; path: string }) {",
+        "    const url = new URL(options.path, this.baseUrl);",
+        "    return fetch(url, { method: options.method });",
+        "  }",
+        "  [dynamicMember](options: { method: string; path: string }) {",
+        "    return this.request(options);",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      "clients/evolution-client.ts": [
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      let thrown: unknown;
+      try {
+        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts"));
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(Error);
+      expect((thrown as Error).message).toMatch(
+        /internal-http-client\.ts:\d+: membro de classe cuja forma não dá nome derivável da declaração/u,
+      );
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("WU-02 é fail-closed na chamada: membro fora da superfície é contado fora com motivo, e membro que a classe não declara derruba (Goal044 / WU-03)", () => {
+  const envSchema = [
+    "export const env = {",
+    '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+    "};",
+    "",
+  ].join("\n");
+
+  const internalClient = [
+    "export class InternalHttpClient {",
+    "  constructor(private baseUrl: string) {}",
+    "  async request(options: { method: string; path: string }) {",
+    "    const url = new URL(options.path, this.baseUrl);",
+    "    return fetch(url, { method: options.method });",
+    "  }",
+    "  private async perform(options: { method: string; path: string }) {",
+    "    return this.request(options);",
+    "  }",
+    "  describeSelf() {",
+    '    return "cliente";',
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+
+  it("chamada a membro private e a membro que não alcança fetch: nenhuma rota, e as duas contadas fora com o motivo derivado da declaração", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": internalClient,
+      "clients/evolution-client.ts": [
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.perform({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "  async describe() {",
+        "    return this.http.describeSelf();",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, nonTransportMemberCalls } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      expect(requests).toEqual([]);
+      // Antes, as duas chamadas simplesmente não casavam com o regex da
+      // superfície: nem rota, nem contagem fora, nem recusa.
+      expect(
+        nonTransportMemberCalls.map((call) => call.memberName).sort((a, b) => a.localeCompare(b)),
+      ).toEqual(["describeSelf", "perform"]);
+      for (const call of nonTransportMemberCalls) {
+        expect(call.className).toBe("InternalHttpClient");
+        expect(call.fieldName).toBe("http");
+        expect(call.reason.length).toBeGreaterThan(0);
+      }
+      expect(
+        nonTransportMemberCalls.find((call) => call.memberName === "perform")?.reason,
+      ).toContain("private/protected");
+      expect(
+        nonTransportMemberCalls.find((call) => call.memberName === "describeSelf")?.reason,
+      ).toContain("não chama fetch nem delega");
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("chamada a membro que a declaração da classe não tem derruba a leitura com arquivo:linha", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": internalClient,
+      "clients/evolution-client.ts": [
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.sendAnything({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      let thrown: unknown;
+      try {
+        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts"));
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(Error);
+      expect((thrown as Error).message).toMatch(
+        /evolution-client\.ts:\d+: chamada this\.http\.sendAnything\(\.\.\.\).*não é membro de topo da declaração de InternalHttpClient/u,
+      );
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("a enumeração que §2 e §3 exigem sai do descobridor e é conferida sobre a árvore real (Goal044 / WU-03)", () => {
+  it("a superfície do cliente HTTP interno sai enumerada: quem alcança fetch, quem não alcança, e o motivo escrito de cada um que fica fora", () => {
+    const { internalClientSurfaces } = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+
+    expect(internalClientSurfaces).toHaveLength(1);
+    const [surface] = internalClientSurfaces;
+
+    // Não-vacuidade: a derivação achou ao menos um membro que alcança fetch.
+    expect(surface.reachingMembers.length).toBeGreaterThan(0);
+    // E os que ficam de fora não desaparecem: cada um traz motivo escrito.
+    expect(surface.excludedMembers.length).toBeGreaterThan(0);
+    for (const excluded of surface.excludedMembers) {
+      expect(excluded.reason).toContain(`"${excluded.name}"`);
+      expect(excluded.reason.length).toBeGreaterThan(20);
+    }
+    // Os dois conjuntos são disjuntos, e nenhum nome se repete.
+    const excludedNames = surface.excludedMembers.map((member) => member.name);
+    expect(surface.reachingMembers.filter((name) => excludedNames.includes(name))).toEqual([]);
+    expect(new Set([...surface.reachingMembers, ...excludedNames]).size).toBe(
+      surface.reachingMembers.length + excludedNames.length,
+    );
+    // Ao menos um membro alcança fetch e fica fora por ser private/protected:
+    // é a diferença entre "alcança fetch" e "é chamável de fora".
+    expect(surface.excludedMembers.some((member) => member.reason.includes("private/protected"))).toBe(
+      true,
+    );
+    // A superfície derivada é exatamente o conjunto que a varredura usa para
+    // reconhecer chamadas: toda chamada lida fora dela está enumerada.
+    const { nonTransportMemberCalls, requests } = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+    for (const call of nonTransportMemberCalls) {
+      expect(surface.reachingMembers).not.toContain(call.memberName);
+      expect(excludedNames).toContain(call.memberName);
+    }
+    expect(requests.length).toBeGreaterThan(0);
+  });
+
+  it("a resolução de chamadores relata as duas árvores varridas, e o motivo escrito de notGoBound só afirma os números que o relatório traz", () => {
+    const { callerResolutions, notGoBound } = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+
+    expect(callerResolutions.length).toBeGreaterThan(0);
+    // Não-vacuidade: a resolução de chamadores produziu requisição de fato.
+    expect(callerResolutions.reduce((total, report) => total + report.requestCount, 0)).toBeGreaterThan(
+      0,
+    );
+
+    for (const report of callerResolutions) {
+      // As duas árvores foram varridas atrás da ligação, e a lista de
+      // arquivos varridos é reportada — não é uma afirmação sem lastro.
+      expect(
+        report.scannedFilePaths.some((filePath) => filePath.startsWith(aiOrchestratorSrcPath)),
+      ).toBe(true);
+      expect(report.scannedFilePaths.some((filePath) => filePath.startsWith(bffSrcPath))).toBe(true);
+      expect(report.scannedFilePaths).toContain(report.siteFilePath);
+      // Todo arquivo com chamador lido é um arquivo do conjunto varrido.
+      for (const callerFilePath of report.callerFilePaths) {
+        expect(report.scannedFilePaths).toContain(callerFilePath);
+      }
+      // Todo arquivo que importa a ligação foi varrido, e nenhum deles é o
+      // próprio arquivo do sítio.
+      for (const importingFilePath of report.importingFilePaths) {
+        expect(report.scannedFilePaths).toContain(importingFilePath);
+        expect(importingFilePath).not.toBe(report.siteFilePath);
+      }
+      expect(report.callerCount).toBeGreaterThanOrEqual(report.callerFilePaths.length);
+      expect(["named", "default", "not_exported"]).toContain(report.exportForm);
+    }
+
+    // O motivo escrito de cada sítio contado fora repete exatamente os
+    // números do relatório do mesmo sítio — nada afirmado além do lido.
+    for (const counted of notGoBound.filter((site) =>
+      site.category.startsWith("caller_resolved_base_url_via_"),
+    )) {
+      const report = callerResolutions.find(
+        (candidate) =>
+          candidate.siteFilePath === counted.filePath && candidate.siteLine === counted.line,
+      );
+      expect(report).toBeDefined();
+      expect(counted.reason).toContain(
+        `${report!.callerCount} chamador(es) lido(s) em ${report!.callerFilePaths.length} arquivo(s)`,
+      );
+      expect(counted.reason).toContain(
+        `varrer ${report!.scannedFilePaths.length} arquivo(s) das duas árvores`,
+      );
+    }
+  });
+});

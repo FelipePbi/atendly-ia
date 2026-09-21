@@ -975,7 +975,11 @@ observável por uma cliente.
 
 ## D-059 — A rota de transporte que o produto alcança é enumerada por forma da expressão de caminho, o alcance de literal de prosa por rota é computado por AST, e a condição do `Revisar se` de D-058 passa de prosa a invariante vigiada, propostas no Goal043
 
-**Status:** proposta, no diff043 (WU-01 a WU-06) sobre a baseline aceita
+**Status:** ACCEPTED no [review043](reviews/043-review.md) (rodada 3 de 3,
+2026-09-21, zero blockers; as rodadas 1 e 2 tiveram 4 e 2 blockers), pelo
+Tech Lead Agent ([AGENT_ROLES](AGENT_ROLES.md), D-018) — registro corrigido
+no fechamento do Goal044, que o fechamento do Goal043 tinha deixado como
+`proposta`. Cobre o diff043 (WU-01 a WU-06) sobre a baseline aceita
 `f48bf9b5ed38937a763cc1796220778fc60dae3c` (fechamento do Goal042); sem
 commit e sem deploy. Não fecha nem reabre nenhum achado — **A-24
 continua `PENDENCIA-POS-MVP`, não corrigido**; A-04 a A-08, A-11 a A-17
@@ -1154,3 +1158,193 @@ existir; o serviço Go ganhar uma rota registrada por forma que
 descobridor, herdado do Goal042; ou `apps/evolution-go/` deixar de ser o
 único ponto de fronteira de serviço do transporte — decisão que nenhum
 Goal desta série toma.
+
+## D-060 — O chamador seguido por ligação importada atravessa arquivo, e a superfície do cliente HTTP interno é derivada por alcançabilidade em vez de três nomes fixos, propostas no Goal044
+
+**Status:** ACCEPTED no [review044](reviews/044-review.md) (rodada 4 de 4,
+2026-09-21, zero blockers; as rodadas 1, 2 e 3 tiveram 5, 3 e 1 blocker,
+todos da mesma família — mecanismo que se desligava em silêncio por não
+reconhecer a forma, ou documento afirmando que um controle exercitava o
+que ele não exercitava), pelo Tech Lead Agent ([AGENT_ROLES](AGENT_ROLES.md),
+D-018). Cobre o diff044 (WU-01 a WU-05 da rodada 1, mais FIX-001 das
+rodadas 2, 3 e 4 — a última mudança de árvore é a indexação da varredura
+de egresso genérico por declaração, e não por nome de primitivo) sobre a
+baseline aceita `3ea06738a8833a3b28801258f4626632c5888983` (fechamento do
+Goal043); sem commit e sem deploy. Uma observação não bloqueante ficou
+registrada no review: `discoverGoBoundInternalClientRequests` ainda
+deduplica classe de cliente por **nome** (`classSurfaces.has(classSpan.name)`),
+herdado do Goal043 — duas classes homônimas em arquivos diferentes fariam
+a segunda ser avaliada contra a superfície da primeira. É a mesma família
+do blocker fechado na rodada 4, um nível acima, e não morde na árvore real,
+que tem uma classe só. Não fecha nem reabre nenhum achado — **A-24 continua
+`PENDENCIA-POS-MVP`, não corrigido**; A-04 a A-08, A-11 a A-17 e A-19 não
+são tocados, e nenhum achado fechado (A-01 a A-03, A-09, A-10, A-18, A-20 a
+A-23) é reaberto. Registrado em [FINAL_AUDIT §21](FINAL_AUDIT.md), que
+**não reescreve** §4 a §20. Não altera nenhuma decisão anterior — reusa e
+não altera D-018, D-057, D-058 e D-059.
+
+**Contexto:** o [review043](reviews/043-review.md) registrou, como
+observação não bloqueante, duas bordas em que a completude do conjunto de
+10 rotas do Goal043 não era fail-closed. Primeira: `discoverGoServiceHttpRequests`
+só seguia chamador de `caller_resolved_base_url_via_*` no mesmo arquivo do
+sítio — um helper exportado com chamador em outro arquivo cairia em
+`notGoBound` com motivo factualmente errado, em vez de derrubar a leitura.
+Segunda: a superfície pública do cliente HTTP interno era reconhecida por
+três nomes de método fixos (`request`, `requestWithStatus`,
+`requestBinary`) — um método público novo que delegasse a um membro
+`private` que chamasse `fetch` não acrescentaria sítio algum, e por isso
+não seria pego pelo resíduo de egresso cru herdado do Goal041. Nas duas, a
+rota nova sairia do conjunto sem registro.
+
+**Decisão:**
+
+1. **O chamador é seguido por ligação importada, nunca por nome igual solto
+   entre arquivos.** `findCrossFileCallerBindings`
+   (`apps/ai-orchestrator/tests/support/http-egress-sites.ts`) lê toda
+   declaração `import ... from` das duas árvores, resolve especificador
+   relativo a caminho de arquivo (`resolveModuleSpecifierToFilePath`) e liga
+   o alias local de cada import ao nome exportado pelo sítio
+   (`resolveModuleExportBindings`). Um mesmo nome pode sair do módulo por
+   mais de uma ligação — a declaração exportada e uma lista
+   `export { nome as outro };`, por exemplo —, e **todas** são seguidas:
+   reconhecer a primeira não silencia as demais, e construção `export`
+   posterior em forma não convertível derruba a leitura do mesmo jeito.
+   `discoverCallerResolvedGoBoundRequests` varre
+   os chamadores reais do arquivo do sítio mais os de todo arquivo ligado
+   dessa forma. Forma que a resolução não converte em arquivo conhecido —
+   reexportação (nomeada ou `export *`), import dinâmico, especificador não
+   relativo, ou referência importada e reexportada adiante — derruba a
+   leitura com `arquivo:linha`, nunca é tratada como ausência de chamador. A
+   alternativa — casar chamador por nome de função igual em qualquer
+   arquivo, sem olhar o import — foi rejeitada: casaria funções homônimas
+   sem relação alguma, que é exatamente o motivo pelo qual a fronteira de
+   arquivo existia.
+2. **A superfície do cliente HTTP interno é computada da declaração da
+   classe, nunca de uma lista de nomes.** `computeInternalClientMemberSurface`
+   varre todo membro de topo da classe e marca como alcançando `fetch` o que
+   chama `fetch` no próprio corpo, ou que delega — via `this.<membro>(...)` —
+   a outro membro que alcança, seguindo a cadeia de delegação até o fim (um
+   ciclo derruba a leitura, nomeando o membro). Membro `private`/`protected`
+   que alcança `fetch` é excluído da superfície com o motivo escrito: não é
+   chamável como `this.<campo>.<membro>(...)` de fora da classe. O método
+   HTTP default de um membro da superfície é o do único `fetch` do próprio
+   corpo, quando estático — nunca mais um `requestBinary` como caso
+   especial hardcoded. A alternativa — acrescentar nomes de método
+   reconhecidos um a um, conforme aparecerem — foi rejeitada: é a mesma
+   allowlist escrita à mão que a segunda borda do review043 apontava.
+3. **As duas bordas foram exercitadas antes de fechar, não só depois.** Os
+   quatro controles negativos deste critério provam, cada um sobre árvore
+   sintética em diretório temporário: a chamada por outro arquivo, ligada
+   por import com alias, não era reconhecida antes de `findCrossFileCallerBindings`
+   e passa a ser depois (controle 1); um método público **sem `fetch`
+   próprio** só vira rota quando passa a delegar ao membro `private` que
+   tem o `fetch` — antes da delegação, a chamada a ele é contada fora com
+   o motivo derivado da declaração; depois, a mesma chamada entra no
+   conjunto, e o caso-limite em que o membro público ainda não existe na
+   classe derruba a leitura com `arquivo:linha` (controle 2);
+   reexportação e import dinâmico derrubam a leitura em vez de afirmar que
+   os chamadores lidos não passam chave de base (controle 3); e mover e
+   renomear helper, classe, arquivos e pastas das duas mecânicas não muda a
+   classificação computada (controle 4). Os quatro removem a própria árvore
+   sintética ao fim, sem nunca tocar a árvore real.
+4. **Forma que a leitura não reconhece derruba, e o que ela reconhece sai
+   enumerado.** A forma de exportação é computada das construções `export`
+   do arquivo — `export function`, `export default function`,
+   `export const/let/var`, lista `export { nome }`, lista com alias (e o
+   import resolvido pelo **nome exportado**) e `export default nome;`; o
+   veredito `not_exported` só é dado depois de conferir que o nome está
+   declarado e que nenhuma construção `export` o menciona, e menção em
+   forma não convertível em ligação importável derruba com `arquivo:linha`.
+   O nome de um membro de classe é derivado da declaração, inclusive na
+   forma de propriedade-arrow, e validado — forma sem nome derivável
+   derruba. Toda chamada `this.<campo>.<membro>(` sobre um cliente apontado
+   ao serviço Go é classificada: rota, contagem fora com motivo
+   (`nonTransportMemberCalls`), ou recusa quando o membro não está na
+   declaração da classe. E a enumeração exigida sai do descobridor —
+   `internalClientSurfaces`, `nonTransportMemberCalls` e
+   `callerResolutions` —, conferida por afirmação permanente sobre a
+   árvore real. Desligar um mecanismo em silêncio por não reconhecer a
+   forma é a falha que este item fecha.
+5. **Nenhum motivo devolvido para fora do conjunto afirma algo sobre um
+   chamador que não foi lido.** Todo sítio `caller_resolved_base_url_via_*`
+   contado em `notGoBound` relata quantos chamadores foram lidos e em
+   quantos arquivos (`"N chamador(es) lido(s) em M arquivo(s)"`) — antes do
+   WU-01, o motivo nomeava só a ausência de chave de base, sem dizer que só
+   um arquivo tinha sido varrido. Sete afirmações permanentes (WU-03) sobre
+   a árvore real consomem os dois mecanismos ao lado das que o Goal043 já
+   deixava, sem relaxar, pular ou remover nenhuma delas.
+
+**Alternativas:** casar chamador por nome de função igual, sem olhar
+import — rejeitada no item 1; lista de nomes de método reconhecidos escrita
+à mão — rejeitada no item 2; fechar as duas bordas sem controle negativo
+que prove o estado anterior aberto — é a lacuna que o item 3 fecha; motivo
+de `notGoBound` que não nomeia quantos chamadores foram lidos — é a lacuna
+que o item 5 fecha; desligar a varredura entre arquivos, ou pular uma
+chamada a membro, por não reconhecer a forma — é a lacuna que o item 4
+fecha.
+
+**Motivo:** o risco próprio deste Goal — declarar as duas bordas fechadas
+sem prova de que estavam abertas antes, ou fechar uma trocando uma
+allowlist por outra — só se evita computando a ligação entre arquivos pela
+forma real do import, derivando a superfície do cliente da alcançabilidade
+real da classe, e provando com controle negativo, sobre árvore sintética,
+que cada borda mordia antes do mecanismo existir.
+
+**Consequências:**
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts` ganha
+`NamedImportBinding`, `ParsedImportDeclaration`, `parseBindingListItem`,
+`findImportDeclarations`, `findDynamicImportSpecifiers`,
+`findReexportDeclarations`, `findForwardedExportLine`,
+`resolveModuleSpecifierToFilePath`, `resolveModuleExportBindings`,
+`describeExportBindings`, `CallerFileBinding`, `dedupeCallerFileBindings`,
+`findCrossFileCallerBindings`,
+`findLocalExportListBindings`, `exportConstructText`,
+`findExportConstructs`, `ModuleExportBinding`, `wordSpanEndingAt`,
+`NOT_A_CLASS_MEMBER_NAME`, `CallerResolutionReport`,
+`InternalClientSurfaceReport`, `NonTransportMemberCall`,
+`NonReachingClassMember`, `InternalClientMemberSurface`,
+`staticFetchMethodOfMember`, `computeInternalClientMemberSurface` e
+`isNonPublicClassMember`; nada do que os Goals 041 a 043 deixaram ali foi
+removido, e `discoverCallerResolvedGoBoundRequests` e
+`discoverGoBoundInternalClientRequests` passam a devolver, respectivamente,
+a contagem de chamadores/arquivos lidos e a superfície computada, em vez do
+que liam antes. `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
+ganha 28 casos ao lado dos 85 já existentes (113 no total): 7 são
+afirmações permanentes que consomem os dois mecanismos sobre a árvore real
+e conferem a enumeração devolvida pelo descobridor (WU-03), 9 são
+controles sintéticos de fail-closed das formas (exportação — inclusive o
+mesmo nome saindo por duas ligações —, nome de membro e chamada a membro
+fora da superfície), 4 provam o egresso genérico varrido também pelo nome
+local do import com alias, e 8 são os quatro controles
+negativos deste critério, dois deles com par antes/depois (WU-04). Nenhum arquivo de `apps/frontend/src/`, `apps/bff/src/`
+(fora do teste de apoio) ou `apps/ai-orchestrator/src/` mudou, nenhum
+arquivo Go mudou, `go.mod` e `go.sum` estão intocados, e o conjunto de 10
+rotas e de 27 literais que os Goals 042 e 043 asseriam continua idêntico ao
+da baseline. `npx vitest run tests/assistant/assistant.service.test.ts`:
+113 testes, 0 falhas (baseline 85). `npx vitest run` completo de
+`apps/ai-orchestrator`: 837 passando, 88 pulados (baseline 809 passando,
+88 pulados). `go test ./...` em `apps/evolution-go`: PASS em todos os
+pacotes com teste, 0 falhas — nenhum pacote Go foi tocado por este diff.
+`npm run lint` e `npm run typecheck` em `apps/ai-orchestrator`: sem erro.
+`npm run validate:core`: `PASSED`, 15 passos verdes e 2 pulados declarados
+(`test:bff`, `test:health-worker`), com `audit:static` mantendo os 34
+checks. `npm run test:gate`: 226 testes, 0 falhas — mesma contagem da
+baseline. FINAL_AUDIT §20 recontado em §21: 0 `BLOQUEADOR-MVP`, 8
+`PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO` — inalterado, sem achado novo e
+sem achado corrigido. Este diff não fecha **M4**, não afirma fidelidade
+visual à referência aprovada, não prova comportamento de runtime do
+serviço Go e **não corrige A-24**. `validate:integration` recusou por
+pré-condição de banco ausente (`exit 2`,
+`BFF_TEST_DATABASE_URL is not set`), declarado como ausente — nenhum valor
+real de variável de ambiente é lido por nada neste diff.
+
+**Revisar se:** um chamador alcançar o sítio por uma forma que
+`findCrossFileCallerBindings` ainda não resolve — alias de caminho não
+relativo, reflexão, ou reexportação seguida de reimportação em cadeia —,
+o que hoje derruba a leitura em vez de resolver; um cliente HTTP interno
+ganhar um membro público que só delega por forma não reconhecida por
+`computeInternalClientMemberSurface` (por exemplo, `this["campo"][membro]`
+por acesso computado); ou o serviço Go ganhar um sítio de egresso por uma
+forma de cliente inteiramente nova, que nem a leitura de `fetch` cru nem a
+de classe reconhecem — nenhum dos dois mecanismos deste Goal estende o
+reconhecimento de forma além do que já cobriam.

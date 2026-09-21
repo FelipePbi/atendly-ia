@@ -2532,3 +2532,126 @@ implantado. `validate:integration` continua recusando por pré-condição
 de banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), e a
 lista de 35 passos de persistência continua intacta.
 Pré-condição de banco ausente, declarada como ausente.
+
+## 21. As duas bordas do review043 são fechadas, computando a ligação entre arquivos e a superfície do cliente — Goal044, 2026-09-21
+
+Seção nova, escrita depois da última mudança de árvore do diff044 (o
+chamador seguido por ligação importada atravessando arquivo, a superfície
+do cliente HTTP interno derivada por alcançabilidade, as sete afirmações
+permanentes que consomem os dois mecanismos, e os quatro controles
+negativos deste critério). Ela **não reescreve** §4 a §20: os registros de
+A-01 a A-24 em §19, o veredito de §19/§20 e as vinte seções de fechamento
+anteriores continuam exatamente como estavam, e a entrada de **A-24**
+**não foi tocada**. Este Goal não corrige A-24 e não abre achado novo —
+fecha as duas bordas não bloqueantes que o [review043](reviews/043-review.md)
+tinha registrado sobre a completude do conjunto de 10 rotas.
+
+### O que mudou
+
+**A primeira borda — chamador só no mesmo arquivo — é fechada por
+`findCrossFileCallerBindings`.** O Goal043 seguia, de um sítio
+`caller_resolved_base_url_via_*`, só os chamadores reais do próprio
+arquivo; um helper exportado com chamador em outro arquivo caía em
+`notGoBound` com um motivo que não mencionava a existência desse segundo
+arquivo. O diff044 resolve especificador de import relativo a caminho de
+arquivo e o alias local ao nome exportado, e varre os chamadores reais do
+arquivo do sítio mais os de todo arquivo ligado dessa forma nas duas
+árvores. Forma que a resolução não converte em arquivo conhecido —
+reexportação, import dinâmico, especificador não relativo, referência
+reexportada adiante — derruba a leitura nomeando arquivo e linha, em vez
+de ser tratada como ausência de chamador.
+
+**A segunda borda — superfície do cliente por três nomes fixos — é
+fechada por `computeInternalClientMemberSurface`.** O Goal043 reconhecia
+`this.<campo>.request(...)`, `.requestWithStatus(...)` e
+`.requestBinary(...)` como toda a superfície chamável do cliente HTTP
+interno; um método público novo que delegasse a um membro `private` com
+`fetch` não teria sítio algum reconhecido. O diff044 computa, da própria
+declaração da classe, todo membro de topo que alcança `fetch` — direto ou
+por delegação transitiva via `this.<membro>(...)` a outro membro — e
+exclui da superfície o que é `private`/`protected`, com o motivo escrito.
+Um ciclo de delegação derruba a leitura em vez de entrar em laço.
+
+**As duas bordas foram provadas abertas antes de fechar.** Os quatro
+controles negativos deste critério rodam, cada um sobre árvore sintética
+em diretório temporário: controle 1 prova, com par antes/depois, que a
+chamada por outro arquivo — ligada por `import { reachUpstream as
+probeHealth }`, sem que o nome da declaração apareça no chamador — não era
+reconhecida antes de `findCrossFileCallerBindings` e passa a ser depois,
+com o motivo da rota nomeando o alias local e a declaração de origem;
+controle 2 prova, com o mesmo par, que um método público **sem `fetch`
+próprio** só vira rota quando passa a delegar ao membro `private` que tem
+o `fetch` — antes da delegação, a chamada a ele é contada fora com o
+motivo derivado da declaração; depois, a mesma chamada entra no conjunto —,
+e prova ainda o caso-limite em que o membro público não existe na classe,
+em que a leitura derruba com `arquivo:linha`; controle 3
+prova que reexportação e import dinâmico derrubam a leitura em vez de
+afirmar, sobre um chamador não lido, que ele não passa chave de base;
+controle 4 prova que mover e renomear helper, classe, arquivos e pastas
+das duas mecânicas não muda a classificação computada. Nenhum dos quatro
+toca a árvore real.
+
+**Nenhum mecanismo se desliga em silêncio por não reconhecer a forma.** As
+ligações de exportação de um helper são computadas das construções
+`export` do arquivo — declaração exportada, `export const/let/var`, lista
+`export { nome }`, lista com alias (com o import resolvido pelo nome
+exportado) e `export default nome;` —, e menção em forma que a resolução
+não converte em ligação importável derruba a leitura com `arquivo:linha`.
+Quando o mesmo nome sai do módulo por **duas** construções, as duas viram
+ligação e as duas são varridas: reconhecer a primeira não silencia as
+seguintes, e a segunda em forma não convertível derruba do mesmo jeito. A
+varredura de chamadores do egresso genérico segue a mesma resolução de
+ligação: cada arquivo é lido pelo nome da declaração e pelo nome local de
+cada import com alias que liga a função, e o motivo escrito do sítio
+genérico conta os chamadores **daquele** primitivo — antes, o nome solto
+deixava invisível o chamador que importava sob outro nome, e o motivo
+afirmava zero chamador onde existia um.
+O nome de um membro de classe é derivado da declaração, inclusive na forma
+de propriedade-arrow (`nome = async (…) => {}`), e validado: forma sem nome
+derivável derruba. Toda chamada `this.<campo>.<membro>(` sobre um cliente
+apontado ao serviço Go é classificada em rota, contagem fora com motivo, ou
+recusa quando o membro não está na declaração da classe. E a enumeração
+exigida sai do descobridor — a superfície por classe com os membros de
+fora e o motivo de cada um, as chamadas a membro fora da superfície, e o
+que a resolução de chamadores leu por sítio —, conferida por afirmação
+permanente sobre a árvore real.
+
+**Sete afirmações permanentes (WU-03) consomem os dois mecanismos sobre
+a árvore real**, ao lado das que o Goal043 já deixava — nenhuma delas foi
+relaxada, pulada ou removida. Entre elas, a prova de que todo motivo
+devolvido em `notGoBound` para um sítio `caller_resolved_base_url_via_*`
+relata quantos chamadores foram lidos e em quantos arquivos, nunca
+afirmando algo sobre um chamador que a leitura não alcançou.
+
+### Veredito recontado
+
+Esta auditoria continua com **0 achados `BLOQUEADOR-MVP`, 8
+`PENDENCIA-POS-MVP`** e **6 `LIMITE-DECLARADO`** — a mesma contagem de
+§20. **Nenhuma mudança em relação a §20**: nenhum achado de A-01 a A-24
+foi tocado, corrigido, reclassificado ou reaberto. **A-24 continua
+`PENDENCIA-POS-MVP`, não corrigido** — nenhum arquivo Go de produção
+deste fork foi editado por este Goal.
+
+Quatro coisas que esta seção não diz. **Não diz que A-24 foi corrigido**:
+o rótulo `"Ver Menu"` continua escrito em
+`pkg/sendMessage/service/send_service.go:1960`, e a condição do
+`Revisar se` de D-058/D-059 não é revisitada aqui. **Não diz que M4 foi
+fechado**: nenhuma chamada saiu para provedor de LLM real nem para o
+WhatsApp real, nenhuma conexão whatsmeow foi aberta, e o diff044 toca dois
+arquivos TypeScript de teste e de apoio a teste — nenhum arquivo Go, nenhum
+arquivo de `apps/frontend/src/`, `apps/bff/src/` (fora do arquivo de apoio
+a teste) ou `apps/ai-orchestrator/src/` —, mais a documentação de migração.
+**Não diz que o comportamento em runtime do serviço Go foi provado**: o
+que se prova é o que a árvore de código diz, lida por AST e por forma de
+declaração; nada aqui executa esse serviço, abre conexão whatsmeow ou
+observa o que chega a um telefone. **Não diz que a fidelidade visual está
+provada**: nenhum arquivo de `apps/frontend/src/` mudou.
+
+O que continua fora do alcance deste Goal, por construção: comportamento
+em runtime do serviço Go; qual binário roda em produção; `whatsmeow-
+lib/`, biblioteca vendorizada lida apenas como fonte das declarações de
+proto; e o valor real de qualquer variável de ambiente — só o default do
+schema TypeScript e o `.env.example` são lidos, nunca um ambiente
+implantado. `validate:integration` continua recusando por pré-condição
+de banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado
+como ausente.

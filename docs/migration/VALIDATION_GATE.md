@@ -1186,4 +1186,41 @@ herdado do Goal041. Nas duas, a rota nova sairia do conjunto sem
 registro — a forma branda da falha de subconjunto próprio que a rodada 1
 deste Goal encontrou em `GET /health`.
 
+**As duas bordas acima foram fechadas pelo Goal044, pelo mecanismo descrito
+na seção seguinte** — computando a ligação entre arquivos e a superfície do
+cliente, cada uma provada aberta antes por um controle negativo sobre
+árvore sintética. Este parágrafo não é apagado: registra a observação
+original do review043, que motivou o fechamento.
+
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff043-2026-09-21-d-059) e [D-059](DECISIONS.md).
+
+## As duas bordas do review043 são fechadas: chamador em outro arquivo e superfície de cliente derivada do Goal044
+
+O parágrafo acima registrou duas bordas em que a completude do conjunto de
+10 rotas do Goal043 não era fail-closed. Este delta fecha as duas, sem
+tocar o conjunto de 10 rotas nem o de 27 literais que os Goals 042 e 043
+já asseriam.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| A primeira borda — chamador de `caller_resolved_base_url_via_*` só no mesmo arquivo do sítio — é fechada por `findCrossFileCallerBindings`: todo import relativo das duas árvores é resolvido a caminho de arquivo, o alias local é ligado ao nome exportado, e os chamadores reais do arquivo do sítio mais os de todo arquivo ligado dessa forma entram na leitura. Forma que a resolução não converte em arquivo conhecido — reexportação, import dinâmico, especificador não relativo, referência reexportada adiante — derruba a leitura nomeando arquivo e linha | A resolução é só pela forma do import — especificador relativo e alias de cláusula —, nunca por nome de função igual solto entre arquivos. Um chamador atrás de um alias de caminho não relativo (`@app/...`) ou de reflexão continua fora, derrubando a leitura em vez de resolver |
+| A segunda borda — superfície do cliente HTTP interno reconhecida por três nomes de método fixos — é fechada por `computeInternalClientMemberSurface`: todo membro de topo da classe que alcança `fetch`, direto ou por delegação transitiva via `this.<membro>(...)` a outro membro, entra na superfície; membro `private`/`protected` que alcança `fetch` é excluído com o motivo escrito, por não ser chamável de fora da classe | Delegação por acesso computado (`this["campo"][membro]`) não é uma forma que este mecanismo reconhece. Um ciclo de delegação derruba a leitura, nomeando o membro, em vez de entrar em laço |
+| Os dois mecanismos foram exercitados por controle negativo antes de fechar, não só depois: os controles 1 e 2 deste critério provam, cada um com par antes/depois sobre árvore sintética em diretório temporário, que a chamada por outro arquivo — ligada por import com alias, sem o nome da declaração aparecer no chamador — não era reconhecida antes do mecanismo existir e passa a ser depois, e que um método público sem `fetch` próprio só vira rota quando passa a delegar ao membro `private` que tem o `fetch` — antes da delegação, a chamada a ele é contada fora com motivo escrito; se o membro público não existir na classe, a leitura derruba com `arquivo:linha` | Os quatro controles negativos deste critério (o par 1/2, mais reexportação/import dinâmico e renomeação) rodam sobre árvore sintética própria, removida ao fim — nenhum deles amplia nem estreita o conjunto de 10 rotas ou de 27 literais que a suíte permanente assere |
+| A varredura de chamadores do egresso genérico usa a mesma resolução de ligação: cada arquivo das duas árvores é lido pelo nome da declaração e pelo nome local de cada import com alias que liga a função, e o motivo escrito do sítio genérico conta os chamadores daquele primitivo (`genericEgressCallersByPrimitive`). Chamador sob alias com destino no serviço Go derruba a leitura, como qualquer outro | Antes, a varredura era por nome solto: um chamador que importasse o primitivo sob outro nome ficava invisível, e o motivo afirmava zero chamador onde existia um. O que continua fora é o que o import não resolve — alias de caminho não relativo, import dinâmico, reexportação —, e isso derruba a leitura |
+| Nenhum motivo devolvido em `notGoBound` para um sítio `caller_resolved_base_url_via_*` afirma algo sobre um chamador que a leitura não alcançou: todo motivo relata quantos chamadores foram lidos e em quantos arquivos (`"N chamador(es) lido(s) em M arquivo(s)"`), e quantos arquivos das duas árvores foram varridos atrás da ligação | Sete afirmações permanentes (WU-03) sobre a árvore real consomem os dois mecanismos, ao lado das que o Goal043 já deixava — nenhuma delas foi relaxada, pulada ou removida |
+| Nenhum dos dois mecanismos se desliga em silêncio por não reconhecer a forma: forma de exportação não convertível em ligação importável derruba com `arquivo:linha`, e o mesmo nome saindo do módulo por duas construções `export` vira duas ligações, as duas varridas — reconhecer a primeira não silencia as seguintes; membro de classe sem nome derivável da declaração derruba; chamada `this.<campo>.<membro>(` a membro que a classe declara mas que está fora da superfície é contada fora com motivo escrito, e a membro que a classe não declara derruba. A enumeração — superfície por classe, chamadas fora da superfície, e o que a resolução de chamadores leu por sítio — sai do descobridor e é conferida por afirmação permanente | O reconhecimento continua limitado à forma: `export =`, `module.exports`, alias de caminho não relativo e acesso computado (`this["campo"][membro]`) continuam derrubando a leitura em vez de resolver. Recusar não é resolver — é recusar em voz alta |
+
+**O que este delta não prova, e é preciso dizer alto.** **Não prova
+runtime**: nada aqui executa o serviço Go, abre conexão whatsmeow ou
+observa o que chega a um telefone. **Não prova qual binário roda em
+produção**. **Não alcança `whatsmeow-lib/`**. **Texto emitido pelo modelo
+continua fora do guardrail por D-050**. **Não corrige A-24**: o achado
+continua `PENDENCIA-POS-MVP`, e nenhum arquivo Go de produção deste fork
+foi editado por este Goal. **Não fecha M4**: nenhuma chamada saiu para
+WhatsApp real nem para provedor de LLM real, e nenhuma conexão whatsmeow
+foi aberta. **Não amplia nem reduz o conjunto de 10 rotas ou de 27
+literais** que os Goals 042 e 043 já asseriam — este delta fecha duas
+bordas de leitura do lado TypeScript, nunca o critério que decide o
+conjunto.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff044-2026-09-21-d-060) e [D-060](DECISIONS.md).

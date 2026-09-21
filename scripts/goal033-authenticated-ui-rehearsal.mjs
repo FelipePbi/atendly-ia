@@ -94,7 +94,13 @@
 // inválido, porta ocupada ou dependência ausente). Sem caminho de skip.
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { createServer as createTcpServer } from "node:net";
@@ -103,6 +109,11 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { isMain } from "./lib/gate.mjs";
+import {
+  extractRetriedTests,
+  formatRetriesMessage,
+  readPlaywrightReport,
+} from "./lib/playwright-report.mjs";
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -526,74 +537,29 @@ function authenticatedGateReportPath() {
 }
 
 /**
- * Lê e decodifica o relatório JSON do Playwright. Ausente ou ilegível é
- * `AuthenticatedUiRehearsalError`, nunca silêncio: um leitor que se cala
- * diante de relatório quebrado reintroduz o gate que mente.
+ * Lê e decodifica o relatório JSON do gate autenticado, pelo leitor
+ * compartilhado em `./lib/playwright-report.mjs`. Ausente, ilegível ou de
+ * outra execução é `AuthenticatedUiRehearsalError`, nunca silêncio.
+ *
+ * `notBeforeMs`, quando informado, é o instante (epoch ms) em que ESTA
+ * execução começou a rodar o gate — segunda linha de defesa contra o
+ * relatório velho que `runAuthenticatedGate` já tenta apagar antes de subir o
+ * Playwright, para o caso raro de o apagamento falhar em silêncio ou o
+ * processo ser interrompido antes de escrever o seu.
  */
-export function readGateReport(reportPath) {
-  let raw;
-  try {
-    raw = readFileSync(reportPath, "utf8");
-  } catch (error) {
-    throw new AuthenticatedUiRehearsalError(
-      `the authenticated gate's JSON report is missing at ${path.relative(repositoryRoot, reportPath)}: ${error.message}. A gate whose retries cannot be read cannot declare them.`,
-    );
-  }
-  try {
-    return JSON.parse(raw);
-  } catch (error) {
-    throw new AuthenticatedUiRehearsalError(
-      `the authenticated gate's JSON report at ${path.relative(repositoryRoot, reportPath)} is not valid JSON: ${error.message}.`,
-    );
-  }
+export function readGateReport(reportPath, notBeforeMs) {
+  return readPlaywrightReport(reportPath, {
+    notBeforeMs,
+    ErrorClass: AuthenticatedUiRehearsalError,
+    gateLabel: "the authenticated gate",
+    runLabel: "this rehearsal's gate",
+  });
 }
 
-/**
- * Todo teste cujo `outcome()` o reporter JSON gravou como `"flaky"` — falhou
- * numa tentativa e passou numa seguinte. É essa marca, não o exit code, que
- * torna a retentativa observável: o processo termina 0 do mesmo jeito.
- *
- * `spec.title` sozinho não identifica o teste: `authenticated-matrix.spec.ts`
- * usa o mesmo título ("measured, logged in") nas 7 rotas, uma por
- * `test.describe(route.name, ...)`. `title` aqui é a cadeia de `suites`
- * ancestrais (o nome da rota) mais `spec.title`, então dois testes do mesmo
- * nome em rotas diferentes continuam distinguíveis. O suite de arquivo (o
- * primeiro nível, um por arquivo `.spec.ts`) fica fora da cadeia: seu título é
- * sempre o mesmo em todo relatório e não ajuda a distinguir nada.
- */
-export function extractRetriedTests(report) {
-  const retried = [];
-  const walk = (suite, ancestors) => {
-    for (const spec of suite.specs ?? []) {
-      const title = [...ancestors, spec.title].filter(Boolean).join(" > ");
-      for (const test of spec.tests ?? []) {
-        if (test.status === "flaky") {
-          retried.push({
-            project: test.projectName ?? test.projectId ?? "unknown",
-            title,
-          });
-        }
-      }
-    }
-    for (const child of suite.suites ?? []) {
-      walk(child, [...ancestors, child.title].filter(Boolean));
-    }
-  };
-  for (const suite of report?.suites ?? []) walk(suite, []);
-  retried.sort((a, b) =>
-    a.project === b.project
-      ? a.title.localeCompare(b.title)
-      : a.project.localeCompare(b.project),
-  );
-  return retried;
-}
+export { extractRetriedTests };
 
 function describeRetries(retried) {
-  if (retried.length === 0) {
-    return "goal033:authenticated-ui-rehearsal authenticated gate retries: 0 — every test passed on its first attempt";
-  }
-  const list = retried.map((entry) => `${entry.project} › ${entry.title}`).join("; ");
-  return `goal033:authenticated-ui-rehearsal authenticated gate retries: ${retried.length} test(s) needed a retry — ${list}`;
+  return `goal033:authenticated-ui-rehearsal ${formatRetriesMessage("authenticated gate", retried)}`;
 }
 
 /**
@@ -1718,6 +1684,12 @@ function runAuthenticatedGate(ports, seed) {
   console.log(
     `goal033:authenticated-ui-rehearsal running the authenticated gate (${path.relative(repositoryRoot, configPath)}) against ${ports.frontendUrl}`,
   );
+  // Apaga o relatório de uma execução anterior ANTES de subir o Playwright: um
+  // relatório que sobrevive a esta linha só pode ter sido escrito por ESTA
+  // execução. `notBeforeMs` é a segunda linha de defesa, para o caso raro de o
+  // apagamento falhar ou o processo cair antes de o Playwright escrever o seu.
+  rmSync(authenticatedGateReportPath(), { force: true });
+  const notBeforeMs = Date.now();
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
@@ -1752,7 +1724,9 @@ function runAuthenticatedGate(ports, seed) {
     child.on("close", (status, signal) => {
       let retried;
       try {
-        retried = extractRetriedTests(readGateReport(authenticatedGateReportPath()));
+        retried = extractRetriedTests(
+          readGateReport(authenticatedGateReportPath(), notBeforeMs),
+        );
       } catch (error) {
         reject(error);
         return;

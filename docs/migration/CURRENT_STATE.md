@@ -3257,3 +3257,131 @@ público mudou; nenhuma tela, componente ou CSS do frontend mudou.
 - **LIMITE:** este delta descreve o diff037 (WU-01 a WU-07) sobre a baseline
   aceita `5829cc4db0bcac995678bc6b1092f1e9dbf14c5a` (fechamento do Goal036),
   decidido em [D-053](DECISIONS.md), sem commit e sem deploy.
+
+## Delta implementado — diff038, 2026-09-21 ([D-054](DECISIONS.md))
+
+Este delta fecha a classe que o diff037 tinha fechado por instância:
+**reconhecimento por forma textual sem resíduo declarado.** Os quatro
+extratores deste repositório que reconhecem candidato por forma — os dois
+fechamentos de texto de cliente e as duas regras de rota `/v1` — passam a
+enumerar as categorias que aceitam, em código, e a derrubar o artefato que
+vigiam quando um candidato não cai em nenhuma. Cobre também o frescor do
+relatório que os dois gates renderizados (autenticado e público) leem.
+Nenhuma copy muda, nenhum arquivo de `apps/*/src/` é tocado, nenhuma
+migration e nenhum contrato público mudam.
+
+- **FATO atual (o fechamento de `assistant.service.ts` deixa de passar por
+  não ver nada):** `extractMessagesArrayLiterals`
+  (`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`) passa a
+  resolver, além do literal entre aspas que já reconhecia, referência
+  `PRODUCT_OWN_FIXED_TEXTS.<chave>` — inclusive atrás de um fallback
+  `dinamico || PRODUCT_OWN_FIXED_TEXTS.<chave>` — e chamada
+  `buildStyleGreeting(...)`, resolvida para o texto de cada estilo aceito em
+  `AI_CONVERSATION_STYLES`. Cada expressão cai em exatamente uma categoria
+  nomeada de `classifyMessageExpressionSites` — `quoted_literal`,
+  `fixed_text_reference`, `dynamic_turn_value_with_fixed_text_fallback` ou
+  `style_greeting_builder` —, e forma fora dessas categorias é **resíduo**:
+  lança erro nomeando arquivo e linha, em vez de devolver `[]` em silêncio
+  como a baseline devolvia. Confirmado por teste sobre o arquivo real: 6
+  sítios, `{quoted_literal: 0, fixed_text_reference: 4,
+  dynamic_turn_value_with_fixed_text_fallback: 1, style_greeting_builder:
+  1}`, 8 textos resolvidos, resíduo zero. O fechamento ganha piso
+  (`countMessagesArraySites`): reprova se o extrator devolver menos textos
+  do que sítios `messages: [...]` tem o arquivo. Sobre `assistant.service.ts`
+  real, o piso passa; sobre uma cópia sintética sem nenhum sítio
+  `messages: [...]`, o teste de fechamento antigo (sem piso) continuava
+  verde e o piso o derruba — as duas saídas estão no relatório do Developer
+  (controle 1). Ver
+  [VALIDATION_GATE](VALIDATION_GATE.md#invariante-de-texto-classificada-do-goal038).
+- **FATO atual (os 16 sítios `text:` de `message-graph.ts` são classificados
+  em categorias nomeadas, resíduo zero):** `classifyDispatchedTextSites`
+  classifica cada sítio em `module_constant` (constante de módulo resolvida
+  — `imageReceivedReply`, `unsupportedReplyFor(state)`,
+  `processingErrorReply`, 3 sítios —, texto do produto, entra no
+  fechamento), `dynamic_turn_expression` (acesso `state.*`/`message.*`, com
+  ou sem `.trim()`, 10 sítios — texto dinâmico do turno, categoria
+  declarada, descartada) ou `type_annotation` (`text: string`, 3 sítios —
+  não é valor, categoria declarada, descartada). Confirmado por teste sobre
+  o arquivo real: 16 sítios, contagem exata `{module_constant: 3,
+  dynamic_turn_expression: 10, type_annotation: 3}`, resíduo zero. Um sítio
+  fora das três formas — literal inline, template literal, lookup em objeto
+  — lança erro nomeando arquivo e linha e derruba o fechamento, provado pelo
+  controle 2. `imageHandoffSummary` nunca é candidato: é despachado via
+  `handoffSummary:`, não via `text:`. Ver
+  [VALIDATION_GATE](VALIDATION_GATE.md#invariante-de-texto-classificada-do-goal038).
+- **FATO atual (as duas regras de rota `/v1` enumeram cada ocorrência
+  candidata e classificam por categoria nomeada):**
+  `classifyBffRouteRegistrationSites` e
+  `classifyFrontendRouteSchemaCallSites` (`scripts/final-production-audit.mjs`)
+  substituem o reconhecimento por forma com resíduo único (a crase). Do lado
+  do BFF, toda chamada `<receptor>.<verbo>(` é classificada em
+  `literal_v1_path`, `literal_other_path`, `template_other_path`,
+  `not_a_route_registration` (categorias declaradas) ou em `template_v1_path`
+  / `non_literal_path_expression` (**resíduo**). Do lado do frontend, toda
+  chamada de `routeSchema`, com ou sem o genérico `<T>`, é classificada em
+  `literal_pattern` / `template_other_pattern` (declaradas) ou em
+  `template_v1_pattern` / `non_literal_pattern` (**resíduo**). O critério que
+  separa candidato de não candidato é computado, e não olha a forma do
+  handler — `app.get(PATH, handleThing)` passa o handler por referência e
+  registra rota igual. Comentário é zerado antes da enumeração
+  (`blankComments`); uma chamada com um único argumento, ou cujo valor alguém
+  consome (atribuição, `await`, `return`, argumento de outra chamada), não
+  registra rota, então `mapa.get(chave)`, leitura de header e cliente HTTP com
+  corpo continuam fora. Sobre a árvore real, `audit:static` (execução real
+  desta unidade):
+  `bff_v1_routes_use_literal_paths` `ok: true` (65 arquivos, 142 sítios —
+  `literal_other_path=4, literal_v1_path=116, not_a_route_registration=22`),
+  `frontend_v1_route_schema_calls_use_literal_patterns` `ok: true` (17
+  arquivos, 116 sítios — `literal_pattern=116`), resíduo zero nos dois, e
+  `public_api_route_coverage` `ok: true` (116 rotas registradas, só
+  `GET /v1/conversations/:id/messages/:messageId/media` sem chamador). Uma
+  chamada `routeSchema("GET", ...)` sem genérico e um registro
+  `router.post(...)` fora de `app.<verbo>(` são reconhecidos como
+  chamador/registro literal; um path vindo de constante — a terceira forma,
+  que escapava das duas regras antigas ao mesmo tempo — vira resíduo que
+  reprova o check nomeado, com arquivo e linha. Provado nos dois sentidos
+  pelos controles 4 e 5. Nenhuma allowlist por
+  arquivo, rota ou linha entrou em nenhuma regra: o conjunto reconhecido
+  continua computado. Ver
+  [VALIDATION_GATE](VALIDATION_GATE.md#checks-estáticos-ampliados-do-goal038).
+- **FATO atual (o relatório lido é o da execução que acabou, nos dois gates
+  renderizados):** `scripts/lib/playwright-report.mjs` (novo) concentra
+  `readPlaywrightReport`, `extractRetriedTests` e `formatRetriesMessage`,
+  usados pelo gate autenticado (`scripts/goal033-authenticated-ui-rehearsal.mjs`)
+  e pelo gate público novo (`scripts/validate-ui.mjs`, agora o executor de
+  `npm run validate:ui`, no lugar de `cd apps/frontend && npm run test:ui`
+  direto). Os dois apagam o `results.json` de execução anterior antes de
+  subir o Playwright e conferem o `mtime` do relatório contra o instante em
+  que a execução começou (`notBeforeMs`) como segunda linha de defesa;
+  relatório mais antigo que esse instante é recusado com erro nomeado
+  (`AuthenticatedUiRehearsalError`/`ValidateUiReportError`) dizendo que é de
+  execução anterior, nos dois gates — provado pelo controle 6. `retries: 1`
+  não mudou em nenhum `playwright.*.config.ts` e `flaky` continua
+  terminando com sucesso nos dois gates: a leitura só passou a declarar
+  retentativa, nunca a reprovar por ela. Ver
+  [VALIDATION_GATE](VALIDATION_GATE.md#frescor-do-relatório-compartilhado-do-goal038).
+- **LIMITE:** este delta não fecha **M4**, não afirma fidelidade visual à
+  referência aprovada e não liga a verificação de resposta em produção —
+  `RESPONSE_CONTRACT_CHECK_ENABLED` continua `env.NODE_ENV !== "production"`,
+  inalterado.
+- **LIMITE:** nenhuma copy muda e `PRODUCT_OWN_TEXTS` continua com o mesmo
+  conjunto de entradas da baseline — provado por diff, sem arquivo de
+  `apps/ai-orchestrator/src/` tocado. Resolver `PRODUCT_OWN_FIXED_TEXTS.<chave>`
+  e `buildStyleGreeting(...)` é o extrator de teste enxergando textos que já
+  existiam; nenhum entra ou sai do conjunto.
+- **LIMITE:** nenhum resíduo apareceu em código de produção nesta rodada —
+  `apps/frontend/src/`, `apps/bff/src/` e `apps/ai-orchestrator/src/`
+  continuam intocados, confirmado por diff. Se algum resíduo real aparecesse
+  em código de produção, viraria achado a partir de **A-24**; não apareceu.
+- **LIMITE:** este delta descreve o diff038 (WU-01 a WU-07 da rodada 1, mais
+  FIX-001 das rodadas 2, 3 e 4 — a última mudança de código de gate é o
+  suporte ao handler de rota passado por referência) sobre a baseline aceita
+  `e90200403467e2860da3db22705d49df6e3822d9` (fechamento do Goal037),
+  decidido em [D-054](DECISIONS.md), sem commit e sem deploy.
+- **LIMITE:** dois dos quinze arquivos do diff são harness, não produto nem
+  gate: `tools/ia-loop/lib/deterministic-executor.mjs` e
+  `tools/ia-loop/tests/deterministic-executor.test.mjs` ganham
+  `resolveActionPattern`, que corta o prefixo do escopo do filtro de teste
+  antes de repassá-lo ao Vitest — sem isso a ação determinística
+  `targeted-tests` reprovava com `No test files found` sem chegar a carregar
+  o arquivo apontado. Nenhum código de `apps/` depende desses dois arquivos.

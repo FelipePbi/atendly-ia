@@ -5,7 +5,7 @@
 // declaradas, que é o controle negativo que `rehearse()` depois checa.
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -249,6 +249,40 @@ test("readGateReport refuses with its own error when the report file is not vali
       (error) =>
         error instanceof AuthenticatedUiRehearsalError &&
         /not valid JSON/u.test(error.message),
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+// WU-04 (Goal038): o relatório lido precisa provar que pertence à execução
+// que acabou de rodar, não a uma anterior — `notBeforeMs` é o instante em que
+// o gate desta execução começou a rodar.
+test("readGateReport accepts a report written after this execution's gate started", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "goal033-report-"));
+  const reportPath = path.join(directory, "results.json");
+  try {
+    const notBeforeMs = Date.now() - 1_000;
+    writeFileSync(reportPath, JSON.stringify({ suites: [] }), "utf8");
+    assert.deepEqual(readGateReport(reportPath, notBeforeMs), { suites: [] });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("readGateReport refuses a report written before this execution's gate started, naming it a previous execution", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "goal033-report-"));
+  const reportPath = path.join(directory, "results.json");
+  try {
+    writeFileSync(reportPath, JSON.stringify({ suites: [] }), "utf8");
+    const past = new Date(Date.now() - 60_000);
+    utimesSync(reportPath, past, past);
+    const notBeforeMs = Date.now();
+    assert.throws(
+      () => readGateReport(reportPath, notBeforeMs),
+      (error) =>
+        error instanceof AuthenticatedUiRehearsalError &&
+        /previous execution/u.test(error.message),
     );
   } finally {
     rmSync(directory, { recursive: true, force: true });

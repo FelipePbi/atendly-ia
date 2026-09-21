@@ -1,6 +1,6 @@
 # Goal 038 — O extrator declara o que não reconheceu: fechamento vazio, resíduo de forma e relatório de outra execução
 
-**Status: READY.** Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-21 pelo Tech Lead Agent após [Goal037 ACCEPTED](../reviews/037-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED.** Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-21 pelo Tech Lead Agent após [Goal037 ACCEPTED](../reviews/037-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: OPUS_MEDIUM
 

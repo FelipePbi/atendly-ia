@@ -1224,3 +1224,41 @@ bordas de leitura do lado TypeScript, nunca o critério que decide o
 conjunto.
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff044-2026-09-21-d-060) e [D-060](DECISIONS.md).
+
+## As três bordas do descobridor de cliente HTTP interno são fechadas: identidade por declaração, instanciação por ligação e destino indireto do Goal045
+
+O parágrafo anterior registrou duas bordas fechadas pelo Goal044 e uma
+observação não bloqueante deixada aberta: `discoverGoBoundInternalClientRequests`
+ainda deduplicava classe de cliente por nome. A conferência deste Goal
+achou mais duas na mesma família, no mesmo descobridor. Este delta fecha
+as três, sem tocar o conjunto de 10 rotas nem o de 27 literais que os
+Goals 042 a 044 já asseriam.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| A identidade da classe de cliente é o sítio de declaração (`arquivo:linha`), nunca o nome: `classSurfaces` é indexado por `classDeclarationKey`, e duas classes homônimas declaradas em arquivos diferentes produzem duas entradas distintas em `internalClientSurfaces`, cada uma com sua própria superfície e varredura de instanciação | `className` continua no relatório só para leitura humana; nenhum casamento posterior usa esse campo isolado como chave. Duas declarações da mesma classe real no mesmo arquivo continuam sendo a mesma entrada — a chave é o sítio de declaração, não uma contagem de ocorrências |
+| A instanciação só conta quando a ligação local resolve até a declaração: `findInstantiationsOfClassDeclaration` resolve, em cada arquivo candidato, a forma pela qual `new <Id>(` chega até a classe — declaração local, import nomeado, import nomeado sob alias, ou import default — reusando a máquina de ligação do Goal044. Nome igual sem ligação resolvida não entra; `new Alias(...)` sob `import { C as Alias }` entra | A resolução é só pela forma do import e da declaração local — nunca por nome de identificador igual solto entre arquivos. Alias de caminho não relativo, `export =`/`module.exports`, ou referência à classe repassada adiante como valor continuam fora, derrubando a leitura em vez de resolver |
+| Forma de ligação que a resolução não alcança derruba a leitura com `arquivo:linha`, em cinco categorias nomeadas (`ClassBindingRefusalCategory`) — nenhum `continue` mudo sobra neste caminho | As cinco categorias cobrem o que a máquina de ligação do Goal044 já resolve mais o caso específico de referência de classe repassada como valor; forma de ligação inteiramente nova, que nem essa máquina reconhece, continua fora do alcance deste mecanismo |
+| Destino de instanciação que a leitura não resolve a chave alguma derruba com `arquivo:linha`, nomeando a expressão não convertida; destino que resolve a uma chave fora do serviço Go é enumerado em `nonGoBoundInstantiations`, com arquivo, linha, nome local, forma de ligação e chave resolvida — as duas saídas são distintas, e o `continue` mudo que descartava a instanciação sem registro não existe mais | A enumeração não classifica se a chave fora do serviço Go aponta a um serviço real ou fictício — só que não é uma das chaves de `GO_SERVICE_BASE_URL_ENV_VARS`. Destino resolvido por forma que `resolveDestination` ainda não converte — por exemplo, base lida de um campo já atribuído em outro método — continua derrubando a leitura, não classificando às cegas |
+| Os três mecanismos foram provados abertos antes de fechar: os controles 1 a 3 deste critério rodam, cada um com par antes/depois sobre árvore sintética em diretório temporário, provando que classe homônima em outro arquivo, instanciação sob alias e destino indireto por parâmetro do construtor não eram reconhecidos/fechados antes do mecanismo existir e passam a ser depois; o controle 4 prova que um homônimo não relacionado não altera a classificação, e que mover e renomear a classe real não muda o resultado | Os quatro controles negativos rodam sobre árvore sintética própria, removida ao fim — nenhum deles amplia nem estreita o conjunto de 10 rotas ou de 27 literais que a suíte permanente assere sobre a árvore real |
+| A isenção por construção `export` em `refuseClassReferencesOutsideInstantiation` é do lado de LIGAÇÃO, nunca do lado de valor (`exportConstructBindingRange`): `export const X = <Classe>;` e `export class Sub extends <Classe> {` recusam sob `class_binding_reference_forwarded_as_value`; `export type` e `export interface` seguem isentos inteiros, por serem posição de tipo. `scannedFilePathsForInstantiation` é acumulado por `findCrossFileCallerBindings` enquanto abre cada arquivo, nunca preenchido de antemão com `allSources` | As duas bordas foram provadas abertas antes de fechar, revertendo cada correção na árvore e reexecutando: os dois repasses passavam em silêncio, e a classe declarada e não exportada reportava 4 arquivos varridos com zero varredura executada. O corte do lado de valor é por forma textual da construção `export` — uma forma de declaração exportada que não seja `type`/`interface`/`class`/`const`/`let`/`var` cai no caso geral e isenta a construção inteira |
+| Duas afirmações permanentes (WU-04) provam, sem vacuidade, que `internalClientSurfaces` tem uma entrada por declaração distinta e que toda superfície tem ao menos uma ligação de instanciação resolvida, e que `nonGoBoundInstantiations` não é vazio e toda entrada tem motivo escrito apontando a uma superfície computada | O que os Goals 040 a 044 já provavam continua provado sem afrouxamento: resíduo de egresso zero, casamento segmento a segmento com o lado Go, superfície derivada por alcançabilidade, chamador seguido por ligação importada atravessando arquivo |
+
+**O que este delta não prova, e é preciso dizer alto.** **Não prova
+runtime**: nada aqui executa o serviço Go, abre conexão whatsmeow ou
+observa o que chega a um telefone. **Não prova qual binário roda em
+produção**. **Não alcança `whatsmeow-lib/`**. **Texto emitido pelo modelo
+continua fora do guardrail por D-050**. **Não corrige A-24**: o achado
+continua `PENDENCIA-POS-MVP`, e nenhum arquivo Go de produção deste fork
+foi editado por este Goal. **Não fecha M4**: nenhuma chamada saiu para
+WhatsApp real nem para provedor de LLM real, e nenhuma conexão whatsmeow
+foi aberta. **Não amplia nem reduz o conjunto de 10 rotas ou de 27
+literais** que os Goals 042 a 044 já asseriam — este delta fecha três
+bordas de leitura do lado TypeScript, nunca o critério que decide o
+conjunto. **Não prova o valor real de variável de ambiente alguma** —
+só o default do schema TypeScript e o `.env.example` são lidos.
+`validate:integration` continua recusando por pré-condição de banco
+ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado como
+ausente.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff045-2026-09-21-d-061) e [D-061](DECISIONS.md).

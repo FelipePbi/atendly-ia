@@ -1279,12 +1279,35 @@ export interface CallerResolutionReport {
   requestCount: number;
 }
 
+/** Forma pela qual o nome local de um arquivo candidato chega à declaração da classe. */
+export type ClassBindingForm =
+  | "local_declaration"
+  | "named_import"
+  | "aliased_named_import"
+  | "default_import";
+
+/** Uma ligação resolvida até a declaração de uma classe: o arquivo, o nome pelo qual a declaração é referenciada lá, e a forma que produziu esse nome. */
+export interface ClassInstantiationBindingReport {
+  filePath: string;
+  /** Nome local — o alias, quando a ligação vem de um import com alias. */
+  localName: string;
+  form: ClassBindingForm;
+}
+
 /** A superfície derivada da declaração de um cliente HTTP interno: quem alcança `fetch` e, com motivo escrito, quem não alcança. */
 export interface InternalClientSurfaceReport {
   className: string;
   filePath: string;
+  /** Linha (1-based) da declaração `class <Nome>` — a identidade da classe, nunca o nome isolado. */
+  classLine: number;
   reachingMembers: string[];
   excludedMembers: NonReachingClassMember[];
+  /** Rótulo da forma pela qual a declaração sai do módulo, no mesmo vocabulário de `CallerResolutionReport`. */
+  exportForm: CallerResolutionReport["exportForm"];
+  /** Todo arquivo das duas árvores varrido atrás de uma ligação que instancie esta declaração. */
+  scannedFilePathsForInstantiation: string[];
+  /** Cada ligação que a varredura de fato resolveu até esta declaração — a prova do que o motivo escrito afirma. */
+  instantiationBindings: ClassInstantiationBindingReport[];
 }
 
 /** Chamada `this.<campo>.<membro>(` sobre um cliente apontado ao serviço Go cujo membro está fora da superfície de transporte: lida e contada fora com motivo, nunca ignorada. */
@@ -1297,6 +1320,19 @@ export interface NonTransportMemberCall {
   reason: string;
 }
 
+/**
+ * Instanciação de um cliente HTTP interno cujo primeiro argumento de
+ * construtor resolve a uma chave de ambiente, mas nenhuma delas é chave do
+ * serviço Go — lida e contada fora do conjunto alcançado, com a chave que a
+ * exclui, nunca descartada em silêncio.
+ */
+export interface NonGoBoundClassInstantiation {
+  filePath: string;
+  line: number;
+  className: string;
+  reason: string;
+}
+
 export interface GoServiceHttpRequestDiscovery {
   requests: GoBoundHttpRequest[];
   assembledUrls: AssembledUrlForDelivery[];
@@ -1306,6 +1342,8 @@ export interface GoServiceHttpRequestDiscovery {
   internalClientSurfaces: InternalClientSurfaceReport[];
   /** Toda chamada a membro fora da superfície, sobre um cliente apontado ao serviço Go. */
   nonTransportMemberCalls: NonTransportMemberCall[];
+  /** Instanciação de cliente interno cujo destino resolve a uma chave que não é do serviço Go — contada fora do conjunto alcançado, com a chave que a exclui. */
+  nonGoBoundInstantiations: NonGoBoundClassInstantiation[];
   /** O que a resolução de chamadores leu, por sítio resolvido no chamador. */
   callerResolutions: CallerResolutionReport[];
 }
@@ -1463,6 +1501,8 @@ interface NamedImportBinding {
 interface ParsedImportDeclaration {
   line: number;
   index: number;
+  /** Índice logo após o especificador: com `index`, o intervalo de texto que a declaração ocupa. */
+  endIndex: number;
   specifier: string;
   typeOnly: boolean;
   defaultAlias?: string;
@@ -1506,6 +1546,7 @@ function findImportDeclarations(source: string): ParsedImportDeclaration[] {
     declarations.push({
       line: lineAt(source, match.index),
       index: match.index,
+      endIndex: match.index + match[0].length,
       specifier,
       typeOnly: typeFlag !== undefined,
       defaultAlias,
@@ -1609,15 +1650,16 @@ function exportConstructText(source: string, exportKeywordIndex: number): string
   return source.slice(exportKeywordIndex, i);
 }
 
-/** Toda construção `export ...` de `source` (fora de aspas), com a linha e o texto do cabeçalho. */
-function findExportConstructs(source: string): { line: number; text: string }[] {
+/** Toda construção `export ...` de `source` (fora de aspas), com o índice, a linha e o texto do cabeçalho. */
+function findExportConstructs(source: string): { index: number; line: number; text: string }[] {
   const quoteMask = computeQuoteMask(source, source.length);
-  const constructs: { line: number; text: string }[] = [];
+  const constructs: { index: number; line: number; text: string }[] = [];
   const pattern = /\bexport\b/g;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(source))) {
     if (quoteMask[match.index]) continue;
     constructs.push({
+      index: match.index,
       line: lineAt(source, match.index),
       text: exportConstructText(source, match.index),
     });
@@ -1685,6 +1727,18 @@ function resolveModuleExportBindings(
     }
     if (new RegExp(`^export\\s+default\\s+${escapedName}$`).test(text)) {
       addBinding({ kind: "default" });
+      continue;
+    }
+    // `class` entra pelas mesmas duas formas de `function`: a declaração de
+    // classe é a ligação que o Goal045 resolve até a instanciação, e sem esta
+    // conversão a própria declaração do cliente HTTP interno cairia como
+    // "forma de exportação não convertida".
+    if (new RegExp(`^export\\s+default\\s+(?:abstract\\s+)?class\\s+${escapedName}\\b`).test(text)) {
+      addBinding({ kind: "default" });
+      continue;
+    }
+    if (new RegExp(`^export\\s+(?:abstract\\s+)?class\\s+${escapedName}\\b`).test(text)) {
+      addBinding({ kind: "named", exportedName: functionName });
       continue;
     }
     if (new RegExp(`^export\\s+(?:async\\s+)?function\\s+${escapedName}\\b`).test(text)) {
@@ -1776,6 +1830,11 @@ function dedupeCallerFileBindings(bindings: CallerFileBinding[]): CallerFileBind
  * nomeando arquivo e linha. Vazio quando `functionName` não é exportado do
  * jeito que esta resolução reconhece — nesse caso só o próprio arquivo tem
  * chamador.
+ *
+ * `scannedFilePaths`, quando passado, recebe o caminho de cada arquivo no
+ * momento em que esta varredura o abre. É a varredura que registra o que
+ * varreu: quem só chama esta função não pode afirmar por fora quais arquivos
+ * foram abertos, porque o laço abaixo pode nem chegar a executar.
  */
 function findCrossFileCallerBindings(
   siteFilePath: string,
@@ -1783,6 +1842,7 @@ function findCrossFileCallerBindings(
   exportForm: ModuleExportBinding,
   allSources: { filePath: string; source: string }[],
   sourcesByPath: Map<string, string>,
+  scannedFilePaths?: string[],
 ): CallerFileBinding[] {
   const bindings: CallerFileBinding[] = [];
   // O nome pelo qual os outros arquivos importam a ligação é o nome
@@ -1791,6 +1851,9 @@ function findCrossFileCallerBindings(
 
   for (const { filePath: otherFilePath, source: otherSource } of allSources) {
     if (otherFilePath === siteFilePath) continue;
+    if (scannedFilePaths !== undefined && !scannedFilePaths.includes(otherFilePath)) {
+      scannedFilePaths.push(otherFilePath);
+    }
 
     for (const dynamicImport of findDynamicImportSpecifiers(otherSource)) {
       if (resolveModuleSpecifierToFilePath(dynamicImport.specifier, otherFilePath, sourcesByPath) === siteFilePath) {
@@ -2204,6 +2267,8 @@ function indexAtLineStart(source: string, line: number): number {
 
 interface ClassSpan {
   name: string;
+  /** Linha (1-based) da declaração `class <Nome>`, chave de identidade da classe — nunca o nome isolado. */
+  line: number;
   bodyStart: number;
   bodyEnd: number;
 }
@@ -2212,15 +2277,15 @@ interface ClassSpan {
 function findEnclosingClassSpan(source: string, index: number): ClassSpan | undefined {
   const pattern = /\bclass\s+([A-Za-z_$][\w$]*)[^{]*\{/g;
   let match: RegExpExecArray | null;
-  let found: { name: string; braceIndex: number } | undefined;
+  let found: { name: string; declIndex: number; braceIndex: number } | undefined;
   while ((match = pattern.exec(source))) {
     if (match.index >= index) break;
-    found = { name: match[1], braceIndex: match.index + match[0].length - 1 };
+    found = { name: match[1], declIndex: match.index, braceIndex: match.index + match[0].length - 1 };
   }
   if (found === undefined) return undefined;
   const bodyEnd = findMatchingDelimiterEnd(source, found.braceIndex, "{", "}");
   if (bodyEnd < index) return undefined;
-  return { name: found.name, bodyStart: found.braceIndex + 1, bodyEnd };
+  return { name: found.name, line: lineAt(source, found.declIndex), bodyStart: found.braceIndex + 1, bodyEnd };
 }
 
 /** Nome do campo atribuído por uma expressão `<campo> = new <Classe>(` que termina em `classNameMatchIndex`, ou `undefined` se a instanciação não estiver nessa forma. */
@@ -2235,15 +2300,27 @@ interface ClassInstantiationSite {
   callIndex: number;
   line: number;
   argsText: string[];
+  /** Identificador de fato escrito em `new <Id>(` — o alias, quando a ligação daquele arquivo vier de um import com alias. */
+  localName: string;
+  /** A ligação por que esse identificador chega à declaração da classe. */
+  bindingForm: ClassBindingForm;
 }
 
-/** Toda instanciação real (`new <className>(...)`, nunca a declaração da classe) de `className` em `source`. */
+/**
+ * Toda instanciação real (`new <localName>(...)`, nunca a declaração da
+ * classe) do identificador `localName` em `source`. `localName` **não** é o
+ * nome da classe escolhido pelo chamador: é o nome que a resolução de
+ * ligação (`resolveClassInstantiationBindings`) provou estar ligado, naquele
+ * arquivo, à declaração procurada. Chamar esta função com um nome que não
+ * saiu dessa resolução volta a casar por texto e é exatamente a borda que o
+ * Goal045 fecha.
+ */
 function findClassInstantiations(
   source: string,
   filePath: string,
-  className: string,
+  binding: ClassInstantiationBindingReport,
 ): ClassInstantiationSite[] {
-  const pattern = new RegExp(`\\b${className}\\(`, "g");
+  const pattern = new RegExp(`\\b${binding.localName}\\(`, "g");
   const sites: ClassInstantiationSite[] = [];
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(source))) {
@@ -2256,9 +2333,381 @@ function findClassInstantiations(
       callIndex: match.index,
       line: lineAt(source, match.index),
       argsText: splitTopLevelItems(source.slice(openParenIndex + 1, closeParenIndex)),
+      localName: binding.localName,
+      bindingForm: binding.form,
     });
   }
   return sites;
+}
+
+/* =========================================================================
+ * Instanciação reconhecida por ligação resolvida (Goal045 / WU-02) — o
+ * identificador de `new <Id>(` só conta como instanciação de uma declaração
+ * de classe quando a ligação do arquivo candidato chega àquela declaração:
+ * import nomeado, import nomeado sob alias, import default, ou a própria
+ * declaração local. Nome igual sem ligação resolvida não é instanciação
+ * dela; alias resolvido é.
+ *
+ * A resolução **reusa** a máquina de ligação do Goal044
+ * (`resolveModuleExportBindings`, `findCrossFileCallerBindings`, e por
+ * dentro dela `resolveModuleSpecifierToFilePath`, `findImportDeclarations`,
+ * `findDynamicImportSpecifiers`, `findReexportDeclarations`): não existe
+ * cópia paralela dela aqui. O que este caminho acrescenta é a categoria
+ * nomeada com que recusa — toda forma que a máquina não converte em arquivo
+ * e nome local derruba a leitura com `arquivo:linha`, nunca com um
+ * `continue` mudo.
+ * ========================================================================= */
+
+/** Categoria nomeada com que a resolução de ligação de instanciação recusa. Toda recusa deste caminho sai sob uma delas. */
+type ClassBindingRefusalCategory =
+  /** Duas declarações do mesmo nome no arquivo da classe: o nome exportado não identifica qual delas é instanciada. */
+  | "class_binding_homonymous_declarations"
+  /** A classe sai do módulo por uma forma que a resolução não converte em ligação importável (`export =`, cláusula nova). */
+  | "class_binding_export_form_not_resolved"
+  /** A classe sai do módulo por CommonJS (`module.exports` / `exports.<nome>`), que esta resolução não segue. */
+  | "class_binding_commonjs_export"
+  /** A ligação atravessa o arquivo por forma não seguida: reexportação em cadeia, import dinâmico, alias de caminho não relativo, import de namespace. */
+  | "class_binding_cross_file_form_not_resolved"
+  /** O nome ligado à declaração aparece num arquivo candidato fora de `new <Id>(`: a classe é passada adiante como valor. */
+  | "class_binding_reference_forwarded_as_value";
+
+/** Recusa deste caminho: `arquivo:linha`, o que a leitura não converteu, e a categoria nomeada da forma. */
+function classBindingRefusal(
+  filePath: string,
+  line: number,
+  detail: string,
+  category: ClassBindingRefusalCategory,
+): Error {
+  return new Error(`${filePath}:${line}: ${detail} [categoria: ${category}]`);
+}
+
+/** A mesma recusa quando o texto vem da máquina de ligação do Goal044, que já nomeia o `arquivo:linha` da forma recusada: a categoria é acrescentada sem reescrever o que ela leu. */
+function categorizedBindingRefusal(error: unknown, category: ClassBindingRefusalCategory): Error {
+  return new Error(`${(error as Error).message} [categoria: ${category}]`);
+}
+
+/** Linha (1-based) de cada declaração `class <name>` de `source`, fora de aspas. */
+function findClassDeclarationLines(source: string, name: string): number[] {
+  const quoteMask = computeQuoteMask(source, source.length);
+  const pattern = new RegExp(`\\bclass\\s+${name}\\b`, "g");
+  const lines: number[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(source))) {
+    if (quoteMask[match.index]) continue;
+    lines.push(lineAt(source, match.index));
+  }
+  return lines;
+}
+
+/** O que a resolução de ligação de instanciação leu: a forma de exportação, os arquivos varridos e as ligações que ela de fato resolveu. */
+interface ClassInstantiationBindingResolution {
+  exportForm: CallerResolutionReport["exportForm"];
+  scannedFilePaths: string[];
+  bindings: ClassInstantiationBindingReport[];
+}
+
+/**
+ * Toda ligação das duas árvores que chega à declaração `classSpan` de
+ * `classFilePath`. O próprio arquivo da declaração entra sempre (ligação
+ * local); os outros entram só quando a resolução do Goal044 converte o
+ * import em arquivo e nome local. `scannedFilePaths` é a enumeração do que
+ * foi varrido — é ela que sustenta qualquer afirmação escrita sobre a
+ * varredura.
+ */
+function resolveClassInstantiationBindings(
+  classFilePath: string,
+  classSpan: ClassSpan,
+  allSources: { filePath: string; source: string }[],
+  sourcesByPath: Map<string, string>,
+): ClassInstantiationBindingResolution {
+  const classSource = sourcesByPath.get(classFilePath);
+  if (classSource === undefined) {
+    throw classBindingRefusal(
+      classFilePath,
+      classSpan.line,
+      `a declaração de "${classSpan.name}" está num arquivo fora das duas árvores lidas, e sem o texto dele nenhuma ligação até ela pode ser resolvida`,
+      "class_binding_export_form_not_resolved",
+    );
+  }
+
+  // A ligação exportada é resolvida pelo NOME; com duas declarações
+  // homônimas no mesmo arquivo o nome não diz qual delas sai do módulo, e
+  // contar a instanciação para uma das duas seria escolher no escuro.
+  const declarationLines = findClassDeclarationLines(classSource, classSpan.name);
+  if (declarationLines.length > 1) {
+    throw classBindingRefusal(
+      classFilePath,
+      classSpan.line,
+      `"${classSpan.name}" é declarada ${declarationLines.length} vezes neste arquivo (linhas ${declarationLines.join(", ")}), e a ligação exportada sob esse nome não identifica qual declaração é instanciada`,
+      "class_binding_homonymous_declarations",
+    );
+  }
+
+  // `module.exports` / `exports.<nome>`: a classe sairia do módulo por uma
+  // forma CommonJS que `findImportDeclarations` não vê. Sem esta recusa,
+  // nenhum arquivo candidato seria varrido e a ausência de instanciação
+  // passaria por leitura.
+  const commonJsExport = new RegExp(
+    `\\b(?:module\\.exports\\b[^\\n]*\\b${classSpan.name}\\b|exports\\.[A-Za-z_$][\\w$]*\\s*=\\s*${classSpan.name}\\b)`,
+  ).exec(classSource);
+  if (commonJsExport !== null) {
+    throw classBindingRefusal(
+      classFilePath,
+      lineAt(classSource, commonJsExport.index),
+      `"${classSpan.name}" sai do módulo por "${commonJsExport[0].trim()}", uma exportação CommonJS que esta resolução não converte em import reconhecido — os arquivos que a instanciam não podem ser nem confirmados nem descartados`,
+      "class_binding_commonjs_export",
+    );
+  }
+
+  let exportBindings: ModuleExportBinding[];
+  try {
+    exportBindings = resolveModuleExportBindings(
+      classSource,
+      classSpan.name,
+      classFilePath,
+      classSpan.line,
+    );
+  } catch (error) {
+    throw categorizedBindingRefusal(error, "class_binding_export_form_not_resolved");
+  }
+
+  const bindings: ClassInstantiationBindingReport[] = [
+    { filePath: classFilePath, localName: classSpan.name, form: "local_declaration" },
+  ];
+  // O arquivo da declaração é o único que esta resolução abre por conta
+  // própria (`classSource`, acima). Todo outro arquivo só é aberto dentro de
+  // `findCrossFileCallerBindings`, que roda no laço abaixo — e o laço não
+  // executa quando `exportBindings` está vazio. Por isso a lista é acumulada
+  // pela própria varredura, em vez de afirmada de antemão a partir de
+  // `allSources`: sem ligação exportada, nenhum outro arquivo é varrido, e
+  // relatar a lista inteira seria afirmar varredura não exercida.
+  const scannedFilePaths = [classFilePath];
+  for (const exportBinding of exportBindings) {
+    let fileBindings: CallerFileBinding[];
+    try {
+      fileBindings = findCrossFileCallerBindings(
+        classFilePath,
+        classSpan.name,
+        exportBinding,
+        allSources,
+        sourcesByPath,
+        scannedFilePaths,
+      );
+    } catch (error) {
+      throw categorizedBindingRefusal(error, "class_binding_cross_file_form_not_resolved");
+    }
+    for (const fileBinding of fileBindings) {
+      const already = bindings.some(
+        (other) =>
+          other.filePath === fileBinding.filePath && other.localName === fileBinding.localName,
+      );
+      if (already) continue;
+      bindings.push({
+        filePath: fileBinding.filePath,
+        localName: fileBinding.localName,
+        form:
+          exportBinding.kind === "default"
+            ? "default_import"
+            : fileBinding.localName === classSpan.name
+              ? "named_import"
+              : "aliased_named_import",
+      });
+    }
+  }
+
+  return {
+    exportForm: describeExportBindings(exportBindings),
+    // O que a varredura de fato abriu, registrado por ela enquanto abria —
+    // nunca a lista de `allSources` afirmada sem a varredura ter rodado.
+    scannedFilePaths,
+    bindings,
+  };
+}
+
+/** Caractere que, imediatamente antes do nome, o põe em posição de TIPO: anotação e tipo de retorno (`:`), argumento de genérico (`<`), união e interseção (`|`, `&`). */
+const TYPE_POSITION_PRECEDING_CHARS = new Set([":", "<", "|", "&"]);
+
+/** Palavra que, imediatamente antes do nome, o põe em posição de TIPO. `extends` não está aqui de propósito: herança de classe é posição de valor e estende a superfície. */
+const TYPE_POSITION_PRECEDING_WORDS = new Set([
+  "as",
+  "satisfies",
+  "typeof",
+  "keyof",
+  "implements",
+  "interface",
+]);
+
+/**
+ * A parte de uma construção `export` em que o nome está em posição de
+ * **ligação**, e não de valor. Só essa parte isenta o nome da recusa de
+ * `refuseClassReferencesOutsideInstantiation`.
+ *
+ * A construção inteira não serve como isenção: o lado DIREITO de
+ * `export const X = <Classe>;` e o que vem depois de `extends` em
+ * `export class Sub extends <Classe> {` estão dentro do texto da construção,
+ * mas ali o nome é um valor repassado adiante — exatamente a referência que
+ * `class_binding_reference_forwarded_as_value` existe para recusar. Isentar
+ * por estar "dentro de um `export`" apagaria essa recusa em silêncio.
+ *
+ * Por forma:
+ * - `export type` / `export interface`: posição de tipo do começo ao fim
+ *   (inclusive o `extends` de uma interface, que não captura construtor);
+ *   a construção inteira isenta.
+ * - `export class` / `export default class`: isenta até o `extends`; a
+ *   superclasse fica de fora, como ficaria fora de qualquer `export`.
+ * - `export const` / `let` / `var`: isenta até o `=`; o valor atribuído
+ *   fica de fora.
+ * - demais formas (`export { X as Y }`, `export default X`,
+ *   `export function`, `export class X {` sem herança): a construção é a
+ *   própria ligação exportada, que a máquina de ligação deste caminho já
+ *   converte e percorre; isenta inteira.
+ */
+function exportConstructBindingRange(construct: {
+  index: number;
+  text: string;
+}): { start: number; end: number } {
+  const { index, text } = construct;
+  const whole = { start: index, end: index + text.length };
+
+  if (/^export\s+(?:declare\s+)?(?:type|interface)\b/.test(text)) return whole;
+
+  if (/^export\s+(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?class\b/.test(text)) {
+    const heritage = /\bextends\b/.exec(text);
+    return heritage === null ? whole : { start: index, end: index + heritage.index };
+  }
+
+  if (/^export\s+(?:default\s+)?(?:declare\s+)?(?:const|let|var)\b/.test(text)) {
+    const assignment = findTopLevelAssignmentIndex(text);
+    return assignment === undefined ? whole : { start: index, end: index + assignment + 1 };
+  }
+
+  return whole;
+}
+
+/**
+ * Índice do `=` de atribuição de `text`, fora de aspas e fora de qualquer
+ * par `()`/`[]`/`{}`/`<>`. Comparações (`==`, `===`, `!=`, `<=`, `>=`) e a
+ * seta de arrow (`=>`) não são atribuição e não contam. `undefined` quando a
+ * construção não atribui valor algum (`export const enum`, por exemplo).
+ */
+function findTopLevelAssignmentIndex(text: string): number | undefined {
+  const quoteMask = computeQuoteMask(text, text.length);
+  let depth = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    if (quoteMask[i]) continue;
+    const char = text[i];
+    if (char === "(" || char === "[" || char === "{" || char === "<") {
+      depth += 1;
+      continue;
+    }
+    if (char === ")" || char === "]" || char === "}" || char === ">") {
+      if (depth > 0) depth -= 1;
+      continue;
+    }
+    if (depth > 0 || char !== "=") continue;
+    if (text[i + 1] === "=" || text[i + 1] === ">") continue;
+    if (i > 0 && ["=", "!", "<", ">", "+", "-", "*", "/", "%", "&", "|", "^"].includes(text[i - 1])) {
+      continue;
+    }
+    return i;
+  }
+  return undefined;
+}
+
+/**
+ * Toda ocorrência do nome ligado, num arquivo candidato, que **não** é a
+ * instanciação. Ficam de fora da recusa, cada uma por um motivo próprio: a
+ * cláusula de import que liga o nome, o lado de ligação da construção
+ * `export` que o exporta (nunca o lado de valor dela — ver
+ * `exportConstructBindingRange`), a
+ * própria declaração `class`, e a posição de tipo — anotação, tipo de
+ * retorno, argumento de genérico, união ou interseção, `as`/`satisfies`/
+ * `typeof`/`keyof`/`implements` —, que não captura o construtor como valor e
+ * portanto não alcança instanciação alguma.
+ *
+ * Toda outra ocorrência é posição de valor: atribuição a outro nome,
+ * argumento passado adiante, `extends`. Por ela a classe alcança
+ * instanciações que esta leitura não percorre, e isso recusa em voz alta,
+ * com `arquivo:linha` e categoria nomeada.
+ */
+function refuseClassReferencesOutsideInstantiation(
+  source: string,
+  filePath: string,
+  localName: string,
+  instantiationIndexes: Set<number>,
+): void {
+  const quoteMask = computeQuoteMask(source, source.length);
+  const importRanges = findImportDeclarations(source).map((declaration) => ({
+    start: declaration.index,
+    end: declaration.endIndex,
+  }));
+  const exportRanges = findExportConstructs(source).map(exportConstructBindingRange);
+  const pattern = new RegExp(`\\b${localName}\\b`, "g");
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(source))) {
+    const { index } = match;
+    if (quoteMask[index]) continue;
+    if (instantiationIndexes.has(index)) continue;
+    // A declaração da classe no próprio arquivo é a ligação local, não uma
+    // referência a ela.
+    const precedingWord = wordEndingAt(source, index);
+    if (precedingWord === "class") continue;
+    if (TYPE_POSITION_PRECEDING_WORDS.has(precedingWord)) continue;
+    let before = index;
+    while (before > 0 && /\s/.test(source[before - 1])) before -= 1;
+    if (before > 0 && TYPE_POSITION_PRECEDING_CHARS.has(source[before - 1])) continue;
+    const inRange = (range: { start: number; end: number }): boolean =>
+      index >= range.start && index < range.end;
+    if (importRanges.some(inRange) || exportRanges.some(inRange)) continue;
+
+    const line = lineAt(source, index);
+    const context = source
+      .slice(Math.max(0, index - 40), index + localName.length + 20)
+      .replace(/\s+/gu, " ")
+      .trim();
+    throw classBindingRefusal(
+      filePath,
+      line,
+      `"${localName}" está ligado à declaração da classe, mas aparece aqui em posição de valor, fora de "new ${localName}(" ("${context}") — por essa referência a classe alcança instanciações que esta leitura não percorre`,
+      "class_binding_reference_forwarded_as_value",
+    );
+  }
+}
+
+/** Toda instanciação da declaração `classSpan` nas duas árvores, reconhecida só por ligação resolvida, mais o que a varredura leu para poder afirmá-lo. */
+function findInstantiationsOfClassDeclaration(
+  classFilePath: string,
+  classSpan: ClassSpan,
+  allSources: { filePath: string; source: string }[],
+  sourcesByPath: Map<string, string>,
+): { sites: ClassInstantiationSite[]; resolution: ClassInstantiationBindingResolution } {
+  const resolution = resolveClassInstantiationBindings(
+    classFilePath,
+    classSpan,
+    allSources,
+    sourcesByPath,
+  );
+  const sites: ClassInstantiationSite[] = [];
+  for (const binding of resolution.bindings) {
+    const source = sourcesByPath.get(binding.filePath);
+    if (source === undefined) {
+      throw classBindingRefusal(
+        binding.filePath,
+        classSpan.line,
+        `a ligação de "${binding.localName}" até a declaração de "${classSpan.name}" foi resolvida, mas o texto de ${binding.filePath} não está entre os arquivos lidos`,
+        "class_binding_cross_file_form_not_resolved",
+      );
+    }
+    const found = findClassInstantiations(source, binding.filePath, binding);
+    refuseClassReferencesOutsideInstantiation(
+      source,
+      binding.filePath,
+      binding.localName,
+      new Set(found.map((site) => site.callIndex)),
+    );
+    sites.push(...found);
+  }
+  return { sites, resolution };
 }
 
 interface ClassMethodBody {
@@ -2535,11 +2984,18 @@ function discoverGoBoundInternalClientRequests(
   assembledUrls: AssembledUrlForDelivery[];
   surfaces: InternalClientSurfaceReport[];
   nonTransportMemberCalls: NonTransportMemberCall[];
+  nonGoBoundInstantiations: NonGoBoundClassInstantiation[];
 } {
   const requests: GoBoundHttpRequest[] = [];
   const assembledUrls: AssembledUrlForDelivery[] = [];
   const surfaces: InternalClientSurfaceReport[] = [];
   const nonTransportMemberCalls: NonTransportMemberCall[] = [];
+  const nonGoBoundInstantiations: NonGoBoundClassInstantiation[] = [];
+  // Chave pela declaração (arquivo + linha), não pelo nome: duas classes
+  // homônimas em arquivos diferentes são duas declarações distintas, e uma
+  // chave por nome faz a segunda ser pulada inteiro, produzindo uma única
+  // superfície e uma única entrada em internalClientSurfaces onde deveriam
+  // existir duas.
   const classSurfaces = new Map<string, InternalClientMemberSurface>();
 
   const constructorBaseUrlSites = discovery.sites.filter((site) =>
@@ -2555,135 +3011,172 @@ function discoverGoBoundInternalClientRequests(
         `${site.filePath}:${site.line}: sítio "${site.category}" fora de um corpo de classe reconhecível`,
       );
     }
-    if (classSurfaces.has(classSpan.name)) continue;
+    const classDeclarationKey = `${site.filePath}:${classSpan.line}`;
+    if (classSurfaces.has(classDeclarationKey)) continue;
     const surface = computeInternalClientMemberSurface(source, classSpan, site.filePath);
-    classSurfaces.set(classSpan.name, surface);
+    classSurfaces.set(classDeclarationKey, surface);
+
+    // A instanciação não é procurada por texto em todo arquivo: cada arquivo
+    // candidato entra pela ligação que o resolve até ESTA declaração — import
+    // nomeado, import sob alias, import default, ou a declaração local. Nome
+    // igual sem ligação resolvida não é instanciação desta classe e não é
+    // varrido; forma de ligação não convertida derruba a leitura.
+    const { sites: instantiations, resolution } = findInstantiationsOfClassDeclaration(
+      site.filePath,
+      classSpan,
+      allSources,
+      sourcesByPath,
+    );
+
     surfaces.push({
       className: classSpan.name,
       filePath: site.filePath,
+      classLine: classSpan.line,
       reachingMembers: surface.reachingMembers,
       excludedMembers: surface.excludedMembers,
+      exportForm: resolution.exportForm,
+      scannedFilePathsForInstantiation: resolution.scannedFilePaths,
+      instantiationBindings: resolution.bindings,
     });
 
-    for (const { filePath, source: candidateSource } of allSources) {
-      for (const instantiation of findClassInstantiations(candidateSource, filePath, classSpan.name)) {
-        const destination = resolveDestination(
-          candidateSource,
-          instantiation.callIndex,
-          instantiation.argsText[0] ?? "",
-          [],
+    for (const instantiation of instantiations) {
+      const filePath = instantiation.filePath;
+      const candidateSource = sourcesByPath.get(filePath);
+      if (candidateSource === undefined) {
+        throw new Error(
+          `${filePath}:${instantiation.line}: a instanciação foi reconhecida pela ligação até ${classDeclarationKey}, mas o texto de ${filePath} não está entre os arquivos lidos`,
         );
-        const goEnvVar = destination.envVars.find((name) => GO_SERVICE_BASE_URL_ENV_VARS.has(name));
-        if (goEnvVar === undefined) continue;
-
-        const fieldName = findAssignedFieldName(candidateSource, instantiation.callIndex);
-        const ownerClassSpan = findEnclosingClassSpan(candidateSource, instantiation.callIndex);
-        if (fieldName === undefined || ownerClassSpan === undefined) {
-          throw new Error(
-            `${filePath}:${instantiation.line}: instância de ${classSpan.name} resolve a env.${goEnvVar} (serviço Go), mas não está atribuída a um campo de classe reconhecível`,
-          );
+      }
+      const destinationArgText = instantiation.argsText[0] ?? "";
+      const destination = resolveDestination(
+        candidateSource,
+        instantiation.callIndex,
+        destinationArgText,
+        [],
+      );
+      const goEnvVar = destination.envVars.find((name) => GO_SERVICE_BASE_URL_ENV_VARS.has(name));
+      if (goEnvVar === undefined) {
+        if (destination.envVars.length > 0) {
+          nonGoBoundInstantiations.push({
+            filePath,
+            line: instantiation.line,
+            className: classSpan.name,
+            reason: `new ${instantiation.localName}(...) em ${filePath}:${instantiation.line} (ligação ${instantiation.bindingForm} até ${classDeclarationKey}) resolve a env.${destination.envVars.join(" e env.")}, e nenhuma dessas chaves é base do serviço Go`,
+          });
+          continue;
         }
+        throw new Error(
+          `${filePath}:${instantiation.line}: instância de ${classSpan.name} (new ${instantiation.localName}(, ligação ${instantiation.bindingForm} até ${classDeclarationKey}) tem destino "${destinationArgText}" que não resolve a nenhuma chave de ambiente`,
+        );
+      }
 
-        for (const method of findTopLevelMethodBodies(
-          candidateSource,
-          ownerClassSpan.bodyStart,
-          ownerClassSpan.bodyEnd,
-        )) {
-          const methodName = methodNameAtBrace(candidateSource, method.braceIndex, filePath, method.line);
-          // Toda chamada `this.<campo>.<membro>(` sobre este cliente é lida,
-          // não só as da superfície: membro que a declaração da classe tem e
-          // que não alcança fetch (ou alcança e é private) é contado fora com
-          // o motivo já computado, e membro que a declaração não tem derruba a
-          // leitura. Casar só a superfície deixaria a chamada sumir.
-          const callPattern = new RegExp(`this\\.${fieldName}\\.([A-Za-z_$][\\w$]*)\\(`, "g");
-          callPattern.lastIndex = method.bodyStart;
-          let requestCallCount = 0;
-          let callMatch: RegExpExecArray | null;
-          while ((callMatch = callPattern.exec(candidateSource)) && callMatch.index < method.bodyEnd) {
-            const callKind = callMatch[1];
-            const line = lineAt(candidateSource, callMatch.index);
-            if (!surface.reachingMembers.includes(callKind)) {
-              const excluded = surface.excludedMembers.find((member) => member.name === callKind);
-              if (excluded === undefined) {
-                throw new Error(
-                  `${filePath}:${line}: chamada this.${fieldName}.${callKind}(...) sobre um cliente que resolve destino de env.${goEnvVar}, mas "${callKind}" não é membro de topo da declaração de ${classSpan.name} (${surface.reachingMembers.length} na superfície, ${surface.excludedMembers.length} fora dela) — uma chamada que a leitura não classifica não é descartada`,
-                );
-              }
-              nonTransportMemberCalls.push({
-                filePath,
-                line,
-                className: classSpan.name,
-                fieldName,
-                memberName: callKind,
-                reason: `this.${fieldName}.${callKind}(...) em ${methodName}() não é requisição ao transporte: ${excluded.reason}`,
-              });
-              continue;
-            }
-            requestCallCount += 1;
-            const openParenIndex = callMatch.index + callMatch[0].length - 1;
-            const closeParenIndex = findMatchingDelimiterEnd(candidateSource, openParenIndex, "(", ")");
-            const args = splitTopLevelItems(candidateSource.slice(openParenIndex + 1, closeParenIndex));
-            const objectMatch = (args[0] ?? "").trim().match(/^\{([\s\S]*)\}$/);
-            if (objectMatch === null) {
-              throw new Error(
-                `${filePath}:${line}: chamada this.${fieldName}.${callKind}(...) sem objeto de opções reconhecível`,
-              );
-            }
-            const pathPropertyText = findObjectPropertyExpression(objectMatch[1], "path");
-            if (pathPropertyText === undefined) {
-              throw new Error(
-                `${filePath}:${line}: chamada this.${fieldName}.${callKind}(...) sem propriedade "path" reconhecível`,
-              );
-            }
-            const methodPropertyText = findObjectPropertyExpression(objectMatch[1], "method");
-            const requestMethod =
-              methodPropertyText !== undefined
-                ? normalizeStringLiteral(methodPropertyText, filePath, line)
-                : surface.staticMethodDefaults.get(callKind);
-            if (requestMethod === undefined) {
-              throw new Error(
-                `${filePath}:${line}: chamada this.${fieldName}.${callKind}(...) sem "method" reconhecível e sem default estático no próprio fetch de "${callKind}"`,
-              );
-            }
+      const fieldName = findAssignedFieldName(candidateSource, instantiation.callIndex);
+      const ownerClassSpan = findEnclosingClassSpan(candidateSource, instantiation.callIndex);
+      if (fieldName === undefined || ownerClassSpan === undefined) {
+        throw new Error(
+          `${filePath}:${instantiation.line}: instância de ${classSpan.name} (new ${instantiation.localName}(, ligação ${instantiation.bindingForm} até ${classDeclarationKey}) resolve a env.${goEnvVar} (serviço Go), mas não está atribuída a um campo de classe reconhecível`,
+        );
+      }
 
-            requests.push({
+      for (const method of findTopLevelMethodBodies(
+        candidateSource,
+        ownerClassSpan.bodyStart,
+        ownerClassSpan.bodyEnd,
+      )) {
+        const methodName = methodNameAtBrace(candidateSource, method.braceIndex, filePath, method.line);
+        // Toda chamada `this.<campo>.<membro>(` sobre este cliente é lida,
+        // não só as da superfície: membro que a declaração da classe tem e
+        // que não alcança fetch (ou alcança e é private) é contado fora com
+        // o motivo já computado, e membro que a declaração não tem derruba a
+        // leitura. Casar só a superfície deixaria a chamada sumir.
+        const callPattern = new RegExp(`this\\.${fieldName}\\.([A-Za-z_$][\\w$]*)\\(`, "g");
+        callPattern.lastIndex = method.bodyStart;
+        let requestCallCount = 0;
+        let callMatch: RegExpExecArray | null;
+        while ((callMatch = callPattern.exec(candidateSource)) && callMatch.index < method.bodyEnd) {
+          const callKind = callMatch[1];
+          const line = lineAt(candidateSource, callMatch.index);
+          if (!surface.reachingMembers.includes(callKind)) {
+            const excluded = surface.excludedMembers.find((member) => member.name === callKind);
+            if (excluded === undefined) {
+              throw new Error(
+                `${filePath}:${line}: chamada this.${fieldName}.${callKind}(...) sobre um cliente que resolve destino de env.${goEnvVar}, mas "${callKind}" não é membro de topo da declaração de ${classSpan.name} em ${classDeclarationKey} (${surface.reachingMembers.length} na superfície, ${surface.excludedMembers.length} fora dela) — uma chamada que a leitura não classifica não é descartada`,
+              );
+            }
+            nonTransportMemberCalls.push({
               filePath,
               line,
-              method: requestMethod,
-              pathExpression: resolvePathExpression(pathPropertyText, envSchemaPath, filePath, line),
-              category: `env_var_${goEnvVar}`,
-              reason: `this.${fieldName}.${callKind}(...) em ${methodName}(), cujo cliente resolve destino de env.${goEnvVar}`,
+              className: classSpan.name,
+              fieldName,
+              memberName: callKind,
+              reason: `this.${fieldName}.${callKind}(...) em ${methodName}() não é requisição ao transporte: ${excluded.reason}`,
             });
-            callPattern.lastIndex = closeParenIndex;
+            continue;
+          }
+          requestCallCount += 1;
+          const openParenIndex = callMatch.index + callMatch[0].length - 1;
+          const closeParenIndex = findMatchingDelimiterEnd(candidateSource, openParenIndex, "(", ")");
+          const args = splitTopLevelItems(candidateSource.slice(openParenIndex + 1, closeParenIndex));
+          const objectMatch = (args[0] ?? "").trim().match(/^\{([\s\S]*)\}$/);
+          if (objectMatch === null) {
+            throw new Error(
+              `${filePath}:${line}: chamada this.${fieldName}.${callKind}(...) sem objeto de opções reconhecível`,
+            );
+          }
+          const pathPropertyText = findObjectPropertyExpression(objectMatch[1], "path");
+          if (pathPropertyText === undefined) {
+            throw new Error(
+              `${filePath}:${line}: chamada this.${fieldName}.${callKind}(...) sem propriedade "path" reconhecível`,
+            );
+          }
+          const methodPropertyText = findObjectPropertyExpression(objectMatch[1], "method");
+          const requestMethod =
+            methodPropertyText !== undefined
+              ? normalizeStringLiteral(methodPropertyText, filePath, line)
+              : surface.staticMethodDefaults.get(callKind);
+          if (requestMethod === undefined) {
+            throw new Error(
+              `${filePath}:${line}: chamada this.${fieldName}.${callKind}(...) sem "method" reconhecível e sem default estático no próprio fetch de "${callKind}"`,
+            );
           }
 
-          if (requestCallCount === 0) {
-            const methodBodyText = candidateSource.slice(method.bodyStart, method.bodyEnd);
-            const envVarsInMethod = matchEnvVars(methodBodyText);
-            if (envVarsInMethod.length === 0) continue;
-            const returnMatch = /\breturn\s+/.exec(methodBodyText);
-            const urlExpression = (
-              returnMatch
-                ? extractStatementRhs(methodBodyText, returnMatch.index + returnMatch[0].length)
-                : methodBodyText
-            )
-              .trim()
-              .replace(/\$\{[^}]*\}/g, "{}");
-            assembledUrls.push({
-              filePath,
-              line: method.line,
-              functionName: methodName,
-              urlExpression,
-              category: `assembled_url_for_delivery_${methodName}`,
-              reason: `"${methodName}" monta valor a partir de env.${envVarsInMethod.join(" e env.")} sem chamar this.${fieldName}.${surface.reachingMembers.join("/.")} — não é requisição ao transporte, é valor entregue em outra chamada`,
-            });
-          }
+          requests.push({
+            filePath,
+            line,
+            method: requestMethod,
+            pathExpression: resolvePathExpression(pathPropertyText, envSchemaPath, filePath, line),
+            category: `env_var_${goEnvVar}`,
+            reason: `this.${fieldName}.${callKind}(...) em ${methodName}(), cujo cliente resolve destino de env.${goEnvVar}`,
+          });
+          callPattern.lastIndex = closeParenIndex;
+        }
+
+        if (requestCallCount === 0) {
+          const methodBodyText = candidateSource.slice(method.bodyStart, method.bodyEnd);
+          const envVarsInMethod = matchEnvVars(methodBodyText);
+          if (envVarsInMethod.length === 0) continue;
+          const returnMatch = /\breturn\s+/.exec(methodBodyText);
+          const urlExpression = (
+            returnMatch
+              ? extractStatementRhs(methodBodyText, returnMatch.index + returnMatch[0].length)
+              : methodBodyText
+          )
+            .trim()
+            .replace(/\$\{[^}]*\}/g, "{}");
+          assembledUrls.push({
+            filePath,
+            line: method.line,
+            functionName: methodName,
+            urlExpression,
+            category: `assembled_url_for_delivery_${methodName}`,
+            reason: `"${methodName}" monta valor a partir de env.${envVarsInMethod.join(" e env.")} sem chamar this.${fieldName}.${surface.reachingMembers.join("/.")} — não é requisição ao transporte, é valor entregue em outra chamada`,
+          });
         }
       }
     }
   }
 
-  return { requests, assembledUrls, surfaces, nonTransportMemberCalls };
+  return { requests, assembledUrls, surfaces, nonTransportMemberCalls, nonGoBoundInstantiations };
 }
 
 /**
@@ -2716,6 +3209,7 @@ export function discoverGoServiceHttpRequests(
     assembledUrls,
     surfaces,
     nonTransportMemberCalls,
+    nonGoBoundInstantiations,
   } = discoverGoBoundInternalClientRequests(
     discovery,
     sourcesByPath,
@@ -2729,6 +3223,7 @@ export function discoverGoServiceHttpRequests(
     notGoBound,
     internalClientSurfaces: surfaces,
     nonTransportMemberCalls,
+    nonGoBoundInstantiations,
     callerResolutions,
   };
 }

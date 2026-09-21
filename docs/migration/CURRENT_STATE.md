@@ -4173,3 +4173,112 @@ não muda.
   TypeScript, nunca o critério que decide o conjunto de rotas ou de
   literais, e nenhum arquivo Go de produção deste fork foi editado por
   ele.
+
+## Delta implementado — diff045, 2026-09-21 ([D-061](DECISIONS.md))
+
+Fecha as três bordas não bloqueantes que a observação do
+[review044](reviews/044-review.md) e a conferência deste Goal registraram
+sobre `discoverGoBoundInternalClientRequests`: classe de cliente
+deduplicada por nome, instanciação achada por texto sem resolver ligação,
+e destino de instanciação não resolvido descartado por um `continue`
+mudo. Só dois arquivos de `apps/ai-orchestrator/tests/` mudaram; nenhum
+arquivo de `apps/frontend/src/`, `apps/bff/src/`, `apps/ai-orchestrator/src/`
+ou qualquer arquivo Go mudou, `go.mod` e `go.sum` continuam intocados, e o
+conjunto de 10 rotas e de 27 literais que os Goals 042 a 044 já asseriam
+não muda.
+
+- **A identidade da classe de cliente é a declaração, nunca o nome.**
+  `classSurfaces` é indexado por `classDeclarationKey`
+  (`${filePath}:${classSpan.line}`), no formato já usado por
+  `scannedPrimitiveDeclarations` desde o Goal044. Duas classes homônimas
+  declaradas em arquivos diferentes produzem duas entradas distintas em
+  `internalClientSurfaces`, cada uma com sua própria superfície.
+- **A instanciação é reconhecida por ligação, não por texto.**
+  `findInstantiationsOfClassDeclaration` e `resolveClassInstantiationBindings`
+  (`http-egress-sites.ts`) reusam a máquina de ligação do Goal044
+  (`findImportDeclarations`, `resolveModuleSpecifierToFilePath`,
+  `resolveModuleExportBindings`) para achar, em cada arquivo candidato,
+  a forma pela qual `new <Id>(` chega até a declaração: declaração
+  local, import nomeado, import nomeado sob alias, ou import default.
+  Nome igual sem ligação resolvida não entra; `new Alias(...)` sob
+  `import { C as Alias }` entra. Forma de ligação não convertível — cinco
+  categorias nomeadas em `ClassBindingRefusalCategory` — derruba a
+  leitura com `arquivo:linha`, nunca vira ausência de instanciação
+  tratada em silêncio.
+- **Destino de instanciação não resolvido recusa; destino fora do
+  transporte é enumerado.** O `continue` que descartava a instanciação
+  sem registro não existe mais: destino que não resolve chave alguma
+  derruba com `arquivo:linha`; destino que resolve a uma chave fora do
+  serviço Go entra em `nonGoBoundInstantiations`, com arquivo, linha,
+  nome local, forma de ligação e chave resolvida.
+- **Duas afirmações permanentes (WU-04)** provam, sem vacuidade, que
+  `internalClientSurfaces` tem uma entrada por declaração distinta e que
+  toda superfície tem ao menos uma ligação de instanciação resolvida, e
+  que `nonGoBoundInstantiations` não é vazio e toda entrada tem motivo
+  escrito apontando a uma superfície computada.
+- **A construção `export` isenta a ligação, nunca o lado de valor dela
+  (correção da rodada 2).** `refuseClassReferencesOutsideInstantiation`
+  deixou de isentar toda ocorrência que caia dentro do texto de uma
+  construção `export`: `exportConstructBindingRange` recorta a parte em
+  que o nome está em posição de **ligação**, e só ela isenta. O lado
+  DIREITO de `export const X = <Classe>;` e o que vem depois de `extends`
+  em `export class Sub extends <Classe> {` ficam de fora e recusam sob
+  `class_binding_reference_forwarded_as_value` — antes da correção os
+  dois passavam em silêncio. `export type` e `export interface` seguem
+  isentos inteiros, porque ali o nome está em posição de tipo e não
+  captura o construtor.
+- **`scannedFilePathsForInstantiation` enumera o que a varredura abriu
+  (correção da rodada 2).** O campo deixou de ser preenchido de antemão
+  com `allSources`: `findCrossFileCallerBindings` registra cada arquivo
+  no momento em que o abre, e `resolveClassInstantiationBindings` parte
+  do arquivo da declaração. Com a classe declarada e não exportada não
+  há ligação exportada, o laço da varredura entre arquivos não executa e
+  o relatório enumera **um** arquivo, não a árvore inteira — afirmar os
+  demais seria relatar varredura não exercida.
+- **Os quatro controles negativos obrigatórios deste critério existem e
+  mordem**, cada um sobre árvore sintética em diretório temporário,
+  removido ao fim, sem nunca tocar a árvore real: classe homônima em
+  outro arquivo, sem superfície própria antes da chave por declaração e
+  com superfície própria depois (par antes/depois); instanciação sob
+  alias, não encontrada antes da resolução por ligação e encontrada
+  depois (par antes/depois); destino indireto por parâmetro do próprio
+  construtor da classe dona, descartado em silêncio antes e derrubando a
+  leitura com `arquivo:linha` depois (par antes/depois); e um homônimo
+  não relacionado, declarado em outro módulo e instanciado em outro
+  arquivo, que não altera a superfície nem a contagem da classe real, com
+  mover e renomear a classe real não mudando a classificação.
+- **Prova executada:** `npx vitest run
+  tests/assistant/assistant.service.test.ts` (em `apps/ai-orchestrator`):
+  **130** testes, 0 falhas — os **113** da baseline mais **17** deste
+  delta (2 afirmações permanentes de não-vacuidade, 8 nos quatro
+  controles negativos obrigatórios, três deles com par antes/depois, e
+  **7** controles permanentes das duas correções da rodada 2 — 5 sobre a
+  isenção por construção `export` e 2 sobre a enumeração da varredura).
+  As duas bordas foram provadas abertas antes de fechar, revertendo cada
+  correção na árvore e reexecutando: sem `exportConstructBindingRange` os
+  dois casos de repasse como valor não recusavam, e com
+  `scannedFilePaths: allSources.map(...)` a classe não exportada
+  reportava **4** arquivos varridos com zero varredura executada.
+  `npx vitest run` completo de `apps/ai-orchestrator`: **854** passando,
+  88 pulados (baseline: 837 passando, 88 pulados). `npx tsc -p
+  tsconfig.json --noEmit` e `npm run lint` em `apps/ai-orchestrator`: sem
+  erro. `cd apps/evolution-go && go test ./...`: PASS em todos os
+  pacotes com teste, 0 falhas — nenhum pacote Go foi tocado por este
+  diff. `npm run validate:core`: `PASSED`, 15 passos verdes e 2 pulados
+  declarados (`test:bff`, `test:health-worker`), com `audit:static`
+  mantendo os **34** checks (33 passados, `production_health` pulado por
+  não solicitado). `npm run test:gate`: **226** testes, 0 falhas — mesma
+  contagem da baseline.
+- **LIMITE:** `validate:integration` **não roda neste ambiente de
+  execução**: `npm run validate:integration` termina com `exit 2` e
+  `validate:integration REFUSED — BFF_TEST_DATABASE_URL is not set`. O
+  valor real das variáveis de ambiente de produção não é lido por nada
+  aqui — só o default do schema e o `.env.example`.
+- **LIMITE:** nada aqui prova comportamento em runtime do serviço Go, nem
+  que o binário em produção é o desta árvore, nem que **M4** fechou. O
+  que se prova é o que a árvore de código diz, lida por forma de
+  declaração e de ligação. **A-24 continua `PENDENCIA-POS-MVP`, não
+  corrigido** — este delta fecha três bordas de leitura do lado
+  TypeScript, nunca o critério que decide o conjunto de rotas ou de
+  literais, e nenhum arquivo Go de produção deste fork foi editado por
+  este Goal.

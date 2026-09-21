@@ -2655,3 +2655,141 @@ schema TypeScript e o `.env.example` são lidos, nunca um ambiente
 implantado. `validate:integration` continua recusando por pré-condição
 de banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado
 como ausente.
+
+## 22. A identidade da classe de cliente é a declaração, a instanciação é reconhecida por ligação, e as duas saídas de destino são fechadas — Goal045, 2026-09-21
+
+Seção nova, escrita depois da última mudança de árvore do diff045 (a
+chave por declaração, o reconhecimento de instanciação por ligação, a
+dupla saída de destino, as afirmações permanentes de não-vacuidade, e os
+quatro controles negativos, montados e revertidos por árvore sintética em
+diretório temporário fora da worktree). Ela **não reescreve** §4 a §21:
+os registros de A-01 a A-24 em §19, o veredito de §19/§20/§21 e as vinte
+e uma seções de fechamento anteriores continuam exatamente como estavam,
+e a entrada de **A-24** **não foi tocada**. Este Goal não corrige A-24 e
+não abre achado novo — fecha as três bordas não bloqueantes que a
+observação do [review044](reviews/044-review.md) e a conferência deste
+Goal registraram sobre `discoverGoBoundInternalClientRequests`.
+
+### O que mudou
+
+**A primeira borda — identidade da classe pelo nome — é fechada indexando
+por declaração.** O Goal044 deduplicava `classSurfaces` por
+`classSpan.name`; duas classes de cliente homônimas declaradas em
+arquivos diferentes fariam a segunda ser avaliada contra a superfície da
+primeira. O diff045 indexa `classSurfaces` por `classDeclarationKey`
+(`${filePath}:${classSpan.line}`), no mesmo formato que
+`scannedPrimitiveDeclarations` já usava desde o Goal044. Duas declarações
+homônimas produzem duas entradas distintas em `internalClientSurfaces`,
+cada uma com sua própria superfície e sua própria varredura de
+instanciação.
+
+**A segunda borda — instanciação achada por texto — é fechada resolvendo
+a ligação local até a declaração.** `findClassInstantiations` montava um
+`RegExp` a partir do nome da classe e o aplicava a todo arquivo das duas
+árvores, sem resolver o que aquele identificador estava ligado naquele
+arquivo — errando para mais (classe homônima não relacionada) e para
+menos (instanciação sob alias de import, que o padrão textual não
+casava). O diff045 acrescenta `findInstantiationsOfClassDeclaration` e
+`resolveClassInstantiationBindings`, que reusam a máquina de ligação do
+Goal044 (`findImportDeclarations`, `resolveModuleSpecifierToFilePath`,
+`resolveModuleExportBindings`) para achar, em cada arquivo candidato, a
+forma pela qual o identificador de `new <Id>(` chega até a declaração:
+declaração local, import nomeado, import nomeado sob alias, ou import
+default. Só então o arquivo é varrido, e só pelo nome local resolvido.
+Forma de ligação que a resolução não converte — duas declarações
+homônimas sem ligação que as distinga, exportação não convertível
+(inclui `export =`), `module.exports`/`exports.<nome>`, ligação que
+atravessa arquivo por forma não seguida (reexportação em cadeia, import
+dinâmico, alias de caminho não relativo, import de namespace, ou
+referência reexportada adiante), ou referência à classe repassada
+adiante como valor — derruba a leitura com `arquivo:linha`, em categoria
+nomeada (`ClassBindingRefusalCategory`), nunca em silêncio.
+
+**A terceira borda — destino não resolvido descartado por um `continue`
+mudo — é fechada com duas saídas distintas.** `resolveDestination`
+recebia o primeiro argumento do construtor com `parameterNames` vazio; se
+esse argumento não fosse uma expressão da qual a leitura extraísse chave
+de ambiente, a instanciação era descartada sem virar requisição, sem
+virar resíduo e sem derrubar a leitura. O diff045 remove esse `continue`:
+quando o destino não resolve a chave alguma, a leitura derruba com
+`arquivo:linha`, nomeando a expressão não convertida; quando resolve a
+uma chave que não é do serviço Go, a instanciação entra em
+`nonGoBoundInstantiations` — fora do conjunto alcançado, mas enumerada
+com motivo computado (arquivo, linha, nome local, forma de ligação, chave
+de ambiente resolvida).
+
+**As três bordas foram provadas abertas antes de fechar.** Os quatro
+controles negativos deste critério rodam, cada um sobre árvore sintética
+em diretório temporário próprio, removida ao fim: controle 1 prova, com
+par antes/depois, que uma segunda classe homônima declarada em outro
+arquivo, sem relação com a primeira, não tinha superfície própria antes
+da chave por declaração e passa a ter depois, cada uma com sua própria
+requisição; controle 2 prova, com par antes/depois, que uma instanciação
+sob `import { C as Alias }` / `new Alias(...)` não era encontrada antes
+da resolução por ligação e passa a ser depois, com a rota entrando no
+conjunto; controle 3 prova, com par antes/depois, que uma instanciação
+cujo destino é recebido por parâmetro do próprio construtor da classe
+dona era descartada em silêncio antes, e depois derruba a leitura
+nomeando arquivo, linha e o texto do destino; controle 4 prova que uma
+classe homônima e não relacionada, declarada em outro módulo e
+instanciada em outro arquivo, não é atribuída à superfície da classe do
+transporte, e que mover e renomear a classe real e a classe dona não
+muda a classificação computada. Nenhum dos quatro toca a árvore real.
+
+**Nenhum mecanismo se desliga em silêncio por não reconhecer a forma.**
+`refuseClassReferencesOutsideInstantiation` derruba quando o identificador
+ligado aparece em posição de valor fora de `new <Id>(` — referência
+repassada adiante que a leitura não percorre. Toda mensagem de recusa e
+toda entrada de `nonGoBoundInstantiations` cita a forma de ligação
+resolvida e a declaração alcançada; nenhuma afirma varredura ou ligação
+que a leitura não exerceu. As duas bordas em que isso não valia foram
+fechadas na rodada 2, cada uma provada aberta antes: a isenção por
+construção `export` cobria o texto inteiro dela, e por isso
+`export const X = <Classe>;` e `export class Sub extends <Classe> {`
+passavam em silêncio — `exportConstructBindingRange` isenta agora só o
+lado de ligação, e os dois recusam sob
+`class_binding_reference_forwarded_as_value`; e
+`scannedFilePathsForInstantiation` era preenchido com `allSources` antes
+de qualquer varredura, reportando a árvore inteira mesmo quando o laço
+que abre arquivo não chegava a executar — quem registra o arquivo agora
+é `findCrossFileCallerBindings`, no momento em que o abre.
+
+**Duas afirmações permanentes (WU-04) consomem os dois mecanismos sobre a
+árvore real**, ao lado das que os Goals 043 e 044 já deixavam — nenhuma
+delas foi relaxada, pulada ou removida. Provam, sem vacuidade, que
+`internalClientSurfaces` tem uma entrada por declaração distinta e que
+toda superfície tem ao menos uma ligação de instanciação resolvida e
+registrada, e que `nonGoBoundInstantiations` não é vazio e toda entrada
+tem motivo escrito e aponta a uma superfície computada.
+
+### Veredito recontado
+
+Esta auditoria continua com **0 achados `BLOQUEADOR-MVP`, 8
+`PENDENCIA-POS-MVP`** e **6 `LIMITE-DECLARADO`** — a mesma contagem de
+§21. **Nenhuma mudança em relação a §21**: nenhum achado de A-01 a A-24
+foi tocado, corrigido, reclassificado ou reaberto. **A-24 continua
+`PENDENCIA-POS-MVP`, não corrigido** — nenhum arquivo Go de produção
+deste fork foi editado por este Goal.
+
+Quatro coisas que esta seção não diz. **Não diz que A-24 foi corrigido**:
+o rótulo `"Ver Menu"` continua escrito em
+`pkg/sendMessage/service/send_service.go:1960`. **Não diz que M4 foi
+fechado**: nenhuma chamada saiu para provedor de LLM real nem para o
+WhatsApp real, nenhuma conexão whatsmeow foi aberta, e o diff045 toca dois
+arquivos TypeScript de teste e de apoio a teste — nenhum arquivo Go,
+nenhum arquivo de `apps/frontend/src/`, `apps/bff/src/` ou
+`apps/ai-orchestrator/src/` —, mais a documentação de migração. **Não diz
+que o comportamento em runtime do serviço Go foi provado**: o que se
+prova é o que a árvore de código diz, lida por AST e por forma de
+declaração e de ligação; nada aqui executa esse serviço, abre conexão
+whatsmeow ou observa o que chega a um telefone. **Não diz que a fidelidade
+visual está provada**: nenhum arquivo de `apps/frontend/src/` mudou.
+
+O que continua fora do alcance deste Goal, por construção: comportamento
+em runtime do serviço Go; qual binário roda em produção; `whatsmeow-
+lib/`, biblioteca vendorizada lida apenas como fonte das declarações de
+proto; e o valor real de qualquer variável de ambiente — só o default do
+schema TypeScript e o `.env.example` são lidos, nunca um ambiente
+implantado. `validate:integration` continua recusando por pré-condição de
+banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado
+como ausente.

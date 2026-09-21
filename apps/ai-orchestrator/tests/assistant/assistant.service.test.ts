@@ -2870,6 +2870,67 @@ describe("nenhum sítio de egresso é descartado em silêncio: ou vira requisiç
   });
 });
 
+describe("Goal045 / WU-04 — afirmações permanentes: superfície por declaração distinta, ligação de instanciação resolvida e enumerações consumidas", () => {
+  it("cada entrada de internalClientSurfaces corresponde a uma declaração distinta, e cada uma tem ao menos uma ligação de instanciação resolvida e registrada", () => {
+    const { internalClientSurfaces } = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+
+    // Não-vacuidade: a resolução por ligação reconheceu ao menos uma instanciação.
+    expect(internalClientSurfaces.length).toBeGreaterThan(0);
+
+    // Cada superfície corresponde a uma declaração distinta: arquivo + linha
+    // da classe é a chave, nunca o nome isolado (duas classes homônimas em
+    // arquivos diferentes seriam duas entradas, não uma).
+    const declarationKeys = internalClientSurfaces.map(
+      (surface) => `${surface.filePath}:${surface.classLine}`,
+    );
+    expect(new Set(declarationKeys).size).toBe(declarationKeys.length);
+
+    const validBindingForms = new Set([
+      "local_declaration",
+      "named_import",
+      "aliased_named_import",
+      "default_import",
+    ]);
+    let totalInstantiationBindings = 0;
+    for (const surface of internalClientSurfaces) {
+      // Cada instanciação reconhecida teve a ligação resolvida até a
+      // declaração — a prova do que o motivo escrito afirma.
+      expect(surface.instantiationBindings.length).toBeGreaterThan(0);
+      for (const binding of surface.instantiationBindings) {
+        expect(binding.filePath.length).toBeGreaterThan(0);
+        expect(binding.localName.length).toBeGreaterThan(0);
+        expect(validBindingForms.has(binding.form)).toBe(true);
+      }
+      totalInstantiationBindings += surface.instantiationBindings.length;
+    }
+    expect(totalInstantiationBindings).toBeGreaterThan(0);
+  });
+
+  it("a enumeração de instanciação fora do transporte é consumida: toda entrada tem motivo escrito e aponta a uma superfície computada", () => {
+    const { internalClientSurfaces, nonGoBoundInstantiations } = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+
+    // Não-vacuidade: a enumeração de fora do transporte produziu ao menos
+    // uma entrada.
+    expect(nonGoBoundInstantiations.length).toBeGreaterThan(0);
+
+    const knownClassNames = new Set(internalClientSurfaces.map((surface) => surface.className));
+    for (const instantiation of nonGoBoundInstantiations) {
+      expect(instantiation.filePath.length).toBeGreaterThan(0);
+      expect(instantiation.line).toBeGreaterThan(0);
+      expect(instantiation.reason.trim().length).toBeGreaterThan(0);
+      expect(knownClassNames.has(instantiation.className)).toBe(true);
+    }
+  });
+});
+
 describe("controle negativo 2b — destino que só existe no chamador: o do serviço Go entra, o de outro serviço é contado fora (Goal043 / WU-02)", () => {
   const envSchema = [
     "export const env = {",
@@ -3036,6 +3097,8 @@ describe("controle negativo 4 (lado TypeScript) — mover sítio, cliente e rota
         "",
       ].join("\n"),
       "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
         "export class EvolutionClient {",
         "  private http: InternalHttpClient;",
         "  constructor() {",
@@ -3061,6 +3124,8 @@ describe("controle negativo 4 (lado TypeScript) — mover sítio, cliente e rota
         "",
       ].join("\n"),
       "callers/another-caller.ts": [
+        'import { TransportGateway } from "../gateways/renamed-gateway.js";',
+        "",
         "export class AnotherCaller {",
         "  private gateway: TransportGateway;",
         "  constructor() {",
@@ -3122,6 +3187,8 @@ describe("controle negativo 5 — destino resolvido por forma: cliente genérico
         "",
       ].join("\n"),
       "clients/scheduling-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
         "export class SchedulingClient {",
         "  private http: InternalHttpClient;",
         "  constructor() {",
@@ -3134,6 +3201,8 @@ describe("controle negativo 5 — destino resolvido por forma: cliente genérico
         "",
       ].join("\n"),
       "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
         "export class EvolutionClient {",
         "  private http: InternalHttpClient;",
         "  constructor() {",
@@ -3388,6 +3457,8 @@ describe("WU-02 é exercitado: delegação de dois níveis alcança fetch, membr
         "",
       ].join("\n"),
       "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
         "export class EvolutionClient {",
         "  private http: InternalHttpClient;",
         "  constructor() {",
@@ -3527,6 +3598,8 @@ describe("controle negativo 2 (Goal044 / WU-04) — método público sem fetch p
 
   /** O chamador é o mesmo nas três árvores: só a declaração do cliente muda. */
   const evolutionClient = [
+    'import { InternalHttpClient } from "./internal-http-client.js";',
+    "",
     "export class EvolutionClient {",
     "  private http: InternalHttpClient;",
     "  constructor() {",
@@ -3794,6 +3867,8 @@ describe("controle negativo 4 (Goal044 / WU-04) — mover e renomear o helper (W
         "",
       ].join("\n"),
       "clients/evolution-client.ts": [
+        'import { HttpGateway } from "./internal-http-client.js";',
+        "",
         "export class ServiceClient {",
         "  private gateway: HttpGateway;",
         "  constructor() {",
@@ -3838,6 +3913,8 @@ describe("controle negativo 4 (Goal044 / WU-04) — mover e renomear o helper (W
         "",
       ].join("\n"),
       "infra/thing-service.ts": [
+        'import { TransportClient } from "./transport-client.js";',
+        "",
         "export class ThingService {",
         "  private transport: TransportClient;",
         "  constructor() {",
@@ -4249,6 +4326,8 @@ describe("WU-02 é fail-closed no nome do membro: a forma de propriedade-arrow d
         "",
       ].join("\n"),
       "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
         "export class EvolutionClient {",
         "  private http: InternalHttpClient;",
         "  constructor() {",
@@ -4299,6 +4378,8 @@ describe("WU-02 é fail-closed no nome do membro: a forma de propriedade-arrow d
         "",
       ].join("\n"),
       "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
         "export class EvolutionClient {",
         "  private http: InternalHttpClient;",
         "  constructor() {",
@@ -4360,6 +4441,8 @@ describe("WU-02 é fail-closed na chamada: membro fora da superfície é contado
       "config/env.ts": envSchema,
       "clients/internal-http-client.ts": internalClient,
       "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
         "export class EvolutionClient {",
         "  private http: InternalHttpClient;",
         "  constructor() {",
@@ -4410,6 +4493,8 @@ describe("WU-02 é fail-closed na chamada: membro fora da superfície é contado
       "config/env.ts": envSchema,
       "clients/internal-http-client.ts": internalClient,
       "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
         "export class EvolutionClient {",
         "  private http: InternalHttpClient;",
         "  constructor() {",
@@ -4536,6 +4621,667 @@ describe("a enumeração que §2 e §3 exigem sai do descobridor e é conferida 
       expect(counted.reason).toContain(
         `varrer ${report!.scannedFilePaths.length} arquivo(s) das duas árvores`,
       );
+    }
+  });
+});
+
+/* =========================================================================
+ * Quatro controles negativos obrigatórios (Goal045 / WU-05): cada um sobre
+ * árvore sintética montada e removida pelo próprio teste, nenhum tocando a
+ * árvore real.
+ * ========================================================================= */
+
+describe("controle negativo 1 (Goal045 / WU-05) — classe homônima em outro arquivo: cada declaração é uma entrada distinta em internalClientSurfaces, nenhuma se funde na outra", () => {
+  const envSchema = [
+    "export const env = {",
+    '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+    "};",
+    "",
+  ].join("\n");
+
+  /** Mesmo texto de classe nos dois arquivos: é a chave por declaração, não o nome, que os distingue. */
+  const internalClient = [
+    "export class InternalHttpClient {",
+    "  constructor(private baseUrl: string) {}",
+    "  async request(options: { method: string; path: string }) {",
+    "    const url = new URL(options.path, this.baseUrl);",
+    "    return fetch(url, { method: options.method });",
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+
+  const evolutionClient = [
+    'import { InternalHttpClient } from "./internal-http-client.js";',
+    "",
+    "export class EvolutionClient {",
+    "  private http: InternalHttpClient;",
+    "  constructor() {",
+    "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+    "  }",
+    "  async createInstance() {",
+    '    return this.http.request({ method: "POST", path: "/instance/create" });',
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+
+  it("antes: só a classe real existe, numa única declaração — uma entrada em internalClientSurfaces, uma requisição", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": internalClient,
+      "clients/evolution-client.ts": evolutionClient,
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, internalClientSurfaces } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      expect(internalClientSurfaces).toHaveLength(1);
+      expect(
+        requests.map((request) => ({ method: request.method, path: request.pathExpression })),
+      ).toEqual([{ method: "POST", path: "/instance/create" }]);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("depois: um segundo arquivo, sem relação alguma com o primeiro, declara uma classe do MESMO nome e também aponta ao serviço Go — as duas entram como entradas distintas em internalClientSurfaces, cada uma com sua própria requisição", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": internalClient,
+      "clients/evolution-client.ts": evolutionClient,
+      "scheduling/internal-http-client.ts": internalClient,
+      "scheduling/scheduling-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class SchedulingClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createBooking() {",
+        '    return this.http.request({ method: "POST", path: "/booking/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, internalClientSurfaces } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      // Duas declarações de "InternalHttpClient", em arquivos diferentes: a
+      // chave é a declaração (arquivo + linha da classe), então as duas
+      // entram, nunca uma pisando na outra.
+      expect(internalClientSurfaces).toHaveLength(2);
+      const declarationKeys = internalClientSurfaces.map(
+        (surface) => `${surface.filePath}:${surface.classLine}`,
+      );
+      expect(new Set(declarationKeys).size).toBe(2);
+      expect(
+        internalClientSurfaces.every((surface) => surface.className === "InternalHttpClient"),
+      ).toBe(true);
+
+      expect(
+        requests
+          .map((request) => ({ method: request.method, path: request.pathExpression }))
+          .sort((a, b) => a.path.localeCompare(b.path)),
+      ).toEqual([
+        { method: "POST", path: "/booking/create" },
+        { method: "POST", path: "/instance/create" },
+      ]);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("controle negativo 2 (Goal045 / WU-05) — instanciação sob alias `new <Alias>(` com a chave de base do serviço Go: a ligação por alias é resolvida até a declaração", () => {
+  const envSchema = [
+    "export const env = {",
+    '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+    "};",
+    "",
+  ].join("\n");
+
+  const internalClient = [
+    "export class InternalHttpClient {",
+    "  constructor(private baseUrl: string) {}",
+    "  async request(options: { method: string; path: string }) {",
+    "    const url = new URL(options.path, this.baseUrl);",
+    "    return fetch(url, { method: options.method });",
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+
+  it("antes: import sem alias — a instanciação sob o nome da própria declaração entra no conjunto alcançado", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": internalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, internalClientSurfaces } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      expect(
+        requests.map((request) => ({ method: request.method, path: request.pathExpression })),
+      ).toEqual([{ method: "POST", path: "/instance/create" }]);
+      const binding = internalClientSurfaces[0].instantiationBindings.find(
+        (candidate) => candidate.localName === "InternalHttpClient" && candidate.form === "named_import",
+      );
+      expect(binding).toBeDefined();
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("depois: o mesmo arquivo passa a importar sob alias e a instanciar `new HttpAlias(...)` com a base do serviço Go — a ligação por alias é resolvida até a mesma declaração, e a rota entra igual", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": internalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient as HttpAlias } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: HttpAlias;",
+        "  constructor() {",
+        "    this.http = new HttpAlias(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, internalClientSurfaces } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      expect(internalClientSurfaces).toHaveLength(1);
+      expect(
+        requests.map((request) => ({ method: request.method, path: request.pathExpression })),
+      ).toEqual([{ method: "POST", path: "/instance/create" }]);
+      // A ligação do alias foi de fato resolvida: aparece com o nome local
+      // do alias e a forma "aliased_named_import", não com o nome da
+      // declaração.
+      const binding = internalClientSurfaces[0].instantiationBindings.find(
+        (candidate) => candidate.localName === "HttpAlias",
+      );
+      expect(binding).toBeDefined();
+      expect(binding!.form).toBe("aliased_named_import");
+      expect(
+        internalClientSurfaces[0].instantiationBindings.some(
+          (candidate) => candidate.localName === "InternalHttpClient" && candidate.form === "named_import",
+        ),
+      ).toBe(false);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("controle negativo 3 (Goal045 / WU-05) — destino indireto: base recebida por parâmetro do construtor da classe dona", () => {
+  const envSchema = [
+    "export const env = {",
+    '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+    "};",
+    "",
+  ].join("\n");
+
+  const internalClient = [
+    "export class InternalHttpClient {",
+    "  constructor(private baseUrl: string) {}",
+    "  async request(options: { method: string; path: string }) {",
+    "    const url = new URL(options.path, this.baseUrl);",
+    "    return fetch(url, { method: options.method });",
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+
+  it("antes: a classe dona passa a base do serviço Go direto, sem indireção pelo próprio construtor — a rota entra no conjunto alcançado", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": internalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests } = discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts"));
+      expect(
+        requests.map((request) => ({ method: request.method, path: request.pathExpression })),
+      ).toEqual([{ method: "POST", path: "/instance/create" }]);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("depois: a classe dona passa a receber a base como parâmetro do PRÓPRIO construtor e repassá-lo sem literal algum — a leitura derruba nomeando arquivo, linha e o texto do destino, em vez de classificar às cegas", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": internalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor(baseUrl: string) {",
+        "    this.http = new InternalHttpClient(baseUrl);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      expect(() =>
+        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+      ).toThrowError(
+        /evolution-client\.ts:\d+: instância de InternalHttpClient \(new InternalHttpClient\(, ligação named_import até .*internal-http-client\.ts:\d+\) tem destino "baseUrl" que não resolve a nenhuma chave de ambiente/u,
+      );
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("controle negativo 4 (Goal045 / WU-05) — nome não decide: homônimo não relacionado em outro módulo não entra na superfície do transporte nem acrescenta rota, e mover/renomear a classe real não muda a classificação", () => {
+  const envSchema = [
+    "export const env = {",
+    '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+    "};",
+    "",
+  ].join("\n");
+
+  it("um homônimo sem relação alguma com o transporte, instanciado com a base do serviço Go como argumento, não altera a superfície nem a contagem de requisições da classe real", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": [
+        "export class InternalHttpClient {",
+        "  constructor(private baseUrl: string) {}",
+        "  async request(options: { method: string; path: string }) {",
+        "    const url = new URL(options.path, this.baseUrl);",
+        "    return fetch(url, { method: options.method });",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      // Homônimo sem fetch algum: não é sítio de egresso, não é
+      // "constructor_base_url_*", e não entra em discoverHttpEgressSites de
+      // jeito nenhum. A trapaça é o nome igual e o argumento de instanciação
+      // ser a mesma chave de base do serviço Go.
+      "unrelated/logger.ts": [
+        "export class InternalHttpClient {",
+        "  constructor(private label: string) {}",
+        "  describe() {",
+        "    return `label:${this.label}`;",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      "unrelated/caller.ts": [
+        'import { InternalHttpClient as LoggerClient } from "./logger.js";',
+        "",
+        "export function makeLogger() {",
+        "  return new LoggerClient(env.EVOLUTION_GO_BASE_URL);",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, internalClientSurfaces, nonGoBoundInstantiations } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      // Só a declaração real, apontada ao transporte, entra — o homônimo sem
+      // fetch nunca é visto por esta descoberta.
+      expect(internalClientSurfaces).toHaveLength(1);
+      expect(internalClientSurfaces[0].filePath.replace(/\\/gu, "/")).toContain(
+        "clients/internal-http-client.ts",
+      );
+      expect(
+        requests.map((request) => ({ method: request.method, path: request.pathExpression })),
+      ).toEqual([{ method: "POST", path: "/instance/create" }]);
+      expect(nonGoBoundInstantiations).toEqual([]);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("mover e renomear a classe real e a classe dona não muda a classificação: mesmo método, caminho e categoria, em arquivos, pastas e nomes diferentes", () => {
+    const before = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": [
+        "export class InternalHttpClient {",
+        "  constructor(private baseUrl: string) {}",
+        "  async request(options: { method: string; path: string }) {",
+        "    const url = new URL(options.path, this.baseUrl);",
+        "    return fetch(url, { method: options.method });",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const after = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "infra/transport-client.ts": [
+        "export class TransportClient {",
+        "  constructor(private baseUrl: string) {}",
+        "  async dispatch(options: { method: string; path: string }) {",
+        "    const url = new URL(options.path, this.baseUrl);",
+        "    return fetch(url, { method: options.method });",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      "infra/thing-service.ts": [
+        'import { TransportClient } from "./transport-client.js";',
+        "",
+        "export class ThingService {",
+        "  private transport: TransportClient;",
+        "  constructor() {",
+        "    this.transport = new TransportClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.transport.dispatch({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const beforeRequests = discoverGoServiceHttpRequests(before, emptyTree, join(before, "config/env.ts"))
+        .requests.map((request) => ({
+          method: request.method,
+          path: request.pathExpression,
+          category: request.category,
+        }));
+      const afterRequests = discoverGoServiceHttpRequests(after, emptyTree, join(after, "config/env.ts"))
+        .requests.map((request) => ({
+          method: request.method,
+          path: request.pathExpression,
+          category: request.category,
+        }));
+      expect(beforeRequests).toEqual([
+        { method: "POST", path: "/instance/create", category: "env_var_EVOLUTION_GO_BASE_URL" },
+      ]);
+      expect(afterRequests).toEqual(beforeRequests);
+    } finally {
+      rmSync(before, { recursive: true, force: true });
+      rmSync(after, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * Controles permanentes das correções da rodada 2 (Goal045 / FIX-001). Cada
+ * um roda sobre árvore sintética em diretório temporário, removido ao fim, e
+ * nunca toca as árvores reais. Os dois fecham borda que a rodada 1 tinha
+ * deixado aberta em silêncio — não são reconhecimento novo.
+ */
+describe("Goal045 / FIX-001 — a construção `export` isenta a ligação, nunca o lado de valor dela", () => {
+  const envSchema = [
+    "export const env = {",
+    '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+    "};",
+    "",
+  ].join("\n");
+
+  const internalClient = [
+    "export class InternalHttpClient {",
+    "  constructor(private baseUrl: string) {}",
+    "  async request(options: { method: string; path: string }) {",
+    "    const url = new URL(options.path, this.baseUrl);",
+    "    return fetch(url, { method: options.method });",
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+
+  /** A mesma árvore em todos os casos, com `trailing` acrescentado ao fim do arquivo que instancia o cliente. */
+  function discoverWithTrailingSource(trailing: string) {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": internalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        trailing,
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      return discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts"));
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  }
+
+  it("sem repasse, a instanciação sob ligação importada é lida e a rota entra — o controle não é vácuo", () => {
+    const { requests } = discoverWithTrailingSource("");
+    expect(
+      requests.map((request) => ({ method: request.method, path: request.pathExpression })),
+    ).toEqual([{ method: "POST", path: "/instance/create" }]);
+  });
+
+  it("`export const Forwarded = InternalHttpClient;` recusa: o lado DIREITO da construção `export` é posição de valor, não a ligação exportada", () => {
+    expect(() => discoverWithTrailingSource("export const Forwarded = InternalHttpClient;")).toThrow(
+      /class_binding_reference_forwarded_as_value/,
+    );
+  });
+
+  it("`export class SubClient extends InternalHttpClient {}` recusa: herança de classe é posição de valor, e estar dentro de um `export` não a isenta", () => {
+    expect(() =>
+      discoverWithTrailingSource("export class SubClient extends InternalHttpClient {}"),
+    ).toThrow(/class_binding_reference_forwarded_as_value/);
+  });
+
+  it("`export type ClientAlias = InternalHttpClient;` não recusa: o lado direito de um alias de TIPO é posição de tipo, não captura o construtor como valor", () => {
+    const { requests } = discoverWithTrailingSource("export type ClientAlias = InternalHttpClient;");
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+  });
+
+  it("`export interface HasClient extends InternalHttpClient {}` não recusa: o `extends` de uma interface é posição de tipo, ao contrário do de uma classe", () => {
+    const { requests } = discoverWithTrailingSource(
+      "export interface HasClient extends InternalHttpClient {}",
+    );
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+  });
+});
+
+describe("Goal045 / FIX-001 — `scannedFilePathsForInstantiation` enumera o que a varredura abriu, nunca o que ela deixaria de abrir", () => {
+  const envSchema = [
+    "export const env = {",
+    '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+    "};",
+    "",
+  ].join("\n");
+
+  it("classe declarada e não exportada: a varredura entre arquivos não roda, e o relatório enumera só o arquivo da declaração", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/local-client.ts": [
+        // Sem `export`: `resolveModuleExportBindings` devolve zero ligação,
+        // o laço que chama `findCrossFileCallerBindings` não executa, e
+        // nenhum outro arquivo é aberto atrás de instanciação.
+        "class InternalHttpClient {",
+        "  constructor(private baseUrl: string) {}",
+        "  async request(options: { method: string; path: string }) {",
+        "    const url = new URL(options.path, this.baseUrl);",
+        "    return fetch(url, { method: options.method });",
+        "  }",
+        "}",
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      "clients/unrelated-a.ts": "export const unrelatedA = 1;\n",
+      "clients/unrelated-b.ts": "export const unrelatedB = 2;\n",
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { internalClientSurfaces } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      expect(internalClientSurfaces).toHaveLength(1);
+      // A árvore tem 4 arquivos TypeScript; afirmar os 4 seria relatar
+      // varredura não exercida.
+      expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toEqual([
+        internalClientSurfaces[0].filePath,
+      ]);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("classe exportada e importada em outro arquivo: a varredura roda e enumera os arquivos que abriu, o da declaração entre eles, sem repetir caminho", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": [
+        "export class InternalHttpClient {",
+        "  constructor(private baseUrl: string) {}",
+        "  async request(options: { method: string; path: string }) {",
+        "    const url = new URL(options.path, this.baseUrl);",
+        "    return fetch(url, { method: options.method });",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { internalClientSurfaces } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      expect(internalClientSurfaces).toHaveLength(1);
+      const scanned = internalClientSurfaces[0].scannedFilePathsForInstantiation;
+      expect(scanned).toContain(internalClientSurfaces[0].filePath);
+      expect(scanned.length).toBeGreaterThan(1);
+      expect(new Set(scanned).size).toBe(scanned.length);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
     }
   });
 });

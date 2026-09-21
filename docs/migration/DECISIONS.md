@@ -1348,3 +1348,209 @@ por acesso computado); ou o serviço Go ganhar um sítio de egresso por uma
 forma de cliente inteiramente nova, que nem a leitura de `fetch` cru nem a
 de classe reconhecem — nenhum dos dois mecanismos deste Goal estende o
 reconhecimento de forma além do que já cobriam.
+
+## D-061 — A identidade da classe de cliente é a declaração, a instanciação é reconhecida por ligação, e destino de instanciação não resolvido recusa enquanto destino fora do transporte é enumerado, propostas no Goal045
+
+**Status:** ACCEPTED no [review045](reviews/045-review.md) (rodada 3 de 3,
+2026-09-21, zero blockers; as rodadas 1 e 2 tiveram 3 e 1 blocker — o de
+maior peso na rodada 1 foi a isenção por construção `export` apagando a
+categoria `class_binding_reference_forwarded_as_value`, e os demais da
+família já conhecida de varredura ou contagem afirmada além do que a
+leitura exerceu), pelo Tech Lead Agent ([AGENT_ROLES](AGENT_ROLES.md),
+D-018). Cobre o diff045 (WU-01 a WU-05 da rodada 1 — a chave por
+declaração, o reconhecimento de instanciação por ligação, a dupla saída de
+destino, as afirmações permanentes e a não-vacuidade, e os quatro
+controles negativos com árvore sintética montada e revertida — mais
+FIX-001 das rodadas 2 e 3: `exportConstructBindingRange`,
+`scannedFilePathsForInstantiation` acumulado pela varredura, e a descrição
+das cinco categorias de recusa corrigida para o que o código faz; a última
+mudança de árvore é essa correção de documentação) sobre a baseline aceita
+`d9b2416193194e6fd8eef58e18988a5585c40628` (fechamento do Goal044); sem
+commit e sem deploy. Quatro observações não bloqueantes ficaram
+registradas no review, nenhuma sobre invariante afrouxada:
+`findTopLevelAssignmentIndex` conta `<`/`>` por heurística textual; esta
+decisão não nomeia dois casos marginais de recusa (declaração fora das
+duas árvores e arquivo ligado com texto fora do conjunto lido), sendo
+incompleta e não falsa; a isenção por construção `export` é recortada por
+forma textual, de modo que uma forma de declaração exportada fora de
+`type`/`interface`/`class`/`const`/`let`/`var` isenta a construção
+inteira; e as observações opcionais dos reviews 040 e 041 continuam
+abertas.
+Fecha as três bordas que a observação não bloqueante do
+[review044](reviews/044-review.md) e a conferência deste Goal registraram
+sobre `discoverGoBoundInternalClientRequests`. Não fecha nem reabre
+achado nenhum — **A-24 continua `PENDENCIA-POS-MVP`, não corrigido**;
+A-04 a A-08, A-11 a A-17 e A-19 não são tocados, e nenhum achado fechado é
+reaberto. Registrado em [FINAL_AUDIT §22](FINAL_AUDIT.md), que **não
+reescreve** §4 a §21. Não altera nenhuma decisão anterior — reusa e não
+altera D-057 a D-060.
+
+**Contexto:** a observação não bloqueante do review044 registrou que
+`discoverGoBoundInternalClientRequests` ainda deduplicava classe de
+cliente por **nome** (`classSurfaces.has(classSpan.name)`,
+`http-egress-sites.ts:2558` na baseline). A conferência deste Goal achou
+mais duas bordas na mesma família, no mesmo descobridor:
+`findClassInstantiations` achava instanciação por `RegExp` sobre o nome
+da classe aplicada a todo arquivo das duas árvores, sem resolver a
+ligação local — errando para mais (classe homônima não relacionada) e
+para menos (instanciação sob alias de import, que o padrão textual não
+casa); e `resolveDestination` recebia o primeiro argumento do construtor
+com `parameterNames` vazio, de modo que uma instanciação cujo destino
+viesse indireto (parâmetro do próprio construtor da classe dona, por
+exemplo) era descartada por um `continue` mudo, sem virar requisição, sem
+virar resíduo e sem derrubar a leitura.
+
+**Decisão:**
+
+1. **A identidade da classe de cliente é o sítio de declaração, nunca o
+   nome.** `classSurfaces` é indexado por `classDeclarationKey`
+   (`${filePath}:${classSpan.line}`, formato já usado por
+   `scannedPrimitiveDeclarations`), não por `classSpan.name`. Duas
+   classes homônimas declaradas em arquivos diferentes produzem duas
+   entradas em `internalClientSurfaces`, cada uma com sua própria
+   superfície computada por `computeInternalClientMemberSurface` e sua
+   própria varredura de instanciação; nenhum casamento posterior usa
+   `className` isolado como chave — o campo continua no relatório só
+   para leitura humana, ao lado de `filePath` e `classLine`.
+2. **A instanciação só conta quando a ligação local resolve até aquela
+   declaração.** `findInstantiationsOfClassDeclaration` chama
+   `resolveClassInstantiationBindings`, que reusa a máquina de ligação do
+   Goal044 (`findImportDeclarations`, `resolveModuleSpecifierToFilePath`,
+   `resolveModuleExportBindings`) para achar, em cada arquivo candidato
+   das duas árvores, a forma pela qual o identificador usado em
+   `new <Id>(` chega até a declaração: `local_declaration`,
+   `named_import`, `aliased_named_import` ou `default_import`
+   (`ClassBindingForm`). Só então `findClassInstantiations` varre aquele
+   arquivo, e só pelo nome local que a ligação resolveu — nunca pelo nome
+   da declaração solto. Nome igual sem ligação resolvida não é varrido;
+   alias resolvido (`import { C as Alias }` / `new Alias(`) é varrido e
+   entra. `refuseClassReferencesOutsideInstantiation` derruba quando o
+   identificador ligado aparece em posição de valor fora de `new <Id>(`
+   — referência repassada adiante que esta leitura não percorre. **A
+   isenção por construção `export` é do lado de LIGAÇÃO, nunca do lado de
+   valor** (`exportConstructBindingRange`, correção da rodada 2): estar
+   dentro do texto de um `export` não isenta o lado direito de
+   `export const X = <Classe>;` nem o que vem depois de `extends` em
+   `export class Sub extends <Classe> {`, que recusam como qualquer outro
+   repasse; `export type` e `export interface` seguem isentos inteiros,
+   por serem posição de tipo. A alternativa — isentar a construção
+   inteira, como a rodada 1 fazia — foi rejeitada porque apagava em
+   silêncio exatamente a categoria
+   `class_binding_reference_forwarded_as_value` nas duas formas em que
+   uma classe de transporte mais plausivelmente escapa.
+   **`scannedFilePathsForInstantiation` é acumulado pela varredura, nunca
+   afirmado de antemão** (correção da rodada 2): quem registra o arquivo
+   é `findCrossFileCallerBindings`, no momento em que o abre. Preencher o
+   campo com `allSources` reportava a árvore inteira mesmo quando nenhuma
+   ligação exportada existia e o laço da varredura não chegava a executar
+   — varredura não exercida afirmada como exercida.
+3. **Forma de ligação que a resolução não alcança derruba a leitura, com
+   `arquivo:linha`, em categoria nomeada — nunca um `continue` mudo.**
+   `ClassBindingRefusalCategory` nomeia cinco categorias: duas declarações
+   homônimas sem ligação que as distinga
+   (`class_binding_homonymous_declarations`), forma de exportação não
+   convertível em ligação importável — inclui `export =`
+   (`class_binding_export_form_not_resolved`), `module.exports` /
+   `exports.<nome>` (`class_binding_commonjs_export`), ligação que
+   atravessa arquivo por forma não seguida — reexportação em cadeia,
+   import dinâmico, alias de caminho não relativo, import de namespace, ou
+   referência importada e reexportada adiante
+   (`class_binding_cross_file_form_not_resolved`) — e referência
+   repassada como valor (`class_binding_reference_forwarded_as_value`).
+   Cada uma derruba com uma mensagem que nomeia o identificador, o
+   arquivo e a linha — nenhuma vira ausência de instanciação tratada em
+   silêncio.
+4. **Destino de instanciação não resolvido recusa; destino fora do
+   transporte é enumerado — as duas saídas são distintas e nenhuma é
+   muda.** O `continue` que descartava a instanciação sem registro
+   (`http-egress-sites.ts:2576-2577` na baseline) não existe mais nesta
+   forma. Quando `resolveDestination(candidateSource, callIndex,
+   destinationArgText, [])` não resolve o primeiro argumento a chave de
+   ambiente alguma, a leitura derruba com `arquivo:linha`, nomeando a
+   expressão que não converteu. Quando resolve a uma chave que não é do
+   serviço Go, a instanciação entra em `nonGoBoundInstantiations` — fora
+   do conjunto alcançado, mas com motivo computado (arquivo, linha, nome
+   local, `bindingForm`, chave de ambiente resolvida) — e nunca é
+   silenciada.
+5. **O motivo escrito só afirma o que a leitura fez.** Toda mensagem de
+   recusa e toda entrada de `nonGoBoundInstantiations` cita o
+   `bindingForm` resolvido e a `classDeclarationKey` alcançada; nenhuma
+   afirma varredura ou ligação que a leitura não exerceu. Duas afirmações
+   permanentes (WU-04) provam, sobre a árvore real, que
+   `internalClientSurfaces` tem uma entrada por declaração distinta, que
+   toda superfície tem ao menos uma ligação de instanciação resolvida e
+   registrada, e que toda entrada de `nonGoBoundInstantiations` tem
+   motivo escrito e aponta a uma superfície computada — as duas
+   invariantes não são vácuas: a árvore real tem `internalClientSurfaces`
+   e `nonGoBoundInstantiations` ambos não vazios.
+
+**Alternativas:** continuar deduplicando por `className` — é a borda que
+este Goal fecha; achar instanciação por `RegExp` sobre o nome, sem
+resolver ligação — é a mesma falha da rodada 3 do Goal044 um nível
+abaixo, rejeitada pelo mesmo motivo; manter o `continue` mudo de destino
+não resolvido, ou tratá-lo como resíduo genérico sem categoria própria —
+rejeitadas: a primeira repete o silêncio que este Goal fecha, a segunda
+perderia o `arquivo:linha` e o `bindingForm` que tornam o motivo
+conferível.
+
+**Motivo:** com as três bordas abertas havia três formas de acrescentar
+uma chamada ao transporte sem que nada no repositório notasse, nenhuma
+delas exigindo um `fetch` novo — a mesma classe de risco que motivou
+D-060 um nível acima. A-24 continua dependendo da completude do conjunto
+de 10 rotas; fechar as três bordas por reuso da máquina de ligação do
+Goal044, sem mecanismo paralelo, mantém essa completude propriedade do
+mecanismo em vez de acidente da árvore.
+
+**Consequências:**
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts` ganha
+`findInstantiationsOfClassDeclaration`, `resolveClassInstantiationBindings`,
+`ClassBindingForm`, `ClassInstantiationBindingReport`,
+`ClassInstantiationBindingResolution`, `ClassBindingRefusalCategory`,
+`classBindingRefusal`, `categorizedBindingRefusal`,
+`refuseClassReferencesOutsideInstantiation`, `NonGoBoundClassInstantiation`
+e `classDeclarationKey`; `classSurfaces` passa a ser `Map<string,
+InternalClientMemberSurface>` indexado pela declaração, e
+`discoverGoBoundInternalClientRequests` passa a devolver também
+`nonGoBoundInstantiations` ao lado de `requests`, `assembledUrls`,
+`surfaces` e `nonTransportMemberCalls`. Nada do que os Goals 041 a 044
+deixaram ali foi removido ou reescrito em paralelo.
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts` ganha 17
+casos ao lado dos 113 já existentes (130 no total): 2 são as afirmações
+permanentes de não-vacuidade (WU-04), 8 são os quatro controles
+negativos obrigatórios (WU-05: classe homônima em outro arquivo,
+instanciação sob alias, destino indireto e nome-não-decide), os
+controles 1 a 3 com as duas saídas — antes e depois —, e 7 são os
+controles permanentes das duas correções da rodada 2 (FIX-001): 5 sobre
+a isenção por construção `export` e 2 sobre a enumeração da
+varredura. Nenhum arquivo de
+`apps/frontend/src/`, `apps/bff/src/`, `apps/ai-orchestrator/src/` ou
+Go mudou; `go.mod` e `go.sum` estão intocados; o arquivo de valores
+`apps/ai-orchestrator/tests/support/product-transport-routes.txt` não
+mudou; e o conjunto de 10 rotas e de 27 literais que os Goals 042 e 043
+asseriam continua idêntico ao da baseline. `npx vitest run
+tests/assistant/assistant.service.test.ts`: 130 testes, 0 falhas
+(baseline 113). `npx vitest run` completo de `apps/ai-orchestrator`: 854
+passando, 88 pulados (baseline 837 passando, 88 pulados). `go test ./...`
+em `apps/evolution-go`: PASS em todos os pacotes com teste, 0 falhas —
+nenhum pacote Go foi tocado por este diff. `npx tsc -p tsconfig.json
+--noEmit` e `npm run lint` em `apps/ai-orchestrator`: sem erro. `npm run
+validate:core`: `PASSED`, 15 passos verdes e 2 pulados declarados
+(`test:bff`, `test:health-worker`), com `audit:static` mantendo os 34
+checks (33 passados, `production_health` pulado por não solicitado). `npm
+run test:gate`: 226 testes, 0 falhas — mesma contagem da baseline.
+`npm run validate:integration` recusou por pré-condição de banco ausente
+(`exit 2`, `validate:integration REFUSED — BFF_TEST_DATABASE_URL is not
+set`), declarado como ausente — nenhum valor real de variável de ambiente
+foi lido por nada neste diff. Este diff não fecha **M4**, não afirma
+fidelidade visual à referência aprovada, não prova comportamento de
+runtime do serviço Go e **não corrige A-24**.
+
+**Revisar se:** um chamador de instanciação alcançar a classe por forma
+que `resolveClassInstantiationBindings` ainda não resolve — alias de
+caminho não relativo, `export =`/`module.exports`, ou identificador
+repassado adiante por atribuição a outro valor que não seja `new <Id>(`
+diretamente —, o que hoje derruba a leitura em vez de resolver; ou uma
+instanciação real passar a ter destino indireto por uma forma que
+`resolveDestination` ainda não converte (hoje: base recebida por
+parâmetro do construtor da classe dona), caso em que a leitura derruba
+com `arquivo:linha` em vez de classificar às cegas.

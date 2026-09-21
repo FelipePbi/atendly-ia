@@ -597,6 +597,55 @@ produto e fora do escopo deste delta; esperar o orçamento evita que o
 **gate** meça o próprio throttle por engano, não afrouxa nenhuma medida nem
 pula nenhuma asserção.
 
+## Checks estáticos ampliados do Goal038
+
+Os dois checks de path literal `/v1` do Goal036/Goal037
+(`bff_v1_routes_use_literal_paths`, `frontend_v1_route_schema_calls_use_literal_patterns`)
+e a extração que `public_api_route_coverage` (Goal035) usa deixam de exigir
+uma forma acidental do chamador/registro e passam a **enumerar cada
+ocorrência candidata**, classificando-a em categoria nomeada. Nenhum check
+novo entrou; os três existentes ganham enumeração, mesma função pura
+exportada, mesmo par de arquivos, provados nos dois sentidos por
+`scripts/tests/final-production-audit-legacy-regression.test.mjs`.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| Do lado do BFF, `classifyBffRouteRegistrationSites` classifica toda chamada `<receptor>.<verbo>(` em `literal_v1_path` (registro reconhecido, entra na cobertura), `literal_other_path`, `template_other_path` ou `not_a_route_registration` (categorias declaradas, fora de escopo), ou em `template_v1_path` / `non_literal_path_expression` — **resíduo**, que reprova o check nomeando arquivo e linha. Do lado do frontend, `classifyFrontendRouteSchemaCallSites` classifica toda chamada de `routeSchema`, com ou sem o genérico `<T>`, em `literal_pattern` / `template_other_pattern` (declaradas) ou em `template_v1_pattern` / `non_literal_pattern` (**resíduo**). O receptor não precisa se chamar `app` e a chamada não precisa de genérico — nem o nome do receptor nem o genérico nunca definiram se a rota existe. A terceira forma, path vindo de constante ou identificador, deixa de escapar dos dois lados ao mesmo tempo. Sobre a árvore real: `bff_v1_routes_use_literal_paths` `ok: true` (65 arquivos, 142 sítios — `literal_other_path=4, literal_v1_path=116, not_a_route_registration=22`), `frontend_v1_route_schema_calls_use_literal_patterns` `ok: true` (17 arquivos, 116 sítios — `literal_pattern=116`), resíduo zero nos dois, e `public_api_route_coverage` continua `ok: true` (116 rotas registradas, só a rota de mídia sem chamador) | Continua não provando que o schema da entrada descreve corretamente o que a rota devolve (isso é o hook de runtime, Goal035). **Nenhuma allowlist por arquivo, rota ou linha entrou em nenhuma regra**: o conjunto reconhecido continua computado, nunca escrito à mão. O critério que separa candidato de não candidato também é computado e não olha a forma do handler — comentário é zerado antes da enumeração (`blankComments`), e uma chamada com um único argumento, ou cujo valor alguém consome (atribuição, `await`, `return`, argumento de outra chamada), não registra rota —, então import, comentário, literal de teste, erro técnico, chave de log, nome de nó do grafo, `mapa.get(chave)`, leitura de header e cliente HTTP com corpo não podem virar resíduo destes checks, enquanto `app.get(PATH, handleThing)`, com o handler passado por referência, é registro reconhecido |
+
+## Invariante de texto classificada do Goal038
+
+Os dois extratores de texto de cliente do fechamento do Goal034/Goal037
+(`extractMessagesArrayLiterals` sobre `assistant.service.ts`,
+`extractDispatchedModuleConstantTexts`/`classifyDispatchedTextSites` sobre
+`message-graph.ts`) deixam de reconhecer só por não acusar o resto: cada
+ocorrência candidata cai em exatamente uma categoria nomeada no código, ou é
+resíduo, e resíduo derruba o teste de fechamento nomeando arquivo e linha —
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`, sem
+alteração em `apps/ai-orchestrator/src/`.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| Sobre `assistant.service.ts`: `classifyMessageExpressionSites` classifica cada expressão dentro de `messages: [...]` em `quoted_literal`, `fixed_text_reference`, `dynamic_turn_value_with_fixed_text_fallback` (o `\|\|` cujo lado direito resolve a `PRODUCT_OWN_FIXED_TEXTS.<chave>`) ou `style_greeting_builder` (`buildStyleGreeting(...)`, resolvida para o texto de cada estilo de `AI_CONVERSATION_STYLES`); forma fora dessas quatro é resíduo e derruba o fechamento nomeando arquivo e linha, em vez de virar `[]` em silêncio. Confirmado sobre a árvore real: 6 sítios, `{quoted_literal: 0, fixed_text_reference: 4, dynamic_turn_value_with_fixed_text_fallback: 1, style_greeting_builder: 1}`, 8 textos resolvidos, resíduo zero. O fechamento ganha piso: reprova se resolver menos textos do que sítios `messages: [...]` o arquivo tem, em vez de ficar verde por não enxergar nada. Sobre `message-graph.ts`: cada sítio `text:` é constante de módulo resolvida (entra em `PRODUCT_OWN_TEXTS`), expressão dinâmica do turno (`state.*`/`message.*`) ou anotação de tipo (`text: string`) — as duas últimas descartadas por pertencer a categoria declarada, não por sobrarem. Confirmado sobre a árvore real: 16 sítios, `{module_constant: 3, dynamic_turn_expression: 10, type_annotation: 3}`, resíduo zero | Continua não cobrindo texto emitido pelo **modelo** — a fronteira entre garantia de código e orientação de prompt que D-050 já declarou não muda. Continua não cobrindo um terceiro módulo emissor fora destes dois: uma forma de despacho diferente das reconhecidas aqui continuaria exigindo extensão própria, não resíduo automático. **Não é aviso**: forma candidata fora das categorias nomeadas derruba o teste de fechamento, com identificação de arquivo e linha — um resíduo que só imprime seria a mesma cegueira com mais texto. `imageHandoffSummary` nunca é candidato: despachado via `handoffSummary:`, não via `text:`, fora do padrão que os dois extratores varrem |
+
+`PRODUCT_OWN_TEXTS` não ganha nem perde entrada por este delta: os dois
+extratores passam a **ver** textos que já existiam na árvore (referência a
+`PRODUCT_OWN_FIXED_TEXTS`, saudação de estilo, constante de módulo já
+despachada), nunca a produzir texto novo.
+
+## Frescor do relatório compartilhado do Goal038
+
+`scripts/lib/playwright-report.mjs` (novo) concentra `readPlaywrightReport`,
+`extractRetriedTests` e `formatRetriesMessage` — leitor único, usado pelo
+gate autenticado (`scripts/goal033-authenticated-ui-rehearsal.mjs`) e pelo
+gate público (`scripts/validate-ui.mjs`, agora o executor de
+`npm run validate:ui`, no lugar de `cd apps/frontend && npm run test:ui`
+direto em `package.json`). Duas cópias que pudessem divergir são a mesma
+classe de problema que o Goal037 fechou para `VOCABULARIO_DE_ESPERA`.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| Os dois gates apagam o `results.json` da execução anterior (`rmSync(..., { force: true })`) antes de subir o Playwright e registram o instante em que começaram (`notBeforeMs`). Depois, o leitor compara o `mtime` do relatório contra esse instante: um relatório mais antigo é recusado com erro nomeado (`AuthenticatedUiRehearsalError` no gate autenticado, `ValidateUiReportError` no gate público) dizendo explicitamente que é de uma execução anterior, não da que acabou de rodar — nos dois gates, mesmo quando o Playwright saiu `0`. Relatório ausente ou ilegível continua falhando como já falhava (D-050/Goal033), agora pelo mesmo leitor nos dois gates | **Não reprova por retentativa, e `flaky` continua terminando com sucesso nos dois gates** — a mesma semântica de antes: o processo continua saindo `0` quando toda retentativa passou na segunda tentativa, `retries: 1` continua inalterado em `playwright.config.ts` e `playwright.authenticated.config.ts`, e declarar retentativa continua sendo diagnóstico no log, nunca critério de aceite. `npm run validate:ui` continua sendo o comando do gate público, continua executando `playwright test` com as cinco larguras da matriz, e o exit code não-zero do Playwright continua sendo o exit code do passo — a checagem de frescor só corre depois, e só derruba o passo quando o Playwright saiu `0` mas o relatório não é confiável |
+
 ## Ordem de corte do Goal003
 
 Duas transições deste Goal têm consumidor e produtor em serviços diferentes.

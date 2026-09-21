@@ -5,7 +5,10 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  classifyBffRouteRegistrationSites,
+  classifyFrontendRouteSchemaCallSites,
   excludeLegitimateAbsenceAssertions,
+  extractBffV1RouteRegistrations,
   findCalendarMigrationServiceReferences,
   findCalendarSourceExternalComparisons,
   findDarkThemeCssReferences,
@@ -487,8 +490,60 @@ test("bff_v1_routes_use_literal_paths: fails when a /v1 route is registered with
     },
   ];
   assert.deepEqual(findNonLiteralV1RouteRegistrations(files), [
-    "apps/bff/src/modules/conversations/routes.ts",
+    "apps/bff/src/modules/conversations/routes.ts:2: path de rota /v1 construido em tempo de execucao (crase), invisivel para public_api_route_coverage — `/v1/conversations/:id/${action}`",
   ]);
+});
+
+// Goal038/WU-03: o receptor da chamada nunca definiu se a rota existe — so
+// o metodo e o path literal definem. Um registro por `router.get(` (ou
+// qualquer outro identificador) e reconhecido do mesmo jeito que `app.get(`.
+test("public_api_route_coverage: recognizes a literal /v1 route registered through a receiver other than app", () => {
+  const files = [
+    {
+      path: "apps/bff/src/modules/conversations/routes.ts",
+      content:
+        'router.post(\n  "/v1/conversations/:id/takeover",\n  { preHandler: requireTenantContext },\n  async (request) => {},\n);',
+    },
+  ];
+  assert.deepEqual(extractBffV1RouteRegistrations(files), [
+    { method: "POST", pathPattern: "/v1/conversations/:id/takeover" },
+  ]);
+  assert.deepEqual(findNonLiteralV1RouteRegistrations(files), []);
+});
+
+test("bff_v1_routes_use_literal_paths: fails when a /v1 route is registered with a template literal path through a receiver other than app", () => {
+  const files = [
+    {
+      path: "apps/bff/src/modules/conversations/routes.ts",
+      content:
+        'for (const action of ["takeover", "release", "resolve"]) {\n' +
+        "  router.post(\n" +
+        "    `/v1/conversations/:id/${action}`,\n" +
+        "    { preHandler: requireTenantContext },\n" +
+        "    async (request) => {},\n" +
+        "  );\n" +
+        "}",
+    },
+  ];
+  assert.deepEqual(findNonLiteralV1RouteRegistrations(files), [
+    "apps/bff/src/modules/conversations/routes.ts:2: path de rota /v1 construido em tempo de execucao (crase), invisivel para public_api_route_coverage — `/v1/conversations/:id/${action}`",
+  ]);
+});
+
+test("bff_v1_routes_use_literal_paths: a non-/v1 route registered with a template literal path is not a finding", () => {
+  const files = [
+    {
+      path: "apps/bff/src/clients/scheduling/index.ts",
+      content:
+        "for (const id of ids) {\n" +
+        "  scheduling.get(\n" +
+        "    `/internal/appointments/${id}/events`,\n" +
+        "    schema,\n" +
+        "  );\n" +
+        "}",
+    },
+  ];
+  assert.deepEqual(findNonLiteralV1RouteRegistrations(files), []);
 });
 
 // Goal037/WU-01: um chamador com padrao entre crases escapa de
@@ -517,7 +572,7 @@ test("frontend_v1_route_schema_calls_use_literal_patterns: fails when a /v1 rout
     },
   ];
   assert.deepEqual(findNonLiteralFrontendV1RouteSchemaCalls(files), [
-    "apps/frontend/src/data/services/BffConversationService.ts",
+    'apps/frontend/src/data/services/BffConversationService.ts:2: routeSchema() chamado com padrao /v1 entre crases, invisivel para public_api_route_coverage — "POST", `/v1/conversations/:id/${action}`',
   ]);
 });
 
@@ -531,6 +586,201 @@ test("frontend_v1_route_schema_calls_use_literal_patterns: a template literal ca
     },
   ];
   assert.deepEqual(findNonLiteralFrontendV1RouteSchemaCalls(files), []);
+});
+
+// Goal038/WU-03: o genero `<T>` de `routeSchema<T>(...)` e opcional para o
+// TypeScript e nunca definiu metodo ou path — uma chamada sem generico com
+// path literal e reconhecida como chamador, exatamente como uma com generico.
+test("public_api_route_coverage: recognizes a literal /v1 routeSchema() call without a generic", () => {
+  const bffSourceFiles = [
+    {
+      path: "apps/bff/src/modules/whatsapp/routes.ts",
+      content:
+        'app.get(\n  "/v1/whatsapp",\n  { preHandler: requireTenantContext },\n  async (request) => {},\n);',
+    },
+  ];
+  const frontendServiceFiles = [
+    {
+      path: "apps/frontend/src/data/services/BffWhatsAppService.ts",
+      content: 'schema: routeSchema("GET", "/v1/whatsapp"),',
+    },
+  ];
+  const routesTableSource =
+    '{ method: "GET", pathPattern: "/v1/whatsapp", schema: whatsappConnectionSchema.nullable() },';
+
+  assert.deepEqual(
+    findUncoveredPublicApiRoutes(
+      bffSourceFiles,
+      frontendServiceFiles,
+      routesTableSource,
+    ),
+    { missingFromTable: [], routesWithoutCaller: [] },
+  );
+});
+
+test("frontend_v1_route_schema_calls_use_literal_patterns: fails when a /v1 routeSchema() call without a generic declares a template literal pattern", () => {
+  const files = [
+    {
+      path: "apps/frontend/src/data/services/BffConversationService.ts",
+      content:
+        'const action: "release" | "resolve" | "takeover" = "takeover";\n' +
+        "routeSchema(\n  \"POST\",\n  `/v1/conversations/:id/${action}`,\n);",
+    },
+  ];
+  assert.deepEqual(findNonLiteralFrontendV1RouteSchemaCalls(files), [
+    'apps/frontend/src/data/services/BffConversationService.ts:2: routeSchema() chamado com padrao /v1 entre crases, invisivel para public_api_route_coverage — "POST", `/v1/conversations/:id/${action}`',
+  ]);
+});
+
+test("frontend_v1_route_schema_calls_use_literal_patterns: a template literal call without a generic for a route outside /v1 is not a finding", () => {
+  const files = [
+    {
+      path: "apps/frontend/src/data/services/BffInternalService.ts",
+      content:
+        'const suffix = "status";\n' +
+        "routeSchema(\n  \"GET\",\n  `/internal/${suffix}`,\n);",
+    },
+  ];
+  assert.deepEqual(findNonLiteralFrontendV1RouteSchemaCalls(files), []);
+});
+
+// Goal038/FIX-001: a crase era o unico residuo reconhecido, e por isso uma
+// terceira forma — o path vindo de constante ou identificador — escapava das
+// duas regras ao mesmo tempo: nao era registro literal (sumia da cobertura) e
+// nao era crase (nao acionava a regra). Agora toda ocorrencia candidata e
+// enumerada e classificada, e o que nao cai em categoria nomeada reprova com
+// arquivo e linha.
+test("bff_v1_routes_use_literal_paths: fails when a /v1 route is registered with a path that is neither a literal nor a template literal", () => {
+  const files = [
+    {
+      path: "apps/bff/src/modules/conversations/routes.ts",
+      content:
+        'const TAKEOVER_PATH = "/v1/conversations/:id/takeover";\n' +
+        "app.post(\n" +
+        "  TAKEOVER_PATH,\n" +
+        "  { preHandler: requireTenantContext },\n" +
+        "  async (request) => {},\n" +
+        ");",
+    },
+  ];
+  assert.deepEqual(findNonLiteralV1RouteRegistrations(files), [
+    "apps/bff/src/modules/conversations/routes.ts:2: registro de rota com path que nao e literal nem crase, forma nao reconhecida — TAKEOVER_PATH",
+  ]);
+  assert.deepEqual(extractBffV1RouteRegistrations(files), []);
+});
+
+// Goal038/FIX-001 (rodada 3): a mesma terceira forma, com o handler passado
+// por REFERENCIA em vez de escrito no lugar. O ultimo argumento nao tem `=>`
+// nem `function`, e exigir a forma inline deixava este registro escapar como
+// `not_a_route_registration` — a rota sumia da cobertura sem virar residuo.
+test("bff_v1_routes_use_literal_paths: fails when a /v1 route is registered with a constant path and a handler passed by reference", () => {
+  const files = [
+    {
+      path: "apps/bff/src/modules/conversations/routes.ts",
+      content:
+        'const TAKEOVER_PATH = "/v1/conversations/:id/takeover";\n' +
+        "server.post(TAKEOVER_PATH, handleTakeover);\n" +
+        "server.get(LIST_PATH, { preHandler: requireTenantContext }, handlers.list);",
+    },
+  ];
+  assert.deepEqual(findNonLiteralV1RouteRegistrations(files), [
+    "apps/bff/src/modules/conversations/routes.ts:2: registro de rota com path que nao e literal nem crase, forma nao reconhecida — TAKEOVER_PATH",
+    "apps/bff/src/modules/conversations/routes.ts:3: registro de rota com path que nao e literal nem crase, forma nao reconhecida — LIST_PATH",
+  ]);
+  assert.deepEqual(extractBffV1RouteRegistrations(files), []);
+});
+
+test("bff_v1_routes_use_literal_paths: classifies every candidate call site in a named category", () => {
+  const files = [
+    {
+      path: "apps/bff/src/modules/conversations/routes.ts",
+      content:
+        'app.post("/v1/conversations/:id/takeover", async (request) => {});\n' +
+        'app.get("/internal/health", async () => {});\n' +
+        "scheduling.get(`/internal/appointments/${id}/events`, async () => {});\n" +
+        "const cached = conversationsById.get(conversationId);",
+    },
+  ];
+  assert.deepEqual(
+    classifyBffRouteRegistrationSites(files).map((site) => site.category),
+    [
+      "literal_v1_path",
+      "literal_other_path",
+      "template_other_path",
+      "not_a_route_registration",
+    ],
+  );
+  assert.deepEqual(findNonLiteralV1RouteRegistrations(files), []);
+});
+
+// Goal038/FIX-001: falso positivo e blocker. O criterio que separa candidato
+// de nao candidato e computado: comentario e zerado antes da enumeracao, e uma
+// chamada sem handler nao registra rota — `Map.get(chave)`, leitura de header
+// e cliente HTTP com corpo continuam fora.
+test("bff_v1_routes_use_literal_paths: a Map lookup, a header read, an HTTP client call and a commented-out registration are not residue", () => {
+  const files = [
+    {
+      path: "apps/bff/src/modules/conversations/store.ts",
+      content:
+        "const cached = conversationsById.get(conversationId);\n" +
+        'const tenant = request.headers.get("x-tenant-id");\n' +
+        "const created = await schedulingClient.post(appointmentsUrl, payload);\n" +
+        "// app.post(`/v1/conversations/:id/${action}`, async (request) => {});\n" +
+        "/* app.get(runtimePath, async (request) => {}); */",
+    },
+  ];
+  assert.deepEqual(findNonLiteralV1RouteRegistrations(files), []);
+  assert.deepEqual(
+    classifyBffRouteRegistrationSites(files).map((site) => site.category),
+    ["not_a_route_registration", "literal_other_path", "not_a_route_registration"],
+  );
+});
+
+test("frontend_v1_route_schema_calls_use_literal_patterns: fails when a routeSchema() call declares the pattern through a constant", () => {
+  const files = [
+    {
+      path: "apps/frontend/src/data/services/BffConversationService.ts",
+      content:
+        'const TAKEOVER = "/v1/conversations/:id/takeover";\n' +
+        'schema: routeSchema<Conversation>("POST", TAKEOVER),',
+    },
+  ];
+  assert.deepEqual(findNonLiteralFrontendV1RouteSchemaCalls(files), [
+    'apps/frontend/src/data/services/BffConversationService.ts:2: routeSchema() chamado com metodo ou padrao que nao e literal, forma nao reconhecida — "POST", TAKEOVER',
+  ]);
+});
+
+test("frontend_v1_route_schema_calls_use_literal_patterns: classifies every candidate call site in a named category", () => {
+  const files = [
+    {
+      path: "apps/frontend/src/data/services/BffConversationService.ts",
+      content:
+        'schema: routeSchema<Conversation>("GET", "/v1/conversations"),\n' +
+        'schema: routeSchema("GET", "/v1/whatsapp"),\n' +
+        "schema: routeSchema<Health>(\"GET\", `/internal/${suffix}`),",
+    },
+  ];
+  assert.deepEqual(
+    classifyFrontendRouteSchemaCallSites(files).map((site) => site.category),
+    ["literal_pattern", "literal_pattern", "template_other_pattern"],
+  );
+  assert.deepEqual(findNonLiteralFrontendV1RouteSchemaCalls(files), []);
+});
+
+test("frontend_v1_route_schema_calls_use_literal_patterns: a routeSchema() call quoted in a comment is not a candidate", () => {
+  const files = [
+    {
+      path: "apps/frontend/src/data/services/BffConversationService.ts",
+      content:
+        "// routeSchema(method, runtimePattern) nunca deve ser escrito assim\n" +
+        'schema: routeSchema<Conversation>("GET", "/v1/conversations"),',
+    },
+  ];
+  assert.deepEqual(findNonLiteralFrontendV1RouteSchemaCalls(files), []);
+  assert.deepEqual(
+    classifyFrontendRouteSchemaCallSites(files).map((site) => site.category),
+    ["literal_pattern"],
+  );
 });
 
 // Goal035/WU-07: findUncoveredPublicApiRoutes recebe exatamente o que

@@ -1545,3 +1545,180 @@ já declaravam. **E não diz que a verificação de resposta roda em
 produção**: `RESPONSE_CONTRACT_CHECK_ENABLED` continua
 `env.NODE_ENV !== "production"`, inalterado por este diff — nenhum arquivo
 de `apps/bff/` foi tocado.
+
+## 15. Fechamento da classe de reconhecimento por forma sem resíduo declarado — Goal038, 2026-09-21
+
+Seção nova, escrita depois da última mudança de árvore do diff038 (WU-01 a
+WU-06, com os seis controles negativos revertidos, mais FIX-001 das rodadas
+2 e 3 — a última mudança de árvore é o suporte ao handler de rota passado
+por referência, descrito abaixo). Ela **não reescreve**
+§4 a §14: os registros de A-01 a A-19 em §6, o veredito de §7 e as sete
+seções de fechamento anteriores continuam exatamente como estavam. Esta
+seção acrescenta o que o diff038 passou a garantir sobre a classe que o
+diff037 tinha fechado por instância — todo extrator deste repositório que
+reconhece candidato por forma textual passa a enumerar as categorias que
+aceita, e o que não cai em nenhuma vira resíduo que derruba o artefato que
+o vigia — e sobre o frescor do relatório que o gate público passa a exigir,
+pelo mesmo leitor do gate autenticado.
+
+### O que mudou
+
+**O fechamento de `assistant.service.ts` deixa de passar por não ver
+nada.** `extractMessagesArrayLiterals` devolvia **zero** literais sobre o
+arquivo real: os seis sítios `messages: [...]` usam
+`PRODUCT_OWN_FIXED_TEXTS.<chave>` e `buildStyleGreeting(...)`, nunca literal
+entre aspas, e o teste de fechamento — sem o piso `toBeGreaterThan(0)` que
+o teste irmão sobre `message-graph.ts` já tinha — ficava verde por iterar
+sobre lista vazia. O extrator passa a classificar cada expressão em uma das
+quatro categorias nomeadas de `classifyMessageExpressionSites` —
+`quoted_literal`, `fixed_text_reference`,
+`dynamic_turn_value_with_fixed_text_fallback`, `style_greeting_builder` —,
+e forma fora delas vira resíduo que derruba o fechamento nomeando arquivo e
+linha, em vez de devolver `[]` em silêncio. Sobre o arquivo real: 6 sítios,
+8 textos resolvidos, resíduo zero. O fechamento ganha piso
+(`countMessagesArraySites`): reprova se devolver menos textos do que sítios
+`messages: [...]` o arquivo tem. Nenhuma copy muda e `PRODUCT_OWN_TEXTS` não ganha nem perde entrada —
+provado por diff. Ver
+[VALIDATION_GATE](VALIDATION_GATE.md#invariante-de-texto-classificada-do-goal038).
+
+**Os 16 sítios `text:` de `message-graph.ts` passam a ser classificados em
+categorias nomeadas, com resíduo zero.** `extractDispatchedModuleConstantTexts`
+descartava 13 dos 16 sítios sem contar, nomear nem distinguir entre eles —
+10 expressão dinâmica do turno (descarte correto) e 3 anotação de tipo, mas
+um `text:` com literal inline ou template literal seria descartado do
+mesmo jeito. `classifyDispatchedTextSites` nomeia as três categorias —
+`module_constant` (entra no fechamento), `dynamic_turn_expression` e
+`type_annotation` (declaradas, descartadas) — e lança erro nomeando arquivo
+e linha para qualquer sítio fora delas. Ver
+[VALIDATION_GATE](VALIDATION_GATE.md#invariante-de-texto-classificada-do-goal038).
+
+**O reconhecimento de rota `/v1` deixa de exigir genérico do TypeScript ou
+receptor chamado `app`.** Nenhum dos dois definia se a chamada/registro
+existia; uma chamada `routeSchema("GET", ...)` sem genérico escapava dos
+dois lados ao mesmo tempo — o mesmo escape duplo que o diff037 já tinha
+fechado para a crase, por outra forma. Os quatro padrões existentes dão
+lugar a enumeração: `classifyBffRouteRegistrationSites` e
+`classifyFrontendRouteSchemaCallSites` classificam cada ocorrência candidata
+em categoria nomeada — 142 sítios no BFF, 116 no frontend, resíduo zero
+sobre a árvore real —, e a terceira forma, path vindo de constante, passa a
+reprovar com arquivo e linha em vez de escapar dos dois lados. No BFF isso
+vale com o handler escrito no lugar **e** com o handler passado por
+referência (`server.post(TAKEOVER_PATH, handleTakeover)`): a forma do handler
+nunca definiu se a chamada registra rota. O que separa registro de rota de
+`mapa.get(chave)` e de cliente HTTP é computado — aridade (path e handler) e
+posição (registro de rota é statement, ninguém lê o valor da chamada). Sem
+allowlist nova. Ver
+[VALIDATION_GATE](VALIDATION_GATE.md#checks-estáticos-ampliados-do-goal038).
+
+**O relatório lido pelos dois gates renderizados prova que pertence à
+execução que acabou.** `scripts/lib/playwright-report.mjs` (novo)
+concentra o leitor único; os dois gates apagam o `results.json` anterior
+antes de subir o Playwright e recusam, com erro nomeado, um relatório cujo
+`mtime` é anterior ao instante em que a execução começou. O gate público
+(`npm run validate:ui`) ganha leitor pela primeira vez — antes não tinha
+nenhum, e a retentativa do Playwright ficava invisível dentro do `exit 0`
+do comando `cd apps/frontend && npm run test:ui`. `retries: 1` não mudou em
+nenhum `playwright.*.config.ts` e `flaky` continua terminando com sucesso
+nos dois gates. Ver
+[VALIDATION_GATE](VALIDATION_GATE.md#frescor-do-relatório-compartilhado-do-goal038).
+
+**O que este diff não decide.** Enumerar categoria de reconhecimento não
+decidiu que um quinto módulo emissor de texto de cliente, ou uma forma de
+despacho diferente das reconhecidas, não precisará de extensão própria —
+decidiu proibir a forma que hoje escapa em silêncio, não prever toda forma
+futura. Ampliar o reconhecimento de rota `/v1` não decidiu que path
+dinâmico deveria um dia ser aceito — continua proibido, nos dois lados.
+Declarar frescor de relatório não decidiu que retentativa deveria reprovar
+o gate, nem mudou `retries`. Nenhuma migration, nenhuma rota, nenhum
+contrato público e nenhuma tela, componente, texto ou CSS do frontend mudou
+neste diff.
+
+### Resultado real da execução
+
+Executado por esta unidade (FIX-001 da rodada 3), sobre a árvore final desta
+rodada — depois da correção dos dois blockers do review da rodada 2 e com os
+seis controles negativos revertidos. Cada número abaixo foi lido da execução
+citada, nesta worktree, depois da última mudança de árvore; nenhum foi
+transcrito de rodada anterior.
+
+- `node scripts/final-production-audit.mjs` — exit 0, 34 checks, 33 `passed`,
+  1 `skipped` declarado (`production_health`, sem `PRODUCTION_HEALTH_TARGETS`).
+  `bff_v1_routes_use_literal_paths`: `ok: true`, 65 arquivos lidos, **142**
+  sítios classificados (`literal_other_path=4, literal_v1_path=116,
+  not_a_route_registration=22`), resíduo zero.
+  `frontend_v1_route_schema_calls_use_literal_patterns`: `ok: true`, 17
+  arquivos lidos, **116** sítios (`literal_pattern=116`), resíduo zero.
+  `public_api_route_coverage`: `ok: true`, 116 rotas registradas, só
+  `GET /v1/conversations/:id/messages/:messageId/media` sem chamador.
+- `node --test scripts/tests/final-production-audit-legacy-regression.test.mjs`
+  — **61** `pass`, 0 `fail`, incluindo o caso novo do registro com path
+  constante e handler passado por referência.
+- `node --test scripts/tests/goal033-authenticated-ui-rehearsal.test.mjs` —
+  **14** `pass`, 0 `fail`, incluindo as duas asserções de frescor sobre
+  `readGateReport`.
+- `node --test scripts/tests/validate-ui.test.mjs` (novo) — **10** `pass`, 0
+  `fail`, cobrindo os quatro cenários nomeados no critério de aceite (verde
+  limpo, verde com flaky, relatório velho, Playwright vermelho).
+- `node --test tools/ia-loop/tests/deterministic-executor.test.mjs` — **13**
+  `pass`, 0 `fail`, cobrindo o filtro de teste reescrito para o diretório em
+  que a ação roda.
+- `npx vitest run tests/assistant/assistant.service.test.ts` em
+  `apps/ai-orchestrator` — **23** testes, 0 falhas, incluindo as classificações
+  novas de `assistant.service.ts` e `message-graph.ts` e os dois controles
+  negativos embutidos como teste permanente (piso do fechamento, resíduo em
+  `text:`).
+- `npx vitest run tests/evals/waiting-message-vocabulary.eval.test.ts` em
+  `apps/ai-orchestrator` — **2** testes, 0 falhas: o controle de vocabulário de
+  espera do Goal037 não regrediu.
+
+Não reexecutados por esta unidade, e por isso sem número reproduzido aqui:
+`npm run test:gate`, `npm test` completo de `apps/ai-orchestrator` e de
+`apps/frontend`, `validate:core`, `validate:integration`, `validate:ui` e o
+ensaio autenticado real (`rehearse:goal033-authenticated-ui`). Essas execuções
+pertencem às unidades de implementação e de controle negativo desta rodada.
+
+### Achados novos a partir de A-24
+
+Nenhum. `apps/frontend/src/`, `apps/bff/src/` e `apps/ai-orchestrator/src/`
+não foram tocados neste diff — confirmado por diff —, então nenhum resíduo
+apareceu em código de produção para virar achado. O que este diff fecha é
+lacuna de **extração estática de teste e de gate**, não de produto: os
+quatro extratores passavam a reconhecer menos do que a árvore real usa, e
+nenhuma das formas que passam a ser reconhecidas — referência a
+`PRODUCT_OWN_FIXED_TEXTS`, saudação de estilo, chamador sem genérico,
+registro em receptor diferente de `app` — é comportamento novo do produto;
+são formas que a árvore já tinha, invisíveis à leitura estática anterior.
+
+### Veredito recontado
+
+A contagem desta auditoria **não muda**: nenhum achado de A-04 a A-08, A-11
+a A-17 ou A-19 foi tocado, corrigido ou reclassificado, e nenhum achado
+fechado (A-01, A-02, A-03, A-09, A-10, A-18, A-20 a A-23) foi reaberto. Esta
+auditoria continua com **0 achados `BLOQUEADOR-MVP`, 7
+`PENDENCIA-POS-MVP`** e **6 `LIMITE-DECLARADO`** — os mesmos números que
+§14 já deixava, porque o que este diff fecha nunca tinha entrado nessa
+contagem como achado nem como limite declarado à parte.
+
+Três coisas que este recontar não diz. **Não diz que M4 foi fechado**:
+nenhuma chamada saiu, neste diff, para um provedor de LLM real nem para o
+WhatsApp real — o diff038 toca
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`,
+`scripts/final-production-audit.mjs`,
+`scripts/tests/final-production-audit-legacy-regression.test.mjs`,
+`scripts/goal033-authenticated-ui-rehearsal.mjs`,
+`scripts/tests/goal033-authenticated-ui-rehearsal.test.mjs`,
+`scripts/lib/playwright-report.mjs` (novo), `scripts/validate-ui.mjs`
+(novo), `scripts/tests/validate-ui.test.mjs` (novo), `package.json`,
+`tools/ia-loop/lib/deterministic-executor.mjs`,
+`tools/ia-loop/tests/deterministic-executor.test.mjs` e a documentação de
+migração — nada além disso. Os dois arquivos de `tools/ia-loop/` são
+harness, não produto: corrigem o filtro de teste que uma ação de escopo
+passava ao Vitest, e nenhum código de `apps/` depende deles. **Não diz que a fidelidade
+visual está provada**: nenhum arquivo de `apps/frontend/src/` mudou, nenhum
+teste do gate renderizado foi pulado, marcado `fixme`, removido ou teve
+tolerância aumentada, e a matriz de larguras continua com as cinco; a
+fidelidade visual segue sendo conferência humana, como §5.3, §7 e as sete
+seções de fechamento anteriores já declaravam. **E não diz que a
+verificação de resposta roda em produção**: nenhum arquivo de `apps/bff/`
+foi tocado e `RESPONSE_CONTRACT_CHECK_ENABLED` continua
+`env.NODE_ENV !== "production"`, inalterado por este diff.

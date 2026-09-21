@@ -407,25 +407,40 @@ export async function main() {
     "packages/public-api-contract/src/schemas.ts",
   );
 
+  // Goal038/FIX-001: a regra enumera cada chamada `<receptor>.<verbo>(` de
+  // apps/bff/src e declara em que categoria cada uma caiu. Residuo e o que
+  // nao cai em nenhuma categoria nomeada, com arquivo e linha.
+  const bffRouteSites = classifyBffRouteRegistrationSites(bffSources);
+  const bffRouteSiteTally = countByCategory(bffRouteSites);
   const nonLiteralV1RouteFiles = findNonLiteralV1RouteRegistrations(bffSources);
   check(
     "bff_v1_routes_use_literal_paths",
     nonLiteralV1RouteFiles.length === 0,
-    `read ${bffSources.length} files under apps/bff/src for /v1 route registrations. ` +
+    `read ${bffSources.length} files under apps/bff/src and classified ` +
+      `${bffRouteSites.length} route-call site(s) by named category ` +
+      `(${bffRouteSiteTally}). ` +
       (nonLiteralV1RouteFiles.length
-        ? `registered with a non-literal path: ${nonLiteralV1RouteFiles.join(", ")}`
-        : "every /v1 route is registered with a literal string path"),
+        ? `residue: ${nonLiteralV1RouteFiles.join("; ")}`
+        : "every /v1 route is registered with a literal string path and no site is residue"),
   );
 
+  // Goal038/FIX-001: mesma enumeracao do lado do frontend — toda chamada de
+  // `routeSchema`, com ou sem generico, cai em categoria nomeada ou e residuo.
+  const frontendRouteSchemaSites = classifyFrontendRouteSchemaCallSites(
+    frontendServiceSources,
+  );
+  const frontendRouteSchemaSiteTally = countByCategory(frontendRouteSchemaSites);
   const nonLiteralFrontendV1RouteSchemaCallFiles =
     findNonLiteralFrontendV1RouteSchemaCalls(frontendServiceSources);
   check(
     "frontend_v1_route_schema_calls_use_literal_patterns",
     nonLiteralFrontendV1RouteSchemaCallFiles.length === 0,
-    `read ${frontendServiceSources.length} files under apps/frontend/src/data/services for routeSchema() calls. ` +
+    `read ${frontendServiceSources.length} files under apps/frontend/src/data/services and classified ` +
+      `${frontendRouteSchemaSites.length} routeSchema() call site(s) by named category ` +
+      `(${frontendRouteSchemaSiteTally}). ` +
       (nonLiteralFrontendV1RouteSchemaCallFiles.length
-        ? `routeSchema() called with a non-literal /v1 pattern: ${nonLiteralFrontendV1RouteSchemaCallFiles.join(", ")}`
-        : "every routeSchema() call for a /v1 route declares a literal pattern"),
+        ? `residue: ${nonLiteralFrontendV1RouteSchemaCallFiles.join("; ")}`
+        : "every routeSchema() call declares a literal pattern and no site is residue"),
   );
 
   const bffV1RouteRegistrations = extractBffV1RouteRegistrations(bffSources);
@@ -971,48 +986,390 @@ export function findEnvExampleParityMismatches(envExampleContent, envSource) {
 // `packages/public-api-contract/src/routes.ts` sabe descrever. Puras como as
 // demais: recebem conteudo ja lido, nunca tocam o disco, para que o teste de
 // regressao passe uma arvore sintetica sem depender do repositorio real.
-const BFF_V1_ROUTE_REGISTRATION_PATTERN =
-  /\bapp\.(get|post|put|patch|delete)\(\s*["'](\/v1\/[^"']*)["']/gu;
-const FRONTEND_ROUTE_SCHEMA_CALL_PATTERN =
-  /\brouteSchema<[\s\S]*?>\(\s*["'](GET|POST|PUT|PATCH|DELETE)["'],\s*["']([^"']+)["']/gu;
+//
+// Goal038/WU-03: o receptor nao precisa se chamar `app` — qualquer
+// identificador que registre `.get(`/`.post(`/... com um path `/v1/` literal
+// conta como registro reconhecido. O nome do receptor nunca definiu se a
+// rota existe; so o padrao de chamada define.
+const RECEIVER_PATTERN = "[A-Za-z_$][\\w$]*";
 const PUBLIC_API_ROUTE_TABLE_ENTRY_PATTERN =
   /\{\s*method:\s*["'](GET|POST|PUT|PATCH|DELETE)["'],\s*pathPattern:\s*["']([^"']+)["']/gu;
 
-// Goal036/WU-04: um path de rota `/v1` construido em tempo de execucao
-// (template literal, `for` sobre uma lista de nomes de acao) escapa do
-// registro literal que `BFF_V1_ROUTE_REGISTRATION_PATTERN` reconhece — a
-// rota existe, mas fica invisivel para `public_api_route_coverage`. Esta
-// regra cobre o caso concreto que ja aconteceu: crase abrindo o path logo
-// depois de `/v1`, com ou sem interpolacao.
-const BFF_V1_NON_LITERAL_ROUTE_REGISTRATION_PATTERN =
-  /\bapp\.(?:get|post|put|patch|delete)\(\s*`(\/v1\/[^`]*)`/u;
+// Goal038/FIX-001: as duas regras de rota deixam de reconhecer por forma com
+// um unico residuo (a crase do Goal036/Goal037) e passam a ENUMERAR cada
+// ocorrencia candidata, classificando-a em uma categoria nomeada. Enquanto o
+// residuo era uma forma so, uma terceira forma — path vindo de identificador
+// ou constante — escapava dos dois lados ao mesmo tempo: nao era registro
+// literal (sumia da cobertura) e nao era crase (nao acionava a regra). Agora
+// o que nao cai em nenhuma categoria e residuo e derruba o check, com arquivo
+// e linha. Puras como as demais: recebem conteudo ja lido, nunca tocam o disco.
 
-export function findNonLiteralV1RouteRegistrations(files) {
-  return files
-    .filter(({ content }) =>
-      BFF_V1_NON_LITERAL_ROUTE_REGISTRATION_PATTERN.test(content),
-    )
-    .map(({ path: filePath }) => filePath);
+/**
+ * Zera o conteudo dos comentarios preservando offsets (cada caractere vira
+ * espaco, a quebra de linha e mantida), para que linha e coluna continuem
+ * valendo. E o criterio computado que exclui comentario de candidato: um
+ * `app.get(` citado em comentario nunca vira residuo. String e template sao
+ * preservados inteiros, entao `"https://x"` nao abre comentario.
+ */
+function blankComments(source) {
+  let out = "";
+  let quote;
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i];
+    if (quote) {
+      if (char === "\\") {
+        out += source.slice(i, i + 2);
+        i += 1;
+        continue;
+      }
+      if (char === quote) quote = undefined;
+      out += char;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === "`") {
+      quote = char;
+      out += char;
+      continue;
+    }
+    if (char === "/" && source[i + 1] === "/") {
+      while (i < source.length && source[i] !== "\n") {
+        out += " ";
+        i += 1;
+      }
+      out += "\n";
+      continue;
+    }
+    if (char === "/" && source[i + 1] === "*") {
+      while (
+        i < source.length &&
+        !(source[i] === "*" && source[i + 1] === "/")
+      ) {
+        out += source[i] === "\n" ? "\n" : " ";
+        i += 1;
+      }
+      out += "  ";
+      i += 1;
+      continue;
+    }
+    out += char;
+  }
+  return out;
 }
 
-// Goal037/WU-01: mesma falha do lado do frontend — `routeSchema<T>("METHOD",
-// \`/v1/...\`)` com o padrao entre crases escapa de
-// `FRONTEND_ROUTE_SCHEMA_CALL_PATTERN`, que so casa aspas. Um chamador assim
-// vira invisivel para `findUncoveredPublicApiRoutes`: a rota some da tabela
-// de chamadores reconhecidos e cai, sem aviso, no balde "sem chamador" junto
-// com rotas que de fato nao tem consumidor algum. So dispara dentro de
-// apps/frontend/src/data/services/ (escopo de `frontendServiceSources`) e so
-// para um padrao que comeca com `/v1/` — chamada que nao e rota /v1, ou path
-// construido fora deste diretorio, nao aciona a regra.
-const FRONTEND_V1_ROUTE_SCHEMA_NON_LITERAL_PATTERN =
-  /\brouteSchema<[\s\S]*?>\(\s*["'](?:GET|POST|PUT|PATCH|DELETE)["'],\s*`(\/v1\/[^`]*)`/u;
+/** Linha (1-based) de um indice de caractere em `source`. */
+function lineAt(source, index) {
+  return source.slice(0, index).split("\n").length;
+}
+
+/**
+ * Argumentos de topo de uma chamada cujo `(` esta em `openParenIndex`.
+ * Respeita aspas, crases e aninhamento de `()`/`[]`/`{}`; devolve o texto de
+ * cada argumento ja sem espacos nas bordas. E o que permite classificar a
+ * forma do primeiro argumento sem depender de uma regex por forma.
+ */
+function extractCallArguments(source, openParenIndex) {
+  const args = [];
+  let depth = 0;
+  let quote;
+  let current = "";
+  const pushCurrent = () => {
+    if (current.trim()) args.push(current.trim());
+  };
+  for (let i = openParenIndex; i < source.length; i += 1) {
+    const char = source[i];
+    if (quote) {
+      current += char;
+      if (char === "\\") {
+        current += source[i + 1] ?? "";
+        i += 1;
+        continue;
+      }
+      if (char === quote) quote = undefined;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === "`") {
+      quote = char;
+      current += char;
+      continue;
+    }
+    if (char === "(" || char === "[" || char === "{") {
+      depth += 1;
+      if (depth > 1) current += char;
+      continue;
+    }
+    if (char === ")" || char === "]" || char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        pushCurrent();
+        return args;
+      }
+      current += char;
+      continue;
+    }
+    if (char === "," && depth === 1) {
+      pushCurrent();
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  pushCurrent();
+  return args;
+}
+
+const QUOTED_LITERAL_ARGUMENT_PATTERN = /^(["'])((?:[^\\]|\\.)*)\1$/su;
+const TEMPLATE_LITERAL_ARGUMENT_PATTERN = /^`([\s\S]*)`$/u;
+// Um registro de rota pode escrever o handler no lugar: funcao anonima, arrow,
+// ou um objeto de opcoes que carrega uma.
+const INLINE_ROUTE_HANDLER_ARGUMENT_PATTERN = /=>|^(?:async\s+)?function\b/u;
+
+// Goal038/FIX-001 (rodada 3): mas o handler tambem pode ser passado por
+// REFERENCIA — `app.get(ROUTE_PATH, handleTakeover)`. Nesse registro o ultimo
+// argumento nao tem `=>` nem `function`, e exigir a forma inline devolvia
+// `not_a_route_registration`: a terceira forma (path vindo de constante)
+// continuava escapando dos dois lados ao mesmo tempo, que e exatamente o que
+// esta regra existe para fechar. A forma do handler nunca definiu se a chamada
+// registra rota — tanto `handleTakeover` quanto `payload` sao identificadores.
+// O que separa registro de rota de `mapa.get(chave)` e de cliente HTTP e:
+//
+// - **aridade**: registro de rota sempre recebe path e handler (>= 2
+//   argumentos); `mapa.get(chave)` e `prisma.x.delete({ where })` recebem um;
+// - **posicao**: registro de rota e statement, ninguem le o valor da chamada.
+//   Leitura de Map, leitura de header e chamada de cliente HTTP sao valor
+//   atribuido, aguardado ou passado adiante.
+//
+// Os dois criterios sao computados sobre o texto ja lido, sem allowlist e sem
+// depender do nome do receptor.
+const CONSUMED_CALL_KEYWORD_PATTERN =
+  /(?:^|[^\w$])(?:await|return|yield|typeof|void|delete|new|of|in)$/u;
+const CONSUMED_CALL_OPERATOR_PATTERN = /[=(,[:?!&|+\-*/<>%^~]$/u;
+
+/**
+ * `true` quando alguem consome o valor da chamada que comeca em
+ * `receiverIndex` — atribuicao, `await`, `return`, argumento de outra chamada,
+ * operando. Registro de rota nunca e consumido; leitura de Map e chamada de
+ * cliente HTTP sempre sao.
+ */
+function callValueIsConsumed(source, receiverIndex) {
+  const before = source.slice(0, receiverIndex).trimEnd();
+  return (
+    CONSUMED_CALL_OPERATOR_PATTERN.test(before) ||
+    CONSUMED_CALL_KEYWORD_PATTERN.test(before)
+  );
+}
+
+const V1_PATH_PREFIX_PATTERN = /^\/v1(?:\/|$)/u;
+
+/** `categoria=N` de cada categoria presente, em ordem alfabetica — a enumeracao escrita do que a regra reconheceu. */
+function countByCategory(sites) {
+  const tally = new Map();
+  for (const site of sites) {
+    tally.set(site.category, (tally.get(site.category) ?? 0) + 1);
+  }
+  return [...tally.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([category, count]) => `${category}=${count}`)
+    .join(", ");
+}
+
+const BFF_ROUTE_CALL_SITE_PATTERN = new RegExp(
+  `\\b${RECEIVER_PATTERN}\\.(get|post|put|patch|delete)\\s*\\(`,
+  "gu",
+);
+
+/**
+ * Classifica toda chamada `<receptor>.<verbo>(` de `files` (escopo
+ * `apps/bff/src`) em uma categoria nomeada:
+ *
+ * - `literal_v1_path`: primeiro argumento e literal entre aspas comecando em
+ *   `/v1` — registro de rota reconhecido, entra na cobertura publica.
+ * - `literal_other_path`: literal entre aspas que nao e `/v1` — rota interna,
+ *   chave de header, chave de Map. Categoria declarada, fora de escopo.
+ * - `template_other_path`: crase sem `/v1` — path construido fora do contrato
+ *   publico. Categoria declarada, fora de escopo.
+ * - `not_a_route_registration`: chamada que nao registra rota — um unico
+ *   argumento (`mapa.get(chave)`) ou valor consumido por quem chamou
+ *   (`await cliente.post(url, corpo)`). Categoria declarada, nao e candidata.
+ * - `template_v1_path`: crase comecando em `/v1` — RESIDUO.
+ * - `non_literal_path_expression`: registro de rota cujo path nao e literal
+ *   nem crase (identificador, constante, lookup) — RESIDUO, com handler
+ *   escrito no lugar ou passado por referencia. E a terceira forma que
+ *   escapava das duas regras antigas ao mesmo tempo.
+ *
+ * Comentarios sao zerados antes da enumeracao, entao nunca viram candidatos.
+ */
+export function classifyBffRouteRegistrationSites(files) {
+  const sites = [];
+  for (const { path: filePath, content } of files) {
+    const source = blankComments(content);
+    for (const match of source.matchAll(BFF_ROUTE_CALL_SITE_PATTERN)) {
+      const args = extractCallArguments(
+        source,
+        match.index + match[0].length - 1,
+      );
+      const site = {
+        filePath,
+        line: lineAt(source, match.index),
+        method: match[1].toUpperCase(),
+        expression: args[0] ?? "",
+      };
+      const registersRoute =
+        args.length >= 2 &&
+        (INLINE_ROUTE_HANDLER_ARGUMENT_PATTERN.test(args[args.length - 1]) ||
+          !callValueIsConsumed(source, match.index));
+      const quoted = site.expression.match(QUOTED_LITERAL_ARGUMENT_PATTERN);
+      if (quoted) {
+        sites.push({
+          ...site,
+          category: V1_PATH_PREFIX_PATTERN.test(quoted[2])
+            ? "literal_v1_path"
+            : "literal_other_path",
+          pathPattern: quoted[2],
+        });
+        continue;
+      }
+      const template = site.expression.match(TEMPLATE_LITERAL_ARGUMENT_PATTERN);
+      if (template) {
+        sites.push({
+          ...site,
+          category: V1_PATH_PREFIX_PATTERN.test(template[1])
+            ? "template_v1_path"
+            : "template_other_path",
+        });
+        continue;
+      }
+      sites.push({
+        ...site,
+        category: registersRoute
+          ? "non_literal_path_expression"
+          : "not_a_route_registration",
+      });
+    }
+  }
+  return sites;
+}
+
+const BFF_ROUTE_RESIDUE_REASONS = {
+  template_v1_path:
+    "path de rota /v1 construido em tempo de execucao (crase), invisivel para public_api_route_coverage",
+  non_literal_path_expression:
+    "registro de rota com path que nao e literal nem crase, forma nao reconhecida",
+};
+
+function bffRouteRegistrationResidues(sites) {
+  return sites
+    .filter((site) => site.category in BFF_ROUTE_RESIDUE_REASONS)
+    .map(
+      (site) =>
+        `${site.filePath}:${site.line}: ${BFF_ROUTE_RESIDUE_REASONS[site.category]} — ${site.expression}`,
+    );
+}
+
+function bffV1RouteRegistrations(sites) {
+  const routes = new Map();
+  for (const site of sites) {
+    if (site.category !== "literal_v1_path") continue;
+    const route = { method: site.method, pathPattern: site.pathPattern };
+    routes.set(routeRegistrationKey(route), route);
+  }
+  return [...routes.values()];
+}
+
+export function findNonLiteralV1RouteRegistrations(files) {
+  return bffRouteRegistrationResidues(classifyBffRouteRegistrationSites(files));
+}
+
+const FRONTEND_ROUTE_SCHEMA_CALL_SITE_PATTERN =
+  /\brouteSchema(?:<[\s\S]*?>)?\s*\(/gu;
+const HTTP_METHOD_LITERAL_PATTERN = /^(?:GET|POST|PUT|PATCH|DELETE)$/u;
+
+/**
+ * Classifica toda chamada de `routeSchema` de `files` (escopo
+ * `apps/frontend/src/data/services/`), com ou sem generico, em uma categoria
+ * nomeada:
+ *
+ * - `literal_pattern`: metodo literal e padrao literal entre aspas — chamador
+ *   reconhecido, entra na tabela de chamadores de `public_api_route_coverage`.
+ * - `template_other_pattern`: padrao entre crases que nao e `/v1` — chamada
+ *   fora do contrato publico. Categoria declarada, fora de escopo.
+ * - `template_v1_pattern`: padrao entre crases comecando em `/v1` — RESIDUO;
+ *   o chamador existe, mas cairia no balde "sem chamador".
+ * - `non_literal_pattern`: metodo ou padrao em qualquer outra forma
+ *   (identificador, constante, concatenacao) — RESIDUO, porque nao da para
+ *   dizer se e `/v1` nem qual rota e.
+ *
+ * Comentarios sao zerados antes da enumeracao, entao nunca viram candidatos.
+ * O generico `<T>` nunca definiu o metodo nem o path, por isso e opcional.
+ */
+export function classifyFrontendRouteSchemaCallSites(files) {
+  const sites = [];
+  for (const { path: filePath, content } of files) {
+    const source = blankComments(content);
+    for (const match of source.matchAll(
+      FRONTEND_ROUTE_SCHEMA_CALL_SITE_PATTERN,
+    )) {
+      const args = extractCallArguments(
+        source,
+        match.index + match[0].length - 1,
+      );
+      const site = {
+        filePath,
+        line: lineAt(source, match.index),
+        expression: args.slice(0, 2).join(", "),
+      };
+      const method = (args[0] ?? "").match(QUOTED_LITERAL_ARGUMENT_PATTERN);
+      const methodIsLiteral =
+        method !== null && HTTP_METHOD_LITERAL_PATTERN.test(method[2]);
+      const quotedPattern = (args[1] ?? "").match(
+        QUOTED_LITERAL_ARGUMENT_PATTERN,
+      );
+      if (methodIsLiteral && quotedPattern) {
+        sites.push({
+          ...site,
+          category: "literal_pattern",
+          method: method[2],
+          pathPattern: quotedPattern[2],
+        });
+        continue;
+      }
+      const templatePattern = (args[1] ?? "").match(
+        TEMPLATE_LITERAL_ARGUMENT_PATTERN,
+      );
+      if (methodIsLiteral && templatePattern) {
+        sites.push({
+          ...site,
+          category: V1_PATH_PREFIX_PATTERN.test(templatePattern[1])
+            ? "template_v1_pattern"
+            : "template_other_pattern",
+        });
+        continue;
+      }
+      sites.push({ ...site, category: "non_literal_pattern" });
+    }
+  }
+  return sites;
+}
+
+const FRONTEND_ROUTE_SCHEMA_RESIDUE_REASONS = {
+  template_v1_pattern:
+    "routeSchema() chamado com padrao /v1 entre crases, invisivel para public_api_route_coverage",
+  non_literal_pattern:
+    "routeSchema() chamado com metodo ou padrao que nao e literal, forma nao reconhecida",
+};
+
+function frontendRouteSchemaResidues(sites) {
+  return sites
+    .filter((site) => site.category in FRONTEND_ROUTE_SCHEMA_RESIDUE_REASONS)
+    .map(
+      (site) =>
+        `${site.filePath}:${site.line}: ${FRONTEND_ROUTE_SCHEMA_RESIDUE_REASONS[site.category]} — ${site.expression}`,
+    );
+}
 
 export function findNonLiteralFrontendV1RouteSchemaCalls(files) {
-  return files
-    .filter(({ content }) =>
-      FRONTEND_V1_ROUTE_SCHEMA_NON_LITERAL_PATTERN.test(content),
-    )
-    .map(({ path: filePath }) => filePath);
+  return frontendRouteSchemaResidues(
+    classifyFrontendRouteSchemaCallSites(files),
+  );
 }
 
 function routeRegistrationKey({ method, pathPattern }) {
@@ -1020,24 +1377,13 @@ function routeRegistrationKey({ method, pathPattern }) {
 }
 
 export function extractBffV1RouteRegistrations(files) {
-  const routes = new Map();
-  for (const { content } of files) {
-    for (const match of content.matchAll(BFF_V1_ROUTE_REGISTRATION_PATTERN)) {
-      const route = { method: match[1].toUpperCase(), pathPattern: match[2] };
-      routes.set(routeRegistrationKey(route), route);
-    }
-  }
-  return [...routes.values()];
+  return bffV1RouteRegistrations(classifyBffRouteRegistrationSites(files));
 }
 
 function extractFrontendRouteSchemaCalls(files) {
-  const routes = [];
-  for (const { content } of files) {
-    for (const match of content.matchAll(FRONTEND_ROUTE_SCHEMA_CALL_PATTERN)) {
-      routes.push({ method: match[1], pathPattern: match[2] });
-    }
-  }
-  return routes;
+  return classifyFrontendRouteSchemaCallSites(files)
+    .filter((site) => site.category === "literal_pattern")
+    .map((site) => ({ method: site.method, pathPattern: site.pathPattern }));
 }
 
 function extractPublicApiRouteTableEntries(routesTableSource) {

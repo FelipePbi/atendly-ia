@@ -1,6 +1,6 @@
 # Goal 042 — O elo de transporte é provado: texto que sai do serviço Go e origem fora do relé
 
-**Status: READY.** Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-21 pelo Tech Lead Agent após [Goal041 ACCEPTED](../reviews/041-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED** na rodada 2, conforme o [review042](../reviews/042-review.md) — uma rodada `CHANGES_REQUIRED` com 9 blockers antes do aceite com zero blockers. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-21 pelo Tech Lead Agent após [Goal041 ACCEPTED](../reviews/041-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: OPUS_MEDIUM
 

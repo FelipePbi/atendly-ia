@@ -3793,3 +3793,117 @@ produto, e fora da contagem de "três" acima.
   pré-condição ausente, **nunca** um resultado verde: a persistência
   continua validada só por `validate:integration`, e este delta não
   reivindica tê-la validado.
+
+
+## Delta implementado — diff042, 2026-09-21 ([D-058](DECISIONS.md))
+
+Fecha a **fronteira de serviço** que o aceite do Goal041 tinha declarado
+como limite em D-057 item 5: `apps/evolution-go/` deixa de estar fora do
+alcance de qualquer guard. Nenhum arquivo Go de produção mudou, nenhum
+`src/` dos três apps mudou, `go.mod` e `go.sum` estão intocados e nenhuma
+dependência nova entrou — o guard é pacote Go novo, **só de teste**,
+escrito com a biblioteca padrão.
+
+- **O serviço de transporte passou a ser lido por guard.** O pacote novo
+  `apps/evolution-go/pkg/transportguard/` (16 arquivos: 10 fontes e 6 de
+  teste) lê `apps/evolution-go/pkg` e `cmd` inteiros por AST —
+  **53** arquivos `.go` de produção, sem `_test.go` e sem
+  `whatsmeow-lib/` — e enumera todo sítio que escreve texto em campo
+  portador de mensagem de proto. Sobre a árvore real: **82** sítios,
+  **19** chamadas de transporte e resíduo **zero**. Nada é reconhecido
+  por nome de arquivo, pasta, função, rota ou receptor; a regra é a forma,
+  e forma não reconhecida vira erro com `arquivo:linha` em vez de
+  passagem silenciosa (`TestNoRuleIsKeyedOnAFileFolderFunctionRouteOrReceiver`
+  lê as fontes do próprio guard e reprova se um desses nomes aparecer).
+- **O conjunto de campos portadores é derivado, não digitado.**
+  `DeriveCarrierFields` lê
+  `whatsmeow-lib/proto/waE2E/WAWebProtobufsE2E.pb.go` e devolve todo campo
+  `*string` declarado em struct de mensagem — struct que declara um campo
+  `protoimpl.MessageState`. Hoje: **325** campos portadores. Nenhum nome
+  de campo está escrito dentro do guard. O caminho do pacote de proto e o
+  da biblioteca de transporte saem do `replace` do `go.mod`
+  (`go.mau.fi/whatsmeow/proto/waE2E` e `go.mau.fi/whatsmeow`), não de
+  literal no código do guard.
+- **As categorias de sítio, nomeadas e com motivo escrito junto:**
+  `send_via_internal_wrapper` (**36**), `send_via_transport_client`
+  (**38**), `embedded_in_non_transport_value` (**8**) e
+  `composed_by_transport_builder` (**0** sobre esta árvore, exercitada
+  pela forma, não pelo número). Distinguir chamada ao wrapper interno de
+  chamada ao cliente whatsmeow é decidido pela declaração do chamado — se
+  ele recebe mensagem de proto e devolve outra, compõe; se recebe e não
+  devolve, transmite —, nunca pelo nome do método.
+- **As categorias de origem de valor, todas nomeadas:**
+  `value_from_route_body_parameter` (o relé),
+  `value_from_instance_configuration`, `value_is_go_prose_literal`,
+  `value_is_empty_placeholder`, `value_resolved_by_caller_as_parameter`,
+  `value_computed_by_library_call`, `value_composed_by_concatenation`
+  (categoria nova deste delta: cada operando do `+` é classificado
+  recursivamente e guardado, então `ButtonParamsJSON` mostra suas partes
+  em vez de ser reportado por um operando só) e
+  `value_bound_differently_per_branch` (categoria nova deste delta: um
+  local ligado em mais de um ramo tem **todos** os ramos classificados —
+  ler só o primeiro deixava passar quatro dos cinco discriminadores de
+  botão).
+- **O conjunto de origens fora do relé é asserido elemento a elemento**
+  (`off_relay_test.go`): **88** escritas de campo portador cuja origem
+  não é o corpo recebido, cada uma com arquivo, linha, tipo de mensagem,
+  campo e categoria. Exatamente **uma** é
+  `value_from_instance_configuration`:
+  `pkg/whatsmeow/service/whatsmeow.go:1806`, `ExtendedTextMessage.Text`,
+  o texto de auto-rejeite de chamada — o membro que o Goal nomeia. Só o
+  literal vazio fica isento do conjunto, porque é a ausência de valor;
+  `value_computed_by_library_call` **não** fica, e essa isenção de
+  categoria inteira, que a rodada 1 fazia, foi removida.
+- **Os literais de prosa em Go que alcançam campo portador também são
+  asseridos elemento a elemento** (`go_prose_test.go`): **27** literais
+  não vazios, cada um com arquivo, linha, conteúdo e os campos que
+  alcança. Um literal novo, movido ou alterado reprova. Isso diverge do
+  Goal, que afirmava zero; ver a divergência declarada em
+  [VALIDATION_GATE](VALIDATION_GATE.md#o-elo-de-transporte-é-provado-texto-que-sai-do-serviço-go-e-origem-fora-do-relé-do-goal042)
+  e o achado **A-24** em [FINAL_AUDIT §19](FINAL_AUDIT.md).
+- **A travessia por valor funciona nos dois lados, cada um lido na sua
+  língua.** No Go: `discoverRegisteredRoutes` computa o caminho completo
+  de cada uma das **94** rotas registradas — prefixo do grupo mais
+  caminho do registro, resolvidos por AST —, `ReadEnvFileValue` lê
+  `EVOLUTION_SEND_TEXT_PATH` de `apps/ai-orchestrator/.env.example` como
+  `CHAVE=VALOR` (`/send/text`, linha 21), e `ChainFrom` segue **o valor
+  que o handler liga do corpo recebido** — não todo chamado alcançável —
+  do registro (`pkg/routes/routes.go:141`, prefixo aberto em `:136`) ao
+  handler (`SendHandler.SendText`,
+  `pkg/sendMessage/handler/send_handler.go:45`) e ao serviço, **24**
+  passos, terminando em sítio de saída com origem relé
+  (`pkg/sendMessage/service/send_service.go:611`,
+  `ExtendedTextMessage.Text`). No TypeScript:
+  `computeBoundaryValueCrossing`
+  (`apps/ai-orchestrator/tests/support/http-egress-sites.ts`) computa o
+  default de `EVOLUTION_SEND_TEXT_PATH` de `src/config/env.ts` (linha 83)
+  pela forma da declaração — não pelo nome do helper — e o compara ao
+  `.env.example`. Divergência reprova; chave ausente em qualquer dos dois
+  reprova em vez de pular. O valor não está digitado em teste nenhum:
+  vem das duas fontes.
+- **Os cinco controles negativos obrigatórios existem e mordem**
+  (`negative_controls_test.go`), cada um sobre módulo sintético completo
+  montado em diretório temporário, removido pelo `t.TempDir` ao fim, sem
+  nunca quebrar a árvore real.
+- **Prova executada:** `cd apps/evolution-go && go test ./...`: **152**
+  testes, 0 falhas — os **133** da baseline mais **19** deste pacote;
+  nenhuma suíte encolheu. `npx vitest run
+  tests/assistant/assistant.service.test.ts` (em `apps/ai-orchestrator`):
+  **70** testes, 0 falhas — os **66** da baseline mais **4** deste delta.
+  `npx vitest run` completo de `apps/ai-orchestrator`: **794** passando,
+  88 pulados (baseline: 790 passando). `npm run validate:core`:
+  `PASSED`, 15 passos verdes e 2 pulados declarados (`test:bff`,
+  `test:health-worker`), com `audit:static` mantendo os **34** checks.
+  `npm run test:gate`: **226** testes, 0 falhas — mesma contagem da
+  baseline.
+- **LIMITE:** `validate:integration` **não roda neste ambiente de
+  execução**: `npm run validate:integration` termina com `exit 2` e
+  `validate:integration REFUSED — BFF_TEST_DATABASE_URL is not set`.
+  Nenhum dos **35** passos chegou a rodar, e a lista de 35 continua
+  intacta. Declaração de pré-condição ausente, **nunca** um resultado
+  verde.
+- **LIMITE:** nada aqui prova comportamento em runtime do serviço Go, nem
+  que o binário em produção é o desta árvore. O que se prova é o que a
+  árvore de código diz, lida por AST. `whatsmeow-lib/` é biblioteca
+  vendorizada e fica fora do alcance do guard — é lida apenas como fonte
+  das declarações de proto.

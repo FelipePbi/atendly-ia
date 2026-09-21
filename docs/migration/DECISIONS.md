@@ -786,3 +786,189 @@ Ao mudar decisão: registrar evidência/commit, marcar anterior SUPERSEDED quand
 **Consequências:** `apps/ai-orchestrator/tests/support/http-egress-sites.ts` é um módulo novo, com `discoverHttpEgressSites`, `HttpEgressSiteCategory`, `ClassifiedHttpEgressSite`, `HttpEgressExclusionReason` e `HttpEgressDiscovery`. `apps/ai-orchestrator/tests/support/send-text-sites.ts` ganha `SendTextChainRootKind`, `SendTextChainRoot`, `SendTextChainLink`, `SendTextChainCycle` e a extensão de `discoverSendTextTransitChains` para percurso multi-elo; a mensagem de resíduo de `classifySendTextSites` passa a nomear o portador descoberto em vez de `sendText` fixo. `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts` ganha 11 casos novos ao lado dos 55 já existentes (66 no total): 2 fecham os resíduos do review040 (forma propriedade-arrow permanente, mensagem de resíduo com portador nomeado) e 9 provam a enumeração de egresso HTTP, o fail-closed do egresso genérico (inclusive primitivo de outro nome em outro arquivo e repasse em cadeia) e a cadeia estendida com os 5 chamadores de segundo elo nomeados. Nenhum arquivo de `apps/frontend/src/`, `apps/bff/src/` ou `apps/ai-orchestrator/src/` mudou; `PRODUCT_OWN_TEXTS` e `VERIFIED_CLIENT_TEXTS` continuam com o mesmo conjunto de entradas da baseline. FINAL_AUDIT §17 recontado em §18: 0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO` — inalterado, sem achado novo a partir de A-24. O limite do serviço Go (`apps/evolution-go/`) fica declarado aqui e em [VALIDATION_GATE](VALIDATION_GATE.md#egresso-http-computado-egresso-genérico-fail-closed-e-cadeia-de-trânsito-até-raiz-classificada-do-goal041). Este diff não fecha **M4**, não afirma fidelidade visual à referência aprovada e não liga a verificação de resposta em produção. **Desvio declarado ao §5 do Goal041, dispensado no review041 (D-018, precedente [D-048](#d-048--fronteira-do-openai-configurável-por-ambiente-e-prova-de-composição-da-resposta-automática-sem-substituto-interno-propostas-no-goal032) do review033):** `tools/ia-loop/lib/deterministic-executor.mjs` e `tools/ia-loop/tests/deterministic-executor.test.mjs` seguem modificados por `scopeRelativePattern` (`deterministic-executor.mjs:56`, usada em `runDeterministicAction:84`), que tira o prefixo de escopo duplicado de `unit.pattern` sob `ACTION_CWD.SCOPE` — sem ela o gate `targeted-tests` (WU-09) reprova com `No test files found, exiting with code 1`, e a reversão tentada nas rodadas 2, 3 e 4 não se sustentou nas três vezes. É mudança de harness, sem efeito em produto nem em gate de produto, coberta por `node --test tools/ia-loop/tests/deterministic-executor.test.mjs` (12 casos, 12 pass).
 
 **Revisar se:** um sítio de egresso HTTP novo não resolver a `env.<NOME>`, a `this.<campo>` nem a parâmetro resolvível nos chamadores — a leitura reprovaria por resíduo, e resolver isso exigiria estender `resolveDestination`, não allowlist; um chamador de `fetchJson` aparecer sem destino resolvível — mesma reprovação por resíduo, mesma extensão exigida; a cadeia de trânsito precisar reconhecer uma raiz nova, fora das sete nomeadas — exigiria decisão própria sobre o que conta como raiz; ou o serviço `apps/evolution-go/` precisar ser provado sem texto próprio — este Goal deliberadamente não decide isso, e permanece limite declarado até haver Goal que o feche.
+
+
+## D-058 — O guard atravessa a fronteira de serviço em vez de continuar declarando limite, o campo portador é derivado das declarações de proto, e a fronteira é atravessada por valor com cada lado lido na sua língua, propostas no Goal042
+
+**Status:** ACCEPTED no [review042](reviews/042-review.md) (rodada 2 de
+2, 2026-09-21, zero blockers; a rodada 1 teve 9 blockers — árvore
+vermelha, §3 ausente dos dois lados, controles negativos e documentação
+inexistentes, e a escalação da WU-03, resolvida por ruling do Tech Lead
+que substituiu o hard-fail de `requireNoProseReachingTransport` por
+conjunto asserido elemento a elemento, sem editar o fork), pelo Tech
+Lead Agent ([AGENT_ROLES](AGENT_ROLES.md), D-018). Cobre o diff042
+(correção dos nove blockers registrados na revisão da rodada 1, com os
+cinco controles negativos obrigatórios executados e revertidos — os
+controles 1 a 3 com as duas saídas, baseline e árvore final) sobre a
+baseline aceita `da0f06d9431bdd73e33c4eb301e5edefd7df986a` (fechamento
+do Goal041); sem commit e sem deploy. Fecha o limite que **D-057 item
+5** declarava. Seis observações não bloqueantes ficaram registradas no
+review, nenhuma sobre invariante afrouxada: o conjunto derivado de
+campos portadores é mais largo do que "texto que uma pessoa lê" (`URL`,
+`DirectPath`, `Mimetype`, `Vcard`), então os conjuntos de 88 e de 27
+membros se mexem a cada mudança de transporte; a alcançabilidade é
+sobre-aproximada de propósito, errando na direção fail-closed; a cadeia
+segue o valor ligado pelo handler e não veria texto atravessando por
+canal, closure guardada em campo ou reflexão; A-24 fica aberto, não
+corrigido; o defeito de harness do Goal041 não mordeu nesta série e
+nenhum arquivo de `tools/ia-loop/` foi tocado; e as três observações
+opcionais do review040 continuam abertas.
+**Acrescenta** um achado novo, **A-24** (`PENDENCIA-POS-MVP`), registrado
+em [FINAL_AUDIT §19](FINAL_AUDIT.md) — não corrige nem reclassifica
+nenhum achado anterior: A-04 a A-08, A-11 a A-17 e A-19 não são tocados,
+e nenhum achado fechado (A-01 a A-03, A-09, A-10, A-18, A-20 a A-23) é
+reaberto. Não altera nenhuma decisão anterior — reusa e não altera D-018,
+D-050, D-054, D-055, D-056 e D-057.
+
+**Contexto:** o produto não entrega texto ao WhatsApp. Entrega ao serviço
+Go, e o serviço Go entrega ao WhatsApp. Os Goals 034 a 041 provaram
+propriedades do lado de cá da fronteira — qual texto o produto compõe,
+por qual porta ele sai, por qual egresso HTTP ele parte, e que só existe
+um. Do lado de lá, `apps/evolution-go/` tem 53 arquivos `.go` de produção
+em `pkg` e `cmd`, e nenhum guard do repositório lia essa árvore. A
+afirmação "o serviço Go é um relé" era prosa em documento, registrada
+pelo aceite do Goal041 como limite declarado, não como fato provado — e o
+`AGENTS.md` de `apps/evolution-go/` já proibia lógica de produto nesse
+fork sem que nada verificasse a proibição.
+
+**Decisão:**
+
+1. **O guard atravessa a fronteira de serviço, em pacote Go novo e só de
+   teste.** `apps/evolution-go/pkg/transportguard/` (16 arquivos: 10
+   fontes e 6 de teste) lê `apps/evolution-go/pkg` e `cmd` inteiros por
+   AST com `go/parser` e `go/ast` da biblioteca padrão — nenhuma
+   dependência nova, `go.mod` e `go.sum` intocados, nenhum arquivo Go de
+   produção alterado, pacote não importado por `cmd/evolution-go`. Sobre
+   a árvore real: 82 sítios de escrita em campo portador, 19 chamadas de
+   transporte, resíduo zero. Todo sítio cai em exatamente uma categoria
+   nomeada com o motivo escrito junto, e forma não reconhecida vira erro
+   com `arquivo:linha`. A alternativa — continuar declarando o serviço Go
+   como limite e vigiar só o lado TypeScript — foi rejeitada: é a mesma
+   premissa não verificada que o review041 apontou, agora uma fronteira
+   de linguagem em vez de uma porta.
+2. **O campo portador de texto é derivado das declarações de proto, nunca
+   digitado.** `DeriveCarrierFields` lê
+   `whatsmeow-lib/proto/waE2E/WAWebProtobufsE2E.pb.go` e devolve todo
+   campo `*string` declarado em struct que traz `protoimpl.MessageState`
+   — 325 campos hoje. O caminho do pacote de proto e o da biblioteca de
+   transporte saem do `replace` do `go.mod`, não de literal no guard. O
+   conjunto derivado é mais largo do que "texto que uma pessoa lê":
+   inclui `URL`, `DirectPath`, `Mimetype` e `Vcard`. A alternativa —
+   estreitá-lo por significado — foi rejeitada: exigiria lista escrita à
+   mão, que é a família de blocker dos Goals 036 a 041.
+3. **A origem de cada valor é classificada em categoria nomeada, e duas
+   categorias novas entram.** Além das cinco que o Goal pede — corpo da
+   rota, configuração de instância, literal em Go, placeholder vazio e
+   valor resolvido no chamador — e de `value_computed_by_library_call`,
+   entram `value_composed_by_concatenation` (a concatenação é seu próprio
+   valor, com cada operando classificado recursivamente e guardado, de
+   modo que `ButtonParamsJSON` mostra suas partes em vez de ser reportado
+   por um operando só) e `value_bound_differently_per_branch` (um local
+   ligado em vários ramos tem **todos** os ramos classificados). A
+   segunda nasceu de um defeito real: a rodada 1 lia só a primeira
+   ligação de um local, e por isso quatro dos cinco discriminadores de
+   botão de `send_service.go:1740-1753` não eram vistos. A alternativa —
+   reportar a concatenação pela categoria de um operando — foi rejeitada:
+   um envelope JSON colado em volta de um campo do corpo recebido não é o
+   campo do corpo recebido, e chamá-lo assim esconderia o envelope.
+4. **Os dois conjuntos são asseridos elemento a elemento, no teste, nunca
+   dentro da regra.** O conjunto de escritas cuja origem não é o relé tem
+   88 membros, cada um com arquivo, linha, tipo de mensagem, campo e
+   categoria, e exatamente um é configuração de instância
+   (`pkg/whatsmeow/service/whatsmeow.go:1806`). O conjunto de literais
+   não vazios que alcançam campo portador tem 27 membros, cada um com
+   arquivo, linha, conteúdo e campos alcançados. Só
+   `value_is_empty_placeholder` fica isento do primeiro conjunto, por ser
+   a ausência de valor; `value_computed_by_library_call` **não** fica, e
+   essa isenção de categoria inteira, que a rodada 1 fazia, foi removida.
+   A alternativa — reprovar a enumeração dentro do guard ao ver um
+   literal — foi rejeitada: manter a árvore verde exigiria então uma
+   allowlist de arquivo e linha **dentro da regra**, que o critério 4
+   proíbe. A asserção mora no teste, como o Goal manda para o conjunto
+   fora do relé.
+5. **A fronteira é atravessada por valor, e cada lado é lido na sua
+   língua.** No Go, o caminho completo de cada uma das 94 rotas
+   registradas é computado por AST — prefixo do grupo mais caminho do
+   registro —, `EVOLUTION_SEND_TEXT_PATH` é lido de
+   `apps/ai-orchestrator/.env.example` como `CHAVE=VALOR`, e o
+   encadeamento segue **o valor que o handler liga do corpo recebido**,
+   do registro ao handler e ao serviço, terminando em sítio de saída com
+   origem relé. No TypeScript, o default de `src/config/env.ts` é
+   computado pela forma da declaração e comparado ao `.env.example`.
+   Chave ausente, arquivo ausente, caminho que não é rota registrada e
+   divergência entre os dois lados reprovam — nunca pulam. A alternativa
+   — o guard Go parsear TypeScript, ou o teste TypeScript parsear Go —
+   foi rejeitada: duplicaria dois parsers para provar uma igualdade de
+   string.
+6. **A divergência com o Goal é declarada, e vira achado, não correção.**
+   O Goal042 afirmava achado zero. O AST enumera 27 literais não vazios
+   alcançando campo portador. Vinte e seis são discriminadores de
+   protocolo, MIME types, envelopes JSON e marcas de formatação. O
+   vigésimo sétimo, `"Ver Menu"`
+   (`pkg/sendMessage/service/send_service.go:1960`), é prosa de produto
+   composta dentro do fork de transporte e entregue ao número da cliente
+   quando o chamador manda `ButtonText` vazio. Ele virou **A-24**,
+   `PENDENCIA-POS-MVP` — rebaixado de bloqueador pela regra de §6, por
+   não haver reprodução executável: a rota que o alcança é
+   `POST /send/list`, e nenhum arquivo de `apps/ai-orchestrator/src` ou
+   de `apps/bff/src` a chama. A alternativa — editar o fork e trocar o
+   literal — é proibida pelo §5 do Goal e foi rejeitada.
+
+**Alternativas:** continuar declarando `apps/evolution-go/` como limite —
+rejeitada no item 1; lista de campos portadores escrita à mão —
+rejeitada no item 2; reportar uma concatenação pela categoria de um
+operando, e um local pela sua primeira ligação — rejeitadas no item 3,
+a segunda por defeito observado; allowlist de arquivo e linha dentro da
+regra para manter a árvore verde — rejeitada no item 4; um lado parsear
+a língua do outro — rejeitada no item 5; corrigir `"Ver Menu"` no fork —
+rejeitada no item 6.
+
+**Motivo:** o risco próprio deste Goal — descobrir demais, transformando
+recibo, presença, histórico, mídia, enquete e reação em resíduo, ou
+provar o lado errado, afirmando runtime a partir de leitura de código —
+só se evita computando o conjunto pela forma real do código, derivando o
+campo portador das declarações de proto, e escrevendo em todo lugar que o
+que se prova é o que a árvore diz.
+
+**Consequências:** `apps/evolution-go/pkg/transportguard/` é um pacote
+novo com `Enumerate`, `DeriveCarrierFields`,
+`DeriveTransportPackagePaths`, `DiscoverProductionGoFiles`,
+`SourceCategory`, `SiteCategory`, `OffRelaySources`,
+`GoProseLiteralsReachingTransport`, `RegisteredRoute`, `RouteChain`,
+`RouteWithPath`, `ChainFrom` e `ReadEnvFileValue`.
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts` ganha
+`readEnvSchemaDefault`, `readEnvFileValue`,
+`computeBoundaryValueCrossing`, `BoundaryValueReading` e
+`BoundaryValueCrossing`; nada do que o Goal041 deixou ali foi alterado.
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts` ganha 4
+casos ao lado dos 66 já existentes (70 no total). Nenhum arquivo de
+`apps/frontend/src/`, `apps/bff/src/` ou `apps/ai-orchestrator/src/`
+mudou, nenhum arquivo Go de produção mudou, `go.mod` e `go.sum` estão
+intocados, nenhum arquivo de `tools/ia-loop/` foi editado em rodada
+nenhuma, e `PRODUCT_OWN_TEXTS`, `VERIFIED_CLIENT_TEXTS` e
+`VOCABULARIO_DE_ESPERA` continuam idênticos aos da baseline. `go test
+./...` em `apps/evolution-go`: 152 testes, 0 falhas (baseline 133).
+`npm run validate:core`: `PASSED`, com `audit:static` mantendo os 34
+checks. `npm run test:gate`: 226 testes, 0 falhas. FINAL_AUDIT §18
+recontado em §19: 0 `BLOQUEADOR-MVP`, **8** `PENDENCIA-POS-MVP` e 6
+`LIMITE-DECLARADO` — a diferença é A-24. Este diff não fecha **M4**, não
+afirma fidelidade visual à referência aprovada, não liga a verificação de
+resposta em produção e **não afirma comportamento de runtime do serviço
+Go**. `validate:integration` recusou por pré-condição de banco ausente
+(`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado como ausente.
+**Defeito conhecido do harness, declarado e não consertado aqui:** a
+correção de `scopeRelativePattern` em
+`tools/ia-loop/lib/deterministic-executor.mjs` existe só na worktree do
+Goal041; enquanto não for integrada, o gate `targeted-tests` reprova com
+`No test files found, exiting with code 1`. Nenhum arquivo de
+`tools/ia-loop/` foi tocado nesta rodada, e a execução manual equivalente
+está no relatório.
+
+**Revisar se:** o transporte passar a compor mensagem por um caminho que
+o encadeamento por valor não segue — canal, closure guardada em campo,
+reflexão —, o que exigiria estender `ChainFrom`, não allowlist; um campo
+portador passar a ser alimentado por uma forma nova, que hoje viraria
+resíduo nomeado; `whatsmeow-lib/` deixar de ser vendorizada, o que mudaria
+a derivação do caminho do pacote de proto; ou o produto passar a usar
+`POST /send/list`, que é a condição que transformaria **A-24** em defeito
+observável por uma cliente.

@@ -974,3 +974,119 @@ export function discoverHttpEgressSites(
 
   return { sites, excluded, genericEgressCallers, genericEgressPrimitives };
 }
+
+/**
+ * O valor que atravessa a fronteira de serviço (Goal042 / §3, lado
+ * TypeScript).
+ *
+ * O produto não entrega texto ao WhatsApp: entrega ao serviço Go, e o
+ * encontro entre os dois é **um valor** — o caminho da rota de envio de
+ * texto. Cada lado lê esse valor na sua própria língua: o guard Go lê
+ * `apps/ai-orchestrator/.env.example` como `CHAVE=VALOR` e confere que o
+ * valor é rota registrada; daqui, o default declarado em
+ * `src/config/env.ts` é computado do próprio schema e comparado ao
+ * `.env.example`.
+ *
+ * Nada aqui parseia Go, e o valor não é escrito dentro de teste nenhum:
+ * ele é lido das duas fontes. Chave ausente em qualquer das duas
+ * **reprova** — nunca pula —, e divergência entre as duas reprova.
+ */
+export interface BoundaryValueReading {
+  /** Caminho do arquivo de onde o valor foi lido. */
+  filePath: string;
+  /** Linha, 1-based, em que a chave aparece. */
+  line: number;
+  /** O valor lido, já sem aspas. */
+  value: string;
+}
+
+/** As duas leituras do mesmo valor, uma por fonte. */
+export interface BoundaryValueCrossing {
+  key: string;
+  envSchema: BoundaryValueReading;
+  envExample: BoundaryValueReading;
+}
+
+/**
+ * Lê o default declarado para `key` no schema de ambiente. A forma
+ * reconhecida é a única que o schema usa: a chave, dois-pontos, uma
+ * chamada de helper e um literal de string como argumento. O nome do
+ * helper não é comparado com lista nenhuma — o que importa é a forma.
+ */
+export function readEnvSchemaDefault(envSchemaPath: string, key: string): BoundaryValueReading {
+  const source = readFileSync(envSchemaPath, "utf8");
+  // A forma é: início de linha, a chave, dois-pontos, um identificador de
+  // helper, e entre parênteses um único literal de string. As três aspas
+  // são alternativas escritas à parte porque retrovisor em regex de
+  // linha única não acrescenta nada aqui e atrapalha a leitura.
+  const quoted = ["\"((?:\\\\.|[^\"\\\\])*)\"", "'((?:\\\\.|[^'\\\\])*)'", "`((?:\\\\.|[^`\\\\])*)`"];
+  const declaration = new RegExp(
+    "^[ \\t]*" +
+      key +
+      ":[ \\t]*[A-Za-z_$][\\w$]*\\([ \\t]*(?:" +
+      quoted.join("|") +
+      ")[ \\t]*\\)",
+    "u",
+  );
+  const lines = source.split(/\r?\n/u);
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = declaration.exec(lines[index] as string);
+    if (match === null) continue;
+    const captured = [match[1], match[2], match[3]].find((group) => group !== undefined);
+    if (captured === undefined) continue;
+    return { filePath: envSchemaPath, line: index + 1, value: captured };
+  }
+  throw new Error(
+    `${envSchemaPath}: ${key} não é declarada com default literal no schema de ambiente, então o valor que atravessa a fronteira não pode ser computado deste lado`,
+  );
+}
+
+/** Lê o valor de `key` de um arquivo `CHAVE=VALOR`. Chave ausente reprova. */
+export function readEnvFileValue(envFilePath: string, key: string): BoundaryValueReading {
+  const source = readFileSync(envFilePath, "utf8");
+  const lines = source.split(/\r?\n/u);
+  for (let index = 0; index < lines.length; index += 1) {
+    const trimmed = (lines[index] as string).trim();
+    if (trimmed === "" || trimmed.startsWith("#")) continue;
+    const separator = trimmed.indexOf("=");
+    if (separator === -1) continue;
+    if (trimmed.slice(0, separator).trim() !== key) continue;
+    return {
+      filePath: envFilePath,
+      line: index + 1,
+      value: unquoteEnvValue(trimmed.slice(separator + 1).trim()),
+    };
+  }
+  throw new Error(
+    `${envFilePath}: não define ${key}, então o valor que atravessa a fronteira não pode ser lido`,
+  );
+}
+
+/** Tira as aspas de um valor de arquivo de ambiente, quando houver. */
+function unquoteEnvValue(value: string): string {
+  if (value.length < 2) return value;
+  const first = value[0] as string;
+  const last = value[value.length - 1] as string;
+  if (first !== last || (first !== '"' && first !== "'")) return value;
+  return value.slice(1, -1);
+}
+
+/**
+ * Computa as duas leituras do valor de fronteira e **reprova** quando
+ * elas divergem, nomeando os dois arquivos e as duas linhas. O valor em
+ * si não é escrito em lugar nenhum: ele vem das fontes.
+ */
+export function computeBoundaryValueCrossing(
+  envSchemaPath: string,
+  envExamplePath: string,
+  key: string,
+): BoundaryValueCrossing {
+  const envSchema = readEnvSchemaDefault(envSchemaPath, key);
+  const envExample = readEnvFileValue(envExamplePath, key);
+  if (envSchema.value !== envExample.value) {
+    throw new Error(
+      `${key} diverge entre os dois lados da fronteira: ${envSchema.filePath}:${envSchema.line} declara o default ${JSON.stringify(envSchema.value)} e ${envExample.filePath}:${envExample.line} traz ${JSON.stringify(envExample.value)}`,
+    );
+  }
+  return { key, envSchema, envExample };
+}

@@ -1086,3 +1086,56 @@ estender `discoverHttpEgressSites` na mesma passada, porque a
 enumeração ficaria silenciosamente incompleta em vez de reprovar.
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff041-2026-09-21-d-057) e [D-057](DECISIONS.md).
+
+
+## O elo de transporte é provado: texto que sai do serviço Go e origem fora do relé do Goal042
+
+O aceite do Goal041 declarou, em D-057 item 5, um limite de outra
+natureza dos anteriores: **uma fronteira de serviço**. O produto não
+entrega texto ao WhatsApp — entrega ao serviço Go, e o serviço Go entrega
+ao WhatsApp. Tudo que os Goals 034 a 041 provaram vale do lado de cá.
+Este delta lê o lado de lá.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `transportguard` (`apps/evolution-go/pkg/transportguard/`, pacote Go novo, só de teste) lê `apps/evolution-go/pkg` e `cmd` inteiros por AST — **53** arquivos `.go` de produção, sem `_test.go` e sem `whatsmeow-lib/` — e enumera todo sítio que escreve campo portador de mensagem de proto. Sobre a árvore real: **82** sítios, **19** chamadas de transporte, resíduo **zero**. Categorias de sítio: `send_via_internal_wrapper` (36), `send_via_transport_client` (38), `embedded_in_non_transport_value` (8), `composed_by_transport_builder` (0) | Forma não reconhecida deriva a enumeração com `arquivo:linha` — a enumeração junta **todos** os resíduos de uma execução em vez de parar no primeiro. Uma forma nova de escrever o mesmo envio continua exigindo extensão do classificador, nunca allowlist |
+| O conjunto de campos portadores é **derivado** das declarações de `waE2E`: todo campo `*string` de struct que declara `protoimpl.MessageState`. Hoje **325** campos. Nenhum nome de campo, de pacote ou de método está digitado no guard; o caminho do pacote de proto e o da biblioteca saem do `replace` do `go.mod` | O conjunto derivado é mais largo do que "texto que uma pessoa lê": inclui `URL`, `DirectPath`, `Mimetype` e `Vcard`, porque são `*string` de mensagem. Isso é deliberado — estreitar o conjunto por significado exigiria uma lista escrita à mão, que é o que o Goal proíbe |
+| O conjunto de escritas cuja origem **não** é o relé é asserido elemento a elemento: **88** membros, cada um com arquivo, linha, tipo de mensagem, campo e categoria. Exatamente **um** é `value_from_instance_configuration` — `pkg/whatsmeow/service/whatsmeow.go:1806`, `ExtendedTextMessage.Text`, o texto de auto-rejeite de chamada. Membro novo, movido ou reclassificado reprova | Só `value_is_empty_placeholder` fica isento, por ser a ausência de valor. `value_computed_by_library_call` **não** fica isento: a isenção de categoria inteira que a rodada 1 fazia foi removida, porque isentar uma categoria é a mesma coisa que não asserir seus membros |
+| Os literais de prosa em Go que alcançam campo portador na direção do fio são asseridos elemento a elemento: **27** literais, cada um com arquivo, linha, conteúdo e campos alcançados. Um novo reprova | A alcançabilidade é **sobre-aproximada** de propósito: quando o campo lê um local ligado em vários ramos, todos contam, porque qual ramo executa é fato de runtime. Sobre-aproximar é o lado fail-closed; o custo é um literal atribuído a mais campos do que uma execução usaria |
+| A travessia por valor, lado Go: o caminho completo de cada uma das **94** rotas registradas é computado por AST (prefixo do grupo mais caminho do registro), `EVOLUTION_SEND_TEXT_PATH` é lido de `apps/ai-orchestrator/.env.example` como `CHAVE=VALOR`, e o encadeamento é seguido do registro (`pkg/routes/routes.go:141`) ao handler (`pkg/sendMessage/handler/send_handler.go:45`) e ao serviço, terminando em `pkg/sendMessage/service/send_service.go:611` com origem relé. Chave ausente, arquivo ausente ou caminho que não corresponde a rota registrada reprovam, com o caminho impresso | O encadeamento segue **o valor que o handler liga do corpo recebido**, não todo chamado alcançável a partir do handler. Isso é o que o torna uma cadeia e não um conjunto de alcançabilidade — e é também o que ele não decide: um caminho que passe o texto por um canal que o guard não segue (canal, closure guardada em campo, reflexão) não apareceria |
+| A travessia por valor, lado TypeScript: `computeBoundaryValueCrossing` computa o default de `EVOLUTION_SEND_TEXT_PATH` de `apps/ai-orchestrator/src/config/env.ts` pela **forma** da declaração — chave, dois-pontos, um helper qualquer, um literal de string — e o compara ao `.env.example`. Divergência reprova; chave ausente em qualquer dos dois reprova em vez de pular. O valor não está digitado em teste nenhum | O lado TypeScript não parseia Go e o lado Go não parseia TypeScript. O encontro é o valor, e só ele: nada aqui prova que a variável de ambiente do ambiente real vale o default |
+
+**O que este delta não prova, e é preciso dizer alto.** **Não prova
+runtime.** Nada aqui executa o serviço Go, abre conexão whatsmeow, envia
+mensagem ou observa o que chega a um telefone. O que se prova é o que a
+árvore de código diz, lida por AST. **Não prova qual binário roda em
+produção**: a árvore lida é a desta worktree, e nada liga esse código ao
+artefato implantado. **Não alcança `whatsmeow-lib/`**: é biblioteca
+vendorizada, excluída da árvore de produto por construção, e lida apenas
+como fonte das declarações de proto — um envio composto dentro dela não
+seria visto.
+
+**Divergência declarada: o Goal afirmava achado zero, e o AST discorda.**
+O Goal042 afirma, na sua lista de fatos de baseline, que os únicos
+literais em campo portador de texto são **21** `proto.String("")` de
+`QuotedMessage`, e que "hoje não há violação real". O AST enumera **27**
+literais não vazios que alcançam campo portador na direção do fio. A
+divergência é declarada, não corrigida: nenhum arquivo Go de produção
+deste fork pode ser editado por este Goal. Os membros são de quatro
+naturezas — discriminadores de protocolo e MIME types (`quick_reply`,
+`cta_copy`, `cta_url`, `cta_call`, `payment_info`, `image/jpeg`,
+`video/mp4`, `audio/ogg; codecs=opus`), os envelopes JSON dos payloads de
+botão, marcas de formatação (`*`, `\n\n`, o espaço que substitui título
+vazio de linha ou de seção), e **um** que não é nenhuma delas:
+`"Ver Menu"` (`pkg/sendMessage/service/send_service.go:1960`), rótulo em
+português que o fork substitui quando o chamador manda `ButtonText`
+vazio, entregue ao número da cliente. Esse último é prosa de produto
+composta dentro do transporte, exatamente o que o `AGENTS.md` de
+`apps/evolution-go/` proíbe sem que nada verificasse — e virou o achado
+**A-24** em [FINAL_AUDIT §19](FINAL_AUDIT.md), não correção silenciosa.
+
+Texto emitido pelo modelo continua fora do guardrail por **D-050**: este
+delta não revisita essa fronteira. **M4** continua aberto como gate
+operacional; nada aqui o fecha nem afirma tê-lo fechado.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff042-2026-09-21-d-058) e [D-058](DECISIONS.md).

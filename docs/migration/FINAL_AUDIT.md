@@ -2315,3 +2315,128 @@ descobridor de egresso, e nenhuma chamada nem teste deste diff toca esse
 serviço. **E não diz que a persistência foi validada nesta rodada**:
 `validate:integration` recusou por pré-condição de banco ausente, como
 registrado acima.
+
+
+## 19. O elo de transporte é provado, e o primeiro achado do lado de lá da fronteira — Goal042, 2026-09-21
+
+Seção nova, escrita depois da última mudança de árvore do diff042 (a
+correção dos nove blockers da rodada 2, com os cinco controles negativos
+obrigatórios executados e revertidos). Ela **não reescreve** §4 a §18: os
+registros de A-01 a A-23 em §6, o veredito de §7 e as doze seções de
+fechamento anteriores continuam exatamente como estavam. O aceite do
+Goal041 tinha declarado, em D-057 item 5, que `apps/evolution-go/`
+continuava fora do alcance de qualquer descobridor. Este Goal fecha esse
+limite — e, ao fechá-lo, encontra o primeiro achado do lado de lá.
+
+### O que mudou
+
+**O serviço de transporte passou a ser lido por guard.** O pacote novo
+`apps/evolution-go/pkg/transportguard/` (16 arquivos: 10 fontes e 6 de
+teste, biblioteca padrão apenas, nenhuma dependência nova, `go.mod` e
+`go.sum` intocados, não importado por `cmd/evolution-go`) lê
+`apps/evolution-go/pkg` e `cmd` inteiros por AST — **53** arquivos `.go`
+de produção — e enumera **82** sítios de escrita em campo portador e
+**19** chamadas de transporte, com resíduo **zero**. Nenhum arquivo Go de
+produção mudou, e nenhum `src/` dos três apps mudou.
+
+**O campo portador é derivado das declarações de proto.**
+`DeriveCarrierFields` devolve **325** campos `*string` de struct de
+mensagem, lidos de
+`whatsmeow-lib/proto/waE2E/WAWebProtobufsE2E.pb.go`. Nenhum nome de campo
+está digitado no guard, e nenhuma regra decide por nome de arquivo,
+pasta, função, rota ou receptor — o próprio guard tem teste que lê as
+suas fontes e reprova se um desses nomes aparecer.
+
+**O conjunto de origens fora do relé é asserido elemento a elemento:**
+**88** escritas, das quais exatamente **uma** é configuração de instância
+(`pkg/whatsmeow/service/whatsmeow.go:1806`, `ExtendedTextMessage.Text`, o
+texto de auto-rejeite de chamada), o membro que o Goal nomeia.
+
+**A fronteira é atravessada por valor, nos dois lados.** No Go, as **94**
+rotas registradas têm o caminho completo computado por AST, e o valor de
+`EVOLUTION_SEND_TEXT_PATH` lido de `apps/ai-orchestrator/.env.example`
+(`/send/text`) é rota registrada (`pkg/routes/routes.go:141`, prefixo em
+`:136`) cujo encadeamento — registro, handler
+(`pkg/sendMessage/handler/send_handler.go:45`), serviço — termina em
+`pkg/sendMessage/service/send_service.go:611` com origem relé. No
+TypeScript, o default de `src/config/env.ts:83` é computado pela forma da
+declaração e comparado ao `.env.example:21`; divergência reprova, chave
+ausente reprova em vez de pular. Ver
+[VALIDATION_GATE](VALIDATION_GATE.md#o-elo-de-transporte-é-provado-texto-que-sai-do-serviço-go-e-origem-fora-do-relé-do-goal042).
+
+### Achados novos a partir de A-24
+
+O Goal042 afirmava, na sua lista de fatos de baseline, que não havia
+violação real: que os únicos literais em campo portador eram **21**
+`proto.String("")` de `QuotedMessage`, e que o resultado esperado era
+achado zero. A enumeração por AST discorda, e pela regra do próprio Goal
+o número do AST é o que vale. A divergência é **declarada, não
+corrigida** — nenhum arquivo Go de produção deste fork pode ser editado
+aqui.
+
+| ID | Achado | Classificação | Origem |
+| --- | --- | --- | --- |
+| A-24 | `pkg/sendMessage/service/send_service.go:1960` substitui o texto de botão por `"Ver Menu"` quando o chamador manda `ButtonText` vazio, e esse rótulo em português é entregue ao número da cliente. É prosa de produto composta dentro do fork de transporte, que o `AGENTS.md` de `apps/evolution-go/` proíbe — e que, até este Goal, nada verificava | `PENDENCIA-POS-MVP` | enumeração de `transportguard` sobre a árvore de produção Go, Goal042 |
+
+**Por que não é `BLOQUEADOR-MVP`.** Pela regra escrita em §6, um
+`BLOQUEADOR-MVP` exige reprodução executável do defeito, e não há: a rota
+que alcança esse literal é `POST /send/list`, e **nenhum** arquivo de
+`apps/ai-orchestrator/src` ou de `apps/bff/src` a chama — a única rota do
+transporte que o produto usa hoje é `/send/text`, pelo valor de
+`EVOLUTION_SEND_TEXT_PATH`. Nenhuma cliente recebe `"Ver Menu"` hoje.
+Rebaixado a `PENDENCIA-POS-MVP` com o motivo escrito, como manda a
+primeira regra de §6.
+
+**Impacto de produto, em uma frase:** se o produto passar a usar
+`/send/list`, uma cliente pode receber um rótulo escrito no fork de
+transporte, fora de `PRODUCT_OWN_TEXTS` e fora de qualquer revisão de
+copy.
+
+Os outros **26** literais não vazios que o AST enumera não são achado:
+são discriminadores de protocolo (`quick_reply`, `cta_copy`, `cta_url`,
+`cta_call`, `payment_info`), MIME types (`image/jpeg`, `video/mp4`,
+`audio/ogg; codecs=opus`), os envelopes JSON dos payloads de botão, e
+marcas de formatação (`*`, quebra de linha, o espaço que substitui título
+vazio). Nenhum deles diz nada a uma pessoa. Estão todos asseridos
+elemento a elemento em `go_prose_test.go`, com arquivo e linha, de modo
+que um literal novo — de qualquer natureza — reprova a suíte e volta a
+esta mesa.
+
+### Veredito recontado
+
+Esta auditoria passa a ter **0 achados `BLOQUEADOR-MVP`, 8
+`PENDENCIA-POS-MVP`** e **6 `LIMITE-DECLARADO`**. A mudança em relação a
+§18 é **uma**: A-24, novo, `PENDENCIA-POS-MVP`. Nenhum achado de A-04 a
+A-08, A-11 a A-17 ou A-19 foi tocado, corrigido ou reclassificado, e
+nenhum achado fechado (A-01 a A-03, A-09, A-10, A-18, A-20 a A-23) foi
+reaberto.
+
+O limite que §18 registrava — "`apps/evolution-go/` fica declaradamente
+fora do descobridor de egresso" — deixa de valer nesses termos: a árvore
+de produção Go passa a ser lida. O que continua fora está escrito abaixo,
+e não é a mesma coisa.
+
+Cinco coisas que este recontar não diz. **Não diz que o comportamento em
+runtime do serviço Go foi provado**: nada aqui executa esse serviço, abre
+conexão whatsmeow ou observa o que chega a um telefone; o que se prova é
+o que a árvore de código diz, lida por AST. **Não diz que o binário em
+produção é o desta árvore**: nada liga este código ao artefato
+implantado. **Não diz que `whatsmeow-lib/` foi verificada**: é biblioteca
+vendorizada, fora do alcance do guard por construção, lida apenas como
+fonte das declarações de proto. **Não diz que M4 foi fechado**: nenhuma
+chamada saiu para provedor de LLM real nem para o WhatsApp real, nenhuma
+conexão whatsmeow foi aberta, e nenhuma requisição de rede foi
+acrescentada a suíte nenhuma — o diff042 toca dois arquivos de teste de
+`apps/ai-orchestrator/tests/`, acrescenta o pacote
+`apps/evolution-go/pkg/transportguard/` e atualiza a documentação de
+migração, nada além disso. **Não diz que a fidelidade visual está
+provada**: nenhum arquivo de `apps/frontend/src/` mudou, nenhum teste do
+gate renderizado foi pulado, marcado `fixme`, removido ou teve tolerância
+aumentada, `retries: 1` continua inalterado nos dois
+`playwright.*.config.ts`, e a matriz continua com as cinco larguras.
+
+**E não diz que a persistência foi validada nesta rodada:**
+`validate:integration` recusou com `exit 2` e
+`validate:integration REFUSED — BFF_TEST_DATABASE_URL is not set`; nenhum
+dos **35** passos chegou a rodar, e a lista de 35 continua intacta.
+Pré-condição de banco ausente, declarada como ausente.

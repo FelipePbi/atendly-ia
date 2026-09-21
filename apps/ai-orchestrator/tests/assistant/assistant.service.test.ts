@@ -20,7 +20,12 @@ import {
 import type { NotificationFacts } from "../../src/modules/scheduling-service/types.js";
 import { AI_CONVERSATION_STYLES } from "../../src/modules/tenant-config/ai-settings.js";
 import { DEFAULT_BUSINESS_CONTEXT } from "../../src/modules/tenant-config/business-context.js";
-import { discoverHttpEgressSites } from "../support/http-egress-sites.js";
+import {
+  computeBoundaryValueCrossing,
+  discoverHttpEgressSites,
+  readEnvFileValue,
+  readEnvSchemaDefault,
+} from "../support/http-egress-sites.js";
 import { classifyNotificationTextSites } from "../support/notification-message-sites.js";
 import {
   classifySendTextSites,
@@ -2594,5 +2599,107 @@ describe("a cadeia de trânsito é seguida transitivamente até a raiz de cada r
         "literal_text_at_link",
       ].sort(),
     );
+  });
+});
+
+const envSchemaSourcePath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../src/config/env.ts",
+);
+const envExamplePath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../.env.example",
+);
+
+/** A chave cujo valor é o encontro entre o produto e o serviço de transporte. */
+const BOUNDARY_PATH_ENV_KEY = "EVOLUTION_SEND_TEXT_PATH";
+
+describe("a fronteira de serviço é atravessada por um valor, e os dois lados leem o mesmo (Goal042 / §3)", () => {
+  it("computa o default do schema de ambiente e o compara ao .env.example, sem o valor estar escrito no teste", () => {
+    const crossing = computeBoundaryValueCrossing(
+      envSchemaSourcePath,
+      envExamplePath,
+      BOUNDARY_PATH_ENV_KEY,
+    );
+
+    // O valor não é digitado aqui: ele vem das duas fontes, e a única
+    // coisa afirmada é que as duas concordam e que o que elas trazem é
+    // um caminho de rota.
+    expect(crossing.envSchema.value).toBe(crossing.envExample.value);
+    expect(crossing.envSchema.value.startsWith("/")).toBe(true);
+    expect(crossing.envSchema.value.length).toBeGreaterThan(1);
+    expect(crossing.envSchema.line).toBeGreaterThan(0);
+    expect(crossing.envExample.line).toBeGreaterThan(0);
+  });
+
+  it("reprova quando o default do schema diverge do .env.example, em vez de escolher um dos dois", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": [
+        "export const env = {",
+        `  ${BOUNDARY_PATH_ENV_KEY}: stringEnv("/send/text"),`,
+        "};",
+        "",
+      ].join("\n"),
+      ".env.example": `${BOUNDARY_PATH_ENV_KEY}=/send/outro\n`,
+    });
+
+    expect(() =>
+      computeBoundaryValueCrossing(
+        join(tree, "config/env.ts"),
+        join(tree, ".env.example"),
+        BOUNDARY_PATH_ENV_KEY,
+      ),
+    ).toThrowError(/diverge entre os dois lados da fronteira/u);
+
+    rmSync(tree, { recursive: true, force: true });
+  });
+
+  it("reprova, em vez de pular, quando a chave falta em qualquer um dos dois lados", () => {
+    const withoutExampleKey = makeTempSourceTree({
+      "config/env.ts": [
+        "export const env = {",
+        `  ${BOUNDARY_PATH_ENV_KEY}: stringEnv("/send/text"),`,
+        "};",
+        "",
+      ].join("\n"),
+      ".env.example": "OUTRA_CHAVE=/qualquer\n",
+    });
+    expect(() =>
+      readEnvFileValue(join(withoutExampleKey, ".env.example"), BOUNDARY_PATH_ENV_KEY),
+    ).toThrowError(new RegExp(`não define ${BOUNDARY_PATH_ENV_KEY}`, "u"));
+    expect(() =>
+      computeBoundaryValueCrossing(
+        join(withoutExampleKey, "config/env.ts"),
+        join(withoutExampleKey, ".env.example"),
+        BOUNDARY_PATH_ENV_KEY,
+      ),
+    ).toThrowError(new RegExp(`não define ${BOUNDARY_PATH_ENV_KEY}`, "u"));
+    rmSync(withoutExampleKey, { recursive: true, force: true });
+
+    const withoutSchemaKey = makeTempSourceTree({
+      "config/env.ts": ["export const env = {", "  OUTRA_CHAVE: stringEnv(\"/qualquer\"),", "};", ""].join("\n"),
+      ".env.example": `${BOUNDARY_PATH_ENV_KEY}=/send/text\n`,
+    });
+    expect(() =>
+      readEnvSchemaDefault(join(withoutSchemaKey, "config/env.ts"), BOUNDARY_PATH_ENV_KEY),
+    ).toThrowError(/não é declarada com default literal/u);
+    rmSync(withoutSchemaKey, { recursive: true, force: true });
+  });
+
+  it("lê o default do schema pela forma, não pelo nome do helper nem por um valor escrito à mão", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": [
+        "export const env = {",
+        `  ${BOUNDARY_PATH_ENV_KEY}: qualquerHelperDeString("/um/caminho/qualquer"),`,
+        "};",
+        "",
+      ].join("\n"),
+    });
+
+    const reading = readEnvSchemaDefault(join(tree, "config/env.ts"), BOUNDARY_PATH_ENV_KEY);
+    expect(reading.value).toBe("/um/caminho/qualquer");
+    expect(reading.line).toBe(2);
+
+    rmSync(tree, { recursive: true, force: true });
   });
 });

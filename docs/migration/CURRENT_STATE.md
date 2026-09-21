@@ -3636,3 +3636,160 @@ mesmo conjunto de entradas.
   `apps/ai-orchestrator`: **779** testes passando, 88 pulados, sem
   regressão. `npm run validate:core`: `PASSED`, 15 passos verdes e 2
   pulados declarados. `npm run test:gate`: 226 testes, 0 falhas.
+
+## Delta implementado — diff041, 2026-09-21 ([D-057](DECISIONS.md))
+
+O aceite do Goal040 declarou dois pontos fora: a **porta** continuava
+sendo premissa — nada provava que todo texto que sai do produto para o
+número da cliente passa por `WhatsAppProvider` — e a **cadeia de
+trânsito** parava em um elo. Este delta computa o egresso HTTP das duas
+árvores (`apps/ai-orchestrator/src` e `apps/bff/src`) em vez de presumir
+o canal, segue a cadeia de trânsito até raiz classificada em vez de
+parar no primeiro elo, e fecha os dois resíduos declarados do review040
+(forma propriedade-arrow sem teste permanente; mensagem de resíduo com
+`sendText` fixo). Três arquivos de teste tocados: um módulo novo
+(`tests/support/http-egress-sites.ts`) e dois já existentes
+(`tests/support/send-text-sites.ts`,
+`tests/assistant/assistant.service.test.ts`); nenhum arquivo de
+`apps/*/src/` é tocado, nenhuma copy muda e `PRODUCT_OWN_TEXTS`/
+`VERIFIED_CLIENT_TEXTS` continuam com o mesmo conjunto de entradas. Mais
+dois arquivos de `tools/ia-loop/`
+(`tools/ia-loop/lib/deterministic-executor.mjs`,
+`tools/ia-loop/tests/deterministic-executor.test.mjs`) seguem tocados
+como desvio declarado ao §5 do Goal041, detalhado abaixo — harness, não
+produto, e fora da contagem de "três" acima.
+
+- **FATO atual (o egresso HTTP é computado, não presumido pela porta):**
+  `discoverHttpEgressSites`
+  (`apps/ai-orchestrator/tests/support/http-egress-sites.ts`) lê
+  `apps/ai-orchestrator/src` e `apps/bff/src` inteiros e classifica **todo**
+  sítio de `fetch(` em exatamente uma categoria, resolvida pelo que o
+  código usa para montar a URL (`env.<NOME>`, campo `this.baseUrl` vindo
+  de parâmetro de construtor, parâmetro em trânsito resolvido nos
+  chamadores, ou parâmetro cujo destino é decidido por quem chamar) —
+  nunca por nome de arquivo, de pasta ou de função, e sem pular arquivo
+  nenhum. Sobre a árvore real: **9** sítios, resíduo **zero**,
+  **exatamente 1** na categoria `product_prose_to_client_number`
+  (`EvolutionProvider.ts:73`). Os outros oito:
+  `lib/http.ts:32` (`generic_egress_destination_decided_by_caller_fetchJson`),
+  `EvolutionProvider.ts:172` (`env_vars_EVOLUTION_BASE_URL_and_EVOLUTION_DOWNLOAD_MEDIA_PATH`),
+  `openai-transcription-provider.ts:58` (`env_var_OPENAI_BASE_URL`),
+  `scheduling-service/client.ts:793` (`env_var_SCHEDULING_SERVICE_BASE_URL`),
+  `bff/src/clients/internal-http-client.ts:83`
+  (`constructor_base_url_requestBinary`) e `:149`
+  (`constructor_base_url_perform`),
+  `bff/src/clients/password-reset-delivery.ts:20`
+  (`env_var_PASSWORD_RESET_DELIVERY_URL`), e
+  `bff/src/routes/health.ts:46`
+  (`caller_resolved_base_url_via_checkHealth`). A categoria de prosa ao
+  número da cliente exige, na mesma função construtora de corpo, uma
+  propriedade `text:` e uma propriedade de destinatário (`to`/`number`/
+  `recipient`/`phone`), ambas atribuídas do mesmo parâmetro — forma, não
+  arquivo.
+- **FATO atual (egresso genérico é fail-closed pelos chamadores):** o
+  `fetch` de `fetchJson` (`lib/http.ts:32`) é ele próprio um sítio
+  classificado, na categoria
+  `generic_egress_destination_decided_by_caller_fetchJson` — o nome do
+  primitivo sai da declaração que contém o `fetch`, não de uma lista de
+  arquivos, e nenhum arquivo é pulado. A regra da categoria é
+  fail-closed: ou zero chamadores na árvore, ou todos os chamadores em
+  categoria nomeada. Seus chamadores reais são computados por
+  `genericEgressCallers`, classificados pela mesma resolução de destino.
+  Sobre a árvore real: **zero** chamadores — confirmado lendo a árvore,
+  não afirmado em comentário. Um chamador cujo destino não resolve a
+  `env.<NOME>`, a `this.<campo>` nem a parâmetro resolvível nos
+  chamadores derruba a leitura inteira, nomeando arquivo e linha —
+  provado por teste com árvore sintética, cujo primitivo tem outro nome e
+  mora em outro arquivo. Chamador que apenas repassa a URL recebida vira
+  primitivo genérico ele próprio, e a varredura segue até ponto fixo com
+  conjunto de nomes visitados — repasse em cadeia não escapa e ciclo não
+  trava.
+- **FATO atual (a contagem de sítios é a da árvore, não a do Goal):** a
+  lista de fatos de baseline do Goal041 dizia **oito** sítios de
+  `fetch(`; a árvore tem **nove**. A lista do Goal omitiu
+  `EvolutionProvider.ts:172` (download de mídia) e contava
+  `lib/http.ts:32` como sítio a não classificar. O número que vale é o
+  computado a cada execução. Divergência declarada aqui, não resolvida em
+  silêncio.
+- **FATO atual (a cadeia de trânsito é seguida transitivamente até raiz
+  classificada):** `discoverSendTextTransitChains`
+  (`apps/ai-orchestrator/tests/support/send-text-sites.ts`) deixou de
+  parar no primeiro chamador: cada `link` do percurso guarda a
+  profundidade, o chamador e a categoria, e o ramo só termina quando
+  encontra uma raiz de `SendTextChainRootKind` (`http_route`,
+  `worker_or_job`, `activation_test_entry`, `text_composed_at_link`,
+  `assistant_decision_text`, `person_typed_text`, `literal_text_at_link`,
+  ou `cycle`, quando o percurso revisita um elo já visitado). Sobre a
+  árvore real: as **2** cadeias do Goal040 chegam à raiz com resíduo
+  zero, cada uma passando por um segundo elo — os **5** chamadores de
+  segundo elo do review040
+  (`ActivationTestAiDriver.ts:203`, raiz `assistant_decision_text`; e
+  `ActivationTestService.ts:604`, `:608`, `:653`, `:679`, cada um raiz
+  `literal_text_at_link` com o literal de `ACTIVATION_TEST_NOTICE` ou de
+  uma das falas de cliente simulado) — todos nomeados por teste, com
+  `chain.cycles` vazio e `chain.roots.length > 0` nas duas cadeias.
+- **FATO atual (os dois resíduos declarados do review040 fecham):** a
+  forma propriedade-arrow de membro de porta
+  (`sendText: (input: SendTextInput) => Promise<SendTextResult>`) ganhou
+  teste permanente, provando que ela já era classificada igual à forma
+  método. A mensagem de resíduo de `classifySendTextSites` deixou de
+  escrever `sendText` fixo: `carrierName` é lido do próprio casamento do
+  padrão de busca (computado a partir de
+  `resolveSendTextCarrierMethodNames()`), e um teste com porta sintética
+  que declara um portador de outro nome prova que a mensagem nomeia esse
+  portador, não um literal.
+- **LIMITE:** a cadeia de trânsito continua lida só dentro de
+  `apps/ai-orchestrator/src` — a mesma exclusão de raiz de leitura que o
+  Goal040 já declarava para a suíte de isolamento de credencial continua
+  valendo, sem mudança.
+- **LIMITE:** `apps/evolution-go/` fica declaradamente fora do
+  descobridor de egresso — o serviço Go recebe o que lhe entregam, mas
+  nada aqui prova que ele não compõe texto próprio. Não é achado, porque
+  nenhuma violação real foi observada, e não é fechado por este Goal.
+- **LIMITE:** este delta não fecha **M4**, não afirma fidelidade visual à
+  referência aprovada e não liga a verificação de resposta em produção —
+  nenhum desses três estados muda por este diff.
+- **LIMITE:** nenhum resíduo apareceu em código de produção nesta rodada
+  — `apps/frontend/src/`, `apps/bff/src/` e `apps/ai-orchestrator/src/`
+  continuam intocados, confirmado por `git status --porcelain`. Se algum
+  resíduo real aparecesse em código de produção, viraria achado a partir
+  de **A-24**; não apareceu.
+- **LIMITE:** este delta descreve o diff041 (WU-01 a WU-06 da rodada 1,
+  mais a correção dos blockers das rodadas 2, 3 e 4) sobre a
+  baseline aceita `9709b1ac2f2de7d338344845a0b4b78d6a3aea93` (fechamento
+  do Goal040), decidido em [D-057](DECISIONS.md), sem commit e sem
+  deploy. Confirmado por `git status --porcelain` sobre a árvore final
+  desta rodada: dois arquivos de teste modificados
+  (`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`,
+  `apps/ai-orchestrator/tests/support/send-text-sites.ts`) e um arquivo
+  novo (`apps/ai-orchestrator/tests/support/http-egress-sites.ts`), mais
+  os quatro documentos de migração desta rodada — nenhum outro e nenhum
+  arquivo de `apps/**/src/`. Dois arquivos de `tools/ia-loop/`
+  (`tools/ia-loop/lib/deterministic-executor.mjs` e
+  `tools/ia-loop/tests/deterministic-executor.test.mjs`) seguem
+  modificados como **desvio declarado ao §5 do Goal041, dispensado no
+  review041** (D-018, precedente [D-048](DECISIONS.md#d-048--fronteira-do-openai-configurável-por-ambiente-e-prova-de-composição-da-resposta-automática-sem-substituto-interno-propostas-no-goal032) do
+  review033): o gate `targeted-tests` reprovava com `No test files
+  found, exiting with code 1` sem a correção (`scopeRelativePattern`,
+  que tira o prefixo de escopo duplicado do `unit.pattern` sob
+  `ACTION_CWD.SCOPE`), e a reversão tentada nas rodadas 2, 3 e 4 não se
+  sustentou nas três vezes — mudança de harness, sem efeito em produto
+  nem em gate de produto, coberta por 12 casos próprios (12 pass). `npx
+  vitest run tests/assistant/assistant.service.test.ts` (em
+  `apps/ai-orchestrator`): **66** testes, 0 falhas — os 55 já existentes
+  do Goal040 e **11** novos deste diff (2 dos resíduos do review040, 9 da
+  enumeração de egresso e da cadeia estendida). `npx vitest run` completo
+  de `apps/ai-orchestrator`: **790** testes passando, 88 pulados, sem
+  regressão (baseline: 779 passando). `npm run validate:core`: `PASSED`,
+  15 passos verdes e 2 pulados declarados (`test:bff`,
+  `test:health-worker`). `npm run test:gate`: 226 testes, 0 falhas.
+- **LIMITE:** `validate:integration` **não roda neste ambiente de
+  execução**: `npm run validate:integration` termina com `exit 2` e
+  `validate:integration REFUSED — BFF_TEST_DATABASE_URL is not set`.
+  Nenhum dos 35 passos chegou a rodar. A pré-condição de banco
+  descartável não existe aqui — não há `.env` na worktree, o daemon do
+  Docker não está em execução, e o Postgres que escuta em `127.0.0.1:5432`
+  não é um cluster descartável declarado. Isso é declaração de
+  pré-condição ausente, **nunca** um resultado verde: a persistência
+  continua validada só por `validate:integration`, e este delta não
+  reivindica tê-la validado.

@@ -421,9 +421,12 @@ export function resolveSendTextCarrierMethodNames(): string[] {
 }
 
 /** Padrão que casa a chamada/declaração de qualquer método portador de texto da porta `WhatsAppProvider`, computado a cada execução. */
-function buildSendTextTokenPattern(): RegExp {
-  const names = resolveSendTextCarrierMethodNames();
-  const escaped = names.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+function buildSendTextTokenPattern(
+  carrierMethodNames: string[] = resolveSendTextCarrierMethodNames(),
+): RegExp {
+  const escaped = carrierMethodNames.map((name) =>
+    name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+  );
   return new RegExp(`\\b(?:${escaped.join("|")})\\s*\\(`, "g");
 }
 
@@ -655,18 +658,23 @@ function classifySendTextCallExpression(
  * Classifica todo sítio de `sendText` de `source` (chamada sobre a porta
  * `WhatsAppProvider`, ou a própria declaração/implementação da porta) em uma
  * categoria nomeada. Sítio fora das categorias reconhecidas é resíduo e
- * derruba a descoberta, lançando erro que nomeia `filePath` e a linha.
+ * derruba a descoberta, lançando erro que nomeia `filePath`, a linha e o
+ * portador descoberto (por padrão, os nomes lidos da porta via
+ * {@link resolveSendTextCarrierMethodNames}; `carrierMethodNames` existe para
+ * que testes injetem um conjunto sintético sem tocar o arquivo da porta).
  */
 export function classifySendTextSites(
   rawSource: string,
   filePath: string,
+  carrierMethodNames: string[] = resolveSendTextCarrierMethodNames(),
 ): ClassifiedSendTextSite[] {
   const source = blankComments(rawSource);
   const sites: ClassifiedSendTextSite[] = [];
-  const sendTextTokenPattern = buildSendTextTokenPattern();
+  const sendTextTokenPattern = buildSendTextTokenPattern(carrierMethodNames);
   let match: RegExpExecArray | null;
   while ((match = sendTextTokenPattern.exec(source))) {
     const line = lineAt(source, match.index);
+    const carrierName = match[0].replace(/\s*\($/, "");
     const openParenIndex = match.index + match[0].length - 1;
     const isCall = !isMemberDeclarationOrImplementationPosition(
       source,
@@ -692,7 +700,7 @@ export function classifySendTextSites(
           : undefined;
       if (!classified) {
         throw new Error(
-          `${filePath}:${line}: chamada sendText(...) com forma de "text:" não reconhecida` +
+          `${filePath}:${line}: chamada ${carrierName}(...) com forma de "text:" não reconhecida` +
             (textExpression !== undefined
               ? ` ("${textExpression}")`
               : " (nenhuma propriedade text: encontrada no argumento)") +
@@ -730,7 +738,7 @@ export function classifySendTextSites(
       continue;
     }
     throw new Error(
-      `${filePath}:${line}: declaração de sendText(...) sem corpo "{" nem terminador ";" reconhecível` +
+      `${filePath}:${line}: declaração de ${carrierName}(...) sem corpo "{" nem terminador ";" reconhecível` +
         " — não é a assinatura da porta WhatsAppProvider nem a implementação de um adapter.",
     );
   }
@@ -776,7 +784,7 @@ export interface ClassifiedSendTextCaller {
   line: number;
   /** Nome da função que contém a chamada — o elo seguinte da cadeia. */
   callerFunction: string;
-  category: SendTextCallerCategory;
+  category: SendTextChainLinkCategory;
   /** Só em `text_in_transit_named_origin`: o parâmetro do chamador de onde o texto veio. */
   origin?: string;
   /** Só em `composed_by_*`: o compositor, já conferido contra os verificados. */
@@ -811,16 +819,28 @@ export interface ExcludedTransitOccurrence {
   reason: TransitOccurrenceExclusionReason;
 }
 
-/** Uma cadeia de emissão: o sítio em trânsito, a função que o contém e os chamadores dela. */
+/** Uma cadeia de emissão: o sítio em trânsito, a função que o contém e o percurso até a raiz de cada ramo. */
 export interface SendTextTransitChain {
-  /** Elo 1: o sítio de `sendText` cujo texto já vinha de fora da função. */
+  /** O sítio de `sendText` cujo texto já vinha de fora da função. */
   site: ClassifiedSendTextSite;
   /** A função que contém o sítio — é pelo nome dela que os chamadores são procurados. */
   transitFunction: string;
-  /** Elo 2: cada chamada real da função de trânsito em `srcRoot`, classificada. */
+  /** Primeiro elo: cada chamada real da função de trânsito em `srcRoot`, classificada. */
   callers: ClassifiedSendTextCaller[];
-  /** Ocorrências do mesmo nome que não são chamada, cada uma com o motivo da exclusão. */
+  /** Ocorrências do mesmo nome que não são chamada **no primeiro elo**, cada uma com o motivo da exclusão. */
   excludedOccurrences: ExcludedTransitOccurrence[];
+  /**
+   * O percurso inteiro, elo a elo, do primeiro chamador até a raiz de cada
+   * ramo (Goal041 / WU-02). `links[i].root` só vem preenchida no elo que fecha
+   * o ramo.
+   */
+  links: SendTextChainLink[];
+  /** As raízes alcançadas, uma por ramo terminado, cada uma com o motivo escrito junto. */
+  roots: SendTextChainRoot[];
+  /** Ciclos encontrados pelo percurso: cada um nomeia o elo cuja segunda visita foi recusada. */
+  cycles: SendTextChainCycle[];
+  /** Ocorrências recusadas nos elos **além do primeiro**, com o motivo nomeado. */
+  excludedOccurrencesBeyondFirstLink: ExcludedTransitOccurrence[];
 }
 
 /** Modificadores de parâmetro de construtor, que precedem o nome. */
@@ -903,11 +923,27 @@ function parseParameterNames(paramsText: string): string[] {
   return names;
 }
 
-/** Função (nome e parâmetros) mais interna que contém `index`, ou `undefined` no nível do módulo. */
-function resolveEnclosingFunction(
+/** Função mais interna que contém `index`, com parâmetros e posição, mesmo quando ela não tem nome próprio (arrow anônima). */
+interface EnclosingFunctionSpan {
+  /** Palavra imediatamente antes do "(" — nome do membro, ou modificador/vazio quando a função é anônima. */
+  name: string;
+  parameterNames: string[];
+  /** Índice do "(" que abre a lista de parâmetros — de onde a raiz de entrada é lida. */
+  openParenIndex: number;
+}
+
+/**
+ * Função mais interna que contém `index`, ou `undefined` no nível do módulo.
+ *
+ * Devolve a função **mesmo sem nome próprio**: uma arrow passada como handler
+ * de rota não tem nome, e o percurso transitivo ainda precisa dos parâmetros
+ * dela para saber de onde o texto veio e da posição dela para reconhecer a
+ * raiz de entrada.
+ */
+function resolveEnclosingFunctionSpan(
   source: string,
   index: number,
-): { name: string; parameterNames: string[] } | undefined {
+): EnclosingFunctionSpan | undefined {
   const bodyStart = findEnclosingFunctionBodyStart(source, index);
   if (bodyStart === 0) return undefined;
   const braceIndex = bodyStart - 1;
@@ -925,16 +961,36 @@ function resolveEnclosingFunction(
     "(",
     ")",
   );
-  const name = wordEndingAt(source, openParenIndex);
-  if (NOT_A_FUNCTION_NAME.has(name) || CONTROL_FLOW_KEYWORDS.has(name)) {
-    return undefined;
-  }
   return {
-    name,
+    name: wordEndingAt(source, openParenIndex),
     parameterNames: parseParameterNames(
       source.slice(openParenIndex + 1, closeParenIndex),
     ),
+    openParenIndex,
   };
+}
+
+/**
+ * true se `name`, a palavra colhida antes do "(" da lista de parâmetros, não
+ * é nome de função pelo qual se possa procurar chamadores: arrow anônima
+ * (`async (request) => {`) devolve o modificador, não um nome.
+ */
+function isAnonymousFunctionName(name: string): boolean {
+  return (
+    NOT_A_FUNCTION_NAME.has(name) ||
+    CONTROL_FLOW_KEYWORDS.has(name) ||
+    MEMBER_DECLARATION_MODIFIERS.has(name)
+  );
+}
+
+/** Função **nomeada** mais interna que contém `index`, ou `undefined` no nível do módulo ou em função anônima. */
+function resolveEnclosingFunction(
+  source: string,
+  index: number,
+): EnclosingFunctionSpan | undefined {
+  const span = resolveEnclosingFunctionSpan(source, index);
+  if (!span || isAnonymousFunctionName(span.name)) return undefined;
+  return span;
 }
 
 /** Índice da chamada de método portador de texto da porta que está na linha `line` de `source`. */
@@ -991,8 +1047,48 @@ export function classifyTransitCallersInSource(
   excluded: ExcludedTransitOccurrence[];
 } {
   const source = blankComments(rawSource);
+  const { calls, excluded } = scanTransitOccurrences(
+    source,
+    filePath,
+    transitFunction,
+  );
+  const callers = calls.map((call) =>
+    classifyTransitCaller(
+      source,
+      filePath,
+      call.line,
+      call.index,
+      call.openParenIndex,
+      transitFunction,
+      verifiedComposers,
+    ),
+  );
+  return { callers, excluded };
+}
+
+/** Uma ocorrência de `transitFunction` que é chamada de verdade, com o "(" dos argumentos já localizado. */
+interface TransitCallOccurrence {
+  index: number;
+  line: number;
+  openParenIndex: number;
+}
+
+/**
+ * Separa, na fonte **já limpa de comentários**, as chamadas reais de
+ * `transitFunction` das ocorrências que não são chamada — cada recusa sai com
+ * o motivo nomeado (ver {@link TransitOccurrenceExclusionReason}).
+ *
+ * É o único lugar onde o critério "isto é uma chamada" mora: o primeiro elo e
+ * os elos seguintes do percurso transitivo usam esta mesma varredura, para que
+ * nenhum deles ganhe um critério próprio que divirja do outro.
+ */
+function scanTransitOccurrences(
+  source: string,
+  filePath: string,
+  transitFunction: string,
+): { calls: TransitCallOccurrence[]; excluded: ExcludedTransitOccurrence[] } {
   const quoteMask = computeQuoteMask(source, source.length);
-  const callers: ClassifiedSendTextCaller[] = [];
+  const calls: TransitCallOccurrence[] = [];
   const excluded: ExcludedTransitOccurrence[] = [];
   const pattern = new RegExp(
     `\\b${transitFunction.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
@@ -1031,19 +1127,9 @@ export function classifyTransitCallersInSource(
       });
       continue;
     }
-    callers.push(
-      classifyTransitCaller(
-        source,
-        filePath,
-        line,
-        index,
-        after,
-        transitFunction,
-        verifiedComposers,
-      ),
-    );
+    calls.push({ index, line, openParenIndex: after });
   }
-  return { callers, excluded };
+  return { calls, excluded };
 }
 
 /** Classifica uma chamada já reconhecida da função de trânsito pelo que ela fornece como texto. */
@@ -1141,60 +1227,937 @@ function classifyTransitCaller(
   );
 }
 
+/* =========================================================================
+ * Percurso transitivo até raiz classificada (Goal041 / WU-02)
+ * ========================================================================= */
+
 /**
- * Segue cada sítio `text_in_transit_named_origin` de `srcRoot` até seus
- * chamadores, lendo a árvore inteira a cada execução — nenhum arquivo, função
- * ou chamador é escrito à mão. A função de trânsito é a que contém o sítio, e
- * o nome dela sai da própria fonte; sítio cuja função não se resolve é
- * resíduo, nomeando arquivo e linha.
+ * Por que um ramo da cadeia de trânsito termina.
+ *
+ * A parada é sempre por **raiz classificada**, nunca por profundidade fixa:
+ * o percurso sobe de chamador em chamador dentro da árvore lida até cair em
+ * uma destas raízes. Ramo que não chega a nenhuma delas é resíduo com arquivo
+ * e linha — não há limite de saltos que faça um ramo parar em silêncio.
+ *
+ * Quatro raízes são **de origem de texto**: o texto nasce no próprio elo, e
+ * não há cadeia acima dele.
+ *
+ * - `text_composed_at_link`: o elo compõe prosa própria (`const <nome> =
+ *   <compositor>(...)` no mesmo bloco de função). A raiz **exige** que o
+ *   compositor esteja entre os verificados contra `VERIFIED_CLIENT_TEXTS`;
+ *   compositor ausente desse conjunto não é raiz, é resíduo.
+ * - `assistant_decision_text`: o texto é a decisão do assistente —
+ *   `state.response.text`, ou variável local atribuída de
+ *   `await this.assistant.<método>(...)`, que é a mesma decisão vindo pela
+ *   porta do assistente.
+ * - `person_typed_text`: o texto é `body.text`, digitado por uma pessoa no
+ *   corpo da requisição HTTP.
+ * - `literal_text_at_link`: o texto é literal escrito na fonte do próprio elo
+ *   — literal de aspas, concatenação de literais, template, ou `const` de
+ *   módulo ligado a um deles. O literal sai em `literalText` de propósito:
+ *   é ele que a suíte enumera, então literal novo muda a enumeração afirmada
+ *   em vez de entrar sem ser visto.
+ *
+ * Três raízes são **de entrada**: o texto ainda está em trânsito, mas a função
+ * que o carrega não tem chamador na árvore porque quem a chama está fora dela.
+ *
+ * - `http_route`: a função é o handler de uma rota registrada
+ *   (`<algo>.post("/caminho", handler)` e as demais palavras de método HTTP);
+ *   quem chama é o servidor, a partir de uma requisição.
+ * - `worker_or_job`: a função é método de uma classe `*Worker`/`*Job`, ou é o
+ *   callback de `setInterval`/`setTimeout`; quem chama é o relógio.
+ * - `activation_test_entry`: a função é método de uma classe do canal de teste
+ *   de ativação (nome `ActivationTest*`, ou classe que implementa porta
+ *   `ActivationTest*`); quem chama é a execução do teste de ativação.
+ *
+ * A última raiz é de **terminação do percurso**:
+ *
+ * - `cycle`: a continuação deste elo já tinha sido visitada neste percurso. O
+ *   ramo termina aqui, o ciclo é reportado em `cycles`, e nenhum elo é
+ *   percorrido duas vezes — o ramo não some e o percurso não trava.
+ */
+export type SendTextChainRootKind =
+  | "text_composed_at_link"
+  | "assistant_decision_text"
+  | "person_typed_text"
+  | "literal_text_at_link"
+  | "http_route"
+  | "worker_or_job"
+  | "activation_test_entry"
+  | "cycle";
+
+/** A raiz em que um ramo terminou, com o motivo escrito junto. */
+export interface SendTextChainRoot {
+  kind: SendTextChainRootKind;
+  reason: string;
+}
+
+/**
+ * Categoria do que um elo fornece como texto: o vocabulário do Goal040 mais
+ * `literal_text_at_link`, que é o elo cujo texto é literal da própria fonte.
+ */
+export type SendTextChainLinkCategory =
+  | SendTextCallerCategory
+  | "literal_text_at_link";
+
+/** Um elo do percurso: uma chamada real da função do elo anterior. */
+export interface SendTextChainLink {
+  /** 1 é o primeiro elo — o chamador da função de trânsito que contém o sítio. */
+  depth: number;
+  filePath: string;
+  line: number;
+  /** A função chamada neste elo, isto é, a função de trânsito do elo anterior. */
+  calleeFunction: string;
+  /** A função que contém a chamada; é por ela que o percurso continua. */
+  callerFunction: string;
+  category: SendTextChainLinkCategory;
+  /** Só em `text_in_transit_named_origin`: o parâmetro do chamador de onde o texto veio. */
+  origin?: string;
+  /** Só em `composed_by_*`: o compositor, já conferido contra os verificados. */
+  composer?: string;
+  /** Só em `literal_text_at_link`: o literal escrito na fonte, para a suíte enumerar. */
+  literalText?: string;
+  /** Preenchida quando o ramo termina neste elo; ausente enquanto o texto segue em trânsito. */
+  root?: SendTextChainRoot;
+}
+
+/** Um ciclo encontrado pelo percurso: a continuação do elo já tinha sido visitada. */
+export interface SendTextChainCycle {
+  /** Onde está o elo que fecharia o ciclo. */
+  filePath: string;
+  line: number;
+  /** A função já visitada, cuja segunda visita foi recusada. */
+  functionName: string;
+  /** O parâmetro dela que carrega o texto — é o par função/parâmetro que identifica um elo. */
+  originParameter: string;
+  reason: string;
+}
+
+/** Como o elo seguinte consome a origem: o próprio valor, ou a propriedade `text` dele. */
+type TransitOriginAccess = "value" | "text_property";
+
+/** Uma continuação pendente do percurso: a função que carrega o texto e por qual parâmetro. */
+interface PendingTransitLink {
+  /** Arquivo onde a função está declarada. */
+  filePath: string;
+  functionName: string;
+  originParameter: string;
+  /** Posição do parâmetro de origem na lista de parâmetros — é por ela que o argumento do chamador é lido. */
+  parameterIndex: number;
+  originAccess: TransitOriginAccess;
+  depth: number;
+  /** Índice do "(" da lista de parâmetros, para reconhecer raiz de entrada quando não houver chamador. */
+  definitionParenIndex: number;
+  /** O elo que pediu esta continuação — recebe a raiz quando o ramo termina aqui. */
+  sourceLink?: SendTextChainLink;
+  /** Onde aquele elo está, para nomear arquivo e linha em resíduo e em ciclo. */
+  fromFilePath: string;
+  fromLine: number;
+}
+
+/** Palavras de método HTTP que registram rota; o primeiro argumento precisa ser um caminho literal. */
+const HTTP_ROUTE_REGISTRATION_METHODS = new Set([
+  "get",
+  "post",
+  "put",
+  "patch",
+  "delete",
+  "options",
+  "head",
+  "all",
+  "route",
+]);
+
+/** Registros que fazem o relógio chamar a função, sem chamador nomeado na árvore. */
+const TIMER_REGISTRATION_FUNCTIONS = new Set(["setInterval", "setTimeout"]);
+
+/** Classe cujo nome diz que ela é disparada por worker ou job. */
+const WORKER_OR_JOB_CLASS_NAME = /(?:Worker|Job)$/;
+
+/** Classe ou porta do canal de teste de ativação. */
+const ACTIVATION_TEST_NAME = /^ActivationTest/;
+
+/** Divide uma expressão nas somas de nível superior, ignorando `+` dentro de literais e de `()`/`[]`/`{}`. */
+function splitTopLevelConcatenation(expression: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let quote: string | undefined;
+  let start = 0;
+  for (let i = 0; i < expression.length; i += 1) {
+    const char = expression[i];
+    if (quote) {
+      if (char === "\\") {
+        i += 1;
+        continue;
+      }
+      if (char === quote) quote = undefined;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === "`") {
+      quote = char;
+      continue;
+    }
+    if (char === "(" || char === "[" || char === "{") {
+      depth += 1;
+      continue;
+    }
+    if (char === ")" || char === "]" || char === "}") {
+      depth -= 1;
+      continue;
+    }
+    if (char === "+" && depth === 0) {
+      parts.push(expression.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  parts.push(expression.slice(start).trim());
+  return parts.filter((part) => part.length > 0);
+}
+
+/** Conteúdo de um literal de texto (`"..."`, `'...'` ou crase), ou `undefined` se a expressão não for um literal só. */
+function readStringLiteral(expression: string): string | undefined {
+  const doubleQuoted = expression.match(/^"((?:[^"\\]|\\[\s\S])*)"$/);
+  if (doubleQuoted) return doubleQuoted[1];
+  const singleQuoted = expression.match(/^'((?:[^'\\]|\\[\s\S])*)'$/);
+  if (singleQuoted) return singleQuoted[1];
+  const templated = expression.match(/^`((?:[^`\\]|\\[\s\S])*)`$/);
+  if (templated) return templated[1];
+  return undefined;
+}
+
+/** Expressão atribuída a `const <identifier>` no **nível do módulo** de `source`, ou `undefined` se não houver. */
+function resolveModuleLevelConstExpression(
+  source: string,
+  identifier: string,
+): string | undefined {
+  const pattern = new RegExp(
+    `\\bconst\\s+${identifier}\\s*(?::[^=]+)?=`,
+    "g",
+  );
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(source))) {
+    if (findEnclosingFunctionBodyStart(source, match.index) !== 0) continue;
+    const start = match.index + match[0].length;
+    let depth = 0;
+    let quote: string | undefined;
+    for (let i = start; i < source.length; i += 1) {
+      const char = source[i];
+      if (quote) {
+        if (char === "\\") {
+          i += 1;
+          continue;
+        }
+        if (char === quote) quote = undefined;
+        continue;
+      }
+      if (char === '"' || char === "'" || char === "`") {
+        quote = char;
+        continue;
+      }
+      if (char === "(" || char === "[" || char === "{") {
+        depth += 1;
+        continue;
+      }
+      if (char === ")" || char === "]" || char === "}") {
+        depth -= 1;
+        continue;
+      }
+      if (char === ";" && depth === 0) return source.slice(start, i).trim();
+    }
+  }
+  return undefined;
+}
+
+/**
+ * O texto literal que `expression` escreve na fonte, ou `undefined` quando a
+ * expressão não é literal. Reconhece literal simples, concatenação de
+ * literais e `const` de módulo ligado a um deles; template com interpolação
+ * volta como está escrito, porque é a prosa da fonte que interessa enumerar.
+ */
+function resolveLiteralText(
+  source: string,
+  expression: string,
+): string | undefined {
+  const parts = splitTopLevelConcatenation(expression);
+  if (parts.length > 1) {
+    const values = parts.map((part) => readStringLiteral(part));
+    if (values.every((value) => value !== undefined)) return values.join("");
+    return undefined;
+  }
+  const direct = readStringLiteral(expression);
+  if (direct !== undefined) return direct;
+  if (!/^[A-Za-z_$][\w$]*$/.test(expression)) return undefined;
+  const moduleLevel = resolveModuleLevelConstExpression(source, expression);
+  if (moduleLevel === undefined) return undefined;
+  const parsed = splitTopLevelConcatenation(moduleLevel).map((part) =>
+    readStringLiteral(part),
+  );
+  if (parsed.every((value) => value !== undefined)) return parsed.join("");
+  return undefined;
+}
+
+/**
+ * Método do assistente da última `const <identifier> = await this.assistant.<método>(`
+ * dentro do bloco de função que contém `beforeIndex`, ou `undefined` se não
+ * houver. É a segunda forma de `assistant_decision_text`: a fala do modelo
+ * chegando pela porta do assistente em vez de por `state.response.text`.
+ */
+function resolveBlockScopedAssistantDecision(
+  source: string,
+  identifier: string,
+  beforeIndex: number,
+): string | undefined {
+  const blockStart = findEnclosingFunctionBodyStart(source, beforeIndex);
+  const scope = source.slice(blockStart, beforeIndex);
+  const pattern = new RegExp(
+    `\\bconst\\s+${identifier}\\s*=\\s*await\\s+this\\.assistant\\.([A-Za-z_$][\\w$]*)\\s*\\(`,
+    "g",
+  );
+  let match: RegExpExecArray | null;
+  let method: string | undefined;
+  while ((match = pattern.exec(scope))) {
+    method = match[1];
+  }
+  return method;
+}
+
+/** Índice do "(" da chamada que envolve `index`, ou `undefined` se `index` não estiver dentro de uma lista de argumentos. */
+function findEnclosingCallOpenParen(
+  source: string,
+  quoteMask: boolean[],
+  index: number,
+): number | undefined {
+  let depth = 0;
+  for (let i = index - 1; i >= 0; i -= 1) {
+    if (quoteMask[i]) continue;
+    const char = source[i];
+    if (char === ")" || char === "]" || char === "}") {
+      depth += 1;
+      continue;
+    }
+    if (char === "(") {
+      if (depth === 0) return i;
+      depth -= 1;
+      continue;
+    }
+    if (char === "[" || char === "{") {
+      if (depth === 0) return undefined;
+      depth -= 1;
+      continue;
+    }
+    if (char === ";" && depth === 0) return undefined;
+  }
+  return undefined;
+}
+
+/** Cabeçalho da classe que envolve `index` — nome e interfaces implementadas —, ou `undefined` fora de classe. */
+function findEnclosingClassHeader(
+  source: string,
+  quoteMask: boolean[],
+  index: number,
+): { name: string; implementsNames: string[] } | undefined {
+  let depth = 0;
+  for (let i = index - 1; i >= 0; i -= 1) {
+    if (quoteMask[i]) continue;
+    const char = source[i];
+    if (char === "}") {
+      depth += 1;
+      continue;
+    }
+    if (char !== "{") continue;
+    if (depth > 0) {
+      depth -= 1;
+      continue;
+    }
+    const header = /\bclass\s+([A-Za-z_$][\w$]*)([^{}();]*)$/.exec(
+      source.slice(0, i),
+    );
+    if (!header) continue;
+    const implemented = /\bimplements\s+([\s\S]*)$/.exec(header[2]);
+    const implementsNames = implemented
+      ? implemented[1]
+          .split(",")
+          .map((name) => name.trim().replace(/<[\s\S]*$/, "").trim())
+          .filter((name) => name.length > 0)
+      : [];
+    return { name: header[1], implementsNames };
+  }
+  return undefined;
+}
+
+/**
+ * A raiz de entrada da função cuja lista de parâmetros abre em
+ * `openParenIndex`, ou `undefined` quando a função não é ponto de entrada
+ * nenhum — e aí o ramo que morre nela é resíduo, não raiz.
+ */
+function resolveEntryPointRoot(
+  source: string,
+  openParenIndex: number,
+): SendTextChainRoot | undefined {
+  const quoteMask = computeQuoteMask(source, source.length);
+  const callParenIndex = findEnclosingCallOpenParen(
+    source,
+    quoteMask,
+    openParenIndex,
+  );
+  if (callParenIndex !== undefined) {
+    const registrar = wordEndingAt(source, callParenIndex);
+    if (TIMER_REGISTRATION_FUNCTIONS.has(registrar)) {
+      return {
+        kind: "worker_or_job",
+        reason: `callback de ${registrar}(...) — quem dispara a função é o relógio, não um chamador na árvore`,
+      };
+    }
+    if (HTTP_ROUTE_REGISTRATION_METHODS.has(registrar)) {
+      const closeParenIndex = findMatchingDelimiterEnd(
+        source,
+        callParenIndex,
+        "(",
+        ")",
+      );
+      const firstArgument =
+        splitTopLevelProperties(
+          source.slice(callParenIndex + 1, closeParenIndex),
+        )[0] ?? "";
+      if (/^["'`]\//.test(firstArgument)) {
+        return {
+          kind: "http_route",
+          reason: `handler de rota registrada em ${registrar}(${firstArgument}, ...) — quem chama é o servidor, a partir da requisição`,
+        };
+      }
+    }
+  }
+  const classHeader = findEnclosingClassHeader(
+    source,
+    quoteMask,
+    openParenIndex,
+  );
+  if (classHeader) {
+    const activationTestPort = classHeader.implementsNames.find((name) =>
+      ACTIVATION_TEST_NAME.test(name),
+    );
+    if (ACTIVATION_TEST_NAME.test(classHeader.name) || activationTestPort) {
+      return {
+        kind: "activation_test_entry",
+        reason:
+          `método de "${classHeader.name}"` +
+          (activationTestPort ? `, que implementa "${activationTestPort}"` : "") +
+          " — a entrada é a execução do canal de teste de ativação",
+      };
+    }
+    if (WORKER_OR_JOB_CLASS_NAME.test(classHeader.name)) {
+      return {
+        kind: "worker_or_job",
+        reason: `método de "${classHeader.name}" — quem dispara a função é o worker/job, não um chamador na árvore`,
+      };
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Classificação de um elo: ou o texto segue em trânsito, ou o ramo termina em
+ * raiz nomeada, ou o elo é resíduo com o motivo já escrito — o terceiro caso
+ * existe para que o resíduo nomeie o que viu (o compositor não verificado, por
+ * exemplo) em vez de sair como "forma não reconhecida".
+ */
+type ChainLinkClassification =
+  | {
+      category: "text_in_transit_named_origin";
+      origin: string;
+      originAccess: TransitOriginAccess;
+    }
+  | {
+      category: SendTextChainLinkCategory;
+      root: SendTextChainRoot;
+      composer?: string;
+      literalText?: string;
+    }
+  | { residueDetail: string };
+
+/** A classificação de um elo que não é resíduo. */
+type SettledChainLinkClassification = Exclude<
+  ChainLinkClassification,
+  { residueDetail: string }
+>;
+
+/**
+ * Classifica a expressão que um elo fornece como texto, no escopo da função
+ * que o contém. Forma não prevista devolve `undefined` e vira resíduo
+ * nomeado: nenhuma classificação acontece em silêncio.
+ */
+function classifyChainTextExpression(
+  source: string,
+  expression: string,
+  callIndex: number,
+  parameterNames: readonly string[],
+  verifiedComposers: ReadonlySet<string>,
+): ChainLinkClassification | undefined {
+  if (expression === "state.response.text") {
+    return {
+      category: "assistant_decision_text",
+      root: {
+        kind: "assistant_decision_text",
+        reason:
+          "o texto é state.response.text — a decisão do assistente nasce neste elo",
+      },
+    };
+  }
+
+  const propertyAccess = expression.match(/^([A-Za-z_$][\w$]*)\.text$/);
+  if (propertyAccess) {
+    const [, origin] = propertyAccess;
+    if (origin === "body") {
+      return {
+        category: "person_typed_text",
+        root: {
+          kind: "person_typed_text",
+          reason:
+            "o texto é body.text — digitado por uma pessoa no corpo da requisição",
+        },
+      };
+    }
+    if (parameterNames.includes(origin)) {
+      return {
+        category: "text_in_transit_named_origin",
+        origin,
+        originAccess: "text_property",
+      };
+    }
+    const assistantMethod = resolveBlockScopedAssistantDecision(
+      source,
+      origin,
+      callIndex,
+    );
+    if (assistantMethod) {
+      return {
+        category: "assistant_decision_text",
+        root: {
+          kind: "assistant_decision_text",
+          reason:
+            `"${origin}" vem de await this.assistant.${assistantMethod}(...) —` +
+            " a decisão do assistente nasce neste elo",
+        },
+      };
+    }
+    return undefined;
+  }
+
+  if (/^[A-Za-z_$][\w$]*$/.test(expression)) {
+    const composer = resolveBlockScopedComposerName(
+      source,
+      expression,
+      callIndex,
+    );
+    if (composer) {
+      if (!verifiedComposers.has(composer)) {
+        return {
+          residueDetail:
+            `compõe o texto na hora com "${composer}", que não está entre os compositores` +
+            " cujo texto produzido está em VERIFIED_CLIENT_TEXTS",
+        };
+      }
+      return {
+        category: `composed_by_${composer}`,
+        composer,
+        root: {
+          kind: "text_composed_at_link",
+          reason:
+            `o elo compõe o texto com "${composer}", cujo texto produzido está` +
+            " em VERIFIED_CLIENT_TEXTS",
+        },
+      };
+    }
+    const assistantMethod = resolveBlockScopedAssistantDecision(
+      source,
+      expression,
+      callIndex,
+    );
+    if (assistantMethod) {
+      return {
+        category: "assistant_decision_text",
+        root: {
+          kind: "assistant_decision_text",
+          reason:
+            `"${expression}" vem de await this.assistant.${assistantMethod}(...) —` +
+            " a decisão do assistente nasce neste elo",
+        },
+      };
+    }
+    if (parameterNames.includes(expression)) {
+      return {
+        category: "text_in_transit_named_origin",
+        origin: expression,
+        originAccess: "value",
+      };
+    }
+  }
+
+  const literalText = resolveLiteralText(source, expression);
+  if (literalText !== undefined) {
+    return {
+      category: "literal_text_at_link",
+      literalText,
+      root: {
+        kind: "literal_text_at_link",
+        reason:
+          "o texto é literal escrito na fonte deste elo — não vem de nenhum chamador acima",
+      },
+    };
+  }
+  return undefined;
+}
+
+/** O que o percurso encontrou a partir de um sítio em trânsito. */
+interface FollowedTransitChain {
+  links: SendTextChainLink[];
+  roots: SendTextChainRoot[];
+  cycles: SendTextChainCycle[];
+  excludedByDepth: { depth: number; occurrence: ExcludedTransitOccurrence }[];
+}
+
+/** Identidade de uma continuação: função e parâmetro que carrega o texto. É esta chave que o conjunto de visitados guarda. */
+function pendingTransitLinkKey(pending: PendingTransitLink): string {
+  return `${pending.filePath}::${pending.functionName}::${pending.originParameter}`;
+}
+
+/**
+ * Sobe a cadeia a partir de `first`, de chamador em chamador, até que cada
+ * ramo termine em raiz classificada (Goal041 / WU-02).
+ *
+ * Não há profundidade máxima: o que faz o percurso terminar é a raiz, e o
+ * conjunto de visitados, que recusa a segunda visita ao mesmo par
+ * função/parâmetro. Ciclo vira raiz `cycle` no elo que o fecharia, e sai
+ * também em `cycles` — o ramo não some e nada é percorrido duas vezes.
+ */
+function followTransitChain(
+  sources: ReadonlyMap<string, string>,
+  first: PendingTransitLink,
+  verifiedComposers: ReadonlySet<string>,
+): FollowedTransitChain {
+  const links: SendTextChainLink[] = [];
+  const roots: SendTextChainRoot[] = [];
+  const cycles: SendTextChainCycle[] = [];
+  const excludedByDepth: {
+    depth: number;
+    occurrence: ExcludedTransitOccurrence;
+  }[] = [];
+  const visited = new Set<string>([pendingTransitLinkKey(first)]);
+  const queue: PendingTransitLink[] = [first];
+
+  while (queue.length > 0) {
+    const pending = queue.shift() as PendingTransitLink;
+    let callCount = 0;
+
+    for (const [filePath, source] of sources) {
+      const scanned = scanTransitOccurrences(
+        source,
+        filePath,
+        pending.functionName,
+      );
+      for (const occurrence of scanned.excluded) {
+        excludedByDepth.push({ depth: pending.depth, occurrence });
+      }
+      for (const call of scanned.calls) {
+        callCount += 1;
+        const closeParenIndex = findMatchingDelimiterEnd(
+          source,
+          call.openParenIndex,
+          "(",
+          ")",
+        );
+        const argumentsText = source.slice(
+          call.openParenIndex + 1,
+          closeParenIndex,
+        );
+        const span = resolveEnclosingFunctionSpan(source, call.index);
+        const parameterNames = span?.parameterNames ?? [];
+        const callerFunction =
+          span && !isAnonymousFunctionName(span.name)
+            ? span.name
+            : "<função anônima>";
+        // Anotada como `=> never` de propósito: é isso que deixa o
+        // compilador estreitar o tipo depois de cada chamada, em vez de
+        // exigir asserção em cada uso do valor já conferido.
+        const residue: (detail: string) => never = (detail) => {
+          throw new Error(
+            `${filePath}:${call.line}: chamador de ${pending.functionName}(...) sem categoria — ${detail}`,
+          );
+        };
+
+        const argument = splitTopLevelProperties(argumentsText)[
+          pending.parameterIndex
+        ];
+        if (argument === undefined) {
+          residue(
+            `não há argumento na posição ${pending.parameterIndex} da chamada, que é a do` +
+              ` parâmetro "${pending.originParameter}" de "${pending.functionName}"`,
+          );
+        }
+        let expression: string | undefined;
+        if (pending.originAccess === "text_property") {
+          const objectMatch = argument.match(/^\{([\s\S]*)\}$/);
+          if (objectMatch) {
+            expression = findTextPropertyExpression(objectMatch[1]);
+          } else if (/^[A-Za-z_$][\w$]*$/.test(argument)) {
+            expression = `${argument}.text`;
+          }
+        } else {
+          expression = argument;
+        }
+        if (expression === undefined) {
+          residue(
+            `o argumento "${argument}" não deixa ver que texto ele fornece ao` +
+              ` parâmetro "${pending.originParameter}" de "${pending.functionName}"`,
+          );
+        }
+
+        const classified = classifyChainTextExpression(
+          source,
+          expression,
+          call.index,
+          parameterNames,
+          verifiedComposers,
+        );
+        if (!classified) {
+          residue(
+            `"${expression}" não é state.response.text, não é body.text, não é` +
+              ` parâmetro de "${callerFunction}", não é texto literal da fonte e não é` +
+              " variável local atribuída de um compositor verificado nem da porta do assistente",
+          );
+        }
+        if ("residueDetail" in classified) residue(classified.residueDetail);
+        const settled: SettledChainLinkClassification = classified;
+
+        const link: SendTextChainLink = {
+          depth: pending.depth,
+          filePath,
+          line: call.line,
+          calleeFunction: pending.functionName,
+          callerFunction,
+          category: settled.category,
+        };
+        links.push(link);
+
+        if (settled.category !== "text_in_transit_named_origin") {
+          const terminal = settled;
+          if (terminal.composer !== undefined) link.composer = terminal.composer;
+          if (terminal.literalText !== undefined) {
+            link.literalText = terminal.literalText;
+          }
+          link.root = terminal.root;
+          roots.push(terminal.root);
+          continue;
+        }
+
+        const transit = settled as Extract<
+          SettledChainLinkClassification,
+          { origin: string }
+        >;
+        link.origin = transit.origin;
+
+        // O texto segue em trânsito: só dá para continuar se a função que o
+        // carrega tiver nome pelo qual procurar chamadores. Sem nome — arrow
+        // anônima —, o ramo tem que terminar em raiz de entrada.
+        if (!span || callerFunction === "<função anônima>") {
+          const root = span
+            ? resolveEntryPointRoot(source, span.openParenIndex)
+            : undefined;
+          if (!root) {
+            residue(
+              `o texto segue em trânsito por "${transit.origin}", mas a função que o carrega não` +
+                " tem nome para procurar chamadores nem é ponto de entrada reconhecido",
+            );
+          }
+          link.root = root;
+          roots.push(root);
+          continue;
+        }
+
+        const parameterIndex = parameterNames.indexOf(transit.origin);
+        if (parameterIndex === -1) {
+          residue(
+            `"${transit.origin}" não é parâmetro de "${callerFunction}", então não há por onde` +
+              " seguir a cadeia acima deste elo",
+          );
+        }
+        const next: PendingTransitLink = {
+          filePath,
+          functionName: callerFunction,
+          originParameter: transit.origin,
+          parameterIndex,
+          originAccess: transit.originAccess,
+          depth: pending.depth + 1,
+          definitionParenIndex: span.openParenIndex,
+          sourceLink: link,
+          fromFilePath: filePath,
+          fromLine: call.line,
+        };
+        const key = pendingTransitLinkKey(next);
+        if (visited.has(key)) {
+          const root: SendTextChainRoot = {
+            kind: "cycle",
+            reason:
+              `a continuação "${callerFunction}" (parâmetro "${transit.origin}") já foi visitada` +
+              " neste percurso — o ramo termina aqui e o ciclo é reportado, sem percorrer duas vezes",
+          };
+          link.root = root;
+          roots.push(root);
+          cycles.push({
+            filePath,
+            line: call.line,
+            functionName: callerFunction,
+            originParameter: transit.origin,
+            reason: root.reason,
+          });
+          continue;
+        }
+        visited.add(key);
+        queue.push(next);
+      }
+    }
+
+    if (callCount === 0) {
+      const source = sources.get(pending.filePath);
+      const root =
+        source === undefined
+          ? undefined
+          : resolveEntryPointRoot(source, pending.definitionParenIndex);
+      if (!root) {
+        throw new Error(
+          `${pending.fromFilePath}:${pending.fromLine}: o ramo da cadeia de trânsito termina em` +
+            ` "${pending.functionName}" (${pending.filePath}), que não tem chamador na árvore lida` +
+            " e não é rota HTTP registrada, worker ou job, nem entrada do canal de teste de ativação" +
+            " — ramo sem raiz classificada é resíduo.",
+        );
+      }
+      if (pending.sourceLink) pending.sourceLink.root = root;
+      roots.push(root);
+    }
+  }
+
+  return { links, roots, cycles, excludedByDepth };
+}
+
+/** Converte o primeiro elo do percurso para o vocabulário de chamador do Goal040, que a suíte já afirma. */
+function toClassifiedCaller(link: SendTextChainLink): ClassifiedSendTextCaller {
+  const caller: ClassifiedSendTextCaller = {
+    filePath: link.filePath,
+    line: link.line,
+    callerFunction: link.callerFunction,
+    category: link.category,
+  };
+  if (link.origin !== undefined) caller.origin = link.origin;
+  if (link.composer !== undefined) caller.composer = link.composer;
+  return caller;
+}
+
+/**
+ * Segue um sítio `text_in_transit_named_origin` até a raiz de cada ramo,
+ * sobre as fontes já lidas — a função de trânsito é a que contém o sítio, e o
+ * nome dela sai da própria fonte.
+ */
+function followChainFromSite(
+  sources: ReadonlyMap<string, string>,
+  site: ClassifiedSendTextSite,
+  verifiedComposers: ReadonlySet<string>,
+): SendTextTransitChain {
+  const source = sources.get(site.filePath);
+  if (!source) {
+    throw new Error(
+      `${site.filePath}:${site.line}: sítio em trânsito fora da árvore lida`,
+    );
+  }
+  const siteIndex = findCarrierCallIndexAtLine(source, site.filePath, site.line);
+  const enclosing = resolveEnclosingFunction(source, siteIndex);
+  if (!enclosing) {
+    throw new Error(
+      `${site.filePath}:${site.line}: sítio em trânsito sem função nomeada em volta` +
+        " — não há elo pelo qual seguir a cadeia até o chamador.",
+    );
+  }
+  const originParameter = site.origin as string;
+  const parameterIndex = enclosing.parameterNames.indexOf(originParameter);
+  if (parameterIndex === -1) {
+    throw new Error(
+      `${site.filePath}:${site.line}: a origem "${originParameter}" do sítio em trânsito não é` +
+        ` parâmetro de "${enclosing.name}" — não há por onde seguir a cadeia até o chamador.`,
+    );
+  }
+  const followed = followTransitChain(
+    sources,
+    {
+      filePath: site.filePath,
+      functionName: enclosing.name,
+      originParameter,
+      parameterIndex,
+      // O sítio consome a origem como `<origem>.text`: é essa a única forma
+      // que produz a categoria `text_in_transit_named_origin`.
+      originAccess: "text_property",
+      depth: 1,
+      definitionParenIndex: enclosing.openParenIndex,
+      fromFilePath: site.filePath,
+      fromLine: site.line,
+    },
+    verifiedComposers,
+  );
+  return {
+    site,
+    transitFunction: enclosing.name,
+    callers: followed.links
+      .filter((link) => link.depth === 1)
+      .map(toClassifiedCaller),
+    excludedOccurrences: followed.excludedByDepth
+      .filter((entry) => entry.depth === 1)
+      .map((entry) => entry.occurrence),
+    links: followed.links,
+    roots: followed.roots,
+    cycles: followed.cycles,
+    excludedOccurrencesBeyondFirstLink: followed.excludedByDepth
+      .filter((entry) => entry.depth > 1)
+      .map((entry) => entry.occurrence),
+  };
+}
+
+/**
+ * Segue cada sítio `text_in_transit_named_origin` das fontes dadas até a raiz
+ * de cada ramo, transitivamente — nenhum arquivo, função, chamador ou raiz é
+ * escrito à mão.
+ *
+ * Recebe a árvore já em memória para que o percurso possa ser exercitado
+ * sobre uma árvore montada — é assim que ciclo e raiz de entrada ficam
+ * demonstráveis sem depender de a árvore real ter um exemplo de cada.
+ */
+export function discoverSendTextTransitChainsFromSources(
+  rawSources: ReadonlyMap<string, string>,
+  verifiedComposers: ReadonlySet<string>,
+): SendTextTransitChain[] {
+  const sources = new Map<string, string>();
+  for (const [filePath, raw] of rawSources) {
+    sources.set(filePath, blankComments(raw));
+  }
+  const chains: SendTextTransitChain[] = [];
+  for (const [filePath, raw] of rawSources) {
+    for (const site of classifySendTextSites(raw, filePath)) {
+      if (site.category !== "text_in_transit_named_origin") continue;
+      chains.push(followChainFromSite(sources, site, verifiedComposers));
+    }
+  }
+  return chains;
+}
+
+/**
+ * Segue cada sítio `text_in_transit_named_origin` de `srcRoot` até a raiz de
+ * cada ramo, lendo a árvore inteira a cada execução. O percurso é transitivo
+ * e para por raiz classificada, nunca por profundidade fixa (Goal041 / WU-02).
  */
 export function discoverSendTextTransitChains(
   srcRoot: string,
   verifiedComposers: ReadonlySet<string>,
 ): SendTextTransitChain[] {
-  const sources = new Map<string, string>();
+  const rawSources = new Map<string, string>();
   for (const filePath of listTypeScriptSources(srcRoot)) {
-    sources.set(filePath, blankComments(readFileSync(filePath, "utf8")));
+    rawSources.set(filePath, readFileSync(filePath, "utf8"));
   }
-  const chains: SendTextTransitChain[] = [];
-  for (const site of discoverSendTextSites(srcRoot)) {
-    if (site.category !== "text_in_transit_named_origin") continue;
-    const source = sources.get(site.filePath);
-    if (!source) {
-      throw new Error(
-        `${site.filePath}:${site.line}: sítio em trânsito fora da árvore lida (${srcRoot})`,
-      );
-    }
-    const siteIndex = findCarrierCallIndexAtLine(
-      source,
-      site.filePath,
-      site.line,
-    );
-    const enclosing = resolveEnclosingFunction(source, siteIndex);
-    if (!enclosing) {
-      throw new Error(
-        `${site.filePath}:${site.line}: sítio em trânsito sem função nomeada em volta` +
-          " — não há elo pelo qual seguir a cadeia até o chamador.",
-      );
-    }
-    const callers: ClassifiedSendTextCaller[] = [];
-    const excludedOccurrences: ExcludedTransitOccurrence[] = [];
-    for (const [filePath, fileSource] of sources) {
-      const scanned = classifyTransitCallersInSource(
-        fileSource,
-        filePath,
-        enclosing.name,
-        verifiedComposers,
-      );
-      callers.push(...scanned.callers);
-      excludedOccurrences.push(...scanned.excluded);
-    }
-    chains.push({
-      site,
-      transitFunction: enclosing.name,
-      callers,
-      excludedOccurrences,
-    });
-  }
-  return chains;
+  return discoverSendTextTransitChainsFromSources(rawSources, verifiedComposers);
 }

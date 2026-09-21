@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -19,6 +20,7 @@ import {
 import type { NotificationFacts } from "../../src/modules/scheduling-service/types.js";
 import { AI_CONVERSATION_STYLES } from "../../src/modules/tenant-config/ai-settings.js";
 import { DEFAULT_BUSINESS_CONTEXT } from "../../src/modules/tenant-config/business-context.js";
+import { discoverHttpEgressSites } from "../support/http-egress-sites.js";
 import { classifyNotificationTextSites } from "../support/notification-message-sites.js";
 import {
   classifySendTextSites,
@@ -526,6 +528,10 @@ const messageGraphSourcePath = join(
 const aiOrchestratorSrcPath = join(
   dirname(fileURLToPath(import.meta.url)),
   "../../src",
+);
+const bffSrcPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../bff/src",
 );
 const notificationMessageSourcePath = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -1466,6 +1472,23 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
       },
     ]);
   });
+
+  it("a mensagem de resíduo nomeia o portador descoberto, não um nome fixo — com porta sintética que declara um portador de outro nome", () => {
+    const fixtureComResiduo = [
+      "class NovoEmissor {",
+      "  entregar() {",
+      '    return provider.enviarMensagem({ to: "1", text: "literal inline nunca visto antes" });',
+      "  }",
+      "}",
+    ].join("\n");
+    expect(() =>
+      classifySendTextSites(fixtureComResiduo, "<fixture-residuo>", [
+        "enviarMensagem",
+      ]),
+    ).toThrowError(
+      /<fixture-residuo>:3: chamada enviarMensagem\(\.\.\.\) com forma de "text:" não reconhecida/,
+    );
+  });
 });
 
 describe("métodos da porta WhatsAppProvider são enumerados com categoria e motivo, computados da declaração (Goal040 / WU-01)", () => {
@@ -1486,6 +1509,29 @@ describe("métodos da porta WhatsAppProvider são enumerados com categoria e mot
       'parâmetro "DownloadMediaInput" não declara text: string — não carrega texto ao destinatário do canal',
     );
     expect(resolveSendTextCarrierMethodNames()).toEqual(["sendText"]);
+  });
+
+  it("forma propriedade-arrow de membro de porta (`sendText: (input: SendTextInput) => Promise<SendTextResult>`) é classificada igual à forma método", () => {
+    const fixturePropriedadeArrow = [
+      "export interface WhatsAppProvider {",
+      "  sendText: (input: SendTextInput) => Promise<SendTextResult>;",
+      "  downloadMedia: (input: DownloadMediaInput) => Promise<void>;",
+      "}",
+      "export interface SendTextInput {",
+      "  text: string;",
+      "}",
+      "export interface DownloadMediaInput {",
+      "  mediaId: string;",
+      "}",
+    ].join("\n");
+    const methods = parseWhatsAppProviderMethods(
+      fixturePropriedadeArrow,
+      "<fixture-propriedade-arrow>",
+    );
+    expect(methods.map((method) => [method.name, method.isCarrier])).toEqual([
+      ["sendText", true],
+      ["downloadMedia", false],
+    ]);
   });
 
   it("método cujo parâmetro resolve a um tipo não declarado como interface no arquivo vira resíduo, nomeando arquivo e linha", () => {
@@ -2229,5 +2275,324 @@ describe("conjunto verificado de texto de cliente inclui notification-message.ts
     ]) {
       expect(PRODUCT_OWN_TEXTS).toContain(text);
     }
+  });
+});
+
+/** Caminho de um sítio de egresso HTTP relativo a `ai-orchestrator/src` ou `bff/src`, o que se aplicar. */
+function httpEgressRelativePath(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, "/");
+  const aiOrchestratorMarker = "/ai-orchestrator/src/";
+  if (normalized.includes(aiOrchestratorMarker)) {
+    return `ai-orchestrator/src/${normalized.split(aiOrchestratorMarker)[1]}`;
+  }
+  const bffMarker = "/bff/src/";
+  return `bff/src/${normalized.split(bffMarker)[1]}`;
+}
+
+/** Cria uma árvore de fontes temporária em disco, para exercitar `discoverHttpEgressSites` sobre uma forma sintética sem tocar as árvores reais. */
+function makeTempSourceTree(files: Record<string, string>): string {
+  const root = mkdtempSync(join(tmpdir(), "http-egress-wu04-"));
+  for (const [relativePath, content] of Object.entries(files)) {
+    const fullPath = join(root, relativePath);
+    mkdirSync(dirname(fullPath), { recursive: true });
+    writeFileSync(fullPath, content, "utf8");
+  }
+  return root;
+}
+
+describe("todo egresso HTTP fora da porta do canal é enumerado com resíduo zero (Goal041 / WU-04)", () => {
+  it("descobre os 9 sítios das duas árvores, com resíduo zero e exatamente 1 portador de prosa ao número da cliente", () => {
+    const discovery = discoverHttpEgressSites(aiOrchestratorSrcPath, bffSrcPath);
+    expect(discovery.excluded).toEqual([]);
+    expect(discovery.sites).toHaveLength(9);
+    const proseSites = discovery.sites.filter(
+      (site) => site.category === "product_prose_to_client_number",
+    );
+    expect(proseSites).toHaveLength(1);
+    expect(httpEgressRelativePath(proseSites[0].filePath)).toBe(
+      "ai-orchestrator/src/modules/channel/adapters/evolution/EvolutionProvider.ts",
+    );
+    expect(proseSites[0].line).toBe(73);
+  });
+
+  it("classifica cada um dos 9 sítios na categoria que a resolução de destino computa, sem lista escrita à mão e sem pular arquivo nenhum", () => {
+    const discovery = discoverHttpEgressSites(aiOrchestratorSrcPath, bffSrcPath);
+    const sites = discovery.sites
+      .map((site) => ({
+        file: httpEgressRelativePath(site.filePath),
+        line: site.line,
+        category: site.category,
+      }))
+      .sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+    expect(sites).toEqual([
+      {
+        file: "ai-orchestrator/src/lib/http.ts",
+        line: 32,
+        category: "generic_egress_destination_decided_by_caller_fetchJson",
+      },
+      {
+        file: "ai-orchestrator/src/modules/channel/adapters/evolution/EvolutionProvider.ts",
+        line: 73,
+        category: "product_prose_to_client_number",
+      },
+      {
+        file: "ai-orchestrator/src/modules/channel/adapters/evolution/EvolutionProvider.ts",
+        line: 172,
+        category: "env_vars_EVOLUTION_BASE_URL_and_EVOLUTION_DOWNLOAD_MEDIA_PATH",
+      },
+      {
+        file: "ai-orchestrator/src/modules/media/openai-transcription-provider.ts",
+        line: 58,
+        category: "env_var_OPENAI_BASE_URL",
+      },
+      {
+        file: "ai-orchestrator/src/modules/scheduling-service/client.ts",
+        line: 793,
+        category: "env_var_SCHEDULING_SERVICE_BASE_URL",
+      },
+      {
+        file: "bff/src/clients/internal-http-client.ts",
+        line: 83,
+        category: "constructor_base_url_requestBinary",
+      },
+      {
+        file: "bff/src/clients/internal-http-client.ts",
+        line: 149,
+        category: "constructor_base_url_perform",
+      },
+      {
+        file: "bff/src/clients/password-reset-delivery.ts",
+        line: 20,
+        category: "env_var_PASSWORD_RESET_DELIVERY_URL",
+      },
+      {
+        file: "bff/src/routes/health.ts",
+        line: 46,
+        category: "caller_resolved_base_url_via_checkHealth",
+      },
+    ]);
+  });
+});
+
+describe("o egresso genérico é fail-closed, com o primitivo e a contagem de chamadores computados (Goal041 / WU-04)", () => {
+  it("o fetch do primitivo genérico é classificado como qualquer outro sítio — o nome da função sai da declaração, não de uma lista de arquivos", () => {
+    const discovery = discoverHttpEgressSites(aiOrchestratorSrcPath, bffSrcPath);
+    expect(
+      discovery.genericEgressPrimitives.map((primitive) => ({
+        file: httpEgressRelativePath(primitive.filePath),
+        line: primitive.line,
+        functionName: primitive.functionName,
+      })),
+    ).toEqual([{ file: "ai-orchestrator/src/lib/http.ts", line: 32, functionName: "fetchJson" }]);
+  });
+
+  it("hoje nenhum código das duas árvores chama o primitivo genérico — a contagem sai de ler a árvore, não de suposição", () => {
+    const discovery = discoverHttpEgressSites(aiOrchestratorSrcPath, bffSrcPath);
+    expect(discovery.genericEgressCallers).toEqual([]);
+  });
+
+  it("primitivo genérico com outro nome, em outro arquivo, é descoberto igual — nenhuma allowlist por nome de arquivo ou de função", () => {
+    const tree = makeTempSourceTree({
+      "net/send.ts": [
+        "export async function requestJson(destino: string, options: RequestInit) {",
+        "  return fetch(destino, options);",
+        "}",
+      ].join("\n"),
+      "caller.ts": [
+        "export async function fetchThing() {",
+        "  return requestJson(env.THING_URL, {});",
+        "}",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const discovery = discoverHttpEgressSites(tree, emptyTree);
+      expect(
+        discovery.sites.map((site) => ({ line: site.line, category: site.category })),
+      ).toEqual([
+        { line: 2, category: "generic_egress_destination_decided_by_caller_requestJson" },
+      ]);
+      expect(discovery.genericEgressPrimitives).toEqual([
+        { filePath: join(tree, "net", "send.ts"), line: 2, functionName: "requestJson" },
+      ]);
+      expect(
+        discovery.genericEgressCallers.map((caller) => ({
+          filePath: caller.filePath,
+          line: caller.line,
+          category: caller.category,
+          reason: caller.reason,
+        })),
+      ).toEqual([
+        {
+          filePath: join(tree, "caller.ts"),
+          line: 2,
+          category: "env_var_THING_URL",
+          reason: "destino resolvido de env.THING_URL",
+        },
+      ]);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("chamador que repassa a URL recebida vira primitivo genérico ele próprio — a varredura segue até ponto fixo e o repasse em cadeia não escapa", () => {
+    const tree = makeTempSourceTree({
+      "net/send.ts": [
+        "export async function requestJson(destino: string, options: RequestInit) {",
+        "  return fetch(destino, options);",
+        "}",
+      ].join("\n"),
+      "repasse.ts": [
+        "export async function repassa(destino: string) {",
+        "  return requestJson(destino, {});",
+        "}",
+      ].join("\n"),
+      "caller.ts": [
+        "export async function fetchThing() {",
+        "  return repassa(destinoDecididoNaHora);",
+        "}",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      expect(() => discoverHttpEgressSites(tree, emptyTree)).toThrowError(
+        /caller\.ts:2: sítio de egresso HTTP sem categoria/,
+      );
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("chamador do primitivo genérico cujo destino não resolve derruba a leitura inteira, nomeando arquivo e linha — a categoria genérica nunca aceita chamador silencioso", () => {
+    const tree = makeTempSourceTree({
+      "net/send.ts": [
+        "export async function requestJson(destino: string, options: RequestInit) {",
+        "  return fetch(destino, options);",
+        "}",
+      ].join("\n"),
+      "caller.ts": [
+        "export async function fetchThing() {",
+        "  return requestJson(destinoNuncaResolvido, {});",
+        "}",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      expect(() => discoverHttpEgressSites(tree, emptyTree)).toThrowError(
+        /caller\.ts:2: sítio de egresso HTTP sem categoria/,
+      );
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("a cadeia de trânsito é seguida transitivamente até a raiz de cada ramo, com os cinco chamadores de segundo elo nomeados (Goal041 / WU-04)", () => {
+  /** Caminho do elo relativo a `apps/ai-orchestrator/src`, no formato `arquivo:linha`. */
+  const at = (filePath: string, line: number): string =>
+    `${filePath.replace(/\\/g, "/").split("/ai-orchestrator/src/")[1]}:${line}`;
+
+  it("os dois ramos têm, juntos, exatamente cinco elos de segunda profundidade, cada um nomeado com chamador, categoria e raiz", () => {
+    const chains = discoverSendTextTransitChains(
+      aiOrchestratorSrcPath,
+      resolveVerifiedComposers(),
+    );
+    const secondLinks = chains
+      .flatMap((chain) => chain.links.filter((link) => link.depth === 2))
+      .map((link) => ({
+        at: at(link.filePath, link.line),
+        callee: link.calleeFunction,
+        caller: link.callerFunction,
+        category: link.category,
+        literalText: link.literalText,
+        rootKind: link.root?.kind,
+      }))
+      .sort((a, b) => a.at.localeCompare(b.at));
+    expect(secondLinks).toHaveLength(5);
+    expect(secondLinks).toEqual([
+      {
+        at: "modules/activation-test/ActivationTestAiDriver.ts:203",
+        callee: "deliverReply",
+        caller: "deliver",
+        category: "assistant_decision_text",
+        literalText: undefined,
+        rootKind: "assistant_decision_text",
+      },
+      {
+        at: "modules/activation-test/ActivationTestService.ts:604",
+        callee: "sendAsClient",
+        caller: "performStep",
+        category: "literal_text_at_link",
+        literalText: ACTIVATION_TEST_NOTICE,
+        rootKind: "literal_text_at_link",
+      },
+      {
+        at: "modules/activation-test/ActivationTestService.ts:608",
+        callee: "sendAsClient",
+        caller: "performStep",
+        category: "literal_text_at_link",
+        literalText: extractSendAsClientText(
+          activationTestServiceSource,
+          "CLIENT_ASKS_PRICE",
+        ),
+        rootKind: "literal_text_at_link",
+      },
+      {
+        at: "modules/activation-test/ActivationTestService.ts:653",
+        callee: "sendAsClient",
+        caller: "performStep",
+        category: "literal_text_at_link",
+        literalText: extractSendAsClientText(
+          activationTestServiceSource,
+          "CLIENT_ASKS_SLOT",
+        ),
+        rootKind: "literal_text_at_link",
+      },
+      {
+        at: "modules/activation-test/ActivationTestService.ts:679",
+        callee: "sendAsClient",
+        caller: "performStep",
+        category: "literal_text_at_link",
+        literalText: extractSendAsClientText(
+          activationTestServiceSource,
+          "CLIENT_ACCEPTS_SLOT",
+        ),
+        rootKind: "literal_text_at_link",
+      },
+    ]);
+  });
+
+  it("cada ramo termina em raiz classificada — nenhum resíduo e nenhum ciclo nas duas cadeias reais", () => {
+    const chains = discoverSendTextTransitChains(
+      aiOrchestratorSrcPath,
+      resolveVerifiedComposers(),
+    );
+    expect(chains).toHaveLength(2);
+    for (const chain of chains) {
+      expect(chain.cycles).toEqual([]);
+      expect(chain.roots.length).toBeGreaterThan(0);
+      for (const link of chain.links) {
+        if (link.category === "text_in_transit_named_origin") {
+          expect(link.root).toBeUndefined();
+        } else {
+          expect(link.root).toBeDefined();
+        }
+      }
+    }
+    const rootKinds = chains
+      .flatMap((chain) => chain.roots.map((root) => root.kind))
+      .sort();
+    expect(rootKinds).toEqual(
+      [
+        "assistant_decision_text",
+        "literal_text_at_link",
+        "literal_text_at_link",
+        "literal_text_at_link",
+        "literal_text_at_link",
+      ].sort(),
+    );
   });
 });

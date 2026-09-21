@@ -1,6 +1,6 @@
 # Goal 041 — O canal único é provado: saída de texto fora da porta e cadeia de trânsito de um elo
 
-**Status: READY.** Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-21 pelo Tech Lead Agent após [Goal040 ACCEPTED](../reviews/040-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED** na rodada 5, conforme o [review041](../reviews/041-review.md) — quatro rodadas `CHANGES_REQUIRED` (5, 2, 1 e 1 blocker) antes do aceite com zero blockers. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-21 pelo Tech Lead Agent após [Goal040 ACCEPTED](../reviews/040-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: OPUS_MEDIUM
 

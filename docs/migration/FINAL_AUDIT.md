@@ -2074,3 +2074,244 @@ teve tolerância aumentada, e a matriz de larguras continua com as cinco.
 **E não diz que a verificação de resposta roda em produção**: nenhum
 arquivo de `apps/bff/` foi tocado e `RESPONSE_CONTRACT_CHECK_ENABLED`
 continua `env.NODE_ENV !== "production"`, inalterado por este diff.
+
+## 18. Egresso HTTP computado, egresso genérico fail-closed e cadeia de trânsito até raiz classificada — Goal041, 2026-09-21
+
+Seção nova, escrita depois da última mudança de árvore do diff041 (WU-01
+a WU-06 da rodada 1, mais a correção dos blockers da rodada 2, com os
+cinco controles negativos obrigatórios executados e revertidos). Ela
+**não reescreve** §4 a §17: os registros de A-01 a A-19 em §6, o veredito
+de §7 e as onze seções de fechamento anteriores continuam exatamente como
+estavam. O review040 tinha declarado dois pontos fora: a porta
+`WhatsAppProvider` continuava sendo premissa de canal único, e a cadeia
+de trânsito parava em um elo. Este Goal fecha os dois, mais os dois
+resíduos declarados do mesmo review.
+
+### O que mudou
+
+**O egresso HTTP das duas árvores é computado, não presumido pela
+porta.** `discoverHttpEgressSites`
+(`apps/ai-orchestrator/tests/support/http-egress-sites.ts`, módulo novo)
+lê `apps/ai-orchestrator/src` e `apps/bff/src` inteiros e classifica todo
+`fetch(` pelo que o código usa para resolver a URL — nunca por nome de
+arquivo, de pasta ou de função, e sem pular arquivo nenhum. Sobre a
+árvore real: **9** sítios, resíduo **zero**, **1** só na categoria
+`product_prose_to_client_number` (`EvolutionProvider.ts:73`); os outros
+oito em `generic_egress_destination_decided_by_caller_fetchJson`
+(`lib/http.ts:32`),
+`env_vars_EVOLUTION_BASE_URL_and_EVOLUTION_DOWNLOAD_MEDIA_PATH`
+(`EvolutionProvider.ts:172`), `env_var_OPENAI_BASE_URL`
+(`openai-transcription-provider.ts:58`),
+`env_var_SCHEDULING_SERVICE_BASE_URL`
+(`scheduling-service/client.ts:793`), `constructor_base_url_requestBinary`
+(`bff/src/clients/internal-http-client.ts:83`),
+`constructor_base_url_perform` (`:149`),
+`env_var_PASSWORD_RESET_DELIVERY_URL`
+(`bff/src/clients/password-reset-delivery.ts:20`) e
+`caller_resolved_base_url_via_checkHealth`
+(`bff/src/routes/health.ts:46`). Ver
+[VALIDATION_GATE](VALIDATION_GATE.md#egresso-http-computado-egresso-genérico-fail-closed-e-cadeia-de-trânsito-até-raiz-classificada-do-goal041).
+
+**O egresso genérico é fail-closed pelos chamadores.** O primitivo
+genérico é reconhecido pela forma — a URL do `fetch` é parâmetro da
+função que o contém e nenhum chamador do próprio arquivo a resolve — e o
+nome (`fetchJson`) é computado da declaração, não escrito à mão nem
+inferido do caminho do arquivo. `genericEgressCallers` é computado a cada
+execução, nunca afirmado em comentário: sobre a árvore real, **zero**
+chamadores. Um chamador cujo destino não resolve deriva a leitura
+inteira, nomeando arquivo e linha — provado por teste com árvore
+sintética cujo primitivo se chama `requestJson` e mora em `net/send.ts`,
+o que prova que nem o nome do arquivo nem o nome da função participam da
+classificação. Chamador que apenas repassa a URL recebida vira primitivo
+genérico ele próprio, e a varredura segue até ponto fixo com conjunto de
+nomes visitados — repasse em cadeia não escapa da regra, e ciclo de nomes
+não trava a varredura.
+
+**A contagem de sítios é a da árvore, não a da lista do Goal.** O Goal041
+enumerou oito sítios de `fetch(` nas duas raízes; a árvore tem nove. A
+lista do Goal omitiu `EvolutionProvider.ts:172` (download de mídia) e
+contava `lib/http.ts:32` como sítio a não classificar. Divergência
+declarada, resolvida a favor do número computado: pular um arquivo pelo
+nome era exatamente a allowlist que este delta remove.
+
+**A cadeia de trânsito é seguida transitivamente até raiz classificada.**
+`discoverSendTextTransitChains` deixa de parar no primeiro chamador: o
+percurso segue enquanto o texto estiver em trânsito
+(`text_in_transit_named_origin`) e termina em raiz de
+`SendTextChainRootKind` (`http_route`, `worker_or_job`,
+`activation_test_entry`, `text_composed_at_link`,
+`assistant_decision_text`, `person_typed_text`, `literal_text_at_link`,
+ou `cycle` quando o percurso revisitaria um elo já visitado — o ciclo é
+reportado em `chain.cycles`, nunca percorrido duas vezes). Sobre a árvore
+real: as **2** cadeias do Goal040 terminam com resíduo zero, cada uma com
+exatamente um segundo elo — os **5** chamadores de segundo elo do
+review040, todos com raiz nomeada:
+`ActivationTestAiDriver.ts:203` (`deliverReply`, categoria
+`assistant_decision_text`, raiz `assistant_decision_text`);
+`ActivationTestService.ts:604`, `:608`, `:653` e `:679` (`performStep` para
+`sendAsClient`, categoria `literal_text_at_link`, raiz
+`literal_text_at_link`, com o literal de `ACTIVATION_TEST_NOTICE` ou de
+uma das falas de cliente simulado nomeado em cada caso).
+
+**Os dois resíduos declarados do review040 fecham.** A forma
+propriedade-arrow de membro de porta
+(`sendText: (input: SendTextInput) => Promise<SendTextResult>`) ganhou
+teste permanente. A mensagem de resíduo de `classifySendTextSites` nomeia
+o portador descoberto — `carrierName`, lido do próprio casamento do
+padrão de busca — em vez de escrever `sendText` fixo, provado por teste
+com porta sintética que declara um portador de outro nome.
+
+**O que este diff não decide.** `apps/evolution-go/` fica declaradamente
+fora do descobridor: o serviço Go recebe o corpo que `EvolutionProvider`
+monta, mas nada aqui prova que ele não compõe texto próprio antes de
+repassar ao WhatsApp real — limite declarado, não achado, porque nenhuma
+violação real foi observada. A cadeia de trânsito continua lida só dentro
+de `apps/ai-orchestrator/src`. Texto emitido pelo modelo
+(`assistant_decision_text`) continua fora do conjunto verificado por
+execução, por D-050. Nenhuma migration, nenhuma rota, nenhum contrato
+público e nenhuma tela, componente, texto ou CSS do frontend mudou neste
+diff; nenhum arquivo de `apps/frontend/src/`, `apps/bff/src/` ou
+`apps/ai-orchestrator/src/` foi tocado.
+
+### Resultado real da execução
+
+Executado na rodada 2, sobre a árvore final — depois dos controles
+negativos e da reversão de cada um. Cada número abaixo foi lido da
+execução citada, nesta worktree, depois da última mudança de árvore.
+
+- `git status --porcelain`, na raiz do repositório — dois arquivos de
+  teste modificados
+  (`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`,
+  `apps/ai-orchestrator/tests/support/send-text-sites.ts`) e um arquivo
+  novo não rastreado (`apps/ai-orchestrator/tests/support/http-egress-sites.ts`),
+  mais os quatro documentos de migração desta rodada. Nenhum arquivo de
+  `apps/**/src/`, nesta árvore final. Dois arquivos de `tools/ia-loop/`
+  seguem modificados — `tools/ia-loop/lib/deterministic-executor.mjs` e
+  `tools/ia-loop/tests/deterministic-executor.test.mjs` —, como **desvio
+  declarado ao §5 do Goal041, dispensado no review041** pelo Tech Lead
+  (D-018, precedente [D-048](DECISIONS.md#d-048--fronteira-do-openai-configurável-por-ambiente-e-prova-de-composição-da-resposta-automática-sem-substituto-interno-propostas-no-goal032) do review033): o gate
+  `targeted-tests` (WU-09) reprovava com `No test files found, exiting
+  with code 1` porque `unit.pattern` chegava raiz-relativo e, sob
+  `ACTION_CWD.SCOPE`, o vitest resolvia o prefixo do escopo uma segunda
+  vez. `scopeRelativePattern` (`deterministic-executor.mjs:56`, usada em
+  `runDeterministicAction:84`) tira esse prefixo antes do argv. A
+  reversão foi tentada nas rodadas 2, 3 e 4 e nas três vezes o próprio
+  harness a desfez para o gate voltar a passar — é mudança de harness,
+  sem efeito em produto nem em gate de produto, coberta por
+  `node --test tools/ia-loop/tests/deterministic-executor.test.mjs`
+  (12 casos, 12 pass, casos 11 e 12 novos).
+- `npx vitest run tests/assistant/assistant.service.test.ts`, em
+  `apps/ai-orchestrator` — **66** testes, 0 falhas: os 55 já existentes
+  do Goal040 e **11** novos deste diff (2 dos resíduos do review040, 9 da
+  enumeração de egresso HTTP, do fail-closed do egresso genérico e da
+  cadeia de trânsito estendida).
+- `npx vitest run`, completo, em `apps/ai-orchestrator` — **80** arquivos
+  de teste `passed`, **12** `skipped` (92 no total); **790** testes
+  `passed`, **88** `skipped` (878 no total), 0 falhas. A baseline
+  `9709b1ac`, medida na mesma worktree com a árvore de teste restaurada,
+  dá **779** `passed` e 88 `skipped`.
+- `npm run validate:core` — `validate:core PASSED`, 17 passos: **15**
+  `passed`, **0** `failed`, **2** `skipped` (`test:bff`,
+  `test:health-worker`, ambos declarados no próprio resumo do gate).
+  `audit:static` dentro dele: **34** checks, 33 `passed`, 1 `skipped`
+  (`production_health`, declarado).
+- `npm run test:gate` — **226** testes, `pass 226`, `fail 0`, `skipped 0`
+  — inalterado em relação ao Goal040, porque nenhum script de gate foi
+  tocado por este diff.
+- `npm run validate:integration` — **`exit 2`**, com
+  `validate:integration REFUSED — BFF_TEST_DATABASE_URL is not set`.
+  **Nenhum dos 35 passos rodou.** A pré-condição de banco descartável não
+  existe neste ambiente de execução: não há `.env` na worktree, o daemon
+  do Docker não responde (`failed to connect to the docker API at
+  npipe:////./pipe/dockerDesktopLinuxEngine`) e o Postgres que escuta em
+  `127.0.0.1:5432` não é um cluster descartável declarado. Isto fica
+  registrado como **pré-condição ausente**, nunca como verde: a
+  persistência continua sem validação nesta rodada, e nenhum número de
+  `validate:integration` é herdado de rodada anterior.
+
+**Os controles negativos, com as duas saídas onde o Goal as exige.** Os
+controles 1 a 3 foram executados na rodada 2 contra as **duas** árvores:
+a baseline aceita `9709b1ac` (restaurada na própria worktree, com `git
+checkout` dos dois arquivos de teste rastreados e remoção temporária do
+módulo novo — **55** testes em `assistant.service.test.ts` e **779**
+`passed` na suíte completa, conferindo com a baseline declarada pelo
+Goal041) e a árvore final desta rodada.
+
+- **Controle 1 — egresso novo de prosa ao número da cliente fora do
+  adapter** (`apps/ai-orchestrator/src/modules/channel/rogue-egress.ts`,
+  um `fetch` para a base e o path de envio de texto do Evolution, com
+  `JSON.stringify` de um corpo que pareia `number: input.to` com
+  `text: input.text`). Baseline: **779 passed, 0 failed** — a cegueira
+  era real. Árvore final: **2 failed**, com o sítio nomeado —
+  `ai-orchestrator/src/modules/channel/rogue-egress.ts` linha `10`,
+  categoria `product_prose_to_client_number` — e a afirmação de egresso
+  único quebrada (`expected 9 ... but got 10`, com o diff da enumeração
+  nomeando arquivo, linha e categoria).
+- **Controle 2 — chamador novo do egresso genérico sem categoria**
+  (`rogue-generic-caller.ts`, `fetchJson(destinoDecididoNaHora, {})` com
+  a URL vinda de uma função local). Baseline: **779 passed, 0 failed**.
+  Árvore final: **4 failed**, todas com o mesmo erro nomeando arquivo e
+  linha — `.../rogue-generic-caller.ts:10: sítio de egresso HTTP sem
+  categoria — a URL "destinoDecididoNaHora" não resolve a env.<NOME>, a
+  this.<campo> nem a parâmetro resolvível nos chamadores.`
+- **Controle 3 — elo de segundo nível compondo prosa própria**
+  (`ActivationTestService.sendRogueStep`, texto vindo de
+  `composeRogueWait`, compositor ausente de `VERIFIED_CLIENT_TEXTS`,
+  inserido no fim da classe para não deslocar nenhum sítio já
+  enumerado). Baseline: **779 passed, 0 failed** — a cadeia parava em um
+  elo e não via o sexto chamador. Árvore final: **5 failed**, com o
+  resíduo nomeado — `.../ActivationTestService.ts:937: chamador de
+  sendAsClient(...) sem categoria — compõe o texto na hora com
+  "composeRogueWait", que não está entre os compositores cujo texto
+  produzido está em VERIFIED_CLIENT_TEXTS`.
+- **Controles 4 (ciclo na cadeia) e 5 (o que já mordia continua
+  mordendo)** foram executados na rodada 1, pela WU-05, com a saída real
+  no relatório daquela unidade; o Goal exige as duas saídas apenas para
+  os controles 1 a 3. A rodada 2 não os reexecutou, e por isso não
+  reproduz número próprio deles aqui.
+
+Toda mutação dos controles foi revertida: a árvore final acima é a árvore
+depois da reversão, e `git status --porcelain` não lista nenhum arquivo
+de `apps/**/src/`.
+
+Não reexecutados nesta rodada, e por isso sem número reproduzido aqui:
+`node scripts/final-production-audit.mjs` fora do que `validate:core` já
+roda, `validate:ui` e o gate renderizado, e a saída literal dos controles
+4 e 5.
+
+### Achados novos a partir de A-24
+
+Nenhum. `apps/frontend/src/`, `apps/bff/src/` e `apps/ai-orchestrator/src/`
+não foram tocados neste diff — confirmado por `git status --porcelain` —,
+então nenhum resíduo apareceu em código de produção para virar achado. O
+que este diff fecha é lacuna de **precisão de guard de teste** (egresso
+HTTP presumido pela porta, cadeia parando em um elo, mensagem de resíduo
+com token fixo), não de produto.
+
+### Veredito recontado
+
+A contagem desta auditoria **não muda**: nenhum achado de A-04 a A-08,
+A-11 a A-17 ou A-19 foi tocado, corrigido ou reclassificado, e nenhum
+achado fechado (A-01 a A-03, A-09, A-10, A-18, A-20 a A-23) foi reaberto.
+Esta auditoria continua com **0 achados `BLOQUEADOR-MVP`, 7
+`PENDENCIA-POS-MVP`** e **6 `LIMITE-DECLARADO`** — os mesmos números que
+§17 já deixava, porque o que este diff amplia é precisão de guard de
+teste, e isso nunca tinha entrado nessa contagem como achado nem como
+limite declarado à parte. `apps/evolution-go/` fica declaradamente fora
+do descobridor de egresso — limite declarado, não achado novo, porque
+nenhuma violação real foi observada.
+
+Quatro coisas que este recontar não diz. **Não diz que M4 foi fechado**:
+nenhuma chamada saiu, neste diff, para um provedor de LLM real nem para o
+WhatsApp real — o diff041 toca só os três arquivos de teste nomeados
+acima, os dois arquivos de `tools/ia-loop/` do desvio declarado acima
+(harness, não produto) e a documentação de migração — nada além disso. **Não diz que
+a fidelidade visual está provada**: nenhum arquivo de `apps/frontend/src/`
+mudou, nenhum teste do gate renderizado foi pulado, marcado `fixme`,
+removido ou teve tolerância aumentada, e a matriz de larguras continua
+com as cinco. **Não diz que o serviço Go foi provado sem texto
+próprio**: `apps/evolution-go/` está declaradamente fora do alcance do
+descobridor de egresso, e nenhuma chamada nem teste deste diff toca esse
+serviço. **E não diz que a persistência foi validada nesta rodada**:
+`validate:integration` recusou por pré-condição de banco ausente, como
+registrado acima.

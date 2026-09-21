@@ -1037,3 +1037,52 @@ forma, e um sexto cobre método de porta em forma genérica
 descoberta silenciosa.
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff040-2026-09-21-d-056) e [D-056](DECISIONS.md).
+
+## Egresso HTTP computado, egresso genérico fail-closed e cadeia de trânsito até raiz classificada do Goal041
+
+O aceite do Goal040 declarou dois pontos fora: o conjunto de métodos
+portadores de texto tinha virado computado, mas a **porta**
+`WhatsAppProvider` continuava sendo premissa — nada provava que todo
+texto do produto para o número da cliente passasse por ela — e a cadeia
+de trânsito parava no primeiro chamador. Este delta fecha os dois e os
+dois resíduos declarados do review040.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `discoverHttpEgressSites` (`apps/ai-orchestrator/tests/support/http-egress-sites.ts`) lê `apps/ai-orchestrator/src` e `apps/bff/src` inteiros e classifica **todo** sítio de `fetch(` em categoria nomeada, resolvida pelo que o código usa para montar a URL — nunca por nome de arquivo, de pasta ou de função, e sem pular arquivo nenhum. Sobre a árvore real: **9** sítios, resíduo **zero**, **1** só na categoria `product_prose_to_client_number` (`EvolutionProvider.ts:73`) | Um sítio sem categoria reconhecida deriva a leitura e nomeia arquivo e linha; a variação de forma que o descobridor não cobrir (nova forma de resolução de destino) continua exigindo extensão própria, não allowlist |
+| `fetchJson` (`lib/http.ts:32`) — o primitivo genérico — é ele próprio um sítio classificado, na categoria `generic_egress_destination_decided_by_caller_fetchJson`, e é **fail-closed pelos chamadores**: o nome do primitivo sai da declaração que contém o `fetch` (nenhum arquivo é pulado, nenhum nome é escrito à mão), `genericEgressCallers` é computado a cada execução (hoje **zero**, nenhum código chama `fetchJson`), e um chamador cujo destino não resolve deriva a leitura inteira, nomeando arquivo e linha. Chamador que apenas repassa a URL recebida vira primitivo genérico ele próprio e a varredura segue até ponto fixo, com conjunto de nomes visitados | A categoria nunca aceita chamador silencioso — mas também não impede que um chamador novo apareça amanhã; o gate é a leitura da árvore a cada execução, não uma trava estática de código-fonte |
+| `discoverSendTextTransitChains` segue o percurso elo a elo até raiz classificada (`http_route`, `worker_or_job`, `activation_test_entry`, `text_composed_at_link`, `assistant_decision_text`, `person_typed_text`, `literal_text_at_link`) ou até `cycle`, quando o percurso revisitaria um elo já visitado. Sobre a árvore real: as 2 cadeias do Goal040 terminam com resíduo zero, cada uma com um segundo elo — os 5 chamadores do review040 (`ActivationTestAiDriver.ts:203`; `ActivationTestService.ts:604`, `:608`, `:653`, `:679`), todos com raiz nomeada | A cadeia continua lida só dentro de `apps/ai-orchestrator/src` — a suíte de isolamento de credencial, fora dessa raiz, continua fora por construção, não por marca no código |
+| Os dois resíduos declarados do review040 fecham: a forma propriedade-arrow de membro de porta ganhou teste permanente, e a mensagem de resíduo de `classifySendTextSites` nomeia o portador descoberto (`carrierName` lido do próprio casamento do padrão), não mais `sendText` fixo | — |
+
+**O que o gate decide sobre a contagem de sítios.** A árvore real tem
+**nove** sítios de `fetch(` nas duas raízes lidas, não oito: o Goal041
+enumerou oito na sua lista de fatos de baseline, omitindo
+`EvolutionProvider.ts:172` (download de mídia) e contando
+`lib/http.ts:32` como sítio a não classificar. O número que vale é o
+lido da árvore a cada execução — a lista do Goal era fato de
+planejamento, não invariante —, e `lib/http.ts:32` é classificado como
+qualquer outro sítio, porque pular um arquivo pelo nome era exatamente a
+allowlist que este delta remove.
+
+**`apps/evolution-go/` fica declaradamente fora do alcance do descobridor.**
+O serviço Go recebe o que o adapter `EvolutionProvider` lhe entrega, mas
+nada neste Goal — nem em nenhum anterior — prova que ele não compõe
+texto próprio antes de repassar ao WhatsApp real. Isso é limite
+declarado, não achado: nenhuma violação real foi observada, e fechar
+esse limite exigiria instrumentar o próprio serviço Go, fora do escopo
+de teste do `ai-orchestrator` que este Goal declara.
+
+Texto emitido pelo modelo (`assistant_decision_text`) continua fora do
+guardrail por **D-050**: não é demonstrável por um dublê roteirizado, e
+este Goal não revisita essa fronteira.
+
+**A forma de egresso reconhecida é `fetch(`, e só ela.** Cliente HTTP de
+biblioteca — `axios`, `undici`, `node-fetch`, `got` — não seria visto
+pelo descobridor. Hoje isso não é buraco: nenhum dos quatro existe em
+`apps/ai-orchestrator/src` nem em `apps/bff/src`, e o único cliente HTTP
+em uso é o `fetch` global. Fica como limite declarado no
+[review041](reviews/041-review.md): adotar um desses clientes exige
+estender `discoverHttpEgressSites` na mesma passada, porque a
+enumeração ficaria silenciosamente incompleta em vez de reprovar.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff041-2026-09-21-d-057) e [D-057](DECISIONS.md).

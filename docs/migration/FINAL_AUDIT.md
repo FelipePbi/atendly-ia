@@ -1880,3 +1880,197 @@ tolerância aumentada, e a matriz de larguras continua com as cinco. **E não
 diz que a verificação de resposta roda em produção**: nenhum arquivo de
 `apps/bff/` foi tocado e `RESPONSE_CONTRACT_CHECK_ENABLED` continua
 `env.NODE_ENV !== "production"`, inalterado por este diff.
+
+## 17. Fechamento do token literal e da categoria não ligada — Goal040, 2026-09-21
+
+Seção nova, escrita depois da última mudança de árvore do diff040 (WU-01 a
+WU-05, com os cinco controles negativos obrigatórios executados e
+revertidos pela WU-05). Ela **não reescreve** §4 a §16: os registros de
+A-01 a A-19 em §6, o veredito de §7 e as nove seções de fechamento
+anteriores continuam exatamente como estavam. O Goal039 tinha computado o
+**escopo de leitura** de cada descobridor; este Goal fecha dois pontos
+adjacentes que ficaram de fora: o **token** que define quais métodos da
+porta `WhatsAppProvider` carregam texto ainda era escrito à mão, e a
+categoria de texto próprio do produto não distinguia o que o código compõe
+de forma testável do que o modelo decide, nem ligava o primeiro ao
+conjunto verificado. Um terceiro ponto, seguir a cadeia de trânsito até o
+chamador, entra junto.
+
+### O que mudou
+
+**O conjunto de métodos portadores de texto passa a ser derivado da
+declaração da porta, não um token literal.** `parseWhatsAppProviderMethods`
+(`apps/ai-orchestrator/tests/support/send-text-sites.ts`) lê a interface
+`WhatsAppProvider` e classifica cada método como portador se o tipo do
+primeiro parâmetro declarar, no nível superior, `text: string`. Sobre a
+declaração real: **2** métodos — `sendText` (`isCarrier: true`) e
+`downloadMedia` (`isCarrier: false`). `resolveSendTextCarrierMethodNames()`
+devolve `["sendText"]`, e `buildSendTextTokenPattern()` monta o padrão de
+busca a partir desse nome, substituindo o token fixo `/\bsendText\s*\(/g`
+da baseline. Método cujo parâmetro não resolve a uma interface no mesmo
+arquivo é resíduo nomeado. Ver
+[VALIDATION_GATE](VALIDATION_GATE.md#conjunto-de-métodos-portadores-de-texto-derivado-da-porta-categoria-de-texto-próprio-dividida-e-cadeia-de-trânsito-seguida-do-goal040).
+
+**A categoria de texto próprio do produto liga o composto ao conjunto
+verificado, e separa o que o modelo decide.**
+`SendTextSiteCategory` troca `product_own_text_to_customer` por
+`` `composed_by_${compositor}` `` e `assistant_decision_text`. Sobre a
+árvore real, mesmos 7 sítios da baseline, resíduo zero, contagem
+`{port_declaration: 1, adapter_implementation: 1,
+composed_by_composeNotificationText: 1, assistant_decision_text: 1,
+text_in_transit_named_origin: 2, person_typed_text: 1}`. Um teste liga o
+único sítio `composed_by_*` da árvore ao conjunto verificado: todo texto
+de `NOTIFICATION_MESSAGE_TEXTS` está em `VERIFIED_CLIENT_TEXTS`.
+`assistant_decision_text` continua fora desse conjunto, por D-050.
+
+**A cadeia de trânsito é seguida do sítio até o chamador, dentro de
+`apps/ai-orchestrator/src`.** `discoverSendTextTransitChains` resolve a
+função que contém cada sítio `text_in_transit_named_origin` e procura toda
+chamada real dela na árvore lida. Sobre a árvore real: **2** cadeias, cada
+uma com exatamente **1** chamador — `ActivationTestReplySender.ts:120` →
+`sendAiReply` → `ActivationTestAiDriver.ts:228` (`deliverReply`, origem
+`reply`); `PlatformWhatsAppSender.ts:98` → `sendToTenantUnderTest` →
+`ActivationTestService.ts:852` (`sendAsClient`, origem `text`). Toda
+ocorrência que não é chamada real sai nomeada em `excludedOccurrences`
+(assinatura da porta, implementação, anotação de tipo), nunca resíduo. A
+suíte de isolamento de credencial chama `sendAiReply` de verdade, mas fica
+fora por estar fora da raiz de leitura — provado por teste que a mesma
+fonte, classificada como se estivesse dentro da raiz, viraria resíduo.
+
+**O que separa declaração de chamada é a forma, não a presença de um
+ponto.** O reconhecimento de `sendText` e das funções de trânsito passou a
+exigir duas condições juntas: antes do nome, nada além de modificadores
+conhecidos (`async`, `public`, `readonly`, …) até o limite de statement mais
+próximo; depois do `)` correspondente, `:` (anotação de tipo de retorno) ou
+`{` (corpo). Uma **chamada de identificador solto** — `sendText({ ... });`
+ou `sendAiReply({ ... });` sem receptor, no início do statement — satisfaz a
+primeira condição e falha a segunda, e por isso é classificada como sítio e
+como chamador. Com o critério anterior (`.` antes do nome, ou só
+modificadores antes dele) ela saía como `port_declaration` ou como
+`port_declaration_or_implementation`: um emissor real registrado como
+assinatura inofensiva, sem resíduo e sem alarme. Nenhum sítio, chamador ou
+exclusão da árvore real mudou de categoria com isso.
+
+**Método de porta em forma genérica é resíduo, não descoberta silenciosa.**
+`parseWhatsAppProviderMethods` não reconhece `sendTemplate<T>(input:
+SendTemplateInput<T>): Promise<void>` — a forma `nome<T>(` cai fora de
+`nome(` e de `nome: (` — e derruba a leitura nomeando arquivo e linha. É o
+comportamento fechado: o método genérico carregaria `text: string` e
+emitiria texto pelo canal, e o que a leitura não sabe classificar nunca sai
+como não-portador. O mesmo método sem parâmetros de tipo é classificado
+normalmente como portador — o que derruba é a forma genérica, não a
+existência de um terceiro método.
+
+**O que este diff não decide.** A cadeia de trânsito para em um elo: o
+chamador direto é classificado, mas se ele próprio repassa texto de um
+parâmetro seu, quem o chama não é seguido — não há recursão até a origem
+definitiva do texto. Derivar o conjunto de métodos da porta não decidiu
+que todo canal de saída de texto passa por essa porta — um canal
+diferente continuaria exigindo descobridor próprio. Nenhuma migration,
+nenhuma rota, nenhum contrato público e nenhuma tela, componente, texto ou
+CSS do frontend mudou neste diff; nenhum arquivo de `apps/frontend/src/`,
+`apps/bff/src/` ou `apps/ai-orchestrator/src/` foi tocado.
+
+### Resultado real da execução
+
+Executado por esta unidade, sobre a árvore final desta rodada — depois dos
+cinco controles negativos obrigatórios (WU-05) e da reversão de cada um.
+Cada número abaixo foi lido da execução citada, nesta worktree, depois da
+última mudança de árvore.
+
+- `git status --porcelain`, na raiz do repositório — seis arquivos: os dois
+  de teste (`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
+  e `apps/ai-orchestrator/tests/support/send-text-sites.ts`) e os quatro
+  documentos de migração desta rodada (`CURRENT_STATE.md`, `DECISIONS.md`,
+  `FINAL_AUDIT.md`, `VALIDATION_GATE.md`), nenhum outro. Nenhum arquivo de
+  `apps/**/src/`.
+- `npx vitest run tests/assistant/assistant.service.test.ts`, em
+  `apps/ai-orchestrator` — **55** testes, 0 falhas: os 37 já existentes do
+  Goal039, os 12 deste diff (derivação de método pela porta, categoria de
+  compositor ligada ao conjunto verificado, e cadeia de trânsito seguida elo
+  a elo) e os **6** controles negativos acrescentados na correção da
+  rodada 3 — 5 de forma de reconhecimento e 1 de método de porta em forma
+  genérica.
+- `npx vitest run`, completo, em `apps/ai-orchestrator` — **80** arquivos
+  de teste `passed`, **12** `skipped` (92 no total); **779** testes
+  `passed`, **88** `skipped` (867 no total), 0 falhas.
+- `npm run validate:core` — `validate:core PASSED`, 17 passos: **15**
+  `passed`, **0** `failed`, **2** `skipped` (`test:bff`,
+  `test:health-worker`, ambos declarados no próprio resumo do gate).
+- `npm run test:gate` — **226** testes, `pass 226`, `fail 0`, `skipped 0`.
+
+**Os cinco controles negativos de forma de reconhecimento, com as duas
+saídas.** Cada um foi executado contra a árvore final (verde) e contra o
+reconhecimento anterior, reposto em cópia temporária e revertido em
+seguida (a cópia foi conferida byte a byte no retorno):
+
+- Sítio de identificador solto (`sendText({ to, text: reply.text });` sem
+  receptor). Árvore final: `text_in_transit_named_origin`, origem `reply`,
+  linha 3. Reconhecimento anterior: `AssertionError: expected [ { …(3) } ]
+  to deeply equal [ { …(4) } ]` — o sítio saía como `port_declaration`.
+- Sítio de identificador solto com forma de `text:` não reconhecida. Árvore
+  final: resíduo `<fixture-solto>:3: chamada sendText(...) com forma de
+  "text:" não reconhecida`. Reconhecimento anterior: `AssertionError:
+  expected [Function] to throw an error` — nenhum resíduo, silêncio.
+- Declaração da porta e implementação do adapter, no mesmo formato real.
+  Árvore final: `port_declaration` (linha 2) e `adapter_implementation`
+  (linha 5), como antes — o critério novo não move o que já estava certo.
+- Chamador de identificador solto da função de trânsito. Árvore final: 1
+  chamador (`<fixture-solto>:8`, `entregarSemReceptor`,
+  `text_in_transit_named_origin`, origem `reply`) e 1 exclusão
+  (`<fixture-solto>:2`, `port_declaration_or_implementation`).
+  Reconhecimento anterior: `AssertionError: expected [] to deeply equal [ {
+  …(5) } ]` — o elo desaparecia da cadeia sem virar resíduo.
+- Chamador de identificador solto compondo na hora com compositor não
+  verificado. Árvore final: resíduo `<fixture-solto>:3: chamador de
+  sendAiReply(...) sem categoria — compõe o texto na hora com
+  "compoeTextoNovo"`. Reconhecimento anterior: `AssertionError: expected
+  [Function] to throw an error`.
+
+**O controle de método de porta em forma genérica, com as duas saídas.**
+Árvore final: `<fixture-generico>:3: membro "sendTemplate<T>(input:
+SendTemplateInput<T>): Promise<void>" declarado com forma não reconhecida
+na porta WhatsAppProvider`, e o mesmo método sem parâmetros de tipo sai
+classificado como portador ao lado de `sendText`. Contra uma leitura que
+pulasse o membro não reconhecido em vez de derrubá-la (`continue` no lugar
+do `throw`, reposto e revertido): `AssertionError: expected [Function] to
+throw an error` — o método genérico sumiria da vigilância em silêncio.
+
+Não reexecutados por esta unidade, e por isso sem número reproduzido
+aqui: `node scripts/final-production-audit.mjs`, `validate:integration`,
+`test:bff` e `test:frontend` fora do que `validate:core` já roda. Nenhum
+arquivo de produção é tocado por este diff — confirmado por
+`git status --porcelain`.
+
+### Achados novos a partir de A-24
+
+Nenhum. `apps/frontend/src/`, `apps/bff/src/` e `apps/ai-orchestrator/src/`
+não foram tocados neste diff — confirmado por `git status --porcelain` —,
+então nenhum resíduo apareceu em código de produção para virar achado. O
+que este diff fecha é lacuna de **precisão de guard de teste** (token
+literal em vez de derivado, categoria não ligada ao conjunto verificado,
+cadeia não seguida até o chamador), não de produto.
+
+### Veredito recontado
+
+A contagem desta auditoria **não muda**: nenhum achado de A-04 a A-08, A-11
+a A-17 ou A-19 foi tocado, corrigido ou reclassificado, e nenhum achado
+fechado (A-01 a A-03, A-09, A-10, A-18, A-20 a A-23) foi reaberto. Esta
+auditoria continua com **0 achados `BLOQUEADOR-MVP`, 7
+`PENDENCIA-POS-MVP`** e **6 `LIMITE-DECLARADO`** — os mesmos números que
+§16 já deixava, porque o que este diff amplia é precisão de guard de
+teste, e isso nunca tinha entrado nessa contagem como achado nem como
+limite declarado à parte.
+
+Três coisas que este recontar não diz. **Não diz que M4 foi fechado**:
+nenhuma chamada saiu, neste diff, para um provedor de LLM real nem para o
+WhatsApp real — o diff040 toca só
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts` e
+`apps/ai-orchestrator/tests/support/send-text-sites.ts`, mais a
+documentação de migração — nada além disso. **Não diz que a fidelidade
+visual está provada**: nenhum arquivo de `apps/frontend/src/` mudou,
+nenhum teste do gate renderizado foi pulado, marcado `fixme`, removido ou
+teve tolerância aumentada, e a matriz de larguras continua com as cinco.
+**E não diz que a verificação de resposta roda em produção**: nenhum
+arquivo de `apps/bff/` foi tocado e `RESPONSE_CONTRACT_CHECK_ENABLED`
+continua `env.NODE_ENV !== "production"`, inalterado por este diff.

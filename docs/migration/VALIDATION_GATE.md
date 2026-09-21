@@ -1009,3 +1009,31 @@ as credenciais do service container são sintéticas e morrem com o runner.
   **M4** continua aberto.
 - A execução hospedada dos workflows ainda não ocorreu; o estado atual é
   "configuração validada localmente". Ver [MIGRATION_STATUS](MIGRATION_STATUS.md).
+
+## Conjunto de métodos portadores de texto derivado da porta, categoria de texto próprio dividida e cadeia de trânsito seguida do Goal040
+
+O Goal039 tinha computado o escopo de leitura de `discoverSendTextSites`
+(`apps/ai-orchestrator/src` inteiro), mas o token que define quais métodos
+da porta contam como envio de texto continuava escrito à mão
+(`/\bsendText\s*\(/g`), e a categoria `product_own_text_to_customer`
+misturava texto composto pelo código com texto decidido pelo modelo, sem
+ligar o primeiro ao conjunto verificado. Este delta fecha os dois pontos e
+segue a cadeia de trânsito até o chamador.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `parseWhatsAppProviderMethods` lê a interface `WhatsAppProvider` e classifica cada método como portador de texto se o tipo do primeiro parâmetro declarar, no nível superior, `text: string`; `resolveSendTextCarrierMethodNames()` devolve os nomes portadores (`["sendText"]` sobre a declaração real, ao lado de `downloadMedia`, não portador), e `buildSendTextTokenPattern()` monta o padrão de busca a partir desses nomes — o token não é mais literal. Método cujo parâmetro não resolve a uma interface no mesmo arquivo, ou cuja forma não é reconhecida, é resíduo nomeado | Continua exigindo que o tipo do parâmetro seja uma interface declarada **no mesmo arquivo** da porta — um tipo importado de outro arquivo não é resolvido, e um método cujo parâmetro é assim formado seria resíduo, não descoberta silenciosa, mas também não teria como ser classificado sem extensão própria |
+| `SendTextSiteCategory` substitui `product_own_text_to_customer` por `` `composed_by_${compositor}` `` (variável local do mesmo bloco de função, atribuída de um compositor) e `assistant_decision_text` (`state.response.text`). Um teste liga `composed_by_composeNotificationText` — o único sítio dessa forma na árvore real — ao conjunto verificado: todo texto de `NOTIFICATION_MESSAGE_TEXTS` está em `VERIFIED_CLIENT_TEXTS` | **Texto emitido pelo modelo (`assistant_decision_text`) continua fora do guardrail por D-050**: não é demonstrável por um dublê roteirizado, e este Goal não revisita essa fronteira. Variável atribuída em outro bloco de função do mesmo arquivo não herda a categoria de compositor — vira resíduo, provado por teste; a resolução de compositor é de escopo de bloco, não de arquivo inteiro (observação já registrada em D-055, não fechada por este Goal) |
+| `discoverSendTextTransitChains` resolve, para cada sítio `text_in_transit_named_origin`, o nome da função que o contém e procura toda chamada real desse nome na árvore lida, classificando o texto que cada chamador fornece pelo mesmo vocabulário dos sítios. Sobre a árvore real: 2 cadeias, cada uma com exatamente 1 chamador, resíduo zero; toda ocorrência do nome que não é chamada real (assinatura da porta, implementação, anotação de tipo) sai nomeada em `excludedOccurrences`, nunca resíduo | **A cadeia é seguida dentro de `apps/ai-orchestrator/src` e não além.** A raiz de leitura exclui teste — uma chamada real de `sendAiReply` em `tests/security/platform-credential-isolation.test.ts` não é vista, por estar fora da raiz, não por alguma marca de "é teste" no código. **A cadeia para em um elo**: o chamador direto da função de trânsito é classificado, mas se ele próprio repassa texto de um parâmetro seu, quem o chama não é seguido — não há recursão até a origem definitiva do texto |
+
+O que separa declaração de chamada, nos dois descobridores, é a forma
+completa: só modificadores conhecidos antes do nome **e** `:` ou `{` depois
+do `)` correspondente. Chamada de identificador solto (`sendText({ ... });`
+sem receptor) satisfaz a primeira metade e falha a segunda, e por isso
+conta como sítio e como chamador — com o critério anterior ela saía como
+declaração de porta, sem resíduo. Cinco controles negativos cobrem essa
+forma, e um sexto cobre método de porta em forma genérica
+(`sendTemplate<T>(input: SendTemplateInput<T>)`), que é resíduo nomeado, não
+descoberta silenciosa.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff040-2026-09-21-d-056) e [D-056](DECISIONS.md).

@@ -3515,3 +3515,124 @@ continua idêntico e nenhuma migration ou contrato público mudam.
   `scripts/tests/final-production-audit-legacy-regression.test.mjs` —
   confirmado por `git status --porcelain` sobre a árvore final, depois da
   reversão dos controles negativos.
+
+## Delta implementado — diff040, 2026-09-21 ([D-056](DECISIONS.md))
+
+O Goal039 tinha computado **onde** `discoverSendTextSites` procura
+(`apps/ai-orchestrator/src` inteiro), mas **quais** métodos da porta
+`WhatsAppProvider` contam como carregando texto ao destinatário do canal
+continuava sendo um token literal escrito à mão (`/\bsendText\s*\(/g`) —
+um método novo da porta com nome diferente de `sendText` que também
+carregasse texto não seria descoberto. E o texto próprio do produto
+(`product_own_text_to_customer`) misturava, numa única categoria, o que o
+**código** compõe de forma testável (`composeNotificationText`) com o que
+o **modelo** decide dizer (`state.response.text`) — sem ligar o primeiro
+ao conjunto verificado nem declarar o segundo como fronteira à parte.
+Este delta fecha os dois pontos e segue a cadeia de trânsito até o
+chamador. Dois arquivos tocados, os dois já existentes desde o Goal039:
+nenhum arquivo novo, nenhum arquivo de `apps/*/src/` é tocado, nenhuma
+copy muda e `PRODUCT_OWN_TEXTS`/`VERIFIED_CLIENT_TEXTS` continuam com o
+mesmo conjunto de entradas.
+
+- **FATO atual (o conjunto de métodos que carregam texto ao destinatário
+  do canal é derivado da declaração da porta, não um token literal):**
+  `parseWhatsAppProviderMethods`
+  (`apps/ai-orchestrator/tests/support/send-text-sites.ts`) enumera todo
+  método da interface `WhatsAppProvider`, resolve o tipo do primeiro
+  parâmetro no mesmo arquivo e classifica o método como portador de texto
+  se esse tipo declarar, no nível superior, `text: string`. Sobre a
+  declaração real (`modules/channel/ports/WhatsAppProvider.ts`): **2**
+  métodos — `sendText` (`isCarrier: true`, parâmetro `SendTextInput`
+  declara `text: string`) e `downloadMedia` (`isCarrier: false`, parâmetro
+  `DownloadMediaInput` não declara). `resolveSendTextCarrierMethodNames()`
+  devolve `["sendText"]`, e `buildSendTextTokenPattern()` monta o padrão
+  de busca a partir desse nome, substituindo o token fixo
+  `/\bsendText\s*\(/g` da baseline. Método cujo parâmetro não resolve a
+  uma interface declarada no mesmo arquivo, ou cuja forma de parâmetro não
+  é reconhecida, é resíduo que derruba a leitura nomeando arquivo e linha
+  — provado pelos dois testes que fabricam cada uma dessas formas.
+- **FATO atual (a categoria de texto próprio do produto liga o composto ao
+  conjunto verificado, e separa o que o modelo decide):**
+  `SendTextSiteCategory` troca `product_own_text_to_customer` por duas
+  categorias: `` `composed_by_${compositor}` `` (o `text:` é variável
+  local atribuída de `const <nome> = <compositor>(` **no mesmo bloco de
+  função** do sítio — variável de outro bloco do mesmo arquivo não conta e
+  vira resíduo, provado por teste) e `assistant_decision_text`
+  (`state.response.text`, a decisão do assistente). Sobre a árvore real, a
+  contagem de `discoverSendTextSites` — mesmos 7 sítios da baseline,
+  resíduo zero — passa a `{port_declaration: 1, adapter_implementation: 1,
+  composed_by_composeNotificationText: 1, assistant_decision_text: 1,
+  text_in_transit_named_origin: 2, person_typed_text: 1}`: o sítio de
+  `NotificationDeliveryService.ts:318` vira
+  `composed_by_composeNotificationText`, o de `message-graph.ts:1207` vira
+  `assistant_decision_text`. Um teste confirma o elo: o único sítio
+  `composed_by_*` da árvore é `composed_by_composeNotificationText`, e
+  todo texto de `NOTIFICATION_MESSAGE_TEXTS` (já existente desde o
+  Goal039) está em `VERIFIED_CLIENT_TEXTS`. `assistant_decision_text`
+  continua fora de `VERIFIED_CLIENT_TEXTS` — fronteira de D-050 (item 2):
+  o que o modelo fala não é demonstrável por um dublê roteirizado.
+- **FATO atual (a cadeia de trânsito é seguida do sítio até o chamador,
+  dentro de `apps/ai-orchestrator/src`):** `discoverSendTextTransitChains`
+  toma cada sítio `text_in_transit_named_origin`, resolve o nome da função
+  que o contém (a "função de trânsito") e procura, em toda a árvore lida,
+  cada chamada real dessa função, classificando o texto que o chamador
+  fornece pelo mesmo vocabulário dos sítios. Confirmado sobre a árvore
+  real, **2** cadeias, uma para cada sítio em trânsito, cada uma com
+  exatamente **1** chamador: `ActivationTestReplySender.ts:120` (origem
+  `input`) → função de trânsito `sendAiReply` → chamador
+  `ActivationTestAiDriver.ts:228`, função `deliverReply`, categoria
+  `text_in_transit_named_origin`, origem `reply`; e
+  `PlatformWhatsAppSender.ts:98` (origem `message`) → função de trânsito
+  `sendToTenantUnderTest` → chamador `ActivationTestService.ts:852`,
+  função `sendAsClient`, categoria `text_in_transit_named_origin`, origem
+  `text`. Toda ocorrência do nome da função de trânsito que não é chamada
+  real sai nomeada em `excludedOccurrences`, com o motivo — a assinatura
+  da porta e a própria implementação que contém o sítio
+  (`port_declaration_or_implementation`, em
+  `ActivationTestReplySender.ts:104` e `:60`, e em
+  `PlatformWhatsAppSender.ts:79`), e anotação de tipo
+  (`type_or_string_reference`, `Pick<Sender, "sendToTenantUnderTest">` em
+  `ActivationTestService.ts:90`) — nenhuma delas vira resíduo. Helper com
+  parâmetro `text`, log e comentário não viram candidato: o reconhecimento
+  é ancorado no nome da função de trânsito, não na presença de um
+  parâmetro chamado `text`. A suíte de isolamento de credencial
+  (`tests/security/platform-credential-isolation.test.ts`) chama
+  `sendAiReply` de verdade, com texto literal — ela fica fora da cadeia só
+  porque a raiz lida é `apps/ai-orchestrator/src`, onde nenhuma suíte
+  mora, não porque a chamada tivesse alguma marca especial: se a mesma
+  fonte fosse classificada como se estivesse dentro da raiz, viraria
+  resíduo (provado por teste).
+- **LIMITE:** a cadeia de trânsito para em **um** elo — o chamador direto
+  da função de trânsito. Se esse chamador em si repassa o texto de um
+  parâmetro seu (como os dois chamadores encontrados, ambos
+  `text_in_transit_named_origin`), quem chama esse chamador não é
+  seguido; a cadeia de trânsito não recursa.
+- **LIMITE:** este delta não fecha **M4**, não afirma fidelidade visual à
+  referência aprovada e não liga a verificação de resposta em produção —
+  nenhum desses três estados muda por este diff.
+- **LIMITE:** texto emitido pelo modelo (`assistant_decision_text`)
+  continua fora do conjunto verificado por execução — D-050 (item 2), não
+  revisitado por este Goal.
+- **LIMITE:** nenhum resíduo apareceu em código de produção nesta rodada —
+  `apps/frontend/src/`, `apps/bff/src/` e `apps/ai-orchestrator/src/`
+  continuam intocados, confirmado por diff. Se algum resíduo real
+  aparecesse em código de produção, viraria achado a partir de **A-24**;
+  não apareceu.
+- **LIMITE:** este delta descreve o diff040 (WU-01 a WU-05 da rodada 1,
+  com os cinco controles negativos obrigatórios executados e revertidos
+  pela WU-05, mais a correção da rodada 3) sobre a baseline aceita
+  `502a70c46be73cb50cab734fa76046a54d5af6be` (fechamento do Goal039),
+  decidido em [D-056](DECISIONS.md), sem commit e sem deploy. Os dois
+  arquivos de código tocados, ambos já existentes, são
+  `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts` e
+  `apps/ai-orchestrator/tests/support/send-text-sites.ts` — confirmado por
+  `git status --porcelain` sobre a árvore final, depois da reversão dos
+  controles negativos: fora deles só aparecem os quatro documentos de
+  migração desta rodada, e nenhum arquivo de `apps/**/src/`. `npx vitest
+  run tests/assistant/assistant.service.test.ts` (em
+  `apps/ai-orchestrator`): **55** testes, 0 falhas — os 37 já existentes
+  do Goal039, os 12 novos deste diff e os 6 controles da rodada 3 (5 de
+  forma de reconhecimento e 1 de método de porta em forma genérica). `npx vitest run` completo de
+  `apps/ai-orchestrator`: **779** testes passando, 88 pulados, sem
+  regressão. `npm run validate:core`: `PASSED`, 15 passos verdes e 2
+  pulados declarados. `npm run test:gate`: 226 testes, 0 falhas.

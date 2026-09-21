@@ -22,7 +22,11 @@ import { DEFAULT_BUSINESS_CONTEXT } from "../../src/modules/tenant-config/busine
 import { classifyNotificationTextSites } from "../support/notification-message-sites.js";
 import {
   classifySendTextSites,
+  classifyTransitCallersInSource,
   discoverSendTextSites,
+  discoverSendTextTransitChains,
+  parseWhatsAppProviderMethods,
+  resolveSendTextCarrierMethodNames,
 } from "../support/send-text-sites.js";
 import { VOCABULARIO_DE_ESPERA } from "../support/vocabulario-de-espera.js";
 
@@ -530,6 +534,14 @@ const notificationMessageSourcePath = join(
 const activationTestServiceSourcePath = join(
   dirname(fileURLToPath(import.meta.url)),
   "../../src/modules/activation-test/ActivationTestService.ts",
+);
+const platformCredentialIsolationTestPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../security/platform-credential-isolation.test.ts",
+);
+const whatsAppProviderPortSourcePath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../src/modules/channel/ports/WhatsAppProvider.ts",
 );
 
 /** Número de sítios `messages: [...]` que o arquivo tem — piso para o fechamento. */
@@ -1208,8 +1220,11 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
       adapter_implementation: sites.filter(
         (s) => s.category === "adapter_implementation",
       ).length,
-      product_own_text_to_customer: sites.filter(
-        (s) => s.category === "product_own_text_to_customer",
+      composed_by_named_module: sites.filter((s) =>
+        s.category.startsWith("composed_by_"),
+      ).length,
+      assistant_decision_text: sites.filter(
+        (s) => s.category === "assistant_decision_text",
       ).length,
       text_in_transit_named_origin: sites.filter(
         (s) => s.category === "text_in_transit_named_origin",
@@ -1221,7 +1236,8 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
     expect(counts).toEqual({
       port_declaration: 1,
       adapter_implementation: 1,
-      product_own_text_to_customer: 2,
+      composed_by_named_module: 1,
+      assistant_decision_text: 1,
       text_in_transit_named_origin: 2,
       person_typed_text: 1,
     });
@@ -1251,13 +1267,13 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
         {
           file: "modules/graph/message-graph.ts",
           line: 1207,
-          category: "product_own_text_to_customer",
+          category: "assistant_decision_text",
           origin: undefined,
         },
         {
           file: "modules/reminders/NotificationDeliveryService.ts",
           line: 318,
-          category: "product_own_text_to_customer",
+          category: "composed_by_composeNotificationText",
           origin: undefined,
         },
         {
@@ -1344,7 +1360,7 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
       {
         filePath: "<fixture>",
         line: 1,
-        category: "product_own_text_to_customer",
+        category: "assistant_decision_text",
       },
     ]);
     const fixtureComposta = [
@@ -1355,9 +1371,498 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
       {
         filePath: "<fixture>",
         line: 2,
-        category: "product_own_text_to_customer",
+        category: "composed_by_composeNotificationText",
       },
     ]);
+  });
+
+  it("uma variável local atribuída num bloco de função diferente do sítio não herda a categoria de compositor e vira resíduo, nomeando arquivo e linha", () => {
+    const fixtureComResiduo = [
+      "function outraFuncao() {",
+      "  const text = origemDiferente();",
+      "}",
+      "",
+      "function enviaTexto(provider: WhatsAppProvider) {",
+      '  const sent = provider.sendText({ to: "1", text });',
+      "}",
+    ].join("\n");
+    expect(() =>
+      classifySendTextSites(fixtureComResiduo, "<fixture-residuo>"),
+    ).toThrowError(
+      /<fixture-residuo>:6: chamada sendText\(\.\.\.\) com forma de "text:" não reconhecida/,
+    );
+  });
+
+  it("a categoria que nomeia o compositor liga a sítio real a texto verificado: `NotificationDeliveryService.ts` compõe com composeNotificationText, e o conjunto que ele produz está em VERIFIED_CLIENT_TEXTS", () => {
+    const sites = discoverSendTextSites(aiOrchestratorSrcPath);
+    const composedSites = sites.filter((site) =>
+      site.category.startsWith("composed_by_"),
+    );
+    expect(composedSites).toHaveLength(1);
+    expect(composedSites[0].category).toBe(
+      "composed_by_composeNotificationText",
+    );
+    expect(NOTIFICATION_MESSAGE_TEXTS.size).toBeGreaterThan(0);
+    for (const text of NOTIFICATION_MESSAGE_TEXTS) {
+      expect(VERIFIED_CLIENT_TEXTS).toContain(text);
+    }
+  });
+
+  it("controle negativo: chamada de identificador solto (`sendText({...})` sem receptor) é sítio classificado, não declaração de porta", () => {
+    const fixture = [
+      "export class SenderSemReceptor {",
+      "  async entregar(reply: { text: string }) {",
+      '    sendText({ to: "1", text: reply.text });',
+      "  }",
+      "}",
+    ].join("\n");
+    // Enquanto o reconhecimento exigia `.` antes do nome, esta chamada caía no
+    // ramo de declaração e saía como `port_declaration`: um emissor real
+    // registrado como assinatura inofensiva, sem resíduo e sem alarme.
+    expect(classifySendTextSites(fixture, "<fixture-solto>")).toEqual([
+      {
+        filePath: "<fixture-solto>",
+        line: 3,
+        category: "text_in_transit_named_origin",
+        origin: "reply",
+      },
+    ]);
+  });
+
+  it("controle negativo: chamada de identificador solto com forma de `text:` não reconhecida vira resíduo, nomeando arquivo e linha", () => {
+    const fixture = [
+      "export class SenderSemReceptor {",
+      "  async entregar() {",
+      '    sendText({ to: "1", text: compoeTextoNovo() });',
+      "  }",
+      "}",
+    ].join("\n");
+    expect(() => classifySendTextSites(fixture, "<fixture-solto>")).toThrowError(
+      /<fixture-solto>:3: chamada sendText\(\.\.\.\) com forma de "text:" não reconhecida/,
+    );
+  });
+
+  it("controle negativo: a declaração da porta e a implementação do adapter continuam fora da categoria de chamada", () => {
+    const fixture = [
+      "export interface WhatsAppProvider {",
+      "  sendText(input: SendTextInput): Promise<SendTextResult>;",
+      "}",
+      "export class EvolutionAdapter implements WhatsAppProvider {",
+      "  async sendText(input: SendTextInput): Promise<SendTextResult> {",
+      "    return this.client.post(input);",
+      "  }",
+      "}",
+    ].join("\n");
+    expect(classifySendTextSites(fixture, "<fixture-declaracao>")).toEqual([
+      {
+        filePath: "<fixture-declaracao>",
+        line: 2,
+        category: "port_declaration",
+      },
+      {
+        filePath: "<fixture-declaracao>",
+        line: 5,
+        category: "adapter_implementation",
+      },
+    ]);
+  });
+});
+
+describe("métodos da porta WhatsAppProvider são enumerados com categoria e motivo, computados da declaração (Goal040 / WU-01)", () => {
+  it("classifica sendText como portador de texto e downloadMedia como não portador, cada um com motivo escrito", () => {
+    const source = readFileSync(whatsAppProviderPortSourcePath, "utf8");
+    const methods = parseWhatsAppProviderMethods(
+      source,
+      whatsAppProviderPortSourcePath,
+    );
+    expect(methods).toHaveLength(2);
+    const byName = Object.fromEntries(methods.map((m) => [m.name, m]));
+    expect(byName.sendText.isCarrier).toBe(true);
+    expect(byName.sendText.reason).toBe(
+      'parâmetro "SendTextInput" declara text: string — carrega texto ao destinatário do canal',
+    );
+    expect(byName.downloadMedia.isCarrier).toBe(false);
+    expect(byName.downloadMedia.reason).toBe(
+      'parâmetro "DownloadMediaInput" não declara text: string — não carrega texto ao destinatário do canal',
+    );
+    expect(resolveSendTextCarrierMethodNames()).toEqual(["sendText"]);
+  });
+
+  it("método cujo parâmetro resolve a um tipo não declarado como interface no arquivo vira resíduo, nomeando arquivo e linha", () => {
+    const fixtureSemInterface = [
+      "export interface WhatsAppProvider {",
+      "  sendText(input: SendTextInput): Promise<void>;",
+      "}",
+    ].join("\n");
+    expect(() =>
+      parseWhatsAppProviderMethods(fixtureSemInterface, "<fixture-residuo>"),
+    ).toThrowError(
+      /<fixture-residuo>:2: método "sendText" tem parâmetro de tipo "SendTextInput", não declarado como interface neste arquivo/,
+    );
+  });
+
+  it("método cujo parâmetro não tem forma de tipo nomeado reconhecível vira resíduo, nomeando arquivo e linha", () => {
+    const fixtureSemForma = [
+      "export interface WhatsAppProvider {",
+      "  sendText(input: { text: string }): Promise<void>;",
+      "}",
+    ].join("\n");
+    expect(() =>
+      parseWhatsAppProviderMethods(fixtureSemForma, "<fixture-residuo>"),
+    ).toThrowError(
+      /<fixture-residuo>:2: método "sendText" declarado com forma de parâmetro não reconhecida na porta WhatsAppProvider/,
+    );
+  });
+
+  it("controle negativo: método de porta em forma genérica (`sendTemplate<T>(input: SendTemplateInput<T>)`) vira resíduo, nomeando arquivo e linha — não sai da vigilância em silêncio", () => {
+    const fixtureGenerico = [
+      "export interface WhatsAppProvider {",
+      "  sendText(input: SendTextInput): Promise<void>;",
+      "  sendTemplate<T>(input: SendTemplateInput<T>): Promise<void>;",
+      "}",
+      "export interface SendTextInput {",
+      "  text: string;",
+      "}",
+      "export interface SendTemplateInput<T> {",
+      "  text: string;",
+      "  variables: T;",
+      "}",
+    ].join("\n");
+    // O método genérico carrega `text: string` e emitiria texto pelo canal. A
+    // leitura não reconhece a forma `nome<T>(` e, por isso, derruba a suíte
+    // nomeando arquivo e linha — nunca devolve o método como não-portador.
+    expect(() =>
+      parseWhatsAppProviderMethods(fixtureGenerico, "<fixture-generico>"),
+    ).toThrowError(
+      /<fixture-generico>:3: membro "sendTemplate<T>[\s\S]*" declarado com forma não reconhecida na porta WhatsAppProvider/,
+    );
+    // O mesmo método sem parâmetros de tipo é classificado normalmente: o que
+    // derruba é a forma genérica, não a existência de um terceiro método.
+    const fixtureSimples = fixtureGenerico
+      .replace(
+        "sendTemplate<T>(input: SendTemplateInput<T>)",
+        "sendTemplate(input: SendTemplateInput)",
+      )
+      .replace("interface SendTemplateInput<T>", "interface SendTemplateInput");
+    const methods = parseWhatsAppProviderMethods(
+      fixtureSimples,
+      "<fixture-simples>",
+    );
+    expect(methods.map((method) => [method.name, method.isCarrier])).toEqual([
+      ["sendText", true],
+      ["sendTemplate", true],
+    ]);
+  });
+});
+
+describe("a cadeia de trânsito é seguida até o chamador, elo a elo (Goal040 / WU-03)", () => {
+  /** Caminho do sítio relativo a `apps/ai-orchestrator/src`, no formato `arquivo:linha`. */
+  const at = (filePath: string, line: number): string =>
+    `${filePath.replace(/\\/g, "/").split("/ai-orchestrator/src/")[1]}:${line}`;
+
+  it("segue as duas cadeias sobre apps/ai-orchestrator/src e computa exatamente um chamador em cada, com resíduo zero", () => {
+    const chains = discoverSendTextTransitChains(
+      aiOrchestratorSrcPath,
+      resolveVerifiedComposers(),
+    );
+    const followed = chains
+      .map((chain) => ({
+        site: at(chain.site.filePath, chain.site.line),
+        siteOrigin: chain.site.origin,
+        transitFunction: chain.transitFunction,
+        callers: chain.callers.map((caller) => ({
+          at: at(caller.filePath, caller.line),
+          callerFunction: caller.callerFunction,
+          category: caller.category,
+          origin: caller.origin,
+        })),
+      }))
+      .sort((a, b) => a.site.localeCompare(b.site));
+    expect(followed).toEqual([
+      {
+        site: "modules/activation-test/ActivationTestReplySender.ts:120",
+        siteOrigin: "input",
+        transitFunction: "sendAiReply",
+        callers: [
+          {
+            at: "modules/activation-test/ActivationTestAiDriver.ts:228",
+            callerFunction: "deliverReply",
+            category: "text_in_transit_named_origin",
+            origin: "reply",
+          },
+        ],
+      },
+      {
+        site: "modules/channel/platform/PlatformWhatsAppSender.ts:98",
+        siteOrigin: "message",
+        transitFunction: "sendToTenantUnderTest",
+        callers: [
+          {
+            at: "modules/activation-test/ActivationTestService.ts:852",
+            callerFunction: "sendAsClient",
+            category: "text_in_transit_named_origin",
+            origin: "text",
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("nomeia cada ocorrência excluída — assinatura da porta, implementação que contém o sítio e anotação de tipo `Pick<..., \"sendToTenantUnderTest\">` — e nenhuma delas virou resíduo", () => {
+    const chains = discoverSendTextTransitChains(
+      aiOrchestratorSrcPath,
+      resolveVerifiedComposers(),
+    );
+    const excluded = Object.fromEntries(
+      chains.map((chain) => [
+        chain.transitFunction,
+        chain.excludedOccurrences
+          .map((occurrence) => ({
+            at: at(occurrence.filePath, occurrence.line),
+            reason: occurrence.reason,
+          }))
+          .sort((a, b) => a.at.localeCompare(b.at)),
+      ]),
+    );
+    expect(excluded).toEqual({
+      sendAiReply: [
+        {
+          at: "modules/activation-test/ActivationTestReplySender.ts:104",
+          reason: "port_declaration_or_implementation",
+        },
+        {
+          at: "modules/activation-test/ActivationTestReplySender.ts:60",
+          reason: "port_declaration_or_implementation",
+        },
+      ],
+      sendToTenantUnderTest: [
+        {
+          at: "modules/activation-test/ActivationTestService.ts:90",
+          reason: "type_or_string_reference",
+        },
+        {
+          at: "modules/channel/platform/PlatformWhatsAppSender.ts:79",
+          reason: "port_declaration_or_implementation",
+        },
+      ],
+    });
+  });
+
+  it("helper com parâmetro `text`, log de texto, comentário e anotação de tipo não viram chamador nem resíduo — o reconhecimento é ancorado no nome da função de trânsito", () => {
+    const fixture = [
+      '// this.replySender.sendAiReply({ to: "1", text: "isto é comentário" });',
+      "/* menção a sendAiReply(algo) dentro de bloco de comentário */",
+      "type Port = { sendAiReply(input: { text: string }): Promise<void> };",
+      'let visto: Awaited<ReturnType<Port["sendAiReply"]>>;',
+      "function formatarTexto(text: string) {",
+      "  return text.trim();",
+      "}",
+      "function registrarTexto(logger: DiagnosticLogger, message: { text: string }) {",
+      '  logger.info({ text: message.text }, "nada sai do canal daqui");',
+      "}",
+    ].join("\n");
+    const scanned = classifyTransitCallersInSource(
+      fixture,
+      "<fixture>",
+      "sendAiReply",
+      resolveVerifiedComposers(),
+    );
+    expect(scanned.callers).toEqual([]);
+    expect(scanned.excluded).toEqual([
+      {
+        filePath: "<fixture>",
+        line: 3,
+        transitFunction: "sendAiReply",
+        reason: "port_declaration_or_implementation",
+      },
+      {
+        filePath: "<fixture>",
+        line: 4,
+        transitFunction: "sendAiReply",
+        reason: "type_or_string_reference",
+      },
+    ]);
+  });
+
+  it("chamada de teste não vira chamador nem resíduo: o critério que a exclui é a raiz de leitura, e a suíte de isolamento de credencial chama `sendAiReply` de verdade", () => {
+    const chains = discoverSendTextTransitChains(
+      aiOrchestratorSrcPath,
+      resolveVerifiedComposers(),
+    );
+    for (const chain of chains) {
+      for (const caller of chain.callers) {
+        expect(caller.filePath.startsWith(aiOrchestratorSrcPath)).toBe(true);
+      }
+    }
+    // A suíte chama `sendAiReply` com texto literal. Se a leitura incluísse
+    // `tests/`, essa chamada viraria resíduo — ela fica fora porque a raiz
+    // lida é `apps/ai-orchestrator/src`, onde nenhuma suíte mora.
+    const suiteSource = readFileSync(
+      platformCredentialIsolationTestPath,
+      "utf8",
+    );
+    expect(() =>
+      classifyTransitCallersInSource(
+        suiteSource,
+        "<suíte>",
+        "sendAiReply",
+        resolveVerifiedComposers(),
+      ),
+    ).toThrowError(/<suíte>:\d+: chamador de sendAiReply\(\.\.\.\) sem categoria/);
+  });
+
+  it("chamador que compõe o texto na hora com compositor ausente de VERIFIED_CLIENT_TEXTS é resíduo, com arquivo e linha; com compositor verificado, a categoria nomeia o compositor", () => {
+    const fixture = [
+      "class NovoDriver {",
+      "  async entregar(reply: { conversationId: string }) {",
+      "    const text = compoeTextoNovo(reply);",
+      '    return this.replySender.sendAiReply({ to: "1", text });',
+      "  }",
+      "}",
+    ].join("\n");
+    expect(() =>
+      classifyTransitCallersInSource(
+        fixture,
+        "<fixture-residuo>",
+        "sendAiReply",
+        resolveVerifiedComposers(),
+      ),
+    ).toThrowError(
+      /<fixture-residuo>:4: chamador de sendAiReply\(\.\.\.\) sem categoria — compõe o texto na hora com "compoeTextoNovo"/,
+    );
+    const comCompositorVerificado = fixture.replace(
+      "compoeTextoNovo",
+      "composeNotificationText",
+    );
+    expect(
+      classifyTransitCallersInSource(
+        comCompositorVerificado,
+        "<fixture>",
+        "sendAiReply",
+        resolveVerifiedComposers(),
+      ).callers,
+    ).toEqual([
+      {
+        filePath: "<fixture>",
+        line: 4,
+        callerFunction: "entregar",
+        category: "composed_by_composeNotificationText",
+        composer: "composeNotificationText",
+      },
+    ]);
+  });
+
+  it("chamador que entrega texto de categoria já declarada continua reconhecido pelo mesmo vocabulário dos sítios", () => {
+    const fixture = [
+      "class NovoDriver {",
+      "  async daDecisao(state: { response: { text: string } }) {",
+      '    return this.replySender.sendAiReply({ to: "1", text: state.response.text });',
+      "  }",
+      "  async daPessoa(body: { text: string }) {",
+      '    return this.replySender.sendAiReply({ to: "1", text: body.text });',
+      "  }",
+      "}",
+    ].join("\n");
+    const scanned = classifyTransitCallersInSource(
+      fixture,
+      "<fixture>",
+      "sendAiReply",
+      resolveVerifiedComposers(),
+    );
+    expect(scanned.callers).toEqual([
+      {
+        filePath: "<fixture>",
+        line: 3,
+        callerFunction: "daDecisao",
+        category: "assistant_decision_text",
+      },
+      {
+        filePath: "<fixture>",
+        line: 6,
+        callerFunction: "daPessoa",
+        category: "person_typed_text",
+      },
+    ]);
+  });
+
+  it("chamador sem categoria é resíduo, com arquivo e linha", () => {
+    const fixture = [
+      "class NovoDriver {",
+      "  async entregar() {",
+      '    return this.replySender.sendAiReply({ to: "1", text: "literal nunca visto antes" });',
+      "  }",
+      "}",
+    ].join("\n");
+    expect(() =>
+      classifyTransitCallersInSource(
+        fixture,
+        "<fixture-residuo>",
+        "sendAiReply",
+        resolveVerifiedComposers(),
+      ),
+    ).toThrowError(
+      /<fixture-residuo>:3: chamador de sendAiReply\(\.\.\.\) sem categoria/,
+    );
+  });
+
+  it("controle negativo: chamada de identificador solto da função de trânsito é chamador classificado, e a assinatura acima dela continua excluída", () => {
+    const fixture = [
+      "export interface ActivationTestReplyPort {",
+      "  sendAiReply(",
+      "    input: ActivationTestReplyInput,",
+      "  ): Promise<ActivationTestReplyDelivery>;",
+      "}",
+      "",
+      "export async function entregarSemReceptor(reply: { text: string }) {",
+      '  sendAiReply({ to: "1", text: reply.text });',
+      "}",
+    ].join("\n");
+    // Com o reconhecimento anterior, a chamada da linha 8 era excluída como
+    // `port_declaration_or_implementation` — um elo da cadeia desaparecia sem
+    // virar resíduo. O que separa as duas ocorrências é o que vem depois do
+    // `)`: `:` na assinatura, `;` na chamada.
+    const scanned = classifyTransitCallersInSource(
+      fixture,
+      "<fixture-solto>",
+      "sendAiReply",
+      resolveVerifiedComposers(),
+    );
+    expect(scanned.callers).toEqual([
+      {
+        filePath: "<fixture-solto>",
+        line: 8,
+        callerFunction: "entregarSemReceptor",
+        category: "text_in_transit_named_origin",
+        origin: "reply",
+      },
+    ]);
+    expect(scanned.excluded).toEqual([
+      {
+        filePath: "<fixture-solto>",
+        line: 2,
+        transitFunction: "sendAiReply",
+        reason: "port_declaration_or_implementation",
+      },
+    ]);
+  });
+
+  it("controle negativo: chamada de identificador solto que compõe o texto na hora com compositor não verificado vira resíduo, com arquivo e linha", () => {
+    const fixture = [
+      "export async function entregarComposto(reply: { conversationId: string }) {",
+      "  const text = compoeTextoNovo(reply);",
+      '  sendAiReply({ to: "1", text });',
+      "}",
+    ].join("\n");
+    expect(() =>
+      classifyTransitCallersInSource(
+        fixture,
+        "<fixture-solto>",
+        "sendAiReply",
+        resolveVerifiedComposers(),
+      ),
+    ).toThrowError(
+      /<fixture-solto>:3: chamador de sendAiReply\(\.\.\.\) sem categoria — compõe o texto na hora com "compoeTextoNovo"/,
+    );
   });
 });
 
@@ -1440,6 +1945,32 @@ const VERIFIED_CLIENT_TEXTS = [
   ...PRODUCT_OWN_TEXTS,
   ...NOTIFICATION_MESSAGE_TEXTS,
 ];
+
+/**
+ * Compositores cujo texto produzido está inteiro em VERIFIED_CLIENT_TEXTS.
+ *
+ * O nome de cada compositor vem dos sítios `composed_by_*` descobertos na
+ * árvore, não de uma lista; o conjunto de textos que ele produz vem de
+ * executá-lo. Compositor que aparecer em um sítio novo sem texto conhecido
+ * aqui fica de fora — e um chamador que compuser com ele vira resíduo
+ * (Goal040 / WU-03).
+ */
+function resolveVerifiedComposers(): Set<string> {
+  const producedByComposer = new Map<string, ReadonlySet<string>>([
+    ["composeNotificationText", NOTIFICATION_MESSAGE_TEXTS],
+  ]);
+  const verified = new Set<string>();
+  for (const site of discoverSendTextSites(aiOrchestratorSrcPath)) {
+    if (!site.category.startsWith("composed_by_")) continue;
+    const composer = site.category.slice("composed_by_".length);
+    const produced = producedByComposer.get(composer);
+    if (!produced || produced.size === 0) continue;
+    if ([...produced].every((text) => VERIFIED_CLIENT_TEXTS.includes(text))) {
+      verified.add(composer);
+    }
+  }
+  return verified;
+}
 
 /** Argumento (4º) de `this.sendAsClient(run, step, attempt, <texto>, ...)` no passo `stepName` de ActivationTestService.ts. */
 function extractSendAsClientText(source: string, stepName: string): string {

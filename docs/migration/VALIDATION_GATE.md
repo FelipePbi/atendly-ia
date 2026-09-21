@@ -516,6 +516,87 @@ real, qualquer que seja o dia. **O que não muda:** as cinco medidas do gate
 renderizado, as sete telas, a régua (`apps/frontend/e2e/measure.ts`) e o
 controle negativo — nenhum deles foi tocado por este diff.
 
+## Checks estáticos novos do Goal037
+
+Um check novo em `audit:static` (`scripts/final-production-audit.mjs`),
+função pura exportada e provado nos dois sentidos por
+`scripts/tests/final-production-audit-legacy-regression.test.mjs`. Mesmo
+padrão dos checks anteriores: leitura de texto com expressão regular, sem
+abrir banco, subir serviço ou executar o produto.
+
+| Check | O que decide | O que não decide |
+| --- | --- | --- |
+| `frontend_v1_route_schema_calls_use_literal_patterns` (`findNonLiteralFrontendV1RouteSchemaCalls`) | Sobre `apps/frontend/src/data/services`: falha se `routeSchema<T>("MÉTODO", ...)` declarar o segundo argumento como um padrão `/v1/...` entre crases, em vez de path literal entre aspas. É a forma exata que deixava `BffConversationService.ts` (`takeover`, `release`, `resolve`, chamadas por um `mutateState` único que montava o path por template literal) invisível ao lado do frontend de `public_api_route_coverage` — o mesmo limite que [FINAL_AUDIT §13](FINAL_AUDIT.md#13-fechamento-de-a-20-a-a-23--goal036-2026-09-20) e [D-052](DECISIONS.md#d-052--rigidez-do-contrato-mora-no-produtor-campo-declarado-é-opcional-quando-o-produtor-pode-omiti-lo-e-rota-v1-exige-path-literal-propostas-no-goal036) tinham registrado sem virar achado | Não decide se a rota tem entrada na tabela do pacote nem se o BFF a registra com path literal — isso continua sendo `bff_v1_routes_use_literal_paths` (Goal036) e `public_api_route_coverage` (Goal035). Só cobre chamada dentro de `apps/frontend/src/data/services` para um padrão que comece com `/v1/`; path construído fora desse diretório, ou para uma rota que não seja `/v1`, não aciona a regra |
+
+Com as três rotas de `BffConversationService.ts` agora chamadas com path
+literal, elas deixam de aparecer no `details` de
+`public_api_route_coverage` como "sem chamador no frontend" — o detalhe que
+[FINAL_AUDIT §13](FINAL_AUDIT.md#13-fechamento-de-a-20-a-a-23--goal036-2026-09-20)
+tinha registrado como limite de ferramenta, nunca achado, some junto com a
+causa que o produzia.
+
+## Invariante de texto ampliada do Goal037
+
+`PRODUCT_OWN_TEXTS`, o conjunto fechado dos textos que o produto emite por
+conta própria sem passar pelo modelo (D-050, Goal034), cobria só
+`apps/ai-orchestrator/src/modules/assistant/assistant.service.ts`. O teste de
+fechamento varria apenas literais dentro de `messages: [...]` desse arquivo —
+uma observação não bloqueante do [review034](reviews/034-review.md) já
+registrava que um texto de cliente emitido por outro módulo, de outra forma
+(`text: identificador`), escaparia do fechamento em silêncio.
+
+| O que decide | O que não decide |
+| --- | --- |
+| Os seis textos de cliente que `apps/ai-orchestrator/src/modules/graph/message-graph.ts` despacha por `text:` — direto (`unsupportedMessageReply`, `processingErrorReply`, `audioNotUnderstoodReply`, `imageReceivedReply`, `documentReceivedReply`, `videoReceivedReply`) ou por função que só retorna uma dessas constantes (`unsupportedReplyFor`) — pertencem a `PRODUCT_OWN_TEXTS`, com o mesmo teste permanente que reprova vocabulário de espera nesse conjunto e o mesmo fechamento que acusa texto novo ausente | `imageHandoffSummary` fica fora, de propósito: é o resumo gravado no `Handoff`, nunca o texto que a cliente recebe. Não cobre texto emitido pelo **modelo** — a fronteira que D-050 já tinha declarado entre garantia de código (absoluta, testada) e orientação de prompt (não verificável por eval determinístico) não muda. Não cobre um terceiro módulo que venha a emitir texto de cliente fora destes dois: o extrator novo lê identificador de constante de módulo e corpo de função que só retorna identificador — uma forma de despacho diferente dessas duas continuaria escapando, como o review034 já tinha avisado para a primeira |
+
+`VOCABULARIO_DE_ESPERA` — a mesma expressão regular, antes duplicada em
+`tests/assistant/assistant.service.test.ts` e em
+`tests/evals/waiting-message-vocabulary.eval.test.ts` — vira uma definição
+única em `tests/support/vocabulario-de-espera.ts`, importada pelas duas. As
+duas cópias podiam divergir sem que nada acusasse; a definição única não
+muda o que o vocabulário cobre, só onde ele mora.
+
+## Declaração de retentativa do Goal037
+
+`scripts/goal033-authenticated-ui-rehearsal.mjs` lê
+`e2e-results/authenticated/results.json` — o relatório JSON que
+`playwright.authenticated.config.ts` já escreve — depois que o gate
+autenticado termina, e extrai todo teste marcado `status: "flaky"`
+(`extractRetriedTests`): falhou numa tentativa, passou numa seguinte. As 35
+medidas de `authenticated-matrix.spec.ts` compartilham o mesmo título de
+teste (`"measured, logged in"`), um por `test.describe(route.name, ...)`;
+`extractRetriedTests` inclui a cadeia de `suites` ancestrais (o nome da rota)
+no título retornado, então duas retentativas do mesmo título em rotas
+diferentes continuam distinguíveis no log.
+
+| O que decide | O que não decide |
+| --- | --- |
+| Projeto e título de cada teste retentado aparecem no log do ensaio, sempre — inclusive "0" quando nenhum teste precisou de retentativa. `readGateReport` recusa com erro nomeado (`AuthenticatedUiRehearsalError`) quando o relatório está ausente ou não é JSON válido: um leitor que se cala diante de relatório quebrado reintroduziria a retentativa invisível que este delta fecha | **Não reprova o gate.** O processo continua saindo `0` quando toda retentativa passou na segunda tentativa — a mesma semântica de antes, `retries: 1, 2` do Playwright continua ativo e nenhum teto de retentativa mudou. Declarar a retentativa é diagnóstico, não critério de aceite: um `flaky` visível no log ainda é um `expected` no veredito do gate |
+
+A investigação desta rodada também mede a causa do `flaky` já registrado em
+[FINAL_AUDIT §10](FINAL_AUDIT.md#10-fechamento-de-a-02--goal033-2026-09-20)
+como "timing de execução". §10 atribuiu esse `flaky` a `/agenda`,
+`desktop-1440`, por leitura manual da estrutura de `suites` daquela execução
+— não pelo `extractRetriedTests` desta rodada, que na sua primeira versão
+colapsava todo título no mesmo `"measured, logged in"` e não teria conseguido
+confirmar qual rota retentou. A causa medida agora não é uma propriedade da
+rota: o log de requisições do BFF mostra as 35 medidas do gate autenticado
+perto do teto de `@fastify/rate-limit` (`max: 300, timeWindow: "1 minute"`,
+por IP, sem allow list) — 285 a 294 requisições numa janela de 60s, 95% a
+98% do orçamento. Cruzá-lo faz `GET /v1/auth/session` ou a leitura de lista
+da própria tela devolver `429`, que a interface trata como erro de sessão ou
+de tela — daí a falha na primeira tentativa e o passe na segunda, depois que
+a janela vira; qual das 35 medidas cruza o teto depende de quando ela cai na
+janela de execução, não da rota que mede. `apps/frontend/e2e/authenticated-matrix.spec.ts`
+passa a ler `x-ratelimit-remaining`/`x-ratelimit-reset` das respostas que a
+página já recebe e espera a janela virar antes de qualquer teste — de
+qualquer rota — que começaria com menos de 30 requisições de orçamento
+restante. **O que isso não decide:** o limite do produto não muda —
+`@fastify/rate-limit` continua `max: 300` por minuto, por IP, decisão do
+produto e fora do escopo deste delta; esperar o orçamento evita que o
+**gate** meça o próprio throttle por engano, não afrouxa nenhuma medida nem
+pula nenhuma asserção.
+
 ## Ordem de corte do Goal003
 
 Duas transições deste Goal têm consumidor e produtor em serviços diferentes.

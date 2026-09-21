@@ -417,6 +417,17 @@ export async function main() {
         : "every /v1 route is registered with a literal string path"),
   );
 
+  const nonLiteralFrontendV1RouteSchemaCallFiles =
+    findNonLiteralFrontendV1RouteSchemaCalls(frontendServiceSources);
+  check(
+    "frontend_v1_route_schema_calls_use_literal_patterns",
+    nonLiteralFrontendV1RouteSchemaCallFiles.length === 0,
+    `read ${frontendServiceSources.length} files under apps/frontend/src/data/services for routeSchema() calls. ` +
+      (nonLiteralFrontendV1RouteSchemaCallFiles.length
+        ? `routeSchema() called with a non-literal /v1 pattern: ${nonLiteralFrontendV1RouteSchemaCallFiles.join(", ")}`
+        : "every routeSchema() call for a /v1 route declares a literal pattern"),
+  );
+
   const bffV1RouteRegistrations = extractBffV1RouteRegistrations(bffSources);
   const { missingFromTable, routesWithoutCaller } =
     findUncoveredPublicApiRoutes(
@@ -980,6 +991,26 @@ export function findNonLiteralV1RouteRegistrations(files) {
   return files
     .filter(({ content }) =>
       BFF_V1_NON_LITERAL_ROUTE_REGISTRATION_PATTERN.test(content),
+    )
+    .map(({ path: filePath }) => filePath);
+}
+
+// Goal037/WU-01: mesma falha do lado do frontend — `routeSchema<T>("METHOD",
+// \`/v1/...\`)` com o padrao entre crases escapa de
+// `FRONTEND_ROUTE_SCHEMA_CALL_PATTERN`, que so casa aspas. Um chamador assim
+// vira invisivel para `findUncoveredPublicApiRoutes`: a rota some da tabela
+// de chamadores reconhecidos e cai, sem aviso, no balde "sem chamador" junto
+// com rotas que de fato nao tem consumidor algum. So dispara dentro de
+// apps/frontend/src/data/services/ (escopo de `frontendServiceSources`) e so
+// para um padrao que comeca com `/v1/` — chamada que nao e rota /v1, ou path
+// construido fora deste diretorio, nao aciona a regra.
+const FRONTEND_V1_ROUTE_SCHEMA_NON_LITERAL_PATTERN =
+  /\brouteSchema<[\s\S]*?>\(\s*["'](?:GET|POST|PUT|PATCH|DELETE)["'],\s*`(\/v1\/[^`]*)`/u;
+
+export function findNonLiteralFrontendV1RouteSchemaCalls(files) {
+  return files
+    .filter(({ content }) =>
+      FRONTEND_V1_ROUTE_SCHEMA_NON_LITERAL_PATTERN.test(content),
     )
     .map(({ path: filePath }) => filePath);
 }

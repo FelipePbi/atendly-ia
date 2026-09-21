@@ -22,17 +22,10 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { VOCABULARIO_DE_ESPERA } from "../support/vocabulario-de-espera.js";
 import { createEvalWorld, evalDoubleUsage, proibirRede } from "./harness.js";
 
 proibirRede();
-
-/**
- * Mesmo padrão de `VOCABULARIO_DE_ESPERA` de
- * `tests/assistant/assistant.service.test.ts`: qualquer vocabulário que faça
- * o texto soar como "estou processando, espera aí" em vez da resposta real.
- */
-const VOCABULARIO_DE_ESPERA =
-  /aguard|\bespera(ndo)?\b|\bum (instante|momento|minuto|minutinho)\b|em breve|daqui a pouco|s[oó] um (instante|momento|minuto|minutinho)|verificando|processando|consultando|analisando/i;
 
 describe("A-09: turno de tool não emite mensagem por conta própria", () => {
   it("cliente pergunta algo que exige consulta; só a resposta real sai, nunca um aviso de espera", async () => {

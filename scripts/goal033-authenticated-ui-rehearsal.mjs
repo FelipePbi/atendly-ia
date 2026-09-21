@@ -515,6 +515,88 @@ function playwrightConfig() {
 }
 
 /**
+ * O relatório JSON que `playwright.authenticated.config.ts` já escreve
+ * (`reporter: [..., ["json", { outputFile: "./e2e-results/authenticated/results.json" }]]`).
+ * Fixo, não derivado de `GOAL033_PLAYWRIGHT_CONFIG`: nenhuma configuração
+ * declara outro caminho hoje, e o objetivo desta unidade é ler o que o gate
+ * autenticado escreve, não generalizar para uma configuração hipotética.
+ */
+function authenticatedGateReportPath() {
+  return path.join(frontendDir(), "e2e-results", "authenticated", "results.json");
+}
+
+/**
+ * Lê e decodifica o relatório JSON do Playwright. Ausente ou ilegível é
+ * `AuthenticatedUiRehearsalError`, nunca silêncio: um leitor que se cala
+ * diante de relatório quebrado reintroduz o gate que mente.
+ */
+export function readGateReport(reportPath) {
+  let raw;
+  try {
+    raw = readFileSync(reportPath, "utf8");
+  } catch (error) {
+    throw new AuthenticatedUiRehearsalError(
+      `the authenticated gate's JSON report is missing at ${path.relative(repositoryRoot, reportPath)}: ${error.message}. A gate whose retries cannot be read cannot declare them.`,
+    );
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    throw new AuthenticatedUiRehearsalError(
+      `the authenticated gate's JSON report at ${path.relative(repositoryRoot, reportPath)} is not valid JSON: ${error.message}.`,
+    );
+  }
+}
+
+/**
+ * Todo teste cujo `outcome()` o reporter JSON gravou como `"flaky"` — falhou
+ * numa tentativa e passou numa seguinte. É essa marca, não o exit code, que
+ * torna a retentativa observável: o processo termina 0 do mesmo jeito.
+ *
+ * `spec.title` sozinho não identifica o teste: `authenticated-matrix.spec.ts`
+ * usa o mesmo título ("measured, logged in") nas 7 rotas, uma por
+ * `test.describe(route.name, ...)`. `title` aqui é a cadeia de `suites`
+ * ancestrais (o nome da rota) mais `spec.title`, então dois testes do mesmo
+ * nome em rotas diferentes continuam distinguíveis. O suite de arquivo (o
+ * primeiro nível, um por arquivo `.spec.ts`) fica fora da cadeia: seu título é
+ * sempre o mesmo em todo relatório e não ajuda a distinguir nada.
+ */
+export function extractRetriedTests(report) {
+  const retried = [];
+  const walk = (suite, ancestors) => {
+    for (const spec of suite.specs ?? []) {
+      const title = [...ancestors, spec.title].filter(Boolean).join(" > ");
+      for (const test of spec.tests ?? []) {
+        if (test.status === "flaky") {
+          retried.push({
+            project: test.projectName ?? test.projectId ?? "unknown",
+            title,
+          });
+        }
+      }
+    }
+    for (const child of suite.suites ?? []) {
+      walk(child, [...ancestors, child.title].filter(Boolean));
+    }
+  };
+  for (const suite of report?.suites ?? []) walk(suite, []);
+  retried.sort((a, b) =>
+    a.project === b.project
+      ? a.title.localeCompare(b.title)
+      : a.project.localeCompare(b.project),
+  );
+  return retried;
+}
+
+function describeRetries(retried) {
+  if (retried.length === 0) {
+    return "goal033:authenticated-ui-rehearsal authenticated gate retries: 0 — every test passed on its first attempt";
+  }
+  const list = retried.map((entry) => `${entry.project} › ${entry.title}`).join("; ");
+  return `goal033:authenticated-ui-rehearsal authenticated gate retries: ${retried.length} test(s) needed a retry — ${list}`;
+}
+
+/**
  * Recusa, ANTES de criar banco, quando o servidor não oferece a extensão que
  * o histórico de migrations da IA exige (`CREATE EXTENSION vector`). Exit 2
  * com mensagem própria, nunca skip.
@@ -1668,12 +1750,21 @@ function runAuthenticatedGate(ports, seed) {
       );
     });
     child.on("close", (status, signal) => {
+      let retried;
+      try {
+        retried = extractRetriedTests(readGateReport(authenticatedGateReportPath()));
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      console.log(describeRetries(retried));
       resolve({
         config: path.relative(repositoryRoot, configPath),
         baseUrl: ports.frontendUrl,
         // Morto por sinal não tem código de saída: 1 mantém a falha visível
         // em vez de virar `null` e passar por sucesso.
         status: status ?? (signal ? 1 : 0),
+        retries: { count: retried.length, tests: retried },
       });
     });
   });
@@ -1794,6 +1885,7 @@ export async function rehearse(plan) {
       console.log(
         `goal033:authenticated-ui-rehearsal authenticated gate: ${report.gate.config} against ${report.gate.baseUrl}, exit ${report.gate.status}`,
       );
+      console.log(describeRetries(report.gate.retries?.tests ?? []));
     }
     if (
       !assert(

@@ -2,7 +2,13 @@ import { existsSync, mkdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 import AxeBuilder from "@axe-core/playwright";
-import { test as base, expect, type Locator, type Page } from "@playwright/test";
+import {
+  test as base,
+  expect,
+  type Locator,
+  type Page,
+  type TestInfo,
+} from "@playwright/test";
 
 import {
   findStaleExceptions,
@@ -191,6 +197,101 @@ function freshSessionState(): boolean {
 }
 
 /**
+ * The product's OTHER throttle — the one this gate was racing without looking
+ * at it (Goal037, WU-05).
+ *
+ * `apps/bff/src/app.ts` registers `@fastify/rate-limit` globally with
+ * `max: 300, timeWindow: "1 minute"`, keyed by IP, with no allow list. Every
+ * test here comes from the same IP. One test is two full page loads — the
+ * `goto` and the `prefers-reduced-motion` reload — and each load asks the BFF
+ * for the session, the system status, the notification summary and the
+ * screen's own data. Measured on this tree from the BFF's own request log: the
+ * thirty-five tests peak at 285 requests inside a sixty-second window, and a
+ * run that repeats one width peaks at 294. That is 95% to 98% of a budget the
+ * product enforces, and the margin is five to fifteen requests.
+ *
+ * Crossing it does not look like a throttle on screen, which is why it read as
+ * flakiness. `GET /v1/auth/session` answering `429` is not `401`, so
+ * `ProductRuntime` takes its `error` branch and renders "Não foi possível
+ * verificar seu acesso" — a page with no navigation at all, so
+ * `aria-current="page"` never appears and the test dies at the session marker.
+ * A `429` on the screen's own list call renders that screen's error state, so
+ * the seeded row never arrives. Either way the first attempt fails, the minute
+ * rolls over while it fails, and the retry passes: a failure block inside an
+ * `exit 0` run, which is exactly what `[notebook-1024] › servicos` left behind.
+ *
+ * Relaxing the limit is not on the table, for the same reason the login
+ * throttle above is not: it is a product rule, and this gate measures the
+ * product as it is. What the gate can do is stop racing it — and it does not
+ * have to guess, because the BFF declares on EVERY response how much of the
+ * budget is left and how long the window still has to run. This waits on that,
+ * not on a clock somebody picked. No assertion is relaxed, no tolerance moves
+ * and no measurement is skipped: the test that would have measured the error
+ * screen now measures the screen.
+ */
+const RATE_LIMIT_REMAINING_HEADER = "x-ratelimit-remaining";
+const RATE_LIMIT_RESET_HEADER = "x-ratelimit-reset";
+/**
+ * The budget one test needs before it is safe to start it.
+ *
+ * A test costs about ten requests (285 in a window that holds roughly thirty
+ * of them). Thirty is three times that, so a test that starts above this line
+ * finishes well clear of zero even with the shell's 45s status poll landing
+ * inside it.
+ */
+const RATE_LIMIT_TEST_BUDGET = 30;
+
+/** The last budget the BFF declared, and how long its window still has. */
+let rateLimitRemaining: number | null = null;
+let rateLimitResetSeconds = 0;
+
+/**
+ * Reads the budget off the responses the page is already making. Nothing is
+ * requested for the sake of measuring: the header rides on every BFF answer
+ * the screen was going to receive anyway.
+ */
+function watchRateLimitBudget(page: Page): void {
+  page.on("response", (response) => {
+    const headers = response.headers();
+    const remaining = Number(headers[RATE_LIMIT_REMAINING_HEADER]);
+    if (!Number.isFinite(remaining)) return;
+    rateLimitRemaining = remaining;
+    rateLimitResetSeconds = Number(headers[RATE_LIMIT_RESET_HEADER] ?? 0);
+  });
+}
+
+/**
+ * Holds the next test until the product's window has room for it, and says so
+ * in the run's own output. A wait that nobody can see is a wait that becomes a
+ * mystery the next time the gate is slow.
+ */
+async function waitForRateLimitBudget(testInfo: TestInfo): Promise<void> {
+  if (rateLimitRemaining === null || rateLimitRemaining >= RATE_LIMIT_TEST_BUDGET) return;
+
+  const waitedMs = (Math.max(rateLimitResetSeconds, 0) + 1) * 1_000;
+  await testInfo.attach("rate-limit-window-waited", {
+    body: JSON.stringify(
+      {
+        remaining: rateLimitRemaining,
+        budget: RATE_LIMIT_TEST_BUDGET,
+        resetSeconds: rateLimitResetSeconds,
+        waitedMs,
+      },
+      null,
+      2,
+    ),
+    contentType: "application/json",
+  });
+  // Cleared before waiting, not after: the next window's first response is
+  // what re-establishes the budget, and a stale number here would let a second
+  // test through on the strength of the window that just closed.
+  rateLimitRemaining = null;
+  await new Promise((resolve) => {
+    setTimeout(resolve, waitedMs);
+  });
+}
+
+/**
  * The worker's session: typed and submitted, then handed to every test in the
  * worker as its `storageState`.
  *
@@ -206,6 +307,9 @@ const test = base.extend<object, { typedSession: string }>({
         mkdirSync(path.dirname(SESSION_STATE_FILE), { recursive: true });
         const context = await browser.newContext({ baseURL: BASE_URL });
         const page = await context.newPage();
+        // The login itself spends from the same per-IP budget, so the first
+        // test starts knowing what it left behind.
+        watchRateLimitBudget(page);
         await signIn(page);
         await context.storageState({ path: SESSION_STATE_FILE });
         await context.close();
@@ -379,6 +483,12 @@ for (const route of AUTHENTICATED_ROUTES) {
      * measuring anything.
      */
     test("measured, logged in", async ({ page }, testInfo) => {
+      // Before the first request of the test, never after: a test that starts
+      // with an exhausted budget measures the "Não foi possível verificar seu
+      // acesso" screen and blames the product for it.
+      await waitForRateLimitBudget(testInfo);
+      watchRateLimitBudget(page);
+
       await page.goto(route.path, { waitUntil: "networkidle" });
       await proveAuthenticatedScreen(page, route);
 

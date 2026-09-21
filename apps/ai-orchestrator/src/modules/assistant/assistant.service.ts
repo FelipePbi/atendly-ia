@@ -14,6 +14,14 @@ import {
 } from "../../lib/errors.js";
 import type { ChannelInboundMessage } from "../channel/domain/ChannelMessage.js";
 import { deriveTurnId } from "../graph/graph-state.js";
+import {
+  audioNotUnderstoodReply,
+  documentReceivedReply,
+  imageReceivedReply,
+  processingErrorReply,
+  unsupportedMessageReply,
+  videoReceivedReply,
+} from "../graph/message-graph.js";
 import type {
   KnowledgeSearchResult,
   KnowledgeVectorStore,
@@ -292,10 +300,21 @@ const PRODUCT_OWN_FIXED_TEXTS = {
   genericReplyFallback: "Certo, vou te ajudar por aqui.",
 } as const;
 
-/** `PRODUCT_OWN_FIXED_TEXTS` mais a saudação de estilo, nos três tons. */
+/**
+ * `PRODUCT_OWN_FIXED_TEXTS` mais a saudação de estilo, nos três tons, mais os
+ * textos de cliente que `message-graph.ts` emite por conta própria (fora do
+ * modelo). `imageHandoffSummary` não entra: é resumo de `Handoff`, não texto
+ * de cliente.
+ */
 export const PRODUCT_OWN_TEXTS: readonly string[] = [
   ...Object.values(PRODUCT_OWN_FIXED_TEXTS),
   ...AI_CONVERSATION_STYLES.map((style) => buildStyleGreeting(style)),
+  unsupportedMessageReply,
+  processingErrorReply,
+  audioNotUnderstoodReply,
+  imageReceivedReply,
+  documentReceivedReply,
+  videoReceivedReply,
 ];
 
 const defaultHandoffMessage = PRODUCT_OWN_FIXED_TEXTS.handoffToTeam;

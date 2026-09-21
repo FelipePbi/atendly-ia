@@ -1366,3 +1366,182 @@ produção**: `RESPONSE_CONTRACT_CHECK_ENABLED` continua
 `env.NODE_ENV !== "production"`, inalterado por este diff — ela segue ligada
 só em `development` e `test`, e desligada onde o produto realmente responde,
 pelo mesmo motivo que §12 já registrava.
+
+## 14. Fechamento do chamador `/v1` em laço do lado do frontend — Goal037, 2026-09-21
+
+Seção nova, escrita depois da última mudança de árvore do diff037 (WU-01 a
+WU-06). Ela **não reescreve** §4 a §13: os registros de A-01 a A-19 em §6, o
+veredito de §7 e as seis seções de fechamento anteriores continuam
+exatamente como estavam. Esta seção acrescenta o que o diff037 passou a
+garantir sobre o detalhe que §13 tinha registrado como limite de ferramenta,
+nunca achado — o chamador `/v1` em laço do lado do **frontend**, invisível à
+mesma extração estática que o Goal036 já tinha corrigido do lado do BFF —,
+e sobre dois assuntos que não eram achado nem limite registrado antes deste
+Goal: o conjunto fechado dos textos que o produto emite por conta própria, e
+a retentativa do gate autenticado.
+
+### O que mudou
+
+**O chamador `/v1` em laço também exige path literal do lado do
+frontend.** `BffConversationService.ts` trocava `takeover`, `release` e
+`resolve` por um `mutateState` único que montava o path por template literal
+(`` `/v1/conversations/:id/${action}` ``) e recebia o `schema` já resolvido
+por chamador — a mesma forma, do outro lado do contrato, que
+`apps/bff/src/modules/conversations/routes.ts` tinha antes do Goal036. Os
+três métodos passam a chamar `routeSchema<Conversation>("POST", ...)` cada
+um com o próprio path entre aspas, e `mutateState` recebe o `schema` já
+resolvido como parâmetro em vez de montá-lo. `audit:static` ganhou
+`frontend_v1_route_schema_calls_use_literal_patterns`
+(`findNonLiteralFrontendV1RouteSchemaCalls`), que falha se um `routeSchema`
+de `apps/frontend/src/data/services` declarar um padrão `/v1/...` entre
+crases — o par exato de `bff_v1_routes_use_literal_paths` (Goal036), agora
+do outro lado. Isso fecha exatamente o limite que §13 tinha registrado: as
+três rotas deixam de aparecer no `details` de `public_api_route_coverage`
+como "sem chamador no frontend", porque o chamador agora é literal. Ver
+[VALIDATION_GATE](VALIDATION_GATE.md#checks-estáticos-novos-do-goal037).
+
+**O conjunto fechado dos textos do produto passa a cobrir
+`message-graph.ts`.** `PRODUCT_OWN_TEXTS` (D-050, Goal034) reunia só os
+textos de `assistant.service.ts`; uma observação não bloqueante do
+[review034](reviews/034-review.md) já tinha avisado que um texto de cliente
+emitido por outro módulo, de outra forma, escaparia do fechamento em
+silêncio. `message-graph.ts` passa a exportar os seis textos de cliente que
+já emitia por conta própria (`unsupportedMessageReply`,
+`processingErrorReply`, `audioNotUnderstoodReply`, `imageReceivedReply`,
+`documentReceivedReply`, `videoReceivedReply` — `imageHandoffSummary` fica
+de fora, de propósito, porque vai para o `Handoff`, não para a cliente), e
+`assistant.service.ts` os soma a `PRODUCT_OWN_TEXTS`. O teste de fechamento
+ganhou um segundo extrator, para o padrão de despacho de `message-graph.ts`
+(`text: identificador` ou `text: funçãoQueSóRetornaIdentificador()`), ao
+lado do extrator existente sobre `messages: [...]` — os dois convivem, nenhum
+substitui o outro. `VOCABULARIO_DE_ESPERA` deixa de ser duas cópias
+idênticas (`tests/assistant/assistant.service.test.ts` e
+`tests/evals/waiting-message-vocabulary.eval.test.ts`) e vira uma definição
+única em `tests/support/vocabulario-de-espera.ts`. Ver
+[VALIDATION_GATE](VALIDATION_GATE.md#invariante-de-texto-ampliada-do-goal037).
+
+**A retentativa do gate autenticado deixa de ser silenciosa — e agora
+identifica a rota de verdade.** `scripts/goal033-authenticated-ui-rehearsal.mjs`
+lê o relatório JSON que `playwright.authenticated.config.ts` já escreve,
+extrai todo teste `status: "flaky"` (`extractRetriedTests`) e imprime projeto
+e título de cada um — sempre, inclusive "0" quando nenhum precisou. O
+processo continua saindo `0` quando toda retentativa passa na segunda
+tentativa: **flaky não reprova o gate**, só deixa de estar invisível dentro de
+um `exit 0`. A primeira versão de `extractRetriedTests` nesta mesma rodada
+usava só `spec.title` — e as 35 medidas de `authenticated-matrix.spec.ts`
+compartilham o mesmo título (`"measured, logged in"`), um por
+`test.describe(route.name, ...)`; sem a cadeia de `suites` ancestrais, o log
+não conseguia dizer qual das 7 rotas tinha retentado, só que uma delas o fez.
+`extractRetriedTests` agora inclui essa cadeia (o nome da rota) no título
+retornado, então a distinção passa a ser verificável a partir deste diff em
+diante. O que ela **não** torna verificável retroativamente: o único `flaky`
+já registrado por §10 (Goal033) como "timing de execução" foi lido do relatório
+daquela execução por inspeção manual da estrutura de `suites`, não por este
+extrator — a atribuição a `/agenda`, `desktop-1440` especificamente vem de
+lá, não de uma nova leitura desta rodada. E a causa medida agora (rate limit)
+não é uma propriedade da rota: o log de requisições do BFF mostra as 35
+medidas do gate autenticado perto do teto de `@fastify/rate-limit`
+(`max: 300, timeWindow: "1 minute"`, por IP) — 285 a 294 requisições numa
+janela de 60s, 95% a 98% do orçamento —, e cruzá-lo faz
+`GET /v1/auth/session` ou a leitura de lista da própria tela devolver `429`,
+que a interface trata como erro de sessão ou de tela; qual das 35 medidas
+cruza o teto depende da posição dela na janela de execução, não da rota que
+mede. Chamar isso de "a causa do flake de `/agenda`" atribui à rota um
+comportamento que é, na verdade, do momento em que a medida corre.
+`authenticated-matrix.spec.ts` passa a ler `x-ratelimit-remaining`/`x-ratelimit-reset`
+das respostas que a página já recebe e espera a janela virar antes de
+qualquer teste — de qualquer rota — que começaria com menos de 30
+requisições de orçamento restante — sem afrouxar asserção, sem pular medida e
+sem tocar o limite do produto, que continua `max: 300` por minuto, por IP,
+decisão fora do escopo deste diff. Ver
+[VALIDATION_GATE](VALIDATION_GATE.md#declaração-de-retentativa-do-goal037).
+
+**O que este diff não decide.** Fechar o limite do chamador em laço não
+decidiu se path dinâmico de rota `/v1` deveria um dia ser reconhecido pela
+extração estática — decidiu proibir a forma que hoje escapa dela, nos dois
+lados. Ampliar o conjunto fechado de textos não decidiu nada sobre o que o
+**modelo** produz — a fronteira entre garantia de código e orientação de
+prompt que D-050 já tinha declarado não muda. Declarar a retentativa não
+decidiu que flaky deveria reprovar o gate, nem mudou o teto de `retries` do
+Playwright. Nenhuma migration, nenhuma rota, nenhum contrato público e
+nenhuma tela, componente, texto ou CSS do frontend mudou neste diff.
+
+### Resultado real da execução
+
+Executado por esta unidade (WU-07), sobre a árvore final, idêntica ao diff
+do WU-06 em diante (os cinco controles negativos foram todos revertidos).
+`node scripts/final-production-audit.mjs` — exit 0, 34 checks, 33 `passed`,
+1 `skipped` declarado (`production_health`, sem
+`PRODUCTION_HEALTH_TARGETS`), incluindo `frontend_v1_route_schema_calls_use_literal_patterns`
+(`ok: true`, "read 17 files under apps/frontend/src/data/services for
+routeSchema() calls ... every routeSchema() call for a /v1 route declares a
+literal pattern") e `public_api_route_coverage` (`ok: true`, 116 rotas
+registradas, "every BFF /v1 route with a frontend caller has a table
+entry", só `GET /v1/conversations/:id/messages/:messageId/media` sem
+chamador — a rota de mídia já conhecida desde o Goal035, nunca mais as três
+de `conversations`). `node --test
+scripts/tests/final-production-audit-legacy-regression.test.mjs` — 48
+`pass`, 0 `fail`, incluindo as três asserções novas de
+`frontend_v1_route_schema_calls_use_literal_patterns`. `node --test
+scripts/tests/goal033-authenticated-ui-rehearsal.test.mjs` — 11 `pass`, 0
+`fail`, incluindo as quatro asserções novas de `extractRetriedTests` e
+`readGateReport`. `npx vitest run tests/assistant/assistant.service.test.ts
+tests/evals/waiting-message-vocabulary.eval.test.ts` em
+`apps/ai-orchestrator` — 2 arquivos, 19 testes, 0 falhas. Esta unidade não
+reexecutou `npm run test:gate`, `npm test` completo de
+`apps/ai-orchestrator`/`apps/frontend`, `validate:integration`,
+`validate:ui` nem o ensaio autenticado real
+(`rehearse:goal033-authenticated-ui`): essas execuções pertencem às
+unidades de implementação e de controle negativo desta rodada, não à
+unidade de fechamento documental.
+
+### Achados novos a partir de A-24
+
+Nenhum. O detalhe que este diff fecha — o chamador em laço do lado do
+frontend — nunca foi achado: §13 já o tinha registrado como o mesmo tipo de
+limite de ferramenta que a rota de mídia sem chamador (§12), não como
+divergência de contrato nem defeito de produto, porque a tabela já tinha as
+três entradas e ambos os chamadores já existiam de fato. Fechá-lo remove o
+limite declarado, não corrige um achado. A causa do `flaky` já registrado por
+§10 (rate limit do BFF) também não é achado novo: é diagnóstico sobre o
+**gate** que mede o produto, não sobre o produto — o limite de
+`@fastify/rate-limit` já era comportamento intencional do BFF, só não estava
+correlacionado ao `flaky` que §10 já tinha registrado e classificado como
+não-achado. A causa em si (orçamento de rate limit perto do teto numa janela
+de 60s) é do momento em que a medida corre, não da rota `/agenda` que §10
+nomeou — qualquer uma das 35 medidas do ensaio poderia ter cruzado o teto,
+dependendo só de quando ela caiu na janela.
+
+### Veredito recontado
+
+A contagem desta auditoria **não muda**: nenhum achado de A-04 a A-08, A-11
+a A-17 ou A-19 foi tocado, corrigido ou reclassificado, e nenhum achado
+fechado (A-01, A-02, A-03, A-09, A-10, A-18, A-20 a A-23) foi reaberto. Esta
+auditoria continua com **0 achados `BLOQUEADOR-MVP`, 7
+`PENDENCIA-POS-MVP`** e **6 `LIMITE-DECLARADO`** — os mesmos números que §13
+já deixava, porque o que este diff fecha nunca tinha entrado nessa contagem
+como achado.
+
+Três coisas que este recontar não diz. **Não diz que M4 foi fechado**:
+nenhuma chamada saiu, neste diff, para um provedor de LLM real nem para o
+WhatsApp real — o diff037 toca
+`apps/ai-orchestrator/src/modules/assistant/assistant.service.ts`,
+`apps/ai-orchestrator/src/modules/graph/message-graph.ts`,
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`,
+`apps/ai-orchestrator/tests/evals/waiting-message-vocabulary.eval.test.ts`,
+`apps/ai-orchestrator/tests/support/vocabulario-de-espera.ts` (novo),
+`apps/frontend/e2e/authenticated-matrix.spec.ts`,
+`apps/frontend/src/data/services/BffConversationService.ts`,
+`scripts/final-production-audit.mjs`,
+`scripts/goal033-authenticated-ui-rehearsal.mjs`,
+`scripts/tests/final-production-audit-legacy-regression.test.mjs`,
+`scripts/tests/goal033-authenticated-ui-rehearsal.test.mjs` e a
+documentação de migração — nada além disso. **Não diz que a fidelidade
+visual está provada**: `authenticated-matrix.spec.ts` só ganha leitura de
+cabeçalho de rate limit e uma espera condicional antes de cada teste, sem
+tocar tela, componente, texto ou CSS; a fidelidade visual segue sendo
+conferência humana, como §5.3, §7 e as seis seções de fechamento anteriores
+já declaravam. **E não diz que a verificação de resposta roda em
+produção**: `RESPONSE_CONTRACT_CHECK_ENABLED` continua
+`env.NODE_ENV !== "production"`, inalterado por este diff — nenhum arquivo
+de `apps/bff/` foi tocado.

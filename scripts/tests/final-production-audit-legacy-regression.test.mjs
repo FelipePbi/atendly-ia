@@ -13,6 +13,7 @@ import {
   findGroupDiscardConfigurationViolations,
   findLegacyMigrationRouteReferences,
   findMinhaAgendaWriterReferences,
+  findNonLiteralFrontendV1RouteSchemaCalls,
   findNonLiteralV1RouteRegistrations,
   findRemovedCalendarErrorCodeReferences,
   findRequireAtendlyCalendarReferences,
@@ -488,6 +489,48 @@ test("bff_v1_routes_use_literal_paths: fails when a /v1 route is registered with
   assert.deepEqual(findNonLiteralV1RouteRegistrations(files), [
     "apps/bff/src/modules/conversations/routes.ts",
   ]);
+});
+
+// Goal037/WU-01: um chamador com padrao entre crases escapa de
+// findUncoveredPublicApiRoutes (vira "sem chamador" mesmo tendo um), como
+// aconteceu com mutateState em BffConversationService.ts antes deste Goal.
+test("frontend_v1_route_schema_calls_use_literal_patterns: passes when every /v1 routeSchema() call declares a literal pattern", () => {
+  const files = [
+    {
+      path: "apps/frontend/src/data/services/BffConversationService.ts",
+      content:
+        'routeSchema<Conversation>("POST", "/v1/conversations/:id/takeover");\n' +
+        'routeSchema<Conversation>("POST", "/v1/conversations/:id/release");\n' +
+        'routeSchema<Conversation>("POST", "/v1/conversations/:id/resolve");',
+    },
+  ];
+  assert.deepEqual(findNonLiteralFrontendV1RouteSchemaCalls(files), []);
+});
+
+test("frontend_v1_route_schema_calls_use_literal_patterns: fails when a /v1 routeSchema() call declares a template literal pattern", () => {
+  const files = [
+    {
+      path: "apps/frontend/src/data/services/BffConversationService.ts",
+      content:
+        'const action: "release" | "resolve" | "takeover" = "takeover";\n' +
+        "routeSchema<Conversation>(\n  \"POST\",\n  `/v1/conversations/:id/${action}`,\n);",
+    },
+  ];
+  assert.deepEqual(findNonLiteralFrontendV1RouteSchemaCalls(files), [
+    "apps/frontend/src/data/services/BffConversationService.ts",
+  ]);
+});
+
+test("frontend_v1_route_schema_calls_use_literal_patterns: a template literal call for a route outside /v1 is not a finding", () => {
+  const files = [
+    {
+      path: "apps/frontend/src/data/services/BffInternalService.ts",
+      content:
+        'const suffix = "status";\n' +
+        "routeSchema<Health>(\n  \"GET\",\n  `/internal/${suffix}`,\n);",
+    },
+  ];
+  assert.deepEqual(findNonLiteralFrontendV1RouteSchemaCalls(files), []);
 });
 
 // Goal035/WU-07: findUncoveredPublicApiRoutes recebe exatamente o que

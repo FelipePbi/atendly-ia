@@ -5,13 +5,18 @@
 // declaradas, que é o controle negativo que `rehearse()` depois checa.
 
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import {
   AuthenticatedUiRehearsalError,
   assertPortsFree,
   createEvolutionDouble,
+  extractRetriedTests,
+  readGateReport,
   resolveRehearsalPlan,
 } from "../goal033-authenticated-ui-rehearsal.mjs";
 
@@ -121,5 +126,131 @@ test("the Evolution double registers known calls and records unexpected ones as 
     assert.equal(evolution.unexpected[0].route, "POST /send/media");
   } finally {
     await evolution.close();
+  }
+});
+
+// WU-04 (Goal037): a retentativa do gate autenticado precisa deixar de ser
+// invisível quando o processo termina com sucesso. `extractRetriedTests` é o
+// leitor do relatório JSON que o Playwright já escreve; estes testes provam
+// que ele acha o teste `flaky` (falhou numa tentativa, passou na seguinte)
+// dentro de suites aninhadas, e que ele nomeia projeto e título — nunca só um
+// dos dois.
+test("extractRetriedTests finds a flaky test nested inside describe blocks and names project and title", () => {
+  const report = {
+    suites: [
+      {
+        title: "authenticated-matrix.spec.ts",
+        suites: [
+          {
+            title: "Agenda",
+            specs: [
+              {
+                title: "shows the booked appointment",
+                tests: [
+                  {
+                    projectName: "mobile-360",
+                    status: "flaky",
+                  },
+                  {
+                    projectName: "desktop-1440",
+                    status: "expected",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        specs: [],
+      },
+    ],
+  };
+  assert.deepEqual(extractRetriedTests(report), [
+    { project: "mobile-360", title: "Agenda > shows the booked appointment" },
+  ]);
+});
+
+// WU-FIX-001 (Goal037, rodada 2): o spec real usa o MESMO título
+// ("measured, logged in") em toda rota, um `test.describe(route.name, ...)`
+// por rota. `spec.title` sozinho colapsaria dois flakies de rotas diferentes
+// no mesmo registro, escondendo qual dos dois retentou de verdade.
+test("extractRetriedTests distinguishes two flaky tests that share the same spec title across different describe blocks", () => {
+  const report = {
+    suites: [
+      {
+        title: "authenticated-matrix.spec.ts",
+        specs: [],
+        suites: [
+          {
+            title: "agenda",
+            specs: [
+              {
+                title: "measured, logged in",
+                tests: [{ projectName: "desktop-1440", status: "flaky" }],
+              },
+            ],
+          },
+          {
+            title: "clientes",
+            specs: [
+              {
+                title: "measured, logged in",
+                tests: [{ projectName: "desktop-1440", status: "flaky" }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(extractRetriedTests(report), [
+    { project: "desktop-1440", title: "agenda > measured, logged in" },
+    { project: "desktop-1440", title: "clientes > measured, logged in" },
+  ]);
+});
+
+test("extractRetriedTests returns an empty list when every test passed on its first attempt", () => {
+  const report = {
+    suites: [
+      {
+        title: "authenticated-matrix.spec.ts",
+        specs: [
+          {
+            title: "shows the booked appointment",
+            tests: [{ projectName: "mobile-360", status: "expected" }],
+          },
+        ],
+        suites: [],
+      },
+    ],
+  };
+  assert.deepEqual(extractRetriedTests(report), []);
+});
+
+test("readGateReport refuses with its own error when the report file is missing", () => {
+  const missingPath = path.join(
+    mkdtempSync(path.join(os.tmpdir(), "goal033-report-")),
+    "results.json",
+  );
+  assert.throws(
+    () => readGateReport(missingPath),
+    (error) =>
+      error instanceof AuthenticatedUiRehearsalError &&
+      /is missing/u.test(error.message),
+  );
+});
+
+test("readGateReport refuses with its own error when the report file is not valid JSON", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "goal033-report-"));
+  const reportPath = path.join(directory, "results.json");
+  writeFileSync(reportPath, "{not json", "utf8");
+  try {
+    assert.throws(
+      () => readGateReport(reportPath),
+      (error) =>
+        error instanceof AuthenticatedUiRehearsalError &&
+        /not valid JSON/u.test(error.message),
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 });

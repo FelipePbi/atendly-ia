@@ -3163,3 +3163,97 @@ nenhum verbo de rota mudou.
 - **LIMITE:** este delta descreve o diff036 (WU-01 a WU-06) sobre a baseline
   aceita `3202cb0b30f2e59c9d69e7a86b4940853c97d922` (fechamento do Goal035),
   decidido em [D-052](DECISIONS.md), sem commit e sem deploy.
+
+## Delta implementado — diff037, 2026-09-21 ([D-053](DECISIONS.md))
+
+Este delta fecha o limite declarado que FINAL_AUDIT §13/[D-052](DECISIONS.md#d-052--rigidez-do-contrato-mora-no-produtor-campo-declarado-é-opcional-quando-o-produtor-pode-omiti-lo-e-rota-v1-exige-path-literal-propostas-no-goal036)
+tinham registrado sem virar achado — chamador `/v1` em laço, do lado do
+frontend, invisível à extração estática — amplia o conjunto fechado dos
+textos que o produto emite por conta própria para cobrir `message-graph.ts`,
+e declara a retentativa do gate autenticado em vez de deixá-la passar em
+silêncio dentro de um `exit 0`. Nenhuma migration, schema, rota ou contrato
+público mudou; nenhuma tela, componente ou CSS do frontend mudou.
+
+- **FATO atual (o chamador `/v1` também exige path literal do lado do
+  frontend):** `BffConversationService.ts` (`takeover`, `release`,
+  `resolve`) chama `routeSchema<Conversation>(...)` três vezes, cada uma com
+  o path entre aspas por ação, em vez do `mutateState` único que construía o
+  path por template literal (`` `/v1/conversations/:id/${action}` ``).
+  `audit:static` ganhou `frontend_v1_route_schema_calls_use_literal_patterns`
+  (`findNonLiteralFrontendV1RouteSchemaCalls`), que falha se um `routeSchema`
+  de `apps/frontend/src/data/services` declarar um padrão `/v1/...` entre
+  crases — a mesma falha que `bff_v1_routes_use_literal_paths` (Goal036) já
+  cobria do lado do BFF, agora do lado do frontend. Provado nos dois sentidos
+  por `scripts/tests/final-production-audit-legacy-regression.test.mjs`. Ver
+  [VALIDATION_GATE](VALIDATION_GATE.md#checks-estáticos-novos-do-goal037).
+- **FATO atual (o conjunto fechado de textos do produto cobre
+  `message-graph.ts`):** `unsupportedMessageReply`, `processingErrorReply`,
+  `audioNotUnderstoodReply`, `imageReceivedReply`, `documentReceivedReply` e
+  `videoReceivedReply` — os seis textos de cliente que
+  `apps/ai-orchestrator/src/modules/graph/message-graph.ts` emite sem passar
+  pelo modelo — passam a ser exportados por esse módulo e somados a
+  `PRODUCT_OWN_TEXTS` em `assistant.service.ts`. `imageHandoffSummary` fica
+  de fora, de propósito: vai para o `Handoff`, nunca para a cliente.
+  `VOCABULARIO_DE_ESPERA` — antes duas cópias idênticas, em
+  `tests/assistant/assistant.service.test.ts` e em
+  `tests/evals/waiting-message-vocabulary.eval.test.ts` — passa a ser uma
+  definição única em `tests/support/vocabulario-de-espera.ts`, importada
+  pelas duas suítes. O teste de fechamento ganhou um segundo extrator, para o
+  padrão de despacho de `message-graph.ts` (`text: identificador` ou
+  `text: funçãoQueRetornaIdentificador()`), ao lado do extrator existente de
+  `messages: [...]` de `assistant.service.ts` — os dois, não um substituindo
+  o outro. Ver
+  [VALIDATION_GATE](VALIDATION_GATE.md#invariante-de-texto-ampliada-do-goal037).
+- **FATO atual (a retentativa do gate autenticado é declarada, não
+  silenciosa):** `scripts/goal033-authenticated-ui-rehearsal.mjs` lê o
+  relatório JSON que `playwright.authenticated.config.ts` já escreve
+  (`e2e-results/authenticated/results.json`), extrai todo teste com
+  `status: "flaky"` (`extractRetriedTests`) e imprime projeto e título de
+  cada um, sempre — inclusive quando a contagem é zero. O processo continua
+  saindo `0` quando toda retentativa passou na segunda tentativa: **flaky não
+  reprova o gate**, só deixa de ser invisível dentro do `exit 0`. Ver
+  [VALIDATION_GATE](VALIDATION_GATE.md#declaração-de-retentativa-do-goal037).
+- **FATO revelado (a causa medida da retentativa do gate autenticado é o
+  teto de rate limit do BFF, e não é propriedade da rota):** FINAL_AUDIT §10
+  (Goal033) tinha classificado como "timing de execução" o `flaky` que
+  registrou — `/agenda`, `desktop-1440`, atribuição vinda de leitura manual
+  da estrutura de `suites` daquele relatório, não de extrator —, e o
+  [review036](reviews/036-review.md) registrou um segundo, `[notebook-1024]
+  › servicos`, dentro de um `validate:integration` que terminou `exit 0`.
+  Não há, portanto, um único `flaky` observado. A investigação desta rodada
+  mede, pelo próprio log de requisições do BFF, que as 35 medidas do gate autenticado chegam a 285–294
+  requisições dentro da janela de 60s de `@fastify/rate-limit`
+  (`max: 300`), 95–98% do orçamento por IP; cruzar o limite faz
+  `GET /v1/auth/session` (ou a leitura de lista da própria tela) devolver
+  `429`, o que a interface trata como erro de sessão ou de tela, não como
+  ausência de dado — daí o teste falhar na primeira tentativa e passar na
+  segunda, depois que a janela virou. Qual das 35 medidas cruza o teto
+  depende de quando ela cai na janela de 60s, não da rota que mede — a mesma
+  causa cobre os dois `flaky` já observados.
+  `apps/frontend/e2e/authenticated-matrix.spec.ts`
+  passa a ler `x-ratelimit-remaining`/`x-ratelimit-reset` das respostas que a
+  página já recebe e espera a janela antes de iniciar um teste que começaria
+  com orçamento abaixo de 30 requisições restantes — sem afrouxar nenhuma
+  asserção, sem pular nenhuma medida e sem tocar o limite do produto
+  (`@fastify/rate-limit` continua `max: 300, timeWindow: "1 minute"`, decisão
+  do produto, fora do escopo deste delta).
+- **FATO revelado (a auditoria final recontada):** nenhum achado novo — o
+  detalhe que FINAL_AUDIT §13 tinha registrado sobre o chamador em laço do
+  frontend nunca foi achado, e fechar esse limite não muda a contagem de
+  `BLOQUEADOR-MVP`, `PENDENCIA-POS-MVP` nem `LIMITE-DECLARADO`. Os
+  identificadores A-04 a A-08, A-11 a A-17 e A-19 não foram tocados,
+  corrigidos nem reclassificados; nenhum achado fechado (A-01, A-02, A-03,
+  A-09, A-10, A-18, A-20 a A-23) foi reaberto. Ver
+  [FINAL_AUDIT §14](FINAL_AUDIT.md#14-fechamento-do-chamador-v1-em-laço-do-lado-do-frontend--goal037-2026-09-21).
+- **LIMITE:** este delta não fecha **M4**, não afirma fidelidade visual à
+  referência aprovada e não liga a verificação de resposta em produção —
+  `RESPONSE_CONTRACT_CHECK_ENABLED` continua `env.NODE_ENV !== "production"`,
+  inalterado.
+- **LIMITE:** o texto que o **modelo** produz continua fora do conjunto
+  fechado — `PRODUCT_OWN_TEXTS` cobre só o que o produto emite sem passar
+  pelo modelo, a mesma fronteira que D-050 já tinha declarado; este delta
+  amplia o conjunto para um segundo módulo emissor, não muda o que ele
+  significa.
+- **LIMITE:** este delta descreve o diff037 (WU-01 a WU-07) sobre a baseline
+  aceita `5829cc4db0bcac995678bc6b1092f1e9dbf14c5a` (fechamento do Goal036),
+  decidido em [D-053](DECISIONS.md), sem commit e sem deploy.

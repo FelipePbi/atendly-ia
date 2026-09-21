@@ -48,9 +48,16 @@ import {
   type MessageGraphStateValue,
 } from "./graph-state.js";
 
-const unsupportedMessageReply =
+/**
+ * Textos de cliente proprios deste modulo. Exportados para compor o mesmo
+ * conjunto declarado de `PRODUCT_OWN_TEXTS` em `assistant.service.ts` — a
+ * emissao continua so daqui, so o texto literal e compartilhado para
+ * conferencia (Goal037). `imageHandoffSummary` fica fora de proposito: vai
+ * para o `Handoff`, nao para a cliente.
+ */
+export const unsupportedMessageReply =
   "Recebi sua mensagem, mas por enquanto consigo responder melhor por texto. Me envie sua pergunta em texto que continuo por aqui.";
-const processingErrorReply =
+export const processingErrorReply =
   "Tive um problema para consultar o sistema agora. Vou chamar a profissional para continuar seu atendimento.";
 /**
  * Audio que nao virou texto.
@@ -59,7 +66,7 @@ const processingErrorReply =
  * que a cliente disse, e responder qualquer coisa aqui seria inventar conteudo
  * de audio.
  */
-const audioNotUnderstoodReply =
+export const audioNotUnderstoodReply =
   "Recebi seu audio, mas nao consegui entender o conteudo dele agora. Pode me mandar em texto, por favor? Assim continuo seu atendimento por aqui.";
 /**
  * Imagem recebida com IA elegivel.
@@ -67,11 +74,11 @@ const audioNotUnderstoodReply =
  * A profissional ve a imagem, nao a IA: a resposta so avisa o encaminhamento,
  * sem tentar interpretar o que foi enviado nem a legenda (Goal013).
  */
-const imageReceivedReply =
+export const imageReceivedReply =
   "Recebi sua imagem e ja chamei a profissional para dar uma olhada com voce. Ela continua seu atendimento por aqui.";
-const documentReceivedReply =
+export const documentReceivedReply =
   "Recebi seu documento e ele ja esta aqui na conversa. Por enquanto nao consigo abrir arquivos, entao me conta em texto o que voce precisa que eu ajudo.";
-const videoReceivedReply =
+export const videoReceivedReply =
   "Recebi seu video e ele ja esta aqui na conversa. Por enquanto nao consigo assistir por aqui, entao me conta em texto o que voce precisa que eu ajudo.";
 /** Resumo do handoff de imagem, gravado no `Handoff` em vez do texto de falha. */
 const imageHandoffSummary =

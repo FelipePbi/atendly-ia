@@ -1,3 +1,5 @@
+import { type z } from "zod";
+
 import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
 import {
   type Conversation,
@@ -134,15 +136,30 @@ export class BffConversationService {
   }
 
   takeover(id: string, signal?: AbortSignal) {
-    return this.mutateState(id, "takeover", signal);
+    return this.mutateState(
+      id,
+      "takeover",
+      routeSchema<Conversation>("POST", "/v1/conversations/:id/takeover"),
+      signal,
+    );
   }
 
   release(id: string, signal?: AbortSignal) {
-    return this.mutateState(id, "release", signal);
+    return this.mutateState(
+      id,
+      "release",
+      routeSchema<Conversation>("POST", "/v1/conversations/:id/release"),
+      signal,
+    );
   }
 
   resolve(id: string, signal?: AbortSignal) {
-    return this.mutateState(id, "resolve", signal);
+    return this.mutateState(
+      id,
+      "resolve",
+      routeSchema<Conversation>("POST", "/v1/conversations/:id/resolve"),
+      signal,
+    );
   }
 
   /**
@@ -164,15 +181,13 @@ export class BffConversationService {
   private mutateState(
     id: string,
     action: "release" | "resolve" | "takeover",
+    schema: z.ZodType<Conversation>,
     signal?: AbortSignal,
   ) {
     return this.http.request({
       method: "POST",
       path: `/v1/conversations/${encodeURIComponent(id)}/${action}`,
-      schema: routeSchema<Conversation>(
-        "POST",
-        `/v1/conversations/:id/${action}`,
-      ),
+      schema,
       signal,
     });
   }

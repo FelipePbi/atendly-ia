@@ -397,9 +397,10 @@ export async function main() {
     path: file,
     content: read(file),
   }));
-  const frontendServiceSources = sourceFiles(
-    "apps/frontend/src/data/services",
-  ).map((file) => ({ path: file, content: read(file) }));
+  const frontendAllSources = frontendSources.map((file) => ({
+    path: file,
+    content: read(file),
+  }));
   const publicApiRoutesTableSource = read(
     "packages/public-api-contract/src/routes.ts",
   );
@@ -424,18 +425,21 @@ export async function main() {
         : "every /v1 route is registered with a literal string path and no site is residue"),
   );
 
-  // Goal038/FIX-001: mesma enumeracao do lado do frontend — toda chamada de
-  // `routeSchema`, com ou sem generico, cai em categoria nomeada ou e residuo.
+  // Goal039/WU-03: escopo estendido de apps/frontend/src/data/services para
+  // apps/frontend/src inteiro — a definicao de `routeSchema` em
+  // data/http/BffHttpClient.ts cai em categoria propria e nao conta como
+  // chamada nem como residuo; um chamador fora de data/services agora entra
+  // na cobertura ou vira residuo, em vez de ficar invisivel.
   const frontendRouteSchemaSites = classifyFrontendRouteSchemaCallSites(
-    frontendServiceSources,
+    frontendAllSources,
   );
   const frontendRouteSchemaSiteTally = countByCategory(frontendRouteSchemaSites);
   const nonLiteralFrontendV1RouteSchemaCallFiles =
-    findNonLiteralFrontendV1RouteSchemaCalls(frontendServiceSources);
+    findNonLiteralFrontendV1RouteSchemaCalls(frontendAllSources);
   check(
     "frontend_v1_route_schema_calls_use_literal_patterns",
     nonLiteralFrontendV1RouteSchemaCallFiles.length === 0,
-    `read ${frontendServiceSources.length} files under apps/frontend/src/data/services and classified ` +
+    `read ${frontendAllSources.length} files under apps/frontend/src and classified ` +
       `${frontendRouteSchemaSites.length} routeSchema() call site(s) by named category ` +
       `(${frontendRouteSchemaSiteTally}). ` +
       (nonLiteralFrontendV1RouteSchemaCallFiles.length
@@ -447,7 +451,7 @@ export async function main() {
   const { missingFromTable, routesWithoutCaller } =
     findUncoveredPublicApiRoutes(
       bffSources,
-      frontendServiceSources,
+      frontendAllSources,
       publicApiRoutesTableSource,
     );
   check(
@@ -455,7 +459,7 @@ export async function main() {
     missingFromTable.length === 0,
     `read ${bffSources.length} files under apps/bff/src for /v1 route registrations ` +
       `(${bffV1RouteRegistrations.length} routes registered), ` +
-      `${frontendServiceSources.length} files under apps/frontend/src/data/services for routeSchema() callers, ` +
+      `${frontendAllSources.length} files under apps/frontend/src for routeSchema() callers, ` +
       `and packages/public-api-contract/src/routes.ts for the route table. ` +
       (missingFromTable.length
         ? `missing from the table despite a frontend caller: ${missingFromTable.join(", ")}. `
@@ -465,10 +469,6 @@ export async function main() {
       }`,
   );
 
-  const frontendAllSources = frontendSources.map((file) => ({
-    path: file,
-    content: read(file),
-  }));
   const duplicateResponseSchemaFiles =
     findDuplicatePublicResponseSchemaDeclarations(
       frontendAllSources,
@@ -1281,13 +1281,17 @@ export function findNonLiteralV1RouteRegistrations(files) {
 
 const FRONTEND_ROUTE_SCHEMA_CALL_SITE_PATTERN =
   /\brouteSchema(?:<[\s\S]*?>)?\s*\(/gu;
+const FRONTEND_ROUTE_SCHEMA_DEFINITION_PRECEDING_PATTERN = /\bfunction\s*$/u;
 const HTTP_METHOD_LITERAL_PATTERN = /^(?:GET|POST|PUT|PATCH|DELETE)$/u;
 
 /**
  * Classifica toda chamada de `routeSchema` de `files` (escopo
- * `apps/frontend/src/data/services/`), com ou sem generico, em uma categoria
+ * `apps/frontend/src` inteiro), com ou sem generico, em uma categoria
  * nomeada:
  *
+ * - `definition`: `function routeSchema<T>(` em
+ *   `data/http/BffHttpClient.ts` — a declaracao, nao uma chamada. Categoria
+ *   declarada, nunca conta como chamador nem como residuo.
  * - `literal_pattern`: metodo literal e padrao literal entre aspas — chamador
  *   reconhecido, entra na tabela de chamadores de `public_api_route_coverage`.
  * - `template_other_pattern`: padrao entre crases que nao e `/v1` — chamada
@@ -1308,15 +1312,23 @@ export function classifyFrontendRouteSchemaCallSites(files) {
     for (const match of source.matchAll(
       FRONTEND_ROUTE_SCHEMA_CALL_SITE_PATTERN,
     )) {
+      const site = {
+        filePath,
+        line: lineAt(source, match.index),
+      };
+      if (
+        FRONTEND_ROUTE_SCHEMA_DEFINITION_PRECEDING_PATTERN.test(
+          source.slice(0, match.index),
+        )
+      ) {
+        sites.push({ ...site, category: "definition", expression: match[0] });
+        continue;
+      }
       const args = extractCallArguments(
         source,
         match.index + match[0].length - 1,
       );
-      const site = {
-        filePath,
-        line: lineAt(source, match.index),
-        expression: args.slice(0, 2).join(", "),
-      };
+      site.expression = args.slice(0, 2).join(", ");
       const method = (args[0] ?? "").match(QUOTED_LITERAL_ARGUMENT_PATTERN);
       const methodIsLiteral =
         method !== null && HTTP_METHOD_LITERAL_PATTERN.test(method[2]);
@@ -1393,7 +1405,7 @@ function extractPublicApiRouteTableEntries(routesTableSource) {
 }
 
 // COBERTURA: toda rota `/v1` registrada no BFF que tem pelo menos um chamador
-// em `apps/frontend/src/data/services` precisa de entrada na tabela. Uma rota
+// em `apps/frontend/src` precisa de entrada na tabela. Uma rota
 // sem chamador nao exige entrada — ninguem no frontend depende do schema dela
 // — mas o conjunto e computado e devolvido, nunca mantido a mao.
 export function findUncoveredPublicApiRoutes(

@@ -5,14 +5,25 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 
 import type { PrismaClient } from "../../src/generated/prisma/client.js";
+import { ACTIVATION_TEST_NOTICE } from "../../src/modules/activation-test/ActivationTestService.js";
 import {
   AssistantService,
   PRODUCT_OWN_TEXTS,
 } from "../../src/modules/assistant/assistant.service.js";
 import { buildStyleGreeting } from "../../src/modules/prompts/style.js";
 import { derivePromptVersion } from "../../src/modules/prompts/system.js";
+import {
+  composeNotificationText,
+  notificationFactualLines,
+} from "../../src/modules/reminders/notification-message.js";
+import type { NotificationFacts } from "../../src/modules/scheduling-service/types.js";
 import { AI_CONVERSATION_STYLES } from "../../src/modules/tenant-config/ai-settings.js";
 import { DEFAULT_BUSINESS_CONTEXT } from "../../src/modules/tenant-config/business-context.js";
+import { classifyNotificationTextSites } from "../support/notification-message-sites.js";
+import {
+  classifySendTextSites,
+  discoverSendTextSites,
+} from "../support/send-text-sites.js";
 import { VOCABULARIO_DE_ESPERA } from "../support/vocabulario-de-espera.js";
 
 const phone = "5511999999999";
@@ -507,6 +518,18 @@ const assistantServiceSourcePath = join(
 const messageGraphSourcePath = join(
   dirname(fileURLToPath(import.meta.url)),
   "../../src/modules/graph/message-graph.ts",
+);
+const aiOrchestratorSrcPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../src",
+);
+const notificationMessageSourcePath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../src/modules/reminders/notification-message.ts",
+);
+const activationTestServiceSourcePath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../src/modules/activation-test/ActivationTestService.ts",
 );
 
 /** Número de sítios `messages: [...]` que o arquivo tem — piso para o fechamento. */
@@ -1172,5 +1195,508 @@ describe("conjunto fechado dos textos que o produto emite por conta própria (A-
     `;
     const literals = extractDispatchedModuleConstantTexts(fixtureComTextoTecnico);
     expect(literals).toEqual([]);
+  });
+});
+
+describe("conjunto de emissores de texto pelo canal do produto é computado, não escrito à mão (Goal039 / WU-01)", () => {
+  it("descobre os sete sítios de sendText de apps/ai-orchestrator/src, com resíduo zero", () => {
+    const sites = discoverSendTextSites(aiOrchestratorSrcPath);
+    expect(sites).toHaveLength(7);
+    const counts = {
+      port_declaration: sites.filter((s) => s.category === "port_declaration")
+        .length,
+      adapter_implementation: sites.filter(
+        (s) => s.category === "adapter_implementation",
+      ).length,
+      product_own_text_to_customer: sites.filter(
+        (s) => s.category === "product_own_text_to_customer",
+      ).length,
+      text_in_transit_named_origin: sites.filter(
+        (s) => s.category === "text_in_transit_named_origin",
+      ).length,
+      person_typed_text: sites.filter(
+        (s) => s.category === "person_typed_text",
+      ).length,
+    };
+    expect(counts).toEqual({
+      port_declaration: 1,
+      adapter_implementation: 1,
+      product_own_text_to_customer: 2,
+      text_in_transit_named_origin: 2,
+      person_typed_text: 1,
+    });
+  });
+
+  it("classifica cada um dos sete sítios reais na categoria e origem esperadas", () => {
+    const sites = discoverSendTextSites(aiOrchestratorSrcPath).map((site) => ({
+      file: site.filePath.replace(/\\/g, "/").split("/ai-orchestrator/src/")[1],
+      line: site.line,
+      category: site.category,
+      origin: site.origin,
+    }));
+    expect(sites).toEqual(
+      expect.arrayContaining([
+        {
+          file: "modules/channel/ports/WhatsAppProvider.ts",
+          line: 38,
+          category: "port_declaration",
+          origin: undefined,
+        },
+        {
+          file: "modules/channel/adapters/evolution/EvolutionProvider.ts",
+          line: 36,
+          category: "adapter_implementation",
+          origin: undefined,
+        },
+        {
+          file: "modules/graph/message-graph.ts",
+          line: 1207,
+          category: "product_own_text_to_customer",
+          origin: undefined,
+        },
+        {
+          file: "modules/reminders/NotificationDeliveryService.ts",
+          line: 318,
+          category: "product_own_text_to_customer",
+          origin: undefined,
+        },
+        {
+          file: "modules/activation-test/ActivationTestReplySender.ts",
+          line: 120,
+          category: "text_in_transit_named_origin",
+          origin: "input",
+        },
+        {
+          file: "modules/channel/platform/PlatformWhatsAppSender.ts",
+          line: 98,
+          category: "text_in_transit_named_origin",
+          origin: "message",
+        },
+        {
+          file: "modules/internal/routes.ts",
+          line: 705,
+          category: "person_typed_text",
+          origin: undefined,
+        },
+      ]),
+    );
+  });
+
+  it("não enxerga comentário, anotação de tipo (`ReturnType<...[\"sendText\"]>`) nem chamada com outro nome como sítio", () => {
+    const fixtureSemSitioReal = `
+      // provider.sendText({ to: "1", text: "isto é só um comentário" });
+      /* outro comentário mencionando sendText(x) */
+      let sent: Awaited<ReturnType<WhatsAppProvider["sendText"]>>;
+      function trySendTextSomethingElse() {}
+      provider.sendTextMessage({ to: "1", text: "não é sendText" });
+    `;
+    expect(classifySendTextSites(fixtureSemSitioReal, "<fixture>")).toEqual([]);
+  });
+
+  it("uma chamada sendText(...) com forma de text: não reconhecida vira resíduo e derruba a descoberta, nomeando arquivo e linha", () => {
+    const fixtureComResiduo = [
+      "class NovoEmissor {",
+      "  async enviar(provider: WhatsAppProvider) {",
+      '    return provider.sendText({ to: "1", text: "literal inline nunca visto antes" });',
+      "  }",
+      "}",
+    ].join("\n");
+    expect(() =>
+      classifySendTextSites(fixtureComResiduo, "<fixture-residuo>"),
+    ).toThrowError(
+      /<fixture-residuo>:3: chamada sendText\(\.\.\.\) com forma de "text:" não reconhecida/,
+    );
+  });
+
+  it("classifica texto em trânsito com origem nomeada a partir de qualquer parâmetro `<origem>.text`, exceto `body`", () => {
+    const fixture =
+      'provider.sendText({ to: "1", text: outroParametro.text, correlationId: "c" });';
+    const sites = classifySendTextSites(fixture, "<fixture>");
+    expect(sites).toEqual([
+      {
+        filePath: "<fixture>",
+        line: 1,
+        category: "text_in_transit_named_origin",
+        origin: "outroParametro",
+      },
+    ]);
+  });
+
+  it("classifica texto digitado por pessoa (`body.text`) e texto próprio do produto (`state.response.text` e variável local de composeNotificationText)", () => {
+    expect(
+      classifySendTextSites(
+        'provider.sendText({ to: "1", text: body.text });',
+        "<fixture>",
+      ),
+    ).toEqual([
+      {
+        filePath: "<fixture>",
+        line: 1,
+        category: "person_typed_text",
+      },
+    ]);
+    expect(
+      classifySendTextSites(
+        'provider.sendText({ to: "1", text: state.response.text });',
+        "<fixture>",
+      ),
+    ).toEqual([
+      {
+        filePath: "<fixture>",
+        line: 1,
+        category: "product_own_text_to_customer",
+      },
+    ]);
+    const fixtureComposta = [
+      "const text = composeNotificationText({ style, facts });",
+      'const sent = provider.sendText({ to: externalContactId, text, correlationId: intent.correlationId });',
+    ].join("\n");
+    expect(classifySendTextSites(fixtureComposta, "<fixture>")).toEqual([
+      {
+        filePath: "<fixture>",
+        line: 2,
+        category: "product_own_text_to_customer",
+      },
+    ]);
+  });
+});
+
+/** Fatos mínimos de notificação, como em `tests/reminders/notification-message.test.ts`. */
+function notificationFacts(
+  overrides: Partial<NotificationFacts> = {},
+): NotificationFacts {
+  return {
+    kind: "REMINDER",
+    appointmentStatus: "CONFIRMED",
+    customerId: "customer-a",
+    customerName: "Ana",
+    customerPhone: "5511999999999",
+    services: ["Corte"],
+    title: null,
+    timezone: "America/Sao_Paulo",
+    date: "2026-09-16",
+    time: "14:30",
+    startAt: "2026-09-16T17:30:00.000Z",
+    price: null,
+    confirmationRequested: false,
+    ...overrides,
+  };
+}
+
+/** `composeNotificationText` monta blocos separados por linha em branco: saudação, frase(s) factual(is), confirmação ou fechamento. */
+function splitComposedBlocks(text: string): string[] {
+  return text.split("\n\n");
+}
+
+/** As seis formas factuais que o Goal exige: lembrete, cancelamento e alteração, cada uma com e sem linha de valor. */
+const FACTUAL_LINE_SCENARIOS: Array<Partial<NotificationFacts>> = [
+  { kind: "REMINDER", price: null },
+  { kind: "REMINDER", price: 120 },
+  { kind: "CHANGE_NOTICE", appointmentStatus: "CANCELLED", price: null },
+  { kind: "CHANGE_NOTICE", appointmentStatus: "CANCELLED", price: 120 },
+  { kind: "CHANGE_NOTICE", appointmentStatus: "CONFIRMED", price: null },
+  { kind: "CHANGE_NOTICE", appointmentStatus: "CONFIRMED", price: 120 },
+];
+
+/**
+ * Os textos que `notification-message.ts` produz, obtidos executando
+ * `composeNotificationText`/`notificationFactualLines` sobre fatos declarados
+ * aqui — não escritos à mão. Cobre saudação com e sem nome, pedido de
+ * confirmação e fechamento nos três estilos de `AI_CONVERSATION_STYLES`, e as
+ * frases factuais das seis formas de {@link FACTUAL_LINE_SCENARIOS}.
+ */
+const NOTIFICATION_MESSAGE_TEXTS = new Set<string>();
+for (const style of AI_CONVERSATION_STYLES) {
+  for (const customerName of ["Ana", null] as const) {
+    const facts = notificationFacts({
+      customerName,
+      confirmationRequested: false,
+    });
+    const text = composeNotificationText({ style, facts });
+    const blocks = splitComposedBlocks(text);
+    NOTIFICATION_MESSAGE_TEXTS.add(blocks[0]); // saudação
+    NOTIFICATION_MESSAGE_TEXTS.add(blocks[blocks.length - 1]); // fechamento
+    for (const line of notificationFactualLines(facts)) {
+      NOTIFICATION_MESSAGE_TEXTS.add(line);
+    }
+  }
+  const confirmationText = composeNotificationText({
+    style,
+    facts: notificationFacts({ confirmationRequested: true }),
+  });
+  const confirmationBlocks = splitComposedBlocks(confirmationText);
+  NOTIFICATION_MESSAGE_TEXTS.add(
+    confirmationBlocks[confirmationBlocks.length - 1],
+  ); // pedido de confirmação
+}
+for (const overrides of FACTUAL_LINE_SCENARIOS) {
+  for (const line of notificationFactualLines(notificationFacts(overrides))) {
+    NOTIFICATION_MESSAGE_TEXTS.add(line);
+  }
+}
+
+/** PRODUCT_OWN_TEXTS mais os textos de notification-message.ts (Goal039 / WU-02). */
+const VERIFIED_CLIENT_TEXTS = [
+  ...PRODUCT_OWN_TEXTS,
+  ...NOTIFICATION_MESSAGE_TEXTS,
+];
+
+/** Argumento (4º) de `this.sendAsClient(run, step, attempt, <texto>, ...)` no passo `stepName` de ActivationTestService.ts. */
+function extractSendAsClientText(source: string, stepName: string): string {
+  const caseIndex = source.indexOf(`case "${stepName}":`);
+  if (caseIndex === -1) {
+    throw new Error(`passo "${stepName}" não encontrado em ActivationTestService.ts`);
+  }
+  const callIndex = source.indexOf("this.sendAsClient(", caseIndex);
+  const openParenIndex = callIndex + "this.sendAsClient".length;
+  let depth = 0;
+  let quote: string | undefined;
+  let closeParenIndex = openParenIndex;
+  for (let i = openParenIndex; i < source.length; i += 1) {
+    const char = source[i];
+    if (quote) {
+      if (char === "\\") {
+        i += 1;
+        continue;
+      }
+      if (char === quote) quote = undefined;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === "`") {
+      quote = char;
+      continue;
+    }
+    if (char === "(") depth += 1;
+    if (char === ")") {
+      depth -= 1;
+      if (depth === 0) {
+        closeParenIndex = i;
+        break;
+      }
+    }
+  }
+  const args = splitTopLevelExpressions(
+    source.slice(openParenIndex + 1, closeParenIndex),
+  );
+  const textArgument = args[3]?.text;
+  const literalMatch =
+    textArgument?.match(/^`((?:[^`\\]|\\.)*)`$/) ??
+    textArgument?.match(/^"((?:[^"\\]|\\.)*)"$/);
+  if (!literalMatch) {
+    throw new Error(
+      `${activationTestServiceSourcePath}:${lineAt(source, callIndex)}: 4º argumento de sendAsClient(...) ` +
+        `no passo "${stepName}" não é literal reconhecível ("${textArgument}")`,
+    );
+  }
+  return literalMatch[1];
+}
+
+/**
+ * Os quatro textos do canal de teste de ativação (Goal039 / WU-02): o aviso
+ * ao observador humano e as três falas do cliente simulado. Nenhum é texto
+ * que o produto emite para uma pessoa cliente real — o aviso é dirigido a
+ * quem observa o teste, e as falas são o script que o teste envia *como se
+ * fosse* o cliente, para a IA responder, não respostas do produto. Por isso
+ * ficam fora do guardrail de espera (nunca conferidas contra
+ * VOCABULARIO_DE_ESPERA nem incluídas em VERIFIED_CLIENT_TEXTS), mas
+ * continuam enumeradas aqui, com a categoria e o motivo junto — nada some em
+ * silêncio.
+ */
+const activationTestServiceSource = readFileSync(
+  activationTestServiceSourcePath,
+  "utf8",
+);
+const ACTIVATION_TEST_CHANNEL_TEXTS = [
+  {
+    category: "activation_test_channel" as const,
+    reason: "aviso ao observador humano, não texto do produto para cliente",
+    text: ACTIVATION_TEST_NOTICE,
+  },
+  {
+    category: "activation_test_channel" as const,
+    reason: "fala do cliente simulado (pergunta de preço), não resposta do produto",
+    text: extractSendAsClientText(
+      activationTestServiceSource,
+      "CLIENT_ASKS_PRICE",
+    ),
+  },
+  {
+    category: "activation_test_channel" as const,
+    reason: "fala do cliente simulado (pergunta de horário), não resposta do produto",
+    text: extractSendAsClientText(
+      activationTestServiceSource,
+      "CLIENT_ASKS_SLOT",
+    ),
+  },
+  {
+    category: "activation_test_channel" as const,
+    reason: "fala do cliente simulado (aceite de horário), não resposta do produto",
+    text: extractSendAsClientText(
+      activationTestServiceSource,
+      "CLIENT_ACCEPTS_SLOT",
+    ),
+  },
+];
+
+describe("conjunto verificado de texto de cliente inclui notification-message.ts (Goal039 / WU-02)", () => {
+  it("o conjunto inclui saudação com e sem nome, pedido de confirmação e fechamento, nos três estilos", () => {
+    for (const style of AI_CONVERSATION_STYLES) {
+      for (const customerName of ["Ana", null] as const) {
+        const text = composeNotificationText({
+          style,
+          facts: notificationFacts({
+            customerName,
+            confirmationRequested: false,
+          }),
+        });
+        const blocks = splitComposedBlocks(text);
+        expect(NOTIFICATION_MESSAGE_TEXTS.has(blocks[0])).toBe(true);
+        expect(NOTIFICATION_MESSAGE_TEXTS.has(blocks[blocks.length - 1])).toBe(
+          true,
+        );
+      }
+      const confirmationText = composeNotificationText({
+        style,
+        facts: notificationFacts({ confirmationRequested: true }),
+      });
+      const confirmationBlocks = splitComposedBlocks(confirmationText);
+      expect(
+        NOTIFICATION_MESSAGE_TEXTS.has(
+          confirmationBlocks[confirmationBlocks.length - 1],
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it("o conjunto inclui as frases factuais de lembrete, cancelamento e alteração, com e sem linha de valor", () => {
+    for (const overrides of FACTUAL_LINE_SCENARIOS) {
+      const lines = notificationFactualLines(notificationFacts(overrides));
+      expect(lines.length).toBeGreaterThan(0);
+      for (const line of lines) {
+        expect(NOTIFICATION_MESSAGE_TEXTS.has(line)).toBe(true);
+      }
+    }
+  });
+
+  it("todo texto do conjunto verificado é conferido contra VOCABULARIO_DE_ESPERA, definição única de tests/support/", () => {
+    expect(NOTIFICATION_MESSAGE_TEXTS.size).toBeGreaterThan(0);
+    for (const text of VERIFIED_CLIENT_TEXTS) {
+      expect(text).not.toMatch(VOCABULARIO_DE_ESPERA);
+    }
+  });
+
+  it("fecha o conjunto: os sítios que produzem texto em notification-message.ts têm forma reconhecida, com resíduo zero", () => {
+    const source = readFileSync(notificationMessageSourcePath, "utf8");
+    const sites = classifyNotificationTextSites(
+      source,
+      notificationMessageSourcePath,
+    );
+    const counts = {
+      style_voice_greeting_ternary: sites.filter(
+        (s) => s.category === "style_voice_greeting_ternary",
+      ).length,
+      style_voice_static_literal: sites.filter(
+        (s) => s.category === "style_voice_static_literal",
+      ).length,
+      factual_change_notice_ternary: sites.filter(
+        (s) => s.category === "factual_change_notice_ternary",
+      ).length,
+      factual_single_template: sites.filter(
+        (s) => s.category === "factual_single_template",
+      ).length,
+    };
+    expect(counts).toEqual({
+      style_voice_greeting_ternary: 3,
+      style_voice_static_literal: 6,
+      factual_change_notice_ternary: 1,
+      factual_single_template: 2,
+    });
+  });
+
+  it("um sítio de STYLE_VOICES fora das formas reconhecidas derruba o fechamento nomeando arquivo e linha", () => {
+    const fixtureComResiduo = [
+      "const STYLE_VOICES: Record<AiConversationStyle, StyleVoice> = {",
+      "  PROFESSIONAL: {",
+      "    greeting: buildGreetingSomehow(),",
+      '    confirmation: "Pode confirmar sua presença respondendo sim ou não?",',
+      '    closing: "Fico à disposição.",',
+      "  },",
+      "};",
+    ].join("\n");
+    expect(() =>
+      classifyNotificationTextSites(fixtureComResiduo, "<fixture-residuo>"),
+    ).toThrowError(
+      /<fixture-residuo>:3: greeting de STYLE_VOICES com forma não reconhecida/,
+    );
+  });
+
+  it("um sítio de notificationFactualLines fora das formas reconhecidas derruba o fechamento nomeando arquivo e linha", () => {
+    const fixtureComResiduo = [
+      "const STYLE_VOICES: Record<AiConversationStyle, StyleVoice> = {",
+      "  PROFESSIONAL: {",
+      '    greeting: (name) => (name ? `Olá, ${name}.` : "Olá."),',
+      '    confirmation: "Pode confirmar sua presença respondendo sim ou não?",',
+      '    closing: "Fico à disposição.",',
+      "  },",
+      "};",
+      "",
+      "export function notificationFactualLines(facts: NotificationFacts): string[] {",
+      "  const lines: string[] = [];",
+      "  lines.push(algumaFuncaoDesconhecida());",
+      "  return lines;",
+      "}",
+    ].join("\n");
+    expect(() =>
+      classifyNotificationTextSites(fixtureComResiduo, "<fixture-residuo>"),
+    ).toThrowError(
+      /<fixture-residuo>:11: lines\.push\(\.\.\.\) de notificationFactualLines com forma não reconhecida/,
+    );
+  });
+
+  it("ACTIVATION_TEST_NOTICE e as três falas do cliente simulado ficam em categoria declarada, fora do guardrail de espera", () => {
+    expect(ACTIVATION_TEST_CHANNEL_TEXTS).toHaveLength(4);
+    for (const entry of ACTIVATION_TEST_CHANNEL_TEXTS) {
+      expect(entry.category).toBe("activation_test_channel");
+      expect(entry.reason.length).toBeGreaterThan(0);
+      expect(entry.text.length).toBeGreaterThan(0);
+      expect(VERIFIED_CLIENT_TEXTS).not.toContain(entry.text);
+    }
+  });
+
+  it("PRODUCT_OWN_TEXTS não muda: continua idêntico ao conjunto que a suíte já prova na baseline", () => {
+    const baselineFixedTexts = [
+      "Vou chamar uma pessoa da equipe pra te responder com atencao por aqui, ta?",
+      "Vou chamar a profissional para continuar seu atendimento.",
+      "Vou deixar essa conversa para a profissional responder, ta?",
+      "Sinto muito por isso. Vou chamar uma pessoa da equipe pra te atender com atencao por aqui, ta?",
+      "Oi! Vou deixar essa mensagem para a equipe verificar e te responder direitinho, ta bom?",
+      "Vou deixar essa mensagem para ela responder pessoalmente.",
+      "Certo, vou te ajudar por aqui.",
+    ];
+    const baselineGreetings = [
+      "Olá, tudo bem? Como posso te ajudar hoje?",
+      "Oii, tudo bem? Como posso te ajudar hoje?",
+      "Oii, tudo bem? Como posso te ajudar hoje? 😊",
+    ];
+    const baselineMessageGraphTexts = [
+      "Recebi sua mensagem, mas por enquanto consigo responder melhor por texto. Me envie sua pergunta em texto que continuo por aqui.",
+      "Tive um problema para consultar o sistema agora. Vou chamar a profissional para continuar seu atendimento.",
+      "Recebi seu audio, mas nao consegui entender o conteudo dele agora. Pode me mandar em texto, por favor? Assim continuo seu atendimento por aqui.",
+      "Recebi sua imagem e ja chamei a profissional para dar uma olhada com voce. Ela continua seu atendimento por aqui.",
+      "Recebi seu documento e ele ja esta aqui na conversa. Por enquanto nao consigo abrir arquivos, entao me conta em texto o que voce precisa que eu ajudo.",
+      "Recebi seu video e ele ja esta aqui na conversa. Por enquanto nao consigo assistir por aqui, entao me conta em texto o que voce precisa que eu ajudo.",
+    ];
+    expect(PRODUCT_OWN_TEXTS).toHaveLength(
+      baselineFixedTexts.length +
+        baselineGreetings.length +
+        baselineMessageGraphTexts.length,
+    );
+    for (const text of [
+      ...baselineFixedTexts,
+      ...baselineGreetings,
+      ...baselineMessageGraphTexts,
+    ]) {
+      expect(PRODUCT_OWN_TEXTS).toContain(text);
+    }
   });
 });

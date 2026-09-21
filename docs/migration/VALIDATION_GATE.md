@@ -632,6 +632,46 @@ extratores passam a **ver** textos que já existiam na árvore (referência a
 `PRODUCT_OWN_FIXED_TEXTS`, saudação de estilo, constante de módulo já
 despachada), nunca a produzir texto novo.
 
+## Conjunto de emissores de texto do Goal039
+
+O Goal038 fechou a forma dentro de dois arquivos escolhidos à mão
+(`assistant.service.ts`, `message-graph.ts`). O escopo de **quais** arquivos
+um guard olha era, ele próprio, a mesma allowlist escrita à mão que o
+Goal038 tinha proibido dentro das regras — um nível acima delas. Este delta
+troca a lista de dois arquivos por uma leitura de
+`apps/ai-orchestrator/src` inteiro.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `discoverSendTextSites` (`apps/ai-orchestrator/tests/support/send-text-sites.ts`, novo) lê `apps/ai-orchestrator/src` recursivamente e classifica toda ocorrência de `sendText(` em `port_declaration`, `adapter_implementation`, `product_own_text_to_customer`, `text_in_transit_named_origin` (com a origem nomeada) ou `person_typed_text`; ocorrência fora dessas cinco é resíduo e derruba o teste, nomeando arquivo e linha. Sobre a árvore real: **7** sítios, `{port_declaration: 1, adapter_implementation: 1, product_own_text_to_customer: 2, text_in_transit_named_origin: 2, person_typed_text: 1}`, resíduo zero — os cinco envios reais mais a porta e o adapter | Continua não cobrindo um canal de saída de texto que não seja `sendText` sobre `WhatsAppProvider` — um adapter que enviasse texto por um método diferente não seria descoberto por este descobridor específico, exigiria extensão própria. **Não é allowlist**: nenhum arquivo, módulo ou linha é nomeado no código do descobridor — só o `srcRoot` de partida e o padrão textual `sendText(`. Log, erro técnico, payload interno, anotação de tipo (`ReturnType<WhatsAppProvider["sendText"]>`) e chamada com outro nome (`sendTextMessage`) não são candidatos, provado por teste |
+
+## Guardrail de espera sobre o texto do lembrete e do aviso de alteração
+
+`notification-message.ts` compõe, sem chamada de modelo, o único texto
+próprio do produto que chega à cliente **sem** que ela tenha escrito nada
+antes — e não estava em `PRODUCT_OWN_TEXTS` nem passava por
+`VOCABULARIO_DE_ESPERA`. Este delta fecha essa lacuna na camada de teste,
+sem tocar `apps/ai-orchestrator/src/`.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `classifyNotificationTextSites` (`apps/ai-orchestrator/tests/support/notification-message-sites.ts`, novo) classifica cada sítio que produz texto em `notification-message.ts` em `style_voice_greeting_ternary`, `style_voice_static_literal`, `factual_change_notice_ternary` ou `factual_single_template`; forma fora dessas quatro é resíduo com arquivo e linha. Sobre o arquivo real: **12** sítios, `{style_voice_greeting_ternary: 3, style_voice_static_literal: 6, factual_change_notice_ternary: 1, factual_single_template: 2}`, resíduo zero. Em paralelo, `NOTIFICATION_MESSAGE_TEXTS` executa `composeNotificationText`/`notificationFactualLines` (exports já existentes) sobre fatos declarados no teste — saudação com/sem nome, confirmação e fechamento nos três estilos de `AI_CONVERSATION_STYLES`, e as seis formas factuais (lembrete/cancelamento/alteração, com/sem valor) — e entra em `VERIFIED_CLIENT_TEXTS` ao lado de `PRODUCT_OWN_TEXTS`. Todo item de `VERIFIED_CLIENT_TEXTS` é conferido contra `VOCABULARIO_DE_ESPERA` (definição única, `tests/support/`) | Continua não cobrindo texto emitido pelo **modelo** — mesma fronteira que D-050 já declarou. **`ACTIVATION_TEST_NOTICE` e as três falas de cliente simulado (`CLIENT_ASKS_PRICE`, `CLIENT_ASKS_SLOT`, `CLIENT_ACCEPTS_SLOT`) ficam fora deste guardrail, por decisão declarada, não por omissão**: são enumerados em `ACTIVATION_TEST_CHANNEL_TEXTS` na categoria `activation_test_channel`, cada um com o motivo escrito junto — o aviso é dirigido a quem observa o teste, não à cliente do negócio, e as falas são o script que o teste envia como se fosse a cliente, para a IA responder, não resposta do produto —, e um teste confirma que nenhum dos quatro está em `VERIFIED_CLIENT_TEXTS`. `PRODUCT_OWN_TEXTS` não muda: provado por teste que reafirma a lista da baseline |
+
+## Escopo computado do chamador de contrato público do Goal039
+
+`classifyFrontendRouteSchemaCallSites` lia só
+`apps/frontend/src/data/services`; uma chamada de `routeSchema` em
+qualquer outra pasta não era reconhecida **nem** virava resíduo — sumia da
+cobertura e da regra de literalidade ao mesmo tempo. É o terceiro escape
+duplo desta série (037 fechou o da crase, 038 o do genérico ausente e do
+receptor não-`app`), agora pela pasta.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `classifyFrontendRouteSchemaCallSites` passa a receber `sourceFiles("apps/frontend/src")` inteiro, no lugar de só `data/services`. `function routeSchema<T>(` em `data/http/BffHttpClient.ts` cai na categoria própria `definition` — nunca conta como chamada nem como resíduo, mesmo dentro do escopo lido agora. Uma chamada fora de `data/services` é reconhecida como chamador (entra em `public_api_route_coverage`) ou vira resíduo que reprova `frontend_v1_route_schema_calls_use_literal_patterns`, nomeando arquivo e linha. Sobre a árvore real: `frontend_v1_route_schema_calls_use_literal_patterns` `ok: true` — **194** arquivos, **117** sítios (`definition=1, literal_pattern=116`), resíduo zero —, e `public_api_route_coverage` `ok: true` — **194** arquivos do frontend, **116** rotas do BFF, continua só `GET /v1/conversations/:id/messages/:messageId/media` sem chamador | Continua não provando que o schema descreve corretamente o que a rota devolve (hook de runtime, Goal035). **Nenhuma allowlist por arquivo, rota ou linha entrou**: o conjunto reconhecido continua computado. Não muda o critério de literal/não-literal em si — path vindo de constante ou identificador continua resíduo, dentro ou fora de `data/services` |
+
+
+
 ## Frescor do relatório compartilhado do Goal038
 
 `scripts/lib/playwright-report.mjs` (novo) concentra `readPlaywrightReport`,

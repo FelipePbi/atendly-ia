@@ -3385,3 +3385,133 @@ migration e nenhum contrato público mudam.
   antes de repassá-lo ao Vitest — sem isso a ação determinística
   `targeted-tests` reprovava com `No test files found` sem chegar a carregar
   o arquivo apontado. Nenhum código de `apps/` depende desses dois arquivos.
+
+## Delta implementado — diff039, 2026-09-21 ([D-055](DECISIONS.md))
+
+Este delta dá nome ao limite que o [review038](reviews/038-review.md) tinha
+registrado — "resíduo zero não é cobertura universal" — e fecha o mesmo
+problema um nível acima do Goal038: **o escopo de cada guard** também era
+lista escrita à mão, não só a forma que ele reconhecia dentro dela. Dois
+descobridores de sítio de teste, novos em `apps/ai-orchestrator/tests/support/`,
+e uma mudança de escopo em `scripts/final-production-audit.mjs`. Nenhuma
+copy muda, nenhum arquivo de `apps/*/src/` é tocado, `PRODUCT_OWN_TEXTS`
+continua idêntico e nenhuma migration ou contrato público mudam.
+
+- **FATO atual (o conjunto de emissores de texto pelo canal do produto é
+  computado, não uma lista de dois arquivos):**
+  `apps/ai-orchestrator/tests/support/send-text-sites.ts` (novo) lê
+  `apps/ai-orchestrator/src` inteiro e classifica toda ocorrência de
+  `sendText(` — chamada sobre a porta `WhatsAppProvider` ou a própria
+  declaração/implementação — em uma de cinco categorias nomeadas:
+  `port_declaration` (assinatura da porta), `adapter_implementation`
+  (implementação concreta, sem texto próprio), `product_own_text_to_customer`
+  (`state.response.text` em `message-graph.ts`, ou variável local vinda de
+  `composeNotificationText(` em `NotificationDeliveryService.ts`),
+  `text_in_transit_named_origin` (propriedade `<origem>.text` de um
+  parâmetro do chamador, exceto `body` — nomeia a origem: `input` em
+  `ActivationTestReplySender.ts`, `message` em `PlatformWhatsAppSender.ts`)
+  e `person_typed_text` (`body.text`, corpo de requisição HTTP, em
+  `internal/routes.ts`). Confirmado por teste sobre a árvore real: **7**
+  sítios — `modules/channel/ports/WhatsAppProvider.ts:38`
+  (`port_declaration`), `modules/channel/adapters/evolution/EvolutionProvider.ts:36`
+  (`adapter_implementation`), `modules/graph/message-graph.ts:1207` e
+  `modules/reminders/NotificationDeliveryService.ts:318`
+  (`product_own_text_to_customer`),
+  `modules/activation-test/ActivationTestReplySender.ts:120` (origem
+  `input`) e `modules/channel/platform/PlatformWhatsAppSender.ts:98`
+  (origem `message`) (`text_in_transit_named_origin`), e
+  `modules/internal/routes.ts:705` (`person_typed_text`) — contagem exata
+  `{port_declaration: 1, adapter_implementation: 1,
+  product_own_text_to_customer: 2, text_in_transit_named_origin: 2,
+  person_typed_text: 1}`, resíduo zero. Sítio fora dessas categorias — um
+  sexto `sendText` com `text:` de forma não reconhecida — lança erro
+  nomeando arquivo e linha, em vez de ficar invisível como antes: nenhum
+  descobridor olhava para além de `assistant.service.ts` e
+  `message-graph.ts`. Comentário, anotação de tipo
+  (`ReturnType<WhatsAppProvider["sendText"]>`) e chamada com outro nome
+  (`sendTextMessage`) não são candidatos.
+- **FATO atual (o guardrail de vocabulário de espera alcança o texto que o
+  lembrete e o aviso de alteração entregam à cliente, não só
+  `assistant.service.ts` e `message-graph.ts`):**
+  `apps/ai-orchestrator/tests/support/notification-message-sites.ts` (novo)
+  classifica cada sítio que produz texto em
+  `modules/reminders/notification-message.ts` em uma de quatro categorias:
+  `style_voice_greeting_ternary` (saudação com/sem nome, por estilo),
+  `style_voice_static_literal` (`confirmation:`/`closing:` literais),
+  `factual_change_notice_ternary` (cancelamento vs. alteração) e
+  `factual_single_template` (frase de lembrete e linha de valor). Confirmado
+  sobre o arquivo real: **12** sítios, `{style_voice_greeting_ternary: 3,
+  style_voice_static_literal: 6, factual_change_notice_ternary: 1,
+  factual_single_template: 2}`, resíduo zero. Em
+  `assistant.service.test.ts`, um conjunto novo
+  (`NOTIFICATION_MESSAGE_TEXTS`) é montado **executando**
+  `composeNotificationText`/`notificationFactualLines` — exports que já
+  existiam — sobre fatos declarados no teste: saudação com e sem nome,
+  pedido de confirmação e fechamento nos três estilos de
+  `AI_CONVERSATION_STYLES`, e as seis formas factuais (lembrete,
+  cancelamento, alteração, cada uma com e sem linha de valor). Esse
+  conjunto entra em `VERIFIED_CLIENT_TEXTS` ao lado de `PRODUCT_OWN_TEXTS` e
+  todo item é conferido contra `VOCABULARIO_DE_ESPERA`, que continua com
+  **uma** definição em `tests/support/`. Nenhum arquivo de
+  `apps/ai-orchestrator/src/` foi editado; `PRODUCT_OWN_TEXTS` continua
+  idêntico, provado por teste que reafirma a lista da baseline.
+- **FATO atual (aviso ao dono do negócio e roteiro de cliente simulado
+  ficam fora do guardrail de espera, por categoria declarada, não por
+  esquecimento):** `ACTIVATION_TEST_NOTICE` e as três falas de cliente
+  simulado de `ActivationTestService.ts`
+  (`CLIENT_ASKS_PRICE`, `CLIENT_ASKS_SLOT`, `CLIENT_ACCEPTS_SLOT`) são
+  enumerados em `assistant.service.test.ts`
+  (`ACTIVATION_TEST_CHANNEL_TEXTS`) na categoria `activation_test_channel`,
+  cada um com o motivo escrito junto: o aviso é dirigido a quem observa o
+  teste, não à cliente do negócio, e as falas são o script que o teste
+  envia *como se fosse* a cliente, para a IA responder — não resposta do
+  produto. Os quatro textos são extraídos do 4º argumento real de
+  `this.sendAsClient(...)` em cada `case` de `ActivationTestService.ts`, não
+  copiados à mão, e um teste confirma que nenhum deles está em
+  `VERIFIED_CLIENT_TEXTS`.
+- **FATO atual (o chamador do contrato público é procurado em
+  `apps/frontend/src` inteiro, não só em `data/services`):**
+  `classifyFrontendRouteSchemaCallSites`
+  (`scripts/final-production-audit.mjs`) passa a receber
+  `sourceFiles("apps/frontend/src")` no lugar de
+  `sourceFiles("apps/frontend/src/data/services")`. A declaração
+  `function routeSchema<T>(` em `data/http/BffHttpClient.ts` cai em
+  categoria própria, `definition` — nunca conta como chamada nem como
+  resíduo, mesmo estando agora dentro do escopo lido. Sobre a árvore real,
+  `audit:static` (execução real desta unidade):
+  `frontend_v1_route_schema_calls_use_literal_patterns` `ok: true` — **194**
+  arquivos lidos, **117** sítios (`definition=1, literal_pattern=116`),
+  resíduo zero —, e `public_api_route_coverage` `ok: true` — **194**
+  arquivos do frontend, **116** rotas registradas no BFF, continua
+  imprimindo só `GET /v1/conversations/:id/messages/:messageId/media` sem
+  chamador, o mesmo número da baseline. Uma chamada fora de
+  `data/services` passa a ser reconhecida como chamador — entra na
+  cobertura — ou vira resíduo que reprova a regra de literalidade nomeando
+  arquivo e linha; antes, ela não caía em nenhum dos dois: simplesmente não
+  era lida. Ver
+  [VALIDATION_GATE](VALIDATION_GATE.md#escopo-computado-do-chamador-de-contrato-público-do-goal039).
+- **LIMITE:** este delta não fecha **M4**, não afirma fidelidade visual à
+  referência aprovada e não liga a verificação de resposta em produção —
+  nenhum desses três estados muda por este diff.
+- **LIMITE:** nenhuma copy muda em `notification-message.ts` nem em
+  `ActivationTestService.ts`, e `PRODUCT_OWN_TEXTS` continua com o mesmo
+  conjunto de entradas da baseline, provado por teste — os dois
+  descobridores passam a **ver** sítio e texto que já existiam, nunca
+  produzem texto novo.
+- **LIMITE:** nenhum resíduo apareceu em código de produção nesta rodada —
+  `apps/frontend/src/`, `apps/bff/src/` e `apps/ai-orchestrator/src/`
+  continuam intocados, confirmado por diff. Se algum resíduo real
+  aparecesse em código de produção, viraria achado a partir de **A-24**;
+  não apareceu.
+- **LIMITE:** este delta descreve o diff039 (WU-01 a WU-05 da rodada 1, com
+  os cinco controles negativos obrigatórios executados e revertidos pela
+  WU-04) sobre a baseline aceita `9ba6b751cac2b1af958fac47e5c83c0e1ddc7d6c`
+  (fechamento do Goal038), decidido em [D-055](DECISIONS.md), sem commit e
+  sem deploy. Os cinco arquivos tocados são
+  `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`,
+  `apps/ai-orchestrator/tests/support/send-text-sites.ts` (novo),
+  `apps/ai-orchestrator/tests/support/notification-message-sites.ts`
+  (novo), `scripts/final-production-audit.mjs` e
+  `scripts/tests/final-production-audit-legacy-regression.test.mjs` —
+  confirmado por `git status --porcelain` sobre a árvore final, depois da
+  reversão dos controles negativos.

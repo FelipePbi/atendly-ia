@@ -899,6 +899,72 @@ test("public_api_response_schema_single_source: passes when the frontend only re
   );
 });
 
+// Goal039/WU-03: escopo estendido de apps/frontend/src/data/services para
+// apps/frontend/src inteiro. A definicao de routeSchema em
+// data/http/BffHttpClient.ts cai em categoria propria e nunca conta como
+// chamada nem como residuo, mesmo estando dentro do escopo agora.
+test("frontend_v1_route_schema_calls_use_literal_patterns: the routeSchema definition itself is a definition, not a call nor residue", () => {
+  const files = [
+    {
+      path: "apps/frontend/src/data/http/BffHttpClient.ts",
+      content:
+        "export function routeSchema<T>(\n" +
+        "  method: HttpMethod,\n" +
+        "  pathPattern: string,\n" +
+        "): z.ZodType<T> {\n" +
+        "  return findPublicApiRoute(method, pathPattern).schema;\n" +
+        "}",
+    },
+  ];
+  assert.deepEqual(
+    classifyFrontendRouteSchemaCallSites(files).map((site) => site.category),
+    ["definition"],
+  );
+  assert.deepEqual(findNonLiteralFrontendV1RouteSchemaCalls(files), []);
+});
+
+// Goal039/WU-03: um chamador de routeSchema fora de data/services agora e
+// reconhecido pela cobertura, em vez de ficar invisivel para
+// public_api_route_coverage.
+test("public_api_route_coverage: recognizes a routeSchema() caller outside apps/frontend/src/data/services", () => {
+  const bffSourceFiles = [
+    {
+      path: "apps/bff/src/modules/whatsapp/routes.ts",
+      content:
+        'app.get(\n  "/v1/whatsapp",\n  { preHandler: requireTenantContext },\n  async (request) => {},\n);',
+    },
+  ];
+  const frontendFiles = [
+    {
+      path: "apps/frontend/src/features/whatsapp/useWhatsAppStatus.ts",
+      content: 'const schema = routeSchema("GET", "/v1/whatsapp");',
+    },
+  ];
+  const routesTableSource =
+    '{ method: "GET", pathPattern: "/v1/whatsapp", schema: whatsappConnectionSchema.nullable() },';
+
+  assert.deepEqual(
+    findUncoveredPublicApiRoutes(bffSourceFiles, frontendFiles, routesTableSource),
+    { missingFromTable: [], routesWithoutCaller: [] },
+  );
+});
+
+// Goal039/WU-03: um chamador de routeSchema fora de data/services com forma
+// nao literal continua reprovando frontend_v1_route_schema_calls_use_literal_patterns,
+// no lugar de escapar por estar fora do escopo antigo.
+test("frontend_v1_route_schema_calls_use_literal_patterns: fails when a routeSchema() call outside data/services declares a non-literal pattern", () => {
+  const files = [
+    {
+      path: "apps/frontend/src/features/whatsapp/useWhatsAppStatus.ts",
+      content:
+        'const path = "/v1/whatsapp";\n' + "const schema = routeSchema(\"GET\", path);",
+    },
+  ];
+  assert.deepEqual(findNonLiteralFrontendV1RouteSchemaCalls(files), [
+    'apps/frontend/src/features/whatsapp/useWhatsAppStatus.ts:2: routeSchema() chamado com metodo ou padrao que nao e literal, forma nao reconhecida — "GET", path',
+  ]);
+});
+
 test("public_api_response_schema_single_source: fails when a frontend file redeclares a public response schema", () => {
   const schemasSource =
     'export const appointmentSchema = z.object({ id: z.string() });';

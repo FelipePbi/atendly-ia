@@ -1722,3 +1722,161 @@ seções de fechamento anteriores já declaravam. **E não diz que a
 verificação de resposta roda em produção**: nenhum arquivo de `apps/bff/`
 foi tocado e `RESPONSE_CONTRACT_CHECK_ENABLED` continua
 `env.NODE_ENV !== "production"`, inalterado por este diff.
+
+## 16. Fechamento do escopo de guard escrito à mão — Goal039, 2026-09-21
+
+Seção nova, escrita depois da última mudança de árvore do diff039 (WU-01 a
+WU-04, com os cinco controles negativos obrigatórios executados e
+revertidos pela WU-04). Ela **não reescreve** §4 a §15: os registros de
+A-01 a A-19 em §6, o veredito de §7 e as oito seções de fechamento
+anteriores continuam exatamente como estavam. O [review038](reviews/038-review.md)
+tinha registrado, como observação não bloqueante, que "resíduo zero não é
+cobertura universal" — o Goal038 fechou a forma dentro de cada extrator,
+mas o **escopo** de arquivos que cada um lia continuava sendo lista escrita
+à mão, a mesma allowlist que o Goal038 tinha proibido dentro das regras, um
+nível acima delas. Esta seção acrescenta o que o diff039 passou a
+garantir: o descobridor de emissores de texto pelo canal do produto lê
+`apps/ai-orchestrator/src` inteiro, o guardrail de vocabulário de espera
+alcança o texto que `notification-message.ts` entrega à cliente, e o
+chamador do contrato público é procurado em `apps/frontend/src` inteiro.
+
+### O que mudou
+
+**O conjunto de sítios de envio de texto passa a ser descoberto, não uma
+lista de dois arquivos.** `discoverSendTextSites`
+(`apps/ai-orchestrator/tests/support/send-text-sites.ts`, novo) lê
+`apps/ai-orchestrator/src` recursivamente e classifica toda ocorrência de
+`sendText(` em `port_declaration`, `adapter_implementation`,
+`product_own_text_to_customer`, `text_in_transit_named_origin` (origem
+nomeada) ou `person_typed_text`; fora dessas cinco é resíduo que derruba o
+teste, nomeando arquivo e linha. Sobre a árvore real: **7** sítios,
+`{port_declaration: 1, adapter_implementation: 1,
+product_own_text_to_customer: 2, text_in_transit_named_origin: 2,
+person_typed_text: 1}`, resíduo zero — os cinco envios reais que a baseline
+já tinha (`message-graph.ts`, `NotificationDeliveryService.ts`,
+`ActivationTestReplySender.ts`, `PlatformWhatsAppSender.ts`,
+`internal/routes.ts`), mais a porta e o adapter. Ver
+[VALIDATION_GATE](VALIDATION_GATE.md#conjunto-de-emissores-de-texto-do-goal039).
+
+**O guardrail de vocabulário de espera passa a alcançar o texto que o
+lembrete e o aviso de alteração entregam à cliente.**
+`classifyNotificationTextSites`
+(`apps/ai-orchestrator/tests/support/notification-message-sites.ts`, novo)
+classifica cada sítio que produz texto em `notification-message.ts` em
+`style_voice_greeting_ternary`, `style_voice_static_literal`,
+`factual_change_notice_ternary` ou `factual_single_template`; forma fora
+dessas quatro é resíduo com arquivo e linha. Sobre o arquivo real: **12**
+sítios, `{style_voice_greeting_ternary: 3, style_voice_static_literal: 6,
+factual_change_notice_ternary: 1, factual_single_template: 2}`, resíduo
+zero. `NOTIFICATION_MESSAGE_TEXTS`, montado executando
+`composeNotificationText`/`notificationFactualLines` sobre fatos declarados
+no teste, entra em `VERIFIED_CLIENT_TEXTS` ao lado de `PRODUCT_OWN_TEXTS` e
+é conferido contra `VOCABULARIO_DE_ESPERA`. `ACTIVATION_TEST_NOTICE` e as
+três falas de cliente simulado ficam em categoria declarada
+(`activation_test_channel`), fora deste guardrail, com o motivo escrito
+junto — decisão registrada, não omissão. `PRODUCT_OWN_TEXTS` não muda e
+nenhuma copy muda, provado por teste e por diff. Ver
+[VALIDATION_GATE](VALIDATION_GATE.md#guardrail-de-espera-sobre-o-texto-do-lembrete-e-do-aviso-de-alteração).
+
+**O chamador do contrato público deixa de ser procurado só em
+`data/services`.** `classifyFrontendRouteSchemaCallSites`
+(`scripts/final-production-audit.mjs`) passa a receber
+`sourceFiles("apps/frontend/src")` inteiro; a definição
+`function routeSchema<T>(` em `data/http/BffHttpClient.ts` cai na categoria
+própria `definition`, nunca conta como chamada nem como resíduo. Uma
+chamada fora de `data/services` passa a ser reconhecida como chamador ou
+vira resíduo nomeado, em vez de escapar dos dois lados ao mesmo tempo — o
+terceiro escape duplo desta série (037 fechou o da crase, 038 o do
+genérico/receptor). Sobre a árvore real:
+`frontend_v1_route_schema_calls_use_literal_patterns` `ok: true` — **194**
+arquivos, **117** sítios (`definition=1, literal_pattern=116`), resíduo
+zero —, e `public_api_route_coverage` `ok: true` — **194** arquivos do
+frontend, **116** rotas do BFF, continua só
+`GET /v1/conversations/:id/messages/:messageId/media` sem chamador, o
+mesmo número da baseline. Ver
+[VALIDATION_GATE](VALIDATION_GATE.md#escopo-computado-do-chamador-de-contrato-público-do-goal039).
+
+**O que este diff não decide.** Ampliar o escopo de leitura não decidiu que
+os três descobridores agora cobrem todo canal de saída possível — um canal
+de texto que não seja `sendText` sobre `WhatsAppProvider`, ou uma pasta do
+frontend fora de `apps/frontend/src`, continuariam exigindo extensão
+própria. Declarar `ACTIVATION_TEST_NOTICE` e as três falas de cliente
+simulado como categoria fora do guardrail não decidiu que texto operacional
+nunca precisa de revisão — decidiu apenas que ele não é texto do produto
+para a cliente do negócio, e por isso não passa pelo mesmo vocabulário
+fechado. Nenhuma migration, nenhuma rota, nenhum contrato público e nenhuma
+tela, componente, texto ou CSS do frontend mudou neste diff.
+
+### Resultado real da execução
+
+Executado por esta unidade, sobre a árvore final desta rodada — depois dos
+cinco controles negativos obrigatórios (WU-04) e da reversão de cada um;
+`git status --porcelain` confirma os cinco arquivos do diff039, sem
+resíduo dos controles. Cada número abaixo foi lido da execução citada,
+nesta worktree, depois da última mudança de árvore.
+
+- `node scripts/final-production-audit.mjs` — exit 0, **34** checks, **33**
+  `passed`, 1 `skipped` declarado (`production_health`, sem
+  `PRODUCTION_HEALTH_TARGETS`).
+  `frontend_v1_route_schema_calls_use_literal_patterns`: `ok: true`, **194**
+  arquivos lidos, **117** sítios (`definition=1, literal_pattern=116`),
+  resíduo zero.
+  `public_api_route_coverage`: `ok: true`, **116** rotas registradas, **194**
+  arquivos do frontend lidos, só
+  `GET /v1/conversations/:id/messages/:messageId/media` sem chamador.
+- `node --test scripts/tests/final-production-audit-legacy-regression.test.mjs`
+  — **64** `pass`, 0 `fail`, incluindo os três casos novos da definição de
+  `routeSchema`, do chamador fora de `data/services` e da forma não
+  literal fora de `data/services`.
+- `npx vitest run tests/assistant/assistant.service.test.ts` em
+  `apps/ai-orchestrator` — **37** testes, 0 falhas: os 23 já existentes do
+  Goal038 mais os 14 novos deste diff (descoberta de sítios de envio,
+  fechamento de `notification-message.ts`, categoria declarada do canal de
+  teste de ativação e reafirmação de `PRODUCT_OWN_TEXTS`).
+
+Não reexecutados por esta unidade, e por isso sem número reproduzido aqui:
+`validate:core` completo, `npm run test:gate`, `validate:integration`,
+`test:bff` e `test:frontend`, e o restante da suíte de `apps/ai-orchestrator`
+além do arquivo citado. Essas execuções, e os cinco controles negativos com
+as duas saídas cada, pertencem às unidades de implementação e de controle
+negativo desta rodada.
+
+### Achados novos a partir de A-24
+
+Nenhum. `apps/frontend/src/`, `apps/bff/src/` e `apps/ai-orchestrator/src/`
+não foram tocados neste diff — confirmado por diff —, então nenhum resíduo
+apareceu em código de produção para virar achado. Os quatro fatos que o
+Goal039 tinha ido conferir sobre a baseline — sítios de `sendText` fora da
+dupla vigiada, texto de `notification-message.ts` fora do guardrail, texto
+do canal de teste de ativação sem categoria declarada, e chamador de
+`routeSchema` fora de `data/services` — não continham violação real: nenhum
+casava com `VOCABULARIO_DE_ESPERA` e nenhuma chamada de `routeSchema` fora
+de `data/services` existia na árvore. O que este diff fecha é lacuna de
+**escopo de leitura de teste e de gate**, não de produto.
+
+### Veredito recontado
+
+A contagem desta auditoria **não muda**: nenhum achado de A-04 a A-08, A-11
+a A-17 ou A-19 foi tocado, corrigido ou reclassificado, e nenhum achado
+fechado (A-01, A-02, A-03, A-09, A-10, A-18, A-20 a A-23) foi reaberto. Esta
+auditoria continua com **0 achados `BLOQUEADOR-MVP`, 7
+`PENDENCIA-POS-MVP`** e **6 `LIMITE-DECLARADO`** — os mesmos números que
+§15 já deixava, porque o que este diff amplia é escopo de leitura de guard
+de teste, e isso nunca tinha entrado nessa contagem como achado nem como
+limite declarado à parte.
+
+Três coisas que este recontar não diz. **Não diz que M4 foi fechado**:
+nenhuma chamada saiu, neste diff, para um provedor de LLM real nem para o
+WhatsApp real — o diff039 toca
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`,
+`apps/ai-orchestrator/tests/support/send-text-sites.ts` (novo),
+`apps/ai-orchestrator/tests/support/notification-message-sites.ts` (novo),
+`scripts/final-production-audit.mjs`,
+`scripts/tests/final-production-audit-legacy-regression.test.mjs` e a
+documentação de migração — nada além disso. **Não diz que a fidelidade
+visual está provada**: nenhum arquivo de `apps/frontend/src/` mudou, nenhum
+teste do gate renderizado foi pulado, marcado `fixme`, removido ou teve
+tolerância aumentada, e a matriz de larguras continua com as cinco. **E não
+diz que a verificação de resposta roda em produção**: nenhum arquivo de
+`apps/bff/` foi tocado e `RESPONSE_CONTRACT_CHECK_ENABLED` continua
+`env.NODE_ENV !== "production"`, inalterado por este diff.

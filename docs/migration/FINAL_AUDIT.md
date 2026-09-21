@@ -673,110 +673,6 @@ Os dois checkboxes (`remember`, `terms`) não aparecem em nenhum anexo —
 associado (o alvo real, nunca uma união com a caixa do `<input>`) passa dos
 44px confortáveis nas duas larguras.
 
-### Achados novos — A-20 a A-23
-
-A verificação de resposta, ligada na suíte de integração do BFF, encontrou
-quatro divergências entre o que o BFF devolve e o que a tela declarava.
-Nenhuma foi corrigida neste diff: nos quatro casos o produtor concorda com o
-comportamento de produto e com `apps/bff/PUBLIC_API_V1.md`, e a correção
-passaria por alterar o contrato público ou afrouxar um schema movido — as
-duas coisas proibidas pelo Goal035. Os identificadores seguem a numeração de
-§6 e a classificação usa o mesmo vocabulário fechado; §6 não foi reescrita.
-
-| ID | Achado | Classificação | Lado errado |
-| --- | --- | --- | --- |
-| A-20 | `DELETE /v1/customers/:id/primary-guardian` devolve `{ deleted: false }`, corpo que o contrato não admite | PENDENCIA-POS-MVP | o contrato: o produtor cumpre a remoção idempotente documentada |
-| A-21 | `GET /v1/status` devolve `ai.reconciled`, documentado em `PUBLIC_API_V1.md`, que o contrato não declara | PENDENCIA-POS-MVP | o contrato: o campo existe, é documentado e é descartado |
-| A-22 | `GET /v1/auth/session` devolve `businessProfile.modalities` e `businessProfile.address`, não declarados | PENDENCIA-POS-MVP | o contrato: as mesmas chaves são declaradas em `/v1/onboarding` e `/v1/settings` |
-| A-23 | `PATCH /v1/onboarding` e `POST /v1/onboarding/complete` devolvem sete campos de serviço não declarados | PENDENCIA-POS-MVP | o contrato: os sete campos já existem no `serviceSchema` cheio do pacote |
-
-#### A-20 — `DELETE /v1/customers/:id/primary-guardian` devolve `{ deleted: false }`
-
-**Classificação:** `PENDENCIA-POS-MVP`.
-
-**Reprodução:** estática, em três arquivos. `clearPrimaryGuardian` devolve
-`{ deleted: deleted.count > 0 }`
-(`apps/scheduling-service/src/modules/customers/atendly-customer-service.ts:263`);
-o BFF repassa sem tocar, tipando a resposta do produtor como
-`z.object({ deleted: z.boolean() })`
-(`apps/bff/src/clients/scheduling/index.ts:1068`,
-`apps/bff/src/modules/customers/routes.ts:178`); a entrada da tabela é
-`deletedSchema.or(customerPrimaryGuardianSchema)`
-(`packages/public-api-contract/src/routes.ts`), com `deletedSchema` =
-`z.object({ deleted: z.literal(true) })` (`src/schemas.ts`). Executada na
-rodada 1 com o Scheduling dublado devolvendo `{data:{deleted:false}}`: a rota
-respondeu `500` com
-`Response of DELETE /v1/customers/:id/primary-guardian does not match the public API contract: data: Invalid input`.
-O dublê era temporário e foi apagado — **não** há reprodução executável
-permanente na árvore, e é por isso que o achado não é classificado como
-`BLOQUEADOR-MVP`, na mesma regra que §6 aplica a A-04, A-07 e A-08.
-
-**Impacto de produto:** remover o responsável principal de um cliente que não
-tem nenhum devolve um corpo que a própria tela não decodifica — o caso
-idempotente que `apps/frontend/src/data/services/BffCustomerService.ts`
-documenta em comentário desde a baseline.
-
-**Por que não foi corrigido aqui:** alargar `deletedSchema` para aceitar
-`false` é afrouxar schema movido (proibido pelo Goal035 §7), e fazer a rota
-devolver outra coisa é mudar contrato público (também proibido). A decisão de
-qual lado muda é de Goal próprio.
-
-#### A-21 — `GET /v1/status` devolve `ai.reconciled`, que o contrato não declara
-
-**Classificação:** `PENDENCIA-POS-MVP`.
-
-**Reprodução:** `apps/bff/PUBLIC_API_V1.md`, seção "Reconciliação
-desired/effective em `GET /v1/status` (Goal019)", descreve `ai.reconciled` com
-seis valores possíveis; `systemStatusSchema` não declara o campo, e `z.object`
-o remove silenciosamente. Observado 37 vezes na suíte de integração da rodada
-1, com o hook instrumentado para comparar o `data` enviado com o `data`
-devolvido pelo `safeParse`: `NOOP` (24), `FAILED` (5), `CONVERGED` (4),
-`ACTIVATED` (3), `DEACTIVATED_BY_CHANNEL_CHANGE` (1). A instrumentação era
-temporária e foi revertida.
-
-**Impacto de produto:** a tela não distingue "convergiu agora" de "nada
-divergia", embora o BFF envie a informação.
-
-#### A-22 — `GET /v1/auth/session` devolve dois campos de perfil não declarados
-
-**Classificação:** `PENDENCIA-POS-MVP`.
-
-**Reprodução:** mesma instrumentação de A-21, 10 observações
-(`modalities: []`, `address: null`). `businessProfileSchema` declara só `id`,
-`businessName`, `category`, `timezone`, `language`, `currency`, `createdAt` e
-`updatedAt`; em `/v1/onboarding` e `/v1/settings` os dois campos são
-declarados — a assimetria é só na sessão.
-
-**Impacto de produto:** quem lê a sessão precisa de uma segunda chamada para
-modalidade e endereço, dados que já vieram na primeira.
-
-#### A-23 — `PATCH /v1/onboarding` e `POST /v1/onboarding/complete` devolvem sete campos de serviço não declarados
-
-**Classificação:** `PENDENCIA-POS-MVP`.
-
-**Reprodução:** mesma instrumentação de A-21, 3 respostas de cada rota. O
-objeto `service` inline de `onboardingStateSchema` declara `id`, `name`,
-`durationMinutes`, `priceType`, `price` e `active`; as respostas trazem também
-`needsReview`, `reviewOrigin`, `description`, `colorToken`,
-`bufferBeforeMinutes`, `bufferAfterMinutes` e `recurrenceIntervalDays` — todos
-já declarados no `serviceSchema` cheio do pacote.
-
-**Impacto de produto:** `needsReview` (pendência de revisão de serviço,
-Goal007) não chega à tela por essas duas rotas.
-
-#### Limite da verificação: campo a mais não reprova
-
-A-21, A-22 e A-23 só apareceram porque o hook foi instrumentado para comparar
-o `data` enviado com o `data` que o `safeParse` devolve. `z.object` **remove**
-chave não declarada em vez de recusá-la, então drift por campo a mais nunca
-deixa a verificação vermelha: o controle negativo da rodada 1 com um campo
-extra (`conversationDays` em `/v1/settings/retention`) passou verde, enquanto
-o controle com valor fora do vocabulário (`appliesFrom: "NOW"`) derrubou cinco
-testes com o erro nomeado. O que este gate cobre hoje é campo faltando, tipo
-errado, nulo indevido e valor fora do vocabulário; campo a mais, não. O limite
-é desta verificação, não do produto, e está declarado aqui para não ser
-descoberto como surpresa.
-
 ### Veredito recontado
 
 A contagem desta auditoria muda em uma linha: A-01 deixa de reproduzir e sai
@@ -1181,6 +1077,110 @@ nesta unidade — WU-20 é documentação, escrita depois da última mudança de
 obrigatórios do Goal — essas provas pertencem às unidades de controle
 negativo, não a esta unidade de fechamento documental. A instalação limpa dos
 dois apps, essa sim, foi executada na correção da rodada 2, acima.
+
+### Achados novos — A-20 a A-23
+
+A verificação de resposta, ligada na suíte de integração do BFF, encontrou
+quatro divergências entre o que o BFF devolve e o que a tela declarava.
+Nenhuma foi corrigida neste diff: nos quatro casos o produtor concorda com o
+comportamento de produto e com `apps/bff/PUBLIC_API_V1.md`, e a correção
+passaria por alterar o contrato público ou afrouxar um schema movido — as
+duas coisas proibidas pelo Goal035. Os identificadores seguem a numeração de
+§6 e a classificação usa o mesmo vocabulário fechado; §6 não foi reescrita.
+
+| ID | Achado | Classificação | Lado errado |
+| --- | --- | --- | --- |
+| A-20 | `DELETE /v1/customers/:id/primary-guardian` devolve `{ deleted: false }`, corpo que o contrato não admite | PENDENCIA-POS-MVP | o contrato: o produtor cumpre a remoção idempotente documentada |
+| A-21 | `GET /v1/status` devolve `ai.reconciled`, documentado em `PUBLIC_API_V1.md`, que o contrato não declara | PENDENCIA-POS-MVP | o contrato: o campo existe, é documentado e é descartado |
+| A-22 | `GET /v1/auth/session` devolve `businessProfile.modalities` e `businessProfile.address`, não declarados | PENDENCIA-POS-MVP | o contrato: as mesmas chaves são declaradas em `/v1/onboarding` e `/v1/settings` |
+| A-23 | `PATCH /v1/onboarding` e `POST /v1/onboarding/complete` devolvem sete campos de serviço não declarados | PENDENCIA-POS-MVP | o contrato: os sete campos já existem no `serviceSchema` cheio do pacote |
+
+#### A-20 — `DELETE /v1/customers/:id/primary-guardian` devolve `{ deleted: false }`
+
+**Classificação:** `PENDENCIA-POS-MVP`.
+
+**Reprodução:** estática, em três arquivos. `clearPrimaryGuardian` devolve
+`{ deleted: deleted.count > 0 }`
+(`apps/scheduling-service/src/modules/customers/atendly-customer-service.ts:263`);
+o BFF repassa sem tocar, tipando a resposta do produtor como
+`z.object({ deleted: z.boolean() })`
+(`apps/bff/src/clients/scheduling/index.ts:1068`,
+`apps/bff/src/modules/customers/routes.ts:178`); a entrada da tabela é
+`deletedSchema.or(customerPrimaryGuardianSchema)`
+(`packages/public-api-contract/src/routes.ts`), com `deletedSchema` =
+`z.object({ deleted: z.literal(true) })` (`src/schemas.ts`). Executada na
+rodada 1 com o Scheduling dublado devolvendo `{data:{deleted:false}}`: a rota
+respondeu `500` com
+`Response of DELETE /v1/customers/:id/primary-guardian does not match the public API contract: data: Invalid input`.
+O dublê era temporário e foi apagado — **não** há reprodução executável
+permanente na árvore, e é por isso que o achado não é classificado como
+`BLOQUEADOR-MVP`, na mesma regra que §6 aplica a A-04, A-07 e A-08.
+
+**Impacto de produto:** remover o responsável principal de um cliente que não
+tem nenhum devolve um corpo que a própria tela não decodifica — o caso
+idempotente que `apps/frontend/src/data/services/BffCustomerService.ts`
+documenta em comentário desde a baseline.
+
+**Por que não foi corrigido aqui:** alargar `deletedSchema` para aceitar
+`false` é afrouxar schema movido (proibido pelo Goal035 §7), e fazer a rota
+devolver outra coisa é mudar contrato público (também proibido). A decisão de
+qual lado muda é de Goal próprio.
+
+#### A-21 — `GET /v1/status` devolve `ai.reconciled`, que o contrato não declara
+
+**Classificação:** `PENDENCIA-POS-MVP`.
+
+**Reprodução:** `apps/bff/PUBLIC_API_V1.md`, seção "Reconciliação
+desired/effective em `GET /v1/status` (Goal019)", descreve `ai.reconciled` com
+seis valores possíveis; `systemStatusSchema` não declara o campo, e `z.object`
+o remove silenciosamente. Observado 37 vezes na suíte de integração da rodada
+1, com o hook instrumentado para comparar o `data` enviado com o `data`
+devolvido pelo `safeParse`: `NOOP` (24), `FAILED` (5), `CONVERGED` (4),
+`ACTIVATED` (3), `DEACTIVATED_BY_CHANNEL_CHANGE` (1). A instrumentação era
+temporária e foi revertida.
+
+**Impacto de produto:** a tela não distingue "convergiu agora" de "nada
+divergia", embora o BFF envie a informação.
+
+#### A-22 — `GET /v1/auth/session` devolve dois campos de perfil não declarados
+
+**Classificação:** `PENDENCIA-POS-MVP`.
+
+**Reprodução:** mesma instrumentação de A-21, 10 observações
+(`modalities: []`, `address: null`). `businessProfileSchema` declara só `id`,
+`businessName`, `category`, `timezone`, `language`, `currency`, `createdAt` e
+`updatedAt`; em `/v1/onboarding` e `/v1/settings` os dois campos são
+declarados — a assimetria é só na sessão.
+
+**Impacto de produto:** quem lê a sessão precisa de uma segunda chamada para
+modalidade e endereço, dados que já vieram na primeira.
+
+#### A-23 — `PATCH /v1/onboarding` e `POST /v1/onboarding/complete` devolvem sete campos de serviço não declarados
+
+**Classificação:** `PENDENCIA-POS-MVP`.
+
+**Reprodução:** mesma instrumentação de A-21, 3 respostas de cada rota. O
+objeto `service` inline de `onboardingStateSchema` declara `id`, `name`,
+`durationMinutes`, `priceType`, `price` e `active`; as respostas trazem também
+`needsReview`, `reviewOrigin`, `description`, `colorToken`,
+`bufferBeforeMinutes`, `bufferAfterMinutes` e `recurrenceIntervalDays` — todos
+já declarados no `serviceSchema` cheio do pacote.
+
+**Impacto de produto:** `needsReview` (pendência de revisão de serviço,
+Goal007) não chega à tela por essas duas rotas.
+
+#### Limite da verificação: campo a mais não reprova
+
+A-21, A-22 e A-23 só apareceram porque o hook foi instrumentado para comparar
+o `data` enviado com o `data` que o `safeParse` devolve. `z.object` **remove**
+chave não declarada em vez de recusá-la, então drift por campo a mais nunca
+deixa a verificação vermelha: o controle negativo da rodada 1 com um campo
+extra (`conversationDays` em `/v1/settings/retention`) passou verde, enquanto
+o controle com valor fora do vocabulário (`appliesFrom: "NOW"`) derrubou cinco
+testes com o erro nomeado. O que este gate cobre hoje é campo faltando, tipo
+errado, nulo indevido e valor fora do vocabulário; campo a mais, não. O limite
+é desta verificação, não do produto, e está declarado aqui para não ser
+descoberto como surpresa.
 
 ### Veredito recontado
 

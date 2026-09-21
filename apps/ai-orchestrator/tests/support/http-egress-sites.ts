@@ -540,6 +540,16 @@ function extractLeadingIdentifiers(urlArgText: string): string[] {
   return Array.from(identifiers);
 }
 
+/** Extrai o valor de uma propriedade `<nome>: <expressão>` de dentro do texto (sem chaves) de um objeto, ou `undefined` se a propriedade não existir. */
+function findObjectPropertyExpression(objectBody: string, propertyName: string): string | undefined {
+  const pattern = new RegExp(`^${propertyName}\\s*:\\s*([\\s\\S]+)$`);
+  for (const property of splitTopLevelItems(objectBody)) {
+    const match = property.match(pattern);
+    if (match) return match[1].trim();
+  }
+  return undefined;
+}
+
 /** Corpo da última declaração `const <identifier> = <expressão>;` que começa antes de `beforeIndex` em `source`, ou `undefined` se não houver. */
 function findNearestPrecedingDeclarationRhs(
   source: string,
@@ -645,18 +655,34 @@ function resolveDestination(
   };
 }
 
-/** Chamadas reais (não a própria declaração) de `functionName` em `source`, com os textos de argumento de topo já separados. */
-function findRealCallArguments(source: string, functionName: string): string[][] {
+/** Uma chamada real de uma função: onde ela está, e os textos de argumento de topo já separados. */
+interface RealCallSite {
+  index: number;
+  line: number;
+  args: string[];
+}
+
+/** Chamadas reais (não a própria declaração) de `functionName` em `source`, com posição e argumentos. */
+function findRealCallSites(source: string, functionName: string): RealCallSite[] {
   const pattern = new RegExp(`\\b${functionName}\\(`, "g");
-  const calls: string[][] = [];
+  const calls: RealCallSite[] = [];
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(source))) {
     const openParenIndex = match.index + match[0].length - 1;
     if (isMemberDeclarationOrImplementationPosition(source, match.index, openParenIndex)) continue;
     const closeParenIndex = findMatchingDelimiterEnd(source, openParenIndex, "(", ")");
-    calls.push(splitTopLevelItems(source.slice(openParenIndex + 1, closeParenIndex)));
+    calls.push({
+      index: match.index,
+      line: lineAt(source, match.index),
+      args: splitTopLevelItems(source.slice(openParenIndex + 1, closeParenIndex)),
+    });
   }
   return calls;
+}
+
+/** Os argumentos de cada chamada real de `functionName` em `source` — a mesma varredura de `findRealCallSites`, sem a posição. */
+function findRealCallArguments(source: string, functionName: string): string[][] {
+  return findRealCallSites(source, functionName).map((call) => call.args);
 }
 
 /** Resolve `env.<NOME>` a partir dos argumentos passados, nos chamadores reais de `functionName` em `source`, para as posições de `paramPositions`. */
@@ -694,11 +720,7 @@ function hasTextToRecipientShape(objectBody: string): boolean {
 
 /** Valor da propriedade `body:` dentro do texto (sem chaves) de um objeto de opções de `fetch`, ou `undefined` se não houver. */
 function findBodyPropertyExpression(optionsObjectBody: string): string | undefined {
-  for (const property of splitTopLevelItems(optionsObjectBody)) {
-    const match = property.match(/^body\s*:\s*([\s\S]+)$/);
-    if (match) return match[1].trim();
-  }
-  return undefined;
+  return findObjectPropertyExpression(optionsObjectBody, "body");
 }
 
 /**
@@ -1089,4 +1111,811 @@ export function computeBoundaryValueCrossing(
     );
   }
   return { key, envSchema, envExample };
+}
+
+/* =========================================================================
+ * Toda requisição das duas árvores cujo destino é o serviço Go (Goal043 /
+ * WU-01) — método e expressão de caminho, não só o egresso bruto.
+ *
+ * Reusa `discoverHttpEgressSites` para os sítios de `fetch(` cru (resíduo
+ * zero já garantido ali) e estende a mesma resolução de destino por forma
+ * para dois casos que o descobridor de egresso não alcança sozinho:
+ *
+ * 1. `fetch(` cru cuja URL é `<helper>(<base>, <caminho>)` — separa qual dos
+ *    dois argumentos é a base (resolve a uma das chaves de ambiente do
+ *    serviço Go) e qual é o caminho, e computa o valor do caminho quando ele
+ *    vem de `env.<NOME>`, pela declaração em `config/env.ts` (nunca digitado
+ *    aqui).
+ * 2. Requisição feita por um cliente HTTP interno (`InternalHttpClient` hoje,
+ *    mas o nome da classe é lido da declaração, nunca escrito à mão): o sítio
+ *    de `fetch(` dentro do cliente já cai em `constructor_base_url_*`
+ *    (destino vem de `this.baseUrl`, atribuído por parâmetro de construtor).
+ *    Daqui, a classe que contém esse `fetch` é localizada, toda instanciação
+ *    dela nas duas árvores é encontrada, e o primeiro argumento de cada
+ *    instanciação é resolvido pela mesma forma — só uma delas resolve a uma
+ *    chave do serviço Go. Para essa instância, cada método da classe que a
+ *    guarda é varrido: o que chama `this.<campo>.request(...)` (ou
+ *    `.requestWithStatus`/`.requestBinary`) vira uma requisição, com método e
+ *    caminho extraídos do objeto de opções; o que só referencia uma chave de
+ *    ambiente sem chamar o cliente monta um valor para ser entregue em
+ *    outro lugar (ex.: `webhookUrl()`, que monta a URL de entrada que o Go
+ *    recebe dentro do corpo de outra requisição) — categoria própria, fora
+ *    do conjunto alcançado.
+ *
+ * Forma não reconhecida em qualquer um dos dois casos derruba a leitura,
+ * nomeando arquivo e linha — a mesma politica de resíduo zero de
+ * `discoverHttpEgressSites`.
+ */
+
+/**
+ * As chaves de ambiente cujo valor é a base da URL do serviço Go. As duas
+ * apontam, por default declarado, para o mesmo host (`evolution-go:8080`) —
+ * a mesma fronteira que `computeBoundaryValueCrossing` já verifica para o
+ * caminho de envio de texto (Goal042/§3). É a chave, não o nome do arquivo,
+ * da classe ou do cliente, que decide o destino.
+ */
+const GO_SERVICE_BASE_URL_ENV_VARS = new Set(["EVOLUTION_BASE_URL", "EVOLUTION_GO_BASE_URL"]);
+
+export interface GoBoundHttpRequest {
+  filePath: string;
+  line: number;
+  method: string;
+  /** Caminho computado; segmento interpolado (`${...}`) vira um buraco `{}`. */
+  pathExpression: string;
+  category: HttpEgressSiteCategory;
+  reason: string;
+}
+
+export type AssembledUrlCategory = `assembled_url_for_delivery_${string}`;
+
+/** Valor de URL montado a partir de uma chave de ambiente, mas nunca entregue diretamente ao transporte (nenhum `fetch`/`.request` na mesma função) — carregado como dado por outra requisição, não é ele próprio uma rota alcançada. */
+export interface AssembledUrlForDelivery {
+  filePath: string;
+  line: number;
+  functionName: string;
+  urlExpression: string;
+  category: AssembledUrlCategory;
+  reason: string;
+}
+
+export interface GoServiceHttpRequestDiscovery {
+  requests: GoBoundHttpRequest[];
+  assembledUrls: AssembledUrlForDelivery[];
+  /** Sítios de egresso lidos e contados fora do conjunto alcançado, com o motivo escrito — nenhum sítio é descartado em silêncio. */
+  notGoBound: NonGoBoundEgressSite[];
+}
+
+/** Resolve o texto de um argumento de caminho a um valor: `env.<NOME>` vira o default computado do schema de ambiente; literal de string/crase vira seu conteúdo com todo `${...}` trocado por `{}`. Forma não reconhecida derruba a leitura. */
+function resolvePathExpression(
+  pathText: string,
+  envSchemaPath: string,
+  filePath: string,
+  line: number,
+): string {
+  const trimmed = pathText.trim();
+  const envMatch = trimmed.match(/^env\.([A-Z][A-Z0-9_]*)$/);
+  if (envMatch) return readEnvSchemaDefault(envSchemaPath, envMatch[1]).value;
+  const literalMatch = trimmed.match(/^(["'`])([\s\S]*)\1$/);
+  if (literalMatch) return literalMatch[2].replace(/\$\{[^}]*\}/g, "{}");
+  throw new Error(
+    `${filePath}:${line}: expressão de caminho "${trimmed}" não é literal nem env.<NOME> reconhecível`,
+  );
+}
+
+/** Tira as aspas (ou crases) de um literal de string, ou derruba a leitura se o texto não for um literal. */
+function normalizeStringLiteral(text: string, filePath: string, line: number): string {
+  const match = text.trim().match(/^(["'`])([\s\S]*)\1$/);
+  if (!match) {
+    throw new Error(`${filePath}:${line}: valor "${text.trim()}" não é um literal de string reconhecível`);
+  }
+  return match[2];
+}
+
+/** Separa `<algo>(<argA>, <argB>)` em base/caminho: `argA` resolve só a chaves de `baseEnvVars` e `argB` resolve a exatamente uma chave fora desse conjunto. Devolve o texto de `argB`, ou `undefined` se a forma não bater. */
+function splitBaseAndPathArguments(rhsText: string, baseEnvVars: Set<string>): string | undefined {
+  const callMatch = rhsText.trim().match(/^[A-Za-z_$][\w$]*\(([\s\S]*)\)$/);
+  if (!callMatch) return undefined;
+  const args = splitTopLevelItems(callMatch[1]);
+  if (args.length !== 2) return undefined;
+  const [argA, argB] = args;
+  const varsA = matchEnvVars(argA);
+  const varsB = matchEnvVars(argB);
+  const baseIsA = varsA.length > 0 && varsA.every((name) => baseEnvVars.has(name));
+  const pathIsB = varsB.length === 1 && !baseEnvVars.has(varsB[0]);
+  return baseIsA && pathIsB ? argB.trim() : undefined;
+}
+
+/**
+ * Método HTTP de uma chamada de `fetch`: o que a propriedade `method:` das
+ * opções disser, ou `GET` quando as opções não trazem `method` — que é o
+ * default do próprio `fetch`, lido da especificação da plataforma, não uma
+ * suposição desta leitura. Segundo argumento presente mas sem forma de
+ * objeto reconhecível derruba a leitura, porque aí o método é ilegível, não
+ * ausente.
+ */
+function resolveFetchMethod(
+  optionsArgText: string | undefined,
+  filePath: string,
+  line: number,
+): string {
+  const trimmed = (optionsArgText ?? "").trim();
+  if (trimmed === "") return "GET";
+  const objectMatch = trimmed.match(/^\{([\s\S]*)\}$/);
+  if (objectMatch === null) {
+    throw new Error(
+      `${filePath}:${line}: opções de fetch "${trimmed}" não estão em forma de objeto reconhecível, então o método da requisição não pode ser lido`,
+    );
+  }
+  const methodText = findObjectPropertyExpression(objectMatch[1], "method");
+  if (methodText === undefined) return "GET";
+  return normalizeStringLiteral(methodText, filePath, line);
+}
+
+/** Uma parte de um literal de crase: texto estático, ou uma expressão `${...}` (sem as chaves). */
+interface TemplateLiteralPart {
+  text: string;
+  expression?: string;
+}
+
+/** Separa um literal de crase em partes estáticas e expressões `${...}`, respeitando aspas e chaves aninhadas. Devolve `undefined` se o texto não for um literal de crase fechado. */
+function splitTemplateLiteralParts(text: string): TemplateLiteralPart[] | undefined {
+  const trimmed = text.trim();
+  if (trimmed.length < 2 || !trimmed.startsWith("`") || !trimmed.endsWith("`")) return undefined;
+  const body = trimmed.slice(1, -1);
+  const parts: TemplateLiteralPart[] = [];
+  let staticText = "";
+  let i = 0;
+  while (i < body.length) {
+    if (body[i] === "\\") {
+      staticText += body.slice(i, i + 2);
+      i += 2;
+      continue;
+    }
+    if (body[i] === "$" && body[i + 1] === "{") {
+      let depth = 1;
+      let quote: string | undefined;
+      let j = i + 2;
+      while (j < body.length) {
+        const char = body[j];
+        if (quote !== undefined) {
+          if (char === "\\") j += 1;
+          else if (char === quote) quote = undefined;
+        } else if (char === '"' || char === "'" || char === "`") {
+          quote = char;
+        } else if (char === "{") {
+          depth += 1;
+        } else if (char === "}") {
+          depth -= 1;
+          if (depth === 0) break;
+        }
+        j += 1;
+      }
+      if (depth !== 0) return undefined;
+      parts.push({ text: staticText });
+      staticText = "";
+      parts.push({ text: "", expression: body.slice(i + 2, j) });
+      i = j + 1;
+      continue;
+    }
+    staticText += body[i];
+    i += 1;
+  }
+  parts.push({ text: staticText });
+  return parts;
+}
+
+/** Parâmetro de que `identifier` depende: ele próprio, quando já é parâmetro, ou o parâmetro citado na declaração local mais próxima que o define. `undefined` quando não depende de parâmetro algum. */
+function resolveIdentifierToParameter(
+  source: string,
+  callIndex: number,
+  identifier: string,
+  parameterNames: string[],
+): string | undefined {
+  if (parameterNames.includes(identifier)) return identifier;
+  const rhs = findNearestPrecedingDeclarationRhs(source, callIndex, identifier);
+  if (rhs === undefined) return undefined;
+  return parameterNames.find((name) => new RegExp(`\\b${name}\\b`).test(rhs));
+}
+
+/**
+ * Requisições ao serviço Go escondidas atrás de um parâmetro em trânsito
+ * (categoria `caller_resolved_base_url_via_*`): a função que contém o
+ * `fetch` recebe a base da URL como parâmetro, então o destino não está
+ * escrito na expressão da URL — ele só existe nos chamadores, e é lá que
+ * esta resolução vai. Para cada chamada real da função no mesmo arquivo, os
+ * argumentos são casados às posições dos parâmetros; a chamada cujo
+ * argumento de base resolve a uma chave do serviço Go vira uma requisição,
+ * e o caminho é computado parte por parte da própria expressão de URL do
+ * `fetch` — a parte que vem do parâmetro de base é o host, e não entra no
+ * caminho; a que vem de outro parâmetro é substituída pelo argumento
+ * daquele chamador. Parte que não resolve a parâmetro algum derruba a
+ * leitura, nunca vira caminho vazio.
+ */
+function discoverCallerResolvedGoBoundRequests(
+  source: string,
+  site: ClassifiedHttpEgressSite,
+  call: RawFetchOccurrence,
+  urlArgText: string,
+  optionsArgText: string | undefined,
+  envSchemaPath: string,
+): GoBoundHttpRequest[] {
+  const enclosing = resolveEnclosingFunction(source, call.index);
+  if (enclosing === undefined) {
+    throw new Error(
+      `${site.filePath}:${site.line}: sítio "${site.category}" sem função envolvente reconhecível, e sem ela os chamadores que decidem o destino não podem ser seguidos`,
+    );
+  }
+  const destination = resolveDestination(source, call.index, urlArgText, enclosing.parameterNames);
+  const transitParams = destination.unresolvedParams.filter((name) =>
+    enclosing.parameterNames.includes(name),
+  );
+  if (transitParams.length === 0) {
+    throw new Error(
+      `${site.filePath}:${site.line}: sítio "${site.category}" cuja URL "${urlArgText}" não depende de parâmetro algum de "${enclosing.name}", então o destino não pode ser resolvido nos chamadores`,
+    );
+  }
+  const parts = splitTemplateLiteralParts(urlArgText);
+  if (parts === undefined) {
+    throw new Error(
+      `${site.filePath}:${site.line}: a URL "${urlArgText}" vem de parâmetro em trânsito e não é um literal de crase, então o caminho da requisição não pode ser separado da base`,
+    );
+  }
+
+  const requests: GoBoundHttpRequest[] = [];
+  for (const callerCall of findRealCallSites(source, enclosing.name)) {
+    const argumentOf = (parameterName: string): string | undefined =>
+      callerCall.args[enclosing.parameterNames.indexOf(parameterName)];
+    // Qual parâmetro em trânsito carrega a base, e qual carrega caminho, é
+    // decidido pelo argumento deste chamador: base é o que resolve a uma
+    // chave de base do serviço Go; os demais entram no caminho.
+    let baseParam: string | undefined;
+    let goEnvVar: string | undefined;
+    for (const parameterName of transitParams) {
+      const found = matchEnvVars(argumentOf(parameterName) ?? "").find((name) =>
+        GO_SERVICE_BASE_URL_ENV_VARS.has(name),
+      );
+      if (found !== undefined) {
+        baseParam = parameterName;
+        goEnvVar = found;
+        break;
+      }
+    }
+    if (baseParam === undefined || goEnvVar === undefined) continue;
+
+    let pathExpression = "";
+    for (const part of parts) {
+      if (part.expression === undefined) {
+        pathExpression += part.text;
+        continue;
+      }
+      const identifier = part.expression.trim().match(/^[A-Za-z_$][\w$]*/)?.[0];
+      const parameterName =
+        identifier === undefined
+          ? undefined
+          : resolveIdentifierToParameter(source, call.index, identifier, enclosing.parameterNames);
+      if (parameterName === undefined) {
+        throw new Error(
+          `${site.filePath}:${site.line}: a parte interpolada "${part.expression}" da URL não resolve a parâmetro algum de "${enclosing.name}", então o caminho da requisição ao serviço Go ficaria incompleto`,
+        );
+      }
+      if (parameterName === baseParam) continue;
+      const argumentText = argumentOf(parameterName);
+      if (argumentText === undefined) {
+        throw new Error(
+          `${site.filePath}:${callerCall.line}: a chamada de "${enclosing.name}" não passa argumento para o parâmetro "${parameterName}", de que o caminho da URL depende`,
+        );
+      }
+      pathExpression += resolvePathExpression(
+        argumentText,
+        envSchemaPath,
+        site.filePath,
+        callerCall.line,
+      );
+    }
+
+    requests.push({
+      filePath: site.filePath,
+      line: callerCall.line,
+      method: resolveFetchMethod(optionsArgText, site.filePath, site.line),
+      pathExpression,
+      category: `env_var_${goEnvVar}`,
+      reason: `chamada de "${enclosing.name}" cujo argumento de base é env.${goEnvVar} (serviço Go); o fetch está em ${site.filePath}:${site.line}, e o caminho vem das partes da URL que não são a base`,
+    });
+  }
+  return requests;
+}
+
+/**
+ * Um sítio de egresso que foi lido e não entra no conjunto alcançado, com o
+ * motivo escrito. Nenhum sítio some em silêncio: ou ele vira requisição ao
+ * serviço Go, ou vira uma destas contagens, ou derruba a leitura.
+ */
+export interface NonGoBoundEgressSite {
+  filePath: string;
+  line: number;
+  category: HttpEgressSiteCategory;
+  reason: string;
+}
+
+/**
+ * Toda requisição das duas árvores cujo destino é o serviço Go, entre os
+ * sítios de `fetch(` cru já classificados por `discoverHttpEgressSites` — a
+ * resolução de base/caminho e de método é própria, o resto (existência do
+ * sítio, resíduo do egresso bruto) já veio de lá.
+ *
+ * A leitura é fail-closed em cada sítio. O destino pode não estar escrito na
+ * expressão da URL — um campo de construtor, um parâmetro em trânsito, um
+ * primitivo genérico —, e nesse caso a categoria que `discoverHttpEgressSites`
+ * já computou decide o que fazer: resolver nos chamadores, deixar para a
+ * varredura de instanciação do cliente interno, ou contar fora do conjunto
+ * com o motivo escrito. Categoria não prevista derruba a leitura, nomeando
+ * arquivo e linha; nenhum sítio é pulado sem registro.
+ */
+function discoverGoBoundRawFetchRequests(
+  discovery: HttpEgressDiscovery,
+  sourcesByPath: Map<string, string>,
+  envSchemaPath: string,
+): { requests: GoBoundHttpRequest[]; notGoBound: NonGoBoundEgressSite[] } {
+  const requests: GoBoundHttpRequest[] = [];
+  const notGoBound: NonGoBoundEgressSite[] = [];
+  const countOut = (site: ClassifiedHttpEgressSite, reason: string): void => {
+    notGoBound.push({ filePath: site.filePath, line: site.line, category: site.category, reason });
+  };
+
+  for (const site of discovery.sites) {
+    const source = sourcesByPath.get(site.filePath);
+    if (source === undefined) {
+      throw new Error(
+        `${site.filePath}:${site.line}: sítio de egresso classificado em arquivo que não aparece na releitura das duas árvores`,
+      );
+    }
+    const { calls } = findRawFetchOccurrences(source, site.filePath);
+    const call = calls.find((candidate) => candidate.line === site.line);
+    if (call === undefined) {
+      throw new Error(
+        `${site.filePath}:${site.line}: sítio de egresso classificado sem chamada de fetch correspondente na releitura do arquivo`,
+      );
+    }
+
+    const openParenIndex = call.index + "fetch(".length - 1;
+    const closeParenIndex = findMatchingDelimiterEnd(source, openParenIndex, "(", ")");
+    const callArgs = splitTopLevelItems(source.slice(openParenIndex + 1, closeParenIndex));
+    const urlArgText = (callArgs[0] ?? "").trim();
+    const optionsArgText = callArgs[1];
+    const isBareIdentifier = /^[A-Za-z_$][\w$]*$/.test(urlArgText);
+    // Um identificador sem declaração local não é um sítio perdido: ele pode
+    // ser um parâmetro, e aí o destino vive nos chamadores. O texto do
+    // próprio argumento segue adiante, e é a categoria do sítio que decide.
+    const rhs =
+      (isBareIdentifier
+        ? findNearestPrecedingDeclarationRhs(source, call.index, urlArgText)
+        : urlArgText) ?? urlArgText;
+
+    // O destino é resolvido pela mesma leitura que classificou o sítio —
+    // `env.<NOME>` escrito na URL, ou alcançado pelas declarações locais que
+    // ela usa — e não por uma varredura textual só da expressão.
+    const enclosing = resolveEnclosingFunction(source, call.index);
+    const destination = resolveDestination(
+      source,
+      call.index,
+      urlArgText,
+      enclosing?.parameterNames ?? [],
+    );
+    const goEnvVar = destination.envVars.find((name) => GO_SERVICE_BASE_URL_ENV_VARS.has(name));
+    if (goEnvVar !== undefined) {
+      const pathArgText = splitBaseAndPathArguments(rhs, GO_SERVICE_BASE_URL_ENV_VARS);
+      if (pathArgText === undefined) {
+        throw new Error(
+          `${site.filePath}:${site.line}: destino resolve a env.${goEnvVar} (serviço Go), mas "${rhs}" não separa base e caminho em forma reconhecível`,
+        );
+      }
+      requests.push({
+        filePath: site.filePath,
+        line: site.line,
+        method: resolveFetchMethod(optionsArgText, site.filePath, site.line),
+        pathExpression: resolvePathExpression(pathArgText, envSchemaPath, site.filePath, site.line),
+        category: site.category,
+        reason: `fetch cru cujo destino resolve a env.${goEnvVar}; caminho resolvido de ${pathArgText.trim()}`,
+      });
+      continue;
+    }
+
+    if (destination.envVars.length > 0) {
+      countOut(
+        site,
+        `destino resolve a env.${destination.envVars.join(" e env.")}, e nenhuma dessas chaves é base do serviço Go`,
+      );
+      continue;
+    }
+
+    // Daqui para baixo o destino não está escrito na expressão da URL. Cada
+    // categoria tem um tratamento nomeado; não existe caminho de saída sem
+    // registro.
+    if (site.category.startsWith("constructor_base_url_")) {
+      countOut(
+        site,
+        "destino vem de campo de instância atribuído por parâmetro de construtor; este sítio é resolvido pela varredura de instanciação do cliente, não aqui",
+      );
+      continue;
+    }
+
+    const callerResolvedPrefix = "caller_resolved_base_url_via_";
+    if (site.category.startsWith(callerResolvedPrefix)) {
+      const resolved = discoverCallerResolvedGoBoundRequests(
+        source,
+        site,
+        call,
+        urlArgText,
+        optionsArgText,
+        envSchemaPath,
+      );
+      if (resolved.length > 0) {
+        requests.push(...resolved);
+        continue;
+      }
+      countOut(
+        site,
+        `os chamadores de "${site.category.slice(callerResolvedPrefix.length)}" decidem o destino, e nenhum deles passa uma chave de base do serviço Go`,
+      );
+      continue;
+    }
+
+    if (site.category.startsWith(GENERIC_EGRESS_CATEGORY_PREFIX)) {
+      const functionName = site.category.slice(GENERIC_EGRESS_CATEGORY_PREFIX.length);
+      const goBoundCallers = discovery.genericEgressCallers.filter((caller) =>
+        Array.from(GO_SERVICE_BASE_URL_ENV_VARS).some((name) => caller.category.includes(name)),
+      );
+      if (goBoundCallers.length > 0) {
+        throw new Error(
+          `${site.filePath}:${site.line}: o egresso genérico "${functionName}" tem chamador com destino no serviço Go (${goBoundCallers
+            .map((caller) => `${caller.filePath}:${caller.line}`)
+            .join(", ")}), e o método e o caminho dessa forma ainda não são computados aqui`,
+        );
+      }
+      countOut(
+        site,
+        `egresso genérico "${functionName}": ${discovery.genericEgressCallers.length} chamador(es) nas duas árvores, nenhum com destino no serviço Go`,
+      );
+      continue;
+    }
+
+    throw new Error(
+      `${site.filePath}:${site.line}: sítio na categoria "${site.category}" cuja URL "${urlArgText}" não nomeia env.<NOME>; o destino não pode ser decidido, e um sítio sem destino decidido não é descartado`,
+    );
+  }
+  return { requests, notGoBound };
+}
+
+/** Índice do primeiro caractere da linha `line` (1-based) em `source`. */
+function indexAtLineStart(source: string, line: number): number {
+  if (line <= 1) return 0;
+  return source.split("\n").slice(0, line - 1).join("\n").length + 1;
+}
+
+interface ClassSpan {
+  name: string;
+  bodyStart: number;
+  bodyEnd: number;
+}
+
+/** Classe (nome e corpo) mais interna que contém `index`, computada da declaração `class <Nome> ... {`, nunca de uma lista. */
+function findEnclosingClassSpan(source: string, index: number): ClassSpan | undefined {
+  const pattern = /\bclass\s+([A-Za-z_$][\w$]*)[^{]*\{/g;
+  let match: RegExpExecArray | null;
+  let found: { name: string; braceIndex: number } | undefined;
+  while ((match = pattern.exec(source))) {
+    if (match.index >= index) break;
+    found = { name: match[1], braceIndex: match.index + match[0].length - 1 };
+  }
+  if (found === undefined) return undefined;
+  const bodyEnd = findMatchingDelimiterEnd(source, found.braceIndex, "{", "}");
+  if (bodyEnd < index) return undefined;
+  return { name: found.name, bodyStart: found.braceIndex + 1, bodyEnd };
+}
+
+/** Nome do campo atribuído por uma expressão `<campo> = new <Classe>(` que termina em `classNameMatchIndex`, ou `undefined` se a instanciação não estiver nessa forma. */
+function findAssignedFieldName(source: string, classNameMatchIndex: number): string | undefined {
+  const window = source.slice(Math.max(0, classNameMatchIndex - 200), classNameMatchIndex);
+  const match = window.match(/([A-Za-z_$][\w$]*)\s*=\s*new\s*$/);
+  return match ? match[1] : undefined;
+}
+
+interface ClassInstantiationSite {
+  filePath: string;
+  callIndex: number;
+  line: number;
+  argsText: string[];
+}
+
+/** Toda instanciação real (`new <className>(...)`, nunca a declaração da classe) de `className` em `source`. */
+function findClassInstantiations(
+  source: string,
+  filePath: string,
+  className: string,
+): ClassInstantiationSite[] {
+  const pattern = new RegExp(`\\b${className}\\(`, "g");
+  const sites: ClassInstantiationSite[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(source))) {
+    if (wordEndingAt(source, match.index) !== "new") continue;
+    const openParenIndex = match.index + match[0].length - 1;
+    if (isMemberDeclarationOrImplementationPosition(source, match.index, openParenIndex)) continue;
+    const closeParenIndex = findMatchingDelimiterEnd(source, openParenIndex, "(", ")");
+    sites.push({
+      filePath,
+      callIndex: match.index,
+      line: lineAt(source, match.index),
+      argsText: splitTopLevelItems(source.slice(openParenIndex + 1, closeParenIndex)),
+    });
+  }
+  return sites;
+}
+
+interface ClassMethodBody {
+  braceIndex: number;
+  bodyStart: number;
+  bodyEnd: number;
+  line: number;
+}
+
+/** Todo método (corpo de função) diretamente no nível do corpo de classe `[bodyStart, bodyEnd)` — não desce a função aninhada dentro de outro método. */
+function findTopLevelMethodBodies(source: string, bodyStart: number, bodyEnd: number): ClassMethodBody[] {
+  const quoteMask = computeQuoteMask(source, bodyEnd);
+  const methods: ClassMethodBody[] = [];
+  let i = bodyStart;
+  while (i < bodyEnd) {
+    if (quoteMask[i]) {
+      i += 1;
+      continue;
+    }
+    if (source[i] === "{") {
+      if (isFunctionBodyOpenBrace(source, quoteMask, i)) {
+        const methodBodyEnd = findMatchingDelimiterEnd(source, i, "{", "}");
+        methods.push({ braceIndex: i, bodyStart: i + 1, bodyEnd: methodBodyEnd, line: lineAt(source, i) });
+        i = methodBodyEnd + 1;
+        continue;
+      }
+      i = findMatchingDelimiterEnd(source, i, "{", "}") + 1;
+      continue;
+    }
+    i += 1;
+  }
+  return methods;
+}
+
+/** Nome do método cujo corpo abre em `braceIndex`, computado da lista de parâmetros — nunca escrito à mão. */
+function methodNameAtBrace(source: string, braceIndex: number, filePath: string, line: number): string {
+  const quoteMask = computeQuoteMask(source, braceIndex);
+  const closeParenIndex = findParameterListCloseParen(source, quoteMask, braceIndex);
+  if (closeParenIndex === undefined) {
+    throw new Error(`${filePath}:${line}: método de classe sem lista de parâmetros reconhecível`);
+  }
+  const openParenIndex = findMatchingDelimiterStart(source, quoteMask, closeParenIndex, "(", ")");
+  return wordEndingAt(source, skipGenericParametersBackward(source, quoteMask, openParenIndex));
+}
+
+/**
+ * Toda requisição a um cliente HTTP interno cujo primeiro argumento de
+ * construtor resolve a uma chave do serviço Go, mais toda montagem de URL
+ * que fica de fora desse conjunto (Goal043/WU-01, ver comentário acima).
+ *
+ * Parte dos sítios `constructor_base_url_*` que `discoverHttpEgressSites` já
+ * achou (o `fetch` dentro do cliente HTTP interno) para computar, sem
+ * escrever nome de classe algum, qual classe é essa — e então varre as duas
+ * árvores atrás de toda instanciação dela.
+ */
+function discoverGoBoundInternalClientRequests(
+  discovery: HttpEgressDiscovery,
+  sourcesByPath: Map<string, string>,
+  allSources: { filePath: string; source: string }[],
+  envSchemaPath: string,
+): { requests: GoBoundHttpRequest[]; assembledUrls: AssembledUrlForDelivery[] } {
+  const requests: GoBoundHttpRequest[] = [];
+  const assembledUrls: AssembledUrlForDelivery[] = [];
+  const scannedClassNames = new Set<string>();
+
+  const constructorBaseUrlSites = discovery.sites.filter((site) =>
+    site.category.startsWith("constructor_base_url_"),
+  );
+
+  for (const site of constructorBaseUrlSites) {
+    const source = sourcesByPath.get(site.filePath);
+    if (source === undefined) continue;
+    const classSpan = findEnclosingClassSpan(source, indexAtLineStart(source, site.line));
+    if (classSpan === undefined) {
+      throw new Error(
+        `${site.filePath}:${site.line}: sítio "${site.category}" fora de um corpo de classe reconhecível`,
+      );
+    }
+    if (scannedClassNames.has(classSpan.name)) continue;
+    scannedClassNames.add(classSpan.name);
+
+    for (const { filePath, source: candidateSource } of allSources) {
+      for (const instantiation of findClassInstantiations(candidateSource, filePath, classSpan.name)) {
+        const destination = resolveDestination(
+          candidateSource,
+          instantiation.callIndex,
+          instantiation.argsText[0] ?? "",
+          [],
+        );
+        const goEnvVar = destination.envVars.find((name) => GO_SERVICE_BASE_URL_ENV_VARS.has(name));
+        if (goEnvVar === undefined) continue;
+
+        const fieldName = findAssignedFieldName(candidateSource, instantiation.callIndex);
+        const ownerClassSpan = findEnclosingClassSpan(candidateSource, instantiation.callIndex);
+        if (fieldName === undefined || ownerClassSpan === undefined) {
+          throw new Error(
+            `${filePath}:${instantiation.line}: instância de ${classSpan.name} resolve a env.${goEnvVar} (serviço Go), mas não está atribuída a um campo de classe reconhecível`,
+          );
+        }
+
+        for (const method of findTopLevelMethodBodies(
+          candidateSource,
+          ownerClassSpan.bodyStart,
+          ownerClassSpan.bodyEnd,
+        )) {
+          const methodName = methodNameAtBrace(candidateSource, method.braceIndex, filePath, method.line);
+          const callPattern = new RegExp(
+            `this\\.${fieldName}\\.(request|requestWithStatus|requestBinary)\\(`,
+            "g",
+          );
+          callPattern.lastIndex = method.bodyStart;
+          let requestCallCount = 0;
+          let callMatch: RegExpExecArray | null;
+          while ((callMatch = callPattern.exec(candidateSource)) && callMatch.index < method.bodyEnd) {
+            requestCallCount += 1;
+            const callKind = callMatch[1];
+            const openParenIndex = callMatch.index + callMatch[0].length - 1;
+            const closeParenIndex = findMatchingDelimiterEnd(candidateSource, openParenIndex, "(", ")");
+            const args = splitTopLevelItems(candidateSource.slice(openParenIndex + 1, closeParenIndex));
+            const line = lineAt(candidateSource, callMatch.index);
+            const objectMatch = (args[0] ?? "").trim().match(/^\{([\s\S]*)\}$/);
+            if (objectMatch === null) {
+              throw new Error(
+                `${filePath}:${line}: chamada this.${fieldName}.${callKind}(...) sem objeto de opções reconhecível`,
+              );
+            }
+            const pathPropertyText = findObjectPropertyExpression(objectMatch[1], "path");
+            if (pathPropertyText === undefined) {
+              throw new Error(
+                `${filePath}:${line}: chamada this.${fieldName}.${callKind}(...) sem propriedade "path" reconhecível`,
+              );
+            }
+            const methodPropertyText = findObjectPropertyExpression(objectMatch[1], "method");
+            const requestMethod =
+              methodPropertyText !== undefined
+                ? normalizeStringLiteral(methodPropertyText, filePath, line)
+                : callKind === "requestBinary"
+                  ? "GET"
+                  : undefined;
+            if (requestMethod === undefined) {
+              throw new Error(
+                `${filePath}:${line}: chamada this.${fieldName}.${callKind}(...) sem "method" reconhecível e sem default de requestBinary`,
+              );
+            }
+
+            requests.push({
+              filePath,
+              line,
+              method: requestMethod,
+              pathExpression: resolvePathExpression(pathPropertyText, envSchemaPath, filePath, line),
+              category: `env_var_${goEnvVar}`,
+              reason: `this.${fieldName}.${callKind}(...) em ${methodName}(), cujo cliente resolve destino de env.${goEnvVar}`,
+            });
+            callPattern.lastIndex = closeParenIndex;
+          }
+
+          if (requestCallCount === 0) {
+            const methodBodyText = candidateSource.slice(method.bodyStart, method.bodyEnd);
+            const envVarsInMethod = matchEnvVars(methodBodyText);
+            if (envVarsInMethod.length === 0) continue;
+            const returnMatch = /\breturn\s+/.exec(methodBodyText);
+            const urlExpression = (
+              returnMatch
+                ? extractStatementRhs(methodBodyText, returnMatch.index + returnMatch[0].length)
+                : methodBodyText
+            )
+              .trim()
+              .replace(/\$\{[^}]*\}/g, "{}");
+            assembledUrls.push({
+              filePath,
+              line: method.line,
+              functionName: methodName,
+              urlExpression,
+              category: `assembled_url_for_delivery_${methodName}`,
+              reason: `"${methodName}" monta valor a partir de env.${envVarsInMethod.join(" e env.")} sem chamar this.${fieldName}.request/.requestWithStatus/.requestBinary — não é requisição ao transporte, é valor entregue em outra chamada`,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return { requests, assembledUrls };
+}
+
+/**
+ * Toda requisição das duas árvores cujo destino é o serviço Go, com método e
+ * expressão de caminho, sem lista escrita à mão (Goal043/WU-01). `assembledUrls`
+ * traz o que só monta valor de URL sem entregá-lo ao transporte — fora do
+ * conjunto alcançado, mas nomeado, não descartado em silêncio.
+ */
+export function discoverGoServiceHttpRequests(
+  aiOrchestratorSrcRoot: string,
+  bffSrcRoot: string,
+  aiOrchestratorEnvSchemaPath: string,
+): GoServiceHttpRequestDiscovery {
+  const discovery = discoverHttpEgressSites(aiOrchestratorSrcRoot, bffSrcRoot);
+
+  const allSources = [
+    ...listTypeScriptSources(aiOrchestratorSrcRoot),
+    ...listTypeScriptSources(bffSrcRoot),
+  ].map((filePath) => ({ filePath, source: blankComments(readFileSync(filePath, "utf8")) }));
+  const sourcesByPath = new Map(allSources.map(({ filePath, source }) => [filePath, source]));
+
+  const { requests: rawFetchRequests, notGoBound } = discoverGoBoundRawFetchRequests(
+    discovery,
+    sourcesByPath,
+    aiOrchestratorEnvSchemaPath,
+  );
+  const { requests: internalClientRequests, assembledUrls } = discoverGoBoundInternalClientRequests(
+    discovery,
+    sourcesByPath,
+    allSources,
+    aiOrchestratorEnvSchemaPath,
+  );
+
+  return {
+    requests: [...rawFetchRequests, ...internalClientRequests],
+    assembledUrls,
+    notGoBound,
+  };
+}
+
+/* =========================================================================
+ * Arquivo de valores das rotas de transporte do produto (Goal043 / WU-02) —
+ * o análogo, para um conjunto, de `readEnvFileValue`: recusa em vez de
+ * pular quando o arquivo falta, vem vazio, ou tem linha que não casa com o
+ * formato fixado.
+ * ========================================================================= */
+
+export interface ProductTransportRoute {
+  method: string;
+  /** Caminho, com "{}" no lugar de todo segmento computado — mesma convenção de `GoBoundHttpRequest.pathExpression`. */
+  path: string;
+  /** Linha (1-based) do arquivo de valores onde a rota está declarada. */
+  line: number;
+}
+
+/** Forma de uma linha de rota: MÉTODO (letras maiúsculas), um espaço, e um caminho iniciado por "/". */
+const PRODUCT_TRANSPORT_ROUTE_LINE_PATTERN = /^([A-Z]+) (\/\S*)$/;
+
+/**
+ * Lê `filePath` no formato fixado (uma rota por linha, `MÉTODO CAMINHO`;
+ * `#` inicia comentário; linha em branco é ignorada). Arquivo ausente,
+ * vazio (sem nenhuma rota reconhecida) ou com linha que não casa com o
+ * formato reprova, nomeando arquivo e linha quando aplicável — nunca pula.
+ */
+export function readProductTransportRoutesFile(filePath: string): ProductTransportRoute[] {
+  const source = readFileSync(filePath, "utf8");
+  const lines = source.split(/\r?\n/u);
+  const routes: ProductTransportRoute[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const raw = lines[index];
+    const trimmed = raw.trim();
+    if (trimmed === "" || trimmed.startsWith("#")) continue;
+    const match = PRODUCT_TRANSPORT_ROUTE_LINE_PATTERN.exec(trimmed);
+    if (match === null) {
+      throw new Error(
+        `${filePath}:${index + 1}: linha malformada no arquivo de rotas de transporte do produto: "${raw}"`,
+      );
+    }
+    routes.push({ method: match[1], path: match[2], line: index + 1 });
+  }
+  if (routes.length === 0) {
+    throw new Error(
+      `${filePath}: arquivo de rotas de transporte do produto vazio — nenhuma rota reconhecida`,
+    );
+  }
+  return routes;
 }

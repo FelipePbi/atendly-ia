@@ -1139,3 +1139,51 @@ delta não revisita essa fronteira. **M4** continua aberto como gate
 operacional; nada aqui o fecha nem afirma tê-lo fechado.
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff042-2026-09-21-d-058) e [D-058](DECISIONS.md).
+
+## A fronteira inteira é atravessada: rota de transporte que o produto alcança e prosa ligada ao uso real do Goal043
+
+[D-058](DECISIONS.md) tinha deixado, no seu `Revisar se`, uma condição em
+prosa: se o produto passasse a usar `POST /send/list`, o literal de
+**A-24** deixaria de ser hipotético. Este delta computa exatamente essa
+condição, em vez de a descrever de novo em texto.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| A rota que o produto alcança no serviço Go é um arquivo de valores (`apps/ai-orchestrator/tests/support/product-transport-routes.txt`, **10** entradas `MÉTODO CAMINHO`), lido pelos dois lados — nenhuma rota está digitada dentro de um teste. No TypeScript, `discoverGoServiceHttpRequests` lê `apps/ai-orchestrator/src` e `apps/bff/src` inteiros e computa o mesmo conjunto; divergência em qualquer direção reprova, nomeando a rota que sobra. Uma dessas dez, `GET /health` (`apps/bff/src/routes/health.ts:22`, `fetch` em `:46`), tem o destino fora da expressão da URL: ele chega por parâmetro e é resolvido no chamador — o §1 do Goal, que nomeia nove caminhos, não a contava | O reconhecimento de cliente HTTP interno é por forma de classe — URL base de campo ligado no construtor, caminho do argumento do método —, não por nome de arquivo, pasta ou classe. Uma chamada ao serviço Go por uma forma não reconhecida (outra assinatura de cliente, por exemplo) reprovaria por resíduo do egresso cru já herdado de Goal041, não silenciosamente |
+| No Go, `MatchProductTransportRoutes` casa as 10 entradas contra as **94** rotas registradas, segmento por segmento, com `{}` batendo só contra parâmetro de rota. As 10 casam, cada uma, com exatamente uma rota; as outras **84** ficam contadas como não alcançadas, não como falha | Duas entradas que casassem a mesma rota, ou uma entrada sem rota correspondente, reprovariam nomeando a entrada e a(s) rota(s) — provado pelos controles negativos 2 e 4 deste critério |
+| O alcance de literal de prosa por rota é computado por AST (`ProseReachFrom`), sobre-aproximando a partir do handler. Das 10 rotas que o produto chama, 9 têm handler para seguir e 1 — `GET /health`, cujo handler registrado é um closure local (`pkg/routes/routes.go:82`) — é recusada com o motivo escrito, contada e não perdida; das 9 percorridas, só `POST /send/text` escreve em campo portador (100 declarações, 29 sítios), e alcança **zero** literais. Das 94 rotas registradas, 84 têm handler para seguir e **5** delas alcançam, juntas, os mesmos **27** literais que o Goal042 já tinha asserido, resíduo zero nos dois sentidos | A reach é deliberadamente mais larga do que uma execução real percorreria — todo ramo de todo valor ligado em mais de um lugar conta —, o mesmo motivo fail-closed que [D-058 item 3](DECISIONS.md) já registrava |
+| O literal de **A-24** é alcançado por exatamente uma rota registrada, `POST /send/list`, e essa rota não está no conjunto de 10 que o produto chama — resultado de teste (`TestNoRouteThatReachesTheProductProseLiteralIsReachedByTheProduct`), não leitura manual. Se o produto passasse a chamar `POST /send/list`, ou qualquer rota nova que alcance um literal, o conjunto de literais alcançáveis a partir do produto deixaria de ser vazio e o teste que o assere vazio reprovaria, nomeando arquivo e linha | O achado **A-24** não é corrigido aqui: continua `PENDENCIA-POS-MVP` em [FINAL_AUDIT §19](FINAL_AUDIT.md), e a mudança de natureza do motivo do rebaixamento — de prosa para invariante computada — está registrada em [FINAL_AUDIT §20](FINAL_AUDIT.md), sem reescrever §19 |
+| Os cinco controles negativos obrigatórios deste critério mordem sobre árvore sintética em diretório temporário: chamada nova por caminho ausente do arquivo (TS); entrada sem rota correspondente, em três formas (Go); literal novo alcançável a partir de rota do produto (Go); mover sítio/cliente/rota/arquivo para nome diferente não muda a classificação (TS e Go); cliente genérico para outro serviço e URL apenas montada (nunca despachada) ficam fora do conjunto alcançado (TS) | Nenhum dos cinco toca a árvore real — cada um monta e remove a própria árvore sintética — e nenhum deles amplia nem estreita o conjunto de 10 rotas ou de 27 literais que a suíte permanente assere |
+
+**O que este delta não prova, e é preciso dizer alto.** **Não prova
+runtime**: nada aqui executa o serviço Go, abre conexão whatsmeow ou
+observa o que chega a um telefone. **Não prova qual binário roda em
+produção**. **Não alcança `whatsmeow-lib/`**, lida apenas como fonte das
+declarações de proto. **Texto emitido pelo modelo continua fora do
+guardrail por D-050**: esta fronteira cobre rota de transporte e prosa do
+fork, nunca decisão do modelo — a mesma fronteira já declarada em
+delta038/D-050 não muda aqui. **Não corrige A-24**: o achado continua
+`PENDENCIA-POS-MVP`, e nenhum arquivo Go de produção deste fork foi
+editado por este Goal. **Não fecha M4**: nenhuma chamada saiu para
+WhatsApp real nem para provedor de LLM real, e nenhuma conexão whatsmeow
+foi aberta. **Não lê o valor real de variável de ambiente nenhuma**: só
+o default do schema TypeScript e o `.env.example`, os mesmos que
+[D-058](DECISIONS.md) já lia.
+
+**Duas bordas em que a completude do conjunto de 10 rotas não é
+fail-closed** — registradas no [review043](reviews/043-review.md) como
+observação não bloqueante, e ditas aqui porque limitam o que a coluna
+acima decide. Primeira: o reconhecimento de destino resolvido no chamador
+varre chamadores **só no mesmo arquivo**; um helper exportado com
+chamadores em outro arquivo cairia em `notGoBound` com motivo
+factualmente errado, em vez de derrubar a leitura. Segunda: a superfície
+pública do cliente HTTP interno é reconhecida por três nomes de método
+(`request`, `requestWithStatus`, `requestBinary`); um método público novo
+que delegasse ao `perform` privado de
+`apps/bff/src/clients/internal-http-client.ts` não acrescentaria sítio de
+`fetch` algum, e por isso **não** seria pego pelo resíduo de egresso cru
+herdado do Goal041. Nas duas, a rota nova sairia do conjunto sem
+registro — a forma branda da falha de subconjunto próprio que a rodada 1
+deste Goal encontrou em `GET /health`.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff043-2026-09-21-d-059) e [D-059](DECISIONS.md).

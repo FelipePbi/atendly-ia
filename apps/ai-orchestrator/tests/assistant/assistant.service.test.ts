@@ -22,9 +22,11 @@ import { AI_CONVERSATION_STYLES } from "../../src/modules/tenant-config/ai-setti
 import { DEFAULT_BUSINESS_CONTEXT } from "../../src/modules/tenant-config/business-context.js";
 import {
   computeBoundaryValueCrossing,
+  discoverGoServiceHttpRequests,
   discoverHttpEgressSites,
   readEnvFileValue,
   readEnvSchemaDefault,
+  readProductTransportRoutesFile,
 } from "../support/http-egress-sites.js";
 import { classifyNotificationTextSites } from "../support/notification-message-sites.js";
 import {
@@ -2701,5 +2703,473 @@ describe("a fronteira de serviço é atravessada por um valor, e os dois lados l
     expect(reading.line).toBe(2);
 
     rmSync(tree, { recursive: true, force: true });
+  });
+});
+
+const productTransportRoutesFilePath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../support/product-transport-routes.txt",
+);
+
+/** Chave estável `MÉTODO CAMINHO` de uma rota, para comparação por conjunto. */
+function productTransportRouteKey(route: { method: string; path: string }): string {
+  return `${route.method} ${route.path}`;
+}
+
+/**
+ * Compara o conjunto computado ao conjunto do arquivo de valores, nas duas
+ * direções, e reprova nomeando toda rota que sobra de um lado só. É a
+ * asserção que a suíte permanente usa, e a que as duas demonstrações abaixo
+ * exercitam com conjuntos sintéticos.
+ */
+function assertGoServiceRouteSetsMatch(
+  computed: { method: string; path: string }[],
+  fromFile: { method: string; path: string }[],
+): void {
+  const computedKeys = new Set(computed.map(productTransportRouteKey));
+  const fileKeys = new Set(fromFile.map(productTransportRouteKey));
+  const missingFromFile = Array.from(computedKeys).filter((key) => !fileKeys.has(key));
+  const missingFromDiscovery = Array.from(fileKeys).filter((key) => !computedKeys.has(key));
+  if (missingFromFile.length > 0 || missingFromDiscovery.length > 0) {
+    throw new Error(
+      `conjunto de rotas do serviço Go diverge do arquivo de valores — computada e ausente do arquivo: [${missingFromFile.join(", ")}]; linha do arquivo ausente do computado: [${missingFromDiscovery.join(", ")}]`,
+    );
+  }
+}
+
+describe("a fronteira inteira é atravessada — o conjunto de rotas do serviço Go bate com o arquivo de valores, nas duas direções (Goal043 / WU-02)", () => {
+  it("o conjunto computado por discoverGoServiceHttpRequests é exatamente o conjunto do arquivo de valores", () => {
+    const { requests } = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+    const computed = Array.from(
+      new Map(
+        requests.map((request) => [
+          productTransportRouteKey({ method: request.method, path: request.pathExpression }),
+          { method: request.method, path: request.pathExpression },
+        ]),
+      ).values(),
+    );
+    const fromFile = readProductTransportRoutesFile(productTransportRoutesFilePath);
+
+    expect(() => assertGoServiceRouteSetsMatch(computed, fromFile)).not.toThrow();
+    expect(computed.map(productTransportRouteKey).sort()).toEqual(
+      fromFile.map(productTransportRouteKey).sort(),
+    );
+  });
+
+  it("rota computada e ausente do arquivo reprova, nomeando a rota que sobra", () => {
+    const fromFile = readProductTransportRoutesFile(productTransportRoutesFilePath);
+    const computedWithExtra = [...fromFile, { method: "GET", path: "/rota/nunca/no/arquivo" }];
+    expect(() => assertGoServiceRouteSetsMatch(computedWithExtra, fromFile)).toThrowError(
+      /computada e ausente do arquivo: \[GET \/rota\/nunca\/no\/arquivo\]/u,
+    );
+  });
+
+  it("linha do arquivo que o descobridor não computa reprova, nomeando a rota que sobra", () => {
+    const computed = readProductTransportRoutesFile(productTransportRoutesFilePath);
+    const fromFileWithExtra = [
+      ...computed,
+      { method: "GET", path: "/rota/nunca/computada", line: 999 },
+    ];
+    expect(() => assertGoServiceRouteSetsMatch(computed, fromFileWithExtra)).toThrowError(
+      /linha do arquivo ausente do computado: \[GET \/rota\/nunca\/computada\]/u,
+    );
+  });
+
+  it("arquivo ausente reprova, em vez de pular", () => {
+    const tree = makeTempSourceTree({});
+    try {
+      expect(() =>
+        readProductTransportRoutesFile(join(tree, "product-transport-routes.txt")),
+      ).toThrow();
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+    }
+  });
+
+  it("arquivo vazio reprova, em vez de pular", () => {
+    const tree = makeTempSourceTree({ "product-transport-routes.txt": "# só comentário\n\n" });
+    try {
+      expect(() =>
+        readProductTransportRoutesFile(join(tree, "product-transport-routes.txt")),
+      ).toThrowError(/arquivo de rotas de transporte do produto vazio/u);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+    }
+  });
+
+  it("linha malformada reprova, nomeando arquivo e linha, em vez de pular", () => {
+    const tree = makeTempSourceTree({
+      "product-transport-routes.txt": "GET /ok\nisto não é uma linha de rota\n",
+    });
+    try {
+      expect(() =>
+        readProductTransportRoutesFile(join(tree, "product-transport-routes.txt")),
+      ).toThrowError(/product-transport-routes\.txt:2: linha malformada/u);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+    }
+  });
+
+  it("ignora comentário e linha em branco, e preserva '{}' como segmento computado", () => {
+    const tree = makeTempSourceTree({
+      "product-transport-routes.txt": "# comentário\n\nGET /instance/{}\n",
+    });
+    try {
+      expect(readProductTransportRoutesFile(join(tree, "product-transport-routes.txt"))).toEqual([
+        { method: "GET", path: "/instance/{}", line: 3 },
+      ]);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("nenhum sítio de egresso é descartado em silêncio: ou vira requisição ao serviço Go, ou é contado fora com motivo escrito (Goal043 / WU-02)", () => {
+  it("todo sítio classificado por discoverHttpEgressSites termina em requisição ou em contagem com motivo", () => {
+    const egress = discoverHttpEgressSites(aiOrchestratorSrcPath, bffSrcPath);
+    const { requests, notGoBound } = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+
+    const unaccounted = egress.sites.filter((site) => {
+      const position = `${site.filePath}:${site.line}`;
+      const countedOut = notGoBound.some(
+        (counted) => `${counted.filePath}:${counted.line}` === position,
+      );
+      const turnedIntoRequest = requests.some(
+        (request) =>
+          `${request.filePath}:${request.line}` === position || request.reason.includes(position),
+      );
+      return !countedOut && !turnedIntoRequest;
+    });
+    expect(unaccounted.map((site) => `${site.filePath}:${site.line}`)).toEqual([]);
+    expect(notGoBound.every((counted) => counted.reason.trim().length > 0)).toBe(true);
+  });
+
+  it("a requisição cujo destino só existe no chamador entra no conjunto alcançado — GET /health do BFF para o serviço Go", () => {
+    const { requests } = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+    const health = requests.filter(
+      (request) => request.method === "GET" && request.pathExpression === "/health",
+    );
+    expect(health).toHaveLength(1);
+    // O destino não está escrito na expressão da URL do `fetch`: ele chega
+    // por parâmetro e só existe no chamador, que é a posição registrada.
+    expect(health[0].filePath.replace(/\\/gu, "/")).toContain("apps/bff/src/routes/health.ts");
+    expect(health[0].category).toBe("env_var_EVOLUTION_GO_BASE_URL");
+    expect(health[0].reason).toContain("EVOLUTION_GO_BASE_URL");
+  });
+});
+
+describe("controle negativo 2b — destino que só existe no chamador: o do serviço Go entra, o de outro serviço é contado fora (Goal043 / WU-02)", () => {
+  const envSchema = [
+    "export const env = {",
+    '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+    '  SCHEDULING_SERVICE_BASE_URL: stringEnv("http://scheduling:9090"),',
+    "};",
+    "",
+  ].join("\n");
+
+  const healthModule = (baseUrlExpression: string): string =>
+    [
+      "export async function registerHealthRoutes() {",
+      `  return checkHealth(${baseUrlExpression}, "/health", "request-id");`,
+      "}",
+      "",
+      "async function checkHealth(baseUrl: string, path: string, requestId: string) {",
+      "  const normalizedBaseUrl = baseUrl.replace(/\\/$/, \"\");",
+      "  return fetch(`${normalizedBaseUrl}${path}`, { headers: { \"x-request-id\": requestId } });",
+      "}",
+      "",
+    ].join("\n");
+
+  it("o chamador que passa a base do serviço Go produz a rota, com o método GET que é o default do próprio fetch", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "routes/health.ts": healthModule("env.EVOLUTION_GO_BASE_URL"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, notGoBound } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      expect(
+        requests.map((request) => ({ method: request.method, path: request.pathExpression })),
+      ).toEqual([{ method: "GET", path: "/health" }]);
+      expect(notGoBound).toEqual([]);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("o mesmo sítio, com o chamador passando a base de outro serviço, fica fora do conjunto — contado, com motivo, nunca pulado", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "routes/health.ts": healthModule("env.SCHEDULING_SERVICE_BASE_URL"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, notGoBound } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      expect(requests).toEqual([]);
+      expect(notGoBound).toHaveLength(1);
+      expect(notGoBound[0].category).toBe("caller_resolved_base_url_via_checkHealth");
+      expect(notGoBound[0].reason).toContain("checkHealth");
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+/* =========================================================================
+ * Os cinco controles negativos de §4 (Goal043 / WU-05), lado TypeScript.
+ * Cada um constrói uma árvore sintética em diretório temporário e roda o
+ * descobridor real sobre ela — nunca a árvore real, e nunca resíduo
+ * deixado para trás (todo diretório é removido no `finally`).
+ * ========================================================================= */
+
+describe("controle negativo 1 — chamada nova ao transporte por caminho não listado, e linha do arquivo que o descobridor não computa (Goal043 / WU-05)", () => {
+  it("uma chamada nova ao serviço Go por caminho ausente do arquivo de valores reprova, com método e caminho impressos", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": [
+        "export const env = {",
+        '  EVOLUTION_BASE_URL: stringEnv("http://evolution-go:8080"),',
+        '  EVOLUTION_SEND_TEXT_PATH: stringEnv("/send/text"),',
+        '  EVOLUTION_NEW_THING_PATH: stringEnv("/new/thing"),',
+        "};",
+        "",
+      ].join("\n"),
+      "modules/new-thing.ts": [
+        'return fetch(join(env.EVOLUTION_BASE_URL, env.EVOLUTION_SEND_TEXT_PATH), { method: "POST" });',
+        'return fetch(join(env.EVOLUTION_BASE_URL, env.EVOLUTION_NEW_THING_PATH), { method: "POST" });',
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    const valueFileTree = makeTempSourceTree({ "routes.txt": "POST /send/text\n" });
+    try {
+      const { requests } = discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts"));
+      const computed = requests.map((request) => ({ method: request.method, path: request.pathExpression }));
+      expect(computed).toEqual([
+        { method: "POST", path: "/send/text" },
+        { method: "POST", path: "/new/thing" },
+      ]);
+
+      const fromFile = readProductTransportRoutesFile(join(valueFileTree, "routes.txt"));
+      expect(() => assertGoServiceRouteSetsMatch(computed, fromFile)).toThrowError(
+        /computada e ausente do arquivo: \[POST \/new\/thing\]/u,
+      );
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+      rmSync(valueFileTree, { recursive: true, force: true });
+    }
+  });
+
+  it("uma linha do arquivo de valores que o descobridor não computa reprova, na direção oposta", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": [
+        "export const env = {",
+        '  EVOLUTION_BASE_URL: stringEnv("http://evolution-go:8080"),',
+        '  EVOLUTION_SEND_TEXT_PATH: stringEnv("/send/text"),',
+        "};",
+        "",
+      ].join("\n"),
+      "modules/only-old.ts": [
+        'return fetch(join(env.EVOLUTION_BASE_URL, env.EVOLUTION_SEND_TEXT_PATH), { method: "POST" });',
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    const valueFileTree = makeTempSourceTree({
+      "routes.txt": "POST /send/text\nGET /never/discovered\n",
+    });
+    try {
+      const { requests } = discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts"));
+      const computed = requests.map((request) => ({ method: request.method, path: request.pathExpression }));
+      const fromFile = readProductTransportRoutesFile(join(valueFileTree, "routes.txt"));
+      expect(() => assertGoServiceRouteSetsMatch(computed, fromFile)).toThrowError(
+        /linha do arquivo ausente do computado: \[GET \/never\/discovered\]/u,
+      );
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+      rmSync(valueFileTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("controle negativo 4 (lado TypeScript) — mover sítio, cliente e rota para arquivo, pasta e classe de outro nome não muda a classificação (Goal043 / WU-05)", () => {
+  it("a mesma requisição via cliente genérico, movida, classifica igual — nenhuma regra decide por nome", () => {
+    const envSchema = [
+      "export const env = {",
+      '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+      "};",
+      "",
+    ].join("\n");
+    const before = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": [
+        "export class InternalHttpClient {",
+        "  constructor(private baseUrl: string) {}",
+        "  async request(options: { method: string; path: string }) {",
+        "    const url = new URL(options.path, this.baseUrl);",
+        "    return fetch(url, { method: options.method });",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      "clients/evolution-client.ts": [
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const after = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "gateways/renamed-gateway.ts": [
+        "export class TransportGateway {",
+        "  constructor(private baseUrl: string) {}",
+        "  async request(options: { method: string; path: string }) {",
+        "    const url = new URL(options.path, this.baseUrl);",
+        "    return fetch(url, { method: options.method });",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      "callers/another-caller.ts": [
+        "export class AnotherCaller {",
+        "  private gateway: TransportGateway;",
+        "  constructor() {",
+        "    this.gateway = new TransportGateway(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async doSomethingElse() {",
+        '    return this.gateway.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const beforeRequests = discoverGoServiceHttpRequests(before, emptyTree, join(before, "config/env.ts"))
+        .requests.map((request) => ({
+          method: request.method,
+          path: request.pathExpression,
+          category: request.category,
+        }));
+      const afterRequests = discoverGoServiceHttpRequests(after, emptyTree, join(after, "config/env.ts"))
+        .requests.map((request) => ({
+          method: request.method,
+          path: request.pathExpression,
+          category: request.category,
+        }));
+      expect(beforeRequests).toEqual([
+        { method: "POST", path: "/instance/create", category: "env_var_EVOLUTION_GO_BASE_URL" },
+      ]);
+      expect(afterRequests).toEqual(beforeRequests);
+    } finally {
+      rmSync(before, { recursive: true, force: true });
+      rmSync(after, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("controle negativo 5 — destino resolvido por forma: cliente genérico para outro serviço, e URL montada para entrega, ficam fora do conjunto alcançado (Goal043 / WU-05)", () => {
+  it("cliente genérico apontado para outro serviço não entra no conjunto, e URL montada para o webhook de entrada não entra — invertendo qualquer um dos dois reprovaria", () => {
+    const envSchema = [
+      "export const env = {",
+      '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+      '  SCHEDULING_SERVICE_BASE_URL: stringEnv("http://scheduling:9090"),',
+      '  AI_ORCHESTRATOR_BASE_URL: stringEnv("http://ai-orchestrator:4000"),',
+      "};",
+      "",
+    ].join("\n");
+    const tree = makeTempSourceTree({
+      "config/env.ts": envSchema,
+      "clients/internal-http-client.ts": [
+        "export class InternalHttpClient {",
+        "  constructor(private baseUrl: string) {}",
+        "  async request(options: { method: string; path: string }) {",
+        "    const url = new URL(options.path, this.baseUrl);",
+        "    return fetch(url, { method: options.method });",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      "clients/scheduling-client.ts": [
+        "export class SchedulingClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.SCHEDULING_SERVICE_BASE_URL);",
+        "  }",
+        "  async listSlots() {",
+        '    return this.http.request({ method: "GET", path: "/slots" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      "clients/evolution-client.ts": [
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  webhookUrl(): string {",
+        "    return `${env.AI_ORCHESTRATOR_BASE_URL}/webhooks/evolution?token=abc`;",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, assembledUrls } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+
+      // O cliente genérico apontado para outro serviço nunca chega a ser
+      // varrido: nenhuma requisição de /slots aparece, nem no conjunto
+      // alcançado nem em URL montada.
+      expect(requests).toEqual([]);
+      expect(assembledUrls.some((assembled) => assembled.urlExpression.includes("/slots"))).toBe(false);
+
+      // A URL montada para o webhook de entrada é nomeada como montagem
+      // para entrega, não como requisição ao transporte.
+      const webhook = assembledUrls.find((assembled) => assembled.functionName === "webhookUrl");
+      expect(webhook).toBeDefined();
+      expect(webhook?.category).toBe("assembled_url_for_delivery_webhookUrl");
+      expect(webhook?.urlExpression).toContain("/webhooks/evolution");
+      expect(requests.some((request) => request.pathExpression.includes("/webhooks/evolution"))).toBe(false);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
   });
 });

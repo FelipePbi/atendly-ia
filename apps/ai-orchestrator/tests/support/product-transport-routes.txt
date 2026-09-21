@@ -1,0 +1,18 @@
+# Arquivo de valores — toda rota (MÉTODO + CAMINHO) que uma requisição das
+# duas árvores (ai-orchestrator/src e bff/src) alcança no serviço Go
+# (Goal043 / WU-02). Lido por readProductTransportRoutesFile e comparado, nas
+# duas direções, ao conjunto que discoverGoServiceHttpRequests computa —
+# nenhuma rota é digitada dentro do teste.
+#
+# Formato: MÉTODO<espaço>CAMINHO, uma rota por linha. "#" inicia comentário.
+# Linha em branco é ignorada. "{}" marca segmento computado (interpolado).
+DELETE /instance/delete/{}
+DELETE /instance/logout
+GET /health
+GET /instance/qr
+GET /instance/status
+POST /instance/connect
+POST /instance/create
+POST /instance/pair
+POST /message/downloadmedia
+POST /send/text

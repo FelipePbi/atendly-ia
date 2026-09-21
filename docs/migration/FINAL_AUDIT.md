@@ -2439,4 +2439,96 @@ aumentada, `retries: 1` continua inalterado nos dois
 `validate:integration` recusou com `exit 2` e
 `validate:integration REFUSED — BFF_TEST_DATABASE_URL is not set`; nenhum
 dos **35** passos chegou a rodar, e a lista de 35 continua intacta.
+
+## 20. O motivo do rebaixamento de A-24 passa de prosa a invariante computada — Goal043, 2026-09-21
+
+Seção nova, escrita depois da última mudança de árvore do diff043 (o
+arquivo de valores de rotas, os dois lados do casamento de rota, o
+alcance de literal por rota, e os cinco controles negativos deste
+critério). Ela **não reescreve** §4 a §19: os registros de A-01 a A-24
+em §6/§19, o veredito de §7 e as treze seções de fechamento anteriores
+continuam exatamente como estavam, e a entrada de **A-24** na tabela de
+§19 **não foi tocada**. Este Goal não corrige A-24 — computa a condição
+que o `Revisar se` de [D-058](DECISIONS.md) tinha deixado em prosa.
+
+### O que mudou
+
+**A razão do rebaixamento de A-24 era uma leitura manual do código.** O
+§19 registra: "a rota que alcança esse literal é `POST /send/list`, e
+**nenhum** arquivo de `apps/ai-orchestrator/src` ou de `apps/bff/src` a
+chama". Essa frase era verdadeira sobre a árvore do Goal042, mas nada a
+recomputava — era prosa em documento, do mesmo tipo que [D-058 item
+6](DECISIONS.md) já tinha usado para rebaixar o achado. Nenhum guard
+verificava se ela continuava valendo depois de uma mudança de árvore.
+
+**A mesma afirmação é agora o resultado de um teste.** O diff043
+enumera, por forma (nunca por nome de arquivo, pasta ou classe), as
+**10** rotas do serviço Go que os dois lados do produto — `ai-
+orchestrator/src` e `bff/src` — de fato alcançam, casa essas 10 contra as
+**94** rotas que este serviço registra, e computa, por AST, o literal
+que cada uma das 94 rotas alcança. O cruzamento dos dois lados
+(`TestNoRouteThatReachesTheProductProseLiteralIsReachedByTheProduct`)
+prova, sobre a árvore real, que a única rota que alcança o literal de
+A-24 — `POST /send/list` — não está no conjunto de 10 que o produto
+chama. É o mesmo fato que o §19 já registrava, mas lido do código a cada
+execução, não escrito uma vez e deixado no documento.
+
+**A condição que transformaria A-24 em defeito observável passa a ser
+vigiada, não apenas nomeada.** O conjunto de literais alcançáveis a
+partir das 10 rotas do produto é asserido como vazio
+(`expectedProseLiteralsReachedFromProductRoutes = []` em
+`route_reach_test.go`). Se o produto passasse a chamar `POST
+/send/list` — ou qualquer rota nova que alcance um literal —, esse
+conjunto deixaria de ser vazio e o teste reprovaria, nomeando o arquivo,
+a linha, o conteúdo do literal e a rota que o entrega. A mesma vigilância
+cobre uma rota do produto movida, renomeada ou reescrita por outro
+cliente HTTP: os controles negativos 2 a 4 deste critério provam que
+casamento e alcance continuam corretos depois da forma mudar, e o
+controle 3 prova especificamente que um literal novo alcançável a partir
+de uma rota do produto reprova.
+
+**O conjunto de 27 literais que o Goal042 tinha asserido não mudou.** A
+reach por AST encontra os mesmos 27 literais, nas mesmas 5 rotas
+(`POST /send/media`, `POST /send/button`, `POST /send/list`, `POST
+/send/carousel`, `POST /send/status/media`), com resíduo zero nos dois
+sentidos entre o conjunto que a reach encontra e o conjunto que o
+Goal042 já tinha asserido. Nenhum literal novo apareceu, nenhum
+desapareceu.
+
+### Veredito recontado
+
+Esta auditoria continua com **0 achados `BLOQUEADOR-MVP`, 8
+`PENDENCIA-POS-MVP`** e **6 `LIMITE-DECLARADO`** — a mesma contagem de
+§19. **Nenhuma mudança em relação a §19**: nenhum achado de A-01 a A-24
+foi tocado, corrigido, reclassificado ou reaberto. **A-24 continua
+`PENDENCIA-POS-MVP`, não corrigido** — nenhum arquivo Go de produção
+deste fork foi editado por este Goal, e a proibição do §5 do Goal042
+sobre editar o fork continua valendo.
+
+Quatro coisas que esta seção não diz. **Não diz que A-24 foi corrigido**:
+o rótulo `"Ver Menu"` continua escrito em
+`pkg/sendMessage/service/send_service.go:1960`, entregue a quem chamar
+`POST /send/list` com `ButtonText` vazio. **Não diz que M4 foi
+fechado**: nenhuma chamada saiu para provedor de LLM real nem para o
+WhatsApp real, nenhuma conexão whatsmeow foi aberta, e o diff043 toca
+dois arquivos TypeScript de teste e de apoio a teste, um arquivo de
+valores, e cinco arquivos do pacote Go de teste `transportguard` (três de
+teste e dois de biblioteca do próprio pacote), mais a documentação de
+migração — nada além disso.
+**Não diz que o comportamento em runtime do serviço Go foi provado**:
+o que se prova é o que a árvore de código diz, lida por AST; nada aqui
+executa esse serviço, abre conexão whatsmeow ou observa o que chega a um
+telefone, e nada liga este código ao binário implantado em produção.
+**Não diz que a fidelidade visual está provada**: nenhum arquivo de
+`apps/frontend/src/` mudou, e a matriz de larguras e as retentativas do
+gate renderizado continuam como estavam.
+
+O que continua fora do alcance deste Goal, por construção: comportamento
+em runtime do serviço Go; qual binário roda em produção; `whatsmeow-
+lib/`, biblioteca vendorizada lida apenas como fonte das declarações de
+proto; e o valor real de qualquer variável de ambiente — só o default do
+schema TypeScript e o `.env.example` são lidos, nunca um ambiente
+implantado. `validate:integration` continua recusando por pré-condição
+de banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), e a
+lista de 35 passos de persistência continua intacta.
 Pré-condição de banco ausente, declarada como ausente.

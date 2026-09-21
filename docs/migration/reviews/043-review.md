@@ -1,0 +1,76 @@
+# Review formal — Goal 043
+
+**Decisão vigente — rodada 3: ACCEPTED.** Tech Lead Agent ([D-018](../DECISIONS.md)), 2026-09-21, conforme o [Goal043](../goals/043-a-fronteira-inteira-e-atravessada.md). Aceite restrito ao diff identificado abaixo; nenhum aceite anterior (001–042) foi reaberto, reavaliado ou revertido. Três rodadas: `CHANGES_REQUIRED` com 4 blockers, `CHANGES_REQUIRED` com 2 blockers, e o aceite na terceira, com zero blockers.
+
+O Goal existia para transformar em invariante computada a única frase que o aceite do Goal042 tinha deixado em prosa: o `Revisar se` de [D-058](../DECISIONS.md), que rebaixava **A-24** a `PENDENCIA-POS-MVP` porque "a rota que alcança esse literal é `POST /send/list`, e nenhum arquivo de `apps/ai-orchestrator/src` ou de `apps/bff/src` a chama". Era leitura manual do código, verdadeira quando escrita e recomputada por execução nenhuma. Agora é resultado de teste: o conjunto de rotas do serviço Go que o produto alcança é enumerado por AST nas duas árvores TypeScript, atravessa a fronteira por valor num arquivo lido pelos dois lados, é casado segmento a segmento contra as rotas registradas do lado Go, e o conjunto de literais de prosa alcançáveis a partir dele é asserido vazio, com guarda de não-vacuidade.
+
+A descoberta substantiva do Goal é que **o enunciado errava a conta, e o AST discorda**: o §1 nomeia nove caminhos, e a árvore mostra **dez**. A décima é `GET /health`, chamada por `apps/bff/src/routes/health.ts:22` através de um destino que **não está escrito na expressão da URL** — ele chega por parâmetro e só existe no chamador. A primeira rodada entregou um descobridor que engolia esse sítio com um `continue` mudo; foi por isso que ela reprovou.
+
+## Escopo e identidade do diff
+
+- Baseline aceita vigente: `f48bf9b5ed38937a763cc1796220778fc60dae3c` (fechamento do Goal042). Base imediata da implementação: `ac63d0050996b765f1f17e9c1fca2407e1f747a5`, HEAD da worktree `.ai-worktrees/goal-043`, inalterado nas três rodadas.
+- Snapshot aceito, calculado pelo IA Loop: **12 arquivos**, hash do diff `83fdfbf2d51dc3903a417ccc0afd16d62b5cffe99b8b8274de5d3754f0f44d5e`. Mudança posterior nesses arquivos exige avaliar o novo diff.
+- **Sete arquivos rastreados**, +1952/−9: `tests/support/http-egress-sites.ts` (+838/−9), `tests/assistant/assistant.service.test.ts` (+470/−0), `pkg/transportguard/negative_controls_test.go` (+205/−0), e a documentação de `docs/migration/` — `DECISIONS.md` +182, `CURRENT_STATE.md` +133, `FINAL_AUDIT.md` +92, `VALIDATION_GATE.md` +32, todos por append puro. Fora do snapshot aceito, o commit de fechamento acrescenta este review e mais 16 linhas de append a `VALIDATION_GATE.md`, com as duas bordas de completude descritas nas observações.
+- **Cinco arquivos novos e não rastreados**, 1082 linhas: `apps/ai-orchestrator/tests/support/product-transport-routes.txt` (18 linhas, 10 rotas), e no pacote de teste que já existia, `pkg/transportguard/route_reach.go` (309), `route_reach_test.go` (444), `product_routes.go` (176), `product_routes_test.go` (135).
+- **O único arquivo Go alterado é de teste.** Nenhum arquivo Go de produção de `apps/evolution-go/` mudou, `go.mod` e `go.sum` estão intocados, e nenhuma dependência nova entrou em nenhuma das duas línguas — o pacote continua em biblioteca padrão.
+- **Nenhum arquivo de `apps/frontend/src/`, `apps/bff/src/` ou `apps/ai-orchestrator/src/` mudou**, nenhum de `apps/scheduling-service/` ou `apps/health-worker/`, nenhuma migration, nenhum `schema.prisma`, `packages/public-api-contract/` intocado, nenhuma rota, verbo ou campo novo ou removido em nenhum dos dois serviços, nenhuma tela, componente, texto de interface ou CSS, nenhum prompt e nenhuma versão de template, nenhuma copy e nenhuma mudança em `PRODUCT_OWN_TEXTS`, `VERIFIED_CLIENT_TEXTS` ou `VOCABULARIO_DE_ESPERA`. **Nenhum arquivo de `tools/ia-loop/` foi tocado em rodada nenhuma.** As 9 linhas removidas estão todas em `http-egress-sites.ts` e pertencem às assinaturas que a extensão substituiu.
+- `git status --porcelain=v1` lista exatamente os 7 modificados e os 5 não rastreados declarados; nenhum diretório temporário de controle negativo sobrou.
+- Inspecionado o patch contra a worktree, não contra o relatório do Developer — os cinco arquivos novos lidos direto da árvore, por ficarem fora do diffstat. Nenhum arquivo de código foi editado pelo reviewer.
+
+## Rodada 1 — CHANGES_REQUIRED (4 blockers)
+
+O mecanismo já estava bem construído nos dois lados — arquivo de valores fail-closed, casamento segmento a segmento com buraco `{}` batendo só contra parâmetro de rota, reach por AST com sobre-aproximação declarada, os 27 literais do Goal042 reencontrados com resíduo zero, disjunção de A-24 computada e não digitada, cinco controles negativos sobre árvores sintéticas sem resíduo. O que reprovou foi a **premissa central**: o conjunto de rotas alcançadas estava incompleto.
+
+1. **Subconjunto próprio do real.** `apps/bff/src/routes/health.ts:22` chama o serviço Go em `GET /health` (registrada em `pkg/routes/routes.go:89`) por egresso cujo destino é resolvido no chamador — categoria que o descobridor novo ignorava. A rota aparecia, no relatório do próprio Goal, entre as "85 não alcançadas". Reprovava os critérios 1, 2, 3 e 7.
+2. **Descoberta não fail-closed.** Em `discoverGoBoundRawFetchRequests`, três `continue` mudos descartavam todo sítio de egresso cujo destino não estivesse escrito textualmente na expressão da URL. Foi esse `continue` que engoliu `health.ts:46`. O critério 2 exige derrubar com `arquivo:linha` ou cair em categoria nomeada — nunca sair do conjunto sem registro.
+3. **Consequência no lado Go.** Com `GET /health` no conjunto do produto, `ProseReachOfRoutes` passaria a falhar, porque o handler dessa rota é um closure local (`routes.go:82`) e não declaração de método desta árvore. Exigido: tratar como recusa contada com motivo escrito, o mesmo tratamento que `ProseReachOfEveryRegisteredRoute` já dava, para que a rota não sumisse em silêncio nem o teste virasse vácuo.
+4. **Documentação de §7 com número errado.** CURRENT_STATE, VALIDATION_GATE, FINAL_AUDIT §20 e D-059 registravam 9 alcançadas e 85 não alcançadas, contra a árvore, e afirmavam invariante mais forte do que ela sustentava. Exigida reescrita depois da correção, com a divergência frente aos nove caminhos do §1 do Goal declarada e o número do AST prevalecendo (critérios 28 e 29).
+
+## Rodada 2 — CHANGES_REQUIRED (2 blockers)
+
+Os quatro blockers da rodada 1 fecharam, verificados por execução própria e não pelo relatório. `discoverCallerResolvedGoBoundRequests` passou a resolver o destino nos chamadores, e conferi na árvore que só quatro sítios resolvem a base do serviço Go — `EvolutionProvider.ts:53` e `:167`, `clients/evolution/index.ts:69` com 7 métodos, e `health.ts:22` —, o que fecha 2+7+1 = **10** rotas. O método `GET` vem do default do próprio `fetch`, por forma, não digitado. Os três `continue` mudos sumiram: cada um dos 9 sítios de egresso termina em requisição, em `notGoBound` com motivo escrito, ou derruba a leitura com `arquivo:linha`. `ProseReachOfRoutes` passou a devolver `ProseReachReport` com `Refusals`, com `len(Reaches)+len(Refusals) == len(routes)` asserido.
+
+O que restou eram duas correções de texto, não de mecanismo:
+
+1. **VALIDATION_GATE sem o item de D-050.** O §7 do Goal exige quatro itens na coluna "o que não decide"; a seção cobria runtime, `whatsmeow-lib/` e rota registrada não alcançada, e não dizia que texto emitido pelo modelo continua fora do guardrail por [D-050](../DECISIONS.md).
+2. **`route_reach_test.go:34` com o número da rodada 1.** O comentário dizia "nine routes", copiado do §1 do Goal e não corrigido depois da entrada de `GET /health`, contra os 10 que os quatro documentos já declaravam.
+
+## Rodada 3 — ACCEPTED
+
+O diff da rodada tocou apenas esses dois arquivos: a frase de D-050 entrou no parágrafo final de VALIDATION_GATE, e o comentário passou a descrever dez rotas alcançadas, nove com handler a percorrer e `GET /health` recusada. Nenhuma regressão no que a rodada 2 já tinha conferido.
+
+### Verificações próprias do reviewer
+
+- **A décima rota é substantiva, e o destino é resolvido por forma até no argumento.** `checkHealth(env.EVOLUTION_GO_BASE_URL, "/health", request.id)` entra no conjunto; as duas chamadas irmãs, para `AI_ORCHESTRATOR_BASE_URL` e `SCHEDULING_SERVICE_BASE_URL`, ficam corretamente fora. Nenhuma regra decide por nome de arquivo, pasta ou classe.
+- **O casamento fecha nos dois sentidos.** As 10 entradas do arquivo de valores casam, cada uma, com exatamente uma das **94** rotas registradas, segmento por segmento, com `{}` batendo só contra `:param`; as outras **84** ficam contadas como não alcançadas, que não é falha.
+- **A reach é contada, nunca perdida.** Das 10 rotas do produto, **9** têm handler para seguir e **1** é recusada com motivo escrito (`GET /health`, closure em `routes.go:82`). Das 9 percorridas, só `POST /send/text` escreve em campo portador (100 declarações, 29 sítios) e alcança **zero** literais. Das 94 registradas, 84 são percorridas e **5** alcançam, juntas, os mesmos **27** literais que o Goal042 já asseria, com resíduo zero nos dois sentidos.
+- **A disjunção de A-24 é computada.** `"Ver Menu"` (`pkg/sendMessage/service/send_service.go:1960`) é alcançado por exatamente uma rota registrada, `POST /send/list`, que não está no conjunto de 10. O conjunto de literais alcançáveis a partir do produto é asserido vazio, com guarda de não-vacuidade sobre o resultado computado — um mecanismo que não alcançasse nada derrubaria o teste.
+- **FINAL_AUDIT recebeu §20 por append puro**, sem remover uma linha de §4 a §19, e a entrada de A-24 em §19 não foi tocada. D-059 está em DECISIONS no formato das anteriores.
+- **`gofmt -l`** lista arquivos da baseline por CRLF pré-existente do checkout Windows; os cinco arquivos novos estão em LF e não aparecem — não há regressão de formatação deste Goal.
+
+### Gates conferidos, e o que aceitei sem prova própria
+
+Reexecutados por mim na worktree: `go test ./...` em `apps/evolution-go` → **174** testes de topo, zero falhas (baseline: 152; nenhuma suíte encolheu, nenhum teste pulado); `go test ./pkg/transportguard/` → **33** testes PASS. Na rodada 3 conferi ainda `npm run test:gate` → **226 pass, 0 fail**, idêntico à baseline, e `assistant.service.test.ts` → **85** testes (baseline: 70), sem nada removido, renomeado ou pulado.
+
+**Aceito sem prova própria:** `npm run validate:core` → `PASSED`, com 15 passos verdes, 2 pulos declarados (`test:bff`, `test:health-worker`) e `audit:static` mantendo os **34** checks; a suíte completa de `apps/ai-orchestrator` com 809 passando e 88 pulados; e as saídas reais dos cinco controles negativos, inclusive as duas saídas dos controles 1 a 3 — o que confirmei na árvore é o estado revertido e o comportamento nomeado de cada invariante nos testes que a exercitam. `validate:integration` recusa com `exit 2` e `validate:integration REFUSED — BFF_TEST_DATABASE_URL is not set`: nenhum dos **35** passos chegou a rodar, e isso está declarado como pré-condição ausente, nunca como verde.
+
+## Observações não bloqueantes
+
+- **A completude do conjunto de 10 rotas tem duas bordas nomeadas, e nenhuma delas é fail-closed.** `discoverCallerResolvedGoBoundRequests` varre chamadores **só no mesmo arquivo** (`findRealCallSites(source, ...)`); hoje isso é completo, porque `checkHealth` é local ao módulo, mas um helper exportado com chamadores em outro arquivo cairia em `notGoBound` com um motivo factualmente errado — "nenhum deles passa uma chave de base do serviço Go" —, que é a forma branda da mesma falha de subconjunto próprio que reprovou a rodada 1. E `discoverGoBoundInternalClientRequests` reconhece a superfície de `InternalHttpClient` por três nomes num regex (`http-egress-sites.ts:1759`: `request`, `requestWithStatus`, `requestBinary`); hoje é exatamente a superfície pública de `apps/bff/src/clients/internal-http-client.ts`, mas um método público novo que delegasse ao `perform` privado (`:138`, `fetch` em `:149`) não acrescentaria sítio de `fetch` algum, então o resíduo de egresso cru herdado do Goal041 também não o pegaria. Registrado em [VALIDATION_GATE](../VALIDATION_GATE.md), por corrigir ali uma afirmação mais forte do que a árvore sustenta.
+- **O conjunto derivado de campos portadores continua mais largo do que "texto que uma pessoa lê"**, e a reach é sobre-aproximada de propósito — todo ramo de todo valor ligado em mais de um lugar conta. Erra na direção fail-closed, ao custo de conjuntos que se mexem a cada mudança de transporte, mesmo quando nenhuma prosa muda.
+- **A leitura estreita e a larga concordam onde as duas existem.** `TestTheWideReachContainsTheNarrowChain` afirma que todo sítio que `ChainFrom` (Goal042) alcança está também na reach larga, nunca o contrário.
+- **FINAL_AUDIT termina com a linha órfã "Pré-condição de banco ausente, declarada como ausente."**, herdada do Goal042 e agora colada ao fim de §20 sem linha em branco. Cosmético e preexistente.
+- **As três observações opcionais do [review040](040-review.md) continuam abertas**, e todas continuam errando na direção correta — resíduo nomeado, nunca classificação silenciosa.
+
+## O que este aceite não cobre
+
+- **Runtime do serviço Go.** Nada aqui executa o serviço, abre conexão whatsmeow, envia mensagem ou observa o que chega a um telefone. O que se prova é o que a árvore de código diz, lida por AST.
+- **Qual binário roda em produção.** A árvore lida é a desta worktree; nada liga esse código ao artefato implantado.
+- **`whatsmeow-lib/`**, biblioteca vendorizada, lida apenas como fonte das declarações de proto.
+- **O valor real de variável de ambiente nenhuma.** Só o default do schema TypeScript e o `.env.example` são lidos.
+- **A-24 não foi corrigido.** Continua `PENDENCIA-POS-MVP`; `"Ver Menu"` continua escrito em `send_service.go:1960`, entregue a quem chamar `POST /send/list` com `ButtonText` vazio. O que mudou é a natureza do motivo do rebaixamento, registrada em [FINAL_AUDIT §20](../FINAL_AUDIT.md) sem reescrever §19.
+- **Texto emitido pelo modelo continua fora do guardrail por [D-050](../DECISIONS.md)**, e a verificação de resposta continua sem rodar em produção por [D-051](../DECISIONS.md). Nenhuma das duas fronteiras é reaberta aqui.
+- **M4 — envio real a número real — continua aberto** como gate operacional. Nenhuma chamada saiu, neste diff, para provedor de LLM real nem para WhatsApp real.
+- **A persistência continua validada só por `validate:integration`**, que não rodou neste ambiente.
+- **Fidelidade visual à referência aprovada** continua sendo conferência humana, como nos reviews [033](033-review.md) a [042](042-review.md). `flaky` continua não reprovando nos dois gates renderizados e `retries: 1` continua inalterado.
+- **Os demais achados abertos.** A-04 a A-08, A-11 a A-17, A-19 e A-24 não foram corrigidos, reclassificados nem tocados; nenhum achado fechado (A-01 a A-03, A-09, A-10, A-18, A-20 a A-23) foi reaberto, e nenhum achado novo apareceu — não houve **A-25**. O veredito de [FINAL_AUDIT](../FINAL_AUDIT.md) continua em **0 `BLOQUEADOR-MVP`, 8 `PENDENCIA-POS-MVP`, 6 `LIMITE-DECLARADO`**, a mesma contagem de §19.

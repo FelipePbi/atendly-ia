@@ -409,6 +409,211 @@ func (h *Handlers) Assign(engine *http.ServeMux) {
 	}
 }
 
+/* =========================================================================
+ * The five negative controls of §4 (Goal043 / WU-05). Each one exercises
+ * the artifact the criterion names — real AST route enumeration, real
+ * value-file matching, real prose reach — over a synthetic tree in a
+ * temporary directory, never the real one.
+ * ========================================================================= */
+
+// syntheticRoutesFile is the routes.go the Goal043 controls share: one
+// router group, one registered route, one handler type — written with the
+// package, folder, type and handler names the caller supplies, so the
+// same shape can be built twice under different names.
+func syntheticRoutesFile(pkgName, routerTypeName, routerFieldType, groupPath, registeredPath, handlerMethodName string) string {
+	return `package ` + pkgName + `
+
+import "net/http"
+
+type ` + routerTypeName + ` struct {
+	target *` + routerFieldType + `
+}
+
+type ` + routerFieldType + ` struct{}
+
+func (t *` + routerFieldType + `) ` + handlerMethodName + `(w http.ResponseWriter) {}
+
+func (h *` + routerTypeName + `) Assign(engine *http.ServeMux) {
+	group := engine.Group("` + groupPath + `")
+	group.POST("` + registeredPath + `", h.target.` + handlerMethodName + `)
+}
+`
+}
+
+// TestNegativeControl2Goal043AnUnmatchedProductRouteEntryFailsWithTheEntry
+// is criterion 21's control 2: an entry of the product transport routes
+// file that does not correspond to exactly one registered route fails
+// with the entry printed — by method, by an extra segment, and by a
+// missing file — exercised over a real AST route enumeration, not a
+// hand-built Enumeration.
+func TestNegativeControl2Goal043AnUnmatchedProductRouteEntryFailsWithTheEntry(t *testing.T) {
+	tree := newSyntheticTree(t)
+	tree.write(t, filepath.Join("pkg", "routes", "routes.go"),
+		syntheticRoutesFile("routes", "Handlers", "Send", "/send", "/text", "Text"))
+	enumeration := mustEnumerateSynthetic(t, tree)
+
+	if _, err := enumeration.RouteWithPath("/send/text"); err != nil {
+		t.Fatalf("the registered route was not found: %v", err)
+	}
+
+	t.Run("método diferente", func(t *testing.T) {
+		entries := []ProductRouteEntry{{Method: "GET", Path: "/send/text", Line: 1}}
+		_, err := enumeration.MatchProductTransportRoutes(entries)
+		if err == nil {
+			t.Fatal("an entry whose method does not match the registered route was accepted")
+		}
+		if !strings.Contains(err.Error(), "GET /send/text") {
+			t.Errorf("the failure does not print the offending entry: %v", err)
+		}
+		t.Logf("control 2, final tree, method mismatch: %v", err)
+	})
+
+	t.Run("segmento a mais", func(t *testing.T) {
+		entries := []ProductRouteEntry{{Method: "POST", Path: "/send/text/extra", Line: 1}}
+		_, err := enumeration.MatchProductTransportRoutes(entries)
+		if err == nil {
+			t.Fatal("an entry with an extra path segment was accepted")
+		}
+		if !strings.Contains(err.Error(), "POST /send/text/extra") {
+			t.Errorf("the failure does not print the offending entry: %v", err)
+		}
+		t.Logf("control 2, final tree, extra segment: %v", err)
+	})
+
+	t.Run("arquivo ausente", func(t *testing.T) {
+		missing := filepath.Join(t.TempDir(), "does-not-exist.txt")
+		if _, err := ReadProductTransportRoutesFile(missing); err == nil {
+			t.Fatal("a missing product transport routes file was read without complaint")
+		} else {
+			t.Logf("control 2, final tree, missing file: %v", err)
+		}
+	})
+}
+
+// TestNegativeControl3Goal043ANewLiteralReachableFromAProductRouteIsRefused
+// is criterion 21's control 3: a Go prose literal newly reachable from a
+// registered route is an unasserted member of the set §3 crosses — the
+// same shape route_reach_test.go asserts element by element on the real
+// tree, exercised here over a route this test registers.
+func TestNegativeControl3Goal043ANewLiteralReachableFromAProductRouteIsRefused(t *testing.T) {
+	tree := newSyntheticTree(t)
+	tree.write(t, filepath.Join("pkg", "svc", "service.go"), relayServiceSource("svc")+`
+func (s *Service) SendGreetingRoute() error {
+	greeting := "Bem-vindo de volta"
+	msg := &waE2E.Message{
+		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+			Text: &greeting,
+		},
+	}
+	return s.client.SendMessage("", msg)
+}
+`)
+	tree.write(t, filepath.Join("pkg", "routes", "routes.go"),
+		`package routes
+
+import (
+	"net/http"
+
+	"`+syntheticModulePath+`/pkg/svc"
+)
+
+type Handlers struct {
+	svc *svc.Service
+}
+
+func (h *Handlers) Assign(engine *http.ServeMux) {
+	group := engine.Group("/notify")
+	group.POST("/greet", h.svc.SendGreetingRoute)
+}
+`)
+
+	enumeration := mustEnumerateSynthetic(t, tree)
+
+	route, err := enumeration.RouteWithPath("/notify/greet")
+	if err != nil {
+		t.Fatalf("the registered route was not found: %v", err)
+	}
+
+	reach, err := enumeration.ProseReachFrom(route)
+	if err != nil {
+		t.Fatalf("the reach from the registered route could not be walked: %v", err)
+	}
+
+	// The permanent assertion of §3 (route_reach_test.go) declares the set
+	// of literals reachable from a route element by element. On a tree
+	// where nothing is declared for this route, every literal its reach
+	// finds is an unasserted member — the failure the real assertion
+	// raises the day a new one appears.
+	declared := map[string]bool{}
+	var refused []string
+	for _, literal := range reach.Literals {
+		position := syntheticPosition(t, tree, literal.File, literal.Line)
+		if declared[position] {
+			continue
+		}
+		refused = append(refused, literal.RouteMethod+" "+literal.RoutePath+" reaches "+position+
+			" writing "+strconv.Quote(literal.Content)+" into "+literal.Field)
+	}
+	if len(refused) != 1 {
+		t.Fatalf("expected exactly one refused literal reachable from the route, got %d: %v", len(refused), refused)
+	}
+	if !strings.Contains(refused[0], "POST /notify/greet") {
+		t.Errorf("the refusal does not name the route it is reached from: %s", refused[0])
+	}
+	if !strings.Contains(refused[0], "Bem-vindo de volta") {
+		t.Errorf("the refusal does not quote the literal: %s", refused[0])
+	}
+	if !strings.Contains(refused[0], "Text") {
+		t.Errorf("the refusal does not name the carrier field: %s", refused[0])
+	}
+	t.Logf("control 3, final tree: %s", refused[0])
+}
+
+// TestNegativeControl4Goal043MovingARouteDoesNotChangeItsMatch is the Go
+// half of control 4: the same route, moved to a file, a folder, a
+// package and a handler type of another name, matches the same
+// value-file entry with the same method and the same full path. No rule
+// decides by name.
+func TestNegativeControl4Goal043MovingARouteDoesNotChangeItsMatch(t *testing.T) {
+	valueFileDir := t.TempDir()
+	valueFile := filepath.Join(valueFileDir, "product-transport-routes.txt")
+	writeTempFile(t, valueFile, "POST /send/text\n")
+	entries, err := ReadProductTransportRoutesFile(valueFile)
+	if err != nil {
+		t.Fatalf("the value file could not be read: %v", err)
+	}
+
+	first := newSyntheticTree(t)
+	first.write(t, filepath.Join("pkg", "routes", "routes.go"),
+		syntheticRoutesFile("routes", "Handlers", "Send", "/send", "/text", "Text"))
+	firstEnumeration := mustEnumerateSynthetic(t, first)
+	firstReport, err := firstEnumeration.MatchProductTransportRoutes(entries)
+	if err != nil {
+		t.Fatalf("the entry did not match on the first tree: %v", err)
+	}
+
+	second := newSyntheticTree(t)
+	second.write(t, filepath.Join("pkg", "endpoints", "wire.go"),
+		syntheticRoutesFile("endpoints", "Router", "Dispatch", "/send", "/text", "SendMessage"))
+	secondEnumeration := mustEnumerateSynthetic(t, second)
+	secondReport, err := secondEnumeration.MatchProductTransportRoutes(entries)
+	if err != nil {
+		t.Fatalf("the entry did not match on the second tree: %v", err)
+	}
+
+	if len(firstReport.Matches) != 1 || len(secondReport.Matches) != 1 {
+		t.Fatalf("expected exactly one match on each tree, got %d and %d",
+			len(firstReport.Matches), len(secondReport.Matches))
+	}
+	before, after := firstReport.Matches[0].Route, secondReport.Matches[0].Route
+	if before.Method != after.Method || before.FullPath != after.FullPath {
+		t.Errorf("the match changed with the name: %s %s became %s %s",
+			before.Method, before.FullPath, after.Method, after.FullPath)
+	}
+	t.Logf("control 4, Go side, final tree: %s %s matches identically in pkg/routes/routes.go and pkg/endpoints/wire.go",
+		before.Method, before.FullPath)
+}
+
 // TestNoNegativeControlLeftAFileBehind checks the promise the controls
 // make: every synthetic tree lives in a temporary directory, and the
 // package directory itself holds nothing but Go sources.

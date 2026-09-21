@@ -3907,3 +3907,136 @@ escrito com a biblioteca padrão.
   árvore de código diz, lida por AST. `whatsmeow-lib/` é biblioteca
   vendorizada e fica fora do alcance do guard — é lida apenas como fonte
   das declarações de proto.
+
+## Delta implementado — diff043, 2026-09-21 ([D-059](DECISIONS.md))
+
+Fecha, computando em vez de afirmando, a condição que o `Revisar se` de
+[D-058](DECISIONS.md) tinha deixado como prosa: se o produto usasse uma
+rota do serviço Go que alcança um literal de prosa, **A-24** deixaria de
+ser `PENDENCIA-POS-MVP`. Este delta cruza os dois lados — a rota que o
+produto de fato alcança, e o literal que cada rota registrada alcança —
+e vigia a condição em vez de a descrever. Nenhum arquivo Go de produção
+mudou, nenhum `src/` dos três apps mudou, `go.mod` e `go.sum` continuam
+intocados, e nenhuma dependência nova entrou.
+
+- **A rota que o produto alcança no serviço Go é enumerada, nos dois
+  lados, por forma — não presumida por porta nem por nome de cliente.**
+  `apps/ai-orchestrator/tests/support/product-transport-routes.txt`
+  (arquivo de valores novo) nomeia **10** rotas (`MÉTODO CAMINHO`, com
+  `{}` marcando segmento interpolado), lido por
+  `readProductTransportRoutesFile` nos dois lados — nenhuma rota está
+  digitada dentro de um teste. No TypeScript,
+  `discoverGoServiceHttpRequests` (`http-egress-sites.ts`) lê
+  `apps/ai-orchestrator/src` e `apps/bff/src` inteiros, reaproveitando a
+  classificação de sítio de `discoverHttpEgressSites` (Goal041) para o
+  `fetch` cru e acrescentando o reconhecimento de cliente HTTP interno
+  por classe (URL base de campo ligado no construtor, caminho do
+  argumento do método) — e o conjunto computado é comparado ao arquivo,
+  nas duas direções: rota computada e ausente do arquivo reprova, e linha
+  do arquivo que a computação não alcança também reprova. Nenhum sítio de
+  egresso sai da leitura em silêncio: o que não vira requisição ao serviço
+  Go é devolvido em `notGoBound`, com o motivo escrito (destino em outra
+  chave de ambiente, campo de construtor tratado pela varredura de
+  cliente, egresso genérico sem chamador), e categoria não prevista
+  derruba a leitura nomeando arquivo e linha.
+- **DIVERGÊNCIA com o §1 do [Goal043](goals/043-a-fronteira-inteira-e-atravessada.md),
+  resolvida a favor da árvore:** o Goal nomeia **nove** caminhos (o envio
+  de texto, o download de mídia e os sete do cliente de instância) e diz
+  que "o produto usa nove rotas". A árvore mostra **dez**: falta na conta
+  do Goal a requisição de `apps/bff/src/routes/health.ts:22`
+  (`checkHealth(env.EVOLUTION_GO_BASE_URL, "/health", request.id)`), cujo
+  `fetch` está em `:46` e cujo destino **não está escrito na expressão da
+  URL** — ele chega por parâmetro e só existe no chamador. `GET /health`
+  está registrada em `pkg/routes/routes.go:89` e entra no conjunto
+  alcançado; o método é `GET` por ser o default do próprio `fetch`, que
+  ali não passa `method`.
+- **O conjunto de rotas é asserido contra as rotas que o serviço Go
+  registra, também nos dois sentidos.** No Go,
+  `MatchProductTransportRoutes` (`product_routes.go`, pacote novo)
+  casa cada uma das 10 entradas contra as **94** rotas que
+  `discoverRegisteredRoutes` já enumerava (Goal042), segmento por
+  segmento, com `{}` batendo só contra parâmetro de rota (`:nome`) —
+  nunca contra segmento literal. As 10 entradas casam, cada uma, com
+  exatamente uma rota registrada; as outras **84** rotas registradas
+  ficam contadas como não alcançadas pelo produto, não como falha — o
+  produto não chamar uma rota que este serviço expõe não é travessia de
+  fronteira a provar.
+- **O alcance de literal de prosa por rota é computado por AST, não lido
+  à mão.** `ProseReachFrom` (`route_reach.go`, pacote novo) segue, a
+  partir do handler de cada rota, toda declaração de produção que ele
+  alcança — sobre-aproximando de propósito, na direção fail-closed — e
+  reporta todo literal de Go não vazio que algum sítio dessa reach
+  escreve em campo portador. Sobre as 10 rotas que o produto chama: **9**
+  têm declaração de handler para seguir e **1** é recusada com o motivo
+  escrito — `GET /health`, cujo handler registrado é um closure local
+  (`pkg/routes/routes.go:82`), não declaração de método desta árvore, e
+  por isso não tem código de produção a percorrer. Recusa é contagem, não
+  falha: é o mesmo tratamento que `ProseReachOfEveryRegisteredRoute` já
+  dava, e `ProseReachOfRoutes` passou a dar, de modo que toda rota do
+  produto termina em reach ou em recusa, nunca some. Das 9 percorridas, a
+  única que escreve em campo portador é `POST /send/text` (100
+  declarações, 29 sítios), e o literal alcançado por ela é **zero**.
+  Sobre as 94 rotas registradas: 84 têm declaração de handler para
+  seguir (10 são recusadas, com o motivo escrito, por handler que não é
+  declaração desta árvore), e **5** delas alcançam, juntas, os mesmos
+  **27** literais que o Goal042 já tinha asserido — `POST /send/media`
+  (5), `POST /send/button` (12), `POST /send/list` (3),
+  `POST /send/carousel` (6) e `POST /send/status/media` (1). Resíduo
+  zero nos dois sentidos: todo literal que a reach encontra é membro do
+  conjunto do Goal042, e todo membro desse conjunto é alcançado por
+  alguma rota registrada.
+- **A condição do `Revisar se` de D-058 passa a ser computada, não
+  descrita.** O literal de **A-24**
+  (`pkg/sendMessage/service/send_service.go:1960`, `"Ver Menu"` em
+  `ButtonText`) é alcançado por exatamente uma rota registrada,
+  `POST /send/list` — e essa rota **não** está no conjunto que o produto
+  chama. A disjunção é o resultado de um teste, não uma leitura manual
+  do código: se o produto passasse a chamar `POST /send/list` (ou
+  qualquer outra rota que alcança um literal), o conjunto de literais
+  alcançáveis a partir das rotas do produto deixaria de ser vazio e o
+  teste que o assere vazio reprovaria, nomeando arquivo e linha. A
+  entrada de **A-24** em [FINAL_AUDIT §19](FINAL_AUDIT.md) não foi
+  reescrita — este delta acrescenta [§20](FINAL_AUDIT.md), que registra
+  a mudança de natureza do motivo do rebaixamento, não uma correção do
+  achado.
+- **A leitura estreita e a leitura larga concordam onde as duas
+  existem.** `ChainFrom` (Goal042) segue só o valor que o handler liga do
+  corpo recebido; sobre a árvore real, 63 das 84 rotas walked ligam corpo
+  de requisição e 11 delas relayam esse corpo inteiro para dentro de um
+  sítio portador — e todo sítio que essa leitura estreita alcança está
+  também na reach larga (`TestTheWideReachContainsTheNarrowChain`), nunca
+  o contrário.
+- **Os cinco controles negativos obrigatórios deste critério existem e
+  mordem**, cada um sobre árvore sintética em diretório temporário,
+  removido pelo `t.TempDir`/`rmSync` ao fim, sem nunca quebrar a árvore
+  real: chamada nova ao transporte por caminho ausente do arquivo de
+  valores reprova (TS); entrada do arquivo sem rota registrada
+  correspondente reprova, em três formas — método diferente, segmento a
+  mais, arquivo ausente (Go); literal novo alcançável a partir de uma
+  rota do produto reprova (Go); mover sítio, cliente, rota e arquivo para
+  nome diferente não muda a classificação, nos dois lados; e cliente
+  genérico apontado para outro serviço, ou URL apenas montada para
+  entrega (nunca despachada pelo mesmo `fetch`), ficam fora do conjunto
+  alcançado.
+- **Prova executada:** `cd apps/evolution-go && go test ./...`: PASS em
+  todos os pacotes com teste, 0 falhas. `npx vitest run
+  tests/assistant/assistant.service.test.ts` (em `apps/ai-orchestrator`):
+  **85** testes, 0 falhas — os **70** da baseline mais **15** deste
+  delta. `npx vitest run` completo de `apps/ai-orchestrator`: **809**
+  passando, 88 pulados (baseline: 794 passando). `npm run
+  validate:core`: `PASSED`, 15 passos verdes e 2 pulados declarados
+  (`test:bff`, `test:health-worker`), com `audit:static` mantendo os
+  **34** checks. `npm run test:gate`: **226** testes, 0 falhas — mesma
+  contagem da baseline.
+- **LIMITE:** `validate:integration` **não roda neste ambiente de
+  execução**: `npm run validate:integration` termina com `exit 2` e
+  `validate:integration REFUSED — BFF_TEST_DATABASE_URL is not set`. O
+  valor real das variáveis de ambiente de produção não é lido por nada
+  aqui — só o default do schema e o `.env.example`.
+- **LIMITE:** nada aqui prova comportamento em runtime do serviço Go, nem
+  que o binário em produção é o desta árvore, nem que **M4** fechou. O
+  que se prova é o que a árvore de código diz, lida por AST.
+  `whatsmeow-lib/` continua fora do alcance do guard, lida apenas como
+  fonte das declarações de proto. **A-24 continua `PENDENCIA-POS-MVP`,
+  não corrigido** — este delta é camada de teste, e nenhum arquivo Go de
+  produção deste fork pode ser editado por ele.

@@ -972,3 +972,185 @@ resíduo nomeado; `whatsmeow-lib/` deixar de ser vendorizada, o que mudaria
 a derivação do caminho do pacote de proto; ou o produto passar a usar
 `POST /send/list`, que é a condição que transformaria **A-24** em defeito
 observável por uma cliente.
+
+## D-059 — A rota de transporte que o produto alcança é enumerada por forma da expressão de caminho, o alcance de literal de prosa por rota é computado por AST, e a condição do `Revisar se` de D-058 passa de prosa a invariante vigiada, propostas no Goal043
+
+**Status:** proposta, no diff043 (WU-01 a WU-06) sobre a baseline aceita
+`f48bf9b5ed38937a763cc1796220778fc60dae3c` (fechamento do Goal042); sem
+commit e sem deploy. Não fecha nem reabre nenhum achado — **A-24
+continua `PENDENCIA-POS-MVP`, não corrigido**; A-04 a A-08, A-11 a A-17
+e A-19 não são tocados, e nenhum achado fechado (A-01 a A-03, A-09,
+A-10, A-18, A-20 a A-23) é reaberto. Registrado em [FINAL_AUDIT
+§20](FINAL_AUDIT.md), que **não reescreve** §19 nem a entrada de A-24
+ali. Não altera nenhuma decisão anterior — reusa e não altera D-018,
+D-050, D-057 e D-058.
+
+**Contexto:** o `Revisar se` de D-058 tinha deixado uma condição em
+prosa: "o produto passar a usar `POST /send/list`, que é a condição que
+transformaria A-24 em defeito observável por uma cliente". A frase que
+justificava o rebaixamento de A-24 em §19 — "a rota que alcança esse
+literal é `POST /send/list`, e nenhum arquivo de
+`apps/ai-orchestrator/src` ou de `apps/bff/src` a chama" — era uma
+leitura manual do código na baseline do Goal042, sem guard que a
+recomputasse a cada mudança de árvore. O transportguard do Goal042 tinha
+duas metades que ainda não se cruzavam: enumerava rota registrada
+(`discoverRegisteredRoutes`) e enumerava literal alcançando campo
+portador (`GoProseLiteralsReachingTransport`), mas nada ligava um
+literal à rota que o alcança, e nada do lado TypeScript enumerava qual
+rota o produto de fato chama.
+
+**Decisão:**
+
+1. **A rota que o produto alcança no serviço Go é um arquivo de valores,
+   lido pelos dois lados, nunca digitado dentro de um teste.**
+   `apps/ai-orchestrator/tests/support/product-transport-routes.txt`
+   nomeia 10 rotas (`MÉTODO CAMINHO`, com `{}` marcando segmento
+   interpolado). `discoverGoServiceHttpRequests`
+   (`http-egress-sites.ts`) computa o mesmo conjunto lendo
+   `apps/ai-orchestrator/src` e `apps/bff/src` inteiros — reaproveitando
+   a classificação de sítio de `discoverHttpEgressSites` (Goal041) para
+   o `fetch` cru, e acrescentando reconhecimento de cliente HTTP interno
+   por forma de classe (URL base de campo ligado no construtor, caminho
+   do argumento do método, nunca nome de arquivo, pasta ou classe) — e
+   os dois conjuntos são comparados nas duas direções. A leitura é
+   fail-closed sítio a sítio: destino que não está escrito na expressão
+   da URL é resolvido pela categoria que o Goal041 já computava —
+   parâmetro em trânsito resolvido nos chamadores (é assim que
+   `GET /health`, de `apps/bff/src/routes/health.ts`, entra no conjunto),
+   campo de construtor tratado pela varredura de cliente, egresso
+   genérico sem chamador — e o que fica de fora é devolvido em
+   `notGoBound` com o motivo escrito, nunca descartado por um `continue`
+   silencioso. Categoria não prevista derruba a leitura. Por isso o
+   conjunto tem 10 rotas, e não as 9 que o §1 do Goal nomeia: a décima é
+   `GET /health`, cujo destino chega por parâmetro. A alternativa —
+   digitar a lista de rotas dentro do teste TypeScript e do teste Go,
+   cada um com a sua — foi rejeitada: são exatamente as duas cópias
+   divergentes que a fronteira de linguagem convida a criar, e o arquivo
+   de valores existe para que nenhum dos dois lados a digite.
+2. **O casamento contra rota registrada é segmento por segmento, com
+   `{}` batendo só contra parâmetro de rota.** `MatchProductTransportRoutes`
+   (`product_routes.go`, pacote novo) casa as 10 entradas contra as 94
+   rotas que `discoverRegisteredRoutes` já enumerava; `routePathSegmentsMatch`
+   recusa `{}` contra segmento literal e recusa comparação de string
+   inteira — as duas formas que deixariam uma rota de grupo escapar sem
+   ninguém notar. As 10 entradas casam, cada uma, com exatamente uma
+   rota; as outras 84 ficam contadas em `Unreached`, não reprovadas — o
+   produto não chamar uma rota que este serviço expõe não é travessia de
+   fronteira a provar. A alternativa — comparar caminho como string
+   inteira — foi rejeitada: falharia toda rota registrada dentro de
+   grupo, cujo prefixo é montado, não escrito no sítio de registro.
+3. **O alcance de literal por rota é computado por AST, sobre-
+   aproximando a partir do handler — a mesma direção fail-closed que
+   [D-058 item 3](#d-058--o-guard-atravessa-a-fronteira-de-serviço-em-vez-de-continuar-declarando-limite-o-campo-portador-é-derivado-das-declarações-de-proto-e-a-fronteira-é-atravessada-por-valor-com-cada-lado-lido-na-sua-língua-propostas-no-goal042)
+   já tinha escolhido.** `ProseReachFrom` (`route_reach.go`, pacote
+   novo) segue toda declaração de produção que o handler de uma rota
+   alcança e reporta todo literal não vazio que algum sítio dessa reach
+   escreve em campo portador. Das 10 rotas do produto, 9 têm handler para
+   seguir e 1 é recusada com o motivo escrito — `GET /health`, cujo
+   handler registrado é um closure local (`pkg/routes/routes.go:82`), não
+   declaração de método desta árvore. `ProseReachOfRoutes` passou a
+   contar essa recusa como `ProseReachOfEveryRegisteredRoute` já
+   contava, em vez de falhar: rota sem código de produção a percorrer não
+   tem nada a provar, e continuar falhando ali obrigaria a estreitar o
+   conjunto alcançado, que é a direção errada. Das 9 percorridas, só
+   `POST /send/text` escreve em campo portador e alcança zero
+   literais. Das 94
+   rotas registradas, 84 têm handler para seguir (10 recusadas com
+   motivo escrito) e 5 delas alcançam, juntas, os mesmos 27 literais que
+   o Goal042 já tinha asserido — resíduo zero nos dois sentidos entre a
+   reach e o conjunto do Goal042. A alternativa — seguir só o valor que
+   o handler liga do corpo recebido (a leitura estreita que `ChainFrom`
+   já fazia) — foi rejeitada como leitura única: a reach larga é mantida
+   ao lado da estreita, nunca no lugar dela, e um teste prova que a
+   larga contém tudo que a estreita alcança.
+4. **A condição do `Revisar se` de D-058 é computada e vigiada, não
+   apenas nomeada de novo.** O conjunto de literais alcançáveis a partir
+   das 10 rotas do produto é asserido vazio
+   (`TestProseLiteralsReachedFromAProductRouteAreAssertedElementByElement`).
+   `TestNoRouteThatReachesTheProductProseLiteralIsReachedByTheProduct`
+   deriva a posição do literal de A-24 do próprio conjunto que o guard
+   computa — nunca digitada —, deriva as rotas que o alcançam, deriva as
+   rotas que o produto chama, e prova que os dois conjuntos são
+   disjuntos. Se o produto passasse a chamar `POST /send/list`, o
+   conjunto vazio deixaria de o ser e o teste reprovaria nomeando
+   arquivo, linha, conteúdo e rota. A alternativa — deixar a condição
+   como nota em `Revisar se`, sem teste que a vigie — é a mesma lacuna
+   que este item fecha.
+5. **A-24 não é corrigido, e não pode ser.** O §5 do Goal042 proibia
+   editar o fork de transporte, e este Goal não revisita essa proibição.
+   A entrada de A-24 em FINAL_AUDIT §19 não é reescrita; §20 registra
+   apenas que o motivo do rebaixamento mudou de natureza — de prosa lida
+   à mão para invariante computada a cada execução —, não que o achado
+   fechou.
+
+**Alternativas:** rota do produto digitada dentro de cada teste, sem
+arquivo de valores compartilhado — rejeitada no item 1; casamento de
+caminho por string inteira — rejeitada no item 2; ler só o valor que o
+handler liga do corpo recebido, sem a reach larga — rejeitada no item 3;
+deixar a condição de A-24 como prosa em `Revisar se`, sem teste — é a
+lacuna que o item 4 fecha; editar o fork para corrigir `"Ver Menu"` —
+proibida pelo §5 do Goal042, rejeitada no item 5.
+
+**Motivo:** o risco próprio deste Goal — declarar de novo, em prosa, uma
+condição que já tinha sido declarada em prosa por D-058 — só se evita
+computando os dois lados do cruzamento (rota que o produto chama, rota
+que um literal alcança) e deixando um teste, não um documento, vigiar a
+condição que os separa.
+
+**Consequências:**
+`apps/ai-orchestrator/tests/support/product-transport-routes.txt` é
+arquivo de valores novo, com 10 rotas.
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts` ganha
+`discoverGoServiceHttpRequests`, `GoBoundHttpRequest`,
+`AssembledUrlForDelivery`, `GoServiceHttpRequestDiscovery`,
+`ProductTransportRoute`, `NonGoBoundEgressSite` e
+`readProductTransportRoutesFile`; nada do que os Goals 041 e 042 deixaram
+ali foi alterado.
+`apps/evolution-go/pkg/transportguard/product_routes.go` (novo) exporta
+`ProductRouteEntry`, `ReadProductTransportRoutesFile`,
+`ProductRouteMatch`, `ProductRouteMatchReport` e
+`MatchProductTransportRoutes`.
+`apps/evolution-go/pkg/transportguard/route_reach.go` (novo) exporta
+`ReachedProseLiteral`, `RouteProseReach`, `RouteReachRefusal`,
+`ProseReachReport`, `ProseReachFrom`, `ProseReachOfRoutes` e
+`ProseReachOfEveryRegisteredRoute` — as duas últimas devolvem
+`ProseReachReport`, com recusa contada e motivo escrito, e a segunda é a
+primeira aplicada a `e.Routes`. `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
+ganha 15 casos ao lado dos 70 já existentes (85 no total): 7 provam o
+casamento do conjunto de rotas nos dois sentidos (WU-02), 4 são controles
+negativos deste critério (WU-05), e 4 provam que nenhum sítio de egresso
+é descartado em silêncio e que o destino que só existe no chamador entra
+no conjunto. `apps/evolution-go/pkg/transportguard/negative_controls_test.go`
+ganha os controles negativos 2, 3 e 4 deste critério, cada um sobre
+árvore sintética em diretório temporário, sem resíduo. Nenhum arquivo de
+`apps/frontend/src/`, `apps/bff/src/` ou `apps/ai-orchestrator/src/`
+mudou, nenhum arquivo Go de produção mudou, `go.mod` e `go.sum` estão
+intocados, e `PRODUCT_OWN_TEXTS`, `VERIFIED_CLIENT_TEXTS` e o conjunto de
+88/27 membros que o Goal042 asseria continuam idênticos aos da baseline.
+`go test ./...` em `apps/evolution-go`: PASS em todos os pacotes, 0
+falhas. `npx vitest run tests/assistant/assistant.service.test.ts`: 85
+testes, 0 falhas (baseline 70). `npx vitest run` completo de
+`apps/ai-orchestrator`: 809 passando, 88 pulados (baseline 794
+passando). `npm run validate:core`: `PASSED`, 15 passos verdes e 2
+pulados declarados, com `audit:static` mantendo os 34 checks. `npm run
+test:gate`: 226 testes, 0 falhas — mesma contagem da baseline. FINAL_AUDIT
+§19 recontado em §20: 0 `BLOQUEADOR-MVP`, 8 `PENDENCIA-POS-MVP` e 6
+`LIMITE-DECLARADO` — inalterado em relação a §19, sem achado novo e sem
+achado corrigido. Este diff não fecha **M4**, não afirma fidelidade
+visual à referência aprovada, não liga a verificação de resposta em
+produção, **não afirma comportamento de runtime do serviço Go** e **não
+corrige A-24**. `validate:integration` recusou por pré-condição de banco
+ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado como
+ausente — nenhum valor real de variável de ambiente é lido por nada
+neste diff.
+
+**Revisar se:** um literal novo passar a alcançar uma das 10 rotas do
+produto — o teste que assere esse conjunto vazio reprovaria, nomeando
+arquivo e linha, e a condição deste D-059 estaria satisfeita; o produto
+passar a chamar uma rota nova do serviço Go — exigiria linha nova em
+`product-transport-routes.txt`, e o casamento reprovaria até ela
+existir; o serviço Go ganhar uma rota registrada por forma que
+`discoverRegisteredRoutes` não reconhece — este Goal não estende esse
+descobridor, herdado do Goal042; ou `apps/evolution-go/` deixar de ser o
+único ponto de fronteira de serviço do transporte — decisão que nenhum
+Goal desta série toma.

@@ -203,21 +203,33 @@ export async function registerV1ConversationRoutes(
     },
   );
 
-  for (const action of ["takeover", "release", "resolve"] as const) {
-    app.post(
-      `/v1/conversations/:id/${action}`,
-      { preHandler: requireTenantContext },
-      async (request) => {
-        const { id } = parseParams(idSchema, request.params);
-        const context = internalContext(request);
-        const conversation =
-          action === "takeover"
-            ? await ai.takeover(context, id)
-            : action === "release"
-              ? await ai.release(context, id)
-              : await ai.resolve(context, id);
-        return dataResponse(request, conversation);
-      },
-    );
-  }
+  app.post(
+    "/v1/conversations/:id/takeover",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      const conversation = await ai.takeover(internalContext(request), id);
+      return dataResponse(request, conversation);
+    },
+  );
+
+  app.post(
+    "/v1/conversations/:id/release",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      const conversation = await ai.release(internalContext(request), id);
+      return dataResponse(request, conversation);
+    },
+  );
+
+  app.post(
+    "/v1/conversations/:id/resolve",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      const conversation = await ai.resolve(internalContext(request), id);
+      return dataResponse(request, conversation);
+    },
+  );
 }

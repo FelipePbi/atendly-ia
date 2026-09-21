@@ -1206,3 +1206,163 @@ roda em produção**: ela é gate de drift, ligada em `development` e `test`,
 e desligada onde o produto realmente responde — o limite está escrito em
 `apps/bff/src/lib/response-contract.ts` e em
 [VALIDATION_GATE](VALIDATION_GATE.md#checks-estáticos-novos-do-goal035).
+
+## 13. Fechamento de A-20 a A-23 — Goal036, 2026-09-20
+
+Seção nova, escrita depois da última mudança de árvore do diff036 (WU-01 a
+WU-06). Ela **não reescreve** §4 a §12: os registros de A-01 a A-19 em §6, o
+veredito de §7 e as cinco seções de fechamento anteriores continuam
+exatamente como estavam. Esta seção acrescenta o que o diff036 passou a
+garantir sobre os quatro achados que §12 tinha registrado como divergência
+real entre o que o BFF devolve e o que o contrato declarava (A-20 a A-23), e
+sobre o limite que §12 também registrava — "campo a mais não reprova"
+(§12, "Limite da verificação: campo a mais não reprova").
+
+### O que mudou
+
+**Campo a mais passou a reprovar.** `apps/bff/src/lib/response-contract.ts`
+ganhou uma segunda direção de comparação: além do que o `safeParse` acusa
+como faltando ou de tipo errado (o que já existia desde o Goal035), o hook
+agora compara o `data` emitido com o `data` que o `safeParse` devolveu e
+reporta toda chave que o parse removeu em silêncio — na raiz, dentro de
+objeto aninhado, dentro de elemento de array e do lado da união que
+efetivamente parseou. `z.record`, `z.unknown`, `z.any`, `.passthrough()` e
+`.catchall()` continuam sem gerar achado, porque para esses tipos o Zod
+legitimamente mantém a chave — nada some, então não há o que comparar. O
+achado usa o mesmo erro nomeado (`ResponseContractViolationError`), o mesmo
+teto de issues reportadas e a mesma mensagem que o campo faltando já usava:
+não há canal de saída novo. Isso fecha exatamente o limite que §12 tinha
+registrado: **a lacuna era desta verificação, não do produto**, e a lacuna
+não existe mais.
+
+**O contrato declara o que o produtor já devolve — fecha A-21, A-22 e
+A-23.** Os três achados eram o contrato atrasado em relação a um produtor
+que já concordava com o produto: `systemStatusSchema` ganhou `ai.reconciled`
+(`aiReconciledValueSchema`, os seis valores que `PUBLIC_API_V1.md` já
+documentava para `GET /v1/status`); `businessProfileSchema` ganhou
+`modalities` e `address`, opcionais, os mesmos campos e o mesmo tipo já
+declarados em `onboardingStateSchema` e `settingsSchema`; o objeto `service`
+inline de `onboardingStateSchema` ganhou os sete campos que `serviceSchema`
+cheio do pacote já tinha (`needsReview`, `reviewOrigin`, `description`,
+`colorToken`, `bufferBeforeMinutes`, `bufferAfterMinutes`,
+`recurrenceIntervalDays`). Nenhum handler do BFF mudou: a correção foi
+inteira do lado do contrato, porque em nenhum dos três casos o produtor
+estava errado.
+
+**A remoção idempotente do responsável principal passou a ser aceita — fecha
+A-20.** `deletedIdempotentSchema` (`z.object({ deleted: z.boolean() })`)
+substitui `deletedSchema` só na entrada
+`DELETE /v1/customers/:id/primary-guardian`; `deletedSchema` continua
+`z.literal(true)` em toda outra rota de exclusão, porque nas outras a
+exclusão não é idempotente e `{ deleted: false }` continua sendo bug, não
+caso válido. `clearCustomerPrimaryGuardian` (`{ deleted: deleted.count > 0
+}`) não mudou — era o contrato que recusava um corpo que o produto sempre
+quis devolver.
+
+**A rota registrada em laço passou a ser vista pelo lado do BFF.**
+`apps/bff/src/modules/conversations/routes.ts` desenrolou o `for` sobre
+`["takeover", "release", "resolve"]` em três chamadas `app.post` com path
+literal entre aspas, uma por ação — sem mudar path, verbo, `preHandler` nem
+corpo de resposta de nenhuma das três rotas. `audit:static` ganhou
+`bff_v1_routes_use_literal_paths`
+(`findNonLiteralV1RouteRegistrations`), que falha se `app.<verbo>` for
+chamado com um path `/v1/...` entre crases em vez de aspas — a forma exata
+que deixava as três rotas invisíveis para `public_api_route_coverage`,
+registrada como observação não bloqueante em [D-051](DECISIONS.md#d-051). A
+tabela do pacote não mudou de tamanho: continua com **116** entradas
+(`node -e "import('./packages/public-api-contract/dist/index.js').then((m) => console.log(m.publicApiRoutes.length))"`
+imprime `116`), porque as três rotas já tinham entrada — o que era invisível
+era a extração automática do lado do BFF, nunca a tabela escrita à mão. Ver
+[VALIDATION_GATE](VALIDATION_GATE.md#checks-estáticos-novos-do-goal036).
+
+**O que este diff não decide.** Fechar os quatro achados não decidiu se
+`GET /v1/status`, `GET /v1/auth/session` ou o onboarding *deveriam* devolver
+esses campos — decidiu que, já devolvendo, o contrato deveria declará-los.
+Nenhuma tela, componente, texto ou CSS do frontend mudou; nenhum arquivo de
+`apps/scheduling-service/`, `apps/ai-orchestrator/`, `apps/evolution-go/` ou
+`apps/health-worker/` foi tocado.
+
+### Resultado real da execução
+
+Executado por esta unidade (WU-07), sobre a árvore final, idêntica ao diff
+do WU-06 em diante (os cinco controles negativos foram todos revertidos).
+`node scripts/final-production-audit.mjs` — exit 0, 33 checks, 32 `passed`,
+1 `skipped` declarado (`production_health`, sem
+`PRODUCTION_HEALTH_TARGETS`), incluindo `bff_v1_routes_use_literal_paths`
+(`ok: true`, "every /v1 route is registered with a literal string path") e
+`public_api_route_coverage` (`ok: true`, "read 65 files under apps/bff/src
+for /v1 route registrations (116 routes registered) ... every BFF /v1 route
+with a frontend caller has a table entry"). `node --test
+scripts/tests/final-production-audit-legacy-regression.test.mjs` — 45
+`pass`, 0 `fail`, incluindo as três asserções novas de
+`bff_v1_routes_use_literal_paths` e a asserção nova de
+`public_api_route_coverage` ("a registered route with no frontend caller is
+reported, not failed"). `npx vitest run` em `apps/bff` sobre os três
+arquivos desta unidade
+(`tests/goal036-response-contract-undeclared-key.test.ts`,
+`tests/goal036-wu02-declared-fields.test.ts`,
+`tests/goal036-wu03-idempotent-delete.test.ts`) — 3 arquivos, 18 testes, 0
+falhas. Esta unidade não reexecutou `npm run test:gate`, `npm test` completo
+de `apps/bff`/`apps/frontend`, `validate:integration` nem `validate:ui`:
+essas execuções pertencem às unidades de implementação e de controle
+negativo desta rodada, não à unidade de fechamento documental.
+
+### Achados novos a partir de A-24
+
+Nenhum. A varredura desta unidade sobre a saída de `public_api_route_coverage`
+encontrou um detalhe que merece registro, mas não achado novo: as mesmas três
+rotas (`takeover`, `release`, `resolve`) aparecem agora, pela primeira vez, na
+lista computada de "rotas sem chamador no frontend" — não porque o chamador
+não exista (`apps/frontend/src/data/services/BffConversationService.ts:171`
+chama as três), mas porque `FRONTEND_ROUTE_SCHEMA_CALL_PATTERN` também exige
+path literal entre aspas, e o chamador das três é
+`` routeSchema<Conversation>("POST", `/v1/conversations/:id/${action}`) `` —
+crase, do lado do frontend. Antes deste diff esse fato nunca aparecia em
+lugar nenhum, porque as três rotas eram inteiramente invisíveis à extração do
+lado do BFF; o diff036 corrigiu só esse lado. Hoje não há lacuna real — a
+tabela tem as três entradas e ambos os chamadores existem de fato —, então
+isto é o mesmo tipo de limite de ferramenta que §12/[VALIDATION_GATE](VALIDATION_GATE.md#checks-estáticos-novos-do-goal035)
+já registrava para a rota de mídia sem chamador, não um defeito de produto
+nem uma divergência de contrato. Registrado em
+[VALIDATION_GATE](VALIDATION_GATE.md#checks-estáticos-novos-do-goal036) para
+não ser descoberto como surpresa se uma rota futura for registrada dessa
+forma nos dois lados ao mesmo tempo.
+
+### Veredito recontado
+
+A contagem desta auditoria muda em duas direções: **A-20**, **A-21**,
+**A-22** e **A-23** deixam de reproduzir e saem da categoria
+`PENDENCIA-POS-MVP`, e nenhum achado novo entra. Os quatro identificadores
+permanecem — não são renumerados nem reaproveitados —, e os registros
+originais em §12 continuam descrevendo o que a verificação de resposta do
+Goal035 encontrou, sem reescrita. **Esta auditoria passa a ter 0 achados
+`BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP`** (era 11: menos A-20, A-21, A-22 e
+A-23) **e 6 `LIMITE-DECLARADO`** (inalterado) — os demais de A-04 a A-19,
+nenhum deles tocado, corrigido ou reclassificado por esta unidade.
+
+Três coisas que este recontar não diz. **Não diz que M4 foi fechado**:
+nenhuma chamada saiu, neste diff, para um provedor de LLM real nem para o
+WhatsApp real — o diff036 toca `apps/bff/`, `packages/public-api-contract/`,
+`apps/frontend/src/data/services/BffCustomerService.ts`,
+`scripts/final-production-audit.mjs`,
+`scripts/goal033-authenticated-ui-rehearsal.mjs`,
+`scripts/tests/final-production-audit-legacy-regression.test.mjs`,
+`apps/frontend/e2e/authenticated-matrix.spec.ts` (arquivo do Goal033,
+aqui só acrescido) e ajustes nos testes
+`apps/frontend/tests/goal018-dashboard-status.test.tsx`,
+`apps/frontend/tests/goal018-onboarding-reachability.test.tsx`,
+`apps/frontend/tests/goal022-notifications-chrome.test.tsx` e
+`apps/frontend/tests/goal025-account-deletion-shell-banner.test.tsx`, além da
+documentação de migração — nada além disso. **Não diz que a fidelidade
+visual está provada**: `apps/frontend/e2e/authenticated-matrix.spec.ts`
+só ajusta dados de asserção do rehearsal (`GOAL033_MEASURED_DATE` e a data
+medida), e os quatro testes de `apps/frontend/tests/` só ajustam fixtures
+para os campos novos declarados pelos schemas (`reconciled`,
+`bufferAfterMinutes`, `bufferBeforeMinutes`, `needsReview`) — nenhum toca
+tela, componente, texto ou CSS. A fidelidade visual segue sendo conferência
+humana, como §5.3, §7 e as cinco seções de fechamento anteriores já
+declaravam. **E não diz que a verificação de resposta roda em
+produção**: `RESPONSE_CONTRACT_CHECK_ENABLED` continua
+`env.NODE_ENV !== "production"`, inalterado por este diff — ela segue ligada
+só em `development` e `test`, e desligada onde o produto realmente responde,
+pelo mesmo motivo que §12 já registrava.

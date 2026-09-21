@@ -13,6 +13,7 @@ import {
   findGroupDiscardConfigurationViolations,
   findLegacyMigrationRouteReferences,
   findMinhaAgendaWriterReferences,
+  findNonLiteralV1RouteRegistrations,
   findRemovedCalendarErrorCodeReferences,
   findRequireAtendlyCalendarReferences,
   findUncoveredPublicApiRoutes,
@@ -456,6 +457,36 @@ test("frontend_has_no_dark_theme_css: fails when a manual dark theme selector co
   ];
   assert.deepEqual(findDarkThemeCssReferences(files), [
     "apps/frontend/src/shared/styles/atendly.css",
+  ]);
+});
+
+test("bff_v1_routes_use_literal_paths: passes when every /v1 route is registered with a literal string path", () => {
+  const files = [
+    {
+      path: "apps/bff/src/modules/conversations/routes.ts",
+      content:
+        'app.post(\n  "/v1/conversations/:id/takeover",\n  { preHandler: requireTenantContext },\n  async (request) => {},\n);',
+    },
+  ];
+  assert.deepEqual(findNonLiteralV1RouteRegistrations(files), []);
+});
+
+test("bff_v1_routes_use_literal_paths: fails when a /v1 route is registered with a template literal path", () => {
+  const files = [
+    {
+      path: "apps/bff/src/modules/conversations/routes.ts",
+      content:
+        'for (const action of ["takeover", "release", "resolve"]) {\n' +
+        "  app.post(\n" +
+        "    `/v1/conversations/:id/${action}`,\n" +
+        "    { preHandler: requireTenantContext },\n" +
+        "    async (request) => {},\n" +
+        "  );\n" +
+        "}",
+    },
+  ];
+  assert.deepEqual(findNonLiteralV1RouteRegistrations(files), [
+    "apps/bff/src/modules/conversations/routes.ts",
   ]);
 });
 

@@ -3092,3 +3092,74 @@ mudou.
 - **LIMITE:** este delta descreve o diff035 (WU-01 a WU-19) sobre a baseline
   aceita `f1fb6203d11270053c8e702d155b98ff7915e7bc` (fechamento do Goal034),
   decidido em [D-051](DECISIONS.md), sem commit e sem deploy.
+
+## Delta implementado — diff036, 2026-09-20 ([D-052](DECISIONS.md))
+
+Este delta fecha **A-20 a A-23**: quatro divergências reais entre o que o
+BFF devolvia e o que o contrato público declarava, que a verificação de
+resposta do Goal035 tinha encontrado e nenhum Goal anterior corrigia. Toca
+`apps/bff/`, `packages/public-api-contract/`, `scripts/`,
+`apps/frontend/src/data/services/BffCustomerService.ts`,
+`apps/frontend/e2e/authenticated-matrix.spec.ts` — que existe desde o
+Goal033 e aqui só recebe +47 linhas (ajuste de dados de
+asserção do rehearsal `goal033-authenticated-ui-rehearsal.mjs`, sem tela
+nova) e quatro fixtures de teste
+(`apps/frontend/tests/goal018-dashboard-status.test.tsx`,
+`goal018-onboarding-reachability.test.tsx`,
+`goal022-notifications-chrome.test.tsx`,
+`goal025-account-deletion-shell-banner.test.tsx`) atualizadas para os campos
+novos declarados pelos schemas; nenhuma migration, nenhum `schema.prisma` e
+nenhum verbo de rota mudou.
+
+- **FATO atual (campo a mais reprova):** `apps/bff/src/lib/response-contract.ts`
+  compara agora as duas direções — o que o contrato exige e o `data` não tem
+  (já existia) e o que o `data` tem e o contrato não declara (novo). Toda
+  chave que `safeParse` remove em silêncio vira achado, em qualquer
+  profundidade (objeto aninhado, elemento de array, lado da união
+  parseado), pelo mesmo erro nomeado, mesmo teto e mesma mensagem que o
+  campo faltando já usava. `z.record`, `z.unknown`, `z.any`,
+  `.passthrough()` e `.catchall()` continuam sem gerar achado, porque para
+  esses tipos nenhuma chave é removida. Ver
+  [VALIDATION_GATE](VALIDATION_GATE.md#checks-estáticos-novos-do-goal036).
+- **FATO atual (o contrato declara o que o produtor já devolve):**
+  `systemStatusSchema` ganhou `reconciled` (`aiReconciledValueSchema`, os
+  seis valores de `PUBLIC_API_V1.md`); `businessProfileSchema` ganhou
+  `modalities` e `address`, opcionais, já declarados em `onboardingStateSchema`
+  e `settingsSchema`; o `service` inline de `onboardingStateSchema` ganhou os
+  sete campos que `serviceSchema` cheio do pacote já tinha (`needsReview`,
+  `reviewOrigin`, `description`, `colorToken`, `bufferBeforeMinutes`,
+  `bufferAfterMinutes`, `recurrenceIntervalDays`). Nenhum handler do BFF
+  mudou — em nenhum dos três casos o produtor estava errado.
+- **FATO atual (a remoção do responsável principal aceita o caso
+  idempotente):** `packages/public-api-contract/src/routes.ts` usa
+  `deletedIdempotentSchema` (`z.object({ deleted: z.boolean() })`) só na
+  entrada `DELETE /v1/customers/:id/primary-guardian`; `deletedSchema`
+  (`z.literal(true)`) continua em toda outra rota de exclusão, onde
+  `{ deleted: false }` segue sendo bug.
+- **FATO atual (rota registrada em laço passa a ser vista pelo lado do
+  BFF):** `apps/bff/src/modules/conversations/routes.ts` desenrolou o `for`
+  sobre `["takeover", "release", "resolve"]` em três `app.post` com path
+  literal entre aspas, sem mudar path, verbo, `preHandler` nem resposta.
+  `audit:static` ganhou `bff_v1_routes_use_literal_paths`, que falha se um
+  path `/v1/...` for construído entre crases num registro de rota do BFF —
+  a forma que deixava essas três rotas invisíveis para
+  `public_api_route_coverage`. A tabela do pacote continua com **116**
+  entradas: o que era invisível era a extração automática, nunca a tabela
+  escrita à mão.
+- **LIMITE:** o check novo cobre só o lado do BFF. O lado do frontend
+  (`FRONTEND_ROUTE_SCHEMA_CALL_PATTERN`, em `public_api_route_coverage`)
+  também exige path literal, e as mesmas três rotas são chamadas por
+  `apps/frontend/src/data/services/BffConversationService.ts` com path entre
+  crases — hoje sem lacuna real (as três têm entrada e ambos os chamadores
+  existem), mas o check passou a reportá-las como "sem chamador no
+  frontend" desde que ficaram visíveis do lado do BFF. Registrado em
+  [FINAL_AUDIT §13](FINAL_AUDIT.md#13-fechamento-de-a-20-a-a-23--goal036-2026-09-20)
+  e [VALIDATION_GATE](VALIDATION_GATE.md#checks-estáticos-novos-do-goal036).
+- **LIMITE:** este delta não liga a verificação de resposta em produção —
+  `RESPONSE_CONTRACT_CHECK_ENABLED` continua `env.NODE_ENV !== "production"`,
+  inalterado. Não fecha **M4** e não afirma fidelidade visual à referência
+  aprovada — nenhuma tela, componente, texto ou CSS do frontend mudou neste
+  diff.
+- **LIMITE:** este delta descreve o diff036 (WU-01 a WU-06) sobre a baseline
+  aceita `3202cb0b30f2e59c9d69e7a86b4940853c97d922` (fechamento do Goal035),
+  decidido em [D-052](DECISIONS.md), sem commit e sem deploy.

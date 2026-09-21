@@ -11,10 +11,12 @@ import {
   type customerPrimaryGuardianSchema,
   type CustomerSummary,
   type CustomerTag,
+  type deletedIdempotentSchema,
   type deletedSchema,
 } from "../mappers/publicApiSchemas";
 
 type Deleted = z.infer<typeof deletedSchema>;
+type DeletedIdempotent = z.infer<typeof deletedIdempotentSchema>;
 type CustomerPrimaryGuardian = z.infer<typeof customerPrimaryGuardianSchema>;
 
 export interface CreateCustomerInput {
@@ -146,7 +148,7 @@ export class BffCustomerService {
       method: "DELETE",
       path: `/v1/customers/${encodeURIComponent(id)}/primary-guardian`,
       // A remoção é idempotente: `deleted: false` quando não havia relação.
-      schema: routeSchema<Deleted | CustomerPrimaryGuardian>(
+      schema: routeSchema<DeletedIdempotent | CustomerPrimaryGuardian>(
         "DELETE",
         "/v1/customers/:id/primary-guardian",
       ),

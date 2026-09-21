@@ -1278,14 +1278,22 @@ async function seedTenant(client, ai, { bffDb, schedulingDb, aiDb, legalVersions
     "seed: the catalogue service and the customer did not both return an id",
   );
 
-  // 6. Atendimento NO DIA MEDIDO. O horário não é escolhido por este arquivo:
-  //    ele sai de `GET /v1/availability`, que é a mesma oferta que a interface
-  //    mostra. O dia é hoje na parede do negócio, porque é o dia que a Agenda
-  //    abre — e é por isso que a disponibilidade semeada cobre os sete dias.
-  const measuredDate = localIsoDate(new Date(), SEED.timezone);
+  // 6. Atendimento no PRIMEIRO horário livre a partir de agora. O horário não
+  //    é escolhido por este arquivo: ele sai de `GET /v1/availability`, que é
+  //    a mesma oferta que a interface mostra, e vem em ordem cronológica —
+  //    `offered[0]` é sempre o mais cedo. A janela pedida cobre dois dias, não
+  //    um: a grade termina às 23:59, então perto da virada a duração do
+  //    serviço pode não caber mais no dia corrente e o primeiro horário livre
+  //    vira o começo do dia seguinte. Isso não atrasa a medição: a subida do
+  //    frontend (`next build` + servidor) que roda depois desta semeadura
+  //    sempre consome minutos, e é esse intervalo que garante que "amanhã" já
+  //    virou "hoje" pelo relógio do navegador quando o Playwright olha para a
+  //    Agenda — por isso `measuredDate` vem do slot escolhido, nunca de
+  //    `new Date()` congelado no instante da semeadura.
+  const queryStartDate = localIsoDate(new Date(), SEED.timezone);
   const availabilityRoute =
     `/v1/availability?serviceIds=${encodeURIComponent(serviceId)}` +
-    `&startDate=${measuredDate}&days=1&maxSlots=100`;
+    `&startDate=${queryStartDate}&days=2&maxSlots=100`;
   const availability = await client.request("GET", availabilityRoute);
   step(
     availability.status === 200,
@@ -1294,9 +1302,10 @@ async function seedTenant(client, ai, { bffDb, schedulingDb, aiDb, legalVersions
   const offered = availability.payload?.data ?? [];
   step(
     Array.isArray(offered) && offered.length > 0,
-    `seed: the agenda offered no slot on the measured day (${measuredDate}). The seeded availability covers the whole day, so this only happens when the rehearsal starts in the last minutes of the business day — and moving the appointment to another day would leave the measured Agenda empty.`,
+    `seed: the agenda offered no slot across the two days starting ${queryStartDate}. The seeded availability covers every day of the week, so an empty two-day window means the calendar has no capacity at all.`,
   );
   const slot = offered[0];
+  const measuredDate = slot.date;
   const appointment = await client.request("POST", "/v1/appointments", {
     body: {
       serviceIds: [serviceId],

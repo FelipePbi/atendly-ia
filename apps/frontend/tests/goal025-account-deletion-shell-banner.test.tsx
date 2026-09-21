@@ -62,7 +62,7 @@ const NOW = new Date("2026-09-16T12:00:00.000Z");
 function statusFixture(overrides: Partial<SystemStatus> = {}): SystemStatus {
   return {
     accountDeletion: { status: "NONE", dueAt: null },
-    ai: { desiredEnabled: true, effectiveEnabled: true, state: "ACTIVE" },
+    ai: { desiredEnabled: true, effectiveEnabled: true, reconciled: "CONVERGED", state: "ACTIVE" },
     degraded: false,
     whatsapp: {
       checkedAt: "2026-09-16T12:00:00.000Z",
@@ -235,7 +235,12 @@ describe("aviso persistente de exclusão agendada", () => {
           status: "SCHEDULED",
           dueAt: "2026-09-23T12:00:00.000Z",
         },
-        ai: { desiredEnabled: false, effectiveEnabled: false, state: "PENDING" },
+        ai: {
+          desiredEnabled: false,
+          effectiveEnabled: false,
+          reconciled: "NOOP",
+          state: "PENDING",
+        },
       }),
     );
     const { container } = renderShell();

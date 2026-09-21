@@ -122,7 +122,7 @@ function systemStatusFixture(
 ): SystemStatus {
   return {
     accountDeletion: { status: "NONE", dueAt: null },
-    ai: { desiredEnabled: true, effectiveEnabled: false, state: "PENDING" },
+    ai: { desiredEnabled: true, effectiveEnabled: false, reconciled: "NOOP", state: "PENDING" },
     degraded: false,
     whatsapp: { checkedAt: "2026-09-14T12:00:00.000Z", phoneNumber: null, status: "DISCONNECTED" },
     ...overrides,
@@ -131,7 +131,12 @@ function systemStatusFixture(
 
 function aiStatus(state: AiStateValue): SystemStatus {
   return systemStatusFixture({
-    ai: { desiredEnabled: state !== "OFF", effectiveEnabled: state === "ACTIVE", state },
+    ai: {
+      desiredEnabled: state !== "OFF",
+      effectiveEnabled: state === "ACTIVE",
+      reconciled: "NOOP",
+      state,
+    },
   });
 }
 

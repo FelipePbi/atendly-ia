@@ -66,6 +66,19 @@ const BASE_URL = requireEnv("GOAL033_GATE_BASE_URL");
 const EMAIL = requireEnv("GOAL033_EMAIL");
 const PASSWORD = requireEnv("GOAL033_PASSWORD");
 const SEED = JSON.parse(requireEnv("GOAL033_SEED")) as SeedContent;
+/**
+ * The day (YYYY-MM-DD) the rehearsal seeded the appointment on.
+ *
+ * The Agenda's day view opens on `new Date()` — the browser's own clock at
+ * mount time, not the day the rehearsal chose. Those two agree whenever the
+ * seeding happens early enough in the business day for a same-day slot to
+ * exist; near midnight, seeding is pushed to the following calendar day (see
+ * `scripts/goal033-authenticated-ui-rehearsal.mjs`) while the browser's clock
+ * is still on the seeding day, minutes later. Without this, the gate would
+ * measure an Agenda that legitimately has nothing on its default day — not a
+ * bug in the product, but the wrong day asked of it.
+ */
+const MEASURED_DATE = requireEnv("GOAL033_MEASURED_DATE");
 
 /**
  * Declared ceilings, so a hang is a named failure instead of a Playwright
@@ -293,6 +306,38 @@ async function proveAuthenticatedScreen(page: Page, route: AuthenticatedRoute): 
   await waitForLoadedContent(page, route);
 }
 
+/**
+ * Moves the Agenda's day view from wherever it opened (the browser's `today`)
+ * to `MEASURED_DATE`, the day the rehearsal actually seeded. A no-op when the
+ * two already agree, which is the common case.
+ *
+ * Every load of the Agenda re-mounts on `new Date()` — the initial `goto`
+ * and, later in this spec, the `prefers-reduced-motion` reload alike — so
+ * this runs from `waitForLoadedContent` itself instead of once up front.
+ */
+async function ensureAgendaOnMeasuredDate(page: Page): Promise<void> {
+  const todayIso = await page.evaluate(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  });
+  if (todayIso === MEASURED_DATE) return;
+
+  const diffDays = Math.round(
+    (new Date(`${MEASURED_DATE}T00:00:00`).getTime() - new Date(`${todayIso}T00:00:00`).getTime())
+      / 86_400_000,
+  );
+  const button = page.getByRole("button", { name: diffDays > 0 ? "Próximo dia" : "Dia anterior" });
+  for (let clicked = 0; clicked < Math.abs(diffDays); clicked += 1) {
+    // eslint-disable-next-line no-await-in-loop -- each click must settle before the next
+    await button.click();
+  }
+
+  await expect(
+    page.locator('[aria-busy="true"], .skeleton'),
+    `/agenda still had a loading placeholder after navigating to ${MEASURED_DATE}.`,
+  ).toHaveCount(0, { timeout: CONTENT_TIMEOUT_MS });
+}
+
 /** The screen's own content, with the ceiling declared and the failure named. */
 async function waitForLoadedContent(page: Page, route: AuthenticatedRoute): Promise<void> {
   await expect(
@@ -307,6 +352,8 @@ async function waitForLoadedContent(page: Page, route: AuthenticatedRoute): Prom
     `${route.path} still had a loading placeholder after ${CONTENT_TIMEOUT_MS}ms. A skeleton has its `
       + "own layout and its own contrast; measuring it reports on a screen the tenant never sees.",
   ).toHaveCount(0, { timeout: CONTENT_TIMEOUT_MS });
+
+  if (route.name === "agenda") await ensureAgendaOnMeasuredDate(page);
 
   const seeded = SEEDED_CONTENT[route.name];
   if (!seeded) return;

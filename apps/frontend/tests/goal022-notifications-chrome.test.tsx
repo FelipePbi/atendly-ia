@@ -55,7 +55,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 function statusFixture(overrides: Partial<SystemStatus> = {}): SystemStatus {
   return {
     accountDeletion: { status: "NONE", dueAt: null },
-    ai: { desiredEnabled: true, effectiveEnabled: true, state: "ACTIVE" },
+    ai: { desiredEnabled: true, effectiveEnabled: true, reconciled: "CONVERGED", state: "ACTIVE" },
     degraded: false,
     whatsapp: {
       checkedAt: "2026-09-15T12:00:00.000Z",
@@ -174,7 +174,12 @@ describe("banner persistente (deriva de /v1/status, não da central)", () => {
   test("aparece para IA indisponível (PENDING ou UNKNOWN), com frase distinta do chip", async () => {
     statusGet.mockResolvedValue(
       statusFixture({
-        ai: { desiredEnabled: true, effectiveEnabled: false, state: "PENDING" },
+        ai: {
+          desiredEnabled: true,
+          effectiveEnabled: false,
+          reconciled: "NOOP",
+          state: "PENDING",
+        },
       }),
     );
     renderShell();
@@ -194,7 +199,12 @@ describe("banner persistente (deriva de /v1/status, não da central)", () => {
   test("sem violação de acessibilidade com os dois banners visíveis", async () => {
     statusGet.mockResolvedValue(
       statusFixture({
-        ai: { desiredEnabled: true, effectiveEnabled: false, state: "UNKNOWN" },
+        ai: {
+          desiredEnabled: true,
+          effectiveEnabled: false,
+          reconciled: "UNKNOWN",
+          state: "UNKNOWN",
+        },
         whatsapp: {
           checkedAt: "2026-09-15T12:00:00.000Z",
           phoneNumber: null,

@@ -407,6 +407,17 @@ export async function main() {
     "packages/public-api-contract/src/schemas.ts",
   );
 
+  const nonLiteralV1RouteFiles = findNonLiteralV1RouteRegistrations(bffSources);
+  check(
+    "bff_v1_routes_use_literal_paths",
+    nonLiteralV1RouteFiles.length === 0,
+    `read ${bffSources.length} files under apps/bff/src for /v1 route registrations. ` +
+      (nonLiteralV1RouteFiles.length
+        ? `registered with a non-literal path: ${nonLiteralV1RouteFiles.join(", ")}`
+        : "every /v1 route is registered with a literal string path"),
+  );
+
+  const bffV1RouteRegistrations = extractBffV1RouteRegistrations(bffSources);
   const { missingFromTable, routesWithoutCaller } =
     findUncoveredPublicApiRoutes(
       bffSources,
@@ -416,7 +427,8 @@ export async function main() {
   check(
     "public_api_route_coverage",
     missingFromTable.length === 0,
-    `read ${bffSources.length} files under apps/bff/src for /v1 route registrations, ` +
+    `read ${bffSources.length} files under apps/bff/src for /v1 route registrations ` +
+      `(${bffV1RouteRegistrations.length} routes registered), ` +
       `${frontendServiceSources.length} files under apps/frontend/src/data/services for routeSchema() callers, ` +
       `and packages/public-api-contract/src/routes.ts for the route table. ` +
       (missingFromTable.length
@@ -955,11 +967,28 @@ const FRONTEND_ROUTE_SCHEMA_CALL_PATTERN =
 const PUBLIC_API_ROUTE_TABLE_ENTRY_PATTERN =
   /\{\s*method:\s*["'](GET|POST|PUT|PATCH|DELETE)["'],\s*pathPattern:\s*["']([^"']+)["']/gu;
 
+// Goal036/WU-04: um path de rota `/v1` construido em tempo de execucao
+// (template literal, `for` sobre uma lista de nomes de acao) escapa do
+// registro literal que `BFF_V1_ROUTE_REGISTRATION_PATTERN` reconhece — a
+// rota existe, mas fica invisivel para `public_api_route_coverage`. Esta
+// regra cobre o caso concreto que ja aconteceu: crase abrindo o path logo
+// depois de `/v1`, com ou sem interpolacao.
+const BFF_V1_NON_LITERAL_ROUTE_REGISTRATION_PATTERN =
+  /\bapp\.(?:get|post|put|patch|delete)\(\s*`(\/v1\/[^`]*)`/u;
+
+export function findNonLiteralV1RouteRegistrations(files) {
+  return files
+    .filter(({ content }) =>
+      BFF_V1_NON_LITERAL_ROUTE_REGISTRATION_PATTERN.test(content),
+    )
+    .map(({ path: filePath }) => filePath);
+}
+
 function routeRegistrationKey({ method, pathPattern }) {
   return `${method} ${pathPattern}`;
 }
 
-function extractBffV1RouteRegistrations(files) {
+export function extractBffV1RouteRegistrations(files) {
   const routes = new Map();
   for (const { content } of files) {
     for (const match of content.matchAll(BFF_V1_ROUTE_REGISTRATION_PATTERN)) {

@@ -128,9 +128,12 @@ const calendarDone = {
 const serviceDone = {
   service: {
     active: true,
+    bufferAfterMinutes: 0,
+    bufferBeforeMinutes: 0,
     durationMinutes: 60,
     id: "svc-1",
     name: "Corte",
+    needsReview: false,
     price: 100,
     priceType: "FIXED" as const,
   },

@@ -43,6 +43,10 @@ export const businessProfileSchema = z.object({
   timezone: z.string().min(1),
   language: z.string().min(1),
   currency: z.string().min(1),
+  // Modalidades e endereço do negócio (Goal018/WU-01). Opcionais: resposta
+  // anterior a este Goal continua decodificando sem eles.
+  modalities: z.array(businessModalitySchema).optional(),
+  address: z.string().nullable().optional(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 });
@@ -112,6 +116,15 @@ export const availabilitySettingsSchema = z.object({
   granularityMinutes: z.number().int().positive().optional().default(30),
 });
 
+const serviceColorTokenSchema = z.enum([
+  "ROSE",
+  "AMBER",
+  "EMERALD",
+  "SKY",
+  "VIOLET",
+  "SLATE",
+]);
+
 export const onboardingStateSchema = z.object({
   business: z
     .object({
@@ -142,6 +155,16 @@ export const onboardingStateSchema = z.object({
       priceType: z.enum(["FIXED", "STARTING_AT", "ON_REQUEST", "NOT_INFORMED"]),
       price: z.number().nonnegative().nullable(),
       active: z.boolean(),
+      // Mesmos campos e tipos de `serviceSchema` (Goal007/Goal009): este
+      // objeto é o serviço ativo devolvido por `scheduling.listServices`, sem
+      // forma reduzida.
+      needsReview: z.boolean().optional().default(false),
+      reviewOrigin: z.enum(["IMPORT", "MANUAL"]).nullish().optional(),
+      description: z.string().nullish().optional(),
+      colorToken: serviceColorTokenSchema.nullish().optional(),
+      bufferBeforeMinutes: z.number().int().nonnegative().optional().default(0),
+      bufferAfterMinutes: z.number().int().nonnegative().optional().default(0),
+      recurrenceIntervalDays: z.number().int().positive().nullish().optional(),
     })
     .nullable(),
   availability: availabilitySettingsSchema.nullable(),
@@ -218,15 +241,6 @@ export const retentionSettingsSchema = z.object({
   lastSweepCompletedAt: z.string().nullable(),
   appliesFrom: z.literal("NEXT_SWEEP"),
 });
-
-const serviceColorTokenSchema = z.enum([
-  "ROSE",
-  "AMBER",
-  "EMERALD",
-  "SKY",
-  "VIOLET",
-  "SLATE",
-]);
 
 export const serviceSchema = z.object({
   id: z.string().min(1),
@@ -546,6 +560,12 @@ export const seriesOccurrencePreviewSchema = z.object({
 
 export const deletedSchema = z.object({ deleted: z.literal(true) });
 
+/**
+ * DELETE /v1/customers/:id/primary-guardian é idempotente: repetir a remoção
+ * quando não havia vínculo devolve `deleted: false`, não erro.
+ */
+export const deletedIdempotentSchema = z.object({ deleted: z.boolean() });
+
 export const customerListSchema = z.object({
   items: z.array(customerSchema),
   source: calendarSourceSchema,
@@ -840,6 +860,17 @@ export const aiStateValueSchema = z.enum([
   "PENDING",
   "UNKNOWN",
 ]);
+// O que a reconciliação desired/effective fez nesta requisição (Goal019 §7).
+// Sempre presente: a reconciliação nunca lança, então toda leitura de
+// `GET /v1/status` computa um valor, mesmo quando ela falha (`FAILED`).
+export const aiReconciledValueSchema = z.enum([
+  "NOOP",
+  "ACTIVATED",
+  "DEACTIVATED_BY_CHANNEL_CHANGE",
+  "CONVERGED",
+  "FAILED",
+  "UNKNOWN",
+]);
 
 // --- Ciclo de vida da conta (Goal025/WU-03) ---------------------------------
 // `NONE` é o negócio que nunca pediu exclusão; `CANCELLED` também admite pedir
@@ -874,12 +905,14 @@ export const systemStatusSchema = z.object({
     desiredEnabled: z.boolean(),
     effectiveEnabled: z.boolean().nullable(),
     state: aiStateValueSchema,
+    reconciled: aiReconciledValueSchema,
   }),
   accountDeletion: accountDeletionStateSchema,
   degraded: z.boolean(),
 });
 export type WhatsAppStatusValue = z.infer<typeof whatsappStatusValueSchema>;
 export type AiStateValue = z.infer<typeof aiStateValueSchema>;
+export type AiReconciledValue = z.infer<typeof aiReconciledValueSchema>;
 export type SystemStatus = z.infer<typeof systemStatusSchema>;
 
 // --- Central de notificacoes e alertas persistentes (Goal022/WU-04) --------

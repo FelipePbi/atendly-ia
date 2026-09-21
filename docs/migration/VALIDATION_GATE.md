@@ -445,6 +445,77 @@ O que este passo **não** decide: ele não instala dependência de app nenhum,
 não toca lockfile e não verifica que a cópia instalada veio de um `npm ci`
 recente — ele a sobrescreve a partir do `dist/` recém-construído.
 
+## Checks estáticos novos do Goal036
+
+Um check novo em `audit:static` (`scripts/final-production-audit.mjs`),
+função pura exportada e provado nos dois sentidos por
+`scripts/tests/final-production-audit-legacy-regression.test.mjs`. Mesmo
+padrão dos checks anteriores: leitura de texto com expressão regular, sem
+abrir banco, subir serviço ou executar o produto.
+
+| Check | O que decide | O que não decide |
+| --- | --- | --- |
+| `bff_v1_routes_use_literal_paths` (`findNonLiteralV1RouteRegistrations`) | Falha se algum arquivo de `apps/bff/src` registrar rota `/v1` com `` app.<verbo>(`/v1/...`) `` — path entre crases, com ou sem interpolação — em vez de path literal entre aspas. É a forma exata que deixava `apps/bff/src/modules/conversations/routes.ts` (`takeover`, `release`, `resolve`, registradas em `for` sobre uma lista de nomes de ação) invisível para `public_api_route_coverage`, abaixo | Não decide se a rota tem chamador no frontend nem se tem entrada na tabela — isso continua sendo `public_api_route_coverage`. Não cobre path não literal do **lado do frontend**: `FRONTEND_ROUTE_SCHEMA_CALL_PATTERN`, usado por `public_api_route_coverage`, também exige path literal entre aspas no segundo argumento de `routeSchema(...)`, e as mesmas três rotas são chamadas por `apps/frontend/src/data/services/BffConversationService.ts:171` com `` routeSchema<Conversation>("POST", `/v1/conversations/:id/${action}`) `` — crase do lado do frontend. Hoje isso não é lacuna real, porque a tabela já tem as três entradas e ambos os chamadores existem de fato; o check só passou a reportá-las como "sem chamador no frontend" (correto para o que ele consegue ler, incorreto sobre o produto) depois que este check as tornou visíveis do lado do BFF ([FINAL_AUDIT §13](FINAL_AUDIT.md#13-fechamento-de-a-20-a-a-23--goal036-2026-09-20)) |
+
+`public_api_route_coverage` (do Goal035) não mudou de comportamento, só de
+entrada: com as três rotas de `conversations/routes.ts` agora extraídas do
+lado do BFF, `bffV1RouteRegistrations` passa de um número menor para
+**116**, e as três aparecem no `details` do check como rotas "sem chamador
+no frontend (entrada na tabela não exigida)" — não porque não tenham
+chamador de fato, mas porque o padrão de extração do lado do frontend
+também exige path literal, e o limite acima descreve exatamente isso.
+
+A verificação de **runtime**, `apps/bff/src/lib/response-contract.ts`
+(`registerResponseContractCheck`), ganhou uma segunda direção de
+comparação: além do que o Goal035 já derrubava (campo faltando, tipo errado,
+valor fora do vocabulário — o que o `safeParse` acusa), ela agora compara o
+`data` emitido com o `data` que o `safeParse` devolveu e reprova toda chave
+que o parse removeu em silêncio, em qualquer profundidade — objeto aninhado,
+elemento de array e o lado da união que efetivamente parseou.
+`z.record`, `z.unknown`, `z.any`, `.passthrough()` e `.catchall()` continuam
+sem gerar achado, porque para esses tipos nenhuma chave é removida. **Isto
+fecha o limite que o Goal035 tinha registrado** — campo a mais chegava a
+sair verde no controle negativo daquela rodada — e não decide nada novo
+sobre o resto do contrato: continua sendo o mesmo hook único, com o mesmo
+teto de issues reportadas, a mesma mensagem e o mesmo desligamento fora de
+`NODE_ENV=production` (`RESPONSE_CONTRACT_CHECK_ENABLED`) — **a verificação
+de resposta continua não rodando em produção**, pelo mesmo motivo do
+Goal035: um corpo divergente já saiu do handler quando o hook o vê, e
+recusá-lo ali trocaria um bug de contrato por uma indisponibilidade real.
+
+## Mudança de semântica do gate `rehearse:goal033-authenticated-ui` (Goal036)
+
+O diff036 muda como `scripts/goal033-authenticated-ui-rehearsal.mjs` escolhe
+o dia medido, sem mudar o que o gate prova (§ acima, "`rehearse:goal033-authenticated-ui`").
+Antes, `measuredDate` vinha de `localIsoDate(new Date(), SEED.timezone)` — o
+dia de hoje no fuso do negócio, no instante da semeadura — e a consulta a
+`GET /v1/availability` pedia só esse dia (`days=1`). Perto da virada da meia-noite
+do negócio, a duração do serviço podia não caber mais no dia corrente, e o
+passo falhava com "the agenda offered no slot on the measured day" mesmo
+havendo capacidade real no dia seguinte.
+
+Agora a consulta pede dois dias (`days=2`), `offered[0]` (o primeiro horário
+livre em ordem cronológica, o mesmo que a interface ofereceria) decide o
+agendamento, e `measuredDate` passa a vir de `offered[0].date` — nunca mais
+de `new Date()` congelado no instante da semeadura. Isso é seguro porque a
+subida do frontend (`next build` + servidor) roda depois da semeadura e
+sempre consome minutos: quando o Playwright abre a Agenda, o relógio do
+navegador já alcançou o dia escolhido, mesmo quando esse dia é "amanhã" na
+hora da semeadura. `apps/frontend/e2e/authenticated-matrix.spec.ts` reflete
+essa mudança do lado do consumidor: exige `GOAL033_MEASURED_DATE` (novo,
+ao lado de `GOAL033_GATE_BASE_URL`, `GOAL033_EMAIL`, `GOAL033_PASSWORD` e
+`GOAL033_SEED`) e, só para a rota `agenda`, navega a grade do dia até
+`MEASURED_DATE` antes de medir — clicando "Próximo dia" ou "Dia anterior"
+pela diferença entre o dia que o navegador abriu e o dia semeado — porque a
+Agenda sempre monta no `new Date()` do navegador, não no dia escolhido pela
+semeadura.
+
+**O que muda:** o gate deixa de poder falhar por semeadura perto da virada
+da meia-noite do negócio, porque agora sempre mede o primeiro horário livre
+real, qualquer que seja o dia. **O que não muda:** as cinco medidas do gate
+renderizado, as sete telas, a régua (`apps/frontend/e2e/measure.ts`) e o
+controle negativo — nenhum deles foi tocado por este diff.
+
 ## Ordem de corte do Goal003
 
 Duas transições deste Goal têm consumidor e produtor em serviços diferentes.

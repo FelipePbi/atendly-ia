@@ -46,6 +46,7 @@ import {
 import { ROUTING_STAGES, routingFromProfile } from '../lib/model-routing.mjs';
 import { createAttemptRouter } from '../lib/routing-runtime.mjs';
 import { createTelemetry, createTelemetryFileSink, resolveLogLevel } from '../lib/telemetry.mjs';
+import { colorizeLogLine, createPaint } from '../lib/relay-logger.mjs';
 import { runWithCapacity, RUN_OUTCOMES } from '../lib/capacity-runner.mjs';
 import { LOOP_STATES } from '../lib/loop-state.mjs';
 import { developerResultSchemaFor, validateDeveloperJob, validateDeveloperResult } from '../lib/contracts-v2.mjs';
@@ -96,10 +97,13 @@ const planStore = createExecutionPlanStore(STATE_DIR);
  */
 const WORK_UNIT_CONFIG = workUnitConfig();
 
+const relayPaint = createPaint();
+
 const telemetry = createTelemetry({
   level: LOG_LEVEL,
   role: ROLE,
   sink: createTelemetryFileSink({ stateDir: STATE_DIR, role: ROLE, enabled: PERSIST_TELEMETRY }),
+  write: (line) => console.log(colorizeLogLine(line, relayPaint)),
 });
 
 let workerState = 'STARTING';
@@ -691,7 +695,7 @@ async function main() {
     getStatus,
     handleJob,
     onStarted: () => {
-      console.log(readyBanner);
+      console.log(relayPaint.cyan(readyBanner));
       console.log('Waiting for implementation task...\n');
     },
   });
@@ -705,7 +709,7 @@ if (isDirectExecution(import.meta.url)) {
     // a changed codebase are deliberate stops, not crashes, and restarting into
     // either one just repeats it.
     const code = exitCodeForError(error);
-    console.error(`Developer worker stopped [${nameForExitCode(code)}]: ${error?.message ?? error}`);
+    console.error(relayPaint.red(`Developer worker stopped [${nameForExitCode(code)}]: ${error?.message ?? error}`));
     process.exitCode = code;
   });
 }

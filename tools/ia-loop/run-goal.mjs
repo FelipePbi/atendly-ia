@@ -63,6 +63,7 @@ import { isDirectExecution } from './lib/direct-execution.mjs';
 import { waitForResult } from './lib/result-waiter.mjs';
 import { assertGoalEligibleForClosure } from './lib/closure-eligibility.mjs';
 import { recordOrchestratorFault } from './lib/orchestrator-fault.mjs';
+import { createPaint, createRelayLogger } from './lib/relay-logger.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..');
@@ -148,17 +149,18 @@ function withJobId(runtime, round, role, jobId) {
 }
 
 async function main() {
-  const emit = (line = '') => console.log(line);
+  const logger = createRelayLogger();
+  const emit = (line = '') => logger.info(line);
   const { goalId, dryRun } = parseArgs(process.argv);
   const leaseStore = createLeaseStore(STATE_DIR);
   const profileStore = createDeveloperProfileStore(STATE_DIR);
   const machine = createLoopStateMachine();
 
-  emit('');
-  emit('IA Loop — Goal Runner');
-  emit('');
+  logger.blank();
+  logger.info('IA Loop — Goal Runner');
+  logger.blank();
   emit(`Mode:\n${dryRun ? 'DRY_RUN' : 'REAL_EXECUTION'}`);
-  emit('');
+  logger.blank();
 
   const goal = await discoverGoal({
     repoRoot: REPO_ROOT, goalId, resolveSha: (sha) => probe.commitExists(sha),
@@ -166,22 +168,19 @@ async function main() {
   currentGoalId = goal.goalId;
   machine.transitionTo(LOOP_STATES.GOAL_READY, { goal: goal.goalId });
 
-  emit('Goal discovery:');
-  emit('PASS');
-  emit(`  goal: ${goal.goalId} — ${goal.title}`);
-  emit(`  status: ${goal.status}`);
+  logger.goal({ id: goal.goalId, title: goal.title, status: goal.status });
   emit(`  previous goal: ${goal.previousGoalId ?? 'n/a'} (${goal.previousGoalStatus ?? 'n/a'})`);
-  emit('');
+  logger.blank();
 
   const headNow = await probe.head();
   emit('Migration baseline (accepted):');
   emit(`  ${goal.migrationAcceptedBaseline}`);
   emit('Execution base (current HEAD):');
   emit(`  ${headNow}`);
-  emit('');
+  logger.blank();
   emit(`Tech Lead:\n  ${TECH_LEAD_MODEL}\n  ${SESSION_STRATEGY.PERSISTENT}`);
   emit(`Developer:\n  ${DEVELOPER_MODEL}\n  ${SESSION_STRATEGY.STATELESS}`);
-  emit('');
+  logger.blank();
 
   // ======================= DRY RUN ========================================
   if (dryRun) {
@@ -195,10 +194,10 @@ async function main() {
     emit(`  current branch (untouched): ${plan.currentBranch}`);
     emit('  created: NO (dry run)');
     if (plan.blockers.length > 0) {
-      emit('  blockers:');
-      for (const b of plan.blockers) emit(`    - [${b.code}] ${b.message}`);
+      logger.warning('blockers:');
+      for (const b of plan.blockers) logger.warning(`    - [${b.code}] ${b.message}`);
     } else emit('  blockers: none');
-    emit('');
+    logger.blank();
 
     if (plan.safe) machine.transitionTo(LOOP_STATES.WORKTREE_READY);
 
@@ -247,18 +246,18 @@ async function main() {
   if (leaked.length > 0) {
     // Not a repair and not a failure: the pointers are simply not used, and the
     // fact that they were there is recorded with what they named.
-    emit(persistedRuntime.goal === goal.goalId
+    logger.warning(persistedRuntime.goal === goal.goalId
       ? `Execution state carries ${leaked.length} pointer(s) from another Goal; they are history and are not used.`
       : `Execution state on disk belongs to Goal ${persistedRuntime.goal}; it is history, not this Goal's state.`);
     for (const pointer of leaked.slice(0, 8)) {
-      emit(`  stale: ${pointer.field} = ${pointer.value}${pointer.goal ? ` (Goal ${pointer.goal})` : ''}`);
+      logger.warning(`  stale: ${pointer.field} = ${pointer.value}${pointer.goal ? ` (Goal ${pointer.goal})` : ''}`);
     }
     await store.appendEvent({
       type: 'CROSS_GOAL_STATE_LEAK_DETECTED',
       goal: goal.goalId, previousGoal: persistedRuntime.goal,
       pointers: leaked.map(({ field, value, goal: owner }) => ({ field, value, goal: owner })),
     });
-    emit('');
+    logger.blank();
   }
 
   const resuming = priorGoalExecution?.mode === 'REAL_EXECUTION'
@@ -401,8 +400,8 @@ async function main() {
       evidence: { kind: reconciled.next.kind, round: reconciled.next.round ?? null, detail: reconciled.next.detail ?? null },
     });
     machine.transitionTo(LOOP_STATES.AWAITING_HUMAN);
-    emit(`Goal ${goal.goalId} needs a human: ${reconciled.next.reason}`);
-    if (reconciled.next.detail) emit(`  ${reconciled.next.detail}`);
+    logger.warning(`Goal ${goal.goalId} needs a human: ${reconciled.next.reason}`);
+    if (reconciled.next.detail) logger.warning(`  ${reconciled.next.detail}`);
     await store.writeRuntime({
       ...(await store.readRuntime()),
       state: machine.state,
@@ -416,7 +415,7 @@ async function main() {
   }
 
   if (reconciled.next.kind === DISPATCH_KINDS.CLOSE_GOAL) {
-    emit(`Round ${reconciled.next.round} was ACCEPTED; the Goal is ready for closure.`);
+    logger.success(`Round ${reconciled.next.round} was ACCEPTED; the Goal is ready for closure.`);
     // Independent, fenced re-proof — never trusted from `reconciled.next`
     // alone — that this exact review job, round and attempt earned ACCEPTED.
     // Its return value IS the evidence `hydrateTo` requires: this jump is
@@ -494,8 +493,8 @@ async function main() {
     : reconciledEscalation;
 
   if (startAsCorrection && pendingBlockers.length > 0) {
-    emit(`Correction round ${round} carries ${pendingBlockers.length} blocker(s) from review ${reconciled.next.fromReviewJobId ?? 'on disk'}.`);
-    emit('');
+    logger.warning(`Correction round ${round} carries ${pendingBlockers.length} blocker(s) from review ${reconciled.next.fromReviewJobId ?? 'on disk'}.`);
+    logger.blank();
   }
 
 
@@ -529,7 +528,7 @@ async function main() {
     const phaseQueued = isCorrection ? LOOP_STATES.CORRECTION_QUEUED : LOOP_STATES.DEVELOPER_QUEUED;
     const phaseRunning = isCorrection ? LOOP_STATES.CORRECTION_RUNNING : LOOP_STATES.DEVELOPER_RUNNING;
 
-    emit(`── Round ${round} ${isCorrection ? '(correction)' : '(implementation)'} ──`);
+    logger.workunit({ round, phase: isCorrection ? 'correction' : 'implementation' });
 
     // --- Developer routing -------------------------------------------------
     // Resolved BEFORE the job is built, from state only. A recovered round
@@ -567,8 +566,10 @@ async function main() {
     // Consumed: an escalation applies to exactly one round.
     pendingProfileEscalation = null;
 
-    emit(`Developer profile: ${routing.profile.name} (${routing.profile.model}, effort ${routing.profile.effort ?? 'CLI default'}) — ${routing.source}`);
-    if (routing.reason) emit(`  reason: ${routing.reason}`);
+    logger.routing([
+      `Developer profile: ${routing.profile.name} (${routing.profile.model}, effort ${routing.profile.effort ?? 'CLI default'}) — ${routing.source}`,
+      ...(routing.reason ? [`  reason: ${routing.reason}`] : []),
+    ]);
 
     const beforeDev = await captureSnapshot({ probe });
 
@@ -671,7 +672,7 @@ async function main() {
 
     let devEnvelope;
     if (alreadyDone) {
-      emit(`Developer already completed ${devJobId} — reusing the persisted result. The model is NOT called again.`);
+      logger.execution(`Developer already completed ${devJobId} — reusing the persisted result. The model is NOT called again.`);
       machine.transitionTo(phaseRunning);
       devEnvelope = await store.readResult('developer', devJobId);
     } else {
@@ -686,7 +687,7 @@ async function main() {
       const dispatched = await store.dispatchJob('developer', devJob, {
         reason: 'RECOVERED_INTERRUPTED_ATTEMPT',
       });
-      emit(dispatchMessage(dispatched, isCorrection ? 'Correction' : 'Developer'));
+      logger.execution(dispatchMessage(dispatched, isCorrection ? 'Correction' : 'Developer'));
 
       // The complete content identity of the tree this attempt is handed,
       // captured before the model runs and named by ATTEMPT. A single
@@ -718,24 +719,24 @@ async function main() {
         });
       }
       machine.transitionTo(phaseRunning);
-      emit('Waiting for the Developer…');
+      logger.execution('Waiting for the Developer…');
       // Which attempt this run is waiting on, read from the job the dispatch
       // just settled. Without it the wait would accept any attempt's result.
       const devAttemptId = (await store.readAttemptState('developer', devJobId))?.attemptId ?? null;
-      emit(`  attempt: ${devAttemptId ?? 'unknown'}`);
+      logger.execution(`  attempt: ${devAttemptId ?? 'unknown'}`);
       const observed = await waitForResult(store, 'developer', devJobId, {
-        emit, leaseStore, expectedAttemptId: devAttemptId,
+        emit: (line) => logger.execution(line), leaseStore, expectedAttemptId: devAttemptId,
         goal: goal.goalId, round, resultTimeoutMs: RESULT_TIMEOUT_MS,
       });
       if (observed.observerTimeout || observed.workerOffline) {
-        await reportObserverStop({ store, emit, role: 'developer', jobId: devJobId, observed, goal: goal.goalId, round });
+        await reportObserverStop({ store, logger, role: 'developer', jobId: devJobId, observed, goal: goal.goalId, round });
         return 0;
       }
       devEnvelope = observed.envelope;
     }
 
     if (!devEnvelope.ok) {
-      emit(`Developer failed: [${devEnvelope.code}] ${devEnvelope.message}`);
+      logger.error(`Developer failed: [${devEnvelope.code}] ${devEnvelope.message}`);
       machine.transitionTo(LOOP_STATES.HUMAN_REQUIRED);
       finalDecision = 'HUMAN_REQUIRED';
       finalReason = devEnvelope.code;
@@ -743,7 +744,7 @@ async function main() {
     }
 
     lastDevResult = devEnvelope.result;
-    emit(`Developer result: ${lastDevResult.status}`);
+    logger.execution(`Developer result: ${lastDevResult.status}`);
 
     // --- Real state, collected from git -----------------------------------
     const changes = await collectWorktreeChanges(absWorktree, worktree.worktreeInitialHead);
@@ -754,8 +755,13 @@ async function main() {
       worktreeInitialHead: worktree.worktreeInitialHead, changes,
     });
 
-    emit(`  changed files: ${changes.changedFiles.length} · commits: ${changes.commits.length} · violations: ${devViolations.length}`);
-    for (const v of formatViolations(devViolations)) emit(`    - ${v}`);
+    const changeSummaryLine = `  changed files: ${changes.changedFiles.length} · commits: ${changes.commits.length} · violations: ${devViolations.length}`;
+    if (devViolations.length > 0) {
+      logger.warning(changeSummaryLine);
+      for (const v of formatViolations(devViolations)) logger.warning(`    - ${v}`);
+    } else {
+      logger.execution(changeSummaryLine);
+    }
 
     const artefactDir = join(STATE_DIR, 'artefacts', `${goal.goalId}-r${round}`);
     await fs.mkdir(artefactDir, { recursive: true });
@@ -798,9 +804,9 @@ async function main() {
     // Entirely optional. It never gates, never refuses, and any failure leaves
     // `criteriaCoverage` null — a missing convenience must not cost a review.
     const coverage = await assessCriteriaCoverage({
-      store, goal, round, changes, worktree: absWorktree, emit, leaseStore,
+      store, goal, round, changes, worktree: absWorktree, logger, leaseStore,
     }).catch(async (error) => {
-      emit(`  cobertura de critérios não apurada: ${error.message}`);
+      logger.validation(`  cobertura de critérios não apurada: ${error.message}`);
       await store.appendEvent({
         type: 'CRITERIA_COVERAGE_SKIPPED', goal: goal.goalId, round, reason: error.code ?? 'UNKNOWN',
       }).catch(() => {});
@@ -876,9 +882,11 @@ async function main() {
       assessment: reviewAssessment,
       mode: routingMode,
     });
-    emit(`Review routing: ${reviewAssessment.classification} (score ${reviewAssessment.riskScore})`
-      + ` → ${reviewRouting.label} effort ${reviewRouting.effort}`);
-    if (reviewAssessment.signals.length > 0) emit(`  signals: ${reviewAssessment.signals.join(', ')}`);
+    logger.routing([
+      `Review routing: ${reviewAssessment.classification} (score ${reviewAssessment.riskScore})`
+        + ` → ${reviewRouting.label} effort ${reviewRouting.effort}`,
+      ...(reviewAssessment.signals.length > 0 ? [`  signals: ${reviewAssessment.signals.join(', ')}`] : []),
+    ]);
 
     const revJob = validateReviewJob({
       protocolVersion: PROTOCOL_VERSION_V2,
@@ -911,7 +919,7 @@ async function main() {
 
     let revEnvelope;
     if (reviewAlreadyDone) {
-      emit(`Tech Lead already completed ${revJobId} — reusing the persisted review. The model is NOT called again.`);
+      logger.review(`Tech Lead already completed ${revJobId} — reusing the persisted review. The model is NOT called again.`);
       machine.transitionTo(LOOP_STATES.REVIEWER_RUNNING);
       revEnvelope = await store.readResult('tech_lead', revJobId);
       await store.appendEvent({ type: 'JOB_RESULT_REUSED', role: 'tech_lead', jobId: revJobId, goal: goal.goalId, round });
@@ -922,7 +930,7 @@ async function main() {
       const dispatchedReview = await store.dispatchJob('tech_lead', revJob, {
         reason: 'RECOVERED_INTERRUPTED_ATTEMPT',
       });
-      emit(dispatchMessage(dispatchedReview, 'Review'));
+      logger.review(dispatchMessage(dispatchedReview, 'Review'));
       if (dispatchedReview.outcome === JOB_DISPATCH.NEW_ATTEMPT) {
         await store.appendEvent({
           type: 'JOB_ATTEMPT_STARTED', role: 'tech_lead', jobId: revJobId,
@@ -930,16 +938,16 @@ async function main() {
         });
       }
       machine.transitionTo(LOOP_STATES.REVIEWER_RUNNING);
-      emit('Waiting for the Tech Lead…');
+      logger.review('Waiting for the Tech Lead…');
 
       const revAttemptId = (await store.readAttemptState('tech_lead', revJobId))?.attemptId ?? null;
-      emit(`  attempt: ${revAttemptId ?? 'unknown'}`);
+      logger.review(`  attempt: ${revAttemptId ?? 'unknown'}`);
       const observedReview = await waitForResult(store, 'tech_lead', revJobId, {
-        emit, leaseStore, expectedAttemptId: revAttemptId,
+        emit: (line) => logger.review(line), leaseStore, expectedAttemptId: revAttemptId,
         goal: goal.goalId, round, resultTimeoutMs: RESULT_TIMEOUT_MS,
       });
       if (observedReview.observerTimeout || observedReview.workerOffline) {
-        await reportObserverStop({ store, emit, role: 'tech_lead', jobId: revJobId, observed: observedReview, goal: goal.goalId, round });
+        await reportObserverStop({ store, logger, role: 'tech_lead', jobId: revJobId, observed: observedReview, goal: goal.goalId, round });
         return 0;
       }
       revEnvelope = observedReview.envelope;
@@ -949,7 +957,7 @@ async function main() {
 
     if (revViolations.length > 0) {
       await store.appendEvent({ type: 'POLICY_VIOLATION', goal: goal.goalId, round, agent: 'tech_lead', violations: revViolations });
-      emit('REVIEWER_MUTATED_WORKTREE — the review is not accepted.');
+      logger.error('REVIEWER_MUTATED_WORKTREE — the review is not accepted.');
       machine.transitionTo(LOOP_STATES.HUMAN_REQUIRED);
       finalDecision = 'HUMAN_REQUIRED';
       finalReason = 'REVIEWER_MUTATED_WORKTREE';
@@ -957,7 +965,7 @@ async function main() {
     }
 
     if (!revEnvelope.ok) {
-      emit(`Review failed: [${revEnvelope.code}] ${revEnvelope.message}`);
+      logger.error(`Review failed: [${revEnvelope.code}] ${revEnvelope.message}`);
       machine.transitionTo(LOOP_STATES.HUMAN_REQUIRED);
       finalDecision = 'HUMAN_REQUIRED';
       finalReason = revEnvelope.code;
@@ -965,8 +973,8 @@ async function main() {
     }
 
     const decision = revEnvelope.result;
-    emit(`Decision R${round}: ${decision.decision}`);
-    emit('');
+    logger.decision(round, decision.decision);
+    logger.blank();
     roundsRun.push({ round, decision: decision.decision, blockers: decision.blockers.length, changedFiles: changes.changedFiles.length });
 
     await store.writeRuntime({
@@ -989,7 +997,7 @@ async function main() {
         ? { profile: decision.nextDeveloperProfile, reason: decision.nextDeveloperProfileReason ?? null }
         : null;
       if (pendingProfileEscalation) {
-        emit(`Tech Lead selected ${pendingProfileEscalation.profile} for round ${plan.nextRound}.`);
+        logger.rework(`Tech Lead selected ${pendingProfileEscalation.profile} for round ${plan.nextRound}.`);
         // Persisted before the next round starts, so a crash in between does
         // not lose the escalation and resume the correction on the old profile.
         await store.writeRuntime({
@@ -1014,7 +1022,7 @@ async function main() {
     finalDecision = plan.decision;
     finalReason = plan.reason;
     if (plan.reason === 'MAX_CORRECTION_ROUNDS_REACHED') {
-      emit(plan.note);
+      logger.warning(plan.note);
       machine.transitionTo(LOOP_STATES.HUMAN_REQUIRED);
     } else {
       machine.transitionTo(stateForDecision(plan.decision));
@@ -1043,30 +1051,37 @@ async function main() {
   });
 
   emit('State:');
-  for (const t of machine.history) emit(`  ${t.from} -> ${t.to}`);
-  emit('');
+  for (const t of machine.history) logger.transition(t.from, t.to);
+  logger.blank();
   emit(`Goal: ${goal.goalId}`);
   emit(`Final round: ${round}`);
   for (const r of roundsRun) emit(`  R${r.round}: ${r.decision} (${r.blockers} blockers, ${r.changedFiles} files)`);
   emit(`Worktree: ${worktree.path} (branch ${worktree.branch})`);
   emit(`Migration baseline: ${goal.migrationAcceptedBaseline}`);
   emit(`Execution base (original): ${executionBase}`);
-  emit(`Decision: ${finalDecision}`);
+  const decisionLine = `Decision: ${finalDecision}`;
+  if (finalDecision === 'ACCEPTED') logger.success(decisionLine);
+  else if (finalDecision === 'HUMAN_REQUIRED') logger.warning(decisionLine);
+  else if (finalDecision === 'CHANGES_REQUIRED') logger.warning(decisionLine);
+  else emit(decisionLine);
   if (finalReason) emit(`Reason: ${finalReason}`);
 
   const lastRound = roundsRun[roundsRun.length - 1];
   if (lastRound && lastRound.blockers > 0) {
     const runtime = await store.readRuntime();
-    emit('Blockers:');
-    for (const b of runtime.blockers ?? []) emit(`  - ${blockerText(b)}`);
+    logger.warning('Blockers:');
+    for (const b of runtime.blockers ?? []) logger.warning(`  - ${blockerText(b)}`);
   }
 
   // What the router chose, and what it cost. Derived from the events written
   // when each decision was taken, so this reports the run rather than a
   // running total someone kept.
-  emit('');
+  logger.blank();
+  // `renderRoutingSummary` already carries its own "MODEL ROUTING" heading —
+  // `logger.detail` avoids stacking a second `◈ ROUTING` title on top of it,
+  // while `paint.purple` still gives the block the routing color.
   for (const line of renderRoutingSummary(summarizeRouting(await store.readEvents(), { goal: goal.goalId }))) {
-    emit(line);
+    logger.detail(logger.paint.purple(line));
   }
 
   emit('');
@@ -1086,26 +1101,26 @@ async function main() {
  * Nothing is failed, nothing is released, nothing is re-queued: the attempt
  * keeps ownership and `ia-loop:resume` re-attaches to it.
  */
-async function reportObserverStop({ store, emit, role, jobId, observed, goal, round }) {
+async function reportObserverStop({ store, logger, role, jobId, observed, goal, round }) {
   await store.appendEvent({
     type: 'OBSERVER_STOPPED', goal, round, role, jobId,
     reason: observed.workerOffline ? 'WORKER_OFFLINE' : 'OBSERVER_TIMEOUT',
     leaseStatus: observed.leaseStatus ?? null,
   });
 
-  emit('');
-  emit(observed.workerOffline
+  logger.blank();
+  logger.warning(observed.workerOffline
     ? `The ${role} worker is no longer heartbeating.`
     : `Stopped observing ${jobId} after the observer window.`);
-  emit('');
-  emit('The job was NOT failed and NOT re-queued. The attempt keeps its lease.');
+  logger.blank();
+  logger.info('The job was NOT failed and NOT re-queued. The attempt keeps its lease.');
   if (observed.lease) {
-    emit(`  attempt: ${observed.lease.attemptId} · lease: ${observed.leaseStatus} `
+    logger.info(`  attempt: ${observed.lease.attemptId} · lease: ${observed.leaseStatus} `
       + `(heartbeat ${Math.round((observed.leaseAgeMs ?? 0) / 1000)}s ago)`);
   }
-  emit('');
-  emit('Check with:  npm run ia-loop:status');
-  emit('Re-attach with:  npm run ia-loop:resume');
+  logger.blank();
+  logger.info('Check with:  npm run ia-loop:status');
+  logger.info('Re-attach with:  npm run ia-loop:resume');
 }
 
 /** Blockers may be plain strings or structured records; both must render. */
@@ -1120,16 +1135,16 @@ async function reportObserverStop({ store, emit, role, jobId, observed, goal, ro
  * Goal document, the worker refused, the call failed. Every one of those is a
  * missing convenience, and the caller treats it as such.
  */
-async function assessCriteriaCoverage({ store, goal, round, changes, worktree, emit, leaseStore }) {
+async function assessCriteriaCoverage({ store, goal, round, changes, worktree, logger, leaseStore }) {
   const goalText = await fs.readFile(goal.goalPath, 'utf8').catch(() => '');
   const requirements = extractGoalRequirements(goalText);
   if (requirements.length === 0) {
-    emit('  cobertura de critérios: o documento não declara itens numerados; nada a apurar.');
+    logger.validation('  cobertura de critérios: o documento não declara itens numerados; nada a apurar.');
     return null;
   }
 
   const jobId = store.newJobId(goal.goalId, round, 'tech_lead');
-  emit(`Cobertura de critérios: ${requirements.length} item(ns) → ${jobId}`);
+  logger.validation(`Cobertura de critérios: ${requirements.length} item(ns) → ${jobId}`);
 
   await store.publishJob('tech_lead', {
     protocolVersion: PROTOCOL_VERSION_V2,
@@ -1150,16 +1165,16 @@ async function assessCriteriaCoverage({ store, goal, round, changes, worktree, e
   // forty-five valid verdicts and both were thrown away here, so the reviewer
   // saw "não apurada" while the work sat completed on disk.
   const observed = await waitForResult(store, 'tech_lead', jobId, {
-    emit, leaseStore, goal: goal.goalId, round,
+    emit: (line) => logger.validation(line), leaseStore, goal: goal.goalId, round,
   });
   if (observed?.observerTimeout || observed?.workerOffline) {
-    emit('  cobertura de critérios: o worker não respondeu; seguindo sem ela.');
+    logger.validation('  cobertura de critérios: o worker não respondeu; seguindo sem ela.');
     return null;
   }
 
   const envelope = observed?.envelope;
   if (!envelope?.ok) {
-    emit(`  cobertura de critérios: sem resposta utilizável (${envelope?.code ?? 'desconhecido'}).`);
+    logger.validation(`  cobertura de critérios: sem resposta utilizável (${envelope?.code ?? 'desconhecido'}).`);
     return null;
   }
 
@@ -1189,7 +1204,8 @@ if (isDirectExecution(import.meta.url)) {
       // whatever is on disk. Best-effort: a failure to record this must never
       // hide the ORIGINAL error.
       await recordOrchestratorFault(store, { goal: currentGoalId, error }).catch(() => {});
-      console.error(`\nIA Loop — Goal Runner\n\nBlocker: [${code}] ${error.message}\n\nOverall:\nFAIL`);
+      const paint = createPaint();
+      console.error(paint.red(`\nIA Loop — Goal Runner\n\nBlocker: [${code}] ${error.message}\n\nOverall:\nFAIL`));
       process.exitCode = 1;
     });
 }

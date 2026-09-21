@@ -55,6 +55,7 @@ import {
 import { SESSION_STRATEGY } from '../lib/worker-registry.mjs';
 import { banner, log, runWorkerLoop } from '../lib/worker-loop.mjs';
 import { createTelemetry, createTelemetryFileSink, resolveLogLevel } from '../lib/telemetry.mjs';
+import { colorizeLogLine, createPaint } from '../lib/relay-logger.mjs';
 import { runWithCapacity, RUN_OUTCOMES } from '../lib/capacity-runner.mjs';
 import { LOOP_STATES } from '../lib/loop-state.mjs';
 import { reviewDecisionSchemaFor, validateReviewJob, validateReviewDecision } from '../lib/contracts-v2.mjs';
@@ -542,10 +543,13 @@ async function handleClosureJob(job) {
 
 const store = createJobStore(STATE_DIR);
 
+const relayPaint = createPaint();
+
 const telemetry = createTelemetry({
   level: LOG_LEVEL,
   role: ROLE,
   sink: createTelemetryFileSink({ stateDir: STATE_DIR, role: ROLE, enabled: PERSIST_TELEMETRY }),
+  write: (line) => console.log(colorizeLogLine(line, relayPaint)),
 });
 
 /**
@@ -836,7 +840,7 @@ async function main() {
     getStatus,
     handleJob,
     onStarted: () => {
-      console.log(readyBanner);
+      console.log(relayPaint.cyan(readyBanner));
       console.log('Waiting for review task...\n');
     },
   });
@@ -850,7 +854,7 @@ if (isDirectExecution(import.meta.url)) {
     // a changed codebase are deliberate stops, not crashes, and restarting into
     // either one just repeats it.
     const code = exitCodeForError(error);
-    console.error(`Tech Lead worker stopped [${nameForExitCode(code)}]: ${error?.message ?? error}`);
+    console.error(relayPaint.red(`Tech Lead worker stopped [${nameForExitCode(code)}]: ${error?.message ?? error}`));
     process.exitCode = code;
   });
 }

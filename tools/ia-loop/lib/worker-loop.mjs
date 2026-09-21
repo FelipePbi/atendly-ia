@@ -30,6 +30,7 @@ import { isClaimableJobStatus } from './job-store.mjs';
 import { createResourceRegistry } from './resource-registry.mjs';
 import { cleanupResourcesForAttempt, scavengeOrphans } from './resource-lifecycle.mjs';
 import { logResourceEvent } from './shutdown-hooks.mjs';
+import { colorizeLogLine, createPaint } from './relay-logger.mjs';
 
 /** Moderate polling. No file watcher needed at this cadence, no busy loop. */
 export const POLL_INTERVAL_MS = 1_000;
@@ -61,9 +62,11 @@ export function banner({ title, model = null, supportedProfiles = null, sessionL
   ].join('\n');
 }
 
+const logPaint = createPaint();
+
 export function log(tag, message = '') {
   const time = new Date().toISOString().slice(11, 19);
-  console.log(`${time} [${tag}]${message ? ` ${message}` : ''}`);
+  console.log(colorizeLogLine(`${time} [${tag}]${message ? ` ${message}` : ''}`, logPaint));
 }
 
 // Deliberately NOT unref'd: this timer is what keeps the worker process alive

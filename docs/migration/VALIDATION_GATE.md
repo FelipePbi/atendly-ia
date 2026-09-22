@@ -1575,3 +1575,79 @@ documentos desta migração — nenhum arquivo de `tools/ia-loop/` foi
 tocado nesta rodada.
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff051-2026-09-22-d-067) e [D-067](DECISIONS.md).
+
+**Acréscimo, desde 2026-09-22 (Goal052 / [D-068](DECISIONS.md)):** o
+parágrafo do Goal049 acima ("O descarte silencioso deixa de ser casado
+por uma `RegExp`...") e o parágrafo do Goal050 sobre "**Não prova
+conservação de candidatos dentro das funções de varredura**" (duas
+seções acima) continuam verdadeiros e não foram apagados — mas o
+alcance PARCIAL que os dois declaravam para a enumeração de descarte
+ficou mais estreito. Até esta data, `findSilentDiscardLines`
+reconhecia só a forma de guarda idiomática (`if (<condição sobre valor
+ausente>) continue;`), e o total de `continue;` do módulo vivia
+escrito à mão num comentário, sem asserção conferindo o número. **Desde
+2026-09-22, a enumeração acha toda ocorrência de `continue;` do
+módulo, com o total computado em runtime**, e cada ocorrência cai numa
+classe do vocabulário `CONTINUE_LOOP_FORMS`, com resíduo zero sobre a
+árvore real. O que continua fora, sem mudança — herdado de D-065 e
+reafirmado por D-068 —, é a conservação de candidatos **dentro** das
+funções de varredura: um `continue;` registrado ou classificado prova
+que está nomeado, não que o candidato descartado não importava. Ver o
+parágrafo novo abaixo.
+
+## O descarte é enumerado por inteiro: toda ocorrência de `continue;` é classificada pela forma do laço, e a classe portadora de candidato tem chave por multiplicidade declarada, do Goal052
+
+O parágrafo do Goal049 introduziu a enumeração de descarte silencioso
+por forma idiomática; o do Goal050/051 estreitou a conservação do
+conjunto de egresso, um nível acima. O que sobrava, um nível abaixo de
+todos eles: a isenção do descarte de candidato continuava sendo
+silêncio, não critério computado — `findSilentDiscardLines` só via a
+forma de guarda, e o total de **120** ocorrências de `continue;` do
+módulo vivia escrito à mão num comentário, sem asserção alguma. Este
+delta fecha essa abertura, sem tocar o conjunto de 10 rotas nem o de
+27 literais e sem alterar regra de classificação de egresso alguma.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| A enumeração acha toda ocorrência de `continue;` do módulo (`enumerateContinueOccurrences`), com o total computado em runtime — **120** ocorrências na árvore real, todas em contexto `code`; o comentário que antes carregava o número à mão não o carrega mais | Ocorrência em literal de string, template ou comentário é reconhecida e nomeada pelo contexto léxico, mas o ramo é vazio na árvore real hoje — exercido por fonte sintética, não morto |
+| Cada ocorrência cai numa classe computada do vocabulário fechado `CONTINUE_LOOP_FORMS` (`for-of` **41**, `for-indexed` **55**, `while-exec-match` **18**, `while-positional-read` **5**, `while-queue-drain` **1**, `for-in` e `do-while` vazios na árvore real); ocorrência cujo laço não resolve, ou classe fora do vocabulário, reprova nomeando `arquivo:linha` — resíduo zero sobre a árvore real, inclusive as 5 ocorrências (`:1761`, `:1765`, `:1769`, `:1773`, `:1796`) em que a sondagem por indentação do próprio Goal falhava | A classificação é por casamento de parênteses/chaves sobre texto mascarado, nunca por recuo de indentação — a técnica antiga não é reaproveitada |
+| `while` é partido em **três** classes, cada uma com critério textual próprio: atribuição de `.exec(` (`while-exec-match`), não-vaziez da própria coleção (`while-queue-drain`) e cursor escalar contra limite (`while-positional-read`); cabeçalho de `while` fora dos três **reprova** nomeando `arquivo:linha`, exercido por fonte sintética no controle 3 | Não há classe de sobra para `while`. Até a rodada 1 deste Goal um único `while-condition` sem critério isentava em bloco as 6 ocorrências, inclusive `http-egress-sites.ts:1028`, que é descarte de candidato — esse fail-open está fechado |
+| A classe iteração sobre candidatos (`for-of`, `while-exec-match`, `while-queue-drain`) exige registro com motivo não vazio; `DOCUMENTED_SILENT_DISCARDS` cresceu de **5** para **43** entradas, cobrindo as **60** ocorrências reais dessa classe, com as quatro saídas fail-closed (`ambiguousKeys`, `unregistered`, `obsolete`, `emptyReason`) vazias sobre a árvore real | A classe leitura posicional (`for-indexed`, `while-positional-read`) continua isenta pelo critério computado do laço, sem registro por ocorrência — não é isenção por prosa |
+| A chave sobrevive à forma nua por multiplicidade declarada (`SilentDiscardEntry.multiplicity`): contagem real divergente da declarada reprova nos dois sentidos, sem número de linha | Deslocamento de linha continua não reprovando em massa — o controle 6 do escopo §9 prova, na forma nova, a mesma garantia do Goal050 |
+| O ponteiro de prosa de `:3483` passou a citar `:4314` em vez de `:4199` | Nenhum outro ponteiro de prosa foi alterado — não é varredura geral |
+
+**O que este delta não prova, e é preciso dizer alto.** **Não prova
+conservação de candidatos dentro das funções de varredura**: registrar
+ou classificar um `continue;` diz que ele está nomeado e justificado,
+não que o candidato descartado não importava — limite herdado de
+D-065/D-066/D-067, não afrouxado. **Não amplia a enumeração a
+`return`, `break` ou saída antecipada de função**: o alcance é
+`continue;`, e o que fica fora continua declarado como fora, agora com
+o número computado em vez de estimado. **Não corrige A-24**: o achado
+continua `PENDENCIA-POS-MVP`, e nenhum arquivo Go de produção deste
+fork foi editado por este Goal. **Não fecha M4. Não amplia nem reduz o
+conjunto de 10 rotas ou de 27 literais. Nenhuma categoria de recusa,
+regra de classificação de egresso ou isenção foi alterada.** `npm run
+validate:core` **PASSED** nesta árvore — dos 17 passos, 15 passaram
+(inclusive `test:ai-orchestrator`) e 2 pulados por design (`test:bff`,
+`test:health-worker`); nenhum falhou. `npm run test:gate` (raiz)
+permanece em **226** testes e 0 falhas, inalterado, porque não
+exercita este arquivo. `validate:integration` continua recusando por
+pré-condição de banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not
+set`), declarado como ausente — não é este Goal quem a supre. Sobre a
+árvore final desta rodada: `npx vitest run
+tests/assistant/assistant.service.test.ts` em `apps/ai-orchestrator` →
+**249** testes, **249** passando, **0** falhando (baseline: 227); `npx
+vitest run` completo → **1061** testes, **973** passando (baseline:
+951), **88** pulados (mesma contagem da baseline), **0** falhando.
+`npx tsc -p tsconfig.json --noEmit`: exit 0. `npm run lint` (`eslint
+src --max-warnings=0`) em `apps/ai-orchestrator`: exit 0, sem saída.
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts` está
+**intocado** (diff zero; **3887** linhas, mesma contagem da baseline);
+`apps/ai-orchestrator/tests/support/product-transport-routes.txt` tem
+diff **zero**. `git status --porcelain=v1 -uall` lista, ao final desta
+rodada, só `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
+e os quatro documentos desta migração — nenhum arquivo de
+`tools/ia-loop/` foi tocado nesta rodada.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff052-2026-09-22-d-068) e [D-068](DECISIONS.md).

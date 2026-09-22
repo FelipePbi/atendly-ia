@@ -1,6 +1,6 @@
 # Goal 052 — O descarte é enumerado por inteiro: `continue` fora da forma reconhecida deixa de ser isento em silêncio
 
-**Status: READY.** Preparado em 2026-09-22 pelo Tech Lead Agent após [Goal051 ACCEPTED](../reviews/051-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED** no [review052](../reviews/052-review.md) (rodada 2 de 2, 2026-09-22; a rodada 1 fechou `CHANGES_REQUIRED`, com 2 blockers). Preparado em 2026-09-22 pelo Tech Lead Agent após [Goal051 ACCEPTED](../reviews/051-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: OPUS_MEDIUM
 

@@ -3480,7 +3480,7 @@ function requestsWithReasonDivergentFromOriginSite(
 }
 
 describe("Goal051 / WU-03 — vacuidade por balde declarada ou exercida, e o motivo de env_var_* ligado ao campo originSite", () => {
-  it("requests, notGoBound, assembledUrls e nonGoBoundInstantiations não são vazios na árvore real; nonTransportMemberCalls é vazio hoje, e o sentido inverso (balde populado) já é exercido por árvore sintética no controle negativo 2 (Goal044 / WU-04, \"antes\", `:4199` acima)", () => {
+  it("requests, notGoBound, assembledUrls e nonGoBoundInstantiations não são vazios na árvore real; nonTransportMemberCalls é vazio hoje, e o sentido inverso (balde populado) já é exercido por árvore sintética no controle negativo 2 (Goal044 / WU-04, \"antes\", `:4314` acima)", () => {
     const discovery = discoverGoServiceHttpRequests(
       aiOrchestratorSrcPath,
       bffSrcPath,
@@ -6439,17 +6439,55 @@ describe("Goal047 / WU-04 (§2) — o alvo da atribuição só vira campo provad
  * reprovam por ambiguidade, em vez de uma engolir silenciosamente a outra no
  * `Map`.
  *
- * Alcance DECLARADAMENTE PARCIAL: o módulo tem 120 ocorrências de
- * `continue;` no total, a maioria de varredura lexical de caractere (não
- * descarte de candidato) ou dentro de bloco com outra instrução antes do
- * `continue` — nenhuma das duas formas é capturada por este mecanismo. Este
- * registro não é prova de conservação de candidatos, só de que as ocorrências
- * na forma idiomática coberta estão nomeadas e justificadas.
+ * Alcance DECLARADAMENTE PARCIAL, na forma que o Goal052 / WU-02 deixou:
+ * este registro cobre toda ocorrência da classe **iteração sobre
+ * candidatos** (`for…of`, `while ((match = pattern.exec(…)))` e `while`
+ * que drena uma fila — vocabulário fechado em
+ * `CONTINUE_CANDIDATE_LOOP_FORMS`, abaixo), não mais só a forma
+ * idiomática de guarda com que o Goal050 abriu este registro — essa forma
+ * continua presente entre as entradas, só deixou de ser o TETO do alcance.
+ * A classe **leitura posicional** (laço `for` indexado e `while` de cursor
+ * escalar contra limite) permanece de fora de propósito: a isenção dela é
+ * o critério computado do Goal052 §2 (`ContinueOccurrence.loopForm`), não
+ * um registro por ocorrência — é por isso que o alcance continua PARCIAL,
+ * não total sobre `continue;`. O total
+ * de ocorrências de `continue;` do módulo NÃO é escrito aqui: quem o
+ * conhece é `enumerateContinueOccurrences` (Goal052 / WU-01, abaixo), que o
+ * computa em runtime do texto do módulo e classifica cada ocorrência pela
+ * forma do laço contenedor. Número de ocorrências escrito à mão em prosa
+ * foi exatamente o que este comentário fazia antes do Goal052, e o que o
+ * Goal052 removeu. Este registro não é prova de conservação de candidatos,
+ * só de que toda ocorrência da classe portadora de candidato está nomeada e
+ * justificada.
+ *
+ * `continue;` nu normaliza sempre para a mesma string, então duas ou mais
+ * ocorrências nuas na mesma função (mesmo quando estão em laços diferentes)
+ * colidem na mesma chave — a sondagem do Goal052 achou isso de fato na
+ * árvore real (`resolveModuleExportBindings` chega a sete pela mesma
+ * chave; `discoverGoBoundRawFetchRequests`, a seis; `resolveDestination`, a
+ * cinco; e outras). Discriminar a chave por cabeçalho de laço não resolve o caso
+ * predominante, porque a repetição típica é várias ocorrências nuas
+ * **dentro do mesmo laço** (mesmo cabeçalho, mesma guarda ausente) — só um
+ * discriminador posicional resolveria essas, e chave por posição é
+ * exatamente o que o Goal050 proibiu. Por isso o Goal052 / WU-02 resolve a
+ * colisão pela segunda opção que o próprio Goal autoriza:
+ * `SilentDiscardEntry.multiplicity` declara quantas ocorrências
+ * legitimamente compartilham a chave, e `findSilentDiscardFindings` reprova
+ * quando a contagem real diverge da declarada — nos dois sentidos, sem ler
+ * linha alguma.
  */
 interface SilentDiscardEntry {
   readonly anchor: string | undefined;
   readonly snippet: string;
   readonly reason: string;
+  /**
+   * Quantas ocorrências reais devem compartilhar esta chave. Ausente
+   * significa `1`, o caso comum. `findSilentDiscardFindings` reprova por
+   * ambiguidade quando a contagem real diverge deste número, em qualquer
+   * direção — é o discriminador que substitui número de linha para a forma
+   * nua repetida dentro da mesma função (Goal052 §4).
+   */
+  readonly multiplicity?: number;
 }
 
 /** Colapsa espaços internos e remove bordas, para que o mesmo trecho lido em pontos diferentes normalize à mesma string. */
@@ -6507,6 +6545,257 @@ const DOCUMENTED_SILENT_DISCARDS: ReadonlyMap<string, SilentDiscardEntry> = buil
     reason:
       "nenhum parâmetro desta chamada resolve a env var de base do serviço Go — este chamador não determina base, então não contribui caminho; outros chamadores continuam sendo varridos",
   },
+  // ---------------------------------------------------------------------
+  // Goal052 / WU-02 — as entradas acima são as 5 da baseline, absorvidas
+  // sem alteração. As entradas abaixo ampliam o registro a TODA ocorrência
+  // da classe iteração sobre candidatos (`for…of`, `while-exec-match` e
+  // `while-queue-drain`) da
+  // árvore real, computada por `enumerateContinueOccurrences` +
+  // `CONTINUE_CANDIDATE_LOOP_FORMS` (abaixo) — não mais só a forma
+  // idiomática de guarda de linha única. `multiplicity` só aparece quando
+  // mais de uma ocorrência real, nu ou não, compartilha a mesma chave.
+  // ---------------------------------------------------------------------
+  {
+    anchor: "listTypeScriptSources",
+    snippet: "continue;",
+    reason:
+      "depois de descer recursivamente num subdiretório e acrescentar os arquivos achados nele, o `continue` evita reavaliar a própria entrada como arquivo `.ts` — ela é diretório, já tratado",
+  },
+  {
+    anchor: "parseParameterNames",
+    snippet: "continue;",
+    reason:
+      "parâmetro desestruturado (`{…}` ou `[…]`) já teve cada nome extraído e empurrado para `names` no laço interno; o `continue` evita cair na checagem de identificador solto, que não se aplica a um padrão",
+  },
+  {
+    anchor: "resolveDestination",
+    snippet: "continue;",
+    multiplicity: 5,
+    reason:
+      "as 5 ocorrências nuas do `for…of` sobre `extractLeadingIdentifiers` gravam o resultado do identificador antes de pular para o próximo — em `unresolvedParams` (parâmetro em trânsito, ou sem declaração precedente, ou parâmetro mencionado no lado direito), em `envVars` (o lado direito resolve a env var), ou marcando `constructorFieldReference` (lado direito referencia `this.<campo>`); nenhuma delas descarta identificador sem contabilizar",
+  },
+  {
+    anchor: "findRealCallSites",
+    snippet:
+      "if (isMemberDeclarationOrImplementationPosition(source, match.index, openParenIndex)) continue;",
+    reason:
+      "o casamento de `<nome>(` está na posição de DECLARAÇÃO do método (`<nome>(...): T {`), não numa chamada real — `isMemberDeclarationOrImplementationPosition` já prova isso; contar aqui inflaria `findRealCallSites` com a própria assinatura",
+  },
+  {
+    anchor: "findRawFetchOccurrences",
+    snippet: "continue;",
+    reason:
+      "o caractere antes de `fetch(` é `.` — é `algumaCoisa.fetch(...)`, um método, não o `fetch` global; a ocorrência é gravada em `excluded` com o motivo `method_call_not_global_fetch` antes do `continue`, nunca descartada muda",
+  },
+  {
+    anchor: "classifyGenericEgressCallersInSource",
+    snippet:
+      "if (isMemberDeclarationOrImplementationPosition(source, match.index, openParenIndex)) continue;",
+    reason:
+      "mesma exclusão de `findRealCallSites` acima, aplicada à varredura de chamadores do egresso genérico: a posição casada é a declaração do primitivo, não uma chamada real dele",
+  },
+  {
+    anchor: "discoverHttpEgressSites",
+    snippet: "if (scannedPrimitiveDeclarations.has(declarationKey)) continue;",
+    reason:
+      "a DECLARAÇÃO deste primitivo (`arquivo:linha`, não o nome) já foi desenfileirada e varrida numa volta anterior de `pendingPrimitives` — deduplicação por declaração, não descarte de candidato: o mesmo primitivo reenfileirado por um segundo chamador não acrescentaria chamador algum, e dois homônimos em arquivos diferentes têm chaves diferentes e os dois são varridos",
+  },
+  {
+    anchor: "discoverHttpEgressSites",
+    snippet: "if (callerBinding.localName === functionName) continue;",
+    reason:
+      "o chamador importa o primitivo pelo próprio nome da declaração, sem alias — a varredura pelo nome solto (sem alias) já o alcança; registrar o mesmo nome como \"alias\" seria redundante, não um chamador a mais",
+  },
+  {
+    anchor: "findImportDeclarations",
+    snippet: "continue;",
+    multiplicity: 2,
+    reason:
+      "as 2 ocorrências nuas do `for…of` sobre a cláusula de import gravam a parte já reconhecida — `{ ... }` explode em bindings nomeados no laço interno, `* as X` vira `namespaceAlias` — antes de pular para a próxima parte da cláusula; nenhuma parte reconhecida é perdida",
+  },
+  {
+    anchor: "findLocalExportListBindings",
+    snippet: 'if (after.startsWith("from")) continue;',
+    reason:
+      '`export { ... } from "especificador"` é reexportação, não uma lista de export LOCAL — esta função só lê listas locais (usadas por `findForwardedExportLine`); a reexportação é lida por outra varredura (`findReexportDeclarations`), nunca aqui',
+  },
+  {
+    anchor: "findExportConstructs",
+    snippet: "if (quoteMask[match.index]) continue;",
+    reason:
+      'a palavra "export" casada está dentro de literal de string ou de comentário (`quoteMask`), não é a palavra-chave — não é construção de export alguma, então não há binding a perder',
+  },
+  {
+    anchor: "resolveModuleExportBindings",
+    snippet: "if (!mentionsName.test(construct.text)) continue;",
+    reason:
+      "a construção `export` deste `for…of` não menciona o nome da função procurada em texto algum — não pode ser a ligação dela, então não é convertida nem recusada, só ignorada para este nome",
+  },
+  {
+    anchor: "resolveModuleExportBindings",
+    snippet: "continue;",
+    multiplicity: 7,
+    reason:
+      "as 7 ocorrências nuas do `for…of` sobre `findExportConstructs` são as 7 formas de export reconhecidas para o nome — default function, default identifier, default class, named class, named function, named const/let/var, e lista `export { ... }` — cada uma chama `addBinding(...)` antes do `continue`; nenhuma forma reconhecida descarta a ligação sem registrar",
+  },
+  {
+    anchor: "findCrossFileCallerBindings",
+    snippet: "if (otherFilePath === siteFilePath) continue;",
+    reason:
+      "o próprio arquivo do sítio não é um ARQUIVO OUTRO capaz de importar a ligação dele — a varredura deste laço é por definição sobre os demais arquivos das duas árvores",
+  },
+  {
+    anchor: "findCrossFileCallerBindings",
+    snippet:
+      "if (resolveModuleSpecifierToFilePath(reexport.specifier, otherFilePath, sourcesByPath) !== siteFilePath) continue;",
+    reason:
+      "a reexportação encontrada neste arquivo aponta para um arquivo diferente do sítio — não é uma reexportação da ligação que esta resolução persegue, então não estende alcance algum aqui",
+  },
+  {
+    anchor: "findCrossFileCallerBindings",
+    snippet: "if (importDecl.typeOnly) continue;",
+    reason:
+      '`import type { X }` não traz valor em runtime — um chamador real de "X" não pode vir desta declaração; type-only é isenção por forma, não por ausência de dado',
+  },
+  {
+    anchor: "findCrossFileCallerBindings",
+    snippet: "continue;",
+    multiplicity: 2,
+    reason:
+      "as 2 ocorrências nuas deste `for…of` sobre `findImportDeclarations(otherSource)` pulam o import quando ele não pode ser o chamador desta ligação: especificador não relativo (pacote/alias) sem o nome na cláusula — não resolve a arquivo algum —, e especificador relativo que resolve a um arquivo diferente do sítio; nenhum candidato de chamador de fato é perdido, é excluído por não apontar para o arquivo do sítio",
+  },
+  {
+    anchor: "discoverCallerResolvedGoBoundRequests",
+    snippet: "continue;",
+    reason:
+      "a parte do literal de crase sem `${...}` (texto puro) já foi acrescentada a `pathExpression` antes do `continue` — não é uma parte de expressão que precise resolver a parâmetro, e nada dela é perdido",
+  },
+  {
+    anchor: "discoverCallerResolvedGoBoundRequests",
+    snippet: "if (parameterName === baseParam) continue;",
+    reason:
+      "o parâmetro em trânsito já foi escolhido como base da URL (`baseParam`, achado antes neste mesmo chamador) — ele vira host, não caminho; contar de novo aqui duplicaria a base dentro do caminho",
+  },
+  {
+    anchor: "discoverGoBoundRawFetchRequests",
+    snippet: "continue;",
+    multiplicity: 6,
+    reason:
+      "as 6 ocorrências nuas do `for…of` sobre `discovery.sites` são os 6 pontos em que o sítio já foi gravado — como `requests` (destino resolvido ao serviço Go) ou como `notGoBound` via `countOut(...)` com motivo (destino não é base do Go, campo de instância de construtor, chamadores resolvidos sem base do Go, ou egresso genérico sem chamador ligado ao Go) — antes do `continue`; a partição do Goal049/050/051 é exatamente a prova de que nenhum sítio sai deste laço sem cair em exatamente um balde",
+  },
+  {
+    anchor: "findClassInstantiations",
+    snippet: 'if (wordEndingAt(source, match.index) !== "new") continue;',
+    reason:
+      'o identificador casado não é precedido da palavra "new" — é uma referência ao nome (tipo, valor repassado, etc.), não uma instanciação; `refuseClassReferencesOutsideInstantiation` trata essas referências à parte, não esta função',
+  },
+  {
+    anchor: "findClassInstantiations",
+    snippet:
+      "if (isMemberDeclarationOrImplementationPosition(source, match.index, openParenIndex)) continue;",
+    reason:
+      "mesma exclusão de declaração/implementação de método das outras varreduras acima: a posição casada é onde um MÉTODO homônimo é declarado, não onde a classe é instanciada",
+  },
+  {
+    anchor: "findClassDeclarationLines",
+    snippet: "if (quoteMask[match.index]) continue;",
+    reason:
+      '"class <nome>" casado está dentro de literal de string ou de comentário — não é declaração de classe alguma, então não conta como uma das linhas de declaração',
+  },
+  {
+    anchor: "resolveClassInstantiationBindings",
+    snippet: "if (already) continue;",
+    reason:
+      "a ligação (`filePath` + `localName`) já foi acrescentada a `bindings` por uma exportação anterior do mesmo nome — deduplicação de ligação já contabilizada, não perda de chamador novo",
+  },
+  {
+    anchor: "refuseClassReferencesOutsideInstantiation",
+    snippet: "if (quoteMask[index]) continue;",
+    reason:
+      "o nome da classe casado está dentro de literal de string ou de comentário — não é uma referência de código ao identificador ligado à declaração",
+  },
+  {
+    anchor: "refuseClassReferencesOutsideInstantiation",
+    snippet: "if (instantiationIndexes.has(index)) continue;",
+    reason:
+      "este índice já foi contado como sítio de instanciação (`new <Id>(`) por `findClassInstantiations` — esta função só recusa referência FORA de instanciação; a própria instanciação não é a referência que ela procura",
+  },
+  {
+    anchor: "refuseClassReferencesOutsideInstantiation",
+    snippet: 'if (precedingWord === "class") continue;',
+    reason:
+      "a palavra imediatamente anterior é \"class\" — é a própria declaração da classe no arquivo, ligação local, não uma referência a ela",
+  },
+  {
+    anchor: "refuseClassReferencesOutsideInstantiation",
+    snippet: "if (importRanges.some(inRange)) continue;",
+    reason:
+      "a ocorrência está dentro do range de uma declaração de import — é o nome sendo importado, não uma referência de valor no corpo do arquivo",
+  },
+  {
+    anchor: "refuseClassReferencesOutsideInstantiation",
+    snippet: "if (TYPE_POSITION_PRECEDING_WORDS.has(precedingWord)) continue;",
+    reason:
+      "a palavra anterior marca posição de TIPO (a mesma allowlist fechada que a partição de egresso já usa) — o nome está anotando um tipo, não sendo repassado como valor",
+  },
+  {
+    anchor: "refuseClassReferencesOutsideInstantiation",
+    snippet:
+      "if (before > 0 && TYPE_POSITION_PRECEDING_CHARS.has(source[before - 1])) continue;",
+    reason:
+      "o caractere anterior (ignorando espaço) marca posição de TIPO pela mesma allowlist fechada — mesma isenção da checagem por palavra acima, só que pelo caractere anterior",
+  },
+  {
+    anchor: "refuseClassReferencesOutsideInstantiation",
+    snippet: "if (exportRanges.some(inRange)) continue;",
+    reason:
+      "a ocorrência está dentro do range de uma construção `export` já RECONHECIDA (`exportConstructBindingRange`) — é o nome sendo exportado, não repassado como valor; construção não reconhecida já recusou antes, mais acima nesta mesma função",
+  },
+  {
+    anchor: "computeInternalClientMemberSurface",
+    snippet: "continue;",
+    multiplicity: 2,
+    reason:
+      "as 2 ocorrências nuas do `for…of` sobre `spans` gravam o membro em `excludedMembers` com motivo — não alcança fetch nem delega, ou alcança mas é private/protected — antes do `continue`; todo membro cai em `reachingMembers` ou em `excludedMembers`, nenhum se perde entre os dois",
+  },
+  {
+    anchor: "enumerateClientFieldMemberCalls",
+    snippet: "if (quoteMask[index]) continue;",
+    reason:
+      '"this" casado está dentro de literal de string ou de comentário — não é uma ocorrência de código do receptor, então não é candidato a uso do campo',
+  },
+  {
+    anchor: "enumerateClientFieldMemberCalls",
+    snippet: "if (receiverFieldName !== fieldName) continue;",
+    reason:
+      "`this.<outroCampo>` prova alcançar um campo diferente do que esta chamada enumera — não é uso do campo procurado; a recusa fica escopada à ocorrência, não ao arquivo inteiro (é o precedente do Goal047/WU-04 §4 acima)",
+  },
+  {
+    anchor: "enumerateClientFieldMemberCalls",
+    snippet:
+      "if (/^\\s*=\\s*new\\s+$/u.test(scan.slice(occurrenceEnd, instantiationCallIndex))) continue;",
+    reason:
+      "o texto entre esta ocorrência e a instanciação é só `= new `— é a própria atribuição que guarda a instância no campo, já provada como instanciação mais acima; não é um USO do campo, é a escrita dele",
+  },
+  {
+    anchor: "discoverGoBoundInternalClientRequests",
+    snippet: "if (classSurfaces.has(classDeclarationKey)) continue;",
+    reason:
+      "a superfície de membros desta declaração de classe (`arquivo:linha`) já foi computada por um sítio `constructor_base_url_*` anterior — memoização por declaração, não por nome; recomputar não acrescentaria membro novo",
+  },
+  {
+    anchor: "discoverGoBoundInternalClientRequests",
+    snippet: "continue;",
+    multiplicity: 2,
+    reason:
+      "as 2 ocorrências nuas, em laços diferentes desta função, gravam o candidato antes de pular: a instanciação cujo destino não é base do serviço Go vai para `nonGoBoundInstantiations` com motivo, e a chamada de campo fora da superfície vai para `nonTransportMemberCalls` com motivo — as duas coleções cuja conservação a partição do Goal050/051 já prova",
+  },
+  {
+    anchor: "discoverGoBoundInternalClientRequests",
+    snippet: "if (envVarsInMethod.length === 0) continue;",
+    reason:
+      "nenhuma env var de base do serviço Go aparece nas requisições que este método já mapeou — o método não contribui caminho do Go, então não gera entrada de requisição para ele; outros métodos do mesmo cliente continuam sendo varridos",
+  },
 ]);
 
 /** Acha, em `source`, toda linha na forma `if (<condição sobre valor ausente>) continue;`, com a condição em qualquer forma idiomática reconhecida (`=== undefined`, `=== null`, `!<identificador>`), combinável por `||`, com qualquer identificador. */
@@ -6539,6 +6828,18 @@ interface SilentDiscardOccurrence {
   readonly snippet: string;
   readonly anchor: string | undefined;
   readonly key: string;
+  /**
+   * Ausente significa `true` — o caso de toda ocorrência construída antes
+   * deste campo existir (Goal050/051). `false` para toda classe FORA de
+   * `CONTINUE_CANDIDATE_LOOP_FORMS` (Goal052 §2/§3), que na árvore real é
+   * a leitura posicional nas suas duas formas, `for-indexed` e
+   * `while-positional-read`: a isenção delas é o critério computado do
+   * laço contenedor, não um registro por ocorrência, então elas nunca
+   * contam como não registradas nem tornam obsoleta uma entrada de outra
+   * classe — mas seguem contando para achar a chave de uma entrada que
+   * porventura as nomeie, sem forçar sua presença.
+   */
+  readonly requiresRegistration?: boolean;
 }
 
 interface SilentDiscardFindings {
@@ -6558,26 +6859,42 @@ function findSilentDiscardFindings(
   occurrences: readonly SilentDiscardOccurrence[],
   registry: ReadonlyMap<string, SilentDiscardEntry>,
 ): SilentDiscardFindings {
+  // A leitura posicional (`requiresRegistration: false`) não exige registro
+  // e não é contada para ambiguidade — ela só evita que uma entrada que a
+  // nomeie vire obsoleta, no `foundKeys` abaixo, que roda sobre TODAS as
+  // ocorrências, registráveis ou não.
+  const registrable = occurrences.filter((occurrence) => occurrence.requiresRegistration ?? true);
+
   const occurrencesByKey = new Map<string, SilentDiscardOccurrence[]>();
-  for (const occurrence of occurrences) {
+  for (const occurrence of registrable) {
     const bucket = occurrencesByKey.get(occurrence.key) ?? [];
     bucket.push(occurrence);
     occurrencesByKey.set(occurrence.key, bucket);
   }
 
+  // A chave nua colide de propósito (mesma função, mesmo trecho
+  // normalizado). O que decide ambiguidade não é mais "mais de uma
+  // ocorrência": é a contagem real divergir da multiplicidade declarada na
+  // entrada — ausente vale `1`, o caso comum de antes do Goal052/WU-02.
   const ambiguousKeys: string[] = [];
   for (const [key, group] of occurrencesByKey) {
-    if (group.length > 1) {
+    const entry = registry.get(key);
+    const expectedMultiplicity = entry?.multiplicity ?? 1;
+    if (group.length !== expectedMultiplicity) {
+      const expectedDescription =
+        entry === undefined
+          ? "não registrada, então 1 é esperado"
+          : `multiplicidade declarada é ${expectedMultiplicity}`;
       ambiguousKeys.push(
-        `chave ambígua "${key}" alcançada por ${group.length} ocorrências (linhas ${group
+        `chave ambígua "${key}" alcançada por ${group.length} ocorrência(s) (linhas ${group
           .map((occurrence) => occurrence.line)
-          .join(", ")})`,
+          .join(", ")}), mas ${expectedDescription}`,
       );
     }
   }
 
   const unregistered: string[] = [];
-  for (const occurrence of occurrences) {
+  for (const occurrence of registrable) {
     if (!registry.has(occurrence.key)) {
       unregistered.push(`${occurrence.line}: "${occurrence.snippet}"`);
     }
@@ -6601,6 +6918,1154 @@ function findSilentDiscardFindings(
   return { ambiguousKeys, unregistered, obsolete, emptyReason };
 }
 
+/* =========================================================================
+ * Goal052 / WU-01 (§1 e §2) — o descarte é enumerado por inteiro.
+ *
+ * O mecanismo do Goal050 (`findSilentDiscardLines` acima) reconhecia UMA
+ * forma de `continue;`: a guarda idiomática sobre valor ausente. Toda
+ * ocorrência fora dessa forma — `continue;` nu dentro de bloco, guarda com
+ * condição de outra forma, laço de leitura posicional — ficava isenta por
+ * simplesmente não ser vista, e o número total vivia escrito à mão num
+ * comentário.
+ *
+ * Aqui a enumeração passa a achar TODA ocorrência de `continue;` no texto do
+ * módulo, e a contagem total é resultado de execução, nunca prosa. Cada
+ * ocorrência recebe:
+ *
+ * - um CONTEXTO LÉXICO computado (`CONTINUE_LEXICAL_CONTEXTS`), porque a
+ *   leitura é textual e pode encontrar `continue;` dentro de literal de
+ *   string, de template ou de comentário. Essas ocorrências são reconhecidas
+ *   como tais e NOMEADAS, nunca descartadas em silêncio;
+ * - uma CLASSE computada pela forma do laço mais próximo que a contém
+ *   (`CONTINUE_LOOP_FORMS`), vocabulário fechado.
+ *
+ * A resolução do laço contenedor NÃO usa recuo por indentação: a sondagem do
+ * Goal052 falhou em 5 ocorrências (`http-egress-sites.ts:1761`, `:1765`,
+ * `:1769`, `:1773`, `:1796`) exatamente por tentar isso. Aqui o texto é
+ * primeiro mapeado caractere a caractere em contextos léxicos, depois o que
+ * não é código vira espaço (preservando índices e linhas), e os laços são
+ * achados por casamento de parênteses e chaves sobre esse texto mascarado.
+ * A ocorrência pertence ao laço mais interno cujo corpo a contém.
+ *
+ * Fail-closed nos dois sentidos que importam: ocorrência de código cujo laço
+ * contenedor não é resolvido REPROVA nomeando `arquivo:linha` e o motivo, em
+ * vez de ser isentada; e classe fora do vocabulário declarado REPROVA. Não há
+ * ramo `else` mudo nem classe "desconhecida" que passe.
+ *
+ * Limite declarado, herdado de D-065/D-066/D-067 e não afrouxado aqui:
+ * classificar um `continue;` diz em que forma de laço ele está, não que o
+ * candidato descartado não importava.
+ * ========================================================================= */
+
+/**
+ * Vocabulário FECHADO das formas de laço que a classificação reconhece.
+ * Classe fora daqui reprova em `findContinueEnumerationFindings`.
+ *
+ * `while` é partido em TRÊS, não em dois, e cada uma das três classes tem
+ * critério textual próprio em `classifyContinueLoopForm` — nenhuma delas é
+ * o ramo de sobra das outras:
+ *
+ * - `while-exec-match` — o cabeçalho atribui o resultado de um `.exec(`;
+ *   cada volta é um candidato casado, e o `continue` o descarta;
+ * - `while-queue-drain` — o cabeçalho testa a NÃO-VAZIEZ da própria
+ *   coleção (`<coleção>.length > 0`, `.size !== 0`, e formas irmãs);
+ *   cada volta consome um elemento da coleção, então cada volta é um
+ *   candidato e o `continue` o descarta, exatamente como num `for…of`;
+ * - `while-positional-read` — o cabeçalho compara um CURSOR escalar
+ *   (identificador nu) com um limite (`i < body.length`, `i < bodyEnd`,
+ *   `i >= 0`); o `continue` avança a leitura, não descarta candidato.
+ *
+ * A partição nasceu de execução, não de prosa: a rodada 1 do Goal052
+ * classificava as seis ocorrências como um único `while-condition` e as
+ * isentava em bloco. Rodando o enumerador sobre a árvore real,
+ * `http-egress-sites.ts:1458`, `:1484`, `:2989`, `:2996` e `:2999` são
+ * cursor contra limite, mas `:1028` é `while (pendingPrimitives.length > 0)`
+ * com `pendingPrimitives.shift()` na primeira linha do corpo — fila de
+ * candidatos drenada, não posição de leitura. A isenção em bloco era,
+ * portanto, fail-open sobre um descarte de candidato real.
+ *
+ * `while` cujo cabeçalho não casa NENHUM dos três critérios REPROVA
+ * nomeando `arquivo:linha`, como já acontece com `for` fora das formas
+ * reconhecidas. Não há classe de sobra para `while`.
+ */
+const CONTINUE_LOOP_FORMS = [
+  "for-of",
+  "for-in",
+  "for-indexed",
+  "while-exec-match",
+  "while-queue-drain",
+  "while-positional-read",
+  "do-while",
+] as const;
+
+type ContinueLoopForm = (typeof CONTINUE_LOOP_FORMS)[number];
+
+/** Vocabulário FECHADO dos contextos léxicos em que a leitura textual pode produzir `continue;`. Contexto fora daqui reprova. */
+const CONTINUE_LEXICAL_CONTEXTS = [
+  "code",
+  "comment",
+  "string-literal",
+  "template-literal",
+  "regex-literal",
+] as const;
+
+type ContinueLexicalContext = (typeof CONTINUE_LEXICAL_CONTEXTS)[number];
+
+/** Tokens depois dos quais um `/` abre literal de expressão regular, não divisão — sem isso a máscara confunde `/\s/` com divisão e desalinha todo o resto. */
+const REGEX_LITERAL_PRECEDING_TOKENS: ReadonlySet<string> = new Set([
+  "(",
+  ",",
+  "=",
+  ":",
+  "[",
+  "!",
+  "&",
+  "|",
+  "?",
+  "{",
+  "}",
+  ";",
+  "+",
+  "-",
+  "*",
+  "%",
+  "~",
+  "^",
+  "<",
+  ">",
+  "return",
+  "case",
+  "typeof",
+  "in",
+  "of",
+  "new",
+  "delete",
+  "void",
+  "instanceof",
+  "do",
+  "else",
+  "yield",
+  "await",
+]);
+
+function markLexicalRange(
+  contexts: ContinueLexicalContext[],
+  from: number,
+  to: number,
+  context: ContinueLexicalContext,
+): void {
+  for (let index = Math.max(from, 0); index < to && index < contexts.length; index += 1) {
+    contexts[index] = context;
+  }
+}
+
+/** Índice imediatamente depois do literal de string aberto em `start` (aspas simples ou duplas). */
+function scanQuotedStringEnd(source: string, start: number): number {
+  const quote = source[start];
+  let index = start + 1;
+  while (index < source.length) {
+    const char = source[index];
+    if (char === "\\") {
+      index += 2;
+      continue;
+    }
+    if (char === quote) return index + 1;
+    if (char === "\n") return index;
+    index += 1;
+  }
+  return source.length;
+}
+
+/** Índice imediatamente depois do literal de expressão regular aberto em `start`, incluindo as flags. */
+function scanRegexLiteralEnd(source: string, start: number): number {
+  let index = start + 1;
+  let insideClass = false;
+  while (index < source.length) {
+    const char = source[index];
+    if (char === "\\") {
+      index += 2;
+      continue;
+    }
+    if (char === "[") insideClass = true;
+    else if (char === "]") insideClass = false;
+    else if (char === "\n") return index;
+    else if (char === "/" && !insideClass) {
+      let end = index + 1;
+      while (end < source.length && /[a-z]/u.test(source[end])) end += 1;
+      return end;
+    }
+    index += 1;
+  }
+  return source.length;
+}
+
+/** Marca o template literal aberto em `start`; cada interpolação `${…}` volta a ser código, recursivamente. Devolve o índice depois da crase de fechamento. */
+function scanTemplateLiteralLexicalContexts(
+  source: string,
+  contexts: ContinueLexicalContext[],
+  start: number,
+): number {
+  contexts[start] = "template-literal";
+  let index = start + 1;
+  while (index < source.length) {
+    const char = source[index];
+    if (char === "\\") {
+      markLexicalRange(contexts, index, index + 2, "template-literal");
+      index += 2;
+      continue;
+    }
+    if (char === "`") {
+      contexts[index] = "template-literal";
+      return index + 1;
+    }
+    if (char === "$" && source[index + 1] === "{") {
+      markLexicalRange(contexts, index, index + 2, "code");
+      const closeIndex = scanCodeRegionLexicalContexts(source, contexts, index + 2);
+      if (closeIndex >= source.length) return source.length;
+      contexts[closeIndex] = "code";
+      index = closeIndex + 1;
+      continue;
+    }
+    contexts[index] = "template-literal";
+    index += 1;
+  }
+  return source.length;
+}
+
+/**
+ * Percorre código a partir de `from`, marcando o contexto léxico de cada
+ * caractere. Para no `}` sem `{` correspondente — o fim de uma interpolação
+ * `${…}` — e devolve esse índice; devolve `source.length` se o texto acabar.
+ */
+function scanCodeRegionLexicalContexts(
+  source: string,
+  contexts: ContinueLexicalContext[],
+  from: number,
+): number {
+  let index = from;
+  let braceDepth = 0;
+  let previousToken = "";
+  while (index < source.length) {
+    const char = source[index];
+    const pair = source.slice(index, index + 2);
+    if (pair === "//") {
+      const lineEnd = source.indexOf("\n", index);
+      const stop = lineEnd === -1 ? source.length : lineEnd;
+      markLexicalRange(contexts, index, stop, "comment");
+      index = stop;
+      continue;
+    }
+    if (pair === "/*") {
+      const commentEnd = source.indexOf("*/", index + 2);
+      const stop = commentEnd === -1 ? source.length : commentEnd + 2;
+      markLexicalRange(contexts, index, stop, "comment");
+      index = stop;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      const stop = scanQuotedStringEnd(source, index);
+      markLexicalRange(contexts, index, stop, "string-literal");
+      index = stop;
+      previousToken = "<literal>";
+      continue;
+    }
+    if (char === "`") {
+      index = scanTemplateLiteralLexicalContexts(source, contexts, index);
+      previousToken = "<literal>";
+      continue;
+    }
+    if (char === "/" && REGEX_LITERAL_PRECEDING_TOKENS.has(previousToken)) {
+      const stop = scanRegexLiteralEnd(source, index);
+      markLexicalRange(contexts, index, stop, "regex-literal");
+      index = stop;
+      previousToken = "<literal>";
+      continue;
+    }
+    if (/[A-Za-z_$]/u.test(char)) {
+      let wordEnd = index;
+      while (wordEnd < source.length && /[\w$]/u.test(source[wordEnd])) wordEnd += 1;
+      previousToken = source.slice(index, wordEnd);
+      index = wordEnd;
+      continue;
+    }
+    if (char === "{") {
+      braceDepth += 1;
+      previousToken = char;
+      index += 1;
+      continue;
+    }
+    if (char === "}") {
+      if (braceDepth === 0) return index;
+      braceDepth -= 1;
+      previousToken = char;
+      index += 1;
+      continue;
+    }
+    if (!/\s/u.test(char)) previousToken = char;
+    index += 1;
+  }
+  return source.length;
+}
+
+/** Contexto léxico de cada caractere de `source`, computado numa passada só. */
+function buildContinueLexicalContexts(source: string): ContinueLexicalContext[] {
+  const contexts: ContinueLexicalContext[] = new Array<ContinueLexicalContext>(source.length).fill(
+    "code",
+  );
+  scanCodeRegionLexicalContexts(source, contexts, 0);
+  return contexts;
+}
+
+/** Substitui por espaço tudo que não é código, preservando índices e quebras de linha — sobre este texto o casamento de chaves não é enganado por chave dentro de string, comentário ou regex. */
+function maskNonCodeText(source: string, contexts: readonly ContinueLexicalContext[]): string {
+  const chars = [...source];
+  for (let index = 0; index < chars.length; index += 1) {
+    const char = chars[index];
+    if (contexts[index] !== "code" && char !== "\n" && char !== "\r") {
+      chars[index] = " ";
+    }
+  }
+  return chars.join("");
+}
+
+type ContinueLoopKeyword = "for" | "while" | "do";
+
+interface ContinueLoopSpan {
+  readonly keyword: ContinueLoopKeyword;
+  readonly header: string;
+  readonly headerIndex: number;
+  readonly bodyStart: number;
+  /** Exclusivo. */
+  readonly bodyEnd: number;
+  readonly form: ContinueLoopForm | undefined;
+  readonly unresolvedReason: string | undefined;
+}
+
+/** Índice do delimitador que fecha o aberto em `openIndex`, ou `-1`. Roda sobre texto já mascarado. */
+function matchBalancedDelimiter(
+  masked: string,
+  openIndex: number,
+  open: string,
+  close: string,
+): number {
+  let depth = 0;
+  for (let index = openIndex; index < masked.length; index += 1) {
+    const char = masked[index];
+    if (char === open) depth += 1;
+    else if (char === close) {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
+/** Primeiro índice a partir de `from` cujo caractere não é espaço em branco, ou `masked.length`. */
+function skipMaskedWhitespace(masked: string, from: number): number {
+  let index = from;
+  while (index < masked.length && /\s/u.test(masked[index])) index += 1;
+  return index;
+}
+
+/** Índice depois do `;` que fecha a instrução iniciada em `from` — corpo de laço sem bloco. */
+function findStatementEnd(masked: string, from: number): number {
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  let braceDepth = 0;
+  for (let index = from; index < masked.length; index += 1) {
+    const char = masked[index];
+    if (char === "(") parenDepth += 1;
+    else if (char === ")") parenDepth -= 1;
+    else if (char === "[") bracketDepth += 1;
+    else if (char === "]") bracketDepth -= 1;
+    else if (char === "{") braceDepth += 1;
+    else if (char === "}") braceDepth -= 1;
+    else if (char === ";" && parenDepth === 0 && bracketDepth === 0 && braceDepth === 0) {
+      return index + 1;
+    }
+  }
+  return masked.length;
+}
+
+/**
+ * Remove parênteses redundantes em volta da condição inteira — `while ((a))`
+ * e `while (a)` têm a mesma condição, e o casamento por forma não pode
+ * depender de quantos parênteses o autor escreveu.
+ */
+function stripRedundantParentheses(condition: string): string {
+  let text = condition.trim();
+  while (text.startsWith("(") && text.endsWith(")")) {
+    let depth = 0;
+    let wraps = true;
+    for (let index = 0; index < text.length; index += 1) {
+      if (text[index] === "(") depth += 1;
+      else if (text[index] === ")") {
+        depth -= 1;
+        if (depth === 0 && index < text.length - 1) {
+          wraps = false;
+          break;
+        }
+      }
+    }
+    if (!wraps) break;
+    text = text.slice(1, -1).trim();
+  }
+  return text;
+}
+
+/** Condição de DRENAGEM DE FILA: a não-vaziez da própria coleção, em qualquer das formas idiomáticas — `xs.length > 0`, `xs.size !== 0`, `xs.length` nu, `!!xs.length`. */
+const WHILE_QUEUE_DRAIN_CONDITION =
+  /^!*[A-Za-z_$][\w$.]*\.(?:length|size)(?:\s*(?:>|!==|!=)\s*0)?$/u;
+
+/** Condição de LEITURA POSICIONAL: um cursor escalar (identificador nu à esquerda, nunca `.length`/`.size`) comparado com um limite. */
+const WHILE_POSITIONAL_READ_CONDITION =
+  /^[A-Za-z_$][\w$]*\s*(?:<|<=|>|>=)\s*[^<>=].*$/u;
+
+/** A classe do laço, computada só do cabeçalho — nenhuma heurística de indentação, nenhum ramo mudo: o que não casa volta com motivo escrito. */
+function classifyContinueLoopForm(
+  keyword: ContinueLoopKeyword,
+  header: string,
+): { form: ContinueLoopForm | undefined; unresolvedReason: string | undefined } {
+  const normalized = header.replace(/\s+/gu, " ").trim();
+  if (keyword === "do") return { form: "do-while", unresolvedReason: undefined };
+  if (keyword === "while") {
+    if (normalized.length === 0) {
+      return {
+        form: undefined,
+        unresolvedReason: "cabeçalho de `while` vazio, sem condição a classificar",
+      };
+    }
+    if (/=\s*[A-Za-z_$][\w$.]*\.exec\s*\(/u.test(normalized)) {
+      return { form: "while-exec-match", unresolvedReason: undefined };
+    }
+    // Fila de candidatos: a condição testa a não-vaziez da PRÓPRIA coleção,
+    // e cada volta consome um elemento dela. `:1028` da árvore real.
+    if (WHILE_QUEUE_DRAIN_CONDITION.test(stripRedundantParentheses(normalized))) {
+      return { form: "while-queue-drain", unresolvedReason: undefined };
+    }
+    // Leitura posicional: a condição compara um CURSOR escalar (identificador
+    // nu, sem `.length`/`.size` à esquerda) com um limite.
+    if (WHILE_POSITIONAL_READ_CONDITION.test(stripRedundantParentheses(normalized))) {
+      return { form: "while-positional-read", unresolvedReason: undefined };
+    }
+    return {
+      form: undefined,
+      unresolvedReason: `cabeçalho de \`while\` fora das formas reconhecidas (exec-match, drenagem de fila, cursor posicional): "${normalized}"`,
+    };
+  }
+  const binding = "(?:\\[[^\\]]*\\]|\\{[^}]*\\}|[A-Za-z_$][\\w$]*)";
+  if (new RegExp(`^(?:const |let |var )?${binding} of `, "u").test(normalized)) {
+    return { form: "for-of", unresolvedReason: undefined };
+  }
+  if (new RegExp(`^(?:const |let |var )?${binding} in `, "u").test(normalized)) {
+    return { form: "for-in", unresolvedReason: undefined };
+  }
+  if (normalized.includes(";")) return { form: "for-indexed", unresolvedReason: undefined };
+  return {
+    form: undefined,
+    unresolvedReason: `cabeçalho de \`for\` fora das formas reconhecidas (for-of, for-in, for indexado): "${normalized}"`,
+  };
+}
+
+/** Todo laço do texto mascarado, com o intervalo exato do corpo — com bloco `{…}` ou instrução única sem chaves. */
+function findContinueLoopSpans(masked: string): ContinueLoopSpan[] {
+  const spans: ContinueLoopSpan[] = [];
+  const skippedKeywordIndices = new Set<number>();
+  const keywordPattern = /\b(for|while|do)\b/gu;
+  let match = keywordPattern.exec(masked);
+  while (match !== null) {
+    const keywordIndex = match.index;
+    const keyword = match[1] as ContinueLoopKeyword;
+    if (!skippedKeywordIndices.has(keywordIndex)) {
+      let header = "";
+      let bodyCandidate = keywordIndex + keyword.length;
+      let recognizedHeader = true;
+      if (keyword === "for" || keyword === "while") {
+        const parenIndex = skipMaskedWhitespace(masked, keywordIndex + keyword.length);
+        const closeIndex =
+          masked[parenIndex] === "(" ? matchBalancedDelimiter(masked, parenIndex, "(", ")") : -1;
+        if (closeIndex === -1) recognizedHeader = false;
+        else {
+          header = masked.slice(parenIndex + 1, closeIndex);
+          bodyCandidate = closeIndex + 1;
+        }
+      }
+      if (recognizedHeader) {
+        const bodyStart = skipMaskedWhitespace(masked, bodyCandidate);
+        let bodyEnd: number;
+        if (masked[bodyStart] === "{") {
+          const closeBrace = matchBalancedDelimiter(masked, bodyStart, "{", "}");
+          bodyEnd = closeBrace === -1 ? masked.length : closeBrace + 1;
+        } else {
+          bodyEnd = findStatementEnd(masked, bodyStart);
+        }
+        const classification = classifyContinueLoopForm(keyword, header);
+        spans.push({
+          keyword,
+          header: header.replace(/\s+/gu, " ").trim(),
+          headerIndex: keywordIndex,
+          bodyStart,
+          bodyEnd,
+          form: classification.form,
+          unresolvedReason: classification.unresolvedReason,
+        });
+        if (keyword === "do") {
+          // O `while (...)` de cauda de um do/while não abre laço próprio:
+          // sem isto ele viraria um `while` fantasma cujo corpo é o
+          // `;` seguinte.
+          const tailIndex = masked.indexOf("while", bodyEnd);
+          if (tailIndex !== -1 && masked.slice(bodyEnd, tailIndex).trim().length === 0) {
+            skippedKeywordIndices.add(tailIndex);
+          }
+        }
+      }
+    }
+    match = keywordPattern.exec(masked);
+  }
+  return spans;
+}
+
+/** Deslocamento inicial de cada linha, para converter índice em número de linha sem refatiar o texto a cada ocorrência. */
+function buildLineStartOffsets(source: string): number[] {
+  const offsets = [0];
+  for (let index = 0; index < source.length; index += 1) {
+    if (source[index] === "\n") offsets.push(index + 1);
+  }
+  return offsets;
+}
+
+function lineNumberAtIndex(lineStartOffsets: readonly number[], index: number): number {
+  let low = 0;
+  let high = lineStartOffsets.length - 1;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (lineStartOffsets[middle] <= index) low = middle;
+    else high = middle - 1;
+  }
+  return low + 1;
+}
+
+interface ContinueOccurrence {
+  readonly filePath: string;
+  readonly line: number;
+  readonly context: ContinueLexicalContext;
+  readonly loopForm: ContinueLoopForm | undefined;
+  readonly loopKeyword: ContinueLoopKeyword | undefined;
+  readonly loopHeader: string | undefined;
+  /** Guarda normalizada que precede o `continue` na mesma linha, quando há uma — discriminador estrutural disponível para quem chavear ocorrência, sem usar número de linha. */
+  readonly guard: string | undefined;
+  readonly text: string;
+  readonly unresolvedReason: string | undefined;
+}
+
+/** Laço mais interno cujo corpo contém `index`, ou `undefined` se nenhum contém. */
+function innermostLoopSpanAt(
+  spans: readonly ContinueLoopSpan[],
+  index: number,
+): ContinueLoopSpan | undefined {
+  let innermost: ContinueLoopSpan | undefined;
+  for (const span of spans) {
+    if (span.bodyStart <= index && index < span.bodyEnd) {
+      if (innermost === undefined || span.bodyStart > innermost.bodyStart) innermost = span;
+    }
+  }
+  return innermost;
+}
+
+/** Trecho `if (…)` imediatamente antes do `continue` na mesma linha, normalizado, ou `undefined` quando o `continue` é nu. */
+function guardPrecedingContinue(lineText: string, continueColumn: number): string | undefined {
+  const before = lineText.slice(0, continueColumn);
+  const match = /(if\s*\([\s\S]*\))\s*$/u.exec(before);
+  if (match === null) return undefined;
+  return match[1].replace(/\s+/gu, " ").trim();
+}
+
+/**
+ * Acha TODA ocorrência de `continue;` no texto e devolve a classificação
+ * computada de cada uma. A contagem total é `occurrences.length` — resultado
+ * de execução, nunca número escrito à mão.
+ */
+function enumerateContinueOccurrences(source: string, filePath: string): ContinueOccurrence[] {
+  const contexts = buildContinueLexicalContexts(source);
+  const masked = maskNonCodeText(source, contexts);
+  const spans = findContinueLoopSpans(masked);
+  const lineStartOffsets = buildLineStartOffsets(source);
+  const lines = source.split(/\r?\n/u);
+  const occurrences: ContinueOccurrence[] = [];
+  const pattern = /\bcontinue\s*;/gu;
+  let match = pattern.exec(source);
+  while (match !== null) {
+    const index = match.index;
+    const line = lineNumberAtIndex(lineStartOffsets, index);
+    const lineText = lines[line - 1] ?? "";
+    const context = contexts[index] ?? "code";
+    if (context !== "code") {
+      occurrences.push({
+        filePath,
+        line,
+        context,
+        loopForm: undefined,
+        loopKeyword: undefined,
+        loopHeader: undefined,
+        guard: undefined,
+        text: lineText.trim(),
+        unresolvedReason: undefined,
+      });
+    } else {
+      const enclosing = innermostLoopSpanAt(spans, index);
+      const column = index - (lineStartOffsets[line - 1] ?? 0);
+      occurrences.push({
+        filePath,
+        line,
+        context,
+        loopForm: enclosing?.form,
+        loopKeyword: enclosing?.keyword,
+        loopHeader: enclosing?.header,
+        guard: guardPrecedingContinue(lineText, column),
+        text: lineText.trim(),
+        unresolvedReason:
+          enclosing === undefined
+            ? "nenhum laço contenedor encontrado para este `continue;`"
+            : enclosing.unresolvedReason,
+      });
+    }
+    match = pattern.exec(source);
+  }
+  return occurrences;
+}
+
+interface ContinueEnumerationFindings {
+  /** Computado, nunca escrito à mão. */
+  readonly total: number;
+  readonly byContext: Readonly<Record<string, number>>;
+  readonly byLoopForm: Readonly<Record<string, number>>;
+  readonly unresolved: string[];
+  readonly outsideVocabulary: string[];
+  readonly nonCode: string[];
+}
+
+/**
+ * A conta única sobre as ocorrências enumeradas. O teste permanente a chama
+ * sobre a leitura real de `http-egress-sites.ts`; os controles negativos a
+ * chamam sobre fonte sintética e sobre ocorrência corrompida, e conferem que
+ * a MESMA conta reprova — nunca uma segunda implementação à parte.
+ */
+function findContinueEnumerationFindings(
+  occurrences: readonly ContinueOccurrence[],
+): ContinueEnumerationFindings {
+  const loopVocabulary = new Set<string>(CONTINUE_LOOP_FORMS);
+  const contextVocabulary = new Set<string>(CONTINUE_LEXICAL_CONTEXTS);
+  const byContext: Record<string, number> = {};
+  const byLoopForm: Record<string, number> = {};
+  const unresolved: string[] = [];
+  const outsideVocabulary: string[] = [];
+  const nonCode: string[] = [];
+
+  for (const occurrence of occurrences) {
+    const where = `${occurrence.filePath}:${occurrence.line}`;
+    byContext[occurrence.context] = (byContext[occurrence.context] ?? 0) + 1;
+    if (!contextVocabulary.has(occurrence.context)) {
+      outsideVocabulary.push(
+        `${where}: contexto léxico "${occurrence.context}" fora de CONTINUE_LEXICAL_CONTEXTS`,
+      );
+      continue;
+    }
+    if (occurrence.context !== "code") {
+      nonCode.push(`${where}: ocorrência em ${occurrence.context} — "${occurrence.text}"`);
+      continue;
+    }
+    if (occurrence.loopForm === undefined) {
+      unresolved.push(
+        `${where}: ${occurrence.unresolvedReason ?? "laço contenedor não resolvido, e sem motivo registrado"} — "${occurrence.text}"`,
+      );
+      continue;
+    }
+    if (!loopVocabulary.has(occurrence.loopForm)) {
+      outsideVocabulary.push(
+        `${where}: classe "${occurrence.loopForm}" fora de CONTINUE_LOOP_FORMS — "${occurrence.text}"`,
+      );
+      continue;
+    }
+    byLoopForm[occurrence.loopForm] = (byLoopForm[occurrence.loopForm] ?? 0) + 1;
+  }
+
+  return { total: occurrences.length, byContext, byLoopForm, unresolved, outsideVocabulary, nonCode };
+}
+
+describe("Goal052 / WU-01 (§1 e §2) — `continue;` é enumerado por inteiro e classificado pela forma do laço contenedor: resíduo reprova, classe fora do vocabulário reprova, e o total é computado em runtime", () => {
+  const supportModulePath = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../support/http-egress-sites.ts",
+  );
+  const moduleSource = readFileSync(supportModulePath, "utf8");
+  const realOccurrences = enumerateContinueOccurrences(moduleSource, "http-egress-sites.ts");
+  const realFindings = findContinueEnumerationFindings(realOccurrences);
+
+  it("a contagem total é computada em runtime e bate, ocorrência a ocorrência, com a contagem textual independente de `continue;` — nenhum número escrito à mão em lugar nenhum", () => {
+    const textualTotal = (moduleSource.match(/\bcontinue\s*;/gu) ?? []).length;
+    expect(realFindings.total).toBe(textualTotal);
+    // Não vácuo: o módulo realmente tem ocorrências, senão o teste inteiro
+    // passaria sobre lista vazia.
+    expect(realFindings.total).toBeGreaterThan(0);
+    expect(realOccurrences).toHaveLength(realFindings.total);
+  });
+
+  it("o comentário de alcance parcial de DOCUMENTED_SILENT_DISCARDS não carrega mais número de ocorrências escrito à mão", () => {
+    const ownSource = readFileSync(fileURLToPath(import.meta.url), "utf8");
+    const declarationIndex = ownSource.indexOf("interface SilentDiscardEntry");
+    expect(declarationIndex).toBeGreaterThan(-1);
+    const commentStart = ownSource.lastIndexOf("/**", declarationIndex);
+    const commentBlock = ownSource.slice(commentStart, declarationIndex);
+    expect(commentBlock).toContain("Alcance DECLARADAMENTE PARCIAL");
+    expect(commentBlock).not.toMatch(/\d+\s*ocorrências/u);
+    expect(commentBlock).toContain("enumerateContinueOccurrences");
+  });
+
+  it("sobre a árvore real o resíduo é zero: nenhuma ocorrência fica sem classe, nenhuma classe cai fora do vocabulário, e a soma por classe reconstrói o total", () => {
+    expect(realFindings.unresolved).toEqual([]);
+    expect(realFindings.outsideVocabulary).toEqual([]);
+    const classified = Object.values(realFindings.byLoopForm).reduce((sum, count) => sum + count, 0);
+    expect(classified + realFindings.nonCode.length).toBe(realFindings.total);
+    for (const form of Object.keys(realFindings.byLoopForm)) {
+      expect(CONTINUE_LOOP_FORMS).toContain(form);
+    }
+  });
+
+  it("ocorrência em literal de string, em template ou em comentário é reconhecida pelo contexto léxico e NOMEADA — na árvore real a lista é vazia, computada, e a fonte sintética prova que o ramo não é morto", () => {
+    expect(realFindings.nonCode).toEqual([]);
+    expect(realFindings.byContext.code).toBe(realFindings.total);
+
+    const synthetic = [
+      'const literal = "if (!x) continue;";',
+      "// comentário de linha com continue; dentro",
+      "/* comentário de bloco com continue; dentro */",
+      "const template = `texto com continue; dentro`;",
+      "function scan(items) {",
+      "  for (const item of items) {",
+      "    if (!item) continue;",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const syntheticFindings = findContinueEnumerationFindings(
+      enumerateContinueOccurrences(synthetic, "sintetico.ts"),
+    );
+    expect(syntheticFindings.total).toBe(5);
+    expect(syntheticFindings.byContext).toEqual({
+      "string-literal": 1,
+      comment: 2,
+      "template-literal": 1,
+      code: 1,
+    });
+    expect(syntheticFindings.nonCode).toEqual([
+      'sintetico.ts:1: ocorrência em string-literal — "const literal = "if (!x) continue;";"',
+      'sintetico.ts:2: ocorrência em comment — "// comentário de linha com continue; dentro"',
+      'sintetico.ts:3: ocorrência em comment — "/* comentário de bloco com continue; dentro */"',
+      'sintetico.ts:4: ocorrência em template-literal — "const template = `texto com continue; dentro`;"',
+    ]);
+    expect(syntheticFindings.unresolved).toEqual([]);
+    expect(syntheticFindings.byLoopForm).toEqual({ "for-of": 1 });
+  });
+
+  it("cada classe do vocabulário fechado tem prova: as cinco presentes na árvore real são aferidas com contagem maior que zero, e as duas ausentes são exercidas por fonte sintética — nenhuma classe declarada só em prosa", () => {
+    const presentInRealTree: ContinueLoopForm[] = [
+      "for-of",
+      "for-indexed",
+      "while-exec-match",
+      "while-queue-drain",
+      "while-positional-read",
+    ];
+    for (const form of presentInRealTree) {
+      expect(realFindings.byLoopForm[form]).toBeGreaterThan(0);
+    }
+    const absentFromRealTree: ContinueLoopForm[] = ["for-in", "do-while"];
+    for (const form of absentFromRealTree) {
+      expect(realFindings.byLoopForm[form]).toBeUndefined();
+    }
+    // As duas classes vazias na árvore real são povoadas por fonte sintética,
+    // com as duas saídas: ausente no real, presente e classificada aqui.
+    const synthetic = [
+      "function scan(record, limit) {",
+      "  for (const key in record) {",
+      "    if (!key) continue;",
+      "  }",
+      "  let i = 0;",
+      "  do {",
+      "    i += 1;",
+      "    continue;",
+      "  } while (i < limit);",
+      "}",
+      "",
+    ].join("\n");
+    const syntheticFindings = findContinueEnumerationFindings(
+      enumerateContinueOccurrences(synthetic, "sintetico.ts"),
+    );
+    expect(syntheticFindings.unresolved).toEqual([]);
+    expect(syntheticFindings.byLoopForm).toEqual({ "for-in": 1, "do-while": 1 });
+    // Toda classe do vocabulário está coberta por uma das duas provas.
+    expect([...presentInRealTree, ...absentFromRealTree].sort()).toEqual(
+      [...CONTINUE_LOOP_FORMS].sort(),
+    );
+  });
+
+  it("ocorrência cujo laço contenedor não é resolvido REPROVA nomeando arquivo:linha e o motivo, em vez de ser isentada — nas duas formas: laço de forma não reconhecida e `continue;` sem laço algum", () => {
+    // Antes: a mesma ocorrência dentro de um laço reconhecido não reprova.
+    const recognized = [
+      "function scan(candidatos) {",
+      "  for (const candidato of candidatos) {",
+      "    continue;",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const recognizedFindings = findContinueEnumerationFindings(
+      enumerateContinueOccurrences(recognized, "sintetico.ts"),
+    );
+    expect(recognizedFindings.unresolved).toEqual([]);
+    expect(recognizedFindings.byLoopForm).toEqual({ "for-of": 1 });
+
+    // Depois: cabeçalho de `for` fora das formas reconhecidas reprova.
+    const unrecognizedLoop = [
+      "function scan(candidatos) {",
+      "  for (candidatos) {",
+      "    continue;",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const unrecognizedFindings = findContinueEnumerationFindings(
+      enumerateContinueOccurrences(unrecognizedLoop, "sintetico.ts"),
+    );
+    expect(unrecognizedFindings.byLoopForm).toEqual({});
+    expect(unrecognizedFindings.unresolved).toHaveLength(1);
+    expect(unrecognizedFindings.unresolved[0]).toMatch(
+      /^sintetico\.ts:3: cabeçalho de `for` fora das formas reconhecidas \(for-of, for-in, for indexado\): "candidatos" — "continue;"$/u,
+    );
+
+    // E cabeçalho de `while` fora dos três critérios também reprova: não há
+    // classe de sobra para `while` desde a rodada 2 do Goal052.
+    const unrecognizedWhile = [
+      "function scan(state) {",
+      "  while (state.ready && state.pending) {",
+      "    continue;",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const unrecognizedWhileFindings = findContinueEnumerationFindings(
+      enumerateContinueOccurrences(unrecognizedWhile, "sintetico.ts"),
+    );
+    expect(unrecognizedWhileFindings.byLoopForm).toEqual({});
+    expect(unrecognizedWhileFindings.unresolved).toEqual([
+      'sintetico.ts:3: cabeçalho de `while` fora das formas reconhecidas (exec-match, drenagem de fila, cursor posicional): "state.ready && state.pending" — "continue;"',
+    ]);
+
+    // E `continue;` sem laço contenedor algum também reprova, nomeado.
+    const withoutLoop = ["function scan() {", "  continue;", "}", ""].join("\n");
+    const withoutLoopFindings = findContinueEnumerationFindings(
+      enumerateContinueOccurrences(withoutLoop, "sintetico.ts"),
+    );
+    expect(withoutLoopFindings.unresolved).toEqual([
+      'sintetico.ts:2: nenhum laço contenedor encontrado para este `continue;` — "continue;"',
+    ]);
+  });
+
+  it("classe fora do vocabulário declarado REPROVA, nomeando arquivo:linha — o vocabulário é fechado de verdade, não uma lista decorativa", () => {
+    const [firstReal] = realOccurrences;
+    expect(firstReal).toBeDefined();
+    // Antes: a ocorrência real, com a classe que a classificação computou, passa.
+    expect(findContinueEnumerationFindings([firstReal]).outsideVocabulary).toEqual([]);
+    // Depois: a MESMA ocorrência com uma classe inventada reprova na mesma conta.
+    const corrupted: ContinueOccurrence = {
+      ...firstReal,
+      loopForm: "loop-inventado" as ContinueLoopForm,
+    };
+    const corruptedFindings = findContinueEnumerationFindings([corrupted]);
+    expect(corruptedFindings.outsideVocabulary).toHaveLength(1);
+    expect(corruptedFindings.outsideVocabulary[0]).toContain(
+      `http-egress-sites.ts:${firstReal.line}: classe "loop-inventado" fora de CONTINUE_LOOP_FORMS`,
+    );
+    expect(corruptedFindings.byLoopForm).toEqual({});
+  });
+
+  it("a partição do `while` é critério computado, não isenção em bloco: na árvore real as 6 ocorrências de `while` sem `.exec(` se separam em 5 de leitura posicional (`:1458`, `:1484`, `:2989`, `:2996`, `:2999`) e 1 de drenagem de fila (`:1028`), e só esta última exige registro", () => {
+    const byLine = new Map(realOccurrences.map((occurrence) => [occurrence.line, occurrence]));
+
+    const positionalLines = [1458, 1484, 2989, 2996, 2999];
+    for (const line of positionalLines) {
+      expect(byLine.get(line)?.loopForm).toBe("while-positional-read");
+    }
+    expect(byLine.get(1028)?.loopForm).toBe("while-queue-drain");
+    expect(byLine.get(1028)?.loopHeader).toBe("pendingPrimitives.length > 0");
+
+    // As duas classes juntas reconstroem exatamente o conjunto de `while`
+    // sem `.exec(` da árvore — nenhuma ocorrência sobra fora delas.
+    const whileWithoutExec = realOccurrences.filter(
+      (occurrence) =>
+        occurrence.loopKeyword === "while" && occurrence.loopForm !== "while-exec-match",
+    );
+    expect(whileWithoutExec.map((occurrence) => occurrence.line).sort((a, b) => a - b)).toEqual(
+      [...positionalLines, 1028].sort((a, b) => a - b),
+    );
+  });
+
+  it("a classificação não depende de recuo por indentação: as cinco ocorrências em que a sondagem do Goal052 falhou (:1761, :1765, :1769, :1773, :1796) estão classificadas, cada uma com a forma do laço que de fato a contém", () => {
+    const probeFailures = [1761, 1765, 1769, 1773, 1796];
+    const byLine = new Map(realOccurrences.map((occurrence) => [occurrence.line, occurrence]));
+    for (const line of probeFailures) {
+      const occurrence = byLine.get(line);
+      expect(occurrence).toBeDefined();
+      expect(occurrence?.context).toBe("code");
+      expect(occurrence?.loopForm).toBeDefined();
+      expect(CONTINUE_LOOP_FORMS).toContain(occurrence?.loopForm);
+      expect(occurrence?.unresolvedReason).toBeUndefined();
+    }
+  });
+});
+
+/* =========================================================================
+ * Goal052 / WU-02 (§3 e §4) — o registro unificado de descarte: chave que
+ * sobrevive à forma nua.
+ *
+ * O Goal050 registrava só a forma idiomática de guarda de linha única. O
+ * Goal052/WU-01 (acima) passou a enumerar e classificar TODA ocorrência de
+ * `continue;`, mas sem ligar essa enumeração ao registro. Aqui as duas se
+ * juntam: `DOCUMENTED_SILENT_DISCARDS` passa a cobrir toda ocorrência da
+ * classe **iteração sobre candidatos** (`CONTINUE_CANDIDATE_LOOP_FORMS`,
+ * abaixo — subconjunto de `CONTINUE_LOOP_FORMS`), computada pela mesma
+ * `enumerateContinueOccurrences`, nunca uma segunda varredura à parte. A
+ * classe **leitura posicional** continua fora do registro de propósito: a
+ * isenção dela já é o critério computado do §2, não algo que precise de
+ * entrada nomeada (`SilentDiscardOccurrence.requiresRegistration`, acima).
+ *
+ * A chave continua `<função>::<trecho normalizado>` (Goal050), sem número
+ * de linha (proibido desde o Goal050). `continue;` nu normaliza sempre para
+ * a mesma string, e a sondagem desta Work Unit achou a colisão de fato na
+ * árvore real — várias ocorrências nuas dentro do MESMO laço da mesma
+ * função (`resolveModuleExportBindings`, 7; `discoverGoBoundRawFetchRequests`,
+ * 6; `resolveDestination`, 5; entre outras), onde nenhum discriminador
+ * estrutural (cabeçalho de laço, guarda) as distingue — só a posição as
+ * distinguiria, e posição é exatamente o que está proibido. O Goal052
+ * entrega a segunda opção que o próprio Goal autoriza:
+ * `SilentDiscardEntry.multiplicity` declara quantas ocorrências legítimas
+ * compartilham a chave, e `findSilentDiscardFindings` (acima) reprova por
+ * ambiguidade quando a contagem real diverge da declarada, nos dois
+ * sentidos, sem ler linha alguma.
+ * ========================================================================= */
+
+/**
+ * Vocabulário da classe **iteração sobre candidatos** (Goal052 §2/§3):
+ * subconjunto de `CONTINUE_LOOP_FORMS` em que cada volta do laço é um
+ * candidato, e o `continue` o descarta — `for-of`, `while-exec-match` e
+ * `while-queue-drain`.
+ *
+ * `while-queue-drain` está aqui por critério computado, não por prosa: o
+ * cabeçalho testa a não-vaziez da própria coleção e cada volta consome um
+ * elemento dela, que é a mesma relação entre volta e candidato do `for…of`.
+ * Na árvore real a classe tem uma ocorrência —
+ * `discoverHttpEgressSites::if (scannedPrimitiveDeclarations.has(declarationKey)) continue;`
+ * — e ela EXIGE registro como qualquer outra da classe. Até a rodada 1 do
+ * Goal052 ela ficava isenta por cair num único `while-condition` sem
+ * critério, que era o fail-open que esta rodada fecha.
+ *
+ * `for-indexed` e `while-positional-read` (as duas formas de leitura
+ * posicional) ficam de fora de propósito: a isenção delas é o próprio
+ * critério computado do §2 — cursor escalar contra limite —, sem registro
+ * por ocorrência e sem prosa isentando.
+ *
+ * `for-in` e `do-while` também ficam de fora — ausentes da árvore real
+ * (provado pelo Goal052/WU-01 acima), e o Goal declara alcance mínimo sobre
+ * o que a árvore de fato contém, ampliável se a execução exigir.
+ */
+const CONTINUE_CANDIDATE_LOOP_FORMS: ReadonlySet<ContinueLoopForm> = new Set([
+  "for-of",
+  "while-exec-match",
+  "while-queue-drain",
+]);
+
+/**
+ * Toda ocorrência de `continue;` em contexto de código de `source`,
+ * convertida para o vocabulário do registro de descarte: âncora pela função
+ * de nível superior, chave estável (`silentDiscardKey`, sem número de
+ * linha), e `requiresRegistration` computado pela classe do laço contenedor
+ * — `true` só para a classe iteração sobre candidatos. Reusa
+ * `enumerateContinueOccurrences` (Goal052/WU-01); não reimplementa a
+ * varredura de `continue;` à parte. É a fonte que o teste permanente
+ * abaixo e os controles negativos do §8 chamam.
+ */
+function enumerateSilentDiscardOccurrences(
+  source: string,
+  filePath: string,
+): SilentDiscardOccurrence[] {
+  return enumerateContinueOccurrences(source, filePath)
+    .filter((occurrence) => occurrence.context === "code")
+    .map((occurrence) => {
+      const anchor = resolveEnclosingTopLevelFunctionName(source, occurrence.line);
+      return {
+        line: occurrence.line,
+        snippet: occurrence.text,
+        anchor,
+        key: silentDiscardKey(anchor, occurrence.text),
+        requiresRegistration:
+          occurrence.loopForm !== undefined &&
+          CONTINUE_CANDIDATE_LOOP_FORMS.has(occurrence.loopForm),
+      };
+    });
+}
+
+describe("Goal052 / WU-02 (§3 e §4) — o registro unificado de descarte cobre toda a classe portadora de candidato, e a chave sobrevive à forma nua por multiplicidade declarada", () => {
+  const supportModulePath = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../support/http-egress-sites.ts",
+  );
+  const moduleSource = readFileSync(supportModulePath, "utf8");
+  const realOccurrences = enumerateSilentDiscardOccurrences(moduleSource, "http-egress-sites.ts");
+
+  it("a exigência de registro segue a CLASSE do laço, não a forma da guarda: na árvore real as 5 ocorrências `while-positional-read` não exigem registro e a única `while-queue-drain` (`:1028`) exige, e está registrada com motivo escrito", () => {
+    const byLine = new Map(realOccurrences.map((occurrence) => [occurrence.line, occurrence]));
+
+    for (const line of [1458, 1484, 2989, 2996, 2999]) {
+      expect(byLine.get(line)?.requiresRegistration).toBe(false);
+    }
+
+    const queueDrain = byLine.get(1028);
+    expect(queueDrain?.requiresRegistration).toBe(true);
+    expect(queueDrain?.key).toBe(
+      silentDiscardKey(
+        "discoverHttpEgressSites",
+        "if (scannedPrimitiveDeclarations.has(declarationKey)) continue;",
+      ),
+    );
+    const entry = DOCUMENTED_SILENT_DISCARDS.get(queueDrain?.key ?? "");
+    expect(entry).toBeDefined();
+    expect((entry?.reason ?? "").trim().length).toBeGreaterThan(0);
+
+    // A mesma conta do teste permanente reprova se a entrada sair: a
+    // ocorrência de fila passa a ser descarte não registrado, nomeada por
+    // `arquivo:linha`.
+    const withoutQueueDrainEntry = new Map(DOCUMENTED_SILENT_DISCARDS);
+    withoutQueueDrainEntry.delete(queueDrain?.key ?? "");
+    const findings = findSilentDiscardFindings(realOccurrences, withoutQueueDrainEntry);
+    expect(findings.unregistered).toHaveLength(1);
+    expect(findings.unregistered[0]).toContain("1028");
+  });
+
+  it("as 5 entradas da baseline (Goal050) continuam no registro, sem duplicação e sem segunda conta — as 3 da classe candidato batem 1 para 1, e as 2 de readEnvSchemaDefault (classe leitura posicional) seguem registradas mas não exigidas, sem virarem obsoletas", () => {
+    const candidateBaselineKeys = [
+      silentDiscardKey("resolveViaCallers", "if (!argExpression) continue;"),
+      silentDiscardKey("findCrossFileCallerBindings", "if (localAlias === undefined) continue;"),
+      silentDiscardKey(
+        "discoverCallerResolvedGoBoundRequests",
+        "if (baseParam === undefined || goEnvVar === undefined) continue;",
+      ),
+    ];
+    for (const key of candidateBaselineKeys) {
+      expect(DOCUMENTED_SILENT_DISCARDS.has(key)).toBe(true);
+      const matches = realOccurrences.filter((occurrence) => occurrence.key === key);
+      expect(matches).toHaveLength(1);
+      expect(matches[0]?.requiresRegistration).toBe(true);
+    }
+
+    const positionalBaselineKeys = [
+      silentDiscardKey("readEnvSchemaDefault", "if (match === null) continue;"),
+      silentDiscardKey("readEnvSchemaDefault", "if (captured === undefined) continue;"),
+    ];
+    for (const key of positionalBaselineKeys) {
+      expect(DOCUMENTED_SILENT_DISCARDS.has(key)).toBe(true);
+      const matches = realOccurrences.filter((occurrence) => occurrence.key === key);
+      expect(matches).toHaveLength(1);
+      // Leitura posicional: a ocorrência existe e a entrada não vira
+      // obsoleta por causa dela, mas ela não EXIGE o registro.
+      expect(matches[0]?.requiresRegistration).toBe(false);
+    }
+
+    // Uma coleção só: nenhuma âncora da baseline aparece registrada duas
+    // vezes (isso já lançaria em buildSilentDiscardRegistry, mas a suíte
+    // também confere o efeito: o Map tem uma entrada por chave).
+    const allBaselineKeys = [...candidateBaselineKeys, ...positionalBaselineKeys];
+    expect(new Set(allBaselineKeys).size).toBe(allBaselineKeys.length);
+  });
+
+  it("buildSilentDiscardRegistry continua lançando em chave duplicada dentro do próprio registro", () => {
+    expect(() =>
+      buildSilentDiscardRegistry([
+        { anchor: "duplicataControle", snippet: "if (!x) continue;", reason: "primeira entrada" },
+        { anchor: "duplicataControle", snippet: "if (!x) continue;", reason: "segunda entrada" },
+      ]),
+    ).toThrow(/chave duplicada/u);
+  });
+
+  it("a colisão de chave da forma nua, real na árvore, é resolvida por multiplicidade declarada — a contagem real bate com a declarada nas 4 âncoras que a sondagem achou colidindo (7, 6, 5 e 2 ocorrências), sem usar número de linha em lugar algum", () => {
+    const collidingRealAnchors: { anchor: string; snippet: string; expectedCount: number }[] = [
+      { anchor: "resolveModuleExportBindings", snippet: "continue;", expectedCount: 7 },
+      { anchor: "discoverGoBoundRawFetchRequests", snippet: "continue;", expectedCount: 6 },
+      { anchor: "resolveDestination", snippet: "continue;", expectedCount: 5 },
+      { anchor: "discoverGoBoundInternalClientRequests", snippet: "continue;", expectedCount: 2 },
+    ];
+    for (const { anchor, snippet, expectedCount } of collidingRealAnchors) {
+      const key = silentDiscardKey(anchor, snippet);
+      const entry = DOCUMENTED_SILENT_DISCARDS.get(key);
+      expect(entry).toBeDefined();
+      expect(entry?.multiplicity).toBe(expectedCount);
+      const matches = realOccurrences.filter((occurrence) => occurrence.key === key);
+      expect(matches).toHaveLength(expectedCount);
+    }
+
+    // `discoverGoBoundInternalClientRequests::continue;` é o caso em que as
+    // 2 ocorrências nuas estão em LAÇOS DIFERENTES da mesma função — prova
+    // de que discriminar a chave por cabeçalho de laço não teria separado
+    // as outras 3 âncoras acima (cujas repetições estão dentro do MESMO
+    // laço), então a multiplicidade é a forma que resolve todas de modo
+    // uniforme, não só as que um discriminador estrutural alcançaria.
+    const differentLoopKey = silentDiscardKey(
+      "discoverGoBoundInternalClientRequests",
+      "continue;",
+    );
+    const differentLoopOccurrences = realOccurrences.filter(
+      (occurrence) => occurrence.key === differentLoopKey,
+    );
+    const loopHeadersInvolved = new Set(
+      enumerateContinueOccurrences(moduleSource, "http-egress-sites.ts")
+        .filter((occurrence) => differentLoopOccurrences.some((o) => o.line === occurrence.line))
+        .map((occurrence) => occurrence.loopHeader),
+    );
+    expect(loopHeadersInvolved.size).toBe(2);
+  });
+
+  it("chave cuja contagem real diverge da multiplicidade declarada reprova nos dois sentidos, sem usar número de linha — ocorrência a menos e ocorrência a mais no mesmo grupo real de resolveDestination (multiplicidade 5)", () => {
+    const key = silentDiscardKey("resolveDestination", "continue;");
+    const soloRegistry = buildSilentDiscardRegistry([
+      {
+        anchor: "resolveDestination",
+        snippet: "continue;",
+        reason: "controle: mesma entrada do registro real, isolada para o teste de multiplicidade",
+        multiplicity: 5,
+      },
+    ]);
+    const group = realOccurrences.filter((occurrence) => occurrence.key === key);
+    expect(group).toHaveLength(5);
+
+    // Antes: a árvore real bate com a multiplicidade declarada.
+    expect(findSilentDiscardFindings(group, soloRegistry).ambiguousKeys).toEqual([]);
+
+    // Depois A: uma ocorrência a menos — a contagem diverge, e a mesma conta
+    // reprova, nomeando a chave e as duas contagens, sem olhar linha.
+    const missingOne = group.slice(0, 4);
+    const afterMissing = findSilentDiscardFindings(missingOne, soloRegistry);
+    expect(afterMissing.ambiguousKeys).toHaveLength(1);
+    expect(afterMissing.ambiguousKeys[0]).toContain(key);
+    expect(afterMissing.ambiguousKeys[0]).toContain("4 ocorrência");
+    expect(afterMissing.ambiguousKeys[0]).toContain("multiplicidade declarada é 5");
+
+    // Depois B: uma ocorrência a mais (a primeira duplicada) — diverge no
+    // sentido oposto, e a mesma conta reprova também.
+    const extraOne = [...group, group[0]];
+    const afterExtra = findSilentDiscardFindings(extraOne, soloRegistry);
+    expect(afterExtra.ambiguousKeys).toHaveLength(1);
+    expect(afterExtra.ambiguousKeys[0]).toContain("6 ocorrência");
+  });
+});
+
 describe("Goal047 / WU-04 (§3) — as duas saídas de sourcesByPath ausente, no ramo da superfície e no ramo da instanciação, são a mesma: nenhuma pula em silêncio", () => {
   const supportModulePath = join(
     dirname(fileURLToPath(import.meta.url)),
@@ -6617,28 +8082,34 @@ describe("Goal047 / WU-04 (§3) — as duas saídas de sourcesByPath ausente, no
     );
   });
 
-  it("Goal050 / WU-04 — todo descarte silencioso de candidato (condição sobre valor ausente seguida de `continue;`) está no registro nomeado por trecho normalizado mais função que o envolve, com arquivo:linha e motivo de ser inócuo — ocorrência não registrada reprova nomeando arquivo:linha e o trecho, entrada registrada que a varredura não encontra mais reprova como obsoleta, e chave ambígua (duas ocorrências que a âncora não distingue) reprova em vez de uma engolir a outra", () => {
-    const found: SilentDiscardOccurrence[] = findSilentDiscardLines(moduleSource).map((occurrence) => {
-      const anchor = resolveEnclosingTopLevelFunctionName(moduleSource, occurrence.line);
-      return { ...occurrence, anchor, key: silentDiscardKey(anchor, occurrence.snippet) };
-    });
+  it("Goal050 / WU-04, ampliado pelo Goal052 / WU-02 — todo descarte silencioso de candidato da classe iteração sobre candidatos (não mais só a forma idiomática de guarda) está no registro nomeado por trecho normalizado mais função que o envolve, com arquivo:linha e motivo não vazio — ocorrência não registrada reprova nomeando arquivo:linha e o trecho, entrada registrada que a varredura não encontra mais reprova como obsoleta, e chave cuja contagem real diverge da multiplicidade declarada reprova em vez de uma engolir a outra", () => {
+    // Fonte única: `enumerateContinueOccurrences` (Goal052/WU-01), a mesma
+    // que o teste permanente do §1/§2 acima chama — nunca uma segunda
+    // varredura à parte de `continue;`.
+    const found = enumerateSilentDiscardOccurrences(moduleSource, "http-egress-sites.ts");
 
-    // A mesma conta que os controles negativos do §8 (`:7444` abaixo) chamam
-    // sobre ocorrências e registro corrompidos — nunca uma segunda
-    // implementação à parte.
+    // A mesma conta que os controles negativos do §8 (controle 5 e controle
+    // 8, abaixo) chamam sobre ocorrências e registro corrompidos — nunca uma
+    // segunda implementação à parte.
     const findings = findSilentDiscardFindings(found, DOCUMENTED_SILENT_DISCARDS);
 
-    // Chave ambígua (duas ocorrências que a âncora não distingue) reprova em
-    // vez de uma engolir a outra.
+    // Chave cuja contagem real diverge da multiplicidade declarada reprova
+    // em vez de uma engolir a outra.
     expect(findings.ambiguousKeys).toEqual([]);
-    // Ocorrência não registrada reprova nomeando arquivo:linha e o trecho.
+    // Ocorrência da classe portadora de candidato não registrada reprova
+    // nomeando arquivo:linha e o trecho.
     expect(findings.unregistered).toEqual([]);
     // Entrada registrada que a varredura não encontra mais reprova como obsoleta.
     expect(findings.obsolete).toEqual([]);
     // Entrada de DOCUMENTED_SILENT_DISCARDS com motivo vazio reprova.
     expect(findings.emptyReason).toEqual([]);
 
-    expect(found.length).toBe(DOCUMENTED_SILENT_DISCARDS.size);
+    // Não vácuo: a classe portadora de candidato de fato exige registro na
+    // árvore real — a leitura posicional não isenta tudo por engano.
+    const requiringRegistration = found.filter(
+      (occurrence) => occurrence.requiresRegistration ?? true,
+    );
+    expect(requiringRegistration.length).toBeGreaterThan(0);
   });
 });
 
@@ -8054,11 +9525,16 @@ describe("Goal050 / WU-05 (§8) — controles negativos: as oito amarras mordem,
   });
 
   it("controle 5 (§8.5) — deslocamento de linha não reprova em massa: inserir linhas acima dos descartes registrados desloca a numeração, mas a chave por trecho normalizado mais âncora continua batendo", () => {
-    const before = findSilentDiscardLines(moduleSource).map((occurrence) => ({
-      ...occurrence,
-      anchor: resolveEnclosingTopLevelFunctionName(moduleSource, occurrence.line),
-    }));
-    expect(before.length).toBe(DOCUMENTED_SILENT_DISCARDS.size);
+    // As 5 ocorrências da forma idiomática de guarda que `findSilentDiscardLines`
+    // reconhece (Goal050) — o Goal052/WU-02 ampliou `DOCUMENTED_SILENT_DISCARDS`
+    // para além delas (§3/§4 acima), então o tamanho do registro não é mais
+    // proxy do tamanho desta lista; a contagem de referência é `before.length`
+    // em si, computada, não `DOCUMENTED_SILENT_DISCARDS.size`.
+    const before = findSilentDiscardLines(moduleSource).map((occurrence) => {
+      const anchor = resolveEnclosingTopLevelFunctionName(moduleSource, occurrence.line);
+      return { ...occurrence, anchor, key: silentDiscardKey(anchor, occurrence.snippet) };
+    });
+    expect(before.length).toBeGreaterThan(0);
     const lineKeyedRegistry = new Set(before.map((occurrence) => occurrence.line));
 
     // Desloca toda a numeração do módulo inserindo 200 linhas em branco no
@@ -8072,23 +9548,24 @@ describe("Goal050 / WU-05 (§8) — controles negativos: as oito amarras mordem,
     expect(after.length).toBe(before.length);
 
     // Saída 1 — chave por número de linha, a forma de antes do Goal050: as
-    // mesmas 5 entradas viram obsoletas, e as 5 ocorrências deslocadas viram
+    // mesmas N entradas viram obsoletas, e as N ocorrências deslocadas viram
     // não registradas, todas de uma vez.
     const shiftedLineKeys = new Set(after.map((occurrence) => occurrence.line));
     const obsoleteByLineKey = [...lineKeyedRegistry].filter((line) => !shiftedLineKeys.has(line));
     const unregisteredByLineKey = after.filter((occurrence) => !lineKeyedRegistry.has(occurrence.line));
-    expect(obsoleteByLineKey.length).toBe(DOCUMENTED_SILENT_DISCARDS.size);
-    expect(unregisteredByLineKey.length).toBe(DOCUMENTED_SILENT_DISCARDS.size);
+    expect(obsoleteByLineKey.length).toBe(before.length);
+    expect(unregisteredByLineKey.length).toBe(before.length);
 
     // Saída 2 — chave por trecho normalizado mais âncora, a forma de hoje:
     // trecho e função não mudam com o deslocamento, então o registro
-    // continua verde nos dois sentidos.
+    // continua verde nos dois sentidos, para as chaves que este controle de
+    // fato exercita (as da forma idiomática de guarda).
     for (const occurrence of after) {
       expect(DOCUMENTED_SILENT_DISCARDS.has(occurrence.key)).toBe(true);
     }
     const afterKeys = new Set(after.map((occurrence) => occurrence.key));
-    for (const key of DOCUMENTED_SILENT_DISCARDS.keys()) {
-      expect(afterKeys.has(key)).toBe(true);
+    for (const occurrence of before) {
+      expect(afterKeys.has(occurrence.key)).toBe(true);
     }
   });
 
@@ -8603,13 +10080,14 @@ describe("Goal051 / WU-04 (§8) — controles negativos: as oito amarras da part
 
   it("controle 8 (§8.8) — a enumeração de descarte e a cobertura de categoria do Goal049/050 continuam mordendo: descarte não registrado reprova com a linha e o trecho, e categoria sem controle é acusada como órfã", () => {
     // Parte A — a enumeração de descarte mudo, fail-closed nos três sentidos.
-    const realOccurrences: SilentDiscardOccurrence[] = findSilentDiscardLines(moduleSource).map(
-      (occurrence) => {
-        const anchor = resolveEnclosingTopLevelFunctionName(moduleSource, occurrence.line);
-        return { ...occurrence, anchor, key: silentDiscardKey(anchor, occurrence.snippet) };
-      },
-    );
-    expect(DOCUMENTED_SILENT_DISCARDS.size).toBe(5);
+    // Fonte ampliada pelo Goal052/WU-02 (`enumerateSilentDiscardOccurrences`,
+    // acima): toda ocorrência de `continue;` em código, não mais só a forma
+    // idiomática de guarda que `findSilentDiscardLines` reconhecia.
+    const realOccurrences = enumerateSilentDiscardOccurrences(moduleSource, "http-egress-sites.ts");
+    // O tamanho exato do registro é provado pelo teste permanente do
+    // Goal052/WU-02 acima; aqui só a não-vacuidade importa, para não
+    // duplicar o número escrito à mão em dois lugares.
+    expect(DOCUMENTED_SILENT_DISCARDS.size).toBeGreaterThan(0);
 
     // Saída 1 — leitura real do módulo: nada não registrado, nada obsoleto,
     // nada com motivo vazio, nenhuma chave ambígua.
@@ -8620,22 +10098,19 @@ describe("Goal051 / WU-04 (§8) — controles negativos: as oito amarras da part
     expect(beforeDiscard.ambiguousKeys).toEqual([]);
 
     // Saída 2 — descarte guardado por valor ausente em ponto não registrado,
-    // inserido numa CÓPIA do fonte: a mesma conta reprova, com a linha e o
-    // trecho na mensagem.
+    // inserido numa CÓPIA do fonte, dentro de um `for…of` (classe iteração
+    // sobre candidatos, para que a classificação o exija registrado): a
+    // mesma conta reprova, com a linha e o trecho na mensagem.
     const injectedSnippet = "if (valorAusenteNaoRegistrado === undefined) continue;";
-    const mutatedSource = `function descarteNaoRegistradoDoControle8() {\n  ${injectedSnippet}\n}\n\n${moduleSource}`;
-    const mutatedOccurrences: SilentDiscardOccurrence[] = findSilentDiscardLines(mutatedSource).map(
-      (occurrence) => {
-        const anchor = resolveEnclosingTopLevelFunctionName(mutatedSource, occurrence.line);
-        return { ...occurrence, anchor, key: silentDiscardKey(anchor, occurrence.snippet) };
-      },
-    );
+    const mutatedSource = `function descarteNaoRegistradoDoControle8(candidatos) {\n  for (const candidato of candidatos) {\n    ${injectedSnippet}\n  }\n}\n\n${moduleSource}`;
+    const mutatedOccurrences = enumerateSilentDiscardOccurrences(mutatedSource, "http-egress-sites.ts");
     const injected = mutatedOccurrences.find((occurrence) => occurrence.snippet === injectedSnippet);
     expect(injected).toBeDefined();
     expect(injected!.anchor).toBe("descarteNaoRegistradoDoControle8");
+    expect(injected!.requiresRegistration).toBe(true);
     const afterDiscard = findSilentDiscardFindings(mutatedOccurrences, DOCUMENTED_SILENT_DISCARDS);
     expect(afterDiscard.unregistered).toEqual([`${injected!.line}: "${injectedSnippet}"`]);
-    // Deslocamento não é achado: as 5 entradas reais continuam registradas,
+    // Deslocamento não é achado: as entradas reais continuam registradas,
     // porque a chave é trecho normalizado mais função envolvente.
     expect(afterDiscard.obsolete).toEqual([]);
 
@@ -8714,5 +10189,365 @@ describe("Goal048 / WU-01 — a cobertura de recusa é computada em runtime a pa
       observedRefusalCategories,
     );
     expect(uncoveredCategories).toEqual([]);
+  });
+});
+
+describe("Goal052 / WU-04 (§9) — controles negativos: as oito amarras do descarte enumerado por inteiro mordem, cada uma chamando a mesma conta que o teste permanente chama, com as duas saídas no relatório", () => {
+  const supportModulePath = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../support/http-egress-sites.ts",
+  );
+  const moduleSource = readFileSync(supportModulePath, "utf8");
+
+  it("controle 1 (§9.1) — descarte novo em laço de candidatos, guardado por condição fora da regex antiga, reprova nomeando arquivo:linha; a classe iteração sobre candidatos é a que exige o registro", () => {
+    const injectedSnippet = "if (candidato.length === 0) continue;";
+    // A regex antiga (findSilentDiscardLines, Goal050) só reconhece
+    // `=== undefined`, `=== null` ou `!identificador` — `.length === 0` está
+    // genuinamente fora dela: a forma antiga nunca veria este descarte.
+    expect(findSilentDiscardLines(injectedSnippet)).toEqual([]);
+
+    // Antes: a árvore real, sem a injeção, passa verde pela mesma conta que
+    // o teste permanente do Goal052/WU-02 chama.
+    const before = findSilentDiscardFindings(
+      enumerateSilentDiscardOccurrences(moduleSource, "http-egress-sites.ts"),
+      DOCUMENTED_SILENT_DISCARDS,
+    );
+    expect(before.unregistered).toEqual([]);
+
+    // Depois: a mesma injeção, dentro de um `for…of` (classe iteração sobre
+    // candidatos), numa CÓPIA do fonte — a mesma conta reprova, nomeando
+    // arquivo:linha e o trecho; a classe computada (requiresRegistration)
+    // é o que a exige registrada.
+    const mutatedSource = `function descarteControle1(candidatos) {\n  for (const candidato of candidatos) {\n    ${injectedSnippet}\n  }\n}\n\n${moduleSource}`;
+    const mutatedOccurrences = enumerateSilentDiscardOccurrences(
+      mutatedSource,
+      "http-egress-sites.ts",
+    );
+    const injected = mutatedOccurrences.find(
+      (occurrence) => occurrence.snippet === injectedSnippet,
+    );
+    expect(injected).toBeDefined();
+    expect(injected!.anchor).toBe("descarteControle1");
+    // A classe: iteração sobre candidatos (for-of), a única que exige registro.
+    expect(injected!.requiresRegistration).toBe(true);
+    const after = findSilentDiscardFindings(mutatedOccurrences, DOCUMENTED_SILENT_DISCARDS);
+    expect(after.unregistered).toEqual([`${injected!.line}: "${injectedSnippet}"`]);
+  });
+
+  it("controle 2 (§9.2) — `continue;` nu em laço de candidatos não registrado reprova — a forma que a regex antiga nunca via", () => {
+    const injectedSnippet = "continue;";
+
+    // Antes: a árvore real passa verde pela mesma conta.
+    const before = findSilentDiscardFindings(
+      enumerateSilentDiscardOccurrences(moduleSource, "http-egress-sites.ts"),
+      DOCUMENTED_SILENT_DISCARDS,
+    );
+    expect(before.unregistered).toEqual([]);
+
+    // Depois: `continue;` nu (sem guarda alguma) dentro de um `for…of`
+    // novo, não registrado — a mesma conta reprova.
+    const mutatedSource = `function descarteControle2(candidatos) {\n  for (const candidato of candidatos) {\n    if (candidato) {\n      ${injectedSnippet}\n    }\n  }\n}\n\n${moduleSource}`;
+    const mutatedOccurrences = enumerateSilentDiscardOccurrences(
+      mutatedSource,
+      "http-egress-sites.ts",
+    );
+    const injected = mutatedOccurrences.find(
+      (occurrence) => occurrence.anchor === "descarteControle2" && occurrence.snippet === injectedSnippet,
+    );
+    expect(injected).toBeDefined();
+    expect(injected!.requiresRegistration).toBe(true);
+    const after = findSilentDiscardFindings(mutatedOccurrences, DOCUMENTED_SILENT_DISCARDS);
+    expect(after.unregistered).toEqual([`${injected!.line}: "${injectedSnippet}"`]);
+  });
+
+  it("controle 3 (§9.3) — laço de forma não reconhecida reprova, nomeando arquivo:linha e dizendo que a classe não resolveu, em vez de isentar", () => {
+    // Antes: a árvore real inteira resolve toda ocorrência, resíduo zero —
+    // a mesma conta que o teste permanente do Goal052/WU-01 chama.
+    const before = findContinueEnumerationFindings(
+      enumerateContinueOccurrences(moduleSource, "http-egress-sites.ts"),
+    );
+    expect(before.unresolved).toEqual([]);
+
+    // Depois: `for (candidatos) continue;` — cabeçalho fora das três formas
+    // reconhecidas (for-of, for-in, for indexado) — reprova nomeando
+    // arquivo:linha e o motivo, em vez de cair num "else" mudo que isenta.
+    const unrecognizedSource = [
+      "function scanControle3(candidatos) {",
+      "  for (candidatos) {",
+      "    continue;",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const after = findContinueEnumerationFindings(
+      enumerateContinueOccurrences(unrecognizedSource, "sintetico-controle3.ts"),
+    );
+    expect(after.unresolved).toEqual([
+      'sintetico-controle3.ts:3: cabeçalho de `for` fora das formas reconhecidas (for-of, for-in, for indexado): "candidatos" — "continue;"',
+    ]);
+    expect(after.byLoopForm).toEqual({});
+
+    // E o mesmo vale para `while`: desde a rodada 2 deste Goal não há classe
+    // de sobra para `while`, então cabeçalho que não é exec-match, nem
+    // drenagem de fila, nem cursor posicional REPROVA em vez de virar uma
+    // classe genérica isenta — que era exatamente o fail-open da rodada 1.
+    const unrecognizedWhileSource = [
+      "function scanControle3While(state) {",
+      "  while (state.ready && state.pending) {",
+      "    continue;",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const afterWhile = findContinueEnumerationFindings(
+      enumerateContinueOccurrences(unrecognizedWhileSource, "sintetico-controle3.ts"),
+    );
+    expect(afterWhile.unresolved).toEqual([
+      'sintetico-controle3.ts:3: cabeçalho de `while` fora das formas reconhecidas (exec-match, drenagem de fila, cursor posicional): "state.ready && state.pending" — "continue;"',
+    ]);
+    expect(afterWhile.byLoopForm).toEqual({});
+  });
+
+  it("controle 4 (§9.4) — entrada registrada que perde a ocorrência reprova como obsoleta", () => {
+    const realOccurrences = enumerateSilentDiscardOccurrences(moduleSource, "http-egress-sites.ts");
+
+    // Antes: toda entrada do registro tem ocorrência correspondente.
+    const before = findSilentDiscardFindings(realOccurrences, DOCUMENTED_SILENT_DISCARDS);
+    expect(before.obsolete).toEqual([]);
+
+    // Depois: numa CÓPIA das ocorrências, sem a única que sustenta a chave
+    // de `resolveViaCallers` — a mesma conta reprova a entrada como obsoleta.
+    const targetKey = silentDiscardKey("resolveViaCallers", "if (!argExpression) continue;");
+    const target = realOccurrences.find((occurrence) => occurrence.key === targetKey);
+    expect(target).toBeDefined();
+    const withoutTarget = realOccurrences.filter((occurrence) => occurrence !== target);
+    const after = findSilentDiscardFindings(withoutTarget, DOCUMENTED_SILENT_DISCARDS);
+    expect(after.obsolete).toEqual([targetKey]);
+  });
+
+  it("controle 5 (§9.5) — motivo vazio reprova, e o registro continua lançando em chave duplicada dentro de si", () => {
+    const realOccurrences = enumerateSilentDiscardOccurrences(moduleSource, "http-egress-sites.ts");
+
+    // Antes: nenhuma entrada do registro tem motivo vazio.
+    const before = findSilentDiscardFindings(realOccurrences, DOCUMENTED_SILENT_DISCARDS);
+    expect(before.emptyReason).toEqual([]);
+
+    // Depois: numa CÓPIA do registro, com o motivo de uma entrada real
+    // esvaziado — a mesma conta reprova, nomeando a chave.
+    const targetKey = silentDiscardKey("resolveViaCallers", "if (!argExpression) continue;");
+    const entry = DOCUMENTED_SILENT_DISCARDS.get(targetKey);
+    expect(entry).toBeDefined();
+    const corruptedRegistry = new Map(DOCUMENTED_SILENT_DISCARDS);
+    corruptedRegistry.set(targetKey, { ...entry!, reason: "" });
+    const after = findSilentDiscardFindings(realOccurrences, corruptedRegistry);
+    expect(after.emptyReason).toEqual([targetKey]);
+
+    // E o registro continua lançando em chave duplicada dentro de si.
+    expect(() =>
+      buildSilentDiscardRegistry([
+        { anchor: "controle5", snippet: "continue;", reason: "primeira entrada" },
+        { anchor: "controle5", snippet: "continue;", reason: "segunda entrada" },
+      ]),
+    ).toThrow(/chave duplicada/u);
+  });
+
+  it("controle 6 (§9.6) — deslocamento de linha continua não reprovando em massa, na forma nova: inserir linhas acima dos descartes desloca a numeração, mas a chave sobrevive", () => {
+    const before = enumerateSilentDiscardOccurrences(moduleSource, "http-egress-sites.ts");
+    expect(before.length).toBeGreaterThan(0);
+    const beforeFindings = findSilentDiscardFindings(before, DOCUMENTED_SILENT_DISCARDS);
+    expect(beforeFindings.unregistered).toEqual([]);
+    expect(beforeFindings.obsolete).toEqual([]);
+    expect(beforeFindings.ambiguousKeys).toEqual([]);
+
+    // Desloca toda a numeração do módulo inserindo 200 linhas em branco no
+    // início — mesma prova do controle de :8056, sobre o mecanismo novo.
+    const shiftedSource = `${"\n".repeat(200)}${moduleSource}`;
+    const after = enumerateSilentDiscardOccurrences(shiftedSource, "http-egress-sites.ts");
+    expect(after.length).toBe(before.length);
+    for (let index = 0; index < before.length; index += 1) {
+      expect(after[index].line).toBe(before[index].line + 200);
+      expect(after[index].key).toBe(before[index].key);
+    }
+
+    // O deslocamento não reprova em massa: a chave (trecho normalizado mais
+    // função envolvente) não depende do número de linha.
+    const afterFindings = findSilentDiscardFindings(after, DOCUMENTED_SILENT_DISCARDS);
+    expect(afterFindings.unregistered).toEqual([]);
+    expect(afterFindings.obsolete).toEqual([]);
+    expect(afterFindings.ambiguousKeys).toEqual([]);
+  });
+
+  it("controle 7 (§9.7) — mover um `continue;` entre classes muda a exigência de registro nos dois sentidos: leitura posicional não exige, iteração sobre candidatos exige", () => {
+    // A mesma guarda, dentro de um laço `for` indexado (leitura posicional):
+    // não é candidato descartado, não exige registro.
+    const positionalSource = [
+      "function scanControle7Positional(text) {",
+      "  for (let i = 0; i < text.length; i += 1) {",
+      '    if (text[i] === " ") continue;',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const positionalOccurrences = enumerateSilentDiscardOccurrences(
+      positionalSource,
+      "sintetico-controle7.ts",
+    );
+    expect(positionalOccurrences).toHaveLength(1);
+    expect(positionalOccurrences[0].requiresRegistration).toBe(false);
+    const positionalFindings = findSilentDiscardFindings(
+      positionalOccurrences,
+      DOCUMENTED_SILENT_DISCARDS,
+    );
+    // Não registrado, mas a classe leitura posicional não exige — a mesma
+    // conta não acusa.
+    expect(positionalFindings.unregistered).toEqual([]);
+
+    // A MESMA guarda, movida para dentro de um `for…of`: a classificação
+    // muda para iteração sobre candidatos, e passa a exigir registro — não
+    // registrada, a mesma conta reprova.
+    const candidateSource = [
+      "function scanControle7Candidate(items) {",
+      "  for (const item of items) {",
+      '    if (item === " ") continue;',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const candidateOccurrences = enumerateSilentDiscardOccurrences(
+      candidateSource,
+      "sintetico-controle7.ts",
+    );
+    expect(candidateOccurrences).toHaveLength(1);
+    expect(candidateOccurrences[0].requiresRegistration).toBe(true);
+    const candidateFindings = findSilentDiscardFindings(
+      candidateOccurrences,
+      DOCUMENTED_SILENT_DISCARDS,
+    );
+    expect(candidateFindings.unregistered).toEqual([
+      `${candidateOccurrences[0].line}: "${candidateOccurrences[0].snippet}"`,
+    ]);
+
+    // E a mesma troca dentro de `while`, que é onde a rodada 1 deste Goal
+    // falhava: cursor escalar contra limite não exige registro; a MESMA
+    // guarda dentro de um `while` que drena uma fila passa a exigir.
+    const whilePositionalSource = [
+      "function scanControle7WhilePositional(text) {",
+      "  let i = 0;",
+      "  while (i < text.length) {",
+      "    i += 1;",
+      '    if (text[i] === " ") continue;',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const whilePositionalOccurrences = enumerateSilentDiscardOccurrences(
+      whilePositionalSource,
+      "sintetico-controle7.ts",
+    );
+    expect(whilePositionalOccurrences).toHaveLength(1);
+    expect(whilePositionalOccurrences[0].requiresRegistration).toBe(false);
+    expect(
+      findSilentDiscardFindings(whilePositionalOccurrences, DOCUMENTED_SILENT_DISCARDS)
+        .unregistered,
+    ).toEqual([]);
+
+    const whileQueueSource = [
+      "function scanControle7WhileQueue(pending) {",
+      "  while (pending.length > 0) {",
+      "    const item = pending.shift();",
+      '    if (item === " ") continue;',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const whileQueueOccurrences = enumerateSilentDiscardOccurrences(
+      whileQueueSource,
+      "sintetico-controle7.ts",
+    );
+    expect(whileQueueOccurrences).toHaveLength(1);
+    expect(whileQueueOccurrences[0].requiresRegistration).toBe(true);
+    expect(
+      findSilentDiscardFindings(whileQueueOccurrences, DOCUMENTED_SILENT_DISCARDS).unregistered,
+    ).toEqual([
+      `${whileQueueOccurrences[0].line}: "${whileQueueOccurrences[0].snippet}"`,
+    ]);
+  });
+
+  it("controle 8 (§9.8) — a partição do Goal050/051 e a cobertura das 24 categorias do Goal049 continuam mordendo: entrada em balde não permitido pela categoria da origem, chave nova no universo de saída, e categoria órfã na cobertura — uma cada, com as duas saídas", () => {
+    const egress = discoverHttpEgressSites(aiOrchestratorSrcPath, bffSrcPath);
+    const discovery = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+    const bucketsByName: Record<EgressPartitionBucket, readonly EgressPartitionEntry[]> = {
+      requests: discovery.requests,
+      notGoBound: discovery.notGoBound,
+      assembledUrls: discovery.assembledUrls,
+      nonTransportMemberCalls: discovery.nonTransportMemberCalls,
+      nonGoBoundInstantiations: discovery.nonGoBoundInstantiations,
+    };
+
+    // Amarra A — entriesInBucketNotAllowedByOriginCategory (Goal051).
+    // Antes: baldes reais, limpos.
+    const beforePartition = findEgressPartitionFindings(egress.sites, bucketsByName);
+    expect(beforePartition.entriesInBucketNotAllowedByOriginCategory).toEqual([]);
+    // Depois: a mesma entrada real movida de `requests` para `assembledUrls`
+    // — nenhuma das duas mãos da categoria de origem permite — reprova.
+    const target = discovery.requests.find(
+      (request) => request.method === "GET" && request.pathExpression === "/health",
+    );
+    expect(target).toBeDefined();
+    const originPosition = egressPositionKey(target!.originSite);
+    const originCategory = egress.sites.find(
+      (site) => egressPositionKey(site) === originPosition,
+    )!.category;
+    const movedBuckets: Record<EgressPartitionBucket, readonly EgressPartitionEntry[]> = {
+      ...bucketsByName,
+      requests: discovery.requests.filter((request) => request !== target),
+      assembledUrls: [...discovery.assembledUrls, target!],
+    };
+    const afterPartition = findEgressPartitionFindings(egress.sites, movedBuckets);
+    expect(afterPartition.entriesInBucketNotAllowedByOriginCategory).toEqual([
+      `assembledUrls ${egressPositionKey(target!)} com origem ${originPosition} [${originCategory}]`,
+    ]);
+
+    // Amarra B — chave nova no universo de saída (GO_SERVICE_HTTP_REQUEST_DISCOVERY_UNIVERSE, Goal051).
+    // Antes: as chaves reais, todas declaradas.
+    const beforeUniverse = findDiscoveryUniverseFindings(Object.keys(discovery).sort());
+    expect(beforeUniverse.undeclared).toEqual([]);
+    // Depois: uma coleção a mais que a declaração não nomeia — reprova.
+    const grownDiscovery = { ...discovery, unknownCollectionControle8: [] };
+    const afterUniverse = findDiscoveryUniverseFindings(Object.keys(grownDiscovery).sort());
+    expect(afterUniverse.undeclared).toEqual(["unknownCollectionControle8"]);
+
+    // Amarra C — categoria órfã na cobertura das 24 categorias (Goal049).
+    const allRefusalCategories: readonly string[] = [
+      ...INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES,
+      ...CLASS_BINDING_REFUSAL_CATEGORIES,
+      ...CLIENT_FIELD_USE_REFUSAL_CATEGORIES,
+    ];
+    expect(allRefusalCategories.length).toBe(24);
+    // Antes: cobertura real, sem categoria descoberta.
+    const beforeCoverage = findUncoveredRefusalCategories(
+      allRefusalCategories,
+      observedRefusalCategories,
+    );
+    expect(beforeCoverage).toEqual([]);
+    // Depois: numa CÓPIA de observedRefusalCategories, sem a observação de
+    // uma categoria alcançável — a mesma conta a acusa como órfã.
+    const removedCategory = allRefusalCategories.find(
+      (category) =>
+        !PROVEN_UNREACHABLE_REFUSAL_CATEGORIES.has(category) &&
+        observedRefusalCategories.has(category),
+    );
+    expect(removedCategory).toBeDefined();
+    const withoutRemovedCategory = new Set(observedRefusalCategories);
+    withoutRemovedCategory.delete(removedCategory!);
+    const afterCoverage = findUncoveredRefusalCategories(
+      allRefusalCategories,
+      withoutRemovedCategory,
+    );
+    expect(afterCoverage).toEqual([removedCategory]);
   });
 });

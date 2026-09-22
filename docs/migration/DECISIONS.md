@@ -2971,3 +2971,215 @@ e a asserção de não-vacuidade direta precisar substituir a dependência
 do controle negativo do Goal044; e se a prova de conservação de
 candidatos dentro das funções de varredura, declarada fora de alcance
 desde D-065, deve virar Goal próprio.
+
+## D-068 — O descarte é enumerado por inteiro: toda ocorrência de `continue;` é classificada pela forma do laço, e a chave da classe portadora de candidato sobrevive à forma nua por multiplicidade declarada, propostas no Goal052
+
+**Status:** ACCEPTED no [review052](reviews/052-review.md) (rodada 2 de
+2, 2026-09-22; a rodada 1 fechou `CHANGES_REQUIRED`, com 2 blockers),
+pelo Tech Lead Agent ([AGENT_ROLES](AGENT_ROLES.md), D-018). O blocker
+de mecanismo da rodada 1 foi a classe `while-condition`, que isentava
+em bloco as 6 ocorrências de `continue;` dentro de `while` sem critério
+computado — inclusive `http-egress-sites.ts:1028`, que é descarte de
+candidato numa fila de trabalho. A rodada 2 fechou-o partindo `while`
+em três classes com critério textual próprio, sem ramo de sobra, e o
+item 3 abaixo descreve o comportamento vigente.
+
+**Contexto:** o [review051](reviews/051-review.md) aceitou D-067 sem
+blockers de mecanismo, na rodada 5 de 5. Um nível abaixo de toda a
+família Goal049–051 ficava o último fail-open conhecido desta série:
+`findSilentDiscardLines` (baseline: `assistant.service.test.ts:6513`)
+reconhecia uma única forma de descarte — `if (<condição sobre valor
+ausente>) continue;` —, e o comentário de `:6442` declarava em prosa,
+à mão, que o módulo tinha **120** ocorrências de `continue;` no total,
+das quais **52** na forma de guarda e **68** nuas, sem nenhuma
+asserção conferindo esse número. Sondagem própria achou vários
+`continue;` nus ou guardados por condição fora da regex, já presentes
+na árvore (`http-egress-sites.ts:1900`, `:3766`, `:2684`, `:1052`,
+`:3601`), que entravam no módulo, passavam verde e não deixavam
+documento algum falso — porque nenhum documento afirmava nada sobre
+eles.
+
+**Decisão:**
+
+1. **A enumeração passa a achar toda ocorrência de `continue;`, com a
+   contagem total computada em runtime.** `enumerateContinueOccurrences`
+   (`assistant.service.test.ts:7488`) varre o texto do módulo,
+   classifica cada posição num contexto léxico fechado
+   (`CONTINUE_LEXICAL_CONTEXTS`: `code`, `comment`, `string-literal`,
+   `template-literal`, `regex-literal`) e resolve o laço mais interno
+   que contém cada `continue;` por casamento de parênteses e chaves
+   sobre o texto com o não-código mascarado — nunca por recuo de
+   indentação, a técnica em que a sondagem do próprio Goal falhou em
+   **5** pontos da árvore real (`:1761`, `:1765`, `:1769`, `:1773`,
+   `:1796`), hoje todos classificados. O comentário de `:6442` não
+   carrega mais número escrito à mão; o total é
+   `findContinueEnumerationFindings(...).total`, provado igual à
+   contagem textual independente de `continue;` sobre o mesmo texto.
+   Sobre a árvore real: **120** ocorrências, todas em contexto `code`
+   — o ramo não-`code` é vazio hoje e exercido por fonte sintética.
+2. **Cada ocorrência cai numa classe computada do vocabulário fechado
+   `CONTINUE_LOOP_FORMS`** (`for-of`, `for-in`, `for-indexed`,
+   `while-exec-match`, `while-queue-drain`, `while-positional-read`,
+   `do-while`), e ocorrência cujo laço contenedor a classificação não
+   resolve, ou cuja classe cai fora do vocabulário, reprova nomeando
+   `arquivo:linha` — provado pelo controle 3 do escopo §9. **`while`
+   é partido em três classes, cada uma com critério textual próprio em
+   `classifyContinueLoopForm`, e nenhuma delas é o ramo de sobra das
+   outras:** cabeçalho que atribui o resultado de um `.exec(` é
+   `while-exec-match`; cabeçalho que testa a não-vaziez da própria
+   coleção (`<coleção>.length > 0`, `.size !== 0` e formas irmãs) é
+   `while-queue-drain`, porque cada volta consome um elemento da
+   coleção e portanto é um candidato; cabeçalho que compara um cursor
+   escalar com um limite (`i < body.length`, `i < bodyEnd`) é
+   `while-positional-read`; e cabeçalho de `while` que não casa
+   nenhum dos três **reprova**, como já acontecia com `for`. Sobre a
+   árvore real o resíduo é **zero**: **41** `for-of`, **55**
+   `for-indexed`, **18** `while-exec-match`, **5**
+   `while-positional-read` (`:1458`, `:1484`, `:2989`, `:2996`,
+   `:2999`) e **1** `while-queue-drain` (`:1028`); `for-in` e
+   `do-while` são vazios na árvore real e exercidos por fonte
+   sintética — as sete classes têm prova, nenhuma só em prosa.
+3. **A classe iteração sobre candidatos (`for-of`, `while-exec-match`,
+   `while-queue-drain` — `CONTINUE_CANDIDATE_LOOP_FORMS`, `:7880`)
+   exige registro nomeado com motivo não vazio; a classe leitura
+   posicional (`for-indexed`, `while-positional-read`) é isenta pelo
+   critério computado do item 2, sem registro por ocorrência.**
+   `DOCUMENTED_SILENT_DISCARDS` (`:6517`) cresceu de **5** para **43**
+   entradas, absorvendo as 5 da baseline sem duplicação (2 delas, de
+   `readEnvSchemaDefault`, são na verdade leitura posicional —
+   continuam registradas, mas deixaram de ser exigidas) e cobrindo as
+   **60** ocorrências reais da classe candidata. A 60ª é
+   `http-egress-sites.ts:1028`
+   (`while (pendingPrimitives.length > 0)` com
+   `pendingPrimitives.shift()` na primeira linha do corpo): descarte de
+   candidato dentro de um `while`, que a rodada 1 deste Goal isentava
+   em bloco por classificá-lo num `while-condition` sem critério.
+   `findSilentDiscardFindings` — a mesma conta que o teste
+   permanente e os controles chamam, nunca uma segunda implementação —
+   roda sobre a árvore real com as quatro saídas vazias:
+   `ambiguousKeys`, `unregistered`, `obsolete` e `emptyReason`.
+4. **A chave sobrevive à forma nua por multiplicidade declarada.**
+   `continue;` nu normaliza sempre para a mesma string
+   `<função>::continue;`, e a sondagem achou a colisão de fato — até
+   **7** ocorrências nuas na mesma função
+   (`resolveModuleExportBindings`). `SilentDiscardEntry.multiplicity`
+   declara quantas ocorrências legítimas compartilham a chave (ausente
+   = 1), e `findSilentDiscardFindings` reprova por ambiguidade quando a
+   contagem real diverge da declarada, nos dois sentidos — sem ler
+   número de linha, discriminador que o Goal050 já havia proibido. O
+   controle 6 do escopo §9 prova que deslocar linhas continua não
+   reprovando em massa.
+5. **Vacuidade não é aceita como prova.** As duas classes vazias na
+   árvore real (`for-in`, `do-while`) e o contexto léxico não-`code`
+   (vazio hoje) são exercidos por fonte sintética dedicada; as
+   **cinco** classes presentes (`for-of`, `for-indexed`,
+   `while-exec-match`, `while-queue-drain`, `while-positional-read`)
+   têm contagem maior que zero asserida diretamente. O cabeçalho de
+   `while` fora dos três critérios não existe na árvore real e é
+   exercido por fonte sintética no controle 3.
+6. **O ponteiro de prosa de `:3483` é corrigido.** O `it` passou a
+   citar `:4314` — o cenário "antes" real do controle negativo 2 do
+   Goal044 — em vez de `:4199`. Correção de uma linha; nenhuma
+   asserção do teste mudou.
+7. **Nenhum mecanismo de classificação de egresso foi alterado.** As 9
+   categorias vistas na árvore, os três vocabulários de recusa,
+   `PROVEN_UNREACHABLE_REFUSAL_CATEGORIES` (**2** entradas),
+   `EGRESS_PARTITION_BUCKETS`, `GO_SERVICE_HTTP_REQUEST_DISCOVERY_UNIVERSE`,
+   `EGRESS_CANDIDATE_UNIVERSE` e `egressPartitionBucketsForCategory`
+   mantêm conteúdo e comportamento da baseline.
+8. **Os oito controles negativos do escopo §9 mordem**, cada um
+   chamando a mesma conta que o teste permanente chama
+   (`assistant.service.test.ts:10202` a `:10552`): descarte novo em
+   laço de candidatos reprova; `continue;` nu não registrado reprova;
+   laço de forma não reconhecida reprova; entrada obsoleta reprova;
+   motivo vazio reprova e chave duplicada continua lançando dentro do
+   registro; deslocamento de linha continua não reprovando em massa;
+   mover um `continue;` entre classes muda a exigência de registro nos
+   dois sentidos; e a partição do Goal050/051 e a cobertura do Goal049
+   continuam mordendo.
+
+**Alternativas:** resolver o laço contenedor por recuo de indentação —
+rejeitada, é a técnica que a sondagem do próprio Goal provou falhar em
+5 pontos da árvore real; chavear o registro por número de linha para
+resolver a colisão da forma nua — rejeitada, proibida desde o Goal050,
+e o controle de deslocamento de linha existe exatamente para provar
+que isso não é necessário; tratar toda repetição de `continue;` nu
+como ambígua por padrão — rejeitada, o caso predominante na árvore
+real é repetição legítima dentro do mesmo laço, e marcar tudo como
+ambíguo derrubaria o registro inteiro sem sinalizar nada de útil.
+
+**Motivo:** os Goals 049 a 051 fecharam, um nível de cada vez, a mesma
+família de defeito um nível acima deste: prova creditada por prosa em
+vez de por estrutura computada. A isenção do descarte de candidato era
+a última instância dessa classe — "varredura lexical de caractere" e
+"dentro de bloco com outra instrução antes" eram adjetivos de
+comentário, não critério computado, e o próprio número total de
+`continue;` do módulo vivia escrito à mão exatamente dentro do
+mecanismo que deveria prová-lo.
+
+**Consequências:**
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts` está
+intocado (diff zero contra a baseline; **3887** linhas, mesma contagem
+da baseline). `apps/ai-orchestrator/tests/support/product-transport-routes.txt`
+também está intocado (diff zero).
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
+concentra o diff inteiro: **1948** inserções e **113** deleções
+contra a baseline (**10553** linhas; baseline: 8718) e **249** testes
+(baseline: 227), **249** passando, **0** falhando (`npx vitest run
+tests/assistant/assistant.service.test.ts` em `apps/ai-orchestrator`).
+Os **22** testes a mais se dividem em **9** no bloco da enumeração e
+classificação (WU-01), **5** no bloco do registro unificado por
+multiplicidade (WU-02) e **8** nos controles negativos do escopo §9
+(WU-04). `npx vitest run` completo de `apps/ai-orchestrator` →
+**1061** testes: **973** passando (baseline: 951), **88** pulados
+(mesma contagem da baseline), **0** falhando. `npx tsc -p
+tsconfig.json --noEmit` em `apps/ai-orchestrator`: "TypeScript: No
+errors found", exit 0. `npm run lint` (`eslint src
+--max-warnings=0`) em `apps/ai-orchestrator`: exit 0, sem saída. `npm
+run validate:core`: **PASSED** — dos 17 passos, **15** passaram
+(inclusive `test:ai-orchestrator`) e **2** pulados por design
+(`test:bff`, `test:health-worker`); nenhum falhou. `npm run test:gate`
+(raiz): **226** testes, **226** passando, **0** falhando, inalterado —
+não exercita `assistant.service.test.ts`. `validate:integration`
+continua recusando por pré-condição de banco ausente (`exit 2`,
+`BFF_TEST_DATABASE_URL is not set`), declarada como ausente. `git
+status --porcelain=v1 -uall` lista, ao final desta rodada, **5**
+arquivos: o arquivo de teste citado acima e os quatro documentos
+permanentes de migração que este fechamento atualiza
+(`docs/migration/CURRENT_STATE.md`, `docs/migration/DECISIONS.md`,
+`docs/migration/FINAL_AUDIT.md`, `docs/migration/VALIDATION_GATE.md`);
+nenhum diretório temporário de controle negativo sobrou, e nenhum
+arquivo de `apps/frontend/src/`, `apps/bff/src/`,
+`apps/ai-orchestrator/src/`, `apps/evolution-go/`, `packages/` ou
+`tools/ia-loop/` foi tocado. Este diff não fecha **M4**, não afirma
+fidelidade visual, não prova runtime do serviço Go e não corrige
+**A-24**, que continua `PENDENCIA-POS-MVP`.
+
+**Limite declarado, herdado de D-065/D-066/D-067, não afrouxado:**
+registrar um descarte com motivo escrito diz que ele está nomeado e
+justificado, não que o candidato descartado não importava — a
+conservação de candidatos **dentro** das funções de varredura de
+`http-egress-sites.ts` continua fora de alcance de qualquer mecanismo
+desta rodada. A enumeração não se estende a `return`, `break` ou saída
+antecipada de função: o alcance é `continue;`, e o que fica fora
+continua declarado como fora, agora com o número computado em vez de
+estimado.
+
+**Revisar se:** o vocabulário `CONTINUE_LOOP_FORMS` precisar de uma
+oitava forma que a árvore real ainda não contém; o critério textual
+que separa `while-queue-drain` de `while-positional-read` (não-vaziez
+da própria coleção contra cursor escalar comparado a um limite) deixar
+de bastar para alguma forma nova de `while` que a árvore venha a ter —
+hoje essa forma nova **reprova** em vez de ser isentada, que é o
+comportamento desejado, mas a reprovação pede classe nova com
+critério próprio, não um ramo de sobra; e se a prova de conservação de
+candidatos dentro das funções de varredura, declarada fora de alcance
+desde D-065 e reafirmada aqui, deve virar Goal próprio.
+
+A condição que a rodada 1 deste Goal escreveu aqui como futura —
+"se a árvore real vier a ter `continue;` de descarte de candidato
+dentro de um `while` de condição" — **já valia na baseline**:
+`http-egress-sites.ts:1028` é exatamente esse caso, e a rodada 2
+fechou-o partindo `while` em três classes com critério computado.
+Não é mais condição de revisão; está no item 3 acima como
+comportamento vigente.

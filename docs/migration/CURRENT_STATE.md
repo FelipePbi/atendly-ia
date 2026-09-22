@@ -4844,3 +4844,114 @@ tem diff **zero**, e nenhum arquivo de `apps/frontend/src/`,
   este Goal não os transforma em baldes de destino de sítio. **A-24
   continua `PENDENCIA-POS-MVP`, não corrigido** — nenhum arquivo Go de
   produção deste fork foi editado por este Goal.
+
+## Delta implementado — diff052, 2026-09-22 ([D-068](DECISIONS.md))
+
+Fecha o último fail-open conhecido da família Goal049–051: a isenção
+do descarte de candidato era silêncio, não critério computado.
+`findSilentDiscardLines` (baseline) reconhecia uma única forma de
+descarte — `if (<condição sobre valor ausente>) continue;` —, e o
+comentário de `:6442` declarava em prosa, à mão, que o módulo tinha
+**120** ocorrências de `continue;` no total, sem asserção alguma
+conferindo esse número. `apps/ai-orchestrator/tests/support/http-egress-sites.ts`
+e `apps/ai-orchestrator/tests/support/product-transport-routes.txt`
+estão **intocados** (diff zero contra a baseline; **3887** linhas o
+primeiro, mesma contagem da baseline). `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
+concentra o diff inteiro (**1948** inserções, **113** deleções;
+**10553** linhas, baseline: 8718), e nenhum arquivo de
+`apps/frontend/src/`, `apps/bff/src/`, `apps/ai-orchestrator/src/`,
+`apps/evolution-go/`, `packages/` ou `tools/ia-loop/` mudou nesta
+rodada.
+
+- **A enumeração acha toda ocorrência de `continue;`, com contagem em
+  runtime.** `enumerateContinueOccurrences` varre o texto do módulo,
+  classifica cada posição num contexto léxico fechado
+  (`CONTINUE_LEXICAL_CONTEXTS`) e resolve o laço mais interno que
+  contém cada `continue;` por casamento de parênteses e chaves sobre o
+  texto com o não-código mascarado — nunca por recuo de indentação,
+  técnica em que a sondagem do próprio Goal falhou em **5** pontos da
+  árvore real (`:1761`, `:1765`, `:1769`, `:1773`, `:1796`), hoje todos
+  classificados. O comentário de `:6442` não carrega mais número
+  escrito à mão. Sobre a árvore real: **120** ocorrências, todas em
+  contexto `code`.
+- **Cada ocorrência cai numa classe computada do vocabulário fechado
+  `CONTINUE_LOOP_FORMS`** (`for-of`, `for-in`, `for-indexed`,
+  `while-exec-match`, `while-queue-drain`, `while-positional-read`,
+  `do-while`); ocorrência cujo laço contenedor não resolve, ou cuja
+  classe cai fora do vocabulário, reprova nomeando `arquivo:linha`.
+  **`while` é partido em três classes, cada uma com critério textual
+  próprio, e nenhuma delas é o ramo de sobra das outras:** cabeçalho
+  que atribui `.exec(` é `while-exec-match`; cabeçalho que testa a
+  não-vaziez da própria coleção (`<coleção>.length > 0` e formas
+  irmãs) é `while-queue-drain`; cabeçalho que compara um cursor
+  escalar com um limite é `while-positional-read`; e cabeçalho de
+  `while` fora dos três **reprova**, como já acontecia com `for`.
+  Sobre a árvore real o resíduo é **zero**: **41** `for-of`, **55**
+  `for-indexed`, **18** `while-exec-match`, **5**
+  `while-positional-read` (`:1458`, `:1484`, `:2989`, `:2996`,
+  `:2999`) e **1** `while-queue-drain` (`:1028`); `for-in` e
+  `do-while` são vazios na árvore real e exercidos por fonte
+  sintética.
+- **A classe iteração sobre candidatos (`for-of`, `while-exec-match`,
+  `while-queue-drain`) exige registro nomeado com motivo não vazio; a
+  classe leitura posicional (`for-indexed`, `while-positional-read`)
+  é isenta pelo critério computado, sem registro por ocorrência.**
+  `DOCUMENTED_SILENT_DISCARDS` cresceu de **5** para **43** entradas,
+  cobrindo as **60** ocorrências reais da classe candidata.
+  `http-egress-sites.ts:1028`
+  (`while (pendingPrimitives.length > 0)`, com
+  `pendingPrimitives.shift()` na primeira linha do corpo) é descarte
+  de candidato dentro de um `while` e **exige** registro — é o
+  fail-open que a rodada 1 deste Goal deixava isento em bloco. A mesma
+  conta que o teste permanente e os controles chamam
+  (`findSilentDiscardFindings`) roda sobre a árvore real com as quatro
+  saídas vazias: `ambiguousKeys`, `unregistered`, `obsolete` e
+  `emptyReason`.
+- **A chave sobrevive à forma nua por multiplicidade declarada.**
+  `continue;` nu normaliza sempre para a mesma string, e a sondagem
+  achou a colisão de fato — até **7** ocorrências nuas na mesma
+  função. `SilentDiscardEntry.multiplicity` declara quantas ocorrências
+  legítimas compartilham a chave; divergência entre a contagem real e
+  a declarada reprova nos dois sentidos, sem ler número de linha.
+  Deslocamento de linha continua não reprovando em massa.
+- **Vacuidade não é aceita como prova.** As duas classes vazias na
+  árvore real (`for-in`, `do-while`) e o contexto léxico não-`code`
+  são exercidos por fonte sintética dedicada; as **cinco** classes
+  presentes têm contagem maior que zero asserida diretamente.
+- **O ponteiro de prosa de `:3483` foi corrigido**, passando a citar
+  `:4314` em vez de `:4199`.
+- **Oito controles negativos permanentes provam as oito amarras do
+  escopo §9** (`assistant.service.test.ts:10202` a `:10552`), cada um
+  chamando a mesma conta que o teste permanente chama: descarte novo
+  em laço de candidatos reprova; `continue;` nu não registrado
+  reprova; laço de forma não reconhecida reprova; entrada obsoleta
+  reprova; motivo vazio reprova e chave duplicada continua lançando;
+  deslocamento de linha continua não reprovando em massa; mover um
+  `continue;` entre classes muda a exigência de registro nos dois
+  sentidos; e a partição do Goal050/051 e a cobertura do Goal049
+  continuam mordendo.
+- **Prova executada:** `npx vitest run
+  tests/assistant/assistant.service.test.ts` (em `apps/ai-orchestrator`):
+  **249** testes (baseline: 227), **249** passando, **0** falhando.
+  `npx vitest run` completo: **1061** testes, **973** passando
+  (baseline: 951), **88** pulados (mesma contagem da baseline), **0**
+  falhando. `npx tsc -p tsconfig.json --noEmit`: "TypeScript: No
+  errors found", exit 0. `npm run lint` (`eslint src
+  --max-warnings=0`): exit 0, sem saída.
+- **Gate reexecutado sobre a árvore final:** `npm run validate:core`
+  **PASSED** — dos 17 passos, **15** passaram (inclusive
+  `test:ai-orchestrator`) e **2** pulados por design (`test:bff`,
+  `test:health-worker`); nenhum passo falhou. `npm run test:gate`
+  (raiz): **226** testes e 0 falhas, inalterado. `validate:integration`
+  continua recusando com `exit 2` e `BFF_TEST_DATABASE_URL is not set`
+  — pré-condição de banco declarada ausente, não suprida por este
+  Goal.
+- **Limite declarado, herdado de D-065/D-066/D-067 sem afrouxamento:**
+  registrar um descarte com motivo escrito diz que ele está nomeado e
+  justificado, não que o candidato descartado não importava — a
+  conservação de candidatos **dentro** das funções de varredura
+  continua fora de alcance de qualquer mecanismo desta rodada. A
+  enumeração não se estende a `return`, `break` ou saída antecipada de
+  função: o alcance é `continue;`. **A-24 continua `PENDENCIA-POS-MVP`,
+  não corrigido** — nenhum arquivo Go de produção deste fork foi
+  editado por este Goal.

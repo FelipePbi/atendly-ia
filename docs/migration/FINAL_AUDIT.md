@@ -3610,3 +3610,151 @@ acima). `validate:integration` continua recusando por pré-condição de
 banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado
 como ausente — não reexecutado além da conferência de exit code por
 esta unidade de documentação (WU-08).
+
+## 29. O descarte é enumerado por inteiro: toda ocorrência de `continue;` é classificada pela forma do laço, e a classe portadora de candidato tem chave por multiplicidade declarada — Goal052, 2026-09-22
+
+Seção nova, escrita depois da última mudança de árvore do diff052
+(WU-01: enumeração completa de `continue;` e classificação computada
+pela forma do laço; WU-02: registro unificado com chave por
+multiplicidade declarada; WU-04: os oito controles negativos
+permanentes do escopo §9; WU-05 a WU-07: verificação dirigida; WU-08,
+esta unidade, documenta). Ela **não reescreve** §4 a §28: os registros
+de A-01 a A-24, o veredito das seções anteriores e as vinte e oito
+seções de fechamento continuam exatamente como estavam, e a entrada de
+**A-24** **não foi tocada**. Este Goal não corrige A-24 e não abre
+achado novo — fecha o último fail-open conhecido da família
+Goal049–051: a isenção do descarte de candidato era silêncio, não
+critério computado. `findSilentDiscardLines` (baseline) reconhecia uma
+única forma de descarte, e o total de **120** ocorrências de
+`continue;` do módulo vivia escrito à mão num comentário, sem
+asserção alguma conferindo esse número.
+
+### O que mudou
+
+**A enumeração acha toda ocorrência de `continue;`, com a contagem
+total computada em runtime.** `enumerateContinueOccurrences`
+(`assistant.service.test.ts:7488`) varre o texto do módulo, classifica
+cada posição num contexto léxico fechado (`CONTINUE_LEXICAL_CONTEXTS`)
+e resolve o laço mais interno que contém cada `continue;` por
+casamento de parênteses e chaves sobre o texto com o não-código
+mascarado — nunca por recuo de indentação, técnica em que a sondagem
+do próprio Goal falhou em **5** pontos da árvore real (`:1761`,
+`:1765`, `:1769`, `:1773`, `:1796`), hoje todos classificados. O
+comentário que antes carregava o número à mão não o carrega mais.
+Sobre a árvore real: **120** ocorrências, todas em contexto `code`.
+
+**Cada ocorrência cai numa classe computada do vocabulário fechado
+`CONTINUE_LOOP_FORMS`** (`for-of`, `for-in`, `for-indexed`,
+`while-exec-match`, `while-queue-drain`, `while-positional-read`,
+`do-while`), e ocorrência cujo laço contenedor não resolve, ou cuja
+classe cai fora do vocabulário, reprova nomeando `arquivo:linha`.
+**`while` é partido em três classes, cada uma com critério textual
+próprio, e nenhuma delas é o ramo de sobra das outras:** atribuição
+de `.exec(` é `while-exec-match`; não-vaziez da própria coleção é
+`while-queue-drain`; cursor escalar contra limite é
+`while-positional-read`; cabeçalho fora dos três **reprova**. Sobre a
+árvore real o resíduo é **zero**: **41** `for-of`, **55**
+`for-indexed`, **18** `while-exec-match`, **5**
+`while-positional-read` (`:1458`, `:1484`, `:2989`, `:2996`, `:2999`)
+e **1** `while-queue-drain` (`:1028`); `for-in` e `do-while` são
+vazios na árvore real e exercidos por fonte sintética.
+
+**A classe iteração sobre candidatos exige registro nomeado; a classe
+leitura posicional é isenta pelo critério computado.**
+`CONTINUE_CANDIDATE_LOOP_FORMS` (`for-of`, `while-exec-match`,
+`while-queue-drain`) exige motivo não vazio no registro;
+`for-indexed` e `while-positional-read` (leitura posicional) são
+isentas sem registro por ocorrência. `DOCUMENTED_SILENT_DISCARDS`
+cresceu de **5** para **43** entradas, cobrindo as **60** ocorrências
+reais da classe candidata — a 60ª é `http-egress-sites.ts:1028`,
+descarte de candidato dentro de um `while` que drena fila, isento em
+bloco até a rodada 1 deste Goal. A mesma conta
+(`findSilentDiscardFindings`) roda sobre a árvore real com as quatro
+saídas vazias: `ambiguousKeys`, `unregistered`, `obsolete` e
+`emptyReason`.
+
+**A chave sobrevive à forma nua por multiplicidade declarada.**
+`continue;` nu normaliza sempre para a mesma string, e a sondagem
+achou a colisão de fato — até **7** ocorrências nuas na mesma função.
+`SilentDiscardEntry.multiplicity` declara quantas ocorrências
+legítimas compartilham a chave; `findSilentDiscardFindings` reprova
+por ambiguidade quando a contagem real diverge da declarada, nos dois
+sentidos, sem ler número de linha.
+
+**Vacuidade não é aceita como prova.** As duas classes vazias na
+árvore real (`for-in`, `do-while`) e o contexto léxico não-`code` são
+exercidos por fonte sintética dedicada; as **cinco** classes
+presentes têm contagem maior que zero asserida diretamente.
+
+**O ponteiro de prosa de `:3483` foi corrigido**, passando a citar
+`:4314` em vez de `:4199` — correção de uma linha, nenhuma asserção
+mudou.
+
+**Os oito controles negativos do escopo §9 mordem**
+(`assistant.service.test.ts:10202` a `:10552`), cada um chamando a
+mesma conta que o teste permanente chama: descarte novo em laço de
+candidatos reprova; `continue;` nu não registrado reprova; laço de
+forma não reconhecida reprova; entrada obsoleta reprova; motivo vazio
+reprova e chave duplicada continua lançando; deslocamento de linha
+continua não reprovando em massa; mover um `continue;` entre classes
+muda a exigência de registro nos dois sentidos; e a partição do
+Goal050/051 e a cobertura do Goal049 continuam mordendo.
+
+### Veredito recontado
+
+Esta auditoria continua com **0** achados `BLOQUEADOR-MVP`, **8**
+`PENDENCIA-POS-MVP` e **6** `LIMITE-DECLARADO` — a mesma contagem de
+§28. **Nenhuma mudança em relação a §28**: nenhum achado de A-01 a A-24
+foi tocado, corrigido, reclassificado ou reaberto. **A-24 continua
+`PENDENCIA-POS-MVP`, não corrigido** — nenhum arquivo Go de produção
+deste fork foi editado por este Goal.
+
+**Limite próprio deste Goal, declarado e não mascarado, herdado de
+D-065/D-066/D-067 sem afrouxamento.** Registrar um descarte com motivo
+escrito diz que ele está nomeado e justificado, não que o candidato
+descartado não importava — a conservação de candidatos **dentro** das
+funções de varredura de `http-egress-sites.ts` continua fora de
+alcance de qualquer mecanismo desta rodada. A enumeração não se
+estende a `return`, `break` ou saída antecipada de função: o alcance é
+`continue;`, e o que fica fora continua declarado como fora, agora com
+o número computado em vez de estimado. Consequência mensurável: de
+**249** testes em `assistant.service.test.ts` (baseline: 227), **249**
+passam, **0** falham; o arquivo tem **10553** linhas
+(baseline: 8718), **1948** inserções e **113** deleções.
+`http-egress-sites.ts` está intocado (diff zero; **3887** linhas,
+mesma contagem da baseline). A suíte completa de `apps/ai-orchestrator`
+fecha em **1061** testes: **973** passando (baseline: 951), **88**
+pulados (mesma contagem da baseline), **0** falhando. `npx tsc -p
+tsconfig.json --noEmit`: "TypeScript: No errors found", exit 0. `npm
+run lint` (`eslint src --max-warnings=0`): exit 0, sem saída. `npm run
+validate:core` **PASSED**: dos 17 passos, **15** passaram (inclusive
+`test:ai-orchestrator`) e **2** pulados por design (`test:bff`,
+`test:health-worker`); nenhum falhou. `npm run test:gate` (raiz):
+**226** testes, **226** passando, **0** falhando, inalterado, porque
+não exercita este arquivo.
+
+Quatro coisas que esta seção não diz. **Não diz que A-24 foi
+corrigido**: o rótulo `"Ver Menu"` continua escrito em
+`pkg/sendMessage/service/send_service.go:1960`. **Não diz que M4 foi
+fechado**: nenhuma chamada saiu para provedor de LLM real nem para o
+WhatsApp real; o diff052 toca só
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts` e a
+documentação de migração — `git status --porcelain=v1 -uall` não lista
+nenhum arquivo de `tools/ia-loop/` nesta rodada. **Não diz que o
+comportamento em runtime do serviço Go foi provado**: o que se prova é
+o que a árvore de código diz, lida por enumeração de ocorrência sobre
+o texto-fonte. **Não diz que a fidelidade visual está provada**:
+nenhum arquivo de `apps/frontend/src/` mudou.
+
+O que continua fora do alcance deste Goal, por construção: comportamento
+em runtime do serviço Go; qual binário roda em produção;
+`whatsmeow-lib/`, biblioteca vendorizada lida apenas como fonte das
+declarações de proto; o valor real de qualquer variável de ambiente;
+`return`, `break` e saída antecipada de função, nunca alcançados pela
+enumeração desta rodada; e conservação de candidatos dentro das
+funções de varredura de `http-egress-sites.ts`, declarada e limitada
+desde o escopo §4 do Goal050 e reafirmada aqui (ver "Limite próprio"
+acima). `validate:integration` continua recusando por pré-condição de
+banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado
+como ausente — não reexecutado além da conferência de exit code por
+esta unidade de documentação (WU-08).

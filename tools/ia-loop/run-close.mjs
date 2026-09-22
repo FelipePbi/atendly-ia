@@ -28,6 +28,7 @@ import {
 } from './lib/model-routing.mjs';
 import { discoverGoal } from './lib/goal-discovery.mjs';
 import { ensureGoalAcceptedStatus } from './lib/goal-status-transition.mjs';
+import { ensureMigrationStatusRowAccepted, ensureMigrationStatusRowExists } from './lib/migration-status-row.mjs';
 import {
   CLOSURE_RESUME_POINTS, expectedMigrationStatusRowFor, planningDiffBaseFor, requiredGoalStatusFor,
   resolveClosureResumePoint,
@@ -740,6 +741,50 @@ async function main() {
     emit(`  planningIntegrationCommit: ${after}`);
     await persistClosure({ planningIntegrationCommit: after }, LOOP_STATES.NEXT_GOAL_READY);
   }
+
+  // MIGRATION_STATUS.md's table row is on a DIFFERENT clock than the Goal
+  // document's own status line (see lib/goal-status-transition.mjs): it is
+  // only finalized here, once planning integration proves BOTH facts at
+  // once — goalId is fully closed, and nextGoalId now has a real document on
+  // main to link. Left to the closure/planning documentation jobs alone,
+  // this table drifted from the prose log written right next to it in the
+  // same file — 26 consecutive Goals by the time this was added (see
+  // MIGRATION_STATUS.md's own "vigésima sexta ocorrência" note on Goal049).
+  // Every occurrence produced the identical human-in-the-loop repair: read
+  // the refusal at the NEXT Goal's discovery, diff the table against the
+  // prose that already said the right thing, patch it by hand. Idempotent
+  // and silent when a documentation job DOES write the row itself — this
+  // only fills the gap when it doesn't, and never touches the narrative
+  // prose either job writes elsewhere in the same file.
+  const acceptedRowFix = await ensureMigrationStatusRowAccepted({
+    repoRoot: REPO_ROOT, goalId,
+    closureCommit: closure.integratedClosureCommit,
+    originCommit: closure.sourceClosureCommit,
+    reviewSummary: `rodada ${accepted.decision.round} ACCEPTED`,
+    reviewPath: `reviews/${goalId}-review.md`,
+    reviewDate: new Date().toISOString().slice(0, 10),
+    emit,
+  });
+  const insertedRow = await ensureMigrationStatusRowExists({
+    repoRoot: REPO_ROOT, goalId: closure.nextGoalId,
+    nextGoalPath: closure.nextGoalPath,
+    newBaseline,
+    afterGoalId: goalId,
+    developerProfile: closure.nextGoalDeveloperProfile,
+    emit,
+  });
+  // One independent commit for both — same file, same moment, same reason.
+  // Never amends the planning integration commit above; staged by exact
+  // path only, so nothing else dirty on this checkout is swept in.
+  if (acceptedRowFix.changed || insertedRow.changed) {
+    const { sha } = await stageAndCommit({
+      cwd: REPO_ROOT,
+      paths: [acceptedRowFix.path],
+      message: `docs(migration): sync MIGRATION_STATUS.md table for Goal${goalId}/Goal${closure.nextGoalId}`,
+    });
+    emit(`  committed: ${sha}`);
+  }
+
   machine.transitionTo(LOOP_STATES.NEXT_GOAL_READY);
 
   // ---------- Supervised stop ---------------------------------------------

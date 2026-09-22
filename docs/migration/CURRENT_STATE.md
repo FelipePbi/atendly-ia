@@ -4564,3 +4564,73 @@ cobrem os dois formatos de `pattern` (com e sem o prefixo).
   não por exceção silenciosa nem por igualdade de array. **A-24 continua
   `PENDENCIA-POS-MVP`, não corrigido** — nenhum arquivo Go de produção
   deste fork foi editado por este Goal.
+
+## Delta implementado — diff049, 2026-09-22 ([D-065](DECISIONS.md))
+
+Fecha as duas observações não bloqueantes do
+[review048](reviews/048-review.md): o mecanismo de cobertura de D-064
+media conformidade de mensagem e crédito de categoria em dois passos
+nunca confrontados, e a asserção de saída silenciosa era uma `RegExp`
+ancorada no acessor `.get(`. `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
+concentra a mudança; `apps/ai-orchestrator/tests/support/http-egress-sites.ts`
+e `apps/ai-orchestrator/tests/support/product-transport-routes.txt` têm
+diff **zero** contra a baseline, e nenhum arquivo de `apps/frontend/src/`,
+`apps/bff/src/`, `apps/ai-orchestrator/src/`, `apps/evolution-go/`,
+`packages/` ou `tools/ia-loop/` mudou nesta rodada.
+
+- **A categoria só é creditada quando a declarada pelo controle e a
+  observada na mensagem coincidem.** `expectRefusal` ganhou um
+  terceiro parâmetro obrigatório — a categoria declarada — entre a ação
+  e o `matcher`. Mensagem sem marcador `[categoria: ...]` reprova
+  nomeando controle e mensagem; marcador com categoria diferente da
+  declarada reprova nomeando as duas; categoria declarada fora dos três
+  arrays em runtime reprova antes de olhar a mensagem. O símbolo
+  `NO_REFUSAL_CATEGORY` cobre o único caso legítimo de recusa sem
+  categoria, nascida fora das quatro fábricas, declarado pelo controle
+  em vez de engolido.
+- **Os 29 sítios de chamada pré-existentes migraram sem divergência
+  entre categoria declarada e observada**, e três controles novos e
+  permanentes provam as três saídas do guard sobre o próprio mecanismo
+  — confirmado por controle temporário e revertido: com o guard voltado
+  à forma anterior, os três reprovam por falta de `toThrow`.
+- **O descarte silencioso deixou de ser casado por `RegExp` ancorada em
+  `.get(` e passou a ser enumerado por forma idiomática** — condição
+  sobre valor ausente (`=== undefined`, `=== null`, `!<identificador>`)
+  seguida de `continue;`, em qualquer origem. Toda ocorrência tem de
+  estar num registro nomeado (`DOCUMENTED_SILENT_DISCARDS`), fail-closed
+  nos dois sentidos: ocorrência não registrada reprova nomeando
+  `arquivo:linha`, entrada obsoleta reprova. As duas asserções de frase
+  literal da saída silenciosa de `sourcesByPath` não mudaram.
+- **A varredura real encontrou 5 sítios, não os 2 nomeados na
+  baseline** — descoberta, não ajuste: `http-egress-sites.ts` tem diff
+  zero, e os 3 adicionais já existiam no texto, invisíveis à `RegExp`
+  antiga. Nenhum é candidato descartado; cada um está registrado com o
+  motivo computado de ser inócuo.
+- **Prova executada:** `npx vitest run
+  tests/assistant/assistant.service.test.ts` (em `apps/ai-orchestrator`):
+  **204** testes (baseline: 200), **204** passando, **0** falhando.
+  `npx vitest run` completo: **1016** testes, **928** passando
+  (baseline: 924), **88** pulados (mesma contagem da baseline), **0**
+  falhando. `npx tsc -p tsconfig.json --noEmit`: "TypeScript: No errors
+  found", exit 0. `npm run lint` (`eslint src --max-warnings=0`): exit
+  0, sem saída. Sobre a árvore real, reconfirmado sem mudança: **1**
+  superfície, **4** ligações resolvidas, **205** arquivos varridos,
+  **10** rotas, **2** instanciações fora do transporte, **0** chamadas
+  de membro fora da superfície, e as **41** ocorrências de `this.http.`
+  em `apps/bff/src/clients/` classificadas sem recusa.
+- **Gate reexecutado sobre a árvore final:** `npm run validate:core`
+  **PASSED** — dos 17 passos, **15** passaram (inclusive
+  `test:ai-orchestrator`) e **2** pulados por design (`test:bff`,
+  `test:health-worker`); nenhum passo falhou. `npm run test:gate`
+  (raiz): **226** testes e 0 falhas, inalterado. `validate:integration`
+  continua recusando com `exit 2` e `BFF_TEST_DATABASE_URL is not set`
+  — pré-condição de banco declarada ausente, não reexecutada por esta
+  unidade de documentação (WU-12).
+- **Limite declarado do escopo §3, não mascarado:** a enumeração de
+  descarte cobre **descarte guardado por valor ausente**, não todo
+  `continue;` do módulo (majoritariamente varredura lexical de
+  caractere) e **não é prova de conservação de candidatos** — provar
+  que todo candidato lido termina em requisição, recusa ou balde
+  declarado é trabalho de Goal futuro, não autorizado aqui. **A-24
+  continua `PENDENCIA-POS-MVP`, não corrigido** — nenhum arquivo Go de
+  produção deste fork foi editado por este Goal.

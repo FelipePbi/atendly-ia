@@ -3192,3 +3192,122 @@ schema TypeScript e o `.env.example` são lidos, nunca um ambiente
 implantado. `validate:integration` continua recusando por pré-condição de
 banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado
 como ausente — não reexecutado por esta unidade de documentação (WU-06).
+
+## 26. A categoria creditada passa a ser a declarada pelo controle, e o descarte silencioso é enumerado por forma idiomática — Goal049, 2026-09-22
+
+Seção nova, escrita depois da última mudança de árvore do diff049
+(WU-01 a WU-06: a amarra que confronta categoria declarada e observada
+dentro de `expectRefusal`, a migração dos sítios de chamada
+pré-existentes, os três controles permanentes do guard novo, a troca da
+asserção de saída silenciosa por enumeração de descarte guardado por
+valor ausente, os controles negativos do mecanismo de descarte —
+revertidos —, e a reconfirmação da árvore real; WU-07 a WU-11 são os
+gates — typecheck, lint, targeted-tests, suíte completa e validation
+gate). Ela **não reescreve** §4 a §25: os registros de A-01 a A-24 em
+§19, o veredito de §19 a §25 e as vinte e cinco seções de fechamento
+anteriores continuam exatamente como estavam, e a entrada de **A-24**
+**não foi tocada**. Este Goal não corrige A-24 e não abre achado novo —
+fecha as duas aberturas que o [review048](reviews/048-review.md)
+registrou como observações não bloqueantes: o mecanismo de cobertura de
+D-064 media conformidade de mensagem e crédito de categoria em dois
+passos nunca confrontados, e a asserção de saída silenciosa era uma
+`RegExp` ancorada num único acessor.
+
+### O que mudou
+
+**A categoria só é creditada quando a declarada pelo controle e a
+observada na mensagem coincidem.** `expectRefusal`
+(`assistant.service.test.ts:67`–`101`) ganhou um terceiro parâmetro
+obrigatório, a categoria declarada, entre a ação e o `matcher`. Três
+saídas passam a reprovar em vez de creditar em silêncio: mensagem sem
+marcador `[categoria: ...]` reprova nomeando controle e mensagem;
+marcador com categoria diferente da declarada reprova nomeando as duas;
+categoria declarada fora dos três arrays em runtime
+(`ALL_REFUSAL_CATEGORIES`, `:58`–`62`) reprova antes de olhar a
+mensagem. O símbolo `NO_REFUSAL_CATEGORY` (`:65`) cobre o único caso
+legítimo de recusa sem categoria — nascida fora das quatro fábricas —,
+declarado pelo controle, não engolido.
+
+**Os sítios de chamada pré-existentes migraram, e a contagem real é
+maior que a estimada.** A árvore final tem **32** chamadas de
+`expectRefusal` (fora a declaração), não as 29 do documento do Goal:
+**29** são os controles de categoria real, migrados 1:1 sem divergência
+entre declarada e observada; **3** são os controles novos do guard,
+descritos abaixo. `describe("Goal049 / WU-03...")`
+(`:114`–`151`+) prova, permanentemente, as três saídas do guard sobre o
+próprio mecanismo — não sobre uma categoria de produto —, confirmado
+por controle temporário e revertido: com o guard voltado à forma
+anterior, as três reprovam por falta de `toThrow`.
+
+**O descarte silencioso deixou de ser casado por `RegExp` ancorada em
+`.get(` e passou a ser enumerado por forma idiomática.**
+`findSilentDiscardLines` (`:5909`–`5920`) varre
+`http-egress-sites.ts` por toda linha `if (<condição sobre valor
+ausente>) continue;`, em `=== undefined`, `=== null` ou
+`!<identificador>`, combinável por `||`. Toda ocorrência tem de estar em
+`DOCUMENTED_SILENT_DISCARDS` (`:5885`–`5906`), fail-closed nos dois
+sentidos como `PROVEN_UNREACHABLE_REFUSAL_CATEGORIES` de D-064:
+ocorrência não registrada reprova nomeando `arquivo:linha`, e entrada
+obsoleta reprova. As duas asserções de frase literal (`:5931`,
+`:5934`) não mudaram.
+
+**A varredura real encontrou 5 sítios, não os 2 nomeados na baseline —
+descoberta, não ajuste.** `http-egress-sites.ts` tem diff **zero**
+contra a baseline: os 3 sítios adicionais (`:1141`, `:1916`, `:2029`)
+já existiam no texto e não eram vistos pela `RegExp` antiga, ancorada
+em `.get(`. Nenhum dos 5 é candidato descartado — cada um está
+registrado com o motivo computado de ser inócuo, na decisão nova
+([D-065](DECISIONS.md)).
+
+### Veredito recontado
+
+Esta auditoria continua com **0** achados `BLOQUEADOR-MVP`, **8**
+`PENDENCIA-POS-MVP` e **6** `LIMITE-DECLARADO` — a mesma contagem de
+§25. **Nenhuma mudança em relação a §25**: nenhum achado de A-01 a A-24
+foi tocado, corrigido, reclassificado ou reaberto. **A-24 continua
+`PENDENCIA-POS-MVP`, não corrigido** — nenhum arquivo Go de produção
+deste fork foi editado por este Goal.
+
+**Limite próprio deste Goal, declarado e não mascarado.** A enumeração
+de `findSilentDiscardLines` cobre **descarte guardado por valor
+ausente**, não todo `continue;` do módulo (majoritariamente varredura
+lexical de caractere, sem relação com descarte de candidato) e **não é
+prova de conservação de candidatos**: um `continue` sem guarda de valor
+ausente não é capturado. Provar que todo candidato termina em
+requisição, recusa ou balde declarado é trabalho de Goal futuro, não
+autorizado aqui. Consequência mensurável: de **204** testes em
+`assistant.service.test.ts` (baseline: 200), **204** passam, **0**
+falham. A suíte completa de `apps/ai-orchestrator` fecha em **1016**
+testes: **928** passando (baseline: 924), **88** pulados (mesma
+contagem da baseline), **0** falhando. `npx tsc -p tsconfig.json
+--noEmit`: "TypeScript: No errors found", exit 0. `npm run lint`
+(`eslint src --max-warnings=0`): exit 0, sem saída. `npm run
+validate:core` **PASSED**: dos 17 passos, **15** passaram (inclusive
+`test:ai-orchestrator`) e **2** pulados por design (`test:bff`,
+`test:health-worker`); nenhum falhou. `npm run test:gate` (raiz):
+**226** testes, **226** passando, **0** falhando, inalterado, porque
+não exercita este arquivo.
+
+Quatro coisas que esta seção não diz. **Não diz que A-24 foi corrigido**:
+o rótulo `"Ver Menu"` continua escrito em
+`pkg/sendMessage/service/send_service.go:1960`. **Não diz que M4 foi
+fechado**: nenhuma chamada saiu para provedor de LLM real nem para o
+WhatsApp real; o diff049 toca só
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts` e a
+documentação de migração — `git status --porcelain=v1 -uall` não lista
+nenhum arquivo de `tools/ia-loop/` nesta rodada, e a dispensa do
+review048 não se estendeu. **Não diz que o comportamento em runtime do
+serviço Go foi provado**: o que se prova é o que a árvore de código diz,
+lida por enumeração de ocorrência sobre o texto-fonte. **Não diz que a
+fidelidade visual está provada**: nenhum arquivo de
+`apps/frontend/src/` mudou.
+
+O que continua fora do alcance deste Goal, por construção: comportamento
+em runtime do serviço Go; qual binário roda em produção; `whatsmeow-
+lib/`, biblioteca vendorizada lida apenas como fonte das declarações de
+proto; o valor real de qualquer variável de ambiente; e conservação de
+candidatos no módulo de descarte, declarada e limitada ao escopo §3 (ver
+"Limite próprio" acima). `validate:integration` continua recusando por
+pré-condição de banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not
+set`), declarado como ausente — não reexecutado por esta unidade de
+documentação (WU-12).

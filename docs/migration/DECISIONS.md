@@ -2280,3 +2280,217 @@ que o mecanismo deste Goal existe para reprovar; e se a correção de
 produto do Goal mas necessária para o harness rodar
 `targeted-tests` corretamente sobre `apps/ai-orchestrator`, deve ficar
 neste diff ou seguir para unidade própria.
+
+## D-065 — A categoria creditada é a declarada pelo controle, não a lida da mensagem, e o descarte silencioso é enumerado por forma idiomática em vez de casado por `RegExp` ancorada em `.get(`, propostas no Goal049
+
+**Status:** ACCEPTED no [review049](reviews/049-review.md) (rodada 1 de
+1, 2026-09-22, zero blockers — a primeira da série 041–049 a fechar sem
+`CHANGES_REQUIRED`), pelo Tech Lead Agent ([AGENT_ROLES](AGENT_ROLES.md),
+D-018). A revisão reconferiu por execução própria a contagem de **32**
+sítios de `expectRefusal` (1 declaração + 32 chamadas, 33 ocorrências),
+as **5** entradas de `DOCUMENTED_SILENT_DISCARDS`, a suíte alvo em
+204/204, a suíte completa em 1016 com 928 passando e 88 pulados, e
+`npm run test:gate` em 226/0; e conferiu o limite do escopo §3 contra a
+árvore, em vez de aceitá-lo escrito — os dois `continue` em bloco de
+`http-egress-sites.ts` (`:658`, `:2033`) têm instrução antes e
+registram em `unresolvedParams`/`pathExpression`, logo não são descarte
+mudo escapando da varredura. Três observações não bloqueantes ficaram
+registradas para Goal futuro: `DOCUMENTED_SILENT_DISCARDS` não afirma
+motivo não vazio, ao contrário de `PROVEN_UNREACHABLE_REFUSAL_CATEGORIES`;
+o registro é chaveado por número de linha, e qualquer deslocamento no
+módulo reprova em massa; e `NO_REFUSAL_CATEGORY` existe sem sítio de uso
+e sem controle que exerça o seu ramo. Cobre o diff049 (WU-01 a WU-11: WU-01 amarra a
+declaração de categoria ao helper `expectRefusal`; WU-02 migra os
+sítios de chamada pré-existentes para declarar categoria; WU-03
+acrescenta os três controles negativos permanentes da amarra nova;
+WU-04 troca a asserção de saída silenciosa de `assistant.service.ts:5770`
+por enumeração de descarte guardado por valor ausente sobre
+`http-egress-sites.ts`, com registro nomeado; WU-05 exercita os
+controles negativos do mecanismo de descarte, revertidos; WU-06
+reconfirma as invariantes da árvore real e que a cobertura do Goal048
+continua mordendo; WU-07 a WU-11 são os gates — typecheck, lint,
+targeted-tests, suíte completa e validation gate — sem tocar árvore de
+produto) sobre a baseline aceita `f294e0e252c6ef69f85c46eeb6dcd7cc9e85de20`
+(fechamento do Goal048); sem commit e sem deploy. Não fecha nem reabre
+nenhum achado — A-01 a A-24 não são tocados, e **A-24 continua
+`PENDENCIA-POS-MVP`**. Não altera nenhuma decisão anterior — reusa e
+não altera D-054 a D-064.
+
+**Contexto:** o [review048](reviews/048-review.md) aceitou o mecanismo
+de cobertura computada de D-064 e registrou duas observações não
+bloqueantes. A observação 2: `expectRefusal(action, matcher)` afirmava
+a `RegExp` contra a mensagem lançada e, à parte, extraía a categoria de
+`[categoria: X]` da mesma mensagem para marcá-la observada — os dois
+lados nunca eram confrontados. Um controle cuja `RegExp` casasse a
+categoria A e cuja recusa trouxesse a categoria B creditava B: a
+execução ficava verde, e A continuava descoberta enquanto a suíte
+afirmava que não estava. Uma recusa sem o marcador não creditava nada e
+não reprovava — o `if (category)` de então engolia o caso em silêncio.
+A observação 1, par da mesma família: a asserção de ausência de saída
+silenciosa (`assistant.service.test.ts:5770` na baseline) era uma
+`RegExp` ancorada no acessor `.get(`
+(`/\.get\([^)]*\);\s*\n\s*if \(\w+ === undefined\) continue/u`); um
+descarte mudo escrito `if (!x) continue`, ou sobre valor de outra
+origem, passava sem ser visto — confirmado na baseline em
+`http-egress-sites.ts:726` (`if (!argExpression) continue;`).
+
+**Decisão:**
+
+1. **A cobertura só é creditada quando a categoria declarada pelo
+   controle e a observada na mensagem coincidem.** `expectRefusal`
+   (`assistant.service.test.ts:67`–`101`) passou a receber um terceiro
+   parâmetro obrigatório, `category: DeclaredRefusalCategory | typeof
+   NO_REFUSAL_CATEGORY`, entre a ação e o `matcher`. Três saídas
+   reprovam em vez de passar em silêncio: mensagem sem marcador
+   `[categoria: ...]` reprova nomeando a categoria declarada e a
+   mensagem lançada; marcador presente com categoria diferente da
+   declarada reprova nomeando as duas; categoria declarada fora dos
+   três arrays (`ALL_REFUSAL_CATEGORIES`, união computada em runtime,
+   `:58`–`62`) reprova antes mesmo de olhar a mensagem. Só quando as
+   três checagens passam a categoria observada entra em
+   `observedRefusalCategories`.
+2. **O caso legítimo sem categoria é declarado, não mudo.** O símbolo
+   `NO_REFUSAL_CATEGORY` (`:65`) é o valor que um controle passa quando
+   a recusa exercida nasce fora das quatro fábricas que emitem o
+   marcador; `expectRefusal` devolve sem tentar crédito algum. Nenhum
+   sítio do arquivo usa esse símbolo hoje: as recusas exercidas pelos
+   controles existentes nascem todas nas quatro fábricas.
+3. **Os sítios de chamada pré-existentes migraram para declarar
+   categoria**, e a contagem real, na árvore final, é **32** chamadas
+   de `expectRefusal` (fora a declaração), não as 29 estimadas na
+   baseline: 29 são os controles de categoria real já existentes,
+   migrados para o terceiro parâmetro; 3 são os controles novos do
+   item 4 abaixo, que exercitam as três saídas do guard sobre o próprio
+   mecanismo, não sobre uma categoria de recusa do produto. Nenhuma
+   divergência entre categoria declarada e observada apareceu nos 29
+   sítios migrados — a migração é 1:1 com a categoria que cada `matcher`
+   já provava.
+4. **As três saídas do guard novo têm controle permanente.**
+   `describe("Goal049 / WU-03...")` (`:114`–`151`+) prova, cada uma
+   sobre um `expect(() => expectRefusal(...)).toThrow(...)`: categoria
+   declarada diferente da observada reprova nomeando as duas; recusa
+   sem marcador reprova; categoria declarada fora dos três arrays
+   reprova. Confirmado por controle temporário, rodado e desfeito nesta
+   Work Unit: com o guard revertido para a forma anterior (sem comparar
+   `category` ao marcador observado), as três reprovam por falta de
+   `toThrow` — nenhuma é vácua.
+5. **O descarte silencioso é enumerado por forma idiomática, não casado
+   por uma `RegExp` ancorada em `.get(`.** `findSilentDiscardLines`
+   (`:5909`–`5920`) varre `http-egress-sites.ts` por toda linha na
+   forma `if (<condição sobre valor ausente>) continue;`, com a
+   condição em `=== undefined`, `=== null` ou `!<identificador>`,
+   combinável por `||`, qualquer identificador, qualquer origem — não
+   mais só depois de `.get(`. Cada ocorrência encontrada tem de estar
+   em `DOCUMENTED_SILENT_DISCARDS` (`:5885`–`5906`), um `Map` nomeado
+   de `linha → motivo de ser inócua`; o mecanismo é fail-closed nos dois
+   sentidos, como `PROVEN_UNREACHABLE_REFUSAL_CATEGORIES` de D-064:
+   ocorrência não registrada reprova nomeando `arquivo:linha` e o
+   trecho, e entrada registrada que a varredura não encontra mais
+   reprova como obsoleta (`:5938`–`5957`). As duas asserções de frase
+   literal (`:5931` e `:5934`, "não está entre os arquivos lidos") não
+   mudaram.
+6. **A varredura real, na árvore final, encontrou 5 sítios — não os 2
+   nomeados na baseline —, e a diferença é descoberta, não ajuste.**
+   Confirmado por `git diff` contra a baseline: `http-egress-sites.ts`
+   tem diff **zero**; os 3 sítios adicionais (`:1141`, `:1916`, `:2029`)
+   já existiam no texto da baseline e não foram vistos porque o
+   documento do Goal só nomeava os 2 que a asserção antiga alcançava
+   (`:726`, `:1143`). Nenhum dos 5 é candidato descartado: `:726` é
+   ausência de argumento numa chamada real específica que genuinamente
+   não o passa; `:1141` e `:1143` são linhas do laço de
+   `readEnvSchemaDefault` cujo regex de declaração, ou de aspas, não
+   casou naquela iteração; `:1916` é `import { X }` sem alias local para
+   o nome exportado rastreado por aquela declaração específica; `:2029`
+   é um chamador cujo parâmetro não resolve a env var de base do
+   serviço Go. Nenhuma regra de classificação, categoria, ordem de
+   consulta ou isenção mudou para produzir essa contagem — só a
+   varredura enxerga mais forma idiomática do que a `RegExp` antiga.
+
+**Alternativas:** manter a `RegExp` de mensagem como única prova e
+tratar a categoria extraída como diagnóstico, não como amarra — rejeitada:
+é exatamente a lacuna da observação 2, onde a categoria errada passa
+silenciosamente creditada; exigir que toda recusa sem categoria seja
+tratada como erro do controle, sem `NO_REFUSAL_CATEGORY` — rejeitada:
+recusa legítima nascida fora das quatro fábricas existe por desenho
+(D-054) e não deve forçar um controle a inventar categoria; continuar
+ancorando a enumeração de descarte em `.get(` e ampliar só a lista de
+acessores reconhecidos — rejeitada: é a mesma forma escrita à mão que a
+observação 1 aponta, só que com mais um acessor; declarar a
+enumeração de descarte como prova de conservação de candidatos —
+rejeitada, é o limite que o próprio escopo §3 do Goal declara: cobre
+descarte guardado por valor ausente, não todo `continue;` do módulo e
+não é prova de conservação.
+
+**Motivo:** o Goal048 computou a cobertura a partir dos três arrays,
+mas confiava que a categoria extraída da mensagem observada era a
+mesma que o controle pretendia provar, sem nunca comparar as duas — a
+mesma classe de defeito (afirmação que a execução não exerce, agora um
+nível abaixo, dentro do próprio mecanismo de prova) que motivou D-054,
+D-060, D-063 e D-064. Amarrar a categoria declarada à observada, e
+enumerar o descarte mudo por forma idiomática em vez de por acessor
+escrito à mão, fecha as duas aberturas que o review048 registrou sem
+ampliar alcance, sem mudar critério de conjunto e sem corrigir achado
+algum.
+
+**Consequências:** `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
+ganha o terceiro parâmetro de `expectRefusal`, `NO_REFUSAL_CATEGORY`,
+`ALL_REFUSAL_CATEGORIES`, os três controles permanentes do guard
+(`describe("Goal049 / WU-03...")`), `findSilentDiscardLines` e
+`DOCUMENTED_SILENT_DISCARDS` no lugar da `RegExp` ancorada, com **7100**
+linhas (baseline: 6896) e **204** testes (baseline: **200**), **204**
+passando, **0** falhando (`npx vitest run
+tests/assistant/assistant.service.test.ts` em `apps/ai-orchestrator`).
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts` tem diff
+**zero** contra a baseline — a enumeração não exigiu expor nada novo,
+como o Goal previa. `apps/ai-orchestrator/tests/support/product-transport-routes.txt`
+está intocado. `npx vitest run` completo de `apps/ai-orchestrator` →
+**1016** testes: **928** passando (baseline: 924), **88** pulados
+(mesma contagem da baseline), **0** falhando. `npx tsc -p
+tsconfig.json --noEmit` em `apps/ai-orchestrator`: "TypeScript: No
+errors found", exit 0. `npm run lint` (`eslint src
+--max-warnings=0`) em `apps/ai-orchestrator`: exit 0, sem saída. `npm
+run validate:core`: **PASSED** — dos 17 passos, **15** passaram
+(inclusive `test:ai-orchestrator`) e **2** pulados por design
+(`test:bff`, `test:health-worker`); nenhum falhou. `npm run test:gate`
+(raiz): **226** testes, **226** passando, **0** falhando, inalterado —
+não exercita `assistant.service.test.ts`. `validate:integration`
+continua recusando por pré-condição de banco ausente (`exit 2`,
+`BFF_TEST_DATABASE_URL is not set`), declarada como ausente — não
+reexecutada por esta unidade de documentação (WU-12). Sobre a árvore
+real, reconfirmado sem mudança (WU-06): **1** superfície, **4**
+ligações resolvidas, **205** arquivos varridos, **10** rotas, **2**
+instanciações fora do transporte, **0** chamadas de membro fora da
+superfície, e as **41** ocorrências de `this.http.` em
+`apps/bff/src/clients/` classificadas sem recusa;
+`product-transport-routes.txt` intocado. `git status --porcelain=v1
+-uall`, ao final desta rodada, lista **só**
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts` e os
+quatro documentos desta migração: nenhum arquivo de `tools/ia-loop/`
+foi tocado nesta rodada — a dispensa do review048 era restrita ao
+Goal048 e não se estendeu, e não houve necessidade dela aqui —, e
+nenhum arquivo de `apps/frontend/src/`, `apps/bff/src/`,
+`apps/ai-orchestrator/src/`, `apps/evolution-go/` ou `packages/` foi
+tocado. Nenhum diretório temporário de controle negativo sobrou. Este
+diff não fecha **M4**, não afirma fidelidade visual, não prova runtime
+do serviço Go e não corrige **A-24**, que continua
+`PENDENCIA-POS-MVP`.
+
+**Limite declarado, escopo §3:** a enumeração de `findSilentDiscardLines`
+cobre **descarte guardado por valor ausente** — condição sobre valor
+ausente seguida de `continue;`, na forma idiomática reconhecida —, não
+todo `continue;` do módulo (que tem majoritariamente varredura lexical
+de caractere, sem relação com descarte de candidato) e não é prova de
+**conservação de candidatos**: um `continue` sem guarda de valor
+ausente, ou dentro de um bloco com outra instrução antes dele, não é
+capturado por este mecanismo. Provar que todo candidato lido termina em
+requisição, recusa ou balde declarado é trabalho de Goal futuro e não
+foi autorizado aqui.
+
+**Revisar se:** a migração dos 29 sítios revelar, em rodada futura,
+algum caso em que a categoria declarada e a observada genuinamente
+divirjam — não apareceu nesta rodada, mas o guard novo existe para
+nomear esse caso quando ele aparecer; se os 3 sítios adicionais de
+descarte silencioso (`:1141`, `:1916`, `:2029`) exigem motivo mais
+detalhado do que o registrado; e se o limite declarado do escopo §3 —
+cobre descarte guardado por valor ausente, não conservação de
+candidatos — deve virar Goal próprio de prova de conservação.

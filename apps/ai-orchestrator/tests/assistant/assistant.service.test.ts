@@ -22,11 +22,14 @@ import { AI_CONVERSATION_STYLES } from "../../src/modules/tenant-config/ai-setti
 import { DEFAULT_BUSINESS_CONTEXT } from "../../src/modules/tenant-config/business-context.js";
 import {
   CLASS_BINDING_REFUSAL_CATEGORIES,
+  type ClassBindingRefusalCategory,
   CLIENT_FIELD_USE_REFUSAL_CATEGORIES,
+  type ClientFieldUseRefusalCategory,
   computeBoundaryValueCrossing,
   discoverGoServiceHttpRequests,
   discoverHttpEgressSites,
   INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES,
+  type InstanceFieldAssignmentRefusalCategory,
   listTypeScriptSources,
   readEnvFileValue,
   readEnvSchemaDefault,
@@ -47,7 +50,25 @@ const phone = "5511999999999";
 
 const observedRefusalCategories = new Set<string>();
 
-function expectRefusal(action: () => unknown, matcher: RegExp): void {
+type DeclaredRefusalCategory =
+  | InstanceFieldAssignmentRefusalCategory
+  | ClassBindingRefusalCategory
+  | ClientFieldUseRefusalCategory;
+
+const ALL_REFUSAL_CATEGORIES: ReadonlySet<string> = new Set<string>([
+  ...INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES,
+  ...CLASS_BINDING_REFUSAL_CATEGORIES,
+  ...CLIENT_FIELD_USE_REFUSAL_CATEGORIES,
+]);
+
+/** Marcador para o único caso legítimo em que a recusa observada não credita categoria: ela nasce fora das quatro fábricas de `http-egress-sites.ts` e portanto não traz `[categoria: ...]`. */
+const NO_REFUSAL_CATEGORY = Symbol("expectRefusal: recusa sem categoria a creditar");
+
+function expectRefusal(
+  action: () => unknown,
+  category: DeclaredRefusalCategory | typeof NO_REFUSAL_CATEGORY,
+  matcher: RegExp,
+): void {
   let thrown: unknown;
   try {
     action();
@@ -57,11 +78,90 @@ function expectRefusal(action: () => unknown, matcher: RegExp): void {
   expect(thrown).toBeInstanceOf(Error);
   const message = (thrown as Error).message;
   expect(message).toMatch(matcher);
-  const category = /\[categoria: ([\w]+)\]/u.exec(message)?.[1];
-  if (category) {
-    observedRefusalCategories.add(category);
+  if (category === NO_REFUSAL_CATEGORY) {
+    return;
   }
+  if (!ALL_REFUSAL_CATEGORIES.has(category)) {
+    throw new Error(
+      `expectRefusal: categoria declarada "${category}" não pertence a INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES, CLASS_BINDING_REFUSAL_CATEGORIES nem CLIENT_FIELD_USE_REFUSAL_CATEGORIES.`,
+    );
+  }
+  const observed = /\[categoria: ([\w]+)\]/u.exec(message)?.[1];
+  if (!observed) {
+    throw new Error(
+      `expectRefusal: controle declarou a categoria "${category}", mas a mensagem lançada não traz o marcador [categoria: ...]. Mensagem: ${message}`,
+    );
+  }
+  if (observed !== category) {
+    throw new Error(
+      `expectRefusal: controle declarou a categoria "${category}", mas a mensagem lançada traz "${observed}".`,
+    );
+  }
+  observedRefusalCategories.add(observed);
 }
+
+/**
+ * Controles negativos da amarra de categoria de `expectRefusal` (Goal049 /
+ * WU-03): as três saídas do guard nas linhas acima (§1 do escopo do Goal).
+ * Cada `it` chama `expectRefusal` dentro de `expect(...).toThrow(...)`,
+ * porque a chamada que o guard reprova É o comportamento sob teste, não um
+ * erro de montagem do controle. Confirmado por controle temporário, rodado
+ * e desfeito nesta Work Unit (ver relatório do Developer): com o guard
+ * revertido para a forma anterior ao Goal049 (sem comparar `category` ao
+ * marcador observado), as três reprovam por falta de `toThrow` — nenhuma é
+ * vácua.
+ */
+describe("Goal049 / WU-03 — a amarra de categoria de expectRefusal reprova nos três jeitos em que uma declaração pode divergir da recusa real", () => {
+  it("controle cuja categoria declarada não é a observada: expectRefusal reprova nomeando as duas", () => {
+    expect(() =>
+      expectRefusal(
+        () =>
+          discoverWithEvolutionClientMembers([
+            "  async createInstance() {",
+            "    const { request } = this.http;",
+            '    return request({ method: "POST", path: "/instance/create" });',
+            "  }",
+          ]),
+        "client_field_use_member_not_invoked",
+        /evolution-client\.ts:\d+:.*desestruturado.*\[categoria: client_field_use_destructured\]/u,
+      ),
+    ).toThrow(
+      /controle declarou a categoria "client_field_use_member_not_invoked".*mensagem lançada traz "client_field_use_destructured"/u,
+    );
+  });
+
+  it("controle sobre recusa sem o marcador [categoria: ...]: expectRefusal reprova, em vez de creditar categoria nenhuma em silêncio", () => {
+    expect(() =>
+      expectRefusal(
+        () => {
+          throw new Error("mensagem de erro manual, sem marcador de categoria nenhum");
+        },
+        "client_field_use_destructured",
+        /mensagem de erro manual, sem marcador de categoria nenhum/,
+      ),
+    ).toThrow(
+      /controle declarou a categoria "client_field_use_destructured", mas a mensagem lançada não traz o marcador/u,
+    );
+  });
+
+  it("categoria declarada que não pertence a nenhum dos três arrays: expectRefusal reprova antes de checar a mensagem observada", () => {
+    expect(() =>
+      expectRefusal(
+        () =>
+          discoverWithEvolutionClientMembers([
+            "  async createInstance() {",
+            "    const { request } = this.http;",
+            '    return request({ method: "POST", path: "/instance/create" });',
+            "  }",
+          ]),
+        "categoria_nao_declarada_em_nenhum_array" as unknown as DeclaredRefusalCategory,
+        /evolution-client\.ts:\d+:.*desestruturado.*\[categoria: client_field_use_destructured\]/u,
+      ),
+    ).toThrow(
+      /categoria declarada "categoria_nao_declarada_em_nenhum_array" não pertence a INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES, CLASS_BINDING_REFUSAL_CATEGORIES nem CLIENT_FIELD_USE_REFUSAL_CATEGORIES/u,
+    );
+  });
+});
 
 describe("AssistantService conversational decisions", () => {
   it("answers a first generic greeting without calling the model or offering services", async () => {
@@ -5183,6 +5283,7 @@ describe("Goal045 / FIX-001 — a construção `export` isenta a ligação, nunc
   it("`export const Forwarded = InternalHttpClient;` recusa: o lado DIREITO da construção `export` é posição de valor, não a ligação exportada", () => {
     expectRefusal(
       () => discoverWithTrailingSource("export const Forwarded = InternalHttpClient;"),
+      "class_binding_reference_forwarded_as_value",
       /class_binding_reference_forwarded_as_value/,
     );
   });
@@ -5190,6 +5291,7 @@ describe("Goal045 / FIX-001 — a construção `export` isenta a ligação, nunc
   it("`export class SubClient extends InternalHttpClient {}` recusa: herança de classe é posição de valor, e estar dentro de um `export` não a isenta", () => {
     expectRefusal(
       () => discoverWithTrailingSource("export class SubClient extends InternalHttpClient {}"),
+      "class_binding_reference_forwarded_as_value",
       /class_binding_reference_forwarded_as_value/,
     );
   });
@@ -5407,6 +5509,7 @@ describe("controle negativo 1 (Goal046 / WU-04) — `export default { Client: <C
   it("depois: `export default { Client: InternalHttpClient };` no mesmo arquivo candidato recusa por `class_binding_export_construct_form_unrecognized` — a forma não é `export default <identificador>` e portanto cai fora da allowlist; a recusa por forma não reconhecida é conferida ANTES da heurística de posição de tipo, porque dentro de uma forma que a leitura não sabe recortar o dois-pontos de `Client: <valor>` separa chave de valor num literal de objeto, não anota tipo", () => {
     expectRefusal(
       () => discoverWithCandidateTrailing("export default { Client: InternalHttpClient };"),
+      "class_binding_export_construct_form_unrecognized",
       /class_binding_export_construct_form_unrecognized/,
     );
   });
@@ -5430,6 +5533,7 @@ describe("controle negativo 2 (Goal046 / WU-04) — `export namespace N { export
         discoverWithCandidateTrailing(
           "export namespace N { export const C = InternalHttpClient; }",
         ),
+      "class_binding_export_construct_form_unrecognized",
       /class_binding_export_construct_form_unrecognized/,
     );
   });
@@ -5444,6 +5548,7 @@ describe("controle negativo 3 (Goal046 / WU-04) — `export = <Classe>` no arqui
   it("depois, no arquivo CANDIDATO: `export = InternalHttpClient;` recusa por `class_binding_export_construct_form_unrecognized` — a allowlist fechada não reconhece `export =`, e a ocorrência do nome ali não cai em nenhuma isenção", () => {
     expectRefusal(
       () => discoverWithCandidateTrailing("export = InternalHttpClient;"),
+      "class_binding_export_construct_form_unrecognized",
       /class_binding_export_construct_form_unrecognized/,
     );
   });
@@ -5451,6 +5556,7 @@ describe("controle negativo 3 (Goal046 / WU-04) — `export = <Classe>` no arqui
   it("depois, no arquivo da DECLARAÇÃO: `export = InternalHttpClient;` continua recusando por `class_binding_export_form_not_resolved` — esta forma nunca chega à allowlist de `exportConstructBindingRange`, porque `resolveModuleExportBindings` já derruba a leitura antes, e essa recusa mais antiga não muda de categoria", () => {
     expectRefusal(
       () => discoverWithDeclarationTrailing("export = InternalHttpClient;"),
+      "class_binding_export_form_not_resolved",
       /class_binding_export_form_not_resolved/,
     );
   });
@@ -5465,6 +5571,7 @@ describe("controle negativo 4 (Goal046 / WU-04) — `export const` que atribui e
   it("depois: `export const Weird: Array<Foo = [InternalHttpClient];` recusa — o `<` de `Array<Foo` nunca fecha (não há `>` correspondente), `findTopLevelAssignmentIndex` termina com profundidade 1 e devolve `resolved: false`, e `exportConstructBindingRange` classifica a construção inteira como não reconhecida", () => {
     expectRefusal(
       () => discoverWithCandidateTrailing("export const Weird: Array<Foo = [InternalHttpClient];"),
+      "class_binding_export_construct_form_unrecognized",
       /class_binding_export_construct_form_unrecognized/,
     );
   });
@@ -5507,6 +5614,7 @@ describe("controle negativo 5 (Goal046 / WU-04) — as formas `export` reais con
   it("depois: `export class SubClient extends InternalHttpClient {}` no candidato continua recusando por `class_binding_reference_forwarded_as_value` — herança de classe é posição de VALOR, e a allowlist fechada não muda essa categoria", () => {
     expectRefusal(
       () => discoverWithCandidateTrailing("export class SubClient extends InternalHttpClient {}"),
+      "class_binding_reference_forwarded_as_value",
       /class_binding_reference_forwarded_as_value/,
     );
   });
@@ -5514,6 +5622,7 @@ describe("controle negativo 5 (Goal046 / WU-04) — as formas `export` reais con
   it("depois: `export const Forwarded = InternalHttpClient;` no candidato continua recusando por `class_binding_reference_forwarded_as_value` — o lado DIREITO da atribuição é posição de VALOR, e a allowlist fechada não muda essa categoria", () => {
     expectRefusal(
       () => discoverWithCandidateTrailing("export const Forwarded = InternalHttpClient;"),
+      "class_binding_reference_forwarded_as_value",
       /class_binding_reference_forwarded_as_value/,
     );
   });
@@ -5686,6 +5795,7 @@ describe("Goal047 / WU-04 (§1) — toda ocorrência do campo cliente é classif
     try {
       expectRefusal(
         () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+        "client_field_use_optional_chaining",
         /evolution-client\.ts:\d+:.*encadeamento opcional.*\[categoria: client_field_use_optional_chaining\]/u,
       );
     } finally {
@@ -5745,6 +5855,7 @@ describe("Goal047 / WU-04 (§2) — o alvo da atribuição só vira campo provad
     try {
       expectRefusal(
         () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+        "instance_field_assignment_local_variable",
         /evolution-client\.ts:\d+:.*variável local.*\[categoria: instance_field_assignment_local_variable\]/u,
       );
     } finally {
@@ -5754,20 +5865,95 @@ describe("Goal047 / WU-04 (§2) — o alvo da atribuição só vira campo provad
   });
 });
 
+/**
+ * Registro nomeado de todo descarte silencioso de candidato hoje presente em
+ * `http-egress-sites.ts`: condição sobre valor ausente (`=== undefined`,
+ * `=== null` ou `!<identificador>`) seguida de `continue;` na mesma linha —
+ * a mesma forma dos dois exemplos que abriram esta Work Unit. Morde nos dois
+ * sentidos, como PROVEN_UNREACHABLE_REFUSAL_CATEGORIES acima: ocorrência que
+ * a varredura encontra e não está aqui reprova nomeando arquivo:linha e o
+ * trecho; entrada aqui que a varredura não encontra mais reprova como
+ * obsoleta.
+ *
+ * Alcance DECLARADAMENTE PARCIAL: o módulo tem 120 ocorrências de
+ * `continue;` no total, a maioria de varredura lexical de caractere (não
+ * descarte de candidato) ou dentro de bloco com outra instrução antes do
+ * `continue` — nenhuma das duas formas é capturada por este mecanismo. Este
+ * registro não é prova de conservação de candidatos, só de que as ocorrências
+ * na forma idiomática coberta estão nomeadas e justificadas.
+ */
+const DOCUMENTED_SILENT_DISCARDS: ReadonlyMap<number, string> = new Map([
+  [
+    726,
+    "resolveViaCallers: posição de parâmetro sem argumento nesta chamada real específica — outras chamadas do mesmo `functionName` continuam sendo varridas; não é candidato descartado, é ausência de argumento numa chamada que genuinamente não o passa",
+  ],
+  [
+    1141,
+    "readEnvSchemaDefault: linha do arquivo cujo regex de declaração não casou — segue para a próxima linha à procura da declaração real; despejar aqui derrubaria a leitura em toda linha que não é a declaração",
+  ],
+  [
+    1143,
+    "readEnvSchemaDefault: nenhum dos três grupos de aspas (\", ', `) capturou depois de já ter casado o regex de declaração — defensivo, porque a regex exige um dos três; mesmo assim documentado para não ficar não-nomeado",
+  ],
+  [
+    1916,
+    "findCrossFileCallerBindings: `import { X }` sem alias local para o nome exportado rastreado nesta declaração de import — essa declaração não é um binding real do nome que a varredura persegue, então não há chamador para perder",
+  ],
+  [
+    2029,
+    "resolução de parâmetro em trânsito do serviço Go: nenhum parâmetro desta chamada resolve a env var de base do serviço Go — este chamador não determina base, então não contribui caminho; outros chamadores continuam sendo varridos",
+  ],
+]);
+
+/** Acha, em `source`, toda linha na forma `if (<condição sobre valor ausente>) continue;`, com a condição em qualquer forma idiomática reconhecida (`=== undefined`, `=== null`, `!<identificador>`), combinável por `||`, com qualquer identificador. */
+function findSilentDiscardLines(source: string): { line: number; snippet: string }[] {
+  const clause = "(?:![A-Za-z_$][\\w$.]*|[A-Za-z_$][\\w$.]*\\s*===\\s*(?:undefined|null))";
+  const pattern = new RegExp(`if \\(\\s*${clause}(?:\\s*\\|\\|\\s*${clause})*\\s*\\)\\s*continue;`, "gu");
+  const lines = source.split(/\r?\n/u);
+  const found: { line: number; snippet: string }[] = [];
+  lines.forEach((text, index) => {
+    pattern.lastIndex = 0;
+    const match = pattern.exec(text);
+    if (match) found.push({ line: index + 1, snippet: match[0] });
+  });
+  return found;
+}
+
 describe("Goal047 / WU-04 (§3) — as duas saídas de sourcesByPath ausente, no ramo da superfície e no ramo da instanciação, são a mesma: nenhuma pula em silêncio", () => {
-  it("as duas recusas terminam com a mesma frase nomeada, e nenhum `continue` silencioso sobrevive no ramo da superfície nem no da instanciação", () => {
-    const supportModulePath = join(
-      dirname(fileURLToPath(import.meta.url)),
-      "../support/http-egress-sites.ts",
-    );
-    const moduleSource = readFileSync(supportModulePath, "utf8");
+  const supportModulePath = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../support/http-egress-sites.ts",
+  );
+  const moduleSource = readFileSync(supportModulePath, "utf8");
+
+  it("as duas recusas terminam com a mesma frase nomeada", () => {
     expect(moduleSource).toContain(
       'sítio "${site.category}" foi encontrado, mas o texto de ${site.filePath} não está entre os arquivos lidos',
     );
     expect(moduleSource).toContain(
       "a instanciação foi reconhecida pela ligação até ${classDeclarationKey}, mas o texto de ${filePath} não está entre os arquivos lidos",
     );
-    expect(moduleSource).not.toMatch(/\.get\([^)]*\);\s*\n\s*if \(\w+ === undefined\) continue/u);
+  });
+
+  it("Goal049 / WU-04 — todo descarte silencioso de candidato (condição sobre valor ausente seguida de `continue;`) está no registro nomeado, com arquivo:linha e motivo de ser inócuo — ocorrência não registrada reprova nomeando arquivo:linha e o trecho, e entrada registrada que a varredura não encontra mais reprova como obsoleta", () => {
+    const found = findSilentDiscardLines(moduleSource);
+    const foundLines = new Set(found.map((occurrence) => occurrence.line));
+
+    for (const occurrence of found) {
+      expect(
+        DOCUMENTED_SILENT_DISCARDS.has(occurrence.line),
+        `http-egress-sites.ts:${occurrence.line}: descarte silencioso não registrado em DOCUMENTED_SILENT_DISCARDS — trecho: "${occurrence.snippet}"`,
+      ).toBe(true);
+    }
+
+    for (const line of DOCUMENTED_SILENT_DISCARDS.keys()) {
+      expect(
+        foundLines.has(line),
+        `http-egress-sites.ts:${line}: entrada de DOCUMENTED_SILENT_DISCARDS obsoleta — a varredura não encontra mais descarte silencioso ali`,
+      ).toBe(true);
+    }
+
+    expect(found.length).toBe(DOCUMENTED_SILENT_DISCARDS.size);
   });
 });
 
@@ -5927,6 +6113,7 @@ describe("Goal047 / WU-05 (§7, controle 2) — acesso computado: this.http[\"re
     try {
       expectRefusal(
         () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+        "client_field_use_computed_member_access",
         /evolution-client\.ts:\d+:.*acesso computado.*\[categoria: client_field_use_computed_member_access\]/u,
       );
     } finally {
@@ -5990,6 +6177,7 @@ describe("Goal047 / WU-05 (§7, controle 3) — alias em variável local: const 
     try {
       expectRefusal(
         () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+        "client_field_use_field_forwarded_as_value",
         /evolution-client\.ts:\d+:.*posição de valor.*\[categoria: client_field_use_field_forwarded_as_value\]/u,
       );
     } finally {
@@ -6053,6 +6241,7 @@ describe("Goal047 / WU-05 (§7, controle 5) — ocorrência fora de corpo de mé
     try {
       expectRefusal(
         () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+        "client_field_use_outside_top_level_method_body",
         /evolution-client\.ts:\d+:.*fora de todo corpo de método de topo.*\[categoria: client_field_use_outside_top_level_method_body\]/u,
       );
     } finally {
@@ -6305,6 +6494,7 @@ describe("Goal047 / WU-05 (§7) — desestruturação do campo, membro não invo
           '    return request({ method: "POST", path: "/instance/create" });',
           "  }",
         ]),
+      "client_field_use_destructured",
       /evolution-client\.ts:\d+:.*desestruturado.*\[categoria: client_field_use_destructured\]/u,
     );
   });
@@ -6318,6 +6508,7 @@ describe("Goal047 / WU-05 (§7) — desestruturação do campo, membro não invo
           '    return send({ method: "POST", path: "/instance/create" });',
           "  }",
         ]),
+      "client_field_use_member_not_invoked",
       /evolution-client\.ts:\d+:.*não é invocado.*\[categoria: client_field_use_member_not_invoked\]/u,
     );
   });
@@ -6330,6 +6521,7 @@ describe("Goal047 / WU-05 (§7) — desestruturação do campo, membro não invo
           '    return this.http.#send({ method: "POST", path: "/instance/create" });',
           "  }",
         ]),
+      "client_field_use_member_name_not_derivable",
       /evolution-client\.ts:\d+:.*sem nome de membro derivável.*\[categoria: client_field_use_member_name_not_derivable\]/u,
     );
   });
@@ -6349,6 +6541,7 @@ describe("Goal047 / WU-05 (§7) — quando o receptor não é o texto literal `t
           '    return this?.http.request({ method: "POST", path: "/instance/create" });',
           "  }",
         ]),
+      "client_field_use_receiver_optional_chaining",
       /evolution-client\.ts:\d+:.*encadeamento opcional está no receptor.*\[categoria: client_field_use_receiver_optional_chaining\]/u,
     );
   });
@@ -6361,6 +6554,7 @@ describe("Goal047 / WU-05 (§7) — quando o receptor não é o texto literal `t
           '    return this["http"].request({ method: "POST", path: "/instance/create" });',
           "  }",
         ]),
+      "client_field_use_receiver_computed_member_access",
       /evolution-client\.ts:\d+:.*índice computado.*\[categoria: client_field_use_receiver_computed_member_access\]/u,
     );
   });
@@ -6374,6 +6568,7 @@ describe("Goal047 / WU-05 (§7) — quando o receptor não é o texto literal `t
           '    return http.request({ method: "POST", path: "/instance/create" });',
           "  }",
         ]),
+      "client_field_use_receiver_destructured",
       /evolution-client\.ts:\d+:.*this é desestruturado.*\[categoria: client_field_use_receiver_destructured\]/u,
     );
   });
@@ -6387,6 +6582,7 @@ describe("Goal047 / WU-05 (§7) — quando o receptor não é o texto literal `t
           '    return self.http.request({ method: "POST", path: "/instance/create" });',
           "  }",
         ]),
+      "client_field_use_receiver_forwarded_as_value",
       /evolution-client\.ts:\d+:.*posição de valor.*\[categoria: client_field_use_receiver_forwarded_as_value\]/u,
     );
   });
@@ -6399,6 +6595,7 @@ describe("Goal047 / WU-05 (§7) — quando o receptor não é o texto literal `t
           '    return this.#transport.request({ method: "POST", path: "/instance/create" });',
           "  }",
         ]),
+      "client_field_use_receiver_field_name_not_derivable",
       /evolution-client\.ts:\d+:.*sem nome de campo derivável.*\[categoria: client_field_use_receiver_field_name_not_derivable\]/u,
     );
   });
@@ -6435,6 +6632,7 @@ describe("Goal047 / WU-05 (§7) — ocorrência dentro de interpolação de temp
           '    return `${await this.http?.request({ method: "POST", path: "/instance/create" })}`;',
           "  }",
         ]),
+      "client_field_use_optional_chaining",
       /evolution-client\.ts:\d+:.*encadeamento opcional.*\[categoria: client_field_use_optional_chaining\]/u,
     );
   });
@@ -6521,6 +6719,7 @@ describe("Goal048 / WU-02 — o alvo da atribuição sem prova nas formas ainda 
     try {
       expectRefusal(
         () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+        "instance_field_assignment_destructured",
         /evolution-client\.ts:\d+:.*padrão de desestruturação.*\[categoria: instance_field_assignment_destructured\]/u,
       );
     } finally {
@@ -6549,6 +6748,7 @@ describe("Goal048 / WU-02 — o alvo da atribuição sem prova nas formas ainda 
     try {
       expectRefusal(
         () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+        "instance_field_assignment_foreign_object_property",
         /evolution-client\.ts:\d+:.*"container\.http".*propriedade de outro objeto.*\[categoria: instance_field_assignment_foreign_object_property\]/u,
       );
     } finally {
@@ -6580,6 +6780,7 @@ describe("Goal048 / WU-02 — o alvo da atribuição sem prova nas formas ainda 
     try {
       expectRefusal(
         () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+        "instance_field_assignment_form_not_recognized",
         /evolution-client\.ts:\d+:.*nem em declaração de propriedade de classe.*\[categoria: instance_field_assignment_form_not_recognized\]/u,
       );
     } finally {
@@ -6691,6 +6892,7 @@ describe("Goal048 / WU-03 — controle das três categorias de ligação de clas
     try {
       expectRefusal(
         () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+        "class_binding_homonymous_declarations",
         /internal-http-client\.ts:\d+:.*"InternalHttpClient" é declarada 2 vezes neste arquivo \(linhas 1, 9\).*\[categoria: class_binding_homonymous_declarations\]/u,
       );
     } finally {
@@ -6733,6 +6935,7 @@ describe("Goal048 / WU-03 — controle das três categorias de ligação de clas
     try {
       expectRefusal(
         () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+        "class_binding_commonjs_export",
         /internal-http-client\.ts:\d+:.*sai do módulo por "exports\.Alt = InternalHttpClient".*\[categoria: class_binding_commonjs_export\]/u,
       );
     } finally {
@@ -6772,6 +6975,7 @@ describe("Goal048 / WU-03 — controle das três categorias de ligação de clas
     try {
       expectRefusal(
         () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+        "class_binding_cross_file_form_not_resolved",
         /via-namespace\.ts:\d+:.*import de namespace.*\[categoria: class_binding_cross_file_form_not_resolved\]/u,
       );
     } finally {

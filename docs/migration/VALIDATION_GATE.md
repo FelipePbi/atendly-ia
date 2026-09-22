@@ -1404,3 +1404,49 @@ duas categorias, é decisão registrada em "Revisar se" de
 [D-064](DECISIONS.md).
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff048-2026-09-22-d-064) e [D-064](DECISIONS.md).
+
+## A categoria creditada passa a ser a declarada pelo controle, e o descarte silencioso é enumerado por forma idiomática, do Goal049
+
+O parágrafo anterior fechou o último trecho fail-open de **prova**: a
+cobertura passou a ser computada a partir dos três arrays em runtime.
+O que sobrava era que o mecanismo novo creditava cobertura por
+convenção — a `RegExp` de mensagem e a categoria extraída dela nunca
+eram confrontadas —, e a asserção de saída silenciosa continuava presa
+a um único acessor escrito à mão. Este delta fecha as duas, sem tocar
+o conjunto de 10 rotas nem o de 27 literais.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `expectRefusal` passa a exigir a categoria declarada pelo controle; a cobertura só é creditada quando ela coincide com a categoria extraída da mensagem realmente lançada. Mensagem sem marcador, marcador com categoria diferente da declarada, e categoria declarada fora dos três arrays em runtime — as três reprovam, nomeando o que faltou | Recusa legítima sem categoria (nascida fora das quatro fábricas que emitem o marcador) continua existindo, agora declarada pelo controle via `NO_REFUSAL_CATEGORY`, em vez de creditar nada em silêncio |
+| Os 29 sítios de chamada pré-existentes migraram para declarar categoria, sem nenhuma divergência entre a declarada e a observada; três controles novos e permanentes provam as três saídas do guard sobre o próprio mecanismo | Nenhuma categoria de recusa foi renomeada, remapeada ou teve sua regra de classificação alterada |
+| O descarte silencioso deixa de ser casado por uma `RegExp` ancorada em `.get(` e passa a ser enumerado por forma idiomática — condição sobre valor ausente seguida de `continue;`, qualquer identificador, qualquer origem —, com cada ocorrência exigindo registro nomeado com `arquivo:linha` e motivo | O alcance é declarado e limitado: cobre descarte guardado por valor ausente, não todo `continue;` do módulo, e não prova conservação de candidatos |
+| A varredura real encontrou 5 sítios de descarte silencioso, não os 2 nomeados no documento do Goal — descoberta sobre texto que já existia na baseline (diff zero de `http-egress-sites.ts`), não ajuste de comportamento | Nenhum dos 5 é candidato descartado; cada um está registrado com o motivo computado de ser inócuo |
+
+**O que este delta não prova, e é preciso dizer alto.** **Não prova
+conservação de candidatos**: a enumeração de descarte cobre só a forma
+idiomática de valor ausente seguido de `continue;`, não todo
+`continue;` do módulo. **Não corrige A-24**: o achado continua
+`PENDENCIA-POS-MVP`, e nenhum arquivo Go de produção deste fork foi
+editado por este Goal. **Não fecha M4.** **Não amplia nem reduz o
+conjunto de 10 rotas ou de 27 literais.** `npm run validate:core`
+**PASSED** nesta árvore — dos 17 passos, 15 passaram (inclusive
+`test:ai-orchestrator`) e 2 pulados por design (`test:bff`,
+`test:health-worker`); nenhum falhou. `npm run test:gate` (raiz)
+permanece em **226** testes e 0 falhas, inalterado, porque não exercita
+este arquivo. `validate:integration` continua recusando por
+pré-condição de banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not
+set`), declarado como ausente — não é este Goal quem a supre, e não foi
+reexecutado por esta unidade de documentação (WU-12). Sobre a árvore
+final desta rodada: `npx vitest run
+tests/assistant/assistant.service.test.ts` em `apps/ai-orchestrator` →
+**204** testes, **204** passando, **0** falhando (baseline: 200); `npx
+vitest run` completo → **1016** testes, **928** passando (baseline:
+924), **88** pulados (mesma contagem da baseline), **0** falhando.
+`npx tsc -p tsconfig.json --noEmit`: exit 0. `npm run lint` (`eslint
+src --max-warnings=0`) em `apps/ai-orchestrator`: exit 0, sem saída.
+`git status --porcelain=v1 -uall` lista, ao final desta rodada, só
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts` e os
+quatro documentos desta migração — nenhum arquivo de `tools/ia-loop/`
+foi tocado nesta rodada.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff049-2026-09-22-d-065) e [D-065](DECISIONS.md).

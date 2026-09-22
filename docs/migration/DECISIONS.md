@@ -1807,3 +1807,261 @@ heurística em si; ou uma sétima categoria de recusa precisar existir —
 o array `CLASS_BINDING_REFUSAL_CATEGORIES` é o lugar único que a suíte e
 a documentação permanente devem conferir, para não repetir a divergência
 de contagem das rodadas do Goal045.
+
+## D-063 — O uso do campo cliente é fail-closed: toda ocorrência de `this.<campo>` é enumerada, e forma não reconhecida recusa em vez de somar rota alguma, propostas no Goal047
+
+**Status:** ACCEPTED no [review047](reviews/047-review.md) (rodada 3 de
+3, 2026-09-22, zero blockers; a rodada 1 teve 2 blockers — o de maior
+peso foi o fail-open que sobrevivia dentro do próprio mecanismo novo: a
+enumeração ainda procurava o texto literal `this.<campo>`, de modo que
+`this?.http`, `this["http"]` e `(this as T).http` perdiam a rota em
+silêncio, enquanto os quatro documentos permanentes já afirmavam
+exaustividade; o outro foi a ausência dos controles com as duas saídas
+que o critério 2 exige. A rodada 2 teve 2 blockers — contagem obsoleta
+de rodada 1 sobrevivendo em FINAL_AUDIT §24 ("sete categorias" para um
+array de doze) e a regressão de `unmaskTemplateInterpolations`, que
+desmarcava `${...}` de qualquer região mascarada e fazia ocorrência
+dentro de string comum recusar, contrariando o critério 3), pelo Tech
+Lead Agent ([AGENT_ROLES](AGENT_ROLES.md), D-018). Cobre o diff047
+(WU-01 enumera toda ocorrência de `this.<campo>` no corpo de método de
+topo da classe dona e recusa forma não reconhecida sob categoria nova;
+WU-02 prova o alvo da atribuição da instanciação e recusa forma não
+provada como campo; WU-03 unifica as duas saídas de `sourcesByPath`
+ausente entre o ramo da superfície e o da instanciação; WU-04
+acrescenta as afirmações permanentes — classificação exaustiva, alvo de
+atribuição, simetria de `sourcesByPath`, o controle próprio do critério
+3 do Goal046, o array de categorias por igualdade e os números da
+árvore real; WU-05 acrescenta os controles negativos restantes do
+escopo §7 e o controle de renomeação; WU-06 é a documentação de
+fechamento) sobre a baseline aceita `3074a6d96c190b3e221b4f5aa96c46158bc1dd1b`
+(fechamento do Goal046); sem commit e sem deploy. Não fecha nem reabre
+nenhum achado — A-04 a A-08, A-11 a A-17, A-19 e A-24 não são tocados, e
+nenhum achado fechado é reaberto. Não altera nenhuma decisão anterior —
+reusa e não altera D-054 a D-062.
+
+**Contexto:** a observação não bloqueante 3 do [review045](reviews/045-review.md),
+já fechada do lado da isenção de `export` por D-062, tinha um par do
+lado do **uso** do campo: `discoverGoBoundInternalClientRequests`
+reconhecia a chamada de transporte só pela forma literal
+`this.<campo>.<membro>(`, por `RegExp`, e `findAssignedFieldName`
+devolvia o identificador antes de um `=` dentro de uma janela textual de
+200 caracteres, sem provar que esse identificador é campo da classe
+dona. Nas duas pontas, forma que não casasse o padrão não produzia
+requisição nem recusa — apenas desaparecia, e uma rota podia sair do
+conjunto de 10 sem acrescentar sítio de `fetch` algum. A observação 1 do
+[review046](reviews/046-review.md) registrou ainda que a recusa escopada
+à ocorrência do Goal046 era verdadeira por leitura da estrutura, sem
+controle permanente que a exercitasse isoladamente.
+
+**Decisão:**
+
+1. **Toda ocorrência do campo cliente é enumerada pelo receptor, e
+   forma não reconhecida recusa.** `enumerateClientFieldMemberCalls`
+   (`http-egress-sites.ts`) para de procurar o texto
+   `this.<campo>.<membro>(` e passa a enumerar o token `this` dentro do
+   corpo da classe dona, sobre o texto sem comentários
+   (`blankComments`) e sobre a máscara de aspas já existente, com as
+   faixas `${...}` de template literal desmarcadas por
+   `unmaskTemplateInterpolations` — o que está dentro delas é código,
+   não texto. Procurar o texto `this.<campo>` seria fail-open de novo:
+   o campo é alcançado sem ele aparecer, por `this?.<campo>`,
+   `this["<campo>"]`, `const { <campo> } = this` ou `const alias =
+   this`. A ordem de decisão é **forma do receptor, localização, forma
+   do uso**. A forma do receptor decide se a ocorrência alcança este
+   campo: ocorrência que prova alcançar **outro** campo
+   (`this.<outro>`) não conta e não recusa, e a atribuição que guarda a
+   própria instância (`this.<campo> = new ...`) é isenta por ser a
+   instanciação já provada. Toda ocorrência restante cai em exatamente
+   uma saída: chamada de transporte, chamada de membro fora da
+   superfície, ou recusa com `arquivo:linha`, o trecho de contexto e
+   uma categoria nomeada nova — inclusive quando a ocorrência está fora
+   de todo corpo de método de topo, usa encadeamento opcional, acesso
+   computado, desestruturação, não tem nome de membro derivável, não é
+   invocada, ou aparece em posição de valor (alias, repasse, `as`/`!`).
+2. **O alvo da atribuição só vira campo provado nas duas formas que
+   provam campo da classe dona.** `findAssignedFieldName` para de casar
+   `<nome> = new` numa janela textual solta e passa a distinguir:
+   **campo provado** — `this.<campo> = new ...` em qualquer profundidade
+   dentro do corpo da classe, ou declaração de propriedade de classe com
+   inicializador (`<campo> = new ...`, fora de todo método); **forma não
+   resolvida** — variável local, desestruturação, atribuição a
+   propriedade de outro objeto, elemento de array, `return new ...`
+   direto, ou qualquer outra forma — que recusa com `arquivo:linha` e
+   categoria nomeada nova, em vez de devolver um nome de campo que nunca
+   será encontrado.
+3. **As duas saídas de `sourcesByPath` ausente são a mesma.** O `continue`
+   silencioso do ramo `constructor_base_url_*` foi substituído pela
+   mesma recusa nomeada com `arquivo:linha` que o ramo da instanciação já
+   fazia; nenhum dos dois ramos pula sítio ou instanciação em silêncio.
+4. **O critério 3 do Goal046 ganhou controle próprio.** Árvore sintética
+   com construção `export` de forma não reconhecida que **não** menciona
+   a classe ligada, ao lado da instanciação normal alcançando o
+   transporte, prova que a classificação é idêntica à da mesma árvore
+   sem aquela construção — fechando a observação 1 do
+   [review046](reviews/046-review.md) sem alterar mecanismo algum do
+   Goal046.
+5. **As categorias de recusa dos dois caminhos novos existem em runtime,
+   em dois arrays separados.** `CLIENT_FIELD_USE_REFUSAL_CATEGORIES`
+   (doze categorias, para o uso do campo) e
+   `INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES` (seis categorias, para
+   o alvo da atribuição) são arrays `as const` exportados por
+   `http-egress-sites.ts`, com `ClientFieldUseRefusalCategory` e
+   `InstanceFieldAssignmentRefusalCategory` derivados deles. A suíte
+   confere os dois arrays por igualdade (`toEqual`), nunca reconstruindo
+   a união à mão. Nas ordens declaradas:
+   - `CLIENT_FIELD_USE_REFUSAL_CATEGORIES`: `client_field_use_outside_top_level_method_body`
+     (ocorrência fora de todo corpo de método de topo — inicializador de
+     campo, bloco estático); `client_field_use_optional_chaining`
+     (`this.<campo>?.<membro>(`); `client_field_use_computed_member_access`
+     (`this.<campo>["<membro>"]` e demais acessos computados);
+     `client_field_use_destructured` (`const { <membro> } = this.<campo>`);
+     `client_field_use_member_not_invoked` (`this.<campo>.<membro>` sem
+     `(` imediato); `client_field_use_member_name_not_derivable` (depois
+     do `.` não há identificador de membro derivável); e
+     `client_field_use_field_forwarded_as_value` (a ocorrência não é
+     acesso a membro: alias em variável local, argumento repassado,
+     `as`/`!` sobre o campo). As cinco últimas são da forma do
+     **receptor**, e existem porque o campo é alcançado sem o texto
+     `this.<campo>` aparecer: `client_field_use_receiver_optional_chaining`
+     (`this?.<campo>`); `client_field_use_receiver_computed_member_access`
+     (`this["<campo>"]` e demais acessos computados sobre `this`);
+     `client_field_use_receiver_destructured` (`const { <campo> } =
+     this`); `client_field_use_receiver_forwarded_as_value` (`const
+     alias = this`, `this` em posição de valor, a instância inteira
+     escapando); e `client_field_use_receiver_field_name_not_derivable`
+     (depois do `.` sobre `this` não há identificador de campo
+     derivável, e a leitura não decide se o receptor alcança o campo
+     cliente).
+   - `INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES`: `instance_field_assignment_local_variable`
+     (instância guardada em variável local); `instance_field_assignment_destructured`
+     (padrão de desestruturação como alvo); `instance_field_assignment_foreign_object_property`
+     (atribuição a propriedade de outro objeto, `<id>.<campo> = new ...`);
+     `instance_field_assignment_array_element` (atribuição a elemento de
+     array); `instance_field_assignment_returned_directly` (`return new
+     ...` direto, sem atribuição a campo algum); e
+     `instance_field_assignment_form_not_recognized` (nenhuma das formas
+     acima casa, e a instanciação também não está em `this.<campo> = new
+     ...` nem em declaração de propriedade de classe).
+6. **Os sete controles negativos do escopo §7 provam a inversão.**
+   Encadeamento opcional (`this.http?.request(...)`) recusa pela
+   categoria nova; acesso computado (`this.http["request"](...)`)
+   recusa; alias em variável local (`const client = this.http;
+   client.request(...)`) recusa por `client_field_use_field_forwarded_as_value`,
+   porque a ocorrência `this.http` não está na forma de chamada;
+   instância guardada em variável local do construtor, nunca em
+   `this.<campo>`, recusa por `instance_field_assignment_local_variable`;
+   ocorrência fora de corpo de método de topo (inicializador de campo
+   que menciona `this.http`) recusa; as três formas reais (chamada de
+   transporte, chamada de membro fora da superfície, montagem de URL sem
+   chamar o cliente) continuam classificando exatamente como antes; e o
+   controle do item 4 acima prova que o escopo do Goal046 continua
+   mordendo. Ao lado deles, cada forma que ainda não tinha controle
+   próprio passou a ter um: desestruturação do campo (`const { <membro>
+   } = this.<campo>`), membro repassado como valor (`const send =
+   this.<campo>.<membro>;`), nome de membro não derivável
+   (`this.<campo>.#<membro>(`), as cinco formas de receptor
+   (`this?.<campo>`, `this["<campo>"]`, `const { <campo> } = this`,
+   `const alias = this`, `this.#<outro>`) e a ocorrência dentro de
+   interpolação de template — cada um com as duas saídas, e as de
+   receptor com a saída "antes" registrada como **nenhuma requisição e
+   nenhuma recusa**, que é exatamente o fail-open que este Goal fecha.
+
+**Alternativas:** continuar reconhecendo só `this.<campo>.<membro>(` por
+expressão regular e tratar toda outra forma como zero requisição e zero
+recusa — rejeitada: é o mesmo fail-open que este Goal existe para
+fechar, na última etapa da cadeia que os Goals 044 a 046 já fecharam
+mais acima; unificar `CLIENT_FIELD_USE_REFUSAL_CATEGORIES` e
+`INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES` num único array —
+rejeitada: são dois mecanismos distintos (o uso do campo já provado
+contra o alvo da atribuição que prova o campo em primeiro lugar), cada
+um com seu próprio ponto de recusa no código, e uma união maior sem
+separar a causa não ajudaria quem lê o motivo a agir diferente — a mesma
+razão que motivou D-062 a não unificar suas duas categorias novas.
+
+**Motivo:** o mecanismo que resolve identidade, instanciação, destino
+(D-061) e isenção de `export` (D-062) só é fail-closed de ponta a ponta
+se o último elo — o uso do campo em que a instância foi guardada —
+também for. Uma leitura que reconhece só uma forma literal e ignora todo
+o resto em silêncio é o mesmo risco que motivou D-060 a D-062 um nível
+acima: uma rota sai do conjunto de 10 sem acrescentar sítio de `fetch`
+algum, e a completude de A-24 depende dessa propriedade ser do
+mecanismo, não da árvore de hoje não ter ainda uma forma exótica de uso
+do campo.
+
+**Consequências:** `apps/ai-orchestrator/tests/support/http-egress-sites.ts`
+ganha `CLIENT_FIELD_USE_REFUSAL_CATEGORIES`,
+`INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES`,
+`enumerateClientFieldMemberCalls` reescrita para enumeração fail-closed
+pelo receptor, `unmaskTemplateInterpolations`, e `findAssignedFieldName`/o
+alvo da atribuição reescritos para as duas formas provadas, mais
+`computeQuoteOpenerMask` (rodada 3), que guarda o delimitador de
+abertura e de onde `computeQuoteMask` passou a derivar com semântica
+idêntica à da baseline, de modo que só a crase abre interpolação — 522
+linhas inseridas, 25 removidas (3364 → 3861 linhas). Nenhuma cópia paralela de `computeQuoteMask`, `blankComments`,
+`findMatchingDelimiterEnd`, `splitTopLevelItems`,
+`findObjectPropertyExpression`, `findEnclosingClassSpan`,
+`findTopLevelMethodBodies` ou `methodNameAtBrace` foi criada.
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts` ganha
+888 linhas (5563 → 6451), com 37 casos novos ao lado dos 153 já
+existentes (190 no total): os testes de classificação exaustiva e alvo
+da atribuição (§1 e §2), a prova de simetria de `sourcesByPath` (§3), o
+controle do critério 3 do Goal046 (§4), a conferência dos dois arrays de
+categorias por igualdade (§5), os números da árvore real e a
+não-vacuidade (§6), e os controles negativos restantes do escopo §7 mais
+o controle de renomeação (WU-05), mais os controles da rodada 2 para as
+formas de receptor, para a desestruturação do campo, para o membro
+repassado como valor, para o nome de membro não derivável e para a
+ocorrência interpolada em template, e os dois da rodada 3 para
+ocorrência do campo dentro de string comum contendo `${...}` e para
+string comum escrita dentro de uma interpolação. `npx vitest run
+tests/assistant/assistant.service.test.ts` em `apps/ai-orchestrator` →
+**190** testes, 0 falhas (baseline do Goal: 153). `npx vitest run`
+completo de `apps/ai-orchestrator` → **914** passando, 88 pulados
+(baseline: 877 passando, 88 pulados) — mesma contagem de pulados,
+nenhuma suíte encolheu. Sobre a árvore real: **1** superfície, **4**
+ligações resolvidas, **205** arquivos varridos (**118** em
+`apps/ai-orchestrator/src`, **87** em `apps/bff/src`), **10** rotas,
+**2** instanciações fora do transporte, **0** chamadas de membro fora da
+superfície — idênticos à baseline do Goal046; as **41** ocorrências de
+`this.http.` em `apps/bff/src/clients/` continuam, todas, na forma
+direta `this.http.<membro>(`, e a leitura completa sobre a árvore real
+não lança recusa alguma — conferido por computação do próprio
+descobridor sobre a árvore real, não copiado do documento, e asserido
+pela suíte permanente (WU-04). Não há divergência a declarar nestes
+números. `git status --porcelain=v1` lista exatamente seis arquivos,
+dois de código de teste e quatro de documentação desta migração:
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`,
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts`,
+`docs/migration/CURRENT_STATE.md`, `docs/migration/DECISIONS.md`,
+`docs/migration/FINAL_AUDIT.md` e `docs/migration/VALIDATION_GATE.md` —
+nenhum arquivo de `apps/frontend/src/`, `apps/bff/src/`,
+`apps/ai-orchestrator/src/`, `apps/scheduling-service/`,
+`apps/health-worker/`, `packages/`, nenhum arquivo Go e nenhum arquivo
+de `tools/ia-loop/` foi tocado; `go.mod`/`go.sum` intocados.
+`product-transport-routes.txt` não mudou. Esta seção (D-063) e a
+documentação de fechamento em FINAL_AUDIT §24, CURRENT_STATE e
+VALIDATION_GATE foram escritas depois da última mudança de árvore.
+Sobre a árvore final: `validate:core` exit 0 (17 passos, 15
+passados, 2 pulados — `test:bff` e `test:health-worker`, pelos motivos
+que o próprio gate imprime), `npm run test:gate` com **226** testes e 0
+falhas, `go test ./...` em `apps/evolution-go` ok em todos os pacotes
+com teste, e `validate:integration` recusando com `exit 2` e
+`BFF_TEST_DATABASE_URL is not set` — pré-condição de banco declarada
+ausente, nunca verde. Cada uma das doze categorias de
+`CLIENT_FIELD_USE_REFUSAL_CATEGORIES` tem, além da igualdade do array
+(§5), controle permanente que a exercita; os sete controles
+obrigatórios do escopo §7, que o critério de aceite nomeia, existem e
+mordem todos. Este diff não fecha **M4**,
+não afirma fidelidade visual à referência aprovada, não prova
+comportamento de runtime do serviço Go e **não corrige A-24** — que
+continua `PENDENCIA-POS-MVP`.
+
+**Revisar se:** uma forma de uso do campo cliente real aparecer nas duas
+árvores fora das doze categorias enumeradas no item 5 — a decisão é que
+ela recusa, não que a lista está fechada para sempre; uma forma de
+guarda de instância real aparecer fora das seis categorias do item 2,
+mesmo critério; ou uma categoria a mais precisar existir em qualquer dos
+dois arrays — `CLIENT_FIELD_USE_REFUSAL_CATEGORIES` e
+`INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES` são os lugares únicos que
+a suíte e a documentação permanente devem conferir, para não repetir a
+divergência de contagem das rodadas do Goal045.

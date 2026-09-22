@@ -4376,3 +4376,103 @@ não muda.
   omissão de leitura do lado TypeScript, nunca o critério que decide o
   conjunto de rotas ou de literais, e nenhum arquivo Go de produção
   deste fork foi editado por este Goal.
+
+## Delta implementado — diff047, 2026-09-22 ([D-063](DECISIONS.md))
+
+Fecha o último trecho fail-open da cadeia que vai da instanciação
+provada até a rota: `discoverGoBoundInternalClientRequests` reconhecia a
+chamada de transporte só pela forma literal `this.<campo>.<membro>(`, e
+`findAssignedFieldName` casava o alvo da atribuição numa janela de texto
+solta — toda outra forma desaparecia sem requisição nem recusa. Só dois
+arquivos de `apps/ai-orchestrator/tests/` mudaram; nenhum arquivo de
+`apps/frontend/src/`, `apps/bff/src/`, `apps/ai-orchestrator/src/` ou
+qualquer arquivo Go mudou, `go.mod` e `go.sum` continuam intocados, e o
+conjunto de 10 rotas e de 27 literais que os Goals 042 a 046 já
+asseriam não muda.
+
+- **Toda ocorrência do campo cliente é enumerada pelo receptor, e forma
+  não reconhecida recusa.** `enumerateClientFieldMemberCalls` enumera o
+  token `this` dentro do corpo da classe dona — não o texto
+  `this.<campo>`, que deixaria de fora `this?.<campo>`,
+  `this["<campo>"]`, `const { <campo> } = this` e `const alias = this`
+  —, sobre o texto sem comentários e com as faixas `${...}` de template
+  literal lidas como código. Cada ocorrência cai em chamada de
+  transporte, chamada de membro fora da superfície, ou recusa com
+  `arquivo:linha`, contexto e uma das doze categorias novas de
+  `CLIENT_FIELD_USE_REFUSAL_CATEGORIES` (sete da forma do uso, cinco da
+  forma do receptor). A atribuição que guarda a própria instância
+  continua isenta, por ser a instanciação já provada; a recusa é
+  escopada à **ocorrência** — nome homônimo em outro objeto, ocorrência
+  que prova alcançar outro campo, texto de template, string ou
+  comentário não conta.
+- **O alvo da atribuição só vira campo provado nas duas formas que
+  provam campo da classe dona.** `findAssignedFieldName` distingue
+  `this.<campo> = new ...` (em qualquer profundidade) e declaração de
+  propriedade de classe com inicializador — as únicas duas que provam
+  campo — de qualquer outra forma, que recusa sob categoria nova de
+  `INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES` (seis categorias), em
+  vez de devolver um nome de campo que nunca será encontrado.
+- **As duas saídas de `sourcesByPath` ausente são a mesma**, no ramo da
+  superfície e no da instanciação — nenhum dos dois pula em silêncio.
+- **A observação 1 do review046 é fechada, por acréscimo.** A recusa
+  escopada à ocorrência do Goal046 ganhou controle próprio: construção
+  `export` de forma exótica que não menciona a classe ligada não derruba
+  nada, provado sobre árvore sintética.
+- **As categorias de recusa existem em runtime, em dois arrays.**
+  `CLIENT_FIELD_USE_REFUSAL_CATEGORIES` (doze categorias) e
+  `INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES` (seis categorias) são
+  arrays `as const` exportados, com os tipos derivados deles; a suíte
+  confere os dois por igualdade. Nenhum identificador de categoria já
+  existente mudou de nome.
+- **Os sete controles negativos obrigatórios do escopo §7 existem e
+  mordem**, cada um sobre árvore sintética em diretório temporário,
+  removido ao fim, sem nunca tocar a árvore real: encadeamento opcional,
+  acesso computado, alias em variável local, instância guardada em
+  variável local do construtor, ocorrência fora de corpo de método de
+  topo, as três formas reais classificando exatamente como antes, e o
+  controle herdado do critério 3 do Goal046. Ao lado deles, cada forma
+  que ainda não tinha controle próprio ganhou o seu: desestruturação do
+  campo, membro repassado como valor, nome de membro não derivável, as
+  cinco formas de receptor (`this?.<campo>`, `this["<campo>"]`,
+  `const { <campo> } = this`, `const alias = this`, `this.#<outro>`) e a
+  ocorrência dentro de interpolação de template — as de receptor com a
+  saída "antes" registrada como nenhuma requisição e nenhuma recusa.
+- **Duas afirmações de não-vacuidade (WU-04)** provam, sobre a árvore
+  real, que ao menos uma ocorrência do campo cliente é classificada como
+  chamada de transporte e que a enumeração de `this.http.<membro>(` não
+  é vazia, ao lado das afirmações já existentes dos Goals 043 a 046.
+- **Prova executada:** `npx vitest run
+  tests/assistant/assistant.service.test.ts` (em `apps/ai-orchestrator`):
+  **190** testes, 0 falhas — os **153** da baseline mais **37** deste
+  delta. `npx vitest run` completo de `apps/ai-orchestrator`: **914**
+  passando, 88 pulados (baseline: 877 passando, 88 pulados) — mesma
+  contagem de pulados, nenhuma suíte encolheu. `npx tsc -p
+  tsconfig.json --noEmit` (que inclui `tests/**/*.ts`): exit 0. Sobre a árvore real: **1**
+  superfície, **4** ligações resolvidas, **205** arquivos varridos pela
+  resolução de instanciação, **10** rotas, **2** instanciações fora do
+  transporte, **0** chamadas de membro fora da superfície — idênticos à
+  baseline do Goal046; as **41** ocorrências de `this.http.` em
+  `apps/bff/src/clients/` continuam, todas, na forma direta
+  `this.http.<membro>(`, e a leitura completa não lança recusa alguma.
+- **Número conferido, não copiado:** `scannedFilePathsForInstantiation`
+  soma **205** arquivos `.ts` varridos nas duas árvores (**118** em
+  `apps/ai-orchestrator/src`, **87** em `apps/bff/src`), computados pelo
+  próprio descobridor sobre a árvore real e asseridos pela suíte
+  permanente. Não há divergência a declarar: o número do AST e o do
+  documento são o mesmo **205**.
+- **Gate reexecutado sobre a árvore final:** `validate:core` exit 0 (17
+  passos, 15 passados, 2 pulados — `test:bff` e `test:health-worker`),
+  `npm run test:gate` com **226** testes e 0 falhas, `go test ./...` em
+  `apps/evolution-go` ok, e `validate:integration` recusando com `exit
+  2` e `BFF_TEST_DATABASE_URL is not set` — pré-condição de banco
+  declarada ausente, nunca verde.
+- **Cada uma das doze categorias de
+  `CLIENT_FIELD_USE_REFUSAL_CATEGORIES` tem controle permanente** que a
+  exercita, além da igualdade do array; os sete controles que o critério
+  de aceite do Goal nomeia (escopo §7) existem e mordem todos.
+- **LIMITE:** nada aqui prova comportamento em runtime do serviço Go, nem
+  que o binário em produção é o desta árvore, nem que **M4** fechou. **A-24
+  continua `PENDENCIA-POS-MVP`, não corrigido** — este delta fecha o
+  último trecho fail-open da leitura do lado TypeScript, nunca o
+  critério que decide o conjunto de rotas ou de literais, e nenhum
+  arquivo Go de produção deste fork foi editado por este Goal.

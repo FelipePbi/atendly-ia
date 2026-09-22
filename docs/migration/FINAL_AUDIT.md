@@ -2914,3 +2914,150 @@ schema TypeScript e o `.env.example` são lidos, nunca um ambiente
 implantado. `validate:integration` continua recusando por pré-condição de
 banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado
 como ausente — não reexecutado por esta unidade de documentação (WU-05).
+
+## 24. O uso do campo cliente é fail-closed: toda ocorrência é enumerada, e forma não reconhecida recusa em vez de somar rota alguma — Goal047, 2026-09-22
+
+Seção nova, escrita depois da última mudança de árvore do diff047 (WU-01
+a WU-05: a enumeração fail-closed do uso do campo, a prova do alvo da
+atribuição, a simetria das duas saídas de `sourcesByPath`, o controle
+próprio do critério 3 do Goal046, os dois arrays de categorias em
+runtime e os sete controles negativos obrigatórios, montados e
+revertidos por árvore sintética em diretório temporário fora da
+worktree). Ela **não reescreve** §4 a §23: os registros de A-01 a A-24
+em §19, o veredito de §19 a §23 e as vinte e três seções de fechamento
+anteriores continuam exatamente como estavam, e a entrada de **A-24**
+**não foi tocada**. Este Goal não corrige A-24 e não abre achado novo —
+fecha o último trecho fail-open da cadeia que os Goals 044 a 046 já
+fecharam mais acima: a leitura do uso do campo em que a instância
+provada foi guardada.
+
+### O que mudou
+
+**Toda ocorrência de `this.<campo>` passa a ser enumerada, e forma não
+reconhecida recusa.** `discoverGoBoundInternalClientRequests` (via
+`enumerateClientFieldMemberCalls`, `http-egress-sites.ts`) reconhecia a
+chamada de transporte só pela forma literal `this.<campo>.<membro>(`,
+por `RegExp`: toda outra forma — encadeamento opcional, acesso
+computado, alias em variável local, desestruturação, campo ou membro
+repassados como valor, ocorrência fora de corpo de método de topo —
+desaparecia sem produzir requisição nem recusa. O diff047 fecha essa
+saída: a enumeração passa a ser do **receptor** — o token `this` dentro
+do corpo da classe dona, sobre o texto sem comentários e com as faixas
+`${...}` de template literal lidas como código —, e cada ocorrência cai
+em exatamente uma saída: chamada de transporte, chamada de membro fora
+da superfície, ou recusa com `arquivo:linha`, contexto e uma categoria
+nomeada nova de `CLIENT_FIELD_USE_REFUSAL_CATEGORIES` (doze categorias:
+sete da forma do uso e cinco da forma do receptor). Enumerar o texto
+`this.<campo>` teria deixado o fail-open de pé, porque o campo é
+alcançado sem esse texto aparecer — `this?.<campo>`, `this["<campo>"]`,
+`const { <campo> } = this`, `const alias = this`. A recusa é **escopada
+à ocorrência**: propriedade homônima de outro objeto, ocorrência que
+prova alcançar outro campo, texto de template, string ou comentário não
+conta e não recusa.
+
+**O alvo da atribuição da instanciação passa a ser provado, não
+casado numa janela de texto.** `findAssignedFieldName` casava o
+identificador imediatamente antes de um `=` dentro de uma janela de 200
+caracteres, sem provar que esse identificador fosse campo da classe
+dona — uma instanciação guardada em variável local produzia um "campo"
+que nunca aparecia como `this.<nome>`, e a leitura terminava em zero
+requisição e zero recusa. O diff047 distingue **campo provado**
+(`this.<campo> = new ...` em qualquer profundidade do corpo da classe,
+ou declaração de propriedade de classe com inicializador) de **forma
+não resolvida** (variável local, desestruturação, propriedade de outro
+objeto, elemento de array, `return new ...` direto, ou qualquer outra),
+que passa a recusar sob categoria nova de
+`INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES` (seis categorias), em vez
+de devolver um nome de campo que nunca será encontrado.
+
+**As duas saídas de `sourcesByPath` ausente unificadas.** O `continue`
+silencioso do ramo `constructor_base_url_*` foi substituído pela mesma
+recusa nomeada com `arquivo:linha` que o ramo da instanciação já fazia
+— nenhum dos dois ramos pula sítio ou instanciação em silêncio.
+
+**A observação 1 do review046 é fechada.** A recusa escopada à
+ocorrência do Goal046 — construção `export` de forma exótica que **não**
+menciona a classe ligada não derruba nada — era verdadeira por leitura
+da estrutura, sem controle permanente. O diff047 acrescenta esse
+controle: árvore sintética com construção `export` não reconhecida que
+não menciona a classe, ao lado da instanciação normal alcançando o
+transporte, prova classificação idêntica à da mesma árvore sem aquela
+construção.
+
+**As categorias de recusa dos dois caminhos existem em runtime, em dois
+arrays separados.** `CLIENT_FIELD_USE_REFUSAL_CATEGORIES` (doze
+categorias: sete da forma do uso, cinco da forma do receptor) e
+`INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES` (seis categorias) são
+arrays `as const` exportados, com os tipos
+`ClientFieldUseRefusalCategory` e `InstanceFieldAssignmentRefusalCategory`
+derivados deles; a suíte confere os dois por igualdade, não contra união
+escrita à mão nos dois lados — a mesma família de falha que reprovou
+documento permanente nos Goals 038, 044 e 045. Nenhum identificador de
+categoria já existente (do Goal045/046) mudou de nome, e nenhuma recusa
+existente mudou de categoria.
+
+**Só a crase abre interpolação.** A desmarcação das faixas `${...}`
+exige que a região tenha sido aberta por crase: dentro de string comum
+(`"..."`, `'...'`) o mesmo texto continua sendo texto, e não vira
+código. Dois controles permanentes exercitam isso — `${this.http.send(`
+escrito dentro de string comum não conta nem recusa, e string comum
+escrita **dentro** de uma interpolação continua sendo texto enquanto a
+chamada real da mesma interpolação sai como requisição.
+
+**Os sete controles negativos obrigatórios do escopo §7 foram provados,
+cada um sobre árvore sintética em diretório temporário, removida ao
+fim:** encadeamento opcional (`this.http?.request(...)`); acesso
+computado (`this.http["request"](...)`); alias em variável local
+(`const client = this.http; client.request(...)`); instância guardada
+em variável local do construtor, nunca em `this.<campo>`; ocorrência
+fora de corpo de método de topo (inicializador de campo que menciona
+`this.http`); as três formas reais continuando classificadas
+exatamente como antes (chamada de transporte, chamada de membro fora da
+superfície, montagem de URL sem chamar o cliente); e o controle herdado
+do critério 3 do Goal046 acima.
+
+**Duas afirmações de não-vacuidade (WU-04) consomem os dois mecanismos
+sobre a árvore real**, ao lado das que os Goals 043 a 046 já deixavam:
+provam que ao menos uma ocorrência do campo cliente foi classificada
+como chamada de transporte e que a enumeração de `this.http.<membro>(`
+na árvore real não é vazia.
+
+### Veredito recontado
+
+Esta auditoria continua com **0** achados `BLOQUEADOR-MVP`, **8**
+`PENDENCIA-POS-MVP` e **6** `LIMITE-DECLARADO` — a mesma contagem de
+§23. **Nenhuma mudança em relação a §23**: nenhum achado de A-01 a A-24
+foi tocado, corrigido, reclassificado ou reaberto. **A-24 continua
+`PENDENCIA-POS-MVP`, não corrigido** — nenhum arquivo Go de produção
+deste fork foi editado por este Goal.
+
+Quatro coisas que esta seção não diz. **Não diz que A-24 foi corrigido**:
+o rótulo `"Ver Menu"` continua escrito em
+`pkg/sendMessage/service/send_service.go:1960`. **Não diz que M4 foi
+fechado**: nenhuma chamada saiu para provedor de LLM real nem para o
+WhatsApp real, nenhuma conexão whatsmeow foi aberta, e o diff047 toca
+dois arquivos TypeScript de teste e de apoio a teste — nenhum arquivo
+Go, nenhum arquivo de `apps/frontend/src/`, `apps/bff/src/` ou
+`apps/ai-orchestrator/src/` —, mais a documentação de migração. **Não
+diz que o comportamento em runtime do serviço Go foi provado**: o que se
+prova é o que a árvore de código diz, lida por enumeração de ocorrência
+sobre o texto-fonte; nada aqui executa esse serviço, abre conexão
+whatsmeow ou observa o que chega a um telefone. **Não diz que a
+fidelidade visual está provada**: nenhum arquivo de `apps/frontend/src/`
+mudou.
+
+Cada uma das doze categorias de `CLIENT_FIELD_USE_REFUSAL_CATEGORIES`
+tem, além da igualdade do array, controle permanente que a exercita, com
+as duas saídas registradas; os sete controles obrigatórios que o
+critério de aceite do Goal nomeia (escopo §7) existem e mordem todos.
+
+O que continua fora do alcance deste Goal, por construção: comportamento
+em runtime do serviço Go; qual binário roda em produção; `whatsmeow-
+lib/`, biblioteca vendorizada lida apenas como fonte das declarações de
+proto; e o valor real de qualquer variável de ambiente — só o default do
+schema TypeScript e o `.env.example` são lidos, nunca um ambiente
+implantado. `validate:integration` continua recusando por pré-condição de
+banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado
+como ausente. Sobre a árvore final: `validate:core` exit 0, `npm run
+test:gate` com 226 testes e 0 falhas, e `go test ./...` em
+`apps/evolution-go` ok.

@@ -1,6 +1,6 @@
 # Goal 047 — O uso do campo cliente é fail-closed: ocorrência do campo fora de `this.<campo>.<membro>(` recusa
 
-**Status: READY.** Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-21 pelo Tech Lead Agent após [Goal046 ACCEPTED](../reviews/046-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED** na rodada 3, conforme o [review047](../reviews/047-review.md) — duas rodadas `CHANGES_REQUIRED`, com 2 blockers cada, antes do aceite com zero blockers. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-21 pelo Tech Lead Agent após [Goal046 ACCEPTED](../reviews/046-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: OPUS_MEDIUM
 

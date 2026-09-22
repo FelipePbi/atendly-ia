@@ -1305,3 +1305,53 @@ número foi computado pelo descobridor sobre a árvore real e é asserido
 pela suíte permanente; não há divergência a declarar.
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff046-2026-09-21-d-062) e [D-062](DECISIONS.md).
+
+## O uso do campo cliente é fail-closed: toda ocorrência é enumerada, e forma não reconhecida recusa, do Goal047
+
+O parágrafo anterior registrou a isenção por construção `export`
+fechada, com o limite declarado de que a leitura do **uso** do campo
+cliente ainda reconhecia só a forma literal `this.<campo>.<membro>(` —
+a observação não bloqueante 3 do review045, do lado espelhado. Este
+delta fecha esse limite, sem tocar o conjunto de 10 rotas nem o de 27
+literais que os Goals 042 a 046 já asseriam.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| Toda ocorrência do token `this` no corpo da classe dona é enumerada — não o texto `this.<campo>` —, sobre o texto sem comentários e com as faixas `${...}` de template literal lidas como código; cada uma cai em chamada de transporte, chamada de membro fora da superfície, ou recusa nomeada — `CLIENT_FIELD_USE_REFUSAL_CATEGORIES` (doze categorias): fora de corpo de método de topo, encadeamento opcional, acesso computado, desestruturado, membro não invocado, nome de membro não derivável, campo repassado como valor, e as cinco do receptor (encadeamento opcional, acesso computado, desestruturado, repassado como valor, nome de campo não derivável) | A recusa é escopada à **ocorrência**, não ao nome solto: propriedade homônima de outro objeto, ocorrência que prova alcançar outro campo, texto de template, string ou comentário não conta e não recusa. A lista de formas reconhecidas é a que as duas árvores reais exigem hoje; forma nova que não estiver na lista recusa, não isenta — o próprio ponto deste delta |
+| O alvo da atribuição só vira campo provado em duas formas: `this.<campo> = new ...` em qualquer profundidade, ou declaração de propriedade de classe com inicializador; qualquer outra forma recusa sob `INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES` (seis categorias: variável local, desestruturado, propriedade de objeto estranho, elemento de array, retorno direto, forma não reconhecida) | Nenhuma das seis categorias produz mais um "campo" que a busca por `this.<nome>` nunca encontraria; a atribuição continua sendo lida por forma de texto, não por parser |
+| As duas saídas de `sourcesByPath` ausente, no ramo da superfície e no da instanciação, são a mesma recusa nomeada com `arquivo:linha` | Nenhum dos dois ramos pula sítio ou instanciação em silêncio |
+| O critério 3 do Goal046 (recusa escopada à ocorrência) ganhou controle próprio: construção `export` exótica que não menciona a classe ligada não derruba nada, fechando a observação 1 do [review046](reviews/046-review.md) | Nenhum mecanismo do Goal046 foi alterado; só a afirmação passou a ser exercida |
+| As categorias de recusa existem em runtime, em dois arrays `as const` exportados, com os tipos derivados deles — a suíte confere os dois por igualdade, nunca contra união escrita à mão | Nenhum identificador de categoria já existente (Goal045/046) mudou de nome, e nenhuma recusa existente mudou de categoria |
+| Os sete controles negativos obrigatórios deste escopo rodam, cada um sobre árvore sintética em diretório temporário: encadeamento opcional, acesso computado, alias em variável local, instância guardada fora de campo de classe, ocorrência fora de corpo de método de topo, as três formas reais continuando classificadas igual, e o controle herdado do critério 3 do Goal046 | Os sete controles rodam sobre árvore sintética própria, removida ao fim — nenhum deles amplia nem estreita o conjunto de 10 rotas ou de 27 literais que a suíte permanente assere sobre a árvore real |
+| Duas afirmações de não-vacuidade (WU-04) provam, sobre a árvore real, que ao menos uma ocorrência do campo cliente foi classificada como chamada de transporte e que a enumeração de `this.http.<membro>(` não é vazia | O que os Goals 040 a 046 já provavam continua provado sem afrouxamento: resíduo de egresso zero, identidade por declaração, instanciação por ligação, isenção de `export` fechada |
+
+**O que este delta não prova, e é preciso dizer alto.** **Não prova
+runtime**: nada aqui executa o serviço Go, abre conexão whatsmeow ou
+observa o que chega a um telefone. **Não prova qual binário roda em
+produção**. **Não alcança `whatsmeow-lib/`**. **Texto emitido pelo modelo
+continua fora do guardrail por D-050**. **Não corrige A-24**: o achado
+continua `PENDENCIA-POS-MVP`, e nenhum arquivo Go de produção deste fork
+foi editado por este Goal. **Não fecha M4**: nenhuma chamada saiu para
+WhatsApp real nem para provedor de LLM real, e nenhuma conexão whatsmeow
+foi aberta. **Não amplia nem reduz o conjunto de 10 rotas ou de 27
+literais** que os Goals 042 a 046 já asseriam — este delta fecha o
+último trecho fail-open da leitura do lado TypeScript, nunca o critério
+que decide o conjunto. **Não prova o valor real de variável de ambiente
+alguma** — só o default do schema TypeScript e o `.env.example` são
+lidos. `validate:integration` continua recusando por pré-condição de
+banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado
+como ausente. Sobre a árvore final desta rodada: `validate:core` exit 0
+(17 passos, 15 passados, 2 pulados), `npm run test:gate` com 226 testes
+e 0 falhas, e `go test ./...` em `apps/evolution-go` ok. Cada uma das
+doze categorias de `CLIENT_FIELD_USE_REFUSAL_CATEGORIES` tem controle
+permanente que a exercita, além da igualdade do array; os sete
+controles que o critério de aceite do Goal nomeia (escopo §7) existem e
+mordem todos. **NÚMERO CONFERIDO:**
+`scannedFilePathsForInstantiation` soma **205** arquivos `.ts` varridos
+(**118** em `apps/ai-orchestrator/src`, **87** em `apps/bff/src`, com o
+client do Prisma gerado presente nas duas árvores) — o mesmo **205** que
+o documento do Goal046 registrava. O número foi computado pelo
+descobridor sobre a árvore real e é asserido pela suíte permanente; não
+há divergência a declarar.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff047-2026-09-22-d-063) e [D-063](DECISIONS.md).

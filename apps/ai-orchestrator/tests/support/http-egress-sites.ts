@@ -307,17 +307,24 @@ const NOT_A_FUNCTION_NAME = new Set(["", "function", "return", "await", "new"]);
 /** Modificadores de parâmetro de construtor, que precedem o nome. */
 const PARAMETER_MODIFIER = /^(?:public|private|protected|readonly)\s+/;
 
-/** Máscara "dentro de aspas/crase" para cada índice de `source` até `uptoIndex` (exclusivo). */
-function computeQuoteMask(source: string, uptoIndex: number): boolean[] {
-  const mask: boolean[] = new Array<boolean>(uptoIndex).fill(false);
+/**
+ * Para cada índice de `source` até `uptoIndex` (exclusivo), o caractere de
+ * aspas que abriu a região em que o índice está, ou `undefined` fora de
+ * aspas. É a mesma varredura de `computeQuoteMask`, guardando **qual**
+ * delimitador abriu a região: quem precisa distinguir template literal com
+ * crase de string comum não pode decidir isso a partir de um booleano.
+ */
+function computeQuoteOpenerMask(source: string, uptoIndex: number): (string | undefined)[] {
+  const mask: (string | undefined)[] = new Array<string | undefined>(uptoIndex).fill(undefined);
   let quote: string | undefined;
   for (let i = 0; i < uptoIndex; i += 1) {
     const char = source[i];
     if (quote) {
-      mask[i] = true;
+      mask[i] = quote;
       if (char === "\\") {
+        const escaped = quote;
         i += 1;
-        if (i < uptoIndex) mask[i] = true;
+        if (i < uptoIndex) mask[i] = escaped;
         continue;
       }
       if (char === quote) quote = undefined;
@@ -325,10 +332,15 @@ function computeQuoteMask(source: string, uptoIndex: number): boolean[] {
     }
     if (char === '"' || char === "'" || char === "`") {
       quote = char;
-      mask[i] = true;
+      mask[i] = char;
     }
   }
   return mask;
+}
+
+/** Máscara "dentro de aspas/crase" para cada índice de `source` até `uptoIndex` (exclusivo). */
+function computeQuoteMask(source: string, uptoIndex: number): boolean[] {
+  return computeQuoteOpenerMask(source, uptoIndex).map((opener) => opener !== undefined);
 }
 
 /** Índice do delimitador de abertura que casa com `closeIndex`, escaneando para trás e ignorando índices marcados em `quoteMask`. */
@@ -2288,11 +2300,151 @@ function findEnclosingClassSpan(source: string, index: number): ClassSpan | unde
   return { name: found.name, line: lineAt(source, found.declIndex), bodyStart: found.braceIndex + 1, bodyEnd };
 }
 
-/** Nome do campo atribuído por uma expressão `<campo> = new <Classe>(` que termina em `classNameMatchIndex`, ou `undefined` se a instanciação não estiver nessa forma. */
-function findAssignedFieldName(source: string, classNameMatchIndex: number): string | undefined {
-  const window = source.slice(Math.max(0, classNameMatchIndex - 200), classNameMatchIndex);
-  const match = window.match(/([A-Za-z_$][\w$]*)\s*=\s*new\s*$/);
-  return match ? match[1] : undefined;
+/* =========================================================================
+ * Prova do alvo da atribuição (Goal047 / WU-02) — depois de provar QUAL
+ * classe é instanciada (Goal045), esta leitura prova se a instância é
+ * guardada num campo da classe dona, em vez de casar `<nome> = new` numa
+ * janela textual solta, que aceitava igualmente uma variável local, uma
+ * propriedade de outro objeto ou um elemento de array.
+ *
+ * Só duas formas provam campo da classe dona: `this.<campo> = new ...` (em
+ * qualquer profundidade dentro do corpo dela) e declaração de propriedade de
+ * classe com inicializador (`<campo> = new ...`, direto no corpo da classe,
+ * fora de todo método). Toda outra forma recusa com `arquivo:linha` e
+ * categoria nomeada — nenhum caminho devolve nome de campo não provado.
+ * ========================================================================= */
+
+/** Categorias nomeadas com que a resolução do alvo de atribuição da instanciação recusa. Toda recusa deste caminho sai sob uma delas. Array em runtime: a suíte e a documentação permanente conferem contra ele, em vez de contra união escrita à mão. */
+export const INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES = [
+  /** A instância é guardada numa variável local (`const`/`let`/`var`), não num campo da classe dona. */
+  "instance_field_assignment_local_variable",
+  /** O alvo da atribuição é um padrão de desestruturação: o membro sai da instância aqui, não vira campo. */
+  "instance_field_assignment_destructured",
+  /** A instância é atribuída a uma propriedade de outro objeto (`<id>.<campo> = new ...`), não a `this.<campo>`. */
+  "instance_field_assignment_foreign_object_property",
+  /** A instância é atribuída a um elemento de array (`<id>[<expr>] = new ...`). */
+  "instance_field_assignment_array_element",
+  /** A instanciação é devolvida diretamente (`return new ...`), sem atribuição a campo algum. */
+  "instance_field_assignment_returned_directly",
+  /** Nenhuma das formas acima casa, e a instanciação também não está em `this.<campo> = new ...` nem em declaração de propriedade de classe: forma não reconhecida. */
+  "instance_field_assignment_form_not_recognized",
+] as const;
+
+/** Categoria nomeada com que a resolução do alvo de atribuição recusa, derivada de {@link INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES}. */
+export type InstanceFieldAssignmentRefusalCategory =
+  (typeof INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES)[number];
+
+/** Recusa deste caminho: `arquivo:linha`, o trecho de contexto e a categoria nomeada da forma. */
+function instanceFieldAssignmentRefusal(
+  filePath: string,
+  line: number,
+  detail: string,
+  category: InstanceFieldAssignmentRefusalCategory,
+): Error {
+  return new Error(`${filePath}:${line}: ${detail} [categoria: ${category}]`);
+}
+
+/** Profundidade de chaves entre `classSpan.bodyStart` e `index` (exclusive), ignorando aspas/crase. Zero é o corpo da classe dona no nível mais alto (posição de declaração de propriedade); acima de zero está dentro de um método ou bloco aninhado. */
+function classBodyNestingDepthAt(source: string, classSpan: ClassSpan, index: number): number {
+  const quoteMask = computeQuoteMask(source, index);
+  let depth = 0;
+  for (let i = classSpan.bodyStart; i < index; i += 1) {
+    if (quoteMask[i]) continue;
+    const char = source[i];
+    if (char === "{") depth += 1;
+    else if (char === "}") depth -= 1;
+  }
+  return depth;
+}
+
+/**
+ * Nome do campo, provado pela FORMA da atribuição que guarda `new <Classe>(`
+ * que termina em `classNameMatchIndex` — nunca por janela textual solta.
+ * Recusa com `arquivo:linha` e categoria nomeada quando a forma não prova
+ * campo da classe dona (`ownerClassSpan`).
+ */
+function resolveProvenClassFieldAssignment(
+  source: string,
+  filePath: string,
+  classNameMatchIndex: number,
+  line: number,
+  ownerClassSpan: ClassSpan,
+): string {
+  const windowStart = Math.max(ownerClassSpan.bodyStart, classNameMatchIndex - 200);
+  const window = source.slice(windowStart, classNameMatchIndex);
+  const context = source
+    .slice(windowStart, Math.min(source.length, classNameMatchIndex + 40))
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const thisFieldMatch = /\bthis\s*\.\s*([A-Za-z_$][\w$]*)\s*=\s*new\s*$/.exec(window);
+  if (thisFieldMatch) return thisFieldMatch[1];
+
+  const propertyDeclarationMatch =
+    /(?:(?:private|public|protected|readonly|static|declare|override)\s+)*([A-Za-z_$][\w$]*)\s*(?:\?|!)?\s*(?::\s*[^=;{}]+)?=\s*new\s*$/.exec(
+      window,
+    );
+  if (
+    propertyDeclarationMatch &&
+    classBodyNestingDepthAt(source, ownerClassSpan, classNameMatchIndex) === 0
+  ) {
+    return propertyDeclarationMatch[1];
+  }
+
+  const localVariableMatch =
+    /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::\s*[^=;{}]+)?=\s*new\s*$/.exec(window);
+  if (localVariableMatch) {
+    throw instanceFieldAssignmentRefusal(
+      filePath,
+      line,
+      `a instância é guardada na variável local "${localVariableMatch[1]}" ("${context}"), não num campo da classe dona`,
+      "instance_field_assignment_local_variable",
+    );
+  }
+
+  if (/[}\]]\s*=\s*new\s*$/.test(window)) {
+    throw instanceFieldAssignmentRefusal(
+      filePath,
+      line,
+      `o alvo da atribuição é um padrão de desestruturação ("${context}"), não um campo da classe dona`,
+      "instance_field_assignment_destructured",
+    );
+  }
+
+  const foreignPropertyMatch = /\b([A-Za-z_$][\w$]*)\s*\.\s*([A-Za-z_$][\w$]*)\s*=\s*new\s*$/.exec(window);
+  if (foreignPropertyMatch && foreignPropertyMatch[1] !== "this") {
+    throw instanceFieldAssignmentRefusal(
+      filePath,
+      line,
+      `a instância é atribuída a "${foreignPropertyMatch[1]}.${foreignPropertyMatch[2]}" ("${context}"), propriedade de outro objeto, não de "this"`,
+      "instance_field_assignment_foreign_object_property",
+    );
+  }
+
+  if (/\b[A-Za-z_$][\w$]*\s*\[[^\]]*\]\s*=\s*new\s*$/.test(window)) {
+    throw instanceFieldAssignmentRefusal(
+      filePath,
+      line,
+      `a instância é atribuída a um elemento de array ("${context}"), não a um campo da classe dona`,
+      "instance_field_assignment_array_element",
+    );
+  }
+
+  if (/\breturn\s*$/.test(window)) {
+    throw instanceFieldAssignmentRefusal(
+      filePath,
+      line,
+      `a instanciação é devolvida diretamente ("${context}"), sem atribuição a campo algum`,
+      "instance_field_assignment_returned_directly",
+    );
+  }
+
+  throw instanceFieldAssignmentRefusal(
+    filePath,
+    line,
+    `a instanciação não está na forma "this.<campo> = new ..." nem em declaração de propriedade de classe ("${context}")`,
+    "instance_field_assignment_form_not_recognized",
+  );
 }
 
 interface ClassInstantiationSite {
@@ -3051,6 +3203,327 @@ function computeInternalClientMemberSurface(
   return { reachingMembers, excludedMembers, staticMethodDefaults };
 }
 
+/* =========================================================================
+ * Uso do campo cliente lido por enumeração fail-closed (Goal047 / WU-01) —
+ * depois de provar que aquela instanciação é daquela classe e que a
+ * instância foi guardada num campo, o uso do campo deixa de ser reconhecido
+ * por uma expressão regular sobre `this.<campo>.<membro>(`.
+ *
+ * A enumeração é do **receptor**, não do texto `this.<campo>`: toda
+ * ocorrência de `this` dentro do corpo da classe dona é lida, e só a forma
+ * `this.<identificador>` deixa a leitura decidir de qual campo se trata.
+ * Procurar o texto `this.<campo>` seria fail-open de novo, porque o campo
+ * também é alcançado sem esse texto aparecer: `this["<campo>"]`,
+ * `this?.<campo>`, `const { <campo> } = this` e `const alias = this` chegam
+ * ao mesmo campo, e cada um deles faria a rota sumir sem recusa alguma.
+ *
+ * Cada ocorrência cai em exatamente uma saída: chamada de transporte,
+ * chamada de membro fora da superfície, recusa com `arquivo:linha`,
+ * contexto e categoria nomeada, ou — só quando a leitura prova que o
+ * receptor alcança **outro** campo (`this.<outro>`) — nada. Não existe
+ * saída que ignore ocorrência por não reconhecê-la.
+ *
+ * A recusa é escopada à ocorrência sobre `this`, não ao nome solto:
+ * propriedade homônima de outro objeto (`outro.<campo>`) não tem `this` como
+ * receptor e não entra, ocorrência dentro de aspas é descartada pela
+ * máscara de `computeQuoteMask`, e comentário já veio apagado por
+ * `blankComments` — nenhuma das três conta nem recusa.
+ * ========================================================================= */
+
+/** Categorias nomeadas com que a leitura do uso do campo cliente recusa. Toda recusa deste caminho sai sob uma delas. Array em runtime: a suíte e a documentação permanente conferem contra ele, em vez de contra união escrita à mão. */
+export const CLIENT_FIELD_USE_REFUSAL_CATEGORIES = [
+  /** A ocorrência do campo está no corpo da classe mas fora de todo corpo de método de topo: inicializador de campo, bloco estático, ou forma que `findTopLevelMethodBodies` não devolve. */
+  "client_field_use_outside_top_level_method_body",
+  /** `this.<campo>?.<membro>(`: o encadeamento opcional não é a forma de chamada que esta leitura converte em requisição. */
+  "client_field_use_optional_chaining",
+  /** `this.<campo>["<membro>"]` e demais acessos computados: o membro não é um identificador escrito na própria chamada. */
+  "client_field_use_computed_member_access",
+  /** `const { <membro> } = this.<campo>`: o membro sai do campo por desestruturação e é invocado depois, fora desta ocorrência. */
+  "client_field_use_destructured",
+  /** `this.<campo>.<membro>` sem `(` imediato: o membro é lido como valor (repasse de referência, forma genérica), não invocado aqui. */
+  "client_field_use_member_not_invoked",
+  /** Depois do `.` não há identificador de membro derivável — nome privado, forma nova. */
+  "client_field_use_member_name_not_derivable",
+  /** A ocorrência não é acesso a membro: alias em variável local, argumento passado adiante, `as`/`!` sobre o campo. Por ela o campo alcança chamadas que esta leitura não percorre. */
+  "client_field_use_field_forwarded_as_value",
+  /** `this?.<campo>`: o encadeamento opcional está no **receptor**, antes do nome do campo, e o texto `this.<campo>` nunca aparece. */
+  "client_field_use_receiver_optional_chaining",
+  /** `this["<campo>"]` e demais acessos computados sobre `this`: qual campo o receptor alcança não é um identificador escrito no próprio acesso. */
+  "client_field_use_receiver_computed_member_access",
+  /** `const { <campo> } = this`: o próprio `this` é desestruturado, e o campo sai dele por ligação que esta leitura não percorre. */
+  "client_field_use_receiver_destructured",
+  /** `const alias = this`, `entregar(this)`, `this` em posição de valor ou de tipo: a instância inteira escapa, e com ela todo campo dela. */
+  "client_field_use_receiver_forwarded_as_value",
+  /** Depois do `.` sobre `this` não há identificador de campo derivável — nome privado, forma nova: a leitura não decide se o receptor alcança o campo cliente. */
+  "client_field_use_receiver_field_name_not_derivable",
+] as const;
+
+/** Categoria nomeada com que a leitura do uso do campo cliente recusa, derivada de {@link CLIENT_FIELD_USE_REFUSAL_CATEGORIES}. */
+export type ClientFieldUseRefusalCategory = (typeof CLIENT_FIELD_USE_REFUSAL_CATEGORIES)[number];
+
+/** Recusa deste caminho: `arquivo:linha`, o trecho de contexto da ocorrência, e a categoria nomeada da forma. */
+function clientFieldUseRefusal(
+  filePath: string,
+  line: number,
+  detail: string,
+  category: ClientFieldUseRefusalCategory,
+): Error {
+  return new Error(`${filePath}:${line}: ${detail} [categoria: ${category}]`);
+}
+
+/** Uma ocorrência de `this.<campo>` reconhecida como chamada de membro do cliente, com o membro invocado e o corpo de método de topo em que ela está. */
+interface ClientFieldMemberCall {
+  line: number;
+  memberName: string;
+  /** Índice do `(` que abre a lista de argumentos da chamada. */
+  openParenIndex: number;
+  method: ClassMethodBody;
+}
+
+/** Primeiro índice não-espaço a partir de (inclusive) `from`, limitado a `limit`. É o índice, não o caractere de `firstNonWhitespaceCharAfter`: a leitura precisa da posição do `(` para recortar a lista de argumentos com `findMatchingDelimiterEnd`. */
+function nextNonWhitespaceIndex(source: string, from: number, limit: number): number {
+  let i = from;
+  while (i < limit && /\s/u.test(source[i])) i += 1;
+  return i;
+}
+
+/**
+ * Desmarca, na máscara de aspas, as faixas `${...}` **de template literal**
+ * do intervalo dado: o que está dentro delas é código, não texto.
+ * `computeQuoteMask` marca o template inteiro, e uma chamada interpolada
+ * (`${this.<campo>.<membro>(...)}`) ficaria invisível — o mesmo fail-open
+ * que esta leitura existe para fechar.
+ *
+ * Só desmarca faixa aberta por **crase**: `${` é interpolação apenas dentro
+ * de template literal. Dentro de string comum (`"..."`, `'...'`) o mesmo
+ * texto é texto, e desmarcá-lo faria uma ocorrência do campo escrita dentro
+ * de uma string passar a contar e a recusar — o oposto do escopo declarado,
+ * em que texto de string não conta nem recusa. Quem decide é
+ * `computeQuoteOpenerMask`, que guarda o delimitador que abriu cada região.
+ *
+ * A máscara interna de cada faixa é a que a mesma varredura computa para
+ * ela, então texto de template ou de string aninhado dentro da interpolação
+ * continua marcado — e a interpolação de um template aninhado, por ter
+ * crase como delimitador de abertura próprio, é desmarcada pela iteração
+ * seguinte do mesmo laço.
+ */
+function unmaskTemplateInterpolations(
+  source: string,
+  quoteMask: boolean[],
+  from: number,
+  to: number,
+): void {
+  const openerMask = computeQuoteOpenerMask(source, to);
+  for (let i = from; i < to - 1; i += 1) {
+    if (!quoteMask[i] || openerMask[i] !== "`") continue;
+    if (source[i] !== "$" || source[i + 1] !== "{") continue;
+    const closeIndex = findMatchingDelimiterEnd(source, i + 1, "{", "}");
+    const innerStart = i + 2;
+    const innerOpenerMask = computeQuoteOpenerMask(
+      source.slice(innerStart, closeIndex),
+      closeIndex - innerStart,
+    );
+    for (let j = innerStart; j < closeIndex && j < to; j += 1) {
+      const opener = innerOpenerMask[j - innerStart];
+      openerMask[j] = opener;
+      quoteMask[j] = opener !== undefined;
+    }
+  }
+}
+
+/**
+ * Toda ocorrência de `this` no corpo da classe `classSpan`, reduzida às que
+ * são chamada de membro do campo cliente. Qualquer outra forma **recusa**
+ * com `arquivo:linha`, contexto e categoria nomeada — é essa recusa, e não um
+ * `continue` mudo, que faz a leitura ser fail-closed: pela leitura anterior,
+ * por formato de texto, uma rota saía do conjunto sem acrescentar sítio de
+ * `fetch` algum sempre que a chamada estivesse numa forma não casada.
+ *
+ * A enumeração é do **receptor**: o laço percorre o token `this`, não o texto
+ * `this.<campo>`. Procurar `this.<campo>` seria fail-open de novo, porque o
+ * campo é alcançado sem esse texto aparecer — `this?.<campo>`,
+ * `this["<campo>"]`, `const { <campo> } = this` e `const alias = this`
+ * chegam todos ao mesmo campo, e cada um deles faria a rota sumir sem recusa
+ * alguma.
+ *
+ * A ordem de decisão é: forma do receptor, depois localização, depois forma
+ * do uso. A forma do receptor vem primeiro porque é ela que decide se a
+ * ocorrência sequer alcança este campo.
+ *
+ * A única ocorrência isenta é a atribuição que guarda a própria instância no
+ * campo (`this.<campo> = new <Classe>(`): ela é a instanciação já provada,
+ * não um uso do campo. Ocorrência que prova alcançar **outro** campo
+ * (`this.<outro>`) não recusa e não conta: a recusa é escopada à ocorrência
+ * deste campo, não ao nome solto.
+ *
+ * Ocorrência dentro de corpo de função aninhada a um método de topo continua
+ * sendo chamada daquele método — o corpo aninhado está dentro da faixa que
+ * `findTopLevelMethodBodies` devolve, e é a faixa que decide. Fora de toda
+ * faixa (inicializador de campo, bloco estático) a ocorrência recusa.
+ */
+function enumerateClientFieldMemberCalls(
+  source: string,
+  filePath: string,
+  classSpan: ClassSpan,
+  fieldName: string,
+  methods: ClassMethodBody[],
+  instantiationCallIndex: number,
+): ClientFieldMemberCall[] {
+  // `blankComments` preserva índices: todo índice de `scan` vale igual em
+  // `source`, de onde sai o trecho de contexto da recusa. A leitura percorre
+  // `scan` para que `this` citado em comentário não conte nem recuse.
+  const scan = blankComments(source);
+  const quoteMask = computeQuoteMask(scan, classSpan.bodyEnd);
+  unmaskTemplateInterpolations(scan, quoteMask, classSpan.bodyStart, classSpan.bodyEnd);
+  const pattern = /\bthis\b/gu;
+  pattern.lastIndex = classSpan.bodyStart;
+  const calls: ClientFieldMemberCall[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(scan)) && match.index < classSpan.bodyEnd) {
+    const index = match.index;
+    if (quoteMask[index]) continue;
+
+    const line = lineAt(source, index);
+    const context = source
+      .slice(Math.max(0, index - 40), Math.min(source.length, index + 80))
+      .replace(/\s+/gu, " ")
+      .trim();
+    const refuse = (detail: string, category: ClientFieldUseRefusalCategory): Error =>
+      clientFieldUseRefusal(filePath, line, `${detail} ("${context}")`, category);
+
+    // --- Forma do receptor: por onde esta ocorrência de `this` alcança (ou
+    // deixa de alcançar) um campo nomeado.
+    const afterThisIndex = nextNonWhitespaceIndex(scan, index + "this".length, classSpan.bodyEnd);
+    const afterThisChar = scan[afterThisIndex];
+    let fieldAccessStart: number;
+    let optionalReceiver = false;
+    if (afterThisChar === "?") {
+      const afterQuestionIndex = nextNonWhitespaceIndex(scan, afterThisIndex + 1, classSpan.bodyEnd);
+      if (scan[afterQuestionIndex] !== ".") {
+        throw refuse(
+          "this aparece em posição de valor (condição de ternário), fora de acesso a campo: a instância inteira escapa, e com ela todo campo dela",
+          "client_field_use_receiver_forwarded_as_value",
+        );
+      }
+      optionalReceiver = true;
+      fieldAccessStart = afterQuestionIndex + 1;
+    } else if (afterThisChar === "[") {
+      throw refuse(
+        `this é acessado por índice computado, e qual campo o receptor alcança não é identificador escrito no acesso: a leitura não decide se ele alcança ${fieldName}`,
+        "client_field_use_receiver_computed_member_access",
+      );
+    } else if (afterThisChar === ".") {
+      fieldAccessStart = afterThisIndex + 1;
+    } else {
+      const receiverDestructured = /\}\s*=\s*$/u.test(scan.slice(Math.max(0, index - 200), index));
+      throw receiverDestructured
+        ? refuse(
+            `this é desestruturado: o campo sai da instância aqui por ligação que esta leitura não percorre, e o texto this.${fieldName} nunca aparece`,
+            "client_field_use_receiver_destructured",
+          )
+        : refuse(
+            "this aparece em posição de valor, fora de acesso a campo: a instância inteira escapa, e com ela todo campo dela",
+            "client_field_use_receiver_forwarded_as_value",
+          );
+    }
+
+    const receiverFieldStart = nextNonWhitespaceIndex(scan, fieldAccessStart, classSpan.bodyEnd);
+    if (scan[receiverFieldStart] === "[") {
+      throw refuse(
+        `this é acessado por índice computado, e qual campo o receptor alcança não é identificador escrito no acesso: a leitura não decide se ele alcança ${fieldName}`,
+        "client_field_use_receiver_computed_member_access",
+      );
+    }
+    const receiverFieldMatch = /^[A-Za-z_$][\w$]*/u.exec(
+      scan.slice(receiverFieldStart, classSpan.bodyEnd),
+    );
+    if (receiverFieldMatch === null) {
+      throw refuse(
+        `this é seguido de "." sem nome de campo derivável: a leitura não decide se o receptor alcança ${fieldName}`,
+        "client_field_use_receiver_field_name_not_derivable",
+      );
+    }
+    const receiverFieldName = receiverFieldMatch[0];
+    // Ocorrência que prova alcançar OUTRO campo não é uso deste campo: não
+    // recusa e não conta. É aqui que a recusa fica escopada à ocorrência.
+    if (receiverFieldName !== fieldName) continue;
+    if (optionalReceiver) {
+      throw refuse(
+        `this?.${fieldName}: o encadeamento opcional está no receptor, antes do nome do campo`,
+        "client_field_use_receiver_optional_chaining",
+      );
+    }
+    const occurrenceEnd = receiverFieldStart + receiverFieldName.length;
+    // A atribuição que guarda a instância no campo não é uso do campo: é a
+    // instanciação que esta leitura já provou, algumas linhas acima.
+    if (/^\s*=\s*new\s+$/u.test(scan.slice(occurrenceEnd, instantiationCallIndex))) continue;
+
+    // --- Localização: dentro de qual corpo de método de topo a ocorrência do
+    // campo está.
+    const method = methods.find(
+      (candidate) => index >= candidate.bodyStart && index < candidate.bodyEnd,
+    );
+    if (method === undefined) {
+      throw refuse(
+        `this.${fieldName} aparece no corpo da classe fora de todo corpo de método de topo`,
+        "client_field_use_outside_top_level_method_body",
+      );
+    }
+
+    // --- Forma do uso: o que a ocorrência do campo faz.
+    const afterFieldIndex = nextNonWhitespaceIndex(scan, occurrenceEnd, classSpan.bodyEnd);
+    const afterFieldChar = scan[afterFieldIndex];
+    if (afterFieldChar === "?") {
+      throw refuse(
+        `this.${fieldName} é usado com encadeamento opcional`,
+        "client_field_use_optional_chaining",
+      );
+    }
+    if (afterFieldChar === "[") {
+      throw refuse(
+        `this.${fieldName} é usado com acesso computado`,
+        "client_field_use_computed_member_access",
+      );
+    }
+    if (afterFieldChar !== ".") {
+      const isDestructuring = /\}\s*=\s*$/u.test(scan.slice(Math.max(0, index - 200), index));
+      throw isDestructuring
+        ? refuse(
+            `this.${fieldName} é desestruturado: o membro sai do campo aqui e é invocado fora desta ocorrência`,
+            "client_field_use_destructured",
+          )
+        : refuse(
+            `this.${fieldName} aparece em posição de valor, fora de acesso a membro`,
+            "client_field_use_field_forwarded_as_value",
+          );
+    }
+
+    const memberStart = nextNonWhitespaceIndex(scan, afterFieldIndex + 1, classSpan.bodyEnd);
+    const memberMatch = /^[A-Za-z_$][\w$]*/u.exec(scan.slice(memberStart, classSpan.bodyEnd));
+    if (memberMatch === null) {
+      throw refuse(
+        `this.${fieldName} é seguido de "." sem nome de membro derivável`,
+        "client_field_use_member_name_not_derivable",
+      );
+    }
+    const memberName = memberMatch[0];
+    const afterMemberIndex = nextNonWhitespaceIndex(
+      scan,
+      memberStart + memberName.length,
+      classSpan.bodyEnd,
+    );
+    if (scan[afterMemberIndex] !== "(") {
+      throw refuse(
+        `this.${fieldName}.${memberName} não é invocado nesta ocorrência`,
+        "client_field_use_member_not_invoked",
+      );
+    }
+
+    calls.push({ line, memberName, openParenIndex: afterMemberIndex, method });
+  }
+  return calls;
+}
+
 /**
  * Toda requisição a um cliente HTTP interno cujo primeiro argumento de
  * construtor resolve a uma chave do serviço Go, mais toda montagem de URL
@@ -3091,7 +3564,11 @@ function discoverGoBoundInternalClientRequests(
 
   for (const site of constructorBaseUrlSites) {
     const source = sourcesByPath.get(site.filePath);
-    if (source === undefined) continue;
+    if (source === undefined) {
+      throw new Error(
+        `${site.filePath}:${site.line}: sítio "${site.category}" foi encontrado, mas o texto de ${site.filePath} não está entre os arquivos lidos`,
+      );
+    }
     const classSpan = findEnclosingClassSpan(source, indexAtLineStart(source, site.line));
     if (classSpan === undefined) {
       throw new Error(
@@ -3157,32 +3634,53 @@ function discoverGoBoundInternalClientRequests(
         );
       }
 
-      const fieldName = findAssignedFieldName(candidateSource, instantiation.callIndex);
       const ownerClassSpan = findEnclosingClassSpan(candidateSource, instantiation.callIndex);
-      if (fieldName === undefined || ownerClassSpan === undefined) {
+      if (ownerClassSpan === undefined) {
         throw new Error(
-          `${filePath}:${instantiation.line}: instância de ${classSpan.name} (new ${instantiation.localName}(, ligação ${instantiation.bindingForm} até ${classDeclarationKey}) resolve a env.${goEnvVar} (serviço Go), mas não está atribuída a um campo de classe reconhecível`,
+          `${filePath}:${instantiation.line}: instância de ${classSpan.name} (new ${instantiation.localName}(, ligação ${instantiation.bindingForm} até ${classDeclarationKey}) resolve a env.${goEnvVar} (serviço Go), mas não está dentro de um corpo de classe reconhecível`,
         );
       }
+      const fieldName = resolveProvenClassFieldAssignment(
+        candidateSource,
+        filePath,
+        instantiation.callIndex,
+        instantiation.line,
+        ownerClassSpan,
+      );
 
-      for (const method of findTopLevelMethodBodies(
+      const methodBodies = findTopLevelMethodBodies(
         candidateSource,
         ownerClassSpan.bodyStart,
         ownerClassSpan.bodyEnd,
-      )) {
+      );
+      // Toda ocorrência de `this.<campo>` no corpo da classe dona é
+      // enumerada, não só a que casa um formato de chamada: forma que a
+      // leitura não converte em chamada de membro recusa aqui dentro, com
+      // `arquivo:linha`, contexto e categoria nomeada. O que volta já é só a
+      // chamada de membro, e ela ainda é classificada abaixo contra a
+      // superfície derivada.
+      const fieldMemberCalls = enumerateClientFieldMemberCalls(
+        candidateSource,
+        filePath,
+        ownerClassSpan,
+        fieldName,
+        methodBodies,
+        instantiation.callIndex,
+      );
+
+      for (const method of methodBodies) {
         const methodName = methodNameAtBrace(candidateSource, method.braceIndex, filePath, method.line);
         // Toda chamada `this.<campo>.<membro>(` sobre este cliente é lida,
         // não só as da superfície: membro que a declaração da classe tem e
         // que não alcança fetch (ou alcança e é private) é contado fora com
         // o motivo já computado, e membro que a declaração não tem derruba a
         // leitura. Casar só a superfície deixaria a chamada sumir.
-        const callPattern = new RegExp(`this\\.${fieldName}\\.([A-Za-z_$][\\w$]*)\\(`, "g");
-        callPattern.lastIndex = method.bodyStart;
         let requestCallCount = 0;
-        let callMatch: RegExpExecArray | null;
-        while ((callMatch = callPattern.exec(candidateSource)) && callMatch.index < method.bodyEnd) {
-          const callKind = callMatch[1];
-          const line = lineAt(candidateSource, callMatch.index);
+        for (const call of fieldMemberCalls.filter(
+          (candidate) => candidate.method.braceIndex === method.braceIndex,
+        )) {
+          const callKind = call.memberName;
+          const line = call.line;
           if (!surface.reachingMembers.includes(callKind)) {
             const excluded = surface.excludedMembers.find((member) => member.name === callKind);
             if (excluded === undefined) {
@@ -3201,7 +3699,7 @@ function discoverGoBoundInternalClientRequests(
             continue;
           }
           requestCallCount += 1;
-          const openParenIndex = callMatch.index + callMatch[0].length - 1;
+          const openParenIndex = call.openParenIndex;
           const closeParenIndex = findMatchingDelimiterEnd(candidateSource, openParenIndex, "(", ")");
           const args = splitTopLevelItems(candidateSource.slice(openParenIndex + 1, closeParenIndex));
           const objectMatch = (args[0] ?? "").trim().match(/^\{([\s\S]*)\}$/);
@@ -3235,7 +3733,6 @@ function discoverGoBoundInternalClientRequests(
             category: `env_var_${goEnvVar}`,
             reason: `this.${fieldName}.${callKind}(...) em ${methodName}(), cujo cliente resolve destino de env.${goEnvVar}`,
           });
-          callPattern.lastIndex = closeParenIndex;
         }
 
         if (requestCallCount === 0) {

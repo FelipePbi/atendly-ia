@@ -22,9 +22,12 @@ import { AI_CONVERSATION_STYLES } from "../../src/modules/tenant-config/ai-setti
 import { DEFAULT_BUSINESS_CONTEXT } from "../../src/modules/tenant-config/business-context.js";
 import {
   CLASS_BINDING_REFUSAL_CATEGORIES,
+  CLIENT_FIELD_USE_REFUSAL_CATEGORIES,
   computeBoundaryValueCrossing,
   discoverGoServiceHttpRequests,
   discoverHttpEgressSites,
+  INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES,
+  listTypeScriptSources,
   readEnvFileValue,
   readEnvSchemaDefault,
   readProductTransportRoutesFile,
@@ -5559,5 +5562,890 @@ describe("Goal046 / WU-04 — a árvore real produz os números desta rodada, e 
     const declarationSource = readFileSync(surface.filePath, "utf8");
     const declarationLine = declarationSource.split(/\r?\n/u)[surface.classLine - 1];
     expect(declarationLine).toMatch(/^export\s+(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?class\b/);
+  });
+});
+
+/* =========================================================================
+ * Goal047 / WU-04 — afirmações permanentes: classificação exaustiva das
+ * ocorrências do campo cliente (§1), campo provado versus forma não
+ * resolvida (§2), simetria das duas saídas de `sourcesByPath` ausente (§3),
+ * o controle próprio do critério 3 do Goal046 (§4, observação 1 do
+ * review046), o conjunto de categorias de recusa em runtime (§5), e os
+ * números da árvore real com as 41 ocorrências de `this.http.` classificadas
+ * sem recusa (§6). Cada árvore sintética é montada e removida pelo próprio
+ * teste; nenhuma toca a árvore real.
+ * ========================================================================= */
+
+const wu047EnvSchema = [
+  "export const env = {",
+  '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+  "};",
+  "",
+].join("\n");
+
+const wu047InternalClient = [
+  "export class InternalHttpClient {",
+  "  constructor(private baseUrl: string) {}",
+  "  async request(options: { method: string; path: string }) {",
+  "    const url = new URL(options.path, this.baseUrl);",
+  "    return fetch(url, { method: options.method });",
+  "  }",
+  "  describeSelf() {",
+  '    return "cliente";',
+  "  }",
+  "}",
+  "",
+].join("\n");
+
+describe("Goal047 / WU-04 (§1) — toda ocorrência do campo cliente é classificada, nenhuma ignorada por não ser reconhecida", () => {
+  it("this.http.request(...) vira rota e this.http.describeSelf(...) — que não alcança fetch — é contado fora com motivo, no mesmo resultado: as duas saídas coexistem, nenhuma ocorrência some", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "  async legacyDescribe() {",
+        "    return this.http.describeSelf();",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, nonTransportMemberCalls } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+      expect(nonTransportMemberCalls.map((call) => call.memberName)).toEqual(["describeSelf"]);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("this.http?.request(...) — encadeamento opcional — recusa pela categoria nova, com arquivo:linha e o trecho de contexto, em vez de a rota sumir sem recusa alguma", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http?.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      expect(() =>
+        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+      ).toThrow(
+        /evolution-client\.ts:\d+:.*encadeamento opcional.*\[categoria: client_field_use_optional_chaining\]/u,
+      );
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Goal047 / WU-04 (§2) — o alvo da atribuição só vira campo provado nas duas formas reconhecidas; variável local recusa em vez de produzir campo que nunca será encontrado", () => {
+  it("declaração de propriedade de classe com inicializador (`http = new InternalHttpClient(...)`, sem passar por construtor) prova campo da classe dona, e a chamada vira rota", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("instância guardada em variável local do construtor — nunca `this.<campo>` — recusa por instance_field_assignment_local_variable, com arquivo:linha, em vez de zero requisição e zero recusa", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  constructor() {",
+        "    const http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      expect(() =>
+        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+      ).toThrow(
+        /evolution-client\.ts:\d+:.*variável local.*\[categoria: instance_field_assignment_local_variable\]/u,
+      );
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Goal047 / WU-04 (§3) — as duas saídas de sourcesByPath ausente, no ramo da superfície e no ramo da instanciação, são a mesma: nenhuma pula em silêncio", () => {
+  it("as duas recusas terminam com a mesma frase nomeada, e nenhum `continue` silencioso sobrevive no ramo da superfície nem no da instanciação", () => {
+    const supportModulePath = join(
+      dirname(fileURLToPath(import.meta.url)),
+      "../support/http-egress-sites.ts",
+    );
+    const moduleSource = readFileSync(supportModulePath, "utf8");
+    expect(moduleSource).toContain(
+      'sítio "${site.category}" foi encontrado, mas o texto de ${site.filePath} não está entre os arquivos lidos',
+    );
+    expect(moduleSource).toContain(
+      "a instanciação foi reconhecida pela ligação até ${classDeclarationKey}, mas o texto de ${filePath} não está entre os arquivos lidos",
+    );
+    expect(moduleSource).not.toMatch(/if \(source === undefined\) continue/u);
+    expect(moduleSource).not.toMatch(/if \(candidateSource === undefined\) continue/u);
+  });
+});
+
+describe("Goal047 / WU-04 (§4) — o critério 3 do Goal046 ganha controle próprio: construção `export` exótica que NÃO menciona a classe não recusa nada (observação 1 do review046)", () => {
+  it("antes: sem construção `export` exótica alguma no candidato, a rota entra — o controle não é vácuo", () => {
+    const { requests } = discoverWithCandidateTrailing("");
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+  });
+
+  it("depois: `export namespace Unrelated { export const flag = 1; }` no candidato não menciona InternalHttpClient em lugar nenhum — a construção cai fora da allowlist, mas a recusa é escopada à OCORRÊNCIA do nome, e nenhuma ocorrência do nome está dentro dela; a classificação continua idêntica à de antes", () => {
+    const { requests } = discoverWithCandidateTrailing(
+      "export namespace Unrelated { export const flag = 1; }",
+    );
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+  });
+});
+
+describe("Goal047 / WU-04 (§5) — as categorias de recusa deste caminho existem em runtime, conferidas por igualdade contra o array", () => {
+  it("CLIENT_FIELD_USE_REFUSAL_CATEGORIES traz as doze categorias do uso do campo cliente — as sete da forma do uso e as cinco da forma do receptor —, na ordem declarada", () => {
+    expect(CLIENT_FIELD_USE_REFUSAL_CATEGORIES).toEqual([
+      "client_field_use_outside_top_level_method_body",
+      "client_field_use_optional_chaining",
+      "client_field_use_computed_member_access",
+      "client_field_use_destructured",
+      "client_field_use_member_not_invoked",
+      "client_field_use_member_name_not_derivable",
+      "client_field_use_field_forwarded_as_value",
+      "client_field_use_receiver_optional_chaining",
+      "client_field_use_receiver_computed_member_access",
+      "client_field_use_receiver_destructured",
+      "client_field_use_receiver_forwarded_as_value",
+      "client_field_use_receiver_field_name_not_derivable",
+    ]);
+  });
+
+  it("INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES traz as seis categorias do alvo da atribuição, na ordem declarada", () => {
+    expect(INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES).toEqual([
+      "instance_field_assignment_local_variable",
+      "instance_field_assignment_destructured",
+      "instance_field_assignment_foreign_object_property",
+      "instance_field_assignment_array_element",
+      "instance_field_assignment_returned_directly",
+      "instance_field_assignment_form_not_recognized",
+    ]);
+  });
+});
+
+describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta rodada, e as 41 ocorrências de this.http. são classificadas sem recusa alguma", () => {
+  it("1 superfície, 4 ligações, 205 arquivos varridos, 10 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — inalterados pelas correções deste Goal", () => {
+    const { requests, internalClientSurfaces, nonGoBoundInstantiations, nonTransportMemberCalls } =
+      discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath);
+
+    expect(internalClientSurfaces).toHaveLength(1);
+    expect(internalClientSurfaces[0].instantiationBindings).toHaveLength(4);
+    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(205);
+    expect(requests).toHaveLength(10);
+    expect(nonGoBoundInstantiations).toHaveLength(2);
+    expect(nonTransportMemberCalls).toHaveLength(0);
+  });
+
+  it("as 41 ocorrências de this.http. em apps/bff/src/clients/ estão todas na forma direta this.http.<membro>(, sem exceção, e a leitura completa não lança recusa alguma sobre a árvore real", () => {
+    const clientsRoot = join(bffSrcPath, "clients");
+    const files = listTypeScriptSources(clientsRoot);
+    let totalOccurrences = 0;
+    let totalDirectCalls = 0;
+    for (const filePath of files) {
+      const source = readFileSync(filePath, "utf8");
+      totalOccurrences += (source.match(/\bthis\.http\./gu) ?? []).length;
+      totalDirectCalls += (source.match(/\bthis\.http\.[A-Za-z_$][\w$]*\(/gu) ?? []).length;
+    }
+    expect(totalOccurrences).toBe(41);
+    expect(totalDirectCalls).toBe(41);
+    expect(() =>
+      discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath),
+    ).not.toThrow();
+  });
+
+  it("não vácuo: ao menos uma ocorrência do campo cliente é classificada como chamada de transporte, e a enumeração de this.http.<membro>( na árvore real não é vazia", () => {
+    const { requests } = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+    expect(requests.some((request) => request.reason.includes("this.http."))).toBe(true);
+    const evolutionClientSource = readFileSync(
+      join(bffSrcPath, "clients/evolution/index.ts"),
+      "utf8",
+    );
+    expect(
+      (evolutionClientSource.match(/\bthis\.http\.[A-Za-z_$][\w$]*\(/gu) ?? []).length,
+    ).toBeGreaterThan(0);
+  });
+});
+
+/* =========================================================================
+ * Goal047 / WU-05 (§7) — controles negativos com as duas saídas. Os
+ * controles 1 (encadeamento opcional), 4 (instância fora de campo de
+ * classe) e 7 (herança do Goal046) já têm teste permanente dedicado no
+ * bloco WU-04 acima (§1, §2 e §4, respectivamente) — cada um já registra
+ * as duas saídas reais e não é duplicado aqui. Este bloco cobre os
+ * controles 2 (acesso computado), 3 (alias local), 5 (ocorrência fora de
+ * corpo de método de topo) e 6 (formas reais inalteradas), mais o controle
+ * de renomeação exigido pelo objetivo desta WU. Cada árvore sintética é
+ * criada e removida pelo próprio teste; nenhuma toca a árvore real.
+ * ========================================================================= */
+
+describe("Goal047 / WU-05 (§7, controle 2) — acesso computado: this.http[\"request\"](...) recusa em vez de a rota sumir sem recusa alguma", () => {
+  it("antes: this.http.request(...) na forma direta entra em requests — o controle não é vácuo", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests } = discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts"));
+      expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it('depois: this.http["request"](...) — acesso computado — recusa pela categoria client_field_use_computed_member_access, com arquivo:linha, em vez de a rota sumir sem recusa alguma', () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http["request"]({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      expect(() =>
+        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+      ).toThrow(
+        /evolution-client\.ts:\d+:.*acesso computado.*\[categoria: client_field_use_computed_member_access\]/u,
+      );
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Goal047 / WU-05 (§7, controle 3) — alias em variável local: const client = this.http; client.request(...) recusa porque a ocorrência this.http não está na forma de chamada", () => {
+  it("antes: sem alias, a chamada direta this.http.request(...) entra em requests — o controle não é vácuo", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests } = discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts"));
+      expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("depois: const client = this.http; client.request(...) — a ocorrência this.http está em posição de valor, não de acesso a membro — recusa pela categoria client_field_use_field_forwarded_as_value, com arquivo:linha", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        "    const client = this.http;",
+        '    return client.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      expect(() =>
+        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+      ).toThrow(
+        /evolution-client\.ts:\d+:.*posição de valor.*\[categoria: client_field_use_field_forwarded_as_value\]/u,
+      );
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Goal047 / WU-05 (§7, controle 5) — ocorrência fora de corpo de método de topo: inicializador de campo que menciona this.http recusa em vez de ficar invisível", () => {
+  it("antes: sem inicializador de campo mencionando this.http, a classificação da classe é só a chamada de transporte — o controle não é vácuo", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests } = discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts"));
+      expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("depois: `private probe = this.http;` como inicializador de campo — fora de todo corpo de método de topo — recusa pela categoria client_field_use_outside_top_level_method_body, com arquivo:linha, em vez de ficar invisível", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  private probe = this.http;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      expect(() =>
+        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+      ).toThrow(
+        /evolution-client\.ts:\d+:.*fora de todo corpo de método de topo.*\[categoria: client_field_use_outside_top_level_method_body\]/u,
+      );
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Goal047 / WU-05 (§7, controle 6) — as três formas reais continuam classificadas igual: chamada de transporte, chamada de membro fora da superfície, e montagem de URL sem chamar o cliente", () => {
+  it("this.http.request(...) vira rota, this.http.describeSelf() é contado fora da superfície com motivo, e buildManualUrl() — que só monta valor a partir de env sem chamar this.http — vira assembledUrl nomeada; nenhuma das três recusa, exatamente como antes desta mudança", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "  async legacyDescribe() {",
+        "    return this.http.describeSelf();",
+        "  }",
+        "  buildManualUrl() {",
+        "    return `${env.EVOLUTION_GO_BASE_URL}/manual`;",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const { requests, nonTransportMemberCalls, assembledUrls } = discoverGoServiceHttpRequests(
+        tree,
+        emptyTree,
+        join(tree, "config/env.ts"),
+      );
+      expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+      expect(nonTransportMemberCalls.map((call) => call.memberName)).toEqual(["describeSelf"]);
+      // O construtor também referencia env.EVOLUTION_GO_BASE_URL (no próprio
+      // `new InternalHttpClient(...)`) e não chama membro algum do campo, então
+      // ele também vira assembledUrl — comportamento já existente da máquina,
+      // não introduzido por este controle.
+      expect(assembledUrls.map((url) => url.functionName)).toEqual(["constructor", "buildManualUrl"]);
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Goal047 / WU-05 — controle de renomeação: nenhuma regra decide por nome de arquivo, pasta, classe, campo, cliente, método ou URL literal", () => {
+  it("mover e renomear arquivo, pasta, classe, campo e método, e trocar a rota por outra: a classificação (1 rota, 0 chamada fora da superfície, 0 recusa) é idêntica, e a mesma ocorrência exótica recusa pela mesma categoria dos dois lados", () => {
+    const before = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const after = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "infra/transport-client.ts": [
+        "export class TransportClient {",
+        "  constructor(private baseUrl: string) {}",
+        "  async dispatch(options: { method: string; path: string }) {",
+        "    const url = new URL(options.path, this.baseUrl);",
+        "    return fetch(url, { method: options.method });",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      "infra/thing-service.ts": [
+        'import { TransportClient } from "./transport-client.js";',
+        "",
+        "export class ThingService {",
+        "  private goTransport: TransportClient;",
+        "  constructor() {",
+        "    this.goTransport = new TransportClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async triggerCreation() {",
+        '    return this.goTransport.dispatch({ method: "POST", path: "/pair/setup" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const beforeResult = discoverGoServiceHttpRequests(before, emptyTree, join(before, "config/env.ts"));
+      const afterResult = discoverGoServiceHttpRequests(after, emptyTree, join(after, "config/env.ts"));
+      expect(beforeResult.requests).toHaveLength(1);
+      expect(beforeResult.nonTransportMemberCalls).toHaveLength(0);
+      expect(afterResult.requests).toHaveLength(1);
+      expect(afterResult.nonTransportMemberCalls).toHaveLength(0);
+      expect(afterResult.requests[0].pathExpression).toBe("/pair/setup");
+      expect(afterResult.requests[0].method).toBe(beforeResult.requests[0].method);
+    } finally {
+      rmSync(before, { recursive: true, force: true });
+      rmSync(after, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("a mesma ocorrência exótica — encadeamento opcional — recusa pela mesma categoria client_field_use_optional_chaining nos dois lados, ainda que arquivo, pasta, classe, campo, método e rota sejam todos diferentes", () => {
+    const before = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http?.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const after = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "infra/transport-client.ts": [
+        "export class TransportClient {",
+        "  constructor(private baseUrl: string) {}",
+        "  async dispatch(options: { method: string; path: string }) {",
+        "    const url = new URL(options.path, this.baseUrl);",
+        "    return fetch(url, { method: options.method });",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      "infra/thing-service.ts": [
+        'import { TransportClient } from "./transport-client.js";',
+        "",
+        "export class ThingService {",
+        "  private goTransport: TransportClient;",
+        "  constructor() {",
+        "    this.goTransport = new TransportClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async triggerCreation() {",
+        '    return this.goTransport?.dispatch({ method: "POST", path: "/pair/setup" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    const categoryOf = (error: unknown): string | null =>
+      /\[categoria: ([\w]+)\]/u.exec((error as Error).message)?.[1] ?? null;
+    try {
+      let beforeCategory: string | null = null;
+      let afterCategory: string | null = null;
+      try {
+        discoverGoServiceHttpRequests(before, emptyTree, join(before, "config/env.ts"));
+      } catch (error) {
+        beforeCategory = categoryOf(error);
+      }
+      try {
+        discoverGoServiceHttpRequests(after, emptyTree, join(after, "config/env.ts"));
+      } catch (error) {
+        afterCategory = categoryOf(error);
+      }
+      expect(beforeCategory).toBe("client_field_use_optional_chaining");
+      expect(afterCategory).toBe("client_field_use_optional_chaining");
+    } finally {
+      rmSync(before, { recursive: true, force: true });
+      rmSync(after, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * Árvore sintética mínima em que `EvolutionClient` guarda o cliente HTTP
+ * interno no campo `http` e os membros dados usam (ou deixam de usar) esse
+ * campo. A árvore é criada e removida pela própria chamada; nenhuma toca a
+ * árvore real. Só o corpo da classe muda entre um controle e outro, então a
+ * saída de cada um é atribuível à forma da ocorrência, não à montagem.
+ */
+function discoverWithEvolutionClientMembers(
+  memberLines: string[],
+): ReturnType<typeof discoverGoServiceHttpRequests> {
+  const tree = makeTempSourceTree({
+    "config/env.ts": wu047EnvSchema,
+    "clients/internal-http-client.ts": wu047InternalClient,
+    "clients/evolution-client.ts": [
+      'import { InternalHttpClient } from "./internal-http-client.js";',
+      "",
+      "export class EvolutionClient {",
+      "  private http: InternalHttpClient;",
+      "  constructor() {",
+      "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+      "  }",
+      ...memberLines,
+      "}",
+      "",
+    ].join("\n"),
+  });
+  const emptyTree = makeTempSourceTree({});
+  try {
+    return discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts"));
+  } finally {
+    rmSync(tree, { recursive: true, force: true });
+    rmSync(emptyTree, { recursive: true, force: true });
+  }
+}
+
+/** Os membros de classe do caso normal: uma única chamada de transporte direta, sem forma exótica alguma. É a saída "antes" de cada controle abaixo. */
+const wu047DirectTransportMembers = [
+  "  async createInstance() {",
+  '    return this.http.request({ method: "POST", path: "/instance/create" });',
+  "  }",
+];
+
+describe("Goal047 / WU-05 (§7) — desestruturação do campo, membro não invocado e nome de membro não derivável recusam, cada um com as duas saídas", () => {
+  it("antes: this.http.request(...) direto entra em requests, sem recusa alguma — os três controles abaixo não são vácuos", () => {
+    const { requests, nonTransportMemberCalls } = discoverWithEvolutionClientMembers(
+      wu047DirectTransportMembers,
+    );
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+    expect(nonTransportMemberCalls).toHaveLength(0);
+  });
+
+  it("depois: const { request } = this.http; request(...) — desestruturação do campo — recusa pela categoria client_field_use_destructured, com arquivo:linha, em vez de a rota sumir sem recusa alguma", () => {
+    expect(() =>
+      discoverWithEvolutionClientMembers([
+        "  async createInstance() {",
+        "    const { request } = this.http;",
+        '    return request({ method: "POST", path: "/instance/create" });',
+        "  }",
+      ]),
+    ).toThrow(
+      /evolution-client\.ts:\d+:.*desestruturado.*\[categoria: client_field_use_destructured\]/u,
+    );
+  });
+
+  it("depois: const send = this.http.request; send(...) — o membro é repassado como valor, sem invocação nesta ocorrência — recusa pela categoria client_field_use_member_not_invoked, com arquivo:linha", () => {
+    expect(() =>
+      discoverWithEvolutionClientMembers([
+        "  async createInstance() {",
+        "    const send = this.http.request;",
+        '    return send({ method: "POST", path: "/instance/create" });',
+        "  }",
+      ]),
+    ).toThrow(
+      /evolution-client\.ts:\d+:.*não é invocado.*\[categoria: client_field_use_member_not_invoked\]/u,
+    );
+  });
+
+  it("depois: this.http.#send(...) — depois do ponto não há identificador de membro derivável — recusa pela categoria client_field_use_member_name_not_derivable, com arquivo:linha", () => {
+    expect(() =>
+      discoverWithEvolutionClientMembers([
+        "  async createInstance() {",
+        '    return this.http.#send({ method: "POST", path: "/instance/create" });',
+        "  }",
+      ]),
+    ).toThrow(
+      /evolution-client\.ts:\d+:.*sem nome de membro derivável.*\[categoria: client_field_use_member_name_not_derivable\]/u,
+    );
+  });
+});
+
+describe("Goal047 / WU-05 (§7) — quando o receptor não é o texto literal `this.`, a ocorrência do campo recusa em vez de ficar invisível", () => {
+  it("antes: com o receptor na forma literal this.http, a chamada entra em requests — os cinco controles de receptor abaixo não são vácuos", () => {
+    const { requests } = discoverWithEvolutionClientMembers(wu047DirectTransportMembers);
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+  });
+
+  it("depois: this?.http.request(...) — encadeamento opcional no RECEPTOR, e o texto this.http nunca aparece — recusa pela categoria client_field_use_receiver_optional_chaining, com arquivo:linha", () => {
+    expect(() =>
+      discoverWithEvolutionClientMembers([
+        "  async createInstance() {",
+        '    return this?.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+      ]),
+    ).toThrow(
+      /evolution-client\.ts:\d+:.*encadeamento opcional está no receptor.*\[categoria: client_field_use_receiver_optional_chaining\]/u,
+    );
+  });
+
+  it('depois: this["http"].request(...) — acesso computado sobre o RECEPTOR — recusa pela categoria client_field_use_receiver_computed_member_access, com arquivo:linha', () => {
+    expect(() =>
+      discoverWithEvolutionClientMembers([
+        "  async createInstance() {",
+        '    return this["http"].request({ method: "POST", path: "/instance/create" });',
+        "  }",
+      ]),
+    ).toThrow(
+      /evolution-client\.ts:\d+:.*índice computado.*\[categoria: client_field_use_receiver_computed_member_access\]/u,
+    );
+  });
+
+  it("depois: const { http } = this; http.request(...) — o próprio this é desestruturado — recusa pela categoria client_field_use_receiver_destructured, com arquivo:linha", () => {
+    expect(() =>
+      discoverWithEvolutionClientMembers([
+        "  async createInstance() {",
+        "    const { http } = this;",
+        '    return http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+      ]),
+    ).toThrow(
+      /evolution-client\.ts:\d+:.*this é desestruturado.*\[categoria: client_field_use_receiver_destructured\]/u,
+    );
+  });
+
+  it("depois: const self = this; self.http.request(...) — a instância inteira escapa por alias — recusa pela categoria client_field_use_receiver_forwarded_as_value, com arquivo:linha", () => {
+    expect(() =>
+      discoverWithEvolutionClientMembers([
+        "  async createInstance() {",
+        "    const self = this;",
+        '    return self.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+      ]),
+    ).toThrow(
+      /evolution-client\.ts:\d+:.*posição de valor.*\[categoria: client_field_use_receiver_forwarded_as_value\]/u,
+    );
+  });
+
+  it("depois: this.#transport.request(...) — depois do ponto sobre this não há nome de campo derivável, e a leitura não decide se o receptor alcança http — recusa pela categoria client_field_use_receiver_field_name_not_derivable, com arquivo:linha", () => {
+    expect(() =>
+      discoverWithEvolutionClientMembers([
+        "  async createInstance() {",
+        '    return this.#transport.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+      ]),
+    ).toThrow(
+      /evolution-client\.ts:\d+:.*sem nome de campo derivável.*\[categoria: client_field_use_receiver_field_name_not_derivable\]/u,
+    );
+  });
+
+  it("escopo da recusa: ocorrência de this.<outro campo> na mesma classe — inclusive em método que nunca toca o cliente — não recusa e não conta, e a rota continua saindo igual", () => {
+    const { requests, nonTransportMemberCalls } = discoverWithEvolutionClientMembers([
+      "  private label = \"evolution\";",
+      "  describeLabel() {",
+      "    return this.label.trim();",
+      "  }",
+      ...wu047DirectTransportMembers,
+    ]);
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+    expect(nonTransportMemberCalls).toHaveLength(0);
+  });
+});
+
+describe("Goal047 / WU-05 (§7) — ocorrência dentro de interpolação de template literal é código, e é lida como tal; texto de template continua sendo texto", () => {
+  it("depois: `${this.http.request(...)}` dentro de template literal entra em requests como chamada de transporte, em vez de ficar invisível atrás da máscara de aspas", () => {
+    const { requests, nonTransportMemberCalls } = discoverWithEvolutionClientMembers([
+      "  async createInstance() {",
+      '    return `${await this.http.request({ method: "POST", path: "/instance/create" })}`;',
+      "  }",
+    ]);
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+    expect(nonTransportMemberCalls).toHaveLength(0);
+  });
+
+  it("depois: `${this.http?.request(...)}` dentro de template literal recusa pela categoria client_field_use_optional_chaining, com arquivo:linha — a interpolação não isenta forma exótica", () => {
+    expect(() =>
+      discoverWithEvolutionClientMembers([
+        "  async createInstance() {",
+        '    return `${await this.http?.request({ method: "POST", path: "/instance/create" })}`;',
+        "  }",
+      ]),
+    ).toThrow(
+      /evolution-client\.ts:\d+:.*encadeamento opcional.*\[categoria: client_field_use_optional_chaining\]/u,
+    );
+  });
+
+  it("escopo: o mesmo texto `this.http.send(` escrito como TEXTO de template, fora de toda interpolação, não conta e não recusa — a rota real continua saindo sozinha", () => {
+    const { requests, nonTransportMemberCalls } = discoverWithEvolutionClientMembers([
+      "  describeUsage() {",
+      "    return `chame this.http.send( para enviar`;",
+      "  }",
+      ...wu047DirectTransportMembers,
+    ]);
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+    expect(nonTransportMemberCalls).toHaveLength(0);
+  });
+
+  it("escopo: `${this.http.send(...)}` escrito dentro de STRING COMUM não é interpolação — continua texto, não conta e não recusa; só crase abre interpolação", () => {
+    const { requests, nonTransportMemberCalls } = discoverWithEvolutionClientMembers([
+      "  describeUsage() {",
+      '    return "escreva ${this.http.send(payload)} no template";',
+      "  }",
+      ...wu047DirectTransportMembers,
+    ]);
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+    expect(nonTransportMemberCalls).toHaveLength(0);
+  });
+
+  it("escopo: string comum DENTRO de uma interpolação continua sendo texto — o texto `this.http.send(` dentro dela não conta e não recusa, e a chamada real da mesma interpolação sai como requisição", () => {
+    const { requests, nonTransportMemberCalls } = discoverWithEvolutionClientMembers([
+      "  async createInstance() {",
+      '    return `${await this.http.request({ method: "POST", path: "/instance/create", note: "chame this.http.send(" })}`;',
+      "  }",
+    ]);
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+    expect(nonTransportMemberCalls).toHaveLength(0);
   });
 });

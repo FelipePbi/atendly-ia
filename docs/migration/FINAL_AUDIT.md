@@ -3061,3 +3061,134 @@ banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado
 como ausente. Sobre a árvore final: `validate:core` exit 0, `npm run
 test:gate` com 226 testes e 0 falhas, e `go test ./...` em
 `apps/evolution-go` ok.
+
+## 25. A cobertura de recusa passa a ser computada, e categoria sem controle reprova a suíte — Goal048, 2026-09-22
+
+Seção nova, escrita depois da última mudança de árvore do diff048
+(WU-01 a WU-05: o mecanismo de cobertura computada a partir dos três
+arrays em runtime, a conversão de todo controle negativo pré-existente
+para alimentá-lo, controle novo para seis das oito categorias que só
+existiam sob igualdade de array, a prova de que as duas restantes são
+inalcançáveis por construção, o controle do sub-caso "comentário" da
+observação 1 do review047, a generalização da asserção do escopo §3 do
+Goal047, os cinco controles negativos do próprio mecanismo de cobertura
+— montados e revertidos —, e a reconfirmação da árvore real). Ela **não
+reescreve** §4 a §24: os registros de A-01 a A-24 em §19, o veredito de
+§19 a §24 e as vinte e quatro seções de fechamento anteriores continuam
+exatamente como estavam, e a entrada de **A-24** **não foi tocada**.
+Este Goal não corrige A-24 e não abre achado novo — fecha a classe de
+defeito, comum aos Goals 044 a 047, em que o vocabulário de recusa
+crescia mais rápido que os controles que o exercitam.
+
+### O que mudou
+
+**A cobertura deixa de ser afirmada em prosa e passa a ser computada.**
+Um `Set` de módulo (`observedRefusalCategories`,
+`assistant.service.test.ts:48`) acumula toda categoria observada em
+runtime, alimentado pelo helper `expectRefusal` (`:50`–`64`), que
+substituiu `expect(() => ...).toThrow(regex)` em todo controle negativo
+do arquivo — dos Goals 045 a 047 e dos novos deste Goal. Um teste final
+(`:6871`–`6896`) concatena os três arrays em runtime —
+`CLIENT_FIELD_USE_REFUSAL_CATEGORIES` (12), `CLASS_BINDING_REFUSAL_CATEGORIES`
+(6) e `INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES` (6), 24 categorias
+ao todo — e afirma que nenhuma ficou de fora do conjunto observado, com
+uma única dedução: as categorias declaradas em
+`PROVEN_UNREACHABLE_REFUSAL_CATEGORIES` (`:6860`–`6869`), o registro das
+duas inalcançáveis descritas abaixo, cada uma com o motivo computado.
+Categoria acrescentada a qualquer um dos três arrays sem controle
+correspondente reprova este teste nomeando exatamente qual ficou
+descoberta. O registro de inalcançáveis não é isenção escrita à mão que
+vale para sempre: o mesmo teste reprova se uma entrada dele deixar de
+existir nos arrays, e reprova se uma categoria declarada inalcançável
+voltar a ser observada em runtime.
+
+**Seis das oito categorias que na baseline só existiam sob igualdade de
+array ganharam controle permanente**, cada uma sobre árvore sintética
+em diretório temporário, removida ao fim: `instance_field_assignment_destructured`,
+`instance_field_assignment_foreign_object_property` e
+`instance_field_assignment_form_not_recognized`, do vocabulário de
+atribuição; `class_binding_homonymous_declarations`,
+`class_binding_commonjs_export` e `class_binding_cross_file_form_not_resolved`,
+do vocabulário de ligação de classe.
+
+**As duas categorias restantes são inalcançáveis por árvore sintética
+alguma, por construção do código de `resolveProvenClassFieldAssignment`
+(`http-egress-sites.ts`), não por lacuna de teste:**
+`instance_field_assignment_array_element` — seu regex é subconjunto
+estrito do de `instance_field_assignment_destructured`, testado antes
+na mesma cadeia de `if`, que sempre casa primeiro; e
+`instance_field_assignment_returned_directly` — sua janela de leitura
+nunca termina em "return", porque `findClassInstantiations` só
+reconhece sítio de instanciação quando a palavra anterior ao nome da
+classe é "new". Dois controles permanentes provam a inalcançabilidade:
+constroem exatamente a forma nomeada por cada categoria e afirmam que a
+recusa observada sai sob a categoria vizinha, nunca sob a nomeada. As
+duas ficam **nomeadas como resíduo aqui e em [D-064](DECISIONS.md)** —
+não declaradas cobertas pela igualdade do array, que é a afirmação que
+este Goal existe para remover.
+
+**O sub-caso "comentário" da observação 1 do review047 ganhou controle
+permanente**, e a asserção do escopo §3 do Goal047 deixou de depender
+de nome de variável, passando a afirmar a ausência genérica de
+`.get(...); if (<identificador> === undefined) continue`.
+
+**O título do teste de igualdade de `CLASS_BINDING_REFUSAL_CATEGORIES`
+deixou de afirmar cobertura que não existia** — passa a dizer que o
+array traz a categoria na ordem declarada, e que a cobertura é
+conferida à parte.
+
+### Veredito recontado
+
+Esta auditoria continua com **0** achados `BLOQUEADOR-MVP`, **8**
+`PENDENCIA-POS-MVP` e **6** `LIMITE-DECLARADO` — a mesma contagem de
+§24. **Nenhuma mudança em relação a §24**: nenhum achado de A-01 a A-24
+foi tocado, corrigido, reclassificado ou reaberto. **A-24 continua
+`PENDENCIA-POS-MVP`, não corrigido** — nenhum arquivo Go de produção
+deste fork foi editado por este Goal.
+
+**Limite próprio deste Goal, declarado e não mascarado.** Das 24
+categorias, **22** têm controle permanente observado em runtime por
+`expectRefusal`; as **2** nomeadas acima são estruturalmente
+inalcançáveis. O mecanismo de cobertura não finge que elas foram
+observadas: desconta as duas só por `PROVEN_UNREACHABLE_REFUSAL_CATEGORIES`
+(`assistant.service.test.ts:6860`–`6869`), um registro nomeado que o
+próprio teste confere — entrada que deixe de existir nos arrays, ou
+categoria nele declarada que volte a ser observada, reprova. Consequência
+mensurável: de **200** testes em `assistant.service.test.ts`, **200**
+passam, **0** falham. A suíte completa de `apps/ai-orchestrator` fecha
+em **1012** testes: **924** passando, **88** pulados (mesma contagem da
+baseline), **0** falhando. `npm run validate:core` **PASSED** nesta
+árvore: dos 17 passos, **15** passaram (inclusive `test:ai-orchestrator`)
+e **2** pulados por design (`test:bff`, `test:health-worker`, cobertos
+só em `validate:integration`); nenhum falhou. `npm run test:gate`
+(raiz, suíte independente sobre `scripts/`) permanece em **226** testes
+e 0 falhas, inalterado, porque não exercita este arquivo. Se o registro
+nomeado é a forma de resíduo que a revisão aceita para as duas
+categorias, é decisão da revisão — registrada em "Revisar se" de D-064.
+
+Quatro coisas que esta seção não diz. **Não diz que A-24 foi corrigido**:
+o rótulo `"Ver Menu"` continua escrito em
+`pkg/sendMessage/service/send_service.go:1960`. **Não diz que M4 foi
+fechado**: nenhuma chamada saiu para provedor de LLM real nem para o
+WhatsApp real, nenhuma conexão whatsmeow foi aberta; o diff048 toca
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts` e,
+fora do escopo de produto, dois arquivos de `tools/ia-loop/`
+(`lib/deterministic-executor.mjs`, `tests/deterministic-executor.test.mjs`)
+para corrigir um bug do próprio harness na resolução de `pattern` —
+nenhum arquivo Go, nenhum arquivo de `apps/frontend/src/`,
+`apps/bff/src/` ou `apps/ai-orchestrator/src/` —, mais a documentação
+de migração. **Não diz que o comportamento em runtime do serviço Go foi
+provado**: o que se prova é o que a árvore de código diz, lida por
+enumeração de ocorrência sobre o texto-fonte; nada aqui executa esse
+serviço, abre conexão whatsmeow ou observa o que chega a um telefone.
+**Não diz que a fidelidade visual está provada**: nenhum arquivo de
+`apps/frontend/src/` mudou.
+
+O que continua fora do alcance deste Goal, por construção: comportamento
+em runtime do serviço Go; qual binário roda em produção; `whatsmeow-
+lib/`, biblioteca vendorizada lida apenas como fonte das declarações de
+proto; e o valor real de qualquer variável de ambiente — só o default do
+schema TypeScript e o `.env.example` são lidos, nunca um ambiente
+implantado. `validate:integration` continua recusando por pré-condição de
+banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado
+como ausente — não reexecutado por esta unidade de documentação (WU-06).

@@ -4476,3 +4476,91 @@ asseriam não muda.
   último trecho fail-open da leitura do lado TypeScript, nunca o
   critério que decide o conjunto de rotas ou de literais, e nenhum
   arquivo Go de produção deste fork foi editado por este Goal.
+
+## Delta implementado — diff048, 2026-09-22 ([D-064](DECISIONS.md))
+
+Fecha a classe de defeito comum aos Goals 044 a 047: o vocabulário de
+recusa crescia mais rápido que os controles que o exercitam, e oito das
+24 categorias então declaradas só existiam sob igualdade de array, sem
+controle algum que as fizesse acontecer. `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
+concentra a mudança de produto; nenhum arquivo de `apps/frontend/src/`,
+`apps/bff/src/`, `apps/ai-orchestrator/src/` ou qualquer arquivo Go
+mudou, `go.mod` e `go.sum` continuam intocados, e o conjunto de 10
+rotas e de 27 literais não muda. Dois arquivos de `tools/ia-loop/`
+(`lib/deterministic-executor.mjs`, `tests/deterministic-executor.test.mjs`)
+também mudaram nesta rodada, fora do escopo de produto do Goal: o
+executor determinístico do próprio harness dobrava o prefixo `scope/`
+quando `unit.pattern` já vinha relativo à raiz do repo e `cwd` já
+estava dentro do `scope`, fazendo o filtro do vitest não casar arquivo
+algum. A correção descarta o prefixo redundante quando
+`spec.cwd === ACTION_CWD.SCOPE`; os testes 11 e 12 do arquivo de teste
+cobrem os dois formatos de `pattern` (com e sem o prefixo).
+
+- **A cobertura é computada a partir dos três arrays em runtime, nunca
+  mais afirmada em prosa.** Um `Set` de módulo
+  (`observedRefusalCategories`) acumula toda categoria observada em
+  runtime, alimentado pelo helper `expectRefusal`, que substituiu
+  `expect(() => ...).toThrow(regex)` em todo controle negativo do
+  arquivo — os já existentes dos Goals 045 a 047 e os novos deste Goal.
+  Um teste final concatena `CLIENT_FIELD_USE_REFUSAL_CATEGORIES` (12),
+  `CLASS_BINDING_REFUSAL_CATEGORIES` (6) e
+  `INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES` (6) — 24 categorias —
+  e reprova nomeando qualquer uma que não tenha sido observada nem
+  esteja declarada em `PROVEN_UNREACHABLE_REFUSAL_CATEGORIES`, o
+  registro das duas inalcançáveis abaixo. O registro é ele mesmo
+  conferido pelo teste: entrada que deixe de existir nos arrays, ou
+  categoria declarada inalcançável que volte a ser observada, reprova.
+- **Seis das oito categorias sem controle da baseline ganharam controle
+  permanente**, cada uma sobre árvore sintética própria, removida ao
+  fim: três do vocabulário de atribuição (desestruturação, propriedade
+  de outro objeto, instanciação passada como argumento) e três do de
+  ligação de classe (duas declarações homônimas, exportação CommonJS,
+  import de namespace atravessando arquivo).
+- **Duas categorias são inalcançáveis por árvore sintética alguma, por
+  construção do código, não por lacuna de teste:**
+  `instance_field_assignment_array_element` (seu regex é subconjunto
+  estrito do de `instance_field_assignment_destructured`, testado antes
+  na mesma cadeia de `if`) e `instance_field_assignment_returned_directly`
+  (a janela de leitura do alvo da atribuição nunca termina em "return").
+  Dois controles permanentes provam isso, mostrando a recusa saindo sob
+  a categoria vizinha. As duas ficam nomeadas como resíduo em
+  [D-064](DECISIONS.md) e em [FINAL_AUDIT §25](FINAL_AUDIT.md) — nunca
+  declaradas cobertas pela igualdade do array.
+- **O sub-caso "comentário" da observação 1 do review047 ganhou
+  controle permanente**, e a asserção do escopo §3 do Goal047 deixou de
+  depender de nome de variável.
+- **O título do teste de igualdade de `CLASS_BINDING_REFUSAL_CATEGORIES`
+  deixou de afirmar cobertura que não existia.**
+- **Prova executada:** `npx vitest run
+  tests/assistant/assistant.service.test.ts` (em `apps/ai-orchestrator`):
+  **200** testes — os **190** da baseline mais **10** deste delta —,
+  **200** passando, **0** falhando: `PROVEN_UNREACHABLE_REFUSAL_CATEGORIES`
+  desconta as duas categorias residuais da cobertura observada, e o
+  teste final de WU-01 fecha verde. `npx vitest run` completo de
+  `apps/ai-orchestrator`: **1012** testes, **924** passando, **88**
+  pulados (mesma contagem da baseline, nenhuma suíte encolheu), **0**
+  falhando. `npx tsc -p tsconfig.json --noEmit` em
+  `apps/ai-orchestrator`: exit 0. Sobre a árvore real, reconfirmado sem
+  mudança: **1** superfície, **4** ligações resolvidas, **205** arquivos
+  varridos, **10** rotas, **2** instanciações fora do transporte, **0**
+  chamadas de membro fora da superfície, e as **41** ocorrências de
+  `this.http.` em `apps/bff/src/clients/` classificadas sem recusa.
+- **Gate reexecutado sobre a árvore final:** `npm run validate:core`
+  **PASSED** — dos 17 passos, **15** passaram (inclusive
+  `test:ai-orchestrator`) e **2** pulados por design
+  (`test:bff`, `test:health-worker`, cobertos só em
+  `validate:integration`); nenhum passo falhou. `npm run test:gate`
+  (raiz, suíte independente sobre `scripts/`) permanece em **226**
+  testes e 0 falhas: não exercita `assistant.service.test.ts`.
+  `validate:integration` continua recusando com `exit 2` e
+  `BFF_TEST_DATABASE_URL is not set` — pré-condição de banco declarada
+  ausente, nunca verde, e não é este Goal quem a supre.
+- **Resíduo declarado, não mascarado:** duas das 24 categorias
+  (`instance_field_assignment_array_element`,
+  `instance_field_assignment_returned_directly`) são inalcançáveis por
+  árvore sintética alguma, por construção do código. O mecanismo de
+  cobertura não finge que elas foram observadas: desconta as duas por
+  registro nomeado e conferido (`PROVEN_UNREACHABLE_REFUSAL_CATEGORIES`),
+  não por exceção silenciosa nem por igualdade de array. **A-24 continua
+  `PENDENCIA-POS-MVP`, não corrigido** — nenhum arquivo Go de produção
+  deste fork foi editado por este Goal.

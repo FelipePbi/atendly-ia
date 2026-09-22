@@ -45,6 +45,24 @@ import { VOCABULARIO_DE_ESPERA } from "../support/vocabulario-de-espera.js";
 
 const phone = "5511999999999";
 
+const observedRefusalCategories = new Set<string>();
+
+function expectRefusal(action: () => unknown, matcher: RegExp): void {
+  let thrown: unknown;
+  try {
+    action();
+  } catch (error) {
+    thrown = error;
+  }
+  expect(thrown).toBeInstanceOf(Error);
+  const message = (thrown as Error).message;
+  expect(message).toMatch(matcher);
+  const category = /\[categoria: ([\w]+)\]/u.exec(message)?.[1];
+  if (category) {
+    observedRefusalCategories.add(category);
+  }
+}
+
 describe("AssistantService conversational decisions", () => {
   it("answers a first generic greeting without calling the model or offering services", async () => {
     const { prisma, store } = createPrismaMock();
@@ -5163,15 +5181,17 @@ describe("Goal045 / FIX-001 — a construção `export` isenta a ligação, nunc
   });
 
   it("`export const Forwarded = InternalHttpClient;` recusa: o lado DIREITO da construção `export` é posição de valor, não a ligação exportada", () => {
-    expect(() => discoverWithTrailingSource("export const Forwarded = InternalHttpClient;")).toThrow(
+    expectRefusal(
+      () => discoverWithTrailingSource("export const Forwarded = InternalHttpClient;"),
       /class_binding_reference_forwarded_as_value/,
     );
   });
 
   it("`export class SubClient extends InternalHttpClient {}` recusa: herança de classe é posição de valor, e estar dentro de um `export` não a isenta", () => {
-    expect(() =>
-      discoverWithTrailingSource("export class SubClient extends InternalHttpClient {}"),
-    ).toThrow(/class_binding_reference_forwarded_as_value/);
+    expectRefusal(
+      () => discoverWithTrailingSource("export class SubClient extends InternalHttpClient {}"),
+      /class_binding_reference_forwarded_as_value/,
+    );
   });
 
   it("`export type ClientAlias = InternalHttpClient;` não recusa: o lado direito de um alias de TIPO é posição de tipo, não captura o construtor como valor", () => {
@@ -5385,9 +5405,10 @@ describe("controle negativo 1 (Goal046 / WU-04) — `export default { Client: <C
   });
 
   it("depois: `export default { Client: InternalHttpClient };` no mesmo arquivo candidato recusa por `class_binding_export_construct_form_unrecognized` — a forma não é `export default <identificador>` e portanto cai fora da allowlist; a recusa por forma não reconhecida é conferida ANTES da heurística de posição de tipo, porque dentro de uma forma que a leitura não sabe recortar o dois-pontos de `Client: <valor>` separa chave de valor num literal de objeto, não anota tipo", () => {
-    expect(() =>
-      discoverWithCandidateTrailing("export default { Client: InternalHttpClient };"),
-    ).toThrow(/class_binding_export_construct_form_unrecognized/);
+    expectRefusal(
+      () => discoverWithCandidateTrailing("export default { Client: InternalHttpClient };"),
+      /class_binding_export_construct_form_unrecognized/,
+    );
   });
 
   it("depois: a recusa nomeia `arquivo:linha` da ocorrência — o arquivo candidato e a linha do `export default` acrescentado", () => {
@@ -5404,11 +5425,13 @@ describe("controle negativo 2 (Goal046 / WU-04) — `export namespace N { export
   });
 
   it("depois: `export namespace N { export const C = InternalHttpClient; }` no arquivo candidato recusa — `export namespace` não está na allowlist, e o `export const` interno não isenta a ocorrência porque ela cai no lado de VALOR do `=`, dentro do range não reconhecido do namespace que o envolve", () => {
-    expect(() =>
-      discoverWithCandidateTrailing(
-        "export namespace N { export const C = InternalHttpClient; }",
-      ),
-    ).toThrow(/class_binding_export_construct_form_unrecognized/);
+    expectRefusal(
+      () =>
+        discoverWithCandidateTrailing(
+          "export namespace N { export const C = InternalHttpClient; }",
+        ),
+      /class_binding_export_construct_form_unrecognized/,
+    );
   });
 });
 
@@ -5419,15 +5442,17 @@ describe("controle negativo 3 (Goal046 / WU-04) — `export = <Classe>` no arqui
   });
 
   it("depois, no arquivo CANDIDATO: `export = InternalHttpClient;` recusa por `class_binding_export_construct_form_unrecognized` — a allowlist fechada não reconhece `export =`, e a ocorrência do nome ali não cai em nenhuma isenção", () => {
-    expect(() =>
-      discoverWithCandidateTrailing("export = InternalHttpClient;"),
-    ).toThrow(/class_binding_export_construct_form_unrecognized/);
+    expectRefusal(
+      () => discoverWithCandidateTrailing("export = InternalHttpClient;"),
+      /class_binding_export_construct_form_unrecognized/,
+    );
   });
 
   it("depois, no arquivo da DECLARAÇÃO: `export = InternalHttpClient;` continua recusando por `class_binding_export_form_not_resolved` — esta forma nunca chega à allowlist de `exportConstructBindingRange`, porque `resolveModuleExportBindings` já derruba a leitura antes, e essa recusa mais antiga não muda de categoria", () => {
-    expect(() =>
-      discoverWithDeclarationTrailing("export = InternalHttpClient;"),
-    ).toThrow(/class_binding_export_form_not_resolved/);
+    expectRefusal(
+      () => discoverWithDeclarationTrailing("export = InternalHttpClient;"),
+      /class_binding_export_form_not_resolved/,
+    );
   });
 });
 
@@ -5438,9 +5463,10 @@ describe("controle negativo 4 (Goal046 / WU-04) — `export const` que atribui e
   });
 
   it("depois: `export const Weird: Array<Foo = [InternalHttpClient];` recusa — o `<` de `Array<Foo` nunca fecha (não há `>` correspondente), `findTopLevelAssignmentIndex` termina com profundidade 1 e devolve `resolved: false`, e `exportConstructBindingRange` classifica a construção inteira como não reconhecida", () => {
-    expect(() =>
-      discoverWithCandidateTrailing("export const Weird: Array<Foo = [InternalHttpClient];"),
-    ).toThrow(/class_binding_export_construct_form_unrecognized/);
+    expectRefusal(
+      () => discoverWithCandidateTrailing("export const Weird: Array<Foo = [InternalHttpClient];"),
+      /class_binding_export_construct_form_unrecognized/,
+    );
   });
 });
 
@@ -5479,15 +5505,17 @@ describe("controle negativo 5 (Goal046 / WU-04) — as formas `export` reais con
   });
 
   it("depois: `export class SubClient extends InternalHttpClient {}` no candidato continua recusando por `class_binding_reference_forwarded_as_value` — herança de classe é posição de VALOR, e a allowlist fechada não muda essa categoria", () => {
-    expect(() =>
-      discoverWithCandidateTrailing("export class SubClient extends InternalHttpClient {}"),
-    ).toThrow(/class_binding_reference_forwarded_as_value/);
+    expectRefusal(
+      () => discoverWithCandidateTrailing("export class SubClient extends InternalHttpClient {}"),
+      /class_binding_reference_forwarded_as_value/,
+    );
   });
 
   it("depois: `export const Forwarded = InternalHttpClient;` no candidato continua recusando por `class_binding_reference_forwarded_as_value` — o lado DIREITO da atribuição é posição de VALOR, e a allowlist fechada não muda essa categoria", () => {
-    expect(() =>
-      discoverWithCandidateTrailing("export const Forwarded = InternalHttpClient;"),
-    ).toThrow(/class_binding_reference_forwarded_as_value/);
+    expectRefusal(
+      () => discoverWithCandidateTrailing("export const Forwarded = InternalHttpClient;"),
+      /class_binding_reference_forwarded_as_value/,
+    );
   });
 
   it("depois: `export { InternalHttpClient };` no próprio arquivo da DECLARAÇÃO não recusa — a lista de export é a própria ligação exportada, isenta inteira, e a segunda ligação nomeada da mesma classe não amplia o alcance para nenhum arquivo novo", () => {
@@ -5497,7 +5525,7 @@ describe("controle negativo 5 (Goal046 / WU-04) — as formas `export` reais con
 });
 
 describe("Goal046 / WU-04 — o conjunto de categorias de recusa é conferido contra o array em runtime, nunca contra união escrita à mão", () => {
-  it("CLASS_BINDING_REFUSAL_CATEGORIES traz a categoria nova da allowlist fechada, e é exatamente o conjunto que os controles negativos desta rodada e das anteriores exercitam", () => {
+  it("CLASS_BINDING_REFUSAL_CATEGORIES traz a categoria nova da allowlist fechada, na ordem declarada — a cobertura por controle é conferida à parte, no bloco de cobertura computada", () => {
     expect(CLASS_BINDING_REFUSAL_CATEGORIES).toEqual([
       "class_binding_homonymous_declarations",
       "class_binding_export_form_not_resolved",
@@ -5656,9 +5684,8 @@ describe("Goal047 / WU-04 (§1) — toda ocorrência do campo cliente é classif
     });
     const emptyTree = makeTempSourceTree({});
     try {
-      expect(() =>
-        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
-      ).toThrow(
+      expectRefusal(
+        () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
         /evolution-client\.ts:\d+:.*encadeamento opcional.*\[categoria: client_field_use_optional_chaining\]/u,
       );
     } finally {
@@ -5716,9 +5743,8 @@ describe("Goal047 / WU-04 (§2) — o alvo da atribuição só vira campo provad
     });
     const emptyTree = makeTempSourceTree({});
     try {
-      expect(() =>
-        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
-      ).toThrow(
+      expectRefusal(
+        () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
         /evolution-client\.ts:\d+:.*variável local.*\[categoria: instance_field_assignment_local_variable\]/u,
       );
     } finally {
@@ -5741,8 +5767,7 @@ describe("Goal047 / WU-04 (§3) — as duas saídas de sourcesByPath ausente, no
     expect(moduleSource).toContain(
       "a instanciação foi reconhecida pela ligação até ${classDeclarationKey}, mas o texto de ${filePath} não está entre os arquivos lidos",
     );
-    expect(moduleSource).not.toMatch(/if \(source === undefined\) continue/u);
-    expect(moduleSource).not.toMatch(/if \(candidateSource === undefined\) continue/u);
+    expect(moduleSource).not.toMatch(/\.get\([^)]*\);\s*\n\s*if \(\w+ === undefined\) continue/u);
   });
 });
 
@@ -5900,9 +5925,8 @@ describe("Goal047 / WU-05 (§7, controle 2) — acesso computado: this.http[\"re
     });
     const emptyTree = makeTempSourceTree({});
     try {
-      expect(() =>
-        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
-      ).toThrow(
+      expectRefusal(
+        () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
         /evolution-client\.ts:\d+:.*acesso computado.*\[categoria: client_field_use_computed_member_access\]/u,
       );
     } finally {
@@ -5964,9 +5988,8 @@ describe("Goal047 / WU-05 (§7, controle 3) — alias em variável local: const 
     });
     const emptyTree = makeTempSourceTree({});
     try {
-      expect(() =>
-        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
-      ).toThrow(
+      expectRefusal(
+        () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
         /evolution-client\.ts:\d+:.*posição de valor.*\[categoria: client_field_use_field_forwarded_as_value\]/u,
       );
     } finally {
@@ -6028,9 +6051,8 @@ describe("Goal047 / WU-05 (§7, controle 5) — ocorrência fora de corpo de mé
     });
     const emptyTree = makeTempSourceTree({});
     try {
-      expect(() =>
-        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
-      ).toThrow(
+      expectRefusal(
+        () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
         /evolution-client\.ts:\d+:.*fora de todo corpo de método de topo.*\[categoria: client_field_use_outside_top_level_method_body\]/u,
       );
     } finally {
@@ -6275,39 +6297,39 @@ describe("Goal047 / WU-05 (§7) — desestruturação do campo, membro não invo
   });
 
   it("depois: const { request } = this.http; request(...) — desestruturação do campo — recusa pela categoria client_field_use_destructured, com arquivo:linha, em vez de a rota sumir sem recusa alguma", () => {
-    expect(() =>
-      discoverWithEvolutionClientMembers([
-        "  async createInstance() {",
-        "    const { request } = this.http;",
-        '    return request({ method: "POST", path: "/instance/create" });',
-        "  }",
-      ]),
-    ).toThrow(
+    expectRefusal(
+      () =>
+        discoverWithEvolutionClientMembers([
+          "  async createInstance() {",
+          "    const { request } = this.http;",
+          '    return request({ method: "POST", path: "/instance/create" });',
+          "  }",
+        ]),
       /evolution-client\.ts:\d+:.*desestruturado.*\[categoria: client_field_use_destructured\]/u,
     );
   });
 
   it("depois: const send = this.http.request; send(...) — o membro é repassado como valor, sem invocação nesta ocorrência — recusa pela categoria client_field_use_member_not_invoked, com arquivo:linha", () => {
-    expect(() =>
-      discoverWithEvolutionClientMembers([
-        "  async createInstance() {",
-        "    const send = this.http.request;",
-        '    return send({ method: "POST", path: "/instance/create" });',
-        "  }",
-      ]),
-    ).toThrow(
+    expectRefusal(
+      () =>
+        discoverWithEvolutionClientMembers([
+          "  async createInstance() {",
+          "    const send = this.http.request;",
+          '    return send({ method: "POST", path: "/instance/create" });',
+          "  }",
+        ]),
       /evolution-client\.ts:\d+:.*não é invocado.*\[categoria: client_field_use_member_not_invoked\]/u,
     );
   });
 
   it("depois: this.http.#send(...) — depois do ponto não há identificador de membro derivável — recusa pela categoria client_field_use_member_name_not_derivable, com arquivo:linha", () => {
-    expect(() =>
-      discoverWithEvolutionClientMembers([
-        "  async createInstance() {",
-        '    return this.http.#send({ method: "POST", path: "/instance/create" });',
-        "  }",
-      ]),
-    ).toThrow(
+    expectRefusal(
+      () =>
+        discoverWithEvolutionClientMembers([
+          "  async createInstance() {",
+          '    return this.http.#send({ method: "POST", path: "/instance/create" });',
+          "  }",
+        ]),
       /evolution-client\.ts:\d+:.*sem nome de membro derivável.*\[categoria: client_field_use_member_name_not_derivable\]/u,
     );
   });
@@ -6320,63 +6342,63 @@ describe("Goal047 / WU-05 (§7) — quando o receptor não é o texto literal `t
   });
 
   it("depois: this?.http.request(...) — encadeamento opcional no RECEPTOR, e o texto this.http nunca aparece — recusa pela categoria client_field_use_receiver_optional_chaining, com arquivo:linha", () => {
-    expect(() =>
-      discoverWithEvolutionClientMembers([
-        "  async createInstance() {",
-        '    return this?.http.request({ method: "POST", path: "/instance/create" });',
-        "  }",
-      ]),
-    ).toThrow(
+    expectRefusal(
+      () =>
+        discoverWithEvolutionClientMembers([
+          "  async createInstance() {",
+          '    return this?.http.request({ method: "POST", path: "/instance/create" });',
+          "  }",
+        ]),
       /evolution-client\.ts:\d+:.*encadeamento opcional está no receptor.*\[categoria: client_field_use_receiver_optional_chaining\]/u,
     );
   });
 
   it('depois: this["http"].request(...) — acesso computado sobre o RECEPTOR — recusa pela categoria client_field_use_receiver_computed_member_access, com arquivo:linha', () => {
-    expect(() =>
-      discoverWithEvolutionClientMembers([
-        "  async createInstance() {",
-        '    return this["http"].request({ method: "POST", path: "/instance/create" });',
-        "  }",
-      ]),
-    ).toThrow(
+    expectRefusal(
+      () =>
+        discoverWithEvolutionClientMembers([
+          "  async createInstance() {",
+          '    return this["http"].request({ method: "POST", path: "/instance/create" });',
+          "  }",
+        ]),
       /evolution-client\.ts:\d+:.*índice computado.*\[categoria: client_field_use_receiver_computed_member_access\]/u,
     );
   });
 
   it("depois: const { http } = this; http.request(...) — o próprio this é desestruturado — recusa pela categoria client_field_use_receiver_destructured, com arquivo:linha", () => {
-    expect(() =>
-      discoverWithEvolutionClientMembers([
-        "  async createInstance() {",
-        "    const { http } = this;",
-        '    return http.request({ method: "POST", path: "/instance/create" });',
-        "  }",
-      ]),
-    ).toThrow(
+    expectRefusal(
+      () =>
+        discoverWithEvolutionClientMembers([
+          "  async createInstance() {",
+          "    const { http } = this;",
+          '    return http.request({ method: "POST", path: "/instance/create" });',
+          "  }",
+        ]),
       /evolution-client\.ts:\d+:.*this é desestruturado.*\[categoria: client_field_use_receiver_destructured\]/u,
     );
   });
 
   it("depois: const self = this; self.http.request(...) — a instância inteira escapa por alias — recusa pela categoria client_field_use_receiver_forwarded_as_value, com arquivo:linha", () => {
-    expect(() =>
-      discoverWithEvolutionClientMembers([
-        "  async createInstance() {",
-        "    const self = this;",
-        '    return self.http.request({ method: "POST", path: "/instance/create" });',
-        "  }",
-      ]),
-    ).toThrow(
+    expectRefusal(
+      () =>
+        discoverWithEvolutionClientMembers([
+          "  async createInstance() {",
+          "    const self = this;",
+          '    return self.http.request({ method: "POST", path: "/instance/create" });',
+          "  }",
+        ]),
       /evolution-client\.ts:\d+:.*posição de valor.*\[categoria: client_field_use_receiver_forwarded_as_value\]/u,
     );
   });
 
   it("depois: this.#transport.request(...) — depois do ponto sobre this não há nome de campo derivável, e a leitura não decide se o receptor alcança http — recusa pela categoria client_field_use_receiver_field_name_not_derivable, com arquivo:linha", () => {
-    expect(() =>
-      discoverWithEvolutionClientMembers([
-        "  async createInstance() {",
-        '    return this.#transport.request({ method: "POST", path: "/instance/create" });',
-        "  }",
-      ]),
-    ).toThrow(
+    expectRefusal(
+      () =>
+        discoverWithEvolutionClientMembers([
+          "  async createInstance() {",
+          '    return this.#transport.request({ method: "POST", path: "/instance/create" });',
+          "  }",
+        ]),
       /evolution-client\.ts:\d+:.*sem nome de campo derivável.*\[categoria: client_field_use_receiver_field_name_not_derivable\]/u,
     );
   });
@@ -6406,13 +6428,13 @@ describe("Goal047 / WU-05 (§7) — ocorrência dentro de interpolação de temp
   });
 
   it("depois: `${this.http?.request(...)}` dentro de template literal recusa pela categoria client_field_use_optional_chaining, com arquivo:linha — a interpolação não isenta forma exótica", () => {
-    expect(() =>
-      discoverWithEvolutionClientMembers([
-        "  async createInstance() {",
-        '    return `${await this.http?.request({ method: "POST", path: "/instance/create" })}`;',
-        "  }",
-      ]),
-    ).toThrow(
+    expectRefusal(
+      () =>
+        discoverWithEvolutionClientMembers([
+          "  async createInstance() {",
+          '    return `${await this.http?.request({ method: "POST", path: "/instance/create" })}`;',
+          "  }",
+        ]),
       /evolution-client\.ts:\d+:.*encadeamento opcional.*\[categoria: client_field_use_optional_chaining\]/u,
     );
   });
@@ -6447,5 +6469,428 @@ describe("Goal047 / WU-05 (§7) — ocorrência dentro de interpolação de temp
     ]);
     expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
     expect(nonTransportMemberCalls).toHaveLength(0);
+  });
+});
+
+/* =========================================================================
+ * Goal048 / WU-02 — controle das cinco categorias do alvo de atribuição sem
+ * prova ainda sem controle depois do WU-01: destructured, foreign_object_
+ * property, array_element, returned_directly e form_not_recognized. Cada
+ * árvore sintética é montada e removida pelo próprio teste; nenhuma toca a
+ * árvore real.
+ *
+ * `instance_field_assignment_array_element` e
+ * `instance_field_assignment_returned_directly` são, por construção do
+ * código de `resolveProvenClassFieldAssignment` (http-egress-sites.ts),
+ * inalcançáveis por árvore sintética alguma — não por lacuna de teste:
+ *   - array_element: seu regex (`\b<id>\[[^\]]*\]\s*=\s*new\s*$`) é
+ *     subconjunto estrito do regex de destructured (`[}\]]\s*=\s*new\s*$`),
+ *     testado ANTES na cadeia de `if`. Todo `<id>[i] = new ...` termina em
+ *     `]` logo antes de `= new`, então o `if` de destructured sempre casa
+ *     e lança primeiro; o `if` de array_element é código morto.
+ *   - returned_directly: seu regex (`\breturn\s*$`) exige que a janela
+ *     termine em "return", mas `findClassInstantiations` só reconhece um
+ *     sítio quando a palavra imediatamente anterior ao nome da classe é
+ *     "new" (`wordEndingAt(...) !== "new") continue`). A janela passada a
+ *     `resolveProvenClassFieldAssignment` termina, portanto, sempre em
+ *     "new" (mais espaço), nunca em "return" — o `if` de returned_directly
+ *     nunca é alcançado; toda forma `return new X(...)` cai no
+ *     `form_not_recognized` final.
+ * Os dois controles abaixo provam essa inalcançabilidade em vez de
+ * contorná-la: constroem exatamente a forma nomeada pela categoria e
+ * observam, por árvore sintética, que a recusa sai sob a OUTRA categoria.
+ * ========================================================================= */
+
+describe("Goal048 / WU-02 — o alvo da atribuição sem prova nas formas ainda sem controle recusa pela categoria exata, com arquivo:linha", () => {
+  it("padrão de desestruturação (`({ campo } = new ...)`) recusa por instance_field_assignment_destructured, com arquivo:linha, em vez de zero requisição e zero recusa", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  constructor() {",
+        "    ({ http } = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL));",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      expectRefusal(
+        () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+        /evolution-client\.ts:\d+:.*padrão de desestruturação.*\[categoria: instance_field_assignment_destructured\]/u,
+      );
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("instância atribuída a propriedade de OUTRO objeto (`<id>.<campo> = new ...`, `<id>` diferente de `this`) recusa por instance_field_assignment_foreign_object_property, com arquivo:linha, em vez de zero requisição e zero recusa", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  constructor() {",
+        "    const container: { http?: InternalHttpClient } = {};",
+        "    container.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      expectRefusal(
+        () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+        /evolution-client\.ts:\d+:.*"container\.http".*propriedade de outro objeto.*\[categoria: instance_field_assignment_foreign_object_property\]/u,
+      );
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("instanciação passada como ARGUMENTO (`configureClient(new ...)`) — nenhuma das formas reconhecidas casa — recusa por instance_field_assignment_form_not_recognized, com arquivo:linha, em vez de zero requisição e zero recusa", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "function configureClient(client: InternalHttpClient): void {",
+        "  void client;",
+        "}",
+        "",
+        "export class EvolutionClient {",
+        "  constructor() {",
+        "    configureClient(new InternalHttpClient(env.EVOLUTION_GO_BASE_URL));",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      expectRefusal(
+        () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+        /evolution-client\.ts:\d+:.*nem em declaração de propriedade de classe.*\[categoria: instance_field_assignment_form_not_recognized\]/u,
+      );
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("instance_field_assignment_array_element é INALCANÇÁVEL: `<id>[<expr>] = new ...` termina em \"]\" antes de \"= new\", e o `if` de destructured — testado antes, com regex que é superconjunto — sempre casa primeiro; a recusa sai sob instance_field_assignment_destructured, nunca sob array_element", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  constructor() {",
+        "    const clients: InternalHttpClient[] = [];",
+        "    clients[0] = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      let thrown: unknown;
+      try {
+        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts"));
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(Error);
+      const message = (thrown as Error).message;
+      expect(message).toMatch(/\[categoria: instance_field_assignment_destructured\]/u);
+      expect(message).not.toContain("instance_field_assignment_array_element");
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("instance_field_assignment_returned_directly é INALCANÇÁVEL: todo sítio reconhecido tem \"new\" como palavra imediatamente anterior ao nome da classe, então a janela de resolveProvenClassFieldAssignment sempre termina em \"new\", nunca em \"return\"; `return new ...` recusa sob instance_field_assignment_form_not_recognized, nunca sob returned_directly", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  createClient(): InternalHttpClient {",
+        "    return new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      let thrown: unknown;
+      try {
+        discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts"));
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(Error);
+      const message = (thrown as Error).message;
+      expect(message).toMatch(/\[categoria: instance_field_assignment_form_not_recognized\]/u);
+      expect(message).not.toContain("instance_field_assignment_returned_directly");
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Goal048 / WU-03 — controle das três categorias de ligação de classe sem prova ainda sem controle depois do WU-01: class_binding_homonymous_declarations, class_binding_commonjs_export e class_binding_cross_file_form_not_resolved", () => {
+  it("duas declarações `class InternalHttpClient` no arquivo da declaração recusam por class_binding_homonymous_declarations, com arquivo:linha, porque o nome exportado não identifica qual das duas é instanciada", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": wu04EnvSchema,
+      "clients/internal-http-client.ts": [
+        "export class InternalHttpClient {",
+        "  constructor(private baseUrl: string) {}",
+        "  async request(options: { method: string; path: string }) {",
+        "    const url = new URL(options.path, this.baseUrl);",
+        "    return fetch(url, { method: options.method });",
+        "  }",
+        "}",
+        "",
+        "class InternalHttpClient {}",
+        "",
+      ].join("\n"),
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      expectRefusal(
+        () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+        /internal-http-client\.ts:\d+:.*"InternalHttpClient" é declarada 2 vezes neste arquivo \(linhas 1, 9\).*\[categoria: class_binding_homonymous_declarations\]/u,
+      );
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("`exports.Alt = InternalHttpClient;` no arquivo da declaração recusa por class_binding_commonjs_export, com arquivo:linha, porque esta resolução não segue exportação CommonJS", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": wu04EnvSchema,
+      "clients/internal-http-client.ts": [
+        "export class InternalHttpClient {",
+        "  constructor(private baseUrl: string) {}",
+        "  async request(options: { method: string; path: string }) {",
+        "    const url = new URL(options.path, this.baseUrl);",
+        "    return fetch(url, { method: options.method });",
+        "  }",
+        "}",
+        "",
+        "exports.Alt = InternalHttpClient;",
+        "",
+      ].join("\n"),
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      expectRefusal(
+        () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+        /internal-http-client\.ts:\d+:.*sai do módulo por "exports\.Alt = InternalHttpClient".*\[categoria: class_binding_commonjs_export\]/u,
+      );
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+
+  it("import de namespace (`* as NS`), num terceiro arquivo, para o módulo da declaração recusa por class_binding_cross_file_form_not_resolved, com arquivo:linha, porque chamada por `NS.InternalHttpClient` não é forma que esta resolução segue", () => {
+    const tree = makeTempSourceTree({
+      "config/env.ts": wu04EnvSchema,
+      "clients/internal-http-client.ts": wu04InternalClient,
+      "clients/evolution-client.ts": [
+        'import { InternalHttpClient } from "./internal-http-client.js";',
+        "",
+        "export class EvolutionClient {",
+        "  private http: InternalHttpClient;",
+        "  constructor() {",
+        "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+        "  }",
+        "  async createInstance() {",
+        '    return this.http.request({ method: "POST", path: "/instance/create" });',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      "callers/via-namespace.ts": [
+        'import * as InternalHttpClientNS from "../clients/internal-http-client.js";',
+        "",
+        "export function unusedNamespaceCaller(): void {",
+        "  void InternalHttpClientNS;",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      expectRefusal(
+        () => discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts")),
+        /via-namespace\.ts:\d+:.*import de namespace.*\[categoria: class_binding_cross_file_form_not_resolved\]/u,
+      );
+    } finally {
+      rmSync(tree, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Goal048 / WU-04 — ocorrência exótica do campo cliente escrita dentro de comentário não recusa e não conta", () => {
+  it("`this.http?.request(...)` (encadeamento opcional, categoria client_field_use_optional_chaining) dentro de comentário de linha é apagada por blankComments antes da varredura: classificação idêntica à árvore sem o comentário, e a rota real continua saindo", () => {
+    const commentedEvolutionClient = [
+      'import { InternalHttpClient } from "./internal-http-client.js";',
+      "",
+      "export class EvolutionClient {",
+      "  private http: InternalHttpClient;",
+      "  constructor() {",
+      "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+      "  }",
+      "  async createInstance() {",
+      "    // this.http?.request({ method: \"POST\", path: \"/instance/create\" });",
+      '    return this.http.request({ method: "POST", path: "/instance/create" });',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const plainEvolutionClient = [
+      'import { InternalHttpClient } from "./internal-http-client.js";',
+      "",
+      "export class EvolutionClient {",
+      "  private http: InternalHttpClient;",
+      "  constructor() {",
+      "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+      "  }",
+      "  async createInstance() {",
+      '    return this.http.request({ method: "POST", path: "/instance/create" });',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const treeWithComment = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": commentedEvolutionClient,
+    });
+    const treeWithoutComment = makeTempSourceTree({
+      "config/env.ts": wu047EnvSchema,
+      "clients/internal-http-client.ts": wu047InternalClient,
+      "clients/evolution-client.ts": plainEvolutionClient,
+    });
+    const emptyTree = makeTempSourceTree({});
+    try {
+      const withComment = discoverGoServiceHttpRequests(
+        treeWithComment,
+        emptyTree,
+        join(treeWithComment, "config/env.ts"),
+      );
+      const withoutComment = discoverGoServiceHttpRequests(
+        treeWithoutComment,
+        emptyTree,
+        join(treeWithoutComment, "config/env.ts"),
+      );
+      expect(withComment.requests.map((request) => request.pathExpression)).toEqual([
+        "/instance/create",
+      ]);
+      expect(withComment.requests.map((request) => request.pathExpression)).toEqual(
+        withoutComment.requests.map((request) => request.pathExpression),
+      );
+      expect(withComment.nonTransportMemberCalls).toEqual(withoutComment.nonTransportMemberCalls);
+    } finally {
+      rmSync(treeWithComment, { recursive: true, force: true });
+      rmSync(treeWithoutComment, { recursive: true, force: true });
+      rmSync(emptyTree, { recursive: true, force: true });
+    }
+  });
+});
+
+/*
+ * As duas categorias que nenhum controle pode fazer acontecer, com o motivo
+ * computado pelos dois controles de inalcançabilidade do WU-02 acima — não
+ * "cobertas pela igualdade do array", que é a afirmação que este Goal existe
+ * para remover, mas resíduo NOMEADO, e nomeado num só lugar: a cobertura
+ * abaixo desconta exatamente estas, e só enquanto elas continuarem
+ * inalcançáveis de fato.
+ */
+const PROVEN_UNREACHABLE_REFUSAL_CATEGORIES: ReadonlyMap<string, string> = new Map([
+  [
+    "instance_field_assignment_array_element",
+    'regex subconjunto estrito do de instance_field_assignment_destructured, testado antes na mesma cadeia de `if`: todo `<id>[<expr>] = new ...` termina em "]" e casa primeiro no de destructured',
+  ],
+  [
+    "instance_field_assignment_returned_directly",
+    'a janela lida por resolveProvenClassFieldAssignment termina sempre em "new", porque findClassInstantiations só reconhece sítio quando a palavra anterior ao nome da classe é "new": ela nunca termina em "return"',
+  ],
+]);
+
+describe("Goal048 / WU-01 — a cobertura de recusa é computada em runtime a partir dos três arrays, nunca contra lista literal", () => {
+  it("toda categoria de INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES, CLASS_BINDING_REFUSAL_CATEGORIES e CLIENT_FIELD_USE_REFUSAL_CATEGORIES tem ao menos um controle que a observou via expectRefusal em runtime — categoria sem controle reprova nomeando qual ficou descoberta, e as duas provadas INALCANÇÁVEIS são descontadas por registro nomeado que o próprio teste confere", () => {
+    const allRefusalCategories: readonly string[] = [
+      ...INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES,
+      ...CLASS_BINDING_REFUSAL_CATEGORIES,
+      ...CLIENT_FIELD_USE_REFUSAL_CATEGORIES,
+    ];
+    for (const [category, reason] of PROVEN_UNREACHABLE_REFUSAL_CATEGORIES) {
+      // Resíduo declarado é resíduo PROVADO: a categoria tem de continuar
+      // existindo no array (entrada obsoleta reprova) e tem de continuar
+      // nunca sendo observada (categoria que volta a acontecer reprova, em
+      // vez de ficar isenta para sempre por uma linha escrita à mão).
+      expect(allRefusalCategories).toContain(category);
+      expect(reason.length).toBeGreaterThan(0);
+      expect([...observedRefusalCategories].filter((observed) => observed === category)).toEqual(
+        [],
+      );
+    }
+    const uncoveredCategories = allRefusalCategories.filter(
+      (category) =>
+        !observedRefusalCategories.has(category) &&
+        !PROVEN_UNREACHABLE_REFUSAL_CATEGORIES.has(category),
+    );
+    expect(uncoveredCategories).toEqual([]);
   });
 });

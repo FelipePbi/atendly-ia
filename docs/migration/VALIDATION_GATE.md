@@ -1355,3 +1355,52 @@ descobridor sobre a árvore real e é asserido pela suíte permanente; não
 há divergência a declarar.
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff047-2026-09-22-d-063) e [D-063](DECISIONS.md).
+
+## A cobertura de recusa é computada, e categoria sem controle reprova a suíte, do Goal048
+
+O parágrafo anterior registrou o fechamento do último trecho fail-open
+de mecanismo, com **24** categorias de recusa nomeadas em três arrays
+em runtime. O que sobrava não era fail-open de mecanismo: era fail-open
+de **prova** — oito dessas categorias só existiam dentro da lista
+literal de um teste de igualdade, sem controle algum que as fizesse
+acontecer. Este delta fecha esse limite, sem tocar o conjunto de 10
+rotas nem o de 27 literais que os Goals 042 a 047 já asseriam.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| A cobertura é computada a partir dos três arrays em runtime — nunca de uma lista reescrita à mão. Um `Set` de módulo acumula toda categoria observada por um helper que todo controle negativo do arquivo passou a usar; um teste final concatena os três arrays e reprova, nomeando a categoria, quando alguma não foi observada | Categoria acrescentada a qualquer um dos três arrays sem controle correspondente reprova de imediato — ninguém precisa lembrar de atualizar lista alguma |
+| Seis das oito categorias sem controle da baseline ganharam controle permanente sobre árvore sintética: três do vocabulário de atribuição (desestruturação, propriedade de outro objeto, instanciação passada como argumento) e três do de ligação de classe (duas declarações homônimas, exportação CommonJS, import de namespace atravessando arquivo) | As formas reais continuam classificando exatamente como antes; nenhuma regra de classificação, categoria ou ordem de consulta mudou |
+| Duas categorias (`instance_field_assignment_array_element`, `instance_field_assignment_returned_directly`) são inalcançáveis por árvore sintética alguma, por construção do código que as declara — provado por dois controles permanentes que mostram a recusa saindo sob a categoria vizinha | As duas ficam nomeadas como resíduo em [D-064](DECISIONS.md) e em [FINAL_AUDIT §25](FINAL_AUDIT.md), descontadas da cobertura só por `PROVEN_UNREACHABLE_REFUSAL_CATEGORIES`, um registro nomeado que o próprio teste confere — não são declaradas cobertas pela igualdade do array |
+| O sub-caso "comentário" da observação 1 do review047 ganhou controle permanente, e a asserção do escopo §3 do Goal047 deixou de depender de nome de variável | Nenhuma saída muda: as mesmas duas frases continuam afirmadas, agora de forma genérica |
+| O título do teste de igualdade de `CLASS_BINDING_REFUSAL_CATEGORIES` deixou de afirmar cobertura que não existia | O array continua provado por igualdade, ordem e conteúdo — a cobertura por controle é conferida à parte |
+
+**O que este delta não prova, e é preciso dizer alto.** **Não prova
+runtime**: nada aqui executa o serviço Go, abre conexão whatsmeow ou
+observa o que chega a um telefone. **Não corrige A-24**: o achado
+continua `PENDENCIA-POS-MVP`, e nenhum arquivo Go de produção deste
+fork foi editado por este Goal. **Não fecha M4**. **Não amplia nem
+reduz o conjunto de 10 rotas ou de 27 literais.** `npm run
+validate:core` **PASSED** nesta árvore — dos 17 passos, 15 passaram
+(inclusive `test:ai-orchestrator`) e 2 pulados por design (`test:bff`,
+`test:health-worker`, cobertos só em `validate:integration`); nenhum
+falhou. `npm run test:gate` (raiz, suíte independente sobre
+`scripts/`) permanece em **226** testes e 0 falhas, inalterado, porque
+não exercita este arquivo. `validate:integration` continua recusando
+por pré-condição de banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is
+not set`), declarado como ausente — não é este Goal quem a supre.
+Sobre a árvore final desta rodada: `npx vitest run
+tests/assistant/assistant.service.test.ts` em `apps/ai-orchestrator` →
+**200** testes, **200** passando, **0** falhando: as duas categorias
+residuais são descontadas pelo registro nomeado
+`PROVEN_UNREACHABLE_REFUSAL_CATEGORIES`, não por igualdade de array;
+`npx vitest run` completo → **1012** testes, **924** passando, **88**
+pulados (mesma contagem da baseline), **0** falhando. Fora do escopo de
+produto, dois arquivos de `tools/ia-loop/` (`lib/deterministic-executor.mjs`,
+`tests/deterministic-executor.test.mjs`) também mudaram nesta rodada,
+para corrigir um bug do próprio harness que dobrava o prefixo `scope/`
+de `unit.pattern` e fazia o filtro do vitest não casar arquivo algum.
+Se o registro nomeado é a forma de resíduo que a revisão aceita para as
+duas categorias, é decisão registrada em "Revisar se" de
+[D-064](DECISIONS.md).
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff048-2026-09-22-d-064) e [D-064](DECISIONS.md).

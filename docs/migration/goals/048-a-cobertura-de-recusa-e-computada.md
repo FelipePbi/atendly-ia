@@ -1,6 +1,6 @@
 # Goal 048 — A cobertura de recusa é computada: categoria sem controle reprova
 
-**Status: READY.** Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-22 pelo Tech Lead Agent após [Goal047 ACCEPTED](../reviews/047-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED** no [review048](../reviews/048-review.md) (rodada 2 de 2, 2026-09-22, zero blockers; a rodada 1 teve 2 blockers, ambos de fechamento documental). Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-22 pelo Tech Lead Agent após [Goal047 ACCEPTED](../reviews/047-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: OPUS_MEDIUM
 

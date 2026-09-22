@@ -2065,3 +2065,218 @@ dois arrays — `CLIENT_FIELD_USE_REFUSAL_CATEGORIES` e
 `INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES` são os lugares únicos que
 a suíte e a documentação permanente devem conferir, para não repetir a
 divergência de contagem das rodadas do Goal045.
+
+## D-064 — A cobertura de recusa passa a ser computada a partir dos três arrays em runtime, e categoria sem controle reprova a suíte, propostas no Goal048
+
+**Status:** ACCEPTED no [review048](reviews/048-review.md) (rodada 2 de
+2, 2026-09-22, zero blockers; a rodada 1 teve 2 blockers, ambos de
+fechamento documental e nenhum de mecanismo — os quatro documentos
+permanentes descreviam uma execução que a árvore final não produzia
+mais, com suíte vermelha por design, "199 passando e 1 falhando",
+`validate:core` FAILED e linhas citadas erradas, depois de a WU-06 ter
+acrescentado `PROVEN_UNREACHABLE_REFUSAL_CATEGORIES`; e os mesmos
+documentos afirmavam `tools/ia-loop/` intocado contra um diff que toca
+dois arquivos ali), pelo Tech Lead Agent ([AGENT_ROLES](AGENT_ROLES.md),
+D-018). O mecanismo, aplicado sem exceção às 24 categorias, desconta as
+duas categorias inalcançáveis do vocabulário de atribuição por registro
+nomeado e conferido — `PROVEN_UNREACHABLE_REFUSAL_CATEGORIES`
+(`assistant.service.test.ts:6860`–`6869`) —, e a suíte fecha verde. A
+revisão aceitou esse registro como a forma de resíduo do item 4: ele é
+nomeado, tem motivo computado e é auto-conferido nos dois sentidos —
+a categoria tem de continuar no array e tem de continuar nunca
+observada —, que é exatamente a propriedade que a igualdade de array
+não tinha. A edição dos dois arquivos de `tools/ia-loop/` recebeu
+**dispensa escrita e restrita ao Goal048**, concedida na rodada 1 e
+condicionada à declaração da exceção nos documentos permanentes;
+a correção fica **neste** diff, não em unidade própria. Cobre
+o diff048 (WU-01 constrói o mecanismo de cobertura
+computada — `observedRefusalCategories`, o helper `expectRefusal` e o
+teste que itera os três arrays em runtime — e rewire os controles já
+existentes dos Goals 045 a 047 para alimentá-lo; WU-02 acrescenta
+controle a três das cinco categorias de atribuição sem controle e prova
+que as outras duas são inalcançáveis; WU-03 acrescenta controle às três
+categorias de ligação de classe sem controle; WU-04 acrescenta o
+controle do sub-caso "comentário" da observação 1 do review047 e
+generaliza a asserção do escopo §3 do Goal047 para não depender de nome
+de variável; WU-05 exercita os cinco controles negativos do escopo §6
+do próprio mecanismo de cobertura, todos revertidos, e reconfirma os
+números da árvore real; WU-06 é a documentação de fechamento) sobre a
+baseline aceita `11f576acc2f4eb667821a50ad16dc13aec6cabbc` (fechamento
+do Goal047); sem commit e sem deploy. Não corrige achado algum e não
+reabre nenhum — A-01 a A-24 não são tocados. Não altera nenhuma decisão
+anterior — reusa e não altera D-054 a D-063.
+
+**Contexto:** a baseline aceita tinha 24 categorias de recusa nomeadas
+em três arrays `as const` exportados (`CLIENT_FIELD_USE_REFUSAL_CATEGORIES`,
+12; `CLASS_BINDING_REFUSAL_CATEGORIES`, 6;
+`INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES`, 6), mas só a conferia
+por igualdade (`toEqual`) contra uma lista literal escrita à mão — o que
+prova ordem e conteúdo do array, não que algum controle a exercite. Por
+contagem na baseline, 8 das 24 só apareciam dentro dessa lista literal,
+sem controle que as fizesse acontecer: 5 do vocabulário de atribuição
+(`instance_field_assignment_destructured`,
+`instance_field_assignment_foreign_object_property`,
+`instance_field_assignment_array_element`,
+`instance_field_assignment_returned_directly`,
+`instance_field_assignment_form_not_recognized`) e 3 do de ligação de
+classe (`class_binding_homonymous_declarations`,
+`class_binding_commonjs_export`,
+`class_binding_cross_file_form_not_resolved`). O título do teste de
+igualdade de `CLASS_BINDING_REFUSAL_CATEGORIES` ainda afirmava que o
+array "é exatamente o conjunto que os controles negativos... exercitam",
+o que era falso para três das seis categorias — a mesma classe de
+defeito (afirmação escrita que a execução não exerce) que reprovou
+rodadas nos Goals 044 a 047.
+
+**Decisão:**
+
+1. **A cobertura é computada, nunca mais afirmada em prosa.** Um `Set`
+   de módulo, `observedRefusalCategories`
+   (`assistant.service.test.ts:48`), acumula toda categoria
+   efetivamente observada em runtime. O helper `expectRefusal`
+   (`:50`–`64`) substitui `expect(() => ...).toThrow(regex)` em todo
+   controle negativo do arquivo: ele invoca a ação, afirma que lançou
+   `Error` casando o `regex` esperado, extrai `[categoria: <nome>]` da
+   mensagem por expressão regular e, se casar, registra a categoria no
+   `Set`. Todo controle negativo pré-existente dos Goals 045 a 047 foi
+   convertido de `toThrow` para `expectRefusal` — não porque a asserção
+   mudasse, mas porque só assim o controle passa a alimentar o
+   mecanismo de cobertura.
+2. **Um teste final fecha o mecanismo.** `describe("Goal048 / WU-01...")`
+   (`:6871`–`6896`) monta `allRefusalCategories` concatenando os três
+   arrays em runtime — nunca uma lista reescrita — e afirma que
+   `allRefusalCategories.filter((c) => !observedRefusalCategories.has(c) && !PROVEN_UNREACHABLE_REFUSAL_CATEGORIES.has(c))`
+   é vazio. A fonte da iteração é o array de produção: categoria
+   acrescentada a qualquer um dos três sem controle correspondente
+   reprova este teste, nomeando exatamente qual ficou descoberta, sem
+   exigir que alguém lembre de atualizar lista alguma. As duas
+   categorias do item 4 são descontadas só por
+   `PROVEN_UNREACHABLE_REFUSAL_CATEGORIES` (`:6860`–`6869`), um `Map`
+   nomeado que o próprio teste confere: entrada que deixe de existir
+   nos três arrays, ou categoria nele declarada que volte a ser
+   observada em runtime, reprova.
+3. **Três das oito categorias sem controle da atribuição ganharam
+   controle permanente**, cada uma sobre árvore sintética em diretório
+   temporário, removida ao fim, com `arquivo:linha` e a categoria casada:
+   `instance_field_assignment_destructured` (padrão de desestruturação
+   como alvo, `({ campo } = new ...)`);
+   `instance_field_assignment_foreign_object_property` (atribuição a
+   propriedade de outro objeto, `<id>.<campo> = new ...`); e
+   `instance_field_assignment_form_not_recognized` (instanciação passada
+   como argumento de função, `configureClient(new ...)`).
+4. **Duas categorias da atribuição são inalcançáveis por árvore
+   sintética alguma, por construção do código de
+   `resolveProvenClassFieldAssignment` (`http-egress-sites.ts`) — não por
+   lacuna de teste.** `instance_field_assignment_array_element`: seu
+   regex (`\b<id>\[[^\]]*\]\s*=\s*new\s*$`) é subconjunto estrito do
+   regex de `instance_field_assignment_destructured`
+   (`[}\]]\s*=\s*new\s*$`), testado antes na cadeia de `if`; todo
+   `<id>[i] = new ...` termina em `]` logo antes de `= new`, então o
+   `if` de destructured sempre casa primeiro, e o de `array_element` é
+   código morto. `instance_field_assignment_returned_directly`: seu
+   regex (`\breturn\s*$`) exige que a janela termine em "return", mas
+   `findClassInstantiations` só reconhece um sítio de instanciação
+   quando a palavra imediatamente anterior ao nome da classe é "new"; a
+   janela passada à resolução do alvo termina, portanto, sempre em
+   "new", nunca em "return", e todo `return new X(...)` cai no
+   `form_not_recognized` final. Dois controles permanentes provam essa
+   inalcançabilidade construindo exatamente a forma nomeada por cada
+   categoria e afirmando que a recusa observada sai sob a **outra**
+   categoria, nunca sob a nomeada.
+5. **As três categorias de ligação de classe sem controle ganharam
+   controle permanente**, cada uma sobre árvore sintética própria:
+   `class_binding_homonymous_declarations` (duas declarações `class
+   InternalHttpClient` no arquivo da declaração); `class_binding_commonjs_export`
+   (`exports.Alt = InternalHttpClient;` no arquivo da declaração); e
+   `class_binding_cross_file_form_not_resolved` (import de namespace,
+   `import * as NS`, num terceiro arquivo, para o módulo da declaração).
+6. **O sub-caso "comentário" da observação 1 do review047 ganhou
+   controle permanente.** `this.http?.request(...)` escrito dentro de
+   comentário de linha é apagado por `blankComments` antes da varredura:
+   um controle prova que a classificação de uma árvore com esse
+   comentário é idêntica à da mesma árvore sem ele, e a rota real
+   continua saindo.
+7. **A asserção do escopo §3 do Goal047 deixa de depender de nome de
+   variável.** Em vez de checar a ausência literal de `if (source ===
+   undefined) continue` e `if (candidateSource === undefined) continue`,
+   a suíte agora afirma a ausência genérica de qualquer ocorrência da
+   forma `.get(...); if (<qualquer identificador> === undefined)
+   continue` — um `continue` mudo novo, com outro nome, reprova.
+8. **O título do teste de igualdade de `CLASS_BINDING_REFUSAL_CATEGORIES`
+   deixou de afirmar cobertura que não existia.** Passa a dizer que o
+   array traz a categoria na ordem declarada, e que a cobertura por
+   controle é conferida à parte, no bloco do mecanismo novo.
+
+**Alternativas:** excluir as duas categorias inalcançáveis do array e
+reescrever a lista para 22 membros — rejeitada: removeria categoria já
+aceita em D-063, e o próprio Goal proíbe renomear ou remover categoria
+existente; deixar a suíte vermelha pelas duas categorias, sem resíduo
+nomeado algum — rejeitada depois de revisão: a forma sugerida pelo
+Goal ("registro categoria → controle... com a ausência de entrada
+sendo falha nomeada") cobre exatamente este caso, então a categoria
+inalcançável por construção ganhou registro nomeado e conferido
+(`PROVEN_UNREACHABLE_REFUSAL_CATEGORIES`) em vez de reprovar a suíte
+inteira por um limite que os próprios controles da decisão 4 já provam.
+
+**Motivo:** o vocabulário de recusa cresceu mais rápido que os
+controles que o exercitam nos Goals 044 a 047, e a única prova de oito
+categorias era o array continuar contendo a string — o mesmo tipo de
+afirmação não exercida que motivou D-054, D-060 e D-063. Computar a
+cobertura a partir do array em runtime, com falta nomeada, remove esse
+acidente de vez: uma categoria só conta como coberta se algum controle
+realmente a fizer acontecer. Aplicado sem exceção, o mecanismo também
+descobre — de primeira ordem, não como desculpa — que duas categorias
+são residuais por construção, e as nomeia em vez de as declarar
+cobertas pela igualdade do array, que é exatamente a afirmação que este
+Goal existe para remover.
+
+**Consequências:** `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
+ganha o `Set` `observedRefusalCategories`, o helper `expectRefusal`, o
+`Map` `PROVEN_UNREACHABLE_REFUSAL_CATEGORIES`, dez casos novos e a
+conversão de todo controle negativo pré-existente de `toThrow` para
+`expectRefusal`, com 200 testes no arquivo (baseline: 190).
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts` não muda
+(igual à baseline): a cobertura não exigiu expor nada novo. `npx
+vitest run tests/assistant/assistant.service.test.ts` em
+`apps/ai-orchestrator` → **200** testes, **200** passando, **0**
+falhando: as duas categorias residuais do item 4 são descontadas pelo
+registro nomeado, e o teste final de cobertura fecha verde. `npx
+vitest run` completo de `apps/ai-orchestrator` → **1012** testes:
+**924** passando, **88** pulados (mesma contagem de pulados da
+baseline, nenhuma suíte encolheu), **0** falhando. `npx tsc -p
+tsconfig.json --noEmit` em `apps/ai-orchestrator`: exit 0. `npm run
+validate:core`: **PASSED** nesta árvore — dos 17 passos, **15**
+passaram (inclusive `test:ai-orchestrator`) e **2** pulados por design
+(`test:bff`, `test:health-worker`, cobertos só em
+`validate:integration`); nenhum falhou. `npm run test:gate` (raiz,
+suíte independente sobre `scripts/`) permanece em **226** testes e 0
+falhas, inalterado: não exercita `assistant.service.test.ts`. Sobre a
+árvore real, reconfirmado sem mudança (WU-05): **1** superfície, **4**
+ligações resolvidas, **205** arquivos varridos, **10** rotas, **2**
+instanciações fora do transporte, **0** chamadas de membro fora da
+superfície, e as **41** ocorrências de `this.http.` em
+`apps/bff/src/clients/` classificadas sem recusa;
+`product-transport-routes.txt` intocado. `git status --porcelain=v1
+-uall` lista, ao final desta rodada, `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`,
+os quatro documentos desta migração e dois arquivos de `tools/ia-loop/`
+(`lib/deterministic-executor.mjs`, `tests/deterministic-executor.test.mjs`),
+tocados por correção do próprio harness — o executor determinístico
+dobrava o prefixo `scope/` de `unit.pattern` quando `cwd` já estava
+dentro do `scope`, e o filtro do vitest não casava arquivo algum;
+nenhum diretório temporário de controle sobrou, e nenhum arquivo de
+`apps/frontend/src/`, `apps/bff/src/`, `apps/ai-orchestrator/src/`,
+`apps/evolution-go/` ou `packages/` foi tocado. Este diff não fecha
+**M4**, não afirma fidelidade visual, não prova runtime do serviço Go
+e não corrige **A-24**, que continua `PENDENCIA-POS-MVP`.
+
+**Revisar se:** o registro nomeado de categorias inalcançáveis
+(`PROVEN_UNREACHABLE_REFUSAL_CATEGORIES`) é a forma de resíduo que a
+revisão aceita para o item 4, ou se exige outra forma equivalente,
+contanto que o resíduo continue nomeado e nunca vire "coberto pela
+igualdade do array". Revisar também se alguma categoria nova, em
+qualquer um dos três arrays, aparecer sem controle: é exatamente o caso
+que o mecanismo deste Goal existe para reprovar; e se a correção de
+`tools/ia-loop/lib/deterministic-executor.mjs`, fora do escopo de
+produto do Goal mas necessária para o harness rodar
+`targeted-tests` corretamente sobre `apps/ai-orchestrator`, deve ficar
+neste diff ou seguir para unidade própria.

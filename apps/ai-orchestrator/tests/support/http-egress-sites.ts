@@ -1246,6 +1246,9 @@ export function computeBoundaryValueCrossing(
  */
 const GO_SERVICE_BASE_URL_ENV_VARS = new Set(["EVOLUTION_BASE_URL", "EVOLUTION_GO_BASE_URL"]);
 
+/** Arquivo e linha do sítio de egresso classificado (`ClassifiedHttpEgressSite`) que originou uma entrada — campo próprio, distinto do `filePath`/`line` da própria entrada. Quando a entrada é o próprio sítio, os dois pares coincidem em valor, mas o campo continua escrito. */
+export type HttpEgressSiteOrigin = Pick<ClassifiedHttpEgressSite, "filePath" | "line">;
+
 export interface GoBoundHttpRequest {
   filePath: string;
   line: number;
@@ -1253,6 +1256,8 @@ export interface GoBoundHttpRequest {
   /** Caminho computado; segmento interpolado (`${...}`) vira um buraco `{}`. */
   pathExpression: string;
   category: HttpEgressSiteCategory;
+  /** Sítio de egresso classificado que originou esta requisição. */
+  originSite: HttpEgressSiteOrigin;
   reason: string;
 }
 
@@ -1265,6 +1270,8 @@ export interface AssembledUrlForDelivery {
   functionName: string;
   urlExpression: string;
   category: AssembledUrlCategory;
+  /** Sítio `constructor_base_url_*` classificado cujo cliente HTTP interno originou esta montagem de URL. */
+  originSite: HttpEgressSiteOrigin;
   reason: string;
 }
 
@@ -1329,6 +1336,8 @@ export interface NonTransportMemberCall {
   className: string;
   fieldName: string;
   memberName: string;
+  /** Sítio `constructor_base_url_*` classificado cujo cliente HTTP interno originou esta chamada. */
+  originSite: HttpEgressSiteOrigin;
   reason: string;
 }
 
@@ -1342,6 +1351,8 @@ export interface NonGoBoundClassInstantiation {
   filePath: string;
   line: number;
   className: string;
+  /** Sítio `constructor_base_url_*` classificado cujo cliente HTTP interno originou esta instanciação. */
+  originSite: HttpEgressSiteOrigin;
   reason: string;
 }
 
@@ -2065,6 +2076,7 @@ function discoverCallerResolvedGoBoundRequests(
         method: resolveFetchMethod(optionsArgText, site.filePath, site.line),
         pathExpression,
         category: `env_var_${goEnvVar}`,
+        originSite: { filePath: site.filePath, line: site.line },
         reason: `chamada de "${localName}" (${enclosing.name}, exportado por ${site.filePath}) cujo argumento de base é env.${goEnvVar} (serviço Go); o fetch está em ${site.filePath}:${site.line}, e o caminho vem das partes da URL que não são a base`,
       });
     }
@@ -2097,6 +2109,8 @@ export interface NonGoBoundEgressSite {
   filePath: string;
   line: number;
   category: HttpEgressSiteCategory;
+  /** Sítio de egresso classificado que originou esta entrada — sempre ela mesma, escrita de forma explícita. */
+  originSite: HttpEgressSiteOrigin;
   reason: string;
 }
 
@@ -2128,7 +2142,13 @@ function discoverGoBoundRawFetchRequests(
   const notGoBound: NonGoBoundEgressSite[] = [];
   const callerResolutions: CallerResolutionReport[] = [];
   const countOut = (site: ClassifiedHttpEgressSite, reason: string): void => {
-    notGoBound.push({ filePath: site.filePath, line: site.line, category: site.category, reason });
+    notGoBound.push({
+      filePath: site.filePath,
+      line: site.line,
+      category: site.category,
+      originSite: { filePath: site.filePath, line: site.line },
+      reason,
+    });
   };
 
   for (const site of discovery.sites) {
@@ -2184,6 +2204,7 @@ function discoverGoBoundRawFetchRequests(
         method: resolveFetchMethod(optionsArgText, site.filePath, site.line),
         pathExpression: resolvePathExpression(pathArgText, envSchemaPath, site.filePath, site.line),
         category: site.category,
+        originSite: { filePath: site.filePath, line: site.line },
         reason: `fetch cru cujo destino resolve a env.${goEnvVar}; caminho resolvido de ${pathArgText.trim()}`,
       });
       continue;
@@ -3625,6 +3646,7 @@ function discoverGoBoundInternalClientRequests(
             filePath,
             line: instantiation.line,
             className: classSpan.name,
+            originSite: { filePath: site.filePath, line: site.line },
             reason: `new ${instantiation.localName}(...) em ${filePath}:${instantiation.line} (ligação ${instantiation.bindingForm} até ${classDeclarationKey}) resolve a env.${destination.envVars.join(" e env.")}, e nenhuma dessas chaves é base do serviço Go`,
           });
           continue;
@@ -3694,6 +3716,7 @@ function discoverGoBoundInternalClientRequests(
               className: classSpan.name,
               fieldName,
               memberName: callKind,
+              originSite: { filePath: site.filePath, line: site.line },
               reason: `this.${fieldName}.${callKind}(...) em ${methodName}() não é requisição ao transporte: ${excluded.reason}`,
             });
             continue;
@@ -3731,6 +3754,7 @@ function discoverGoBoundInternalClientRequests(
             method: requestMethod,
             pathExpression: resolvePathExpression(pathPropertyText, envSchemaPath, filePath, line),
             category: `env_var_${goEnvVar}`,
+            originSite: { filePath: site.filePath, line: site.line },
             reason: `this.${fieldName}.${callKind}(...) em ${methodName}(), cujo cliente resolve destino de env.${goEnvVar}`,
           });
         }
@@ -3753,6 +3777,7 @@ function discoverGoBoundInternalClientRequests(
             functionName: methodName,
             urlExpression,
             category: `assembled_url_for_delivery_${methodName}`,
+            originSite: { filePath: site.filePath, line: site.line },
             reason: `"${methodName}" monta valor a partir de env.${envVarsInMethod.join(" e env.")} sem chamar this.${fieldName}.${surface.reachingMembers.join("/.")} — não é requisição ao transporte, é valor entregue em outra chamada`,
           });
         }

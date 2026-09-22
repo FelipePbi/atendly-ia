@@ -3311,3 +3311,159 @@ candidatos no módulo de descarte, declarada e limitada ao escopo §3 (ver
 pré-condição de banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not
 set`), declarado como ausente — não reexecutado por esta unidade de
 documentação (WU-12).
+
+## 27. A conservação do conjunto de egresso vira partição computada por campo, e balde sem origem reprova — Goal050, 2026-09-22
+
+Seção nova, escrita depois da última mudança de árvore do diff050
+(WU-01: campo estrutural de origem em `http-egress-sites.ts`; WU-02: a
+partição computada, nos dois sentidos, com o universo de candidatos
+declarado; WU-03: motivo não vazio nos cinco baldes e no registro de
+descarte, e `NO_REFUSAL_CATEGORY` exercitado por controle; WU-04: o
+registro de descarte rechaveado por trecho normalizado mais âncora de
+função; WU-05: os oito controles negativos permanentes do escopo §8,
+cada um exercitado por reversão temporária; WU-06, esta unidade,
+documenta). Ela **não reescreve** §4 a §26: os registros de A-01 a
+A-24, o veredito das seções anteriores e as vinte e seis seções de
+fechamento continuam exatamente como estavam, e a entrada de **A-24**
+**não foi tocada**. Este Goal não corrige A-24 e não abre achado
+novo — fecha a abertura registrada no [Goal050](goals/050-a-conservacao-e-provada-por-construcao.md):
+a asserção de conservação de `assistant.service.test.ts:2953`–`2975`
+(baseline) decidia que um sítio de egresso "virou requisição" por uma
+disjunção cujo segundo ramo era `request.reason.includes(position)` —
+substring de prosa livre, portante e não decorativa, porque o único
+laço de volta ao sítio de origem da requisição resolvida no chamador
+estava dentro do texto do motivo.
+
+### O que mudou
+
+**A origem do sítio de egresso é campo estrutural, não frase.**
+`http-egress-sites.ts` ganhou `HttpEgressSiteOrigin` e o campo
+`originSite` em toda interface de saída que nasce de sítio
+classificado — `GoBoundHttpRequest`, `NonGoBoundEgressSite`,
+`AssembledUrlForDelivery`, `NonTransportMemberCall` e
+`NonGoBoundClassInstantiation`. Os oito sítios de `push` do arquivo
+passam a preenchê-lo, inclusive a requisição resolvida no chamador
+(`:2062` na baseline) e o cliente HTTP interno, que na baseline não
+carregava origem alguma, nem campo nem prosa.
+
+**A conservação virou partição computada, nos dois sentidos, sem ramo
+de prosa.** A asserção antiga foi substituída por uma que lê
+`discovery.sites` inteiro e encaminha cada sítio, por categoria, a um
+dos cinco baldes nomeados (`requests`, `notGoBound`, `assembledUrls`,
+`nonTransportMemberCalls`, `nonGoBoundInstantiations`). Quatro saídas
+reprovam em vez de passar em silêncio: sítio sem balde algum; sítio em
+mais de um balde; entrada de balde cuja origem declarada não
+corresponde a sítio lido algum; e categoria que a partição não sabe
+encaminhar. A ligação é sempre por campo (`originSite`), nunca por
+`reason.includes(...)` — o ramo de prosa não existe mais. **Exceção
+declarada** (ver "Limite próprio" abaixo): "um dos cinco baldes" é por
+categoria, não pelos cinco em conjunto — `egressPartitionBucketsForCategory`
+restringe a checagem de duplicidade ao subconjunto roteável da
+categoria do sítio.
+
+**O universo de candidatos é declarado, fail-closed.**
+`EGRESS_CANDIDATE_UNIVERSE` nomeia as cinco coleções de
+`HttpEgressDiscovery`: `sites` e `genericEgressPrimitives` entram na
+partição; `excluded`, `genericEgressCallers` e
+`genericEgressCallersByPrimitive` ficam de fora, cada uma com motivo
+escrito e conferida — `excluded` não encobre sítio, `genericEgressCallers`
+está vazio na árvore atual e o controle é fail-closed sobre essa
+vacuidade. Coleção nova que o descobridor produza e que esta
+declaração não nomeie reprova.
+
+**Motivo vazio não passa em balde nenhum, nem no registro de
+descarte**, no precedente de D-064. **O registro de descarte deixou de
+ser chaveado por número de linha**: a chave passou a ser o trecho
+normalizado mais a função de nível superior que o envolve, fail-closed
+nos dois sentidos de antes mais uma terceira saída — chave ambígua
+reprova. As **5** entradas continuam as mesmas da baseline, porque
+nenhuma edição deste Goal tocou o texto-fonte que a varredura lê.
+**`NO_REFUSAL_CATEGORY` ganhou controle**, em vez de ser removido —
+exercitado sobre uma recusa cujo destino não resolve por env, campo de
+instância nem parâmetro de chamador.
+
+**Oito controles negativos permanentes provam as oito amarras do
+escopo §8**, cada um com as duas saídas conferidas na árvore, incluindo
+deslocamento de linha em `http-egress-sites.ts` não reprovando em
+massa e descarte mudo novo continuando a reprovar.
+
+### Veredito recontado
+
+Esta auditoria continua com **0** achados `BLOQUEADOR-MVP`, **8**
+`PENDENCIA-POS-MVP` e **6** `LIMITE-DECLARADO` — a mesma contagem de
+§26. **Nenhuma mudança em relação a §26**: nenhum achado de A-01 a A-24
+foi tocado, corrigido, reclassificado ou reaberto. **A-24 continua
+`PENDENCIA-POS-MVP`, não corrigido** — nenhum arquivo Go de produção
+deste fork foi editado por este Goal.
+
+**Limite próprio deste Goal, declarado e não mascarado, herdado de
+D-065 sem afrouxamento.** A enumeração de `findSilentDiscardLines`
+continua cobrindo **descarte guardado por valor ausente**, não todo
+`continue;` do módulo, e a partição deste Goal prova conservação
+**entre o descobridor e os baldes de saída**, não dentro das funções
+de varredura — um `continue` sem guarda de valor ausente, ou dentro de
+bloco com outra instrução antes, não é capturado por mecanismo algum
+desta rodada. Provar conservação de candidatos dentro das funções de
+varredura é trabalho de Goal futuro, não autorizado aqui.
+
+**Segundo limite próprio, declarado: "exatamente um balde" é por
+categoria, não pelos cinco baldes em conjunto.**
+`egressPartitionBucketsForCategory` devolve, por categoria, o
+subconjunto de baldes em que a checagem de duplicidade roda — não
+sempre os cinco. Sítios `constructor_base_url_*` têm subconjunto
+`[notGoBound]` só: a saída direta do sítio é o registro de adiamento
+ali, e as entradas que a varredura de instanciação produz para cada
+instanciação do cliente (em `requests`, `assembledUrls`,
+`nonGoBoundInstantiations` ou `nonTransportMemberCalls`, presas ao
+sítio pelo mesmo `originSite`) são saídas de cada instanciação, não
+segundas saídas do sítio, e ficam fora do subconjunto verificado para
+essa categoria. Um sítio `constructor_base_url_*` com uma ou mais
+instanciações legitimamente tem `originSite` em `notGoBound` **e** num
+dos quatro baldes de instanciação ao mesmo tempo, sem que "sítio em
+mais de um balde" reprove. A partição prova "exatamente um balde
+dentre os roteáveis pela categoria do sítio", não "exatamente um balde
+dentre os cinco", para todo sítio. **A exceção não é vácua:** teste
+permanente novo (`assistant.service.test.ts:3137`) prova, sobre a
+árvore real, que ao menos um sítio `constructor_base_url_*` de fato
+tem `originSite` em `notGoBound` e num balde de instanciação ao mesmo
+tempo, e que a mesma conta de `:3099` não o reprova. Consequência
+mensurável: de **215** testes em `assistant.service.test.ts`
+(baseline: 204), **215** passam, **0** falham; o arquivo tem **7864**
+linhas (baseline: 7100). `http-egress-sites.ts` tem **26** inserções e
+**1** deleção contra a baseline (**3886** linhas; baseline: 3861) — a
+primeira vez desde o Goal047 que este arquivo tem diff não-zero. A
+suíte completa de `apps/ai-orchestrator` fecha em **1027** testes:
+**939** passando (baseline: 928), **88** pulados (mesma contagem da
+baseline), **0** falhando. `npx tsc -p tsconfig.json --noEmit`:
+"TypeScript: No errors found", exit 0. `npm run lint` (`eslint src
+--max-warnings=0`): exit 0, sem saída. `npm run validate:core`
+**PASSED**: dos 17 passos, **15** passaram (inclusive
+`test:ai-orchestrator`) e **2** pulados por design (`test:bff`,
+`test:health-worker`); nenhum falhou. `npm run test:gate` (raiz):
+**226** testes, **226** passando, **0** falhando, inalterado, porque
+não exercita este arquivo.
+
+Quatro coisas que esta seção não diz. **Não diz que A-24 foi corrigido**:
+o rótulo `"Ver Menu"` continua escrito em
+`pkg/sendMessage/service/send_service.go:1960`. **Não diz que M4 foi
+fechado**: nenhuma chamada saiu para provedor de LLM real nem para o
+WhatsApp real; o diff050 toca só
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`,
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts` e a
+documentação de migração — `git status --porcelain=v1 -uall` não lista
+nenhum arquivo de `tools/ia-loop/` nesta rodada. **Não diz que o
+comportamento em runtime do serviço Go foi provado**: o que se prova é
+o que a árvore de código diz, lida por enumeração de ocorrência sobre
+o texto-fonte. **Não diz que a fidelidade visual está provada**:
+nenhum arquivo de `apps/frontend/src/` mudou.
+
+O que continua fora do alcance deste Goal, por construção: comportamento
+em runtime do serviço Go; qual binário roda em produção; `whatsmeow-
+lib/`, biblioteca vendorizada lida apenas como fonte das declarações de
+proto; o valor real de qualquer variável de ambiente; e conservação de
+candidatos dentro das funções de varredura de `http-egress-sites.ts`,
+declarada e limitada ao escopo §4 do Goal050 (ver "Limite próprio"
+acima). `validate:integration` continua recusando por pré-condição de
+banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado
+como ausente — não reexecutado por esta unidade de documentação
+(WU-06).

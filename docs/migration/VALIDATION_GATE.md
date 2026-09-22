@@ -1450,3 +1450,56 @@ quatro documentos desta migração — nenhum arquivo de `tools/ia-loop/`
 foi tocado nesta rodada.
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff049-2026-09-22-d-065) e [D-065](DECISIONS.md).
+
+## A conservação do conjunto de egresso vira partição computada por campo, e balde sem origem reprova, do Goal050
+
+O parágrafo anterior fechou a categoria creditada por convenção. O que
+sobrava era um nível acima: a asserção que prova que nenhum sítio de
+egresso é descartado em silêncio decidia se um sítio "virou requisição"
+por uma disjunção cujo segundo ramo era substring de prosa livre sobre
+o motivo — a origem da requisição resolvida no chamador só existia
+como texto, e o cliente HTTP interno não carregava origem alguma. Este
+delta fecha essa abertura, sem tocar o conjunto de 10 rotas nem o de
+27 literais.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| Toda entrada de saída que nasce de sítio classificado carrega `originSite`, campo estrutural (`Pick<ClassifiedHttpEgressSite, "filePath" \| "line">`), preenchido nos oito sítios de `push`; a ligação entre sítio e balde é sempre por esse campo, nunca por `reason.includes(...)` — o ramo de prosa foi removido | A frase do motivo continua existindo, para quem lê; só deixou de ser dado de prova |
+| A conservação é partição computada, nos dois sentidos: sítio sem balde algum reprova, sítio em mais de um balde reprova, entrada de balde cuja origem não corresponde a sítio lido reprova, e categoria que a partição não sabe encaminhar reprova — nunca um `else` mudo | O universo de candidatos é o que `EGRESS_CANDIDATE_UNIVERSE` declara: `sites` e `genericEgressPrimitives` entram, `excluded`/`genericEgressCallers`/`genericEgressCallersByPrimitive` ficam de fora com motivo escrito e conferido; coleção nova do descobridor sem declaração reprova. "Sítio em mais de um balde" é checado dentro do subconjunto de baldes que `egressPartitionBucketsForCategory` roteia para a categoria do sítio, não sempre os cinco — sítios `constructor_base_url_*` roteiam só para `[notGoBound]`, e por isso legitimamente têm `originSite` também em um dos quatro baldes de instanciação do cliente ao mesmo tempo, sem reprovar. Não vácuo: teste permanente (`assistant.service.test.ts:3137`) prova, sobre a árvore real, que esse caso ocorre de fato |
+| Os cinco baldes de saída e `DOCUMENTED_SILENT_DISCARDS` passam a exigir motivo não vazio | O registro de descarte deixou de ser chaveado por número de linha — a chave é trecho normalizado mais função que o envolve; deslocamento de linha não reprova em massa, e chave ambígua reprova como saída nova |
+| `NO_REFUSAL_CATEGORY` ganhou controle permanente, exercitado sobre uma recusa cujo destino não resolve por env, campo de instância nem parâmetro de chamador | As **5** entradas de `DOCUMENTED_SILENT_DISCARDS` continuam as mesmas da baseline; nenhuma edição deste Goal tocou o texto-fonte que a varredura lê |
+
+**O que este delta não prova, e é preciso dizer alto.** **Não prova
+conservação de candidatos dentro das funções de varredura**: a
+partição prova conservação entre o descobridor e os baldes de saída,
+não dentro delas — um `continue;` sem guarda de valor ausente, ou em
+bloco com outra instrução antes, continua fora de alcance. **Não
+corrige A-24**: o achado continua `PENDENCIA-POS-MVP`, e nenhum
+arquivo Go de produção deste fork foi editado por este Goal. **Não
+fecha M4.** **Não amplia nem reduz o conjunto de 10 rotas ou de 27
+literais.** `npm run validate:core` **PASSED** nesta árvore — dos 17
+passos, 15 passaram (inclusive `test:ai-orchestrator`) e 2 pulados por
+design (`test:bff`, `test:health-worker`); nenhum falhou. `npm run
+test:gate` (raiz) permanece em **226** testes e 0 falhas, inalterado,
+porque não exercita este arquivo. `validate:integration` continua
+recusando por pré-condição de banco ausente (`exit 2`,
+`BFF_TEST_DATABASE_URL is not set`), declarado como ausente — não é
+este Goal quem a supre, e não foi reexecutado por esta unidade de
+documentação (WU-06). Sobre a árvore final desta rodada: `npx vitest
+run tests/assistant/assistant.service.test.ts` em
+`apps/ai-orchestrator` → **215** testes, **215** passando, **0**
+falhando (baseline: 204); `npx vitest run` completo → **1027** testes,
+**939** passando (baseline: 928), **88** pulados (mesma contagem da
+baseline), **0** falhando. `npx tsc -p tsconfig.json --noEmit`: exit
+0. `npm run lint` (`eslint src --max-warnings=0`) em
+`apps/ai-orchestrator`: exit 0, sem saída. `apps/ai-orchestrator/tests/support/http-egress-sites.ts`
+tem **26** inserções e **1** deleção contra a baseline — a primeira
+vez desde o Goal047 que este arquivo tem diff não-zero;
+`apps/ai-orchestrator/tests/support/product-transport-routes.txt` tem
+diff **zero**. `git status --porcelain=v1 -uall` lista, ao final desta
+rodada, só `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`,
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts` e os quatro
+documentos desta migração — nenhum arquivo de `tools/ia-loop/` foi
+tocado nesta rodada.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff050-2026-09-22-d-066) e [D-066](DECISIONS.md).

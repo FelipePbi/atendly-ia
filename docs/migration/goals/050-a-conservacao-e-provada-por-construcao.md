@@ -1,6 +1,6 @@
 # Goal 050 — A conservação é provada por construção: sítio creditado por prosa não conta, e balde sem origem reprova
 
-**Status: READY.** Preparado em 2026-09-22 pelo Tech Lead Agent após [Goal049 ACCEPTED](../reviews/049-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED** no [review050](../reviews/050-review.md) (rodada 3 de 3, 2026-09-22; rodadas 1 e 2 fecharam `CHANGES_REQUIRED`, com 3 e 2 blockers). Preparado em 2026-09-22 pelo Tech Lead Agent após [Goal049 ACCEPTED](../reviews/049-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: OPUS_MEDIUM
 

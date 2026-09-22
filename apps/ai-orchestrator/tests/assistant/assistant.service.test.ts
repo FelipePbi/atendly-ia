@@ -21,6 +21,7 @@ import type { NotificationFacts } from "../../src/modules/scheduling-service/typ
 import { AI_CONVERSATION_STYLES } from "../../src/modules/tenant-config/ai-settings.js";
 import { DEFAULT_BUSINESS_CONTEXT } from "../../src/modules/tenant-config/business-context.js";
 import {
+  CLASS_BINDING_REFUSAL_CATEGORIES,
   computeBoundaryValueCrossing,
   discoverGoServiceHttpRequests,
   discoverHttpEgressSites,
@@ -5283,5 +5284,280 @@ describe("Goal045 / FIX-001 — `scannedFilePathsForInstantiation` enumera o que
       rmSync(tree, { recursive: true, force: true });
       rmSync(emptyTree, { recursive: true, force: true });
     }
+  });
+});
+
+/* =========================================================================
+ * Cinco controles negativos obrigatórios (Goal046 / WU-04): cada um monta a
+ * própria árvore sintética em diretório temporário e roda o descobridor real
+ * sobre ela — nunca a árvore real —, removendo todo diretório no `finally`.
+ * O alvo é a allowlist fechada de `exportConstructBindingRange` (WU-01) e a
+ * divisão `{found, resolved}` de `findTopLevelAssignmentIndex` (WU-02): cada
+ * controle exercita uma forma que cai fora da allowlist, uma cuja
+ * profundidade textual não fecha, ou prova que forma já reconhecida continua
+ * classificando igual.
+ * ========================================================================= */
+
+const wu04EnvSchema = [
+  "export const env = {",
+  '  EVOLUTION_GO_BASE_URL: stringEnv("http://localhost:8080"),',
+  "};",
+  "",
+].join("\n");
+
+const wu04InternalClient = [
+  "export class InternalHttpClient {",
+  "  constructor(private baseUrl: string) {}",
+  "  async request(options: { method: string; path: string }) {",
+  "    const url = new URL(options.path, this.baseUrl);",
+  "    return fetch(url, { method: options.method });",
+  "  }",
+  "}",
+  "",
+].join("\n");
+
+/** Árvore com o cliente real e o arquivo CANDIDATO (quem importa e instancia), com `trailing` acrescentado ao fim do arquivo candidato — nunca ao da declaração. */
+function discoverWithCandidateTrailing(trailing: string) {
+  const tree = makeTempSourceTree({
+    "config/env.ts": wu04EnvSchema,
+    "clients/internal-http-client.ts": wu04InternalClient,
+    "clients/evolution-client.ts": [
+      'import { InternalHttpClient } from "./internal-http-client.js";',
+      "",
+      "export class EvolutionClient {",
+      "  private http: InternalHttpClient;",
+      "  constructor() {",
+      "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+      "  }",
+      "  async createInstance() {",
+      '    return this.http.request({ method: "POST", path: "/instance/create" });',
+      "  }",
+      "}",
+      trailing,
+      "",
+    ].join("\n"),
+  });
+  const emptyTree = makeTempSourceTree({});
+  try {
+    return discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts"));
+  } finally {
+    rmSync(tree, { recursive: true, force: true });
+    rmSync(emptyTree, { recursive: true, force: true });
+  }
+}
+
+/** A mesma árvore, mas com `trailing` acrescentado ao arquivo da DECLARAÇÃO — nunca ao candidato. */
+function discoverWithDeclarationTrailing(trailing: string) {
+  const tree = makeTempSourceTree({
+    "config/env.ts": wu04EnvSchema,
+    "clients/internal-http-client.ts": [wu04InternalClient, trailing, ""].join("\n"),
+    "clients/evolution-client.ts": [
+      'import { InternalHttpClient } from "./internal-http-client.js";',
+      "",
+      "export class EvolutionClient {",
+      "  private http: InternalHttpClient;",
+      "  constructor() {",
+      "    this.http = new InternalHttpClient(env.EVOLUTION_GO_BASE_URL);",
+      "  }",
+      "  async createInstance() {",
+      '    return this.http.request({ method: "POST", path: "/instance/create" });',
+      "  }",
+      "}",
+      "",
+    ].join("\n"),
+  });
+  const emptyTree = makeTempSourceTree({});
+  try {
+    return discoverGoServiceHttpRequests(tree, emptyTree, join(tree, "config/env.ts"));
+  } finally {
+    rmSync(tree, { recursive: true, force: true });
+    rmSync(emptyTree, { recursive: true, force: true });
+  }
+}
+
+describe("controle negativo 1 (Goal046 / WU-04) — `export default { Client: <Classe> };` no arquivo candidato: a allowlist fechada não reconhece a forma, e a ocorrência do nome dentro dela recusa pela categoria nova, com `arquivo:linha`", () => {
+  it("antes: sem o objeto default, a instanciação sob ligação importada é lida e a rota entra — o controle não é vácuo", () => {
+    const { requests } = discoverWithCandidateTrailing("");
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+  });
+
+  it("depois: `export default { Client: InternalHttpClient };` no mesmo arquivo candidato recusa por `class_binding_export_construct_form_unrecognized` — a forma não é `export default <identificador>` e portanto cai fora da allowlist; a recusa por forma não reconhecida é conferida ANTES da heurística de posição de tipo, porque dentro de uma forma que a leitura não sabe recortar o dois-pontos de `Client: <valor>` separa chave de valor num literal de objeto, não anota tipo", () => {
+    expect(() =>
+      discoverWithCandidateTrailing("export default { Client: InternalHttpClient };"),
+    ).toThrow(/class_binding_export_construct_form_unrecognized/);
+  });
+
+  it("depois: a recusa nomeia `arquivo:linha` da ocorrência — o arquivo candidato e a linha do `export default` acrescentado", () => {
+    expect(() =>
+      discoverWithCandidateTrailing("export default { Client: InternalHttpClient };"),
+    ).toThrow(/evolution-client\.ts:12: "InternalHttpClient" aparece dentro de uma construção/);
+  });
+});
+
+describe("controle negativo 2 (Goal046 / WU-04) — `export namespace N { export const C = <Classe>; }`: a allowlist fechada não reconhece `export namespace`, e a ocorrência dentro dele recusa pela categoria nova", () => {
+  it("antes: sem o namespace, a instanciação sob ligação importada é lida e a rota entra — o controle não é vácuo", () => {
+    const { requests } = discoverWithCandidateTrailing("");
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+  });
+
+  it("depois: `export namespace N { export const C = InternalHttpClient; }` no arquivo candidato recusa — `export namespace` não está na allowlist, e o `export const` interno não isenta a ocorrência porque ela cai no lado de VALOR do `=`, dentro do range não reconhecido do namespace que o envolve", () => {
+    expect(() =>
+      discoverWithCandidateTrailing(
+        "export namespace N { export const C = InternalHttpClient; }",
+      ),
+    ).toThrow(/class_binding_export_construct_form_unrecognized/);
+  });
+});
+
+describe("controle negativo 3 (Goal046 / WU-04) — `export = <Classe>` no arquivo CANDIDATO recusa pela categoria nova da allowlist; a mesma forma no arquivo da DECLARAÇÃO continua recusando por `resolveModuleExportBindings`, categoria antiga", () => {
+  it("antes: sem `export =` em lugar nenhum, a instanciação sob ligação importada é lida e a rota entra — o controle não é vácuo", () => {
+    const { requests } = discoverWithCandidateTrailing("");
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+  });
+
+  it("depois, no arquivo CANDIDATO: `export = InternalHttpClient;` recusa por `class_binding_export_construct_form_unrecognized` — a allowlist fechada não reconhece `export =`, e a ocorrência do nome ali não cai em nenhuma isenção", () => {
+    expect(() =>
+      discoverWithCandidateTrailing("export = InternalHttpClient;"),
+    ).toThrow(/class_binding_export_construct_form_unrecognized/);
+  });
+
+  it("depois, no arquivo da DECLARAÇÃO: `export = InternalHttpClient;` continua recusando por `class_binding_export_form_not_resolved` — esta forma nunca chega à allowlist de `exportConstructBindingRange`, porque `resolveModuleExportBindings` já derruba a leitura antes, e essa recusa mais antiga não muda de categoria", () => {
+    expect(() =>
+      discoverWithDeclarationTrailing("export = InternalHttpClient;"),
+    ).toThrow(/class_binding_export_form_not_resolved/);
+  });
+});
+
+describe("controle negativo 4 (Goal046 / WU-04) — `export const` que atribui e cuja profundidade textual não fecha: a busca pelo `=` de topo nunca resolve, e a forma fica não reconhecida", () => {
+  it("antes: sem a construção de profundidade aberta, a instanciação sob ligação importada é lida e a rota entra — o controle não é vácuo", () => {
+    const { requests } = discoverWithCandidateTrailing("");
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+  });
+
+  it("depois: `export const Weird: Array<Foo = [InternalHttpClient];` recusa — o `<` de `Array<Foo` nunca fecha (não há `>` correspondente), `findTopLevelAssignmentIndex` termina com profundidade 1 e devolve `resolved: false`, e `exportConstructBindingRange` classifica a construção inteira como não reconhecida", () => {
+    expect(() =>
+      discoverWithCandidateTrailing("export const Weird: Array<Foo = [InternalHttpClient];"),
+    ).toThrow(/class_binding_export_construct_form_unrecognized/);
+  });
+});
+
+describe("controle negativo 5 (Goal046 / WU-04) — as formas `export` reais continuam com classificação idêntica à de antes da allowlist fechada: a allowlist não estreitou o que já funcionava", () => {
+  it("antes: sem forma real acrescentada, a instanciação sob ligação importada é lida e a rota entra — o controle não é vácuo", () => {
+    const { requests } = discoverWithCandidateTrailing("");
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+  });
+
+  it("depois: `export function helper(x: InternalHttpClient) { ... }` no candidato não recusa — cabeçalho de função é a própria ligação exportada, isenta inteira", () => {
+    const { requests } = discoverWithCandidateTrailing(
+      "export function helper(x: InternalHttpClient) { return x; }",
+    );
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+  });
+
+  it("depois: `export async function helperAsync(x: InternalHttpClient) { ... }` no candidato não recusa, pelo mesmo motivo do `export function`", () => {
+    const { requests } = discoverWithCandidateTrailing(
+      "export async function helperAsync(x: InternalHttpClient) { return x; }",
+    );
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+  });
+
+  it("depois: `export interface HasClient extends InternalHttpClient {}` no candidato não recusa — `extends` de interface é posição de TIPO, ao contrário do `extends` de classe", () => {
+    const { requests } = discoverWithCandidateTrailing(
+      "export interface HasClient extends InternalHttpClient {}",
+    );
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+  });
+
+  it("depois: `export type ClientAlias = InternalHttpClient;` no candidato não recusa — lado direito de alias de tipo é posição de TIPO, não captura o construtor como valor", () => {
+    const { requests } = discoverWithCandidateTrailing(
+      "export type ClientAlias = InternalHttpClient;",
+    );
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+  });
+
+  it("depois: `export class SubClient extends InternalHttpClient {}` no candidato continua recusando por `class_binding_reference_forwarded_as_value` — herança de classe é posição de VALOR, e a allowlist fechada não muda essa categoria", () => {
+    expect(() =>
+      discoverWithCandidateTrailing("export class SubClient extends InternalHttpClient {}"),
+    ).toThrow(/class_binding_reference_forwarded_as_value/);
+  });
+
+  it("depois: `export const Forwarded = InternalHttpClient;` no candidato continua recusando por `class_binding_reference_forwarded_as_value` — o lado DIREITO da atribuição é posição de VALOR, e a allowlist fechada não muda essa categoria", () => {
+    expect(() =>
+      discoverWithCandidateTrailing("export const Forwarded = InternalHttpClient;"),
+    ).toThrow(/class_binding_reference_forwarded_as_value/);
+  });
+
+  it("depois: `export { InternalHttpClient };` no próprio arquivo da DECLARAÇÃO não recusa — a lista de export é a própria ligação exportada, isenta inteira, e a segunda ligação nomeada da mesma classe não amplia o alcance para nenhum arquivo novo", () => {
+    const { requests } = discoverWithDeclarationTrailing("export { InternalHttpClient };");
+    expect(requests.map((request) => request.pathExpression)).toEqual(["/instance/create"]);
+  });
+});
+
+describe("Goal046 / WU-04 — o conjunto de categorias de recusa é conferido contra o array em runtime, nunca contra união escrita à mão", () => {
+  it("CLASS_BINDING_REFUSAL_CATEGORIES traz a categoria nova da allowlist fechada, e é exatamente o conjunto que os controles negativos desta rodada e das anteriores exercitam", () => {
+    expect(CLASS_BINDING_REFUSAL_CATEGORIES).toEqual([
+      "class_binding_homonymous_declarations",
+      "class_binding_export_form_not_resolved",
+      "class_binding_commonjs_export",
+      "class_binding_cross_file_form_not_resolved",
+      "class_binding_reference_forwarded_as_value",
+      "class_binding_export_construct_form_unrecognized",
+    ]);
+    expect(CLASS_BINDING_REFUSAL_CATEGORIES).toContain(
+      "class_binding_export_construct_form_unrecognized",
+    );
+  });
+});
+
+describe("Goal046 / WU-04 — a árvore real produz os números desta rodada, e as invariantes de reconhecimento não são vácuas", () => {
+  it("1 superfície, 4 ligações resolvidas, 10 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — os mesmos números da baseline do Goal045, exceto o de arquivos varridos pela resolução de instanciação: com o client do Prisma gerado nas duas árvores (`prisma generate`), elas somam hoje 205 arquivos .ts (118 em apps/ai-orchestrator/src, 87 em apps/bff/src) — o número computado pelo AST (205) prevalece sobre qualquer contagem anterior capturada antes de o client do Prisma do BFF existir na árvore", () => {
+    const { requests, internalClientSurfaces, nonGoBoundInstantiations, nonTransportMemberCalls } =
+      discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath);
+
+    expect(internalClientSurfaces).toHaveLength(1);
+    expect(internalClientSurfaces[0].instantiationBindings).toHaveLength(4);
+    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(205);
+    expect(requests).toHaveLength(10);
+    expect(nonGoBoundInstantiations).toHaveLength(2);
+    expect(nonTransportMemberCalls).toHaveLength(0);
+  });
+
+  it("product-transport-routes.txt continua com as mesmas 10 rotas do conjunto que a árvore real alcança", () => {
+    const routesFilePath = join(
+      dirname(fileURLToPath(import.meta.url)),
+      "../support/product-transport-routes.txt",
+    );
+    const routes = readProductTransportRoutesFile(routesFilePath);
+    expect(routes).toHaveLength(10);
+    const { requests } = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+    expect(requests).toHaveLength(routes.length);
+  });
+
+  it("não vácuo: a resolução por ligação reconheceu ao menos uma instanciação sobre a árvore real", () => {
+    const { internalClientSurfaces } = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+    const totalBindings = internalClientSurfaces.reduce(
+      (total, surface) => total + surface.instantiationBindings.length,
+      0,
+    );
+    expect(totalBindings).toBeGreaterThan(0);
+  });
+
+  it("não vácuo: ao menos uma construção `export` de forma reconhecida foi isenta sobre a árvore real — a declaração de InternalHttpClient sai por `export class`, forma que `exportConstructBindingRange` reconhece, e a leitura não recusa por causa dela", () => {
+    const [surface] = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    ).internalClientSurfaces;
+    const declarationSource = readFileSync(surface.filePath, "utf8");
+    const declarationLine = declarationSource.split(/\r?\n/u)[surface.classLine - 1];
+    expect(declarationLine).toMatch(/^export\s+(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?class\b/);
   });
 });

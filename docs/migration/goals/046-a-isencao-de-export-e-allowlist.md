@@ -1,6 +1,6 @@
 # Goal 046 — A isenção de `export` é allowlist: forma não reconhecida recusa em vez de isentar
 
-**Status: READY.** Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-21 pelo Tech Lead Agent após [Goal045 ACCEPTED](../reviews/045-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED** na rodada 2, conforme o [review046](../reviews/046-review.md) — uma rodada `CHANGES_REQUIRED`, com 2 blockers, antes do aceite com zero blockers. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Preparado em 2026-09-21 pelo Tech Lead Agent após [Goal045 ACCEPTED](../reviews/045-review.md) e integração do seu commit de fechamento. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: OPUS_MEDIUM
 

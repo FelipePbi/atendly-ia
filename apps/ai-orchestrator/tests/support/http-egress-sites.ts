@@ -2358,18 +2358,24 @@ function findClassInstantiations(
  * `continue` mudo.
  * ========================================================================= */
 
-/** Categoria nomeada com que a resolução de ligação de instanciação recusa. Toda recusa deste caminho sai sob uma delas. */
-type ClassBindingRefusalCategory =
+/** Categorias nomeadas com que a resolução de ligação de instanciação recusa. Toda recusa deste caminho sai sob uma delas. Array em runtime: a suíte e a documentação permanente conferem contra ele, em vez de contra união escrita à mão. */
+export const CLASS_BINDING_REFUSAL_CATEGORIES = [
   /** Duas declarações do mesmo nome no arquivo da classe: o nome exportado não identifica qual delas é instanciada. */
-  | "class_binding_homonymous_declarations"
+  "class_binding_homonymous_declarations",
   /** A classe sai do módulo por uma forma que a resolução não converte em ligação importável (`export =`, cláusula nova). */
-  | "class_binding_export_form_not_resolved"
+  "class_binding_export_form_not_resolved",
   /** A classe sai do módulo por CommonJS (`module.exports` / `exports.<nome>`), que esta resolução não segue. */
-  | "class_binding_commonjs_export"
+  "class_binding_commonjs_export",
   /** A ligação atravessa o arquivo por forma não seguida: reexportação em cadeia, import dinâmico, alias de caminho não relativo, import de namespace. */
-  | "class_binding_cross_file_form_not_resolved"
+  "class_binding_cross_file_form_not_resolved",
   /** O nome ligado à declaração aparece num arquivo candidato fora de `new <Id>(`: a classe é passada adiante como valor. */
-  | "class_binding_reference_forwarded_as_value";
+  "class_binding_reference_forwarded_as_value",
+  /** O nome ligado aparece dentro de uma construção `export` cuja forma não está na allowlist de `exportConstructBindingRange`: sem forma reconhecida, a ocorrência não pode ser confirmada como ligação exportada. */
+  "class_binding_export_construct_form_unrecognized",
+] as const;
+
+/** Categoria nomeada com que a resolução de ligação de instanciação recusa, derivada de {@link CLASS_BINDING_REFUSAL_CATEGORIES}. */
+export type ClassBindingRefusalCategory = (typeof CLASS_BINDING_REFUSAL_CATEGORIES)[number];
 
 /** Recusa deste caminho: `arquivo:linha`, o que a leitura não converteu, e a categoria nomeada da forma. */
 function classBindingRefusal(
@@ -2549,6 +2555,10 @@ const TYPE_POSITION_PRECEDING_WORDS = new Set([
  * `class_binding_reference_forwarded_as_value` existe para recusar. Isentar
  * por estar "dentro de um `export`" apagaria essa recusa em silêncio.
  *
+ * A forma é reconhecida contra uma allowlist fechada; fora dela o resultado
+ * é explícito (`recognized: false`), nunca um `whole` silencioso — quem
+ * consome decide, por ocorrência, se isso vira recusa.
+ *
  * Por forma:
  * - `export type` / `export interface`: posição de tipo do começo ao fim
  *   (inclusive o `extends` de uma interface, que não captura construtor);
@@ -2556,41 +2566,87 @@ const TYPE_POSITION_PRECEDING_WORDS = new Set([
  * - `export class` / `export default class`: isenta até o `extends`; a
  *   superclasse fica de fora, como ficaria fora de qualquer `export`.
  * - `export const` / `let` / `var`: isenta até o `=`; o valor atribuído
- *   fica de fora.
- * - demais formas (`export { X as Y }`, `export default X`,
- *   `export function`, `export class X {` sem herança): a construção é a
- *   própria ligação exportada, que a máquina de ligação deste caminho já
- *   converte e percorre; isenta inteira.
+ *   fica de fora. Quando não atribui valor algum (`export const enum`, uma
+ *   `declare const` ambiente), a construção inteira isenta. Quando atribui
+ *   mas o `=` de topo não é localizado, não é reconhecida — é forma não
+ *   resolvida, não isenção.
+ * - `export function` / `export async function` / `export default function`:
+ *   a construção é a própria ligação exportada; isenta inteira (o cabeçalho
+ *   já para antes do corpo, em `exportConstructText`).
+ * - `export default <identificador>`: reexporta o identificador como
+ *   ligação de módulo; isenta inteira. Qualquer outro `export default`
+ *   (expressão, literal, chamada) não casa aqui e cai fora da allowlist.
+ * - `export { X as Y }` / `export * from "..."`: a lista ou o repasse é a
+ *   própria ligação exportada; isenta inteira.
+ * - todas as formas acima valem com `declare` na frente.
+ * - qualquer outra forma (`export =`, `export namespace`, `export default`
+ *   de expressão, etc.): não reconhecida.
  */
 function exportConstructBindingRange(construct: {
   index: number;
   text: string;
-}): { start: number; end: number } {
+}):
+  | { recognized: true; start: number; end: number }
+  | { recognized: false; start: number; end: number } {
   const { index, text } = construct;
   const whole = { start: index, end: index + text.length };
 
-  if (/^export\s+(?:declare\s+)?(?:type|interface)\b/.test(text)) return whole;
+  if (/^export\s+(?:declare\s+)?(?:type|interface)\b/.test(text)) {
+    return { recognized: true, ...whole };
+  }
 
   if (/^export\s+(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?class\b/.test(text)) {
     const heritage = /\bextends\b/.exec(text);
-    return heritage === null ? whole : { start: index, end: index + heritage.index };
+    return heritage === null
+      ? { recognized: true, ...whole }
+      : { recognized: true, start: index, end: index + heritage.index };
   }
 
   if (/^export\s+(?:default\s+)?(?:declare\s+)?(?:const|let|var)\b/.test(text)) {
     const assignment = findTopLevelAssignmentIndex(text);
-    return assignment === undefined ? whole : { start: index, end: index + assignment + 1 };
+    if (assignment.found) {
+      return { recognized: true, start: index, end: index + assignment.index + 1 };
+    }
+    return assignment.resolved ? { recognized: true, ...whole } : { recognized: false, ...whole };
   }
 
-  return whole;
+  if (/^export\s+(?:default\s+)?(?:declare\s+)?(?:async\s+)?function\b/.test(text)) {
+    return { recognized: true, ...whole };
+  }
+
+  if (/^export\s+default\s+[A-Za-z_$][\w$]*\s*$/.test(text)) {
+    return { recognized: true, ...whole };
+  }
+
+  if (/^export\s+(?:declare\s+)?\{/.test(text)) return { recognized: true, ...whole };
+
+  if (/^export\s+\*/.test(text)) return { recognized: true, ...whole };
+
+  return { recognized: false, ...whole };
 }
 
+/** Resultado da busca pelo `=` de atribuição de topo de uma construção `const`/`let`/`var`. */
+type TopLevelAssignmentSearch =
+  | { found: true; index: number }
+  | { found: false; resolved: true }
+  | { found: false; resolved: false };
+
 /**
- * Índice do `=` de atribuição de `text`, fora de aspas e fora de qualquer
- * par `()`/`[]`/`{}`/`<>`. Comparações (`==`, `===`, `!=`, `<=`, `>=`) e a
- * seta de arrow (`=>`) não são atribuição e não contam. `undefined` quando a
- * construção não atribui valor algum (`export const enum`, por exemplo).
+ * Busca o `=` de atribuição de `text`, fora de aspas e fora de qualquer par
+ * `()`/`[]`/`{}`/`<>`. Comparações (`==`, `===`, `!=`, `<=`, `>=`) e a seta de
+ * arrow (`=>`) não são atribuição e não contam.
+ *
+ * `{ found: false, resolved: true }` é a construção que de fato não atribui
+ * valor algum: todo par de bracket fechou (profundidade volta a zero) e
+ * nenhum `=` de topo apareceu — `export const enum`, uma `declare const`
+ * ambiente.
+ *
+ * `{ found: false, resolved: false }` é quando a profundidade nunca volta a
+ * zero: sinal de que um `<`/`>` foi contado como par de bracket sem ser um, e
+ * o `=` de topo pode estar escondido atrás dessa contagem errada — forma não
+ * resolvida, não isenção.
  */
-function findTopLevelAssignmentIndex(text: string): number | undefined {
+function findTopLevelAssignmentIndex(text: string): TopLevelAssignmentSearch {
   const quoteMask = computeQuoteMask(text, text.length);
   let depth = 0;
   for (let i = 0; i < text.length; i += 1) {
@@ -2609,9 +2665,9 @@ function findTopLevelAssignmentIndex(text: string): number | undefined {
     if (i > 0 && ["=", "!", "<", ">", "+", "-", "*", "/", "%", "&", "|", "^"].includes(text[i - 1])) {
       continue;
     }
-    return i;
+    return { found: true, index: i };
   }
-  return undefined;
+  return { found: false, resolved: depth === 0 };
 }
 
 /**
@@ -2629,6 +2685,15 @@ function findTopLevelAssignmentIndex(text: string): number | undefined {
  * argumento passado adiante, `extends`. Por ela a classe alcança
  * instanciações que esta leitura não percorre, e isso recusa em voz alta,
  * com `arquivo:linha` e categoria nomeada.
+ *
+ * A ordem das isenções importa e é fail-closed: a ocorrência que cai dentro
+ * de uma construção `export` de forma **não reconhecida** recusa antes de a
+ * heurística de posição de tipo ser consultada. Dentro de uma forma que a
+ * leitura não sabe recortar, os caracteres em que essa heurística se apoia
+ * não são confiáveis — o `:` de `export default { C: <Classe> };` separa
+ * chave de valor num literal de objeto, não anota tipo. Só a declaração
+ * `class` local e a cláusula de import, que independem da forma do `export`
+ * que as envolva, são conferidas antes.
  */
 function refuseClassReferencesOutsideInstantiation(
   source: string,
@@ -2641,7 +2706,9 @@ function refuseClassReferencesOutsideInstantiation(
     start: declaration.index,
     end: declaration.endIndex,
   }));
-  const exportRanges = findExportConstructs(source).map(exportConstructBindingRange);
+  const exportConstructResults = findExportConstructs(source).map(exportConstructBindingRange);
+  const exportRanges = exportConstructResults.filter((result) => result.recognized);
+  const unrecognizedExportRanges = exportConstructResults.filter((result) => !result.recognized);
   const pattern = new RegExp(`\\b${localName}\\b`, "g");
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(source))) {
@@ -2652,19 +2719,39 @@ function refuseClassReferencesOutsideInstantiation(
     // referência a ela.
     const precedingWord = wordEndingAt(source, index);
     if (precedingWord === "class") continue;
-    if (TYPE_POSITION_PRECEDING_WORDS.has(precedingWord)) continue;
-    let before = index;
-    while (before > 0 && /\s/.test(source[before - 1])) before -= 1;
-    if (before > 0 && TYPE_POSITION_PRECEDING_CHARS.has(source[before - 1])) continue;
     const inRange = (range: { start: number; end: number }): boolean =>
       index >= range.start && index < range.end;
-    if (importRanges.some(inRange) || exportRanges.some(inRange)) continue;
+    if (importRanges.some(inRange)) continue;
 
     const line = lineAt(source, index);
     const context = source
       .slice(Math.max(0, index - 40), index + localName.length + 20)
       .replace(/\s+/gu, " ")
       .trim();
+    // A recusa por forma não reconhecida vem ANTES da heurística de posição
+    // de tipo, e é essa ordem que a torna fail-closed. Dentro de uma forma
+    // que a leitura não sabe recortar, o `:` de `export default { C: X };` e
+    // o `<` de uma construção cuja profundidade não fecha são indistinguíveis
+    // de anotação de tipo por caractere anterior: ali `C: X` é propriedade de
+    // objeto literal, posição de VALOR. Consultar a heurística primeiro
+    // isentaria justamente o repasse que esta categoria existe para recusar.
+    // A isenção de posição de tipo continua intacta fora dessas formas —
+    // `TYPE_POSITION_PRECEDING_CHARS` e `TYPE_POSITION_PRECEDING_WORDS` não
+    // mudaram, e forma reconhecida continua consultando as duas.
+    if (unrecognizedExportRanges.some(inRange)) {
+      throw classBindingRefusal(
+        filePath,
+        line,
+        `"${localName}" aparece dentro de uma construção "export" cuja forma não está na allowlist reconhecida ("${context}") — sem forma reconhecida, a ocorrência não pode ser confirmada como ligação exportada`,
+        "class_binding_export_construct_form_unrecognized",
+      );
+    }
+    if (TYPE_POSITION_PRECEDING_WORDS.has(precedingWord)) continue;
+    let before = index;
+    while (before > 0 && /\s/.test(source[before - 1])) before -= 1;
+    if (before > 0 && TYPE_POSITION_PRECEDING_CHARS.has(source[before - 1])) continue;
+    if (exportRanges.some(inRange)) continue;
+
     throw classBindingRefusal(
       filePath,
       line,

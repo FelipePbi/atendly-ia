@@ -1262,3 +1262,46 @@ ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado como
 ausente.
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff045-2026-09-21-d-061) e [D-061](DECISIONS.md).
+
+## A isenção de `export` vira allowlist fechada e as categorias de recusa existem em runtime do Goal046
+
+O parágrafo anterior registrou a isenção por construção `export`
+recortada por forma textual, com o limite declarado de que uma forma
+exportada fora de `type`/`interface`/`class`/`const`/`let`/`var` isentava
+a construção inteira — a observação não bloqueante 3 do review045. Este
+delta fecha esse limite, sem tocar o conjunto de 10 rotas nem o de 27
+literais que os Goals 042 a 045 já asseriam.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| A isenção de `export` é allowlist fechada: `exportConstructBindingRange` classifica cada construção contra um conjunto nomeado de formas — as três da baseline mais `function`/`async function`/`default function`, `default <identificador>` e `{ ... }`/`* from ...`, todas com `declare` opcional — e devolve `{ recognized: true }` com o range de lado de ligação para cada forma reconhecida; para o que não casa com nenhuma, devolve `{ recognized: false }`, nunca mais um range silencioso | A recusa é escopada à **ocorrência**, não à construção: uma forma `export` exótica que não mencione a classe ligada não derruba nada. A lista de formas reconhecidas é a que as duas árvores reais exigem hoje; forma `export` nova que a árvore vier a ter e que não estiver na lista recusa, não isenta — o próprio ponto deste delta |
+| No ramo `const`/`let`/`var`, atribuição que a busca de profundidade não localiza recusa; construção que de fato não atribui valor algum continua isenta: `findTopLevelAssignmentIndex` devolve `TopLevelAssignmentSearch`, distinguindo `{ found: false, resolved: true }` (não atribui) de `{ found: false, resolved: false }` (atribui, mas a profundidade nunca fechou) | A heurística de `<`/`>` como delimitador de profundidade continua sendo heurística textual, não parser — `resolved: false` é o sinal de que ela não fechou, nunca uma correção da heurística em si |
+| As categorias de recusa existem em runtime: `CLASS_BINDING_REFUSAL_CATEGORIES` é array `as const` exportado com seis categorias, e `ClassBindingRefusalCategory` é o tipo derivado dele — a suíte e a documentação permanente conferem contra o array, nunca contra união escrita à mão | Nenhum identificador de categoria existente mudou de nome, e nenhuma recusa existente mudou de categoria; a categoria nova (`class_binding_export_construct_form_unrecognized`) cobre os dois pontos de recusa deste delta, e só eles |
+| A observação não bloqueante 2 do review045 é fechada, por acréscimo: `class_binding_export_form_not_resolved` também dispara quando a declaração está em arquivo fora das duas árvores varridas; `class_binding_cross_file_form_not_resolved` também quando o arquivo ligado tem texto fora do conjunto lido — [D-062](DECISIONS.md) nomeia os dois casos | D-061 não foi reescrita; a descrição completa mora em D-062, que fecha a observação sem reabrir o aceite anterior |
+| Os cinco mecanismos foram provados abertos antes de fechar: os cinco controles negativos obrigatórios rodam, cada um sobre árvore sintética em diretório temporário, provando que `export default { Client: <Classe> };`, `export namespace`, `export =` no candidato, e atribuição de profundidade não fechada recusam pela categoria nova, e que as sete formas reais das duas árvores continuam classificando exatamente como antes | Os cinco controles negativos rodam sobre árvore sintética própria, removida ao fim — nenhum deles amplia nem estreita o conjunto de 10 rotas ou de 27 literais que a suíte permanente assere sobre a árvore real |
+| Duas afirmações de não-vacuidade (WU-04) provam, sobre a árvore real, que ao menos uma construção `export` de forma reconhecida foi isenta e que a resolução por ligação reconheceu ao menos uma instanciação | O que os Goals 040 a 045 já provavam continua provado sem afrouxamento: resíduo de egresso zero, identidade por declaração, instanciação por ligação, destino de instanciação com as duas saídas nomeadas |
+
+**O que este delta não prova, e é preciso dizer alto.** **Não prova
+runtime**: nada aqui executa o serviço Go, abre conexão whatsmeow ou
+observa o que chega a um telefone. **Não prova qual binário roda em
+produção**. **Não alcança `whatsmeow-lib/`**. **Texto emitido pelo modelo
+continua fora do guardrail por D-050**. **Não corrige A-24**: o achado
+continua `PENDENCIA-POS-MVP`, e nenhum arquivo Go de produção deste fork
+foi editado por este Goal. **Não fecha M4**: nenhuma chamada saiu para
+WhatsApp real nem para provedor de LLM real, e nenhuma conexão whatsmeow
+foi aberta. **Não amplia nem reduz o conjunto de 10 rotas ou de 27
+literais** que os Goals 042 a 045 já asseriam — este delta fecha uma
+omissão de leitura do lado TypeScript, nunca o critério que decide o
+conjunto. **Não prova o valor real de variável de ambiente alguma** —
+só o default do schema TypeScript e o `.env.example` são lidos.
+`validate:integration` continua recusando por pré-condição de banco
+ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado como
+ausente — não reexecutado por esta unidade de documentação (WU-05).
+**NÚMERO CONFERIDO:** `scannedFilePathsForInstantiation` soma **205**
+arquivos `.ts` varridos (**118** em `apps/ai-orchestrator/src`, **87**
+em `apps/bff/src`, com o client do Prisma gerado presente nas duas
+árvores) — o mesmo **205** que o documento do Goal046 registrava. O
+número foi computado pelo descobridor sobre a árvore real e é asserido
+pela suíte permanente; não há divergência a declarar.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff046-2026-09-21-d-062) e [D-062](DECISIONS.md).

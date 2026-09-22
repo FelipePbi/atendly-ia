@@ -4282,3 +4282,97 @@ não muda.
   TypeScript, nunca o critério que decide o conjunto de rotas ou de
   literais, e nenhum arquivo Go de produção deste fork foi editado por
   este Goal.
+
+## Delta implementado — diff046, 2026-09-21 ([D-062](DECISIONS.md))
+
+Fecha o resíduo por **omissão** que a observação não bloqueante 3 do
+[review045](reviews/045-review.md) registrou: `exportConstructBindingRange`
+isentava por inteiro toda construção `export` de forma que as três
+famílias então reconhecidas não classificavam. Só dois arquivos de
+`apps/ai-orchestrator/tests/` mudaram; nenhum arquivo de
+`apps/frontend/src/`, `apps/bff/src/`, `apps/ai-orchestrator/src/` ou
+qualquer arquivo Go mudou, `go.mod` e `go.sum` continuam intocados, e o
+conjunto de 10 rotas e de 27 literais que os Goals 042 a 045 já asseriam
+não muda.
+
+- **A isenção de `export` é allowlist fechada; forma não reconhecida
+  recusa.** `exportConstructBindingRange` classifica cada construção
+  contra um conjunto fechado de formas — as três da baseline (`type`/
+  `interface`, `class`, `const`/`let`/`var`) mais `function`/`async
+  function`/`default function`, `default <identificador>` e `{ ... }`/
+  `* from ...` (todas com `declare` opcional) — e devolve
+  `{ recognized: true, ... }` com o range de lado de ligação para cada
+  forma reconhecida, e `{ recognized: false, ... }` para o que sobra,
+  nunca mais um `whole` silencioso. A recusa é escopada à **ocorrência**:
+  uma construção exótica que não mencione a classe não derruba nada.
+- **Atribuição não localizada é forma não resolvida, não isenção.**
+  `findTopLevelAssignmentIndex` devolve `TopLevelAssignmentSearch`:
+  `{ found: false, resolved: true }` continua isentando (a construção de
+  fato não atribui valor algum); `{ found: false, resolved: false }` — a
+  profundidade de bracket nunca fechou — passa a recusar, pela mesma
+  categoria nova do item acima.
+- **As categorias de recusa existem em runtime.**
+  `CLASS_BINDING_REFUSAL_CATEGORIES` é um array `as const` exportado com
+  seis categorias; `ClassBindingRefusalCategory` é o tipo derivado desse
+  array. A categoria nova,
+  `class_binding_export_construct_form_unrecognized`, cobre os dois
+  pontos de recusa acima. Nenhum identificador existente mudou de nome,
+  e nenhuma recusa existente mudou de categoria.
+- **A observação não bloqueante 2 do review045 é fechada, por
+  acréscimo.** `class_binding_export_form_not_resolved` também dispara
+  quando a declaração está em arquivo fora das duas árvores varridas;
+  `class_binding_cross_file_form_not_resolved` também quando o arquivo
+  ligado tem texto fora do conjunto lido — os dois casos que a descrição
+  de D-061 nomeava só pelo caso dominante. [D-062](DECISIONS.md) nomeia
+  os dois; D-061 não foi reescrita.
+- **Os cinco controles negativos obrigatórios deste critério existem e
+  mordem**, cada um sobre árvore sintética em diretório temporário,
+  removido ao fim, sem nunca tocar a árvore real: `export default {
+  Client: <Classe> };` no candidato (recusa pela categoria nova, com
+  `arquivo:linha` da ocorrência — a forma cai fora da allowlist, e a
+  conferência de forma não reconhecida acontece antes da heurística de
+  posição de tipo, porque dentro dela o dois-pontos de `Client:
+  <valor>` separa chave de valor num literal de objeto); `export namespace N { export
+  const C = <Classe>; }` (recusa); `export = <Classe>` no candidato
+  (recusa pela categoria nova) versus na declaração (continua recusando
+  por `class_binding_export_form_not_resolved`, categoria antiga —
+  nunca se confundem); `export const Weird: Array<Foo = [<Classe>];`
+  (recusa, profundidade nunca fecha); e as formas reais das duas árvores
+  (`export function`, `export async function`, `export interface ...
+  extends`, `export type`, `export class ... extends`, `export const
+  =`, `export { ... }`) classificando exatamente como antes.
+- **Duas afirmações de não-vacuidade (WU-04)** provam, sobre a árvore
+  real, que ao menos uma construção `export` de forma reconhecida foi
+  isenta e que a resolução por ligação reconheceu ao menos uma
+  instanciação, ao lado das afirmações já existentes dos Goals 043 a
+  045.
+- **Prova executada (reexecutada na rodada 2):** `npx vitest run
+  tests/assistant/assistant.service.test.ts` (em `apps/ai-orchestrator`):
+  **153** testes, 0 falhas — os **130** da baseline mais **23** deste
+  delta (17 nos cinco controles negativos obrigatórios, 1 conferindo
+  `CLASS_BINDING_REFUSAL_CATEGORIES` por igualdade, 5 provando os
+  números da árvore real e as duas invariantes de não-vacuidade). `npx
+  vitest run` completo de `apps/ai-orchestrator`: **877** passando, 88
+  pulados (baseline: 854 passando, 88 pulados) — mesma contagem de
+  pulados, nenhuma suíte encolheu. Sobre a árvore real: **1** superfície,
+  **4** ligações resolvidas, **205** arquivos varridos pela resolução de
+  instanciação, **10** rotas, **2** instanciações fora do transporte,
+  **0** chamadas de membro fora da superfície — idênticos à baseline do
+  Goal045 e ao que o documento do Goal046 registrava.
+- **Número conferido, não copiado:** `scannedFilePathsForInstantiation`
+  soma **205** arquivos `.ts` varridos nas duas árvores (**118** em
+  `apps/ai-orchestrator/src`, **87** em `apps/bff/src`, com o client do
+  Prisma gerado por `prisma generate` presente nas duas), computados
+  pelo próprio descobridor sobre a árvore real e asseridos pela suíte
+  permanente. Não há divergência com o documento do Goal046 a declarar:
+  o número do AST e o do documento são o mesmo **205**.
+- **LIMITE:** `validate:core`, `test:gate`, `validate:integration` e `go
+  test ./...` não foram reexecutados por esta unidade de documentação
+  (WU-05) — a suíte-alvo e a suíte completa de `apps/ai-orchestrator`
+  foram as únicas reexecutadas antes de escrever este registro.
+- **LIMITE:** nada aqui prova comportamento em runtime do serviço Go, nem
+  que o binário em produção é o desta árvore, nem que **M4** fechou. **A-24
+  continua `PENDENCIA-POS-MVP`, não corrigido** — este delta fecha uma
+  omissão de leitura do lado TypeScript, nunca o critério que decide o
+  conjunto de rotas ou de literais, e nenhum arquivo Go de produção
+  deste fork foi editado por este Goal.

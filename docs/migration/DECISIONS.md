@@ -1554,3 +1554,256 @@ instanciação real passar a ter destino indireto por uma forma que
 `resolveDestination` ainda não converte (hoje: base recebida por
 parâmetro do construtor da classe dona), caso em que a leitura derruba
 com `arquivo:linha` em vez de classificar às cegas.
+
+## D-062 — A isenção de `export` é allowlist fechada, atribuição não localizada recusa em vez de isentar, e as categorias de recusa existem em runtime, propostas no Goal046
+
+**Status:** ACCEPTED no [review046](reviews/046-review.md) (rodada 2 de 2,
+2026-09-21, zero blockers; a rodada 1 teve 2 blockers — o de maior peso
+foi a ordem de consulta dentro de
+`refuseClassReferencesOutsideInstantiation`, que deixava o caso canônico
+do Goal, `export default { Client: <Classe> };`, sair pela isenção de
+posição de tipo antes de chegar à faixa `export` não reconhecida, com o
+teste entregue afirmando a ausência de recusa; o outro foi a família já
+conhecida de número afirmado em documento permanente que a árvore
+desmente, 182 onde a suíte prova 205), pelo Tech Lead Agent
+([AGENT_ROLES](AGENT_ROLES.md), D-018). Cobre o diff046 (WU-01 inverte o
+default de `exportConstructBindingRange` para allowlist fechada; WU-02
+aplica a mesma inversão à busca do `=` de topo no ramo
+`const`/`let`/`var`, reusando a categoria nova de WU-01; WU-03 deriva
+`ClassBindingRefusalCategory` de um array `as const` em runtime; WU-04
+acrescenta os cinco controles negativos obrigatórios, a afirmação sobre
+o array de categorias e as afirmações de não-vacuidade; WU-05 é a
+documentação de fechamento — mais as duas correções da rodada 2: a
+reordenação fail-closed, que passa a consultar a faixa `export` não
+reconhecida **antes** da isenção de posição de tipo, sem alterar o
+conteúdo de `TYPE_POSITION_PRECEDING_CHARS`/`TYPE_POSITION_PRECEDING_WORDS`,
+com o teste do controle 1 asserindo `toThrow` da categoria nova e do
+`arquivo:linha`; e a correção de 182 para 205 nos três documentos
+permanentes, com o breakdown 118 + 87; a última mudança de árvore é essa
+correção de documentação) sobre a baseline aceita
+`42ba1e975591ce03cf36f553f8f7faba085f1fd0`
+(fechamento do Goal045); sem commit e sem deploy. Não fecha nem reabre
+nenhum achado — A-04 a A-08, A-11 a A-17, A-19 e A-24 não são tocados, e
+nenhum achado fechado é reaberto. Não altera nenhuma decisão anterior —
+reusa e não altera D-054 a D-061. Quatro observações não bloqueantes
+ficaram registradas no review, nenhuma sobre invariante afrouxada: o
+critério da recusa escopada à ocorrência é verdadeiro por leitura do
+código, sem controle permanente próprio; a asserção permanente de 205
+depende do client do Prisma gerado existir nas duas árvores, o que
+`validate:core` garante ao rodar os dois builds antes;
+`validate:integration` continua recusando por pré-condição de banco
+ausente; e as observações opcionais dos reviews 040 e 041 continuam
+abertas.
+
+**Contexto:** a observação não bloqueante 3 do [review045](reviews/045-review.md)
+registrou que `exportConstructBindingRange` terminava em `return whole`:
+toda construção `export` de forma não reconhecida isentava por inteiro,
+fail-open por default, na função cujo propósito é decidir o que pode ser
+isentado. A mesma observação registrou o caso vizinho no ramo
+`const`/`let`/`var`: `findTopLevelAssignmentIndex` devolvendo
+`undefined` também isentava por inteiro, sem distinguir "não atribui
+valor algum" de "atribui, mas a busca de profundidade não achou o `=`
+de topo". A observação não bloqueante 2 do mesmo review registrou que
+`class_binding_export_form_not_resolved` e
+`class_binding_cross_file_form_not_resolved` tinham descrição
+incompleta: a primeira também dispara quando a declaração está em
+arquivo fora das duas árvores varridas, e a segunda também quando o
+arquivo ligado tem texto fora do conjunto lido — nos dois casos a
+descrição nomeava só o caso dominante.
+
+**Decisão:**
+
+1. **A isenção de `export` é allowlist fechada; forma não reconhecida
+   recusa, nunca isenta.** `exportConstructBindingRange` classifica cada
+   construção `export` contra um conjunto fechado de formas — `type`/
+   `interface` (com `declare`), `class`/`default class`/`abstract class`
+   (com `declare`, isenta até o `extends`), `function`/`async function`/
+   `default function` (com `declare`), `default <identificador>`,
+   `{ ... }`/`* from ...` (com `declare`) e `const`/`let`/`var` (com
+   `declare`, isenta até o `=` de atribuição) — e devolve, para cada
+   forma reconhecida, `{ recognized: true, start, end }` com o range de
+   **lado de ligação**. Para toda construção que não casa com nenhuma
+   dessas formas — `export =`, `export namespace`, `export default` de
+   expressão, literal ou chamada — devolve `{ recognized: false, start,
+   end }`, nunca mais um `whole` silencioso.
+   `refuseClassReferencesOutsideInstantiation` separa as duas listas
+   (`exportRanges` reconhecidas, que isentam, e
+   `unrecognizedExportRanges`, que não isentam) e recusa a ocorrência do
+   nome ligado que caia dentro de uma faixa não reconhecida, sob a
+   categoria nova `class_binding_export_construct_form_unrecognized`. A
+   recusa é **escopada à ocorrência**: uma construção `export` de forma
+   exótica que não mencione a classe não derruba nada.
+2. **Atribuição não localizada é forma não resolvida, não isenção.**
+   `findTopLevelAssignmentIndex` devolve `TopLevelAssignmentSearch` —
+   `{ found: true, index }` quando acha o `=` de topo; `{ found: false,
+   resolved: true }` quando a profundidade de bracket volta a zero sem
+   achar `=` (a construção de fato não atribui valor algum: `export
+   const enum X { ... }`, `declare const` ambiente); `{ found: false,
+   resolved: false }` quando a profundidade nunca fecha — sinal de que um
+   `<`/`>` foi contado como bracket sem ser um, e o `=` de topo pode
+   estar escondido atrás dessa contagem errada. Só o primeiro caso de
+   "não achou" (`resolved: true`) isenta a construção inteira; o segundo
+   (`resolved: false`) devolve `{ recognized: false }` de
+   `exportConstructBindingRange` e recusa pela mesma categoria nova do
+   item 1 — é a mesma família de falha, não uma categoria à parte.
+3. **As seis categorias de recusa existem em runtime, num array
+   exportado.** `CLASS_BINDING_REFUSAL_CATEGORIES` é um array `as const`
+   exportado por `http-egress-sites.ts`, e `ClassBindingRefusalCategory`
+   passa a ser `(typeof CLASS_BINDING_REFUSAL_CATEGORIES)[number]` —
+   união derivada do array, não mais escrita solta. Nenhum identificador
+   de categoria existente mudou de nome, e nenhuma recusa existente mudou
+   de categoria; a suíte confere o array por igualdade
+   (`toEqual`/`toContain`), em vez de reconstruir a união à mão. As seis
+   categorias, na ordem do array, e a descrição de cada uma contra o
+   código que a implementa:
+   - `class_binding_homonymous_declarations` — duas declarações do mesmo
+     nome no arquivo da classe: o nome exportado não identifica qual
+     delas é instanciada.
+   - `class_binding_export_form_not_resolved` — a classe sai do módulo
+     por uma forma que a resolução não converte em ligação importável
+     (`export =`, cláusula nova) **ou a declaração está em arquivo fora
+     das duas árvores varridas** (`apps/ai-orchestrator/src` e
+     `apps/bff/src`) — o segundo caso fecha a observação não bloqueante 2
+     do review045, que a descrição de D-061 nomeava só pelo primeiro.
+   - `class_binding_commonjs_export` — a classe sai do módulo por
+     CommonJS (`module.exports` / `exports.<nome>`), que esta resolução
+     não segue.
+   - `class_binding_cross_file_form_not_resolved` — a ligação atravessa o
+     arquivo por forma não seguida (reexportação em cadeia, import
+     dinâmico, alias de caminho não relativo, import de namespace) **ou o
+     arquivo ligado tem texto fora do conjunto lido** — o segundo caso
+     fecha a outra metade da observação não bloqueante 2 do review045,
+     que a descrição de D-061 nomeava só pelo caso dominante.
+   - `class_binding_reference_forwarded_as_value` — o nome ligado à
+     declaração aparece num arquivo candidato fora de `new <Id>(`: a
+     classe é passada adiante como valor.
+   - `class_binding_export_construct_form_unrecognized` (**nova neste
+     Goal**) — o nome ligado aparece dentro de uma construção `export`
+     cuja forma não está na allowlist de `exportConstructBindingRange`
+     (item 1) **ou** dentro de uma construção `const`/`let`/`var` que
+     atribui valor mas cujo `=` de topo a busca de profundidade não
+     localizou (item 2): nos dois casos, sem forma reconhecida, a
+     ocorrência não pode ser confirmada como ligação exportada.
+4. **A isenção de posição de tipo não foi afrouxada, mas deixou de
+   decidir primeiro dentro de forma não reconhecida.**
+   `TYPE_POSITION_PRECEDING_CHARS` e `TYPE_POSITION_PRECEDING_WORDS`
+   mantêm o conteúdo da baseline, caractere a caractere e palavra a
+   palavra; `export type` e `export interface X extends Base` continuam
+   sem produzir recusa e sem perder rota, porque essas duas formas estão
+   na allowlist e a heurística de posição de tipo continua valendo
+   inteira dentro delas e em todo texto fora de construção `export`. O
+   que mudou é só a **ordem**: a ocorrência que cai dentro de uma
+   construção `export` de forma **não reconhecida** recusa antes de a
+   heurística ser consultada. Dentro de uma forma que a leitura não sabe
+   recortar, os caracteres em que a heurística se apoia não são
+   confiáveis — o `:` de `export default { C: <Classe> };` separa chave
+   de valor num literal de objeto, posição de VALOR, e consultá-lo
+   primeiro isentaria exatamente o repasse que a categoria nova existe
+   para recusar. Sem essa ordem, o caso canônico do item 1 do escopo
+   continuaria fail-open.
+5. **As cinco formas exigidas pela allowlist e os cinco controles
+   negativos provam a inversão nos dois sentidos.** Controle 1
+   (`export default { Client: <Classe> };` no candidato) prova que a
+   forma fora da allowlist recusa pela categoria nova, com
+   `arquivo:linha` da ocorrência, e que a conferência de forma não
+   reconhecida vem antes da heurística de posição de tipo. Controle 2 (`export namespace N { export const
+   C = <Classe>; }`) prova que `export namespace` recusa, por não estar
+   na allowlist. Controle 3 (`export = <Classe>` no candidato) prova que
+   a mesma forma no arquivo da **declaração** continua recusando por
+   `resolveModuleExportBindings`, sob a categoria antiga
+   `class_binding_export_form_not_resolved` — as duas recusas nunca se
+   confundem. Controle 4 (`export const Weird: Array<Foo = [<Classe>];`)
+   prova o item 2: o `<` de `Array<Foo` nunca fecha, a busca termina com
+   profundidade 1 e `resolved: false`. Controle 5 prova que `export
+   function`, `export async function`, `export interface ... extends`,
+   `export type`, `export class ... extends <Classe>`, `export const =
+   <Classe>` e `export { <Classe> };` continuam classificando
+   exatamente como na baseline do Goal045 — a allowlist fechada não
+   estreitou o que já funcionava.
+
+**Alternativas:** continuar isentando por padrão e listar exceção por
+exceção — rejeitada: é o mesmo fail-open que este Goal existe para
+fechar, só que com uma lista de exceções maior; tratar `resolved: false`
+como isenção, já que a heurística de profundidade é textual e pode errar
+por motivo alheio à construção — rejeitada: inverteria a direção do
+erro de volta para "isenta quando não sabe", exatamente o defeito que a
+observação 1 do review045 registrou; unificar as duas categorias novas
+propostas (uma para `export` não reconhecido, outra para atribuição não
+localizada) em vez de uma só — rejeitada: as duas são o mesmo fato —
+"forma dentro de uma construção `export` que a leitura não conseguiu
+recortar como lado de ligação" —, e uma categoria a mais sem distinção
+de causa não ajudaria quem lê o motivo a agir diferente.
+
+**Motivo:** o mecanismo que resolve identidade, instanciação e destino
+(D-061) só é fail-closed de ponta a ponta se a isenção que o alimenta
+também for. Uma isenção por catch-all é o mesmo risco que motivou D-060
+e D-061 um nível abaixo: uma rota sai do conjunto de 10 sem acrescentar
+sítio de `fetch` algum, e a completude de A-24 depende dessa
+propriedade ser do mecanismo, não da árvore de hoje não ter ainda uma
+forma exótica de `export`.
+
+**Consequências:** `apps/ai-orchestrator/tests/support/http-egress-sites.ts`
+ganha `CLASS_BINDING_REFUSAL_CATEGORIES` (array `as const` exportado,
+seis categorias), `TopLevelAssignmentSearch`, e
+`exportConstructBindingRange` passa a devolver `{ recognized, start,
+end }` em vez de `{ start, end }` sozinho; `findTopLevelAssignmentIndex`
+passa a devolver `TopLevelAssignmentSearch` em vez de `number |
+undefined`. `ClassBindingRefusalCategory` continua sendo o tipo
+consumido pelo resto do módulo, agora derivado do array. Nenhuma cópia
+paralela de `computeQuoteMask`, `findExportConstructs`,
+`exportConstructText`, `findImportDeclarations`,
+`findCrossFileCallerBindings`, `resolveModuleExportBindings` ou
+`resolveModuleSpecifierToFilePath` foi criada.
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts` ganha
+23 casos ao lado dos 130 já existentes (153 no total): os cinco
+controles negativos obrigatórios (17 casos, com par antes/depois em
+cada um — o controle 1 tem duas saídas "depois", a categoria e o
+`arquivo:linha`, o controle 3 tem duas saídas "depois", candidato e
+declaração, e o controle 5 tem sete saídas "depois"), 1 caso que confere
+`CLASS_BINDING_REFUSAL_CATEGORIES` por igualdade e 5 casos que provam,
+sobre a árvore real, os mesmos números da baseline do Goal045 mais as
+duas invariantes de não-vacuidade novas. Reexecutado na rodada 2:
+`npx vitest run tests/assistant/assistant.service.test.ts` em
+`apps/ai-orchestrator` → **153** testes, 0 falhas (baseline do Goal:
+130). `npx vitest run` completo de `apps/ai-orchestrator` → **877**
+passando, 88 pulados (baseline: 854 passando, 88 pulados) — mesma
+contagem de pulados, nenhuma suíte encolheu. Sobre a árvore real: **1**
+superfície, **4** ligações resolvidas, **10** rotas, **2** instanciações
+fora do transporte, **0** chamadas de membro fora da superfície —
+idênticos à baseline do Goal045; `scannedFilePathsForInstantiation`
+soma **205** arquivos `.ts` varridos (**118** em
+`apps/ai-orchestrator/src`, **87** em `apps/bff/src`), o mesmo número
+que a baseline deste Goal documentava — conferido por computação do
+próprio descobridor sobre a árvore real, não copiado do documento, e
+asserido pela suíte permanente (WU-04). Não há divergência a declarar
+neste número. `git status
+--porcelain=v1` lista exatamente seis arquivos, dois de código de teste
+e quatro de documentação desta migração:
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`,
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts`,
+`docs/migration/CURRENT_STATE.md`, `docs/migration/DECISIONS.md`,
+`docs/migration/FINAL_AUDIT.md` e
+`docs/migration/VALIDATION_GATE.md` — nenhum
+arquivo de `apps/frontend/src/`, `apps/bff/src/`,
+`apps/ai-orchestrator/src/`, `apps/scheduling-service/`,
+`apps/health-worker/`, `packages/`, nenhum arquivo Go e nenhum arquivo
+de `tools/ia-loop/` foi tocado; `go.mod`/`go.sum` intocados.
+`product-transport-routes.txt` não mudou. Esta seção (D-062) e a
+documentação de fechamento em FINAL_AUDIT §23, CURRENT_STATE e
+VALIDATION_GATE foram escritas depois da última mudança de árvore.
+`validate:core`, `test:gate`, `validate:integration` e `go test
+./...` não foram reexecutados pela unidade de documentação; o
+resultado deles é responsabilidade da verificação determinística
+posterior do Goal. Este diff não fecha **M4**, não afirma fidelidade
+visual à referência aprovada, não prova comportamento de runtime do
+serviço Go e **não corrige A-24** — que continua `PENDENCIA-POS-MVP`.
+
+**Revisar se:** uma forma de `export` real aparecer nas duas árvores
+fora da allowlist enumerada no item 1 — a decisão é que ela recusa, não
+que a lista está fechada para sempre; a heurística de `<`/`>` de
+`findTopLevelAssignmentIndex` continuar sendo textual, não parser —
+`resolved: false` é o sinal de que ela não fechou, nunca uma correção da
+heurística em si; ou uma sétima categoria de recusa precisar existir —
+o array `CLASS_BINDING_REFUSAL_CATEGORIES` é o lugar único que a suíte e
+a documentação permanente devem conferir, para não repetir a divergência
+de contagem das rodadas do Goal045.

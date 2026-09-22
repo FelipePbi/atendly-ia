@@ -2793,3 +2793,124 @@ schema TypeScript e o `.env.example` são lidos, nunca um ambiente
 implantado. `validate:integration` continua recusando por pré-condição de
 banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado
 como ausente.
+
+## 23. A isenção de `export` vira allowlist fechada, atribuição não localizada recusa, e as categorias de recusa existem em runtime — Goal046, 2026-09-21
+
+Seção nova, escrita depois da última mudança de árvore do diff046 (WU-01
+a WU-04: a allowlist fechada de `exportConstructBindingRange`, a divisão
+`{found, resolved}` de `findTopLevelAssignmentIndex`, o array em runtime
+`CLASS_BINDING_REFUSAL_CATEGORIES` e os cinco controles negativos
+obrigatórios, montados e revertidos por árvore sintética em diretório
+temporário fora da worktree). Ela **não reescreve** §4 a §22: os
+registros de A-01 a A-24 em §19, o veredito de §19/§20/§21/§22 e as
+vinte e duas seções de fechamento anteriores continuam exatamente como
+estavam, e a entrada de **A-24** **não foi tocada**. Este Goal não
+corrige A-24 e não abre achado novo — fecha o resíduo por **omissão** que
+a observação não bloqueante 3 do [review045](reviews/045-review.md)
+registrou em `discoverGoBoundInternalClientRequests`.
+
+### O que mudou
+
+**A isenção de `export` deixa de ter caminho de saída que isenta por não
+reconhecer.** `exportConstructBindingRange` (`http-egress-sites.ts`)
+terminava em `return whole`: toda construção `export` de forma não
+classificada pelas três famílias então reconhecidas (`type`/`interface`,
+`class`, `const`/`let`/`var`) isentava por inteiro. O diff046 fecha essa
+saída: a função classifica contra um conjunto fechado de formas — as três
+anteriores mais `function`/`async function`/`default function` (com
+`declare`), `default <identificador>`, `{ ... }`/`* from ...` (com
+`declare`) — e devolve, para cada forma reconhecida,
+`{ recognized: true, start, end }` com o range de lado de ligação; para
+toda construção que não casa com nenhuma delas, devolve
+`{ recognized: false, start, end }`, nunca mais um range silencioso.
+`refuseClassReferencesOutsideInstantiation` recusa a ocorrência do nome
+ligado que caia dentro de uma faixa não reconhecida, sob a categoria nova
+`class_binding_export_construct_form_unrecognized` — escopada à
+**ocorrência**, não à construção: uma forma exótica que não mencione a
+classe não derruba nada.
+
+**No ramo `const`/`let`/`var`, atribuição não localizada passa a recusar
+em vez de isentar.** `findTopLevelAssignmentIndex` devolvia `undefined`
+tanto para "não atribui valor algum" quanto para "atribui, mas a busca de
+profundidade não achou o `=` de topo", e os dois casos isentavam por
+inteiro. O diff046 separa os dois: `{ found: false, resolved: true }` é o
+primeiro caso (a profundidade de bracket fechou, sem `=` de topo — segue
+isentando); `{ found: false, resolved: false }` é o segundo (a
+profundidade nunca fechou, sinal de `<`/`>` contado como bracket sem ser
+um) — e este passa a recusar, pela mesma categoria nova.
+
+**As categorias de recusa existem em runtime.** `CLASS_BINDING_REFUSAL_CATEGORIES`
+é um array `as const` exportado, com seis categorias na ordem em que o
+código as usa; `ClassBindingRefusalCategory` passa a ser o tipo derivado
+desse array, e a suíte confere o conjunto contra ele, não contra união
+escrita à mão nos dois lados — a mesma família de falha que reprovou
+documento permanente nos Goals 038, 044 e 045. Nenhum identificador de
+categoria existente mudou de nome, e nenhuma recusa existente mudou de
+categoria.
+
+**Os cinco controles negativos obrigatórios foram provados, cada um
+sobre árvore sintética em diretório temporário, removida ao fim:**
+`export default { Client: <Classe> };` no candidato recusa pela
+categoria nova, com `arquivo:linha` — a forma não é `export default
+<identificador>` e cai fora da allowlist, e a conferência de forma não
+reconhecida acontece **antes** da heurística de posição de tipo, porque
+dentro de uma forma que a leitura não sabe recortar o dois-pontos de
+`Client: <valor>` separa chave de valor num literal de objeto;
+`export namespace N { export const C = <Classe>; }` recusa, por não
+estar na allowlist; `export = <Classe>` no arquivo candidato recusa pela
+categoria nova, enquanto a mesma forma no arquivo da **declaração**
+continua recusando por `resolveModuleExportBindings`, sob a categoria
+antiga `class_binding_export_form_not_resolved` — as duas nunca se
+confundem; `export const Weird: Array<Foo = [<Classe>];` recusa, porque
+o `<` de `Array<Foo` nunca fecha; e as formas reais das duas árvores
+(`export function`, `export async function`, `export interface ...
+extends`, `export type`, `export class ... extends`, `export const =`,
+`export { ... }`) continuam classificando exatamente como antes da
+allowlist fechada.
+
+**A observação não bloqueante 2 do review045 é fechada.** A descrição de
+duas categorias, tanto em D-061 quanto no comentário do código, nomeava
+só o caso dominante. `class_binding_export_form_not_resolved` também
+dispara quando a declaração está em arquivo fora das duas árvores
+varridas; `class_binding_cross_file_form_not_resolved` também quando o
+arquivo ligado tem texto fora do conjunto lido. [D-062](DECISIONS.md)
+nomeia os dois casos, por acréscimo — D-061 não foi reescrita.
+
+**Duas afirmações de não-vacuidade (WU-04) consomem os dois mecanismos
+sobre a árvore real**, ao lado das que os Goals 043 a 045 já deixavam:
+provam que ao menos uma construção `export` de forma reconhecida foi
+isenta (a declaração de `InternalHttpClient` sai por `export class`) e
+que a resolução por ligação reconheceu ao menos uma instanciação.
+
+### Veredito recontado
+
+Esta auditoria continua com **0** achados `BLOQUEADOR-MVP`, **8**
+`PENDENCIA-POS-MVP` e **6** `LIMITE-DECLARADO` — a mesma contagem de
+§22. **Nenhuma mudança em relação a §22**: nenhum achado de A-01 a A-24
+foi tocado, corrigido, reclassificado ou reaberto. **A-24 continua
+`PENDENCIA-POS-MVP`, não corrigido** — nenhum arquivo Go de produção
+deste fork foi editado por este Goal.
+
+Quatro coisas que esta seção não diz. **Não diz que A-24 foi corrigido**:
+o rótulo `"Ver Menu"` continua escrito em
+`pkg/sendMessage/service/send_service.go:1960`. **Não diz que M4 foi
+fechado**: nenhuma chamada saiu para provedor de LLM real nem para o
+WhatsApp real, nenhuma conexão whatsmeow foi aberta, e o diff046 toca
+dois arquivos TypeScript de teste e de apoio a teste — nenhum arquivo
+Go, nenhum arquivo de `apps/frontend/src/`, `apps/bff/src/` ou
+`apps/ai-orchestrator/src/` —, mais a documentação de migração. **Não
+diz que o comportamento em runtime do serviço Go foi provado**: o que se
+prova é o que a árvore de código diz, lida por AST e por forma de
+construção `export`; nada aqui executa esse serviço, abre conexão
+whatsmeow ou observa o que chega a um telefone. **Não diz que a
+fidelidade visual está provada**: nenhum arquivo de `apps/frontend/src/`
+mudou.
+
+O que continua fora do alcance deste Goal, por construção: comportamento
+em runtime do serviço Go; qual binário roda em produção; `whatsmeow-
+lib/`, biblioteca vendorizada lida apenas como fonte das declarações de
+proto; e o valor real de qualquer variável de ambiente — só o default do
+schema TypeScript e o `.env.example` são lidos, nunca um ambiente
+implantado. `validate:integration` continua recusando por pré-condição de
+banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado
+como ausente — não reexecutado por esta unidade de documentação (WU-05).

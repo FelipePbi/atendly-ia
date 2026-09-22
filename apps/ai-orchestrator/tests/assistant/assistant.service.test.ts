@@ -28,6 +28,7 @@ import {
   computeBoundaryValueCrossing,
   discoverGoServiceHttpRequests,
   discoverHttpEgressSites,
+  type GoServiceHttpRequestDiscovery,
   type HttpEgressDiscovery,
   type HttpEgressSiteCategory,
   type HttpEgressSiteOrigin,
@@ -3018,24 +3019,41 @@ const egressPositionKey = (place: { filePath: string; line: number }): string =>
   `${place.filePath}:${place.line}`;
 
 /**
- * Encaminhamento por categoria: em que baldes a saída *do próprio sítio* pode
- * aparecer. Categoria que a partição não sabe encaminhar devolve `null` e
- * reprova — nunca há ramo `else` mudo.
+ * Encaminhamento por categoria, com as duas mãos declaradas separadamente
+ * (Goal051 / WU-01). O que antes era um conjunto só — e obrigava a exceção de
+ * `constructor_base_url_*` a viver em prosa de documento — passa a ser
+ * estrutura que o código declara:
+ *
+ * - `ownOutput`: os baldes em que o **próprio sítio** pode aparecer, isto é,
+ *   aqueles em que a entrada ocupa a mesma `arquivo:linha` do sítio. É sobre
+ *   este conjunto, e só sobre ele, que continua valendo "exatamente um balde".
+ * - `derivedOutput`: os baldes em que podem aparecer entradas **geradas a
+ *   partir** do sítio — por instanciação do cliente, por resolução de
+ *   chamador ou por montagem de URL —, que declaram o sítio em `originSite`
+ *   mas ficam em outra posição.
  *
  * As categorias de `fetch` cru resolvem o destino no próprio sítio: ou ele
- * vira requisição ao serviço Go, ou é contado fora com motivo. Já
+ * vira requisição ao serviço Go, ou é contado fora com motivo. Para elas as
+ * duas mãos coincidem, porque a entrada derivada (o `fetch` de um chamador
+ * que resolve a base) continua sendo requisição ou registro de adiamento. Já
  * `constructor_base_url_*` não resolve destino nenhum sozinho — a URL vem de
- * um parâmetro de construtor —, então a saída do sítio é o registro de
- * adiamento em `notGoBound`, com o motivo que manda ler a varredura de
- * instanciação. As entradas que aquela varredura produz (`requests`,
- * `assembledUrls`, `nonGoBoundInstantiations`, `nonTransportMemberCalls`) são
- * saídas de cada *instanciação* do cliente, não segundas saídas do sítio;
- * elas continuam presas ao sítio pelo campo `originSite`, e o sentido inverso
- * da partição cobra isso de cada uma.
+ * um parâmetro de construtor —, então a saída *própria* do sítio é só o
+ * registro de adiamento em `notGoBound`, com o motivo que manda ler a
+ * varredura de instanciação; as entradas que aquela varredura produz são
+ * saídas de cada *instanciação* do cliente, e por isso aparecem na mão
+ * derivada.
+ *
+ * Categoria que a partição não sabe encaminhar devolve `null` e reprova —
+ * nunca há ramo `else` mudo.
  */
+interface EgressPartitionCategoryRouting {
+  readonly ownOutput: readonly EgressPartitionBucket[];
+  readonly derivedOutput: readonly EgressPartitionBucket[];
+}
+
 function egressPartitionBucketsForCategory(
   category: HttpEgressSiteCategory,
-): readonly EgressPartitionBucket[] | null {
+): EgressPartitionCategoryRouting | null {
   if (
     category.startsWith("env_var_") ||
     category.startsWith("env_vars_") ||
@@ -3043,10 +3061,21 @@ function egressPartitionBucketsForCategory(
     category.startsWith("caller_resolved_base_url_via_") ||
     category.startsWith("generic_egress_destination_decided_by_caller_")
   ) {
-    return ["requests", "notGoBound"];
+    return {
+      ownOutput: ["requests", "notGoBound"],
+      derivedOutput: ["requests", "notGoBound"],
+    };
   }
   if (category.startsWith("constructor_base_url_")) {
-    return ["notGoBound"];
+    return {
+      ownOutput: ["notGoBound"],
+      derivedOutput: [
+        "requests",
+        "assembledUrls",
+        "nonGoBoundInstantiations",
+        "nonTransportMemberCalls",
+      ],
+    };
   }
   return null;
 }
@@ -3095,6 +3124,177 @@ const EGRESS_CANDIDATE_UNIVERSE: readonly {
   },
 ];
 
+/**
+ * O universo de saída de `discoverGoServiceHttpRequests`, declarado no
+ * precedente exato de `EGRESS_CANDIDATE_UNIVERSE` acima (Goal051 / WU-02).
+ * Cada chave de `GoServiceHttpRequestDiscovery` entra na partição de baldes
+ * de destino de sítio — e por isso tem de coincidir com
+ * `EGRESS_PARTITION_BUCKETS` — ou fica de fora com o motivo escrito. Chave
+ * nova que o descobridor devolva e esta declaração não nomeie reprova; chave
+ * nomeada aqui que o descobridor deixe de devolver reprova como declaração
+ * obsoleta. `internalClientSurfaces` e `callerResolutions` ficam fora: são
+ * relatórios do que a resolução leu, não coleções de entradas com
+ * `originSite` próprio.
+ */
+const GO_SERVICE_HTTP_REQUEST_DISCOVERY_UNIVERSE: readonly {
+  collection: keyof GoServiceHttpRequestDiscovery;
+  inPartition: boolean;
+  reason: string;
+}[] = [
+  {
+    collection: "requests",
+    inPartition: true,
+    reason:
+      "balde de destino de sítio: requisição do conjunto alcançado pelo serviço Go, entrada de EGRESS_PARTITION_BUCKETS",
+  },
+  {
+    collection: "notGoBound",
+    inPartition: true,
+    reason:
+      "balde de destino de sítio: sítio lido e contado fora do conjunto alcançado, com motivo escrito, entrada de EGRESS_PARTITION_BUCKETS",
+  },
+  {
+    collection: "assembledUrls",
+    inPartition: true,
+    reason:
+      "balde de destino de sítio: URL montada a partir do sítio, saída derivada, entrada de EGRESS_PARTITION_BUCKETS",
+  },
+  {
+    collection: "nonTransportMemberCalls",
+    inPartition: true,
+    reason:
+      "balde de destino de sítio: chamada de membro fora da superfície de um cliente apontado ao serviço Go, entrada de EGRESS_PARTITION_BUCKETS",
+  },
+  {
+    collection: "nonGoBoundInstantiations",
+    inPartition: true,
+    reason:
+      "balde de destino de sítio: instanciação de cliente cujo destino resolve a uma chave que não é do serviço Go, saída derivada, entrada de EGRESS_PARTITION_BUCKETS",
+  },
+  {
+    collection: "internalClientSurfaces",
+    inPartition: false,
+    reason:
+      "não é balde de destino de sítio: é o relatório da superfície de cada cliente HTTP interno — os membros de fora e o motivo de cada um —, não uma coleção de entradas com originSite próprio",
+  },
+  {
+    collection: "callerResolutions",
+    inPartition: false,
+    reason:
+      "não é balde de destino de sítio: é o relatório do que a resolução de chamadores leu por sítio resolvido no chamador, não uma coleção de entradas de destino com origem própria",
+  },
+];
+
+interface DiscoveryUniverseFindings {
+  readonly undeclared: string[];
+  readonly obsolete: string[];
+  readonly emptyReason: string[];
+  readonly partitionMismatch: string[];
+}
+
+/**
+ * A mesma conta que o teste permanente do universo de saída (`:3253` abaixo)
+ * roda sobre `Object.keys(discovery)` da execução real — ambos chamam esta
+ * função, nunca a reimplementam à parte. Os controles negativos 3 e 4 do §8
+ * (Goal051 / WU-04) a chamam sobre um conjunto de chaves corrompido (chave
+ * acrescentada ao objeto devolvido pela leitura, chave declarada que some) e
+ * conferem que a mesma conta reprova, nomeando a chave.
+ */
+function findDiscoveryUniverseFindings(
+  discoveredKeys: readonly string[],
+): DiscoveryUniverseFindings {
+  const declaredCollections = GO_SERVICE_HTTP_REQUEST_DISCOVERY_UNIVERSE.map(
+    (entry) => entry.collection as string,
+  );
+  const declared = new Set(declaredCollections);
+  const discovered = new Set(discoveredKeys);
+
+  // Chave nova que o descobridor devolva e a declaração não nomeie reprova.
+  const undeclared = [...discovered].filter((key) => !declared.has(key)).sort();
+  // Chave nomeada aqui que o descobridor deixe de devolver reprova como
+  // declaração obsoleta — o mesmo fail-closed nos dois sentidos de
+  // EGRESS_CANDIDATE_UNIVERSE.
+  const obsolete = declaredCollections.filter((key) => !discovered.has(key)).sort();
+  // Coleção declarada sem motivo escrito não conta como declarada: ficar de
+  // fora em silêncio é o defeito que a declaração existe para remover.
+  const emptyReason = GO_SERVICE_HTTP_REQUEST_DISCOVERY_UNIVERSE.filter(
+    (entry) => entry.reason.trim().length === 0,
+  ).map((entry) => entry.collection as string);
+
+  // As duas declarações não podem divergir: dentro-da-partição aqui é
+  // exatamente o conjunto nomeado por EGRESS_PARTITION_BUCKETS.
+  const declaredInPartition = GO_SERVICE_HTTP_REQUEST_DISCOVERY_UNIVERSE.filter(
+    (entry) => entry.inPartition,
+  ).map((entry) => entry.collection as string);
+  const inPartitionSet = new Set(declaredInPartition);
+  const partitionMismatch = [
+    ...EGRESS_PARTITION_BUCKETS.filter((bucket) => !inPartitionSet.has(bucket)).map(
+      (bucket) =>
+        `balde ${bucket} de EGRESS_PARTITION_BUCKETS sem declaração inPartition no universo de saída`,
+    ),
+    ...declaredInPartition
+      .filter(
+        (collection) =>
+          !(EGRESS_PARTITION_BUCKETS as readonly string[]).includes(collection),
+      )
+      .map(
+        (collection) =>
+          `coleção ${collection} declarada dentro da partição sem ser balde de EGRESS_PARTITION_BUCKETS`,
+      ),
+  ];
+
+  return { undeclared, obsolete, emptyReason, partitionMismatch };
+}
+
+describe("o universo de saída de discoverGoServiceHttpRequests é declarado, fail-closed (Goal051 / WU-02)", () => {
+  it("cada chave de GoServiceHttpRequestDiscovery está declarada, com motivo não vazio, e a declaração não diverge da execução real nem de EGRESS_PARTITION_BUCKETS", () => {
+    const discovery = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+
+    const discoveredKeys = Object.keys(discovery).sort();
+
+    // Fail-closed nos dois sentidos: chave nova no descobridor reprova;
+    // chave declarada aqui que o descobridor deixe de devolver reprova. A
+    // conta é a mesma que os controles 3 e 4 do §8 (Goal051 / WU-04,
+    // `:8173` abaixo) chamam sobre um conjunto de chaves corrompido — nunca
+    // uma segunda implementação à parte.
+    const findings = findDiscoveryUniverseFindings(discoveredKeys);
+    expect(findings.undeclared).toEqual([]);
+    expect(findings.obsolete).toEqual([]);
+    expect(findings.emptyReason).toEqual([]);
+
+    // Contagem por execução, não copiada de plano nenhum: divergência em
+    // relação às 7 chaves conhecidas nesta baseline é achado, não suposição.
+    expect(discoveredKeys).toEqual([
+      "assembledUrls",
+      "callerResolutions",
+      "internalClientSurfaces",
+      "nonGoBoundInstantiations",
+      "nonTransportMemberCalls",
+      "notGoBound",
+      "requests",
+    ]);
+
+    // As duas declarações não podem divergir: dentro-da-partição aqui é
+    // exatamente o conjunto nomeado por EGRESS_PARTITION_BUCKETS, conferido
+    // nos dois sentidos pela mesma conta.
+    expect(findings.partitionMismatch).toEqual([]);
+
+    // internalClientSurfaces e callerResolutions estão fora, com motivo.
+    const outOfPartition = GO_SERVICE_HTTP_REQUEST_DISCOVERY_UNIVERSE.filter(
+      (entry) => !entry.inPartition,
+    );
+    expect(outOfPartition.map((entry) => entry.collection).sort()).toEqual([
+      "callerResolutions",
+      "internalClientSurfaces",
+    ]);
+    expect(outOfPartition.every((entry) => entry.reason.trim().length > 0)).toBe(true);
+  });
+});
+
 describe("nenhum sítio de egresso é descartado em silêncio: ou vira requisição ao serviço Go, ou é contado fora com motivo escrito (Goal043 / WU-02)", () => {
   it("a conservação é uma partição computada: todo sítio lido cai em exatamente um balde, ligado pelo campo de origem", () => {
     const egress = discoverHttpEgressSites(aiOrchestratorSrcPath, bffSrcPath);
@@ -3132,9 +3332,15 @@ describe("nenhum sítio de egresso é descartado em silêncio: ou vira requisiç
     // precedente de PROVEN_UNREACHABLE_REFUSAL_CATEGORIES de D-064 — sítio
     // creditado por prosa vazia não conta como declarado.
     expect(findings.entriesWithEmptyReason).toEqual([]);
+    // A outra mão da partição (Goal051 / WU-01): toda entrada dos cinco
+    // baldes está num balde que a categoria da sua origem permite — saída
+    // própria quando a entrada ocupa a posição do sítio, saída derivada
+    // quando não. Entrada de categoria `env_var_*` que aparecesse em
+    // `assembledUrls` reprovaria aqui, em vez de passar verde.
+    expect(findings.entriesInBucketNotAllowedByOriginCategory).toEqual([]);
   });
 
-  it("a exceção declarada de egressPartitionBucketsForCategory não é vácua: um sítio constructor_base_url_* tem originSite em notGoBound e também num balde de instanciação, sem reprovar (Goal050)", () => {
+  it("a exceção declarada de egressPartitionBucketsForCategory não é vácua: um sítio constructor_base_url_* tem saída própria em notGoBound e saída derivada num balde de instanciação, sem reprovar em nenhuma das duas mãos (Goal050, adaptado no Goal051)", () => {
     const egress = discoverHttpEgressSites(aiOrchestratorSrcPath, bffSrcPath);
     const discovery = discoverGoServiceHttpRequests(
       aiOrchestratorSrcPath,
@@ -3148,33 +3354,19 @@ describe("nenhum sítio de egresso é descartado em silêncio: ou vira requisiç
     // Não-vacuidade do sítio em si: a categoria existe na árvore real.
     expect(constructorSites.length).toBeGreaterThan(0);
 
-    const instantiationEntries: readonly EgressPartitionEntry[] = [
-      ...discovery.requests,
-      ...discovery.assembledUrls,
-      ...discovery.nonGoBoundInstantiations,
-      ...discovery.nonTransportMemberCalls,
-    ];
+    // A exceção deixou de ser prosa e passou a ser estrutura: para esta
+    // categoria as duas mãos são declaradas e são distintas, e a mão
+    // derivada é exatamente a dos quatro baldes de instanciação.
+    const constructorRouting = egressPartitionBucketsForCategory(constructorSites[0].category);
+    expect(constructorRouting).not.toBeNull();
+    expect(constructorRouting!.ownOutput).toEqual(["notGoBound"]);
+    expect([...constructorRouting!.derivedOutput].sort()).toEqual([
+      "assembledUrls",
+      "nonGoBoundInstantiations",
+      "nonTransportMemberCalls",
+      "requests",
+    ]);
 
-    // Não-vacuidade da exceção: pelo menos um desses sítios tem originSite
-    // em `notGoBound` **e** em um balde de instanciação ao mesmo tempo —
-    // a condição que `egressPartitionBucketsForCategory` (`:3048`) existe
-    // para permitir. Sem este sítio real, a exceção seria prosa nunca
-    // confrontada com dado, a mesma classe de defeito que o Goal fecha.
-    const dualMembership = constructorSites.filter((site) => {
-      const position = egressPositionKey(site);
-      const inNotGoBound = discovery.notGoBound.some(
-        (entry) => egressPositionKey(entry.originSite) === position,
-      );
-      const inInstantiationBucket = instantiationEntries.some(
-        (entry) => egressPositionKey(entry.originSite) === position,
-      );
-      return inNotGoBound && inInstantiationBucket;
-    });
-    expect(dualMembership.length).toBeGreaterThan(0);
-
-    // A mesma conta permanente (`:3099` acima) não reprova esses sítios: a
-    // checagem de duplicidade fica restrita ao subconjunto roteável da
-    // categoria, então a dupla presença acima é legítima, não um achado.
     const bucketsByName: Record<EgressPartitionBucket, readonly EgressPartitionEntry[]> = {
       requests: discovery.requests,
       notGoBound: discovery.notGoBound,
@@ -3182,9 +3374,26 @@ describe("nenhum sítio de egresso é descartado em silêncio: ou vira requisiç
       nonTransportMemberCalls: discovery.nonTransportMemberCalls,
       nonGoBoundInstantiations: discovery.nonGoBoundInstantiations,
     };
-    expect(
-      findEgressPartitionFindings(egress.sites, bucketsByName).inMoreThanOneBucket,
-    ).toEqual([]);
+
+    // Não-vacuidade da exceção: pelo menos um desses sítios tem saída
+    // própria em `notGoBound` **e** saída derivada em um balde de
+    // instanciação ao mesmo tempo — a condição que as duas mãos de
+    // `egressPartitionBucketsForCategory` existem para permitir. A saída
+    // derivada é cobrada como derivada de fato: a entrada declara o sítio em
+    // `originSite` e ocupa outra `arquivo:linha`. Sem este sítio real, a
+    // exceção seria prosa nunca confrontada com dado, a mesma classe de
+    // defeito que o Goal fecha. A conta é a mesma que o controle 5 do §8
+    // (Goal051 / WU-04, `:8173` abaixo) chama sobre baldes corrompidos.
+    const dualMembership = findConstructorBaseUrlDualMembershipSites(egress.sites, bucketsByName);
+    expect(dualMembership.length).toBeGreaterThan(0);
+
+    // A mesma conta permanente (`:3099` acima) não reprova esses sítios em
+    // mão nenhuma: a duplicidade é checada sobre a saída própria, e as
+    // entradas derivadas caem em baldes que a saída derivada da categoria
+    // permite. A dupla presença acima é legítima, não um achado.
+    const findings = findEgressPartitionFindings(egress.sites, bucketsByName);
+    expect(findings.inMoreThanOneBucket).toEqual([]);
+    expect(findings.entriesInBucketNotAllowedByOriginCategory).toEqual([]);
   });
 
   it("o universo de candidatos da partição está declarado: cada coleção do descobridor entra, ou fica de fora com motivo escrito", () => {
@@ -3245,6 +3454,99 @@ describe("nenhum sítio de egresso é descartado em silêncio: ou vira requisiç
     expect(health[0].filePath.replace(/\\/gu, "/")).toContain("apps/bff/src/routes/health.ts");
     expect(health[0].category).toBe("env_var_EVOLUTION_GO_BASE_URL");
     expect(health[0].reason).toContain("EVOLUTION_GO_BASE_URL");
+  });
+});
+
+/**
+ * Entradas cujo motivo cita `o fetch está em arquivo:linha` mas o par que ele
+ * cita diverge do campo `originSite` — a mesma conta que o teste permanente e
+ * o controle negativo de WU-03 chamam (Goal051 / §5). Vazio prova
+ * correspondência; não vazio nomeia cada entrada divergente.
+ */
+function requestsWithReasonDivergentFromOriginSite(
+  requests: readonly { filePath: string; line: number; reason: string; originSite: HttpEgressSiteOrigin }[],
+): string[] {
+  return requests
+    .filter((request) => request.reason.includes("o fetch está em"))
+    .filter(
+      (request) =>
+        !request.reason.includes(
+          `o fetch está em ${request.originSite.filePath}:${request.originSite.line}`,
+        ),
+    )
+    .map(
+      (request) => `${egressPositionKey(request)} com origem ${egressPositionKey(request.originSite)}`,
+    );
+}
+
+describe("Goal051 / WU-03 — vacuidade por balde declarada ou exercida, e o motivo de env_var_* ligado ao campo originSite", () => {
+  it("requests, notGoBound, assembledUrls e nonGoBoundInstantiations não são vazios na árvore real; nonTransportMemberCalls é vazio hoje, e o sentido inverso (balde populado) já é exercido por árvore sintética no controle negativo 2 (Goal044 / WU-04, \"antes\", `:4199` acima)", () => {
+    const discovery = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+
+    // Não-vacuidade real, balde a balde: cada um tem entrada de fato na
+    // árvore real, nunca suposição declarada em prosa.
+    expect(discovery.requests.length).toBeGreaterThan(0);
+    expect(discovery.notGoBound.length).toBeGreaterThan(0);
+    expect(discovery.assembledUrls.length).toBeGreaterThan(0);
+    expect(discovery.nonGoBoundInstantiations.length).toBeGreaterThan(0);
+
+    // O quinto balde é vazio nesta baseline. A vacuidade é conferida aqui
+    // sobre a árvore real, não só declarada; o sentido inverso (balde
+    // populado) é exercido por árvore sintética no controle negativo 2
+    // (Goal044 / WU-04, cenário "antes"), que afirma `nonTransportMemberCalls`
+    // com uma entrada.
+    expect(discovery.nonTransportMemberCalls).toEqual([]);
+  });
+
+  it("o trecho do motivo de env_var_* que cita a posição de origem é computado do campo originSite (Goal051 / WU-03), e a árvore real confere a correspondência", () => {
+    const discovery = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+
+    const originCited = discovery.requests.filter((request) =>
+      request.reason.includes("o fetch está em"),
+    );
+    // Não-vacuidade do próprio controle: ao menos um motivo desta forma
+    // existe na árvore real — sem isso a asserção abaixo confere o vazio.
+    expect(originCited.length).toBeGreaterThan(0);
+    for (const request of originCited) {
+      expect(request.reason).toContain(
+        `o fetch está em ${request.originSite.filePath}:${request.originSite.line}`,
+      );
+    }
+    // Antes: a árvore real não diverge — a mesma conta do controle negativo
+    // abaixo confere isso.
+    expect(requestsWithReasonDivergentFromOriginSite(discovery.requests)).toEqual([]);
+  });
+
+  it("controle negativo (Goal051 / WU-03, §5) — motivo e campo originSite divergentes reprovam: uma origem trocada faz a mesma conta acusar a entrada", () => {
+    const discovery = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+    const originCited = discovery.requests.filter((request) =>
+      request.reason.includes("o fetch está em"),
+    );
+    expect(originCited.length).toBeGreaterThan(0);
+    const target = originCited[0]!;
+
+    // Depois: a mesma requisição real, com originSite trocado por uma
+    // posição diferente da que o motivo cita — motivo e campo agora
+    // divergem, e a conta que provou o vazio acima acusa a entrada.
+    const divergent = {
+      ...target,
+      originSite: { filePath: target.originSite.filePath, line: target.originSite.line + 1 },
+    };
+    expect(requestsWithReasonDivergentFromOriginSite([divergent])).toEqual([
+      `${egressPositionKey(divergent)} com origem ${egressPositionKey(divergent.originSite)}`,
+    ]);
   });
 });
 
@@ -7453,18 +7755,22 @@ function findEgressPartitionFindings(
   inMoreThanOneBucket: string[];
   entriesWithoutReadOrigin: string[];
   entriesWithEmptyReason: string[];
+  entriesInBucketNotAllowedByOriginCategory: string[];
 } {
   const unroutable: string[] = [];
   const withoutBucket: string[] = [];
   const inMoreThanOneBucket: string[] = [];
   for (const site of sites) {
     const position = egressPositionKey(site);
-    const routable = egressPartitionBucketsForCategory(site.category);
-    if (routable === null) {
+    const routing = egressPartitionBucketsForCategory(site.category);
+    if (routing === null) {
       unroutable.push(`${position} [${site.category}]`);
       continue;
     }
-    const landed = routable.filter((bucket) =>
+    // "Exatamente um balde" vale sobre a **saída própria** da categoria, que
+    // é onde ele sempre valeu: os baldes de instanciação recebem entradas
+    // derivadas do sítio, não segundas saídas dele.
+    const landed = routing.ownOutput.filter((bucket) =>
       bucketsByName[bucket].some((entry) => egressPositionKey(entry.originSite) === position),
     );
     if (landed.length === 0) {
@@ -7477,21 +7783,98 @@ function findEgressPartitionFindings(
   }
 
   const readSitePositions = new Set(sites.map(egressPositionKey));
+  const categoryByReadSitePosition = new Map(
+    sites.map((site) => [egressPositionKey(site), site.category] as const),
+  );
   const entriesWithoutReadOrigin: string[] = [];
   const entriesWithEmptyReason: string[] = [];
+  const entriesInBucketNotAllowedByOriginCategory: string[] = [];
   for (const bucket of EGRESS_PARTITION_BUCKETS) {
     for (const entry of bucketsByName[bucket]) {
-      if (!readSitePositions.has(egressPositionKey(entry.originSite))) {
+      const entryPosition = egressPositionKey(entry);
+      const originPosition = egressPositionKey(entry.originSite);
+      if (!readSitePositions.has(originPosition)) {
         entriesWithoutReadOrigin.push(
-          `${bucket} ${egressPositionKey(entry)} com origem ${egressPositionKey(entry.originSite)}`,
+          `${bucket} ${entryPosition} com origem ${originPosition}`,
         );
+      } else {
+        // O outro sentido da partição: o balde em que a entrada está tem de
+        // pertencer ao conjunto que a categoria da **origem** permite. A
+        // categoria que roteia é sempre a do sítio de origem, nunca a da
+        // entrada: `requests` derivada de `constructor_base_url_requestBinary`
+        // tem categoria própria `env_var_*`, `assembledUrls` fala o
+        // vocabulário `assembled_url_for_delivery_*` e as instanciações não
+        // têm campo `category` nenhum. Entrada na mesma posição da origem é
+        // saída própria; qualquer outra posição é saída derivada. Categoria
+        // que a partição não sabe encaminhar não permite balde algum — o
+        // sítio já reprova em `unroutable`, e a entrada reprova aqui, em vez
+        // de passar por falta de conjunto declarado.
+        const originCategory = categoryByReadSitePosition.get(originPosition)!;
+        const routing = egressPartitionBucketsForCategory(originCategory);
+        const allowed =
+          routing === null
+            ? []
+            : originPosition === entryPosition
+              ? routing.ownOutput
+              : routing.derivedOutput;
+        if (!allowed.includes(bucket)) {
+          entriesInBucketNotAllowedByOriginCategory.push(
+            `${bucket} ${entryPosition} com origem ${originPosition} [${originCategory}]`,
+          );
+        }
       }
       if (entry.reason.trim().length === 0) {
-        entriesWithEmptyReason.push(`${bucket} ${egressPositionKey(entry)}`);
+        entriesWithEmptyReason.push(`${bucket} ${entryPosition}`);
       }
     }
   }
-  return { unroutable, withoutBucket, inMoreThanOneBucket, entriesWithoutReadOrigin, entriesWithEmptyReason };
+  return {
+    unroutable,
+    withoutBucket,
+    inMoreThanOneBucket,
+    entriesWithoutReadOrigin,
+    entriesWithEmptyReason,
+    entriesInBucketNotAllowedByOriginCategory,
+  };
+}
+
+/**
+ * A mesma conta que o teste permanente da exceção de `constructor_base_url_*`
+ * (`:3343` acima) roda sobre os baldes reais — ambos chamam esta função,
+ * nunca a reimplementam à parte. O controle 5 do §8 (Goal051 / WU-04) a chama
+ * sobre uma cópia dos baldes de onde o dado que justifica a exceção foi
+ * removido, e confere que a mesma conta deixa de encontrá-lo.
+ *
+ * Dual membership é o que a exceção existe para permitir: o sítio tem saída
+ * **própria** em um balde de `ownOutput`, na sua própria `arquivo:linha`, e
+ * saída **derivada** em um balde de `derivedOutput`, em outra posição.
+ */
+function findConstructorBaseUrlDualMembershipSites(
+  sites: readonly { filePath: string; line: number; category: HttpEgressSiteCategory }[],
+  bucketsByName: Record<EgressPartitionBucket, readonly EgressPartitionEntry[]>,
+): string[] {
+  return sites
+    .filter((site) => site.category.startsWith("constructor_base_url_"))
+    .filter((site) => {
+      const routing = egressPartitionBucketsForCategory(site.category);
+      const position = egressPositionKey(site);
+      const inOwnOutput = (routing?.ownOutput ?? []).some((bucket) =>
+        bucketsByName[bucket].some(
+          (entry) =>
+            egressPositionKey(entry.originSite) === position &&
+            egressPositionKey(entry) === position,
+        ),
+      );
+      const inDerivedOutput = (routing?.derivedOutput ?? []).some((bucket) =>
+        bucketsByName[bucket].some(
+          (entry) =>
+            egressPositionKey(entry.originSite) === position &&
+            egressPositionKey(entry) !== position,
+        ),
+      );
+      return inOwnOutput && inDerivedOutput;
+    })
+    .map((site) => `${egressPositionKey(site)} [${site.category}]`);
 }
 
 describe("Goal050 / WU-05 (§8) — controles negativos: as oito amarras mordem, cada uma com as duas saídas no relatório", () => {
@@ -7836,6 +8219,476 @@ const PROVEN_UNREACHABLE_REFUSAL_CATEGORIES: ReadonlyMap<string, string> = new M
   ],
 ]);
 
+/**
+ * A cobertura de recusa, computada em runtime a partir dos três arrays: as
+ * categorias que nenhum controle observou e que o registro de inalcançáveis
+ * não desconta. A mesma conta que o teste permanente do Goal048/WU-01 roda
+ * sobre `observedRefusalCategories` e que o controle 8 do §8 (Goal051 /
+ * WU-04) roda sobre uma CÓPIA daquele conjunto com uma observação removida —
+ * nunca duas implementações da mesma conta.
+ */
+function findUncoveredRefusalCategories(
+  allRefusalCategories: readonly string[],
+  observed: ReadonlySet<string>,
+): string[] {
+  return allRefusalCategories.filter(
+    (category) => !observed.has(category) && !PROVEN_UNREACHABLE_REFUSAL_CATEGORIES.has(category),
+  );
+}
+
+describe("Goal051 / WU-04 (§8) — controles negativos: as oito amarras da partição de duas mãos mordem, cada uma com as duas saídas no relatório", () => {
+  const supportModulePath = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../support/http-egress-sites.ts",
+  );
+  const moduleSource = readFileSync(supportModulePath, "utf8");
+
+  /**
+   * A árvore real, lida uma vez por controle: os sítios, o descobridor e os
+   * cinco baldes nomeados. Cada controle corrompe uma **cópia** destes baldes
+   * — nunca a árvore em disco, nunca o mecanismo de produção — e chama a
+   * mesma conta que o teste permanente chama.
+   */
+  const readRealTree = (): {
+    egress: HttpEgressDiscovery;
+    discovery: GoServiceHttpRequestDiscovery;
+    bucketsByName: Record<EgressPartitionBucket, readonly EgressPartitionEntry[]>;
+  } => {
+    const egress = discoverHttpEgressSites(aiOrchestratorSrcPath, bffSrcPath);
+    const discovery = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+    return {
+      egress,
+      discovery,
+      bucketsByName: {
+        requests: discovery.requests,
+        notGoBound: discovery.notGoBound,
+        assembledUrls: discovery.assembledUrls,
+        nonTransportMemberCalls: discovery.nonTransportMemberCalls,
+        nonGoBoundInstantiations: discovery.nonGoBoundInstantiations,
+      },
+    };
+  };
+
+  const categoryOfSiteAt = (egress: HttpEgressDiscovery, position: string): HttpEgressSiteCategory =>
+    egress.sites.find((site) => egressPositionKey(site) === position)!.category;
+
+  it("controle 1 (§8.1) — entrada em balde que a categoria da origem não roteia reprova, nomeando balde, entrada, origem e categoria", () => {
+    const { egress, discovery, bucketsByName } = readRealTree();
+
+    const target = discovery.requests.find(
+      (request) => request.method === "GET" && request.pathExpression === "/health",
+    );
+    expect(target).toBeDefined();
+    const originPosition = egressPositionKey(target!.originSite);
+    const originCategory = categoryOfSiteAt(egress, originPosition);
+
+    // O cenário do controle, conferido em vez de suposto: `assembledUrls`
+    // não está em nenhuma das duas mãos desta categoria, então a entrada
+    // movida para lá é ilegítima nos dois sentidos.
+    const routing = egressPartitionBucketsForCategory(originCategory);
+    expect(routing).not.toBeNull();
+    expect(routing!.ownOutput).not.toContain("assembledUrls");
+    expect(routing!.derivedOutput).not.toContain("assembledUrls");
+
+    // Saída 1 — baldes reais: nenhuma entrada fora do conjunto que a
+    // categoria da sua origem roteia, e nenhum sítio sem balde.
+    const before = findEgressPartitionFindings(egress.sites, bucketsByName);
+    expect(before.entriesInBucketNotAllowedByOriginCategory).toEqual([]);
+    expect(before.withoutBucket).toEqual([]);
+
+    // Saída 2 — a MESMA entrada movida de `requests` para `assembledUrls`
+    // numa cópia dos baldes: a mesma conta reprova, nomeando balde, entrada,
+    // origem e categoria da origem.
+    const moved: Record<EgressPartitionBucket, readonly EgressPartitionEntry[]> = {
+      ...bucketsByName,
+      requests: discovery.requests.filter((request) => request !== target),
+      assembledUrls: [...discovery.assembledUrls, target!],
+    };
+    const after = findEgressPartitionFindings(egress.sites, moved);
+    expect(after.entriesInBucketNotAllowedByOriginCategory).toEqual([
+      `assembledUrls ${egressPositionKey(target!)} com origem ${originPosition} [${originCategory}]`,
+    ]);
+    // E o movimento aparece também na outra mão: o sítio deixou de ter saída
+    // própria em balde algum. Uma corrupção, duas amarras.
+    expect(after.withoutBucket).toEqual([`${originPosition} [${originCategory}]`]);
+  });
+
+  it("controle 2 (§8.2) — as duas mãos são distintas, não a união: entrada derivada em balde de saída própria reprova, e entrada própria em balde de saída derivada também", () => {
+    const { egress, discovery, bucketsByName } = readRealTree();
+
+    // Uma entrada derivada real: declara um sítio em `originSite` e ocupa
+    // outra `arquivo:linha`.
+    const derivedEntry = discovery.assembledUrls.find(
+      (entry) => egressPositionKey(entry) !== egressPositionKey(entry.originSite),
+    );
+    expect(derivedEntry).toBeDefined();
+    const sitePosition = egressPositionKey(derivedEntry!.originSite);
+    const siteCategory = categoryOfSiteAt(egress, sitePosition);
+    expect(siteCategory.startsWith("constructor_base_url_")).toBe(true);
+
+    // A entrada de saída própria do mesmo sítio: ocupa a posição do sítio.
+    const ownEntry = discovery.notGoBound.find(
+      (entry) =>
+        egressPositionKey(entry.originSite) === sitePosition &&
+        egressPositionKey(entry) === sitePosition,
+    );
+    expect(ownEntry).toBeDefined();
+
+    // A união das duas mãos conteria os dois baldes — é exatamente por isso
+    // que a checagem não pode ser feita sobre a união: as duas corrupções
+    // abaixo passariam verdes por ela.
+    const routing = egressPartitionBucketsForCategory(siteCategory);
+    expect(routing).not.toBeNull();
+    const union = new Set<string>([...routing!.ownOutput, ...routing!.derivedOutput]);
+    expect(union.has("notGoBound")).toBe(true);
+    expect(union.has("assembledUrls")).toBe(true);
+
+    // Saída 1 — baldes reais, cada entrada na mão a que pertence: verde.
+    expect(
+      findEgressPartitionFindings(egress.sites, bucketsByName)
+        .entriesInBucketNotAllowedByOriginCategory,
+    ).toEqual([]);
+
+    // Saída 2a — a entrada DERIVADA movida para o balde de saída PRÓPRIA:
+    // `notGoBound` não está na mão derivada da categoria, e reprova.
+    const derivedIntoOwnOutput: Record<EgressPartitionBucket, readonly EgressPartitionEntry[]> = {
+      ...bucketsByName,
+      assembledUrls: discovery.assembledUrls.filter((entry) => entry !== derivedEntry),
+      notGoBound: [...discovery.notGoBound, derivedEntry!],
+    };
+    expect(
+      findEgressPartitionFindings(egress.sites, derivedIntoOwnOutput)
+        .entriesInBucketNotAllowedByOriginCategory,
+    ).toEqual([
+      `notGoBound ${egressPositionKey(derivedEntry!)} com origem ${sitePosition} [${siteCategory}]`,
+    ]);
+
+    // Saída 2b — o inverso: a entrada PRÓPRIA movida para um balde de saída
+    // DERIVADA. `assembledUrls` não está na mão própria da categoria, e
+    // reprova. As duas mãos mordem em sentidos opostos.
+    const ownIntoDerivedOutput: Record<EgressPartitionBucket, readonly EgressPartitionEntry[]> = {
+      ...bucketsByName,
+      notGoBound: discovery.notGoBound.filter((entry) => entry !== ownEntry),
+      assembledUrls: [...discovery.assembledUrls, ownEntry!],
+    };
+    const afterOwnMoved = findEgressPartitionFindings(egress.sites, ownIntoDerivedOutput);
+    expect(afterOwnMoved.entriesInBucketNotAllowedByOriginCategory).toEqual([
+      `assembledUrls ${sitePosition} com origem ${sitePosition} [${siteCategory}]`,
+    ]);
+    // E, como no controle 1, o sítio perde a saída própria: a outra amarra
+    // acusa o mesmo movimento.
+    expect(afterOwnMoved.withoutBucket).toEqual([`${sitePosition} [${siteCategory}]`]);
+  });
+
+  it("controle 3 (§8.3) — chave nova de saída reprova, nomeando a chave que a declaração não conhece", () => {
+    const discovery = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+
+    // Saída 1 — as chaves reais da execução: a declaração cobre todas, nos
+    // dois sentidos, pela mesma conta que o teste permanente roda.
+    const before = findDiscoveryUniverseFindings(Object.keys(discovery).sort());
+    expect(before.undeclared).toEqual([]);
+    expect(before.obsolete).toEqual([]);
+    expect(before.emptyReason).toEqual([]);
+    expect(before.partitionMismatch).toEqual([]);
+
+    // Saída 2 — o descobridor passa a devolver uma coleção a mais, que a
+    // declaração não nomeia: a mesma conta reprova, nomeando a chave.
+    const grownDiscovery = { ...discovery, deferredByBudget: [] };
+    const after = findDiscoveryUniverseFindings(Object.keys(grownDiscovery).sort());
+    expect(after.undeclared).toEqual(["deferredByBudget"]);
+    expect(after.obsolete).toEqual([]);
+  });
+
+  it("controle 4 (§8.4) — chave declarada que some reprova como declaração obsoleta, nomeando a chave", () => {
+    const discovery = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+
+    // Saída 1 — chaves reais: declaração nem obsoleta nem incompleta.
+    const before = findDiscoveryUniverseFindings(Object.keys(discovery).sort());
+    expect(before.undeclared).toEqual([]);
+    expect(before.obsolete).toEqual([]);
+
+    // Saída 2 — a leitura deixa de devolver `assembledUrls`, que a
+    // declaração continua nomeando: a mesma conta reprova a declaração como
+    // obsoleta, em vez de deixar a coleção sumir em silêncio.
+    const shrunkDiscovery: Record<string, unknown> = { ...discovery };
+    delete shrunkDiscovery.assembledUrls;
+    const after = findDiscoveryUniverseFindings(Object.keys(shrunkDiscovery).sort());
+    expect(after.obsolete).toEqual(["assembledUrls"]);
+    expect(after.undeclared).toEqual([]);
+  });
+
+  it("controle 5 (§8.5) — a exceção de constructor_base_url_* continua não sendo vácua na forma nova: sumir o dado que a justifica reprova", () => {
+    const { egress, discovery, bucketsByName } = readRealTree();
+
+    // Saída 1 — árvore real: a exceção das duas mãos é justificada por sítio
+    // de fato, pela mesma conta que o teste permanente da exceção roda.
+    const before = findConstructorBaseUrlDualMembershipSites(egress.sites, bucketsByName);
+    expect(before.length).toBeGreaterThan(0);
+    for (const entry of before) {
+      expect(entry).toContain("[constructor_base_url_");
+    }
+
+    // Saída 2 — numa cópia dos baldes sem as entradas DERIVADAS daqueles
+    // sítios (as que declaram o sítio em `originSite` e ocupam outra
+    // posição), o dado que justifica a exceção some. A mesma conta não acha
+    // mais nada, e a asserção permanente reprova.
+    const constructorSitePositions = new Set(
+      egress.sites
+        .filter((site) => site.category.startsWith("constructor_base_url_"))
+        .map(egressPositionKey),
+    );
+    const withoutDerivedEntries = (
+      entries: readonly EgressPartitionEntry[],
+    ): readonly EgressPartitionEntry[] =>
+      entries.filter(
+        (entry) =>
+          !(
+            constructorSitePositions.has(egressPositionKey(entry.originSite)) &&
+            egressPositionKey(entry) !== egressPositionKey(entry.originSite)
+          ),
+      );
+    const withoutJustification: Record<EgressPartitionBucket, readonly EgressPartitionEntry[]> = {
+      requests: withoutDerivedEntries(discovery.requests),
+      notGoBound: withoutDerivedEntries(discovery.notGoBound),
+      assembledUrls: withoutDerivedEntries(discovery.assembledUrls),
+      nonTransportMemberCalls: withoutDerivedEntries(discovery.nonTransportMemberCalls),
+      nonGoBoundInstantiations: withoutDerivedEntries(discovery.nonGoBoundInstantiations),
+    };
+    const after = findConstructorBaseUrlDualMembershipSites(egress.sites, withoutJustification);
+    expect(after).toEqual([]);
+    // A reprovação com a mensagem real da asserção permanente, não só o
+    // vazio: sem o dado, o teste da exceção cai.
+    expect(() => expect(after.length).toBeGreaterThan(0)).toThrow(/greater than 0/u);
+  });
+
+  it("controle 6 (§8.6) — as quatro saídas da partição do Goal050 continuam mordendo na forma nova: sítio perdido, sítio em mais de um balde de saída própria, origem inventada e motivo vazio", () => {
+    const { egress, discovery, bucketsByName } = readRealTree();
+
+    const target = discovery.requests.find(
+      (request) => request.method === "GET" && request.pathExpression === "/health",
+    );
+    expect(target).toBeDefined();
+    const originPosition = egressPositionKey(target!.originSite);
+    const originCategory = categoryOfSiteAt(egress, originPosition);
+
+    // Saída 1 — baldes reais: as quatro saídas vazias.
+    const before = findEgressPartitionFindings(egress.sites, bucketsByName);
+    expect(before.withoutBucket).toEqual([]);
+    expect(before.inMoreThanOneBucket).toEqual([]);
+    expect(before.entriesWithoutReadOrigin).toEqual([]);
+    expect(before.entriesWithEmptyReason).toEqual([]);
+
+    // Saída 2a — sítio perdido: a entrada sai do balde e nenhum outro
+    // reclama a origem.
+    const withoutTarget: Record<EgressPartitionBucket, readonly EgressPartitionEntry[]> = {
+      ...bucketsByName,
+      requests: discovery.requests.filter((request) => request !== target),
+    };
+    expect(findEgressPartitionFindings(egress.sites, withoutTarget).withoutBucket).toEqual([
+      `${originPosition} [${originCategory}]`,
+    ]);
+
+    // Saída 2b — sítio em mais de um balde de SAÍDA PRÓPRIA: a mesma origem
+    // reclamada por `requests` e por `notGoBound`, os dois baldes da mão
+    // própria desta categoria.
+    const duplicated: EgressPartitionEntry = {
+      filePath: target!.filePath,
+      line: target!.line,
+      originSite: target!.originSite,
+      reason:
+        "controle negativo: duplicata deliberada da mesma origem em segundo balde de saída própria",
+    };
+    const withDuplicate: Record<EgressPartitionBucket, readonly EgressPartitionEntry[]> = {
+      ...bucketsByName,
+      notGoBound: [...discovery.notGoBound, duplicated],
+    };
+    expect(findEgressPartitionFindings(egress.sites, withDuplicate).inMoreThanOneBucket).toEqual([
+      `${originPosition} [${originCategory}] em [requests, notGoBound]`,
+    ]);
+
+    // Saída 2c — entrada com origem inventada: balde não inventa sítio.
+    const inventedOrigin: EgressPartitionEntry = {
+      filePath: "apps/bff/src/clients/inventado.ts",
+      line: 1,
+      originSite: { filePath: "apps/bff/src/clients/inventado.ts", line: 999999 },
+      reason: "controle negativo: origem que a leitura de sítios nunca produziu",
+    };
+    const withInventedOrigin: Record<EgressPartitionBucket, readonly EgressPartitionEntry[]> = {
+      ...bucketsByName,
+      notGoBound: [...discovery.notGoBound, inventedOrigin],
+    };
+    expect(
+      findEgressPartitionFindings(egress.sites, withInventedOrigin).entriesWithoutReadOrigin,
+    ).toEqual([
+      `notGoBound ${egressPositionKey(inventedOrigin)} com origem ${egressPositionKey(inventedOrigin.originSite)}`,
+    ]);
+
+    // Saída 2d — motivo vazio: sítio creditado por prosa vazia não conta.
+    const emptyReasonEntry = { ...target!, reason: "   " };
+    const withEmptyReason: Record<EgressPartitionBucket, readonly EgressPartitionEntry[]> = {
+      ...bucketsByName,
+      requests: discovery.requests.map((request) =>
+        request === target ? emptyReasonEntry : request,
+      ),
+    };
+    expect(
+      findEgressPartitionFindings(egress.sites, withEmptyReason).entriesWithEmptyReason,
+    ).toEqual([`requests ${egressPositionKey(emptyReasonEntry)}`]);
+  });
+
+  it("controle 7 (§8.7) — o balde vazio na árvore real não vira vacuidade nova: povoado por árvore sintética, o sentido inverso passa com entrada legítima e reprova de fato com entrada inválida", () => {
+    const { egress, discovery, bucketsByName } = readRealTree();
+
+    // O balde é vazio de fato nesta baseline — é isto que tornaria a
+    // checagem do sentido inverso vácua se ninguém a exercesse.
+    expect(discovery.nonTransportMemberCalls).toEqual([]);
+
+    const constructorSite = egress.sites.find((site) =>
+      site.category.startsWith("constructor_base_url_"),
+    );
+    expect(constructorSite).toBeDefined();
+    const envVarSite = egress.sites.find((site) => site.category.startsWith("env_var_"));
+    expect(envVarSite).toBeDefined();
+
+    // Saída 1 — árvore sintética que POVOA o balde com entrada LEGÍTIMA:
+    // saída derivada de um sítio `constructor_base_url_*`, que a mão derivada
+    // daquela categoria permite. Verde, e agora não por vacuidade.
+    const legitimate: EgressPartitionEntry = {
+      filePath: "apps/bff/src/clients/evolution/index.ts",
+      line: 900001,
+      originSite: { filePath: constructorSite!.filePath, line: constructorSite!.line },
+      reason:
+        "árvore sintética: chamada de membro fora da superfície de um cliente instanciado a partir do sítio",
+    };
+    const populatedLegitimately: Record<EgressPartitionBucket, readonly EgressPartitionEntry[]> = {
+      ...bucketsByName,
+      nonTransportMemberCalls: [legitimate],
+    };
+    const afterLegitimate = findEgressPartitionFindings(egress.sites, populatedLegitimately);
+    expect(afterLegitimate.entriesInBucketNotAllowedByOriginCategory).toEqual([]);
+    expect(afterLegitimate.entriesWithoutReadOrigin).toEqual([]);
+
+    // Saída 2 — a mesma árvore sintética povoada com entrada INVÁLIDA: a
+    // origem é de categoria `env_var_*`, cuja mão derivada não contém este
+    // balde. A mesma conta reprova, nomeando balde, entrada, origem e
+    // categoria — prova de que o balde vazio passou a ser exercido.
+    const invalid: EgressPartitionEntry = {
+      ...legitimate,
+      originSite: { filePath: envVarSite!.filePath, line: envVarSite!.line },
+      reason: "árvore sintética: origem env_var_*, cuja mão derivada não roteia este balde",
+    };
+    const populatedInvalidly: Record<EgressPartitionBucket, readonly EgressPartitionEntry[]> = {
+      ...bucketsByName,
+      nonTransportMemberCalls: [invalid],
+    };
+    expect(
+      findEgressPartitionFindings(egress.sites, populatedInvalidly)
+        .entriesInBucketNotAllowedByOriginCategory,
+    ).toEqual([
+      `nonTransportMemberCalls ${egressPositionKey(invalid)} com origem ${egressPositionKey(invalid.originSite)} [${envVarSite!.category}]`,
+    ]);
+  });
+
+  it("controle 8 (§8.8) — a enumeração de descarte e a cobertura de categoria do Goal049/050 continuam mordendo: descarte não registrado reprova com a linha e o trecho, e categoria sem controle é acusada como órfã", () => {
+    // Parte A — a enumeração de descarte mudo, fail-closed nos três sentidos.
+    const realOccurrences: SilentDiscardOccurrence[] = findSilentDiscardLines(moduleSource).map(
+      (occurrence) => {
+        const anchor = resolveEnclosingTopLevelFunctionName(moduleSource, occurrence.line);
+        return { ...occurrence, anchor, key: silentDiscardKey(anchor, occurrence.snippet) };
+      },
+    );
+    expect(DOCUMENTED_SILENT_DISCARDS.size).toBe(5);
+
+    // Saída 1 — leitura real do módulo: nada não registrado, nada obsoleto,
+    // nada com motivo vazio, nenhuma chave ambígua.
+    const beforeDiscard = findSilentDiscardFindings(realOccurrences, DOCUMENTED_SILENT_DISCARDS);
+    expect(beforeDiscard.unregistered).toEqual([]);
+    expect(beforeDiscard.obsolete).toEqual([]);
+    expect(beforeDiscard.emptyReason).toEqual([]);
+    expect(beforeDiscard.ambiguousKeys).toEqual([]);
+
+    // Saída 2 — descarte guardado por valor ausente em ponto não registrado,
+    // inserido numa CÓPIA do fonte: a mesma conta reprova, com a linha e o
+    // trecho na mensagem.
+    const injectedSnippet = "if (valorAusenteNaoRegistrado === undefined) continue;";
+    const mutatedSource = `function descarteNaoRegistradoDoControle8() {\n  ${injectedSnippet}\n}\n\n${moduleSource}`;
+    const mutatedOccurrences: SilentDiscardOccurrence[] = findSilentDiscardLines(mutatedSource).map(
+      (occurrence) => {
+        const anchor = resolveEnclosingTopLevelFunctionName(mutatedSource, occurrence.line);
+        return { ...occurrence, anchor, key: silentDiscardKey(anchor, occurrence.snippet) };
+      },
+    );
+    const injected = mutatedOccurrences.find((occurrence) => occurrence.snippet === injectedSnippet);
+    expect(injected).toBeDefined();
+    expect(injected!.anchor).toBe("descarteNaoRegistradoDoControle8");
+    const afterDiscard = findSilentDiscardFindings(mutatedOccurrences, DOCUMENTED_SILENT_DISCARDS);
+    expect(afterDiscard.unregistered).toEqual([`${injected!.line}: "${injectedSnippet}"`]);
+    // Deslocamento não é achado: as 5 entradas reais continuam registradas,
+    // porque a chave é trecho normalizado mais função envolvente.
+    expect(afterDiscard.obsolete).toEqual([]);
+
+    // Parte B — a cobertura das categorias, computada dos arrays em runtime.
+    const allRefusalCategories: readonly string[] = [
+      ...INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES,
+      ...CLASS_BINDING_REFUSAL_CATEGORIES,
+      ...CLIENT_FIELD_USE_REFUSAL_CATEGORIES,
+    ];
+    expect(allRefusalCategories.length).toBe(24);
+    // As 2 inalcançáveis são descontadas por registro nomeado, e continuam
+    // pertencendo aos arrays — entrada obsoleta reprovaria.
+    expect(PROVEN_UNREACHABLE_REFUSAL_CATEGORIES.size).toBe(2);
+    for (const category of PROVEN_UNREACHABLE_REFUSAL_CATEGORIES.keys()) {
+      expect(allRefusalCategories).toContain(category);
+      expect(observedRefusalCategories.has(category)).toBe(false);
+    }
+
+    const removedCategory = allRefusalCategories.find(
+      (category) =>
+        !PROVEN_UNREACHABLE_REFUSAL_CATEGORIES.has(category) &&
+        observedRefusalCategories.has(category),
+    );
+    expect(removedCategory).toBeDefined();
+
+    // Saída 1 — a categoria escolhida está coberta: algum controle a observou
+    // via expectRefusal em runtime, até este ponto da suíte.
+    expect(observedRefusalCategories.has(removedCategory!)).toBe(true);
+
+    // Saída 2 — removida a observação de uma CÓPIA do conjunto, a mesma conta
+    // que o teste permanente do Goal048/WU-01 roda acusa a categoria órfã.
+    const withoutRemovedCategory = new Set(observedRefusalCategories);
+    withoutRemovedCategory.delete(removedCategory!);
+    const uncoveredCategories = findUncoveredRefusalCategories(
+      allRefusalCategories,
+      withoutRemovedCategory,
+    );
+    expect(uncoveredCategories).toEqual([removedCategory]);
+
+    // E a amarra de categoria do Goal049 segue mordendo: categoria fora dos
+    // três arrays reprova antes mesmo de a mensagem observada importar.
+    expect(() =>
+      expectRefusal(
+        () => {
+          throw new Error("mensagem qualquer, com [categoria: client_field_use_destructured]");
+        },
+        "categoria_que_nao_existe_em_array_nenhum_no_controle_8" as unknown as DeclaredRefusalCategory,
+        /mensagem qualquer/u,
+      ),
+    ).toThrow(/não pertence a INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES/u);
+  });
+});
+
 describe("Goal048 / WU-01 — a cobertura de recusa é computada em runtime a partir dos três arrays, nunca contra lista literal", () => {
   it("toda categoria de INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES, CLASS_BINDING_REFUSAL_CATEGORIES e CLIENT_FIELD_USE_REFUSAL_CATEGORIES tem ao menos um controle que a observou via expectRefusal em runtime — categoria sem controle reprova nomeando qual ficou descoberta, e as duas provadas INALCANÇÁVEIS são descontadas por registro nomeado que o próprio teste confere", () => {
     const allRefusalCategories: readonly string[] = [
@@ -7854,10 +8707,11 @@ describe("Goal048 / WU-01 — a cobertura de recusa é computada em runtime a pa
         [],
       );
     }
-    const uncoveredCategories = allRefusalCategories.filter(
-      (category) =>
-        !observedRefusalCategories.has(category) &&
-        !PROVEN_UNREACHABLE_REFUSAL_CATEGORIES.has(category),
+    // A mesma conta que o controle 8 do §8 (Goal051 / WU-04) roda sobre uma
+    // cópia de observedRefusalCategories com uma observação removida.
+    const uncoveredCategories = findUncoveredRefusalCategories(
+      allRefusalCategories,
+      observedRefusalCategories,
     );
     expect(uncoveredCategories).toEqual([]);
   });

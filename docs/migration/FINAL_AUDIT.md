@@ -3467,3 +3467,146 @@ acima). `validate:integration` continua recusando por pré-condição de
 banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado
 como ausente — não reexecutado por esta unidade de documentação
 (WU-06).
+
+## 28. A partição de egresso passa a conferir as duas mãos, e o universo de saída de `discoverGoServiceHttpRequests` é declarado fail-closed — Goal051, 2026-09-22
+
+Seção nova, escrita depois da última mudança de árvore do diff051
+(WU-01: encaminhamento por categoria em duas mãos declaradas, saída
+própria e saída derivada; WU-02: universo de saída declarado
+fail-closed; WU-03: vacuidade por balde e o motivo de
+`env_var_*`/resolvido-no-chamador ligado ao campo `originSite`; WU-04:
+os oito controles negativos permanentes do escopo §8; WU-05 a WU-07:
+verificação dirigida; WU-08, esta unidade, documenta). Ela **não
+reescreve** §4 a §27: os registros de A-01 a A-24, o veredito das
+seções anteriores e as vinte e sete seções de fechamento continuam
+exatamente como estavam, e a entrada de **A-24** **não foi tocada**.
+Este Goal não corrige A-24 e não abre achado novo — fecha as duas
+aberturas registradas no [Goal051](goals/051-a-particao-morde-nos-dois-sentidos.md),
+originadas nas observações 1 e 2 do [review050](reviews/050-review.md)
+e num achado próprio desta passada de planejamento: a partição do
+Goal050 conferia a mordida só do lado do sítio — do lado da entrada,
+cobrava apenas que a origem fosse um sítio de fato lido e que o motivo
+não fosse vazio, deixando **10** das **19** entradas dos cinco baldes
+sem asserção nenhuma sobre se o balde em que estavam era permitido
+pela categoria da própria origem; e o universo de **saída** de
+`discoverGoServiceHttpRequests` não tinha o mesmo tratamento
+fail-closed que `EGRESS_CANDIDATE_UNIVERSE` já dava ao universo de
+entrada desde D-066.
+
+### O que mudou
+
+**O encaminhamento por categoria declara saída própria e saída
+derivada, separadamente.** `egressPartitionBucketsForCategory` passou
+a devolver `{ ownOutput, derivedOutput }` em vez de um array só. Para
+as categorias de `fetch` cru os dois conjuntos coincidem
+(`[requests, notGoBound]`); para `constructor_base_url_*` a saída
+própria é só `[notGoBound]` e a derivada é
+`[requests, assembledUrls, nonGoBoundInstantiations, nonTransportMemberCalls]`
+— os baldes que a varredura de instanciação povoa a partir daquele
+sítio. Categoria não encaminhável continua devolvendo `null` e
+reprovando.
+
+**A partição confere agora as duas mãos.** Toda entrada dos cinco
+baldes é conferida contra o conjunto que a categoria da sua origem
+declarada permite — saída própria quando a entrada ocupa a posição do
+sítio, saída derivada quando não —, com a saída nova
+`entriesInBucketNotAllowedByOriginCategory`. `inMoreThanOneBucket`
+passou a ser avaliado só sobre a saída própria. O controle negativo 1
+do escopo §8 prova a mordida movendo uma entrada real para um balde
+não permitido pela categoria da sua origem; o controle 2 prova que as
+duas mãos são distintas, não a união das duas.
+
+**O universo de saída de `discoverGoServiceHttpRequests` é declarado,
+fail-closed, no precedente exato de `EGRESS_CANDIDATE_UNIVERSE`.**
+`GO_SERVICE_HTTP_REQUEST_DISCOVERY_UNIVERSE` nomeia as **7** chaves que
+o descobridor devolve em runtime: as **5** de `EGRESS_PARTITION_BUCKETS`
+entram na partição; `internalClientSurfaces` e `callerResolutions`
+ficam fora, cada uma com motivo escrito — são relatórios do que a
+resolução leu, não coleções de entradas com `originSite` próprio. Um
+teste confere a declaração contra `Object.keys(discovery)` da execução
+real e contra `EGRESS_PARTITION_BUCKETS`; os controles negativos 3 e 4
+do escopo §8 provam as duas direções fail-closed sobre um conjunto de
+chaves corrompido.
+
+**Vacuidade por balde é declarada ou exercida.** Sobre a árvore real:
+`requests` (**10**), `notGoBound` (**6**), `assembledUrls` (**1**) e
+`nonGoBoundInstantiations` (**2**) têm não-vacuidade asserida
+diretamente; `nonTransportMemberCalls` é **0**. O controle negativo 2
+do Goal044 (`:4314`, cenário "antes") já prova, sobre árvore sintética
+de arquivos, que o balde recebe entrada — mas não exercita a checagem
+de categoria de origem, porque a árvore real nunca o popula. O
+controle negativo 7 do escopo §8 (`assistant.service.test.ts:8551`)
+fecha essa lacuna com estado de partição sintético dedicado: povoa o
+balde com entrada de origem permitida (saída verde) e depois com
+origem não permitida, provando que a mesma conta do controle negativo
+1 reprova, nomeando balde, entrada, origem e categoria.
+
+**O trecho do `reason` que cita a posição da origem passa a ser
+computado do campo `originSite`.** A montagem do motivo da requisição
+resolvida no chamador interpola `${site.filePath}:${site.line}` a
+partir do próprio `originSite`, e os dois não podem mais divergir por
+construção. Um teste permanente confere a correspondência sobre a
+árvore real — **1** entrada nessa condição, a requisição de
+`health.ts:22` — e um controle negativo dedicado (WU-03, logo após o
+teste permanente em `assistant.service.test.ts`) prova que motivo
+divergente do campo reprova: a mesma conta aplicada a uma entrada real
+com `originSite` deslocado uma linha acusa a entrada, nomeando
+`arquivo:linha` da requisição e da origem divergente.
+
+### Veredito recontado
+
+Esta auditoria continua com **0** achados `BLOQUEADOR-MVP`, **8**
+`PENDENCIA-POS-MVP` e **6** `LIMITE-DECLARADO` — a mesma contagem de
+§27. **Nenhuma mudança em relação a §27**: nenhum achado de A-01 a A-24
+foi tocado, corrigido, reclassificado ou reaberto. **A-24 continua
+`PENDENCIA-POS-MVP`, não corrigido** — nenhum arquivo Go de produção
+deste fork foi editado por este Goal.
+
+**Limite próprio deste Goal, declarado e não mascarado, herdado de
+D-066 sem afrouxamento.** A partição continua provando conservação
+**entre o descobridor e os baldes de saída**, não dentro das funções
+de varredura — um `continue` sem guarda de valor ausente, ou em bloco
+com outra instrução antes, continua fora de alcance de qualquer
+mecanismo desta rodada. `internalClientSurfaces` e `callerResolutions`
+ganharam motivo declarado para estarem fora da partição, não
+pertencimento novo — este Goal não os transforma em baldes de
+destino de sítio. Consequência mensurável: de **227** testes em
+`assistant.service.test.ts` (baseline: 215), **227** passam, **0**
+falham; o arquivo tem **8718** linhas (baseline: 7864), **909**
+inserções e **55** deleções. `http-egress-sites.ts` tem **3**
+inserções e **2** deleções contra a baseline (**3887** linhas;
+baseline: 3886). A suíte completa de `apps/ai-orchestrator` fecha em
+**1039** testes: **951** passando (baseline: 939), **88** pulados
+(mesma contagem da baseline), **0** falhando. `npx tsc -p
+tsconfig.json --noEmit`: "TypeScript: No errors found", exit 0. `npm
+run lint` (`eslint src --max-warnings=0`): exit 0, sem saída. `npm run
+validate:core` **PASSED**: dos 17 passos, **15** passaram (inclusive
+`test:ai-orchestrator`) e **2** pulados por design (`test:bff`,
+`test:health-worker`); nenhum falhou. `npm run test:gate` (raiz):
+**226** testes, **226** passando, **0** falhando, inalterado, porque
+não exercita este arquivo.
+
+Quatro coisas que esta seção não diz. **Não diz que A-24 foi
+corrigido**: o rótulo `"Ver Menu"` continua escrito em
+`pkg/sendMessage/service/send_service.go:1960`. **Não diz que M4 foi
+fechado**: nenhuma chamada saiu para provedor de LLM real nem para o
+WhatsApp real; o diff051 toca só
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`,
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts` e a
+documentação de migração — `git status --porcelain=v1 -uall` não lista
+nenhum arquivo de `tools/ia-loop/` nesta rodada. **Não diz que o
+comportamento em runtime do serviço Go foi provado**: o que se prova é
+o que a árvore de código diz, lida por enumeração de ocorrência sobre
+o texto-fonte. **Não diz que a fidelidade visual está provada**:
+nenhum arquivo de `apps/frontend/src/` mudou.
+
+O que continua fora do alcance deste Goal, por construção: comportamento
+em runtime do serviço Go; qual binário roda em produção; `whatsmeow-
+lib/`, biblioteca vendorizada lida apenas como fonte das declarações de
+proto; o valor real de qualquer variável de ambiente; e conservação de
+candidatos dentro das funções de varredura de `http-egress-sites.ts`,
+declarada e limitada desde o escopo §4 do Goal050 (ver "Limite próprio"
+acima). `validate:integration` continua recusando por pré-condição de
+banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado
+como ausente — não reexecutado além da conferência de exit code por
+esta unidade de documentação (WU-08).

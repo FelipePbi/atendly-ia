@@ -1503,3 +1503,75 @@ documentos desta migração — nenhum arquivo de `tools/ia-loop/` foi
 tocado nesta rodada.
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff050-2026-09-22-d-066) e [D-066](DECISIONS.md).
+
+**Acréscimo, desde 2026-09-22 (Goal051 / [D-067](DECISIONS.md)):** a
+linha da tabela acima que descreve "sítio em mais de um balde" checado
+só dentro do subconjunto de baldes que a categoria roteia continua
+verdadeira e não foi apagada — mas deixou de ser o único lado
+verificado. Até esta data, o lado da **entrada** só cobrava que a
+origem declarada fosse um sítio de fato lido e que o motivo não fosse
+vazio; nenhuma asserção conferia se o balde em que uma entrada estava
+era um dos que a categoria da sua origem permite. **Desde 2026-09-22,
+toda entrada dos cinco baldes é conferida contra esse conjunto,
+também**, nomeando balde, entrada, origem e categoria quando não
+permitida. Ver o parágrafo novo abaixo.
+
+## A partição de egresso passa a conferir as duas mãos, e o universo de saída de `discoverGoServiceHttpRequests` é declarado fail-closed, do Goal051
+
+O parágrafo anterior fechou a conservação do conjunto de egresso como
+partição computada por campo, mas só do lado do sítio: para cada
+sítio, a checagem perguntava quais baldes sua categoria roteia e
+conferia presença só nesses; do lado da entrada, o único requisito era
+origem lida e motivo não vazio. Sondagem independente sobre essa
+baseline achou **10** das **19** entradas dos cinco baldes num balde
+que a categoria da própria origem não roteia, sem asserção nenhuma
+sobre elas — a **observação 1** do [review050](reviews/050-review.md).
+A **observação 2** do mesmo review: o motivo da requisição resolvida
+no chamador repetia `arquivo:linha` da origem como prosa, sem nada que
+impedisse a frase e o campo `originSite` de divergir. Um terceiro
+achado, desta passada de planejamento: o universo de **saída** de
+`discoverGoServiceHttpRequests` não tinha o mesmo tratamento
+fail-closed que `EGRESS_CANDIDATE_UNIVERSE` já dava ao universo de
+entrada. Este delta fecha as três, sem tocar o conjunto de 10 rotas
+nem o de 27 literais.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| Toda entrada dos cinco baldes é conferida contra o conjunto que a categoria da sua origem declarada permite — saída própria quando a entrada ocupa a posição do sítio, saída derivada quando não —, nomeando balde, entrada, origem e categoria quando não permitida | A checagem de "exatamente um balde" continua restrita à saída própria por categoria (parágrafo do Goal050 acima, não afrouxado) — a novidade é que a saída derivada também tem, agora, um conjunto permitido explícito, e entrada fora dele reprova |
+| O universo de saída de `discoverGoServiceHttpRequests` está declarado, fail-closed: das **7** chaves que o descobridor devolve em runtime, as **5** de `EGRESS_PARTITION_BUCKETS` entram na partição; `internalClientSurfaces` e `callerResolutions` ficam fora, cada uma com motivo escrito e conferido | `internalClientSurfaces` e `callerResolutions` não viraram baldes de destino de sítio — continuam relatórios do que a resolução leu, sem `originSite` próprio |
+| Cada um dos cinco baldes tem não-vacuidade asserida sobre a árvore real (`requests`, `notGoBound`, `assembledUrls`, `nonGoBoundInstantiations`) ou tem o sentido inverso exercido por árvore sintética (`nonTransportMemberCalls`, vazio hoje: o controle negativo 2 do Goal044 prova que o balde recebe entrada, e o controle negativo 7 do escopo §8, dedicado, prova que entrada de origem não permitida nesse balde reprova) | Nenhum balde novo foi criado, e a lista de cinco baldes de `EGRESS_PARTITION_BUCKETS` não mudou |
+| O trecho do `reason` que cita a posição da origem, na requisição resolvida no chamador, passa a ser computado do campo `originSite` — os dois não podem mais divergir por construção | A frase continua existindo, prosa útil para quem lê; só a parte que citava a posição deixou de poder divergir do dado |
+
+**O que este delta não prova, e é preciso dizer alto.** **Não prova
+conservação de candidatos dentro das funções de varredura**: a
+partição continua provando conservação entre o descobridor e os
+baldes de saída, não dentro delas — limite herdado do Goal050, não
+afrouxado. **Não corrige A-24**: o achado continua `PENDENCIA-POS-MVP`,
+e nenhum arquivo Go de produção deste fork foi editado por este Goal.
+**Não fecha M4.** **Não amplia nem reduz o conjunto de 10 rotas ou de
+27 literais.** `npm run validate:core` **PASSED** nesta árvore — dos
+17 passos, 15 passaram (inclusive `test:ai-orchestrator`) e 2 pulados
+por design (`test:bff`, `test:health-worker`); nenhum falhou. `npm run
+test:gate` (raiz) permanece em **226** testes e 0 falhas, inalterado,
+porque não exercita este arquivo. `validate:integration` continua
+recusando por pré-condição de banco ausente (`exit 2`,
+`BFF_TEST_DATABASE_URL is not set`), declarado como ausente — não é
+este Goal quem a supre. Sobre a árvore final desta rodada: `npx vitest
+run tests/assistant/assistant.service.test.ts` em
+`apps/ai-orchestrator` → **227** testes, **227** passando, **0**
+falhando (baseline: 215); `npx vitest run` completo → **1039** testes,
+**951** passando (baseline: 939), **88** pulados (mesma contagem da
+baseline), **0** falhando. `npx tsc -p tsconfig.json --noEmit`: exit
+0. `npm run lint` (`eslint src --max-warnings=0`) em
+`apps/ai-orchestrator`: exit 0, sem saída. `apps/ai-orchestrator/tests/support/http-egress-sites.ts`
+tem **3** inserções e **2** deleções contra a baseline (**3887**
+linhas; baseline: 3886) — diff pequeno e localizado, só a montagem do
+motivo da requisição resolvida no chamador;
+`apps/ai-orchestrator/tests/support/product-transport-routes.txt` tem
+diff **zero**. `git status --porcelain=v1 -uall` lista, ao final desta
+rodada, só `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`,
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts` e os quatro
+documentos desta migração — nenhum arquivo de `tools/ia-loop/` foi
+tocado nesta rodada.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff051-2026-09-22-d-067) e [D-067](DECISIONS.md).

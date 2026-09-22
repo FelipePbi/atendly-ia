@@ -1,6 +1,6 @@
 # Goal 051 — A partição morde nos dois sentidos: entrada em balde que a categoria não roteia reprova, e balde fora da declaração não existe em silêncio
 
-**Status: READY.** Preparado em 2026-09-22 pelo Tech Lead Agent após [Goal050 ACCEPTED](../reviews/050-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED** no [review051](../reviews/051-review.md) (rodada 5 de 5, 2026-09-22; rodadas 1 a 4 fecharam `CHANGES_REQUIRED`, com 2, 2, 2 e 1 blockers). Preparado em 2026-09-22 pelo Tech Lead Agent após [Goal050 ACCEPTED](../reviews/050-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: OPUS_MEDIUM
 

@@ -2741,3 +2741,233 @@ das funções de varredura (o `continue;` que este Goal declara fora de
 alcance) deve virar Goal próprio; e se o campo `originSite` deve, em
 Goal futuro, substituir a frase do `reason` também como texto para
 quem lê, não só como dado de prova.
+
+## D-067 — A partição de egresso passa a conferir as duas mãos, e o universo de saída de `discoverGoServiceHttpRequests` é declarado fail-closed, propostas no Goal051
+
+**Status:** ACCEPTED no [review051](reviews/051-review.md) (rodada 5 de
+5, 2026-09-22; rodadas 1 a 4 fecharam `CHANGES_REQUIRED`, com 2, 2, 2 e
+1 blockers), pelo Tech Lead Agent ([AGENT_ROLES](AGENT_ROLES.md), D-018).
+O mecanismo das rodadas 2 a 5 é o mesmo: o único blocker de mecanismo
+foi o da rodada 1 — a asserção de correspondência entre o `reason` e o
+campo `originSite` não podia falhar por construção, e faltava o
+controle negativo que o escopo §5 exige. As quatro rodadas seguintes
+foram gastas em texto de documento permanente: contagens defasadas em
+relação à execução final, prova atribuída a um controle que não a
+exerce, descrição errada do que o controle 7 faz e um ponteiro
+`arquivo:linha` que apontava para o controle negativo vizinho. Nenhuma
+delas afrouxou invariante; todas corrigiram documento a favor do que a
+execução mostra.
+
+**Contexto:** o [review050](reviews/050-review.md) aceitou D-066 sem
+blockers e registrou duas observações não bloqueantes. A observação 1:
+`findEgressPartitionFindings` conferia só o lado do sítio — para cada
+sítio, perguntava a `egressPartitionBucketsForCategory` quais baldes
+sua categoria roteia e checava presença só nesses; do lado da entrada,
+o único requisito era que a origem declarada fosse um sítio de fato
+lido e que o motivo não fosse vazio. Sondagem independente sobre a
+baseline achou **10** das **19** entradas dos cinco baldes num balde
+que a categoria da própria origem não roteia — nenhuma asserção as
+olhava; uma entrada inventada em balde errado passaria verde. A
+observação 2: o `reason` da requisição resolvida no chamador
+(`http-egress-sites.ts:2080` na baseline) repetia `arquivo:linha` da origem como
+prosa, sem nada que impedisse a frase e o campo `originSite` de
+divergir. A um nível acima dessas duas, achado desta passada de
+planejamento: o universo de **saída** de `discoverGoServiceHttpRequests`
+não tinha o `EGRESS_CANDIDATE_UNIVERSE` do lado de entrada — o
+descobridor devolve 7 chaves em runtime, `EGRESS_PARTITION_BUCKETS`
+nomeava 5, e `internalClientSurfaces`/`callerResolutions` ficavam fora
+sem declaração, sem motivo escrito e sem nada que reprovasse chave
+nova.
+
+**Decisão:**
+
+1. **O encaminhamento por categoria passa a declarar saída própria e
+   saída derivada, separadamente.** `egressPartitionBucketsForCategory`
+   deixou de devolver um array só e passou a devolver
+   `EgressPartitionCategoryRouting { ownOutput, derivedOutput }`.
+   Para as categorias de `fetch` cru (`env_var_*`, `env_vars_*`,
+   `product_prose_to_client_number`, `caller_resolved_base_url_via_*`,
+   `generic_egress_destination_decided_by_caller_*`) os dois conjuntos
+   coincidem: `[requests, notGoBound]`. Para `constructor_base_url_*`
+   a saída própria é só `[notGoBound]` — o registro de adiamento — e a
+   saída derivada é `[requests, assembledUrls, nonGoBoundInstantiations,
+   nonTransportMemberCalls]`, os baldes que a varredura de instanciação
+   povoa a partir daquele sítio. Categoria que a função não sabe
+   encaminhar continua devolvendo `null` e reprovando — nenhum ramo
+   `else` mudo foi introduzido.
+2. **A partição confere agora as duas mãos.** Toda entrada dos cinco
+   baldes é conferida contra o conjunto que a categoria da sua origem
+   declarada permite: saída própria quando a entrada ocupa a posição do
+   sítio, saída derivada quando não. `findEgressPartitionFindings`
+   ganhou a saída `entriesInBucketNotAllowedByOriginCategory`, e as
+   quatro saídas do Goal050 (`unroutable`, `withoutBucket`,
+   `inMoreThanOneBucket`, `entriesWithoutReadOrigin`) continuam
+   existindo, com `inMoreThanOneBucket` agora avaliado só sobre a saída
+   própria — que é onde "exatamente um" sempre valeu. Sobre a árvore
+   real, depois da correção, as **10** entradas que a observação 1
+   apontou já não aparecem em `entriesInBucketNotAllowedByOriginCategory`
+   nenhuma: a mesma conta que reprovava zero antes (porque não olhava)
+   continua reprovando zero agora, mas desta vez porque de fato
+   confere as **19** entradas dos cinco baldes contra a categoria da
+   sua origem. O controle negativo 1 do escopo §8 prova a mordida:
+   mover uma entrada real para um balde que a categoria da sua origem
+   não permite reprova, nomeando balde, entrada, origem e categoria.
+3. **O universo de saída de `discoverGoServiceHttpRequests` é
+   declarado, fail-closed, no precedente exato de
+   `EGRESS_CANDIDATE_UNIVERSE`.** `GO_SERVICE_HTTP_REQUEST_DISCOVERY_UNIVERSE`
+   nomeia as **7** chaves que o descobridor devolve em runtime:
+   `requests`, `notGoBound`, `assembledUrls`, `nonTransportMemberCalls`
+   e `nonGoBoundInstantiations` entram na partição — o conjunto exato
+   de `EGRESS_PARTITION_BUCKETS`; `internalClientSurfaces` e
+   `callerResolutions` ficam fora, cada uma com motivo escrito: são
+   relatórios do que a resolução leu — a superfície de cada cliente e o
+   que a resolução de chamadores encontrou —, não coleções de entradas
+   com `originSite` próprio. Um teste confere
+   `GO_SERVICE_HTTP_REQUEST_DISCOVERY_UNIVERSE.map(...).sort()` contra
+   `Object.keys(discovery).sort()` da execução real, e que a lista das
+   chaves declaradas dentro da partição coincide exatamente com
+   `EGRESS_PARTITION_BUCKETS`: chave nova que o descobridor devolva e a
+   declaração não nomeie reprova; chave declarada aqui que o
+   descobridor deixe de devolver reprova como declaração obsoleta. Os
+   controles negativos 3 e 4 do escopo §8 provam as duas direções sobre
+   um conjunto de chaves corrompido.
+4. **Vacuidade por balde é declarada ou exercida, balde a balde.**
+   Sobre a árvore real: `requests` (**10**), `notGoBound` (**6**),
+   `assembledUrls` (**1**) e `nonGoBoundInstantiations` (**2**) têm
+   não-vacuidade asserida diretamente. `nonTransportMemberCalls` é
+   **0** na árvore real. O controle negativo 2 do Goal044 (`:4314`,
+   cenário "antes") já prova, sobre árvore sintética de arquivos, que o
+   balde recebe entrada quando a derivação acha um membro que não
+   alcança fetch nem delega — mas não exercita a checagem de categoria
+   de origem, porque a árvore real nunca popula o balde. O controle
+   negativo 7 do escopo §8 (`assistant.service.test.ts:8551`) fecha essa
+   lacuna com estado de partição sintético próprio, dedicado a este
+   propósito: povoa `nonTransportMemberCalls` com uma entrada de origem
+   `constructor_base_url_*` (permitida) e confere saída verde; depois,
+   com a mesma entrada movida para origem `env_var_*` (não permitida
+   para este balde), confere que a mesma conta do controle negativo 1
+   reprova, nomeando balde, entrada, origem e categoria — o sentido
+   inverso que a vacuidade da árvore real deixaria sem exercício.
+5. **O trecho do `reason` que cita a posição da origem passa a ser
+   computado do campo `originSite`, não mais recalculado à parte.**
+   `http-egress-sites.ts` mudou a montagem do motivo da requisição
+   resolvida no chamador (`:2080` na baseline do Goal050) — o `reason`
+   já interpolava `${site.filePath}:${site.line}`, mas essa expressão
+   era escrita de novo, separada da montagem do campo `originSite`
+   (`:2079` na mesma baseline), e as duas podiam divergir por edição
+   independente. A mudança introduz uma constante local `originSite`
+   (`http-egress-sites.ts:2073`) e faz o campo e a citação no `reason`
+   lerem dela — os dois não podem mais divergir por construção. Um
+   teste permanente confere, sobre a árvore real, que
+   toda entrada de `requests` cujo motivo contém "o fetch está em"
+   contém também `o fetch está em ${originSite.filePath}:${originSite.line}`
+   (`assistant.service.test.ts:3519`–`3521`, `toContain`, não
+   igualdade nem sufixo: o `reason` continua com prosa depois da
+   posição); na árvore real há **1** entrada nessa condição (a requisição de
+   `health.ts:22`, motivo montado a partir de `health.ts:46`), e um
+   controle negativo dedicado (WU-03, `assistant.service.test.ts`, logo
+   após o teste permanente) prova que motivo divergente do campo
+   reprova: a mesma conta que o teste permanente chama, aplicada a uma
+   entrada real com `originSite` deslocado uma linha, acusa a entrada
+   nomeando `arquivo:linha` da requisição e `arquivo:linha` da origem
+   divergente.
+6. **Nenhum mecanismo de classificação foi alterado.** As 9 categorias
+   vistas na árvore, os três vocabulários de recusa, os quatro grupos
+   de categorias de recusa e `DOCUMENTED_SILENT_DISCARDS` (**5**
+   entradas) mantêm o conteúdo e o comportamento da baseline. Os
+   controles negativos 5 e 8 do escopo §8 confirmam que a exceção de
+   `constructor_base_url_*` continua não vácua na forma nova e que a
+   cobertura de categoria e a enumeração de descarte do Goal049/050
+   continuam mordendo.
+7. **A árvore real produz os mesmos números.** `product-transport-routes.txt`
+   tem diff zero. Sobre a árvore real, por sondagem própria: **9**
+   sítios, cinco baldes com **19** entradas no total (`requests` 10,
+   `notGoBound` 6, `assembledUrls` 1, `nonGoBoundInstantiations` 2,
+   `nonTransportMemberCalls` 0), **7** chaves em
+   `discoverGoServiceHttpRequests` (`internalClientSurfaces` 1,
+   `callerResolutions` 1, fora da partição), **1** superfície, **4**
+   ligações resolvidas, **205** arquivos varridos, **10** rotas, **2**
+   instanciações fora do transporte, **0** chamadas de membro fora da
+   superfície e as **41** ocorrências de `this.http.` em
+   `apps/bff/src/clients/` classificadas sem recusa — todas
+   reconfirmadas pela suíte permanente, ainda verde.
+
+**Alternativas:** conferir a mordida do lado da entrada só por
+amostragem ou só sobre as categorias que hoje têm entrada derivada —
+rejeitada, deixaria a mesma classe de lacuna para a próxima categoria
+que ganhar saída derivada; declarar `internalClientSurfaces` e
+`callerResolutions` como baldes de partição a mais, em vez de
+relatórios fora com motivo — rejeitada, o escopo §9 do Goal proíbe
+transformá-los em baldes de destino de sítio, e eles não carregam
+`originSite` próprio; substituir a frase inteira do `reason` por um
+texto genérico sem posição alguma — rejeitada, o Goal permitia as duas
+saídas (computar do campo ou remover a posição do motivo) e computar
+do campo preserva o texto útil para quem lê sem abrir a divergência.
+
+**Motivo:** a partição do Goal050 mordia de uma mão só — media
+generosamente do lado do sítio e cobrava pouco do lado da entrada — e
+o universo de saída da leitura de requisições não tinha o mesmo
+tratamento fail-closed que o universo de entrada já tinha desde
+D-066. As duas aberturas são a mesma classe de defeito, um nível
+diferente: mecanismo que prova parte do que afirma prova o resto por
+omissão, não por verificação.
+
+**Consequências:**
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts` ganha **3**
+inserções e **2** deleções contra a baseline do Goal050 (**3887**
+linhas; baseline: **3886**) — só a montagem do motivo da requisição
+resolvida no chamador, sem tocar regra de classificação, categoria,
+ordem de consulta ou isenção alguma.
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
+concentra o resto — o encaminhamento de duas mãos, a conferência do
+lado da entrada, o universo de saída declarado, a vacuidade por balde
+e os oito controles negativos do escopo §8 — com **909** inserções e
+**55** deleções contra a mesma baseline (**8718** linhas; baseline:
+**7864**) e **227** testes (baseline: **215**), **227** passando, **0**
+falhando (`npx vitest run tests/assistant/assistant.service.test.ts`
+em `apps/ai-orchestrator`). Os **12** testes a mais provam,
+respectivamente, o universo de saída declarado, a vacuidade dos cinco
+baldes, a correspondência frase/campo e os oito controles negativos.
+`apps/ai-orchestrator/tests/support/product-transport-routes.txt`
+está intocado. `npx vitest run` completo de `apps/ai-orchestrator` →
+**1039** testes: **951** passando (baseline: 939), **88** pulados
+(mesma contagem da baseline), **0** falhando. `npx tsc -p
+tsconfig.json --noEmit` em `apps/ai-orchestrator`: "TypeScript: No
+errors found", exit 0. `npm run lint` (`eslint src
+--max-warnings=0`) em `apps/ai-orchestrator`: exit 0, sem saída. `npm
+run validate:core`: **PASSED** — dos 17 passos, **15** passaram
+(inclusive `test:ai-orchestrator`) e **2** pulados por design
+(`test:bff`, `test:health-worker`); nenhum falhou. `npm run test:gate`
+(raiz): **226** testes, **226** passando, **0** falhando, inalterado —
+não exercita `assistant.service.test.ts`. `validate:integration`
+continua recusando por pré-condição de banco ausente (`exit 2`,
+`BFF_TEST_DATABASE_URL is not set`), declarada como ausente. `git
+status --porcelain=v1 -uall` lista, ao final desta rodada, **6**
+arquivos: os dois de teste citados acima e os quatro documentos
+permanentes de migração que este fechamento atualiza
+(`docs/migration/CURRENT_STATE.md`, `docs/migration/DECISIONS.md`,
+`docs/migration/FINAL_AUDIT.md`, `docs/migration/VALIDATION_GATE.md`);
+nenhum diretório temporário de controle negativo sobrou, e nenhum
+arquivo de `apps/frontend/src/`, `apps/bff/src/`,
+`apps/ai-orchestrator/src/`, `apps/evolution-go/`, `packages/` ou
+`tools/ia-loop/` foi tocado. Este diff não fecha **M4**,
+não afirma fidelidade visual, não prova runtime do serviço Go e não
+corrige **A-24**, que continua `PENDENCIA-POS-MVP`.
+
+**Limite declarado, herdado de D-066 e do escopo §9 do Goal051, não
+afrouxado:** a partição continua provando conservação **entre o
+descobridor e os baldes de saída**, não dentro das funções de
+varredura — o `continue;` sem guarda de valor ausente, ou em bloco com
+outra instrução antes, continua fora de alcance de qualquer mecanismo
+desta rodada. `internalClientSurfaces` e `callerResolutions` ganharam
+motivo declarado para estarem fora da partição, não pertencimento
+novo. A enumeração de `findSilentDiscardLines` continua cobrindo só
+descarte guardado por valor ausente na forma idiomática reconhecida.
+
+**Revisar se:** uma sexta categoria de sítio aparecer e exigir saída
+própria e derivada que não coincidam com nenhum dos dois padrões
+atuais; se `nonTransportMemberCalls` deixar de ser vazio na árvore real
+e a asserção de não-vacuidade direta precisar substituir a dependência
+do controle negativo do Goal044; e se a prova de conservação de
+candidatos dentro das funções de varredura, declarada fora de alcance
+desde D-065, deve virar Goal próprio.

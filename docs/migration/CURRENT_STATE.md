@@ -4742,3 +4742,105 @@ tem diff **zero**, e nenhum arquivo de `apps/frontend/src/`,
   isso é trabalho de Goal futuro, não autorizado aqui. **A-24 continua
   `PENDENCIA-POS-MVP`, não corrigido** — nenhum arquivo Go de produção
   deste fork foi editado por este Goal.
+
+## Delta implementado — diff051, 2026-09-22 ([D-067](DECISIONS.md))
+
+Fecha as duas aberturas registradas no [Goal051](goals/051-a-particao-morde-nos-dois-sentidos.md):
+a partição do Goal050 conferia a mordida só do lado do sítio — do lado
+da entrada, cobrava apenas que a origem declarada fosse um sítio de
+fato lido e que o motivo não fosse vazio, deixando **10** das **19**
+entradas dos cinco baldes sem asserção sobre se o balde em que estavam
+era permitido pela categoria da própria origem; e o universo de
+**saída** de `discoverGoServiceHttpRequests` não tinha o mesmo
+tratamento fail-closed que `EGRESS_CANDIDATE_UNIVERSE` já dava ao
+universo de entrada. `apps/ai-orchestrator/tests/support/http-egress-sites.ts`
+tem diff pequeno e localizado — só a montagem do motivo da requisição
+resolvida no chamador (**3** inserções, **2** deleções; **3887**
+linhas, baseline: 3886); `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
+concentra o resto (**909** inserções, **55** deleções; **8718** linhas,
+baseline: 7864). `apps/ai-orchestrator/tests/support/product-transport-routes.txt`
+tem diff **zero**, e nenhum arquivo de `apps/frontend/src/`,
+`apps/bff/src/`, `apps/ai-orchestrator/src/`, `apps/evolution-go/`,
+`packages/` ou `tools/ia-loop/` mudou nesta rodada.
+
+- **O encaminhamento por categoria declara saída própria e saída
+  derivada, separadamente.** `egressPartitionBucketsForCategory`
+  devolve `{ ownOutput, derivedOutput }`: para as categorias de
+  `fetch` cru os dois conjuntos coincidem (`[requests, notGoBound]`);
+  para `constructor_base_url_*` a saída própria é só `[notGoBound]` e
+  a derivada é os quatro baldes que a varredura de instanciação povoa
+  a partir daquele sítio. Categoria não encaminhável continua
+  devolvendo `null` e reprovando, sem ramo `else` mudo.
+- **A partição confere agora as duas mãos.** Toda entrada dos cinco
+  baldes é conferida contra o conjunto que a categoria da sua origem
+  declarada permite, com a saída nova
+  `entriesInBucketNotAllowedByOriginCategory`; `inMoreThanOneBucket`
+  passou a ser avaliado só sobre a saída própria. Sobre a árvore real,
+  as **19** entradas dos cinco baldes (`requests` 10, `notGoBound` 6,
+  `assembledUrls` 1, `nonGoBoundInstantiations` 2,
+  `nonTransportMemberCalls` 0) passam sem achado — inclusive as **10**
+  que a observação 1 do [review050](reviews/050-review.md) tinha
+  apontado como não conferidas antes.
+- **O universo de saída de `discoverGoServiceHttpRequests` está
+  declarado, fail-closed**, no precedente exato de
+  `EGRESS_CANDIDATE_UNIVERSE`. `GO_SERVICE_HTTP_REQUEST_DISCOVERY_UNIVERSE`
+  nomeia as **7** chaves que o descobridor devolve em runtime: as
+  **5** de `EGRESS_PARTITION_BUCKETS` entram na partição;
+  `internalClientSurfaces` (**1** entrada) e `callerResolutions`
+  (**1** entrada) ficam fora, cada uma com motivo escrito e conferido.
+  Chave nova que o descobridor produza e a declaração não nomeie
+  reprova; chave declarada que some reprova como declaração obsoleta.
+- **Vacuidade por balde está declarada ou exercida.** `requests`,
+  `notGoBound`, `assembledUrls` e `nonGoBoundInstantiations` têm
+  não-vacuidade asserida diretamente sobre a árvore real;
+  `nonTransportMemberCalls` é **0** hoje. O controle negativo 2 do
+  Goal044 já prova, sobre árvore sintética de arquivos, que o balde
+  recebe entrada; o sentido inverso (balde populado, entrada inválida
+  reprovando) é exercido, de forma dedicada, pelo controle negativo 7
+  do escopo §8 desta rodada, sobre estado de partição sintético
+  próprio.
+- **O trecho do `reason` que cita a posição da origem é computado do
+  campo `originSite`.** A montagem do motivo da requisição resolvida
+  no chamador interpola `${site.filePath}:${site.line}` a partir do
+  próprio `originSite`; um teste permanente confere a correspondência
+  sobre a árvore real — **1** entrada nessa condição, a requisição de
+  `health.ts:22`.
+- **Oito controles negativos permanentes provam as oito amarras do
+  escopo §8**, cada um com as duas saídas conferidas na árvore:
+  entrada em balde não permitido reprova; as duas mãos são distintas;
+  chave nova de saída reprova; chave declarada que some reprova;
+  a exceção de `constructor_base_url_*` continua não vácua; as quatro
+  saídas do Goal050 continuam mordendo; balde vazio exercido por
+  árvore sintética reprova de fato quando povoado com entrada
+  inválida; e a enumeração de descarte e a cobertura de categoria do
+  Goal049/050 continuam mordendo.
+- **Prova executada:** `npx vitest run
+  tests/assistant/assistant.service.test.ts` (em `apps/ai-orchestrator`):
+  **227** testes (baseline: 215), **227** passando, **0** falhando.
+  `npx vitest run` completo: **1039** testes, **951** passando
+  (baseline: 939), **88** pulados (mesma contagem da baseline), **0**
+  falhando. `npx tsc -p tsconfig.json --noEmit`: "TypeScript: No
+  errors found", exit 0. `npm run lint` (`eslint src
+  --max-warnings=0`): exit 0, sem saída. Sobre a árvore real,
+  reconfirmado sem mudança: **9** sítios, **1** superfície, **4**
+  ligações resolvidas, **205** arquivos varridos, **10** rotas, **2**
+  instanciações fora do transporte, **0** chamadas de membro fora da
+  superfície, e as **41** ocorrências de `this.http.` em
+  `apps/bff/src/clients/` classificadas sem recusa.
+- **Gate reexecutado sobre a árvore final:** `npm run validate:core`
+  **PASSED** — dos 17 passos, **15** passaram (inclusive
+  `test:ai-orchestrator`) e **2** pulados por design (`test:bff`,
+  `test:health-worker`); nenhum passo falhou. `npm run test:gate`
+  (raiz): **226** testes e 0 falhas, inalterado. `validate:integration`
+  continua recusando com `exit 2` e `BFF_TEST_DATABASE_URL is not set`
+  — pré-condição de banco declarada ausente, não suprida por este
+  Goal.
+- **Limite declarado, herdado de D-066/D-065 sem afrouxamento:** a
+  partição continua provando conservação **entre o descobridor e os
+  baldes de saída**, não **dentro** das funções de varredura — provar
+  isso é trabalho de Goal futuro, não autorizado aqui.
+  `internalClientSurfaces` e `callerResolutions` ganharam motivo
+  declarado para estarem fora da partição, não pertencimento novo:
+  este Goal não os transforma em baldes de destino de sítio. **A-24
+  continua `PENDENCIA-POS-MVP`, não corrigido** — nenhum arquivo Go de
+  produção deste fork foi editado por este Goal.

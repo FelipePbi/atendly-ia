@@ -2070,14 +2070,15 @@ function discoverCallerResolvedGoBoundRequests(
         );
       }
 
+      const originSite: HttpEgressSiteOrigin = { filePath: site.filePath, line: site.line };
       requests.push({
         filePath: callerFilePath,
         line: callerCall.line,
         method: resolveFetchMethod(optionsArgText, site.filePath, site.line),
         pathExpression,
         category: `env_var_${goEnvVar}`,
-        originSite: { filePath: site.filePath, line: site.line },
-        reason: `chamada de "${localName}" (${enclosing.name}, exportado por ${site.filePath}) cujo argumento de base é env.${goEnvVar} (serviço Go); o fetch está em ${site.filePath}:${site.line}, e o caminho vem das partes da URL que não são a base`,
+        originSite,
+        reason: `chamada de "${localName}" (${enclosing.name}, exportado por ${site.filePath}) cujo argumento de base é env.${goEnvVar} (serviço Go); o fetch está em ${originSite.filePath}:${originSite.line}, e o caminho vem das partes da URL que não são a base`,
       });
     }
   }

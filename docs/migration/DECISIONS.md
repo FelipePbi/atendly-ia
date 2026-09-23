@@ -3183,3 +3183,182 @@ dentro de um `while` de condição" — **já valia na baseline**:
 fechou-o partindo `while` em três classes com critério computado.
 Não é mais condição de revisão; está no item 3 acima como
 comportamento vigente.
+
+## D-069 — O critério da isenção é o domínio percorrido: leitura posicional só isenta quando o cursor indexa sequência de caracteres ou máscara paralela, e coleção de elementos exige registro mesmo em `for-indexed`, propostas no Goal053
+
+**Status:** ACCEPTED no [review053](reviews/053-review.md) (rodada 3 de 3,
+2026-09-22; as rodadas 1 e 2 fecharam `CHANGES_REQUIRED`, com 3 e 2
+blockers), pelo Tech Lead Agent ([AGENT_ROLES](AGENT_ROLES.md), D-018),
+sobre a baseline `2adb7cabf2cc09707287e1d440d6041b51d6cfe9` (fechamento
+do Goal052). Os cinco blockers das rodadas 1 e 2 foram todos de prosa
+permanente afirmando critério que o código não implementa: `.split(…)`
+listado como evidência de `character-sequence` quando é evidência de
+`element-collection`; a evidência "citando `arquivo:linha`" declarada
+sem a ressalva das **60** ocorrências `no-domain`, que nomeiam a forma
+do laço e não uma ligação; a prova (b) de `parallel-mask` ampliando a
+isenção sem estar declarada em documento algum; `literal` listado como
+evidência de `character-sequence` quando `resolveIndexedBaseShape` não
+tem esse ramo e um literal sem anotação cai em `unresolved`; e a
+afirmação de que as duas provas de `parallel-mask` eram exercidas por
+fonte sintética, quando só a prova (a) é. O mecanismo passou nas três
+rodadas sem blocker.
+
+**Contexto:** D-068 (Goal052) classificava cada `continue;` numa classe
+computada do cabeçalho do laço (`CONTINUE_LOOP_FORMS`) e isentava de
+registro toda a leitura posicional (`for-indexed`, `while-positional-read`)
+só por essa forma, sem olhar o que o cursor de fato percorre. A observação 1
+do [review052](reviews/052-review.md) apontou o risco; a sondagem própria do
+Goal053 confirmou fail-open real, não hipotético: `http-egress-sites.ts` tem
+**6** ocorrências de `continue;` (`:1141`, `:1143`, `:1157`, `:1159`,
+`:1160`, `:3872`) dentro de `for (let index = 0; index < lines.length; …)`
+com `lines` vindo de `source.split(…)` — cada volta é uma linha candidata,
+descartada como um `for…of` descartaria — classificadas como `for-indexed` e
+isentas em bloco pelo critério do Goal052.
+
+**Decisão:**
+
+1. **Cada ocorrência em contexto `code` ganha um domínio percorrido,
+   computado do texto do módulo, em vocabulário fechado
+   `CONTINUE_CURSOR_DOMAINS`** (`character-sequence`, `parallel-mask`,
+   `element-collection`, `no-domain`), resolvido por
+   `resolveContinueCursorDomain` dentro do caminho já existente
+   (`enumerateContinueOccurrences` → `enumerateSilentDiscardOccurrences` →
+   `findSilentDiscardFindings`), nunca por segunda varredura. Para
+   `character-sequence`, `parallel-mask` e `element-collection`, a
+   evidência que concedeu o domínio é registrada por ocorrência
+   (`cursorDomainEvidence`), citando `arquivo:linha` da ligação que provou o
+   valor indexado (`.split(…)`, parâmetro anotado `: string`,
+   `new Array<…>(uptoIndex)` e afins) — nunca lista de nomes de variável,
+   indentação ou nome de função. As **60** ocorrências `no-domain` não
+   citam ligação alguma: sua evidência nomeia a forma do laço e o
+   cabeçalho (`laço \`<forma>\` não avança por cursor escalar indexado:
+   consome o que percorre diretamente`), porque o laço já consome
+   candidato diretamente, sem cursor a resolver. `parallel-mask` tem
+   **duas** provas, nenhuma citando nome de variável escrito à mão:
+   (a) o comprimento do arranjo vem do comprimento de uma sequência de
+   caracteres, na forma `<string>.length`; (b) o
+   mesmo cursor indexa o arranjo **e** uma sequência de caracteres no
+   mesmo corpo do laço, mesmo quando a forma do arranjo não amarra seu
+   comprimento a `.length` de coisa alguma — cada posição do arranjo é
+   uma posição de caractere pela coincidência de cursor. A prova (b)
+   amplia a isenção: sem ela, um arranjo cuja forma não prova a relação
+   de comprimento reprovaria como resíduo; com ela, a ocorrência fica
+   isenta. A máscara real da árvore (`quoteMask`, de `computeQuoteMask`
+   / `new Array<…>(uptoIndex)`) cai na prova **(b)**, não na (a): o
+   argumento de comprimento é `uptoIndex`, que não casa
+   `<string>.length`. Sobre a árvore real:
+   **60** `no-domain`
+   (as três classes já portadoras de candidato, que não indexam cursor
+   algum), **54** `character-sequence`, **6** `element-collection`, **0**
+   `parallel-mask` — soma **120**, igual ao total de ocorrências em
+   `code` (`nonCode` é vazio). `parallel-mask` computa **0** porque na
+   árvore real a única máscara paralela (prova (b)) compartilha cursor
+   com uma sequência de caracteres, e a precedência de aperto dá o
+   domínio final à sequência, não à máscara; prova (b) é exercida pela
+   árvore real (mascarada pela precedência), só prova (a) precisa de
+   fonte sintética.
+2. **A isenção de registro passa a depender do domínio, não mais só da
+   classe do cabeçalho.** Para leitura posicional (`for-indexed`,
+   `while-positional-read`): domínio `character-sequence` ou
+   `parallel-mask` continua isento; domínio `element-collection` passa a
+   exigir registro, mesmo com cabeçalho `for-indexed`; domínio que a
+   resolução não prova, ou que cai fora do vocabulário, **reprova**
+   nomeando `arquivo:linha` e o motivo — nenhum ramo `else` mudo.
+3. **As 6 ocorrências sobre `lines` passam a exigir registro.**
+   `DOCUMENTED_SILENT_DISCARDS` cresceu de **43** para **47** entradas: as
+   2 entradas herdadas de `readEnvSchemaDefault` (baseline, com
+   `requiresRegistration` computado `false`) são **reaproveitadas**, não
+   duplicadas, e passam a ser conferidas de verdade — removê-las produz
+   `unregistered`; as **4** entradas novas cobrem `readEnvFileValue`
+   (3 ocorrências) e `readProductTransportRoutesFile` (1 ocorrência), cada
+   uma com motivo escrito substantivo. Multiplicidade e a proibição de
+   chave por linha (Goal050) não mudam.
+4. **`while` posicional continua isento pelo mesmo critério, não mais pela
+   forma do cabeçalho.** As **5** ocorrências reais (`:1458`, `:1484`,
+   `:2989`, `:2996`, `:2999`) continuam isentas porque o domínio que
+   indexam é `character-sequence`; a prova de que um `while` posicional
+   sobre `element-collection` passaria a exigir registro é por fonte
+   sintética, fechando a observação 2 do review052.
+5. **Nada do Goal052 foi afrouxado.** `for-of` (**41**),
+   `while-exec-match` (**18**) e `while-queue-drain` (**1**) continuam
+   exigindo registro independentemente do domínio — nenhuma delas indexa
+   cursor algum, então todas caem em `no-domain`, e `no-domain` não isenta.
+6. **Nenhum mecanismo de classificação de egresso foi alterado**: as 9
+   categorias vistas na árvore, os três vocabulários de recusa,
+   `PROVEN_UNREACHABLE_REFUSAL_CATEGORIES`, `EGRESS_PARTITION_BUCKETS`,
+   `GO_SERVICE_HTTP_REQUEST_DISCOVERY_UNIVERSE`, `EGRESS_CANDIDATE_UNIVERSE`
+   e `egressPartitionBucketsForCategory` mantêm conteúdo e comportamento da
+   baseline.
+7. **Os oito controles negativos do escopo §9 do Goal053 mordem**, cada um
+   chamando a mesma conta que o teste permanente chama: `continue;` sobre
+   coleção de elementos não registrado reprova; `for-indexed` sobre
+   sequência de caracteres continua isento e a mesma guarda sobre coleção
+   exige registro (as duas saídas, por fonte sintética); `while`
+   posicional sobre coleção reprova e sobre string continua isento (as
+   duas saídas); domínio não resolvido ou fora do vocabulário reprova;
+   entrada que perde a ocorrência reprova como obsoleta e motivo vazio
+   reprova; deslocamento de linha continua não reprovando em massa; nenhuma
+   ocorrência que já exigia registro por classe deixou de exigir; e a
+   partição do Goal050/051 e a cobertura do Goal049 continuam mordendo.
+
+**Alternativas:** resolver o domínio por allowlist de nomes de variável
+(`source`, `text`, `content`, `lines`) — rejeitada, é a mesma prosa do
+antipadrão que os Goals 048 a 052 já removeram, só que com outro rótulo;
+resolver por indentação ou por nome de função — rejeitada, técnica que a
+sondagem do Goal052 já provou falhar em 5 pontos da árvore real; isentar
+`element-collection` também quando o cabeçalho é `for-indexed` — rejeitada,
+é exatamente o fail-open que a observação 1 do review052 apontou.
+
+**Motivo:** classe computada do cabeçalho mede a forma sintática do laço,
+não o que o cursor percorre. Um `for (let i = 0; i < lines.length; …)` e um
+`for (let i = 0; i < source.length; …)` têm a mesma forma e domínios opostos
+— um descarta candidato, o outro avança leitura. Medir só a forma e chamar
+isso de critério de isenção é a mesma família de defeito que os Goals 048 a
+052 fecharam, um nível acima.
+
+**Consequências:** `apps/ai-orchestrator/tests/support/http-egress-sites.ts`
+está intocado (diff zero contra a baseline; **3887** linhas, mesma contagem
+da baseline). `apps/ai-orchestrator/tests/support/product-transport-routes.txt`
+também está intocado (diff zero).
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts` concentra o
+diff inteiro: **1115** inserções e **37** deleções contra a baseline
+(**11631** linhas; baseline: **10553**) e **255** testes (baseline: **249**),
+**255** passando, **0** falhando (`npx vitest run
+tests/assistant/assistant.service.test.ts` em `apps/ai-orchestrator`).
+`npx vitest run` completo de `apps/ai-orchestrator` → **1067** testes:
+**979** passando (baseline: **973**), **88** pulados (mesma contagem da
+baseline), **0** falhando. `npx tsc -p tsconfig.json --noEmit` em
+`apps/ai-orchestrator`: sem saída, exit 0. `npm run lint` (`eslint src
+--max-warnings=0`) em `apps/ai-orchestrator`: exit 0, sem saída. `npm run
+test:gate` (raiz): **226** testes, **226** passando, **0** falhando,
+inalterado — não exercita `assistant.service.test.ts`. `validate:integration`
+não foi reexecutado nesta rodada; nada neste diff toca banco, infraestrutura
+ou pré-condição, então o comportamento herdado da baseline (recusa por
+`BFF_TEST_DATABASE_URL` ausente) não muda por este fechamento. `git status
+--porcelain=v1 -uall` lista, ao final desta Work Unit, **5** arquivos: o
+arquivo de teste citado acima e os quatro documentos permanentes de migração
+que este fechamento atualiza (`docs/migration/CURRENT_STATE.md`,
+`docs/migration/DECISIONS.md`, `docs/migration/FINAL_AUDIT.md`,
+`docs/migration/VALIDATION_GATE.md`); nenhum diretório temporário de
+controle negativo sobrou, e nenhum arquivo de `apps/frontend/src/`,
+`apps/bff/src/`, `apps/ai-orchestrator/src/`, `apps/evolution-go/`,
+`packages/` ou `tools/ia-loop/` foi tocado. Este diff não corrige **A-24**,
+que continua `PENDENCIA-POS-MVP`, não fecha **M4** e não prova runtime do
+serviço Go.
+
+**Limite declarado, herdado de D-065/D-066/D-067/D-068, não afrouxado:**
+registrar um descarte com motivo escrito diz que ele está nomeado e
+justificado, não que o candidato descartado não importava — a conservação
+de candidatos **dentro** das funções de varredura de `http-egress-sites.ts`
+continua fora de alcance de qualquer mecanismo desta rodada. O domínio
+resolve **o que o cursor indexa**, não **se o descarte perde candidato que
+importe**; essas são perguntas diferentes, e só a primeira está provada
+aqui.
+
+**Revisar se:** `CONTINUE_CURSOR_DOMAINS` precisar de um quinto domínio que
+a árvore real ainda não contém; uma forma de laço nova indexar um valor que
+nenhuma das ligações reconhecidas (`.split(…)`, parâmetro `: string`,
+`new Array<…>(uptoIndex)`, `.slice(`, `.join(`) prova, exigindo ligação
+nova com evidência própria; ou se a prova de conservação de candidatos
+dentro das funções de varredura, declarada fora de alcance desde D-065 e
+reafirmada aqui, devir Goal próprio.

@@ -1650,4 +1650,66 @@ rodada, só `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
 e os quatro documentos desta migração — nenhum arquivo de
 `tools/ia-loop/` foi tocado nesta rodada.
 
+**Acréscimo, desde 2026-09-22 (Goal053 / [D-069](DECISIONS.md)):** a
+linha da tabela acima — "a classe leitura posicional (`for-indexed`,
+`while-positional-read`) continua isenta pelo critério computado do
+laço, sem registro por ocorrência — não é isenção por prosa" — não é
+apagada, mas passou a estar **incompleta sozinha**: isentar pela classe
+do cabeçalho, sem olhar o que o cursor percorre, **era fail-open**,
+medido sobre **6** ocorrências reais (`http-egress-sites.ts:1141`,
+`:1143`, `:1157`, `:1159`, `:1160`, `:3872`, todas `for-indexed` sobre
+`lines`, produzido por `.split(…)`). Ver seção seguinte para o critério
+vigente desde esta rodada.
+
+## O critério da isenção passa a ser o domínio percorrido, não a forma do cabeçalho, do Goal053
+
+O parágrafo do Goal052 computava a classe do cabeçalho do laço
+(`CONTINUE_LOOP_FORMS`) e isentava toda leitura posicional só por essa
+forma. O que sobrava: classe computada não é o mesmo que critério
+computado — a classe mede a forma sintática do cabeçalho, não o
+**domínio que o cursor percorre**. Este delta fecha essa abertura, sem
+tocar o conjunto de 10 rotas nem o de 27 literais e sem alterar regra de
+classificação de egresso alguma.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| Cada ocorrência em contexto `code` ganha um domínio computado do vocabulário fechado `CONTINUE_CURSOR_DOMAINS` (**sequência de caracteres**, **máscara paralela**, **coleção de elementos**, **sem domínio**). Para as três primeiras classes, a evidência é registrada por ocorrência citando `arquivo:linha` da ligação que a provou — nunca lista de nomes de variável, indentação ou nome de função; as **60** ocorrências `no-domain` não citam ligação alguma, porque o laço já consome candidato diretamente — sua evidência nomeia a forma do laço e o cabeçalho. Sobre a árvore real: **60** `no-domain`, **54** `character-sequence`, **6** `element-collection`, **0** `parallel-mask` (vazio, exercido por fonte sintética) — soma **120** | Domínio não resolvido, ou fora do vocabulário, **reprova** nomeando `arquivo:linha` e o motivo — nenhum ramo `else` mudo isenta em silêncio |
+| `parallel-mask` tem **duas** provas: (a) o comprimento do arranjo vem do comprimento de uma sequência de caracteres; (b) o mesmo cursor indexa o arranjo **e** uma sequência de caracteres no mesmo corpo, mesmo sem a forma do arranjo provar relação alguma com `.length` — a prova (b) amplia a isenção, porque sem ela esse arranjo reprovaria como resíduo por forma não provada | `parallel-mask` computa **0** na árvore real porque a única máscara paralela real (prova (b)) compartilha cursor com uma sequência de caracteres, e a precedência de aperto dá o domínio final à sequência; prova (b) é exercida pela árvore real (mascarada pela precedência), só prova (a) precisa de fonte sintética |
+| A isenção de leitura posicional (`for-indexed`, `while-positional-read`) passa a depender do domínio: `character-sequence` e `parallel-mask` continuam isentando; `element-collection` passa a **exigir registro**, mesmo em `for-indexed` | A classe iteração sobre candidatos (`for-of`, `while-exec-match`, `while-queue-drain`) continua exigindo registro independentemente do domínio — nada do Goal052 foi afrouxado |
+| As **6** ocorrências reais sobre `lines` (`:1141`, `:1143`, `:1157`, `:1159`, `:1160`, `:3872`) passam a exigir registro; `DOCUMENTED_SILENT_DISCARDS` cresceu de **43** para **47** entradas — as 2 de `readEnvSchemaDefault` são reaproveitadas e agora conferidas de verdade, e as 4 novas cobrem `readEnvFileValue` (3) e `readProductTransportRoutesFile` (1) | Multiplicidade e a proibição de chave por linha (Goal050) não mudam; deslocamento de linha continua não reprovando em massa |
+| `while` posicional (**5** ocorrências reais: `:1458`, `:1484`, `:2989`, `:2996`, `:2999`) continua isento porque o domínio que indexa é `character-sequence`; a prova de que a mesma forma sobre `element-collection` exigiria registro é por fonte sintética | Não há isenção de `while` posicional por forma sozinha desde esta rodada — a isenção sempre passa pelo domínio |
+| Oito controles negativos permanentes provam as amarras do escopo §9 do Goal053, cada um chamando a mesma conta que o teste permanente chama | Nenhum dos oito controles do escopo §9 do Goal052 foi removido — foram adaptados ao critério novo |
+
+**O que este delta não prova, e é preciso dizer alto.** **Não prova
+conservação de candidatos dentro das funções de varredura**: registrar
+um descarte com motivo escrito diz que ele está nomeado e justificado,
+não que o candidato descartado não importava — limite herdado de
+D-065/D-066/D-067/D-068, não afrouxado. O domínio resolve **o que o
+cursor indexa**, não **se o descarte perde candidato que importe**.
+**Não amplia a enumeração a `return`, `break` ou saída antecipada de
+função**: o alcance continua sendo `continue;`. **Não corrige A-24**: o
+achado continua `PENDENCIA-POS-MVP`, e nenhum arquivo Go de produção
+deste fork foi editado por este Goal. **Não fecha M4. Não amplia nem
+reduz o conjunto de 10 rotas ou de 27 literais. Nenhuma categoria de
+recusa, regra de classificação de egresso ou isenção de egresso foi
+alterada.** Sobre a árvore final desta rodada: `npx vitest run
+tests/assistant/assistant.service.test.ts` em `apps/ai-orchestrator` →
+**255** testes, **255** passando, **0** falhando (baseline: 249); `npx
+vitest run` completo → **1067** testes, **979** passando (baseline:
+973), **88** pulados (mesma contagem da baseline), **0** falhando. `npx
+tsc -p tsconfig.json --noEmit`: sem saída, exit 0. `npm run lint`
+(`eslint src --max-warnings=0`) em `apps/ai-orchestrator`: exit 0, sem
+saída. `npm run test:gate` (raiz) permanece em **226** testes e 0
+falhas, inalterado. `validate:integration` não foi reexecutado nesta
+rodada: nada no diff toca banco, infraestrutura ou pré-condição, e o
+comportamento herdado da baseline (recusa por `BFF_TEST_DATABASE_URL`
+ausente, `exit 2`) não muda.
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts` está
+**intocado** (diff zero; **3887** linhas, mesma contagem da baseline);
+`apps/ai-orchestrator/tests/support/product-transport-routes.txt` tem
+diff **zero**. `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
+concentra o diff inteiro contra a baseline `2adb7cabf2cc09707287e1d440d6041b51d6cfe9`:
+**1115** inserções, **37** deleções (**11631** linhas, baseline:
+**10553**).
+
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff052-2026-09-22-d-068) e [D-068](DECISIONS.md).

@@ -4955,3 +4955,121 @@ rodada.
   função: o alcance é `continue;`. **A-24 continua `PENDENCIA-POS-MVP`,
   não corrigido** — nenhum arquivo Go de produção deste fork foi
   editado por este Goal.
+
+## Delta implementado — diff053, 2026-09-22 ([D-069](DECISIONS.md))
+
+Fecha o degrau que sobrou dentro do próprio diff052: a classe de laço
+computada por `classifyContinueLoopForm` media a **forma sintática do
+cabeçalho**, não o **domínio que o cursor percorre**, e isentava em
+bloco toda leitura posicional (`for-indexed`, `while-positional-read`)
+só por essa forma. A observação 1 do [review052](reviews/052-review.md)
+apontou um fail-open real, confirmado por sondagem: **6** ocorrências de
+`continue;` em `for (let index = 0; index < lines.length; …)`, com
+`lines` vindo de `source.split(…)`, descartavam candidato exatamente
+como um `for…of` descartaria e eram isentas por classificação.
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts` e
+`apps/ai-orchestrator/tests/support/product-transport-routes.txt`
+continuam **intocados** (diff zero contra a baseline; **3887** linhas o
+primeiro, mesma contagem). `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
+concentra o diff inteiro (**1115** inserções, **37** deleções; **11631**
+linhas, baseline: **10553**), e nenhum arquivo de `apps/frontend/src/`,
+`apps/bff/src/`, `apps/ai-orchestrator/src/`, `apps/evolution-go/`,
+`packages/` ou `tools/ia-loop/` mudou nesta rodada.
+
+- **Vocabulário de domínios (`CONTINUE_CURSOR_DOMAINS`), computado do
+  texto do módulo, nunca declarado por lista de nomes de variável:**
+  **sequência de caracteres** — o cursor indexa valor provado `string`
+  no texto (parâmetro anotado, `.slice(`/`.join(` na cadeia; um literal
+  sem anotação, como `const s = "abc"`, não prova domínio e cai em
+  `unresolved`);
+  `.split(…)` é evidência de **coleção de elementos**, nunca de
+  sequência de caracteres — ver a seguir; **máscara paralela** — duas
+  provas, nenhuma citando nome de variável escrito à mão: (a) o cursor
+  indexa arranjo cujo comprimento vem do comprimento de uma sequência
+  de caracteres, na forma `<string>.length` — regra sem ocorrência na
+  árvore real, exercida por fonte sintética; ou
+  (b) o mesmo cursor indexa esse arranjo **e** uma sequência de
+  caracteres no mesmo corpo do laço — cada posição do arranjo é então
+  uma posição de caractere, mesmo quando a forma (b) não prova o
+  comprimento do arranjo por relação alguma com `.length`. A prova (b)
+  amplia a isenção: um arranjo cuja forma resolvida não amarra o
+  comprimento a uma sequência de caracteres deixa de virar resíduo
+  reprovado quando o mesmo cursor também indexa uma sequência de
+  caracteres — em vez de reprovar por forma não provada, a ocorrência
+  fica isenta. A máscara real da árvore (`quoteMask`, de
+  `computeQuoteMask` / `new Array<…>(uptoIndex)`) é resolvida pela
+  prova **(b)**, não pela (a): o argumento de comprimento é
+  `uptoIndex`, que não casa `<string>.length`; **coleção de
+  elementos** — o cursor indexa coleção cujos elementos são candidatos
+  (`lines` vindo de `.split(…)`); **sem domínio** — o laço (`for-of`,
+  `while-exec-match`, `while-queue-drain`) não indexa cursor algum. Para
+  `character-sequence`, `parallel-mask` e `element-collection`, a
+  evidência que concedeu o domínio é registrada por ocorrência, citando
+  `arquivo:linha` da ligação que a provou; as **60** ocorrências
+  `no-domain` não citam ligação alguma — sua evidência nomeia a forma
+  do laço e o cabeçalho (`laço "<forma>" não avança por cursor escalar
+  indexado: consome o que percorre diretamente (...)`), porque nenhuma
+  ligação de variável precisa ser provada quando o laço já consome
+  candidato diretamente. Sobre a árvore real: **60**
+  `no-domain`, **54** `character-sequence`, **6** `element-collection`,
+  **0** `parallel-mask` (vazio porque a única máscara paralela da
+  árvore é percorrida pelo mesmo cursor de uma sequência de caracteres;
+  exercido por fonte sintética) — soma **120**, igual ao total de
+  ocorrências de código.
+- **Critério de isenção passa a ser o domínio, não a classe do
+  cabeçalho.** Leitura posicional (`for-indexed`,
+  `while-positional-read`) com domínio `character-sequence` ou
+  `parallel-mask` continua isenta; com domínio `element-collection`
+  passa a **exigir registro**, mesmo em `for-indexed`; domínio não
+  resolvido, ou fora do vocabulário, **reprova** nomeando
+  `arquivo:linha` e o motivo — nenhum ramo `else` mudo.
+- **As 6 ocorrências sobre `lines` (`:1141`, `:1143`, `:1157`, `:1159`,
+  `:1160`, `:3872`) passam a exigir registro.**
+  `DOCUMENTED_SILENT_DISCARDS` cresceu de **43** para **47** entradas:
+  as 2 entradas herdadas de `readEnvSchemaDefault` (baseline, com
+  `requiresRegistration` antes computado `false`, de modo que
+  removê-las não reprovava nada) são reaproveitadas, não duplicadas, e
+  agora conferidas de verdade; as 4 novas cobrem `readEnvFileValue` (3
+  ocorrências) e `readProductTransportRoutesFile` (1 ocorrência), cada
+  uma com motivo escrito substantivo.
+- **`while` posicional é conferido pelo mesmo critério, não mais pela
+  forma.** As **5** ocorrências reais (`:1458`, `:1484`, `:2989`,
+  `:2996`, `:2999`) continuam isentas porque o domínio que indexam é
+  `character-sequence`; a prova de que a mesma forma sobre
+  `element-collection` exigiria registro é por fonte sintética,
+  fechando a observação 2 do review052.
+- **Nada do Goal052 foi afrouxado:** `for-of` (**41**),
+  `while-exec-match` (**18**) e `while-queue-drain` (**1**) continuam
+  exigindo registro independentemente do domínio — todas caem em
+  `no-domain`, que não isenta.
+- **Oito controles negativos permanentes provam as amarras do escopo
+  §9 do Goal053**, cada um chamando a mesma conta que o teste
+  permanente chama: coleção de elementos não registrada reprova;
+  `for-indexed` sobre string continua isento e a mesma guarda sobre
+  coleção exige registro (as duas saídas); `while` posicional sobre
+  coleção reprova e sobre string continua isento (as duas saídas);
+  domínio não resolvido ou fora do vocabulário reprova; entrada que
+  perde a ocorrência reprova como obsoleta e motivo vazio reprova;
+  deslocamento de linha continua não reprovando em massa; nenhuma
+  ocorrência que já exigia registro por classe deixou de exigir; e a
+  partição do Goal050/051 e a cobertura do Goal049 continuam mordendo.
+- **Prova executada:** `npx vitest run
+  tests/assistant/assistant.service.test.ts` (em `apps/ai-orchestrator`):
+  **255** testes (baseline: 249), **255** passando, **0** falhando.
+  `npx vitest run` completo: **1067** testes, **979** passando
+  (baseline: 973), **88** pulados (mesma contagem da baseline), **0**
+  falhando. `npx tsc -p tsconfig.json --noEmit`: sem saída, exit 0.
+  `npm run lint` (`eslint src --max-warnings=0`): exit 0, sem saída.
+  `npm run test:gate` (raiz): **226** testes, **226** passando, **0**
+  falhando, inalterado.
+- **`validate:integration` não foi reexecutado nesta rodada:** nada no
+  diff toca banco, infraestrutura ou pré-condição; o comportamento
+  herdado da baseline (recusa por `BFF_TEST_DATABASE_URL` ausente,
+  `exit 2`) não muda.
+- **Limite declarado, herdado de D-065/D-066/D-067/D-068 sem
+  afrouxamento:** o domínio resolve **o que o cursor indexa**, não **se
+  o descarte perde candidato que importe** — a conservação de
+  candidatos **dentro** das funções de varredura continua fora de
+  alcance de qualquer mecanismo desta rodada. **A-24 continua
+  `PENDENCIA-POS-MVP`, não corrigido** — nenhum arquivo Go de produção
+  deste fork foi editado por este Goal.

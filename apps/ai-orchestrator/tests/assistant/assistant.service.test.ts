@@ -6796,6 +6796,41 @@ const DOCUMENTED_SILENT_DISCARDS: ReadonlyMap<string, SilentDiscardEntry> = buil
     reason:
       "nenhuma env var de base do serviço Go aparece nas requisições que este método já mapeou — o método não contribui caminho do Go, então não gera entrada de requisição para ele; outros métodos do mesmo cliente continuam sendo varridos",
   },
+  // ---------------------------------------------------------------------
+  // Goal053 / WU-02 — a isenção de registro passa a seguir o DOMÍNIO
+  // percorrido (§2), não mais só a forma sintática do cabeçalho: as 6
+  // ocorrências reais sobre `lines` (arranjo produzido por `.split(…)`,
+  // portanto `element-collection`) exigem registro mesmo sendo
+  // `for-indexed` — classe que o Goal052 isentava em bloco por leitura
+  // posicional. As duas entradas de `readEnvSchemaDefault` já estavam na
+  // baseline acima (Goal050), agora reaproveitadas sem duplicar: a mesma
+  // chave, o mesmo motivo, passam a ser de fato exigidas e conferidas. As
+  // 4 entradas abaixo são novas, para as 4 ocorrências restantes.
+  // ---------------------------------------------------------------------
+  {
+    anchor: "readEnvFileValue",
+    snippet: 'if (trimmed === "" || trimmed.startsWith("#")) continue;',
+    reason:
+      "linha em branco ou comentário (`#`) do arquivo `CHAVE=VALOR` — não é candidato a par chave/valor algum; a varredura segue para a próxima linha à procura da declaração real, mesma forma da guarda irmã de `readEnvSchemaDefault` acima",
+  },
+  {
+    anchor: "readEnvFileValue",
+    snippet: "if (separator === -1) continue;",
+    reason:
+      "linha sem `=` — não tem a forma `CHAVE=VALOR`, então não é um par a considerar; despejar aqui derrubaria a leitura em toda linha do arquivo que não declara um valor",
+  },
+  {
+    anchor: "readEnvFileValue",
+    snippet: "if (trimmed.slice(0, separator).trim() !== key) continue;",
+    reason:
+      "a linha declara uma chave diferente da procurada — não é o par que esta chamada busca; outras chaves do mesmo arquivo continuam sendo varridas pelas chamadas que as procuram",
+  },
+  {
+    anchor: "readProductTransportRoutesFile",
+    snippet: 'if (trimmed === "" || trimmed.startsWith("#")) continue;',
+    reason:
+      "linha em branco ou comentário no arquivo de rotas de transporte do produto — não é candidato a rota; a varredura segue para a próxima linha, e o arquivo sem rota reconhecida alguma já reprova depois do laço, então nenhuma rota de fato se perde aqui",
+  },
 ]);
 
 /** Acha, em `source`, toda linha na forma `if (<condição sobre valor ausente>) continue;`, com a condição em qualquer forma idiomática reconhecida (`=== undefined`, `=== null`, `!<identificador>`), combinável por `||`, com qualquer identificador. */
@@ -6830,14 +6865,17 @@ interface SilentDiscardOccurrence {
   readonly key: string;
   /**
    * Ausente significa `true` — o caso de toda ocorrência construída antes
-   * deste campo existir (Goal050/051). `false` para toda classe FORA de
-   * `CONTINUE_CANDIDATE_LOOP_FORMS` (Goal052 §2/§3), que na árvore real é
-   * a leitura posicional nas suas duas formas, `for-indexed` e
-   * `while-positional-read`: a isenção delas é o critério computado do
-   * laço contenedor, não um registro por ocorrência, então elas nunca
-   * contam como não registradas nem tornam obsoleta uma entrada de outra
-   * classe — mas seguem contando para achar a chave de uma entrada que
-   * porventura as nomeie, sem forçar sua presença.
+   * deste campo existir (Goal050/051). Desde o Goal053 §2, o critério é o
+   * DOMÍNIO percorrido (`resolveContinueCursorDomain`), não mais só a
+   * classe do cabeçalho: sequência de caracteres e máscara paralela são
+   * isentas — cada volta avança leitura, não descarta candidato —, e
+   * coleção de elementos EXIGE registro mesmo quando a forma é
+   * `for-indexed` (o Goal052 isentava por classe em bloco). Laço sem
+   * domínio (`no-domain`) continua decidido por `CONTINUE_CANDIDATE_LOOP_FORMS`,
+   * porque cada volta dele já é diretamente um candidato, sem cursor a
+   * resolver. Ocorrência isenta nunca conta como não registrada nem torna
+   * obsoleta uma entrada de outra classe — mas segue contando para achar a
+   * chave de uma entrada que porventura a nomeie, sem forçar sua presença.
    */
   readonly requiresRegistration?: boolean;
 }
@@ -6999,6 +7037,51 @@ const CONTINUE_LOOP_FORMS = [
 ] as const;
 
 type ContinueLoopForm = (typeof CONTINUE_LOOP_FORMS)[number];
+
+/**
+ * Vocabulário FECHADO do DOMÍNIO que o cursor de um laço percorre
+ * (Goal053 §1). A classe de laço do Goal052 mede a FORMA do cabeçalho; o
+ * domínio mede o que o cursor de fato indexa, resolvido do texto do módulo
+ * por evidência nomeada — nunca por lista de nomes de variável escrita à
+ * mão, nunca por recuo e nunca por nome de função.
+ *
+ * - `character-sequence`: o cursor indexa um valor provado `string` no
+ *   próprio texto (anotação `: string`, `readFileSync(…, "utf8")`,
+ *   `.trim()`/`.slice(…)`/`.join(…)` sobre sequência de caracteres, ou
+ *   retorno `: string` de função do módulo). Cada volta avança LEITURA.
+ * - `parallel-mask`: o cursor indexa um arranjo cujo comprimento vem do
+ *   comprimento de uma sequência de caracteres (`new Array<…>(s.length)`),
+ *   ou um arranjo indexado pelo MESMO cursor que indexa uma sequência de
+ *   caracteres no mesmo corpo — cada posição é uma posição de caractere.
+ * - `element-collection`: o cursor indexa uma coleção cujos elementos são
+ *   candidatos (`source.split(…)` é o caso concreto da árvore). Cada volta
+ *   é um CANDIDATO.
+ * - `no-domain`: o laço não avança por cursor escalar indexado — `for…of`,
+ *   `for…in`, `while` de `exec` e de drenagem de fila e `do/while` consomem
+ *   o que percorrem diretamente, sem indexar domínio algum.
+ *
+ * Domínio que a resolução não conclui REPROVA nomeando `arquivo:linha` e o
+ * motivo, como já acontece com a classe de laço: não há ramo `else` mudo e
+ * não há domínio "desconhecido" que passe.
+ */
+const CONTINUE_CURSOR_DOMAINS = [
+  "character-sequence",
+  "parallel-mask",
+  "element-collection",
+  "no-domain",
+] as const;
+
+type ContinueCursorDomain = (typeof CONTINUE_CURSOR_DOMAINS)[number];
+
+/**
+ * Formas de laço que avançam por CURSOR ESCALAR — as únicas que percorrem
+ * um domínio indexado, e portanto as únicas em que o domínio é resolvido do
+ * corpo. As demais recebem `no-domain` pela própria classe.
+ */
+const CURSOR_BEARING_LOOP_FORMS: ReadonlySet<ContinueLoopForm> = new Set([
+  "for-indexed",
+  "while-positional-read",
+]);
 
 /** Vocabulário FECHADO dos contextos léxicos em que a leitura textual pode produzir `continue;`. Contexto fora daqui reprova. */
 const CONTINUE_LEXICAL_CONTEXTS = [
@@ -7454,6 +7537,12 @@ interface ContinueOccurrence {
   readonly loopHeader: string | undefined;
   /** Guarda normalizada que precede o `continue` na mesma linha, quando há uma — discriminador estrutural disponível para quem chavear ocorrência, sem usar número de linha. */
   readonly guard: string | undefined;
+  /** Domínio que o cursor do laço contenedor percorre (Goal053 §1), ou `undefined` quando a resolução não o provou. */
+  readonly cursorDomain: ContinueCursorDomain | undefined;
+  /** O trecho da árvore que CONCEDEU o domínio, com `arquivo:linha` da ligação — evidência verificável, não rótulo. */
+  readonly cursorDomainEvidence: string | undefined;
+  /** Motivo escrito de o domínio não ter sido resolvido; reprova em `findContinueEnumerationFindings`. */
+  readonly unresolvedDomainReason: string | undefined;
   readonly text: string;
   readonly unresolvedReason: string | undefined;
 }
@@ -7480,6 +7569,466 @@ function guardPrecedingContinue(lineText: string, continueColumn: number): strin
   return match[1].replace(/\s+/gu, " ").trim();
 }
 
+/** Escapa um identificador lido da árvore antes de entrar numa expressão regular — `$` é válido em identificador e metacaractere em regex. */
+function escapeForRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+/** Divide o cabeçalho de um `for` nas suas cláusulas, respeitando parênteses, colchetes e chaves aninhados. */
+function splitTopLevelSemicolons(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const char of text) {
+    if (char === "(" || char === "[" || char === "{") depth += 1;
+    else if (char === ")" || char === "]" || char === "}") depth -= 1;
+    if (char === ";" && depth === 0) {
+      parts.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  parts.push(current);
+  return parts;
+}
+
+/** Índice do primeiro `char` em profundidade zero a partir de `from`, ou `-1` quando o delimitador que contém `from` fecha antes. Roda sobre texto já mascarado. */
+function indexOfTopLevelChar(masked: string, from: number, char: string): number {
+  let depth = 0;
+  for (let index = from; index < masked.length; index += 1) {
+    const current = masked[index];
+    if (depth === 0 && current === char) return index;
+    if (current === "(" || current === "[" || current === "{") depth += 1;
+    else if (current === ")" || current === "]" || current === "}") {
+      if (depth === 0) return -1;
+      depth -= 1;
+    }
+  }
+  return -1;
+}
+
+/** Cursor escalar e limite do cabeçalho, quando ele compara um identificador nu com um limite. */
+function cursorComparisonOfSpan(
+  span: ContinueLoopSpan,
+): { cursor: string; limit: string } | undefined {
+  const condition =
+    span.keyword === "for" ? (splitTopLevelSemicolons(span.header)[1] ?? "") : span.header;
+  const match = /^([A-Za-z_$][\w$]*)\s*(?:<=|>=|<|>)\s*(.+)$/u.exec(
+    stripRedundantParentheses(condition.trim()),
+  );
+  if (match === null) return undefined;
+  return { cursor: match[1], limit: match[2].trim() };
+}
+
+/** Acesso indexado (`X[…]`) e leitura posicional de caractere (`X.charCodeAt(…)`, `X.slice(…)`) cujo argumento usa o cursor. */
+const CURSOR_INDEXED_ACCESS_PATTERNS: readonly RegExp[] = [
+  /([A-Za-z_$][\w$]*)\s*\[([^[\]]*)\]/gu,
+  /([A-Za-z_$][\w$]*)\s*\.\s*(?:charCodeAt|charAt|codePointAt|slice|substring)\s*\(([^()]*)\)/gu,
+];
+
+/**
+ * Todo identificador que o CURSOR indexa dentro do corpo do laço, com o
+ * trecho da árvore real que provou o acesso. Roda sobre o texto mascarado,
+ * então acesso escrito dentro de string, template ou comentário não conta.
+ */
+function cursorIndexedBases(
+  source: string,
+  masked: string,
+  bodyStart: number,
+  bodyEnd: number,
+  cursor: string,
+): Map<string, string> {
+  const maskedBody = masked.slice(bodyStart, bodyEnd);
+  const cursorUse = new RegExp(`(?<![\\w$])${escapeForRegExp(cursor)}(?![\\w$])`, "u");
+  const bases = new Map<string, string>();
+  for (const pattern of CURSOR_INDEXED_ACCESS_PATTERNS) {
+    pattern.lastIndex = 0;
+    let match = pattern.exec(maskedBody);
+    while (match !== null) {
+      if (match[1] !== cursor && cursorUse.test(match[2]) && !bases.has(match[1])) {
+        const from = bodyStart + match.index;
+        bases.set(match[1], source.slice(from, from + match[0].length).replace(/\s+/gu, " ").trim());
+      }
+      match = pattern.exec(maskedBody);
+    }
+  }
+  return bases;
+}
+
+/** Ligação de um identificador a um valor: declaração `const`/`let`/`var`, ou parâmetro anotado. */
+interface ContinueValueBinding {
+  readonly index: number;
+  readonly line: number;
+  readonly typeAnnotation: string | undefined;
+  readonly initializer: string | undefined;
+}
+
+/**
+ * A ligação de `name` mais próxima ANTES de `beforeIndex` — declaração ou
+ * parâmetro. É posição léxica computada sobre o texto mascarado, nunca uma
+ * lista de nomes conhecidos.
+ */
+function findNearestValueBinding(
+  source: string,
+  masked: string,
+  lineStartOffsets: readonly number[],
+  name: string,
+  beforeIndex: number,
+): ContinueValueBinding | undefined {
+  const escaped = escapeForRegExp(name);
+  let best: ContinueValueBinding | undefined;
+  const consider = (candidate: ContinueValueBinding): void => {
+    if (best === undefined || candidate.index > best.index) best = candidate;
+  };
+
+  const declaration = new RegExp(`\\b(?:const|let|var)\\s+${escaped}(?![\\w$])`, "gu");
+  let match = declaration.exec(masked);
+  while (match !== null && match.index < beforeIndex) {
+    let cursor = skipMaskedWhitespace(masked, match.index + match[0].length);
+    let typeAnnotation: string | undefined;
+    let initializer: string | undefined;
+    if (masked[cursor] === ":") {
+      const assign = indexOfTopLevelChar(masked, cursor + 1, "=");
+      const end = assign === -1 ? indexOfTopLevelChar(masked, cursor + 1, ";") : assign;
+      if (end !== -1) {
+        typeAnnotation = source.slice(cursor + 1, end).replace(/\s+/gu, " ").trim();
+        cursor = end;
+      }
+    }
+    if (masked[cursor] === "=") {
+      const end = indexOfTopLevelChar(masked, cursor + 1, ";");
+      initializer = source
+        .slice(cursor + 1, end === -1 ? source.length : end)
+        .replace(/\s+/gu, " ")
+        .trim();
+    }
+    consider({
+      index: match.index,
+      line: lineNumberAtIndex(lineStartOffsets, match.index),
+      typeAnnotation,
+      initializer,
+    });
+    match = declaration.exec(masked);
+  }
+
+  const parameter = new RegExp(`[(,]\\s*(?:readonly\\s+)?${escaped}\\s*:`, "gu");
+  match = parameter.exec(masked);
+  while (match !== null && match.index < beforeIndex) {
+    const colon = match.index + match[0].length - 1;
+    const comma = indexOfTopLevelChar(masked, colon + 1, ",");
+    const close = indexOfTopLevelChar(masked, colon + 1, ")");
+    const end = comma !== -1 && (close === -1 || comma < close) ? comma : close;
+    if (end !== -1) {
+      consider({
+        index: match.index,
+        line: lineNumberAtIndex(lineStartOffsets, match.index),
+        typeAnnotation: source.slice(colon + 1, end).replace(/\s+/gu, " ").trim(),
+        initializer: undefined,
+      });
+    }
+    match = parameter.exec(masked);
+  }
+  return best;
+}
+
+/** Tipo de retorno anotado de uma função declarada no módulo, quando há um. */
+function moduleFunctionReturnType(masked: string, name: string): string | undefined {
+  const declaration = new RegExp(`\\bfunction\\s+${escapeForRegExp(name)}\\s*\\(`, "u").exec(masked);
+  if (declaration === null) return undefined;
+  const open = masked.indexOf("(", declaration.index);
+  const close = matchBalancedDelimiter(masked, open, "(", ")");
+  if (close === -1) return undefined;
+  const returnType = /^\s*:\s*([^{;]+)\{/u.exec(masked.slice(close + 1));
+  return returnType === null ? undefined : returnType[1].replace(/\s+/gu, " ").trim();
+}
+
+/** Um tipo anotado é de arranjo quando termina em `[]` ou abre `Array<`/`ReadonlyArray<`. */
+function isArrayTypeAnnotation(annotation: string): boolean {
+  const normalized = annotation.trim();
+  return normalized.endsWith("[]") || /^(?:Readonly)?Array\s*</u.test(normalized);
+}
+
+/** O que a resolução conseguiu provar sobre um identificador indexado pelo cursor. */
+type ContinueBaseShape =
+  | { readonly kind: "domain"; readonly domain: ContinueCursorDomain; readonly evidence: string }
+  | {
+      readonly kind: "array";
+      readonly evidence: string;
+      readonly lengthArgument: string | undefined;
+    }
+  | { readonly kind: "unresolved"; readonly reason: string };
+
+/** Métodos de `String` que devolvem `string` quando o receptor é sequência de caracteres. */
+const STRING_PRESERVING_METHODS =
+  /^([A-Za-z_$][\w$]*)\s*\.\s*(trim|trimStart|trimEnd|slice|substring|toLowerCase|toUpperCase|replace|replaceAll|normalize|padStart|padEnd|concat|repeat)\s*\(/u;
+
+/**
+ * O domínio que `name` representa, provado pela sua ligação mais próxima no
+ * texto do módulo. `depth` limita a cadeia de receptores (`body` vem de
+ * `trimmed`, que vem do parâmetro `text: string`) e o que a cadeia não
+ * fecha volta como motivo escrito, nunca como classe de sobra.
+ */
+function resolveIndexedBaseShape(
+  source: string,
+  masked: string,
+  lineStartOffsets: readonly number[],
+  filePath: string,
+  name: string,
+  beforeIndex: number,
+  depth: number,
+): ContinueBaseShape {
+  if (depth <= 0) {
+    return {
+      kind: "unresolved",
+      reason: `a cadeia de ligações de \`${name}\` excedeu a profundidade de resolução`,
+    };
+  }
+  const binding = findNearestValueBinding(source, masked, lineStartOffsets, name, beforeIndex);
+  if (binding === undefined) {
+    return {
+      kind: "unresolved",
+      reason: `\`${name}\` não tem declaração nem parâmetro anotado antes do laço, então o domínio que ele representa não pode ser provado`,
+    };
+  }
+  const where = `${filePath}:${binding.line}`;
+  const initializer = binding.initializer ?? "";
+  const annotation = binding.typeAnnotation;
+
+  if (/(?:^|[\w$)\]])\s*\.\s*split\s*\(/u.test(initializer)) {
+    return {
+      kind: "domain",
+      domain: "element-collection",
+      evidence: `${where}: \`${name}\` recebe \`${initializer}\`, e \`.split(…)\` produz uma coleção cujos elementos são candidatos`,
+    };
+  }
+  if (/\breadFileSync\s*\([^)]*["']utf8["']/u.test(initializer)) {
+    return {
+      kind: "domain",
+      domain: "character-sequence",
+      evidence: `${where}: \`${name}\` recebe \`${initializer}\`, leitura de arquivo em "utf8", que é sequência de caracteres`,
+    };
+  }
+  if (/(?:^|[\w$)\]])\s*\.\s*join\s*\(/u.test(initializer)) {
+    return {
+      kind: "domain",
+      domain: "character-sequence",
+      evidence: `${where}: \`${name}\` recebe \`${initializer}\`, e \`.join(…)\` produz sequência de caracteres`,
+    };
+  }
+  const preserving = STRING_PRESERVING_METHODS.exec(initializer);
+  if (preserving !== null) {
+    const receiver = resolveIndexedBaseShape(
+      source,
+      masked,
+      lineStartOffsets,
+      filePath,
+      preserving[1],
+      binding.index,
+      depth - 1,
+    );
+    if (receiver.kind === "domain" && receiver.domain === "character-sequence") {
+      return {
+        kind: "domain",
+        domain: "character-sequence",
+        evidence: `${where}: \`${name}\` recebe \`${initializer}\`, e \`.${preserving[2]}(…)\` preserva a sequência de caracteres de \`${preserving[1]}\` — ${receiver.evidence}`,
+      };
+    }
+  }
+  const allocation = /^new\s+Array\s*(?:<[^<>]*>)?\s*\(([^)]*)\)/u.exec(initializer);
+  if (allocation !== null) {
+    return {
+      kind: "array",
+      evidence: `${where}: \`${name}\` recebe \`${initializer}\``,
+      lengthArgument: allocation[1].replace(/\s+/gu, " ").trim(),
+    };
+  }
+  if (annotation !== undefined && /^(?:readonly\s+)?string$/u.test(annotation)) {
+    return {
+      kind: "domain",
+      domain: "character-sequence",
+      evidence: `${where}: \`${name}\` é anotado \`: ${annotation}\``,
+    };
+  }
+  const call = /^([A-Za-z_$][\w$]*)\s*\(/u.exec(initializer);
+  if (call !== null) {
+    const returnType = moduleFunctionReturnType(masked, call[1]);
+    if (returnType !== undefined && /^(?:readonly\s+)?string$/u.test(returnType)) {
+      return {
+        kind: "domain",
+        domain: "character-sequence",
+        evidence: `${where}: \`${name}\` recebe \`${initializer}\`, e \`${call[1]}\` é declarada com retorno \`: ${returnType}\``,
+      };
+    }
+    if (returnType !== undefined && isArrayTypeAnnotation(returnType)) {
+      return {
+        kind: "array",
+        evidence: `${where}: \`${name}\` recebe \`${initializer}\`, e \`${call[1]}\` é declarada com retorno \`: ${returnType}\``,
+        lengthArgument: undefined,
+      };
+    }
+  }
+  if (annotation !== undefined && isArrayTypeAnnotation(annotation)) {
+    return {
+      kind: "array",
+      evidence: `${where}: \`${name}\` é anotado \`: ${annotation}\``,
+      lengthArgument: undefined,
+    };
+  }
+  if (/(?:^|[\w$)\]])\s*\.\s*map\s*\(/u.test(initializer)) {
+    return {
+      kind: "array",
+      evidence: `${where}: \`${name}\` recebe \`${initializer}\`, e \`.map(…)\` produz arranjo`,
+      lengthArgument: undefined,
+    };
+  }
+  return {
+    kind: "unresolved",
+    reason: `a ligação de \`${name}\` em ${where}${annotation === undefined ? "" : ` (\`: ${annotation}\`)`}${initializer === "" ? "" : ` (\`= ${initializer}\`)`} não prova sequência de caracteres, máscara paralela nem coleção de elementos`,
+  };
+}
+
+/** Domínio percorrido por um laço, com a evidência que o concedeu ou o motivo de não ter resolvido. */
+interface ContinueCursorDomainResolution {
+  readonly domain: ContinueCursorDomain | undefined;
+  readonly evidence: string | undefined;
+  readonly unresolvedReason: string | undefined;
+}
+
+/** Quantas ligações encadeadas a resolução de domínio percorre antes de devolver motivo escrito. */
+const CONTINUE_DOMAIN_RESOLUTION_DEPTH = 4;
+
+/** Precedência de APERTO: coleção de elementos vence, porque é a única que carrega candidato. */
+const CONTINUE_DOMAIN_PRECEDENCE: readonly ContinueCursorDomain[] = [
+  "element-collection",
+  "character-sequence",
+  "parallel-mask",
+];
+
+/**
+ * O domínio que o cursor do laço percorre, computado do texto do módulo.
+ * Nenhum ramo devolve domínio sem evidência: o que a resolução não prova
+ * volta como motivo escrito, e `findContinueEnumerationFindings` reprova
+ * nomeando `arquivo:linha`.
+ */
+function resolveContinueCursorDomain(
+  source: string,
+  masked: string,
+  lineStartOffsets: readonly number[],
+  filePath: string,
+  span: ContinueLoopSpan,
+): ContinueCursorDomainResolution {
+  if (span.form === undefined) {
+    // A classe do laço já reprovou com motivo próprio; não se empilha um
+    // segundo motivo sobre a mesma ocorrência.
+    return { domain: undefined, evidence: undefined, unresolvedReason: undefined };
+  }
+  if (!CURSOR_BEARING_LOOP_FORMS.has(span.form)) {
+    return {
+      domain: "no-domain",
+      evidence: `laço \`${span.form}\` não avança por cursor escalar indexado: consome o que percorre diretamente (\`${span.keyword} (${span.header})\`)`,
+      unresolvedReason: undefined,
+    };
+  }
+  const comparison = cursorComparisonOfSpan(span);
+  if (comparison === undefined) {
+    return {
+      domain: undefined,
+      evidence: undefined,
+      unresolvedReason: `laço \`${span.form}\` cujo cabeçalho \`${span.header}\` não expõe cursor escalar comparado a limite, então o domínio percorrido não pode ser resolvido`,
+    };
+  }
+  const bases = cursorIndexedBases(source, masked, span.bodyStart, span.bodyEnd, comparison.cursor);
+  if (bases.size === 0) {
+    return {
+      domain: undefined,
+      evidence: undefined,
+      unresolvedReason: `o cursor \`${comparison.cursor}\` do laço \`${span.keyword} (${span.header})\` não indexa valor algum no corpo, então o domínio percorrido não pode ser resolvido`,
+    };
+  }
+
+  const resolved = new Map<string, { domain: ContinueCursorDomain; evidence: string }>();
+  const arrays = new Map<string, { evidence: string; lengthArgument: string | undefined }>();
+  const failures: string[] = [];
+  for (const [base, access] of bases) {
+    const shape = resolveIndexedBaseShape(
+      source,
+      masked,
+      lineStartOffsets,
+      filePath,
+      base,
+      span.headerIndex,
+      CONTINUE_DOMAIN_RESOLUTION_DEPTH,
+    );
+    if (shape.kind === "domain") {
+      resolved.set(base, { domain: shape.domain, evidence: `\`${access}\` — ${shape.evidence}` });
+    } else if (shape.kind === "array") {
+      arrays.set(base, {
+        evidence: `\`${access}\` — ${shape.evidence}`,
+        lengthArgument: shape.lengthArgument,
+      });
+    } else {
+      failures.push(`\`${access}\`: ${shape.reason}`);
+    }
+  }
+
+  // Máscara paralela: ou o comprimento do arranjo vem do comprimento de uma
+  // sequência de caracteres, ou o MESMO cursor indexa o arranjo e uma
+  // sequência de caracteres no mesmo corpo — cada posição é uma posição de
+  // caractere. Nenhuma das duas provas cita nome de variável escrito à mão.
+  const characterBase = [...resolved].find(([, entry]) => entry.domain === "character-sequence");
+  for (const [base, entry] of arrays) {
+    const lengthOf = /^([A-Za-z_$][\w$]*)\s*\.\s*length$/u.exec(entry.lengthArgument ?? "");
+    if (lengthOf !== null) {
+      const receiver = resolveIndexedBaseShape(
+        source,
+        masked,
+        lineStartOffsets,
+        filePath,
+        lengthOf[1],
+        span.headerIndex,
+        CONTINUE_DOMAIN_RESOLUTION_DEPTH,
+      );
+      if (receiver.kind === "domain" && receiver.domain === "character-sequence") {
+        resolved.set(base, {
+          domain: "parallel-mask",
+          evidence: `${entry.evidence}, cujo comprimento é \`${entry.lengthArgument}\` — ${receiver.evidence}`,
+        });
+        continue;
+      }
+    }
+    if (characterBase !== undefined) {
+      resolved.set(base, {
+        domain: "parallel-mask",
+        evidence: `${entry.evidence}, indexado pelo mesmo cursor \`${comparison.cursor}\` que indexa a sequência de caracteres \`${characterBase[0]}\` — ${characterBase[1].evidence}`,
+      });
+      continue;
+    }
+    failures.push(
+      `${entry.evidence}: arranjo cujo comprimento não vem do comprimento de uma sequência de caracteres e que não é indexado pelo mesmo cursor de uma sequência de caracteres`,
+    );
+  }
+
+  if (failures.length > 0) {
+    return {
+      domain: undefined,
+      evidence: undefined,
+      unresolvedReason: `o domínio percorrido pelo cursor \`${comparison.cursor}\` de \`${span.keyword} (${span.header})\` não foi resolvido: ${failures.join("; ")}`,
+    };
+  }
+  for (const domain of CONTINUE_DOMAIN_PRECEDENCE) {
+    const winner = [...resolved].find(([, entry]) => entry.domain === domain);
+    if (winner !== undefined) {
+      return { domain, evidence: winner[1].evidence, unresolvedReason: undefined };
+    }
+  }
+  return {
+    domain: undefined,
+    evidence: undefined,
+    unresolvedReason: `o domínio percorrido pelo cursor \`${comparison.cursor}\` de \`${span.keyword} (${span.header})\` não caiu em nenhuma classe de CONTINUE_CURSOR_DOMAINS`,
+  };
+}
+
 /**
  * Acha TODA ocorrência de `continue;` no texto e devolve a classificação
  * computada de cada uma. A contagem total é `occurrences.length` — resultado
@@ -7492,6 +8041,16 @@ function enumerateContinueOccurrences(source: string, filePath: string): Continu
   const lineStartOffsets = buildLineStartOffsets(source);
   const lines = source.split(/\r?\n/u);
   const occurrences: ContinueOccurrence[] = [];
+  // Uma resolução de domínio por LAÇO, reaproveitada por toda ocorrência que
+  // ele contém: a conta continua sendo uma só varredura de `continue;`.
+  const domainBySpan = new Map<ContinueLoopSpan, ContinueCursorDomainResolution>();
+  const domainOf = (span: ContinueLoopSpan): ContinueCursorDomainResolution => {
+    const cached = domainBySpan.get(span);
+    if (cached !== undefined) return cached;
+    const resolution = resolveContinueCursorDomain(source, masked, lineStartOffsets, filePath, span);
+    domainBySpan.set(span, resolution);
+    return resolution;
+  };
   const pattern = /\bcontinue\s*;/gu;
   let match = pattern.exec(source);
   while (match !== null) {
@@ -7508,12 +8067,19 @@ function enumerateContinueOccurrences(source: string, filePath: string): Continu
         loopKeyword: undefined,
         loopHeader: undefined,
         guard: undefined,
+        cursorDomain: undefined,
+        cursorDomainEvidence: undefined,
+        unresolvedDomainReason: undefined,
         text: lineText.trim(),
         unresolvedReason: undefined,
       });
     } else {
       const enclosing = innermostLoopSpanAt(spans, index);
       const column = index - (lineStartOffsets[line - 1] ?? 0);
+      const domain =
+        enclosing === undefined
+          ? { domain: undefined, evidence: undefined, unresolvedReason: undefined }
+          : domainOf(enclosing);
       occurrences.push({
         filePath,
         line,
@@ -7522,6 +8088,9 @@ function enumerateContinueOccurrences(source: string, filePath: string): Continu
         loopKeyword: enclosing?.keyword,
         loopHeader: enclosing?.header,
         guard: guardPrecedingContinue(lineText, column),
+        cursorDomain: domain.domain,
+        cursorDomainEvidence: domain.evidence,
+        unresolvedDomainReason: domain.unresolvedReason,
         text: lineText.trim(),
         unresolvedReason:
           enclosing === undefined
@@ -7539,6 +8108,8 @@ interface ContinueEnumerationFindings {
   readonly total: number;
   readonly byContext: Readonly<Record<string, number>>;
   readonly byLoopForm: Readonly<Record<string, number>>;
+  /** Contagem por DOMÍNIO percorrido (Goal053 §1); soma igual à de `byLoopForm` quando o resíduo é zero. */
+  readonly byCursorDomain: Readonly<Record<string, number>>;
   readonly unresolved: string[];
   readonly outsideVocabulary: string[];
   readonly nonCode: string[];
@@ -7555,8 +8126,10 @@ function findContinueEnumerationFindings(
 ): ContinueEnumerationFindings {
   const loopVocabulary = new Set<string>(CONTINUE_LOOP_FORMS);
   const contextVocabulary = new Set<string>(CONTINUE_LEXICAL_CONTEXTS);
+  const domainVocabulary = new Set<string>(CONTINUE_CURSOR_DOMAINS);
   const byContext: Record<string, number> = {};
   const byLoopForm: Record<string, number> = {};
+  const byCursorDomain: Record<string, number> = {};
   const unresolved: string[] = [];
   const outsideVocabulary: string[] = [];
   const nonCode: string[] = [];
@@ -7586,10 +8159,43 @@ function findContinueEnumerationFindings(
       );
       continue;
     }
+    // O domínio percorrido é conferido no MESMO resíduo da classe de laço:
+    // não resolvido reprova com motivo escrito, fora do vocabulário reprova
+    // nomeado, e domínio sem evidência que o conceda também reprova.
+    if (occurrence.cursorDomain === undefined) {
+      unresolved.push(
+        `${where}: ${occurrence.unresolvedDomainReason ?? "domínio percorrido não resolvido, e sem motivo registrado"} — "${occurrence.text}"`,
+      );
+      continue;
+    }
+    if (!domainVocabulary.has(occurrence.cursorDomain)) {
+      outsideVocabulary.push(
+        `${where}: domínio "${occurrence.cursorDomain}" fora de CONTINUE_CURSOR_DOMAINS — "${occurrence.text}"`,
+      );
+      continue;
+    }
+    if (
+      occurrence.cursorDomainEvidence === undefined ||
+      occurrence.cursorDomainEvidence.trim() === ""
+    ) {
+      unresolved.push(
+        `${where}: domínio "${occurrence.cursorDomain}" sem evidência registrada — "${occurrence.text}"`,
+      );
+      continue;
+    }
     byLoopForm[occurrence.loopForm] = (byLoopForm[occurrence.loopForm] ?? 0) + 1;
+    byCursorDomain[occurrence.cursorDomain] = (byCursorDomain[occurrence.cursorDomain] ?? 0) + 1;
   }
 
-  return { total: occurrences.length, byContext, byLoopForm, unresolved, outsideVocabulary, nonCode };
+  return {
+    total: occurrences.length,
+    byContext,
+    byLoopForm,
+    byCursorDomain,
+    unresolved,
+    outsideVocabulary,
+    nonCode,
+  };
 }
 
 describe("Goal052 / WU-01 (§1 e §2) — `continue;` é enumerado por inteiro e classificado pela forma do laço contenedor: resíduo reprova, classe fora do vocabulário reprova, e o total é computado em runtime", () => {
@@ -7809,6 +8415,214 @@ describe("Goal052 / WU-01 (§1 e §2) — `continue;` é enumerado por inteiro e
     );
   });
 
+  it("Goal053 §1 — toda ocorrência em contexto de código recebe um DOMÍNIO percorrido do vocabulário fechado, com a evidência que o concedeu registrada: o resíduo é zero e a soma por domínio reconstrói o total de código", () => {
+    const codeOccurrences = realOccurrences.filter((occurrence) => occurrence.context === "code");
+    expect(codeOccurrences).toHaveLength(realFindings.total - realFindings.nonCode.length);
+    expect(codeOccurrences.length).toBeGreaterThan(0);
+
+    for (const occurrence of codeOccurrences) {
+      const where = `${occurrence.filePath}:${occurrence.line}`;
+      expect(occurrence.unresolvedDomainReason, where).toBeUndefined();
+      expect(CONTINUE_CURSOR_DOMAINS, where).toContain(occurrence.cursorDomain);
+      expect(occurrence.cursorDomainEvidence, where).toBeDefined();
+      expect((occurrence.cursorDomainEvidence ?? "").trim().length, where).toBeGreaterThan(0);
+    }
+
+    expect(realFindings.unresolved).toEqual([]);
+    expect(realFindings.outsideVocabulary).toEqual([]);
+    const byDomainTotal = Object.values(realFindings.byCursorDomain).reduce(
+      (sum, count) => sum + count,
+      0,
+    );
+    const byFormTotal = Object.values(realFindings.byLoopForm).reduce(
+      (sum, count) => sum + count,
+      0,
+    );
+    expect(byDomainTotal).toBe(codeOccurrences.length);
+    expect(byDomainTotal).toBe(byFormTotal);
+    for (const domain of Object.keys(realFindings.byCursorDomain)) {
+      expect(CONTINUE_CURSOR_DOMAINS).toContain(domain);
+    }
+
+    // As duas partições — por classe de laço e por domínio — recortam o
+    // MESMO conjunto: só as formas de cursor escalar percorrem domínio, e
+    // todas as demais caem em `no-domain`. A igualdade é computada das duas
+    // contagens, nunca escrita à mão.
+    const cursorBearingTotal = Object.entries(realFindings.byLoopForm)
+      .filter(([form]) => CURSOR_BEARING_LOOP_FORMS.has(form as ContinueLoopForm))
+      .reduce((sum, [, count]) => sum + count, 0);
+    const indexedDomainTotal = byDomainTotal - (realFindings.byCursorDomain["no-domain"] ?? 0);
+    expect(indexedDomainTotal).toBe(cursorBearingTotal);
+  });
+
+  it("Goal053 §1/§5 — cada domínio do vocabulário fechado tem prova: os três presentes na árvore real são aferidos com contagem maior que zero, e `parallel-mask`, vazio na árvore, é exercido por fonte sintética — nenhum domínio declarado só em prosa", () => {
+    const presentInRealTree: ContinueCursorDomain[] = [
+      "character-sequence",
+      "element-collection",
+      "no-domain",
+    ];
+    for (const domain of presentInRealTree) {
+      expect(realFindings.byCursorDomain[domain], domain).toBeGreaterThan(0);
+    }
+    // Vazio na árvore real porque toda máscara paralela que a árvore indexa
+    // é percorrida pelo MESMO cursor de uma sequência de caracteres, e a
+    // precedência de aperto dá o domínio à sequência.
+    const absentFromRealTree: ContinueCursorDomain[] = ["parallel-mask"];
+    for (const domain of absentFromRealTree) {
+      expect(realFindings.byCursorDomain[domain], domain).toBeUndefined();
+    }
+    expect([...presentInRealTree, ...absentFromRealTree].sort()).toEqual(
+      [...CONTINUE_CURSOR_DOMAINS].sort(),
+    );
+
+    // Fonte sintética que povoa o domínio vazio: o cursor indexa SÓ a
+    // máscara, e o comprimento dela vem do comprimento de uma sequência de
+    // caracteres — a prova de paralelismo não cita nome de variável.
+    const synthetic = [
+      "function scan(source: string) {",
+      "  const marks = new Array<boolean>(source.length).fill(false);",
+      "  for (let i = 0; i < marks.length; i += 1) {",
+      "    if (marks[i]) continue;",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const syntheticOccurrences = enumerateContinueOccurrences(synthetic, "sintetico.ts");
+    const syntheticFindings = findContinueEnumerationFindings(syntheticOccurrences);
+    expect(syntheticFindings.unresolved).toEqual([]);
+    expect(syntheticFindings.outsideVocabulary).toEqual([]);
+    expect(syntheticFindings.byCursorDomain).toEqual({ "parallel-mask": 1 });
+    expect(syntheticOccurrences[0]?.cursorDomainEvidence).toContain(
+      "cujo comprimento é `source.length`",
+    );
+  });
+
+  it("Goal053 §1 — a evidência que concedeu o domínio é VERIFICÁVEL: ela cita `arquivo:linha` da ligação que provou o valor indexado, ou a classe de laço que dispensa cursor", () => {
+    const codeOccurrences = realOccurrences.filter((occurrence) => occurrence.context === "code");
+    for (const occurrence of codeOccurrences) {
+      const where = `${occurrence.filePath}:${occurrence.line}`;
+      const evidence = occurrence.cursorDomainEvidence ?? "";
+      if (occurrence.cursorDomain === "no-domain") {
+        expect(evidence, where).toContain("não avança por cursor escalar indexado");
+        expect(CURSOR_BEARING_LOOP_FORMS.has(occurrence.loopForm as ContinueLoopForm), where).toBe(
+          false,
+        );
+        continue;
+      }
+      expect(CURSOR_BEARING_LOOP_FORMS.has(occurrence.loopForm as ContinueLoopForm), where).toBe(
+        true,
+      );
+      // `http-egress-sites.ts:318` e afins: a evidência aponta a linha da
+      // ligação, e a linha existe no módulo lido.
+      const cited = new RegExp(`${occurrence.filePath}:(\\d+)`, "gu");
+      const lines = [...evidence.matchAll(cited)].map((match) => Number(match[1]));
+      expect(lines.length, `${where}: ${evidence}`).toBeGreaterThan(0);
+      for (const line of lines) {
+        expect(line, `${where}: ${evidence}`).toBeGreaterThan(0);
+        expect(line, `${where}: ${evidence}`).toBeLessThanOrEqual(
+          moduleSource.split(/\r?\n/u).length,
+        );
+      }
+    }
+  });
+
+  it("Goal053 §1 — o domínio não vem de lista de nomes de variável, de recuo nem de nome de função: as ocorrências sobre `lines` são coleção de elementos e as sobre `source`/`text`/`body` são sequência de caracteres, cada uma pela ligação que a provou", () => {
+    const byLine = new Map(realOccurrences.map((occurrence) => [occurrence.line, occurrence]));
+
+    // `lines` vem de `source.split(…)` — a evidência é o `.split(`, não o nome.
+    const collectionLines = [1141, 1143, 1157, 1159, 1160, 3872];
+    for (const line of collectionLines) {
+      const occurrence = byLine.get(line);
+      expect(occurrence?.cursorDomain, `linha ${line}`).toBe("element-collection");
+      expect(occurrence?.cursorDomainEvidence, `linha ${line}`).toContain(".split(…)");
+    }
+    // E o conjunto é EXATAMENTE esse: nenhuma outra ocorrência da árvore cai
+    // em coleção de elementos, e o número sai da execução, não deste arquivo.
+    expect(
+      realOccurrences
+        .filter((occurrence) => occurrence.cursorDomain === "element-collection")
+        .map((occurrence) => occurrence.line)
+        .sort((a, b) => a - b),
+    ).toEqual([...collectionLines].sort((a, b) => a - b));
+
+    // `:1458` e `:1484` percorrem `body`, que vem de `trimmed.slice(1, -1)`,
+    // que vem de `text.trim()`, que vem do parâmetro `text: string`.
+    for (const line of [1458, 1484]) {
+      const occurrence = byLine.get(line);
+      expect(occurrence?.loopForm, `linha ${line}`).toBe("while-positional-read");
+      expect(occurrence?.cursorDomain, `linha ${line}`).toBe("character-sequence");
+    }
+
+    // A classe `while-queue-drain` de `:1028` não indexa nada: `no-domain`.
+    expect(byLine.get(1028)?.cursorDomain).toBe("no-domain");
+  });
+
+  it("Goal053 §1 — domínio não resolvido REPROVA nomeando arquivo:linha e o motivo, e domínio fora do vocabulário também reprova — nenhum ramo else mudo", () => {
+    // Laço de cursor escalar cujo corpo não indexa valor algum: a forma do
+    // cabeçalho é reconhecida, mas o domínio não, e isso reprova.
+    const withoutIndexing = [
+      "function scan(limit) {",
+      "  let total = 0;",
+      "  for (let i = 0; i < limit; i += 1) {",
+      "    total += 1;",
+      "    continue;",
+      "  }",
+      "  return total;",
+      "}",
+      "",
+    ].join("\n");
+    const withoutIndexingFindings = findContinueEnumerationFindings(
+      enumerateContinueOccurrences(withoutIndexing, "sintetico.ts"),
+    );
+    expect(withoutIndexingFindings.byLoopForm).toEqual({});
+    expect(withoutIndexingFindings.byCursorDomain).toEqual({});
+    expect(withoutIndexingFindings.unresolved).toEqual([
+      'sintetico.ts:5: o cursor `i` do laço `for (let i = 0; i < limit; i += 1)` não indexa valor algum no corpo, então o domínio percorrido não pode ser resolvido — "continue;"',
+    ]);
+
+    // Cursor que indexa um valor cuja ligação não prova domínio algum.
+    const unprovenBase = [
+      "function scan(limit, bucket) {",
+      "  for (let i = 0; i < limit; i += 1) {",
+      "    if (bucket[i]) continue;",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const unprovenFindings = findContinueEnumerationFindings(
+      enumerateContinueOccurrences(unprovenBase, "sintetico.ts"),
+    );
+    expect(unprovenFindings.byCursorDomain).toEqual({});
+    expect(unprovenFindings.unresolved).toHaveLength(1);
+    expect(unprovenFindings.unresolved[0]).toMatch(
+      /^sintetico\.ts:3: o domínio percorrido pelo cursor `i` de `for \(let i = 0; i < limit; i \+= 1\)` não foi resolvido: /u,
+    );
+    expect(unprovenFindings.unresolved[0]).toContain("`bucket[i]`");
+
+    // Depois: a MESMA ocorrência com domínio inventado reprova na mesma conta.
+    const [firstReal] = realOccurrences.filter((occurrence) => occurrence.context === "code");
+    expect(firstReal).toBeDefined();
+    expect(findContinueEnumerationFindings([firstReal]).outsideVocabulary).toEqual([]);
+    const corrupted: ContinueOccurrence = {
+      ...firstReal,
+      cursorDomain: "dominio-inventado" as ContinueCursorDomain,
+    };
+    const corruptedFindings = findContinueEnumerationFindings([corrupted]);
+    expect(corruptedFindings.outsideVocabulary).toEqual([
+      `http-egress-sites.ts:${firstReal.line}: domínio "dominio-inventado" fora de CONTINUE_CURSOR_DOMAINS — "${firstReal.text}"`,
+    ]);
+    expect(corruptedFindings.byCursorDomain).toEqual({});
+
+    // E domínio do vocabulário sem evidência registrada também reprova.
+    const withoutEvidence = findContinueEnumerationFindings([
+      { ...firstReal, cursorDomainEvidence: undefined },
+    ]);
+    expect(withoutEvidence.unresolved).toEqual([
+      `http-egress-sites.ts:${firstReal.line}: domínio "${firstReal.cursorDomain}" sem evidência registrada — "${firstReal.text}"`,
+    ]);
+    expect(withoutEvidence.byCursorDomain).toEqual({});
+  });
+
   it("a classificação não depende de recuo por indentação: as cinco ocorrências em que a sondagem do Goal052 falhou (:1761, :1765, :1769, :1773, :1796) estão classificadas, cada uma com a forma do laço que de fato a contém", () => {
     const probeFailures = [1761, 1765, 1769, 1773, 1796];
     const byLine = new Map(realOccurrences.map((occurrence) => [occurrence.line, occurrence]));
@@ -7833,10 +8647,20 @@ describe("Goal052 / WU-01 (§1 e §2) — `continue;` é enumerado por inteiro e
  * juntam: `DOCUMENTED_SILENT_DISCARDS` passa a cobrir toda ocorrência da
  * classe **iteração sobre candidatos** (`CONTINUE_CANDIDATE_LOOP_FORMS`,
  * abaixo — subconjunto de `CONTINUE_LOOP_FORMS`), computada pela mesma
- * `enumerateContinueOccurrences`, nunca uma segunda varredura à parte. A
- * classe **leitura posicional** continua fora do registro de propósito: a
- * isenção dela já é o critério computado do §2, não algo que precise de
- * entrada nomeada (`SilentDiscardOccurrence.requiresRegistration`, acima).
+ * `enumerateContinueOccurrences`, nunca uma segunda varredura à parte.
+ *
+ * O Goal053 §2 aperta o critério: a isenção não é mais decidida só pela
+ * classe do cabeçalho, e sim pelo DOMÍNIO que o cursor percorre
+ * (`resolveContinueCursorDomain`, Goal053 §1). Sequência de caracteres e
+ * máscara paralela continuam isentas — cada volta avança leitura, nunca
+ * descarta candidato —, mas coleção de elementos passa a EXIGIR registro
+ * mesmo quando a forma do cabeçalho é `for-indexed`: a árvore real tem 6
+ * ocorrências assim, sobre `lines` (produzido por `.split(…)`), que o
+ * Goal052 isentava em bloco só por ler como leitura posicional.
+ *
+ * `SilentDiscardOccurrence.requiresRegistration` (acima) é o campo que
+ * carrega o resultado; `requiresSilentDiscardRegistration` (abaixo) é onde
+ * o critério é de fato computado.
  *
  * A chave continua `<função>::<trecho normalizado>` (Goal050), sem número
  * de linha (proibido desde o Goal050). `continue;` nu normaliza sempre para
@@ -7869,13 +8693,18 @@ describe("Goal052 / WU-01 (§1 e §2) — `continue;` é enumerado por inteiro e
  * critério, que era o fail-open que esta rodada fecha.
  *
  * `for-indexed` e `while-positional-read` (as duas formas de leitura
- * posicional) ficam de fora de propósito: a isenção delas é o próprio
- * critério computado do §2 — cursor escalar contra limite —, sem registro
- * por ocorrência e sem prosa isentando.
+ * posicional) continuam FORA deste vocabulário por forma — mas, desde o
+ * Goal053 §2, isso não basta mais para isentar do registro: quando o
+ * domínio que o cursor de uma delas percorre é `element-collection`, a
+ * ocorrência exige registro do mesmo jeito que `for-of` exige — só que
+ * pelo domínio, não pela classe (`requiresSilentDiscardRegistration`,
+ * abaixo). A isenção genuína por forma sintática — sequência de caracteres
+ * e máscara paralela — continua sem registro por ocorrência.
  *
- * `for-in` e `do-while` também ficam de fora — ausentes da árvore real
- * (provado pelo Goal052/WU-01 acima), e o Goal declara alcance mínimo sobre
- * o que a árvore de fato contém, ampliável se a execução exigir.
+ * `for-in` e `do-while` também ficam de fora deste vocabulário — ausentes
+ * da árvore real (provado pelo Goal052/WU-01 acima), e o Goal declara
+ * alcance mínimo sobre o que a árvore de fato contém, ampliável se a
+ * execução exigir.
  */
 const CONTINUE_CANDIDATE_LOOP_FORMS: ReadonlySet<ContinueLoopForm> = new Set([
   "for-of",
@@ -7884,11 +8713,44 @@ const CONTINUE_CANDIDATE_LOOP_FORMS: ReadonlySet<ContinueLoopForm> = new Set([
 ]);
 
 /**
+ * O critério de isenção de registro (Goal053 §2): o DOMÍNIO que o cursor do
+ * laço contenedor percorre (`ContinueOccurrence.cursorDomain`, Goal053 §1),
+ * não mais só a classe sintática do cabeçalho.
+ *
+ * - `character-sequence` e `parallel-mask`: isentas — cada volta avança
+ *   leitura, nunca descarta candidato.
+ * - `element-collection`: EXIGE registro — cada volta é um candidato,
+ *   mesmo quando a forma do cabeçalho é `for-indexed` (o Goal052 isentava
+ *   em bloco por essa forma; a árvore real tem 6 ocorrências assim, sobre
+ *   `lines`, produzido por `.split(…)`).
+ * - `no-domain` (laço que não indexa nada — `for-of`, `while-exec-match`,
+ *   `while-queue-drain`, `for-in`, `do-while`): decidido pela classe, como
+ *   no Goal052, por `CONTINUE_CANDIDATE_LOOP_FORMS` — cada volta dessas
+ *   formas já é diretamente um candidato, sem cursor indexado a resolver.
+ * - domínio não resolvido (Goal053 §1 reprovou a resolução com motivo
+ *   escrito, mas a ocorrência ainda assim entra aqui): fail-closed — EXIGE
+ *   registro, nunca isenta em silêncio por falta de prova.
+ */
+function requiresSilentDiscardRegistration(occurrence: ContinueOccurrence): boolean {
+  if (occurrence.cursorDomain === "character-sequence" || occurrence.cursorDomain === "parallel-mask") {
+    return false;
+  }
+  if (occurrence.cursorDomain === "element-collection") {
+    return true;
+  }
+  if (occurrence.cursorDomain === "no-domain") {
+    return occurrence.loopForm !== undefined && CONTINUE_CANDIDATE_LOOP_FORMS.has(occurrence.loopForm);
+  }
+  return true;
+}
+
+/**
  * Toda ocorrência de `continue;` em contexto de código de `source`,
  * convertida para o vocabulário do registro de descarte: âncora pela função
  * de nível superior, chave estável (`silentDiscardKey`, sem número de
- * linha), e `requiresRegistration` computado pela classe do laço contenedor
- * — `true` só para a classe iteração sobre candidatos. Reusa
+ * linha), e `requiresRegistration` computado por
+ * `requiresSilentDiscardRegistration` (acima) — o DOMÍNIO percorrido, não
+ * mais só a classe do laço contenedor (Goal053 §2). Reusa
  * `enumerateContinueOccurrences` (Goal052/WU-01); não reimplementa a
  * varredura de `continue;` à parte. É a fonte que o teste permanente
  * abaixo e os controles negativos do §8 chamam.
@@ -7906,9 +8768,7 @@ function enumerateSilentDiscardOccurrences(
         snippet: occurrence.text,
         anchor,
         key: silentDiscardKey(anchor, occurrence.text),
-        requiresRegistration:
-          occurrence.loopForm !== undefined &&
-          CONTINUE_CANDIDATE_LOOP_FORMS.has(occurrence.loopForm),
+        requiresRegistration: requiresSilentDiscardRegistration(occurrence),
       };
     });
 }
@@ -7950,7 +8810,7 @@ describe("Goal052 / WU-02 (§3 e §4) — o registro unificado de descarte cobre
     expect(findings.unregistered[0]).toContain("1028");
   });
 
-  it("as 5 entradas da baseline (Goal050) continuam no registro, sem duplicação e sem segunda conta — as 3 da classe candidato batem 1 para 1, e as 2 de readEnvSchemaDefault (classe leitura posicional) seguem registradas mas não exigidas, sem virarem obsoletas", () => {
+  it("as 5 entradas da baseline (Goal050) continuam no registro, sem duplicação e sem segunda conta — as 3 da classe candidato batem 1 para 1, e as 2 de readEnvSchemaDefault, embora `for-indexed`, exigem registro de verdade desde o Goal053 §2 (domínio `element-collection`, não mais leitura posicional isenta)", () => {
     const candidateBaselineKeys = [
       silentDiscardKey("resolveViaCallers", "if (!argExpression) continue;"),
       silentDiscardKey("findCrossFileCallerBindings", "if (localAlias === undefined) continue;"),
@@ -7966,24 +8826,120 @@ describe("Goal052 / WU-02 (§3 e §4) — o registro unificado de descarte cobre
       expect(matches[0]?.requiresRegistration).toBe(true);
     }
 
-    const positionalBaselineKeys = [
+    // `readEnvSchemaDefault` lê `lines = source.split(/\r?\n/u)` com `for`
+    // indexado: a FORMA do cabeçalho é `for-indexed` (leitura posicional),
+    // mas o DOMÍNIO que o cursor percorre é `element-collection` — cada
+    // linha é um candidato a declaração, exatamente como `for…of` sobre
+    // `lines.split(…)` em outra função qualquer. As duas entradas, já
+    // registradas desde o Goal050, agora são de fato exigidas.
+    const readEnvSchemaDefaultKeys = [
       silentDiscardKey("readEnvSchemaDefault", "if (match === null) continue;"),
       silentDiscardKey("readEnvSchemaDefault", "if (captured === undefined) continue;"),
     ];
-    for (const key of positionalBaselineKeys) {
+    for (const key of readEnvSchemaDefaultKeys) {
       expect(DOCUMENTED_SILENT_DISCARDS.has(key)).toBe(true);
       const matches = realOccurrences.filter((occurrence) => occurrence.key === key);
       expect(matches).toHaveLength(1);
-      // Leitura posicional: a ocorrência existe e a entrada não vira
-      // obsoleta por causa dela, mas ela não EXIGE o registro.
-      expect(matches[0]?.requiresRegistration).toBe(false);
+      expect(matches[0]?.requiresRegistration).toBe(true);
     }
 
     // Uma coleção só: nenhuma âncora da baseline aparece registrada duas
     // vezes (isso já lançaria em buildSilentDiscardRegistry, mas a suíte
     // também confere o efeito: o Map tem uma entrada por chave).
-    const allBaselineKeys = [...candidateBaselineKeys, ...positionalBaselineKeys];
+    const allBaselineKeys = [...candidateBaselineKeys, ...readEnvSchemaDefaultKeys];
     expect(new Set(allBaselineKeys).size).toBe(allBaselineKeys.length);
+  });
+
+  it("Goal053 §2 — a exigência de registro segue o DOMÍNIO percorrido, não mais só a forma do cabeçalho: as 6 ocorrências `element-collection` reais sobre `lines` (:1141, :1143, :1157, :1159, :1160, :3872) exigem registro, mesmo três delas sendo `for-indexed`, e cada uma tem entrada com motivo escrito substantivo — remover qualquer uma produz `unregistered` nomeando a linha", () => {
+    const byLine = new Map(realOccurrences.map((occurrence) => [occurrence.line, occurrence]));
+    const elementCollectionKeys = [
+      { line: 1141, key: silentDiscardKey("readEnvSchemaDefault", "if (match === null) continue;") },
+      {
+        line: 1143,
+        key: silentDiscardKey("readEnvSchemaDefault", "if (captured === undefined) continue;"),
+      },
+      {
+        line: 1157,
+        key: silentDiscardKey(
+          "readEnvFileValue",
+          'if (trimmed === "" || trimmed.startsWith("#")) continue;',
+        ),
+      },
+      {
+        line: 1159,
+        key: silentDiscardKey("readEnvFileValue", "if (separator === -1) continue;"),
+      },
+      {
+        line: 1160,
+        key: silentDiscardKey(
+          "readEnvFileValue",
+          "if (trimmed.slice(0, separator).trim() !== key) continue;",
+        ),
+      },
+      {
+        line: 3872,
+        key: silentDiscardKey(
+          "readProductTransportRoutesFile",
+          'if (trimmed === "" || trimmed.startsWith("#")) continue;',
+        ),
+      },
+    ];
+
+    for (const { line, key } of elementCollectionKeys) {
+      const occurrence = byLine.get(line);
+      expect(occurrence?.requiresRegistration, `linha ${line}`).toBe(true);
+      expect(occurrence?.key, `linha ${line}`).toBe(key);
+      const entry = DOCUMENTED_SILENT_DISCARDS.get(key);
+      expect(entry, `linha ${line}`).toBeDefined();
+      expect((entry?.reason ?? "").trim().length, `linha ${line}`).toBeGreaterThan(0);
+    }
+
+    // Conjunto exato: nenhuma outra ocorrência da árvore real exige
+    // registro por domínio `element-collection` fora dessas 6.
+    expect(
+      realOccurrences
+        .filter((occurrence) => occurrence.requiresRegistration === true)
+        .map((occurrence) => occurrence.key),
+    ).toEqual(expect.arrayContaining(elementCollectionKeys.map(({ key }) => key)));
+
+    // Remover cada entrada nova, uma de cada vez, produz `unregistered`
+    // nomeando exatamente a linha — nenhum ramo silencioso.
+    for (const { line, key } of elementCollectionKeys) {
+      const withoutEntry = new Map(DOCUMENTED_SILENT_DISCARDS);
+      withoutEntry.delete(key);
+      const findings = findSilentDiscardFindings(realOccurrences, withoutEntry);
+      expect(findings.unregistered, `linha ${line}`).toHaveLength(1);
+      expect(findings.unregistered[0], `linha ${line}`).toContain(`${line}:`);
+    }
+
+    // Nenhuma ocorrência que já exigia registro no Goal052 (classe
+    // candidata) deixou de exigir com o critério novo.
+    const candidateBaselineKeys = [
+      silentDiscardKey("resolveViaCallers", "if (!argExpression) continue;"),
+      silentDiscardKey("findCrossFileCallerBindings", "if (localAlias === undefined) continue;"),
+      silentDiscardKey(
+        "discoverCallerResolvedGoBoundRequests",
+        "if (baseParam === undefined || goEnvVar === undefined) continue;",
+      ),
+      silentDiscardKey(
+        "discoverHttpEgressSites",
+        "if (scannedPrimitiveDeclarations.has(declarationKey)) continue;",
+      ),
+    ];
+    for (const key of candidateBaselineKeys) {
+      const matches = realOccurrences.filter((occurrence) => occurrence.key === key);
+      expect(matches.length, key).toBeGreaterThan(0);
+      for (const match of matches) {
+        expect(match.requiresRegistration, key).toBe(true);
+      }
+    }
+
+    // O registro real segue vazio nas quatro contas, com as entradas novas.
+    const findings = findSilentDiscardFindings(realOccurrences, DOCUMENTED_SILENT_DISCARDS);
+    expect(findings.ambiguousKeys).toEqual([]);
+    expect(findings.unregistered).toEqual([]);
+    expect(findings.obsolete).toEqual([]);
+    expect(findings.emptyReason).toEqual([]);
   });
 
   it("buildSilentDiscardRegistry continua lançando em chave duplicada dentro do próprio registro", () => {
@@ -10232,6 +11188,30 @@ describe("Goal052 / WU-04 (§9) — controles negativos: as oito amarras do desc
     expect(injected!.requiresRegistration).toBe(true);
     const after = findSilentDiscardFindings(mutatedOccurrences, DOCUMENTED_SILENT_DISCARDS);
     expect(after.unregistered).toEqual([`${injected!.line}: "${injectedSnippet}"`]);
+
+    // Goal053 §9.1 — sobre a árvore real: remover a entrada de uma das seis
+    // ocorrências reais de domínio `element-collection` (escopo §3) produz
+    // `unregistered` nomeando a linha. Antes deste Goal, `for-indexed`
+    // isentava em bloco por classe, e a mesma remoção não produzia nada.
+    const realOccurrences = enumerateSilentDiscardOccurrences(moduleSource, "http-egress-sites.ts");
+    const elementCollectionOccurrence = realOccurrences.find(
+      (occurrence) =>
+        occurrence.key ===
+        silentDiscardKey(
+          "readEnvFileValue",
+          'if (trimmed === "" || trimmed.startsWith("#")) continue;',
+        ),
+    );
+    expect(elementCollectionOccurrence).toBeDefined();
+    expect(elementCollectionOccurrence!.requiresRegistration).toBe(true);
+    const beforeRealRemoval = findSilentDiscardFindings(realOccurrences, DOCUMENTED_SILENT_DISCARDS);
+    expect(beforeRealRemoval.unregistered).toEqual([]);
+    const registryWithoutEntry = new Map(DOCUMENTED_SILENT_DISCARDS);
+    registryWithoutEntry.delete(elementCollectionOccurrence!.key);
+    const afterRealRemoval = findSilentDiscardFindings(realOccurrences, registryWithoutEntry);
+    expect(afterRealRemoval.unregistered).toEqual([
+      `${elementCollectionOccurrence!.line}: "${elementCollectionOccurrence!.snippet}"`,
+    ]);
   });
 
   it("controle 2 (§9.2) — `continue;` nu em laço de candidatos não registrado reprova — a forma que a regex antiga nunca via", () => {
@@ -10258,6 +11238,26 @@ describe("Goal052 / WU-04 (§9) — controles negativos: as oito amarras do desc
     expect(injected!.requiresRegistration).toBe(true);
     const after = findSilentDiscardFindings(mutatedOccurrences, DOCUMENTED_SILENT_DISCARDS);
     expect(after.unregistered).toEqual([`${injected!.line}: "${injectedSnippet}"`]);
+
+    // Goal053 §9.7 — nada do Goal052 foi afrouxado: um `continue;` dentro de
+    // um `for…of` (classe candidata) continua exigindo registro mesmo com o
+    // corpo tendo a cara de sequência de caracteres (`text: string`) — a
+    // classe do laço já basta, e o domínio (sempre `no-domain` para
+    // `for…of`) nunca isenta essa classe.
+    const candidateLikeTextSource = [
+      "function descarteControle2NadaAfrouxado(text: string) {",
+      "  for (const char of text) {",
+      '    if (char === " ") continue;',
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const candidateLikeTextOccurrences = enumerateSilentDiscardOccurrences(
+      candidateLikeTextSource,
+      "sintetico-controle2.ts",
+    );
+    expect(candidateLikeTextOccurrences).toHaveLength(1);
+    expect(candidateLikeTextOccurrences[0].requiresRegistration).toBe(true);
   });
 
   it("controle 3 (§9.3) — laço de forma não reconhecida reprova, nomeando arquivo:linha e dizendo que a classe não resolveu, em vez de isentar", () => {
@@ -10306,6 +11306,42 @@ describe("Goal052 / WU-04 (§9) — controles negativos: as oito amarras do desc
       'sintetico-controle3.ts:3: cabeçalho de `while` fora das formas reconhecidas (exec-match, drenagem de fila, cursor posicional): "state.ready && state.pending" — "continue;"',
     ]);
     expect(afterWhile.byLoopForm).toEqual({});
+
+    // Goal053 §9.4 — domínio não resolvido reprova, nomeando arquivo:linha e
+    // o motivo, em vez de isentar: cabeçalho reconhecido (`for-indexed`),
+    // mas o cursor não indexa valor algum no corpo.
+    const unresolvedDomainSource = [
+      "function scanControle3Domain(limit) {",
+      "  for (let i = 0; i < limit; i += 1) {",
+      "    continue;",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const unresolvedDomainFindings = findContinueEnumerationFindings(
+      enumerateContinueOccurrences(unresolvedDomainSource, "sintetico-controle3-dominio.ts"),
+    );
+    expect(unresolvedDomainFindings.byCursorDomain).toEqual({});
+    expect(unresolvedDomainFindings.unresolved).toEqual([
+      'sintetico-controle3-dominio.ts:3: o cursor `i` do laço `for (let i = 0; i < limit; i += 1)` não indexa valor algum no corpo, então o domínio percorrido não pode ser resolvido — "continue;"',
+    ]);
+
+    // E domínio fora do vocabulário declarado (`CONTINUE_CURSOR_DOMAINS`)
+    // também reprova, nomeada — a mesma ocorrência real, com um domínio
+    // inventado, na mesma conta.
+    const [firstRealCodeOccurrence] = enumerateContinueOccurrences(
+      moduleSource,
+      "http-egress-sites.ts",
+    ).filter((occurrence) => occurrence.context === "code");
+    expect(firstRealCodeOccurrence).toBeDefined();
+    expect(findContinueEnumerationFindings([firstRealCodeOccurrence]).outsideVocabulary).toEqual([]);
+    const outsideDomainVocabularyFindings = findContinueEnumerationFindings([
+      { ...firstRealCodeOccurrence, cursorDomain: "dominio-inventado" as ContinueCursorDomain },
+    ]);
+    expect(outsideDomainVocabularyFindings.outsideVocabulary).toEqual([
+      `http-egress-sites.ts:${firstRealCodeOccurrence.line}: domínio "dominio-inventado" fora de CONTINUE_CURSOR_DOMAINS — "${firstRealCodeOccurrence.text}"`,
+    ]);
+    expect(outsideDomainVocabularyFindings.byCursorDomain).toEqual({});
   });
 
   it("controle 4 (§9.4) — entrada registrada que perde a ocorrência reprova como obsoleta", () => {
@@ -10377,11 +11413,12 @@ describe("Goal052 / WU-04 (§9) — controles negativos: as oito amarras do desc
     expect(afterFindings.ambiguousKeys).toEqual([]);
   });
 
-  it("controle 7 (§9.7) — mover um `continue;` entre classes muda a exigência de registro nos dois sentidos: leitura posicional não exige, iteração sobre candidatos exige", () => {
+  it("controle 7 (§9.7), adaptado pelo Goal053 §2 — mover um `continue;` entre classes muda a exigência de registro nos dois sentidos: leitura posicional sobre sequência de caracteres não exige (domínio `character-sequence` provado pela anotação `: string`), iteração sobre candidatos exige", () => {
     // A mesma guarda, dentro de um laço `for` indexado (leitura posicional):
-    // não é candidato descartado, não exige registro.
+    // `text: string` prova o domínio `character-sequence` — não é candidato
+    // descartado, não exige registro.
     const positionalSource = [
-      "function scanControle7Positional(text) {",
+      "function scanControle7Positional(text: string) {",
       "  for (let i = 0; i < text.length; i += 1) {",
       '    if (text[i] === " ") continue;',
       "  }",
@@ -10428,10 +11465,11 @@ describe("Goal052 / WU-04 (§9) — controles negativos: as oito amarras do desc
     ]);
 
     // E a mesma troca dentro de `while`, que é onde a rodada 1 deste Goal
-    // falhava: cursor escalar contra limite não exige registro; a MESMA
-    // guarda dentro de um `while` que drena uma fila passa a exigir.
+    // falhava: cursor escalar contra limite sobre sequência de caracteres
+    // (`text: string`) não exige registro; a MESMA guarda dentro de um
+    // `while` que drena uma fila passa a exigir.
     const whilePositionalSource = [
-      "function scanControle7WhilePositional(text) {",
+      "function scanControle7WhilePositional(text: string) {",
       "  let i = 0;",
       "  while (i < text.length) {",
       "    i += 1;",
@@ -10471,6 +11509,46 @@ describe("Goal052 / WU-04 (§9) — controles negativos: as oito amarras do desc
     ).toEqual([
       `${whileQueueOccurrences[0].line}: "${whileQueueOccurrences[0].snippet}"`,
     ]);
+
+    // Goal053 §9.3 — fecha a observação 2 do review052: `while (i <
+    // pending.length)` que consome elementos (`pending.splice(…)`) passa a
+    // exigir registro (domínio `element-collection`, provado por
+    // `pending = source.split(…)`), e a MESMA forma `while (i < X.length)`
+    // sobre sequência de caracteres continua isenta.
+    const whileIndexedStringSource = [
+      "function scanControle7WhileIndexedString(body: string) {",
+      "  let i = 0;",
+      "  while (i < body.length) {",
+      '    if (body[i] === " ") continue;',
+      "    i += 1;",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const whileIndexedStringOccurrences = enumerateSilentDiscardOccurrences(
+      whileIndexedStringSource,
+      "sintetico-controle7.ts",
+    );
+    expect(whileIndexedStringOccurrences).toHaveLength(1);
+    expect(whileIndexedStringOccurrences[0].requiresRegistration).toBe(false);
+
+    const whileIndexedElementsSource = [
+      "function scanControle7WhileIndexedElements(source: string) {",
+      '  const pending = source.split(",");',
+      "  let i = 0;",
+      "  while (i < pending.length) {",
+      '    if (pending[i] === "") continue;',
+      "    pending.splice(i, 1);",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const whileIndexedElementsOccurrences = enumerateSilentDiscardOccurrences(
+      whileIndexedElementsSource,
+      "sintetico-controle7.ts",
+    );
+    expect(whileIndexedElementsOccurrences).toHaveLength(1);
+    expect(whileIndexedElementsOccurrences[0].requiresRegistration).toBe(true);
   });
 
   it("controle 8 (§9.8) — a partição do Goal050/051 e a cobertura das 24 categorias do Goal049 continuam mordendo: entrada em balde não permitido pela categoria da origem, chave nova no universo de saída, e categoria órfã na cobertura — uma cada, com as duas saídas", () => {

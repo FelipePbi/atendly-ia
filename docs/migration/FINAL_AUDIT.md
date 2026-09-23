@@ -3758,3 +3758,133 @@ acima). `validate:integration` continua recusando por pré-condição de
 banco ausente (`exit 2`, `BFF_TEST_DATABASE_URL is not set`), declarado
 como ausente — não reexecutado além da conferência de exit code por
 esta unidade de documentação (WU-08).
+
+## 30. O critério da isenção passa a ser o domínio percorrido, não a forma do cabeçalho: leitura posicional sobre coleção de elementos deixa de ser isenta — Goal053, 2026-09-22
+
+Seção nova, escrita depois da execução final do diff053 (WU-01: resolução
+de domínio computada do texto do módulo; WU-02: ligação do critério de
+isenção ao registro unificado; WU-03: os oito controles negativos
+permanentes do escopo §9; WU-07, esta unidade, documenta por acréscimo).
+Ela **não reescreve** §4 a §29: os registros de A-01 a A-24, o veredito
+das seções anteriores e as vinte e nove seções de fechamento continuam
+exatamente como estavam, e a entrada de **A-24** **não foi tocada**. Este
+Goal não corrige A-24 e não abre achado novo — fecha o degrau que sobrou
+dentro do próprio §29: a classe de laço que o Goal052 computava media a
+**forma sintática do cabeçalho**, não o **domínio que o cursor percorre**,
+e a observação 1 do [review052](reviews/052-review.md) apontou um
+fail-open real, não hipotético, medido sobre **6** ocorrências.
+
+### O que mudou
+
+**Cada ocorrência em contexto `code` ganha um domínio percorrido,
+computado do texto do módulo.** `resolveContinueCursorDomain` entra no
+caminho já existente (`enumerateContinueOccurrences` →
+`enumerateSilentDiscardOccurrences` → `findSilentDiscardFindings`), nunca
+como segunda varredura. O vocabulário fechado `CONTINUE_CURSOR_DOMAINS`
+tem quatro classes: **sequência de caracteres**, **máscara paralela**,
+**coleção de elementos** e **sem domínio** (as três classes já portadoras
+de candidato do Goal052, que não indexam cursor algum). Para as três
+primeiras classes, a evidência que concedeu o domínio é registrada por
+ocorrência, citando `arquivo:linha` da ligação que a provou; as **60**
+ocorrências `no-domain` não citam ligação alguma, porque o laço já
+consome candidato diretamente — sua evidência nomeia a forma do laço e
+o cabeçalho (`laço \`<forma>\` não avança por cursor escalar indexado:
+consome o que percorre diretamente`). `parallel-mask` tem duas provas:
+(a) o comprimento do arranjo vem do comprimento de uma sequência de
+caracteres; (b) o mesmo cursor indexa o arranjo **e** uma sequência de
+caracteres no mesmo corpo, mesmo sem a forma do arranjo provar relação
+alguma com `.length` — a prova (b) amplia a isenção, porque sem ela
+esse arranjo reprovaria como resíduo. Sobre a árvore real: **60** `no-domain`, **54**
+`character-sequence`, **6** `element-collection`, **0** `parallel-mask` —
+soma **120**, igual ao total de ocorrências de código; `parallel-mask`
+computa **0** porque a única máscara paralela da árvore (prova (b))
+compartilha cursor com uma sequência de caracteres, e a precedência de
+aperto dá o domínio final à sequência; prova (b) é exercida pela
+árvore real (mascarada pela precedência), só prova (a) precisa de
+fonte sintética.
+
+**A isenção de registro passa a depender do domínio, não mais só da
+classe do cabeçalho.** Domínio `character-sequence` ou `parallel-mask`
+continua isentando leitura posicional; domínio `element-collection` passa
+a exigir registro mesmo em `for-indexed`; domínio não resolvido, ou fora
+do vocabulário, **reprova** nomeando `arquivo:linha` e o motivo — nenhum
+ramo `else` mudo.
+
+**As 6 ocorrências sobre `lines` (`:1141`, `:1143`, `:1157`, `:1159`,
+`:1160`, `:3872`), produzido por `.split(…)`, passam a exigir registro.**
+`DOCUMENTED_SILENT_DISCARDS` cresceu de **43** para **47** entradas: as 2
+entradas herdadas de `readEnvSchemaDefault` — que já existiam com motivo
+escrito, mas com `requiresRegistration` computado `false`, de modo que
+removê-las não reprovava nada — são reaproveitadas e agora conferidas de
+verdade; as 4 entradas novas cobrem `readEnvFileValue` (3 ocorrências) e
+`readProductTransportRoutesFile` (1 ocorrência).
+
+**`while` posicional continua isento pelo mesmo critério, não mais pela
+forma.** As **5** ocorrências reais (`:1458`, `:1484`, `:2989`, `:2996`,
+`:2999`) continuam isentas porque o domínio que indexam é
+`character-sequence`; a prova de que a mesma forma sobre
+`element-collection` passaria a exigir registro é por fonte sintética.
+
+**Nada do Goal052 foi afrouxado.** `for-of` (**41**), `while-exec-match`
+(**18**) e `while-queue-drain` (**1**) continuam exigindo registro
+independentemente do domínio — nenhuma delas indexa cursor algum, então
+todas caem em `no-domain`, e `no-domain` não isenta.
+
+**Os oito controles negativos do escopo §9 mordem**, cada um chamando a
+mesma conta que o teste permanente chama: `continue;` sobre coleção de
+elementos não registrado reprova; `for-indexed` sobre sequência de
+caracteres continua isento e a mesma guarda sobre coleção exige registro
+(as duas saídas); `while` posicional sobre coleção reprova e sobre string
+continua isento (as duas saídas); domínio não resolvido ou fora do
+vocabulário reprova; entrada que perde a ocorrência reprova como obsoleta
+e motivo vazio reprova; deslocamento de linha continua não reprovando em
+massa; nenhuma ocorrência que já exigia registro por classe deixou de
+exigir; e a partição do Goal050/051 e a cobertura do Goal049 continuam
+mordendo.
+
+### Veredito recontado
+
+Esta auditoria continua com **0** achados `BLOQUEADOR-MVP`, **8**
+`PENDENCIA-POS-MVP` e **6** `LIMITE-DECLARADO` — a mesma contagem de §29.
+**Nenhuma mudança em relação a §29**: nenhum achado de A-01 a A-24 foi
+tocado, corrigido, reclassificado ou reaberto. **A-24 continua
+`PENDENCIA-POS-MVP`, não corrigido** — nenhum arquivo Go de produção deste
+fork foi editado por este Goal.
+
+**Limite próprio deste Goal, declarado e não mascarado, herdado de
+D-065/D-066/D-067/D-068 sem afrouxamento.** O domínio resolve **o que o
+cursor indexa**, não **se o descarte perde candidato que importe**; a
+conservação de candidatos **dentro** das funções de varredura de
+`http-egress-sites.ts` continua fora de alcance de qualquer mecanismo
+desta rodada. Consequência mensurável: `assistant.service.test.ts` cresce
+de **249** para **255** testes, todos passando, **0** falhando, com
+**11631** linhas (baseline: **10553**), **1115** inserções e **37**
+deleções contra a baseline `2adb7cabf2cc09707287e1d440d6041b51d6cfe9`.
+`http-egress-sites.ts` está intocado (diff zero; **3887** linhas, mesma
+contagem da baseline). A suíte completa de `apps/ai-orchestrator` fecha em
+**1067** testes: **979** passando (baseline: **973**), **88** pulados
+(mesma contagem da baseline), **0** falhando. `npx tsc -p tsconfig.json
+--noEmit`: sem saída, exit 0. `npm run lint` (`eslint src
+--max-warnings=0`): exit 0, sem saída. `npm run test:gate` (raiz): **226**
+testes, **226** passando, **0** falhando, inalterado, porque não exercita
+este arquivo. `validate:integration` não foi reexecutado nesta unidade:
+nada no diff toca banco, infraestrutura ou pré-condição, então o
+comportamento herdado da baseline não muda.
+
+Três coisas que esta seção não diz. **Não diz que A-24 foi corrigido**: o
+rótulo `"Ver Menu"` continua escrito em
+`pkg/sendMessage/service/send_service.go:1960`. **Não diz que M4 foi
+fechado**: nenhum arquivo de `apps/frontend/src/`, `apps/bff/src/`,
+`apps/ai-orchestrator/src/`, `apps/evolution-go/`, `packages/` ou
+`tools/ia-loop/` mudou nesta Work Unit. **Não diz que a conservação de
+candidatos dentro das funções de varredura foi provada**: registrar um
+descarte com motivo escrito diz que ele está nomeado e justificado, não
+que o candidato descartado não importava.
+
+O que continua fora do alcance deste Goal, por construção: comportamento
+em runtime do serviço Go; qual binário roda em produção; `whatsmeow-lib/`,
+lida apenas como fonte das declarações de proto; o valor real de qualquer
+variável de ambiente; `return`, `break` e saída antecipada de função,
+nunca alcançados pela enumeração; e conservação de candidatos dentro das
+funções de varredura de `http-egress-sites.ts`, declarada e limitada desde
+o escopo §4 do Goal050 e reafirmada aqui.

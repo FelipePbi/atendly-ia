@@ -1712,4 +1712,67 @@ concentra o diff inteiro contra a baseline `2adb7cabf2cc09707287e1d440d6041b51d6
 **1115** inserções, **37** deleções (**11631** linhas, baseline:
 **10553**).
 
+**Acréscimo, desde 2026-09-22 (Goal054 / [D-070](DECISIONS.md)):** a
+frase acima — "**Não amplia a enumeração a `return`, `break` ou saída
+antecipada de função**: o alcance continua sendo `continue;`" — não é
+apagada, mas deixou de valer sozinha desde esta rodada: aquele alcance de
+uma forma só era **fail-open medido**, não hipotético, sobre as **6**
+ocorrências reais do escopo §5 do Goal054 (`:591`, `:2037`, `:2316` de
+`break;` e `:576`, `:1144`, `:1161` de saída antecipada de função, todas
+em laço portador de candidato ou sobre domínio `element-collection`, e
+nenhuma tinha enumeração, classe, domínio, exigência ou resíduo antes
+desta rodada). Ver seção seguinte para o vocabulário vigente desde esta
+rodada.
+
+## O alfabeto do descarte é completo: `break`, saída antecipada de função e as formas vazias entram na mesma enumeração, do Goal054
+
+O parágrafo do Goal053 fechou o **critério** de isenção para a única
+forma que a máquina conhecia; a máquina em si só via `continue;`. O que
+sobrava: `break` e saída antecipada de função são **piores** que
+`continue;`, porque não descartam um elemento — descartam todo o resto do
+domínio percorrido ou a varredura inteira —, e nenhuma das duas tinha
+enumeração, classe, domínio, exigência ou resíduo. Este delta fecha essa
+abertura, sem tocar o conjunto de 10 rotas nem o de 27 literais e sem
+alterar regra de classificação de egresso alguma.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| A enumeração passa a percorrer um vocabulário fechado de **cinco** formas (`DISCARD_FORMS`, `assistant.service.test.ts:8056`): `continue`, `break`, `function-early-exit` (saída antecipada da função que contém o cabeçalho do laço), `nested-function-return` (`return` de função aninhada no corpo do laço) e `switch-break` (`break` cujo bloco mais próximo é um `switch`) | Forma fora do vocabulário **reprova**, nomeando `arquivo:linha`; `break`/`continue` rotulado usa as mesmas formas `break`/`continue` — o rótulo muda o laço abandonado, nunca a forma |
+| A fronteira de função é computada por casamento de delimitadores sobre texto mascarado, nunca por indentação, nome de função ou lista escrita à mão: `return` de função aninhada não conta como saída antecipada, porque o laço segue percorrendo o domínio do mesmo jeito | Fronteira não resolvida **reprova**, nomeando `arquivo:linha` e o motivo — só `function-early-exit` e `nested-function-return` têm fronteira |
+| A exigência de motivo combina forma, classe de laço e domínio: `character-sequence`/`parallel-mask` seguem isentos em qualquer forma; `element-collection` exige registro em qualquer forma; as classes já portadoras de candidato do Goal052 continuam exigindo registro em qualquer forma; `switch-break` e `nested-function-return` nunca exigem registro, com evidência computada própria | Nada do Goal052/053 foi afrouxado: o total de **120** ocorrências de `continue;` e a soma por classe/domínio continuam reconstruindo o mesmo total |
+| **6** ocorrências reais passam a exigir registro — **3** de `break` (`:591`, `:2037`, `:2316`) e **3** de `function-early-exit` (`:576`, `:1144`, `:1161`); `DOCUMENTED_SILENT_DISCARDS` cresceu de **47** para **53** entradas, sem duplicar as existentes, com chave que distingue forma | `throw` fica fora do alfabeto, declarado, por não ser descarte silencioso — não foi enumerado |
+| Sobre a árvore real: **143** ocorrências em código — `continue` **120**, `break` **6**, `function-early-exit` **17**; `nested-function-return` e `switch-break` computam **0** e são exercidos por fonte sintética; `unresolved` e `outsideVocabulary` vazias | `byCursorDomain` reconstrói **143**: `no-domain` **64**, `character-sequence` **71**, `element-collection` **8**, `parallel-mask` **0** |
+| Dez controles negativos novos do escopo §10 mordem, cada um chamando a mesma conta que o teste permanente chama, com as duas saídas — cinco por fonte sintética (fronteira, `switch-break`/rótulo, isenção por domínio movida de classe) | Os oito controles do escopo §9 do Goal053 continuam mordendo, adaptados ao alfabeto novo — nenhum foi removido |
+
+**O que este delta não prova, e é preciso dizer alto.** **Não prova
+conservação de candidatos dentro das funções de varredura**: registrar um
+`break` ou uma saída antecipada com motivo escrito diz que o abandono
+está nomeado e justificado, não que o candidato abandonado não importava
+— limite herdado de D-065/D-066/D-067/D-068/D-069, não afrouxado. **Não
+amplia o alfabeto para `throw`**: aborta a execução inteira e é ruidoso
+por construção, não é descarte silencioso. **Não corrige A-24**: o achado
+continua `PENDENCIA-POS-MVP`, e nenhum arquivo Go de produção deste fork
+foi editado por este Goal. **Não fecha M4. Não amplia nem reduz o
+conjunto de 10 rotas ou de 27 literais. Nenhuma categoria de recusa, regra
+de classificação de egresso ou isenção de egresso foi alterada.** Sobre a
+árvore final desta rodada: `npx vitest run
+tests/assistant/assistant.service.test.ts` em `apps/ai-orchestrator` →
+**283** testes, **283** passando, **0** falhando (baseline: 255); `npx
+vitest run` completo → **1095** testes, **1007** passando (baseline:
+979), **88** pulados (mesma contagem da baseline), **0** falhando. `npx
+tsc -p tsconfig.json --noEmit`: sem saída, exit 0. `npm run lint`
+(`eslint src --max-warnings=0`) em `apps/ai-orchestrator`: exit 0, sem
+saída. `npm run test:gate` (raiz) permanece em **226** testes e 0
+falhas, inalterado. `validate:integration` não foi reexecutado nesta
+rodada: nada no diff toca banco, infraestrutura ou pré-condição, e o
+comportamento herdado da baseline (recusa por `BFF_TEST_DATABASE_URL`
+ausente, `exit 2`) não muda.
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts` está
+**intocado** (diff zero; **3887** linhas, mesma contagem da baseline);
+`apps/ai-orchestrator/tests/support/product-transport-routes.txt` tem
+diff **zero**. `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
+concentra o diff inteiro contra a baseline `d3e76645d3042e66eb9559f33fef9dda40904809`:
+**2820** inserções, **215** deleções (**14236** linhas, baseline:
+**11631**).
+
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff052-2026-09-22-d-068) e [D-068](DECISIONS.md).

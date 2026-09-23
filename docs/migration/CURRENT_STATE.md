@@ -5073,3 +5073,134 @@ linhas, baseline: **10553**), e nenhum arquivo de `apps/frontend/src/`,
   alcance de qualquer mecanismo desta rodada. **A-24 continua
   `PENDENCIA-POS-MVP`, não corrigido** — nenhum arquivo Go de produção
   deste fork foi editado por este Goal.
+
+## Delta implementado — diff054, 2026-09-22 ([D-070](DECISIONS.md))
+
+Fecha o degrau que o diff053 deixou declarado como fora do alcance: a
+máquina inteira do descarte silencioso só conhecia **uma** forma,
+`continue;`. `break` e saída antecipada de função são piores que
+`continue;` — não descartam um elemento, descartam todo o resto do
+domínio ou a varredura inteira — e nenhuma das duas tinha enumeração,
+classe, domínio, exigência ou resíduo.
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts` e
+`apps/ai-orchestrator/tests/support/product-transport-routes.txt`
+continuam **intocados** (diff zero contra a baseline; **3887** linhas o
+primeiro, mesma contagem). `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
+concentra o diff inteiro (**2820** inserções, **215** deleções; **14236**
+linhas, baseline: **11631**), e nenhum arquivo de `apps/frontend/src/`,
+`apps/bff/src/`, `apps/ai-orchestrator/src/`, `apps/evolution-go/`,
+`packages/` ou `tools/ia-loop/` mudou nesta rodada.
+
+- **Vocabulário fechado de cinco formas de descarte (`DISCARD_FORMS`,
+  `assistant.service.test.ts:8056`), computado dentro do caminho de
+  enumeração já existente, nunca por segunda varredura:** `continue` — o
+  alcance do Goal052/053, inalterado; `break` — encerra o laço e abandona
+  todo o resto do domínio percorrido; `function-early-exit` — `return`
+  cuja função mais próxima é a mesma que contém o cabeçalho do laço,
+  encerrando a varredura inteira; `nested-function-return` — `return` de
+  função aninhada no corpo do laço (expressão de função, arrow com corpo
+  em bloco, método de objeto literal), que não abandona candidato algum
+  porque a volta seguinte do laço acontece do mesmo jeito;
+  `switch-break` — `break` cujo bloco de controle mais próximo é um
+  `switch`, não um laço, mesmo quando o `switch` está dentro de um. Forma
+  fora do vocabulário reprova nomeando `arquivo:linha`. `break`/`continue`
+  rotulado (`break outer;`, `continue outer;`) usa as mesmas formas
+  `break`/`continue` — o rótulo muda qual laço a ocorrência abandona,
+  resolvido ao laço que o declara ou reprovado como resíduo nomeado; não
+  é forma nova.
+- **A fronteira de função é computada, nunca presumida:** por casamento de
+  delimitadores sobre texto mascarado, no mesmo estilo que já resolve
+  laço e `switch` — nunca por indentação, nome de função ou lista escrita
+  à mão. Só `function-early-exit` e `nested-function-return`
+  (`DISCARD_FUNCTION_BOUNDARY_FORMS`) têm fronteira; fronteira não
+  resolvida reprova nomeando `arquivo:linha` e o motivo.
+- **A exigência de motivo (`requiresSilentDiscardRegistration`) passa a
+  combinar forma, classe de laço e domínio percorrido, sem afrouxar o que
+  o Goal053 provou:** `character-sequence` e `parallel-mask` continuam
+  isentos em qualquer forma; `element-collection` exige registro em
+  qualquer forma; as classes já portadoras de candidato do Goal052
+  (`for-of`, `while-exec-match`, `while-queue-drain`) continuam exigindo
+  registro independentemente do domínio, em qualquer forma;
+  `switch-break` e `nested-function-return` nunca exigem registro, porque
+  não abandonam laço algum — isenção computada, com evidência própria por
+  ocorrência (`formExemptionEvidence` para `switch-break`,
+  `functionBoundaryEvidence` para `nested-function-return`), nunca
+  silêncio.
+- **As 6 ocorrências reais que passam a exigir registro ganham motivo
+  escrito.** `DOCUMENTED_SILENT_DISCARDS` cresceu de **47** para **53**
+  entradas, sem duplicar as existentes, com chave que distingue forma:
+  **3** de `break` — `:591` (`while-exec-match`), `:2037` (`for-of`),
+  `:2316` (`while-exec-match`), todas por classe de laço portadora de
+  candidato, independentemente do domínio; **3** de `function-early-exit`
+  — `:576` (`for-of`, por classe portadora), `:1144` e `:1161`
+  (`for-indexed`, sobre domínio `element-collection`).
+- **Vacuidade não é aceita como prova.** Sobre a árvore real: **143**
+  ocorrências em contexto `code` — `continue` **120**, `break` **6**,
+  `function-early-exit` **17**. `nested-function-return` e `switch-break`
+  computam **0** (ausentes na árvore real) e são exercidas por fonte
+  sintética. `unresolved` e `outsideVocabulary` seguem vazias.
+  `byCursorDomain` reconstrói o total: `no-domain` **64** (**60** de
+  `continue` + **3** de `break` + **1** de `function-early-exit`),
+  `character-sequence` **71** (**54** + **3** + **14**),
+  `element-collection` **8** (**6** + **0** + **2**), `parallel-mask`
+  **0** — soma **143**, igual ao total de ocorrências de código.
+- **`throw` fica fora do alcance, declarado, não como resíduo.** Aborta a
+  execução inteira e é ruidoso por construção — não é descarte silencioso
+  de candidato — e não foi enumerado.
+- **Acréscimo — fecha a observação 1 do [review053](reviews/053-review.md):**
+  a lista de evidências de `character-sequence` acima ("o cursor indexa
+  valor provado `string` no texto (parâmetro anotado, `.slice(`/`.join(`
+  na cadeia; ...)") era ilustrativa e incompleta. Os **cinco** ramos que
+  `resolveIndexedBaseShape` de fato tem, cada um com o ramo do código que
+  o sustenta em `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`:
+  (1) leitura de arquivo em `"utf8"` — `readFileSync(…, "utf8")`
+  (`:8471`–`:8476`); (2) `.join(…)` na cadeia, que produz sequência de
+  caracteres (`:8478`–`:8483`); (3) método que preserva sequência de
+  caracteres do receptor (`trim`, `trimStart`, `trimEnd`, `slice`,
+  `substring`, `toLowerCase`, `toUpperCase`, `replace`, `replaceAll`,
+  `normalize`, `padStart`, `padEnd`, `concat`, `repeat`), quando o próprio
+  receptor resolve `character-sequence` (`:8485`–`:8503`); (4) parâmetro
+  ou variável anotado `: string` (`:8512`–`:8518`); (5) chamada a função
+  do módulo declarada com retorno `: string`
+  (`moduleFunctionReturnType`, `:8519`–`:8528`). Item sem ramo
+  correspondente não entra; `.split(…)` continua sendo evidência de
+  `element-collection`, nunca de `character-sequence` — não muda.
+- **Oito controles negativos permanentes do Goal053 continuam mordendo,
+  mais dez novos do escopo §10 do Goal054**, cada um chamando a mesma
+  conta que o teste permanente chama, com as duas saídas: `break` em laço
+  portador de candidato reprova quando não registrado; saída antecipada em
+  laço `element-collection` reprova quando não registrada; `break` em
+  domínio `character-sequence` continua isento e a mesma guarda sobre
+  coleção passa a exigir registro (fonte sintética); `return` de função
+  aninhada não conta como saída antecipada e o mesmo `return` movido para
+  o corpo do laço passa a contar (fonte sintética); `break` de `switch`
+  não conta como abandono de laço e forma rotulada é resolvida ao laço
+  correto ou reprova como resíduo (fonte sintética); forma, domínio ou
+  fronteira não resolvidos reprovam nomeando `arquivo:linha`; entrada que
+  perde a ocorrência reprova como obsoleta, motivo vazio reprova, e chave
+  de `break` não colide com chave de `continue` no mesmo ponto âncora;
+  deslocamento de linha continua não reprovando em massa; nada do
+  Goal052/053 foi afrouxado; e a partição do Goal050/051 e a cobertura do
+  Goal049 continuam mordendo.
+- **Prova executada:** `npx vitest run
+  tests/assistant/assistant.service.test.ts` (em `apps/ai-orchestrator`):
+  **283** testes (baseline: 255), **283** passando, **0** falhando.
+  `npx vitest run` completo: **1095** testes, **1007** passando
+  (baseline: 979), **88** pulados (mesma contagem da baseline), **0**
+  falhando. `npx tsc -p tsconfig.json --noEmit`: sem saída, exit 0.
+  `npm run lint` (`eslint src --max-warnings=0`): exit 0, sem saída.
+  `npm run test:gate` (raiz): **226** testes, **226** passando, **0**
+  falhando, inalterado.
+- **`validate:integration` não foi reexecutado nesta rodada:** nada no
+  diff toca banco, infraestrutura ou pré-condição; o comportamento
+  herdado da baseline (recusa por `BFF_TEST_DATABASE_URL` ausente,
+  `exit 2`) não muda.
+- **Limite declarado, herdado de D-065/D-066/D-067/D-068/D-069 sem
+  afrouxamento:** registrar um `break` ou uma saída antecipada com motivo
+  escrito diz que o abandono está nomeado e justificado, não que o
+  candidato abandonado não importava — a conservação de candidatos
+  **dentro** das funções de varredura continua fora de alcance de
+  qualquer mecanismo desta rodada. `throw` continua fora do alfabeto, por
+  não ser descarte silencioso. **A-24 continua `PENDENCIA-POS-MVP`, não
+  corrigido** — nenhum arquivo Go de produção deste fork foi editado por
+  este Goal.

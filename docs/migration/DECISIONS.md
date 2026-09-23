@@ -3362,3 +3362,172 @@ nenhuma das ligações reconhecidas (`.split(…)`, parâmetro `: string`,
 nova com evidência própria; ou se a prova de conservação de candidatos
 dentro das funções de varredura, declarada fora de alcance desde D-065 e
 reafirmada aqui, devir Goal próprio.
+
+## D-070 — O alfabeto do descarte é completo: `break`, saída antecipada de função e as formas vazias (`switch-break`, rótulo) entram na mesma enumeração, propostas no Goal054
+
+**Status:** ACCEPTED no [review054](reviews/054-review.md) (rodada 1 de
+1, 2026-09-23; zero blockers), pelo Tech Lead Agent
+([AGENT_ROLES](AGENT_ROLES.md), D-018), sobre a baseline
+`d3e76645d3042e66eb9559f33fef9dda40904809` (fechamento do Goal053,
+ACCEPTED no [review053](reviews/053-review.md)). Primeira aceitação em
+rodada única desta série desde o Goal044: a regra do escopo §12 — cada
+afirmação de alcance, isenção ou evidência escrita em documento
+permanente nomeia a saída da execução ou o ramo do código que a sustenta
+— é a diferença direta em relação aos cinco blockers de prosa do
+Goal053.
+
+**Contexto:** D-069 (Goal053) resolveu o **critério** de isenção — domínio
+percorrido, não forma do cabeçalho —, mas a máquina inteira
+(`enumerateContinueOccurrences`, `classifyContinueLoopForm`,
+`resolveContinueCursorDomain`, `requiresSilentDiscardRegistration`,
+`DOCUMENTED_SILENT_DISCARDS`) só conhecia uma **forma** de descarte:
+`continue;`. Um laço largava candidato de outras duas maneiras, nenhuma
+enumerada: `break;`, que abandona **todo o resto** do domínio percorrido, e
+`return` dentro do laço, que abandona a **função de varredura inteira**
+quando a função mais próxima que o contém é a mesma que contém o
+cabeçalho do laço. A observação 1 do [review053](reviews/053-review.md)
+também apontou que a lista de evidências de `character-sequence` em
+[CURRENT_STATE](CURRENT_STATE.md) era ilustrativa e incompleta, omitindo
+`readFileSync(…, "utf8")` e retorno declarado `: string` de função do
+módulo — os dois ramos que `resolveIndexedBaseShape` de fato tem e o
+texto não nomeava.
+
+**Decisão:**
+
+1. **A enumeração passa a percorrer um vocabulário fechado de cinco
+   formas** (`DISCARD_FORMS`, `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts:8056`):
+   `continue`, `break`, `function-early-exit` (saída antecipada da função
+   que contém o cabeçalho do laço), `nested-function-return` (`return` de
+   função aninhada no corpo do laço — não abandona candidato algum, porque
+   a volta seguinte do laço acontece do mesmo jeito) e `switch-break`
+   (`break` cujo bloco de controle mais próximo é um `switch`, não um
+   laço). Forma fora do vocabulário **reprova**, nomeando `arquivo:linha`;
+   nenhum ramo `else` mudo. `break`/`continue` rotulado (`break outer;`,
+   `continue outer;`) usa as mesmas formas `break`/`continue` — o rótulo
+   muda qual laço a ocorrência abandona, resolvido ao laço que o declara
+   (`DiscardFormPattern.labeled`) ou reprovado como resíduo nomeado; não é
+   forma nova.
+2. **A fronteira de função é computada, nunca presumida**, pelo mesmo
+   casamento de delimitadores sobre texto mascarado que já resolve laço e
+   `switch` — nunca por indentação, nome de função ou lista escrita à
+   mão. Só as formas de `DISCARD_FUNCTION_BOUNDARY_FORMS`
+   (`function-early-exit`, `nested-function-return`) têm fronteira; para
+   elas, fronteira não resolvida **reprova**, nomeando `arquivo:linha` e o
+   motivo.
+3. **A exigência de motivo (`requiresSilentDiscardRegistration`) combina
+   forma, classe de laço e domínio percorrido, sem afrouxar o que já
+   valia:** domínio `character-sequence` e `parallel-mask` continuam
+   isentos em qualquer forma; domínio `element-collection` exige registro
+   em qualquer forma; as classes já portadoras de candidato do Goal052
+   (`for-of`, `while-exec-match`, `while-queue-drain`) continuam exigindo
+   registro independentemente do domínio, em qualquer forma; `switch-break`
+   e `nested-function-return` **nunca** exigem registro, porque não
+   abandonam laço algum, e essa isenção é computada com evidência própria
+   por ocorrência (`formExemptionEvidence` para `switch-break`,
+   `functionBoundaryEvidence` para `nested-function-return`) — nunca
+   silêncio.
+4. **As ocorrências reais que passam a exigir registro ganham motivo
+   escrito.** Sobre a árvore real (`http-egress-sites.ts`), conferido por
+   execução: **6** ocorrências novas exigem registro — **3** de `break`
+   (`:591` em `while-exec-match`, `:2037` em `for-of`, `:2316` em
+   `while-exec-match`, as três por classe de laço portadora de candidato,
+   independentemente do domínio) e **3** de `function-early-exit` (`:576`
+   em `for-of`/classe portadora; `:1144` e `:1161` em `for-indexed` sobre
+   domínio `element-collection`). `DOCUMENTED_SILENT_DISCARDS` cresceu de
+   **47** para **53** entradas — as **47** existentes são reaproveitadas
+   sem duplicação, e a chave distingue forma: uma entrada de `break` e uma
+   de `continue` no mesmo ponto âncora não colidem.
+5. **A conta é uma só.** As formas novas entram dentro do caminho já
+   existente (`enumerateDiscardOccurrences` → `enumerateSilentDiscardOccurrences`
+   → `findSilentDiscardFindings`), nunca como segunda varredura. Nada do
+   que os Goals 052 e 053 provaram foi afrouxado: o total de **120**
+   ocorrências de `continue;`, a soma por classe de laço e por domínio, e
+   os oito controles negativos do Goal053 continuam passando, adaptados ao
+   alfabeto novo — nenhum caso de teste foi removido.
+6. **Vacuidade não é aceita como prova.** Sobre a árvore real: **143**
+   ocorrências em contexto `code` — `continue` **120**, `break` **6**,
+   `function-early-exit` **17**; `nested-function-return` e `switch-break`
+   computam **0** (ausentes na árvore real) e são exercidas por fonte
+   sintética. `unresolved` e `outsideVocabulary` seguem vazias.
+   `byCursorDomain` reconstrói o total: `no-domain` **64** (**60** de
+   `continue` + **3** de `break` + **1** de `function-early-exit`),
+   `character-sequence` **71** (**54** + **3** + **14**),
+   `element-collection` **8** (**6** + **0** + **2**), `parallel-mask`
+   **0** — soma **143**.
+7. **`throw` fica fora do alcance, declarado, não como resíduo.** `throw`
+   aborta a execução inteira e é ruidoso por construção: não é descarte
+   silencioso de candidato. Não foi enumerado.
+8. **A observação 1 do [review053](reviews/053-review.md) é fechada.** A
+   lista de evidências de `character-sequence` em
+   [CURRENT_STATE](CURRENT_STATE.md) passa a nomear os cinco ramos que
+   `resolveIndexedBaseShape` de fato tem, cada um com o `arquivo:linha` do
+   ramo que o sustenta em `assistant.service.test.ts`.
+9. **Nenhum mecanismo de classificação de egresso foi alterado**: as 9
+   categorias vistas na árvore, os três vocabulários de recusa,
+   `PROVEN_UNREACHABLE_REFUSAL_CATEGORIES`, `EGRESS_PARTITION_BUCKETS`,
+   `GO_SERVICE_HTTP_REQUEST_DISCOVERY_UNIVERSE`, `EGRESS_CANDIDATE_UNIVERSE`
+   e `egressPartitionBucketsForCategory` mantêm conteúdo e comportamento da
+   baseline.
+
+**Alternativas:** enumerar `break` e `return` numa segunda varredura
+paralela — rejeitada, é a mesma família de defeito que o blocker 2 da
+rodada 1 do Goal050 já corrigiu (uma conta só); resolver a fronteira de
+função por nome de função ou por indentação — rejeitada, técnica que a
+sondagem do Goal052 já provou falhar; contar `return` de função aninhada
+como saída antecipada — rejeitada, ele não abandona candidato algum,
+porque a volta do laço acontece do mesmo jeito; ampliar o alfabeto para
+`throw` — rejeitada, `throw` aborta a execução inteira e não é descarte
+silencioso.
+
+**Motivo:** o Goal053 fechou o critério de isenção para a única forma que
+a máquina conhecia; a máquina em si só via `continue;`. `break` e saída
+antecipada de função são **piores** que `continue;`, porque não descartam
+um elemento: descartam todo o resto do domínio ou a varredura inteira. Um
+alfabeto de descarte que reconhece só uma de três formas mede parte do
+fenômeno e chama isso de completo — a mesma família de defeito que os
+Goals 048 a 053 fecharam, um nível acima.
+
+**Consequências:** `apps/ai-orchestrator/tests/support/http-egress-sites.ts`
+está intocado (diff zero contra a baseline; **3887** linhas, mesma
+contagem da baseline). `apps/ai-orchestrator/tests/support/product-transport-routes.txt`
+também está intocado (diff zero).
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts` concentra
+o diff inteiro: **2820** inserções e **215** deleções contra a baseline
+(**14236** linhas; baseline: **11631**) e **283** testes (baseline:
+**255**), **283** passando, **0** falhando (`npx vitest run
+tests/assistant/assistant.service.test.ts` em `apps/ai-orchestrator`).
+`npx vitest run` completo de `apps/ai-orchestrator` → **1095** testes:
+**1007** passando (baseline: **979**), **88** pulados (mesma contagem da
+baseline), **0** falhando. `npx tsc -p tsconfig.json --noEmit` em
+`apps/ai-orchestrator`: sem saída, exit 0. `npm run lint` (`eslint src
+--max-warnings=0`) em `apps/ai-orchestrator`: exit 0, sem saída. `npm run
+test:gate` (raiz): **226** testes, **226** passando, **0** falhando,
+inalterado — não exercita `assistant.service.test.ts`. `validate:integration`
+não foi reexecutado nesta rodada; nada neste diff toca banco,
+infraestrutura ou pré-condição, então o comportamento herdado da baseline
+(recusa por `BFF_TEST_DATABASE_URL` ausente) não muda por este fechamento.
+`git status --porcelain=v1 -uall` lista, ao final desta Work Unit, o
+arquivo de teste citado acima e os documentos permanentes de migração que
+esta unidade atualiza (`docs/migration/CURRENT_STATE.md`,
+`docs/migration/DECISIONS.md`, `docs/migration/FINAL_AUDIT.md`,
+`docs/migration/VALIDATION_GATE.md`); nenhum diretório temporário de
+controle negativo sobrou, e nenhum arquivo de `apps/frontend/src/`,
+`apps/bff/src/`, `apps/ai-orchestrator/src/`, `apps/evolution-go/`,
+`packages/` ou `tools/ia-loop/` foi tocado. Este diff não corrige **A-24**,
+que continua `PENDENCIA-POS-MVP`, não fecha **M4** e não prova runtime do
+serviço Go, e não prova conservação de candidatos dentro das funções de
+varredura.
+
+**Limite declarado, herdado de D-065/D-066/D-067/D-068/D-069, não
+afrouxado:** registrar um `break` ou uma saída antecipada com motivo
+escrito diz que o abandono está nomeado e justificado, não que o candidato
+abandonado não importava — essa prova continua fora de alcance de
+qualquer mecanismo desta série. `throw` continua fora do alfabeto, por não
+ser descarte silencioso.
+
+**Revisar se:** uma forma de descarte nova aparecer na árvore real
+(`do-while` com `break`/`return`, por exemplo) sem estar coberta pelo
+vocabulário fechado atual; a prova de conservação de candidatos dentro das
+funções de varredura, declarada fora de alcance desde D-065 e reafirmada
+aqui, devir Goal próprio; ou se `throw` precisar de tratamento por decisão
+de produto, fora do escopo deste guardrail de descarte silencioso.

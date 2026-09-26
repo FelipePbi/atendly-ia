@@ -30,7 +30,7 @@ import { validatePlanningDecision } from '../lib/planning-decision.mjs';
 import { banner } from '../lib/worker-loop.mjs';
 
 const SONNET = 'claude-sonnet-5';
-const OPUS = 'claude-opus-5';
+const OPUS = 'claude-opus-5-5';
 const SHA_A = 'a'.repeat(40);
 const SHA_B = 'b'.repeat(40);
 
@@ -135,7 +135,7 @@ test('13. OPUS_HIGH is registered as Opus at high effort', () => {
   assert.equal(profile.model, OPUS);
   assert.equal(profile.effort, 'high');
   assert.equal(profile.family, 'opus');
-  assert.equal(describeProfile('OPUS_HIGH'), 'OPUS_HIGH · Claude Opus 5 · effort High');
+  assert.equal(describeProfile('OPUS_HIGH'), 'OPUS_HIGH · Claude Opus 5.5 · effort High');
 });
 
 test('13b. every registered effort is one the installed CLI accepts', () => {
@@ -337,6 +337,6 @@ test('31b. the Developer worker source pins no model of its own', async () => {
   const source = await readFile(new URL('../workers/developer.mjs', import.meta.url), 'utf8');
   // The model must arrive on the job. A literal id here would be a second,
   // competing source of truth for the routing decision.
-  assert.ok(!source.includes("'claude-opus-5'"), 'developer.mjs must not hardcode a model id');
+  assert.ok(!source.includes("'claude-opus-5-5'"), 'developer.mjs must not hardcode a model id');
   assert.ok(!source.includes("'claude-sonnet-5'"), 'developer.mjs must not hardcode a model id');
 });

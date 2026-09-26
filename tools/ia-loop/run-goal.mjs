@@ -70,7 +70,7 @@ const REPO_ROOT = resolve(HERE, '..', '..');
 const STATE_DIR = join(HERE, '.state');
 
 const TECH_LEAD_MODEL = process.env.IA_LOOP_TECH_LEAD_MODEL ?? 'claude-fable-5-1';
-const DEVELOPER_MODEL = process.env.IA_LOOP_DEVELOPER_MODEL ?? 'claude-opus-5';
+const DEVELOPER_MODEL = process.env.IA_LOOP_DEVELOPER_MODEL ?? 'claude-opus-5-5';
 const REVIEW_LEVEL = LOOP_CONFIG.reviewLevel;
 /** Read once, here: an override is a property of the run, not of a worker. */
 const routingMode = resolveRoutingMode();

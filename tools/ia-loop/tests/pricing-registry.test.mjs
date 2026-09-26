@@ -74,11 +74,13 @@ test('ALL_OPUS_CANONICAL_MODEL is itself a priced, resolvable model', () => {
   assert.equal(resolveCanonicalModel(ALL_OPUS_CANONICAL_MODEL), ALL_OPUS_CANONICAL_MODEL);
 });
 
-test('every model prices the same way Anthropic\'s own cache economics do: output 5x input, cache read 0.1x, cache write 5m/1h at 1.25x/2x', () => {
+test('every calibrated model prices the same way Anthropic\'s own cache economics do: output 5x input, cache read 0.1x, cache write 5m/1h at 1.25x/2x', () => {
   // Not a coincidence: these ratios were solved from the real ledger (see the
-  // registry's own docstring) and hold for every canonical model.
+  // registry's own docstring) and hold for every calibrated model. A model
+  // priced from the published list instead (modelProvenance) is exempt.
   const snapshot = getPricingSnapshot();
   for (const [model, prices] of Object.entries(snapshot.models)) {
+    if (snapshot.modelProvenance?.[model]) continue;
     const input = prices.input;
     assert.equal(prices.output, input * 5, `${model} output`);
     assert.equal(prices.cacheRead, input * 0.1, `${model} cacheRead`);
@@ -126,4 +128,30 @@ test('the snapshot id itself does not claim to be an official Anthropic price li
 
 test('PRICING_PROVENANCE enumerates exactly the four values the Goal allows', () => {
   assert.deepEqual(new Set(Object.values(PRICING_PROVENANCE)), new Set(['OFFICIAL', 'EMPIRICALLY_CALIBRATED', 'MANUAL', 'UNKNOWN']));
+});
+
+// --- Opus 5.5 (2026-09-26) --------------------------------------------------
+
+test('Opus 5.5 resolves to itself and is priced, so its calls are monitored apart from Opus 5', () => {
+  const snapshot = getPricingSnapshot();
+  assert.equal(resolveCanonicalModel('claude-opus-5-5'), 'claude-opus-5-5');
+  assert.equal(resolveCanonicalModel('claude-opus-5'), 'claude-opus-5');
+  assert.deepEqual(
+    { input: snapshot.models['claude-opus-5-5'].input, output: snapshot.models['claude-opus-5-5'].output, cacheRead: snapshot.models['claude-opus-5-5'].cacheRead },
+    { input: 4, output: 20, cacheRead: 0.2 },
+  );
+  assert.equal(snapshot.modelProvenance['claude-opus-5-5'], PRICING_PROVENANCE.OFFICIAL);
+});
+
+test('the 2026-09 snapshot is untouched and the new one carries every one of its rates unchanged', () => {
+  const previous = getPricingSnapshot('claude-ledger-calibrated-2026-09');
+  const current = getPricingSnapshot();
+  assert.equal(previous.models['claude-opus-5-5'], undefined);
+  for (const [model, prices] of Object.entries(previous.models)) {
+    assert.deepEqual(current.models[model], prices, `${model} must reprice identically`);
+  }
+});
+
+test('ALL_OPUS stays on Opus 5 so historical routing savings do not move', () => {
+  assert.equal(ALL_OPUS_CANONICAL_MODEL, 'claude-opus-5');
 });

@@ -45,7 +45,7 @@ const AGENTS = [
   {
     label: 'Developer',
     expectedRole: 'developer',
-    requestedModel: process.env.IA_LOOP_DEVELOPER_MODEL ?? 'claude-opus-5',
+    requestedModel: process.env.IA_LOOP_DEVELOPER_MODEL ?? 'claude-opus-5-5',
     expectedFamily: 'opus',
     prompt: [
       'Você está atuando como Developer. Retorne exclusivamente o JSON solicitado,',

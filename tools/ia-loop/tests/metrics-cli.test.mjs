@@ -120,7 +120,7 @@ test('an explicit --limit is still honoured', () => {
 });
 
 test('--pricing-snapshot overrides the default snapshot id', () => {
-  assert.equal(parseMetricsArgs(['n', 'x']).pricingSnapshotId, 'claude-ledger-calibrated-2026-09');
+  assert.equal(parseMetricsArgs(['n', 'x']).pricingSnapshotId, 'claude-ledger-calibrated-2026-09-26');
   assert.equal(parseMetricsArgs(['n', 'x', '--pricing-snapshot', 'other-snapshot']).pricingSnapshotId, 'other-snapshot');
 });
 

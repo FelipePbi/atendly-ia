@@ -35,7 +35,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, '.state');
 
 const TECH_LEAD_MODEL = process.env.IA_LOOP_TECH_LEAD_MODEL ?? 'claude-fable-5-1';
-const DEVELOPER_MODEL = process.env.IA_LOOP_DEVELOPER_MODEL ?? 'claude-opus-5';
+const DEVELOPER_MODEL = process.env.IA_LOOP_DEVELOPER_MODEL ?? 'claude-opus-5-5';
 
 function duration(fromIso, now) {
   const started = Date.parse(fromIso);

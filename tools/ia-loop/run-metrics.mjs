@@ -278,6 +278,7 @@ export function buildMetricsReport({
       snapshotId: snapshot.id, provider: snapshot.provider, effectiveFrom: snapshot.effectiveFrom,
       provenance: snapshot.provenance, derivedFrom: snapshot.derivedFrom ?? null,
       sampleRows: snapshot.sampleRows ?? null, validatedAt: snapshot.validatedAt ?? null,
+      modelProvenance: snapshot.modelProvenance ?? null,
     } : null,
     benchmarks: { excludedRows: rows.length - scoped.length },
     confidence: {
@@ -330,6 +331,9 @@ export function renderMetricsReport(report, { goal = null, verboseDeterministic 
     out.push(`Pricing snapshot   ${report.pricing.snapshotId} (effective ${report.pricing.effectiveFrom})`);
     out.push(`Source             ${report.pricing.provenance}`
       + `${report.pricing.sampleRows ? ` (calibrated against ${report.pricing.sampleRows} production rows)` : ''}`);
+    for (const [model, provenance] of Object.entries(report.pricing.modelProvenance ?? {})) {
+      out.push(`                   ${model}: ${provenance}`);
+    }
     out.push('');
     out.push(`Actual routing cost        ${fmtCost(report.baselines.ACTUAL.costUsd)}`
       + ` (${report.baselines.ACTUAL.pricedInvocations}/${report.baselines.ACTUAL.totalInvocations} invocations priced)`);

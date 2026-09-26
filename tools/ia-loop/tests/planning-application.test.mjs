@@ -109,7 +109,7 @@ test('the events an operator would audit are both there: profile selected, plan 
     const profileEvent = events.find((e) => e.type === 'DEVELOPER_PROFILE_SELECTED');
     assert.ok(profileEvent, 'DEVELOPER_PROFILE_SELECTED must be recorded');
     assert.equal(profileEvent.profile, 'OPUS_HIGH');
-    assert.equal(profileEvent.model, 'claude-opus-5');
+    assert.equal(profileEvent.model, 'claude-opus-5-5');
 
     const planEvent = events.find((e) => e.type === 'EXECUTION_PLAN_RECORDED');
     assert.ok(planEvent, 'EXECUTION_PLAN_RECORDED must be recorded');

@@ -23,6 +23,7 @@ Duas etapas concluídas:
 | V28 — Fable deixa de ser default | medido nos Goals 009–013, o portão de risco nunca recusou: planning e review vão para Opus sempre, e Fable só por escalonamento autorizado ou override manual |
 | V29 — Posição da campanha reconciliada | um Goal fechado fora da run deixa de congelar o `autonomous-run.json`: closure integrado e alcançável do HEAD avança o registro em vez de parar como `GOAL_BOUNDARY_AMBIGUOUS` |
 | V30 — Gate renderizado no registro determinístico | `validate-ui` entra no registro fechado de ações; Playwright roda como unidade determinística, não como ferramenta do revisor |
+| V31 — Opus 5 → Opus 5.5 | Opus do loop vira `claude-opus-5-5`; snapshot de preço novo só acrescenta Opus 5.5, `ALL_OPUS` fica em Opus 5 e métricas antigas não mudam |
 
 ---
 
@@ -1820,7 +1821,7 @@ npm run ia-loop:pause -- --after-goal   # espera o Goal inteiro terminar
 | --- | --- |
 | `IA_LOOP_CLAUDE_BIN` | Caminho explícito do executável |
 | `IA_LOOP_TECH_LEAD_MODEL` | Modelo do Tech Lead (padrão `claude-fable-5-1`) |
-| `IA_LOOP_DEVELOPER_MODEL` | Modelo do Developer (padrão `claude-opus-5`) |
+| `IA_LOOP_DEVELOPER_MODEL` | Modelo do Developer (padrão `claude-opus-5-5`) |
 | `IA_LOOP_TIMEOUT_MS` | Timeout por processo (padrão `120000` no Spike, `180000` na V1) |
 
 Prompts completos não são impressos. A saída não contém tokens, credenciais,
@@ -1970,8 +1971,8 @@ seria um segundo lugar para a decisão de roteamento divergir.
 | Perfil | Modelo | Effort | Quando |
 | --- | --- | --- | --- |
 | `SONNET_MEDIUM` | `claude-sonnet-5` | `medium` | implementação localizada, CRUD, UI, adapters, testes, refactor simples, arquitetura já definida, risco baixo/médio |
-| `OPUS_MEDIUM` | `claude-opus-5` | `medium` | mudança multi-serviço, contrato importante, domínio complexo, migration, debugging difícil, concorrência, vários consumers |
-| `OPUS_HIGH` | `claude-opus-5` | `high` | segurança, auth/sessão, isolamento de tenant, dado crítico, race condition, consistência distribuída, mudança arquitetural, alto custo de erro |
+| `OPUS_MEDIUM` | `claude-opus-5-5` | `medium` | mudança multi-serviço, contrato importante, domínio complexo, migration, debugging difícil, concorrência, vários consumers |
+| `OPUS_HIGH` | `claude-opus-5-5` | `high` | segurança, auth/sessão, isolamento de tenant, dado crítico, race condition, consistência distribuída, mudança arquitetural, alto custo de erro |
 
 `--effort` é uma flag real do CLI instalado (2.1.263), que aceita
 `low, medium, high, xhigh, max`. Um valor desconhecido produz apenas um
@@ -2032,8 +2033,8 @@ ATENDLY IA LOOP — DEVELOPER
 
 Supported profiles:
   SONNET_MEDIUM · Claude Sonnet 5 · effort Medium
-  OPUS_MEDIUM · Claude Opus 5 · effort Medium
-  OPUS_HIGH · Claude Opus 5 · effort High
+  OPUS_MEDIUM · Claude Opus 5.5 · effort Medium
+  OPUS_HIGH · Claude Opus 5.5 · effort High
 Log level: normal
 Session strategy: STATELESS
 State: IDLE
@@ -2730,9 +2731,9 @@ papéis e as três etapas.
 
 | Papel · etapa | LOW · MEDIUM | HIGH · CRITICAL |
 | --- | --- | --- |
-| Tech Lead · planning | Opus 5 `high` | Fable 5.1 `high` |
-| Tech Lead · review | Opus 5 `high` | Fable 5.1 `high` |
-| Developer | Sonnet 5 `high` (sempre o início) | escalation → Opus 5 `high`; deep → Opus 5 `xhigh` |
+| Tech Lead · planning | Opus 5.5 `high` | Fable 5.1 `high` |
+| Tech Lead · review | Opus 5.5 `high` | Fable 5.1 `high` |
+| Developer | Sonnet 5 `high` (sempre o início) | escalation → Opus 5.5 `high`; deep → Opus 5.5 `xhigh` |
 
 `max` não aparece: fica como decisão humana, nunca do router. A tabela inteira
 vive em `ROUTING_CONFIG`, e os ids de modelo só existem em `MODELS` — nenhum
@@ -5621,3 +5622,52 @@ O plano gravado do Goal014 recebeu `WU-16` com essa ação, dependendo de `WU-14
 A gravação passou pelo `validateExecutionPlan` do próprio harness, não por
 edição de JSON à mão: 16 unidades, banda `OVER_GUIDANCE` — reportada, não
 recusada, e a mesma banda dos Goals 008–013.
+
+## V31 — Opus 5 → Opus 5.5
+
+Em 2026-09-26 o Opus do loop passou de `claude-opus-5` para `claude-opus-5-5`
+(`MODELS.opus` em `lib/model-routing.mjs`, os perfis `OPUS_MEDIUM`,
+`OPUS_HIGH`, `OPUS_XHIGH` e `LEGACY_OPUS`, e o padrão de
+`IA_LOOP_DEVELOPER_MODEL`). Nada mais mudou: mesma política de roteamento,
+mesmos efforts, Sonnet e Fable intocados.
+
+**Métricas antigas não se movem.**
+
+- O snapshot `claude-ledger-calibrated-2026-09` segue imutável. O novo padrão,
+  `claude-ledger-calibrated-2026-09-26`, copia todas as tarifas dele sem
+  alteração e só acrescenta `claude-opus-5-5`, então qualquer linha antiga
+  reprecifica para o mesmo número nos dois.
+- `ALL_OPUS` continua reprecificando como `claude-opus-5`. Trocar o
+  contrafactual reescreveria toda economia de roteamento já reportada.
+
+**Monitoramento do Opus 5.5.** As métricas agrupam por modelo canônico
+(`resolveCanonicalModel`), então chamadas de Opus 5 e Opus 5.5 aparecem em
+linhas separadas em `ia-loop:metrics` (by model, effectiveness, resolution
+chains, escalation ROI). Sem o registro no snapshot, o Opus 5.5 cairia em
+`UNKNOWN_MODEL` e não teria custo calculado.
+
+A tarifa do Opus 5.5 vem da tabela pública da Anthropic ($4 input / $20
+output por MTok, cache read $0,20), não do ledger — ainda não havia linha de
+Opus 5.5 para calibrar. O snapshot declara isso em `modelProvenance`, e o
+relatório imprime:
+
+```text
+Pricing snapshot   claude-ledger-calibrated-2026-09-26 (effective 2026-09-26)
+Source             EMPIRICALLY_CALIBRATED (calibrated against 35 production rows)
+                   claude-opus-5-5: OFFICIAL
+```
+
+Cache write assume a mesma proporção dos outros modelos (1,25× / 2× input).
+Recalibrar contra `provider_reported_cost_usd` quando o ledger tiver linhas de
+Opus 5.5 com split de cache limpo.
+
+**O que observar no Opus 5.5.**
+
+- O effort padrão do Opus 5.5 é `medium`, não `high`. Só `LEGACY_OPUS` roda
+  sem `--effort`; todo outro perfil passa effort explícito.
+- O classificador `reasoning_extraction` que bloqueou multi-turno no Opus 5
+  (Spike 1) existe também no Opus 5.5, ao lado de `bio` e `cyber`. O Developer
+  e o Tech Lead em Opus seguem stateless. Para reavaliar, rode o spike de sessão
+  persistente, que agora usa Opus 5.5 por padrão.
+- Recusa de safeguard aparece como falha de execução. Compare a taxa de
+  falha e de escalonamento Opus 5 × Opus 5.5 em `ia-loop:metrics`.

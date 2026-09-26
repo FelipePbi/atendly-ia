@@ -47,7 +47,7 @@ const STATE_DIR = join(HERE, '.state');
 const REGISTRY_PATH = join(STATE_DIR, 'sessions.json');
 const TIMEOUT_MS = Number(process.env.IA_LOOP_TIMEOUT_MS ?? 180_000);
 
-const DEVELOPER_MODEL = process.env.IA_LOOP_DEVELOPER_MODEL ?? 'claude-opus-5';
+const DEVELOPER_MODEL = process.env.IA_LOOP_DEVELOPER_MODEL ?? 'claude-opus-5-5';
 const TECH_LEAD_MODEL = process.env.IA_LOOP_TECH_LEAD_MODEL ?? 'claude-fable-5-1';
 
 const TASK_MARKER = 'OPUS-123';

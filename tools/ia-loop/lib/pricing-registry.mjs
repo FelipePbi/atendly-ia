@@ -59,6 +59,25 @@ const ANTHROPIC_2026_09_MODELS = Object.freeze({
 });
 
 /**
+ * 2026-09-26: Claude Opus 5.5 replaces Opus 5 as the loop's Opus. Every rate
+ * from the 2026-09 card is carried over unchanged, so any row that snapshot
+ * could price reprices to the exact same number here; the only difference is
+ * that `claude-opus-5-5` stops being UNKNOWN_MODEL. Its rates come from
+ * Anthropic's published list ($4 / $20 per MTok, cache read $0.20) — NOT
+ * from the ledger, which had no Opus 5.5 rows yet — so the snapshot flags
+ * that one model's provenance separately (see `modelProvenance`). Unlike the
+ * calibrated models, cache reads are 0.05x input, not 0.1x; cache writes keep
+ * the usual 1.25x/2x. Recalibrate once the ledger has clean-split Opus 5.5
+ * rows.
+ */
+const ANTHROPIC_2026_09_26_MODELS = Object.freeze({
+  ...ANTHROPIC_2026_09_MODELS,
+  'claude-opus-5-5': Object.freeze({
+    input: 4, output: 20, cacheRead: 0.2, cacheCreation: 5, cacheCreation5m: 5, cacheCreation1h: 8,
+  }),
+});
+
+/**
  * How a snapshot's rates came to exist. Never decorative: a report MUST show
  * this, because a rate an operator can mistake for the provider's own
  * published list is a rate that gets trusted more than it has earned.
@@ -94,11 +113,32 @@ const SNAPSHOTS = Object.freeze({
     sampleRows: 35,
     validatedAt: '2026-09-12',
   }),
+  'claude-ledger-calibrated-2026-09-26': Object.freeze({
+    id: 'claude-ledger-calibrated-2026-09-26',
+    provider: 'anthropic',
+    effectiveFrom: '2026-09-26',
+    models: ANTHROPIC_2026_09_26_MODELS,
+    // Still calibrated as a whole: every model except Opus 5.5 keeps the
+    // ledger-solved rate of the 2026-09 snapshot.
+    provenance: PRICING_PROVENANCE.EMPIRICALLY_CALIBRATED,
+    derivedFrom: 'provider_reported_cost_usd',
+    sampleRows: 35,
+    validatedAt: '2026-09-12',
+    /** Per-model exceptions to `provenance`. */
+    modelProvenance: Object.freeze({ 'claude-opus-5-5': PRICING_PROVENANCE.OFFICIAL }),
+  }),
 });
 
-export const DEFAULT_PRICING_SNAPSHOT_ID = 'claude-ledger-calibrated-2026-09';
+export const DEFAULT_PRICING_SNAPSHOT_ID = 'claude-ledger-calibrated-2026-09-26';
 
-/** The model the ALL_OPUS counterfactual reprices every observed call as. */
+/**
+ * The model the ALL_OPUS counterfactual reprices every observed call as.
+ *
+ * Deliberately still Opus 5, not the Opus 5.5 the loop now runs: moving the
+ * counterfactual would silently rewrite every historical routing-savings
+ * figure. Opus 5.5 calls are priced at their own rate in ACTUAL, so the
+ * baseline stays comparable across the switch.
+ */
 export const ALL_OPUS_CANONICAL_MODEL = 'claude-opus-5';
 
 export function getPricingSnapshot(id = DEFAULT_PRICING_SNAPSHOT_ID) {
@@ -132,7 +172,7 @@ const TRAILING_DATE_SUFFIX = /-\d{8}$/;
  * must produce `UNKNOWN_MODEL` in the engine, never a borrowed or averaged
  * price.
  */
-export function resolveCanonicalModel(observedModel, { models = ANTHROPIC_2026_09_MODELS } = {}) {
+export function resolveCanonicalModel(observedModel, { models = ANTHROPIC_2026_09_26_MODELS } = {}) {
   if (typeof observedModel !== 'string' || observedModel === '') return null;
   if (models[observedModel]) return observedModel;
   if (MODEL_ALIASES[observedModel] && models[MODEL_ALIASES[observedModel]]) return MODEL_ALIASES[observedModel];
@@ -141,6 +181,6 @@ export function resolveCanonicalModel(observedModel, { models = ANTHROPIC_2026_0
   return null;
 }
 
-export function canonicalModelIds({ models = ANTHROPIC_2026_09_MODELS } = {}) {
+export function canonicalModelIds({ models = ANTHROPIC_2026_09_26_MODELS } = {}) {
   return Object.keys(models);
 }

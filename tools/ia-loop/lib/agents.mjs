@@ -16,7 +16,7 @@ import {
   validateReviewDecision,
 } from './contracts.mjs';
 
-export const DEVELOPER_MODEL = process.env.IA_LOOP_DEVELOPER_MODEL ?? 'claude-opus-5';
+export const DEVELOPER_MODEL = process.env.IA_LOOP_DEVELOPER_MODEL ?? 'claude-opus-5-5';
 export const TECH_LEAD_MODEL = process.env.IA_LOOP_TECH_LEAD_MODEL ?? 'claude-fable-5-1';
 
 const DEVELOPER_FAMILY = 'opus';

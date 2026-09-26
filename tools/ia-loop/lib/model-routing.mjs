@@ -59,7 +59,7 @@ export const MODELS = Object.freeze({
     key: 'sonnet', model: 'claude-sonnet-5', family: 'sonnet', label: 'Claude Sonnet 5',
   }),
   opus: Object.freeze({
-    key: 'opus', model: 'claude-opus-5', family: 'opus', label: 'Claude Opus 5',
+    key: 'opus', model: 'claude-opus-5-5', family: 'opus', label: 'Claude Opus 5.5',
   }),
   fable: Object.freeze({
     key: 'fable', model: 'claude-fable-5-1', family: 'fable', label: 'Claude Fable 5.1',

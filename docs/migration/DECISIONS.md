@@ -3531,3 +3531,157 @@ vocabulário fechado atual; a prova de conservação de candidatos dentro das
 funções de varredura, declarada fora de alcance desde D-065 e reafirmada
 aqui, devir Goal próprio; ou se `throw` precisar de tratamento por decisão
 de produto, fora do escopo deste guardrail de descarte silencioso.
+
+## D-071 — A isenção é provada pelo que o descarte abandona: a região abandonada, o vocabulário de produção, o fecho sobre as funções de módulo e um quinto eixo que só retira isenção, propostos no Goal055
+
+**Status:** ACCEPTED no [review055](reviews/055-review.md) (rodada 2 de
+2, 2026-09-26; rodada 1 `CHANGES_REQUIRED` com 9 blockers, rodada 2 com
+zero), pelo Tech Lead Agent ([AGENT_ROLES](AGENT_ROLES.md), D-018), sobre
+a baseline `0851b3362ced899954a5f19600e2a06944e6a913` (fechamento do
+Goal054, ACCEPTED no [review054](reviews/054-review.md)). Proposta pelo
+Developer Agent na rodada 2.
+
+**Contexto:** D-069 e D-070 fizeram do **antecedente** da isenção um
+cômputo — qual domínio o cursor percorre, em qual forma de descarte —, mas
+o **consequente** que a justificava ("cada volta avança leitura, nunca
+descarta candidato") ficou escrito em comentário e não era conferido por
+asserção alguma. `resolveSilentDiscardRequirement` isentava por
+`character-sequence`/`parallel-mask` e por `no-domain` em classe não
+portadora sem olhar o que a ocorrência abandona. A observação 1 do
+[review054](reviews/054-review.md) apontou o custo: `function-early-exit`
+é a forma com mais ocorrências isentas e menos prova por ocorrência.
+
+**Decisão:**
+
+1. **A região abandonada é computada por ocorrência**
+   (`resolveDiscardAbandonedRegion`,
+   `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts:8251`),
+   por casamento de delimitadores sobre o mesmo texto mascarado que já
+   resolve laço, domínio e fronteira de função. Regra por forma:
+   `continue` e `break` — do fim da instrução ao fim do corpo do laço
+   contenedor (o laço que o rótulo declara, quando há rótulo); que `break`
+   também abandone as voltas seguintes é verdade do runtime **declarada**
+   em comentário, não computada — a região provada é a da volta corrente;
+   `function-early-exit` — do fim da instrução `return` (a expressão do
+   próprio `return` executa e não é abandonada) ao fim do corpo da função
+   que a fronteira do Goal054 resolveu; `switch-break` e
+   `nested-function-return` — **sem região**, isentos pela forma como no
+   Goal054. Região não resolvida reprova no mesmo resíduo de classe,
+   domínio e fronteira (`findDiscardEnumerationFindings`, `:9815`–`:9834`).
+2. **A produção do módulo é vocabulário fechado, com resíduo.**
+   `DISCARD_PRODUCING_OPERATIONS = ["push", "add", "set"] as const`
+   (`:8323`), com tipo derivado, no padrão de `DISCARD_FORMS`. A varredura
+   reconhece um alfabeto deliberadamente maior
+   (`DISCARD_RECOGNIZED_INSERTION_METHODS`, `:8343`: o vocabulário mais
+   `unshift`, `splice`, `append`), e operação reconhecida fora do
+   vocabulário reprova nomeando `arquivo:linha` em
+   `findDiscardProductionFindings` (`:8813`) — e, na região, conta como
+   produção (fail-closed).
+3. **A função produtora é resolvida por fecho transitivo**
+   (`buildDiscardModuleProduction`, `:8647`; uma volta em
+   `expandDiscardProducersOnce`, `:8620`): função de módulo declarada em
+   coluna zero cujo corpo contém operação reconhecida, ou que chama função
+   de módulo produtora. O fecho é computado **uma vez** por arquivo, dentro
+   de `enumerateDiscardAnalysis` (`:9433`), e reaproveitado por toda
+   ocorrência (`findDiscardRegionProduction`, `:8765`). O caminho do fecho
+   até a produtora direta é nomeado por `discardProducerPath` (`:8720`).
+4. **Limite declarado — chamada cujo destino não é função de módulo não é
+   produção.** Método de `string`, de `Array`, de `RegExp`, construtor,
+   função importada: a única via de uma chamada dessas alcançar a saída do
+   módulo é o valor que ela devolve, e atribuir valor não é produzir. Ramo
+   que implementa: `if (!site.calleeIsModuleFunction)` em
+   `buildDiscardModuleProduction` (`:8675`), que só conta a chamada em
+   `nonModuleCallCounts`, e o filtro de `findDiscardRegionProduction`
+   (`:8785`). Chamada de membro (`a.b(...)`) não chega a ser candidata; a
+   produção dela, quando existe, é o próprio sítio do vocabulário.
+5. **A exigência ganha um quinto eixo, que só retira isenção.** Os quatro
+   eixos do Goal054 continuam intocados em
+   `resolveSilentDiscardRequirementByFourAxes` (`:10945`);
+   `resolveSilentDiscardRequirement` (`:11077`) os chama e, só quando
+   concluíram pela isenção de forma que abandona laço, aplica o eixo 5
+   (`:11084`): região com produção **exige** registro, com
+   `retiredExemptionReason` nomeando `arquivo:linha` da ocorrência e da
+   produção; região não resolvida **exige** registro e vai para o resíduo;
+   região livre isenta com as **duas** evidências — a dos eixos 1 a 4 e a
+   ausência de produção com a extensão da região em `arquivo:linha`.
+6. **As ocorrências reais que mudaram de lado ganham motivo.** Execução
+   final: **8** ocorrências (a sondagem previa **6**) —
+   `splitTopLevelItems` `:225`, `:228`, `:232`, `:236`, `:240`
+   (`continue;`, produção `items.push` em `:243`), `splitTemplateLiteralParts`
+   `:1458` (`continue;`) e `:1479` (saída antecipada), com `parts.push` em
+   `:1480`/`:1482`, e `findTopLevelMethodBodies` `:2989` (`continue;`,
+   `methods.push` em `:2994`). As **8** entram por operação produtora
+   **direta** na região; **0** por chamada a função produtora.
+   `DOCUMENTED_SILENT_DISCARDS` cresceu de **53** para **57** entradas (4
+   novas em `:6918`–`:6957`, `splitTopLevelItems` com multiplicidade 5),
+   sem duplicar, remover ou reescrever entrada anterior.
+7. **Uma conta só.** Região, produção e eixo entram no caminho existente —
+   `enumerateDiscardAnalysis` (de que `enumerateDiscardOccurrences` é
+   projeção) → `enumerateSilentDiscardOccurrences` →
+   `findSilentDiscardFindings` —, sem segunda varredura da fonte.
+
+**Divergência declarada entre sondagem e execução (o computado vence):**
+a sondagem do Goal contou **70** funções de módulo, **16** produtoras
+diretas e **20** pelo fecho; a execução computa **89**, **23** e **28**
+(`grep -cE "^(export )?(async )?function"` sobre `http-egress-sites.ts`
+confirma **89** declarações em coluna zero). A sondagem previa **6**
+ocorrências desisentadas; a execução acha **8** — as duas a mais
+(`:1458`, `:1479`, `splitTemplateLiteralParts`) não entraram na sondagem,
+que só varreu `continue;`/`break;` e não contou a saída antecipada de
+`:1479`. As operações `push`/`add`/`set` batem com a sondagem (**51**,
+**14**, **5**).
+
+**Alternativas:** amostragem dirigida das ocorrências isentas, como a
+observação 1 do review054 sugeria — rejeitada, o cômputo é mais barato e
+mais forte, e a escolha está registrada na v76 do MASTER_PLAN; tratar
+chamada a função fora do módulo como produção — rejeitada, o valor
+devolvido não é saída do módulo até ser gravado por operação do
+vocabulário, que o sítio dela já mostra; contar a produção da expressão
+do próprio `return` como abandonada — rejeitada, ela executa.
+
+**Motivo:** um critério de isenção cuja parte decisiva é adjetivo é a
+mesma família de defeito que os Goals 046, 052, 053 e 054 removeram um
+nível acima de cada vez. A isenção por um eixo só era fail-open **medido**
+sobre as **8** ocorrências acima: uma regressão que fizesse um desses
+laços pular a produção seria invisível à máquina inteira dos Goals 048 a
+054.
+
+**Consequências:** `apps/ai-orchestrator/tests/support/http-egress-sites.ts`
+e `apps/ai-orchestrator/tests/support/product-transport-routes.txt` estão
+intocados (diff zero). `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
+concentra o diff de código: **1810** inserções e **12** deleções contra a
+baseline (`git diff --histogram --numstat`; **16034** linhas, baseline
+**14236**) e **299** testes (baseline **283**), **299** passando, **0**
+falhando. Três testes anteriores foram **adaptados, não removidos**: os
+que liam a isenção pelo domínio passam a ler os quatro eixos
+(`resolveSilentDiscardRequirementByFourAxes`), e o que asseria as 5
+`while-positional-read` isentas passa a asserir `:1458` e `:2989`
+desisentadas pelo eixo 5 e as outras 3 isentas. Suíte completa de
+`apps/ai-orchestrator`: **1111** testes, **1023** passando (baseline
+**1007**), **88** pulados (mesma contagem), **0** falhando. Nenhum
+mecanismo de classificação de egresso foi alterado.
+
+**Limite declarado, herdado de D-065 a D-070, não afrouxado:** o eixo 5
+prova que a região abandonada de uma ocorrência isenta não contém
+produção; não prova conservação de candidatos dentro das funções de
+varredura na forma geral. Registrar as 8 ocorrências com motivo diz que o
+abandono está nomeado e justificado, não que a produção pulada não
+importava. Chamada a função fora do módulo não é produção (decisão 4).
+
+**Revisar se:** a árvore real ganhar operação de inserção fora do
+vocabulário (reprova até o vocabulário decidir); surgir função de módulo
+declarada fora de coluna zero ou como `const f = (...) => {}` no nível do
+módulo — hoje ausente em `http-egress-sites.ts` e fora do fecho; ou a
+prova de conservação de candidatos virar Goal próprio.
+
+**Nota de fechamento ([review055](reviews/055-review.md)):** a decisão 4
+está sub-declarada. O ramo `calleeIsModuleFunction === false` também
+cobre chamada a closure local que grava em coleção capturada
+(`addBinding`, `countOut`, `enqueuePrimitive`, `reachesFetch` em
+`http-egress-sites.ts`). Para essas, "a única via é o valor devolvido" é
+falso. Na árvore real elas só aparecem em laço `element-collection`, que
+os quatro eixos já exigem, ou em região que já tem `push` direto; não há
+fail-open vigente, mas o limite vale para closure local, não só para
+arrow no nível do módulo. Também não computado: `function-early-exit`
+dentro de laço abandona as voltas seguintes, como `break`; a região
+provada é só a da volta corrente.

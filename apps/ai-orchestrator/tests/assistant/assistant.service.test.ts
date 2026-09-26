@@ -6914,6 +6914,44 @@ const DOCUMENTED_SILENT_DISCARDS: ReadonlyMap<string, SilentDiscardEntry> = buil
     reason:
       "a busca quer a declaração de classe mais PRÓXIMA que ainda começa antes de `index`; ao alcançar uma declaração na posição dele ou depois, `found` já guarda a mais próxima anterior — as declarações restantes do texto começam depois do ponto de interesse e não podem ser a classe envolvente que a função procura",
   },
+  // ---------------------------------------------------------------------
+  // Goal055 / FIX-001 — o eixo 5 de `resolveSilentDiscardRequirement` (a
+  // região abandonada) RETIRA a isenção de domínio `character-sequence` de
+  // 8 ocorrências reais, computadas por execução: a região que cada uma
+  // abandona contém operação de `DISCARD_PRODUCING_OPERATIONS` escrita no
+  // próprio corpo — nenhuma entra por chamada a função produtora. São as 6
+  // da sondagem do Goal (`:225`, `:228`, `:232`, `:236`, `:240`, `:2989`)
+  // mais 2 que a sondagem não contou, porque só varreu `continue;`/`break;`:
+  // `:1458` (`continue;`) e `:1479` (saída antecipada), ambas em
+  // `splitTemplateLiteralParts`. As entradas abaixo são novas; nenhuma
+  // anterior foi duplicada, removida ou reescrita.
+  // ---------------------------------------------------------------------
+  {
+    anchor: "splitTopLevelItems",
+    snippet: "continue;",
+    multiplicity: 5,
+    reason:
+      "as 5 ocorrências nuas do laço de caractere sobre `content` pulam, cada uma, o resto da volta — e com ele o `items.push(content.slice(start, i).trim())` de :243, a única produção da função. Pular é correto porque o `push` só pode acontecer na vírgula de NÍVEL ZERO fora de aspas: as 5 tratam o caractere seguinte a `\\` dentro de aspas, o próprio caractere dentro de aspas, a aspa que abre, o delimitador que abre (`depth += 1`) e o que fecha (`depth -= 1`) — nenhum deles é vírgula de topo. Se uma delas pulasse uma vírgula de topo, dois itens sairiam fundidos num só, e os laços portadores de candidato de :485 (parâmetros) e :574 (propriedades de objeto) perderiam um candidato inteiro sem recusa",
+  },
+  {
+    anchor: "splitTemplateLiteralParts",
+    snippet: "continue;",
+    reason:
+      "o `\\` de escape já acrescentou os DOIS caracteres (`\\` e o escapado) a `staticText` e avançou `i` em 2 antes de pular; a região pulada contém os `parts.push` de :1480 e :1482, que só pertencem à abertura `${` de uma interpolação — e um caractere escapado nunca a abre. Se o pulo estivesse errado, um `\\${` escapado seria lido como interpolação (parte de expressão espúria) ou uma `${` real seria engolida como texto estático, e o parâmetro em trânsito da URL sumiria do caminho que a resolução por chamadores separa da base",
+  },
+  {
+    anchor: "splitTemplateLiteralParts",
+    snippet: "if (depth !== 0) return undefined;",
+    form: "function-early-exit",
+    reason:
+      "`${` sem `}` correspondente até o fim do corpo: o texto não é literal de crase fechado, e o contrato da função é devolver `undefined` nesse caso — a região abandonada contém os `parts.push` de :1480/:1482 e o `push` final, que montariam partes de um literal malformado. O abandono não é mudo: o único chamador (:1984) lança erro nomeando `arquivo:linha` e a URL quando recebe `undefined`, de modo que, se a saída antecipada disparasse sobre um literal bem formado, a descoberta falharia alto em vez de perder a rota",
+  },
+  {
+    anchor: "findTopLevelMethodBodies",
+    snippet: "continue;",
+    reason:
+      "o índice `i` está dentro de aspas pela `quoteMask` — texto de string ou de template, não código; a região pulada contém o `methods.push` de :2994, que só pode acontecer num `{` de CÓDIGO que abre corpo de método, e um `{` dentro de aspas nunca é um. Se o pulo estivesse errado, um corpo de método real seria saltado: o método sumiria de `ClassMethodBody[]` e, com ele, da superfície de membros derivada em :3150 e da enumeração de uso do campo cliente em :3674",
+  },
 ]);
 
 /** Acha, em `source`, toda linha na forma `if (<condição sobre valor ausente>) continue;`, com a condição em qualquer forma idiomática reconhecida (`=== undefined`, `=== null`, `!<identificador>`), combinável por `||`, com qualquer identificador. */
@@ -6987,6 +7025,8 @@ interface SilentDiscardOccurrence {
    * continua exigindo registro enquanto o resíduo existir (fail-closed).
    */
   readonly unresolvedRequirementReason?: string;
+  /** Motivo do eixo 5 (Goal055 §4) para a isenção dos eixos 1 a 4 ter sido RETIRADA: a região abandonada produz. Presente só quando `requiresRegistration` é `true` por esse motivo. */
+  readonly retiredExemptionReason?: string;
 }
 
 interface SilentDiscardFindings {
@@ -8176,6 +8216,657 @@ const DISCARD_FUNCTION_BOUNDARY_FORMS: ReadonlySet<DiscardForm> = new Set<Discar
   ),
 );
 
+/** O que a resolução provou sobre a região abandonada, com a evidência do fim que a concedeu. */
+interface DiscardAbandonedRegionResolution {
+  /** Índice, no texto fonte, de onde a região começa: logo DEPOIS da instrução de descarte — o que ela própria executa (a expressão de um `return`, por exemplo) não é abandonado. */
+  readonly abandonedRegionStart: number | undefined;
+  readonly abandonedRegionEnd: number | undefined;
+  readonly evidence: string | undefined;
+  readonly unresolvedReason: string | undefined;
+}
+
+/**
+ * Região (Goal055) que uma ocorrência de descarte abandona — o que ela deixa
+ * de executar —, casada por delimitador sobre o MESMO texto mascarado que já
+ * resolve laço, domínio e fronteira de função (Goal054 §§1–2), nunca por
+ * indentação nem por nome de função:
+ *
+ * - `continue`/`break` — até o fim do CORPO do laço que `enclosing` já
+ *   resolveu (o laço rotulado quando houver rótulo, nunca o mais interno,
+ *   porque `enclosing` já vem resolvido assim). Que `break` também abandone
+ *   as voltas SEGUINTES do mesmo laço é verdade do runtime declarada aqui em
+ *   comentário, não computada: a região provada é só o que falta da volta em
+ *   curso, o mesmo texto que `continue` abandona;
+ * - `function-early-exit` — até o fim do CORPO DE FUNÇÃO que a fronteira do
+ *   Goal054 §2 provou conter o `return` (o lado `same-function`), porque aí o
+ *   `return` encerra a varredura inteira, não só o laço;
+ * - qualquer forma fora de `DISCARD_FORMS_ABANDONING_LOOP` (`switch-break`,
+ *   `nested-function-return`) não abandona laço nem função de varredura
+ *   algum (Goal054 §4) — a ausência de região aqui é a mesma isenção
+ *   COMPUTADA pela forma, nunca um resíduo mudo.
+ *
+ * Região não resolvida devolve motivo escrito nomeando o que faltou, para o
+ * mesmo resíduo em que classe, domínio e fronteira já reprovam.
+ */
+function resolveDiscardAbandonedRegion(
+  masked: string,
+  topology: DiscardBraceTopology,
+  verdicts: Map<number, DiscardBraceVerdict>,
+  lineStartOffsets: readonly number[],
+  filePath: string,
+  form: DiscardForm,
+  occurrenceIndex: number,
+  occurrenceEnd: number,
+  enclosing: DiscardLoopSpan | undefined,
+): DiscardAbandonedRegionResolution {
+  const unresolved = (reason: string): DiscardAbandonedRegionResolution => ({
+    abandonedRegionStart: undefined,
+    abandonedRegionEnd: undefined,
+    evidence: undefined,
+    unresolvedReason: `a região abandonada por este \`${form}\` não foi resolvida: ${reason}`,
+  });
+  if (!DISCARD_FORMS_ABANDONING_LOOP.has(form)) {
+    return {
+      abandonedRegionStart: undefined,
+      abandonedRegionEnd: undefined,
+      evidence: undefined,
+      unresolvedReason: undefined,
+    };
+  }
+  if (form === "function-early-exit") {
+    const atOccurrence = resolveEnclosingFunctionBody(masked, topology, verdicts, occurrenceIndex);
+    if (atOccurrence.unresolvedReason !== undefined) return unresolved(atOccurrence.unresolvedReason);
+    if (atOccurrence.body === undefined) {
+      return unresolved("nenhum corpo de função o contém no texto mascarado");
+    }
+    const endLine = lineNumberAtIndex(lineStartOffsets, atOccurrence.body.end);
+    // A expressão do próprio `return` EXECUTA — só o que vem depois da
+    // instrução é abandonado. O fim da instrução é casado por delimitador
+    // sobre o texto mascarado e nunca passa do fim do corpo.
+    return {
+      abandonedRegionStart: Math.min(
+        findStatementEnd(masked, occurrenceIndex),
+        atOccurrence.body.end,
+      ),
+      abandonedRegionEnd: atOccurrence.body.end,
+      evidence: `o corpo da função de varredura que este \`return\` encerra vai até ${filePath}:${endLine}`,
+      unresolvedReason: undefined,
+    };
+  }
+  // `continue`/`break`: até o fim do corpo do laço já resolvido em `enclosing`.
+  if (enclosing === undefined) {
+    return unresolved("nenhum laço contenedor foi resolvido para esta ocorrência");
+  }
+  const endLine = lineNumberAtIndex(lineStartOffsets, enclosing.bodyEnd);
+  return {
+    abandonedRegionStart: occurrenceEnd,
+    abandonedRegionEnd: enclosing.bodyEnd,
+    evidence: `o corpo do laço \`${enclosing.keyword} (${enclosing.header})\` que esta ocorrência abandona vai até ${filePath}:${endLine}`,
+    unresolvedReason: undefined,
+  };
+}
+
+/**
+ * Vocabulário FECHADO (Goal055 §2) das operações que PRODUZEM saída do
+ * módulo de varredura: a chamada acrescenta valor a uma estrutura que
+ * SOBREVIVE a ela, e é por essa estrutura que o resultado da varredura chega
+ * a quem a pediu — `push` de arranjo, `add` de `Set`, `set` de `Map`.
+ *
+ * O padrão é o de `DISCARD_FORMS`: array declarado, tipo derivado dele,
+ * nenhuma união escrita à mão em paralelo. O teste permanente confere o
+ * vocabulário nos DOIS sentidos — cada membro declarado tem contagem
+ * computada na árvore real, e toda operação que a varredura reconhece
+ * pertence ao vocabulário, senão REPROVA nomeada por `arquivo:linha` em
+ * `findDiscardProductionFindings`. Não há ramo mudo e não há operação
+ * "outra".
+ */
+const DISCARD_PRODUCING_OPERATIONS = ["push", "add", "set"] as const;
+
+type DiscardProducingOperation = (typeof DISCARD_PRODUCING_OPERATIONS)[number];
+
+/** Pertencimento ao vocabulário conferido em runtime — a única porta pela qual um sítio reconhecido é contado como membro. */
+function isDiscardProducingOperation(operation: string): operation is DiscardProducingOperation {
+  return (DISCARD_PRODUCING_OPERATIONS as readonly string[]).includes(operation);
+}
+
+/**
+ * O alfabeto que a VARREDURA reconhece, deliberadamente MAIOR que o
+ * vocabulário: os métodos pelos quais as coleções da linguagem aceitam
+ * elemento novo — `push`/`unshift`/`splice` de arranjo, `add` de `Set`,
+ * `set` de `Map`, `append` de `URLSearchParams`/`Headers`/`FormData`. É o
+ * que dá ao vocabulário um lado de FORA: operação reconhecida aqui e ausente
+ * de `DISCARD_PRODUCING_OPERATIONS` não passa muda como "não produção" —
+ * reprova nomeada em `findDiscardProductionFindings` e, na região abandonada,
+ * conta como produção (fail-closed), até o vocabulário decidir sobre ela.
+ * Cada membro do vocabulário é membro deste alfabeto, conferido por execução.
+ */
+const DISCARD_RECOGNIZED_INSERTION_METHODS: readonly string[] = [
+  ...DISCARD_PRODUCING_OPERATIONS,
+  "unshift",
+  "splice",
+  "append",
+];
+
+/**
+ * Um sítio de operação produtora no texto mascarado. `operation` é `string`,
+ * e não `DiscardProducingOperation`, de propósito: sítio com operação fora
+ * do vocabulário tem de ser REPRESENTÁVEL para poder reprovar nomeado, em
+ * vez de impossível de construir e por isso nunca conferido — é o mesmo
+ * motivo pelo qual `findDiscardEnumerationFindings` confere `occurrence.form`
+ * contra `DISCARD_FORMS` em runtime.
+ */
+interface DiscardProducingOperationSite {
+  readonly filePath: string;
+  readonly operation: string;
+  readonly index: number;
+  readonly line: number;
+  /** Receptor da operação, lido do texto mascarado; `undefined` quando o que precede o `.` não é identificador (resultado de chamada, `)` de expressão). A ausência não isenta: a operação continua produzindo. */
+  readonly receiver: string | undefined;
+  readonly text: string;
+}
+
+/**
+ * Todo sítio de operação reconhecida do texto mascarado, numa passada só
+ * sobre a alternância ÚNICA montada do alfabeto — nunca uma varredura por
+ * membro. Comentário e literal não entram porque o texto já vem mascarado
+ * por `maskNonCodeText`, o mesmo de laço, domínio, fronteira e região.
+ */
+function findDiscardProducingOperationSites(
+  source: string,
+  masked: string,
+  lineStartOffsets: readonly number[],
+  filePath: string,
+): DiscardProducingOperationSite[] {
+  const pattern = new RegExp(
+    `\\.(${DISCARD_RECOGNIZED_INSERTION_METHODS.map(escapeForRegExp).join("|")})\\s*\\(`,
+    "gu",
+  );
+  const lines = source.split(/\r?\n/u);
+  const sites: DiscardProducingOperationSite[] = [];
+  let match = pattern.exec(masked);
+  while (match !== null) {
+    const receiver = wordEndingAtMaskedIndex(masked, match.index);
+    const line = lineNumberAtIndex(lineStartOffsets, match.index);
+    sites.push({
+      filePath,
+      operation: match[1] as string,
+      index: match.index,
+      line,
+      receiver: receiver === "" ? undefined : receiver,
+      text: (lines[line - 1] ?? "").trim(),
+    });
+    match = pattern.exec(masked);
+  }
+  return sites;
+}
+
+/** Uma função declarada em COLUNA ZERO do módulo, com o corpo casado por delimitador sobre a topologia de chaves já existente. É a unidade do fecho do Goal055 §3. */
+interface DiscardModuleFunction {
+  readonly name: string;
+  readonly line: number;
+  readonly body: DiscardBraceSpan;
+}
+
+interface DiscardModuleFunctionScan {
+  readonly functions: readonly DiscardModuleFunction[];
+  /** Motivo escrito, com `arquivo:linha`, de uma declaração não ter virado função de módulo resolvida. Reprova em `findDiscardProductionFindings` e torna não resolvida a região de toda ocorrência do arquivo — fail-closed, nunca produção presumida ausente. */
+  readonly unresolved: readonly string[];
+}
+
+/**
+ * As funções de módulo de um arquivo: declaração `function` em COLUNA ZERO
+ * (com ou sem `export`, `default`, `async`, `*`), corpo obtido da topologia
+ * de chaves de `findMaskedBraceTopology` e confirmado por
+ * `classifyMaskedOpenBrace` — nunca por contagem de recuo, e nunca pelo
+ * primeiro `{` textual, que poderia ser o de uma anotação de retorno com
+ * forma de objeto.
+ *
+ * Chave sem par em qualquer ponto do arquivo torna a topologia inútil para
+ * casar corpo, e então NADA é resolvido: o resíduo diz isso com o índice da
+ * chave órfã, do mesmo jeito que `resolveEnclosingFunctionBody` já faz. Nome
+ * declarado duas vezes também vira resíduo, porque o fecho é indexado por
+ * nome e não teria como escolher entre os dois corpos.
+ */
+function findDiscardModuleFunctions(
+  masked: string,
+  topology: DiscardBraceTopology,
+  verdicts: Map<number, DiscardBraceVerdict>,
+  lineStartOffsets: readonly number[],
+  filePath: string,
+): DiscardModuleFunctionScan {
+  const unresolved: string[] = [];
+  if (topology.unbalanced.length > 0) {
+    return {
+      functions: [],
+      unresolved: [
+        `${filePath}: há chave sem par no índice ${topology.unbalanced[0]} do texto mascarado, e nenhum corpo de função de módulo pode ser casado com segurança`,
+      ],
+    };
+  }
+  const declaration =
+    /^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)\s*[<(]/gmu;
+  const declarations: { name: string; index: number; line: number }[] = [];
+  let match = declaration.exec(masked);
+  while (match !== null) {
+    declarations.push({
+      name: match[1] as string,
+      index: match.index,
+      line: lineNumberAtIndex(lineStartOffsets, match.index),
+    });
+    match = declaration.exec(masked);
+  }
+  const spansByStart = [...topology.spans].sort((left, right) => left.start - right.start);
+  const verdictOf = (start: number): DiscardBraceVerdict => {
+    let verdict = verdicts.get(start);
+    if (verdict === undefined) {
+      verdict = classifyMaskedOpenBrace(masked, start);
+      verdicts.set(start, verdict);
+    }
+    return verdict;
+  };
+  const functions: DiscardModuleFunction[] = [];
+  const byName = new Map<string, DiscardModuleFunction>();
+  for (const [position, entry] of declarations.entries()) {
+    const where = `${filePath}:${entry.line}`;
+    const open = masked.indexOf("(", entry.index);
+    const close = open === -1 ? -1 : matchBalancedDelimiter(masked, open, "(", ")");
+    if (close === -1) {
+      unresolved.push(
+        `${where}: a lista de parâmetros de \`${entry.name}\` não fecha no texto mascarado`,
+      );
+      continue;
+    }
+    // O corpo tem de vir ANTES da próxima declaração de coluna zero: sem esse
+    // limite, uma declaração cujo corpo não casasse herdaria em silêncio o
+    // corpo da função seguinte.
+    const limit = declarations[position + 1]?.index ?? masked.length;
+    const body = spansByStart.find(
+      (span) =>
+        span.start > close && span.start < limit && verdictOf(span.start).kind === "function-body",
+    );
+    if (body === undefined) {
+      unresolved.push(
+        `${where}: nenhum \`{\` entre a lista de parâmetros de \`${entry.name}\` e a declaração seguinte abre corpo de função`,
+      );
+      continue;
+    }
+    const previous = byName.get(entry.name);
+    if (previous !== undefined) {
+      unresolved.push(
+        `${where}: \`${entry.name}\` já foi declarada em ${filePath}:${previous.line}, e o fecho de produção é indexado por nome — dois corpos com o mesmo nome não têm escolha computável`,
+      );
+      continue;
+    }
+    const resolved: DiscardModuleFunction = { name: entry.name, line: entry.line, body };
+    byName.set(entry.name, resolved);
+    functions.push(resolved);
+  }
+  return { functions, unresolved };
+}
+
+/** Uma chamada de identificador nu (`nome(...)`) no texto mascarado, com a função de módulo que a contém quando há uma. */
+interface DiscardModuleCallSite {
+  /** Função de módulo que contém a chamada; `undefined` quando a chamada está no nível do módulo. */
+  readonly caller: string | undefined;
+  readonly callee: string;
+  /** `true` quando `callee` é função de módulo declarada no arquivo — o ÚNICO caso que propaga produção pelo fecho do Goal055 §3. */
+  readonly calleeIsModuleFunction: boolean;
+  readonly index: number;
+  readonly line: number;
+}
+
+/**
+ * Palavras seguidas de `(` sem que isso seja chamada de função: as seis de
+ * controle que `CONTROL_FLOW_PARENTHESIZED_KEYWORDS` já declara, mais as de
+ * expressão. `function` e `new` entram aqui de propósito: o `(` de
+ * `function f(` é a lista de parâmetros da própria declaração, e `new Foo(` é
+ * construtor, que o Goal055 §3 declara FORA da produção.
+ */
+const DISCARD_NON_CALL_PARENTHESIZED_WORDS: ReadonlySet<string> = new Set<string>([
+  ...CONTROL_FLOW_PARENTHESIZED_KEYWORDS,
+  "function",
+  "new",
+  "return",
+  "typeof",
+  "void",
+  "delete",
+  "await",
+  "yield",
+  "instanceof",
+  "in",
+  "of",
+  "case",
+  "do",
+  "else",
+]);
+
+/**
+ * Toda chamada de identificador NU do texto mascarado, numa passada só, já
+ * atribuída à função de módulo que a contém.
+ *
+ * LIMITE DECLARADO do Goal055 §3, implementado no ramo
+ * `calleeIsModuleFunction === false` desta função e consumido no ramo de
+ * mesmo nome de `buildDiscardModuleProduction` e de
+ * `findDiscardRegionProduction`: chamada cujo destino não é função de módulo
+ * — método de `string`, de `Array`, de `RegExp`, construtor, função
+ * importada — NÃO é produção por si só. O motivo é que a única via de uma
+ * chamada dessas alcançar a saída do módulo é o valor que ela devolve, e
+ * atribuir valor não é produzir: quem produz é a operação do vocabulário §2
+ * que grava esse valor numa estrutura que sobrevive à chamada, e essa
+ * operação é vista pelo sítio dela, no corpo em que está escrita. Chamada de
+ * MEMBRO (`a.b(...)`) não chega a ser candidata aqui — o `(?<![\w$.])` a
+ * exclui —, e a produção dela, quando existe, é o próprio sítio do
+ * vocabulário.
+ */
+function findDiscardModuleCallSites(
+  masked: string,
+  functions: readonly DiscardModuleFunction[],
+  lineStartOffsets: readonly number[],
+): DiscardModuleCallSite[] {
+  const moduleFunctionNames = new Set(functions.map((entry) => entry.name));
+  const pattern = /(?<![\w$.])([A-Za-z_$][\w$]*)\s*\(/gu;
+  const sites: DiscardModuleCallSite[] = [];
+  let match = pattern.exec(masked);
+  while (match !== null) {
+    const callee = match[1] as string;
+    const index = match.index;
+    if (
+      !DISCARD_NON_CALL_PARENTHESIZED_WORDS.has(callee) &&
+      !DISCARD_NON_CALL_PARENTHESIZED_WORDS.has(wordEndingAtMaskedIndex(masked, index))
+    ) {
+      const caller = functions.find(
+        (entry) => entry.body.start < index && index < entry.body.end,
+      );
+      sites.push({
+        caller: caller?.name,
+        callee,
+        calleeIsModuleFunction: moduleFunctionNames.has(callee),
+        index,
+        line: lineNumberAtIndex(lineStartOffsets, index),
+      });
+    }
+    match = pattern.exec(masked);
+  }
+  return sites;
+}
+
+/** O que a produção do módulo provou, computada UMA vez por arquivo e reaproveitada por toda ocorrência (Goal055 §§2–3). */
+interface DiscardModuleProduction {
+  readonly filePath: string;
+  readonly operationSites: readonly DiscardProducingOperationSite[];
+  readonly moduleFunctions: readonly DiscardModuleFunction[];
+  readonly callSites: readonly DiscardModuleCallSite[];
+  /** Funções de módulo com operação produtora ESCRITA no próprio corpo. */
+  readonly directProducers: ReadonlySet<string>;
+  /** Fecho transitivo: produtora direta, ou que chama função de módulo produtora. */
+  readonly producers: ReadonlySet<string>;
+  /** Arestas do fecho: função de módulo chamada por função de módulo. Só estas propagam produção. */
+  readonly calleesByCaller: ReadonlyMap<string, readonly string[]>;
+  /** Chamadas cujo destino NÃO é função de módulo, contadas por nome — declaradamente fora da produção (§3), registradas para que o limite seja verificável na execução e não apenas afirmado em comentário. */
+  readonly nonModuleCallCounts: ReadonlyMap<string, number>;
+  /** Voltas em que o fecho AINDA mudou o conjunto; a volta final, que não muda nada, não conta. */
+  readonly closureRounds: number;
+  /** `true` quando aplicar mais uma volta sobre o fecho não muda o conjunto — terminação conferida por execução, nunca afirmada em prosa. */
+  readonly closureStable: boolean;
+  readonly unresolved: readonly string[];
+}
+
+/**
+ * UMA volta do fecho: o conjunto de entrada mais toda função de módulo que
+ * chama alguém dele. É a mesma função que computa o fecho e que o teste
+ * permanente reaplica sobre o resultado para asserir estabilidade — nunca
+ * duas implementações da mesma propagação.
+ */
+function expandDiscardProducersOnce(
+  calleesByCaller: ReadonlyMap<string, readonly string[]>,
+  producers: ReadonlySet<string>,
+): Set<string> {
+  const next = new Set<string>(producers);
+  for (const [caller, callees] of calleesByCaller) {
+    if (next.has(caller)) continue;
+    if (callees.some((callee) => producers.has(callee))) next.add(caller);
+  }
+  return next;
+}
+
+/**
+ * A produção do módulo (Goal055 §§2–3), computada UMA vez sobre o MESMO
+ * texto mascarado que já resolve laço, domínio, fronteira de função e região
+ * abandonada — nunca numa segunda varredura da fonte, e nunca ocorrência a
+ * ocorrência. `enumerateDiscardAnalysis` é o único chamador.
+ *
+ * Uma função de módulo é produtora quando o corpo dela contém sítio de
+ * operação reconhecida (§2), ou quando chama função de módulo produtora. O
+ * fecho é ponto fixo sobre as arestas de chamada: cada volta só ACRESCENTA
+ * nome a um conjunto limitado pelas funções de módulo do arquivo, e por isso
+ * termina em no máximo tantas voltas quantas funções existirem. A terminação
+ * não fica na prosa — `closureRounds` e `closureStable` saem da execução, e o
+ * teste permanente reaplica `expandDiscardProducersOnce` sobre o resultado
+ * para conferir que mais uma volta não muda nada.
+ */
+function buildDiscardModuleProduction(
+  source: string,
+  masked: string,
+  topology: DiscardBraceTopology,
+  verdicts: Map<number, DiscardBraceVerdict>,
+  lineStartOffsets: readonly number[],
+  filePath: string,
+): DiscardModuleProduction {
+  const operationSites = findDiscardProducingOperationSites(
+    source,
+    masked,
+    lineStartOffsets,
+    filePath,
+  );
+  const scan = findDiscardModuleFunctions(masked, topology, verdicts, lineStartOffsets, filePath);
+  const callSites = findDiscardModuleCallSites(masked, scan.functions, lineStartOffsets);
+
+  const directProducers = new Set<string>();
+  for (const entry of scan.functions) {
+    const produces = operationSites.some(
+      (site) => entry.body.start < site.index && site.index < entry.body.end,
+    );
+    if (produces) directProducers.add(entry.name);
+  }
+
+  const calleesByCaller = new Map<string, string[]>();
+  const nonModuleCallCounts = new Map<string, number>();
+  for (const site of callSites) {
+    if (!site.calleeIsModuleFunction) {
+      // Ramo nomeado do limite declarado do Goal055 §3: destino que não é
+      // função de módulo não propaga produção. Fica CONTADO, para que o
+      // limite seja conferível por execução em vez de só afirmado.
+      nonModuleCallCounts.set(site.callee, (nonModuleCallCounts.get(site.callee) ?? 0) + 1);
+      continue;
+    }
+    if (site.caller === undefined) continue;
+    const callees = calleesByCaller.get(site.caller) ?? [];
+    if (!callees.includes(site.callee)) callees.push(site.callee);
+    calleesByCaller.set(site.caller, callees);
+  }
+
+  let producers: Set<string> = new Set(directProducers);
+  let closureRounds = 0;
+  for (;;) {
+    const next = expandDiscardProducersOnce(calleesByCaller, producers);
+    if (next.size === producers.size) break;
+    producers = next;
+    closureRounds += 1;
+  }
+  const closureStable =
+    expandDiscardProducersOnce(calleesByCaller, producers).size === producers.size;
+
+  return {
+    filePath,
+    operationSites,
+    moduleFunctions: scan.functions,
+    callSites,
+    directProducers,
+    producers,
+    calleesByCaller,
+    nonModuleCallCounts,
+    closureRounds,
+    closureStable,
+    unresolved: scan.unresolved,
+  };
+}
+
+/**
+ * O caminho do fecho que torna `name` produtora: `name`, a função de módulo
+ * que ela chama, e assim por diante até uma produtora DIRETA — busca em
+ * largura sobre as mesmas arestas do fecho, nunca uma segunda propagação.
+ * `undefined` quando `name` não está no fecho.
+ */
+function discardProducerPath(
+  production: DiscardModuleProduction,
+  name: string,
+): readonly string[] | undefined {
+  if (!production.producers.has(name)) return undefined;
+  const previous = new Map<string, string | undefined>([[name, undefined]]);
+  const queue: string[] = [name];
+  while (queue.length > 0) {
+    const current = queue.shift() as string;
+    if (production.directProducers.has(current)) {
+      const path: string[] = [];
+      let step: string | undefined = current;
+      while (step !== undefined) {
+        path.unshift(step);
+        step = previous.get(step);
+      }
+      return path;
+    }
+    for (const callee of production.calleesByCaller.get(current) ?? []) {
+      if (previous.has(callee) || !production.producers.has(callee)) continue;
+      previous.set(callee, current);
+      queue.push(callee);
+    }
+  }
+  return undefined;
+}
+
+/** Uma produção achada DENTRO da região que uma ocorrência abandona, com `arquivo:linha`. */
+interface DiscardRegionProduction {
+  readonly kind: "operation" | "producer-call";
+  readonly line: number;
+  /** Operação do vocabulário (`push`, `add`, `set`) ou nome da função de módulo produtora chamada. */
+  readonly name: string;
+  /** Para `producer-call`: o caminho do fecho até a produtora direta. */
+  readonly path: readonly string[] | undefined;
+  readonly text: string;
+}
+
+/**
+ * O que a região `[start, end)` de uma ocorrência contém de produção: sítio
+ * de operação reconhecida (§2) ou chamada a função de módulo produtora pelo
+ * fecho (§3). Lê a produção JÁ computada do módulo — nunca varre a fonte de
+ * novo. Chamada a destino que não é função de módulo não entra (limite
+ * declarado do §3, ramo `calleeIsModuleFunction === false`).
+ */
+function findDiscardRegionProduction(
+  source: string,
+  production: DiscardModuleProduction,
+  start: number,
+  end: number,
+): DiscardRegionProduction[] {
+  const lines = source.split(/\r?\n/u);
+  const found: DiscardRegionProduction[] = [];
+  for (const site of production.operationSites) {
+    if (site.index < start || site.index >= end) continue;
+    found.push({
+      kind: "operation",
+      line: site.line,
+      name: site.operation,
+      path: undefined,
+      text: site.text,
+    });
+  }
+  for (const site of production.callSites) {
+    if (site.index < start || site.index >= end) continue;
+    if (!site.calleeIsModuleFunction || !production.producers.has(site.callee)) continue;
+    found.push({
+      kind: "producer-call",
+      line: site.line,
+      name: site.callee,
+      path: discardProducerPath(production, site.callee),
+      text: (lines[site.line - 1] ?? "").trim(),
+    });
+  }
+  return found.sort((left, right) => left.line - right.line);
+}
+
+/** A conta única sobre a produção computada: contagens de execução e resíduo nomeado. O teste permanente a chama sobre a árvore real; os controles a chamam sobre fonte sintética e sobre sítio corrompido. */
+interface DiscardProductionFindings {
+  readonly moduleFunctionCount: number;
+  readonly operationSiteCount: number;
+  readonly byOperation: Readonly<Record<string, number>>;
+  readonly directProducerCount: number;
+  readonly producerCount: number;
+  /** Produtoras que só o fecho alcança: nenhuma operação do vocabulário escrita no próprio corpo. */
+  readonly closureOnlyProducers: string[];
+  readonly nonModuleCallCount: number;
+  readonly closureRounds: number;
+  readonly closureStable: boolean;
+  readonly unresolved: string[];
+  readonly outsideVocabulary: string[];
+}
+
+function findDiscardProductionFindings(
+  production: DiscardModuleProduction,
+): DiscardProductionFindings {
+  const byOperation: Record<string, number> = {};
+  const outsideVocabulary: string[] = [];
+  const unresolved: string[] = [...production.unresolved];
+
+  for (const site of production.operationSites) {
+    const where = `${site.filePath}:${site.line}`;
+    // A OPERAÇÃO é conferida antes de contar: produzir por operação que o
+    // vocabulário não declara é o buraco que o Goal055 §2 fecha, e ele
+    // reprova nomeado, nunca por ramo mudo.
+    if (!isDiscardProducingOperation(site.operation)) {
+      outsideVocabulary.push(
+        `${where}: operação produtora "${site.operation}" fora de DISCARD_PRODUCING_OPERATIONS — "${site.text}"`,
+      );
+      continue;
+    }
+    byOperation[site.operation] = (byOperation[site.operation] ?? 0) + 1;
+  }
+
+  // Nome no fecho que não é função de módulo resolvida seria produção de
+  // origem desconhecida: reprova, em vez de entrar na conta.
+  const moduleFunctionNames = new Set(production.moduleFunctions.map((entry) => entry.name));
+  for (const name of production.producers) {
+    if (!moduleFunctionNames.has(name)) {
+      unresolved.push(
+        `${production.filePath}: \`${name}\` está no fecho de produção sem ser função de módulo resolvida`,
+      );
+    }
+  }
+  if (!production.closureStable) {
+    unresolved.push(
+      `${production.filePath}: o fecho de produção não é estável — aplicar mais uma volta ainda muda o conjunto de ${production.producers.size} produtoras`,
+    );
+  }
+
+  return {
+    moduleFunctionCount: production.moduleFunctions.length,
+    operationSiteCount: production.operationSites.length,
+    byOperation,
+    directProducerCount: production.directProducers.size,
+    producerCount: production.producers.size,
+    closureOnlyProducers: [...production.producers]
+      .filter((name) => !production.directProducers.has(name))
+      .sort(),
+    nonModuleCallCount: [...production.nonModuleCallCounts.values()].reduce(
+      (sum, count) => sum + count,
+      0,
+    ),
+    closureRounds: production.closureRounds,
+    closureStable: production.closureStable,
+    unresolved,
+    outsideVocabulary,
+  };
+}
+
 interface DiscardOccurrence {
   readonly filePath: string;
   /** A FORMA do descarte (Goal054 §1), computada pelo padrão que casou — nunca presumida do contexto. */
@@ -8199,6 +8890,22 @@ interface DiscardOccurrence {
   readonly functionBoundaryEvidence: string | undefined;
   /** Motivo escrito de a fronteira não ter sido resolvida; reprova em `findDiscardEnumerationFindings`. */
   readonly unresolvedFunctionBoundaryReason: string | undefined;
+  /** Índice, no texto fonte, de onde termina a região (Goal055) que esta ocorrência abandona — corpo do laço para `continue`/`break`, corpo da função de varredura para `function-early-exit`. `undefined` sem motivo para `switch-break`/`nested-function-return` (isenção pela FORMA); `undefined` COM motivo em `unresolvedAbandonedRegionReason` quando a resolução falha. */
+  readonly abandonedRegionEnd: number | undefined;
+  /** Índice, no texto fonte, de onde a região abandonada começa — logo depois da instrução de descarte. Presente exatamente quando `abandonedRegionEnd` está. */
+  readonly abandonedRegionStart: number | undefined;
+  /** O trecho que CONCEDEU o fim da região, com `arquivo:linha` — evidência verificável, não estimativa. */
+  readonly abandonedRegionEvidence: string | undefined;
+  /**
+   * A produção (Goal055 §§2–3) que a região abandonada contém: operação do
+   * vocabulário, ou chamada a função de módulo produtora pelo fecho. Lista
+   * vazia é região PROVADA livre de produção; `undefined` é região não
+   * computada — sem região (isenção pela forma) ou não resolvida, e então
+   * `unresolvedAbandonedRegionReason` diz por quê.
+   */
+  readonly abandonedRegionProduction: readonly DiscardRegionProduction[] | undefined;
+  /** Motivo escrito de a região — a extensão, ou a produção do módulo que a decide — não ter sido resolvida; entra no mesmo resíduo em que domínio e fronteira já reprovam. */
+  readonly unresolvedAbandonedRegionReason: string | undefined;
   /**
    * O trecho que CONCEDEU a isenção pela própria FORMA (Goal054 §4), com
    * `arquivo:linha` dos dois lados. Hoje só `switch-break` o preenche: a
@@ -8707,6 +9414,23 @@ function resolveDiscardCursorDomain(
  * forma nova tem máquina própria à parte.
  */
 function enumerateDiscardOccurrences(source: string, filePath: string): DiscardOccurrence[] {
+  return enumerateDiscardAnalysis(source, filePath).occurrences;
+}
+
+/** A enumeração e a produção do módulo que decidiu o conteúdo de cada região, saídas da MESMA passada (Goal055 §6). */
+interface DiscardAnalysis {
+  readonly occurrences: DiscardOccurrence[];
+  readonly production: DiscardModuleProduction;
+}
+
+/**
+ * A conta ÚNICA da enumeração (Goal052/053/054) mais a região abandonada e a
+ * produção do módulo (Goal055 §§1–3), tudo sobre o MESMO texto mascarado e a
+ * MESMA topologia de chaves. `enumerateDiscardOccurrences` é projeção dela;
+ * o teste permanente a chama direto para ler a produção que decidiu as
+ * regiões — nunca uma segunda varredura para obter contagens.
+ */
+function enumerateDiscardAnalysis(source: string, filePath: string): DiscardAnalysis {
   const contexts = buildDiscardLexicalContexts(source);
   const masked = maskNonCodeText(source, contexts);
   const spans = findDiscardLoopSpans(masked);
@@ -8724,6 +9448,16 @@ function enumerateDiscardOccurrences(source: string, filePath: string): DiscardO
   const braceTopology = findMaskedBraceTopology(masked);
   const braceVerdicts = new Map<number, DiscardBraceVerdict>();
   const lineStartOffsets = buildLineStartOffsets(source);
+  // Produção do módulo (Goal055 §§2–3): computada UMA vez, sobre o mesmo
+  // texto mascarado e a mesma topologia, e reaproveitada por toda ocorrência.
+  const production = buildDiscardModuleProduction(
+    source,
+    masked,
+    braceTopology,
+    braceVerdicts,
+    lineStartOffsets,
+    filePath,
+  );
   const lines = source.split(/\r?\n/u);
   const occurrences: DiscardOccurrence[] = [];
   // Uma resolução de domínio por LAÇO, reaproveitada por toda ocorrência que
@@ -8799,6 +9533,11 @@ function enumerateDiscardOccurrences(source: string, filePath: string): DiscardO
         functionBoundary: undefined,
         functionBoundaryEvidence: undefined,
         unresolvedFunctionBoundaryReason: undefined,
+        abandonedRegionEnd: undefined,
+        abandonedRegionStart: undefined,
+        abandonedRegionEvidence: undefined,
+        abandonedRegionProduction: undefined,
+        unresolvedAbandonedRegionReason: undefined,
         formExemptionEvidence: undefined,
         text: lineText.trim(),
         unresolvedReason: undefined,
@@ -8823,6 +9562,13 @@ function enumerateDiscardOccurrences(source: string, filePath: string): DiscardO
         functionBoundary: undefined,
         functionBoundaryEvidence: undefined,
         unresolvedFunctionBoundaryReason: undefined,
+        // `switch-break` não abandona laço algum (Goal054 §4): a ausência de
+        // região aqui é a MESMA isenção computada, sem motivo de resíduo.
+        abandonedRegionEnd: undefined,
+        abandonedRegionStart: undefined,
+        abandonedRegionEvidence: undefined,
+        abandonedRegionProduction: undefined,
+        unresolvedAbandonedRegionReason: undefined,
         // A evidência do veredito, por ocorrência: o corpo do `switch` que a
         // contém, com `arquivo:linha` dos dois lados, e o laço contenedor —
         // quando existe — provado mais externo que ele. É o que torna a
@@ -8858,12 +9604,53 @@ function enumerateDiscardOccurrences(source: string, filePath: string): DiscardO
               index,
               enclosing,
             );
+      const finalForm: DiscardForm =
+        boundary?.kind === "nested-function" && matchedEntry?.formWhenNestedFunction !== undefined
+          ? matchedEntry.formWhenNestedFunction
+          : form;
+      // Região abandonada (Goal055): resolvida da FORMA final — depois da
+      // troca por fronteira de função, nunca antes —, porque é a forma final
+      // que decide se há região (`continue`/`break`/`function-early-exit`)
+      // ou isenção pela forma (`nested-function-return`).
+      const abandonedRegion = resolveDiscardAbandonedRegion(
+        masked,
+        braceTopology,
+        braceVerdicts,
+        lineStartOffsets,
+        filePath,
+        finalForm,
+        index,
+        index + match[0].length,
+        enclosing,
+      );
+      // Produção da região (Goal055 §4): lida da produção do módulo JÁ
+      // computada uma vez acima, nunca varrida de novo. Região sem extensão
+      // não tem conteúdo a decidir; produção do módulo com resíduo torna a
+      // região não resolvida — fail-closed, nunca "sem produção" presumida.
+      const regionProduction: {
+        production: readonly DiscardRegionProduction[] | undefined;
+        unresolvedReason: string | undefined;
+      } =
+        abandonedRegion.abandonedRegionStart === undefined ||
+        abandonedRegion.abandonedRegionEnd === undefined
+          ? { production: undefined, unresolvedReason: undefined }
+          : production.unresolved.length > 0
+            ? {
+                production: undefined,
+                unresolvedReason: `a produção do módulo que decide o conteúdo da região não foi resolvida: ${production.unresolved[0]}`,
+              }
+            : {
+                production: findDiscardRegionProduction(
+                  source,
+                  production,
+                  abandonedRegion.abandonedRegionStart,
+                  abandonedRegion.abandonedRegionEnd,
+                ),
+                unresolvedReason: undefined,
+              };
       occurrences.push({
         filePath,
-        form:
-          boundary?.kind === "nested-function" && matchedEntry?.formWhenNestedFunction !== undefined
-            ? matchedEntry.formWhenNestedFunction
-            : form,
+        form: finalForm,
         line,
         context,
         loopForm: enclosing?.form,
@@ -8876,6 +9663,12 @@ function enumerateDiscardOccurrences(source: string, filePath: string): DiscardO
         functionBoundary: boundary?.kind,
         functionBoundaryEvidence: boundary?.evidence,
         unresolvedFunctionBoundaryReason: boundary?.unresolvedReason,
+        abandonedRegionEnd: abandonedRegion.abandonedRegionEnd,
+        abandonedRegionStart: abandonedRegion.abandonedRegionStart,
+        abandonedRegionEvidence: abandonedRegion.evidence,
+        abandonedRegionProduction: regionProduction.production,
+        unresolvedAbandonedRegionReason:
+          abandonedRegion.unresolvedReason ?? regionProduction.unresolvedReason,
         // Isenção por forma sem laço não existe neste caminho: aqui há laço
         // contenedor, e quem concede isenção é a fronteira de função, o
         // domínio ou a classe — nunca a forma sozinha.
@@ -8890,7 +9683,7 @@ function enumerateDiscardOccurrences(source: string, filePath: string): DiscardO
     }
     match = pattern.exec(source);
   }
-  return occurrences;
+  return { occurrences, production };
 }
 
 interface DiscardEnumerationFindings {
@@ -9016,6 +9809,26 @@ function findDiscardEnumerationFindings(
     ) {
       unresolved.push(
         `${where}: a forma "${occurrence.form}" exige fronteira de função e a ocorrência não a traz — "${occurrence.text}"`,
+      );
+      continue;
+    }
+    // A REGIÃO ABANDONADA (Goal055 §1) é conferida no mesmo resíduo: não
+    // resolvida reprova com o motivo escrito, e forma que abandona laço sem
+    // região computada também reprova — região ausente em silêncio seria
+    // isenção muda pelo eixo novo.
+    if (occurrence.unresolvedAbandonedRegionReason !== undefined) {
+      unresolved.push(
+        `${where}: ${occurrence.unresolvedAbandonedRegionReason} — "${occurrence.text}"`,
+      );
+      continue;
+    }
+    if (
+      DISCARD_FORMS_ABANDONING_LOOP.has(occurrence.form) &&
+      (occurrence.abandonedRegionEnd === undefined ||
+        occurrence.abandonedRegionProduction === undefined)
+    ) {
+      unresolved.push(
+        `${where}: a forma "${occurrence.form}" abandona laço e a ocorrência não traz região abandonada computada — "${occurrence.text}"`,
       );
       continue;
     }
@@ -9966,9 +10779,13 @@ describe("Goal054 / WU-02 (§2) — a fronteira de função separa saída anteci
     // aceito do Goal053 são as que de fato largam candidato. A sondagem do
     // Goal054 §2 previu 3 (`:576`, `:1144` e `:1161`); o que vale é este
     // número, computado da mesma enumeração, com âncora pela função de nível
-    // superior — nunca por número de linha escrito à mão.
-    const inCandidateBearingLoop = earlyExits.filter((occurrence) =>
-      requiresSilentDiscardRegistration(occurrence),
+    // superior — nunca por número de linha escrito à mão. O critério lido
+    // aqui é o dos quatro eixos do Goal054 §4: o eixo 5 do Goal055 (região
+    // abandonada) passa a exigir registro também de `splitTemplateLiteralParts`
+    // por PRODUÇÃO na região, não por laço portador de candidato, e é
+    // conferido à parte no teste permanente do Goal055.
+    const inCandidateBearingLoop = earlyExits.filter(
+      (occurrence) => resolveSilentDiscardRequirementByFourAxes(occurrence).requires,
     );
     expect(
       inCandidateBearingLoop.map((occurrence) =>
@@ -10087,6 +10904,13 @@ interface SilentDiscardRequirement {
   readonly exemptionEvidence?: string;
   /** Motivo escrito de o eixo não ter resolvido; presente REPROVA, nomeado por `arquivo:linha`. */
   readonly unresolvedReason?: string;
+  /**
+   * Presente exatamente quando os eixos 1 a 4 concluíram pela isenção e o
+   * eixo 5 (Goal055 §4) a RETIROU porque a região abandonada produz: nomeia
+   * `arquivo:linha` da ocorrência e da produção encontrada. É o motivo do
+   * resolvedor para a ocorrência passar a exigir registro.
+   */
+  readonly retiredExemptionReason?: string;
 }
 
 /**
@@ -10118,7 +10942,7 @@ interface SilentDiscardRequirement {
  * caso em que uma classe portadora chegasse com domínio isentador, que antes
  * escaparia pelo domínio.
  */
-function resolveSilentDiscardRequirement(
+function resolveSilentDiscardRequirementByFourAxes(
   occurrence: DiscardOccurrence,
 ): SilentDiscardRequirement {
   // Eixo 1 — FORMA.
@@ -10224,6 +11048,73 @@ function resolveSilentDiscardRequirement(
 }
 
 /**
+ * O veredito de exigência vigente (Goal055 §4): os quatro eixos do Goal054
+ * §4, intocados em `resolveSilentDiscardRequirementByFourAxes`, e DEPOIS
+ * deles um quinto — a REGIÃO ABANDONADA. Ele só age quando os quatro
+ * concluíram pela isenção de uma forma que abandona laço (os ramos de
+ * domínio `character-sequence`/`parallel-mask` e de `no-domain` em classe
+ * não portadora); a isenção pela FORMA do eixo 1 (`switch-break`,
+ * `nested-function-return`) não tem região e não é tocada.
+ *
+ * 5. **REGIÃO ABANDONADA** — o critério anterior dizia que essas ocorrências
+ *    "avançam leitura, nunca descartam candidato", e nada o conferia. Agora
+ *    a isenção só é concedida quando a região `[depois da instrução, fim do
+ *    corpo abandonado)` não contém operação de `DISCARD_PRODUCING_OPERATIONS`
+ *    nem chamada a função de módulo produtora pelo fecho:
+ *    - região livre de produção: isenta, com as DUAS evidências — a que os
+ *      eixos 1 a 4 já davam e a ausência de produção com a extensão da
+ *      região em `arquivo:linha`;
+ *    - região com produção: EXIGE registro, com `retiredExemptionReason`
+ *      nomeando `arquivo:linha` da ocorrência e da produção;
+ *    - região não resolvida (extensão ou produção do módulo): EXIGE
+ *      registro, e o motivo vai para o resíduo — nunca isenta por falta de
+ *      prova.
+ *
+ * O eixo só RETIRA: todo ramo dele parte de um veredito de isenção e nenhum
+ * transforma exigência em isenção — o teste permanente confere, ocorrência a
+ * ocorrência, que quem os quatro eixos mandavam registrar continua exigindo.
+ */
+function resolveSilentDiscardRequirement(
+  occurrence: DiscardOccurrence,
+): SilentDiscardRequirement {
+  const byFourAxes = resolveSilentDiscardRequirementByFourAxes(occurrence);
+  if (byFourAxes.requires || !DISCARD_FORMS_ABANDONING_LOOP.has(occurrence.form)) {
+    return byFourAxes;
+  }
+  // Eixo 5 — REGIÃO ABANDONADA.
+  const where = `${occurrence.filePath}:${occurrence.line}`;
+  if (occurrence.unresolvedAbandonedRegionReason !== undefined) {
+    return { requires: true, unresolvedReason: occurrence.unresolvedAbandonedRegionReason };
+  }
+  const production = occurrence.abandonedRegionProduction;
+  if (
+    occurrence.abandonedRegionEnd === undefined ||
+    occurrence.abandonedRegionEvidence === undefined ||
+    production === undefined
+  ) {
+    return {
+      requires: true,
+      unresolvedReason: `a forma "${occurrence.form}" abandona laço, e a isenção dos eixos 1 a 4 chegou sem região abandonada computada que a sustente`,
+    };
+  }
+  if (production.length > 0) {
+    const first = production[0] as DiscardRegionProduction;
+    const found =
+      first.kind === "operation"
+        ? `a operação produtora \`.${first.name}(\` em ${occurrence.filePath}:${first.line} — "${first.text}"`
+        : `a chamada à função de módulo produtora \`${first.name}\` em ${occurrence.filePath}:${first.line}, produtora pelo fecho ${(first.path ?? [first.name]).join(" → ")}`;
+    return {
+      requires: true,
+      retiredExemptionReason: `${where}: a isenção dos eixos 1 a 4 (${byFourAxes.exemptionEvidence ?? "sem evidência"}) é retirada porque a região que este \`${occurrence.form}\` abandona contém ${found}${production.length > 1 ? `, e mais ${production.length - 1} produção(ões) na mesma região` : ""}`,
+    };
+  }
+  return {
+    requires: false,
+    exemptionEvidence: `${byFourAxes.exemptionEvidence ?? ""}; e a região abandonada, de ${where} até o fim — ${occurrence.abandonedRegionEvidence} —, não contém operação de DISCARD_PRODUCING_OPERATIONS nem chamada a função de módulo produtora`,
+  };
+}
+
+/**
  * O mesmo veredito, reduzido ao booleano que os chamadores anteriores ao
  * Goal054 §4 usam. É projeção de `resolveSilentDiscardRequirement`, nunca um
  * segundo critério: quem precisa da evidência da isenção ou do resíduo chama
@@ -10286,6 +11177,7 @@ function enumerateSilentDiscardOccurrences(
         requiresRegistration: requirement.requires,
         exemptionEvidence: requirement.exemptionEvidence,
         unresolvedRequirementReason: requirement.unresolvedReason,
+        retiredExemptionReason: requirement.retiredExemptionReason,
       };
     });
 }
@@ -10301,8 +11193,17 @@ describe("Goal052 / WU-02 (§3 e §4) — o registro unificado de descarte cobre
   it("a exigência de registro segue a CLASSE do laço, não a forma da guarda: na árvore real as 5 ocorrências `while-positional-read` não exigem registro e a única `while-queue-drain` (`:1028`) exige, e está registrada com motivo escrito", () => {
     const byLine = new Map(realOccurrences.map((occurrence) => [occurrence.line, occurrence]));
 
-    for (const line of [1458, 1484, 2989, 2996, 2999]) {
+    // Pela CLASSE (e pelos quatro eixos do Goal054 §4), as 5 continuam
+    // isentas. Desde o Goal055 §4, o eixo 5 retira a isenção de `:1458` e de
+    // `:2989`, cuja região abandonada contém `.push(` — e o motivo do
+    // resolvedor nomeia a ocorrência; as outras 3 abandonam região livre de
+    // produção e continuam isentas.
+    for (const line of [1484, 2996, 2999]) {
       expect(byLine.get(line)?.requiresRegistration).toBe(false);
+    }
+    for (const line of [1458, 2989]) {
+      expect(byLine.get(line)?.requiresRegistration).toBe(true);
+      expect(byLine.get(line)?.retiredExemptionReason).toContain(`http-egress-sites.ts:${line}:`);
     }
 
     const queueDrain = byLine.get(1028);
@@ -10576,14 +11477,17 @@ describe("Goal052 / WU-02 (§3 e §4) — o registro unificado de descarte cobre
       expect(bucket.length, domain).toBeGreaterThan(0);
       for (const occurrence of bucket) {
         const where = `${occurrence.filePath}:${occurrence.line}`;
-        const requirement = resolveSilentDiscardRequirement(occurrence);
+        // O eixo DOMÍNIO é lido nos quatro eixos do Goal054 §4, intocados:
+        // o eixo 5 do Goal055 (região abandonada) pode retirar a isenção
+        // depois deles, e é conferido à parte no teste permanente do Goal055.
+        const requirement = resolveSilentDiscardRequirementByFourAxes(occurrence);
         expect(requirement.requires, where).toBe(false);
         expect((requirement.exemptionEvidence ?? "").trim().length, where).toBeGreaterThan(0);
         expect(requirement.unresolvedReason, where).toBeUndefined();
         // `em QUALQUER forma`: a MESMA ocorrência, com a forma trocada para
         // `break`, continua isenta — o eixo que decide é o domínio.
         expect(
-          resolveSilentDiscardRequirement({ ...occurrence, form: "break" }).requires,
+          resolveSilentDiscardRequirementByFourAxes({ ...occurrence, form: "break" }).requires,
           where,
         ).toBe(false);
       }
@@ -14232,5 +15136,899 @@ describe("Goal054 / WU-06 (§10) — controles negativos: as dez amarras do alfa
     expect(maskFindings.unresolved).toEqual([]);
     expect(maskFindings.byCursorDomain).toEqual({ "parallel-mask": 1 });
     expect([...domainsPresent, ...domainsAbsent].sort()).toEqual([...DISCARD_CURSOR_DOMAINS].sort());
+  });
+});
+
+/* =========================================================================
+ * Goal055 — a isenção é provada pelo que o descarte abandona.
+ *
+ * Até o Goal054, `resolveSilentDiscardRequirement` isentava pelo DOMÍNIO
+ * (`character-sequence`/`parallel-mask`) ou pela CLASSE (`no-domain` em
+ * classe não portadora) com o consequente "cada volta avança leitura, nunca
+ * descarta candidato" escrito em comentário e conferido por nada. Aqui o
+ * consequente vira cômputo: a REGIÃO que a ocorrência abandona
+ * (`resolveDiscardAbandonedRegion`), a PRODUÇÃO do módulo
+ * (`DISCARD_PRODUCING_OPERATIONS` e o fecho de `buildDiscardModuleProduction`)
+ * e o eixo 5 de `resolveSilentDiscardRequirement`, que só RETIRA isenção.
+ * Tudo sai de `enumerateDiscardAnalysis`, a mesma passada que já enumera,
+ * classifica e resolve domínio e fronteira — nenhuma segunda varredura.
+ * ========================================================================= */
+
+/** Lista branca de posição: `arquivo:linha` de cada ocorrência em que o eixo 5 retirou a isenção, na ordem da árvore. */
+function retiredExemptionLines(occurrences: readonly DiscardOccurrence[]): number[] {
+  return occurrences
+    .filter(
+      (occurrence) =>
+        occurrence.context === "code" &&
+        SILENT_DISCARD_REGISTERED_FORMS.has(occurrence.form) &&
+        resolveSilentDiscardRequirement(occurrence).retiredExemptionReason !== undefined,
+    )
+    .map((occurrence) => occurrence.line);
+}
+
+describe("Goal055 / FIX-001 (§§1–7) — a região abandonada, o vocabulário de produção, o fecho sobre as funções de módulo e o eixo 5 da exigência, computados na MESMA passada da enumeração e conferidos na árvore real", () => {
+  const supportModulePath = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../support/http-egress-sites.ts",
+  );
+  const moduleSource = readFileSync(supportModulePath, "utf8");
+  // UMA análise, compartilhada por todos os testes abaixo: a enumeração e a
+  // produção que decidiu o conteúdo de cada região saem da mesma passada.
+  const analysis = enumerateDiscardAnalysis(moduleSource, "http-egress-sites.ts");
+  const codeOccurrences = analysis.occurrences.filter(
+    (occurrence) => occurrence.context === "code",
+  );
+  const productionFindings = findDiscardProductionFindings(analysis.production);
+
+  it("§2 — o vocabulário de operações produtoras é conferido nos DOIS sentidos contra a árvore real: toda operação reconhecida pertence a DISCARD_PRODUCING_OPERATIONS, cada membro tem contagem > 0, e operação reconhecida fora do vocabulário reprova nomeando arquivo:linha", () => {
+    // Sentido 1: nada do que a varredura reconhece fica fora do vocabulário.
+    expect(productionFindings.outsideVocabulary).toEqual([]);
+    // Sentido 2: cada membro declarado tem ocorrência na árvore real, com a
+    // contagem que a execução produziu — não a da sondagem.
+    expect(Object.keys(productionFindings.byOperation).sort()).toEqual(
+      [...DISCARD_PRODUCING_OPERATIONS].sort(),
+    );
+    expect(productionFindings.byOperation).toEqual({ push: 51, add: 14, set: 5 });
+    expect(productionFindings.operationSiteCount).toBe(70);
+    for (const operation of DISCARD_PRODUCING_OPERATIONS) {
+      expect(productionFindings.byOperation[operation], operation).toBeGreaterThan(0);
+      // Cada membro é membro do alfabeto que a varredura reconhece — senão
+      // ele nunca seria encontrado, e a contagem acima seria vácua.
+      expect(DISCARD_RECOGNIZED_INSERTION_METHODS).toContain(operation);
+    }
+
+    // Operação reconhecida FORA do vocabulário: a mesma conta reprova,
+    // nomeando arquivo:linha e o trecho, e não a conta como membro.
+    const outsideSource = [
+      "function scanControleVocabulario(itens: string[], valor: string) {",
+      "  itens.unshift(valor);",
+      "  itens.push(valor);",
+      "}",
+      "",
+    ].join("\n");
+    const outside = findDiscardProductionFindings(
+      enumerateDiscardAnalysis(outsideSource, "sintetico-goal055-vocabulario.ts").production,
+    );
+    expect(outside.outsideVocabulary).toEqual([
+      'sintetico-goal055-vocabulario.ts:2: operação produtora "unshift" fora de DISCARD_PRODUCING_OPERATIONS — "itens.unshift(valor);"',
+    ]);
+    expect(outside.byOperation).toEqual({ push: 1 });
+  });
+
+  it("§3 — o fecho de produção é computado UMA vez sobre as funções de módulo, com contagens vindas da execução, é estável (mais uma volta não muda o conjunto), e toda produtora só pelo fecho tem caminho nomeado até uma produtora direta", () => {
+    expect(productionFindings.unresolved).toEqual([]);
+    expect(productionFindings.moduleFunctionCount).toBe(89);
+    expect(productionFindings.directProducerCount).toBe(23);
+    expect(productionFindings.producerCount).toBe(28);
+    expect(productionFindings.closureOnlyProducers).toEqual([
+      "discoverGoServiceHttpRequests",
+      "refuseClassReferencesOutsideInstantiation",
+      "siteCarriesProductProseToClientNumber",
+      "splitBaseAndPathArguments",
+      "staticFetchMethodOfMember",
+    ]);
+    expect(productionFindings.closureRounds).toBe(1);
+    // Estabilidade: a MESMA função que computa uma volta, reaplicada sobre
+    // o resultado, não acrescenta ninguém.
+    expect(productionFindings.closureStable).toBe(true);
+    expect([
+      ...expandDiscardProducersOnce(
+        analysis.production.calleesByCaller,
+        analysis.production.producers,
+      ),
+    ].sort()).toEqual([...analysis.production.producers].sort());
+    for (const name of productionFindings.closureOnlyProducers) {
+      const path = discardProducerPath(analysis.production, name);
+      expect(path, name).toBeDefined();
+      expect(path![0], name).toBe(name);
+      expect(path!.length, name).toBeGreaterThan(1);
+      expect(analysis.production.directProducers.has(path![path!.length - 1]), name).toBe(true);
+    }
+
+    // Limite declarado do §3, ramo `calleeIsModuleFunction === false`: há
+    // chamadas a destino que não é função de módulo na árvore real, e
+    // NENHUM desses destinos entra no fecho.
+    expect(productionFindings.nonModuleCallCount).toBeGreaterThan(0);
+    for (const callee of analysis.production.nonModuleCallCounts.keys()) {
+      expect(analysis.production.producers.has(callee), callee).toBe(false);
+    }
+  });
+
+  it("§1 — toda ocorrência de forma que abandona laço tem região computada por casamento de delimitadores, com a evidência do fim em arquivo:linha; na árvore real nenhuma região fica não resolvida, e as formas sem região são ausentes (exercidas no controle 5)", () => {
+    const regionByForm: Record<string, number> = {};
+    for (const occurrence of codeOccurrences) {
+      const where = `${occurrence.filePath}:${occurrence.line}`;
+      expect(occurrence.unresolvedAbandonedRegionReason, where).toBeUndefined();
+      if (!DISCARD_FORMS_ABANDONING_LOOP.has(occurrence.form)) {
+        expect(occurrence.abandonedRegionEnd, where).toBeUndefined();
+        continue;
+      }
+      expect(occurrence.abandonedRegionStart, where).toBeDefined();
+      expect(occurrence.abandonedRegionEnd, where).toBeDefined();
+      expect(occurrence.abandonedRegionStart!, where).toBeLessThanOrEqual(
+        occurrence.abandonedRegionEnd!,
+      );
+      expect(occurrence.abandonedRegionEvidence ?? "", where).toMatch(
+        /http-egress-sites\.ts:\d+/u,
+      );
+      expect(occurrence.abandonedRegionProduction, where).toBeDefined();
+      regionByForm[occurrence.form] = (regionByForm[occurrence.form] ?? 0) + 1;
+    }
+    // Uma região por ocorrência que abandona laço: a partição por forma
+    // reconstrói as 143 do Goal054.
+    expect(regionByForm).toEqual({ continue: 120, break: 6, "function-early-exit": 17 });
+    expect(
+      codeOccurrences.filter((occurrence) => !DISCARD_FORMS_ABANDONING_LOOP.has(occurrence.form)),
+    ).toEqual([]);
+  });
+
+  it("§4/§6 — o eixo 5 só RETIRA: ocorrência a ocorrência, quem os quatro eixos do Goal054 mandavam registrar continua exigindo; as isentas trazem as DUAS evidências; as desisentadas nomeiam arquivo:linha da produção; e as contagens do Goal054 continuam reconstruídas", () => {
+    const registered = codeOccurrences.filter((occurrence) =>
+      SILENT_DISCARD_REGISTERED_FORMS.has(occurrence.form),
+    );
+    let exemptWithFreeRegion = 0;
+    let retiredByOperation = 0;
+    let retiredByProducerCall = 0;
+    let requiredByFourAxes = 0;
+    let residue = 0;
+    for (const occurrence of registered) {
+      const where = `${occurrence.filePath}:${occurrence.line}`;
+      const byFourAxes = resolveSilentDiscardRequirementByFourAxes(occurrence);
+      const verdict = resolveSilentDiscardRequirement(occurrence);
+      if (verdict.unresolvedReason !== undefined) residue += 1;
+      if (byFourAxes.requires) {
+        // Só retira: nada que exigia passou a ser isento.
+        expect(verdict.requires, where).toBe(true);
+        expect(verdict.retiredExemptionReason, where).toBeUndefined();
+        requiredByFourAxes += 1;
+        continue;
+      }
+      if (verdict.requires) {
+        const first = occurrence.abandonedRegionProduction![0];
+        expect(verdict.retiredExemptionReason ?? "", where).toContain(`${where}:`);
+        expect(verdict.retiredExemptionReason ?? "", where).toContain(
+          `http-egress-sites.ts:${first.line}`,
+        );
+        if (first.kind === "operation") retiredByOperation += 1;
+        else retiredByProducerCall += 1;
+        continue;
+      }
+      // Isenta: as DUAS evidências — a dos quatro eixos e a da região livre.
+      expect(verdict.exemptionEvidence ?? "", where).toContain(byFourAxes.exemptionEvidence ?? "?");
+      expect(verdict.exemptionEvidence ?? "", where).toContain("região abandonada");
+      expect(verdict.exemptionEvidence ?? "", where).toContain(occurrence.abandonedRegionEvidence ?? "?");
+      exemptWithFreeRegion += 1;
+    }
+    expect({
+      exemptWithFreeRegion,
+      retiredByOperation,
+      retiredByProducerCall,
+      requiredByFourAxes,
+      residue,
+    }).toEqual({
+      exemptWithFreeRegion: 63,
+      retiredByOperation: 8,
+      retiredByProducerCall: 0,
+      requiredByFourAxes: 72,
+      residue: 0,
+    });
+    expect(registered).toHaveLength(143);
+    // As 8 que mudaram de lado, pela posição que a execução computou: as 6
+    // da sondagem mais `:1458` e `:1479`, que a sondagem não varreu.
+    expect(retiredExemptionLines(analysis.occurrences)).toEqual([
+      225, 228, 232, 236, 240, 1458, 1479, 2989,
+    ]);
+
+    // As contagens do Goal054 continuam reconstruídas pela MESMA conta.
+    const enumeration = findDiscardEnumerationFindings(analysis.occurrences);
+    expect(enumeration.unresolved).toEqual([]);
+    expect(enumeration.outsideVocabulary).toEqual([]);
+    expect(enumeration.byForm).toEqual({ continue: 120, break: 6, "function-early-exit": 17 });
+    expect(enumeration.byCursorDomain).toEqual({
+      "no-domain": 64,
+      "character-sequence": 71,
+      "element-collection": 8,
+    });
+    expect([...DISCARD_FORMS].sort()).toEqual(
+      ["break", "continue", "function-early-exit", "nested-function-return", "switch-break"],
+    );
+  });
+
+  it("§5 — as 8 ocorrências desisentadas estão registradas com motivo substantivo em 4 entradas novas, sem duplicar, remover ou reescrever entrada anterior, e a conta do registro fecha sem resíduo", () => {
+    const silent = enumerateSilentDiscardOccurrences(moduleSource, "http-egress-sites.ts");
+    const findings = findSilentDiscardFindings(silent, DOCUMENTED_SILENT_DISCARDS);
+    expect(findings).toEqual({
+      ambiguousKeys: [],
+      unregistered: [],
+      obsolete: [],
+      emptyReason: [],
+      unresolvedRequirement: [],
+    });
+    const newKeys = [
+      silentDiscardKey("splitTopLevelItems", "continue;"),
+      silentDiscardKey("splitTemplateLiteralParts", "continue;"),
+      silentDiscardKey(
+        "splitTemplateLiteralParts",
+        "if (depth !== 0) return undefined;",
+        "function-early-exit",
+      ),
+      silentDiscardKey("findTopLevelMethodBodies", "continue;"),
+    ];
+    for (const key of newKeys) {
+      const entry = DOCUMENTED_SILENT_DISCARDS.get(key);
+      expect(entry, key).toBeDefined();
+      // Substantivo: nomeia a produção abandonada por `arquivo:linha` curto
+      // (`:<linha>`), não só um adjetivo.
+      expect(entry!.reason, key).toMatch(/:\d+/u);
+      expect(entry!.reason.length, key).toBeGreaterThan(200);
+    }
+    const retired = silent.filter((occurrence) => occurrence.retiredExemptionReason !== undefined);
+    expect(retired.map((occurrence) => occurrence.line)).toEqual([
+      225, 228, 232, 236, 240, 1458, 1479, 2989,
+    ]);
+    expect(new Set(retired.map((occurrence) => occurrence.key))).toEqual(new Set(newKeys));
+    // 53 entradas do Goal054 + 4 novas.
+    expect(DOCUMENTED_SILENT_DISCARDS.size).toBe(57);
+  });
+
+  it("§7 — vacuidade não é aceita como prova: cada ramo novo tem contagem > 0 na árvore real, ou é asserido AUSENTE nela e exercido por fonte sintética; presentes mais ausentes igualam a lista de ramos declarada", () => {
+    const registered = codeOccurrences.filter((occurrence) =>
+      SILENT_DISCARD_REGISTERED_FORMS.has(occurrence.form),
+    );
+    const verdicts = registered.map((occurrence) => ({
+      occurrence,
+      verdict: resolveSilentDiscardRequirement(occurrence),
+    }));
+    const real: Record<string, number> = {
+      "região-continue": codeOccurrences.filter(
+        (occurrence) => occurrence.form === "continue" && occurrence.abandonedRegionEnd !== undefined,
+      ).length,
+      "região-break": codeOccurrences.filter(
+        (occurrence) => occurrence.form === "break" && occurrence.abandonedRegionEnd !== undefined,
+      ).length,
+      "região-function-early-exit": codeOccurrences.filter(
+        (occurrence) =>
+          occurrence.form === "function-early-exit" && occurrence.abandonedRegionEnd !== undefined,
+      ).length,
+      "sem-região-switch-break": codeOccurrences.filter(
+        (occurrence) => occurrence.form === "switch-break",
+      ).length,
+      "sem-região-nested-function-return": codeOccurrences.filter(
+        (occurrence) => occurrence.form === "nested-function-return",
+      ).length,
+      "região-não-resolvida": codeOccurrences.filter(
+        (occurrence) => occurrence.unresolvedAbandonedRegionReason !== undefined,
+      ).length,
+      "produção-direta-na-região": verdicts.filter(
+        ({ occurrence, verdict }) =>
+          verdict.retiredExemptionReason !== undefined &&
+          occurrence.abandonedRegionProduction?.[0]?.kind === "operation",
+      ).length,
+      "produção-por-fecho-na-região": verdicts.filter(
+        ({ occurrence, verdict }) =>
+          verdict.retiredExemptionReason !== undefined &&
+          occurrence.abandonedRegionProduction?.[0]?.kind === "producer-call",
+      ).length,
+      "produtora-só-pelo-fecho": productionFindings.closureOnlyProducers.length,
+      "fecho-estável": productionFindings.closureStable ? 1 : 0,
+      "isenção-com-duas-evidências": verdicts.filter(
+        ({ occurrence, verdict }) =>
+          !verdict.requires &&
+          DISCARD_FORMS_ABANDONING_LOOP.has(occurrence.form) &&
+          (verdict.exemptionEvidence ?? "").includes("região abandonada"),
+      ).length,
+      "isenção-retirada": verdicts.filter(
+        ({ verdict }) => verdict.retiredExemptionReason !== undefined,
+      ).length,
+    };
+    const present = Object.keys(real).filter((branch) => real[branch] > 0).sort();
+    const absent = Object.keys(real).filter((branch) => real[branch] === 0).sort();
+    expect(present).toEqual([
+      "fecho-estável",
+      "isenção-com-duas-evidências",
+      "isenção-retirada",
+      "produtora-só-pelo-fecho",
+      "produção-direta-na-região",
+      "região-break",
+      "região-continue",
+      "região-function-early-exit",
+    ].sort());
+    expect(absent).toEqual([
+      "produção-por-fecho-na-região",
+      "região-não-resolvida",
+      "sem-região-nested-function-return",
+      "sem-região-switch-break",
+    ].sort());
+
+    // Os ramos AUSENTES na árvore real, exercidos pela MESMA análise sobre
+    // fonte sintética única.
+    const syntheticSource = [
+      "function registrarVacuidade(itens: string[], valor: string) {",
+      "  itens.push(valor);",
+      "}",
+      "function scanVacuidade(texto: string) {",
+      "  const itens: string[] = [];",
+      "  for (let i = 0; i < texto.length; i += 1) {",
+      "    if (texto[i] === \" \") continue;",
+      "    registrarVacuidade(itens, texto[i]);",
+      "    const ler = () => {",
+      "      return texto[i];",
+      "    };",
+      "    switch (ler()) {",
+      "      case \"a\":",
+      "        break;",
+      "    }",
+      "  }",
+      "  return itens;",
+      "}",
+      "",
+    ].join("\n");
+    const synthetic = enumerateDiscardAnalysis(syntheticSource, "sintetico-goal055-vacuidade.ts");
+    const byForm = (form: DiscardForm) =>
+      synthetic.occurrences.filter((occurrence) => occurrence.form === form);
+    expect(byForm("switch-break")).toHaveLength(1);
+    expect(byForm("switch-break")[0].abandonedRegionEnd).toBeUndefined();
+    expect(byForm("nested-function-return")).toHaveLength(1);
+    expect(byForm("nested-function-return")[0].abandonedRegionEnd).toBeUndefined();
+    const [viaClosure] = byForm("continue");
+    expect(viaClosure.abandonedRegionProduction?.[0]?.kind).toBe("producer-call");
+    expect(resolveSilentDiscardRequirement(viaClosure).retiredExemptionReason).toContain(
+      "registrarVacuidade",
+    );
+    const unresolvedSource = [
+      "function duplicadaVacuidade() {}",
+      "function duplicadaVacuidade() {}",
+      "function scanVacuidadeResiduo(texto: string) {",
+      "  for (let i = 0; i < texto.length; i += 1) {",
+      "    if (texto[i] === \" \") continue;",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const unresolvedOccurrences = enumerateDiscardAnalysis(
+      unresolvedSource,
+      "sintetico-goal055-vacuidade.ts",
+    ).occurrences;
+    expect(
+      unresolvedOccurrences.filter(
+        (occurrence) => occurrence.unresolvedAbandonedRegionReason !== undefined,
+      ),
+    ).toHaveLength(1);
+  });
+});
+
+describe("Goal055 / FIX-001 (§10) — controles negativos: as dez amarras do eixo da região abandonada mordem, cada uma chamando a MESMA conta que o teste permanente chama, com as duas saídas", () => {
+  const supportModulePath = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../support/http-egress-sites.ts",
+  );
+  const moduleSource = readFileSync(supportModulePath, "utf8");
+  const realAnalysis = enumerateDiscardAnalysis(moduleSource, "http-egress-sites.ts");
+  const realSilentOccurrences = enumerateSilentDiscardOccurrences(
+    moduleSource,
+    "http-egress-sites.ts",
+  );
+  const onlyOccurrence = (source: string, filePath: string, form: DiscardForm) => {
+    const found = enumerateDiscardAnalysis(source, filePath).occurrences.filter(
+      (occurrence) => occurrence.form === form,
+    );
+    expect(found, `${filePath}: uma ocorrência de ${form}`).toHaveLength(1);
+    return found[0] as DiscardOccurrence;
+  };
+
+  it("controle 1 (§10.1) — `continue` em laço de caractere cuja região contém `.push(` EXIGE registro nomeando a operação e a linha; o MESMO laço sem o `push` é isento, com as duas evidências", () => {
+    const withPush = [
+      "function scanControle1(texto: string) {",
+      "  const itens: string[] = [];",
+      "  for (let i = 0; i < texto.length; i += 1) {",
+      "    if (texto[i] === \" \") continue;",
+      "    itens.push(texto[i]);",
+      "  }",
+      "  return itens;",
+      "}",
+      "",
+    ].join("\n");
+    const withoutPush = withPush.replace("    itens.push(texto[i]);", "    const atual = texto[i];");
+
+    // Saída 1 — com produção na região: os quatro eixos isentavam; o eixo 5
+    // retira, nomeando a ocorrência e a operação produtora.
+    const produces = onlyOccurrence(withPush, "sintetico-goal055-c1.ts", "continue");
+    expect(produces.cursorDomain).toBe("character-sequence");
+    expect(resolveSilentDiscardRequirementByFourAxes(produces).requires).toBe(false);
+    const retired = resolveSilentDiscardRequirement(produces);
+    expect(retired.requires).toBe(true);
+    expect(retired.unresolvedReason).toBeUndefined();
+    expect(retired.retiredExemptionReason).toContain("sintetico-goal055-c1.ts:4:");
+    expect(retired.retiredExemptionReason).toContain(
+      'a operação produtora `.push(` em sintetico-goal055-c1.ts:5 — "itens.push(texto[i]);"',
+    );
+    // E a conta do registro acusa a ocorrência como não registrada.
+    expect(
+      findSilentDiscardFindings(
+        enumerateSilentDiscardOccurrences(withPush, "sintetico-goal055-c1.ts"),
+        DOCUMENTED_SILENT_DISCARDS,
+      ).unregistered,
+    ).toEqual(['4: "if (texto[i] === " ") continue;"']);
+
+    // Saída 2 — sem produção: isenta, com a evidência do domínio E a da
+    // região livre, que nomeia a extensão em arquivo:linha.
+    const free = onlyOccurrence(withoutPush, "sintetico-goal055-c1.ts", "continue");
+    const exempt = resolveSilentDiscardRequirement(free);
+    expect(exempt.requires).toBe(false);
+    expect(exempt.exemptionEvidence).toContain(
+      resolveSilentDiscardRequirementByFourAxes(free).exemptionEvidence ?? "?",
+    );
+    expect(exempt.exemptionEvidence).toContain(
+      "e a região abandonada, de sintetico-goal055-c1.ts:4 até o fim — o corpo do laço `for (let i = 0; i < texto.length; i += 1)` que esta ocorrência abandona vai até sintetico-goal055-c1.ts:6 —, não contém operação de DISCARD_PRODUCING_OPERATIONS nem chamada a função de módulo produtora",
+    );
+    expect(
+      findSilentDiscardFindings(
+        enumerateSilentDiscardOccurrences(withoutPush, "sintetico-goal055-c1.ts"),
+        DOCUMENTED_SILENT_DISCARDS,
+      ).unregistered,
+    ).toEqual([]);
+  });
+
+  it("controle 2 (§10.2) — a região que chama função de módulo PRODUTORA exige registro; chamar função de módulo NÃO produtora, método de string ou construtor global deixa a região livre — o limite declarado do §3", () => {
+    const template = (call: string) =>
+      [
+        "function registrar(itens: string[], valor: string) {",
+        "  itens.push(valor);",
+        "}",
+        "function medir(valor: string) {",
+        "  return valor.length;",
+        "}",
+        "function scanControle2(texto: string) {",
+        "  const itens: string[] = [];",
+        "  for (let i = 0; i < texto.length; i += 1) {",
+        "    if (texto[i] === \" \") continue;",
+        `    ${call}`,
+        "  }",
+        "  return itens;",
+        "}",
+        "",
+      ].join("\n");
+
+    // Saída 1 — chamada a produtora de módulo: exige, nomeando a chamada.
+    const producerCall = onlyOccurrence(
+      template("registrar(itens, texto[i]);"),
+      "sintetico-goal055-c2.ts",
+      "continue",
+    );
+    expect(producerCall.abandonedRegionProduction).toEqual([
+      {
+        kind: "producer-call",
+        line: 11,
+        name: "registrar",
+        path: ["registrar"],
+        text: "registrar(itens, texto[i]);",
+      },
+    ]);
+    const retired = resolveSilentDiscardRequirement(producerCall);
+    expect(retired.requires).toBe(true);
+    expect(retired.retiredExemptionReason).toContain(
+      "a chamada à função de módulo produtora `registrar` em sintetico-goal055-c2.ts:11, produtora pelo fecho registrar",
+    );
+
+    // Saída 2 — chamada a função de módulo NÃO produtora, a método de string
+    // e a construtor global: nenhuma é produção, e a ocorrência continua isenta.
+    for (const call of [
+      "medir(texto[i]);",
+      "const pedaco = texto.slice(i).trim();",
+      "const marca = String(texto[i]);",
+    ]) {
+      const free = onlyOccurrence(template(call), "sintetico-goal055-c2.ts", "continue");
+      expect(free.abandonedRegionProduction, call).toEqual([]);
+      expect(resolveSilentDiscardRequirement(free).requires, call).toBe(false);
+    }
+  });
+
+  it("controle 3 (§10.3) — função produtora só pelo FECHO (chama quem chama quem produz) é reconhecida, com o caminho nomeado, em tantas voltas quantas o fecho precisou, e o fecho é estável", () => {
+    const source = [
+      "function gravar(itens: string[]) {",
+      "  itens.push(\"x\");",
+      "}",
+      "function intermediaria(itens: string[]) {",
+      "  gravar(itens);",
+      "}",
+      "function externa(itens: string[]) {",
+      "  intermediaria(itens);",
+      "}",
+      "function scanControle3(texto: string) {",
+      "  const itens: string[] = [];",
+      "  for (let i = 0; i < texto.length; i += 1) {",
+      "    if (texto[i] === \" \") continue;",
+      "    externa(itens);",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const analysis = enumerateDiscardAnalysis(source, "sintetico-goal055-c3.ts");
+    const findings = findDiscardProductionFindings(analysis.production);
+    // Antes do fecho: só `gravar` produz diretamente.
+    expect([...analysis.production.directProducers]).toEqual(["gravar"]);
+    // Depois do fecho: as três que chegam a `gravar` por chamada.
+    expect(findings.closureOnlyProducers).toEqual(["externa", "intermediaria", "scanControle3"]);
+    expect(findings.closureRounds).toBe(3);
+    expect(findings.closureStable).toBe(true);
+    expect(discardProducerPath(analysis.production, "externa")).toEqual([
+      "externa",
+      "intermediaria",
+      "gravar",
+    ]);
+    const [occurrence] = analysis.occurrences;
+    expect(resolveSilentDiscardRequirement(occurrence).retiredExemptionReason).toContain(
+      "produtora pelo fecho externa → intermediaria → gravar",
+    );
+  });
+
+  it("controle 4 (§10.4) — `break` ROTULADO abandona até o fim do laço que o rótulo declara, não do mais interno: a produção que só existe ENTRE os dois laços o faz exigir registro, e o `break` nu no mesmo ponto, cuja região acaba no laço interno, continua isento", () => {
+    const labeled = [
+      "function scanControle4(texto: string) {",
+      "  const itens: string[] = [];",
+      "  externo: for (let i = 0; i < texto.length; i += 1) {",
+      "    for (let j = i; j < texto.length; j += 1) {",
+      "      if (texto[j] === \";\") break externo;",
+      "    }",
+      "    itens.push(texto[i]);",
+      "  }",
+      "  return itens;",
+      "}",
+      "",
+    ].join("\n");
+    const bare = labeled.replace("break externo;", "break;");
+
+    const labeledBreak = onlyOccurrence(labeled, "sintetico-goal055-c4.ts", "break");
+    expect(labeledBreak.abandonedRegionEvidence).toBe(
+      "o corpo do laço `for (let i = 0; i < texto.length; i += 1)` que esta ocorrência abandona vai até sintetico-goal055-c4.ts:8",
+    );
+    expect(labeledBreak.abandonedRegionProduction?.map((entry) => entry.line)).toEqual([7]);
+    expect(resolveSilentDiscardRequirement(labeledBreak).requires).toBe(true);
+
+    const bareBreak = onlyOccurrence(bare, "sintetico-goal055-c4.ts", "break");
+    expect(bareBreak.abandonedRegionEvidence).toBe(
+      "o corpo do laço `for (let j = i; j < texto.length; j += 1)` que esta ocorrência abandona vai até sintetico-goal055-c4.ts:6",
+    );
+    expect(bareBreak.abandonedRegionProduction).toEqual([]);
+    expect(resolveSilentDiscardRequirement(bareBreak).requires).toBe(false);
+  });
+
+  it("controle 5 (§10.5) — saída antecipada cuja região abandona produção exige registro; `return` de função aninhada e `break` de `switch` continuam isentos pela FORMA, sem região computada, com a evidência do Goal054", () => {
+    const earlyExitSource = [
+      "function scanControle5(texto: string) {",
+      "  const itens: string[] = [];",
+      "  for (let i = 0; i < texto.length; i += 1) {",
+      "    if (texto[i] === \"#\") return itens;",
+      "  }",
+      "  itens.push(\"fim\");",
+      "  return itens;",
+      "}",
+      "",
+    ].join("\n");
+    const earlyExit = onlyOccurrence(earlyExitSource, "sintetico-goal055-c5.ts", "function-early-exit");
+    expect(earlyExit.abandonedRegionProduction?.map((entry) => entry.line)).toEqual([6]);
+    expect(resolveSilentDiscardRequirementByFourAxes(earlyExit).requires).toBe(false);
+    expect(resolveSilentDiscardRequirement(earlyExit).requires).toBe(true);
+    // A expressão do próprio `return` executa: a mesma saída devolvendo uma
+    // chamada produtora não abandona essa produção.
+    const returnsProduction = onlyOccurrence(
+      earlyExitSource
+        .replace("  itens.push(\"fim\");\n", "")
+        .replace("return itens;\n  }", "return itens.push(\"#\");\n  }"),
+      "sintetico-goal055-c5.ts",
+      "function-early-exit",
+    );
+    expect(returnsProduction.text).toBe("if (texto[i] === \"#\") return itens.push(\"#\");");
+    expect(returnsProduction.abandonedRegionProduction).toEqual([]);
+    expect(resolveSilentDiscardRequirement(returnsProduction).requires).toBe(false);
+
+    const nestedSource = [
+      "function scanControle5Aninhada(texto: string) {",
+      "  const itens: string[] = [];",
+      "  for (let i = 0; i < texto.length; i += 1) {",
+      "    const ler = () => {",
+      "      return texto[i];",
+      "    };",
+      "    itens.push(ler());",
+      "  }",
+      "  return itens;",
+      "}",
+      "",
+    ].join("\n");
+    const nested = onlyOccurrence(nestedSource, "sintetico-goal055-c5.ts", "nested-function-return");
+    expect(nested.abandonedRegionEnd).toBeUndefined();
+    expect(nested.abandonedRegionProduction).toBeUndefined();
+    expect(nested.unresolvedAbandonedRegionReason).toBeUndefined();
+    const nestedVerdict = resolveSilentDiscardRequirement(nested);
+    expect(nestedVerdict.requires).toBe(false);
+    expect(nestedVerdict.exemptionEvidence).toBe(nested.functionBoundaryEvidence);
+
+    const switchSource = [
+      "function scanControle5Switch(texto: string) {",
+      "  const itens: string[] = [];",
+      "  for (let i = 0; i < texto.length; i += 1) {",
+      "    switch (texto[i]) {",
+      "      case \"a\":",
+      "        break;",
+      "    }",
+      "    itens.push(texto[i]);",
+      "  }",
+      "  return itens;",
+      "}",
+      "",
+    ].join("\n");
+    const switchBreak = onlyOccurrence(switchSource, "sintetico-goal055-c5.ts", "switch-break");
+    expect(switchBreak.abandonedRegionEnd).toBeUndefined();
+    expect(switchBreak.abandonedRegionProduction).toBeUndefined();
+    const switchVerdict = resolveSilentDiscardRequirement(switchBreak);
+    expect(switchVerdict.requires).toBe(false);
+    expect(switchVerdict.exemptionEvidence).toBe(switchBreak.formExemptionEvidence);
+  });
+
+  it("controle 6 (§10.6) — região não resolvível REPROVA como resíduo nomeado em vez de isentar: produção do módulo não resolvida (nome declarado duas vezes) e ocorrência que chega sem região — as duas saídas", () => {
+    const clean = [
+      "function unica() {}",
+      "function scanControle6(texto: string) {",
+      "  for (let i = 0; i < texto.length; i += 1) {",
+      "    if (texto[i] === \" \") continue;",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const duplicated = clean.replace("function unica() {}", "function dupla() {}\nfunction dupla() {}");
+
+    // Antes: fonte limpa, região resolvida e livre, isenta, resíduo zero.
+    const before = enumerateDiscardAnalysis(clean, "sintetico-goal055-c6.ts");
+    expect(findDiscardEnumerationFindings(before.occurrences).unresolved).toEqual([]);
+    expect(resolveSilentDiscardRequirement(before.occurrences[0]).requires).toBe(false);
+
+    // Depois (a): nome de função de módulo declarado duas vezes — o fecho não
+    // tem escolha computável, a produção do módulo reprova, e a região de
+    // toda ocorrência do arquivo fica NÃO RESOLVIDA.
+    const after = enumerateDiscardAnalysis(duplicated, "sintetico-goal055-c6.ts");
+    expect(findDiscardProductionFindings(after.production).unresolved).toEqual([
+      "sintetico-goal055-c6.ts:2: `dupla` já foi declarada em sintetico-goal055-c6.ts:1, e o fecho de produção é indexado por nome — dois corpos com o mesmo nome não têm escolha computável",
+    ]);
+    const residueReason =
+      "a produção do módulo que decide o conteúdo da região não foi resolvida: sintetico-goal055-c6.ts:2: `dupla` já foi declarada em sintetico-goal055-c6.ts:1, e o fecho de produção é indexado por nome — dois corpos com o mesmo nome não têm escolha computável";
+    expect(findDiscardEnumerationFindings(after.occurrences).unresolved).toEqual([
+      `sintetico-goal055-c6.ts:5: ${residueReason} — "if (texto[i] === " ") continue;"`,
+    ]);
+    const verdict = resolveSilentDiscardRequirement(after.occurrences[0]);
+    expect(verdict.requires).toBe(true);
+    expect(verdict.unresolvedReason).toBe(residueReason);
+    expect(
+      findSilentDiscardFindings(
+        enumerateSilentDiscardOccurrences(duplicated, "sintetico-goal055-c6.ts"),
+        DOCUMENTED_SILENT_DISCARDS,
+      ).unresolvedRequirement,
+    ).toEqual([`sintetico-goal055-c6.ts:5: ${residueReason} — "if (texto[i] === " ") continue;"`]);
+
+    // Depois (b): uma ocorrência REAL isenta, corrompida para chegar sem
+    // região — as duas contas reprovam, e nenhuma isenta por falta de prova.
+    const realExempt = realAnalysis.occurrences.find(
+      (occurrence) =>
+        occurrence.context === "code" &&
+        occurrence.form === "continue" &&
+        !resolveSilentDiscardRequirement(occurrence).requires,
+    )!;
+    const withoutRegion: DiscardOccurrence = {
+      ...realExempt,
+      abandonedRegionEnd: undefined,
+      abandonedRegionStart: undefined,
+      abandonedRegionProduction: undefined,
+    };
+    expect(findDiscardEnumerationFindings([withoutRegion]).unresolved).toEqual([
+      `http-egress-sites.ts:${realExempt.line}: a forma "continue" abandona laço e a ocorrência não traz região abandonada computada — "${realExempt.text}"`,
+    ]);
+    const corruptedVerdict = resolveSilentDiscardRequirement(withoutRegion);
+    expect(corruptedVerdict.requires).toBe(true);
+    expect(corruptedVerdict.unresolvedReason).toBe(
+      'a forma "continue" abandona laço, e a isenção dos eixos 1 a 4 chegou sem região abandonada computada que a sustente',
+    );
+  });
+
+  it("controle 7 (§10.7) — ocorrência que os quatro eixos mandavam registrar continua exigindo depois do eixo 5, mesmo com região LIVRE de produção: o eixo não concede isenção a ninguém — em fonte sintética e em toda a árvore real", () => {
+    const source = [
+      "function scanControle7(itens: string[]) {",
+      "  for (const item of itens) {",
+      "    if (!item) continue;",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    const occurrence = onlyOccurrence(source, "sintetico-goal055-c7.ts", "continue");
+    expect(occurrence.abandonedRegionProduction).toEqual([]);
+    expect(resolveSilentDiscardRequirementByFourAxes(occurrence).requires).toBe(true);
+    const verdict = resolveSilentDiscardRequirement(occurrence);
+    expect(verdict.requires).toBe(true);
+    expect(verdict.retiredExemptionReason).toBeUndefined();
+
+    const stillRequired = realAnalysis.occurrences.filter(
+      (candidate) =>
+        candidate.context === "code" &&
+        resolveSilentDiscardRequirementByFourAxes(candidate).requires,
+    );
+    expect(stillRequired.length).toBeGreaterThan(0);
+    expect(
+      stillRequired.filter((candidate) => !resolveSilentDiscardRequirement(candidate).requires),
+    ).toEqual([]);
+  });
+
+  it("controle 8 (§10.8) — as entradas novas mordem como as do Goal052/054: sem a entrada, as ocorrências reprovam como não registradas; sem as ocorrências, a entrada reprova como obsoleta; motivo vazio reprova; multiplicidade errada reprova", () => {
+    const key = silentDiscardKey("splitTopLevelItems", "continue;");
+    const before = findSilentDiscardFindings(realSilentOccurrences, DOCUMENTED_SILENT_DISCARDS);
+    expect(before.unregistered).toEqual([]);
+    expect(before.obsolete).toEqual([]);
+
+    const withoutEntry = new Map(DOCUMENTED_SILENT_DISCARDS);
+    withoutEntry.delete(key);
+    const missing = findSilentDiscardFindings(realSilentOccurrences, withoutEntry);
+    expect(missing.unregistered).toEqual([
+      '225: "continue;"',
+      '228: "continue;"',
+      '232: "continue;"',
+      '236: "continue;"',
+      '240: "continue;"',
+    ]);
+
+    expect(
+      findSilentDiscardFindings(
+        realSilentOccurrences.filter((occurrence) => occurrence.key !== key),
+        DOCUMENTED_SILENT_DISCARDS,
+      ).obsolete,
+    ).toEqual([key]);
+
+    const emptied = new Map(DOCUMENTED_SILENT_DISCARDS);
+    emptied.set(key, { ...DOCUMENTED_SILENT_DISCARDS.get(key)!, reason: "  " });
+    expect(findSilentDiscardFindings(realSilentOccurrences, emptied).emptyReason).toEqual([key]);
+
+    const wrongMultiplicity = new Map(DOCUMENTED_SILENT_DISCARDS);
+    wrongMultiplicity.set(key, { ...DOCUMENTED_SILENT_DISCARDS.get(key)!, multiplicity: 4 });
+    expect(findSilentDiscardFindings(realSilentOccurrences, wrongMultiplicity).ambiguousKeys).toEqual([
+      `chave ambígua "${key}" alcançada por 5 ocorrência(s) (linhas 225, 228, 232, 236, 240), mas multiplicidade declarada é 4`,
+    ]);
+  });
+
+  it("controle 9 (§10.9) — as amarras dos Goals 052, 053 e 054 continuam mordendo depois do eixo 5: forma fora do vocabulário, domínio não resolvido, classe não resolvida e fronteira de função ausente reprovam nomeados, e as 120 de `continue` continuam idênticas", () => {
+    const realFindings = findDiscardEnumerationFindings(realAnalysis.occurrences);
+    expect(realFindings.byForm.continue).toBe(120);
+    expect(realFindings.unresolved).toEqual([]);
+
+    const realContinue = realAnalysis.occurrences.find(
+      (occurrence) => occurrence.context === "code" && occurrence.form === "continue",
+    )!;
+    // Forma fora do vocabulário.
+    expect(
+      findDiscardEnumerationFindings([
+        { ...realContinue, form: "descarte-inventado-goal055" as DiscardForm },
+      ]).outsideVocabulary,
+    ).toEqual([
+      `http-egress-sites.ts:${realContinue.line}: forma de descarte "descarte-inventado-goal055" fora de DISCARD_FORMS — "${realContinue.text}"`,
+    ]);
+
+    // Domínio não resolvido.
+    const domainSource = [
+      "function scanControle9Dominio(limite) {",
+      "  for (let i = 0; i < limite; i += 1) {",
+      "    continue;",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    expect(
+      findDiscardEnumerationFindings(
+        enumerateDiscardOccurrences(domainSource, "sintetico-goal055-c9.ts"),
+      ).unresolved,
+    ).toEqual([
+      'sintetico-goal055-c9.ts:3: o cursor `i` do laço `for (let i = 0; i < limite; i += 1)` não indexa valor algum no corpo, então o domínio percorrido não pode ser resolvido — "continue;"',
+    ]);
+
+    // Classe não resolvida.
+    const classSource = [
+      "function scanControle9Classe(candidatos) {",
+      "  for (candidatos) {",
+      "    continue;",
+      "  }",
+      "}",
+      "",
+    ].join("\n");
+    expect(
+      findDiscardEnumerationFindings(
+        enumerateDiscardOccurrences(classSource, "sintetico-goal055-c9.ts"),
+      ).unresolved,
+    ).toEqual([
+      'sintetico-goal055-c9.ts:3: cabeçalho de `for` fora das formas reconhecidas (for-of, for-in, for indexado): "candidatos" — "continue;"',
+    ]);
+
+    // Fronteira de função ausente, numa saída antecipada real.
+    const realEarlyExit = realAnalysis.occurrences.find(
+      (occurrence) => occurrence.form === "function-early-exit",
+    )!;
+    const withoutBoundary: DiscardOccurrence = { ...realEarlyExit, functionBoundary: undefined };
+    expect(findDiscardEnumerationFindings([withoutBoundary]).unresolved).toEqual([
+      `http-egress-sites.ts:${realEarlyExit.line}: a forma "function-early-exit" exige fronteira de função e a ocorrência não a traz — "${realEarlyExit.text}"`,
+    ]);
+    expect(resolveSilentDiscardRequirement(withoutBoundary).requires).toBe(true);
+  });
+
+  it("controle 10 (§10.10) — a partição do Goal050/051 e a cobertura das 24 categorias do Goal049 continuam mordendo, com as 2 inalcançáveis descontadas pelo registro nos dois sentidos", () => {
+    const egress = discoverHttpEgressSites(aiOrchestratorSrcPath, bffSrcPath);
+    const discovery = discoverGoServiceHttpRequests(
+      aiOrchestratorSrcPath,
+      bffSrcPath,
+      envSchemaSourcePath,
+    );
+    const bucketsByName: Record<EgressPartitionBucket, readonly EgressPartitionEntry[]> = {
+      requests: discovery.requests,
+      notGoBound: discovery.notGoBound,
+      assembledUrls: discovery.assembledUrls,
+      nonTransportMemberCalls: discovery.nonTransportMemberCalls,
+      nonGoBoundInstantiations: discovery.nonGoBoundInstantiations,
+    };
+    // Partição: antes limpa; depois, requisição movida para balde que a
+    // categoria da origem não permite reprova nomeada.
+    expect(
+      findEgressPartitionFindings(egress.sites, bucketsByName)
+        .entriesInBucketNotAllowedByOriginCategory,
+    ).toEqual([]);
+    const [movedRequest] = discovery.requests;
+    expect(movedRequest).toBeDefined();
+    expect(
+      findEgressPartitionFindings(egress.sites, {
+        ...bucketsByName,
+        requests: discovery.requests.filter((request) => request !== movedRequest),
+        nonTransportMemberCalls: [...discovery.nonTransportMemberCalls, movedRequest],
+      }).entriesInBucketNotAllowedByOriginCategory,
+    ).toHaveLength(1);
+
+    // Cobertura: antes nenhuma órfã; depois, sem uma categoria alcançável
+    // observada, a mesma conta a acusa — e as 2 inalcançáveis seguem
+    // descontadas pelo registro conferido.
+    const allRefusalCategories: readonly string[] = [
+      ...INSTANCE_FIELD_ASSIGNMENT_REFUSAL_CATEGORIES,
+      ...CLASS_BINDING_REFUSAL_CATEGORIES,
+      ...CLIENT_FIELD_USE_REFUSAL_CATEGORIES,
+    ];
+    expect(allRefusalCategories.length).toBe(24);
+    expect(findUncoveredRefusalCategories(allRefusalCategories, observedRefusalCategories)).toEqual(
+      [],
+    );
+    const reachableObserved = allRefusalCategories.filter(
+      (category) =>
+        !PROVEN_UNREACHABLE_REFUSAL_CATEGORIES.has(category) &&
+        observedRefusalCategories.has(category),
+    );
+    const removedCategory = reachableObserved[0];
+    expect(removedCategory).toBeDefined();
+    const withoutRemoved = new Set(observedRefusalCategories);
+    withoutRemoved.delete(removedCategory);
+    expect(findUncoveredRefusalCategories(allRefusalCategories, withoutRemoved)).toEqual([
+      removedCategory,
+    ]);
+    expect(PROVEN_UNREACHABLE_REFUSAL_CATEGORIES.size).toBe(2);
+    for (const category of PROVEN_UNREACHABLE_REFUSAL_CATEGORIES.keys()) {
+      expect(allRefusalCategories).toContain(category);
+    }
   });
 });

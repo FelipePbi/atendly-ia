@@ -5204,3 +5204,82 @@ linhas, baseline: **11631**), e nenhum arquivo de `apps/frontend/src/`,
   não ser descarte silencioso. **A-24 continua `PENDENCIA-POS-MVP`, não
   corrigido** — nenhum arquivo Go de produção deste fork foi editado por
   este Goal.
+
+## Delta implementado — diff055, 2026-09-26 ([D-071](DECISIONS.md))
+
+Fecha o consequente que o diff053 e o diff054 deixaram em prosa: a
+isenção por domínio (`character-sequence`/`parallel-mask`) e por classe
+(`no-domain` em classe não portadora) afirmava "cada volta avança
+leitura, nunca descarta candidato", e nada o conferia.
+`apps/ai-orchestrator/tests/support/http-egress-sites.ts` e
+`apps/ai-orchestrator/tests/support/product-transport-routes.txt`
+continuam **intocados** (diff zero). `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
+concentra o diff de código (**1810** inserções, **12** deleções por `git
+diff --histogram --numstat`; **16034** linhas, baseline **14236**), e
+nenhum arquivo de `apps/*/src/`, `apps/evolution-go/`, `packages/` ou
+`tools/ia-loop/` mudou.
+
+- **Região abandonada (escopo §1)** — `resolveDiscardAbandonedRegion`
+  (`assistant.service.test.ts:8251`), por casamento de delimitadores
+  sobre o texto mascarado: `continue`/`break` do fim da instrução ao fim
+  do corpo do laço contenedor (o do rótulo, quando há); `break` abandonar
+  também as voltas seguintes é declarado, não computado;
+  `function-early-exit` do fim da instrução `return` ao fim do corpo da
+  função (a expressão do `return` executa); `switch-break` e
+  `nested-function-return` sem região. Região não resolvida reprova no
+  resíduo de `findDiscardEnumerationFindings` (`:9815`–`:9834`). Na árvore
+  real: **120** regiões de `continue`, **6** de `break`, **17** de
+  `function-early-exit`, **0** não resolvidas.
+- **Vocabulário de produção (escopo §2)** —
+  `DISCARD_PRODUCING_OPERATIONS = ["push", "add", "set"]` (`:8323`), tipo
+  derivado; a varredura reconhece também `unshift`, `splice` e `append`
+  (`DISCARD_RECOGNIZED_INSERTION_METHODS`, `:8343`) para que operação
+  fora do vocabulário reprove nomeada em `findDiscardProductionFindings`
+  (`:8813`). Árvore real: **51** `push`, **14** `add`, **5** `set`; **0**
+  fora do vocabulário.
+- **Fecho de produção (escopo §3)** — `buildDiscardModuleProduction`
+  (`:8647`), computado uma vez por arquivo dentro de
+  `enumerateDiscardAnalysis` (`:9433`): **89** funções de módulo em coluna
+  zero, **23** produtoras diretas, **28** pelo fecho (**5** só pelo fecho:
+  `discoverGoServiceHttpRequests`, `refuseClassReferencesOutsideInstantiation`,
+  `siteCarriesProductProseToClientNumber`, `splitBaseAndPathArguments`,
+  `staticFetchMethodOfMember`), **1** volta, estável. **Limite
+  declarado:** chamada cujo destino não é função de módulo (método de
+  `string`/`Array`/`RegExp`, construtor, importada) não é produção — a
+  única via dela alcançar a saída do módulo é o valor devolvido, e
+  atribuir valor não é produzir; ramo `if (!site.calleeIsModuleFunction)`
+  (`:8675`) e filtro de `findDiscardRegionProduction` (`:8785`).
+- **Eixo 5 (escopo §4)** — `resolveSilentDiscardRequirement` (`:11077`)
+  aplica os quatro eixos do Goal054, intocados em
+  `resolveSilentDiscardRequirementByFourAxes` (`:10945`), e depois deles a
+  região (`:11084`), só quando eles concluíram pela isenção de forma que
+  abandona laço: região com produção exige registro
+  (`retiredExemptionReason` nomeia `arquivo:linha` da ocorrência e da
+  produção); não resolvida exige registro e vai para o resíduo; livre
+  isenta com as duas evidências. Árvore real, **143** ocorrências: **63**
+  isentas com região livre, **8** desisentadas por produção direta, **0**
+  por chamada a produtora, **72** exigidas pelos quatro eixos e ainda
+  exigidas, **0** resíduo, **0** que passou de exigida a isenta.
+- **Registro (escopo §5)** — `DOCUMENTED_SILENT_DISCARDS` passa de **53**
+  para **57** entradas (`:6918`–`:6957`): `splitTopLevelItems`
+  `continue;` com multiplicidade **5** (`:225`, `:228`, `:232`, `:236`,
+  `:240`), `splitTemplateLiteralParts` `continue;` (`:1458`) e saída
+  antecipada `if (depth !== 0) return undefined;` (`:1479`),
+  `findTopLevelMethodBodies` `continue;` (`:2989`). A sondagem previa 6;
+  a execução acha 8 (divergência em [D-071](DECISIONS.md)).
+- **Controles negativos (escopo §10)** — dez, no describe `Goal055 /
+  FIX-001 (§10)`, cada um chamando `enumerateDiscardAnalysis`,
+  `resolveSilentDiscardRequirement` e `findSilentDiscardFindings`, com as
+  duas saídas, todos por fonte sintética em memória ou cópia da leitura
+  real — nenhum escreve árvore temporária.
+- **Prova executada:** `npx vitest run
+  tests/assistant/assistant.service.test.ts` → **299** testes (baseline
+  283), **299** passando. `npx vitest run` completo → **1111** testes,
+  **1023** passando (baseline 1007), **88** pulados, **0** falhando. `npm
+  run typecheck` exit 0; `npm run lint` exit 0; `npm run test:gate`
+  **226**/**226**; `npm run validate:core` exit 0; `npm run
+  validate:integration` `exit 2` por `BFF_TEST_DATABASE_URL` ausente.
+- **Limite declarado, herdado de D-065 a D-070:** o eixo 5 prova ausência
+  de produção na região abandonada de uma ocorrência isenta; não prova
+  conservação de candidatos dentro das funções de varredura na forma
+  geral. **A-24 continua `PENDENCIA-POS-MVP`, não corrigido.**

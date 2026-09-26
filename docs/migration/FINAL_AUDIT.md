@@ -4022,3 +4022,100 @@ variável de ambiente; `throw`, por não ser descarte silencioso; e
 conservação de candidatos dentro das funções de varredura de
 `http-egress-sites.ts`, declarada e limitada desde o escopo §4 do Goal050
 e reafirmada aqui.
+
+## 32. A isenção é provada pelo que o descarte abandona: ocorrência isenta cuja região abandonada produz saída deixa de ser isenta em silêncio — Goal055, 2026-09-26
+
+Seção nova, escrita depois da execução final do diff055 (rodada 2,
+FIX-001). Ela **não reescreve** §4 a §31: os registros de A-01 a A-24, o
+veredito das seções anteriores e as trinta e uma seções de fechamento
+continuam exatamente como estavam, e a entrada de **A-24** **não foi
+tocada**. Este Goal não corrige A-24 e não abre achado novo — fecha o
+consequente que o §30 e o §31 deixaram em prosa: a isenção por domínio
+dizia "cada volta avança leitura, nunca descarta candidato", e nada o
+conferia. Decisão: [D-071](DECISIONS.md), `ACCEPTED` no
+[review055](reviews/055-review.md) (rodada 2 de 2).
+
+### O que mudou
+
+**A região abandonada é computada por ocorrência**
+(`resolveDiscardAbandonedRegion`, `assistant.service.test.ts:8251`), por
+casamento de delimitadores sobre o mesmo texto mascarado: `continue` e
+`break` até o fim do corpo do laço contenedor (o laço do rótulo, quando
+há rótulo — só a volta corrente é provada; que `break` abandone também as
+voltas seguintes é declarado em comentário, não computado);
+`function-early-exit` do fim da instrução `return` até o fim do corpo da
+função; `switch-break` e `nested-function-return` sem região. Região não
+resolvida reprova nomeada no mesmo resíduo de classe, domínio e fronteira
+(`findDiscardEnumerationFindings`, `:9815`–`:9834`).
+
+**A produção é vocabulário fechado** (`DISCARD_PRODUCING_OPERATIONS`,
+`:8323`: `push`, `add`, `set`), conferido nos dois sentidos contra a
+árvore real — **51** `push`, **14** `add`, **5** `set`, **70** sítios, **0**
+fora do vocabulário. Operação reconhecida fora dele (`unshift`, `splice`,
+`append`, `DISCARD_RECOGNIZED_INSERTION_METHODS`, `:8343`) reprova
+nomeada.
+
+**A função produtora é resolvida por fecho transitivo, uma vez por
+arquivo** (`buildDiscardModuleProduction`, `:8647`, chamado só por
+`enumerateDiscardAnalysis`, `:9433`): **89** funções de módulo, **23**
+produtoras diretas, **28** pelo fecho (**5** só pelo fecho), **1** volta
+até o ponto fixo, fecho estável (reaplicar `expandDiscardProducersOnce`
+não muda o conjunto). Chamada cujo destino não é função de módulo não é
+produção — limite declarado, ramo `if (!site.calleeIsModuleFunction)`
+(`:8675`) e filtro de `findDiscardRegionProduction` (`:8785`).
+
+**A exigência ganha um quinto eixo que só retira isenção**
+(`resolveSilentDiscardRequirement`, `:11077`; eixo 5 em `:11084`), depois
+dos quatro do Goal054, intocados em
+`resolveSilentDiscardRequirementByFourAxes` (`:10945`). Sobre as **143**
+ocorrências de código da árvore real, conferido por execução no teste
+permanente do Goal055: **63** isentas com região livre e as duas
+evidências; **8** desisentadas por produção direta na região (**0** por
+chamada a função produtora); **72** que os quatro eixos já mandavam
+registrar e continuam exigindo; **0** resíduo; **0** ocorrência que
+passou de exigida a isenta.
+
+**As 8 ocorrências que mudaram de lado ganham motivo substantivo:**
+`splitTopLevelItems` `:225`, `:228`, `:232`, `:236`, `:240`;
+`splitTemplateLiteralParts` `:1458` e `:1479`; `findTopLevelMethodBodies`
+`:2989`. A sondagem do Goal previa **6**; as duas a mais estão em
+[D-071](DECISIONS.md). `DOCUMENTED_SILENT_DISCARDS` passa de **53** para
+**57** entradas, sem duplicar, remover ou reescrever entrada anterior.
+
+**O que o Goal054 provou continua provado:** **143** ocorrências —
+`continue` **120**, `break` **6**, `function-early-exit` **17** —,
+`byCursorDomain` `no-domain` **64**, `character-sequence` **71**,
+`element-collection` **8**, `unresolved` e `outsideVocabulary` vazias.
+
+### Veredito recontado
+
+Esta auditoria continua com **0** achados `BLOQUEADOR-MVP`, **8**
+`PENDENCIA-POS-MVP` e **6** `LIMITE-DECLARADO` — a mesma contagem de §29,
+§30 e §31. Nenhum achado de A-01 a A-24 foi tocado, corrigido,
+reclassificado ou reaberto. **A-24 continua `PENDENCIA-POS-MVP`, não
+corrigido.**
+
+**Limite próprio deste Goal, declarado:** o eixo 5 prova que a região
+abandonada de uma ocorrência isenta não contém produção; não prova
+conservação de candidatos dentro das funções de varredura na forma geral
+(herdado de D-065 a D-070), e não trata chamada a função fora do módulo
+como produção. Consequência mensurável: `assistant.service.test.ts` passa
+de **283** para **299** testes, **299** passando, **0** falhando, com
+**16034** linhas (baseline **14236**), **1810** inserções e **12**
+deleções contra a baseline `0851b3362ced899954a5f19600e2a06944e6a913`
+(`git diff --histogram --numstat`). `http-egress-sites.ts` e
+`product-transport-routes.txt` estão intocados (diff zero). A suíte
+completa de `apps/ai-orchestrator` fecha em **1111** testes: **1023**
+passando (baseline **1007**), **88** pulados (mesma contagem), **0**
+falhando. `npm run typecheck` (`prisma generate && tsc -p tsconfig.json
+--noEmit`): exit 0. `npm run lint`: exit 0, sem saída. `npm run
+test:gate` (raiz): **226** testes, **226** passando, **0** falhando.
+`npm run validate:core`: exit 0. `npm run validate:integration`: `exit
+2`, `validate:integration REFUSED — BFF_TEST_DATABASE_URL is not set` —
+pré-condição ausente, inalterada.
+
+Três coisas que esta seção não diz. **Não diz que A-24 foi corrigido.**
+**Não diz que M4 foi fechado**: nenhum arquivo de `apps/*/src/`,
+`apps/evolution-go/`, `packages/` ou `tools/ia-loop/` mudou. **Não diz
+que a produção pulada pelas 8 ocorrências não importava**: o motivo
+escrito diz que o abandono está nomeado e justificado.

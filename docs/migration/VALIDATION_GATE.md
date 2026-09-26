@@ -1776,3 +1776,48 @@ concentra o diff inteiro contra a baseline `d3e76645d3042e66eb9559f33fef9dda4090
 **11631**).
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff052-2026-09-22-d-068) e [D-068](DECISIONS.md).
+
+**Acréscimo, desde 2026-09-26 (Goal055 / [D-071](DECISIONS.md)):** a
+linha da tabela acima — "A exigência de motivo combina forma, classe de
+laço e domínio: `character-sequence`/`parallel-mask` seguem isentos em
+qualquer forma; [...] `no-domain` em classe não portadora" (critério dos
+quatro eixos do Goal054) — não é apagada, mas deixou de valer sozinha
+desde esta rodada: a isenção por um eixo só era **fail-open medido**, não
+hipotético, sobre as **8** ocorrências reais do escopo §5 do Goal055
+(`:225`, `:228`, `:232`, `:236`, `:240` de `splitTopLevelItems`; `:1458`
+e `:1479` de `splitTemplateLiteralParts`; `:2989` de
+`findTopLevelMethodBodies`), todas isentas pelo domínio
+`character-sequence` e todas abandonando região com `.push(` do próprio
+corpo. Desde esta rodada, a isenção dos quatro eixos só é concedida
+quando a região abandonada é livre de produção. Ver seção seguinte.
+
+## A isenção é provada pelo que o descarte abandona: a região abandonada, o vocabulário de produção e um quinto eixo que só retira, do Goal055
+
+O parágrafo do Goal054 fechou o **alfabeto** do descarte; o critério de
+isenção continuava decidido só pelo antecedente (domínio ou classe), e o
+consequente ("cada volta avança leitura, nunca descarta candidato") não
+era conferido. Este delta o torna cômputo, sem tocar o conjunto de 10
+rotas nem o de 27 literais e sem alterar regra de classificação de
+egresso alguma.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| Região abandonada por ocorrência (`resolveDiscardAbandonedRegion`, `assistant.service.test.ts:8251`): `continue`/`break` até o fim do corpo do laço (o do rótulo, quando há), `function-early-exit` do fim do `return` até o fim do corpo da função; na árvore real **120** + **6** + **17** regiões, **0** não resolvidas | `switch-break` e `nested-function-return` não têm região — isentos pela forma, como no Goal054; `break` abandonar as voltas seguintes é declarado, não computado |
+| Vocabulário fechado `DISCARD_PRODUCING_OPERATIONS` (`:8323`: `push`, `add`, `set`), conferido nos dois sentidos — **51**/**14**/**5** na árvore real; operação reconhecida fora dele (`unshift`, `splice`, `append`) reprova nomeada | Método que devolve valor sem gravá-lo em estrutura que sobrevive não é produção |
+| Fecho sobre as funções de módulo (`buildDiscardModuleProduction`, `:8647`), uma vez por arquivo: **89** funções, **23** produtoras diretas, **28** pelo fecho, **1** volta, estável | Chamada a destino que não é função de módulo (método de `string`/`Array`/`RegExp`, construtor, importada) não é produção — limite declarado, ramo `:8675` e filtro `:8785` |
+| Eixo 5 em `resolveSilentDiscardRequirement` (`:11077`/`:11084`), depois dos quatro do Goal054 (intocados em `:10945`): região com produção exige registro nomeando `arquivo:linha` da produção; não resolvida exige e vai ao resíduo; livre isenta com as duas evidências | O eixo 5 nunca concede isenção: **0** das **72** ocorrências que os quatro eixos mandavam registrar passou a isenta, conferido ocorrência a ocorrência |
+| Árvore real: **63** isentas com região livre, **8** desisentadas (todas por produção direta), `DOCUMENTED_SILENT_DISCARDS` de **53** para **57** entradas | Não prova conservação de candidatos dentro das funções de varredura na forma geral — limite de D-065 a D-070 |
+
+Sobre a árvore final desta rodada: `npx vitest run
+tests/assistant/assistant.service.test.ts` → **299** testes, **299**
+passando (baseline 283); `npx vitest run` completo → **1111** testes,
+**1023** passando (baseline 1007), **88** pulados, **0** falhando; `npm
+run typecheck`, `npm run lint` e `npm run validate:core` exit 0; `npm run
+test:gate` **226**/**226**; `npm run validate:integration` `exit 2`,
+`validate:integration REFUSED — BFF_TEST_DATABASE_URL is not set`.
+`http-egress-sites.ts` e `product-transport-routes.txt` com diff zero;
+`assistant.service.test.ts` com **1810** inserções e **12** deleções
+contra `0851b3362ced899954a5f19600e2a06944e6a913` (`git diff --histogram
+--numstat`). **A-24 continua `PENDENCIA-POS-MVP`.**
+
+Ver [CURRENT_STATE](CURRENT_STATE.md) e [D-071](DECISIONS.md).

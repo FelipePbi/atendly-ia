@@ -197,9 +197,9 @@ apikey: SUA-CHAVE-API
 | `number` | string | ✅ Sim | Número do destinatário |
 | `description` | string | ✅ Sim | Texto do corpo da mensagem |
 | `sections` | array | ✅ Sim | Array de seções contendo rows |
-| `buttonText` | string | ❌ Não | Texto do botão que abre a lista (padrão: "Ver Menu") |
-| `title` | string | ❌ Não | Título em negrito no topo |
-| `footerText` | string | ❌ Não | Texto do rodapé |
+| `buttonText` | string | ✅ Sim | Texto do botão que abre a lista |
+| `title` | string | ✅ Sim | Título em negrito no topo |
+| `footerText` | string | ✅ Sim | Texto do rodapé |
 | `delay` | int32 | ❌ Não | Delay em milissegundos antes de enviar |
 | `mentionedJid` | string | ❌ Não | JID do usuário a mencionar |
 | `mentionAll` | bool | ❌ Não | Mencionar todos (apenas grupos) |

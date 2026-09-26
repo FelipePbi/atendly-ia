@@ -17,13 +17,22 @@ type reachedProseExpectation struct {
 	Field    string
 }
 
-// productProseLiteralLocation is the source position of the one literal
-// the Goal singles out as product prose composed inside the transport
-// fork (A-24). Only the position is written here: the content is read
-// from the set the guard derives, never typed into this file, so the
-// negative proof below cannot be satisfied by a string that merely looks
-// right.
-const productProseLiteralLocation = "pkg/sendMessage/service/send_service.go:1960"
+// productProseLiteralContent is the Portuguese label Goal042 singled out
+// as product prose composed inside the transport fork (A-24): "Ver Menu",
+// substituted for an empty ButtonText. Goal056 closes A-24 by deleting
+// the fallback that composed it. It is kept as one asserted instance the
+// check below refuses, alongside the content-independent check on the
+// ButtonText field itself: a fallback moved to another line or spelled
+// with another label ("Menu", "Abrir") still writes into that field, and
+// the field-based check catches it where a content match alone would not.
+const productProseLiteralContent = "Ver Menu"
+
+// productProseCarrierField is the carrier field Goal056 closes: no
+// non-empty Go literal may write into ListMessage.ButtonText, regardless
+// of what it says. The Goal042 fallback wrote there; a replacement
+// fallback with a different label would write there too, so the field
+// is what the check refuses, not the string it once held.
+const productProseCarrierField = "ButtonText"
 
 // expectedProseLiteralsReachedFromProductRoutes is the set of non-empty
 // Go literals reachable from a route the product actually calls —
@@ -37,8 +46,8 @@ const productProseLiteralLocation = "pkg/sendMessage/service/send_service.go:196
 // one of the nine walked routes that writes text carrier fields at all
 // is POST /send/text, whose reach holds carrier writes whose value is
 // the relayed request body and no Go literal. The prose this fork
-// composes — the button discriminators, the JSON envelopes, the formatting marks and the
-// "Ver Menu" label — lives behind /send/button, /send/list,
+// composes — the button discriminators, the JSON envelopes and the
+// formatting marks — lives behind /send/button, /send/list,
 // /send/carousel, /send/media and /send/status/media, and the product
 // calls none of those.
 //
@@ -52,7 +61,7 @@ var expectedProseLiteralsReachedFromProductRoutes = []reachedProseExpectation{}
 // expectedProseLiteralsReachedFromRegisteredRoutes is the same set taken
 // over every route this tree registers, asserted element by element. It
 // is what makes the empty set above meaningful: the machinery that finds
-// nothing from a product route finds twenty-seven literals from five
+// nothing from a product route finds twenty-six literals from five
 // routes of the same tree, each with the route it is reached from.
 //
 // The reach is the over-approximating one — every production
@@ -77,16 +86,15 @@ var expectedProseLiteralsReachedFromRegisteredRoutes = []reachedProseExpectation
 	{Route: "POST /send/button", Location: "pkg/sendMessage/service/send_service.go:1765", Content: "{\"from\":\"api\",\"templateId\":", Field: "MessageParamsJSON"},
 	{Route: "POST /send/button", Location: "pkg/sendMessage/service/send_service.go:1782", Content: "*", Field: "Text"},
 	{Route: "POST /send/button", Location: "pkg/sendMessage/service/send_service.go:1784", Content: "\n\n", Field: "Text"},
-	{Route: "POST /send/list", Location: "pkg/sendMessage/service/send_service.go:1960", Content: "Ver Menu", Field: "ButtonText"},
+	{Route: "POST /send/list", Location: "pkg/sendMessage/service/send_service.go:1962", Content: " ", Field: "Title"},
 	{Route: "POST /send/list", Location: "pkg/sendMessage/service/send_service.go:1968", Content: " ", Field: "Title"},
-	{Route: "POST /send/list", Location: "pkg/sendMessage/service/send_service.go:1974", Content: " ", Field: "Title"},
-	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2547", Content: "image/jpeg", Field: "Mimetype"},
-	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2572", Content: "video/mp4", Field: "Mimetype"},
-	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2606", Content: "cta_url", Field: "Name"},
-	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2610", Content: "cta_call", Field: "Name"},
-	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2614", Content: "cta_copy", Field: "Name"},
-	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2620", Content: "quick_reply", Field: "Name"},
-	{Route: "POST /send/status/media", Location: "pkg/sendMessage/service/send_service.go:2824", Content: "image/jpeg", Field: "Mimetype"},
+	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2541", Content: "image/jpeg", Field: "Mimetype"},
+	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2566", Content: "video/mp4", Field: "Mimetype"},
+	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2600", Content: "cta_url", Field: "Name"},
+	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2604", Content: "cta_call", Field: "Name"},
+	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2608", Content: "cta_copy", Field: "Name"},
+	{Route: "POST /send/carousel", Location: "pkg/sendMessage/service/send_service.go:2614", Content: "quick_reply", Field: "Name"},
+	{Route: "POST /send/status/media", Location: "pkg/sendMessage/service/send_service.go:2818", Content: "image/jpeg", Field: "Mimetype"},
 }
 
 // reachedProseExpectationsOf renders computed literals the way the
@@ -257,70 +265,68 @@ func TestProseLiteralsReachedFromEveryRegisteredRouteAreAssertedElementByElement
 	}
 }
 
-// TestNoRouteThatReachesTheProductProseLiteralIsReachedByTheProduct is
-// the negative the Goal asks to be computed rather than stated: the
-// routes that reach the product prose literal are derived from the
-// reaches, the routes the product calls are derived from the value file,
-// and the two sets are disjoint. Neither side is typed here, and the
-// content of the literal is read from the set the guard derives.
-func TestNoRouteThatReachesTheProductProseLiteralIsReachedByTheProduct(t *testing.T) {
+// TestGoal056RemovesTheProductProseLiteralFromTheTree is what
+// TestNoRouteThatReachesTheProductProseLiteralIsReachedByTheProduct
+// proved before Goal056: that no route the product calls reaches the
+// literal "Ver Menu", by isolation. Goal056 does not merely keep that
+// literal unreachable from the product, it deletes the fallback that
+// composed it, so this test proves the stronger fact over the two sets
+// this file and go_prose_test.go compute — the non-empty Go literals
+// reaching the transport, and the ones reachable from a registered
+// route: neither holds a literal written into the ButtonText carrier
+// field, by field rather than by content, so a fallback reintroduced
+// under a different label ("Menu", "Abrir") still fails here. The
+// content check on "Ver Menu" is kept alongside as the one instance
+// Goal042 named, and expectedGoProseLiterals /
+// expectedProseLiteralsReachedFromRegisteredRoutes are checked the same
+// way. This does not prove the literal is absent from files this guard
+// never walks (whatsmeow-lib, _test.go) or from fields other than
+// ButtonText — TestGoProseLiteralsReachingTransportAreAssertedElementByElement
+// and TestProseLiteralsReachedFromEveryRegisteredRouteAreAssertedElementByElement
+// are what name every other field element by element.
+func TestGoal056RemovesTheProductProseLiteralFromTheTree(t *testing.T) {
 	enumeration := enumerateRealTree(t)
 
-	var literal GoProseLiteral
-	found := false
 	for _, candidate := range enumeration.GoProseLiteralsReachingTransport() {
-		if positionRelativeToModuleRoot(t, candidate.File, candidate.Line) == productProseLiteralLocation {
-			literal = candidate
-			found = true
-			break
+		if candidate.Content == productProseLiteralContent {
+			t.Errorf("a non-empty Go literal %q is derived at %s, writing into %v; Goal056 removed the fallback that composed it",
+				productProseLiteralContent, positionRelativeToModuleRoot(t, candidate.File, candidate.Line), candidate.Fields)
+		}
+		for _, field := range candidate.Fields {
+			if field == productProseCarrierField {
+				t.Errorf("a non-empty Go literal %q is derived at %s, writing into %s; Goal056 removed the fallback that wrote a literal there",
+					candidate.Content, positionRelativeToModuleRoot(t, candidate.File, candidate.Line), productProseCarrierField)
+			}
 		}
 	}
-	if !found {
-		t.Fatalf("no non-empty Go literal is derived at %s; the position the Goal names is not in the computed set",
-			productProseLiteralLocation)
+	for _, want := range expectedGoProseLiterals {
+		if want.Content == productProseLiteralContent {
+			t.Errorf("expectedGoProseLiterals still asserts %q at %s; Goal056 removed the fallback that composed it",
+				productProseLiteralContent, want.Location)
+		}
+		for _, field := range want.Fields {
+			if field == productProseCarrierField {
+				t.Errorf("expectedGoProseLiterals still asserts a literal writing into %s at %s; Goal056 removed the fallback that wrote a literal there",
+					productProseCarrierField, want.Location)
+			}
+		}
 	}
-	if literal.Content == "" {
-		t.Fatalf("the literal derived at %s has no content", productProseLiteralLocation)
-	}
-	t.Logf("the literal derived at %s writes %q into %v", productProseLiteralLocation, literal.Content, literal.Fields)
 
 	report, err := enumeration.ProseReachOfEveryRegisteredRoute()
 	if err != nil {
 		t.Fatalf("the reach of a registered route could not be walked: %v", err)
 	}
-	reaching := report.RoutesReachingLiteralAt(literal.File, literal.Line)
-	if len(reaching) == 0 {
-		t.Fatalf("no registered route reaches the literal at %s, so its absence from the product set proves nothing",
-			productProseLiteralLocation)
-	}
-
-	product := map[string]RegisteredRoute{}
-	for _, route := range productReachedRoutes(t, enumeration) {
-		product[route.Position()] = route
-	}
-	for _, route := range reaching {
-		t.Logf("the literal at %s is reachable from %s %s registered at %s",
-			productProseLiteralLocation, route.Method, route.FullPath,
-			positionRelativeToModuleRoot(t, route.File, route.Line))
-		if _, reached := product[route.Position()]; reached {
-			t.Errorf("route %s %s reaches the literal at %s and is in the set the product calls",
-				route.Method, route.FullPath, productProseLiteralLocation)
+	for _, literal := range report.Literals() {
+		if literal.Field == productProseCarrierField {
+			t.Errorf("%s %s reaches a Go literal %q written into %s at %s; Goal056 removed the fallback that wrote a literal there",
+				literal.RouteMethod, literal.RoutePath, literal.Content, productProseCarrierField, literal.Position())
 		}
 	}
-
-	// The derived content and the content Goal042 asserted at the same
-	// position must be the same string. This is the only place the two
-	// meet, and it is a comparison between a computed value and an
-	// asserted one, not a literal typed to make the proof pass.
-	asserted := ""
-	for _, want := range expectedGoProseLiterals {
-		if want.Location == productProseLiteralLocation {
-			asserted = want.Content
+	for _, want := range expectedProseLiteralsReachedFromRegisteredRoutes {
+		if want.Field == productProseCarrierField {
+			t.Errorf("expectedProseLiteralsReachedFromRegisteredRoutes still asserts a literal writing into %s at %s; Goal056 removed the fallback that wrote a literal there",
+				productProseCarrierField, want.Location)
 		}
-	}
-	if asserted != literal.Content {
-		t.Errorf("the literal derived at %s is %q, the set Goal042 asserted holds %q",
-			productProseLiteralLocation, literal.Content, asserted)
 	}
 }
 

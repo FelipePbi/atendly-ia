@@ -17,7 +17,7 @@ type goProseExpectation struct {
 // The Goal states there is no such literal on this tree — that the only
 // literals in a carrier field are the empty placeholders of
 // QuotedMessage. The AST disagrees, and by the Goal own rule the AST is
-// what holds. The members fall into four kinds, and the divergence is
+// what holds. The members fall into three kinds, and the divergence is
 // declared rather than corrected, because no production file of this
 // fork may be edited here:
 //
@@ -27,11 +27,13 @@ type goProseExpectation struct {
 //     other operands are the received request body;
 //   - formatting marks, the asterisks and newlines wrapped around a
 //     received title and description, and the single space substituted
-//     for an empty row or section title;
-//   - and one that is none of those: "Ver Menu", a Portuguese label this
-//     transport fork substitutes when the caller sends an empty button
-//     text, delivered to a customer number. It is product prose composed
-//     inside the transport, which is what §2 exists to catch.
+//     for an empty row or section title.
+//
+// Goal056 closed A-24, the fourth kind this set used to hold: "Ver Menu",
+// a Portuguese label this transport fork substituted when the caller
+// sent an empty button text, delivered to a customer number. The service
+// now refuses an empty button text before composing anything, so no
+// literal of that kind is derived here anymore.
 //
 // A literal that appears, moves or changes fails this test with its file
 // and its line.
@@ -53,16 +55,15 @@ var expectedGoProseLiterals = []goProseExpectation{
 	{Location: "pkg/sendMessage/service/send_service.go:1765", Content: "{\"from\":\"api\",\"templateId\":", Fields: []string{"MessageParamsJSON"}},
 	{Location: "pkg/sendMessage/service/send_service.go:1782", Content: "*", Fields: []string{"Text"}},
 	{Location: "pkg/sendMessage/service/send_service.go:1784", Content: "\n\n", Fields: []string{"Text"}},
-	{Location: "pkg/sendMessage/service/send_service.go:1960", Content: "Ver Menu", Fields: []string{"ButtonText"}},
+	{Location: "pkg/sendMessage/service/send_service.go:1962", Content: " ", Fields: []string{"Title"}},
 	{Location: "pkg/sendMessage/service/send_service.go:1968", Content: " ", Fields: []string{"Title"}},
-	{Location: "pkg/sendMessage/service/send_service.go:1974", Content: " ", Fields: []string{"Title"}},
-	{Location: "pkg/sendMessage/service/send_service.go:2547", Content: "image/jpeg", Fields: []string{"Mimetype"}},
-	{Location: "pkg/sendMessage/service/send_service.go:2572", Content: "video/mp4", Fields: []string{"Mimetype"}},
-	{Location: "pkg/sendMessage/service/send_service.go:2606", Content: "cta_url", Fields: []string{"Name"}},
-	{Location: "pkg/sendMessage/service/send_service.go:2610", Content: "cta_call", Fields: []string{"Name"}},
-	{Location: "pkg/sendMessage/service/send_service.go:2614", Content: "cta_copy", Fields: []string{"Name"}},
-	{Location: "pkg/sendMessage/service/send_service.go:2620", Content: "quick_reply", Fields: []string{"Name"}},
-	{Location: "pkg/sendMessage/service/send_service.go:2824", Content: "image/jpeg", Fields: []string{"Mimetype"}},
+	{Location: "pkg/sendMessage/service/send_service.go:2541", Content: "image/jpeg", Fields: []string{"Mimetype"}},
+	{Location: "pkg/sendMessage/service/send_service.go:2566", Content: "video/mp4", Fields: []string{"Mimetype"}},
+	{Location: "pkg/sendMessage/service/send_service.go:2600", Content: "cta_url", Fields: []string{"Name"}},
+	{Location: "pkg/sendMessage/service/send_service.go:2604", Content: "cta_call", Fields: []string{"Name"}},
+	{Location: "pkg/sendMessage/service/send_service.go:2608", Content: "cta_copy", Fields: []string{"Name"}},
+	{Location: "pkg/sendMessage/service/send_service.go:2614", Content: "quick_reply", Fields: []string{"Name"}},
+	{Location: "pkg/sendMessage/service/send_service.go:2818", Content: "image/jpeg", Fields: []string{"Mimetype"}},
 }
 
 // TestGoProseLiteralsReachingTransportAreAssertedElementByElement is the

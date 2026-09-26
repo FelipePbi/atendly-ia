@@ -253,7 +253,7 @@ type ListStruct struct {
 	Title        string       `json:"title" example:"Nossos planos"`
 	// Body description text (required).
 	Description  string       `json:"description" example:"Escolha o plano ideal para voce"`
-	// Label of the button that opens the list. Defaults to "Ver Menu" when empty.
+	// Label of the button that opens the list (required).
 	ButtonText   string       `json:"buttonText" example:"Abrir cardapio"`
 	// Footer text (required).
 	FooterText   string       `json:"footerText" example:"Evolution GO"`
@@ -1933,13 +1933,8 @@ func sectionsToString(data *ListStruct) (string, error) {
 		sections = append(sections, section)
 	}
 
-	buttonText := data.ButtonText
-	if buttonText == "" {
-		buttonText = "Ver Menu"
-	}
-
 	listData := list{
-		Title:    buttonText,
+		Title:    data.ButtonText,
 		Sections: sections,
 	}
 
@@ -1955,9 +1950,8 @@ func (s *sendService) SendList(data *ListStruct, instance *instance_model.Instan
 	// Legacy ListMessage format - works on iOS, Android and Web
 	// Matching PAPI Node.js default (non-modern) path exactly
 
-	buttonText := data.ButtonText
-	if buttonText == "" {
-		buttonText = "Ver Menu"
+	if data.ButtonText == "" {
+		return nil, fmt.Errorf("button text is required")
 	}
 
 	// Build sections in legacy ListMessage format
@@ -1993,7 +1987,7 @@ func (s *sendService) SendList(data *ListStruct, instance *instance_model.Instan
 	listMessage := &waE2E.ListMessage{
 		Title:       proto.String(data.Title),
 		Description: proto.String(data.Description),
-		ButtonText:  proto.String(buttonText),
+		ButtonText:  proto.String(data.ButtonText),
 		FooterText:  proto.String(data.FooterText),
 		ListType:    &listType,
 		Sections:    sections,

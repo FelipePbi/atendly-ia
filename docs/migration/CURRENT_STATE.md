@@ -5283,3 +5283,107 @@ nenhum arquivo de `apps/*/src/`, `apps/evolution-go/`, `packages/` ou
   de produção na região abandonada de uma ocorrência isenta; não prova
   conservação de candidatos dentro das funções de varredura na forma
   geral. **A-24 continua `PENDENCIA-POS-MVP`, não corrigido.**
+
+## Delta implementado — diff056, 2026-09-26 ([D-072](DECISIONS.md))
+
+Corrige **A-24**: o fork de transporte deixa de compor prosa de produto
+para `ButtonText`. A entrada anterior, no diff042
+(`pkg/sendMessage/service/send_service.go:1960`, `"Ver Menu"` em
+`ButtonText`, achado `A-24` em [FINAL_AUDIT §19](FINAL_AUDIT.md)), não é
+apagada: este delta diz o que passou a valer desde este Goal.
+`apps/ai-orchestrator/` não foi tocado.
+
+- **Serviço recusa em vez de preencher (escopo §1–§2)** — `SendList`
+  (`send_service.go:1953`–`:1955`) devolve
+  `fmt.Errorf("button text is required")` quando `ButtonText` chega
+  vazio, antes de qualquer uso de cliente, instância ou rede.
+  `sectionsToString` (`:1878`, cópia sem chamador) não ganha recusa — só
+  perde a fallback que compunha, e continua sem chamador e declarada.
+  Valor não vazio segue sem transformação até `ListMessage.ButtonText`
+  (`:1990`, categoria computada `SourceRouteBody`/
+  `value_from_route_body_parameter`, `proto.String(data.ButtonText)`).
+  `grep -rn '"Ver Menu"' apps/evolution-go --include=*.go`, excluindo
+  `whatsmeow-lib/` e `_test.go`, não acha nenhuma ocorrência em código de
+  produção.
+- **Contrato escrito (escopo §3)** — comentário do campo
+  (`send_service.go:256`), `@Description` do handler
+  (`send_handler.go:568`), `docs/docs.go`, `docs/swagger.json`,
+  `docs/swagger.yaml` (duas posições em cada um) e as linhas de
+  `buttonText`, `title` e `footerText` da tabela de
+  `docs/wiki/guias-api/api-interactive.md` (`:200`–`:202`)
+  passam a dizer que os três campos são obrigatórios e que vazio devolve
+  `400`.
+- **Teste novo (escopo §4)** —
+  `apps/evolution-go/pkg/sendMessage/service/send_service_list_test.go`:
+  `TestSendList_EmptyButtonText_ReturnsErrorBeforeUsingClient`, valor
+  zero de `sendService`, sem cliente WhatsApp. `PASS`. Um segundo caso
+  (passthrough de `ButtonText` não vazio) não é viável sem fabricar
+  dependência: `listMessage` é variável local (`:1987`–`:1994`) passada
+  direto para `s.SendMessage(instance, msg, ...)` (`:2001`), que depende de
+  cliente e instância reais — não há ponto de observação antes do envio.
+- **Conjuntos do guard recomputados por execução, não por edição de
+  expectativa (escopo §5)** — `expectedGoProseLiterals`
+  (`go_prose_test.go`) e `expectedProseLiteralsReachedFromRegisteredRoutes`
+  (`route_reach_test.go`) perdem a entrada `"Ver Menu"`: **27 → 26**
+  entradas cada, nas mesmas **5** rotas
+  (`POST /send/media`, `POST /send/button`, `POST /send/list`,
+  `POST /send/carousel`, `POST /send/status/media`); as demais entradas
+  mudam só de linha. `TestNoRouteThatReachesTheProductProseLiteralIsReachedByTheProduct`
+  é substituído por `TestGoal056RemovesTheProductProseLiteralFromTheTree`
+  (prova, sobre `GoProseLiteralsReachingTransport()` e
+  `ProseReachOfEveryRegisteredRoute()`, que nenhum literal Go não vazio
+  escreve no campo `ButtonText`, por campo e não só por conteúdo — uma
+  fallback reintroduzida sob outro rótulo reprova pelo mesmo teste — e
+  que `expectedGoProseLiterals` não assere `"Ver Menu"` em nenhuma
+  entrada).
+  `TestEveryReachedLiteralIsAMemberOfTheGoal042Set` confirma **26**
+  literais, todos de rota registrada. `expectedProseLiteralsReachedFromProductRoutes`
+  continua vazio, e `product-transport-routes.txt` (**10** rotas) está
+  com diff zero. `expectedOffRelaySources` (`off_relay_test.go`) perde a
+  entrada `send_service.go:1996`, `ListMessage.ButtonText`,
+  `SourceBranchDependent` — a escrita final está em `:1990`, categoria
+  computada `SourceRouteBody` (`value_from_route_body_parameter`), a
+  mesma categoria do relé direto do corpo recebido, sem ramo, e por isso
+  deixou de ser candidata ao conjunto (não foi recategorizada para outra
+  categoria fora do relé). `go test ./pkg/transportguard/...`: `PASS`.
+- **Controle negativo (escopo §6)** — executado de forma independente na
+  rodada de correção que fechou os blockers da revisão (FIX-001, rodada
+  4), sobre a árvore já corrigida (`8d37112`): o `if data.ButtonText ==
+  "" { return ... }` (`:1953`–`:1955`) foi substituído por `buttonText :=
+  data.ButtonText; if buttonText == "" { buttonText = "Ver Menu" }`, e o
+  campo `ButtonText` (`:1990`) voltou a ler `proto.String(buttonText)` —
+  as duas trocas juntas, senão o pacote não compila. `go test
+  ./pkg/transportguard/...` reprova em quatro testes:
+  `TestGoProseLiteralsReachingTransportAreAssertedElementByElement`
+  (`go_prose_test.go:93`, `:1955` escrevendo `"Ver Menu"` em `[ButtonText]`),
+  `TestOffRelaySourceSetIsAssertedElementByElement`
+  (`off_relay_test.go:180`, `:1991`, `ListMessage.ButtonText` com origem
+  `value_bound_differently_per_branch`),
+  `TestProseLiteralsReachedFromEveryRegisteredRouteAreAssertedElementByElement`
+  (`route_reach_test.go:251`, `POST /send/list` alcançando `:1955`) e
+  `TestGoal056RemovesTheProductProseLiteralFromTheTree`
+  (`route_reach_test.go:292`, mesmo `:1955`). As entradas seguintes
+  reprovam só por deslocamento de uma linha (`:1962`/`:1968` →
+  `:1963`/`:1969`; `:1975`/`:1977`/`:1981` → `:1976`/`:1978`/`:1982`), sem
+  mudar de conteúdo, campo ou rota. Com um segundo rótulo,
+  `"Abrir"`, reprova pelos mesmos quatro testes, pelo campo `ButtonText`
+  em vez do conteúdo. Revertido cada um, a suíte volta a `PASS`, sem resto na árvore
+  (`git diff --stat` sobre `send_service.go` confere com o diff real
+  desta Work Unit, **+5/-11**).
+- **Contagem de arquivos de produção (escopo §4)** — `send_service_list_test.go`
+  é `_test.go` e fica fora de `DiscoverProductionGoFiles`
+  (`pkg/transportguard/sources.go:60`, `hasTestSuffix`). Rodando essa
+  função sobre a árvore (teste temporário, removido depois de conferir),
+  a contagem de arquivos de produção é **65** tanto na baseline `4041db2`
+  quanto na árvore final desta Work Unit. O total de `.go` de `pkg/` e
+  `cmd/` (produção mais teste, fora `whatsmeow-lib/`) sobe de **90** para
+  **91** no mesmo intervalo — o **+1** exato do arquivo de teste novo.
+- **Prova executada:** `go test ./pkg/transportguard/...` `PASS`;
+  `go test ./...` em `apps/evolution-go` — **62** testes de topo (**175**
+  com subtestes), **0** falhando; `npm run validate:core` — **15** passos
+  `passed`, **2** `skipped` (`test:bff`, `test:health-worker`), **0**
+  `failed`, exit 0; `npm run test:gate` — **226**/**226**, **0**
+  falhando, mesma contagem da baseline.
+- **Limite declarado:** não prova comportamento em runtime do serviço
+  Go nem qual binário roda em produção. **A-24 corrigido** — ver
+  [FINAL_AUDIT §33](FINAL_AUDIT.md) e [D-072](DECISIONS.md).

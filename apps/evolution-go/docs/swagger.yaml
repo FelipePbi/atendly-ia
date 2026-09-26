@@ -626,8 +626,7 @@ definitions:
   github_com_EvolutionAPI_evolution-go_pkg_sendMessage_service.ListStruct:
     properties:
       buttonText:
-        description: Label of the button that opens the list. Defaults to "Ver Menu"
-          when empty.
+        description: Label of the button that opens the list (required).
         example: Abrir cardapio
         type: string
       delay:
@@ -8370,7 +8369,7 @@ paths:
 
         Required body fields: `number`, `title`, `description`, `footerText`, `buttonText`, `sections`.
         Each section must contain one or more `rows`. When `rowId` is omitted, the server generates a fallback ID.
-        When `buttonText` is empty, the server falls back to "Ver Menu".
+        `buttonText` is required; an empty value returns 400.
 
         Uses legacy `ListMessage` format (no ViewOnceMessage wrapper) so it renders on iOS, Android and WhatsApp Web.
       parameters:

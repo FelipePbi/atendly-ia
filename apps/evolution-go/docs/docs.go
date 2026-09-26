@@ -2641,7 +2641,7 @@ const docTemplate = `{
         },
         "/send/list": {
             "post": {
-                "description": "Send an interactive list message (single-select) rendered as a tappable menu.\n\nRequired body fields: ` + "`" + `number` + "`" + `, ` + "`" + `title` + "`" + `, ` + "`" + `description` + "`" + `, ` + "`" + `footerText` + "`" + `, ` + "`" + `buttonText` + "`" + `, ` + "`" + `sections` + "`" + `.\nEach section must contain one or more ` + "`" + `rows` + "`" + `. When ` + "`" + `rowId` + "`" + ` is omitted, the server generates a fallback ID.\nWhen ` + "`" + `buttonText` + "`" + ` is empty, the server falls back to \"Ver Menu\".\n\nUses legacy ` + "`" + `ListMessage` + "`" + ` format (no ViewOnceMessage wrapper) so it renders on iOS, Android and WhatsApp Web.",
+                "description": "Send an interactive list message (single-select) rendered as a tappable menu.\n\nRequired body fields: ` + "`" + `number` + "`" + `, ` + "`" + `title` + "`" + `, ` + "`" + `description` + "`" + `, ` + "`" + `footerText` + "`" + `, ` + "`" + `buttonText` + "`" + `, ` + "`" + `sections` + "`" + `.\nEach section must contain one or more ` + "`" + `rows` + "`" + `. When ` + "`" + `rowId` + "`" + ` is omitted, the server generates a fallback ID.\n` + "`" + `buttonText` + "`" + ` is required; an empty value returns 400.\n\nUses legacy ` + "`" + `ListMessage` + "`" + ` format (no ViewOnceMessage wrapper) so it renders on iOS, Android and WhatsApp Web.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4420,7 +4420,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "buttonText": {
-                    "description": "Label of the button that opens the list. Defaults to \"Ver Menu\" when empty.",
+                    "description": "Label of the button that opens the list (required).",
                     "type": "string",
                     "example": "Abrir cardapio"
                 },

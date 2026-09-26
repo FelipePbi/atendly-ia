@@ -565,7 +565,7 @@ func (s *sendHandler) SendButton(ctx *gin.Context) {
 // @Description
 // @Description Required body fields: `number`, `title`, `description`, `footerText`, `buttonText`, `sections`.
 // @Description Each section must contain one or more `rows`. When `rowId` is omitted, the server generates a fallback ID.
-// @Description When `buttonText` is empty, the server falls back to "Ver Menu".
+// @Description `buttonText` is required; an empty value returns 400.
 // @Description
 // @Description Uses legacy `ListMessage` format (no ViewOnceMessage wrapper) so it renders on iOS, Android and WhatsApp Web.
 // @Tags Send Message

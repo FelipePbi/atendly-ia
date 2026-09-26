@@ -1,6 +1,6 @@
 # Goal 056 — A prosa sai do fork de transporte: o serviço Go deixa de compor o rótulo `"Ver Menu"` (A-24)
 
-**Status: READY.** Preparado em 2026-09-26 pelo Tech Lead Agent após [Goal055 ACCEPTED](../reviews/055-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED** no [review056](../reviews/056-review.md) (rodada 5 de 5, 2026-09-26; rodadas 1 a 4 `CHANGES_REQUIRED` com 4, 4, 3 e 1 blocker, rodada 5 com zero). Preparado em 2026-09-26 pelo Tech Lead Agent após [Goal055 ACCEPTED](../reviews/055-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: SONNET_HIGH
 

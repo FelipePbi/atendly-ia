@@ -1,17 +1,24 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 
 import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
 import { EvolutionClient } from "../../clients/evolution/index.js";
 import type { InternalRequestContext } from "../../clients/internal-http-client.js";
 import { SchedulingClient } from "../../clients/scheduling/index.js";
 import { reconcileAiActivation } from "../../lib/ai-activation.js";
+import { AppError } from "../../lib/errors.js";
 import { dataResponse } from "../../lib/http.js";
+import { phoneFromWhatsappJid } from "../../lib/phone.js";
 import { getPrisma } from "../../lib/prisma.js";
+import type { TenantContext } from "../../lib/tenant-context.js";
 import {
   currentTenantContext,
   requireTenantContext,
 } from "../../lib/tenant-context.js";
 import { internalContext } from "../tenant/context.js";
+import {
+  findLinkedInstance,
+  resolveInstanceCredential,
+} from "../whatsapp/instance-link.js";
 
 export async function registerV1DashboardRoutes(
   app: FastifyInstance,
@@ -38,7 +45,10 @@ export async function registerV1DashboardRoutes(
           settled(
             schedulingDashboardWithReadiness(context, scheduling, ai),
           ),
-          settled(whatsappSummary(tenant.userId, request.id, evolution)),
+          settled(
+            whatsappSummary(tenant, request.id, evolution),
+            request.log,
+          ),
         ]);
       return dataResponse(request, {
         platform,
@@ -129,39 +139,61 @@ async function platformSummary(tenantId: string) {
   };
 }
 
-/** Reaproveitada pelo read model `GET /v1/status` (Goal014/WU-02). */
+/**
+ * Reaproveitada pelo read model `GET /v1/status` (Goal014/WU-02).
+ *
+ * Goal059/WU-01: o vínculo é resolvido por `findLinkedInstance` (nunca uma
+ * segunda leitura direta de `WhatsAppInstance`) e a credencial usada contra a
+ * Evolution é sempre a aberta por `resolveInstanceCredential` — nunca o
+ * envelope cifrado cru. Vínculo `pending`/`divergent` lança antes de qualquer
+ * chamada à Evolution; quem chama trata isso via `settled`.
+ */
 export async function whatsappSummary(
-  userId: string,
+  tenant: TenantContext,
   requestId: string,
   evolution: EvolutionClient,
 ): Promise<{
   status: "CONNECTED" | "DISCONNECTED";
   phoneNumber: string | null;
 } | null> {
-  const instance = await getPrisma().whatsAppInstance.findUnique({
-    where: { userId },
-  });
+  const instance = await findLinkedInstance(tenant);
   if (!instance) return null;
-  const status = await evolution.getStatus(
-    instance.evolutionInstanceToken,
-    requestId,
-  );
+  const credential = await resolveInstanceCredential(instance);
+  const status = await evolution.getStatus(credential, requestId);
   return {
     status: status.connected ? "CONNECTED" : "DISCONNECTED",
-    phoneNumber: status.phoneNumber ?? instance.phoneNumber,
+    phoneNumber:
+      status.phoneNumber ??
+      (instance.phoneNumber
+        ? phoneFromWhatsappJid(instance.phoneNumber) || null
+        : null),
   };
 }
 
-/** Reaproveitada pelo read model `GET /v1/status` (Goal014/WU-02). */
+/**
+ * Reaproveitada pelo read model `GET /v1/status` (Goal014/WU-02).
+ *
+ * Goal059/WU-01: falha registrada com código e status HTTP, nunca com
+ * credencial, envelope, número ou corpo da resposta upstream — a forma da
+ * resposta pública não muda.
+ */
 export async function settled<T>(
   promise: Promise<T>,
+  log?: FastifyBaseLogger,
 ): Promise<
   | { status: "ok"; data: T }
   | { status: "error"; data: null; code: "DEPENDENCY_UNAVAILABLE" }
 > {
   try {
     return { status: "ok", data: await promise };
-  } catch {
+  } catch (error) {
+    log?.warn(
+      {
+        code: error instanceof AppError ? error.code : "INTERNAL_ERROR",
+        statusCode: error instanceof AppError ? error.statusCode : undefined,
+      },
+      "Dependency read failed",
+    );
     return {
       status: "error",
       data: null,

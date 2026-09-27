@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { WhatsAppConnectInput, WhatsAppConnection } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
+import { formatBrazilianPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Dialog } from "@/shared/ui/Dialog";
 
@@ -120,6 +121,9 @@ export function WhatsAppConnectionPanel({
   }
 
   const connected = connection?.status === "CONNECTED";
+  const displayPhone = connection?.phoneNumber
+    ? formatBrazilianPhone(connection.phoneNumber, "plus")
+    : null;
   return (
     <div className="settings-stack">
       <section className="settings-status-hero">
@@ -148,9 +152,7 @@ export function WhatsAppConnectionPanel({
               ? "O atendimento automático pode operar neste número."
               : "A conexão só fica ativa depois da confirmação no WhatsApp."}
           </p>
-          {connection?.phoneNumber && (
-            <p className="small">{connection.phoneNumber}</p>
-          )}
+          {displayPhone && <p className="small">{displayPhone}</p>}
         </div>
       </section>
 

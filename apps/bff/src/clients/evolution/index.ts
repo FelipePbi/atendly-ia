@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { env, requireEnv } from "../../config/env.js";
 import { AppError } from "../../lib/errors.js";
+import { phoneFromWhatsappJid } from "../../lib/phone.js";
 import { InternalHttpClient } from "../internal-http-client.js";
 
 const createDataSchema = z
@@ -174,15 +175,18 @@ export class EvolutionClient {
       booleanValue(data.connected) ?? booleanValue(data.Connected) ?? false;
     const loggedIn =
       booleanValue(data.loggedIn) ?? booleanValue(data.LoggedIn) ?? false;
+    const rawJid =
+      stringValue(data.myJid) ??
+      stringValue(data.MyJid) ??
+      stringValue(data.jid) ??
+      stringValue(data.Jid) ??
+      null;
     return {
       connected: Boolean(transportConnected && loggedIn),
       loggedIn,
-      phoneNumber:
-        stringValue(data.myJid) ??
-        stringValue(data.MyJid) ??
-        stringValue(data.jid) ??
-        stringValue(data.Jid) ??
-        null,
+      // A Evolution devolve o JID completo (ou grupo/@lid); o produto só usa
+      // o número em dígitos, nunca o JID cru.
+      phoneNumber: rawJid ? phoneFromWhatsappJid(rawJid) || null : null,
       displayName: stringValue(data.name) ?? stringValue(data.Name) ?? null,
       statusText: stringValue(data.status) ?? stringValue(data.Status) ?? null,
     };

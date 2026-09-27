@@ -143,7 +143,7 @@ export function ProductDashboardScreen() {
     dashboard
       ? {
           active: "inicio",
-          attention: dashboardNeedsAttention(dashboard),
+          attention: dashboardNeedsAttention(dashboard, status.whatsappView),
           module: "dashboard",
           title: "Início",
         }
@@ -190,16 +190,27 @@ export function ProductDashboardScreen() {
   );
 }
 
-function dashboardNeedsAttention(dashboard: Dashboard): boolean {
+/**
+ * Estado do banner de WhatsApp da Home, derivado de `status.whatsappView`
+ * (Goal059/H-02) — a mesma fonte da sidebar e do checklist. `unknown` nunca
+ * vira "off": afirmar desconexão sem confirmação é o próprio bug.
+ */
+function whatsappBannerIssue(view: StatusView): "off" | "unknown" | null {
+  if (view === "off") return "off";
+  if (view === "unknown") return "unknown";
+  return null;
+}
+
+function dashboardNeedsAttention(
+  dashboard: Dashboard,
+  whatsappView: StatusView,
+): boolean {
   const ai = dashboard.ai.status === "ok" ? dashboard.ai.data : null;
-  const whatsapp =
-    dashboard.whatsapp.status === "ok" ? dashboard.whatsapp.data : null;
   const calendarUnavailable = dashboard.scheduling.status === "error";
   const aiUnavailable = dashboard.ai.status === "error";
-  const whatsappDisconnected = whatsapp?.status !== "CONNECTED";
+  const whatsappOff = whatsappBannerIssue(whatsappView) === "off";
   const attentionCount = ai?.conversationsNeedingAttentionCount ?? 0;
-  const primaryIssue =
-    calendarUnavailable || whatsappDisconnected || aiUnavailable;
+  const primaryIssue = calendarUnavailable || whatsappOff || aiUnavailable;
   return primaryIssue || attentionCount > 0;
 }
 
@@ -287,11 +298,9 @@ function RealDashboard({
   const scheduling =
     dashboard.scheduling.status === "ok" ? dashboard.scheduling.data : null;
   const ai = dashboard.ai.status === "ok" ? dashboard.ai.data : null;
-  const whatsapp =
-    dashboard.whatsapp.status === "ok" ? dashboard.whatsapp.data : null;
   const calendarUnavailable = dashboard.scheduling.status === "error";
   const aiUnavailable = dashboard.ai.status === "error";
-  const whatsappDisconnected = whatsapp?.status !== "CONNECTED";
+  const whatsappIssue = whatsappBannerIssue(status.whatsappView);
   const todayAppointments = scheduling?.todayAppointments ?? [];
   const attention = ai?.conversationsNeedingAttention ?? [];
   const attentionCount = ai?.conversationsNeedingAttentionCount ?? 0;
@@ -303,11 +312,13 @@ function RealDashboard({
     attentionCount === 0;
   const primaryIssue = calendarUnavailable
     ? "calendar"
-    : whatsappDisconnected
+    : whatsappIssue === "off"
       ? "whatsapp"
-      : aiUnavailable
-        ? "ai"
-        : null;
+      : whatsappIssue === "unknown"
+        ? "whatsapp-unknown"
+        : aiUnavailable
+          ? "ai"
+          : null;
   /**
    * Checklist pós-onboarding (Goal018/WU-10): só aparece com uma leitura
    * confirmada de `GET /v1/status` (nunca durante `loading`, para não afirmar
@@ -336,22 +347,29 @@ function RealDashboard({
         </header>
 
         {primaryIssue && (
-          <div className="alert alert-error dashboard-banner" role="alert">
-            <Icon name="alert" />
+          <div
+            className={`alert ${primaryIssue === "whatsapp-unknown" ? "alert-info" : "alert-error"} dashboard-banner`}
+            role="alert"
+          >
+            <Icon name={primaryIssue === "whatsapp-unknown" ? "info" : "alert"} />
             <div>
               <p className="alert-title">
                 {primaryIssue === "calendar"
                   ? "Não foi possível consultar a agenda oficial"
                   : primaryIssue === "whatsapp"
                     ? "WhatsApp desconectado"
-                    : "Dados de atendimento indisponíveis"}
+                    : primaryIssue === "whatsapp-unknown"
+                      ? "Não foi possível confirmar o WhatsApp"
+                      : "Dados de atendimento indisponíveis"}
               </p>
               <p className="alert-text">
                 {primaryIssue === "calendar"
                   ? "Os horários podem estar desatualizados. Consulte a integração antes de confirmar novos agendamentos."
                   : primaryIssue === "whatsapp"
                     ? "O atendimento automático está pausado. Sua agenda continua disponível para uso manual."
-                    : "As métricas e conversas pendentes não puderam ser consultadas. Tente novamente antes de concluir que não há atividade."}
+                    : primaryIssue === "whatsapp-unknown"
+                      ? "Ainda não confirmamos o estado da conexão. Verifique as configurações para garantir o atendimento automático."
+                      : "As métricas e conversas pendentes não puderam ser consultadas. Tente novamente antes de concluir que não há atividade."}
               </p>
             </div>
             <Link
@@ -359,7 +377,7 @@ function RealDashboard({
               href={
                 primaryIssue === "calendar"
                   ? "/configuracoes/agenda"
-                  : primaryIssue === "whatsapp"
+                  : primaryIssue === "whatsapp" || primaryIssue === "whatsapp-unknown"
                     ? "/configuracoes/whatsapp"
                     : "/conversas"
               }
@@ -368,33 +386,49 @@ function RealDashboard({
                 ? "Revisar integração"
                 : primaryIssue === "whatsapp"
                   ? "Reconectar WhatsApp"
-                  : "Abrir conversas"}
+                  : primaryIssue === "whatsapp-unknown"
+                    ? "Verificar WhatsApp"
+                    : "Abrir conversas"}
             </Link>
           </div>
         )}
 
         <section id="operational-status" className="operational-strip">
-          <span className={`operational-icon${primaryIssue ? " danger" : ""}`}>
-            <Icon name={primaryIssue ? "alert" : "shield"} />
+          <span
+            className={`operational-icon${primaryIssue && primaryIssue !== "whatsapp-unknown" ? " danger" : ""}`}
+          >
+            <Icon
+              name={
+                primaryIssue === "whatsapp-unknown"
+                  ? "info"
+                  : primaryIssue
+                    ? "alert"
+                    : "shield"
+              }
+            />
           </span>
           <div className="operational-copy">
             <strong>
               {calendarUnavailable
                 ? "Integração com problema"
-                : whatsappDisconnected
+                : whatsappIssue === "off"
                   ? "Atendimento automático pausado"
-                  : aiUnavailable
-                    ? "Dados de atendimento indisponíveis"
-                    : "Tudo funcionando"}
+                  : whatsappIssue === "unknown"
+                    ? "WhatsApp não confirmado"
+                    : aiUnavailable
+                      ? "Dados de atendimento indisponíveis"
+                      : "Tudo funcionando"}
             </strong>
             <span>
               {calendarUnavailable
                 ? "A fonte oficial permanece ativa, mas a consulta está indisponível."
-                : whatsappDisconnected
+                : whatsappIssue === "off"
                   ? "Reconecte o WhatsApp para a Atendly voltar a responder clientes."
-                  : aiUnavailable
-                    ? "A agenda está disponível, mas os dados da IA não responderam."
-                    : "WhatsApp conectado e Agenda Atendly disponível."}
+                  : whatsappIssue === "unknown"
+                    ? "Ainda não confirmamos a conexão do WhatsApp."
+                    : aiUnavailable
+                      ? "A agenda está disponível, mas os dados da IA não responderam."
+                      : "WhatsApp conectado e Agenda Atendly disponível."}
             </span>
           </div>
           <div className="operational-points">

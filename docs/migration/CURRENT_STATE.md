@@ -5563,3 +5563,124 @@ migrations não foram tocados.
   ver [D-074](DECISIONS.md). **QA CV-01, QA CV-02, QA SV-01, QA SV-02 e
   QA NT-04 corrigidos**, fora da contagem A-01…A-24 — ver
   [FINAL_AUDIT §35](FINAL_AUDIT.md).
+
+## Delta implementado — diff059, 2026-09-27 ([D-075](DECISIONS.md))
+
+Corrige **QA X-01**, **QA H-02**, **QA S-09**, **QA O-46**, **QA O-47**
+e **QA A-06** do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md) (fora da
+enumeração A-01…A-24 do FINAL_AUDIT). Toca `apps/bff/` (leitura de
+status, credencial, número em dígitos, remoção compensatória de
+instância órfã) e `apps/frontend/` (banner da Home, número formatado);
+`apps/ai-orchestrator/`, `apps/scheduling-service/`,
+`apps/evolution-go/`, `packages/` e migrations não foram tocados;
+nenhum campo público, rota ou schema Prisma muda de forma.
+
+- **Leitura de status pelo vínculo e pela credencial abertos (QA X-01,
+  escopo §1)** — `whatsappSummary` (`apps/bff/src/modules/dashboard/routes.ts`),
+  reaproveitada por `GET /v1/status` e `GET /v1/dashboard`, resolve o
+  vínculo por `findLinkedInstance` e abre a credencial por
+  `resolveInstanceCredential` antes de chamar `evolution.getStatus` —
+  nunca mais `instance.evolutionInstanceToken` (o envelope cifrado) cru.
+  Vínculo `pending`/`divergent`, credencial que não abre e Evolution
+  fora do ar viram `UNKNOWN`/`status: "error"`, nunca `DISCONNECTED`.
+  `settled` (mesmo arquivo) registra a falha com `código`/`statusCode`
+  do erro, nunca com credencial, envelope, número ou corpo da resposta.
+  `resolveInstanceCredential` só grava de novo quando decifra credencial
+  legada em texto puro (uma vez, na primeira leitura, que já vira
+  linha selada) ou quando `WHATSAPP_CREDENTIAL_ACTIVE_KEY_ID` muda de
+  chave (rotação); fora desses dois casos, a leitura de status não
+  escreve. Como a sidebar chama `GET /v1/status` a cada tick do shell,
+  só o primeiro tick depois de um vínculo legado ou de uma rotação
+  grava; os ticks seguintes não gravam nada por este caminho. Leituras
+  concorrentes nesse primeiro acesso podem regravar em paralelo o mesmo
+  envelope, de forma idempotente.
+  Testes novos: `tests/goal059-whatsapp-status.integration.test.ts`
+  (**10** testes).
+- **Número em dígitos (QA S-09/O-46, escopo §2)** — `phoneNumber` sai
+  em dígitos, sem servidor nem sufixo de aparelho, em `GET /v1/whatsapp`,
+  `GET /v1/status`, `GET /v1/dashboard` (via `whatsappSummary`, usando
+  `phoneFromWhatsappJid` de `lib/phone.ts`) e no estado de onboarding
+  (`lib/onboarding-state.ts`). `GET /v1/whatsapp` converte **antes** de
+  gravar (`phoneFromWhatsappJid(rawPhone)` no `data` do `update`, não só
+  na resposta): linha antiga que só tinha o JID cru sai em dígitos já na
+  primeira releitura, sem migration. O teste desse caso (rodada 3/FIX-001)
+  lê a linha direto do banco depois da chamada, em vez de só conferir a
+  resposta HTTP, que `whatsappDto` reconverteria de qualquer forma mesmo
+  se o `update` ainda gravasse o JID cru.
+- **Instância órfã (QA O-47, escopo §3)** — `ensureInstance`
+  (`apps/bff/src/modules/whatsapp/routes.ts`) confere
+  `credentialKeysConfigured()` antes de `evolution.createInstance`,
+  recusando com `CREDENTIAL_UNAVAILABLE` (`503`) sem chamar a Evolution;
+  falha entre a criação remota e a gravação local chama
+  `evolution.deleteInstance` e relança o erro original; falha da
+  remoção compensatória só é registrada em log, sem credencial, e não
+  troca o erro que o dono vê; falha depois da gravação local não remove
+  nada, e a próxima tentativa reutiliza a linha por `findLinkedInstance`.
+  Testes novos: `tests/goal059-whatsapp-orphan.integration.test.ts`
+  (**4** testes).
+- **Banner da Home (QA H-02, escopo §4)** — `ProductDashboardScreen`
+  (`apps/frontend/src/features/dashboard/DashboardScreen.tsx`) deriva o
+  banner de `status.whatsappView` — a mesma fonte da sidebar e do
+  checklist —, não de um segundo predicado sobre `dashboard.whatsapp`.
+  Estado desconhecido não afirma "desconectado" nem "pausado" e não
+  mostra "Reconectar", com link para `/configuracoes/whatsapp`; estado
+  desconectado de fato mantém o banner de hoje; conectado e carregando
+  não mostram banner de WhatsApp.
+- **Número formatado (QA S-09/A-06, escopo §5)** —
+  `apps/frontend/src/shared/phone.ts` (novo) normaliza JID ou dígitos
+  crus em DDD + assinante, restaura o 9º dígito quando o assinante
+  legado de 12 dígitos começa em 6–9 (celular) e preserva como fixo
+  quando começa em 2–5; `formatBrazilianPhone` só formata para exibição,
+  sem tocar valor gravado nem chave de busca. `WhatsAppConnectionPanel.tsx`
+  usa `formatBrazilianPhone(…, "plus")`; `formatPhone` de Conversas
+  (`features/conversations/format.ts`) usa o mesmo normalizador,
+  mantendo o formato `(DDD) NNNNN-NNNN` de hoje. Testes novos:
+  `tests/goal059-whatsapp-status-view.test.tsx` (**13** testes,
+  incluindo `formatBrazilianPhone("")`/`formatPhone("")` e
+  `WhatsAppConnectionPanel` sem número, além do JID com sufixo de
+  aparelho no formato real, `número:sufixo@servidor`, e do caso de
+  dígitos puros sem servidor).
+- **Controles negativos (escopo §7)**, saída colada em
+  [FINAL_AUDIT §36](FINAL_AUDIT.md), rodados depois da última edição de
+  código (rodada 2/FIX-001) e revertidos byte a byte (diff conferido
+  idêntico ao original): token cru em `whatsappSummary` reprova **2**
+  de **10** testes de `goal059-whatsapp-status`; busca por `userId` em
+  vez de `findLinkedInstance` reprova **1** de **10** (o caso `pending`
+  ainda acusa `UNKNOWN`, mas por decifração falhar com `tenantId`
+  zerado no AAD, não pela regra de posse); `phoneNumber` sem conversão
+  em `EvolutionClient.getStatus` reprova **1** de **10** (`GET
+  /v1/whatsapp` continua em dígitos, porque `whatsappDto` reconverte
+  por conta própria); `ensureInstance` sem a conferência prévia e sem a
+  remoção compensatória reprova **2** de **4** testes de
+  `goal059-whatsapp-orphan`; o banner revertido para
+  `dashboard.whatsapp?.status !== "CONNECTED"` reprova **3** de **13**
+  testes de `goal059-whatsapp-status-view` (`unknown`, `active` e
+  `loading`). Depois de cada reversão as três suítes voltam a
+  **14**/**14** (BFF) e **13**/**13** (frontend).
+- **Prova executada nesta rodada (FIX-001)**, sobre um PostgreSQL 18
+  descartável em loopback (`postgresql://pgtest@127.0.0.1:55432/atendly_bff_test`):
+  `npx vitest run tests/goal059-whatsapp-status.integration.test.ts
+  tests/goal059-whatsapp-orphan.integration.test.ts` (`apps/bff`) —
+  **14**/**14**; `npx vitest run
+  tests/goal059-whatsapp-status-view.test.tsx` (`apps/frontend`) —
+  **13**/**13**.
+- **Execução final desta rodada (FIX-001, rodada 3), sobre a árvore
+  final:** `npm run typecheck` e `npm run lint` de `apps/bff` e
+  `apps/frontend`, exit 0 nos quatro; `npm run validate:core` — **17**
+  passos, **15** `passed`, **2** `skipped` (`test:bff`,
+  `test:health-worker`), **0** `failed`, exit 0; `npm run test:gate` —
+  **227**/**227**; `npm run validate:integration` — **35** passos, **35**
+  `passed`, **0** `failed`, exit 0, com `rehearse:goal033-authenticated-ui`
+  em **60** testes e **0** retentativas; `npm run validate:ui` — **169**
+  testes passando, **21** pulados, **0** retentativas, exit 0. Uma primeira
+  execução de `validate:integration` reprovou em `test:scheduling-integration`
+  (`goal008-agenda.test.ts`, teste dependente do relógio real em
+  `apps/scheduling-service`, fora do escopo deste Goal); isolado, o mesmo
+  arquivo passou **15**/**15** na tentativa seguinte, e a reexecução
+  completa do gate saiu limpa nos **35** passos.
+- **Limite declarado:** a remoção compensatória é melhor esforço e não
+  varre órfãs antigas; a exibição com o 9º dígito é só exibição, sem
+  efeito em identificador, chave de busca ou valor gravado — ver
+  [D-075](DECISIONS.md). **QA X-01, QA H-02, QA S-09, QA O-46, QA O-47 e
+  QA A-06 corrigidos**, fora da contagem A-01…A-24 — ver
+  [FINAL_AUDIT §36](FINAL_AUDIT.md).

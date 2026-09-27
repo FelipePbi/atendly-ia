@@ -61,7 +61,7 @@ export async function registerV1StatusRoutes(
       });
       const [whatsappResult, aiConfigResult, aiSettings, deletion] =
         await Promise.all([
-          settled(whatsappSummary(tenant.userId, request.id, evolution)),
+          settled(whatsappSummary(tenant, request.id, evolution), request.log),
           settled(ai.getAiTenantConfig(context)),
           getPrisma().aiSettings.findUnique({
             where: { tenantId: tenant.tenantId },

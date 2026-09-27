@@ -1,6 +1,6 @@
 # Goal 059 — O status do WhatsApp é o real
 
-**Status: READY.** Preparado em 2026-09-27 pelo Tech Lead Agent após [Goal058 ACCEPTED](../reviews/058-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED** no [review059](../reviews/059-review.md), rodada 3 de 3 (rodadas 1 e 2 `CHANGES_REQUIRED` com 5 e 3 blockers). Preparado em 2026-09-27 pelo Tech Lead Agent após [Goal058 ACCEPTED](../reviews/058-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: OPUS_MEDIUM
 

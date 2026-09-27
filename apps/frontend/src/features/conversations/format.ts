@@ -1,4 +1,5 @@
 import { BffHttpError, type Conversation } from "@/data";
+import { extractPhoneDigits, formatBrazilianPhone } from "@/shared/phone";
 
 /** Nome da pessoa quando o contato já tem um; telefone formatado quando não. */
 export function conversationLabel(conversation: Conversation): string {
@@ -19,14 +20,11 @@ export function initials(value: string): string {
 }
 
 export function formatPhone(value: string): string {
-  const digits = value.split("@")[0]?.replace(/\D/g, "") ?? "";
-  if (digits.length === 13 && digits.startsWith("55")) {
-    return `(${digits.slice(2, 4)}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
-  }
-  if (digits.length === 12 && digits.startsWith("55")) {
-    return `(${digits.slice(2, 4)}) ${digits.slice(4, 8)}-${digits.slice(8)}`;
-  }
-  return digits || "Contato sem telefone";
+  return (
+    formatBrazilianPhone(value, "parens") ||
+    extractPhoneDigits(value) ||
+    "Contato sem telefone"
+  );
 }
 
 export function formatRelativeTime(value: string): string {

@@ -8,7 +8,11 @@ import { EvolutionClient } from "../../clients/evolution/index.js";
 import { resolveAiConversationStyle } from "../../lib/ai-conversation-style.js";
 import { AppError } from "../../lib/errors.js";
 import { dataResponse, parseBody } from "../../lib/http.js";
-import { normalizeBrazilianWhatsappPhone } from "../../lib/phone.js";
+import { credentialKeysConfigured } from "../../lib/instance-credentials.js";
+import {
+  normalizeBrazilianWhatsappPhone,
+  phoneFromWhatsappJid,
+} from "../../lib/phone.js";
 import { getPrisma } from "../../lib/prisma.js";
 import {
   currentTenantContext,
@@ -56,11 +60,15 @@ export async function registerV1WhatsAppRoutes(
       // restabelece sozinho na primeira vez que o negócio abre a tela.
       await projectChannelCredential(request, instance, credential, ai);
       const status = await evolution.getStatus(credential, request.id);
+      // O legado guarda o JID cru: converte antes de gravar, nunca depois,
+      // para que a linha antiga saia limpa já na primeira releitura.
+      const rawPhone = status.phoneNumber ?? instance.phoneNumber;
+      const phoneNumber = rawPhone ? phoneFromWhatsappJid(rawPhone) || null : null;
       const updated = await getPrisma().whatsAppInstance.update({
         where: { id: instance.id },
         data: {
           status: status.connected ? "CONNECTED" : "DISCONNECTED",
-          phoneNumber: status.phoneNumber ?? instance.phoneNumber,
+          phoneNumber,
           connectedAt:
             status.connected && !instance.connectedAt
               ? new Date()
@@ -136,6 +144,17 @@ async function ensureInstance(
     return existing;
   }
 
+  // Sem chave de cifra configurada, a linha local nunca poderia guardar a
+  // credencial da instância nova — recusa antes de criar nada na Evolution,
+  // para não sobrar uma instância remota que este BFF não consegue vincular.
+  if (!credentialKeysConfigured()) {
+    throw new AppError(
+      "CREDENTIAL_UNAVAILABLE",
+      "WHATSAPP_CREDENTIAL_KEYS is not configured: a new WhatsApp instance cannot be created.",
+      503,
+    );
+  }
+
   const profile = await getPrisma().businessProfile.findUnique({
     where: { tenantId: tenant.tenantId },
   });
@@ -150,21 +169,45 @@ async function ensureInstance(
     request.id,
   );
   const evolutionInstanceName = created.data?.name ?? name;
+  const evolutionInstanceId = created.data?.id ?? created.data?.name ?? name;
   // O vínculo nasce com dono explícito e credencial já cifrada: nenhuma
   // gravação nova depende do backfill nem guarda o token em texto puro.
-  const instance = await getPrisma().whatsAppInstance.create({
-    data: {
-      userId: tenant.userId,
-      tenantId: tenant.tenantId,
-      evolutionInstanceId: created.data?.id ?? created.data?.name ?? name,
-      evolutionInstanceName,
-      status: "CREATED",
-      ...sealedInstanceCredentialData(created.data?.token ?? token, {
+  let instance: LinkedInstance;
+  try {
+    instance = await getPrisma().whatsAppInstance.create({
+      data: {
+        userId: tenant.userId,
         tenantId: tenant.tenantId,
+        evolutionInstanceId,
         evolutionInstanceName,
-      }),
-    },
-  });
+        status: "CREATED",
+        ...sealedInstanceCredentialData(created.data?.token ?? token, {
+          tenantId: tenant.tenantId,
+          evolutionInstanceName,
+        }),
+      },
+    });
+  } catch (error) {
+    // A instância remota já existe na Evolution e nenhuma linha local a
+    // referencia: sem esta remoção ela fica órfã lá, reivindicando o mesmo
+    // nome numa tentativa futura. A remoção usa a chave administrativa, igual
+    // a `disconnectWhatsApp`, e sua falha não pode trocar o erro original que
+    // o dono vê.
+    await evolution.deleteInstance(evolutionInstanceId, request.id).catch(
+      (cleanupError) => {
+        request.log.warn(
+          {
+            err:
+              cleanupError instanceof Error
+                ? cleanupError.name
+                : "CLEANUP_ERROR",
+          },
+          "Failed to remove an orphaned Evolution instance after a failed WhatsApp connect attempt",
+        );
+      },
+    );
+    throw error;
+  }
   await provisionChannel(request, instance, ai);
   return instance;
 }
@@ -305,7 +348,10 @@ function whatsappDto(instance: {
 }) {
   return {
     id: instance.id,
-    phoneNumber: instance.phoneNumber,
+    // Estoque legado pode guardar o JID cru; o produto só expõe dígitos.
+    phoneNumber: instance.phoneNumber
+      ? phoneFromWhatsappJid(instance.phoneNumber) || null
+      : null,
     status: instance.status,
     connectedAt: instance.connectedAt?.toISOString() ?? null,
     updatedAt: instance.updatedAt.toISOString(),

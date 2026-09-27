@@ -363,8 +363,8 @@ Uma vez concluída (`POST .../complete`), a sessão é o único registro definit
 
 | Campo | Valores | Significado |
 | --- | --- | --- |
-| `whatsapp.status` | `CONNECTED`, `DISCONNECTED`, `UNKNOWN` | `CONNECTED`/`DISCONNECTED` vêm da verificação real no Evolution, feita nesta requisição, do mesmo jeito que `GET /v1/dashboard` verifica; `UNKNOWN` é quando o Evolution não respondeu, e não quando não existe vínculo — negócio sem número ligado é `DISCONNECTED` |
-| `whatsapp.phoneNumber` | telefone ou `null` | número reportado pelo Evolution, ou o último guardado quando ele não informou um novo |
+| `whatsapp.status` | `CONNECTED`, `DISCONNECTED`, `UNKNOWN` | `CONNECTED`/`DISCONNECTED` vêm da verificação real no Evolution, feita nesta requisição, do mesmo jeito que `GET /v1/dashboard` verifica; `UNKNOWN` é quando o Evolution não respondeu **ou quando o vínculo existe mas não pode ser lido** (pendente, divergente ou credencial que não abre) — nunca quando não existe vínculo, que é `DISCONNECTED` (Goal059) |
+| `whatsapp.phoneNumber` | telefone em dígitos ou `null` | número em dígitos, sem servidor nem sufixo de aparelho (Goal059), reportado pelo Evolution, ou o último guardado quando ele não informou um novo |
 | `whatsapp.checkedAt` | timestamp ISO | instante desta verificação, sempre "agora" — a rota nunca reaproveita uma leitura antiga |
 | `ai.desiredEnabled` | booleano | o que o negócio configurou em `PATCH /v1/settings/ai` (`AiSettings.enabled`), local ao BFF |
 | `ai.effectiveEnabled` | booleano ou `null` | o que a IA relata como configuração ativa; `null` quando o tenant ainda não foi projetado lá ou quando a IA não respondeu |
@@ -501,6 +501,8 @@ Ativar a partir da **mesma** execução bem-sucedida duas vezes não gera duas a
 ## Vínculo WhatsApp: estados ambíguos
 
 `GET /v1/whatsapp` também reprojeta a credencial da instância na IA. É idempotente e não altera o estado do número; existe para que um vínculo criado antes da projeção cifrada se restabeleça sozinho, sem o negócio precisar reconectar o número na mão. Falha nessa projeção é registrada e não impede a leitura de status.
+
+O `phoneNumber` desta rota segue a mesma regra de `GET /v1/status`: sempre em dígitos, sem servidor nem sufixo de aparelho (Goal059).
 
 Quando o vínculo não é inequívoco, todas as rotas de WhatsApp recusam com `409 CONFLICT` antes de qualquer efeito. Há dois estados distintos:
 

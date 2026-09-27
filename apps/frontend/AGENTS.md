@@ -188,8 +188,8 @@ Além de overflow, touch target, contraste, foco e movimento, ele mede
   visível, não sobrepõe o `main`; e o cabeçalho móvel e a barra inferior,
   quando visíveis, ficam inteiros dentro da viewport.
 - **Alcance por clique real** (`locator.click()` sem `force`): a linha semeada
-  de Conversas, Clientes e Serviços abre o detalhe, e "Criar serviço" abre o
-  formulário, nas cinco larguras.
+  de Conversas, Clientes e Serviços abre o detalhe, e "Novo serviço" abre o
+  formulário e "Criar serviço" recebe o clique, nas cinco larguras.
 - **Serviço de 45 minutos** salvo pelo formulário, com resposta 2xx e
   "45 min" na lista.
 

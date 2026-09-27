@@ -4,6 +4,7 @@ import type { SchedulingClient } from "../clients/scheduling/index.js";
 import { internalContext } from "../modules/tenant/context.js";
 import { normalizeStoredAiConversationStyle } from "./ai-conversation-style.js";
 import { businessContextProjectionState } from "./business-profile.js";
+import { phoneFromWhatsappJid } from "./phone.js";
 import { getPrisma } from "./prisma.js";
 import { currentTenantContext } from "./tenant-context.js";
 
@@ -68,7 +69,13 @@ export async function onboardingState(
     service: services.find((service) => service.active) ?? null,
     availability,
     whatsapp: instance
-      ? { status: instance.status, phoneNumber: instance.phoneNumber }
+      ? {
+          status: instance.status,
+          // Estoque legado pode guardar o JID cru; o produto só expõe dígitos.
+          phoneNumber: instance.phoneNumber
+            ? phoneFromWhatsappJid(instance.phoneNumber) || null
+            : null,
+        }
       : null,
     completed: Boolean(profile?.onboardingCompletedAt),
     completedAt: profile?.onboardingCompletedAt?.toISOString() ?? null,

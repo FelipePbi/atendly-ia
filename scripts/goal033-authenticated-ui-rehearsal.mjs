@@ -1387,6 +1387,11 @@ async function seedTenant(client, ai, { bffDb, schedulingDb, aiDb, legalVersions
     appointment.status === 201,
     `seed: POST /v1/appointments answered ${appointment.status}, expected 201`,
   );
+  const appointmentId = appointment.payload?.data?.id ?? null;
+  step(
+    Boolean(appointmentId),
+    "seed: POST /v1/appointments did not return an id",
+  );
 
   // 7. Mensagem ENTRANTE pelo caminho durável real. O webhook é entrada
   //    externa e por isso o ensaio o fabrica; tudo depois dele é produto.
@@ -1424,6 +1429,32 @@ async function seedTenant(client, ai, { bffDb, schedulingDb, aiDb, legalVersions
     sent.status === 201 || sent.status === 202,
     `seed: POST /v1/conversations/:id/messages answered ${sent.status}, expected 201 or 202`,
   );
+
+  // 9. Ledger de agenda desta conversa (Goal070 §5): um AiRun com três
+  //    AiToolCall de `create_appointment`, direto por `pg` no banco
+  //    descartável da IA. Não existe rota de produto para plantar um `prepare`
+  //    já vencido ou um `hold` no futuro sem confirmar — só o modelo real, em
+  //    conversa real, produz isso — então esta semeadura é a única do ensaio
+  //    que não passa por uma rota, e é só de teste: nenhuma rota nova nem
+  //    caminho de escrita novo nasce em `apps/` por causa dela.
+  const channelRow = await aiDb.query(
+    `SELECT "id" FROM "ChannelConnection" WHERE "tenantId" = $1 LIMIT 1`,
+    [tenantId],
+  );
+  const channelId = channelRow.rows[0]?.id ?? null;
+  step(
+    Boolean(channelId),
+    "seed: no ChannelConnection found for the tenant; the ledger event seed needs one",
+  );
+  await seedConversationEventLedger(aiDb, {
+    tenantId,
+    channelId,
+    conversationId,
+    appointmentId,
+    appointmentDate: measuredDate,
+    appointmentStartTime: slot.startTime,
+    seededAt: new Date(),
+  });
 
   // O que ficou gravado, lido no banco do serviço DONO de cada dado. Resposta
   // `200` não é evidência de persistência.
@@ -1581,6 +1612,169 @@ async function seedInboundMessage(ai) {
     "seed: the inbound message was not recorded into any conversation",
   );
   return conversationId;
+}
+
+// --- Ledger sintético de eventos de agenda (Goal070 §5) ---------------------
+//
+// A conversa semeada ganha um `AiRun` com três `AiToolCall` de
+// `create_appointment`, na ordem que faz `deriveConversationEvents`
+// (`apps/ai-orchestrator/src/modules/conversations/conversation-events.ts`)
+// produzir as três linhas que o Goal070 exige na tela: um `prepare` cujo
+// hold ainda não venceu, um `confirm` que criou o agendamento real desta
+// conversa, e um segundo `prepare` cujo hold já venceu sem confirmação.
+//
+// A ordem cronológica importa: o `confirm` vem DEPOIS do primeiro `prepare`
+// e ANTES do segundo, para consumir o hold do primeiro — que por isso nunca
+// aparece como vencido — sem tocar no hold do segundo, que fica livre para
+// vencer. `buildConversationEventToolCalls` é puro — sem banco, sem relógio
+// de parede — para que o teste do ensaio prove a forma e a ordem sem subir a
+// pilha.
+//
+// Não existe rota de produto que plante um hold já vencido ou um hold futuro
+// sem confirmar: só o modelo real, numa conversa real, produz isso. Por isso
+// esta é a única semeadura do ensaio que não passa por uma rota — e é só de
+// teste, sem rota nova nem caminho de escrita novo em `apps/`.
+
+export function buildConversationEventToolCalls({
+  conversationId,
+  appointmentId,
+  appointmentDate,
+  appointmentStartTime,
+  seededAt,
+}) {
+  const prepareFutureAt = new Date(seededAt.getTime() - 30 * 60_000);
+  const confirmAt = new Date(seededAt.getTime() - 20 * 60_000);
+  const prepareExpiredAt = new Date(seededAt.getTime() - 10 * 60_000);
+
+  return [
+    {
+      id: `${conversationId}-goal070-prepare-future`,
+      name: "create_appointment",
+      status: "SUCCEEDED",
+      arguments: { action: "prepare" },
+      result: {
+        ok: true,
+        data: {
+          pendingAction: { date: appointmentDate, startTime: "09:00" },
+          hold: {
+            id: `${conversationId}-goal070-hold-future`,
+            // Bem além do teto de subida do frontend
+            // (`FRONTEND_READY_TIMEOUT_MS`) e da execução do gate: precisa
+            // continuar no futuro quando o Playwright abrir a tela, não só no
+            // instante da semeadura.
+            expiresAt: new Date(
+              seededAt.getTime() + 24 * 60 * 60_000,
+            ).toISOString(),
+          },
+        },
+      },
+      createdAt: prepareFutureAt,
+      completedAt: prepareFutureAt,
+    },
+    {
+      id: `${conversationId}-goal070-confirm`,
+      name: "create_appointment",
+      status: "SUCCEEDED",
+      arguments: { action: "confirm" },
+      result: {
+        ok: true,
+        data: {
+          appointment: {
+            id: appointmentId,
+            date: appointmentDate,
+            startTime: appointmentStartTime,
+          },
+        },
+      },
+      createdAt: confirmAt,
+      completedAt: confirmAt,
+    },
+    {
+      id: `${conversationId}-goal070-prepare-expired`,
+      name: "create_appointment",
+      status: "SUCCEEDED",
+      arguments: { action: "prepare" },
+      result: {
+        ok: true,
+        data: {
+          pendingAction: { date: appointmentDate, startTime: "17:00" },
+          hold: {
+            id: `${conversationId}-goal070-hold-expired`,
+            // Já vencido no instante da semeadura, então segue vencido em
+            // qualquer instante em que o gate rodar depois.
+            expiresAt: new Date(
+              seededAt.getTime() - 5 * 60_000,
+            ).toISOString(),
+          },
+        },
+      },
+      createdAt: prepareExpiredAt,
+      completedAt: prepareExpiredAt,
+    },
+  ];
+}
+
+/**
+ * Grava o `AiRun` e os três `AiToolCall` direto por `pg`, no banco
+ * descartável da IA.
+ */
+async function seedConversationEventLedger(aiDb, {
+  tenantId,
+  channelId,
+  conversationId,
+  appointmentId,
+  appointmentDate,
+  appointmentStartTime,
+  seededAt,
+}) {
+  const toolCalls = buildConversationEventToolCalls({
+    conversationId,
+    appointmentId,
+    appointmentDate,
+    appointmentStartTime,
+    seededAt,
+  });
+  const aiRunId = `${conversationId}-goal070-airun`;
+
+  await aiDb.query(
+    `INSERT INTO "AiRun"
+       ("id", "tenantId", "channelId", "conversationId", "provider", "model",
+        "promptVersion", "inputMessageIds", "status", "kind", "startedAt", "completedAt")
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+    [
+      aiRunId,
+      tenantId,
+      channelId,
+      conversationId,
+      "openai",
+      "goal033-authenticated-ui-rehearsal",
+      "goal033-authenticated-ui-rehearsal",
+      [],
+      "SUCCEEDED",
+      "TURN",
+      toolCalls[0].createdAt,
+      toolCalls[toolCalls.length - 1].completedAt,
+    ],
+  );
+
+  for (const call of toolCalls) {
+    await aiDb.query(
+      `INSERT INTO "AiToolCall"
+         ("id", "tenantId", "aiRunId", "name", "arguments", "result", "status", "createdAt", "completedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        call.id,
+        tenantId,
+        aiRunId,
+        call.name,
+        call.arguments,
+        call.result,
+        call.status,
+        call.createdAt,
+        call.completedAt,
+      ],
+    );
+  }
 }
 
 // --- Frontend: build com a URL embutida, e servidor em loopback -------------

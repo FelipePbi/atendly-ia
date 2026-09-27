@@ -688,6 +688,40 @@ export const conversationSchema = z.object({
   contentExpiredThrough: isoDateTimeSchema.nullish().optional(),
 });
 
+// --- Eventos de agenda que a IA fez na conversa (Goal070) -------------------
+// Deriva só do ledger `AiToolCall` de `create_appointment`, nunca do texto do
+// modelo (D-073). Espelha `ConversationEvent` de
+// `apps/ai-orchestrator/src/modules/conversations/conversation-events.ts`.
+export const holdPlacedEventSchema = z.object({
+  type: z.literal("HOLD_PLACED"),
+  id: z.string().min(1),
+  occurredAt: z.string(),
+  date: dateSchema,
+  startTime: timeSchema,
+  holdExpiresAt: z.string(),
+});
+export const holdExpiredEventSchema = z.object({
+  type: z.literal("HOLD_EXPIRED"),
+  id: z.string().min(1),
+  occurredAt: z.string(),
+  date: dateSchema,
+  startTime: timeSchema,
+});
+export const appointmentCreatedEventSchema = z.object({
+  type: z.literal("APPOINTMENT_CREATED"),
+  id: z.string().min(1),
+  occurredAt: z.string(),
+  appointmentId: z.string().min(1),
+  date: dateSchema,
+  startTime: timeSchema,
+});
+export const conversationEventSchema = z.discriminatedUnion("type", [
+  holdPlacedEventSchema,
+  holdExpiredEventSchema,
+  appointmentCreatedEventSchema,
+]);
+export type ConversationEvent = z.infer<typeof conversationEventSchema>;
+
 // Contato ignorado por telefone, sem conversa ainda (Goal019/WU-07): a etapa
 // opcional entre conectar e testar aceita numero informado manualmente,
 // criando o contato quando ele nao existe.

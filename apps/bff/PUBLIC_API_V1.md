@@ -12,7 +12,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Autenticação | `POST /v1/auth/register`; `POST /v1/auth/login`; `POST /v1/auth/logout`; `POST /v1/auth/logout-all` (Goal024/WU-05); `GET /v1/auth/session`; `PATCH /v1/auth/password`; `POST /v1/auth/forgot-password`; `POST /v1/auth/reset-password` |
 | Onboarding | `GET /v1/onboarding`; `PATCH /v1/onboarding`; `POST /v1/onboarding/complete` |
 | Home | `GET /v1/dashboard`; `GET /v1/status` (Goal014) |
-| Conversas | `GET /v1/conversations`; `GET /v1/conversations/:id`; `GET /v1/conversations/:id/messages`; `POST /v1/conversations/:id/messages`; `POST /v1/conversations/:id/takeover`; `POST /v1/conversations/:id/release`; `POST /v1/conversations/:id/resolve`; `PUT /v1/conversations/:id/category`; `PUT /v1/conversations/:id/ignore`; `POST /v1/conversations/:id/suggestions` (Goal012) |
+| Conversas | `GET /v1/conversations`; `GET /v1/conversations/:id`; `GET /v1/conversations/:id/messages`; `GET /v1/conversations/:id/events` (Goal070); `POST /v1/conversations/:id/messages`; `POST /v1/conversations/:id/takeover`; `POST /v1/conversations/:id/release`; `POST /v1/conversations/:id/resolve`; `PUT /v1/conversations/:id/category`; `PUT /v1/conversations/:id/ignore`; `POST /v1/conversations/:id/suggestions` (Goal012) |
 | Agendamentos | `GET /v1/appointments`; `GET /v1/appointments/:id`; `POST /v1/appointments`; `POST /v1/appointments/:id/reschedule`; `POST /v1/appointments/:id/cancel` |
 | Ciclo de vida do atendimento | `POST /v1/appointments/:id/complete`; `POST /v1/appointments/:id/no-show`; `POST /v1/appointments/:id/final-value`; `POST /v1/appointments/:id/presence`; `GET /v1/appointments/:id/events`; `GET /v1/appointments/:id/notifications` (Goal021) |
 | Reserva temporária (hold) | `POST /v1/holds`; `GET /v1/holds`; `DELETE /v1/holds/:id` |
@@ -551,6 +551,20 @@ O DTO de mensagem ganhou dois campos **opcionais**, presentes em `GET /v1/conver
 O que a transcrição garante: quando `transcriptStatus` é `DONE`, `transcript` é o texto que a IA efetivamente usou como turno do cliente, nunca inventado — falha de reconhecimento grava `FAILED` com `transcriptError`, e ausência de transcrição por política (contato ignorado, sessão pessoal, mídia sem áudio) grava `SKIPPED`. O que ela **não** garante: exatidão do texto (a IA trata como podendo conter erro), disponibilidade contra o WhatsApp além do que a origem permite, nem persistência de bytes — nenhum byte de mídia fica retido pela IA além do processamento do evento.
 
 `GET /v1/conversations/:id/messages/:messageId/media` devolve o **corpo bruto** da mídia (não JSON), com `content-type` e, quando a origem informou, `content-disposition` com o nome do arquivo — proxy fino para a rota interna equivalente da IA, resolvendo o tenant pela sessão autenticada como as demais rotas, sem CSRF por ser leitura. Recusas próprias da IA (mensagem sem attachment, attachment `tooLarge`, mídia indisponível na origem) chegam pelo mesmo envelope de `UPSTREAM_ERROR` com `upstreamCode` das demais rotas desta API, nunca um `500` genérico; o consumidor deve tratar essas recusas como estado de exibição (ex.: "mídia indisponível"), não como falha do próprio BFF.
+
+## Conversa: eventos de agenda que a IA fez (Goal070)
+
+`GET /v1/conversations/:id/events` devolve, em ordem cronológica, o que a IA fez na agenda dentro desta conversa — proxy fino para a rota interna equivalente, igual a `GET .../messages`. Cada item é um de três tipos, discriminados por `type`:
+
+| `type` | Campos próprios | Significado |
+| --- | --- | --- |
+| `HOLD_PLACED` | `date`, `startTime`, `holdExpiresAt` | a IA reservou um horário temporariamente |
+| `HOLD_EXPIRED` | `date`, `startTime` | a reserva venceu sem confirmação |
+| `APPOINTMENT_CREATED` | `appointmentId`, `date`, `startTime` | a IA confirmou o agendamento |
+
+Todos os itens trazem `id` e `occurredAt` (data/hora ISO do fato). Os eventos são **derivados só do ledger** de chamadas de `create_appointment` que a IA já registra — nunca do texto que o modelo escreveu — e nunca dependem de mensagem, então uma resposta que o modelo tenha formulado de forma imprecisa não muda o que esta rota mostra. Uma reserva **substituída antes de vencer** por uma reserva seguinte nunca vira `HOLD_EXPIRED` — a reserva anterior já foi liberada. Se ela já tiver vencido antes da reserva seguinte, o `HOLD_EXPIRED` aparece do mesmo jeito.
+
+Resolve o negócio pela sessão autenticada, sem CSRF por ser leitura. Recusas próprias da rota interna (conversa de outro negócio ou inexistente) chegam pelo mesmo envelope de `UPSTREAM_ERROR` das demais rotas de conversa.
 
 ## Conversa: categoria, sessão e atendimento humano
 

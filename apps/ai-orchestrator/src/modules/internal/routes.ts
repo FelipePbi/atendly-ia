@@ -31,6 +31,7 @@ import { AssistantService } from "../assistant/assistant.service.js";
 import { EvolutionProvider } from "../channel/adapters/evolution/EvolutionProvider.js";
 import { ChannelConnectionService } from "../channel/ChannelConnectionService.js";
 import { PlatformWhatsAppSender } from "../channel/platform/PlatformWhatsAppSender.js";
+import { deriveConversationEvents } from "../conversations/conversation-events.js";
 import {
   type ConversationAwaitingHuman,
   listConversationsAwaitingHuman,
@@ -579,6 +580,43 @@ export async function registerInternalRoutes(
       include: { attachments: { orderBy: { createdAt: "asc" }, take: 1 } },
     });
     return internalData(request, messages.map(messageDto));
+  });
+
+  /**
+   * Eventos de agenda que a IA fez nesta conversa (Goal070/§1, §2).
+   *
+   * Deriva só do ledger `AiToolCall` de `create_appointment`, nunca do texto
+   * do modelo (D-073). `requireConversation` recusa conversa de outro tenant
+   * ou inexistente antes de ler qualquer chamada.
+   */
+  app.get("/internal/conversations/:id/events", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    const { id } = parseOrThrow(conversationParamsSchema, request.params);
+    await requireConversation(prisma, tenantId, id);
+    const toolCalls = await prisma.aiToolCall.findMany({
+      where: {
+        tenantId,
+        name: "create_appointment",
+        aiRun: { conversationId: id },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        createdAt: true,
+        completedAt: true,
+        status: true,
+        arguments: true,
+        result: true,
+      },
+    });
+    const events = deriveConversationEvents({
+      tenantId,
+      conversationId: id,
+      toolCalls,
+      now: new Date(),
+      logger: app.log,
+    });
+    return internalData(request, events);
   });
 
   /**

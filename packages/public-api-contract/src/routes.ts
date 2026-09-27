@@ -13,6 +13,7 @@ import {
   availabilitySlotSchema,
   blockSeriesSchema,
   calendarStateSchema,
+  conversationEventSchema,
   conversationSchema,
   conversationSuggestionsSchema,
   customerDetailSchema,
@@ -131,6 +132,7 @@ export const publicApiRoutes: readonly PublicApiRoute[] = [
   { method: "GET", pathPattern: "/v1/conversations", schema: z.array(conversationSchema) },
   { method: "GET", pathPattern: "/v1/conversations/:id", schema: conversationSchema },
   { method: "GET", pathPattern: "/v1/conversations/:id/messages", schema: z.array(messageSchema) },
+  { method: "GET", pathPattern: "/v1/conversations/:id/events", schema: z.array(conversationEventSchema) },
   // Raw media bytes (`reply.send(media.body)`); never wrapped in the `{ data, requestId }` envelope.
   { method: "GET", pathPattern: "/v1/conversations/:id/messages/:messageId/media", schema: z.unknown() },
   { method: "POST", pathPattern: "/v1/conversations/:id/messages", schema: messageSchema },

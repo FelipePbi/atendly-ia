@@ -429,6 +429,26 @@
   color: var(--muted);
   font-size: 12px;
 }
+.conversation-event {
+  margin: 10px auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+.conversation-event .icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.conversation-event a {
+  color: var(--fg);
+  font-weight: 600;
+  text-decoration: underline;
+}
 .message-system {
   width: min(100%, 500px);
   margin: 18px auto;

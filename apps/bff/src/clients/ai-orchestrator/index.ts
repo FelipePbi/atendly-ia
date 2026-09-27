@@ -58,6 +58,35 @@ const sessionCategorySchema = z.enum([
   "PERSONAL",
 ]);
 
+// Goal070: eventos de agenda que a IA fez na conversa, derivados só do
+// ledger `AiToolCall` de `create_appointment` (D-073). Espelha
+// `ConversationEvent` da rota interna equivalente.
+const conversationEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("HOLD_PLACED"),
+    id: z.string(),
+    occurredAt: z.string(),
+    date: z.string(),
+    startTime: z.string(),
+    holdExpiresAt: z.string(),
+  }),
+  z.object({
+    type: z.literal("HOLD_EXPIRED"),
+    id: z.string(),
+    occurredAt: z.string(),
+    date: z.string(),
+    startTime: z.string(),
+  }),
+  z.object({
+    type: z.literal("APPOINTMENT_CREATED"),
+    id: z.string(),
+    occurredAt: z.string(),
+    appointmentId: z.string(),
+    date: z.string(),
+    startTime: z.string(),
+  }),
+]);
+
 const conversationSchema = z.object({
   id: z.string(),
   externalContactId: z.string(),
@@ -378,6 +407,21 @@ export class AiOrchestratorClient {
         path: `/internal/conversations/${encodeURIComponent(id)}/messages`,
         context,
         schema: envelope(z.array(messageSchema)),
+      })
+    ).data;
+  }
+
+  /**
+   * Eventos de agenda que a IA fez nesta conversa (Goal070). Proxy fino,
+   * igual a `listMessages`: repassa o array que a rota interna devolve.
+   */
+  async listConversationEvents(context: InternalRequestContext, id: string) {
+    return (
+      await this.http.request({
+        method: "GET",
+        path: `/internal/conversations/${encodeURIComponent(id)}/events`,
+        context,
+        schema: envelope(z.array(conversationEventSchema)),
       })
     ).data;
   }

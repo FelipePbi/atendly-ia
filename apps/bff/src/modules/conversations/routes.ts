@@ -86,6 +86,23 @@ export async function registerV1ConversationRoutes(
   );
 
   /**
+   * Eventos de agenda que a IA fez nesta conversa (Goal070): proxy fino,
+   * igual a `/messages` — repassa o array que a rota interna devolve, e as
+   * recusas dela chegam pelo mesmo envelope de `UPSTREAM_ERROR`.
+   */
+  app.get(
+    "/v1/conversations/:id/events",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      return dataResponse(
+        request,
+        await ai.listConversationEvents(internalContext(request), id),
+      );
+    },
+  );
+
+  /**
    * Bytes de mídia de um attachment, sob demanda (Goal013/WU-06). Proxy fino
    * para a rota interna equivalente da IA: repassa o tenant da sessão, os
    * bytes e os cabeçalhos (`content-type`, nome). Recusas próprias da IA

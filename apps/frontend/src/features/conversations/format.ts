@@ -55,6 +55,39 @@ export function formatExpiredThroughDate(value: string): string {
   }).format(new Date(value));
 }
 
+/**
+ * Dia da semana abreviado de um `date` (`YYYY-MM-DD`) de evento de agenda
+ * (Goal070). `date` é wall-clock do negócio, sem hora — por isso o cálculo
+ * usa UTC, nunca o fuso do processo, para não mudar de dia perto da meia-noite.
+ */
+export function formatEventWeekday(date: string): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "UTC",
+    weekday: "short",
+  })
+    .format(new Date(`${date}T00:00:00Z`))
+    .replace(/\.$/, "");
+}
+
+/** `DD/MM` de um `date` (`YYYY-MM-DD`) de evento de agenda, sem conversão de fuso. */
+export function formatEventDayMonth(date: string): string {
+  const [, month = "--", day = "--"] = date.split("-");
+  return `${day}/${month}`;
+}
+
+/**
+ * Hora de um instante ISO no fuso do negócio (D-045), nunca no fuso do
+ * navegador ou do processo — usada só para instantes reais (`occurredAt`,
+ * `holdExpiresAt`), nunca para `date`/`startTime`, que já são wall-clock.
+ */
+export function formatBusinessTime(iso: string, timezone: string): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: timezone,
+  }).format(new Date(iso));
+}
+
 export function requestError(error: unknown, fallback: string): string {
   if (error instanceof BffHttpError)
     return `${error.message} (ID ${error.requestId})`;

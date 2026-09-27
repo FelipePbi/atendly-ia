@@ -5684,3 +5684,144 @@ nenhum campo público, rota ou schema Prisma muda de forma.
   [D-075](DECISIONS.md). **QA X-01, QA H-02, QA S-09, QA O-46, QA O-47 e
   QA A-06 corrigidos**, fora da contagem A-01…A-24 — ver
   [FINAL_AUDIT §36](FINAL_AUDIT.md).
+
+## Delta implementado — Goal070, 2026-09-27 ([D-076](DECISIONS.md), ACCEPTED)
+
+Corrige **QA CV-03** do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md) (fora da
+enumeração A-01…A-24 do FINAL_AUDIT): a conversa passa a mostrar, como
+linha central entre as bolhas, o que a IA fez de fato na agenda — a
+reserva de um horário, a reserva que venceu sem virar agendamento e o
+agendamento criado, com link para ele. Toca `apps/ai-orchestrator/`
+(derivação e rota interna), `packages/public-api-contract/` e
+`apps/bff/` (rota e proxy públicos) e `apps/frontend/` (timeline). Não
+toca `assistant-tools.ts`, `assistant.service.ts`, prompts, tools,
+`messageSchema` nem a resposta de `GET /v1/conversations/:id/messages`.
+
+- **A derivação é do ledger, nunca do texto (§1, escopo do Goal)** —
+  `deriveConversationEvents`
+  (`apps/ai-orchestrator/src/modules/conversations/conversation-events.ts`,
+  novo módulo, sem banco) lê só as `AiToolCall` de `create_appointment`
+  do `AiRun` da conversa, do mesmo tenant, em ordem de `createdAt` e
+  depois `id`. Produz `HOLD_PLACED` (um `prepare` `SUCCEEDED`),
+  `APPOINTMENT_CREATED` (um `confirm` `SUCCEEDED` com `appointment.id`)
+  e `HOLD_EXPIRED` (um `HOLD_PLACED` vencido, não consumido nem
+  substituído, ou provado vencido por um `confirm` `FAILED` com
+  `APPOINTMENT_HOLD_EXPIRED`). Um `confirm` `SUCCEEDED` consome o
+  `prepare` `SUCCEEDED` mais recente ainda não consumido nem
+  substituído; um `prepare` `SUCCEEDED` substitui o anterior ainda não
+  consumido, se esse anterior ainda não venceu, e o substituído antes
+  de vencer nunca produz `HOLD_EXPIRED` — a reserva dele já foi
+  liberada. Se o `prepare` anterior já tiver vencido (pelo relógio ou
+  por um `confirm` `FAILED` com `APPOINTMENT_HOLD_EXPIRED`) antes do
+  próximo `prepare` chegar, ele continua produzindo `HOLD_EXPIRED`.
+  `result` fora da forma esperada não produz evento; o descarte vai
+  para `logger.warn` com `tenantId`, `conversationId`, `toolCallId` e o
+  campo ausente, nunca `result`, `arguments`, telefone ou nome. O
+  relógio é injetado (`now`). Testes novos:
+  `tests/conversations/goal070-conversation-events.test.ts`
+  (**9** testes).
+- **A rota interna é da conversa do tenant (§2)** — `GET
+  /internal/conversations/:id/events`
+  (`apps/ai-orchestrator/src/modules/internal/routes.ts`), escopo
+  `conversations:read` no mapa de escopos, `requireConversation` antes
+  de ler o ledger; conversa de outro tenant ou inexistente recusa como
+  `GET .../messages` recusa, nunca lista vazia. Testes novos:
+  `tests/internal/goal070-conversation-events.routes.test.ts`
+  (**4** testes).
+- **O contrato público ganha a rota, não um campo em mensagem (§3)** —
+  `GET /v1/conversations/:id/events`, proxy fino em
+  `apps/bff/src/clients/ai-orchestrator/index.ts` e
+  `apps/bff/src/modules/conversations/routes.ts`, com as mesmas
+  recusas de `GET .../messages`. `conversationEventSchema` (união
+  discriminada por `type`) em `packages/public-api-contract/src/schemas.ts`
+  e a entrada em `routes.ts`. `messageSchema` e a resposta de `GET
+  .../messages` não mudam. `PUBLIC_API_V1.md` ganha a rota na tabela de
+  Conversas e a seção que diz de onde o evento vem, quais tipos
+  existem e que reserva substituída antes de vencer não vence. A seção
+  **não** diz que o evento segue a purga do conteúdo nem que
+  remarcação/cancelamento/série recorrente não aparecem; D-076 diz
+  ([review070](reviews/070-review.md), observação 3). Testes novos:
+  `tests/goal070-conversation-events.test.ts` (`apps/bff`, **6** testes).
+- **A conversa mostra os eventos (§4)** — `BffConversationService`
+  ganha `listEvents(id, signal)`; `ConversationThread.tsx` busca os
+  eventos no mesmo ritmo das mensagens, em promessa própria, para que
+  falha na consulta deles nunca esconda mensagens nem afirme erro na
+  conversa; `MessageTimeline.tsx` intercala evento e bolha por
+  instante, evento antes da bolha em caso de empate. `HOLD_PLACED`:
+  "Horário reservado até HH:MM · \<dia\> HH:MM", hora de vencimento no
+  fuso do negócio (D-045, `format.ts:formatBusinessTime`), dia/hora
+  propostos sem conversão. `APPOINTMENT_CREATED`: "Agendamento criado ·
+  \<dia\> DD/MM, HH:MM · Ver", link para `/agenda/agendamento?id=`.
+  `HOLD_EXPIRED`: "Reserva de \<dia\> HH:MM venceu sem confirmação".
+  Conversa sem eventos fica igual a hoje. Testes novos:
+  `tests/goal070-conversation-events.test.tsx` (`apps/frontend`,
+  **5** testes).
+- **O gate autenticado mede a tela com eventos (§5)** —
+  `scripts/goal033-authenticated-ui-rehearsal.mjs` semeia, no banco
+  descartável da IA, um `AiRun` com três `AiToolCall`
+  (`buildConversationEventToolCalls`): um `prepare` `SUCCEEDED` no
+  prazo, um `confirm` `SUCCEEDED` que o consome e um segundo `prepare`
+  `SUCCEEDED` já vencido. `authenticated-matrix.spec.ts` exige as três
+  linhas de evento em `/conversas/:id` nas cinco larguras e o clique
+  real (sem `force`) no "Ver" abrindo `/agenda/agendamento?id=`. A
+  contagem do gate autenticado sobe de **60** (D-074) para **65**.
+  Teste novo do ensaio: `scripts/tests/goal033-authenticated-ui-rehearsal.test.mjs`
+  (**6** testes novos de `buildConversationEventToolCalls`, que levam
+  `test:gate` de **227** para **233**).
+- **Controles negativos (escopo §7)**, saída colada em
+  [FINAL_AUDIT §37](FINAL_AUDIT.md), rodados depois da última edição de
+  código e revertidos byte a byte (diff conferido idêntico ao
+  original): `confirm` sem exigir `SUCCEEDED` reprova **1** de **9**
+  testes de `goal070-conversation-events` (ai-orchestrator); `prepare`
+  substituído antes de vencer não tratado reprova **1** de **9** do mesmo arquivo;
+  `requireConversation` removido da rota interna reprova **1** de **4**
+  testes de rota (conversa de outro tenant passa a responder **200**
+  em vez de **404**); hora de vencimento no fuso do navegador reprova
+  **2** de **5** testes jsdom; timeline sem eventos reprova **3** de
+  **5** testes jsdom e **10** de **65** testes do gate autenticado
+  (as três linhas de evento e o clique no "Ver", nas cinco larguras).
+- **Duas correções incidentais**, fora do escopo do ledger de eventos,
+  para que o diff não deixasse a árvore vermelha nas unidades
+  determinísticas seguintes: três literais computados pela árvore real
+  em `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts`
+  (Goal046/047/039) atualizados para o número que a nova
+  `conversation-events.ts` e o novo `this.http.get` de `listEvents`
+  produzem (**206** arquivos varridos, **42** ocorrências de
+  `this.http.`, `person_typed_text` na linha **743**); e a asserção do
+  clique no "Ver" em `authenticated-matrix.spec.ts`, que comparava
+  `pathname` (nunca contém `?id=`) e por isso nunca podia passar, agora
+  compara a URL inteira.
+- **Execução desta Work Unit (WU-05)**, sobre a árvore final: `npm run
+  typecheck` e `npm run lint` de `apps/ai-orchestrator`, `apps/bff` e
+  `apps/frontend`, exit 0 nos seis; `apps/ai-orchestrator` — **97**
+  arquivos (**85** `passed`, **12** `skipped`), **1112** testes
+  passando, **88** pulados, **0** falhando; `apps/bff` (arquivos
+  locais, sem integração) — **13** arquivos passando, **2** pulados,
+  **118** testes passando, **39** pulados; `apps/frontend`
+  (`test:frontend`) — **76** arquivos, **704** testes passando, **0**
+  falhando; `npm run test:gate` — **233**/**233** (baseline **227**);
+  `node scripts/final-production-audit.mjs` — **34** checks, **33**
+  `passed`, **1** `skipped` (`production_health`), **0** `failed`;
+  `BFF_TEST_DATABASE_URL=postgresql://pgtest@127.0.0.1:55432/atendly_bff_test
+  node scripts/goal033-authenticated-ui-rehearsal.mjs` — **65** testes,
+  **0** retentativas, exit 0 (`expected` 65, `unexpected` 0, `flaky`
+  0). Os passos agregadores `validate:core`, `validate:ui` e
+  `validate:integration` ficam para as unidades determinísticas
+  seguintes do plano (WU-06 a WU-19).
+- **Execução final da rodada 2 (WU-06 a WU-19), sobre a árvore
+  aceita** ([review070](reviews/070-review.md)): `typecheck` e `lint`
+  dos três apps e `git diff --check`, exit 0; testes dirigidos
+  `goal070` — **13**/**13** (`apps/ai-orchestrator`), **6**/**6**
+  (`apps/bff`), **5**/**5** (`apps/frontend`); `test:gate` —
+  **233**/**233**; `validate:core` — **17** passos, **15** `passed`,
+  **2** `skipped`, **0** `failed`; `validate:ui` — **169** passando,
+  **21** pulados, **0** retentativas; `validate:integration` —
+  **35**/**35** passos, com `rehearse:goal033-authenticated-ui` em
+  **65** testes passando e **0** retentativas.
+- **Limites declarados:** remarcação, cancelamento e série recorrente
+  não aparecem na conversa; o texto de `HOLD_EXPIRED` não tem
+  referência no protótipo; fidelidade visual segue conferência humana
+  (Goal069); aderência do modelo real a `prepare`/`confirm` no momento
+  certo continua fora de prova (D-050) — ver [D-076](DECISIONS.md).
+  **QA CV-03 corrigido**, fora da contagem A-01…A-24 — ver
+  [FINAL_AUDIT §37](FINAL_AUDIT.md).

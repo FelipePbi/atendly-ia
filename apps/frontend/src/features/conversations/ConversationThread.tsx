@@ -4,7 +4,12 @@ import clsx from "clsx";
 import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 
-import type { Conversation, Message, SessionCategory } from "@/data";
+import type {
+  Conversation,
+  ConversationEvent,
+  Message,
+  SessionCategory,
+} from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import {
@@ -47,6 +52,7 @@ export function ConversationThread({
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [events, setEvents] = useState<ConversationEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -67,6 +73,19 @@ export function ConversationThread({
 
   const load = useCallback(
     async (signal?: AbortSignal, background = false) => {
+      // Eventos são complementares às mensagens (Goal070 §4): buscados no
+      // mesmo ritmo, mas em promessa própria, para que falha na consulta
+      // deles nunca esconda mensagens nem afirme erro na conversa.
+      const eventsPromise = (async () => {
+        try {
+          return await getProductServices().conversations.listEvents(
+            conversationId,
+            signal,
+          );
+        } catch {
+          return null;
+        }
+      })();
       try {
         const [conversationResult, messagesResult, listResult] =
           await Promise.all([
@@ -90,6 +109,8 @@ export function ConversationThread({
       } finally {
         if (!signal?.aborted && !background) setLoading(false);
       }
+      const eventsResult = await eventsPromise;
+      if (eventsResult && !signal?.aborted) setEvents(eventsResult);
     },
     [conversationId],
   );
@@ -321,6 +342,8 @@ export function ConversationThread({
     session?.businessProfile?.businessName ??
     session?.tenant.name ??
     "Seu negócio";
+  const businessTimezone =
+    session?.businessProfile?.timezone ?? "America/Sao_Paulo";
   const waiting = conversations.filter(
     (item) => conversationState(item) === "waiting-you",
   ).length;
@@ -465,8 +488,10 @@ export function ConversationThread({
 
           <MessageTimeline
             businessName={businessName}
+            businessTimezone={businessTimezone}
             contentExpiredThrough={conversation.contentExpiredThrough ?? null}
             conversationId={conversation.id}
+            events={events}
             messages={messages}
             onResend={(message) => void resend(message)}
             person={person}

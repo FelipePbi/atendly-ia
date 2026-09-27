@@ -787,9 +787,28 @@ const REACHED_BY_CLICK: ReachedByClick[] = [
     row: (page) => page.locator("a.conversation-row", { hasText: SEED.contactName }).first(),
     detailPath: /^\/conversas\/[^/]+$/u,
     detailLoaded: async (page, what) => {
+      const timeline = page.locator(".message-timeline");
       await expect(
-        page.locator(".message-timeline").getByText(SEED.inboundText).first(),
+        timeline.getByText(SEED.inboundText).first(),
         `${what}: the thread did not show the contact's inbound message within ${CONTENT_TIMEOUT_MS}ms.`,
+      ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+
+      // Goal070 §5: the three ledger-derived event lines, seeded straight
+      // into the AI's disposable database
+      // (scripts/goal033-authenticated-ui-rehearsal.mjs) — a hold not yet
+      // expired, the appointment the confirm created, and a hold that
+      // expired without confirmation.
+      await expect(
+        timeline.getByText("Horário reservado até", { exact: false }).first(),
+        `${what}: no HOLD_PLACED line ("Horário reservado até…") within ${CONTENT_TIMEOUT_MS}ms.`,
+      ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+      await expect(
+        timeline.getByText("Agendamento criado", { exact: false }).first(),
+        `${what}: no APPOINTMENT_CREATED line ("Agendamento criado…") within ${CONTENT_TIMEOUT_MS}ms.`,
+      ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+      await expect(
+        timeline.getByText("venceu sem confirmação", { exact: false }).first(),
+        `${what}: no HOLD_EXPIRED line ("…venceu sem confirmação") within ${CONTENT_TIMEOUT_MS}ms.`,
       ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
     },
   },
@@ -944,6 +963,40 @@ test.describe("reached by real click", () => {
       created,
       "the gate must not create a service: the seed is shared by every measurement",
     ).toEqual([]);
+  });
+
+  /**
+   * The "Ver" link of the APPOINTMENT_CREATED event row (Goal070 §5): a real
+   * click, without `force`, from the conversation's own timeline to the
+   * agenda detail the confirm's ledger entry names.
+   */
+  test('conversas: the appointment-created event\'s "Ver" opens the agenda detail', async ({ page }, testInfo) => {
+    await waitForRateLimitBudget(testInfo);
+    watchRateLimitBudget(page);
+
+    const route = routeNamed("conversas");
+    await page.goto(route.path, { waitUntil: "networkidle" });
+    await proveAuthenticatedScreen(page, route);
+
+    const what = `${route.path}: ${SEED.contactName}`;
+    await clickForReal(
+      page.locator("a.conversation-row", { hasText: SEED.contactName }).first(),
+      what,
+      testInfo,
+    );
+    await expectPath(page, /^\/conversas\/[^/]+$/u, `${what} at ${testInfo.project.name}`);
+
+    const ver = page.locator(".message-timeline").getByRole("link", { name: "Ver" });
+    await clickForReal(ver, `${what}: Ver`, testInfo);
+    // `expectPath` polls `URL.pathname`, which never carries the query string —
+    // the id lives in `?id=`, so this checks the full URL instead.
+    await expect
+      .poll(() => page.url(), {
+        message: `${what}: Ver at ${testInfo.project.name}: the click did not open `
+          + `/agenda/agendamento?id=; the browser is at ${page.url()}.`,
+        timeout: CONTENT_TIMEOUT_MS,
+      })
+      .toMatch(/\/agenda\/agendamento\?id=/u);
   });
 
   /**

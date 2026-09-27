@@ -1,12 +1,58 @@
 "use client";
 
 import clsx from "clsx";
+import Link from "next/link";
 
-import type { Message } from "@/data";
+import type { ConversationEvent, Message } from "@/data";
 import { Icon, type IconName } from "@/shared/icons/Icon";
 
-import { formatExpiredThroughDate, formatMessageTime } from "./format";
+import {
+  formatBusinessTime,
+  formatEventDayMonth,
+  formatEventWeekday,
+  formatExpiredThroughDate,
+  formatMessageTime,
+} from "./format";
 import { MessageAttachmentView } from "./MessageAttachment";
+
+type TimelineRow =
+  | { instant: number; key: string; kind: "event"; event: ConversationEvent }
+  | { instant: number; key: string; kind: "message"; message: Message };
+
+/**
+ * Intercala evento e bolha por instante (Goal070 §4). Com instante igual, o
+ * evento vem antes da bolha, como no protótipo: a reserva antes de "Posso
+ * confirmar?" e a criação antes de "Confirmado!".
+ */
+function buildTimelineRows(
+  messages: Message[],
+  events: ConversationEvent[],
+): TimelineRow[] {
+  const rows: TimelineRow[] = [
+    ...events.map(
+      (event): TimelineRow => ({
+        event,
+        instant: Date.parse(event.occurredAt),
+        key: `event-${event.id}`,
+        kind: "event",
+      }),
+    ),
+    ...messages.map(
+      (message): TimelineRow => ({
+        instant: Date.parse(message.createdAt),
+        key: `message-${message.id}`,
+        kind: "message",
+        message,
+      }),
+    ),
+  ];
+  rows.sort((a, b) => {
+    if (a.instant !== b.instant) return a.instant - b.instant;
+    if (a.kind === b.kind) return 0;
+    return a.kind === "event" ? -1 : 1;
+  });
+  return rows;
+}
 
 /**
  * O histórico da conversa. Autoria discreta e honesta: o que a IA escreveu
@@ -19,16 +65,20 @@ import { MessageAttachmentView } from "./MessageAttachment";
  */
 export function MessageTimeline({
   businessName,
+  businessTimezone,
   contentExpiredThrough,
   conversationId,
+  events,
   messages,
   onResend,
   person,
   resendingId,
 }: {
   businessName: string;
+  businessTimezone: string;
   contentExpiredThrough: string | null;
   conversationId: string;
+  events: ConversationEvent[];
   messages: Message[];
   onResend: (message: Message) => void;
   person: string;
@@ -37,6 +87,7 @@ export function MessageTimeline({
   const expiredDate = contentExpiredThrough
     ? formatExpiredThroughDate(contentExpiredThrough)
     : null;
+  const rows = buildTimelineRows(messages, events);
   return (
     <div
       aria-label={`Histórico da conversa com ${person}`}
@@ -81,18 +132,76 @@ export function MessageTimeline({
           </div>
         </div>
       ) : (
-        messages.map((message) => (
-          <MessageBubble
-            businessName={businessName}
-            conversationId={conversationId}
-            key={message.id}
-            message={message}
-            onResend={onResend}
-            person={person}
-            resending={resendingId === message.id}
-          />
-        ))
+        rows.map((row) =>
+          row.kind === "event" ? (
+            <ConversationEventRow
+              businessTimezone={businessTimezone}
+              event={row.event}
+              key={row.key}
+            />
+          ) : (
+            <MessageBubble
+              businessName={businessName}
+              conversationId={conversationId}
+              key={row.key}
+              message={row.message}
+              onResend={onResend}
+              person={person}
+              resending={resendingId === row.message.id}
+            />
+          ),
+        )
       )}
+    </div>
+  );
+}
+
+const eventIcon: Record<ConversationEvent["type"], IconName> = {
+  APPOINTMENT_CREATED: "calendar",
+  HOLD_EXPIRED: "alert",
+  HOLD_PLACED: "clock",
+};
+
+/**
+ * Linha central do que a IA fez na agenda desta conversa (Goal070 §4): nunca
+ * uma bolha, nunca com autoria — o fato vem só do ledger `AiToolCall`.
+ */
+function ConversationEventRow({
+  businessTimezone,
+  event,
+}: {
+  businessTimezone: string;
+  event: ConversationEvent;
+}) {
+  const weekday = formatEventWeekday(event.date);
+  return (
+    <div className="conversation-event" role="status">
+      <Icon name={eventIcon[event.type]} />
+      <span>
+        {event.type === "HOLD_PLACED" && (
+          <>
+            Horário reservado até{" "}
+            {formatBusinessTime(event.holdExpiresAt, businessTimezone)} ·{" "}
+            {weekday} {event.startTime}
+          </>
+        )}
+        {event.type === "APPOINTMENT_CREATED" && (
+          <>
+            Agendamento criado · {weekday} {formatEventDayMonth(event.date)},{" "}
+            {event.startTime} ·{" "}
+            <Link
+              href={`/agenda/agendamento?id=${encodeURIComponent(event.appointmentId)}`}
+            >
+              Ver
+            </Link>
+          </>
+        )}
+        {event.type === "HOLD_EXPIRED" && (
+          <>
+            Reserva de {weekday} {event.startTime} venceu sem confirmação
+          </>
+        )}
+      </span>
     </div>
   );
 }

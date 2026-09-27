@@ -3,6 +3,7 @@ import { type z } from "zod";
 import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
 import {
   type Conversation,
+  type ConversationEvent,
   type ConversationSuggestions,
   type IgnoredContact,
   type Message,
@@ -50,6 +51,22 @@ export class BffConversationService {
     return this.http.request({
       path: `/v1/conversations/${encodeURIComponent(id)}/messages`,
       schema: routeSchema<Message[]>("GET", "/v1/conversations/:id/messages"),
+      signal,
+    });
+  }
+
+  /**
+   * Eventos de agenda que a IA fez nesta conversa (Goal070): reserva,
+   * vencimento sem confirmação e agendamento criado. Derivado só do ledger no
+   * ai-orchestrator, nunca do texto das mensagens.
+   */
+  listEvents(id: string, signal?: AbortSignal) {
+    return this.http.request({
+      path: `/v1/conversations/${encodeURIComponent(id)}/events`,
+      schema: routeSchema<ConversationEvent[]>(
+        "GET",
+        "/v1/conversations/:id/events",
+      ),
       signal,
     });
   }

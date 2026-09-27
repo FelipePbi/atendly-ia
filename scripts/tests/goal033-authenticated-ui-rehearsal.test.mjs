@@ -14,6 +14,7 @@ import test from "node:test";
 import {
   AuthenticatedUiRehearsalError,
   assertPortsFree,
+  buildConversationEventToolCalls,
   createEvolutionDouble,
   extractRetriedTests,
   readGateReport,
@@ -78,6 +79,78 @@ test("seeds a service of its own for the duration case, apart from every other s
     durationService.price > 0 && durationService.priceType === "FIXED",
     "the form refuses a fixed price without a value, so the seeded service needs one",
   );
+});
+
+// Goal070 §5: o ensaio semeia, para a conversa que já cria, um AiRun com três
+// AiToolCall de `create_appointment` — direto por `pg`, porque nenhuma rota
+// de produto planta um hold já vencido ou um hold futuro sem confirmar.
+// `buildConversationEventToolCalls` é a parte pura dessa semeadura: monta as
+// três linhas, sem banco e sem relógio de parede, na ordem que faz a
+// derivação real (`deriveConversationEvents`) produzir HOLD_PLACED (ainda no
+// prazo), APPOINTMENT_CREATED e HOLD_EXPIRED — nunca supondo o hold do
+// primeiro `prepare` vencido, porque o `confirm` o consome antes do segundo
+// `prepare` nascer.
+function ledgerFixture() {
+  return {
+    conversationId: "conversation-goal070",
+    appointmentId: "appointment-goal070",
+    appointmentDate: "2026-10-01",
+    appointmentStartTime: "15:30",
+    seededAt: new Date("2026-09-27T12:00:00.000Z"),
+  };
+}
+
+test("buildConversationEventToolCalls returns exactly a prepare, a confirm and a prepare, all create_appointment/SUCCEEDED", () => {
+  const toolCalls = buildConversationEventToolCalls(ledgerFixture());
+  assert.equal(toolCalls.length, 3);
+  for (const call of toolCalls) {
+    assert.equal(call.name, "create_appointment");
+    assert.equal(call.status, "SUCCEEDED");
+    assert.equal(call.result.ok, true);
+  }
+  assert.deepEqual(
+    toolCalls.map((call) => call.arguments.action),
+    ["prepare", "confirm", "prepare"],
+  );
+});
+
+test("buildConversationEventToolCalls orders the confirm between the two prepares, so it consumes only the first hold", () => {
+  const toolCalls = buildConversationEventToolCalls(ledgerFixture());
+  const [prepareFuture, confirm, prepareExpired] = toolCalls;
+  assert.ok(prepareFuture.createdAt.getTime() < confirm.createdAt.getTime());
+  assert.ok(confirm.createdAt.getTime() < prepareExpired.createdAt.getTime());
+});
+
+test("buildConversationEventToolCalls: the first prepare's hold has not expired yet", () => {
+  const fixture = ledgerFixture();
+  const [prepareFuture] = buildConversationEventToolCalls(fixture);
+  const expiresAt = new Date(prepareFuture.result.data.hold.expiresAt);
+  assert.ok(expiresAt.getTime() > fixture.seededAt.getTime());
+});
+
+test("buildConversationEventToolCalls: the second prepare's hold is already expired", () => {
+  const fixture = ledgerFixture();
+  const [, , prepareExpired] = buildConversationEventToolCalls(fixture);
+  const expiresAt = new Date(prepareExpired.result.data.hold.expiresAt);
+  assert.ok(expiresAt.getTime() < fixture.seededAt.getTime());
+});
+
+test("buildConversationEventToolCalls: the confirm carries the conversation's own booked appointment", () => {
+  const fixture = ledgerFixture();
+  const [, confirm] = buildConversationEventToolCalls(fixture);
+  assert.deepEqual(confirm.result.data.appointment, {
+    id: fixture.appointmentId,
+    date: fixture.appointmentDate,
+    startTime: fixture.appointmentStartTime,
+  });
+});
+
+test("buildConversationEventToolCalls: every id is unique and scoped to the conversation", () => {
+  const fixture = ledgerFixture();
+  const toolCalls = buildConversationEventToolCalls(fixture);
+  const ids = toolCalls.map((call) => call.id);
+  assert.equal(new Set(ids).size, ids.length);
+  for (const id of ids) assert.ok(id.startsWith(fixture.conversationId));
 });
 
 function withOccupiedPort(run) {

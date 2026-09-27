@@ -1,19 +1,3 @@
-.settings-shell {
-  min-height: 100dvh;
-  display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
-}
-
-.settings-main {
-  min-width: 0;
-}
-.settings-mobile-header,
-.settings-bottom-nav {
-  display: none;
-}
-.settings-bottom-nav .bottom-nav-item {
-  text-decoration: none;
-}
 .settings-skip-link {
   position: fixed;
   z-index: 120;
@@ -32,10 +16,15 @@
   transform: translateY(0);
 }
 
+/* Notificações (Goal058/WU-01) reusa este respiro em vez de um número
+   próprio: mesma casca (`module: "settings"`), sem largura de conteúdo. */
+.notifications-page,
+.settings-page {
+  padding: 40px 36px 64px;
+}
 .settings-page {
   width: min(100%, 1120px);
   margin: 0 auto;
-  padding: 40px 36px 64px;
 }
 .settings-page-header {
   margin-bottom: 24px;
@@ -703,9 +692,6 @@
 }
 
 @media (max-width: 1099px) {
-  .settings-shell {
-    grid-template-columns: 88px minmax(0, 1fr);
-  }
   .settings-shell .sidebar .brand span,
   .settings-shell .sidebar .business-name,
   .settings-shell .sidebar .wa-status span,
@@ -730,6 +716,7 @@
   .settings-shell .sidebar .account-button > .icon {
     display: none;
   }
+  .notifications-page,
   .settings-page {
     padding-inline: 24px;
   }
@@ -762,29 +749,23 @@
 }
 
 @media (max-width: 767px) {
+  /* .settings-page já reserva o próprio rodapé (linha abaixo); a base do
+     `.app-frame` reservaria 76px de novo por baixo dela. */
   .settings-shell {
-    display: block;
-  }
-  .settings-shell > .sidebar {
-    display: none;
+    padding-bottom: 0;
   }
   .settings-mobile-header {
-    position: sticky;
     z-index: 40;
-    top: 0;
-    min-height: calc(60px + env(safe-area-inset-top));
     padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     gap: 12px;
-    border-bottom: 1px solid var(--border);
-    background: color-mix(in oklch, var(--surface), transparent 4%);
     backdrop-filter: blur(10px);
+  }
+  .notifications-page,
+  .settings-page {
+    padding: 20px 16px calc(96px + env(safe-area-inset-bottom));
   }
   .settings-page {
     width: 100%;
-    padding: 20px 16px calc(96px + env(safe-area-inset-bottom));
   }
   .settings-page-header {
     margin-bottom: 18px;
@@ -800,19 +781,13 @@
   .settings-page-header .badge {
     margin-top: 12px;
   }
+  /* Configurações centraliza a barra inferior num cartão de até 520px, em vez
+     da borda a borda que o resto do produto usa. */
   .settings-bottom-nav {
-    position: fixed;
-    z-index: 50;
     left: 50%;
-    bottom: 0;
+    right: auto;
     transform: translateX(-50%);
     width: min(100%, 520px);
-    min-height: calc(68px + env(safe-area-inset-bottom));
-    padding: 6px 8px env(safe-area-inset-bottom);
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    border-top: 1px solid var(--border);
-    background: var(--surface);
   }
   .settings-overview {
     grid-template-columns: 1fr;
@@ -936,6 +911,7 @@
 }
 
 @media (max-width: 390px) {
+  .notifications-page,
   .settings-page {
     padding-inline: 14px;
   }

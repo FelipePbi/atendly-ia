@@ -213,7 +213,7 @@ export function ServiceForm({
                   min={1}
                   name="duration"
                   placeholder="Ex.: 45"
-                  step={5}
+                  step={1}
                   type="number"
                 />
                 <span className="field-help">
@@ -254,9 +254,9 @@ export function ServiceForm({
                   <CurrencyInput
                     className="input"
                     defaultValueCents={
-                      service?.price === null
-                        ? undefined
-                        : Math.round((service?.price ?? 0) * 100)
+                      service && service.price !== null
+                        ? Math.round(service.price * 100)
+                        : undefined
                     }
                     key={service?.id ?? "new"}
                     onValueChange={(value) => {

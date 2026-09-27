@@ -14,6 +14,7 @@ import {
   findStaleExceptions,
   hasFocusIndicator,
   type KnownSmallTarget,
+  measureComposition,
   measureFirstTabFocus,
   measureOverflow,
   measureRunningAnimations,
@@ -53,6 +54,19 @@ type SeedContent = {
   customerName: string;
   serviceName: string;
   contactName: string;
+  /**
+   * The contact's inbound message. The inbox row previews the LAST message,
+   * which is the owner's reply, so this text only renders once the thread
+   * itself has opened — the proof a click reached the conversation.
+   */
+  inboundText: string;
+  /**
+   * The service the rehearsal seeds only for the duration case (Goal058,
+   * QA SV-01): 60 minutes, like the one onboarding creates. No other
+   * measurement names it, and the case puts it back to 60 before it ends.
+   */
+  durationServiceName: string;
+  durationServiceMinutes: number;
 };
 
 function requireEnv(name: string): string {
@@ -108,7 +122,9 @@ const CONTENT_TIMEOUT_MS = 20_000;
  * texts are produced by the platform, not by the rehearsal's fixture, so
  * there is no seeded string to name.
  */
-const SEEDED_CONTENT: Partial<Record<AuthenticatedRoute["name"], keyof SeedContent>> = {
+type SeededText = { [K in keyof SeedContent]: SeedContent[K] extends string ? K : never }[keyof SeedContent];
+
+const SEEDED_CONTENT: Partial<Record<AuthenticatedRoute["name"], SeededText>> = {
   agenda: "customerName",
   clientes: "customerName",
   conversas: "contactName",
@@ -472,11 +488,15 @@ async function waitForLoadedContent(page: Page, route: AuthenticatedRoute): Prom
 for (const route of AUTHENTICATED_ROUTES) {
   test.describe(route.name, () => {
     /**
-     * One test per route and width, not one per measurement: five measurements
-     * per test, across seven routes and five widths, is already thirty-five
-     * runs of the whole proof. The measurements are soft assertions, so one
+     * One test per route and width, not one per measurement: six measurements
+     * per test (the composition joined in Goal058), across seven routes and
+     * five widths, is already thirty-five runs of the whole proof. The measurements are soft assertions, so one
      * failure never hides the other four — the test still fails, and it fails
      * naming everything it found.
+     *
+     * What a click reaches is measured apart, below, because a click moves the
+     * browser off this route and nothing measured after it would be this
+     * screen.
      *
      * The session arrives through the `typedSession` fixture above, which
      * types it into `/login` once per run; each test still proves it before
@@ -494,6 +514,12 @@ for (const route of AUTHENTICATED_ROUTES) {
 
       // 1. Nothing runs off the side.
       const overflow = await measureOverflow(page);
+      // The reading itself, pass or fail: it is what answered why the shell
+      // without a grid never overflowed at 390 (Goal058 §5.1).
+      await testInfo.attach(`overflow-${route.name}`, {
+        body: JSON.stringify(overflow, null, 2),
+        contentType: "application/json",
+      });
       expect
         .soft(
           overflow.scrollWidth,
@@ -502,6 +528,51 @@ for (const route of AUTHENTICATED_ROUTES) {
             + JSON.stringify(overflow.offenders, null, 2),
         )
         .toBeLessThanOrEqual(overflow.clientWidth + OVERFLOW_TOLERANCE);
+
+      // 1b. The composition (Goal058): the screen's own content is on the
+      // first screen, it is what a pointer lands on, and the sidebar sits
+      // beside `main` instead of over it. Every other measurement here passed
+      // on a shell whose sidebar took the whole width and covered the list.
+      const composition = await measureComposition(contentLocator(page, route).first());
+      const where = `${route.path} at ${testInfo.project.name}`;
+      await testInfo.attach(`composition-${route.name}`, {
+        body: JSON.stringify(composition, null, 2),
+        contentType: "application/json",
+      });
+      expect
+        .soft(
+          composition.marker.top,
+          `${where}: the content marker (${route.contentMarker}) starts at y=${composition.marker.top}, `
+            + `below the first screen (${composition.viewport.height}px). Found at the top instead: `
+            + `sidebar ${JSON.stringify(composition.sidebar)}, main ${JSON.stringify(composition.main)}.`,
+        )
+        .toBeLessThan(composition.viewport.height);
+      expect
+        .soft(
+          composition.hit.insideMarker && composition.hit.navigation === null,
+          `${where}: elementFromPoint at the centre of the content marker (${route.contentMarker}, `
+            + `point ${JSON.stringify(composition.point)}) found ${composition.hit.element ?? "nothing"}`
+            + (composition.hit.navigation ? `, inside the navigation ${composition.hit.navigation}` : "")
+            + `, not the marker. ${composition.hit.html ?? ""}`,
+        )
+        .toBe(true);
+      expect
+        .soft(
+          composition.sidebarMainOverlap,
+          `${where}: aside.sidebar ${JSON.stringify(composition.sidebar)} overlaps main `
+            + `${JSON.stringify(composition.main)} by ${composition.sidebarMainOverlap}px horizontally; `
+            + `the element at the content marker's centre is ${composition.hit.element ?? "nothing"}.`,
+        )
+        .toBe(0);
+      const chromeOffGlass = composition.chrome.filter((box) => !box.inside);
+      expect
+        .soft(
+          chromeOffGlass,
+          `${where}: the shell's mobile header or bottom bar runs off the viewport `
+            + `(${composition.viewport.width}x${composition.viewport.height}): `
+            + JSON.stringify(chromeOffGlass),
+        )
+        .toEqual([]);
 
       // 2. The touch targets can be hit — a touch-screen rule, as in the public gate.
       if (testInfo.project.name.startsWith("mobile")) {
@@ -572,7 +643,8 @@ for (const route of AUTHENTICATED_ROUTES) {
           })),
         );
       // Everything else axe found is a finding, reported and not decided here:
-      // this gate measures overflow, touch target, contrast, focus and motion.
+      // this gate measures overflow, composition, touch target, contrast, focus
+      // and motion.
       // Fixing anything else silently would be a change nobody asked for.
       const otherViolations = axe.violations.filter((violation) => violation.id !== "color-contrast");
       if (otherViolations.length > 0) {
@@ -643,3 +715,256 @@ for (const route of AUTHENTICATED_ROUTES) {
     });
   });
 }
+
+/**
+ * What a click reaches (Goal058, QA CV-02).
+ *
+ * The composition above reads the layout; this proves the consequence a person
+ * meets. On the shell that shipped without a grid, `aside.sidebar` sat over the
+ * lists and "intercepts pointer events" was the answer to every click: the
+ * owner could not open a conversation, a customer or a service, and "Criar
+ * serviço" only submitted from the keyboard.
+ *
+ * Every click here is `locator.click()` with Playwright's own actionability
+ * checks: no `force`, no `dispatchEvent`, no keyboard. When something else is
+ * on top, the click retries until the ceiling below and then fails naming the
+ * element that took the pointer.
+ *
+ * All five widths, not only 390 and 1440: the product's per-IP budget is
+ * respected the same way the measurements respect it (`waitForRateLimitBudget`
+ * before each test), which costs time and nothing else.
+ */
+const CLICK_TIMEOUT_MS = 15_000;
+const SAVE_TIMEOUT_MS = 20_000;
+
+function routeNamed(name: AuthenticatedRoute["name"]): AuthenticatedRoute {
+  const route = AUTHENTICATED_ROUTES.find((candidate) => candidate.name === name);
+  if (!route) throw new Error(`${name} is not in AUTHENTICATED_ROUTES`);
+  return route;
+}
+
+/**
+ * A real click, with the failure named: route, width, what was aimed at and —
+ * when Playwright saw one — the element that intercepted the pointer.
+ */
+async function clickForReal(target: Locator, what: string, testInfo: TestInfo): Promise<void> {
+  try {
+    await target.click({ timeout: CLICK_TIMEOUT_MS });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const interceptor = /(<[^\n]*?>[^\n]*?intercepts pointer events)/u.exec(message)?.[1];
+    throw new Error(
+      `${what} at ${testInfo.project.name} could not be reached by a real click within `
+        + `${CLICK_TIMEOUT_MS}ms`
+        + (interceptor ? `: ${interceptor}` : "")
+        + `.\n${message}`,
+    );
+  }
+}
+
+async function expectPath(page: Page, pathname: RegExp, what: string): Promise<void> {
+  await expect
+    .poll(() => new URL(page.url()).pathname, {
+      message: `${what}: the click did not open ${pathname}; the browser is at ${page.url()}.`,
+      timeout: CONTENT_TIMEOUT_MS,
+    })
+    .toMatch(pathname);
+}
+
+type ReachedByClick = {
+  route: AuthenticatedRoute["name"];
+  label: string;
+  row: (page: Page) => Locator;
+  detailPath: RegExp;
+  /** Content only the detail renders, so a URL change alone is not the proof. */
+  detailLoaded: (page: Page, what: string) => Promise<void>;
+};
+
+const REACHED_BY_CLICK: ReachedByClick[] = [
+  {
+    route: "conversas",
+    label: `the conversation with ${SEED.contactName}`,
+    row: (page) => page.locator("a.conversation-row", { hasText: SEED.contactName }).first(),
+    detailPath: /^\/conversas\/[^/]+$/u,
+    detailLoaded: async (page, what) => {
+      await expect(
+        page.locator(".message-timeline").getByText(SEED.inboundText).first(),
+        `${what}: the thread did not show the contact's inbound message within ${CONTENT_TIMEOUT_MS}ms.`,
+      ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+    },
+  },
+  {
+    route: "clientes",
+    label: `the customer ${SEED.customerName}`,
+    row: (page) => page
+      .locator('a[href^="/clientes/detalhes"]', { hasText: SEED.customerName })
+      .first(),
+    detailPath: /^\/clientes\/detalhes$/u,
+    detailLoaded: async (page, what) => {
+      await expect(
+        page.getByRole("heading", { level: 1, name: SEED.customerName }),
+        `${what}: the customer profile did not render its heading within ${CONTENT_TIMEOUT_MS}ms.`,
+      ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+    },
+  },
+  {
+    route: "servicos",
+    label: `the service ${SEED.serviceName}`,
+    row: (page) => page.getByRole("link", { name: `Editar ${SEED.serviceName}` }),
+    detailPath: /^\/servicos\/editar$/u,
+    detailLoaded: async (page, what) => {
+      await expect(
+        page.locator('form input[name="name"]'),
+        `${what}: the edit form did not load the service within ${CONTENT_TIMEOUT_MS}ms.`,
+      ).toHaveValue(SEED.serviceName, { timeout: CONTENT_TIMEOUT_MS });
+    },
+  },
+];
+
+/**
+ * Opens the seeded duration service by click, types `minutes`, saves by
+ * click, and proves the BFF's answer and the list. Returns on the list.
+ */
+async function saveDurationByForm(page: Page, minutes: number, testInfo: TestInfo): Promise<void> {
+  const what = `${SEED.durationServiceName} at ${minutes} min, ${testInfo.project.name}`;
+  await clickForReal(
+    page.getByRole("link", { name: `Editar ${SEED.durationServiceName}` }),
+    `/servicos: ${SEED.durationServiceName}`,
+    testInfo,
+  );
+  await expectPath(page, /^\/servicos\/editar$/u, what);
+  await expect(
+    page.locator('form input[name="name"]'),
+    `${what}: the edit form did not load the service within ${CONTENT_TIMEOUT_MS}ms.`,
+  ).toHaveValue(SEED.durationServiceName, { timeout: CONTENT_TIMEOUT_MS });
+
+  const duration = page.locator('form input[name="duration"]');
+  await duration.fill(String(minutes));
+
+  // Armed before the click, so the answer cannot slip past; the `catch` keeps
+  // a click that never happens from leaving a rejection nobody awaits.
+  const saved = page
+    .waitForResponse(
+      (response) => response.request().method() === "PATCH"
+        && new URL(response.url()).pathname.startsWith("/v1/services/"),
+      { timeout: SAVE_TIMEOUT_MS },
+    )
+    .catch((error: unknown) => (error instanceof Error ? error : new Error(String(error))));
+  await clickForReal(
+    page.getByRole("button", { name: "Salvar alterações" }),
+    "/servicos/editar: Salvar alterações",
+    testInfo,
+  );
+  const response = await saved;
+  if (response instanceof Error) {
+    const refusal = await duration.evaluate(
+      (input) => (input as HTMLInputElement).validationMessage,
+    );
+    throw new Error(
+      `${what}: "Salvar alterações" was clicked and no PATCH /v1/services/:id left the browser within `
+        + `${SAVE_TIMEOUT_MS}ms. The duration field's own validation says: "${refusal || "(valid)"}".`,
+    );
+  }
+  const status = response.status();
+  expect(
+    status >= 200 && status < 300,
+    `${what}: PATCH ${new URL(response.url()).pathname} answered ${status}, expected 2xx.`,
+  ).toBe(true);
+
+  await expectPath(page, /^\/servicos$/u, what);
+  await expect(
+    page.locator(".directory-row", { hasText: SEED.durationServiceName }),
+    `${what}: the list does not show the saved duration.`,
+  ).toContainText(`${minutes} min`, { timeout: CONTENT_TIMEOUT_MS });
+}
+
+test.describe("reached by real click", () => {
+  for (const reach of REACHED_BY_CLICK) {
+    test(`${reach.route}: the seeded row opens its detail`, async ({ page }, testInfo) => {
+      await waitForRateLimitBudget(testInfo);
+      watchRateLimitBudget(page);
+
+      const route = routeNamed(reach.route);
+      await page.goto(route.path, { waitUntil: "networkidle" });
+      await proveAuthenticatedScreen(page, route);
+
+      const what = `${route.path}: ${reach.label}`;
+      await clickForReal(reach.row(page), what, testInfo);
+      await expectPath(page, reach.detailPath, `${what} at ${testInfo.project.name}`);
+      await reach.detailLoaded(page, `${what} at ${testInfo.project.name}`);
+    });
+  }
+
+  /**
+   * "Criar serviço" receives the click. Nothing is created: the form is sent
+   * with a name and no price, and the price rule the form enforces before any
+   * request answers on screen. That answer can only exist if the submit ran,
+   * so it is the proof the button was reached — and the seed stays as the
+   * other measurements found it.
+   */
+  test("servicos: Criar serviço is reached by a real click", async ({ page }, testInfo) => {
+    await waitForRateLimitBudget(testInfo);
+    watchRateLimitBudget(page);
+
+    const created: string[] = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST" && new URL(request.url()).pathname === "/v1/services") {
+        created.push(request.url());
+      }
+    });
+
+    const route = routeNamed("servicos");
+    await page.goto(route.path, { waitUntil: "networkidle" });
+    await proveAuthenticatedScreen(page, route);
+
+    await clickForReal(
+      page.getByRole("link", { name: "Novo serviço" }).first(),
+      "/servicos: Novo serviço",
+      testInfo,
+    );
+    await expectPath(page, /^\/servicos\/novo$/u, `/servicos/novo at ${testInfo.project.name}`);
+    const name = page.locator('form input[name="name"]');
+    await expect(
+      name,
+      `/servicos/novo did not render its form within ${CONTENT_TIMEOUT_MS}ms.`,
+    ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+    await name.fill("Serviço que o gate não grava");
+
+    await clickForReal(
+      page.getByRole("button", { name: "Criar serviço" }),
+      "/servicos/novo: Criar serviço",
+      testInfo,
+    );
+    await expect(
+      page.getByRole("alert").filter({ hasText: "Informe o valor" }),
+      `/servicos/novo at ${testInfo.project.name}: "Criar serviço" was clicked and the form did not `
+        + "answer: the submit never ran.",
+    ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+    expect(
+      created,
+      "the gate must not create a service: the seed is shared by every measurement",
+    ).toEqual([]);
+  });
+
+  /**
+   * A 45-minute service saves through the form (Goal058, QA SV-01): the
+   * duration field accepted only 1, 6, 11…, so 45 was refused by the browser
+   * with nothing on screen and no request.
+   *
+   * On the service the rehearsal seeds for this case alone. Then put back to
+   * its seeded 60 minutes the same way — which is also the onboarding case the
+   * review could not save again — so every later test finds the seed as it
+   * was.
+   */
+  test("servicos: a 45-minute service saves through the form", async ({ page }, testInfo) => {
+    await waitForRateLimitBudget(testInfo);
+    watchRateLimitBudget(page);
+
+    const route = routeNamed("servicos");
+    await page.goto(route.path, { waitUntil: "networkidle" });
+    await proveAuthenticatedScreen(page, route);
+
+    await saveDurationByForm(page, 45, testInfo);
+    await saveDurationByForm(page, SEED.durationServiceMinutes, testInfo);
+  });
+});

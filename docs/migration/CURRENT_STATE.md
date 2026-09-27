@@ -5483,3 +5483,83 @@ Corrige **QA A-01** e **QA H-09** do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md)
   aderência do modelo real ao prompt fora de prova, por
   D-050 — ver [D-073](DECISIONS.md). **QA A-01 e QA H-09 corrigidos**,
   fora da contagem A-01…A-24 — ver [FINAL_AUDIT §34](FINAL_AUDIT.md).
+
+## Delta implementado — diff058, 2026-09-27 ([D-074](DECISIONS.md))
+
+Corrige **QA CV-01**, **QA CV-02**, **QA SV-01**, **QA SV-02** e
+**QA NT-04** do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md) (fora da
+enumeração A-01…A-24 do FINAL_AUDIT). Só `apps/frontend/` e o ensaio
+`scripts/goal033-authenticated-ui-rehearsal.mjs` (com o teste dele em
+`scripts/tests/`) mudam; `apps/bff/`, `apps/ai-orchestrator/`,
+`apps/scheduling-service/`, `apps/evolution-go/`, `packages/` e
+migrations não foram tocados.
+
+- **Classe base da casca (QA CV-01/CV-02, escopo §1)** — `AppShell`
+  aplica `app-frame` ao lado de `${styleModule}-shell` em toda casca, e
+  `apps/frontend/src/shared/styles/atendly.css` declara nela, uma vez, a
+  grade de 248px, o trilho de 88px abaixo de 1100px e, abaixo de 768px,
+  a sidebar escondida, o cabeçalho móvel `sticky` e a barra inferior
+  `fixed`. As regras repetidas de `dashboard`, `agenda` e `settings`
+  saíram; `conversations` e `directory` passam a ter casca. Cabeçalho
+  móvel e barra inferior da base ficam em `:where()`, com
+  especificidade zero, para que a regra do módulo vença:
+  `.settings-mobile-header` (`z-index` 40, respiro próprio) e
+  `.settings-bottom-nav` (cartão centrado de até 520px) continuam com o
+  estilo computado da baseline em 360, 390 e 768. `SHELL_MODULES`
+  (`navigation.ts`, reexportada por `AppShell`) alimenta
+  `tests/goal058-shell-base.test.tsx`.
+- **Respiro de Notificações (QA NT-04, escopo §2)** —
+  `.notifications-page, .settings-page` na regra de respiro existente de
+  `atendly-settings.css` e nos três breakpoints dela.
+- **Duração e preço (QA SV-01/SV-02, escopo §3–§4)** — duração com
+  `min={1}` e `step={1}` (`ServiceForm.tsx`); serviço novo e serviço sem
+  preço nascem com o preço vazio; `CurrencyInput` acrescenta ao fim,
+  derivando a edição do texto que o navegador montou no `onChange`, sem
+  depender de `keydown` (teclado virtual, IME, colar, ditado,
+  preenchimento automático). `tests/goal058-service-form.test.tsx`
+  (novo, **13** testes, **13** passando), inclusive três testes de
+  entrada só pelo evento `input`.
+- **Gate autenticado (escopo §5)** — `measureComposition`
+  (`apps/frontend/e2e/measure.ts`) nas sete rotas e cinco larguras:
+  marcador na primeira tela, `elementFromPoint` no centro sem navegação
+  por cima, sidebar sem sobrepor o `main`, cabeçalho móvel e barra
+  inferior inteiros dentro da viewport; anexos `composition-<rota>` e
+  `overflow-<rota>`. Clique real (`locator.click()` sem `force`) na
+  linha semeada de `/conversas`, `/clientes` e `/servicos` e em "Criar
+  serviço", nas cinco larguras; serviço de 45 minutos salvo pelo
+  formulário sobre um serviço semeado só para isso.
+- **Resposta do §5.1, medida na baseline** — o gate autenticado inteiro
+  numa `git worktree` temporária na baseline, com `e2e/` e a semente
+  deste Goal: **35** testes reprovados e **25** passando, exit 1; a
+  composição reprova em `/conversas`, `/clientes` e `/servicos` nas cinco
+  larguras e o clique real em 20 testes, com `aside.sidebar` nomeado. O
+  overflow do Goal033 não reprovou em 390 porque `scrollWidth` e
+  `clientWidth` ficaram em 390 nas três telas: sem grade, a sidebar é um
+  bloco de largura cheia empilhado sobre o `main`, e o único elemento
+  que passa da borda (a prévia de mensagem de `/conversas`, até x=409)
+  é recortado por um ancestral, sem rolar o documento; o mesmo elemento
+  continua recortado na execução final. A semente não é curta demais:
+  os marcadores ficam em y=797 a 1089.
+- **Controles negativos (escopo §6)** — saída colada em
+  [FINAL_AUDIT §35](FINAL_AUDIT.md): regra base removida reprova **55**
+  de **60** testes do gate autenticado; `step={5}` reprova **1** de
+  **13**; `CurrencyInput` da baseline reprova **3** de **13**; preço `0`
+  para serviço novo reprova **1** de **13**; a base sem `:where()` (a
+  regressão da rodada 1) reprova **4** de **60**, com
+  `nav.settings-bottom-nav` em x=-195..195 em 390.
+- **Prova executada nesta rodada (FIX-001, rodada 2), depois da última
+  edição de código e dos controles negativos:** `npm run
+  validate:integration` contra PostgreSQL 18 descartável em loopback —
+  **35**/**35** passos, exit 0, com `rehearse:goal033-authenticated-ui`
+  em **60** testes passando e **0** retentativas; `npm run validate:core`
+  — **17** passos, **15** `passed`, **2** `skipped` (`test:bff`,
+  `test:health-worker`), exit 0, com `test:frontend` em **74** arquivos
+  e **686** testes e `test:gate-scripts` em **227**/**227** (baseline
+  **226**); `npm run validate:ui` — **169** passando, **21** pulados,
+  exit 0; `npm run typecheck` e `npm run lint` (`apps/frontend`) exit 0.
+- **Limite declarado:** fidelidade visual ao protótipo segue
+  conferência humana; a composição mede o `contentMarker` de cada rota,
+  não o resto da tela; overflow recortado por ancestral não reprova —
+  ver [D-074](DECISIONS.md). **QA CV-01, QA CV-02, QA SV-01, QA SV-02 e
+  QA NT-04 corrigidos**, fora da contagem A-01…A-24 — ver
+  [FINAL_AUDIT §35](FINAL_AUDIT.md).

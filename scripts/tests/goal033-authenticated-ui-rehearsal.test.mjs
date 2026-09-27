@@ -18,6 +18,7 @@ import {
   extractRetriedTests,
   readGateReport,
   resolveRehearsalPlan,
+  SEED,
 } from "../goal033-authenticated-ui-rehearsal.mjs";
 
 const validUrl =
@@ -60,6 +61,23 @@ test("accepts a loopback, disposable target and derives its own three databases"
   assert.equal(plan.bff.database, "atendly_bff_test_goal033_bff");
   assert.equal(plan.scheduling.database, "atendly_bff_test_goal033_scheduling");
   assert.equal(plan.ai.database, "atendly_bff_test_goal033_ai");
+});
+
+// Goal058 (QA SV-01): o gate salva 45 minutos pelo formulário num serviço
+// semeado só para isso e o devolve à duração com que nasceu. Se ele fosse um
+// dos serviços que outras medidas nomeiam, ou nascesse com 45, o caso não
+// provaria nada ou mudaria o que o resto do gate mede.
+test("seeds a service of its own for the duration case, apart from every other seeded service", () => {
+  const { durationService, catalogService, onboardingService } = SEED;
+  assert.ok(durationService, "SEED.durationService is missing");
+  assert.notEqual(durationService.name, catalogService.name);
+  assert.notEqual(durationService.name, onboardingService.name);
+  assert.equal(durationService.durationMinutes, 60);
+  assert.notEqual(durationService.durationMinutes, 45);
+  assert.ok(
+    durationService.price > 0 && durationService.priceType === "FIXED",
+    "the form refuses a fixed price without a value, so the seeded service needs one",
+  );
 });
 
 function withOccupiedPort(run) {

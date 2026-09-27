@@ -24,6 +24,17 @@ export type ShellModule =
   | "settings"
   | "system";
 
+/** Todo valor de `ShellModule`, em runtime — para quem precisa iterar (Goal058/WU-01). */
+export const SHELL_MODULES: readonly ShellModule[] = [
+  "agenda",
+  "conversations",
+  "dashboard",
+  "directory",
+  "migration",
+  "settings",
+  "system",
+];
+
 export type NavDestination = {
   href: string;
   icon: IconName;

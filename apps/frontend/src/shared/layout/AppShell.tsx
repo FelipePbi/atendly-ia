@@ -31,6 +31,7 @@ import {
 import type { ShellConfig } from "./ShellConfig";
 
 export type { PlatformSection, ShellContextualAction, ShellModule } from "./navigation";
+export { SHELL_MODULES } from "./navigation";
 
 export type AppShellProps = ShellConfig & {
   children: ReactNode;

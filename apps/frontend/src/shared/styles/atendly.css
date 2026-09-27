@@ -1350,9 +1350,78 @@ p {
   height: 24px;
 }
 
+/*
+ * Casca comum de toda tela autenticada (Goal058/WU-01): grade de sidebar,
+ * trilho abaixo de 1100px, cabeçalho móvel e barra inferior abaixo de 768px
+ * moram aqui uma única vez, porque `app-frame` é aplicado em toda casca que
+ * `AppShell` monta, junto de `${styleModule}-shell`. Um módulo só declara CSS
+ * própria quando diverge de verdade (ex.: `.settings-mobile-header`,
+ * `.settings-bottom-nav`), nunca para repetir isto.
+ *
+ * Cabeçalho móvel e barra inferior ficam dentro de `:where()`, com
+ * especificidade zero: a classe do módulo (0,1,0) precisa vencer a base em
+ * qualquer ordem de arquivo. Sem isso `.app-frame > nav` (0,1,1) vencia
+ * `.settings-bottom-nav` e a barra de Configurações saía metade da tela.
+ */
 .app-frame {
   min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
   background: var(--bg);
+}
+.app-frame > main {
+  min-width: 0;
+}
+:where(.app-frame > main > header:first-child) {
+  display: none;
+}
+:where(.app-frame > nav) {
+  display: none;
+}
+:where(.app-frame > nav) .bottom-nav-item {
+  text-decoration: none;
+}
+
+@media (max-width: 1099px) {
+  .app-frame {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 767px) {
+  .app-frame {
+    display: block;
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+  .app-frame > .sidebar {
+    display: none;
+  }
+  :where(.app-frame > main > header:first-child) {
+    position: sticky;
+    z-index: 30;
+    top: 0;
+    min-height: calc(60px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 16px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: color-mix(in oklch, var(--surface), transparent 4%);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(12px);
+  }
+  :where(.app-frame > nav) {
+    position: fixed;
+    z-index: 50;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    min-height: calc(68px + env(safe-area-inset-bottom));
+    padding: 6px 8px env(safe-area-inset-bottom);
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
 }
 .desktop-shell {
   display: grid;
@@ -2652,22 +2721,6 @@ p {
 }
 
 /* Dashboard / Início — Passo 5 */
-.dashboard-shell {
-  min-height: 100dvh;
-  display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
-  background: var(--bg);
-}
-.dashboard-mobile-header,
-.dashboard-bottom-nav {
-  display: none;
-}
-.dashboard-bottom-nav .bottom-nav-item {
-  text-decoration: none;
-}
-.dashboard-main {
-  min-width: 0;
-}
 .dashboard-page {
   width: min(1280px, 100%);
   margin: 0 auto;
@@ -3006,9 +3059,6 @@ p {
 }
 
 @media (max-width: 1099px) and (min-width: 768px) {
-  .dashboard-shell {
-    grid-template-columns: 88px minmax(0, 1fr);
-  }
   .dashboard-page {
     padding-inline: 24px;
   }
@@ -3023,30 +3073,6 @@ p {
 }
 
 @media (max-width: 767px) {
-  .dashboard-shell {
-    display: block;
-    min-height: 100dvh;
-    padding-bottom: calc(76px + env(safe-area-inset-bottom));
-  }
-  .dashboard-shell > .sidebar {
-    display: none;
-  }
-  .dashboard-mobile-header {
-    position: sticky;
-    z-index: 30;
-    top: 0;
-    min-height: calc(60px + env(safe-area-inset-top));
-    padding: env(safe-area-inset-top) 16px 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: color-mix(in oklch, var(--surface), transparent 4%);
-    border-bottom: 1px solid var(--border);
-    backdrop-filter: blur(12px);
-  }
-  .dashboard-main {
-    min-width: 0;
-  }
   .dashboard-page {
     padding: 20px 16px 36px;
   }
@@ -3121,19 +3147,6 @@ p {
   }
   .quick-actions .btn {
     width: 100%;
-  }
-  .dashboard-bottom-nav {
-    position: fixed;
-    z-index: 50;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    min-height: calc(68px + env(safe-area-inset-bottom));
-    padding: 6px 8px env(safe-area-inset-bottom);
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    background: var(--surface);
-    border-top: 1px solid var(--border);
   }
 }
 

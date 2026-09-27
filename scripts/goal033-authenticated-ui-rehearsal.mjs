@@ -287,6 +287,17 @@ export const SEED = Object.freeze({
     colorToken: "VIOLET",
     description: "Coloração com avaliação prévia.",
   }),
+  // Serviço só do caso de duração do Goal058 (QA SV-01): o gate o abre por
+  // clique, salva 45 minutos pelo formulário e o devolve aos 60 com que nasceu
+  // — a duração do serviço do onboarding que a revisão local não conseguiu
+  // salvar de novo. Nenhuma outra medida o nomeia, então editá-lo não muda o
+  // que o resto do gate mede.
+  durationService: Object.freeze({
+    name: "Escova modelada",
+    durationMinutes: 60,
+    priceType: "FIXED",
+    price: 120,
+  }),
   availabilityDays: Object.freeze([0, 1, 2, 3, 4, 5, 6]),
   availabilityStartTime: "00:00",
   availabilityEndTime: "23:59",
@@ -1313,6 +1324,14 @@ async function seedTenant(client, ai, { bffDb, schedulingDb, aiDb, legalVersions
   );
   const serviceId = service.payload?.data?.id ?? null;
 
+  const durationService = await client.request("POST", "/v1/services", {
+    body: { ...SEED.durationService, active: true },
+  });
+  step(
+    durationService.status === 201,
+    `seed: POST /v1/services (duration case) answered ${durationService.status}, expected 201`,
+  );
+
   const customer = await client.request("POST", "/v1/customers", {
     body: { ...SEED.customer },
   });
@@ -1455,6 +1474,9 @@ async function seedTenant(client, ai, { bffDb, schedulingDb, aiDb, legalVersions
       customerName: SEED.customer.name,
       serviceName: SEED.catalogService.name,
       contactName: SEED.contact.name,
+      inboundText: SEED.contact.text,
+      durationServiceName: SEED.durationService.name,
+      durationServiceMinutes: SEED.durationService.durationMinutes,
     },
   };
 }

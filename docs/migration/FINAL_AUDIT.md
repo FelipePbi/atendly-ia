@@ -4327,3 +4327,97 @@ O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` 
 Quatro coisas que este recontar não diz. **Não prova aderência do modelo real ao prompt** (D-050): o eval usa um dublê roteirizado, prova o que o runtime deixa acontecer quando o modelo escreve o texto do roteiro, não o comportamento do modelo real em produção. **Não fecha o `QA_LOCAL_REVIEW`**: o documento da revisão não é editado — ele registra a revisão como ela foi. **Não cobre afirmação sem rascunho pendente**: uma frase como "seu horário de quinta está confirmado", sobre um agendamento antigo sem `pendingAction`, passa sem checagem — o guard não distingue de fato verdadeiro sem ler a agenda; o caso real de QA A-01 (hold recém-criado, ainda em `pendingAction`) cai dentro do guard. **Termo genérico de confirmação cruza tipo e é fail-closed**: `COMMITMENT_CLAIM_GENERIC_CONFIRM_TERMS` entra no vocabulário dos três tipos porque o guard decide o tipo pelo `pendingAction`, não pelo texto; com `cancel` ou `reschedule` pendente, uma frase que usa só o termo genérico sobre o agendamento original, sem afirmar o efeito do rascunho — por exemplo, "Seu horário continua confirmado, mesmo assim quer cancelar?" — dispara o guard mesmo sem afirmar cancelamento ou remarcação; o custo desse falso positivo cai sobre uma mensagem substituída, nunca sobre uma confirmação inventada (ambos os limites, [D-073](DECISIONS.md)).
 
 Execução conferida por esta Work Unit: `npx vitest run tests/assistant/commitment-claim-guard.test.ts tests/evals/commitment-claim.eval.test.ts tests/internal/dashboard-ai-appointments.routes.test.ts` — **67** testes, **67** passando, **0** falhando, depois de cada controle negativo revertido. `git status --porcelain=v1 -uall` sobre `apps/ai-orchestrator/src/modules/assistant/assistant.service.ts` e `apps/ai-orchestrator/src/modules/internal/routes.ts` mostra só o diff desta execução, sem resto de controle. Rodados nesta rodada de correção (FIX-001, rodada 4): `npm run typecheck` (`apps/ai-orchestrator`) exit 0; `npm run lint` (`apps/ai-orchestrator`) exit 0; `npm test` (`apps/ai-orchestrator`, suíte completa) — **1099** testes passando, **88** pulados, **0** falhando; `npm run validate:core` — **15** passos `passed`, **2** `skipped` (`test:bff`, `test:health-worker`), **0** `failed`, exit 0, incluindo o passo `test:gate-scripts` com **226**/**226**.
+
+## 35. QA CV-01, QA CV-02, QA SV-01, QA SV-02 e QA NT-04 são corrigidos: a área logada volta a ter casca, e o gate autenticado passa a medir a composição — Goal058, 2026-09-27
+
+Seção nova, escrita depois da execução final da rodada 2 do diff058. Ela **não reescreve** §4 a §34: os registros de A-01 a A-24, o veredito das seções anteriores e as trinta e quatro seções de fechamento anteriores continuam exatamente como estavam. **QA CV-01, QA CV-02, QA SV-01, QA SV-02 e QA NT-04** vêm do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md), não da enumeração A-01…A-24 — o prefixo `QA` existe porque este documento já usa `A-` com outro significado — e **não entram nessa contagem**. Decisão: [D-074](DECISIONS.md), `ACCEPTED` no [review058](reviews/058-review.md).
+
+### O que mudou
+
+**QA CV-01 e QA CV-02 — a casca é uma regra base comum a todo módulo.** `AppShell` aplica `app-frame` ao lado de `${styleModule}-shell` em toda casca, e a grade de 248px, o trilho de 88px abaixo de 1100px, o cabeçalho móvel e a barra inferior abaixo de 768px moram uma vez em `apps/frontend/src/shared/styles/atendly.css`. As regras repetidas de `dashboard`, `agenda` e `settings` saíram; `conversations` e `directory`, que não tinham regra nenhuma desde os Goals 016 e 017, passam a ter a da base. Cabeçalho móvel e barra inferior da base ficam em `:where()`, com especificidade zero: na rodada 1 deste Goal a base usava `.app-frame > nav` (0,1,1), que vencia `.settings-bottom-nav` (0,1,0) e empurrava a barra inferior de Configurações para x=-195..195 em 390px; com `:where()`, o estilo computado do cabeçalho e da barra de `settings` em 360, 390 e 768 é idêntico ao da baseline (medido com Chromium sobre os CSS concatenados na ordem de `globals.css`).
+
+**QA NT-04 — Notificações com o respiro de `.settings-page`.** `atendly-settings.css` agrupa `.notifications-page, .settings-page` na regra de respiro existente e nos três breakpoints dela, sem número novo.
+
+**QA SV-01 — duração aceita qualquer minuto inteiro.** `ServiceForm.tsx` troca `step={5}` por `step={1}` na duração, com `min={1}`; os intervalos antes e depois do atendimento continuam `min={0}` e `step={5}`.
+
+**QA SV-02 — preço nasce vazio e a digitação não depende do cursor.** Serviço novo e serviço sem preço nascem com o campo vazio. `CurrencyInput` deriva a edição do texto que o navegador montou, no `onChange`: sem seleção, o dígito entra à direita do valor qualquer que seja o cursor; apagar um caractere tira o último dígito; substituir ou apagar uma seleção deixa o campo com os dígitos que passou a mostrar; o que não é dígito é ignorado. A rodada 1 tratava a entrada no `keydown`, com `onChange` vazio; a rodada 2 tira essa dependência, porque teclado virtual e IME mandam `key: "Unidentified"` e ditado, preenchimento automático e texto arrastado nem mandam `keydown`.
+
+**O gate autenticado mede composição e alcance por clique real.** `measureComposition` (`apps/frontend/e2e/measure.ts`) roda nas sete rotas e nas cinco larguras: marcador na primeira tela, `elementFromPoint` no centro dele sem navegação por cima, sidebar sem sobrepor o `main`, e cabeçalho móvel e barra inferior inteiros dentro da viewport. `authenticated-matrix.spec.ts` abre a linha semeada de Conversas, Clientes e Serviços e "Criar serviço" por `locator.click()` sem `force`, nas cinco larguras, e salva um serviço de 45 minutos pelo formulário. A semente ganha um serviço próprio para o caso de 45 minutos.
+
+### Por que o gate do Goal033 não reprovou, medido na baseline
+
+Execução do gate autenticado inteiro (`node scripts/goal033-authenticated-ui-rehearsal.mjs`, PostgreSQL descartável em loopback) numa `git worktree` temporária na baseline, com o CSS e o `src/` da baseline e só `e2e/` e a semente deste Goal:
+
+```
+  35 failed
+  25 passed (12.9m)
+goal033:authenticated-ui-rehearsal FAILED — AuthenticatedUiRehearsalError: the authenticated gate failed with exit 1. Its output is above, in full.
+```
+
+A medida de composição reprova em `/conversas`, `/clientes` e `/servicos` nas cinco larguras (15 testes de medida), e o clique real reprova 20 testes, com o interceptador nomeado, por exemplo:
+
+```
+/conversas at mobile-390: the content marker (Conversas) starts at y=901, below the first screen (844px). Found at the top instead: sidebar {"left":0,"right":390}, main {"left":0,"right":390}.
+/clientes at desktop-1440: aside.sidebar {"left":0,"right":1440} overlaps main {"left":0,"right":1440} by 1440px horizontally; the element at the content marker's centre is nothing.
+/conversas: the conversation with Nina das Telas at mobile-390 could not be reached by a real click within 15000ms: <aside class="sidebar" aria-label="Navegação da aplicação">…</aside> intercepts pointer events.
+```
+
+A causa de o overflow não ter reprovado em 390, lida nos anexos `overflow-*` e `composition-*` dessa execução: a medida de overflow compara `scrollWidth` com `clientWidth` do documento, e nas três telas os dois ficam em 390. Sem regra de casca, a sidebar é um bloco de largura cheia (x=0..390) empilhado sobre o `main` (x=0..390), então nada estoura na horizontal. O único elemento que passa da borda é a prévia de mensagem de `/conversas`, um `span` que vai até x=409 (x=401 em 360); como o documento não rola, um ancestral o recorta. Ele aparece na lista de `offenders` e a asserção não reprova. O mesmo `span`, igualmente recortado, continua na lista da execução final com a casca corrigida (`scrollWidth` 390): o "vaza para a direita" que a revisão descreveu não se reproduz, com esta semente, como rolagem do documento. A barra inferior aparece em fluxo, sem `position: fixed`, com 280px de altura (y=1429..1709 em `/conversas`), igual ao que a revisão descreveu. A semente não é curta demais: os marcadores ficam em y=797 a 1089, sempre abaixo da primeira tela.
+
+A linha semeada de `/servicos` abre o detalhe por clique real na baseline e no controle 1 abaixo: em bloco, a sidebar fica acima da lista, não sobre ela, e o clique chega à linha depois da rolagem. As outras quatro medidas de clique reprovam.
+
+### Controles negativos, depois da última edição de código, saída real
+
+1. Regra base removida (numa cópia: `.app-frame` volta a ter só `min-height` e `background`, como na baseline), gate autenticado inteiro por `node scripts/goal033-authenticated-ui-rehearsal.mjs`:
+```
+  55 failed
+  5 passed (13.9m)
+goal033:authenticated-ui-rehearsal FAILED — AuthenticatedUiRehearsalError: the authenticated gate failed with exit 1. Its output is above, in full.
+/conversas at mobile-390: the content marker (Conversas) starts at y=901, below the first screen (844px). Found at the top instead: sidebar {"left":0,"right":390}, main {"left":0,"right":390}.
+/clientes at mobile-390: the content marker (Clientes) starts at y=909, below the first screen (844px). Found at the top instead: sidebar {"left":0,"right":390}, main {"left":0,"right":390}.
+/servicos at desktop-1440: aside.sidebar {"left":0,"right":1440} overlaps main {"left":0,"right":1440} by 1440px horizontally; the element at the content marker's centre is nothing.
+/clientes: the customer Marta Nogueira at desktop-1440 could not be reached by a real click within 15000ms: <aside class="sidebar" aria-label="Navegação da aplicação">…</aside> intercepts pointer events.
+/servicos: Novo serviço at desktop-1440 could not be reached by a real click within 15000ms: <a href="/servicos" aria-current="page" class="nav-item is-active">…</a> from <aside class="sidebar" aria-label="Navegação da aplicação">…</aside> subtree intercepts pointer events.
+```
+Os 35 testes de medida reprovam (as sete rotas, porque a base é a única casca de todo módulo), mais 20 de clique; passam só os 5 da linha semeada de `/servicos`.
+
+2. `step={5}` com `min={1}` de volta na duração, `npx vitest run tests/goal058-service-form.test.tsx`:
+```
+     × 40, 45, 60 e 41 são válidos; 0 é recusado; vazio continua válido 41ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 12 passed (13)
+```
+
+3. `CurrencyInput` da baseline restaurado, mesmo teste:
+```
+     × digitar 6000 dá R$ 60,00 com o cursor no começo, no meio e no fim 334ms
+     × dígitos que chegam só pelo evento input, sem keydown, acumulam ao fim 2ms
+     × apagar um caractere pelo evento input tira o último dígito, onde quer que esteja o cursor 1ms
+ Test Files  1 failed (1)
+      Tests  3 failed | 10 passed (13)
+```
+Com o `CurrencyInput` da rodada 1 (só `keydown`, `onChange` vazio), reprovam os três testes de entrada sem `keydown` (`3 failed | 10 passed (13)`).
+
+4. `ServiceForm` passando `0` para serviço novo, mesmo teste:
+```
+ FAIL  tests/goal058-service-form.test.tsx > preço do serviço > serviço novo nasce com o campo de preço vazio
+AssertionError: expected 'R$ 0,00' to be '' // Object.is equality
+      Tests  1 failed | 12 passed (13)
+```
+
+Um quinto controle, da regressão da rodada 1: com a base de volta a `.app-frame > nav` e `.app-frame > main > header:first-child`, sem `:where()`, o gate autenticado reprova só os 4 testes de medida de `/configuracoes` e `/notificacoes` em 360 e 390 (`stats` lido do `results.json` dessa execução, exit 1):
+```
+stats {"startTime":"2026-09-27T11:41:12.421Z","duration":125091.624,"expected":56,"skipped":0,"unexpected":4,"flaky":0}
+/configuracoes at mobile-390: the shell's mobile header or bottom bar runs off the viewport (390x844): [{"element":"nav.settings-bottom-nav","left":-195,"right":195,"top":776,"bottom":844,"inside":false}]
+/notificacoes at mobile-360: the shell's mobile header or bottom bar runs off the viewport (360x740): [{"element":"nav.settings-bottom-nav","left":-180,"right":180,"top":672,"bottom":740,"inside":false}]
+```
+
+Os controles 1 e 5 rodaram numa `git worktree` temporária, fora da worktree do Goal, removida no fim. Os controles 2 a 4 foram aplicados e revertidos no mesmo passo, a partir de cópia guardada antes da mutação, com o hash do arquivo conferido depois; em seguida, `tests/goal058-service-form.test.tsx` e `tests/goal058-shell-base.test.tsx` voltam a **20** testes passando.
+
+### Veredito recontado
+
+O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO`** — os mesmos números de §34. Nenhum achado de A-01 a A-24 foi tocado, corrigido, reclassificado ou reaberto: `git diff` deste documento só acrescenta esta seção, e os cinco achados corrigidos são do `QA_LOCAL_REVIEW`, fora dessa enumeração.
+
+O que este recontar não diz. **Não prova fidelidade visual** da casca, de Conversas, Clientes, Serviços e Notificações ao protótipo aprovado: essa conferência é humana (Goal069). **Não fecha o `QA_LOCAL_REVIEW`**, que não é editado. **A composição mede o `contentMarker` de cada rota**, não o resto da tela. **Overflow recortado por ancestral continua sem reprovar**, como a baseline mostrou em `/conversas`.
+
+Execução final desta rodada, sobre a árvore entregue, depois da última edição de código e dos controles negativos: `BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55481/atendly_bff_test" npm run validate:integration`, contra um PostgreSQL 18 descartável em loopback — **35** passos, **35** `passed`, **0** `failed`, exit 0; nele, `rehearse:goal033-authenticated-ui` com **60** testes passando e **0** retentativas (`stats` do `results.json`: `expected` 60, `unexpected` 0, `flaky` 0). `npm run validate:core` — **17** passos, **15** `passed`, **2** `skipped` (`test:bff`, `test:health-worker`), **0** `failed`, exit 0, com `test:frontend` em **74** arquivos e **686** testes passando e `test:gate-scripts` em **227**/**227** (baseline: **226**). `npm run validate:ui` — **169** testes passando, **21** pulados, **0** retentativas, exit 0. `npm run typecheck` e `npm run lint` (`apps/frontend`) exit 0.

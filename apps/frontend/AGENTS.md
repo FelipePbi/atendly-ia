@@ -163,8 +163,52 @@ A saída vai para `e2e-results/`, que está no `.gitignore` de propósito — o
 revisor do IA Loop é fingerprintado por `git status --porcelain` na worktree, e
 artefato rastreado ali viraria `REVIEWER_MUTATED_WORKTREE`.
 
-Rotas cobertas: só as públicas (`e2e/routes.ts`). Tela autenticada exigiria
-sessão real, e sessão falsa provaria layout sobre dado que ninguém vê.
+Rotas cobertas por `validate:ui`: só as públicas (`PUBLIC_ROUTES` em
+`e2e/routes.ts`). `validate:ui` não tem sessão nem banco, e sessão falsa
+provaria layout sobre dado que ninguém vê.
+
+## O gate autenticado (dentro de `validate:integration`)
+
+As sete telas logadas (`/inicio`, `/agenda`, `/clientes`, `/conversas`,
+`/configuracoes`, `/servicos`, `/notificacoes`, `AUTHENTICATED_ROUTES` em
+`e2e/routes.ts`) são medidas por `e2e/authenticated-matrix.spec.ts`, com a
+mesma régua (`e2e/measure.ts`) e as mesmas cinco larguras. Ele roda como o
+passo `rehearse:goal033-authenticated-ui` de `npm run validate:integration`,
+não em `validate:ui`: `scripts/goal033-authenticated-ui-rehearsal.mjs` sobe
+BFF, Scheduling e IA reais sobre bancos descartáveis, semeia o negócio pelas
+rotas do produto, constrói e serve o frontend, e o Playwright digita e-mail e
+senha em `/login` — nenhuma sessão fabricada.
+
+Além de overflow, touch target, contraste, foco e movimento, ele mede
+(Goal058):
+
+- **Composição**, por rota e largura: o `contentMarker` da rota começa na
+  primeira tela; `elementFromPoint` no centro dele devolve o próprio marcador,
+  nunca sidebar, cabeçalho móvel, barra inferior ou FAB; a sidebar, quando
+  visível, não sobrepõe o `main`; e o cabeçalho móvel e a barra inferior,
+  quando visíveis, ficam inteiros dentro da viewport.
+- **Alcance por clique real** (`locator.click()` sem `force`): a linha semeada
+  de Conversas, Clientes e Serviços abre o detalhe, e "Criar serviço" abre o
+  formulário, nas cinco larguras.
+- **Serviço de 45 minutos** salvo pelo formulário, com resposta 2xx e
+  "45 min" na lista.
+
+A casca que essas medidas protegem é a classe base `app-frame`, que
+`AppShell` aplica em toda casca ao lado de `${module}-shell`
+(`src/shared/styles/atendly.css`). Cabeçalho móvel e barra inferior da base
+ficam dentro de `:where()`, com especificidade zero, para que a regra de um
+módulo (por exemplo `.settings-bottom-nav`) sempre vença.
+
+Para rodar só este gate, com um PostgreSQL descartável em loopback (receita
+em `docs/migration/VALIDATION_GATE.md`):
+
+```bash
+BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_bff_test" \
+  node scripts/goal033-authenticated-ui-rehearsal.mjs
+```
+
+a partir da raiz do repositório. A saída vai para
+`e2e-results/authenticated/`, fora do Git pelo mesmo motivo acima.
 
 `tests/support/a11y.test.tsx` existe para provar que o portão morde: ele aponta
 o axe para markup quebrado de propósito e exige que falhe. Um axe mal

@@ -1,6 +1,6 @@
 # Goal 058 — A área logada volta a ter casca, e o gate autenticado passa a medir a composição
 
-**Status: READY.** Preparado em 2026-09-27 pelo Tech Lead Agent após [Goal057 ACCEPTED](../reviews/057-review.md), a integração do seu commit de fechamento e a [revisão local de ponta a ponta](../QA_LOCAL_REVIEW.md). Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED** no [review058](../reviews/058-review.md), rodada 2 de 2 (rodada 1 `CHANGES_REQUIRED` com 5 blockers). Preparado em 2026-09-27 pelo Tech Lead Agent após [Goal057 ACCEPTED](../reviews/057-review.md), a integração do seu commit de fechamento e a [revisão local de ponta a ponta](../QA_LOCAL_REVIEW.md). Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: SONNET_HIGH
 

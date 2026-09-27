@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 /**
  * The measurement ruler, extracted from `viewport-matrix.spec.ts` (Goal033
@@ -236,4 +236,168 @@ export async function measureRunningAnimations(page: Page): Promise<string[]> {
     }
     return offenders.slice(0, 10);
   }, REDUCED_MOTION_TOLERANCE_SECONDS);
+}
+
+/**
+ * The shell's navigation, by what `AppShell` renders: the sidebar, the mobile
+ * header and the bottom bar (whose class is `${module}-mobile-header` and
+ * `${module}-bottom-nav`), and the floating action button that sits beside
+ * the bottom bar. Content found under any of these is content the tenant
+ * cannot reach.
+ */
+export const SHELL_NAVIGATION_SELECTOR =
+  'aside.sidebar, header[class$="-mobile-header"], nav[class$="-bottom-nav"], a.fab';
+
+export type CompositionHit = {
+  /** `tag.class` of what `elementFromPoint` returned, or `null` for nothing. */
+  element: string | null;
+  html: string | null;
+  insideMarker: boolean;
+  /** `tag.class` of the navigation ancestor the hit lives in, if any. */
+  navigation: string | null;
+};
+
+export type CompositionResult = {
+  viewport: { width: number; height: number };
+  marker: { top: number; left: number; right: number; bottom: number };
+  /** The point probed: the centre of the marker's part inside the first screen. */
+  point: { x: number; y: number } | null;
+  hit: CompositionHit;
+  /** Only when the sidebar is actually rendered at this width. */
+  sidebar: { left: number; right: number } | null;
+  main: { left: number; right: number } | null;
+  /** Horizontal intersection of the two boxes, in px; 0 when they sit side by side. */
+  sidebarMainOverlap: number;
+  /**
+   * The mobile header and the bottom bar, only when rendered at this width,
+   * with `inside` telling whether the whole box sits on the glass. A bar
+   * pushed to a negative `left` is neither overflow (nothing scrolls) nor a
+   * covered marker, so neither reading above would see it.
+   */
+  chrome: ChromeBox[];
+};
+
+export type ChromeBox = {
+  element: string;
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  inside: boolean;
+};
+
+/** Sub-pixel rounding of a fixed bar's edge, never a bar out of place. */
+const CHROME_TOLERANCE = 1;
+
+/**
+ * The composition of a screen: whether its content is where a person can see
+ * it and reach it (Goal058, QA CV-01/CV-02).
+ *
+ * Overflow, touch target, contrast, focus and motion all passed on a shell
+ * whose sidebar took the whole width and sat on top of the list. None of them
+ * asks the question this one asks: is the screen's own content on the first
+ * screen, and is it the thing a pointer lands on?
+ *
+ * Three readings, all taken with the page scrolled to the top:
+ *
+ * - the marker's top against the viewport height;
+ * - `document.elementFromPoint` at the centre of the marker's visible part —
+ *   the marker's box clipped to the viewport, which for a heading is its own
+ *   centre, and for a page wrapper taller than the screen (`/inicio`) is the
+ *   centre of what the first screen shows of it. A point off the glass would
+ *   make `elementFromPoint` answer `null` for a reason that is not the layout;
+ * - the sidebar's box against the `main` box, horizontally, only when the
+ *   sidebar is rendered at this width;
+ * - the mobile header and the bottom bar against the viewport, whole, only
+ *   when rendered at this width (Goal058 round 2: the settings bottom bar sat
+ *   at x=-195..195 at 390px and nothing above failed).
+ *
+ * The caller owns the assertions; this only reads the layout and names what
+ * it found.
+ */
+export async function measureComposition(marker: Locator): Promise<CompositionResult> {
+  await marker.page().evaluate(() => window.scrollTo(0, 0));
+  return marker.evaluate((target, { navigationSelector, chromeTolerance }) => {
+    const describe = (el: Element | null): string | null => {
+      if (!el) return null;
+      const classes = typeof el.className === "string" && el.className.trim() !== ""
+        ? `.${el.className.trim().split(/\s+/u).join(".")}`
+        : "";
+      return `${el.tagName.toLowerCase()}${classes}`;
+    };
+    const isRendered = (el: Element | null): el is Element => {
+      if (!el) return false;
+      const style = getComputedStyle(el);
+      const box = el.getBoundingClientRect();
+      return style.display !== "none"
+        && style.visibility !== "hidden"
+        && box.width > 0
+        && box.height > 0;
+    };
+
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const box = target.getBoundingClientRect();
+
+    const visibleLeft = Math.max(box.left, 0);
+    const visibleRight = Math.min(box.right, width);
+    const visibleTop = Math.max(box.top, 0);
+    const visibleBottom = Math.min(box.bottom, height);
+    const point = visibleRight > visibleLeft && visibleBottom > visibleTop
+      ? { x: (visibleLeft + visibleRight) / 2, y: (visibleTop + visibleBottom) / 2 }
+      : null;
+
+    const found = point ? document.elementFromPoint(point.x, point.y) : null;
+    const navigation = found?.closest(navigationSelector) ?? null;
+
+    const sidebar = document.querySelector("aside.sidebar");
+    const main = document.querySelector("main#main-content");
+    const sidebarBox = isRendered(sidebar) ? sidebar.getBoundingClientRect() : null;
+    const mainBox = isRendered(main) ? main.getBoundingClientRect() : null;
+    const overlap = sidebarBox && mainBox
+      ? Math.max(0, Math.min(sidebarBox.right, mainBox.right) - Math.max(sidebarBox.left, mainBox.left))
+      : 0;
+
+    const chrome = Array.from(
+      document.querySelectorAll('header[class$="-mobile-header"], nav[class$="-bottom-nav"]'),
+    )
+      .filter(isRendered)
+      .map((el) => {
+        const chromeBox = el.getBoundingClientRect();
+        return {
+          element: describe(el) ?? el.tagName.toLowerCase(),
+          left: Math.round(chromeBox.left),
+          right: Math.round(chromeBox.right),
+          top: Math.round(chromeBox.top),
+          bottom: Math.round(chromeBox.bottom),
+          inside: chromeBox.left >= -chromeTolerance
+            && chromeBox.right <= width + chromeTolerance
+            && chromeBox.top >= -chromeTolerance
+            && chromeBox.bottom <= height + chromeTolerance,
+        };
+      });
+
+    return {
+      viewport: { width, height },
+      marker: {
+        top: Math.round(box.top),
+        left: Math.round(box.left),
+        right: Math.round(box.right),
+        bottom: Math.round(box.bottom),
+      },
+      point: point ? { x: Math.round(point.x), y: Math.round(point.y) } : null,
+      hit: {
+        element: describe(found),
+        html: found ? found.outerHTML.slice(0, 160) : null,
+        insideMarker: found !== null && (found === target || target.contains(found)),
+        navigation: describe(navigation),
+      },
+      sidebar: sidebarBox
+        ? { left: Math.round(sidebarBox.left), right: Math.round(sidebarBox.right) }
+        : null,
+      main: mainBox ? { left: Math.round(mainBox.left), right: Math.round(mainBox.right) } : null,
+      sidebarMainOverlap: Math.round(overlap),
+      chrome,
+    };
+  }, { navigationSelector: SHELL_NAVIGATION_SELECTOR, chromeTolerance: CHROME_TOLERANCE });
 }

@@ -4692,3 +4692,139 @@ Esta Work Unit é de controles negativos e documentação: os passos agregadores
 ### Veredito recontado
 
 O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO`** — os mesmos números de §37. Nenhum achado de A-01 a A-24 foi tocado, corrigido, reclassificado ou reaberto: esta seção só acrescenta o registro do diff060, e **QA IM-01/QA IM-02 corrigidos** são do `QA_LOCAL_REVIEW`, fora dessa enumeração.
+
+## 39. QA IM-03, QA IM-04, QA IM-05, QA IM-07 e QA IM-08 são corrigidos: a importação longa não depende de uma requisição — Goal061, 2026-09-27
+
+Seção nova, reescrita na rodada 2 do Goal061 depois da execução final. Ela **não reescreve** §4 a §38: os registros de A-01 a A-24, o veredito das seções anteriores e as trinta e oito seções de fechamento anteriores continuam exatamente como estavam. **QA IM-03**, **QA IM-04**, **QA IM-05**, **QA IM-07** e **QA IM-08** vêm do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md), não da enumeração A-01…A-24 — o prefixo `QA` existe porque este documento já usa `A-` com outro significado — e **não entram nessa contagem**. Decisão: [D-078](DECISIONS.md), **ACCEPTED** no [review061](reviews/061-review.md) (rodada 2 de 2).
+
+### O que mudou
+
+**QA IM-03 e QA IM-07 — iniciar é uma requisição curta.** `POST /internal/calendar/imports/:sessionId/analyze` e `POST .../execute` (`apps/scheduling-service/src/modules/internal-api/routes.ts`) conferem sessão, estado e conexão, reivindicam a sessão com `acquireImportLease` gravando `ANALYZING` ou `EXECUTING` no mesmo `UPDATE`, disparam o trabalho em `ImportBackgroundWork` (`import-lease.ts`) e respondem `202` com `{ sessionId, status, previewVersion }`, sem chamar a origem. A análise passa a ter lease: ela e a execução se excluem pelo estado, e novo início com lease vivo é recusado com `IMPORT_SESSION_LEASE_HELD` (409). A transação final da análise só grava se a sessão ainda tem o mesmo `leaseOwner` e está em `ANALYZING`. Falha que não é de item grava `errorCode` de `IMPORT_WORK_ERROR_CODES` e libera o lease. O BFF e o contrato público (`importWorkStartSchema`) repassam o `202`. A tela sai para o acompanhamento quando o início é aceito. Falha de transporte (rede, timeout ou 5xx) no início da análise, em "Importar tudo" e na retomada ("Importar os N que faltam"/"Continuar") relê `GET /v1/calendar/imports` e só mostra erro quando o estado relido mostra que nada começou. Depois de "Tentar de novo" ou "Continuar" aceito, a tela mostra a análise em andamento, não a falha nem a interrupção da tentativa anterior que a sessão ainda carrega. **QA IM-04 — montar não reanalisa.** `GET /internal/calendar/imports/:sessionId/preview` e `GET /v1/calendar/imports/:sessionId/preview` leem o preview gravado da versão vigente, sem a origem; `ImportPreviewScreen.tsx` só inicia a análise sozinha em `DRAFT` sem preview. **QA IM-08 — motivo do item falho.** `failedReasons` por categoria em `progress`, e "O que ainda não entrou" mostra cada motivo em linguagem leiga, com a contagem. Cada código que a execução grava tem texto próprio em `labels.ts` (`IMPORT_SERVICE_MAPPING_MISSING`, `IMPORT_CUSTOMER_MAPPING_MISSING`, `IMPORT_APPOINTMENT_INTERVAL_INVALID`, `IMPORT_SOURCE_RECORD_INVALID`, `IMPORT_AVAILABILITY_COMPANY_MISSING`, `IMPORT_ITEM_FAILED`); código desconhecido cai num texto genérico. **QA IM-05 — contagem de clientes.** A revisão e a escolha mostram `discoveredCount` também em categoria com limitação. `interrupted` (lease vencido pelo relógio do banco, ou ausente, em `ANALYZING`/`EXECUTING`) e `lastError` entram em `progress` e em `session` de `GET /internal/calendar/imports`; a tela oferece "Continuar". Decisão completa e limites: [D-078](DECISIONS.md).
+
+### Controles negativos, saída real
+
+Os seis controles do §8 do Goal, cada um aplicado num arquivo de produção, com cópia do original salva antes e restaurada no mesmo passo (arquivo restaurado comparado byte a byte com a cópia, sem diferença). Os controles 1 a 4 atuam em `apps/scheduling-service/src`, que a rodada 2 não mudou; a saída abaixo é a da rodada 1. Os controles 5 e 6 rodaram de novo na rodada 2, depois da última edição de código, porque o frontend mudou; a saída abaixo é a dessa execução. Os controles 1 a 4 rodaram com `SCHEDULING_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_scheduling_test" npx vitest run --dir tests/integration tests/integration/goal061-import-async.test.ts` (`apps/scheduling-service`, contra PostgreSQL real, banco provisionado por `scripts/provision-scheduling-test-database.mjs`); os controles 5 e 6, com `npx vitest run tests/goal061-import-async.test.tsx` (`apps/frontend`, jsdom).
+
+1. **A rota de análise volta a aguardar o trabalho antes de responder** (`routes.ts`, `importWork.dispatch(() => preview.runAnalysis(...))` trocado por `await preview.runAnalysis(...)`):
+```
+     × POST analyze answers 202 ANALYZING while the origin is locked, then reaches READY in-process 5146ms
+     × a locked analysis refuses execution and a second analysis; the same key replays without a second work 5040ms
+     × replace while the analysis is locked: the old work writes nothing to the replaced session nor to the new one 5033ms
+     × starting in one business never claims or reads another business's session 5026ms
+     × an ANALYZING session with an expired lease is interrupted in progress and in GET imports, by the database clock, and a new start resumes it 5040ms
+ FAIL  ... > POST analyze answers 202 ANALYZING while the origin is locked, then reaches READY in-process
+Error: Test timed out in 5000ms.
+ Test Files  1 failed (1)
+      Tests  5 failed | 7 passed (12)
+```
+2. **A análise deixa de reivindicar o lease** (`import-preview-service.ts`, a chamada `acquireImportLease` de `startAnalysis` trocada por um `claim` fixo `{ acquired: true, lease: { owner, ... } }` que não toca o banco):
+```
+ FAIL  ... > a locked analysis refuses execution and a second analysis; the same key replays without a second work
+AssertionError: expected 'IMPORT_SESSION_NOT_EXECUTABLE' to be 'IMPORT_SESSION_LEASE_HELD' // Object.is equality
+ FAIL  ... > POST analyze answers 202 ANALYZING while the origin is locked, then reaches READY in-process
+AssertionError: expected 'DRAFT' to be 'ANALYZING' // Object.is equality
+ FAIL  ... > a locked execution refuses analysis and a second execution; the same key replays without a second work
+AssertionError: expected 409 to be 202 // Object.is equality
+ Test Files  1 failed (1)
+      Tests  9 failed | 3 passed (12)
+```
+3. **A transação final da análise deixa de conferir o `leaseOwner`** (`import-preview-service.ts`, `leaseOwner: start.lease.owner` removido do `where` do `updateMany` de `recordAnalysis`). **Contra o teste de `replace` do §7.1, o controle não reprovou:** `Tests  12 passed (12)`. Motivo, conferido no código: `replace` move a sessão para `SUPERSEDED` e apaga o `leaseOwner`, então o `heartbeat({ force: true })` feito antes da gravação já perde o lease, e o `status: "ANALYZING"` do mesmo `where` também recusa — a conferência do dono não é a única barreira nesse caso. A rodada 1 acrescentou ao arquivo o teste em que a conferência do dono é a única barreira: outra instância toma o lease vencido **depois** do último heartbeat e antes da transação final, com a sessão ainda em `ANALYZING`. Com o controle aplicado, sobre o arquivo com **13** testes:
+```
+     × a lease taken by another instance after the last heartbeat: the old analysis's final transaction writes nothing 28ms
+ FAIL  ... > a lease taken by another instance after the last heartbeat: the old analysis's final transaction writes nothing
+AssertionError: expected { …(6) } to be null
+ Test Files  1 failed (1)
+      Tests  1 failed | 12 passed (13)
+```
+4. **`interrupted` deixa de considerar lease vencido** (`import-lease.ts`, a última linha de `isImportSessionInterrupted` trocada de `return session.leaseExpiresAt.getTime() <= now.getTime();` para `return false;`). A outra forma do controle, trocar o relógio do banco pelo do processo, não foi aplicada: banco e processo rodam na mesma máquina, e nenhum teste consegue separar os dois relógios sem manipular o relógio de um deles.
+```
+     × an EXECUTING session with an expired lease is interrupted in progress and in GET imports, by the database clock, and a new start resumes it 35ms
+     × an ANALYZING session with an expired lease is interrupted in progress and in GET imports, by the database clock, and a new start resumes it 20ms
+AssertionError: expected false to be true // Object.is equality
+ Test Files  1 failed (1)
+      Tests  2 failed | 11 passed (13)
+```
+5. **A tela volta a chamar `analyzeImport` ao montar com sessão `READY`** (`ImportPreviewScreen.tsx`, o ramo `previewVersion > 0` do efeito passa a chamar `startAnalysis()` em vez de `readPreview()`), arquivo inteiro com **32** testes, rodada 2:
+```
+     × sessão READY com preview gravado nunca chama analyzeImport, nem montando três vezes 1029ms
+     × sessão DRAFT sem preview inicia a análise uma única vez 1004ms
+     × sessão ANALYZING nunca inicia de novo, só lê o estado até sair de ANALYZING 1012ms
+     × falha de transporte com estado relido EXECUTING mostra o andamento, nunca o erro 1014ms
+     × falha de transporte com estado relido sem início mostra o erro 1009ms
+     × NETWORK_ERROR com estado relido já analisado mostra o preview, nunca o erro 1010ms
+     × 5xx UPSTREAM_ERROR com estado relido já analisado mostra o preview, nunca o erro 1013ms
+     × categoria com limitação mostra discoveredCount, junto do texto da limitação 1006ms
+     × recusa de seleção de categoria (UPSTREAM_ERROR + upstreamCode) não derruba a tela 1013ms
+ Test Files  1 failed (1)
+      Tests  9 failed | 23 passed (32)
+ FAIL  tests/goal061-import-async.test.tsx > montar não reanalisa > sessão READY com preview gravado nunca chama analyzeImport, nem montando três vezes
+TestingLibraryElementError: Unable to find role="heading" and name "Encontramos isto no Minha Agenda"
+```
+6. **`handleExecute` volta a mostrar o erro sem reler o estado** (`ImportPreviewScreen.tsx`, o bloco "Incerteza não é falha" do `catch` de `handleExecute` removido, de modo que a falha cai direto em `setExecuteError`), arquivo inteiro com **32** testes, rodada 2:
+```
+     × falha de transporte com estado relido EXECUTING mostra o andamento, nunca o erro 1070ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 31 passed (32)
+ FAIL  tests/goal061-import-async.test.tsx > incerteza não é falha > falha de transporte com estado relido EXECUTING mostra o andamento, nunca o erro
+TestingLibraryElementError: Unable to find role="heading" and name "Importando seus dados"
+```
+O caso "falha de transporte com estado relido sem início mostra o erro" passa com o controle aplicado, como deve: sem releitura, o erro aparece do mesmo jeito. Na rodada 1, este controle derrubava também casos seguintes por contaminação entre testes (um `mockResolvedValueOnce` não consumido vazava para o teste seguinte); a rodada 2 troca `vi.clearAllMocks()` por `vi.resetAllMocks()` no `beforeEach` do arquivo, e o controle passa a reprovar só o caso que ele ataca.
+
+**Controles das correções da rodada 2**, na mesma execução e pelo mesmo procedimento, arquivo inteiro com **32** testes:
+
+- Início da análise sem reler o estado (`ImportPreviewScreen.tsx`, o desvio `analysisStarted(...)` do `catch` de `startAnalysis` removido):
+```
+     × NETWORK_ERROR com estado relido ANALYZING mostra a análise em andamento, nunca o erro 28ms
+     × 5xx UPSTREAM_ERROR com estado relido ANALYZING mostra a análise em andamento, nunca o erro 26ms
+     × NETWORK_ERROR com estado relido já analisado mostra o preview, nunca o erro 1016ms
+     × 5xx UPSTREAM_ERROR com estado relido já analisado mostra o preview, nunca o erro 1014ms
+      Tests  4 failed | 28 passed (32)
+TestingLibraryElementError: Unable to find an accessible element with the role "heading" and name "Analisando seus dados…"
+```
+- Retomada sem reler o estado (`ImportRunScreen.tsx`, o `catch` de `retryPending` volta a chamar `setRetryError` direto):
+```
+     × NETWORK_ERROR com estado relido EXECUTING mostra o andamento, nunca o erro 80ms
+     × 5xx UPSTREAM_ERROR com estado relido EXECUTING mostra o andamento, nunca o erro 76ms
+      Tests  2 failed | 30 passed (32)
+```
+- Fase derivada da sessão vencendo o reinício do dono (`ImportPreviewScreen.tsx`, `derivedPhase` volta a ignorar `ownerRestarted` e `settle` deixa de entregar ao pai o estado relido em `ANALYZING`):
+```
+     × sessão com lastError, clique aceito com 202 e estado ANALYZING mostra a análise em andamento 92ms
+     × sessão com interrupted, clique aceito com 202 e estado ANALYZING mostra a análise em andamento 89ms
+      Tests  2 failed | 30 passed (32)
+TestingLibraryElementError: Unable to find an accessible element with the role "heading" and name "Analisando seus dados…"
+```
+- Código de motivo sem texto próprio (`labels.ts`, a chave `IMPORT_CUSTOMER_MAPPING_MISSING` renomeada):
+```
+     × código conhecido IMPORT_CUSTOMER_MAPPING_MISSING tem texto leigo próprio 1012ms
+      Tests  1 failed | 31 passed (32)
+```
+
+Depois de cada restauração, a suíte alvo voltou a passar por inteiro: `tests/integration/goal061-import-async.test.ts` — **13**/**13** contra PostgreSQL real (`apps/scheduling-service`, controles 1 a 4, rodada 1); `tests/goal061-import-async.test.tsx` — **32**/**32** (`apps/frontend`, controles 5 e 6 e os da rodada 2).
+
+**Mudança da rodada 1 no teste de integração, antes dos controles.** Na primeira execução, `tests/integration/goal061-import-async.test.ts` reprovou **1** de **11**: o caso de interrupção em `EXECUTING` vencia o lease com `leaseExpiresAt = Date.now() - 1000`, e o PostgreSQL recusou com `23514` (`ImportSession_lease_check` exige `leaseExpiresAt > leaseAcquiredAt`). O helper `expireLeaseByDatabaseClock` passa a vencer o lease por SQL com `now()` do banco, recuando `leaseAcquiredAt` junto. Foram acrescentados dois casos: a interrupção em `ANALYZING`, que o §7.1 pede e o arquivo não tinha, e a tomada do lease entre o último heartbeat e a transação final (controle 3). O arquivo passou de **11** para **13** testes, sem mudança de código de produção.
+
+**Escopo.** `apps/ai-orchestrator/`, `apps/evolution-go/` e `tools/ia-loop/` não são tocados pelo diff. A rodada 1 tinha editado `apps/ai-orchestrator/tests/assistant/assistant.service.test.ts` para subir de 42 para 43 a contagem congelada de `this.http.` em `apps/bff/src/clients/`, porque o cliente do BFF ganhou `mutateWithStatus`. A rodada 2 reverteu o arquivo ao estado de `7623009` e manteve as **42** ocorrências fazendo `mutate` delegar a `mutateWithStatus` (`apps/bff/src/clients/scheduling/index.ts`), de modo que a escrita tem uma única chamada `this.http.requestWithStatus`; `test:ai-orchestrator` passou sem alterar o teste.
+
+### Execução final da rodada 2, sobre a árvore final
+
+Depois dos controles restaurados, sobre a árvore final:
+
+- `npm run typecheck` e `npm run lint` de `apps/scheduling-service`, `apps/bff` e `apps/frontend`, exit 0 nos seis.
+- `npm run validate:core` — **17** passos, **15** `passed`, **0** `failed`, **2** `skipped` (`test:bff`, que só tem suíte de integração e roda em `validate:integration`, e `test:health-worker`, sem suíte automatizada), exit 0. Dentro dele:
+  - `test:scheduling-service` — **32** arquivos, **448** testes passando, **0** falhando (baseline review060: **30**/**410**; a diferença são `tests/unit/goal061-import-async.test.ts` e `tests/unit/goal061-import-read.test.ts`, **38** testes do §7.2);
+  - `test:frontend` — **78** arquivos, **750** testes passando, **0** falhando (baseline review060: **77**/**718**; a diferença é `tests/goal061-import-async.test.tsx`, **32** testes do §7.4 e das correções da rodada 2);
+  - `test:ai-orchestrator` — **85** arquivos passando e **12** pulados, **1112** testes passando e **88** pulados, com `assistant.service.test.ts` no estado de `7623009`;
+  - `test:gate-scripts` (`node --test scripts/tests/**/*.test.mjs`, o mesmo comando de `npm run test:gate`) — **233**/**233**, sem teste a menos que a baseline (**233**);
+  - `audit:static` — **34** verificações, **33** passando, **0** falhando, **1** pulada (`production_health`, não pedida).
+- `npm run validate:ui` — **169** passando, **21** pulados, **0** retentativas, exit 0.
+- `BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_bff_test" node scripts/validate-integration.mjs` — **35**/**35** passos `passed`, **0** `failed`, exit 0. Dentro dele: `test:bff-integration` — **48** arquivos, **386** testes passando, inclusive `tests/goal061-import-async.integration.test.ts` (§7.3); `test:scheduling-integration` — **13** arquivos, **103** testes passando, inclusive os **13** de `tests/integration/goal061-import-async.test.ts` (§7.1); `rehearse:goal033-authenticated-ui` com **65** testes passando e **0** retentativas (resumo do Playwright `65 passed`, sem `failed` nem `flaky`: **65** expected, **0** unexpected, **0** flaky).
+- `git status --porcelain=v1 -uall` lista só arquivos de `apps/scheduling-service/`, `apps/bff/`, `apps/frontend/`, `packages/public-api-contract/` e `docs/migration/`, sem resto de controle negativo nem artefato de `e2e-results/`.
+
+### O que esta seção não prova
+
+**Não prova** que a análise e a importação de uma conta real terminam e que a tela acompanha até o fim — isso é a conferência humana do §9 do Goal, e **não foi feita** por este Goal; que as telas de importação cumprem largura, toque, contraste, foco e movimento, porque `/importacao` não está no gate renderizado; que a tela bate com o protótipo aprovado (conferência humana, Goal069); que um trabalho em curso numa instância que cai é retomado sozinho — ele só é retomado quando alguém pede (limite declarado da D-078); a lista completa de clientes, a disponibilidade substituída e o telefone normalizado (Goal062).
+
+### Veredito recontado
+
+O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO`** — os mesmos números de §38. Nenhum achado de A-01 a A-24 foi tocado, corrigido, reclassificado ou reaberto: esta seção só acrescenta o registro do diff061, e **QA IM-03, QA IM-04, QA IM-05, QA IM-07 e QA IM-08 corrigidos** são do `QA_LOCAL_REVIEW`, fora dessa enumeração.

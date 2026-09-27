@@ -1235,6 +1235,28 @@ export const importSessionStartSchema = z.object({
   replacedSessionId: z.string().nullable(),
 });
 
+// Causa nao-de-item de uma falha de trabalho (Goal061 §3), conjunto fechado:
+// a mensagem nunca sai daqui, so o codigo.
+export const importWorkErrorCodeSchema = z.enum([
+  "IMPORT_SOURCE_AUTH_REJECTED",
+  "IMPORT_SOURCE_UNAVAILABLE",
+  "IMPORT_SOURCE_INVALID_RESPONSE",
+  "IMPORT_PREVIEW_STALE",
+  "IMPORT_INTERNAL_ERROR",
+]);
+export const importLastErrorSchema = z
+  .object({ code: importWorkErrorCodeSchema })
+  .nullable();
+
+// Resposta de inicio de `POST .../analyze` e `POST .../execute` (Goal061
+// §1): so o que a reivindicacao do lease gravou, sob `202`. O preview e o
+// andamento sao lidos por rota propria, nunca aqui.
+export const importWorkStartSchema = z.object({
+  sessionId: z.string().min(1),
+  status: z.enum(["ANALYZING", "EXECUTING"]),
+  previewVersion: z.number().int().nonnegative(),
+});
+
 export const importItemSchema = z.object({
   id: z.string().min(1),
   category: importCategorySchema,
@@ -1280,6 +1302,16 @@ export const importPreviewSchema = z.object({
   }),
 });
 
+// Leitura do preview gravado pela ultima analise (Goal061 §4), sem tocar a
+// origem: `GET .../preview`. Sem `changesSincePreviousVersion` — nao e
+// gravado hoje, entao esta rota nunca o devolve.
+export const importPreviewSnapshotSchema = z.object({
+  sessionId: z.string().min(1),
+  previewVersion: z.number().int().nonnegative(),
+  generatedAt: isoDateTimeSchema.nullable(),
+  categories: z.array(importPreviewCategorySchema),
+});
+
 export const importItemsPageSchema = z.object({
   sessionId: z.string().min(1),
   category: importCategorySchema,
@@ -1316,14 +1348,27 @@ export const importExecutionSchema = z.object({
   leaseLost: z.boolean(),
 });
 
+// Motivos das falhas `FAILED` desta categoria, contados (Goal061 §4).
+const importCategoryFailedReasonSchema = z.object({
+  reasonCode: z.string().min(1),
+  count: z.number().int().nonnegative(),
+});
+const importProgressCategorySchema = importCategoryCountsSchema.extend({
+  failedReasons: z.array(importCategoryFailedReasonSchema),
+});
+
 export const importProgressSchema = z.object({
   sessionId: z.string().min(1),
   status: importSessionStatusSchema,
   previewVersion: z.number().int().nonnegative(),
   startedAt: isoDateTimeSchema.nullable(),
   finishedAt: isoDateTimeSchema.nullable(),
+  // Sessao `ANALYZING`/`EXECUTING` com lease vencido pelo relogio do banco,
+  // ou sem lease (Goal061 §4). O frontend nunca compara relogio proprio.
+  interrupted: z.boolean(),
+  lastError: importLastErrorSchema,
   counts: importCountsSchema,
-  categories: z.array(importCategoryCountsSchema),
+  categories: z.array(importProgressCategorySchema),
 });
 
 export const importCompletionSchema = z.object({
@@ -1379,6 +1424,10 @@ export const importLiveSessionSchema = z.object({
   startedAt: isoDateTimeSchema.nullable(),
   finishedAt: isoDateTimeSchema.nullable(),
   previewGeneratedAt: isoDateTimeSchema.nullable(),
+  // Mesmo par de `importProgressSchema` (Goal061 §4), por acrescimo: a tela
+  // sabe o que mostrar ja ao montar, sem esperar a rota de progresso.
+  interrupted: z.boolean(),
+  lastError: importLastErrorSchema,
   counts: importCountsSchema,
   categories: z.array(importLiveSessionCategorySchema),
 });
@@ -1406,8 +1455,11 @@ export type ImportSessionStatus = z.infer<typeof importSessionStatusSchema>;
 export type ImportDecisionScope = z.infer<typeof importDecisionScopeSchema>;
 export type ImportDecisionKind = z.infer<typeof importDecisionKindSchema>;
 export type ImportSessionStart = z.infer<typeof importSessionStartSchema>;
+export type ImportWorkErrorCode = z.infer<typeof importWorkErrorCodeSchema>;
+export type ImportWorkStart = z.infer<typeof importWorkStartSchema>;
 export type ImportItem = z.infer<typeof importItemSchema>;
 export type ImportPreview = z.infer<typeof importPreviewSchema>;
+export type ImportPreviewSnapshot = z.infer<typeof importPreviewSnapshotSchema>;
 export type ImportPreviewCategory = z.infer<typeof importPreviewCategorySchema>;
 export type ImportItemsPage = z.infer<typeof importItemsPageSchema>;
 export type ImportDecision = z.infer<typeof importDecisionSchema>;

@@ -125,8 +125,32 @@ export async function registerV1MigrationRoutes(
     },
   );
 
+  // Inicio curto da analise (Goal061 §1): a rota interna responde `202` com
+  // a reivindicacao do lease, sem esperar a origem. O BFF repassa o mesmo
+  // status, nao apresenta o inicio como concluido.
   app.post(
     "/v1/calendar/imports/:sessionId/analyze",
+    { preHandler: requireTenantContext },
+    async (request, reply) => {
+      const { sessionId } = parseParams(
+        importSessionParamsSchema,
+        request.params,
+      );
+      const { start, status } = await scheduling.analyzeImport(
+        internalContext(request),
+        sessionId,
+        idempotencyKey(request),
+      );
+      return reply
+        .code(status === 202 ? 202 : 200)
+        .send(dataResponse(request, start));
+    },
+  );
+
+  // Leitura do preview gravado pela ultima analise (Goal061 §4), sem tocar a
+  // origem: so leitura, nenhuma `Idempotency-Key`.
+  app.get(
+    "/v1/calendar/imports/:sessionId/preview",
     { preHandler: requireTenantContext },
     async (request) => {
       const { sessionId } = parseParams(
@@ -135,11 +159,7 @@ export async function registerV1MigrationRoutes(
       );
       return dataResponse(
         request,
-        await scheduling.analyzeImport(
-          internalContext(request),
-          sessionId,
-          idempotencyKey(request),
-        ),
+        await scheduling.previewImport(internalContext(request), sessionId),
       );
     },
   );
@@ -215,24 +235,25 @@ export async function registerV1MigrationRoutes(
     },
   );
 
+  // Inicio curto da execucao (Goal061 §1), no mesmo formato da analise.
   app.post(
     "/v1/calendar/imports/:sessionId/execute",
     { preHandler: requireTenantContext },
-    async (request) => {
+    async (request, reply) => {
       const { sessionId } = parseParams(
         importSessionParamsSchema,
         request.params,
       );
       const body = parseBody(executeImportBodySchema, request.body ?? {});
-      return dataResponse(
-        request,
-        await scheduling.executeImport(
-          internalContext(request),
-          sessionId,
-          body,
-          idempotencyKey(request),
-        ),
+      const { start, status } = await scheduling.executeImport(
+        internalContext(request),
+        sessionId,
+        body,
+        idempotencyKey(request),
       );
+      return reply
+        .code(status === 202 ? 202 : 200)
+        .send(dataResponse(request, start));
     },
   );
 

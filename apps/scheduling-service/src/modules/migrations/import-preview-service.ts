@@ -1,8 +1,11 @@
+import { env } from "../../config/env.js";
 import type { PrismaClient } from "../../generated/prisma/client.js";
 import type {
   ExternalEntityType,
   ImportCategory,
   ImportItemStatus,
+  ImportSessionStatus,
+  IntegrationProvider,
 } from "../../generated/prisma/enums.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { normalizePhone } from "../../shared/phone/phone.js";
@@ -12,6 +15,14 @@ import type {
   MinhaAgendaImportRecord,
   MinhaAgendaImportSnapshot,
 } from "../integrations/minha-agenda/import-source-reader.js";
+import {
+  acquireImportLease,
+  type ImportLease,
+  importLeaseHeldError,
+  ImportLeaseHolder,
+  importWorkFailure,
+  newImportLeaseOwner,
+} from "./import-lease.js";
 
 /**
  * Superficie minima que o preview precisa da origem: so a leitura por
@@ -23,6 +34,58 @@ export interface ImportPreviewSourceReader {
     input: GetImportSnapshotInput,
   ): Promise<MinhaAgendaImportSnapshot>;
 }
+
+/**
+ * Leitor resolvido so dentro do trabalho (Goal061 §1): montar o leitor
+ * decifra a credencial, e a requisicao que inicia nunca toca a origem nem o
+ * que a alcanca. Falha ao montar e falha do trabalho, gravada como as outras.
+ */
+export type ImportSourceReaderFactory = () => Promise<ImportPreviewSourceReader>;
+
+export type ImportSourceInput =
+  | ImportPreviewSourceReader
+  | ImportSourceReaderFactory;
+
+/** Resolve o leitor, seja ele dado pronto ou montado sob demanda. */
+export async function resolveImportSource(
+  source: ImportSourceInput,
+): Promise<ImportPreviewSourceReader> {
+  return typeof source === "function" ? source() : source;
+}
+
+/** Opcoes de lease comuns ao inicio e ao trabalho da analise e da execucao. */
+export interface ImportWorkLeaseOptions {
+  /** Identidade da instancia; omitida, uma nova e gerada por passada. */
+  leaseOwner?: string;
+  /** TTL do lease em segundos; o padrao e `IMPORT_LEASE_TTL_SECONDS`. */
+  leaseTtlSeconds?: number;
+  /** Milissegundos entre renovacoes; so o teste encurta. */
+  leaseRenewIntervalMs?: number;
+}
+
+/**
+ * O que a requisicao de inicio da analise devolve e o que o trabalho precisa
+ * para continuar (Goal061 §1). `status` e sempre `ANALYZING`: e o que o
+ * `UPDATE` da reivindicacao gravou.
+ */
+export interface ImportAnalysisStart {
+  tenantId: string;
+  sessionId: string;
+  status: "ANALYZING";
+  /** Versao vigente no inicio; a analise concluida grava a seguinte. */
+  previewVersion: number;
+  provider: IntegrationProvider;
+  /** Estado a que a sessao volta se o trabalho falhar. */
+  restoreStatus: ImportSessionStatus;
+  /** Estado que a analise concluida grava: o mesmo da baseline. */
+  finalStatus: "READY" | "PARTIAL";
+  lease: ImportLease;
+}
+
+/** A analise perdeu o lease: outra passada, `replace` ou outra instancia. */
+export const IMPORT_SESSION_LEASE_LOST = "IMPORT_SESSION_LEASE_LOST";
+
+class AnalysisLeaseLost extends Error {}
 
 export type ImportMatchClass = "NONE" | "EXACT" | "SIMILAR" | "DIVERGENT";
 
@@ -73,6 +136,24 @@ export interface ImportPreviewResult {
 }
 
 /**
+ * Preview gravado pela última análise, lido sem tocar a origem (Goal061
+ * §7.4, WU-02). Só o que `recordAnalysis` já persistiu em `ImportSession` e
+ * `ImportSessionCategory` — nunca `changesSincePreviousVersion`, que é
+ * calculado na hora da análise e não é reconstruível de uma leitura
+ * posterior.
+ */
+export interface ImportPreviewSnapshot {
+  sessionId: string;
+  previewVersion: number;
+  generatedAt: string | null;
+  categories: ImportPreviewCategoryResult[];
+}
+
+/** A sessão nunca foi analisada: não há preview gravado para ler. */
+export const IMPORT_SESSION_PREVIEW_NOT_AVAILABLE =
+  "IMPORT_SESSION_PREVIEW_NOT_AVAILABLE";
+
+/**
  * Tipo de entidade de destino por categoria: e a chave de idempotencia por
  * origem/item em `ExternalEntityMap`. Exportado porque o motor de execucao
  * (WU-04) precisa exatamente do mesmo mapeamento — duas copias dele seriam
@@ -89,8 +170,30 @@ export const CATEGORY_ENTITY_TYPE: Record<ImportCategory, ExternalEntityType> = 
   NO_SHOW_APPOINTMENT: "APPOINTMENT",
 };
 
-/** Sessao ainda analisavel: nao comecou execucao nem chegou a um terminal. */
-const ANALYZABLE_STATUSES = new Set(["DRAFT", "ANALYZING", "READY", "PARTIAL"]);
+/**
+ * Sessao ainda analisavel: nao comecou execucao nem chegou a um terminal.
+ * `ANALYZING` so e reivindicavel com o lease vencido ou livre — a condicao
+ * vive no `WHERE` de `acquireImportLease`, nao aqui.
+ */
+const ANALYZABLE_STATUS_LIST: ImportSessionStatus[] = [
+  "DRAFT",
+  "ANALYZING",
+  "READY",
+  "PARTIAL",
+];
+const ANALYZABLE_STATUSES = new Set<string>(ANALYZABLE_STATUS_LIST);
+
+/** A mesma ordem do motor e do histórico: a leitura do preview lê como a tela mostra. */
+const PREVIEW_CATEGORY_ORDER: ImportCategory[] = [
+  "SERVICE",
+  "CUSTOMER",
+  "AVAILABILITY",
+  "TIME_BLOCK",
+  "FUTURE_APPOINTMENT",
+  "PAST_APPOINTMENT",
+  "CANCELLED_APPOINTMENT",
+  "NO_SHOW_APPOINTMENT",
+];
 
 /** A sessao ja terminou (Goal020, WU-02): nao ha mais o que escolher. */
 export const IMPORT_SESSION_NOT_SELECTABLE = "IMPORT_SESSION_NOT_SELECTABLE";
@@ -150,11 +253,39 @@ interface Classification {
 export class ImportPreviewService {
   constructor(private readonly prisma: PrismaClient) {}
 
+  /**
+   * Analise inteira numa chamada so: inicio e trabalho em sequencia. E o
+   * caminho de quem precisa do resultado na mao (servico, teste); a rota
+   * chama {@link startAnalysis} e dispara {@link runAnalysis} sem esperar.
+   */
   async analyze(
     context: { tenantId: string; sessionId: string },
-    reader: ImportPreviewSourceReader,
+    reader: ImportSourceInput,
     snapshotInput: GetImportSnapshotInput,
+    options: ImportWorkLeaseOptions = {},
   ): Promise<ImportPreviewResult> {
+    const start = await this.startAnalysis(context, options);
+    const result = await this.runAnalysis(start, reader, snapshotInput, options);
+    if (!result) {
+      throw new AppError(
+        IMPORT_SESSION_LEASE_LOST,
+        "The import analysis lost its lease before it could be recorded.",
+        409,
+      );
+    }
+    return result;
+  }
+
+  /**
+   * Leitura do preview gravado pela última análise, sem tocar a origem
+   * (Goal061 §7.4, WU-02): só `ImportSession` e `ImportSessionCategory` da
+   * versão vigente. Sessão que nunca analisou (`previewVersion` 0) não tem
+   * o que ler e é recusada com código próprio, em vez de devolver um
+   * preview vazio que pareceria uma análise que não aconteceu.
+   */
+  async getPreview(
+    context: { tenantId: string; sessionId: string },
+  ): Promise<ImportPreviewSnapshot> {
     const session = await this.prisma.importSession.findUnique({
       where: {
         tenantId_id: { tenantId: context.tenantId, id: context.sessionId },
@@ -167,17 +298,171 @@ export class ImportPreviewService {
         404,
       );
     }
-    if (!ANALYZABLE_STATUSES.has(session.status)) {
+    if (session.previewVersion === 0) {
       throw new AppError(
-        "IMPORT_SESSION_NOT_ANALYZABLE",
-        `Import session cannot be analyzed while in status ${session.status}.`,
+        IMPORT_SESSION_PREVIEW_NOT_AVAILABLE,
+        "This import session has not been analyzed yet; there is no preview to read.",
         409,
         { status: session.status },
       );
     }
+    const rows = await this.prisma.importSessionCategory.findMany({
+      where: { tenantId: context.tenantId, sessionId: context.sessionId },
+    });
+    const byCategory = new Map(rows.map((row) => [row.category, row]));
+    const categories: ImportPreviewCategoryResult[] = [];
+    for (const category of PREVIEW_CATEGORY_ORDER) {
+      const row = byCategory.get(category);
+      if (!row) continue;
+      categories.push({
+        category,
+        sourceSupported: row.sourceSupported,
+        limitationCode: row.limitationCode,
+        limitationDetail: row.limitationDetail,
+        sourceReportedCount: row.sourceReportedCount,
+        readCount: row.readCount,
+        discoveredCount: row.discoveredCount,
+        pendingCount: row.pendingCount,
+        needsReviewCount: row.needsReviewCount,
+        importedCount: row.importedCount,
+        skippedCount: row.skippedCount,
+        failedCount: row.failedCount,
+      });
+    }
+    return {
+      sessionId: session.id,
+      previewVersion: session.previewVersion,
+      generatedAt: session.previewGeneratedAt?.toISOString() ?? null,
+      categories,
+    };
+  }
 
-    const snapshot = await reader.getImportSnapshot(snapshotInput);
-    const nextVersion = session.previewVersion + 1;
+  /**
+   * Inicio da analise (Goal061 §1): confere a sessao e a reivindica gravando
+   * `ANALYZING` no mesmo `UPDATE` do lease. Nunca le a origem.
+   *
+   * A reivindicacao exige que a sessao ainda esteja **no estado lido**: e
+   * isso que torna exato o estado de partida guardado em
+   * `restoreStatus`/`finalStatus`, porque `ANALYZING` apaga o anterior. Se
+   * outro ator mudou a sessao entre a leitura e o `UPDATE`, a reivindicacao
+   * perde e nada e gravado.
+   *
+   * Sessao em `EXECUTING` ou em `ANALYZING` com lease vivo e recusada com
+   * `IMPORT_SESSION_LEASE_HELD`: analise e execucao se excluem pela linha.
+   */
+  async startAnalysis(
+    context: { tenantId: string; sessionId: string },
+    options: ImportWorkLeaseOptions = {},
+  ): Promise<ImportAnalysisStart> {
+    const session = await this.prisma.importSession.findUnique({
+      where: {
+        tenantId_id: { tenantId: context.tenantId, id: context.sessionId },
+      },
+    });
+    if (!session) {
+      throw new AppError(
+        "IMPORT_SESSION_NOT_FOUND",
+        "Import session was not found.",
+        404,
+      );
+    }
+    const notAnalyzable = (status: string) =>
+      new AppError(
+        "IMPORT_SESSION_NOT_ANALYZABLE",
+        `Import session cannot be analyzed while in status ${status}.`,
+        409,
+        { status },
+      );
+    if (!ANALYZABLE_STATUSES.has(session.status) && session.status !== "EXECUTING") {
+      throw notAnalyzable(session.status);
+    }
+
+    // Antes da reivindicacao, que muda a linha: o estado de partida e o que
+    // foi lido, e o `WHERE` abaixo so aceita a linha se ela ainda estiver nele.
+    const origin = analysisOrigin(session);
+    const owner = options.leaseOwner ?? newImportLeaseOwner();
+    const claim = await acquireImportLease(this.prisma, {
+      tenantId: context.tenantId,
+      sessionId: context.sessionId,
+      owner,
+      ttlSeconds: options.leaseTtlSeconds,
+      // `EXECUTING` nunca e reivindicavel pela analise: a lista cheia so
+      // existe para que a recusa diga, pelo relogio do banco, se o lease da
+      // execucao esta vivo (`LEASE_HELD`) ou nao (`NOT_ANALYZABLE`).
+      statuses:
+        session.status === "EXECUTING"
+          ? ANALYZABLE_STATUS_LIST
+          : [session.status],
+      onClaim: { status: "ANALYZING", errorCode: null, errorMessage: null },
+    });
+    if (!claim.acquired) {
+      throw importLeaseHeldError(
+        claim,
+        notAnalyzable(claim.status ?? session.status),
+      );
+    }
+
+    return {
+      tenantId: context.tenantId,
+      sessionId: context.sessionId,
+      status: "ANALYZING",
+      previewVersion: session.previewVersion,
+      provider: session.provider,
+      restoreStatus: origin.restoreStatus,
+      finalStatus: origin.finalStatus,
+      lease: claim.lease,
+    };
+  }
+
+  /**
+   * Trabalho da analise (Goal061 §2 e §3), ja sob lease: le a origem
+   * renovando o lease, classifica e grava o preview numa transacao que so
+   * vale se a sessao ainda e desta passada (`leaseOwner` e `ANALYZING`).
+   *
+   * Devolve `null` quando o lease foi perdido — `replace`, outra instancia
+   * ou lease vencido e tomado: nada da sessao e escrito. Falha que nao e de
+   * item grava `errorCode` do conjunto fechado, devolve a sessao ao estado
+   * de partida e libera o lease, tudo no mesmo `UPDATE` condicionado ao dono.
+   */
+  async runAnalysis(
+    start: ImportAnalysisStart,
+    source: ImportSourceInput,
+    snapshotInput: GetImportSnapshotInput,
+    options: ImportWorkLeaseOptions = {},
+  ): Promise<ImportPreviewResult | null> {
+    const lease = new ImportLeaseHolder(
+      this.prisma,
+      start.lease,
+      options.leaseTtlSeconds ?? env.IMPORT_LEASE_TTL_SECONDS,
+      options.leaseRenewIntervalMs,
+    );
+    try {
+      const reader = await resolveImportSource(source);
+      const snapshot = await lease.keepAliveWhile(
+        reader.getImportSnapshot(snapshotInput),
+      );
+      // Perdido durante a leitura: nem vale classificar o que ja nao sera
+      // gravado.
+      if (!(await lease.heartbeat({ force: true }))) return null;
+      return await this.recordAnalysis(start, snapshot);
+    } catch (error) {
+      if (error instanceof AnalysisLeaseLost) return null;
+      await lease.release({
+        status: start.restoreStatus,
+        ...importWorkFailure(error),
+      });
+      throw error;
+    }
+  }
+
+  /** Classifica a origem lida e grava o preview sob fencing. */
+  private async recordAnalysis(
+    start: ImportAnalysisStart,
+    snapshot: MinhaAgendaImportSnapshot,
+  ): Promise<ImportPreviewResult> {
+    const context = { tenantId: start.tenantId, sessionId: start.sessionId };
+    const session = { provider: start.provider };
+    const nextVersion = start.previewVersion + 1;
 
     const [existingCustomers, existingServices, externalMaps, existingItems] =
       await Promise.all([
@@ -407,10 +692,41 @@ export class ImportPreviewService {
 
     // Sessao PARTIAL (execucao anterior incompleta) continua PARTIAL: a
     // reanalise nao apaga o andamento. Toda outra sessao analisavel vira
-    // READY, pronta para "Importar tudo".
-    const nextStatus = session.status === "PARTIAL" ? "PARTIAL" : "READY";
+    // READY, pronta para "Importar tudo". O estado de partida vem do inicio,
+    // porque `ANALYZING` ja o apagou da linha.
+    const nextStatus = start.finalStatus;
 
     await this.prisma.$transaction(async (tx) => {
+      // Fencing (Goal061 §2): a primeira escrita e a da sessao, condicionada
+      // ao dono do lease e a `ANALYZING`. Ela trava a linha, entao `replace`
+      // ou uma reivindicacao concorrente esperam por ela ou ja a mudaram — e
+      // nesse caso `count = 0`, a transacao inteira desiste e nenhum item,
+      // categoria ou contador e gravado. O mesmo `UPDATE` devolve o lease.
+      const closed = await tx.importSession.updateMany({
+        where: {
+          tenantId: context.tenantId,
+          id: context.sessionId,
+          leaseOwner: start.lease.owner,
+          status: "ANALYZING",
+        },
+        data: {
+          status: nextStatus,
+          previewVersion: nextVersion,
+          previewGeneratedAt: generatedAt,
+          sourceFingerprint,
+          pendingCount: totals.pending,
+          needsReviewCount: totals.needsReview,
+          importedCount: totals.imported,
+          skippedCount: totals.skipped,
+          failedCount: totals.failed,
+          errorCode: null,
+          errorMessage: null,
+          leaseOwner: null,
+          leaseAcquiredAt: null,
+          leaseExpiresAt: null,
+        },
+      });
+      if (closed.count !== 1) throw new AnalysisLeaseLost();
       for (const data of itemCreates) {
         await tx.importItem.create({ data });
       }
@@ -425,22 +741,6 @@ export class ImportPreviewService {
       for (const upsert of categoryUpserts) {
         await tx.importSessionCategory.upsert(upsert);
       }
-      await tx.importSession.update({
-        where: {
-          tenantId_id: { tenantId: context.tenantId, id: context.sessionId },
-        },
-        data: {
-          status: nextStatus,
-          previewVersion: nextVersion,
-          previewGeneratedAt: generatedAt,
-          sourceFingerprint,
-          pendingCount: totals.pending,
-          needsReviewCount: totals.needsReview,
-          importedCount: totals.imported,
-          skippedCount: totals.skipped,
-          failedCount: totals.failed,
-        },
-      });
     });
 
     return {
@@ -549,6 +849,37 @@ export class ImportPreviewService {
       selected: updated.selected,
     };
   }
+}
+
+/**
+ * Estado de partida da analise. Lido da linha antes da reivindicacao, e a
+ * reivindicacao exige que a linha ainda esteja nele — por isso e exato.
+ *
+ * A unica excecao e retomar uma analise que caiu (`ANALYZING` com lease
+ * vencido): o estado anterior ja foi apagado e nao ha campo que o guarde. A
+ * regra e entao derivada do que a linha ainda prova: sessao que uma execucao
+ * ja tocou (`startedAt`) e tratada como `PARTIAL`, que e o estado que
+ * preserva o andamento; as demais voltam a `READY`, ou a `DRAFT` se nunca
+ * houve preview.
+ */
+function analysisOrigin(session: {
+  status: ImportSessionStatus;
+  startedAt: Date | null;
+  previewVersion: number;
+}): { restoreStatus: ImportSessionStatus; finalStatus: "READY" | "PARTIAL" } {
+  if (session.status === "ANALYZING") {
+    if (session.startedAt) {
+      return { restoreStatus: "PARTIAL", finalStatus: "PARTIAL" };
+    }
+    return {
+      restoreStatus: session.previewVersion > 0 ? "READY" : "DRAFT",
+      finalStatus: "READY",
+    };
+  }
+  return {
+    restoreStatus: session.status,
+    finalStatus: session.status === "PARTIAL" ? "PARTIAL" : "READY",
+  };
 }
 
 function collectCategorySnapshots(

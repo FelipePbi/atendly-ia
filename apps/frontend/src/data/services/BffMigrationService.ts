@@ -5,13 +5,13 @@ import {
   type ImportCompletion,
   type ImportDecision,
   type ImportDecisionKind,
-  type ImportExecution,
   type ImportItemsPage,
   type ImportItemStatus,
-  type ImportPreview,
+  type ImportPreviewSnapshot,
   type ImportProgress,
   type ImportSessionStart,
   type ImportState,
+  type ImportWorkStart,
 } from "../mappers/publicApiSchemas";
 
 export interface StartImportInput {
@@ -78,7 +78,11 @@ export class BffMigrationService {
     });
   }
 
-  /** Analisa a origem e gera uma versão de preview; não escreve na agenda. */
+  /**
+   * Início curto da análise (Goal061 §1): reivindica o lease e responde
+   * `202` com `{ sessionId, status, previewVersion }`, sem tocar a origem
+   * nesta requisição. O preview é lido por `getImportPreview`, nunca aqui.
+   */
   analyzeImport(
     sessionId: string,
     idempotencyKey: string,
@@ -89,9 +93,21 @@ export class BffMigrationService {
       headers: { "idempotency-key": idempotencyKey },
       method: "POST",
       path: `/v1/calendar/imports/${encodeURIComponent(sessionId)}/analyze`,
-      schema: routeSchema<ImportPreview>(
+      schema: routeSchema<ImportWorkStart>(
         "POST",
         "/v1/calendar/imports/:sessionId/analyze",
+      ),
+      signal,
+    });
+  }
+
+  /** Lê o preview gravado pela última análise, sem reler a origem (Goal061 §4). */
+  getImportPreview(sessionId: string, signal?: AbortSignal) {
+    return this.http.request({
+      path: `/v1/calendar/imports/${encodeURIComponent(sessionId)}/preview`,
+      schema: routeSchema<ImportPreviewSnapshot>(
+        "GET",
+        "/v1/calendar/imports/:sessionId/preview",
       ),
       signal,
     });
@@ -157,7 +173,11 @@ export class BffMigrationService {
     });
   }
 
-  /** Executa (ou retoma) a importação da versão de preview aprovada. */
+  /**
+   * Início curto da execução (Goal061 §1), no mesmo formato da análise: `202`
+   * com `{ sessionId, status, previewVersion }`. O andamento é lido por
+   * `getImportProgress`, nunca devolvido aqui.
+   */
   executeImport(
     sessionId: string,
     input: ExecuteImportInput,
@@ -169,7 +189,7 @@ export class BffMigrationService {
       headers: { "idempotency-key": idempotencyKey },
       method: "POST",
       path: `/v1/calendar/imports/${encodeURIComponent(sessionId)}/execute`,
-      schema: routeSchema<ImportExecution>(
+      schema: routeSchema<ImportWorkStart>(
         "POST",
         "/v1/calendar/imports/:sessionId/execute",
       ),

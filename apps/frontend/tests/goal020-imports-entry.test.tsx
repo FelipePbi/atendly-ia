@@ -27,7 +27,7 @@ import {
   BffHttpError,
   type ImportHistory,
   type ImportLiveSession,
-  type ImportPreview,
+  type ImportPreviewSnapshot,
   type ImportProgress,
   type ImportState,
 } from "@/data";
@@ -38,6 +38,7 @@ const getImportState = vi.fn();
 const connectIntegration = vi.fn();
 const startImport = vi.fn();
 const analyzeImport = vi.fn();
+const getImportPreview = vi.fn();
 const getImportProgress = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
@@ -46,6 +47,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
     migration: {
       analyzeImport,
       executeImport: vi.fn(),
+      getImportPreview,
       getImportProgress,
       getImportState,
       setImportCategorySelection: vi.fn(),
@@ -64,6 +66,8 @@ function progressFixture(): ImportProgress {
     categories: [],
     counts: { failed: 0, imported: 0, needsReview: 0, pending: 0, skipped: 0 },
     finishedAt: null,
+    interrupted: false,
+    lastError: null,
     previewVersion: 1,
     sessionId: "session-1",
     startedAt: "2026-09-15T10:10:00.000Z",
@@ -71,10 +75,9 @@ function progressFixture(): ImportProgress {
   };
 }
 
-function previewFixture(overrides: Partial<ImportPreview> = {}): ImportPreview {
+function previewFixture(overrides: Partial<ImportPreviewSnapshot> = {}): ImportPreviewSnapshot {
   return {
     categories: [],
-    changesSincePreviousVersion: { changedCount: 0, disappearedCount: 0, newCount: 0 },
     generatedAt: "2026-09-15T10:05:00.000Z",
     previewVersion: 1,
     sessionId: "session-1",
@@ -96,6 +99,8 @@ function sessionFixture(overrides: Partial<ImportLiveSession> = {}): ImportLiveS
     counts: { failed: 0, imported: 0, needsReview: 0, pending: 12, skipped: 0 },
     createdAt: "2026-09-15T10:00:00.000Z",
     finishedAt: null,
+    interrupted: false,
+    lastError: null,
     previewGeneratedAt: null,
     previewVersion: 0,
     provider: "MINHA_AGENDA",
@@ -145,7 +150,12 @@ async function fillCredentials(user: ReturnType<typeof userEvent.setup>) {
 beforeEach(() => {
   vi.clearAllMocks();
   getImportProgress.mockResolvedValue(progressFixture());
-  analyzeImport.mockResolvedValue(previewFixture());
+  analyzeImport.mockResolvedValue({
+    previewVersion: 0,
+    sessionId: "session-1",
+    status: "ANALYZING",
+  });
+  getImportPreview.mockResolvedValue(previewFixture());
   window.localStorage.clear();
   window.sessionStorage.clear();
 });
@@ -208,6 +218,13 @@ describe("conexão da origem", () => {
         history: null,
         right: { available: true, sessionId: "session-1", completedAt: null },
         session: sessionFixture(),
+      })
+      // Leitura interna da análise (Goal061 §6): a sessão DRAFT inicia a
+      // análise sozinha e o preview screen lê o estado até sair de ANALYZING.
+      .mockResolvedValueOnce({
+        history: null,
+        right: { available: true, sessionId: "session-1", completedAt: null },
+        session: sessionFixture({ previewVersion: 1, startedAt: null, status: "READY" }),
       });
     connectIntegration.mockResolvedValue({
       capabilities: {

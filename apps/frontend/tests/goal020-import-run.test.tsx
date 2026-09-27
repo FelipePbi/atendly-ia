@@ -35,7 +35,7 @@ import {
   type ImportCompletion,
   type ImportHistory,
   type ImportLiveSession,
-  type ImportPreview,
+  type ImportPreviewSnapshot,
   type ImportProgress,
   type ImportState,
 } from "@/data";
@@ -46,6 +46,7 @@ import { expectNoA11yViolations } from "./support/a11y";
 
 const getImportState = vi.fn();
 const analyzeImport = vi.fn();
+const getImportPreview = vi.fn();
 const executeImport = vi.fn();
 const getImportProgress = vi.fn();
 const completeImport = vi.fn();
@@ -59,6 +60,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       completeImport,
       decideImportItem: vi.fn(),
       executeImport,
+      getImportPreview,
       getImportProgress,
       getImportState,
       listImportItems,
@@ -74,6 +76,8 @@ function sessionFixture(overrides: Partial<ImportLiveSession> = {}): ImportLiveS
     counts: { failed: 0, imported: 0, needsReview: 0, pending: 0, skipped: 0 },
     createdAt: "2026-09-15T10:00:00.000Z",
     finishedAt: null,
+    interrupted: false,
+    lastError: null,
     previewGeneratedAt: null,
     previewVersion: 0,
     provider: "MINHA_AGENDA",
@@ -97,7 +101,7 @@ function runningSessionFixture(
   });
 }
 
-function previewFixture(previewVersion = 7): ImportPreview {
+function previewFixture(previewVersion = 7): ImportPreviewSnapshot {
   return {
     categories: [
       {
@@ -115,7 +119,6 @@ function previewFixture(previewVersion = 7): ImportPreview {
         sourceSupported: true,
       },
     ],
-    changesSincePreviousVersion: { changedCount: 0, disappearedCount: 0, newCount: 12 },
     generatedAt: "2026-09-15T10:05:00.000Z",
     previewVersion,
     sessionId: "session-1",
@@ -127,6 +130,8 @@ function progressFixture(overrides: Partial<ImportProgress> = {}): ImportProgres
     categories: [],
     counts: { failed: 0, imported: 0, needsReview: 0, pending: 0, skipped: 0 },
     finishedAt: null,
+    interrupted: false,
+    lastError: null,
     previewVersion: 7,
     sessionId: "session-1",
     startedAt: "2026-09-15T10:10:00.000Z",
@@ -142,6 +147,7 @@ function partialProgressFixture(): ImportProgress {
       {
         category: "SERVICE",
         failed: 0,
+        failedReasons: [],
         imported: 30,
         needsReview: 0,
         pending: 5,
@@ -150,6 +156,7 @@ function partialProgressFixture(): ImportProgress {
       {
         category: "CUSTOMER",
         failed: 0,
+        failedReasons: [],
         imported: 10,
         needsReview: 2,
         pending: 0,
@@ -158,6 +165,7 @@ function partialProgressFixture(): ImportProgress {
       {
         category: "FUTURE_APPOINTMENT",
         failed: 1,
+        failedReasons: [{ reasonCode: "IMPORT_SERVICE_MAPPING_MISSING", count: 1 }],
         imported: 2,
         needsReview: 0,
         pending: 0,
@@ -176,6 +184,7 @@ function cleanProgressFixture(): ImportProgress {
       {
         category: "SERVICE",
         failed: 0,
+        failedReasons: [],
         imported: 42,
         needsReview: 0,
         pending: 0,
@@ -238,6 +247,21 @@ function httpError(code: string, status = 409): BffHttpError {
 }
 
 /**
+ * Recusa de domínio no formato real do BFF (Goal061 §7): `error.code` é
+ * sempre `UPSTREAM_ERROR`, e o código de domínio vive em
+ * `error.details.upstreamCode`, nunca em `error.code` direto.
+ */
+function upstreamError(upstreamCode: string, status = 409): BffHttpError {
+  return new BffHttpError({
+    code: "UPSTREAM_ERROR",
+    details: { upstreamCode },
+    message: upstreamCode,
+    requestId: "req-1",
+    status,
+  });
+}
+
+/**
  * Com timers falsos, a montagem da tela passa por duas promessas (estado e
  * progresso) antes da primeira leitura. Este laço espera a leitura acontecer
  * sem esperar tempo nenhum: o que os testes de parada medem é o intervalo de
@@ -260,6 +284,7 @@ function renderScreen() {
 beforeEach(() => {
   vi.clearAllMocks();
   getImportProgress.mockResolvedValue(progressFixture());
+  getImportPreview.mockResolvedValue(previewFixture());
 });
 
 afterEach(() => {
@@ -270,18 +295,12 @@ describe("executar é executar o preview aprovado", () => {
   test("envia a previewVersion que a tela de preview mostrou", async () => {
     const user = userEvent.setup();
     getImportState
-      .mockResolvedValueOnce(stateWithSession(sessionFixture()))
+      .mockResolvedValueOnce(stateWithSession(sessionFixture({ previewVersion: 7, status: "READY" })))
       .mockResolvedValueOnce(stateWithSession(runningSessionFixture()));
-    analyzeImport.mockResolvedValue(previewFixture(7));
     executeImport.mockResolvedValue({
-      categories: [],
-      counts: { failed: 0, imported: 12, needsReview: 0, pending: 0, skipped: 0 },
-      leaseLost: false,
-      leaseOwner: "worker-1",
       previewVersion: 7,
-      processed: 12,
       sessionId: "session-1",
-      status: "READY",
+      status: "EXECUTING",
     });
     getImportProgress.mockResolvedValue(cleanProgressFixture());
     renderScreen();
@@ -295,13 +314,20 @@ describe("executar é executar o preview aprovado", () => {
         expect.any(String),
       ),
     );
+    expect(analyzeImport).not.toHaveBeenCalled();
   });
 
   test("preview obsoleto vira estado de produto com saída para analisar de novo", async () => {
     const user = userEvent.setup();
-    getImportState.mockResolvedValue(stateWithSession(sessionFixture()));
-    analyzeImport.mockResolvedValue(previewFixture(7));
-    executeImport.mockRejectedValue(httpError("IMPORT_PREVIEW_STALE"));
+    getImportState
+      .mockResolvedValueOnce(stateWithSession(sessionFixture({ previewVersion: 7, status: "READY" })))
+      .mockResolvedValueOnce(
+        stateWithSession(sessionFixture({ previewVersion: 8, status: "READY" })),
+      );
+    executeImport.mockRejectedValue(upstreamError("IMPORT_PREVIEW_STALE"));
+    getImportPreview
+      .mockResolvedValueOnce(previewFixture(7))
+      .mockResolvedValueOnce(previewFixture(8));
     renderScreen();
 
     await user.click(await screen.findByRole("button", { name: "Importar tudo" }));
@@ -319,7 +345,7 @@ describe("executar é executar o preview aprovado", () => {
 
     await user.click(screen.getByRole("button", { name: "Analisar de novo" }));
 
-    await waitFor(() => expect(analyzeImport).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(analyzeImport).toHaveBeenCalledTimes(1));
     expect(
       await screen.findByRole("heading", { name: "Encontramos isto no Minha Agenda" }),
     ).toBeInTheDocument();
@@ -391,14 +417,9 @@ describe("PARTIAL é estado legítimo", () => {
     getImportState.mockResolvedValue(stateWithSession(runningSessionFixture()));
     getImportProgress.mockResolvedValue(partialProgressFixture());
     executeImport.mockResolvedValue({
-      categories: [],
-      counts: { failed: 1, imported: 47, needsReview: 2, pending: 0, skipped: 0 },
-      leaseLost: false,
-      leaseOwner: "worker-1",
       previewVersion: 7,
-      processed: 5,
       sessionId: "session-1",
-      status: "PARTIAL",
+      status: "EXECUTING",
     });
     renderScreen();
 

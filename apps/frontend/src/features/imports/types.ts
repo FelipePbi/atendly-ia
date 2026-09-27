@@ -5,11 +5,12 @@ import type {
   ImportHistory,
   ImportItem,
   ImportLiveSession,
-  ImportPreview,
   ImportPreviewCategory,
+  ImportPreviewSnapshot,
   ImportProgress,
   ImportSessionStatus,
   ImportState,
+  ImportWorkErrorCode,
 } from "@/data/mappers/publicApiSchemas";
 
 // --- Importacao unica do Minha Agenda (Goal010, Goal020) --------------------
@@ -33,9 +34,10 @@ export type {
   ImportHistory,
   ImportItem,
   ImportLiveSession,
-  ImportPreview,
   ImportPreviewCategory,
+  ImportPreviewSnapshot,
   ImportProgress,
   ImportSessionStatus,
   ImportState,
+  ImportWorkErrorCode,
 };

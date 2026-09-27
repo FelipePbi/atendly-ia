@@ -1,6 +1,6 @@
 # Goal 061 — A importação longa não depende de uma requisição
 
-**Status: READY.** Preparado em 2026-09-27 pelo Tech Lead Agent após [Goal060 ACCEPTED](../reviews/060-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED** no [review061](../reviews/061-review.md), rodada 2 de 2 (rodada 1 `CHANGES_REQUIRED` com 5 blockers). Preparado em 2026-09-27 pelo Tech Lead Agent após [Goal060 ACCEPTED](../reviews/060-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: OPUS_HIGH
 

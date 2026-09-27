@@ -24,7 +24,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import type {
   ImportItem,
   ImportLiveSession,
-  ImportPreview,
+  ImportPreviewSnapshot,
   ImportProgress,
   ImportState,
 } from "@/data";
@@ -39,6 +39,7 @@ const getImportState = vi.fn();
 const connectIntegration = vi.fn();
 const startImport = vi.fn();
 const analyzeImport = vi.fn();
+const getImportPreview = vi.fn();
 const setImportCategorySelection = vi.fn();
 const executeImport = vi.fn();
 const getImportProgress = vi.fn();
@@ -54,6 +55,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       completeImport,
       decideImportItem,
       executeImport,
+      getImportPreview,
       getImportProgress,
       getImportState,
       listImportItems,
@@ -71,20 +73,23 @@ function availableStateFixture(): ImportState {
   };
 }
 
+/** Sessão já analisada (`READY`, preview gravado); a análise em si é provada em `goal061-import-async.test.tsx`. */
 function sessionFixture(overrides: Partial<ImportLiveSession> = {}): ImportLiveSession {
   return {
     categories: [],
     counts: { failed: 0, imported: 0, needsReview: 1, pending: 12, skipped: 0 },
     createdAt: "2026-09-15T10:00:00.000Z",
     finishedAt: null,
-    previewGeneratedAt: null,
-    previewVersion: 0,
+    interrupted: false,
+    lastError: null,
+    previewGeneratedAt: "2026-09-15T10:05:00.000Z",
+    previewVersion: 1,
     provider: "MINHA_AGENDA",
     sessionId: "session-1",
     sourceAccountId: "camila@example.com",
     sourceAccountLabel: "camila@example.com",
     startedAt: null,
-    status: "DRAFT",
+    status: "READY",
     ...overrides,
   };
 }
@@ -107,7 +112,7 @@ function stateWithSession(session: ImportLiveSession): ImportState {
   };
 }
 
-function previewWithConflicts(): ImportPreview {
+function previewWithConflicts(): ImportPreviewSnapshot {
   return {
     categories: [
       {
@@ -139,7 +144,6 @@ function previewWithConflicts(): ImportPreview {
         sourceSupported: true,
       },
     ],
-    changesSincePreviousVersion: { changedCount: 0, disappearedCount: 0, newCount: 19 },
     generatedAt: "2026-09-15T10:05:00.000Z",
     previewVersion: 1,
     sessionId: "session-1",
@@ -152,6 +156,7 @@ function partialProgressFixture(): ImportProgress {
       {
         category: "SERVICE",
         failed: 0,
+        failedReasons: [],
         imported: 30,
         needsReview: 0,
         pending: 5,
@@ -160,6 +165,7 @@ function partialProgressFixture(): ImportProgress {
       {
         category: "CUSTOMER",
         failed: 1,
+        failedReasons: [],
         imported: 10,
         needsReview: 2,
         pending: 0,
@@ -168,6 +174,8 @@ function partialProgressFixture(): ImportProgress {
     ],
     counts: { failed: 1, imported: 40, needsReview: 2, pending: 5, skipped: 0 },
     finishedAt: null,
+    interrupted: false,
+    lastError: null,
     previewVersion: 1,
     sessionId: "session-1",
     startedAt: "2026-09-15T10:10:00.000Z",
@@ -233,7 +241,7 @@ describe("ShellConfigProvider + conexão da origem não excede a profundidade de
 describe("ShellConfigProvider + análise e seleção não excede a profundidade de atualização", () => {
   test("alterna repetidamente entre resumo e seleção, e marca/desmarca categorias continuamente", async () => {
     getImportState.mockResolvedValue(stateWithSession(sessionFixture()));
-    analyzeImport.mockResolvedValue(previewWithConflicts());
+    getImportPreview.mockResolvedValue(previewWithConflicts());
     const user = userEvent.setup();
 
     renderScreen();
@@ -261,7 +269,7 @@ describe("ShellConfigProvider + análise e seleção não excede a profundidade 
 describe("ShellConfigProvider + conflitos por item não excede a profundidade de atualização", () => {
   test("expande, alterna a decisão e recolhe repetidamente sem confirmar", async () => {
     getImportState.mockResolvedValue(stateWithSession(sessionFixture()));
-    analyzeImport.mockResolvedValue(previewWithConflicts());
+    getImportPreview.mockResolvedValue(previewWithConflicts());
     listImportItems.mockResolvedValue({
       category: "SERVICE",
       items: [conflictItemFixture()],

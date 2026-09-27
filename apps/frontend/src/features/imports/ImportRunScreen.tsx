@@ -13,11 +13,14 @@ import { ImportsPage, ReplaceAccountZone } from "./ImportsLayout";
 import {
   CATEGORY_LABELS,
   CATEGORY_ORDER,
+  failedReasonLabel,
   formatImportDateTime,
   importCountFormatter,
   SINGLE_IMPORT_CONFIRMATION_BODY,
   SINGLE_IMPORT_CONFIRMATION_TITLE,
   STATUS_LABELS,
+  upstreamErrorCode,
+  workErrorLabel,
 } from "./labels";
 import type {
   ImportCompletion,
@@ -76,8 +79,8 @@ function completeErrorMessage(error: unknown): string {
 }
 
 function retryErrorMessage(error: unknown): string {
-  if (error instanceof BffHttpError) {
-    switch (error.code) {
+  if (error instanceof BffHttpError && error.code === "UPSTREAM_ERROR") {
+    switch (upstreamErrorCode(error)) {
       case "IMPORT_PREVIEW_STALE":
         return "Os dados do Minha Agenda mudaram desde esta análise. Nada foi importado nesta tentativa.";
       case "IMPORT_SESSION_NOT_EXECUTABLE":
@@ -87,6 +90,29 @@ function retryErrorMessage(error: unknown): string {
     }
   }
   return "Não foi possível continuar a importação agora. Tente novamente.";
+}
+
+/**
+ * A retomada pode ter chegado ao servidor mesmo quando o cliente só viu falha
+ * (Goal061 §6). O estado relido é comparado ao último andamento lido: passada
+ * em curso, outra fase, outro motivo gravado ou contagem diferente contam como
+ * trabalho começado.
+ */
+function executionAdvanced(
+  before: ImportProgress | null,
+  after: ImportLiveSession | null,
+): boolean {
+  if (!after) return true;
+  if (after.status === "EXECUTING" && !after.interrupted) return true;
+  if (!before) return false;
+  return (
+    after.status !== before.status ||
+    after.interrupted !== before.interrupted ||
+    (after.lastError?.code ?? null) !== (before.lastError?.code ?? null) ||
+    after.counts.pending !== before.counts.pending ||
+    after.counts.imported !== before.counts.imported ||
+    after.counts.failed !== before.counts.failed
+  );
 }
 
 /** O que sobrou em cada categoria, em linguagem de produto e sem inventar zero. */
@@ -258,7 +284,20 @@ export function ImportRunScreen({
         newIdempotencyKey(),
       );
     } catch (caught: unknown) {
-      setRetryError(retryErrorMessage(caught));
+      // Incerteza não é falha (Goal061 §6): rede, timeout ou 5xx não dizem se
+      // a retomada chegou ao servidor. Relê o estado antes de decidir; o erro
+      // só aparece quando o estado relido mostra que nada começou.
+      let next: ImportState | null = null;
+      try {
+        next = await getProductServices().migration.getImportState();
+      } catch {
+        // A checagem também falhou: cai no erro da retomada abaixo.
+      }
+      if (next && !next.session) {
+        onChanged(next);
+      } else if (!next || !executionAdvanced(progress, next.session)) {
+        setRetryError(retryErrorMessage(caught));
+      }
     } finally {
       setRetrying(false);
       setReadToken((value) => value + 1);
@@ -323,7 +362,11 @@ export function ImportRunScreen({
   }
 
   const startedAt = formatImportDateTime(progress.startedAt ?? session.startedAt);
-  const executing = progress.status === "EXECUTING" || retrying;
+  // Interrompida: o lease sumiu sem o trabalho terminar (Goal061 §6). Não é
+  // mais "em andamento" de fato, mesmo que `status` ainda diga `EXECUTING`.
+  const interrupted = progress.interrupted;
+  const causeMessage = progress.lastError ? workErrorLabel(progress.lastError.code) : null;
+  const executing = (progress.status === "EXECUTING" && !interrupted) || retrying;
   const terminal = TERMINAL_STATUSES.has(progress.status);
   const completable = COMPLETABLE_STATUSES.has(progress.status) && !executing;
   const outstanding = outstandingOf(progress.counts);
@@ -334,20 +377,43 @@ export function ImportRunScreen({
     <>
       <ImportsPage
         description={
-          executing
-            ? "Estamos trazendo seus dados do Minha Agenda. Isso pode levar alguns minutos."
-            : terminal
-              ? "Esta importação não continua de onde parou."
-              : "Você já tem uma importação em andamento. Continue de onde parou."
+          interrupted
+            ? "Nada do que já entrou foi perdido."
+            : executing
+              ? "Estamos trazendo seus dados do Minha Agenda. Isso pode levar alguns minutos."
+              : terminal
+                ? "Esta importação não continua de onde parou."
+                : "Você já tem uma importação em andamento. Continue de onde parou."
         }
         title={
-          executing
-            ? "Importando seus dados"
-            : terminal
-              ? "Esta importação não pode continuar"
-              : "Continuar importação"
+          interrupted
+            ? "Isso parou no meio do caminho"
+            : executing
+              ? "Importando seus dados"
+              : terminal
+                ? "Esta importação não pode continuar"
+                : "Continuar importação"
         }
       >
+        {interrupted && (
+          <div className="imports-panel" role="status">
+            <p className="imports-note">
+              {causeMessage ??
+                "A importação parou no meio do caminho. Nada do que já entrou foi perdido."}
+            </p>
+            <div className="imports-actions">
+              <button
+                className="btn btn-primary"
+                disabled={retrying}
+                type="button"
+                onClick={() => void retryPending(progress.previewVersion)}
+              >
+                {retrying ? "Continuando..." : "Continuar"}
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="imports-panel" aria-busy={executing || undefined}>
           <div className="imports-panel-header">
             <h2>{STATUS_LABELS[progress.status]}</h2>
@@ -403,6 +469,15 @@ export function ImportRunScreen({
                   <div>
                     <strong>{CATEGORY_LABELS[category.category]}</strong>
                     <small>{outstandingDetail(category)}</small>
+                    {category.failed > 0 && category.failedReasons.length > 0 && (
+                      <ul className="imports-failed-reasons">
+                        {category.failedReasons.map((reason) => (
+                          <li key={reason.reasonCode}>
+                            {`${failedReasonLabel(reason.reasonCode)} (${importCountFormatter.format(reason.count)})`}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                   <span className="imports-row-count">
                     {importCountFormatter.format(outstandingOf(category))}

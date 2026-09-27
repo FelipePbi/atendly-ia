@@ -50,6 +50,7 @@ import {
   listTimeBlocks,
   removeTimeBlock,
 } from "../calendar/time-blocks.js";
+import { databaseNow } from "../calendar/write-policy.js";
 import { AtendlyCustomerService } from "../customers/atendly-customer-service.js";
 import { encryptIntegrationCredentials } from "../integrations/credentials.js";
 import { createMinhaAgendaClient } from "../integrations/minha-agenda/client.js";
@@ -65,14 +66,18 @@ import {
 } from "../integrations/minha-agenda/import-source-reader.js";
 import {
   CATEGORY_ENTITY_TYPE,
+  ImportBackgroundWork,
   type ImportCompletionResult,
   ImportCompletionService,
   ImportExecutionService,
   type ImportHistoryEntry,
   type ImportLiveSession,
-  type ImportPreviewResult,
   ImportPreviewService,
+  type ImportPreviewSnapshot,
+  type ImportPreviewSourceReader,
   type ImportRight,
+  importWorkFailure,
+  isImportSessionInterrupted,
 } from "../migrations/index.js";
 import {
   claimDueNotificationIntents,
@@ -496,12 +501,43 @@ const importDecisionBodySchema = z
     },
   );
 
+/**
+ * Dependencias do trabalho da importacao em segundo plano (Goal061 §1).
+ * `importWork` e o conjunto em memoria que `app.close()` espera;
+ * `importSourceReader` monta o leitor da origem **dentro** do trabalho — o
+ * teste troca-o por uma origem que so responde quando ele a libera.
+ */
+export interface ManagementRoutesOptions {
+  importWork?: ImportBackgroundWork;
+  importSourceReader?: (tenantId: string) => Promise<ImportPreviewSourceReader>;
+}
+
 export async function registerManagementRoutes(
   app: FastifyInstance,
   prismaClient: PrismaClient = getPrisma(),
+  options: ManagementRoutesOptions = {},
 ): Promise<void> {
   const prisma = prismaClient;
   const internalOnly = { preHandler: requireInternalAuth };
+  // Quem nao recebe o conjunto de fora (teste de rota) cria o seu e o
+  // espera no proprio `onClose`; `buildApp` passa o dele e o espera antes
+  // de desconectar o banco.
+  const importWork =
+    options.importWork ??
+    new ImportBackgroundWork((error) => {
+      app.log.error(
+        { errorCode: importWorkFailure(error).errorCode },
+        "Import work failed",
+      );
+    });
+  if (!options.importWork) {
+    app.addHook("onClose", async () => {
+      await importWork.drain();
+    });
+  }
+  const importSourceReader =
+    options.importSourceReader ??
+    ((tenantId: string) => buildMinhaAgendaReader(prisma, tenantId));
   const tenantPurge = new TenantPurgeService(prisma);
   // Sem recuperacao global no boot (Goal010, WU-05): subir o servico nao
   // reprocessa job de negocio nenhum. A retomada da importacao e por tenant e
@@ -1462,16 +1498,21 @@ export async function registerManagementRoutes(
     return data(request, result);
   });
 
+  // Inicio curto da analise (Goal061 §1): confere, reivindica gravando
+  // `ANALYZING` e responde `202` sem tocar a origem. O trabalho roda no
+  // proprio processo e so grava enquanto tem o lease. A mesma
+  // `Idempotency-Key` devolve a mesma resposta de inicio e nao dispara um
+  // segundo trabalho, porque o disparo mora dentro do callback idempotente.
   app.post(
     "/internal/calendar/imports/:sessionId/analyze",
     internalOnly,
-    async (request) => {
+    async (request, reply) => {
       const context = currentInternalContext(request);
       requireHumanCaller(context);
       const key = idempotencyKey(request);
       const { sessionId } = parse(importSessionParamsSchema, request.params);
       const calendar = await requireCalendar(prisma, context.tenantId);
-      const reader = await buildMinhaAgendaReader(prisma, context.tenantId);
+      await requireIntegration(prisma, context.tenantId);
       const snapshotInput = importSnapshotWindow(calendar.timezone);
       const result = await withImportIdempotency(
         prisma,
@@ -1481,16 +1522,42 @@ export async function registerManagementRoutes(
           operation: "import.analyze",
           request: { sessionId },
         },
-        async () =>
-          importPreviewSummaryDto(
-            await new ImportPreviewService(prisma).analyze(
-              { tenantId: context.tenantId, sessionId },
-              reader,
+        async () => {
+          const preview = new ImportPreviewService(prisma);
+          const start = await preview.startAnalysis({
+            tenantId: context.tenantId,
+            sessionId,
+          });
+          importWork.dispatch(() =>
+            preview.runAnalysis(
+              start,
+              () => importSourceReader(context.tenantId),
               snapshotInput,
             ),
-          ),
+          );
+          return importWorkStartDto(start);
+        },
       );
+      reply.code(202);
       return data(request, result);
+    },
+  );
+
+  // Leitura do preview gravado pela ultima analise (Goal061 §7.4, WU-02): so
+  // `ImportSession`/`ImportSessionCategory` da versao vigente, nunca a
+  // origem. Sessao sem analise (`previewVersion` 0) e recusada com codigo
+  // proprio, em vez de devolver um preview vazio.
+  app.get(
+    "/internal/calendar/imports/:sessionId/preview",
+    internalOnly,
+    async (request) => {
+      const context = currentInternalContext(request);
+      requireHumanCaller(context);
+      const { sessionId } = parse(importSessionParamsSchema, request.params);
+      const preview: ImportPreviewSnapshot = await new ImportPreviewService(
+        prisma,
+      ).getPreview({ tenantId: context.tenantId, sessionId });
+      return data(request, preview);
     },
   );
 
@@ -1602,17 +1669,19 @@ export async function registerManagementRoutes(
     },
   );
 
+  // Inicio curto da execucao (Goal061 §1), no mesmo formato da analise:
+  // tudo ate a reivindicacao do lease na requisicao, o lote no processo.
   app.post(
     "/internal/calendar/imports/:sessionId/execute",
     internalOnly,
-    async (request) => {
+    async (request, reply) => {
       const context = currentInternalContext(request);
       requireHumanCaller(context);
       const key = idempotencyKey(request);
       const { sessionId } = parse(importSessionParamsSchema, request.params);
       const body = parse(executeImportBodySchema, request.body ?? {});
       const calendar = await requireCalendar(prisma, context.tenantId);
-      const reader = await buildMinhaAgendaReader(prisma, context.tenantId);
+      await requireIntegration(prisma, context.tenantId);
       const snapshotInput = importSnapshotWindow(calendar.timezone);
       const result = await withImportIdempotency(
         prisma,
@@ -1622,15 +1691,24 @@ export async function registerManagementRoutes(
           operation: "import.execute",
           request: { sessionId, ...body },
         },
-        async () => ({
-          ...(await new ImportExecutionService(prisma).execute(
+        async () => {
+          const execution = new ImportExecutionService(prisma);
+          const start = await execution.startExecution(
             { tenantId: context.tenantId, sessionId, userId: context.userId },
-            reader,
-            snapshotInput,
-            { previewVersion: body.previewVersion, maxItems: body.maxItems },
-          )),
-        }),
+            { previewVersion: body.previewVersion },
+          );
+          importWork.dispatch(() =>
+            execution.runExecution(
+              start,
+              () => importSourceReader(context.tenantId),
+              snapshotInput,
+              { maxItems: body.maxItems },
+            ),
+          );
+          return importWorkStartDto(start);
+        },
       );
+      reply.code(202);
       return data(request, result);
     },
   );
@@ -1649,12 +1727,21 @@ export async function registerManagementRoutes(
         context.tenantId,
         sessionId,
       );
-      const items = await prisma.importItem.findMany({
-        where: { tenantId: context.tenantId, sessionId },
-      });
+      const [items, now] = await Promise.all([
+        prisma.importItem.findMany({
+          where: { tenantId: context.tenantId, sessionId },
+        }),
+        databaseNow(prisma),
+      ]);
       const categories = IMPORT_CATEGORY_ORDER.map((category) => {
         const rows = items.filter((item) => item.category === category);
-        return rows.length === 0 ? null : { category, ...tallyItems(rows) };
+        return rows.length === 0
+          ? null
+          : {
+              category,
+              ...tallyItems(rows),
+              failedReasons: failedReasonsTally(rows),
+            };
       }).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
       return data(request, {
         sessionId: session.id,
@@ -1662,6 +1749,8 @@ export async function registerManagementRoutes(
         previewVersion: session.previewVersion,
         startedAt: session.startedAt?.toISOString() ?? null,
         finishedAt: session.finishedAt?.toISOString() ?? null,
+        interrupted: isImportSessionInterrupted(session, now),
+        lastError: session.errorCode ? { code: session.errorCode } : null,
         counts: tallyItems(items),
         categories,
       });
@@ -2187,20 +2276,20 @@ function importSnapshotWindow(timezone: string): GetImportSnapshotInput {
 }
 
 /**
- * Resumo da analise devolvido pela rota: os itens em si sao lidos pela rota
- * de listagem paginada, nunca inteiros aqui — uma sessao com milhares de
- * registros nao cabe, de novo, no corpo de `analyze` nem na resposta gravada
+ * Resposta de inicio da analise e da execucao (Goal061 §1): so o que a
+ * reivindicacao gravou. O preview e o andamento sao lidos do banco pelas
+ * rotas de leitura, nunca carregados nesta resposta nem na resposta gravada
  * pela `Idempotency-Key`.
  */
-function importPreviewSummaryDto(
-  result: ImportPreviewResult,
-): Record<string, unknown> {
+function importWorkStartDto(start: {
+  sessionId: string;
+  status: "ANALYZING" | "EXECUTING";
+  previewVersion: number;
+}): Record<string, unknown> {
   return {
-    sessionId: result.sessionId,
-    previewVersion: result.previewVersion,
-    generatedAt: result.generatedAt,
-    categories: result.categories,
-    changesSincePreviousVersion: result.changesSincePreviousVersion,
+    sessionId: start.sessionId,
+    status: start.status,
+    previewVersion: start.previewVersion,
   };
 }
 
@@ -2238,6 +2327,22 @@ function tallyItems(rows: Array<{ status: ImportItemStatus }>) {
     else if (row.status === "NEEDS_REVIEW") counts.needsReview += 1;
   }
   return counts;
+}
+
+/** Itens `FAILED` desta categoria, contados por motivo (Goal061 §7.4, WU-02). */
+function failedReasonsTally(
+  rows: Array<{ status: ImportItemStatus; reasonCode: string | null }>,
+): Array<{ reasonCode: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (row.status !== "FAILED") continue;
+    const reasonCode = row.reasonCode ?? "UNKNOWN";
+    counts.set(reasonCode, (counts.get(reasonCode) ?? 0) + 1);
+  }
+  return [...counts.entries()].map(([reasonCode, count]) => ({
+    reasonCode,
+    count,
+  }));
 }
 
 function importItemDto(item: {

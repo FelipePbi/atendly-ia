@@ -53,6 +53,38 @@ const RESUMABLE_IMPORT_STATUSES: ImportSessionStatus[] = [
   "PARTIAL",
 ];
 
+/**
+ * Estados em que a sessão está com o trabalho no meio — analisando ou
+ * executando. Só nestes dois o lease vencido significa "parou no meio";
+ * fora deles, ausência de lease é o normal (Goal061).
+ */
+const WORKING_IMPORT_STATUSES = new Set<ImportSessionStatus>([
+  "ANALYZING",
+  "EXECUTING",
+]);
+
+/**
+ * A sessão ficou parada no meio do trabalho: está `ANALYZING` ou
+ * `EXECUTING`, e o lease que a reivindicou não está mais vivo pelo relógio
+ * do **banco** — venceu, ou nunca chegou a ser gravado por esta passada
+ * (falha da execução que devolve o lease e mantém `EXECUTING`, ver
+ * `ImportExecutionService.runExecution`). Um novo início reivindica esta
+ * sessão normalmente: a condição vive no `WHERE` de {@link acquireImportLease},
+ * não aqui — esta função só descreve o que já é verdade na linha.
+ */
+export function isImportSessionInterrupted(
+  session: {
+    status: ImportSessionStatus;
+    leaseOwner: string | null;
+    leaseExpiresAt: Date | null;
+  },
+  now: Date,
+): boolean {
+  if (!WORKING_IMPORT_STATUSES.has(session.status)) return false;
+  if (!session.leaseOwner || !session.leaseExpiresAt) return true;
+  return session.leaseExpiresAt.getTime() <= now.getTime();
+}
+
 export interface ImportLease {
   tenantId: string;
   sessionId: string;
@@ -68,6 +100,13 @@ export type ImportLeaseClaim =
       /** Dono vigente, quando a recusa foi por lease vivo de outra instância. */
       heldBy: string | null;
       heldUntil: Date | null;
+      /**
+       * Verdadeiro quando o lease de outro dono ainda estava vivo **pelo
+       * relógio do banco** no instante da recusa. É o que distingue "outra
+       * instância está trabalhando" de "a sessão só não está num estado que
+       * este início aceita" (Goal061).
+       */
+      leaseLive: boolean;
       /** Estado da sessão, quando a recusa foi por estado não reivindicável. */
       status: ImportSessionStatus | null;
     };
@@ -166,16 +205,28 @@ export async function acquireImportLease(
       acquired: false,
       heldBy: current?.leaseOwner ?? null,
       heldUntil: current?.leaseExpiresAt ?? null,
+      leaseLive: Boolean(
+        current?.leaseOwner &&
+          current.leaseExpiresAt &&
+          current.leaseExpiresAt.getTime() > now.getTime(),
+      ),
       status: current?.status ?? null,
     };
   });
 }
 
-/** Erro pronto para a recusa de reivindicação, com o motivo já classificado. */
+/**
+ * Erro pronto para a recusa de reivindicação, com o motivo já classificado.
+ * Lease vivo de outro dono é sempre `IMPORT_SESSION_LEASE_HELD`, seja ele de
+ * uma análise ou de uma execução (Goal061): as duas se excluem pela mesma
+ * linha. Sem lease vivo, a recusa é de estado, e quem chama pode dizer qual
+ * (`notClaimable`); o padrão continua sendo o da execução.
+ */
 export function importLeaseHeldError(
   claim: Extract<ImportLeaseClaim, { acquired: false }>,
+  notClaimable?: AppError,
 ): AppError {
-  if (claim.heldBy) {
+  if (claim.heldBy && claim.leaseLive) {
     return new AppError(
       IMPORT_SESSION_LEASE_HELD,
       "Another instance is already running this import.",
@@ -183,6 +234,7 @@ export function importLeaseHeldError(
       { heldBy: claim.heldBy, heldUntil: claim.heldUntil, status: claim.status },
     );
   }
+  if (notClaimable) return notClaimable;
   return new AppError(
     "IMPORT_SESSION_NOT_EXECUTABLE",
     "Import session left an executable state before this run started.",
@@ -305,6 +357,29 @@ export class ImportLeaseHolder {
   }
 
   /**
+   * Mantém o lease vivo enquanto uma espera longa acontece — a leitura da
+   * origem inteira, que é uma única promessa e não tem "entre dois itens"
+   * onde chamar {@link heartbeat} (Goal061 §2). A renovação continua sendo
+   * decidida pelo banco; o relógio do processo só marca quando perguntar. O
+   * intervalo nasce e morre com esta espera: não é laço de fundo, não
+   * sobrevive à passada e não segura o processo aberto (`unref`).
+   */
+  async keepAliveWhile<T>(work: Promise<T>): Promise<T> {
+    if (this.renewIntervalMs <= 0) return work;
+    let beating: Promise<unknown> = Promise.resolve();
+    const timer = setInterval(() => {
+      beating = beating.then(() => this.heartbeat()).catch(() => false);
+    }, this.renewIntervalMs);
+    timer.unref?.();
+    try {
+      return await work;
+    } finally {
+      clearInterval(timer);
+      await beating;
+    }
+  }
+
+  /**
    * Libera o lease e, no mesmo UPDATE, grava o fechamento da passada. Se o
    * lease já não for meu, nada é gravado e o retorno é `false`: é assim que a
    * perda de lease deixa de sobrescrever o que o novo dono está escrevendo.
@@ -319,6 +394,124 @@ export class ImportLeaseHolder {
     this.lost = true;
     return released;
   }
+}
+
+/**
+ * Trabalhos de importação em curso **neste processo** (Goal061 §1).
+ *
+ * Não decide nada: quem trabalha é quem tem o lease do banco (D-008, D-026).
+ * O conjunto existe só para que `app.close()` e os testes possam esperar o
+ * que já começou — sem ele, fechar o processo cortaria uma análise no meio
+ * sem que ninguém soubesse, e um teste não teria como aguardar o fim do
+ * trabalho que a rota disparou. Não é fila, não é laço e não reagenda nada:
+ * o que cai com o processo é retomado quando o dono pede de novo, pelo lease
+ * vencido.
+ */
+export class ImportBackgroundWork {
+  private readonly running = new Set<Promise<void>>();
+
+  constructor(
+    private readonly onError: (error: unknown) => void = () => undefined,
+  ) {}
+
+  /** Dispara o trabalho no próprio processo, sem esperar por ele. */
+  dispatch(work: () => Promise<unknown>): void {
+    const tracked: Promise<void> = Promise.resolve()
+      .then(work)
+      .then(
+        () => undefined,
+        (error: unknown) => {
+          this.onError(error);
+        },
+      )
+      .finally(() => {
+        this.running.delete(tracked);
+      });
+    this.running.add(tracked);
+  }
+
+  /** Quantos trabalhos ainda estão em curso. */
+  get size(): number {
+    return this.running.size;
+  }
+
+  /** Espera todos os trabalhos em curso, inclusive os disparados durante a espera. */
+  async drain(): Promise<void> {
+    while (this.running.size > 0) {
+      await Promise.allSettled([...this.running]);
+    }
+  }
+}
+
+/**
+ * Conjunto fechado de causas de falha do trabalho de importação (Goal061 §3).
+ * Só estes códigos entram em `ImportSession.errorCode`; a mensagem gravada
+ * ao lado é fixa por código, escrita aqui, e nunca copia texto do erro —
+ * assim nenhum segredo, credencial, e-mail, senha, token ou corpo da origem
+ * pode chegar ao banco por uma mensagem de exceção.
+ */
+export const IMPORT_WORK_ERROR_CODES = [
+  "IMPORT_SOURCE_AUTH_REJECTED",
+  "IMPORT_SOURCE_UNAVAILABLE",
+  "IMPORT_SOURCE_INVALID_RESPONSE",
+  "IMPORT_PREVIEW_STALE",
+  "IMPORT_INTERNAL_ERROR",
+] as const;
+
+export type ImportWorkErrorCode = (typeof IMPORT_WORK_ERROR_CODES)[number];
+
+const IMPORT_WORK_ERROR_MESSAGES: Record<ImportWorkErrorCode, string> = {
+  IMPORT_SOURCE_AUTH_REJECTED: "The import source refused the stored login.",
+  IMPORT_SOURCE_UNAVAILABLE: "The import source could not be reached.",
+  IMPORT_SOURCE_INVALID_RESPONSE:
+    "The import source answered outside the expected contract.",
+  IMPORT_PREVIEW_STALE:
+    "The import source changed after the approved preview; analyze again.",
+  IMPORT_INTERNAL_ERROR: "The import work failed inside Atendly.",
+};
+
+const SOURCE_UNAVAILABLE_CODES = new Set([
+  "MINHA_AGENDA_TIMEOUT",
+  "MINHA_AGENDA_UNREACHABLE",
+  "MINHA_AGENDA_HTTP_ERROR",
+]);
+
+/** Classifica a falha que não é de item num código do conjunto fechado. */
+export function importWorkFailure(error: unknown): {
+  errorCode: ImportWorkErrorCode;
+  errorMessage: string;
+} {
+  const errorCode = classifyImportWorkError(error);
+  return { errorCode, errorMessage: IMPORT_WORK_ERROR_MESSAGES[errorCode] };
+}
+
+function classifyImportWorkError(error: unknown): ImportWorkErrorCode {
+  if (!(error instanceof AppError)) return "IMPORT_INTERNAL_ERROR";
+  return classifyImportWorkCode(
+    error.code,
+    (error.details as { cause?: unknown } | undefined)?.cause,
+  );
+}
+
+function classifyImportWorkCode(
+  code: string,
+  cause: unknown,
+): ImportWorkErrorCode {
+  if (code === "MINHA_AGENDA_AUTH_FAILED") return "IMPORT_SOURCE_AUTH_REJECTED";
+  if (SOURCE_UNAVAILABLE_CODES.has(code)) return "IMPORT_SOURCE_UNAVAILABLE";
+  if (code === "MINHA_AGENDA_INVALID_RESPONSE") {
+    return "IMPORT_SOURCE_INVALID_RESPONSE";
+  }
+  if (code === "IMPORT_PREVIEW_STALE") return "IMPORT_PREVIEW_STALE";
+  // A leitura por categoria embrulha a causa da origem num código próprio;
+  // a classe da falha é a da causa, não a do embrulho.
+  if (
+    code === "MINHA_AGENDA_IMPORT_CATEGORY_FAILED" &&
+    typeof cause === "string"
+  ) {
+    return classifyImportWorkCode(cause, undefined);
+  }
+  return "IMPORT_INTERNAL_ERROR";
 }
 
 export interface ResumableImportSession {

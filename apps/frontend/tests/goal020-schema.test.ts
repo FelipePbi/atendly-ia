@@ -23,6 +23,8 @@ const liveSession = {
   startedAt: null,
   finishedAt: null,
   previewGeneratedAt: "2026-09-12T12:05:00.000Z",
+  interrupted: false,
+  lastError: null,
   counts: {
     pending: 12,
     imported: 0,

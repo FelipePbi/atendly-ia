@@ -905,7 +905,10 @@ verificados no [review010](reviews/010-review.md) sobre a base `e381c15`.
   asserção executável: `apps/ai-orchestrator/tests/tools/import-out-of-reach.test.ts`
   falha se alguma tool passar a tocar o caminho de importação. O frontend
   aceita as operações e campos novos mantendo os schemas antigos de migração
-  decodificáveis; não há tela (Goal020).
+  decodificáveis; não há tela (Goal020). (**Ampliado no Goal061**,
+  [D-078](DECISIONS.md): `analyze` e `execute` passam a responder `202` com
+  o início do trabalho, não mais com o preview ou o resultado, e nasce uma
+  oitava rota, `GET .../preview`, que lê o preview gravado sem a origem.)
 - **Limite verificado:** a capacidade da API real do Minha Agenda continua
   **sem prova** — não há credencial autorizada no ambiente de migração. Toda
   origem exercitada é dublê ou fixture, M4 não foi exercitado e nenhum tenant
@@ -5969,3 +5972,136 @@ execução, preview, conflitos, lease ou retomada da importação, nem
   a conexão — ver [D-077](DECISIONS.md). **QA IM-01 e
   QA IM-02 corrigidos**, fora da contagem A-01…A-24 — ver
   [FINAL_AUDIT §38](FINAL_AUDIT.md).
+
+## Delta implementado — Goal061, 2026-09-27 ([D-078](DECISIONS.md), ACCEPTED)
+
+Corrige **QA IM-03**, **QA IM-04**, **QA IM-05**, **QA IM-07** e
+**QA IM-08** do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md) (fora da
+enumeração A-01…A-24 do FINAL_AUDIT): a análise e a execução da
+importação começam numa requisição curta e terminam no processo do
+Scheduling, com o andamento lido do banco. Toca
+`apps/scheduling-service/` (rotas de importação, serviços de análise,
+execução, lease e conclusão, `app/build-app.ts`),
+`packages/public-api-contract/`, `apps/bff/` (cliente, rotas e
+`PUBLIC_API_V1.md`) e `apps/frontend/` (telas de importação e
+serviço). Não toca `apps/ai-orchestrator/`, `apps/evolution-go/`,
+`tools/ia-loop/`, migration, schema Prisma, a conexão com a origem
+(D-077), a leitura da origem, a classificação de itens, os conflitos,
+a conclusão, `INTERNAL_HTTP_TIMEOUT_MS`, o `rewrites` do Next nem
+`IMPORT_LEASE_TTL_SECONDS`. A rodada 1 tinha editado
+`apps/ai-orchestrator/tests/assistant/assistant.service.test.ts` (a
+contagem congelada de `this.http.` em `apps/bff/src/clients/`, de 42
+para 43); a rodada 2 reverteu o arquivo ao estado de `7623009` e
+manteve as **42** ocorrências fazendo `mutate` delegar a
+`mutateWithStatus` (`apps/bff/src/clients/scheduling/index.ts`).
+
+- **Início assíncrono (§1)** — `POST /internal/calendar/imports/:sessionId/analyze`
+  e `POST .../execute` conferem sessão, estado e conexão, reivindicam
+  a sessão com `acquireImportLease` (`ANALYZING` ou `EXECUTING` no
+  mesmo `UPDATE`), disparam o trabalho em `ImportBackgroundWork`
+  (`modules/migrations/import-lease.ts`) e respondem `202` com
+  `{ sessionId, status, previewVersion }`, sem chamar a origem.
+  `withImportIdempotency` continua envolvendo o início. O conjunto em
+  memória só serve para `onClose` (`app/build-app.ts`) e os testes
+  esperarem os trabalhos em curso; quem decide quem trabalha é o
+  lease do banco. Nenhum loop, timer, fila, worker, processo,
+  migration ou campo novo.
+- **Lease da análise (§1 e §2)** — a análise reivindica a partir de
+  `DRAFT`, `ANALYZING` com lease vencido, `READY` ou `PARTIAL` e
+  termina como a baseline (`PARTIAL` continua `PARTIAL`, os demais
+  viram `READY`); o estado de partida é recuperado sem migration por
+  `analysisOrigin` (`import-preview-service.ts`), a partir de
+  `startedAt` e `previewVersion`. Análise e execução se excluem pelo
+  estado; novo início com lease vivo é recusado com
+  `IMPORT_SESSION_LEASE_HELD` (409). O trabalho renova o lease pelo
+  relógio do banco (`ImportLeaseHolder`), e a transação final da
+  análise só grava com o mesmo `leaseOwner` e o estado `ANALYZING`.
+- **Falha gravada (§3)** — falha que não é de item grava `errorCode`
+  de `IMPORT_WORK_ERROR_CODES` (`IMPORT_SOURCE_AUTH_REJECTED`,
+  `IMPORT_SOURCE_UNAVAILABLE`, `IMPORT_SOURCE_INVALID_RESPONSE`,
+  `IMPORT_PREVIEW_STALE`, `IMPORT_INTERNAL_ERROR`) com mensagem fixa
+  por código, e libera o lease; a análise volta ao estado de partida,
+  a execução fica em `EXECUTING` sem lease, retomável.
+- **Leitura do preview e campos novos (§4 e §5)** — nascem
+  `GET /internal/calendar/imports/:sessionId/preview` e
+  `GET /v1/calendar/imports/:sessionId/preview`, que leem o preview
+  gravado sem a origem e recusam sessão sem análise com
+  `IMPORT_SESSION_PREVIEW_NOT_AVAILABLE` (409). `progress` ganha
+  `interrupted`, `lastError` (`{ code }` ou `null`) e `failedReasons`
+  por categoria; `session` de `GET /internal/calendar/imports` e de
+  `GET /v1/calendar/imports` ganha `interrupted` e `lastError`.
+  `interrupted` é decidido pelo relógio do banco
+  (`isImportSessionInterrupted`). `POST /v1/.../analyze` e
+  `.../execute` respondem `202` com `importWorkStartSchema`.
+- **Tela (§6)** — `ImportPreviewScreen.tsx` lê o preview gravado com
+  `previewVersion` maior que zero, só inicia a análise sozinha em
+  `DRAFT` sem preview e acompanha `ANALYZING` lendo o estado. Falha
+  de transporte (rede, timeout ou 5xx) em três pontos — início da
+  análise, "Importar tudo" (`ImportPreviewScreen.tsx`) e retomada
+  "Importar os N que faltam"/"Continuar" (`ImportRunScreen.tsx`) —
+  relê `GET /v1/calendar/imports` e só mostra erro quando o estado
+  relido mostra que nada começou. Depois de "Tentar de novo" ou
+  "Continuar", a fase local vence o `lastError`/`interrupted` que a
+  sessão ainda carrega da tentativa anterior, e o estado relido em
+  `ANALYZING` é entregue ao pai; a tela mostra a análise em andamento,
+  não "Análise indisponível" nem "Análise interrompida". `interrupted`
+  oferece "Continuar"; cada classe de `lastError` tem texto próprio;
+  "O que ainda não entrou" mostra os motivos de `failedReasons` em
+  linguagem leiga, com a contagem, com texto próprio para cada código
+  que a execução grava (`IMPORT_SERVICE_MAPPING_MISSING`,
+  `IMPORT_CUSTOMER_MAPPING_MISSING`,
+  `IMPORT_APPOINTMENT_INTERVAL_INVALID`,
+  `IMPORT_SOURCE_RECORD_INVALID`,
+  `IMPORT_AVAILABILITY_COMPANY_MISSING`, `IMPORT_ITEM_FAILED`) e
+  texto genérico para código desconhecido (`labels.ts`); a contagem de
+  clientes aparece também em categoria com limitação.
+- **Controles negativos (escopo §8)**, saída colada em
+  [FINAL_AUDIT §39](FINAL_AUDIT.md), com o arquivo restaurado
+  conferido contra a cópia salva antes. Os controles 1 a 4 atuam no
+  código de `apps/scheduling-service/src`, que a rodada 2 não mudou, e
+  rodaram na rodada 1 contra PostgreSQL real: análise aguardando o
+  trabalho reprova **5** de **12** testes de
+  `tests/integration/goal061-import-async.test.ts`; análise sem lease
+  reprova **9** de **12**; transação final sem `leaseOwner` não
+  reprova o teste de `replace` e reprova **1** de **13** com o teste
+  de tomada do lease depois do último heartbeat; `interrupted` sem
+  lease vencido reprova **2** de **13**. Os controles 5 e 6 rodaram
+  de novo na rodada 2, depois da última edição de código, sobre
+  `tests/goal061-import-async.test.tsx` com **32** testes: tela
+  reanalisando ao montar reprova **9** de **32**, inclusive "sessão
+  READY com preview gravado nunca chama analyzeImport";
+  `handleExecute` sem reler o estado reprova **1** de **32**, "falha
+  de transporte com estado relido EXECUTING mostra o andamento, nunca
+  o erro". Os controles das correções da rodada 2, na mesma execução:
+  início da análise sem reler o estado reprova **4** de **32**;
+  retomada sem reler o estado reprova **2** de **32**; fase derivada
+  da sessão vencendo o reinício reprova **2** de **32**; código de
+  motivo sem texto próprio reprova **1** de **32**.
+- **Execução final (rodada 2), sobre a árvore final, depois dos
+  controles restaurados** — `typecheck` e `lint` de
+  `apps/scheduling-service`, `apps/bff` e `apps/frontend`, exit 0 nos
+  seis. `npm run validate:core` — **17** passos, **15** `passed`,
+  **0** `failed`, **2** `skipped` (`test:bff`, que só tem suíte de
+  integração, e `test:health-worker`, sem suíte automatizada), exit 0;
+  dentro dele, `test:scheduling-service` em **32** arquivos e **448**
+  testes (baseline review060: **30**/**410**), `test:frontend` em
+  **78** arquivos e **750** testes (baseline review060:
+  **77**/**718**), `test:ai-orchestrator` em **85** arquivos passando
+  e **12** pulados, **1112** testes passando e **88** pulados, e
+  `test:gate-scripts` em **233**/**233** (baseline **233**). `npm run
+  validate:ui` — **169** passando, **21** pulados, **0**
+  retentativas, exit 0. `validate:integration` — **35**/**35**
+  passos, exit 0, com `test:bff-integration` em **48** arquivos e
+  **386** testes, `test:scheduling-integration` em **13** arquivos e
+  **103** testes (inclusive os **13** do §7.1) e
+  `rehearse:goal033-authenticated-ui` em **65** expected, **0**
+  unexpected, **0** flaky e **0** retentativas.
+- **Conferência humana pendente:** a conferência do §9 do Goal —
+  análise e importação de uma conta real terminando, com a tela
+  acompanhando até o fim, com a pilha local e a conta de teste de
+  U-05 — **não foi feita** por este Goal.
+- **Limites declarados:** trabalho em curso numa instância que cai só
+  é retomado quando alguém pede; `/importacao` segue fora do gate
+  renderizado — ver [D-078](DECISIONS.md). **QA IM-03, QA IM-04,
+  QA IM-05, QA IM-07 e QA IM-08 corrigidos**, fora da contagem
+  A-01…A-24 — ver [FINAL_AUDIT §39](FINAL_AUDIT.md).

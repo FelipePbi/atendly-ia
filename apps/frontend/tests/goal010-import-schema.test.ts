@@ -164,8 +164,10 @@ describe("contrato da importação única (Goal010)", () => {
       previewVersion: 2,
       startedAt: "2026-09-12T12:00:00.000Z",
       finishedAt: null,
+      interrupted: false,
+      lastError: null,
       counts,
-      categories: [{ category: "SERVICE", ...counts }],
+      categories: [{ category: "SERVICE", ...counts, failedReasons: [] }],
     });
     expect(progress.counts.needsReview).toBe(1);
   });

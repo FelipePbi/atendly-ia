@@ -20,7 +20,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Disponibilidade e bloqueios | `GET /v1/availability`; `GET /v1/time-blocks`; `POST /v1/time-blocks`; `DELETE /v1/time-blocks/:id`; `DELETE /v1/time-blocks/:id/occurrence`; `PATCH /v1/time-blocks/:id/occurrence` |
 | Exceções de disponibilidade (Goal009) | `GET /v1/availability-exceptions`; `POST /v1/availability-exceptions/extra`; `POST /v1/availability-exceptions/unavailable`; `DELETE /v1/availability-exceptions/:id` |
 | Séries de bloqueio/compromisso (Goal009) | `POST /v1/block-series`; `PATCH /v1/block-series/:id/from-date`; `DELETE /v1/block-series/:id` |
-| Importação única (Goal010, Goal020) | `GET /v1/calendar/imports`; `POST /v1/calendar/imports`; `POST /v1/calendar/imports/:sessionId/analyze`; `GET /v1/calendar/imports/:sessionId/categories/:category/items`; `POST /v1/calendar/imports/:sessionId/categories/:category/selection`; `POST /v1/calendar/imports/:sessionId/items/:itemId/decision`; `POST /v1/calendar/imports/:sessionId/execute`; `GET /v1/calendar/imports/:sessionId/progress`; `POST /v1/calendar/imports/:sessionId/complete` |
+| Importação única (Goal010, Goal020, Goal061) | `GET /v1/calendar/imports`; `POST /v1/calendar/imports`; `POST /v1/calendar/imports/:sessionId/analyze`; `GET /v1/calendar/imports/:sessionId/preview`; `GET /v1/calendar/imports/:sessionId/categories/:category/items`; `POST /v1/calendar/imports/:sessionId/categories/:category/selection`; `POST /v1/calendar/imports/:sessionId/items/:itemId/decision`; `POST /v1/calendar/imports/:sessionId/execute`; `GET /v1/calendar/imports/:sessionId/progress`; `POST /v1/calendar/imports/:sessionId/complete` |
 | Clientes | `GET /v1/customers`; `GET /v1/customers/:id`; `POST /v1/customers`; `PATCH /v1/customers/:id`; `PUT /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/primary-guardian/confirm`; `DELETE /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/notes`; `PATCH /v1/customers/:id/notes/:noteId`; `DELETE /v1/customers/:id/notes/:noteId`; `POST /v1/customers/:id/tags`; `PATCH /v1/customers/:id/tags/:tagId`; `DELETE /v1/customers/:id/tags/:tagId`; `GET/POST /v1/customers/:id/memory`; `PATCH/DELETE /v1/customers/:id/memory/:memoryId`; `POST /v1/customers/:id/summary` (Goal012) |
 | Conhecimento do negócio (Goal012) | `GET/POST /v1/knowledge/documents`; `GET/PUT/DELETE /v1/knowledge/documents/:id`; `PUT /v1/knowledge/other-info` |
 | Serviços | `GET /v1/services`; `POST /v1/services`; `PATCH /v1/services/:id` |
@@ -73,7 +73,7 @@ As rotas abaixo também estão registradas e possuem consumidores no frontend at
 | Estado/fonte de calendário | `GET /v1/calendar` |
 | Conexão da origem de importação (antes: conexão operacional de agenda externa) | `POST /v1/calendar/integration/connect`; `POST /v1/calendar/integration/reconnect`; `DELETE /v1/calendar/integration` |
 
-Essas três rotas foram reescopadas pelo Goal010 e continuam com o mesmo contrato: elas guardam, testam e removem a **credencial da origem de importação** e nada mais. Conectar não muda a fonte da agenda operacional e não exige que ela seja externa — exigir isso deixaria a importação inalcançável depois do corte do writer remoto. Credencial que se declara de escrita é recusada com `409 INTEGRATION_WRITES_NOT_SUPPORTED`: a origem é somente leitura. Desconectar remove a credencial e **nunca** desativa a Agenda Atendly.
+Essas três rotas foram reescopadas pelo Goal010 e continuam com o mesmo contrato: elas guardam, testam e removem a **credencial da origem de importação** e nada mais. Conectar não muda a fonte da agenda operacional e não exige que ela seja externa — exigir isso deixaria a importação inalcançável depois do corte do writer remoto. Desde o Goal060, `POST /v1/calendar/integration/connect` aceita só `{ email, password }`; um corpo no formato anterior (`credentials`/`configuration`, incluindo qualquer declaração de escrita) é recusado com `400 VALIDATION_ERROR`, antes de qualquer chamada à origem — este contrato não usa mais `409 INTEGRATION_WRITES_NOT_SUPPORTED` (ver "Conexão da origem: só e-mail e senha" abaixo). Desconectar remove a credencial e **nunca** desativa a Agenda Atendly.
 
 Pela regra de produto vigente:
 
@@ -319,30 +319,45 @@ Substitui a migração bidirecional: um negócio importa do Minha Agenda **uma v
 | --- | --- |
 | `GET /v1/calendar/imports` (Goal020) | lê o estado da importação do negócio: direito (`right`), sessão viva (`session`, `null` se não houver) e histórico (`history`, `null` até a conclusão); sem efeito, não exige `Idempotency-Key` |
 | `POST /v1/calendar/imports` | abre a sessão de importação (`sourceAccountId`, `sourceAccountLabel?`, `replace?`); exige `Idempotency-Key` |
-| `POST /v1/calendar/imports/:sessionId/analyze` | lê a origem e grava/atualiza os itens da sessão; devolve o resumo por categoria, não os itens; exige `Idempotency-Key` |
+| `POST /v1/calendar/imports/:sessionId/analyze` (Goal061) | inicia a análise: confere sessão, estado e conexão, reivindica o lease gravando `ANALYZING` e responde `202` com `{ sessionId, status, previewVersion }`, sem tocar a origem nesta requisição; exige `Idempotency-Key` |
+| `GET /v1/calendar/imports/:sessionId/preview` (Goal061) | lê o preview gravado pela última análise, por categoria, sem reler a origem; sem efeito, não exige `Idempotency-Key` |
 | `GET /v1/calendar/imports/:sessionId/categories/:category/items` | lista os itens de uma categoria, paginado (`status?`, `limit`, `offset`) |
 | `POST /v1/calendar/imports/:sessionId/categories/:category/selection` (Goal020) | marca/desmarca uma categoria inteira para importar (`selected`); não altera `previewVersion` nem os itens; exige `Idempotency-Key` |
 | `POST /v1/calendar/imports/:sessionId/items/:itemId/decision` | decide um item em conflito (`decision`: `INCLUDE`, `EXCLUDE`, `MERGE_WITH_EXISTING`, `CREATE_NEW`, `KEEP_EXISTING`; `targetInternalId` obrigatório nos dois últimos); exige `Idempotency-Key` |
-| `POST /v1/calendar/imports/:sessionId/execute` | processa os itens pendentes, criando os registros na Agenda Atendly (`previewVersion` obrigatória, `maxItems?`); exige `Idempotency-Key` |
-| `GET /v1/calendar/imports/:sessionId/progress` | progresso lido do banco a cada chamada, por categoria e total |
+| `POST /v1/calendar/imports/:sessionId/execute` (Goal061) | inicia a execução, no mesmo formato da análise: confere sessão, estado, conexão e `previewVersion`, reivindica o lease gravando `EXECUTING` e responde `202` com `{ sessionId, status, previewVersion }` (`maxItems?` no corpo), sem tocar a origem nesta requisição; exige `Idempotency-Key` |
+| `GET /v1/calendar/imports/:sessionId/progress` | progresso lido do banco a cada chamada, por categoria e total, com `interrupted` e `lastError` (Goal061, ver abaixo) |
 | `POST /v1/calendar/imports/:sessionId/complete` | conclui a sessão, consumindo o direito único de importação do negócio (`acceptPending?` aceita concluir com itens ainda pendentes); exige `Idempotency-Key` |
 
 Estas rotas são **só humano**: não existe contrato de importação do lado da IA, no mesmo padrão de bloqueio/exceção do Goal009.
 
-Recusas nomeadas das duas rotas do Goal020:
+### Início assíncrono da análise e da execução (Goal061)
+
+`POST .../analyze` e `POST .../execute` deixaram de esperar a origem: a requisição só confere estado e reivindica o lease, gravando `ANALYZING`/`EXECUTING` na mesma escrita, e responde **`202`** com `{ sessionId, status, previewVersion }` — nunca o preview nem o andamento, que se leem por `GET .../preview` e `GET .../progress`. O trabalho continua no servidor depois da resposta; fechar a tela não cancela nada. Análise e execução se excluem pela linha: com a sessão em `ANALYZING`, iniciar a execução é recusado, e vice-versa; uma segunda tentativa enquanto o lease adverso está vivo responde `409 IMPORT_SESSION_LEASE_HELD`, no mesmo mecanismo de `error.details.upstreamCode` dos demais códigos nomeados desta seção. A mesma `Idempotency-Key` devolve a mesma resposta de início e não dispara um segundo trabalho.
+
+`GET .../preview` lê o preview da versão vigente sem reanalisar; uma sessão que nunca foi analisada (`previewVersion` zero) é recusada com `409 IMPORT_SESSION_PREVIEW_NOT_AVAILABLE`. A resposta não traz `changesSincePreviousVersion` — esse cálculo só existe no instante da análise e não é reconstruível de uma leitura posterior.
+
+`GET .../progress` e o campo `session` de `GET /v1/calendar/imports` ganham, por acréscimo:
+
+- `interrupted`: verdadeiro quando a sessão está em `ANALYZING` ou `EXECUTING` com o lease vencido pelo relógio do **banco**, ou sem lease — nunca decidido por relógio do cliente;
+- `lastError`: `{ code }` ou `null`, com `code` em `IMPORT_SOURCE_AUTH_REJECTED | IMPORT_SOURCE_UNAVAILABLE | IMPORT_SOURCE_INVALID_RESPONSE | IMPORT_PREVIEW_STALE | IMPORT_INTERNAL_ERROR`; a mensagem nunca é exposta;
+- `failedReasons` por categoria (só em `GET .../progress`): `[{ reasonCode, count }]` dos itens `FAILED` daquela categoria.
+
+Recusas nomeadas das rotas de importação:
 
 | Rota | Código | HTTP | Quando |
 | --- | --- | --- | --- |
 | `GET /v1/calendar/imports` | — | — | não recusa por estado: negócio sem conexão, sem sessão e sem histórico é resposta válida com `right` indisponível e `session`/`history` em `null`. Fora isso, só as recusas de sessão/CSRF comuns a todo o `/v1` |
+| `POST .../analyze`, `POST .../execute` | `IMPORT_SESSION_LEASE_HELD` | 409 | a sessão já está reivindicada por outra passada em curso (`ANALYZING` para iniciar a execução, `EXECUTING` para iniciar a análise, ou a mesma operação já em andamento) |
+| `GET .../preview` | `IMPORT_SESSION_PREVIEW_NOT_AVAILABLE` | 409 | a sessão ainda não foi analisada (`previewVersion` zero); não há preview gravado para ler |
 | `POST .../categories/:category/selection` | `IMPORT_SESSION_NOT_FOUND` | 404 | não existe sessão com esse id **para o negócio da sessão autenticada** — a mesma resposta de uma sessão de outro negócio, que nunca é distinguida |
 | `POST .../categories/:category/selection` | `IMPORT_SESSION_NOT_SELECTABLE` | 409 | a sessão está em estado terminal (`COMPLETED`, `FAILED` ou `SUPERSEDED`) e não admite mais escolha; o estado que recusou vem em `upstreamDetails.status` |
 | `POST .../categories/:category/selection` | `IMPORT_SESSION_CATEGORY_NOT_FOUND` | 404 | a categoria é válida no contrato, mas esta sessão ainda não a descobriu — marcar o que a análise não viu escolheria sobre nada |
 
 Como toda recusa de domínio que o BFF repassa do Scheduling, esses códigos chegam ao cliente em `error.details.upstreamCode`, com `error.code: "UPSTREAM_ERROR"` e o status HTTP original preservado — o mesmo mecanismo dos demais códigos nomeados desta seção.
 
-Nenhuma das duas altera `previewVersion`, item ou `status`: a leitura é pura e a marcação escreve apenas `ImportSessionCategory.selected`, que a execução lê no início de cada passada.
+Nenhuma das duas rotas de seleção altera `previewVersion`, item ou `status`: a leitura é pura e a marcação escreve apenas `ImportSessionCategory.selected`, que a execução lê no início de cada passada.
 
-`previewVersion` é obrigatória em `execute` de propósito: executar é executar o preview que o negócio aprovou. Se a origem mudou desde a análise, a versão vigente é outra e a resposta é `409 IMPORT_PREVIEW_STALE` — sem o campo, omitir a versão executaria a análise vigente qualquer que fosse ela, e a recusa de preview obsoleto viraria opt-in de quem chama. Agendamento futuro cujo horário já está ocupado por um atendimento da Agenda Atendly não é sobreposto: o item fica em `NEEDS_REVIEW` com `APPOINTMENT_SLOT_TAKEN` e a decisão volta para o negócio.
+`previewVersion` é obrigatória em `execute` de propósito: executar é executar o preview que o negócio aprovou. Se a origem mudou desde a análise, a versão vigente é outra e o trabalho grava `409 IMPORT_PREVIEW_STALE` como `lastError` — sem o campo, omitir a versão executaria a análise vigente qualquer que fosse ela, e a recusa de preview obsoleto viraria opt-in de quem chama. Agendamento futuro cujo horário já está ocupado por um atendimento da Agenda Atendly não é sobreposto: o item fica em `NEEDS_REVIEW` com `APPOINTMENT_SLOT_TAKEN` e a decisão volta para o negócio.
 
 Uma vez concluída (`POST .../complete`), a sessão é o único registro definitivo do negócio: `POST /v1/calendar/imports` para o mesmo negócio devolve `409 IMPORT_ALREADY_COMPLETED` — não existe uma segunda importação. Decisão já tomada em um item, ou item já resolvido pela execução, recusa uma segunda decisão com `409 IMPORT_ITEM_ALREADY_DECIDED`.
 

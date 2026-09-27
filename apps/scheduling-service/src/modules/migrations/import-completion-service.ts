@@ -9,6 +9,7 @@ import type {
 import { AppError } from "../../shared/errors/app-error.js";
 import { CalendarMutationIdempotency } from "../calendar/idempotency.js";
 import { databaseNow } from "../calendar/write-policy.js";
+import { isImportSessionInterrupted } from "./import-lease.js";
 
 /**
  * Conclusão única e irreversível da importação (Goal010, WU-06).
@@ -166,6 +167,15 @@ export interface ImportLiveSession {
   startedAt: Date | null;
   finishedAt: Date | null;
   previewGeneratedAt: Date | null;
+  /**
+   * A sessão está `ANALYZING`/`EXECUTING` e o lease que a reivindicou não
+   * está mais vivo pelo relógio do **banco** (Goal061 §7.4): o trabalho
+   * parou no meio, sem que ninguém tenha decidido isso. Um novo início
+   * retoma normalmente — este campo só descreve o que a linha já mostra.
+   */
+  interrupted: boolean;
+  /** Causa sanitizada da última falha de trabalho, quando houver. */
+  lastError: { code: string } | null;
   counts: ImportCompletionCounts;
   categories: ImportLiveSessionCategoryResult[];
 }
@@ -312,13 +322,14 @@ export class ImportCompletionService {
     });
     if (!session) return null;
 
-    const [items, categories] = await Promise.all([
+    const [items, categories, now] = await Promise.all([
       this.prisma.importItem.findMany({
         where: { tenantId, sessionId: session.id },
       }),
       this.prisma.importSessionCategory.findMany({
         where: { tenantId, sessionId: session.id },
       }),
+      databaseNow(this.prisma),
     ]);
     const selectedByCategory = new Map(
       categories.map((entry) => [entry.category, entry.selected]),
@@ -348,6 +359,8 @@ export class ImportCompletionService {
       startedAt: session.startedAt,
       finishedAt: session.finishedAt,
       previewGeneratedAt: session.previewGeneratedAt,
+      interrupted: isImportSessionInterrupted(session, now),
+      lastError: session.errorCode ? { code: session.errorCode } : null,
       counts: tally(items),
       categories: perCategory,
     };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { BffHttpError } from "@/data";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
@@ -9,22 +9,38 @@ import { StatePanel } from "@/shared/ui/States";
 import { newIdempotencyKey } from "./idempotency";
 import { ImportConflictsScreen } from "./ImportConflictsScreen";
 import { ImportsPage, ReplaceAccountZone } from "./ImportsLayout";
-import { CATEGORY_LABELS, CATEGORY_ORDER, importCountFormatter, limitationLabel } from "./labels";
+import {
+  CATEGORY_LABELS,
+  CATEGORY_ORDER,
+  importCountFormatter,
+  limitationLabel,
+  upstreamErrorCode,
+  workErrorLabel,
+} from "./labels";
 import type {
   ImportCategory,
   ImportLiveSession,
-  ImportPreview,
+  ImportPreviewCategory,
+  ImportPreviewSnapshot,
   ImportState,
 } from "./types";
+
+/** Mesmo intervalo de `ImportRunScreen`: leitura de estado, não de progresso. */
+const ANALYSIS_POLL_MS = 3_000;
+
+const GENERIC_ANALYSIS_ERROR =
+  "Não foi possível analisar seus dados do Minha Agenda agora.";
 
 /**
  * Não repete `error.message` da origem: só linguagem de produto chega à tela.
  * `IMPORT_PREVIEW_STALE` não passa por aqui: preview obsoleto é um estado do
- * produto com saída própria, não mais uma frase de erro.
+ * produto com saída própria, não mais uma frase de erro. Erros de domínio
+ * chegam do BFF como `UPSTREAM_ERROR` com `details.upstreamCode` (Goal061 §7),
+ * nunca com o código cru direto em `error.code`.
  */
 function executeErrorMessage(error: unknown): string {
-  if (error instanceof BffHttpError) {
-    switch (error.code) {
+  if (error instanceof BffHttpError && error.code === "UPSTREAM_ERROR") {
+    switch (upstreamErrorCode(error)) {
       case "IMPORT_SESSION_NOT_SELECTABLE":
         return "Esta importação já não aceita mais escolhas.";
       default:
@@ -34,17 +50,70 @@ function executeErrorMessage(error: unknown): string {
   return "Não foi possível importar agora. Tente novamente.";
 }
 
-function orderedCategories(preview: ImportPreview) {
+function isPreviewStaleError(error: unknown): boolean {
+  return (
+    error instanceof BffHttpError &&
+    error.code === "UPSTREAM_ERROR" &&
+    upstreamErrorCode(error) === "IMPORT_PREVIEW_STALE"
+  );
+}
+
+function orderedCategories(preview: ImportPreviewSnapshot): ImportPreviewCategory[] {
   const byCategory = new Map(preview.categories.map((entry) => [entry.category, entry]));
   return CATEGORY_ORDER.map((category) => byCategory.get(category)).filter(
-    (entry): entry is ImportPreview["categories"][number] => entry !== undefined,
+    (entry): entry is ImportPreviewCategory => entry !== undefined,
   );
 }
 
 /**
- * Análise, preview por categoria e escolha do que importar (Goal020/WU-06).
- * Cobre `session.status` em `DRAFT | ANALYZING | READY`: antes disso não há
- * sessão, depois disso a execução já começou e é outra tela.
+ * O início pode ter chegado ao servidor mesmo sem resposta ao cliente
+ * (Goal061 §6): isso conta como trabalho começado, nunca como falha.
+ */
+function hasStartedWork(session: ImportLiveSession | null): boolean {
+  if (!session) return false;
+  return (
+    session.status === "EXECUTING" ||
+    session.status === "PARTIAL" ||
+    session.startedAt !== null
+  );
+}
+
+/**
+ * O início da análise pode ter chegado ao servidor mesmo quando o cliente só
+ * viu falha (Goal061 §6). O estado relido depois da falha é comparado ao que a
+ * tela tinha antes do clique: qualquer avanço — análise em curso, preview
+ * novo, outra fase ou outro motivo gravado — conta como trabalho começado.
+ */
+function analysisStarted(
+  before: ImportLiveSession,
+  after: ImportLiveSession | null,
+): boolean {
+  if (!after) return true;
+  if (after.status === "ANALYZING" && !after.interrupted) return true;
+  return (
+    after.status !== before.status ||
+    after.previewVersion !== before.previewVersion ||
+    after.interrupted !== before.interrupted ||
+    (after.lastError?.code ?? null) !== (before.lastError?.code ?? null)
+  );
+}
+
+type Phase =
+  | { kind: "working" }
+  | { kind: "interrupted" }
+  | { kind: "error"; message: string }
+  | { kind: "ready"; preview: ImportPreviewSnapshot };
+
+/**
+ * Análise, preview por categoria e escolha do que importar (Goal020/WU-06,
+ * Goal061 §6). Cobre `session.status` em `DRAFT | ANALYZING | READY` sem
+ * execução iniciada: antes disso não há sessão, depois disso a execução já
+ * começou e é `ImportRunScreen`.
+ *
+ * Montar nunca reanalisa sozinho quando já existe preview gravado
+ * (`previewVersion > 0`, sessão `READY`): a leitura é `GET .../preview`. A
+ * análise só é disparada sozinha em `DRAFT` sem preview; `ANALYZING` só lê o
+ * estado até sair de lá, nunca inicia de novo.
  */
 export function ImportPreviewScreen({
   onChanged,
@@ -55,55 +124,186 @@ export function ImportPreviewScreen({
   onReplaceAccount: () => void;
   session: ImportLiveSession;
 }) {
-  const [preview, setPreview] = useState<ImportPreview | null>(null);
-  const [analysisError, setAnalysisError] = useState(false);
-  const [analysisToken, setAnalysisToken] = useState(0);
+  const [phase, setPhase] = useState<Phase>({ kind: "working" });
   const [mode, setMode] = useState<"summary" | "select" | "conflicts">("summary");
   const [selected, setSelected] = useState<Set<ImportCategory>>(new Set());
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
   const [executeError, setExecuteError] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
+  // Depois de "Tentar de novo"/"Continuar", a fase local vence o
+  // `lastError`/`interrupted` que a prop ainda carrega da tentativa anterior:
+  // sem isso a tela declararia falha de uma análise que acabou de começar. Volta
+  // a `false` quando o estado relido é entregue ao pai.
+  const [ownerRestarted, setOwnerRestarted] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Reinício manual ("Tentar de novo"/"Continuar"): chama direto o
+  // `startAnalysis` do efeito vigente, fora do fluxo de dependências — assim
+  // nunca reexecuta sozinho a cada prop nova que a própria análise produzir.
+  const startRef = useRef<() => void>(() => {});
 
   useEffect(() => {
+    let active = true;
     const controller = new AbortController();
-    getProductServices()
-      .migration.analyzeImport(
-        session.sessionId,
-        newIdempotencyKey(),
-        controller.signal,
-      )
-      .then((result) => {
-        setPreview(result);
-        // A escolha já gravada é a verdade; o `@default(true)` do schema só
-        // vale enquanto a sessão ainda não tem categoria nenhuma. Ler o
-        // `category` e ignorar o `selected` reapresentaria como incluída uma
-        // categoria que o negócio já tinha deixado de fora.
-        setSelected(
-          session.categories.length > 0
-            ? new Set(
-                session.categories
-                  .filter((c) => c.selected)
-                  .map((c) => c.category),
-              )
-            : new Set(result.categories.map((c) => c.category)),
-        );
-      })
-      .catch(() => {
-        if (controller.signal.aborted) return;
-        setAnalysisError(true);
-      });
-    return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.sessionId, analysisToken]);
 
-  function retryAnalysis() {
-    setPreview(null);
-    setAnalysisError(false);
+    function applyPreview(snapshot: ImportPreviewSnapshot) {
+      if (!active) return;
+      setPhase({ kind: "ready", preview: snapshot });
+      // A escolha já gravada é a verdade; o `@default(true)` do schema só
+      // vale enquanto a sessão ainda não tem categoria nenhuma. Ler o
+      // `category` e ignorar o `selected` reapresentaria como incluída uma
+      // categoria que o negócio já tinha deixado de fora.
+      setSelected(
+        session.categories.length > 0
+          ? new Set(session.categories.filter((c) => c.selected).map((c) => c.category))
+          : new Set(snapshot.categories.map((c) => c.category)),
+      );
+    }
+
+    async function readPreview() {
+      try {
+        const snapshot = await getProductServices().migration.getImportPreview(
+          session.sessionId,
+          controller.signal,
+        );
+        applyPreview(snapshot);
+      } catch {
+        if (!active) return;
+        setPhase({ kind: "error", message: GENERIC_ANALYSIS_ERROR });
+      }
+    }
+
+    function handOver(next: ImportState) {
+      setOwnerRestarted(false);
+      onChanged(next);
+    }
+
+    function settle(next: ImportState) {
+      const nextSession = next.session;
+      if (!nextSession || nextSession.status !== "ANALYZING") {
+        // Saiu de ANALYZING (READY, ou voltou ao estado de partida com
+        // `lastError`): o pai recebe o estado novo e este componente
+        // reavalia a partir dele.
+        handOver(next);
+        return;
+      }
+      if (nextSession.interrupted) {
+        setPhase({ kind: "interrupted" });
+        return;
+      }
+      if (session.lastError || session.interrupted) {
+        // Reinício aceito pelo dono: a prop ainda diz que a tentativa
+        // anterior falhou ou parou. O pai recebe a sessão em ANALYZING, sem
+        // os dois, e este componente segue lendo a partir dela.
+        handOver(next);
+        return;
+      }
+      timer.current = setTimeout(() => void pollUntilSettled(), ANALYSIS_POLL_MS);
+    }
+
+    async function pollUntilSettled() {
+      if (!active) return;
+      let next: ImportState;
+      try {
+        next = await getProductServices().migration.getImportState(controller.signal);
+      } catch {
+        if (!active) return;
+        setPhase({ kind: "error", message: GENERIC_ANALYSIS_ERROR });
+        return;
+      }
+      if (!active) return;
+      settle(next);
+    }
+
+    async function startAnalysis() {
+      try {
+        await getProductServices().migration.analyzeImport(
+          session.sessionId,
+          newIdempotencyKey(),
+          controller.signal,
+        );
+      } catch {
+        if (!active) return;
+        // Incerteza não é falha (Goal061 §6): rede, timeout ou 5xx não dizem
+        // se o início chegou ao servidor. Relê o estado antes de decidir; o
+        // erro só aparece quando o estado relido mostra que nada começou.
+        let next: ImportState;
+        try {
+          next = await getProductServices().migration.getImportState(controller.signal);
+        } catch {
+          if (!active) return;
+          setPhase({ kind: "error", message: GENERIC_ANALYSIS_ERROR });
+          return;
+        }
+        if (!active) return;
+        if (analysisStarted(session, next.session)) {
+          settle(next);
+          return;
+        }
+        setPhase({ kind: "error", message: GENERIC_ANALYSIS_ERROR });
+        return;
+      }
+      await pollUntilSettled();
+    }
+
+    // Ação explícita do dono ("Tentar de novo"/"Continuar"): sempre inicia de
+    // novo, mesmo que a sessão ainda carregue o `lastError`/`interrupted` da
+    // tentativa anterior — é exatamente isso que limpa os dois. Chamada
+    // direto por `startRef`, nunca reavaliada pelas dependências abaixo.
+    startRef.current = () => {
+      setOwnerRestarted(true);
+      setPhase({ kind: "working" });
+      void startAnalysis();
+    };
+
+    // `lastError`/`interrupted` são estado derivado direto da prop
+    // (`derivedPhase` no corpo do componente): nada para buscar sozinho
+    // enquanto o dono não agir, então o efeito não dispara nada aqui.
+    // `phase` já nasce `working` (estado inicial do `useState`): nenhum
+    // destes três ramos precisa repetir `setPhase` antes do fetch — só o
+    // resultado assíncrono grava estado, nunca o próprio corpo do efeito.
+    if (!session.lastError && !session.interrupted) {
+      if (session.status === "ANALYZING") {
+        void pollUntilSettled();
+      } else if (session.previewVersion > 0) {
+        void readPreview();
+      } else {
+        void startAnalysis();
+      }
+    }
+
+    return () => {
+      active = false;
+      controller.abort();
+      if (timer.current) clearTimeout(timer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    session.sessionId,
+    session.status,
+    session.previewVersion,
+    session.interrupted,
+    session.lastError,
+  ]);
+
+  function retry() {
     setStale(false);
     setExecuteError(null);
-    setAnalysisToken((value) => value + 1);
+    startRef.current();
   }
+
+  // Derivado direto da prop, nunca de `setState` num efeito (evita a
+  // cascata de render que a regra `set-state-in-effect` proíbe): a sessão já
+  // diz que parou ou falhou, sem nenhuma leitura para decidir isso. Depois do
+  // reinício pelo dono, quem decide é a fase local (`ownerRestarted`).
+  const derivedPhase: Phase | null = ownerRestarted
+    ? null
+    : session.lastError
+    ? { kind: "error", message: workErrorLabel(session.lastError.code) }
+    : session.interrupted
+      ? { kind: "interrupted" }
+      : null;
+  const effectivePhase = derivedPhase ?? phase;
 
   async function toggleCategory(category: ImportCategory, next: boolean) {
     setSelected((current) => {
@@ -132,7 +332,8 @@ export function ImportPreviewScreen({
   }
 
   async function handleExecute() {
-    if (!preview) return;
+    if (effectivePhase.kind !== "ready") return;
+    const { preview } = effectivePhase;
     setExecuting(true);
     setExecuteError(null);
     try {
@@ -144,17 +345,28 @@ export function ImportPreviewScreen({
       const nextState = await getProductServices().migration.getImportState();
       onChanged(nextState);
     } catch (caught: unknown) {
-      setExecuting(false);
-      if (
-        caught instanceof BffHttpError &&
-        caught.code === "IMPORT_PREVIEW_STALE"
-      ) {
+      if (isPreviewStaleError(caught)) {
         // A recusa de preview obsoleto é o contrato funcionando, não uma
         // falha: o que o negócio aprovou não existe mais, e a saída é ver de
         // novo antes de executar — nunca executar a versão vigente no lugar.
+        setExecuting(false);
         setStale(true);
         return;
       }
+      // Incerteza não é falha (Goal061 §6): o início pode ter chegado ao
+      // servidor mesmo sem resposta ao cliente (timeout, rede, 5xx de
+      // transporte). Relê o estado antes de decidir — só mostra o erro
+      // quando o estado relido confirma que nada começou.
+      try {
+        const nextState = await getProductServices().migration.getImportState();
+        if (hasStartedWork(nextState.session)) {
+          onChanged(nextState);
+          return;
+        }
+      } catch {
+        // A checagem também falhou: cai no erro de execução abaixo.
+      }
+      setExecuting(false);
       setExecuteError(executeErrorMessage(caught));
     }
   }
@@ -168,7 +380,7 @@ export function ImportPreviewScreen({
         <StatePanel
           description="O que você viu aqui já não descreve o Minha Agenda. Analise de novo para importar o que existe agora."
           icon="refresh"
-          onAction={retryAnalysis}
+          onAction={retry}
           actionLabel="Analisar de novo"
           title="Esta análise ficou desatualizada"
         />
@@ -177,16 +389,34 @@ export function ImportPreviewScreen({
     );
   }
 
-  if (analysisError) {
+  if (effectivePhase.kind === "interrupted") {
+    return (
+      <ImportsPage
+        description="Nada do que já foi lido se perdeu."
+        title="A análise parou no meio do caminho"
+      >
+        <StatePanel
+          description="Isso pode acontecer quando o processo reinicia durante o trabalho. Continue para retomar de onde parou."
+          icon="refresh"
+          onAction={retry}
+          actionLabel="Continuar"
+          title="Análise interrompida"
+        />
+        <ReplaceAccountZone onReplace={onReplaceAccount} />
+      </ImportsPage>
+    );
+  }
+
+  if (effectivePhase.kind === "error") {
     return (
       <ImportsPage
         description="Nada foi alterado na Atendly."
         title="Analisando seus dados"
       >
         <StatePanel
-          description="Não foi possível analisar seus dados do Minha Agenda agora."
+          description={effectivePhase.message}
           icon="alert"
-          onAction={retryAnalysis}
+          onAction={retry}
           actionLabel="Tentar de novo"
           title="Análise indisponível"
           tone="error"
@@ -196,7 +426,7 @@ export function ImportPreviewScreen({
     );
   }
 
-  if (!preview) {
+  if (effectivePhase.kind === "working") {
     return (
       <ImportsPage
         description="Nada muda na Atendly até você confirmar."
@@ -216,6 +446,7 @@ export function ImportPreviewScreen({
     );
   }
 
+  const { preview } = effectivePhase;
   const categories = orderedCategories(preview);
   const selectedCount = categories
     .filter((category) => selected.has(category.category))
@@ -269,11 +500,9 @@ export function ImportPreviewScreen({
                       <small>{limitationLabel(category.limitationCode)}</small>
                     )}
                   </div>
-                  {category.sourceSupported && (
-                    <span className="imports-row-count">
-                      {importCountFormatter.format(category.discoveredCount)}
-                    </span>
-                  )}
+                  <span className="imports-row-count">
+                    {importCountFormatter.format(category.discoveredCount)}
+                  </span>
                 </label>
               </li>
             ))}
@@ -337,11 +566,9 @@ export function ImportPreviewScreen({
                     <small>Você deixou esta categoria de fora</small>
                   )}
               </div>
-              {category.sourceSupported && (
-                <span className="imports-row-count">
-                  {importCountFormatter.format(category.discoveredCount)}
-                </span>
-              )}
+              <span className="imports-row-count">
+                {importCountFormatter.format(category.discoveredCount)}
+              </span>
             </li>
           ))}
         </ul>

@@ -1,15 +1,19 @@
 // @vitest-environment jsdom
 /**
- * Goal020 (WU-006): análise, preview por categoria e escolha do que importar.
+ * Goal020 (WU-006) e Goal061 (WU-04): preview por categoria e escolha do que
+ * importar, a partir de uma sessão já analisada (`READY`, `previewVersion`
+ * maior que zero). O início da análise (`DRAFT` sem preview) e o polling de
+ * `ANALYZING` até `READY` são provados em `goal061-import-async.test.tsx`;
+ * esta suíte assume que a análise já terminou.
  *
  * O que esta suíte prova:
  *
- * - a tela afirma que a análise não altera nada, antes de qualquer confirmação;
- * - cada categoria mostra a contagem real vinda do preview (`analyzeImport`),
- *   nunca um valor calculado localmente;
+ * - montar com sessão já analisada lê o preview gravado (`getImportPreview`),
+ *   nunca chama `analyzeImport`;
+ * - cada categoria mostra a contagem real vinda do preview, nunca um valor
+ *   calculado localmente;
  * - uma categoria sem cobertura na origem explica a limitação em linguagem de
- *   produto e nunca exibe um número para ela — nem `0`, nem o `readCount`
- *   parcial que a origem ofereceu;
+ *   produto e, desde o Goal061 (IM-05), também mostra `discoveredCount`;
  * - `Importar tudo` executa direto (`executeImport`), sem qualquer chamada de
  *   seleção antes;
  * - `Escolher o que importar` consome a rota de seleção por categoria
@@ -23,7 +27,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type {
   ImportLiveSession,
-  ImportPreview,
+  ImportPreviewSnapshot,
   ImportProgress,
   ImportState,
 } from "@/data";
@@ -34,6 +38,7 @@ import { expectNoA11yViolations } from "./support/a11y";
 
 const getImportState = vi.fn();
 const analyzeImport = vi.fn();
+const getImportPreview = vi.fn();
 const setImportCategorySelection = vi.fn();
 const executeImport = vi.fn();
 const getImportProgress = vi.fn();
@@ -44,6 +49,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
     migration: {
       analyzeImport,
       executeImport,
+      getImportPreview,
       getImportProgress,
       getImportState,
       setImportCategorySelection,
@@ -62,6 +68,8 @@ function progressFixture(): ImportProgress {
     categories: [],
     counts: { failed: 0, imported: 0, needsReview: 0, pending: 0, skipped: 0 },
     finishedAt: null,
+    interrupted: false,
+    lastError: null,
     previewVersion: 1,
     sessionId: "session-1",
     startedAt: "2026-09-15T10:10:00.000Z",
@@ -69,20 +77,23 @@ function progressFixture(): ImportProgress {
   };
 }
 
+/** Sessão já analisada: `READY` com preview gravado (Goal061 §6). */
 function sessionFixture(overrides: Partial<ImportLiveSession> = {}): ImportLiveSession {
   return {
     categories: [],
     counts: { failed: 0, imported: 0, needsReview: 0, pending: 0, skipped: 0 },
     createdAt: "2026-09-15T10:00:00.000Z",
     finishedAt: null,
-    previewGeneratedAt: null,
-    previewVersion: 0,
+    interrupted: false,
+    lastError: null,
+    previewGeneratedAt: "2026-09-15T10:05:00.000Z",
+    previewVersion: 1,
     provider: "MINHA_AGENDA",
     sessionId: "session-1",
     sourceAccountId: "camila@example.com",
     sourceAccountLabel: "camila@example.com",
-    startedAt: "2026-09-15T10:00:00.000Z",
-    status: "DRAFT",
+    startedAt: null,
+    status: "READY",
     ...overrides,
   };
 }
@@ -106,7 +117,7 @@ function sessionCategory(
   };
 }
 
-function previewFixture(): ImportPreview {
+function previewFixture(): ImportPreviewSnapshot {
   return {
     categories: [
       {
@@ -168,7 +179,6 @@ function previewFixture(): ImportPreview {
         importedCount: 0,
       },
     ],
-    changesSincePreviousVersion: { changedCount: 0, disappearedCount: 0, newCount: 61 },
     generatedAt: "2026-09-15T10:05:00.000Z",
     previewVersion: 1,
     sessionId: "session-1",
@@ -194,15 +204,16 @@ function renderScreen() {
 beforeEach(() => {
   vi.clearAllMocks();
   getImportProgress.mockResolvedValue(progressFixture());
+  getImportPreview.mockResolvedValue(previewFixture());
 });
 
 describe("análise e preview por categoria", () => {
-  test("afirma que a análise não altera nada antes de qualquer confirmação, depois mostra a contagem real", async () => {
+  test("montar com sessão já analisada lê o preview gravado, sem chamar analyzeImport", async () => {
     getImportState.mockResolvedValue(stateWithSession(sessionFixture()));
-    let resolveAnalyze!: (value: ImportPreview) => void;
-    analyzeImport.mockReturnValue(
+    let resolvePreview!: (value: ImportPreviewSnapshot) => void;
+    getImportPreview.mockReturnValue(
       new Promise((resolve) => {
-        resolveAnalyze = resolve;
+        resolvePreview = resolve;
       }),
     );
     renderScreen();
@@ -214,23 +225,19 @@ describe("análise e preview por categoria", () => {
       screen.getByText("Nada muda na Atendly até você confirmar."),
     ).toBeInTheDocument();
 
-    resolveAnalyze(previewFixture());
+    resolvePreview(previewFixture());
 
     expect(
       await screen.findByRole("heading", { name: "Encontramos isto no Minha Agenda" }),
     ).toBeInTheDocument();
     expect(screen.getByText("12")).toBeInTheDocument();
     expect(screen.getByText("42")).toBeInTheDocument();
-    expect(analyzeImport).toHaveBeenCalledWith(
-      "session-1",
-      expect.any(String),
-      expect.anything(),
-    );
+    expect(analyzeImport).not.toHaveBeenCalled();
+    expect(getImportPreview).toHaveBeenCalledWith("session-1", expect.anything());
   });
 
-  test("categoria sem cobertura na origem explica a limitação em linguagem de produto, sem número fabricado", async () => {
+  test("categoria sem cobertura na origem explica a limitação e mostra a contagem (Goal061 IM-05)", async () => {
     getImportState.mockResolvedValue(stateWithSession(sessionFixture()));
-    analyzeImport.mockResolvedValue(previewFixture());
     renderScreen();
 
     await screen.findByRole("heading", { name: "Encontramos isto no Minha Agenda" });
@@ -245,9 +252,8 @@ describe("análise e preview por categoria", () => {
         "O Minha Agenda não distingue falta de cancelamento. Nenhum atendimento será marcado como falta a partir de lá.",
       ),
     ).toBeInTheDocument();
-    // Nunca um número para a categoria sem cobertura, nem mesmo o readCount
-    // parcial (7) que a origem ofereceu.
-    expect(screen.queryByText("7")).not.toBeInTheDocument();
+    // Goal061 (IM-05): a contagem de clientes aparece mesmo com limitação.
+    expect(screen.getByText("7")).toBeInTheDocument();
     // A linguagem de produto substitui o texto cru do servidor.
     expect(
       screen.queryByText(/endpoint de listagem de clientes/),
@@ -256,7 +262,6 @@ describe("análise e preview por categoria", () => {
 
   test("axe: preview sem violações", async () => {
     getImportState.mockResolvedValue(stateWithSession(sessionFixture()));
-    analyzeImport.mockResolvedValue(previewFixture());
     const { container } = renderScreen();
 
     await screen.findByRole("heading", { name: "Encontramos isto no Minha Agenda" });
@@ -270,18 +275,12 @@ describe("importar tudo é o caminho principal", () => {
     getImportState
       .mockResolvedValueOnce(stateWithSession(sessionFixture()))
       .mockResolvedValueOnce(
-        stateWithSession(sessionFixture({ status: "PARTIAL" })),
+        stateWithSession(sessionFixture({ status: "PARTIAL", startedAt: "2026-09-15T10:10:00.000Z" })),
       );
-    analyzeImport.mockResolvedValue(previewFixture());
     executeImport.mockResolvedValue({
-      categories: [],
-      counts: { failed: 0, imported: 61, needsReview: 0, pending: 0, skipped: 0 },
-      leaseLost: false,
-      leaseOwner: "worker-1",
       previewVersion: 1,
-      processed: 61,
       sessionId: "session-1",
-      status: "READY",
+      status: "EXECUTING",
     });
     renderScreen();
 
@@ -297,7 +296,7 @@ describe("importar tudo é o caminho principal", () => {
       ),
     );
     expect(setImportCategorySelection).not.toHaveBeenCalled();
-    expect(analyzeImport).toHaveBeenCalledTimes(1);
+    expect(analyzeImport).not.toHaveBeenCalled();
     await screen.findByRole("heading", { name: "Continuar importação" });
   });
 });
@@ -306,7 +305,6 @@ describe("escolher o que importar", () => {
   test("consome a rota de seleção por categoria, sem re-analisar a origem", async () => {
     const user = userEvent.setup();
     getImportState.mockResolvedValue(stateWithSession(sessionFixture()));
-    analyzeImport.mockResolvedValue(previewFixture());
     setImportCategorySelection.mockResolvedValue({
       category: "CUSTOMER",
       selected: false,
@@ -329,22 +327,16 @@ describe("escolher o que importar", () => {
         expect.any(String),
       ),
     );
-    // A seleção nunca dispara uma nova análise: `previewVersion` continua a
-    // mesma usada na execução final.
-    expect(analyzeImport).toHaveBeenCalledTimes(1);
+    // A seleção nunca dispara uma nova análise.
+    expect(analyzeImport).not.toHaveBeenCalled();
 
     executeImport.mockResolvedValue({
-      categories: [],
-      counts: { failed: 0, imported: 54, needsReview: 0, pending: 0, skipped: 7 },
-      leaseLost: false,
-      leaseOwner: "worker-1",
       previewVersion: 1,
-      processed: 54,
       sessionId: "session-1",
-      status: "READY",
+      status: "EXECUTING",
     });
     getImportState.mockResolvedValueOnce(
-      stateWithSession(sessionFixture({ status: "PARTIAL" })),
+      stateWithSession(sessionFixture({ status: "PARTIAL", startedAt: "2026-09-15T10:10:00.000Z" })),
     );
 
     await user.click(
@@ -370,7 +362,6 @@ describe("escolher o que importar", () => {
   test("o resumo deixa de prometer tudo depois que uma categoria sai", async () => {
     const user = userEvent.setup();
     getImportState.mockResolvedValue(stateWithSession(sessionFixture()));
-    analyzeImport.mockResolvedValue(previewFixture());
     setImportCategorySelection.mockResolvedValue({
       category: "SERVICE",
       selected: false,
@@ -418,7 +409,6 @@ describe("escolher o que importar", () => {
         }),
       ),
     );
-    analyzeImport.mockResolvedValue(previewFixture());
     renderScreen();
 
     await screen.findByRole("heading", { name: "Encontramos isto no Minha Agenda" });
@@ -444,7 +434,6 @@ describe("escolher o que importar", () => {
         }),
       ),
     );
-    analyzeImport.mockResolvedValue(previewFixture());
     renderScreen();
 
     await screen.findByRole("heading", { name: "Encontramos isto no Minha Agenda" });
@@ -461,7 +450,6 @@ describe("escolher o que importar", () => {
   test("axe: seleção por categoria sem violações", async () => {
     const user = userEvent.setup();
     getImportState.mockResolvedValue(stateWithSession(sessionFixture()));
-    analyzeImport.mockResolvedValue(previewFixture());
     const { container } = renderScreen();
 
     await user.click(

@@ -403,17 +403,35 @@ const importPreviewCategorySchema = z.object({
   skippedCount: z.number().int().nonnegative(),
   failedCount: z.number().int().nonnegative(),
 });
-const importPreviewSummarySchema = z.object({
+// Resposta de inicio de `analyze`/`execute` (Goal061 §1): so o que a
+// reivindicacao do lease gravou, sob `202`.
+const importWorkStartResultSchema = z.object({
+  sessionId: z.string(),
+  status: z.enum(["ANALYZING", "EXECUTING"]),
+  previewVersion: z.number().int().nonnegative(),
+});
+
+// Leitura do preview gravado pela ultima analise (Goal061 §4), sem
+// `changesSincePreviousVersion` — nao e gravado hoje.
+const importPreviewSnapshotSchema = z.object({
   sessionId: z.string(),
   previewVersion: z.number().int().nonnegative(),
-  generatedAt: z.string(),
+  generatedAt: z.string().nullable(),
   categories: z.array(importPreviewCategorySchema),
-  changesSincePreviousVersion: z.object({
-    newCount: z.number().int().nonnegative(),
-    changedCount: z.number().int().nonnegative(),
-    disappearedCount: z.number().int().nonnegative(),
-  }),
 });
+
+// Causa nao-de-item de uma falha de trabalho (Goal061 §3), conjunto fechado.
+const importLastErrorSchema = z
+  .object({
+    code: z.enum([
+      "IMPORT_SOURCE_AUTH_REJECTED",
+      "IMPORT_SOURCE_UNAVAILABLE",
+      "IMPORT_SOURCE_INVALID_RESPONSE",
+      "IMPORT_PREVIEW_STALE",
+      "IMPORT_INTERNAL_ERROR",
+    ]),
+  })
+  .nullable();
 const importItemsPageSchema = z.object({
   sessionId: z.string(),
   category: importCategorySchema,
@@ -449,6 +467,8 @@ const importLiveSessionSchema = z.object({
   startedAt: z.string().nullable(),
   finishedAt: z.string().nullable(),
   previewGeneratedAt: z.string().nullable(),
+  interrupted: z.boolean(),
+  lastError: importLastErrorSchema,
   counts: importCountsSchema,
   categories: z.array(importLiveSessionCategorySchema),
 });
@@ -457,15 +477,10 @@ const importCategorySelectionResultSchema = z.object({
   category: importCategorySchema,
   selected: z.boolean(),
 });
-const importExecutionResultSchema = z.object({
-  sessionId: z.string(),
-  previewVersion: z.number().int().nonnegative(),
-  status: z.enum(["PARTIAL", "READY"]),
-  processed: z.number().int().nonnegative(),
-  counts: importCountsSchema,
-  categories: z.array(importCategoryCountsSchema),
-  leaseOwner: z.string(),
-  leaseLost: z.boolean(),
+const importProgressCategorySchema = importCategoryCountsSchema.extend({
+  failedReasons: z.array(
+    z.object({ reasonCode: z.string(), count: z.number().int().nonnegative() }),
+  ),
 });
 const importProgressSchema = z.object({
   sessionId: z.string(),
@@ -473,8 +488,10 @@ const importProgressSchema = z.object({
   previewVersion: z.number().int().nonnegative(),
   startedAt: z.string().nullable(),
   finishedAt: z.string().nullable(),
+  interrupted: z.boolean(),
+  lastError: importLastErrorSchema,
   counts: importCountsSchema,
-  categories: z.array(importCategoryCountsSchema),
+  categories: z.array(importProgressCategorySchema),
 });
 const importCompletionCategorySchema = importCountsSchema.extend({
   category: importCategorySchema,
@@ -1262,18 +1279,36 @@ export class SchedulingClient {
     );
   }
 
+  /**
+   * Inicio curto da analise (Goal061 §1): so o que a reivindicacao do lease
+   * gravou. O status acompanha, porque `202` e a unica resposta de sucesso
+   * desta rota — o trabalho roda no proprio processo, sem confirmacao aqui.
+   */
   async analyzeImport(
     context: InternalRequestContext,
     sessionId: string,
     idempotencyKey: string,
   ) {
-    return this.mutate(
+    const { data, status } = await this.mutateWithStatus(
       context,
       "POST",
       `/internal/calendar/imports/${encodeURIComponent(sessionId)}/analyze`,
       undefined,
-      importPreviewSummarySchema,
+      importWorkStartResultSchema,
       idempotencyKey,
+    );
+    return { start: data, status };
+  }
+
+  /**
+   * Leitura do preview gravado pela ultima analise (Goal061 §4), sem tocar a
+   * origem.
+   */
+  async previewImport(context: InternalRequestContext, sessionId: string) {
+    return this.get(
+      context,
+      `/internal/calendar/imports/${encodeURIComponent(sessionId)}/preview`,
+      importPreviewSnapshotSchema,
     );
   }
 
@@ -1308,20 +1343,22 @@ export class SchedulingClient {
     );
   }
 
+  /** Inicio curto da execucao (Goal061 §1), no mesmo formato da analise. */
   async executeImport(
     context: InternalRequestContext,
     sessionId: string,
     input: { previewVersion: number; maxItems?: number },
     idempotencyKey: string,
   ) {
-    return this.mutate(
+    const { data, status } = await this.mutateWithStatus(
       context,
       "POST",
       `/internal/calendar/imports/${encodeURIComponent(sessionId)}/execute`,
       input,
-      importExecutionResultSchema,
+      importWorkStartResultSchema,
       idempotencyKey,
     );
+    return { start: data, status };
   }
 
   async importProgress(context: InternalRequestContext, sessionId: string) {
@@ -1494,7 +1531,33 @@ export class SchedulingClient {
     schema: T,
     idempotencyKey?: string,
   ): Promise<z.output<T>> {
-    const response = await this.http.request({
+    const { data } = await this.mutateWithStatus(
+      context,
+      method,
+      path,
+      body,
+      schema,
+      idempotencyKey,
+    );
+    return data;
+  }
+
+  /**
+   * Igual a `mutate`, mas devolve tambem o status HTTP do Scheduling: usado
+   * pelo inicio da analise e da execucao (Goal061 §1), onde `202` e a unica
+   * resposta de sucesso e o chamador precisa repassa-la, nao apresenta-la
+   * como `200`/`201`. `mutate` delega a este metodo, para que a escrita tenha
+   * uma unica chamada ao transporte.
+   */
+  private async mutateWithStatus<T extends z.ZodType>(
+    context: InternalRequestContext,
+    method: "POST" | "PATCH" | "PUT" | "DELETE",
+    path: string,
+    body: unknown,
+    schema: T,
+    idempotencyKey?: string,
+  ): Promise<{ data: z.output<T>; status: number }> {
+    const response = await this.http.requestWithStatus({
       method,
       path,
       context,
@@ -1502,6 +1565,9 @@ export class SchedulingClient {
       idempotencyKey,
       schema: envelope(schema),
     });
-    return (response as { data: z.output<T> }).data;
+    return {
+      data: (response.data as { data: z.output<T> }).data,
+      status: response.status,
+    };
   }
 }

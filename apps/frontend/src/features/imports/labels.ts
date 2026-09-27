@@ -1,8 +1,70 @@
+import type { BffHttpError } from "@/data";
+
 import type {
   ImportCategory,
   ImportDecisionKind,
   ImportSessionStatus,
+  ImportWorkErrorCode,
 } from "./types";
+
+/**
+ * Código de domínio de uma recusa do Scheduling, sempre repassado pelo BFF
+ * como `error.code: "UPSTREAM_ERROR"` com `error.details.upstreamCode`
+ * (Goal061 §7): nunca o código cru como `error.code` direto.
+ */
+export function upstreamErrorCode(error: BffHttpError): string | undefined {
+  const details = error.details;
+  if (!details || typeof details !== "object") return undefined;
+  const value = (details as { upstreamCode?: unknown }).upstreamCode;
+  return typeof value === "string" ? value : undefined;
+}
+
+/**
+ * Texto por classe de `lastError` do trabalho em segundo plano (Goal061 §6):
+ * a mensagem da origem nunca chega à tela, só a classe do código fechado.
+ */
+const WORK_ERROR_LABELS: Record<ImportWorkErrorCode, string> = {
+  IMPORT_SOURCE_AUTH_REJECTED:
+    "O Minha Agenda recusou a entrada. A senha pode ter mudado.",
+  IMPORT_SOURCE_UNAVAILABLE:
+    "O Minha Agenda não respondeu agora. Nada foi alterado. Tente mais tarde.",
+  IMPORT_SOURCE_INVALID_RESPONSE:
+    "Não foi possível continuar agora por uma falha da Atendly. Tente novamente.",
+  IMPORT_PREVIEW_STALE:
+    "Seus dados mudaram desde a última análise. Nada foi importado nesta tentativa.",
+  IMPORT_INTERNAL_ERROR:
+    "Não foi possível continuar agora por uma falha da Atendly. Tente novamente.",
+};
+
+export function workErrorLabel(code: string): string {
+  return (
+    (WORK_ERROR_LABELS as Record<string, string>)[code] ??
+    "Não foi possível continuar agora. Tente novamente."
+  );
+}
+
+/**
+ * Motivo de item `FAILED`, em linguagem leiga (Goal061 §6/IM-08): a tela
+ * nunca mostra `reasonCode` cru. Código sem texto próprio cai no genérico.
+ */
+const FAILED_REASON_LABELS: Record<string, string> = {
+  IMPORT_SERVICE_MAPPING_MISSING:
+    "O serviço deste atendimento não veio da Minha Agenda (por exemplo, porque foi apagado lá).",
+  IMPORT_CUSTOMER_MAPPING_MISSING:
+    "O cliente deste atendimento não foi importado, então o atendimento também ficou de fora.",
+  IMPORT_APPOINTMENT_INTERVAL_INVALID:
+    "Este atendimento está sem duração e sem horário de término na Minha Agenda.",
+  IMPORT_SOURCE_RECORD_INVALID:
+    "Este registro veio incompleto ou em um formato que a Atendly não reconhece.",
+  IMPORT_AVAILABILITY_COMPANY_MISSING:
+    "A Minha Agenda não informou o horário de funcionamento do seu negócio.",
+  IMPORT_ITEM_FAILED:
+    "Houve uma falha inesperada ao importar este item.",
+};
+
+export function failedReasonLabel(reasonCode: string): string {
+  return FAILED_REASON_LABELS[reasonCode] ?? "Este item não foi importado.";
+}
 
 export const CATEGORY_ORDER: ImportCategory[] = [
   "SERVICE",

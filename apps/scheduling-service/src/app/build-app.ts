@@ -10,6 +10,10 @@ import {
 import { AutoCompleteLoop } from "../modules/appointments/auto-complete-loop.js";
 import { registerCalendarRoutes } from "../modules/calendar/routes.js";
 import { registerManagementRoutes } from "../modules/internal-api/routes.js";
+import {
+  ImportBackgroundWork,
+  importWorkFailure,
+} from "../modules/migrations/index.js";
 import { AppError, toErrorMessage } from "../shared/errors/app-error.js";
 import { registerHealthRoute } from "./health.js";
 
@@ -39,9 +43,19 @@ export async function buildApp() {
     reply.header("x-request-id", request.id);
   });
 
+  // Analise e execucao da importacao terminam no proprio processo (Goal061,
+  // D-008): o conjunto so existe para o `onClose` esperar o que ja comecou.
+  // Quem decide quem trabalha e o lease do banco.
+  const importWork = new ImportBackgroundWork((error) => {
+    app.log.error(
+      { errorCode: importWorkFailure(error).errorCode },
+      "Import work failed",
+    );
+  });
+
   await registerHealthRoute(app);
   await registerCalendarRoutes(app);
-  await registerManagementRoutes(app);
+  await registerManagementRoutes(app, getPrisma(), { importWork });
 
   // Conclusao automatica (Goal008, D-008): loop no proprio processo, sem
   // fila nem servico novo. Desligavel por variavel para operacao e para a
@@ -80,6 +94,7 @@ export async function buildApp() {
 
   app.addHook("onClose", async () => {
     await autoCompleteLoop.stop();
+    await importWork.drain();
     await disconnectPrisma();
   });
 

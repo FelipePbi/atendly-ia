@@ -75,32 +75,13 @@ function startResultPayload(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function previewSummaryPayload(overrides: Record<string, unknown> = {}) {
+// Resposta de inicio de `analyze`/`execute` sob `202` (Goal061): so o que a
+// reivindicacao do lease gravou.
+function workStartPayload(overrides: Record<string, unknown> = {}) {
   return {
     sessionId: "import-session-1",
+    status: "ANALYZING",
     previewVersion: 1,
-    generatedAt: "2026-09-10T12:00:00.000Z",
-    categories: [
-      {
-        category: "SERVICE",
-        sourceSupported: true,
-        limitationCode: null,
-        limitationDetail: null,
-        sourceReportedCount: 3,
-        readCount: 3,
-        discoveredCount: 3,
-        pendingCount: 3,
-        needsReviewCount: 0,
-        importedCount: 0,
-        skippedCount: 0,
-        failedCount: 0,
-      },
-    ],
-    changesSincePreviousVersion: {
-      newCount: 3,
-      changedCount: 0,
-      disappearedCount: 0,
-    },
     ...overrides,
   };
 }
@@ -166,29 +147,6 @@ function decisionResponsePayload(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function executionResultPayload(overrides: Record<string, unknown> = {}) {
-  return {
-    sessionId: "import-session-1",
-    previewVersion: 1,
-    status: "READY",
-    processed: 3,
-    counts: { pending: 0, imported: 3, skipped: 0, failed: 0, needsReview: 0 },
-    categories: [
-      {
-        category: "SERVICE",
-        pending: 0,
-        imported: 3,
-        skipped: 0,
-        failed: 0,
-        needsReview: 0,
-      },
-    ],
-    leaseOwner: "owner-1",
-    leaseLost: false,
-    ...overrides,
-  };
-}
-
 function progressPayload(overrides: Record<string, unknown> = {}) {
   return {
     sessionId: "import-session-1",
@@ -196,6 +154,8 @@ function progressPayload(overrides: Record<string, unknown> = {}) {
     previewVersion: 1,
     startedAt: "2026-09-10T12:00:00.000Z",
     finishedAt: null,
+    interrupted: false,
+    lastError: null,
     counts: { pending: 0, imported: 3, skipped: 0, failed: 0, needsReview: 0 },
     categories: [
       {
@@ -205,6 +165,7 @@ function progressPayload(overrides: Record<string, unknown> = {}) {
         skipped: 0,
         failed: 0,
         needsReview: 0,
+        failedReasons: [],
       },
     ],
     ...overrides,
@@ -300,17 +261,22 @@ describe.skipIf(!RUN_INTEGRATION)("Goal010: rotas públicas da importação úni
     const owner = created[0]!;
 
     stubScheduling(
-      { data: previewSummaryPayload(), requestId: "upstream-analyze" },
+      { data: workStartPayload({ status: "ANALYZING" }), requestId: "upstream-analyze" },
+      202,
     );
     const analyze = await app.inject({
       method: "POST",
       url: "/v1/calendar/imports/import-session-1/analyze",
       headers: { ...browserMutation(owner), "idempotency-key": "import-analyze-1" },
     });
-    expect(analyze.statusCode).toBe(200);
-    expect(analyze.json().data.categories).toHaveLength(1);
-    // Resumo da análise não carrega os itens; a listagem é rota própria.
-    expect(analyze.json().data.items).toBeUndefined();
+    // Inicio assincrono (Goal061): a requisicao so reivindica o lease, e o
+    // BFF repassa o `202` do Scheduling, nao o apresenta como concluido.
+    expect(analyze.statusCode).toBe(202);
+    expect(analyze.json().data).toMatchObject({
+      sessionId: "import-session-1",
+      status: "ANALYZING",
+      previewVersion: 1,
+    });
     expect(upstream[0].tenantId).toBe(owner.tenantId);
     upstream.length = 0;
 
@@ -337,7 +303,10 @@ describe.skipIf(!RUN_INTEGRATION)("Goal010: rotas públicas da importação úni
     expect(upstream[0].idempotencyKey).toBe("import-decision-1");
     upstream.length = 0;
 
-    stubScheduling({ data: executionResultPayload(), requestId: "upstream-execute" });
+    stubScheduling(
+      { data: workStartPayload({ status: "EXECUTING" }), requestId: "upstream-execute" },
+      202,
+    );
     const execute = await app.inject({
       method: "POST",
       url: "/v1/calendar/imports/import-session-1/execute",
@@ -346,8 +315,12 @@ describe.skipIf(!RUN_INTEGRATION)("Goal010: rotas públicas da importação úni
       // recusa antes de chegar ao Scheduling.
       payload: { previewVersion: 1, maxItems: 100 },
     });
-    expect(execute.statusCode).toBe(200);
-    expect(execute.json().data).toMatchObject({ status: "READY", processed: 3 });
+    expect(execute.statusCode).toBe(202);
+    expect(execute.json().data).toMatchObject({
+      sessionId: "import-session-1",
+      status: "EXECUTING",
+      previewVersion: 1,
+    });
     expect(upstream[0].idempotencyKey).toBe("import-execute-1");
     upstream.length = 0;
 

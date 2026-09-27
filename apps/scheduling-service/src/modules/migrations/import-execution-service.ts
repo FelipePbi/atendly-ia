@@ -40,8 +40,10 @@ import { recomputeAppointmentIntentsWithin } from "../reminders/notification-int
 import { AtendlyServiceService } from "../services/atendly-service-service.js";
 import {
   acquireImportLease,
+  type ImportLease,
   importLeaseHeldError,
   ImportLeaseHolder,
+  importWorkFailure,
   LEASABLE_IMPORT_STATUSES,
   newImportLeaseOwner,
 } from "./import-lease.js";
@@ -49,6 +51,8 @@ import {
   CATEGORY_ENTITY_TYPE,
   ImportPreviewService,
   type ImportPreviewSourceReader,
+  type ImportSourceInput,
+  resolveImportSource,
 } from "./import-preview-service.js";
 
 /** O motor lê a origem pela mesma superfície mínima do preview (WU-02/WU-03). */
@@ -91,6 +95,25 @@ export interface ImportExecutionOptions {
    * é o que evita uma ida ao banco por registro.
    */
   leaseRenewIntervalMs?: number;
+}
+
+/**
+ * O que a requisição de início da execução devolve e o que o trabalho
+ * precisa para continuar (Goal061 §1). `status` é sempre `EXECUTING`: é o
+ * que o `UPDATE` da reivindicação gravou.
+ */
+export interface ImportExecutionStart {
+  tenantId: string;
+  sessionId: string;
+  userId: string;
+  status: "EXECUTING";
+  /** A versão aprovada, já conferida contra a vigente. */
+  previewVersion: number;
+  provider: IntegrationProvider;
+  timeZone: string;
+  /** Estado em que a sessão estava antes da reivindicação. */
+  fromStatus: ImportSessionStatus;
+  lease: ImportLease;
 }
 
 export interface ImportExecutionCounts {
@@ -264,12 +287,34 @@ interface ImportEnvironment {
 export class ImportExecutionService {
   constructor(private readonly prisma: PrismaClient) {}
 
+  /**
+   * Execução inteira numa chamada só: início e trabalho em sequência. É o
+   * caminho de quem precisa do resultado na mão (serviço, teste); a rota
+   * chama {@link startExecution} e dispara {@link runExecution} sem esperar.
+   */
   async execute(
     context: ImportExecutionContext,
-    reader: ImportExecutionSourceReader,
+    reader: ImportSourceInput,
     snapshotInput: GetImportSnapshotInput,
     options: ImportExecutionOptions,
   ): Promise<ImportExecutionResult> {
+    const start = await this.startExecution(context, options);
+    return this.runExecution(start, reader, snapshotInput, options);
+  }
+
+  /**
+   * Início da execução (Goal061 §1): tudo o que não depende da origem —
+   * sessão, estado, versão aprovada, configuração da agenda — e a
+   * reivindicação do lease gravando `EXECUTING` no mesmo `UPDATE`. Nunca lê
+   * a origem.
+   */
+  async startExecution(
+    context: ImportExecutionContext,
+    options: Pick<
+      ImportExecutionOptions,
+      "previewVersion" | "leaseOwner" | "leaseTtlSeconds"
+    >,
+  ): Promise<ImportExecutionStart> {
     const session = await this.prisma.importSession.findUnique({
       where: {
         tenantId_id: { tenantId: context.tenantId, id: context.sessionId },
@@ -282,7 +327,13 @@ export class ImportExecutionService {
         404,
       );
     }
-    if (!EXECUTABLE_STATUSES.includes(session.status)) {
+    // `ANALYZING` segue até a reivindicação só para que a recusa diga, pelo
+    // relógio do banco, se a análise está viva (`LEASE_HELD`, Goal061): o
+    // `WHERE` do lease nunca a aceita como estado executável.
+    if (
+      !EXECUTABLE_STATUSES.includes(session.status) &&
+      session.status !== "ANALYZING"
+    ) {
       throw new AppError(
         "IMPORT_SESSION_NOT_EXECUTABLE",
         `Import session cannot be executed while in status ${session.status}.`,
@@ -315,6 +366,7 @@ export class ImportExecutionService {
     // a origem. Duas instâncias que lessem a origem para só então descobrir
     // que uma delas não vai executar já teriam feito trabalho duplicado —
     // aqui a perdedora desiste sem chamar a origem uma vez sequer.
+    const fromStatus = session.status;
     const owner = options.leaseOwner ?? newImportLeaseOwner();
     const claim = await acquireImportLease(this.prisma, {
       tenantId: context.tenantId,
@@ -335,27 +387,67 @@ export class ImportExecutionService {
       }),
     });
     if (!claim.acquired) throw importLeaseHeldError(claim);
+
+    return {
+      tenantId: context.tenantId,
+      sessionId: context.sessionId,
+      userId: context.userId,
+      status: "EXECUTING",
+      previewVersion: session.previewVersion,
+      provider: session.provider,
+      timeZone: settings.timezone,
+      fromStatus,
+      lease: claim.lease,
+    };
+  }
+
+  /**
+   * Trabalho da execução (Goal061 §2 e §3), já sob lease: lê a origem
+   * renovando o lease e roda o lote como sempre rodou.
+   */
+  async runExecution(
+    start: ImportExecutionStart,
+    source: ImportSourceInput,
+    snapshotInput: GetImportSnapshotInput,
+    options: Omit<ImportExecutionOptions, "previewVersion"> = {},
+  ): Promise<ImportExecutionResult> {
     const lease = new ImportLeaseHolder(
       this.prisma,
-      claim.lease,
+      start.lease,
       options.leaseTtlSeconds ?? env.IMPORT_LEASE_TTL_SECONDS,
       options.leaseRenewIntervalMs,
     );
+    const context: ImportExecutionContext = {
+      tenantId: start.tenantId,
+      sessionId: start.sessionId,
+      userId: start.userId,
+    };
 
     try {
+      const reader = await resolveImportSource(source);
       return await this.run(
         context,
         reader,
         snapshotInput,
         options,
-        session,
-        settings.timezone,
+        { provider: start.provider, previewVersion: start.previewVersion },
+        start.timeZone,
         lease,
       );
     } catch (error) {
       // Falha que não é de item: a sessão fica em `EXECUTING`, mas sem lease,
       // então a próxima passada a reivindica na hora em vez de esperar o TTL.
-      await lease.release();
+      // A causa fica gravada, do conjunto fechado e sem texto do erro, no
+      // mesmo `UPDATE` que devolve o lease — e só se o lease ainda for meu.
+      // Preview obsoleto é a exceção: nada foi importado por ele, e a sessão
+      // volta a um estado analisável.
+      const failure = importWorkFailure(error);
+      await lease.release({
+        ...failure,
+        ...(failure.errorCode === "IMPORT_PREVIEW_STALE"
+          ? { status: start.fromStatus === "READY" ? "READY" : "PARTIAL" }
+          : {}),
+      });
       throw error;
     }
   }
@@ -368,12 +460,16 @@ export class ImportExecutionService {
     context: ImportExecutionContext,
     reader: ImportExecutionSourceReader,
     snapshotInput: GetImportSnapshotInput,
-    options: ImportExecutionOptions,
+    options: Pick<ImportExecutionOptions, "maxItems">,
     session: { provider: IntegrationProvider; previewVersion: number },
     timeZone: string,
     lease: ImportLeaseHolder,
   ): Promise<ImportExecutionResult> {
-    const snapshot = await reader.getImportSnapshot(snapshotInput);
+    // A leitura inteira da origem é uma espera só: o lease é renovado
+    // durante ela, e não apenas entre itens (Goal061 §2).
+    const snapshot = await lease.keepAliveWhile(
+      reader.getImportSnapshot(snapshotInput),
+    );
     const records = indexRecords(snapshot);
 
     const [items, categories, maps] = await Promise.all([

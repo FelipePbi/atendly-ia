@@ -25,7 +25,7 @@ import {
   BffHttpError,
   type ImportItem,
   type ImportLiveSession,
-  type ImportPreview,
+  type ImportPreviewSnapshot,
   type ImportProgress,
   type ImportState,
 } from "@/data";
@@ -36,6 +36,7 @@ import { expectNoA11yViolations } from "./support/a11y";
 
 const getImportState = vi.fn();
 const analyzeImport = vi.fn();
+const getImportPreview = vi.fn();
 const executeImport = vi.fn();
 const listImportItems = vi.fn();
 const decideImportItem = vi.fn();
@@ -48,6 +49,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       analyzeImport,
       decideImportItem,
       executeImport,
+      getImportPreview,
       getImportProgress,
       getImportState,
       listImportItems,
@@ -67,6 +69,8 @@ function progressFixture(): ImportProgress {
     categories: [],
     counts: { failed: 0, imported: 0, needsReview: 0, pending: 0, skipped: 0 },
     finishedAt: null,
+    interrupted: false,
+    lastError: null,
     previewVersion: 1,
     sessionId: "session-1",
     startedAt: "2026-09-15T10:10:00.000Z",
@@ -74,25 +78,28 @@ function progressFixture(): ImportProgress {
   };
 }
 
+/** Sessão já analisada (`READY`, preview gravado); a análise em si é provada em `goal061-import-async.test.tsx`. */
 function sessionFixture(overrides: Partial<ImportLiveSession> = {}): ImportLiveSession {
   return {
     categories: [],
     counts: { failed: 0, imported: 0, needsReview: 1, pending: 11, skipped: 0 },
     createdAt: "2026-09-15T10:00:00.000Z",
     finishedAt: null,
-    previewGeneratedAt: null,
-    previewVersion: 0,
+    interrupted: false,
+    lastError: null,
+    previewGeneratedAt: "2026-09-15T10:05:00.000Z",
+    previewVersion: 1,
     provider: "MINHA_AGENDA",
     sessionId: "session-1",
     sourceAccountId: "camila@example.com",
     sourceAccountLabel: "camila@example.com",
-    startedAt: "2026-09-15T10:00:00.000Z",
-    status: "DRAFT",
+    startedAt: null,
+    status: "READY",
     ...overrides,
   };
 }
 
-function previewFixture(): ImportPreview {
+function previewFixture(): ImportPreviewSnapshot {
   return {
     categories: [
       {
@@ -124,7 +131,6 @@ function previewFixture(): ImportPreview {
         importedCount: 0,
       },
     ],
-    changesSincePreviousVersion: { changedCount: 0, disappearedCount: 0, newCount: 19 },
     generatedAt: "2026-09-15T10:05:00.000Z",
     previewVersion: 1,
     sessionId: "session-1",
@@ -180,7 +186,7 @@ describe("aviso de conflitos não bloqueia o restante", () => {
       .mockResolvedValueOnce(
         stateWithSession(sessionFixture({ status: "PARTIAL" })),
       );
-    analyzeImport.mockResolvedValue(previewFixture());
+    getImportPreview.mockResolvedValue(previewFixture());
     executeImport.mockResolvedValue({
       categories: [],
       counts: { failed: 0, imported: 18, needsReview: 1, pending: 0, skipped: 0 },
@@ -215,7 +221,7 @@ describe("conflitos resolvidos por item", () => {
   test("explica o conflito em linguagem leiga e oferece as cinco decisões, exigindo o cadastro alvo em MERGE_WITH_EXISTING", async () => {
     const user = userEvent.setup();
     getImportState.mockResolvedValue(stateWithSession(sessionFixture()));
-    analyzeImport.mockResolvedValue(previewFixture());
+    getImportPreview.mockResolvedValue(previewFixture());
     listImportItems.mockResolvedValue({
       category: "SERVICE",
       items: [conflictItemFixture()],
@@ -317,7 +323,7 @@ describe("conflitos resolvidos por item", () => {
   test("segunda decisão sobre item já decidido vira estado explicado na linha, não um erro genérico", async () => {
     const user = userEvent.setup();
     getImportState.mockResolvedValue(stateWithSession(sessionFixture()));
-    analyzeImport.mockResolvedValue(previewFixture());
+    getImportPreview.mockResolvedValue(previewFixture());
     listImportItems.mockResolvedValue({
       category: "SERVICE",
       items: [conflictItemFixture()],
@@ -359,7 +365,7 @@ describe("conflitos resolvidos por item", () => {
 
   test("axe: revisão de conflitos sem violações", async () => {
     getImportState.mockResolvedValue(stateWithSession(sessionFixture()));
-    analyzeImport.mockResolvedValue(previewFixture());
+    getImportPreview.mockResolvedValue(previewFixture());
     listImportItems.mockResolvedValue({
       category: "SERVICE",
       items: [conflictItemFixture()],

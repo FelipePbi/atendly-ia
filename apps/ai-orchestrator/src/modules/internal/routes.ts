@@ -1112,7 +1112,7 @@ export async function registerInternalRoutes(
     const startOfDay = startOfTodayInTimeZone(
       normalizeBusinessContext(tenantConfig?.settings).timezone,
     );
-    const [attention, attentionCount, successfulAppointmentTools, aiRuns] =
+    const [attention, attentionCount, confirmedAppointmentCalls, aiRuns] =
       await Promise.all([
         prisma.conversation.findMany({
           where: { tenantId, status: "HUMAN_HANDOFF", humanHandoff: true },
@@ -1123,13 +1123,14 @@ export async function registerInternalRoutes(
         prisma.conversation.count({
           where: { tenantId, status: "HUMAN_HANDOFF", humanHandoff: true },
         }),
-        prisma.aiToolCall.count({
+        prisma.aiToolCall.findMany({
           where: {
             tenantId,
-            name: "create_appointment",
+            name: { in: ["create_appointment", "confirm_recurring_appointments"] },
             status: "SUCCEEDED",
             completedAt: { gte: startOfDay },
           },
+          select: { name: true, arguments: true, result: true },
         }),
         prisma.aiRun.findMany({
           where: {
@@ -1143,11 +1144,26 @@ export async function registerInternalRoutes(
     // Dead-letter visivel como atencao. Nao existe endpoint de reenvio em
     // massa: retomar um evento parado e decisao explicita, evento a evento.
     const inboxDeadLetters = await inbox.countDeadLetters(tenantId);
+    // So confirmacao grava agenda: prepare, hold vencido, remarcacao e
+    // cancelamento nao contam aqui. Uma serie recorrente conta pelo numero
+    // de ocorrencias que o Scheduling de fato confirmou, nao como 1.
+    const aiAppointmentsToday = confirmedAppointmentCalls.reduce(
+      (total, call) => {
+        if (call.name === "confirm_recurring_appointments") {
+          return total + countConfirmedRecurringAppointments(call.result);
+        }
+        if (isRecord(call.arguments) && call.arguments.action === "confirm") {
+          return total + 1;
+        }
+        return total;
+      },
+      0,
+    );
     return internalData(request, {
       conversationsNeedingAttention: attention.map(conversationDto),
       conversationsNeedingAttentionCount: attentionCount,
       inboxDeadLetters,
-      aiAppointmentsToday: successfulAppointmentTools,
+      aiAppointmentsToday,
       automatedConversationsToday: new Set(
         aiRuns.map((run) => run.conversationId),
       ).size,
@@ -1809,4 +1825,19 @@ export function requiredScope(request: FastifyRequest): InternalScope {
   }
 
   return "internal:unmapped";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * `confirm_recurring_appointments` conta pelo numero de ocorrencias que o
+ * Scheduling de fato confirmou (`data.appointments`), nao como 1 por chamada:
+ * uma serie de N ocorrencias e N agendamentos criados, nao um so.
+ */
+function countConfirmedRecurringAppointments(result: unknown): number {
+  if (!isRecord(result) || !isRecord(result.data)) return 0;
+  const appointments = result.data.appointments;
+  return Array.isArray(appointments) ? appointments.length : 0;
 }

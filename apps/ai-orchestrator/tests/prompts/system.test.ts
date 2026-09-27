@@ -79,13 +79,18 @@ describe("prompt montado: sem persona, identidade transparente e versao por esti
   });
 
   it("a versao e um hash estavel do conteudo montado: um teste que muda sozinho aqui sinaliza que o prompt mudou sem bump consciente da versao semantica", () => {
+    // Hashes de v7 (Goal057/U-06): travessao proibido em MAIN_RULES e as
+    // regras de confirmacao/encerramento em buildSchedulingPrompt mudaram o
+    // conteudo estavel do prompt. Valores obtidos rodando
+    // `npx vitest run tests/prompts/system.test.ts` apos a mudanca, nao
+    // calculados a mao.
     expect(derivePromptVersion("PROFESSIONAL")).toBe(
-      "prompt-v6-professional-162d0c285c",
+      "prompt-v7-professional-b283950244",
     );
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v6-balanced-1d0be808a2",
+      "prompt-v7-balanced-91590a238c",
     );
-    expect(derivePromptVersion("CASUAL")).toBe("prompt-v6-casual-5666453f95");
+    expect(derivePromptVersion("CASUAL")).toBe("prompt-v7-casual-773009abef");
   });
 
   it("o prompt montado embute exatamente a versao retornada para o estilo usado", () => {
@@ -143,7 +148,7 @@ describe("prompt montado: modo sugestao (Goal012/WU-04)", () => {
 
   it("a secao do modo sugestao entra no hash estavel: mudar o template de sugestao muda a versao do prompt normal tambem", () => {
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v6-balanced-1d0be808a2",
+      "prompt-v7-balanced-91590a238c",
     );
   });
 
@@ -199,7 +204,7 @@ describe("prompt montado: audio transcrito (Goal013/WU-03)", () => {
     // poder chegar como voz virada em texto; o hash abaixo muda sozinho se
     // alguem mexer na secao sem decidir isso de novo.
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v6-balanced-1d0be808a2",
+      "prompt-v7-balanced-91590a238c",
     );
   });
 });
@@ -375,7 +380,47 @@ describe("prompt montado: resposta ao lembrete (Goal021/WU-008)", () => {
 
   it("a secao de resposta ao lembrete entra no hash estavel: o bump para v5 e a versao conscientemente atualizada por causa dela", () => {
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v6-balanced-1d0be808a2",
+      "prompt-v7-balanced-91590a238c",
     );
   });
+});
+
+describe("prompt montado: proibicao de travessao e confirmacao/encerramento da agenda (Goal057/U-06)", () => {
+  it.each(STYLES)(
+    "prompt montado para %s nunca contem U+2014, faixa numerica sem espaco continua intacta",
+    (style) => {
+      const { text } = assemblePrompt(style);
+
+      expect(text).not.toContain("—");
+    },
+  );
+
+  it.each(STYLES)(
+    "prompt montado para %s proibe travessao em MAIN_RULES",
+    (style) => {
+      const { text } = assemblePrompt(style);
+
+      expect(text).toContain("Nunca use travessao na resposta.");
+    },
+  );
+
+  it.each(STYLES)(
+    "prompt montado para %s traz as regras de confirmacao unica, confirm no mesmo turno e mensagem de encerramento",
+    (style) => {
+      const { text } = assemblePrompt(style);
+
+      expect(text).toContain(
+        "nao pergunte de novo para quem e",
+      );
+      expect(text).toContain(
+        "Faca uma unica pergunta de confirmacao clara",
+      );
+      expect(text).toContain(
+        "chame a tool com action=confirm no mesmo turno",
+      );
+      expect(text).toContain(
+        "encerre com uma mensagem curta de despedida",
+      );
+    },
+  );
 });

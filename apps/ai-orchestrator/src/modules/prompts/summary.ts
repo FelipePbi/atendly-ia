@@ -97,7 +97,7 @@ export function buildCustomerSummaryPrompt(input: CustomerSummaryPromptInput): {
     ...emptyOr(
       input.upcomingAppointments.map(
         (appointment) =>
-          `- ${appointment.date} ${appointment.startTime}${appointment.serviceName ? ` — ${appointment.serviceName}` : ""}`,
+          `- ${appointment.date} ${appointment.startTime}${appointment.serviceName ? ` - ${appointment.serviceName}` : ""}`,
       ),
       "- Nenhum atendimento futuro.",
     ),

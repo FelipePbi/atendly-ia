@@ -1853,3 +1853,31 @@ baseline. **A-24 corrigido.**
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff056-2026-09-26-d-072),
 [FINAL_AUDIT §33](FINAL_AUDIT.md) e [D-072](DECISIONS.md).
+
+## QA A-01 e QA H-09 são corrigidos: a resposta não afirma efeito não gravado, e a Home conta agendamento, não reserva, do Goal057
+
+`apps/ai-orchestrator/` ganha um guard determinístico e uma métrica corrigida; nenhuma tool, contrato ou schema muda.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `guardCommitmentClaim` (`assistant.service.ts:952`), chamado por `completeGraphTurn` (`:881`) antes de `prisma.message.create`: bloqueia texto que afirma efeito (`findCommitmentClaims`, vocabulário fechado `COMMITMENT_CLAIM_VOCABULARY`) quando há `pendingAction` do tipo correspondente não consumido e nenhuma `AiToolCall` `SUCCEEDED` do `AiRun` confirmou o efeito (`loadTurnConfirmedEffects`, lê o ledger, nunca o JSON da decisão) | Afirmação sem nenhum rascunho pendente passa sem checagem — o guard não lê a agenda para distinguir de fato verdadeiro; limite declarado em [D-073](DECISIONS.md) |
+| Na violação sai o texto fixo `PRODUCT_OWN_FIXED_TEXTS.commitmentNotRecorded`, com log `warn` sem texto de cliente/modelo e `AiRun.outputText` preservando a saída original; sem segunda chamada ao modelo, sem handoff | Falso positivo do vocabulário é fail-closed: vira o mesmo texto fixo, nunca uma confirmação inventada — inclusive quando o termo genérico de confirmação casa com o tipo do rascunho `cancel`/`reschedule` sem afirmar esse efeito (limite concreto em [D-073](DECISIONS.md)) |
+| `normalizeModelDashes`, antes do guard: U+2014 sempre e U+2013 cercado de espaço viram vírgula; faixa numérica sem espaço (`10–11`) intocada; nenhum texto de `PRODUCT_OWN_TEXTS` nem literal enviado ao modelo (`prompts/system.ts`, `prompts/summary.ts`) contém U+2014 | `PROMPT_TEMPLATE_VERSION` sobe de `v6` para `v7`; hashes de `system.test.ts` recalculados pela execução |
+| `aiAppointmentsToday` (`routes.ts:1150`) soma 1 por `create_appointment` `SUCCEEDED` `action=confirm`, mais as ocorrências confirmadas de `confirm_recurring_appointments`; `prepare`, falha, hold vencido, remarcação e cancelamento não contam | Nome, tipo e schema do campo não mudam; BFF e Home não são tocados |
+| `tests/assistant/commitment-claim-guard.test.ts` (**50** testes), `tests/evals/commitment-claim.eval.test.ts` (**8** testes, runtime real do `AssistantService`, cobrindo vocabulário dedicado e genérico em remarcação/cancelamento) e `tests/internal/dashboard-ai-appointments.routes.test.ts` (**9** testes) — os três novos, **67** testes, **67** passando | Aderência do modelo real ao prompt fora de prova (D-050): o eval usa dublê roteirizado |
+
+**Quatro controles negativos, executados e revertidos por esta Work Unit.** (1) Guard desligado (`guardCommitmentClaim` retorna o texto sem checagem): reprova **16** de **58** testes nos dois arquivos de guard/eval (**10** de **50** no guard, **6** de **8** no eval). (2) Evidência lida do JSON da decisão em vez do ledger (`appointmentDraftPatch.status === "confirmed"` aceito como `confirm`): reprova **1** de **58**, o teste "a evidência nunca sai do JSON da decisão". (3) Métrica antiga restaurada (`aiAppointmentsToday = confirmedAppointmentCalls.length`): reprova **3** de **9** testes de rota, incluindo "prepare sem confirm da 0" (dá **1**, não **0**). (4) Normalização de travessão removida: reprova **2** de **58**, o teste de travessão do guard e o caso de travessão do eval. Revertido cada um, os três arquivos voltam a **67**/**67** passando; `git status --porcelain=v1 -uall` não mostra resto de controle.
+
+**O que este delta não prova.** **Não prova aderência do modelo real ao prompt** (D-050): o eval usa dublê roteirizado.
+
+Rodados nesta rodada de correção (FIX-001, rodada 4), sobre a árvore final: `npm run typecheck` (`apps/ai-orchestrator`: `prisma generate && tsc -p tsconfig.json --noEmit`) exit 0; `npm run lint` (`apps/ai-orchestrator`: `eslint src --max-warnings=0`) exit 0; `npm test` (`apps/ai-orchestrator`, `vitest run`, suíte completa) — **83** arquivos passando, **12** pulados, **1099** testes passando, **88** pulados, **0** falhando; `npm run validate:core` — **17** passos, **15** `passed`, **2** `skipped` (`test:bff`, `test:health-worker`), **0** `failed`, exit 0, com `test:gate-scripts` em **226**/**226**, mesma contagem da baseline.
+
+Sobre a árvore desta Work Unit: `npx vitest run
+tests/assistant/commitment-claim-guard.test.ts
+tests/evals/commitment-claim.eval.test.ts
+tests/internal/dashboard-ai-appointments.routes.test.ts` → **67** testes,
+**67** passando, **0** falhando, depois de cada controle negativo
+revertido. **QA A-01 e QA H-09 corrigidos, fora da contagem A-01…A-24.**
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--diff057-2026-09-27-d-073),
+[FINAL_AUDIT §34](FINAL_AUDIT.md) e [D-073](DECISIONS.md).

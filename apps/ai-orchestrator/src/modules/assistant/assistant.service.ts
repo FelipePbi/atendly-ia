@@ -298,7 +298,178 @@ const PRODUCT_OWN_FIXED_TEXTS = {
   personalContact:
     "Vou deixar essa mensagem para ela responder pessoalmente.",
   genericReplyFallback: "Certo, vou te ajudar por aqui.",
+  /**
+   * Substitui a resposta do modelo que afirma um efeito que o turno nao
+   * gravou (QA A-01 / Goal057): ver `guardCommitmentClaim`.
+   */
+  commitmentNotRecorded:
+    "Ainda nao ficou registrado na agenda. Posso confirmar agora pra voce?",
 } as const;
+
+/**
+ * Tipo de efeito que uma resposta pode afirmar (QA A-01 / Goal057). A serie
+ * recorrente (`pendingAction.type === "recurring"`) afirma com o vocabulario
+ * de `schedule`.
+ */
+export type CommitmentClaimKind = "schedule" | "reschedule" | "cancel";
+
+/**
+ * Vocabulario de afirmacao de efeito, por tipo. Conjunto fechado, escrito ja
+ * na forma normalizada de `normalizeCommitmentText` (minusculas, sem acento,
+ * letra repetida colapsada) e casado como palavra inteira: "remarcado" nao
+ * conta como "marcado". Fora de proposito: "reservado" e "pre-agendado" (o
+ * hold segura o horario, nao marca), e o infinitivo/subjuntivo de pergunta ou
+ * intencao ("posso confirmar?", "quer que eu confirme?", "vou confirmar").
+ */
+/**
+ * "confirmado"/"confirmei" e "marcado"/"marquei" nao dizem sozinhos qual
+ * operacao foi feita — "Cancelamento confirmado!" e "Sua remarcacao foi
+ * confirmada" afirmam efeito com essas mesmas palavras. Por isso entram no
+ * vocabulario dos tres tipos, e nao so em `schedule`.
+ */
+const COMMITMENT_CLAIM_GENERIC_CONFIRM_TERMS = Object.freeze([
+  "confirmado",
+  "confirmada",
+  "confirmados",
+  "confirmadas",
+  "confirmei",
+  "marcado",
+  "marcada",
+  "marcados",
+  "marcadas",
+  "marquei",
+]);
+
+export const COMMITMENT_CLAIM_VOCABULARY: Readonly<
+  Record<CommitmentClaimKind, readonly string[]>
+> = Object.freeze({
+  schedule: Object.freeze([
+    "agendado",
+    "agendada",
+    "agendados",
+    "agendadas",
+    "agendei",
+    "agendamento feito",
+    "agendamento criado",
+    ...COMMITMENT_CLAIM_GENERIC_CONFIRM_TERMS,
+  ]),
+  reschedule: Object.freeze([
+    "remarcado",
+    "remarcada",
+    "remarcados",
+    "remarcadas",
+    "remarquei",
+    "reagendado",
+    "reagendada",
+    "reagendados",
+    "reagendadas",
+    "reagendei",
+    ...COMMITMENT_CLAIM_GENERIC_CONFIRM_TERMS,
+  ]),
+  cancel: Object.freeze([
+    "cancelado",
+    "cancelada",
+    "cancelados",
+    "canceladas",
+    "cancelei",
+    "desmarcado",
+    "desmarcada",
+    "desmarcados",
+    "desmarcadas",
+    "desmarquei",
+    ...COMMITMENT_CLAIM_GENERIC_CONFIRM_TERMS,
+  ]),
+});
+
+/**
+ * Janela de negacao, em palavras: um termo do vocabulario precedido de
+ * negador ate esta distancia, na mesma oracao (virgula, ponto e afins cortam
+ * a janela), nao e afirmacao — "ainda nao esta confirmado", "nao ficou
+ * marcado".
+ */
+export const COMMITMENT_CLAIM_NEGATION_WINDOW_WORDS = 3;
+
+const COMMITMENT_CLAIM_NEGATORS: ReadonlySet<string> = new Set([
+  "nao",
+  "nem",
+  "nunca",
+  "sem",
+]);
+
+/**
+ * Travessão normalizado fora da resposta da IA (D-073/U-06): U+2014 sempre
+ * vira vírgula, porque nunca é intervalo, só pausa de fala. U+2013 só
+ * normaliza cercado de espaço, que também é pausa de fala; sem espaço ("10–11")
+ * é faixa numérica e continua intacta.
+ */
+export function normalizeModelDashes(text: string): string {
+  if (!/[—–]/.test(text)) return text;
+  return text
+    .replace(/[ \t]*—+[ \t]*/g, ", ")
+    .replace(/(?<=\S)[ \t]–[ \t](?=\S)/g, ", ")
+    .replace(/^[ \t]*,[ \t]*/gm, "")
+    .replace(/,[ \t]*$/gm, "")
+    .replace(/,{2,}/g, ",")
+    .replace(/,[ \t]*([.!?,])/g, "$1")
+    .replace(/[ \t]+$/gm, "")
+    .trim();
+}
+
+/** Minusculas, sem acento e com letra repetida colapsada ("confirmadoo"). */
+export function normalizeCommitmentText(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/([a-z])\1+/g, "$1");
+}
+
+/** Tipos de efeito que `text` afirma, na ordem de `COMMITMENT_CLAIM_VOCABULARY`. */
+export function findCommitmentClaims(text: string): CommitmentClaimKind[] {
+  const normalized = normalizeCommitmentText(text);
+  return (Object.keys(COMMITMENT_CLAIM_VOCABULARY) as CommitmentClaimKind[])
+    .filter((kind) =>
+      COMMITMENT_CLAIM_VOCABULARY[kind].some((term) =>
+        affirmsCommitmentTerm(normalized, term),
+      ),
+    );
+}
+
+function affirmsCommitmentTerm(normalized: string, term: string): boolean {
+  const pattern = new RegExp(
+    `(?<![a-z0-9])${term.replace(/ /g, "\\s+")}(?![a-z0-9])`,
+    "g",
+  );
+  for (const match of normalized.matchAll(pattern)) {
+    const before = normalized.slice(0, match.index);
+    // "pre-agendado" / "pre agendado": rascunho, nao efeito.
+    if (/(?<![a-z0-9])pre[\s-]$/.test(before)) continue;
+    const clause = before.split(/[.,;:!?\n]/).pop() ?? "";
+    const words = clause.match(/[a-z0-9]+/g) ?? [];
+    const negated = words
+      .slice(-COMMITMENT_CLAIM_NEGATION_WINDOW_WORDS)
+      .some((word) => COMMITMENT_CLAIM_NEGATORS.has(word));
+    if (!negated) return true;
+  }
+  return false;
+}
+
+/** Tipo de efeito que confirmaria o rascunho `pendingAction.type`. */
+function commitmentKindOfPendingAction(
+  pendingActionType: string,
+): CommitmentClaimKind | undefined {
+  switch (pendingActionType) {
+    case "schedule":
+    case "recurring":
+      return "schedule";
+    case "reschedule":
+      return "reschedule";
+    case "cancel":
+      return "cancel";
+    default:
+      return undefined;
+  }
+}
 
 /**
  * `PRODUCT_OWN_FIXED_TEXTS` mais a saudação de estilo, nos três tons, mais os
@@ -727,7 +898,10 @@ export class AssistantService {
       decision,
       aiRunId: session.aiRunId,
     });
-    const text = composeReplyText(decision);
+    const text = await this.guardCommitmentClaim(
+      session,
+      normalizeModelDashes(composeReplyText(decision)),
+    );
     // A saida existe antes de qualquer chamada ao transporte, com
     // `correlationId` estavel: e ele que viaja como id da mensagem no envio e
     // que o recibo do Go reconcilia depois.
@@ -761,6 +935,53 @@ export class AssistantService {
       messageRecordId: assistantMessage.id,
       correlationId: assistantMessage.correlationId ?? undefined,
     };
+  }
+
+  /**
+   * A resposta nao afirma efeito que o turno nao gravou (QA A-01 / Goal057).
+   *
+   * Violacao e a conjuncao: o texto afirma um efeito K; ha rascunho
+   * `pendingAction` de tipo K nao consumido em `Conversation.state`; e nenhuma
+   * `AiToolCall` `SUCCEEDED` deste `AiRun` confirmou K. A evidencia sai do
+   * ledger, nunca do JSON da decisao. Na violacao sai o texto fixo
+   * `commitmentNotRecorded`, sem segunda chamada ao modelo e sem handoff; o
+   * `AiRun.outputText` continua com a saida original. Afirmacao sem rascunho
+   * pendente passa: sem ler a agenda, nao ha como distingui-la de fato
+   * verdadeiro.
+   */
+  private async guardCommitmentClaim(
+    session: AssistantGraphSession,
+    text: string,
+  ): Promise<string> {
+    const claims = findCommitmentClaims(text);
+    if (claims.length === 0) return text;
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: session.conversationId },
+    });
+    const pendingAction = normalizeStoredState(conversation?.state)
+      .pendingAction;
+    if (!isRecord(pendingAction) || typeof pendingAction.type !== "string") {
+      return text;
+    }
+    const claimType = commitmentKindOfPendingAction(pendingAction.type);
+    if (!claimType || !claims.includes(claimType)) return text;
+    const confirmed = await this.loadTurnConfirmedEffects(
+      session.tenantId,
+      session.aiRunId,
+    );
+    if (confirmed.has(claimType)) return text;
+    this.logger.warn(
+      {
+        requestId: session.requestId,
+        tenantId: session.tenantId,
+        conversationId: session.conversationId,
+        aiRunId: session.aiRunId,
+        claimType,
+        pendingActionType: pendingAction.type,
+      },
+      "AI reply claimed an effect the turn did not record",
+    );
+    return PRODUCT_OWN_FIXED_TEXTS.commitmentNotRecorded;
   }
 
   async failGraphTurn(
@@ -1354,6 +1575,47 @@ export class AssistantService {
           call.arguments.action === "confirm",
       );
     return { appointmentConfirmed, recurringSeriesConfirmed };
+  }
+
+  /**
+   * Efeitos que este turno gravou, lidos do rastro de auditoria como em
+   * `loadTurnAppointmentEvidence`: so `confirm` conta, `prepare` nao.
+   */
+  private async loadTurnConfirmedEffects(
+    tenantId: string,
+    aiRunId?: string,
+  ): Promise<ReadonlySet<CommitmentClaimKind>> {
+    const confirmed = new Set<CommitmentClaimKind>();
+    if (!aiRunId) return confirmed;
+    const calls = await this.prisma.aiToolCall.findMany({
+      where: {
+        tenantId,
+        aiRunId,
+        status: "SUCCEEDED",
+        name: {
+          in: [
+            "create_appointment",
+            "confirm_recurring_appointments",
+            "reschedule_appointment",
+            "cancel_appointment",
+          ],
+        },
+      },
+      select: { name: true, arguments: true },
+    });
+    for (const call of calls) {
+      if (call.name === "confirm_recurring_appointments") {
+        confirmed.add("schedule");
+        continue;
+      }
+      if (!isRecord(call.arguments) || call.arguments.action !== "confirm") {
+        continue;
+      }
+      if (call.name === "create_appointment") confirmed.add("schedule");
+      if (call.name === "reschedule_appointment") confirmed.add("reschedule");
+      if (call.name === "cancel_appointment") confirmed.add("cancel");
+    }
+    return confirmed;
   }
 
   private async applyDecision(input: {

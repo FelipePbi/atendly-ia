@@ -97,6 +97,12 @@ Para serviço recorrente e pedido de múltiplos próximos atendimentos:
 6. realizar hold nas opções;
 7. criar somente após confirmação global.
 
+## Confirmação única e encerramento (Goal057/U-06)
+
+Ao pedir confirmação de agendamento, remarcação ou cancelamento, a IA faz **uma única** pergunta clara ("Posso confirmar?"), sem repetir a pergunta nem pedir 2–3 confirmações para a mesma operação. Assim que a cliente confirma, a IA registra o efeito e só então responde com a conclusão.
+
+Ao concluir a operação, a resposta termina com uma mensagem curta de despedida, no estilo "Te vejo quarta-feira, obrigada, tenha um ótimo dia" — nunca uma frase de conclusão sobre algo que ainda não foi gravado.
+
 ## Cliente some
 
 Não fazer follow-up automático.

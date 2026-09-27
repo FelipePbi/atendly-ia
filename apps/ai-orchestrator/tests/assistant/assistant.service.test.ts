@@ -1175,6 +1175,8 @@ describe("conjunto fechado dos textos que o produto emite por conta própria (A-
     "Oi! Vou deixar essa mensagem para a equipe verificar e te responder direitinho, ta bom?",
     "Vou deixar essa mensagem para ela responder pessoalmente.",
     "Certo, vou te ajudar por aqui.",
+    // QA A-01 / Goal057: substitui a resposta que afirma efeito nao gravado.
+    "Ainda nao ficou registrado na agenda. Posso confirmar agora pra voce?",
   ];
   const baselineGreetings = [
     "Olá, tudo bem? Como posso te ajudar hoje?",
@@ -2420,6 +2422,8 @@ describe("conjunto verificado de texto de cliente inclui notification-message.ts
       "Oi! Vou deixar essa mensagem para a equipe verificar e te responder direitinho, ta bom?",
       "Vou deixar essa mensagem para ela responder pessoalmente.",
       "Certo, vou te ajudar por aqui.",
+      // QA A-01 / Goal057: mesma entrada nova da baseline do fechamento (A-09 / Goal034).
+      "Ainda nao ficou registrado na agenda. Posso confirmar agora pra voce?",
     ];
     const baselineGreetings = [
       "Olá, tudo bem? Como posso te ajudar hoje?",

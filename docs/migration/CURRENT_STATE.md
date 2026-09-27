@@ -5387,3 +5387,99 @@ apagada: este delta diz o que passou a valer desde este Goal.
 - **Limite declarado:** não prova comportamento em runtime do serviço
   Go nem qual binário roda em produção. **A-24 corrigido** — ver
   [FINAL_AUDIT §33](FINAL_AUDIT.md) e [D-072](DECISIONS.md).
+
+## Delta implementado — diff057, 2026-09-27 ([D-073](DECISIONS.md))
+
+Corrige **QA A-01** e **QA H-09** do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md)
+(fora da enumeração A-01…A-24 do FINAL_AUDIT). `apps/bff/`,
+`apps/frontend/`, `apps/scheduling-service/`, `apps/evolution-go/` e
+`packages/` não foram tocados.
+
+- **Guard de afirmação de efeito (QA A-01, escopo §1–§2)** —
+  `guardCommitmentClaim`
+  (`apps/ai-orchestrator/src/modules/assistant/assistant.service.ts:952`),
+  chamado por `completeGraphTurn` (`:881`) antes de `prisma.message.create`:
+  bloqueia a saída quando o texto afirma efeito (`findCommitmentClaims`,
+  `:428`, vocabulário fechado `COMMITMENT_CLAIM_VOCABULARY` congelado,
+  `:343`, três chaves — `schedule`, `reschedule`, `cancel` — `recurring`
+  usa o de `schedule`), há `pendingAction` do tipo correspondente não
+  consumido, e nenhuma `AiToolCall` `SUCCEEDED` do `AiRun` confirmou o
+  efeito (`loadTurnConfirmedEffects`, `:1584`, lendo o ledger, nunca o
+  JSON da decisão). Na violação sai `PRODUCT_OWN_FIXED_TEXTS.commitmentNotRecorded`
+  (`:305`): `"Ainda nao ficou registrado na agenda. Posso confirmar agora
+  pra voce?"`, com log `warn` (`requestId`, `tenantId`, `conversationId`,
+  `aiRunId`, `claimType`, `pendingActionType`, sem texto de cliente ou
+  modelo) e `AiRun.outputText` preservando a saída original.
+- **Travessão normalizado (U-06, escopo §3)** — `normalizeModelDashes`
+  (`:405`), antes do guard: U+2014 sempre e U+2013 cercado de espaço
+  viram vírgula; faixa numérica sem espaço (`10–11`) intocada. Nenhum
+  texto de `PRODUCT_OWN_TEXTS` contém U+2014; `prompts/system.ts`
+  (`MAIN_RULES` regra 17) e `prompts/summary.ts` deixam de usar
+  travessão nos literais enviados ao modelo.
+- **Prompt da condução (U-06, escopo §4)** — `prompts/scheduling.ts`
+  ganha o bloco "CONFIRMACAO E ENCERRAMENTO": não perguntar de novo para
+  quem é quando a cliente já disse "pode marcar" e a pessoa já está clara
+  (`scheduling.ts:20`); uma única pergunta de confirmação por operação;
+  `action=confirm` no mesmo turno da resposta afirmativa da cliente;
+  mensagem curta de encerramento depois de efeito confirmado.
+  `PROMPT_TEMPLATE_VERSION` sobe de `v6` para `v7` (`system.ts:116`);
+  hashes de `tests/prompts/system.test.ts` recalculados pela execução, e
+  o teste passa a afirmar também a frase de não repetir a pergunta de
+  para quem é.
+- **Métrica da Home por ledger (QA H-09, escopo §5)** —
+  `aiAppointmentsToday` (`apps/ai-orchestrator/src/modules/internal/routes.ts:1150`)
+  soma 1 por `create_appointment` `SUCCEEDED` com
+  `arguments.action === "confirm"`, mais as ocorrências confirmadas de
+  `confirm_recurring_appointments` `SUCCEEDED`; `prepare`, falha, hold
+  vencido, remarcação e cancelamento não contam. Nome, tipo e schema do
+  campo não mudam; BFF e Home não são tocados.
+- **Prova por teste e eval (escopo §6)** —
+  `tests/assistant/commitment-claim-guard.test.ts` (novo, **50** testes,
+  **50** passando): vocabulário, normalização, cada não-afirmação
+  ("reservado", "pré-agendado", "posso confirmar?", negação com janela
+  de 3 palavras), e as três condições da violação isoladas.
+  `tests/evals/commitment-claim.eval.test.ts` (novo, **8** testes, **8**
+  passando), pelo runtime real do `AssistantService`: reproduz QA A-01
+  (`prepare` + "Confirmo" sem tool → texto fixo, nenhum `Appointment` no
+  gateway do dublê, log `warn`) e os casos irmãos (`confirm`
+  bem-sucedido afirma sem bloqueio; hold vencido no `confirm`;
+  remarcação e cancelamento sem `confirm`, com o vocabulário dedicado
+  ("remarcado", "Cancelei") e também com o vocabulário genérico de
+  confirmação, no formato real de QA A-01 depois de "Posso confirmar?"
+  ("Pronto, sua remarcação foi confirmada", "Cancelamento confirmado!");
+  travessão normalizado). `tests/internal/dashboard-ai-appointments.routes.test.ts`
+  (novo, **9** testes, **9** passando): inclui o caso da revisão,
+  `prepare` sem `confirm` dá **0**.
+- **Controles negativos (escopo §7)** — quatro, aplicados e revertidos
+  no código, saída real colada em [FINAL_AUDIT §34](FINAL_AUDIT.md) e
+  [D-073](DECISIONS.md): guard desligado (**16** falhas de **58** nos
+  dois arquivos de teste/eval do guard — **10** de **50** no arquivo do
+  guard, **6** de **8** no eval); evidência pelo JSON da decisão em vez
+  do ledger (**1** falha de **58**, "a evidência nunca sai do JSON da
+  decisão"); métrica antiga restaurada (**3** falhas de **9**, incluindo
+  "prepare sem confirm da 0"); normalização de travessão removida (**2**
+  falhas de **58**: o teste de travessão do guard e o caso de travessão
+  do eval). Revertidos, os três arquivos voltam a **67**/**67** passando;
+  `git status --porcelain=v1 -uall` não mostra resto de controle.
+- **Prova executada por esta Work Unit:** `npx vitest run
+  tests/assistant/commitment-claim-guard.test.ts
+  tests/evals/commitment-claim.eval.test.ts
+  tests/internal/dashboard-ai-appointments.routes.test.ts` → **67**
+  testes, **67** passando, **0** falhando (depois dos controles
+  revertidos).
+- **Prova executada pela rodada de correção (FIX-001, rodada 4):**
+  `npm run typecheck` (`apps/ai-orchestrator`) exit 0; `npm run lint`
+  (`apps/ai-orchestrator`) exit 0; `npm test` (`apps/ai-orchestrator`,
+  suíte completa) — **1099** testes passando, **88** pulados, **0**
+  falhando; `npm run validate:core` — **15** passos `passed`, **2**
+  `skipped` (`test:bff`, `test:health-worker`), **0** `failed`, exit 0,
+  com `test:gate-scripts` em **226**/**226** — esta entrada não cita
+  número que não executou.
+- **Limite declarado:** afirmação sem rascunho pendente não é violação
+  (o guard não lê a agenda); falso positivo do vocabulário é
+  fail-closed, inclusive a forma concreta em que o termo genérico de
+  confirmação (`COMMITMENT_CLAIM_GENERIC_CONFIRM_TERMS`) casa com o
+  tipo do rascunho `cancel`/`reschedule` sem afirmar esse efeito;
+  aderência do modelo real ao prompt fora de prova, por
+  D-050 — ver [D-073](DECISIONS.md). **QA A-01 e QA H-09 corrigidos**,
+  fora da contagem A-01…A-24 — ver [FINAL_AUDIT §34](FINAL_AUDIT.md).

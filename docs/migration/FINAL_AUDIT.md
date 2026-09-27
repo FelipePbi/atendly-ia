@@ -4274,3 +4274,56 @@ passos `passed`, **2** `skipped` (`test:bff`, `test:health-worker`, o
 mesmo par já reportado pulado desde §32), **0** `failed`, exit 0; `npm
 run test:gate` — **226** testes, **226** passando, **0** falhando, mesma
 contagem da baseline.
+
+## 34. QA A-01 e QA H-09 são corrigidos: a resposta não afirma efeito não gravado, e a Home conta agendamento, não reserva — Goal057, 2026-09-27
+
+Seção nova, escrita depois da execução desta Work Unit sobre o diff057. Ela **não reescreve** §4 a §33: os registros de A-01 a A-24 em §19, o veredito das seções anteriores e as trinta e duas seções de fechamento anteriores continuam exatamente como estavam. **QA A-01** e **QA H-09** vêm do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md), não da enumeração A-01…A-24 — o prefixo `QA` existe porque este documento já usa `A-` com outro significado — e **não entram nessa contagem**. Decisão: [D-073](DECISIONS.md), `ACCEPTED` no [review057](reviews/057-review.md) (rodada 5 de 5).
+
+### O que mudou
+
+**QA A-01 — a IA não afirma mais agendamento, remarcação ou cancelamento que o turno não gravou.** `guardCommitmentClaim` (`apps/ai-orchestrator/src/modules/assistant/assistant.service.ts:952`), chamado por `completeGraphTurn` (`:881`) antes de `prisma.message.create`, bloqueia a saída quando o texto do modelo afirma um efeito (`findCommitmentClaims`, `:428`, vocabulário fechado em `COMMITMENT_CLAIM_VOCABULARY`, `:343`), há `pendingAction` do tipo correspondente ainda não consumido, e nenhuma `AiToolCall` `SUCCEEDED` deste `AiRun` confirmou o efeito (`loadTurnConfirmedEffects`, `:1584`, lendo o ledger — nunca o JSON da decisão). Na violação, a mensagem persistida é o texto fixo `PRODUCT_OWN_FIXED_TEXTS.commitmentNotRecorded` (`:305`): `"Ainda nao ficou registrado na agenda. Posso confirmar agora pra voce?"`. O caso real de QA A-01 — `prepare` sem `confirm`, cliente escreve "Confirmo", modelo responde sem chamar tool — é reproduzido por `tests/evals/commitment-claim.eval.test.ts` (**8** testes, **8** passando), que prova pelo runtime do `AssistantService` real: a `Message` persistida é o texto fixo, nenhum `Appointment` chega ao gateway do dublê, e o log `warn` existe sem o texto da cliente nem o do modelo. Os casos de remarcação e cancelamento cobrem tanto o vocabulário dedicado ("remarcado", "Cancelei") quanto o vocabulário genérico de confirmação sem chamar a tool de confirmação, no formato real de QA A-01 depois de "Posso confirmar?" ("Pronto, sua remarcação foi confirmada", "Cancelamento confirmado!"). `tests/assistant/commitment-claim-guard.test.ts` (**50** testes, **50** passando) prova o vocabulário, a normalização, cada não-afirmação do §1 do Goal ("reservado", "posso confirmar?", negação), e as três condições da violação isoladas.
+
+**Travessão normalizado (U-06).** `normalizeModelDashes` (`assistant.service.ts:405`), aplicado antes do guard, troca U+2014 sempre e U+2013 cercado de espaço por vírgula, sem tocar faixa numérica sem espaço (`10–11`). Nenhum texto de `PRODUCT_OWN_TEXTS` contém U+2014; os literais que chegam ao modelo (`prompts/system.ts`, regra 17 de `MAIN_RULES`; `prompts/summary.ts`) também deixaram de usar travessão. `PROMPT_TEMPLATE_VERSION` subiu de `v6` para `v7`.
+
+**QA H-09 — a Home conta agendamento, não reserva.** `aiAppointmentsToday` em `/internal/dashboard` (`apps/ai-orchestrator/src/modules/internal/routes.ts:1150`) soma 1 por `create_appointment` `SUCCEEDED` com `arguments.action === "confirm"`, e o número de ocorrências de `confirm_recurring_appointments` `SUCCEEDED`; `prepare`, falha, hold vencido, remarcação e cancelamento não contam. `tests/internal/dashboard-ai-appointments.routes.test.ts` (**9** testes, **9** passando) prova, inclusive o caso da revisão: um `prepare` sem `confirm` dá **0**.
+
+**Quatro controles negativos, executados e revertidos nesta Work Unit, saída real desta execução:**
+
+1. Guard desligado (`guardCommitmentClaim` retornando o texto sem checagem):
+```
+❯ tests/assistant/commitment-claim-guard.test.ts (50 tests | 10 failed) 19ms
+❯ tests/evals/commitment-claim.eval.test.ts (8 tests | 6 failed) 23ms
+Test Files  2 failed (2)
+     Tests  16 failed | 42 passed (58)
+```
+2. Evidência lida do JSON da decisão (`appointmentDraftPatch.status === "confirmed"` aceito como `confirm`, ao lado do ledger):
+```
+Test Files  1 failed | 1 passed (2)
+     Tests  1 failed | 57 passed (58)
+ FAIL  tests/assistant/commitment-claim-guard.test.ts > guard de afirmação de efeito não gravado em completeGraphTurn (QA A-01) > a evidência nunca sai do JSON da decisão: status confirmed no rascunho do modelo não conta
+```
+3. Métrica antiga restaurada (`aiAppointmentsToday = confirmedAppointmentCalls.length`):
+```
+Test Files  1 failed (1)
+     Tests  3 failed | 6 passed (9)
+ FAIL  tests/internal/dashboard-ai-appointments.routes.test.ts > aiAppointmentsToday conta so agendamento criado > prepare sem confirm da 0
+ FAIL  tests/internal/dashboard-ai-appointments.routes.test.ts > aiAppointmentsToday conta so agendamento criado > serie recorrente confirmada de N conta N
+ FAIL  tests/internal/dashboard-ai-appointments.routes.test.ts > aiAppointmentsToday conta so agendamento criado > mistura confirm avulso e serie recorrente soma os dois
+```
+4. Normalização de travessão removida (guard chamado sem `normalizeModelDashes`):
+```
+❯ tests/assistant/commitment-claim-guard.test.ts (50 tests | 1 failed) 17ms
+❯ tests/evals/commitment-claim.eval.test.ts (8 tests | 1 failed) 22ms
+Test Files  2 failed (2)
+     Tests  2 failed | 56 passed (58)
+```
+
+Cada controle foi aplicado e revertido no mesmo passo, a partir de cópia de `assistant.service.ts` e `routes.ts` guardada antes da primeira mutação. Depois de revertidos, os três arquivos de teste voltam a **67** testes passando (`npx vitest run tests/assistant/commitment-claim-guard.test.ts tests/evals/commitment-claim.eval.test.ts tests/internal/dashboard-ai-appointments.routes.test.ts` → **67** testes, **67** passando, **0** falhando), e `git status --porcelain=v1 -uall` não mostra resto de controle.
+
+### Veredito recontado
+
+O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO`** — os mesmos números de §33. Nenhum achado de A-01 a A-24 foi tocado, corrigido, reclassificado ou reaberto: QA A-01 e QA H-09 são achados do `QA_LOCAL_REVIEW`, fora dessa enumeração, e sua correção não move a contagem.
+
+Quatro coisas que este recontar não diz. **Não prova aderência do modelo real ao prompt** (D-050): o eval usa um dublê roteirizado, prova o que o runtime deixa acontecer quando o modelo escreve o texto do roteiro, não o comportamento do modelo real em produção. **Não fecha o `QA_LOCAL_REVIEW`**: o documento da revisão não é editado — ele registra a revisão como ela foi. **Não cobre afirmação sem rascunho pendente**: uma frase como "seu horário de quinta está confirmado", sobre um agendamento antigo sem `pendingAction`, passa sem checagem — o guard não distingue de fato verdadeiro sem ler a agenda; o caso real de QA A-01 (hold recém-criado, ainda em `pendingAction`) cai dentro do guard. **Termo genérico de confirmação cruza tipo e é fail-closed**: `COMMITMENT_CLAIM_GENERIC_CONFIRM_TERMS` entra no vocabulário dos três tipos porque o guard decide o tipo pelo `pendingAction`, não pelo texto; com `cancel` ou `reschedule` pendente, uma frase que usa só o termo genérico sobre o agendamento original, sem afirmar o efeito do rascunho — por exemplo, "Seu horário continua confirmado, mesmo assim quer cancelar?" — dispara o guard mesmo sem afirmar cancelamento ou remarcação; o custo desse falso positivo cai sobre uma mensagem substituída, nunca sobre uma confirmação inventada (ambos os limites, [D-073](DECISIONS.md)).
+
+Execução conferida por esta Work Unit: `npx vitest run tests/assistant/commitment-claim-guard.test.ts tests/evals/commitment-claim.eval.test.ts tests/internal/dashboard-ai-appointments.routes.test.ts` — **67** testes, **67** passando, **0** falhando, depois de cada controle negativo revertido. `git status --porcelain=v1 -uall` sobre `apps/ai-orchestrator/src/modules/assistant/assistant.service.ts` e `apps/ai-orchestrator/src/modules/internal/routes.ts` mostra só o diff desta execução, sem resto de controle. Rodados nesta rodada de correção (FIX-001, rodada 4): `npm run typecheck` (`apps/ai-orchestrator`) exit 0; `npm run lint` (`apps/ai-orchestrator`) exit 0; `npm test` (`apps/ai-orchestrator`, suíte completa) — **1099** testes passando, **88** pulados, **0** falhando; `npm run validate:core` — **15** passos `passed`, **2** `skipped` (`test:bff`, `test:health-worker`), **0** `failed`, exit 0, incluindo o passo `test:gate-scripts` com **226**/**226**.

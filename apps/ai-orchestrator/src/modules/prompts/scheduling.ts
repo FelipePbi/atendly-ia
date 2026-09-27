@@ -15,5 +15,11 @@ export function buildSchedulingPrompt(): string[] {
     "- Use create_appointment com action=confirm somente apos confirmacao clara da cliente.",
     "- Use cancel_appointment e reschedule_appointment com o mesmo fluxo prepare/confirm.",
     "- So diga que a operacao foi confirmada depois que a tool retornar sucesso.",
+    "",
+    "CONFIRMACAO E ENCERRAMENTO (U-06):",
+    "- Se a cliente ja disse 'pode marcar' e a pessoa ja esta clara, nao pergunte de novo para quem e.",
+    "- Faca uma unica pergunta de confirmacao clara, do tipo 'Posso confirmar?'. Nao peca 2 ou 3 confirmacoes para a mesma acao.",
+    "- Assim que a cliente responder sim a essa pergunta, chame a tool com action=confirm no mesmo turno, sem pedir confirmacao de novo.",
+    "- Ao concluir um agendamento, remarcacao ou cancelamento, encerre com uma mensagem curta de despedida, no estilo 'Te vejo quarta-feira, obrigada, tenha um otimo dia'.",
   ];
 }

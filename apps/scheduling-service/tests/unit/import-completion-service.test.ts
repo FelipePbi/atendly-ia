@@ -260,7 +260,11 @@ describe("ImportCompletionService: conclusão única garantida pelo banco", () =
     const completionWrites = database.journal
       .writesFor("importSession")
       .filter((write) => write.operation === "updateMany");
-    expect(completionWrites).toHaveLength(1);
+    // Um `updateMany` reivindica a conclusão (Goal010); o outro desfaz a
+    // referência de conexão antes do delete da credencial (Goal060 WU-02).
+    // Ambos só rodam do lado de quem venceu a corrida — o perdedor não bate
+    // no `WHERE completedAt: null` e retorna sem escrever.
+    expect(completionWrites).toHaveLength(2);
   });
 });
 

@@ -877,7 +877,10 @@ verificados no [review010](reviews/010-review.md) sobre a base `e381c15`.
   origem sobrevive apenas dentro da importação, chamada direto pelo módulo.
   Os endpoints de integração foram reescopados para o ciclo da importação:
   `connect` não exige mais que a agenda seja externa e recusa `enableWrites`
-  com `409 INTEGRATION_WRITES_NOT_SUPPORTED` — a origem é somente leitura — e
+  com `409 INTEGRATION_WRITES_NOT_SUPPORTED` — a origem é somente leitura
+  (**superado no Goal060**, [D-077](DECISIONS.md): o corpo passou a ser
+  `{ email, password }` estrito, e `enableWrites` a mais é recusado com
+  `VALIDATION_ERROR` 400; o código 409 não existe mais) — e
   `DELETE /internal/calendar/integration` não toca mais `CalendarSettings`,
   ou seja, desconectar a origem de importação não desativa a agenda
   operacional.
@@ -5825,3 +5828,144 @@ toca `assistant-tools.ts`, `assistant.service.ts`, prompts, tools,
   certo continua fora de prova (D-050) — ver [D-076](DECISIONS.md).
   **QA CV-03 corrigido**, fora da contagem A-01…A-24 — ver
   [FINAL_AUDIT §37](FINAL_AUDIT.md).
+
+## Delta implementado — Goal060, 2026-09-27 ([D-077](DECISIONS.md), ACCEPTED)
+
+Corrige **QA IM-01** e **QA IM-02** do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md)
+(fora da enumeração A-01…A-24 do FINAL_AUDIT): a conexão com a Minha
+Agenda passa a pedir só e-mail e senha, com endereço e cliente OAuth
+fixos no sistema e o profissional descoberto em vez de digitado; o
+erro diz a causa por classe, nunca mais um texto genérico de "tente
+novamente"; e a credencial deixa de sobreviver à importação concluída
+(vault Q894). Toca `apps/scheduling-service/` (config, cliente,
+tipos e rota interna da origem), `apps/bff/` (rota e contrato
+público) e `apps/frontend/` (`ConnectSourceScreen`). Não toca análise,
+execução, preview, conflitos, lease ou retomada da importação, nem
+`timeoutMs`.
+
+- **Endereço e cliente OAuth vêm do sistema (§1, escopo do Goal)** —
+  `MINHA_AGENDA_API_BASE_URL` (default
+  `https://api.minhaagendaapp.com.br`) e
+  `MINHA_AGENDA_OAUTH_CLIENT_CREDENTIAL` (opcional, sem default,
+  `sync: false` em `render.yaml`) em
+  `apps/scheduling-service/src/config/env.ts`. Sem a credencial de
+  ambiente, conectar recusa com `MINHA_AGENDA_NOT_CONFIGURED` (503)
+  antes de qualquer chamada à origem ou escrita; o resto do serviço
+  sobe normalmente. `parseMinhaAgendaConnection`
+  (`modules/integrations/minha-agenda/config.ts`) sempre usa os dois
+  valores do sistema; linha antiga gravada com `baseUrl`/`basicAuth`
+  de negócio continua legível, com os dois valores ignorados.
+  `paymentMethod`, `modelVersion`, `bufferBetweenServicesMinutes` e
+  `enableWrites` saem da configuração gravada e da validação.
+- **A conexão pede só e-mail e senha (§2)** — `integrationConnectBodySchema`
+  (`modules/internal-api/routes.ts`) e `integrationSchema`
+  (`apps/bff/src/modules/calendar/routes.ts`) aceitam só
+  `{ email, password }`, `.strict()`; campo a mais, inclusive o
+  envelope antigo `credentials`/`configuration`, é recusado com
+  `VALIDATION_ERROR`, sem `fetch` e sem escrita. A credencial gravada
+  guarda só e-mail e senha, cifrada por negócio como hoje.
+- **O profissional é descoberto (§3)** — depois do login,
+  `MinhaAgendaClient.listProfessionals` chama
+  `GET /employees/professionals?includeDeleted=false`; a resposta
+  passa por schema (`minhaAgendaProfessionalSchema.array()`,
+  `.passthrough()`) antes de qualquer uso.
+  `resolveDiscoveredEmployeeId` (`config.ts`) grava o `id` de um
+  profissional único; zero profissionais recusa com
+  `MINHA_AGENDA_PROFESSIONAL_NOT_FOUND` (422); mais de um recusa com
+  `MINHA_AGENDA_MULTIPLE_PROFESSIONALS` (422); nenhum caso escolhe um
+  profissional por conta própria. Caminho e forma da resposta vêm do
+  mapa histórico do portal e não foram conferidos contra a API real —
+  ver Limites.
+- **O erro diz a causa, e o status da origem nunca vira o nosso (§4)** —
+  quatro classes fixas em `client.ts`/`config.ts`: credencial recusada
+  (`MINHA_AGENDA_AUTH_FAILED`, 422), conta sem um profissional único
+  (§3, 422), origem indisponível (`MINHA_AGENDA_TIMEOUT` 504,
+  `MINHA_AGENDA_UNREACHABLE`/`MINHA_AGENDA_HTTP_ERROR`/`MINHA_AGENDA_INVALID_RESPONSE`
+  502) e falha nossa (`MINHA_AGENDA_NOT_CONFIGURED` 503,
+  `INTEGRATION_CONFIGURATION_INVALID` 500, já existente). Nenhum
+  código `MINHA_AGENDA_*` sai com status 401 ou 403; o status da
+  origem só aparece em `details`. Nenhuma falha da conexão grava. O
+  BFF não traduz os códigos: chegam como `code: "UPSTREAM_ERROR"`,
+  `details.upstreamCode` e o status repassado.
+- **A tela tem só e-mail e senha, e fala a causa (§5)** —
+  `ConnectSourceScreen.tsx` perde "Chave de acesso", "Endereço da sua
+  conta", "Código do profissional" e "Forma de pagamento padrão";
+  `CalendarIntegrationInput` vira `{ email, password }`;
+  `connectErrorMessage` lê `details.upstreamCode` e dá um texto de
+  produto distinto por classe do §4, sem "token", "OAuth",
+  "endereço", "HTTP", "API" nem código cru. A tela diz, perto dos
+  campos, que os dados servem só a esta importação e são apagados ao
+  concluir.
+- **A credencial é apagada quando a importação termina (§6, vault
+  Q894)** — na mesma transação de `completeOnce`
+  (`modules/migrations/import-completion-service.ts`) que grava
+  `completedAt`, a linha `IntegrationConnection` `MINHA_AGENDA` do
+  negócio é apagada, filtrada pelo `tenantId`; `ImportSession.connectionId`
+  é desfeito antes, porque o FK é `Restrict`. Falha na transação
+  mantém a linha; conclusão repetida não falha por ela já não
+  existir; a conclusão de um negócio nunca toca a linha de outro.
+  Depois da conclusão, `GET /v1/calendar` devolve `integration:
+  null`. `DELETE /internal/calendar/integration` não muda. Testes
+  novos, contra PostgreSQL real:
+  `tests/integration/goal060-import-completion-credential.test.ts`
+  (**5** testes).
+- **Controles negativos (escopo §9)**, saída colada em
+  [FINAL_AUDIT §38](FINAL_AUDIT.md), rodados depois da última edição
+  de código e revertidos byte a byte (diff conferido idêntico ao
+  original): status da origem devolvido em vez de 422 fixo reprova
+  **3** de **19** testes de `goal060-minha-agenda-connection`
+  (scheduling-service); `connectErrorMessage` comparando `error.code`
+  reprova **9** de **14** testes de `goal060-connect-source`
+  (frontend); leitor usando `baseUrl` gravado reprova **1** de **19**
+  do mesmo arquivo de scheduling-service; descoberta aceitando o
+  primeiro de vários profissionais reprova **1** de **19**; schema do
+  corpo sem `.strict()` reprova **3** de **19**; conclusão sem apagar
+  a linha reprova **3** de **5** testes de integração contra
+  PostgreSQL real.
+- **Execução desta Work Unit (WU-05)**, sobre a árvore final: `npm
+  run typecheck` e `npm run lint` de `apps/scheduling-service`,
+  `apps/bff` e `apps/frontend`, exit 0 nos seis; `apps/scheduling-service`
+  (`tests/unit`) — **30** arquivos, **410** testes passando, **0**
+  falhando; `apps/scheduling-service` (`tests/integration`, contra
+  PostgreSQL descartável) — o teste do §7.5, **5**/**5**; `apps/bff`
+  (arquivos locais, sem integração) — **15** arquivos passando, **32**
+  pulados, **122** testes passando, **258** pulados; `apps/frontend`
+  — **77** arquivos, **718** testes passando, **0** falhando
+  (baseline review070: **76**/**704**; a diferença é
+  `goal060-connect-source.test.tsx`, **14** testes); `npm run
+  test:gate` — **233**/**233** (baseline review070: **233**, sem
+  mudança — este Goal não toca `scripts/tests/`);
+  `node scripts/final-production-audit.mjs` — **34** checks, **33**
+  `passed`, **1** `skipped` (`production_health`), **0** `failed`;
+  `BFF_TEST_DATABASE_URL=postgresql://pgtest@127.0.0.1:55432/atendly_bff_test
+  node scripts/goal033-authenticated-ui-rehearsal.mjs` — **65**
+  testes, **0** retentativas, exit 0 (sem mudança em relação à
+  baseline: este Goal não toca nenhuma das sete rotas logadas
+  medidas). Os passos agregadores `validate:core`, `validate:ui` e
+  `validate:integration` ficam para as unidades determinísticas
+  seguintes do plano (WU-06 a WU-19).
+- **Execução final da rodada 4 (WU-06 a WU-19), sobre a árvore
+  aceita** ([review060](reviews/060-review.md)): `typecheck` e `lint`
+  dos três apps e `git diff --check`, exit 0; testes dirigidos
+  `goal060` — **19** passando e **5** pulados sem banco
+  (`apps/scheduling-service`), **6** pulados sem banco (`apps/bff`),
+  **14**/**14** (`apps/frontend`); `test:gate` — **233**/**233**;
+  `validate:core` — **17** passos, **15** `passed`, **2** `skipped`,
+  **0** `failed`; `validate:ui` — **169** passando, **21** pulados,
+  **0** retentativas; `validate:integration` — **35**/**35** passos,
+  inclusive `test:bff-integration` (§7.6) e
+  `test:scheduling-integration` (§7.5), com
+  `rehearse:goal033-authenticated-ui` em **65** testes passando e **0**
+  retentativas.
+- **Limites declarados:** o caminho e a forma de resposta de
+  `/employees/professionals` vêm do mapa histórico do portal e não
+  foram conferidos contra a API real; a conferência humana do §8 do
+  Goal (login e descoberta contra a conta de teste real da Minha
+  Agenda, U-05) **não foi feita** por este Goal; escolha entre vários
+  profissionais não existe; `POST /internal/calendar/integration/connect`
+  e `POST /v1/calendar/integration/connect` aceitam conectar depois da
+  conclusão e gravam a credencial de novo, sem restrição — quem recusa
+  é `POST /v1/calendar/imports` com `409 IMPORT_ALREADY_COMPLETED`, não
+  a conexão — ver [D-077](DECISIONS.md). **QA IM-01 e
+  QA IM-02 corrigidos**, fora da contagem A-01…A-24 — ver
+  [FINAL_AUDIT §38](FINAL_AUDIT.md).

@@ -150,21 +150,8 @@ export interface ConfirmAppointmentSeriesInput {
 }
 
 export interface CalendarIntegrationInput {
-  configuration: {
-    baseUrl: string;
-    bufferBetweenServicesMinutes?: number;
-    employeeId: number;
-    enableWrites?: boolean;
-    modelVersion?: number;
-    paymentMethod: string;
-    refreshSkewSeconds?: number;
-    timeoutMs?: number;
-  };
-  credentials: {
-    basicAuth: string;
-    password: string;
-    username: string;
-  };
+  email: string;
+  password: string;
 }
 
 export class BffCalendarService {

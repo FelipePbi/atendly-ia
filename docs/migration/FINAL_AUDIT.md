@@ -4599,3 +4599,96 @@ Os **6** testes novos de `scripts/tests/goal033-authenticated-ui-rehearsal.test.
 ### Veredito recontado
 
 O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO`** — os mesmos números de §36. Nenhum achado de A-01 a A-24 foi tocado, corrigido, reclassificado ou reaberto: esta seção só acrescenta o registro do diff070, e **QA CV-03 corrigido** é do `QA_LOCAL_REVIEW`, fora dessa enumeração.
+
+## 38. QA IM-01 e QA IM-02 são corrigidos: a conexão pede só e-mail e senha e o erro diz a causa — Goal060, 2026-09-27
+
+Seção nova, escrita pela Work Unit de controles e documentação (WU-05) depois de integradas as Work Units de implementação (WU-01 configuração do sistema, corpo novo, descoberta do profissional e classes de erro no scheduling-service; WU-02 remoção da credencial na conclusão; WU-03 corpo público novo e códigos de erro no BFF; WU-04 tela de dois campos e mensagens por classe no frontend). Ela **não reescreve** §4 a §37: os registros de A-01 a A-24, o veredito das seções anteriores e as trinta e sete seções de fechamento anteriores continuam exatamente como estavam. **QA IM-01** e **QA IM-02** vêm do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md), não da enumeração A-01…A-24 — o prefixo `QA` existe porque este documento já usa `A-` com outro significado — e **não entram nessa contagem**. Decisão: [D-077](DECISIONS.md), **ACCEPTED** no [review060](reviews/060-review.md) (rodada 4 de 4).
+
+### O que mudou
+
+**QA IM-01 e QA IM-02 — a conexão pede só e-mail e senha, e o erro diz a causa.** `MINHA_AGENDA_API_BASE_URL` e `MINHA_AGENDA_OAUTH_CLIENT_CREDENTIAL` (`apps/scheduling-service/src/config/env.ts`) tornam o endereço e o cliente OAuth da origem configuração do sistema; `parseMinhaAgendaConnection` (`config.ts`) sempre usa os dois, e a linha antiga gravada com `baseUrl`/`basicAuth` de negócio continua legível, com os dois valores ignorados. `integrationConnectBodySchema` e `integrationSchema` (`apps/scheduling-service/src/modules/internal-api/routes.ts`, `apps/bff/src/modules/calendar/routes.ts`) aceitam só `{ email, password }`, `.strict()`. Depois do login, `MinhaAgendaClient.listProfessionals` chama `/employees/professionals?includeDeleted=false`, e `resolveDiscoveredEmployeeId` (`config.ts`) grava o `id` de um profissional único, recusando com `MINHA_AGENDA_PROFESSIONAL_NOT_FOUND` (zero) ou `MINHA_AGENDA_MULTIPLE_PROFESSIONALS` (mais de um), os dois com 422. O status da origem nunca vira o status da resposta: `MINHA_AGENDA_AUTH_FAILED` sai sempre 422, `MINHA_AGENDA_HTTP_ERROR`/`MINHA_AGENDA_UNREACHABLE`/`MINHA_AGENDA_TIMEOUT`/`MINHA_AGENDA_INVALID_RESPONSE` saem 502 ou 504, e nenhum código `MINHA_AGENDA_*` sai 401 ou 403 (`client.ts`). O BFF repassa o código em `details.upstreamCode` sob `UPSTREAM_ERROR`, sem tradução. `ConnectSourceScreen.tsx` tem só os campos de e-mail e senha, e `connectErrorMessage` lê `details.upstreamCode` para dar um texto de produto distinto por classe. Na mesma transação de `completeOnce` (`import-completion-service.ts`) que grava `completedAt`, a linha `IntegrationConnection` `MINHA_AGENDA` do negócio é apagada (vault Q894), com `ImportSession.connectionId` desfeito antes por causa do FK `Restrict`. **Limite declarado (D-077):** `POST /internal/calendar/integration/connect` e `POST /v1/calendar/integration/connect` aceitam conectar depois da conclusão e gravam a credencial de novo, sem restrição — quem recusa é `POST /v1/calendar/imports`, com `409 IMPORT_ALREADY_COMPLETED`, porque o direito único de importação já foi consumido, não a conexão; impedir a reconexão pós-conclusão é decisão de produto fora deste Goal. Decisão completa: [D-077](DECISIONS.md).
+
+### Controles negativos, depois da última edição de código, saída real
+
+Os seis controles do §9 do Goal, cada um aplicado num arquivo já entregue por WU-01/WU-02/WU-03/WU-04 e revertido no mesmo passo (diff conferido idêntico ao original depois da reversão):
+
+1. **O cliente volta a usar o status da origem em `MINHA_AGENDA_AUTH_FAILED`** (`client.ts`, o terceiro argumento de `AppError` trocado de `422` para `response.status` no ramo 400/401), `npx vitest run --dir tests/unit tests/unit/goal060-minha-agenda-connection.test.ts` (`apps/scheduling-service`):
+```
+ FAIL  tests/unit/goal060-minha-agenda-connection.test.ts > Goal060: conexão Minha Agenda com e-mail e senha > §7.2: classes de erro, nunca 401/403, nenhuma falha grava > token 400 vira MINHA_AGENDA_AUTH_FAILED 422
+AssertionError: expected 400 to be 422
+ FAIL  tests/unit/goal060-minha-agenda-connection.test.ts > ... > token 401 vira MINHA_AGENDA_AUTH_FAILED 422
+AssertionError: expected 401 to be 422
+ FAIL  tests/unit/goal060-minha-agenda-connection.test.ts > ... > nenhuma classe de erro sai com status 401 ou 403
+AssertionError: expected 401 not to be 401
+ Test Files  1 failed (1)
+      Tests  3 failed | 16 passed (19)
+```
+2. **`connectErrorMessage` volta a comparar `error.code`** (`ConnectSourceScreen.tsx`, `switch (upstreamCode(error))` trocado por `switch (error.code)`), `npx vitest run tests/goal060-connect-source.test.tsx` (`apps/frontend`):
+```
+ FAIL  tests/goal060-connect-source.test.tsx > ... > 'MINHA_AGENDA_AUTH_FAILED' (upstream 422) vira texto de produto próprio
+Expected: "Não foi possível entrar no Minha Agenda com esses dados. Confira o e-mail e a senha."
+Received: "Não foi possível conectar ao Minha Agenda agora. Tente novamente."
+ FAIL  tests/goal060-connect-source.test.tsx > ... > 'MINHA_AGENDA_PROFESSIONAL_NOT_FOUND' (upstream 422) vira texto de produto próprio
+Expected: "Não encontramos nenhum profissional cadastrado nessa conta do Minha Agenda."
+Received: "Não foi possível conectar ao Minha Agenda agora. Tente novamente."
+ Test Files  1 failed (1)
+      Tests  9 failed | 5 passed (14)
+```
+3. **O leitor volta a usar o `baseUrl` gravado** (`config.ts`, `connectionConfigSchema` ganha `baseUrl: z.string().min(1).optional()` e o retorno de `parseMinhaAgendaConnection` usa `config.data.baseUrl ?? settings.baseUrl`), mesmo comando do controle 1:
+```
+ FAIL  tests/unit/goal060-minha-agenda-connection.test.ts > ... > §7.4: linha antiga continua legível com a configuração do sistema > IntegrationConnection gravada com baseUrl do portal e basicAuth na credencial é lida com o endereço e o Basic do sistema
+AssertionError: expected false to be true
+ Test Files  1 failed (1)
+      Tests  1 failed | 18 passed (19)
+```
+4. **A descoberta passa a aceitar o primeiro de vários profissionais** (`config.ts`, `resolveDiscoveredEmployeeId` perde o ramo `professionals.length > 1`), mesmo comando:
+```
+ FAIL  tests/unit/goal060-minha-agenda-connection.test.ts > ... > §7.3: descoberta do profissional > dois profissionais vira MINHA_AGENDA_MULTIPLE_PROFESSIONALS 422, sem gravar
+AssertionError: expected 200 to be 422
+ Test Files  1 failed (1)
+      Tests  1 failed | 18 passed (19)
+```
+5. **O schema do corpo deixa de ser estrito** (`apps/scheduling-service/src/modules/internal-api/routes.ts`, `.strict()` removido de `integrationConnectBodySchema`), mesmo comando:
+```
+ FAIL  tests/unit/goal060-minha-agenda-connection.test.ts > ... > §7.1: corpo novo, endereço e cliente OAuth do sistema > corpo com campo antigo (basicAuth a mais) é recusado com VALIDATION_ERROR, sem fetch e sem escrita
+AssertionError: expected 500 to be 400
+ FAIL  ... corpo com campo antigo (enableWrites a mais) ...
+ FAIL  ... corpo com campo antigo (baseUrl a mais) ...
+ Test Files  1 failed (1)
+      Tests  3 failed | 16 passed (19)
+```
+6. **A conclusão deixa de apagar a linha** (`import-completion-service.ts`, o filtro de `integrationConnection.deleteMany` trocado de `tenantId: context.tenantId` para um tenant que não existe em nenhum teste, de modo que a chamada não apague nada), `SCHEDULING_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_scheduling_test" npx vitest run --dir tests/integration tests/integration/goal060-import-completion-credential.test.ts` (`apps/scheduling-service`, contra PostgreSQL real):
+```
+ FAIL  ... > deletes the MINHA_AGENDA connection of the tenant in the same transaction that completes the session
+AssertionError: expected { ... } to be null
+ FAIL  ... > does not fail when the completion is repeated after the connection is already gone
+ FAIL  ... > feeds the calendar overview's integration: null after completion
+AssertionError: expected { ... } to be null
+ Test Files  1 failed (1)
+      Tests  3 failed | 2 passed (5)
+```
+
+Depois de cada reversão (arquivo conferido idêntico ao original), a suíte alvo voltou a passar por inteiro: `tests/unit/goal060-minha-agenda-connection.test.ts` — **19**/**19** (`apps/scheduling-service`, controles 1, 3, 4 e 5); `tests/goal060-connect-source.test.tsx` — **14**/**14** (`apps/frontend`, controle 2); `tests/integration/goal060-import-completion-credential.test.ts` — **5**/**5** contra PostgreSQL real (`apps/scheduling-service`, controle 6).
+
+### Execução final desta rodada (WU-05), sobre a árvore final
+
+Esta Work Unit é de controles negativos e documentação: os passos agregadores `validate:core`, `validate:ui` e `validate:integration` (com os passos das outras apps e serviços) ficam para as unidades determinísticas seguintes do plano (WU-06 a WU-19). O que esta Work Unit executou e confere, sobre a árvore final, depois dos seis controles revertidos:
+
+- `npm run typecheck` e `npm run lint` de `apps/scheduling-service`, `apps/bff` e `apps/frontend`, exit 0 nos seis.
+- `apps/scheduling-service`: `npx vitest run --dir tests/unit` (suíte completa) — **30** arquivos, **410** testes passando, **0** falhando — inclusive os **19** testes de `tests/unit/goal060-minha-agenda-connection.test.ts` do §7.1 a §7.4.
+- `apps/scheduling-service` (integração): `SCHEDULING_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_scheduling_test" npx vitest run --dir tests/integration tests/integration/goal060-import-completion-credential.test.ts`, contra um PostgreSQL descartável provisionado por `scripts/provision-scheduling-test-database.mjs` — **5**/**5** testes do §7.5.
+- `apps/bff`: `npx vitest run` (arquivos locais, sem integração) — **15** arquivos passando, **32** pulados (**122** testes passando, **258** pulados) — os testes de integração de `tests/goal060-integration-connect.test.ts` (§7.6, **6** testes) ficam pulados sem `BFF_RUN_INTEGRATION_TESTS`/`BFF_TEST_DATABASE_URL`, como os demais arquivos de integração do app; a suíte de integração roda dentro de `validate:integration` (WU-06 a WU-19).
+- `apps/frontend`: `npx vitest run` (suíte completa) — **77** arquivos, **718** testes passando, **0** falhando (baseline do review070: **76** arquivos, **704** testes; a diferença é o arquivo novo `tests/goal060-connect-source.test.tsx`, **14** testes do §7.7).
+- `npm run test:gate` — **233**/**233**, sem teste a menos que a baseline (**233**, review070) — este Goal não adiciona nem altera arquivo de `scripts/tests/`.
+- `node scripts/final-production-audit.mjs` — **34** checks, **33** `passed`, **1** `skipped` (`production_health`, não solicitado), **0** `failed`; `production_config_env_example_parity` e `production_config_render_env_coverage` passam com as duas chaves novas do §1 declaradas em `env.ts`, `.env.example` e `render.yaml`, sem valor real do cliente OAuth no diff.
+- `BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_bff_test" node scripts/goal033-authenticated-ui-rehearsal.mjs` — **65** testes, **0** retentativas, exit 0. A contagem não muda em relação à baseline (**65**, D-074/D-076): este Goal não altera nenhuma tela ou rota medida pelo gate autenticado — a tela de conexão (`ConnectSourceScreen`) fica fora das sete rotas logadas que `authenticated-matrix.spec.ts` mede.
+
+**Nota de fechamento ([review060](reviews/060-review.md)):** as unidades determinísticas da rodada 4 (WU-06 a WU-19) rodaram sobre a árvore aceita, todas com exit 0: `validate:core` com **17** passos, **15** `passed`, **2** `skipped` (`test:bff`, `test:health-worker`) e **0** `failed`; `validate:ui` com **169** testes passando, **21** pulados e **0** retentativas; `validate:integration` com **35**/**35** passos, inclusive `test:bff-integration` (onde rodam os **6** testes de `goal060-integration-connect`, §7.6) e `test:scheduling-integration` (§7.5), e `rehearse:goal033-authenticated-ui` com **65** testes e **0** retentativas. Testes dirigidos da mesma rodada: `goal060-connect-source` **14**/**14**; `goal060-minha-agenda-connection` **19**/**19**; `test:gate` **233**/**233**.
+
+### O que esta seção não prova
+
+**Não prova** que o login e a descoberta do profissional funcionam contra a Minha Agenda real — isso é a conferência humana do §8 do Goal, e **não foi feita** por este Goal; que a análise e a execução da importação terminam para uma conta real (Goal061); que o caminho e a forma de `/employees/professionals` batem com a API real, além do que o mapa histórico documenta; que a tela bate com o protótipo aprovado (conferência humana, Goal069); que a credencial fica apagada depois da conclusão — uma reconexão depois disso grava a credencial de novo, sem restrição (limite declarado da D-077).
+
+### Veredito recontado
+
+O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO`** — os mesmos números de §37. Nenhum achado de A-01 a A-24 foi tocado, corrigido, reclassificado ou reaberto: esta seção só acrescenta o registro do diff060, e **QA IM-01/QA IM-02 corrigidos** são do `QA_LOCAL_REVIEW`, fora dessa enumeração.

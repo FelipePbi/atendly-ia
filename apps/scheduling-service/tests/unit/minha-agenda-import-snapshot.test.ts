@@ -18,12 +18,8 @@ function config(): MinhaAgendaConnectionConfig {
     username: "user",
     password: "secret",
     employeeId: 7,
-    paymentMethod: "dinheiro",
-    modelVersion: 2,
     timeoutMs: 1_000,
     refreshSkewSeconds: 300,
-    enableWrites: false,
-    bufferBetweenServicesMinutes: 0,
   };
 }
 

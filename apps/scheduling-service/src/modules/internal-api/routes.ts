@@ -52,7 +52,12 @@ import {
 } from "../calendar/time-blocks.js";
 import { AtendlyCustomerService } from "../customers/atendly-customer-service.js";
 import { encryptIntegrationCredentials } from "../integrations/credentials.js";
-import { parseMinhaAgendaConnection } from "../integrations/minha-agenda/config.js";
+import { createMinhaAgendaClient } from "../integrations/minha-agenda/client.js";
+import {
+  minhaAgendaSystemSettings,
+  parseMinhaAgendaConnection,
+  resolveDiscoveredEmployeeId,
+} from "../integrations/minha-agenda/config.js";
 import { todayInTimeZone } from "../integrations/minha-agenda/date-time.js";
 import {
   type GetImportSnapshotInput,
@@ -402,23 +407,16 @@ const blockSeriesEditBodySchema = z.object({
   rule: z.object(blockSeriesRuleShape).partial(),
   ...blockSeriesDecisionShape,
 });
-const integrationBodySchema = z.object({
-  credentials: z.object({
-    basicAuth: z.string().min(1).max(2_000),
-    username: z.string().min(1).max(500),
+// Conexao com so e-mail e senha (Goal060 §2): endereco e cliente OAuth vem do
+// sistema, o profissional e descoberto (§3). `.strict()` recusa qualquer
+// campo a mais — inclusive o envelope antigo `credentials`/`configuration` —
+// sem chamada a origem e sem escrita.
+const integrationConnectBodySchema = z
+  .object({
+    email: z.string().trim().min(1).max(320),
     password: z.string().min(1).max(500),
-  }),
-  configuration: z.object({
-    baseUrl: z.string().url(),
-    employeeId: z.number().int().positive(),
-    paymentMethod: z.string().min(1).max(100),
-    modelVersion: z.number().int().positive().default(2),
-    timeoutMs: z.number().int().positive().max(60_000).default(10_000),
-    refreshSkewSeconds: z.number().int().nonnegative().max(3_600).default(300),
-    enableWrites: z.boolean().default(false),
-    bufferBetweenServicesMinutes: z.number().int().nonnegative().default(0),
-  }),
-});
+  })
+  .strict();
 
 // --- Importacao unica (Goal010, WU-08) -------------------------------------
 const importCategorySchema = z.enum([
@@ -1290,7 +1288,7 @@ export async function registerManagementRoutes(
     internalOnly,
     async (request) => {
       const context = currentInternalContext(request);
-      const body = parse(integrationBodySchema, request.body);
+      const body = parse(integrationConnectBodySchema, request.body);
       // A conexao existe agora **so** para o ciclo da importacao unica:
       // guardar e testar a credencial da origem. Ela nao muda a fonte da
       // agenda operacional e nao e mais exigida para operar a agenda.
@@ -1299,23 +1297,28 @@ export async function registerManagementRoutes(
       // que opera na Agenda Atendly — que e todo negocio novo — nunca
       // conseguiria conectar a origem que ele quer importar.
       await requireCalendar(prisma, context.tenantId);
-      if (body.configuration.enableWrites) {
-        // Corte do writer remoto (Goal010 §6): a origem de importacao e
-        // somente leitura. Guardar uma credencial que se declara de escrita
-        // seria guardar uma promessa que o produto nao cumpre mais.
-        throw new AppError(
-          "INTEGRATION_WRITES_NOT_SUPPORTED",
-          "The Minha Agenda connection is read-only: it exists only to import into the Atendly calendar.",
-          409,
-        );
-      }
-      const provider = new MinhaAgendaImportSourceReader({
+      // Endereco e cliente OAuth do sistema (Goal060 §1): sem a chave de
+      // ambiente, a recusa acontece aqui, antes de qualquer chamada a origem
+      // e antes de qualquer escrita.
+      const settings = minhaAgendaSystemSettings();
+      const client = createMinhaAgendaClient({
         tenantId: context.tenantId,
-        ...body.credentials,
-        ...body.configuration,
+        baseUrl: settings.baseUrl,
+        basicAuth: settings.basicAuth,
+        username: body.email,
+        password: body.password,
+        timeoutMs: settings.timeoutMs,
+        refreshSkewSeconds: settings.refreshSkewSeconds,
       });
-      await provider.listServices();
+      // Login e descoberta do profissional (Goal060 §3) antes de qualquer
+      // escrita: nenhuma falha daqui em diante grava linha nova nem altera a
+      // existente.
+      const employeeId = resolveDiscoveredEmployeeId(
+        await client.listProfessionals(),
+      );
       const now = new Date();
+      const credentials = { email: body.email, password: body.password };
+      const config = { employeeId };
       await prisma.integrationConnection.upsert({
         where: {
           tenantId_provider: {
@@ -1328,17 +1331,17 @@ export async function registerManagementRoutes(
           provider: "MINHA_AGENDA",
           status: "CONNECTED",
           credentialsEncrypted: Uint8Array.from(
-            encryptIntegrationCredentials(context.tenantId, body.credentials),
+            encryptIntegrationCredentials(context.tenantId, credentials),
           ),
-          config: body.configuration,
+          config,
           lastSuccessfulSyncAt: now,
         },
         update: {
           status: "CONNECTED",
           credentialsEncrypted: Uint8Array.from(
-            encryptIntegrationCredentials(context.tenantId, body.credentials),
+            encryptIntegrationCredentials(context.tenantId, credentials),
           ),
-          config: body.configuration,
+          config,
           lastSuccessfulSyncAt: now,
           lastErrorAt: null,
           lastErrorCode: null,

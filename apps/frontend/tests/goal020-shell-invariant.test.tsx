@@ -220,19 +220,12 @@ describe("ShellConfigProvider + conexão da origem não excede a profundidade de
 
     await screen.findByRole("heading", { name: "Entre no Minha Agenda" });
     await user.type(
-      screen.getByLabelText("Usuário ou e-mail do Minha Agenda"),
+      screen.getByLabelText("E-mail do Minha Agenda"),
       "camila@example.com",
     );
-    await user.type(screen.getByLabelText("Senha"), "super-secret");
-    await user.type(screen.getByLabelText(/^Chave de acesso/), "token-abc");
-    await user.type(
-      screen.getByLabelText("Endereço da sua conta no Minha Agenda"),
-      "https://camila.minhaagenda.com.br",
-    );
-    await user.type(screen.getByLabelText("Código do profissional"), "42");
-    await user.type(screen.getByLabelText(/^Forma de pagamento padrão/), "Dinheiro");
+    await user.type(screen.getByLabelText("Senha do Minha Agenda"), "super-secret");
 
-    expect(screen.getByLabelText("Senha")).toHaveValue("super-secret");
+    expect(screen.getByLabelText("Senha do Minha Agenda")).toHaveValue("super-secret");
     expect(startImport).not.toHaveBeenCalled();
   });
 });

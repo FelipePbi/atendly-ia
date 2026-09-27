@@ -43,6 +43,14 @@ const envSchema = z.object({
   BFF_COMMAND_TOKEN: serviceTokenEnv(),
   AI_ORCHESTRATOR_COMMAND_TOKEN: serviceTokenEnv(),
   INTEGRATION_CREDENTIALS_KEY: stringEnv(),
+  // Endereco publico da origem Minha Agenda (Goal060 §1): default e o host
+  // real de producao, nao segredo. O leitor da origem usa sempre este valor,
+  // mesmo quando a linha gravada guarda um `baseUrl` antigo do portal.
+  MINHA_AGENDA_API_BASE_URL: stringEnv("https://api.minhaagendaapp.com.br"),
+  // Cabecalho Basic do cliente OAuth do portal (Goal060 §1): igual para todo
+  // negocio, nunca por tenant. Sem valor, conectar a Minha Agenda sai
+  // MINHA_AGENDA_NOT_CONFIGURED e o resto do servico sobe normalmente.
+  MINHA_AGENDA_OAUTH_CLIENT_CREDENTIAL: stringEnv(),
   // Politica unica de escrita da agenda (Goal008): quantas vezes uma
   // transacao Serializable e tentada antes de devolver erro proprio diante de
   // aborto serializavel (40001/40P01/P2034). Uma tentativa e o comportamento

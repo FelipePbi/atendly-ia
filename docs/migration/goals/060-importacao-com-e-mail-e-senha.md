@@ -1,6 +1,6 @@
 # Goal 060 — Importação com e-mail e senha
 
-**Status: READY.** Preparado em 2026-09-27 pelo Tech Lead Agent após [Goal070 ACCEPTED](../reviews/070-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED** no [review060](../reviews/060-review.md), rodada 4 de 4 (rodadas 1, 2 e 3 `CHANGES_REQUIRED` com 4, 3 e 3 blockers). Preparado em 2026-09-27 pelo Tech Lead Agent após [Goal070 ACCEPTED](../reviews/070-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: OPUS_MEDIUM
 

@@ -1,6 +1,6 @@
 /**
  * Reescopo dos endpoints de integração para o ciclo da importação (Goal010,
- * §6).
+ * §6), agora com o corpo de e-mail e senha do Goal060 (§2).
  *
  * O que está em prova aqui é **alcançabilidade**: depois do corte do writer
  * remoto todo negócio opera na Agenda Atendly, e era exatamente isso que o
@@ -8,10 +8,10 @@
  * a origem — e sem `IntegrationConnection` nenhuma sessão de importação
  * começa, o que deixaria o ciclo novo inteiro inalcançável na fiação real.
  *
- * A rede da origem é a única coisa dublada: `listServices()` é o teste de
- * credencial do `connect`, e o que interessa provar é o efeito no banco e a
- * porta aberta para a importação, não o HTTP do Minha Agenda (coberto em
- * `minha-agenda-client.test.ts`).
+ * A origem é sempre um dublê de `fetch` (Goal060): o login e a descoberta do
+ * profissional são cobertos em detalhe por
+ * `goal060-minha-agenda-connection.test.ts`; aqui o que interessa provar é o
+ * efeito no banco e a porta aberta para a importação.
  */
 import "./support/test-env.js";
 
@@ -28,27 +28,6 @@ import { AppError } from "../../src/shared/errors/app-error.js";
 import { createDatabaseDouble } from "./support/database-double.js";
 import { TEST_INTERNAL_SERVICE_TOKEN } from "./support/test-env.js";
 
-const origin = vi.hoisted(() => ({ credentialChecks: [] as unknown[] }));
-
-vi.mock(
-  "../../src/modules/integrations/minha-agenda/import-source-reader.js",
-  async () => {
-    const actual = await vi.importActual<
-      typeof import("../../src/modules/integrations/minha-agenda/import-source-reader.js")
-    >("../../src/modules/integrations/minha-agenda/import-source-reader.js");
-    return {
-      ...actual,
-      MinhaAgendaImportSourceReader: class {
-        constructor(private readonly config: { tenantId: string }) {}
-        async listServices() {
-          origin.credentialChecks.push(this.config);
-          return [];
-        }
-      },
-    };
-  },
-);
-
 type Database = ReturnType<typeof createDatabaseDouble>;
 
 const tenantId = "tenant-a";
@@ -60,16 +39,8 @@ const bffToken = deriveInternalToken(
 );
 
 const connectPayload = {
-  credentials: {
-    basicAuth: "super-secret-basic-auth",
-    username: "minha-agenda-user",
-    password: "super-secret-password",
-  },
-  configuration: {
-    baseUrl: "https://minha-agenda.example.com",
-    employeeId: 1,
-    paymentMethod: "cash",
-  },
+  email: "dono@example.com",
+  password: "super-secret-password",
 };
 
 function headers(extra: Record<string, string> = {}) {
@@ -91,6 +62,25 @@ function seedAtendlyCalendar(db: Database) {
     source: "ATENDLY",
     timezone: "America/Sao_Paulo",
   } as never);
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function tokenResponse(): Response {
+  return jsonResponse({
+    access_token: "tok-123",
+    token_type: "bearer",
+    expires_in: 3_600,
+  });
+}
+
+function professionalsResponse(ids: number[]): Response {
+  return jsonResponse(ids.map((id) => ({ id })));
 }
 
 async function buildTestApp(client: PrismaClient): Promise<FastifyInstance> {
@@ -115,22 +105,28 @@ async function buildTestApp(client: PrismaClient): Promise<FastifyInstance> {
   return app;
 }
 
-describe("integração Minha Agenda reescopada para a importação (Goal010 §6)", () => {
+describe("integração Minha Agenda reescopada para a importação (Goal010 §6, Goal060 §2)", () => {
   let db: Database;
   let app: FastifyInstance;
+  let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
-    origin.credentialChecks.length = 0;
     db = createDatabaseDouble();
     app = await buildTestApp(db.client as unknown as PrismaClient);
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
   });
 
   afterEach(async () => {
     await app.close();
+    vi.unstubAllGlobals();
   });
 
   it("conecta a origem com a agenda operacional na Atendly e abre caminho para a importação", async () => {
     seedAtendlyCalendar(db);
+    fetchMock
+      .mockResolvedValueOnce(tokenResponse())
+      .mockResolvedValueOnce(professionalsResponse([42]));
 
     const connected = await app.inject({
       method: "POST",
@@ -145,12 +141,15 @@ describe("integração Minha Agenda reescopada para a importação (Goal010 §6)
       source: "ATENDLY",
       integration: { status: "CONNECTED" },
     });
-    expect(origin.credentialChecks).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     const stored = db.client.integrationConnection.rows[0];
     expect(stored).toMatchObject({ tenantId, provider: "MINHA_AGENDA" });
+    // O profissional descoberto é gravado, e nada mais (Goal060 §1/§2).
+    expect(stored.config).toEqual({ employeeId: 42 });
     // Segredo guardado cifrado: nunca em texto puro na linha.
+    expect(JSON.stringify(stored.config)).not.toContain(connectPayload.email);
     expect(JSON.stringify(stored.config)).not.toContain(
-      connectPayload.credentials.password,
+      connectPayload.password,
     );
 
     // É esta a ponta que estava quebrada: com a conexão gravada, a sessão de
@@ -171,28 +170,11 @@ describe("integração Minha Agenda reescopada para a importação (Goal010 §6)
     expect(db.client.importSession.rows).toHaveLength(1);
   });
 
-  it("recusa guardar credencial de origem que se declara de escrita", async () => {
-    seedAtendlyCalendar(db);
-
-    const response = await app.inject({
-      method: "POST",
-      url: "/internal/calendar/integration/connect",
-      headers: headers(),
-      payload: {
-        ...connectPayload,
-        configuration: { ...connectPayload.configuration, enableWrites: true },
-      },
-    });
-
-    expect(response.statusCode).toBe(409);
-    expect(response.json().error.code).toBe("INTEGRATION_WRITES_NOT_SUPPORTED");
-    // Nada gravado, e a origem nem chegou a ser chamada.
-    expect(db.client.integrationConnection.rows).toHaveLength(0);
-    expect(origin.credentialChecks).toHaveLength(0);
-  });
-
   it("desconectar a origem não desativa a agenda operacional", async () => {
     seedAtendlyCalendar(db);
+    fetchMock
+      .mockResolvedValueOnce(tokenResponse())
+      .mockResolvedValueOnce(professionalsResponse([1]));
     await app.inject({
       method: "POST",
       url: "/internal/calendar/integration/connect",

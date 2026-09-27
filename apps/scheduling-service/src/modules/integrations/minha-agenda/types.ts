@@ -91,6 +91,17 @@ export type MinhaAgendaAppointment = z.infer<
   typeof minhaAgendaAppointmentSchema
 >;
 
+// Descoberta do profissional (Goal060 §3): so o `id`, unico campo que a
+// resolucao de negocio usa. `.passthrough()` no mesmo padrao dos demais.
+export const minhaAgendaProfessionalSchema = z
+  .object({
+    id: z.number().int().positive(),
+  })
+  .passthrough();
+export type MinhaAgendaProfessional = z.infer<
+  typeof minhaAgendaProfessionalSchema
+>;
+
 export const workScheduleSchema = z.record(
   z.string(),
   z.union([z.string(), z.number(), z.boolean()]).nullish(),

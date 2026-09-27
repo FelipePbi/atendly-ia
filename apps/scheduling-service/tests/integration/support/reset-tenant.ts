@@ -48,4 +48,5 @@ export async function resetTenant(
   await prisma.importSessionCategory.deleteMany({ where: { tenantId } });
   await prisma.importSession.deleteMany({ where: { tenantId } });
   await prisma.externalEntityMap.deleteMany({ where: { tenantId } });
+  await prisma.integrationConnection.deleteMany({ where: { tenantId } });
 }

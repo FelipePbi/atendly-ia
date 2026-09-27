@@ -10,81 +10,72 @@ import { newIdempotencyKey } from "./idempotency";
 import { ImportsPage } from "./ImportsLayout";
 import type { ImportState } from "./types";
 
-type FieldName =
-  | "username"
-  | "password"
-  | "basicAuth"
-  | "baseUrl"
-  | "employeeId"
-  | "paymentMethod";
+type FieldName = "email" | "password";
 
 type FieldErrors = Partial<Record<FieldName, string>>;
 
 type FormValues = Record<FieldName, string>;
 
 const EMPTY_FORM: FormValues = {
-  username: "",
+  email: "",
   password: "",
-  basicAuth: "",
-  baseUrl: "",
-  employeeId: "",
-  paymentMethod: "",
 };
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function validate(values: FormValues): FieldErrors {
   const errors: FieldErrors = {};
-  if (!values.username.trim()) {
-    errors.username = "Informe o usuário ou e-mail do Minha Agenda.";
+  if (!values.email.trim()) {
+    errors.email = "Informe o e-mail do Minha Agenda.";
+  } else if (!EMAIL_PATTERN.test(values.email.trim())) {
+    errors.email = "Informe um e-mail válido.";
   }
   if (!values.password) {
     errors.password = "Informe a senha do Minha Agenda.";
   }
-  if (!values.basicAuth.trim()) {
-    errors.basicAuth = "Informe a chave de acesso do Minha Agenda.";
-  }
-  if (!values.baseUrl.trim()) {
-    errors.baseUrl = "Informe o endereço da sua conta no Minha Agenda.";
-  } else {
-    try {
-      new URL(values.baseUrl.trim());
-    } catch {
-      errors.baseUrl = "Informe um endereço válido, começando com https://.";
-    }
-  }
-  const employeeId = Number(values.employeeId);
-  if (
-    !values.employeeId.trim() ||
-    !Number.isInteger(employeeId) ||
-    employeeId <= 0
-  ) {
-    errors.employeeId =
-      "Informe o código do profissional no Minha Agenda (um número inteiro maior que zero).";
-  }
-  if (!values.paymentMethod.trim()) {
-    errors.paymentMethod = "Informe a forma de pagamento padrão.";
-  }
   return errors;
+}
+
+function upstreamCode(error: BffHttpError): string | undefined {
+  const details = error.details;
+  if (!details || typeof details !== "object") return undefined;
+  const value = (details as { upstreamCode?: unknown }).upstreamCode;
+  return typeof value === "string" ? value : undefined;
 }
 
 /**
  * Nunca repete `error.message` da origem: a causa real fica no BFF/scheduling
- * (`MINHA_AGENDA_*`), e o que chega aqui é sempre linguagem de produto.
+ * (`MINHA_AGENDA_*`, repassado em `error.details.upstreamCode` sob
+ * `error.code: "UPSTREAM_ERROR"`), e o que chega aqui é sempre linguagem de
+ * produto, sem token, endereço, HTTP nem código cru.
  */
 function connectErrorMessage(error: unknown): string {
   if (error instanceof BffHttpError) {
-    switch (error.code) {
-      case "MINHA_AGENDA_AUTH_FAILED":
-        return "Não foi possível entrar no Minha Agenda com esses dados. Confira o usuário, a senha e a chave de acesso.";
-      case "MINHA_AGENDA_TIMEOUT":
-      case "MINHA_AGENDA_HTTP_ERROR":
-      case "MINHA_AGENDA_INVALID_RESPONSE":
-        return "O Minha Agenda não respondeu como esperado agora. Tente novamente em alguns minutos.";
-      case "IMPORT_ALREADY_COMPLETED":
-        return "Este negócio já concluiu sua única importação do Minha Agenda.";
-      case "VALIDATION_ERROR":
-        return "Confira os dados preenchidos e tente novamente.";
-      default:
-        return "Não foi possível conectar ao Minha Agenda agora. Tente novamente.";
+    if (error.code === "IMPORT_ALREADY_COMPLETED") {
+      return "Este negócio já concluiu sua única importação do Minha Agenda.";
+    }
+    if (error.code === "VALIDATION_ERROR") {
+      return "Confira os dados preenchidos e tente novamente.";
+    }
+    if (error.code === "UPSTREAM_ERROR") {
+      switch (upstreamCode(error)) {
+        case "MINHA_AGENDA_AUTH_FAILED":
+          return "Não foi possível entrar no Minha Agenda com esses dados. Confira o e-mail e a senha.";
+        case "MINHA_AGENDA_PROFESSIONAL_NOT_FOUND":
+          return "Não encontramos nenhum profissional cadastrado nessa conta do Minha Agenda.";
+        case "MINHA_AGENDA_MULTIPLE_PROFESSIONALS":
+          return "Encontramos mais de um profissional cadastrado nessa conta do Minha Agenda. Por enquanto, a Atendly importa a agenda de um profissional só.";
+        case "MINHA_AGENDA_TIMEOUT":
+        case "MINHA_AGENDA_UNREACHABLE":
+        case "MINHA_AGENDA_HTTP_ERROR":
+        case "MINHA_AGENDA_INVALID_RESPONSE":
+          return "O Minha Agenda não respondeu agora. Nada foi salvo. Tente novamente em alguns minutos.";
+        case "MINHA_AGENDA_NOT_CONFIGURED":
+        case "INTEGRATION_CONFIGURATION_INVALID":
+          return "A importação está indisponível agora por uma falha da Atendly, não por causa dos dados informados. Tente novamente mais tarde.";
+        default:
+          return "Não foi possível conectar ao Minha Agenda agora. Tente novamente.";
+      }
     }
   }
   return "Não foi possível conectar ao Minha Agenda agora. Tente novamente.";
@@ -115,19 +106,11 @@ export function ConnectSourceScreen({
     if (Object.keys(errors).length > 0) return;
     setSubmitting(true);
     setFormError(null);
-    const sourceAccountId = values.username.trim();
+    const sourceAccountId = values.email.trim();
     try {
       await getProductServices().calendar.connectIntegration({
-        credentials: {
-          basicAuth: values.basicAuth.trim(),
-          password: values.password,
-          username: sourceAccountId,
-        },
-        configuration: {
-          baseUrl: values.baseUrl.trim(),
-          employeeId: Number(values.employeeId),
-          paymentMethod: values.paymentMethod.trim(),
-        },
+        email: sourceAccountId,
+        password: values.password,
       });
       await getProductServices().migration.startImport(
         {
@@ -174,30 +157,34 @@ export function ConnectSourceScreen({
         </ul>
       </div>
 
-      <form className="imports-panel" onSubmit={(event) => void handleSubmit(event)}>
+      <form
+        className="imports-panel"
+        noValidate
+        onSubmit={(event) => void handleSubmit(event)}
+      >
         <div className="imports-panel-header">
           <h2>Entre no Minha Agenda</h2>
           <p>
-            Usamos seu acesso só para ler seus dados durante a importação. Ele
-            não fica guardado.
+            Usamos seu e-mail e senha só para esta importação. Eles não ficam
+            guardados: são apagados assim que você concluir a importação.
           </p>
         </div>
         <div className="settings-form-grid">
-          <label className={`field${fieldErrors.username ? " field-error" : ""}`}>
-            <span className="label">Usuário ou e-mail do Minha Agenda</span>
+          <label className={`field${fieldErrors.email ? " field-error" : ""}`}>
+            <span className="label">E-mail do Minha Agenda</span>
             <input
               autoComplete="username"
               className="input"
-              type="text"
-              value={values.username}
-              onChange={(event) => setField("username", event.target.value)}
+              type="email"
+              value={values.email}
+              onChange={(event) => setField("email", event.target.value)}
             />
-            {fieldErrors.username && (
-              <span className="field-help">{fieldErrors.username}</span>
+            {fieldErrors.email && (
+              <span className="field-help">{fieldErrors.email}</span>
             )}
           </label>
           <label className={`field${fieldErrors.password ? " field-error" : ""}`}>
-            <span className="label">Senha</span>
+            <span className="label">Senha do Minha Agenda</span>
             <input
               autoComplete="current-password"
               className="input"
@@ -207,67 +194,6 @@ export function ConnectSourceScreen({
             />
             {fieldErrors.password && (
               <span className="field-help">{fieldErrors.password}</span>
-            )}
-          </label>
-          <label className={`field${fieldErrors.basicAuth ? " field-error" : ""}`}>
-            <span className="label">Chave de acesso (token de integração)</span>
-            <input
-              autoComplete="off"
-              className="input"
-              type="password"
-              value={values.basicAuth}
-              onChange={(event) => setField("basicAuth", event.target.value)}
-            />
-            <span className="field-help">
-              Encontrada nas configurações de integrações do Minha Agenda.
-            </span>
-            {fieldErrors.basicAuth && (
-              <span className="field-help">{fieldErrors.basicAuth}</span>
-            )}
-          </label>
-          <label className={`field is-wide${fieldErrors.baseUrl ? " field-error" : ""}`}>
-            <span className="label">Endereço da sua conta no Minha Agenda</span>
-            <input
-              autoComplete="off"
-              className="input"
-              placeholder="https://sua-empresa.minhaagenda.com.br"
-              type="text"
-              value={values.baseUrl}
-              onChange={(event) => setField("baseUrl", event.target.value)}
-            />
-            {fieldErrors.baseUrl && (
-              <span className="field-help">{fieldErrors.baseUrl}</span>
-            )}
-          </label>
-          <label className={`field${fieldErrors.employeeId ? " field-error" : ""}`}>
-            <span className="label">Código do profissional</span>
-            <input
-              autoComplete="off"
-              className="input"
-              inputMode="numeric"
-              type="number"
-              value={values.employeeId}
-              onChange={(event) => setField("employeeId", event.target.value)}
-            />
-            {fieldErrors.employeeId && (
-              <span className="field-help">{fieldErrors.employeeId}</span>
-            )}
-          </label>
-          <label className={`field${fieldErrors.paymentMethod ? " field-error" : ""}`}>
-            <span className="label">Forma de pagamento padrão</span>
-            <input
-              autoComplete="off"
-              className="input"
-              placeholder="Dinheiro, cartão..."
-              type="text"
-              value={values.paymentMethod}
-              onChange={(event) => setField("paymentMethod", event.target.value)}
-            />
-            <span className="field-help">
-              Usada nos atendimentos importados que não informam pagamento.
-            </span>
-            {fieldErrors.paymentMethod && (
-              <span className="field-help">{fieldErrors.paymentMethod}</span>
             )}
           </label>
         </div>

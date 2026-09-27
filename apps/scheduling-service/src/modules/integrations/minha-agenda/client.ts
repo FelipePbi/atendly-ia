@@ -1,12 +1,14 @@
 import type { z } from "zod";
 
 import { AppError } from "../../../shared/errors/app-error.js";
-import type { MinhaAgendaConnectionConfig } from "./config.js";
+import type { MinhaAgendaClientConfig } from "./config.js";
 import {
   type AppointmentRangeQuery,
   type MinhaAgendaAppointment,
   minhaAgendaAppointmentSchema,
   minhaAgendaAuthResponseSchema,
+  type MinhaAgendaProfessional,
+  minhaAgendaProfessionalSchema,
   type MinhaAgendaService,
   minhaAgendaServiceSchema,
   type WorkSchedule,
@@ -37,13 +39,27 @@ export interface MinhaAgendaSourceClient {
 export class MinhaAgendaClient implements MinhaAgendaSourceClient {
   private tokenCache: TokenCache | null = null;
 
-  constructor(private readonly config: MinhaAgendaConnectionConfig) {}
+  constructor(private readonly config: MinhaAgendaClientConfig) {}
 
   async listServices(): Promise<MinhaAgendaService[]> {
     return this.request(
       "/services",
       minhaAgendaServiceSchema.array(),
       "services",
+    );
+  }
+
+  /**
+   * Descoberta do profissional (Goal060 §3): mesmo cliente autenticado, sem
+   * outro filtro que a baseline (mapa historico) justifique.
+   */
+  async listProfessionals(): Promise<MinhaAgendaProfessional[]> {
+    return this.request(
+      "/employees/professionals",
+      minhaAgendaProfessionalSchema.array(),
+      "employees.professionals",
+      {},
+      { includeDeleted: false },
     );
   }
 
@@ -98,7 +114,7 @@ export class MinhaAgendaClient implements MinhaAgendaSourceClient {
     try {
       raw = await fetchJson(url, options, headers, this.config.timeoutMs);
     } catch (error) {
-      if (error instanceof AppError && error.statusCode === 401) {
+      if (error instanceof AppError && originStatus(error) === 401) {
         this.tokenCache = null;
         const retryHeaders = await this.authHeaders(true);
         if (options.idempotencyKey) {
@@ -139,27 +155,56 @@ export class MinhaAgendaClient implements MinhaAgendaSourceClient {
       password: this.config.password,
       grant_type: "password",
     });
-    const response = await fetch(
-      buildUrl(this.config.baseUrl, "/oauth/token", { isWeb: true }),
-      {
-        method: "POST",
-        headers: {
-          accept: "application/json, text/plain, */*",
-          authorization: auth,
-          app_is_web: "true",
-          "content-type": "application/x-www-form-urlencoded",
+
+    let response: Response;
+    try {
+      response = await fetch(
+        buildUrl(this.config.baseUrl, "/oauth/token", { isWeb: true }),
+        {
+          method: "POST",
+          headers: {
+            accept: "application/json, text/plain, */*",
+            authorization: auth,
+            app_is_web: "true",
+            "content-type": "application/x-www-form-urlencoded",
+          },
+          body,
+          signal: AbortSignal.timeout(this.config.timeoutMs),
         },
-        body,
-        signal: AbortSignal.timeout(this.config.timeoutMs),
-      },
-    );
+      );
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "TimeoutError") {
+        throw new AppError(
+          "MINHA_AGENDA_TIMEOUT",
+          "Minha Agenda authentication request timed out.",
+          504,
+        );
+      }
+      throw new AppError(
+        "MINHA_AGENDA_UNREACHABLE",
+        "Minha Agenda authentication endpoint could not be reached.",
+        502,
+      );
+    }
 
     if (!response.ok) {
       await response.text();
+      // Credencial recusada e origem indisponivel sao classes diferentes
+      // (Goal060 §4): so 400/401 e credencial errada. O status da origem
+      // nunca vira o nosso — ele fica em `details`, nunca no `statusCode`.
+      if (response.status === 400 || response.status === 401) {
+        throw new AppError(
+          "MINHA_AGENDA_AUTH_FAILED",
+          "Minha Agenda authentication failed: invalid credentials.",
+          422,
+          { originStatus: response.status },
+        );
+      }
       throw new AppError(
-        "MINHA_AGENDA_AUTH_FAILED",
-        `Minha Agenda authentication failed with HTTP ${response.status}.`,
-        response.status,
+        "MINHA_AGENDA_HTTP_ERROR",
+        `Minha Agenda authentication endpoint returned HTTP ${response.status}.`,
+        502,
+        { originStatus: response.status },
       );
     }
 
@@ -182,9 +227,15 @@ export class MinhaAgendaClient implements MinhaAgendaSourceClient {
 }
 
 export function createMinhaAgendaClient(
-  config: MinhaAgendaConnectionConfig,
+  config: MinhaAgendaClientConfig,
 ): MinhaAgendaClient {
   return new MinhaAgendaClient(config);
+}
+
+/** Status HTTP da origem que causou o erro, quando conhecido (Goal060 §4). Nunca o `statusCode` do próprio erro — esse nunca é 401/403 para código `MINHA_AGENDA_*`. */
+function originStatus(error: AppError): number | undefined {
+  const details = error.details as { originStatus?: number } | undefined;
+  return details?.originStatus;
 }
 
 /**
@@ -249,15 +300,22 @@ async function fetchJson(
         504,
       );
     }
-    throw error;
+    throw new AppError(
+      "MINHA_AGENDA_UNREACHABLE",
+      "Minha Agenda could not be reached.",
+      502,
+    );
   }
 
   const text = await response.text();
   if (!response.ok) {
+    // O status da origem nunca vira o nosso (Goal060 §4): fica em `details`,
+    // nunca no `statusCode` — por isso nenhum `MINHA_AGENDA_*` sai 401/403.
     throw new AppError(
       "MINHA_AGENDA_HTTP_ERROR",
       `Minha Agenda returned HTTP ${response.status}.`,
-      response.status,
+      502,
+      { originStatus: response.status },
     );
   }
   if (!text) return undefined;

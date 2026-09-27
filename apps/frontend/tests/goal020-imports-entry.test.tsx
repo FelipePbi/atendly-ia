@@ -136,23 +136,10 @@ function renderScreen() {
 
 async function fillCredentials(user: ReturnType<typeof userEvent.setup>) {
   await user.type(
-    await screen.findByLabelText("Usuário ou e-mail do Minha Agenda"),
+    await screen.findByLabelText("E-mail do Minha Agenda"),
     "camila@example.com",
   );
-  await user.type(screen.getByLabelText("Senha"), "super-secret");
-  await user.type(
-    screen.getByLabelText(/^Chave de acesso/),
-    "token-abc",
-  );
-  await user.type(
-    screen.getByLabelText("Endereço da sua conta no Minha Agenda"),
-    "https://camila.minhaagenda.com.br",
-  );
-  await user.type(screen.getByLabelText("Código do profissional"), "42");
-  await user.type(
-    screen.getByLabelText(/^Forma de pagamento padrão/),
-    "Dinheiro",
-  );
+  await user.type(screen.getByLabelText("Senha do Minha Agenda"), "super-secret");
 }
 
 beforeEach(() => {
@@ -247,16 +234,8 @@ describe("conexão da origem", () => {
 
     await waitFor(() =>
       expect(connectIntegration).toHaveBeenCalledWith({
-        credentials: {
-          basicAuth: "token-abc",
-          password: "super-secret",
-          username: "camila@example.com",
-        },
-        configuration: {
-          baseUrl: "https://camila.minhaagenda.com.br",
-          employeeId: 42,
-          paymentMethod: "Dinheiro",
-        },
+        email: "camila@example.com",
+        password: "super-secret",
       }),
     );
     await waitFor(() =>
@@ -269,12 +248,6 @@ describe("conexão da origem", () => {
         expect.any(String),
       ),
     );
-    // Nunca envia `configuration.enableWrites`: a origem é somente leitura e a
-    // interface não oferece escrita de volta.
-    const [connectInput] = connectIntegration.mock.calls[0] as [
-      { configuration: Record<string, unknown> },
-    ];
-    expect(connectInput.configuration).not.toHaveProperty("enableWrites");
     // Sessão recém-aberta está DRAFT: a próxima tela é a de análise/preview
     // (Goal020/WU-06), não o resumo genérico de retomada.
     await screen.findByRole("heading", { name: "Encontramos isto no Minha Agenda" });
@@ -285,10 +258,11 @@ describe("conexão da origem", () => {
     getImportState.mockResolvedValue(availableStateFixture());
     connectIntegration.mockRejectedValue(
       new BffHttpError({
-        code: "MINHA_AGENDA_AUTH_FAILED",
-        message: "Minha Agenda authentication failed with HTTP 401.",
+        code: "UPSTREAM_ERROR",
+        details: { upstreamCode: "MINHA_AGENDA_AUTH_FAILED" },
+        message: "The upstream Minha Agenda integration reported an error.",
         requestId: "req-1",
-        status: 401,
+        status: 422,
       }),
     );
     renderScreen();
@@ -298,11 +272,13 @@ describe("conexão da origem", () => {
 
     expect(
       await screen.findByText(
-        "Não foi possível entrar no Minha Agenda com esses dados. Confira o usuário, a senha e a chave de acesso.",
+        "Não foi possível entrar no Minha Agenda com esses dados. Confira o e-mail e a senha.",
       ),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("Minha Agenda authentication failed with HTTP 401."),
+      screen.queryByText(
+        "The upstream Minha Agenda integration reported an error.",
+      ),
     ).not.toBeInTheDocument();
     expect(startImport).not.toHaveBeenCalled();
   });
@@ -312,10 +288,11 @@ describe("conexão da origem", () => {
     getImportState.mockResolvedValue(availableStateFixture());
     connectIntegration.mockRejectedValue(
       new BffHttpError({
-        code: "MINHA_AGENDA_AUTH_FAILED",
+        code: "UPSTREAM_ERROR",
+        details: { upstreamCode: "MINHA_AGENDA_AUTH_FAILED" },
         message: "falhou",
         requestId: "req-1",
-        status: 401,
+        status: 422,
       }),
     );
     renderScreen();
@@ -327,7 +304,6 @@ describe("conexão da origem", () => {
     expect(window.localStorage.length).toBe(0);
     expect(window.sessionStorage.length).toBe(0);
     expect(window.location.href).not.toContain("super-secret");
-    expect(window.location.href).not.toContain("token-abc");
   });
 });
 
@@ -344,7 +320,7 @@ describe("sessão viva: retomar é o padrão, substituir é decisão explícita"
 
     await screen.findByRole("heading", { name: "Continuar importação" });
     expect(
-      screen.queryByLabelText("Usuário ou e-mail do Minha Agenda"),
+      screen.queryByLabelText("E-mail do Minha Agenda"),
     ).not.toBeInTheDocument();
   });
 
@@ -368,7 +344,7 @@ describe("sessão viva: retomar é o padrão, substituir é decisão explícita"
     ).toBeInTheDocument();
     // Ainda não abriu o formulário de conexão: a confirmação é uma etapa própria.
     expect(
-      screen.queryByLabelText("Usuário ou e-mail do Minha Agenda"),
+      screen.queryByLabelText("E-mail do Minha Agenda"),
     ).not.toBeInTheDocument();
 
     await user.click(
@@ -376,7 +352,7 @@ describe("sessão viva: retomar é o padrão, substituir é decisão explícita"
     );
 
     expect(
-      await screen.findByLabelText("Usuário ou e-mail do Minha Agenda"),
+      await screen.findByLabelText("E-mail do Minha Agenda"),
     ).toBeInTheDocument();
   });
 
@@ -398,7 +374,7 @@ describe("sessão viva: retomar é o padrão, substituir é decisão explícita"
     );
 
     expect(
-      screen.queryByLabelText("Usuário ou e-mail do Minha Agenda"),
+      screen.queryByLabelText("E-mail do Minha Agenda"),
     ).not.toBeInTheDocument();
     expect(startImport).not.toHaveBeenCalled();
   });

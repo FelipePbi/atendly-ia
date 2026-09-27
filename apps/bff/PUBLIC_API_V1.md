@@ -346,6 +346,25 @@ Nenhuma das duas altera `previewVersion`, item ou `status`: a leitura é pura e 
 
 Uma vez concluída (`POST .../complete`), a sessão é o único registro definitivo do negócio: `POST /v1/calendar/imports` para o mesmo negócio devolve `409 IMPORT_ALREADY_COMPLETED` — não existe uma segunda importação. Decisão já tomada em um item, ou item já resolvido pela execução, recusa uma segunda decisão com `409 IMPORT_ITEM_ALREADY_DECIDED`.
 
+### Conexão da origem: só e-mail e senha (Goal060)
+
+`POST /v1/calendar/integration/connect` aceita só `{ email, password }`, e nada além disso — um corpo no formato anterior a este Goal (`credentials: { basicAuth, username, password }`, `configuration: { baseUrl, employeeId, paymentMethod, ... }`) é recusado com `400 VALIDATION_ERROR`, sem nenhuma chamada ao Scheduling. Endereço da origem e cliente OAuth deixam de vir do corpo — são os do sistema, configuração de ambiente do Scheduling — e o profissional da conta não é mais informado: ele é descoberto por login, e a conta precisa ter exatamente um profissional.
+
+Recusa da conexão, por classe:
+
+| Classe | Código(s) | HTTP |
+| --- | --- | --- |
+| Credencial recusada | `MINHA_AGENDA_AUTH_FAILED` | 422 |
+| Conta sem um profissional único | `MINHA_AGENDA_PROFESSIONAL_NOT_FOUND`, `MINHA_AGENDA_MULTIPLE_PROFESSIONALS` | 422 |
+| Origem indisponível | `MINHA_AGENDA_TIMEOUT`, `MINHA_AGENDA_UNREACHABLE`, `MINHA_AGENDA_HTTP_ERROR`, `MINHA_AGENDA_INVALID_RESPONSE` | 502 ou 504 |
+| Falha nossa | `MINHA_AGENDA_NOT_CONFIGURED`, `INTEGRATION_CONFIGURATION_INVALID` | 503 ou 500 |
+
+Como toda recusa de domínio que o BFF repassa, o código chega em `error.details.upstreamCode` com `error.code: "UPSTREAM_ERROR"`. Diferente do mecanismo padrão de proxy desta API — que reduz todo `5xx` de origem a `502` (ver "Status honesto do WhatsApp e da IA" e a seção da IA) —, `MINHA_AGENDA_AUTH_FAILED` e `MINHA_AGENDA_NOT_CONFIGURED` chegam com o **status que o Scheduling escolheu** (422 e 503, respectivamente): é a própria decisão dele sobre a causa, não uma falha de infraestrutura genérica que o BFF precise generalizar. Nenhum código `MINHA_AGENDA_*` sai com `401` ou `403` em nenhuma resposta desta rota — o status HTTP da origem, quando relevante, só aparece dentro de `error.details`, nunca como o status da resposta. Nenhuma mensagem, `details` ou log desta rota carrega e-mail, senha, token ou o corpo cru da resposta da origem.
+
+### A credencial não sobrevive à conclusão da importação (Goal060)
+
+Concluir a importação (`POST /v1/calendar/imports/:sessionId/complete`) apaga, na mesma transação que grava a conclusão, a credencial `MINHA_AGENDA` gravada para o negócio. Depois disso, `GET /v1/calendar` devolve `integration: null`. Uma nova chamada a `POST /v1/calendar/integration/connect` não é recusada por isso: ela guarda a credencial de novo, sem restrição. Quem recusa é `POST /v1/calendar/imports`, com `409 IMPORT_ALREADY_COMPLETED` (ver acima), porque o direito único de importação do negócio já foi consumido, e não porque a credencial não existe mais. `DELETE /v1/calendar/integration` continua existindo e não muda.
+
 ## Status honesto do WhatsApp e da IA (Goal014)
 
 `GET /v1/status` é um read model dedicado — não substitui `GET /v1/dashboard`, que continua com seu próprio contrato. Ele existe para o shell mostrar, em qualquer tela, se o número está de fato conectado e se a IA está de fato respondendo, sem inferir a partir de configuração local: `whatsapp.status` só é `CONNECTED` depois de consultar o Evolution nesta própria requisição, e `ai.state` só é `ACTIVE` depois de consultar a IA. Nenhum dos dois é deduzido do que foi salvo — dado salvo é *desejado*, não *efetivo*.

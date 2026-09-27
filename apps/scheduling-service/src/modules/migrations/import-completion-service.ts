@@ -567,6 +567,19 @@ export class ImportCompletionService {
             },
           });
         }
+
+        // A credencial não sobrevive à importação concluída (vault Q894). O
+        // FK de ImportSession para IntegrationConnection é Restrict de
+        // propósito (histórico da importação nunca cai junto), então a
+        // referência precisa ser desfeita antes do delete, na mesma
+        // transação da conclusão.
+        await transaction.importSession.updateMany({
+          where: { tenantId: context.tenantId, connectionId: { not: null } },
+          data: { connectionId: null },
+        });
+        await transaction.integrationConnection.deleteMany({
+          where: { tenantId: context.tenantId, provider: "MINHA_AGENDA" },
+        });
         return true;
       });
 

@@ -198,23 +198,39 @@ const seriesConfirmSchema = z.object({
   customerPhone: z.string().trim().min(6).max(32).optional(),
   comments: z.string().trim().max(2_000).optional(),
 });
-const integrationSchema = z.object({
-  credentials: z.object({
-    basicAuth: z.string().min(1).max(2_000),
-    username: z.string().min(1).max(500),
+// Conexao com so e-mail e senha (Goal060 §2/§5): endereco, cliente OAuth e
+// profissional passam a vir do sistema e da descoberta no Scheduling.
+// `.strict()` recusa o corpo antigo `credentials`/`configuration` inteiro
+// com `VALIDATION_ERROR`, antes de qualquer chamada ao Scheduling.
+const integrationSchema = z
+  .object({
+    email: z.string().trim().min(1).max(320),
     password: z.string().min(1).max(500),
-  }),
-  configuration: z.object({
-    baseUrl: z.string().url(),
-    employeeId: z.number().int().positive(),
-    paymentMethod: z.string().min(1).max(100),
-    modelVersion: z.number().int().positive().default(2),
-    timeoutMs: z.number().int().positive().max(60_000).default(10_000),
-    refreshSkewSeconds: z.number().int().nonnegative().max(3_600).default(300),
-    enableWrites: z.boolean().default(false),
-    bufferBetweenServicesMinutes: z.number().int().nonnegative().default(0),
-  }),
-});
+  })
+  .strict();
+
+// Classes de erro cujo status HTTP e a propria decisao do Scheduling, nao um
+// upstream 5xx generico (Goal060 §4): `internal-http-client.ts` reduz todo
+// `>= 500` a 502 por padrao, e essas duas classes precisam chegar com o
+// status que o Scheduling escolheu. O codigo nunca muda, so o status.
+const MINHA_AGENDA_UPSTREAM_STATUS: Record<string, number> = {
+  MINHA_AGENDA_AUTH_FAILED: 422,
+  MINHA_AGENDA_NOT_CONFIGURED: 503,
+};
+
+function withMinhaAgendaUpstreamStatus(error: unknown): never {
+  if (error instanceof AppError && error.code === "UPSTREAM_ERROR") {
+    const upstreamCode = (error.details as { upstreamCode?: string } | undefined)
+      ?.upstreamCode;
+    const status = upstreamCode
+      ? MINHA_AGENDA_UPSTREAM_STATUS[upstreamCode]
+      : undefined;
+    if (status !== undefined && status !== error.statusCode) {
+      throw new AppError(error.code, error.message, status, error.details);
+    }
+  }
+  throw error;
+}
 
 export async function registerV1CalendarRoutes(
   app: FastifyInstance,
@@ -697,10 +713,12 @@ export async function registerV1CalendarRoutes(
       dataResponse(
         request,
         publicCalendar(
-          await scheduling.connectIntegration(
-            internalContext(request),
-            parseBody(integrationSchema, request.body),
-          ),
+          await scheduling
+            .connectIntegration(
+              internalContext(request),
+              parseBody(integrationSchema, request.body),
+            )
+            .catch(withMinhaAgendaUpstreamStatus),
         ),
       ),
   );

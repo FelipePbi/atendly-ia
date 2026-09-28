@@ -264,7 +264,13 @@ export interface InternalRoutesOptions {
   /** Ciclo de vida do documento de conhecimento (Goal012/WU-01). */
   knowledgeDocuments?: Pick<
     KnowledgeDocumentService,
-    "list" | "get" | "create" | "edit" | "deactivate" | "saveOtherInfo"
+    | "list"
+    | "get"
+    | "create"
+    | "edit"
+    | "deactivate"
+    | "saveOtherInfo"
+    | "getOtherInfo"
   >;
   /** Memoria da pessoa: listar, criar, permitir e remover (Goal012). */
   customerMemory?: Pick<
@@ -1052,6 +1058,14 @@ export async function registerInternalRoutes(
       content: body.content,
     });
     return internalData(request, knowledgeDocumentDto(document));
+  });
+
+  /** Leitura do campo livre "Outras informações importantes" (Goal067/§1).
+   * Vazio quando o tenant nunca salvou nada — nao e erro. */
+  app.get("/internal/knowledge/other-info", async (request) => {
+    const { tenantId } = trustedTenantContext(request);
+    const content = await knowledgeDocuments.getOtherInfo(tenantId);
+    return internalData(request, { content });
   });
 
   /**

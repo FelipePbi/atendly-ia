@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Skeleton } from "@/shared/ui/States";
@@ -12,6 +12,7 @@ import { Skeleton } from "@/shared/ui/States";
  * não ganha bloco novo para isto (será redecomposta no 024).
  */
 export function NotificationPreferenceSection() {
+  const descriptionId = useId();
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -70,12 +71,14 @@ export function NotificationPreferenceSection() {
       <label className="switch-row">
         <span>
           <strong>Agendamento criado pela IA</strong>
-          <small>
+          <small id={descriptionId}>
             Desligada por padrão: avise quando a IA confirmar um horário
             sozinha, sem intervenção sua.
           </small>
         </span>
         <input
+          aria-describedby={descriptionId}
+          aria-label="Agendamento criado pela IA"
           checked={enabled}
           disabled={busy}
           type="checkbox"

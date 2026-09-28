@@ -4,6 +4,7 @@ import { z } from "zod";
 import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
 import { EvolutionClient } from "../../clients/evolution/index.js";
 import { currentUser } from "../../lib/auth.js";
+import { userDto } from "../../lib/dto.js";
 import { AppError } from "../../lib/errors.js";
 import { dataResponse, parseBody } from "../../lib/http.js";
 import { verifyPassword } from "../../lib/password.js";
@@ -12,6 +13,7 @@ import {
   currentTenantContext,
   requireTenantContext,
 } from "../../lib/tenant-context.js";
+import { nameSchema } from "../auth/routes.js";
 import {
   accountDeletionEffects,
   accountDeletionStore,
@@ -30,6 +32,12 @@ import {
 
 const startAccountDeletionSchema = z.object({
   password: z.string().min(1).max(200),
+});
+
+// Mesma validacao do nome de POST /v1/auth/register (Goal067, review064
+// observacao 4): aparado, de 1 a 120 caracteres.
+const profileSchema = z.object({
+  name: nameSchema,
 });
 
 export async function registerV1AccountRoutes(
@@ -93,6 +101,23 @@ export async function registerV1AccountRoutes(
         status: cancelled.status,
         dueAt: cancelled.dueAt.toISOString(),
       });
+    },
+  );
+
+  // Mesmos pre-handlers de escrita autenticada de `PATCH /v1/auth/password`
+  // (sessao e CSRF, sem reautenticacao por senha): grava so o `User` da
+  // sessao, nunca `userId` do corpo (Goal067, review064 observacao 4).
+  app.patch(
+    "/v1/account/profile",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const sessionUser = currentUser(request);
+      const body = parseBody(profileSchema, request.body);
+      const user = await getPrisma().user.update({
+        where: { id: sessionUser.id },
+        data: { name: body.name },
+      });
+      return dataResponse(request, { user: userDto(user) });
     },
   );
 }

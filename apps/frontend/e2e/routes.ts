@@ -68,6 +68,26 @@ export const AUTHENTICATED_ROUTES = [
     sessionMarker: "configuracoes",
     contentMarker: "WhatsApp",
   },
+  // Goal067 §5: agenda, disponibilidade e conta, cada uma em SettingsPage com
+  // seu próprio h1. Shell destino é Configurações, mesmo sessionMarker acima.
+  {
+    path: "/configuracoes/agenda",
+    name: "configuracoes-agenda",
+    sessionMarker: "configuracoes",
+    contentMarker: "Agenda",
+  },
+  {
+    path: "/configuracoes/disponibilidade",
+    name: "configuracoes-disponibilidade",
+    sessionMarker: "configuracoes",
+    contentMarker: "Disponibilidade",
+  },
+  {
+    path: "/configuracoes/conta",
+    name: "configuracoes-conta",
+    sessionMarker: "configuracoes",
+    contentMarker: "Conta",
+  },
   { path: "/servicos", name: "servicos", sessionMarker: "servicos", contentMarker: "Serviços" },
   {
     path: "/notificacoes",

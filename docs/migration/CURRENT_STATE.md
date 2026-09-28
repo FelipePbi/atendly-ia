@@ -6761,3 +6761,117 @@ nem `scripts/goal033-authenticated-ui-rehearsal.mjs`. Nenhuma migration.
   medidos pelo gate renderizado; a fidelidade visual a
   `Onboarding-2-Importacao*` é do Goal072; o Product Vault e o
   `QA_LOCAL_REVIEW.md` não foram editados — ver [D-084](DECISIONS.md).
+
+## Delta implementado — Goal067, 2026-09-28 ([D-085](DECISIONS.md), ACCEPTED)
+
+Corrige **QA S-06** (só a parte das regras de oferta), **QA S-04**, **QA
+S-07**, **QA M-01**, **QA M-02**, **QA L-09**, **QA S-01**, **QA S-03**, **QA
+S-05**, **QA S-10** e **QA NT-03** do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md)
+(fora da enumeração A-01…A-24 do FINAL_AUDIT), a observação 2 do
+[review063](reviews/063-review.md) e a observação 4 do
+[review064](reviews/064-review.md). Toca
+`apps/frontend/src/features/settings/`, `features/knowledge/OtherInfoSection.tsx`,
+`features/reminders/ReminderSettingsSection.tsx` (só texto/separação),
+`features/notifications/NotificationPreferenceSection.tsx` (só separação),
+`shared/layout/navigation.ts`, `shared/layout/AppShell.tsx`, `src/data/`,
+`shared/styles/`, `e2e/routes.ts`; `apps/bff/src/modules/settings/routes.ts`,
+`modules/knowledge/routes.ts`, `modules/account/routes.ts`,
+`clients/ai-orchestrator/index.ts`, `PUBLIC_API_V1.md`; `apps/ai-orchestrator/src/modules/internal/routes.ts`,
+`modules/knowledge/knowledge-document-service.ts`,
+`packages/public-api-contract/src/schemas.ts` (`accountProfileResultSchema`,
+`otherInfoResultSchema`) e `packages/public-api-contract/src/routes.ts` (as
+duas entradas correspondentes em `publicApiRoutes` — desvio declarado do
+Goal067 §10, exigido pela checagem `public_api_route_coverage` para as duas
+rotas novas, ver [D-085](DECISIONS.md)). Não toca
+`apps/scheduling-service/`, `tools/ia-loop/`, `scripts/`, o
+Product Vault nem o `QA_LOCAL_REVIEW.md`. Nenhuma migration.
+
+- **Regras de oferta em Configurações › Agenda** — antecedência mínima (1h/
+  2h/4h/1 dia), limite no futuro (30/60/90 dias) e intervalo entre horários
+  (15 min/30 min/1h), com o valor lido sempre representado (inclusive
+  `minLeadMinutes: 0` como "Sem antecedência mínima"). Salvar reenvia
+  `timezone` e `rules` de disponibilidade exatamente como lidos, mais os três
+  campos; `PATCH /v1/settings/availability` e o Scheduling não mudam.
+- **Disponibilidade por dia em `/configuracoes/disponibilidade`** — cada dia
+  liga/desliga e tem um ou mais intervalos, com "Adicionar intervalo" e
+  remover; `fitsSingleIntervalForm` sai de `AvailabilitySettings`;
+  sobreposição e início depois do fim são recusados inline, sem `PATCH`;
+  regras inativas lidas voltam intactas; o limite de 28 regras do Scheduling
+  é respeitado pela tela.
+- **Leitura de "Outras informações importantes"** — `GET /internal/knowledge/other-info`
+  (orquestrador, isolado por tenant) e `GET /v1/knowledge/other-info` (BFF);
+  `OtherInfoSection` abre com o texto salvo, sem o aviso "o conteúdo salvo
+  não é reexibido"; falha de leitura mostra erro de tela sem apagar o que a
+  pessoa já digitou.
+- **Pausar não consome mais a prova do teste real com a IA já desligada** —
+  em `PATCH /v1/settings/ai`, o ramo `enabled: false` só grava
+  `activatedByRunId` quando o `enabled` gravado já era `true`; a
+  reconciliação de `GET /v1/status` continua livre para ligar a IA sozinha
+  com uma prova não marcada.
+- **Nome da pessoa em Configurações › Conta** — `PATCH /v1/account/profile`
+  com `{ name }`, mesma validação de `POST /v1/auth/register` e os mesmos
+  pré-handlers de escrita autenticada de `PATCH /v1/auth/password`; escreve
+  só o `User` da sessão; `AccountSettings` mostra o nome ou o convite a
+  informá-lo quando é nulo.
+- **"Mais" completo no celular, "Ajuda" sai dos dois menus** —
+  `MORE_DESTINATIONS` ganha Disponibilidade e Conversas; `CalendarSettings`
+  linka para Disponibilidade; "Ajuda" sai da folha "Mais" e do menu da conta
+  em `AppShell`.
+- **Texto de produto e estados** — estilos da IA sem "V1" nem "tools";
+  Configurações › Agenda sem "Fonte oficial" nem "migração assistida";
+  título e descrição separados no nome acessível das linhas de liga/desliga
+  de Configurações e Notificações; `ProductSettingsScreen` ignora o abort do
+  cleanup do efeito.
+- **Etapas medidas pelo gate** — `AUTHENTICATED_ROUTES` ganha
+  `/configuracoes/agenda`, `/configuracoes/disponibilidade` e
+  `/configuracoes/conta`, nas cinco larguras, com a sessão da conta
+  principal; as rotas já medidas continuam medidas; `ONBOARDING_ROUTES` não
+  muda.
+- **Fora do escopo, por construção** — a política de cancelamento de QA
+  S-06 e QA S-08 ("Como você vê a agenda") não existem em camada nenhuma
+  (sem campo, sem rota, sem regra na IA); passam ao Goal073.
+- **Sete controles negativos (§7)**, rodados por esta unidade (WU-15) depois
+  da última edição de código e da execução final, com restauração conferida
+  por `sha256sum` idêntico antes e depois de cada um: isolamento por tenant
+  da leitura do orquestrador reprova; o ramo de pausa gravando
+  `activatedByRunId` sem olhar o `enabled` gravado reprova; gravar `rules: []`
+  nas regras de oferta reprova; recusar a grade com dois intervalos no dia
+  reprova; `OtherInfoSection` abrindo vazia reprova; Disponibilidade fora de
+  `MORE_DESTINATIONS` reprova; `PATCH /v1/account/profile` aceitando nome só
+  com espaços reprova. Saída em [FINAL_AUDIT §46](FINAL_AUDIT.md).
+- **Execução final da rodada 2 (FIX-001), sobre a árvore com os blockers 1–3
+  corrigidos** — `node scripts/validate-core.mjs`:
+  **17** passos, **15** `passed`, **0** `failed`, **2** `skipped`, exit 0;
+  `test:ai-orchestrator` em **85**/**97** arquivos (**12** pulados) e
+  **1117**/**1205** testes (**88** pulados); `test:scheduling-service` em
+  **35**/**35** e **484**/**484**; `test:frontend` em **94**/**94** arquivos
+  e **979**/**979** testes (baseline desta seção **976**, os **3** a mais são
+  o teste novo do blocker 1 e os dois testes novos do blocker 2); `audit:static` em **33** de **34** e **1**
+  pulada. `node --test scripts/tests/**/*.test.mjs` (`test:gate`):
+  **233**/**233**. `node scripts/validate-ui.mjs`: **169** passando, **21**
+  pulados, **0** falhando, **0** retentativas. `node scripts/validate-integration.mjs`,
+  contra o PostgreSQL 18 descartável em `127.0.0.1:55432`: **35**/**35**
+  passos, exit 0; `test:bff-integration` em **55** arquivos e **434** testes
+  (baseline **53**/**428**, os **2** arquivos e **6** testes novos continuam
+  sendo `goal067-*`); `test:scheduling-integration` em **16**/**124**, sem
+  mudança; gate autenticado (`rehearse:goal033-authenticated-ui`) com **155**
+  testes passando (baseline **140**, mais **15** das três rotas novas nas
+  cinco larguras), **0** falhando, **0** retentativas. `this.http.` em
+  `apps/bff/src/clients/`: **43** (sem mudança nesta rodada). Sete controles
+  negativos do §7 rodados depois desta execução, com hash antes/durante/
+  depois de cada arquivo; o controle de isolamento por tenant da leitura do
+  orquestrador não foi re-executado (arquivo não tocado por esta rodada; a
+  tentativa de reaplicar o defeito foi recusada pela permissão do harness
+  como remoção de controle de segurança). Detalhe e saída real em
+  [FINAL_AUDIT §46](FINAL_AUDIT.md).
+- **Conferência humana pendente:** a conferência do §8 do Goal **não foi
+  feita** por este Goal — que Configurações bate com o protótipo
+  `Mais-Negocio-Agenda-IA` e `Mais-WhatsApp-Importacao-Conta` nas opções e
+  nos textos, e que a IA, depois de mudar as regras de oferta, oferece
+  horários com a antecedência, o limite e o intervalo escolhidos, numa
+  conversa real.
+- **Limites declarados:** a política de cancelamento e "Como você vê a
+  agenda" (QA S-08) ficam para o Goal073; a fidelidade visual de
+  Configurações ao protótipo além do que este Goal cria é do Goal068; o
+  Product Vault e o `QA_LOCAL_REVIEW.md` não foram editados — ver
+  [D-085](DECISIONS.md).

@@ -25,6 +25,14 @@ interface Row {
  * é o que o ciclo de vida do documento realmente toca. `KnowledgeChunk` fica
  * inteiramente do lado do dublê de `KnowledgeChunkIndexer`.
  */
+interface ChunkRow {
+  id: string;
+  tenantId: string;
+  documentId: string;
+  content: string;
+  createdAt: Date;
+}
+
 interface FakeTx {
   knowledgeDocument: {
     create: (args: { data: Row }) => Promise<Row>;
@@ -33,13 +41,17 @@ interface FakeTx {
       data: Partial<Row>;
     }) => Promise<{ count: number }>;
   };
+  knowledgeChunk: {
+    create: (args: { data: Omit<ChunkRow, "createdAt"> }) => Promise<ChunkRow>;
+  };
 }
 
 function fakePrisma(initial: Row[] = []) {
   const rows: Row[] = [...initial];
+  const chunkRows: ChunkRow[] = [];
 
-  function matches(where: Record<string, unknown>) {
-    return (row: Row) =>
+  function matches<T>(where: Record<string, unknown>) {
+    return (row: T) =>
       Object.entries(where).every(([key, value]) => {
         if (value === undefined) return true;
         return (row as unknown as Record<string, unknown>)[key] === value;
@@ -50,15 +62,15 @@ function fakePrisma(initial: Row[] = []) {
     knowledgeDocument: {
       findMany: async ({ where }: { where: Record<string, unknown> }) =>
         rows
-          .filter(matches(where))
+          .filter(matches<Row>(where))
           .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
           .map((row) => ({ ...row })),
       findFirst: async ({ where }: { where: Record<string, unknown> }) => {
-        const found = rows.find(matches(where));
+        const found = rows.find(matches<Row>(where));
         return found ? { ...found } : null;
       },
       count: async ({ where }: { where: Record<string, unknown> }) =>
-        rows.filter(matches(where)).length,
+        rows.filter(matches<Row>(where)).length,
       update: async ({
         where,
         data,
@@ -76,6 +88,14 @@ function fakePrisma(initial: Row[] = []) {
         return { ...row };
       },
     },
+    knowledgeChunk: {
+      findFirst: async ({ where }: { where: Record<string, unknown> }) => {
+        const found = chunkRows
+          .filter(matches<ChunkRow>(where))
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0];
+        return found ? { ...found } : null;
+      },
+    },
     $transaction: async <T>(fn: (tx: FakeTx) => Promise<T>): Promise<T> => {
       const tx: FakeTx = {
         knowledgeDocument: {
@@ -91,11 +111,18 @@ function fakePrisma(initial: Row[] = []) {
             where: Record<string, unknown>;
             data: Partial<Row>;
           }) => {
-            const matched = rows.filter(matches(where));
+            const matched = rows.filter(matches<Row>(where));
             matched.forEach((row) =>
               Object.assign(row, data, { updatedAt: new Date() }),
             );
             return { count: matched.length };
+          },
+        },
+        knowledgeChunk: {
+          create: async ({ data }: { data: Omit<ChunkRow, "createdAt"> }) => {
+            const row: ChunkRow = { ...data, createdAt: new Date() };
+            chunkRows.push(row);
+            return { ...row };
           },
         },
       };
@@ -103,7 +130,7 @@ function fakePrisma(initial: Row[] = []) {
     },
   };
 
-  return { rows, prisma: prisma as never };
+  return { rows, chunkRows, prisma: prisma as never };
 }
 
 function fakeChunkIndexer(options: { embedFails?: boolean } = {}) {
@@ -117,8 +144,19 @@ function fakeChunkIndexer(options: { embedFails?: boolean } = {}) {
       }
       return contents.map(() => [0.1, 0.2, 0.3]);
     },
-    async writeChunks(_tx, input) {
+    async writeChunks(tx, input) {
       writeCalls.push({ tenantId: input.tenantId, documentId: input.documentId });
+      const typedTx = tx as unknown as FakeTx;
+      for (const chunk of input.chunks) {
+        await typedTx.knowledgeChunk.create({
+          data: {
+            id: `${input.documentId}-${chunk.content.length}-${Math.random()}`,
+            tenantId: input.tenantId,
+            documentId: input.documentId,
+            content: chunk.content,
+          },
+        });
+      }
     },
   };
   return { indexer, embedCalls, writeCalls };
@@ -398,6 +436,34 @@ describe("KnowledgeDocumentService", () => {
         (row) => row.type === "BUSINESS_INFO" && row.status === "ACTIVE",
       );
       expect(active).toHaveLength(1);
+    });
+
+    it("getOtherInfo devolve exatamente o texto gravado pelo save mais recente", async () => {
+      await service.saveOtherInfo({
+        tenantId: "tenant-a",
+        content: "Aceitamos pets de pequeno porte.",
+      });
+      await service.saveOtherInfo({
+        tenantId: "tenant-a",
+        content: "Aceitamos pets de pequeno e médio porte.",
+      });
+
+      const content = await service.getOtherInfo("tenant-a");
+      expect(content).toBe("Aceitamos pets de pequeno e médio porte.");
+    });
+
+    it("getOtherInfo isola por tenant: outro tenant não recebe o documento", async () => {
+      await service.saveOtherInfo({
+        tenantId: "tenant-a",
+        content: "Só do tenant A.",
+      });
+
+      const otherTenant = await service.getOtherInfo("tenant-b");
+      expect(otherTenant).toBe("");
+    });
+
+    it("getOtherInfo sem documento devolve vazio, não erro", async () => {
+      await expect(service.getOtherInfo("tenant-sem-nada")).resolves.toBe("");
     });
   });
 });

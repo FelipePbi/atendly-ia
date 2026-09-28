@@ -14,41 +14,137 @@ type AvailabilityRule = NonNullable<
   SettingsState["availability"]
 >["rules"][number];
 
-/** Uma entrada por dia com >1 regra ativa: a grade tem mais de um intervalo. */
-function groupActiveRulesByDay(
-  rules: AvailabilityRule[],
-): Map<number, AvailabilityRule[]> {
-  const grouped = new Map<number, AvailabilityRule[]>();
+type Interval = { startTime: string; endTime: string };
+type DayIntervals = Record<number, Interval[]>;
+
+const MAX_RULES = 28;
+
+// A semana começa na segunda na tela (mesma ordem do onboarding); o valor
+// gravado de `dayOfWeek` continua 0=domingo…6=sábado.
+const weekOrder = [1, 2, 3, 4, 5, 6, 0];
+
+function buildDayIntervals(rules: AvailabilityRule[]): DayIntervals {
+  const byDay: DayIntervals = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
   for (const rule of rules) {
     if (!rule.active) continue;
-    const forDay = grouped.get(rule.dayOfWeek) ?? [];
-    forDay.push(rule);
-    grouped.set(rule.dayOfWeek, forDay);
+    byDay[rule.dayOfWeek] = [
+      ...byDay[rule.dayOfWeek],
+      { startTime: rule.startTime, endTime: rule.endTime },
+    ].sort((a, b) => a.startTime.localeCompare(b.startTime));
   }
-  return grouped;
+  return byDay;
 }
 
-/**
- * O formulário abaixo só grava um horário único para os dias escolhidos.
- * Ele "cabe" quando cada dia ativo tem exatamente um intervalo e todos os
- * dias compartilham o mesmo horário — caso contrário, salvar com este
- * formulário substituiria uma grade que ele não consegue representar.
- */
-function fitsSingleIntervalForm(rulesByDay: Map<number, AvailabilityRule[]>) {
-  let shared: { startTime: string; endTime: string } | null = null;
-  for (const dayRules of rulesByDay.values()) {
-    if (dayRules.length !== 1) return false;
-    const [rule] = dayRules;
-    if (!shared) {
-      shared = { startTime: rule.startTime, endTime: rule.endTime };
-    } else if (
-      rule.startTime !== shared.startTime ||
-      rule.endTime !== shared.endTime
-    ) {
-      return false;
+/** `null` quando o dia está válido; senão, a mensagem a mostrar naquele dia. */
+function dayError(intervals: Interval[]): string | null {
+  const sorted = [...intervals].sort((a, b) =>
+    a.startTime.localeCompare(b.startTime),
+  );
+  for (const interval of sorted) {
+    if (interval.startTime >= interval.endTime) {
+      return "O horário final deve ser depois do horário inicial.";
     }
   }
-  return true;
+  for (let index = 1; index < sorted.length; index += 1) {
+    if (sorted[index].startTime < sorted[index - 1].endTime) {
+      return "Os intervalos não podem se sobrepor.";
+    }
+  }
+  return null;
+}
+
+function DayRow({
+  day,
+  intervals,
+  error,
+  atLimit,
+  onAddInterval,
+  onRemoveInterval,
+  onToggleDay,
+  onChangeInterval,
+}: {
+  day: number;
+  intervals: Interval[];
+  error: string | null;
+  atLimit: boolean;
+  onAddInterval: () => void;
+  onRemoveInterval: (index: number) => void;
+  onToggleDay: (active: boolean) => void;
+  onChangeInterval: (
+    index: number,
+    field: "startTime" | "endTime",
+    value: string,
+  ) => void;
+}) {
+  const active = intervals.length > 0;
+  return (
+    <div className={`availability-row${active ? "" : " is-off"}`}>
+      <div className="availability-day">
+        <label className="check">
+          <input
+            aria-label={weekdayLabels[day]}
+            checked={active}
+            type="checkbox"
+            onChange={(event) => onToggleDay(event.target.checked)}
+          />
+          <span aria-hidden="true" className="check-box" />
+        </label>
+        <span>{weekdayLabels[day]}</span>
+      </div>
+      <div className="availability-periods">
+        {active ? (
+          intervals.map((interval, index) => (
+            <span className="availability-period" key={index}>
+              <input
+                aria-label={`${weekdayLabels[day]} · início do intervalo ${index + 1}`}
+                type="time"
+                value={interval.startTime}
+                onChange={(event) =>
+                  onChangeInterval(index, "startTime", event.target.value)
+                }
+              />
+              <span aria-hidden="true">–</span>
+              <input
+                aria-label={`${weekdayLabels[day]} · fim do intervalo ${index + 1}`}
+                type="time"
+                value={interval.endTime}
+                onChange={(event) =>
+                  onChangeInterval(index, "endTime", event.target.value)
+                }
+              />
+              {intervals.length > 1 && (
+                <button
+                  aria-label={`Remover intervalo ${index + 1} de ${weekdayLabels[day]}`}
+                  className="availability-period-remove"
+                  type="button"
+                  onClick={() => onRemoveInterval(index)}
+                >
+                  <Icon name="x" />
+                </button>
+              )}
+            </span>
+          ))
+        ) : (
+          <span className="availability-period">Sem atendimento</span>
+        )}
+        {error && (
+          <span className="availability-period-error" role="alert">
+            {error}
+          </span>
+        )}
+      </div>
+      {active && (
+        <button
+          className="btn btn-secondary"
+          disabled={atLimit}
+          type="button"
+          onClick={onAddInterval}
+        >
+          Adicionar intervalo
+        </button>
+      )}
+    </div>
+  );
 }
 
 export function AvailabilitySettings({
@@ -58,172 +154,129 @@ export function AvailabilitySettings({
   settings: SettingsState;
   onSaved: (state: SettingsState) => void;
 }) {
-  const rules = settings.availability?.rules;
-  const activeRules = useMemo(
-    () => rules?.filter((rule) => rule.active) ?? [],
-    [rules],
+  const initialRules = useMemo(
+    () => settings.availability?.rules ?? [],
+    [settings.availability],
   );
-  const rulesByDay = useMemo(
-    () => groupActiveRulesByDay(activeRules),
-    [activeRules],
+  // Regras inativas do último estado lido não têm UI própria aqui, mas
+  // precisam voltar intactas no PATCH — a rota substitui a lista inteira
+  // (deleteMany + createMany), então esquecê-las apagaria a desativação.
+  const inactiveRules = useMemo(
+    () => initialRules.filter((rule) => !rule.active),
+    [initialRules],
   );
-  const fitsSingleInterval = fitsSingleIntervalForm(rulesByDay);
-  const [days, setDays] = useState(
-    () => [...rulesByDay.keys()].sort((a, b) => a - b),
+  const [dayIntervals, setDayIntervals] = useState<DayIntervals>(() =>
+    buildDayIntervals(initialRules),
   );
-  const [startTime, setStartTime] = useState(
-    activeRules[0]?.startTime ?? "09:00",
-  );
-  const [endTime, setEndTime] = useState(activeRules[0]?.endTime ?? "18:00");
-  const [replaceConfirmed, setReplaceConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  const totalRules = useMemo(
+    () =>
+      Object.values(dayIntervals).reduce((sum, list) => sum + list.length, 0) +
+      inactiveRules.length,
+    [dayIntervals, inactiveRules],
+  );
+  const errors = useMemo(() => {
+    const byDay: Record<number, string | null> = {};
+    for (const day of weekOrder) byDay[day] = dayError(dayIntervals[day]);
+    return byDay;
+  }, [dayIntervals]);
+
+  function setDay(day: number, intervals: Interval[]) {
+    setDayIntervals((current) => ({ ...current, [day]: intervals }));
+  }
+
+  function toggleDay(day: number, active: boolean) {
+    setDay(day, active ? [{ startTime: "09:00", endTime: "18:00" }] : []);
+  }
+
+  function addInterval(day: number) {
+    if (totalRules >= MAX_RULES) return;
+    setDay(day, [...dayIntervals[day], { startTime: "09:00", endTime: "18:00" }]);
+  }
+
+  function removeInterval(day: number, index: number) {
+    setDay(
+      day,
+      dayIntervals[day].filter((_, item) => item !== index),
+    );
+  }
+
+  function changeInterval(
+    day: number,
+    index: number,
+    field: "startTime" | "endTime",
+    value: string,
+  ) {
+    setDay(
+      day,
+      dayIntervals[day].map((interval, item) =>
+        item === index ? { ...interval, [field]: value } : interval,
+      ),
+    );
+  }
+
   async function save() {
-    if (days.length === 0) {
-      setMessage("Escolha pelo menos um dia de atendimento.");
-      return;
-    }
-    if (startTime >= endTime) {
-      setMessage("O horário final deve ser posterior ao horário inicial.");
-      return;
-    }
-    if (!fitsSingleInterval && !replaceConfirmed) {
-      setMessage(
-        "Marque a confirmação para substituir os horários existentes.",
-      );
+    const invalidDay = weekOrder.find((day) => errors[day]);
+    if (invalidDay !== undefined) {
+      setMessage(`${weekdayLabels[invalidDay]}: ${errors[invalidDay]}`);
       return;
     }
     setBusy(true);
     setMessage(null);
     try {
-      const availability =
-        await getProductServices().settings.updateAvailability({
-          timezone: settings.business?.timezone ?? "America/Sao_Paulo",
-          rules: days.map((dayOfWeek) => ({
-            active: true,
-            dayOfWeek,
-            startTime,
-            endTime,
-          })),
-        });
+      const activeRules = weekOrder.flatMap((day) =>
+        dayIntervals[day].map((interval) => ({
+          active: true,
+          dayOfWeek: day,
+          startTime: interval.startTime,
+          endTime: interval.endTime,
+        })),
+      );
+      const preservedInactiveRules = inactiveRules.map((rule) => ({
+        active: false,
+        dayOfWeek: rule.dayOfWeek,
+        startTime: rule.startTime,
+        endTime: rule.endTime,
+      }));
+      const availability = await getProductServices().settings.updateAvailability({
+        timezone: settings.business?.timezone ?? "America/Sao_Paulo",
+        rules: [...activeRules, ...preservedInactiveRules],
+      });
       onSaved({ ...settings, availability });
       setMessage("Disponibilidade salva.");
-      setReplaceConfirmed(false);
     } catch {
       setMessage("Não foi possível salvar a disponibilidade.");
     } finally {
       setBusy(false);
     }
   }
-  if (settings.calendar.source !== "ATENDLY")
-    return (
-      <SettingsPage
-        title="Disponibilidade"
-        description="A disponibilidade pertence à fonte oficial."
-      >
-        <div className="onboarding-note is-important">
-          <Icon name="info" />
-          <span>Edite os horários diretamente na Minha Agenda.</span>
-        </div>
-      </SettingsPage>
-    );
+
   return (
     <SettingsPage
       title="Disponibilidade"
-      description="Defina os dias e o intervalo habitual da Agenda Atendly."
+      description="Defina os dias e os intervalos de atendimento da Agenda."
     >
       <section className="settings-panel">
-        {rulesByDay.size > 0 && (
-          <ul aria-label="Horários atuais" className="availability-current-rules">
-            {weekdayLabels.map((label, day) => {
-              const dayRules = rulesByDay.get(day);
-              if (!dayRules) return null;
-              return (
-                <li key={label}>
-                  <strong>{label}</strong>
-                  <span>
-                    {dayRules
-                      .map((rule) => `${rule.startTime}–${rule.endTime}`)
-                      .join(", ")}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {!fitsSingleInterval && (
-          <div className="onboarding-note is-important" role="alert">
-            <Icon name="info" />
-            <span>
-              Um ou mais dias têm mais de um intervalo. Este formulário grava
-              um único horário para os dias escolhidos e salvar substitui os
-              intervalos atuais.
-            </span>
-          </div>
-        )}
-        <div className="choice-grid">
-          {weekdayLabels.map((label, day) => (
-            <label
-              className={`choice-card${days.includes(day) ? " is-selected" : ""}`}
-              key={label}
-            >
-              <input
-                className="sr-only"
-                checked={days.includes(day)}
-                type="checkbox"
-                onChange={(event) =>
-                  setDays((value) =>
-                    event.target.checked
-                      ? [...value, day].sort()
-                      : value.filter((item) => item !== day),
-                  )
-                }
-              />
-              <strong>{label}</strong>
-            </label>
+        <div className="availability-list">
+          {weekOrder.map((day) => (
+            <DayRow
+              atLimit={totalRules >= MAX_RULES}
+              day={day}
+              error={errors[day]}
+              intervals={dayIntervals[day]}
+              key={day}
+              onAddInterval={() => addInterval(day)}
+              onChangeInterval={(index, field, value) =>
+                changeInterval(day, index, field, value)
+              }
+              onRemoveInterval={(index) => removeInterval(day, index)}
+              onToggleDay={(active) => toggleDay(day, active)}
+            />
           ))}
         </div>
-        <div className="settings-form-grid">
-          <label className="field">
-            <span className="label">Início</span>
-            <input
-              className="input"
-              type="time"
-              value={startTime}
-              onChange={(event) => setStartTime(event.target.value)}
-            />
-          </label>
-          <label className="field">
-            <span className="label">Fim</span>
-            <input
-              className="input"
-              type="time"
-              value={endTime}
-              onChange={(event) => setEndTime(event.target.value)}
-            />
-          </label>
-        </div>
-        {!fitsSingleInterval && (
-          <label className="switch-row">
-            <span>
-              <strong>Substituir horários existentes</strong>
-              <small>
-                Confirme para trocar os intervalos atuais por este horário
-                único.
-              </small>
-            </span>
-            <input
-              checked={replaceConfirmed}
-              type="checkbox"
-              onChange={(event) => setReplaceConfirmed(event.target.checked)}
-            />
-          </label>
-        )}
-        <SaveActions
-          busy={busy}
-          message={message}
-          onClick={() => void save()}
-        />
+        <SaveActions busy={busy} message={message} onClick={() => void save()} />
       </section>
     </SettingsPage>
   );

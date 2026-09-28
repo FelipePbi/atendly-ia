@@ -62,7 +62,11 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
     account: { requestDeletion: vi.fn(), cancelDeletion: vi.fn() },
     auth: { changePassword, logout, logoutAllDevices },
-    knowledge: { list: knowledgeList, create: knowledgeCreate },
+    knowledge: {
+      list: knowledgeList,
+      create: knowledgeCreate,
+      getOtherInfo: vi.fn().mockResolvedValue({ content: "" }),
+    },
     retention: { get: getRetention, update: updateRetention },
     serviceCatalog: { list: serviceCatalogList },
     settings: {
@@ -402,7 +406,7 @@ describe("ShellConfigProvider + Disponibilidade não excede a profundidade de at
       await user.click(monday);
     }
 
-    const startField = screen.getByLabelText("Início");
+    const startField = screen.getByLabelText("Segunda · início do intervalo 1");
     await user.clear(startField);
     await user.type(startField, "08:00");
 

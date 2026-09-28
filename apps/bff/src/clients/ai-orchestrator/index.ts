@@ -726,6 +726,19 @@ export class AiOrchestratorClient {
     ).data;
   }
 
+  /** Leitura do campo livre "Outras informações importantes" (Goal067/§1).
+   * Vazio quando o tenant nunca salvou nada. */
+  async getOtherInfo(context: InternalRequestContext) {
+    return (
+      await this.http.request({
+        method: "GET",
+        path: "/internal/knowledge/other-info",
+        context,
+        schema: envelope(z.object({ content: z.string() })),
+      })
+    ).data;
+  }
+
   /**
    * Memoria do cliente (Goal012/WU-01): proveniencia, permissao explicita e
    * relevancia decrescente. A colecao e a criacao ficam sob `/memory`; o item

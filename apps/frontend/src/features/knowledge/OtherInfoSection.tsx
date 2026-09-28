@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useId, useState } from "react";
+import { type FormEvent, useEffect, useId, useState } from "react";
 
 import { BffHttpError, type KnowledgeDocument } from "@/data";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
@@ -8,32 +8,48 @@ import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { formString, SaveActions } from "../settings/shared/fields";
 
 /**
- * Campo livre "Outras informações importantes" (Goal024/WU-04): único
- * documento `BUSINESS_INFO` do negócio, só acessível por
- * `PUT /v1/knowledge/other-info` — sem criar um segundo, sem desativar.
- *
- * Não há rota que devolva o conteúdo salvo (o schema de `KnowledgeDocument`
- * nunca inclui o texto indexado, só metadado), então este campo é
- * intencionalmente de escrita: a caixa nasce vazia a cada carregamento e a
- * confirmação de "salvo" vem da resposta do próprio `PUT`, não de uma leitura
- * anterior.
+ * Campo livre "Outras informações importantes" (Goal024/WU-04, leitura no
+ * Goal067): único documento `BUSINESS_INFO` do negócio, escrito por
+ * `PUT /v1/knowledge/other-info` — sem criar um segundo, sem desativar — e
+ * lido por `GET /v1/knowledge/other-info` para abrir com o texto salvo.
  */
 export function OtherInfoSection() {
   const contentId = useId();
+  const [content, setContent] = useState("");
+  const [reading, setReading] = useState(true);
+  const [readError, setReadError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [saved, setSaved] = useState<KnowledgeDocument | null>(null);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    getProductServices()
+      .knowledge.getOtherInfo(controller.signal)
+      .then((result) => {
+        setContent(result.content);
+        setReading(false);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setReadError(true);
+        setReading(false);
+      });
+    return () => controller.abort();
+  }, []);
+
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (reading || readError) return;
     const data = new FormData(event.currentTarget);
-    const content = formString(data, "content").trim();
-    if (!content) return;
+    const value = formString(data, "content").trim();
+    if (!value) return;
     setBusy(true);
     setMessage(null);
     try {
-      const document = await getProductServices().knowledge.saveOtherInfo(content);
+      const document = await getProductServices().knowledge.saveOtherInfo(value);
       setSaved(document);
+      setContent(value);
       setMessage("Informações salvas.");
     } catch (caught: unknown) {
       setMessage(requestError(caught));
@@ -52,13 +68,14 @@ export function OtherInfoSection() {
             IA usa este texto com prioridade menor que um documento
             específico ou uma regra de serviço.
           </p>
-          <p className="settings-modal-copy">
-            O conteúdo salvo não é reexibido aqui: esta caixa nasce vazia a
-            cada vez que você abre a tela. Escreva o texto completo sempre
-            que salvar, mesmo que já exista uma versão anterior.
-          </p>
         </div>
       </div>
+      {readError && (
+        <p className="field-help" role="alert">
+          Não foi possível carregar o texto salvo agora. Atualize a página e
+          tente de novo.
+        </p>
+      )}
       <form className="settings-stack" onSubmit={(event) => void save(event)}>
         <div className="field is-wide">
           <label className="label" htmlFor={contentId}>
@@ -70,6 +87,8 @@ export function OtherInfoSection() {
             name="content"
             placeholder="Ex.: horário de intervalo, política de atraso, formas de pagamento aceitas..."
             rows={6}
+            value={content}
+            onChange={(event) => setContent(event.target.value)}
           />
         </div>
         {saved && (
@@ -78,7 +97,12 @@ export function OtherInfoSection() {
             {new Date(saved.updatedAt).toLocaleString("pt-BR")}.
           </p>
         )}
-        <SaveActions busy={busy} message={message} label="Salvar informações" />
+        <SaveActions
+          busy={busy}
+          disabled={reading || readError}
+          message={message}
+          label="Salvar informações"
+        />
       </form>
     </section>
   );

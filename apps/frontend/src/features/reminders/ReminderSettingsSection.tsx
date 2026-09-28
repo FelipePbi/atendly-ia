@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import type {
   ReminderPricePolicy,
@@ -40,6 +40,7 @@ function isValidLeadMinutes(value: number): boolean {
  * desligar os lembretes.
  */
 export function ReminderSettingsSection() {
+  const confirmationDescriptionId = useId();
   const [settings, setSettings] = useState<ReminderSettings | null>(null);
   const [error, setError] = useState(false);
   const [rules, setRules] = useState<ReminderRule[]>([]);
@@ -173,12 +174,14 @@ export function ReminderSettingsSection() {
         <label className="switch-row">
           <span>
             <strong>Pedir confirmação de presença</strong>
-            <small>
+            <small id={confirmationDescriptionId}>
               Se a cliente disser que não vem, a IA pergunta se quer cancelar ou
               remarcar. Sem resposta, o horário continua válido.
             </small>
           </span>
           <input
+            aria-describedby={confirmationDescriptionId}
+            aria-label="Pedir confirmação de presença"
             checked={confirmationEnabled}
             type="checkbox"
             onChange={(event) => setConfirmationEnabled(event.target.checked)}

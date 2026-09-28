@@ -125,4 +125,11 @@ export async function registerV1KnowledgeRoutes(
       await ai.saveOtherInfo(internalContext(request), body),
     );
   });
+
+  app.get("/v1/knowledge/other-info", authenticated, async (request) => {
+    return dataResponse(
+      request,
+      await ai.getOtherInfo(internalContext(request)),
+    );
+  });
 }

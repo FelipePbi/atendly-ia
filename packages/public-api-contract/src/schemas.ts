@@ -941,6 +941,10 @@ export const accountDeletionResultSchema = z.object({
 export type AccountDeletionStatus = z.infer<typeof accountDeletionStatusSchema>;
 export type AccountDeletionState = z.infer<typeof accountDeletionStateSchema>;
 
+// `PATCH /v1/account/profile` (Goal067): grava só o nome do dono da conta.
+export const accountProfileResultSchema = z.object({ user: userSchema });
+export type AccountProfileResult = z.infer<typeof accountProfileResultSchema>;
+
 export const systemStatusSchema = z.object({
   whatsapp: z.object({
     status: whatsappStatusValueSchema,
@@ -1049,6 +1053,11 @@ export const knowledgeChunkSchema = z.object({
   content: z.string().min(1),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
+
+// `GET /v1/knowledge/other-info` (Goal067): leitura do campo livre "Outras
+// informações importantes". Vazio (`""`) quando o negócio nunca salvou nada.
+export const otherInfoResultSchema = z.object({ content: z.string() });
+export type OtherInfoResult = z.infer<typeof otherInfoResultSchema>;
 
 export const knowledgeDocumentSchema = z.object({
   id: z.string().min(1),

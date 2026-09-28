@@ -4,9 +4,11 @@ export type PlatformSection =
   | "agenda"
   | "clientes"
   | "config-agenda"
+  | "config-conversas"
   | "configuracoes"
   | "conta"
   | "conversas"
+  | "disponibilidade"
   | "ia"
   | "importacao"
   | "inicio"
@@ -94,6 +96,12 @@ export const MORE_DESTINATIONS: NavDestination[] = [
     label: "Agenda",
     section: "config-agenda",
   },
+  {
+    href: "/configuracoes/disponibilidade",
+    icon: "clock",
+    label: "Disponibilidade",
+    section: "disponibilidade",
+  },
   { href: "/configuracoes/ia", icon: "spark", label: "IA", section: "ia" },
   {
     href: "/configuracoes/whatsapp",
@@ -106,6 +114,12 @@ export const MORE_DESTINATIONS: NavDestination[] = [
     icon: "refresh",
     label: "Importação",
     section: "importacao",
+  },
+  {
+    href: "/configuracoes/conversas",
+    icon: "chat",
+    label: "Conversas",
+    section: "config-conversas",
   },
   { href: "/configuracoes/conta", icon: "user", label: "Conta", section: "conta" },
 ];

@@ -233,6 +233,29 @@ export class KnowledgeDocumentService {
     );
   }
 
+  /**
+   * Texto do documento BUSINESS_INFO ativo de source fixa, ou vazio quando o
+   * tenant nunca salvou nada. `saveOtherInfo` grava o texto inteiro como um
+   * unico chunk, entao o primeiro chunk do documento ja e o texto completo.
+   */
+  async getOtherInfo(tenantId: string): Promise<string> {
+    const tenant = requireText(tenantId, "tenantId");
+    const document = await this.prisma.knowledgeDocument.findFirst({
+      where: {
+        tenantId: tenant,
+        type: "BUSINESS_INFO",
+        source: OTHER_INFO_SOURCE,
+        status: "ACTIVE",
+      },
+    });
+    if (!document) return "";
+    const chunk = await this.prisma.knowledgeChunk.findFirst({
+      where: { tenantId: tenant, documentId: document.id },
+      orderBy: { createdAt: "asc" },
+    });
+    return chunk?.content ?? "";
+  }
+
   private async requireDocument(tenantId: string, id: string) {
     const document = await this.prisma.knowledgeDocument.findFirst({
       where: { tenantId, id },

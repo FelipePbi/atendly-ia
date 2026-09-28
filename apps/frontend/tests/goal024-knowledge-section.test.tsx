@@ -17,8 +17,9 @@
  *   versão na lista, com aviso de que a versão anterior não foi apagada;
  * - desativar chama `knowledge.deactivate` só após confirmação e remove o
  *   documento da lista visível, com aviso de que nada foi apagado;
- * - `OtherInfoSection` é um campo de escrita só: nasce vazio (a API nunca
- *   devolve o conteúdo indexado) e confirma pela resposta do próprio `PUT`;
+ * - `OtherInfoSection` abre com o texto lido de `knowledge.getOtherInfo` e
+ *   confirma o salvo pela resposta do próprio `PUT` (leitura desde o
+ *   Goal067; a cobertura de leitura fica em `goal067-configuracoes-ia-conta`);
  * - o erro 502 `KNOWLEDGE_INDEX_UNAVAILABLE` — em criar, editar e no campo
  *   livre — mostra a mensagem de que nada foi salvo, sem inserir/alterar a
  *   lista.
@@ -37,6 +38,7 @@ const knowledgeCreate = vi.fn();
 const knowledgeEdit = vi.fn();
 const knowledgeDeactivate = vi.fn();
 const knowledgeSaveOtherInfo = vi.fn();
+const knowledgeGetOtherInfo = vi.fn();
 const serviceCatalogList = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
@@ -45,6 +47,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       create: knowledgeCreate,
       deactivate: knowledgeDeactivate,
       edit: knowledgeEdit,
+      getOtherInfo: knowledgeGetOtherInfo,
       list: knowledgeList,
       saveOtherInfo: knowledgeSaveOtherInfo,
     },
@@ -104,6 +107,7 @@ beforeEach(() => {
     items: [serviceFixture()],
     source: "ATENDLY",
   });
+  knowledgeGetOtherInfo.mockResolvedValue({ content: "" });
 });
 
 describe("listar", () => {
@@ -340,7 +344,7 @@ describe("desativar", () => {
 });
 
 describe("campo livre (Outras informações importantes)", () => {
-  test("nasce vazio e confirma o salvo pela resposta do PUT", async () => {
+  test("nasce vazio quando nunca foi salvo, e confirma o salvo pela resposta do PUT", async () => {
     const saved = documentFixture({
       id: "doc-other-info",
       title: "Outras informações importantes",
@@ -348,17 +352,13 @@ describe("campo livre (Outras informações importantes)", () => {
       updatedAt: "2026-09-15T12:00:00.000Z",
       version: "3",
     });
+    knowledgeGetOtherInfo.mockResolvedValue({ content: "" });
     knowledgeSaveOtherInfo.mockResolvedValue(saved);
     const user = userEvent.setup();
     render(<OtherInfoSection />);
 
-    const contentField = screen.getByLabelText("Conteúdo");
+    const contentField = await screen.findByLabelText("Conteúdo");
     expect(contentField).toHaveValue("");
-    // Honestidade de tela: a caixa nasce vazia porque o conteúdo salvo não é
-    // reexibido, e a tela precisa dizer isso, não só o docblock do componente.
-    expect(
-      screen.getByText(/O conteúdo salvo não é reexibido aqui/),
-    ).toBeVisible();
     await user.type(contentField, "Aceitamos cartão e pix.");
     await user.click(screen.getByRole("button", { name: "Salvar informações" }));
 

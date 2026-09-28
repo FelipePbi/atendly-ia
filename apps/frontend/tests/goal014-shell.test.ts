@@ -39,15 +39,19 @@ describe("modelo de navegação", () => {
     ]);
   });
 
+  // Goal067/WU-04: "Mais" ganhou Disponibilidade e Conversas, espelhando
+  // todas as entradas do hub de Configurações — antes faltavam as duas.
   test("'Mais' lista Notificações, Serviços e os destinos de Configurações da Especificação das Telas", () => {
     expect(MORE_DESTINATIONS.map((item) => item.section)).toEqual([
       "notificacoes",
       "servicos",
       "negocio",
       "config-agenda",
+      "disponibilidade",
       "ia",
       "whatsapp",
       "importacao",
+      "config-conversas",
       "conta",
     ]);
   });
@@ -65,9 +69,11 @@ describe("modelo de navegação", () => {
     "servicos",
     "negocio",
     "config-agenda",
+    "disponibilidade",
     "ia",
     "whatsapp",
     "importacao",
+    "config-conversas",
     "conta",
   ] as const)(
     "%s marca 'Mais' como destino ativo, não uma aba própria",

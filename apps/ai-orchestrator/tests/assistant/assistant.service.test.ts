@@ -1469,7 +1469,7 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
         },
         {
           file: "modules/internal/routes.ts",
-          line: 743,
+          line: 749,
           category: "person_typed_text",
           origin: undefined,
         },
@@ -6270,7 +6270,7 @@ describe("Goal046 / WU-04 — a árvore real produz os números desta rodada, e 
  * resolvida (§2), simetria das duas saídas de `sourcesByPath` ausente (§3),
  * o controle próprio do critério 3 do Goal046 (§4, observação 1 do
  * review046), o conjunto de categorias de recusa em runtime (§5), e os
- * números da árvore real com as 42 ocorrências de `this.http.` classificadas
+ * números da árvore real com as 43 ocorrências de `this.http.` classificadas
  * sem recusa (§6). Cada árvore sintética é montada e removida pelo próprio
  * teste; nenhuma toca a árvore real.
  * ========================================================================= */
@@ -11895,7 +11895,7 @@ describe("Goal047 / WU-04 (§5) — as categorias de recusa deste caminho existe
   });
 });
 
-describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta rodada, e as 42 ocorrências de this.http. são classificadas sem recusa alguma", () => {
+describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta rodada, e as 43 ocorrências de this.http. são classificadas sem recusa alguma", () => {
   it("1 superfície, 4 ligações, 206 arquivos varridos, 10 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — inalterados pelas correções deste Goal, exceto o de arquivos varridos, pelo módulo de eventos de conversa do Goal070", () => {
     const { requests, internalClientSurfaces, nonGoBoundInstantiations, nonTransportMemberCalls } =
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath);
@@ -11908,7 +11908,7 @@ describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta roda
     expect(nonTransportMemberCalls).toHaveLength(0);
   });
 
-  it("as 42 ocorrências de this.http. em apps/bff/src/clients/ estão todas na forma direta this.http.<membro>(, sem exceção, e a leitura completa não lança recusa alguma sobre a árvore real", () => {
+  it("as 43 ocorrências de this.http. em apps/bff/src/clients/ estão todas na forma direta this.http.<membro>(, sem exceção, e a leitura completa não lança recusa alguma sobre a árvore real", () => {
     const clientsRoot = join(bffSrcPath, "clients");
     const files = listTypeScriptSources(clientsRoot);
     let totalOccurrences = 0;
@@ -11918,8 +11918,8 @@ describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta roda
       totalOccurrences += (source.match(/\bthis\.http\./gu) ?? []).length;
       totalDirectCalls += (source.match(/\bthis\.http\.[A-Za-z_$][\w$]*\(/gu) ?? []).length;
     }
-    expect(totalOccurrences).toBe(42);
-    expect(totalDirectCalls).toBe(42);
+    expect(totalOccurrences).toBe(43);
+    expect(totalDirectCalls).toBe(43);
     expect(() =>
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath),
     ).not.toThrow();

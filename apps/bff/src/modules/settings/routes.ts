@@ -171,6 +171,9 @@ export async function registerV1SettingsRoutes(
       const body = parseBodyWithAiConversationStyle(aiSchema, request.body);
       const tenant = currentTenantContext(request);
       let activatedByRunId: string | undefined;
+      const current = await getPrisma().aiSettings.findUnique({
+        where: { tenantId: tenant.tenantId },
+      });
       if (body.enabled) {
         // Goal025 §3: conta em exclusao nao religa a IA por nenhum caminho, e
         // este e o unico caminho de pedido humano que grava `enabled: true`.
@@ -178,9 +181,6 @@ export async function registerV1SettingsRoutes(
         // conta inteira, e perguntar se da para ativar uma conta que esta
         // sendo apagada nao faz sentido nem em ordem nem em custo.
         await assertAiActivationNotBlockedByDeletion(tenant.tenantId);
-        const current = await getPrisma().aiSettings.findUnique({
-          where: { tenantId: tenant.tenantId },
-        });
         // Prova valida so e exigida na passagem desligada -> ligada
         // (Goal063/WU-01, criterio 4). Ja ligada, o pedido so troca o estilo:
         // nem prova nova nem `activatedByRunId` mudam.
@@ -199,10 +199,13 @@ export async function registerV1SettingsRoutes(
             409,
           );
         }
-      } else {
-        // Pausar grava a execucao valida corrente (se houver) como ja usada,
-        // para a reconciliacao (Goal019 §7) nunca desfazer a pausa humana com
-        // a mesma prova que a ligou (Goal063/WU-01). Leitura falhando nao
+      } else if (current?.enabled) {
+        // Pausar (ligada -> desligada) grava a execucao valida corrente (se
+        // houver) como ja usada, para a reconciliacao (Goal019 §7) nunca
+        // desfazer a pausa humana com a mesma prova que a ligou (Goal063/WU-01,
+        // review063 observacao 2). `enabled` ja gravado como `false` e so
+        // troca de estilo: gravar aqui religaria a IA por reconciliacao com
+        // uma prova que nunca autorizou pausa nenhuma. Leitura falhando nao
         // bloqueia pausar; so deixa de marcar a execucao como consumida.
         try {
           const run = await getValidActivationRun(internalContext(request), ai);

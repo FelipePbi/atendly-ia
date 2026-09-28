@@ -254,9 +254,6 @@ function AppShellChrome({
                   <Link className="menu-item" href="/configuracoes/conta">
                     Minha conta
                   </Link>
-                  <span className="menu-item" aria-disabled="true">
-                    Ajuda
-                  </span>
                   <div className="menu-divider" />
                   <button
                     className="menu-item danger"
@@ -380,10 +377,6 @@ function AppShellChrome({
               )}
             </Link>
           ))}
-          <span className="menu-item" aria-disabled="true">
-            <Icon name="help" />
-            Ajuda
-          </span>
           <div className="menu-divider" />
           <button
             className="menu-item danger"

@@ -44,7 +44,7 @@ function daysRemainingCopy(days: number): string {
 
 export function AccountSettings() {
   const router = useRouter();
-  const { session, setUnauthenticated } = useProductRuntime();
+  const { refreshSession, session, setUnauthenticated } = useProductRuntime();
   const {
     accountDeletion,
     phase: statusPhase,
@@ -52,6 +52,8 @@ export function AccountSettings() {
   } = useSystemStatus();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [nameBusy, setNameBusy] = useState(false);
+  const [nameMessage, setNameMessage] = useState<string | null>(null);
   const [confirmingLogoutAll, setConfirmingLogoutAll] = useState(false);
   const [loggingOutAll, setLoggingOutAll] = useState(false);
   const [logoutAllError, setLogoutAllError] = useState<string | null>(null);
@@ -67,6 +69,23 @@ export function AccountSettings() {
   const [cancellingDeletionError, setCancellingDeletionError] = useState<
     string | null
   >(null);
+
+  async function saveName(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = formString(new FormData(event.currentTarget), "name").trim();
+    if (!name) return;
+    setNameBusy(true);
+    setNameMessage(null);
+    try {
+      await getProductServices().account.updateProfile(name);
+      await refreshSession();
+      setNameMessage("Nome salvo.");
+    } catch {
+      setNameMessage("Não foi possível salvar o nome.");
+    } finally {
+      setNameBusy(false);
+    }
+  }
 
   async function changePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -167,6 +186,35 @@ export function AccountSettings() {
   return (
     <SettingsPage title="Conta" description="Gerencie credenciais e acesso.">
       <div className="settings-stack">
+        <section className="settings-panel">
+          <div className="settings-panel-header">
+            <div>
+              <h2>Nome</h2>
+              <p>
+                {session?.user.name
+                  ? "Como a Atendly chama você."
+                  : "Adicione seu nome para a Atendly usar no cumprimento."}
+              </p>
+            </div>
+          </div>
+          <form
+            className="settings-form-grid"
+            onSubmit={(event) => void saveName(event)}
+          >
+            <label className="field">
+              <span className="label">Nome</span>
+              <input
+                className="input"
+                defaultValue={session?.user.name ?? ""}
+                maxLength={120}
+                name="name"
+                required
+                type="text"
+              />
+            </label>
+            <SaveActions busy={nameBusy} message={nameMessage} label="Salvar nome" />
+          </form>
+        </section>
         <section className="settings-panel">
           <div className="settings-data-list">
             <div className="settings-data-row">

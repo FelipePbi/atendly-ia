@@ -2426,3 +2426,113 @@ protótipo (Goal072).
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal066-2026-09-28-d-084-proposed),
 [FINAL_AUDIT §45](FINAL_AUDIT.md) e [D-084](DECISIONS.md).
+
+## Regras de oferta, disponibilidade por dia, leitura de "Outras informações importantes", pausa sem consumir prova, nome da pessoa e "Mais" completo, do Goal067
+
+`apps/frontend/` ganha tela para as regras de oferta em Configurações ›
+Agenda, disponibilidade por dia com mais de um intervalo, reexibição de
+"Outras informações importantes", edição do nome em Conta, "Mais" completo
+no celular e a saída de "Ajuda" dos dois menus. `apps/bff/` para de consumir
+a prova do teste real ao pausar com a IA já desligada e ganha
+`PATCH /v1/account/profile` e `GET /v1/knowledge/other-info`.
+`apps/ai-orchestrator/` ganha `GET /internal/knowledge/other-info`, isolado
+por tenant. `packages/public-api-contract/` ganha `accountProfileResultSchema`
+e `otherInfoResultSchema` e as duas entradas correspondentes em
+`publicApiRoutes` — desvio declarado do Goal067 §10, exigido pela checagem
+`public_api_route_coverage` desta mesma tabela para as duas rotas novas (ver
+[D-085](DECISIONS.md)). O gate autenticado mede as três telas novas. Nenhuma
+migration; `apps/scheduling-service/` e `scripts/` não mudam. Decisão:
+[D-085](DECISIONS.md), proposta no Goal067, **ACCEPTED** no
+[review067](reviews/067-review.md).
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| Configurações › Agenda com antecedência mínima, limite no futuro e intervalo entre horários, com o valor lido sempre representado; salvar reenvia `timezone`/`rules` lidos sem mudança | A política de cancelamento de QA S-06 e QA S-08 ("Como você vê a agenda") — não existem em camada nenhuma, ficam para o Goal073 |
+| Disponibilidade por dia, com um ou mais intervalos, sobreposição e início-depois-do-fim recusados inline | Que a IA respeita as regras de oferta numa conversa real (conferência humana do §8; o motor é do Goal009 e não muda) |
+| `GET /internal/knowledge/other-info` e `GET /v1/knowledge/other-info`, isolados por tenant; `OtherInfoSection` abre com o texto salvo | Que Configurações bate com o protótipo aprovado nas opções e nos textos (conferência humana do §8) |
+| `PATCH /v1/settings/ai` só grava `activatedByRunId` na passagem ligada→desligada | Fidelidade visual de Configurações ao protótipo além do que este Goal cria (Goal068) |
+| `PATCH /v1/account/profile`, mesma validação do cadastro, escreve só o `User` da sessão | — |
+| `MORE_DESTINATIONS` ganha Disponibilidade e Conversas; "Ajuda" sai dos dois menus | — |
+| O gate autenticado mede, nas cinco larguras, `/configuracoes/agenda`, `/configuracoes/disponibilidade` e `/configuracoes/conta` | — |
+| Nenhuma exceção nova em `KNOWN_*`; `AUTHENTICATED_ROUTES` e `ONBOARDING_ROUTES` não perdem rota | — |
+
+### Controles negativos e execução final
+
+**Sete controles negativos, aplicados e revertidos**, rodados por esta
+unidade (WU-15), **depois da última edição de código** e da execução final,
+na própria worktree, com `sha256sum` idêntico antes e depois de cada um.
+Saída colada em [FINAL_AUDIT §46](FINAL_AUDIT.md).
+
+1. Isolamento por tenant da leitura do orquestrador (`getOtherInfo`) sai do
+   filtro: reprova o teste de isolamento (apps/ai-orchestrator).
+2. O ramo de pausa volta a gravar `activatedByRunId` sem olhar o `enabled`
+   gravado: reprova o teste de estilo com a IA desligada (apps/bff,
+   integração contra PostgreSQL real).
+3. Gravar as regras de oferta envia `rules: []`: reprova o teste de
+   preservação da grade (apps/frontend).
+4. Disponibilidade volta a recusar a grade com dois intervalos no dia:
+   reprova o teste de grade por dia (apps/frontend).
+5. `OtherInfoSection` volta a abrir vazia: reprova o teste de reexibição
+   (apps/frontend).
+6. Disponibilidade sai de `MORE_DESTINATIONS`: reprova o teste do "Mais"
+   (apps/frontend).
+7. `PATCH /v1/account/profile` aceita nome só com espaços: reprova o teste
+   de validação (apps/bff, integração contra PostgreSQL real).
+
+Sem cada defeito, os testes nomeados voltam a passar, e o arquivo restaurado
+bate hash com o original em todos os sete.
+
+Execução final da rodada 2 (FIX-001), sobre a árvore com os blockers 1–3
+corrigidos, antes dos controles acima:
+
+- `node scripts/validate-core.mjs`: **17** passos, **15** `passed`, **0**
+  `failed`, **2** `skipped` (`test:bff`, `test:health-worker`), exit 0.
+  Dentro dele, `test:ai-orchestrator` em **85**/**97** arquivos e
+  **1117**/**1205** testes; `test:scheduling-service` em **35**/**35** e
+  **484**/**484**; `test:frontend` em **94**/**94** arquivos e
+  **979**/**979** testes (baseline desta seção **976**, os **3** a mais são
+  o teste novo do blocker 1 e os dois testes novos do blocker 2);
+  `audit:static` em **33** de **34** verificações
+  passando e **1** pulada.
+- `node --test scripts/tests/**/*.test.mjs` (`test:gate`): **233**/**233**,
+  **0** falhando, exit 0.
+- `node scripts/validate-ui.mjs`: **169** passando, **21** pulados, **0**
+  falhando, **0** retentativas, exit 0.
+- `node scripts/validate-integration.mjs`, contra o PostgreSQL 18
+  descartável em `127.0.0.1:55432`
+  (`BFF_TEST_DATABASE_URL=postgresql://pgtest@127.0.0.1:55432/atendly_bff_test`):
+  **35**/**35** passos, exit 0. Dentro dela, `test:bff-integration` em
+  **55** arquivos e **434** testes (baseline **53**/**428**, os **2**
+  arquivos e **6** testes novos continuam sendo `goal067-*`);
+  `test:scheduling-integration` em **16**/**124**, sem mudança; gate
+  autenticado (`rehearse:goal033-authenticated-ui`) com **155** testes
+  passando (baseline **140**, mais **15** das três rotas novas nas cinco
+  larguras), **0** falhando e **0** retentativas.
+- `this.http.` em `apps/bff/src/clients/`: **43** (sem mudança nesta rodada).
+
+Dos sete controles negativos acima, os seis de código (2 a 7) foram
+reaplicados e revertidos depois desta execução, com hash antes/durante/
+depois idêntico em cada um — saída real em [FINAL_AUDIT §46](FINAL_AUDIT.md).
+O controle 1 (isolamento por tenant da leitura do orquestrador) não foi
+re-executado nesta rodada: o arquivo (`knowledge-document-service.ts`) não
+foi tocado pelo FIX-001, e a tentativa de reaplicar o mesmo defeito foi
+recusada pela permissão do harness como remoção de controle de segurança,
+antes de qualquer teste rodar; o arquivo foi restaurado de imediato e o
+hash conferido idêntico ao original.
+
+### Conferência humana e limites
+
+**Conferência humana pendente.** A conferência do §8 do Goal **não foi
+feita** por este Goal: que Configurações bate com o protótipo
+`Mais-Negocio-Agenda-IA` e `Mais-WhatsApp-Importacao-Conta` nas opções e nos
+textos; que a IA, depois de mudar as regras de oferta, oferece horários com
+a antecedência, o limite e o intervalo escolhidos numa conversa real.
+
+**O que esta seção não prova.** Não prova a política de cancelamento nem
+"Como você vê a agenda" (Goal073). Não prova fidelidade visual de
+Configurações ao protótipo além do que este Goal cria (Goal068). Não
+reproduz o vermelho da baseline de cada escopo obrigatório (§6 do Goal):
+essa evidência é das unidades que implementaram cada parte (WU-01 a WU-04).
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal067-2026-09-28-d-085-proposed),
+[FINAL_AUDIT §46](FINAL_AUDIT.md) e [D-085](DECISIONS.md).

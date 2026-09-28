@@ -22,13 +22,14 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Séries de bloqueio/compromisso (Goal009) | `POST /v1/block-series`; `PATCH /v1/block-series/:id/from-date`; `DELETE /v1/block-series/:id` |
 | Importação única (Goal010, Goal020, Goal061) | `GET /v1/calendar/imports`; `POST /v1/calendar/imports`; `POST /v1/calendar/imports/:sessionId/analyze`; `GET /v1/calendar/imports/:sessionId/preview`; `GET /v1/calendar/imports/:sessionId/categories/:category/items`; `POST /v1/calendar/imports/:sessionId/categories/:category/selection`; `POST /v1/calendar/imports/:sessionId/items/:itemId/decision`; `POST /v1/calendar/imports/:sessionId/execute`; `GET /v1/calendar/imports/:sessionId/progress`; `POST /v1/calendar/imports/:sessionId/complete` |
 | Clientes | `GET /v1/customers`; `GET /v1/customers/:id`; `POST /v1/customers`; `PATCH /v1/customers/:id`; `PUT /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/primary-guardian/confirm`; `DELETE /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/notes`; `PATCH /v1/customers/:id/notes/:noteId`; `DELETE /v1/customers/:id/notes/:noteId`; `POST /v1/customers/:id/tags`; `PATCH /v1/customers/:id/tags/:tagId`; `DELETE /v1/customers/:id/tags/:tagId`; `GET/POST /v1/customers/:id/memory`; `PATCH/DELETE /v1/customers/:id/memory/:memoryId`; `POST /v1/customers/:id/summary` (Goal012) |
-| Conhecimento do negócio (Goal012) | `GET/POST /v1/knowledge/documents`; `GET/PUT/DELETE /v1/knowledge/documents/:id`; `PUT /v1/knowledge/other-info` |
+| Conhecimento do negócio (Goal012) | `GET/POST /v1/knowledge/documents`; `GET/PUT/DELETE /v1/knowledge/documents/:id`; `GET/PUT /v1/knowledge/other-info` |
 | Serviços | `GET /v1/services`; `POST /v1/services`; `PATCH /v1/services/:id` |
 | Configurações | `GET /v1/settings`; `PATCH /v1/settings/business`; `PATCH /v1/settings/ai`; `PATCH /v1/settings/availability`; `GET /v1/settings/reminders`; `PATCH /v1/settings/reminders` (Goal021); `GET/PATCH /v1/settings/retention` (Goal023/WU-01) |
 | WhatsApp | `GET /v1/whatsapp`; `GET /v1/whatsapp/qr` (Goal071/WU-01); `POST /v1/whatsapp/connect`; `POST /v1/whatsapp/reconnect`; `DELETE /v1/whatsapp` |
 | Teste real de ativação (Goal019/WU-05) | `GET /v1/activation-test`; `POST /v1/activation-test`; `POST /v1/activation-test/restart` |
 | Central de notificações (Goal022/WU-04) | `GET /v1/notifications`; `GET /v1/notifications/summary`; `POST /v1/notifications/read`; `GET/PATCH /v1/notifications/preferences` |
 | Ciclo de vida da conta (Goal025/WU-03) | `POST /v1/account/deletion`; `DELETE /v1/account/deletion` |
+| Perfil da conta (Goal067) | `PATCH /v1/account/profile` |
 
 As rotas autenticadas resolvem o negócio a partir da sessão; `tenantId` enviado isoladamente pelo browser não concede autorização.
 
@@ -540,7 +541,7 @@ Ligar a IA à mão (`enabled: true` na passagem desligada → ligada) passa a ex
 
 Ligar com prova válida grava `activatedByRunId` com o id da execução usada, no mesmo campo que a autoativação da Home já preenche — a mesma execução não liga a IA duas vezes, pelo mesmo motivo em qualquer um dos dois caminhos. `enabled: true` com a IA **já** ligada (troca só de `tone`) não exige prova nova e não muda `activatedByRunId`.
 
-Desligar (`enabled: false`, "Pausar") grava `activatedByRunId` da execução válida corrente, se houver uma — para a reconciliação de ativação (`reconcileAiActivation`) nunca desfazer uma pausa humana religando a IA com a mesma prova que já a tinha ligado. Uma IA religada à mão volta a desligar sozinha se a execução que a autorizou for superada por troca de canal (`DEACTIVATED_BY_CHANNEL_CHANGE`, inalterado).
+Desligar (`enabled: false`, "Pausar") só grava `activatedByRunId` — da execução válida corrente, se houver uma — quando o `enabled` já gravado era `true` (Goal067, review063 observação 2): é a passagem ligada → desligada que é pausa de verdade. Salvar só o estilo com a IA já desligada não grava `activatedByRunId`, mesmo com prova válida disponível — nada aqui era uma pausa, e gravar o id religaria a IA pela reconciliação de ativação (`reconcileAiActivation`) com uma prova que nunca autorizou pausa nenhuma. Uma IA religada à mão volta a desligar sozinha se a execução que a autorizou for superada por troca de canal (`DEACTIVATED_BY_CHANNEL_CHANGE`, inalterado).
 
 **O teste real fora do onboarding (Goal063, U-11).** As rotas `GET/POST /v1/activation-test` e `POST /v1/activation-test/restart` não mudam e nunca olharam o onboarding. O que muda é quem as oferece: além do onboarding, Configurações › IA oferece o mesmo teste **enquanto a IA não está ativa** — sem prova válida e com WhatsApp conectado. Com a IA ativa a tela não mostra entrada para o teste, e o BFF continua recusando com `ACTIVATION_TEST_AI_ALREADY_ACTIVE`. Um teste novo bem-sucedido depois de uma pausa continua ligando a IA pela reconciliação, como antes. O cliente trata `409 AI_ACTIVATION_TEST_REQUIRED` relendo o estado (`GET /v1/settings` e `GET /v1/activation-test`), nunca como erro genérico. O onboarding só é concluído (`POST /v1/onboarding/complete`) pela ação que sai dele, depois da etapa do teste; a regra é do cliente e não muda a rota.
 
@@ -713,7 +714,7 @@ Todas as rotas desta seção resolvem o negócio pela sessão autenticada e exig
 
 `type` de `KnowledgeDocument` é um de `FAQ`, `GUIDANCE` (orientação), `CARE` (cuidado), `PROCEDURE`, `BUSINESS_INFO` ou `TEXT_POLICY`. `GET /v1/knowledge/documents` lista os documentos `ACTIVE` do negócio (filtráveis por `type`, `serviceId` e `status`); `POST` cria a primeira versão; `PUT /v1/knowledge/documents/:id` edita a versão vigente — cada edição gera uma **versão nova** e inativa a anterior na mesma transação do lado da IA, nunca apaga; `DELETE` desativa (`INACTIVE`), nunca remove a linha. `serviceId` liga o documento a um serviço do catálogo por ID, sem FK entre bancos; ausente, o documento é geral.
 
-Existe exatamente um documento `BUSINESS_INFO` por negócio para o campo livre "Outras informações importantes", com `source` fixa — só `PUT /v1/knowledge/other-info` grava nele. `POST`/`PUT /v1/knowledge/documents` recusam `type: "BUSINESS_INFO"` com `409` (repassado da IA, `upstreamCode: "KNOWLEDGE_BUSINESS_INFO_RESERVED"`).
+Existe exatamente um documento `BUSINESS_INFO` por negócio para o campo livre "Outras informações importantes", com `source` fixa — só `PUT /v1/knowledge/other-info` grava nele. `POST`/`PUT /v1/knowledge/documents` recusam `type: "BUSINESS_INFO"` com `409` (repassado da IA, `upstreamCode: "KNOWLEDGE_BUSINESS_INFO_RESERVED"`). `GET /v1/knowledge/other-info` lê o texto vigente; resposta `{ "content": string }`, vazio (`""`) quando o negócio nunca salvou nada — não é erro.
 
 Cada documento carrega um ou mais `chunks` (`content` + `metadata` livre), reindexados a cada versão nova. Se o provider de embedding falhar, nada muda no banco da IA e a resposta chega como erro de infraestrutura próprio (`502`, `error.details.upstreamCode: "KNOWLEDGE_INDEX_UNAVAILABLE"`) — nunca um documento ativo sem chunks, nunca um `500` genérico.
 
@@ -967,3 +968,17 @@ Cancelar **não restaura nada**: o WhatsApp continua desconectado e a IA continu
 `GET /v1/status` devolve o mesmo estado sob `accountDeletion`, para a tela contar os dias sem precisar de uma leitura própria — ver a seção "Status honesto do WhatsApp e da IA" acima.
 
 Enquanto o estado é `SCHEDULED`, **nenhum caminho religa a IA do negócio**. `PATCH /v1/settings/ai` com `enabled: true` recusa com `409 CONFLICT` — o mesmo código e a mesma forma com que já recusava sem serviço operacional, sem `details` novo —, e a reconciliação de ativação mantém o desejado em `false`. Cancelar dentro do prazo devolve a conta ao estado normal: a partir daí `PATCH /v1/settings/ai` volta a valer exatamente como antes, e religar a IA continua exigindo reconectar o WhatsApp e refazer o teste real de ativação. Desde o Goal063, "como antes" inclui a prova do teste real: ligar a IA por `PATCH /v1/settings/ai` exige execução `SUCCEEDED` não superada por troca de canal (seção "`PATCH /v1/settings/ai` exige prova do teste real" acima), e a exclusão agendada continua sendo checada antes dela.
+
+## `PATCH /v1/account/profile` (Goal067)
+
+```json
+{ "name": "Novo nome" }
+```
+
+Grava o nome do dono da conta. Sob sessão e CSRF, como as demais mutações; não aceita `userId` nem `tenantId` no corpo — a identidade vem sempre da sessão, e a rota escreve só no `User` da sessão, nunca em outro.
+
+`name` usa a mesma validação de `POST /v1/auth/register`: aparado, de 1 a 120 caracteres. Ausente, vazio ou só espaço é `400 VALIDATION_ERROR`. Sem sessão é `401 UNAUTHORIZED`.
+
+```json
+{ "data": { "user": { "id": "...", "email": "...", "name": "Novo nome", "createdAt": "..." } } }
+```

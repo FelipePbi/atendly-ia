@@ -34,7 +34,7 @@ import {
 const emailSchema = z.string().email().trim().toLowerCase();
 // Nome do dono da conta (Goal064): aparado, de 1 a 120 caracteres. Ausente,
 // vazio ou só espaço recusa antes de qualquer escrita.
-const nameSchema = z.string().trim().min(1).max(120);
+export const nameSchema = z.string().trim().min(1).max(120);
 // `confirmPassword` saiu do contrato: um corpo antigo que ainda o traga é
 // aceito e o campo é ignorado (z.object não estrito descarta chave
 // desconhecida).

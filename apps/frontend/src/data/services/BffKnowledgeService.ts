@@ -109,4 +109,16 @@ export class BffKnowledgeService {
       signal,
     });
   }
+
+  /** Leitura do campo livre "Outras informacoes importantes" (Goal067). */
+  getOtherInfo(signal?: AbortSignal) {
+    return this.http.request({
+      path: "/v1/knowledge/other-info",
+      schema: routeSchema<{ content: string }>(
+        "GET",
+        "/v1/knowledge/other-info",
+      ),
+      signal,
+    });
+  }
 }

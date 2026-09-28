@@ -12,7 +12,6 @@ export function ToneChoice({
       <input checked={checked} name="tone" type="radio" onChange={onChange} />
       <span className="settings-tone-card">
         <strong>{label}</strong>
-        <span>Tom permitido na V1.</span>
       </span>
     </label>
   );
@@ -35,11 +34,13 @@ export function Password({ label, name }: { label: string; name: string }) {
 
 export function SaveActions({
   busy,
+  disabled = false,
   label = "Salvar alterações",
   message,
   onClick,
 }: {
   busy: boolean;
+  disabled?: boolean;
   label?: string;
   message: string | null;
   onClick?: () => void;
@@ -51,7 +52,7 @@ export function SaveActions({
       </span>
       <button
         className="btn btn-primary"
-        disabled={busy}
+        disabled={busy || disabled}
         type={onClick ? "button" : "submit"}
         onClick={onClick}
       >

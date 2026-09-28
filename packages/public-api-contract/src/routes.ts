@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   accountDeletionResultSchema,
+  accountProfileResultSchema,
   activationTestRunSchema,
   appointmentEventSchema,
   appointmentHoldSchema,
@@ -46,6 +47,7 @@ import {
   notificationPreferencesSchema,
   notificationSummarySchema,
   okSchema,
+  otherInfoResultSchema,
   onboardingStateSchema,
   registerResultSchema,
   reminderSettingsSchema,
@@ -78,6 +80,7 @@ export const publicApiRoutes: readonly PublicApiRoute[] = [
   // account
   { method: "POST", pathPattern: "/v1/account/deletion", schema: accountDeletionResultSchema },
   { method: "DELETE", pathPattern: "/v1/account/deletion", schema: accountDeletionResultSchema },
+  { method: "PATCH", pathPattern: "/v1/account/profile", schema: accountProfileResultSchema },
 
   // activation-test
   { method: "GET", pathPattern: "/v1/activation-test", schema: activationTestRunSchema.nullable() },
@@ -175,6 +178,7 @@ export const publicApiRoutes: readonly PublicApiRoute[] = [
   { method: "PUT", pathPattern: "/v1/knowledge/documents/:id", schema: knowledgeDocumentSchema },
   { method: "DELETE", pathPattern: "/v1/knowledge/documents/:id", schema: knowledgeDocumentSchema },
   { method: "PUT", pathPattern: "/v1/knowledge/other-info", schema: knowledgeDocumentSchema },
+  { method: "GET", pathPattern: "/v1/knowledge/other-info", schema: otherInfoResultSchema },
 
   // migrations
   { method: "GET", pathPattern: "/v1/calendar/imports", schema: importStateSchema },

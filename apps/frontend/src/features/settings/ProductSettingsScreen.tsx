@@ -31,7 +31,10 @@ export function ProductSettingsScreen({
     getProductServices()
       .settings.get(controller.signal)
       .then(setSettings)
-      .catch(() => setError(true));
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setError(true);
+      });
     getProductServices()
       .whatsapp.get(controller.signal)
       .then((connection) =>
@@ -93,7 +96,7 @@ function SettingsContent({
   if (scenario.startsWith("whatsapp"))
     return <WhatsAppSettings onStatusChange={setWhatsappConnected} />;
   if (scenario === "calendar" || scenario === "calendar-external")
-    return <CalendarSettings settings={settings} />;
+    return <CalendarSettings settings={settings} onSaved={setSettings} />;
   if (scenario === "availability")
     return <AvailabilitySettings settings={settings} onSaved={setSettings} />;
   if (scenario === "conversations") return <ConversationsSettings />;

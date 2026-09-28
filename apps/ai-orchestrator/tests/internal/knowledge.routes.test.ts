@@ -50,7 +50,10 @@ function document(overrides: Partial<StoredDocument> = {}): StoredDocument {
 }
 
 /** Dublê do ciclo de vida: só registra o que a rota chamou, sem persistência real. */
-function fakeKnowledgeDocuments(seed: StoredDocument[] = []) {
+function fakeKnowledgeDocuments(
+  seed: StoredDocument[] = [],
+  otherInfoByTenant: Record<string, string> = {},
+) {
   const calls: Array<{ method: string; args: unknown }> = [];
   return {
     calls,
@@ -90,6 +93,10 @@ function fakeKnowledgeDocuments(seed: StoredDocument[] = []) {
           source: "business-info/other-important-information",
           ...(args as Partial<StoredDocument>),
         });
+      },
+      async getOtherInfo(tenantId: string) {
+        calls.push({ method: "getOtherInfo", args: { tenantId } });
+        return otherInfoByTenant[tenantId] ?? "";
       },
     },
   };
@@ -239,6 +246,44 @@ describe("rotas internas de conhecimento", () => {
       method: "saveOtherInfo",
       args: { tenantId: "tenant-a", content: "Aceitamos pets de pequeno porte." },
     });
+  });
+
+  it("lê o campo livre único do negócio", async () => {
+    await app.close();
+    knowledgeDocuments = fakeKnowledgeDocuments([document()], {
+      "tenant-a": "Aceitamos pets de pequeno porte.",
+    });
+    app = Fastify();
+    await registerInternalRoutes(app, {} as never, {
+      inbox: { countDeadLetters: async () => 0 },
+      knowledgeDocuments: knowledgeDocuments.service,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/internal/knowledge/other-info",
+      headers: headers("tenant-a"),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual({
+      content: "Aceitamos pets de pequeno porte.",
+    });
+    expect(knowledgeDocuments.calls[0]).toMatchObject({
+      method: "getOtherInfo",
+      args: { tenantId: "tenant-a" },
+    });
+  });
+
+  it("campo livre vazio quando o tenant nunca salvou nada, sem erro", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/internal/knowledge/other-info",
+      headers: headers("tenant-sem-nada"),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual({ content: "" });
   });
 
   it("recusa a credencial de provisionamento nas rotas de conhecimento", async () => {

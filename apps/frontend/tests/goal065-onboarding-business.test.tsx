@@ -303,7 +303,7 @@ describe("modalidade: exige ao menos uma opção, com o erro ligado ao grupo", (
     expect(updateOnboarding).not.toHaveBeenCalled();
   });
 
-  test("sem Local próprio, grava e avança direto para fonte-da-agenda", async () => {
+  test("sem Local próprio, grava e avança direto para sistema-atual", async () => {
     const user = await renderStep(
       "modalidade",
       stateFixture(businessSegmentDone),
@@ -319,7 +319,9 @@ describe("modalidade: exige ao menos uma opção, com o erro ligado ao grupo", (
         timezone: "America/Sao_Paulo",
       },
     }));
-    expect(push).toHaveBeenCalledWith("/onboarding/fonte-da-agenda");
+    // Goal066/WU-01: "fonte-da-agenda" saiu da sequência; o próximo passo do
+    // bloco "Sua agenda" é "sistema-atual".
+    expect(push).toHaveBeenCalledWith("/onboarding/sistema-atual");
   });
 
   test("com Local próprio, grava e avança para endereco", async () => {
@@ -386,7 +388,7 @@ describe("endereco: só existe para Local próprio, exige valor não vazio", () 
     expect(updateOnboarding).not.toHaveBeenCalled();
   });
 
-  test("preenchido, grava com o endereço e avança para fonte-da-agenda", async () => {
+  test("preenchido, grava com o endereço e avança para sistema-atual", async () => {
     const user = await renderStep("endereco", stateFixture(onSiteWithoutAddress));
     await user.type(
       await screen.findByLabelText("Endereço do seu espaço"),
@@ -403,7 +405,8 @@ describe("endereco: só existe para Local próprio, exige valor não vazio", () 
         timezone: "America/Sao_Paulo",
       },
     }));
-    expect(push).toHaveBeenCalledWith("/onboarding/fonte-da-agenda");
+    // Goal066/WU-01: mesma troca de destino do teste sem ON_SITE acima.
+    expect(push).toHaveBeenCalledWith("/onboarding/sistema-atual");
   });
 
   test("BUSINESS_ADDRESS_REQUIRED do servidor cai no campo de endereço, sem o aviso geral", async () => {

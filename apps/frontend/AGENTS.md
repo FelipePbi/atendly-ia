@@ -200,10 +200,14 @@ Além de overflow, touch target, contraste, foco e movimento, ele mede
   sem checkbox de consentimento.
 
 O mesmo passo também mede as etapas do onboarding descritas no vault
-(Goal065, WU-05): Boas-vindas, Segmento+nome, Modalidade, Endereço, Primeiro
-serviço, Serviços adicionais, Dias, Horários (com "Personalizar dias
-diferentes" aberto), Agenda pronta e a introdução do WhatsApp
-(`ONBOARDING_ROUTES` em `e2e/routes.ts`). A sessão vem de uma SEGUNDA conta,
+(Goal065, WU-05): Boas-vindas, Segmento+nome, Modalidade, Endereço, Sistema
+atual, Quando importar e Importação (no estado de conectar; as três desde o
+Goal066), Primeiro serviço, Serviços adicionais, Dias, Horários (com
+"Personalizar dias diferentes" aberto), Agenda pronta e a introdução do
+WhatsApp (`ONBOARDING_ROUTES` em `e2e/routes.ts`). Os outros estados da
+importação dentro do onboarding (análise, revisão, conflitos, execução e
+resultado) exigem uma origem real e ficam no jsdom
+(`tests/goal066-onboarding-importacao.test.tsx`). A sessão vem de uma SEGUNDA conta,
 também semeada por `scripts/goal033-authenticated-ui-rehearsal.mjs`, que a
 registra e grava só o bloco de negócio (nome, segmento, "Local próprio" e
 endereço) sem nunca completar o onboarding — é essa conta parada no meio,

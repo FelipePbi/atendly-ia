@@ -5649,3 +5649,81 @@ Sem o defeito, cada alvo volta a passar por inteiro: **4**/**4** no BFF, **76**/
 ### Veredito recontado
 
 O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO`**. São os mesmos números de §43, com `audit:static` da execução final em **33** de **34** verificações passando e **1** pulada. Nenhum achado de A-01 a A-24 foi tocado, corrigido, reclassificado ou reaberto. Esta seção só acrescenta o registro do diff065. Os QAs corrigidos são do `QA_LOCAL_REVIEW`, fora dessa enumeração.
+
+## 45. QA O-17…O-22 e a observação 5 do review065 são corrigidos: a importação entra no onboarding — Goal066, 2026-09-28
+
+Seção nova, escrita na rodada 2, depois da execução final e dos seis controles negativos do §6 do Goal, ambos rodados pela rodada 2 sobre a árvore final. **Não reescreve** §4 a §44: os registros de A-01 a A-24, o veredito das seções anteriores e as quarenta e quatro seções de fechamento anteriores continuam exatamente como estavam. Os QAs desta seção vêm do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md), não da enumeração A-01…A-24, e **não entram nessa contagem**. Decisão: [D-084](DECISIONS.md), **ACCEPTED** no [review066](reviews/066-review.md) (rodada 2).
+
+### O que mudou
+
+**QA O-17, QA O-18 e QA O-19 — "Sistema atual".** `fonte-da-agenda`, `agenda-atendly-confirmar` e `agenda-atendly-metodo` saem da sequência, do progresso e de `blockForScenario`, e redirecionam para `sistema-atual`. A etapa pergunta "Você já usa algum sistema para organizar seus clientes e agendamentos?" com dois cards que são a ação, "Sim, quero importar" e "Não, começar do zero": nenhum marcado, sem `aria-pressed`, sem ✓, sem "Continuar", e os dois desabilitados durante a gravação. Nenhuma etapa do bloco mostra fuso horário, "Fonte oficial" ou "Agenda Atendly" como escolha.
+
+**QA O-22 — ✓ sobre o título a 390 px.** Fecha por construção: os cards de `sistema-atual` não têm ✓.
+
+**QA O-20 e QA O-21 — importar agora ou depois.** "Sim, quero importar" leva a `quando-importar` ("Quer importar agora?", "Se fizer depois, a importação fica em Mais › Importação."), sem gravar. "Importar agora", "Fazer depois" e "Não, começar do zero" gravam `calendar.source` pelo `PATCH /v1/onboarding` de antes e só avançam com `200` — a importação recusa sem `calendarSettings` (`CALENDAR_SETTINGS_NOT_FOUND`). "Importar agora" abre a etapa `importacao`; os outros dois levam a `servico-nome`. "Configurações → Agenda" e `servicePopulation` saem do onboarding.
+
+**A mesma importação nas duas molduras.** `features/imports` separa a leitura do estado (`useImportState`, só `getImportState`) e a escolha da tela (`ImportsFlow`) da moldura. `/importacao` continua com `useShellConfig` e o link "Configurações". A etapa `importacao` monta o mesmo `ImportsFlow` com `ImportsFrameProvider frame="onboarding"`, dentro da barra superior do onboarding: sem link "Configurações", sem link que saia do onboarding, com um `<h1>` só. Com a importação concluída, "Continuar" vai a `servico-nome` sem serviço ativo, a `dias-de-atendimento` sem horário ativo e a `demonstracao-da-ia` sem pendência, cada um com o seu aviso. Na retomada, `nextRequiredStep(state, importState)` devolve `importacao` com `calendar.source` gravado, sem serviço ativo e com sessão viva; se a leitura do estado da importação falhar, a retomada segue a regra sem importação.
+
+**Observação 5 do review065 — horário só no início.** `dayHours` guarda por dia só o campo personalizado; o outro acompanha o intervalo-base, e a gravação manda o intervalo que a tela mostra.
+
+**Gate autenticado.** `ONBOARDING_ROUTES` passa de dez para treze etapas, com `sistema-atual`, `quando-importar` e `importacao` (estado de conectar), medidas nas cinco larguras com a sessão da segunda conta vinda de `/login`.
+
+### Vermelho na baseline
+
+Rodado na rodada 2, antes da execução final, com os dois arquivos de teste novos da árvore final. Cópia da árvore `apps/frontend` de `f565978a8da01165fd3b397f5c1a9ef58dd6e747` extraída por `git archive f565978 apps/frontend | tar -x` para o diretório temporário da sessão, fora do repositório, com os `node_modules` da worktree ligados por junção e só `goal066-onboarding-sistema-atual.test.tsx` e `goal066-onboarding-importacao.test.tsx` copiados. Comando: `npx vitest run tests/goal066-onboarding-sistema-atual.test.tsx tests/goal066-onboarding-importacao.test.tsx --reporter=verbose`, exit 1:
+
+```text
+ Test Files  2 failed (2)
+      Tests  33 failed | 3 passed (36)
+```
+
+**23** de **23** falhando em `goal066-onboarding-sistema-atual.test.tsx` e **10** de **13** em `goal066-onboarding-importacao.test.tsx`. Linhas decisivas:
+
+```text
+TypeError: undefined is not iterable (cannot read property Symbol(Symbol.iterator))
+AssertionError: expected "vi.fn()" to be called with arguments: [ '/onboarding/sistema-atual' ]
+AssertionError: expected true to be false // Object.is equality
+AssertionError: expected 'fonte-da-agenda' to be 'sistema-atual' // Object.is equality
+AssertionError: expected 'servico-nome' to be 'importacao' // Object.is equality
+AssertionError: expected "vi.fn()" to be called with arguments: [ '/onboarding/importacao' ]
+AssertionError: expected { active: true, dayOfWeek: 1, …(2) } to deeply equal { active: true, dayOfWeek: 1, …(2) }
+AssertionError: expected { active: true, dayOfWeek: 5, …(2) } to deeply equal { active: true, dayOfWeek: 5, …(2) }
+```
+
+O `TypeError` é `onboardingScenarios["sistema-atual"]` (e `quando-importar`, `importacao`) inexistente na baseline. Os **3** que passam na baseline são de preservação, e passar neles é o esperado: a retomada com importação concluída e sem serviço vai a `servico-nome`, a retomada com falha de leitura vai a `servico-nome` (a baseline nunca lê a importação), e `/importacao` mantém o link "Configurações" e registra o shell.
+
+### Asserções existentes mudadas e testes substituídos (§5 do Goal)
+
+Nenhum teste foi pulado. Nenhum teste do módulo `features/imports` mudou.
+
+- `goal018-onboarding-reachability.test.tsx`: `onboardingOrder` continua em **23**, com a asserção igual à da baseline e só o comentário que explica a conta mudado (saem `fonte-da-agenda`, `agenda-atendly-confirmar` e `agenda-atendly-metodo`; entram `sistema-atual`, `quando-importar` e `importacao`). O mock de `ProductRuntime` ganha `migration.getImportState`, porque o teste que monta cada cenário pela rota real passa a montar `importacao`. Cinco testes das três telas antigas são substituídos pela suíte `goal066-onboarding-sistema-atual.test.tsx`, listados no próprio arquivo: "fonte-da-agenda com Agenda Atendly volta para modalidade…" por "Voltar aponta para modalidade sem ON_SITE" e "'Não, começar do zero' grava calendar.source…"; "fonte-da-agenda sem escolher a Agenda Atendly bloqueia…" por "não oferece Continuar"; "agenda-atendly-confirmar avança para agenda-atendly-metodo" por "'Sim, quero importar' só navega para quando-importar…"; "agenda-atendly-metodo avança para servico-nome" por "'Fazer depois' grava calendar.source e só avança para servico-nome com 200"; "agenda-atendly-metodo oferece as duas opções…" por "mostra a pergunta do vault e os dois cards, nenhum marcado…", "servicePopulation e o aviso antigo de importação saíram…" e, em `goal066-onboarding-importacao.test.tsx`, "PATCH, depois a releitura do onboarding, depois a etapa importacao real…". O comentário de cabeçalho deixa de citar `agenda-atendly-metodo`.
+- `goal065-onboarding-business.test.tsx`: dois destinos passam de `/onboarding/fonte-da-agenda` a `/onboarding/sistema-atual` (sem "Local próprio", e endereço preenchido) — rota; os títulos dos dois testes passam a dizer `sistema-atual`.
+
+### Seis controles negativos, aplicados e revertidos
+
+Rodados na rodada 2, depois da última edição de código e depois da execução final, na própria worktree, por um script que troca exatamente um trecho, roda `npx vitest run tests/goal066-onboarding-sistema-atual.test.tsx tests/goal066-onboarding-importacao.test.tsx` (**36** testes), grava o arquivo original de volta byte a byte e compara `git hash-object` antes e depois (idênticos nos seis). Saída real:
+
+1. `sistema-atual` volta a pré-marcar "Não, começar do zero" (`Choice selected` no lugar do card; `OnboardingScreen.tsx`, `eafd69f9…` → `b8b6adf1…` → `eafd69f9…`): exit 1, `Tests  2 failed | 34 passed (36)` — `mostra a pergunta do vault e os dois cards, nenhum marcado…` com `AssertionError: expected 'choice-card is-selected' not to contain 'is-selected'`, e `enquanto a gravação não volta, os dois cards ficam desabilitados…` com `expect(element).toBeDisabled()`.
+2. "Importar agora" deixa de gravar `calendar.source` antes da importação (`schedule.tsx`, `a1235289…` → `bc8e338f…` → `a1235289…`): exit 1, `Tests  3 failed | 33 passed (36)` — `PATCH, depois a releitura do onboarding, depois a etapa importacao real lê o estado da importação` e `'Importar agora' grava calendar.source e navega para importacao, só com 200` com `AssertionError: expected "vi.fn()" to be called with arguments: [ { calendar: { …(2) } } ]`, e `'Importar agora' com falha no PATCH fica na etapa, sem avançar`.
+3. A moldura do onboarding volta a mostrar o link "Configurações" (`ImportsLayout.tsx`, `e0cca39c…` → `6b5f406c…` → `e0cca39c…`): exit 1, `Tests  5 failed | 31 passed (36)` — a tela de conectar, a fase da sessão viva e os três destinos de §5B, com `AssertionError: expected <a class="imports-back" …(1)>…(1)</a> to be null`.
+4. `nextRequiredStep` volta a ignorar a sessão viva (`OnboardingRuntime.tsx`, `3eaed350…` → `9c77d1b5…` → `3eaed350…`): exit 1, `Tests  2 failed | 34 passed (36)` — `AssertionError: expected 'servico-nome' to be 'importacao' // Object.is equality` e `AssertionError: expected "vi.fn()" to be called with arguments: [ '/onboarding/importacao' ]` em `OnboardingResume lê a importação e leva a /onboarding/importacao`.
+5. Depois da importação concluída, "Continuar" vai direto a `demonstracao-da-ia` (`OnboardingImportStep.tsx`, `2f19d08c…` → `99503fca…` → `2f19d08c…`): exit 1, `Tests  2 failed | 34 passed (36)` — `AssertionError: expected "vi.fn()" to be called with arguments: [ '/onboarding/servico-nome' ]` e `[ '/onboarding/dias-de-atendimento' ]`.
+6. O dia personalizado só no início volta a congelar o fim antigo (o dia guarda o par inteiro; `schedule.tsx`, `a1235289…` → `709a85eb…` → `a1235289…`): exit 1, `Tests  2 failed | 34 passed (36)` — `AssertionError: expected { active: true, dayOfWeek: 1, …(2) } to deeply equal { active: true, dayOfWeek: 1, …(2) }` (só o início) e o mesmo para `dayOfWeek: 5` (só o fim).
+
+Sem o defeito, depois da restauração: `Test Files  2 passed (2)`, `Tests  36 passed (36)`; `git status --porcelain=v1 -uall` sem resto de controle.
+
+### Execução final da rodada 2, sobre a árvore final, antes dos controles
+
+- `npm run validate:core`: **17** passos, **15** `passed`, **0** `failed`, **2** `skipped` (`test:bff`, só integração; `test:health-worker`, sem suíte automatizada), exit 0. Dentro dele: `test:frontend` em **92** arquivos e **958** testes; `audit:static` em **33** de **34** verificações passando e **1** pulada (`production_health`, não pedida); `repro:a03-contract-drift` não reproduz A-03.
+- `npm run test:gate`: **233**/**233**, **0** falhando, exit 0.
+- `npm run validate:ui`: `results.json` com `expected` **169**, `skipped` **21**, `unexpected` **0**, `flaky` **0** e **0** retentativas, exit 0.
+- `npm run validate:integration`, contra o PostgreSQL 18 descartável em `127.0.0.1:55432` (`BFF_TEST_DATABASE_URL=postgresql://pgtest@127.0.0.1:55432/atendly_bff_test`): **35**/**35** passos, exit 0. Dentro dela: `test:bff-integration` em **53** arquivos e **428** testes; `test:scheduling-integration` em **16**/**124**, sem mudança; `rehearse:goal033-authenticated-ui` com `expected` **140** (os **125** de antes, sem mudança, mais **15**: `onboarding-sistema-atual`, `onboarding-quando-importar` e `onboarding-importacao` nas cinco larguras), `skipped` **0**, `unexpected` **0**, `flaky` **0** e **0** retentativas. `goal025-account-purge`, `goal008-agenda` e `net::ERR_NO_BUFFER_SPACE` não apareceram.
+- `grep -rn "this\.http\." apps/bff/src/clients/ | wc -l`: **42**.
+
+### O que esta seção não prova
+
+**Não prova** que a importação dentro do onboarding funciona contra uma conta real do Minha Agenda, nem que quem termina a importação chega à demonstração da IA sem recadastro num aparelho real — conferência humana do §7 do Goal, **não feita**. **Não prova** que a ausência de tela separada de escolha de origem é aceitável (D-084, conferência humana). **Não prova** que os estados de análise, revisão, conflitos, execução e resultado dentro do onboarding cumprem largura, toque, contraste, foco e movimento: ficam no jsdom, e o gate mede `importacao` só no estado de conectar. **Não prova** fidelidade das etapas novas ao protótipo aprovado (Goal072).
+
+### Veredito recontado
+
+O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO`**. São os mesmos números de §44, com `audit:static` da execução final em **33** de **34** verificações passando e **1** pulada. Nenhum achado de A-01 a A-24 foi tocado, corrigido, reclassificado ou reaberto. Esta seção só acrescenta o registro do diff066. Os QAs corrigidos são do `QA_LOCAL_REVIEW`, fora dessa enumeração.

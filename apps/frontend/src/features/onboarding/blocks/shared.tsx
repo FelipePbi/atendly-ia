@@ -53,6 +53,36 @@ export function Choice({
   );
 }
 
+/** Cartão que É a ação, sem estado de seleção: usado onde escolher já
+ * avança (Goal066 `sistema-atual`), diferente de `Choice`, que só marca uma
+ * escolha até "Continuar" gravar. Sem ✓ nem `aria-pressed` — QA O-22 (✓
+ * sobre o título a 390px) fecha por construção, não por CSS. */
+export function ActionCard({
+  copy,
+  disabled = false,
+  onClick,
+  title,
+}: {
+  copy: string;
+  // Desabilitado enquanto a gravação do outro card (ou deste) não volta:
+  // dois cliques não disparam dois PATCH.
+  disabled?: boolean;
+  onClick: () => void;
+  title: string;
+}) {
+  return (
+    <button
+      className="choice-card"
+      disabled={disabled}
+      type="button"
+      onClick={onClick}
+    >
+      <h2>{title}</h2>
+      <p>{copy}</p>
+    </button>
+  );
+}
+
 export function Summary({ rows }: { rows: Array<[string, string]> }) {
   return (
     <div className="service-summary">

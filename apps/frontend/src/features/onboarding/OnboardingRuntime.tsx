@@ -14,6 +14,7 @@ import type {
   AiTone,
   BusinessModality,
   CalendarSource,
+  ImportState,
   OnboardingState,
 } from "@/data";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
@@ -27,9 +28,11 @@ export type OnboardingDraft = {
   businessName: string;
   calendarSource: CalendarSource | null;
   days: number[];
-  // Intervalo por dia gravado com "Personalizar dias diferentes"; ausente
-  // para um dia usa `startTime`/`endTime` (Goal065/WU-03).
-  dayHours: Record<number, { startTime: string; endTime: string }>;
+  // Intervalo por dia gravado com "Personalizar dias diferentes"; um campo
+  // ausente naquele dia acompanha o intervalo-base (`startTime`/`endTime`)
+  // enquanto não for personalizado, mesmo depois de o dia ganhar uma
+  // personalização no outro campo (Goal066, observação 5 do review065).
+  dayHours: Record<number, Partial<{ startTime: string; endTime: string }>>;
   endTime: string;
   // Lidos do estado real do negócio (não editáveis pelo formulário): guardam
   // a demonstração da IA (WU-07) sem serviço inoperante nem horário vazio,
@@ -39,7 +42,6 @@ export type OnboardingDraft = {
   serviceId?: string;
   serviceName: string;
   serviceOperational: boolean;
-  servicePopulation: "IMPORT" | "SCRATCH";
   servicePrice: string;
   servicePriceType: "FIXED" | "STARTING_AT" | "ON_REQUEST" | "NOT_INFORMED";
   startTime: string;
@@ -69,7 +71,6 @@ const initialDraft: OnboardingDraft = {
   serviceDuration: 60,
   serviceName: "",
   serviceOperational: false,
-  servicePopulation: "SCRATCH",
   servicePrice: "",
   servicePriceType: "FIXED",
   startTime: "09:00",
@@ -143,6 +144,28 @@ export function OnboardingResume() {
   useEffect(() => {
     if (!state) return;
     const fallback = nextRequiredStep(state);
+    // Sem serviço ativo, uma importação viva é onde a pessoa parou
+    // (Goal066): só aqui a retomada lê o estado da importação. Se a leitura
+    // falhar, segue a regra sem importação, sem bloquear o onboarding — a
+    // importação continua alcançável por Mais › Importação.
+    if (fallback === "servico-nome") {
+      let active = true;
+      getProductServices()
+        .migration.getImportState()
+        .then((importState) => {
+          if (active) {
+            router.replace(
+              `/onboarding/${nextRequiredStep(state, importState)}`,
+            );
+          }
+        })
+        .catch(() => {
+          if (active) router.replace(`/onboarding/${fallback}`);
+        });
+      return () => {
+        active = false;
+      };
+    }
     // Só há execução para conferir depois que WhatsApp conecta e as demais
     // etapas terminam: é o único caso em que `nextRequiredStep` aponta para
     // `contatos-ignorados`. Antes disso, a retomada não lê o teste — não há
@@ -181,7 +204,17 @@ export function OnboardingResume() {
   );
 }
 
-export function nextRequiredStep(state: OnboardingState): string {
+/**
+ * A próxima etapa pendente. `importState` só pesa entre `calendar.source` e
+ * o primeiro serviço (Goal066): sem serviço ativo e com uma sessão de
+ * importação viva, a pessoa volta para a importação; com a importação
+ * concluída, vale a mesma ordem da saída dela (`stepAfterImport`), que é a
+ * desta função. Sem estado de importação lido, a regra é a de antes.
+ */
+export function nextRequiredStep(
+  state: OnboardingState,
+  importState: ImportState | null = null,
+): string {
   // Business é gravado atômico (nome+categoria+timezone sempre juntos): sem
   // nome, nada do bloco foi gravado ainda, e a conta volta para Boas-vindas
   // (nunca retomada depois de qualquer gravação — Goal065/WU-02).
@@ -191,14 +224,49 @@ export function nextRequiredStep(state: OnboardingState): string {
   if (modalities.includes("ON_SITE") && !state.business.address) {
     return "endereco";
   }
-  if (!state.calendar.source) return "fonte-da-agenda";
-  if (!state.service) return "servico-nome";
+  if (!state.calendar.source) return "sistema-atual";
+  if (!state.service) {
+    return importState?.session && !importState.history
+      ? "importacao"
+      : "servico-nome";
+  }
   if (!state.availability?.rules.some((rule) => rule.active)) {
     return "dias-de-atendimento";
   }
   if (!state.ai.tone) return "demonstracao-da-ia";
   if (state.whatsapp?.status !== "CONNECTED") return "whatsapp";
   return "contatos-ignorados";
+}
+
+/**
+ * Saída da etapa `importacao` com a importação concluída (vault §5B): a
+ * primeira pendência que a importação não resolveu, com o aviso que a
+ * explica. O estado é o relido do BFF, que já lista os serviços e os
+ * horários importados.
+ */
+export function stepAfterImport(state: OnboardingState): {
+  notice: string;
+  step: "demonstracao-da-ia" | "dias-de-atendimento" | "servico-nome";
+} {
+  if (!state.service) {
+    return {
+      notice:
+        "Nenhum serviço importado está ativo. Cadastre pelo menos um serviço para continuar.",
+      step: "servico-nome",
+    };
+  }
+  if (!state.availability?.rules.some((rule) => rule.active)) {
+    return {
+      notice:
+        "A importação não trouxe seus horários de atendimento. Informe os dias e horários em que você atende.",
+      step: "dias-de-atendimento",
+    };
+  }
+  return {
+    notice:
+      "Seus serviços e horários foram importados. Agora é só ver sua IA em ação.",
+    step: "demonstracao-da-ia",
+  };
 }
 
 function draftFromState(

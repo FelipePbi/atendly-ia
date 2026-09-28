@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
@@ -30,13 +30,19 @@ function isPreviewStage(session: ImportLiveSession): boolean {
   return session.status === "READY" && session.startedAt === null;
 }
 
+export type ImportStateReader = {
+  error: boolean;
+  retry: () => void;
+  setState: (state: ImportState) => void;
+  state: ImportState | null;
+};
+
 /**
- * Ponto de entrada do módulo (Goal020): o estado lido decide a tela, nunca
- * uma tentativa de abrir sessão. Uma única chamada de `useShellConfig` por
- * árvore — as telas filhas (`ConnectSourceScreen`, `ResumeSessionScreen`,
- * `ImportHistoryScreen`) nunca chamam o hook.
+ * Leitura do estado da importação (Goal020): só `getImportState`, nunca uma
+ * tentativa de abrir sessão. Compartilhada por `/importacao` e pela etapa
+ * `importacao` do onboarding (Goal066), que decidem a tela do mesmo jeito.
  */
-export function ImportsScreen() {
+export function useImportState(): ImportStateReader {
   const [state, setState] = useState<ImportState | null>(null);
   const [error, setError] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
@@ -59,12 +65,42 @@ export function ImportsScreen() {
     setReloadToken((value) => value + 1);
   }
 
+  return { error, retry, setState, state };
+}
+
+/**
+ * Ponto de entrada do módulo (Goal020): o estado lido decide a tela, nunca
+ * uma tentativa de abrir sessão. Uma única chamada de `useShellConfig` por
+ * árvore — as telas filhas (`ConnectSourceScreen`, `ResumeSessionScreen`,
+ * `ImportHistoryScreen`) nunca chamam o hook.
+ */
+export function ImportsScreen() {
+  const reader = useImportState();
+
   useShellConfig({
     active: "importacao",
-    loading: !state && !error,
+    loading: !reader.state && !reader.error,
     module: "migration",
     title: "Importação",
   });
+
+  return <ImportsFlow reader={reader} />;
+}
+
+/**
+ * As telas da importação, escolhidas pelo estado lido (Goal020), sem
+ * moldura própria: quem monta decide a moldura (`/importacao` no shell da
+ * plataforma, ou a etapa `importacao` do onboarding, Goal066) e, com a
+ * importação concluída, o que aparece junto do resultado.
+ */
+export function ImportsFlow({
+  historyActions,
+  reader,
+}: {
+  historyActions?: ReactNode;
+  reader: ImportStateReader;
+}) {
+  const { error, retry, setState, state } = reader;
 
   if (!state && !error) return <ImportsLoading />;
 
@@ -87,7 +123,11 @@ export function ImportsScreen() {
   }
 
   if (state.history) {
-    return <ImportHistoryScreen history={state.history} />;
+    return (
+      <ImportHistoryScreen history={state.history}>
+        {historyActions}
+      </ImportHistoryScreen>
+    );
   }
   if (state.session) {
     return <ResumeSessionScreen session={state.session} onChanged={setState} />;
@@ -171,13 +211,20 @@ function ResumeSessionScreen({
   );
 }
 
-function ImportHistoryScreen({ history }: { history: ImportHistory }) {
+function ImportHistoryScreen({
+  children,
+  history,
+}: {
+  children?: ReactNode;
+  history: ImportHistory;
+}) {
   return (
     <ImportsPage
       description="Sua única importação do Minha Agenda. Não é possível importar novamente."
       title="Importação"
     >
       <ImportHistoryCard history={history} />
+      {children}
     </ImportsPage>
   );
 }

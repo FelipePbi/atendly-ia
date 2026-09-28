@@ -321,7 +321,7 @@ export async function persistBusinessStep(
     ctx.go(
       ctx.draft.businessModalities.includes("ON_SITE")
         ? "endereco"
-        : "fonte-da-agenda",
+        : "sistema-atual",
     );
     return;
   }
@@ -336,5 +336,5 @@ export async function persistBusinessStep(
     },
   });
   await ctx.refresh();
-  ctx.go("fonte-da-agenda");
+  ctx.go("sistema-atual");
 }

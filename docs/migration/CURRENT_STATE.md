@@ -6678,3 +6678,86 @@ migration.
   endereço sem CEP (Goal072); os estados de erro não são medidos pelo gate
   renderizado; o Product Vault e o `QA_LOCAL_REVIEW.md` não foram editados —
   ver [D-083](DECISIONS.md).
+
+## Delta implementado — Goal066, 2026-09-28 ([D-084](DECISIONS.md), ACCEPTED)
+
+Corrige **QA O-17**, **QA O-18**, **QA O-19**, **QA O-20**, **QA O-21** e
+**QA O-22** do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md) (fora da enumeração
+A-01…A-24 do FINAL_AUDIT) e a observação 5 do
+[review065](reviews/065-review.md): a importação entra no onboarding (U-09).
+Toca só `apps/frontend/` (`features/onboarding/`, `features/imports/ImportsLayout.tsx`
+e `ImportsScreen.tsx`, `app/onboarding/[step]/page.tsx`, `e2e/routes.ts`) e
+`apps/frontend/AGENTS.md`. Não toca `apps/bff/`, `apps/scheduling-service/`,
+`POST /v1/onboarding/complete`, a ativação da IA, as chamadas da importação
+nem `scripts/goal033-authenticated-ui-rehearsal.mjs`. Nenhuma migration.
+
+- **Sequência nova do bloco "Sua agenda"** — … Modalidade → Endereço (só com
+  "Local próprio") → Sistema atual → se "Sim, quero importar": Quando
+  importar → se "Importar agora": Importação → Primeiro serviço, Dias e
+  Horários só se a importação não os trouxe → Demonstração da IA. Com "Não,
+  começar do zero" ou "Fazer depois", o caminho é o de antes (Primeiro
+  serviço → Serviços adicionais → Dias → Horários → Agenda pronta →
+  Demonstração da IA). `fonte-da-agenda`, `agenda-atendly-confirmar` e
+  `agenda-atendly-metodo` redirecionam para `sistema-atual`.
+  `quando-importar` e `importacao` usam a posição de `sistema-atual` no
+  progresso.
+- **Sistema atual e Quando importar** — dois cards que são a ação, sem
+  marcação, sem `aria-pressed`, sem ✓ e sem "Continuar", desabilitados
+  durante a gravação; "Quer importar agora?" com "Importar agora" e "Fazer
+  depois", e "Se fizer depois, a importação fica em Mais › Importação.".
+  Nenhuma etapa mostra fuso horário, "Fonte oficial" nem "Configurações →
+  Agenda". "Importar agora", "Fazer depois" e "Não, começar do zero" gravam
+  `calendar.source` e só avançam com `200` (a importação exige
+  `calendarSettings`); "Sim, quero importar" só navega.
+- **A importação no onboarding** — a etapa `importacao` monta as mesmas
+  telas de `/importacao` (`ImportsFlow`, sobre `getImportState`, sem abrir
+  sessão por montar) na moldura do onboarding: sem `useShellConfig`, sem o
+  link "Configurações", sem link que saia do onboarding, com um `<h1>` só.
+  `/importacao` continua igual. Com a importação concluída, "Continuar" vai
+  a `servico-nome` sem serviço ativo, a `dias-de-atendimento` sem horário
+  ativo e a `demonstracao-da-ia` sem pendência, cada um com o seu aviso. A
+  retomada volta a `importacao` com sessão viva e sem serviço ativo; se a
+  leitura do estado da importação falhar, segue a regra sem importação.
+- **Horário só no início** — personalizar só o início (ou só o fim) de um
+  dia não congela o outro campo; a gravação manda o intervalo que a tela
+  mostra.
+- **Etapas medidas pelo gate** — o gate autenticado mede agora treze etapas
+  do onboarding (`ONBOARDING_ROUTES`): as dez do Goal065 mais
+  `sistema-atual`, `quando-importar` e `importacao` no estado de conectar,
+  nas cinco larguras, com a segunda conta. **Ficam no jsdom**, porque exigem
+  uma origem real: análise, revisão, conflitos, execução e resultado da
+  importação dentro do onboarding (`goal066-onboarding-importacao.test.tsx`).
+- **Vermelho na baseline** `f565978`, rodado na rodada 2: **33** de **36**
+  testes falhando (**23**/**23** e **10**/**13**); os **3** que passam são
+  de preservação. Saída em [FINAL_AUDIT §45](FINAL_AUDIT.md).
+- **Seis controles negativos (§6)**, rodados na rodada 2 depois da última
+  edição de código e da execução final, com restauração conferida por
+  `git hash-object`: pré-marcar "Não, começar do zero" reprova **2** de
+  **36**; "Importar agora" sem gravar antes reprova **3**; o link
+  "Configurações" na moldura do onboarding reprova **5**; `nextRequiredStep`
+  ignorando a sessão viva reprova **2**; §5B direto a `demonstracao-da-ia`
+  reprova **2**; o fim congelado reprova **2**. Saída em
+  [FINAL_AUDIT §45](FINAL_AUDIT.md).
+- **Execução final da rodada 2, sobre a árvore final** —
+  `npm run validate:core`: **17** passos, **15** `passed`, **0** `failed`,
+  **2** `skipped`, exit 0; `test:frontend` em **92** arquivos e **958**
+  testes; `audit:static` em **33** de **34** e **1** pulada.
+  `npm run test:gate`: **233**/**233**. `npm run validate:ui`: `expected`
+  **169**, `skipped` **21**, `unexpected` **0**, `flaky` **0**, **0**
+  retentativas. `npm run validate:integration`, contra o PostgreSQL 18
+  descartável em `127.0.0.1:55432`: **35**/**35** passos, exit 0;
+  `test:bff-integration` em **53** arquivos e **428** testes;
+  `test:scheduling-integration` em **16**/**124**; gate autenticado com
+  `expected` **140** (**125** de antes, sem mudança, mais **15** das três
+  etapas novas), `unexpected` **0**, `flaky` **0** e **0** retentativas.
+  `this.http.` em `apps/bff/src/clients/`: **42**.
+- **Conferência humana pendente:** a conferência do §7 do Goal **não foi
+  feita** por este Goal — percorrer o onboarding com importação num
+  aparelho real contra uma conta real do Minha Agenda, até a demonstração da
+  IA sem recadastro; aceitar ou não a ausência de tela separada de escolha
+  de origem (D-084); e conferir as etapas novas contra o protótipo aprovado
+  (Goal072).
+- **Limites declarados:** os estados da importação além de conectar não são
+  medidos pelo gate renderizado; a fidelidade visual a
+  `Onboarding-2-Importacao*` é do Goal072; o Product Vault e o
+  `QA_LOCAL_REVIEW.md` não foram editados — ver [D-084](DECISIONS.md).

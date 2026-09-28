@@ -2331,3 +2331,98 @@ prova fidelidade ao protótipo (Goal072).
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal065-2026-09-28-d-083-accepted),
 [FINAL_AUDIT §44](FINAL_AUDIT.md) e [D-083](DECISIONS.md).
+
+## A importação entra no onboarding e as etapas novas entram no gate autenticado, do Goal066
+
+`apps/frontend/` troca as três telas antigas do bloco "Sua agenda" por
+"Sistema atual" e "Quando importar", grava `calendar.source` antes de
+qualquer importação, monta a mesma experiência de `/importacao` numa etapa
+`importacao` do onboarding (sem shell da plataforma, sem link
+"Configurações") e corrige o horário personalizado só no início. O gate
+autenticado mede as três etapas novas. Nenhuma migration; `apps/bff/`,
+`apps/scheduling-service/` e `scripts/` não mudaram. Decisão:
+[D-084](DECISIONS.md), proposta no Goal066, **ACCEPTED** no [review066](reviews/066-review.md).
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| A sequência … Endereço → Sistema atual → (Quando importar → Importação) → Primeiro serviço, Dias e Horários só se a importação não os trouxe → Demonstração da IA; as três rotas antigas redirecionam para `sistema-atual` | Que a importação no onboarding funciona contra uma conta real do Minha Agenda — conferência humana do §7, **não feita** |
+| "Importar agora", "Fazer depois" e "Não, começar do zero" gravam `calendar.source` e só avançam com `200`; "Sim, quero importar" só navega | Que a ausência de tela separada de escolha de origem é aceitável (D-084, conferência humana) |
+| A etapa `importacao` usa as mesmas telas e chamadas de `/importacao`, sem `useShellConfig`, sem link "Configurações", com um `<h1>` só; `/importacao` não muda | Largura, toque, contraste, foco e movimento dos estados de análise, revisão, conflitos, execução e resultado dentro do onboarding — ficam no jsdom |
+| O gate autenticado mede, nas cinco larguras, as dez etapas do Goal065 mais `sistema-atual`, `quando-importar` e `importacao` (estado de conectar) | Fidelidade das etapas novas ao protótipo aprovado (Goal072) |
+| Nenhuma exceção nova em `KNOWN_*`; `AUTHENTICATED_ROUTES`, `ONBOARDING_ROUTES` e as medidas da conta principal não perdem rota | — |
+
+### Vermelho na baseline
+
+Rodado na rodada 2, antes da execução final, numa cópia de `apps/frontend`
+de `f565978a8da01165fd3b397f5c1a9ef58dd6e747` extraída por `git archive`
+para fora do repositório, com só os dois arquivos de teste novos copiados:
+**2** de **2** arquivos falhando; **33** de **36** testes falhando
+(**23** de **23** em `goal066-onboarding-sistema-atual.test.tsx`, **10** de
+**13** em `goal066-onboarding-importacao.test.tsx`). Primeiras linhas:
+`TypeError: undefined is not iterable` (o cenário `sistema-atual` não existe);
+`expected 'fonte-da-agenda' to be 'sistema-atual'`;
+`expected 'servico-nome' to be 'importacao'`. Os **3** que passam são de
+preservação (retomada com importação concluída ou com falha de leitura vai a
+`servico-nome`; `/importacao` mantém o link e o shell).
+
+### Controles negativos e execução final
+
+**Seis controles negativos, aplicados e revertidos**, rodados na rodada 2,
+**depois da última edição de código** e da execução final, na própria
+worktree, com `git hash-object` idêntico antes e depois de cada um, contra os
+**36** testes dos dois arquivos `goal066-`. Saída colada em
+[FINAL_AUDIT §45](FINAL_AUDIT.md).
+
+1. `sistema-atual` volta a pré-marcar "Não, começar do zero": reprova **2**
+   de **36** (`expected 'choice-card is-selected' not to contain 'is-selected'`).
+2. "Importar agora" deixa de gravar `calendar.source` antes: reprova **3**,
+   incluindo o teste de ordem PATCH → releitura → etapa `importacao`.
+3. A moldura do onboarding volta a mostrar o link "Configurações": reprova
+   **5** (conectar, sessão viva e os três destinos de §5B).
+4. `nextRequiredStep` volta a ignorar a sessão viva: reprova **2**
+   (`expected 'servico-nome' to be 'importacao'`).
+5. Depois da importação concluída, "Continuar" vai direto a
+   `demonstracao-da-ia`: reprova **2** (os destinos `servico-nome` e
+   `dias-de-atendimento`).
+6. O dia personalizado só no início volta a congelar o fim antigo: reprova
+   **2** (só o início, e só o fim).
+
+Sem o defeito, **36**/**36**.
+
+Execução final da rodada 2, sobre a árvore final, antes dos controles acima:
+
+- `npm run validate:core`: **17** passos, **15** `passed`, **0** `failed`,
+  **2** `skipped` (`test:bff`, `test:health-worker`), exit 0. Dentro dele,
+  `test:frontend` em **92** arquivos e **958** testes e `audit:static` em
+  **33** de **34** verificações passando e **1** pulada.
+- `npm run test:gate`: **233**/**233**, **0** falhando, exit 0.
+- `npm run validate:ui`: `apps/frontend/e2e-results/results.json` com
+  `expected` **169**, `skipped` **21**, `unexpected` **0**, `flaky` **0** e
+  **0** retentativas, exit 0.
+- `npm run validate:integration`, contra o PostgreSQL 18 descartável em
+  `127.0.0.1:55432`: **35**/**35** passos, exit 0. Dentro dela,
+  `test:bff-integration` em **53** arquivos e **428** testes e
+  `test:scheduling-integration` em **16**/**124**, sem mudança. O gate
+  autenticado traz `expected` **140** — os **125** de antes, sem mudança,
+  mais **15** (`onboarding-sistema-atual`, `onboarding-quando-importar` e
+  `onboarding-importacao` nas cinco larguras) —, `skipped` **0**,
+  `unexpected` **0**, `flaky` **0** e **0** retentativas.
+- `this.http.` em `apps/bff/src/clients/`: **42**.
+
+### Conferência humana e limites
+
+**Conferência humana pendente.** A conferência do §7 do Goal **não foi
+feita** por este Goal: percorrer o onboarding com importação num aparelho
+real contra uma conta real do Minha Agenda e chegar à demonstração da IA sem
+recadastro; decidir se a ausência de tela separada de escolha de origem é
+aceitável (D-084); conferir as etapas novas contra o protótipo aprovado
+(Goal072).
+
+**O que esta seção não prova.** Não prova que os estados de análise,
+revisão, conflitos, execução e resultado da importação dentro do onboarding
+cumprem largura, toque, contraste, foco e movimento — ficam no jsdom. Não
+prova a importação contra uma origem real. Não prova fidelidade ao
+protótipo (Goal072).
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal066-2026-09-28-d-084-proposed),
+[FINAL_AUDIT §45](FINAL_AUDIT.md) e [D-084](DECISIONS.md).

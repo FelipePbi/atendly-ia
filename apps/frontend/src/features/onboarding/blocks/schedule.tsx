@@ -8,7 +8,6 @@ import type { OnboardingDraft } from "../OnboardingRuntime";
 import type { OnboardingScenario } from "../scenarios";
 import {
   applyInlineValidation,
-  Choice,
   type OnboardingStepContext,
   Summary,
 } from "./shared";
@@ -59,14 +58,20 @@ const DAYS_REQUIRED_MESSAGE = "Escolha pelo menos um dia de atendimento.";
 const END_BEFORE_START_MESSAGE =
   "O horário final deve ser depois do horário inicial.";
 
-/** O intervalo de um dia: o personalizado, se existir, ou o intervalo-base.
- * `dayHours` só guarda dias que diferem do intervalo-base, então mudar o
- * intervalo-base muda todos os dias sem personalização real. */
+/** O intervalo de um dia: cada campo (início, fim) usa o valor personalizado
+ * daquele dia quando existe, e o intervalo-base quando não. Os dois campos
+ * são decididos de forma independente, então personalizar só o início não
+ * congela o fim — ele continua acompanhando o intervalo-base até ganhar sua
+ * própria personalização (Goal066, observação 5 do review065). */
 function dayHourOf(
   draft: OnboardingDraft,
   day: number,
 ): { startTime: string; endTime: string } {
-  return draft.dayHours[day] ?? { startTime: draft.startTime, endTime: draft.endTime };
+  const override = draft.dayHours[day];
+  return {
+    endTime: override?.endTime ?? draft.endTime,
+    startTime: override?.startTime ?? draft.startTime,
+  };
 }
 
 /** Início e fim de um intervalo, com o erro de "fim antes do início" no
@@ -379,15 +384,18 @@ function HoursStepBody({
 
   function setDayHour(day: number, field: "startTime" | "endTime", value: string) {
     setDraft((current) => {
-      const next = { ...dayHourOf(current, day), [field]: value };
       const dayHours = { ...current.dayHours };
-      // Igual ao intervalo-base não é personalização: o dia volta a
-      // acompanhar o intervalo-base.
-      if (next.startTime === current.startTime && next.endTime === current.endTime) {
-        delete dayHours[day];
+      const override = { ...dayHours[day] };
+      // Igual ao intervalo-base não é personalização daquele campo: ele
+      // volta a acompanhar o intervalo-base, mesmo que o outro campo do
+      // mesmo dia continue personalizado.
+      if (value === current[field]) {
+        delete override[field];
       } else {
-        dayHours[day] = next;
+        override[field] = value;
       }
+      if (Object.keys(override).length === 0) delete dayHours[day];
+      else dayHours[day] = override;
       return { ...current, dayHours };
     });
   }
@@ -450,59 +458,12 @@ export function scheduleStepBody(
   draft: OnboardingDraft,
   setDraft: (updater: (value: OnboardingDraft) => OnboardingDraft) => void,
 ) {
-  if (scenario === "fonte-da-agenda")
+  if (scenario === "quando-importar")
     return (
-      <div className="choice-grid">
-        <Choice
-          selected={draft.calendarSource === "ATENDLY"}
-          title="Agenda Atendly"
-          copy="Gerencie serviços, disponibilidade e agendamentos na Atendly."
-          onClick={() =>
-            setDraft((value) => ({ ...value, calendarSource: "ATENDLY" }))
-          }
-        />
+      <div className="onboarding-note">
+        <Icon name="info" />
+        <span>Se fizer depois, a importação fica em Mais › Importação.</span>
       </div>
-    );
-  if (scenario === "agenda-atendly-confirmar")
-    return (
-      <Summary
-        rows={[
-          ["Fonte oficial", "Agenda Atendly"],
-          ["Fuso horário", draft.timezone],
-        ]}
-      />
-    );
-  if (scenario === "agenda-atendly-metodo")
-    return (
-      <>
-        <div className="choice-grid">
-          <Choice
-            selected={draft.servicePopulation === "SCRATCH"}
-            title="Começar do zero"
-            copy="Cadastre seu primeiro serviço e disponibilidade agora."
-            onClick={() =>
-              setDraft((value) => ({ ...value, servicePopulation: "SCRATCH" }))
-            }
-          />
-          <Choice
-            selected={draft.servicePopulation === "IMPORT"}
-            title="Importar do Minha Agenda"
-            copy="Traga serviços, clientes, horários e agendamentos de uma vez."
-            onClick={() =>
-              setDraft((value) => ({ ...value, servicePopulation: "IMPORT" }))
-            }
-          />
-        </div>
-        {draft.servicePopulation === "IMPORT" && (
-          <div className="onboarding-note">
-            <Icon name="info" />
-            <span>
-              A importação acontece depois, em Configurações → Agenda. Cadastre
-              pelo menos um serviço agora para já ver a IA em ação.
-            </span>
-          </div>
-        )}
-      </>
     );
   if (scenario === "servico-nome")
     return (
@@ -586,22 +547,15 @@ export async function persistScheduleStep(
 ): Promise<void> {
   const onboarding = getProductServices().onboarding;
   switch (scenario) {
-    case "fonte-da-agenda":
-      if (ctx.draft.calendarSource !== "ATENDLY") {
-        ctx.setError("Escolha uma fonte oficial para continuar.");
-        return;
-      }
+    // Evidência 5 (`CALENDAR_SETTINGS_NOT_FOUND`): a importação só executa
+    // com `calendarSettings` gravado, então "Importar agora" grava
+    // `calendar.source` antes de seguir para a importação.
+    case "quando-importar":
       await onboarding.update({
         calendar: { source: "ATENDLY", timezone: ctx.draft.timezone },
       });
       await ctx.refresh();
-      ctx.go("agenda-atendly-confirmar");
-      return;
-    case "agenda-atendly-confirmar":
-      ctx.go("agenda-atendly-metodo");
-      return;
-    case "agenda-atendly-metodo":
-      ctx.go("servico-nome");
+      ctx.go("importacao");
       return;
     case "servico-nome": {
       const requiresPrice = priceRequiresValue(ctx.draft.servicePriceType);
@@ -657,6 +611,22 @@ export async function persistScheduleStep(
       ctx.go("demonstracao-da-ia");
       return;
     default:
-      ctx.go("fonte-da-agenda");
+      ctx.go("sistema-atual");
   }
+}
+
+/** "Não, começar do zero" (`sistema-atual`) e "Fazer depois"
+ * (`quando-importar`) gravam a mesma coisa e seguem para o primeiro
+ * serviço: a evidência 5 do Goal066 exige `calendarSettings` gravado antes
+ * de qualquer execução de importação, então toda saída sem importar agora
+ * também grava `calendar.source`, e quem sair antes de responder volta
+ * para `sistema-atual` (calendar.source continua nulo). */
+export async function skipImportAndGoToScratch(
+  ctx: OnboardingStepContext,
+): Promise<void> {
+  await getProductServices().onboarding.update({
+    calendar: { source: "ATENDLY", timezone: ctx.draft.timezone },
+  });
+  await ctx.refresh();
+  ctx.go("servico-nome");
 }

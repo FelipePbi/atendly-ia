@@ -92,6 +92,14 @@ export const AUTHENTICATED_ROUTES = [
  * só redireciona `/onboarding/*` para `/login` ou `/inicio`, nunca para
  * outra etapa). O endereço exige "Local próprio", por isso a semeadura
  * grava o bloco de negócio com essa modalidade antes de a conta parar.
+ *
+ * Goal066: `sistema-atual`, `quando-importar` e `importacao`. A conta parada
+ * no meio não tem sessão de importação, então `importacao` é medida no
+ * estado de conectar, cujo h1 é o da tela de conectar do módulo de
+ * importação (a etapa usa as telas do módulo, com o `<h1>` delas). Análise,
+ * revisão, conflitos, execução e resultado dentro do onboarding exigem uma
+ * origem real e ficam provados no jsdom
+ * (`tests/goal066-onboarding-importacao.test.tsx`).
  */
 export const ONBOARDING_ROUTES = [
   {
@@ -113,6 +121,22 @@ export const ONBOARDING_ROUTES = [
     path: "/onboarding/endereco",
     name: "onboarding-endereco",
     contentMarker: "Qual é o endereço do seu espaço?",
+  },
+  {
+    path: "/onboarding/sistema-atual",
+    name: "onboarding-sistema-atual",
+    contentMarker:
+      "Você já usa algum sistema para organizar seus clientes e agendamentos?",
+  },
+  {
+    path: "/onboarding/quando-importar",
+    name: "onboarding-quando-importar",
+    contentMarker: "Quer importar agora?",
+  },
+  {
+    path: "/onboarding/importacao",
+    name: "onboarding-importacao",
+    contentMarker: "Importar do Minha Agenda",
   },
   {
     path: "/onboarding/servico-nome",

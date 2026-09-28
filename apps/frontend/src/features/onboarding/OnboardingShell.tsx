@@ -33,31 +33,11 @@ export function OnboardingShell({
 }) {
   return (
     <main className="onboarding-shell">
-      <header className="onboarding-topbar">
-        <Brand href="/onboarding" />
-        <div
-          className="step-progress"
-          aria-label={`Bloco atual: ${blockLabel}`}
-        >
-          <div className="step-progress-row">
-            <span>{blockLabel}</span>
-          </div>
-          <div className="progress-track">
-            <div
-              className="progress-bar"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-        </div>
-        <button
-          className="btn btn-secondary onboarding-exit"
-          type="button"
-          onClick={onExit}
-        >
-          <Icon name="logout" />
-          <span>Sair</span>
-        </button>
-      </header>
+      <OnboardingTopbar
+        blockLabel={blockLabel}
+        onExit={onExit}
+        progressPercent={progressPercent}
+      />
       <form className="onboarding-main" noValidate onSubmit={onSubmit}>
         <div className="onboarding-content">
           <header className="onboarding-heading">
@@ -80,5 +60,69 @@ export function OnboardingShell({
         </div>
       </form>
     </main>
+  );
+}
+
+/** Moldura do onboarding sem o formulário da etapa (Goal066): a etapa
+ * `importacao` monta as telas do módulo de importação, que têm os próprios
+ * formulários, título e ações. Só a barra superior (marca, progresso,
+ * "Sair") é a mesma das outras etapas. */
+export function OnboardingFrame({
+  blockLabel,
+  children,
+  onExit,
+  progressPercent,
+}: {
+  blockLabel: string;
+  children: ReactNode;
+  onExit: () => void;
+  progressPercent: number;
+}) {
+  return (
+    <main className="onboarding-shell">
+      <OnboardingTopbar
+        blockLabel={blockLabel}
+        onExit={onExit}
+        progressPercent={progressPercent}
+      />
+      <div className="onboarding-main">
+        <div className="onboarding-content">{children}</div>
+      </div>
+    </main>
+  );
+}
+
+function OnboardingTopbar({
+  blockLabel,
+  onExit,
+  progressPercent,
+}: {
+  blockLabel: string;
+  onExit: () => void;
+  progressPercent: number;
+}) {
+  return (
+    <header className="onboarding-topbar">
+      <Brand href="/onboarding" />
+      <div className="step-progress" aria-label={`Bloco atual: ${blockLabel}`}>
+        <div className="step-progress-row">
+          <span>{blockLabel}</span>
+        </div>
+        <div className="progress-track">
+          <div
+            className="progress-bar"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+      </div>
+      <button
+        className="btn btn-secondary onboarding-exit"
+        type="button"
+        onClick={onExit}
+      >
+        <Icon name="logout" />
+        <span>Sair</span>
+      </button>
+    </header>
   );
 }

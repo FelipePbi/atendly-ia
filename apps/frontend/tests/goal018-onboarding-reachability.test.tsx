@@ -18,7 +18,8 @@
  * importação real é do Goal019) e as 13 variações `minha-agenda-*`, incluindo
  * `minha-agenda-conectar` (Goal027: a Atendly é a única fonte oficial, então
  * "Minha Agenda" deixou de ser uma escolha de agenda — só sobrevive como
- * importação única em `agenda-atendly-metodo`). `onboardingOrder` e
+ * importação única, hoje nas etapas `quando-importar` e `importacao` do
+ * Goal066). `onboardingOrder` e
  * `generateStaticParams` não geram mais rota estática para nenhum desses 21
  * cenários.
  */
@@ -50,6 +51,7 @@ const startActivationTest = vi.fn();
 const restartActivationTest = vi.fn();
 const listServiceCatalog = vi.fn();
 const createServiceCatalog = vi.fn();
+const getImportState = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
@@ -64,6 +66,8 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       list: listConversations,
       setIgnored: setIgnoredConversation,
     },
+    // A etapa `importacao` (Goal066) só lê o estado da importação ao montar.
+    migration: { getImportState },
     onboarding: {
       complete: completeOnboarding,
       get: getOnboarding,
@@ -180,6 +184,11 @@ beforeEach(() => {
     items: [],
     source: "ATENDLY",
   });
+  getImportState.mockResolvedValue({
+    history: null,
+    right: { available: true, completedAt: null, sessionId: null },
+    session: null,
+  });
 });
 
 describe("cenários do protótipo sem consumidor real foram removidos", () => {
@@ -215,7 +224,10 @@ describe("cenários do protótipo sem consumidor real foram removidos", () => {
     // "dados-do-negocio" por quatro etapas (boas-vindas, segmento-e-nome,
     // modalidade, endereco), net +3. Goal065/WU-03 juntou "servico-nome",
     // "servico-duracao" e "servico-preco" numa etapa só e acrescentou
-    // "servicos-adicionais", net -1.
+    // "servicos-adicionais", net -1. Goal066/WU-01 trocou "fonte-da-agenda",
+    // "agenda-atendly-confirmar" e "agenda-atendly-metodo" por
+    // "sistema-atual" e "quando-importar", net -1; e Goal066/WU-02
+    // acrescentou "importacao", net +1.
     expect(onboardingOrder).toHaveLength(23);
   });
 
@@ -290,92 +302,26 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
   // Goal065/WU-02: "dados-do-negocio" virou boas-vindas + segmento-e-nome +
   // modalidade + endereco. O encadeamento completo e a validação inline por
   // campo têm sua própria suíte em `goal065-onboarding-business.test.tsx`;
-  // aqui fica só a prova de alcançabilidade da rota seguinte,
-  // "fonte-da-agenda".
-  test("fonte-da-agenda com Agenda Atendly volta para modalidade (sem ON_SITE) e avança para agenda-atendly-confirmar", async () => {
-    const user = userEvent.setup();
-    renderScreen("fonte-da-agenda", stateFixture(businessDone));
-    expect(await screen.findByRole("link", { name: "Voltar" })).toHaveAttribute(
-      "href",
-      "/onboarding/modalidade",
-    );
-
-    await user.click(screen.getByRole("button", { name: /^Agenda Atendly/ }));
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
-
-    expect(updateOnboarding).toHaveBeenCalledWith(
-      expect.objectContaining({
-        calendar: { source: "ATENDLY", timezone: "America/Sao_Paulo" },
-      }),
-    );
-    expect(push).toHaveBeenCalledWith("/onboarding/agenda-atendly-confirmar");
-  });
-
-  test("fonte-da-agenda sem escolher a Agenda Atendly bloqueia com erro, sem salvar", async () => {
-    const user = userEvent.setup();
-    renderScreen("fonte-da-agenda", stateFixture(businessDone));
-
-    await user.click(
-      await screen.findByRole("button", { name: "Continuar" }),
-    );
-
-    expect(
-      await screen.findByText("Escolha uma fonte oficial para continuar."),
-    ).toBeVisible();
-    expect(updateOnboarding).not.toHaveBeenCalled();
-    expect(push).not.toHaveBeenCalledWith("/onboarding/agenda-atendly-confirmar");
-  });
-
-  test("agenda-atendly-confirmar avança para agenda-atendly-metodo", async () => {
-    const user = userEvent.setup();
-    renderScreen(
-      "agenda-atendly-confirmar",
-      stateFixture({ ...businessDone, ...calendarDone }),
-    );
-    await user.click(await screen.findByRole("button", { name: "Continuar" }));
-    expect(push).toHaveBeenCalledWith("/onboarding/agenda-atendly-metodo");
-  });
-
-  test("agenda-atendly-metodo avança para servico-nome", async () => {
-    const user = userEvent.setup();
-    renderScreen(
-      "agenda-atendly-metodo",
-      stateFixture({ ...businessDone, ...calendarDone }),
-    );
-    await user.click(await screen.findByRole("button", { name: "Continuar" }));
-    expect(push).toHaveBeenCalledWith("/onboarding/servico-nome");
-  });
-
-  test("agenda-atendly-metodo oferece as duas opções como escolha real, sem promessa de habilitação futura", async () => {
-    const user = userEvent.setup();
-    renderScreen(
-      "agenda-atendly-metodo",
-      stateFixture({ ...businessDone, ...calendarDone }),
-    );
-    expect(
-      screen.queryByText("A importação única será habilitada no fluxo de migração."),
-    ).not.toBeInTheDocument();
-
-    const scratch = await screen.findByRole("button", {
-      name: /Começar do zero/,
-    });
-    const imported = screen.getByRole("button", {
-      name: /Importar do Minha Agenda/,
-    });
-    expect(scratch.className).toContain("is-selected");
-    expect(imported.className).not.toContain("is-selected");
-
-    await user.click(imported);
-    expect(imported.className).toContain("is-selected");
-    expect(scratch.className).not.toContain("is-selected");
-    expect(
-      screen.getByText(/A importação acontece depois, em Configurações/),
-    ).toBeInTheDocument();
-
-    // Continua alcançando servico-nome independente da escolha (Goal020/WU-09).
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
-    expect(push).toHaveBeenCalledWith("/onboarding/servico-nome");
-  });
+  // aqui fica só a prova de alcançabilidade da rota seguinte, "sistema-atual".
+  //
+  // Goal066/WU-01 substituiu "fonte-da-agenda", "agenda-atendly-confirmar" e
+  // "agenda-atendly-metodo" por "sistema-atual" e "quando-importar". Os
+  // cinco testes que cobriam essas três telas foram substituídos pela suíte
+  // "goal066-onboarding-sistema-atual.test.tsx", que prova a mesma
+  // alcançabilidade para as etapas novas:
+  // - "fonte-da-agenda com Agenda Atendly volta para modalidade…": "Voltar
+  //   aponta para modalidade sem ON_SITE" e "'Não, começar do zero' grava
+  //   calendar.source…";
+  // - "fonte-da-agenda sem escolher a Agenda Atendly bloqueia…": "não
+  //   oferece Continuar" (não há mais escolha a esquecer: o card é a ação);
+  // - "agenda-atendly-confirmar avança para agenda-atendly-metodo": "'Sim,
+  //   quero importar' só navega para quando-importar…";
+  // - "agenda-atendly-metodo avança para servico-nome": "'Fazer depois'
+  //   grava calendar.source e só avança para servico-nome com 200";
+  // - "agenda-atendly-metodo oferece as duas opções…": "mostra a pergunta do
+  //   vault e os dois cards, nenhum marcado…", "servicePopulation e o aviso
+  //   antigo de importação saíram…" e "'Importar agora' grava calendar.source,
+  //   relê o onboarding e só então monta a etapa importacao".
 
   test("servico-nome (primeiro serviço) salva nome, duração e preço numa etapa só e avança para servicos-adicionais", async () => {
     const user = userEvent.setup();

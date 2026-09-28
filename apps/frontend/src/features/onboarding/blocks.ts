@@ -14,9 +14,9 @@ const blockScenarios: Record<OnboardingBlockId, readonly OnboardingScenario[]> =
     ai: ["demonstracao-da-ia", "tom-da-ia"],
     business: ["boas-vindas", "segmento-e-nome", "modalidade", "endereco"],
     schedule: [
-      "fonte-da-agenda",
-      "agenda-atendly-confirmar",
-      "agenda-atendly-metodo",
+      "sistema-atual",
+      "quando-importar",
+      "importacao",
       "servico-nome",
       "servicos-adicionais",
       "dias-de-atendimento",
@@ -45,7 +45,10 @@ const blockScenarios: Record<OnboardingBlockId, readonly OnboardingScenario[]> =
  * `endereco` também fica fora: só existe quando "Local próprio" é escolhido
  * em `modalidade` (vault §"Modalidade"), então não é um passo sequencial do
  * caminho principal — `blockForScenario`, `OnboardingScreen` (Voltar) e
- * `progressPercent` tratam esse desvio explicitamente.
+ * `progressPercent` tratam esse desvio explicitamente. `quando-importar`
+ * segue a mesma regra: só existe para quem responde "Sim, quero importar"
+ * em `sistema-atual` (Goal066), então usa a posição de `sistema-atual`; e
+ * `importacao` também, porque só existe depois de "Importar agora".
  *
  * Do teste real, só `teste-real` e `teste-real-progresso` são sequenciais: as
  * outras três telas são **estados da execução**, alcançadas a partir do
@@ -56,9 +59,7 @@ export const onboardingFlow: OnboardingScenario[] = [
   "boas-vindas",
   "segmento-e-nome",
   "modalidade",
-  "fonte-da-agenda",
-  "agenda-atendly-confirmar",
-  "agenda-atendly-metodo",
+  "sistema-atual",
   "servico-nome",
   "servicos-adicionais",
   "dias-de-atendimento",
@@ -96,8 +97,11 @@ export function progressPercent(scenario: OnboardingScenario): number {
   }
   // Desvio condicional: usa a posição do passo real que sempre o antecede.
   if (scenario === "endereco") return progressPercent("modalidade");
+  if (scenario === "quando-importar" || scenario === "importacao") {
+    return progressPercent("sistema-atual");
+  }
   const index = onboardingFlow.indexOf(scenario);
   const position =
-    index >= 0 ? index : onboardingFlow.indexOf("fonte-da-agenda");
+    index >= 0 ? index : onboardingFlow.indexOf("sistema-atual");
   return Math.round(((position + 1) / onboardingFlow.length) * 100);
 }

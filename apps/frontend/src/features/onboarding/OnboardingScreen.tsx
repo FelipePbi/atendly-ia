@@ -22,7 +22,9 @@ import {
   stepBodyByBlock,
   stepPersistByBlock,
 } from "./blocks/registry";
+import { skipImportAndGoToScratch } from "./blocks/schedule";
 import {
+  ActionCard,
   applyInlineValidation,
   applyServerFieldErrors,
 } from "./blocks/shared";
@@ -31,6 +33,7 @@ import {
   skipIgnoredContactsStep,
   skipWhatsappStep,
 } from "./blocks/whatsapp";
+import { OnboardingImportStep } from "./OnboardingImportStep";
 import { useOnboardingRuntime } from "./OnboardingRuntime";
 import { OnboardingShell } from "./OnboardingShell";
 import { type OnboardingScenario, onboardingScenarios } from "./scenarios";
@@ -65,6 +68,8 @@ export function OnboardingScreen({
   const blockId = blockForScenario(scenario);
   const blockLabel = onboardingBlockLabels[blockId];
   const isWelcomeStep = scenario === "boas-vindas";
+  const isSistemaAtual = scenario === "sistema-atual";
+  const isQuandoImportar = scenario === "quando-importar";
   const isWhatsappIntro = scenario === "whatsapp";
   const isWhatsappConnect = scenario === "whatsapp-conectar";
   const isWhatsappConclusion = scenario === "whatsapp-concluido";
@@ -76,22 +81,45 @@ export function OnboardingScreen({
   const isActivationTestSucceeded = scenario === "teste-real-sucesso";
   const index = onboardingFlow.indexOf(scenario);
   // "endereco" é condicional (só existe para Local próprio) e por isso fica
-  // fora de onboardingFlow; e o passo anterior de "fonte-da-agenda" depende
-  // da mesma escolha. Os dois precisam de Voltar calculado pelo rascunho, não
-  // pela posição fixa no array.
+  // fora de onboardingFlow; e o passo anterior de "sistema-atual" depende da
+  // mesma escolha. "quando-importar" também é condicional (só existe para
+  // quem respondeu "Sim, quero importar"), e volta sempre para
+  // "sistema-atual". Os três precisam de Voltar calculado pelo rascunho ou
+  // pelo cenário, não pela posição fixa no array.
   const previous: OnboardingScenario | undefined =
     scenario === "endereco"
       ? "modalidade"
-      : scenario === "fonte-da-agenda"
+      : scenario === "sistema-atual"
         ? draft.businessModalities.includes("ON_SITE")
           ? "endereco"
           : "modalidade"
-        : index > 0
-          ? onboardingFlow[index - 1]
-          : undefined;
+        : scenario === "quando-importar"
+          ? "sistema-atual"
+          : index > 0
+            ? onboardingFlow[index - 1]
+            : undefined;
 
   function go(step: OnboardingScenario) {
     router.push(`/onboarding/${step}`);
+  }
+
+  async function chooseWithoutImportNow() {
+    setBusy(true);
+    setError(null);
+    try {
+      await skipImportAndGoToScratch({
+        draft,
+        go,
+        refresh,
+        refreshSession,
+        router,
+        setError,
+      });
+    } catch (caught: unknown) {
+      setError(onboardingError(caught));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -204,12 +232,47 @@ export function OnboardingScreen({
     router.replace("/login");
   }
 
+  // A importação tem as próprias telas, formulários e títulos (Goal066): a
+  // etapa usa só a barra superior do onboarding, sem o formulário da etapa.
+  if (scenario === "importacao") {
+    return <OnboardingImportStep go={go} onExit={() => void logout()} />;
+  }
+
   const actions = isWelcomeStep ? (
     // Boas-vindas não grava nada: só avança para o primeiro campo real
     // (docs/product-vault/02-Fluxos/01-Onboarding.md §1).
     <button className="btn btn-primary" disabled={busy} type="submit">
       {busy ? "Abrindo..." : "Começar"}
     </button>
+  ) : isSistemaAtual ? (
+    // Os dois cards do corpo já são a ação (QA O-19, O-22): não há
+    // "Continuar" aqui, só a volta.
+    <>
+      {previous && (
+        <Link className="btn btn-secondary" href={`/onboarding/${previous}`}>
+          Voltar
+        </Link>
+      )}
+    </>
+  ) : isQuandoImportar ? (
+    <>
+      {previous && (
+        <Link className="btn btn-secondary" href={`/onboarding/${previous}`}>
+          Voltar
+        </Link>
+      )}
+      <button
+        className="btn btn-secondary"
+        disabled={busy}
+        type="button"
+        onClick={() => void chooseWithoutImportNow()}
+      >
+        {busy ? "Salvando..." : "Fazer depois"}
+      </button>
+      <button className="btn btn-primary" disabled={busy} type="submit">
+        {busy ? "Salvando..." : "Importar agora"}
+      </button>
+    </>
   ) : isActivationTestSucceeded ? (
     // Sucesso: só o CTA do vault. Não há "voltar" para um teste que terminou.
     <button className="btn btn-primary" disabled={busy} type="submit">
@@ -362,12 +425,26 @@ export function OnboardingScreen({
       actions={actions}
       actionsStacked={isWhatsappIntro}
       blockLabel={blockLabel}
-      body={stepBodyByBlock[blockId](
-        scenario,
-        draft,
-        setDraft,
-        setWhatsappConnected,
-      )}
+      body={
+        isSistemaAtual ? (
+          <div className="choice-grid">
+            <ActionCard
+              copy="Traga clientes, serviços e agendamentos do Minha Agenda."
+              disabled={busy}
+              title="Sim, quero importar"
+              onClick={() => go("quando-importar")}
+            />
+            <ActionCard
+              copy="Cadastre tudo direto na Atendly, sem importar nada."
+              disabled={busy}
+              title="Não, começar do zero"
+              onClick={() => void chooseWithoutImportNow()}
+            />
+          </div>
+        ) : (
+          stepBodyByBlock[blockId](scenario, draft, setDraft, setWhatsappConnected)
+        )
+      }
       description={description}
       error={error}
       eyebrow={eyebrow}

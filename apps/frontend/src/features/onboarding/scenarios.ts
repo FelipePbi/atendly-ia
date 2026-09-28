@@ -23,23 +23,26 @@ export const onboardingScenarios = {
     "Usado para localizar seu atendimento presencial.",
     "business-address",
   ],
-  "fonte-da-agenda": [
-    "Fonte oficial",
-    "Onde seus agendamentos serão controlados?",
-    "Você terá uma única fonte oficial. Essa escolha evita horários duplicados.",
-    "source",
+  "sistema-atual": [
+    "Sua agenda",
+    "Você já usa algum sistema para organizar seus clientes e agendamentos?",
+    "Isso ajuda a saber se já existem dados para trazer para a Atendly.",
+    "current-system",
   ],
-  "agenda-atendly-metodo": [
-    "Escolha um caminho",
-    "Como deseja preparar sua agenda?",
-    "Você pode cadastrar tudo agora ou copiar dados existentes uma única vez.",
-    "method",
+  "quando-importar": [
+    "Sua agenda",
+    "Quer importar agora?",
+    "A cópia é feita do Minha Agenda para a Atendly, uma vez só.",
+    "when-import",
   ],
-  "agenda-atendly-confirmar": [
-    "Sua fonte oficial",
-    "A Agenda Atendly cuidará dos seus horários",
-    "Serviços, disponibilidade e agendamentos serão gerenciados aqui.",
-    "confirm",
+  // A etapa monta as telas do módulo de importação (Goal066), com o título
+  // de cada uma: este título não aparece na tela, só no progresso e no
+  // bloco.
+  importacao: [
+    "Sua agenda",
+    "Importar do Minha Agenda",
+    "A mesma importação de Mais › Importação, dentro do onboarding.",
+    "import",
   ],
   "servico-nome": [
     "Primeiro serviço",

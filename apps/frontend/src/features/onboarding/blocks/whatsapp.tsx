@@ -207,8 +207,11 @@ export function whatsappStepBody(
   scenario: OnboardingScenario,
   _draft: OnboardingDraft,
   _setDraft: (updater: (value: OnboardingDraft) => OnboardingDraft) => void,
+  onWhatsappStatusChange?: (connected: boolean) => void,
 ) {
-  if (scenario === "whatsapp-conectar") return <WhatsAppConnectionPanel />;
+  if (scenario === "whatsapp-conectar") {
+    return <WhatsAppConnectionPanel onStatusChange={onWhatsappStatusChange} />;
+  }
   if (scenario === "whatsapp-concluido") return null;
   if (scenario === "contatos-ignorados") return <IgnoredContactsStepBody />;
   if (isActivationTestScenario(scenario)) {

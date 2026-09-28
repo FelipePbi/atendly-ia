@@ -60,6 +60,7 @@ import {
   whatsappConnectResultSchema,
   whatsappConnectionSchema,
   whatsappDisconnectResultSchema,
+  whatsappQrResultSchema,
 } from "./schemas.js";
 
 export type HttpMethod = "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
@@ -221,6 +222,7 @@ export const publicApiRoutes: readonly PublicApiRoute[] = [
 
   // whatsapp
   { method: "GET", pathPattern: "/v1/whatsapp", schema: whatsappConnectionSchema.nullable() },
+  { method: "GET", pathPattern: "/v1/whatsapp/qr", schema: whatsappQrResultSchema },
   { method: "POST", pathPattern: "/v1/whatsapp/connect", schema: whatsappConnectResultSchema },
   { method: "POST", pathPattern: "/v1/whatsapp/reconnect", schema: whatsappConnectResultSchema },
   { method: "DELETE", pathPattern: "/v1/whatsapp", schema: whatsappDisconnectResultSchema },

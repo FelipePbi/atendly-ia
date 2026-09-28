@@ -5,13 +5,20 @@ import {
   type WhatsAppConnection,
   type whatsappConnectResultSchema,
   type whatsappDisconnectResultSchema,
+  type whatsappQrResultSchema,
 } from "../mappers/publicApiSchemas";
 
 type WhatsAppConnectResult = z.infer<typeof whatsappConnectResultSchema>;
 type WhatsAppDisconnectResult = z.infer<typeof whatsappDisconnectResultSchema>;
+export type WhatsAppQrResult = z.infer<typeof whatsappQrResultSchema>;
 
-export type WhatsAppConnectInput =
-  { mode: "PAIRING_CODE"; phone: string } | { mode: "QR"; phone?: never };
+// Consentimento exigido a cada conexão/reconexão (Goal071): sem alias
+// opcional, para que esquecer o campo no chamador vire erro de tipo, não um
+// corpo silenciosamente incompleto.
+export type WhatsAppConnectInput = (
+  | { mode: "PAIRING_CODE"; phone: string }
+  | { mode: "QR"; phone?: never }
+) & { consentAccepted: true };
 
 export class BffWhatsAppService {
   constructor(private readonly http: BffHttpClient) {}
@@ -20,6 +27,17 @@ export class BffWhatsAppService {
     return this.http.request({
       path: "/v1/whatsapp",
       schema: routeSchema<WhatsAppConnection | null>("GET", "/v1/whatsapp"),
+      signal,
+    });
+  }
+
+  // GET /v1/whatsapp/qr (Goal071/WU-01): relê o QR corrente da vinculação em
+  // curso, sem abrir uma nova. Recusa `WHATSAPP_QR_NOT_IN_PROGRESS` quando não
+  // há vinculação por QR em andamento.
+  qr(signal?: AbortSignal) {
+    return this.http.request({
+      path: "/v1/whatsapp/qr",
+      schema: routeSchema<WhatsAppQrResult>("GET", "/v1/whatsapp/qr"),
       signal,
     });
   }

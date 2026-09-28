@@ -144,7 +144,7 @@ describe.skipIf(!RUN_INTEGRATION)(
           method: "POST",
           url: "/v1/whatsapp/connect",
           headers: browserMutation(owner),
-          payload: { mode: "QR" },
+          payload: { mode: "QR", consentAccepted: true },
         });
 
         expect(response.statusCode).toBe(503);
@@ -177,7 +177,7 @@ describe.skipIf(!RUN_INTEGRATION)(
         method: "POST",
         url: "/v1/whatsapp/connect",
         headers: browserMutation(owner),
-        payload: { mode: "QR" },
+        payload: { mode: "QR", consentAccepted: true },
       });
 
       // O erro que o dono vê é exatamente o que quebrou a gravação local, não
@@ -220,7 +220,7 @@ describe.skipIf(!RUN_INTEGRATION)(
         method: "POST",
         url: "/v1/whatsapp/connect",
         headers: browserMutation(owner),
-        payload: { mode: "QR" },
+        payload: { mode: "QR", consentAccepted: true },
       });
 
       // Mesmo com a remoção compensatória falhando na Evolution, o erro que
@@ -256,7 +256,7 @@ describe.skipIf(!RUN_INTEGRATION)(
         method: "POST",
         url: "/v1/whatsapp/connect",
         headers: browserMutation(owner),
-        payload: { mode: "QR" },
+        payload: { mode: "QR", consentAccepted: true },
       });
       expect(first.statusCode).toBe(502);
 
@@ -287,7 +287,7 @@ describe.skipIf(!RUN_INTEGRATION)(
         method: "POST",
         url: "/v1/whatsapp/connect",
         headers: browserMutation(owner),
-        payload: { mode: "QR" },
+        payload: { mode: "QR", consentAccepted: true },
       });
 
       expect(second.statusCode).toBe(201);

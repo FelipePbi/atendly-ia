@@ -2047,3 +2047,49 @@ Execução final da rodada 2, sobre a árvore final: `npm run validate:core` —
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal063-2026-09-27-d-080-accepted),
 [FINAL_AUDIT §41](FINAL_AUDIT.md) e [D-080](DECISIONS.md).
+
+## A conexão do WhatsApp pede consentimento e mantém o QR válido, do Goal071
+
+`apps/bff/` passa a exigir `consentAccepted: true` em `POST /v1/whatsapp/connect` e `POST /v1/whatsapp/reconnect`, antes de qualquer chamada à Evolution e de qualquer escrita. Ganha também `GET /v1/whatsapp/qr`, que relê o QR corrente só com vinculação por QR em curso (marcador na coluna `qrcode`, sem migration) e nunca com o número conectado. `apps/frontend/` move o consentimento para dentro de `WhatsAppConnectionPanel` (onboarding e Configurações › WhatsApp, mesma implementação). O painel renova o QR com uma leitura por vez, dentro de uma janela declarada de 5 minutos, e nunca mantém na tela um QR com mais de um giro (20 s) de idade. A visão de código copia com confirmação, numera passos e explica o formato do número. `apps/ai-orchestrator/`, `apps/scheduling-service/` e o fork Evolution não mudaram; nenhuma migration. Decisão: [D-081](DECISIONS.md), proposta no Goal071, **ACCEPTED** no [review071](reviews/071-review.md) (rodada 3 de 3). Este registro é da rodada 3, que corrigiu os quatro blockers da rodada 2 (a rodada 2 corrigiu os dez da rodada 1).
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `connect`/`reconnect` recusam `400 VALIDATION_ERROR` sem `consentAccepted: true`, antes de `ensureInstance`, da Evolution e de qualquer escrita; o aceite não é gravado | Que o consentimento tem valor legal — não é gravado, e a revisão legal está nos temas adiados do vault |
+| `GET /v1/whatsapp/qr` recusa `409 WHATSAPP_QR_NOT_IN_PROGRESS` sem marcador (inclusive depois de `connect` no modo código), sem chamar a Evolution; com marcador, lê o status antes do QR e não chama `/instance/qr` com o número conectado ou logado | Que a conexão real funciona com WhatsApp e Evolution reais (conferência humana do §11, **não feita**) |
+| O painel exige o checkbox com a frase do consentimento e a resposta sobre número pessoal antes de habilitar "Conectar"/"Reconectar", nos dois caminhos (onboarding e Configurações), com o painel real nos testes; toda chamada envia `consentAccepted: true`; antes da primeira leitura de status, só carregamento (`aria-busy`), sem consentimento nem CTA | O fork abrir sessão nova depois do quinto QR (`QRCODE_MAX_COUNT`, inalterado) — o BFF e a tela evitam provocá-lo, não o eliminam |
+| A renovação do QR nunca tem duas leituras em voo, pausa com a aba oculta, e mostra "O QR Code expirou" ao fim da janela ou quando nenhum QR novo chega em um giro; uma leitura em voo de um efeito já descartado não expira nem troca o QR da vinculação seguinte. No modo código, a leitura de status segue a cada 3 s | Largura, toque, contraste, foco e movimento dos estados de consentimento, QR e código e de `/onboarding/*`, fora do gate renderizado |
+| `/configuracoes/whatsapp` medida pelo gate autenticado no estado conectado, nas cinco larguras: antes de medir, `LOADED_STATE` exige o título "WhatsApp conectado" e nenhum checkbox | Que as telas batem com o protótipo aprovado (conferência humana, Goal068) |
+
+**Vermelho da baseline, rodado de novo na rodada 3.** Contra `0cb49b40154050e220e53c9b937f7b2dc7f7852c`, os dois arquivos `goal071-` do frontend reprovam **29** de **36**. `tests/goal071-whatsapp-consent-qr.integration.test.ts` reprova **12** de **15** contra PostgreSQL real. Saída colada em [FINAL_AUDIT §42](FINAL_AUDIT.md).
+
+**Onze controles negativos, aplicados e revertidos**: os seis do §10 do Goal, os dois da rodada 2 e três novos, um por blocker de código da rodada 3. Rodaram **depois da última edição de código** e depois de `validate:integration`, na própria worktree, com cada arquivo restaurado e conferido byte a byte; saída colada em [FINAL_AUDIT §42](FINAL_AUDIT.md).
+
+1. `connectSchema` deixa de exigir `consentAccepted`: reprova **2** de **15** em `tests/goal071-whatsapp-consent-qr.integration.test.ts`, contra PostgreSQL real (`expected 502 to be 400`).
+2. A rota do QR deixa de ler o status antes: reprova **2** de **15** (`expected 502 to be 200`).
+3. A rota do QR deixa de exigir vinculação em curso: reprova **2** de **15** (`expected 502 to be 409` e `expected 200 to be 409`).
+4. O painel volta a ler o QR uma vez só: reprova **10** de **28** em `tests/goal071-whatsapp-connection-panel.test.tsx`.
+5. O painel chama `connect` sem passar pelo consentimento: reprova **3** de **28**.
+6. O fim da janela volta a mostrar o último QR: reprova **5** de **28**.
+7. Voltar a ficar visível lê de novo com uma leitura em voo: reprova **1** de **28** (`expected "vi.fn()" to be called 1 times, but got 2 times`).
+8. `qrcode: null` ou falha persistentes seguram o último QR: reprova **4** de **28**.
+9. A leitura em voo volta a agir depois do cleanup do efeito de QR: reprova **2** de **28** (`expected 'data:image/png;base64,qr-stale' to contain 'qr-new'`).
+10. O consentimento volta a aparecer antes da primeira leitura de status: reprova **1** de **28**.
+11. A leitura de status do modo código volta a 4 s: reprova **1** de **28** (`expected 1 to be 2`).
+
+Sem o defeito, cada alvo volta a passar por inteiro.
+
+Execução final da rodada 3, sobre a árvore final, antes dos controles:
+
+- `npm run validate:core`: **17** passos, **15** `passed`, **0** `failed`, **2** `skipped` (`test:bff`, `test:health-worker`), exit 0. Dentro dele, `test:frontend` em **85** arquivos e **829** testes (baseline review063: **83**/**793**) e `audit:static` em **33** de **34** verificações passando e **1** pulada.
+- `npm run test:gate`: **233**/**233**.
+- `npm run validate:ui`: artefato `apps/frontend/e2e-results/results.json` com `expected` **169**, `skipped` **21**, `unexpected` **0**, `flaky` **0**, e **0** retentativas, exit 0.
+- `npm run validate:integration`: a primeira execução falhou em `test:bff-integration` com **1** de **417** testes, em `tests/goal025-account-purge.test.ts` (a passada de `runAccountPurge` reivindicou uma segunda conta vencida no banco; purga e teste fora do diff071). A reexecução completa, sem mudança na árvore: **35**/**35** passos, exit 0. Dentro dela, `test:bff-integration` em **51** arquivos e **417** testes (baseline review063: **50**/**402**) e `test:scheduling-integration` em **16**/**124**. O artefato `apps/frontend/e2e-results/authenticated/results.json` traz `expected` **75**, `skipped` **0**, `unexpected` **0** e `flaky` **0**, com **0** retentativas. Baseline **70**: a diferença é `/configuracoes/whatsapp` nas cinco larguras, cada uma medida só depois de "WhatsApp conectado" na tela e sem checkbox.
+- `npm run typecheck` e `npm run lint` de `apps/bff` e `apps/frontend`: exit 0 nos quatro.
+- `this.http.` em `apps/bff/src/clients/`: **42**.
+
+**Conferência humana pendente.** A conferência do §11 do Goal **não foi feita** por este Goal. Ela confere o QR renovado conectando depois de 60 s aberto, "Gerar novo QR Code" depois da janela conectando, o código copiado conectando pelo celular, e ler o QR com o número já conectado sem derrubar a sessão.
+
+**O que esta seção não prova.** **Não prova** a conexão real (conferência humana acima, não feita). Também não prova que o consentimento tem valor legal. Não prova que os estados de consentimento, carregamento, QR e código e `/onboarding/*` cumprem largura, toque, contraste, foco e movimento, porque não são medidos. Não prova que as telas batem com o protótipo aprovado (conferência humana, Goal068).
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal071-2026-09-28-d-081-proposed),
+[FINAL_AUDIT §42](FINAL_AUDIT.md) e [D-081](DECISIONS.md).

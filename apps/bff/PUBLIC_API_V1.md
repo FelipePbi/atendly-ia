@@ -25,7 +25,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Conhecimento do negócio (Goal012) | `GET/POST /v1/knowledge/documents`; `GET/PUT/DELETE /v1/knowledge/documents/:id`; `PUT /v1/knowledge/other-info` |
 | Serviços | `GET /v1/services`; `POST /v1/services`; `PATCH /v1/services/:id` |
 | Configurações | `GET /v1/settings`; `PATCH /v1/settings/business`; `PATCH /v1/settings/ai`; `PATCH /v1/settings/availability`; `GET /v1/settings/reminders`; `PATCH /v1/settings/reminders` (Goal021); `GET/PATCH /v1/settings/retention` (Goal023/WU-01) |
-| WhatsApp | `GET /v1/whatsapp`; `POST /v1/whatsapp/connect`; `POST /v1/whatsapp/reconnect`; `DELETE /v1/whatsapp` |
+| WhatsApp | `GET /v1/whatsapp`; `GET /v1/whatsapp/qr` (Goal071/WU-01); `POST /v1/whatsapp/connect`; `POST /v1/whatsapp/reconnect`; `DELETE /v1/whatsapp` |
 | Teste real de ativação (Goal019/WU-05) | `GET /v1/activation-test`; `POST /v1/activation-test`; `POST /v1/activation-test/restart` |
 | Central de notificações (Goal022/WU-04) | `GET /v1/notifications`; `GET /v1/notifications/summary`; `POST /v1/notifications/read`; `GET/PATCH /v1/notifications/preferences` |
 | Ciclo de vida da conta (Goal025/WU-03) | `POST /v1/account/deletion`; `DELETE /v1/account/deletion` |
@@ -581,6 +581,20 @@ Quando o vínculo não é inequívoco, todas as rotas de WhatsApp recusam com `4
 | Divergente | duas linhas concorrentes, ou uma linha cujo dono de negócio e dono de usuário são contas diferentes | fora do autoatendimento: resolver envolveria decidir pelo outro negócio; depende de operação |
 
 `DELETE /v1/whatsapp` é a única rota que trata o estado pendente como resolvível, e apenas para o dono autenticado da linha. No estado pendente a credencial não é abrível — a cifra está ligada ao negócio —, então o logout autenticado no transporte é pulado; a instância remota ainda é removida pela credencial administrativa. No estado divergente a rota recusa como as demais, sem apagar nada.
+
+## Consentimento na conexão e leitura do QR corrente (Goal071/WU-01)
+
+`POST /v1/whatsapp/connect` e `POST /v1/whatsapp/reconnect` exigem `consentAccepted: true` no corpo, no mesmo padrão de `termsAccepted` do cadastro (`z.literal(true)`). Ausente ou diferente de `true`: `400 VALIDATION_ERROR`, antes de qualquer chamada à Evolution e antes de qualquer escrita — nenhuma instância remota ou linha local nasce sem consentimento. O aceite em si não é gravado. O corpo também não leva a resposta da pessoa à pergunta sobre uso pessoal do número: essa resposta fica só na tela e nenhuma rota a recebe.
+
+`GET /v1/whatsapp/qr` relê o QR pelo que está valendo agora, sobre o vínculo do próprio negócio (`requireTenantContext` + as mesmas recusas `409 CONFLICT` de vínculo pendente ou divergente das demais rotas de WhatsApp). Resposta: `{ "connection": { ... }, "qrcode": string | null }`, nunca com credencial, JID ou nome de instância.
+
+**Marcador de vinculação por QR em curso**, sem migration: a coluna `qrcode` de `WhatsAppInstance` passa a ser o marcador. `connect`/`reconnect` no modo QR a gravam, como já faziam; o modo código a limpa; qualquer leitura que observe o número conectado ou logado (`GET /v1/whatsapp` e `GET /v1/whatsapp/qr`) a limpa.
+
+Sem vinculação por QR em curso (marcador vazio), `GET /v1/whatsapp/qr` recusa com `409 WHATSAPP_QR_NOT_IN_PROGRESS` **antes de qualquer chamada à Evolution** — nem `/instance/status` nem `/instance/qr`. Reler o QR nunca abre uma vinculação que um `connect` com consentimento não abriu.
+
+Com vinculação em curso, a rota lê o status (`getStatus`) **antes** de ler o QR. Com o número conectado ou logado, ela responde a conexão já com o estado conectado (`qrcode: null`), limpa o marcador e não chama `/instance/qr`: no fork, pedir o QR com o cliente já logado pode derrubar a sessão boa. Só com o número nem conectado nem logado a rota chama `getQr`; se a Evolution não tiver QR disponível agora, a resposta é `200` com `qrcode: null`, não erro — cada leitura devolve o QR corrente, sem persistir nada de volta no marcador.
+
+**Limite declarado:** o fork gira o QR a cada 20 s depois do primeiro e, depois do quinto QR, a próxima leitura abre uma sessão nova nele. O BFF não guarda o início da vinculação, porque isso pediria migration. A janela de renovação é da tela: o painel relê a rota enquanto está aberto e visível, dentro de uma janela de no máximo 5 minutos desde o início da vinculação ali, e o BFF não impõe esse limite.
 
 ## Mensagem: estado de entrega
 

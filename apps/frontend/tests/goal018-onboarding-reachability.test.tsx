@@ -599,9 +599,11 @@ describe("o encadeamento real de dados-do-negocio até validação", () => {
         "Conecte seu WhatsApp quando quiser colocar a IA para atender seus clientes.",
       ),
     ).toBeVisible();
+    // Goal071/WU-03: "Conectar agora" volta à etapa do onboarding — a
+    // conclusão sem WhatsApp continua só em "Ir para o início".
     expect(
       screen.getByRole("link", { name: "Conectar agora" }),
-    ).toHaveAttribute("href", "/configuracoes/whatsapp");
+    ).toHaveAttribute("href", "/onboarding/whatsapp");
 
     await user.click(
       screen.getByRole("button", { name: "Ir para o início" }),

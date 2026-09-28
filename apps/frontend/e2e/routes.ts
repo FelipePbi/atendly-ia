@@ -58,6 +58,16 @@ export const AUTHENTICATED_ROUTES = [
     sessionMarker: "configuracoes",
     contentMarker: "Atendente virtual",
   },
+  // Goal071: o painel de conexão do WhatsApp (consentimento, QR/código,
+  // desconectar) é o mesmo de whatsapp-conectar no onboarding, servido aqui em
+  // Configurações. Shell destino é Configurações, mesmo sessionMarker de
+  // /configuracoes/ia acima.
+  {
+    path: "/configuracoes/whatsapp",
+    name: "configuracoes-whatsapp",
+    sessionMarker: "configuracoes",
+    contentMarker: "WhatsApp",
+  },
   { path: "/servicos", name: "servicos", sessionMarker: "servicos", contentMarker: "Serviços" },
   {
     path: "/notificacoes",

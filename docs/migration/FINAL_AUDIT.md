@@ -5106,3 +5106,395 @@ Na ordem em que rodou:
 ### Veredito recontado
 
 O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO`** — os mesmos números de §40, com `audit:static` da execução final em **33** de **34** verificações passando e **1** pulada. Nenhum achado de A-01 a A-24 foi tocado, corrigido, reclassificado ou reaberto: esta seção só acrescenta o registro do diff063, e **QA O-49, QA S-02, QA H-03 e QA H-04 corrigidos** são do `QA_LOCAL_REVIEW`, fora dessa enumeração.
+
+## 42. QA O-40, QA O-45, QA O-48 e QA O-44 são corrigidos: a conexão do WhatsApp pede consentimento e mantém o código válido — Goal071, 2026-09-28
+
+Seção nova, reescrita na rodada 3 do Goal071 (unidade FIX-001), depois da execução final da árvore corrigida e dos controles negativos rodados sobre ela. Ela **não reescreve** §4 a §41: os registros de A-01 a A-24, o veredito das seções anteriores e as quarenta e uma seções de fechamento anteriores continuam exatamente como estavam. **QA O-40**, **QA O-45**, **QA O-48** e **QA O-44** vêm do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md), não da enumeração A-01…A-24, e **não entram nessa contagem**. Decisão: [D-081](DECISIONS.md), **ACCEPTED** no [review071](reviews/071-review.md) (rodada 3 de 3).
+
+### O que mudou
+
+**QA O-40 — o consentimento é exigido a cada vinculação.** `connectSchema` (`apps/bff/src/modules/whatsapp/routes.ts`) exige `consentAccepted: z.literal(true)`; ausente ou `false` recusa `400 VALIDATION_ERROR` antes de `ensureInstance`, de qualquer chamada à Evolution e de qualquer escrita. `WhatsAppConnectionPanel` — o mesmo componente do onboarding e de Configurações › WhatsApp — mostra, com o número não conectado, um checkbox obrigatório desmarcado cujo rótulo é a própria frase exigida ("Entendo que as conversas deste número poderão ser processadas e armazenadas para oferecer os recursos da Atendly."), com "Saiba mais" para `/politica-de-privacidade`, e a pergunta sobre número pessoal sem resposta pré-marcada. "Conectar WhatsApp"/"Reconectar WhatsApp" só habilita com os dois; toda chamada a `connect`/`reconnect` envia `consentAccepted: true`. Antes da primeira leitura de status, o painel não mostra consentimento nem CTA, só um carregamento com `aria-busy`; se essa leitura falha, mostra "Não foi possível verificar a conexão." com "Tentar novamente". Com o número conectado, o consentimento não aparece em nenhum momento.
+
+**QA O-45 — o QR é relido pelo que está valendo.** Rota nova `GET /v1/whatsapp/qr` usa a coluna `qrcode` como marcador de vinculação por QR em curso (sem migration): sem marcador, recusa `409 WHATSAPP_QR_NOT_IN_PROGRESS` sem chamar a Evolution; com marcador, lê o status antes do QR e, conectado ou logado, responde o estado conectado sem chamar `/instance/qr`. A tela relê essa rota a cada 15 s (`QR_POLL_INTERVAL_MS`) com uma leitura por vez: voltar a ficar visível com uma leitura em voo não abre uma segunda. A leitura pausa com a aba oculta e para na janela declarada de 5 minutos (`QR_WINDOW_MS`). Nenhum QR fica na tela com mais de um giro de idade (`QR_ROTATION_MS`, 20 s): `qrcode: null` ou falha de leitura que persistem além de um giro levam a "O QR Code expirou", como o fim da janela e a recusa `WHATSAPP_QR_NOT_IN_PROGRESS`. Uma leitura que ainda está em voo quando o efeito de QR é descartado (expiração, conexão, desmontagem ou vinculação nova) não age ao voltar: não expira, não rearma o relógio de idade e não troca o QR da vinculação seguinte.
+
+**QA O-48 — a visão de código tem passos e cópia.** O campo "Seu número de WhatsApp com DDD" mostra erro inline que explica o formato quando o número é curto ou quando o BFF recusa com `VALIDATION_ERROR`, em vez da mensagem genérica. Depois de gerar: código grande e selecionável; "Copiar código" confirma na tela ("Código copiado") e tem texto próprio de falha; cinco passos numerados; "Aguardando conexão… detectamos sozinhos quando conectar."; "Abrir WhatsApp". O código expira pelo `expiresAt` do BFF e oferece "Gerar novo código". Enquanto o código vale, a leitura de status continua a cada 3 s (`PAIRING_CODE_POLL_INTERVAL_MS`).
+
+**QA O-44 — um CTA primário por estado, sem o cartão de tom da IA.** O painel não usa `.settings-tone-card` em nenhum estado. Consentimento, falha da primeira leitura e expirado têm um único botão primário; carregamento não tem nenhum; QR, código e conectado têm no máximo um. Em `whatsapp-conectar`, o rodapé do onboarding não compete com o painel enquanto o número não conecta.
+
+Decisão completa e limites: [D-081](DECISIONS.md).
+
+### Correções da rodada 2
+
+A rodada 1 foi reprovada com dez blockers. A rodada 2 corrigiu:
+
+1. **Leitura concorrente do QR.** `schedulePoll` marca a leitura em voo; `visibilitychange` para `visible` só lê se nenhuma estiver em voo.
+2. **QR velho ou ausente sem expirar.** Um relógio de idade do QR (`QR_ROTATION_MS`) expira a tela quando nenhum QR novo chega em um giro. Com a aba oculta, ele só tira o QR velho da tela, e a leitura ao voltar decide entre QR novo e expirado.
+3. **Texto do consentimento.** O rótulo do checkbox é a frase exigida, e "Saiba mais" aponta para `/politica-de-privacidade`.
+4. **Visão de código.** "Código copiado", rótulo "Seu número de WhatsApp com DDD", CTA habilitado com número curto para o erro inline aparecer, e `VALIDATION_ERROR` do BFF mostrado como o mesmo erro inline de formato.
+5. **Termos proibidos.** O teste confere "token", "API", "HTTP", "JID", "instância", "Evolution", "QRTimeout" e "pairing", e também código de erro cru, no texto e nos atributos `alt`/`aria-label`/`title`/`placeholder` dos estados de consentimento, QR, código, código expirado, QR expirado e conectado. Um teste próprio prova que esse filtro reprova texto proibido.
+6. **Provas do §9.2.** `goal071-onboarding-whatsapp.test.tsx` usa o painel real, não um dublê. O mesmo consentimento é conferido em `whatsapp-conectar` e em `WhatsAppSettings`. "Não, só trabalho" não revela o bloco de controle.
+7. **Provas do §9.1.** `connect` com consentimento no modo `PAIRING_CODE` limpa o marcador: `GET /v1/whatsapp/qr` recusa `409 WHATSAPP_QR_NOT_IN_PROGRESS` e não chama `/instance/qr`. Depois de `DELETE /v1/whatsapp`, a rota recusa sem vínculo e não chama `/instance/qr`. Antes do `DELETE`, a mesma rota lê o QR com `200`, então o `404` não vem de rota inexistente. O isolamento entre negócios agora é decidido pela credencial que o dublê recebe, e não pela ordem das leituras.
+8. **Comentário de contagem.** `e2e/authenticated-matrix.spec.ts` diz nove rotas e quarenta e cinco execuções. `apps/frontend/AGENTS.md` também lista nove telas logadas, com `/configuracoes/whatsapp`.
+9. **Vermelho da baseline dos testes jsdom.** Colado abaixo, junto com o do BFF.
+10. **Documentação refeita.** A frase sobre o corpo de `connect` em `apps/bff/PUBLIC_API_V1.md` ficou explícita: o corpo não leva a resposta sobre uso pessoal do número.
+
+### Correções da rodada 3
+
+A rodada 2 foi reprovada com quatro blockers. A rodada 3 corrigiu:
+
+1. **Leitura em voo depois do cleanup.** O efeito de QR ganhou a marca `disposed`, ligada no cleanup. Depois do `await` de `whatsapp.qr()`, e também no `catch`, a leitura descartada devolve `false` sem tocar em nada. Antes, uma leitura com mais de ~5 s em voo quando o relógio de idade expirava a tela podia, ao voltar, expirar ou trocar o QR de uma vinculação nova aberta por "Gerar novo QR Code". Dois testes novos provam os dois caminhos (`qrcode: null` e QR velho), e o controle 9 abaixo prova que eles mordem.
+2. **Consentimento antes da primeira leitura de status.** O painel guarda o estado da primeira leitura (`statusRead`). Até ela chegar, mostra só o carregamento (`aria-busy="true"`, com `Skeleton` fora da árvore acessível), sem checkbox e sem CTA. Falha na leitura mostra erro com "Tentar novamente", não o formulário de consentimento. No gate autenticado, `/configuracoes/whatsapp` tem o h1 "WhatsApp" em qualquer estado, então `e2e/authenticated-matrix.spec.ts` ganhou `LOADED_STATE`: antes de medir, a rota precisa mostrar o título "WhatsApp conectado" e nenhum checkbox. Dois testes jsdom novos cobrem carregamento e falha; o controle 10 abaixo prova que o de carregamento morde.
+3. **Leitura de status do modo código.** `PAIRING_CODE_POLL_INTERVAL_MS` voltou a **3 000** ms, como o §5 do Goal pede. Um teste novo confere que a leitura não sai aos 2 999 ms e sai aos 3 000 e aos 6 000 ms; o controle 11 abaixo prova que ele morde com 4 000 ms.
+4. **Documentação e controles.** `validate:core`, `test:gate`, `validate:ui` e `validate:integration` rodaram de novo na árvore final da rodada 3; os seis controles do §10, os dois da rodada 2 e três novos rodaram depois deles. Esta seção, D-081, [CURRENT_STATE](CURRENT_STATE.md) e [VALIDATION_GATE](VALIDATION_GATE.md) trazem as contagens dessas execuções.
+
+### Vermelho da baseline, saída real
+
+**Frontend (jsdom).** Os dois arquivos `goal071-` do frontend, na forma final da rodada 3, rodaram contra o painel e o onboarding da baseline `0cb49b40154050e220e53c9b937f7b2dc7f7852c`. Os quatro arquivos de produção (`features/whatsapp/WhatsAppConnectionPanel.tsx`, `features/onboarding/OnboardingScreen.tsx`, `features/onboarding/blocks/whatsapp.tsx` e `features/onboarding/blocks/shared.tsx`) foram trocados pela versão da baseline (`git show <baseline>:<arquivo>`) numa cópia salva à parte. Depois da execução, os quatro foram restaurados e conferidos byte a byte com `cmp`, e `git status --porcelain=v1 -uall` voltou idêntico ao de antes. Comando: `npx vitest run tests/goal071-` em `apps/frontend`.
+
+```
+     × onboarding (whatsapp-conectar) abre no consentimento, com o painel real
+     × Configurações › WhatsApp abre no mesmo consentimento, com o painel real
+     × desconectado, 'Continuar' é a ação secundária e o único CTA primário é o do painel
+     × aponta para /onboarding/whatsapp, não para Configurações
+     × connect nunca é chamado antes do checkbox e da resposta escolhida, e sempre envia consentAccepted: true
+     × resposta 'Sim, também' revela o bloco de controle
+     × resposta 'Não, só trabalho' não revela o bloco de controle
+     × checkbox e respostas são controles nativos alcançáveis pelo teclado, sem violação de acessibilidade
+     × antes da primeira leitura de status, nem consentimento nem CTA: só o carregamento
+     × falha na primeira leitura de status oferece tentar de novo, sem consentimento
+     × reconectar (número já vinculado antes) também exige consentimento e chama reconnect
+     × o src troca sozinho, pausa com a aba oculta, retoma visível e termina na janela declarada
+     × recusa WHATSAPP_QR_NOT_IN_PROGRESS expira a tela imediatamente
+     × conectar durante a espera para a renovação e nunca mais lê o QR
+     × desmontar para a renovação
+     × sem leitura concorrente: voltar a ficar visível com uma leitura em voo não abre uma segunda
+     × qrcode: null persistente além de um giro leva a 'O QR Code expirou'
+     × falha transitória nunca deixa na tela um QR com mais de um giro de idade
+     × leitura em voo quando o giro expira a tela nunca toca a vinculação seguinte
+     × leitura em voo com QR velho não troca o QR da vinculação seguinte
+     × 'Gerar novo QR Code' chama reconnect com consentimento e reabre a renovação
+     × copia, cinco passos, Abrir WhatsApp e Gerar novo código com o mesmo número
+     × a leitura de status enquanto o código vale continua a cada 3 s
+     × clipboard indisponível mostra texto próprio de falha
+     × número curto mostra erro inline que explica o formato, sem chamar connect
+     × recusa VALIDATION_ERROR do servidor vira o mesmo erro inline de formato, não a mensagem genérica
+     × consentimento: um CTA primário, sem settings-tone-card e sem termo proibido
+     × QR e expirado: no máximo um CTA primário e nenhum termo proibido
+     × código e código expirado: no máximo um CTA primário e nenhum termo proibido
+⎯⎯⎯⎯⎯⎯ Failed Tests 29 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  2 failed (2)
+      Tests  29 failed | 7 passed (36)
+```
+
+Os 7 que passam na baseline são o complemento da lista acima e guardam o comportamento que já existia: no onboarding, número conectado com "Continuar" primário, o avanço para `contatos-ignorados`, a ausência de "Já conectei" e "Ir para o início"; no painel, número conectado sem consentimento, o próprio filtro de termos e o estado conectado sem CTA primário concorrente. Os cinco testes novos da rodada 3 estão entre os 29 que reprovam. Primeiras linhas de erro: `Unable to find an accessible element with the role "checkbox" and name "Entendo que as conversas deste número poderão ser processadas e arma…` (os dois caminhos, e todos os testes que começam pelo consentimento), `expected 'btn btn-primary' to contain 'btn-secondary'` ("Continuar" desconectado), `element.getAttribute("href") === "/onboarding/whatsapp"` ("Conectar agora") e `expected <span class="settings-tone-card">…(2)</span> to be null`.
+
+**BFF, contra PostgreSQL real.** `tests/goal071-whatsapp-consent-qr.integration.test.ts`, na forma final (a rodada 3 não o mudou), rodou de novo na rodada 3 com `apps/bff/src/modules/whatsapp/routes.ts` e `apps/bff/src/lib/errors.ts` da mesma baseline, trocados e restaurados do mesmo jeito. Comando: `npx vitest run tests/goal071-whatsapp-consent-qr.integration.test.ts` em `apps/bff`, com `BFF_TEST_DATABASE_URL=postgresql://pgtest@127.0.0.1:55432/atendly_bff_test`, `BFF_RUN_INTEGRATION_TESTS=true` e as chaves sintéticas de `validate:integration`.
+
+```
+     × connect sem consentAccepted recusa 400 VALIDATION_ERROR, sem chamar a Evolution nem gravar instância
+     × connect com consentAccepted: false recusa 400 VALIDATION_ERROR, sem chamar a Evolution nem gravar instância
+     × reconnect sem consentAccepted recusa 400 VALIDATION_ERROR, sem chamar a Evolution nem alterar o vínculo existente
+     × sem vinculação por QR em curso, recusa 409 WHATSAPP_QR_NOT_IN_PROGRESS e não chama a Evolution
+     × vínculo pendente ou divergente recusa 409 CONFLICT, como as demais rotas de WhatsApp
+     × com número conectado, limpa o marcador, responde o estado conectado e não chama /instance/qr
+     × com o número apenas logado (sem connected), também limpa o marcador e não chama /instance/qr
+     × com vinculação em curso, cada leitura devolve o QR corrente do dublê, sem persistir no marcador
+     × sem QR disponível agora, responde 200 com qrcode: null, não erro
+     × isolamento entre negócios: a leitura de um negócio nunca enxerga o QR do outro
+     × connect com consentimento no modo PAIRING_CODE limpa o marcador: a leitura seguinte recusa 409 WHATSAPP_QR_NOT_IN_PROGRESS sem chamar /instance/qr
+     × depois de DELETE /v1/whatsapp, a rota não lê QR: recusa sem vínculo e zero chamadas a /instance/qr
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  1 failed (1)
+      Tests  12 failed | 3 passed (15)
+```
+
+Erros: `expected 502 to be 400` (os três casos sem consentimento: a baseline chama a Evolution), `expected 404 to be 409` e `expected 404 to be 200` (a rota não existe na baseline), `Cannot read properties of undefined (reading 'qrcode')` (isolamento) e `expected 'qr-before-pairing-071' to be null` (o modo código da baseline não limpa o marcador). Os 3 que passam na baseline são guardas de comportamento que já existia: `connect` com consentimento segue normalmente, a ausência de vínculo recusa `404`, e a resposta não traz credencial.
+
+### Controles negativos, saída real
+
+Onze controles rodaram **depois da última edição de código** e depois de `validate:integration`, na própria worktree, um de cada vez: os seis do §10 do Goal (1 a 6), os dois extras da rodada 2 (7 e 8) e três novos, um por blocker de código da rodada 3 (9 a 11). Um script aplica a troca exata de texto, roda o teste alvo, restaura o arquivo a partir do conteúdo lido antes, confere a restauração byte a byte e roda o mesmo teste de novo. Os controles 1 a 3 rodam contra PostgreSQL real, com o mesmo ambiente do BFF acima; os 4 a 11 rodam em jsdom, em `apps/frontend`. No controle 6, o relógio de idade do QR também é desligado, para que o fim da janela seja o único caminho de expiração exercitado. Depois dos onze, `git status --porcelain=v1 -uall` voltou idêntico ao de antes.
+
+```
+### Controle 1 — connectSchema deixa de exigir consentAccepted
+arquivo: apps/bff/src/modules/whatsapp/routes.ts
+--- trecho original
+    consentAccepted: z.literal(true),
++++ com o defeito
+    consentAccepted: z.literal(true).optional(),
+com o defeito: npx vitest run tests/goal071-whatsapp-consent-qr.integration.test.ts (em apps/bff) -> exit 1
+Test Files  1 failed (1)
+Tests  2 failed | 13 passed (15)
+FAIL tests/goal071-whatsapp-consent-qr.integration.test.ts > Goal071/WU-01: consentimento na conexão > connect sem consentAccepted recusa 400 VALIDATION_ERROR, sem chamar a Evolution nem gravar instância
+FAIL tests/goal071-whatsapp-consent-qr.integration.test.ts > Goal071/WU-01: consentimento na conexão > reconnect sem consentAccepted recusa 400 VALIDATION_ERROR, sem chamar a Evolution nem alterar o vínculo existente
+AssertionError: expected 502 to be 400 // Object.is equality
+restaurado byte a byte: true
+sem o defeito: exit 0
+Test Files  1 passed (1)
+Tests  15 passed (15)
+
+### Controle 2 — a rota do QR deixa de ler o status antes de getQr
+arquivo: apps/bff/src/modules/whatsapp/routes.ts
+--- trecho original
+      const status = await evolution.getStatus(credential, request.id);
+      if (status.connected || status.loggedIn) {
++++ com o defeito
+      const status = { connected: false, loggedIn: false, phoneNumber: null as string | null };
+      if (status.connected || status.loggedIn) {
+com o defeito: npx vitest run tests/goal071-whatsapp-consent-qr.integration.test.ts (em apps/bff) -> exit 1
+Test Files  1 failed (1)
+Tests  2 failed | 13 passed (15)
+FAIL tests/goal071-whatsapp-consent-qr.integration.test.ts > Goal071/WU-01: GET /v1/whatsapp/qr relê o QR corrente > com número conectado, limpa o marcador, responde o estado conectado e não chama /instance/qr
+FAIL tests/goal071-whatsapp-consent-qr.integration.test.ts > Goal071/WU-01: GET /v1/whatsapp/qr relê o QR corrente > com o número apenas logado (sem connected), também limpa o marcador e não chama /instance/qr
+AssertionError: expected 502 to be 200 // Object.is equality
+restaurado byte a byte: true
+sem o defeito: exit 0
+Test Files  1 passed (1)
+Tests  15 passed (15)
+
+### Controle 3 — a rota do QR deixa de exigir vinculação em curso
+arquivo: apps/bff/src/modules/whatsapp/routes.ts
+--- trecho original
+      if (!instance.qrcode) {
+        throw new AppError(
+          "WHATSAPP_QR_NOT_IN_PROGRESS",
++++ com o defeito
+      if (false as boolean) {
+        throw new AppError(
+          "WHATSAPP_QR_NOT_IN_PROGRESS",
+com o defeito: npx vitest run tests/goal071-whatsapp-consent-qr.integration.test.ts (em apps/bff) -> exit 1
+Test Files  1 failed (1)
+Tests  2 failed | 13 passed (15)
+FAIL tests/goal071-whatsapp-consent-qr.integration.test.ts > Goal071/WU-01: GET /v1/whatsapp/qr relê o QR corrente > sem vinculação por QR em curso, recusa 409 WHATSAPP_QR_NOT_IN_PROGRESS e não chama a Evolution
+FAIL tests/goal071-whatsapp-consent-qr.integration.test.ts > Goal071/WU-01: GET /v1/whatsapp/qr relê o QR corrente > connect com consentimento no modo PAIRING_CODE limpa o marcador: a leitura seguinte recusa 409 WHATSAPP_QR_NOT_IN_PROGRESS sem chamar /instance/qr
+AssertionError: expected 502 to be 409 // Object.is equality
+AssertionError: expected 200 to be 409 // Object.is equality
+restaurado byte a byte: true
+sem o defeito: exit 0
+Test Files  1 passed (1)
+Tests  15 passed (15)
+
+### Controle 4 — o painel volta a ler o QR uma vez só
+arquivo: apps/frontend/src/features/whatsapp/WhatsAppConnectionPanel.tsx
+--- trecho original
+    if (!linking || linking.mode !== "QR") return undefined;
+    const startedAt = Date.now();
++++ com o defeito
+    if (!linking || linking.mode !== "QR" || linking) return undefined;
+    const startedAt = Date.now();
+com o defeito: npx vitest run tests/goal071-whatsapp-connection-panel.test.tsx (em apps/frontend) -> exit 1
+Test Files  1 failed (1)
+Tests  10 failed | 18 passed (28)
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > o src troca sozinho, pausa com a aba oculta, retoma visível e termina na janela declarada
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > recusa WHATSAPP_QR_NOT_IN_PROGRESS expira a tela imediatamente
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > conectar durante a espera para a renovação e nunca mais lê o QR
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > sem leitura concorrente: voltar a ficar visível com uma leitura em voo não abre uma segunda
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > qrcode: null persistente além de um giro leva a 'O QR Code expirou'
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > falha transitória nunca deixa na tela um QR com mais de um giro de idade
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > leitura em voo quando o giro expira a tela nunca toca a vinculação seguinte
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > leitura em voo com QR velho não troca o QR da vinculação seguinte
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > 'Gerar novo QR Code' chama reconnect com consentimento e reabre a renovação
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > um CTA primário por estado e nenhum termo técnico > QR e expirado: no máximo um CTA primário e nenhum termo proibido
+AssertionError: expected "vi.fn()" to be called 1 times, but got 0 times
+TestingLibraryElementError: Unable to find an element with the text: O QR Code expirou.. …
+TestingLibraryElementError: Unable to find an element with the text: WhatsApp conectado. …
+Error: expect(element).not.toBeInTheDocument()
+restaurado byte a byte: true
+sem o defeito: exit 0
+Test Files  1 passed (1)
+Tests  28 passed (28)
+
+### Controle 5 — o painel chama connect sem passar pelo consentimento
+arquivo: apps/frontend/src/features/whatsapp/WhatsAppConnectionPanel.tsx
+--- trecho original
+              disabled={busy || !consentChecked || !personalAnswer}
++++ com o defeito
+              disabled={busy}
+--- trecho original
+    if (!consentChecked || !personalAnswer) return;
++++ com o defeito
+(removido)
+com o defeito: npx vitest run tests/goal071-whatsapp-connection-panel.test.tsx (em apps/frontend) -> exit 1
+Test Files  1 failed (1)
+Tests  3 failed | 25 passed (28)
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > consentimento obrigatório > connect nunca é chamado antes do checkbox e da resposta escolhida, e sempre envia consentAccepted: true
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > consentimento obrigatório > falha na primeira leitura de status oferece tentar de novo, sem consentimento
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > consentimento obrigatório > reconectar (número já vinculado antes) também exige consentimento e chama reconnect
+Error: expect(element).toBeDisabled()
+restaurado byte a byte: true
+sem o defeito: exit 0
+Test Files  1 passed (1)
+Tests  28 passed (28)
+
+### Controle 6 — o fim da janela volta a mostrar o último QR
+arquivo: apps/frontend/src/features/whatsapp/WhatsAppConnectionPanel.tsx
+--- trecho original
+      if (Date.now() - startedAt >= QR_WINDOW_MS) {
+        expire();
+        return false;
+      }
++++ com o defeito
+      if (Date.now() - startedAt >= QR_WINDOW_MS) {
+        return true;
+      }
+--- trecho original
+        poller.cancel();
+        expire();
+      }, QR_ROTATION_MS);
++++ com o defeito
+      }, QR_ROTATION_MS);
+com o defeito: npx vitest run tests/goal071-whatsapp-connection-panel.test.tsx (em apps/frontend) -> exit 1
+Test Files  1 failed (1)
+Tests  5 failed | 23 passed (28)
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > o src troca sozinho, pausa com a aba oculta, retoma visível e termina na janela declarada
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > qrcode: null persistente além de um giro leva a 'O QR Code expirou'
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > falha transitória nunca deixa na tela um QR com mais de um giro de idade
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > leitura em voo quando o giro expira a tela nunca toca a vinculação seguinte
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > leitura em voo com QR velho não troca o QR da vinculação seguinte
+TestingLibraryElementError: Unable to find an element with the text: O QR Code expirou.. …
+Error: expect(element).not.toBeInTheDocument()
+restaurado byte a byte: true
+sem o defeito: exit 0
+Test Files  1 passed (1)
+Tests  28 passed (28)
+
+### Controle 7 — voltar a ficar visível lê de novo com uma leitura em voo (rodada 2)
+arquivo: apps/frontend/src/features/whatsapp/WhatsAppConnectionPanel.tsx
+--- trecho original
+    if (cancelled || inFlight) return;
++++ com o defeito
+    if (cancelled) return;
+--- trecho original
+    if (document.visibilityState === "visible" && !inFlight) tick();
++++ com o defeito
+    if (document.visibilityState === "visible") tick();
+com o defeito: npx vitest run tests/goal071-whatsapp-connection-panel.test.tsx (em apps/frontend) -> exit 1
+Test Files  1 failed (1)
+Tests  1 failed | 27 passed (28)
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > sem leitura concorrente: voltar a ficar visível com uma leitura em voo não abre uma segunda
+AssertionError: expected "vi.fn()" to be called 1 times, but got 2 times
+restaurado byte a byte: true
+sem o defeito: exit 0
+Test Files  1 passed (1)
+Tests  28 passed (28)
+
+### Controle 8 — QR nulo ou falha persistentes seguram o último QR (rodada 2)
+arquivo: apps/frontend/src/features/whatsapp/WhatsAppConnectionPanel.tsx
+--- trecho original
+        poller.cancel();
+        expire();
+      }, QR_ROTATION_MS);
++++ com o defeito
+      }, QR_ROTATION_MS);
+--- trecho original
+        if (stale()) {
+          expire();
+          return false;
+        }
+        return true;
++++ com o defeito
+        return true;
+--- trecho original
+            thrown.code === "WHATSAPP_QR_NOT_IN_PROGRESS") ||
+          stale()
++++ com o defeito
+            thrown.code === "WHATSAPP_QR_NOT_IN_PROGRESS")
+com o defeito: npx vitest run tests/goal071-whatsapp-connection-panel.test.tsx (em apps/frontend) -> exit 1
+Test Files  1 failed (1)
+Tests  4 failed | 24 passed (28)
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > qrcode: null persistente além de um giro leva a 'O QR Code expirou'
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > falha transitória nunca deixa na tela um QR com mais de um giro de idade
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > leitura em voo quando o giro expira a tela nunca toca a vinculação seguinte
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > leitura em voo com QR velho não troca o QR da vinculação seguinte
+TestingLibraryElementError: Unable to find an element with the text: O QR Code expirou.. …
+Error: expect(element).not.toBeInTheDocument()
+restaurado byte a byte: true
+sem o defeito: exit 0
+Test Files  1 passed (1)
+Tests  28 passed (28)
+
+### Controle 9 — blocker 1 da rodada 3: a leitura em voo volta a agir depois do cleanup
+arquivo: apps/frontend/src/features/whatsapp/WhatsAppConnectionPanel.tsx
+--- trecho original
+        const result = await getProductServices().whatsapp.qr();
+        if (disposed) return false;
++++ com o defeito
+        const result = await getProductServices().whatsapp.qr();
+--- trecho original
+      } catch (thrown) {
+        if (disposed) return false;
++++ com o defeito
+      } catch (thrown) {
+com o defeito: npx vitest run tests/goal071-whatsapp-connection-panel.test.tsx (em apps/frontend) -> exit 1
+Test Files  1 failed (1)
+Tests  2 failed | 26 passed (28)
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > leitura em voo quando o giro expira a tela nunca toca a vinculação seguinte
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > renovação do QR > leitura em voo com QR velho não troca o QR da vinculação seguinte
+Error: expect(element).not.toBeInTheDocument()
+AssertionError: expected 'data:image/png;base64,qr-stale' to contain 'qr-new'
+restaurado byte a byte: true
+sem o defeito: exit 0
+Test Files  1 passed (1)
+Tests  28 passed (28)
+
+### Controle 10 — blocker 2 da rodada 3: o consentimento volta a aparecer antes da primeira leitura de status
+arquivo: apps/frontend/src/features/whatsapp/WhatsAppConnectionPanel.tsx
+--- trecho original
+  if (statusRead !== "loaded") {
++++ com o defeito
+  if (statusRead === "error") {
+com o defeito: npx vitest run tests/goal071-whatsapp-connection-panel.test.tsx (em apps/frontend) -> exit 1
+Test Files  1 failed (1)
+Tests  1 failed | 27 passed (28)
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > consentimento obrigatório > antes da primeira leitura de status, nem consentimento nem CTA: só o carregamento
+AssertionError: expected null not to be null
+restaurado byte a byte: true
+sem o defeito: exit 0
+Test Files  1 passed (1)
+Tests  28 passed (28)
+
+### Controle 11 — blocker 3 da rodada 3: a leitura de status do modo código volta a 4 s
+arquivo: apps/frontend/src/features/whatsapp/WhatsAppConnectionPanel.tsx
+--- trecho original
+const PAIRING_CODE_POLL_INTERVAL_MS = 3_000;
++++ com o defeito
+const PAIRING_CODE_POLL_INTERVAL_MS = 4_000;
+com o defeito: npx vitest run tests/goal071-whatsapp-connection-panel.test.tsx (em apps/frontend) -> exit 1
+Test Files  1 failed (1)
+Tests  1 failed | 27 passed (28)
+FAIL tests/goal071-whatsapp-connection-panel.test.tsx > visão de código > a leitura de status enquanto o código vale continua a cada 3 s
+AssertionError: expected 1 to be 2 // Object.is equality
+restaurado byte a byte: true
+sem o defeito: exit 0
+Test Files  1 passed (1)
+Tests  28 passed (28)
+```
+
+### Execução final, sobre a árvore final
+
+Na ordem em que rodou, na árvore final da rodada 3, antes dos controles acima. Depois dela, só esta documentação mudou.
+
+- `npm run validate:core`: **17** passos, **15** `passed`, **0** `failed`, **2** `skipped` (`test:bff`, só integração; `test:health-worker`, sem suíte automatizada), exit 0. Dentro dele:
+  - `test:frontend`: **85** arquivos e **829** testes passando. Baseline review063: **83**/**793**. A diferença são os dois arquivos `goal071-` do frontend, com **36** testes (28 do painel e 8 do onboarding); a rodada 3 somou 5 ao painel.
+  - `audit:static`: **34** verificações, **33** passando, **0** falhando e **1** pulada (`production_health`, não pedida).
+  - `repro:a03-contract-drift` não reproduz A-03.
+- `npm run test:gate`: **233**/**233**, **0** falhando, exit 0.
+- `npm run validate:ui`: **169** passando, **21** pulados, **0** retentativas, exit 0. Artefato `apps/frontend/e2e-results/results.json`, `stats`: `expected` **169**, `skipped` **21**, `unexpected` **0**, `flaky` **0**.
+- `npm run validate:integration`, contra o PostgreSQL 18 descartável em `127.0.0.1:55432`. A primeira execução falhou em `test:bff-integration`, com **1** de **417** testes: `tests/goal025-account-purge.test.ts` › "o teto por passada segura o trabalho, sinaliza o resto e não apaga o dono" (`expected [ 'ai', 'scheduling', 'ai', …(1) ] to deeply equal [ 'ai', 'scheduling' ]`). A passada de `runAccountPurge` reivindica qualquer exclusão de conta vencida no banco, e uma segunda conta vencida entrou nela. Nem a purga nem esse teste são tocados pelo diff071. A reexecução completa, sem mudança nenhuma na árvore, passou **35**/**35** passos, exit 0. Dentro dela:
+  - `test:bff-integration`: **51** arquivos e **417** testes. Baseline review063: **50**/**402**. A diferença é `tests/goal071-whatsapp-consent-qr.integration.test.ts`, com **15** testes.
+  - `test:scheduling-integration`: **16**/**124**, sem mudança.
+  - `rehearse:goal033-authenticated-ui`: artefato `apps/frontend/e2e-results/authenticated/results.json`, `stats`: `expected` **75**, `skipped` **0**, `unexpected` **0**, `flaky` **0**, com **0** retentativas. Baseline **70**: as cinco medidas novas são `/configuracoes/whatsapp` nas cinco larguras.
+  - **Estado conectado medido.** Os cinco testes `configuracoes-whatsapp › measured, logged in` (360, 390, 768, 1024 e 1440) passaram na primeira tentativa. Cada um só mede depois que `LOADED_STATE` encontra o título "WhatsApp conectado" e nenhum checkbox na tela; sem isso, o teste falha antes de medir. Em 1024 o teste levou 22,1 s, contra ~1,8 s nas outras larguras; passou na primeira tentativa, e o log não diz qual espera demorou.
+- `npm run typecheck` e `npm run lint` de `apps/bff` e `apps/frontend`: exit 0 nos quatro.
+- `grep -rn "this\.http\." apps/bff/src/clients/ | wc -l`: **42**.
+
+### O que esta seção não prova
+
+**Não prova** que a conexão real funciona com WhatsApp e Evolution reais: a Evolution é sempre dublê nos testes automatizados. A conferência humana do §11 do Goal **não foi feita** por este Goal. Ela confere que o QR renovado conecta depois de 60 s aberto, que "Gerar novo QR Code" depois da janela conecta, que o código copiado conecta pelo celular e que ler o QR com o número já conectado não derruba a sessão. Esta seção também não prova:
+
+- que o consentimento tem valor legal: ele não é gravado, e a revisão legal está nos temas adiados do vault;
+- que os estados de consentimento, carregamento, QR e código e `/onboarding/*` cumprem largura, toque, contraste, foco e movimento, porque o gate renderizado não os mede;
+- que as telas batem com o protótipo aprovado (conferência humana, Goal068).
+
+### Veredito recontado
+
+O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO`**. São os mesmos números de §41, com `audit:static` da execução final em **33** de **34** verificações passando e **1** pulada. Nenhum achado de A-01 a A-24 foi tocado, corrigido, reclassificado ou reaberto. Esta seção só acrescenta o registro do diff071. **QA O-40, QA O-45, QA O-48 e QA O-44 corrigidos** são do `QA_LOCAL_REVIEW`, fora dessa enumeração.

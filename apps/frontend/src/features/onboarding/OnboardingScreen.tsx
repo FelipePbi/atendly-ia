@@ -49,6 +49,9 @@ export function OnboardingScreen({
   } = useOnboardingRuntime();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Só lido em whatsapp-conectar: enquanto falso, "Continuar" não compete com
+  // o CTA primário do próprio painel de conexão (Goal071/WU-03).
+  const [whatsappConnected, setWhatsappConnected] = useState(false);
   const [eyebrow, title, description] = onboardingScenarios[scenario];
 
   if (loading)
@@ -58,6 +61,7 @@ export function OnboardingScreen({
   const blockId = blockForScenario(scenario);
   const blockLabel = onboardingBlockLabels[blockId];
   const isWhatsappIntro = scenario === "whatsapp";
+  const isWhatsappConnect = scenario === "whatsapp-conectar";
   const isWhatsappConclusion = scenario === "whatsapp-concluido";
   const isIgnoredContactsStep = scenario === "contatos-ignorados";
   const isActivationTestIntro = scenario === "teste-real";
@@ -246,7 +250,7 @@ export function OnboardingScreen({
     </>
   ) : isWhatsappConclusion ? (
     <>
-      <Link className="btn btn-secondary" href="/configuracoes/whatsapp">
+      <Link className="btn btn-secondary" href="/onboarding/whatsapp">
         Conectar agora
       </Link>
       <button
@@ -256,6 +260,21 @@ export function OnboardingScreen({
         onClick={() => void finishWithoutWhatsapp()}
       >
         {busy ? "Abrindo..." : "Ir para o início"}
+      </button>
+    </>
+  ) : isWhatsappConnect ? (
+    <>
+      {previous && (
+        <Link className="btn btn-secondary" href={`/onboarding/${previous}`}>
+          Voltar
+        </Link>
+      )}
+      <button
+        className={`btn ${whatsappConnected ? "btn-primary" : "btn-secondary"}`}
+        disabled={busy}
+        type="submit"
+      >
+        {busy ? "Salvando..." : "Continuar"}
       </button>
     </>
   ) : isWhatsappIntro ? (
@@ -313,7 +332,12 @@ export function OnboardingScreen({
     <OnboardingShell
       actions={actions}
       blockLabel={blockLabel}
-      body={stepBodyByBlock[blockId](scenario, draft, setDraft)}
+      body={stepBodyByBlock[blockId](
+        scenario,
+        draft,
+        setDraft,
+        setWhatsappConnected,
+      )}
       description={description}
       error={error}
       eyebrow={eyebrow}

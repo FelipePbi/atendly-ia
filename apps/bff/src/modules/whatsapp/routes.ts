@@ -32,6 +32,11 @@ const connectSchema = z
   .object({
     mode: z.enum(["QR", "PAIRING_CODE"]).default("QR"),
     phone: z.string().trim().min(10).max(32).optional(),
+    // Consentimento exigido a cada vinculação (Goal071/WU-01), no padrão de
+    // `termsAccepted` do cadastro: ausente ou diferente de `true` recusa antes
+    // de `ensureInstance`, de qualquer chamada à Evolution e de qualquer
+    // escrita. O aceite em si não é gravado.
+    consentAccepted: z.literal(true),
   })
   .refine((value) => value.mode !== "PAIRING_CODE" || value.phone, {
     path: ["phone"],
@@ -73,9 +78,64 @@ export async function registerV1WhatsAppRoutes(
             status.connected && !instance.connectedAt
               ? new Date()
               : instance.connectedAt,
+          // Marcador de vinculação por QR em curso (Goal071/WU-01): qualquer
+          // leitura que observe o número conectado o limpa.
+          ...(status.connected ? { qrcode: null } : {}),
         },
       });
       return dataResponse(request, whatsappDto(updated));
+    },
+  );
+
+  app.get(
+    "/v1/whatsapp/qr",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const tenant = currentTenantContext(request);
+      const instance = await requireLinkedInstance(tenant);
+      // Sem marcador (coluna `qrcode` vazia), não há vinculação por QR em
+      // curso: recusa antes de qualquer chamada à Evolution. Reler o QR
+      // nunca abre uma vinculação que um `connect` com consentimento não
+      // abriu.
+      if (!instance.qrcode) {
+        throw new AppError(
+          "WHATSAPP_QR_NOT_IN_PROGRESS",
+          "There is no WhatsApp QR pairing in progress for this business.",
+          409,
+        );
+      }
+
+      const credential = await resolveInstanceCredential(instance);
+      // No fork, ler o QR com o cliente já logado (ou nil) chama
+      // StartInstance, que pode derrubar a sessão boa — por isso o status
+      // vem antes de `getQr`, e conectado ou logado pulam `/instance/qr` por
+      // completo.
+      const status = await evolution.getStatus(credential, request.id);
+      if (status.connected || status.loggedIn) {
+        const rawPhone = status.phoneNumber ?? instance.phoneNumber;
+        const phoneNumber = rawPhone
+          ? phoneFromWhatsappJid(rawPhone) || null
+          : null;
+        const updated = await getPrisma().whatsAppInstance.update({
+          where: { id: instance.id },
+          data: {
+            status: "CONNECTED",
+            phoneNumber,
+            connectedAt: instance.connectedAt ?? new Date(),
+            qrcode: null,
+          },
+        });
+        return dataResponse(request, {
+          connection: whatsappDto(updated),
+          qrcode: null,
+        });
+      }
+
+      const qr = await evolution.getQr(credential, request.id);
+      return dataResponse(request, {
+        connection: whatsappDto(instance),
+        qrcode: qr.qrcode || null,
+      });
     },
   );
 
@@ -238,7 +298,9 @@ async function connect(
     const pairing = await evolution.pairInstance(credential, phone, request.id);
     const updated = await getPrisma().whatsAppInstance.update({
       where: { id: instance.id },
-      data: { status: "CONNECTING", phoneNumber: phone },
+      // Modo código limpa o marcador de vinculação por QR em curso
+      // (Goal071/WU-01): esta vinculação não é por QR.
+      data: { status: "CONNECTING", phoneNumber: phone, qrcode: null },
     });
     return {
       connection: whatsappDto(updated),

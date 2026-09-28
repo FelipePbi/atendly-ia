@@ -1302,7 +1302,7 @@ async function seedTenant(client, ai, { bffDb, schedulingDb, aiDb, legalVersions
   // 4. Canal do WhatsApp pelo caminho de produção, contra o dublê. O vínculo
   //    conectado é o que permite a mensagem SAÍDA existir pela rota humana.
   const connect = await client.request("POST", "/v1/whatsapp/connect", {
-    body: { mode: "QR" },
+    body: { mode: "QR", consentAccepted: true },
   });
   step(
     connect.status === 201,

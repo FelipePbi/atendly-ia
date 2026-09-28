@@ -880,6 +880,15 @@ export const whatsappDisconnectResultSchema = z.object({
   disconnected: z.literal(true),
 });
 
+// GET /v1/whatsapp/qr (Goal071/WU-01): leitura do QR corrente enquanto a
+// vinculação por QR está em curso. `qrcode: null` tanto quando o número já
+// está conectado/logado (o marcador foi limpo) quanto quando a Evolution não
+// tem QR disponível agora — os dois são resposta válida, não erro.
+export const whatsappQrResultSchema = z.object({
+  connection: whatsappConnectionSchema,
+  qrcode: z.string().nullable(),
+});
+
 // --- Status honesto de WhatsApp e IA (Goal014) ------------------------------
 // Read model dedicado de `GET /v1/status`: nunca deduz de configuração salva,
 // só do que a verificação desta requisição encontrou. Ver PUBLIC_API_V1.md.

@@ -64,7 +64,7 @@ Inventário registrado: [PUBLIC_API_V1](../../apps/bff/PUBLIC_API_V1.md). Montag
 | `/v1/customers`, `/v1/services` | CRUD parcial via Scheduling; telefone obrigatório no create cliente BFF |
 | `/v1/conversations/*` | IA guarda conversas; BFF passa token da instância no envio humano |
 | `/v1/settings/*` | BFF grava perfil/configuração e sincroniza IA em chamadas posteriores |
-| `/v1/whatsapp/*` | BFF controla provisionamento/QR/pairing/status/disconnect em Evolution e provisiona vínculo na IA |
+| `/v1/whatsapp/*` | BFF controla provisionamento/QR/pairing/status/disconnect em Evolution e provisiona vínculo na IA. Desde o Goal071 ([D-081](DECISIONS.md)), `connect`/`reconnect` exigem `consentAccepted: true` e `GET /v1/whatsapp/qr` relê o QR só com vinculação por QR em curso |
 | `/v1/calendar/integration/*`, `/calendar/migrations/*` | Contratos legados ainda montados e consumidos |
 
 `onboarding/routes.ts:174–235` exige fonte escolhida, dois tons antigos, modalidade selecionada e endereço quando `ON_SITE` (Goal018); fonte externa dispensa disponibilidade interna, exigindo integração conectada. WhatsApp deixou de ser exigência de conclusão no Goal018 — a rota não consulta mais `WhatsAppInstance` nem o status do Evolution. `settings/routes.ts:88–100` persiste AI settings antes de sincronizar IA: falha remota deixa duas cópias divergentes. Atualização de negócio também precede sincronização. Não há transação distribuída ou reconciliação durável nesse caminho.
@@ -6325,3 +6325,131 @@ as rotas de WhatsApp do BFF. Nenhuma migration.
   renderizado — ver [D-080](DECISIONS.md). **QA O-49, QA S-02, QA H-03 e
   QA H-04 corrigidos**, fora da contagem A-01…A-24 — ver
   [FINAL_AUDIT §41](FINAL_AUDIT.md).
+
+## Delta implementado — Goal071, 2026-09-28 ([D-081](DECISIONS.md), ACCEPTED)
+
+Corrige **QA O-40**, **QA O-45**, **QA O-48** e **QA O-44** do
+[QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md) (fora da enumeração A-01…A-24 do
+FINAL_AUDIT): a conexão do WhatsApp exige consentimento a cada vinculação,
+pelo BFF, por qualquer caminho; o QR é relido pelo que está valendo, nunca
+com o número conectado; a renovação tem janela declarada na tela; e a visão
+de código e a de QR seguem o protótipo aprovado. Toca `apps/bff/`
+(`modules/whatsapp/routes.ts`, `lib/errors.ts`, `PUBLIC_API_V1.md`),
+`packages/public-api-contract/`, `apps/frontend/` (`WhatsAppConnectionPanel`,
+onboarding, `e2e/routes.ts`, `AGENTS.md`) e
+`scripts/goal033-authenticated-ui-rehearsal.mjs`. Não toca
+`apps/ai-orchestrator/`, `apps/scheduling-service/`, `apps/evolution-go/`, o
+teste real, `AiSettings`, a Home, a desconexão nem a leitura de status além
+de limpar o marcador. Nenhuma migration. Estado da rodada 3 (FIX-001), que
+corrigiu os quatro blockers da rodada 2 (a rodada 2 corrigiu os dez da
+rodada 1).
+
+- **Consentimento (§1)** — `POST /v1/whatsapp/connect` e `POST
+  /v1/whatsapp/reconnect` exigem `consentAccepted: z.literal(true)` no
+  corpo; ausente ou `false` recusa `400 VALIDATION_ERROR` antes de
+  `ensureInstance`, de qualquer chamada à Evolution e de qualquer escrita.
+  O aceite não é gravado.
+- **Rota do QR (§2)** — `GET /v1/whatsapp/qr`, sobre o próprio vínculo
+  (`requireLinkedInstance`, `409 CONFLICT` em vínculo pendente ou
+  divergente). A coluna `qrcode` é o marcador de vinculação por QR em
+  curso, sem migration: `connect`/`reconnect` no modo QR a gravam, o modo
+  código a limpa, e qualquer leitura que observe o número conectado a
+  limpa. Sem marcador, `409 WHATSAPP_QR_NOT_IN_PROGRESS` antes de qualquer
+  chamada à Evolution. Com marcador, lê o status antes do QR: conectado ou
+  logado responde o estado conectado sem chamar `/instance/qr`. `this.http.`
+  em `apps/bff/src/clients/` segue **42**.
+- **Painel único, consentimento antes de conectar (§3)** —
+  `WhatsAppConnectionPanel` (onboarding e Configurações › WhatsApp, mesma
+  implementação) mostra o checkbox obrigatório, cujo rótulo é a frase
+  exigida, com "Saiba mais" para `/politica-de-privacidade`, e a pergunta
+  sobre número pessoal sem resposta pré-marcada, antes de habilitar
+  "Conectar WhatsApp"/"Reconectar WhatsApp". Toda chamada a
+  `connect`/`reconnect` envia `consentAccepted: true`. O aceite vale só
+  para a vinculação aberta na tela. Antes da primeira leitura de status, o
+  painel mostra só um carregamento (`aria-busy`), sem consentimento nem CTA;
+  falha nessa leitura mostra "Não foi possível verificar a conexão." com
+  "Tentar novamente". Com o número conectado, o consentimento não aparece
+  em nenhum momento.
+- **Renovação do QR com janela (§4)** — releitura de `GET /v1/whatsapp/qr`
+  a cada 15 s (`QR_POLL_INTERVAL_MS`), uma leitura por vez: voltar a ficar
+  visível com uma leitura em voo não abre outra. Pausa com a aba oculta e
+  retoma ao voltar a ficar visível; para ao conectar, ao desmontar ou ao
+  fim da janela de **5 minutos** (`QR_WINDOW_MS`). Nenhum QR fica na tela
+  com mais de um giro de idade (`QR_ROTATION_MS`, 20 s). Fim da janela,
+  `qrcode: null` ou falha de leitura persistentes além de um giro, ou
+  `WHATSAPP_QR_NOT_IN_PROGRESS`: "O QR Code expirou" com "Gerar novo QR
+  Code", nunca "Conectando"/"Aguardando conexão" sobre QR velho. Uma
+  leitura em voo de um efeito de QR já descartado (`disposed`) não expira,
+  não rearma o relógio e não troca o QR da vinculação seguinte.
+- **Visão de código (§5)** — campo "Seu número de WhatsApp com DDD" com
+  erro inline de formato para número curto e para `VALIDATION_ERROR` do
+  BFF; código grande e selecionável; "Copiar código" com confirmação
+  ("Código copiado") e texto próprio de falha; cinco passos numerados;
+  "Aguardando conexão… detectamos sozinhos quando conectar."; "Abrir
+  WhatsApp". Expira por `expiresAt` e oferece "Gerar novo código". A
+  leitura de status enquanto o código vale segue a cada 3 s
+  (`PAIRING_CODE_POLL_INTERVAL_MS`).
+- **Onboarding (§6)** — `whatsapp-conectar` sem CTA concorrente com o do
+  painel enquanto o número não conecta; `whatsapp-concluido`: "Conectar
+  agora" leva a `/onboarding/whatsapp`, não mais a `/configuracoes/whatsapp`.
+- **Gate autenticado (§7)** — `/configuracoes/whatsapp` entrou em
+  `AUTHENTICATED_ROUTES`, `sessionMarker: "configuracoes"`; são nove rotas
+  autenticadas, quarenta e cinco execuções da prova por rota e largura.
+  Como o h1 "WhatsApp" aparece em qualquer estado, `LOADED_STATE` em
+  `e2e/authenticated-matrix.spec.ts` exige o título "WhatsApp conectado" e
+  nenhum checkbox antes de medir. O ensaio do Goal033 envia
+  `consentAccepted: true`.
+- **Vermelho da baseline (§9), rodado de novo na rodada 3** — contra
+  `0cb49b40154050e220e53c9b937f7b2dc7f7852c`, os dois arquivos `goal071-`
+  do frontend reprovam **29** de **36**, e
+  `tests/goal071-whatsapp-consent-qr.integration.test.ts` reprova **12** de
+  **15** contra PostgreSQL real. Saída colada em
+  [FINAL_AUDIT §42](FINAL_AUDIT.md).
+- **Controles negativos (§10)** — os seis do Goal, os dois da rodada 2 e
+  três novos, um por blocker de código da rodada 3, rodaram depois da
+  última edição de código e depois de `validate:integration`, com cada
+  arquivo restaurado e conferido byte a byte. Saída colada em
+  [FINAL_AUDIT §42](FINAL_AUDIT.md). Com o defeito: (1) `connectSchema` sem
+  exigir `consentAccepted` reprova **2** de **15** no BFF (`expected 502 to
+  be 400`); (2) a rota do QR sem ler o status antes reprova **2** de **15**
+  (`expected 502 to be 200`); (3) a rota do QR sem exigir vinculação em
+  curso reprova **2** de **15** (`expected 502 to be 409`, `expected 200 to
+  be 409`); (4) o painel sem reler o QR reprova **10** de **28** em
+  `tests/goal071-whatsapp-connection-panel.test.tsx`; (5) o painel sem gate
+  de consentimento reprova **3** de **28**; (6) o fim da janela sem expirar
+  reprova **5** de **28**; (7) leitura concorrente ao voltar a ficar
+  visível reprova **1** de **28**; (8) QR velho sem expirar reprova **4**
+  de **28**; (9) leitura em voo agindo depois do cleanup reprova **2** de
+  **28**; (10) consentimento antes da primeira leitura de status reprova
+  **1** de **28**; (11) leitura de status do modo código a 4 s reprova
+  **1** de **28**. Sem o defeito, cada alvo volta a passar por inteiro.
+- **Execução final da rodada 3, sobre a árvore final** —
+  `npm run validate:core`: **17** passos, **15** `passed`, **0** `failed`,
+  **2** `skipped` (`test:bff`, `test:health-worker`), exit 0. Dentro dele,
+  `test:frontend` em **85** arquivos e **829** testes (baseline review063:
+  **83**/**793**) e `audit:static` em **33** de **34** verificações
+  passando e **1** pulada. `npm run test:gate`: **233**/**233**.
+  `npm run validate:ui`: **169** passando, **21** pulados, **0**
+  retentativas, exit 0. `npm run validate:integration`: a primeira execução
+  falhou em `test:bff-integration` com **1** de **417** testes, em
+  `tests/goal025-account-purge.test.ts` (a passada de `runAccountPurge`
+  reivindicou uma segunda conta vencida no banco; purga e teste fora do
+  diff071); a reexecução completa, sem mudança na árvore, passou **35**/**35**
+  passos, exit 0. Dentro dela, `test:bff-integration` em **51** arquivos e
+  **417** testes (baseline **50**/**402**), `test:scheduling-integration`
+  em **16**/**124** e `rehearse:goal033-authenticated-ui` com `expected`
+  **75**, `unexpected` **0**, `flaky` **0** e **0** retentativas (baseline
+  **70**; a diferença é `/configuracoes/whatsapp` nas cinco larguras, cada
+  uma medida só depois de "WhatsApp conectado" na tela e sem checkbox).
+  `typecheck` e `lint` de `apps/bff` e `apps/frontend`: exit 0 nos quatro.
+  `this.http.` em `apps/bff/src/clients/`: **42**.
+- **Conferência humana pendente:** a conferência do §11 do Goal **não foi
+  feita** por este Goal. Ela confere o QR renovado conectando depois de
+  60 s aberto, "Gerar novo QR Code" depois da janela conectando, o código
+  copiado conectando pelo celular, e ler o QR com o número já conectado
+  sem derrubar a sessão.
+- **Limites declarados:** o consentimento não é gravado; a janela de
+  renovação é da tela, não do BFF; o fork abre sessão nova depois do
+  quinto QR — ver [D-081](DECISIONS.md). **QA O-40, QA O-45, QA O-48 e
+  QA O-44 corrigidos**, fora da contagem A-01…A-24 — ver
+  [FINAL_AUDIT §42](FINAL_AUDIT.md).

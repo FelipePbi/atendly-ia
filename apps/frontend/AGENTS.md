@@ -169,9 +169,10 @@ provaria layout sobre dado que ninguém vê.
 
 ## O gate autenticado (dentro de `validate:integration`)
 
-As oito telas logadas (`/inicio`, `/agenda`, `/clientes`, `/conversas`,
+As nove telas logadas (`/inicio`, `/agenda`, `/clientes`, `/conversas`,
 `/configuracoes`, `/configuracoes/ia` — desde o Goal063, no estado sem teste
-válido —, `/servicos`, `/notificacoes`, `AUTHENTICATED_ROUTES` em
+válido —, `/configuracoes/whatsapp` — desde o Goal071, no estado de número
+conectado —, `/servicos`, `/notificacoes`, `AUTHENTICATED_ROUTES` em
 `e2e/routes.ts`) são medidas por `e2e/authenticated-matrix.spec.ts`, com a
 mesma régua (`e2e/measure.ts`) e as mesmas cinco larguras. Ele roda como o
 passo `rehearse:goal033-authenticated-ui` de `npm run validate:integration`,
@@ -193,6 +194,10 @@ Além de overflow, touch target, contraste, foco e movimento, ele mede
   formulário e "Criar serviço" recebe o clique, nas cinco larguras.
 - **Serviço de 45 minutos** salvo pelo formulário, com resposta 2xx e
   "45 min" na lista.
+- **Estado medido** (Goal071): quando o h1 da rota aparece em qualquer
+  estado, `LOADED_STATE` nomeia o estado que precisa estar na tela antes da
+  medida. `/configuracoes/whatsapp` só é medida com "WhatsApp conectado" e
+  sem checkbox de consentimento.
 
 A casca que essas medidas protegem é a classe base `app-frame`, que
 `AppShell` aplica em toda casca ao lado de `${module}-shell`

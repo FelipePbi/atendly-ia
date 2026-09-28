@@ -116,11 +116,12 @@ const CONTENT_TIMEOUT_MS = 20_000;
  * structural check would call that ready. Naming the seeded row means the
  * gate measures the screen with content on it.
  *
- * `/inicio`, `/configuracoes`, `/configuracoes/ia` and `/notificacoes` are
- * absent on purpose: the first three are proven by the heading their loaded
- * branch renders (their loading and error branches render different
- * headings) — `/configuracoes/ia` also holds `aria-busy` on its activation
- * panel until the test and WhatsApp reads arrive —, and the notification
+ * `/inicio`, `/configuracoes`, `/configuracoes/ia`, `/configuracoes/whatsapp`
+ * and `/notificacoes` are absent on purpose: the first three are proven by the
+ * heading their loaded branch renders (their loading and error branches
+ * render different headings) — `/configuracoes/ia` also holds `aria-busy` on
+ * its activation panel until the test and WhatsApp reads arrive —,
+ * `/configuracoes/whatsapp` by `LOADED_STATE` below, and the notification
  * texts are produced by the platform, not by the rehearsal's fixture, so
  * there is no seeded string to name.
  */
@@ -131,6 +132,20 @@ const SEEDED_CONTENT: Partial<Record<AuthenticatedRoute["name"], SeededText>> = 
   clientes: "customerName",
   conversas: "contactName",
   servicos: "serviceName",
+};
+
+/**
+ * The state a screen must be in before it is measured, when its h1 does not
+ * tell (Goal071).
+ *
+ * `/configuracoes/whatsapp` renders the settings page's "WhatsApp" h1 in
+ * every state, and its panel holds `aria-busy` only until the first status
+ * read. The rehearsal tenant's number is connected, so the gate names the
+ * connected heading and refuses the consent form: without this, a failed or
+ * wrong status read would be measured as if it were the connected screen.
+ */
+const LOADED_STATE: Partial<Record<AuthenticatedRoute["name"], { heading: string; absentRole: "checkbox" }>> = {
+  "configuracoes-whatsapp": { heading: "WhatsApp conectado", absentRole: "checkbox" },
 };
 
 /**
@@ -479,6 +494,20 @@ async function waitForLoadedContent(page: Page, route: AuthenticatedRoute): Prom
 
   if (route.name === "agenda") await ensureAgendaOnMeasuredDate(page);
 
+  const state = LOADED_STATE[route.name];
+  if (state) {
+    await expect(
+      page.getByRole("heading", { name: state.heading, exact: true }),
+      `${route.path} did not reach the state it must be measured in ("${state.heading}") within `
+        + `${CONTENT_TIMEOUT_MS}ms. Its h1 renders in every state, so measuring now could measure another one.`,
+    ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+    await expect(
+      page.getByRole(state.absentRole),
+      `${route.path} shows a ${state.absentRole} in the "${state.heading}" state: that is the consent form, `
+        + "which a connected number never sees.",
+    ).toHaveCount(0);
+  }
+
   const seeded = SEEDED_CONTENT[route.name];
   if (!seeded) return;
   await expect(
@@ -493,8 +522,8 @@ for (const route of AUTHENTICATED_ROUTES) {
   test.describe(route.name, () => {
     /**
      * One test per route and width, not one per measurement: six measurements
-     * per test (the composition joined in Goal058), across seven routes and
-     * five widths, is already thirty-five runs of the whole proof. The measurements are soft assertions, so one
+     * per test (the composition joined in Goal058), across nine routes and
+     * five widths, is already forty-five runs of the whole proof. The measurements are soft assertions, so one
      * failure never hides the other four — the test still fails, and it fails
      * naming everything it found.
      *

@@ -17,6 +17,9 @@ export type OnboardingStepBody = (
   scenario: OnboardingScenario,
   draft: OnboardingDraft,
   setDraft: (updater: (value: OnboardingDraft) => OnboardingDraft) => void,
+  // Só o bloco WhatsApp usa isto, para o CTA "Continuar" de whatsapp-conectar
+  // saber quando o número já conectou (Goal071/WU-03).
+  onWhatsappStatusChange?: (connected: boolean) => void,
 ) => React.ReactNode;
 
 export type OnboardingStepPersist = (

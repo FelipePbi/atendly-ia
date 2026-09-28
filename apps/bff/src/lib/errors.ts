@@ -34,6 +34,10 @@ export type ErrorCode =
   // do teste real (Goal063/WU-01): sem execucao, execucao FAILED/PAUSED, teste
   // superado por troca de canal, ou leitura do teste falhou. Nada e gravado.
   | "AI_ACTIVATION_TEST_REQUIRED"
+  // GET /v1/whatsapp/qr sem vinculação por QR em curso (Goal071/WU-01): a
+  // coluna qrcode, usada como marcador, está vazia. Reler o QR nunca abre uma
+  // vinculação que um connect com consentimento não abriu.
+  | "WHATSAPP_QR_NOT_IN_PROGRESS"
   | "INTERNAL_ERROR";
 
 export class AppError extends Error {

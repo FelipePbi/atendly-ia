@@ -7,7 +7,10 @@ import { useEffect, useState } from "react";
 import { BffHttpError, type CalendarState, type Dashboard } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
-import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import {
+  getProductServices,
+  useProductRuntime,
+} from "@/shared/runtime/ProductRuntime";
 import {
   type StatusView,
   useSystemStatus,
@@ -191,6 +194,32 @@ export function ProductDashboardScreen() {
 }
 
 /**
+ * Cumprimento da Home (Goal064 §7): pelo horário no fuso do negócio, nunca
+ * pelo nome do negócio. `dashboard.platform.timezone` já é a fonte oficial
+ * de fuso desta tela (usada por `today` logo abaixo).
+ */
+function currentHourInTimeZone(timezone: string): number {
+  const formatted = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    hourCycle: "h23",
+    timeZone: timezone,
+  }).format(new Date());
+  return Number.parseInt(formatted, 10);
+}
+
+function greetingWord(hour: number): string {
+  if (hour >= 5 && hour < 12) return "Bom dia";
+  if (hour >= 12 && hour < 18) return "Boa tarde";
+  return "Boa noite";
+}
+
+function homeGreeting(timezone: string, name: string | null | undefined): string {
+  const word = greetingWord(currentHourInTimeZone(timezone));
+  const firstName = name?.trim().split(/\s+/)[0];
+  return firstName ? `${word}, ${firstName}` : word;
+}
+
+/**
  * Estado do banner de WhatsApp da Home, derivado de `status.whatsappView`
  * (Goal059/H-02) — a mesma fonte da sidebar e do checklist. `unknown` nunca
  * vira "off": afirmar desconexão sem confirmação é o próprio bug.
@@ -295,6 +324,7 @@ function RealDashboard({
   onRetry: () => void;
   status: UseSystemStatusResult;
 }) {
+  const { session } = useProductRuntime();
   const scheduling =
     dashboard.scheduling.status === "ok" ? dashboard.scheduling.data : null;
   const ai = dashboard.ai.status === "ok" ? dashboard.ai.data : null;
@@ -325,6 +355,7 @@ function RealDashboard({
    * pendência antes de saber) e some assim que a IA está efetivamente ativa.
    */
   const checklistVisible = status.phase !== "loading" && status.aiView !== "active";
+  const greeting = homeGreeting(dashboard.platform.timezone, session?.user.name);
   const today = new Intl.DateTimeFormat("pt-BR", {
     day: "numeric",
     month: "long",
@@ -337,7 +368,7 @@ function RealDashboard({
       <div className="dashboard-page">
         <header className="dashboard-header">
           <div>
-            <h1>Olá, {dashboard.platform.tenantName || "seu negócio"}</h1>
+            <h1>{greeting}</h1>
             <p className="dashboard-date">{today}</p>
           </div>
           <span className="dashboard-source">

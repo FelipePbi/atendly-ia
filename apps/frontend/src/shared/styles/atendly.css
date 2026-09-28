@@ -463,6 +463,49 @@ p {
   border-color: var(--accent);
   padding-right: 44px;
 }
+.password-rules {
+  display: grid;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.password-rule {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.password-rule-mark {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--surface);
+}
+.password-rule-mark .icon {
+  width: 10px;
+  height: 10px;
+}
+.password-rule.is-met {
+  color: var(--fg);
+}
+.password-rule.is-met .password-rule-mark {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.password-rule-status {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+.password-rule.is-met .password-rule-status {
+  color: var(--fg);
+}
 .select {
   appearance: none;
   padding-right: 44px;
@@ -3422,6 +3465,9 @@ p {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+}
+.auth-row:has(> :only-child) {
+  justify-content: flex-end;
 }
 .auth-link {
   color: var(--accent);

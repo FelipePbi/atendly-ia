@@ -2093,3 +2093,124 @@ Execução final da rodada 3, sobre a árvore final, antes dos controles:
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal071-2026-09-28-d-081-proposed),
 [FINAL_AUDIT §42](FINAL_AUDIT.md) e [D-081](DECISIONS.md).
+
+## O cadastro exige Nome, uma regra de senha só e a recuperação usa o fluxo real por link, do Goal064
+
+`apps/bff/` ganha `User.name` (migration aditiva), exige `name` no cadastro,
+escreve a regra de senha de U-10 uma única vez em
+`packages/public-api-contract/` e separa o token de redefinição inválido
+(`PASSWORD_RESET_TOKEN_INVALID`) da senha recusada (`VALIDATION_ERROR`).
+`apps/frontend/` move `/recuperar-senha` para o fluxo real por link, remove
+`recoveryMachine.ts` e a encenação de código, valida as quatro telas de
+entrada inline sem balão nativo, tira o checkbox morto do login e faz a Home
+cumprimentar pela pessoa. `apps/ai-orchestrator/` e
+`apps/scheduling-service/` não mudaram; uma migration aditiva. Decisão:
+[D-082](DECISIONS.md), proposta no Goal064, **ACCEPTED** no [review064](reviews/064-review.md).
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `POST /v1/auth/register` recusa `400 VALIDATION_ERROR` sem `name` aparado de 1 a 120 caracteres, antes de qualquer escrita; `userDto` devolve `name` em `register`, `login` e `GET /v1/auth/session` | Editar o nome depois do cadastro, ou mostrar o nome em Configurações › Conta (fora do escopo) |
+| A regra de U-10 é uma definição só, usada por cadastro, `reset-password`, `PATCH /v1/auth/password` e a troca de senha de Configurações › Conta; login continua sem a regra | Escolher, contratar ou configurar provider de e-mail (U-03) — a recuperação continua sem entregar nada de verdade |
+| `reset-password` responde `PASSWORD_RESET_TOKEN_INVALID` para token ausente, usado ou vencido, distinto de `VALIDATION_ERROR`; senha igual à atual é recusada antes de consumir o token | Recuperação por código de 6 dígitos, como o protótipo e a pergunta 470 do vault descrevem — divergência registrada em D-082, pendente de confirmação humana |
+| `/recuperar-senha` chama `forgotPassword` de verdade; "Senha redefinida" só depois de `resetPassword` responder `200`; nenhuma tela mostra "Digite o código" | Que a recuperação com provider real entrega o link e abre `/nova-senha` no endereço público certo — conferência humana do §11, **não feita** |
+| Cadastro, login, recuperar senha e nova senha validam inline, com `noValidate` e todos os erros juntos; o login perde "Manter acesso neste dispositivo"; a Home cumprimenta pela pessoa | Login, sessão, CSRF, `logout`, `logout-all`, exclusão de conta ou purga — nenhum muda |
+
+### Vermelho na baseline
+
+Rodado na rodada 5, numa worktree temporária destacada na baseline aceita
+`fbdb0ccbfc9b8457a11b06def3e856b12894e39b`, com só os três arquivos de teste
+novos copiados da árvore final (`goal064-auth-screens.test.tsx`,
+`goal064-greeting-and-account.test.tsx` e
+`goal064-account.integration.test.ts`), o pacote de contrato construído da
+fonte da baseline e o client Prisma e as migrations da baseline. A worktree
+temporária foi removida depois e não aparece em `git worktree list`.
+
+- Frontend (vitest, jsdom): **2** de **2** arquivos falhando; **27** de
+  **31** testes falhando (**23** de **26** em `goal064-auth-screens.test.tsx`,
+  **4** de **5** em `goal064-greeting-and-account.test.tsx`). Primeiras linhas:
+  `Unable to find a label with the text of: /^Nome/`; `Unable to find an
+  accessible element with the role "button" and name "Enviar link"`;
+  `expected 'AtendlyAcesso protegidoProntinho para…' not to match /Senha
+  redefinida/`.
+- BFF (vitest, contra o PostgreSQL 18 descartável em `127.0.0.1:55432`, num
+  banco próprio criado e removido para esta execução): **1** de **1** arquivo
+  falhando; **6** de **7** testes falhando. Primeiras linhas:
+  `expected 201 to be 400` (cadastro sem nome aceito);
+  `expected 400 to be 201` (cadastro sem `confirmPassword` recusado);
+  `expected 'VALIDATION_ERROR' to be 'PASSWORD_RESET_TOKEN_INVALID'`. O único
+  que passa na baseline é o de `forgot-password` sem entrega configurada,
+  comportamento anterior a este Goal.
+
+### Controles negativos e execução final
+
+**Seis controles negativos, aplicados e revertidos**, rodados na rodada 5,
+**depois da última edição de código**, na própria worktree, com cada arquivo
+copiado antes da mutação, restaurado depois e conferido por `md5sum` (mesmo
+hash antes e depois); no controle 2, o pacote de contrato foi reconstruído com
+o defeito e de novo depois da reversão. Testes por arquivo nesta execução:
+`goal064-account.integration.test.ts` **7**, `goal064-auth-screens.test.tsx`
+**26**, `goal064-greeting-and-account.test.tsx` **5**. Saída colada em
+[FINAL_AUDIT §43](FINAL_AUDIT.md).
+
+1. `registerSchema` deixa de exigir `name`: reprova **1** de **7** em
+   `tests/goal064-account.integration.test.ts`, contra PostgreSQL real
+   (`expected 201 to be 400` no cadastro sem nome).
+2. A regra de senha volta a ser só `min(8)` no pacote (schema e lista de
+   regras): reprova **1** de **7** no BFF (`expected 201 to be 400`), **1** de
+   **5** em `tests/goal064-greeting-and-account.test.tsx` (a troca de senha
+   deixa de recusar senha só de letras) e **1** de **26** em
+   `tests/goal064-auth-screens.test.tsx` (as regras ao vivo deixam de mudar).
+3. O token inválido volta a responder `VALIDATION_ERROR`: reprova **1** de
+   **7** (`expected 'VALIDATION_ERROR' to be 'PASSWORD_RESET_TOKEN_INVALID'`).
+4. A conferência contra a senha atual passa para depois do consumo do token:
+   reprova **2** de **7** — o token aparece usado depois de uma tentativa
+   recusada (`expected 2026-09-28T07:39:44.232Z to be null`), e o fluxo ponta
+   a ponta recebe `400` em vez de `200`.
+5. `/recuperar-senha` volta a navegar sem chamar `forgotPassword`: reprova
+   **8** de **26** em `tests/goal064-auth-screens.test.tsx` (os casos `200`,
+   `503`, `429`, falha de rede e `500`, e os três de vocabulário técnico em
+   `/recuperar-senha`).
+6. O cadastro volta a chamar `reportValidity` (campo Nome marcado
+   `required`): reprova **1** de **26** — o caso de todos os erros juntos.
+
+Sem o defeito, cada alvo volta a passar por inteiro na mesma execução.
+
+Execução final da rodada 5, sobre a árvore final, depois dos controles acima:
+
+- `npm run validate:core`: **17** passos, **15** `passed`, **0** `failed`,
+  **2** `skipped` (`test:bff`, `test:health-worker`), exit 0. Dentro dele,
+  `test:frontend` em **87** arquivos e **854** testes e `audit:static` em
+  **33** de **34** verificações passando e **1** pulada.
+- `npm run test:gate`: **233**/**233**, **0** falhando, exit 0.
+- `npm run validate:ui`: artefato `apps/frontend/e2e-results/results.json`
+  com `expected` **169**, `skipped` **21**, `unexpected` **0**, `flaky` **0**,
+  e **0** retentativas, exit 0.
+- `npm run validate:integration`, contra o PostgreSQL 18 descartável em
+  `127.0.0.1:55432`: **35**/**35** passos, exit 0. Dentro dela,
+  `test:bff-integration` em **52** arquivos e **424** testes,
+  `test:scheduling-integration` em **16**/**124**, sem mudança. O artefato
+  `apps/frontend/e2e-results/authenticated/results.json` traz `expected`
+  **75**, `skipped` **0**, `unexpected` **0** e `flaky` **0**, com **0**
+  retentativas — sem mudança, este Goal não toca nenhuma das nove rotas
+  autenticadas.
+- `this.http.` em `apps/bff/src/clients/`: **42**.
+
+### Conferência humana e limites
+
+**Conferência humana pendente.** A conferência do §11 do Goal **não foi
+feita** por este Goal. Ela confere que a recuperação com um provider de
+e-mail real entrega o link, que o link abre `/nova-senha` no endereço público
+certo, e que a recuperação por link é aceitável para o produto frente ao
+código de 6 dígitos do protótipo e da pergunta 470 do vault.
+
+**O que esta seção não prova.** **Não prova** que a recuperação entrega
+e-mail a alguém: não há provider (U-03), e todo teste usa o dublê de entrega
+que grava `resetUrl`. Não prova que `/nova-senha` e os estados de erro e
+sucesso das telas de entrada cumprem largura, toque, contraste, foco e
+movimento — o gate renderizado mede `/login`, `/cadastro`, `/recuperar-senha`,
+`/solicitacao-enviada` e `/link-expirado`, não os estados internos nem
+`/nova-senha`. Não prova que as telas batem com o protótipo aprovado
+(conferência humana, Goal068).
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal064-2026-09-28-d-082-proposed),
+[FINAL_AUDIT §43](FINAL_AUDIT.md) e [D-082](DECISIONS.md).

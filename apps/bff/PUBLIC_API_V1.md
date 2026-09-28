@@ -64,6 +64,14 @@ O token é estável enquanto a sessão viver, então uma segunda aba ou um reloa
 
 `POST /v1/auth/register`, `POST /v1/auth/login`, `POST /v1/auth/logout`, `POST /v1/auth/forgot-password` e `POST /v1/auth/reset-password` exigem origem permitida mesmo sem sessão estabelecida.
 
+## Nome da conta e regra de senha (Goal064/WU-01)
+
+`POST /v1/auth/register` exige `name`: texto aparado, de 1 a 120 caracteres. Ausente, vazio ou só espaço é `400 VALIDATION_ERROR` no campo `name`, antes de qualquer escrita — nenhuma linha de `User`, `Tenant` ou `LegalAcceptance` nasce. `confirmPassword` saiu do corpo de `register` e de `reset-password`; um corpo antigo que ainda o traga continua aceito, com o campo ignorado. `User.name` é nulável: conta cadastrada antes deste Goal tem `name: null`, que significa "não informado", nunca um nome inventado. `userDto` devolve `name` (texto ou `null`) em `register`, `login` e `GET /v1/auth/session`.
+
+A regra de senha (U-10 em [DECISIONS](../../docs/migration/DECISIONS.md)) — mínimo de 8 caracteres, pelo menos uma letra e pelo menos um número, máximo de 200 — é escrita uma vez em `packages/public-api-contract/src/password-policy.ts` (`passwordPolicySchema`) e usada por `POST /v1/auth/register`, `POST /v1/auth/reset-password` e `PATCH /v1/auth/password`. Recusa fora da regra é `400 VALIDATION_ERROR` com o campo da senha, no mesmo formato de `details` das demais validações. **Não** vale para `POST /v1/auth/login`: uma conta com senha gravada antes desta regra continua entrando com ela.
+
+`POST /v1/auth/reset-password` aceita só `token` e `newPassword`. Token ausente do banco, já usado ou vencido é `400` com o código próprio `PASSWORD_RESET_TOKEN_INVALID`, distinto de `VALIDATION_ERROR`. Nova senha igual à atual é `400 VALIDATION_ERROR` no campo `newPassword`, conferida contra o hash atual **antes** de consumir o token — o link continua válido para uma nova tentativa até vencer. O resto da rota não muda: consumo atômico do token, remoção dos demais tokens do usuário e revogação de todas as sessões. `POST /v1/auth/forgot-password` não muda: sem `PASSWORD_RESET_DELIVERY_URL` configurado responde `503 CONFIGURATION_ERROR` sem gravar nenhum `PasswordResetToken`.
+
 ## Contratos legados ainda ativos
 
 As rotas abaixo também estão registradas e possuem consumidores no frontend atual:

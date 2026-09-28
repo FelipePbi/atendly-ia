@@ -823,3 +823,19 @@ essa segunda linha de defesa tem teste próprio, também no passo
 `test:ai-orchestrator`; e não prova nada sobre conversa de grupo com
 histórico prévio, mídia ou ferramenta, que continuam fora do escopo já
 declarado em [§18](#18-resposta-automática-provada-ponta-a-ponta-goal032).
+
+## 21. Nome do dono da conta (Goal064)
+
+Uma migration, **estritamente aditiva**, sem `UPDATE` e sem backfill — a
+coluna nasce nula em toda linha existente:
+
+| Migration | App | O que cria | Backfill |
+| --- | --- | --- | --- |
+| `20260917000000_goal064_user_name` | BFF | `User.name TEXT`, nulável, sem `DEFAULT` | Nenhum — coluna nasce nula em todo o estoque; nulo é "não informado", nunca um nome inventado por esta migration |
+
+**Limite de reversão:** um binário anterior ao Goal064 ignora `name` — nunca
+o lê nem o grava —, então reverter o binário não perde nenhuma linha
+pré-existente; só deixa de exigir, gravar e devolver o nome até o binário
+novo voltar. Conta criada antes deste Goal permanece com `name` nulo até a
+pessoa dona da conta não ter como preenchê-lo retroativamente: não existe
+tela de edição de nome depois do cadastro (fora do escopo do Goal064).

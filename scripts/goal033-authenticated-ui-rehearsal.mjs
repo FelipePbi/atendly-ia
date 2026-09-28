@@ -267,6 +267,8 @@ function frontendDir() {
  */
 export const SEED = Object.freeze({
   email: "goal033-authenticated-ui@example.invalid",
+  // Nome do dono da conta (Goal064/WU-01), exigido por POST /v1/auth/register.
+  ownerName: "Telas Goal033",
   businessName: "Estúdio Goal033 Telas",
   businessCategory: "Beleza e estética",
   timezone: "America/Sao_Paulo",
@@ -1204,6 +1206,7 @@ async function seedTenant(client, ai, { bffDb, schedulingDb, aiDb, legalVersions
   const registered = await client.request("POST", "/v1/auth/register", {
     body: {
       email: SEED.email,
+      name: SEED.ownerName,
       password: ACCOUNT_PASSWORD,
       confirmPassword: ACCOUNT_PASSWORD,
       termsAccepted: true,

@@ -2,14 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, type ReactNode, useReducer, useState } from "react";
+import { type FormEvent, type ReactNode, useState } from "react";
 
 import { CURRENT_LEGAL_VERSIONS } from "@/config/legal-versions";
-import { BffHttpError } from "@/data";
-import {
-  initialRecoveryState,
-  recoveryReducer,
-} from "@/features/auth/recoveryMachine";
+import { BffHttpError, PASSWORD_POLICY_RULES } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import {
   getProductServices,
@@ -20,7 +16,6 @@ import { Brand } from "@/shared/ui/Brand";
 export type AuthScenario =
   | "login"
   | "signup"
-  | "signup-errors"
   | "forgot-password"
   | "request-sent"
   | "new-password"
@@ -40,20 +35,15 @@ const story: Record<
     title: "Menos tempo respondendo. Mais tempo atendendo.",
     copy: "Crie sua conta agora. A configuração do negócio acontece depois, passo a passo.",
   },
-  "signup-errors": {
-    eyebrow: "Cadastro simples",
-    title: "Corrija o necessário e siga em frente.",
-    copy: "Mensagens próximas aos campos ajudam você a resolver cada pendência.",
-  },
   "forgot-password": {
     eyebrow: "Recupere seu acesso",
     title: "Volte à sua rotina com segurança.",
-    copy: "Um passo a passo simples para criar uma nova senha.",
+    copy: "Informe seu e-mail para receber um link de recuperação.",
   },
   "request-sent": {
-    eyebrow: "Acesso protegido",
-    title: "Prontinho para continuar.",
-    copy: "Sua nova senha já está pronta para uso.",
+    eyebrow: "Verifique seu e-mail",
+    title: "Quase lá.",
+    copy: "Um link de recuperação está a caminho, se houver conta com este e-mail.",
   },
   "new-password": {
     eyebrow: "Nova senha",
@@ -65,6 +55,11 @@ const story: Record<
     title: "Links temporários mantêm seu acesso seguro.",
     copy: "Solicite outro link para continuar a recuperação.",
   },
+};
+
+const PASSWORD_RULE_LABELS: Record<string, string> = {
+  MIN_LENGTH: "Pelo menos 8 caracteres",
+  HAS_LETTER_AND_DIGIT: "Letras e números",
 };
 
 function AuthLayout({
@@ -108,13 +103,23 @@ function PasswordField({
   label,
   error,
   help,
+  showRules,
+  autoComplete,
 }: {
   id: string;
   label: string;
   error?: string;
   help?: string;
+  showRules?: boolean;
+  autoComplete?: string;
 }) {
   const [visible, setVisible] = useState(false);
+  const [value, setValue] = useState("");
+  const errorId = `${id}-error`;
+  const rulesId = `${id}-rules`;
+  const describedBy = [error ? errorId : null, showRules ? rulesId : null]
+    .filter(Boolean)
+    .join(" ");
   return (
     <label className={`field${error ? " field-error" : ""}`}>
       <span className="label">{label}</span>
@@ -125,30 +130,119 @@ function PasswordField({
           className="input input-with-action"
           type={visible ? "text" : "password"}
           autoComplete={
-            id === "login-password" ? "current-password" : "new-password"
+            autoComplete ??
+            (id === "login-password" ? "current-password" : "new-password")
           }
-          minLength={8}
-          required
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
           aria-invalid={error ? true : undefined}
-          aria-describedby={error || help ? `${id}-help` : undefined}
-          defaultValue={error ? "12345" : undefined}
+          aria-describedby={describedBy || undefined}
         />
         <button
           className="field-action"
           type="button"
-          onClick={() => setVisible((value) => !value)}
+          onClick={() => setVisible((current) => !current)}
           aria-label={visible ? "Ocultar senha" : "Mostrar senha"}
         >
           <Icon name="eye" />
         </button>
       </span>
-      {(error || help) && (
-        <span className="field-help" id={`${id}-help`}>
-          {error ?? help}
+      {error && (
+        <span className="field-help" id={errorId} role="alert">
+          {error}
         </span>
+      )}
+      {!error && help && <span className="field-help">{help}</span>}
+      {showRules && (
+        <ul className="password-rules" id={rulesId}>
+          {PASSWORD_POLICY_RULES.map((rule) => {
+            const met = rule.test(value);
+            return (
+              <li
+                key={rule.id}
+                className={`password-rule${met ? " is-met" : ""}`}
+              >
+                <span className="password-rule-mark" aria-hidden="true">
+                  {met && <Icon name="check" />}
+                </span>
+                {PASSWORD_RULE_LABELS[rule.id]}
+                <span className="password-rule-status">
+                  {met ? "Atendida" : "Pendente"}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </label>
   );
+}
+
+const fieldOrderByScenario: Partial<Record<AuthScenario, string[]>> = {
+  login: ["email", "login-password"],
+  signup: ["name", "email", "signup-password", "terms"],
+  "forgot-password": ["email"],
+  "new-password": ["new-password"],
+};
+
+function validateEmail(value: string): string | undefined {
+  if (!value.trim()) return "Digite seu e-mail.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    return "Digite um e-mail válido.";
+  }
+  return undefined;
+}
+
+function validatePasswordPolicy(value: string): string | undefined {
+  if (!value) return "Digite uma senha.";
+  const allRulesMet = PASSWORD_POLICY_RULES.every((rule) => rule.test(value));
+  if (!allRulesMet) return "A senha precisa atender às regras abaixo.";
+  return undefined;
+}
+
+function validateForm(
+  scenario: AuthScenario,
+  data: FormData,
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (scenario === "signup") {
+    if (!formString(data, "name").trim()) errors.name = "Digite seu nome.";
+    const emailError = validateEmail(formString(data, "email"));
+    if (emailError) errors.email = emailError;
+    const passwordError = validatePasswordPolicy(
+      formString(data, "signup-password"),
+    );
+    if (passwordError) errors["signup-password"] = passwordError;
+    if (!data.get("terms")) {
+      errors.terms = "Você precisa aceitar os Termos de Uso e a Política de Privacidade.";
+    }
+  } else if (scenario === "login") {
+    const emailError = validateEmail(formString(data, "email"));
+    if (emailError) errors.email = emailError;
+    if (!formString(data, "login-password")) {
+      errors["login-password"] = "Digite sua senha.";
+    }
+  } else if (scenario === "forgot-password") {
+    const emailError = validateEmail(formString(data, "email"));
+    if (emailError) errors.email = emailError;
+  } else if (scenario === "new-password") {
+    const passwordError = validatePasswordPolicy(
+      formString(data, "new-password"),
+    );
+    if (passwordError) errors["new-password"] = passwordError;
+  }
+  return errors;
+}
+
+function focusFirstError(
+  form: HTMLFormElement,
+  errors: Record<string, string>,
+  order: string[],
+): void {
+  const firstId = order.find((id) => errors[id]);
+  if (!firstId) return;
+  const field = form.elements.namedItem(firstId);
+  if (field instanceof HTMLElement) field.focus();
 }
 
 export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
@@ -156,35 +250,32 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
   const { refreshSession } = useProductRuntime();
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>(() => {
-    const initial: Record<string, string> = {};
-    if (scenario === "signup-errors") {
-      initial.email = "Digite um e-mail completo, como nome@empresa.com.br.";
-      initial["signup-password"] =
-        "Sua senha precisa ter pelo menos 8 caracteres.";
-    }
-    return initial;
-  });
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [resetSucceeded, setResetSucceeded] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!event.currentTarget.checkValidity()) {
-      event.currentTarget.reportValidity();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+
+    const validationErrors = validateForm(scenario, data);
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors);
+      setSubmitError(null);
+      focusFirstError(form, validationErrors, fieldOrderByScenario[scenario] ?? []);
       return;
     }
-    const data = new FormData(event.currentTarget);
+
     setLoading(true);
     setSubmitError(null);
     setFieldErrors({});
     try {
       const auth = getProductServices().auth;
       if (scenario === "signup") {
-        const password = formString(data, "signup-password");
-        const confirmPassword = formString(data, "confirm-password");
         await auth.register({
           email: formString(data, "email"),
-          password,
-          confirmPassword,
+          name: formString(data, "name").trim(),
+          password: formString(data, "signup-password"),
           termsAccepted: true,
           ...CURRENT_LEGAL_VERSIONS,
         });
@@ -197,6 +288,9 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
         });
         const session = await refreshSession();
         router.push(session?.onboardingCompleted ? "/inicio" : "/onboarding");
+      } else if (scenario === "forgot-password") {
+        await auth.forgotPassword(formString(data, "email"));
+        router.push("/solicitacao-enviada");
       } else if (scenario === "new-password") {
         const token = new URLSearchParams(window.location.search).get("token");
         if (!token) {
@@ -206,30 +300,42 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
         await auth.resetPassword({
           token,
           newPassword: formString(data, "new-password"),
-          confirmPassword: formString(data, "confirm-password"),
         });
-        router.push("/login");
+        setResetSucceeded(true);
       }
     } catch (error: unknown) {
       if (
         scenario === "new-password" &&
         error instanceof BffHttpError &&
-        error.code === "VALIDATION_ERROR"
+        error.code === "PASSWORD_RESET_TOKEN_INVALID"
       ) {
-        // Token de reset inválido ou expirado: a tela dedicada já explica o
+        // Código próprio do BFF para link morto: a tela dedicada já explica o
         // motivo e oferece o próximo passo, então não há campo para apontar.
         router.push("/link-expirado");
         return;
       }
+      if (scenario === "forgot-password" && error instanceof BffHttpError) {
+        if (error.status === 503) {
+          setSubmitError(
+            "A recuperação de senha está indisponível no momento. Tente novamente em instantes.",
+          );
+          return;
+        }
+        if (error.status === 429) {
+          setSubmitError(
+            "Muitas tentativas seguidas. Aguarde alguns minutos antes de tentar de novo.",
+          );
+          return;
+        }
+      }
       const mapped = mapAuthError(error, scenario);
       setFieldErrors(mapped.fieldErrors);
       setSubmitError(mapped.formError ?? null);
+      focusFirstError(form, mapped.fieldErrors, fieldOrderByScenario[scenario] ?? []);
     } finally {
       setLoading(false);
     }
   }
-
-  if (scenario === "forgot-password") return <RecoveryFlow />;
 
   if (scenario === "request-sent" || scenario === "link-expired") {
     const expired = scenario === "link-expired";
@@ -239,17 +345,19 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
           <span className={`state-icon${expired ? " is-error" : ""}`}>
             <Icon name={expired ? "alert" : "check"} />
           </span>
-          <h1>{expired ? "Este link expirou" : "Senha redefinida"}</h1>
+          <h1>
+            {expired ? "Este link expirou" : "Enviamos um link de recuperação"}
+          </h1>
           <p>
             {expired
               ? "Por segurança, links de recuperação deixam de funcionar depois de um período. Solicite um novo para criar sua senha."
-              : "Você já pode entrar na Atendly com sua nova senha."}
+              : "Se existir uma conta com este e-mail, você vai receber um link para criar uma nova senha, válido por tempo limitado. Verifique também a caixa de spam."}
           </p>
           <Link
             className="btn btn-primary"
             href={expired ? "/recuperar-senha" : "/login"}
           >
-            {expired ? "Solicitar novo link" : "Ir para entrar"}
+            {expired ? "Solicitar novo link" : "Voltar para entrar"}
           </Link>
           {expired && (
             <p className="auth-footer">
@@ -263,40 +371,58 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
     );
   }
 
-  const signup = scenario === "signup" || scenario === "signup-errors";
-  const errors = scenario === "signup-errors";
   const newPassword = scenario === "new-password";
+
+  if (newPassword && resetSucceeded) {
+    return (
+      <AuthLayout scenario="new-password">
+        <div className="auth-card auth-state">
+          <span className="state-icon">
+            <Icon name="check" />
+          </span>
+          <h1>Senha redefinida</h1>
+          <p>Você já pode entrar na Atendly com sua nova senha.</p>
+          <Link className="btn btn-primary" href="/login">
+            Ir para entrar
+          </Link>
+        </div>
+      </AuthLayout>
+    );
+  }
+
+  const signup = scenario === "signup";
+  const forgotPassword = scenario === "forgot-password";
   const passwordFieldId = newPassword
     ? "new-password"
     : signup
       ? "signup-password"
       : "login-password";
-  const title = errors
-    ? "Revise seus dados"
-    : signup
-      ? "Crie sua conta"
-      : newPassword
-        ? "Crie uma nova senha"
+  const title = signup
+    ? "Crie sua conta"
+    : newPassword
+      ? "Crie uma nova senha"
+      : forgotPassword
+        ? "Esqueceu sua senha?"
         : "Boas-vindas de volta";
-  const subtitle = errors
-    ? "Encontramos duas informações que precisam de ajuste."
-    : signup
-      ? "Use seus dados de acesso. Informações do negócio vêm na próxima etapa."
-      : newPassword
-        ? "Use pelo menos 8 caracteres."
+  const subtitle = signup
+    ? "Use seus dados de acesso. Informações do negócio vêm na próxima etapa."
+    : newPassword
+      ? "Diferente da senha anterior, com pelo menos 8 caracteres, letras e números."
+      : forgotPassword
+        ? "Informe o e-mail da sua conta para continuar."
         : "Entre para acompanhar conversas e agendamentos.";
-  const submitLabel = errors
-    ? "Revisar e criar conta"
-    : signup
-      ? "Criar conta"
-      : newPassword
-        ? "Salvar nova senha"
+  const submitLabel = signup
+    ? "Criar conta"
+    : newPassword
+      ? "Salvar nova senha"
+      : forgotPassword
+        ? "Enviar link"
         : "Entrar";
 
   return (
     <AuthLayout scenario={scenario}>
       <div className="auth-card">
-        {signup && (
+        {(signup || forgotPassword) && (
           <Link className="auth-back" href="/login">
             ← Voltar para entrar
           </Link>
@@ -305,15 +431,6 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
           <h1>{title}</h1>
           <p>{subtitle}</p>
         </header>
-        {errors && (
-          <div className="auth-inline-alert" role="alert">
-            <Icon name="alert" />
-            <div>
-              <strong>Não foi possível criar sua conta</strong>Corrija os campos
-              indicados abaixo.
-            </div>
-          </div>
-        )}
         {submitError && (
           <div className="auth-inline-alert" role="alert">
             <Icon name="alert" />
@@ -323,74 +440,90 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
             </div>
           </div>
         )}
-        <form
-          className="auth-form"
-          style={errors ? { marginTop: 18 } : undefined}
-          onSubmit={(event) => void submit(event)}
-          noValidate
-        >
+        <form className="auth-form" onSubmit={(event) => void submit(event)} noValidate>
+          {signup && (
+            <label className={`field${fieldErrors.name ? " field-error" : ""}`}>
+              <span className="label">Nome</span>
+              <input
+                id="name"
+                className="input"
+                name="name"
+                type="text"
+                autoComplete="name"
+                placeholder="Seu nome"
+                aria-invalid={fieldErrors.name ? true : undefined}
+                aria-describedby={fieldErrors.name ? "name-error" : undefined}
+              />
+              {fieldErrors.name && (
+                <span id="name-error" className="field-help" role="alert">
+                  {fieldErrors.name}
+                </span>
+              )}
+            </label>
+          )}
           {!newPassword && (
             <label
               className={`field${fieldErrors.email ? " field-error" : ""}`}
             >
               <span className="label">E-mail</span>
               <input
+                id="email"
                 className="input"
                 name="email"
                 type="email"
                 autoComplete="email"
                 placeholder="voce@seunegocio.com.br"
-                required
                 aria-invalid={fieldErrors.email ? true : undefined}
                 aria-describedby={fieldErrors.email ? "email-error" : undefined}
-                defaultValue={errors ? "felipe@" : undefined}
               />
               {fieldErrors.email && (
-                <span id="email-error" className="field-help">
+                <span id="email-error" className="field-help" role="alert">
                   {fieldErrors.email}
                 </span>
               )}
             </label>
           )}
-          <PasswordField
-            id={passwordFieldId}
-            label={
-              newPassword ? "Nova senha" : signup ? "Crie uma senha" : "Senha"
-            }
-            error={fieldErrors[passwordFieldId]}
-            help={
-              scenario === "signup" ? "Use pelo menos 8 caracteres." : undefined
-            }
-          />
-          {(newPassword || signup) && (
+          {!forgotPassword && (
             <PasswordField
-              id="confirm-password"
-              label="Repita a nova senha"
-              error={fieldErrors["confirm-password"]}
+              id={passwordFieldId}
+              label={
+                newPassword ? "Nova senha" : signup ? "Crie uma senha" : "Senha"
+              }
+              error={fieldErrors[passwordFieldId]}
+              showRules={newPassword || signup}
             />
           )}
           {signup && (
-            <label className="check">
-              <input name="terms" type="checkbox" required />
-              <span className="check-box" aria-hidden="true" />
-              <span className="small">
-                Li e aceito os <Link href="/termos-de-uso">Termos de Uso</Link>{" "}
-                e a{" "}
-                <Link href="/politica-de-privacidade">
-                  Política de Privacidade
-                </Link>
-                .
-              </span>
-            </label>
+            <div className={`field${fieldErrors.terms ? " field-error" : ""}`}>
+              <label className="check">
+                <input
+                  id="terms"
+                  name="terms"
+                  type="checkbox"
+                  aria-invalid={fieldErrors.terms ? true : undefined}
+                  aria-describedby={fieldErrors.terms ? "terms-error" : undefined}
+                />
+                <span className="check-box" aria-hidden="true" />
+                <span className="small">
+                  Li e concordo com os{" "}
+                  <Link href="/termos-de-uso">Termos de Uso</Link> e declaro
+                  que li a{" "}
+                  <Link href="/politica-de-privacidade">
+                    Política de Privacidade
+                  </Link>
+                  .
+                </span>
+              </label>
+              {fieldErrors.terms && (
+                <span id="terms-error" className="field-help" role="alert">
+                  {fieldErrors.terms}
+                </span>
+              )}
+            </div>
           )}
           {scenario === "login" && (
             <div className="auth-row">
-              <label className="check">
-                <input type="checkbox" name="remember" />
-                <span className="check-box" aria-hidden="true" />
-                <span className="small">Manter acesso neste dispositivo</span>
-              </label>
-              <Link className="auth-link" href="/recuperar-senha">
+              <Link className="auth-link auth-link--standalone" href="/recuperar-senha">
                 Esqueci minha senha
               </Link>
             </div>
@@ -405,15 +538,7 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
             <span>{loading ? `${submitLabel}...` : submitLabel}</span>
           </button>
         </form>
-        {signup && !errors && (
-          <p className="auth-legal">
-            Ao criar sua conta, você concorda com os{" "}
-            <Link href="/termos-de-uso">Termos de Uso</Link> e a{" "}
-            <Link href="/politica-de-privacidade">Política de Privacidade</Link>
-            .
-          </p>
-        )}
-        {!newPassword && !errors && (
+        {!newPassword && !forgotPassword && (
           <p className="auth-footer">
             {signup ? (
               <>
@@ -437,182 +562,17 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
   );
 }
 
-/**
- * Recuperação de senha visual (G-34): e-mail → código → nova senha → sucesso,
- * sem tocar em `/v1/auth/forgot-password`. A máquina de estados fica em
- * `recoveryMachine.ts`, pura e testada isoladamente; este componente só lê o
- * passo atual e decide o que desenhar.
- */
-function RecoveryFlow() {
-  const router = useRouter();
-  const [state, dispatch] = useReducer(recoveryReducer, initialRecoveryState);
-  const [fieldError, setFieldError] = useState<string | null>(null);
-
-  function submitEmail(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!event.currentTarget.checkValidity()) {
-      event.currentTarget.reportValidity();
-      return;
-    }
-    const email = formString(new FormData(event.currentTarget), "email");
-    setFieldError(null);
-    dispatch({ type: "SUBMIT_EMAIL", email });
-  }
-
-  function submitCode(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const code = formString(new FormData(event.currentTarget), "code");
-    if (!/^\d{6}$/.test(code)) {
-      setFieldError("Digite os 6 dígitos do código.");
-      return;
-    }
-    setFieldError(null);
-    dispatch({ type: "SUBMIT_CODE" });
-  }
-
-  function submitNewPassword(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!event.currentTarget.checkValidity()) {
-      event.currentTarget.reportValidity();
-      return;
-    }
-    const data = new FormData(event.currentTarget);
-    const password = formString(data, "new-password");
-    const confirmPassword = formString(data, "confirm-password");
-    if (password !== confirmPassword) {
-      setFieldError("As senhas precisam ser iguais.");
-      return;
-    }
-    setFieldError(null);
-    dispatch({ type: "SUBMIT_NEW_PASSWORD" });
-    router.push("/solicitacao-enviada");
-  }
-
-  const backButtonStyle = { background: "none", border: 0, padding: 0 };
-
-  if (state.step === "done") {
-    // O passo seguinte já disparou a navegação para /solicitacao-enviada;
-    // nada para desenhar aqui além de evitar um flash da tela de e-mail.
-    return null;
-  }
-
-  if (state.step === "code") {
-    return (
-      <AuthLayout scenario="forgot-password">
-        <div className="auth-card">
-          <button
-            className="auth-back"
-            onClick={() => dispatch({ type: "BACK" })}
-            style={backButtonStyle}
-            type="button"
-          >
-            ← Alterar e-mail
-          </button>
-          <header className="auth-heading">
-            <h1>Digite o código</h1>
-            <p>Informe o código de verificação de 6 dígitos para continuar.</p>
-          </header>
-          <form className="auth-form" onSubmit={submitCode} noValidate>
-            <label className={`field${fieldError ? " field-error" : ""}`}>
-              <span className="label">Código</span>
-              <input
-                aria-describedby={fieldError ? "code-error" : undefined}
-                aria-invalid={fieldError ? true : undefined}
-                autoComplete="one-time-code"
-                className="input"
-                inputMode="numeric"
-                maxLength={6}
-                name="code"
-                placeholder="000000"
-                required
-              />
-              {fieldError && (
-                <span className="field-help" id="code-error">
-                  {fieldError}
-                </span>
-              )}
-            </label>
-            <button className="btn btn-primary" type="submit">
-              Continuar
-            </button>
-          </form>
-        </div>
-      </AuthLayout>
-    );
-  }
-
-  if (state.step === "new-password") {
-    return (
-      <AuthLayout scenario="forgot-password">
-        <div className="auth-card">
-          <button
-            className="auth-back"
-            onClick={() => dispatch({ type: "BACK" })}
-            style={backButtonStyle}
-            type="button"
-          >
-            ← Voltar ao código
-          </button>
-          <header className="auth-heading">
-            <h1>Crie uma nova senha</h1>
-            <p>Use pelo menos 8 caracteres.</p>
-          </header>
-          <form className="auth-form" onSubmit={submitNewPassword} noValidate>
-            <PasswordField id="new-password" label="Nova senha" />
-            <PasswordField
-              error={fieldError ?? undefined}
-              id="confirm-password"
-              label="Repita a nova senha"
-            />
-            <button className="btn btn-primary" type="submit">
-              Salvar nova senha
-            </button>
-          </form>
-        </div>
-      </AuthLayout>
-    );
-  }
-
-  return (
-    <AuthLayout scenario="forgot-password">
-      <div className="auth-card">
-        <Link className="auth-back" href="/login">
-          ← Voltar para entrar
-        </Link>
-        <header className="auth-heading">
-          <h1>Esqueceu sua senha?</h1>
-          <p>Informe o e-mail da sua conta para continuar.</p>
-        </header>
-        <form className="auth-form" onSubmit={submitEmail} noValidate>
-          <label className="field">
-            <span className="label">E-mail</span>
-            <input
-              autoComplete="email"
-              className="input"
-              name="email"
-              placeholder="voce@seunegocio.com.br"
-              required
-              type="email"
-            />
-          </label>
-          <button className="btn btn-primary" type="submit">
-            Continuar
-          </button>
-        </form>
-      </div>
-    </AuthLayout>
-  );
-}
-
 const validationFieldIdByScenario: Partial<
   Record<AuthScenario, Record<string, string>>
 > = {
   login: { email: "email", password: "login-password" },
   signup: {
-    confirmPassword: "confirm-password",
     email: "email",
+    name: "name",
     password: "signup-password",
   },
+  "forgot-password": { email: "email" },
+  "new-password": { newPassword: "new-password" },
 };
 
 function mapAuthError(
@@ -653,10 +613,13 @@ function mapAuthError(
 
 function friendlyValidationMessage(field: string): string {
   if (field === "email") return "Digite um e-mail válido.";
+  if (field === "name") return "Digite seu nome.";
   if (field === "password") {
-    return "A senha precisa ter pelo menos 8 caracteres.";
+    return "A senha precisa ter pelo menos 8 caracteres, com letras e números.";
   }
-  if (field === "confirmPassword") return "As senhas precisam ser iguais.";
+  if (field === "newPassword") {
+    return "Escolha uma senha diferente da atual, que atenda às regras acima.";
+  }
   return "Revise esta informação.";
 }
 

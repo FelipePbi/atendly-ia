@@ -224,7 +224,9 @@ describe("banner de WhatsApp da Home segue status.whatsappView", () => {
       </ShellConfigProvider>,
     );
 
-    await screen.findByText(/Olá, Studio Marina/);
+    // Goal064 §7: cumprimento pelo horário, nunca pelo nome do negócio.
+    const heading = await screen.findByRole("heading", { level: 1 });
+    expect(heading).toHaveTextContent(/^(Bom dia|Boa tarde|Boa noite)$/);
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
@@ -240,7 +242,9 @@ describe("banner de WhatsApp da Home segue status.whatsappView", () => {
       </ShellConfigProvider>,
     );
 
-    await screen.findByText(/Olá, Studio Marina/);
+    // Goal064 §7: cumprimento pelo horário, nunca pelo nome do negócio.
+    const heading = await screen.findByRole("heading", { level: 1 });
+    expect(heading).toHaveTextContent(/^(Bom dia|Boa tarde|Boa noite)$/);
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });

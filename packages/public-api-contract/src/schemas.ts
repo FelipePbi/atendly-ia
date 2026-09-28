@@ -25,6 +25,9 @@ export const messageResultSchema = z.object({ message: z.string().min(1) });
 export const userSchema = z.object({
   id: z.string().min(1),
   email: z.email(),
+  // Nome do dono da conta (Goal064). Nulo para conta anterior a este Goal;
+  // ausente é aceito na decodificação, para resposta anterior ao campo.
+  name: z.string().nullable().optional(),
   createdAt: isoDateTimeSchema,
 });
 

@@ -212,6 +212,8 @@ function bffRequire() {
  */
 export const JOURNEY = Object.freeze({
   email: "goal030-mvp-journey@example.invalid",
+  // Nome do dono da conta (Goal064/WU-01), exigido por POST /v1/auth/register.
+  ownerName: "Percurso Goal030",
   businessName: "Estúdio Goal030 Percurso",
   businessCategory: "Beleza e estética",
   timezone: "America/Sao_Paulo",
@@ -1207,6 +1209,7 @@ async function stageAccountAndSession(client, bffDb, legalVersions) {
   const registered = await client.request("POST", "/v1/auth/register", {
     body: {
       email: JOURNEY.email,
+      name: JOURNEY.ownerName,
       password: ACCOUNT_PASSWORD,
       confirmPassword: ACCOUNT_PASSWORD,
       termsAccepted: true,

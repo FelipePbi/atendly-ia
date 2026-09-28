@@ -15,8 +15,8 @@ type Ok = z.infer<typeof okSchema>;
 type MessageResult = z.infer<typeof messageResultSchema>;
 
 export interface RegisterInput {
-  confirmPassword: string;
   email: string;
+  name: string;
   password: string;
   privacyPolicyVersion: string;
   termsAccepted: true;
@@ -35,7 +35,6 @@ export interface ChangePasswordInput {
 }
 
 export interface ResetPasswordInput {
-  confirmPassword: string;
   newPassword: string;
   token: string;
 }

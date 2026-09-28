@@ -5498,3 +5498,83 @@ Na ordem em que rodou, na árvore final da rodada 3, antes dos controles acima. 
 ### Veredito recontado
 
 O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO`**. São os mesmos números de §41, com `audit:static` da execução final em **33** de **34** verificações passando e **1** pulada. Nenhum achado de A-01 a A-24 foi tocado, corrigido, reclassificado ou reaberto. Esta seção só acrescenta o registro do diff071. **QA O-40, QA O-45, QA O-48 e QA O-44 corrigidos** são do `QA_LOCAL_REVIEW`, fora dessa enumeração.
+
+## 43. QA C-01…C-04, C-11, C-12, L-01…L-05 e H-05 são corrigidos: conta conforme o vault — Goal064, 2026-09-28
+
+Seção nova. O texto de contagens, controles e vermelho foi reescrito na rodada 5, depois dos seis controles negativos do §10 do Goal e da execução final, ambos rodados pela rodada 5 sobre a árvore final. **Não reescreve** §4 a §42: os registros de A-01 a A-24, o veredito das seções anteriores e as quarenta e duas seções de fechamento anteriores continuam exatamente como estavam. **QA C-01**, **QA C-02**, **QA C-03**, **QA C-04**, **QA C-11**, **QA C-12**, **QA L-01**, **QA L-02**, **QA L-03**, **QA L-04**, **QA L-05** e **QA H-05** vêm do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md), não da enumeração A-01…A-24, e **não entram nessa contagem**. Decisão: [D-082](DECISIONS.md), **ACCEPTED** no [review064](reviews/064-review.md) (rodada 5).
+
+### O que mudou
+
+**QA C-01 — o cadastro pede Nome.** `User` ganha `name` nulável (migration aditiva `20260917000000_goal064_user_name`, sem `UPDATE`, sem backfill); `POST /v1/auth/register` exige `name` aparado, de 1 a 120 caracteres, recusando `400 VALIDATION_ERROR` antes de qualquer escrita quando ausente, vazio ou só espaço; `userDto` devolve `name` em `register`, `login` e `GET /v1/auth/session`. A tela de cadastro ganha o campo Nome.
+
+**QA C-02 e QA C-03 — uma única regra de senha (aplica U-10).** `packages/public-api-contract/src/password-policy.ts` exporta `passwordPolicySchema` (mínimo de 8 caracteres, letra e número, sem "Repita a senha") e `PASSWORD_POLICY_RULES`, usados por `registerSchema`, `resetPasswordSchema`, `passwordSchema` (`PATCH /v1/auth/password`) e pela validação inline do cadastro, da redefinição e da troca de senha em Configurações › Conta; login continua fora da regra. `confirmPassword` sai de `registerSchema` e de `resetPasswordSchema`; corpo antigo que ainda o traga é aceito e o campo é ignorado.
+
+**QA C-04 — um aceite só.** O parágrafo passivo "Ao criar sua conta, você concorda…" sai do cadastro; sobra o checkbox único, com os links dos Termos de Uso e da Política de Privacidade.
+
+**QA C-11 e QA C-12 — validação inline, sem balão nativo.** Cadastro, login, recuperar senha e nova senha ganham `noValidate` e validação própria antes do envio: todos os erros do envio aparecem juntos, com `aria-invalid`, `aria-describedby` e foco no primeiro campo inválido; erro devolvido pelo servidor cai no mesmo campo.
+
+**QA L-01, QA L-02 e QA L-03 — a recuperação usa o fluxo real por link.** `/recuperar-senha` passa a pedir só o e-mail e chamar `POST /v1/auth/forgot-password`; a tela de código e a nova senha dentro do fluxo saem, e `recoveryMachine.ts` é removido do repositório. `/solicitacao-enviada` não afirma mais "Senha redefinida" — diz que, se existir conta com o e-mail, chega um link para criar uma nova senha. `/nova-senha` só mostra "Senha redefinida" depois de `POST /v1/auth/reset-password` responder `200`; o token inválido responde com o código próprio `PASSWORD_RESET_TOKEN_INVALID`, distinto de `VALIDATION_ERROR`, e leva a `/link-expirado`; `VALIDATION_ERROR` mostra erro no campo, sem navegar.
+
+**QA L-04 — regras ao vivo na nova senha.** `/nova-senha` mostra as mesmas regras verificadas ao digitar do cadastro.
+
+**QA L-05 — o checkbox morto sai do login.** "Manter acesso neste dispositivo" não era lido por nada e foi removido.
+
+**QA H-05 — a Home cumprimenta pela pessoa.** `DashboardScreen` passa a cumprimentar pelo primeiro nome da sessão, pelo horário do fuso do negócio; sem nome (conta anterior a este Goal), cumprimenta sem nome, nunca pelo nome do negócio.
+
+Decisão completa e limites: [D-082](DECISIONS.md).
+
+### Vermelho na baseline
+
+Rodado na rodada 5, numa worktree temporária destacada em `fbdb0ccbfc9b8457a11b06def3e856b12894e39b` (a baseline aceita), com só os três arquivos de teste novos copiados da árvore final: `apps/frontend/tests/goal064-auth-screens.test.tsx`, `apps/frontend/tests/goal064-greeting-and-account.test.tsx` e `apps/bff/tests/goal064-account.integration.test.ts`. O pacote `public-api-contract` foi construído a partir da fonte da baseline, e o client Prisma e as migrations vieram do `schema.prisma` da baseline. A worktree temporária foi removida depois e não aparece em `git worktree list`.
+
+- Frontend (vitest, jsdom): **2** arquivos falhando de **2**; **27** testes falhando de **31**. `goal064-auth-screens.test.tsx`: **23** de **26**; `goal064-greeting-and-account.test.tsx`: **4** de **5**. Primeiras linhas decisivas: `Unable to find a label with the text of: /^Nome/`; `Unable to find an element with the text: Pelo menos 8 caracteres.`; `Unable to find an accessible element with the role "button" and name "Enviar link"`; `expected 'AtendlyAcesso protegidoProntinho para…' not to match /Senha redefinida/`; `expected "vi.fn()" to be called with arguments: [ '/link-expirado' ]`.
+- BFF (vitest, contra o PostgreSQL 18 descartável em `127.0.0.1:55432`, num banco próprio criado e removido para esta execução): **1** arquivo falhando de **1**; **6** testes falhando de **7**. Primeiras linhas decisivas: `expected 201 to be 400` (cadastro sem nome aceito); `expected 400 to be 201` (cadastro sem `confirmPassword` recusado); `expected 'VALIDATION_ERROR' to be 'PASSWORD_RESET_TOKEN_INVALID'`; `expected 400 to be 200` (fluxo ponta a ponta sem `confirmPassword`). O teste que passa na baseline é `refuses forgot-password without PASSWORD_RESET_DELIVERY_URL configured, and writes no token`, comportamento que já existia antes deste Goal.
+
+### Testes tirados de `goal014-auth.test.tsx` e o que os substitui (§13 do Goal)
+
+Oito testes saíram de `apps/frontend/tests/goal014-auth.test.tsx`. Nenhum foi pulado; cada um tem substituto ou motivo.
+
+Os quatro de `recoveryReducer (máquina pura da recuperação de senha)` não têm substituto direto: `recoveryMachine.ts` foi removido (§6 do Goal), e o redutor que eles testavam deixou de existir. O que eles protegiam, um fluxo de quatro telas com código, também deixou de existir; a garantia de que ele não volta está em `nenhuma tela mostra 'Digite o código'` (`goal064-auth-screens.test.tsx`).
+
+1. `começa na tela de e-mail` — sem substituto direto (redutor removido). A tela inicial de `/recuperar-senha`, que pede só o e-mail, é coberta por `recuperar senha vazio mostra o erro de e-mail e não chama a rede` e por `200 chama forgotPassword e navega para /solicitacao-enviada`.
+2. `e-mail → código → nova senha → sucesso, guardando o e-mail informado` — sem substituto direto (redutor removido; não há mais passo de código nem de nova senha dentro de `/recuperar-senha`).
+3. `BACK devolve um passo, sem apagar o e-mail já informado` — sem substituto direto (redutor removido; `/recuperar-senha` tem um passo só). O e-mail preservado depois de falha é coberto por `falha de rede (TypeError) mostra erro genérico, não navega e mantém o e-mail digitado`.
+4. `um evento fora de ordem é ignorado — a transição não pula passo` — sem substituto direto (redutor removido; não há transição entre passos).
+
+Os quatro de `recuperação de senha — quatro telas, sem rede e sem copy de envio`:
+
+5. `percorre e-mail → código → nova senha → navega para a tela de sucesso` — substituído por `200 chama forgotPassword e navega para /solicitacao-enviada` e, na etapa da nova senha, por `200 mostra 'Senha redefinida' e o link para entrar, sem confirmPassword no corpo` (`goal064-auth-screens.test.tsx`). O teste antigo exigia que nenhuma rede fosse chamada; o fluxo real exige a chamada.
+6. `nenhuma tela do fluxo, nem a de sucesso, afirma que algo foi enviado` — substituído por `não contém o texto 'Senha redefinida'` e `mostra o link 'Voltar para entrar' para /login` (`goal064-auth-screens.test.tsx`). A asserção antiga (`/envi/i` ausente) contradiz o §6 do Goal: `/solicitacao-enviada` agora diz que, se existir conta com o e-mail, chega um link.
+7. `a tela de código pode voltar para alterar o e-mail sem perder o passo` — substituído por `nenhuma tela mostra 'Digite o código'` (`goal064-auth-screens.test.tsx`): a tela de código não existe mais.
+8. `e-mail já cadastrado aparece junto ao campo de e-mail, senha preservada` — reescrito no próprio arquivo como `e-mail já cadastrado aparece junto ao campo de e-mail, senha preservada, sem 'Repita a senha'` (`goal014-auth.test.tsx`), porque o cadastro perdeu "Repita a senha" e ganhou Nome.
+
+`goal014-auth.test.tsx` também ganhou `login não tem o checkbox 'Manter acesso neste dispositivo'`, que é acréscimo, não substituição.
+
+### Seis controles negativos, aplicados e revertidos
+
+Rodados na rodada 5, depois da última edição de código (a asserção de ausência de "Ir para entrar" em `mostra o link 'Voltar para entrar' para /login`), na própria worktree. Cada arquivo foi copiado antes da mutação, restaurado depois e conferido por `md5sum`, com o mesmo hash antes e depois. No controle 2, o pacote de contrato foi reconstruído com o defeito e de novo depois da reversão. Os testes do BFF rodaram contra o PostgreSQL 18 descartável em `127.0.0.1:55432`, num banco próprio removido depois. Testes por arquivo nesta execução: `goal064-account.integration.test.ts` **7**, `goal064-auth-screens.test.tsx` **26**, `goal064-greeting-and-account.test.tsx` **5**.
+
+1. `registerSchema` deixa de exigir `name` (`name: nameSchema.optional()`): reprova **1** de **7** em `tests/goal064-account.integration.test.ts` — `expected 201 to be 400` em `refuses registration without a name…`.
+2. A regra de senha volta a ser só `min(8)` no pacote (schema sem as exigências de letra e de número; a regra `HAS_LETTER_AND_DIGIT` da lista sempre atendida): reprova **1** de **7** no BFF — `expected 201 to be 400` em `applies the U-10 password rule…`; **1** de **5** em `tests/goal064-greeting-and-account.test.tsx` — `Unable to find an element with the text: /A nova senha precisa ter letras e números\./` em `recusa no cliente uma senha só de letras…`; e **1** de **26** em `tests/goal064-auth-screens.test.tsx` — `expect(element).toHaveTextContent()` em `cada regra alterna entre 'Pendente' e 'Atendida'…`.
+3. O token inválido volta a responder `VALIDATION_ERROR`: reprova **1** de **7** — `expected 'VALIDATION_ERROR' to be 'PASSWORD_RESET_TOKEN_INVALID'`.
+4. A conferência contra a senha atual passa para depois do consumo do token (`usedAt` gravado antes de `verifyPassword`): reprova **2** de **7** — `expected 2026-09-28T07:39:44.232Z to be null` em `refuses resetting to the current password without consuming the token…`, e `expected 400 to be 200` no fluxo ponta a ponta, porque o token já consumido não pode mais ser reivindicado.
+5. `/recuperar-senha` volta a navegar sem chamar `forgotPassword`: reprova **8** de **26** em `tests/goal064-auth-screens.test.tsx` — os casos `200`, `503`, `429`, falha de rede e `500` da tela, e os três de vocabulário técnico em `/recuperar-senha` (`503`, `429`, erro genérico). Primeira linha: `expected "vi.fn()" to be called with arguments: [ 'camila@studio.com' ]`.
+6. O formulário do cadastro volta a chamar `reportValidity` (campo Nome marcado `required`): reprova **1** de **26** — `Unable to find an element with the text: Digite seu nome.` em `cadastro vazio mostra nome, e-mail, senha e termos juntos, e foca o nome`, porque o envio é interrompido antes da validação própria.
+
+Sem o defeito, cada alvo volta a passar por inteiro na mesma execução: **7**/**7** no BFF, **26**/**26** e **5**/**5** no frontend.
+
+### Execução final da rodada 5, sobre a árvore final, depois dos controles
+
+- `npm run validate:core`: **17** passos, **15** `passed`, **0** `failed`, **2** `skipped` (`test:bff`, só integração; `test:health-worker`, sem suíte automatizada), exit 0. Dentro dele: `test:frontend` em **87** arquivos e **854** testes; `audit:static` em **33** de **34** verificações passando e **1** pulada (`production_health`, não pedida); `repro:a03-contract-drift` não reproduz A-03.
+- `npm run test:gate`: **233**/**233**, **0** falhando, exit 0.
+- `npm run validate:ui`: **169** passando, **21** pulados, **0** retentativas, exit 0. `results.json`: `expected` **169**, `skipped` **21**, `unexpected` **0**, `flaky` **0**.
+- `npm run validate:integration`, contra o PostgreSQL 18 descartável em `127.0.0.1:55432`: **35**/**35** passos, exit 0. Dentro dela: `test:bff-integration` em **52** arquivos e **424** testes; `test:scheduling-integration` em **16**/**124**, sem mudança; `rehearse:goal033-authenticated-ui` com `expected` **75**, `skipped` **0**, `unexpected` **0**, `flaky` **0** e **0** retentativas, sem mudança — este Goal não toca nenhuma das nove rotas autenticadas.
+- `grep -rn "this\.http\." apps/bff/src/clients/ | wc -l`: **42**.
+
+### O que esta seção não prova
+
+**Não prova** que a recuperação de senha entrega e-mail a alguém: não há provider (U-03), e todo teste usa o dublê de entrega que grava `resetUrl`. **Não prova** que a recuperação por link, em vez do código de 6 dígitos do protótipo e da pergunta 470 do vault, é a que o produto quer — conferência humana do §11 do Goal, **não feita**. **Não prova** que `/nova-senha` e os estados de erro e sucesso das telas de entrada cumprem largura, toque, contraste, foco e movimento: o gate renderizado mede `/login`, `/cadastro`, `/recuperar-senha`, `/solicitacao-enviada` e `/link-expirado`, não os estados internos nem `/nova-senha`. **Não prova** que as telas batem com o protótipo aprovado (conferência humana, Goal068).
+
+### Veredito recontado
+
+O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO`**. São os mesmos números de §42, com `audit:static` da execução final em **33** de **34** verificações passando e **1** pulada. Nenhum achado de A-01 a A-24 foi tocado, corrigido, reclassificado ou reaberto. Esta seção só acrescenta o registro do diff064. **QA C-01, QA C-02, QA C-03, QA C-04, QA C-11, QA C-12, QA L-01, QA L-02, QA L-03, QA L-04, QA L-05 e QA H-05 corrigidos** são do `QA_LOCAL_REVIEW`, fora dessa enumeração.

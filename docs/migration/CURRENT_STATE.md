@@ -6453,3 +6453,130 @@ rodada 1).
   quinto QR — ver [D-081](DECISIONS.md). **QA O-40, QA O-45, QA O-48 e
   QA O-44 corrigidos**, fora da contagem A-01…A-24 — ver
   [FINAL_AUDIT §42](FINAL_AUDIT.md).
+
+## Delta implementado — Goal064, 2026-09-28 ([D-082](DECISIONS.md), ACCEPTED)
+
+Corrige **QA C-01**, **QA C-02**, **QA C-03**, **QA C-04**, **QA C-11**,
+**QA C-12**, **QA L-01**, **QA L-02**, **QA L-03**, **QA L-04**, **QA L-05** e
+**QA H-05** do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md) (fora da enumeração
+A-01…A-24 do FINAL_AUDIT): o cadastro exige Nome; uma única regra de senha
+(U-10) vale para cadastro, redefinição e troca, e nunca para login; a
+recuperação de senha usa o fluxo real por link, sem afirmar sucesso antes de
+`200`; as quatro telas de entrada validam inline sem balão nativo; o cadastro
+tem um aceite só; o login perde o checkbox morto; e a Home cumprimenta pela
+pessoa. Toca `apps/bff/` (`prisma/schema.prisma`, `modules/auth/routes.ts`,
+`lib/dto.ts`, `lib/errors.ts`, `PUBLIC_API_V1.md`), `packages/public-api-contract/`
+(`password-policy.ts`, `schemas.ts`, `index.ts`), `apps/frontend/`
+(`features/auth/AuthScreen.tsx`, `recoveryMachine.ts` removido,
+`app/solicitacao-enviada/page.tsx`, `data/services/BffAuthService.ts`,
+`features/dashboard/DashboardScreen.tsx`, `features/settings/AccountSettings.tsx`)
+e os corpos de `POST /v1/auth/register` em `apps/bff/tests/helpers/integration.ts`,
+`auth-register.integration.test.ts`, `scripts/goal030-mvp-journey-rehearsal.mjs`
+e `scripts/goal033-authenticated-ui-rehearsal.mjs`. Não toca login, sessão,
+CSRF, `logout`, `logout-all`, exclusão de conta, purga, `apps/ai-orchestrator/`
+nem `apps/scheduling-service/`. Uma migration aditiva,
+`20260917000000_goal064_user_name`.
+
+- **Nome no cadastro (§1)** — `User.name`, texto nulável (migration aditiva,
+  sem `UPDATE`, sem backfill). `POST /v1/auth/register` exige `name` aparado,
+  de 1 a 120 caracteres; ausente, vazio ou só espaço recusa
+  `400 VALIDATION_ERROR` com o campo, antes de qualquer escrita. `userDto`
+  devolve `name` em `register`, `login` e `GET /v1/auth/session`.
+  `confirmPassword` sai do schema de cadastro; corpo antigo que ainda o traga
+  é aceito, com o campo ignorado.
+- **Uma regra de senha (§2)** — `passwordPolicySchema` e
+  `PASSWORD_POLICY_RULES` em `packages/public-api-contract/src/password-policy.ts`
+  (mínimo de 8 caracteres, letra e número), usados por `registerSchema`,
+  `resetPasswordSchema`, `passwordSchema` (`PATCH /v1/auth/password`) e pela
+  validação inline do cadastro, da redefinição e da troca de senha em
+  Configurações › Conta. Login não usa a regra.
+- **Redefinição com erros separados (§3)** — `resetPasswordSchema` aceita só
+  `token` e `newPassword`. Token ausente, já usado ou vencido responde
+  `PASSWORD_RESET_TOKEN_INVALID`, distinto de `VALIDATION_ERROR`. Nova senha
+  igual à atual é conferida contra o hash antes de consumir o token, e
+  responde `400 VALIDATION_ERROR` no campo `newPassword` sem gastar o token.
+- **Cadastro conforme o vault (§4)** — Nome, E-mail, Senha com olho e regras
+  ao vivo (8+ caracteres; letras e números), um aceite só (checkbox com os
+  dois links), sem "Repita a senha" e sem o parágrafo passivo. O corpo
+  enviado leva `name`, `email`, `password`, `termsAccepted` e as versões;
+  nunca leva `confirmPassword`.
+- **Validação inline nas quatro telas de entrada (§5)** — cadastro, login,
+  recuperar senha e nova senha com `noValidate` e validação própria: todos
+  os erros do envio juntos, `aria-invalid`, `aria-describedby` e foco no
+  primeiro campo inválido. Erro do servidor cai no mesmo campo. O login
+  perde "Manter acesso neste dispositivo" (QA L-05).
+- **Recuperação de senha honesta (§6)** — `/recuperar-senha` pede só o
+  e-mail e chama `forgotPassword`: `200` navega para `/solicitacao-enviada`
+  (e-mail fora da URL); `503 CONFIGURATION_ERROR` mantém a tela com erro de
+  indisponibilidade; `429` mostra texto de muitas tentativas; falha de rede
+  mostra erro genérico com o e-mail preservado. `/solicitacao-enviada` não
+  contém mais "Senha redefinida". `/nova-senha` mostra as regras ao vivo e só
+  afirma "Senha redefinida" depois de `POST /v1/auth/reset-password`
+  responder `200`; o código de token inválido leva a `/link-expirado`;
+  `VALIDATION_ERROR` mostra erro no campo, sem navegar. `recoveryMachine.ts`
+  foi removido; nenhuma tela mostra "Digite o código".
+- **Nome onde ele aparece (§7)** — a Home cumprimenta pelo primeiro nome da
+  sessão, pelo horário do fuso do negócio; sem nome (conta anterior a este
+  Goal), cumprimenta sem nome, nunca pelo nome do negócio. A troca de senha
+  de Configurações › Conta usa a mesma regra do §2; a forma da tela não
+  muda.
+- **Contrato público (§8)** — `apps/bff/PUBLIC_API_V1.md` e
+  `packages/public-api-contract/` descrevem o corpo novo de `register` e de
+  `reset-password`, a regra de senha e onde vale, `name` em `user` (texto ou
+  `null`) e `PASSWORD_RESET_TOKEN_INVALID`.
+- **Vermelho na baseline**, rodado na rodada 5 numa worktree temporária
+  destacada em `fbdb0ccbfc9b8457a11b06def3e856b12894e39b`, com só os três
+  arquivos de teste novos copiados e removida depois: no frontend, **27** de
+  **31** testes falhando (**23** de **26** em `goal064-auth-screens.test.tsx`,
+  **4** de **5** em `goal064-greeting-and-account.test.tsx`); no BFF, contra
+  PostgreSQL real, **6** de **7** em `goal064-account.integration.test.ts`.
+  Saída em [FINAL_AUDIT §43](FINAL_AUDIT.md).
+- **Testes substituídos (§13 do Goal)** — os oito testes tirados de
+  `goal014-auth.test.tsx` (quatro de `recoveryReducer`, sem substituto
+  direto porque o redutor foi removido, e quatro do fluxo de quatro telas) e
+  o teste `goal064-` ou `goal014-` reescrito que substitui cada um estão
+  listados em [FINAL_AUDIT §43](FINAL_AUDIT.md).
+- **Seis controles negativos (§10), aplicados e revertidos**, rodados na
+  rodada 5, depois da última edição de código, com cada arquivo restaurado e
+  conferido por `md5sum`; saída colada em [FINAL_AUDIT §43](FINAL_AUDIT.md).
+  Testes por arquivo nesta execução: `goal064-account.integration.test.ts`
+  **7**, `goal064-auth-screens.test.tsx` **26**,
+  `goal064-greeting-and-account.test.tsx` **5**. (1) `registerSchema` sem
+  exigir `name` reprova **1** de **7** contra PostgreSQL real. (2) a regra de
+  senha só com `min(8)` no pacote reprova **1** de **7** no BFF, **1** de
+  **5** em `goal064-greeting-and-account.test.tsx` e **1** de **26** em
+  `goal064-auth-screens.test.tsx`. (3) o token inválido voltando a
+  `VALIDATION_ERROR` reprova **1** de **7**. (4) a conferência contra a senha
+  atual depois do consumo do token reprova **2** de **7** (token consumido
+  mesmo recusado; fluxo ponta a ponta recusado). (5) `/recuperar-senha` sem
+  chamar `forgotPassword` reprova **8** de **26**. (6) o cadastro voltando a
+  chamar `reportValidity` reprova **1** de **26**. Sem o defeito, cada alvo
+  volta a passar por inteiro na mesma execução.
+- **Execução final da rodada 5, sobre a árvore final, depois dos controles**
+  — `npm run validate:core`: **17** passos, **15** `passed`, **0** `failed`,
+  **2** `skipped` (`test:bff`, `test:health-worker`), exit 0. Dentro dele,
+  `test:frontend` em **87** arquivos e **854** testes e `audit:static` em
+  **33** de **34** verificações passando e **1** pulada.
+  `npm run test:gate`: **233**/**233**. `npm run validate:ui`: **169**
+  passando, **21** pulados, **0** retentativas, exit 0.
+  `npm run validate:integration`, contra o PostgreSQL 18 descartável em
+  `127.0.0.1:55432`: **35**/**35** passos, exit 0. Dentro dela,
+  `test:bff-integration` em **52** arquivos e **424** testes,
+  `test:scheduling-integration` em **16**/**124**, sem mudança, e
+  `rehearse:goal033-authenticated-ui` com `expected` **75**, `unexpected`
+  **0**, `flaky` **0** e **0** retentativas, sem mudança (este Goal não toca
+  nenhuma das nove rotas autenticadas). `this.http.` em
+  `apps/bff/src/clients/`: **42**.
+- **Conferência humana pendente:** a conferência do §11 do Goal **não foi
+  feita** por este Goal. Ela confere que a recuperação com um provider de
+  e-mail real entrega o link, que o link abre `/nova-senha` no endereço
+  público certo, e que a recuperação por link — em vez do código de 6
+  dígitos do protótipo e da pergunta 470 do vault — é aceitável para o
+  produto.
+- **Limites declarados:** nenhum provider de e-mail (U-03); o vault e o
+  protótipo descrevem código de 6 dígitos e o produto usa link, com
+  confirmação humana pendente; o Product Vault não foi editado; conta
+  anterior a este Goal fica sem nome — ver [D-082](DECISIONS.md). **QA C-01,
+  QA C-02, QA C-03, QA C-04, QA C-11, QA C-12, QA L-01, QA L-02, QA L-03,
+  QA L-04, QA L-05 e QA H-05 corrigidos**, fora da contagem A-01…A-24 — ver
+  [FINAL_AUDIT §43](FINAL_AUDIT.md).

@@ -97,6 +97,7 @@ describe.skipIf(!runIntegration)("auth registration persistence", () => {
       headers: { origin: env.FRONTEND_ORIGIN },
       payload: {
         email,
+        name: "Legal Integration",
         password: "Integration-only-123",
         confirmPassword: "Integration-only-123",
         termsAccepted: true,

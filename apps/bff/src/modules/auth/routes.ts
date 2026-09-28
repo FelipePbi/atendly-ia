@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
+import { passwordPolicySchema } from "@atendly-ia/public-api-contract";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
@@ -31,30 +32,34 @@ import {
 } from "../../lib/tenant-context.js";
 
 const emailSchema = z.string().email().trim().toLowerCase();
-const registerSchema = z
-  .object({
-    email: emailSchema,
-    password: z.string().min(8).max(200),
-    confirmPassword: z.string().min(8).max(200),
-    termsAccepted: z.literal(true),
-    termsVersion: z.literal(CURRENT_LEGAL_VERSIONS.termsVersion),
-    privacyPolicyVersion: z.literal(
-      CURRENT_LEGAL_VERSIONS.privacyPolicyVersion,
-    ),
-  })
-  .refine((value) => value.password === value.confirmPassword, {
-    path: ["confirmPassword"],
-    message: "Passwords do not match.",
-  });
+// Nome do dono da conta (Goal064): aparado, de 1 a 120 caracteres. Ausente,
+// vazio ou só espaço recusa antes de qualquer escrita.
+const nameSchema = z.string().trim().min(1).max(120);
+// `confirmPassword` saiu do contrato: um corpo antigo que ainda o traga é
+// aceito e o campo é ignorado (z.object não estrito descarta chave
+// desconhecida).
+const registerSchema = z.object({
+  email: emailSchema,
+  name: nameSchema,
+  password: passwordPolicySchema,
+  termsAccepted: z.literal(true),
+  termsVersion: z.literal(CURRENT_LEGAL_VERSIONS.termsVersion),
+  privacyPolicyVersion: z.literal(CURRENT_LEGAL_VERSIONS.privacyPolicyVersion),
+});
 const loginSchema = z.object({
   email: emailSchema,
+  // A regra U-10 não vale para login: conta antiga com senha fora dela
+  // continua entrando.
   password: z.string().min(1).max(200),
 });
+// Configurações › Conta mantém "Repita a nova senha" (Goal064 §7): a forma
+// da tela não muda, então o servidor continua exigindo e conferindo
+// `confirmPassword` aqui, diferente de registerSchema e resetPasswordSchema.
 const passwordSchema = z
   .object({
     currentPassword: z.string().min(1).max(200),
-    newPassword: z.string().min(8).max(200),
-    confirmPassword: z.string().min(8).max(200),
+    newPassword: passwordPolicySchema,
+    confirmPassword: z.string().min(1).max(200),
   })
   .refine((value) => value.currentPassword !== value.newPassword, {
     path: ["newPassword"],
@@ -65,16 +70,10 @@ const passwordSchema = z
     message: "Passwords do not match.",
   });
 const forgotPasswordSchema = z.object({ email: emailSchema });
-const resetPasswordSchema = z
-  .object({
-    token: z.string().min(32).max(512),
-    newPassword: z.string().min(8).max(200),
-    confirmPassword: z.string().min(8).max(200),
-  })
-  .refine((value) => value.newPassword === value.confirmPassword, {
-    path: ["confirmPassword"],
-    message: "Passwords do not match.",
-  });
+const resetPasswordSchema = z.object({
+  token: z.string().min(32).max(512),
+  newPassword: passwordPolicySchema,
+});
 
 export async function registerV1AuthRoutes(
   app: FastifyInstance,
@@ -110,8 +109,9 @@ export async function registerV1AuthRoutes(
         data: {
           email: body.email,
           passwordHash,
+          name: body.name,
         },
-        select: { id: true, email: true, createdAt: true },
+        select: { id: true, email: true, name: true, createdAt: true },
       });
       const tenant = await transaction.tenant.create({
         data: {
@@ -339,10 +339,30 @@ export async function registerV1AuthRoutes(
       where: { tokenHash: tokenHash(body.token) },
     });
     if (!reset || reset.usedAt || reset.expiresAt <= new Date()) {
+      // Código próprio, distinto de VALIDATION_ERROR: o frontend usa isto
+      // para navegar para /link-expirado, e não para marcar um campo.
       throw new AppError(
-        "VALIDATION_ERROR",
+        "PASSWORD_RESET_TOKEN_INVALID",
         "Password reset token is invalid or expired.",
         400,
+      );
+    }
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: reset.userId },
+    });
+    // Conferida contra o hash atual antes de consumir o token: recusar aqui
+    // não gasta o link, e a pessoa pode tentar de novo com outra senha.
+    if (await verifyPassword(body.newPassword, user.passwordHash)) {
+      throw new AppError(
+        "VALIDATION_ERROR",
+        "New password must differ from current password.",
+        400,
+        {
+          formErrors: [],
+          fieldErrors: {
+            newPassword: ["New password must differ from current password."],
+          },
+        },
       );
     }
     const passwordHash = await hashPassword(body.newPassword);
@@ -357,7 +377,7 @@ export async function registerV1AuthRoutes(
       });
       if (claimed.count !== 1) {
         throw new AppError(
-          "VALIDATION_ERROR",
+          "PASSWORD_RESET_TOKEN_INVALID",
           "Password reset token is invalid or expired.",
           400,
         );

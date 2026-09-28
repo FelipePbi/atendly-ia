@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
-import { BffHttpError } from "@/data";
+import { BffHttpError, PASSWORD_POLICY_RULES } from "@/data";
 import { getProductServices, useProductRuntime } from "@/shared/runtime/ProductRuntime";
 import {
   accountDeletionDaysRemaining,
@@ -18,6 +18,20 @@ import { SettingsPage } from "./shared/SettingsPage";
  * A contagem de dias é a de `systemStatus`, a mesma que o aviso persistente do
  * shell usa: o prazo mostrado aqui e o mostrado lá não podem divergir.
  */
+// Mesmo texto de regra do cadastro (AuthScreen), mesma regra do pacote
+// (U-10/Goal064 §7): a forma da tela não muda, só a recusa no cliente.
+const PASSWORD_RULE_LABELS: Record<string, string> = {
+  MIN_LENGTH: "pelo menos 8 caracteres",
+  HAS_LETTER_AND_DIGIT: "letras e números",
+};
+
+function passwordPolicyError(value: string): string | null {
+  const failed = PASSWORD_POLICY_RULES.filter((rule) => !rule.test(value));
+  if (failed.length === 0) return null;
+  const labels = failed.map((rule) => PASSWORD_RULE_LABELS[rule.id]);
+  return `A nova senha precisa ter ${labels.join(" e ")}.`;
+}
+
 function daysRemainingCopy(days: number): string {
   if (days <= 0) {
     return "O prazo para cancelar termina hoje. Depois disso os dados são apagados e não é possível recuperar a conta.";
@@ -58,13 +72,24 @@ export function AccountSettings() {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
+    const newPassword = formString(data, "newPassword");
+    const confirmPassword = formString(data, "confirmPassword");
+    const policyError = passwordPolicyError(newPassword);
+    if (policyError) {
+      setMessage(policyError);
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setMessage("As senhas não coincidem.");
+      return;
+    }
     setBusy(true);
     setMessage(null);
     try {
       await getProductServices().auth.changePassword({
         currentPassword: formString(data, "currentPassword"),
-        newPassword: formString(data, "newPassword"),
-        confirmPassword: formString(data, "confirmPassword"),
+        newPassword,
+        confirmPassword,
       });
       form.reset();
       setMessage("Senha alterada.");

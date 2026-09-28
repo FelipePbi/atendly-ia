@@ -116,6 +116,7 @@ export async function registerBusiness(
     headers: { origin: ALLOWED_ORIGIN },
     payload: {
       email,
+      name: `Fixture ${label}`,
       password,
       confirmPassword: password,
       termsAccepted: true,

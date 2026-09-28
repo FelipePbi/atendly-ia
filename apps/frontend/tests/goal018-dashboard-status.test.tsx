@@ -220,7 +220,10 @@ describe("checklist pós-onboarding da Home", () => {
       </ShellConfigProvider>,
     );
 
-    await screen.findByText(/Olá, Studio Marina/);
+    // Goal064 §7: cumprimento pelo horário, nunca pelo nome do negócio; sem
+    // nome na sessão, só a palavra do horário aparece.
+    const heading = await screen.findByRole("heading", { level: 1 });
+    expect(heading).toHaveTextContent(/^(Bom dia|Boa tarde|Boa noite)$/);
     await waitFor(() => {
       expect(screen.queryByText("Ative sua IA")).toBeNull();
     });

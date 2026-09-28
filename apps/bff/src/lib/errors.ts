@@ -38,6 +38,11 @@ export type ErrorCode =
   // coluna qrcode, usada como marcador, está vazia. Reler o QR nunca abre uma
   // vinculação que um connect com consentimento não abriu.
   | "WHATSAPP_QR_NOT_IN_PROGRESS"
+  // POST /v1/auth/reset-password com token ausente do banco, já usado ou
+  // vencido (Goal064/WU-01). Código próprio, distinto de VALIDATION_ERROR,
+  // para o frontend distinguir "link morto" (navega para /link-expirado) de
+  // erro de campo (fica na tela).
+  | "PASSWORD_RESET_TOKEN_INVALID"
   | "INTERNAL_ERROR";
 
 export class AppError extends Error {

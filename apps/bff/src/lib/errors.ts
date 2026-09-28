@@ -30,6 +30,10 @@ export type ErrorCode =
   // PATCH /v1/settings/retention reduzindo Comercial ou Pessoal sem
   // `confirmReduction: true` (Goal023/WU-01, G-29). Aumentar nunca cai aqui.
   | "RETENTION_REDUCTION_REQUIRES_CONFIRMATION"
+  // PATCH /v1/settings/ai ligando a IA (desligada -> ligada) sem prova valida
+  // do teste real (Goal063/WU-01): sem execucao, execucao FAILED/PAUSED, teste
+  // superado por troca de canal, ou leitura do teste falhou. Nada e gravado.
+  | "AI_ACTIVATION_TEST_REQUIRED"
   | "INTERNAL_ERROR";
 
 export class AppError extends Error {

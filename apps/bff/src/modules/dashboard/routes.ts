@@ -4,7 +4,10 @@ import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
 import { EvolutionClient } from "../../clients/evolution/index.js";
 import type { InternalRequestContext } from "../../clients/internal-http-client.js";
 import { SchedulingClient } from "../../clients/scheduling/index.js";
-import { reconcileAiActivation } from "../../lib/ai-activation.js";
+import {
+  activationTestCompleted,
+  reconcileAiActivation,
+} from "../../lib/ai-activation.js";
 import { AppError } from "../../lib/errors.js";
 import { dataResponse } from "../../lib/http.js";
 import { phoneFromWhatsappJid } from "../../lib/phone.js";
@@ -109,22 +112,6 @@ async function schedulingDashboardWithReadiness(
       },
     },
   };
-}
-
-/**
- * Quarto item do checklist pós-onboarding: "teste concluído" (Goal019 §9).
- *
- * `true` **só** com execução em `SUCCEEDED` que ainda vale — teste feito
- * contra um vínculo de WhatsApp que já não é o do negócio não conta, porque o
- * vault exige teste novo ao trocar/revincular. Sem execução é `false`, que é
- * "nunca testou", não "falhou": o produtor não fabrica conclusão nenhuma.
- */
-async function activationTestCompleted(
-  context: InternalRequestContext,
-  ai: Pick<AiOrchestratorClient, "getActivationTest">,
-): Promise<boolean> {
-  const run = await ai.getActivationTest(context);
-  return run?.state === "SUCCEEDED" && !run.supersededByChannelChange;
 }
 
 async function platformSummary(tenantId: string) {

@@ -4945,3 +4945,164 @@ Depois dos controles restaurados e antes desta prosa:
 ### Veredito recontado
 
 O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO`** — os mesmos números de §39, com `audit:static` da execução final em **33** de **34** verificações passando e **1** pulada. Nenhum achado de A-01 a A-24 foi tocado, corrigido, reclassificado ou reaberto: esta seção só acrescenta o registro do diff062, e **QA IM-06, QA IM-09, QA IM-10, QA IM-11 e QA CL-04 corrigidos**, e **QA CL-05 corrigido só na busca**, são do `QA_LOCAL_REVIEW`, fora dessa enumeração.
+
+## 41. QA O-49, QA S-02, QA H-03 e QA H-04 são corrigidos: a IA só liga depois do teste real — Goal063, 2026-09-27
+
+Seção nova, escrita na rodada 2 do Goal063 depois da execução final. Ela **não reescreve** §4 a §40: os registros de A-01 a A-24, o veredito das seções anteriores e as quarenta seções de fechamento anteriores continuam exatamente como estavam. **QA O-49**, **QA S-02**, **QA H-03** e **QA H-04** vêm do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md), não da enumeração A-01…A-24 — o prefixo `QA` existe porque este documento já usa `A-` com outro significado — e **não entram nessa contagem**. Decisão: [D-080](DECISIONS.md), **PROPOSED** no Goal063, que aplica U-11 e revê D-035 na parte "teste real só no onboarding".
+
+### O que mudou
+
+**QA S-02 — a IA só liga com prova.** `PATCH /v1/settings/ai` (`apps/bff/src/modules/settings/routes.ts`) com `enabled: true`, na passagem desligada → ligada, lê a prova por `getValidActivationRun` (`apps/bff/src/lib/ai-activation.ts`, a mesma função de `activationTestCompleted`) e recusa com `409 AI_ACTIVATION_TEST_REQUIRED` (`apps/bff/src/lib/errors.ts`) sem gravar nada quando não há execução, quando ela é `FAILED` ou `PAUSED_BY_HUMAN`, quando a `SUCCEEDED` foi superada por troca de canal e quando a leitura falha. A ordem é exclusão, prova, serviço; as duas recusas antigas não mudam. Ligar grava `activatedByRunId`; já ligada, só o estilo muda. Pausar grava a execução válida corrente como usada, e a reconciliação não religa. **QA O-49 — o teste é alcançável.** `contatos-ignorados` vai a `teste-real` pelos dois botões sem concluir; o onboarding só conclui na saída (CTA de sucesso, "Fazer isso depois" do teste, CTA de `whatsapp-concluido`); a retomada lê a execução corrente; a tela de sucesso só afirma a ativação depois de `GET /v1/status`. Configurações › IA (`AiSettings.tsx`) não tem interruptor: mostra o estado lido e a ação dele, e oferece o mesmo teste do onboarding sem prova válida, pelo módulo compartilhado `apps/frontend/src/features/activation-test/ActivationTestPanels.tsx`. **QA H-03 — o checklist leva a cada módulo.** Cada item de `PostOnboardingChecklist` (`DashboardScreen.tsx`) é link para `/servicos`, `/configuracoes/disponibilidade`, `/configuracoes/whatsapp` (com "Conectar" enquanto pendente) e `/configuracoes/ia#teste-real`, este com "depois do WhatsApp" enquanto o WhatsApp está pendente. **QA H-04 — o checklist não some sem teste.** Deixa de ser possível porque o S-02 fecha: sem prova a IA não liga, e o checklist aparece enquanto a IA não está ativa. `/configuracoes/ia` entrou em `AUTHENTICATED_ROUTES` (`apps/frontend/e2e/routes.ts`). Decisão completa e limites: [D-080](DECISIONS.md).
+
+### Controles negativos, saída real
+
+Os seis controles do §8 do Goal, rodados na rodada 2 **depois da última edição de código**, na própria worktree, um de cada vez. Cada controle copia o arquivo, aplica o defeito (o `diff` abaixo é contra a cópia), roda o teste alvo, restaura a cópia, confere que o `sha256` do arquivo restaurado é igual ao de antes do defeito e roda o mesmo teste de novo. Os controles 1 a 3 rodam `npx vitest run` em `apps/bff` contra PostgreSQL real (`BFF_TEST_DATABASE_URL` num banco descartável de um cluster PostgreSQL 18 em `127.0.0.1`, com `BFF_RUN_INTEGRATION_TESTS=true`); os 4 a 6, jsdom em `apps/frontend`.
+
+1. **`PATCH /v1/settings/ai` volta a ignorar a prova** (`apps/bff/src/modules/settings/routes.ts`):
+```
+187c187
+<         if (!current?.enabled) {
+---
+>         if (false && !current?.enabled) {
+--- com o defeito: npx vitest run tests/goal063-ai-activation.integration.test.ts -t "recusa ligar com sem execução nenhuma"
+exit 1
+ FAIL  tests/goal063-ai-activation.integration.test.ts > Goal063/WU-01: PATCH /v1/settings/ai exige prova válida para ligar > recusa ligar com sem execução nenhuma, sem gravar nada
+AssertionError: expected 200 to be 409 // Object.is equality
+ Test Files  1 failed (1)
+      Tests  1 failed | 12 skipped (13)
+--- restaurado byte a byte (sha256 igual ao de antes)
+--- sem o defeito:
+exit 0
+ Test Files  1 passed (1)
+      Tests  1 passed | 12 skipped (13)
+```
+2. **A prova volta a aceitar execução superada** (`apps/bff/src/lib/ai-activation.ts`, `getValidActivationRun`):
+```
+59,61c59
+<   return run?.state === "SUCCEEDED" && !run.supersededByChannelChange
+<     ? run
+<     : null;
+---
+>   return run?.state === "SUCCEEDED" ? run : null;
+--- com o defeito: npx vitest run tests/goal063-ai-activation.integration.test.ts -t "recusa ligar com execução SUCCEEDED superada por troca de canal"
+exit 1
+ FAIL  tests/goal063-ai-activation.integration.test.ts > Goal063/WU-01: PATCH /v1/settings/ai exige prova válida para ligar > recusa ligar com execução SUCCEEDED superada por troca de canal, sem gravar nada
+AssertionError: expected 200 to be 409 // Object.is equality
+ Test Files  1 failed (1)
+      Tests  1 failed | 12 skipped (13)
+--- restaurado byte a byte (sha256 igual ao de antes)
+--- sem o defeito:
+exit 0
+ Test Files  1 passed (1)
+      Tests  1 passed | 12 skipped (13)
+```
+3. **Pausar deixa de marcar a execução como usada** (`apps/bff/src/modules/settings/routes.ts`):
+```
+209c209
+<           if (run) activatedByRunId = run.id;
+---
+>           if (false && run) activatedByRunId = run.id;
+--- com o defeito: npx vitest run tests/goal063-ai-activation.integration.test.ts -t "pausar"
+exit 1
+ FAIL  tests/goal063-ai-activation.integration.test.ts > Goal063/WU-01: PATCH /v1/settings/ai exige prova válida para ligar > pausar a IA ligada antes deste Goal (sem activatedByRunId), com execução bem-sucedida existente: GET /v1/status não religa
+AssertionError: expected 'ACTIVATED' not to be 'ACTIVATED' // Object.is equality
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed | 11 skipped (13)
+--- restaurado byte a byte (sha256 igual ao de antes)
+--- sem o defeito:
+exit 0
+ Test Files  1 passed (1)
+      Tests  2 passed | 11 skipped (13)
+```
+4. **`contatos-ignorados` volta a concluir o onboarding** (`apps/frontend/src/features/onboarding/blocks/whatsapp.tsx`, ramo "Ir para o teste"):
+```
+248a249,250
+>     await getProductServices().onboarding.complete();
+>     await ctx.refreshSession();
+--- com o defeito: npx vitest run tests/goal063-onboarding-activation.test.tsx -t "sem chamar onboarding.complete"
+exit 1
+ FAIL  tests/goal063-onboarding-activation.test.tsx > contatos-ignorados não conclui: quem conclui é o teste real > Ir para o teste avança sem chamar onboarding.complete()
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed | 14 skipped (16)
+--- restaurado byte a byte (sha256 igual ao de antes)
+--- sem o defeito:
+exit 0
+ Test Files  1 passed (1)
+      Tests  2 passed | 14 skipped (16)
+```
+5. **A tela de sucesso volta a afirmar a ativação sem ler** (`apps/frontend/src/features/activation-test/ActivationTestPanels.tsx`, `ActivationTestSucceeded`):
+```
+482c482
+<   const { icon, text } = aiActiveCopy(view);
+---
+>   const { icon, text } = aiActiveCopy("active");
+--- com o defeito: npx vitest run tests/goal063-onboarding-activation.test.tsx -t "Sua IA está ativa"
+exit 1
+ FAIL  tests/goal063-onboarding-activation.test.tsx > sucesso: "Sua IA está ativa" só depois de GET /v1/status confirmar > status PENDING: não afirma ativa, diz o estado real
+ FAIL  tests/goal063-onboarding-activation.test.tsx > sucesso: "Sua IA está ativa" só depois de GET /v1/status confirmar > status OFF: não afirma ativa, diz o estado real
+ FAIL  tests/goal063-onboarding-activation.test.tsx > sucesso: "Sua IA está ativa" só depois de GET /v1/status confirmar > falha ao ler o status: não afirma ativa nem inventa outro estado
+TestingLibraryElementError: Unable to find an element with the text: /Sua IA está sendo ativada/.
+ Test Files  1 failed (1)
+      Tests  3 failed | 1 passed | 12 skipped (16)
+--- restaurado byte a byte (sha256 igual ao de antes)
+--- sem o defeito:
+exit 0
+ Test Files  1 passed (1)
+      Tests  4 passed | 12 skipped (16)
+```
+6. **Um item do checklist volta a ser texto sem ação** (`apps/frontend/src/features/dashboard/DashboardScreen.tsx`, `PostOnboardingChecklist`):
+```
+785,787c785
+<             <Link className="checklist-link" href={item.href}>
+<               {item.label}
+<             </Link>
+---
+>             <span>{item.label}</span>
+--- com o defeito: npx vitest run tests/goal063-home-checklist.test.tsx -t "checklist"
+exit 1
+ FAIL  tests/goal063-home-checklist.test.tsx > checklist da Home: cada item é uma ação alcançável > tudo pendente: cada item leva ao seu módulo, e o teste espera o WhatsApp
+ FAIL  tests/goal063-home-checklist.test.tsx > checklist da Home: cada item é uma ação alcançável > WhatsApp conectado: a linha dele não oferece 'Conectar' e o teste passa a ser oferecido
+ FAIL  tests/goal063-home-checklist.test.tsx > checklist da Home: cada item é uma ação alcançável > itens concluídos continuam marcados e alcançáveis
+TestingLibraryElementError: Unable to find an accessible element with the role "link" and name "Cadastrar um serviço"
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+--- restaurado byte a byte (sha256 igual ao de antes)
+--- sem o defeito:
+exit 0
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+```
+
+**Por que o controle 3 reprova o teste que reprova.** `-t "pausar"` roda os dois testes de pausa. O primeiro liga a IA por `PATCH` com a execução `run-9` e depois pausa: como ligar já gravou `run-9` em `activatedByRunId`, a pausa sem marcação não muda nada e o teste passa com o defeito. Por isso a rodada 2 acrescentou o caso da IA ligada antes deste Goal (`enabled: true`, `activatedByRunId` nulo) com execução bem-sucedida existente: é nele que a autoativação religaria a IA pausada, e é esse o teste que o controle reprova, pela leitura de `GET /v1/status` (`reconciled: "ACTIVATED"`).
+
+### Vermelho da baseline
+
+O arquivo `apps/bff/tests/goal063-ai-activation.integration.test.ts` final foi rodado contra o código da baseline `1c42689`: `settings/routes.ts`, `ai-activation.ts`, `errors.ts` e `dashboard/routes.ts` (que importa `activationTestCompleted` do mesmo módulo) substituídos por `git show 1c42689:<arquivo>` na worktree, restaurados no mesmo passo e conferidos por `sha256sum -c`, contra PostgreSQL real. Saída: `exit 1`, **11** de **13** reprovam — as cinco recusas (`expected 200 to be 409`), "liga com prova válida" (`expected null to be 'run-42'`), "já ligada" (`expected null to be 'run-7'`), as duas pausas (`expected null to be 'run-9'` e `expected null to be 'run-legacy'`), "a IA religada à mão desliga" (`expected 'CONVERGED' to be 'DEACTIVATED_BY_CHANNEL_CHANGE'`) e "a prova de um negócio nunca liga a IA de outro" (`expected 200 to be 409`). Passam na baseline, como devem, "com prova válida mas sem serviço operacional, recusa 409 CONFLICT" e "a exclusão agendada recusa antes de checar a prova", que provam comportamento que não muda. `apps/frontend` — com os oito arquivos de `src/` que o Goal muda substituídos pelos da baseline `1c42689` e `src/features/activation-test/` retirado, restaurados no mesmo passo e conferidos por `sha256sum -c`: `tests/goal063-ai-settings.test.tsx` reprova **7** de **8** (passa "salvar o estilo com a IA ativa", que a baseline já fazia com o interruptor ligado); `tests/goal063-home-checklist.test.tsx` reprova **3** de **3**; `tests/goal063-onboarding-activation.test.tsx` não carrega na baseline, porque importa o módulo compartilhado que ela não tem.
+
+### Execução final da rodada 2, sobre a árvore final
+
+Na ordem em que rodou:
+
+- `npm run validate:core` — **17** passos, **15** `passed`, **0** `failed`, **2** `skipped` (`test:bff`, que só tem suíte de integração, e `test:health-worker`, sem suíte automatizada), exit 0. Dentro dele:
+  - `test:frontend` — **83** arquivos, **793** testes passando, **0** falhando (baseline review062: **80**/**766**; a diferença são `tests/goal063-onboarding-activation.test.tsx` (**16**), `tests/goal063-ai-settings.test.tsx` (**8**) e `tests/goal063-home-checklist.test.tsx` (**3**));
+  - `test:scheduling-service` — **35** arquivos, **484** testes passando (baseline **35**/**484**);
+  - `test:ai-orchestrator` — **85** arquivos passando e **12** pulados, **1112** testes passando e **88** pulados;
+  - `test:gate-scripts` — **233**/**233** (baseline **233**);
+  - `audit:static` — **34** verificações, **33** passando, **0** falhando, **1** pulada (`production_health`, não pedida).
+- `npm run validate:ui` — **169** passando, **21** pulados, **0** retentativas, exit 0.
+- Depois de `validate:core` e `validate:ui`, a única edição foi no arquivo de teste `apps/bff/tests/goal063-ai-activation.integration.test.ts` (o caso da IA ligada antes do Goal, e a leitura de `GET /v1/status` antes da checagem da linha); `apps/bff` não tem suíte fora da integração, e nenhum arquivo de `src/` mudou depois dessas duas execuções. Em seguida rodaram os seis controles acima.
+- Depois dos controles: `npm run typecheck` e `npm run lint` de `apps/bff` e `apps/frontend`, exit 0 nos quatro; `npm run test:gate` — **233**/**233**; `grep -rn "this\.http\." apps/bff/src/clients/ | wc -l` — **42**.
+- `BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55700/atendly_g063r2final2_test" npm run validate:integration`, contra um cluster PostgreSQL 18 descartável em loopback — **35**/**35** passos `passed`, **0** `failed`, exit 0. Dentro dele: `test:bff-integration` — **50** arquivos, **402** testes passando (baseline review062: **49**/**389**; a diferença é `tests/goal063-ai-activation.integration.test.ts`, **13** testes do §7.1); `test:scheduling-integration` — **16** arquivos, **124** testes passando (baseline **16**/**124**); `rehearse:goal033-authenticated-ui` com **70** testes passando e **0** retentativas (`e2e-results/authenticated/results.json`: `expected` **70**, `unexpected` **0**, `flaky` **0**; baseline **65** — a diferença são as cinco larguras de `/configuracoes/ia`). `goal008-agenda.test.ts` passou.
+
+**Mudanças de teste existente.** `apps/frontend/tests/goal018-onboarding-reachability.test.tsx` (rodada 1): quatro asserções que esperavam `onboarding.complete()` em "Fazer isso depois" do WhatsApp e nos dois botões de `contatos-ignorados` passam a esperar que ele **não** seja chamado, e o CTA "Ir para o início" de `whatsapp-concluido` passa a ser botão que conclui — é a regra do §2. `apps/frontend/tests/goal024-settings-shell-invariant.test.tsx` (rodada 2): o laço que abria a confirmação de pausa pelo checkbox passa a abri-la pelo botão "Pausar atendimento" — o checkbox deixou de existir (§3). Nenhum teste de integração do BFF anterior ao Goal063 foi alterado: a suíte inteira, inclusive `goal011-ai-conversation-style`, `goal018-ai-projection` e `goal025-account-deletion-routes`, passou sem mudança de dublê, porque nenhum deles liga a IA desligada por `PATCH` esperando sucesso sem execução, e a leitura do teste ao pausar não lança (falha dela não impede a pausa).
+
+**Blocker 10 do review063 rodada 1.** `goal029-goal030-rehearsal-guards` reprovava em `test:gate` com "The generated Prisma client of apps/ai-orchestrator is missing": o client gerado não é versionado e não existia na worktree naquela execução. É causa de ambiente: com o client gerado (`validate:core` o gera em `build:ai-orchestrator`), `npm run test:gate` passou **233**/**233** antes e depois dos controles.
+
+### O que esta seção não prova
+
+**Não prova** que o teste real envia e recebe mensagem de verdade: o número oficial da Atendly não existe no ambiente de migração (D-035) e a IA é dublê em todo teste. A conferência humana do §9 do Goal — na pilha local com número da plataforma configurado, o onboarding chegando ao teste pelos dois botões, o teste de Configurações › IA rodando, a IA ligando ao terminar bem e a pausa não sendo desfeita por nova leitura — **não foi feita** por este Goal. Também não prova que `/onboarding/*` cumpre largura, toque, contraste, foco e movimento, porque não é medida; nem que as telas batem com o protótipo aprovado (conferência humana, Goal068).
+
+### Veredito recontado
+
+O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO`** — os mesmos números de §40, com `audit:static` da execução final em **33** de **34** verificações passando e **1** pulada. Nenhum achado de A-01 a A-24 foi tocado, corrigido, reclassificado ou reaberto: esta seção só acrescenta o registro do diff063, e **QA O-49, QA S-02, QA H-03 e QA H-04 corrigidos** são do `QA_LOCAL_REVIEW`, fora dessa enumeração.

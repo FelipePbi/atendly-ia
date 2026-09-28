@@ -39,6 +39,43 @@ export interface AiActivationDeps {
   scheduling: Pick<SchedulingClient, "calendar">;
 }
 
+export type ActivationTestRun = NonNullable<
+  Awaited<ReturnType<AiOrchestratorClient["getActivationTest"]>>
+>;
+
+/**
+ * A prova válida, e só uma (Goal063/WU-01, critério 8).
+ *
+ * `SUCCEEDED` que não foi superada por troca de canal — a mesma checagem que
+ * já decidia a autoativação abaixo e o quarto item do checklist da Home
+ * (`activationTestCompleted`). Nenhum outro lugar do produto define "prova
+ * válida" com regra própria.
+ */
+export async function getValidActivationRun(
+  context: InternalRequestContext,
+  ai: Pick<AiOrchestratorClient, "getActivationTest">,
+): Promise<ActivationTestRun | null> {
+  const run = await ai.getActivationTest(context);
+  return run?.state === "SUCCEEDED" && !run.supersededByChannelChange
+    ? run
+    : null;
+}
+
+/**
+ * Quarto item do checklist pós-onboarding: "teste concluído" (Goal019 §9).
+ *
+ * `true` **só** com execução em `SUCCEEDED` que ainda vale — teste feito
+ * contra um vínculo de WhatsApp que já não é o do negócio não conta, porque o
+ * vault exige teste novo ao trocar/revincular. Sem execução é `false`, que é
+ * "nunca testou", não "falhou": o produtor não fabrica conclusão nenhuma.
+ */
+export async function activationTestCompleted(
+  context: InternalRequestContext,
+  ai: Pick<AiOrchestratorClient, "getActivationTest">,
+): Promise<boolean> {
+  return (await getValidActivationRun(context, ai)) !== null;
+}
+
 /**
  * Reconciliação desired/effective da IA, prevista em D-010 (Goal019 §7).
  *

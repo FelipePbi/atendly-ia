@@ -281,9 +281,11 @@ describe("ShellConfigProvider + Atendente virtual não excede a profundidade de 
       await user.click(screen.getByRole("radio", { name: /^Equilibrada/ }));
     }
 
-    const pauseToggle = screen.getByRole("checkbox");
+    // Goal063 §3: sem interruptor. A IA ativa oferece "Pausar atendimento",
+    // com a mesma confirmação de antes.
+    const pauseButton = screen.getByRole("button", { name: "Pausar atendimento" });
     for (let i = 0; i < 4; i += 1) {
-      await user.click(pauseToggle);
+      await user.click(pauseButton);
       await screen.findByRole("dialog", { name: "Pausar atendimento automático?" });
       await user.click(screen.getByRole("button", { name: "Manter atendimento ativo" }));
     }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
+import { activationTestStartAction } from "@/features/activation-test/ActivationTestPanels";
 import {
   getProductServices,
   useProductRuntime,
@@ -21,7 +22,11 @@ import {
   stepBodyByBlock,
   stepPersistByBlock,
 } from "./blocks/registry";
-import { skipIgnoredContactsStep, skipWhatsappStep } from "./blocks/whatsapp";
+import {
+  completeWithoutWhatsapp,
+  skipIgnoredContactsStep,
+  skipWhatsappStep,
+} from "./blocks/whatsapp";
 import { useOnboardingRuntime } from "./OnboardingRuntime";
 import { OnboardingShell } from "./OnboardingShell";
 import { type OnboardingScenario, onboardingScenarios } from "./scenarios";
@@ -148,6 +153,25 @@ export function OnboardingScreen({
     }
   }
 
+  async function finishWithoutWhatsapp() {
+    setBusy(true);
+    setError(null);
+    try {
+      await completeWithoutWhatsapp({
+        draft,
+        go,
+        refresh,
+        refreshSession,
+        router,
+        setError,
+      });
+    } catch (caught: unknown) {
+      setError(onboardingError(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function logout() {
     await getProductServices()
       .auth.logout()
@@ -179,7 +203,9 @@ export function OnboardingScreen({
     </>
   ) : isActivationTestPaused ? (
     <button className="btn btn-primary" disabled={busy} type="submit">
-      {busy ? "Reiniciando..." : "Reiniciar teste"}
+      {busy
+        ? activationTestStartAction.paused.busy
+        : activationTestStartAction.paused.label}
     </button>
   ) : isActivationTestFailed ? (
     <>
@@ -192,7 +218,9 @@ export function OnboardingScreen({
         {busy ? "Salvando..." : "Fazer isso depois"}
       </button>
       <button className="btn btn-primary" disabled={busy} type="submit">
-        {busy ? "Iniciando..." : "Tentar novamente"}
+        {busy
+          ? activationTestStartAction.failed.busy
+          : activationTestStartAction.failed.label}
       </button>
     </>
   ) : isActivationTestIntro ? (
@@ -211,7 +239,9 @@ export function OnboardingScreen({
         {busy ? "Salvando..." : "Fazer isso depois"}
       </button>
       <button className="btn btn-primary" disabled={busy} type="submit">
-        {busy ? "Iniciando..." : "Iniciar teste"}
+        {busy
+          ? activationTestStartAction.intro.busy
+          : activationTestStartAction.intro.label}
       </button>
     </>
   ) : isWhatsappConclusion ? (
@@ -219,9 +249,14 @@ export function OnboardingScreen({
       <Link className="btn btn-secondary" href="/configuracoes/whatsapp">
         Conectar agora
       </Link>
-      <Link className="btn btn-primary" href="/inicio">
-        Ir para o início
-      </Link>
+      <button
+        className="btn btn-primary"
+        disabled={busy}
+        type="button"
+        onClick={() => void finishWithoutWhatsapp()}
+      >
+        {busy ? "Abrindo..." : "Ir para o início"}
+      </button>
     </>
   ) : isWhatsappIntro ? (
     <>

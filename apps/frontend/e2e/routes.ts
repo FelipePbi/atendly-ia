@@ -49,6 +49,15 @@ export const AUTHENTICATED_ROUTES = [
     sessionMarker: "configuracoes",
     contentMarker: "Configurações",
   },
+  // Goal063 §5: the rehearsal tenant has never run the real test, so the
+  // screen measured here is the "no valid test" state with its own action.
+  // Its shell destination is Configurações, hence the shared sessionMarker.
+  {
+    path: "/configuracoes/ia",
+    name: "configuracoes-ia",
+    sessionMarker: "configuracoes",
+    contentMarker: "Atendente virtual",
+  },
   { path: "/servicos", name: "servicos", sessionMarker: "servicos", contentMarker: "Serviços" },
   {
     path: "/notificacoes",

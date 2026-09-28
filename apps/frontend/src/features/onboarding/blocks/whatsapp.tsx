@@ -244,10 +244,8 @@ export async function persistWhatsappStep(
     return;
   }
   if (scenario === "contatos-ignorados") {
-    // O onboarding é concluído aqui, mas a IA continua desligada: quem a liga
-    // é o teste real que termina bem. A etapa seguinte é o teste.
-    await getProductServices().onboarding.complete();
-    await ctx.refreshSession();
+    // O onboarding só é concluído no teste real que termina bem (Goal063):
+    // esta etapa é opcional e não afirma nada sobre ativação.
     ctx.go("teste-real");
     return;
   }
@@ -256,26 +254,36 @@ export async function persistWhatsappStep(
   }
 }
 
-/** Ação "Fazer isso depois": conclui o onboarding sem exigir o WhatsApp
- * conectado (docs/product-vault/02-Fluxos/01-Onboarding.md §9-10). A IA
- * permanece inativa até uma conexão real acontecer. */
+/** Ação "Fazer isso depois": leva à tela de conclusão sem exigir o WhatsApp
+ * conectado (docs/product-vault/02-Fluxos/01-Onboarding.md §9-10). O
+ * onboarding só é concluído no CTA de `whatsapp-concluido` (Goal063): até
+ * lá, a pessoa ainda pode voltar e conectar. */
 export async function skipWhatsappStep(
+  ctx: OnboardingStepContext,
+): Promise<void> {
+  ctx.go("whatsapp-concluido");
+}
+
+/**
+ * CTA de `whatsapp-concluido`: só aqui o onboarding é concluído sem
+ * WhatsApp. A IA permanece inativa até uma conexão real acontecer.
+ */
+export async function completeWithoutWhatsapp(
   ctx: OnboardingStepContext,
 ): Promise<void> {
   await getProductServices().onboarding.complete();
   await ctx.refreshSession();
-  ctx.go("whatsapp-concluido");
+  ctx.router.replace("/inicio");
 }
 
 /**
  * Pular contatos ignorados: etapa opcional, não bloqueia a conclusão (vault
  * `02-Ativacao-e-Teste-do-WhatsApp.md` §"Contatos ignorados"). Nenhuma
- * marcação é gravada ao pular.
+ * marcação é gravada ao pular. O onboarding só é concluído no teste real que
+ * termina bem (Goal063).
  */
 export async function skipIgnoredContactsStep(
   ctx: OnboardingStepContext,
 ): Promise<void> {
-  await getProductServices().onboarding.complete();
-  await ctx.refreshSession();
   ctx.go("teste-real");
 }

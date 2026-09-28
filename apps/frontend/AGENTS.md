@@ -169,8 +169,9 @@ provaria layout sobre dado que ninguém vê.
 
 ## O gate autenticado (dentro de `validate:integration`)
 
-As sete telas logadas (`/inicio`, `/agenda`, `/clientes`, `/conversas`,
-`/configuracoes`, `/servicos`, `/notificacoes`, `AUTHENTICATED_ROUTES` em
+As oito telas logadas (`/inicio`, `/agenda`, `/clientes`, `/conversas`,
+`/configuracoes`, `/configuracoes/ia` — desde o Goal063, no estado sem teste
+válido —, `/servicos`, `/notificacoes`, `AUTHENTICATED_ROUTES` em
 `e2e/routes.ts`) são medidas por `e2e/authenticated-matrix.spec.ts`, com a
 mesma régua (`e2e/measure.ts`) e as mesmas cinco larguras. Ele roda como o
 passo `rehearse:goal033-authenticated-ui` de `npm run validate:integration`,

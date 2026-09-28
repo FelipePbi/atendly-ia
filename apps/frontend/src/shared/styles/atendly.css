@@ -2853,9 +2853,10 @@ p {
 }
 .checklist-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
+  gap: 4px 12px;
+  padding: 4px 14px;
   border: 1px solid var(--border);
   border-radius: var(--r-input);
   background: var(--surface-secondary);
@@ -2874,6 +2875,23 @@ p {
   align-items: center;
   justify-content: center;
   flex: none;
+}
+.checklist-link {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  color: inherit;
+  font-weight: 600;
+  text-decoration: inherit;
+}
+.checklist-hint {
+  color: var(--fg-soft);
+  font-size: 13px;
+}
+.checklist-item .btn {
+  min-height: 44px;
 }
 .checklist-item.is-done .checklist-marker {
   background: var(--accent);

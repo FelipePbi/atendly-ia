@@ -1586,7 +1586,9 @@ aditiva, e o contrato público mudou em três pontos aditivos mais uma remoção
 - **LIMITE:** ativação por teste real, autoativação, demonstração da IA, consentimento/contatos
   ignorados no onboarding, reconciliação automática desired/effective e o item "teste concluído" do
   checklist são do **Goal019**. `PATCH /v1/settings/ai` mantém a regra vigente — ao menos um
-  serviço operacional — e nada mais.
+  serviço operacional — e nada mais. (**Superado no Goal063**, [D-080](DECISIONS.md): na
+  passagem desligada → ligada, `PATCH /v1/settings/ai` também exige prova do teste real e
+  recusa com `409 AI_ACTIVATION_TEST_REQUIRED`; ver o delta do Goal063 no fim deste documento.)
 - **LIMITE:** em `PATCH /v1/settings/ai`, falha de projeção continua não marcando `PENDING` em
   `contextProjectionStatus`; o estado só fica observável por `GET /v1/status` (`ai.state`).
 - **LIMITE:** a migration foi aplicada em PostgreSQL descartável recriado do zero pelo gate
@@ -1673,7 +1675,11 @@ abaixo. Há **três migrations** na IA e **uma** no BFF, todas aditivas e sem ba
   `demonstracao-da-ia`, `contatos-ignorados` e as cinco telas do teste real (`teste-real`,
   `teste-real-progresso`, `teste-real-interferencia`, `teste-real-falha`, `teste-real-sucesso`).
   A leitura de progresso tem intervalo próprio e **para** em estado terminal; continua existindo um
-  poller de `GET /v1/status` por árvore renderizada.
+  poller de `GET /v1/status` por árvore renderizada. (**Corrigido no Goal063**,
+  [D-080](DECISIONS.md), QA O-49: até a baseline do Goal063, "Continuar" e "Pular esta etapa" em
+  `contatos-ignorados` concluíam o onboarding antes de `teste-real`, e `ProductRuntimeProvider`
+  mandava a rota para `/inicio`, então as telas do teste e `whatsapp-concluido` eram
+  inalcançáveis pelo fluxo. Desde o Goal063 o onboarding só é concluído pela ação que sai dele.)
 
 - **LIMITE:** nada disso prova envio real. Nenhum WhatsApp real, número da plataforma real, modelo
   real ou CI hospedada foi exercitado: a porta de envio e a IA são exercitadas contra dublê, e o
@@ -6228,3 +6234,94 @@ lease nem a leitura do preview (D-078).
   QA IM-10, QA IM-11 e QA CL-04 corrigidos, e QA CL-05 corrigido só na
   busca**, fora da contagem A-01…A-24 — ver
   [FINAL_AUDIT §40](FINAL_AUDIT.md).
+
+## Delta implementado — Goal063, 2026-09-27 ([D-080](DECISIONS.md), ACCEPTED)
+
+Corrige **QA O-49**, **QA S-02**, **QA H-03** e **QA H-04** do
+[QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md) (fora da enumeração A-01…A-24 do
+FINAL_AUDIT): a IA só passa de desligada a ligada com prova do teste real,
+por qualquer caminho; pausar fica pausado; o teste é alcançável no
+onboarding e em Configurações › IA enquanto a IA não está ativa; e o
+checklist da Home leva a cada módulo. Aplica U-11 e revê D-035 na parte
+"teste real só no onboarding". Toca `apps/bff/` (`PATCH /v1/settings/ai`,
+`lib/ai-activation.ts`, `lib/errors.ts`, `modules/dashboard/routes.ts` e
+`PUBLIC_API_V1.md`) e `apps/frontend/` (onboarding, módulo compartilhado
+`features/activation-test/`, Configurações › IA, checklist da Home e o gate
+autenticado). Não toca `apps/ai-orchestrator/`, `apps/scheduling-service/`,
+`apps/evolution-go/`, as rotas do teste real, `WhatsAppConnectionPanel` nem
+as rotas de WhatsApp do BFF. Nenhuma migration.
+
+- **Regra de ativação (§1)** — `PATCH /v1/settings/ai` com `enabled: true`,
+  na passagem desligada → ligada, exige prova válida lida por
+  `getValidActivationRun` (a mesma função de `activationTestCompleted`):
+  execução `SUCCEEDED` não superada por troca de canal. Sem prova, ou com a
+  leitura falhando, recusa com `409 AI_ACTIVATION_TEST_REQUIRED` sem gravar
+  nada. Ordem: exclusão, prova, serviço operacional; as duas recusas antigas
+  não mudam. Ligar grava `activatedByRunId`; já ligada, só o estilo muda.
+- **Pausa (§1)** — `enabled: false` grava a execução válida corrente em
+  `activatedByRunId`, e a reconciliação de `GET /v1/status` não religa; um
+  teste novo bem-sucedido depois da pausa continua ligando. A IA religada à
+  mão desliga com a troca de canal (`DEACTIVATED_BY_CHANNEL_CHANGE`).
+- **Onboarding (§2)** — "Continuar" e "Pular esta etapa" em
+  `contatos-ignorados` vão a `teste-real` sem concluir; a conclusão acontece
+  no CTA de `teste-real-sucesso`, em "Fazer isso depois" das telas do teste e
+  no CTA de `whatsapp-concluido`, mostrada antes da conclusão. A retomada lê
+  a execução corrente; a tela de sucesso só diz "Sua IA está ativa" depois
+  de `GET /v1/status` confirmar.
+- **Configurações › IA (§3)** — sem interruptor. IA ativa: "Pausar
+  atendimento" com confirmação; pausada com prova: "Retomar atendimento";
+  sem prova: o teste real, ou `/configuracoes/whatsapp` sem WhatsApp. A
+  recusa `AI_ACTIVATION_TEST_REQUIRED` relê o estado. Salvar o estilo envia
+  o ligado lido. Introdução, progresso, pausa por interferência, falha,
+  sucesso e as ações que (re)começam o teste moram em
+  `features/activation-test/ActivationTestPanels.tsx`, usado pelo onboarding
+  e por Configurações.
+- **Checklist (§4)** — cada item é link para `/servicos`,
+  `/configuracoes/disponibilidade`, `/configuracoes/whatsapp` ("Conectar" na
+  linha enquanto pendente) e `/configuracoes/ia#teste-real`, com "depois do
+  WhatsApp" enquanto o WhatsApp está pendente; concluído continua
+  alcançável.
+- **Gate autenticado (§5)** — `/configuracoes/ia` entrou em
+  `AUTHENTICATED_ROUTES`, medida no estado sem prova válida; a sessão é
+  conferida pelo `sessionMarker` da rota. Nenhuma rota saiu e nenhuma medida
+  foi desligada.
+- **Controles negativos (§8)**, rodados na rodada 2 depois da última edição
+  de código, com cada arquivo restaurado conferido por `sha256`; saída colada
+  em [FINAL_AUDIT §41](FINAL_AUDIT.md). (1) `PATCH` ignorando a prova e (2)
+  a prova aceitando execução superada: cada um reprova o seu caso de recusa
+  em `tests/goal063-ai-activation.integration.test.ts` contra PostgreSQL
+  real (`expected 200 to be 409`); (3) pausar sem marcar a execução: reprova
+  **1** de **2** alvos, o caso da IA ligada antes do Goal, com `GET
+  /v1/status` religando (`ACTIVATED`); (4) `contatos-ignorados` concluindo:
+  reprova "Ir para o teste avança sem chamar onboarding.complete()"; (5)
+  sucesso afirmando sem ler: reprova **3** de **4** alvos; (6) checklist sem
+  ação: reprova **3** de **3** em `tests/goal063-home-checklist.test.tsx`.
+  Sem o defeito, cada alvo volta a passar por inteiro.
+- **Execução final (rodada 2), sobre a árvore final** — `npm run
+  validate:core` — **17** passos, **15** `passed`, **0** `failed`, **2**
+  `skipped` (`test:bff`, `test:health-worker`), exit 0; dentro dele,
+  `test:frontend` em **83** arquivos e **793** testes (baseline review062:
+  **80**/**766**), `test:scheduling-service` em **35**/**484**,
+  `test:ai-orchestrator` em **85** arquivos passando e **12** pulados,
+  **1112** testes passando e **88** pulados, `test:gate-scripts` em
+  **233**/**233** e `audit:static` em **33** de **34** verificações passando
+  e **1** pulada. `npm run validate:ui` — **169** passando, **21** pulados,
+  **0** retentativas. Depois dos controles: `typecheck` e `lint` de
+  `apps/bff` e `apps/frontend`, exit 0 nos quatro; `npm run test:gate` —
+  **233**/**233**; `validate:integration` contra um PostgreSQL 18
+  descartável em loopback — **35**/**35** passos, exit 0, com
+  `test:bff-integration` em **50** arquivos e **402** testes (baseline
+  **49**/**389**), `test:scheduling-integration` em **16**/**124** e
+  `rehearse:goal033-authenticated-ui` em **70** expected, **0** unexpected,
+  **0** flaky e **0** retentativas (baseline **65**). `this.http.` em
+  `apps/bff/src/clients/` segue **42**.
+- **Conferência humana pendente:** a conferência do §9 do Goal — na pilha
+  local com número da plataforma configurado, o onboarding chegando ao
+  teste pelos dois botões, o teste de Configurações › IA rodando, a IA
+  ligando ao terminar bem e a pausa não sendo desfeita por nova leitura —
+  **não foi feita** por este Goal.
+- **Limites declarados:** IA ligada antes deste Goal sem teste continua
+  ligada; o envio real não tem prova; `/onboarding/*` segue fora do gate
+  renderizado — ver [D-080](DECISIONS.md). **QA O-49, QA S-02, QA H-03 e
+  QA H-04 corrigidos**, fora da contagem A-01…A-24 — ver
+  [FINAL_AUDIT §41](FINAL_AUDIT.md).

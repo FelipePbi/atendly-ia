@@ -4,6 +4,10 @@ import { z } from "zod";
 import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
 import { SchedulingClient } from "../../clients/scheduling/index.js";
 import {
+  type ActivationTestRun,
+  getValidActivationRun,
+} from "../../lib/ai-activation.js";
+import {
   aiConversationStyleSchema,
   normalizeStoredAiConversationStyle,
   parseBodyWithAiConversationStyle,
@@ -16,7 +20,7 @@ import {
   businessModalitySchema,
   resolveBusinessProfileFields,
 } from "../../lib/business-profile.js";
-import { AppError } from "../../lib/errors.js";
+import { AppError, toErrorMessage } from "../../lib/errors.js";
 import { dataResponse, parseBody } from "../../lib/http.js";
 import { getPrisma } from "../../lib/prisma.js";
 import {
@@ -166,14 +170,27 @@ export async function registerV1SettingsRoutes(
     async (request) => {
       const body = parseBodyWithAiConversationStyle(aiSchema, request.body);
       const tenant = currentTenantContext(request);
+      let activatedByRunId: string | undefined;
       if (body.enabled) {
         // Goal025 §3: conta em exclusao nao religa a IA por nenhum caminho, e
         // este e o unico caminho de pedido humano que grava `enabled: true`.
-        // Antes da checagem de servico operacional de proposito: a exclusao e
-        // sobre a conta inteira, e perguntar ao Scheduling se da para ativar
-        // uma conta que esta sendo apagada nao faz sentido nem em ordem nem em
-        // custo.
+        // Antes de qualquer outra checagem de proposito: a exclusao e sobre a
+        // conta inteira, e perguntar se da para ativar uma conta que esta
+        // sendo apagada nao faz sentido nem em ordem nem em custo.
         await assertAiActivationNotBlockedByDeletion(tenant.tenantId);
+        const current = await getPrisma().aiSettings.findUnique({
+          where: { tenantId: tenant.tenantId },
+        });
+        // Prova valida so e exigida na passagem desligada -> ligada
+        // (Goal063/WU-01, criterio 4). Ja ligada, o pedido so troca o estilo:
+        // nem prova nova nem `activatedByRunId` mudam.
+        if (!current?.enabled) {
+          const run = await getValidActivationRunOrRefuse(
+            internalContext(request),
+            ai,
+          );
+          activatedByRunId = run.id;
+        }
         const calendar = await scheduling.calendar(internalContext(request));
         if (!calendar.capabilities.aiActivationReady) {
           throw new AppError(
@@ -182,6 +199,17 @@ export async function registerV1SettingsRoutes(
             409,
           );
         }
+      } else {
+        // Pausar grava a execucao valida corrente (se houver) como ja usada,
+        // para a reconciliacao (Goal019 §7) nunca desfazer a pausa humana com
+        // a mesma prova que a ligou (Goal063/WU-01). Leitura falhando nao
+        // bloqueia pausar; so deixa de marcar a execucao como consumida.
+        try {
+          const run = await getValidActivationRun(internalContext(request), ai);
+          if (run) activatedByRunId = run.id;
+        } catch {
+          // Pausar segue sem a marcacao; nao e recusa de leitura como ligar.
+        }
       }
       await getPrisma().aiSettings.upsert({
         where: { tenantId: tenant.tenantId },
@@ -189,10 +217,12 @@ export async function registerV1SettingsRoutes(
           tenantId: tenant.tenantId,
           enabled: body.enabled,
           tone: body.tone,
+          ...(activatedByRunId ? { activatedByRunId } : {}),
         },
         update: {
           enabled: body.enabled,
           tone: body.tone,
+          ...(activatedByRunId ? { activatedByRunId } : {}),
         },
       });
       const projected = await syncAi(request, ai);
@@ -412,6 +442,39 @@ async function syncAi(
     );
     return false;
   }
+}
+
+/**
+ * A prova exigida para ligar a IA por `PATCH /v1/settings/ai` (Goal063/WU-01).
+ *
+ * Recusa com `409 AI_ACTIVATION_TEST_REQUIRED` sem gravar nada: sem execucao,
+ * execucao `FAILED`/`PAUSED_BY_HUMAN`, execucao `SUCCEEDED` superada por troca
+ * de canal, ou leitura do teste que falhou — os quatro casos do criterio 1
+ * caem no mesmo `catch`, porque `getValidActivationRun` nunca lanca por causa
+ * de estado, so por falha de leitura, e ausencia de prova valida e `null`.
+ */
+async function getValidActivationRunOrRefuse(
+  context: ReturnType<typeof internalContext>,
+  ai: AiOrchestratorClient,
+): Promise<ActivationTestRun> {
+  let run: ActivationTestRun | null;
+  try {
+    run = await getValidActivationRun(context, ai);
+  } catch (error) {
+    throw new AppError(
+      "AI_ACTIVATION_TEST_REQUIRED",
+      `A successful, still-valid real activation test is required before turning the AI on: ${toErrorMessage(error)}`,
+      409,
+    );
+  }
+  if (!run) {
+    throw new AppError(
+      "AI_ACTIVATION_TEST_REQUIRED",
+      "A successful, still-valid real activation test is required before turning the AI on.",
+      409,
+    );
+  }
+  return run;
 }
 
 function assertTimezone(value: string): void {

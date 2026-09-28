@@ -18,6 +18,8 @@ import type {
 } from "@/data";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
+import { activationTestScenarioFor } from "./blocks/activation-test";
+
 export type OnboardingDraft = {
   businessAddress: string;
   businessCategory: string;
@@ -132,11 +134,42 @@ export function useOnboardingRuntime() {
 export function OnboardingResume() {
   const router = useRouter();
   const { error, loading, state } = useOnboardingRuntime();
+  const [resumeError, setResumeError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!state) return;
-    router.replace(`/onboarding/${nextRequiredStep(state)}`);
+    const fallback = nextRequiredStep(state);
+    // Só há execução para conferir depois que WhatsApp conecta e as demais
+    // etapas terminam: é o único caso em que `nextRequiredStep` aponta para
+    // `contatos-ignorados`. Antes disso, a retomada não lê o teste — não há
+    // execução possível sem WhatsApp.
+    if (fallback !== "contatos-ignorados") {
+      router.replace(`/onboarding/${fallback}`);
+      return;
+    }
+    let active = true;
+    getProductServices()
+      .activationTest.get()
+      .then((run) => {
+        if (!active) return;
+        router.replace(
+          `/onboarding/${run ? activationTestScenarioFor(run) : fallback}`,
+        );
+      })
+      .catch(() => {
+        // Falha de leitura não vira sucesso nem falha: a tela fica aqui,
+        // sem redirecionar para um estado que ninguém confirmou.
+        if (active) {
+          setResumeError("Não foi possível retomar sua configuração.");
+        }
+      });
+    return () => {
+      active = false;
+    };
   }, [router, state]);
+
   if (error) return <RuntimeMessage message={error} />;
+  if (resumeError) return <RuntimeMessage message={resumeError} />;
   return (
     <RuntimeMessage
       message={loading ? "Carregando configuração..." : "Continuando..."}

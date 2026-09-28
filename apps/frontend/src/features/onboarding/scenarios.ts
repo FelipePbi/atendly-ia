@@ -121,7 +121,7 @@ export const onboardingScenarios = {
   "teste-real-sucesso": [
     "Teste concluído",
     "Tudo pronto!",
-    "Sua IA está ativa e pronta para atender seus clientes.",
+    "Sua IA conversou com o cliente de teste. Veja abaixo o estado real da ativação.",
     "activation-test-succeeded",
   ],
   "whatsapp-concluido": [

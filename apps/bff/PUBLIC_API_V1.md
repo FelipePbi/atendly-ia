@@ -514,7 +514,7 @@ Toda recusa tem código próprio e nenhuma vira `500` para o consumidor. `ACTIVA
 
 | Código | Onde aparece | `error.statusCode` | Significado | Como se resolve |
 | --- | --- | --- | --- | --- |
-| `ACTIVATION_TEST_AI_ALREADY_ACTIVE` | `error.code` | `409` | a IA já está ativa para o negócio (`AiSettings.enabled`, o desejado gravado pelo BFF); testar não é ferramenta recorrente depois que a IA está no ar | desligar a IA em `PATCH /v1/settings/ai` antes de testar de novo, ou reconectar/trocar o WhatsApp, que volta a exigir teste |
+| `ACTIVATION_TEST_AI_ALREADY_ACTIVE` | `error.code` | `409` | a IA já está ativa para o negócio (`AiSettings.enabled`, o desejado gravado pelo BFF); testar não é ferramenta recorrente depois que a IA está no ar | desligar a IA em `PATCH /v1/settings/ai` antes de testar de novo, ou reconectar/trocar o WhatsApp, que volta a exigir teste. Por esta mesma recusa, Configurações › IA só oferece o teste enquanto a IA não está ativa (Goal063) |
 | `PLATFORM_NUMBER_NOT_CONFIGURED` | `error.details.upstreamCode` | `502` (a IA falhou com `503`) | a instância oficial da Atendly não está configurada neste ambiente | configuração de ambiente, fora do autoatendimento; a tela diz que o teste não está disponível, sem simular progresso |
 | `ACTIVATION_TEST_WHATSAPP_NOT_CONNECTED` | `error.details.upstreamCode` | `409` | não há vínculo de WhatsApp ativo para o negócio | conectar o WhatsApp (`POST /v1/whatsapp/connect`) antes de testar |
 | `ACTIVATION_TEST_TENANT_PHONE_UNKNOWN` | `error.details.upstreamCode` | `409` | `tenantPhone` enviado está vazio (depois de normalizado) ou é igual ao número da própria plataforma | enviar o número real do WhatsApp do negócio |
@@ -523,6 +523,18 @@ Toda recusa tem código próprio e nenhuma vira `500` para o consumidor. `ACTIVA
 | `ACTIVATION_TEST_ALREADY_RUNNING` | `error.details.upstreamCode` | `409` | já existe execução viva (em andamento ou pausada) para o negócio | ler `GET /v1/activation-test`; se estiver pausada, `POST /v1/activation-test/restart` |
 
 `202` é a única resposta de sucesso das duas rotas de escrita: a execução foi persistida e passa a rodar no servidor, sem confirmação de resultado nesta mesma resposta.
+
+## `PATCH /v1/settings/ai` exige prova do teste real (Goal063/WU-01)
+
+Ligar a IA à mão (`enabled: true` na passagem desligada → ligada) passa a exigir a mesma prova válida da autoativação da Home (D-010): uma execução do teste real em `SUCCEEDED` que ainda vale para o WhatsApp de hoje — não superada por troca ou revínculo de canal. Sem essa prova a rota recusa com `409 AI_ACTIVATION_TEST_REQUIRED`, **sem gravar nada** em `AiSettings`, nos quatro casos: nenhuma execução (`data: null` em `GET /v1/activation-test`), execução `FAILED` ou `PAUSED_BY_HUMAN`, execução `SUCCEEDED` já superada por troca de canal, ou a leitura da execução falhando. A checagem roda **depois** da recusa de exclusão agendada e **antes** da recusa de serviço operacional (`409 CONFLICT` sem `details`, inalterada) — nesta ordem: exclusão, prova, serviço.
+
+Ligar com prova válida grava `activatedByRunId` com o id da execução usada, no mesmo campo que a autoativação da Home já preenche — a mesma execução não liga a IA duas vezes, pelo mesmo motivo em qualquer um dos dois caminhos. `enabled: true` com a IA **já** ligada (troca só de `tone`) não exige prova nova e não muda `activatedByRunId`.
+
+Desligar (`enabled: false`, "Pausar") grava `activatedByRunId` da execução válida corrente, se houver uma — para a reconciliação de ativação (`reconcileAiActivation`) nunca desfazer uma pausa humana religando a IA com a mesma prova que já a tinha ligado. Uma IA religada à mão volta a desligar sozinha se a execução que a autorizou for superada por troca de canal (`DEACTIVATED_BY_CHANNEL_CHANGE`, inalterado).
+
+**O teste real fora do onboarding (Goal063, U-11).** As rotas `GET/POST /v1/activation-test` e `POST /v1/activation-test/restart` não mudam e nunca olharam o onboarding. O que muda é quem as oferece: além do onboarding, Configurações › IA oferece o mesmo teste **enquanto a IA não está ativa** — sem prova válida e com WhatsApp conectado. Com a IA ativa a tela não mostra entrada para o teste, e o BFF continua recusando com `ACTIVATION_TEST_AI_ALREADY_ACTIVE`. Um teste novo bem-sucedido depois de uma pausa continua ligando a IA pela reconciliação, como antes. O cliente trata `409 AI_ACTIVATION_TEST_REQUIRED` relendo o estado (`GET /v1/settings` e `GET /v1/activation-test`), nunca como erro genérico. O onboarding só é concluído (`POST /v1/onboarding/complete`) pela ação que sai dele, depois da etapa do teste; a regra é do cliente e não muda a rota.
+
+**Limites.** IA ligada antes do Goal063 sem teste continua ligada: não há regra retroativa nem migration. Salvar só o estilo com a IA já ligada nunca é recusado por falta de teste. Que o teste envia e recebe mensagem de verdade não é provado por teste automatizado, porque o número oficial da Atendly não existe no ambiente de migração (D-035); essa conferência humana **não foi feita** pelo Goal063.
 
 ## Checklist pós-onboarding da Home (Goal018/WU-10)
 
@@ -930,4 +942,4 @@ Cancelar **não restaura nada**: o WhatsApp continua desconectado e a IA continu
 
 `GET /v1/status` devolve o mesmo estado sob `accountDeletion`, para a tela contar os dias sem precisar de uma leitura própria — ver a seção "Status honesto do WhatsApp e da IA" acima.
 
-Enquanto o estado é `SCHEDULED`, **nenhum caminho religa a IA do negócio**. `PATCH /v1/settings/ai` com `enabled: true` recusa com `409 CONFLICT` — o mesmo código e a mesma forma com que já recusava sem serviço operacional, sem `details` novo —, e a reconciliação de ativação mantém o desejado em `false`. Cancelar dentro do prazo devolve a conta ao estado normal: a partir daí `PATCH /v1/settings/ai` volta a valer exatamente como antes, e religar a IA continua exigindo reconectar o WhatsApp e refazer o teste real de ativação.
+Enquanto o estado é `SCHEDULED`, **nenhum caminho religa a IA do negócio**. `PATCH /v1/settings/ai` com `enabled: true` recusa com `409 CONFLICT` — o mesmo código e a mesma forma com que já recusava sem serviço operacional, sem `details` novo —, e a reconciliação de ativação mantém o desejado em `false`. Cancelar dentro do prazo devolve a conta ao estado normal: a partir daí `PATCH /v1/settings/ai` volta a valer exatamente como antes, e religar a IA continua exigindo reconectar o WhatsApp e refazer o teste real de ativação. Desde o Goal063, "como antes" inclui a prova do teste real: ligar a IA por `PATCH /v1/settings/ai` exige execução `SUCCEEDED` não superada por troca de canal (seção "`PATCH /v1/settings/ai` exige prova do teste real" acima), e a exclusão agendada continua sendo checada antes dela.

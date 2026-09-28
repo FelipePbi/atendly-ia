@@ -116,9 +116,11 @@ const CONTENT_TIMEOUT_MS = 20_000;
  * structural check would call that ready. Naming the seeded row means the
  * gate measures the screen with content on it.
  *
- * `/inicio`, `/configuracoes` and `/notificacoes` are absent on purpose: the
- * first two are proven by the heading their loaded branch renders (their
- * loading and error branches render different headings), and the notification
+ * `/inicio`, `/configuracoes`, `/configuracoes/ia` and `/notificacoes` are
+ * absent on purpose: the first three are proven by the heading their loaded
+ * branch renders (their loading and error branches render different
+ * headings) — `/configuracoes/ia` also holds `aria-busy` on its activation
+ * panel until the test and WhatsApp reads arrive —, and the notification
  * texts are produced by the platform, not by the rehearsal's fixture, so
  * there is no seeded string to name.
  */
@@ -403,9 +405,11 @@ async function proveAuthenticatedScreen(page: Page, route: AuthenticatedRoute): 
     .toBe(route.path);
 
   // Only the authenticated shell marks a destination as the current page; the
-  // "Verificando seu acesso" screen has no navigation at all.
+  // "Verificando seu acesso" screen has no navigation at all. The destination
+  // is the route's `sessionMarker`, which a nested screen shares with its
+  // module (`/configuracoes/ia` marks Configurações).
   await expect(
-    page.locator(`a[href="${route.path}"][aria-current="page"]`).first(),
+    page.locator(`a[href="/${route.sessionMarker}"][aria-current="page"]`).first(),
     `the authenticated shell did not mark "${route.sessionMarker}" as the current destination within `
       + `${SESSION_TIMEOUT_MS}ms: the session marker is missing, so this is not a logged-in screen.`,
   ).toBeAttached({ timeout: SESSION_TIMEOUT_MS });

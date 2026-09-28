@@ -691,7 +691,16 @@ function RealDashboard({
   );
 }
 
-type ChecklistItem = { done: boolean; key: string; label: string };
+type ChecklistItem = {
+  /** Ação na própria linha, além do link do item, enquanto ela couber. */
+  action?: { href: string; label: string };
+  done: boolean;
+  href: string;
+  /** Por que o item ainda não tem ação: dito, nunca escondido. */
+  hint?: string;
+  key: string;
+  label: string;
+};
 
 /**
  * Checklist pós-onboarding do vault (`docs/product-vault/02-Fluxos/01-Onboarding.md`):
@@ -703,6 +712,10 @@ type ChecklistItem = { done: boolean; key: string; label: string };
  * teste real em `SUCCEEDED` e ainda válida para o WhatsApp de hoje. Ausente na
  * resposta (dependência indisponível) é `false` — "não sei" nunca vira
  * "concluído".
+ *
+ * Cada item leva ao módulo que o resolve (Goal063 §4), concluído ou não: o
+ * link é o próprio nome do item. O teste mora em Configurações › IA, e só é
+ * oferecido depois do WhatsApp, que é o que ele usa para conversar.
  */
 function PostOnboardingChecklist({
   capabilities,
@@ -711,24 +724,37 @@ function PostOnboardingChecklist({
   capabilities: CalendarState["capabilities"] | null;
   whatsappActive: boolean;
 }) {
+  const testDone = Boolean(capabilities?.activationTestCompleted);
   const items: ChecklistItem[] = [
     {
       done: Boolean(capabilities?.aiActivationReady),
+      href: "/servicos",
       key: "service",
       label: "Cadastrar um serviço",
     },
     {
       done: Boolean(capabilities?.hoursConfigured),
+      href: "/configuracoes/disponibilidade",
       key: "hours",
       label: "Definir horários de atendimento",
     },
     {
+      action: whatsappActive
+        ? undefined
+        : { href: "/configuracoes/whatsapp", label: "Conectar" },
       done: whatsappActive,
+      href: "/configuracoes/whatsapp",
       key: "whatsapp",
       label: "Conectar o WhatsApp",
     },
     {
-      done: Boolean(capabilities?.activationTestCompleted),
+      action:
+        whatsappActive && !testDone
+          ? { href: "/configuracoes/ia#teste-real", label: "Fazer o teste" }
+          : undefined,
+      done: testDone,
+      hint: whatsappActive || testDone ? undefined : "depois do WhatsApp",
+      href: "/configuracoes/ia#teste-real",
       key: "activation-test",
       label: "Concluir o teste da IA",
     },
@@ -756,7 +782,15 @@ function PostOnboardingChecklist({
             <span className="checklist-marker" aria-hidden="true">
               {item.done && <Icon name="check" />}
             </span>
-            <span aria-hidden="true">{item.label}</span>
+            <Link className="checklist-link" href={item.href}>
+              {item.label}
+            </Link>
+            {item.hint && <span className="checklist-hint">{item.hint}</span>}
+            {item.action && (
+              <Link className="btn btn-secondary" href={item.action.href}>
+                {item.action.label}
+              </Link>
+            )}
           </li>
         ))}
       </ul>

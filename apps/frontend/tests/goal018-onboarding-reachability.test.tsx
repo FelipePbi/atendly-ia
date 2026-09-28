@@ -555,7 +555,7 @@ describe("o encadeamento real de dados-do-negocio até validação", () => {
     expect(push).toHaveBeenCalledWith("/onboarding/whatsapp-conectar");
   });
 
-  test("whatsapp: Fazer isso depois conclui o onboarding e leva a whatsapp-concluido", async () => {
+  test("whatsapp: Fazer isso depois leva a whatsapp-concluido sem concluir o onboarding ainda", async () => {
     const user = userEvent.setup();
     renderScreen(
       "whatsapp",
@@ -570,12 +570,15 @@ describe("o encadeamento real de dados-do-negocio até validação", () => {
       await screen.findByRole("button", { name: "Fazer isso depois" }),
     );
 
-    expect(completeOnboarding).toHaveBeenCalled();
-    expect(refreshSession).toHaveBeenCalled();
+    // A conclusão fica para o CTA de whatsapp-concluido (Goal063): até lá a
+    // pessoa ainda pode voltar e conectar.
+    expect(completeOnboarding).not.toHaveBeenCalled();
+    expect(refreshSession).not.toHaveBeenCalled();
     expect(push).toHaveBeenCalledWith("/onboarding/whatsapp-concluido");
   });
 
-  test("whatsapp-concluido mostra a copy do vault com as duas ações", async () => {
+  test("whatsapp-concluido mostra a copy do vault com as duas ações, e o CTA de início conclui o onboarding", async () => {
+    const user = userEvent.setup();
     renderScreen(
       "whatsapp-concluido",
       stateFixture({
@@ -597,11 +600,16 @@ describe("o encadeamento real de dados-do-negocio até validação", () => {
       ),
     ).toBeVisible();
     expect(
-      screen.getByRole("link", { name: "Ir para o início" }),
-    ).toHaveAttribute("href", "/inicio");
-    expect(
       screen.getByRole("link", { name: "Conectar agora" }),
     ).toHaveAttribute("href", "/configuracoes/whatsapp");
+
+    await user.click(
+      screen.getByRole("button", { name: "Ir para o início" }),
+    );
+
+    expect(completeOnboarding).toHaveBeenCalled();
+    expect(refreshSession).toHaveBeenCalled();
+    expect(replace).toHaveBeenCalledWith("/inicio");
   });
 
   test("whatsapp-conectar conectado avança para contatos-ignorados, sem concluir ainda", async () => {
@@ -716,13 +724,13 @@ describe("o encadeamento real de dados-do-negocio até validação", () => {
 
     expect(setIgnoredConversation).not.toHaveBeenCalled();
     expect(ignoreByPhone).not.toHaveBeenCalled();
-    expect(completeOnboarding).toHaveBeenCalled();
-    // Pular a etapa opcional não pula o teste real: o vault põe o teste
-    // **depois** dos contatos ignorados, e é ele que ativa a IA.
+    // Nem pular nem continuar concluem o onboarding aqui (Goal063): só o
+    // teste real que termina bem ativa a IA e conclui.
+    expect(completeOnboarding).not.toHaveBeenCalled();
     expect(push).toHaveBeenCalledWith("/onboarding/teste-real");
   });
 
-  test("contatos-ignorados: concluir configuração finaliza o onboarding", async () => {
+  test("contatos-ignorados: Ir para o teste avança sem concluir o onboarding", async () => {
     const user = userEvent.setup();
     renderScreen(
       "contatos-ignorados",
@@ -739,8 +747,8 @@ describe("o encadeamento real de dados-do-negocio até validação", () => {
       await screen.findByRole("button", { name: "Ir para o teste" }),
     );
 
-    expect(completeOnboarding).toHaveBeenCalled();
-    expect(refreshSession).toHaveBeenCalled();
+    expect(completeOnboarding).not.toHaveBeenCalled();
+    expect(refreshSession).not.toHaveBeenCalled();
     expect(push).toHaveBeenCalledWith("/onboarding/teste-real");
   });
 });

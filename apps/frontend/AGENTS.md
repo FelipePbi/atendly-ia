@@ -199,6 +199,21 @@ Além de overflow, touch target, contraste, foco e movimento, ele mede
   medida. `/configuracoes/whatsapp` só é medida com "WhatsApp conectado" e
   sem checkbox de consentimento.
 
+O mesmo passo também mede as etapas do onboarding descritas no vault
+(Goal065, WU-05): Boas-vindas, Segmento+nome, Modalidade, Endereço, Primeiro
+serviço, Serviços adicionais, Dias, Horários (com "Personalizar dias
+diferentes" aberto), Agenda pronta e a introdução do WhatsApp
+(`ONBOARDING_ROUTES` em `e2e/routes.ts`). A sessão vem de uma SEGUNDA conta,
+também semeada por `scripts/goal033-authenticated-ui-rehearsal.mjs`, que a
+registra e grava só o bloco de negócio (nome, segmento, "Local próprio" e
+endereço) sem nunca completar o onboarding — é essa conta parada no meio,
+nunca a principal, que o gate usa para essas etapas, e a régua é a mesma
+(overflow, toque, contraste, foco, movimento), mais a conferência de que os
+oito chips de segmento ficam inteiros dentro da largura e, nas duas larguras
+de celular, de que "Conectar meu WhatsApp" e "Fazer isso depois" ficam
+empilhados em largura total na introdução do WhatsApp, com o principal em
+cima (QA O-41, Goal065 rodada 2).
+
 A casca que essas medidas protegem é a classe base `app-frame`, que
 `AppShell` aplica em toda casca ao lado de `${module}-shell`
 (`src/shared/styles/atendly.css`). Cabeçalho móvel e barra inferior da base

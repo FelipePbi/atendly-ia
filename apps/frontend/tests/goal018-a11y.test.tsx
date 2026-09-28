@@ -139,18 +139,23 @@ beforeEach(() => {
 });
 
 describe("onboarding: bloco Seu negócio", () => {
-  test("dados-do-negocio sem local próprio selecionado", async () => {
+  // Goal065/WU-02: "dados-do-negocio" virou quatro etapas (boas-vindas,
+  // segmento-e-nome, modalidade, endereco); as duas provas de a11y cobrem os
+  // dois extremos com campo de verdade.
+  test("segmento-e-nome sem local próprio selecionado", async () => {
     getOnboarding.mockResolvedValue(emptyOnboardingState());
     const { container } = render(
       <OnboardingRuntimeProvider>
-        <OnboardingScreen scenario="dados-do-negocio" />
+        <OnboardingScreen scenario="segmento-e-nome" />
       </OnboardingRuntimeProvider>,
     );
-    await screen.findByLabelText("Nome do negócio");
+    // Goal065 rodada 2: o campo segue o vault ("Como seus clientes conhecem
+    // você?"), depois do segmento.
+    await screen.findByLabelText("Como seus clientes conhecem você?");
     await expectNoA11yViolations(container);
   });
 
-  test("dados-do-negocio com ON_SITE já gravado, campo de endereço visível", async () => {
+  test("endereco com ON_SITE já gravado, campo de endereço visível", async () => {
     getOnboarding.mockResolvedValue({
       ...emptyOnboardingState(),
       business: {
@@ -163,7 +168,7 @@ describe("onboarding: bloco Seu negócio", () => {
     });
     const { container } = render(
       <OnboardingRuntimeProvider>
-        <OnboardingScreen scenario="dados-do-negocio" />
+        <OnboardingScreen scenario="endereco" />
       </OnboardingRuntimeProvider>,
     );
     await screen.findByLabelText("Endereço do seu espaço");

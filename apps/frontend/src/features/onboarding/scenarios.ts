@@ -1,9 +1,27 @@
 export const onboardingScenarios = {
-  "dados-do-negocio": [
+  "boas-vindas": [
     "Vamos começar",
-    "Conte um pouco sobre seu negócio",
-    "Isso ajuda a Atendly a usar nomes e exemplos mais próximos da sua rotina.",
-    "business",
+    "Configure sua Atendly em poucos passos.",
+    "Sua IA atende seus clientes pelo WhatsApp e marca horários direto na sua agenda.",
+    "welcome",
+  ],
+  "segmento-e-nome": [
+    "Seu negócio",
+    "Vamos começar pelo seu negócio",
+    "Isso ajuda a IA a usar nomes e exemplos mais próximos da sua rotina.",
+    "business-segment",
+  ],
+  modalidade: [
+    "Seu negócio",
+    "Onde você atende?",
+    "Pode escolher mais de uma opção.",
+    "business-modality",
+  ],
+  endereco: [
+    "Seu negócio",
+    "Qual é o endereço do seu espaço?",
+    "Usado para localizar seu atendimento presencial.",
+    "business-address",
   ],
   "fonte-da-agenda": [
     "Fonte oficial",
@@ -26,20 +44,14 @@ export const onboardingScenarios = {
   "servico-nome": [
     "Primeiro serviço",
     "Qual serviço seus clientes mais agendam?",
-    "Comece com um. Outros serviços poderão ser adicionados depois.",
+    "Nome, duração e preço. A IA só informará o valor cadastrado. Se variar, use “Sob consulta”.",
     "service-name",
   ],
-  "servico-duracao": [
-    "Duração",
-    "Quanto tempo esse serviço costuma levar?",
-    "Esse tempo será usado para reservar o horário correto.",
-    "service-duration",
-  ],
-  "servico-preco": [
-    "Preço",
-    "Qual é o preço desse serviço?",
-    "A Atendly só informará o valor cadastrado. Se variar, use “Sob consulta”.",
-    "service-price",
+  "servicos-adicionais": [
+    "Serviços adicionais",
+    "Quer adicionar outros serviços agora?",
+    "Você pode continuar sem adicionar nenhum. Isso pode ser feito depois em Serviços.",
+    "additional-services",
   ],
   "dias-de-atendimento": [
     "Disponibilidade",
@@ -56,7 +68,7 @@ export const onboardingScenarios = {
   "agenda-atendly-pronta": [
     "Agenda configurada",
     "Sua Agenda Atendly está pronta",
-    "Serviço e disponibilidade foram salvos. O restante da ativação continua em uma próxima etapa do produto.",
+    "Serviço e disponibilidade foram salvos.",
     "ready",
   ],
   "demonstracao-da-ia": [
@@ -67,7 +79,7 @@ export const onboardingScenarios = {
   ],
   "tom-da-ia": [
     "Atendente virtual",
-    "Como a Atendly deve conversar?",
+    "Como a IA deve conversar?",
     "Escolha um dos três estilos disponíveis.",
     "tone",
   ],

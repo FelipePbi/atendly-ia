@@ -27,6 +27,9 @@ export type OnboardingDraft = {
   businessName: string;
   calendarSource: CalendarSource | null;
   days: number[];
+  // Intervalo por dia gravado com "Personalizar dias diferentes"; ausente
+  // para um dia usa `startTime`/`endTime` (Goal065/WU-03).
+  dayHours: Record<number, { startTime: string; endTime: string }>;
   endTime: string;
   // Lidos do estado real do negócio (não editáveis pelo formulário): guardam
   // a demonstração da IA (WU-07) sem serviço inoperante nem horário vazio,
@@ -60,6 +63,7 @@ const initialDraft: OnboardingDraft = {
   businessName: "",
   calendarSource: null,
   days: [1, 2, 3, 4, 5],
+  dayHours: {},
   endTime: "18:00",
   hoursValid: false,
   serviceDuration: 60,
@@ -178,14 +182,15 @@ export function OnboardingResume() {
 }
 
 export function nextRequiredStep(state: OnboardingState): string {
-  const modalities = state.business?.modalities ?? [];
-  if (
-    !state.business?.name ||
-    !state.business.category ||
-    modalities.length === 0 ||
-    (modalities.includes("ON_SITE") && !state.business.address)
-  )
-    return "dados-do-negocio";
+  // Business é gravado atômico (nome+categoria+timezone sempre juntos): sem
+  // nome, nada do bloco foi gravado ainda, e a conta volta para Boas-vindas
+  // (nunca retomada depois de qualquer gravação — Goal065/WU-02).
+  if (!state.business?.name) return "boas-vindas";
+  const modalities = state.business.modalities ?? [];
+  if (modalities.length === 0) return "modalidade";
+  if (modalities.includes("ON_SITE") && !state.business.address) {
+    return "endereco";
+  }
   if (!state.calendar.source) return "fonte-da-agenda";
   if (!state.service) return "servico-nome";
   if (!state.availability?.rules.some((rule) => rule.active)) {
@@ -196,20 +201,31 @@ export function nextRequiredStep(state: OnboardingState): string {
   return "contatos-ignorados";
 }
 
-export function onboardingPriceType(
-  priceType: "FIXED" | "STARTING_AT" | "ON_REQUEST" | "NOT_INFORMED",
-): "FIXED" | "ON_REQUEST" {
-  return priceType === "ON_REQUEST" || priceType === "NOT_INFORMED"
-    ? "ON_REQUEST"
-    : "FIXED";
-}
-
 function draftFromState(
   state: OnboardingState,
   current: OnboardingDraft,
 ): OnboardingDraft {
   const activeRules =
     state.availability?.rules.filter((rule) => rule.active) ?? [];
+  // Reconstrói o intervalo por dia do que está gravado, não só a primeira
+  // regra. O intervalo-base é o mais frequente (empate: o primeiro da semana,
+  // a partir da segunda), e `dayHours` guarda só os dias que diferem dele:
+  // um dia sem personalização real acompanha o intervalo-base quando a
+  // pessoa o muda na retomada (Goal065, rodada 2).
+  const baseHours = mostFrequentInterval(activeRules);
+  const dayHours = Object.fromEntries(
+    activeRules
+      .filter(
+        (rule) =>
+          baseHours !== null &&
+          (rule.startTime !== baseHours.startTime ||
+            rule.endTime !== baseHours.endTime),
+      )
+      .map((rule) => [
+        rule.dayOfWeek,
+        { endTime: rule.endTime, startTime: rule.startTime },
+      ]),
+  );
   return {
     ...current,
     businessAddress: state.business?.address ?? current.businessAddress,
@@ -221,7 +237,8 @@ function draftFromState(
     days: activeRules.length
       ? [...new Set(activeRules.map((rule) => rule.dayOfWeek))]
       : current.days,
-    endTime: activeRules[0]?.endTime ?? current.endTime,
+    dayHours: activeRules.length ? dayHours : current.dayHours,
+    endTime: baseHours?.endTime ?? current.endTime,
     // Mesma definição de "operacional" do checklist pós-onboarding e do
     // Scheduling (`isOperationalService`): ativo e com duração definida.
     hoursValid: activeRules.length > 0,
@@ -235,17 +252,35 @@ function draftFromState(
       state.service?.price === null || state.service?.price === undefined
         ? current.servicePrice
         : String(state.service.price),
-    // O onboarding só oferece os dois tipos originais; um serviço já com um
-    // dos dois tipos novos (ex.: importado) é exibido pelo par mais próximo
-    // sem nunca gravar preço zero — o formulário completo é do Goal015.
-    servicePriceType: state.service
-      ? onboardingPriceType(state.service.priceType)
-      : current.servicePriceType,
-    startTime: activeRules[0]?.startTime ?? current.startTime,
+    // Os quatro tipos são gravados e relidos sem conversão (Goal065/WU-03).
+    servicePriceType: state.service?.priceType ?? current.servicePriceType,
+    startTime: baseHours?.startTime ?? current.startTime,
     timezone:
       state.business?.timezone ?? state.calendar.timezone ?? current.timezone,
     tone: state.ai.tone,
   };
+}
+
+// Ordem de exibição da semana (segunda primeiro), usada só para desempatar.
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+function mostFrequentInterval(
+  rules: Array<{ dayOfWeek: number; endTime: string; startTime: string }>,
+): { endTime: string; startTime: string } | null {
+  const ordered = [...rules].sort(
+    (a, b) => WEEK_ORDER.indexOf(a.dayOfWeek) - WEEK_ORDER.indexOf(b.dayOfWeek),
+  );
+  let best: { count: number; endTime: string; startTime: string } | null = null;
+  for (const rule of ordered) {
+    const count = ordered.filter(
+      (other) =>
+        other.startTime === rule.startTime && other.endTime === rule.endTime,
+    ).length;
+    if (!best || count > best.count) {
+      best = { count, endTime: rule.endTime, startTime: rule.startTime };
+    }
+  }
+  return best && { endTime: best.endTime, startTime: best.startTime };
 }
 
 function RuntimeMessage({ message }: { message: string }) {

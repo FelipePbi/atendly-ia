@@ -23,7 +23,7 @@ import {
   TOUCH_TARGET_AA,
   TOUCH_TARGET_COMFORTABLE,
 } from "./measure";
-import { AUTHENTICATED_ROUTES } from "./routes";
+import { AUTHENTICATED_ROUTES, ONBOARDING_ROUTES } from "./routes";
 
 /**
  * The width matrix, with a session (Goal033, A-02).
@@ -47,6 +47,7 @@ import { AUTHENTICATED_ROUTES } from "./routes";
  */
 
 type AuthenticatedRoute = (typeof AUTHENTICATED_ROUTES)[number];
+type OnboardingRoute = (typeof ONBOARDING_ROUTES)[number];
 
 /** What the rehearsal seeded, by name — used to prove the screen has data. */
 type SeedContent = {
@@ -86,6 +87,15 @@ const BASE_URL = requireEnv("GOAL033_GATE_BASE_URL");
 const EMAIL = requireEnv("GOAL033_EMAIL");
 const PASSWORD = requireEnv("GOAL033_PASSWORD");
 const SEED = JSON.parse(requireEnv("GOAL033_SEED")) as SeedContent;
+/**
+ * A SEGUNDA conta (Goal065/WU-05): para no meio do onboarding, de propósito,
+ * para este gate medir as etapas que só uma sessão sem onboarding concluído
+ * alcança. `scripts/goal033-authenticated-ui-rehearsal.mjs` a registra e
+ * grava só o bloco de negócio — nunca completa o onboarding dela, e nunca
+ * toca a conta e as 75 medidas de `EMAIL`/`SEED` acima.
+ */
+const ONBOARDING_EMAIL = requireEnv("GOAL033_ONBOARDING_EMAIL");
+const ONBOARDING_PASSWORD = requireEnv("GOAL033_ONBOARDING_PASSWORD");
 /**
  * The day (YYYY-MM-DD) the rehearsal seeded the appointment on.
  *
@@ -222,11 +232,22 @@ const SESSION_STATE_FILE = path.join(
   // next one; inside one run, every worker restart reuses it.
   `typed-session-${requireEnv("GOAL033_RUN_ID")}.json`,
 );
+/**
+ * The SECOND account's typed session (Goal065, WU-05) — same contract as
+ * `SESSION_STATE_FILE`, a separate file because it is a separate account,
+ * stopped mid-onboarding on purpose.
+ */
+const ONBOARDING_SESSION_STATE_FILE = path.join(
+  process.cwd(),
+  "e2e-results",
+  "authenticated",
+  `typed-onboarding-session-${requireEnv("GOAL033_RUN_ID")}.json`,
+);
 const SESSION_STATE_MAX_AGE_MS = 10 * 60 * 1_000;
 
-function freshSessionState(): boolean {
-  if (!existsSync(SESSION_STATE_FILE)) return false;
-  return Date.now() - statSync(SESSION_STATE_FILE).mtimeMs < SESSION_STATE_MAX_AGE_MS;
+function freshSessionState(file: string): boolean {
+  if (!existsSync(file)) return false;
+  return Date.now() - statSync(file).mtimeMs < SESSION_STATE_MAX_AGE_MS;
 }
 
 /**
@@ -336,14 +357,14 @@ async function waitForRateLimitBudget(testInfo: TestInfo): Promise<void> {
 const test = base.extend<object, { typedSession: string }>({
   typedSession: [
     async ({ browser }, use) => {
-      if (!freshSessionState()) {
+      if (!freshSessionState(SESSION_STATE_FILE)) {
         mkdirSync(path.dirname(SESSION_STATE_FILE), { recursive: true });
         const context = await browser.newContext({ baseURL: BASE_URL });
         const page = await context.newPage();
         // The login itself spends from the same per-IP budget, so the first
         // test starts knowing what it left behind.
         watchRateLimitBudget(page);
-        await signIn(page);
+        await signIn(page, EMAIL, PASSWORD, (pathname) => pathname === "/inicio", "/inicio");
         await context.storageState({ path: SESSION_STATE_FILE });
         await context.close();
       }
@@ -357,10 +378,51 @@ const test = base.extend<object, { typedSession: string }>({
 });
 
 /**
- * The session, established the only way this gate accepts: typed and
- * submitted.
+ * The SECOND account's worker session (Goal065, WU-05): typed and submitted
+ * the same way, reused across the onboarding-step tests of one worker. Its
+ * onboarding never completes, so a successful login lands somewhere under
+ * `/onboarding/*` — never `/inicio` — and that is what this waits for.
  */
-async function signIn(page: Page): Promise<void> {
+const onboardingTest = base.extend<object, { typedOnboardingSession: string }>({
+  typedOnboardingSession: [
+    async ({ browser }, use) => {
+      if (!freshSessionState(ONBOARDING_SESSION_STATE_FILE)) {
+        mkdirSync(path.dirname(ONBOARDING_SESSION_STATE_FILE), { recursive: true });
+        const context = await browser.newContext({ baseURL: BASE_URL });
+        const page = await context.newPage();
+        watchRateLimitBudget(page);
+        await signIn(
+          page,
+          ONBOARDING_EMAIL,
+          ONBOARDING_PASSWORD,
+          (pathname) => pathname.startsWith("/onboarding/"),
+          "/onboarding/*",
+        );
+        await context.storageState({ path: ONBOARDING_SESSION_STATE_FILE });
+        await context.close();
+      }
+      await use(ONBOARDING_SESSION_STATE_FILE);
+    },
+    { scope: "worker" },
+  ],
+  storageState: async ({ typedOnboardingSession }, use) => {
+    await use(typedOnboardingSession);
+  },
+});
+
+/**
+ * The session, established the only way this gate accepts: typed and
+ * submitted. `isExpectedDestination` names where a successful login must
+ * land — `/inicio` for a completed onboarding, somewhere under
+ * `/onboarding/*` for the account WU-05 stops mid-onboarding.
+ */
+async function signIn(
+  page: Page,
+  email: string,
+  password: string,
+  isExpectedDestination: (pathname: string) => boolean,
+  destinationDescription: string,
+): Promise<void> {
   await page.goto("/login", { waitUntil: "networkidle" });
 
   const form = page.locator("form.auth-form");
@@ -369,19 +431,19 @@ async function signIn(page: Page): Promise<void> {
     `/login did not render its form within ${SESSION_TIMEOUT_MS}ms — the gate has nothing to type into.`,
   ).toBeVisible({ timeout: SESSION_TIMEOUT_MS });
 
-  await form.locator('input[name="email"]').fill(EMAIL);
-  await form.locator('input[name="login-password"]').fill(PASSWORD);
+  await form.locator('input[name="email"]').fill(email);
+  await form.locator('input[name="login-password"]').fill(password);
   await form.locator('button[type="submit"]').click();
 
   try {
-    await page.waitForURL((url) => url.pathname === "/inicio", { timeout: LOGIN_TIMEOUT_MS });
+    await page.waitForURL((url) => isExpectedDestination(url.pathname), { timeout: LOGIN_TIMEOUT_MS });
   } catch {
     const rejection = (
       await page.locator(".auth-inline-alert").first().textContent().catch(() => null)
     )?.trim();
     throw new Error(
-      `the login form did not establish a session within ${LOGIN_TIMEOUT_MS}ms: it was submitted with `
-        + `${EMAIL} and the browser is still at ${page.url()}.`
+      `the login form did not reach ${destinationDescription} within ${LOGIN_TIMEOUT_MS}ms: it was `
+        + `submitted with ${email} and the browser is still at ${page.url()}.`
         + (rejection
           ? ` The screen answered: "${rejection}".`
           : " The screen showed no error, so the request never completed.")
@@ -396,6 +458,11 @@ function contentLocator(page: Page, route: AuthenticatedRoute): Locator {
   return route.contentMarker.startsWith(".")
     ? page.locator(route.contentMarker)
     : page.getByRole("heading", { level: 1, name: route.contentMarker });
+}
+
+/** The onboarding step's own content marker: always its h1 (Goal065, WU-05). */
+function onboardingContentLocator(page: Page, route: OnboardingRoute): Locator {
+  return page.getByRole("heading", { level: 1, name: route.contentMarker });
 }
 
 /**
@@ -443,6 +510,42 @@ async function proveAuthenticatedScreen(page: Page, route: AuthenticatedRoute): 
   ).toHaveText(SEED.businessName, { timeout: SESSION_TIMEOUT_MS });
 
   await waitForLoadedContent(page, route);
+}
+
+/**
+ * Proves an onboarding step screen (Goal065, WU-05): the URL is the one
+ * asked for, and the step's own h1 rendered — the same two proofs
+ * `proveAuthenticatedScreen` makes for `AppShell`, adapted to a screen that
+ * has neither a sidebar nor a session marker.
+ *
+ * There is no forward guard to prove against: `OnboardingScreen` renders
+ * whichever step the URL names regardless of how far the account's own
+ * state has progressed (`ProductRuntime` only redirects `/onboarding/*`
+ * away for an unauthenticated or a completed session). The URL check still
+ * catches the one redirect that DOES apply — a session that finished
+ * onboarding between the login and this navigation would land on `/inicio`.
+ */
+async function proveOnboardingScreen(page: Page, route: OnboardingRoute): Promise<void> {
+  await expect
+    .poll(() => new URL(page.url()).pathname, {
+      message:
+        `${route.path} redirected away instead of rendering: ProductRuntime sends an unauthenticated `
+        + "phase to /login and a completed onboarding to /inicio. Whatever is on screen now is not the "
+        + "step this test claims to measure.",
+      timeout: SESSION_TIMEOUT_MS,
+    })
+    .toBe(route.path);
+
+  await expect(
+    onboardingContentLocator(page, route),
+    `${route.path} did not render its own heading ("${route.contentMarker}") within `
+      + `${CONTENT_TIMEOUT_MS}ms.`,
+  ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+
+  await expect(
+    page.locator('[aria-busy="true"], .skeleton'),
+    `${route.path} still had a loading placeholder after ${CONTENT_TIMEOUT_MS}ms.`,
+  ).toHaveCount(0, { timeout: CONTENT_TIMEOUT_MS });
 }
 
 /**
@@ -737,6 +840,249 @@ for (const route of AUTHENTICATED_ROUTES) {
       await page.emulateMedia({ reducedMotion: "reduce" });
       await page.reload({ waitUntil: "networkidle" });
       await waitForLoadedContent(page, route);
+      const moving = await measureRunningAnimations(page);
+      expect
+        .soft(
+          moving,
+          `animation still running under prefers-reduced-motion at ${route.name}/`
+            + `${testInfo.project.name}:\n${moving.join("\n")}`,
+        )
+        .toEqual([]);
+    });
+  });
+}
+
+/**
+ * The onboarding steps the vault describes (Goal065, WU-05), measured with
+ * the SECOND account's session — the one that stops mid-onboarding on
+ * purpose (`scripts/goal033-authenticated-ui-rehearsal.mjs`).
+ *
+ * Same ruler as `AUTHENTICATED_ROUTES` above (overflow, touch target,
+ * contrast, focus, reduced motion), minus the shell-specific composition and
+ * click-reach checks that assume `AppShell`'s sidebar and `main#main-content`
+ * — the onboarding shell has neither.
+ */
+for (const route of ONBOARDING_ROUTES) {
+  onboardingTest.describe(route.name, () => {
+    onboardingTest("measured, logged in", async ({ page }, testInfo) => {
+      await waitForRateLimitBudget(testInfo);
+      watchRateLimitBudget(page);
+
+      await page.goto(route.path, { waitUntil: "networkidle" });
+      await proveOnboardingScreen(page, route);
+
+      // "Horários" only shows its per-day fields once "Personalizar dias
+      // diferentes" is opened (WU-05's acceptance criteria names this state
+      // explicitly): the button starts collapsed, and opening it is a real
+      // click, not a seeded state — nothing about the account's onboarding
+      // progress can pre-open it.
+      if (route.name === "onboarding-horarios") {
+        const toggle = page.getByRole("button", { name: "Personalizar dias diferentes" });
+        await toggle.click();
+        await expect(
+          toggle,
+          `${route.path}: "Personalizar dias diferentes" did not open within ${CONTENT_TIMEOUT_MS}ms.`,
+        ).toHaveAttribute("aria-expanded", "true", { timeout: CONTENT_TIMEOUT_MS });
+      }
+
+      // 1. Nothing runs off the side.
+      const overflow = await measureOverflow(page);
+      await testInfo.attach(`overflow-${route.name}`, {
+        body: JSON.stringify(overflow, null, 2),
+        contentType: "application/json",
+      });
+      expect
+        .soft(
+          overflow.scrollWidth,
+          `horizontal scroll at ${route.name}/${testInfo.project.name}: ${overflow.scrollWidth}px of `
+            + `content in ${overflow.clientWidth}px.\nFirst offenders: `
+            + JSON.stringify(overflow.offenders, null, 2),
+        )
+        .toBeLessThanOrEqual(overflow.clientWidth + OVERFLOW_TOLERANCE);
+
+      // 1b. The eight segment chips (Cabelo…Personal trainer, plus "Outro")
+      // stay whole inside the width, at every width — the WU-05 acceptance
+      // criterion the generic overflow check above does not, by itself,
+      // name: a row with its own `overflow-x` would never show up as
+      // document-level scroll.
+      if (route.name === "onboarding-segmento-e-nome") {
+        const chipRow = page.locator(".segment-chip-row");
+        const chips = chipRow.locator(".chip");
+        await expect(
+          chips,
+          `${route.path}: expected the eight segment chips (seven frequent segments plus "Outro").`,
+        ).toHaveCount(8);
+        const rowBox = await chipRow.evaluate((el) => ({
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+        }));
+        await testInfo.attach(`segment-chips-${testInfo.project.name}`, {
+          body: JSON.stringify(rowBox, null, 2),
+          contentType: "application/json",
+        });
+        expect
+          .soft(
+            rowBox.scrollWidth,
+            `${route.path} at ${testInfo.project.name}: the segment chip row scrolls `
+              + `(${rowBox.scrollWidth}px of content in ${rowBox.clientWidth}px) — the eight chips do not `
+              + "stay whole inside the width.",
+          )
+          .toBeLessThanOrEqual(rowBox.clientWidth + OVERFLOW_TOLERANCE);
+      }
+
+      // 1c. WhatsApp intro on a phone (QA O-41): "Conectar meu WhatsApp" and
+      // "Fazer isso depois" are stacked, each as wide as the action bar, with
+      // the primary one on top — never squeezed side by side in one row.
+      if (route.name === "onboarding-whatsapp" && testInfo.project.name.startsWith("mobile")) {
+        const bar = await page.locator(".onboarding-actions").boundingBox();
+        const connect = await page.getByRole("button", { name: "Conectar meu WhatsApp" }).boundingBox();
+        const later = await page.getByRole("button", { name: "Fazer isso depois" }).boundingBox();
+        await testInfo.attach(`whatsapp-intro-actions-${testInfo.project.name}`, {
+          body: JSON.stringify({ bar, connect, later }, null, 2),
+          contentType: "application/json",
+        });
+        expect(bar && connect && later, `${route.path}: the intro actions did not render.`).toBeTruthy();
+        if (bar && connect && later) {
+          for (const [label, box] of [["Conectar meu WhatsApp", connect], ["Fazer isso depois", later]] as const) {
+            expect
+              .soft(
+                box.width,
+                `${route.path} at ${testInfo.project.name}: "${label}" is ${box.width}px wide in a `
+                  + `${bar.width}px action bar — it is not full width.`,
+              )
+              .toBeGreaterThanOrEqual(bar.width - OVERFLOW_TOLERANCE);
+          }
+          expect
+            .soft(
+              connect.y + connect.height,
+              `${route.path} at ${testInfo.project.name}: "Conectar meu WhatsApp" is not stacked above `
+                + '"Fazer isso depois".',
+            )
+            .toBeLessThanOrEqual(later.y + OVERFLOW_TOLERANCE);
+        }
+      }
+
+      // 2. The touch targets can be hit — a touch-screen rule, as in the public gate.
+      if (testInfo.project.name.startsWith("mobile")) {
+        const measured = await measureTouchTargets(page);
+        await testInfo.attach(`controls-classified-${route.name}`, {
+          body: JSON.stringify(
+            { route: route.name, project: testInfo.project.name, classified: measured.length },
+            null,
+            2,
+          ),
+          contentType: "application/json",
+        });
+        expect
+          .soft(
+            measured.length,
+            `no touch-target controls collected at ${route.name}: selector matched nothing`,
+          )
+          .toBeGreaterThan(0);
+
+        const undersized = measured.filter(
+          (c) => c.exempt === null && (c.w < TOUCH_TARGET_AA || c.h < TOUCH_TARGET_AA),
+        );
+        const baselined = KNOWN_SMALL_TARGETS.filter((k) => k.route === route.name);
+        const stale = findStaleExceptions(route.name, undersized, KNOWN_SMALL_TARGETS);
+        expect
+          .soft(
+            stale,
+            "these touch-target exceptions no longer reproduce and must be deleted:\n"
+              + JSON.stringify(stale, null, 2),
+          )
+          .toEqual([]);
+
+        const belowAA = undersized.filter((c) => !baselined.some((k) => k.html === c.html));
+        const belowComfortable = measured.filter(
+          (c) => c.exempt === null
+            && !belowAA.includes(c)
+            && (c.w < TOUCH_TARGET_COMFORTABLE || c.h < TOUCH_TARGET_COMFORTABLE),
+        );
+        if (belowComfortable.length > 0) {
+          await testInfo.attach(`below-${TOUCH_TARGET_COMFORTABLE}px-${route.name}`, {
+            body: JSON.stringify(belowComfortable, null, 2),
+            contentType: "application/json",
+          });
+        }
+
+        expect
+          .soft(
+            belowAA,
+            `controls below the WCAG 2.5.8 AA minimum of ${TOUCH_TARGET_AA}px at `
+              + `${route.name}/${testInfo.project.name}:\n${JSON.stringify(belowAA, null, 2)}`,
+          )
+          .toEqual([]);
+      }
+
+      // 3. Contrast, computed against the rendered palette.
+      const axe = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+        .analyze();
+      const contrastNodes = axe.violations
+        .filter((violation) => violation.id === "color-contrast")
+        .flatMap((violation) =>
+          violation.nodes.map((node) => ({
+            html: node.html,
+            summary: node.failureSummary ?? violation.help,
+          })),
+        );
+      const otherViolations = axe.violations.filter((violation) => violation.id !== "color-contrast");
+      if (otherViolations.length > 0) {
+        await testInfo.attach(`axe-outside-the-ruler-${route.name}`, {
+          body: JSON.stringify(otherViolations, null, 2),
+          contentType: "application/json",
+        });
+      }
+
+      const staleContrast = findStaleContrastExceptions(route.name, contrastNodes);
+      expect
+        .soft(
+          staleContrast,
+          "these contrast exceptions no longer reproduce and must be deleted:\n"
+            + JSON.stringify(staleContrast, null, 2),
+        )
+        .toEqual([]);
+
+      const unbaselinedContrast = contrastNodes.filter(
+        (node) => !KNOWN_CONTRAST_FAILURES.some(
+          (known) => known.route === route.name && known.html === node.html,
+        ),
+      );
+      expect
+        .soft(
+          unbaselinedContrast,
+          `insufficient contrast at ${route.name}/${testInfo.project.name}:\n`
+            + JSON.stringify(unbaselinedContrast, null, 2),
+        )
+        .toEqual([]);
+
+      // 4. The first Tab reaches something visible, with a focus indicator.
+      const focus = await measureFirstTabFocus(page);
+      expect
+        .soft(focus, `Tab moved focus nowhere at ${route.name}: the screen has no keyboard entry point`)
+        .not.toBeNull();
+      expect
+        .soft(focus?.visible, `focus landed on something with no box at ${route.name}`)
+        .toBe(true);
+      expect
+        .soft(
+          hasFocusIndicator(focus),
+          `no visible focus indicator on <${focus?.tag}> at ${route.name}/${testInfo.project.name}`,
+        )
+        .toBe(true);
+
+      // Evidence, never a pass/fail: fidelity to the approved direction is a
+      // human call and no gate decides it.
+      await testInfo.attach(`${route.name}-${testInfo.project.name}`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: "image/png",
+      });
+
+      // 5. Reduced motion, honoured rather than declared.
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.reload({ waitUntil: "networkidle" });
+      await proveOnboardingScreen(page, route);
       const moving = await measureRunningAnimations(page);
       expect
         .soft(

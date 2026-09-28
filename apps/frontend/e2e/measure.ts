@@ -85,7 +85,16 @@ export async function measureTouchTargets(page: Page): Promise<MeasuredControl[]
     // whole label would hide a genuinely small target instead of finding one.
     const isVisuallyHidden = (el: Element): boolean => {
       const style = window.getComputedStyle(el);
-      return style.opacity === "0" || style.visibility === "hidden" || style.display === "none";
+      if (style.opacity === "0" || style.visibility === "hidden" || style.display === "none") {
+        return true;
+      }
+      // The `sr-only` utility clips an absolutely positioned element to a
+      // 1x1 box instead of using opacity/visibility/display — the standard
+      // "visible to no one, present for screen readers" technique. A real
+      // (buggy) undersized control renders at its native size, never
+      // clipped to exactly 1x1, so this cannot mask a genuine defect.
+      const rect = el.getBoundingClientRect();
+      return style.position === "absolute" && rect.width <= 1 && rect.height <= 1;
     };
     const associatedLabel = (el: Element): Element | null => {
       if (el.tagName !== "INPUT" || !isVisuallyHidden(el)) return null;

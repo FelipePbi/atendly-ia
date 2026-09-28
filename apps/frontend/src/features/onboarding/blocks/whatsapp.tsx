@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import type { Conversation } from "@/data";
+import { BffHttpError } from "@/data";
 import { WhatsAppConnectionPanel } from "@/features/whatsapp/WhatsAppConnectionPanel";
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
@@ -28,9 +29,11 @@ export function isActivationTestScenario(
   return ACTIVATION_TEST_SCENARIOS.has(scenario);
 }
 
-/** Os quatro pontos do vault (docs/product-vault/02-Fluxos/02-Ativacao-e-Teste-do-WhatsApp.md
- * §"Orientação sobre número pessoal"), explicados antes de oferecer a conexão. */
+/** Os pontos do vault (docs/product-vault/02-Fluxos/02-Ativacao-e-Teste-do-WhatsApp.md
+ * §"Orientação sobre número pessoal" e docs/product-vault/01-Regras/05-WhatsApp.md
+ * §"Um número por negócio"), explicados antes de oferecer a conexão. */
 const PERSONAL_NUMBER_POINTS = [
+  "Só um número por negócio.",
   "Você pode usar um número de WhatsApp pessoal ou comercial.",
   "A Atendly organiza todas as suas conversas automaticamente.",
   "Você pode desativar a IA para pessoas específicas, como família e amigos.",
@@ -105,8 +108,12 @@ function IgnoredContactsStepBody() {
       );
       setMarkedPhones((current) => [...current, contact.externalContactId]);
       setPhone("");
-    } catch {
-      setPhoneError("Não foi possível marcar este número. Tente novamente.");
+    } catch (error) {
+      if (error instanceof BffHttpError && error.code === "VALIDATION_ERROR") {
+        setPhoneError("Use o formato +55 11 99999-0000, com DDD.");
+      } else {
+        setPhoneError("Não foi possível marcar este número. Tente novamente.");
+      }
     } finally {
       setPhoneBusy(false);
     }

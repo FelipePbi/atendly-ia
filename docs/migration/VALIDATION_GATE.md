@@ -2214,3 +2214,120 @@ movimento — o gate renderizado mede `/login`, `/cadastro`, `/recuperar-senha`,
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal064-2026-09-28-d-082-proposed),
 [FINAL_AUDIT §43](FINAL_AUDIT.md) e [D-082](DECISIONS.md).
+
+## O onboarding segue o vault e entra no gate autenticado, do Goal065
+
+`apps/bff/` aceita os quatro tipos de preço em `PATCH /v1/onboarding`, com a
+regra do valor antes do Scheduling. `apps/frontend/` refaz a sequência do
+onboarding (Boas-vindas sem gravação; "Seu negócio" em três etapas; primeiro
+serviço numa etapa; serviços adicionais; horário por dia; resumo completo),
+valida inline sem balão nativo, chama a automação de "IA" e empilha os botões
+da introdução do WhatsApp no celular. `scripts/goal033-authenticated-ui-rehearsal.mjs`
+semeia uma segunda conta parada no meio do onboarding, e o gate autenticado
+mede as etapas dela. Nenhuma migration; `apps/ai-orchestrator/` e
+`apps/scheduling-service/` não mudaram. Decisão: [D-083](DECISIONS.md),
+proposta no Goal065, **ACCEPTED** no [review065](reviews/065-review.md).
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| A sequência Boas-vindas → Segmento + nome → Modalidade → Endereço (só com "Local próprio") → "Sua agenda" como está → Primeiro serviço → Serviços adicionais → Dias → Horários → Agenda pronta → IA → WhatsApp; conta nova entra em Boas-vindas e a retomada nunca volta a ela | O bloco "Sua agenda" e a importação no onboarding (Goal066) |
+| `PATCH /v1/onboarding` grava e devolve `FIXED`, `STARTING_AT`, `ON_REQUEST` e `NOT_INFORMED`, sem conversão no frontend; valor incoerente é `400 VALIDATION_ERROR` sem gravar | Fidelidade das etapas ao protótipo aprovado (Goal072, conferência humana) |
+| Horário por dia: uma regra por dia, e a retomada reconstrói os intervalos gravados; mudar o intervalo-base muda os dias sem personalização | Busca de endereço por CEP (Goal072) |
+| O gate autenticado mede, nas cinco larguras, Boas-vindas, Segmento + nome, Modalidade, Endereço, Primeiro serviço, Serviços adicionais, Dias, Horários (com "Personalizar dias diferentes" aberto), Agenda pronta e a introdução do WhatsApp, com os oito chips inteiros e os dois botões do WhatsApp empilhados no celular | Os estados de erro das etapas — ficam no jsdom; o gate não os mede |
+| Nenhuma exceção nova em `KNOWN_*`; `AUTHENTICATED_ROUTES` e as medidas da conta principal não mudam | Que o onboarding num aparelho real segue o vault de ponta a ponta — conferência humana do §11, **não feita** |
+
+### Vermelho na baseline
+
+Rodado na rodada 2, depois da última edição de código e antes da execução
+final, com os arquivos de teste da árvore final.
+
+- Frontend (vitest, jsdom), numa cópia da árvore de
+  `76293d0747d0c755c38f90ff71ded08c1247a987` extraída por `git archive` para
+  fora do repositório, com só os três arquivos de teste novos copiados:
+  **3** de **3** arquivos falhando; **67** de **76** testes falhando
+  (**21** de **21** em `goal065-onboarding-business.test.tsx`, **12** de
+  **18** em `goal065-onboarding-copy-whatsapp.test.tsx`, **34** de **37** em
+  `goal065-onboarding-schedule.test.tsx`). Primeiras linhas:
+  `expected 'dados-do-negocio' to be 'boas-vindas'`;
+  `expected 'Atendente virtualComo a Atendly deve …' not to match /Atendly/`;
+  `Unable to find role="button" and name "Personalizar dias diferentes"`.
+- BFF (vitest, contra o PostgreSQL 18 descartável que
+  `tools/ia-loop/lib/temporary-postgres.mjs#withTestDatabases` inicia em
+  `127.0.0.1:55500` e remove ao fim), com `routes.ts` da baseline no lugar e
+  restaurado por hash: **2** de **4** testes falhando
+  (`expected 400 to be 200` nos quatro tipos; `STARTING_AT` sem `price`
+  recusado sem nomear `price`).
+
+### Controles negativos e execução final
+
+**Seis controles negativos, aplicados e revertidos**, rodados na rodada 2,
+**depois da última edição de código**, na própria worktree, com
+`git hash-object` idêntico antes e depois de cada um. Testes por arquivo:
+`goal065-onboarding.integration.test.ts` **4**,
+`goal065-onboarding-business.test.tsx` **21**,
+`goal065-onboarding-schedule.test.tsx` **37**,
+`goal065-onboarding-copy-whatsapp.test.tsx` **18**. Saída colada em
+[FINAL_AUDIT §44](FINAL_AUDIT.md).
+
+1. `service.priceType` do `PATCH` volta a `FIXED`/`ON_REQUEST`: reprova **2**
+   de **4** contra PostgreSQL real.
+2. `draftFromState` volta a converter pelo par mais próximo: reprova **6** de
+   **37** em `goal065-onboarding-schedule.test.tsx`, incluindo
+   `um serviço existente lido como STARTING_AT continua STARTING_AT ao gravar…`.
+3. O formulário volta a chamar `reportValidity`: reprova **10** de **58** nos
+   arquivos de negócio e de agenda (todos os casos de erros juntos).
+4. A gravação de horários volta a mandar o mesmo intervalo para todos os
+   dias: reprova **2** de **37** (`expected '09:00' to be '08:00'`).
+5. `nextRequiredStep` volta a devolver `dados-do-negocio` para conta nova:
+   reprova **1** de **21**.
+6. `.chip-row.segment-chip-row` volta a `nowrap` com rolagem horizontal,
+   medido por `node scripts/goal033-authenticated-ui-rehearsal.mjs` (o passo
+   `rehearse:goal033-authenticated-ui` de `validate:integration`): reprova
+   `onboarding-segmento-e-nome` nas cinco larguras, `unexpected` **5** de
+   **125**; a 360 px, `881px of content in 328px`.
+
+Sem o defeito, cada alvo volta a passar por inteiro: **4**/**4** no BFF,
+**76**/**76** no frontend, e o gate autenticado, rodado de novo depois da
+restauração do controle 6, com `expected` **125** e `unexpected` **0**.
+
+Execução final da rodada 2, sobre a árvore final, antes dos controles acima:
+
+- `npm run validate:core`: **17** passos, **15** `passed`, **0** `failed`,
+  **2** `skipped` (`test:bff`, `test:health-worker`), exit 0. Dentro dele,
+  `test:frontend` em **90** arquivos e **927** testes e `audit:static` em
+  **33** de **34** verificações passando e **1** pulada.
+- `npm run test:gate`: **233**/**233**, **0** falhando, exit 0.
+- `npm run validate:ui`: `apps/frontend/e2e-results/results.json` com
+  `expected` **169**, `skipped` **21**, `unexpected` **0**, `flaky` **0** e
+  **0** retentativas, exit 0.
+- `npm run validate:integration`, contra o PostgreSQL 18 descartável em
+  `127.0.0.1:55500`: **35**/**35** passos, exit 0. Dentro dela,
+  `test:bff-integration` em **53** arquivos e **428** testes e
+  `test:scheduling-integration` em **16**/**124**, sem mudança. O gate
+  autenticado traz `expected` **125** — os **75** da conta principal, sem
+  mudança, mais **50** (dez etapas do onboarding nas cinco larguras) —,
+  `skipped` **0**, `unexpected` **0**, `flaky` **0** e **0** retentativas.
+- `this.http.` em `apps/bff/src/clients/`: **42**.
+
+**Execução do orquestrador na revisão da rodada 2.** O `validate:integration`
+rodado pelo IA Loop para a revisão (fora das duas execuções do Developer, que
+deram **125**/**0**/**0**) teve o gate autenticado com `expected` **124** e
+`flaky` **1**: `onboarding-whatsapp@desktop-1440` falhou na primeira tentativa
+com `net::ERR_NO_BUFFER_SPACE`, esgotamento de buffer de socket do Windows, e
+passou na retentativa. Não é defeito do produto nem do teste; fica registrado
+porque essa execução não foi limpa.
+
+### Conferência humana e limites
+
+**Conferência humana pendente.** A conferência do §11 do Goal **não foi
+feita** por este Goal: percorrer o onboarding num aparelho real, com a conta
+nova, de ponta a ponta, e conferir as etapas contra o protótipo aprovado
+(Goal072).
+
+**O que esta seção não prova.** Não prova que os estados de erro das etapas
+cumprem largura, toque, contraste, foco e movimento — ficam no jsdom. Não
+prova o bloco "Sua agenda" nem a importação no onboarding (Goal066). Não
+prova fidelidade ao protótipo (Goal072).
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal065-2026-09-28-d-083-accepted),
+[FINAL_AUDIT §44](FINAL_AUDIT.md) e [D-083](DECISIONS.md).

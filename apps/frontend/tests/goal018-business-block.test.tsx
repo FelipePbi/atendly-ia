@@ -1,29 +1,32 @@
 // @vitest-environment jsdom
 /**
  * Goal018/WU-11 — o bloco "Seu negócio" coleta segmento (frequentes + "Outro"),
- * nome, modalidades múltiplas e endereço condicional, tanto no onboarding
- * (`dados-do-negocio`) quanto em `configuracoes/negocio` (`ProductSettingsScreen`
- * como está, sem redecomposição).
+ * nome, modalidades múltiplas e endereço condicional em
+ * `configuracoes/negocio` (`ProductSettingsScreen`, como está, sem
+ * redecomposição).
  *
- * O que esta suíte prova pelo que a usuária encontra:
- * - nenhuma modalidade escolhida bloqueia o avanço/salvamento com uma
- *   mensagem, nas duas telas;
- * - `ON_SITE` exige endereço não vazio antes de salvar, nas duas telas;
+ * O onboarding equivalente (`dados-do-negocio`) foi dividido em três etapas
+ * (`segmento-e-nome`, `modalidade`, `endereco`) mais `boas-vindas` pelo
+ * Goal065/WU-02 — a suíte antiga deste arquivo testava as quatro como uma
+ * tela só e foi substituída por `goal065-onboarding-business.test.tsx`, que
+ * cobre o novo encadeamento e a validação inline por campo.
+ *
+ * O que esta suíte prova pelo que a usuária encontra, em Configurações:
+ * - nenhuma modalidade escolhida bloqueia o salvamento com uma mensagem;
+ * - `ON_SITE` exige endereço não vazio antes de salvar;
  * - desmarcar `ON_SITE` depois de ter digitado um endereço preserva o
  *   endereço já gravado: o payload não envia a chave `address` (§1 do Goal018:
  *   retirar ON_SITE não apaga o endereço, só deixa de exigi-lo);
- * - em Configurações, o payload de `updateBusiness` é exatamente o que a
- *   tela mostra, e o aviso de projeção pendente aparece quando o servidor
- *   devolve `contextProjectionStatus: "PENDING"`.
+ * - o payload de `updateBusiness` é exatamente o que a tela mostra, e o
+ *   aviso de projeção pendente aparece quando o servidor devolve
+ *   `contextProjectionStatus: "PENDING"`.
  */
 
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { OnboardingState, SettingsState } from "@/data";
-import { OnboardingRuntimeProvider } from "@/features/onboarding/OnboardingRuntime";
-import { OnboardingScreen } from "@/features/onboarding/OnboardingScreen";
+import type { SettingsState } from "@/data";
 import { ProductSettingsScreen } from "@/features/settings/ProductSettingsScreen";
 import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 
@@ -33,8 +36,6 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, replace }),
 }));
 
-const getOnboarding = vi.fn();
-const updateOnboarding = vi.fn();
 const getSettings = vi.fn();
 const updateBusiness = vi.fn();
 const getWhatsapp = vi.fn();
@@ -42,7 +43,6 @@ const refreshSession = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
-    onboarding: { get: getOnboarding, update: updateOnboarding },
     settings: { get: getSettings, updateBusiness },
     whatsapp: { get: getWhatsapp },
   }),
@@ -52,19 +52,6 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
     setUnauthenticated: vi.fn(),
   }),
 }));
-
-function emptyOnboardingState(): OnboardingState {
-  return {
-    ai: { tone: null },
-    availability: null,
-    business: null,
-    calendar: { integration: null, source: null, timezone: null },
-    completed: false,
-    completedAt: null,
-    service: null,
-    whatsapp: null,
-  };
-}
 
 function settingsFixture(
   overrides: Partial<NonNullable<SettingsState["business"]>> = {},
@@ -100,120 +87,8 @@ function settingsFixture(
 
 beforeEach(() => {
   vi.clearAllMocks();
-  updateOnboarding.mockResolvedValue(emptyOnboardingState());
   refreshSession.mockResolvedValue(null);
   getWhatsapp.mockResolvedValue(null);
-});
-
-describe("onboarding: dados-do-negocio", () => {
-  async function renderStep() {
-    getOnboarding.mockResolvedValue(emptyOnboardingState());
-    const user = userEvent.setup();
-    render(
-      <OnboardingRuntimeProvider>
-        <OnboardingScreen scenario="dados-do-negocio" />
-      </OnboardingRuntimeProvider>,
-    );
-    await screen.findByLabelText("Nome do negócio");
-    return user;
-  }
-
-  test("sem modalidade escolhida, bloqueia com mensagem e não salva", async () => {
-    const user = await renderStep();
-    await user.type(screen.getByLabelText("Nome do negócio"), "Studio Aurora");
-    await user.click(screen.getByRole("button", { name: "Outro" }));
-    await user.type(
-      screen.getByPlaceholderText("Qual é o seu segmento?"),
-      "Beleza",
-    );
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
-
-    expect(
-      await screen.findByText("Escolha ao menos uma modalidade de atendimento."),
-    ).toBeVisible();
-    expect(updateOnboarding).not.toHaveBeenCalled();
-  });
-
-  test("ON_SITE com endereço só espaços bloqueia com mensagem e não salva", async () => {
-    // O atributo HTML `required` já barra o campo totalmente vazio no
-    // navegador; a prova real do trim() em `persistBusinessStep` é um valor
-    // só com espaços, que passa pela validação nativa e só é pego aqui —
-    // o mesmo caso que a suíte de integração do BFF cobre com `"   "`.
-    const user = await renderStep();
-    await user.type(screen.getByLabelText("Nome do negócio"), "Studio Aurora");
-    await user.click(screen.getByRole("button", { name: "Outro" }));
-    await user.type(
-      screen.getByPlaceholderText("Qual é o seu segmento?"),
-      "Beleza",
-    );
-    await user.click(screen.getByText("Local próprio"));
-    await user.type(
-      await screen.findByLabelText("Endereço do seu espaço"),
-      "   ",
-    );
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
-
-    expect(
-      await screen.findByText("Informe o endereço do seu espaço."),
-    ).toBeVisible();
-    expect(updateOnboarding).not.toHaveBeenCalled();
-  });
-
-  test("ON_SITE com endereço salva com o endereço preenchido", async () => {
-    const user = await renderStep();
-    await user.type(screen.getByLabelText("Nome do negócio"), "Studio Aurora");
-    await user.click(screen.getByRole("button", { name: "Outro" }));
-    await user.type(
-      screen.getByPlaceholderText("Qual é o seu segmento?"),
-      "Beleza",
-    );
-    await user.click(screen.getByText("Local próprio"));
-    await user.type(
-      await screen.findByLabelText("Endereço do seu espaço"),
-      "Rua das Flores, 100",
-    );
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
-
-    await waitFor(() => expect(updateOnboarding).toHaveBeenCalled());
-    expect(updateOnboarding).toHaveBeenCalledWith({
-      business: {
-        address: "Rua das Flores, 100",
-        category: "Beleza",
-        modalities: ["ON_SITE"],
-        name: "Studio Aurora",
-        timezone: "America/Sao_Paulo",
-      },
-    });
-  });
-
-  test("desmarcar ON_SITE depois de digitar o endereço preserva o endereço gravado (chave address ausente)", async () => {
-    const user = await renderStep();
-    await user.type(screen.getByLabelText("Nome do negócio"), "Studio Aurora");
-    await user.click(screen.getByRole("button", { name: "Outro" }));
-    await user.type(
-      screen.getByPlaceholderText("Qual é o seu segmento?"),
-      "Beleza",
-    );
-    await user.click(screen.getByText("Local próprio"));
-    await user.type(
-      await screen.findByLabelText("Endereço do seu espaço"),
-      "Rua das Flores, 100",
-    );
-    // Desmarca ON_SITE e escolhe Online no lugar.
-    await user.click(screen.getByText("Local próprio"));
-    await user.click(screen.getByText("Online"));
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
-
-    await waitFor(() => expect(updateOnboarding).toHaveBeenCalled());
-    expect(updateOnboarding).toHaveBeenCalledWith({
-      business: {
-        category: "Beleza",
-        modalities: ["ONLINE"],
-        name: "Studio Aurora",
-        timezone: "America/Sao_Paulo",
-      },
-    });
-  });
 });
 
 describe("configurações/negocio: BusinessSettings dentro de ProductSettingsScreen", () => {

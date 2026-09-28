@@ -56,10 +56,31 @@ const patchSchema = z
         id: z.string().trim().min(1).optional(),
         name: z.string().trim().min(1).max(200),
         durationMinutes: z.number().int().positive().max(1_440),
-        priceType: z.enum(["FIXED", "ON_REQUEST"]),
+        priceType: z.enum(["FIXED", "STARTING_AT", "ON_REQUEST", "NOT_INFORMED"]),
         price: z.number().nonnegative().nullable().optional(),
         active: z.boolean().default(true),
       })
+      // Mesma regra de ServiceForm (Goal065/WU-01): FIXED/STARTING_AT exigem
+      // price; ON_REQUEST/NOT_INFORMED gravam price nulo sempre, mesmo que o
+      // corpo traga um valor — a recusa acontece aqui, antes do Scheduling.
+      .superRefine((value, ctx) => {
+        const requiresPrice =
+          value.priceType === "FIXED" || value.priceType === "STARTING_AT";
+        if (requiresPrice && (value.price === null || value.price === undefined)) {
+          ctx.addIssue({
+            code: "custom",
+            message: "service.price is required for FIXED and STARTING_AT.",
+            path: ["price"],
+          });
+        }
+      })
+      .transform((value) => ({
+        ...value,
+        price:
+          value.priceType === "FIXED" || value.priceType === "STARTING_AT"
+            ? value.price
+            : null,
+      }))
       .optional(),
     availability: z
       .object({

@@ -6580,3 +6580,101 @@ nem `apps/scheduling-service/`. Uma migration aditiva,
   QA C-02, QA C-03, QA C-04, QA C-11, QA C-12, QA L-01, QA L-02, QA L-03,
   QA L-04, QA L-05 e QA H-05 corrigidos**, fora da contagem A-01…A-24 — ver
   [FINAL_AUDIT §43](FINAL_AUDIT.md).
+
+## Delta implementado — Goal065, 2026-09-28 ([D-083](DECISIONS.md), ACCEPTED)
+
+Corrige **QA O-01**, **QA O-02**, **QA O-03**, **QA O-04**, **QA O-05**,
+**QA O-06**, **QA O-08**, **QA O-09**, **QA O-14**, **QA O-15** (só a
+sequência), **QA O-16**, **QA O-24**, **QA O-26**, **QA O-28**, **QA O-30**,
+**QA O-31**, **QA O-33**, **QA O-34**, **QA O-35**, **QA O-38**, **QA O-41**,
+**QA O-43** e **QA O-50** do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md) (fora da
+enumeração A-01…A-24 do FINAL_AUDIT): o onboarding segue a sequência do
+vault, começa em Boas-vindas sem gravar nada, grava os quatro tipos de preço
+sem conversão, cria serviços adicionais por `POST /v1/services`, grava
+horário por dia e entra no gate autenticado. Toca `apps/bff/`
+(`modules/onboarding/routes.ts`, `PUBLIC_API_V1.md`), `apps/frontend/`
+(`features/onboarding/`, a seção do onboarding em `shared/styles/atendly.css`,
+`app/onboarding/[step]/page.tsx`, `data/services/BffOnboardingService.ts`,
+`e2e/routes.ts`, `e2e/authenticated-matrix.spec.ts`, `e2e/measure.ts`) e a
+semeadura de `scripts/goal033-authenticated-ui-rehearsal.mjs`. Não toca
+`POST /v1/onboarding/complete`, a ativação da IA, o painel de conexão do
+WhatsApp, `apps/ai-orchestrator/` nem `apps/scheduling-service/`. Nenhuma
+migration.
+
+- **Sequência (§3 do Goal)** — Boas-vindas → Segmento + nome → Modalidade →
+  Endereço (só com "Local próprio") → o bloco "Sua agenda" como está
+  (Goal066) → Primeiro serviço → Serviços adicionais (opcional) → Dias de
+  atendimento → Horários → Agenda pronta → Demonstração da IA → Estilo da
+  IA → WhatsApp como está. `servico-duracao` e `servico-preco` redirecionam
+  para `servico-nome`. Cada etapa grava ao continuar e só avança com `200`;
+  `nextRequiredStep` retoma na primeira pendente e nunca volta a
+  Boas-vindas depois de qualquer gravação.
+- **Boas-vindas e casca (§2)** — texto do vault, "Seu progresso fica salvo a
+  cada etapa." e composição estática de três elementos, sem movimento.
+  "Sair" é `.btn .btn-secondary` em todas as larguras, com um único nome
+  acessível e o ícone `aria-hidden`.
+- **"Seu negócio" (§3)** — segmento primeiro (oito chips quebrando linha,
+  com `aria-pressed`), depois "Como seus clientes conhecem você?" com a
+  ajuda; "Vamos começar pelo seu negócio"; "Onde você atende?", "Pode
+  escolher mais de uma opção.", "A domicílio · Você vai até o cliente";
+  endereço em etapa própria, sem CEP.
+- **Validação inline (§4)** — `noValidate`, sem `checkValidity` nem
+  `reportValidity`; erro no campo com `aria-invalid`, `aria-describedby` e
+  foco no primeiro inválido, todos juntos; escolha vazia ligada ao grupo;
+  fim antes do início no campo final; recusa do servidor no campo da etapa.
+- **Tipo de preço (§1 e §5)** — `PATCH /v1/onboarding` aceita `FIXED`,
+  `STARTING_AT`, `ON_REQUEST` e `NOT_INFORMED`, com `price` obrigatório nos
+  dois primeiros e nulo nos dois últimos, recusando `400 VALIDATION_ERROR`
+  antes do Scheduling. O frontend grava e relê o tipo escolhido, sem
+  conversão; a demonstração da IA fala pelo tipo. Serviços adicionais por
+  `POST /v1/services`, sem trocar o serviço do onboarding.
+- **Horário por dia (§6)** — semana de segunda a domingo, sem mudar
+  `dayOfWeek`; intervalo-base e "Personalizar dias diferentes", uma regra por
+  dia; na retomada, só os dias diferentes do intervalo-base contam como
+  personalizados. "Agenda pronta" mostra serviço, duração, preço, dias e
+  horário, sem texto de desenvolvimento nem "Fonte oficial".
+- **Textos e WhatsApp (§7)** — "IA" como nome da automação nas etapas;
+  "Só um número por negócio."; "Conectar meu WhatsApp" e "Fazer isso depois"
+  empilhados em largura total no celular; contatos ignorados com o formato
+  esperado em `400 VALIDATION_ERROR`.
+- **Etapas medidas pelo gate (§8)** — uma segunda conta, semeada pelas rotas
+  do produto e parada no meio do onboarding, é medida pelo gate autenticado
+  em Boas-vindas, Segmento + nome, Modalidade, Endereço, Primeiro serviço,
+  Serviços adicionais, Dias, Horários (com "Personalizar dias diferentes"
+  aberto), Agenda pronta e introdução do WhatsApp, nas cinco larguras, com
+  os oito chips inteiros e os dois botões da introdução do WhatsApp
+  empilhados no celular. Os estados de erro ficam no jsdom.
+- **Vermelho na baseline** `76293d0`, rodado na rodada 2: no frontend,
+  **67** de **76** testes falhando (**21**/**21**, **12**/**18** e
+  **34**/**37**); no BFF, contra PostgreSQL real, **2** de **4**. Saída em
+  [FINAL_AUDIT §44](FINAL_AUDIT.md).
+- **Seis controles negativos (§10)**, rodados na rodada 2 depois da última
+  edição de código, com restauração conferida por `git hash-object`: (1)
+  `priceType` só `FIXED`/`ON_REQUEST` reprova **2** de **4** contra
+  PostgreSQL real; (2) conversão pelo par mais próximo reprova **6** de
+  **37**; (3) `reportValidity` reprova **10** de **58**; (4) o mesmo
+  intervalo para todos os dias reprova **2** de **37**; (5)
+  `dados-do-negocio` para conta nova reprova **1** de **21**; (6)
+  `.segment-chip-row` em `nowrap` com rolagem reprova o gate autenticado em
+  `onboarding-segmento-e-nome` nas cinco larguras (`unexpected` **5** de
+  **125**). Saída em [FINAL_AUDIT §44](FINAL_AUDIT.md).
+- **Execução final da rodada 2, sobre a árvore final** —
+  `npm run validate:core`: **17** passos, **15** `passed`, **0** `failed`,
+  **2** `skipped`, exit 0; `test:frontend` em **90** arquivos e **927**
+  testes; `audit:static` em **33** de **34** e **1** pulada.
+  `npm run test:gate`: **233**/**233**. `npm run validate:ui`: `expected`
+  **169**, `skipped` **21**, `unexpected` **0**, `flaky` **0**, **0**
+  retentativas. `npm run validate:integration`, contra o PostgreSQL 18
+  descartável em `127.0.0.1:55500`: **35**/**35** passos, exit 0;
+  `test:bff-integration` em **53** arquivos e **428** testes;
+  `test:scheduling-integration` em **16**/**124**; gate autenticado com
+  `expected` **125** (**75** da conta principal, sem mudança, mais **50** das
+  dez etapas do onboarding), `unexpected` **0**, `flaky` **0** e **0**
+  retentativas. `this.http.` em `apps/bff/src/clients/`: **42**.
+- **Conferência humana pendente:** a conferência do §11 do Goal **não foi
+  feita** por este Goal — percorrer o onboarding num aparelho real, com a
+  conta nova, e conferir as etapas contra o protótipo aprovado (Goal072).
+- **Limites declarados:** o bloco "Sua agenda" continua como está (Goal066);
+  endereço sem CEP (Goal072); os estados de erro não são medidos pelo gate
+  renderizado; o Product Vault e o `QA_LOCAL_REVIEW.md` não foram editados —
+  ver [D-083](DECISIONS.md).

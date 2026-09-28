@@ -636,6 +636,13 @@ p {
   overflow-x: auto;
   scrollbar-width: none;
 }
+/* Onboarding: lista curta de segmentos, cabe quebrando linha em vez de
+   rolar horizontalmente (vault §"Segmento + nome"). */
+.chip-row.segment-chip-row,
+.chip-row.price-chip-row {
+  flex-wrap: wrap;
+  overflow: visible;
+}
 .chip {
   min-height: 44px;
   padding: 0 13px;
@@ -2257,17 +2264,12 @@ p {
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
+/* "Sair" usa o botão secundário do design system (.btn .btn-secondary) em
+   todas as larguras; aqui só o tamanho da barra superior (QA O-02). */
 .onboarding-exit {
   justify-self: end;
   min-height: 44px;
-  padding: 0 8px;
-  color: var(--muted);
-  text-decoration: none;
-  font-size: 14px;
-  font-weight: 600;
-}
-.onboarding-exit:hover {
-  color: var(--fg);
+  padding: 0 14px;
 }
 .onboarding-main {
   width: min(100%, 720px);
@@ -2322,6 +2324,41 @@ p {
 }
 .onboarding-actions.is-single {
   justify-content: flex-end;
+}
+/* Introdução do WhatsApp: o principal vem primeiro no DOM (protótipo 4.1);
+   a partir do tablet a linha é invertida para manter "Voltar" à esquerda. */
+.onboarding-actions.is-stacked {
+  flex-direction: row-reverse;
+}
+.onboarding-welcome {
+  display: grid;
+  gap: 14px;
+}
+/* Boas-vindas: composição estática (mensagem, resposta da IA, horário na
+   agenda), sem animação; a versão animada do protótipo é do Goal072. */
+.onboarding-welcome-scene {
+  margin: 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--surface-secondary);
+}
+.onboarding-welcome-slot {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-input);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  font-size: 14px;
+}
+.onboarding-welcome-slot strong {
+  font-variant-numeric: tabular-nums;
 }
 .onboarding-note {
   margin-top: 18px;
@@ -3221,17 +3258,28 @@ p {
     grid-template-columns: 42px 1fr 42px;
     gap: 12px;
   }
-  .onboarding-topbar .brand span:last-child,
-  .onboarding-exit {
+  .onboarding-topbar .brand span:last-child {
     font-size: 0;
   }
   .onboarding-topbar .brand-mark {
     width: 28px;
     height: 28px;
   }
-  .onboarding-exit::after {
-    content: "Sair";
-    font-size: 12px;
+  /* No celular o botão mostra só o ícone; o texto "Sair" fica oculto só
+     visualmente e continua sendo o único nome acessível (sem ::after). */
+  .onboarding-exit {
+    width: 42px;
+    min-height: 42px;
+    padding: 0;
+  }
+  .onboarding-exit span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   .step-progress-row {
     font-size: 11px;
@@ -3263,6 +3311,15 @@ p {
   }
   .onboarding-actions .btn-secondary {
     min-width: 96px;
+  }
+  .onboarding-actions.is-stacked {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .onboarding-actions.is-stacked .btn {
+    width: 100%;
+    min-width: 0;
+    flex: none;
   }
   .choice-grid {
     grid-template-columns: 1fr;

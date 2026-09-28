@@ -48,6 +48,8 @@ const ignoreByPhone = vi.fn();
 const getActivationTest = vi.fn();
 const startActivationTest = vi.fn();
 const restartActivationTest = vi.fn();
+const listServiceCatalog = vi.fn();
+const createServiceCatalog = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
@@ -67,6 +69,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       get: getOnboarding,
       update: updateOnboarding,
     },
+    serviceCatalog: { create: createServiceCatalog, list: listServiceCatalog },
     whatsapp: { get: getWhatsapp },
   }),
   useProductRuntime: () => ({ refreshSession, setUnauthenticated }),
@@ -172,6 +175,11 @@ beforeEach(() => {
   completeOnboarding.mockResolvedValue(emptyState());
   refreshSession.mockResolvedValue(null);
   listConversations.mockResolvedValue([]);
+  listServiceCatalog.mockResolvedValue({
+    editable: true,
+    items: [],
+    source: "ATENDLY",
+  });
 });
 
 describe("cenários do protótipo sem consumidor real foram removidos", () => {
@@ -203,8 +211,12 @@ describe("cenários do protótipo sem consumidor real foram removidos", () => {
       expect(isOnboardingScenario(scenario)).toBe(false);
     }
     // 16 do Goal018 (Goal027 retirou `minha-agenda-conectar`) mais as cinco
-    // telas do teste real (Goal019 §9).
-    expect(onboardingOrder).toHaveLength(21);
+    // telas do teste real (Goal019 §9); Goal065/WU-02 trocou
+    // "dados-do-negocio" por quatro etapas (boas-vindas, segmento-e-nome,
+    // modalidade, endereco), net +3. Goal065/WU-03 juntou "servico-nome",
+    // "servico-duracao" e "servico-preco" numa etapa só e acrescentou
+    // "servicos-adicionais", net -1.
+    expect(onboardingOrder).toHaveLength(23);
   });
 
   test("PrototypeOnboardingScreen não existe mais no módulo despachante", () => {
@@ -231,8 +243,8 @@ describe("todo cenário sobrevivente é montado pela rota real", () => {
 });
 
 describe("o progresso nomeia o bloco corrente, sem contagem de telas", () => {
-  test("dados-do-negocio mostra o bloco 'Seu negócio' e nenhuma contagem de etapas", async () => {
-    renderScreen("dados-do-negocio", stateFixture());
+  test("boas-vindas mostra o bloco 'Seu negócio' e nenhuma contagem de etapas", async () => {
+    renderScreen("boas-vindas", stateFixture());
     expect(await screen.findByText("Seu negócio")).toBeVisible();
     expect(screen.queryByText(/Etapa \d+ de \d+/)).toBeNull();
   });
@@ -274,39 +286,18 @@ describe("o progresso nomeia o bloco corrente, sem contagem de telas", () => {
   });
 });
 
-describe("o encadeamento real de dados-do-negocio até validação", () => {
-  test("dados-do-negocio salva e leva a fonte-da-agenda", async () => {
-    const user = userEvent.setup();
-    renderScreen("dados-do-negocio", emptyState());
-    await user.type(
-      await screen.findByLabelText("Nome do negócio"),
-      "Studio Aurora",
-    );
-    await user.click(screen.getByRole("button", { name: "Outro" }));
-    await user.type(
-      screen.getByPlaceholderText("Qual é o seu segmento?"),
-      "Beleza",
-    );
-    await user.click(screen.getByText("Online"));
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
-
-    expect(updateOnboarding).toHaveBeenCalledWith({
-      business: {
-        category: "Beleza",
-        modalities: ["ONLINE"],
-        name: "Studio Aurora",
-        timezone: "America/Sao_Paulo",
-      },
-    });
-    expect(push).toHaveBeenCalledWith("/onboarding/fonte-da-agenda");
-  });
-
-  test("fonte-da-agenda com Agenda Atendly volta para dados-do-negocio e avança para agenda-atendly-confirmar", async () => {
+describe("o encadeamento real de boas-vindas a endereco até validação", () => {
+  // Goal065/WU-02: "dados-do-negocio" virou boas-vindas + segmento-e-nome +
+  // modalidade + endereco. O encadeamento completo e a validação inline por
+  // campo têm sua própria suíte em `goal065-onboarding-business.test.tsx`;
+  // aqui fica só a prova de alcançabilidade da rota seguinte,
+  // "fonte-da-agenda".
+  test("fonte-da-agenda com Agenda Atendly volta para modalidade (sem ON_SITE) e avança para agenda-atendly-confirmar", async () => {
     const user = userEvent.setup();
     renderScreen("fonte-da-agenda", stateFixture(businessDone));
     expect(await screen.findByRole("link", { name: "Voltar" })).toHaveAttribute(
       "href",
-      "/onboarding/dados-do-negocio",
+      "/onboarding/modalidade",
     );
 
     await user.click(screen.getByRole("button", { name: /^Agenda Atendly/ }));
@@ -386,7 +377,7 @@ describe("o encadeamento real de dados-do-negocio até validação", () => {
     expect(push).toHaveBeenCalledWith("/onboarding/servico-nome");
   });
 
-  test("servico-nome salva e avança para servico-duracao", async () => {
+  test("servico-nome (primeiro serviço) salva nome, duração e preço numa etapa só e avança para servicos-adicionais", async () => {
     const user = userEvent.setup();
     renderScreen(
       "servico-nome",
@@ -396,37 +387,68 @@ describe("o encadeamento real de dados-do-negocio até validação", () => {
       await screen.findByLabelText("Nome do serviço"),
       "Corte feminino",
     );
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
-    expect(push).toHaveBeenCalledWith("/onboarding/servico-duracao");
-  });
-
-  test("servico-duracao avança para servico-preco", async () => {
-    const user = userEvent.setup();
-    renderScreen(
-      "servico-duracao",
-      stateFixture({ ...businessDone, ...calendarDone }),
-    );
-    const input = await screen.findByLabelText("Duração em minutos");
-    await user.clear(input);
-    await user.type(input, "45");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
-    expect(push).toHaveBeenCalledWith("/onboarding/servico-preco");
-  });
-
-  test("servico-preco salva preço fixo e avança para dias-de-atendimento", async () => {
-    const user = userEvent.setup();
-    renderScreen(
-      "servico-preco",
-      stateFixture({ ...businessDone, ...calendarDone }),
-    );
-    await user.type(await screen.findByLabelText("Preço em reais"), "150");
+    const durationInput = screen.getByLabelText("Duração em minutos");
+    await user.clear(durationInput);
+    await user.type(durationInput, "45");
+    await user.type(screen.getByLabelText("Preço em reais"), "150");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
     const [patch] = updateOnboarding.mock.calls.at(-1) as [
-      { service: { price: number; priceType: string } },
+      {
+        service: {
+          durationMinutes: number;
+          name: string;
+          price: number;
+          priceType: string;
+        };
+      },
     ];
+    expect(patch.service.name).toBe("Corte feminino");
+    expect(patch.service.durationMinutes).toBe(45);
     expect(patch.service.price).toBe(150);
     expect(patch.service.priceType).toBe("FIXED");
+    expect(push).toHaveBeenCalledWith("/onboarding/servicos-adicionais");
+  });
+
+  test("servico-nome com um serviço já lido como STARTING_AT grava o mesmo tipo, sem conversão", async () => {
+    const user = userEvent.setup();
+    renderScreen(
+      "servico-nome",
+      stateFixture({
+        ...businessDone,
+        ...calendarDone,
+        service: {
+          active: true,
+          bufferAfterMinutes: 0,
+          bufferBeforeMinutes: 0,
+          durationMinutes: 45,
+          id: "svc-1",
+          name: "Corte",
+          needsReview: false,
+          price: 80,
+          priceType: "STARTING_AT",
+        },
+      }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "A partir de" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+
+    const [patch] = updateOnboarding.mock.calls.at(-1) as [
+      { service: { priceType: string } },
+    ];
+    expect(patch.service.priceType).toBe("STARTING_AT");
+  });
+
+  test("servicos-adicionais avança para dias-de-atendimento sem exigir nenhum adicional", async () => {
+    const user = userEvent.setup();
+    renderScreen(
+      "servicos-adicionais",
+      stateFixture({ ...businessDone, ...calendarDone, ...serviceDone }),
+    );
+    await user.click(await screen.findByRole("button", { name: "Continuar" }));
+    expect(updateOnboarding).not.toHaveBeenCalled();
     expect(push).toHaveBeenCalledWith("/onboarding/dias-de-atendimento");
   });
 
@@ -794,11 +816,16 @@ describe("erro 409 ao salvar uma etapa não cita WhatsApp", () => {
 });
 
 describe("a retomada abre a próxima pendência real", () => {
+  // Goal065/WU-02: "dados-do-negocio" virou boas-vindas (sem gravação) +
+  // segmento-e-nome + modalidade + endereco. Business é gravado atômico
+  // (nome+categoria+timezone sempre juntos), então "sem nome" é o único
+  // estado que volta a boas-vindas — as pendências mais avançadas do mesmo
+  // bloco resumem direto na etapa pendente real.
   test("com o negócio pendente, a retomada não força o passo de WhatsApp", () => {
-    expect(nextRequiredStep(emptyState())).toBe("dados-do-negocio");
+    expect(nextRequiredStep(emptyState())).toBe("boas-vindas");
   });
 
-  test("com nome e categoria preenchidos mas sem modalidade escolhida, a retomada continua em dados-do-negocio", () => {
+  test("com nome e categoria preenchidos mas sem modalidade escolhida, a retomada continua em modalidade", () => {
     expect(
       nextRequiredStep(
         stateFixture({
@@ -816,10 +843,10 @@ describe("a retomada abre a próxima pendência real", () => {
           whatsapp: { phoneNumber: "+5511999990000", status: "CONNECTED" },
         }),
       ),
-    ).toBe("dados-do-negocio");
+    ).toBe("modalidade");
   });
 
-  test("com ON_SITE escolhido e sem endereço, a retomada continua em dados-do-negocio", () => {
+  test("com ON_SITE escolhido e sem endereço, a retomada continua em endereco", () => {
     expect(
       nextRequiredStep(
         stateFixture({
@@ -837,7 +864,7 @@ describe("a retomada abre a próxima pendência real", () => {
           whatsapp: { phoneNumber: "+5511999990000", status: "CONNECTED" },
         }),
       ),
-    ).toBe("dados-do-negocio");
+    ).toBe("endereco");
   });
 
   test("com tudo pendente só o WhatsApp, a próxima pendência real é whatsapp", () => {

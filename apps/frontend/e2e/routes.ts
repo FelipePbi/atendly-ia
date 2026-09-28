@@ -76,3 +76,72 @@ export const AUTHENTICATED_ROUTES = [
     contentMarker: "Central de notificações",
   },
 ] as const;
+
+/**
+ * As etapas do onboarding que o vault descreve, medidas com uma sessão de
+ * uma segunda conta que para no meio do onboarding (Goal065, WU-05).
+ *
+ * `contentMarker` é sempre o h1 da etapa (`OnboardingShell` renderiza
+ * `title` de `onboardingScenarios` em `<h1>`) — nenhuma etapa aqui usa
+ * classe, ao contrário de `AUTHENTICATED_ROUTES`.
+ *
+ * Nenhuma rota depende da posição real que a conta semeada alcançou: o
+ * `OnboardingScreen` não guarda a etapa contra o estado gravado, então
+ * navegar direto para a URL de uma etapa adiante do que a conta gravou
+ * ainda a renderiza (`apps/frontend/src/shared/runtime/ProductRuntime.tsx`
+ * só redireciona `/onboarding/*` para `/login` ou `/inicio`, nunca para
+ * outra etapa). O endereço exige "Local próprio", por isso a semeadura
+ * grava o bloco de negócio com essa modalidade antes de a conta parar.
+ */
+export const ONBOARDING_ROUTES = [
+  {
+    path: "/onboarding/boas-vindas",
+    name: "onboarding-boas-vindas",
+    contentMarker: "Configure sua Atendly em poucos passos.",
+  },
+  {
+    path: "/onboarding/segmento-e-nome",
+    name: "onboarding-segmento-e-nome",
+    contentMarker: "Vamos começar pelo seu negócio",
+  },
+  {
+    path: "/onboarding/modalidade",
+    name: "onboarding-modalidade",
+    contentMarker: "Onde você atende?",
+  },
+  {
+    path: "/onboarding/endereco",
+    name: "onboarding-endereco",
+    contentMarker: "Qual é o endereço do seu espaço?",
+  },
+  {
+    path: "/onboarding/servico-nome",
+    name: "onboarding-servico-nome",
+    contentMarker: "Qual serviço seus clientes mais agendam?",
+  },
+  {
+    path: "/onboarding/servicos-adicionais",
+    name: "onboarding-servicos-adicionais",
+    contentMarker: "Quer adicionar outros serviços agora?",
+  },
+  {
+    path: "/onboarding/dias-de-atendimento",
+    name: "onboarding-dias-de-atendimento",
+    contentMarker: "Em quais dias você atende?",
+  },
+  {
+    path: "/onboarding/horarios",
+    name: "onboarding-horarios",
+    contentMarker: "Qual é seu horário de atendimento?",
+  },
+  {
+    path: "/onboarding/agenda-atendly-pronta",
+    name: "onboarding-agenda-atendly-pronta",
+    contentMarker: "Sua Agenda Atendly está pronta",
+  },
+  {
+    path: "/onboarding/whatsapp",
+    name: "onboarding-whatsapp",
+    contentMarker: "Agora vamos colocar sua IA para atender de verdade",
+  },
+] as const;

@@ -7,6 +7,7 @@ import { Brand } from "@/shared/ui/Brand";
 
 export function OnboardingShell({
   actions,
+  actionsStacked = false,
   blockLabel,
   body,
   description,
@@ -18,6 +19,8 @@ export function OnboardingShell({
   title,
 }: {
   actions: ReactNode;
+  // Ações empilhadas em largura total no celular (introdução do WhatsApp).
+  actionsStacked?: boolean;
   blockLabel: string;
   body: ReactNode;
   description: string;
@@ -46,11 +49,16 @@ export function OnboardingShell({
             />
           </div>
         </div>
-        <button className="onboarding-exit" type="button" onClick={onExit}>
-          Sair
+        <button
+          className="btn btn-secondary onboarding-exit"
+          type="button"
+          onClick={onExit}
+        >
+          <Icon name="logout" />
+          <span>Sair</span>
         </button>
       </header>
-      <form className="onboarding-main" onSubmit={onSubmit}>
+      <form className="onboarding-main" noValidate onSubmit={onSubmit}>
         <div className="onboarding-content">
           <header className="onboarding-heading">
             <p className="eyebrow">{eyebrow}</p>
@@ -64,7 +72,11 @@ export function OnboardingShell({
               <span>{error}</span>
             </div>
           )}
-          <div className="onboarding-actions">{actions}</div>
+          <div
+            className={`onboarding-actions${actionsStacked ? " is-stacked" : ""}`}
+          >
+            {actions}
+          </div>
         </div>
       </form>
     </main>

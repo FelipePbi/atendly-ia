@@ -20,11 +20,26 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
 });
 
-function demoPriceLabel(draft: OnboardingDraft): string {
-  if (draft.servicePriceType === "ON_REQUEST") return "sob consulta";
-  const value = Number(draft.servicePrice.replace(",", "."));
-  if (!Number.isFinite(value)) return "sob consulta";
-  return currencyFormatter.format(value);
+/** A resposta de preço da demonstração, pelo tipo gravado (Goal065): a IA só
+ * informa o valor cadastrado, e "A partir de" nunca vira preço fixo. */
+function demoPriceReply(draft: OnboardingDraft): string {
+  const name = draft.serviceName;
+  if (draft.servicePriceType === "ON_REQUEST") {
+    return `O valor do ${name} é sob consulta.`;
+  }
+  const raw = draft.servicePrice.trim().replace(",", ".");
+  const value = Number(raw);
+  if (
+    draft.servicePriceType === "NOT_INFORMED" ||
+    raw === "" ||
+    !Number.isFinite(value)
+  ) {
+    return `O valor do ${name} ainda não foi informado.`;
+  }
+  const price = currencyFormatter.format(value);
+  return draft.servicePriceType === "STARTING_AT"
+    ? `O ${name} custa a partir de ${price}.`
+    : `O ${name} custa ${price}.`;
 }
 
 function demoDayLabel(draft: OnboardingDraft): string {
@@ -57,7 +72,7 @@ function AiDemoStepBody({ draft }: { draft: OnboardingDraft }) {
     );
   }
 
-  const price = demoPriceLabel(draft);
+  const priceReply = demoPriceReply(draft);
   const day = demoDayLabel(draft);
 
   return (
@@ -78,9 +93,7 @@ function AiDemoStepBody({ draft }: { draft: OnboardingDraft }) {
         </div>
         <div className="message-group is-outgoing is-ai">
           <span className="message-sender">Sua IA</span>
-          <div className="message-bubble">
-            O {draft.serviceName} custa {price}.
-          </div>
+          <div className="message-bubble">{priceReply}</div>
           <span className="message-meta">Serviço reconhecido</span>
         </div>
         <div className="message-group">

@@ -392,8 +392,10 @@ describe("OnboardingResume retoma na execução corrente", () => {
   test("sem WhatsApp conectado, a retomada não consulta o teste", async () => {
     renderResume(emptyState());
 
+    // Goal065/WU-02: estado totalmente vazio retoma em "boas-vindas", não
+    // mais em "dados-do-negocio" (dividido em quatro etapas).
     await waitFor(() =>
-      expect(replace).toHaveBeenCalledWith("/onboarding/dados-do-negocio"),
+      expect(replace).toHaveBeenCalledWith("/onboarding/boas-vindas"),
     );
     expect(getActivationTest).not.toHaveBeenCalled();
   });

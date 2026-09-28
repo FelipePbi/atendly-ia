@@ -147,6 +147,11 @@ const SESSION_SECRET = "goal033-authenticated-ui-rehearsal-session-secret";
 // precisa DIGITÁ-LA em `/login` — é esse o ponto do Goal —, e não aparece em
 // nenhuma linha de log deste arquivo.
 const ACCOUNT_PASSWORD = "goal033-authenticated-ui-rehearsal-password";
+// Senha da SEGUNDA conta (Goal065/WU-05), que para no meio do onboarding.
+// Mesmo contrato que `ACCOUNT_PASSWORD`: só viaja por ambiente, digitada em
+// `/login` pelo gate, nunca logada.
+const ONBOARDING_ACCOUNT_PASSWORD =
+  "goal033-authenticated-ui-rehearsal-onboarding-password";
 // Fronteira do WhatsApp, toda sintética. O token do webhook é o que a IA exige
 // de quem entrega evento (e o mesmo que o BFF registra no dublê); as chaves
 // cifram a projeção da credencial de instância dentro dos bancos descartáveis.
@@ -314,6 +319,29 @@ export const SEED = Object.freeze({
     messageId: "goal033-authenticated-ui-inbound-1",
   }),
   ownerReply: "Claro! Consigo te atender essa semana, posso confirmar?",
+});
+
+/**
+ * A SEGUNDA conta do ensaio (Goal065/WU-05): para no meio do onboarding, de
+ * propósito, para o gate medir as etapas que só uma sessão sem onboarding
+ * concluído alcança. Só o bloco de negócio é gravado — nome, segmento,
+ * "Local próprio" e endereço — e nada mais: nem fonte da agenda, nem
+ * serviço, nem disponibilidade, nem tom da IA, nem WhatsApp. A conta
+ * PRINCIPAL (`SEED` acima) e as 75 medidas que ela já sustenta não mudam;
+ * esta é uma conta e um tenant à parte, semeada depois, pelas mesmas rotas
+ * do produto.
+ *
+ * "Local próprio" é a modalidade porque o vault só oferece "Endereço" como
+ * etapa quando ela está selecionada — sem isso o gate mediria uma etapa que
+ * o produto não considera alcançável.
+ */
+export const ONBOARDING_SEED = Object.freeze({
+  email: "goal033-onboarding-gate@example.invalid",
+  ownerName: "Onboarding Goal065",
+  businessName: "Estúdio Goal065 Onboarding",
+  businessCategory: "Estética",
+  timezone: "America/Sao_Paulo",
+  address: "Rua do Onboarding, 65 — Sala 1",
 });
 
 /**
@@ -1111,11 +1139,12 @@ async function runStackChild() {
   const aiDb = new Client({ connectionString: aiDbUrl });
   await Promise.all([bffDb.connect(), schedulingDb.connect(), aiDb.connect()]);
 
-  const client = createSeedClient(bffAddress, ports.frontendUrl, {
+  const cookieNames = {
     session: env.SESSION_COOKIE_NAME,
     csrf: env.CSRF_COOKIE_NAME,
     csrfHeader: env.CSRF_HEADER_NAME.toLowerCase(),
-  });
+  };
+  const client = createSeedClient(bffAddress, ports.frontendUrl, cookieNames);
 
   // O único substituto do provedor de modelo existe para LANÇAR: se o caminho
   // exercitado chamasse o modelo, a semeadura cairia com mensagem própria em
@@ -1147,12 +1176,16 @@ async function runStackChild() {
       aiDb,
       legalVersions: CURRENT_LEGAL_VERSIONS,
     });
+    result.onboardingSeed = await seedOnboardingAccount(
+      () => createSeedClient(bffAddress, ports.frontendUrl, cookieNames),
+      CURRENT_LEGAL_VERSIONS,
+    );
 
     result.build = buildFrontend(ports);
     frontend = await startFrontend(ports);
     result.frontend = { url: ports.frontendUrl, pid: frontend.pid };
 
-    result.gate = await runAuthenticatedGate(ports, result.seed);
+    result.gate = await runAuthenticatedGate(ports, result.seed, result.onboardingSeed);
     result.evolutionDouble = {
       calls: evolution.calls.length,
       unexpected: evolution.unexpected,
@@ -1513,6 +1546,59 @@ async function seedTenant(client, ai, { bffDb, schedulingDb, aiDb, legalVersions
       durationServiceMinutes: SEED.durationService.durationMinutes,
     },
   };
+}
+
+/**
+ * Semeia a SEGUNDA conta (Goal065/WU-05), pelas rotas do produto, e para no
+ * meio do onboarding de propósito: registra a conta e grava só o bloco de
+ * negócio (nome, segmento, "Local próprio" e endereço). Nunca chama
+ * `PATCH /v1/onboarding` de novo nem `POST /v1/onboarding/complete` — é isso
+ * que mantém a sessão em `phase: "onboarding"` para o gate autenticado
+ * medir, navegando direto para a URL de cada etapa.
+ *
+ * `createClient` é uma fábrica, não a instância: esta conta precisa do
+ * próprio cofre de cookies, separado do cliente que semeou a conta
+ * principal.
+ */
+async function seedOnboardingAccount(createClient, legalVersions) {
+  const client = createClient();
+  const registered = await client.request("POST", "/v1/auth/register", {
+    body: {
+      email: ONBOARDING_SEED.email,
+      name: ONBOARDING_SEED.ownerName,
+      password: ONBOARDING_ACCOUNT_PASSWORD,
+      confirmPassword: ONBOARDING_ACCOUNT_PASSWORD,
+      termsAccepted: true,
+      termsVersion: legalVersions.termsVersion,
+      privacyPolicyVersion: legalVersions.privacyPolicyVersion,
+    },
+  });
+  step(
+    registered.status === 201,
+    `seed(onboarding): POST /v1/auth/register answered ${registered.status}, expected 201`,
+  );
+  step(
+    client.hasSessionCookie(),
+    "seed(onboarding): register did not return a session cookie",
+  );
+
+  const business = await client.request("PATCH", "/v1/onboarding", {
+    body: {
+      business: {
+        address: ONBOARDING_SEED.address,
+        category: ONBOARDING_SEED.businessCategory,
+        modalities: ["ON_SITE"],
+        name: ONBOARDING_SEED.businessName,
+        timezone: ONBOARDING_SEED.timezone,
+      },
+    },
+  });
+  step(
+    business.status === 200,
+    `seed(onboarding): the business onboarding block answered ${business.status}, expected 200`,
+  );
+
+  return { email: ONBOARDING_SEED.email, password: ONBOARDING_ACCOUNT_PASSWORD };
 }
 
 /** Corpo do webhook do Evolution Go, no formato que o adaptador mapeia. */
@@ -1898,7 +1984,7 @@ function delay(ms) {
  * medir nada. Com `spawn` + `await`, o laço continua livre e o BFF responde
  * enquanto o gate roda.
  */
-function runAuthenticatedGate(ports, seed) {
+function runAuthenticatedGate(ports, seed, onboardingSeed) {
   const configPath = playwrightConfig();
   console.log(
     `goal033:authenticated-ui-rehearsal running the authenticated gate (${path.relative(repositoryRoot, configPath)}) against ${ports.frontendUrl}`,
@@ -1922,6 +2008,10 @@ function runAuthenticatedGate(ports, seed) {
           GOAL033_PASSWORD: ACCOUNT_PASSWORD,
           GOAL033_MEASURED_DATE: seed.measuredDate,
           GOAL033_SEED: JSON.stringify(seed.content),
+          // A SEGUNDA conta (Goal065/WU-05), parada no meio do onboarding —
+          // digitada em /login como a primeira, sem cookie fabricado.
+          GOAL033_ONBOARDING_EMAIL: onboardingSeed.email,
+          GOAL033_ONBOARDING_PASSWORD: onboardingSeed.password,
           // Identificador desta execução. O gate digita a sessão uma vez e a
           // reusa entre os testes (a rota de login do produto aceita dez
           // tentativas por IP a cada quinze minutos, e são trinta e cinco

@@ -23,6 +23,10 @@ import {
   stepPersistByBlock,
 } from "./blocks/registry";
 import {
+  applyInlineValidation,
+  applyServerFieldErrors,
+} from "./blocks/shared";
+import {
   completeWithoutWhatsapp,
   skipIgnoredContactsStep,
   skipWhatsappStep,
@@ -60,6 +64,7 @@ export function OnboardingScreen({
 
   const blockId = blockForScenario(scenario);
   const blockLabel = onboardingBlockLabels[blockId];
+  const isWelcomeStep = scenario === "boas-vindas";
   const isWhatsappIntro = scenario === "whatsapp";
   const isWhatsappConnect = scenario === "whatsapp-conectar";
   const isWhatsappConclusion = scenario === "whatsapp-concluido";
@@ -70,7 +75,20 @@ export function OnboardingScreen({
   const isActivationTestFailed = scenario === "teste-real-falha";
   const isActivationTestSucceeded = scenario === "teste-real-sucesso";
   const index = onboardingFlow.indexOf(scenario);
-  const previous = index > 0 ? onboardingFlow[index - 1] : undefined;
+  // "endereco" é condicional (só existe para Local próprio) e por isso fica
+  // fora de onboardingFlow; e o passo anterior de "fonte-da-agenda" depende
+  // da mesma escolha. Os dois precisam de Voltar calculado pelo rascunho, não
+  // pela posição fixa no array.
+  const previous: OnboardingScenario | undefined =
+    scenario === "endereco"
+      ? "modalidade"
+      : scenario === "fonte-da-agenda"
+        ? draft.businessModalities.includes("ON_SITE")
+          ? "endereco"
+          : "modalidade"
+        : index > 0
+          ? onboardingFlow[index - 1]
+          : undefined;
 
   function go(step: OnboardingScenario) {
     router.push(`/onboarding/${step}`);
@@ -78,10 +96,8 @@ export function OnboardingScreen({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!event.currentTarget.checkValidity()) {
-      event.currentTarget.reportValidity();
-      return;
-    }
+    const form = event.currentTarget;
+    if (!applyInlineValidation(form)) return;
     setBusy(true);
     setError(null);
     try {
@@ -94,7 +110,11 @@ export function OnboardingScreen({
         setError,
       });
     } catch (caught: unknown) {
-      setError(onboardingError(caught));
+      // Recusa de validação do servidor cai no campo da etapa; só o que não
+      // corresponde a campo nenhum vai para o aviso geral.
+      if (!applyServerFieldErrors(form, caught)) {
+        setError(onboardingError(caught));
+      }
     } finally {
       setBusy(false);
     }
@@ -184,7 +204,13 @@ export function OnboardingScreen({
     router.replace("/login");
   }
 
-  const actions = isActivationTestSucceeded ? (
+  const actions = isWelcomeStep ? (
+    // Boas-vindas não grava nada: só avança para o primeiro campo real
+    // (docs/product-vault/02-Fluxos/01-Onboarding.md §1).
+    <button className="btn btn-primary" disabled={busy} type="submit">
+      {busy ? "Abrindo..." : "Começar"}
+    </button>
+  ) : isActivationTestSucceeded ? (
     // Sucesso: só o CTA do vault. Não há "voltar" para um teste que terminou.
     <button className="btn btn-primary" disabled={busy} type="submit">
       {busy ? "Abrindo..." : "Ir para o início"}
@@ -278,12 +304,13 @@ export function OnboardingScreen({
       </button>
     </>
   ) : isWhatsappIntro ? (
+    // Principal primeiro, como no protótipo (tela 4.1): no celular os botões
+    // ficam empilhados em largura total nesta ordem; a partir do tablet, a
+    // linha é invertida para manter "Voltar" à esquerda (QA O-41).
     <>
-      {previous && (
-        <Link className="btn btn-secondary" href={`/onboarding/${previous}`}>
-          Voltar
-        </Link>
-      )}
+      <button className="btn btn-primary" disabled={busy} type="submit">
+        {busy ? "Salvando..." : "Conectar meu WhatsApp"}
+      </button>
       <button
         className="btn btn-secondary"
         disabled={busy}
@@ -292,9 +319,11 @@ export function OnboardingScreen({
       >
         {busy ? "Salvando..." : "Fazer isso depois"}
       </button>
-      <button className="btn btn-primary" disabled={busy} type="submit">
-        {busy ? "Salvando..." : "Conectar meu WhatsApp"}
-      </button>
+      {previous && (
+        <Link className="btn btn-secondary" href={`/onboarding/${previous}`}>
+          Voltar
+        </Link>
+      )}
     </>
   ) : isIgnoredContactsStep ? (
     <>
@@ -331,6 +360,7 @@ export function OnboardingScreen({
   return (
     <OnboardingShell
       actions={actions}
+      actionsStacked={isWhatsappIntro}
       blockLabel={blockLabel}
       body={stepBodyByBlock[blockId](
         scenario,

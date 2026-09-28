@@ -36,7 +36,7 @@ export interface OnboardingPatch {
     id?: string;
     name: string;
     price?: number | null;
-    priceType: "FIXED" | "ON_REQUEST";
+    priceType: "FIXED" | "STARTING_AT" | "ON_REQUEST" | "NOT_INFORMED";
   };
 }
 

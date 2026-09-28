@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { BffHttpError, type Customer, type CustomerDetail } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
+import { displayPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Field } from "@/shared/ui/Field";
 import { ListItem } from "@/shared/ui/ListItem";
@@ -167,7 +168,7 @@ export function PrimaryGuardianPanel({
             >
               {filtered.map((candidate) => (
                 <ListItem
-                  copy={candidate.phone || "Telefone não informado"}
+                  copy={displayPhone(candidate.phone, "Telefone não informado")}
                   disabled={busy}
                   key={candidate.id}
                   onClick={() => void propose(candidate.id)}
@@ -206,7 +207,9 @@ export function PrimaryGuardianPanel({
         <>
           <div className="directory-readonly-field">
             <span>{guardian.guardian.name || "Cliente sem nome"}</span>
-            <strong>{guardian.guardian.phone || "Telefone não informado"}</strong>
+            <strong>
+              {displayPhone(guardian.guardian.phone, "Telefone não informado")}
+            </strong>
           </div>
           <div className="directory-detail-signals">
             <span

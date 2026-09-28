@@ -7,6 +7,7 @@ import { type FormEvent } from "react";
 import { BffHttpError, type CalendarState, type CustomerDetail } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
+import { displayPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Field } from "@/shared/ui/Field";
 import { StatePanel } from "@/shared/ui/States";
@@ -143,7 +144,7 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
               <div>
                 <h1>{customer.name || "Cliente sem nome"}</h1>
                 <p className="directory-detail-phone">
-                  {customer.phone || "Telefone não informado"}
+                  {displayPhone(customer.phone, "Telefone não informado")}
                 </p>
                 <div className="directory-detail-signals">
                   <span className="badge">Agenda Atendly</span>

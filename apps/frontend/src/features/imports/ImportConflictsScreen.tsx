@@ -15,9 +15,11 @@ import {
   DECISION_LABELS,
   decisionRequiresTarget,
   decisionsForCategory,
+  groupAvailabilityByDay,
   type ItemDecisionKind,
 } from "./labels";
 import type {
+  ImportAvailabilityGridRule,
   ImportCategory,
   ImportItem,
   ImportPreviewCategory,
@@ -269,23 +271,17 @@ function ConflictItemRow({
     );
   }
 
-  async function submit() {
-    if (!decision) return;
-    const needsTarget = decisionRequiresTarget(decision);
-    if (needsTarget && !targetInternalId.trim()) {
-      setDecisionError("Informe o identificador do cadastro existente.");
-      return;
-    }
+  async function submitDecision(
+    decisionValue: ItemDecisionKind,
+    targetInternalIdValue?: string,
+  ) {
     setSubmitting(true);
     setDecisionError(null);
     try {
       await getProductServices().migration.decideImportItem(
         sessionId,
         item.id,
-        {
-          decision,
-          targetInternalId: needsTarget ? targetInternalId.trim() : undefined,
-        },
+        { decision: decisionValue, targetInternalId: targetInternalIdValue },
         newIdempotencyKey(),
       );
       onDecided();
@@ -301,6 +297,19 @@ function ConflictItemRow({
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function submit() {
+    if (!decision) return;
+    const needsTarget = decisionRequiresTarget(decision);
+    if (needsTarget && !targetInternalId.trim()) {
+      setDecisionError("Informe o identificador do cadastro existente.");
+      return;
+    }
+    await submitDecision(
+      decision,
+      needsTarget ? targetInternalId.trim() : undefined,
+    );
   }
 
   if (!expanded) {
@@ -322,6 +331,58 @@ function ConflictItemRow({
         >
           Resolver
         </button>
+      </li>
+    );
+  }
+
+  if (category === "AVAILABILITY") {
+    return (
+      <li className="imports-conflict-item is-expanded">
+        <div>
+          <strong>{item.label ?? item.externalId}</strong>
+          <p className="imports-note">{conflictReasonLabel(item.reasonCode)}</p>
+        </div>
+        <div className="imports-availability-comparison">
+          <AvailabilityGridPreview
+            rules={item.currentAvailability}
+            title="Horários atuais"
+          />
+          <AvailabilityGridPreview
+            rules={item.proposedAvailability}
+            title="Horários do Minha Agenda"
+          />
+        </div>
+        {decisionError && (
+          <p className="field-help" role="alert">
+            {decisionError}
+          </p>
+        )}
+        <div className="imports-actions is-split">
+          <button
+            className="btn btn-secondary"
+            disabled={submitting}
+            type="button"
+            onClick={onCollapse}
+          >
+            Cancelar
+          </button>
+          <button
+            className="btn btn-secondary"
+            disabled={submitting}
+            type="button"
+            onClick={() => void submitDecision("EXCLUDE")}
+          >
+            Manter meus horários
+          </button>
+          <button
+            className="btn btn-primary"
+            disabled={submitting}
+            type="button"
+            onClick={() => void submitDecision("INCLUDE")}
+          >
+            Usar os horários da Minha Agenda
+          </button>
+        </div>
       </li>
     );
   }
@@ -389,5 +450,38 @@ function ConflictItemRow({
         </button>
       </div>
     </li>
+  );
+}
+
+/**
+ * Uma grade da comparação de disponibilidade (Goal062 §2): a atual do
+ * negócio ou a proposta pela origem, por dia da semana. Sem grade — origem
+ * ilegível ou sobreposta — mostra que não há o que comparar, nunca uma
+ * grade vazia sem explicação.
+ */
+function AvailabilityGridPreview({
+  rules,
+  title,
+}: {
+  rules: ImportAvailabilityGridRule[] | null | undefined;
+  title: string;
+}) {
+  const days = groupAvailabilityByDay(rules);
+  return (
+    <div className="imports-availability-grid">
+      <strong>{title}</strong>
+      {days.length === 0 ? (
+        <p className="imports-note">Nenhum horário para comparar.</p>
+      ) : (
+        <ul>
+          {days.map((day) => (
+            <li key={day.dayOfWeek}>
+              <span>{day.label}</span>
+              <span>{day.intervals.join(", ")}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

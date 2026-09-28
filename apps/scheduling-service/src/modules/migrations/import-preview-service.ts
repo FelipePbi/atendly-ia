@@ -1,5 +1,5 @@
 import { env } from "../../config/env.js";
-import type { PrismaClient } from "../../generated/prisma/client.js";
+import { Prisma, type PrismaClient } from "../../generated/prisma/client.js";
 import type {
   ExternalEntityType,
   ImportCategory,
@@ -8,13 +8,25 @@ import type {
   IntegrationProvider,
 } from "../../generated/prisma/enums.js";
 import { AppError } from "../../shared/errors/app-error.js";
-import { normalizePhone } from "../../shared/phone/phone.js";
+import {
+  normalizePhone,
+  phoneEquivalenceCandidates,
+} from "../../shared/phone/phone.js";
+import {
+  type AvailabilityGridRule,
+  isValidAvailabilityGrid,
+} from "../availability/availability-grid.js";
+import { migrationAvailabilityRules } from "../integrations/minha-agenda/availability.js";
 import type {
   GetImportSnapshotInput,
   MinhaAgendaImportCategorySnapshot,
   MinhaAgendaImportRecord,
   MinhaAgendaImportSnapshot,
 } from "../integrations/minha-agenda/import-source-reader.js";
+import {
+  type WorkSchedule,
+  workScheduleSchema,
+} from "../integrations/minha-agenda/types.js";
 import {
   acquireImportLease,
   type ImportLease,
@@ -195,6 +207,25 @@ const PREVIEW_CATEGORY_ORDER: ImportCategory[] = [
   "NO_SHOW_APPOINTMENT",
 ];
 
+/**
+ * Disponibilidade da origem contra a grade vigente (Goal062 §2). O negocio ja
+ * tem horario ativo: a grade da origem so entra **no lugar** dela, e so com
+ * `INCLUDE` de item. Sem essa decisao, nada de disponibilidade e gravado.
+ */
+export const AVAILABILITY_REPLACES_CURRENT = "AVAILABILITY_REPLACES_CURRENT";
+/**
+ * A grade da origem se sobrepoe a si mesma (ou tem inicio depois do fim) pela
+ * mesma regra da tela de configuracao: nunca e gravada, nem com decisao.
+ */
+export const AVAILABILITY_SOURCE_OVERLAP = "AVAILABILITY_SOURCE_OVERLAP";
+/**
+ * Na execucao, o negocio tem horario ativo e a troca nao foi confirmada — a
+ * grade ganhou regra depois da analise. Nada e gravado; e preciso analisar
+ * de novo.
+ */
+export const AVAILABILITY_CHANGED_SINCE_ANALYSIS =
+  "AVAILABILITY_CHANGED_SINCE_ANALYSIS";
+
 /** A sessao ja terminou (Goal020, WU-02): nao ha mais o que escolher. */
 export const IMPORT_SESSION_NOT_SELECTABLE = "IMPORT_SESSION_NOT_SELECTABLE";
 /** A categoria pedida nunca foi descoberta por uma analise desta sessao. */
@@ -227,6 +258,16 @@ interface MatchableCustomer {
 interface MatchableService {
   id: string;
   name: string;
+}
+
+/**
+ * Grade proposta pela origem para o grupo de disponibilidade (`company` e
+ * `employee:<id>` formam uma grade so). `rules` so existe quando a grade
+ * passou na regra de sobreposicao; `overlap` marca a que nao passou.
+ */
+interface AvailabilityProposal {
+  rules: AvailabilityGridRule[] | null;
+  overlap: boolean;
 }
 
 interface Classification {
@@ -464,8 +505,13 @@ export class ImportPreviewService {
     const session = { provider: start.provider };
     const nextVersion = start.previewVersion + 1;
 
-    const [existingCustomers, existingServices, externalMaps, existingItems] =
-      await Promise.all([
+    const [
+      existingCustomers,
+      existingServices,
+      externalMaps,
+      existingItems,
+      activeAvailabilityRules,
+    ] = await Promise.all([
         this.prisma.customer.findMany({
           where: { tenantId: context.tenantId },
         }),
@@ -475,6 +521,9 @@ export class ImportPreviewService {
         }),
         this.prisma.importItem.findMany({
           where: { tenantId: context.tenantId, sessionId: context.sessionId },
+        }),
+        this.prisma.availabilityRule.count({
+          where: { tenantId: context.tenantId, active: true },
         }),
       ]);
 
@@ -489,6 +538,9 @@ export class ImportPreviewService {
     );
 
     const categorySnapshots = collectCategorySnapshots(snapshot);
+    const availabilityProposal = proposeAvailability(
+      snapshot.availability.records,
+    );
     const seenKeys = new Set<string>();
     const itemResults: ImportPreviewItemResult[] = [];
     const categoryResults: ImportPreviewCategoryResult[] = [];
@@ -527,7 +579,13 @@ export class ImportPreviewService {
           externalMapIndex,
           existingCustomers,
           existingServices,
+          availabilityProposal,
+          hasActiveAvailability: activeAvailabilityRules > 0,
         });
+        const proposedAvailability =
+          category === "AVAILABILITY" && availabilityProposal.rules
+            ? (availabilityProposal.rules as unknown as Prisma.InputJsonArray)
+            : Prisma.DbNull;
         const fingerprint = fingerprintOf(record.raw);
         const existing = existingItemIndex.get(key);
         const isNew = !existing;
@@ -580,6 +638,7 @@ export class ImportPreviewService {
               reasonCode: classification.reasonCode,
               reasonDetail: classification.reasonDetail,
               fingerprint,
+              proposedAvailability,
               lastSeenPreviewVersion: nextVersion,
               disappearedAt: null,
             },
@@ -595,6 +654,7 @@ export class ImportPreviewService {
             reasonCode: classification.reasonCode,
             reasonDetail: classification.reasonDetail,
             fingerprint,
+            proposedAvailability,
             firstSeenPreviewVersion: nextVersion,
             lastSeenPreviewVersion: nextVersion,
           });
@@ -921,6 +981,8 @@ function classifyRecord(input: {
   externalMapIndex: Map<string, string>;
   existingCustomers: MatchableCustomer[];
   existingServices: MatchableService[];
+  availabilityProposal: AvailabilityProposal;
+  hasActiveAvailability: boolean;
 }): Classification {
   const { category, record, entityType, externalMapIndex } = input;
 
@@ -948,6 +1010,13 @@ function classifyRecord(input: {
   if (category === "CUSTOMER") {
     return classifyCustomer(record, input.existingCustomers);
   }
+  if (category === "AVAILABILITY") {
+    return classifyAvailability(
+      record,
+      input.availabilityProposal,
+      input.hasActiveAvailability,
+    );
+  }
 
   return {
     label: labelFor(category, record),
@@ -963,9 +1032,12 @@ function classifyService(
   record: MinhaAgendaImportRecord,
   existingServices: MatchableService[],
 ): Classification {
-  const raw = record.raw as { name?: unknown; duration?: unknown } | null;
+  const raw = record.raw as
+    | { name?: unknown; duration?: unknown; price?: unknown }
+    | null;
   const name = asString(raw?.name) ?? `Serviço ${record.externalId}`;
   const duration = asPositiveNumber(raw?.duration);
+  const price = typeof raw?.price === "number" ? raw.price : null;
 
   const exactMatches = existingServices.filter(
     (service) => normalizeText(service.name) === normalizeText(name),
@@ -1009,6 +1081,13 @@ function classifyService(
     reasonCode = "SERVICE_DURATION_MISSING";
     reasonDetail =
       "Serviço sem duração informada pela origem: precisa de revisão antes de aceitar novos agendamentos.";
+  } else if (price === 0 && reasonCode === null) {
+    // Preco zero e "nao informado", nunca preco de verdade (Goal062, WU-01):
+    // so informativo, nunca bloqueia a analise nem sobrepoe um reasonCode
+    // ja explicado por correspondencia.
+    reasonCode = "SERVICE_PRICE_NOT_INFORMED";
+    reasonDetail =
+      "Serviço sem preço informado pela origem (preço 0): revise antes de usar em cobrança.";
   }
 
   return { label: name, status, reasonCode, reasonDetail, matchClass, candidateInternalIds };
@@ -1036,8 +1115,11 @@ function classifyCustomer(
   let candidateInternalIds: string[] = [];
 
   if (normalizedPhone) {
+    const phoneCandidates = new Set(phoneEquivalenceCandidates(normalizedPhone));
     const phoneMatches = existingCustomers.filter(
-      (customer) => customer.normalizedPhone === normalizedPhone,
+      (customer) =>
+        customer.normalizedPhone !== null &&
+        phoneCandidates.has(customer.normalizedPhone),
     );
     if (phoneMatches.length > 0) {
       const sameName = rawName
@@ -1086,6 +1168,87 @@ function classifyCustomer(
       : "PENDING";
 
   return { label, status, reasonCode, reasonDetail, matchClass, candidateInternalIds };
+}
+
+/**
+ * Disponibilidade (Goal062 §2): a grade da origem nunca e somada a vigente.
+ * Grade que se sobrepoe a si mesma pesa mais que a troca — ela nunca e
+ * gravada, com ou sem decisao. Com horario ativo no negocio, o item espera a
+ * escolha explicita (`INCLUDE` troca, `EXCLUDE` mantem); sem horario ativo,
+ * segue pendente como sempre.
+ */
+function classifyAvailability(
+  record: MinhaAgendaImportRecord,
+  proposal: AvailabilityProposal,
+  hasActiveAvailability: boolean,
+): Classification {
+  const label = labelFor("AVAILABILITY", record);
+  if (proposal.overlap) {
+    return {
+      label,
+      status: "NEEDS_REVIEW",
+      reasonCode: AVAILABILITY_SOURCE_OVERLAP,
+      reasonDetail:
+        "Os horários da origem se sobrepõem no mesmo dia: eles não serão importados.",
+      matchClass: "NONE",
+      candidateInternalIds: [],
+    };
+  }
+  if (hasActiveAvailability) {
+    return {
+      label,
+      status: "NEEDS_REVIEW",
+      reasonCode: AVAILABILITY_REPLACES_CURRENT,
+      reasonDetail:
+        "O negócio já tem horários de atendimento: escolha entre usar os horários da origem no lugar dos atuais ou manter os atuais.",
+      matchClass: "NONE",
+      candidateInternalIds: [],
+    };
+  }
+  return {
+    label,
+    status: "PENDING",
+    reasonCode: null,
+    reasonDetail: null,
+    matchClass: "NONE",
+    candidateInternalIds: [],
+  };
+}
+
+/**
+ * Grade proposta pelo grupo de disponibilidade, derivada como a execucao a
+ * deriva (`migrationAvailabilityRules`) e validada pela regra unica de
+ * sobreposicao. Registro fora do contrato ou sem a jornada da empresa nao tem
+ * grade proposta: a execucao falha o item com o proprio motivo.
+ */
+function proposeAvailability(
+  records: MinhaAgendaImportRecord[],
+): AvailabilityProposal {
+  let company: WorkSchedule | null = null;
+  let employee: WorkSchedule | null = null;
+  for (const record of records) {
+    const parsed = workScheduleSchema.safeParse(record.raw);
+    if (!parsed.success) return { rules: null, overlap: false };
+    if (record.externalId === "company") company = parsed.data;
+    else employee = parsed.data;
+  }
+  if (!company) return { rules: null, overlap: false };
+  let rules: AvailabilityGridRule[];
+  try {
+    rules = migrationAvailabilityRules(company, employee);
+  } catch {
+    return { rules: null, overlap: false };
+  }
+  if (!isValidAvailabilityGrid(rules)) return { rules: null, overlap: true };
+  // Sanitizada: so dia e horario, nada mais da origem.
+  return {
+    rules: rules.map((rule) => ({
+      dayOfWeek: rule.dayOfWeek,
+      startTime: rule.startTime,
+      endTime: rule.endTime,
+    })),
+    overlap: false,
+  };
 }
 
 function safeNormalizePhone(value: string | null): string | null {

@@ -1,4 +1,5 @@
 import type {
+  ImportAvailabilityGridRule,
   ImportCategory,
   ImportCompletion,
   ImportDecisionKind,
@@ -28,6 +29,7 @@ import type {
 // (`Idempotency-Key` explicita por mutacao). Uma segunda descricao da porta,
 // sem implementador, so poderia divergir dela.
 export type {
+  ImportAvailabilityGridRule,
   ImportCategory,
   ImportCompletion,
   ImportDecisionKind,

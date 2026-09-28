@@ -1199,6 +1199,13 @@ model ImportItem {
   /// mesmo identificador com conteudo diferente.
   fingerprint String?
 
+  /// Grade semanal proposta pela origem, so em itens `AVAILABILITY` (Goal062
+  /// §2): lista de `{ dayOfWeek, startTime, endTime }` ja derivada e
+  /// validada pela analise, nada mais da origem. Nula quando a grade da
+  /// origem nao pode ser gravada (sobreposicao, registro ilegivel) e em toda
+  /// outra categoria.
+  proposedAvailability Json?
+
   firstSeenPreviewVersion Int @default(0)
   lastSeenPreviewVersion  Int @default(0)
   /// Quando o item deixou de aparecer na origem entre duas analises. A

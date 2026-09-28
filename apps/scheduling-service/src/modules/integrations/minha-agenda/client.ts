@@ -7,6 +7,8 @@ import {
   type MinhaAgendaAppointment,
   minhaAgendaAppointmentSchema,
   minhaAgendaAuthResponseSchema,
+  type MinhaAgendaCustomer,
+  minhaAgendaCustomerSchema,
   type MinhaAgendaProfessional,
   minhaAgendaProfessionalSchema,
   type MinhaAgendaService,
@@ -27,6 +29,12 @@ interface TokenCache {
  */
 export interface MinhaAgendaSourceClient {
   listServices(): Promise<MinhaAgendaService[]>;
+  /**
+   * Diretorio completo de clientes (Goal062, WU-01). Opcional na interface:
+   * um dublê de teste sem este metodo faz o leitor recuar para a cobertura
+   * so por agendamento/bloqueio ja lido, no mesmo espirito de antes.
+   */
+  listCustomers?(): Promise<MinhaAgendaCustomer[]>;
   findAppointmentsByDateRange(
     query: AppointmentRangeQuery,
   ): Promise<MinhaAgendaAppointment[]>;
@@ -60,6 +68,14 @@ export class MinhaAgendaClient implements MinhaAgendaSourceClient {
       "employees.professionals",
       {},
       { includeDeleted: false },
+    );
+  }
+
+  async listCustomers(): Promise<MinhaAgendaCustomer[]> {
+    return this.request(
+      "/customers",
+      minhaAgendaCustomerSchema.array(),
+      "customers",
     );
   }
 

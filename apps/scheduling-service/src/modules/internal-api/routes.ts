@@ -28,6 +28,10 @@ import {
 } from "../appointments/appointment-event-service.js";
 import { runAutoCompleteSweep } from "../appointments/auto-complete-loop.js";
 import {
+  assertNonOverlappingRules,
+  sortAvailabilityGrid,
+} from "../availability/availability-grid.js";
+import {
   createExtraAvailability,
   createUnavailability,
   listAvailabilityExceptions,
@@ -1587,13 +1591,42 @@ export async function registerManagementRoutes(
         orderBy: [{ externalId: "asc" as const }],
       });
       const page = all.slice(query.offset, query.offset + query.limit);
+      // Disponibilidade (Goal062 §2): a troca so e escolhida vendo as duas
+      // grades. Por acrescimo, e so nos itens desta categoria, cada item leva
+      // a grade vigente do negocio e a proposta gravada pela analise.
+      const currentAvailability =
+        category === "AVAILABILITY"
+          ? (
+              await prisma.availabilityRule.findMany({
+                where: { tenantId: context.tenantId, active: true },
+                orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+              })
+            ).map((rule) => {
+              const dto = availabilityRuleDto(rule);
+              return {
+                dayOfWeek: dto.dayOfWeek,
+                startTime: dto.startTime,
+                endTime: dto.endTime,
+              };
+            })
+          : null;
       return data(request, {
         sessionId,
         category,
         total: all.length,
         limit: query.limit,
         offset: query.offset,
-        items: page.map(importItemDto),
+        items: page.map((item) =>
+          currentAvailability
+            ? {
+                ...importItemDto(item),
+                currentAvailability,
+                proposedAvailability: proposedAvailabilityDto(
+                  item.proposedAvailability,
+                ),
+              }
+            : importItemDto(item),
+        ),
       });
     },
   );
@@ -2377,6 +2410,33 @@ function importItemDto(item: {
   };
 }
 
+/**
+ * Grade proposta gravada pela analise, relida sem confiar na forma do JSON:
+ * so `dayOfWeek`, `startTime` e `endTime` saem daqui, por dia e horario.
+ * Nula quando a analise nao gravou grade (sobreposicao, registro ilegivel).
+ */
+function proposedAvailabilityDto(
+  value: unknown,
+): Array<{ dayOfWeek: number; startTime: string; endTime: string }> | null {
+  if (!Array.isArray(value)) return null;
+  const rules = value.flatMap((entry: unknown) => {
+    const rule = entry as Record<string, unknown> | null;
+    return rule &&
+      typeof rule.dayOfWeek === "number" &&
+      typeof rule.startTime === "string" &&
+      typeof rule.endTime === "string"
+      ? [
+          {
+            dayOfWeek: rule.dayOfWeek,
+            startTime: rule.startTime,
+            endTime: rule.endTime,
+          },
+        ]
+      : [];
+  });
+  return sortAvailabilityGrid(rules);
+}
+
 function importDecisionDto(decision: {
   id: string;
   scope: string;
@@ -2607,27 +2667,75 @@ async function applyImportDecision(
         };
       }
 
-      const updated = await transaction.importItem.update({
-        where: { tenantId_id: { tenantId: input.tenantId, id: item.id } },
-        data: itemUpdate,
-      });
-      const createdDecision = await transaction.importDecision.create({
-        data: {
-          tenantId: input.tenantId,
-          sessionId: input.sessionId,
-          scope: "ITEM",
-          decision: input.decision,
-          category: item.category,
-          itemId: item.id,
-          externalId: item.externalId,
-          previewVersion: session.previewVersion,
-          targetInternalId: input.targetInternalId ?? null,
-          noteCode: input.noteCode ?? null,
-          decidedBy: input.decidedBy,
-          decidedAt: now,
-        },
-      });
-      return [updated, createdDecision] as const;
+      if (item.category === "AVAILABILITY") {
+        itemUpdate = {
+          ...itemUpdate,
+          reasonDetail:
+            input.decision === "EXCLUDE"
+              ? "Horários atuais mantidos por decisão explícita; os da origem não foram importados."
+              : "Troca confirmada por decisão explícita: os horários da origem substituem os atuais.",
+        };
+      }
+
+      const decide = async (target: { id: string; externalId: string }) => {
+        const updated = await transaction.importItem.update({
+          where: { tenantId_id: { tenantId: input.tenantId, id: target.id } },
+          data: itemUpdate,
+        });
+        const createdDecision = await transaction.importDecision.create({
+          data: {
+            tenantId: input.tenantId,
+            sessionId: input.sessionId,
+            scope: "ITEM",
+            decision: input.decision,
+            category: item.category,
+            itemId: target.id,
+            externalId: target.externalId,
+            previewVersion: session.previewVersion,
+            targetInternalId: input.targetInternalId ?? null,
+            noteCode: input.noteCode ?? null,
+            decidedBy: input.decidedBy,
+            decidedAt: now,
+          },
+        });
+        return [updated, createdDecision] as const;
+      };
+
+      const decided = await decide(item);
+      // Disponibilidade é uma grade só (Goal062 §2): `company` e
+      // `employee:<id>` são trocados ou mantidos juntos. A escolha de um item
+      // vale para os demais itens do grupo ainda sem decisão, cada um com a
+      // própria linha de decisão de item — a tabela continua append-only e
+      // uma decisão por item.
+      if (
+        item.category === "AVAILABILITY" &&
+        (input.decision === "INCLUDE" || input.decision === "EXCLUDE")
+      ) {
+        const siblings = await transaction.importItem.findMany({
+          where: {
+            tenantId: input.tenantId,
+            sessionId: input.sessionId,
+            category: "AVAILABILITY",
+            id: { not: item.id },
+            status: { notIn: [...DECIDED_ITEM_STATUSES] },
+          },
+        });
+        const alreadyDecided = new Set(
+          (
+            await transaction.importDecision.findMany({
+              where: {
+                tenantId: input.tenantId,
+                scope: "ITEM",
+                itemId: { in: siblings.map((sibling) => sibling.id) },
+              },
+            })
+          ).map((entry) => entry.itemId),
+        );
+        for (const sibling of siblings) {
+          if (!alreadyDecided.has(sibling.id)) await decide(sibling);
+        }
+      }
+      return decided;
     },
   );
 
@@ -2659,34 +2767,6 @@ function data<T>(request: FastifyRequest, value: T) {
 
 function databaseTime(value: string): Date {
   return new Date(`1970-01-01T${value}:00.000Z`);
-}
-
-function assertNonOverlappingRules(
-  rules: Array<{ dayOfWeek: number; startTime: string; endTime: string }>,
-): void {
-  for (const rule of rules) {
-    if (rule.startTime >= rule.endTime) {
-      throw new AppError(
-        "INVALID_AVAILABILITY_RANGE",
-        "Availability start must precede end.",
-        400,
-      );
-    }
-    const overlap = rules.some(
-      (candidate) =>
-        candidate !== rule &&
-        candidate.dayOfWeek === rule.dayOfWeek &&
-        candidate.startTime < rule.endTime &&
-        candidate.endTime > rule.startTime,
-    );
-    if (overlap) {
-      throw new AppError(
-        "AVAILABILITY_OVERLAP",
-        "Availability periods cannot overlap.",
-        409,
-      );
-    }
-  }
 }
 
 function assertTimezone(value: string): void {

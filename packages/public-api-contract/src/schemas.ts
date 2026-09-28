@@ -1257,6 +1257,15 @@ export const importWorkStartSchema = z.object({
   previewVersion: z.number().int().nonnegative(),
 });
 
+// Grade semanal da grade vigente/proposta num item de disponibilidade
+// (Goal062 §2): mesma forma de `availabilityRuleSchema`, sem `id`/`active` —
+// aqui é só o que a comparação de troca precisa mostrar.
+export const importAvailabilityGridRuleSchema = z.object({
+  dayOfWeek: z.number().int().min(0).max(6),
+  startTime: timeSchema,
+  endTime: timeSchema,
+});
+
 export const importItemSchema = z.object({
   id: z.string().min(1),
   category: importCategorySchema,
@@ -1271,6 +1280,15 @@ export const importItemSchema = z.object({
   lastAttemptAt: isoDateTimeSchema.nullable(),
   processedAt: isoDateTimeSchema.nullable(),
   disappearedAt: isoDateTimeSchema.nullable(),
+  // Grade vigente do negócio e grade proposta pela origem (Goal062 §2):
+  // presentes só nos itens de `category: "AVAILABILITY"`, ausentes em toda
+  // outra categoria. `proposedAvailability` é `null` quando a análise não
+  // gravou grade (sobreposição, registro ilegível).
+  currentAvailability: z.array(importAvailabilityGridRuleSchema).optional(),
+  proposedAvailability: z
+    .array(importAvailabilityGridRuleSchema)
+    .nullable()
+    .optional(),
 });
 
 // Contagens por categoria, nunca uma contagem generica de agendamentos; a
@@ -1457,6 +1475,9 @@ export type ImportDecisionKind = z.infer<typeof importDecisionKindSchema>;
 export type ImportSessionStart = z.infer<typeof importSessionStartSchema>;
 export type ImportWorkErrorCode = z.infer<typeof importWorkErrorCodeSchema>;
 export type ImportWorkStart = z.infer<typeof importWorkStartSchema>;
+export type ImportAvailabilityGridRule = z.infer<
+  typeof importAvailabilityGridRuleSchema
+>;
 export type ImportItem = z.infer<typeof importItemSchema>;
 export type ImportPreview = z.infer<typeof importPreviewSchema>;
 export type ImportPreviewSnapshot = z.infer<typeof importPreviewSnapshotSchema>;

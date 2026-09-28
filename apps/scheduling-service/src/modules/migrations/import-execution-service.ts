@@ -13,6 +13,7 @@ import {
 } from "../../shared/date-time/calendar-date-time.js";
 import { AppError, toErrorMessage } from "../../shared/errors/app-error.js";
 import { recordAppointmentEvent } from "../appointments/appointment-event-service.js";
+import { isValidAvailabilityGrid } from "../availability/availability-grid.js";
 import {
   calendarDaysBetween,
   databaseNow,
@@ -48,6 +49,8 @@ import {
   newImportLeaseOwner,
 } from "./import-lease.js";
 import {
+  AVAILABILITY_CHANGED_SINCE_ANALYSIS,
+  AVAILABILITY_SOURCE_OVERLAP,
   CATEGORY_ENTITY_TYPE,
   ImportPreviewService,
   type ImportPreviewSourceReader,
@@ -188,6 +191,12 @@ const RESOLVED_ITEM_STATUSES = new Set<ImportItemStatus>([
   "NEEDS_REVIEW",
 ]);
 
+/**
+ * A transação da disponibilidade encontrou a sessão fora do meu lease: nada
+ * dela foi gravado, e a passada para como em qualquer outra perda de lease.
+ */
+class AvailabilityLeaseLost extends Error {}
+
 /** Categorias cujo registro de origem é um agendamento da agenda externa. */
 const APPOINTMENT_CATEGORIES = new Set<ImportCategory>([
   "FUTURE_APPOINTMENT",
@@ -237,6 +246,7 @@ type ItemOutcome =
 
 interface ImportEnvironment {
   tenantId: string;
+  sessionId: string;
   userId: string;
   provider: IntegrationProvider;
   timeZone: string;
@@ -501,6 +511,7 @@ export class ImportExecutionService {
 
     const environment: ImportEnvironment = {
       tenantId: context.tenantId,
+      sessionId: context.sessionId,
       userId: context.userId,
       provider: session.provider,
       timeZone,
@@ -666,6 +677,15 @@ export class ImportExecutionService {
    * item do grupo é mapeado para a mesma âncora (a primeira regra criada),
    * de modo que reprocessar reconhece o grupo como já importado e não cria
    * uma segunda jornada.
+   *
+   * A grade da origem **troca** a vigente, nunca se soma a ela (Goal062 §2).
+   * A troca só vale com `INCLUDE` de item em algum item do grupo — decisão de
+   * sessão ou de categoria nunca a confirma. Confirmada, a mesma transação
+   * apaga a grade inteira do negócio e grava a da origem, como
+   * `PATCH /internal/availability-settings`. Sem confirmação e com horário
+   * ativo no negócio (criado depois da análise), nada é gravado e o grupo
+   * termina `FAILED` com `AVAILABILITY_CHANGED_SINCE_ANALYSIS`. A transação
+   * abre pelo fencing do lease: perdido, ela desiste inteira.
    */
   private async runAvailabilityGroup(
     environment: ImportEnvironment,
@@ -722,8 +742,35 @@ export class ImportExecutionService {
         }
         return { processed: present.length, lastExternalId, leaseLost: false };
       }
+      if (!isValidAvailabilityGrid(rules)) {
+        throw new AppError(
+          AVAILABILITY_SOURCE_OVERLAP,
+          "The source availability overlaps itself and is never recorded.",
+          409,
+        );
+      }
+      const replaceConfirmed = await this.availabilityReplaceConfirmed(
+        environment,
+        present,
+      );
 
       await this.prisma.$transaction(async (transaction) => {
+        await fenceAvailabilityWrite(transaction, environment);
+        const current = await transaction.availabilityRule.count({
+          where: { tenantId: environment.tenantId, active: true },
+        });
+        if (current > 0 && !replaceConfirmed) {
+          throw new AppError(
+            AVAILABILITY_CHANGED_SINCE_ANALYSIS,
+            "The business has availability that this import was not confirmed to replace; analyze again.",
+            409,
+          );
+        }
+        if (replaceConfirmed) {
+          await transaction.availabilityRule.deleteMany({
+            where: { tenantId: environment.tenantId },
+          });
+        }
         const created: string[] = [];
         for (const rule of rules) {
           const row = await transaction.availabilityRule.create({
@@ -760,12 +807,36 @@ export class ImportExecutionService {
         }
       }
     } catch (error) {
+      if (error instanceof AvailabilityLeaseLost) {
+        return { processed: 0, lastExternalId: null, leaseLost: true };
+      }
       for (const item of present) {
         await this.markFailed(environment, item, error);
       }
     }
 
     return { processed: present.length, lastExternalId, leaseLost: false };
+  }
+
+  /**
+   * A troca da grade só é confirmada por `INCLUDE` **de item** num item do
+   * grupo desta sessão. `IMPORT_ALL` e decisão de categoria nunca entram na
+   * conta, nem a seleção de categoria.
+   */
+  private async availabilityReplaceConfirmed(
+    environment: ImportEnvironment,
+    items: ImportItemRow[],
+  ): Promise<boolean> {
+    const decision = await this.prisma.importDecision.findFirst({
+      where: {
+        tenantId: environment.tenantId,
+        sessionId: environment.sessionId,
+        scope: "ITEM",
+        decision: "INCLUDE",
+        itemId: { in: items.map((item) => item.id) },
+      },
+    });
+    return decision !== null;
   }
 
   /** Roteia o registro para a escrita da sua categoria. */
@@ -804,7 +875,7 @@ export class ImportExecutionService {
       record,
       "SERVICE",
     );
-    const price = knownNumber(source.price);
+    const { priceType, price } = resolvePrice(source.price);
     const durationMinutes = knownPositiveDuration(source.duration);
 
     const internalId = await this.prisma.$transaction(async (transaction) => {
@@ -814,7 +885,7 @@ export class ImportExecutionService {
       ).create({
         name: source.name,
         durationMinutes,
-        priceType: price === null ? "NOT_INFORMED" : "FIXED",
+        priceType,
         price,
         active: !source.deleted,
         // Duração ausente na origem vira pendência de revisão com origem
@@ -1361,6 +1432,30 @@ export class ImportExecutionService {
   }
 }
 
+/**
+ * Fencing da escrita da disponibilidade (D-078): a primeira escrita da
+ * transação é na sessão, condicionada ao dono do lease vivo pelo relógio do
+ * banco e a `EXECUTING`. Ela trava a linha, então uma reivindicação
+ * concorrente espera por ela ou já a mudou — e aí nada da grade é gravado.
+ */
+async function fenceAvailabilityWrite(
+  transaction: Prisma.TransactionClient,
+  environment: ImportEnvironment,
+): Promise<void> {
+  const now = await databaseNow(transaction);
+  const fenced = await transaction.importSession.updateMany({
+    where: {
+      tenantId: environment.tenantId,
+      id: environment.sessionId,
+      leaseOwner: environment.lease.owner,
+      leaseExpiresAt: { gt: now },
+      status: "EXECUTING",
+    },
+    data: { leaseHeartbeatAt: now },
+  });
+  if (fenced.count !== 1) throw new AvailabilityLeaseLost();
+}
+
 function indexRecords(
   snapshot: MinhaAgendaImportSnapshot,
 ): Map<string, MinhaAgendaImportRecord> {
@@ -1472,33 +1567,22 @@ function appointmentServices(
   appointment: MinhaAgendaAppointment,
 ): SourceAppointmentService[] {
   if (appointment.services?.length) {
-    return appointment.services.map((service) => {
-      const price = knownNumber(service.price);
-      return {
-        externalId: String(service.id),
-        name: service.name,
-        durationMinutes: knownPositiveDuration(service.duration),
-        priceType:
-          price === null ? ("NOT_INFORMED" as const) : ("FIXED" as const),
-        price,
-      };
-    });
+    return appointment.services.map((service) => ({
+      externalId: String(service.id),
+      name: service.name,
+      durationMinutes: knownPositiveDuration(service.duration),
+      ...resolvePrice(service.price),
+    }));
   }
   if (appointment.appHasServices?.length) {
-    return appointment.appHasServices.map((entry) => {
-      const price = knownNumber(entry.price ?? entry.service?.price);
-      return {
-        externalId: String(entry.serviceId),
-        name: entry.service?.name ?? `Serviço ${entry.serviceId}`,
-        durationMinutes: knownPositiveDuration(entry.service?.duration),
-        priceType:
-          price === null ? ("NOT_INFORMED" as const) : ("FIXED" as const),
-        price,
-      };
-    });
+    return appointment.appHasServices.map((entry) => ({
+      externalId: String(entry.serviceId),
+      name: entry.service?.name ?? `Serviço ${entry.serviceId}`,
+      durationMinutes: knownPositiveDuration(entry.service?.duration),
+      ...resolvePrice(entry.price ?? entry.service?.price),
+    }));
   }
   if (appointment.serviceId) {
-    const price = knownNumber(appointment.service?.price ?? appointment.price);
     return [
       {
         externalId: String(appointment.serviceId),
@@ -1507,9 +1591,7 @@ function appointmentServices(
           appointment.service?.name ??
           `Serviço ${appointment.serviceId}`,
         durationMinutes: knownPositiveDuration(appointment.service?.duration),
-        priceType:
-          price === null ? ("NOT_INFORMED" as const) : ("FIXED" as const),
-        price,
+        ...resolvePrice(appointment.service?.price ?? appointment.price),
       },
     ];
   }
@@ -1579,4 +1661,20 @@ function knownNumber(value: unknown): number | null {
 function knownPositiveDuration(value: unknown): number | null {
   const known = knownNumber(value);
   return known !== null && known > 0 ? known : null;
+}
+
+/**
+ * Preco ausente e preco zero da origem sao a mesma pendencia de negocio
+ * (Goal062, WU-01): nenhum dos dois e um preco de verdade, e ambos viram
+ * `NOT_INFORMED`/`null`, nunca `FIXED` com zero fabricado.
+ */
+function resolvePrice(value: unknown): {
+  priceType: "FIXED" | "NOT_INFORMED";
+  price: number | null;
+} {
+  const known = knownNumber(value);
+  if (known === null || known === 0) {
+    return { priceType: "NOT_INFORMED", price: null };
+  }
+  return { priceType: "FIXED", price: known };
 }

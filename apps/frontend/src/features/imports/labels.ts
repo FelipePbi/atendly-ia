@@ -1,6 +1,7 @@
 import type { BffHttpError } from "@/data";
 
 import type {
+  ImportAvailabilityGridRule,
   ImportCategory,
   ImportDecisionKind,
   ImportSessionStatus,
@@ -29,7 +30,7 @@ const WORK_ERROR_LABELS: Record<ImportWorkErrorCode, string> = {
   IMPORT_SOURCE_UNAVAILABLE:
     "O Minha Agenda não respondeu agora. Nada foi alterado. Tente mais tarde.",
   IMPORT_SOURCE_INVALID_RESPONSE:
-    "Não foi possível continuar agora por uma falha da Atendly. Tente novamente.",
+    "O Minha Agenda respondeu de um jeito que não conseguimos entender. Tente novamente.",
   IMPORT_PREVIEW_STALE:
     "Seus dados mudaram desde a última análise. Nada foi importado nesta tentativa.",
   IMPORT_INTERNAL_ERROR:
@@ -60,6 +61,10 @@ const FAILED_REASON_LABELS: Record<string, string> = {
     "A Minha Agenda não informou o horário de funcionamento do seu negócio.",
   IMPORT_ITEM_FAILED:
     "Houve uma falha inesperada ao importar este item.",
+  AVAILABILITY_CHANGED_SINCE_ANALYSIS:
+    "Seus horários de atendimento mudaram depois da análise, então nada foi alterado neles. Analise de novo para escolher entre os horários do Minha Agenda e os atuais.",
+  AVAILABILITY_SOURCE_OVERLAP:
+    "Os horários do Minha Agenda se sobrepõem no mesmo dia e não foram usados. Seus horários atuais continuam como estavam.",
 };
 
 export function failedReasonLabel(reasonCode: string): string {
@@ -96,6 +101,8 @@ export const CATEGORY_LABELS: Record<ImportCategory, string> = {
 const LIMITATION_LABELS: Record<string, string> = {
   CUSTOMER_DIRECTORY_UNAVAILABLE:
     "O Minha Agenda não tem uma lista completa de clientes. Só trazemos quem aparece em um agendamento ou bloqueio encontrado.",
+  CUSTOMER_DIRECTORY_LISTING_UNSUPPORTED:
+    "Não foi possível ler a lista completa de clientes desta vez. Só trazemos quem aparece em um agendamento ou bloqueio encontrado.",
   NO_SHOW_NOT_MODELED_BY_SOURCE:
     "O Minha Agenda não distingue falta de cancelamento. Nenhum atendimento será marcado como falta a partir de lá.",
 };
@@ -179,6 +186,12 @@ const CONFLICT_REASON_LABELS: Record<string, string> = {
     "Esse cliente não tem nome na origem. Ele fica identificado temporariamente pelo id de origem, a não ser que você decida outra coisa.",
   APPOINTMENT_SLOT_TAKEN:
     "Esse horário já está ocupado por um atendimento na Atendly. Decida se ainda assim deve ser incluído ou não.",
+  AVAILABILITY_REPLACES_CURRENT:
+    "O negócio já tem horários de atendimento cadastrados. Escolha se quer usar os horários do Minha Agenda no lugar deles ou manter os atuais.",
+  AVAILABILITY_SOURCE_OVERLAP:
+    "Os horários do Minha Agenda se sobrepõem no mesmo dia e não puderam ser usados. Você pode manter os horários atuais.",
+  SERVICE_PRICE_NOT_INFORMED:
+    "Esse serviço está com preço zero no Minha Agenda. Ele entra sem preço informado, e você pode definir o preço depois.",
 };
 
 export function conflictReasonLabel(reasonCode: string | null): string {
@@ -212,3 +225,43 @@ export const STATUS_LABELS: Record<ImportSessionStatus, string> = {
 export const SINGLE_IMPORT_CONFIRMATION_TITLE = "Esta é sua única importação.";
 export const SINGLE_IMPORT_CONFIRMATION_BODY =
   "Depois de concluir, não será possível importar novamente do Minha Agenda. Alguns registros não serão importados. Deseja concluir mesmo assim?";
+
+const WEEKDAY_LABELS = [
+  "Domingo",
+  "Segunda",
+  "Terça",
+  "Quarta",
+  "Quinta",
+  "Sexta",
+  "Sábado",
+];
+
+export interface AvailabilityDayGroup {
+  dayOfWeek: number;
+  label: string;
+  intervals: string[];
+}
+
+/**
+ * Agrupa a grade de disponibilidade por dia da semana para o conflito de
+ * importação (Goal062 §2): a mesma regra de dia com mais de um intervalo
+ * aparece junto, na ordem Domingo→Sábado, nunca na ordem de chegada da API.
+ */
+export function groupAvailabilityByDay(
+  rules: ImportAvailabilityGridRule[] | null | undefined,
+): AvailabilityDayGroup[] {
+  if (!rules || rules.length === 0) return [];
+  const byDay = new Map<number, string[]>();
+  for (const rule of rules) {
+    const intervals = byDay.get(rule.dayOfWeek) ?? [];
+    intervals.push(`${rule.startTime}–${rule.endTime}`);
+    byDay.set(rule.dayOfWeek, intervals);
+  }
+  return [...byDay.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([dayOfWeek, intervals]) => ({
+      dayOfWeek,
+      label: WEEKDAY_LABELS[dayOfWeek],
+      intervals,
+    }));
+}

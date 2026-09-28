@@ -7,6 +7,7 @@ import {
   type CalendarState,
   isActiveAppointmentStatus,
 } from "@/data";
+import { displayPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Button } from "@/shared/ui/Button";
 import { StatePanel } from "@/shared/ui/States";
@@ -120,7 +121,7 @@ export function AppointmentDetail({ appointmentId }: { appointmentId?: string })
                 <SummaryRow label="Nome" value={customerLabel(appointment)} />
                 <SummaryRow
                   label="Telefone"
-                  value={appointment.customer?.phone ?? "Não informado"}
+                  value={displayPhone(appointment.customer?.phone, "Não informado")}
                 />
               </div>
             </section>

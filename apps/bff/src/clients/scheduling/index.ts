@@ -356,6 +356,13 @@ const importCountsSchema = z.object({
   failed: z.number().int().nonnegative(),
   needsReview: z.number().int().nonnegative(),
 });
+// Grade vigente/proposta num item de disponibilidade (Goal062 §2): mesma
+// forma de `availabilitySettingsSchema.rules`, sem `id`/`active`.
+const importAvailabilityGridRuleSchema = z.object({
+  dayOfWeek: z.number().int().min(0).max(6),
+  startTime: z.string(),
+  endTime: z.string(),
+});
 const importItemSchema = z.object({
   id: z.string(),
   category: importCategorySchema,
@@ -370,6 +377,12 @@ const importItemSchema = z.object({
   lastAttemptAt: z.string().nullable(),
   processedAt: z.string().nullable(),
   disappearedAt: z.string().nullable(),
+  // Presentes so em itens `category: "AVAILABILITY"` (Goal062 §2).
+  currentAvailability: z.array(importAvailabilityGridRuleSchema).optional(),
+  proposedAvailability: z
+    .array(importAvailabilityGridRuleSchema)
+    .nullable()
+    .optional(),
 });
 const importDecisionResultSchema = z.object({
   id: z.string(),

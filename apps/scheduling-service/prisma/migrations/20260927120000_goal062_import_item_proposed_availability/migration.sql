@@ -1,0 +1,11 @@
+-- Goal062, WU-03: a disponibilidade da importacao e trocada, nunca somada.
+-- Aditiva apenas — uma coluna JSON anulavel e nada mais: nenhuma tabela,
+-- indice, constraint ou linha existente muda.
+--
+-- `proposedAvailability` guarda, so em itens `AVAILABILITY`, a grade semanal
+-- proposta pela origem ja derivada e validada pela analise
+-- (`[{ dayOfWeek, startTime, endTime }]`), para que a tela de conflito mostre
+-- a grade vigente e a proposta antes da escolha. Nenhum outro dado da origem
+-- entra aqui. Linhas existentes ficam `NULL`, que e o mesmo que "sem grade
+-- proposta gravada" — a proxima analise da sessao a preenche.
+ALTER TABLE "ImportItem" ADD COLUMN "proposedAvailability" JSONB;

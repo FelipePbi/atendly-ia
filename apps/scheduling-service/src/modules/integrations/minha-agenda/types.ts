@@ -39,6 +39,7 @@ export const minhaAgendaCustomerSchema = z
     name: z.string(),
     phone1: z.string().nullish(),
     phone2: z.string().nullish(),
+    deleted: z.boolean().nullish(),
   })
   .passthrough();
 export type MinhaAgendaCustomer = z.infer<typeof minhaAgendaCustomerSchema>;

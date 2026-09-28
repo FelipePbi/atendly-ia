@@ -1,6 +1,6 @@
 # Goal 062 — A importação traz a base inteira e respeita a agenda existente
 
-**Status: READY.** Preparado em 2026-09-27 pelo Tech Lead Agent após [Goal061 ACCEPTED](../reviews/061-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED** no [review062](../reviews/062-review.md), rodada 2 de 2 (rodada 1 `CHANGES_REQUIRED` com 6 blockers). Preparado em 2026-09-27 pelo Tech Lead Agent após [Goal061 ACCEPTED](../reviews/061-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: OPUS_MEDIUM
 

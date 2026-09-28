@@ -1,6 +1,10 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import { AppError } from "../../shared/errors/app-error.js";
-import { normalizePhone } from "../../shared/phone/phone.js";
+import {
+  normalizePhone,
+  normalizePhoneDetailed,
+  phoneEquivalenceCandidates,
+} from "../../shared/phone/phone.js";
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -53,13 +57,13 @@ export class AtendlyCustomerService {
   ) {}
 
   async list(filter: { phone?: string | null } = {}) {
-    const normalizedPhone = filter.phone
-      ? normalizePhone(filter.phone)
+    const phoneCandidates = filter.phone
+      ? phoneEquivalenceCandidates(normalizePhone(filter.phone))
       : undefined;
     return this.database.customer.findMany({
       where: {
         tenantId: this.tenantId,
-        ...(normalizedPhone ? { normalizedPhone } : {}),
+        ...(phoneCandidates ? { normalizedPhone: { in: phoneCandidates } } : {}),
       },
       orderBy: [{ name: "asc" }, { createdAt: "asc" }],
     });
@@ -463,7 +467,11 @@ function normalizeName(value: string | null | undefined): string | null {
 function normalizeOptionalPhone(
   value: string | null | undefined,
 ): { phone: string; normalizedPhone: string } | null {
-  const phone = value?.trim();
-  if (!phone) return null;
-  return { phone, normalizedPhone: normalizePhone(phone) };
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  const { normalizedPhone, recognized } = normalizePhoneDetailed(trimmed);
+  return {
+    phone: recognized ? `+${normalizedPhone}` : trimmed,
+    normalizedPhone,
+  };
 }

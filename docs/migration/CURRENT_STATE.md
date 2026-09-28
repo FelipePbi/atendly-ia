@@ -851,7 +851,12 @@ verificados no [review010](reviews/010-review.md) sobre a base `e381c15`.
   ou bloqueio lido no período — e `NO_SHOW_NOT_MODELED_BY_SOURCE` — a origem
   não modela falta como estado distinto de cancelado. Nenhuma
   disponibilidade, duração, preço ou status é fabricado a partir de dado
-  ausente.
+  ausente. (**Superado em parte no Goal062**, [D-079](DECISIONS.md), que
+  aplica U-08: a categoria de clientes lê `GET /customers` e une a listagem
+  aos clientes embutidos; `CUSTOMER_DIRECTORY_UNAVAILABLE` fica só para
+  sessão analisada antes do Goal062, e o recuo por `404` ou forma inválida
+  declara `CUSTOMER_DIRECTORY_LISTING_UNSUPPORTED`. A forma real da
+  resposta continua sem prova.)
 - **FATO atual:** a transação monolítica do `importToAtendly` deixou de ser o
   caminho. `ImportExecutionService` processa item a item sob `runCalendarWrite`
   e os locks do Goal008, gravando efeito, mapa de origem
@@ -6105,3 +6110,121 @@ manteve as **42** ocorrências fazendo `mutate` delegar a
   renderizado — ver [D-078](DECISIONS.md). **QA IM-03, QA IM-04,
   QA IM-05, QA IM-07 e QA IM-08 corrigidos**, fora da contagem
   A-01…A-24 — ver [FINAL_AUDIT §39](FINAL_AUDIT.md).
+
+## Delta implementado — Goal062, 2026-09-27 ([D-079](DECISIONS.md), ACCEPTED)
+
+Corrige **QA IM-06**, **QA IM-09**, **QA IM-10**, **QA IM-11** e
+**QA CL-04**, e **QA CL-05** só na busca, do
+[QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md) (fora da enumeração A-01…A-24 do
+FINAL_AUDIT): a importação traz a base inteira de clientes, troca a
+disponibilidade só com escolha explícita do dono e nunca a soma, grava o
+telefone numa forma única que a busca por número encontra, e trata preço
+zero como preço não informado. Aplica U-08 e D-005. Toca
+`apps/scheduling-service/` (leitor e client da Minha Agenda, análise,
+execução, rotas internas, telefone, clientes, schema Prisma e uma
+migration), `packages/public-api-contract/`, `apps/bff/` (cliente e
+`PUBLIC_API_V1.md`) e `apps/frontend/` (telas de importação, Disponibilidade
+e exibição de telefone). Não toca `apps/ai-orchestrator/`,
+`apps/evolution-go/`, `tools/ia-loop/`, o painel de Conversas, o vínculo da
+conversa ao cliente, a conexão com a origem (D-077), o início assíncrono, o
+lease nem a leitura do preview (D-078).
+
+- **Listagem de clientes e recuo (§1)** — `MinhaAgendaClient.listCustomers()`
+  lê `GET /customers`, validado como lista de `minhaAgendaCustomerSchema`
+  (com `deleted`). `CUSTOMER` é a união da listagem com os clientes
+  embutidos em agendamentos e bloqueios lidos, deduplicada pelo `id` da
+  origem, sem `deleted: true` não referenciado; com a listagem lida,
+  `sourceSupported: true`. Com `404` ou forma inválida, recua para a
+  cobertura anterior com `CUSTOMER_DIRECTORY_LISTING_UNSUPPORTED`. Login
+  recusado, origem indisponível e erro de rede continuam falhando o
+  trabalho inteiro.
+- **Troca da disponibilidade (§2)** — com horário ativo, os itens de
+  `AVAILABILITY` nascem `NEEDS_REVIEW` com `AVAILABILITY_REPLACES_CURRENT`;
+  grade da origem com sobreposição recebe `AVAILABILITY_SOURCE_OVERLAP` e
+  nunca é gravada. A regra de sobreposição saiu de `routes.ts` para
+  `modules/availability/availability-grid.ts`, sem mudar
+  `PATCH /internal/availability-settings`. `INCLUDE`/`EXCLUDE` de item
+  decide o grupo `company`/`employee:<id>`; só `INCLUDE` de item confirma a
+  troca — `IMPORT_ALL`, decisão e seleção de categoria nunca. A execução
+  troca numa transação com fencing (apaga a grade vigente, grava a da
+  origem, confirma os itens); horário criado depois da análise sem troca
+  confirmada faz os itens terminarem `FAILED` com
+  `AVAILABILITY_CHANGED_SINCE_ANALYSIS`, sem gravar. A leitura dos itens
+  de `AVAILABILITY` devolve `currentAvailability` e `proposedAvailability`.
+- **Migration aditiva (§2)** —
+  `20260927120000_goal062_import_item_proposed_availability` acrescenta
+  `ImportItem.proposedAvailability` (JSONB anulável), com a grade proposta
+  já derivada (só `dayOfWeek`, `startTime`, `endTime`). Nenhuma outra
+  mudança de schema; nenhuma linha existente é reescrita.
+- **Telefone canônico (§3)** — `normalizePhone` do Scheduling devolve
+  `55` + DDD + assinante, com o 9º dígito para celular, e `phone` é gravado
+  como `+` seguido da forma canônica em todo caminho de
+  `AtendlyCustomerService`; número não reconhecido fica como digitado.
+  `list({ phone })`, `findCandidatesByPhone` e a classificação da análise
+  comparam com o conjunto de formas equivalentes (canônica, sem 9º dígito,
+  nacionais sem `55`). `BRAZILIAN_DDDS` é a lista do BFF, comparada por
+  teste com `apps/bff/src/lib/phone.ts`. A busca devolve candidatos e nada
+  vincula (D-005). Lista, perfil, candidatos de responsável e detalhe do
+  agendamento mostram o telefone por `formatBrazilianPhone`.
+- **Preço zero (§4)** — preço `0` da origem vira `NOT_INFORMED` com `price`
+  nulo no catálogo e nos serviços embutidos em agendamentos; a análise
+  marca `SERVICE_PRICE_NOT_INFORMED` sem bloquear.
+- **Telas (§6)** — o conflito de disponibilidade mostra os horários atuais
+  e os da Minha Agenda por dia, com "Usar os horários da Minha Agenda" e
+  "Manter meus horários"; a Disponibilidade mostra todas as regras ativas
+  por dia e só envia uma grade que não cabe no formulário com confirmação.
+  `IMPORT_SOURCE_INVALID_RESPONSE`, `CUSTOMER_DIRECTORY_LISTING_UNSUPPORTED`,
+  `AVAILABILITY_REPLACES_CURRENT`, `AVAILABILITY_SOURCE_OVERLAP`,
+  `AVAILABILITY_CHANGED_SINCE_ANALYSIS` (que manda analisar de novo) e
+  `SERVICE_PRICE_NOT_INFORMED` têm texto leigo próprio em `labels.ts`.
+- **Controles negativos (§8)**, rodados na rodada 2 depois da última edição
+  de código, numa cópia da árvore final conferida contra a worktree, com
+  cada arquivo restaurado conferido byte a byte; saída colada em
+  [FINAL_AUDIT §40](FINAL_AUDIT.md). (1) categoria de clientes ignorando a
+  listagem: reprova **1** de **1** alvo em
+  `tests/integration/goal062-import-customers.test.ts`; (2) execução sem
+  contar nem apagar a grade vigente: reprova **2** de **11** em
+  `tests/integration/goal062-import-availability.test.ts`; (3)
+  `IMPORT_ALL` confirmando a troca: reprova **1** de **2** alvos, o caso de
+  `IMPORT_ALL` que chega à execução; (4) busca por igualdade exata: reprova **2** de **7** em
+  `tests/integration/goal062-customer-phone.test.ts`; (5) preço zero como
+  `FIXED`: reprova **2** de **3** alvos em
+  `tests/unit/goal062-import-customers.test.ts`; (6) Disponibilidade
+  enviando sem confirmação: reprova **1** de **3** alvos em
+  `tests/goal062-availability-phone.test.tsx`. Sem o defeito, cada alvo
+  volta a passar por inteiro.
+- **Execução final (rodada 2), sobre a árvore final** — `typecheck` e
+  `lint` de `apps/scheduling-service`, `apps/bff` e `apps/frontend`, exit 0
+  nos seis. `npm run validate:core` — **17** passos, **15** `passed`,
+  **0** `failed`, **2** `skipped` (`test:bff`, que só tem suíte de
+  integração, e `test:health-worker`, sem suíte automatizada), exit 0;
+  dentro dele, `test:scheduling-service` em **35** arquivos e **484**
+  testes (baseline review061: **32**/**448**), `test:frontend` em **80**
+  arquivos e **766** testes (baseline review061: **78**/**750**),
+  `test:ai-orchestrator` em **85** arquivos passando e **12** pulados,
+  **1112** testes passando e **88** pulados, `test:gate-scripts` em
+  **233**/**233** (baseline **233**) e `audit:static` em **33** de **34**
+  verificações passando e **1** pulada. `npm run validate:ui` — **169**
+  passando, **21** pulados, **0** retentativas, exit 0.
+  `validate:integration` contra um PostgreSQL 18 descartável em loopback —
+  **35**/**35** passos, exit 0, com `test:bff-integration` em **49**
+  arquivos e **389** testes (baseline **48**/**386**),
+  `test:scheduling-integration` em **16** arquivos e **124** testes
+  (baseline **13**/**103**; inclusive os **21** do §7.1), a migration
+  aplicada sem drift pelos ensaios de migration e
+  `rehearse:goal033-authenticated-ui` em **65** expected, **0**
+  unexpected, **0** flaky e **0** retentativas. `this.http.` em
+  `apps/bff/src/clients/` segue **42**.
+- **Conferência humana pendente:** a conferência do §9 do Goal — com a
+  pilha local e a conta de teste de U-05, `GET /customers` da conta real
+  na forma validada, a contagem de clientes batendo com a da Minha Agenda,
+  a troca da grade com a grade real e uma mensagem de número importado
+  achando a cliente como candidata — **não foi feita** por este Goal.
+- **Limites declarados:** a forma real de `GET /customers` não foi
+  conferida por teste; linhas antigas de telefone não são reescritas; o
+  editor por dia fica no Goal067; o vínculo da conversa não muda;
+  `/importacao` e `/configuracoes/disponibilidade` seguem fora do gate
+  renderizado — ver [D-079](DECISIONS.md). **QA IM-06, QA IM-09,
+  QA IM-10, QA IM-11 e QA CL-04 corrigidos, e QA CL-05 corrigido só na
+  busca**, fora da contagem A-01…A-24 — ver
+  [FINAL_AUDIT §40](FINAL_AUDIT.md).

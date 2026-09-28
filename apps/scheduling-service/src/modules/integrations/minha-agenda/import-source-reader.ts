@@ -107,6 +107,43 @@ function isCancelled(appointment: MinhaAgendaAppointment): boolean {
   return appointment.deleted === true;
 }
 
+/** Cobertura por cliente so vinculado a agendamento/bloqueio ja lido — nunca o cadastro completo. */
+function appointmentLinkedCustomerCoverage(
+  referenced: Map<number, MinhaAgendaCustomer>,
+  limitationCode = "CUSTOMER_DIRECTORY_UNAVAILABLE",
+  limitationDetail = "A origem não expõe um endpoint de listagem de clientes; apenas clientes vinculados a um agendamento ou bloqueio lido no período consultado ficam visíveis.",
+): MinhaAgendaImportCategorySnapshot {
+  return {
+    category: "CUSTOMER",
+    coverage: {
+      sourceSupported: false,
+      sourceReportedCount: null,
+      readCount: referenced.size,
+      limitationCode,
+      limitationDetail,
+    },
+    records: [...referenced.entries()].map(([id, customer]) => ({
+      externalId: String(id),
+      raw: customer,
+    })),
+  };
+}
+
+/**
+ * 404 ou resposta fora do contrato: a origem existe mas recusa (ou nao tem)
+ * a listagem. Autenticacao recusada, origem inalcancavel ou qualquer outro
+ * HTTP de erro continuam propagando — so estes dois casos recuam.
+ */
+function isCustomerDirectoryListingUnsupported(error: unknown): boolean {
+  if (!(error instanceof AppError)) return false;
+  if (error.code === "MINHA_AGENDA_INVALID_RESPONSE") return true;
+  if (error.code === "MINHA_AGENDA_HTTP_ERROR") {
+    const details = error.details as { originStatus?: number } | undefined;
+    return details?.originStatus === 404;
+  }
+  return false;
+}
+
 /**
  * Falha de leitura de uma categoria: identificada pela categoria e por uma
  * causa sanitizada (codigo do erro de origem), nunca pelo payload cru nem
@@ -180,7 +217,7 @@ export class MinhaAgendaImportSourceReader {
       "CANCELLED_APPOINTMENT",
       operational.filter((appointment) => isCancelled(appointment)),
     );
-    const customers = this.readCustomerCategory([
+    const customers = await this.readCustomerCategory([
       ...operational,
       ...timeBlocks.source,
     ]);
@@ -330,33 +367,65 @@ export class MinhaAgendaImportSourceReader {
   }
 
   /**
-   * A origem nao expoe um diretorio de clientes (so busca por telefone); o
-   * que da para ver e quem aparece vinculado a um agendamento ou bloqueio ja
-   * lido. Isso e cobertura parcial e declarada, nunca o cadastro completo.
+   * Diretorio completo de clientes (Goal062, WU-01): a listagem da origem
+   * uniao com quem aparece vinculado a um agendamento ou bloqueio ja lido,
+   * deduplicada por id. Cliente `deleted:true` da listagem e excluido, salvo
+   * quando referenciado por um desses registros — nesse caso a referencia
+   * prevalece, porque apagar quem um agendamento aponta perderia o vinculo.
+   *
+   * Sem o metodo no client (dublê de teste) ou com a origem recusando a
+   * listagem (404 ou fora do contrato), recua para a cobertura antiga —
+   * so quem aparece vinculado — com um codigo de limitacao proprio,
+   * distinto do caso "origem nunca exposse o endpoint". Login recusado e
+   * origem indisponivel continuam propagando a falha do trabalho inteiro.
    */
-  private readCustomerCategory(
+  private async readCustomerCategory(
     appointments: MinhaAgendaAppointment[],
-  ): MinhaAgendaImportCategorySnapshot {
-    const byId = new Map<number, MinhaAgendaCustomer>();
+  ): Promise<MinhaAgendaImportCategorySnapshot> {
+    const referenced = new Map<number, MinhaAgendaCustomer>();
     for (const appointment of appointments) {
       if (appointment.customer)
-        byId.set(appointment.customer.id, appointment.customer);
+        referenced.set(appointment.customer.id, appointment.customer);
     }
-    return {
-      category: "CUSTOMER",
-      coverage: {
-        sourceSupported: false,
-        sourceReportedCount: null,
-        readCount: byId.size,
-        limitationCode: "CUSTOMER_DIRECTORY_UNAVAILABLE",
-        limitationDetail:
-          "A origem não expõe um endpoint de listagem de clientes; apenas clientes vinculados a um agendamento ou bloqueio lido no período consultado ficam visíveis.",
-      },
-      records: [...byId.entries()].map(([id, customer]) => ({
-        externalId: String(id),
-        raw: customer,
-      })),
-    };
+
+    if (!this.client.listCustomers) {
+      return appointmentLinkedCustomerCoverage(referenced);
+    }
+
+    try {
+      const directory = await this.client.listCustomers();
+      const byId = new Map<number, MinhaAgendaCustomer>();
+      for (const customer of directory) {
+        if (customer.deleted && !referenced.has(customer.id)) continue;
+        byId.set(customer.id, customer);
+      }
+      for (const [id, customer] of referenced) {
+        if (!byId.has(id)) byId.set(id, customer);
+      }
+      return {
+        category: "CUSTOMER",
+        coverage: {
+          sourceSupported: true,
+          sourceReportedCount: directory.length,
+          readCount: byId.size,
+          limitationCode: null,
+          limitationDetail: null,
+        },
+        records: [...byId.entries()].map(([id, customer]) => ({
+          externalId: String(id),
+          raw: customer,
+        })),
+      };
+    } catch (error) {
+      if (!isCustomerDirectoryListingUnsupported(error)) {
+        throw importCategoryFailure("CUSTOMER", error);
+      }
+      return appointmentLinkedCustomerCoverage(
+        referenced,
+        "CUSTOMER_DIRECTORY_LISTING_UNSUPPORTED",
+        "A listagem de clientes da origem não respondeu de forma utilizável (não encontrada ou fora do contrato); apenas clientes vinculados a um agendamento ou bloqueio lido no período consultado ficam visíveis.",
+      );
+    }
   }
 
   /**

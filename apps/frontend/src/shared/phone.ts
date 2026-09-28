@@ -59,3 +59,15 @@ export function formatBrazilianPhone(
 
   return style === "plus" ? `+55 ${ddd} ${local}` : `(${ddd}) ${local}`;
 }
+
+/**
+ * Telefone pronto para tela: `formatBrazilianPhone` quando reconhecido,
+ * senão o valor gravado como veio, e o `fallback` só quando não há valor.
+ */
+export function displayPhone(
+  value: string | null | undefined,
+  fallback: string,
+): string {
+  if (!value) return fallback;
+  return formatBrazilianPhone(value, "parens") ?? value;
+}

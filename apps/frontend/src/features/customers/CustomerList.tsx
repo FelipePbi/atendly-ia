@@ -9,6 +9,7 @@ import {
 } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
+import { displayPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Field } from "@/shared/ui/Field";
 import { ListItem } from "@/shared/ui/ListItem";
@@ -123,7 +124,7 @@ export function CustomerList() {
             <div aria-label="Clientes" className="list" role="list">
               {filtered.map((customer) => (
                 <ListItem
-                  copy={customer.phone || "Telefone não informado"}
+                  copy={displayPhone(customer.phone, "Telefone não informado")}
                   href={`/clientes/detalhes?id=${encodeURIComponent(customer.id)}`}
                   key={customer.id}
                   leading={

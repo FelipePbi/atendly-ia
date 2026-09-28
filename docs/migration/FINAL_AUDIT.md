@@ -4828,3 +4828,120 @@ Depois dos controles restaurados, sobre a árvore final:
 ### Veredito recontado
 
 O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO`** — os mesmos números de §38. Nenhum achado de A-01 a A-24 foi tocado, corrigido, reclassificado ou reaberto: esta seção só acrescenta o registro do diff061, e **QA IM-03, QA IM-04, QA IM-05, QA IM-07 e QA IM-08 corrigidos** são do `QA_LOCAL_REVIEW`, fora dessa enumeração.
+
+## 40. QA IM-06, QA IM-09, QA IM-10, QA IM-11 e QA CL-04 são corrigidos, e QA CL-05 só na busca: a importação traz a base inteira e respeita a agenda existente — Goal062, 2026-09-27
+
+Seção nova, escrita na rodada 2 do Goal062 depois da execução final. Ela **não reescreve** §4 a §39: os registros de A-01 a A-24, o veredito das seções anteriores e as trinta e nove seções de fechamento anteriores continuam exatamente como estavam. **QA IM-06**, **QA IM-09**, **QA IM-10**, **QA IM-11**, **QA CL-04** e **QA CL-05** vêm do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md), não da enumeração A-01…A-24 — o prefixo `QA` existe porque este documento já usa `A-` com outro significado — e **não entram nessa contagem**. Decisão: [D-079](DECISIONS.md), **ACCEPTED** no [review062](reviews/062-review.md) (rodada 2 de 2), que aplica U-08 e D-005.
+
+### O que mudou
+
+**QA IM-06 — a base inteira de clientes.** `MinhaAgendaClient.listCustomers()` lê `GET /customers`; `readCustomerCategory` (`import-source-reader.ts`) une a listagem aos clientes embutidos em agendamentos e bloqueios, deduplica pelo `id` da origem e deixa de fora quem está `deleted: true` sem referência. Com `404` ou resposta fora da forma, recua para a cobertura anterior com `CUSTOMER_DIRECTORY_LISTING_UNSUPPORTED`, que a tela mostra com texto próprio. **QA IM-09 — a disponibilidade é trocada, nunca somada.** Com horário ativo no negócio, a análise marca os itens de `AVAILABILITY` como `NEEDS_REVIEW` com `AVAILABILITY_REPLACES_CURRENT` e grava a grade proposta em `ImportItem.proposedAvailability` (migration aditiva `20260927120000_goal062_import_item_proposed_availability`); a regra de sobreposição saiu de `routes.ts` para `modules/availability/availability-grid.ts`; `INCLUDE`/`EXCLUDE` de item decide o grupo; só `INCLUDE` de item confirma a troca, numa transação com fencing que apaga a grade vigente e grava a da origem; grade mudada depois da análise termina `FAILED` com `AVAILABILITY_CHANGED_SINCE_ANALYSIS`, sem gravar. A tela de conflito mostra as duas grades por dia; a de Disponibilidade mostra todas as regras ativas e exige confirmação para substituir uma grade que não cabe no formulário. **QA IM-10 e QA CL-04 — telefone numa forma única.** `normalizePhone` do Scheduling devolve `55` + DDD + assinante, com o 9º dígito para celular, e `phone` é gravado como `+` seguido da forma canônica em todo caminho de `AtendlyCustomerService`; a exibição de cliente usa `formatBrazilianPhone`. **QA CL-05, só a busca.** `list({ phone })`, `findCandidatesByPhone` e a classificação da análise comparam com o conjunto de formas equivalentes; o vínculo da conversa não muda (D-005). **QA IM-11 — preço zero.** `resolvePrice` trata `0` como preço não informado no catálogo e nos serviços embutidos em agendamentos; a análise marca `SERVICE_PRICE_NOT_INFORMED` sem bloquear. `IMPORT_SOURCE_INVALID_RESPONSE`, `AVAILABILITY_CHANGED_SINCE_ANALYSIS`, `AVAILABILITY_SOURCE_OVERLAP` e `SERVICE_PRICE_NOT_INFORMED` têm texto leigo próprio em `labels.ts`; o de `AVAILABILITY_CHANGED_SINCE_ANALYSIS` manda analisar de novo. Decisão completa e limites: [D-079](DECISIONS.md).
+
+### Controles negativos, saída real
+
+Os seis controles do §8 do Goal, rodados na rodada 2 **depois da última edição de código**, numa cópia da árvore final (`git ls-files -co --exclude-standard` de `apps/scheduling-service` e `apps/frontend`, com os mesmos `node_modules`), conferida arquivo a arquivo contra a worktree antes da execução, sem diferença. Cada controle aplica um defeito, roda o teste alvo, restaura o arquivo, confere a restauração byte a byte e roda o mesmo teste de novo. Os controles 1 a 4 rodam `npx vitest run` em `apps/scheduling-service` contra PostgreSQL real (`SCHEDULING_TEST_DATABASE_URL` num banco descartável provisionado por `scripts/provision-scheduling-test-database.mjs` em `127.0.0.1`); o 5, a suíte unitária; o 6, jsdom em `apps/frontend`.
+
+1. **A categoria de clientes volta a ignorar a listagem** (`import-source-reader.ts`, `if (!this.client.listCustomers)` trocado por `if (true || !this.client.listCustomers)`), `tests/integration/goal062-import-customers.test.ts -t "sem nenhum agendamento"`:
+```
+--- com o defeito: exit 1
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 skipped (3)
+ FAIL  tests/integration/goal062-import-customers.test.ts > goal062 CUSTOMER directory against PostgreSQL > analisa e importa clientes sem nenhum agendamento vinculado, com sourceSupported true
+AssertionError: expected { category: 'CUSTOMER', …(11) } to match object { sourceSupported: true, …(2) }
+--- sem o defeito (arquivo restaurado byte a byte): exit 0
+ Test Files  1 passed (1)
+      Tests  1 passed | 2 skipped (3)
+```
+2. **A execução volta a criar regras sem ler a grade vigente** (`import-execution-service.ts`, `if (current > 0 && !replaceConfirmed)` trocado por `if (false && current > 0 && !replaceConfirmed)`), arquivo inteiro `tests/integration/goal062-import-availability.test.ts`:
+```
+--- com o defeito: exit 1
+ Test Files  1 failed (1)
+      Tests  2 failed | 9 passed (11)
+ FAIL  tests/integration/goal062-import-availability.test.ts > goal062 AVAILABILITY replaced, never summed, against PostgreSQL > IMPORT_ALL e decisão de categoria não confirmam a troca nem quando os itens chegam à execução
+AssertionError: expected [ 'cmukh1rcf002uioi43ffqk1d1', …(14) ] to deeply equal [ 'cmukh1rcf002uioi43ffqk1d1', …(4) ]
+ FAIL  tests/integration/goal062-import-availability.test.ts > goal062 AVAILABILITY replaced, never summed, against PostgreSQL > regra criada depois da análise faz o item terminar FAILED com AVAILABILITY_CHANGED_SINCE_ANALYSIS, sem gravar
+AssertionError: expected [ 'cmukh1rfl003mioi4e927kxas', …(10) ] to deeply equal [ 'cmukh1rfl003mioi4e927kxas' ]
+--- sem o defeito (arquivo restaurado byte a byte): exit 0
+ Test Files  1 passed (1)
+      Tests  11 passed (11)
+```
+3. **`IMPORT_ALL` passa a confirmar a troca** (`import-execution-service.ts`, o `where` de `availabilityReplaceConfirmed` passa a aceitar também `{ scope: "SESSION", decision: "IMPORT_ALL" }`), `tests/integration/goal062-import-availability.test.ts -t "IMPORT_ALL"`:
+```
+--- com o defeito: exit 1
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed | 9 skipped (11)
+ FAIL  tests/integration/goal062-import-availability.test.ts > goal062 AVAILABILITY replaced, never summed, against PostgreSQL > IMPORT_ALL e decisão de categoria não confirmam a troca nem quando os itens chegam à execução
+AssertionError: expected [ 'cmukh1vgb00107wi4twpuoji9', …(9) ] to deeply equal [ 'cmukh1vft000v7wi4zynspncz', …(4) ]
+--- sem o defeito (arquivo restaurado byte a byte): exit 0
+ Test Files  1 passed (1)
+      Tests  2 passed | 9 skipped (11)
+```
+4. **A busca volta à igualdade exata** (`atendly-customer-service.ts`, `normalizedPhone: { in: phoneCandidates }` trocado por `normalizedPhone: normalizePhone(filter.phone!)`), arquivo inteiro `tests/integration/goal062-customer-phone.test.ts`:
+```
+--- com o defeito: exit 1
+ Test Files  1 failed (1)
+      Tests  2 failed | 5 passed (7)
+ FAIL  tests/integration/goal062-customer-phone.test.ts > candidatos por telefone por equivalência (Goal062, WU-02) > acha uma linha gravada antes do Goal, em dígitos nacionais sem 55
+AssertionError: expected [] to deeply equal [ 'cmukh1yep0001z0i46b2wvzn5' ]
+ FAIL  tests/integration/goal062-customer-phone.test.ts > GET /internal/customers?phone= acha cliente importado com DDD 55 (Goal062 §7.1) > cliente gravado antes deste Goal, com dígitos nacionais, também é achado pela rota
+AssertionError: expected [] to deeply equal [ 'cmukh1yqd000mz0i42ccoiyky' ]
+--- sem o defeito (arquivo restaurado byte a byte): exit 0
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+```
+5. **Preço zero volta a `FIXED`** (`import-execution-service.ts`, `if (known === null || known === 0)` trocado por `if (known === null)` em `resolvePrice`), `tests/unit/goal062-import-customers.test.ts -t "Preço 0"`:
+```
+--- com o defeito: exit 1
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed | 6 skipped (9)
+ FAIL  tests/unit/goal062-import-customers.test.ts > Preço 0 da origem vira NOT_INFORMED/null, sem bloquear a análise > cria o serviço do catálogo com priceType NOT_INFORMED e price null quando a origem manda preço 0
+AssertionError: expected { id: 'service-22', …(15) } to match object { priceType: 'NOT_INFORMED', …(1) }
+ FAIL  tests/unit/goal062-import-customers.test.ts > Preço 0 da origem vira NOT_INFORMED/null, sem bloquear a análise > preserva preço 0 do serviço embutido do agendamento como NOT_INFORMED/null, sem mudar o preço total do agendamento
+AssertionError: expected { id: 'appointmentItem-42', …(9) } to match object { …(2) }
+--- sem o defeito (arquivo restaurado byte a byte): exit 0
+ Test Files  1 passed (1)
+      Tests  3 passed | 6 skipped (9)
+```
+6. **A tela de Disponibilidade volta a enviar sem confirmação** (`AvailabilitySettings.tsx`, `if (!fitsSingleInterval && !replaceConfirmed)` trocado por `if (false && !fitsSingleInterval && !replaceConfirmed)`), `tests/goal062-availability-phone.test.tsx -t "Disponibilidade"`:
+```
+--- com o defeito: exit 1
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed | 3 skipped (6)
+ FAIL  tests/goal062-availability-phone.test.tsx > Disponibilidade não apaga em silêncio > dois intervalos no mesmo dia aparecem os dois, e salvar sem confirmar não envia nada
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+--- sem o defeito (arquivo restaurado byte a byte): exit 0
+ Test Files  1 passed (1)
+      Tests  3 passed | 3 skipped (6)
+```
+
+**Por que os controles 2 e 3 reprovam o teste que reprovam.** Com horário ativo na análise, os itens de disponibilidade nascem `NEEDS_REVIEW`, e a execução nunca os processa sem decisão; por isso o teste "Importar tudo sem decisão" com horário já existente na análise passa com os dois defeitos: quem o protege é a classificação da análise. A rodada 2 acrescentou o caso em que "Importar tudo" (`IMPORT_ALL` de sessão e `INCLUDE` de categoria) chega à execução: horário criado depois da análise, itens `PENDING`. É esse caso que os controles 2 e 3 reprovam — com a grade somada no 2 (15 regras em vez de 5) e com a grade trocada no 3. **O controle 4 reprova as linhas antigas, não o caso canônico sem 9º dígito:** como `normalizePhone` devolve a forma canônica com o 9º dígito, uma busca por `5555<8 dígitos>` casa por igualdade com a linha gravada pela forma canônica; a equivalência é o que acha as linhas gravadas antes deste Goal (nacionais, ou com `55` e sem 9º dígito), e o teste de rota cobre as duas.
+
+### Vermelho da baseline
+
+Cada teste novo e cada teste acrescentado foi rodado contra a baseline `a070c54` (exportada por `git archive`, com o contrato público da baseline compilado, o cliente Prisma gerado pelo schema da baseline e bancos migrados pelas migrations da baseline), com os arquivos de teste da árvore final copiados para ela. Saída resumida: `apps/scheduling-service` unitário — `goal062-import-customers.test.ts` reprova **8** de **9**; `goal062-availability.test.ts` não carrega (`Cannot find module '../../src/modules/availability/availability-grid.js'`); `goal062-phone.test.ts` não carrega (`TypeError: BRAZILIAN_DDDS is not iterable`). Integração contra PostgreSQL real — `goal062-import-customers.test.ts` reprova **3** de **3**; `goal062-customer-phone.test.ts` reprova **7** de **7**, inclusive os três casos pela rota `GET /internal/customers?phone=`; `goal062-import-availability.test.ts` reprova **8** de **10** e, com o caso novo da rodada 2, esse caso também (`expected [ …(14) ] to deeply equal [ …(4) ]`). Passam na baseline, como devem, "negócio sem horário ativo continua importando a grade da origem" e "PATCH /internal/availability-settings se comporta como antes". `apps/bff/tests/goal062-import.integration.test.ts` reprova **2** de **3** (o terceiro prova que item de outra categoria segue sem os campos novos). `apps/frontend` — `goal062-availability-phone.test.tsx` reprova **4** de **6**; `goal062-import.test.tsx` reprova **7** de **10**.
+
+### Execução final da rodada 2, sobre a árvore final
+
+Depois dos controles restaurados e antes desta prosa:
+
+- `npm run typecheck` e `npm run lint` de `apps/scheduling-service`, `apps/bff` e `apps/frontend`, exit 0 nos seis.
+- `npm run validate:core` — **17** passos, **15** `passed`, **0** `failed`, **2** `skipped` (`test:bff`, que só tem suíte de integração, e `test:health-worker`, sem suíte automatizada), exit 0. Dentro dele:
+  - `test:scheduling-service` — **35** arquivos, **484** testes passando, **0** falhando (baseline review061: **32**/**448**; a diferença são `tests/unit/goal062-import-customers.test.ts`, `goal062-phone.test.ts` e `goal062-availability.test.ts`);
+  - `test:frontend` — **80** arquivos, **766** testes passando, **0** falhando (baseline review061: **78**/**750**; a diferença são `tests/goal062-import.test.tsx` e `tests/goal062-availability-phone.test.tsx`);
+  - `test:ai-orchestrator` — **85** arquivos passando e **12** pulados, **1112** testes passando e **88** pulados;
+  - `test:gate-scripts` (`node --test scripts/tests/**/*.test.mjs`, o mesmo comando de `npm run test:gate`) — **233**/**233**, sem teste a menos que a baseline (**233**);
+  - `audit:static` — **34** verificações, **33** passando, **0** falhando, **1** pulada (`production_health`, não pedida).
+- `npm run validate:ui` — **169** passando, **21** pulados, **0** retentativas, exit 0.
+- `BFF_TEST_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:55632/atendly_g062r2final_test" npm run validate:integration`, contra um cluster PostgreSQL 18 descartável em loopback — **35**/**35** passos `passed`, **0** `failed`, exit 0. Dentro dele: `test:bff-integration` — **49** arquivos, **389** testes passando (baseline **48**/**386**; a diferença é `tests/goal062-import.integration.test.ts`, **3** testes do §7.3); `test:scheduling-integration` — **16** arquivos, **124** testes passando (baseline **13**/**103**; a diferença são os **21** testes do §7.1: **3** de `goal062-import-customers`, **7** de `goal062-customer-phone` e **11** de `goal062-import-availability`); `rehearse:goal028-release-migrations` aplica o histórico inteiro, inclusive `20260927120000_goal062_import_item_proposed_availability`, e `prisma migrate diff` não acusa drift; `rehearse:goal033-authenticated-ui` com **65** testes passando e **0** retentativas (resumo do Playwright `65 passed`, sem `failed` nem `flaky`: **65** expected, **0** unexpected, **0** flaky). Nenhum passo reprovou; `goal008-agenda.test.ts` passou.
+- `grep -rn "this\.http\." apps/bff/src/clients/ | wc -l` — **42**.
+- `git status --porcelain=v1 -uall` lista só arquivos de `apps/scheduling-service/`, `apps/bff/`, `apps/frontend/`, `packages/public-api-contract/` e `docs/migration/`, sem resto de controle negativo nem artefato de `e2e-results/`.
+
+**Mudanças de teste da rodada 2.** `tests/integration/goal062-import-customers.test.ts` passa a usar o leitor de produção (`MinhaAgendaImportSourceReader`) sobre um dublê local do client, em vez de um snapshot pronto, e ganha os casos `404` e fora da forma; `tests/integration/goal062-customer-phone.test.ts` ganha três casos pela rota `GET /internal/customers?phone=` com clientes de DDD 55 criados pela execução da importação; `tests/integration/goal062-import-availability.test.ts` ganha o caso de `IMPORT_ALL` que chega à execução; `tests/unit/goal062-phone.test.ts` passa a comparar `BRAZILIAN_DDDS` com a lista lida de `apps/bff/src/lib/phone.ts` — com a lista do BFF alterada (`98, 99,` trocado por `98,`), o teste reprova com `expected [ 11, 12, 13, …(60) ] to deeply equal [ 11, 12, 13, …(59) ]`, e passa com o arquivo restaurado; `tests/goal062-import.test.tsx` cobre os textos novos na tela de execução. Nenhuma asserção de teste anterior ao Goal062 mudou.
+
+### O que esta seção não prova
+
+**Não prova** que `GET /customers` da conta real tem a forma validada, que a contagem de clientes da revisão bate com a da Minha Agenda, que a troca da grade funciona com a grade real nem que uma mensagem de um número importado encontra a cliente como candidata — isso é a conferência humana do §9 do Goal, e **não foi feita** por este Goal; que as telas de importação e de Disponibilidade cumprem largura, toque, contraste, foco e movimento, porque `/importacao` e `/configuracoes/disponibilidade` não estão no gate renderizado; que a tela bate com o protótipo aprovado (conferência humana, Goal069); que a conversa fica ligada à cliente sem confirmação, o que D-005 proíbe.
+
+### Veredito recontado
+
+O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO`** — os mesmos números de §39, com `audit:static` da execução final em **33** de **34** verificações passando e **1** pulada. Nenhum achado de A-01 a A-24 foi tocado, corrigido, reclassificado ou reaberto: esta seção só acrescenta o registro do diff062, e **QA IM-06, QA IM-09, QA IM-10, QA IM-11 e QA CL-04 corrigidos**, e **QA CL-05 corrigido só na busca**, são do `QA_LOCAL_REVIEW`, fora dessa enumeração.

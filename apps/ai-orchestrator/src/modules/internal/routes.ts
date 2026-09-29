@@ -126,6 +126,8 @@ const conversationQuerySchema = z.object({
   ignored: z.enum(["true", "false"]).optional(),
   search: z.string().trim().max(160).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
+  // Conversas de uma pessoa do Scheduling (Goal075), pelo perfil do cliente.
+  customerId: z.string().trim().min(1).max(128).optional(),
 });
 
 const awaitingHumanQuerySchema = z.object({
@@ -541,8 +543,13 @@ export async function registerInternalRoutes(
               },
             }
           : {}),
-        ...(query.ignored
-          ? { contact: { ignored: query.ignored === "true" } }
+        ...(query.ignored || query.customerId
+          ? {
+              contact: {
+                ...(query.ignored ? { ignored: query.ignored === "true" } : {}),
+                ...(query.customerId ? { customerId: query.customerId } : {}),
+              },
+            }
           : {}),
         ...(query.search
           ? {

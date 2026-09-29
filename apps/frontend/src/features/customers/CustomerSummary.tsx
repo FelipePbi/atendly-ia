@@ -3,16 +3,27 @@
 import { useState } from "react";
 
 import {
+  appointmentStatusLabel,
   BffHttpError,
+  type CustomerAppointmentStats,
+  type CustomerAppointmentSummary,
   type CustomerSummary as CustomerSummaryRecord,
 } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Spinner } from "@/shared/ui/Spinner";
 
-type CustomerSummaryProps = { customerId: string };
+type CustomerSummaryProps = {
+  customerId: string;
+  nextAppointment?: CustomerAppointmentSummary | null;
+  stats?: CustomerAppointmentStats;
+};
 
-export function CustomerSummary({ customerId }: CustomerSummaryProps) {
+export function CustomerSummary({
+  customerId,
+  nextAppointment,
+  stats,
+}: CustomerSummaryProps) {
   const [summary, setSummary] = useState<CustomerSummaryRecord | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,13 +43,52 @@ export function CustomerSummary({ customerId }: CustomerSummaryProps) {
   }
 
   return (
-    <section aria-label="Resumo por IA" className="directory-section">
+    <section aria-label="Resumo" className="directory-section">
       <div className="directory-section-header">
         <div>
-          <h2>Resumo por IA</h2>
+          <h2>Números</h2>
+        </div>
+      </div>
+      {stats ? (
+        <div className="customer-stat-grid">
+          <div className="customer-stat">
+            <strong>{stats.completed}</strong>
+            <span>atendimentos</span>
+          </div>
+          <div className="customer-stat">
+            <strong>{intervalWeeksLabel(stats.averageIntervalDays)}</strong>
+            <span>a cada</span>
+          </div>
+          <div className="customer-stat">
+            <strong>{stats.noShows}</strong>
+            <span>faltas</span>
+          </div>
+          <div className="customer-stat">
+            <strong>{stats.cancelled}</strong>
+            <span>
+              {stats.cancelled === 1 ? "cancelamento" : "cancelamentos"}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <p className="muted small">Ainda sem números de atendimento.</p>
+      )}
+
+      {nextAppointment && (
+        <p className="customer-summary-note">
+          Próximo atendimento: {formatAppointmentDate(nextAppointment.date)}{" "}
+          às {nextAppointment.startTime} ·{" "}
+          {appointmentStatusLabel(nextAppointment.status)}
+        </p>
+      )}
+
+      <div className="directory-section-header">
+        <div>
+          <h2>Resumo da IA</h2>
           <p>
-            Gerado sob demanda. Cobre apenas observações, tags e memórias
-            autorizadas para uso pela IA, além dos próximos atendimentos.
+            Gerado sob demanda, só a partir de observações, tags e
+            preferências autorizadas para uso pela IA, além dos próximos
+            atendimentos.
           </p>
         </div>
         <button
@@ -69,7 +119,7 @@ export function CustomerSummary({ customerId }: CustomerSummaryProps) {
           <p className="customer-summary-text">{summary.summary}</p>
           <p className="customer-summary-note">
             Considerou apenas material autorizado: {summary.sources.memory}{" "}
-            item(ns) de memória, {summary.sources.notes} observação(ões) e{" "}
+            item(ns) de preferência, {summary.sources.notes} observação(ões) e{" "}
             {summary.sources.tags} tag(s) autorizadas, além de{" "}
             {summary.sources.upcomingAppointments} atendimento(s) futuro(s).
           </p>
@@ -77,6 +127,20 @@ export function CustomerSummary({ customerId }: CustomerSummaryProps) {
       )}
     </section>
   );
+}
+
+function intervalWeeksLabel(averageIntervalDays: number | null): string {
+  if (averageIntervalDays === null) return "—";
+  const weeks = Math.round(averageIntervalDays / 7);
+  return `${weeks} sem`;
+}
+
+function formatAppointmentDate(value: string): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "UTC",
+  }).format(new Date(`${value}T12:00:00Z`));
 }
 
 function requestError(error: unknown, fallback: string): string {

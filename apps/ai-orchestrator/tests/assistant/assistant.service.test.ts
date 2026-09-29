@@ -1469,7 +1469,7 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
         },
         {
           file: "modules/internal/routes.ts",
-          line: 749,
+          line: 756,
           category: "person_typed_text",
           origin: undefined,
         },

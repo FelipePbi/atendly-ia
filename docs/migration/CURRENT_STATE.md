@@ -7427,3 +7427,93 @@ no nome que dependiam da composição antiga, mais quatro testes novos
   atende neste dia." ignora exceção que fecha o dia. A conferência humana
   do §9 continua **não feita**. Ver a nota de fechamento de
   [D-089](DECISIONS.md) e o [review069](reviews/069-review.md).
+
+## Delta implementado — Goal075, 2026-09-29 ([D-090](DECISIONS.md), ACCEPTED)
+
+Corrige **CL-01…CL-03** do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md), fora da
+enumeração A-01…A-24 do FINAL_AUDIT, e a observação 1 do
+[review074](reviews/074-review.md). Atravessa Scheduling, orquestrador,
+BFF, contrato público e frontend, sem migration, sem rota nova e sem campo
+existente mudando de forma. Decisão: [D-090](DECISIONS.md), proposta no
+Goal075, **ACCEPTED** no [review075](reviews/075-review.md).
+
+- **O Scheduling calcula próximo, último e os números do perfil**, só para o
+  negócio da requisição e no fuso do calendário, sobre o histórico inteiro
+  (`AtendlyCustomerService`). `GET /internal/customers` traz
+  `nextAppointment` e `lastAppointment` por cliente, em duas consultas
+  `DISTINCT ON` para o negócio inteiro; `GET /internal/customers/:id` traz
+  os mesmos dois campos, pelas mesmas consultas com `[id]`, e
+  `appointmentStats` (`completed`, `noShows`, `cancelled`,
+  `averageIntervalDays`, `firstAppointmentDate`).
+- **Contrato e BFF.** Os campos novos são opcionais no contrato público e no
+  cliente do Scheduling do BFF; `PUBLIC_API_V1.md` descreve as regras.
+  `GET /v1/conversations` aceita `customerId`, filtrado pelo orquestrador
+  por `contact.customerId` dentro do negócio da sessão.
+- **Lista de Clientes.** Cada linha diz "próximo …", "último …" (com
+  "faltou ·" para falta) ou "sem atendimentos", com "hoje" no fuso do
+  calendário do negócio; ordem alfabética pt-BR, separador por letra sem
+  acento e "Sem nome" no fim.
+- **Perfil.** Cabeçalho com nome em `<h1>`, telefone, "cliente desde",
+  tags e as ações "Conversa" (só com conversa da pessoa), "Agendar" (só com
+  `createAppointments`, abre `/agenda/novo?customerId=` com a pessoa
+  escolhida) e "Editar dados". Abas Resumo (resumo da IA, quatro números,
+  próximo atendimento, preferências com a origem por extenso, responsável
+  principal), Atendimentos (próximo e anteriores) e Notas (notas e tags),
+  com `?aba=` para link direto. Nenhuma capacidade sumiu; onde ficou cada
+  uma está em [D-090](DECISIONS.md), item 7.
+- **Copy técnica sai** de `/clientes`, `/clientes/detalhes` e
+  `/clientes/novo`: "Gerenciado pela", "Controle completo", "pertencem
+  somente", "origem, permissão e idade", "nasce sem autorização", "fonte
+  oficial".
+- **Divergências declaradas:** `firstAppointmentDate` conta agendamento de
+  qualquer estado, inclusive cancelado e futuro; os testes de integração
+  §6.1 e §6.2 do Scheduling usam o relógio real; o controle 3 muta o
+  orquestrador. Detalhe em [D-090](DECISIONS.md).
+- **Vermelho da baseline `6787755`** de todos os testes novos, com os 18
+  arquivos de código e o `dist` do contrato na baseline, restaurados por
+  hash: Scheduling integração contra PostgreSQL `3 failed (3)`, unidade
+  `9 failed | 2 passed (11)`, BFF `8 failed (8)`, orquestrador
+  `1 failed | 2 passed (3)`, frontend `20 failed | 1 passed (21)`. Saída
+  em [FINAL_AUDIT §51](FINAL_AUDIT.md).
+- **Sete controles negativos (§7)**, rodados depois da execução final, com
+  restauração conferida por `git hash-object`: cada um reprova o teste
+  correspondente com o defeito e passa sem ele. Saída em
+  [FINAL_AUDIT §51](FINAL_AUDIT.md).
+- **Execução final (rodada 2)** — `validate:core` **17** passos, **15**
+  `passed`, **2** `skipped`, exit 0, com `test:frontend` **106**/**1100**
+  (baseline **104**/**1079**), `test:scheduling-service` **37**/**502**
+  (baseline **36**/**491**) e `test:ai-orchestrator` **1136** `passed` e
+  **93** pulados de **1229**; typecheck de `apps/frontend`, `apps/bff` e
+  `apps/scheduling-service` e lint de `apps/frontend` exit 0; `test:gate`
+  **233**/**233**; `validate:ui` **169** `passed`, **21** `skipped`, **0**
+  retentativas; `validate:integration` **36**/**36** passos, com
+  `test:bff-integration` **58**/**448** (baseline **57**/**440**) e o gate
+  autenticado em **155** `passed` e **0** retentativas, medindo
+  `/clientes` nas cinco larguras e o perfil aberto pela linha semeada.
+- **Rodadas de correção.** Rodada 2: blockers 1 a 4 do review da rodada 1
+  — o detalhe devolve próximo e último; a lista usa o fuso do negócio e
+  diz "há 1 mês"; vermelho da baseline, execução final e controles
+  refeitos; os quatro documentos escritos.
+- **Conferência humana pendente:** a conferência do §9 do Goal **não foi
+  feita** por este Goal — que a lista e o perfil, num aparelho real nas
+  cinco larguras, com cliente com e sem atendimento, batem com
+  `Clientes.dc.html`, `Clientes-Tablet.dc.html` e
+  `Clientes-Desktop.dc.html`; que o texto de próximo e último cabe na
+  linha em 360 e 390px; e que "Conversa" e "Agendar" levam ao lugar certo
+  com dados reais.
+- **Limites declarados:** Serviços (Goal076), Conversas e a central de
+  notificações (Goal077) e o onboarding (Goal072) não são tocados; o
+  Product Vault, `docs/design-reference/` e `QA_LOCAL_REVIEW.md` não foram
+  editados — ver [D-090](DECISIONS.md).
+
+- **Fechamento — review075, 2026-09-29.** Aceito na rodada 2 do IA Loop,
+  sem blocker; rodada 1 `CHANGES_REQUIRED` com 4 blockers. Na rodada 2 os
+  gates do IA Loop passaram todos, inclusive `validate:integration`, e o
+  Tech Lead reexecutou os testes `goal075-*` do frontend (21/21) e do
+  Scheduling (unidade 11/11, integração contra PostgreSQL 3/3). Um ponto
+  fica para a conferência humana: a lista usa o dia da semana abreviado
+  até 20 dias à frente, e não "nesta semana e nas duas seguintes" como o
+  Goal pede; dentro dessa janela, "próximo qua" não diz qual quarta. A
+  conferência humana do §9 continua **não feita**. Ver a nota de
+  fechamento de [D-090](DECISIONS.md) e o
+  [review075](reviews/075-review.md).

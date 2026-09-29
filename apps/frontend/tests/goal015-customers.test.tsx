@@ -57,6 +57,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       getCalendar: calendarGetCalendar,
       listAppointments: calendarListAppointments,
     },
+    conversations: { list: () => Promise.resolve([]) },
     customers: {
       create: customersCreate,
       createMemory: customersCreateMemory,
@@ -123,6 +124,9 @@ beforeEach(() => {
   customersSetTagAuthorization.mockReset();
   calendarGetCalendar.mockReset();
   calendarListAppointments.mockReset();
+  // A aba do perfil (Goal075) vive no endereço; sem isto, a aba escolhida
+  // por um teste vaza para o próximo.
+  window.history.replaceState({}, "", "/clientes");
 });
 
 describe("cliente sem nome e sem telefone não vira dado inventado", () => {
@@ -281,7 +285,9 @@ describe("autorização de uso pela IA nasce negada e só muda por ação explí
     const user = userEvent.setup();
     render(<CustomerMemory customerId="c1" />);
 
-    await user.click(screen.getByRole("button", { name: "Cadastrar memória" }));
+    await user.click(
+      screen.getByRole("button", { name: "Cadastrar preferência" }),
+    );
     await user.type(
       screen.getByLabelText("Descrição"),
       "Prefere atendimentos no fim da tarde",
@@ -328,6 +334,7 @@ describe("na Agenda Atendly, a agenda do perfil pede por customerId", () => {
     calendarGetCalendar.mockResolvedValue(calendarStateFixture());
     calendarListAppointments.mockResolvedValue([]);
     customersListMemory.mockResolvedValue([]);
+    const user = userEvent.setup();
     render(
       <ShellConfigProvider>
         <ProductCustomersScreen customerId="c1" scenario="detail" />
@@ -335,6 +342,8 @@ describe("na Agenda Atendly, a agenda do perfil pede por customerId", () => {
     );
 
     await screen.findByRole("heading", { name: "Marina Duarte" });
+    // A agenda do cliente vive na aba "Atendimentos" (Goal075).
+    await user.click(screen.getByRole("tab", { name: "Atendimentos" }));
     expect(calendarListAppointments).toHaveBeenCalledTimes(1);
     const [query] = calendarListAppointments.mock.calls[0] as [
       Record<string, unknown>,
@@ -347,6 +356,7 @@ describe("na Agenda Atendly, a agenda do perfil pede por customerId", () => {
     calendarGetCalendar.mockResolvedValue(calendarStateFixture());
     calendarListAppointments.mockResolvedValue([]);
     customersListMemory.mockResolvedValue([]);
+    const user = userEvent.setup();
 
     customersGet.mockResolvedValueOnce(
       customerDetailFixture({ id: "c1", name: "Marina Duarte", phone: "11999990000" }),
@@ -357,6 +367,7 @@ describe("na Agenda Atendly, a agenda do perfil pede por customerId", () => {
       </ShellConfigProvider>,
     );
     await screen.findByRole("heading", { name: "Marina Duarte" });
+    await user.click(screen.getByRole("tab", { name: "Atendimentos" }));
     first.unmount();
 
     customersGet.mockResolvedValueOnce(
@@ -368,6 +379,7 @@ describe("na Agenda Atendly, a agenda do perfil pede por customerId", () => {
       </ShellConfigProvider>,
     );
     await screen.findByRole("heading", { name: "Bruno Alves" });
+    await user.click(screen.getByRole("tab", { name: "Atendimentos" }));
 
     expect(calendarListAppointments).toHaveBeenCalledTimes(2);
     const [firstQuery, secondQuery] = calendarListAppointments.mock.calls as Array<
@@ -508,6 +520,7 @@ describe("a agenda do perfil sempre pede por customerId, nunca por customerPhone
     calendarGetCalendar.mockResolvedValue(calendarStateFixture());
     calendarListAppointments.mockResolvedValue([]);
     customersListMemory.mockResolvedValue([]);
+    const user = userEvent.setup();
     render(
       <ShellConfigProvider>
         <ProductCustomersScreen customerId="c1" scenario="detail" />
@@ -515,6 +528,8 @@ describe("a agenda do perfil sempre pede por customerId, nunca por customerPhone
     );
 
     await screen.findByRole("heading", { name: "Marina Duarte" });
+    // A agenda do cliente vive na aba "Atendimentos" (Goal075).
+    await user.click(screen.getByRole("tab", { name: "Atendimentos" }));
     expect(calendarListAppointments).toHaveBeenCalledTimes(1);
     const [query] = calendarListAppointments.mock.calls[0] as [
       Record<string, unknown>,
@@ -530,6 +545,7 @@ describe("a agenda do perfil sempre pede por customerId, nunca por customerPhone
     calendarGetCalendar.mockResolvedValue(calendarStateFixture());
     calendarListAppointments.mockResolvedValue([]);
     customersListMemory.mockResolvedValue([]);
+    const user = userEvent.setup();
     render(
       <ShellConfigProvider>
         <ProductCustomersScreen customerId="c1" scenario="detail" />
@@ -537,6 +553,7 @@ describe("a agenda do perfil sempre pede por customerId, nunca por customerPhone
     );
 
     await screen.findByRole("heading", { name: "Marina Duarte" });
+    await user.click(screen.getByRole("tab", { name: "Atendimentos" }));
     expect(calendarListAppointments).toHaveBeenCalledTimes(1);
     const [query] = calendarListAppointments.mock.calls[0] as [
       Record<string, unknown>,

@@ -376,6 +376,7 @@ export class AiOrchestratorClient {
       ignored?: string;
       search?: string;
       limit?: number;
+      customerId?: string;
     },
   ) {
     return (
@@ -548,7 +549,7 @@ export class AiOrchestratorClient {
             conversationsNeedingAttentionCount: z.number().int().nonnegative(),
             aiAppointmentsToday: z.number().int().nonnegative(),
             // Contadores da semana local corrente (segunda a domingo,
-            // incluindo dias ja passados), para o checklist da Home (Goal074).
+            // incluindo dias ja passados), para "Esta semana" (Goal074).
             aiAppointmentsThisWeek: z.number().int().nonnegative(),
             automatedConversationsToday: z.number().int().nonnegative(),
             conversationsTakenOverThisWeek: z.number().int().nonnegative(),

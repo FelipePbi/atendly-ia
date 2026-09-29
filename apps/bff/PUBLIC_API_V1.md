@@ -174,6 +174,12 @@ O cliente é uma **pessoa**, identificada pelo ID dentro do negócio. O telefone
 - nome e telefone só mudam por `PATCH /v1/customers/:id`. Nenhuma outra rota renomeia, funde ou deduplica pessoas.
 - `GET /v1/customers/:id` devolve, além dos dados básicos, `primaryGuardian`, `notes` e `tags`. Consumidores que só conhecem o contrato anterior continuam válidos: os campos novos são adicionais.
 
+### Próximo e último atendimento, e números do histórico (Goal075)
+
+`GET /v1/customers` traz, por item, `nextAppointment` e `lastAppointment` — cada um `{ date, startTime, status }` ou `null`. `nextAppointment` é o atendimento `CONFIRMED`/`SCHEDULED` de início mais cedo a partir de agora; `lastAppointment` é o não cancelado de início mais recente até agora. Os dois são calculados no fuso do calendário do negócio, nunca do cliente. Campos opcionais: resposta anterior a este Goal continua válida sem eles.
+
+`GET /v1/customers/:id` traz os mesmos `nextAppointment` e `lastAppointment`, pelas mesmas regras, e `appointmentStats`, também opcional: `{ completed, noShows, cancelled, averageIntervalDays, firstAppointmentDate }`, contados sobre o histórico inteiro da pessoa nesse negócio. `averageIntervalDays` é a média de dias entre atendimentos `COMPLETED` consecutivos, `null` com menos de dois; `firstAppointmentDate` é a data do primeiro atendimento de qualquer estado, `null` sem nenhum.
+
 `POST /v1/appointments` aceita `customerId` para uma pessoa já resolvida ou `customerName`/`customerPhone` para criar o cadastro **na confirmação** — a criação acontece dentro da transação do agendamento, depois de o horário ser validado. Consultar preço ou disponibilidade não cria ninguém, e uma confirmação que falha no horário também não. `GET /v1/appointments` aceita `customerId` (a pessoa) e `customerPhone` (todos os candidatos do número).
 
 ### Responsável principal
@@ -685,6 +691,7 @@ Resolve o negócio pela sessão autenticada, sem CSRF por ser leitura. Recusas p
 | `category` | `COMMERCIAL`, `UNCLASSIFIED`, `PERSONAL` | organização da inbox, atributo da sessão vigente |
 | `handling` | `AI`, `HUMAN` | estado de atendimento: `HUMAN` é "Você atendendo" |
 | `ignored` | `true`, `false` | contato em `Ignorar IA` |
+| `customerId` | id de um cliente do Scheduling | só conversas dessa pessoa, dentro do negócio da sessão autenticada (Goal075) |
 
 O DTO de conversa ganhou campos **opcionais**; respostas anteriores a esta versão continuam válidas e o consumidor trata ausência como o padrão seguro (`UNCLASSIFIED`, `AUTOMATIC`, `AI`, não ignorado):
 

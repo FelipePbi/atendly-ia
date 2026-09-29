@@ -25,9 +25,9 @@ const KIND_LABELS: Record<CustomerMemoryKind, string> = {
 };
 
 const ORIGIN_LABELS: Record<CustomerMemoryOrigin, string> = {
-  AI_INFERRED: "Inferido pela IA",
-  CUSTOMER_STATED: "Informado pelo cliente",
-  PROFESSIONAL: "Cadastrado pela profissional",
+  AI_INFERRED: "percebida pela IA",
+  CUSTOMER_STATED: "informada pela cliente",
+  PROFESSIONAL: "cadastrada por você",
 };
 
 export function CustomerMemory({ customerId }: CustomerMemoryProps) {
@@ -127,13 +127,13 @@ export function CustomerMemory({ customerId }: CustomerMemoryProps) {
   }
 
   return (
-    <section aria-label="Memória do cliente" className="directory-section">
+    <section aria-label="Preferências do cliente" className="directory-section">
       <div className="directory-section-header">
         <div>
-          <h2>Memória</h2>
+          <h2>Preferências</h2>
           <p>
-            Preferências e observações com origem, permissão e idade. Cadastro
-            manual nasce sem autorização de uso pela IA.
+            O que você e a IA percebem sobre esta pessoa. Uma preferência
+            cadastrada por você só é usada pela IA depois que você autoriza.
           </p>
         </div>
         {!creating && (
@@ -143,7 +143,7 @@ export function CustomerMemory({ customerId }: CustomerMemoryProps) {
             type="button"
           >
             <Icon name="plus" />
-            Cadastrar memória
+            Cadastrar preferência
           </button>
         )}
       </div>
@@ -158,7 +158,7 @@ export function CustomerMemory({ customerId }: CustomerMemoryProps) {
             setEntries(null);
             setReload((value) => value + 1);
           }}
-          title="Memória indisponível"
+          title="Preferências indisponíveis"
           tone="error"
         />
       )}

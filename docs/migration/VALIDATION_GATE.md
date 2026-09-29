@@ -3080,3 +3080,36 @@ Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal069-2026-09-29-d-08
 [review069](reviews/069-review.md) (rodada 6 do IA Loop, sem blocker; os
 gates da rodada 6 passaram, inclusive `validate:integration` no próprio IA
 Loop).
+
+## Próximo e último atendimento na lista, perfil de Clientes em três abas e o filtro `customerId` de conversa, do Goal075
+
+`apps/scheduling-service/` calcula próximo e último atendimento e os números do histórico no fuso do calendário; `packages/public-api-contract/` e `apps/bff/` declaram os campos novos como opcionais e repassam `customerId` de conversa ao `apps/ai-orchestrator/`; `apps/frontend/` mostra a lista e o perfil novos. Nenhuma migration, nenhuma rota nova. `e2e/routes.ts` e `e2e/authenticated-matrix.spec.ts` ficam na baseline.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `nextAppointmentsByCustomer`/`lastAppointmentsByCustomer` (`atendly-customer-service.ts`): duas consultas `DISTINCT ON` por negócio, `tenantId` em toda consulta, hora local por `instantToLocalDateTime(…, settings.timezone)` | O fuso do processo do Scheduling, que não entra no cálculo |
+| `GET /internal/customers/:id` devolve `nextAppointment`/`lastAppointment` pelas mesmas consultas com `[id]` (`appointmentHighlights`) e `appointmentStats` | A busca por telefone (`findCandidatesByPhone`), que mantém filtro e ordem |
+| `customerSchema`/`customerDetailSchema` do contrato e do cliente do Scheduling no BFF: campos novos opcionais, checagem de campo não declarado (Goal036) dentro deles | Resposta anterior ao Goal075, que continua válida sem os campos |
+| `GET /v1/conversations?customerId=` → orquestrador filtra `contact.customerId` no negócio da sessão | Os filtros de conversa que já existiam |
+| `CustomerList.tsx`: "hoje" é a data no fuso de `calendar.getCalendar().timezone`, com `America/Sao_Paulo` quando o calendário não traz fuso ou não responde | O fuso do navegador, que não decide mais o texto da linha |
+| `CustomerProfile.tsx`: "Conversa" só com conversa da pessoa; "Agendar" só com `createAppointments`; abas com `role="tablist"`, setas e `?aba=` | Regra de memória, nota, tag, resumo e responsável principal, que não muda |
+
+**Divergências declaradas:** `firstAppointmentDate` conta agendamento de qualquer estado, inclusive cancelado e futuro; os testes de integração §6.1 e §6.2 do Scheduling usam o relógio real; o controle 3 muta o orquestrador. Detalhe em [D-090](DECISIONS.md).
+
+**Vermelho da baseline `6787755` dos testes novos**, rodado na rodada 2 com os 18 arquivos de código do diff servidos de `git show 6787755:<arquivo>` e o `dist` do contrato trocado pelo build da baseline em `packages/public-api-contract`, `apps/bff/node_modules/…` e `apps/frontend/node_modules/…`, tudo restaurado e conferido por hash: Scheduling integração contra PostgreSQL — exit 1, `Tests 3 failed (3)`; Scheduling unidade — exit 1, `Tests 9 failed | 2 passed (11)`; BFF §6.4 — exit 1, `Tests 8 failed (8)`; orquestrador §6.5 — exit 1, `Tests 1 failed | 2 passed (3)`; frontend §6.6 a §6.11 e os testes dos blockers 1 e 2 — exit 1, `Tests 20 failed | 1 passed (21)`. Os que passam contra a baseline são guardas de comportamento que não muda (lista sem fuso, conversa de outro negócio, conversa sem filtro, axe). Saída em [FINAL_AUDIT §51](FINAL_AUDIT.md).
+
+**Sete controles negativos do §7, aplicados e revertidos** depois da execução final, saída colada em [FINAL_AUDIT §51](FINAL_AUDIT.md): (1) `lastAppointment` aceita cancelado: reprova **2** de **3** do teste de integração do Scheduling (§6.1 e, pelo detalhe, §6.2). (2) a lista usa o fuso do servidor: reprova o §6.3. (3) o orquestrador deixa de filtrar por `customerId`: reprova **1** de **3** do §6.5. (4) a linha volta a só nome e telefone: reprova **4** de **6** de `goal075-customer-list.test.tsx`. (5) "Conversa" aparece sem conversa: reprova "sem conversa da pessoa". (6) `AppointmentForm` ignora `customerId`: reprova o §6.9. (7) a faixa "Gerenciado pela Agenda Atendly" volta: reprova "nenhuma das copies proibidas aparece no perfil". Cada um passa sem o defeito, e cada arquivo-alvo volta ao mesmo `git hash-object`.
+
+**Execução final, rodada 2, depois da última edição de código:** `npm run validate:core` — **17** passos, **15** `passed`, **0** `failed`, **2** `skipped` (`test:bff`, `test:health-worker`), exit 0; dentro dele `test:frontend` **106**/**106** arquivos e **1100**/**1100** testes (baseline **104**/**1079**), `test:scheduling-service` **37**/**502** (baseline **36**/**491**), `test:ai-orchestrator` **1136** `passed` e **93** pulados de **1229** (baseline **1133**/**1226**), `audit:static` **34** verificações com **1** pulada (`production_health`). `npx tsc --noEmit` em `apps/frontend`, `apps/bff` e `apps/scheduling-service` e `npm run lint` em `apps/frontend`, exit 0. `npm run test:gate` — **233**/**233**, exit 0. `npm run validate:ui` — **169** `passed`, **21** `skipped`, **0** retentativas, exit 0. `BFF_TEST_DATABASE_URL=postgresql://pgtest@127.0.0.1:55432/atendly_bff_test npm run validate:integration` — **36**/**36** passos, exit 0; `test:bff-integration` **58**/**448** (baseline **57**/**440**), `test:scheduling-integration` **18**/**143**; gate autenticado (`rehearse:goal033-authenticated-ui`) **155** `passed`, **0** retentativas, com `/clientes` medida nas cinco larguras e o perfil aberto pela linha semeada.
+
+**Rodadas de correção.** Rodada 2: blockers 1 a 4 do review da rodada 1 — o detalhe do cliente devolve próximo e último; a lista calcula "hoje" no fuso do negócio e diz "há 1 mês"; o vermelho da baseline, a execução final e os sete controles refeitos; D-090, FINAL_AUDIT §51, CURRENT_STATE e esta seção escritos.
+
+**Conferência humana pendente.** A conferência do §9 do Goal **não foi feita** por este Goal: que a lista e o perfil, num aparelho real nas cinco larguras, com cliente com e sem atendimento, batem com `Clientes.dc.html`, `Clientes-Tablet.dc.html` e `Clientes-Desktop.dc.html`; que o texto de próximo e último cabe na linha em 360 e 390px sem esconder o nome; e que "Conversa" e "Agendar" levam ao lugar certo com dados reais.
+
+**O que esta seção não prova.** Não prova fidelidade visual de Clientes aos protótipos aprovados, nem de Serviços (Goal076), de Conversas e da central de notificações (Goal077) ou do onboarding (Goal072). `validate:integration` e o gate autenticado são a execução declarada pelo Developer contra o PostgreSQL descartável da estação.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal075-2026-09-29-d-090-accepted),
+[FINAL_AUDIT §51](FINAL_AUDIT.md) e [D-090](DECISIONS.md), **ACCEPTED** no
+[review075](reviews/075-review.md) (rodada 2 do IA Loop, sem blocker; os
+gates da rodada 2 passaram, inclusive `validate:integration` no próprio IA
+Loop).

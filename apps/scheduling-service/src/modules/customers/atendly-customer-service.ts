@@ -1,4 +1,5 @@
-import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
+import { Prisma, type PrismaClient } from "../../generated/prisma/client.js";
+import { instantToLocalDateTime } from "../../shared/date-time/calendar-date-time.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import {
   normalizePhone,
@@ -42,6 +43,31 @@ export interface CustomerTagInput {
   actor?: string | null;
 }
 
+/** Recorte de um agendamento no fuso do calendário do negócio (Goal075). */
+export interface AppointmentSummary {
+  date: string;
+  startTime: string;
+  status: string;
+}
+
+/** Números do histórico inteiro do cliente, no fuso do negócio (Goal075). */
+export interface AppointmentStats {
+  completed: number;
+  noShows: number;
+  cancelled: number;
+  averageIntervalDays: number | null;
+  firstAppointmentDate: string | null;
+}
+
+/** Ativo o suficiente para contar como próximo atendimento (Goal075). */
+const NEXT_APPOINTMENT_STATUSES = ["CONFIRMED", "SCHEDULED"] as const;
+
+interface AppointmentRow {
+  customerId: string;
+  startAt: Date;
+  status: string;
+}
+
 /**
  * Cliente é uma pessoa identificada por `(tenantId, id)`.
  *
@@ -56,25 +82,165 @@ export class AtendlyCustomerService {
     private readonly tenantId: string,
   ) {}
 
-  async list(filter: { phone?: string | null } = {}) {
+  /**
+   * `options.timezone` liga o próximo e o último atendimento (Goal075),
+   * calculados num único par de consultas para todo o negócio — nunca uma
+   * por cliente. Omitido, a lista sai como antes: quem não precisa dos
+   * campos novos não paga a consulta extra.
+   */
+  async list(
+    filter: { phone?: string | null } = {},
+    options: { timezone?: string; now?: Date } = {},
+  ) {
     const phoneCandidates = filter.phone
       ? phoneEquivalenceCandidates(normalizePhone(filter.phone))
       : undefined;
-    return this.database.customer.findMany({
+    const customers = await this.database.customer.findMany({
       where: {
         tenantId: this.tenantId,
         ...(phoneCandidates ? { normalizedPhone: { in: phoneCandidates } } : {}),
       },
       orderBy: [{ name: "asc" }, { createdAt: "asc" }],
     });
+    if (!options.timezone || customers.length === 0) return customers;
+    const timezone = options.timezone;
+    const now = options.now ?? new Date();
+    const customerIds = customers.map((customer) => customer.id);
+    const [nextRows, lastRows] = await Promise.all([
+      this.nextAppointmentsByCustomer(customerIds, now),
+      this.lastAppointmentsByCustomer(customerIds, now),
+    ]);
+    const nextById = new Map(nextRows.map((row) => [row.customerId, row]));
+    const lastById = new Map(lastRows.map((row) => [row.customerId, row]));
+    return customers.map((customer) => ({
+      ...customer,
+      nextAppointment: appointmentSummary(nextById.get(customer.id), timezone),
+      lastAppointment: appointmentSummary(lastById.get(customer.id), timezone),
+    }));
   }
 
   /**
    * Candidatos para um número. Zero, um ou vários — o chamador decide, e a
    * escolha entre eles é sempre explícita.
    */
-  async findCandidatesByPhone(phone: string) {
-    return this.list({ phone });
+  async findCandidatesByPhone(
+    phone: string,
+    options: { timezone?: string; now?: Date } = {},
+  ) {
+    return this.list({ phone }, options);
+  }
+
+  /**
+   * Próximo e último atendimento de um cliente só, pelas mesmas consultas
+   * da lista, para o detalhe do perfil (Goal075).
+   */
+  async appointmentHighlights(
+    customerId: string,
+    options: { timezone: string; now?: Date },
+  ): Promise<{
+    nextAppointment: AppointmentSummary | null;
+    lastAppointment: AppointmentSummary | null;
+  }> {
+    const now = options.now ?? new Date();
+    const [nextRows, lastRows] = await Promise.all([
+      this.nextAppointmentsByCustomer([customerId], now),
+      this.lastAppointmentsByCustomer([customerId], now),
+    ]);
+    return {
+      nextAppointment: appointmentSummary(nextRows[0], options.timezone),
+      lastAppointment: appointmentSummary(lastRows[0], options.timezone),
+    };
+  }
+
+  /**
+   * Um único agendamento ativo por cliente, o de início mais cedo a partir
+   * de `now` — nunca uma consulta por cliente (Goal075).
+   */
+  private async nextAppointmentsByCustomer(
+    customerIds: string[],
+    now: Date,
+  ): Promise<AppointmentRow[]> {
+    if (customerIds.length === 0) return [];
+    return this.database.$queryRaw<AppointmentRow[]>(Prisma.sql`
+      SELECT DISTINCT ON ("customerId") "customerId", "startAt", "status"
+        FROM "Appointment"
+       WHERE "tenantId" = ${this.tenantId}
+         AND "customerId" IN (${Prisma.join(customerIds)})
+         AND "status" IN (${Prisma.join(NEXT_APPOINTMENT_STATUSES)})
+         AND "startAt" > ${now}
+       ORDER BY "customerId", "startAt" ASC
+    `);
+  }
+
+  /**
+   * Um único agendamento não cancelado por cliente, o de início mais recente
+   * antes de `now` — nunca uma consulta por cliente (Goal075).
+   */
+  private async lastAppointmentsByCustomer(
+    customerIds: string[],
+    now: Date,
+  ): Promise<AppointmentRow[]> {
+    if (customerIds.length === 0) return [];
+    return this.database.$queryRaw<AppointmentRow[]>(Prisma.sql`
+      SELECT DISTINCT ON ("customerId") "customerId", "startAt", "status"
+        FROM "Appointment"
+       WHERE "tenantId" = ${this.tenantId}
+         AND "customerId" IN (${Prisma.join(customerIds)})
+         AND "status" != 'CANCELLED'
+         AND "startAt" <= ${now}
+       ORDER BY "customerId", "startAt" DESC
+    `);
+  }
+
+  /**
+   * Números do histórico inteiro de um cliente (Goal075): contagens por
+   * estado, média de intervalo entre atendimentos concluídos consecutivos e
+   * a data do primeiro atendimento, todas no fuso do calendário do negócio.
+   */
+  async appointmentStats(
+    customerId: string,
+    timezone: string,
+  ): Promise<AppointmentStats> {
+    const rows = await this.database.appointment.findMany({
+      where: { tenantId: this.tenantId, customerId },
+      select: { startAt: true, status: true },
+      orderBy: { startAt: "asc" },
+    });
+    let completed = 0;
+    let noShows = 0;
+    let cancelled = 0;
+    const completedStarts: Date[] = [];
+    for (const row of rows) {
+      if (row.status === "COMPLETED") {
+        completed += 1;
+        completedStarts.push(row.startAt);
+      } else if (row.status === "NO_SHOW") {
+        noShows += 1;
+      } else if (row.status === "CANCELLED") {
+        cancelled += 1;
+      }
+    }
+    let averageIntervalDays: number | null = null;
+    if (completedStarts.length >= 2) {
+      let totalDays = 0;
+      for (let index = 1; index < completedStarts.length; index += 1) {
+        totalDays +=
+          (completedStarts[index].getTime() -
+            completedStarts[index - 1].getTime()) /
+          86_400_000;
+      }
+      averageIntervalDays = totalDays / (completedStarts.length - 1);
+    }
+    const first = rows[0];
+    return {
+      completed,
+      noShows,
+      cancelled,
+      averageIntervalDays,
+      firstAppointmentDate: first
+        ? instantToLocalDateTime(first.startAt, timezone).date
+        : null,
+    };
   }
 
   async get(customerId: string) {
@@ -450,6 +616,15 @@ export class AtendlyCustomerService {
       primaryGuardian: guardian?.status === "CONFIRMED" ? guardian : null,
     };
   }
+}
+
+function appointmentSummary(
+  row: AppointmentRow | undefined,
+  timezone: string,
+): AppointmentSummary | null {
+  if (!row) return null;
+  const local = instantToLocalDateTime(row.startAt, timezone);
+  return { date: local.date, startTime: local.time, status: row.status };
 }
 
 function normalizeName(value: string | null | undefined): string | null {

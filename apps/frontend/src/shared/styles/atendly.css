@@ -893,6 +893,19 @@ p {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.list-item-meta {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.list-separator {
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--surface-secondary);
+}
 .avatar {
   width: 38px;
   height: 38px;

@@ -38,12 +38,30 @@ const serviceSchema = z.object({
   bufferAfterMinutes: z.number().int().nonnegative().default(0),
   recurrenceIntervalDays: z.number().int().positive().nullable().default(null),
 });
+// Próximo e último atendimento por cliente, no fuso do calendário do negócio
+// (Goal075). Ausentes na resposta anterior a este Goal.
+const customerAppointmentSummarySchema = z.object({
+  date: z.string(),
+  startTime: z.string(),
+  status: z.string(),
+});
 const customerSchema = z.object({
   id: z.string(),
   name: z.string().nullable(),
   phone: z.string().nullable(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
+  nextAppointment: customerAppointmentSummarySchema.nullable().optional(),
+  lastAppointment: customerAppointmentSummarySchema.nullable().optional(),
+});
+// Números do histórico inteiro do cliente, no fuso do calendário do negócio
+// (Goal075). Ausente na resposta anterior a este Goal.
+const customerAppointmentStatsSchema = z.object({
+  completed: z.number().int().nonnegative(),
+  noShows: z.number().int().nonnegative(),
+  cancelled: z.number().int().nonnegative(),
+  averageIntervalDays: z.number().nonnegative().nullable(),
+  firstAppointmentDate: z.string().nullable(),
 });
 const primaryGuardianSchema = z
   .object({
@@ -86,6 +104,7 @@ const customerDetailSchema = customerSchema.extend({
   primaryGuardian: primaryGuardianSchema.default(null),
   notes: z.array(customerNoteSchema).default([]),
   tags: z.array(customerTagSchema).default([]),
+  appointmentStats: customerAppointmentStatsSchema.optional(),
 });
 const appointmentSchema = z.object({
   id: z.string(),
@@ -1517,7 +1536,7 @@ export class SchedulingClient {
         appointmentsToday: z.number().int().nonnegative(),
         todayAppointments: z.array(appointmentSchema),
         // Semana local corrente (segunda a domingo, incluindo dias ja
-        // passados), para o checklist da Home (Goal074).
+        // passados), para "Esta semana" (Goal074).
         appointmentsThisWeek: z.number().int().nonnegative(),
         nextAppointment: appointmentSchema.nullable(),
         estimatedRevenueToday: z.number().nonnegative().nullable(),

@@ -30,6 +30,8 @@ const querySchema = z.object({
   ignored: z.enum(["true", "false"]).optional(),
   search: z.string().trim().max(160).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
+  // Conversas de uma pessoa do Scheduling (Goal075), pelo perfil do cliente.
+  customerId: z.string().trim().min(1).max(128).optional(),
 });
 const messageSchema = z.object({ text: z.string().trim().min(1).max(4_000) });
 const categorySchema = z.object({

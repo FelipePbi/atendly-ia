@@ -33,6 +33,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       getCalendar: calendarGetCalendar,
       listAppointments: calendarListAppointments,
     },
+    conversations: { list: () => Promise.resolve([]) },
     customers: {
       get: customersGet,
       list: customersList,

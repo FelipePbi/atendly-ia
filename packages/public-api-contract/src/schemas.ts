@@ -276,12 +276,33 @@ export const serviceSchema = z.object({
   recurrenceIntervalDays: z.number().int().positive().nullish().optional(),
 });
 
+// Recorte de um agendamento no fuso do calendário do negócio (Goal075):
+// próximo e último atendimento na lista de clientes. Ausente na resposta
+// anterior a este Goal, que continua decodável sem os dois campos.
+export const customerAppointmentSummarySchema = z.object({
+  date: dateSchema,
+  startTime: timeSchema,
+  status: z.string(),
+});
+
 export const customerSchema = z.object({
   id: z.string().min(1),
   name: z.string().nullable(),
   phone: z.string().nullable(),
   createdAt: isoDateTimeSchema.optional(),
   updatedAt: isoDateTimeSchema.optional(),
+  nextAppointment: customerAppointmentSummarySchema.nullable().optional(),
+  lastAppointment: customerAppointmentSummarySchema.nullable().optional(),
+});
+
+// Números do histórico inteiro de um cliente (Goal075), no fuso do
+// calendário do negócio. Ausente na resposta anterior a este Goal.
+export const customerAppointmentStatsSchema = z.object({
+  completed: z.number().int().nonnegative(),
+  noShows: z.number().int().nonnegative(),
+  cancelled: z.number().int().nonnegative(),
+  averageIntervalDays: z.number().nonnegative().nullable(),
+  firstAppointmentDate: dateSchema.nullable(),
 });
 
 // Relação, observações e tags são opcionais no schema de propósito: a
@@ -331,6 +352,7 @@ export const customerDetailSchema = customerSchema.extend({
   primaryGuardian: customerPrimaryGuardianSchema.optional().default(null),
   notes: z.array(customerNoteSchema).optional().default([]),
   tags: z.array(customerTagSchema).optional().default([]),
+  appointmentStats: customerAppointmentStatsSchema.optional(),
 });
 
 export const appointmentSchema = z.object({
@@ -848,7 +870,7 @@ const schedulingDashboardSchema = z.object({
   appointmentsToday: z.number().int().nonnegative(),
   todayAppointments: z.array(appointmentSchema),
   // Semana local corrente (segunda a domingo, incluindo dias ja passados),
-  // para o checklist da Home (Goal074).
+  // para "Esta semana" (Goal074).
   appointmentsThisWeek: z.number().int().nonnegative(),
   nextAppointment: appointmentSchema.nullable(),
   estimatedRevenueToday: z.number().nonnegative().nullable(),
@@ -867,7 +889,7 @@ export const dashboardSchema = z.object({
       conversationsNeedingAttentionCount: z.number().int().nonnegative(),
       aiAppointmentsToday: z.number().int().nonnegative(),
       // Contadores da semana local corrente (segunda a domingo, incluindo
-      // dias ja passados), para o checklist da Home (Goal074).
+      // dias ja passados), para "Esta semana" (Goal074).
       aiAppointmentsThisWeek: z.number().int().nonnegative(),
       automatedConversationsToday: z.number().int().nonnegative(),
       conversationsTakenOverThisWeek: z.number().int().nonnegative(),
@@ -1206,6 +1228,12 @@ export type Conversation = z.infer<typeof conversationSchema>;
 export type SessionCategory = z.infer<typeof sessionCategorySchema>;
 export type Customer = z.infer<typeof customerSchema>;
 export type CustomerDetail = z.infer<typeof customerDetailSchema>;
+export type CustomerAppointmentSummary = z.infer<
+  typeof customerAppointmentSummarySchema
+>;
+export type CustomerAppointmentStats = z.infer<
+  typeof customerAppointmentStatsSchema
+>;
 export type CustomerNote = z.infer<typeof customerNoteSchema>;
 export type CustomerTag = z.infer<typeof customerTagSchema>;
 export type CustomerList = z.infer<typeof customerListSchema>;

@@ -161,7 +161,9 @@ describe("cada fluxo obrigatório tem rota própria e é alcançável", () => {
   });
 
   test("novo agendamento oferece o caminho para a série de atendimento", async () => {
-    renderPage(<NewAppointmentPage />);
+    // Goal075: a página lê `customerId` de `searchParams`, então é async
+    // (padrão de componente de servidor) — chamar e aguardar antes de montar.
+    renderPage(await NewAppointmentPage({ searchParams: Promise.resolve({}) }));
 
     expect(
       await screen.findByRole("link", { name: "Agendar série" }),

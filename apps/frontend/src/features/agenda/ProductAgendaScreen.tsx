@@ -32,13 +32,16 @@ type AgendaScenario =
 
 export function ProductAgendaScreen({
   appointmentId,
+  customerId,
   scenario = "list",
 }: {
   appointmentId?: string;
+  /** Pessoa escolhida de antemão para um agendamento novo (Goal075). */
+  customerId?: string;
   scenario?: AgendaScenario;
 }) {
   if (scenario === "list") return <AgendaBoard />;
-  if (scenario === "new") return <AppointmentForm />;
+  if (scenario === "new") return <AppointmentForm customerId={customerId} />;
   if (scenario === "appointment-series") return <SeriesPreview />;
   if (scenario === "block-time") return <BlockForm />;
   if (scenario === "block-series") return <BlockSeriesForm />;

@@ -56,7 +56,10 @@ import {
   removeTimeBlock,
 } from "../calendar/time-blocks.js";
 import { databaseNow } from "../calendar/write-policy.js";
-import { AtendlyCustomerService } from "../customers/atendly-customer-service.js";
+import {
+  type AppointmentSummary,
+  AtendlyCustomerService,
+} from "../customers/atendly-customer-service.js";
 import { encryptIntegrationCredentials } from "../integrations/credentials.js";
 import { createMinhaAgendaClient } from "../integrations/minha-agenda/client.js";
 import {
@@ -625,7 +628,7 @@ export async function registerManagementRoutes(
     const customers = await new AtendlyCustomerService(
       prisma,
       context.tenantId,
-    ).list({ phone: query.phone });
+    ).list({ phone: query.phone }, { timezone: settings.timezone });
     return data(request, {
       items: customers.map(customerDto),
       source: settings.source,
@@ -638,20 +641,24 @@ export async function registerManagementRoutes(
 
   app.get("/internal/customers/:id", internalOnly, async (request) => {
     const context = currentInternalContext(request);
-    await requireCalendar(prisma, context.tenantId);
+    const settings = await requireCalendar(prisma, context.tenantId);
     const { id } = parse(idParamsSchema, request.params);
     const customers = new AtendlyCustomerService(prisma, context.tenantId);
-    const [customer, guardian, notes, tags] = await Promise.all([
-      customers.get(id),
-      customers.primaryGuardian(id),
-      customers.listNotes(id),
-      customers.listTags(id),
-    ]);
+    const [customer, guardian, notes, tags, appointmentStats, highlights] =
+      await Promise.all([
+        customers.get(id),
+        customers.primaryGuardian(id),
+        customers.listNotes(id),
+        customers.listTags(id),
+        customers.appointmentStats(id, settings.timezone),
+        customers.appointmentHighlights(id, { timezone: settings.timezone }),
+      ]);
     return data(request, {
-      ...customerDto(customer),
+      ...customerDto({ ...customer, ...highlights }),
       primaryGuardian: primaryGuardianDto(guardian),
       notes: notes.map(customerNoteDto),
       tags: tags.map(customerTagDto),
+      appointmentStats,
     });
   });
 
@@ -2033,6 +2040,8 @@ function customerDto(customer: {
   phone: string | null;
   createdAt: Date;
   updatedAt: Date;
+  nextAppointment?: AppointmentSummary | null;
+  lastAppointment?: AppointmentSummary | null;
 }) {
   return {
     id: customer.id,
@@ -2040,6 +2049,12 @@ function customerDto(customer: {
     phone: customer.phone,
     createdAt: customer.createdAt.toISOString(),
     updatedAt: customer.updatedAt.toISOString(),
+    ...(customer.nextAppointment !== undefined
+      ? { nextAppointment: customer.nextAppointment }
+      : {}),
+    ...(customer.lastAppointment !== undefined
+      ? { lastAppointment: customer.lastAppointment }
+      : {}),
   };
 }
 

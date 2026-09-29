@@ -131,7 +131,7 @@ export function CustomerForm() {
         <StatePanel
           actionHref="/clientes"
           actionLabel="Voltar para clientes"
-          description="Cadastros são controlados pela fonte oficial e não podem ser criados nesta tela."
+          description="Este negócio cadastra clientes pelo Minha Agenda. Não é possível criar um cliente novo por aqui."
           icon="link"
           title="Cadastro gerenciado no Minha Agenda"
         />

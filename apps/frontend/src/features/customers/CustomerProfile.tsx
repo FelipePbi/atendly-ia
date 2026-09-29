@@ -1,7 +1,8 @@
 "use client";
 
+import clsx from "clsx";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { type FormEvent } from "react";
 
 import { BffHttpError, type CalendarState, type CustomerDetail } from "@/data";
@@ -21,6 +22,14 @@ import { PrimaryGuardianPanel } from "./PrimaryGuardianPanel";
 
 type CustomerProfileProps = { customerId?: string };
 
+type ProfileTab = "atendimentos" | "notas" | "resumo";
+
+const TABS: Array<{ id: ProfileTab; label: string }> = [
+  { id: "resumo", label: "Resumo" },
+  { id: "atendimentos", label: "Atendimentos" },
+  { id: "notas", label: "Notas" },
+];
+
 export function CustomerProfile({ customerId }: CustomerProfileProps) {
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [calendar, setCalendar] = useState<CalendarState | null>(null);
@@ -33,6 +42,10 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [tab, setTab] = useState<ProfileTab>(() => initialTabFromLocation());
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const tabsId = useId();
 
   useEffect(() => {
     if (!customerId) return;
@@ -54,6 +67,20 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
       });
     return () => controller.abort();
   }, [customerId, reload]);
+
+  // A conversa mais recente da pessoa (Goal075): sem conversa ou em erro, a
+  // ação "Conversa" simplesmente não aparece — não é uma falha bloqueante.
+  useEffect(() => {
+    if (!customerId) return;
+    const controller = new AbortController();
+    getProductServices()
+      .conversations.list({ customerId, limit: 1 }, controller.signal)
+      .then((result) => setConversationId(result[0]?.id ?? null))
+      .catch(() => {
+        if (!controller.signal.aborted) setConversationId(null);
+      });
+    return () => controller.abort();
+  }, [customerId]);
 
   async function saveIdentity(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -99,12 +126,21 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
   }, []);
 
   const editable = Boolean(calendar?.capabilities.manageCustomers);
+  const canSchedule = Boolean(calendar?.capabilities.createAppointments);
   useShellConfig({
     active: "clientes",
     loading: !customer && !error,
     module: "directory",
     title: "Detalhes do cliente",
   });
+
+  function selectTab(next: ProfileTab) {
+    setTab(next);
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("aba", next);
+    window.history.replaceState(null, "", url);
+  }
 
   return (
     <section className="directory-page">
@@ -135,7 +171,6 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
         />
       ) : (
         <>
-          <SourceStrip />
           <section className="directory-detail-hero">
             <div className="directory-detail-identity">
               <span className="avatar" aria-hidden="true">
@@ -144,15 +179,47 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
               <div>
                 <h1>{customer.name || "Cliente sem nome"}</h1>
                 <p className="directory-detail-phone">
-                  {displayPhone(customer.phone, "Telefone não informado")}
+                  {[
+                    displayPhone(customer.phone, "Telefone não informado"),
+                    sinceLabel(customer),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </p>
-                <div className="directory-detail-signals">
-                  <span className="badge">Agenda Atendly</span>
-                </div>
+                {customer.tags.length > 0 && (
+                  <ul
+                    aria-label="Tags do cliente"
+                    className="customer-header-tags"
+                  >
+                    {customer.tags.map((tag) => (
+                      <li className="badge" key={tag.id}>
+                        {tag.label}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
-            {editable && !editing && (
-              <div className="directory-detail-actions">
+            <div className="directory-detail-actions">
+              {conversationId && (
+                <Link
+                  className="btn btn-secondary"
+                  href={`/conversas/${encodeURIComponent(conversationId)}`}
+                >
+                  <Icon name="chat" />
+                  Conversa
+                </Link>
+              )}
+              {canSchedule && (
+                <Link
+                  className="btn btn-secondary"
+                  href={`/agenda/novo?customerId=${encodeURIComponent(customer.id)}`}
+                >
+                  <Icon name="calendar" />
+                  Agendar
+                </Link>
+              )}
+              {editable && !editing && (
                 <button
                   className="btn btn-secondary"
                   onClick={() => setEditing(true)}
@@ -160,8 +227,8 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
                 >
                   Editar dados
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </section>
 
           {editing && (
@@ -219,53 +286,101 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
             </form>
           )}
 
-          <div className="directory-detail-grid">
-            <div>
-              <CustomerAgenda
+          <div
+            aria-label="Seções do perfil"
+            className="directory-tabs tab-list"
+            role="tablist"
+          >
+            {TABS.map((item, index) => (
+              <button
+                aria-controls={`${tabsId}-panel-${item.id}`}
+                aria-selected={tab === item.id}
+                className={clsx("tab", tab === item.id && "is-active")}
+                id={`${tabsId}-tab-${item.id}`}
+                key={item.id}
+                onClick={() => selectTab(item.id)}
+                onKeyDown={(event) => {
+                  const step =
+                    event.key === "ArrowRight"
+                      ? 1
+                      : event.key === "ArrowLeft"
+                        ? -1
+                        : 0;
+                  if (!step) return;
+                  event.preventDefault();
+                  const next = (index + step + TABS.length) % TABS.length;
+                  selectTab(TABS[next].id);
+                  tabRefs.current[next]?.focus();
+                }}
+                ref={(node) => {
+                  tabRefs.current[index] = node;
+                }}
+                role="tab"
+                tabIndex={tab === item.id ? 0 : -1}
+                type="button"
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          {tab === "resumo" && (
+            <div
+              aria-labelledby={`${tabsId}-tab-resumo`}
+              id={`${tabsId}-panel-resumo`}
+              role="tabpanel"
+              tabIndex={0}
+            >
+              <CustomerSummary
                 customerId={customer.id}
-                timezone={calendar?.timezone ?? "America/Sao_Paulo"}
-              />
-              <CustomerNotes
-                customerId={customer.id}
-                notes={customer.notes}
-                onChange={applyNotes}
+                nextAppointment={customer.nextAppointment}
+                stats={customer.appointmentStats}
               />
               <CustomerMemory customerId={customer.id} />
-              <CustomerTags
-                customerId={customer.id}
-                onChange={applyTags}
-                tags={customer.tags}
-              />
-              <CustomerSummary customerId={customer.id} />
-            </div>
-            <aside>
               <PrimaryGuardianPanel
                 customerId={customer.id}
                 editable={editable}
                 guardian={customer.primaryGuardian}
                 onChange={applyGuardian}
               />
-            </aside>
-          </div>
+            </div>
+          )}
+
+          {tab === "atendimentos" && (
+            <div
+              aria-labelledby={`${tabsId}-tab-atendimentos`}
+              id={`${tabsId}-panel-atendimentos`}
+              role="tabpanel"
+              tabIndex={0}
+            >
+              <CustomerAgenda
+                customerId={customer.id}
+                timezone={calendar?.timezone ?? "America/Sao_Paulo"}
+              />
+            </div>
+          )}
+
+          {tab === "notas" && (
+            <div
+              aria-labelledby={`${tabsId}-tab-notas`}
+              id={`${tabsId}-panel-notas`}
+              role="tabpanel"
+              tabIndex={0}
+            >
+              <CustomerNotes
+                customerId={customer.id}
+                notes={customer.notes}
+                onChange={applyNotes}
+              />
+              <CustomerTags
+                customerId={customer.id}
+                onChange={applyTags}
+                tags={customer.tags}
+              />
+            </div>
+          )}
         </>
       )}
-    </section>
-  );
-}
-
-function SourceStrip() {
-  return (
-    <section className="directory-source-strip">
-      <div className="directory-source-copy">
-        <span className="directory-source-icon">
-          <Icon name="users" />
-        </span>
-        <div>
-          <strong>Gerenciado pela Agenda Atendly</strong>
-          <span>Cadastros pertencem somente a este negócio.</span>
-        </div>
-      </div>
-      <span className="badge badge-success">Controle completo</span>
     </section>
   );
 }
@@ -290,6 +405,34 @@ function ProfileLoading() {
       ))}
     </div>
   );
+}
+
+/**
+ * A aba pedida por `?aba=` no link direto (Goal075 §4). Só decide a seleção
+ * inicial; trocar de aba depois é sempre ação da própria tela.
+ */
+function initialTabFromLocation(): ProfileTab {
+  if (typeof window === "undefined") return "resumo";
+  const requested = new URLSearchParams(window.location.search).get("aba");
+  return requested === "atendimentos" || requested === "notas"
+    ? requested
+    : "resumo";
+}
+
+function sinceLabel(customer: CustomerDetail): string | null {
+  const firstAppointment = customer.appointmentStats?.firstAppointmentDate;
+  const source = firstAppointment ?? customer.createdAt ?? null;
+  if (!source) return null;
+  const isDateOnly = source.length === 10;
+  const date = new Date(isDateOnly ? `${source}T12:00:00Z` : source);
+  const formatted = new Intl.DateTimeFormat("pt-BR", {
+    month: "short",
+    timeZone: isDateOnly ? "UTC" : undefined,
+    year: "numeric",
+  })
+    .format(date)
+    .replace(".", "");
+  return `cliente desde ${formatted}`;
 }
 
 function requestError(error: unknown, fallback: string): string {

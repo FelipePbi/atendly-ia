@@ -12,6 +12,8 @@ import {
 
 export interface ConversationQuery {
   category?: SessionCategory;
+  /** Só as conversas desta pessoa do Scheduling (Goal075). */
+  customerId?: string;
   handling?: "AI" | "HUMAN";
   ignored?: boolean;
   limit?: number;
@@ -27,6 +29,7 @@ export class BffConversationService {
       path: "/v1/conversations",
       query: {
         category: query.category,
+        customerId: query.customerId,
         handling: query.handling,
         ignored:
           query.ignored === undefined ? undefined : String(query.ignored),

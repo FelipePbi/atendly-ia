@@ -41,6 +41,11 @@ import { SlotPicker } from "./SlotPicker";
 
 const NEW_CUSTOMER = "new";
 
+type AppointmentFormProps = {
+  /** Pessoa escolhida de antemão (Goal075, vinda de `/clientes`). Continua trocável. */
+  customerId?: string;
+};
+
 /**
  * Criação de atendimento (Goal016).
  *
@@ -51,14 +56,16 @@ const NEW_CUSTOMER = "new";
  * reescolher, não a um erro genérico; e sobrepor um intervalo ocupado é
  * decisão humana com motivo obrigatório.
  */
-export function AppointmentForm() {
+export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
   const router = useRouter();
   const hold = useHoldSession();
   const [calendar, setCalendar] = useState<CalendarState | null>(null);
   const [services, setServices] = useState<ServiceList | null>(null);
   const [customers, setCustomers] = useState<CustomerList | null>(null);
   const [serviceIds, setServiceIds] = useState<string[]>([]);
-  const [customerChoice, setCustomerChoice] = useState(NEW_CUSTOMER);
+  const [customerChoice, setCustomerChoice] = useState(
+    customerId ?? NEW_CUSTOMER,
+  );
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [date, setDate] = useState(isoDate(new Date()));

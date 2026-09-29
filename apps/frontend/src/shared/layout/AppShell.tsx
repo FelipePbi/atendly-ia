@@ -152,7 +152,7 @@ function AppShellChrome({
       >
         <aside className="sidebar" aria-label="Navegação da aplicação">
           <div className="sidebar-brand">
-            <Brand />
+            <Brand signature="check" />
           </div>
           <div className="business-context">
             <span className="avatar" aria-hidden="true">

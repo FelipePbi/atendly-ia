@@ -2682,3 +2682,179 @@ BFF e do frontend é da rodada 2 (FIX-001).
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal073-2026-09-28-d-086-proposed),
 [FINAL_AUDIT §47](FINAL_AUDIT.md) e [D-086](DECISIONS.md).
+
+## Fidelidade visual de marca e autenticação, do Goal068
+
+`apps/frontend/` ganha a marca v4 em SVG de uma cor (`Brand`/`BrandMark`),
+favicon em SVG, assinatura animada uma vez por sessão do navegador e as
+telas de entrada compostas por largura em Petróleo, com os textos de C-05,
+C-06 e L-07. Decisão: [D-087](DECISIONS.md), proposta no Goal068,
+**PROPOSED**.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| O símbolo da marca é um SVG de três traços, uma cor só (`stroke="currentColor"`), vinda do contexto — nunca CSS de caixa/pontos | Que a marca, num aparelho real, bate pixel a pixel com `Marca.dc.html` (conferência humana do §8) |
+| Favicon em `public/brand/atendly-icon.svg`; os quatro PNGs antigos e os cinco SVGs de exemplo do Next saíram de `public/` | — |
+| A assinatura anima uma vez por sessão do navegador (`sessionStorage` por chave), nunca deixando o símbolo incompleto; `prefers-reduced-motion` e ausência de `sessionStorage` mostram o símbolo parado e completo | Que a assinatura, num aparelho real, bate com os tempos de `Movimento.dc.html` (conferência humana do §8) |
+| `.entry-panel` usa `--accent` (Petróleo), nunca `--navy`; composição por três limiares de largura (768px, 1024px, 1280px) | Que as telas de entrada, num aparelho real, batem com os três protótipos de Login (conferência humana do §8) |
+| Textos de C-05, C-06 e L-07 nas telas de entrada; "Esqueci minha senha" sozinho, à direita, abaixo da senha (L-06) | A saudação neutra ("Boas-vindas de volta...") no lugar de "Bem-vinda de volta." — divergência declarada, não decisão fechada |
+| — | A Home (protótipo pede números da semana que nenhuma camada calcula) — vai para o Goal074 |
+| `/nova-senha` fica fora de `PUBLIC_ROUTES` (`apps/frontend/e2e/routes.ts`), porque exige token — `validate:ui` não a alcança | Largura, toque, contraste, foco e movimento de `/nova-senha` num aparelho real: fica provada só em jsdom, por `goal064-auth-screens.test.tsx` (Goal064) |
+
+### Sete controles negativos e execução final
+
+**Sete controles negativos, aplicados e revertidos**, rodados por esta
+unidade (WU-11) sobre a árvore final, **depois da última edição de código**
+e da execução final abaixo, na própria worktree, com `sha256sum` idêntico
+antes e depois de cada um. Saída colada em
+[FINAL_AUDIT §48](FINAL_AUDIT.md).
+
+1. `Brand` volta a renderizar `<span className="brand-mark">`: reprova os
+   dois testes de estrutura do SVG (`apps/frontend`,
+   `goal068-marca.test.tsx`).
+2. Um dos traços ganha `stroke` fixo de outra cor: reprova o teste de
+   `stroke=currentColor` único (`goal068-marca.test.tsx`).
+3. `layout.tsx` volta a apontar para `atendly-favicon-32x32.png`: reprova o
+   teste do favicon novo (`goal068-marca.test.tsx`).
+4. A assinatura ignora `prefers-reduced-motion`: reprova o teste de
+   movimento reduzido (`goal068-assinatura.test.tsx`).
+5. A assinatura deixa de registrar a sessão: reprova os testes de segunda
+   montagem, entrada e sidebar (`goal068-assinatura.test.tsx`).
+6. A seta passa a fazer parte do nome acessível do botão: reprova o teste
+   do nome acessível "Criar conta" e o fluxo de cadastro do Goal064
+   (`goal068-telas-de-entrada.test.tsx`).
+7. O apoio do cadastro volta ao texto antigo: reprova o teste da frase de
+   C-05 (`goal068-telas-de-entrada.test.tsx`).
+
+Sem cada defeito, os três arquivos de teste voltam a passar por inteiro:
+`npx vitest run tests/goal068-marca.test.tsx tests/goal068-assinatura.test.tsx tests/goal068-telas-de-entrada.test.tsx`
+→ **3** arquivos e **30** testes passando, exit 0. Os arquivos-alvo
+(`Brand.tsx`, `layout.tsx`, `AuthScreen.tsx`) foram restaurados byte a byte:
+o `sha256sum` de cada um depois da restauração bate com o de antes do
+defeito, inclusive entre os controles que compartilham arquivo (1/2/4/5 em
+`Brand.tsx`; 6/7 em `AuthScreen.tsx`), cada edição revertida antes da
+próxima.
+
+**Execução final**, na ordem do §10 do Goal (`validate:core`, `test:gate`,
+`validate:ui`, `validate:integration`, WU-07 a WU-10), antes dos controles
+acima:
+
+- `test:frontend` (`npx vitest run`, reexecutado por esta unidade sobre a
+  árvore final): **99**/**99** arquivos e **1030**/**1030** testes, exit 0
+  — baseline `2995be5` **96**/**1000**; os **3** arquivos e **30** testes a
+  mais são `goal068-marca.test.tsx` (11), `goal068-assinatura.test.tsx`
+  (11) e `goal068-telas-de-entrada.test.tsx` (8).
+- `test:gate` (`npm run test:gate`, reexecutado por esta unidade):
+  `tests 233`, `pass 233`, `fail 0`, `skipped 0`, exit 0 — sem mudança.
+- `validate:ui` (WU-09): `e2e-results/results.json.stats` → `expected`
+  **169**, `skipped` **21**, `unexpected` **0**, `flaky` **0** — sem
+  mudança (rotas públicas só).
+- Gate autenticado (`rehearse:goal033-authenticated-ui`, dentro de
+  `validate:integration`, WU-10): `e2e-results/authenticated/results.json.stats`
+  → `expected` **155**, `skipped` **0**, `unexpected` **0**, `flaky` **0**;
+  nenhum resultado individual com `retry > 0` — sem mudança de rota,
+  **0** retentativas.
+- `validate:integration` (WU-10): PASSED, exit 0, `393635ms`.
+
+`test:frontend` e `test:gate` foram reexecutados por esta unidade (WU-11)
+depois da última edição de código (anterior a WU-07); `validate:ui` e o
+gate autenticado são lidos dos artefatos `results.json` gravados por
+WU-09/WU-10, ainda presentes na worktree. `validate:core` (WU-07) não tem
+número citado aqui: nenhuma execução própria desta unidade o mediu.
+
+### Conferência humana e limites
+
+**Conferência humana pendente.** A conferência do §8 do Goal **não foi
+feita** por este Goal: que a marca, a assinatura animada e as telas de
+entrada, num aparelho real nas cinco larguras, batem com `Marca.dc.html`,
+`Movimento.dc.html` e os três protótipos de login; e que a saudação neutra
+é aceitável no lugar de "Bem-vinda de volta.".
+
+**O que esta seção não prova.** Não prova fidelidade visual da Home
+(Goal074), das telas de módulo (Goal069) ou do onboarding (Goal072) além
+da troca de marca, que já vale para eles pelos cinco usos de `Brand`.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal068-2026-09-29-d-087-proposed),
+[FINAL_AUDIT §48](FINAL_AUDIT.md) e [D-087](DECISIONS.md).
+
+### Correção — rodada 2 (FIX-001)
+
+A revisão da rodada 1 encontrou quatro blockers, todos corrigidos: (1) a
+sidebar (`AppShell.tsx`) não passava `signature="check"` para `Brand`, então
+o check nunca animava apesar do que a tabela acima e D-087 §3 afirmavam;
+(2) `atendly-icon.svg` tinha geometria divergente de `Marca.dc.html` (grade
+64, traço full-bleed, saindo do canto arredondado), corrigido para grade
+120 com `rect rx="27"` e o símbolo escalado a 80×80 centralizado; (3) no
+celular, `.entry-main` e `.entry-panel`/`.entry-shell` usavam o mesmo
+`--surface`, sem sobreposição, então o raio de 24px no topo não aparecia
+contra o Petróleo — corrigido com `margin-top: -24px` e `z-index: 1` em
+`.entry-main` abaixo de 768px, zerado nos três limiares de composição.
+
+Execução final refeita sobre a árvore corrigida: `npm test` (`apps/frontend`)
+**99**/**99** arquivos e **1030**/**1030** testes, exit 0 — sem mudança de
+contagem (os três blockers não tocam nenhum arquivo de teste). `npm run
+lint` e `npm run typecheck` exit 0. `node scripts/validate-core.mjs`:
+**17** passos, **15** `passed`, **0** `failed`, **2** `skipped`, exit 0.
+`node scripts/validate-ui.mjs`: `expected` **169**, `skipped` **21**,
+`unexpected` **0**, `flaky` **0** — sem mudança.
+`BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_bff_test" npm run validate:integration`,
+contra o PostgreSQL 18 descartável já provisionado na estação: **35**/**35**
+passos, exit 0; dentro dela, o gate autenticado
+(`rehearse:goal033-authenticated-ui`) mediu `expected` **154**, `skipped`
+**0**, `unexpected` **0**, `flaky` **1** (`onboarding-quando-importar` em
+`notebook-1024`, `net::ERR_NO_BUFFER_SPACE`, recuperado na primeira
+retentativa — falha de rede transitória do Windows, sem relação com o
+diff desta rodada; **155** cenários no total, igual à baseline).
+
+Os sete controles negativos do §6 foram re-executados sobre a árvore
+corrigida, com os mesmos hashes e as mesmas falhas da execução anterior
+(nenhum dos três arquivos que eles tocam — `Brand.tsx`, `layout.tsx`,
+`AuthScreen.tsx` — foi alterado pelos três blockers desta rodada). Detalhe
+completo, hashes e saída real em
+[FINAL_AUDIT §48 — Rodada 2](FINAL_AUDIT.md); nota de correção em
+[D-087](DECISIONS.md) e em
+[CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal068-2026-09-29-d-087-proposed).
+A conferência humana do §8 do Goal continua **não feita**.
+
+### Correção — rodada 3 (FIX-001)
+
+A revisão da rodada 2 encontrou três blockers, todos corrigidos: (1)
+`tests/goal068-assinatura.test.tsx` reprovava `npx eslint … --max-warnings=0`
+por ordem de import (`simple-import-sort/imports`) — reordenado; (2) o
+describe `AppShell — a sidebar de verdade…` só afirmava a primeira
+montagem; faltavam a segunda montagem de `AppShell` na mesma sessão não
+animando a sidebar de novo, e o `Brand` do cabeçalho do celular nunca
+recebendo `brand-mark--check` (a sidebar consome a chave de sessão
+primeiro) — os dois testes foram acrescentados; (3) este adendo, que
+faltava desde a rodada 2. Nenhum arquivo de produto foi tocado.
+
+`npx vitest run tests/goal068-assinatura.test.tsx`: **14**/**14** testes,
+exit 0. `npx eslint tests/goal068-assinatura.test.tsx --max-warnings=0`:
+exit 0. `npx vitest run` (suíte completa): **99**/**99** arquivos e
+**1033**/**1033** testes, exit 0 — os registros anteriores diziam **1030**,
+já errado desde a rodada 2 (o describe `AppShell` não tinha entrado na
+contagem). `npx eslint src tests --max-warnings=0`: exit 0 — os registros
+anteriores diziam "lint exit 0", falso na árvore desta rodada até a
+correção do item (1). `npx tsc --noEmit`: exit 0, sem mudança.
+`validate:core`, `validate:ui` e `validate:integration` (gate autenticado
+incluso, `expected` **154**, `flaky` **1**) não foram reexecutados: nenhum
+arquivo que eles medem foi tocado, só um teste jsdom fora de `e2e/`. Detalhe
+completo em [FINAL_AUDIT §48 — Rodada 3](FINAL_AUDIT.md).
+
+**Rodada 4 (FIX-001).** A revisão da rodada 3 encontrou três blockers: (1)
+`AppShell.tsx:273` (cabeçalho móvel) ainda tinha `signature="check"`,
+contradizendo o §2 — corrigido para `<Brand />`; (2) faltava o controle
+negativo da sidebar (`AppShell.tsx:155`) e a re-execução real dos sete
+controles do §6 depois da última edição — ambos rodados nesta rodada, com
+hash antes/durante/depois e saída real colada em
+[FINAL_AUDIT §48 — Rodada 4](FINAL_AUDIT.md); (3) a execução final completa,
+na ordem do §7, contra um PostgreSQL 18 descartável em loopback provisionado
+e apagado nesta rodada. Resultado: `npx vitest run` **99**/**99** arquivos e
+**1033**/**1033** testes, exit 0; `npx eslint src tests --max-warnings=0` e
+`npx tsc --noEmit` exit 0; `validate:core` **17** passos, **15** `passed`,
+**0** `failed`, **2** `skipped`, exit 0; `validate:ui` `expected` **169**,
+`skipped` **21**, `unexpected` **0**, `flaky` **0**, exit 0;
+`validate:integration` **35**/**35** passos, exit 0, com o gate autenticado
+em `startTime` **2026-09-29T06:18:27.839Z**, `expected` **155**, `skipped`
+**0**, `unexpected` **0**, `flaky` **0** — **0** retentativas, substituindo o
+`flaky` **1** que a rodada 3 tinha deixado sem reconfirmar.

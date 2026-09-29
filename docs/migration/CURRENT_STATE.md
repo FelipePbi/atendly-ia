@@ -7002,3 +7002,147 @@ Duas migrations aditivas, uma por serviço, nenhuma outra. Decisão:
   que este Goal muda (qual visualização abre, quais colunas aparecem) ficam
   para o Goal069; o Product Vault e o `QA_LOCAL_REVIEW.md` não foram
   editados — ver [D-086](DECISIONS.md).
+
+## Delta implementado — Goal068, 2026-09-29 ([D-087](DECISIONS.md), ACCEPTED)
+
+Corrige **G-01…G-07**, **C-05…C-10** e **L-06…L-08** do
+[QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md), fora da enumeração A-01…A-24 do
+FINAL_AUDIT. Toca só `apps/frontend/`: `shared/ui/Brand.tsx`,
+`shared/styles/atendly.css`, `app/layout.tsx`, `public/brand/`,
+`public/*.svg`, `features/auth/AuthScreen.tsx`, `shared/layout/AppShell.tsx`
+(só `signature="check"` na sidebar), e os três testes novos
+`tests/goal068-{marca,assinatura,telas-de-entrada}.test.tsx`. Nenhum
+contrato, BFF, orquestrador, Scheduling, `packages/` ou migration tocados.
+Decisão: [D-087](DECISIONS.md), proposta no Goal068, **ACCEPTED** no
+[review068](reviews/068-review.md) (rodada 5).
+
+- **Marca v4, em SVG de uma cor.** `Brand`/`BrandMark` renderiza os três
+  traços do `Marca.dc.html` (grade 64, traço 6, `stroke="currentColor"`,
+  `fill="none"`), sem caixa nem pseudo-elemento; a cor vem do contexto CSS
+  que envolve o componente, nunca de um traço individual. O wordmark usa
+  `--font-display` (Literata), peso 600 e tracking −2%. Vale nos cinco usos
+  existentes (sidebar, cabeçalho do celular, onboarding, telas de sistema,
+  telas legais).
+- **Favicon em SVG.** `public/brand/atendly-icon.svg` (quadrado Petróleo,
+  A v4 em Papel) substitui os quatro PNGs antigos, removidos de
+  `public/brand/`; os cinco SVGs de exemplo do Next saíram de `public/`.
+  `layout.tsx` aponta o ícone para o SVG novo.
+- **Assinatura animada, uma vez por sessão do navegador.** Na entrada sem
+  sessão, a primeira montagem desenha os três traços em 820ms; com sessão,
+  só o check anima na sidebar, em 420ms. `sessionStorage` guarda a chave por
+  assinatura; segunda montagem na mesma sessão não repete, e tocar uma
+  assinatura não consome a chave da outra. `prefers-reduced-motion: reduce`
+  e a ausência de `sessionStorage` deixam o símbolo completo e parado, nunca
+  incompleto.
+- **Telas de entrada, painel Petróleo por largura.** `.entry-panel` usa
+  `--accent`, nunca `--navy`; três limiares (768px, 1024px, 1280px): faixa
+  Petróleo com folha de raio 24px no topo abaixo de 768px, card centralizado
+  sobre Petróleo cheio até 1279px, painel com frase e mock de conversa
+  estático (`aria-hidden`, sem dado real e sem rede) a partir de 1280px.
+  Cadastro com o apoio de C-05 e botão "Criar conta" com seta `aria-hidden`
+  fora do nome acessível (C-06); login com título "Entrar" e apoio de L-07;
+  "Esqueci minha senha" sozinho, à direita, abaixo da senha (L-06). Textos
+  antigos por cenário (`story`) saíram do painel. `/nova-senha` não está em
+  `PUBLIC_ROUTES` (`apps/frontend/e2e/routes.ts`), porque exige token; fica
+  provada só em jsdom, por `goal064-auth-screens.test.tsx` (Goal064),
+  conforme o §4 do Goal068.
+- **Divergência declarada.** A saudação do login é neutra ("Boas-vindas de
+  volta...") no lugar de "Bem-vinda de volta." do protótipo — ver
+  [D-087](DECISIONS.md).
+- **A Home sai deste Goal.** `dashboardSchema` só tem contadores de hoje; a
+  seção "Esta semana" do protótipo não tem camada de dado nenhuma. Vai para
+  o **Goal074** (H-01, H-06, H-07, H-08, H-10).
+- **Sete controles negativos (§6)**, rodados por esta unidade (WU-11) sobre
+  a árvore final, depois da execução final abaixo, com restauração
+  conferida por `sha256sum` idêntico antes e depois de cada um: `Brand`
+  voltar a `<span className="brand-mark">` reprova; um traço ganhar `stroke`
+  fixo reprova; `layout.tsx` voltar ao PNG antigo reprova; a assinatura
+  ignorar `prefers-reduced-motion` reprova; a assinatura deixar de registrar
+  a sessão reprova na segunda montagem; a seta entrar no nome acessível do
+  botão reprova; o apoio do cadastro voltar ao texto antigo reprova. Saída
+  em [FINAL_AUDIT §48](FINAL_AUDIT.md).
+- **Execução final** — `test:frontend` (reexecutado por esta unidade):
+  **99**/**99** arquivos e **1030**/**1030** testes, exit 0 (baseline
+  **96**/**1000**; os **3** arquivos e **30** testes a mais são os três
+  `goal068-*.test.tsx`); `test:gate` (reexecutado): **233**/**233**, exit 0,
+  sem mudança; `validate:ui` (WU-09, `e2e-results/results.json`):
+  `expected` **169**, `skipped` **21**, `unexpected` **0**, `flaky` **0**,
+  sem mudança; gate autenticado (WU-10,
+  `e2e-results/authenticated/results.json`): `expected` **155**,
+  `unexpected` **0**, `flaky` **0**, **0** retentativas, sem mudança de
+  rota. Detalhe e saída real em [FINAL_AUDIT §48](FINAL_AUDIT.md).
+- **Conferência humana pendente:** a conferência do §8 do Goal **não foi
+  feita** por este Goal — que a marca, a assinatura animada e as telas de
+  entrada, num aparelho real nas cinco larguras, batem com `Marca.dc.html`,
+  `Movimento.dc.html` e os três protótipos de login; e que a saudação
+  neutra é aceitável no lugar de "Bem-vinda de volta.".
+- **Limites declarados:** a Home (Goal074), Agenda/Clientes/Serviços/
+  Conversas/Notificações (Goal069) e o onboarding fiel ao protótipo
+  (Goal072) ficam fora, exceto pela troca de marca, que já vale para eles
+  pelos cinco usos de `Brand`; campos, validação, regra de senha, aceite e
+  o fluxo de recuperação por link não mudam — ver [D-087](DECISIONS.md).
+- **Correção — rodada 2 (FIX-001), 2026-09-29.** A revisão da rodada 1
+  encontrou quatro blockers, todos corrigidos: a sidebar não recebia
+  `signature="check"` em `AppShell.tsx` (o check nunca animava, apesar do
+  que este delta e D-087 afirmavam); `atendly-icon.svg` tinha geometria
+  divergente de `Marca.dc.html` (traço full-bleed numa grade 64, saindo do
+  canto arredondado), corrigido para grade 120 com o símbolo escalado a
+  80×80 centralizado; e no celular `.entry-main` não sobrepunha
+  `.entry-panel` (mesmo `--surface` dos dois, sem sobreposição, raio de
+  24px sem efeito visível), corrigido com `margin-top: -24px` abaixo de
+  768px. Execução final refeita: `npm test` (`apps/frontend`) **99**/**99**
+  arquivos e **1030**/**1030** testes, exit 0 (sem mudança); `validate:core`
+  **17** passos, **15** `passed`, **2** `skipped`, exit 0; `validate:ui`
+  **169** passando, **21** pulados, **0** retentativas, exit 0;
+  `validate:integration` **35**/**35** passos, exit 0, com o gate
+  autenticado em **154** `expected` e **1** `flaky` (recuperado na
+  retentativa, falha de rede transitória do Windows sem relação com o
+  diff — **155** cenários no total, igual à baseline). Os sete controles do
+  §6 foram re-executados com os mesmos resultados da execução anterior.
+  Detalhe em [FINAL_AUDIT §48 — Rodada 2](FINAL_AUDIT.md).
+- **Correção — rodada 3 (FIX-001), 2026-09-29.** A revisão da rodada 2
+  encontrou três blockers, todos corrigidos, todos só em
+  `tests/goal068-assinatura.test.tsx`: import fora de ordem reprovando
+  `npx eslint … --max-warnings=0` (`simple-import-sort/imports`),
+  corrigido; o describe `AppShell — a sidebar de verdade…` faltando duas
+  asserções pedidas desde a rodada 2 (segunda montagem de `AppShell` na
+  mesma sessão não anima a sidebar de novo; o `Brand` do cabeçalho do
+  celular nunca recebe `brand-mark--check`, porque a sidebar consome a
+  sessão primeiro), acrescentadas; e este adendo de documentação, que
+  faltava. Nenhum arquivo de produto mudou. Execução real: `npm test`
+  (`apps/frontend`) **99**/**99** arquivos e **1033**/**1033** testes,
+  exit 0 (os registros anteriores diziam **1030**, já errado desde a
+  rodada 2, que acrescentou um teste sem atualizar a contagem); `npm run
+  lint` exit 0 (os registros anteriores diziam "lint exit 0", falso na
+  árvore desta rodada até a correção do import); `npm run typecheck`
+  exit 0. `validate:core`, `validate:ui` e `validate:integration` (gate
+  autenticado incluso) não foram reexecutados: nenhum arquivo que eles
+  medem foi tocado, só um teste jsdom. Detalhe em
+  [FINAL_AUDIT §48 — Rodada 3](FINAL_AUDIT.md).
+- **Correção — rodada 4 (FIX-001), 2026-09-29.** A revisão da rodada 3
+  encontrou três blockers: `AppShell.tsx:273` (cabeçalho móvel) ainda
+  tinha `signature="check"`, corrigido para `<Brand />`; faltava o
+  controle negativo da sidebar e a re-execução real dos sete controles do
+  §6, ambos rodados com hash e saída real; e faltava a execução final
+  completa, na ordem do §7. Execução real, contra um PostgreSQL 18
+  descartável em loopback provisionado e apagado nesta rodada: `npm test`
+  (`apps/frontend`) **99**/**99** arquivos e **1033**/**1033** testes,
+  exit 0; `npm run lint` e `npm run typecheck` exit 0; `validate:core`
+  **17** passos, **15** `passed`, **0** `failed`, **2** `skipped`,
+  exit 0; `validate:ui` `expected` **169**, `skipped` **21**,
+  `unexpected` **0**, `flaky` **0**, exit 0; `validate:integration`
+  **35**/**35** passos, exit 0, com o gate autenticado em `expected`
+  **155**, `unexpected` **0**, `flaky` **0** — **0** retentativas,
+  corrigindo o `flaky` **1** que a rodada 3 tinha deixado sem
+  reconfirmar. Detalhe em
+  [FINAL_AUDIT §48 — Rodada 4](FINAL_AUDIT.md).
+- **Fechamento — review068, 2026-09-29.** Aceito na rodada 5 do IA Loop,
+  sem blocker. As notas de correção acima usam numeração própria: "rodada 3"
+  é a correção da rodada 4 do IA Loop, e "rodada 4" é a da rodada 5, a
+  árvore aceita. A correção da rodada 3 do IA Loop não escreveu nota. Uma
+  frase deste delta está errada: "card centralizado sobre Petróleo cheio até
+  1279px" só vale de 768px a 1023px. De 1024px a 1279px, o painel Petróleo
+  fica à esquerda (440px, com a frase e sem o mock) e o card fica sobre papel
+  à direita. Essa composição fica para a conferência humana do §8 — ver a
+  nota de fechamento de [D-087](DECISIONS.md) e o
+  [review068](reviews/068-review.md).

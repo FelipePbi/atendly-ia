@@ -8,7 +8,7 @@ import { RouteAnnouncer } from "@/shared/ui/RouteAnnouncer";
 export const metadata: Metadata = {
   title: { default: "Atendly", template: "%s — Atendly" },
   description: "Atendimento e agendamento pelo WhatsApp, com apoio de IA.",
-  icons: [{ rel: "icon", url: "/brand/atendly-favicon-32x32.png" }],
+  icons: [{ rel: "icon", url: "/brand/atendly-icon.svg", type: "image/svg+xml" }],
 };
 
 export const viewport: Viewport = {

@@ -21,79 +21,51 @@ export type AuthScenario =
   | "new-password"
   | "link-expired";
 
-const story: Record<
-  AuthScenario,
-  { eyebrow: string; title: string; copy: string }
-> = {
-  login: {
-    eyebrow: "Atendimento que vira agenda",
-    title: "Seu negócio em movimento, sem perder conversas.",
-    copy: "Centralize atendimento e agendamentos com uma rotina simples, clara e confiável.",
-  },
-  signup: {
-    eyebrow: "Comece pelo essencial",
-    title: "Menos tempo respondendo. Mais tempo atendendo.",
-    copy: "Crie sua conta agora. A configuração do negócio acontece depois, passo a passo.",
-  },
-  "forgot-password": {
-    eyebrow: "Recupere seu acesso",
-    title: "Volte à sua rotina com segurança.",
-    copy: "Informe seu e-mail para receber um link de recuperação.",
-  },
-  "request-sent": {
-    eyebrow: "Verifique seu e-mail",
-    title: "Quase lá.",
-    copy: "Um link de recuperação está a caminho, se houver conta com este e-mail.",
-  },
-  "new-password": {
-    eyebrow: "Nova senha",
-    title: "Proteja seu acesso e continue.",
-    copy: "Escolha uma senha diferente da anterior.",
-  },
-  "link-expired": {
-    eyebrow: "Proteção da conta",
-    title: "Links temporários mantêm seu acesso seguro.",
-    copy: "Solicite outro link para continuar a recuperação.",
-  },
-};
-
 const PASSWORD_RULE_LABELS: Record<string, string> = {
   MIN_LENGTH: "Pelo menos 8 caracteres",
   HAS_LETTER_AND_DIGIT: "Letras e números",
 };
 
-function AuthLayout({
-  children,
-  scenario,
-}: {
-  children: ReactNode;
-  scenario: AuthScenario;
-}) {
-  const current = story[scenario];
+function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <main className="auth-layout">
-      <aside className="auth-brand-panel" aria-label="Atendly">
-        <Brand href="/login" />
-        <div className="auth-story">
-          <p className="eyebrow">{current.eyebrow}</p>
-          <h2>{current.title}</h2>
-          <p>{current.copy}</p>
-        </div>
-        <div className="auth-flow" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </div>
-        {(scenario === "login" || scenario === "signup") && (
-          <p className="auth-trust">
-            <Icon name="shield" />
-            {scenario === "signup"
-              ? "Seus dados protegidos desde o primeiro acesso"
-              : "Acesso protegido à sua operação"}
+    <main className="entry-shell">
+      <aside className="entry-panel" aria-label="Atendly">
+        <Brand href="/login" signature="entry" />
+        <div className="entry-copy">
+          <h2 className="entry-tagline">
+            Seu atendimento começa com uma boa conversa.
+          </h2>
+          <p className="entry-support">
+            A Atendly aprende o jeito do seu negócio, responde clientes no
+            WhatsApp e marca direto na sua agenda.
           </p>
-        )}
+        </div>
+        <div className="entry-mock" aria-hidden="true">
+          <div className="entry-mock-header">
+            <span className="entry-mock-avatar">SC</span>
+            <div className="entry-mock-meta">
+              <span className="entry-mock-name">Studio Camila Reis</span>
+              <span className="entry-mock-status">
+                <span className="entry-mock-dot" />
+                IA atendendo
+              </span>
+            </div>
+          </div>
+          <div className="entry-mock-bubble entry-mock-bubble--client">
+            Oi! Vocês têm horário amanhã à tarde?
+          </div>
+          <div className="entry-mock-bubble entry-mock-bubble--ai">
+            Temos sim. Corte feminino às 15:00 ou 16:30 — qual prefere?
+          </div>
+          <div className="entry-mock-bubble entry-mock-bubble--client">
+            15:00, por favor
+          </div>
+          <div className="entry-mock-bubble entry-mock-bubble--ai">
+            Marcado: sexta, 19/09 às 15:00. Te lembro na véspera.
+          </div>
+        </div>
       </aside>
-      <section className="auth-main">{children}</section>
+      <section className="entry-main">{children}</section>
     </main>
   );
 }
@@ -340,7 +312,7 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
   if (scenario === "request-sent" || scenario === "link-expired") {
     const expired = scenario === "link-expired";
     return (
-      <AuthLayout scenario={scenario}>
+      <AuthLayout>
         <div className="auth-card auth-state">
           <span className={`state-icon${expired ? " is-error" : ""}`}>
             <Icon name={expired ? "alert" : "check"} />
@@ -375,7 +347,7 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
 
   if (newPassword && resetSucceeded) {
     return (
-      <AuthLayout scenario="new-password">
+      <AuthLayout>
         <div className="auth-card auth-state">
           <span className="state-icon">
             <Icon name="check" />
@@ -403,14 +375,14 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
       ? "Crie uma nova senha"
       : forgotPassword
         ? "Esqueceu sua senha?"
-        : "Boas-vindas de volta";
+        : "Entrar";
   const subtitle = signup
-    ? "Use seus dados de acesso. Informações do negócio vêm na próxima etapa."
+    ? "Configure o negócio e conecte seu WhatsApp em poucos minutos."
     : newPassword
       ? "Diferente da senha anterior, com pelo menos 8 caracteres, letras e números."
       : forgotPassword
         ? "Informe o e-mail da sua conta para continuar."
-        : "Entre para acompanhar conversas e agendamentos.";
+        : "Boas-vindas de volta. Sua agenda continua de onde parou.";
   const submitLabel = signup
     ? "Criar conta"
     : newPassword
@@ -420,7 +392,7 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
         : "Entrar";
 
   return (
-    <AuthLayout scenario={scenario}>
+    <AuthLayout>
       <div className="auth-card">
         {(signup || forgotPassword) && (
           <Link className="auth-back" href="/login">
@@ -536,6 +508,7 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
           >
             {loading && <span className="spinner" />}
             <span>{loading ? `${submitLabel}...` : submitLabel}</span>
+            {signup && !loading && <Icon name="chevron-right" />}
           </button>
         </form>
         {!newPassword && !forgotPassword && (

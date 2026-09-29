@@ -5904,3 +5904,139 @@ Rodada na rodada 3 (FIX-001) sobre a árvore final, na ordem do §10 do Goal (`v
 ### Veredito recontado
 
 O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO`**. São os mesmos números de §46, com `audit:static` da execução final desta seção em **33** de **34** verificações passando e **1** pulada — mesma contagem da baseline, nenhuma exceção nova. Nenhum achado de A-01 a A-24 foi tocado, corrigido, reclassificado ou reaberto. Esta seção só acrescenta o registro do diff073. Os QAs e observações corrigidos são do `QA_LOCAL_REVIEW` e do review067, fora dessa enumeração.
+
+## 48. QA G-01…G-07, C-05…C-10 e L-06…L-08 são corrigidos: fidelidade visual de marca e autenticação — Goal068, 2026-09-29
+
+Seção nova, escrita por WU-11 depois da execução final (WU-07 a WU-10) e dos sete controles negativos do §6 do Goal, sobre a árvore final. **Não reescreve** §4 a §47: os registros de A-01 a A-24, o veredito das seções anteriores e as quarenta e sete seções de fechamento anteriores continuam exatamente como estavam. Os QAs desta seção vêm do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md), não da enumeração A-01…A-24, e **não entram nessa contagem**. Decisão: [D-087](DECISIONS.md), **PROPOSED**.
+
+### O que mudou
+
+**Marca v4.** `apps/frontend/src/shared/ui/Brand.tsx` renderiza o SVG de três traços do `Marca.dc.html` (grade 64, traço 6, `stroke="currentColor"`, `fill="none"`), sem caixa nem pseudo-elemento; a cor vem do contexto CSS que envolve o componente. O wordmark usa `--font-display` (Literata), peso 600 e tracking −2%. Favicon novo em `apps/frontend/public/brand/atendly-icon.svg`, com `layout.tsx` apontando para ele; os quatro PNGs antigos (`atendly-favicon-32x32.png`, `atendly-favicon-512x512.png`, `atendly-logo-horizontal.png`, `atendly-logo-icon.png`) e os cinco SVGs de exemplo do Next (`file.svg`, `globe.svg`, `next.svg`, `vercel.svg`, `window.svg`) saíram de `public/`.
+
+**Assinatura animada.** Na entrada sem sessão, a primeira montagem da sessão do navegador desenha os três traços em 820ms (460/380/220ms); a sidebar anima só o check, em 420ms, também uma vez por sessão. `sessionStorage` guarda a chave por assinatura (`entry`/`check`); segunda montagem na mesma sessão não repete. `prefers-reduced-motion: reduce` e a ausência de `sessionStorage` deixam o símbolo completo e parado, nunca incompleto.
+
+**Telas de entrada.** `.entry-panel` usa `--accent` (Petróleo), nunca `--navy`; composição por largura em três limiares (768px, 1024px, 1280px): faixa Petróleo com folha de raio 24px no topo abaixo de 768px, card centralizado sobre Petróleo cheio até 1279px, painel com frase e mock de conversa estático (`aria-hidden`) a partir de 1280px. Cadastro mostra "Configure o negócio e conecte seu WhatsApp em poucos minutos." (C-05) e botão "Criar conta" com seta decorativa `aria-hidden` fora do nome acessível (C-06); login mostra título "Entrar" e apoio "Boas-vindas de volta. Sua agenda continua de onde parou." (L-07); "Esqueci minha senha" continua sozinho, à direita, abaixo da senha (L-06). Textos antigos por cenário (`story`) saíram do painel. `/nova-senha` não está em `PUBLIC_ROUTES` (`apps/frontend/e2e/routes.ts`), porque exige token; fica provada só em jsdom, por `goal064-auth-screens.test.tsx` (Goal064), conforme o §4 do Goal068.
+
+**Divergência declarada.** A saudação do login ("Boas-vindas de volta...") é neutra, no lugar de "Bem-vinda de volta." do protótipo — registrado em [D-087](DECISIONS.md) e reservado para a conferência humana do §8 do Goal, **não feita** por esta unidade.
+
+**Fora do escopo, por construção.** A Home (`Home.dc.html`/`Home-Desktop.dc.html`) pede números da semana que não existem em `dashboardSchema` nem em serviço nenhum — vai para o **Goal074** (H-01, H-06, H-07, H-08, H-10), conforme o próprio Goal068 já delimitou antes da implementação.
+
+### Sete controles negativos do §6, aplicados e revertidos (WU-11)
+
+Rodados depois da execução final abaixo, na própria worktree, sem arquivo de controle temporário: cada edição foi feita diretamente no arquivo-alvo, o teste correspondente rodado, e o arquivo restaurado byte a byte antes do próximo controle. `sha256sum` conferido antes, durante e depois de cada um. Comandos: `npx vitest run tests/goal068-marca.test.tsx` (controles 1 a 3), `npx vitest run tests/goal068-assinatura.test.tsx` (controles 4 e 5), `npx vitest run tests/goal068-telas-de-entrada.test.tsx` (controles 6 e 7), todos em `apps/frontend`. Saída real:
+
+1. **`Brand` volta a renderizar `<span className="brand-mark">`** (`Brand.tsx`: o `return` de `BrandMark` substituído por `return <span className="brand-mark" aria-hidden="true" />;`; `sha256sum` antes e depois `f97d7be455014dbe5440d301187174c8d3143f83b04cd32dcb6412ec13bb7ce5`, durante `3910bc9b16087312eea8822e640cbe6714e9292a830c8fd2d42cdeecdd28ca09`). Exit 1, `Tests  2 failed | 4 passed (6)`: "renderiza svg aria-hidden com os três traços do Marca.dc.html e stroke=currentColor" (`expected null not to be null`) e "link mantém apenas um elemento .brand-mark, sem span de caixa" (`expected 'SPAN' to be 'svg'`).
+2. **Um dos traços ganha `stroke` fixo de outra cor** (`Brand.tsx`: `stroke="#ff5a36"` acrescentado ao terceiro `path`; antes e depois iguais ao controle 1, durante `eb1387468285c637d572075ed1d814925c6e61f89598886f773b0f7e611d0071`). Exit 1, `Tests  1 failed | 5 passed (6)`: "renderiza svg aria-hidden com os três traços do Marca.dc.html e stroke=currentColor", com `expected the element not to have attribute: stroke` / `Received: stroke="#ff5a36"`.
+3. **`layout.tsx` volta a apontar para `atendly-favicon-32x32.png`** (o `icons` de `metadata` trocado para `{ rel: "icon", url: "/brand/atendly-favicon-32x32.png" }`; antes e depois `02618748fadf55bf72c5d31b857b0fb928efb8b4d267fd19b2e391e1cae115e0`, durante `26aaea6db77ae9a9867748dd86b92305bab5ce6b2f2afb0959ee6b3ec881bf72`). Exit 1, `Tests  1 failed | 5 passed (6)`: "layout.tsx declara /brand/atendly-icon.svg e o arquivo existe", falhando em `expect(layoutSource).toContain("/brand/atendly-icon.svg")`.
+4. **A assinatura ignora `prefers-reduced-motion`** (`Brand.tsx`: `resolveShouldAnimate` deixa de chamar `prefersReducedMotion()`; antes e depois `f97d7be455014dbe5440d301187174c8d3143f83b04cd32dcb6412ec13bb7ce5`, durante `a81c851cb4d42aeb903434350caf1c3361a5df6463b021344329430b12139682`). Exit 1, `Tests  1 failed | 10 passed (11)`: "com prefers-reduced-motion: reduce, a assinatura não toca e o símbolo aparece completo", com `svg` mantendo a classe `brand-mark--entry`.
+5. **A assinatura deixa de registrar a sessão** (`Brand.tsx`: `resolveShouldAnimate` deixa de chamar `storage.setItem(key, "1")`; antes e depois iguais ao controle 4, durante `43567020d2b8b8f60a132054559d79624e5f4e477d5ef4e231c0db2808dba44a`). Exit 1, `Tests  3 failed | 8 passed (11)`: a segunda montagem da entrada continua animando (`brand-mark--entry` presente), a chave `atendly:brand-signature-check` nunca é gravada e a segunda montagem da sidebar continua animando.
+6. **A seta passa a fazer parte do nome acessível do botão** (`AuthScreen.tsx`: `<Icon name="chevron-right" />` vira `<Icon name="chevron-right" label="seta" />`, dando à seta `role="img"` e `aria-label="seta"`; antes e depois `56ae0b7a4707ecddd2ae606d84f55f0704f7d5a8276b34f209e93612a5e5e827`, durante `d483a4fa14380958b4160284db25dcd21e8c0ca44261e20b269a45f18ee2fd31`). Exit 1, `Tests  2 failed | 11 passed (13)`: "botão de cadastro tem nome acessível exatamente 'Criar conta'..." e o fluxo de cadastro do Goal064, os dois por `getByRole('button', { name: 'Criar conta' })` não encontrar mais o elemento (o nome acessível passa a incluir "seta").
+7. **O apoio do cadastro volta ao texto antigo** (`AuthScreen.tsx`: a frase de C-05 trocada por "Use seus dados de acesso. Informações do negócio vêm na próxima etapa."; antes e depois iguais ao controle 6, durante `dd37be02dafb8045615229da6e8476e26fb8cdd3894392801989a82c3705b598`). Exit 1, `Tests  1 failed | 12 passed (13)`: "cadastro mostra a frase de C-05", `screen.getByText` não encontra "Configure o negócio e conecte seu WhatsApp em poucos minutos.".
+
+Os três arquivos-alvo (`Brand.tsx`, `layout.tsx`, `AuthScreen.tsx`) foram restaurados byte a byte depois de cada controle: o `sha256sum` bate com o registrado antes do respectivo defeito, inclusive entre os controles 1/2/4/5 (que compartilham `Brand.tsx`) e 6/7 (que compartilham `AuthScreen.tsx`), cada edição revertida antes da próxima. Sem os defeitos, os três arquivos de teste voltam a passar por inteiro: `npx vitest run tests/goal068-marca.test.tsx tests/goal068-assinatura.test.tsx tests/goal068-telas-de-entrada.test.tsx` → `Test Files  3 passed (3)`, `Tests  30 passed (30)`, exit 0.
+
+### Execução final (WU-07 a WU-10, antes dos controles acima)
+
+- `test:frontend` (`npx vitest run`, dentro de `apps/frontend`, reexecutado por esta unidade sobre a árvore final): **99**/**99** arquivos e **1030**/**1030** testes passando, exit 0 — baseline do Goal (`2995be5`) **96**/**1000**; os **3** arquivos e **30** testes a mais são `goal068-marca.test.tsx` (11), `goal068-assinatura.test.tsx` (11) e `goal068-telas-de-entrada.test.tsx` (8).
+- `test:gate` (`npm run test:gate`, reexecutado por esta unidade na raiz): `tests 233`, `pass 233`, `fail 0`, `skipped 0`, exit 0 — mesma contagem da baseline.
+- `validate:ui` (`node scripts/validate-ui.mjs`, WU-09): `e2e-results/results.json.stats` → `expected` **169**, `skipped` **21**, `unexpected` **0**, `flaky` **0** — mesma contagem da baseline (rotas públicas só).
+- Gate autenticado (`rehearse:goal033-authenticated-ui`, dentro de `validate:integration`, WU-10): `e2e-results/authenticated/results.json.stats` → `expected` **155**, `skipped` **0**, `unexpected` **0**, `flaky` **0**; nenhum resultado individual com `retry > 0` — mesma contagem da baseline, **0** retentativas.
+- `validate:integration` (WU-10): PASSED, exit 0, `393635ms`, conforme a própria unidade reportou.
+
+Esta seção cita `test:frontend` e `test:gate` por reexecução própria (WU-11, depois da última edição de código, que é anterior a WU-07) e `validate:ui`/gate autenticado pelos artefatos `results.json` gravados por WU-09/WU-10, ainda presentes na worktree no momento desta escrita. `validate:core` (WU-07) não é citado com números nesta seção: só a evidência que as unidades citadas efetivamente produziram é usada, conforme a regra do Goal054 §12.
+
+### O que esta seção não prova
+
+**Não prova** que a marca, a assinatura animada e as telas de entrada, num aparelho real nas cinco larguras, batem com `Marca.dc.html`, `Movimento.dc.html` e os três protótipos de login — conferência humana do §8 do Goal, **não feita**. **Não prova** que a saudação neutra é aceitável no lugar de "Bem-vinda de volta." — mesma conferência humana, **não feita**. **Não prova** fidelidade visual da Home (Goal074), das telas de módulo (Goal069) ou do onboarding (Goal072) além da troca de marca.
+
+### Veredito recontado
+
+O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO`**. São os mesmos números de §47, sem mudança: os achados de G-01…G-07, C-05…C-10 e L-06…L-08 são do `QA_LOCAL_REVIEW`, fora da enumeração A-01…A-24, e nenhum achado dessa enumeração foi tocado, corrigido, reclassificado ou reaberto. Esta seção só acrescenta o registro do diff068.
+
+### Rodada 2 (FIX-001): quatro blockers corrigidos, execução final refeita
+
+Corrige os 4 blockers da revisão da rodada 1: (1) G-07 não chegava à sidebar — `AppShell.tsx:155` renderizava `<Brand />` sem `signature="check"`, então a sidebar logada nunca animava o check apesar do que D-087 §3, `CURRENT_STATE` e este §48 afirmavam; corrigido para `<Brand signature="check" />`; (2) o favicon (`atendly-icon.svg`) divergia do ícone de `Marca.dc.html` — o traço ia de 6 a 61/59 numa grade 64 com `rect rx="14"`, encostando nas bordas e saindo do canto arredondado; corrigido para grade 120 com `rect rx="27"` e os três traços escalados (×1.25) e centralizados numa caixa de 80×80 (proporção 2/3 do quadrado, igual à referência); (3) no celular, `.entry-main` (raio 24px no topo) ficava logo abaixo de `.entry-panel` sem sobreposição, e como `.entry-shell` também usa `--surface`, os cantos arredondados mostravam papel sobre papel — corrigido com `.entry-main { position: relative; z-index: 1; margin-top: -24px; }` abaixo de 768px, fazendo a folha subir sobre o Petróleo do painel; `margin-top` é zerado nos três limiares de 768px, 1024px e 1280px, onde a folha não deve sobrepor nada; (4) esta subseção é a execução final e os controles negativos exigidos por essas correções.
+
+**Execução final, sobre a árvore com os três blockers de código corrigidos (antes dos controles abaixo):**
+
+- `npm test` (`apps/frontend`, suíte completa): **99**/**99** arquivos e **1030**/**1030** testes, exit 0 — mesma contagem da execução final anterior (WU-07/WU-10): esta rodada não acrescenta nem remove teste, só corrige `AppShell.tsx`, `atendly-icon.svg` e `atendly.css`.
+- `npm run lint` e `npm run typecheck` (`apps/frontend`): exit 0 nos dois.
+- `node scripts/validate-core.mjs`: **17** passos, **15** `passed`, **0** `failed`, **2** `skipped` (`test:bff`, só integração; `test:health-worker`, sem suíte automatizada), exit 0.
+- `node scripts/validate-ui.mjs`: `e2e-results/results.json.stats` → `expected` **169**, `skipped` **21**, `unexpected` **0**, `flaky` **0**, exit 0 — sem mudança.
+- `BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_bff_test" npm run validate:integration`, contra o PostgreSQL 18 descartável em loopback já provisionado na estação: **35**/**35** passos, exit 0. Dentro dela, `rehearse:goal033-authenticated-ui` (gate autenticado): `e2e-results/authenticated/results.json.stats` → `expected` **154**, `skipped` **0**, `unexpected` **0**, `flaky` **1** (`notebook-1024 › onboarding-quando-importar › measured, logged in`, `page.goto: net::ERR_NO_BUFFER_SPACE`, recuperado na primeira retentativa — falha de rede transitória do Windows, sem relação com o diff desta rodada; total de **155** cenários, igual à baseline WU-10, que teve **0** retentativas).
+- `git status --porcelain=v1 -uall` na worktree, conferido depois da execução final e dos sete controles abaixo: só os arquivos já declarados no diff do Goal068 (inclusive os três `apps/frontend/tests/goal068-*.test.tsx`), sem resto de controle negativo nem artefato de `e2e-results/`.
+
+**Sete controles negativos do §6, aplicados e revertidos depois desta execução final:** mesmos sete defeitos de WU-11 (acima), reaplicados um de cada vez sobre `Brand.tsx`, `layout.tsx` e `AuthScreen.tsx` — nenhum dos três é tocado pelos blockers desta rodada, então o hash "antes" de cada um bate exatamente com o hash "antes"/"depois" já registrado por WU-11. `sha256sum` conferido antes, durante e depois de cada um; comandos: `npx vitest run tests/goal068-marca.test.tsx` (controles 1 a 3), `npx vitest run tests/goal068-assinatura.test.tsx` (controles 4 e 5), `npx vitest run tests/goal068-telas-de-entrada.test.tsx` (controles 6 e 7), todos em `apps/frontend`. Saída real:
+
+1. **`Brand` volta a renderizar `<span className="brand-mark">`** (antes/depois `f97d7be455014dbe5440d301187174c8d3143f83b04cd32dcb6412ec13bb7ce5`, durante `3910bc9b16087312eea8822e640cbe6714e9292a830c8fd2d42cdeecdd28ca09` — idêntico a WU-11). Exit 1, `Tests  2 failed | 4 passed (6)`, mesmas duas asserções de WU-11.
+2. **Um dos traços ganha `stroke` fixo de outra cor** (antes/depois iguais ao controle 1; durante `adea407cf8edd83f4d7609ff8a052a9aeae68886f42a72c1d9cb91568a46edfa`). Exit 1, `Tests  1 failed | 5 passed (6)` — `expect(p).not.toHaveAttribute("stroke")` recebendo `stroke="#ff5a36"`.
+3. **`layout.tsx` volta a apontar para `atendly-favicon-32x32.png`** (antes/depois `02618748fadf55bf72c5d31b857b0fb928efb8b4d267fd19b2e391e1cae115e0`, durante `26aaea6db77ae9a9867748dd86b92305bab5ce6b2f2afb0959ee6b3ec881bf72` — idêntico a WU-11). Exit 1, `Tests  1 failed | 5 passed (6)`, mesma asserção de WU-11.
+4. **A assinatura ignora `prefers-reduced-motion`** (antes/depois iguais ao controle 1; durante `a81c851cb4d42aeb903434350caf1c3361a5df6463b021344329430b12139682` — idêntico a WU-11). Exit 1, `Tests  1 failed | 10 passed (11)`, mesma asserção de WU-11.
+5. **A assinatura deixa de registrar a sessão** (antes/depois iguais ao controle 1; durante `43567020d2b8b8f60a132054559d79624e5f4e477d5ef4e231c0db2808dba44a` — idêntico a WU-11). Exit 1, `Tests  3 failed | 8 passed (11)`, mesmas três asserções de WU-11.
+6. **A seta passa a fazer parte do nome acessível do botão** (antes/depois `56ae0b7a4707ecddd2ae606d84f55f0704f7d5a8276b34f209e93612a5e5e827`, durante `d483a4fa14380958b4160284db25dcd21e8c0ca44261e20b269a45f18ee2fd31` — idêntico a WU-11). Exit 1, `Tests  2 failed | 11 passed (13)`, mesmas duas falhas de WU-11.
+7. **O apoio do cadastro volta ao texto antigo** (antes/depois iguais ao controle 6; durante `dd37be02dafb8045615229da6e8476e26fb8cdd3894392801989a82c3705b598` — idêntico a WU-11). Exit 1, `Tests  1 failed | 12 passed (13)`, mesma falha de WU-11.
+
+Os três arquivos-alvo foram restaurados byte a byte: o `sha256sum` de cada um depois da restauração bate exatamente com o de antes do controle 1 (`Brand.tsx`, `layout.tsx`) ou do controle 6 (`AuthScreen.tsx`). Sem os defeitos, os três arquivos de teste voltam a passar por inteiro: `npx vitest run tests/goal068-marca.test.tsx tests/goal068-assinatura.test.tsx tests/goal068-telas-de-entrada.test.tsx` → `Test Files  3 passed (3)`, `Tests  30 passed (30)`, exit 0.
+
+Depois dos sete controles, `git status --porcelain=v1 -uall` continua idêntico ao registrado antes deles: nenhum resto de controle negativo na árvore.
+
+### Rodada 3 (FIX-001): lint e cobertura da sidebar corrigidos, sem mudança de código de produto
+
+A revisão da rodada 2 encontrou três blockers, todos corrigidos nesta rodada: (1) `npx eslint tests/goal068-assinatura.test.tsx --max-warnings=0` reprovava por ordem de import (`@/shared/ui/Brand` importado antes de `@/shared/layout/AppShell`, `simple-import-sort/imports`) — import reordenado; (2) o describe `AppShell — a sidebar de verdade…` só afirmava a primeira montagem da sidebar, faltando duas asserções pedidas desde a rodada 2 — acrescentadas a `tests/goal068-assinatura.test.tsx`: numa segunda montagem de `AppShell` na mesma sessão, a sidebar não recebe `brand-mark--check`; e o `Brand` do cabeçalho do celular nunca recebe `brand-mark--check`, porque a sidebar consome a chave de sessão primeiro, por vir antes no JSX (`AppShell.tsx:153-156` antes de `AppShell.tsx:270-273`); (3) este parágrafo é o adendo de documentação que faltava em FINAL_AUDIT, VALIDATION_GATE e CURRENT_STATE. Nenhum arquivo de produto foi tocado: só `tests/goal068-assinatura.test.tsx` ganhou os dois testes e teve o import reordenado.
+
+**Execução real desta rodada:**
+
+- `npx vitest run tests/goal068-assinatura.test.tsx` (apps/frontend): `Test Files 1 passed (1)`, `Tests 14 passed (14)`, exit 0.
+- `npx eslint tests/goal068-assinatura.test.tsx --max-warnings=0` (apps/frontend): "ESLint: No issues found", exit 0.
+- `npx vitest run` (apps/frontend, suíte completa): `Test Files 99 passed (99)`, `Tests 1033 passed (1033)`, exit 0. Os registros de rodada 1/2 diziam **1030**: o número já estava errado desde a rodada 2, que acrescentou o describe `AppShell` sem atualizar a contagem (1 teste a mais, nunca contado); os dois testes desta rodada somam os **3** que faltavam (1030 + 3 = 1033).
+- `npx eslint src tests --max-warnings=0` (apps/frontend): exit 0. Os registros de rodada 1/2 diziam "lint exit 0", falso na árvore desta rodada até a correção do item (1) acima — o import de `goal068-assinatura.test.tsx` reprovava exatamente esse comando.
+- `npx tsc --noEmit` (apps/frontend): exit 0, sem mudança.
+
+**Sem mudança em relação à rodada 2:** `validate:core`, `validate:ui` e `validate:integration` (inclusive o gate autenticado, `expected` **154**, `flaky` **1**) não foram reexecutados nesta rodada porque nenhum arquivo que esses gates medem foi tocado — só um teste jsdom, fora de `e2e/` e fora de qualquer rota do gate autenticado. Os números da rodada 2, citados acima nesta seção, continuam valendo.
+
+### Rodada 4 (FIX-001): `signature="check"` tirado do cabeçalho móvel, controle negativo da sidebar e os sete controles do §6 rodados de novo, execução final completa
+
+A revisão da rodada 3 encontrou três blockers, todos corrigidos nesta rodada:
+
+1. **Código.** `AppShell.tsx:273` (cabeçalho móvel) continuava com `<Brand signature="check" />`, contradizendo o §2 do Goal (só a sidebar anima o check). Corrigido para `<Brand />`, sem prop `signature`. `AppShell.tsx:155` (sidebar) manteve `signature="check"`, como pedido.
+2. **Controle negativo da sidebar, rodado depois da correção acima.** Hash de `AppShell.tsx` antes do controle: `b17ee02ebcc2005ecfa87f27be1575a26a3118fba1f043050a1dac1d6f11aa82`. Controle aplicado: `signature="check"` tirado de `AppShell.tsx:155` (sidebar volta a `<Brand />`, sem prop). Hash durante o controle: `d6eb3d4a3815df7387c718af2c2e284d05b22124a1cb1d1cf59cbf6d8727d90c`. `npx vitest run tests/goal068-assinatura.test.tsx` (apps/frontend) reprova exatamente o teste da sidebar, saída real:
+
+   ```
+   FAIL  tests/goal068-assinatura.test.tsx > AppShell — a sidebar de verdade passa signature="check" para Brand > a marca da sidebar anima o check na primeira montagem da sessão
+   Error: expect(element).toHaveClass("brand-mark--check")
+   Expected the element to have class:
+     brand-mark--check
+   Received:
+     brand-mark
+   Test Files  1 failed (1)
+        Tests  1 failed | 13 passed (14)
+   ```
+
+   Revertido; hash depois da restauração: `b17ee02ebcc2005ecfa87f27be1575a26a3118fba1f043050a1dac1d6f11aa82` — idêntico ao de antes do controle.
+3. **Os sete controles do §6, rodados de novo depois da edição do item 1**, um de cada vez sobre `Brand.tsx`, `layout.tsx` e `AuthScreen.tsx` (nenhum dos três é tocado pelo blocker desta rodada). `sha256sum` conferido antes, durante e depois de cada um:
+
+   1. `Brand` volta a renderizar `<span className="brand-mark">` (antes/depois `f97d7be455014dbe5440d301187174c8d3143f83b04cd32dcb6412ec13bb7ce5`, durante `9bf90d4d05dfd5c3818b251708775fdb0b3aefb266410525c58baf27dbfd26e2`). `npx vitest run tests/goal068-marca.test.tsx`: exit 1, `Tests 2 failed | 4 passed (6)`.
+   2. Um dos traços ganha `stroke` fixo de outra cor (antes/depois iguais ao controle 1; durante `dea9e4e75dfee3eb5fb8909560780cb737e08eda0c24ce833eb5c57ba52e8e5a`). Exit 1, `Tests 1 failed | 5 passed (6)`.
+   3. `layout.tsx` volta a apontar para `atendly-favicon-32x32.png` (antes/depois `02618748fadf55bf72c5d31b857b0fb928efb8b4d267fd19b2e391e1cae115e0`, durante `75dbec51631ab20dc08ffaed199ae6ddd524afa01398565f17e544cfd860acf9`). Exit 1, `Tests 1 failed | 5 passed (6)`.
+   4. A assinatura ignora `prefers-reduced-motion` (antes/depois iguais ao controle 1; durante `a81c851cb4d42aeb903434350caf1c3361a5df6463b021344329430b12139682`). Exit 1, `Tests 1 failed | 13 passed (14)` (o arquivo desta rodada tem 14 testes, não 11: a rodada 3 acrescentou o describe `AppShell`).
+   5. A assinatura deixa de registrar a sessão (antes/depois iguais ao controle 1; durante `43567020d2b8b8f60a132054559d79624e5f4e477d5ef4e231c0db2808dba44a`). Exit 1, `Tests 5 failed | 9 passed (14)` — as 3 falhas de sempre mais as 2 do describe `AppShell` que a rodada 3 acrescentou (também dependem da sessão gravada).
+   6. A seta passa a fazer parte do nome acessível do botão (antes/depois `56ae0b7a4707ecddd2ae606d84f55f0704f7d5a8276b34f209e93612a5e5e827`, durante `d483a4fa14380958b4160284db25dcd21e8c0ca44261e20b269a45f18ee2fd31`). Exit 1, `Tests 2 failed | 11 passed (13)`.
+   7. O apoio do cadastro volta ao texto antigo (antes/depois iguais ao controle 6; durante `dd37be02dafb8045615229da6e8476e26fb8cdd3894392801989a82c3705b598`). Exit 1, `Tests 1 failed | 12 passed (13)`.
+
+   Todos revertidos; hash de cada arquivo depois da restauração idêntico ao de antes do controle 1 (`Brand.tsx`, `layout.tsx`) ou do controle 6 (`AuthScreen.tsx`). Sem os defeitos: `npx vitest run tests/goal068-marca.test.tsx tests/goal068-assinatura.test.tsx tests/goal068-telas-de-entrada.test.tsx` → `Test Files 3 passed (3)`, `Tests 33 passed (33)`, exit 0 (33, não 30: a rodada 3 acrescentou 2 testes ao describe `AppShell`, e esta rodada acrescentou o controle negativo da sidebar, fora da contagem de teste).
+
+**Execução final, depois da última edição de código e dos oito controles negativos acima (sidebar + sete do §6):**
+
+- `npx vitest run` (apps/frontend, suíte completa): `Test Files 99 passed (99)`, `Tests 1033 passed (1033)`, exit 0 — mesma contagem da rodada 3, sem teste a mais nem a menos.
+- `npx eslint src tests --max-warnings=0` (apps/frontend): exit 0.
+- `npx tsc --noEmit` (apps/frontend): exit 0.
+- `node scripts/validate-core.mjs`: **17** passos, **15** `passed`, **0** `failed`, **2** `skipped` (`test:bff`, só integração; `test:health-worker`, sem suíte automatizada), exit 0.
+- `node scripts/validate-ui.mjs`: `e2e-results/results.json.stats` → `expected` **169**, `skipped` **21**, `unexpected` **0**, `flaky` **0**, exit 0.
+- `BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_g068r5final_test" npm run validate:integration`, contra um PostgreSQL 18 descartável em loopback provisionado nesta rodada e apagado depois da execução: **35**/**35** passos, exit 0. Dentro dela, `rehearse:goal033-authenticated-ui` (gate autenticado): `e2e-results/authenticated/results.json.stats` → `startTime` **2026-09-29T06:18:27.839Z**, `expected` **155**, `skipped` **0**, `unexpected` **0**, `flaky` **0** — **0** retentativas, corrigindo o `flaky` **1** que a rodada 3 tinha deixado sem reexecutar.
+- `git status --porcelain=v1 -uall` na worktree, conferido depois da execução final e dos oito controles: só os arquivos já declarados no diff do Goal068, sem resto de controle negativo nem artefato de `e2e-results/`.
+
+**Correção ao registro da rodada 3:** o parágrafo "Sem mudança em relação à rodada 2" acima, que dizia que os números da rodada 2 (`expected` **154**, `flaky` **1**) "continuavam valendo", estava incorreto quanto ao gate autenticado — o critério 7 do Goal exige **0** retentativas, e a rodada 3 não reexecutou o gate para confirmar isso. Esta rodada reexecutou tudo e fecha com **0** retentativas, **155** testes, conforme acima.
+
+### Fechamento — review068, 2026-09-29
+
+D-087 **ACCEPTED** no [review068](reviews/068-review.md), rodada 5 do IA Loop, sem blocker. A seção "Rodada 4" acima é a correção da rodada 5 do IA Loop e sustenta o aceite; "Rodada 3" é a da rodada 4, e a correção da rodada 3 do IA Loop não escreveu seção. Uma frase de "O que mudou" está errada: "card centralizado sobre Petróleo cheio até 1279px" só vale de 768px a 1023px. De 1024px a 1279px, `atendly.css` põe o painel Petróleo à esquerda (440px, com a frase e sem o mock) e o card sobre papel à direita. Essa composição fica para a conferência humana do §8 do Goal. O veredito de §48 não muda: **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 6 `LIMITE-DECLARADO`**.

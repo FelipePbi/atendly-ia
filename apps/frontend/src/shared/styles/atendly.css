@@ -157,38 +157,49 @@ svg {
   align-items: center;
   gap: 10px;
   color: var(--fg);
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-weight: 600;
   letter-spacing: -0.02em;
   text-decoration: none;
 }
 .brand-mark {
-  position: relative;
   width: 28px;
   height: 28px;
-  border-radius: 9px;
-  background: var(--navy);
+  flex: none;
 }
-.brand-mark::before,
-.brand-mark::after {
-  content: "";
-  position: absolute;
-  border-radius: 50%;
-  background: var(--accent-vivid);
+@keyframes at-brand-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
 }
-.brand-mark::before {
-  width: 7px;
-  height: 7px;
-  left: 6px;
-  top: 7px;
-  box-shadow: 9px 7px 0 var(--accent-vivid);
+.brand-mark--entry .brand-mark-leg {
+  stroke-dasharray: 100 400;
+  stroke-dashoffset: 106;
+  animation: at-brand-draw 0.46s cubic-bezier(0.2, 0.7, 0.2, 1) 0s forwards;
 }
-.brand-mark::after {
-  width: 12px;
-  height: 2px;
-  left: 8px;
-  top: 14px;
-  border-radius: 2px;
-  transform: rotate(38deg);
+.brand-mark--entry .brand-mark-check {
+  stroke-dasharray: 100 400;
+  stroke-dashoffset: 106;
+  animation: at-brand-draw 0.38s cubic-bezier(0.2, 0.7, 0.2, 1) 0.34s forwards;
+}
+.brand-mark--entry .brand-mark-leg-rest {
+  stroke-dasharray: 100 400;
+  stroke-dashoffset: 106;
+  animation: at-brand-draw 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) 0.6s forwards;
+}
+.brand-mark--check .brand-mark-check {
+  stroke-dasharray: 100 400;
+  stroke-dashoffset: 106;
+  animation: at-brand-draw 0.42s cubic-bezier(0.2, 0.7, 0.2, 1) 0s forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand-mark--entry .brand-mark-leg,
+  .brand-mark--entry .brand-mark-check,
+  .brand-mark--entry .brand-mark-leg-rest,
+  .brand-mark--check .brand-mark-check {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
 }
 
 .eyebrow {
@@ -3386,16 +3397,6 @@ p {
   color: var(--surface);
   font-size: 18px;
 }
-.auth-brand-panel .brand-mark {
-  background: var(--surface);
-}
-.auth-brand-panel .brand-mark::before,
-.auth-brand-panel .brand-mark::after {
-  background: var(--accent);
-}
-.auth-brand-panel .brand-mark::before {
-  box-shadow: 9px 7px 0 var(--accent);
-}
 .auth-story {
   position: relative;
   z-index: 1;
@@ -3463,15 +3464,6 @@ p {
   width: 38%;
   transform: rotate(16deg);
 }
-.auth-trust {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: color-mix(in oklch, var(--surface), transparent 30%);
-  font-size: 13px;
-}
 .auth-main {
   min-width: 0;
   padding: 48px clamp(24px, 7vw, 96px);
@@ -3479,8 +3471,274 @@ p {
   place-items: center;
   background: var(--surface);
 }
+
+/* Telas de entrada (Goal068/WU-03) — painel Petróleo com composição própria
+   por largura. Classes dedicadas (entry-*) para não herdar visual em
+   .legal-* (Termos/Privacidade), que segue usando .auth-layout/.auth-brand-panel
+   fora do escopo desta unidade.
+   Limiares (mesmas larguras do gate `validate:ui`: 360, 390, 768, 1024, 1440):
+   - < 768px: celular — faixa Petróleo no topo, formulário em folha (raio 24px).
+   - 768–1023px (cai a largura 768 do gate): tablet retrato — fundo Petróleo
+     full-bleed, card centralizado.
+   - 1024–1279px (cai a largura 1024 do gate): tablet paisagem — marca à
+     esquerda, card à direita, sem mock.
+   - >= 1280px (cai a largura 1440 do gate): desktop — painel com a frase e o
+     mock de conversa, card compacto centralizado. */
+.entry-shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+}
+.entry-panel {
+  position: relative;
+  z-index: 0;
+  overflow: hidden;
+  flex: none;
+  padding: calc(20px + env(safe-area-inset-top)) 20px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: var(--surface);
+  background: var(--accent);
+}
+.entry-panel::before,
+.entry-panel::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.entry-panel::before {
+  width: 260px;
+  height: 260px;
+  right: -100px;
+  top: -110px;
+  background: color-mix(in oklch, var(--accent), black 22%);
+}
+.entry-panel::after {
+  width: 180px;
+  height: 180px;
+  left: -80px;
+  bottom: -60px;
+  background: color-mix(in oklch, var(--accent), white 12%);
+  opacity: 0.6;
+}
+.entry-panel .brand {
+  position: relative;
+  z-index: 1;
+  color: var(--surface);
+  font-size: 18px;
+}
+.entry-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 42ch;
+}
+.entry-tagline {
+  color: var(--surface);
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+.entry-support {
+  margin-top: 8px;
+  color: color-mix(in oklch, var(--surface), transparent 24%);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.entry-mock {
+  position: relative;
+  z-index: 1;
+  display: none;
+}
+.entry-mock-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.entry-mock-avatar {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-vivid);
+  font-size: 12px;
+  font-weight: 600;
+}
+.entry-mock-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.entry-mock-name {
+  color: var(--surface);
+  font-size: 14px;
+  font-weight: 600;
+}
+.entry-mock-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-vivid);
+  font-size: 12px;
+}
+.entry-mock-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.entry-mock-bubble {
+  align-self: flex-start;
+  max-width: 84%;
+  padding: 10px 14px;
+  border-radius: 14px 14px 14px 4px;
+  background: var(--accent-soft);
+  color: var(--accent-vivid);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.entry-mock-bubble--client {
+  align-self: flex-end;
+  max-width: 80%;
+  border-radius: 14px 14px 4px 14px;
+  background: var(--surface);
+  color: var(--fg);
+}
+.entry-main {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  margin-top: -24px;
+  padding: 28px 20px calc(28px + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-radius: 24px 24px 0 0;
+}
 .auth-card {
-  width: min(100%, 440px);
+  width: 100%;
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .entry-shell {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 40px;
+    padding: 48px 24px;
+    background: var(--accent);
+  }
+  .entry-panel {
+    flex: none;
+    align-items: center;
+    overflow: visible;
+    padding: 0;
+    text-align: center;
+    background: transparent;
+  }
+  .entry-panel::before,
+  .entry-panel::after {
+    display: none;
+  }
+  .entry-copy {
+    max-width: 480px;
+  }
+  .entry-tagline {
+    font-size: 30px;
+  }
+  .entry-main {
+    flex: none;
+    margin-top: 0;
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+  }
+  .auth-card {
+    width: 480px;
+    max-width: 100%;
+    padding: 32px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    box-shadow: var(--shadow-md);
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .entry-shell {
+    flex-direction: row;
+  }
+  .entry-panel {
+    width: 440px;
+    padding: 44px 40px;
+    justify-content: flex-start;
+    gap: 32px;
+  }
+  .entry-tagline {
+    font-size: 30px;
+  }
+  .entry-main {
+    flex: 1;
+    margin-top: 0;
+    display: grid;
+    place-items: center;
+    padding: 48px;
+    border-radius: 0;
+  }
+  .auth-card {
+    width: min(100%, 420px);
+    padding: 32px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    box-shadow: var(--shadow-md);
+  }
+}
+
+@media (min-width: 1280px) {
+  .entry-shell {
+    flex-direction: row;
+  }
+  .entry-panel {
+    width: 560px;
+    padding: 44px 56px;
+    justify-content: flex-start;
+    gap: 40px;
+  }
+  .entry-tagline {
+    font-size: 34px;
+  }
+  .entry-mock {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px;
+    border-radius: 18px;
+    background: color-mix(in oklch, var(--accent), black 20%);
+    border: 1px solid color-mix(in oklch, var(--surface), transparent 88%);
+  }
+  .entry-main {
+    flex: 1;
+    margin-top: 0;
+    display: grid;
+    place-items: center;
+    padding: 48px;
+    border-radius: 0;
+  }
+  .auth-card {
+    width: min(100%, 440px);
+    padding: 32px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    box-shadow: var(--shadow-md);
+  }
 }
 .auth-back {
   width: fit-content;
@@ -3670,7 +3928,6 @@ p {
     justify-content: flex-start;
   }
   .auth-brand-panel .auth-story,
-  .auth-brand-panel .auth-trust,
   .auth-flow {
     display: none;
   }

@@ -240,6 +240,13 @@ export interface CancelCalendarAppointmentInput extends NotifyCustomerInput {
   appointmentId: string;
   comments?: string;
   idempotencyKey: string;
+  /**
+   * Isencao da politica de antecedencia minima do cliente (Goal073): a
+   * limpeza do atendimento de teste de ativacao cancela sem esperar
+   * antecedencia nenhuma, mesmo com chamador IA. So existe para cancelamento
+   * — nao ha isencao equivalente em remarcacao.
+   */
+  policyExemption?: "ACTIVATION_TEST_CLEANUP";
 }
 
 /**

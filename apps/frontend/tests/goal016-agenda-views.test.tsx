@@ -139,6 +139,11 @@ beforeEach(() => {
   listAppointments.mockReset();
   listTimeBlocks.mockReset();
   listAvailabilityExceptions.mockReset();
+  // Goal073: Automática abre em Semana a partir de 1024px (o padrão do
+  // jsdom); esta suíte é sobre Dia/Semana/Mês alternáveis, não sobre a
+  // largura, então fixa a viewport abaixo do corte para manter Dia como
+  // abertura inicial, como antes do Goal073.
+  window.innerWidth = 390;
 });
 
 function renderBoard() {

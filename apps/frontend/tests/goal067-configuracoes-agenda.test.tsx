@@ -34,10 +34,18 @@ const getSettings = vi.fn();
 const getWhatsapp = vi.fn();
 const getReminders = vi.fn();
 const updateAvailability = vi.fn();
+const getAgendaViewPreference = vi.fn();
+const updateAgendaViewPreference = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
-    settings: { get: getSettings, getReminders, updateAvailability },
+    settings: {
+      get: getSettings,
+      getAgendaViewPreference,
+      getReminders,
+      updateAgendaViewPreference,
+      updateAvailability,
+    },
     whatsapp: { get: getWhatsapp },
   }),
 }));
@@ -46,6 +54,7 @@ function settingsFixture(overrides: Partial<SettingsState> = {}): SettingsState 
   return {
     ai: { enabled: true, tone: "BALANCED" },
     availability: {
+      customerChangeMinNoticeMinutes: 0,
       granularityMinutes: 30,
       maxLeadDays: 90,
       minLeadMinutes: 0,
@@ -91,6 +100,10 @@ beforeEach(() => {
     pricePolicy: "NEVER",
     rules: [{ slot: "FIRST", leadMinutes: 1_440 }],
   });
+  getAgendaViewPreference.mockResolvedValue({
+    hiddenWeekdays: [],
+    initialView: null,
+  });
 });
 
 describe("Agenda: regras de oferta", () => {
@@ -121,6 +134,7 @@ describe("Agenda: regras de oferta", () => {
 
     await waitFor(() =>
       expect(updateAvailability).toHaveBeenCalledWith({
+        customerChangeMinNoticeMinutes: 0,
         granularityMinutes: 30,
         maxLeadDays: 90,
         minLeadMinutes: 120,
@@ -222,6 +236,7 @@ describe("Disponibilidade por dia", () => {
   test("intervalos sobrepostos no mesmo dia são recusados inline, sem PATCH", async () => {
     const settings = settingsFixture({
       availability: {
+        customerChangeMinNoticeMinutes: 0,
         granularityMinutes: 30,
         maxLeadDays: 90,
         minLeadMinutes: 0,

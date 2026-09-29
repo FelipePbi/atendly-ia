@@ -227,6 +227,9 @@ beforeEach(() => {
   // são todas ancoradas em ISO_TODAY, então o relógio precisa ficar preso
   // nela — sem isso a suíte quebra sozinha assim que o dia real avança.
   vi.setSystemTime(new Date(`${ISO_TODAY}T12:00:00.000Z`));
+  // Goal073: Automática abre em Semana a partir de 1024px (o padrão do
+  // jsdom); a grade do Dia abaixo depende de Dia como abertura inicial.
+  window.innerWidth = 390;
   for (const spy of [
     push,
     replace,

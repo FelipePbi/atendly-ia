@@ -13,6 +13,7 @@ import type {
   ClaimNotificationIntentsInput,
   ConfirmAppointmentSeriesInput,
   CreateSchedulingHoldInput,
+  CustomerChangePolicy,
   NotificationClaimResult,
   NotificationIntentSettlement,
   PreviewAppointmentSeriesInput,
@@ -213,6 +214,13 @@ const reminderConfirmationSettingsSchema = z.object({
   configured: z.boolean(),
   confirmationEnabled: z.boolean(),
 });
+// --- Politica de antecedencia do cliente (Goal073) --------------------------
+// Recorte do mesmo `GET /internal/availability-settings` usado pela tela de
+// Configuracoes: campos que a resposta nao declara (timezone, rules, demais
+// regras de oferta) sao ignorados por este schema, nao decodificados errado.
+const customerChangePolicySchema = z.object({
+  customerChangeMinNoticeMinutes: z.number().int(),
+});
 // Recorte do snapshot de ciclo de vida do atendimento. `status`,
 // `completedAt` e `noShowAt` sao decodificados nao porque a confirmacao os
 // mude, mas justamente porque ela nao pode muda-los: sem le-los nao ha como
@@ -271,6 +279,13 @@ export interface SchedulingGateway {
     appointmentId: string,
     context?: SchedulingRequestContext,
     idempotencyKey?: string,
+    /**
+     * Isencao da politica de antecedencia minima do cliente (Goal073). So
+     * `ActivationTestCleanupService` envia isto — a limpeza do teste de
+     * ativacao cancela sem esperar antecedencia nenhuma, mesmo com chamador
+     * IA. Nenhum outro chamador dentro de `src` passa este argumento.
+     */
+    policyExemption?: "ACTIVATION_TEST_CLEANUP",
   ): Promise<{ appointmentId: string; cancelled: true }>;
   /**
    * Remoção definitiva por ID (Goal019).
@@ -360,6 +375,14 @@ export interface SchedulingGateway {
     context?: SchedulingRequestContext,
     idempotencyKey?: string,
   ): Promise<AppointmentPresenceConfirmation>;
+  /**
+   * Antecedencia minima do cliente (Goal073). Leitura pura do mesmo recorte
+   * que `PATCH /internal/availability-settings` grava; quem decide o valor
+   * e o negocio via BFF, nunca a IA.
+   */
+  getCustomerChangePolicy(
+    context?: SchedulingRequestContext,
+  ): Promise<CustomerChangePolicy>;
 }
 
 export class SchedulingClient implements SchedulingGateway {
@@ -615,11 +638,17 @@ export class SchedulingClient implements SchedulingGateway {
     appointmentId: string,
     context?: SchedulingRequestContext,
     idempotencyKey?: string,
+    policyExemption?: "ACTIVATION_TEST_CLEANUP",
   ): Promise<{ appointmentId: string; cancelled: true }> {
     await this.request(
       `/internal/appointments/${appointmentId}/cancel`,
       appointmentSchema,
-      { method: "POST", context, idempotencyKey, body: {} },
+      {
+        method: "POST",
+        context,
+        idempotencyKey,
+        body: { policyExemption: policyExemption ?? undefined },
+      },
     );
     return { appointmentId, cancelled: true };
   }
@@ -776,6 +805,21 @@ export class SchedulingClient implements SchedulingGateway {
     };
   }
 
+  /**
+   * Le a antecedencia minima do cliente (Goal073). Mesmo endpoint de
+   * Configuracoes; o schema decodifica so o campo que esta regra usa.
+   */
+  async getCustomerChangePolicy(
+    context?: SchedulingRequestContext,
+  ): Promise<CustomerChangePolicy> {
+    const settings = await this.request(
+      "/internal/availability-settings",
+      customerChangePolicySchema,
+      { context },
+    );
+    return { minNoticeMinutes: settings.customerChangeMinNoticeMinutes };
+  }
+
   private async request<TSchema extends z.ZodType>(
     path: string,
     schema: TSchema,
@@ -846,6 +890,7 @@ export class SchedulingClient implements SchedulingGateway {
       throw new DomainError(upstream.message, {
         code: upstream.code,
         statusCode: response.status,
+        details: upstream.details,
       });
     }
     const parsed = z.object({ data: z.unknown() }).safeParse(payload);
@@ -995,9 +1040,19 @@ function parseJson(value: string): unknown {
 function extractUpstreamError(value: unknown): {
   code: string;
   message: string;
+  details?: unknown;
 } {
   const parsed = z
-    .object({ error: z.object({ code: z.string(), message: z.string() }) })
+    .object({
+      error: z.object({
+        code: z.string(),
+        message: z.string(),
+        // Repassado tal como o dono descreveu (ex.: `minNoticeMinutes` do
+        // Goal073). Ausente na maioria dos erros de dominio, e isso e o
+        // caso normal, nao uma decodificacao falha.
+        details: z.unknown().optional(),
+      }),
+    })
     .safeParse(value);
   return parsed.success
     ? parsed.data.error

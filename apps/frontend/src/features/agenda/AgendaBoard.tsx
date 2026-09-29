@@ -2,9 +2,10 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  type AgendaInitialView,
   type Appointment,
   type AvailabilityException,
   type CalendarState,
@@ -53,6 +54,19 @@ export {
 
 type AgendaView = "day" | "week" | "month";
 
+/** Semana a partir de 1024 px, Dia abaixo (regra mobile-first do produto). */
+function automaticView(): AgendaView {
+  if (typeof window === "undefined") return "day";
+  return window.innerWidth >= 1024 ? "week" : "day";
+}
+
+function resolveView(initialView: AgendaInitialView | null): AgendaView {
+  if (initialView === "DAY") return "day";
+  if (initialView === "WEEK") return "week";
+  if (initialView === "MONTH") return "month";
+  return automaticView();
+}
+
 function rangeForView(
   view: AgendaView,
   cursor: Date,
@@ -71,7 +85,11 @@ function rangeForView(
 }
 
 export function AgendaBoard() {
-  const [view, setView] = useState<AgendaView>("day");
+  const [view, setView] = useState<AgendaView>(() => automaticView());
+  const [hiddenWeekdays, setHiddenWeekdays] = useState<number[]>([]);
+  // Uma escolha manual da visualização não pode ser desfeita por uma
+  // preferência gravada que ainda estava em voo quando o clique aconteceu.
+  const viewLockedRef = useRef(false);
   const [cursor, setCursor] = useState(() => new Date());
   const [calendar, setCalendar] = useState<CalendarState | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -81,6 +99,24 @@ export function AgendaBoard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+
+  // Leitura falhada (ou serviço ausente) mantém a Agenda em Automática, com
+  // todos os dias visíveis e sem mensagem de erro (Goal073).
+  useEffect(() => {
+    const controller = new AbortController();
+    const settingsService = getProductServices().settings;
+    if (!settingsService) return;
+    settingsService
+      .getAgendaViewPreference(controller.signal)
+      .then((preference) => {
+        setHiddenWeekdays(preference.hiddenWeekdays);
+        if (!viewLockedRef.current) setView(resolveView(preference.initialView));
+      })
+      .catch(() => {
+        /* Automática já é o estado inicial; nada a fazer aqui. */
+      });
+    return () => controller.abort();
+  }, []);
 
   const range = useMemo(() => rangeForView(view, cursor), [view, cursor]);
 
@@ -179,6 +215,7 @@ export function AgendaBoard() {
   }
 
   function changeView(nextView: AgendaView) {
+    viewLockedRef.current = true;
     if (nextView === view) return;
     setLoading(true);
     setSelectedBlock(null);
@@ -186,6 +223,7 @@ export function AgendaBoard() {
   }
 
   function selectDay(date: Date) {
+    viewLockedRef.current = true;
     setLoading(true);
     setSelectedBlock(null);
     setCursor(date);
@@ -346,6 +384,7 @@ export function AgendaBoard() {
             {!loading && view === "week" && (
               <WeekView
                 entries={entries}
+                hiddenWeekdays={hiddenWeekdays}
                 onSelectDay={selectDay}
                 start={range.startDate}
               />
@@ -353,6 +392,7 @@ export function AgendaBoard() {
             {!loading && view === "month" && (
               <MonthView
                 entries={entries}
+                hiddenWeekdays={hiddenWeekdays}
                 month={cursor}
                 onSelectDay={selectDay}
                 selectedDate={isoDate(cursor)}

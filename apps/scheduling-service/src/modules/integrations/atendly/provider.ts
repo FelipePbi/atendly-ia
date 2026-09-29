@@ -358,6 +358,13 @@ export class AtendlyCalendarProvider implements CalendarProvider {
       });
       if (!persisted) appointmentNotFound();
       assertCanReschedule(persisted);
+      // Antecedencia medida contra o INICIO ATUAL do atendimento, nao o
+      // horario novo pretendido (Goal073): o que a politica limita e o
+      // quanto em cima da hora o cliente muda o que ja estava marcado.
+      await this.assertCustomerChangePolicy(transaction, {
+        startAt: persisted.startAt,
+        source: input.source ?? "AI",
+      });
       const persistedDate = this.localDate(persisted.startAt);
       if (persistedDate !== originalDate) {
         // O atendimento mudou de dia entre a leitura e o lock: o dia que ele
@@ -491,6 +498,14 @@ export class AtendlyCalendarProvider implements CalendarProvider {
       if (persisted.status === "CANCELLED") {
         return this.commitAppointment(transaction, persisted, commit);
       }
+      // Depois do atalho de replay acima: cancelar o que ja esta cancelado
+      // nunca esbarra na politica, porque nao ha segundo efeito para conferir
+      // antecedencia (Goal073).
+      await this.assertCustomerChangePolicy(transaction, {
+        startAt: persisted.startAt,
+        source: input.source ?? "AI",
+        exemption: input.policyExemption,
+      });
       const cancelled = await transaction.appointment.update({
         where: {
           tenantId_id: { tenantId: this.tenantId, id: persisted.id },
@@ -631,6 +646,43 @@ export class AtendlyCalendarProvider implements CalendarProvider {
         return false;
       }
       throw error;
+    }
+  }
+
+  /**
+   * Antecedencia minima do cliente (Goal073): so restringe o chamador IA — a
+   * profissional (chamador USER) nunca e limitada por esta regra, no mesmo
+   * padrao de `resolveOverlapOverride`. Lida dentro da PROPRIA transacao da
+   * mutacao, nunca antes: a configuracao vigente e a do instante da escrita,
+   * nao a de quando a chamada comecou.
+   *
+   * `minNoticeMinutes <= 0` (o default) nao restringe nada — nenhum negocio
+   * existente ganha recusa nova so pela coluna aditiva ter chegado com zero.
+   */
+  private async assertCustomerChangePolicy(
+    transaction: Prisma.TransactionClient,
+    params: {
+      startAt: Date;
+      source: "AI" | "USER";
+      exemption?: "ACTIVATION_TEST_CLEANUP";
+    },
+  ): Promise<void> {
+    if (params.source !== "AI") return;
+    if (params.exemption === "ACTIVATION_TEST_CLEANUP") return;
+    const settings = await transaction.calendarSettings.findUniqueOrThrow({
+      where: { tenantId: this.tenantId },
+    });
+    const minNoticeMinutes = settings.customerChangeMinNoticeMinutes;
+    if (minNoticeMinutes <= 0) return;
+    const now = await databaseNow(transaction);
+    const noticeMinutes = (params.startAt.getTime() - now.getTime()) / 60_000;
+    if (noticeMinutes < minNoticeMinutes) {
+      throw new AppError(
+        "CUSTOMER_CHANGE_OUTSIDE_POLICY",
+        "The customer change notice policy no longer allows this change.",
+        409,
+        { minNoticeMinutes },
+      );
     }
   }
 

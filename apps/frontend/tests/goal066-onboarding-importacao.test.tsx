@@ -126,6 +126,7 @@ const serviceDone: Partial<OnboardingState> = {
 };
 const availabilityDone: Partial<OnboardingState> = {
   availability: {
+    customerChangeMinNoticeMinutes: 0,
     granularityMinutes: 30,
     maxLeadDays: 90,
     minLeadMinutes: 0,

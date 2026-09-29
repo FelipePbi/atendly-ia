@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { env } from "../../config/env.js";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
+import { instantFromZonedDateTime } from "../../lib/dates.js";
 import {
   type DiagnosticLogger,
   noopDiagnosticLogger,
@@ -19,6 +20,7 @@ import {
 } from "../scheduling-service/client.js";
 import {
   APPOINTMENT_HOLD_EXPIRED,
+  CUSTOMER_CHANGE_OUTSIDE_POLICY,
   PRESENCE_CONFIRMATION_NOT_ENABLED,
   type SchedulingAppointment,
   type SchedulingHold,
@@ -345,6 +347,12 @@ export class AssistantToolRegistry {
     private readonly scheduling: SchedulingGateway = new SchedulingClient(),
     private readonly knowledge?: KnowledgeVectorStore,
     private readonly logger: DiagnosticLogger = noopDiagnosticLogger,
+    /**
+     * Relogio injetavel (Goal073): so o teste substitui. A politica de
+     * antecedencia minima do cliente compara o horario do atendimento com
+     * "agora", e um `now` fixo e o que torna esse calculo determinístico.
+     */
+    private readonly now: () => Date = () => new Date(),
   ) {}
 
   createDefinitions(context: ToolBindingContext): StructuredToolInterface[] {
@@ -1099,6 +1107,36 @@ export class AssistantToolRegistry {
   }
 
   /**
+   * Antecedencia minima do cliente (Goal073): recusa cancelar/remarcar fora
+   * do prazo **antes** de gravar pendencia ou criar hold — nunca depois.
+   *
+   * Le a configuracao vigente a cada chamada (nunca cacheia entre turnos: a
+   * configuracao pode mudar a qualquer momento) e compara com o horario ATUAL
+   * do atendimento, no fuso do negocio. `minNoticeMinutes <= 0` (o default)
+   * nao restringe nada, no mesmo padrao do Scheduling.
+   */
+  private async assertCustomerChangePolicy(
+    appointment: SchedulingAppointment,
+    context: ToolExecutionContext,
+  ): Promise<
+    { ok: true } | { ok: false; code: string; error: string; details: unknown }
+  > {
+    const policy = await this.scheduling.getCustomerChangePolicy(
+      schedulingContext(context),
+    );
+    if (policy.minNoticeMinutes <= 0) return { ok: true };
+    const startAt = instantFromZonedDateTime(
+      appointment.date,
+      appointment.startTime,
+      context.businessContext.timezone,
+    );
+    const noticeMinutes =
+      (startAt.getTime() - this.now().getTime()) / 60_000;
+    if (noticeMinutes >= policy.minNoticeMinutes) return { ok: true };
+    return outsidePolicyFailure(policy.minNoticeMinutes);
+  }
+
+  /**
    * Para quem é o atendimento.
    *
    * `customerId` escolhido pela conversa vence. Sem escolha, os candidatos do
@@ -1403,6 +1441,9 @@ export class AssistantToolRegistry {
       };
     }
 
+    const policy = await this.assertCustomerChangePolicy(appointment, context);
+    if (!policy.ok) return policy;
+
     const pending: PendingAction = {
       type: "cancel",
       appointmentId: args.appointmentId,
@@ -1425,13 +1466,22 @@ export class AssistantToolRegistry {
     if (!draft.ok) return draft;
     const pending = draft.pending;
 
-    const result = await this.scheduling.cancelAppointment(
-      pending.appointmentId,
-      schedulingContext(context),
-      pending.idempotencyKey || context.idempotencyKey,
-    );
-    await this.clearPendingAction(context);
-    return result;
+    try {
+      const result = await this.scheduling.cancelAppointment(
+        pending.appointmentId,
+        schedulingContext(context),
+        pending.idempotencyKey || context.idempotencyKey,
+      );
+      await this.clearPendingAction(context);
+      return result;
+    } catch (error) {
+      if (!isOutsidePolicy(error)) throw error;
+      // A configuracao pode ter mudado entre o prepare e o confirm; a
+      // recusa e definitiva, entao o rascunho nao sobrevive como sobrevive
+      // ao hold vencido — nao ha "tentar de novo" para o mesmo pedido.
+      await this.clearPendingAction(context);
+      return outsidePolicyFailure(minNoticeMinutesFromError(error));
+    }
   }
 
   private async prepareReschedule(
@@ -1452,6 +1502,12 @@ export class AssistantToolRegistry {
         error: "Agendamento nao encontrado para esse telefone.",
       };
     }
+
+    // Antecedencia medida contra o INICIO ATUAL do atendimento, nao o
+    // horario novo pretendido (Goal073): o que a politica limita e o quanto
+    // em cima da hora a cliente muda o que ja estava marcado.
+    const policy = await this.assertCustomerChangePolicy(appointment, context);
+    if (!policy.ok) return policy;
 
     // Hold apenas no horario NOVO. O original continua ocupado pelo proprio
     // atendimento ate a remarcacao commitar: soltar antes deixaria a cliente
@@ -1508,6 +1564,12 @@ export class AssistantToolRegistry {
         pending.idempotencyKey || context.idempotencyKey,
       );
     } catch (error) {
+      if (isOutsidePolicy(error)) {
+        // Mesma recusa definitiva do cancelamento: a configuracao pode ter
+        // mudado entre o prepare e o confirm, e o rascunho nao sobrevive.
+        await this.clearPendingAction(context);
+        return outsidePolicyFailure(minNoticeMinutesFromError(error));
+      }
       if (!isHoldExpired(error)) throw error;
       // Nada foi remarcado: o atendimento original continua exatamente onde
       // estava, e e isso que a IA deve dizer antes de oferecer outro horario.
@@ -1930,6 +1992,64 @@ function requireString(value: string | undefined, field: string): string {
  */
 function isHoldExpired(error: unknown): boolean {
   return errorCode(error) === APPOINTMENT_HOLD_EXPIRED;
+}
+
+/** A cliente (via IA) tentou alterar o proprio atendimento fora do prazo. */
+function isOutsidePolicy(error: unknown): boolean {
+  return errorCode(error) === CUSTOMER_CHANGE_OUTSIDE_POLICY;
+}
+
+/**
+ * `minNoticeMinutes` do erro devolvido pelo Scheduling, quando presente. O
+ * confirm que recusa por revalidacao (configuracao mudou entre prepare e
+ * confirm) pode nao trazer o detalhe; a mensagem segue sem o numero de horas
+ * nesse caso, nunca inventando um valor.
+ */
+function minNoticeMinutesFromError(error: unknown): number | null {
+  const details = error instanceof AppError ? error.details : undefined;
+  return isRecord(details) && typeof details.minNoticeMinutes === "number"
+    ? details.minNoticeMinutes
+    : null;
+}
+
+/**
+ * Recusa estruturada da politica (Goal073): `outsidePolicy: true` e o prazo
+ * em horas (`minNoticeHours`) sao o que a instrucao de
+ * `prompts/scheduling.ts` manda a IA ler; a mesma forma sai do prepare e do
+ * confirm.
+ */
+function outsidePolicyFailure(minNoticeMinutes: number | null): {
+  ok: false;
+  code: string;
+  error: string;
+  details: {
+    outsidePolicy: true;
+    minNoticeHours: number | null;
+    minNoticeMinutes: number | null;
+  };
+} {
+  const minNoticeHours = noticeHours(minNoticeMinutes);
+  const hoursText = formatNoticeHours(minNoticeHours);
+  return {
+    ok: false,
+    code: CUSTOMER_CHANGE_OUTSIDE_POLICY,
+    error: hoursText
+      ? `Esse atendimento nao pode mais ser alterado pela cliente: o prazo minimo de antecedencia deste negocio e de ${hoursText}. Explique o prazo pra cliente e ofereca falar direto com a profissional.`
+      : "Esse atendimento nao pode mais ser alterado pela cliente: o prazo minimo de antecedencia deste negocio ja nao permite essa mudanca. Explique isso pra cliente e ofereca falar direto com a profissional.",
+    details: { outsidePolicy: true, minNoticeHours, minNoticeMinutes },
+  };
+}
+
+/** Prazo em horas, com uma casa decimal quando nao for hora cheia. */
+function noticeHours(minNoticeMinutes: number | null): number | null {
+  if (minNoticeMinutes === null) return null;
+  return Math.round((minNoticeMinutes / 60) * 10) / 10;
+}
+
+function formatNoticeHours(hours: number | null): string | null {
+  if (hours === null) return null;
+  const text = Number.isInteger(hours) ? hours.toFixed(0) : hours.toFixed(1);
+  return `${text} hora(s)`;
 }
 
 /** Todo hold que um rascunho segura, qualquer que seja o tipo dele. */

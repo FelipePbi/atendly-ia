@@ -569,6 +569,11 @@ async function ensureAgendaOnMeasuredDate(page: Page): Promise<void> {
       / 86_400_000,
   );
   const button = page.getByRole("button", { name: diffDays > 0 ? "Próximo dia" : "Dia anterior" });
+  // A largura Automática abre em Semana a partir de 1024px (Goal073): essa
+  // visualização não tem navegação por dia, só por semana. A semeadura
+  // procura o horário livre nos dois dias seguintes a "hoje", que a semana
+  // corrente (ou a grade do mês) já cobre — nada a clicar nesses casos.
+  if ((await button.count()) === 0) return;
   for (let clicked = 0; clicked < Math.abs(diffDays); clicked += 1) {
     // eslint-disable-next-line no-await-in-loop -- each click must settle before the next
     await button.click();

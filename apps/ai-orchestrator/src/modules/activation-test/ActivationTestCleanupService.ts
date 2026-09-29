@@ -287,10 +287,14 @@ export class ActivationTestCleanupService {
     if (!appointmentId) return false;
 
     try {
+      // Isencao da politica de antecedencia minima do cliente (Goal073): a
+      // limpeza precisa cancelar o atendimento de teste mesmo quando ele foi
+      // criado a poucos minutos, sem esperar prazo nenhum.
       await this.scheduling.cancelAppointment(
         appointmentId,
         context,
         `activation-test-cleanup-${run.id}`,
+        "ACTIVATION_TEST_CLEANUP",
       );
     } catch (error) {
       if (isGone(error)) {

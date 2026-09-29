@@ -161,6 +161,9 @@ function createAgenda() {
       effects.confirmAppointmentSeries.push(input);
       return [appointment];
     },
+    // Sem restricao (Goal073): esta suite prova a guarda de confirmacao no
+    // mesmo turno, nao a politica de antecedencia minima do cliente.
+    getCustomerChangePolicy: async () => ({ minNoticeMinutes: 0 }),
   } as unknown as SchedulingGateway;
   return { gateway, effects };
 }

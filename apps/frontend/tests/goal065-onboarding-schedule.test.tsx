@@ -372,6 +372,7 @@ function availabilityFixture(
   rules: Array<{ dayOfWeek: number; startTime: string; endTime: string }>,
 ): NonNullable<OnboardingState["availability"]> {
   return {
+    customerChangeMinNoticeMinutes: 0,
     granularityMinutes: 30,
     maxLeadDays: 90,
     minLeadMinutes: 0,
@@ -426,6 +427,7 @@ describe("dias-de-atendimento: a semana começa na segunda, sem mudar os valores
       "dias-de-atendimento",
       stateFixture({
         availability: {
+          customerChangeMinNoticeMinutes: 0,
           granularityMinutes: 30,
           maxLeadDays: 90,
           minLeadMinutes: 0,
@@ -520,6 +522,7 @@ describe("horarios: Personalizar dias diferentes grava uma regra por dia", () =>
       "horarios",
       stateFixture({
         availability: {
+          customerChangeMinNoticeMinutes: 0,
           granularityMinutes: 30,
           maxLeadDays: 90,
           minLeadMinutes: 0,
@@ -679,6 +682,7 @@ describe("agenda-atendly-pronta: resumo completo, sem texto de desenvolvimento n
       stateFixture({
         service: serviceFixture({ name: "Corte", durationMinutes: 45, price: 120, priceType: "FIXED" }),
         availability: {
+          customerChangeMinNoticeMinutes: 0,
           granularityMinutes: 30,
           maxLeadDays: 90,
           minLeadMinutes: 0,

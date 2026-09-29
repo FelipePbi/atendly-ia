@@ -1,5 +1,7 @@
 import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
 import type {
+  AgendaInitialView,
+  AgendaViewPreference,
   AiTone,
   AvailabilitySettings,
   BusinessModality,
@@ -36,6 +38,15 @@ export interface AvailabilitySettingsInput {
   granularityMinutes?: number;
   maxLeadDays?: number;
   minLeadMinutes?: number;
+  /** Prazo mínimo para o cliente cancelar/remarcar pela IA (Goal073); ausente preserva o valor gravado. */
+  customerChangeMinNoticeMinutes?: number;
+}
+
+export interface AgendaViewPreferenceInput {
+  /** Ausente preserva o que já está gravado. */
+  hiddenWeekdays?: number[];
+  /** `null` limpa a escolha; ausente preserva. */
+  initialView?: AgendaInitialView | null;
 }
 
 export interface ReminderSettingsInput {
@@ -104,6 +115,33 @@ export class BffSettingsService {
       method: "PATCH",
       path: "/v1/settings/reminders",
       schema: routeSchema<ReminderSettings>("PATCH", "/v1/settings/reminders"),
+      signal,
+    });
+  }
+
+  getAgendaViewPreference(signal?: AbortSignal) {
+    return this.http.request({
+      path: "/v1/settings/agenda-view",
+      schema: routeSchema<AgendaViewPreference>(
+        "GET",
+        "/v1/settings/agenda-view",
+      ),
+      signal,
+    });
+  }
+
+  updateAgendaViewPreference(
+    input: AgendaViewPreferenceInput,
+    signal?: AbortSignal,
+  ) {
+    return this.http.request({
+      body: input,
+      method: "PATCH",
+      path: "/v1/settings/agenda-view",
+      schema: routeSchema<AgendaViewPreference>(
+        "PATCH",
+        "/v1/settings/agenda-view",
+      ),
       signal,
     });
   }

@@ -85,12 +85,12 @@ describe("prompt montado: sem persona, identidade transparente e versao por esti
     // `npx vitest run tests/prompts/system.test.ts` apos a mudanca, nao
     // calculados a mao.
     expect(derivePromptVersion("PROFESSIONAL")).toBe(
-      "prompt-v7-professional-b283950244",
+      "prompt-v8-professional-36396ecf5d",
     );
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v7-balanced-91590a238c",
+      "prompt-v8-balanced-af0051dd08",
     );
-    expect(derivePromptVersion("CASUAL")).toBe("prompt-v7-casual-773009abef");
+    expect(derivePromptVersion("CASUAL")).toBe("prompt-v8-casual-6b5bca3eb9");
   });
 
   it("o prompt montado embute exatamente a versao retornada para o estilo usado", () => {
@@ -148,7 +148,7 @@ describe("prompt montado: modo sugestao (Goal012/WU-04)", () => {
 
   it("a secao do modo sugestao entra no hash estavel: mudar o template de sugestao muda a versao do prompt normal tambem", () => {
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v7-balanced-91590a238c",
+      "prompt-v8-balanced-af0051dd08",
     );
   });
 
@@ -204,7 +204,7 @@ describe("prompt montado: audio transcrito (Goal013/WU-03)", () => {
     // poder chegar como voz virada em texto; o hash abaixo muda sozinho se
     // alguem mexer na secao sem decidir isso de novo.
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v7-balanced-91590a238c",
+      "prompt-v8-balanced-af0051dd08",
     );
   });
 });
@@ -380,7 +380,7 @@ describe("prompt montado: resposta ao lembrete (Goal021/WU-008)", () => {
 
   it("a secao de resposta ao lembrete entra no hash estavel: o bump para v5 e a versao conscientemente atualizada por causa dela", () => {
     expect(derivePromptVersion("BALANCED")).toBe(
-      "prompt-v7-balanced-91590a238c",
+      "prompt-v8-balanced-af0051dd08",
     );
   });
 });

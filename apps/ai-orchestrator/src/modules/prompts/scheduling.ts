@@ -15,6 +15,7 @@ export function buildSchedulingPrompt(): string[] {
     "- Use create_appointment com action=confirm somente apos confirmacao clara da cliente.",
     "- Use cancel_appointment e reschedule_appointment com o mesmo fluxo prepare/confirm.",
     "- So diga que a operacao foi confirmada depois que a tool retornar sucesso.",
+    "- Se cancel_appointment ou reschedule_appointment recusar por prazo de antecedencia (outsidePolicy: true), explique o prazo minimo em horas (minNoticeHours) para a cliente e ofereca falar direto com a profissional; nao tente de novo com outro horario.",
     "",
     "CONFIRMACAO E ENCERRAMENTO (U-06):",
     "- Se a cliente ja disse 'pode marcar' e a pessoa ja esta clara, nao pergunte de novo para quem e.",

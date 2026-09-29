@@ -45,6 +45,8 @@ const getWhatsapp = vi.fn();
 const updateBusiness = vi.fn();
 const updateAi = vi.fn();
 const updateAvailability = vi.fn();
+const getAgendaViewPreference = vi.fn();
+const updateAgendaViewPreference = vi.fn();
 const getReminders = vi.fn();
 const updateReminders = vi.fn();
 const getRetention = vi.fn();
@@ -71,7 +73,9 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
     serviceCatalog: { list: serviceCatalogList },
     settings: {
       get: getSettings,
+      getAgendaViewPreference,
       getReminders,
+      updateAgendaViewPreference,
       updateAi,
       updateAvailability,
       updateBusiness,
@@ -101,6 +105,7 @@ function settingsFixture(overrides: Partial<SettingsState> = {}): SettingsState 
   return {
     ai: { enabled: true, tone: "BALANCED" },
     availability: {
+      customerChangeMinNoticeMinutes: 0,
       granularityMinutes: 30,
       maxLeadDays: 90,
       minLeadMinutes: 0,
@@ -199,6 +204,10 @@ beforeEach(() => {
     confirmationEnabled: false,
     pricePolicy: "NEVER",
     rules: [{ slot: "FIRST", leadMinutes: 1_440 }],
+  });
+  getAgendaViewPreference.mockResolvedValue({
+    hiddenWeekdays: [],
+    initialView: null,
   });
   getRetention.mockResolvedValue(retentionFixture());
   knowledgeList.mockResolvedValue([knowledgeDocumentFixture()]);

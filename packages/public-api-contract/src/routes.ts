@@ -4,6 +4,7 @@ import {
   accountDeletionResultSchema,
   accountProfileResultSchema,
   activationTestRunSchema,
+  agendaViewPreferenceSchema,
   appointmentEventSchema,
   appointmentHoldSchema,
   appointmentLifecycleSchema,
@@ -220,6 +221,8 @@ export const publicApiRoutes: readonly PublicApiRoute[] = [
   { method: "PATCH", pathPattern: "/v1/settings/availability", schema: availabilitySettingsSchema },
   { method: "GET", pathPattern: "/v1/settings/reminders", schema: reminderSettingsSchema },
   { method: "PATCH", pathPattern: "/v1/settings/reminders", schema: reminderSettingsSchema },
+  { method: "GET", pathPattern: "/v1/settings/agenda-view", schema: agendaViewPreferenceSchema },
+  { method: "PATCH", pathPattern: "/v1/settings/agenda-view", schema: agendaViewPreferenceSchema },
 
   // status
   { method: "GET", pathPattern: "/v1/status", schema: systemStatusSchema },

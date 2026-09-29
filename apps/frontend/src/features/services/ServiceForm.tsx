@@ -13,9 +13,9 @@ import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { CurrencyInput } from "@/shared/ui/CurrencyInput";
 
+import { formatServicePreview } from "./serviceFormatting";
 import {
   DirectoryHeader,
-  DirectorySourceStrip,
   DirectoryState,
   requestError,
 } from "./ServiceList";
@@ -53,6 +53,8 @@ export function ServiceForm({
   const router = useRouter();
   const [catalog, setCatalog] = useState<ServiceListResult | null>(null);
   const [service, setService] = useState<Service | null>(null);
+  const [name, setName] = useState("");
+  const [durationValue, setDurationValue] = useState("");
   const [priceType, setPriceType] = useState<Service["priceType"]>("FIXED");
   const [priceCents, setPriceCents] = useState<number | null>(null);
   const [priceError, setPriceError] = useState<string | null>(null);
@@ -79,6 +81,10 @@ export function ServiceForm({
           return;
         }
         setService(found);
+        setName(found.name);
+        setDurationValue(
+          found.durationMinutes === null ? "" : String(found.durationMinutes),
+        );
         setPriceType(found.priceType);
         setPriceCents(
           found.price === null ? null : Math.round(found.price * 100),
@@ -146,6 +152,25 @@ export function ServiceForm({
     }
   }
 
+  function incrementDuration() {
+    setDurationValue((current) =>
+      current === "" ? "5" : String(Number(current) + 5),
+    );
+  }
+
+  function decrementDuration() {
+    setDurationValue((current) =>
+      current === "" ? current : String(Math.max(5, Number(current) - 5)),
+    );
+  }
+
+  const preview = formatServicePreview({
+    durationMinutes: durationValue === "" ? null : Number(durationValue),
+    name,
+    priceCents,
+    priceType,
+  });
+
   useShellConfig({
     active: "servicos",
     loading: !catalog && !error,
@@ -160,7 +185,6 @@ export function ServiceForm({
           description="Defina o que a IA pode oferecer ao criar novos agendamentos."
           back="/servicos"
         />
-        <DirectorySourceStrip />
         {error ? (
           <DirectoryState
             actionHref="/servicos"
@@ -199,29 +223,72 @@ export function ServiceForm({
                 <span className="label">Nome do serviço</span>
                 <input
                   className="input"
-                  defaultValue={service?.name}
                   maxLength={200}
                   name="name"
                   required
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
                 />
               </label>
-              <label className="field">
-                <span className="label">Duração (minutos)</span>
-                <input
-                  className="input"
-                  defaultValue={service?.durationMinutes ?? ""}
-                  min={1}
-                  name="duration"
-                  placeholder="Ex.: 45"
-                  step={1}
-                  type="number"
-                />
+              <div className="field">
+                <label className="label" htmlFor="service-duration">
+                  Duração (minutos)
+                </label>
+                <span className="service-duration-control">
+                  <button
+                    aria-label="Diminuir duração"
+                    className="btn btn-tertiary service-duration-step"
+                    type="button"
+                    onClick={decrementDuration}
+                  >
+                    −
+                  </button>
+                  <input
+                    className="input"
+                    id="service-duration"
+                    min={1}
+                    name="duration"
+                    placeholder="Ex.: 45"
+                    step={1}
+                    type="number"
+                    value={durationValue}
+                    onChange={(event) => setDurationValue(event.target.value)}
+                  />
+                  <button
+                    aria-label="Aumentar duração"
+                    className="btn btn-tertiary service-duration-step"
+                    type="button"
+                    onClick={incrementDuration}
+                  >
+                    +
+                  </button>
+                  <span aria-hidden="true" className="service-duration-unit">
+                    min
+                  </span>
+                </span>
+                <span
+                  aria-label="Atalhos de duração"
+                  className="service-duration-shortcuts"
+                  role="group"
+                >
+                  {[30, 60, 90].map((minutes) => (
+                    <button
+                      aria-pressed={durationValue === String(minutes)}
+                      className="btn btn-tertiary service-duration-shortcut"
+                      key={minutes}
+                      type="button"
+                      onClick={() => setDurationValue(String(minutes))}
+                    >
+                      {minutes}
+                    </button>
+                  ))}
+                </span>
                 <span className="field-help">
                   Deixe em branco quando ainda não for possível informar a
                   duração. Isso mantém o serviço pendente de revisão, em vez
                   de inventar um valor.
                 </span>
-              </label>
+              </div>
               <fieldset className="directory-fieldset">
                 <legend>Tipo de preço</legend>
                 <div className="directory-segmented">
@@ -272,6 +339,12 @@ export function ServiceForm({
                     {priceError ??
                       "Uma alteração vale para novos agendamentos; o histórico é preservado."}
                   </span>
+                </div>
+              )}
+              {preview && (
+                <div className="field is-wide service-preview">
+                  <span className="label">Prévia · como a IA responde</span>
+                  <p className="service-preview-text">“{preview}”</p>
                 </div>
               )}
             </div>

@@ -3113,3 +3113,39 @@ Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal075-2026-09-29-d-09
 [review075](reviews/075-review.md) (rodada 2 do IA Loop, sem blocker; os
 gates da rodada 2 passaram, inclusive `validate:integration` no próprio IA
 Loop).
+
+## Fidelidade visual de Serviços: três grupos, linha "duração · preço", filete, − e + na duração e a frase "A IA responde", do Goal076
+
+`apps/frontend/` troca a grade de tabela de Serviços por três grupos (Precisa de revisão, Ativos, Inativos), com a linha "duração · preço", o filete na cor de `colorToken`, "Corrigir" nas pendências e ativar/desativar na própria linha; o formulário ganha − e + de 5 minutos, atalhos 30/60/90 e a frase "A IA responde", prévia rotulada como tal. Nenhum contrato, rota ou migration muda. `e2e/routes.ts` fica na baseline.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `groups` (`ServiceList.tsx`, `useMemo`): `needsReview` sempre em "Precisa de revisão"; ativos fora de revisão em ordem pt-BR; inativos fora de revisão sob separador | O filtro Todos/Ativos/Inativos, que saiu — os grupos o substituem |
+| `formatServiceLine`/`formatServiceDuration`/`formatServicePrice` (`serviceFormatting.ts`): a linha "duração · preço", com recorrência e "a IA não oferece" no inativo | A origem "Agenda Atendly" por linha, que saiu |
+| `.service-row-accent` (`atendly-services.css`): `background: var(--swatch, var(--border-strong))`, a mesma variável da prévia de cor do formulário | O texto da linha, que nunca depende da cor |
+| `.service-row-link` com `aria-label` `Editar <nome>` cobre a linha inteira; "Corrigir <nome>" só nas pendências | Exclusão de serviço, que não existe |
+| Ativar/desativar num botão em `.service-row-actions`, com o mesmo diálogo e o mesmo `PATCH /v1/services/:id` | O formulário de edição, que não ganhou essa ação |
+| `incrementDuration`/`decrementDuration` (`ServiceForm.tsx`): passo de 5 minutos, "−" não desce de 5, "+" com campo vazio põe 5; atalhos 30/60/90 com `aria-pressed` | A validação do Goal058 (`min`/`step` do `input[name="duration"]`), que não muda |
+| `formatServicePreview` (`serviceFormatting.ts`): a frase por tipo de preço, rotulada "Prévia · como a IA responde" | O texto que o modelo realmente vai gerar — a frase é só prévia do frontend |
+
+**Divergência declarada:** a frase "A IA responde" não usa artigo diante do nome do serviço, porque o frontend não conhece o gênero do nome. Detalhe em [D-091](DECISIONS.md).
+
+**`directory-row` só como marcador.** Todas as regras CSS de `.directory-row` saem de `atendly-services.css`; a classe continua no `<li className="directory-row service-row">` da linha só porque o seletor travado do gate autenticado a usa, sem nenhuma regra CSS em `apps/frontend/src`.
+
+**Desvio declarado do §8 do Goal, autorizado pelo review076, rodada 1:** `e2e/authenticated-matrix.spec.ts` mudou, contra o "fica como está" do §8. Motivo: o serviço semeado de 60 min passa a aparecer como "1 h" na linha que o design exige. A única linha mudada é, em `saveDurationByForm`, `toContainText(\`${minutes} min\`)` → `toContainText(expectedDurationText(minutes))`, mais o helper `expectedDurationText`, que espelha `formatServiceDuration`. A asserção não foi afrouxada: a linha `.directory-row` do serviço semeado ainda tem de mostrar a duração salva.
+
+**Vermelho da baseline `faa0943` dos dois testes novos**, rodado de novo na rodada 3 do IA Loop contra a árvore vigente, sem edição de código, com `ServiceList.tsx` e `ServiceForm.tsx` servidos de `git show faa0943:<arquivo>` e restaurados com `git hash-object` idêntico antes e depois (`ServiceList.tsx` `2a4a4f4a…`, `ServiceForm.tsx` `867d8a86…`, `serviceFormatting.ts` `aa4003ba…`): `npx vitest run tests/goal076-service-list.test.tsx tests/goal076-service-form.test.tsx` — exit 1, `Test Files 2 failed (2)`, `Tests 14 failed | 5 passed (19)`. Contra a árvore do Goal, os mesmos dois arquivos passam: `Tests 19 passed (19)`. Saída em [FINAL_AUDIT §52](FINAL_AUDIT.md).
+
+**Seis controles negativos do §5, aplicados e revertidos** na rodada 3, depois da execução final da rodada 2 e sem edição de código entre as duas, saída colada em [FINAL_AUDIT §52](FINAL_AUDIT.md): (1) a origem "Agenda Atendly" de volta na linha: reprova o §4.1, `Tests 1 failed | 5 passed (6)`. (2) o pendente sem grupo próprio: reprova o §4.2, `Tests 1 failed | 5 passed (6)`. (3) o link sem `Editar <nome>`: reprova o teste de §4.3 com `editable` e o de §4.2, que lê os nomes dos links, `Tests 2 failed | 4 passed (6)`. (4) "+" somando 1 minuto: reprova o §4.5, `Tests 1 failed | 2 passed | 10 skipped (13)`. (5) `STARTING_AT` sem "a partir de": reprova dois casos do §4.6, `Tests 2 failed | 6 passed | 5 skipped (13)`. (6) `DirectorySourceStrip` de volta ao formulário: reprova os dois casos do §4.7, `Tests 2 failed | 11 skipped (13)`. Cada um passa sem o defeito, e os três arquivos-alvo voltam ao mesmo `git hash-object` depois de cada controle (`ServiceList.tsx` `2a4a4f4a562dcacc1c36fd3b847594813f0abc92`, `ServiceForm.tsx` `867d8a86fcf8db647af35d941f1c9608d305c2a1`, `serviceFormatting.ts` `aa4003ba1d464f855ddddaacada60bae298b385b`).
+
+**Execução final, da rodada 2 do IA Loop, depois da última edição de código** (o FIX-001 da rodada 2 em `ServiceList.tsx`): `npm run validate:core` (WU-08) — **17** passos, **15** `passed`, **0** `failed`, **2** `skipped` (`test:bff`, `test:health-worker`), exit 0. `npx tsc --noEmit` (WU-03) e `npm run lint` (WU-04) em `apps/frontend`, exit 0 nos dois. `npm run test:gate` (WU-09) — **233**/**233**, exit 0, mesma contagem da baseline. `npm run validate:ui` (WU-10) — `e2e-results/results.json` com `startTime` `2026-09-29T19:50:45Z`: **169** `passed`, **21** `skipped`, **0** `unexpected`, **0** retentativas, exit 0. `npm run validate:integration` (WU-11, contra o PostgreSQL descartável do IA Loop em `127.0.0.1:55500/ia_bff_test`) — **36**/**36** passos, exit 0; gate autenticado (`rehearse:goal033-authenticated-ui`) em `e2e-results/authenticated/results.json` com `startTime` `2026-09-29T19:53:55Z`: **155** `passed`, **0** `unexpected`, **0** retentativas, medindo `/servicos` nas cinco larguras — mesma contagem da baseline. Na rodada 3, contra a mesma árvore, `npx vitest run` (`apps/frontend`, a suíte de `test:frontend`) deu **108**/**108** arquivos e **1119**/**1119** testes (baseline **106**/**1100**, **+2** arquivos e **+19** testes) e `npm run test:gate` de novo **233**/**233**, exit 0 nos dois.
+
+**Conferência humana pendente.** A conferência do §7 do Goal **não foi feita**: que a lista e o formulário, num aparelho real nas cinco larguras, com serviço pendente, ativo e inativo, batem com `Servicos.dc.html`, `Servicos-Tablet.dc.html` e `Servicos-Desktop.dc.html`; que o filete e o âmbar leem bem e que "duração · preço" cabe na linha em 360 e 390px sem esconder o nome; e que a frase sem artigo é aceitável frente ao protótipo.
+
+**O que esta seção não prova.** Não prova fidelidade visual de Serviços aos protótipos aprovados, nem que a IA usa "Instruções para a IA" (Goal078), nem de Conversas e da central de notificações (Goal077) ou do onboarding (Goal072). `validate:integration` e o gate autenticado são a execução da WU-11 da rodada 2 do IA Loop, contra o PostgreSQL descartável do IA Loop.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal076-2026-09-29-d-091-accepted),
+[FINAL_AUDIT §52](FINAL_AUDIT.md) e [D-091](DECISIONS.md), **ACCEPTED** no
+[review076](reviews/076-review.md) (rodada 3 do IA Loop, sem blocker; os
+gates da rodada 3 passaram, inclusive `validate:integration` no próprio IA
+Loop, com as mesmas contagens da execução final da rodada 2).

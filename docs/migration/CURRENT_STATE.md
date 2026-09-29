@@ -7517,3 +7517,128 @@ Goal075, **ACCEPTED** no [review075](reviews/075-review.md).
   conferência humana do §9 continua **não feita**. Ver a nota de
   fechamento de [D-090](DECISIONS.md) e o
   [review075](reviews/075-review.md).
+
+## Delta implementado — Goal076, 2026-09-29 ([D-091](DECISIONS.md), ACCEPTED)
+
+Corrige **SV-03** e **SV-05**, e a parte de **SV-04** sem "Instruções para
+a IA", do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md), fora da enumeração
+A-01…A-24 do FINAL_AUDIT. Só frontend: nenhum contrato, rota, schema do
+BFF ou migration muda. Toca `apps/frontend/`: `features/services/ServiceList.tsx`,
+`ServiceForm.tsx`, o arquivo novo `serviceFormatting.ts`,
+`shared/styles/atendly-services.css`, `e2e/authenticated-matrix.spec.ts`
+(só a linha da duração em `saveDurationByForm` e o helper
+`expectedDurationText`, desvio declarado do §8 abaixo), e os testes com
+`goal015` no nome que dependiam da composição antiga, mais dois testes
+novos `goal076-*.test.tsx`. `e2e/routes.ts` fica na baseline. Decisão:
+[D-091](DECISIONS.md), proposta no Goal076, **ACCEPTED** no
+[review076](reviews/076-review.md).
+
+- **Três grupos, cada um só quando não vazio.** Precisa de revisão
+  (`needsReview`), Ativos (fora de revisão, ordem pt-BR) e Inativos, sob
+  separador próprio; um inativo em revisão fica em "Precisa de revisão".
+  Sai o filtro Todos/Ativos/Inativos; a busca por nome continua, e grupo
+  que ela esvazia some. O resumo mostra só as partes não vazias, com
+  singular e plural certos.
+- **A linha "duração · preço".** Nome em destaque e, abaixo,
+  "duração · preço" (`formatServiceLine`), com " · a cada N semanas/dias"
+  na recorrência e " · a IA não oferece" no inativo. Duração:
+  "sem duração", "40 min", "1 h", "1 h 30". Preço: `FIXED` "R$ 90",
+  `STARTING_AT` "a partir de R$ 60", `ON_REQUEST` "sob consulta",
+  `NOT_INFORMED` "sem preço informado". Nenhuma linha repete "Agenda
+  Atendly".
+- **O filete na cor.** `.service-row-accent`, barra de 4px à esquerda da
+  linha, com `background: var(--swatch, var(--border-strong))` — a mesma
+  variável que a prévia de cor do formulário já usava; neutro sem cor. O
+  texto da linha nunca depende da cor.
+- **A linha inteira é o link `Editar <nome>`**, porque o gate autenticado a
+  abre por esse nome. "Corrigir <nome>" é um link a mais, só nas
+  pendências. Ativar/desativar ficam num botão na própria linha, com o
+  mesmo diálogo e o mesmo `PATCH`; sem `editable`, só "Somente leitura".
+- **Duração com − e + de 5 minutos** (`.service-duration-step`, 44×44px,
+  "Diminuir duração"/"Aumentar duração"; "−" não desce de 5, "+" com campo
+  vazio põe 5) e **atalhos 30/60/90** (`aria-pressed` no valor igual),
+  sem mudar a validação do Goal058.
+- **A frase "A IA responde"**, prévia do frontend rotulada como tal, por
+  tipo de preço, atualizada a cada mudança de nome, duração, tipo ou
+  valor. **Divergência declarada:** sem artigo diante do nome, porque o
+  gênero não é conhecido. Detalhe em [D-091](DECISIONS.md).
+- **Copy técnica sai.** `DirectorySourceStrip` ("Gerenciado pela Agenda
+  Atendly", "Controle completo") deixa de ser chamada na lista e no
+  formulário; a origem "Agenda Atendly" por linha sai.
+- **"Instruções para a IA" fica para o Goal078** — nenhum campo, prompt ou
+  contrato muda neste Goal.
+- **`directory-row` só como marcador.** Todas as regras CSS de
+  `.directory-row` saem de `atendly-services.css`; a classe continua no
+  `<li className="directory-row service-row">` da linha só porque o
+  seletor travado do gate autenticado a usa, sem nenhuma regra CSS em
+  `apps/frontend/src`.
+- **Desvio declarado do §8 do Goal, autorizado pelo review076, rodada 1.**
+  `e2e/authenticated-matrix.spec.ts` mudou, contra o "fica como está" do
+  §8, porque o serviço semeado de 60 min passa a aparecer como "1 h" na
+  linha que o design exige. A única linha mudada é, em
+  `saveDurationByForm`, `toContainText(\`${minutes} min\`)` →
+  `toContainText(expectedDurationText(minutes))`, mais o helper
+  `expectedDurationText`, que espelha `formatServiceDuration`. A asserção
+  não foi afrouxada: a linha `.directory-row` do serviço semeado ainda tem
+  de mostrar a duração salva.
+- **Vermelho da baseline `faa0943` dos dois testes novos**, rodado de novo
+  na rodada 3 do IA Loop contra a árvore vigente, sem edição de código,
+  com `ServiceList.tsx` e `ServiceForm.tsx` servidos de
+  `git show faa0943:<arquivo>` e restaurados com `git hash-object`
+  idêntico antes e depois: exit 1, `Tests 14 failed | 5 passed (19)`.
+  Contra a árvore do Goal: `Tests 19 passed (19)`. Saída em
+  [FINAL_AUDIT §52](FINAL_AUDIT.md).
+- **Seis controles negativos do §5**, rodados na rodada 3 contra a árvore
+  vigente, depois da execução final da rodada 2 e sem edição de código
+  entre as duas, com `git hash-object` idêntico antes e depois de cada um
+  (`ServiceList.tsx` `2a4a4f4a562dcacc1c36fd3b847594813f0abc92`,
+  `ServiceForm.tsx` `867d8a86fcf8db647af35d941f1c9608d305c2a1`,
+  `serviceFormatting.ts` `aa4003ba1d464f855ddddaacada60bae298b385b`):
+  origem "Agenda Atendly" de volta na linha reprova o §4.1; pendente sem
+  grupo próprio reprova o §4.2; link sem `Editar <nome>` reprova o teste
+  de §4.3 com `editable` e o de §4.2, que lê os nomes dos links; "+"
+  somando 1 minuto reprova o §4.5; `STARTING_AT` sem "a partir de"
+  reprova dois casos do §4.6; `DirectorySourceStrip` de volta ao
+  formulário reprova os dois casos do §4.7. Revertidos os seis, os dois
+  arquivos `goal076-*.test.tsx` voltam a **19**/**19**. Saída em
+  [FINAL_AUDIT §52](FINAL_AUDIT.md).
+- **Execução final**, da rodada 2 do IA Loop, depois da última edição de
+  código (o FIX-001 da rodada 2 em `ServiceList.tsx`): `validate:core`
+  (WU-08) **17** passos, **15** `passed`, **2** `skipped`, exit 0;
+  `typecheck` (WU-03) e `lint` (WU-04) exit 0; `test:gate` (WU-09)
+  **233**/**233**; `validate:ui` (WU-10, `startTime`
+  `2026-09-29T19:50:45Z`) **169** `passed`, **21** `skipped`, **0**
+  retentativas; `validate:integration` (WU-11, PostgreSQL descartável do
+  IA Loop) **36**/**36** passos, com o gate autenticado
+  (`rehearse:goal033-authenticated-ui`, `startTime`
+  `2026-09-29T19:53:55Z`) em **155** `passed`, **0** retentativas,
+  medindo `/servicos` nas cinco larguras — mesma contagem da baseline. Na
+  rodada 3, contra a mesma árvore, `test:frontend` (`npx vitest run`)
+  deu **108**/**108** arquivos e **1119**/**1119** testes (baseline
+  **106**/**1100**) e `test:gate` de novo **233**/**233**. Detalhe em
+  [FINAL_AUDIT §52](FINAL_AUDIT.md).
+- **Conferência humana pendente:** a conferência do §7 do Goal **não foi
+  feita** — que a lista e o formulário, num aparelho real nas cinco
+  larguras, com serviço pendente, ativo e inativo, batem com
+  `Servicos.dc.html`, `Servicos-Tablet.dc.html` e
+  `Servicos-Desktop.dc.html`; que o filete e o âmbar leem bem e que
+  "duração · preço" cabe na linha em 360 e 390px sem esconder o nome; e
+  que a frase sem artigo é aceitável frente ao protótipo.
+- **Limites declarados:** "Instruções para a IA" (Goal078), Conversas e a
+  central de notificações (Goal077) e o onboarding (Goal072) não são
+  tocados; o Product Vault e `docs/design-reference/` não foram
+  editados — ver [D-091](DECISIONS.md).
+
+- **Fechamento — review076, 2026-09-29.** Aceito na rodada 3 do IA Loop,
+  sem blocker; rodadas 1 e 2 `CHANGES_REQUIRED` com 2 blockers cada (o
+  spec do gate mudado além do autorizado, a execução final anterior à
+  última edição de código e, na rodada 2, documentos escritos antes da
+  correção e controles não refeitos). Na rodada 3 os gates do IA Loop
+  passaram todos, inclusive `validate:integration`, com as mesmas
+  contagens da rodada 2 na mesma árvore; o Tech Lead reexecutou os testes
+  `goal076-*`, `goal015-services`, `goal015-shell-invariant` e
+  `goal058-service-form` (44/44). A prévia "A IA responde" ainda monta
+  texto com a duração inválida e sobra o ponto e vírgula em
+  `NOT_INFORMED` sem duração. A conferência humana do §7 continua **não
+  feita**. Ver a nota de fechamento de [D-091](DECISIONS.md) e o
+  [review076](reviews/076-review.md).

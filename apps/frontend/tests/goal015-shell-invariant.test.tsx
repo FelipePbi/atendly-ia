@@ -172,7 +172,7 @@ describe("ShellConfigProvider + tela real de Serviços não excede a profundidad
     serviceCatalogList.mockReset();
   });
 
-  test("lista carrega e responde à alternância de filtro", async () => {
+  test("lista carrega e responde à busca digitada caractere a caractere", async () => {
     serviceCatalogList.mockResolvedValue({
       editable: true,
       items: [
@@ -188,9 +188,9 @@ describe("ShellConfigProvider + tela real de Serviços não excede a profundidad
       </ShellConfigProvider>,
     );
 
-    expect(await screen.findByText("2 serviços")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Ativos" }));
-    expect(await screen.findByText("1 serviço")).toBeVisible();
+    expect(await screen.findByText("1 ativo · 1 inativo")).toBeVisible();
+    await user.type(screen.getByPlaceholderText("Buscar serviço"), "Escova");
+    expect(await screen.findByText("1 inativo")).toBeVisible();
   });
 
   test("formulário de novo serviço responde à troca repetida do tipo de preço", async () => {

@@ -1263,6 +1263,23 @@ const REACHED_BY_CLICK: ReachedByClick[] = [
 ];
 
 /**
+ * The list's own duration text (Goal076): hours and minutes, not raw
+ * minutes — `formatServiceDuration` in
+ * `src/features/services/serviceFormatting.ts` is the source of this, and a
+ * literal `${minutes} min` here would drift the moment that source changes.
+ * Mirrored instead of imported: this spec keeps its own expectations, the
+ * same way it keeps its own `routes.ts` and `measure.ts` rather than
+ * reaching into `src/**`.
+ */
+function expectedDurationText(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  if (hours === 0) return `${remainder} min`;
+  if (remainder === 0) return `${hours} h`;
+  return `${hours} h ${remainder}`;
+}
+
+/**
  * Opens the seeded duration service by click, types `minutes`, saves by
  * click, and proves the BFF's answer and the list. Returns on the list.
  */
@@ -1316,7 +1333,7 @@ async function saveDurationByForm(page: Page, minutes: number, testInfo: TestInf
   await expect(
     page.locator(".directory-row", { hasText: SEED.durationServiceName }),
     `${what}: the list does not show the saved duration.`,
-  ).toContainText(`${minutes} min`, { timeout: CONTENT_TIMEOUT_MS });
+  ).toContainText(expectedDurationText(minutes), { timeout: CONTENT_TIMEOUT_MS });
 }
 
 test.describe("reached by real click", () => {

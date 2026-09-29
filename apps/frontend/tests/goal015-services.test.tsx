@@ -66,9 +66,6 @@ beforeEach(() => {
 
 describe("as quatro semânticas de preço", () => {
   test("fixo, a partir de, sob consulta e não informado renderizam textos distintos", async () => {
-    const fixedText = /^R\$\s*150,00$/;
-    const startingAtText = /^A partir de R\$\s*80,00$/;
-
     serviceCatalogList.mockResolvedValue({
       editable: true,
       items: [
@@ -101,11 +98,11 @@ describe("as quatro semânticas de preço", () => {
       </ShellConfigProvider>,
     );
 
-    expect(await screen.findByText("4 serviços")).toBeVisible();
-    expect(screen.getByText(fixedText)).toBeVisible();
-    expect(screen.getByText(startingAtText)).toBeVisible();
-    expect(screen.getByText("Sob consulta")).toBeVisible();
-    expect(screen.getByText("Não informado")).toBeVisible();
+    expect(await screen.findByText("4 ativos")).toBeVisible();
+    expect(screen.getByText("45 min · R$ 150")).toBeVisible();
+    expect(screen.getByText("45 min · a partir de R$ 80")).toBeVisible();
+    expect(screen.getByText("45 min · sob consulta")).toBeVisible();
+    expect(screen.getByText("45 min · sem preço informado")).toBeVisible();
   });
 });
 
@@ -140,7 +137,7 @@ describe("pendência de revisão", () => {
 
     expect(await screen.findByText("Revisar · importado")).toBeVisible();
     expect(screen.getByText("Revisar · cadastro manual")).toBeVisible();
-    expect(screen.getAllByText("Não informada")).toHaveLength(2);
+    expect(screen.getAllByText("sem duração · R$ 80")).toHaveLength(2);
   });
 });
 
@@ -189,7 +186,7 @@ describe("acessibilidade das telas novas de Serviços", () => {
         <ProductServicesScreen scenario="list" />
       </ShellConfigProvider>,
     );
-    await screen.findByText("2 serviços");
+    await screen.findByText("1 ativo · 1 precisa de revisão");
     await expectNoA11yViolations(container);
   });
 

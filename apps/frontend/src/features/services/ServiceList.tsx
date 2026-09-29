@@ -1,6 +1,5 @@
 "use client";
 
-import clsx from "clsx";
 import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
@@ -11,11 +10,12 @@ import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Badge } from "@/shared/ui/Badge";
 import { Dialog } from "@/shared/ui/Dialog";
 
+import { formatServiceLine } from "./serviceFormatting";
+
 export function ServiceList() {
   const [result, setResult] = useState<ServiceListResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"active" | "all" | "inactive">("all");
   const [pending, setPending] = useState<Service | null>(null);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -35,16 +35,23 @@ export function ServiceList() {
     return () => controller.abort();
   }, [reload]);
 
-  const services = useMemo(() => {
+  const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("pt-BR");
-    return (result?.items ?? []).filter(
-      (service) =>
-        service.name.toLocaleLowerCase("pt-BR").includes(normalized) &&
-        (filter === "all" ||
-          (filter === "active" && service.active) ||
-          (filter === "inactive" && !service.active)),
+    return (result?.items ?? []).filter((service) =>
+      service.name.toLocaleLowerCase("pt-BR").includes(normalized),
     );
-  }, [filter, query, result]);
+  }, [query, result]);
+
+  const groups = useMemo(() => {
+    const review = filtered.filter((service) => service.needsReview);
+    const active = filtered
+      .filter((service) => service.active && !service.needsReview)
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    const inactive = filtered.filter(
+      (service) => !service.active && !service.needsReview,
+    );
+    return { active, inactive, review };
+  }, [filtered]);
 
   async function changeStatus() {
     if (!pending || !result?.editable) return;
@@ -96,7 +103,6 @@ export function ServiceList() {
             ) : null
           }
         />
-        <DirectorySourceStrip />
         {feedback && (
           <p className="directory-retry-status" role="status">
             {feedback}
@@ -115,116 +121,60 @@ export function ServiceList() {
             }}
             title="Não foi possível carregar serviços"
           />
-        ) : services.length === 0 && !query && filter === "all" ? (
+        ) : result && result.items.length === 0 ? (
           <DirectoryState
-            actionHref={result?.editable ? "/servicos/novo" : undefined}
-            actionLabel={
-              result?.editable ? "Cadastrar primeiro serviço" : undefined
-            }
+            actionHref={result.editable ? "/servicos/novo" : undefined}
+            actionLabel={result.editable ? "Cadastrar primeiro serviço" : undefined}
             description="A IA só oferece serviços ativos com duração e preço ou valor sob consulta."
             title="Cadastre seu primeiro serviço"
           />
         ) : (
           <>
-            <DirectoryToolbar
-              filter={filter}
-              filters={[
-                ["all", "Todos"],
-                ["active", "Ativos"],
-                ["inactive", "Inativos"],
-              ]}
-              query={query}
-              onFilter={(value) => setFilter(value as typeof filter)}
-              onQuery={setQuery}
-            />
+            <section className="directory-toolbar" aria-label="Busca">
+              <label className="directory-search">
+                <span className="sr-only">Buscar</span>
+                <Icon name="search" />
+                <input
+                  className="input"
+                  type="search"
+                  placeholder="Buscar serviço"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              </label>
+            </section>
             <section className="directory-list-surface">
               <div className="directory-list-meta">
                 <strong>Serviços cadastrados</strong>
-                <span>
-                  {services.length}{" "}
-                  {services.length === 1 ? "serviço" : "serviços"}
-                </span>
+                <span>{summaryLine(groups)}</span>
               </div>
-              <div
-                className="directory-grid-head service-grid"
-                aria-hidden="true"
-              >
-                <span>Serviço</span>
-                <span>Duração</span>
-                <span>Preço</span>
-                <span>Status</span>
-                <span>Ação</span>
-                <span />
-              </div>
-              <div>
-                {services.map((service) => (
-                  <div className="directory-row service-grid" key={service.id}>
-                    <span className="directory-row-main">
-                      <span className="directory-source-icon">
-                        <Icon name="briefcase" />
-                      </span>
-                      <span className="directory-row-copy">
-                        <strong>{service.name}</strong>
-                        <span>Agenda Atendly</span>
-                      </span>
-                    </span>
-                    <span className="directory-cell">
-                      <span className="directory-cell-label">Duração</span>
-                      {formatServiceDuration(service)}
-                    </span>
-                    <span className="directory-cell">
-                      <span className="directory-cell-label">Preço</span>
-                      <strong>{formatPrice(service)}</strong>
-                    </span>
-                    <span className="directory-cell">
-                      <span className="directory-cell-label">Status</span>
-                      <span className="directory-row-badges">
-                        <Badge
-                          label={service.active ? "Ativo" : "Inativo"}
-                          tone={service.active ? "success" : "neutral"}
-                        />
-                        {service.needsReview && (
-                          <Badge
-                            icon="alert"
-                            label={`Revisar · ${reviewOriginLabel(service.reviewOrigin)}`}
-                            tone="warning"
-                          />
-                        )}
-                      </span>
-                    </span>
-                    <span className="directory-cell">
-                      <span className="directory-cell-label">Ação</span>
-                      {result?.editable ? (
-                        <button
-                          className="btn btn-tertiary"
-                          type="button"
-                          onClick={() => setPending(service)}
-                        >
-                          {service.active ? "Desativar" : "Ativar"}
-                        </button>
-                      ) : (
-                        <span className="muted small">Somente leitura</span>
-                      )}
-                    </span>
-                    {result?.editable ? (
-                      <Link
-                        className="icon-btn directory-row-action"
-                        href={`/servicos/editar?id=${encodeURIComponent(service.id)}`}
-                        aria-label={`Editar ${service.name}`}
-                      >
-                        <Icon name="chevron-right" />
-                      </Link>
-                    ) : (
-                      <span className="directory-row-action">
-                        <Icon name="external" />
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {services.length === 0 && (
+              {!result?.editable && (
+                <p className="service-list-readonly-note">
+                  Serviços não podem ser editados aqui.
+                </p>
+              )}
+              <ServiceGroup
+                editable={Boolean(result?.editable)}
+                heading="Precisa de revisão"
+                services={groups.review}
+                tone="warning"
+                onToggleActive={setPending}
+              />
+              <ServiceGroup
+                editable={Boolean(result?.editable)}
+                heading="Ativos"
+                services={groups.active}
+                onToggleActive={setPending}
+              />
+              <ServiceGroup
+                editable={Boolean(result?.editable)}
+                heading="Inativos"
+                services={groups.inactive}
+                onToggleActive={setPending}
+              />
+              {filtered.length === 0 && (
                 <p className="directory-no-results">
-                  Nenhum serviço corresponde à busca e ao filtro.
+                  Nenhum serviço corresponde à busca.
                 </p>
               )}
             </section>
@@ -313,52 +263,6 @@ export function DirectorySourceStrip() {
   );
 }
 
-function DirectoryToolbar({
-  filter,
-  filters,
-  onFilter,
-  onQuery,
-  query,
-}: {
-  filter: string;
-  filters: Array<[string, string]>;
-  onFilter: (value: string) => void;
-  onQuery: (value: string) => void;
-  query: string;
-}) {
-  return (
-    <section className="directory-toolbar" aria-label="Busca e filtros">
-      <label className="directory-search">
-        <span className="sr-only">Buscar</span>
-        <Icon name="search" />
-        <input
-          className="input"
-          type="search"
-          placeholder="Buscar serviço"
-          value={query}
-          onChange={(event) => onQuery(event.target.value)}
-        />
-      </label>
-      <div className="directory-filters">
-        {filters.map(([value, label]) => (
-          <button
-            className={clsx(
-              "directory-filter",
-              filter === value && "is-active",
-            )}
-            type="button"
-            aria-pressed={filter === value}
-            onClick={() => onFilter(value)}
-            key={value}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function DirectoryLoading() {
   return (
     <div
@@ -429,26 +333,112 @@ export function requestError(error: unknown, fallback: string): string {
   return `${message} Referência: ${error.requestId}`;
 }
 
-function formatPrice(service: Service): string {
-  if (service.priceType === "NOT_INFORMED") return "Não informado";
-  if (service.priceType === "ON_REQUEST" || service.price === null) {
-    return "Sob consulta";
-  }
-  const amount = service.price.toLocaleString("pt-BR", {
-    currency: "BRL",
-    style: "currency",
-  });
-  return service.priceType === "STARTING_AT" ? `A partir de ${amount}` : amount;
-}
-
-function formatServiceDuration(service: Service): string {
-  return service.durationMinutes === null
-    ? "Não informada"
-    : `${service.durationMinutes} min`;
-}
-
 function reviewOriginLabel(origin: Service["reviewOrigin"]): string {
   if (origin === "IMPORT") return "importado";
   if (origin === "MANUAL") return "cadastro manual";
   return "origem não informada";
+}
+
+function summaryLine(groups: {
+  active: Service[];
+  inactive: Service[];
+  review: Service[];
+}): string {
+  const parts: string[] = [];
+  if (groups.active.length > 0) {
+    parts.push(
+      `${groups.active.length} ${groups.active.length === 1 ? "ativo" : "ativos"}`,
+    );
+  }
+  if (groups.review.length > 0) {
+    parts.push(
+      `${groups.review.length} precisa${
+        groups.review.length === 1 ? "" : "m"
+      } de revisão`,
+    );
+  }
+  if (groups.inactive.length > 0) {
+    parts.push(
+      `${groups.inactive.length} ${
+        groups.inactive.length === 1 ? "inativo" : "inativos"
+      }`,
+    );
+  }
+  return parts.join(" · ");
+}
+
+function ServiceGroup({
+  editable,
+  heading,
+  onToggleActive,
+  services,
+  tone,
+}: {
+  editable: boolean;
+  heading: string;
+  onToggleActive: (service: Service) => void;
+  services: Service[];
+  tone?: "warning";
+}) {
+  if (services.length === 0) return null;
+  return (
+    <div className="service-group">
+      <h2 className="service-group-heading" data-tone={tone}>
+        {heading}
+      </h2>
+      <ul className="service-group-list">
+        {services.map((service) => (
+          <li className="directory-row service-row" key={service.id}>
+            <span
+              aria-hidden="true"
+              className="service-row-accent"
+              data-color={service.colorToken ?? undefined}
+            />
+            {editable && (
+              <Link
+                aria-label={`Editar ${service.name}`}
+                className="service-row-link"
+                href={`/servicos/editar?id=${encodeURIComponent(service.id)}`}
+              />
+            )}
+            <span className="service-row-body">
+              <strong className="service-row-name">{service.name}</strong>
+              <span className="service-row-meta">
+                {formatServiceLine(service)}
+                {service.needsReview && (
+                  <Badge
+                    icon="alert"
+                    label={`Revisar · ${reviewOriginLabel(service.reviewOrigin)}`}
+                    tone="warning"
+                  />
+                )}
+              </span>
+            </span>
+            <span className="service-row-actions">
+              {editable && service.needsReview && (
+                <Link
+                  aria-label={`Corrigir ${service.name}`}
+                  className="btn btn-tertiary service-row-fix"
+                  href={`/servicos/editar?id=${encodeURIComponent(service.id)}`}
+                >
+                  Corrigir
+                </Link>
+              )}
+              {editable ? (
+                <button
+                  className="btn btn-tertiary"
+                  type="button"
+                  onClick={() => onToggleActive(service)}
+                >
+                  {service.active ? "Desativar" : "Ativar"}
+                </button>
+              ) : (
+                <span className="muted small">Somente leitura</span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }

@@ -254,9 +254,11 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
   /**
    * Envio manual assume a sessao.
    *
-   * Uma transacao so: marca o atendimento humano na sessao e no espelho legado
-   * da conversa. Nao existe "assumir depois de enviar" — quando a resposta
-   * automatica chegar ao guard de envio, o controle humano ja esta gravado.
+   * Uma transacao so: marca o atendimento humano na sessao, no espelho legado
+   * da conversa e, so na transicao real de IA para humano, no registro
+   * duravel de tomada (Goal074). Nao existe "assumir depois de enviar" —
+   * quando a resposta automatica chegar ao guard de envio, o controle humano
+   * ja esta gravado.
    */
   async assumeHumanControl(input: {
     tenantId: string;
@@ -267,6 +269,11 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
   }): Promise<SessionSnapshot> {
     const now = input.now ?? new Date();
     const session = await this.prisma.$transaction(async (tx) => {
+      const current = await tx.conversationSession.findUniqueOrThrow({
+        where: {
+          tenantId_id: { tenantId: input.tenantId, id: input.sessionId },
+        },
+      });
       const updated = await tx.conversationSession.update({
         where: {
           tenantId_id: { tenantId: input.tenantId, id: input.sessionId },
@@ -282,6 +289,21 @@ export class SessionService implements GraphSessionPort, CategorySuggestionPort 
         where: { tenantId: input.tenantId, id: updated.conversationId },
         data: { humanHandoff: true, status: "HUMAN_HANDOFF" },
       });
+      // So a transicao real vira registro: sessao ja em atendimento humano
+      // nao soma outra tomada, e BACKFILL reconstroi estado passado, nao uma
+      // tomada que aconteceu agora.
+      if (!current.humanHandling && input.source !== "BACKFILL") {
+        await tx.humanTakeover.create({
+          data: {
+            tenantId: input.tenantId,
+            sessionId: updated.id,
+            conversationId: updated.conversationId,
+            source: input.source,
+            actor: input.actor ?? null,
+            takenAt: now,
+          },
+        });
+      }
       return updated;
     });
     const contact = await this.requireContact(input.tenantId, session.contactId);

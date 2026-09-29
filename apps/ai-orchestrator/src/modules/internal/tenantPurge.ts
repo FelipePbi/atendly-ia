@@ -3,8 +3,9 @@ import { Prisma, type PrismaClient } from "../../generated/prisma/client.js";
 /**
  * Purga do negocio inteiro na IA (Goal025/WU-05).
  *
- * Nao existe tabela raiz de tenant na IA: `tenantId` esta espalhado por cerca
- * de 80 ocorrencias em 16 modelos do schema, entao a purga e enumeracao, nao
+ * Nao existe tabela raiz de tenant na IA: `tenantId` esta espalhado por
+ * varios modelos do schema (ver {@link TENANT_PURGE_TABLES}), entao a purga e
+ * enumeracao, nao
  * uma unica exclusao em cascata a partir de uma linha "Tenant". A lista abaixo
  * e o contrato com {@link ../../../tests/internal/tenant-purge.schema.test.ts}: toda
  * tabela com `tenantId` no schema precisa aparecer aqui, na ordem segura de
@@ -22,6 +23,7 @@ export const TENANT_PURGE_TABLES = [
   "MessageAttachment",
   "ActivationTestMilestone",
   "KnowledgeChunk",
+  "HumanTakeover",
   // Dependem de ChannelConnection e/ou Conversation.
   "AiRun",
   "ConversationSession",
@@ -82,6 +84,7 @@ const TABLE_META: Record<TenantPurgeTable, TableMeta> = {
     idColumn: "id",
   },
   KnowledgeChunk: { sql: Prisma.sql`"KnowledgeChunk"`, idColumn: "id" },
+  HumanTakeover: { sql: Prisma.sql`"HumanTakeover"`, idColumn: "id" },
   AiRun: { sql: Prisma.sql`"AiRun"`, idColumn: "id" },
   ConversationSession: {
     sql: Prisma.sql`"ConversationSession"`,

@@ -839,3 +839,23 @@ pré-existente; só deixa de exigir, gravar e devolver o nome até o binário
 novo voltar. Conta criada antes deste Goal permanece com `name` nulo até a
 pessoa dona da conta não ter como preenchê-lo retroativamente: não existe
 tela de edição de nome depois do cadastro (fora do escopo do Goal064).
+
+## 22. Registro durável de tomada de controle humano, sem backfill (Goal074)
+
+Diff074, [D-088](DECISIONS.md). Uma migration, **estritamente aditiva**, no orquestrador:
+
+| Migration | App | O que cria | Backfill |
+| --- | --- | --- | --- |
+| `20260929120000_goal074_human_takeover` | AI Orchestrator | Tabela `HumanTakeover` (`tenantId`, `sessionId`, `conversationId`, `source` `HumanControlSource`, `actor` nulável, `takenAt`), FK composta `(tenantId, sessionId)` → `ConversationSession(tenantId, id)` com `ON DELETE CASCADE`, índices por `(tenantId, takenAt)` e `(tenantId, conversationId, takenAt)` | Nenhum — nenhuma linha nasce para sessão que já estava em atendimento humano antes da migration; "nunca foi tomada por humano" e "foi tomada antes do registro existir" ficam indistinguíveis, por decisão declarada em [D-088](DECISIONS.md) |
+
+**Ensaio (`scripts/goal074-human-takeover-migration-rehearsal.mjs`, passo `rehearse:goal074-human-takeover-migration` de `validate:integration`, entre `rehearse:goal029-timezone-reconciliation` e `generate:ai-orchestrator-prisma-client`).** Contra um banco descartável próprio (`${BFF_TEST_DATABASE_URL}_goal074`, recriado a cada execução) com o recorte reduzido de `ConversationSession` de que a migration depende:
+
+- semeia uma sessão legada, já em atendimento humano antes deste Goal existir — o exemplo exato de dado que a migration não pode reescrever nem contar retroativamente;
+- aplica a migration real, a mesma que roda em produção, dentro de uma transação, e confere que a sessão legada continua byte a byte igual (mesmo `id`, `tenantId`, `conversationId`, `humanHandling`, `createdAt`, `updatedAt`) depois dela;
+- confere que a tabela `HumanTakeover` existe e que a sessão legada continua com **zero** linhas nela — sem backfill;
+- confere que a chave estrangeira recusa uma tomada para `sessionId` inexistente (código Postgres `23503`) e que apagar uma `ConversationSession` apaga em cascata a `HumanTakeover` que a referencia;
+- expande também o banco de durabilidade da IA (`AI_TEST_DATABASE_URL`, o `${...}_goal004` que o ensaio do Goal004 deixa e que os Goals seguintes já expandem) com a mesma migration, sem o qual `SessionService.assumeHumanControl` falharia com "the table HumanTakeover does not exist" na suíte de persistência (`tests/integration/goal074-human-takeover.test.ts`) — a falha que este ensaio existe para fechar antes dela.
+
+**O que nenhuma linha de sessão ou conversa perde.** O único efeito de escrita novo é a tabela `HumanTakeover`, isolada por FK e cascade da própria sessão que descreve. **Nenhuma coluna de `ConversationSession` ou `Conversation` é lida ou escrita** por esta migration, fora do que `assumeHumanControl` já fazia antes deste Goal (marcar `humanHandling`, `humanHandlingSince`, `humanHandlingSource`).
+
+**Limite declarado.** Não há como contar tomadas de controle humano anteriores à migration: os campos que existiam antes dela (`humanHandlingSince`/`humanHandlingSource`) são sobrescritos a cada tomada nova e não preservam histórico, então nenhuma reconstrução retroativa é possível sem inventar dado que a camada nunca teve — ver [D-088](DECISIONS.md).

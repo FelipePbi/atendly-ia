@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { env } from "../../config/env.js";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
-import { startOfTodayInTimeZone } from "../../lib/dates.js";
+import { startOfTodayInTimeZone, startOfWeekInTimeZone } from "../../lib/dates.js";
 import { AppError, toErrorMessage } from "../../lib/errors.js";
 import {
   authorizeInternalRequest,
@@ -1161,63 +1161,75 @@ export async function registerInternalRoutes(
       where: { tenantId },
       select: { settings: true },
     });
-    const startOfDay = startOfTodayInTimeZone(
-      normalizeBusinessContext(tenantConfig?.settings).timezone,
-    );
-    const [attention, attentionCount, confirmedAppointmentCalls, aiRuns] =
-      await Promise.all([
-        prisma.conversation.findMany({
-          where: { tenantId, status: "HUMAN_HANDOFF", humanHandoff: true },
-          include: conversationInclude,
-          orderBy: { updatedAt: "desc" },
-          take: 5,
-        }),
-        prisma.conversation.count({
-          where: { tenantId, status: "HUMAN_HANDOFF", humanHandoff: true },
-        }),
-        prisma.aiToolCall.findMany({
-          where: {
-            tenantId,
-            name: { in: ["create_appointment", "confirm_recurring_appointments"] },
-            status: "SUCCEEDED",
-            completedAt: { gte: startOfDay },
-          },
-          select: { name: true, arguments: true, result: true },
-        }),
-        prisma.aiRun.findMany({
-          where: {
-            tenantId,
-            status: "SUCCEEDED",
-            completedAt: { gte: startOfDay },
-          },
-          select: { conversationId: true },
-        }),
-      ]);
+    const timezone = normalizeBusinessContext(tenantConfig?.settings).timezone;
+    const startOfDay = startOfTodayInTimeZone(timezone);
+    const startOfWeek = startOfWeekInTimeZone(timezone);
+    const [
+      attention,
+      attentionCount,
+      confirmedAppointmentCallsThisWeek,
+      aiRuns,
+      takeoversThisWeek,
+    ] = await Promise.all([
+      prisma.conversation.findMany({
+        where: { tenantId, status: "HUMAN_HANDOFF", humanHandoff: true },
+        include: conversationInclude,
+        orderBy: { updatedAt: "desc" },
+        take: 5,
+      }),
+      prisma.conversation.count({
+        where: { tenantId, status: "HUMAN_HANDOFF", humanHandoff: true },
+      }),
+      // Uma so consulta desde o inicio da semana; hoje e um subconjunto dela,
+      // filtrado em memoria (nunca uma segunda ida ao banco so para o dia).
+      prisma.aiToolCall.findMany({
+        where: {
+          tenantId,
+          name: { in: ["create_appointment", "confirm_recurring_appointments"] },
+          status: "SUCCEEDED",
+          completedAt: { gte: startOfWeek },
+        },
+        select: { name: true, arguments: true, result: true, completedAt: true },
+      }),
+      prisma.aiRun.findMany({
+        where: {
+          tenantId,
+          status: "SUCCEEDED",
+          completedAt: { gte: startOfDay },
+        },
+        select: { conversationId: true },
+      }),
+      // Conversas distintas que passaram de IA para humano desde segunda
+      // 00:00 (Goal074). Corrida entre duas tomadas na mesma conversa conta
+      // uma vez so, porque a contagem e por conversa, nao por linha.
+      prisma.humanTakeover.findMany({
+        where: { tenantId, takenAt: { gte: startOfWeek } },
+        select: { conversationId: true },
+      }),
+    ]);
     // Dead-letter visivel como atencao. Nao existe endpoint de reenvio em
     // massa: retomar um evento parado e decisao explicita, evento a evento.
     const inboxDeadLetters = await inbox.countDeadLetters(tenantId);
-    // So confirmacao grava agenda: prepare, hold vencido, remarcacao e
-    // cancelamento nao contam aqui. Uma serie recorrente conta pelo numero
-    // de ocorrencias que o Scheduling de fato confirmou, nao como 1.
-    const aiAppointmentsToday = confirmedAppointmentCalls.reduce(
-      (total, call) => {
-        if (call.name === "confirm_recurring_appointments") {
-          return total + countConfirmedRecurringAppointments(call.result);
-        }
-        if (isRecord(call.arguments) && call.arguments.action === "confirm") {
-          return total + 1;
-        }
-        return total;
-      },
-      0,
+    const confirmedAppointmentCallsToday = confirmedAppointmentCallsThisWeek.filter(
+      // `completedAt: { gte: startOfWeek }` no filtro ja garante nao-nulo
+      // aqui; a checagem so satisfaz o tipo opcional da coluna no schema.
+      (call) => call.completedAt !== null && call.completedAt >= startOfDay,
     );
     return internalData(request, {
       conversationsNeedingAttention: attention.map(conversationDto),
       conversationsNeedingAttentionCount: attentionCount,
       inboxDeadLetters,
-      aiAppointmentsToday,
+      aiAppointmentsToday: countConfirmedAppointments(
+        confirmedAppointmentCallsToday,
+      ),
+      aiAppointmentsThisWeek: countConfirmedAppointments(
+        confirmedAppointmentCallsThisWeek,
+      ),
       automatedConversationsToday: new Set(
         aiRuns.map((run) => run.conversationId),
+      ).size,
+      conversationsTakenOverThisWeek: new Set(
+        takeoversThisWeek.map((takeover) => takeover.conversationId),
       ).size,
     });
   });
@@ -1892,4 +1904,25 @@ function countConfirmedRecurringAppointments(result: unknown): number {
   if (!isRecord(result) || !isRecord(result.data)) return 0;
   const appointments = result.data.appointments;
   return Array.isArray(appointments) ? appointments.length : 0;
+}
+
+/**
+ * So confirmacao grava agenda: prepare, hold vencido, remarcacao e
+ * cancelamento nao contam aqui. Uma serie recorrente conta pelo numero de
+ * ocorrencias que o Scheduling de fato confirmou, nao como 1. Usada tanto
+ * para "hoje" quanto para "esta semana" (Goal074) — mesma regra, janelas
+ * diferentes de chamadas ja filtradas por quem chama.
+ */
+function countConfirmedAppointments(
+  calls: readonly { name: string; arguments: unknown; result: unknown }[],
+): number {
+  return calls.reduce((total, call) => {
+    if (call.name === "confirm_recurring_appointments") {
+      return total + countConfirmedRecurringAppointments(call.result);
+    }
+    if (isRecord(call.arguments) && call.arguments.action === "confirm") {
+      return total + 1;
+    }
+    return total;
+  }, 0);
 }

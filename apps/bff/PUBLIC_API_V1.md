@@ -279,6 +279,8 @@ Toda escrita da agenda roda em transação `Serializable` com lock por dia. Abor
 
 `customerChangeMinNoticeMinutes` (Goal073/WU-03) é o quarto campo aditivo do mesmo corpo: antecedência mínima, em minutos (0 a 10080, sete dias), para o **cliente** — via IA — cancelar ou remarcar o próprio atendimento. Ausente preserva o valor já gravado; o default do produto é `0` (sem restrição, o comportamento anterior a este Goal). Fora do intervalo é `400 VALIDATION_ERROR`, sem gravar nada. A aplicação da regra na IA — quem ela restringe, o que exime — é do Scheduling e da IA, fora deste contrato; aqui só o campo é gravado e devolvido.
 
+A recusa que a IA vê quando a cliente tenta mudar o próprio atendimento fora desse prazo é `CUSTOMER_CHANGE_OUTSIDE_POLICY` (D-086), devolvida pelo Scheduling e tratada pela ferramenta de agenda da IA — **nunca** uma resposta de rota pública deste contrato: nenhuma das rotas acima devolve esse código para o cliente do BFF.
+
 O motor de disponibilidade aplica as três a **toda** oferta — nenhum slot antes da antecedência mínima nem depois da máxima, passo sempre igual à granularidade do negócio. `GET /v1/availability` não aceita mais `stepMinutes`: quem decide o passo é sempre o negócio, nunca quem chama. A confirmação (`POST /v1/appointments`, `.../reschedule`, `POST /v1/holds`) continua aceitando `stepMinutes` no corpo por compatibilidade, mas o valor é ignorado pela Agenda Atendly — o horário pedido é sempre validado contra a grade do negócio. Override humano de sobreposição (`overlapOverride`) continua ignorando a grade; a IA nunca tem esse campo.
 
 ### Buffers como ocupação externa
@@ -560,6 +562,18 @@ Desligar (`enabled: false`, "Pausar") só grava `activatedByRunId` — da execu�
 | `capabilities.activationTestCompleted` (Goal019) | execução do teste real em `SUCCEEDED` **que ainda vale** para o WhatsApp de hoje. Negócio que nunca testou é `false` — "nunca testou", não "falhou" —, e teste feito contra um número que foi trocado ou revinculado deixa de contar, porque o vault exige teste novo nesse caso. Dependência indisponível também é `false`: "não sei" nunca vira "concluído" |
 
 Os três campos, somados a `whatsapp.status` de `GET /v1/status`, alimentam o checklist de `/inicio` ("Cadastrar um serviço", "Definir horários de atendimento", "Conectar o WhatsApp", "Concluir o teste da IA"): enquanto a IA não estiver efetivamente ativa (`GET /v1/status`.`ai.state` diferente de `ACTIVE`), a Home mostra o que falta, com item concluído marcado.
+
+### Contadores da semana corrente (Goal074/WU-03)
+
+`GET /v1/dashboard` ganha três inteiros não negativos, aditivos, um em cada dependência:
+
+| Campo | Significado |
+| --- | --- |
+| `ai.data.aiAppointmentsThisWeek` | atendimentos que a IA confirmou desde a segunda-feira 00:00 da semana local do negócio, incluindo os dias já passados dela — mesmo cálculo de `aiAppointmentsToday`, só com a janela maior |
+| `ai.data.conversationsTakenOverThisWeek` | conversas **distintas** que passaram de IA para humano desde a mesma segunda-feira 00:00; mais de uma tomada na mesma conversa na semana conta uma vez só |
+| `scheduling.data.appointmentsThisWeek` | atendimentos não cancelados da Agenda Atendly na mesma semana local, segunda a domingo, incluindo os dias já passados |
+
+A semana é sempre a semana local corrente do negócio (fuso de `platform.timezone`), segunda a domingo — nunca só "hoje até domingo". Os três contam de novo a cada leitura, sem persistir separado do que já gera `aiAppointmentsToday`/`appointmentsToday`; nenhum dos dois campos diários muda de forma ou de cálculo por causa deste acréscimo.
 
 ### Reconciliação desired/effective em `GET /v1/status` (Goal019)
 

@@ -14,8 +14,9 @@ import {
 // Mesmo alvo descartavel das demais suites de banco (AI_TEST_DATABASE_URL);
 // sem ela a suite e pulada, para que o gate local nao dependa de banco
 // pessoal. O que esta suite prova nao e so "a linha some": e que a purga
-// atravessa as 16 tabelas com `tenantId` do schema, respeita o teto por
-// passada, e idempotente, e nunca toca o negocio vizinho em nenhuma delas.
+// atravessa as tabelas com `tenantId` do schema (`TENANT_PURGE_TABLES.length`),
+// respeita o teto por passada, e idempotente, e nunca toca o negocio vizinho em
+// nenhuma delas.
 const databaseUrl = process.env.AI_TEST_DATABASE_URL?.trim();
 
 const TENANT_A = "tenant-full-purge-a";
@@ -42,6 +43,7 @@ const ACCESSOR = {
   MessageAttachment: "messageAttachment",
   ActivationTestMilestone: "activationTestMilestone",
   KnowledgeChunk: "knowledgeChunk",
+  HumanTakeover: "humanTakeover",
   AiRun: "aiRun",
   ConversationSession: "conversationSession",
   Message: "message",
@@ -120,13 +122,23 @@ describe.skipIf(!databaseUrl)("tenant purge against PostgreSQL", () => {
       },
     });
 
-    await prisma.conversationSession.create({
+    const session = await prisma.conversationSession.create({
       data: {
         tenantId,
         channelId,
         conversationId,
         contactId: contact.id,
         expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+
+    await prisma.humanTakeover.create({
+      data: {
+        tenantId,
+        sessionId: session.id,
+        conversationId,
+        source: "ATENDLY",
+        actor: `owner-${tenantId}`,
       },
     });
 
@@ -266,7 +278,7 @@ describe.skipIf(!databaseUrl)("tenant purge against PostgreSQL", () => {
     return counts;
   }
 
-  it("apaga todas as 16 tabelas do negocio, sem violar chave estrangeira", async () => {
+  it("apaga todas as tabelas do negocio, sem violar chave estrangeira", async () => {
     await seedTenant(TENANT_A, CHANNEL_A);
 
     const before = await countsFor(TENANT_A);

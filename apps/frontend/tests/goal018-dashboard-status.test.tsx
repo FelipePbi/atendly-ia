@@ -81,10 +81,12 @@ function dashboardFixture(overrides: Partial<Dashboard> = {}): Dashboard {
   return {
     ai: {
       data: {
+        aiAppointmentsThisWeek: 0,
         aiAppointmentsToday: 0,
         automatedConversationsToday: 0,
         conversationsNeedingAttention: [],
         conversationsNeedingAttentionCount: 0,
+        conversationsTakenOverThisWeek: 0,
       },
       status: "ok",
     },
@@ -96,6 +98,7 @@ function dashboardFixture(overrides: Partial<Dashboard> = {}): Dashboard {
     },
     scheduling: {
       data: {
+        appointmentsThisWeek: 0,
         appointmentsToday: 0,
         calendar: {
           capabilities: calendarCapabilitiesFixture(),
@@ -158,6 +161,7 @@ describe("checklist pós-onboarding da Home", () => {
       dashboardFixture({
         scheduling: {
           data: {
+            appointmentsThisWeek: 0,
             appointmentsToday: 0,
             calendar: {
               capabilities: calendarCapabilitiesFixture({

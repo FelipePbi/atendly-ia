@@ -62,10 +62,12 @@ function dashboardFixture(
   return {
     ai: {
       data: {
+        aiAppointmentsThisWeek: 0,
         aiAppointmentsToday: 0,
         automatedConversationsToday: 0,
         conversationsNeedingAttention: [],
         conversationsNeedingAttentionCount: 0,
+        conversationsTakenOverThisWeek: 0,
       },
       status: "ok",
     },
@@ -77,6 +79,7 @@ function dashboardFixture(
     },
     scheduling: {
       data: {
+        appointmentsThisWeek: 0,
         appointmentsToday: 0,
         calendar: {
           capabilities: {
@@ -205,20 +208,23 @@ describe("checklist da Home: cada item é uma ação alcançável", () => {
     ).toHaveAttribute("href", "/configuracoes/ia#teste-real");
   });
 
-  test("itens concluídos continuam marcados e alcançáveis", async () => {
+  test("itens concluídos continuam marcados e alcançáveis, mesmo com um passo pendente", async () => {
+    // Goal074, blocker 1: com os 4 passos concluídos, o estado vira "IA
+    // pausada" e o checklist some (não fica ao lado dela, contradizendo-a).
+    // Este teste prova a marcação/alcançabilidade dos itens já concluídos
+    // enquanto o checklist ainda está visível, com um passo por concluir.
     const { checklist } = await renderHome(
       {
         activationTestCompleted: true,
         aiActivationReady: true,
-        hoursConfigured: true,
+        hoursConfigured: false,
       },
       true,
     );
 
-    expect(screen.getByText("4 de 4 passos concluídos")).toBeVisible();
+    expect(screen.getByText("3 de 4 passos concluídos")).toBeVisible();
     for (const [name, href] of [
       ["Cadastrar um serviço", "/servicos"],
-      ["Definir horários de atendimento", "/configuracoes/disponibilidade"],
       ["Conectar o WhatsApp", "/configuracoes/whatsapp"],
       ["Concluir o teste da IA", "/configuracoes/ia#teste-real"],
     ] as const) {
@@ -228,7 +234,36 @@ describe("checklist da Home: cada item é uma ação alcançável", () => {
         href,
       );
     }
+    const hours = row(checklist, "Definir horários de atendimento: pendente");
+    expect(
+      within(hours).getByRole("link", { name: "Definir horários de atendimento" }),
+    ).toHaveAttribute("href", "/configuracoes/disponibilidade");
     expect(within(checklist).queryByRole("link", { name: "Fazer o teste" })).toBeNull();
     expect(within(checklist).queryByRole("link", { name: "Conectar" })).toBeNull();
+  });
+
+  test("todos os 4 passos concluídos: o checklist some (vira 'IA pausada', não 'IA inativa')", async () => {
+    dashboardGet.mockResolvedValue(
+      dashboardFixture(
+        {
+          activationTestCompleted: true,
+          aiActivationReady: true,
+          hoursConfigured: true,
+        },
+        true,
+      ),
+    );
+    statusGet.mockResolvedValue(statusFixture(true));
+    render(
+      <ShellConfigProvider>
+        <SystemStatusProvider>
+          <ProductDashboardScreen />
+        </SystemStatusProvider>
+      </ShellConfigProvider>,
+    );
+
+    await screen.findByText("IA pausada");
+    expect(screen.queryByRole("region", { name: "Ative sua IA" })).toBeNull();
+    expect(screen.queryByText("Ative sua IA")).toBeNull();
   });
 });

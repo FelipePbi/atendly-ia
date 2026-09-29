@@ -20,6 +20,7 @@ import {
   databaseTimeToMinutes,
   localDateTimeToInstant,
   timeFromMinutes,
+  weekdayIndex,
 } from "../../shared/date-time/calendar-date-time.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import {
@@ -1830,9 +1831,27 @@ export async function registerManagementRoutes(
       (appointment) =>
         appointment.date === today && appointment.status !== "CANCELLED",
     );
+    // Segunda a domingo da semana local do calendario, sempre a semana de
+    // `today` — inclui dias ja passados dela, nao so hoje em diante.
+    const weekStart = addDays(today, -((weekdayIndex(today) + 6) % 7));
+    const weekEnd = addDays(weekStart, 6);
+    const weekAppointments = await new CalendarService(prisma).listAppointments(
+      context,
+      { startDate: weekStart, endDate: weekEnd },
+    );
+    // `listAppointments` seleciona por sobreposicao de instante, entao um
+    // agendamento que cruza meia-noite pode vir de fora da semana; o filtro
+    // por `date` garante segunda a domingo da semana local (Goal074).
+    const appointmentsThisWeek = weekAppointments.filter(
+      (appointment) =>
+        appointment.status !== "CANCELLED" &&
+        appointment.date >= weekStart &&
+        appointment.date <= weekEnd,
+    ).length;
     return data(request, {
       appointmentsToday: todayAppointments.length,
       todayAppointments,
+      appointmentsThisWeek,
       nextAppointment:
         appointments.find(
           (appointment) =>

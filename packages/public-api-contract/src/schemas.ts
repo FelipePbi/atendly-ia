@@ -847,6 +847,9 @@ const dependencyResultSchema = <TSchema extends z.ZodType>(schema: TSchema) =>
 const schedulingDashboardSchema = z.object({
   appointmentsToday: z.number().int().nonnegative(),
   todayAppointments: z.array(appointmentSchema),
+  // Semana local corrente (segunda a domingo, incluindo dias ja passados),
+  // para o checklist da Home (Goal074).
+  appointmentsThisWeek: z.number().int().nonnegative(),
   nextAppointment: appointmentSchema.nullable(),
   estimatedRevenueToday: z.number().nonnegative().nullable(),
   calendar: calendarStateSchema,
@@ -863,7 +866,11 @@ export const dashboardSchema = z.object({
       conversationsNeedingAttention: z.array(conversationSchema),
       conversationsNeedingAttentionCount: z.number().int().nonnegative(),
       aiAppointmentsToday: z.number().int().nonnegative(),
+      // Contadores da semana local corrente (segunda a domingo, incluindo
+      // dias ja passados), para o checklist da Home (Goal074).
+      aiAppointmentsThisWeek: z.number().int().nonnegative(),
       automatedConversationsToday: z.number().int().nonnegative(),
+      conversationsTakenOverThisWeek: z.number().int().nonnegative(),
     }),
   ),
   scheduling: dependencyResultSchema(schedulingDashboardSchema),

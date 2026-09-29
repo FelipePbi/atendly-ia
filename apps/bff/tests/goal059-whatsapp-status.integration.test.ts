@@ -115,7 +115,9 @@ function stubUpstream(handlers: {
               conversationsNeedingAttention: [],
               conversationsNeedingAttentionCount: 0,
               aiAppointmentsToday: 0,
+              aiAppointmentsThisWeek: 0,
               automatedConversationsToday: 0,
+              conversationsTakenOverThisWeek: 0,
             },
             requestId: "up-ai-dashboard",
           });
@@ -133,6 +135,7 @@ function stubUpstream(handlers: {
           return jsonResponse({
             data: {
               appointmentsToday: 0,
+              appointmentsThisWeek: 0,
               todayAppointments: [],
               nextAppointment: null,
               estimatedRevenueToday: null,

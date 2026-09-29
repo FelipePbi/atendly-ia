@@ -255,7 +255,7 @@ describe("AppShell — a sidebar de verdade passa signature=\"check\" para Brand
     ).toBe("1");
   });
 
-  test("o cabeçalho do celular nunca anima o check: a sidebar consome a sessão primeiro", () => {
+  test("o cabeçalho do celular nunca anima o check: ele não recebe signature=\"check\"", () => {
     render(
       <AppShell active="inicio" title="Início">
         <p>Conteúdo</p>

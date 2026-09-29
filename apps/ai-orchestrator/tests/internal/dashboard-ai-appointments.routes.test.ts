@@ -92,9 +92,13 @@ function fakePrisma(toolCalls: ToolCallRow[]) {
             name: call.name,
             arguments: call.arguments,
             result: call.result,
+            completedAt: call.completedAt,
           })),
     },
     aiRun: {
+      findMany: async () => [],
+    },
+    humanTakeover: {
       findMany: async () => [],
     },
   } as never;

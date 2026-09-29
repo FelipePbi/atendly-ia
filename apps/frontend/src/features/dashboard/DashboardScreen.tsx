@@ -4,8 +4,13 @@ import clsx from "clsx";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { BffHttpError, type CalendarState, type Dashboard } from "@/data";
-import { Icon } from "@/shared/icons/Icon";
+import {
+  type Appointment,
+  BffHttpError,
+  type CalendarState,
+  type Dashboard,
+} from "@/data";
+import { Icon, type IconName } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import {
   getProductServices,
@@ -33,6 +38,7 @@ function LoadingDashboard() {
             style={{ marginTop: 10, width: "58%" }}
           />
         </div>
+        <Skeleton style={{ height: 40, width: 40, borderRadius: "50%" }} />
       </header>
       <section className="operational-strip">
         <Skeleton style={{ height: 40, width: 40 }} />
@@ -42,7 +48,18 @@ function LoadingDashboard() {
         </div>
         <span className="badge">Verificando</span>
       </section>
-      <div className="dashboard-grid">
+      <div className="dashboard-body">
+        <article className="card dashboard-card attention-card">
+          <div className="dashboard-card-head">
+            <Skeleton className="skeleton-title" />
+          </div>
+          <div className="dashboard-skeleton-grid">
+            <div className="dashboard-skeleton-block">
+              <Skeleton className="skeleton-title" />
+              <Skeleton className="skeleton-line" />
+            </div>
+          </div>
+        </article>
         <article className="card dashboard-card today-card">
           <div className="dashboard-card-head">
             <Skeleton className="skeleton-title" />
@@ -56,52 +73,12 @@ function LoadingDashboard() {
             ))}
           </div>
         </article>
-        <article className="card dashboard-card next-card">
+        <article className="card dashboard-card week-card">
           <div className="dashboard-card-head">
             <Skeleton className="skeleton-title" />
           </div>
-          <div className="dashboard-skeleton-grid">
-            <Skeleton style={{ height: 34, width: "42%" }} />
-            <Skeleton className="skeleton-line" />
-            <Skeleton className="skeleton-line" style={{ width: "56%" }} />
-          </div>
+          <Skeleton style={{ height: 48, width: "100%" }} />
         </article>
-        <article className="card dashboard-card outcomes-card">
-          <div className="dashboard-card-head">
-            <Skeleton className="skeleton-title" />
-          </div>
-          <div className="outcome-layout">
-            <div className="dashboard-skeleton-grid">
-              <Skeleton style={{ height: 40, width: "32%" }} />
-              <Skeleton className="skeleton-line" />
-            </div>
-            <div className="dashboard-skeleton-grid">
-              <Skeleton className="skeleton-line" />
-              <Skeleton className="skeleton-line" />
-              <Skeleton className="skeleton-line" />
-            </div>
-          </div>
-        </article>
-        <article className="card dashboard-card attention-card">
-          <div className="dashboard-card-head">
-            <Skeleton className="skeleton-title" />
-          </div>
-          <div className="dashboard-skeleton-grid">
-            <div className="dashboard-skeleton-block">
-              <Skeleton className="skeleton-title" />
-              <Skeleton className="skeleton-line" />
-            </div>
-          </div>
-        </article>
-        <section className="card dashboard-card quick-card">
-          <div className="dashboard-card-head">
-            <Skeleton className="skeleton-title" />
-          </div>
-          <div className="quick-actions">
-            <Skeleton style={{ height: 44, width: 160 }} />
-            <Skeleton style={{ height: 44, width: 180 }} />
-          </div>
-        </section>
       </div>
       <span className="sr-only" role="status">
         Carregando dados do início.
@@ -171,7 +148,6 @@ export function ProductDashboardScreen() {
             <h1>Início</h1>
           </div>
         </header>
-        <StatusStrip status={status} />
         <StatePanel
           actionLabel="Tentar novamente"
           description={error ?? "Tente novamente em instantes."}
@@ -195,8 +171,8 @@ export function ProductDashboardScreen() {
 
 /**
  * Cumprimento da Home (Goal064 §7): pelo horário no fuso do negócio, nunca
- * pelo nome do negócio. `dashboard.platform.timezone` já é a fonte oficial
- * de fuso desta tela (usada por `today` logo abaixo).
+ * pelo nome do negócio. `dashboard.platform.timezone` já é a fonte de fuso
+ * desta tela (usada por `today` e por `currentTimeLabel` logo abaixo).
  */
 function currentHourInTimeZone(timezone: string): number {
   const formatted = new Intl.DateTimeFormat("en-US", {
@@ -205,6 +181,16 @@ function currentHourInTimeZone(timezone: string): number {
     timeZone: timezone,
   }).format(new Date());
   return Number.parseInt(formatted, 10);
+}
+
+/** "HH:MM" no fuso do negócio, no mesmo formato de `appointment.startTime`. */
+function currentTimeLabel(timezone: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    hourCycle: "h23",
+    minute: "2-digit",
+    timeZone: timezone,
+  }).format(new Date());
 }
 
 function greetingWord(hour: number): string {
@@ -243,19 +229,179 @@ function dashboardNeedsAttention(
   return primaryIssue || attentionCount > 0;
 }
 
-function StatusStrip({ status }: { status: UseSystemStatusResult }) {
+type OperationalState = {
+  action?: { href: string; label: string };
+  alert: boolean;
+  description: string;
+  icon: IconName;
+  title: string;
+  tone: "error" | "info" | "ok" | "warning";
+};
+
+/**
+ * Uma única faixa de estado (Goal074 §7.5), nunca duas: o alerta e o resumo
+ * operacional eram blocos separados antes deste Goal. A ordem de prioridade
+ * segue a gravidade — agenda indisponível é o problema mais bloqueante,
+ * "IA pausada" o mais brando — e só o estado vencedor aparece.
+ */
+function resolveOperationalState({
+  aiUnavailable,
+  aiView,
+  automatedConversationsToday,
+  calendarUnavailable,
+  checklistComplete,
+  whatsappIssue,
+}: {
+  aiUnavailable: boolean;
+  aiView: StatusView;
+  automatedConversationsToday: number;
+  calendarUnavailable: boolean;
+  checklistComplete: boolean;
+  whatsappIssue: "off" | "unknown" | null;
+}): OperationalState {
+  if (calendarUnavailable) {
+    return {
+      action: { href: "/configuracoes/agenda", label: "Revisar integração" },
+      alert: true,
+      description:
+        "A agenda continua ativa, mas a consulta está indisponível no momento.",
+      icon: "alert",
+      title: "Não foi possível consultar a agenda",
+      tone: "error",
+    };
+  }
+  if (whatsappIssue === "off") {
+    return {
+      action: { href: "/configuracoes/whatsapp", label: "Reconectar WhatsApp" },
+      alert: true,
+      description:
+        "Reconecte o WhatsApp para a Atendly voltar a responder clientes.",
+      icon: "alert",
+      title: "WhatsApp desconectado",
+      tone: "error",
+    };
+  }
+  if (whatsappIssue === "unknown") {
+    return {
+      action: { href: "/configuracoes/whatsapp", label: "Verificar WhatsApp" },
+      alert: true,
+      description: "Ainda não confirmamos a conexão do WhatsApp.",
+      icon: "info",
+      title: "WhatsApp não confirmado",
+      tone: "info",
+    };
+  }
+  if (aiUnavailable) {
+    return {
+      action: { href: "/conversas", label: "Abrir conversas" },
+      alert: true,
+      description:
+        "A agenda está disponível, mas os dados da IA não responderam.",
+      icon: "alert",
+      title: "Dados de atendimento indisponíveis",
+      tone: "error",
+    };
+  }
+  if (aiView === "pending") {
+    // Com os quatro passos concluídos o checklist some; a faixa não pode
+    // apontar para passos "abaixo" que não estão na tela (Goal074, rodada 4).
+    return {
+      alert: true,
+      description: checklistComplete
+        ? "Os passos estão concluídos; falta a IA confirmar a ativação."
+        : "Conclua os passos abaixo para a IA responder no WhatsApp.",
+      icon: "shield",
+      title: "IA em ativação",
+      tone: "info",
+    };
+  }
+  if (aiView === "unknown") {
+    return {
+      alert: true,
+      description: "Ainda não confirmamos o status da IA.",
+      icon: "info",
+      title: "IA não confirmada",
+      tone: "info",
+    };
+  }
+  if (aiView === "loading") {
+    return {
+      alert: false,
+      description: "Verificando o status da IA.",
+      icon: "shield",
+      title: "Verificando IA",
+      tone: "info",
+    };
+  }
+  if (aiView === "off") {
+    return checklistComplete
+      ? {
+          alert: true,
+          description:
+            "As conversas continuam chegando; ninguém recebe resposta automática.",
+          icon: "shield",
+          title: "IA pausada",
+          tone: "warning",
+        }
+      : {
+          alert: true,
+          description: "Termine a configuração abaixo para a IA responder no WhatsApp.",
+          icon: "shield",
+          title: "IA inativa",
+          tone: "warning",
+        };
+  }
+  return {
+    alert: false,
+    description: `Atendendo pelo WhatsApp · ${automatedConversationsToday} ${
+      automatedConversationsToday === 1 ? "conversa hoje" : "conversas hoje"
+    }`,
+    icon: "shield",
+    title: "IA ativa",
+    tone: "ok",
+  };
+}
+
+function OperationalBand({
+  calendarUnavailable,
+  state,
+  status,
+}: {
+  calendarUnavailable: boolean;
+  state: OperationalState;
+  status: UseSystemStatusResult;
+}) {
   return (
     <section
       id="operational-status"
-      className="operational-strip"
-      aria-label="Status operacional"
+      className={clsx(
+        "operational-strip",
+        state.tone === "error" && "alert-error",
+        state.tone === "info" && "alert-info",
+        state.tone === "warning" && "banner-warning",
+      )}
+      role={state.alert ? "alert" : undefined}
     >
-      <span className="operational-icon">
-        <Icon name="shield" />
+      <span
+        className={clsx(
+          "operational-icon",
+          state.tone === "error" && "danger",
+          state.tone === "warning" && "warning",
+        )}
+      >
+        <Icon name={state.icon} />
       </span>
       <div className="operational-copy">
-        <strong>Status honesto</strong>
-        <span>WhatsApp e IA conforme a última verificação real.</span>
+        <strong>{state.title}</strong>
+        <span>{state.description}</span>
+        {state.action && (
+          <Link
+            className="btn btn-primary operational-action"
+            href={state.action.href}
+          >
+            {state.action.label}
+          </Link>
+        )}
       </div>
       <div className="operational-points">
         <StatusPoint
@@ -271,6 +417,12 @@ function StatusStrip({ status }: { status: UseSystemStatusResult }) {
           pendingCopy="IA em ativação"
           view={status.aiView}
         />
+        <span className="status-line">
+          <span
+            className={clsx("status-dot", calendarUnavailable && "danger")}
+          />
+          {calendarUnavailable ? "Agenda indisponível" : "Agenda"}
+        </span>
       </div>
     </section>
   );
@@ -315,6 +467,80 @@ function StatusPoint({
   );
 }
 
+/**
+ * Marca o atendimento em curso (startTime <= agora < endTime) ou, na
+ * ausência de um em curso, o próximo a começar (Goal074 §7.5).
+ */
+function AgendaToday({
+  appointments,
+  nowLabel,
+}: {
+  appointments: Appointment[];
+  nowLabel: string;
+}) {
+  const markerIndex = appointments.findIndex(
+    (appointment) => appointment.endTime > nowLabel,
+  );
+  const insertAt = markerIndex === -1 ? appointments.length : markerIndex;
+
+  return (
+    <div className="agenda-stack">
+      {appointments.flatMap((appointment, index) => {
+        const row = (
+          <Link
+            className="agenda-row"
+            href={`/agenda/agendamento?id=${encodeURIComponent(appointment.id)}`}
+            key={appointment.id}
+          >
+            <strong className="agenda-time">{appointment.startTime}</strong>
+            <div className="agenda-copy">
+              <strong>{appointment.customer?.name ?? "Cliente"}</strong>
+              <span>
+                {appointment.services
+                  .map((service) => service.name)
+                  .join(", ")}
+              </span>
+            </div>
+            <span className="badge">
+              {appointment.source === "AI" ? "Criado pela IA" : "Confirmado"}
+            </span>
+          </Link>
+        );
+        return index === insertAt
+          ? [
+              <div className="agenda-now-marker" key="agora">
+                agora
+              </div>,
+              row,
+            ]
+          : [row];
+      })}
+      {insertAt === appointments.length && (
+        <div className="agenda-now-marker" key="agora">
+          agora
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HomeBell({ unreadCount }: { unreadCount: number }) {
+  return (
+    <Link
+      aria-label={
+        unreadCount > 0
+          ? `Notificações, ${unreadCount} não lidas`
+          : "Notificações"
+      }
+      className="home-bell"
+      href="/notificacoes"
+    >
+      <Icon name="inbox" />
+      {unreadCount > 0 && <span className="home-bell-dot" aria-hidden="true" />}
+    </Link>
+  );
+}
+
 function RealDashboard({
   dashboard,
   onRetry,
@@ -334,27 +560,28 @@ function RealDashboard({
   const todayAppointments = scheduling?.todayAppointments ?? [];
   const attention = ai?.conversationsNeedingAttention ?? [];
   const attentionCount = ai?.conversationsNeedingAttentionCount ?? 0;
-  const empty =
-    !calendarUnavailable &&
-    todayAppointments.length === 0 &&
-    !scheduling?.nextAppointment &&
-    (ai?.aiAppointmentsToday ?? 0) === 0 &&
-    attentionCount === 0;
-  const primaryIssue = calendarUnavailable
-    ? "calendar"
-    : whatsappIssue === "off"
-      ? "whatsapp"
-      : whatsappIssue === "unknown"
-        ? "whatsapp-unknown"
-        : aiUnavailable
-          ? "ai"
-          : null;
+  const weekAppointments = calendarUnavailable
+    ? null
+    : (scheduling?.appointmentsThisWeek ?? 0);
+  const weekAiAppointments = aiUnavailable ? null : (ai?.aiAppointmentsThisWeek ?? 0);
+  const weekHandoffs = aiUnavailable
+    ? null
+    : (ai?.conversationsTakenOverThisWeek ?? 0);
+  const checklistItems = buildChecklistItems({
+    capabilities: scheduling?.calendar.capabilities ?? null,
+    whatsappActive: status.whatsappView === "active",
+  });
+  const checklistComplete = checklistItems.every((item) => item.done);
   /**
    * Checklist pós-onboarding (Goal018/WU-10): só aparece com uma leitura
    * confirmada de `GET /v1/status` (nunca durante `loading`, para não afirmar
-   * pendência antes de saber) e some assim que a IA está efetivamente ativa.
+   * pendência antes de saber), some assim que a IA está efetivamente ativa e
+   * some também com todos os passos concluídos mesmo antes disso — nunca ao
+   * lado da faixa "IA pausada" (Goal074, blocker 1: "IA inativa", com o
+   * checklist, é um estado diferente de "IA pausada").
    */
-  const checklistVisible = status.phase !== "loading" && status.aiView !== "active";
+  const checklistVisible =
+    status.phase !== "loading" && status.aiView !== "active" && !checklistComplete;
   const greeting = homeGreeting(dashboard.platform.timezone, session?.user.name);
   const today = new Intl.DateTimeFormat("pt-BR", {
     day: "numeric",
@@ -362,363 +589,148 @@ function RealDashboard({
     timeZone: dashboard.platform.timezone,
     weekday: "long",
   }).format(new Date());
+  const nowLabel = currentTimeLabel(dashboard.platform.timezone);
+  const operationalState = resolveOperationalState({
+    aiUnavailable,
+    aiView: status.aiView,
+    automatedConversationsToday: ai?.automatedConversationsToday ?? 0,
+    calendarUnavailable,
+    checklistComplete,
+    whatsappIssue,
+  });
+  const unreadCount = status.notificationsSummary?.unreadCount ?? 0;
 
   return (
-    <>
-      <div className="dashboard-page">
-        <header className="dashboard-header">
-          <div>
-            <h1>{greeting}</h1>
-            <p className="dashboard-date">{today}</p>
-          </div>
-          <span className="dashboard-source">
-            <Icon name="calendar" />
-            Agenda Atendly · fonte oficial
-          </span>
-        </header>
+    <div className="dashboard-page">
+      <header className="dashboard-header">
+        <div>
+          <h1>{greeting}</h1>
+          <p className="dashboard-date">{today}</p>
+        </div>
+        <HomeBell unreadCount={unreadCount} />
+      </header>
 
-        {primaryIssue && (
-          <div
-            className={`alert ${primaryIssue === "whatsapp-unknown" ? "alert-info" : "alert-error"} dashboard-banner`}
-            role="alert"
-          >
-            <Icon name={primaryIssue === "whatsapp-unknown" ? "info" : "alert"} />
-            <div>
-              <p className="alert-title">
-                {primaryIssue === "calendar"
-                  ? "Não foi possível consultar a agenda oficial"
-                  : primaryIssue === "whatsapp"
-                    ? "WhatsApp desconectado"
-                    : primaryIssue === "whatsapp-unknown"
-                      ? "Não foi possível confirmar o WhatsApp"
-                      : "Dados de atendimento indisponíveis"}
-              </p>
-              <p className="alert-text">
-                {primaryIssue === "calendar"
-                  ? "Os horários podem estar desatualizados. Consulte a integração antes de confirmar novos agendamentos."
-                  : primaryIssue === "whatsapp"
-                    ? "O atendimento automático está pausado. Sua agenda continua disponível para uso manual."
-                    : primaryIssue === "whatsapp-unknown"
-                      ? "Ainda não confirmamos o estado da conexão. Verifique as configurações para garantir o atendimento automático."
-                      : "As métricas e conversas pendentes não puderam ser consultadas. Tente novamente antes de concluir que não há atividade."}
-              </p>
-            </div>
-            <Link
-              className="btn btn-primary"
-              href={
-                primaryIssue === "calendar"
-                  ? "/configuracoes/agenda"
-                  : primaryIssue === "whatsapp" || primaryIssue === "whatsapp-unknown"
-                    ? "/configuracoes/whatsapp"
-                    : "/conversas"
-              }
-            >
-              {primaryIssue === "calendar"
-                ? "Revisar integração"
-                : primaryIssue === "whatsapp"
-                  ? "Reconectar WhatsApp"
-                  : primaryIssue === "whatsapp-unknown"
-                    ? "Verificar WhatsApp"
-                    : "Abrir conversas"}
-            </Link>
-          </div>
-        )}
+      <OperationalBand
+        calendarUnavailable={calendarUnavailable}
+        state={operationalState}
+        status={status}
+      />
 
-        <section id="operational-status" className="operational-strip">
-          <span
-            className={`operational-icon${primaryIssue && primaryIssue !== "whatsapp-unknown" ? " danger" : ""}`}
-          >
-            <Icon
-              name={
-                primaryIssue === "whatsapp-unknown"
-                  ? "info"
-                  : primaryIssue
-                    ? "alert"
-                    : "shield"
-              }
-            />
-          </span>
-          <div className="operational-copy">
-            <strong>
-              {calendarUnavailable
-                ? "Integração com problema"
-                : whatsappIssue === "off"
-                  ? "Atendimento automático pausado"
-                  : whatsappIssue === "unknown"
-                    ? "WhatsApp não confirmado"
-                    : aiUnavailable
-                      ? "Dados de atendimento indisponíveis"
-                      : "Tudo funcionando"}
-            </strong>
-            <span>
-              {calendarUnavailable
-                ? "A fonte oficial permanece ativa, mas a consulta está indisponível."
-                : whatsappIssue === "off"
-                  ? "Reconecte o WhatsApp para a Atendly voltar a responder clientes."
-                  : whatsappIssue === "unknown"
-                    ? "Ainda não confirmamos a conexão do WhatsApp."
-                    : aiUnavailable
-                      ? "A agenda está disponível, mas os dados da IA não responderam."
-                      : "WhatsApp conectado e Agenda Atendly disponível."}
-            </span>
-          </div>
-          <div className="operational-points">
-            <StatusPoint
-              activeCopy="WhatsApp conectado"
-              label="WhatsApp"
-              offCopy="WhatsApp desconectado"
-              view={status.whatsappView}
-            />
-            <StatusPoint
-              activeCopy="IA ativa"
-              label="IA"
-              offCopy="IA desligada"
-              pendingCopy="IA em ativação"
-              view={status.aiView}
-            />
-            <span className="status-line">
-              <span
-                className={`status-dot${calendarUnavailable ? " danger" : ""}`}
-              />
-              {calendarUnavailable ? "Agenda indisponível" : "Agenda"}
-            </span>
-          </div>
-        </section>
+      {checklistVisible && (
+        <PostOnboardingChecklist items={checklistItems} />
+      )}
 
-        {checklistVisible && (
-          <PostOnboardingChecklist
-            capabilities={scheduling?.calendar.capabilities ?? null}
-            whatsappActive={status.whatsappView === "active"}
-          />
-        )}
-
-        <div className="dashboard-grid">
-          <article id="agenda-today" className="card dashboard-card today-card">
-            <header className="dashboard-card-head">
-              <h2>Agenda de hoje</h2>
-              <span
-                className={`badge${calendarUnavailable ? " badge-danger" : ""}`}
-              >
-                {calendarUnavailable
-                  ? "Indisponível"
-                  : `${todayAppointments.length} ${todayAppointments.length === 1 ? "atendimento" : "atendimentos"}`}
-              </span>
-            </header>
-            {calendarUnavailable ? (
-              <div className="error-state" style={{ padding: "24px 16px" }}>
-                <span className="state-icon">
-                  <Icon name="refresh" />
-                </span>
-                <h3>Consulta indisponível</h3>
-                <p>Horários antigos não serão apresentados como atuais.</p>
-                <button
-                  className="btn btn-secondary"
-                  onClick={onRetry}
-                  type="button"
-                >
-                  Tentar novamente
-                </button>
-              </div>
-            ) : todayAppointments.length === 0 ? (
-              <div className="dashboard-empty">
-                <div className="dashboard-empty-inner">
-                  <span className="state-icon">
-                    <Icon name="calendar" />
-                  </span>
-                  <h3>Ainda não há agendamentos hoje</h3>
-                  <p>
-                    Agendamentos criados manualmente ou pela Atendly aparecerão
-                    aqui.
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="agenda-stack">
-                {todayAppointments.map((appointment) => (
-                  <Link
-                    className="agenda-row"
-                    href={`/agenda/agendamento?id=${encodeURIComponent(appointment.id)}`}
-                    key={appointment.id}
-                  >
-                    <strong className="agenda-time">
-                      {appointment.startTime}
-                    </strong>
-                    <div className="agenda-copy">
-                      <strong>{appointment.customer?.name ?? "Cliente"}</strong>
-                      <span>
-                        {appointment.services
-                          .map((service) => service.name)
-                          .join(", ")}
-                      </span>
-                    </div>
-                    <span className="badge">
-                      {appointment.source === "AI"
-                        ? "Criado pela IA"
-                        : "Confirmado"}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </article>
-
-          <article className="card dashboard-card next-card">
-            <header className="dashboard-card-head">
-              <h2>Próximo atendimento</h2>
-            </header>
-            <div className="next-focus">
-              <div>
-                <div className="next-focus-time">
-                  {scheduling?.nextAppointment?.startTime ?? "—"}
-                </div>
-                <p>
-                  {scheduling?.nextAppointment
-                    ? `${scheduling.nextAppointment.customer?.name ?? "Cliente"} · ${scheduling.nextAppointment.services.map((service) => service.name).join(", ")}`
-                    : calendarUnavailable
-                      ? "Não disponível sem uma consulta segura."
-                      : "Nenhum atendimento futuro disponível."}
-                </p>
-              </div>
-              <span
-                className={`badge${calendarUnavailable ? " badge-danger" : ""}`}
-              >
-                {calendarUnavailable
-                  ? "Não atualizado"
-                  : (scheduling?.nextAppointment?.date ?? "Agenda livre")}
-              </span>
-            </div>
-          </article>
-
-          <article className="card dashboard-card outcomes-card">
-            <header className="dashboard-card-head">
-              <h2>O que a Atendly fez hoje</h2>
-            </header>
-            <div className="outcome-layout">
-              <div className="outcome-lead">
-                <div>
-                  <div className="outcome-value">
-                    {ai?.aiAppointmentsToday ?? "—"}
-                  </div>
-                  <div className="outcome-label">
-                    Agendamentos feitos pela IA
-                  </div>
-                </div>
-                <small>
-                  {ai
-                    ? "Confirmados somente após persistência na fonte oficial"
-                    : "Métricas de automação indisponíveis"}
-                </small>
-              </div>
-              <div className="outcome-minis">
-                <div className="outcome-mini">
-                  <div>
-                    <strong>{ai?.automatedConversationsToday ?? "—"}</strong>
-                    <small>Conversas automatizadas</small>
-                  </div>
-                </div>
-                <div className="outcome-mini">
-                  <div>
-                    <strong>
-                      {scheduling?.estimatedRevenueToday === null ||
-                      scheduling?.estimatedRevenueToday === undefined
-                        ? "—"
-                        : formatCurrency(scheduling.estimatedRevenueToday)}
-                    </strong>
-                    <small>Receita estimada dos atendimentos de hoje</small>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </article>
-
+      <div className="dashboard-body">
+        {attentionCount > 0 && (
           <article
             id="attention"
             className="card dashboard-card attention-card"
           >
             <header className="dashboard-card-head">
-              <h2>Precisam de atenção</h2>
-              <span
-                className={`badge ${attentionCount === 0 ? "badge-success" : "badge-attention"}`}
-              >
-                {attentionCount === 0
-                  ? "Nenhuma"
-                  : `${attentionCount} ${attentionCount === 1 ? "conversa" : "conversas"}`}
+              <h2>Precisa da sua atenção</h2>
+              <span className="badge badge-attention">
+                {`${attentionCount} ${attentionCount === 1 ? "conversa" : "conversas"}`}
               </span>
             </header>
-            {ai && attention.length > 0 ? (
-              <div className="attention-list">
-                {attention.map((conversation) => (
-                  <Link
-                    className="attention-row"
-                    href={`/conversas/${encodeURIComponent(conversation.id)}`}
-                    key={conversation.id}
-                  >
-                    <span className="avatar">
-                      <Icon name="chat" />
+            <div className="attention-list">
+              {attention.map((conversation) => (
+                <Link
+                  className="attention-row"
+                  href={`/conversas/${encodeURIComponent(conversation.id)}`}
+                  key={conversation.id}
+                >
+                  <span className="avatar">
+                    <Icon name="chat" />
+                  </span>
+                  <div className="attention-row-main">
+                    <strong>
+                      {conversation.customerName ??
+                        conversation.externalContactId}
+                    </strong>
+                    <span>
+                      {conversation.lastMessage?.body ??
+                        conversation.handoffReason ??
+                        "Aguardando atendimento humano"}
                     </span>
-                    <div className="attention-row-main">
-                      <strong>
-                        {conversation.customerName ??
-                          conversation.externalContactId}
-                      </strong>
-                      <span>
-                        {conversation.lastMessage?.body ??
-                          conversation.handoffReason ??
-                          "Aguardando atendimento humano"}
-                      </span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <div className="dashboard-empty">
-                <div className="dashboard-empty-inner">
-                  <h3>
-                    {ai
-                      ? "Nenhuma conversa pendente"
-                      : "Conversas temporariamente indisponíveis"}
-                  </h3>
-                  <p>
-                    {ai
-                      ? "Novas conversas que exigirem ação humana aparecerão aqui."
-                      : "Tente novamente antes de concluir que não há pendências."}
-                  </p>
-                  {!ai && (
-                    <button
-                      className="btn btn-secondary"
-                      onClick={onRetry}
-                      type="button"
-                    >
-                      Tentar novamente
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </article>
-
-          <section className="card dashboard-card quick-card">
-            <header className="dashboard-card-head">
-              <h2>Ações rápidas</h2>
-            </header>
-            <div className="quick-actions">
-              <Link className="btn btn-primary" href="/agenda">
-                Ver agenda de hoje
-              </Link>
-              {attentionCount > 0 && (
-                <Link className="btn btn-secondary" href="/conversas">
-                  Ver conversas com atenção
+                  </div>
                 </Link>
-              )}
-              <Link className="btn btn-secondary" href="/configuracoes">
-                Revisar status
-              </Link>
+              ))}
             </div>
-          </section>
-        </div>
-        {empty && <span className="sr-only">Ambiente sem atividade hoje.</span>}
+          </article>
+        )}
+
+        <article id="agenda-today" className="card dashboard-card today-card">
+          <header className="dashboard-card-head">
+            <h2>Hoje</h2>
+            <span
+              className={`badge${calendarUnavailable ? " badge-danger" : ""}`}
+            >
+              {calendarUnavailable
+                ? "Indisponível"
+                : `${todayAppointments.length} ${todayAppointments.length === 1 ? "atendimento" : "atendimentos"}`}
+            </span>
+          </header>
+          {calendarUnavailable ? (
+            <div className="error-state" style={{ padding: "24px 16px" }}>
+              <span className="state-icon">
+                <Icon name="refresh" />
+              </span>
+              <h3>Consulta indisponível</h3>
+              <p>Horários antigos não serão apresentados como atuais.</p>
+              <button
+                className="btn btn-secondary"
+                onClick={onRetry}
+                type="button"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          ) : todayAppointments.length === 0 ? (
+            <div className="dashboard-empty">
+              <div className="dashboard-empty-inner">
+                <span className="state-icon">
+                  <Icon name="calendar" />
+                </span>
+                <h3>Nenhum atendimento hoje.</h3>
+                <p>
+                  Agendamentos criados manualmente ou pela Atendly aparecerão
+                  aqui.
+                </p>
+                <Link className="btn btn-secondary" href="/agenda/novo">
+                  Novo agendamento
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <AgendaToday appointments={todayAppointments} nowLabel={nowLabel} />
+          )}
+        </article>
+
+        <article className="card dashboard-card week-card">
+          <header className="dashboard-card-head">
+            <h2>Esta semana</h2>
+          </header>
+          <div className="week-stats">
+            <div className="week-stat">
+              <span className="week-stat-value">
+                {weekAppointments ?? "—"}
+              </span>
+              <span className="week-stat-label">agendamentos</span>
+            </div>
+            <div className="week-stat">
+              <span className="week-stat-value">
+                {weekAiAppointments ?? "—"}
+              </span>
+              <span className="week-stat-label">marcados pela IA</span>
+            </div>
+            <div className="week-stat">
+              <span className="week-stat-value">{weekHandoffs ?? "—"}</span>
+              <span className="week-stat-label">conversas que você assumiu</span>
+            </div>
+          </div>
+        </article>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -748,15 +760,15 @@ type ChecklistItem = {
  * link é o próprio nome do item. O teste mora em Configurações › IA, e só é
  * oferecido depois do WhatsApp, que é o que ele usa para conversar.
  */
-function PostOnboardingChecklist({
+function buildChecklistItems({
   capabilities,
   whatsappActive,
 }: {
   capabilities: CalendarState["capabilities"] | null;
   whatsappActive: boolean;
-}) {
+}): ChecklistItem[] {
   const testDone = Boolean(capabilities?.activationTestCompleted);
-  const items: ChecklistItem[] = [
+  return [
     {
       done: Boolean(capabilities?.aiActivationReady),
       href: "/servicos",
@@ -790,6 +802,9 @@ function PostOnboardingChecklist({
       label: "Concluir o teste da IA",
     },
   ];
+}
+
+function PostOnboardingChecklist({ items }: { items: ChecklistItem[] }) {
   const doneCount = items.filter((item) => item.done).length;
 
   return (
@@ -827,11 +842,4 @@ function PostOnboardingChecklist({
       </ul>
     </section>
   );
-}
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
 }

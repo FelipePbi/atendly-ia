@@ -117,6 +117,20 @@ export function weekdayIndex(date: string): number {
   return new Date(`${date}T12:00:00.000Z`).getUTCDay();
 }
 
+/**
+ * Instante UTC de segunda-feira 00:00 no fuso do negocio (Goal074).
+ *
+ * Mesma convergencia iterativa de `startOfTodayInTimeZone`, via
+ * `instantFromZonedDateTime`: primeiro acha a data local de hoje, recua ate a
+ * segunda-feira da mesma semana e converte essa data para 00:00 local.
+ */
+export function startOfWeekInTimeZone(timeZone: string): Date {
+  const today = todayInTimeZone(timeZone);
+  const daysSinceMonday = (weekdayIndex(today) + 6) % 7;
+  const monday = addDays(today, -daysSinceMonday);
+  return instantFromZonedDateTime(monday, "00:00", timeZone);
+}
+
 export function overlaps(
   startA: number,
   endA: number,

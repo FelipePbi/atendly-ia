@@ -101,6 +101,12 @@ class FakeTable {
     return this.find(args.where);
   }
 
+  async findUniqueOrThrow(args: { where: Row }): Promise<Row> {
+    const row = this.find(args.where);
+    if (!row) throw new Error(`${this.name}: row not found.`);
+    return row;
+  }
+
   async findFirst(args: {
     where?: Row;
     orderBy?: unknown;
@@ -157,6 +163,7 @@ export interface FakePrismaStore {
   conversationSession: FakeTable;
   handoff: FakeTable;
   message: FakeTable;
+  humanTakeover: FakeTable;
 }
 
 export function createFakePrisma(): {
@@ -210,6 +217,10 @@ export function createFakePrisma(): {
       createdAt: new Date(),
     }),
     message: new FakeTable("message", {}),
+    humanTakeover: new FakeTable("humanTakeover", {
+      actor: null,
+      createdAt: new Date(),
+    }),
   };
 
   // `getBotPauseContext` pede os handoffs abertos junto da conversa.
@@ -244,6 +255,7 @@ export function createFakePrisma(): {
     conversationSession: store.conversationSession,
     handoff: store.handoff,
     message: store.message,
+    humanTakeover: store.humanTakeover,
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma),
   };
 

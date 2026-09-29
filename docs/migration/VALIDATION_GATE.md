@@ -2858,3 +2858,189 @@ e apagado nesta rodada. Resultado: `npx vitest run` **99**/**99** arquivos e
 em `startTime` **2026-09-29T06:18:27.839Z**, `expected` **155**, `skipped`
 **0**, `unexpected` **0**, `flaky` **0** — **0** retentativas, substituindo o
 `flaky` **1** que a rodada 3 tinha deixado sem reconfirmar.
+
+## A Home ganha uma faixa de estado só, os três números reais de "Esta semana" e o sino, do Goal074
+
+`apps/ai-orchestrator/` ganha o registro durável de tomada de controle humano e os dois números novos da semana; `apps/scheduling-service/` ganha o terceiro; `packages/public-api-contract/` e `apps/bff/` repassam os três, aditivos; `apps/frontend/` reorganiza a Home numa faixa de estado só, na ordem do protótipo, com o sino. Nenhum campo público existente muda ou sai; nenhuma migration no BFF nem no Scheduling.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `HumanTakeover` (migration aditiva, `apps/ai-orchestrator/prisma/`) grava uma linha por passagem real de "IA atende" para "humano atende", na própria transação de `assumeHumanControl`, só para `WHATSAPP`/`ATENDLY`; `BACKFILL` nunca grava | Tomadas anteriores à migration não existem em registro nenhum; `releaseToAi` não apaga linha, e assumir/devolver/assumir de novo grava duas |
+| `startOfWeekInTimeZone` (`apps/ai-orchestrator/src/lib/dates.ts`) e a mesma `countConfirmedAppointments` de `aiAppointmentsToday`, aplicada à janela da semana, produzem `aiAppointmentsThisWeek`; `conversationsTakenOverThisWeek` conta conversas distintas com tomada desde segunda | `aiAppointmentsToday` não muda de valor; `prepare`, hold vencido, remarcação e cancelamento continuam sem contar (H-09) |
+| `appointmentsThisWeek` (`apps/scheduling-service/src/modules/internal-api/routes.ts`) lê segunda a domingo da semana local do calendário, inclusive dias já passados | `appointmentsToday`, `todayAppointments` e `nextAppointment` não mudam de valor |
+| Os três campos são aditivos em `dashboardSchema` e nos clientes do BFF; dependência indisponível mostra "—", nunca 0 | Nenhum campo público existente muda ou sai |
+| `OperationalBand` resolve uma faixa de estado só, por gravidade, nunca duas ao mesmo tempo (H-01); ordem faixa → "Precisa da sua atenção" → "Hoje" → "Esta semana" (H-06); saem "Próximo atendimento", "O que a Atendly fez hoje", receita estimada e "Ações rápidas"; nenhuma copy técnica (H-08) nem data ISO (H-10) | Fidelidade visual aos protótipos aprovados; hora da pausa da IA e bloqueios pessoais em "Hoje", que pedem dado novo |
+| `HomeBell` no cabeçalho, em todas as larguras, link para `/notificacoes`, ponto só com `unreadCount` maior que zero (H-07) | O sino não abre gaveta — isso é NT-01, do Goal069; o item "Notificações" da sidebar e do "Mais" continua |
+
+**Oito controles negativos, aplicados e revertidos, depois da última edição de código**, saída colada em [FINAL_AUDIT §49](FINAL_AUDIT.md): (1) a janela da semana do orquestrador começa em hoje, não em segunda: reprova **2** de **6** testes de `goal074-dashboard-week.routes.test.ts`. (2) a contagem da semana passa a contar `prepare`: reprova **1** de **6** do mesmo arquivo. (3) `assumeHumanControl` grava a linha sem conferir a passagem: reprova **1** de **5** testes de `goal074-human-takeover.test.ts`, contra PostgreSQL real. (4) a leitura do Scheduling volta a começar em hoje: reprova **3** de **6** testes de `goal074-dashboard-week.test.ts` (scheduling-service). (5) o schema do cliente do BFF perde `aiAppointmentsThisWeek`: reprova o único teste de `goal074-dashboard-week.test.ts` (bff). (6) a Home volta a renderizar `StatusStrip`: reprova **1** de **6** testes de `goal074-home.test.tsx`. (7) o ponto do sino aparece com zero não lidas: reprova **1** de **6** do mesmo arquivo. (8) a Home volta a mostrar `nextAppointment.date` cru: reprova **1** de **6** do mesmo arquivo. Cada arquivo tocado foi salvo antes da mutação e restaurado logo depois (`sha256sum` conferido idêntico ao original); revertidos os oito, as cinco suítes voltam a **6**/**6**, **5**/**5**, **6**/**6**, **1**/**1** e **6**/**6**.
+
+**Execução final desta unidade (WU-16), sobre a árvore final, depois da última edição de código (das unidades WU-01 a WU-04) e antes dos controles acima:** `npm run validate:core` — **17** passos, **15** `passed`, **0** `failed`, **2** `skipped` (`test:bff`, `test:health-worker`), exit 0, com `test:ai-orchestrator` **87**/**100** arquivos (**13** pulados) e **1133**/**1226** testes (**93** pulados), `test:scheduling-service` **36**/**36** arquivos e **490** testes, `test:frontend` **100**/**100** arquivos e **1039** testes, `test:gate-scripts` **233**/**233**. `npm run validate:ui` — **169** testes passando, **21** pulados, **0** retentativas, exit 0. `BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_bff_test" npm run validate:integration`, contra um PostgreSQL 18 descartável em loopback — **36**/**36** passos, **0** `failed`, exit 0 (**36**, não **35**: o passo novo é `rehearse:goal074-human-takeover-migration`); dentro dele, `test:bff-integration` em **57** arquivos e **440** testes (baseline **56**/**439**), `test:scheduling-integration` em **17** arquivos e **140** testes (sem mudança), `test:ai-orchestrator-transport-durability` em **10** arquivos e **74** testes (inclui `goal074-human-takeover.test.ts`, **5** testes, contra `AI_TEST_DATABASE_URL` derivado) e `rehearse:goal033-authenticated-ui` (gate autenticado) em `expected` **154**, `skipped` **0**, `unexpected` **0**, `flaky` **1** (`notebook-1024 › onboarding-horarios › measured, logged in`, recuperado na primeira retentativa, sem relação com este diff — `onboarding-horarios` não é tocado por nenhum arquivo do Goal074) — **155** cenários no total, igual à baseline.
+
+**Correção incidental, fora do escopo do Goal074, necessária para `validate:core` fechar verde.** `scripts/tests/validate-integration.test.mjs` fixava a lista exata dos passos de `validate:integration` e não tinha sido atualizada para o passo `rehearse:goal074-human-takeover-migration`, já presente em `scripts/validate-integration.mjs` antes desta unidade começar — sincronizado por acréscimo de uma linha, sem relaxar regra de gate nenhuma. `node --test scripts/tests/validate-integration.test.mjs`: **28**/**28** testes, exit 0.
+
+**Conferência humana pendente.** A conferência do §10 do Goal **não foi feita** por este Goal: que a Home, num aparelho real nas cinco larguras e nos estados da faixa, bate com `Home.dc.html`, `Home-Tablet.dc.html` e `Home-Desktop.dc.html`; e que os três números da semana fazem sentido para quem usa.
+
+**O que esta seção não prova.** Não prova fidelidade visual da Home aos protótipos aprovados, nem das telas de módulo e da central de notificações (Goal069) ou do onboarding (Goal072). Não prova tomadas de controle humano anteriores à migration, que não existem em registro nenhum.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal074-2026-09-29-d-088-proposed),
+[FINAL_AUDIT §49](FINAL_AUDIT.md) e [D-088](DECISIONS.md).
+
+### Correção — rodada 2 (FIX-001)
+
+A revisão da rodada 1 encontrou seis blockers, todos corrigidos: (1)
+`resolveOperationalState` (`DashboardScreen.tsx`) mapeava todo `aiView`
+diferente de `"off"` para o título "IA ativa", inclusive `pending`,
+`unknown` e `loading` — a faixa contradizia o checklist "Ative sua IA" e o
+`StatusPoint` ("IA em ativação"); ganhou três ramos novos, um por `aiView`,
+antes do ramo `"off"` (H-02 continua fechado). (2) a seção "Precisa da sua
+atenção" aparecia sempre, com "Nenhuma"/"Nenhuma conversa pendente" mesmo
+sem pendência, contra o Objetivo item 2 do Goal ("só quando há pendência");
+passou a renderizar só com `attentionCount > 0`. (3a) o estado vazio de
+"Hoje" dizia "Ainda não há agendamentos hoje", sem ação; passou a "Nenhum
+atendimento hoje." com o link "Novo agendamento" (`/agenda/novo`, como
+`AgendaBoard.tsx`). (3b) o marcador "agora" em `AgendaToday` comparava só
+`startTime > nowLabel`, então um atendimento em curso nunca o recebia;
+passou a comparar `endTime > nowLabel`, marcando o atendimento em curso ou
+o próximo. (4) `appointmentsThisWeek` (Scheduling) contava tudo que
+`listAppointments` devolvia por sobreposição de instante, então um
+agendamento de domingo anterior que cruza a meia-noite para a segunda desta
+semana entrava na contagem; ganhou filtro adicional por `date` dentro de
+`[weekStart, weekEnd]`. (5) o desvio de escopo do §11 do Goal (toque em
+`scripts/`) não estava declarado; registrado agora em
+[D-088](DECISIONS.md) ("Desvio declarado do §11") e referenciado em
+[FINAL_AUDIT §49](FINAL_AUDIT.md). (6) a evidência documentada citava o gate
+autenticado da execução WU-16 com `flaky` **1** (`onboarding-horarios`);
+como os itens (1) a (4) mudam código, a execução final foi refeita por
+inteiro nesta rodada, substituindo aquela evidência por uma nova, com **0**
+retentativas.
+
+Execução final desta rodada, sobre a árvore corrigida: `npm run lint` e
+`npx tsc --noEmit` de `apps/ai-orchestrator`, `apps/scheduling-service`,
+`apps/bff` e `apps/frontend`, exit 0 nos oito. `npx vitest run`
+(`apps/frontend`, suíte completa): **100**/**100** arquivos e
+**1040**/**1040** testes, exit 0 (baseline WU-16: **100**/**1039**; a
+diferença é o teste novo de "com pendência" em `goal074-home.test.tsx`).
+`npx vitest run tests/unit` (`apps/scheduling-service`, suíte completa):
+**36**/**36** arquivos e **491**/**491** testes, exit 0 (baseline WU-16:
+**36**/**490**; a diferença é o teste novo de agendamento que cruza
+meia-noite em `goal074-dashboard-week.test.ts`). `npm run validate:core`:
+**17** passos, **15** `passed`, **0** `failed`, **2** `skipped`
+(`test:bff`, `test:health-worker`), exit 0, com `test:ai-orchestrator`
+**87**/**100** arquivos (**13** pulados) e **1133**/**1226** testes
+(**93** pulados, sem mudança — este Goal não toca o orquestrador nesta
+rodada), `test:scheduling-service` **36**/**36** arquivos e **491** testes,
+`test:frontend` **100**/**100** arquivos e **1040** testes,
+`test:gate-scripts` **233**/**233**. `npm run validate:ui`: **169**
+testes passando, **21** pulados, **0** `unexpected`, **0** `flaky`, **0**
+retentativas, exit 0 — sem mudança (rotas públicas só, nenhuma tocada por
+esta rodada). `BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_bff_test"
+npm run validate:integration`, contra o PostgreSQL 18 descartável já
+provisionado na estação: **36**/**36** passos, **0** `failed`, exit 0;
+dentro dele, `test:bff-integration` **57**/**57** arquivos e **440**
+testes (sem mudança), `test:scheduling-integration` **17**/**17** arquivos
+e **140** testes (sem mudança), `test:ai-orchestrator-transport-durability`
+**10**/**10** arquivos e **74** testes (sem mudança, inclui
+`goal074-human-takeover.test.ts`), `rehearse:goal074-human-takeover-migration`
+PASSED, e `rehearse:goal033-authenticated-ui` (gate autenticado) em
+`"155 passed (4.7m)"` e `"authenticated gate retries: 0 — every test
+passed on its first attempt"` — **155** cenários no total, igual à
+baseline, **substituindo o `flaky` 1** que a execução WU-16 tinha deixado
+registrado.
+
+**Quatro dos oito controles negativos do §8 foram re-executados**, porque
+tocam os dois arquivos que esta rodada mudou (`DashboardScreen.tsx` e
+`apps/scheduling-service/.../routes.ts`); os outros quatro (1, 2, 3 e 5,
+que tocam `apps/ai-orchestrator/.../routes.ts`, `SessionService.ts` e
+`apps/bff/.../ai-orchestrator/index.ts`) não foram tocados por esta rodada
+e não foram reexecutados. `sha256sum` de cada arquivo-alvo conferido igual
+ao registrado por WU-16 antes da mutação, e idêntico a ele depois da
+restauração:
+
+- **Controle 4** (`weekStart` volta a começar em hoje, não em segunda,
+  `apps/scheduling-service/.../routes.ts`; hash antes/depois
+  `0828d4438622829e6228922df2e42f3cbda6b0fe65515f26d16b9994a87714c7`):
+  `npx vitest run tests/unit/goal074-dashboard-week.test.ts` — exit 1,
+  `Tests 3 failed | 4 passed (7)`.
+- **Controle 6** (`DashboardScreen.tsx` volta a renderizar `StatusStrip`;
+  hash antes/depois
+  `dfb49cdb86185e3c0de6a4a9ccda4ed11b20f05530b1447411af40d9b8402385`):
+  `npx vitest run tests/goal074-home.test.tsx` — exit 1,
+  `Tests 1 failed | 6 passed (7)`.
+- **Controle 7** (o ponto do sino aparece com zero não lidas; mesmo
+  arquivo, mesmo hash): `npx vitest run tests/goal074-home.test.tsx` —
+  exit 1, `Tests 1 failed | 6 passed (7)`.
+- **Controle 8** (a Home volta a mostrar `nextAppointment.date` cru; mesmo
+  arquivo, mesmo hash): `npx vitest run tests/goal074-home.test.tsx` —
+  exit 1, `Tests 2 failed | 5 passed (7)` — o teste novo de "com pendência"
+  também reprova com este defeito.
+
+Revertidos os quatro, `tests/unit/goal074-dashboard-week.test.ts` volta a
+**7**/**7** e `tests/goal074-home.test.tsx` volta a **7**/**7**; `npx vitest
+run` completo de `apps/frontend` e de `apps/scheduling-service` confirmado
+de novo em **1040**/**1040** e **491**/**491**, respectivamente, depois da
+última restauração.
+
+Detalhe completo em [FINAL_AUDIT §49 — Correção, rodada 2](FINAL_AUDIT.md);
+o desvio do §11 em [D-088](DECISIONS.md).
+
+A conferência humana do §10 do Goal continua **não feita**.
+
+### Correção — rodada 3 (blockers da revisão da rodada 3, entregues na rodada 4, FIX-001)
+
+A revisão da rodada 3 encontrou três blockers: faltavam os testes dos
+estados da faixa com a IA não ativa, o teste do marcador "agora" entre dois
+atendimentos e esta documentação. As contagens da rodada 2 acima
+(`test:frontend` **1040**, `goal074-home.test.tsx` **7**/**7**, controles 6
+a 8 com "(7)") ficam substituídas pelas desta subseção.
+
+- **Código.** Em `resolveOperationalState` (`DashboardScreen.tsx`), a
+  faixa "IA em ativação" só diz "Conclua os passos abaixo…" com o checklist
+  visível; com os quatro passos concluídos, diz "Os passos estão
+  concluídos; falta a IA confirmar a ativação.". [D-088](DECISIONS.md)
+  item 8 lista a ordem real da faixa, com "IA inativa" (`OFF`, checklist
+  incompleto) e "IA pausada" (`OFF`, checklist completo, inferida porque
+  não existe dado de pausa).
+- **Testes novos em `goal074-home.test.tsx` (7 → 14).** Cinco nesta
+  rodada: `PENDING` com checklist incompleto, `PENDING` com checklist
+  completo, `OFF` com checklist incompleto e `UNKNOWN`, todos com WhatsApp
+  `CONNECTED`, "IA ativa" ausente e uma só `#operational-status` com o
+  título esperado; e o marcador "agora" às 10:45 (`America/Sao_Paulo`)
+  entre 10:00–10:30 e 11:00–11:30, com ordem `[primeiro, "agora",
+  segundo]` e um só `.agenda-now-marker`. Os outros dois são da rodada 3
+  (vazio e atendimento em curso).
+
+Execução final da rodada 4, sobre a árvore final, depois da última edição
+de código: `npm run lint` de `apps/frontend`, exit 0. `npm run
+validate:core`: **17** passos, **15** `passed`, **0** `failed`, **2**
+`skipped` (`test:bff`, `test:health-worker`), exit 0, com
+`test:ai-orchestrator` **87**/**100** arquivos (**13** pulados) e
+**1133**/**1226** testes (**93** pulados), `test:scheduling-service`
+**36**/**36** e **491** testes, `test:frontend` **100**/**100** e **1048**
+testes (rodada 2: **1040**; **+5** desta rodada, **+3** da rodada 3),
+`test:gate-scripts` **233**/**233**. `npm run test:gate`: **233**/**233**,
+exit 0. `npm run validate:ui`: `169 passed`, **21** pulados, **0**
+retentativas, exit 0.
+`BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_bff_test"
+npm run validate:integration`: **36**/**36** passos, **0** `failed`, exit 0;
+`test:bff-integration` **57**/**440**, `test:scheduling-integration`
+**17**/**140**, `test:ai-orchestrator-transport-durability` **10**/**74**,
+`test:ai-orchestrator-content-purge` **3**/**19**, e o gate autenticado
+(`rehearse:goal033-authenticated-ui`) em `155 passed (4.7m)` e
+`authenticated gate retries: 0 — every test passed on its first attempt`
+— **155**/**0** retentativas.
+
+**Os oito controles negativos do §8 foram rodados de novo, todos**, depois
+dessa execução, com `sha256sum` idêntico antes e depois de cada um e `git
+status --porcelain=v1 -uall` idêntico antes e depois dos oito: (1) semana
+do orquestrador começando hoje — `Tests 2 failed | 4 passed (6)`; (2)
+`prepare` contado — `Tests 1 failed | 5 passed (6)`; (3)
+`assumeHumanControl` sem conferir a passagem, contra PostgreSQL —
+`Tests 1 failed | 4 passed (5)`; (4) Scheduling começando hoje —
+`Tests 3 failed | 4 passed (7)`; (5) BFF sem `aiAppointmentsThisWeek` —
+`Tests 1 failed (1)`; (6) `StatusStrip` de volta — `Tests 1 failed | 13
+passed (14)`; (7) ponto do sino com zero não lidas — `Tests 1 failed | 13
+passed (14)`; (8) `nextAppointment.date` cru — `Tests 2 failed | 12 passed
+(14)`. Todos exit 1. Hashes e saída em
+[FINAL_AUDIT §49 — Correção, rodada 3](FINAL_AUDIT.md).
+
+A conferência humana do §10 do Goal continua **não feita**.

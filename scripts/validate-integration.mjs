@@ -556,6 +556,18 @@ export function integrationSteps(target) {
       args: ["scripts/goal029-timezone-reconciliation-rehearsal.mjs"],
       env,
     },
+    // Gate M0/M1 do Goal074: ensaio da migration de registro durável de tomada
+    // de controle humano (`HumanTakeover`) na IA, em banco próprio e
+    // descartável. Expande também o banco de durabilidade da IA (`_goal004`)
+    // com a mesma migration — sem isto, `SessionService.assumeHumanControl`
+    // falha na suíte de persistência abaixo porque a tabela não existe lá.
+    {
+      name: "rehearse:goal074-human-takeover-migration",
+      cwd: ".",
+      command: "node",
+      args: ["scripts/goal074-human-takeover-migration-rehearsal.mjs"],
+      env,
+    },
     {
       // Checkout limpo não tem `src/generated/prisma`; sem isto a suíte falha
       // na importação do client.

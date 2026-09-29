@@ -7146,3 +7146,160 @@ Decisão: [D-087](DECISIONS.md), proposta no Goal068, **ACCEPTED** no
   à direita. Essa composição fica para a conferência humana do §8 — ver a
   nota de fechamento de [D-087](DECISIONS.md) e o
   [review068](reviews/068-review.md).
+
+## Delta implementado — Goal074, 2026-09-29 ([D-088](DECISIONS.md), ACCEPTED)
+
+Corrige **H-01**, **H-06**, **H-07**, **H-08** e **H-10** do
+[QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md), fora da enumeração A-01…A-24 do
+FINAL_AUDIT. Cria o registro durável de tomada de controle humano e os
+três números reais de "Esta semana", que não existiam em camada nenhuma.
+Toca `apps/ai-orchestrator/` (migration aditiva, `SessionService.ts`,
+`internal/routes.ts`, `lib/dates.ts`), `apps/scheduling-service/`
+(`internal-api/routes.ts`), `packages/public-api-contract/`,
+`apps/bff/` (`clients/ai-orchestrator/`, `clients/scheduling/`,
+`PUBLIC_API_V1.md`), `apps/frontend/` (`features/dashboard/
+DashboardScreen.tsx`, `shared/styles/atendly.css`) e os testes com
+`goal074` no nome em cada serviço tocado. Decisão: [D-088](DECISIONS.md),
+proposta no Goal074, **ACCEPTED** no [review074](reviews/074-review.md)
+(rodada 4).
+
+- **Registro durável de tomada de controle humano.** Tabela nova
+  `HumanTakeover` no orquestrador (migration aditiva
+  `20260929120000_goal074_human_takeover`, índice por `tenantId` e
+  instante, `onDelete: Cascade` a partir de `ConversationSession`).
+  `assumeHumanControl` grava uma linha na própria transação, só na
+  passagem real de "IA atende" para "humano atende" e só para
+  `WHATSAPP`/`ATENDLY`; `BACKFILL` nunca grava. `releaseToAi` não apaga
+  linha; assumir, devolver e assumir de novo grava duas.
+- **Números da semana, mesma regra de hoje, janela diferente.**
+  `startOfWeekInTimeZone` (segunda 00:00, fuso do negócio) em
+  `apps/ai-orchestrator/src/lib/dates.ts`. `/internal/dashboard` do
+  orquestrador ganha `aiAppointmentsThisWeek` (mesma função
+  `countConfirmedAppointments` de `aiAppointmentsToday`) e
+  `conversationsTakenOverThisWeek` (conversas distintas com tomada desde
+  segunda). `/internal/dashboard` do Scheduling ganha
+  `appointmentsThisWeek`, segunda a domingo da semana local do
+  calendário, inclusive dias já passados. Os três campos são aditivos em
+  `dashboardSchema` e nos clientes do BFF; `PUBLIC_API_V1.md` os
+  descreve, por acréscimo, e passa a nomear
+  `CUSTOMER_CHANGE_OUTSIDE_POLICY` (observação 1 do review073).
+  Dependência indisponível mostra "—", nunca 0.
+- **A Home, uma faixa de estado só, na ordem do protótipo.**
+  `StatusStrip` e os alertas empilhados saem; `OperationalBand` resolve
+  um só estado, por gravidade (H-01; H-02 continua fechado). Ordem:
+  faixa → "Precisa da sua atenção" → "Hoje" (lista, marcador "agora") →
+  "Esta semana" (H-06); o checklist do Goal063 fica, sem itens em card,
+  no lugar do estado H4 (H-03 e H-04 continuam fechados). Saem "Próximo
+  atendimento", "O que a Atendly fez hoje", a receita estimada e "Ações
+  rápidas"; nenhuma copy técnica do §4 do Goal aparece (H-08); nenhuma
+  data ISO aparece — a `nextAppointment.date` crua saiu junto com o card
+  (H-10).
+- **O sino.** Cabeçalho da Home, em todas as larguras, link para
+  `/notificacoes`, nome acessível com contagem de não lidas, ponto só
+  com `unreadCount` maior que zero (H-07). O item "Notificações" da
+  sidebar e do "Mais" continua até o Goal069 trocar a central por
+  gaveta.
+- **Observação 3 do review068.** Título do teste em
+  `apps/frontend/tests/goal068-assinatura.test.tsx:258` corrigido para
+  descrever o que a asserção prova; a asserção não muda.
+- **Oito controles negativos (§8)**, rodados por esta unidade (WU-16)
+  sobre a árvore final, depois da execução final abaixo, com restauração
+  conferida por `sha256sum` idêntico antes e depois de cada um: janela
+  da semana do orquestrador começando hoje reprova; contar `prepare`
+  reprova; `assumeHumanControl` sem conferir a passagem reprova na
+  segunda tomada da mesma sessão; leitura do Scheduling começando hoje
+  reprova; schema do BFF sem `aiAppointmentsThisWeek` reprova;
+  `StatusStrip` de volta reprova; ponto do sino com zero não lidas
+  reprova; `nextAppointment.date` cru de volta reprova. Saída em
+  [FINAL_AUDIT §49](FINAL_AUDIT.md).
+- **Execução final** (reexecutada por esta unidade, WU-16) —
+  `validate:core`: **17** passos, **15** `passed`, **0** `failed`, **2**
+  `skipped` (`test:bff`, `test:health-worker`), exit 0, com
+  `test:ai-orchestrator` **87**/**100** arquivos e **1133**/**1226**
+  testes, `test:scheduling-service` **36**/**36** arquivos e **490**
+  testes, `test:frontend` **100**/**100** arquivos e **1039** testes,
+  `test:gate-scripts` **233**/**233**; `validate:ui`: **169** passando,
+  **21** pulados, **0** retentativas, exit 0; `validate:integration`:
+  **36**/**36** passos, **0** `failed`, exit 0 (**36**, não **35**: o passo
+  novo é `rehearse:goal074-human-takeover-migration`), com
+  `test:bff-integration` **57**/**440** (baseline **56**/**439**),
+  `test:scheduling-integration` **17**/**140** (sem mudança) e o gate
+  autenticado (`rehearse:goal033-authenticated-ui`) em `expected` **154**,
+  `unexpected` **0**, `flaky` **1** (`onboarding-horarios`, recuperado na
+  retentativa, sem relação com este diff) — **155** cenários no total,
+  igual à baseline. Detalhe e saída real em
+  [FINAL_AUDIT §49](FINAL_AUDIT.md).
+- **Correção incidental, fora do escopo do Goal074.**
+  `scripts/tests/validate-integration.test.mjs` fixava a lista de passos
+  de `validate:integration` sem o passo
+  `rehearse:goal074-human-takeover-migration`, já presente em
+  `scripts/validate-integration.mjs` antes desta unidade começar —
+  sincronizado, sem relaxar regra nenhuma de gate. Detalhe em
+  [FINAL_AUDIT §49](FINAL_AUDIT.md).
+- **Conferência humana pendente:** a conferência do §10 do Goal **não
+  foi feita** por este Goal — que a Home, num aparelho real nas cinco
+  larguras e nos estados da faixa, bate com `Home.dc.html`,
+  `Home-Tablet.dc.html` e `Home-Desktop.dc.html`; e que os três números
+  da semana fazem sentido para quem usa.
+- **Limites declarados:** tomadas de controle humano anteriores à
+  migration não existem em registro nenhum; sem hora da pausa da IA nem
+  bloqueios pessoais em "Hoje" (pedem dado novo); o sino leva à página
+  `/notificacoes`, não a uma gaveta, até o Goal069; o Product Vault e o
+  `QA_LOCAL_REVIEW.md` não foram editados — ver [D-088](DECISIONS.md).
+- **Correção, rodada 2 (FIX-001).** Seis blockers da revisão da rodada 1,
+  todos corrigidos: faixa de estado contradizendo `pending`/`unknown`/
+  `loading` da IA (H-02); "Precisa da sua atenção" aparecendo sem
+  pendência; estado vazio de "Hoje" sem a ação de criar agendamento e sem
+  ação; marcador "agora" nunca pegando o atendimento em curso;
+  `appointmentsThisWeek` contando agendamento de domingo anterior que
+  cruza meia-noite; desvio do §11 (toque em `scripts/`) não declarado
+  (agora em [D-088](DECISIONS.md#d-088)); e evidência de gate autenticado
+  com `flaky` **1**, substituída porque o código mudou. Execução final
+  refeita por inteiro: `test:frontend` **100**/**1040** (baseline WU-16:
+  **100**/**1039**), `test:scheduling-service` **36**/**491** (baseline
+  **36**/**490**), `validate:core` **17** passos **15** `passed` **2**
+  `skipped` exit 0, `validate:ui` **169** passando **0** retentativas exit
+  0, `validate:integration` **36**/**36** passos exit 0 com o gate
+  autenticado em `155 passed (4.7m)` e **0** retentativas — substituindo o
+  `flaky` **1** da execução WU-16. Quatro dos oito controles negativos
+  (4, 6, 7, 8, os que tocam os arquivos mudados nesta rodada)
+  re-executados, com `sha256sum` idêntico ao de WU-16 antes de cada
+  mutação e depois de cada restauração; os outros quatro (1, 2, 3, 5) não
+  tocam arquivo mudado nesta rodada e não foram reexecutados. Detalhe e
+  saída real em [FINAL_AUDIT §49 — Rodada 2](FINAL_AUDIT.md).
+- **Correção — rodada 3 (FIX-001, entregue na rodada 4).** Três blockers
+  da revisão da rodada 3. (1) A faixa "IA em ativação" dizia "Conclua os
+  passos abaixo…" mesmo com o checklist oculto; agora essa frase só
+  aparece com o checklist visível. [D-088](DECISIONS.md) item 8 passa a
+  listar a ordem real da faixa, com "IA inativa" (`OFF`, checklist
+  incompleto) e "IA pausada" (`OFF`, checklist completo, inferida porque
+  não existe dado de pausa). (2) Testes novos em `goal074-home.test.tsx`
+  (**7** → **14**): `PENDING` com e sem checklist completo, `OFF` com
+  checklist incompleto, `UNKNOWN` e o marcador "agora" entre dois
+  atendimentos, às 10:45. (3) Esta documentação. Execução final da rodada
+  4, depois da última edição de código: `validate:core` **17** passos,
+  **15** `passed`, **2** `skipped`, exit 0, com `test:frontend`
+  **100**/**1048** (rodada 2: **1040**), `test:ai-orchestrator`
+  **1133**/**1226** (**93** pulados), `test:scheduling-service`
+  **36**/**491**; `test:gate` **233**/**233**; `validate:ui` **169**
+  passando, **0** retentativas; `validate:integration` **36**/**36**
+  passos, exit 0, com o gate autenticado em `155 passed (4.7m)` e **0**
+  retentativas. Os oito controles negativos do §8 foram rodados de novo,
+  todos, depois dessa execução; os oito reprovam e cada arquivo volta com
+  `sha256sum` idêntico. Saída real em
+  [FINAL_AUDIT §49 — Correção, rodada 3](FINAL_AUDIT.md). A conferência
+  humana do §10 continua **não feita**.
+- **Fechamento — review074, 2026-09-29.** Aceito na rodada 4 do IA Loop,
+  sem blocker. As notas de correção acima usam numeração própria:
+  "Correção — rodada 3" é a correção da rodada 4 do IA Loop, a árvore
+  aceita; a correção da rodada 3 do IA Loop não escreveu nota. A nota
+  "Correção, rodada 2" diz os seis blockers da rodada 1 corrigidos, mas o
+  estado "IA inativa" e os testes de "Hoje" só fecharam na rodada 4. A
+  purga de tenant também apaga `HumanTakeover` por enumeração
+  (`TENANT_PURGE_TABLES`), além do cascade a partir da sessão. "IA
+  pausada" é inferida pelo checklist completo, sem dado de pausa. Na
+  rodada 4, `validate:integration` ficou `SKIPPED` no IA Loop por falta de
+  `*_TEST_DATABASE_URL`; os **36**/**36** passos e o gate autenticado com
+  **155** e **0** retentativas são a execução declarada pelo Developer. Ver
+  a nota de fechamento de [D-088](DECISIONS.md) e o
+  [review074](reviews/074-review.md).

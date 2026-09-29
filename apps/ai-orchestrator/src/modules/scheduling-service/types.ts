@@ -402,3 +402,22 @@ export interface AppointmentPresenceConfirmation {
  */
 export const PRESENCE_CONFIRMATION_NOT_ENABLED =
   "PRESENCE_CONFIRMATION_NOT_ENABLED";
+
+// --- Politica de antecedencia do cliente (Goal073) --------------------------
+// So restringe o chamador IA (a profissional nunca e limitada por isto). A
+// IA le a configuracao vigente e recusa cancelar/remarcar fora do prazo
+// antes de gravar pendencia ou criar hold; o Scheduling confere de novo no
+// commit, para o caso de a configuracao mudar entre o prepare e o confirm.
+
+/** Recorte de `GET /internal/availability-settings` que esta regra le. */
+export interface CustomerChangePolicy {
+  /** Zero (o default) nao restringe nada. */
+  minNoticeMinutes: number;
+}
+
+/**
+ * Mesmo codigo que `AtendlyCalendarProvider.assertCustomerChangePolicy`
+ * emite no Scheduling: o cliente (via IA) tentou alterar o proprio
+ * atendimento com menos antecedencia do que o negocio permite.
+ */
+export const CUSTOMER_CHANGE_OUTSIDE_POLICY = "CUSTOMER_CHANGE_OUTSIDE_POLICY";

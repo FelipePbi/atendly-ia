@@ -396,6 +396,7 @@ function availabilityFixture(
   rules: Array<{ dayOfWeek: number; startTime: string; endTime: string }>,
 ): NonNullable<OnboardingState["availability"]> {
   return {
+    customerChangeMinNoticeMinutes: 0,
     granularityMinutes: 30,
     maxLeadDays: 90,
     minLeadMinutes: 0,

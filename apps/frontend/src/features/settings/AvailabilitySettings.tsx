@@ -188,6 +188,12 @@ export function AvailabilitySettings({
   }
 
   function toggleDay(day: number, active: boolean) {
+    if (active && totalRules >= MAX_RULES) {
+      setMessage(
+        `Você já tem ${MAX_RULES} intervalos na Disponibilidade. Remova um intervalo para ligar este dia.`,
+      );
+      return;
+    }
     setDay(day, active ? [{ startTime: "09:00", endTime: "18:00" }] : []);
   }
 

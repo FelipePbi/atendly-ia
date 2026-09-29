@@ -24,7 +24,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Clientes | `GET /v1/customers`; `GET /v1/customers/:id`; `POST /v1/customers`; `PATCH /v1/customers/:id`; `PUT /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/primary-guardian/confirm`; `DELETE /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/notes`; `PATCH /v1/customers/:id/notes/:noteId`; `DELETE /v1/customers/:id/notes/:noteId`; `POST /v1/customers/:id/tags`; `PATCH /v1/customers/:id/tags/:tagId`; `DELETE /v1/customers/:id/tags/:tagId`; `GET/POST /v1/customers/:id/memory`; `PATCH/DELETE /v1/customers/:id/memory/:memoryId`; `POST /v1/customers/:id/summary` (Goal012) |
 | Conhecimento do negócio (Goal012) | `GET/POST /v1/knowledge/documents`; `GET/PUT/DELETE /v1/knowledge/documents/:id`; `GET/PUT /v1/knowledge/other-info` |
 | Serviços | `GET /v1/services`; `POST /v1/services`; `PATCH /v1/services/:id` |
-| Configurações | `GET /v1/settings`; `PATCH /v1/settings/business`; `PATCH /v1/settings/ai`; `PATCH /v1/settings/availability`; `GET /v1/settings/reminders`; `PATCH /v1/settings/reminders` (Goal021); `GET/PATCH /v1/settings/retention` (Goal023/WU-01) |
+| Configurações | `GET /v1/settings`; `PATCH /v1/settings/business`; `PATCH /v1/settings/ai`; `PATCH /v1/settings/availability`; `GET /v1/settings/reminders`; `PATCH /v1/settings/reminders` (Goal021); `GET/PATCH /v1/settings/retention` (Goal023/WU-01); `GET/PATCH /v1/settings/agenda-view` (Goal073/WU-03) |
 | WhatsApp | `GET /v1/whatsapp`; `GET /v1/whatsapp/qr` (Goal071/WU-01); `POST /v1/whatsapp/connect`; `POST /v1/whatsapp/reconnect`; `DELETE /v1/whatsapp` |
 | Teste real de ativação (Goal019/WU-05) | `GET /v1/activation-test`; `POST /v1/activation-test`; `POST /v1/activation-test/restart` |
 | Central de notificações (Goal022/WU-04) | `GET /v1/notifications`; `GET /v1/notifications/summary`; `POST /v1/notifications/read`; `GET/PATCH /v1/notifications/preferences` |
@@ -276,6 +276,8 @@ Toda escrita da agenda roda em transação `Serializable` com lock por dia. Abor
 ### Regras de oferta e granularidade
 
 `PATCH /v1/settings/availability` ganhou, de forma aditiva ao corpo existente (`timezone` + `rules`), `minLeadMinutes` (antecedência mínima, minutos), `maxLeadDays` (antecedência máxima, dias) e `granularityMinutes` (passo da grade, múltiplo de 5 entre 5 e 120). Ausentes preservam o valor já gravado. `GET /v1/settings` devolve os três dentro de `availability`.
+
+`customerChangeMinNoticeMinutes` (Goal073/WU-03) é o quarto campo aditivo do mesmo corpo: antecedência mínima, em minutos (0 a 10080, sete dias), para o **cliente** — via IA — cancelar ou remarcar o próprio atendimento. Ausente preserva o valor já gravado; o default do produto é `0` (sem restrição, o comportamento anterior a este Goal). Fora do intervalo é `400 VALIDATION_ERROR`, sem gravar nada. A aplicação da regra na IA — quem ela restringe, o que exime — é do Scheduling e da IA, fora deste contrato; aqui só o campo é gravado e devolvido.
 
 O motor de disponibilidade aplica as três a **toda** oferta — nenhum slot antes da antecedência mínima nem depois da máxima, passo sempre igual à granularidade do negócio. `GET /v1/availability` não aceita mais `stepMinutes`: quem decide o passo é sempre o negócio, nunca quem chama. A confirmação (`POST /v1/appointments`, `.../reschedule`, `POST /v1/holds`) continua aceitando `stepMinutes` no corpo por compatibilidade, mas o valor é ignorado pela Agenda Atendly — o horário pedido é sempre validado contra a grade do negócio. Override humano de sobreposição (`overlapOverride`) continua ignorando a grade; a IA nunca tem esse campo.
 
@@ -832,6 +834,31 @@ Reduzir uma categoria (ou as duas) sem `confirmReduction: true` é recusado com 
 O `PATCH` devolve a mesma forma do `GET`, inclusive `lastSweepCompletedAt`: gravar prazo não varre, e a resposta não pode sugerir que varreu.
 
 **O que estas rotas não configuram.** Três prazos são **técnicos** e não aparecem aqui nem na interface, porque não são conteúdo de conversa e sim rastro de transporte e execução: o inbox durável da IA (`INBOX_RETENTION_DAYS`, default 180 dias), o conteúdo das intenções de lembrete (`RETENTION_INTENT_CONTENT_DAYS`, default 90 dias) e o outbox do transporte em Go (`WEBHOOK_OUTBOX_RETENTION_HOURS`, default 30 dias). Todos vêm de variável de ambiente, e nenhum deles muda quando o negócio muda o prazo das categorias.
+
+## Preferência de visualização da agenda (Goal073/WU-03)
+
+Duas rotas sob `requireTenantContext`, só do BFF: a Agenda Atendly não tem noção de "vista", então não existe rota interna correspondente no Scheduling — a preferência é gravada e lida só aqui. A **ausência da linha** é o default do produto: nada oculto, sem vista inicial escolhida, nunca gravada só pela leitura.
+
+| Rota | O que faz |
+| --- | --- |
+| `GET /v1/settings/agenda-view` | lê a preferência de visualização do negócio |
+| `PATCH /v1/settings/agenda-view` | grava um ou os dois campos |
+
+Corpo/resposta:
+
+```json
+{
+  "hiddenWeekdays": [0, 6],
+  "initialView": "WEEK"
+}
+```
+
+| Campo | Valores | Significado |
+| --- | --- | --- |
+| `hiddenWeekdays` | array de até seis inteiros `0`-`6` (domingo a sábado), sem repetido | dias da semana ocultos na grade da agenda; ausente na escrita preserva o valor já gravado (ou `[]`, sem linha) |
+| `initialView` | `DAY`, `WEEK`, `MONTH` ou `null` | vista com que a Agenda abre; ausente na escrita preserva o valor já gravado, `null` explícito limpa a escolha |
+
+`PATCH` recusa com `400 VALIDATION_ERROR`, sem gravar nada: sete dias ocultos (ocultaria a semana inteira), dia repetido ou dia fora de `0`-`6`. Sem sessão, `401 UNAUTHORIZED`. `tenantId` vem sempre da sessão; esta rota nunca lê nem grava a preferência de outro negócio.
 
 ### Estado de envio de um agendamento
 

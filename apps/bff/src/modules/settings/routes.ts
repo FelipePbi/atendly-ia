@@ -79,6 +79,25 @@ const availabilitySchema = z.object({
   minLeadMinutes: z.number().int().min(0).max(43_200).optional(),
   maxLeadDays: z.number().int().min(1).max(365).optional(),
   granularityMinutes: z.number().int().min(5).max(120).optional(),
+  // Antecedencia minima do cliente (via IA) para cancelar/remarcar o proprio
+  // atendimento (Goal073). Ausente preserva o valor ja gravado, no mesmo
+  // padrao das demais regras de oferta.
+  customerChangeMinNoticeMinutes: z.number().int().min(0).max(10_080).optional(),
+});
+
+const agendaInitialViewSchema = z.enum(["DAY", "WEEK", "MONTH"]);
+const agendaHiddenWeekdaysSchema = z
+  .array(z.number().int().min(0).max(6))
+  .max(6)
+  .refine((days) => new Set(days).size === days.length, {
+    message: "hiddenWeekdays must not contain a repeated day.",
+  });
+const agendaViewPreferenceSchema = z.object({
+  // Ausente preserva o que ja esta gravado (ou vazio, sem linha); ate seis
+  // dias, sem repetido — sete ocultaria a semana inteira (Goal073).
+  hiddenWeekdays: agendaHiddenWeekdaysSchema.optional(),
+  // `null` explicito limpa a escolha; ausente preserva.
+  initialView: agendaInitialViewSchema.nullable().optional(),
 });
 
 export async function registerV1SettingsRoutes(
@@ -282,6 +301,53 @@ export async function registerV1SettingsRoutes(
           parseBody(reminderSettingsSchema, request.body),
         ),
       ),
+  );
+
+  // --- Preferencia de visualizacao da agenda (Goal073) --------------------
+  // So do BFF: a Agenda Atendly nao tem noticao de "vista", entao nao existe
+  // rota interna correspondente no Scheduling. Ausencia de linha e o default
+  // do produto (nada oculto, sem vista inicial escolhida), nunca gravada por
+  // esta leitura.
+
+  app.get(
+    "/v1/settings/agenda-view",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const tenant = currentTenantContext(request);
+      const row = await getPrisma().agendaViewPreference.findUnique({
+        where: { tenantId: tenant.tenantId },
+      });
+      return dataResponse(request, {
+        hiddenWeekdays: row?.hiddenWeekdays ?? [],
+        initialView: row?.initialView ?? null,
+      });
+    },
+  );
+
+  app.patch(
+    "/v1/settings/agenda-view",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const body = parseBody(agendaViewPreferenceSchema, request.body);
+      const tenant = currentTenantContext(request);
+      const current = await getPrisma().agendaViewPreference.findUnique({
+        where: { tenantId: tenant.tenantId },
+      });
+      const hiddenWeekdays = body.hiddenWeekdays ?? current?.hiddenWeekdays ?? [];
+      const initialView =
+        body.initialView !== undefined
+          ? body.initialView
+          : (current?.initialView ?? null);
+      const row = await getPrisma().agendaViewPreference.upsert({
+        where: { tenantId: tenant.tenantId },
+        create: { tenantId: tenant.tenantId, hiddenWeekdays, initialView },
+        update: { hiddenWeekdays, initialView },
+      });
+      return dataResponse(request, {
+        hiddenWeekdays: row.hiddenWeekdays,
+        initialView: row.initialView,
+      });
+    },
   );
 }
 

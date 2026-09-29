@@ -258,6 +258,15 @@ model CalendarSettings {
   minLeadMinutes     Int @default(0)
   maxLeadDays        Int @default(90)
   granularityMinutes Int @default(30)
+  /// Antecedencia minima para o cliente (via IA) alterar o proprio
+  /// atendimento (Goal073): cancelar ou remarcar com menos do que isto de
+  /// antecedencia e recusado quando o chamador e a IA. Zero e o default,
+  /// preservado por migration aditiva sem backfill — negocio existente nao
+  /// ganha restricao nova so por ter a coluna. So humano (BFF) decide o
+  /// valor; a profissional (chamador USER) nunca e limitada por esta regra.
+  /// Teto de 10080 minutos (sete dias), pela constraint SQL
+  /// `CalendarSettings_customerChangeMinNoticeMinutes_check`.
+  customerChangeMinNoticeMinutes Int @default(0)
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
 }

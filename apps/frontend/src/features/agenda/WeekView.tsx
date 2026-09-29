@@ -1,6 +1,7 @@
 "use client";
 
 import clsx from "clsx";
+import type { CSSProperties } from "react";
 
 import { Icon } from "@/shared/icons/Icon";
 
@@ -19,17 +20,20 @@ const WEEKDAY_LABELS = ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"];
 
 export function WeekView({
   entries,
+  hiddenWeekdays = [],
   onSelectDay,
   start,
 }: {
   entries: AgendaEntry[];
+  hiddenWeekdays?: number[];
   onSelectDay: (date: Date) => void;
   start: string;
 }) {
   const startDate = parseDate(start);
+  const hiddenSet = new Set(hiddenWeekdays);
   const days = Array.from({ length: 7 }, (_, index) =>
     addDays(startDate, index),
-  );
+  ).filter((day) => !hiddenSet.has(day.getDay()));
   const today = isoDate(new Date());
 
   const { gridHeight, hours, startHour } = timeGridBounds(entries);
@@ -39,7 +43,10 @@ export function WeekView({
       aria-label="Mapa da semana"
       className="agenda-calendar agenda-week-scroll"
     >
-      <div className="week-board">
+      <div
+        className="week-board"
+        style={{ "--visible-days": days.length } as CSSProperties}
+      >
         <div className="week-header">
           <div className="week-header-spacer" />
           {days.map((day) => {

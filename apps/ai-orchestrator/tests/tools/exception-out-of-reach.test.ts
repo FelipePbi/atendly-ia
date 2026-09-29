@@ -227,6 +227,9 @@ function createExceptionTrap() {
       configured: true,
       confirmationEnabled: true,
     }),
+    // Sem restricao (Goal073): esta suite prova excecao/encaixe/desconto
+    // fora do alcance, nao a politica de antecedencia minima do cliente.
+    getCustomerChangePolicy: async () => ({ minNoticeMinutes: 0 }),
     confirmAppointmentPresence: async (appointmentId: string) => {
       record("confirmAppointmentPresence", { appointmentId });
       return {

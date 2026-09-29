@@ -1653,6 +1653,10 @@ function createAgendaMock(
       tags: [],
       primaryGuardian: null,
     }),
+    // Sem restricao (Goal073): os testes deste arquivo nao exercitam a
+    // politica de antecedencia minima do cliente, que tem suite propria em
+    // goal073-customer-change-policy.test.ts.
+    getCustomerChangePolicy: async () => ({ minNoticeMinutes: 0 }),
     cancelAppointment: async (appointmentId: string) => ({
       appointmentId,
       cancelled: true as const,

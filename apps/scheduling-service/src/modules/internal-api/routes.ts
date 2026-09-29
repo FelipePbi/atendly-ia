@@ -121,6 +121,10 @@ const offerRulesShape = {
   minLeadMinutes: z.number().int().min(0).max(43_200).optional(),
   maxLeadDays: z.number().int().min(1).max(365).optional(),
   granularityMinutes: z.number().int().min(5).max(120).optional(),
+  // Antecedencia minima do cliente (Goal073), aditiva ao mesmo corpo:
+  // ausente preserva o valor ja gravado, no mesmo padrao das demais regras
+  // de oferta.
+  customerChangeMinNoticeMinutes: z.number().int().min(0).max(10_080).optional(),
 };
 const availabilityBodySchema = z.object({
   timezone: z.string().trim().min(1).max(100),
@@ -902,6 +906,11 @@ export async function registerManagementRoutes(
       const maxLeadDays = body.maxLeadDays ?? calendar.maxLeadDays;
       const granularityMinutes =
         body.granularityMinutes ?? calendar.granularityMinutes;
+      // Ausente preserva o valor ja gravado (Goal073): o corpo so muda o que
+      // ele de fato manda.
+      const customerChangeMinNoticeMinutes =
+        body.customerChangeMinNoticeMinutes ??
+        calendar.customerChangeMinNoticeMinutes;
       assertOfferRules({ minLeadMinutes, maxLeadDays, granularityMinutes });
       await prisma.$transaction(async (transaction) => {
         await transaction.calendarSettings.update({
@@ -911,6 +920,7 @@ export async function registerManagementRoutes(
             minLeadMinutes,
             maxLeadDays,
             granularityMinutes,
+            customerChangeMinNoticeMinutes,
           },
         });
         await transaction.availabilityRule.deleteMany({
@@ -938,6 +948,7 @@ export async function registerManagementRoutes(
         minLeadMinutes,
         maxLeadDays,
         granularityMinutes,
+        customerChangeMinNoticeMinutes,
       });
     },
   );
@@ -2128,11 +2139,13 @@ function offerRulesDto(calendar: {
   minLeadMinutes: number;
   maxLeadDays: number;
   granularityMinutes: number;
+  customerChangeMinNoticeMinutes: number;
 }) {
   return {
     minLeadMinutes: calendar.minLeadMinutes,
     maxLeadDays: calendar.maxLeadDays,
     granularityMinutes: calendar.granularityMinutes,
+    customerChangeMinNoticeMinutes: calendar.customerChangeMinNoticeMinutes,
   };
 }
 

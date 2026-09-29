@@ -117,6 +117,7 @@ model Tenant {
   notificationSyncState  NotificationSyncState?
   retentionSettings      RetentionSettings?
   retentionSweepState    RetentionSweepState?
+  agendaViewPreference   AgendaViewPreference?
 }
 
 model TenantMember {
@@ -457,6 +458,32 @@ model NotificationSyncState {
   aiAppointmentEventCursor String?
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+/// Vista inicial da Agenda (Goal073). So do BFF: a Agenda Atendly nao tem
+/// nocao de "vista", esta preferencia e so de apresentacao.
+enum AgendaInitialView {
+  DAY
+  WEEK
+  MONTH
+}
+
+/// Preferencia de visualizacao da agenda, por negocio (Goal073).
+///
+/// A **ausencia da linha** e a escolha do produto, no mesmo padrao de
+/// `RetentionSettings`: nada oculto e sem vista inicial escolhida, nunca
+/// gravada so pela leitura. `hiddenWeekdays` e uma lista de `dayOfWeek`
+/// (0-6, domingo a sabado) sem repetido e com no maximo seis itens — sete
+/// ocultaria a agenda inteira, o que a validacao da rota recusa antes de
+/// chegar aqui.
+model AgendaViewPreference {
+  tenantId       String             @id
+  hiddenWeekdays Int[]              @default([])
+  initialView    AgendaInitialView?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }

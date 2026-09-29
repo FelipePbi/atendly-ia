@@ -117,6 +117,10 @@ export const availabilitySettingsSchema = z.object({
   minLeadMinutes: z.number().int().nonnegative().optional().default(0),
   maxLeadDays: z.number().int().positive().optional().default(90),
   granularityMinutes: z.number().int().positive().optional().default(30),
+  // Antecedencia minima do cliente (via IA) para cancelar/remarcar o proprio
+  // atendimento (Goal073). Default igual ao motor: resposta antiga continua
+  // decodavel.
+  customerChangeMinNoticeMinutes: z.number().int().nonnegative().optional().default(0),
 });
 
 const serviceColorTokenSchema = z.enum([
@@ -225,6 +229,16 @@ export const reminderSettingsSchema = z.object({
   confirmationEnabled: z.boolean(),
   pricePolicy: reminderPricePolicySchema,
   rules: z.array(reminderRuleSchema).max(2),
+});
+
+// --- Preferencia de visualizacao da agenda (Goal073) ------------------------
+// Espelha `GET/PATCH /v1/settings/agenda-view`. So do BFF; a Agenda Atendly
+// nao tem nocao de "vista". Ausencia de linha e o default do produto (nada
+// oculto, sem vista inicial), nunca gravada so pela leitura.
+export const agendaInitialViewSchema = z.enum(["DAY", "WEEK", "MONTH"]);
+export const agendaViewPreferenceSchema = z.object({
+  hiddenWeekdays: z.array(z.number().int().min(0).max(6)).max(6),
+  initialView: agendaInitialViewSchema.nullable(),
 });
 
 export const retentionDaysSchema = z.union([
@@ -1177,6 +1191,8 @@ export type ReminderRule = z.infer<typeof reminderRuleSchema>;
 export type ReminderSettings = z.infer<typeof reminderSettingsSchema>;
 export type RetentionDays = z.infer<typeof retentionDaysSchema>;
 export type RetentionSettings = z.infer<typeof retentionSettingsSchema>;
+export type AgendaInitialView = z.infer<typeof agendaInitialViewSchema>;
+export type AgendaViewPreference = z.infer<typeof agendaViewPreferenceSchema>;
 export type CalendarSource = z.infer<typeof calendarSourceSchema>;
 export type CalendarState = z.infer<typeof calendarStateSchema>;
 export type Conversation = z.infer<typeof conversationSchema>;

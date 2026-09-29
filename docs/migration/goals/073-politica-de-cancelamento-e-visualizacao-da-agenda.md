@@ -1,6 +1,6 @@
 # Goal 073 — Política de cancelamento e visualização da agenda
 
-**Status: READY.** Preparado em 2026-09-28 pelo Tech Lead Agent após [Goal067 ACCEPTED](../reviews/067-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED.** Preparado em 2026-09-28 pelo Tech Lead Agent após [Goal067 ACCEPTED](../reviews/067-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: OPUS_MEDIUM
 

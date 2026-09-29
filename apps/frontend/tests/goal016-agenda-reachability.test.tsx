@@ -102,6 +102,10 @@ function timeBlockFixture(overrides: Partial<TimeBlock> = {}): TimeBlock {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Goal073: Automática abre em Semana a partir de 1024px (o padrão do
+  // jsdom); esta suíte afirma a grade do Dia, então fixa a viewport abaixo
+  // do corte para manter Dia como abertura inicial, como antes do Goal073.
+  window.innerWidth = 390;
   getCalendar.mockResolvedValue(calendarFixture());
   listAppointments.mockResolvedValue([]);
   listAvailabilityExceptions.mockResolvedValue([]);

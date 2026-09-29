@@ -112,8 +112,13 @@ const MAIN_RULES = [
  * resposta, e a secao de agenda ganhou as regras de uma unica pergunta de
  * confirmacao, confirm no mesmo turno do sim e mensagem de encerramento ao
  * concluir agendamento, remarcacao ou cancelamento.
+ *
+ * v8 (Goal073): a secao de agenda ganhou a instrucao de reagir a recusa por
+ * prazo de antecedencia (outsidePolicy) do cancelamento e da remarcacao —
+ * explicar o prazo minimo e oferecer falar direto com a profissional, em vez
+ * de tentar de novo com outro horario.
  */
-const PROMPT_TEMPLATE_VERSION = "v7";
+const PROMPT_TEMPLATE_VERSION = "v8";
 
 /**
  * Amostra fixa, nunca usada no prompt real: existe so para que o hash em

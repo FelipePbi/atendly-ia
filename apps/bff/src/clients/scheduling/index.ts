@@ -267,6 +267,9 @@ const availabilitySettingsSchema = z.object({
   minLeadMinutes: z.number().int().nonnegative().default(0),
   maxLeadDays: z.number().int().positive().default(90),
   granularityMinutes: z.number().int().positive().default(30),
+  // Antecedencia minima do cliente (Goal073). Default igual ao motor: resposta
+  // antiga (sem este campo) continua decodavel.
+  customerChangeMinNoticeMinutes: z.number().int().nonnegative().default(0),
 });
 const timeBlockKindSchema = z.enum(["BLOCK", "PERSONAL"]);
 const timeBlockSchema = z.object({

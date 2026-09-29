@@ -107,6 +107,9 @@ const rescheduleBodySchema = z.object({
 const cancelBodySchema = z.object({
   source: z.enum(["AI", "USER"]).optional(),
   comments: z.string().trim().max(2_000).optional(),
+  // Isencao da politica de antecedencia minima (Goal073); so existe aqui,
+  // nunca em remarcacao.
+  policyExemption: z.enum(["ACTIVATION_TEST_CLEANUP"]).optional(),
   ...notifyCustomerShape,
 });
 

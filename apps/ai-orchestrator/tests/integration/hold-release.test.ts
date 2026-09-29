@@ -292,6 +292,9 @@ describeWithDatabases("AssistantToolRegistry hold release against PostgreSQL", (
           "Confirmar presenca nao faz parte do fluxo de hold deste teste.",
         );
       },
+      // Fora do assunto deste arquivo (hold): sem restricao de antecedencia
+      // minima do cliente (Goal073).
+      getCustomerChangePolicy: async () => ({ minNoticeMinutes: 0 }),
     };
     return new AssistantToolRegistry(prisma, agenda);
   }

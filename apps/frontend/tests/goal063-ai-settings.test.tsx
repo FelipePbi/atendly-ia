@@ -112,6 +112,7 @@ function settingsFixture(
   return {
     ai,
     availability: {
+      customerChangeMinNoticeMinutes: 0,
       granularityMinutes: 30,
       maxLeadDays: 90,
       minLeadMinutes: 0,

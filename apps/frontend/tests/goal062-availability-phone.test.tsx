@@ -46,6 +46,7 @@ function settingsFixture(overrides: Partial<SettingsState> = {}): SettingsState 
   return {
     ai: { enabled: true, tone: "BALANCED" },
     availability: {
+      customerChangeMinNoticeMinutes: 0,
       granularityMinutes: 30,
       maxLeadDays: 90,
       minLeadMinutes: 0,
@@ -120,6 +121,7 @@ describe("Disponibilidade não apaga em silêncio", () => {
   test("dois intervalos no mesmo dia aparecem os dois, editáveis", () => {
     const settings = settingsFixture({
       availability: {
+        customerChangeMinNoticeMinutes: 0,
         granularityMinutes: 30,
         maxLeadDays: 90,
         minLeadMinutes: 0,
@@ -150,6 +152,7 @@ describe("Disponibilidade não apaga em silêncio", () => {
     const user = userEvent.setup();
     const settings = settingsFixture({
       availability: {
+        customerChangeMinNoticeMinutes: 0,
         granularityMinutes: 30,
         maxLeadDays: 90,
         minLeadMinutes: 0,

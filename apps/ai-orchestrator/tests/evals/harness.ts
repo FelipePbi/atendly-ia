@@ -678,6 +678,12 @@ function createAgendaStub(
         noShowAt: null,
       };
     },
+    // Sem restricao (Goal073): o default do duble e o negocio sem politica
+    // de antecedencia minima, no mesmo padrao de `getReminderConfirmationSettings`.
+    getCustomerChangePolicy: async (context) => {
+      record("getCustomerChangePolicy", null, context);
+      return { minNoticeMinutes: 0 };
+    },
   };
 
   const gateway = { ...base, ...(options.gateway ?? {}) } as SchedulingGateway;

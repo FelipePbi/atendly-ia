@@ -131,7 +131,9 @@ describe("Outras informações importantes: leitura (Goal067)", () => {
     ).not.toBeInTheDocument();
   });
 
-  test("falha de leitura mostra erro de tela e não apaga o que foi digitado", async () => {
+  // Observação 2 do review067, fechada no Goal073: a caixa fica somente
+  // leitura depois de uma leitura falhada, não só o botão de salvar.
+  test("falha de leitura mostra erro de tela e não aceita digitação", async () => {
     knowledgeGetOtherInfo.mockRejectedValue(new Error("falhou"));
     const user = userEvent.setup();
     render(<OtherInfoSection />);
@@ -142,7 +144,7 @@ describe("Outras informações importantes: leitura (Goal067)", () => {
 
     const contentField = screen.getByLabelText("Conteúdo");
     await user.type(contentField, "Texto digitado agora.");
-    expect(contentField).toHaveValue("Texto digitado agora.");
+    expect(contentField).toHaveValue("");
     expect(
       screen.getByRole("button", { name: "Salvar informações" }),
     ).toBeDisabled();

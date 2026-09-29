@@ -82,13 +82,18 @@ export function OtherInfoSection() {
             Conteúdo
           </label>
           <textarea
+            aria-readonly={reading || readError}
             className="input"
             id={contentId}
             name="content"
             placeholder="Ex.: horário de intervalo, política de atraso, formas de pagamento aceitas..."
+            readOnly={reading || readError}
             rows={6}
             value={content}
-            onChange={(event) => setContent(event.target.value)}
+            onChange={(event) => {
+              if (reading || readError) return;
+              setContent(event.target.value);
+            }}
           />
         </div>
         {saved && (

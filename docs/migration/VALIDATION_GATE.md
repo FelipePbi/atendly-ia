@@ -2536,3 +2536,149 @@ essa evidência é das unidades que implementaram cada parte (WU-01 a WU-04).
 
 Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal067-2026-09-28-d-085-proposed),
 [FINAL_AUDIT §46](FINAL_AUDIT.md) e [D-085](DECISIONS.md).
+
+## Política de cancelamento e remarcação, "Como você vê a Agenda" e as observações 2 e 5 do review067, do Goal073
+
+`apps/scheduling-service/` ganha `CalendarSettings.customerChangeMinNoticeMinutes`
+(migration aditiva `20260928120000_goal073_customer_change_policy`) e a regra
+de antecedência mínima do cliente, aplicada só a chamador `AI` dentro da
+transação de cancelar/remarcar. `apps/ai-orchestrator/` lê a regra ao
+preparar e traduz a recusa do Scheduling ao confirmar, sem nunca contar a
+recusa como efeito. `apps/bff/` ganha `AgendaViewPreference` (migration
+aditiva `20260928130000_goal073_agenda_view_preference`) e
+`GET`/`PATCH /v1/settings/agenda-view`. `apps/frontend/` ganha a tela da
+política em Configurações › Agenda, a seção "Como você vê a Agenda", a
+Agenda abrindo em Automática (Semana a partir de 1024px) ou na visualização
+gravada com dias ocultos omitidos em Semana/Mês, e as observações 2 e 5 do
+[review067](reviews/067-review.md). Decisão: [D-086](DECISIONS.md), proposta
+no Goal073, **ACCEPTED** no [review073](reviews/073-review.md).
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| Antecedência mínima do cliente (0..10080 min, padrão 0), aplicada a todo chamador `AI` dentro da transação de cancelar/remarcar, com a única isenção nomeada `ACTIVATION_TEST_CLEANUP` só em `/cancel` | Prazo diferente por serviço, por cliente, ou separado para cancelar e remarcar — o vault fixa uma regra global |
+| A IA recusa fora do prazo já no `prepare`, sem pendência e sem hold, e a recusa nunca conta como efeito confirmado | Que a IA, numa conversa real, explica o prazo com as palavras certas (conferência humana do §9) |
+| `AgendaViewPreference` e `GET`/`PATCH /v1/settings/agenda-view`, isolados por tenant, sem linha por padrão | Estrutura e fidelidade visual da Agenda além de qual visualização abre e quais colunas aparecem (Goal069) |
+| A Agenda abre em Automática (Semana ≥1024px, Dia abaixo) ou na visualização gravada; leitura falhada abre em Automática sem erro | Que as telas batem com o protótipo aprovado nas opções e nos textos (conferência humana do §9) |
+| Dias ocultos somem de Semana e Mês e o espaço é redistribuído; "Dia" continua navegando por todos os dias | — |
+| Observações 2 e 5 do review067 corrigidas (`OtherInfoSection` somente leitura durante leitura pendente/falhada; `toggleDay` respeita o limite de 28 regras) | — |
+| O gate autenticado continua medindo `/agenda` e `/configuracoes/agenda`, nas cinco larguras, sem rota nova nem removida | — |
+
+### Achado corrigido fora do escopo obrigatório
+
+O helper do gate autenticado (`apps/frontend/e2e/authenticated-matrix.spec.ts`,
+`ensureAgendaOnMeasuredDate`) assumia que `/agenda` sempre abre em "Dia" e
+clicava no botão "Próximo dia" em qualquer largura. Com a Agenda abrindo em
+Semana a partir de 1024px, essa visualização não tem esse botão, e a medida
+de `/agenda` travava em timeout de 180000ms em `notebook-1024` e
+`desktop-1440` — reproduzido pela execução final desta unidade (WU-17) antes
+da correção. Corrigido pulando a navegação por dia quando o botão não existe:
+a semeadura do gate procura horário livre nos dois dias seguintes a "hoje",
+que a semana ou o mês correntes já cobrem sem precisar navegar. Nenhuma
+medida foi desligada, e a conta do gate autenticado (155 testes) não mudou.
+Ver [D-086](DECISIONS.md) e [FINAL_AUDIT §47](FINAL_AUDIT.md).
+
+### Oito controles negativos e execução final
+
+**Oito controles negativos, aplicados e revertidos**, rodados na rodada 3
+(FIX-001) sobre a árvore final, **depois da última edição de código** (da
+rodada 2; a rodada 3 só mudou documentação) e depois da execução final
+abaixo, na própria worktree, com `sha256sum` idêntico antes e depois de
+cada um. Saída colada em [FINAL_AUDIT §47](FINAL_AUDIT.md).
+
+1. O Scheduling deixa de conferir o prazo: reprova o teste de cancelar a
+   23h (apps/scheduling-service, integração contra PostgreSQL real).
+2. O Scheduling passa a barrar também o chamador `USER`: reprova o teste da
+   Agenda a 1h, em cancelamento e remarcação (apps/scheduling-service).
+3. A comparação vira `<=` no lugar de `<`: reprovam os dois testes
+   permanentes de fronteira ("exatamente 24h e 25h", em cancelamento e em
+   remarcação), que congelam `databaseNow` com `vi.mock` parcial de
+   `write-policy.ts` e põem o atendimento a exatamente 1440 minutos do
+   instante que a regra lê (apps/scheduling-service, integração contra
+   PostgreSQL real). Nenhum arquivo de controle temporário.
+4. A isenção deixa de ser enviada pela limpeza do teste real: reprova o
+   teste estático que conta onde o literal `ACTIVATION_TEST_CLEANUP`
+   aparece (apps/ai-orchestrator).
+5. `prepareReschedule` cria o hold antes de conferir o prazo: reprova o
+   teste de remarcar fora do prazo sem hold (apps/ai-orchestrator).
+6. A recusa passa a contar em `loadTurnConfirmedEffects`: reprova o teste
+   que exige `AiToolCall.status: "FAILED"` numa confirmação recusada
+   (apps/ai-orchestrator).
+7. A Agenda volta a abrir sempre em Dia: reprova o teste de 1024px
+   (apps/frontend).
+8. Semana volta a mostrar o dia oculto: reprova o teste de dias visíveis
+   (apps/frontend).
+
+Sem cada defeito, os testes nomeados voltam a passar, e o arquivo restaurado
+bate hash com o original em todos os oito (os controles 1, 2 e 3 compartilham
+`apps/scheduling-service/.../provider.ts`, cada edição revertida antes da
+próxima).
+
+Execução final da rodada 3 (FIX-001), sobre a árvore final, na ordem do §10
+do Goal, antes dos controles acima:
+
+- `node scripts/validate-core.mjs`: **17** passos, **15** `passed`, **0**
+  `failed`, **2** `skipped` (`test:bff`, `test:health-worker`), exit 0.
+  Dentro dele, `test:ai-orchestrator` em **86** arquivos passando e **12**
+  pulados (**98**) e **1127** testes passando e **88** pulados (**1215**)
+  (baseline **85**/**97** e **1117**/**1205**; o **1** arquivo e os **10**
+  testes a mais são `goal073-customer-change-policy.test.ts`);
+  `test:scheduling-service` em **35**/**35** e **484**/**484**, sem
+  mudança; `test:frontend` em **96**/**96** arquivos e **1000**/**1000**
+  testes (baseline **94**/**979**; os **2** arquivos e **21** testes a mais
+  são `goal073-agenda-visualizacao.test.tsx`, **8**, e
+  `goal073-configuracoes-agenda.test.tsx`, **13**); `audit:static` em
+  **33** de **34** verificações passando e **1** pulada, sem mudança.
+- `npm run test:gate` (`node --test scripts/tests/**/*.test.mjs`):
+  **233**/**233**, **0** falhando, exit 0 — sem mudança.
+- `node scripts/validate-ui.mjs`: **169** passando, **21** pulados, **0**
+  falhando, **0** retentativas, exit 0; no `results.json` do Playwright,
+  `expected` **169**, `unexpected` **0**, `flaky` **0** — sem mudança
+  (rotas públicas só; `/agenda` e `/configuracoes/agenda` são do gate
+  autenticado).
+- `node scripts/validate-integration.mjs`, contra o PostgreSQL 18
+  descartável em `127.0.0.1:55432`
+  (`BFF_TEST_DATABASE_URL=postgresql://pgtest@127.0.0.1:55432/atendly_bff_test`):
+  **PASSED**, **35**/**35** passos, exit 0. Dentro dela,
+  `test:bff-integration` em **56**/**56** arquivos e **439**/**439** testes
+  (baseline **55**/**434**; o **1** arquivo e **5** testes a mais são
+  `goal073-settings-policy-and-agenda-view.integration.test.ts`);
+  `test:scheduling-integration` em **17**/**17** arquivos e **140**/**140**
+  testes (baseline **16**/**124**; o **1** arquivo e **16** testes a mais
+  são `goal073-customer-change-policy.integration.test.ts`);
+  `test:ai-orchestrator-transport-durability` **9**/**69** e
+  `test:ai-orchestrator-content-purge` **3**/**19**, sem mudança; gate
+  autenticado (`rehearse:goal033-authenticated-ui`) com `expected`
+  **155**, `unexpected` **0**, `flaky` **0** e **0** retentativas, com
+  `/agenda` e `/configuracoes/agenda` nas cinco larguras — mesma contagem
+  da baseline.
+- `this.http.` em `apps/bff/src/clients/`: **43** (sem mudança).
+- Typecheck de `apps/scheduling-service`, `apps/ai-orchestrator` e
+  `apps/bff`, provado pelos passos `build:*` de `validate:core` (cada
+  `build` roda `tsc -p tsconfig.json`); `apps/frontend` por
+  `npx tsc --noEmit`, exit 0. `npm run lint` de `apps/frontend`
+  (`eslint src tests --max-warnings=0`), exit 0.
+
+**Vermelho da baseline `a1adf4b`.** O teste novo do Scheduling foi rodado
+contra a baseline pela unidade que o implementou (WU-01, rodada 1: **16**
+falhando). Os testes novos do orquestrador, do BFF e do frontend foram
+rodados contra uma cópia de `a1adf4b` na rodada 2 (FIX-001), com só os
+arquivos de teste novos copiados: orquestrador **8** falhando e **2**
+passando de **10**; BFF **5** de **5** falhando; frontend **18** falhando e
+**3** passando de **21**. Saída em [FINAL_AUDIT §47](FINAL_AUDIT.md).
+
+### Conferência humana e limites
+
+**Conferência humana pendente.** A conferência do §9 do Goal **não foi
+feita** por este Goal: que Configurações › Agenda e a Agenda, num aparelho
+real, batem com o protótipo `Mais-Negocio-Agenda-IA` nas opções e nos
+textos, e se a opção Automática deve existir; que a IA, numa conversa real,
+explica o prazo e oferece falar com o profissional sem dizer que cancelou.
+
+**O que esta seção não prova.** Não prova estrutura e fidelidade visual da
+Agenda além do que este Goal muda — qual visualização abre, quais colunas
+aparecem (Goal069). O vermelho da baseline dos testes novos (§7 do Goal)
+está acima: o do Scheduling é da rodada 1 (WU-01); o do orquestrador, do
+BFF e do frontend é da rodada 2 (FIX-001).
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal073-2026-09-28-d-086-proposed),
+[FINAL_AUDIT §47](FINAL_AUDIT.md) e [D-086](DECISIONS.md).

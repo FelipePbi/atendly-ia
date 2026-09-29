@@ -28,7 +28,15 @@ const updateReminders = vi.fn();
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
     migration: { getImportState },
-    settings: { get: getSettings, getReminders, updateReminders },
+    settings: {
+      get: getSettings,
+      getAgendaViewPreference: vi.fn().mockResolvedValue({
+        hiddenWeekdays: [],
+        initialView: null,
+      }),
+      getReminders,
+      updateReminders,
+    },
     whatsapp: { get: getWhatsapp },
   }),
 }));

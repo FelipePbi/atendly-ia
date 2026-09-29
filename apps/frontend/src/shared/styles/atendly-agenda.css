@@ -210,7 +210,7 @@
 }
 .week-header {
   display: grid;
-  grid-template-columns: 64px repeat(7, minmax(118px, 1fr));
+  grid-template-columns: 64px repeat(var(--visible-days, 7), minmax(118px, 1fr));
   border-bottom: 1px solid var(--border);
   background: var(--surface-secondary);
 }
@@ -267,7 +267,7 @@
 }
 .week-days {
   display: grid;
-  grid-template-columns: repeat(7, minmax(118px, 1fr));
+  grid-template-columns: repeat(var(--visible-days, 7), minmax(118px, 1fr));
 }
 .week-day {
   position: relative;
@@ -419,7 +419,7 @@
 }
 .month-weekday-row {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--visible-days, 7), minmax(0, 1fr));
   border-bottom: 1px solid var(--border);
   background: var(--surface-secondary);
 }
@@ -433,7 +433,7 @@
 }
 .month-days {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--visible-days, 7), minmax(0, 1fr));
 }
 .month-day {
   min-height: 96px;
@@ -448,7 +448,7 @@
   color: var(--fg);
   background: var(--surface);
 }
-.month-day:nth-child(7n) {
+.month-day.is-row-end {
   border-right: 0;
 }
 .month-day:hover {

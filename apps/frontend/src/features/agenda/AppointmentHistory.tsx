@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { type AppointmentEvent } from "@/data";
-import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { getProductServices, useProductRuntime } from "@/shared/runtime/ProductRuntime";
 import { StatePanel } from "@/shared/ui/States";
 
 import { requestError } from "./occupancy";
@@ -52,6 +52,20 @@ function formatEventTimestamp(value: string): string {
   }).format(new Date(value));
 }
 
+/**
+ * `actor` grava o `user.id` de quem agiu — um identificador interno, nunca
+ * exibível (AG-07). Só quando ele bate com o `user.id` da própria sessão dá
+ * para trocá-lo pelo nome (ou e-mail, sem nome) de quem está olhando; para
+ * qualquer outro valor não há nome para mostrar, então a linha some.
+ */
+function actorLabel(
+  actor: string | null,
+  session: ReturnType<typeof useProductRuntime>["session"],
+): string | null {
+  if (!actor || !session || actor !== session.user.id) return null;
+  return session.user.name ?? session.user.email;
+}
+
 export function AppointmentHistory({
   appointmentId,
   reloadKey,
@@ -59,6 +73,7 @@ export function AppointmentHistory({
   appointmentId: string;
   reloadKey?: number;
 }) {
+  const { session } = useProductRuntime();
   const [events, setEvents] = useState<AppointmentEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -104,16 +119,20 @@ export function AppointmentHistory({
   }
   return (
     <ol className="agenda-history">
-      {events.map((event) => (
-        <li className="agenda-history-item" key={event.id}>
-          <strong>
-            {EVENT_TYPE_LABELS[event.type]} · {EVENT_SOURCE_LABELS[event.source]}
-          </strong>
-          <span>{formatEventTimestamp(event.occurredAt)}</span>
-          {event.actor && <span>Por {event.actor}</span>}
-          {event.reason && <span>Motivo: {event.reason}</span>}
-        </li>
-      ))}
+      {events.map((event) => {
+        const actor = actorLabel(event.actor, session);
+        return (
+          <li className="agenda-history-item" key={event.id}>
+            <strong>
+              {EVENT_TYPE_LABELS[event.type]} ·{" "}
+              {EVENT_SOURCE_LABELS[event.source]}
+            </strong>
+            <span>{formatEventTimestamp(event.occurredAt)}</span>
+            {actor && <span>Por {actor}</span>}
+            {event.reason && <span>Motivo: {event.reason}</span>}
+          </li>
+        );
+      })}
     </ol>
   );
 }

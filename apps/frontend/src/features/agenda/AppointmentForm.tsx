@@ -303,7 +303,7 @@ export function AppointmentForm() {
   return (
     <AppointmentFlowShell
       calendar={calendar}
-      description="Escolha cliente, serviços e um horário disponível na fonte oficial."
+      description="Escolha cliente, serviços e um horário disponível."
       loading={loading}
       title="Novo agendamento"
     >

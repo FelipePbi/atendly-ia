@@ -434,7 +434,11 @@ describe("carregando, vazio e erro recuperável", () => {
 
     renderBoard();
 
-    expect(await screen.findByText("Nenhum evento neste dia.")).toBeVisible();
+    // Goal069 §2: "Nenhum evento neste dia." virou "Nenhum atendimento neste
+    // dia.", a mesma copy do dia vazio com contexto de disponibilidade.
+    expect(
+      await screen.findByText("Nenhum atendimento neste dia."),
+    ).toBeVisible();
   });
 
   test("recarregar com sucesso tira a tela do painel de erro", async () => {
@@ -451,7 +455,9 @@ describe("carregando, vazio e erro recuperável", () => {
     expect(await screen.findByText("falha de rede")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Tentar novamente" }));
 
-    expect(await screen.findByText("Nenhum evento neste dia.")).toBeVisible();
+    expect(
+      await screen.findByText("Nenhum atendimento neste dia."),
+    ).toBeVisible();
     expect(screen.queryByText("falha de rede")).toBeNull();
   });
 });

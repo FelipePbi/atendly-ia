@@ -7303,3 +7303,127 @@ proposta no Goal074, **ACCEPTED** no [review074](reviews/074-review.md)
   **155** e **0** retentativas são a execução declarada pelo Developer. Ver
   a nota de fechamento de [D-088](DECISIONS.md) e o
   [review074](reviews/074-review.md).
+
+## Delta implementado — Goal069, 2026-09-29 ([D-089](DECISIONS.md), ACCEPTED)
+
+Corrige **AG-01…AG-12** do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md), fora da
+enumeração A-01…A-24 do FINAL_AUDIT, e as observações 2 e 4 do
+[review073](reviews/073-review.md). Só frontend: nenhum contrato, rota,
+schema do BFF ou migration muda. Toca `apps/frontend/`:
+`e2e/authenticated-matrix.spec.ts` (só `ensureAgendaOnMeasuredDate`),
+`features/agenda/AgendaBoard.tsx`, `AppointmentDetail.tsx`,
+`AppointmentForm.tsx`, `AppointmentHistory.tsx`, `BlockForm.tsx`,
+`DayView.tsx`, `LifecycleActions.tsx`, `WeekView.tsx`, `occupancy.ts`,
+`features/settings/CalendarSettings.tsx`, `shared/styles/atendly-agenda.css`,
+`shared/styles/atendly.css`, e os testes com `goal016`/`goal021`/`goal073`
+no nome que dependiam da composição antiga, mais quatro testes novos
+`goal069-*.test.tsx`. `e2e/routes.ts` fica na baseline. Decisão:
+[D-089](DECISIONS.md), proposta no Goal069, **ACCEPTED** no
+[review069](reviews/069-review.md).
+
+- **Barra superior única.** Mês/ano do dia focado, o segmentado Dia ·
+  Semana · Mês em toda largura a partir de 360px, ‹ › com nomes acessíveis
+  por unidade e "+ Novo". Saem o cabeçalho "Operação diária", `SourceStrip`
+  e os três botões soltos; o `<h1>` "Agenda" continua na página, escondido
+  visualmente pela classe `.agenda-page-title` (`shared/styles/atendly-agenda.css`)
+  — não `sr-only`: a técnica evita `clip`/`clip-path` para continuar
+  hit-testável pelo `elementFromPoint` do gate autenticado.
+- **"+ Novo" com os três tipos.** Menu com Agendamento (`/agenda/novo`),
+  Compromisso pessoal (`/agenda/bloquear?type=PERSONAL`) e Bloqueio
+  (`/agenda/bloquear?type=BLOCK`), cada item só com a capacidade que já o
+  regia; sem nenhuma das duas, o botão não existe; Escape fecha o menu e
+  devolve o foco. `BlockForm` lê o tipo inicial da URL.
+- **Faixa da semana no Dia**, com ponto só nos dias com agendamento ativo;
+  tocar num dia foca esse dia. **Duas colunas a partir de 1024px**: a
+  lista à esquerda e `DayDetailPanel` à direita, reaproveitando
+  `LifecycleActions` e `AppointmentHistory` (não duplica regra); abaixo de
+  1024px, tocar no agendamento continua levando à página de detalhe.
+- **Regras de tela.** Dia vazio com o motivo ("Você não atende neste
+  dia.") quando a disponibilidade confirma; bloco da Semana com nome,
+  serviço e o tipo como prefixo do nome acessível (`${typeLabel}: `, para
+  que um bloqueio e um compromisso pessoal com o mesmo título tenham
+  nomes acessíveis distintos); troca de visualização preserva o dia
+  focado — `goToAdjacent` ancora a navegação por semana à segunda-feira
+  da semana exibida (`startOfWeek(cursor)`) antes de somar ou subtrair
+  sete dias, e `changeView` abre o Mês por esse `cursor`; "Próximo
+  agendamento" vem de uma leitura própria, hoje até 60 dias à frente,
+  independente da data navegada.
+- **Histórico sem identificador interno.** Mostra o nome (ou e-mail) só
+  quando `actor` bate com o `user.id` da sessão; qualquer outro valor não
+  aparece.
+- **Ações de fim só a partir do início do atendimento.** `canComplete` e
+  `canMarkNoShow` exigem `appointmentHasStarted`, além do status.
+- **Telefone (AG-08) fecha sem mudança de código:** o caso reproduzido
+  (`5511998887766`) já saía formatado por `displayPhone` na baseline.
+- **Copy técnica sai de `/agenda`, do detalhe e do formulário de
+  agendamento**: "fonte oficial", "Operação diária", "persistidos",
+  "Operacional".
+- **"Exceções do dia" continua alcançável**, como link logo abaixo da
+  barra de comando.
+- **Observação 4 do review073.** `toggleHiddenDay` recusa o sétimo dia
+  oculto; o motivo aparece no controle desabilitado e na recusa do
+  servidor pelo mesmo motivo.
+- **Observação 2 do review073.** `ensureAgendaOnMeasuredDate` navega até a
+  data semeada em qualquer visualização (dia, semana ou mês).
+- **Divergência declarada.** `DayDetailPanel` reaproveita
+  `LifecycleActions`/`AppointmentHistory`, mas não embute o componente
+  `AppointmentDetail` inteiro. Detalhe em [D-089](DECISIONS.md).
+- **Vermelho da baseline dos testes reescritos (§6.6 e §6.5).** Com
+  `AgendaBoard.tsx`, `WeekView.tsx` e `DayView.tsx` servidos do blob de
+  `37c7371` por um plugin Vite, sem sobrescrever a árvore: §6.6
+  "'Próxima semana' e depois Mês" reprova (exit 1, o Mês abre em
+  outubro); §6.5 nome e serviço reprova (exit 1); §6.5 "Almoço" passa
+  contra a baseline, porque o `WeekEntryBar` de `37c7371` já prefixava o
+  tipo — o defeito só existiu no `WeekView.tsx` da rodada 1, e contra ele
+  o teste reprova (exit 1). Saída em [FINAL_AUDIT §50](FINAL_AUDIT.md).
+- **Oito controles negativos (§7)**, rodados contra a árvore vigente, com
+  restauração conferida por `git hash-object` idêntico antes e depois de
+  cada um: `SourceStrip` de volta reprova; menu sem "Compromisso pessoal"
+  reprova; ponto da faixa em dia sem agendamento reprova; `goToAdjacent`
+  sem a âncora `startOfWeek(cursor)` reprova o teste "Próxima semana";
+  "Próximo agendamento" saindo da janela navegada reprova; histórico com
+  `event.actor` cru reprova; `canComplete` só por status reprova;
+  `toggleHiddenDay` aceitando o sétimo dia reprova. Revertidos os oito,
+  as quatro suítes `goal069-*.test.tsx` passam com **30**/**30**. Saída
+  em [FINAL_AUDIT §50](FINAL_AUDIT.md).
+- **Execução final (rodada 2, sobre o código vigente)** — `test:gate`
+  **233**/**233**; `test:frontend` **104**/**104** arquivos,
+  **1079**/**1079** testes (baseline **100**/**1048**); `typecheck`/`lint`
+  exit 0; `validate:core` **17** passos, **15** `passed`, **2** `skipped`,
+  exit 0; `validate:ui` **169** `passed`, **21** `skipped`, **0**
+  retentativas, exit 0; `validate:integration` **36**/**36** passos,
+  exit 0, com o gate autenticado (`rehearse:goal033-authenticated-ui`) em
+  **155** `passed`, **0** retentativas — mesma contagem da baseline.
+  Detalhe em [FINAL_AUDIT §50](FINAL_AUDIT.md).
+- **Rodadas de correção.** Rodada 2: `e2e/routes.ts` volta à baseline, o
+  `<h1>` passa a `.agenda-page-title`, AG-05 passa a ser corrigido em
+  `goToAdjacent` e o bloco da Semana recupera o prefixo do tipo. Rodada 3:
+  os oito controles refeitos depois das edições da rodada 2. Rodada 4: o
+  controle 4 passa a mutar `goToAdjacent`. Rodada 5: sem mudança de
+  código. Rodada 6: os quatro documentos reescritos no estado vigente,
+  com o vermelho da baseline acima.
+- **Conferência humana pendente:** a conferência do §9 do Goal **não foi
+  feita** por este Goal — que a Agenda, num aparelho real nas cinco
+  larguras, em Dia, Semana e Mês, com e sem agendamento, bate com
+  `Agenda.dc.html`, `Agenda-Tablet.dc.html` e `Agenda-Desktop.dc.html`; e
+  que a marca no trilho, o segmentado numa linha e o bloco da Semana
+  legível batem com o protótipo.
+- **Limites declarados:** "Como você vê a Agenda" (D-086) continua como
+  está; fidelidade visual de Clientes, Serviços, Conversas e da central de
+  notificações (Goal075) e do onboarding (Goal072) não são tocadas; o
+  Product Vault e `docs/design-reference/` não foram editados — ver
+  [D-089](DECISIONS.md).
+
+- **Fechamento — review069, 2026-09-29.** Aceito na rodada 6 do IA Loop,
+  sem blocker; rodadas 1 a 5 `CHANGES_REQUIRED` com 4, 2, 2, 2 e 2
+  blockers. Só as rodadas 1 e 2 mudaram código. Na rodada 6 os gates do IA
+  Loop passaram todos, inclusive `validate:integration`, e o Tech Lead
+  reproduziu o vermelho do §6.6 e do §6.5 contra `37c7371`. Três pontos do
+  texto acima ficaram imprecisos: o título da barra é `periodLabel` — data
+  completa no Dia, intervalo na Semana, mês/ano só no Mês —, não "mês/ano
+  do dia focado" em toda visualização; AG-12 (marca no trilho entre 768 e
+  1099px) fecha sem mudança de código, com a regra de 1099px de
+  `atendly.css` ainda escondendo o nome da marca; e o motivo "Você não
+  atende neste dia." ignora exceção que fecha o dia. A conferência humana
+  do §9 continua **não feita**. Ver a nota de fechamento de
+  [D-089](DECISIONS.md) e o [review069](reviews/069-review.md).

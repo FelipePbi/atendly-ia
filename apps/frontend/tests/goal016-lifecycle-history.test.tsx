@@ -47,6 +47,12 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       setAppointmentFinalValue,
     },
   }),
+  useProductRuntime: () => ({
+    session: {
+      tenant: { id: "t1", name: "Studio Teste" },
+      user: { email: "dono@teste.com", id: "user-dono", name: "Dono do negócio" },
+    },
+  }),
 }));
 
 function calendarFixture(overrides: Partial<CalendarState> = {}): CalendarState {
@@ -318,11 +324,11 @@ describe("histórico cronológico com desempate por sequence", () => {
     expect(within(items[1]).getByText(/Reserva consumida/)).toBeVisible();
   });
 
-  test("cada evento mostra tipo, origem, ator e motivo, com origem AI lida como IA", async () => {
+  test("cada evento mostra tipo, origem e motivo, com origem AI lida como IA; ator sem correspondência na sessão não aparece (Goal069 AG-07)", async () => {
     getAppointment.mockResolvedValue(appointmentFixture());
     listAppointmentEvents.mockResolvedValue([
       eventFixture({
-        actor: "Assistente da Atendly",
+        actor: "cus-ana",
         id: "evt-ai",
         occurredAt: "2026-09-14T13:00:00.000Z",
         reason: "Cliente pediu pelo WhatsApp",
@@ -336,12 +342,29 @@ describe("histórico cronológico com desempate por sequence", () => {
     const item = await screen.findByRole("listitem");
     expect(within(item).getByText(/Reagendado/)).toBeVisible();
     expect(within(item).getByText(/IA/)).toBeVisible();
-    expect(
-      within(item).getByText("Por Assistente da Atendly"),
-    ).toBeVisible();
+    // "cus-ana" não é o user.id da sessão: nenhum identificador interno vaza.
+    expect(within(item).queryByText(/^Por /)).not.toBeInTheDocument();
     expect(
       within(item).getByText("Motivo: Cliente pediu pelo WhatsApp"),
     ).toBeVisible();
+  });
+
+  test("ator igual ao user.id da sessão mostra o nome da pessoa (Goal069 AG-07)", async () => {
+    getAppointment.mockResolvedValue(appointmentFixture());
+    listAppointmentEvents.mockResolvedValue([
+      eventFixture({
+        actor: "user-dono",
+        id: "evt-user",
+        occurredAt: "2026-09-14T13:00:00.000Z",
+        sequence: "1",
+        source: "USER",
+        type: "CREATED",
+      }),
+    ]);
+    renderDetail();
+
+    const item = await screen.findByRole("listitem");
+    expect(within(item).getByText("Por Dono do negócio")).toBeVisible();
   });
 
   test("histórico vazio não trava a tela", async () => {

@@ -107,9 +107,20 @@ function WeekEntryBar({
   startHour: number;
 }) {
   const presentation = describeEntry(entry);
-  const label = presentation.statusText
-    ? `${presentation.typeLabel}: ${presentation.title}, ${presentation.statusText}`
-    : `${presentation.typeLabel}: ${presentation.title}`;
+  const timeRange = `${minutesToTime(entry.startMinutes)}–${minutesToTime(entry.endMinutes)}`;
+  // Nome e serviço, tanto no texto quanto no nome acessível (Goal069 AG-04),
+  // sem perder o tipo (`typeLabel`) que já distinguia "Bloqueio" de
+  // "Compromisso pessoal" e afins: sem ele, um bloqueio e um compromisso com
+  // o mesmo título ficam com nome acessível idêntico. `presentation.detail`
+  // já traz "<serviço> · <duração>" para atendimento.
+  const label = `${presentation.typeLabel}: ${[
+    presentation.title,
+    presentation.detail,
+    timeRange,
+    presentation.statusText,
+  ]
+    .filter(Boolean)
+    .join(", ")}`;
 
   return (
     <div
@@ -119,14 +130,13 @@ function WeekEntryBar({
       })}
       style={entryPlacement(entry, startHour)}
     >
-      <span className="appointment-time">
-        {minutesToTime(entry.startMinutes)}–{minutesToTime(entry.endMinutes)}
-      </span>
+      <span className="appointment-time">{timeRange}</span>
       <span className="week-appointment-kind">
         <Icon name={presentation.icon} />
         {presentation.typeLabel}
       </span>
       <strong>{presentation.title}</strong>
+      {presentation.detail && <span>{presentation.detail}</span>}
       {presentation.statusText && <span>{presentation.statusText}</span>}
     </div>
   );

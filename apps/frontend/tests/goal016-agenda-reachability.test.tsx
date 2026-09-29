@@ -178,7 +178,7 @@ describe("a grade consulta a fonte oficial antes de ler", () => {
     renderPage(<AgendaPage />);
 
     expect(
-      await screen.findByText("Fonte oficial não configurada"),
+      await screen.findByText("Agenda ainda não configurada"),
     ).toBeVisible();
     expect(listAppointments).not.toHaveBeenCalled();
     expect(listTimeBlocks).not.toHaveBeenCalled();
@@ -188,7 +188,7 @@ describe("a grade consulta a fonte oficial antes de ler", () => {
   test("na Agenda Atendly a janela inteira é lida, bloqueios e exceções inclusive", async () => {
     renderPage(<AgendaPage />);
 
-    expect(await screen.findByText("Nenhum evento neste dia.")).toBeVisible();
+    expect(await screen.findByText("Nenhum atendimento neste dia.")).toBeVisible();
     expect(listTimeBlocks).toHaveBeenCalledTimes(1);
     expect(listAvailabilityExceptions).toHaveBeenCalledTimes(1);
   });

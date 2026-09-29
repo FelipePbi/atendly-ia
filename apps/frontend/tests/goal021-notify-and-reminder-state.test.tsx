@@ -54,6 +54,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       rescheduleAppointment,
     },
   }),
+  useProductRuntime: () => ({ session: null }),
 }));
 
 function calendarFixture(overrides: Partial<CalendarState> = {}): CalendarState {

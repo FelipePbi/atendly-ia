@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import type {
-  AgendaInitialView,
-  AvailabilitySettingsInput,
-  SettingsState,
+import {
+  type AgendaInitialView,
+  type AvailabilitySettingsInput,
+  BffHttpError,
+  type SettingsState,
 } from "@/data";
 import { ReminderSettingsSection } from "@/features/reminders/ReminderSettingsSection";
 import { Icon } from "@/shared/icons/Icon";
@@ -19,6 +20,26 @@ import { SettingsPage } from "./shared/SettingsPage";
 // Mesma ordem Segunda…Domingo de `AvailabilitySettings` (o valor gravado de
 // `dayOfWeek` continua 0=domingo…6=sábado).
 const weekOrder = [1, 2, 3, 4, 5, 6, 0];
+
+const HIDDEN_WEEKDAYS_LIMIT_REASON =
+  "Pelo menos um dia precisa aparecer na Agenda.";
+
+/**
+ * O servidor recusa `hiddenWeekdays` com sete dias pelo mesmo motivo do
+ * limite do cliente (Goal073, `agendaHiddenWeekdaysSchema.max(6)`); detecta
+ * essa recusa específica para mostrar a mesma frase, não a genérica.
+ */
+function hiddenWeekdaysLimitReason(error: unknown): string | null {
+  if (!(error instanceof BffHttpError) || error.code !== "VALIDATION_ERROR") {
+    return null;
+  }
+  const details = error.details as
+    | { fieldErrors?: Record<string, unknown> }
+    | undefined;
+  return details?.fieldErrors?.hiddenWeekdays
+    ? HIDDEN_WEEKDAYS_LIMIT_REASON
+    : null;
+}
 
 const MIN_LEAD_OPTIONS: Array<{ value: number; label: string }> = [
   { value: 0, label: "Sem antecedência mínima" },
@@ -240,6 +261,7 @@ export function CalendarSettings({
 
   function toggleHiddenDay(day: number) {
     setHiddenDays((current) => {
+      if (!current.has(day) && current.size >= 6) return current;
       const next = new Set(current);
       if (next.has(day)) {
         next.delete(day);
@@ -262,8 +284,11 @@ export function CalendarSettings({
       setHiddenDays(new Set(preference.hiddenWeekdays));
       setInitialView(preference.initialView);
       setViewMessage("Preferências da Agenda salvas.");
-    } catch {
-      setViewMessage("Não foi possível salvar as preferências da Agenda.");
+    } catch (error) {
+      setViewMessage(
+        hiddenWeekdaysLimitReason(error) ??
+          "Não foi possível salvar as preferências da Agenda.",
+      );
     } finally {
       setViewBusy(false);
     }
@@ -359,10 +384,12 @@ export function CalendarSettings({
               <div className="chip-row">
                 {weekOrder.map((day) => {
                   const visible = !hiddenDays.has(day);
+                  const isLastVisibleDay = visible && hiddenDays.size >= 6;
                   return (
                     <button
                       aria-pressed={visible}
                       className={`chip${visible ? " is-active" : ""}`}
+                      disabled={isLastVisibleDay}
                       key={day}
                       type="button"
                       onClick={() => toggleHiddenDay(day)}
@@ -372,6 +399,9 @@ export function CalendarSettings({
                   );
                 })}
               </div>
+              {hiddenDays.size >= 6 && (
+                <p className="field-help">{HIDDEN_WEEKDAYS_LIMIT_REASON}</p>
+              )}
             </div>
             <ChoiceGroup
               label="Visualização inicial"

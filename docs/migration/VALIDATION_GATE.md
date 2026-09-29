@@ -3044,3 +3044,39 @@ passed (14)`; (8) `nextAppointment.date` cru — `Tests 2 failed | 12 passed
 [FINAL_AUDIT §49 — Correção, rodada 3](FINAL_AUDIT.md).
 
 A conferência humana do §10 do Goal continua **não feita**.
+
+## Doze achados de fidelidade visual da Agenda (AG-01…AG-12) e as observações 2 e 4 do review073, do Goal069
+
+`apps/frontend/` ganha uma barra superior única na Agenda, com "+ Novo" nos três tipos, a faixa da semana com pontos e duas colunas no Dia a partir de 1024px; nenhum contrato, rota, schema do BFF ou migration muda. `e2e/routes.ts` fica na baseline.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `AgendaNewMenu` (`AgendaBoard.tsx`) abre Agendamento, Compromisso pessoal e Bloqueio, cada um só com a capacidade que já o regia; sem nenhuma, o botão não existe | O contrato de `POST /v1/time-blocks`, que já aceitava os dois tipos |
+| `WeekStrip` (`DayView.tsx`) marca ponto pelos dias em `datesWithActiveAppointment` (só `kind: "appointment"` com status ativo) | Dias ocultos pela preferência (D-086), que continuam fora da faixa |
+| `goToAdjacent` (`AgendaBoard.tsx`) soma ou subtrai sete dias a `startOfWeek(cursor)`; `changeView` abre o Mês pelo `cursor` porque `goToAdjacent` o ancora na segunda-feira da semana mostrada | Nenhum estado de "dia focado" separado do `cursor` foi criado |
+| `WeekEntryBar` (`WeekView.tsx`) leva nome e serviço no texto e no nome acessível, prefixado pelo tipo (`${typeLabel}: `) | A cor e a posição do bloco na grade |
+| `nextActiveAppointment` (`occupancy.ts`), lido numa janela própria de hoje até 60 dias à frente | A data navegada (`view`/`cursor`), que não influencia mais "Próximo agendamento" |
+| `actorLabel` (`AppointmentHistory.tsx`) só resolve nome quando `actor === session.user.id` | Qualquer outro `actor` — a linha "Por…" some, nunca mostra o identificador |
+| `canComplete`/`canMarkNoShow` (`LifecycleActions.tsx`) exigem `appointmentHasStarted`, além do status | Cancelar e remarcar, que não mudam |
+| `toggleHiddenDay` (`CalendarSettings.tsx`) recusa o sétimo dia oculto; o motivo aparece no controle desabilitado e na recusa do servidor | O limite do servidor (`agendaHiddenWeekdaysSchema`, BFF), que já recusava — só a tela ganhou o mesmo motivo |
+| `ensureAgendaOnMeasuredDate` navega até a data semeada em qualquer visualização (dia, semana ou mês) | O restante de `authenticated-matrix.spec.ts`, que não muda |
+
+**Divergência declarada:** `DayDetailPanel` reaproveita `LifecycleActions` e `AppointmentHistory`, mas não embute o componente `AppointmentDetail` inteiro. Detalhe em [D-089](DECISIONS.md).
+
+**Vermelho da baseline dos testes reescritos do §6.6 e do §6.5**, rodado na rodada 6 com `AgendaBoard.tsx`, `WeekView.tsx` e `DayView.tsx` servidos do blob de `37c7371` por um plugin Vite de uma configuração do Vitest fora do repositório, sem sobrescrever a árvore: §6.6 "'Próxima semana' e depois Mês" — exit 1, `Tests 1 failed | 7 skipped (8)`, o Mês abre em outubro; §6.5 nome e serviço — exit 1, `Tests 1 failed | 7 skipped (8)`, nome acessível `Atendimento: Ana Paula, Confirmado`; §6.5 "Almoço" — exit 0 contra a baseline, porque o `WeekEntryBar` de `37c7371` já prefixava o tipo; o defeito só existiu no `WeekView.tsx` da rodada 1, e contra ele o teste reprova (exit 1, `Unable to find a label with the text of: /^Bloqueio: /`). Saída e hashes em [FINAL_AUDIT §50](FINAL_AUDIT.md).
+
+**Oito controles negativos do §7, aplicados e revertidos** contra a árvore vigente, saída colada em [FINAL_AUDIT §50](FINAL_AUDIT.md): (1) `/agenda` volta a renderizar `SourceStrip`: reprova **1** de **11** testes de `goal069-agenda-structure.test.tsx`. (2) o menu "+ Novo" perde "Compromisso pessoal": reprova **2** de **11** do mesmo arquivo. (3) o ponto da faixa aparece em dia sem agendamento: reprova o teste isolado de `goal069-agenda-views.test.tsx` (§6.3). (4) `goToAdjacent` volta a usar o `cursor` sem ajuste (`addDays(cursor, direction * 7)`): reprova o teste isolado `-t "Próxima semana"` de `goal069-agenda-views.test.tsx` (§6.6). (5) "Próximo agendamento" volta a sair da janela navegada: reprova o teste isolado de `goal069-agenda-views.test.tsx` (§6.7). (6) o histórico volta a imprimir `event.actor`: reprova **3** de **6** testes de `goal069-appointment-detail.test.tsx` (§6.8). (7) `canComplete` volta a olhar só o status: reprova **1** de **6** do mesmo arquivo (§6.9). (8) `toggleHiddenDay` volta a aceitar o sétimo dia: reprova **2** de **5** testes de `goal069-hidden-days-limit.test.tsx`. Cada arquivo-alvo foi conferido por `git hash-object` antes da mutação e restaurado idêntico logo depois (`AgendaBoard.tsx`: `43b4d65c6dc50b22fc1da66bd850733fbd0ddd62`); revertidos os oito, as quatro suítes `goal069-*.test.tsx` passam com **30**/**30**.
+
+**Execução final, rodada 2, sobre o código vigente** (nenhuma rodada posterior mudou código de produto): `node --test scripts/tests/**/*.test.mjs` (`test:gate`) — **233**/**233**, exit 0. `npx vitest run` (`apps/frontend`, suíte completa) — **104**/**104** arquivos, **1079**/**1079** testes, exit 0 (baseline **100**/**1048**). `npm run typecheck` e `npm run lint` (`apps/frontend`, `src tests`) exit 0 nos dois. `node scripts/validate-core.mjs`: **17** passos, **15** `passed`, **0** `failed`, **2** `skipped` (`test:bff`, `test:health-worker`), exit 0. `node scripts/validate-ui.mjs`: **169** `passed`, **21** `skipped`, **0** `unexpected`, **0** retentativas, exit 0. `BFF_TEST_DATABASE_URL="postgresql://pgtest@127.0.0.1:55432/atendly_bff_test" npm run validate:integration`, contra o PostgreSQL 18 descartável da estação: **36**/**36** passos, exit 0; dentro dela, `rehearse:goal033-authenticated-ui` (o gate autenticado que mede `/agenda` e `/configuracoes/agenda`) — **155** `passed`, **0** `failed`, **0** retentativas, exit 0, mesma contagem da baseline WU-12.
+
+**Rodadas de correção.** Rodada 2: `e2e/routes.ts` volta à baseline; o `<h1>` "Agenda" troca `sr-only` (cujo `clip`/`clip-path` tira a caixa do hit-test do gate autenticado) por `.agenda-page-title`; AG-05 passa a ser corrigido em `goToAdjacent`; o bloco da Semana recupera o prefixo do tipo no nome acessível, com o teste de regressão "Almoço". Rodada 3: os oito controles são refeitos contra `AgendaBoard.tsx` depois das edições da rodada 2. Rodada 4: o controle 4 passa a mutar `goToAdjacent`. Rodada 5: sem mudança de código. Rodada 6: esta seção é reescrita no estado vigente e ganha o vermelho da baseline.
+
+**Conferência humana pendente.** A conferência do §9 do Goal **não foi feita** por este Goal: que a Agenda, num aparelho real nas cinco larguras, em Dia, Semana e Mês, com e sem agendamento, bate com `Agenda.dc.html`, `Agenda-Tablet.dc.html` e `Agenda-Desktop.dc.html`; e que a marca no trilho, o segmentado numa linha e o bloco da Semana legível batem com o protótipo.
+
+**O que esta seção não prova.** Não prova fidelidade visual da Agenda aos protótipos aprovados, nem das telas de módulo e da central de notificações (Goal075) ou do onboarding (Goal072). `validate:integration` e o gate autenticado são a execução declarada pelo Developer contra o PostgreSQL descartável da estação.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal069-2026-09-29-d-089-accepted),
+[FINAL_AUDIT §50](FINAL_AUDIT.md) e [D-089](DECISIONS.md), **ACCEPTED** no
+[review069](reviews/069-review.md) (rodada 6 do IA Loop, sem blocker; os
+gates da rodada 6 passaram, inclusive `validate:integration` no próprio IA
+Loop).

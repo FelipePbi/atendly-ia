@@ -179,6 +179,29 @@ export function seriesConflicts(
   );
 }
 
+/**
+ * Início do atendimento como instante local, sem conversão de fuso — `date`
+ * e `startTime` são wall-clock do negócio, como o resto da navegação da
+ * Agenda já faz.
+ */
+function appointmentStartInstant(appointment: Appointment): Date {
+  const [year = 0, month = 1, day = 1] = appointment.date
+    .split("-")
+    .map(Number);
+  const [hour = 0, minute = 0] = appointment.startTime.split(":").map(Number);
+  return new Date(year, month - 1, day, hour, minute);
+}
+
+/**
+ * Decide se as ações de fim (Goal069 AG-09) já podem aparecer.
+ */
+export function appointmentHasStarted(
+  appointment: Appointment,
+  now: Date = new Date(),
+): boolean {
+  return appointmentStartInstant(appointment).getTime() <= now.getTime();
+}
+
 export function compareAppointments(
   left: Appointment,
   right: Appointment,
@@ -186,6 +209,23 @@ export function compareAppointments(
   return `${left.date}T${left.startTime}`.localeCompare(
     `${right.date}T${right.startTime}`,
   );
+}
+
+/**
+ * O próximo agendamento ativo a partir de agora (Goal069 AG-06) — não o
+ * primeiro da janela navegada, que pode já ter passado.
+ */
+export function nextActiveAppointment(
+  appointments: Appointment[],
+  now: Date = new Date(),
+): Appointment | undefined {
+  return appointments
+    .filter(
+      (appointment) =>
+        isActiveAppointmentStatus(appointment.status) &&
+        appointmentStartInstant(appointment).getTime() >= now.getTime(),
+    )
+    .sort(compareAppointments)[0];
 }
 
 // --- Ocupação honesta da grade (Goal016) ------------------------------------
@@ -333,6 +373,24 @@ export function entriesForDate(
   date: string,
 ): AgendaEntry[] {
   return entries.filter((entry) => entry.date === date);
+}
+
+/**
+ * Datas com pelo menos um agendamento ativo (Goal069 AG-01) — a faixa da
+ * semana marca ponto só nelas, nunca em bloqueio, buffer ou exceção.
+ */
+export function datesWithActiveAppointment(entries: AgendaEntry[]): Set<string> {
+  const dates = new Set<string>();
+  for (const entry of entries) {
+    if (
+      entry.kind === "appointment" &&
+      entry.appointment &&
+      isActiveAppointmentStatus(entry.appointment.status)
+    ) {
+      dates.add(entry.date);
+    }
+  }
+  return dates;
 }
 
 export function groupEntriesByDate(

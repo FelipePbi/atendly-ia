@@ -548,10 +548,19 @@ async function proveOnboardingScreen(page: Page, route: OnboardingRoute): Promis
   ).toHaveCount(0, { timeout: CONTENT_TIMEOUT_MS });
 }
 
+/** Monday (YYYY-MM-DD) of the week containing `iso`, mirroring the frontend's own `startOfWeek`. */
+function mondayOfWeek(iso: string): string {
+  const date = new Date(`${iso}T12:00:00`);
+  const weekday = date.getDay();
+  date.setDate(date.getDate() - ((weekday + 6) % 7));
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 /**
- * Moves the Agenda's day view from wherever it opened (the browser's `today`)
- * to `MEASURED_DATE`, the day the rehearsal actually seeded. A no-op when the
- * two already agree, which is the common case.
+ * Moves the Agenda from wherever it opened (the browser's `today`) to
+ * `MEASURED_DATE`, the day the rehearsal actually seeded, in whichever view
+ * (Dia, Semana or Mês) is open — Goal069 §5. A no-op when the two already
+ * agree, which is the common case.
  *
  * Every load of the Agenda re-mounts on `new Date()` — the initial `goto`
  * and, later in this spec, the `prefers-reduced-motion` reload alike — so
@@ -564,17 +573,46 @@ async function ensureAgendaOnMeasuredDate(page: Page): Promise<void> {
   });
   if (todayIso === MEASURED_DATE) return;
 
-  const diffDays = Math.round(
-    (new Date(`${MEASURED_DATE}T00:00:00`).getTime() - new Date(`${todayIso}T00:00:00`).getTime())
-      / 86_400_000,
-  );
-  const button = page.getByRole("button", { name: diffDays > 0 ? "Próximo dia" : "Dia anterior" });
-  // A largura Automática abre em Semana a partir de 1024px (Goal073): essa
-  // visualização não tem navegação por dia, só por semana. A semeadura
-  // procura o horário livre nos dois dias seguintes a "hoje", que a semana
-  // corrente (ou a grade do mês) já cobre — nada a clicar nesses casos.
-  if ((await button.count()) === 0) return;
-  for (let clicked = 0; clicked < Math.abs(diffDays); clicked += 1) {
+  let button: Locator | null = null;
+  let steps = 0;
+
+  if (
+    (await page.getByRole("button", { name: "Próximo dia" }).count()) > 0
+    || (await page.getByRole("button", { name: "Dia anterior" }).count()) > 0
+  ) {
+    const diffDays = Math.round(
+      (new Date(`${MEASURED_DATE}T00:00:00`).getTime() - new Date(`${todayIso}T00:00:00`).getTime())
+        / 86_400_000,
+    );
+    steps = Math.abs(diffDays);
+    button = page.getByRole("button", { name: diffDays > 0 ? "Próximo dia" : "Dia anterior" });
+  } else if (
+    (await page.getByRole("button", { name: "Próxima semana" }).count()) > 0
+    || (await page.getByRole("button", { name: "Semana anterior" }).count()) > 0
+  ) {
+    const todayWeekStart = mondayOfWeek(todayIso);
+    const measuredWeekStart = mondayOfWeek(MEASURED_DATE);
+    const diffWeeks = Math.round(
+      (new Date(`${measuredWeekStart}T00:00:00`).getTime() - new Date(`${todayWeekStart}T00:00:00`).getTime())
+        / (7 * 86_400_000),
+    );
+    steps = Math.abs(diffWeeks);
+    button = page.getByRole("button", { name: diffWeeks > 0 ? "Próxima semana" : "Semana anterior" });
+  } else if (
+    (await page.getByRole("button", { name: "Próximo mês" }).count()) > 0
+    || (await page.getByRole("button", { name: "Mês anterior" }).count()) > 0
+  ) {
+    const [todayYear, todayMonth] = todayIso.split("-").map(Number);
+    const [measuredYear, measuredMonth] = MEASURED_DATE.split("-").map(Number);
+    const diffMonths = (measuredYear - todayYear) * 12 + (measuredMonth - todayMonth);
+    steps = Math.abs(diffMonths);
+    button = page.getByRole("button", { name: diffMonths > 0 ? "Próximo mês" : "Mês anterior" });
+  }
+
+  // Nenhum dos três pares de botão existe: nada a clicar (não deveria
+  // acontecer com a barra superior do Goal069, mas não há o que fazer aqui).
+  if (!button || steps === 0) return;
+  for (let clicked = 0; clicked < steps; clicked += 1) {
     // eslint-disable-next-line no-await-in-loop -- each click must settle before the next
     await button.click();
   }

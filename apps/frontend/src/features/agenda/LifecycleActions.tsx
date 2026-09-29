@@ -12,7 +12,7 @@ import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Button } from "@/shared/ui/Button";
 
 import { formatMoney } from "./AppointmentFlowShell";
-import { requestError, statusLabel } from "./occupancy";
+import { appointmentHasStarted, requestError, statusLabel } from "./occupancy";
 
 type Busy = "complete" | "confirm-presence" | "final-value" | "no-show" | null;
 
@@ -156,8 +156,12 @@ export function LifecycleActions({
   );
 
   const status = normalizedStatus(appointment.status);
-  const canComplete = status === "CONFIRMED";
-  const canMarkNoShow = status === "CONFIRMED" || status === "COMPLETED";
+  // O início já chegou (Goal069 AG-09): concluir ou marcar falta antes disso
+  // afirmaria um atendimento que ainda não começou.
+  const started = appointmentHasStarted(appointment);
+  const canComplete = status === "CONFIRMED" && started;
+  const canMarkNoShow =
+    (status === "CONFIRMED" || status === "COMPLETED") && started;
   const canConfirmPresence =
     status !== "CANCELLED" && !appointment.presenceConfirmedAt;
   const canSetFinalValue = status !== "CANCELLED";

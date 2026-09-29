@@ -230,9 +230,12 @@ describe("dias ocultos somem de Semana e Mês, nunca do Dia", () => {
     const [queryWindow] = listAppointments.mock.calls.at(-1) as [
       { endDate: string; startDate: string },
     ];
+    // Goal069 §2: o Dia lê a semana inteira do dia focado (não só o dia), para
+    // a faixa da semana marcar ponto — 27/09 (domingo) pertence à semana de
+    // 21 a 27/09, não à de 28/09 a 04/10.
     expect(queryWindow).toEqual({
       endDate: "2026-09-27",
-      startDate: "2026-09-27",
+      startDate: "2026-09-21",
     });
   });
 });

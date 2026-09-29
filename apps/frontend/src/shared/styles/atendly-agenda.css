@@ -3,6 +3,21 @@
   margin: 0 auto;
   padding: 28px 36px 64px;
 }
+/* Igual a `.sr-only`, sem `clip`/`clip-path`: os dois recortam a caixa fora
+ * da área testável por `elementFromPoint`, e o gate autenticado usa o centro
+ * desta caixa como marcador de conteúdo carregado de `/agenda` (Goal069,
+ * rodada 2). `overflow: hidden` numa caixa de 1px já basta para escondê-la de
+ * quem enxerga. */
+.agenda-page-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 0;
+}
 .agenda-page-header {
   margin-bottom: 22px;
   display: flex;
@@ -124,9 +139,16 @@
 .agenda-command-bar {
   margin-bottom: 16px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: end;
   gap: 18px;
+}
+.agenda-new-menu .menu {
+  right: 0;
+  left: auto;
+}
+.agenda-exceptions-link {
+  margin: -6px 0 16px;
 }
 .agenda-date-tools {
   display: flex;
@@ -1237,6 +1259,16 @@
   .agenda-date-tools {
     display: grid;
     grid-template-columns: 44px minmax(0, 1fr) 44px auto;
+  }
+  .agenda-new-menu {
+    justify-self: stretch;
+  }
+  .agenda-new-menu .btn {
+    width: 100%;
+  }
+  .agenda-new-menu .menu {
+    left: 0;
+    right: 0;
   }
   .agenda-date-title {
     min-width: 0;

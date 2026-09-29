@@ -70,7 +70,7 @@ export function AppointmentDetail({ appointmentId }: { appointmentId?: string })
   return (
     <AppointmentFlowShell
       calendar={calendar}
-      description="Dados persistidos na fonte oficial do negócio."
+      description="Dados do agendamento na Agenda Atendly."
       loading={loading}
       title="Detalhes do agendamento"
     >

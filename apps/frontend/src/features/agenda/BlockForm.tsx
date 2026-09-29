@@ -39,13 +39,26 @@ const KINDS: Array<{
 ];
 
 /**
+ * O tipo pedido por `?type=` no "+ Novo" da Agenda (Goal069 §1) decide só a
+ * seleção inicial; o que é gravado continua vindo do que a pessoa escolhe (ou
+ * confirma) no formulário.
+ */
+function initialKindFromLocation(): TimeBlockKind {
+  if (typeof window === "undefined") return "BLOCK";
+  const requested = new URLSearchParams(window.location.search).get("type");
+  return requested === "PERSONAL" ? "PERSONAL" : "BLOCK";
+}
+
+/**
  * Bloqueio operacional e compromisso pessoal (Goal016): mesmo contrato
  * (`POST /v1/time-blocks`), `kind` distinto — nunca apresentados como a mesma
  * coisa com uma cor diferente.
  */
 export function BlockForm() {
   const [calendar, setCalendar] = useState<CalendarState | null>(null);
-  const [kind, setKind] = useState<TimeBlockKind>("BLOCK");
+  const [kind, setKind] = useState<TimeBlockKind>(() =>
+    initialKindFromLocation(),
+  );
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(isoDate(new Date()));
   const [startTime, setStartTime] = useState("09:00");

@@ -109,6 +109,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
     customers: { list: listCustomers },
     serviceCatalog: { list: listServices },
   }),
+  useProductRuntime: () => ({ session: null }),
 }));
 
 const ISO_TODAY = "2026-09-14";

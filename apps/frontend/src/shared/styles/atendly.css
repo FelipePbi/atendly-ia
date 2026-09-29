@@ -4662,3 +4662,86 @@ p {
     max-width: 30ch;
   }
 }
+
+/*
+ * Goal069 §2 — Agenda: faixa da semana no Dia e duas colunas a partir de
+ * 1024px (lista + painel de detalhe, sem sair de /agenda).
+ */
+.agenda-week-strip {
+  display: flex;
+  gap: var(--s2);
+  overflow-x: auto;
+  padding-bottom: var(--s2);
+  margin-bottom: var(--s3);
+}
+.agenda-week-strip-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 1 0 40px;
+  min-width: 40px;
+  min-height: 44px;
+  padding: var(--s2) var(--s1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  background: var(--surface);
+  color: var(--fg-soft);
+  cursor: pointer;
+}
+.agenda-week-strip-day.is-today {
+  border-color: var(--accent);
+}
+.agenda-week-strip-day.is-selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--at-color-on-primary);
+}
+.agenda-week-strip-label {
+  font-size: var(--at-font-size-2xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.agenda-week-strip-number {
+  font-weight: var(--at-font-weight-semibold);
+}
+.agenda-week-strip-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.agenda-day-empty {
+  display: grid;
+  gap: var(--s3);
+  justify-items: start;
+}
+.agenda-day-empty-reason {
+  color: var(--fg-soft);
+  margin: 0;
+}
+.agenda-day-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--s4);
+  align-items: start;
+}
+.agenda-day-detail {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .agenda-day-layout {
+    grid-template-columns: minmax(0, 1fr) 360px;
+  }
+  .agenda-day-detail {
+    display: grid;
+    gap: var(--s4);
+    align-content: start;
+    padding: var(--s4);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    background: var(--surface);
+    position: sticky;
+    top: var(--s4);
+  }
+}

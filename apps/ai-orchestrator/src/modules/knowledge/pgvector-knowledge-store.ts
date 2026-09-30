@@ -4,6 +4,7 @@ import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import { Prisma as PrismaNamespace } from "../../generated/prisma/client.js";
 import type { EmbeddingProvider } from "./embedding-provider.js";
 import { KNOWLEDGE_EMBEDDING_DIMENSIONS } from "./embedding-provider.js";
+import { SERVICE_INSTRUCTION_SOURCE_PREFIX } from "./knowledge-document-service.js";
 import type {
   KnowledgeIndexDocumentInput,
   KnowledgeIndexResult,
@@ -149,6 +150,9 @@ export class PGVectorKnowledgeStore implements KnowledgeVectorStore {
               document."serviceId" IS NULL
               OR document."serviceId" = ANY(${focusServiceIds}::text[])
             )
+            -- Instrucao privada por servico (Goal078): nunca chega como
+            -- trecho de conhecimento, nem ao modo sugestao pela mesma busca.
+            AND document."source" NOT LIKE ${`${SERVICE_INSTRUCTION_SOURCE_PREFIX}%`}
         )
         SELECT *
         FROM ranked

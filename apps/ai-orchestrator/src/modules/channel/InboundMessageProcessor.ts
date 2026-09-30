@@ -25,6 +25,7 @@ import type { IdempotencyStore } from "../idempotency/IdempotencyStore.js";
 import type { KnowledgeVectorStore } from "../knowledge/knowledge-vector-store.js";
 import type { InboundAudioTranscriptionPort } from "../media/audio-transcription.js";
 import type { CustomerMemoryPromptPort } from "../memory/customer-memory-service.js";
+import type { ServiceInstructionPromptPort } from "../prompts/service-instructions.js";
 import type { GraphSessionPort } from "../session/SessionService.js";
 import type { BusinessContext } from "../tenant-config/business-context.js";
 import type { ChannelInboundMessage } from "./domain/ChannelMessage.js";
@@ -178,6 +179,8 @@ export interface InboundMessageProcessorOptions {
   sessions?: GraphSessionPort;
   /** Memoria permitida da pessoa vinculada ao contato (Goal012). */
   customerMemory?: CustomerMemoryPromptPort;
+  /** Instrucoes privadas por servico em foco (Goal078). */
+  serviceInstructions?: ServiceInstructionPromptPort;
   /** Transcricao de audio recebido (Goal013). */
   transcription?: InboundAudioTranscriptionPort;
 }
@@ -227,6 +230,7 @@ export class InboundMessageProcessor {
       outboundGate: options.outboundGate,
       sessions: options.sessions,
       customerMemory: options.customerMemory,
+      serviceInstructions: options.serviceInstructions,
       transcription: options.transcription,
       logger,
     });

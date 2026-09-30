@@ -744,6 +744,40 @@ export class AiOrchestratorClient {
     ).data;
   }
 
+  /** Leitura da instrucao privada por servico (Goal078). Vazia quando o
+   * tenant nunca salvou nada para este servico — nao e erro. */
+  async getServiceInstruction(
+    context: InternalRequestContext,
+    serviceId: string,
+  ) {
+    return (
+      await this.http.request({
+        method: "GET",
+        path: `/internal/knowledge/service-instructions/${encodeURIComponent(serviceId)}`,
+        context,
+        schema: envelope(z.object({ content: z.string() })),
+      })
+    ).data;
+  }
+
+  /** Grava, substitui ou remove (texto vazio) a instrucao privada por
+   * servico (Goal078). Nunca revelada ao cliente pelo modelo. */
+  async saveServiceInstruction(
+    context: InternalRequestContext,
+    serviceId: string,
+    input: { content: string },
+  ) {
+    return (
+      await this.http.request({
+        method: "PUT",
+        path: `/internal/knowledge/service-instructions/${encodeURIComponent(serviceId)}`,
+        context,
+        body: input,
+        schema: envelope(z.object({ content: z.string() })),
+      })
+    ).data;
+  }
+
   /**
    * Memoria do cliente (Goal012/WU-01): proveniencia, permissao explicita e
    * relevancia decrescente. A colecao e a criacao ficam sob `/memory`; o item

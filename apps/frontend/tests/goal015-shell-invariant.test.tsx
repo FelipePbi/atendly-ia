@@ -32,6 +32,9 @@ const customersListMemory = vi.fn();
 const calendarGetCalendar = vi.fn();
 const calendarListAppointments = vi.fn();
 const serviceCatalogList = vi.fn();
+const serviceCatalogGetAiInstruction = vi
+  .fn()
+  .mockResolvedValue({ content: "" });
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
@@ -46,6 +49,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       listMemory: customersListMemory,
     },
     serviceCatalog: {
+      getAiInstruction: serviceCatalogGetAiInstruction,
       list: serviceCatalogList,
     },
   }),
@@ -170,6 +174,9 @@ describe("ShellConfigProvider + tela real de Serviços não excede a profundidad
     push.mockReset();
     replace.mockReset();
     serviceCatalogList.mockReset();
+    serviceCatalogGetAiInstruction
+      .mockReset()
+      .mockResolvedValue({ content: "" });
   });
 
   test("lista carrega e responde à busca digitada caractere a caractere", async () => {

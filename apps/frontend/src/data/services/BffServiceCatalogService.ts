@@ -1,5 +1,9 @@
 import { type BffHttpClient, routeSchema } from "../http/BffHttpClient";
-import type { Service, ServiceList } from "../mappers/publicApiSchemas";
+import type {
+  Service,
+  ServiceAiInstruction,
+  ServiceList,
+} from "../mappers/publicApiSchemas";
 
 export type ServiceColorToken =
   "ROSE" | "AMBER" | "EMERALD" | "SKY" | "VIOLET" | "SLATE";
@@ -47,6 +51,30 @@ export class BffServiceCatalogService {
       method: "PATCH",
       path: `/v1/services/${encodeURIComponent(id)}`,
       schema: routeSchema<Service>("PATCH", "/v1/services/:id"),
+      signal,
+    });
+  }
+
+  getAiInstruction(id: string, signal?: AbortSignal) {
+    return this.http.request({
+      path: `/v1/services/${encodeURIComponent(id)}/ai-instruction`,
+      schema: routeSchema<ServiceAiInstruction>(
+        "GET",
+        "/v1/services/:id/ai-instruction",
+      ),
+      signal,
+    });
+  }
+
+  updateAiInstruction(id: string, content: string, signal?: AbortSignal) {
+    return this.http.request({
+      body: { content },
+      method: "PUT",
+      path: `/v1/services/${encodeURIComponent(id)}/ai-instruction`,
+      schema: routeSchema<ServiceAiInstruction>(
+        "PUT",
+        "/v1/services/:id/ai-instruction",
+      ),
       signal,
     });
   }

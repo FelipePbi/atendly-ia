@@ -43,6 +43,11 @@ export type ErrorCode =
   // para o frontend distinguir "link morto" (navega para /link-expirado) de
   // erro de campo (fica na tela).
   | "PASSWORD_RESET_TOKEN_INVALID"
+  // GET/PUT /v1/services/:id/ai-instruction com serviço inexistente ou de
+  // outro negócio (Goal078). Posse conferida por `scheduling.listServices`
+  // antes de chamar a IA: nenhuma chamada acontece quando o serviço não é
+  // do negócio.
+  | "SERVICE_NOT_FOUND"
   | "INTERNAL_ERROR";
 
 export class AppError extends Error {

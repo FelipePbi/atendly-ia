@@ -13,6 +13,15 @@ import type {
 export const OTHER_INFO_SOURCE = "business-info/other-important-information";
 const OTHER_INFO_TITLE = "Outras informações importantes";
 
+/**
+ * Prefixo de source reservado da instrução privada por serviço (Goal078). A
+ * source completa é `${SERVICE_INSTRUCTION_SOURCE_PREFIX}${serviceId}`, um
+ * documento `GUIDANCE` por `(tenantId, serviceId)`.
+ */
+export const SERVICE_INSTRUCTION_SOURCE_PREFIX = "service-instruction/";
+const SERVICE_INSTRUCTION_TITLE = "Instruções para a IA";
+export const SERVICE_INSTRUCTION_MAX_LENGTH = 2000;
+
 export interface KnowledgeDocumentRecord {
   id: string;
   tenantId: string;
@@ -54,6 +63,12 @@ export interface ListKnowledgeDocumentsInput {
 
 export interface SaveOtherInfoInput {
   tenantId: string;
+  content: string;
+}
+
+export interface SaveServiceInstructionInput {
+  tenantId: string;
+  serviceId: string;
   content: string;
 }
 
@@ -100,11 +115,19 @@ export class KnowledgeDocumentService {
       },
       orderBy: { updatedAt: "desc" },
     });
-    return documents.map(toRecord);
+    // A instrução privada por serviço (Goal078) nunca aparece nas rotas
+    // genéricas, mesmo filtrando por este `serviceId`.
+    return documents
+      .filter((document) => !isServiceInstructionSource(document.source))
+      .map(toRecord);
   }
 
   async get(tenantId: string, id: string): Promise<KnowledgeDocumentRecord> {
-    return toRecord(await this.requireDocument(tenantId, id));
+    const document = await this.requireDocument(tenantId, id);
+    if (isServiceInstructionSource(document.source)) {
+      throw serviceInstructionReservedError();
+    }
+    return toRecord(document);
   }
 
   async create(
@@ -117,6 +140,9 @@ export class KnowledgeDocumentService {
     const title = requireText(input.title, "title");
     const chunks = normalizeChunks(input.chunks);
     const source = input.source?.trim() || generateSource(input.type);
+    if (isServiceInstructionSource(source)) {
+      throw serviceInstructionReservedError();
+    }
     const serviceId = input.serviceId?.trim() || null;
 
     const collision = await this.prisma.knowledgeDocument.findFirst({
@@ -152,6 +178,9 @@ export class KnowledgeDocumentService {
   ): Promise<KnowledgeDocumentRecord> {
     const tenantId = requireText(input.tenantId, "tenantId");
     const current = await this.requireDocument(tenantId, input.id);
+    if (isServiceInstructionSource(current.source)) {
+      throw serviceInstructionReservedError();
+    }
     if (current.status !== "ACTIVE") {
       throw new AppError(
         "Only the active version of a knowledge document can be edited.",
@@ -182,6 +211,9 @@ export class KnowledgeDocumentService {
     id: string,
   ): Promise<KnowledgeDocumentRecord> {
     const current = await this.requireDocument(tenantId, id);
+    if (isServiceInstructionSource(current.source)) {
+      throw serviceInstructionReservedError();
+    }
     if (current.status === "INACTIVE") return toRecord(current);
     const updated = await this.prisma.knowledgeDocument.update({
       where: { tenantId_id: { tenantId, id } },
@@ -254,6 +286,137 @@ export class KnowledgeDocumentService {
       orderBy: { createdAt: "asc" },
     });
     return chunk?.content ?? "";
+  }
+
+  /**
+   * Grava, substitui ou remove a instrução privada de um serviço (Goal078).
+   * Texto vazio remove: inativa a versão ativa, se houver, e não cria outra.
+   * Texto igual ao vigente não gera versão nova. Acima de
+   * `SERVICE_INSTRUCTION_MAX_LENGTH` caracteres recusa com 400, antes de
+   * tocar o banco.
+   */
+  async saveServiceInstruction(
+    input: SaveServiceInstructionInput,
+  ): Promise<KnowledgeDocumentRecord | null> {
+    const tenantId = requireText(input.tenantId, "tenantId");
+    const serviceId = requireText(input.serviceId, "serviceId");
+    const content = input.content.trim();
+    if (content.length > SERVICE_INSTRUCTION_MAX_LENGTH) {
+      throw new AppError(
+        `content must be at most ${SERVICE_INSTRUCTION_MAX_LENGTH} characters.`,
+        { statusCode: 400, code: "VALIDATION_ERROR" },
+      );
+    }
+    const source = serviceInstructionSource(serviceId);
+    const current = await this.prisma.knowledgeDocument.findFirst({
+      where: { tenantId, type: "GUIDANCE", source, status: "ACTIVE" },
+    });
+
+    if (!content) {
+      if (current) {
+        await this.prisma.knowledgeDocument.update({
+          where: { tenantId_id: { tenantId, id: current.id } },
+          data: { status: "INACTIVE" },
+        });
+      }
+      return null;
+    }
+
+    const chunks = normalizeChunks([{ content }]);
+
+    if (!current) {
+      const version = String(
+        (await this.prisma.knowledgeDocument.count({
+          where: { tenantId, type: "GUIDANCE", source },
+        })) + 1,
+      );
+      return toRecord(
+        await this.createVersion({
+          tenantId,
+          type: "GUIDANCE",
+          serviceId,
+          title: SERVICE_INSTRUCTION_TITLE,
+          source,
+          version,
+          chunks,
+        }),
+      );
+    }
+
+    return toRecord(
+      await this.replaceVersion({
+        current,
+        title: current.title,
+        serviceId,
+        chunks,
+      }),
+    );
+  }
+
+  /** Texto da instrução ativa de um serviço, ou vazio quando não há uma. */
+  async getServiceInstruction(
+    tenantId: string,
+    serviceId: string,
+  ): Promise<string> {
+    const tenant = requireText(tenantId, "tenantId");
+    const service = requireText(serviceId, "serviceId");
+    const document = await this.prisma.knowledgeDocument.findFirst({
+      where: {
+        tenantId: tenant,
+        type: "GUIDANCE",
+        source: serviceInstructionSource(service),
+        status: "ACTIVE",
+      },
+    });
+    if (!document) return "";
+    const chunk = await this.prisma.knowledgeChunk.findFirst({
+      where: { tenantId: tenant, documentId: document.id },
+      orderBy: { createdAt: "asc" },
+    });
+    return chunk?.content ?? "";
+  }
+
+  /**
+   * Leitura em lote para o prompt: só as instruções ativas do tenant para os
+   * `serviceId` pedidos, na ordem da lista recebida. Sem consulta ao banco
+   * quando a lista é vazia.
+   */
+  async getServiceInstructions(
+    tenantId: string,
+    serviceIds: readonly string[],
+  ): Promise<Map<string, string>> {
+    const result = new Map<string, string>();
+    if (serviceIds.length === 0) return result;
+    const tenant = requireText(tenantId, "tenantId");
+    const sources = serviceIds.map(serviceInstructionSource);
+    const documents = await this.prisma.knowledgeDocument.findMany({
+      where: {
+        tenantId: tenant,
+        type: "GUIDANCE",
+        source: { in: sources },
+        status: "ACTIVE",
+      },
+    });
+    if (documents.length === 0) return result;
+    const documentIds = documents.map((document) => document.id);
+    const chunks = await this.prisma.knowledgeChunk.findMany({
+      where: { tenantId: tenant, documentId: { in: documentIds } },
+      orderBy: { createdAt: "asc" },
+    });
+    const contentByDocumentId = new Map<string, string>();
+    for (const chunk of chunks) {
+      if (!contentByDocumentId.has(chunk.documentId)) {
+        contentByDocumentId.set(chunk.documentId, chunk.content);
+      }
+    }
+    for (const serviceId of serviceIds) {
+      const document = documents.find(
+        (candidate) => candidate.source === serviceInstructionSource(serviceId),
+      );
+      const content = document && contentByDocumentId.get(document.id);
+      if (content) result.set(serviceId, content);
+    }
+    return result;
   }
 
   private async requireDocument(tenantId: string, id: string) {
@@ -396,6 +559,21 @@ function businessInfoReservedError(): AppError {
   return new AppError(
     "BUSINESS_INFO documents are managed through the other-info endpoint.",
     { statusCode: 409, code: "KNOWLEDGE_BUSINESS_INFO_RESERVED" },
+  );
+}
+
+function serviceInstructionSource(serviceId: string): string {
+  return `${SERVICE_INSTRUCTION_SOURCE_PREFIX}${serviceId}`;
+}
+
+function isServiceInstructionSource(source: string): boolean {
+  return source.startsWith(SERVICE_INSTRUCTION_SOURCE_PREFIX);
+}
+
+function serviceInstructionReservedError(): AppError {
+  return new AppError(
+    "This source is managed through the service-instruction endpoint.",
+    { statusCode: 409, code: "KNOWLEDGE_SOURCE_RESERVED" },
   );
 }
 

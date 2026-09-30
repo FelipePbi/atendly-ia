@@ -23,11 +23,15 @@ vi.mock("next/navigation", () => ({
 const serviceCatalogList = vi.fn();
 const serviceCatalogCreate = vi.fn();
 const serviceCatalogUpdate = vi.fn();
+const serviceCatalogGetAiInstruction = vi
+  .fn()
+  .mockResolvedValue({ content: "" });
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
     serviceCatalog: {
       create: serviceCatalogCreate,
+      getAiInstruction: serviceCatalogGetAiInstruction,
       list: serviceCatalogList,
       update: serviceCatalogUpdate,
     },
@@ -66,6 +70,7 @@ beforeEach(() => {
   serviceCatalogList.mockReset();
   serviceCatalogCreate.mockReset();
   serviceCatalogUpdate.mockReset();
+  serviceCatalogGetAiInstruction.mockReset().mockResolvedValue({ content: "" });
 });
 
 async function renderNewForm() {

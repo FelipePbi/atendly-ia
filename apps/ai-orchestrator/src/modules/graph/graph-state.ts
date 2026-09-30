@@ -9,6 +9,7 @@ import type {
   ModelResponse,
   ModelToolResult,
 } from "../model/model-provider.js";
+import type { ServiceInstructionPromptItem } from "../prompts/service-instructions.js";
 import type { SessionSnapshot } from "../session/SessionService.js";
 import type { AiConversationStyle } from "../tenant-config/ai-settings.js";
 
@@ -174,6 +175,12 @@ export const MessageGraphState = Annotation.Root({
    * chegam a ler memoria.
    */
   customerMemory: Annotation<CustomerMemoryPromptItem[]>(),
+  /**
+   * Instrucoes privadas do servico em foco desta conversa (Goal078).
+   * Carregada depois de `loadCustomerMemory` e antes de `agent`, sempre que
+   * `conversation.focusServiceIds` tem ao menos um `serviceId`.
+   */
+  serviceInstructions: Annotation<ServiceInstructionPromptItem[]>(),
   toolResults: Annotation<GraphToolResult[]>(),
   assistantSession: Annotation<AssistantGraphSession | undefined>(),
   modelResponse: Annotation<ModelResponse | undefined>(),

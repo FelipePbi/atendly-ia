@@ -43,6 +43,7 @@ import {
   CustomerMemoryService,
   type CustomerMemoryPolicy,
 } from "../../src/modules/memory/customer-memory-service.js";
+import type { ServiceInstructionPromptItem } from "../../src/modules/prompts/service-instructions.js";
 import type {
   ModelRequest,
   ModelResponse,
@@ -101,6 +102,12 @@ export interface EvalTurn {
   knowledgeRequested?: boolean;
   retrievedKnowledge?: KnowledgeSearchResult[];
   customerMemory?: CustomerMemoryPromptItem[];
+  /**
+   * Instrucoes privadas do servico em foco (Goal078), ja carregadas como o
+   * grafo faria (`loadServiceInstructions`) antes do turno. A bancada nao
+   * refaz sozinha a leitura por tenant/servico.
+   */
+  serviceInstructions?: ServiceInstructionPromptItem[];
 }
 
 /** Uma execução de tool como o runtime a registrou em `aiToolCall`. */
@@ -333,6 +340,7 @@ export function createEvalWorld(options: EvalWorldOptions = {}) {
       knowledgeRequested: turn.knowledgeRequested,
       retrievedKnowledge: turn.retrievedKnowledge,
       customerMemory: turn.customerMemory,
+      serviceInstructions: turn.serviceInstructions,
     });
     // Falha legível no ponto exato: o roteiro deste turno tem que ter sido
     // todo consumido, senão o caso está afirmando menos do que escreveu.

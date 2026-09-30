@@ -23,7 +23,7 @@ Para comportamento vigente, prevalece [`../../docs/product-vault/00-HOME.md`](..
 | Importação única (Goal010, Goal020, Goal061) | `GET /v1/calendar/imports`; `POST /v1/calendar/imports`; `POST /v1/calendar/imports/:sessionId/analyze`; `GET /v1/calendar/imports/:sessionId/preview`; `GET /v1/calendar/imports/:sessionId/categories/:category/items`; `POST /v1/calendar/imports/:sessionId/categories/:category/selection`; `POST /v1/calendar/imports/:sessionId/items/:itemId/decision`; `POST /v1/calendar/imports/:sessionId/execute`; `GET /v1/calendar/imports/:sessionId/progress`; `POST /v1/calendar/imports/:sessionId/complete` |
 | Clientes | `GET /v1/customers`; `GET /v1/customers/:id`; `POST /v1/customers`; `PATCH /v1/customers/:id`; `PUT /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/primary-guardian/confirm`; `DELETE /v1/customers/:id/primary-guardian`; `POST /v1/customers/:id/notes`; `PATCH /v1/customers/:id/notes/:noteId`; `DELETE /v1/customers/:id/notes/:noteId`; `POST /v1/customers/:id/tags`; `PATCH /v1/customers/:id/tags/:tagId`; `DELETE /v1/customers/:id/tags/:tagId`; `GET/POST /v1/customers/:id/memory`; `PATCH/DELETE /v1/customers/:id/memory/:memoryId`; `POST /v1/customers/:id/summary` (Goal012) |
 | Conhecimento do negócio (Goal012) | `GET/POST /v1/knowledge/documents`; `GET/PUT/DELETE /v1/knowledge/documents/:id`; `GET/PUT /v1/knowledge/other-info` |
-| Serviços | `GET /v1/services`; `POST /v1/services`; `PATCH /v1/services/:id` |
+| Serviços | `GET /v1/services`; `POST /v1/services`; `PATCH /v1/services/:id`; `GET/PUT /v1/services/:id/ai-instruction` (Goal078) |
 | Configurações | `GET /v1/settings`; `PATCH /v1/settings/business`; `PATCH /v1/settings/ai`; `PATCH /v1/settings/availability`; `GET /v1/settings/reminders`; `PATCH /v1/settings/reminders` (Goal021); `GET/PATCH /v1/settings/retention` (Goal023/WU-01); `GET/PATCH /v1/settings/agenda-view` (Goal073/WU-03) |
 | WhatsApp | `GET /v1/whatsapp`; `GET /v1/whatsapp/qr` (Goal071/WU-01); `POST /v1/whatsapp/connect`; `POST /v1/whatsapp/reconnect`; `DELETE /v1/whatsapp` |
 | Teste real de ativação (Goal019/WU-05) | `GET /v1/activation-test`; `POST /v1/activation-test`; `POST /v1/activation-test/restart` |
@@ -203,6 +203,12 @@ A seção `service` de `PATCH /v1/onboarding` admite os mesmos quatro valores de
 Atributos adicionais do catálogo: `description` (texto livre opcional), `colorToken` (token estável de identidade visual — `ROSE | AMBER | EMERALD | SKY | VIOLET | SLATE`, nunca cor livre), `bufferBeforeMinutes`/`bufferAfterMinutes` (minutos, default `0` — com efeito operacional na ocupação desde o Goal009, ver abaixo) e `recurrenceIntervalDays` (intervalo em dias; uso pela IA para propor recorrência proativamente é do Goal011, mas a série já pode ser criada via `POST /v1/appointments/series/preview`/`confirm` desde já).
 
 `GET/POST /v1/appointments` (e o `services[]` de cada agendamento) carregam as mesmas quatro semânticas nos itens do acordo, junto de `totalPrice`/`totalPriceType`. A regra do total é única e usada pelo Scheduling e pela IA: soma quando todos os itens são `FIXED`; `STARTING_AT` quando há algum "a partir de" e nenhum `ON_REQUEST`/`NOT_INFORMED`; `NONE` (sem total) nos demais casos. Editar o catálogo depois da confirmação não altera snapshots existentes.
+
+### Instrução privada por serviço (Goal078)
+
+`GET/PUT /v1/services/:id/ai-instruction` lê e grava um texto por serviço que o modelo usa como orientação interna de atendimento — nunca repetido nem revelado ao cliente. Resposta `{ "content": string }` nas duas rotas, vazio (`""`) quando o negócio nunca salvou nada para o serviço — não é erro. `PUT` com `content` vazio remove a instrução vigente. O corpo aceita só `content`, com no máximo 2000 caracteres; corpo maior ou com campo a mais é recusado com `400 VALIDATION_ERROR` antes de chamar a IA.
+
+Antes de repassar à IA, o BFF confere a posse do serviço por `GET /v1/services` (o mesmo catálogo do Scheduling): serviço de outro negócio ou inexistente responde `404 SERVICE_NOT_FOUND` sem a IA chegar a ser chamada. Serviço inativo continua sendo do negócio e responde normalmente.
 
 ## Agenda: hold, estados do atendimento e histórico (Goal008)
 

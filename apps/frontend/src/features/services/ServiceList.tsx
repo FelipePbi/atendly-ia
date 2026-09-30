@@ -246,23 +246,6 @@ export function DirectoryHeader({
   );
 }
 
-export function DirectorySourceStrip() {
-  return (
-    <section className="directory-source-strip">
-      <div className="directory-source-copy">
-        <span className="directory-source-icon">
-          <Icon name="briefcase" />
-        </span>
-        <div>
-          <strong>Gerenciado pela Agenda Atendly</strong>
-          <span>Serviços podem ser criados, editados e desativados aqui.</span>
-        </div>
-      </div>
-      <span className="badge badge-success">Controle completo</span>
-    </section>
-  );
-}
-
 function DirectoryLoading() {
   return (
     <div

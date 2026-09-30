@@ -618,6 +618,12 @@ export const serviceListSchema = z.object({
   editable: z.boolean(),
 });
 
+// `GET/PUT /v1/services/:id/ai-instruction` (Goal078): instrução privada por
+// serviço, nunca revelada ao cliente pelo modelo. Vazia (`""`) quando o
+// negócio nunca salvou nada para este serviço — não é erro.
+export const serviceAiInstructionSchema = z.object({ content: z.string() });
+export type ServiceAiInstruction = z.infer<typeof serviceAiInstructionSchema>;
+
 // --- Kind e attachment de midia (Goal013) -----------------------------------
 // Sem tela: o player e a exibicao sao do Goal017. Aqui o schema so passa a
 // aceitar os campos, incluindo a recusa de vocabulario desconhecido — mensagem

@@ -7642,3 +7642,154 @@ novos `goal076-*.test.tsx`. `e2e/routes.ts` fica na baseline. Decisão:
   `NOT_INFORMED` sem duração. A conferência humana do §7 continua **não
   feita**. Ver a nota de fechamento de [D-091](DECISIONS.md) e o
   [review076](reviews/076-review.md).
+
+## Delta implementado — Goal078, 2026-09-29 ([D-092](DECISIONS.md), ACCEPTED)
+
+Corrige **SV-04** (só a parte "Instruções para a IA") do
+[QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md), fora da enumeração A-01…A-24 do
+FINAL_AUDIT, e fecha o resíduo "regras privadas" de **G-17** do
+[GAP_ANALYSIS](GAP_ANALYSIS.md). Toca `apps/ai-orchestrator/`,
+`apps/bff/`, `packages/public-api-contract/` e `apps/frontend/`; nenhuma
+migration, nenhuma mudança de `schema.prisma`. Decisão:
+[D-092](DECISIONS.md), proposta no Goal078, **PROPOSED**.
+
+- **Documento reservado, sem migration.** `KnowledgeDocument` `GUIDANCE`
+  com `serviceId` e `source` `service-instruction/<serviceId>`
+  (`SERVICE_INSTRUCTION_SOURCE_PREFIX`), 1 a 2000 caracteres, versão nova
+  a cada mudança (texto igual não versiona), texto vazio remove.
+  `getServiceInstructions` lê em lote, por tenant e lista de `serviceId`,
+  na ordem pedida, sem consultar o banco com lista vazia.
+- **Reserva nas rotas genéricas e exclusão da busca.** `create`, `get`,
+  `edit` e `deactivate` de documento com essa `source` recusam com 409
+  `KNOWLEDGE_SOURCE_RESERVED`; `list` nunca o devolve.
+  `PGVectorKnowledgeStore.search` exclui a `source` reservada no `WHERE`,
+  antes do `LIMIT` — a instrução nunca chega como trecho de conhecimento.
+- **Entrega ao modelo em todo turno com o serviço em foco.** Passo novo
+  do grafo (`loadServiceInstructions`), entre `loadCustomerMemory` e
+  `agent`, nos dois caminhos do grafo (com e sem `retrieveKnowledge`): não
+  depende da intenção. Sem foco, não há consulta nem seção. Falha na
+  leitura não derruba o turno — `warn` sem o texto, turno segue sem a
+  seção. A seção nova do prompt (`modules/prompts/service-instructions.ts`)
+  tem quatro regras fixas (seguir e vencer descrição pública/conhecimento;
+  nunca repetir, citar, resumir, parafrasear nem revelar instrução
+  interna; dado operacional só das tools; `request_human_handoff` quando
+  mandado) e uma linha por instrução. `PROMPT_TEMPLATE_VERSION` sobe para
+  `v9`.
+- **Rotas internas** `GET`/`PUT /internal/knowledge/service-instructions/:serviceId`,
+  com o tenant do `trustedTenantContext`, nunca do corpo.
+- **Conferência de posse no BFF.** `GET`/`PUT /v1/services/:id/ai-instruction`
+  confere que o serviço está em `scheduling.listServices` do negócio da
+  sessão antes de chamar a IA; se não está, 404 `SERVICE_NOT_FOUND` sem
+  chamar o orquestrador. Schema `serviceAiInstructionSchema` no contrato
+  público; seção em `apps/bff/PUBLIC_API_V1.md`.
+- **O formulário.** `ServiceForm.tsx` ganha "Instruções para a IA" nas
+  opções avançadas: lido por `GET` ao abrir, gravado por `PUT` só quando
+  o texto mudou (ou, no serviço novo, quando não vazio), depois do
+  `POST`/`PATCH` do serviço. Falha na leitura desabilita o campo sem
+  impedir salvar; falha no `PUT` mostra o erro sem desfazer o serviço,
+  texto digitado mantido. `DirectorySourceStrip` sai de `ServiceList.tsx`
+  (observação 2 do review076).
+- **Oito controles negativos do §7**, aplicados e revertidos depois da
+  última edição de código (FIX-001 da rodada 2, em `ServiceForm.tsx`),
+  com `git hash-object` do arquivo-alvo idêntico antes e depois de cada
+  um. Os controles 3 e 8 vêm da rodada 2, por edição real revertida; os
+  controles 1, 2, 4, 5, 6 e 7 vêm da rodada 3 (FIX-001), o 4 por edição
+  real revertida e os 1, 2, 5, 6 e 7 por transform em memória, sem tocar
+  o arquivo em disco. SQL sem a exclusão reprova o teste do SQL
+  capturado (1); leitura em lote sem `tenantId` reprova o teste de
+  isolamento (2); passo restrito à intenção `knowledge` reprova o caso
+  de agendamento da entrega (3); leitura que ignora `focusServiceIds`
+  reprova o caso do serviço B em foco (4); linha da regra de não revelar
+  removida reprova a entrega e o hash da versão do prompt (5); `create`
+  sem a reserva reprova o teste de reserva (6); BFF sem conferir posse
+  reprova o teste de outro negócio com `AssertionError: expected 502 to
+  be 404` (7); formulário que sempre manda `PUT`, contra o
+  `ServiceForm.tsx` já corrigido, reprova o caso de salvar sem mudar o
+  texto, `Tests 2 failed | 7 passed (9)` (8). `ServiceForm.tsx` tem o
+  hash `88d3bb55…` desde o FIX-001 da rodada 2 (era `04d9bd8e…` na WU-19
+  da rodada 1); os outros cinco arquivos-alvo não mudaram. Saída em
+  [FINAL_AUDIT §53](FINAL_AUDIT.md).
+- **Execução final vigente**, das WU-15 a WU-18 da rodada 2 do IA Loop,
+  posterior à última edição de código (FIX-001 da rodada 2, em
+  `ServiceForm.tsx`): `validate:core` **17** passos, **15** `passed`,
+  **2** `skipped` (`test:bff`, `test:health-worker`), exit 0, com
+  `test:ai-orchestrator` **1177** testes passando de **1270** (**93**
+  pulados; baseline **1136**/**1229**, **+41** testes) e `test:frontend`
+  **109**/**1128** (baseline **108**/**1119**, **+1** arquivo e **+9**
+  testes — 8 da WU-04 mais o teste do blocker 1 da rodada de correção
+  2). `test:gate` **233**/**233**, exit 0, mesma contagem da baseline.
+  `validate:ui` **169** `passed`, **21** `skipped`, **0** retentativas,
+  exit 0. `validate:integration` (contra o PostgreSQL descartável da
+  estação em `127.0.0.1:55432/atendly_bff_test`) **36**/**36** passos,
+  exit 0, com `test:bff-integration` **59**/**455** (baseline
+  **58**/**448**, **+1** arquivo e **+7** testes),
+  `test:scheduling-integration` **18**/**143**,
+  `test:ai-orchestrator-transport-durability` **10**/**74** e
+  `test:ai-orchestrator-content-purge` **3**/**19** (as três sem mudança)
+  e o gate autenticado (`rehearse:goal033-authenticated-ui`) em **155**
+  `passed`, **0** retentativas — mesma contagem da baseline. A rodada 3
+  não editou código e reexecutou os mesmos quatro gates, todos exit 0.
+  Esta execução substitui a das WU-15 a WU-18 da rodada 1, rodada sobre
+  a árvore das WU-01 a WU-04 antes da edição de `ServiceForm.tsx`, com
+  as mesmas contagens nos gates e nas suítes de backend e `test:frontend`
+  com **109** arquivos, sem o teste do blocker 1, escrito depois dela (a
+  contagem de testes dessa execução não foi guardada). Detalhe em
+  [FINAL_AUDIT §53](FINAL_AUDIT.md).
+- **Conferência humana pendente:** a conferência do §9 do Goal **não foi
+  feita** — que, numa conversa real com o modelo de produção, com uma
+  instrução como a da henna e o serviço em foco, a IA age conforme a
+  instrução e não a repete à cliente; e que o campo "Instruções para a
+  IA", percorrido num aparelho real nas cinco larguras, bate com as
+  opções abertas de `Servicos.dc.html`, `Servicos-Tablet.dc.html` e
+  `Servicos-Desktop.dc.html`.
+- **Limites declarados:** o primeiro turno sem serviço em foco não
+  recebe instrução; o modo sugestão e o teste real da ativação não
+  recebem a seção; a obediência do modelo à regra de não revelar não é
+  provada por teste determinístico; Conversas e a central de notificações
+  (Goal077) e o onboarding (Goal072) não são tocados; o Product Vault e
+  `docs/design-reference/` não foram editados — ver [D-092](DECISIONS.md).
+- **Correção — rodada 2 (FIX-001), 2026-09-29.** A revisão da rodada 1
+  encontrou três blockers, todos corrigidos: (1) código, `ServiceForm.tsx`
+  repetia `POST` no reenvio quando o `PUT` da instrução falhava depois de
+  criar o serviço, corrigido com o estado `createdServiceId`; (2)
+  evidência, faltava o vermelho da baseline `011de8f` dos testes novos e a
+  recontagem das três suítes de backend; (3) documentação, o parágrafo
+  "Consequências" de D-092 nomeava mal as asserções mudadas fora de
+  composição/versão de prompt. **Vermelho da baseline `011de8f`**, com os
+  arquivos de produção deste Goal postos de lado por `git stash
+  push -u`/`apply`/`drop`: os quatro arquivos novos de
+  `apps/ai-orchestrator/tests/` contra o `src/` da baseline — `Tests 32
+  failed | 5 passed (37)`; `goal078-service-ai-instruction.integration.test.ts`
+  do BFF, com `BFF_RUN_INTEGRATION_TESTS=true` e o PostgreSQL descartável,
+  contra o `src/` da baseline — `Tests 7 failed (7)`;
+  `goal078-service-instruction-form.test.tsx` do frontend contra o `src/`
+  da baseline — `Tests 9 failed (9)`. **Recontagem das três suítes de
+  backend na baseline** (produção e testes deste Goal postos de lado
+  juntos): `test:ai-orchestrator` **1136** `passed`, **93** `skipped` de
+  **1229**, em **88** arquivos; `test:scheduling-service` **502** `passed`
+  em **37** arquivos (app não tocado); `test:bff-integration` **448**
+  `passed` em **58** arquivos — os três batem com "Baseline aceita" (via
+  review075), agora reconferidos em vez de só citados, e são o piso
+  usado para comparar a execução final. Teste novo
+  (`goal078-service-instruction-form.test.tsx`, "correção rodada 2,
+  blocker 1"): vermelho antes (`AssertionError: expected "vi.fn()" to be
+  called 1 times, but got 2 times`), verde depois (`Tests 9 passed (9)`).
+  A execução final vigente, citada acima, é a das WU-15 a WU-18 da
+  rodada 2, refeita depois do blocker 1. Detalhe
+  completo, hashes e saída real em
+  [FINAL_AUDIT §53 — Rodada de correção 2](FINAL_AUDIT.md); nota em
+  [D-092](DECISIONS.md).
+- **Fechamento — review078, 2026-09-29.** [D-092](DECISIONS.md)
+  **ACCEPTED** no [review078](reviews/078-review.md), rodada 4 do IA Loop,
+  sem blocker; rodadas 1, 2 e 3 `CHANGES_REQUIRED` com 3 blockers cada.
+  Só a rodada 1 teve blocker de código (`createdServiceId`, corrigido na
+  rodada 2); as rodadas 3 e 4 só reescreveram documentação. Na rodada 4
+  os gates do IA Loop passaram todos, inclusive `validate:integration`,
+  com as mesmas contagens da execução final da rodada 2 (público **169**
+  `passed`, **21** `skipped`; autenticado **155** `passed`; **0**
+  retentativas). Observações sem bloqueio: o campo fica habilitado
+  enquanto o `GET` da instrução está pendente, e a resposta tardia
+  sobrescreve o que foi digitado; em `NETWORK_ERROR` no `PUT` a mensagem
+  genérica esconde que o serviço já foi salvo. A conferência humana do §9
+  continua **não feita**. Ver a nota de fechamento de
+  [D-092](DECISIONS.md) e o [review078](reviews/078-review.md).

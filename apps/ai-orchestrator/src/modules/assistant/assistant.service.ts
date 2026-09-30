@@ -47,6 +47,7 @@ import {
   type ModelToolResult,
   type ModelTurn,
 } from "../model/model-provider.js";
+import type { ServiceInstructionPromptItem } from "../prompts/service-instructions.js";
 import { buildStyleGreeting } from "../prompts/style.js";
 import { buildSystemPrompt } from "../prompts/system.js";
 import type { CategorySuggestionPort } from "../session/SessionService.js";
@@ -80,6 +81,13 @@ export interface IncomingAssistantMessage {
    * esta ignorado ou nada foi autorizado — e ai o prompt nao ganha a secao.
    */
   customerMemory?: CustomerMemoryPromptItem[];
+  /**
+   * Instrucoes privadas do servico em foco desta conversa (Goal078),
+   * carregadas pelo grafo antes do turno. Vazio ou ausente quando nao ha
+   * servico em foco, quando a leitura falhou ou fora do turno real do canal
+   * — e ai o prompt nao ganha a secao.
+   */
+  serviceInstructions?: ServiceInstructionPromptItem[];
   /**
    * Instante a partir do qual o contexto vale.
    *
@@ -665,6 +673,7 @@ export class AssistantService {
       knowledgeRequested: input.knowledgeRequested,
       retrievedKnowledge: input.retrievedKnowledge,
       customerMemory: input.customerMemory,
+      serviceInstructions: input.serviceInstructions,
     });
 
     return {

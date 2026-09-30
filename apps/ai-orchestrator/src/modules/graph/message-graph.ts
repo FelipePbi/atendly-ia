@@ -37,6 +37,7 @@ import {
 } from "../media/audio-turn.js";
 import type { CustomerMemoryPromptPort } from "../memory/customer-memory-service.js";
 import { classifySendFailure } from "../outbox/outbox-policy.js";
+import type { ServiceInstructionPromptPort } from "../prompts/service-instructions.js";
 import type { GraphSessionPort } from "../session/SessionService.js";
 import type { GraphRuntimePort } from "./graph-runtime.js";
 import {
@@ -154,6 +155,11 @@ export interface MessageGraphDependencies {
    */
   customerMemory?: CustomerMemoryPromptPort;
   /**
+   * Instrucoes privadas por servico (Goal078). Opcional: sem a porta, o
+   * prompt segue sem a secao, como sem servico em foco.
+   */
+  serviceInstructions?: ServiceInstructionPromptPort;
+  /**
    * Transcricao de audio (Goal013). Opcional: sem a porta, audio volta a cair
    * na resposta generica anterior a este Goal, sem transcrever nada.
    */
@@ -203,6 +209,7 @@ export class MessageGraphWorkflow {
         observedInboundVersion: 0,
         retrievedKnowledge: [],
         customerMemory: [],
+        serviceInstructions: [],
         toolResults: [],
         assistantSession: undefined,
         modelResponse: undefined,
@@ -254,6 +261,9 @@ export class MessageGraphWorkflow {
       )
       .addNode("retrieveKnowledge", (state) => this.retrieveKnowledge(state))
       .addNode("loadCustomerMemory", (state) => this.loadCustomerMemory(state))
+      .addNode("loadServiceInstructions", (state) =>
+        this.loadServiceInstructions(state),
+      )
       .addNode("agent", (state) => this.agent(state))
       .addNode("executeTool", (state) => this.executeTool(state))
       .addNode("validateToolResult", (state) => this.validateToolResult(state))
@@ -293,7 +303,8 @@ export class MessageGraphWorkflow {
         agent: "loadCustomerMemory",
       })
       .addEdge("retrieveKnowledge", "loadCustomerMemory")
-      .addEdge("loadCustomerMemory", "agent")
+      .addEdge("loadCustomerMemory", "loadServiceInstructions")
+      .addEdge("loadServiceInstructions", "agent")
       .addConditionalEdges("agent", routeAfterAgent, {
         end: END,
         tools: "executeTool",
@@ -700,6 +711,48 @@ export class MessageGraphWorkflow {
     }
   }
 
+  /**
+   * Instrucoes privadas do servico em foco desta conversa (Goal078).
+   *
+   * Roda depois de `loadCustomerMemory` e antes de `agent`, nos dois caminhos
+   * (com e sem `retrieveKnowledge`): a entrega nao depende da intencao. Sem
+   * servico em foco a leitura nao acontece e o prompt nao ganha a secao.
+   * Falha da leitura nao derruba o turno: fica um `warn` sem o texto da
+   * instrucao, e o turno segue sem a secao, como `loadCustomerMemory` faz.
+   */
+  private async loadServiceInstructions(
+    state: MessageGraphStateValue,
+  ): Promise<MessageGraphStateUpdate> {
+    const port = this.dependencies.serviceInstructions;
+    const focusServiceIds = state.conversation.focusServiceIds;
+    if (!port || !focusServiceIds || focusServiceIds.length === 0) {
+      return { serviceInstructions: [] };
+    }
+    try {
+      const instructions = await port.getServiceInstructions(
+        state.tenantId,
+        focusServiceIds,
+      );
+      return {
+        serviceInstructions: focusServiceIds
+          .filter((serviceId) => instructions.has(serviceId))
+          .map((serviceId) => ({
+            serviceId,
+            content: instructions.get(serviceId) as string,
+          })),
+      };
+    } catch (error) {
+      this.logger.warn(
+        {
+          ...channelMessageLogContext(state.inboundMessage),
+          err: toErrorMessage(error),
+        },
+        "Service instruction load failed",
+      );
+      return { serviceInstructions: [] };
+    }
+  }
+
   private async bufferInbound(
     state: MessageGraphStateValue,
   ): Promise<MessageGraphStateUpdate> {
@@ -919,6 +972,7 @@ export class MessageGraphWorkflow {
             knowledgeRequested: state.intent === "knowledge",
             retrievedKnowledge: state.retrievedKnowledge,
             customerMemory: state.customerMemory,
+            serviceInstructions: state.serviceInstructions,
             // `Retomar IA` reavalia o contexto atual: o turno seguinte le a
             // conversa a partir do instante da retomada, nao do ponto anterior.
             contextSince: state.session?.contextResetAt ?? undefined,

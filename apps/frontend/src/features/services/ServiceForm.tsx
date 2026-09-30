@@ -63,6 +63,12 @@ export function ServiceForm({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [aiInstructionValue, setAiInstructionValue] = useState("");
+  const [aiInstructionOriginal, setAiInstructionOriginal] = useState("");
+  const [aiInstructionReadError, setAiInstructionReadError] = useState(false);
+  const [createdServiceId, setCreatedServiceId] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -100,6 +106,17 @@ export function ServiceForm({
         ) {
           setAdvancedOpen(true);
         }
+        getProductServices()
+          .serviceCatalog.getAiInstruction(found.id, controller.signal)
+          .then((result) => {
+            if (controller.signal.aborted) return;
+            setAiInstructionValue(result.content);
+            setAiInstructionOriginal(result.content);
+          })
+          .catch((_caught: unknown) => {
+            if (controller.signal.aborted) return;
+            setAiInstructionReadError(true);
+          });
       })
       .catch((caught: unknown) => {
         if (!controller.signal.aborted)
@@ -141,9 +158,30 @@ export function ServiceForm({
         recurrenceIntervalDays:
           recurrence === "" ? null : Number(recurrence),
       } as const;
-      if (edit && service)
-        await getProductServices().serviceCatalog.update(service.id, input);
-      else await getProductServices().serviceCatalog.create(input);
+      const existingId = (edit && service?.id) || createdServiceId;
+      const savedService = existingId
+        ? await getProductServices().serviceCatalog.update(existingId, input)
+        : await getProductServices().serviceCatalog.create(input);
+      if (!existingId) setCreatedServiceId(savedService.id);
+      if (
+        !aiInstructionReadError &&
+        aiInstructionValue !== aiInstructionOriginal
+      ) {
+        try {
+          await getProductServices().serviceCatalog.updateAiInstruction(
+            savedService.id,
+            aiInstructionValue,
+          );
+        } catch (caught: unknown) {
+          setMessage(
+            requestError(
+              caught,
+              "Serviço salvo, mas não foi possível salvar as instruções para a IA.",
+            ),
+          );
+          return;
+        }
+      }
       router.replace("/servicos");
     } catch (caught: unknown) {
       setMessage(requestError(caught, "Não foi possível salvar o serviço."));
@@ -367,6 +405,30 @@ export function ServiceForm({
                     name="description"
                     placeholder="Detalhes que ajudam a explicar o serviço."
                   />
+                </label>
+                <label className="field is-wide">
+                  <span className="label">
+                    Instruções para a IA · só ela lê
+                  </span>
+                  <textarea
+                    className="input"
+                    disabled={aiInstructionReadError}
+                    maxLength={2000}
+                    name="aiInstruction"
+                    placeholder="Não faço coloração em cabelo com henna. Se a cliente mencionar henna, peça para falar comigo antes de marcar."
+                    value={aiInstructionValue}
+                    onChange={(event) =>
+                      setAiInstructionValue(event.target.value)
+                    }
+                  />
+                  <span
+                    className="field-help"
+                    role={aiInstructionReadError ? "alert" : undefined}
+                  >
+                    {aiInstructionReadError
+                      ? "Não foi possível carregar as instruções para a IA agora. Você ainda pode salvar o serviço."
+                      : "A IA usa para decidir o que responder ou quando chamar você, e não mostra este texto às clientes."}
+                  </span>
                 </label>
                 <label className="field">
                   <span className="label">Identidade visual (opcional)</span>

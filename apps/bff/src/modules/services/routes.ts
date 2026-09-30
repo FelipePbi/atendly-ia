@@ -1,7 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
+import { AiOrchestratorClient } from "../../clients/ai-orchestrator/index.js";
+import type { InternalRequestContext } from "../../clients/internal-http-client.js";
 import { SchedulingClient } from "../../clients/scheduling/index.js";
+import { AppError } from "../../lib/errors.js";
 import { dataResponse, parseBody, parseParams } from "../../lib/http.js";
 import { requireTenantContext } from "../../lib/tenant-context.js";
 import { internalContext } from "../tenant/context.js";
@@ -35,10 +38,34 @@ const patchSchema = serviceSchema
     "At least one service field is required.",
   );
 
+// Instrucao privada por servico (Goal078): texto vazio remove, sem `min`,
+// ao contrario dos outros campos de conhecimento. Limite de 2000 caracteres
+// aqui, antes de chamar a IA.
+const aiInstructionSchema = z
+  .object({ content: z.string().trim().max(2_000) })
+  .strict();
+
 export async function registerV1ServiceRoutes(
   app: FastifyInstance,
 ): Promise<void> {
   const scheduling = new SchedulingClient();
+  const ai = new AiOrchestratorClient();
+
+  /**
+   * Confere a posse do servico por `scheduling.listServices` antes de
+   * chamar a IA (Goal078): servico de outro negocio ou inexistente vira
+   * `404 SERVICE_NOT_FOUND` sem a IA ser chamada. Servico inativo continua
+   * sendo do negocio.
+   */
+  async function requireOwnService(
+    context: InternalRequestContext,
+    serviceId: string,
+  ): Promise<void> {
+    const services = await scheduling.listServices(context);
+    if (!services.some((service) => service.id === serviceId)) {
+      throw new AppError("SERVICE_NOT_FOUND", "Service was not found.", 404);
+    }
+  }
 
   app.get(
     "/v1/services",
@@ -81,6 +108,32 @@ export async function registerV1ServiceRoutes(
           id,
           parseBody(patchSchema, request.body),
         ),
+      );
+    },
+  );
+
+  app.get(
+    "/v1/services/:id/ai-instruction",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      const context = internalContext(request);
+      await requireOwnService(context, id);
+      return dataResponse(request, await ai.getServiceInstruction(context, id));
+    },
+  );
+
+  app.put(
+    "/v1/services/:id/ai-instruction",
+    { preHandler: requireTenantContext },
+    async (request) => {
+      const { id } = parseParams(idSchema, request.params);
+      const body = parseBody(aiInstructionSchema, request.body);
+      const context = internalContext(request);
+      await requireOwnService(context, id);
+      return dataResponse(
+        request,
+        await ai.saveServiceInstruction(context, id, body),
       );
     },
   );

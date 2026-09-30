@@ -9,6 +9,8 @@ import type { OutboundGate } from "../graph/message-graph.js";
 import { HandoffService } from "../handoff/HandoffService.js";
 import { IdempotencyStore } from "../idempotency/IdempotencyStore.js";
 import { OpenAIEmbeddingProvider } from "../knowledge/embedding-provider.js";
+import { PgVectorKnowledgeChunkIndexer } from "../knowledge/knowledge-chunk-indexer.js";
+import { KnowledgeDocumentService } from "../knowledge/knowledge-document-service.js";
 import { PGVectorKnowledgeStore } from "../knowledge/pgvector-knowledge-store.js";
 import { AudioTranscriptionService } from "../media/audio-transcription.js";
 import { PrismaMessageAttachmentStore } from "../media/message-attachment-store.js";
@@ -54,6 +56,10 @@ export function buildInboundMessageProcessor(input: InboundProcessorInput) {
   );
   const sessions = new SessionService(input.prisma);
   const customerMemory = new CustomerMemoryService(input.prisma);
+  const serviceInstructions = new KnowledgeDocumentService(
+    input.prisma,
+    new PgVectorKnowledgeChunkIndexer(new OpenAIEmbeddingProvider()),
+  );
   const assistant = new AssistantService(
     input.prisma,
     input.logger,
@@ -96,6 +102,7 @@ export function buildInboundMessageProcessor(input: InboundProcessorInput) {
       outboundGate: input.outboundGate,
       sessions,
       customerMemory,
+      serviceInstructions,
       transcription,
     },
   );

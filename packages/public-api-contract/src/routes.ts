@@ -54,6 +54,7 @@ import {
   reminderSettingsSchema,
   retentionSettingsSchema,
   seriesOccurrencePreviewSchema,
+  serviceAiInstructionSchema,
   serviceListSchema,
   serviceSchema,
   sessionSchema,
@@ -213,6 +214,8 @@ export const publicApiRoutes: readonly PublicApiRoute[] = [
   { method: "GET", pathPattern: "/v1/services", schema: serviceListSchema },
   { method: "POST", pathPattern: "/v1/services", schema: serviceSchema },
   { method: "PATCH", pathPattern: "/v1/services/:id", schema: serviceSchema },
+  { method: "GET", pathPattern: "/v1/services/:id/ai-instruction", schema: serviceAiInstructionSchema },
+  { method: "PUT", pathPattern: "/v1/services/:id/ai-instruction", schema: serviceAiInstructionSchema },
 
   // settings
   { method: "GET", pathPattern: "/v1/settings", schema: settingsStateSchema },

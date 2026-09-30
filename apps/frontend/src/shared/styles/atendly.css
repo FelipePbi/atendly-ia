@@ -4551,44 +4551,6 @@ p {
   flex-wrap: wrap;
   gap: 10px;
 }
-.directory-source-strip {
-  min-height: 58px;
-  margin-bottom: 18px;
-  padding: 11px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-input);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  background: var(--surface);
-}
-.directory-source-copy {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-}
-.directory-source-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-.directory-source-copy > div > strong,
-.directory-source-copy > div > span {
-  display: block;
-}
-.directory-source-copy > div > strong {
-  font-size: 14px;
-}
-.directory-source-copy > div > span {
-  color: var(--muted);
-  font-size: 12px;
-}
 .directory-loading-shell {
   overflow: hidden;
   border: 1px solid var(--border);
@@ -4643,12 +4605,6 @@ p {
     width: 52px;
     padding-inline: 0;
   }
-  .directory-source-strip {
-    align-items: flex-start;
-  }
-  .directory-source-strip > .badge {
-    flex: 0 0 auto;
-  }
   .directory-loading-shell {
     margin-inline: -16px;
     border-inline: 0;
@@ -4660,19 +4616,6 @@ p {
   }
   .directory-loading-row > :nth-child(n + 3) {
     display: none;
-  }
-}
-
-@media (max-width: 390px) {
-  .directory-source-strip {
-    display: grid;
-    grid-template-columns: 1fr;
-  }
-  .directory-source-strip > .badge {
-    justify-self: start;
-  }
-  .directory-source-copy > div > span {
-    max-width: 30ch;
   }
 }
 

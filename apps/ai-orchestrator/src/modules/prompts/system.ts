@@ -19,6 +19,10 @@ import { buildKnowledgePrompt } from "./knowledge.js";
 import { buildPresencePrompt } from "./presence.js";
 import { buildResponsePrompt } from "./response.js";
 import { buildSchedulingPrompt } from "./scheduling.js";
+import {
+  buildServiceInstructionsPrompt,
+  type ServiceInstructionPromptItem,
+} from "./service-instructions.js";
 import { buildAiTonePromptSection } from "./style.js";
 import { buildSuggestionModePrompt } from "./suggestion.js";
 import { buildTenantContextPrompt } from "./tenant-context.js";
@@ -45,6 +49,13 @@ export interface BuildSystemPromptInput {
    * vinculada, o contato esta ignorado ou nada foi autorizado.
    */
   customerMemory?: CustomerMemoryPromptItem[];
+  /**
+   * Instrucoes privadas do servico em foco desta conversa (Goal078), ja
+   * filtradas pelo grafo. Ausente ou vazio quando nao ha servico em foco, a
+   * leitura falhou, ou fora do turno real do canal — e ai o prompt nao ganha
+   * a secao.
+   */
+  serviceInstructions?: ServiceInstructionPromptItem[];
   /** Ausente equivale a `"assistant"`, o turno de conversa de sempre. */
   mode?: SystemPromptMode;
 }
@@ -117,8 +128,14 @@ const MAIN_RULES = [
  * prazo de antecedencia (outsidePolicy) do cancelamento e da remarcacao —
  * explicar o prazo minimo e oferecer falar direto com a profissional, em vez
  * de tentar de novo com outro horario.
+ *
+ * v9 (Goal078): o template ganhou a secao de instrucoes privadas do negocio
+ * para o servico em foco, entregue em todo turno real do canal com
+ * `focusServiceIds`, qualquer que seja a intencao. Ela vence a descricao
+ * publica do servico e qualquer trecho de conhecimento, e o modelo passa a
+ * ter a regra explicita de nunca revelar que ela existe.
  */
-const PROMPT_TEMPLATE_VERSION = "v8";
+const PROMPT_TEMPLATE_VERSION = "v9";
 
 /**
  * Amostra fixa, nunca usada no prompt real: existe so para que o hash em
@@ -173,6 +190,16 @@ const STABLE_CUSTOMER_MEMORY_SAMPLE: CustomerMemoryPromptItem[] = [
 ];
 
 /**
+ * Amostra fixa da instrucao privada por servico, nunca usada no prompt real:
+ * cobre no hash os dois ramos de `buildServiceInstructionsPrompt` (sem
+ * instrucao ativa e com uma instrucao para o servico em foco).
+ */
+const STABLE_SERVICE_INSTRUCTION_SAMPLE: ServiceInstructionPromptItem = {
+  serviceId: "stable-service",
+  content: "stable-sample",
+};
+
+/**
  * Conteudo estavel do prompt: tudo que nao muda por turno, tenant ou
  * conhecimento recuperado. Usado apenas para derivar a versao, nao para
  * montar o prompt real enviado ao modelo.
@@ -195,6 +222,8 @@ function buildStablePromptContent(style: AiConversationStyle): string {
       requested: true,
       results: [STABLE_SERVICE_KNOWLEDGE_SAMPLE, STABLE_KNOWLEDGE_SAMPLE],
     }),
+    ...buildServiceInstructionsPrompt([]),
+    ...buildServiceInstructionsPrompt([STABLE_SERVICE_INSTRUCTION_SAMPLE]),
     ...buildCustomerMemoryPrompt([]),
     ...buildCustomerMemoryPrompt(STABLE_CUSTOMER_MEMORY_SAMPLE),
     buildAiTonePromptSection({ aiEnabled: true, tone: style }),
@@ -248,6 +277,8 @@ export function buildSystemPrompt(input: unknown): BuiltSystemPrompt {
       results: args.retrievedKnowledge ?? [],
     }),
     "",
+    ...buildServiceInstructionsPrompt(args.serviceInstructions ?? []),
+    "",
     ...buildCustomerMemoryPrompt(args.customerMemory ?? []),
     "",
     buildAiTonePromptSection(aiSettings),
@@ -280,6 +311,7 @@ function isPromptInput(value: unknown): value is BuildSystemPromptInput {
       "knowledgeRequested" in value ||
       "retrievedKnowledge" in value ||
       "customerMemory" in value ||
+      "serviceInstructions" in value ||
       "mode" in value)
   );
 }

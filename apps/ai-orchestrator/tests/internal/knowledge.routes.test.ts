@@ -98,6 +98,17 @@ function fakeKnowledgeDocuments(
         calls.push({ method: "getOtherInfo", args: { tenantId } });
         return otherInfoByTenant[tenantId] ?? "";
       },
+      // Instrução privada por serviço (Goal078): rotas e testes próprios em
+      // goal078-service-instruction-routes.test.ts; aqui só o suficiente para
+      // satisfazer o tipo de `InternalRoutesOptions.knowledgeDocuments`.
+      async saveServiceInstruction(args: unknown) {
+        calls.push({ method: "saveServiceInstruction", args });
+        return null;
+      },
+      async getServiceInstruction(tenantId: string, serviceId: string) {
+        calls.push({ method: "getServiceInstruction", args: { tenantId, serviceId } });
+        return "";
+      },
     },
   };
 }

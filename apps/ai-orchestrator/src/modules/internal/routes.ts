@@ -242,6 +242,17 @@ const otherInfoSchema = z
   .object({ content: z.string().trim().min(1) })
   .strict();
 
+// Instrucao privada por servico (Goal078): texto vazio remove (sem `min`,
+// ao contrario de `otherInfoSchema`); o limite de tamanho e conferido pelo
+// servico, que responde 400 antes de tocar o banco.
+const serviceInstructionParamsSchema = z.object({
+  serviceId: z.string().trim().min(1).max(128),
+});
+
+const serviceInstructionBodySchema = z
+  .object({ content: z.string().trim() })
+  .strict();
+
 // Numero do WhatsApp do negocio, projetado por quem pede o teste: e para ele
 // que o numero oficial da Atendly manda a conversa de teste. Nao ha default e
 // nao ha descoberta por busca — sem numero valido a execucao e recusada.
@@ -273,6 +284,8 @@ export interface InternalRoutesOptions {
     | "deactivate"
     | "saveOtherInfo"
     | "getOtherInfo"
+    | "saveServiceInstruction"
+    | "getServiceInstruction"
   >;
   /** Memoria da pessoa: listar, criar, permitir e remover (Goal012). */
   customerMemory?: Pick<
@@ -1074,6 +1087,44 @@ export async function registerInternalRoutes(
     const content = await knowledgeDocuments.getOtherInfo(tenantId);
     return internalData(request, { content });
   });
+
+  /** Instrucao privada por servico (Goal078). Vazia quando o tenant nunca
+   * salvou nada para este serviço — nao e erro. */
+  app.get(
+    "/internal/knowledge/service-instructions/:serviceId",
+    async (request) => {
+      const { tenantId } = trustedTenantContext(request);
+      const { serviceId } = parseOrThrow(
+        serviceInstructionParamsSchema,
+        request.params,
+      );
+      const content = await knowledgeDocuments.getServiceInstruction(
+        tenantId,
+        serviceId,
+      );
+      return internalData(request, { content });
+    },
+  );
+
+  /** Grava, substitui ou remove (texto vazio) a instrucao privada por
+   * serviço (Goal078). */
+  app.put(
+    "/internal/knowledge/service-instructions/:serviceId",
+    async (request) => {
+      const { tenantId } = trustedTenantContext(request);
+      const { serviceId } = parseOrThrow(
+        serviceInstructionParamsSchema,
+        request.params,
+      );
+      const body = parseOrThrow(serviceInstructionBodySchema, request.body);
+      await knowledgeDocuments.saveServiceInstruction({
+        tenantId,
+        serviceId,
+        content: body.content,
+      });
+      return internalData(request, { content: body.content });
+    },
+  );
 
   /**
    * Memoria da pessoa.

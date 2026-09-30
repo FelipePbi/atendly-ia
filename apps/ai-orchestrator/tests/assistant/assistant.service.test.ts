@@ -1445,7 +1445,7 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
         },
         {
           file: "modules/graph/message-graph.ts",
-          line: 1207,
+          line: 1261,
           category: "assistant_decision_text",
           origin: undefined,
         },
@@ -1469,7 +1469,7 @@ describe("conjunto de emissores de texto pelo canal do produto é computado, nã
         },
         {
           file: "modules/internal/routes.ts",
-          line: 756,
+          line: 769,
           category: "person_typed_text",
           origin: undefined,
         },
@@ -6215,13 +6215,13 @@ describe("Goal046 / WU-04 — o conjunto de categorias de recusa é conferido co
 });
 
 describe("Goal046 / WU-04 — a árvore real produz os números desta rodada, e as invariantes de reconhecimento não são vácuas", () => {
-  it("1 superfície, 4 ligações resolvidas, 10 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — os mesmos números da baseline do Goal045, exceto o de arquivos varridos pela resolução de instanciação: com o modelo AgendaViewPreference do Goal073 gerado em apps/bff/src/generated/prisma e o modelo HumanTakeover do Goal074 gerado em apps/ai-orchestrator/src/generated/prisma, elas somam hoje 208 arquivos .ts (120 em apps/ai-orchestrator/src, 88 em apps/bff/src) — o número computado pelo AST (208) prevalece sobre qualquer contagem anterior capturada antes desse arquivo existir na árvore", () => {
+  it("1 superfície, 4 ligações resolvidas, 10 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — os mesmos números da baseline do Goal045, exceto o de arquivos varridos pela resolução de instanciação: com o modelo AgendaViewPreference do Goal073 gerado em apps/bff/src/generated/prisma, o modelo HumanTakeover do Goal074 gerado em apps/ai-orchestrator/src/generated/prisma e modules/prompts/service-instructions.ts do Goal078, elas somam hoje 209 arquivos .ts (121 em apps/ai-orchestrator/src, 88 em apps/bff/src) — o número computado pelo AST (209) prevalece sobre qualquer contagem anterior capturada antes desse arquivo existir na árvore", () => {
     const { requests, internalClientSurfaces, nonGoBoundInstantiations, nonTransportMemberCalls } =
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath);
 
     expect(internalClientSurfaces).toHaveLength(1);
     expect(internalClientSurfaces[0].instantiationBindings).toHaveLength(4);
-    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(208);
+    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(209);
     expect(requests).toHaveLength(10);
     expect(nonGoBoundInstantiations).toHaveLength(2);
     expect(nonTransportMemberCalls).toHaveLength(0);
@@ -6273,7 +6273,7 @@ describe("Goal046 / WU-04 — a árvore real produz os números desta rodada, e 
  * resolvida (§2), simetria das duas saídas de `sourcesByPath` ausente (§3),
  * o controle próprio do critério 3 do Goal046 (§4, observação 1 do
  * review046), o conjunto de categorias de recusa em runtime (§5), e os
- * números da árvore real com as 43 ocorrências de `this.http.` classificadas
+ * números da árvore real com as 45 ocorrências de `this.http.` classificadas
  * sem recusa (§6). Cada árvore sintética é montada e removida pelo próprio
  * teste; nenhuma toca a árvore real.
  * ========================================================================= */
@@ -11898,20 +11898,20 @@ describe("Goal047 / WU-04 (§5) — as categorias de recusa deste caminho existe
   });
 });
 
-describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta rodada, e as 43 ocorrências de this.http. são classificadas sem recusa alguma", () => {
-  it("1 superfície, 4 ligações, 208 arquivos varridos, 10 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — inalterados pelas correções deste Goal, exceto o de arquivos varridos, pelo modelo AgendaViewPreference do Goal073 e pelo modelo HumanTakeover do Goal074", () => {
+describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta rodada, e as 45 ocorrências de this.http. são classificadas sem recusa alguma", () => {
+  it("1 superfície, 4 ligações, 209 arquivos varridos, 10 rotas, 2 instanciações fora do transporte, 0 chamadas de membro fora da superfície — inalterados pelas correções deste Goal, exceto o de arquivos varridos, pelo modelo AgendaViewPreference do Goal073, pelo modelo HumanTakeover do Goal074 e por modules/prompts/service-instructions.ts do Goal078", () => {
     const { requests, internalClientSurfaces, nonGoBoundInstantiations, nonTransportMemberCalls } =
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath);
 
     expect(internalClientSurfaces).toHaveLength(1);
     expect(internalClientSurfaces[0].instantiationBindings).toHaveLength(4);
-    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(208);
+    expect(internalClientSurfaces[0].scannedFilePathsForInstantiation).toHaveLength(209);
     expect(requests).toHaveLength(10);
     expect(nonGoBoundInstantiations).toHaveLength(2);
     expect(nonTransportMemberCalls).toHaveLength(0);
   });
 
-  it("as 43 ocorrências de this.http. em apps/bff/src/clients/ estão todas na forma direta this.http.<membro>(, sem exceção, e a leitura completa não lança recusa alguma sobre a árvore real", () => {
+  it("as 45 ocorrências de this.http. em apps/bff/src/clients/ estão todas na forma direta this.http.<membro>(, sem exceção, e a leitura completa não lança recusa alguma sobre a árvore real", () => {
     const clientsRoot = join(bffSrcPath, "clients");
     const files = listTypeScriptSources(clientsRoot);
     let totalOccurrences = 0;
@@ -11921,8 +11921,8 @@ describe("Goal047 / WU-04 (§6) — a árvore real produz os números desta roda
       totalOccurrences += (source.match(/\bthis\.http\./gu) ?? []).length;
       totalDirectCalls += (source.match(/\bthis\.http\.[A-Za-z_$][\w$]*\(/gu) ?? []).length;
     }
-    expect(totalOccurrences).toBe(43);
-    expect(totalDirectCalls).toBe(43);
+    expect(totalOccurrences).toBe(45);
+    expect(totalDirectCalls).toBe(45);
     expect(() =>
       discoverGoServiceHttpRequests(aiOrchestratorSrcPath, bffSrcPath, envSchemaSourcePath),
     ).not.toThrow();

@@ -1,6 +1,6 @@
 # Goal 081 — O onboarding não trava em "Local próprio" e o teste real diz quando está indisponível
 
-**Status: READY.** Preparado em 2026-09-30 pelo Tech Lead Agent após [Goal080 ACCEPTED](../reviews/080-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED.** Preparado em 2026-09-30 pelo Tech Lead Agent após [Goal080 ACCEPTED](../reviews/080-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: SONNET_HIGH
 

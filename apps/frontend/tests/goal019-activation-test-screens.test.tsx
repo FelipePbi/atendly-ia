@@ -225,6 +225,9 @@ describe("antes do teste: explicação e CTA do vault", () => {
     );
 
     await waitFor(() => expect(startActivationTest).toHaveBeenCalled());
+    expect(
+      await screen.findByText(/O teste real não está disponível neste ambiente/),
+    ).toBeVisible();
     expect(push).not.toHaveBeenCalled();
     expect(screen.queryByText(/Tudo pronto/)).not.toBeInTheDocument();
     expect(screen.queryByText("Mensagem enviada")).not.toBeInTheDocument();

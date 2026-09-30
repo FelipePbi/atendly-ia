@@ -8142,3 +8142,71 @@ ela substitui o item (9) de [D-039](DECISIONS.md) e mantém os demais.
   conteúdo não classificado. A conferência humana do §9 continua **não
   feita**. Ver a nota de fechamento de [D-096](DECISIONS.md) e o
   [review080](reviews/080-review.md).
+
+## Delta implementado — Goal081, 2026-09-30 ([D-097](DECISIONS.md), ACCEPTED)
+
+Fecha **R-01** e **R-05** do re-teste local de 2026-09-30: quem marca "Local
+próprio" no onboarding chega ao fim da etapa, e o teste real diz quando está
+indisponível. Toca só `apps/frontend/` e um comentário de
+`scripts/validate-integration.mjs`; o BFF ganha um teste, sem mudança em
+`apps/bff/src/`. Sem rota, contrato, migration ou campo novo, e
+`apps/bff/PUBLIC_API_V1.md` não mudou. Decisão: [D-097](DECISIONS.md), proposta
+no Goal081, **PROPOSED** até o review.
+
+- **Local próprio grava junto com o endereço.** `persistBusinessStep`
+  (`blocks/business.tsx`) não chama `onboarding.update` na etapa `modalidade`
+  quando o rascunho tem `ON_SITE` e segue para `endereco`, que grava `address` e
+  `modalities` numa chamada só. O BFF recusa `ON_SITE` sem endereço em
+  `PATCH /v1/onboarding` e em `PATCH /v1/settings/business`, e essa regra não
+  mudou.
+- **`endereco` sem `ON_SITE` no rascunho não grava** e volta para `modalidade`.
+  Custo aceito: quem fecha a janela no endereço volta, na retomada, para
+  `modalidade`.
+- **Recusas do teste real traduzidas num único módulo.**
+  `features/activation-test/ActivationTestPanels.tsx` devolve como recusa as sete
+  recusas nomeadas de `POST /v1/activation-test`; o onboarding e Configurações ›
+  IA mostram o mesmo texto para o mesmo código. `PLATFORM_NUMBER_NOT_CONFIGURED`
+  diz que o teste real não está disponível neste ambiente, sem "Tente
+  novamente", sem progresso simulado e com o caminho de pular visível no
+  onboarding. A indisponibilidade só é dita depois do clique.
+- **Erro de etapa em três classes.** `onboardingError` (`blocks/shared.tsx`)
+  distingue dado recusado (`400`), serviço fora do ar (`0`, `502`, `503`, `504`)
+  e falha nossa (o resto), e mantém o texto do `409` de conclusão. A frase única
+  "Não foi possível salvar esta etapa. Tente novamente." deixou de existir.
+- **Comentário.** O passo `test:ai-orchestrator-content-purge` de
+  `scripts/validate-integration.mjs` deixa de dizer que a purga não alcança
+  conteúdo não classificado; só linhas de comentário mudaram.
+- **Execução final, feita pela WU-13, todos exit 0.** `validate:core` **17**
+  passos (**15** `passed`, **2** `skipped`); `test:gate` **233**/**233**;
+  `validate:ui` **169** `passed`, **21** `skipped`, **0** `flaky` (`startTime`
+  `2026-09-30T22:06:12.019Z`); `validate:integration` **36**/**36** passos,
+  contra um PostgreSQL descartável em `127.0.0.1:55711/atendly_bff_test`, com o
+  gate autenticado em **170** testes e **0** retentativas (`startTime`
+  `2026-09-30T22:09:15.913Z`). Suítes: `test:frontend` **123**/**1268**
+  (baseline **121**/**1244**); `test:bff-integration` **62**/**471** (baseline
+  **61**/**470**), com o teste novo do BFF rodando contra esse PostgreSQL, sem
+  `skipped`; `test:ai-orchestrator` **1186** passando e **98** `skipped` de
+  **1284**, e `test:scheduling-service` **37**/**502**, ambos sem mudança.
+- **Cinco controles negativos do §7**, feitos pela WU-13 depois da execução
+  final, por edição real revertida e conferida por hash: cada um reprova o teste
+  esperado com o defeito e passa restaurado. O vermelho da baseline foi de
+  **25** testes reprovados de **124**. Saída, hashes e asserções alteradas em
+  [FINAL_AUDIT §58](FINAL_AUDIT.md).
+- **Fechamento no FINAL_AUDIT.** R-01 e R-05 são dados como corrigidos em §58
+  (sem reescrever §4–§57); o veredito continua **0** `BLOQUEADOR-MVP`, **7**
+  `PENDENCIA-POS-MVP` e **5** `LIMITE-DECLARADO`. A-08 segue pendente.
+- **Conferência humana pendente:** a conferência do §9 do Goal **não foi feita**
+  — percorrer o onboarding com Local próprio num navegador contra o BFF real,
+  ler os textos novos e aceitar o custo da retomada. Nenhum gate percorre a etapa
+  `modalidade` clicando.
+- **Fechamento — review081, 2026-09-30.** [D-097](DECISIONS.md)
+  **ACCEPTED** no [review081](reviews/081-review.md), rodada 1 do IA Loop,
+  sem blocker. A execução final e os cinco controles acima continuam os da
+  WU-13; os `e2e-results` em disco têm os mesmos `startTime`. O Tech Lead
+  reexecutou os seis arquivos de teste de frontend afetados (**124**/**124**)
+  e conferiu os dois consumidores da tradução das recusas. **R-01** e **R-05**
+  ficam corrigidos. O comentário de `scripts/validate-integration.mjs` que
+  dizia que a purga não alcança conteúdo não classificado foi reescrito, o que
+  fecha a observação 2 do review080. A conferência humana do §9 continua **não
+  feita**, e A-08 segue pendente. Ver a nota de fechamento de
+  [D-097](DECISIONS.md) e o [review081](reviews/081-review.md).

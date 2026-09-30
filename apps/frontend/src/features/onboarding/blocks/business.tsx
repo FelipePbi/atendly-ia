@@ -369,6 +369,13 @@ export async function persistBusinessStep(
     return;
   }
   if (scenario === "modalidade") {
+    // O BFF recusa ON_SITE sem endereço: com Local próprio nada é gravado
+    // aqui, e `endereco` grava endereço e modalidades juntos. Sem `refresh`,
+    // o rascunho não é sobrescrito pelo valor ainda não gravado.
+    if (ctx.draft.businessModalities.includes("ON_SITE")) {
+      ctx.go("endereco");
+      return;
+    }
     await onboarding.update({
       business: {
         category: ctx.draft.businessCategory,
@@ -378,14 +385,15 @@ export async function persistBusinessStep(
       },
     });
     await ctx.refresh();
-    ctx.go(
-      ctx.draft.businessModalities.includes("ON_SITE")
-        ? "endereco"
-        : "sistema-atual",
-    );
+    ctx.go("sistema-atual");
     return;
   }
-  // "endereco"
+  // "endereco": sem Local próprio no rascunho (página aberta direto ou
+  // recarregada) não há endereço a gravar; a escolha volta para `modalidade`.
+  if (!ctx.draft.businessModalities.includes("ON_SITE")) {
+    ctx.go("modalidade");
+    return;
+  }
   await onboarding.update({
     business: {
       address: ctx.draft.businessAddress.trim(),

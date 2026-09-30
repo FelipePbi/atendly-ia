@@ -236,7 +236,7 @@ describe("segmento-e-nome: valida inline, grava e avança para modalidade", () =
     expect(nameInput).toHaveAttribute("aria-invalid", "true");
     expect(nameInput).toHaveFocus();
     expect(
-      screen.queryByText("Não foi possível salvar esta etapa. Tente novamente."),
+      screen.queryByText("Alguma informação desta etapa não foi aceita. Revise o que você preencheu e continue."),
     ).toBeNull();
     expect(screen.queryByText(/Too small/)).toBeNull();
     expect(push).not.toHaveBeenCalled();
@@ -339,7 +339,7 @@ describe("modalidade: exige ao menos uma opção, com o erro ligado ao grupo", (
     expect(push).toHaveBeenCalledWith("/onboarding/sistema-atual");
   });
 
-  test("com Local próprio, grava e avança para endereco", async () => {
+  test("com Local próprio, não grava e avança para endereco (o BFF recusa ON_SITE sem endereço)", async () => {
     const user = await renderStep(
       "modalidade",
       stateFixture(businessSegmentDone),
@@ -347,15 +347,10 @@ describe("modalidade: exige ao menos uma opção, com o erro ligado ao grupo", (
     await user.click(await screen.findByText("Local próprio"));
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
-    await waitFor(() => expect(updateOnboarding).toHaveBeenCalledWith({
-      business: {
-        category: "Cabelo",
-        modalities: ["ON_SITE"],
-        name: "Studio Aurora",
-        timezone: "America/Sao_Paulo",
-      },
-    }));
-    expect(push).toHaveBeenCalledWith("/onboarding/endereco");
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("/onboarding/endereco"),
+    );
+    expect(updateOnboarding).not.toHaveBeenCalled();
   });
 });
 
@@ -447,7 +442,7 @@ describe("endereco: só existe para Local próprio, exige valor não vazio", () 
       "Informe o endereço do seu espaço.",
     );
     expect(
-      screen.queryByText("Não foi possível salvar esta etapa. Tente novamente."),
+      screen.queryByText("Alguma informação desta etapa não foi aceita. Revise o que você preencheu e continue."),
     ).toBeNull();
     expect(push).not.toHaveBeenCalled();
   });

@@ -361,7 +361,7 @@ describe("servico-nome: validação inline e recusa do servidor no campo", () =>
       "aria-invalid",
     );
     expect(
-      screen.queryByText("Não foi possível salvar esta etapa. Tente novamente."),
+      screen.queryByText("Alguma informação desta etapa não foi aceita. Revise o que você preencheu e continue."),
     ).toBeNull();
     expect(screen.queryByText(/service\.price/)).toBeNull();
     expect(push).not.toHaveBeenCalled();

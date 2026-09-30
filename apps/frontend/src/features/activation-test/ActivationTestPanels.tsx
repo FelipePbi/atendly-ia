@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 
-import type { ActivationTestMilestoneName, ActivationTestRun, AiStateValue } from "@/data";
+import {
+  type ActivationTestMilestoneName,
+  type ActivationTestRun,
+  type AiStateValue,
+  BffHttpError,
+} from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import {
@@ -305,10 +310,48 @@ const CONNECT_WHATSAPP_FIRST =
   "Conecte seu WhatsApp antes de testar: o teste conversa com o número do seu negócio.";
 
 /**
+ * Recusas nomeadas do contrato (`PUBLIC_API_V1.md`, recusas do teste real),
+ * uma frase para cada. O onboarding e Configurações › IA mostram exatamente
+ * estas frases, porque só passam por `startActivationTest`. Nenhuma convida a
+ * tentar de novo quando tentar de novo não resolve.
+ */
+const ACTIVATION_TEST_REFUSALS: Record<string, string> = {
+  PLATFORM_NUMBER_NOT_CONFIGURED:
+    "O teste real não está disponível neste ambiente. Sua IA só pode ser ativada depois dele.",
+  ACTIVATION_TEST_AI_ALREADY_ACTIVE:
+    "Sua IA já está ativa, então não há teste a fazer. Para testar de novo, desligue a IA antes.",
+  ACTIVATION_TEST_WHATSAPP_NOT_CONNECTED:
+    "Seu WhatsApp não está conectado. Conecte o número do seu negócio antes de testar.",
+  ACTIVATION_TEST_TENANT_PHONE_UNKNOWN:
+    "Não reconhecemos o número de WhatsApp do seu negócio. Confira a conexão do WhatsApp e teste de novo.",
+  ACTIVATION_TEST_NO_ELIGIBLE_SERVICE:
+    "O teste precisa de ao menos um serviço ativo que aceite agendamento. Cadastre ou ative um serviço antes de testar.",
+  ACTIVATION_TEST_NO_AVAILABILITY:
+    "Sua agenda não tem nenhum horário livre para o serviço do teste. Ajuste seus dias e horários de atendimento antes de testar.",
+  ACTIVATION_TEST_ALREADY_RUNNING:
+    "Já existe um teste em andamento para o seu negócio. Aguarde o fim dele ou, se estiver pausado, reinicie o teste.",
+};
+
+/** A recusa nomeada que este erro carrega, ou `null` para qualquer outro erro. */
+function activationTestRefusal(error: unknown): string | null {
+  if (!(error instanceof BffHttpError)) return null;
+  const details = error.details;
+  const upstream =
+    details && typeof details === "object"
+      ? (details as { upstreamCode?: unknown }).upstreamCode
+      : undefined;
+  const code = typeof upstream === "string" ? upstream : error.code;
+  return Object.hasOwn(ACTIVATION_TEST_REFUSALS, code)
+    ? ACTIVATION_TEST_REFUSALS[code]
+    : null;
+}
+
+/**
  * Inicia o teste (`start`) ou recomeça depois de interferência humana
- * (`restart`). Devolve a recusa dita antes de qualquer chamada, ou `null`
- * quando o servidor aceitou a execução — que segue sozinha a partir daí.
- * Erro do servidor sobe para quem chamou.
+ * (`restart`). Devolve a recusa, ou `null` quando o servidor aceitou a
+ * execução — que segue sozinha a partir daí. A recusa vem dita antes de
+ * qualquer chamada (WhatsApp desconectado) ou traduzida de uma das sete
+ * recusas nomeadas do contrato. Qualquer outro erro sobe para quem chamou.
  */
 export async function startActivationTest(
   mode: "start" | "restart",
@@ -316,8 +359,14 @@ export async function startActivationTest(
   const phone = await connectedPhone();
   if (!phone) return CONNECT_WHATSAPP_FIRST;
   const service = getProductServices().activationTest;
-  if (mode === "restart") await service.restart(phone);
-  else await service.start(phone);
+  try {
+    if (mode === "restart") await service.restart(phone);
+    else await service.start(phone);
+  } catch (error) {
+    const refusal = activationTestRefusal(error);
+    if (refusal) return refusal;
+    throw error;
+  }
   return null;
 }
 

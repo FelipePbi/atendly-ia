@@ -3466,3 +3466,68 @@ comentário do passo `test:ai-orchestrator-content-purge` em
 `scripts/validate-integration.mjs` ainda diz que a purga não alcança conteúdo
 não classificado; o passo roda o teste certo, mas o comentário ficou velho e
 estava fora do escopo deste Goal.
+
+## Local próprio e as recusas do teste real, do Goal081
+
+O onboarding deixa de gravar `ON_SITE` sem endereço: a etapa `modalidade` não
+grava com Local próprio e `endereco` grava endereço e modalidades juntos, que é
+o que `PATCH /v1/onboarding` aceita. As sete recusas nomeadas de `POST
+/v1/activation-test` ganham texto próprio num módulo só, usado pelo onboarding e
+por Configurações › IA, e o erro de etapa do onboarding distingue dado recusado,
+serviço fora do ar e falha nossa. Nenhuma rota, contrato, migration, gate ou
+arquivo de configuração de teste ou de build mudou; em
+`scripts/validate-integration.mjs` mudaram só linhas de comentário.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `apps/frontend/tests/goal081-onboarding-local-proprio.test.tsx` (**4**, arquivo novo): contra um dublê que aplica a regra do BFF, `modalidade` → `endereco` → `sistema-atual` com Local próprio não tem chamada recusada, `modalidade` não chama `update`, `endereco` chama com `address` e `modalities: ["ON_SITE"]` juntos, e `endereco` sem `ON_SITE` no rascunho não grava e leva a `modalidade` | Que a pessoa percorra o onboarding num navegador real contra o BFF real (conferência humana do §9) |
+| `apps/frontend/tests/goal081-activation-test-refusals.test.tsx` (**20**, arquivo novo): a indisponibilidade no onboarding e em Configurações › IA com o mesmo texto, sem "Tente novamente" e sem navegar; o texto de cada uma das seis recusas `409`; `onboardingError` em três classes e o `409` de conclusão | Que os textos estejam claros para uma pessoa |
+| `apps/bff/tests/goal081-onboarding-local-proprio.integration.test.ts` (**1**, arquivo novo, PostgreSQL real): os corpos que o frontend passa a mandar dão `200` em `PATCH /v1/onboarding` e o `GET` seguinte traz `ON_SITE` e o endereço; é guarda do contrato e passa também na baseline | Que o frontend grave na ordem certa; isso é do teste de frontend |
+| `apps/frontend/tests/goal019-activation-test-screens.test.tsx`: "recusa do servidor não vira progresso nem sucesso" agora afirma também o texto de indisponibilidade | Que o teste real funcione com o número da plataforma configurado (A-08 segue pendente) |
+
+Testes de Goals anteriores tiveram asserções alteradas (o teste de
+`goal065-onboarding-business.test.tsx` que guardava o defeito, três asserções de
+ausência e três de erro de tela em `goal065-onboarding-business`,
+`goal065-onboarding-schedule` e `goal066-onboarding-sistema-atual`), cada uma
+com o motivo em [FINAL_AUDIT §58](FINAL_AUDIT.md); nenhum teste foi removido nem
+pulado.
+
+**Execução final**, feita pela WU-13 sobre a árvore entregue, todos exit 0:
+`npm run validate:core` — **17** passos, **15** `passed`, **2** `skipped`
+(`test:bff`, `test:health-worker`); `npm run test:gate` — **233**/**233**;
+`npm run validate:ui` — **169** `passed`, **21** `skipped`, **0** `flaky`
+(`startTime` `2026-09-30T22:06:12.019Z`); `npm run validate:integration`,
+contra um PostgreSQL descartável em `127.0.0.1:55711/atendly_bff_test` — **36**
+passos, **36** `passed`, com `rehearse:goal033-authenticated-ui` em **170**
+testes, **0** `unexpected`, **0** `flaky` e **0** retentativas (`startTime`
+`2026-09-30T22:09:15.913Z`). Suítes reexecutadas pela WU-13: `test:frontend`
+**123** arquivos e **1268** testes; `test:bff-integration` **62** arquivos e
+**471** testes, com o teste novo do BFF rodando no banco descartável, sem
+`skipped`; `test:ai-orchestrator` sem banco **1186** passando e **98**
+`skipped` de **1284**; `test:scheduling-service` **37** arquivos e **502**
+testes. Os cinco controles negativos do §7 foram feitos depois da execução
+final, com restauração conferida por hash; saída real em
+[FINAL_AUDIT §58](FINAL_AUDIT.md).
+
+**Conferência humana pendente.** A conferência do §9 do Goal **não foi feita**:
+percorrer o onboarding de uma conta nova com Local próprio num navegador, contra
+o BFF real, até `sistema-atual`; ler o texto de indisponibilidade do teste real e
+os três textos de erro de etapa; e aceitar o custo de a retomada voltar para
+`modalidade`. Nenhum teste é declarado prova disso, e nenhum gate percorre a
+etapa `modalidade` clicando.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal081-2026-09-30-d-097-accepted),
+[FINAL_AUDIT §58](FINAL_AUDIT.md) e [D-097](DECISIONS.md), **ACCEPTED** no
+[review081](reviews/081-review.md) (rodada 1 do IA Loop, sem blocker).
+
+**O que o review081 acrescenta ao gate.** O defeito de R-01 passou por todos
+os gates desde os Goals 065 e 072. O teste da etapa usava um dublê de
+`onboarding.update` que não aplicava a regra do BFF, e o gate autenticado grava
+`ON_SITE` e endereço num único `PATCH`, sem clicar na etapa `modalidade`. O
+dublê novo de `goal081-onboarding-local-proprio.test.tsx` recusa `ON_SITE` sem
+endereço com o mesmo erro do BFF, e o teste de integração do BFF prova os corpos
+contra PostgreSQL real. Nenhum gate percorre a etapa clicando; isso continua na
+conferência humana. Na recontagem da baseline, `test:gate` teve **3** falhas
+porque o client Prisma do ai-orchestrator não estava gerado, e passou com
+**233**/**233** depois de `npx prisma generate`: é pré-condição do harness,
+tratada fora do diff.

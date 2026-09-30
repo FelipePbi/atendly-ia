@@ -109,10 +109,18 @@ export function Summary({ rows }: { rows: Array<[string, string]> }) {
 }
 
 export function onboardingError(error: unknown): string {
-  if (error instanceof BffHttpError && error.status === 409) {
-    return "Ainda há itens obrigatórios pendentes. Revise negócio, agenda, serviço, disponibilidade e tom da IA.";
+  if (error instanceof BffHttpError) {
+    if (error.status === 409) {
+      return "Ainda há itens obrigatórios pendentes. Revise negócio, agenda, serviço, disponibilidade e tom da IA.";
+    }
+    if (error.status === 400) {
+      return "Alguma informação desta etapa não foi aceita. Revise o que você preencheu e continue.";
+    }
+    if ([0, 502, 503, 504].includes(error.status)) {
+      return "Não foi possível falar com o servidor agora. Tente de novo em instantes.";
+    }
   }
-  return "Não foi possível salvar esta etapa. Tente novamente.";
+  return "Algo deu errado do nosso lado e esta etapa não foi salva. Tente de novo em alguns instantes.";
 }
 
 type ValidatableControl = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;

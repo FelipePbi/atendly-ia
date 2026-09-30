@@ -253,7 +253,7 @@ describe("sistema-atual: dois cards de ação, sem marcação e sem Continuar", 
 
     expect(
       await screen.findByText(
-        "Não foi possível salvar esta etapa. Tente novamente.",
+        "Algo deu errado do nosso lado e esta etapa não foi salva. Tente de novo em alguns instantes.",
       ),
     ).toBeVisible();
     expect(push).not.toHaveBeenCalled();
@@ -350,7 +350,7 @@ describe("quando-importar: Importar agora / Fazer depois gravam calendar.source"
 
     expect(
       await screen.findByText(
-        "Não foi possível salvar esta etapa. Tente novamente.",
+        "Algo deu errado do nosso lado e esta etapa não foi salva. Tente de novo em alguns instantes.",
       ),
     ).toBeVisible();
     expect(push).not.toHaveBeenCalled();
@@ -385,7 +385,7 @@ describe("quando-importar: Importar agora / Fazer depois gravam calendar.source"
 
     expect(
       await screen.findByText(
-        "Não foi possível salvar esta etapa. Tente novamente.",
+        "Algo deu errado do nosso lado e esta etapa não foi salva. Tente de novo em alguns instantes.",
       ),
     ).toBeVisible();
     expect(push).not.toHaveBeenCalled();

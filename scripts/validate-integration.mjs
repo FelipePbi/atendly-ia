@@ -588,8 +588,9 @@ export function integrationSteps(target) {
       env,
     },
     // Purga de conteúdo de conversa (Goal023) contra o mesmo banco: o que a
-    // purga apaga, e sobretudo o que ela não alcança — não classificado,
-    // órfão de sessão, dentro do prazo e o negócio vizinho. Passo próprio
+    // purga apaga, e sobretudo o que ela não alcança — órfão de sessão,
+    // dentro do prazo, o negócio vizinho e não classificado antes do prazo
+    // Comercial (Goal080: depois dele a purga o alcança). Passo próprio
     // porque apagar dado de cliente não é "mais um caso de durabilidade".
     {
       name: "test:ai-orchestrator-content-purge",

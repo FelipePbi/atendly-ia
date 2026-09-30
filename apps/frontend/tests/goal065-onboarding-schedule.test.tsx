@@ -8,7 +8,7 @@
  * desenvolvimento nem "Fonte oficial".
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -129,7 +129,7 @@ describe("servico-nome: os quatro tipos gravam e releem sem conversão", () => {
     const duration = screen.getByLabelText("Duração em minutos");
     await user.clear(duration);
     await user.type(duration, "45");
-    await user.type(screen.getByLabelText("Preço em reais"), "150");
+    await user.type(screen.getByLabelText("Preço em reais"), "15000");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
     await waitFor(() =>
@@ -225,7 +225,7 @@ describe("servicos-adicionais: cria por POST /v1/services sem trocar o serviço 
     const duration = screen.getByLabelText("Duração em minutos");
     await user.clear(duration);
     await user.type(duration, "30");
-    await user.type(screen.getByLabelText("Preço em reais"), "40");
+    await user.type(screen.getByLabelText("Preço em reais"), "4000");
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
 
     await waitFor(() =>
@@ -410,8 +410,20 @@ describe("demonstracao-da-ia: a resposta de preço segue os quatro tipos", () =>
 describe("dias-de-atendimento: a semana começa na segunda, sem mudar os valores gravados", () => {
   test("os dias aparecem de segunda a domingo", async () => {
     await renderStep("dias-de-atendimento", emptyState());
-    const headings = await screen.findAllByRole("heading", { level: 3 });
-    expect(headings.map((heading) => heading.textContent)).toEqual([
+    // Goal072/WU-02: o nome do dia deixou de ser heading dentro do label; a
+    // ordem é conferida pelos checkboxes do grupo.
+    const group = await screen.findByRole("group", {
+      name: "Dias de atendimento",
+    });
+    const days = within(group).getAllByRole("checkbox");
+    // Goal072/WU-03: a pílula mostra a sigla; o nome completo é o nome
+    // acessível do checkbox.
+    expect(
+      days.map(
+        (day) =>
+          day.closest("label")?.querySelector("span.sr-only")?.textContent,
+      ),
+    ).toEqual([
       "Segunda",
       "Terça",
       "Quarta",

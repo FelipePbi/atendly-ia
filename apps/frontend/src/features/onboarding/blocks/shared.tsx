@@ -47,7 +47,7 @@ export function Choice({
       <span className="choice-check">
         <Icon name="check" />
       </span>
-      <h2>{title}</h2>
+      <span className="choice-title">{title}</span>
       <p>{copy}</p>
     </button>
   );
@@ -77,7 +77,7 @@ export function ActionCard({
       type="button"
       onClick={onClick}
     >
-      <h2>{title}</h2>
+      <span className="choice-title">{title}</span>
       <p>{copy}</p>
     </button>
   );

@@ -19,7 +19,7 @@
  * - `/importacao` continua com o link "Configurações" e registrando o shell.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
@@ -248,8 +248,12 @@ describe("importacao sem sessão: a tela de conectar, na moldura do onboarding",
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.queryByRole("link", { name: /Configurações/ })).toBeNull();
     expectOnlyOnboardingLinks(container);
-    // A moldura é a do onboarding: bloco e "Sair".
-    expect(screen.getByText("Sua agenda")).toBeVisible();
+    // A moldura é a do onboarding: capítulo atual no trilho e "Sair".
+    expect(
+      within(
+        screen.getByRole("navigation", { name: "Configuração inicial" }),
+      ).getByRole("listitem", { name: "Sua agenda" }),
+    ).toHaveAttribute("aria-current", "step");
     expect(screen.getByRole("button", { name: "Sair" })).toBeVisible();
   });
 
@@ -267,7 +271,11 @@ describe("importacao sem sessão: a tela de conectar, na moldura do onboarding",
 
 describe("'Importar agora' grava calendar.source antes de montar a importação", () => {
   test("PATCH, depois a releitura do onboarding, depois a etapa importacao real lê o estado da importação", async () => {
-    getOnboarding.mockResolvedValue(stateFixture(businessDone));
+    // A primeira leitura ainda não tem a fonte; a releitura, depois do PATCH,
+    // já tem (a etapa importacao só abre com ela — Goal072).
+    getOnboarding
+      .mockResolvedValueOnce(stateFixture(businessDone))
+      .mockResolvedValue(stateFixture({ ...businessDone, ...calendarDone }));
     // A navegação do app, com a mesma árvore: `push` troca a etapa montada.
     function Harness() {
       const [step, setStep] = useState<OnboardingScenario>("quando-importar");

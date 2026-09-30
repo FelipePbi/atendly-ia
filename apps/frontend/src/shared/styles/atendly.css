@@ -623,6 +623,73 @@ p {
 .choice-card h3 {
   margin-bottom: 6px;
 }
+.choice-title {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.45;
+  text-align: left;
+}
+.choice-card > p {
+  text-align: left;
+}
+.choice-card-modality {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  min-height: 88px;
+}
+.choice-card-modality .choice-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--surface-secondary);
+  color: var(--accent);
+}
+.choice-card-modality.is-selected .choice-icon {
+  background: var(--surface);
+}
+.choice-card-modality .choice-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.choice-card-modality .choice-title {
+  margin-bottom: 2px;
+}
+.choice-card-modality .choice-copy {
+  display: block;
+  color: var(--muted);
+  font-size: 14px;
+}
+.choice-card-modality .choice-indicator {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--surface);
+}
+.choice-card-modality.is-selected .choice-indicator {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.choice-card-modality .choice-indicator .icon {
+  width: 14px;
+  height: 14px;
+}
+.choice-card-modality:focus-within {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
 .choice-check {
   position: absolute;
   right: 14px;
@@ -675,9 +742,19 @@ p {
   transform: translateY(1px);
 }
 .chip.is-active {
-  background: var(--navy);
-  color: var(--surface);
-  border-color: var(--navy);
+  background: var(--accent-soft);
+  color: var(--fg);
+  border-color: var(--accent);
+}
+.segment-chip-row .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.segment-chip-row .chip .icon {
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
 }
 .tab-list {
   border-bottom: 1px solid var(--border);
@@ -2262,7 +2339,7 @@ p {
   min-height: 76px;
   padding: 14px clamp(20px, 4vw, 48px);
   display: grid;
-  grid-template-columns: 180px minmax(220px, 520px) 180px;
+  grid-template-columns: 1fr auto;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
@@ -2287,6 +2364,125 @@ p {
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
+}
+/* Barra segmentada (abaixo de 768 px): o capítulo atual é mais grosso, além
+   de mais escuro, para não depender só de cor. */
+.step-segments {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  align-items: center;
+  gap: 4px;
+}
+.step-segment {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-interactive);
+}
+.step-segment.is-done {
+  background: var(--accent);
+}
+.step-segment.is-current {
+  height: 8px;
+  background: var(--accent);
+}
+/* Trilho "Configuração inicial" (a partir de 768 px). */
+.onboarding-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.onboarding-rail {
+  display: none;
+}
+.onboarding-rail-title {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.onboarding-rail ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 14px;
+}
+.onboarding-rail-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.onboarding-rail-item.is-current {
+  color: var(--fg);
+  font-weight: 700;
+}
+.onboarding-rail-item.is-done {
+  color: var(--fg);
+}
+.onboarding-rail-marker {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.onboarding-rail-marker .icon {
+  width: 14px;
+  height: 14px;
+}
+.onboarding-rail-item.is-current .onboarding-rail-marker {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--at-color-on-primary);
+}
+.onboarding-rail-item.is-done .onboarding-rail-marker {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+/* Voltar: chevron no topo da etapa. Na Boas-vindas fica cinza, sem destino. */
+.onboarding-back {
+  margin: -8px 0 12px -10px;
+}
+.onboarding-back-link {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg);
+}
+.onboarding-back-link:hover {
+  background: var(--surface-interactive);
+}
+.onboarding-back-link.is-disabled {
+  pointer-events: none;
+  color: var(--muted);
+}
+@media (min-width: 768px) {
+  .step-progress {
+    display: none;
+  }
+  .onboarding-body {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+  .onboarding-rail {
+    display: block;
+    padding: clamp(40px, 7vh, 72px) 24px 48px 32px;
+    border-right: 1px solid var(--border);
+  }
 }
 /* "Sair" usa o botão secundário do design system (.btn .btn-secondary) em
    todas as larguras; aqui só o tamanho da barra superior (QA O-02). */
@@ -2325,6 +2521,89 @@ p {
   display: grid;
   gap: 18px;
 }
+.day-pill-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+.day-pill {
+  position: relative;
+  min-width: 0;
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--fg-soft);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 160ms var(--ease);
+}
+.day-pill:hover {
+  border-color: var(--border-strong);
+}
+.day-pill.is-selected {
+  border: 1.5px solid var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.day-pill:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.days-summary {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  color: var(--fg);
+  background: var(--surface-secondary);
+  font-size: 15px;
+}
+.time-input {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.time-range {
+  display: grid;
+  gap: 14px;
+}
+.hours-range {
+  display: grid;
+  gap: 8px;
+}
+.hours-range-text {
+  margin: 0;
+  color: var(--fg);
+  font-size: 15px;
+}
+.hours-bar {
+  display: grid;
+  gap: 4px;
+}
+.hours-bar-track {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--border);
+  overflow: hidden;
+}
+.hours-bar-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 4px;
+  background: var(--accent);
+}
+.hours-bar-scale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 12px;
+}
 .onboarding-actions {
   margin-top: 32px;
   padding-top: 20px;
@@ -2334,6 +2613,7 @@ p {
   gap: 12px;
 }
 .onboarding-actions .btn-primary {
+  flex: 1 1 auto;
   min-width: 180px;
 }
 .onboarding-actions .btn-secondary {

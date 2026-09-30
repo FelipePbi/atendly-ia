@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { Service } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
+import { CurrencyInput } from "@/shared/ui/CurrencyInput";
 
 import type { OnboardingDraft } from "../OnboardingRuntime";
 import type { OnboardingScenario } from "../scenarios";
@@ -21,6 +22,8 @@ const weekdayLabels = [
   "Sexta",
   "Sábado",
 ];
+
+const weekdayShortLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
 // A semana começa na segunda (vault §"Dias e horários"); os valores de
 // `dayOfWeek` gravados continuam 0=domingo…6=sábado (Goal065/WU-03), só a
@@ -54,6 +57,49 @@ function formatPrice(
     : "";
 }
 
+const DURATION_STEP_MESSAGE = "A duração vai de 5 em 5 minutos.";
+const DURATION_SHORTCUTS = [30, 60, 90];
+const MINUTES_PER_DAY = 1440;
+
+function priceToCents(price: string): number | undefined {
+  if (price.trim() === "") return undefined;
+  const value = Number(price.replace(",", "."));
+  return Number.isFinite(value) ? Math.round(value * 100) : undefined;
+}
+
+function centsToPrice(cents: number | null): string {
+  return cents === null ? "" : String(cents / 100);
+}
+
+function timeToMinutes(time: string): number | null {
+  const [hours, minutes] = time.split(":").map(Number);
+  if (hours === undefined || minutes === undefined) return null;
+  return Number.isFinite(hours) && Number.isFinite(minutes)
+    ? hours * 60 + minutes
+    : null;
+}
+
+function summarizeDays(days: number[]): string {
+  const selected = weekOrder.filter((day) => days.includes(day));
+  const count = selected.length;
+  const first = selected[0];
+  if (first === undefined) return "";
+  const names = selected.map((day) => (weekdayLabels[day] ?? "").toLowerCase());
+  const positions = selected.map((day) => weekOrder.indexOf(day));
+  const consecutive = positions.every(
+    (position, index) => index === 0 || position === (positions[index - 1] ?? 0) + 1,
+  );
+  let head: string;
+  if (count === 1) head = `Só ${names[0]}`;
+  else if (consecutive && count >= 3)
+    head = `${weekdayLabels[first]} a ${names[count - 1]}`;
+  else {
+    const list = `${names.slice(0, -1).join(", ")} e ${names[count - 1]}`;
+    head = list.charAt(0).toUpperCase() + list.slice(1);
+  }
+  return `${head} · ${count} ${count === 1 ? "dia" : "dias"} por semana`;
+}
+
 const DAYS_REQUIRED_MESSAGE = "Escolha pelo menos um dia de atendimento.";
 const END_BEFORE_START_MESSAGE =
   "O horário final deve ser depois do horário inicial.";
@@ -82,6 +128,7 @@ function TimeRangeFields({
   endTime,
   onChangeEnd,
   onChangeStart,
+  showRange = false,
   startLabel,
   startTime,
 }: {
@@ -89,6 +136,7 @@ function TimeRangeFields({
   endTime: string;
   onChangeEnd: (value: string) => void;
   onChangeStart: (value: string) => void;
+  showRange?: boolean;
   startLabel: string;
   startTime: string;
 }) {
@@ -102,16 +150,19 @@ function TimeRangeFields({
         : "",
     );
   }, [endTime, startTime]);
+  const startMinutes = timeToMinutes(startTime);
+  const endMinutes = timeToMinutes(endTime);
   // Cada campo num `div.field` com <label for>: a mensagem de erro entra
   // logo depois do campo, dentro da mesma célula da grade.
   return (
-    <div className="choice-grid">
+    <div className="time-range">
+      <div className="choice-grid">
       <div className="field">
         <label className="label" htmlFor={startId}>
           {startLabel}
         </label>
         <input
-          className="input"
+          className="input time-input"
           data-server-field="availability.startTime"
           id={startId}
           required
@@ -125,7 +176,7 @@ function TimeRangeFields({
           {endLabel}
         </label>
         <input
-          className="input"
+          className="input time-input"
           data-server-field="availability.endTime"
           id={endId}
           ref={endRef}
@@ -135,6 +186,33 @@ function TimeRangeFields({
           onChange={(event) => onChangeEnd(event.target.value)}
         />
       </div>
+      </div>
+      {showRange && startTime !== "" && endTime !== "" && (
+        <div className="hours-range">
+          <p className="hours-range-text">
+            Das {startTime} às {endTime}
+          </p>
+          <span aria-hidden="true" className="hours-bar">
+            <span className="hours-bar-track">
+              {startMinutes !== null &&
+                endMinutes !== null &&
+                endMinutes > startMinutes && (
+                  <span
+                    className="hours-bar-fill"
+                    style={{
+                      left: `${(startMinutes / MINUTES_PER_DAY) * 100}%`,
+                      width: `${((endMinutes - startMinutes) / MINUTES_PER_DAY) * 100}%`,
+                    }}
+                  />
+                )}
+            </span>
+            <span className="hours-bar-scale">
+              <span>0 h</span>
+              <span>24 h</span>
+            </span>
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -176,6 +254,15 @@ function ServiceFields({
   onChangePrice: (value: string) => void;
   onChangePriceType: (value: PriceType) => void;
 }) {
+  const durationId = useId();
+  const durationRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    durationRef.current?.setCustomValidity(
+      Number.isFinite(duration) && duration % 5 !== 0
+        ? DURATION_STEP_MESSAGE
+        : "",
+    );
+  }, [duration]);
   return (
     <div className="onboarding-form">
       <label className="field">
@@ -189,20 +276,63 @@ function ServiceFields({
           onChange={(event) => onChangeName(event.target.value)}
         />
       </label>
-      <label className="field">
-        <span className="label">Duração em minutos</span>
-        <input
-          className="input"
-          data-error-message="Informe a duração em minutos."
-          data-server-field="service.durationMinutes"
-          min={5}
-          max={1440}
-          required
-          type="number"
-          value={duration}
-          onChange={(event) => onChangeDuration(Number(event.target.value))}
-        />
-      </label>
+      <div className="field">
+        <label className="label" htmlFor={durationId}>
+          Duração em minutos
+        </label>
+        <span className="service-duration-control">
+          <button
+            aria-label="Diminuir duração"
+            className="btn btn-tertiary service-duration-step"
+            type="button"
+            onClick={() => onChangeDuration(Math.max(5, duration - 5))}
+          >
+            −
+          </button>
+          <input
+            className="input"
+            data-error-message="Informe a duração em minutos."
+            data-server-field="service.durationMinutes"
+            id={durationId}
+            max={1440}
+            min={5}
+            ref={durationRef}
+            required
+            step={5}
+            type="number"
+            value={duration}
+            onChange={(event) => onChangeDuration(Number(event.target.value))}
+          />
+          <button
+            aria-label="Aumentar duração"
+            className="btn btn-tertiary service-duration-step"
+            type="button"
+            onClick={() => onChangeDuration(Math.min(1440, duration + 5))}
+          >
+            +
+          </button>
+          <span aria-hidden="true" className="service-duration-unit">
+            min
+          </span>
+        </span>
+        <span
+          aria-label="Atalhos de duração"
+          className="service-duration-shortcuts"
+          role="group"
+        >
+          {DURATION_SHORTCUTS.map((minutes) => (
+            <button
+              aria-pressed={duration === minutes}
+              className="btn btn-tertiary service-duration-shortcut"
+              key={minutes}
+              type="button"
+              onClick={() => onChangeDuration(minutes)}
+            >
+              {minutes}
+            </button>
+          ))}
+        </span>
+      </div>
       <div className="field">
         <span className="label">Preço</span>
         <div className="chip-row price-chip-row">
@@ -227,16 +357,15 @@ function ServiceFields({
           <span className="label">
             {priceType === "STARTING_AT" ? "Valor inicial em reais" : "Preço em reais"}
           </span>
-          <input
+          <CurrencyInput
             className="input"
             data-error-message="Informe o valor do serviço."
             data-server-field="service.price"
-            min="0"
+            defaultValueCents={priceToCents(price)}
+            key={priceType}
+            placeholder="R$ 0,00"
             required
-            step="0.01"
-            type="number"
-            value={price}
-            onChange={(event) => onChangePrice(event.target.value)}
+            onValueChange={(cents) => onChangePrice(centsToPrice(cents))}
           />
         </label>
       )}
@@ -412,6 +541,7 @@ function HoursStepBody({
       <TimeRangeFields
         endLabel="Fim"
         endTime={draft.endTime}
+        showRange
         startLabel="Início"
         startTime={draft.startTime}
         onChangeEnd={(value) =>
@@ -490,34 +620,42 @@ export function scheduleStepBody(
     return <AdditionalServicesStepBody draft={draft} />;
   if (scenario === "dias-de-atendimento")
     return (
-      <div
-        aria-label="Dias de atendimento"
-        className="choice-grid"
-        data-group-error={draft.days.length === 0 ? DAYS_REQUIRED_MESSAGE : ""}
-        data-validation-group=""
-        role="group"
-      >
-        {weekOrder.map((day) => (
-          <label
-            className={`choice-card${draft.days.includes(day) ? " is-selected" : ""}`}
-            key={day}
-          >
-            <input
-              className="sr-only"
-              checked={draft.days.includes(day)}
-              type="checkbox"
-              onChange={(event) =>
-                setDraft((value) => ({
-                  ...value,
-                  days: event.target.checked
-                    ? [...value.days, day].sort()
-                    : value.days.filter((item) => item !== day),
-                }))
-              }
-            />
-            <h3>{weekdayLabels[day]}</h3>
-          </label>
-        ))}
+      <div className="onboarding-form">
+        <div
+          aria-label="Dias de atendimento"
+          className="day-pill-row"
+          data-group-error={draft.days.length === 0 ? DAYS_REQUIRED_MESSAGE : ""}
+          data-validation-group=""
+          role="group"
+        >
+          {weekOrder.map((day) => (
+            <label
+              className={`day-pill${draft.days.includes(day) ? " is-selected" : ""}`}
+              key={day}
+            >
+              <input
+                className="sr-only"
+                checked={draft.days.includes(day)}
+                type="checkbox"
+                onChange={(event) =>
+                  setDraft((value) => ({
+                    ...value,
+                    days: event.target.checked
+                      ? [...value.days, day].sort()
+                      : value.days.filter((item) => item !== day),
+                  }))
+                }
+              />
+              <span aria-hidden="true">{weekdayShortLabels[day]}</span>
+              <span className="sr-only">{weekdayLabels[day]}</span>
+            </label>
+          ))}
+        </div>
+        {draft.days.length > 0 && (
+          <p aria-live="polite" className="days-summary">
+            {summarizeDays(draft.days)}
+          </p>
+        )}
       </div>
     );
   if (scenario === "horarios")

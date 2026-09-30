@@ -86,6 +86,34 @@ export function blockForScenario(
   return entry[0];
 }
 
+/** Ordem dos capítulos no trilho "Configuração inicial" (protótipo). */
+export const onboardingChapterOrder: readonly OnboardingBlockId[] = [
+  "business",
+  "schedule",
+  "ai",
+  "whatsapp",
+];
+
+export type OnboardingChapterStatus = "done" | "current" | "upcoming";
+
+export function chapterProgress(
+  scenario: OnboardingScenario,
+): Array<{ id: OnboardingBlockId; label: string; status: OnboardingChapterStatus }> {
+  const currentIndex = onboardingChapterOrder.indexOf(
+    blockForScenario(scenario),
+  );
+  return onboardingChapterOrder.map((id, index) => ({
+    id,
+    label: onboardingBlockLabels[id],
+    status:
+      index < currentIndex
+        ? "done"
+        : index === currentIndex
+          ? "current"
+          : "upcoming",
+  }));
+}
+
 export function progressPercent(scenario: OnboardingScenario): number {
   if (scenario === "whatsapp-concluido") return 100;
   // Estados terminais do teste real: o fluxo acabou, bem ou mal, e a barra

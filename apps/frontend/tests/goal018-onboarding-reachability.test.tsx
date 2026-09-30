@@ -24,7 +24,7 @@
  * cenários.
  */
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -241,7 +241,12 @@ describe("todo cenário sobrevivente é montado pela rota real", () => {
   test.each(onboardingOrder)(
     "%s monta sem 404 e mostra seu título",
     async (step) => {
-      getOnboarding.mockResolvedValue(stateFixture());
+      // "importacao" só abre com a fonte da agenda gravada (Goal072).
+      getOnboarding.mockResolvedValue(
+        step === "importacao"
+          ? stateFixture({ ...businessDone, ...calendarDone })
+          : stateFixture(),
+      );
       render(
         <OnboardingRuntimeProvider>
           {await OnboardingPage({ params: Promise.resolve({ step }) })}
@@ -256,9 +261,17 @@ describe("todo cenário sobrevivente é montado pela rota real", () => {
 });
 
 describe("o progresso nomeia o bloco corrente, sem contagem de telas", () => {
+  // O trilho e a barra segmentada repetem os quatro nomes (Goal072); o bloco
+  // corrente é o que a barra segmentada escreve.
+  const currentBlock = () =>
+    within(
+      screen.getByRole("group", { name: "Progresso da configuração inicial" }),
+    );
+
   test("boas-vindas mostra o bloco 'Seu negócio' e nenhuma contagem de etapas", async () => {
     renderScreen("boas-vindas", stateFixture());
-    expect(await screen.findByText("Seu negócio")).toBeVisible();
+    await screen.findByRole("heading", { level: 1 });
+    expect(currentBlock().getByText("Seu negócio")).toBeVisible();
     expect(screen.queryByText(/Etapa \d+ de \d+/)).toBeNull();
   });
 
@@ -267,7 +280,8 @@ describe("o progresso nomeia o bloco corrente, sem contagem de telas", () => {
       "servico-nome",
       stateFixture({ ...businessDone, ...calendarDone }),
     );
-    expect(await screen.findByText("Sua agenda")).toBeVisible();
+    await screen.findByRole("heading", { level: 1 });
+    expect(currentBlock().getByText("Sua agenda")).toBeVisible();
     expect(screen.queryByText(/Etapa \d+ de \d+/)).toBeNull();
   });
 
@@ -281,7 +295,8 @@ describe("o progresso nomeia o bloco corrente, sem contagem de telas", () => {
         ...availabilityDone,
       }),
     );
-    expect(await screen.findByText("Sua IA")).toBeVisible();
+    await screen.findByRole("heading", { level: 1 });
+    expect(currentBlock().getByText("Sua IA")).toBeVisible();
   });
 
   test("whatsapp mostra o bloco 'WhatsApp'", async () => {
@@ -295,7 +310,8 @@ describe("o progresso nomeia o bloco corrente, sem contagem de telas", () => {
         ...toneDone,
       }),
     );
-    expect(await screen.findByText("WhatsApp")).toBeVisible();
+    await screen.findByRole("heading", { level: 1 });
+    expect(currentBlock().getByText("WhatsApp")).toBeVisible();
   });
 });
 
@@ -337,7 +353,7 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
     const durationInput = screen.getByLabelText("Duração em minutos");
     await user.clear(durationInput);
     await user.type(durationInput, "45");
-    await user.type(screen.getByLabelText("Preço em reais"), "150");
+    await user.type(screen.getByLabelText("Preço em reais"), "15000");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
     const [patch] = updateOnboarding.mock.calls.at(-1) as [
@@ -757,7 +773,8 @@ describe("erro 409 ao salvar uma etapa não cita WhatsApp", () => {
         "Ainda há itens obrigatórios pendentes. Revise negócio, agenda, serviço, disponibilidade e tom da IA.",
       ),
     ).toBeVisible();
-    expect(screen.queryByText(/WhatsApp/)).toBeNull();
+    // O trilho do progresso nomeia o capítulo "WhatsApp"; a copy do erro não.
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/WhatsApp/);
     expect(push).not.toHaveBeenCalledWith("/onboarding/whatsapp");
   });
 });

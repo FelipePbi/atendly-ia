@@ -6,7 +6,6 @@ import { ImportsFrameProvider } from "@/features/imports/ImportsLayout";
 import { ImportsFlow, useImportState } from "@/features/imports/ImportsScreen";
 import { Icon } from "@/shared/icons/Icon";
 
-import { onboardingBlockLabels, progressPercent } from "./blocks";
 import { onboardingError } from "./blocks/registry";
 import { stepAfterImport, useOnboardingRuntime } from "./OnboardingRuntime";
 import { OnboardingFrame } from "./OnboardingShell";
@@ -30,11 +29,7 @@ export function OnboardingImportStep({
 }) {
   const reader = useImportState();
   return (
-    <OnboardingFrame
-      blockLabel={onboardingBlockLabels.schedule}
-      onExit={onExit}
-      progressPercent={progressPercent("importacao")}
-    >
+    <OnboardingFrame onExit={onExit} scenario="importacao">
       <ImportsFrameProvider frame="onboarding">
         <ImportsFlow
           historyActions={<ImportDoneActions go={go} />}

@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 
 import type { BusinessModality } from "@/data";
+import { Icon, type IconName } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
 import type { OnboardingDraft } from "../OnboardingRuntime";
@@ -21,21 +22,25 @@ export const FREQUENT_BUSINESS_SEGMENTS = [
 
 export const BUSINESS_MODALITY_OPTIONS: Array<{
   copy: string;
+  icon: IconName;
   title: string;
   value: BusinessModality;
 }> = [
   {
     copy: "Salão, estúdio, consultório ou sala",
+    icon: "pin",
     title: "Local próprio",
     value: "ON_SITE",
   },
   {
     copy: "Você vai até o cliente",
+    icon: "home",
     title: "A domicílio",
     value: "AT_HOME",
   },
   {
     copy: "Videochamada ou atendimento à distância",
+    icon: "monitor",
     title: "Online",
     value: "ONLINE",
   },
@@ -136,6 +141,7 @@ function SegmentAndNameStepBody({
                   setDraft((value) => ({ ...value, businessCategory: segment }));
                 }}
               >
+                {pressed && <Icon name="check" />}
                 {segment}
               </button>
             );
@@ -149,6 +155,7 @@ function SegmentAndNameStepBody({
               setDraft((value) => ({ ...value, businessCategory: "" }));
             }}
           >
+            {customSegment && <Icon name="check" />}
             Outro
           </button>
         </div>
@@ -226,7 +233,7 @@ function ModalityStepBody({
           const selected = draft.businessModalities.includes(option.value);
           return (
             <label
-              className={`choice-card${selected ? " is-selected" : ""}`}
+              className={`choice-card choice-card-modality${selected ? " is-selected" : ""}`}
               key={option.value}
             >
               <input
@@ -244,8 +251,16 @@ function ModalityStepBody({
                   }))
                 }
               />
-              <h3>{option.title}</h3>
-              <p>{option.copy}</p>
+              <span className="choice-icon">
+                <Icon name={option.icon} />
+              </span>
+              <span className="choice-text">
+                <span className="choice-title">{option.title}</span>
+                <span className="choice-copy">{option.copy}</span>
+              </span>
+              <span className="choice-indicator">
+                {selected && <Icon name="check" />}
+              </span>
             </label>
           );
         })}

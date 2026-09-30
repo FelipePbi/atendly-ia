@@ -1550,11 +1550,12 @@ async function seedTenant(client, ai, { bffDb, schedulingDb, aiDb, legalVersions
 
 /**
  * Semeia a SEGUNDA conta (Goal065/WU-05), pelas rotas do produto, e para no
- * meio do onboarding de propósito: registra a conta e grava só o bloco de
- * negócio (nome, segmento, "Local próprio" e endereço). Nunca chama
- * `PATCH /v1/onboarding` de novo nem `POST /v1/onboarding/complete` — é isso
- * que mantém a sessão em `phase: "onboarding"` para o gate autenticado
- * medir, navegando direto para a URL de cada etapa.
+ * meio do onboarding de propósito: registra a conta e faz exatamente dois
+ * `PATCH /v1/onboarding` — o bloco de negócio (nome, segmento, "Local próprio"
+ * e endereço) e depois a fonte da agenda (`ATENDLY`, que a etapa `importacao`
+ * exige). Nunca chama `POST /v1/onboarding/complete` — é isso que mantém a
+ * sessão em `phase: "onboarding"` para o gate autenticado medir, navegando
+ * direto para a URL de cada etapa.
  *
  * `createClient` é uma fábrica, não a instância: esta conta precisa do
  * próprio cofre de cookies, separado do cliente que semeou a conta
@@ -1596,6 +1597,16 @@ async function seedOnboardingAccount(createClient, legalVersions) {
   step(
     business.status === 200,
     `seed(onboarding): the business onboarding block answered ${business.status}, expected 200`,
+  );
+
+  // A etapa `importacao` só abre para quem já gravou a fonte da agenda
+  // (Goal072/WU-01): sem ela, a URL direta volta para `sistema-atual`.
+  const calendar = await client.request("PATCH", "/v1/onboarding", {
+    body: { calendar: { source: "ATENDLY" } },
+  });
+  step(
+    calendar.status === 200,
+    `seed(onboarding): the calendar onboarding block answered ${calendar.status}, expected 200`,
   );
 
   return { email: ONBOARDING_SEED.email, password: ONBOARDING_ACCOUNT_PASSWORD };

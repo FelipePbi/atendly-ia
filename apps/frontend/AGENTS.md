@@ -210,7 +210,7 @@ resultado) exigem uma origem real e ficam no jsdom
 (`tests/goal066-onboarding-importacao.test.tsx`). A sessão vem de uma SEGUNDA conta,
 também semeada por `scripts/goal033-authenticated-ui-rehearsal.mjs`, que a
 registra e grava só o bloco de negócio (nome, segmento, "Local próprio" e
-endereço) sem nunca completar o onboarding — é essa conta parada no meio,
+endereço) e a fonte da agenda (que a etapa Importação exige para abrir) sem nunca completar o onboarding — é essa conta parada no meio,
 nunca a principal, que o gate usa para essas etapas, e a régua é a mesma
 (overflow, toque, contraste, foco, movimento), mais a conferência de que os
 oito chips de segmento ficam inteiros dentro da largura e, nas duas larguras

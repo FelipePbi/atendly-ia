@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 
 import { activationTestStartAction } from "@/features/activation-test/ActivationTestPanels";
 import {
@@ -10,12 +10,7 @@ import {
   useProductRuntime,
 } from "@/shared/runtime/ProductRuntime";
 
-import {
-  blockForScenario,
-  onboardingBlockLabels,
-  onboardingFlow,
-  progressPercent,
-} from "./blocks";
+import { blockForScenario, onboardingFlow } from "./blocks";
 import { skipActivationTestStep } from "./blocks/activation-test";
 import {
   onboardingError,
@@ -35,7 +30,7 @@ import {
 } from "./blocks/whatsapp";
 import { OnboardingImportStep } from "./OnboardingImportStep";
 import { useOnboardingRuntime } from "./OnboardingRuntime";
-import { OnboardingShell } from "./OnboardingShell";
+import { type OnboardingBack, OnboardingShell } from "./OnboardingShell";
 import { type OnboardingScenario, onboardingScenarios } from "./scenarios";
 
 /** Despachante: escolhe o bloco pelo cenário e delega corpo/persistência a
@@ -60,13 +55,25 @@ export function OnboardingScreen({
   // o CTA primário do próprio painel de conexão (Goal071/WU-03).
   const [whatsappConnected, setWhatsappConnected] = useState(false);
   const [eyebrow, title, description] = onboardingScenarios[scenario];
+  // "importacao" só existe para quem escolheu importar: aberta por URL direta
+  // sem a fonte gravada, volta para "sistema-atual" sem tocar na importação.
+  const importWithoutSource =
+    scenario === "importacao" &&
+    !loading &&
+    !loadError &&
+    draft.calendarSource === null;
 
-  if (loading)
+  useEffect(() => {
+    if (importWithoutSource) router.replace("/onboarding/sistema-atual");
+    // O objeto do router pode mudar a cada render; a decisão depende só disto.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importWithoutSource]);
+
+  if (loading || importWithoutSource)
     return <OnboardingMessage message="Carregando sua configuração..." />;
   if (loadError) return <OnboardingMessage message={loadError} />;
 
   const blockId = blockForScenario(scenario);
-  const blockLabel = onboardingBlockLabels[blockId];
   const isWelcomeStep = scenario === "boas-vindas";
   const isSistemaAtual = scenario === "sistema-atual";
   const isQuandoImportar = scenario === "quando-importar";
@@ -98,6 +105,19 @@ export function OnboardingScreen({
           : index > 0
             ? onboardingFlow[index - 1]
             : undefined;
+
+  const showsBack = !(
+    isActivationTestProgress ||
+    isActivationTestPaused ||
+    isActivationTestFailed ||
+    isActivationTestSucceeded ||
+    isWhatsappConclusion
+  );
+  const back: OnboardingBack | undefined = isWelcomeStep
+    ? { disabled: true }
+    : showsBack && previous
+      ? { href: `/onboarding/${previous}` }
+      : undefined;
 
   function go(step: OnboardingScenario) {
     router.push(`/onboarding/${step}`);
@@ -246,21 +266,10 @@ export function OnboardingScreen({
     </button>
   ) : isSistemaAtual ? (
     // Os dois cards do corpo já são a ação (QA O-19, O-22): não há
-    // "Continuar" aqui, só a volta.
-    <>
-      {previous && (
-        <Link className="btn btn-secondary" href={`/onboarding/${previous}`}>
-          Voltar
-        </Link>
-      )}
-    </>
+    // "Continuar" aqui; a volta é o chevron do topo.
+    null
   ) : isQuandoImportar ? (
     <>
-      {previous && (
-        <Link className="btn btn-secondary" href={`/onboarding/${previous}`}>
-          Voltar
-        </Link>
-      )}
       <button
         className="btn btn-secondary"
         disabled={busy}
@@ -318,11 +327,6 @@ export function OnboardingScreen({
     </>
   ) : isActivationTestIntro ? (
     <>
-      {previous && (
-        <Link className="btn btn-secondary" href={`/onboarding/${previous}`}>
-          Voltar
-        </Link>
-      )}
       <button
         className="btn btn-secondary"
         disabled={busy}
@@ -353,11 +357,6 @@ export function OnboardingScreen({
     </>
   ) : isWhatsappConnect ? (
     <>
-      {previous && (
-        <Link className="btn btn-secondary" href={`/onboarding/${previous}`}>
-          Voltar
-        </Link>
-      )}
       <button
         className={`btn ${whatsappConnected ? "btn-primary" : "btn-secondary"}`}
         disabled={busy}
@@ -382,19 +381,9 @@ export function OnboardingScreen({
       >
         {busy ? "Salvando..." : "Fazer isso depois"}
       </button>
-      {previous && (
-        <Link className="btn btn-secondary" href={`/onboarding/${previous}`}>
-          Voltar
-        </Link>
-      )}
     </>
   ) : isIgnoredContactsStep ? (
     <>
-      {previous && (
-        <Link className="btn btn-secondary" href={`/onboarding/${previous}`}>
-          Voltar
-        </Link>
-      )}
       <button
         className="btn btn-secondary"
         disabled={busy}
@@ -409,11 +398,6 @@ export function OnboardingScreen({
     </>
   ) : (
     <>
-      {previous && (
-        <Link className="btn btn-secondary" href={`/onboarding/${previous}`}>
-          Voltar
-        </Link>
-      )}
       <button className="btn btn-primary" disabled={busy} type="submit">
         {busy ? "Salvando..." : "Continuar"}
       </button>
@@ -424,7 +408,7 @@ export function OnboardingScreen({
     <OnboardingShell
       actions={actions}
       actionsStacked={isWhatsappIntro}
-      blockLabel={blockLabel}
+      back={back}
       body={
         isSistemaAtual ? (
           <div className="choice-grid">
@@ -450,7 +434,7 @@ export function OnboardingScreen({
       eyebrow={eyebrow}
       onExit={() => void logout()}
       onSubmit={(event) => void submit(event)}
-      progressPercent={progressPercent(scenario)}
+      scenario={scenario}
       title={title}
     />
   );

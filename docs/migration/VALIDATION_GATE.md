@@ -3244,3 +3244,86 @@ rodada 3 só restaurou seis arquivos de configuração de teste e build que as
 unidades de diagnóstico tinham editado, e os gates passaram, inclusive
 `validate:integration` no próprio IA Loop, com as mesmas contagens da
 execução final da rodada 2).
+
+## Onboarding com voltar no topo, progresso por capítulo, seleção tonal, campos da agenda e guard da `importacao`, do Goal072
+
+`apps/frontend/` troca o "Voltar" do rodapé por um chevron no topo, põe a
+barra segmentada (abaixo de 768 px) e o trilho "Configuração inicial" (a
+partir de 768 px) no lugar da barra contínua, dá tom e ✓ à seleção, e troca os
+campos nativos da agenda por duração de 5 em 5 minutos, preço com máscara,
+sete pílulas de dia e horas com barra. A etapa `importacao` aberta sem
+`calendarSource` volta a `sistema-atual`. Nenhuma rota, migration ou mudança
+de contrato; nenhuma rota entra ou sai de `PUBLIC_ROUTES`,
+`AUTHENTICATED_ROUTES` ou `ONBOARDING_ROUTES`.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `goal072-onboarding-frame.test.tsx` (jsdom, **19** testes): um único "Voltar" antes do título nas onze etapas do §6.1, inativo e fora do Tab na Boas-vindas, ausente nas telas de estado do teste real e em `whatsapp-concluido`; trilho e barra com o mesmo capítulo atual e "concluído"; o guard da `importacao` com e sem fonte | Layout real: em que largura a barra vira trilho, e a largura do botão principal |
+| `goal072-onboarding-selection.test.tsx` (jsdom, **8**): nenhum heading dentro de `<button>` ou `<label>` em `modalidade`, `sistema-atual`, `tom-da-ia` e `dias-de-atendimento`; ícone e ✓ do cartão de modalidade; ✓ e `aria-pressed` do chip, com oito `.chip` | Que o tom, a borda e o ✓ leem bem aos olhos de uma pessoa |
+| `goal072-onboarding-schedule-fields.test.tsx` (jsdom, **13**): duração de 5 em 5 com atalhos e recusa em linha, preço "R$ 90,00" gravando o mesmo valor, erro de servidor no campo do preço, sete dias com resumo, intervalo em texto com a barra `aria-hidden` | Que a barra de horas e o resumo dos dias leem bem |
+| Gate autenticado dentro de `validate:integration`, **160** testes e **0** retentativas: as `ONBOARDING_ROUTES` nas cinco larguras — overflow, toque, contraste, foco e movimento — com a segunda conta semeada com a fonte da agenda | Fidelidade aos protótipos `Onboarding-1-Negocio-e-Agenda*.dc.html` |
+
+A segunda conta do ensaio autenticado grava `calendar.source` (`ATENDLY`),
+porque sem ela o guard da `importacao` a redirecionava para `sistema-atual` e
+`onboarding-importacao` reprovava nas cinco larguras (a primeira execução de
+`validate:integration` da rodada 1, WU-12: **155** passando e **5**
+inesperados). É uma edição em `scripts/`, fora do escopo do Goal (§10), feita
+pelo DIAG-001 do harness e **aceita pelo Tech Lead no review072 como desvio
+autorizado**: é a única saída coerente entre o guard exigido (§4 e §6.10) e o
+§5, e o seed grava um estado real do produto sem desligar nenhuma medida. O
+docblock de `seedOnboardingAccount` diz o que a função faz: dois
+`PATCH /v1/onboarding` e nenhum `POST /v1/onboarding/complete`; nenhuma linha
+de `e2e/` mudou. `apps/frontend/AGENTS.md` foi atualizado com a mesma frase.
+
+O sprite `apps/frontend/public/icons/atendly-icons.svg` passa no `DOMParser` do
+jsdom com `image/svg+xml`: sem `parsererror`, **31** símbolos.
+`goal072-icon-sprite.test.ts` (jsdom, **3** testes) guarda isso e a cobertura de
+todo `IconName`: com o atributo colado (`id="i-clock"viewBox`) reprova
+(`Tests 2 failed | 1 passed (3)`), restaurado passa (`Tests 3 passed (3)`), com o
+`sha256` do sprite idêntico antes e depois
+(`3c46b3e88be5f66feafbc1aa92135aef1e1f61cf56c941147a4d5e23b12be227`). Com ele,
+`test:frontend` do app fica em **116**/**1189** (piso **112**/**1146**: **+4**
+arquivos e **+43** testes).
+
+**Execução final vigente: a da rodada 3 do IA Loop**, sobre a árvore entregue
+(com o teste do sprite), todos exit 0: `npm run validate:core` — **17** passos,
+**15** `passed`, **0** `failed`, **2** `skipped` (`test:bff`,
+`test:health-worker`), com `test:frontend` **116**/**1189**; `npm run
+test:gate` — **233**/**233**; `npm run validate:ui` — **169** `passed`, **21**
+`skipped`, **0** retentativas (`startTime` `2026-09-30T11:43:11Z`);
+`npm run validate:integration`, contra um PostgreSQL descartável em
+`127.0.0.1:55500/ia_bff_test` — **36** passos, **36** `passed`, com
+`rehearse:goal033-authenticated-ui` em **160** testes passando, **0**
+`unexpected`, **0** `flaky` e **0** retentativas (`startTime`
+`2026-09-30T11:46:27Z`); `tsc --noEmit` e `eslint` de `apps/frontend`, exit 0.
+A execução da rodada 2 (`test:frontend` **115**/**1186**, `validate:ui`
+`2026-09-30T11:08:11Z`, autenticado `2026-09-30T11:10:56Z`, PostgreSQL em
+`127.0.0.1:55472/atendly_bff_test`) é **anterior**, com as mesmas contagens de
+gate. Os nove controles negativos do §7 **continuam os da rodada 2**, com
+restauração conferida por hash: depois deles só entrou
+`goal072-icon-sprite.test.ts`, que não toca código de produto nem os arquivos de
+teste do §6, então não foram refeitos; saída real em
+[FINAL_AUDIT §55](FINAL_AUDIT.md).
+
+**Conferência humana pendente.** A conferência do §9 do Goal **não foi
+feita**: as etapas dos capítulos "Seu negócio" e "Sua agenda" num aparelho
+real nas cinco larguras frente aos três protótipos; o trilho, o chevron e o
+botão na largura da coluna nas etapas de "Sua IA" e "WhatsApp"; e a leitura
+do chevron cinza, da barra de horas e do resumo dos dias. Nenhum teste é
+declarado prova de fidelidade visual.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal072-2026-09-30-d-094-accepted),
+[FINAL_AUDIT §55](FINAL_AUDIT.md) e [D-094](DECISIONS.md), **ACCEPTED** no
+[review072](reviews/072-review.md) (rodada 4 do IA Loop, sem blocker; a
+rodada 4 só reescreveu os documentos, e a execução final vigente continua a
+da rodada 3). O rerun dos gates na rodada 4, sobre o mesmo código, deu exit 0
+com **1** `flaky` no gate autenticado (`onboarding-whatsapp` em `tablet-768`,
+parado em "Verificando seu acesso" de `shared/runtime/ProductRuntime.tsx`, que
+o diff não toca), classificado como ambiente conforme o §10 do Goal. Esse
+rerun sobrescreveu os `e2e-results`: público `startTime`
+`2026-09-30T12:03:21Z` (**169**/**21**/**0**) e autenticado
+`2026-09-30T12:06:34Z` (**159** `expected` e **1** `flaky`). A lição do
+review: o sprite de ícones com XML inválido da rodada 1 apagava o ícone
+`clock` no app inteiro e passou por todos os gates, inclusive o gate
+autenticado; hoje `goal072-icon-sprite.test.ts`, dentro de `test:frontend`,
+parseia `public/icons/atendly-icons.svg` e exige um símbolo por `IconName`.

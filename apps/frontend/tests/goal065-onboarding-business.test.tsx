@@ -89,10 +89,12 @@ describe("boas-vindas: entrada da conta nova, sem gravação", () => {
     expect(push).toHaveBeenCalledWith("/onboarding/segmento-e-nome");
   });
 
-  test("não oferece Voltar: é sempre o primeiro passo", async () => {
+  test("Voltar existe só inativo: é sempre o primeiro passo", async () => {
     await renderStep("boas-vindas", emptyState());
     await screen.findByRole("button", { name: "Começar" });
-    expect(screen.queryByRole("link", { name: "Voltar" })).toBeNull();
+    const back = screen.getByRole("link", { name: "Voltar" });
+    expect(back).toHaveAttribute("aria-disabled", "true");
+    expect(back).not.toHaveAttribute("href");
   });
 
   test("texto do vault, a frase do progresso e a composição estática de três elementos", async () => {

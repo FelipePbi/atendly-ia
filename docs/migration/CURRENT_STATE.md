@@ -7880,3 +7880,114 @@ controles negativos desta rodada.
   retentativas). A conferência humana do §9 continua **não feita**. Ver a
   nota de fechamento de [D-093](DECISIONS.md) e o
   [review077](reviews/077-review.md).
+
+## Delta implementado — Goal072, 2026-09-30 ([D-094](DECISIONS.md), ACCEPTED)
+
+Corrige **O-07**, **O-10/O-23**, **O-11**, **O-12**, **O-13**, **O-25**,
+**O-27**, **O-29** e **O-32** do [QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md), fora
+da enumeração A-01…A-24 do FINAL_AUDIT, e as observações 1 e 2 do review066
+e 4 do review065. Toca `apps/frontend/` e, por uma edição declarada abaixo,
+`scripts/`; nenhuma rota, migration ou mudança de contrato. Decisão:
+[D-094](DECISIONS.md), proposta no Goal072, **PROPOSED**. Reescrito no lugar
+pelo FIX-001 da rodada 2 do IA Loop e de novo pelo FIX-001 da rodada 4, para a
+execução final da rodada 3 e o guard do sprite; os nove controles negativos
+continuam os da rodada 2.
+
+- **Voltar no topo.** Chevron ‹ de nome "Voltar" antes do título, para
+  `/onboarding/${previous}` (regra de `previous` intacta); cinza, com
+  `aria-disabled="true"`, sem `href` e fora do Tab na Boas-vindas; ausente em
+  `teste-real-progresso`, `-interferencia`, `-falha`, `-sucesso` e em
+  `whatsapp-concluido`; a etapa `importacao` mantém a navegação própria. Nenhum
+  "Voltar" no rodapé.
+- **Progresso por capítulo.** Barra segmentada abaixo de 768 px; trilho
+  "Configuração inicial" a partir de 768 px, com os quatro capítulos
+  numerados, `aria-current="step"` no atual e "concluído" no nome dos
+  anteriores. `chapterProgress` (`blocks.ts`) deriva de `blockForScenario`.
+  `OnboardingFrame` (etapa `importacao`) usa o mesmo progresso. O botão
+  principal ocupa a largura da coluna.
+- **Seleção.** Chip selecionado tonal com ✓ (`.chip` e `.segment-chip-row`
+  intactos, oito chips); cartão de modalidade com ícone (pino, casa e
+  monitor; `pin` e `monitor` são novos no sprite, `home` já existia) e
+  indicador com ✓; nenhum heading dentro de `<button>` ou `<label>`.
+- **Campos da agenda.** Duração de 5 em 5 minutos com − e + e atalhos
+  30/60/90, recusando valor fora do passo em linha; preço com `CurrencyInput`
+  ("R$ 90,00"), gravando em reais como antes; dias em sete pílulas com o
+  resumo em texto; horas com o intervalo em texto e a barra de 0 a 24 h
+  decorativa.
+- **Guard da `importacao`.** Sem `calendarSource` no rascunho carregado, troca
+  a rota para `/onboarding/sistema-atual` e não chama a importação.
+- **Desvio do §10 do Goal, aceito pelo Tech Lead no review072.**
+  `scripts/goal033-authenticated-ui-rehearsal.mjs`: o seed da segunda conta do
+  ensaio autenticado grava `calendar.source` (`ATENDLY`), porque o guard acima
+  redirecionava a conta parada no meio do onboarding e a primeira execução de
+  `validate:integration` da rodada 1 reprovou `onboarding-importacao` (**155**
+  passando, **5** inesperados). É a única saída coerente entre o guard exigido
+  (§4 e §6.10) e o §5; o seed grava um estado real do produto e não desliga
+  medida. O docblock de `seedOnboardingAccount` diz o que a função faz: dois
+  `PATCH /v1/onboarding` e nenhum `POST /v1/onboarding/complete`.
+  `apps/frontend/AGENTS.md` ganhou a frase correspondente. O sprite
+  `public/icons/atendly-icons.svg` tem **31** símbolos e é XML bem formado
+  (`DOMParser` do jsdom com `image/svg+xml`, sem `parsererror`), guardado por
+  `goal072-icon-sprite.test.ts` (**3** testes; reprova com o atributo colado,
+  passa restaurado, `sha256` do sprite idêntico antes e depois);
+  `test:frontend` do app: **116**/**1189**.
+- **Testes novos:** `goal072-onboarding-frame` (**19**),
+  `goal072-onboarding-selection` (**8**),
+  `goal072-onboarding-schedule-fields` (**13**) e `goal072-icon-sprite` (**3**),
+  **43** no total; `test:frontend` **116**/**1189** (piso **112**/**1146**:
+  **+4** arquivos, **+43** testes, nenhum a menos); asserções
+  mudadas por composição trocada em `goal018-onboarding-reachability`,
+  `goal065-onboarding-business`, `goal065-onboarding-schedule` e
+  `goal066-onboarding-importacao`, nenhuma apagada — lista em
+  [D-094](DECISIONS.md), "Consequências".
+- **Vermelho da baseline `79d2133`**, rodado pelas WU-01, WU-02 e WU-03:
+  frontend `16 failed | 3 passed (19)`, `7 failed | 1 passed (8)` e
+  `8 failed | 5 passed (13)` (**31** dos **40** testes desses três arquivos
+  reprovam e **9** guardam comportamento que já existia). O piso da baseline (**112**/**1146**) é o declarado no Goal e
+  **não foi recontado**.
+- **Execução final vigente: a da rodada 3 do IA Loop**, sobre a árvore
+  entregue (com `goal072-icon-sprite.test.ts`), todos exit 0: `validate:core`
+  **17** passos (**15** `passed`, **2** `skipped`), com `test:frontend`
+  **116**/**1189**; `test:gate` **233**/**233**; `validate:ui` **169**
+  `passed`, **21** `skipped`, **0** retentativas (`startTime`
+  `2026-09-30T11:43:11Z`); `validate:integration` **36**/**36** passos, contra um
+  PostgreSQL descartável em `127.0.0.1:55500/ia_bff_test`, com o gate
+  autenticado em **160** testes, **0** `unexpected`, **0** `flaky` e **0**
+  retentativas (`startTime` `2026-09-30T11:46:27Z`); `tsc --noEmit` e `eslint`
+  de `apps/frontend`, exit 0. A execução da rodada 2 (`test:frontend`
+  **115**/**1186**; `validate:ui` `2026-09-30T11:08:11Z`; autenticado
+  `2026-09-30T11:10:56Z`) é **anterior**, com as mesmas contagens de gate.
+- **Nove controles negativos do §7**, todos pelo FIX-001 da rodada 2, por
+  edição real revertida e conferida por hash: cada um reprova o teste esperado
+  com o defeito e passa sem ele. **Continuam os da rodada 2**: depois deles só
+  entrou `goal072-icon-sprite.test.ts`, que não toca código de produto nem os
+  arquivos de teste do §6, então não foram refeitos. Saída em
+  [FINAL_AUDIT §55](FINAL_AUDIT.md).
+- **Conferência humana pendente:** a conferência do §9 do Goal **não foi
+  feita** — as etapas dos capítulos "Seu negócio" e "Sua agenda" num aparelho
+  real nas cinco larguras frente aos três protótipos; o trilho, o chevron e o
+  botão na largura da coluna nas etapas de "Sua IA" e "WhatsApp"; a leitura do
+  chevron cinza, da barra de horas e do resumo dos dias.
+- **Limites declarados:** a largura do botão, a troca entre barra e trilho e a
+  barra de horas são CSS, medidas só pelo gate autenticado (overflow, toque,
+  contraste, foco e movimento), nunca em fidelidade; `progressPercent` segue
+  exportada sem uso em `src/`. Ficam fora, para o Goal079, a demonstração
+  animada, a amostra por estilo, as promessas, a Boas-vindas animada e a
+  ordem de Tab da introdução do WhatsApp; a busca por CEP (O-15) fica
+  pendente de decisão humana — ver [D-094](DECISIONS.md).
+- **Fechamento — review072, 2026-09-30.** [D-094](DECISIONS.md)
+  **ACCEPTED** no [review072](reviews/072-review.md), rodada 4 do IA Loop,
+  sem blocker; rodada 1 `CHANGES_REQUIRED` com 3 blockers, rodadas 2 e 3
+  com 1 cada. O defeito de código achado no review foi o sprite de ícones
+  com atributo colado em `i-clock`, que apagava o ícone `clock` no app
+  inteiro e passou por todos os gates; hoje ele é guardado por
+  `goal072-icon-sprite.test.ts`. A edição de `scripts/` foi aceita na
+  rodada 1 como desvio autorizado do §10. A rodada 4 só reescreveu os
+  documentos. A execução final vigente continua a da rodada 3 (autenticado
+  **160**/**0** retentativas). O rerun dos gates na rodada 4, sobre o mesmo
+  código, teve **1** `flaky` em `onboarding-whatsapp` a 768 px, na tela
+  "Verificando seu acesso" de `ProductRuntime.tsx`, que o diff não toca;
+  foi classificado como ambiente e sobrescreveu os `e2e-results`
+  (`startTime` `2026-09-30T12:03:21Z` e `12:06:34Z`). A conferência humana
+  do §9 continua **não feita**. Ver a nota de fechamento de
+  [D-094](DECISIONS.md) e o [review072](reviews/072-review.md).

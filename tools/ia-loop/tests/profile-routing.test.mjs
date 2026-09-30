@@ -23,7 +23,7 @@ import { initializeGoalExecutionState } from '../lib/goal-execution.mjs';
 import { PER_GOAL_RUNTIME_FIELDS } from '../lib/job-store.mjs';
 import { PROTOCOL_VERSION_V2, validateReviewDecision } from '../lib/contracts-v2.mjs';
 
-const SONNET = 'claude-sonnet-5';
+const SONNET = 'claude-sonnet-5-5';
 const OPUS = 'claude-opus-5-5';
 
 /** The execution record `run-goal` persists after resolving a round. */

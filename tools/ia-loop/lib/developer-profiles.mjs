@@ -42,10 +42,10 @@ export { CLI_EFFORT_LEVELS };
 export const DEVELOPER_PROFILES = Object.freeze({
   SONNET_MEDIUM: Object.freeze({
     name: 'SONNET_MEDIUM',
-    model: 'claude-sonnet-5',
+    model: 'claude-sonnet-5-5',
     effort: 'medium',
     family: 'sonnet',
-    label: 'Claude Sonnet 5',
+    label: 'Claude Sonnet 5.5',
     effortLabel: 'Medium',
     selectable: true,
   }),
@@ -56,10 +56,10 @@ export const DEVELOPER_PROFILES = Object.freeze({
    */
   SONNET_HIGH: Object.freeze({
     name: 'SONNET_HIGH',
-    model: 'claude-sonnet-5',
+    model: 'claude-sonnet-5-5',
     effort: 'high',
     family: 'sonnet',
-    label: 'Claude Sonnet 5',
+    label: 'Claude Sonnet 5.5',
     effortLabel: 'High',
     selectable: true,
   }),

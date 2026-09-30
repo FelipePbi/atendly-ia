@@ -313,3 +313,19 @@ test('38. resolution chains and per-model cost never double count the same row\'
   // cost, counted exactly once — not once per model bucket it also appears in.
   assert.ok(Math.abs(chain.costUsd - expected) < 1e-9);
 });
+
+// --- a routing key is not a model: source attribution across generations ----
+
+test('an escalation recorded under the key "sonnet" is credited to the generation that actually ran, not today\'s', () => {
+  const rows = [
+    row({ work_unit_id: 'OLD', attempt: 1, model_key: 'sonnet', resolved_model: 'claude-sonnet-5', status: 'FAILED', started_at: '2026-09-20T10:00:00.000Z' }),
+    row({ work_unit_id: 'OLD', attempt: 2, model_key: 'opus', resolved_model: 'claude-opus-5', status: 'COMPLETED', is_escalation: 1, escalation_from_model: 'sonnet', started_at: '2026-09-20T10:05:00.000Z' }),
+    row({ work_unit_id: 'NEW', attempt: 1, model_key: 'sonnet', resolved_model: 'claude-sonnet-5-5', status: 'FAILED', started_at: '2026-10-01T10:00:00.000Z' }),
+    row({ work_unit_id: 'NEW', attempt: 2, model_key: 'opus', resolved_model: 'claude-opus-5-5', status: 'COMPLETED', is_escalation: 1, escalation_from_model: 'sonnet', started_at: '2026-10-01T10:05:00.000Z' }),
+  ];
+  const { byModel } = computeModelEffectiveness(rows, []);
+  assert.equal(byModel['claude-sonnet-5'].escalation.escalationSourceCalls, 1);
+  assert.equal(byModel['claude-sonnet-5-5'].escalation.escalationSourceCalls, 1);
+  assert.equal(byModel['claude-opus-5'].escalation.escalationsReceived, 1);
+  assert.equal(byModel['claude-opus-5-5'].escalation.escalationsReceived, 1);
+});

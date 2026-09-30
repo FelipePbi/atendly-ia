@@ -155,3 +155,22 @@ test('the 2026-09 snapshot is untouched and the new one carries every one of its
 test('ALL_OPUS stays on Opus 5 so historical routing savings do not move', () => {
   assert.equal(ALL_OPUS_CANONICAL_MODEL, 'claude-opus-5');
 });
+
+// --- Sonnet 5.5 (2026-09-30) ------------------------------------------------
+
+test('Sonnet 5.5 resolves to itself and is priced, so its calls are monitored apart from Sonnet 5', () => {
+  const snapshot = getPricingSnapshot();
+  assert.equal(resolveCanonicalModel('claude-sonnet-5-5'), 'claude-sonnet-5-5');
+  assert.equal(resolveCanonicalModel('claude-sonnet-5'), 'claude-sonnet-5');
+  assert.deepEqual(snapshot.models['claude-sonnet-5-5'], snapshot.models['claude-sonnet-5']);
+  assert.equal(snapshot.modelProvenance['claude-sonnet-5-5'], PRICING_PROVENANCE.OFFICIAL);
+});
+
+test('the 2026-09-26 snapshot is untouched and the 2026-09-30 one carries every one of its rates unchanged', () => {
+  const previous = getPricingSnapshot('claude-ledger-calibrated-2026-09-26');
+  const current = getPricingSnapshot();
+  assert.equal(previous.models['claude-sonnet-5-5'], undefined);
+  for (const [model, prices] of Object.entries(previous.models)) {
+    assert.deepEqual(current.models[model], prices, `${model} must reprice identically`);
+  }
+});

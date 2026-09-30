@@ -24,6 +24,7 @@ Duas etapas concluídas:
 | V29 — Posição da campanha reconciliada | um Goal fechado fora da run deixa de congelar o `autonomous-run.json`: closure integrado e alcançável do HEAD avança o registro em vez de parar como `GOAL_BOUNDARY_AMBIGUOUS` |
 | V30 — Gate renderizado no registro determinístico | `validate-ui` entra no registro fechado de ações; Playwright roda como unidade determinística, não como ferramenta do revisor |
 | V31 — Opus 5 → Opus 5.5 | Opus do loop vira `claude-opus-5-5`; snapshot de preço novo só acrescenta Opus 5.5, `ALL_OPUS` fica em Opus 5 e métricas antigas não mudam |
+| V32 — Sonnet 5 → Sonnet 5.5 | Sonnet do loop vira `claude-sonnet-5-5`; snapshot `2026-09-30` só acrescenta Sonnet 5.5; origem de fallback/escalonamento passa a ser resolvida pela chamada real no ledger |
 
 ---
 
@@ -1970,7 +1971,7 @@ seria um segundo lugar para a decisão de roteamento divergir.
 
 | Perfil | Modelo | Effort | Quando |
 | --- | --- | --- | --- |
-| `SONNET_MEDIUM` | `claude-sonnet-5` | `medium` | implementação localizada, CRUD, UI, adapters, testes, refactor simples, arquitetura já definida, risco baixo/médio |
+| `SONNET_MEDIUM` | `claude-sonnet-5-5` | `medium` | implementação localizada, CRUD, UI, adapters, testes, refactor simples, arquitetura já definida, risco baixo/médio |
 | `OPUS_MEDIUM` | `claude-opus-5-5` | `medium` | mudança multi-serviço, contrato importante, domínio complexo, migration, debugging difícil, concorrência, vários consumers |
 | `OPUS_HIGH` | `claude-opus-5-5` | `high` | segurança, auth/sessão, isolamento de tenant, dado crítico, race condition, consistência distribuída, mudança arquitetural, alto custo de erro |
 
@@ -2032,7 +2033,7 @@ Developer é dinâmico.
 ATENDLY IA LOOP — DEVELOPER
 
 Supported profiles:
-  SONNET_MEDIUM · Claude Sonnet 5 · effort Medium
+  SONNET_MEDIUM · Claude Sonnet 5.5 · effort Medium
   OPUS_MEDIUM · Claude Opus 5.5 · effort Medium
   OPUS_HIGH · Claude Opus 5.5 · effort High
 Log level: normal
@@ -2733,7 +2734,7 @@ papéis e as três etapas.
 | --- | --- | --- |
 | Tech Lead · planning | Opus 5.5 `high` | Fable 5.1 `high` |
 | Tech Lead · review | Opus 5.5 `high` | Fable 5.1 `high` |
-| Developer | Sonnet 5 `high` (sempre o início) | escalation → Opus 5.5 `high`; deep → Opus 5.5 `xhigh` |
+| Developer | Sonnet 5.5 `high` (sempre o início) | escalation → Opus 5.5 `high`; deep → Opus 5.5 `xhigh` |
 
 `max` não aparece: fica como decisão humana, nunca do router. A tabela inteira
 vive em `ROUTING_CONFIG`, e os ids de modelo só existem em `MODELS` — nenhum
@@ -3240,8 +3241,8 @@ WORK UNIT ROUTER ......................... lib/model-routing.mjs
 ┌──────────────────────────────────────────────────────────┐
 │ DETERMINISTIC → ia-loop executa o comando (nenhum modelo) │
 │ MECHANICAL    → Haiku 4.5      high                       │
-│ STANDARD      → Sonnet 5       high                       │
-│ COMPLEX       → Opus 5         high                       │
+│ STANDARD      → Sonnet 5.5     high                       │
+│ COMPLEX       → Opus 5.5       high                       │
 └──────────────────────────────────────────────────────────┘
   ↓
 VERIFICATION (unidades DETERMINISTIC do próprio plano)
@@ -5029,9 +5030,12 @@ campo), e `confidence` (`sampleConfidenceFor`, regra centralizada: `< 5` →
 `MEDIUM_CONFIDENCE`, `>= 50` → `HIGH_CONFIDENCE`).
 
 `fallback_from_model`/`escalation_from_model` guardam a MODEL KEY curta do
-roteamento (`'sonnet'`, não `'claude-sonnet-5'`) — resolvida através da MESMA
-tabela que `lib/model-routing.mjs` usa para rotear (`resolveModel`), nunca
-uma segunda tabela de mapeamento inventada aqui.
+roteamento (`'sonnet'`, não `'claude-sonnet-5'`). Uma chave não é um modelo:
+`'sonnet'` foi Sonnet 5 até 2026-09-30 e Sonnet 5.5 depois. A origem é
+resolvida pela última chamada anterior que o próprio ledger registra para
+aquela chave (mesma Work Unit, depois mesma rodada, depois qualquer uma). Só
+quando o ledger não tem chamada anterior ela cai na tabela de
+`lib/model-routing.mjs` (`resolveModel`). Ver V32.
 
 ### Resolution chains, ROI de escalation/retry, falhas terminais
 
@@ -5671,3 +5675,37 @@ Opus 5.5 com split de cache limpo.
   persistente, que agora usa Opus 5.5 por padrão.
 - Recusa de safeguard aparece como falha de execução. Compare a taxa de
   falha e de escalonamento Opus 5 × Opus 5.5 em `ia-loop:metrics`.
+
+## V32 — Sonnet 5 → Sonnet 5.5
+
+Em 2026-09-30 o Sonnet do loop passou de `claude-sonnet-5` para
+`claude-sonnet-5-5` (`MODELS.sonnet` em `lib/model-routing.mjs` e os perfis
+`SONNET_MEDIUM`/`SONNET_HIGH`). Isso cobre o Developer padrão e as Work Units
+STANDARD. Política de roteamento, efforts, Opus, Fable e Haiku não mudaram.
+
+**Preço e métricas antigas.** Mesma regra da V31. O snapshot
+`claude-ledger-calibrated-2026-09-26` segue imutável. O novo padrão,
+`claude-ledger-calibrated-2026-09-30`, copia todas as tarifas dele e só
+acrescenta `claude-sonnet-5-5`, com a tarifa pública: $2 / $10 por MTok, cache
+read $0,20, cache write $2,50 / $4. É igual ao Sonnet 5, e o modelo aparece como
+`OFFICIAL` em `modelProvenance`. `ALL_OPUS` continua em Opus 5.
+
+**Monitoramento.** Sonnet 5 e Sonnet 5.5 aparecem em linhas separadas em
+`ia-loop:metrics`, porque as métricas agrupam por modelo canônico.
+
+**Correção de atribuição.** `fallback_from_model` e `escalation_from_model`
+guardam só a chave de roteamento. Antes, `model-effectiveness` resolvia a chave
+pela tabela atual. Com isso, cada troca de geração reatribuía o histórico: desde
+a V31, o escalonamento de origem `'opus'` feito em Opus 5 era creditado ao Opus
+5.5. Com a V32, os 8 escalonamentos de origem `'sonnet'` do ledger iriam para o
+Sonnet 5.5. Agora a origem é a última chamada anterior daquela chave registrada
+no próprio ledger. A tabela atual só entra quando o ledger não tem essa chamada.
+Validado no `usage.sqlite` real: os 8 escalonamentos de origem Sonnet ficam em
+`claude-sonnet-5`, e o 1 de origem Opus fica em `claude-opus-5`.
+
+**O que observar.** O effort padrão do Sonnet 5.5 é `high`, igual ao do Sonnet 5,
+e todo perfil Sonnet passa effort explícito. O Sonnet 5.5 não aceita
+`tool_choice` forçado (`any`/`tool`), assim como o Opus 5.5. O loop chama o
+`claude` CLI e não força ferramenta, então isso não afeta o loop hoje. Compare
+failure rate, retry rate e taxa de escalonamento Sonnet 5 × Sonnet 5.5 em
+`ia-loop:metrics`.

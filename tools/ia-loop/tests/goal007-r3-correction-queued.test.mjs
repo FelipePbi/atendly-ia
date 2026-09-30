@@ -244,7 +244,7 @@ test('resolveProfileForRound: a fresh escalation for round 3 resolves to SONNET_
     techLeadEscalation: { profile: 'SONNET_MEDIUM', reason: 'Correção localizada...' },
   });
   assert.equal(resolution.profile.name, 'SONNET_MEDIUM');
-  assert.equal(resolution.profile.model, 'claude-sonnet-5');
+  assert.equal(resolution.profile.model, 'claude-sonnet-5-5');
   assert.equal(resolution.profile.effort, 'medium');
   assert.equal(resolution.source, PROFILE_SOURCES.TECH_LEAD_ESCALATION);
   assert.equal(resolution.selectedBy, 'tech_lead');

@@ -78,6 +78,21 @@ const ANTHROPIC_2026_09_26_MODELS = Object.freeze({
 });
 
 /**
+ * 2026-09-30: Claude Sonnet 5.5 replaces Sonnet 5 as the loop's Sonnet. Same
+ * rule as the 2026-09-26 card: every earlier rate carried over unchanged, one
+ * model added. Sonnet 5.5's rates come from Anthropic's published list ($2 /
+ * $10 per MTok, cache read $0.20, cache write $2.50 / $4) — identical to
+ * Sonnet 5 and on the usual ratio card — and are flagged in
+ * `modelProvenance` until the ledger has Sonnet 5.5 rows to calibrate against.
+ */
+const ANTHROPIC_2026_09_30_MODELS = Object.freeze({
+  ...ANTHROPIC_2026_09_26_MODELS,
+  'claude-sonnet-5-5': Object.freeze({
+    input: 2, output: 10, cacheRead: 0.2, cacheCreation: 2.5, cacheCreation5m: 2.5, cacheCreation1h: 4,
+  }),
+});
+
+/**
  * How a snapshot's rates came to exist. Never decorative: a report MUST show
  * this, because a rate an operator can mistake for the provider's own
  * published list is a rate that gets trusted more than it has earned.
@@ -127,9 +142,23 @@ const SNAPSHOTS = Object.freeze({
     /** Per-model exceptions to `provenance`. */
     modelProvenance: Object.freeze({ 'claude-opus-5-5': PRICING_PROVENANCE.OFFICIAL }),
   }),
+  'claude-ledger-calibrated-2026-09-30': Object.freeze({
+    id: 'claude-ledger-calibrated-2026-09-30',
+    provider: 'anthropic',
+    effectiveFrom: '2026-09-30',
+    models: ANTHROPIC_2026_09_30_MODELS,
+    provenance: PRICING_PROVENANCE.EMPIRICALLY_CALIBRATED,
+    derivedFrom: 'provider_reported_cost_usd',
+    sampleRows: 35,
+    validatedAt: '2026-09-12',
+    modelProvenance: Object.freeze({
+      'claude-opus-5-5': PRICING_PROVENANCE.OFFICIAL,
+      'claude-sonnet-5-5': PRICING_PROVENANCE.OFFICIAL,
+    }),
+  }),
 });
 
-export const DEFAULT_PRICING_SNAPSHOT_ID = 'claude-ledger-calibrated-2026-09-26';
+export const DEFAULT_PRICING_SNAPSHOT_ID = 'claude-ledger-calibrated-2026-09-30';
 
 /**
  * The model the ALL_OPUS counterfactual reprices every observed call as.
@@ -172,7 +201,7 @@ const TRAILING_DATE_SUFFIX = /-\d{8}$/;
  * must produce `UNKNOWN_MODEL` in the engine, never a borrowed or averaged
  * price.
  */
-export function resolveCanonicalModel(observedModel, { models = ANTHROPIC_2026_09_26_MODELS } = {}) {
+export function resolveCanonicalModel(observedModel, { models = ANTHROPIC_2026_09_30_MODELS } = {}) {
   if (typeof observedModel !== 'string' || observedModel === '') return null;
   if (models[observedModel]) return observedModel;
   if (MODEL_ALIASES[observedModel] && models[MODEL_ALIASES[observedModel]]) return MODEL_ALIASES[observedModel];
@@ -181,6 +210,6 @@ export function resolveCanonicalModel(observedModel, { models = ANTHROPIC_2026_0
   return null;
 }
 
-export function canonicalModelIds({ models = ANTHROPIC_2026_09_26_MODELS } = {}) {
+export function canonicalModelIds({ models = ANTHROPIC_2026_09_30_MODELS } = {}) {
   return Object.keys(models);
 }

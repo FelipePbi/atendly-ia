@@ -29,7 +29,7 @@ import { validateDeveloperJob, validateReviewDecision, PROTOCOL_VERSION_V2 } fro
 import { validatePlanningDecision } from '../lib/planning-decision.mjs';
 import { banner } from '../lib/worker-loop.mjs';
 
-const SONNET = 'claude-sonnet-5';
+const SONNET = 'claude-sonnet-5-5';
 const OPUS = 'claude-opus-5-5';
 const SHA_A = 'a'.repeat(40);
 const SHA_B = 'b'.repeat(40);
@@ -338,5 +338,5 @@ test('31b. the Developer worker source pins no model of its own', async () => {
   // The model must arrive on the job. A literal id here would be a second,
   // competing source of truth for the routing decision.
   assert.ok(!source.includes("'claude-opus-5-5'"), 'developer.mjs must not hardcode a model id');
-  assert.ok(!source.includes("'claude-sonnet-5'"), 'developer.mjs must not hardcode a model id');
+  assert.ok(!source.includes("'claude-sonnet-5-5'"), 'developer.mjs must not hardcode a model id');
 });

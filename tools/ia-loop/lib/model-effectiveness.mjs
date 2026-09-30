@@ -46,6 +46,44 @@ function canonicalOfModelKey(key) {
   }
 }
 
+function servedByKey(row, key) {
+  if (row.model_key) return row.model_key === key;
+  return typeof row.resolved_model === 'string' && row.resolved_model.startsWith(`claude-${key}-`);
+}
+
+function ranBefore(candidate, row) {
+  if (candidate === row) return false;
+  if (candidate.started_at && row.started_at) return candidate.started_at < row.started_at;
+  return n(candidate.attempt) < n(row.attempt);
+}
+
+/**
+ * The canonical model a fallback/escalation actually came FROM.
+ *
+ * A routing key is not a model: 'sonnet' meant Sonnet 5 until 2026-09-30 and
+ * Sonnet 5.5 after, 'opus' meant Opus 5 until 2026-09-26. Resolving the key
+ * through today's table would credit every historical escalation to the
+ * current generation. So the source is the latest earlier call the ledger
+ * itself records for that key — same Work Unit first, then same round, then
+ * anywhere — and today's table only when the ledger has no such call.
+ */
+function sourceModelOf(row, key, allRows) {
+  if (!key) return null;
+  const earlier = allRows.filter((candidate) => servedByKey(candidate, key) && candidate.resolved_model && ranBefore(candidate, row));
+  const sameRound = (candidate) => candidate.goal_id === row.goal_id && candidate.round_id === row.round_id;
+  const scopes = [
+    earlier.filter((candidate) => sameRound(candidate) && candidate.work_unit_id === row.work_unit_id),
+    earlier.filter(sameRound),
+    earlier,
+  ];
+  for (const scope of scopes) {
+    if (scope.length === 0) continue;
+    const latest = scope.reduce((a, b) => (ranBefore(a, b) ? b : a));
+    return resolveCanonicalModel(latest.resolved_model) ?? latest.resolved_model;
+  }
+  return canonicalOfModelKey(key);
+}
+
 /**
  * The ONE minimum-sample-size rule every effectiveness metric in this module
  * defers to. Centralised and pure so a threshold change never has to be
@@ -90,10 +128,10 @@ function buildModelRecord(model, { modelRows, allRows, unitsInvolved, attributio
   // modelRows, since the "from" model's own row never carries its own name
   // in fallback_from_model/escalation_from_model.
   const fallbackDestinationCalls = modelRows.filter((row) => row.is_fallback === 1 || row.is_fallback === true).length;
-  const fallbackSourceCalls = allRows.filter((row) => canonicalOfModelKey(row.fallback_from_model) === model).length;
+  const fallbackSourceCalls = allRows.filter((row) => sourceModelOf(row, row.fallback_from_model, allRows) === model).length;
   const escalationsReceived = modelRows.filter((row) => row.is_escalation === 1 || row.is_escalation === true);
   const escalationsResolved = escalationsReceived.filter((row) => row.status === 'COMPLETED').length;
-  const escalationSourceCalls = allRows.filter((row) => canonicalOfModelKey(row.escalation_from_model) === model).length;
+  const escalationSourceCalls = allRows.filter((row) => sourceModelOf(row, row.escalation_from_model, allRows) === model).length;
 
   // --- Work Unit level: first-pass success, retry, acceptance, repair -----
   let firstPassSuccessCalls = 0;

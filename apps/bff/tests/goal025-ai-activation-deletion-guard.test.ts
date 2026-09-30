@@ -42,61 +42,68 @@ const store = vi.hoisted(() => {
 
 vi.mock("../src/lib/prisma.js", () => {
   const byTenant = (where: { tenantId: string }) => where.tenantId;
+  const client = {
+    // `$transaction` só encadeia a mesma dublê: o que este arquivo prova é a
+    // guarda de não-reativação, não a atomicidade da escrita — essa é da
+    // suíte de integração do Goal077/WU-01.
+    $transaction: async (fn: (tx: typeof client) => unknown) => fn(client),
+    tenantNotification: {
+      createMany: async () => ({ count: 1 }),
+    },
+    aiSettings: {
+      findUnique: async ({ where }: { where: { tenantId: string } }) =>
+        store.aiSettings.get(byTenant(where)) ?? null,
+      update: async ({
+        where,
+        data,
+      }: {
+        where: { tenantId: string };
+        data: Record<string, unknown>;
+      }) => {
+        const current = store.aiSettings.get(byTenant(where));
+        if (!current) throw new Error("aiSettings row not found");
+        const next = { ...current, ...data };
+        store.aiSettings.set(byTenant(where), next);
+        return next;
+      },
+      upsert: async ({
+        where,
+        create,
+        update,
+      }: {
+        where: { tenantId: string };
+        create: Record<string, unknown>;
+        update: Record<string, unknown>;
+      }) => {
+        const current = store.aiSettings.get(byTenant(where));
+        const next = current
+          ? { ...current, ...update }
+          : ({ tone: null, ...create } as never);
+        store.aiSettings.set(byTenant(where), next);
+        return next;
+      },
+    },
+    accountDeletion: {
+      findUnique: async ({ where }: { where: { tenantId: string } }) =>
+        store.deletions.get(byTenant(where)) ?? null,
+    },
+    // A projeção do desejado lê o perfil do negócio; aqui ele só precisa
+    // existir, porque o que este teste observa é o `enabled` que sai.
+    businessProfile: {
+      upsert: async ({ where }: { where: { tenantId: string } }) => ({
+        tenantId: where.tenantId,
+      }),
+    },
+  };
   return {
-    getPrisma: () => ({
-      aiSettings: {
-        findUnique: async ({ where }: { where: { tenantId: string } }) =>
-          store.aiSettings.get(byTenant(where)) ?? null,
-        update: async ({
-          where,
-          data,
-        }: {
-          where: { tenantId: string };
-          data: Record<string, unknown>;
-        }) => {
-          const current = store.aiSettings.get(byTenant(where));
-          if (!current) throw new Error("aiSettings row not found");
-          const next = { ...current, ...data };
-          store.aiSettings.set(byTenant(where), next);
-          return next;
-        },
-        upsert: async ({
-          where,
-          create,
-          update,
-        }: {
-          where: { tenantId: string };
-          create: Record<string, unknown>;
-          update: Record<string, unknown>;
-        }) => {
-          const current = store.aiSettings.get(byTenant(where));
-          const next = current
-            ? { ...current, ...update }
-            : ({ tone: null, ...create } as never);
-          store.aiSettings.set(byTenant(where), next);
-          return next;
-        },
-      },
-      accountDeletion: {
-        findUnique: async ({ where }: { where: { tenantId: string } }) =>
-          store.deletions.get(byTenant(where)) ?? null,
-      },
-      // A projeção do desejado lê o perfil do negócio; aqui ele só precisa
-      // existir, porque o que este teste observa é o `enabled` que sai.
-      businessProfile: {
-        upsert: async ({ where }: { where: { tenantId: string } }) => ({
-          tenantId: where.tenantId,
-        }),
-      },
-    }),
+    getPrisma: () => client,
     disconnectPrisma: async () => {},
   };
 });
 
 const { reconcileAiActivation } = await import("../src/lib/ai-activation.js");
-const { assertAiActivationNotBlockedByDeletion } = await import(
-  "../src/modules/account/service.js"
-);
+const { assertAiActivationNotBlockedByDeletion } =
+  await import("../src/modules/account/service.js");
 type Deps = Parameters<typeof reconcileAiActivation>[1];
 
 const TENANT = "tenant-1";

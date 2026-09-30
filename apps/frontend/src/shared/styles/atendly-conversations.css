@@ -400,11 +400,6 @@
 .message-group.is-outgoing {
   align-items: flex-end;
 }
-.message-sender {
-  margin: 0 6px 5px;
-  color: var(--muted);
-  font-size: 12px;
-}
 .message-bubble {
   max-width: min(74%, 540px);
   padding: 11px 14px;

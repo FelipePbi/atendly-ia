@@ -7,7 +7,8 @@ export type NotificationLevelView = {
 
 /**
  * Três níveis do vault (`01-Regras/07-Lembretes-Notificacoes-e-Instabilidade`),
- * distintos por rótulo visível e cor — nunca só por cor (AGENTS.md).
+ * distintos por rótulo visível, pela forma do marcador e pela cor — nunca só
+ * por cor (AGENTS.md). O rótulo também entra no nome acessível da linha.
  */
 const LEVEL_VIEWS: Record<NotificationLevel, NotificationLevelView> = {
   INFO: { className: "is-info", label: "Informativa" },
@@ -59,6 +60,18 @@ const KIND_TITLES: Record<NotificationKind, string> = {
   WHATSAPP_DISCONNECTED: "WhatsApp desconectado",
   AI_UNAVAILABLE: "IA indisponível",
   SETUP_INCOMPLETE: "Configuração incompleta",
+  AI_ACTIVATED: "Sua IA está ativa",
+};
+
+/**
+ * Desfecho da condição resolvida (Goal077 §2): a descrição diz como foi
+ * resolvida, em vez de repetir a instrução do problema aberto.
+ */
+const RESOLVED_OUTCOMES: Partial<Record<NotificationKind, string>> = {
+  WHATSAPP_DISCONNECTED: "reconectado. A IA voltou a atender.",
+  AI_UNAVAILABLE: "a IA voltou a responder.",
+  CUSTOMER_WAITING_HUMAN: "a conversa foi atendida.",
+  SETUP_INCOMPLETE: "a configuração foi concluída.",
 };
 
 function record(payload: unknown): Record<string, unknown> {
@@ -94,6 +107,23 @@ export type NotificationCopy = {
  * frase para a versão genérica da espécie.
  */
 export function notificationCopy(notification: Notification): NotificationCopy {
+  const copy = openCopy(notification);
+  const outcome = RESOLVED_OUTCOMES[notification.kind];
+  if (isResolvedCondition(notification) && outcome && notification.resolvedAt) {
+    return {
+      ...copy,
+      description: `Resolvido às ${formatClock(notification.resolvedAt)} · ${outcome}`,
+    };
+  }
+  return copy;
+}
+
+/** Condição que o motor da central já deu por encerrada. */
+export function isResolvedCondition(notification: Notification): boolean {
+  return notification.shape === "CONDITION" && notification.resolvedAt !== null;
+}
+
+function openCopy(notification: Notification): NotificationCopy {
   const payload = record(notification.payload);
   const title = KIND_TITLES[notification.kind];
   switch (notification.kind) {
@@ -174,12 +204,68 @@ export function notificationCopy(notification: Notification): NotificationCopy {
         title,
       };
     }
+    case "AI_ACTIVATED":
+      // `payload` é sempre vazio (PUBLIC_API_V1.md): nenhum telefone aqui.
+      return {
+        description: "Teste real concluído. A IA passou a atender pelo WhatsApp.",
+        href: "/configuracoes/ia",
+        title,
+      };
   }
 }
 
-export function formatOccurredAt(value: string): string {
+/** Hora "HH:MM" no fuso do navegador, como o resto da central. */
+export function formatClock(value: string): string {
   return new Intl.DateTimeFormat("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
+    hour: "2-digit",
+    minute: "2-digit",
   }).format(new Date(value));
+}
+
+export type NotificationDayGroup = {
+  key: string;
+  label: string;
+  items: Notification[];
+};
+
+function localDayKey(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+/**
+ * Histórico agrupado pelo dia de `occurredAt` no fuso do navegador: "Hoje",
+ * "Ontem" e, antes disso, a data curta ("15/09"). A ordem das linhas é a que
+ * a rota devolveu; o grupo só junta as consecutivas do mesmo dia.
+ */
+export function groupNotificationsByDay(
+  items: Notification[],
+  now: Date = new Date(),
+): NotificationDayGroup[] {
+  const today = localDayKey(now);
+  const yesterdayDate = new Date(now);
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = localDayKey(yesterdayDate);
+  const groups: NotificationDayGroup[] = [];
+  for (const item of items) {
+    const occurred = new Date(item.occurredAt);
+    const key = localDayKey(occurred);
+    const last = groups.at(-1);
+    if (last && last.key === key) {
+      last.items.push(item);
+      continue;
+    }
+    const label =
+      key === today
+        ? "Hoje"
+        : key === yesterday
+          ? "Ontem"
+          : new Intl.DateTimeFormat("pt-BR", {
+              day: "2-digit",
+              month: "2-digit",
+            }).format(occurred);
+    groups.push({ key, label, items: [item] });
+  }
+  return groups;
 }

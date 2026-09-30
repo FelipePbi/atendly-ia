@@ -1459,4 +1459,99 @@ test.describe("reached by real click", () => {
     await saveDurationByForm(page, 45, testInfo);
     await saveDurationByForm(page, SEED.durationServiceMinutes, testInfo);
   });
+
+  /**
+   * The Home bell (Goal077 §5, NT-01). On a phone it still leads to the
+   * central on its own screen. From 768px on it opens the notifications
+   * drawer over the Home, without navigating: measured open for overflow and
+   * for the touch targets inside it (and the bell), then closed by Escape,
+   * with focus back on the bell.
+   */
+  test("inicio: the bell opens the notifications", async ({ page }, testInfo) => {
+    await waitForRateLimitBudget(testInfo);
+    watchRateLimitBudget(page);
+
+    const route = routeNamed("inicio");
+    await page.goto(route.path, { waitUntil: "networkidle" });
+    await proveAuthenticatedScreen(page, route);
+
+    const where = `/inicio at ${testInfo.project.name}`;
+    const width = page.viewportSize()?.width ?? 0;
+    if (width < 768) {
+      await clickForReal(page.locator("a.home-bell"), `${where}: the bell`, testInfo);
+      await expectPath(page, /^\/notificacoes$/u, `${where}: the bell`);
+      await expect(
+        page.getByRole("heading", { level: 1, name: "Central de notificações" }),
+        `${where}: the bell did not open the central on its own screen.`,
+      ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+      return;
+    }
+
+    const bell = page.locator("button.home-bell");
+    await clickForReal(bell, `${where}: the bell`, testInfo);
+    const drawer = page.getByRole("dialog", { name: "Notificações" });
+    await expect(
+      drawer,
+      `${where}: the bell did not open the notifications drawer.`,
+    ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+    await expect(
+      drawer.getByRole("link", { name: "Preferências de notificação" }),
+      `${where}: the drawer has no way to the preferences.`,
+    ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+    expect(new URL(page.url()).pathname, `${where}: opening the drawer navigated.`).toBe("/inicio");
+
+    const overflow = await measureOverflow(page);
+    await testInfo.attach("overflow-notifications-drawer", {
+      body: JSON.stringify(overflow, null, 2),
+      contentType: "application/json",
+    });
+    expect
+      .soft(
+        overflow.scrollWidth,
+        `horizontal scroll with the drawer open at ${testInfo.project.name}: `
+          + `${overflow.scrollWidth}px of content in ${overflow.clientWidth}px.\nFirst offenders: `
+          + JSON.stringify(overflow.offenders, null, 2),
+      )
+      .toBeLessThanOrEqual(overflow.clientWidth + OVERFLOW_TOLERANCE);
+
+    // The drawer's own controls and the bell: the rest of the Home is measured
+    // by the route's own test, at the widths where it applies.
+    const drawerControls = await drawer.evaluate((panel) =>
+      Array.from(
+        panel.querySelectorAll('a[href], button:not([disabled]), input:not([type="hidden"]), select, textarea'),
+      ).map((element) => element.outerHTML.slice(0, 160)),
+    );
+    const bellHtml = await bell.evaluate((element) => element.outerHTML.slice(0, 160));
+    const measured = (await measureTouchTargets(page)).filter(
+      (control) => drawerControls.includes(control.html) || control.html === bellHtml,
+    );
+    await testInfo.attach("controls-notifications-drawer", {
+      body: JSON.stringify(measured, null, 2),
+      contentType: "application/json",
+    });
+    expect
+      .soft(
+        measured.filter((control) => control.exempt === null).length,
+        `${where}: no touch-target controls measured in the drawer`,
+      )
+      .toBeGreaterThan(1);
+    const belowAA = measured.filter(
+      (control) => control.exempt === null
+        && (control.w < TOUCH_TARGET_AA || control.h < TOUCH_TARGET_AA),
+    );
+    expect
+      .soft(
+        belowAA,
+        `controls below the WCAG 2.5.8 AA minimum of ${TOUCH_TARGET_AA}px in the drawer at `
+          + `${testInfo.project.name}:\n${JSON.stringify(belowAA, null, 2)}`,
+      )
+      .toEqual([]);
+
+    await page.keyboard.press("Escape");
+    await expect(drawer, `${where}: Escape did not close the drawer.`).toBeHidden({
+      timeout: CONTENT_TIMEOUT_MS,
+    });
+    await expect(bell, `${where}: focus did not return to the bell.`).toBeFocused();
+    expect(new URL(page.url()).pathname, `${where}: closing the drawer navigated.`).toBe("/inicio");
+  });
 });

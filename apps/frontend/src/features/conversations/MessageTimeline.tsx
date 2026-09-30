@@ -64,7 +64,6 @@ function buildTimelineRows(
  * acontece numa conversa nova.
  */
 export function MessageTimeline({
-  businessName,
   businessTimezone,
   contentExpiredThrough,
   conversationId,
@@ -74,7 +73,6 @@ export function MessageTimeline({
   person,
   resendingId,
 }: {
-  businessName: string;
   businessTimezone: string;
   contentExpiredThrough: string | null;
   conversationId: string;
@@ -141,12 +139,10 @@ export function MessageTimeline({
             />
           ) : (
             <MessageBubble
-              businessName={businessName}
               conversationId={conversationId}
               key={row.key}
               message={row.message}
               onResend={onResend}
-              person={person}
               resending={resendingId === row.message.id}
             />
           ),
@@ -250,24 +246,22 @@ function DeliveryBadge({
 }
 
 export function MessageBubble({
-  businessName,
   conversationId,
   message,
   onResend,
-  person,
   resending,
 }: {
-  businessName: string;
   conversationId: string;
   message: Message;
   onResend: (message: Message) => void;
-  person: string;
   resending: boolean;
 }) {
   const outgoing = message.direction === "OUTBOUND";
   const source = message.source;
   const ai = source === "AI";
-  const sender = ai ? `${businessName} · IA` : outgoing ? "Você" : person;
+  const time = formatMessageTime(message.createdAt);
+  const meta = ai ? `IA · ${time}` : outgoing ? `Você · ${time}` : time;
+  const deliveryState = message.deliveryState;
   return (
     <div
       className={clsx(
@@ -278,7 +272,6 @@ export function MessageBubble({
         source === "CUSTOMER" && "is-customer",
       )}
     >
-      <span className="message-sender">{sender}</span>
       <div className="message-bubble">
         {message.body}
         {message.attachment && (
@@ -289,20 +282,13 @@ export function MessageBubble({
           />
         )}
       </div>
-      <span className="message-meta">
-        {formatMessageTime(message.createdAt)}
-        {ai
-          ? " · resposta automática"
-          : source === "OWNER"
-            ? " · atendimento humano"
-            : ""}
-      </span>
-      {outgoing && message.deliveryState && (
+      <span className="message-meta">{meta}</span>
+      {outgoing && deliveryState && deliveryState !== "SENT" && (
         <DeliveryBadge
           detail={message.deliveryDetail}
           onResend={() => onResend(message)}
           resending={resending}
-          state={message.deliveryState}
+          state={deliveryState}
         />
       )}
     </div>

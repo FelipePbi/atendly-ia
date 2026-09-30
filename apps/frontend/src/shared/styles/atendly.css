@@ -1033,8 +1033,8 @@ p {
   padding: 0;
 }
 .drawer {
-  width: min(100%, 400px);
-  max-width: 400px;
+  width: min(100%, 440px);
+  max-width: 440px;
   height: 100dvh;
   max-height: 100dvh;
   overflow-y: auto;

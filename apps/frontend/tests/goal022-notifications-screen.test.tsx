@@ -159,9 +159,9 @@ describe("marcar como lida reflete o que a rota devolveu", () => {
     markRead.mockResolvedValue({ updated: 2 });
     renderScreen();
 
-    await screen.findByRole("button", { name: "Marcar todas como lidas" });
+    await screen.findByRole("button", { name: "Marcar lidas" });
     await user.click(
-      screen.getByRole("button", { name: "Marcar todas como lidas" }),
+      screen.getByRole("button", { name: "Marcar lidas" }),
     );
 
     await waitFor(() => expect(markRead).toHaveBeenCalledWith({ all: true }));
@@ -170,7 +170,7 @@ describe("marcar como lida reflete o que a rota devolveu", () => {
       expect(screen.queryByText("Não lida")).not.toBeInTheDocument(),
     );
     expect(
-      screen.queryByRole("button", { name: "Marcar todas como lidas" }),
+      screen.queryByRole("button", { name: "Marcar lidas" }),
     ).not.toBeInTheDocument();
   });
 });

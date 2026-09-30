@@ -68,6 +68,11 @@
   font-weight: 700;
 }
 
+/*
+ * A forma do marcador muda por nível (Goal077 §2): círculo para
+ * informativa, quadrado girado para atenção e triângulo para crítica — o
+ * nível continua legível sem cor, além do rótulo e do nome acessível da linha.
+ */
 .notifications-level-dot {
   width: 10px;
   height: 10px;
@@ -76,9 +81,13 @@
   background: var(--border-strong);
 }
 .notifications-level-dot.is-attention {
+  border-radius: 1px;
+  transform: rotate(45deg) scale(0.85);
   background: color-mix(in oklch, var(--coral), black 24%);
 }
 .notifications-level-dot.is-critical {
+  border-radius: 0;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
   background: var(--danger);
 }
 .notifications-level-dot.is-info {
@@ -116,6 +125,51 @@
   margin: 0;
   color: var(--muted);
   font-size: 13px;
+}
+
+/* Condição resolvida: título riscado, sem perder contraste nem o selo. */
+.notifications-row.is-resolved .notifications-row-title {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+/* Histórico por dia: "Hoje", "Ontem" e a data curta. */
+.notifications-days {
+  display: grid;
+  gap: 20px;
+}
+.notifications-day {
+  display: grid;
+  gap: 8px;
+}
+.notifications-day-title {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Gaveta (Goal077 §3): a mesma lista, sem a preferência. */
+.notifications-drawer-body {
+  display: grid;
+  gap: 16px;
+}
+.notifications-drawer-body > .notifications-panel {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+}
+.notifications-drawer-footer {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.notifications-drawer-footer a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .badge-unread {

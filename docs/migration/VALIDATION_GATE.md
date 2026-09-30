@@ -3188,3 +3188,59 @@ Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal078-2026-09-29-d-09
 [review078](reviews/078-review.md) (rodada 4 do IA Loop, sem blocker; os
 gates da rodada 4 passaram, inclusive `validate:integration` no próprio IA
 Loop, com as mesmas contagens da execução final da rodada 2).
+
+## Central de notificações em gaveta, espécie `AI_ACTIVATED` e autoria discreta sob a bolha, do Goal077
+
+`apps/bff/` ganha a espécie `AI_ACTIVATED` por uma migration aditiva do enum
+`NotificationKind` (`20260929000000_goal077_notification_ai_activated`),
+escrita na mesma transação que liga a IA. `apps/frontend/` ganha a copy da
+espécie, o desfecho da condição resolvida, o histórico por dia, a gaveta da
+central a partir de 768 px e a autoria discreta sob a bolha do chat.
+`packages/public-api-contract/` lista a espécie em `notificationKindSchema`.
+Nenhuma rota nova; nenhuma rota entra ou sai de `PUBLIC_ROUTES`,
+`AUTHENTICATED_ROUTES` ou `ONBOARDING_ROUTES`.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `goal077-ai-activated-notification.integration.test.ts` (BFF, banco real, **10** testes): uma `AI_ACTIVATED` por execução, na mesma transação da ativação, só no negócio da sessão, `payload` vazio; pausar, troca de canal, conta em exclusão e ativação recusada não criam | Que a notificação aparece depois de um teste real num WhatsApp real — IA e Scheduling são dublês HTTP |
+| `rehearse:goal028-release-migrations`: a migration nova aplica do zero e o `migrate diff` do BFF não mostra drift | Migration em banco de produto |
+| `goal077-notifications-center.test.tsx` e `goal077-notifications-drawer.test.tsx` (jsdom): copy, desfecho, agrupamento, nome acessível com o nível, gaveta com `Escape` e foco devolvido, sino como link no celular | Layout real, contraste e largura — decididos pelo gate autenticado |
+| `goal077-message-authorship.test.tsx` (jsdom): "IA · hora", "Você · hora", só a hora da cliente, `SENT` sem selo, `PENDING`/`FAILED`/`UNKNOWN` visíveis | Que a linha de autoria é discreta aos olhos de uma pessoa |
+| Teste novo "inicio: the bell opens the notifications" no gate autenticado, nas cinco larguras: link para `/notificacoes` em 360 e 390; em 768, 1024 e 1440, o diálogo "Notificações" sem navegar, overflow e toque (≥ 24 px) do sino e dos controles da gaveta, `Escape` e foco de volta no sino | Fidelidade aos protótipos `Notificacoes*.dc.html` e `Conversas*.dc.html` |
+
+O marcador de sessão de `/notificacoes` em `e2e/routes.ts` é
+`a[href="/notificacoes"][aria-current="page"]`: o item "Notificações" da
+sidebar continua link para `/notificacoes`, e o clique simples abre a
+gaveta. Uma pré-checagem do gate autenticado com o item como botão reprovou
+`/notificacoes` nas cinco larguras por esse marcador, antes da execução
+final; nenhuma linha de `e2e/routes.ts` nem do spec existente mudou.
+
+**Execução final do FIX-001 da rodada 2, depois da última edição de código:**
+`npm run validate:core` — **17** passos, **15** `passed`, **0** `failed`,
+**2** `skipped` (`test:bff`, `test:health-worker`), exit 0, com
+`test:frontend` **112**/**1146** (baseline recontada **109**/**1128**);
+`npm run test:gate` — **233**/**233**, exit 0; `npm run validate:ui` —
+**169** `passed`, **21** `skipped`, **0** retentativas, exit 0;
+`BFF_TEST_DATABASE_URL=postgresql://pgtest@127.0.0.1:55432/atendly_bff_test_g077r2 npm run validate:integration`
+— **36** passos, **36** `passed`, exit 0, com `test:bff-integration`
+**60**/**465** (baseline recontada **59**/**455**), sem drift no BFF, e
+`rehearse:goal033-authenticated-ui` com **160** testes passando (**155** da
+baseline mais o novo nas cinco larguras) e **0** retentativas. Os oito
+controles negativos do §7 foram rodados depois dessa execução; saída real
+em [FINAL_AUDIT §54](FINAL_AUDIT.md).
+
+**Conferência humana pendente.** A conferência do §9 do Goal **não foi
+feita**: Conversas e a central num aparelho real nas cinco larguras frente
+aos seis protótipos; a legibilidade de "IA · 13:38"; a gaveta de 440 px
+sobre a Home no tablet; o item "Notificações" mantido na sidebar
+(divergência declarada frente ao protótipo); e "Sua IA está ativa" depois
+de um teste real num WhatsApp real. Nenhum teste é declarado prova de
+fidelidade visual.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal077-2026-09-29-d-093-accepted),
+[FINAL_AUDIT §54](FINAL_AUDIT.md) e [D-093](DECISIONS.md), **ACCEPTED** no
+[review077](reviews/077-review.md) (rodada 3 do IA Loop, sem blocker; a
+rodada 3 só restaurou seis arquivos de configuração de teste e build que as
+unidades de diagnóstico tinham editado, e os gates passaram, inclusive
+`validate:integration` no próprio IA Loop, com as mesmas contagens da
+execução final da rodada 2).

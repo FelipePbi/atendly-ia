@@ -28,6 +28,7 @@ export const NOTIFICATION_SPECIES: Record<
   WHATSAPP_DISCONNECTED: { level: "CRITICAL", shape: "CONDITION" },
   AI_UNAVAILABLE: { level: "CRITICAL", shape: "CONDITION" },
   SETUP_INCOMPLETE: { level: "ATTENTION", shape: "CONDITION" },
+  AI_ACTIVATED: { level: "INFO", shape: "EVENT" },
 };
 
 export const NOTIFICATION_KINDS = Object.keys(
@@ -65,6 +66,15 @@ export function importSessionDedupeKey(sessionId: string): string {
 /** `sequence` do `AppointmentEvent`: único e monotônico no dono. */
 export function aiAppointmentDedupeKey(sequence: string): string {
   return `AI_APPOINTMENT_CREATED:event:${sequence}`;
+}
+
+/**
+ * A execução do teste que autorizou a ativação (Goal077/WU-01): único e
+ * consumido no máximo uma vez em `AiSettings.activatedByRunId`, então
+ * religar com a mesma execução nunca duplica a notificação.
+ */
+export function aiActivatedDedupeKey(runId: string): string {
+  return `AI_ACTIVATED:run:${runId}`;
 }
 
 /**

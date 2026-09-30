@@ -102,10 +102,11 @@ describe("deliveryState nos quatro valores, composto no balão", () => {
     expect(screen.getByText("Enviando…")).toBeVisible();
   });
 
-  test("SENT é entrega confirmada", async () => {
+  test("SENT não mostra selo próprio (Goal077 §6.11): só a linha de autoria/hora", async () => {
     await renderThread([messageFixture({ deliveryState: "SENT" })]);
 
-    expect(screen.getByText("Enviado")).toBeVisible();
+    expect(document.querySelector(".message-delivery")).toBeNull();
+    expect(screen.queryByText("Enviado")).toBeNull();
   });
 
   test("FAILED mostra o detalhe e oferece reenviar", async () => {
@@ -133,7 +134,7 @@ describe("deliveryState nos quatro valores, composto no balão", () => {
     ).toBeNull();
   });
 
-  test("os quatro valores usam rótulos diferentes entre si", async () => {
+  test("os três selos visíveis (PENDING, FAILED, UNKNOWN) usam rótulos diferentes entre si; SENT não soma selo", async () => {
     await renderThread([
       messageFixture({ deliveryState: "PENDING", id: "m-pending" }),
       messageFixture({ deliveryState: "SENT", id: "m-sent" }),
@@ -141,12 +142,12 @@ describe("deliveryState nos quatro valores, composto no balão", () => {
       messageFixture({ deliveryState: "UNKNOWN", id: "m-unknown" }),
     ]);
 
+    const badges = document.querySelectorAll(".message-delivery");
     const labels = new Set(
-      Array.from(document.querySelectorAll(".message-delivery")).map(
-        (node) => node.textContent,
-      ),
+      Array.from(badges).map((node) => node.textContent),
     );
-    expect(labels.size).toBe(4);
+    expect(badges).toHaveLength(3);
+    expect(labels.size).toBe(3);
   });
 });
 

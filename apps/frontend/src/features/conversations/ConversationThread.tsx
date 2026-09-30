@@ -487,7 +487,6 @@ export function ConversationThread({
           </div>
 
           <MessageTimeline
-            businessName={businessName}
             businessTimezone={businessTimezone}
             contentExpiredThrough={conversation.contentExpiredThrough ?? null}
             conversationId={conversation.id}

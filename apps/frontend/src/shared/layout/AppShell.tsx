@@ -5,6 +5,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
+import {
+  NotificationsDrawerProvider,
+  useNotificationsDrawer,
+} from "@/features/notifications/NotificationsDrawer";
 import { Icon } from "@/shared/icons/Icon";
 import {
   getProductServices,
@@ -49,11 +53,16 @@ const OFFICIAL_SOURCE_LABEL = "Agenda Atendly";
  * (Goal018/WU-10): o chrome do shell e a tela filha (ex.: `DashboardScreen`)
  * leem o mesmo resultado via `useSystemStatus`, em vez de cada um abrir seu
  * próprio `setInterval`/listener de `focus`.
+ *
+ * `NotificationsDrawerProvider` monta a gaveta da central (Goal077 §3): o
+ * item "Notificações" da sidebar e o sino da Home abrem a mesma gaveta.
  */
 export function AppShell(props: AppShellProps) {
   return (
     <SystemStatusProvider>
-      <AppShellChrome {...props} />
+      <NotificationsDrawerProvider>
+        <AppShellChrome {...props} />
+      </NotificationsDrawerProvider>
     </SystemStatusProvider>
   );
 }
@@ -74,6 +83,7 @@ function AppShellChrome({
   const pathname = usePathname();
   const { session, setUnauthenticated } = useProductRuntime();
   const status = useSystemStatus();
+  const notificationsDrawer = useNotificationsDrawer();
   const [accountOpen, setAccountOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
@@ -196,12 +206,36 @@ function AppShellChrome({
           </nav>
           <div className="sidebar-bottom">
             <nav className="nav">
+              {/*
+                A sidebar só aparece a partir de 768 px, a largura da gaveta:
+                o clique no item abre a central sobre a tela em vez de navegar
+                (Goal077 §3). Continua link para /notificacoes — abrir em nova
+                aba e o destino atual seguem funcionando. Divergência
+                declarada frente ao protótipo, que não tem o item: sem ele a
+                central ficaria inalcançável fora da Home.
+              */}
               <Link
                 className={clsx(
                   "nav-item",
                   active === "notificacoes" && "is-active",
                 )}
                 href={NOTIFICATIONS_DESTINATION.href}
+                onClick={(event) => {
+                  if (
+                    !notificationsDrawer ||
+                    active === "notificacoes" ||
+                    event.button !== 0 ||
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.shiftKey ||
+                    event.altKey
+                  ) {
+                    return;
+                  }
+                  event.preventDefault();
+                  notificationsDrawer.open();
+                }}
+                aria-haspopup={active === "notificacoes" ? undefined : "dialog"}
                 aria-current={active === "notificacoes" ? "page" : undefined}
               >
                 <Icon name={NOTIFICATIONS_DESTINATION.icon} />

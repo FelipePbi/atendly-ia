@@ -124,7 +124,7 @@ beforeEach(() => {
 });
 
 describe("autoria discreta e honesta por source", () => {
-  test("CUSTOMER aparece com o nome da pessoa, à esquerda", async () => {
+  test("CUSTOMER mostra só a hora, sem nome nem rótulo (Goal077 §6.10)", async () => {
     await renderThread([
       messageFixture({
         body: "Oi, tudo bem?",
@@ -136,26 +136,32 @@ describe("autoria discreta e honesta por source", () => {
 
     const bubble = screen.getByText("Oi, tudo bem?").closest(".message-group");
     expect(bubble).not.toBeNull();
-    expect(within(bubble as HTMLElement).getByText("Marina Duarte")).toBeVisible();
+    expect(
+      within(bubble as HTMLElement).queryByText("Marina Duarte"),
+    ).toBeNull();
+    const meta = (bubble as HTMLElement).querySelector(".message-meta");
+    expect(meta?.textContent).toMatch(/^\d{2}:\d{2}$/);
     expect(bubble).not.toHaveClass("is-outgoing");
     expect(bubble).toHaveClass("is-customer");
   });
 
-  test("AI se apresenta como escrita pela IA, nunca com nome de pessoa", async () => {
+  test("AI se apresenta como 'IA · hora' abaixo da bolha, nunca com nome de pessoa ou do negócio (Goal077 §6.10)", async () => {
     await renderThread([
       messageFixture({ body: "Posso ajudar em algo?", id: "msg-ai" }),
     ]);
 
-    expect(screen.getByText("Studio Marina · IA")).toBeVisible();
-    expect(screen.getByText(/resposta automática/)).toBeVisible();
     const bubble = screen
       .getByText("Posso ajudar em algo?")
       .closest(".message-group");
+    const meta = (bubble as HTMLElement).querySelector(".message-meta");
+    expect(meta?.textContent).toMatch(/^IA · \d{2}:\d{2}$/);
+    expect(screen.queryByText(/Studio Marina/)).toBeNull();
+    expect(screen.queryByText(/resposta automática/)).toBeNull();
     expect(bubble).toHaveClass("is-ai");
     expect(bubble).toHaveClass("is-outgoing");
   });
 
-  test("OWNER se apresenta como Você, distinto da IA", async () => {
+  test("OWNER se apresenta como 'Você · hora', distinto da IA (Goal077 §6.10)", async () => {
     await renderThread([
       messageFixture({
         body: "Já te atendo",
@@ -164,9 +170,10 @@ describe("autoria discreta e honesta por source", () => {
       }),
     ]);
 
-    expect(screen.getByText("Você")).toBeVisible();
-    expect(screen.getByText(/atendimento humano/)).toBeVisible();
     const bubble = screen.getByText("Já te atendo").closest(".message-group");
+    const meta = (bubble as HTMLElement).querySelector(".message-meta");
+    expect(meta?.textContent).toMatch(/^Você · \d{2}:\d{2}$/);
+    expect(screen.queryByText(/atendimento humano/)).toBeNull();
     expect(bubble).toHaveClass("is-owner");
     expect(bubble).not.toHaveClass("is-ai");
   });

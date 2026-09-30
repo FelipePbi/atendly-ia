@@ -368,6 +368,7 @@ enum NotificationKind {
   WHATSAPP_DISCONNECTED
   AI_UNAVAILABLE
   SETUP_INCOMPLETE
+  AI_ACTIVATED
 }
 
 /// Os tres niveis do produto. Derivado de `kind` por tabela fixa no codigo,

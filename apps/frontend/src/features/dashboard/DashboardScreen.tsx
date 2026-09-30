@@ -10,6 +10,10 @@ import {
   type CalendarState,
   type Dashboard,
 } from "@/data";
+import {
+  useNotificationsDrawer,
+  useNotificationsDrawerViewport,
+} from "@/features/notifications/NotificationsDrawer";
 import { Icon, type IconName } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import {
@@ -524,19 +528,39 @@ function AgendaToday({
   );
 }
 
+/**
+ * O sino da Home (Goal074, Goal077 §3): a partir de 768 px abre a gaveta da
+ * central sobre a Home, sem navegar; abaixo disso — e fora da casca, onde não
+ * há gaveta — é o link para a central em tela própria.
+ */
 function HomeBell({ unreadCount }: { unreadCount: number }) {
-  return (
-    <Link
-      aria-label={
-        unreadCount > 0
-          ? `Notificações, ${unreadCount} não lidas`
-          : "Notificações"
-      }
-      className="home-bell"
-      href="/notificacoes"
-    >
+  const drawer = useNotificationsDrawer();
+  const wide = useNotificationsDrawerViewport();
+  const label =
+    unreadCount > 0 ? `Notificações, ${unreadCount} não lidas` : "Notificações";
+  const content = (
+    <>
       <Icon name="inbox" />
       {unreadCount > 0 && <span className="home-bell-dot" aria-hidden="true" />}
+    </>
+  );
+  if (drawer && wide) {
+    return (
+      <button
+        aria-expanded={drawer.isOpen}
+        aria-haspopup="dialog"
+        aria-label={label}
+        className="home-bell"
+        onClick={drawer.open}
+        type="button"
+      >
+        {content}
+      </button>
+    );
+  }
+  return (
+    <Link aria-label={label} className="home-bell" href="/notificacoes">
+      {content}
     </Link>
   );
 }

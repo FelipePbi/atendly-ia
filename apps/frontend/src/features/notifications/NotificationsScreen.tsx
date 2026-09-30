@@ -11,27 +11,30 @@ import { Skeleton, StatePanel } from "@/shared/ui/States";
 
 import { NotificationPreferenceSection } from "./NotificationPreferenceSection";
 import {
-  formatOccurredAt,
+  formatClock,
+  groupNotificationsByDay,
+  isResolvedCondition,
   notificationCopy,
   notificationLevelView,
 } from "./notificationViews";
 
 const PAGE_SIZE = 20;
 
+type NotificationListState = {
+  error: boolean;
+  items: Notification[] | null;
+  total: number;
+  reload: () => Promise<void>;
+};
+
 /**
- * Central de notificações (Goal022/WU-07): três níveis distintos, não lida
- * destacada, marcar uma/todas como lidas, condição resolvida identificada
- * como resolvida (nunca some da lista), histórico recente e a preferência de
- * agendamento criado pela IA. Toda mutação recarrega a lista do zero — nunca
- * soma contagem local — para que o que a tela mostra seja sempre o que a
- * rota devolveu.
+ * A leitura de `GET /v1/notifications` que a página e a gaveta compartilham
+ * (Goal077 §3): a mesma lista, com a mesma página e o mesmo recarregamento.
  */
-export function NotificationsScreen() {
+function useNotificationList(): NotificationListState {
   const [items, setItems] = useState<Notification[] | null>(null);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [markingAll, setMarkingAll] = useState(false);
 
   const load = useCallback((signal?: AbortSignal) => {
     return getProductServices()
@@ -53,18 +56,136 @@ export function NotificationsScreen() {
     return () => controller.abort();
   }, [load]);
 
+  return { error, items, reload: () => load(), total };
+}
+
+/**
+ * Central de notificações (Goal022/WU-07, Goal077): três níveis distintos,
+ * não lida destacada, marcar uma/todas como lidas, condição resolvida dizendo
+ * como foi resolvida (nunca some da lista), histórico agrupado por dia e a
+ * preferência de agendamento criado pela IA — esta última só aqui, nunca na
+ * gaveta. Toda mutação recarrega a lista do zero — nunca soma contagem local —
+ * para que o que a tela mostra seja sempre o que a rota devolveu.
+ */
+export function NotificationsScreen() {
+  const list = useNotificationList();
+
   useShellConfig({
     active: "notificacoes",
-    loading: !items && !error,
+    loading: !list.items && !list.error,
     module: "settings",
     title: "Notificações",
   });
+
+  if (!list.items && !list.error) {
+    return (
+      <Page>
+        <NotificationsLoading />
+      </Page>
+    );
+  }
+
+  if (list.error || !list.items) {
+    return (
+      <Page>
+        <NotificationsUnavailable onRetry={() => void list.reload()} />
+      </Page>
+    );
+  }
+
+  return (
+    <Page>
+      <section className="notifications-panel">
+        <NotificationHistory
+          heading={
+            <div>
+              <h2>Histórico recente</h2>
+              <p>
+                {list.total > 0
+                  ? `${list.total} nos últimos 90 dias`
+                  : "Nenhuma nos últimos 90 dias"}
+              </p>
+            </div>
+          }
+          items={list.items}
+          reload={list.reload}
+        />
+      </section>
+      <NotificationPreferenceSection />
+    </Page>
+  );
+}
+
+/**
+ * O conteúdo da gaveta (Goal077 §3): a mesma lista e as mesmas mutações da
+ * página, sem a preferência — que fica só em `/notificacoes`, alcançável pelo
+ * link do rodapé.
+ */
+export function NotificationsDrawerContent({
+  onNavigate,
+}: {
+  onNavigate: () => void;
+}) {
+  const list = useNotificationList();
+
+  return (
+    <div className="notifications-drawer-body">
+      {!list.items && !list.error ? (
+        <NotificationsLoading />
+      ) : list.error || !list.items ? (
+        <NotificationsUnavailable onRetry={() => void list.reload()} />
+      ) : (
+        <NotificationHistory items={list.items} reload={list.reload} />
+      )}
+      <footer className="notifications-drawer-footer">
+        <Link href="/notificacoes" onClick={onNavigate}>
+          Preferências de notificação
+        </Link>
+      </footer>
+    </div>
+  );
+}
+
+function NotificationsLoading() {
+  return (
+    <div aria-busy="true" className="notifications-panel">
+      <Skeleton style={{ width: "60%", height: 20 }} />
+      <Skeleton style={{ width: "100%", height: 72 }} />
+      <Skeleton style={{ width: "100%", height: 72 }} />
+    </div>
+  );
+}
+
+function NotificationsUnavailable({ onRetry }: { onRetry: () => void }) {
+  return (
+    <StatePanel
+      actionLabel="Tentar de novo"
+      description="Nada foi alterado. Tente carregar a página novamente."
+      icon="alert"
+      onAction={onRetry}
+      title="Notificações indisponíveis"
+      tone="error"
+    />
+  );
+}
+
+function NotificationHistory({
+  heading,
+  items,
+  reload,
+}: {
+  heading?: ReactNode;
+  items: Notification[];
+  reload: () => Promise<void>;
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [markingAll, setMarkingAll] = useState(false);
 
   async function markOne(id: string) {
     setBusyId(id);
     try {
       await getProductServices().notifications.markRead({ id });
-      await load();
+      await reload();
     } finally {
       setBusyId(null);
     }
@@ -74,53 +195,19 @@ export function NotificationsScreen() {
     setMarkingAll(true);
     try {
       await getProductServices().notifications.markRead({ all: true });
-      await load();
+      await reload();
     } finally {
       setMarkingAll(false);
     }
   }
 
-  if (!items && !error) {
-    return (
-      <Page>
-        <div aria-busy="true" className="notifications-panel">
-          <Skeleton style={{ width: "60%", height: 20 }} />
-          <Skeleton style={{ width: "100%", height: 72 }} />
-          <Skeleton style={{ width: "100%", height: 72 }} />
-        </div>
-      </Page>
-    );
-  }
-
-  if (error || !items) {
-    return (
-      <Page>
-        <StatePanel
-          actionLabel="Tentar de novo"
-          description="Nada foi alterado. Tente carregar a página novamente."
-          icon="alert"
-          onAction={() => void load()}
-          title="Notificações indisponíveis"
-          tone="error"
-        />
-      </Page>
-    );
-  }
-
   const hasUnread = items.some((item) => item.readAt === null);
 
   return (
-    <Page>
-      <section className="notifications-panel">
+    <>
+      {(heading || hasUnread) && (
         <div className="notifications-panel-header">
-          <div>
-            <h2>Histórico recente</h2>
-            <p>
-              {total > 0
-                ? `${total} nos últimos 90 dias`
-                : "Nenhuma nos últimos 90 dias"}
-            </p>
-          </div>
+          {heading}
           {hasUnread && (
             <Button
               loading={markingAll}
@@ -128,31 +215,37 @@ export function NotificationsScreen() {
               type="button"
               variant="secondary"
             >
-              Marcar todas como lidas
+              Marcar lidas
             </Button>
           )}
         </div>
-        {items.length === 0 ? (
-          <StatePanel
-            description="Nada exige sua atenção agora."
-            icon="check"
-            title="Tudo em dia"
-          />
-        ) : (
-          <ul className="notifications-list">
-            {items.map((item) => (
-              <NotificationRow
-                busy={busyId === item.id}
-                key={item.id}
-                notification={item}
-                onMarkRead={() => void markOne(item.id)}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
-      <NotificationPreferenceSection />
-    </Page>
+      )}
+      {items.length === 0 ? (
+        <StatePanel
+          description="Nada exige sua atenção agora."
+          icon="check"
+          title="Tudo em dia"
+        />
+      ) : (
+        <div className="notifications-days">
+          {groupNotificationsByDay(items).map((group) => (
+            <section className="notifications-day" key={group.key}>
+              <h3 className="notifications-day-title">{group.label}</h3>
+              <ul className="notifications-list">
+                {group.items.map((item) => (
+                  <NotificationRow
+                    busy={busyId === item.id}
+                    key={item.id}
+                    notification={item}
+                    onMarkRead={() => void markOne(item.id)}
+                  />
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -168,8 +261,7 @@ function NotificationRow({
   const level = notificationLevelView(notification.level);
   const copy = notificationCopy(notification);
   const unread = notification.readAt === null;
-  const resolved =
-    notification.shape === "CONDITION" && notification.resolvedAt !== null;
+  const resolved = isResolvedCondition(notification);
 
   const body = (
     <div className="notifications-row-body">
@@ -180,16 +272,19 @@ function NotificationRow({
         {unread && <span className="badge badge-unread">Não lida</span>}
         {resolved && <span className="badge badge-success">Resolvido</span>}
         <span className="notifications-row-time">
-          {formatOccurredAt(notification.occurredAt)}
+          {formatClock(notification.occurredAt)}
         </span>
       </div>
-      <strong>{copy.title}</strong>
+      <strong className="notifications-row-title">{copy.title}</strong>
       <p>{copy.description}</p>
     </div>
   );
 
   return (
-    <li className={`notifications-row${unread ? " is-unread" : ""}`}>
+    <li
+      aria-label={`${level.label}: ${copy.title}${resolved ? " (resolvido)" : ""}`}
+      className={`notifications-row${unread ? " is-unread" : ""}${resolved ? " is-resolved" : ""}`}
+    >
       <span
         aria-hidden="true"
         className={`notifications-level-dot ${level.className}`}

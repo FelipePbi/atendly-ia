@@ -7793,3 +7793,90 @@ migration, nenhuma mudança de `schema.prisma`. Decisão:
   genérica esconde que o serviço já foi salvo. A conferência humana do §9
   continua **não feita**. Ver a nota de fechamento de
   [D-092](DECISIONS.md) e o [review078](reviews/078-review.md).
+
+## Delta implementado — Goal077, 2026-09-29 ([D-093](DECISIONS.md), ACCEPTED)
+
+Corrige **CV-05**, **NT-01** e **NT-02** do
+[QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md), fora da enumeração A-01…A-24 do
+FINAL_AUDIT. Toca `apps/bff/`, `packages/public-api-contract/` e
+`apps/frontend/`, com **uma** migration aditiva no BFF e nenhuma rota nova.
+Decisão: [D-093](DECISIONS.md), proposta no Goal077, **PROPOSED**. Escrito
+pelo FIX-001 da rodada 2 do IA Loop, depois da execução final e dos oito
+controles negativos desta rodada.
+
+- **Espécie `AI_ACTIVATED`** (`INFO`, `EVENT`). Migration
+  `20260929000000_goal077_notification_ai_activated` (`ALTER TYPE
+  "NotificationKind" ADD VALUE 'AI_ACTIVATED'`), `NOTIFICATION_SPECIES`,
+  `notificationKindSchema` e `apps/bff/PUBLIC_API_V1.md`. Nasce na mesma
+  transação que grava `enabled: true` com uma execução do teste real, na
+  autoativação (`ai-activation.ts`) e em `PATCH /v1/settings/ai`; dedupe
+  `AI_ACTIVATED:run:<runId>`; `payload` `{}` e `subjectId` `null`. Pausar,
+  troca de canal, conta em exclusão e ativação recusada não criam
+  notificação. O motor da central não ganha fonte nova.
+- **A central.** "Sua IA está ativa" com "Teste real concluído. A IA passou
+  a atender pelo WhatsApp."; condição resolvida com "Resolvido às HH:MM ·
+  <desfecho>" (quatro desfechos, hora do navegador), título riscado e selo
+  "Resolvido"; histórico agrupado em "Hoje", "Ontem" e data curta; nome
+  acessível com o nível em cada linha e marcador com forma por nível;
+  "Marcar lidas".
+- **A gaveta.** A partir de 768 px, o sino da Home e o item "Notificações"
+  da sidebar abrem um `Dialog` `variant="drawer"` de 440 px à direita, com
+  título "Notificações", "Marcar lidas", "Fechar" e o link "Preferências de
+  notificação" para `/notificacoes`, sem navegar; `Escape`, "Fechar" e o
+  fundo fecham e devolvem o foco. Abaixo de 768 px o sino continua link para
+  `/notificacoes`. O item da sidebar continua link para `/notificacoes` (o
+  clique simples abre a gaveta), o que mantém o marcador de sessão do gate
+  autenticado. A preferência fica só na página, que mantém "Central de
+  notificações". O "Mais" do celular não muda.
+- **A bolha.** Sem rótulo de autor acima; abaixo, "IA · HH:MM", "Você ·
+  HH:MM" ou só a hora. `SENT` sem selo; `PENDING`, `FAILED` (com "Tentar
+  reenviar") e `UNKNOWN` continuam visíveis.
+- **Teste novo do gate autenticado**, no bloco "reached by real click" de
+  `e2e/authenticated-matrix.spec.ts`: "inicio: the bell opens the
+  notifications", nas cinco larguras (em 360 e 390, `/notificacoes` com
+  "Central de notificações"; em 768, 1024 e 1440, o diálogo "Notificações"
+  com o caminho ainda `/inicio`, overflow e toque medidos, `Escape` e foco
+  de volta no sino). Nenhuma linha existente do spec e nenhuma linha de
+  `e2e/routes.ts` mudaram.
+- **Vermelho da baseline `b0e42ad`**, rodado nesta rodada: os três arquivos
+  novos do frontend, `Tests 13 failed | 5 passed (18)` (os cinco que passam
+  guardam comportamento que já existia); o arquivo novo do BFF, `Tests 10
+  failed (10)`. Recontagem na baseline: `test:frontend` **109**/**1128** e
+  `test:bff-integration` **59**/**455**.
+- **Execução final**, depois da última edição de código, todos exit 0:
+  `validate:core` **17** passos (**15** `passed`, **2** `skipped`), com
+  `test:frontend` **112**/**1146**, `test:ai-orchestrator` **1177**
+  passando e **93** pulados de **1270** e `test:scheduling-service`
+  **37**/**502**; `test:gate` **233**; `validate:ui` **169** `passed`,
+  **21** `skipped`, **0** retentativas; `validate:integration` **36**/**36**
+  passos contra `127.0.0.1:55432/atendly_bff_test_g077r2`, com
+  `test:bff-integration` **60**/**465**, `migrate diff` do BFF sem drift e o
+  gate autenticado com **160** testes e **0** retentativas.
+- **Oito controles negativos do §7**, todos nesta rodada, depois da
+  execução final, por edição real revertida e conferida por hash: cada um
+  reprova o teste esperado com o defeito e passa sem ele. Saída em
+  [FINAL_AUDIT §54](FINAL_AUDIT.md).
+- **Conferência humana pendente:** a conferência do §9 do Goal **não foi
+  feita** — o chat aberto e a central num aparelho real nas cinco larguras
+  frente aos seis protótipos, a legibilidade de "IA · 13:38", a gaveta de
+  440 px sobre a Home no tablet, a manutenção do item "Notificações" na
+  sidebar (**divergência declarada** frente ao protótipo, que não tem o
+  item) e "Sua IA está ativa" depois de um teste real num WhatsApp real.
+- **Limites declarados:** antes de o React montar, o sino é link em
+  qualquer largura; o contador da sidebar acompanha o tick de
+  `GET /v1/status`, não a gaveta; o banner crítico sobre Conversas, o vazio
+  animado e o onboarding (Goal072) ficam fora — ver [D-093](DECISIONS.md).
+- **Fechamento — review077, 2026-09-30.** [D-093](DECISIONS.md)
+  **ACCEPTED** no [review077](reviews/077-review.md), rodada 3 do IA Loop,
+  sem blocker; rodada 1 `CHANGES_REQUIRED` com 7 blockers, rodada 2 com 1.
+  O blocker da rodada 2 foi o teto de workers que as unidades de
+  diagnóstico do harness puseram em seis arquivos de configuração de teste
+  e build proibidos pelo §10; a rodada 3 os restaurou ao conteúdo de
+  `1068a68`, sem editar código de produto, teste nem documento. A execução
+  final e os oito controles do FIX-001 da rodada 2 valem para a árvore
+  aceita. Na rodada 3 os gates do IA Loop passaram todos, inclusive
+  `validate:integration`, com as mesmas contagens (público **169**
+  `passed`, **21** `skipped`; autenticado **160** `passed`; **0**
+  retentativas). A conferência humana do §9 continua **não feita**. Ver a
+  nota de fechamento de [D-093](DECISIONS.md) e o
+  [review077](reviews/077-review.md).

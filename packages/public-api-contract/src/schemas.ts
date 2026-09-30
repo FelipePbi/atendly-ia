@@ -1028,6 +1028,7 @@ export const notificationKindSchema = z.enum([
   "WHATSAPP_DISCONNECTED",
   "AI_UNAVAILABLE",
   "SETUP_INCOMPLETE",
+  "AI_ACTIVATED",
 ]);
 export const notificationLevelSchema = z.enum(["INFO", "ATTENTION", "CRITICAL"]);
 export const notificationShapeSchema = z.enum(["EVENT", "CONDITION"]);

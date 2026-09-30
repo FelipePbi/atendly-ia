@@ -29,6 +29,8 @@ import {
 } from "../../lib/tenant-context.js";
 import { reconcileBusinessTimezone } from "../../lib/timezone-reconciliation.js";
 import { assertAiActivationNotBlockedByDeletion } from "../account/service.js";
+import { aiActivatedDedupeKey } from "../notifications/species.js";
+import { materialize } from "../notifications/store.js";
 import { internalContext } from "../tenant/context.js";
 
 const businessSchema = z.object({
@@ -193,6 +195,10 @@ export async function registerV1SettingsRoutes(
       const current = await getPrisma().aiSettings.findUnique({
         where: { tenantId: tenant.tenantId },
       });
+      // Desligada -> ligada, e só essa passagem (Goal077/WU-01): é o momento
+      // em que a prova foi exigida acima, e a notificação da central nasce
+      // com a ativação, na mesma transação.
+      const activating = body.enabled && !current?.enabled;
       if (body.enabled) {
         // Goal025 §3: conta em exclusao nao religa a IA por nenhum caminho, e
         // este e o unico caminho de pedido humano que grava `enabled: true`.
@@ -233,7 +239,7 @@ export async function registerV1SettingsRoutes(
           // Pausar segue sem a marcacao; nao e recusa de leitura como ligar.
         }
       }
-      await getPrisma().aiSettings.upsert({
+      const upsertArgs = {
         where: { tenantId: tenant.tenantId },
         create: {
           tenantId: tenant.tenantId,
@@ -246,7 +252,26 @@ export async function registerV1SettingsRoutes(
           tone: body.tone,
           ...(activatedByRunId ? { activatedByRunId } : {}),
         },
-      });
+      };
+      if (activating) {
+        // A ativação e a notificação nascem juntas: falha ao gravar a
+        // notificação desfaz o `enabled: true` desta mesma passada.
+        const occurredAt = new Date();
+        await getPrisma().$transaction(async (tx) => {
+          await tx.aiSettings.upsert(upsertArgs);
+          await materialize(tx, tenant.tenantId, [
+            {
+              kind: "AI_ACTIVATED",
+              dedupeKey: aiActivatedDedupeKey(activatedByRunId as string),
+              subjectId: null,
+              occurredAt,
+              payload: {},
+            },
+          ]);
+        });
+      } else {
+        await getPrisma().aiSettings.upsert(upsertArgs);
+      }
       const projected = await syncAi(request, ai);
       return dataResponse(
         request,

@@ -4,6 +4,8 @@ import type { AiOrchestratorClient } from "../clients/ai-orchestrator/index.js";
 import type { InternalRequestContext } from "../clients/internal-http-client.js";
 import type { SchedulingClient } from "../clients/scheduling/index.js";
 import { isDeletionPending } from "../modules/account/state.js";
+import { aiActivatedDedupeKey } from "../modules/notifications/species.js";
+import { materialize } from "../modules/notifications/store.js";
 import { internalContext } from "../modules/tenant/context.js";
 import { resolveAiConversationStyle } from "./ai-conversation-style.js";
 import { businessContextPayload } from "./business-profile.js";
@@ -177,14 +179,29 @@ async function reconcile(
     const calendar = await deps.scheduling.calendar(context);
     if (!calendar.capabilities.aiActivationReady) return "NOOP";
 
-    await prisma.aiSettings.upsert({
-      where: { tenantId: tenant.tenantId },
-      create: {
-        tenantId: tenant.tenantId,
-        enabled: true,
-        activatedByRunId: run.id,
-      },
-      update: { enabled: true, activatedByRunId: run.id },
+    // A ativação e a notificação da central nascem juntas (Goal077/WU-01):
+    // uma falha ao gravar a notificação desfaz o `enabled: true` desta
+    // passada, em vez de deixar a IA ligada sem o registro correspondente.
+    const occurredAt = new Date();
+    await prisma.$transaction(async (tx) => {
+      await tx.aiSettings.upsert({
+        where: { tenantId: tenant.tenantId },
+        create: {
+          tenantId: tenant.tenantId,
+          enabled: true,
+          activatedByRunId: run.id,
+        },
+        update: { enabled: true, activatedByRunId: run.id },
+      });
+      await materialize(tx, tenant.tenantId, [
+        {
+          kind: "AI_ACTIVATED",
+          dedupeKey: aiActivatedDedupeKey(run.id),
+          subjectId: null,
+          occurredAt,
+          payload: {},
+        },
+      ]);
     });
     return (await project(request, deps, true)) ? "ACTIVATED" : "FAILED";
   }

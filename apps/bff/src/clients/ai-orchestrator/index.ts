@@ -959,7 +959,12 @@ export class AiOrchestratorClient {
    */
   async purgeConversationContent(
     context: InternalRequestContext,
-    input: { commercialCutoff: Date; personalCutoff: Date; maxRows: number },
+    input: {
+      commercialCutoff: Date;
+      personalCutoff: Date;
+      unclassifiedCutoff: Date;
+      maxRows: number;
+    },
   ): Promise<ContentPurgeResult> {
     return (
       await this.http.request({
@@ -969,6 +974,7 @@ export class AiOrchestratorClient {
         body: {
           commercialCutoff: input.commercialCutoff.toISOString(),
           personalCutoff: input.personalCutoff.toISOString(),
+          unclassifiedCutoff: input.unclassifiedCutoff.toISOString(),
           maxRows: input.maxRows,
         },
         schema: envelope(contentPurgeResultSchema),

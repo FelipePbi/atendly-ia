@@ -1,3 +1,4 @@
+import { retentionSettingsSchema } from "@atendly-ia/public-api-contract";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -98,7 +99,7 @@ describe.skipIf(!RUN_INTEGRATION)(
         response.json() as {
           data: {
             retentionDaysOptions: number[];
-            unclassifiedPurged: boolean;
+            unclassifiedRetentionFollows: string;
             lastSweepCompletedAt: string | null;
           };
         }
@@ -106,8 +107,10 @@ describe.skipIf(!RUN_INTEGRATION)(
 
       // A allowlist é do servidor, e é exatamente a do produto.
       expect(data.retentionDaysOptions).toEqual([30, 90, 180, 365]);
-      // U-01 dito no contrato, não só na tela.
-      expect(data.unclassifiedPurged).toBe(false);
+      // U-01 (D-096) dito no contrato, não só na tela.
+      expect(data.unclassifiedRetentionFollows).toBe("COMMERCIAL");
+      expect(data).not.toHaveProperty("unclassifiedPurged");
+      expect(retentionSettingsSchema.safeParse(data).success).toBe(true);
       // Negócio nunca varrido responde nulo, nunca uma data inventada.
       expect(data.lastSweepCompletedAt).toBeNull();
     });
@@ -126,14 +129,16 @@ describe.skipIf(!RUN_INTEGRATION)(
         patch.json() as {
           data: {
             retentionDaysOptions: number[];
-            unclassifiedPurged: boolean;
+            unclassifiedRetentionFollows: string;
             lastSweepCompletedAt: string | null;
             appliesFrom: string;
           };
         }
       ).data;
       expect(data.retentionDaysOptions).toEqual([30, 90, 180, 365]);
-      expect(data.unclassifiedPurged).toBe(false);
+      expect(data.unclassifiedRetentionFollows).toBe("COMMERCIAL");
+      expect(data).not.toHaveProperty("unclassifiedPurged");
+      expect(retentionSettingsSchema.safeParse(data).success).toBe(true);
       // Gravar prazo não varre: a última varredura continua nula.
       expect(data.lastSweepCompletedAt).toBeNull();
       expect(data.appliesFrom).toBe("NEXT_SWEEP");

@@ -144,9 +144,15 @@ const ignoreContactSchema = z.object({ ignored: z.boolean() });
 // BFF, que e quem conhece o prazo do negocio; esta rota nao le configuracao,
 // nao deriva prazo de relogio proprio e nao tem default de janela. Sem teto
 // explicito nao ha passada: "apague tudo" nao e um pedido aceitavel.
+//
+// `unclassifiedCutoff` (U-01, Goal080) e opcional de proposito: sem ele a
+// sessao nao classificada continua recusando a purga, e esta rota nunca o
+// deriva do comercial. Um BFF antigo chamando uma IA nova, num deploy fora de
+// ordem, nao apaga nada que nao apagava antes.
 const contentPurgeSchema = z.object({
   commercialCutoff: z.iso.datetime({ offset: true }),
   personalCutoff: z.iso.datetime({ offset: true }),
+  unclassifiedCutoff: z.iso.datetime({ offset: true }).optional(),
   maxRows: z.number().int().min(1).max(CONTENT_PURGE_MAX_ROWS_LIMIT),
 });
 
@@ -1390,6 +1396,9 @@ export async function registerInternalRoutes(
       tenantId,
       commercialCutoff: new Date(body.commercialCutoff),
       personalCutoff: new Date(body.personalCutoff),
+      ...(body.unclassifiedCutoff
+        ? { unclassifiedCutoff: new Date(body.unclassifiedCutoff) }
+        : {}),
       maxRows: body.maxRows,
     });
     // Teto proprio: o inbox e outra tabela e outro prazo, e gastar nele o

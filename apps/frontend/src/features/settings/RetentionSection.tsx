@@ -24,13 +24,12 @@ function retentionLabel(days: RetentionDays): string {
  * Bloco de retenção em Configurações → **Conversas** (Goal023/§8, G-29): lê e
  * grava `/v1/settings/retention`. Só duas categorias existem — Comercial e
  * Pessoal — no mesmo padrão do WU-01; Não classificadas não tem seletor
- * porque **U-01** não lhe dá prazo nenhum: a nota ao lado diz que o conteúdo
- * fica guardado enquanto a categoria não for definida e que classificar passa
- * a aplicar o prazo da categoria escolhida, sem prometer nem insinuar que
- * esse conteúdo sai daqui.
+ * porque **U-01** a faz seguir o prazo Comercial: a nota ao lado diz isso e
+ * que classificar como Pessoal passa a aplicar o prazo Pessoal dali em diante.
  *
  * Reduzir qualquer categoria exige confirmação explícita antes do PATCH; até
- * a confirmação, o seletor continua mostrando o valor salvo.
+ * a confirmação, o seletor continua mostrando o valor salvo. O diálogo da
+ * Comercial avisa que a redução vale também para Não classificadas.
  *
  * **As opções vêm da resposta, não daqui.** A allowlist é do servidor: o
  * seletor mostra o que o `GET` declarou aceitar, e um seletor que inventasse a
@@ -138,10 +137,9 @@ export function RetentionSection() {
         <div className="onboarding-note">
           <Icon name="info" />
           <span>
-            Conversas Não classificadas não têm prazo: o conteúdo fica guardado
-            enquanto a categoria não for definida. Ao classificar uma conversa
-            como Comercial ou Pessoal, o prazo dessa categoria passa a valer
-            para ela daí em diante.
+            Conversas Não classificadas seguem o prazo Comercial. Ao classificar
+            uma conversa como Pessoal, o prazo Pessoal passa a valer para ela
+            daí em diante.
           </span>
         </div>
       </div>
@@ -155,8 +153,9 @@ export function RetentionSection() {
         title={`Reduzir retenção ${pendingReduction?.categoryLabel ?? ""}?`}
       >
         <p className="settings-modal-copy">
-          Mensagens mais antigas que o novo prazo poderão ser removidas na
-          próxima varredura. Não há como recuperá-las depois.
+          {pendingReduction?.category === "commercialRetentionDays"
+            ? "Mensagens Comerciais e Não classificadas mais antigas que o novo prazo poderão ser removidas na próxima varredura. Não há como recuperá-las depois."
+            : "Mensagens mais antigas que o novo prazo poderão ser removidas na próxima varredura. Não há como recuperá-las depois."}
         </p>
         <div className="modal-actions">
           <button

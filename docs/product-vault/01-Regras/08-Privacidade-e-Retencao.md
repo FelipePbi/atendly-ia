@@ -68,6 +68,8 @@ Defaults:
 
 Comercial e Pessoal podem ter períodos diferentes.
 
+Conversas Não classificadas seguem o prazo Comercial, sem prazo, opção ou default próprios.
+
 Ao reduzir retenção, a interface deve explicar que mensagens antigas poderão ser removidas e pedir confirmação.
 
 Depois que o conteúdo expira, a conversa pode continuar existindo na lista com informações mínimas e indicação de que mensagens antigas expiraram.

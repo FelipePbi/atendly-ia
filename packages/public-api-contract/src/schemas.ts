@@ -252,8 +252,8 @@ export const retentionSettingsSchema = z.object({
   personalRetentionDays: retentionDaysSchema,
   // A allowlist e do servidor: o seletor a le, nao a declara.
   retentionDaysOptions: z.array(retentionDaysSchema),
-  // U-01 no contrato, nao so na tela: conteudo nao classificado nao e purgado.
-  unclassifiedPurged: z.literal(false),
+  // U-01 no contrato, nao so na tela: conteudo nao classificado segue o prazo Comercial.
+  unclassifiedRetentionFollows: z.literal("COMMERCIAL"),
   // Ultima varredura concluida deste negocio; nula enquanto nenhuma concluiu.
   lastSweepCompletedAt: z.string().nullable(),
   appliesFrom: z.literal("NEXT_SWEEP"),

@@ -840,7 +840,7 @@ Resposta de ambas as rotas:
   "commercialRetentionDays": 90,
   "personalRetentionDays": 30,
   "retentionDaysOptions": [30, 90, 180, 365],
-  "unclassifiedPurged": false,
+  "unclassifiedRetentionFollows": "COMMERCIAL",
   "lastSweepCompletedAt": "2026-09-14T03:10:22.481Z",
   "appliesFrom": "NEXT_SWEEP"
 }
@@ -851,12 +851,12 @@ Resposta de ambas as rotas:
 | `commercialRetentionDays` | `30`, `90`, `180` ou `365` | prazo do conteúdo comercial; fora da allowlist é `400 VALIDATION_ERROR`, sem gravar nada |
 | `personalRetentionDays` | `30`, `90`, `180` ou `365` | prazo do conteúdo pessoal; mesma allowlist |
 | `retentionDaysOptions` | `[30, 90, 180, 365]`, só leitura | a allowlist **do servidor**; o cliente lê as opções daqui em vez de declarar a própria lista |
-| `unclassifiedPurged` | `false`, só leitura | invariante, não estado: conteúdo de sessão não classificada não tem prazo, não tem opção e **não é purgado** |
+| `unclassifiedRetentionFollows` | `"COMMERCIAL"`, só leitura | invariante, não estado: conteúdo de sessão não classificada não tem prazo nem opção próprios e **segue o prazo Comercial** — expira junto com `commercialRetentionDays` |
 | `lastSweepCompletedAt` | ISO-8601 ou `null`, só leitura | instante da última varredura **concluída** deste negócio (todas as fontes de pé); `null` enquanto nenhuma concluiu. Uma passada que degradou terminou, mas não concluiu, e não avança este campo |
 | `confirmReduction` | booleano, só na escrita | exigido quando o `PATCH` **reduz** qualquer uma das duas categorias; aumentar nunca exige |
 | `appliesFrom` | `"NEXT_SWEEP"`, só leitura | uma redução aceita só passa a valer na próxima varredura de purga — esta rota nunca apaga dado |
 
-Reduzir uma categoria (ou as duas) sem `confirmReduction: true` é recusado com `409 RETENTION_REDUCTION_REQUIRES_CONFIRMATION`, sem gravar nada; `error.details.reductions` lista cada categoria reduzida com `from`/`to`. Não existe categoria, coluna, parâmetro ou default para conteúdo "não classificado" — só Comercial e Pessoal.
+Reduzir uma categoria (ou as duas) sem `confirmReduction: true` é recusado com `409 RETENTION_REDUCTION_REQUIRES_CONFIRMATION`, sem gravar nada; `error.details.reductions` lista cada categoria reduzida com `from`/`to`. Não existe categoria, coluna, parâmetro, opção nem default próprios para conteúdo "não classificado" — só Comercial e Pessoal são configuráveis, e o grupo Não classificadas segue o prazo Comercial (`unclassifiedRetentionFollows`). Por isso reduzir Comercial também encurta esse grupo, e `error.details.reductions` continua listando só categorias configuráveis.
 
 O `PATCH` devolve a mesma forma do `GET`, inclusive `lastSweepCompletedAt`: gravar prazo não varre, e a resposta não pode sugerir que varreu.
 

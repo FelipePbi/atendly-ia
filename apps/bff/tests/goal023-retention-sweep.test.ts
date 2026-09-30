@@ -6,6 +6,7 @@ import { env } from "../src/config/env.js";
 import { getPrisma } from "../src/lib/prisma.js";
 import { HISTORY_WINDOW_DAYS } from "../src/modules/notifications/routes.js";
 import { RetentionSweepWorker } from "../src/modules/retention/RetentionSweepWorker.js";
+import { RETENTION_DAYS_OPTIONS } from "../src/modules/retention/settings.js";
 import {
   intentContentCutoff,
   type RetentionCutoffs,
@@ -185,13 +186,38 @@ describe("Goal023/WU-05: cutoffs derivados do prazo do negócio", () => {
     expect(cutoffs.personalCutoff.toISOString()).toBe(
       new Date(NOW.getTime() - 30 * DAY_MS).toISOString(),
     );
-    // Nada aqui governa conteúdo sem categoria: prazo técnico não sai de
-    // `RetentionSettings` e por isso não pertence a este objeto.
+    // Prazo técnico não sai de `RetentionSettings` e por isso não pertence a
+    // este objeto; o único cutoff sem categoria própria é o de Não classificadas
+    // (U-01, D-096), que segue o Comercial.
     expect(Object.keys(cutoffs).sort()).toEqual([
       "commercialCutoff",
       "personalCutoff",
+      "unclassifiedCutoff",
     ]);
   });
+});
+
+describe("Goal080/§6.6: Não classificadas segue o prazo Comercial", () => {
+  it.each(RETENTION_DAYS_OPTIONS)(
+    "unclassifiedCutoff é o commercialCutoff com Comercial em %i dias, e não o Pessoal",
+    (commercialDays) => {
+      const personalDays = commercialDays === 30 ? 365 : 30;
+      const cutoffs = retentionCutoffs(NOW, {
+        commercialRetentionDays: commercialDays,
+        personalRetentionDays: personalDays,
+      });
+
+      expect(cutoffs.unclassifiedCutoff.toISOString()).toBe(
+        new Date(NOW.getTime() - commercialDays * DAY_MS).toISOString(),
+      );
+      expect(cutoffs.unclassifiedCutoff.getTime()).toBe(
+        cutoffs.commercialCutoff.getTime(),
+      );
+      expect(cutoffs.unclassifiedCutoff.getTime()).not.toBe(
+        cutoffs.personalCutoff.getTime(),
+      );
+    },
+  );
 });
 
 describe("Goal023/§6: o prazo técnico das intenções não é o da seção Conversas", () => {
@@ -280,6 +306,9 @@ describe.skipIf(!RUN_INTEGRATION)(
       );
       expect(aiCall?.cutoffs?.personalCutoff.toISOString()).toBe(
         new Date(NOW.getTime() - 30 * DAY_MS).toISOString(),
+      );
+      expect(aiCall?.cutoffs?.unclassifiedCutoff.toISOString()).toBe(
+        new Date(NOW.getTime() - 90 * DAY_MS).toISOString(),
       );
 
       const state = await sweepState(owner.tenantId);

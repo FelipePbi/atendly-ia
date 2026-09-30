@@ -183,7 +183,7 @@ function retentionFixture() {
     lastSweepCompletedAt: null,
     personalRetentionDays: 30 as const,
     retentionDaysOptions: [30, 90, 180, 365] as const,
-    unclassifiedPurged: false as const,
+    unclassifiedRetentionFollows: "COMMERCIAL" as const,
   };
 }
 

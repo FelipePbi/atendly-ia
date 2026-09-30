@@ -12,8 +12,10 @@
  *   `confirmReduction: true`;
  * - cancelar a confirmação não altera nada: nenhum PATCH sai e o seletor
  *   continua mostrando o valor salvo;
- * - Não classificadas é só texto explicativo, sem seletor e sem promessa de
- *   exclusão;
+ * - Não classificadas é só texto explicativo, sem seletor: a nota diz que segue
+ *   o prazo Comercial;
+ * - o diálogo de redução da Comercial menciona Não classificadas; o da Pessoal
+ *   não (Goal080);
  * - erro ao carregar não inventa estado próprio;
  * - as opções vêm da resposta do servidor, não de uma lista local: o seletor
  *   mostra exatamente a allowlist que o `GET` declarou.
@@ -44,7 +46,7 @@ function retentionFixture(
     commercialRetentionDays: 90,
     personalRetentionDays: 30,
     retentionDaysOptions: [30, 90, 180, 365],
-    unclassifiedPurged: false,
+    unclassifiedRetentionFollows: "COMMERCIAL",
     lastSweepCompletedAt: null,
     appliesFrom: "NEXT_SWEEP",
     ...overrides,
@@ -187,7 +189,7 @@ test("confirmar a redução só então envia o PATCH com confirmReduction", asyn
   ).toHaveAttribute("aria-pressed", "true");
 });
 
-test("Não classificadas é só texto explicativo, sem seletor e sem promessa de exclusão", async () => {
+test("Não classificadas é só texto explicativo, sem seletor: segue o prazo Comercial", async () => {
   get.mockResolvedValue(retentionFixture());
   render(<RetentionSection />);
 
@@ -195,19 +197,45 @@ test("Não classificadas é só texto explicativo, sem seletor e sem promessa de
   const note = screen.getByText(/Não classificadas/);
   expect(note).toBeVisible();
   expect(note.textContent).not.toMatch(/exclu[íi]|remov|apaga|delet/i);
-  // U-01 tem duas metades, e a nota precisa das duas: o conteúdo fica
-  // enquanto a categoria não for definida, e classificar passa a aplicar o
-  // prazo da categoria escolhida dali em diante. Dizer só a primeira deixa a
-  // pessoa sem saber o que acontece depois de classificar.
+  // U-01 tem duas metades, e a nota precisa das duas: Não classificadas
+  // segue o prazo Comercial, e classificar como Pessoal passa a aplicar o
+  // prazo Pessoal dali em diante. Dizer só a primeira deixa a pessoa sem
+  // saber o que acontece depois de classificar.
   expect(note.textContent).toMatch(
-    /guardado enquanto a categoria não for definida/i,
+    /Não classificadas seguem o prazo Comercial/i,
   );
   expect(note.textContent).toMatch(
-    /Comercial ou Pessoal, o prazo dessa categoria passa\s+a valer/i,
+    /Pessoal, o prazo Pessoal passa\s+a valer/i,
   );
+  // O texto anterior dizia que o grupo não tinha prazo; isso não é mais verdade.
+  expect(note.textContent).not.toMatch(/não têm prazo|enquanto a categoria/i);
   expect(
     screen.queryByRole("button", { name: /Não classificadas/ }),
   ).not.toBeInTheDocument();
+});
+
+test("o diálogo de redução da Comercial menciona Não classificadas; o da Pessoal não", async () => {
+  get.mockResolvedValue(retentionFixture({ personalRetentionDays: 90 }));
+  const user = userEvent.setup();
+  render(<RetentionSection />);
+
+  await screen.findByRole("heading", { name: "Conversas" });
+
+  await user.click(screen.getByRole("button", { name: "Comercial: 30 dias" }));
+  const commercialDialog = await screen.findByRole("dialog");
+  expect(commercialDialog).toHaveTextContent(
+    /Mensagens Comerciais e Não classificadas mais antigas que o novo prazo/,
+  );
+  expect(commercialDialog).toHaveTextContent(/não há como recuperá-las/i);
+  await user.click(screen.getByRole("button", { name: "Manter prazo atual" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Pessoal: 30 dias" }));
+  const personalDialog = await screen.findByRole("dialog");
+  expect(personalDialog).toHaveTextContent(/mensagens.*antigas.*removidas/i);
+  expect(personalDialog).toHaveTextContent(/não há como recuperá-las/i);
+  expect(personalDialog).not.toHaveTextContent(/Não classificadas/);
+  expect(update).not.toHaveBeenCalled();
 });
 
 describe("nunca inventa estado próprio", () => {

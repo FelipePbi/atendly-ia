@@ -8068,3 +8068,77 @@ nenhuma rota, migration ou mudança de contrato. Decisão:
   as mesmas contagens (`startTime` `2026-09-30T13:40:18Z` e `13:43:29Z`). A
   conferência humana do §9 continua **não feita**. Ver a nota de fechamento
   de [D-095](DECISIONS.md) e o [review079](reviews/079-review.md).
+
+## Delta implementado — Goal080, 2026-09-30 ([D-096](DECISIONS.md), ACCEPTED)
+
+Implementa a decisão **U-01** (Felipe Borges, 2026-09-27): o conteúdo das
+conversas `Não classificadas` expira pelo prazo **Comercial do negócio**, e não
+por um prazo próprio nem por 90 dias fixos. Toca `apps/ai-orchestrator/`,
+`apps/bff/`, `packages/public-api-contract/` e `apps/frontend/`, e muda
+`apps/bff/PUBLIC_API_V1.md`. Sem migration, sem backfill e sem `UPDATE`.
+Decisão: [D-096](DECISIONS.md), proposta no Goal080, **PROPOSED** até o review;
+ela substitui o item (9) de [D-039](DECISIONS.md) e mantém os demais.
+
+- **Regra escrita uma vez, no BFF.** `retentionCutoffs` devolve
+  `unclassifiedCutoff`, igual ao `commercialCutoff` do mesmo negócio; o cliente
+  do orquestrador o envia em `purgeConversationContent`.
+- **Cutoff opcional na IA; a ausência preserva.** `POST
+  /internal/retention/conversation-content` aceita `unclassifiedCutoff` (ISO com fuso)
+  e só o repassa quando vem no corpo. A IA nunca o deriva do Comercial. Um BFF
+  antigo chamando uma IA nova não apaga nada que não apagava.
+- **Um ramo só no predicado.** Dentro do `NOT (...)` de `governedRows` entra
+  `OR (categoria = 'UNCLASSIFIED' AND ocorrida antes do cutoff)`, só com o
+  cutoff presente. A linha órfã de janela continua preservada e a janela
+  ambígua só sai se toda sessão governante permitir.
+- **Contrato.** `unclassifiedPurged: false` sai de `GET`/`PATCH
+  /v1/settings/retention`; entra `unclassifiedRetentionFollows: "COMMERCIAL"`,
+  literal e somente leitura (`settings.ts`, `retentionSettingsSchema`,
+  `PUBLIC_API_V1.md`).
+- **Tela.** A nota diz "Conversas Não classificadas seguem o prazo Comercial.
+  Ao classificar uma conversa como Pessoal, o prazo Pessoal passa a valer para
+  ela daí em diante."; o diálogo de redução da Comercial, e só ele, avisa que
+  mensagens Não classificadas mais antigas também poderão ser removidas.
+- **O laço segue desligado.** `RETENTION_SWEEP_ENABLED` não é ligado por este
+  diff. Quando um operador o ligar, a primeira passada apaga todo o conteúdo
+  Não classificado acumulado além do prazo Comercial, dentro do teto por
+  passada de D-039.
+- **Execução final, todos exit 0.** `validate:core` **17** passos (**15**
+  `passed`, **2** `skipped`); `test:gate` **233**/**233**; `validate:ui` **169**
+  `passed`, **21** `skipped`, **0** retentativas (`startTime`
+  `2026-09-30T14:37:30.913Z`); `validate:integration` **36**/**36** passos, com
+  o gate autenticado em **170** testes e **0** retentativas (`startTime`
+  `2026-09-30T14:40:43.946Z`). Reexecutados pela WU-17 sobre a árvore
+  entregue: `test:frontend` **121**/**1244** (baseline **1243**);
+  `test:ai-orchestrator` sem banco **1186** passando e **98** `skipped` de
+  **1284** (baseline **1177**, **93**, **1270**); `test:bff-integration`
+  **61**/**470** (baseline **60**/**465**); `test:scheduling-service`
+  **37**/**502**, sem mudança.
+- **Seis controles negativos do §7**, feitos depois da última edição de
+  código, por edição real revertida e conferida por hash: cada um reprova o
+  teste esperado com o defeito e passa restaurado. O controle do contrato
+  reprova por `500` de verificação de resposta, e não pela asserção explícita.
+  Saída, hashes e o vermelho da baseline em [FINAL_AUDIT §57](FINAL_AUDIT.md).
+- **Fechamento no FINAL_AUDIT.** A-12 e a linha U-01 são fechados em §57 (sem
+  reescrever §4–§56); o veredito passa a **0** `BLOQUEADOR-MVP`, **7**
+  `PENDENCIA-POS-MVP` e **5** `LIMITE-DECLARADO`.
+- **Conferência humana pendente:** a conferência do §9 do Goal **não foi
+  feita** — a leitura da nota e do diálogo na tela, num aparelho real nas cinco
+  larguras. Nenhuma purga, varredura ou `content-purge` foi executada contra
+  dado real; toda evidência vem de PostgreSQL descartável.
+- **Fechamento — review080, 2026-09-30.** [D-096](DECISIONS.md)
+  **ACCEPTED** no [review080](reviews/080-review.md), rodada 2 do IA Loop,
+  sem blocker; rodada 1 `CHANGES_REQUIRED` com 1 blocker, só de
+  documentação: este delta e o item 3 de D-096 nomeavam a rota interna como
+  `POST /internal/retention/content-purge`, que não existe. A rodada 2
+  reescreveu as duas frases para `POST /internal/retention/conversation-content`;
+  nenhum código de produção nem teste mudou entre as rodadas, então a execução
+  final e os seis controles acima continuam os da rodada 1 (autenticado
+  **170**/**0** retentativas). Os gates da rodada 2 deram exit 0 e
+  sobrescreveram os `e2e-results` (`startTime` `2026-09-30T15:11:59Z` e
+  `15:15:11Z`); o autenticado teve **1** `flaky` de ambiente
+  (`configuracoes-conta` em `notebook-1024`, sem o marcador de sessão na
+  primeira tentativa). Fica para um Goal futuro o comentário de
+  `scripts/validate-integration.mjs` que ainda diz que a purga não alcança
+  conteúdo não classificado. A conferência humana do §9 continua **não
+  feita**. Ver a nota de fechamento de [D-096](DECISIONS.md) e o
+  [review080](reviews/080-review.md).

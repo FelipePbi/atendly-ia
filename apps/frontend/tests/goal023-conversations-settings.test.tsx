@@ -90,7 +90,7 @@ function retentionFixture(): RetentionSettings {
     commercialRetentionDays: 90,
     personalRetentionDays: 30,
     retentionDaysOptions: [30, 90, 180, 365],
-    unclassifiedPurged: false,
+    unclassifiedRetentionFollows: "COMMERCIAL",
     lastSweepCompletedAt: null,
     appliesFrom: "NEXT_SWEEP",
   };

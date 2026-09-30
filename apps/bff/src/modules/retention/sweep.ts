@@ -56,6 +56,8 @@ export interface RetentionCutoffs {
   commercialCutoff: Date;
   /** Conteúdo de conversa classificada como pessoal. */
   personalCutoff: Date;
+  /** Conteúdo de conversa não classificada: segue o prazo Comercial. */
+  unclassifiedCutoff: Date;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
@@ -63,13 +65,20 @@ const DAY_MS = 24 * 60 * 60 * 1_000;
 const cutoffAt = (now: Date, days: number) =>
   new Date(now.getTime() - days * DAY_MS);
 
+/**
+ * Único lugar da regra U-01 (D-096): conteúdo de sessão não classificada segue
+ * o prazo Comercial. Não há prazo, coluna nem opção próprios; a IA só aplica
+ * o cutoff que recebe e nunca o deriva.
+ */
 export function retentionCutoffs(
   now: Date,
   days: { commercialRetentionDays: number; personalRetentionDays: number },
 ): RetentionCutoffs {
+  const commercialCutoff = cutoffAt(now, days.commercialRetentionDays);
   return {
-    commercialCutoff: cutoffAt(now, days.commercialRetentionDays),
+    commercialCutoff,
     personalCutoff: cutoffAt(now, days.personalRetentionDays),
+    unclassifiedCutoff: new Date(commercialCutoff.getTime()),
   };
 }
 
@@ -166,6 +175,7 @@ export function defaultRetentionPorts(
         {
           commercialCutoff: input.cutoffs.commercialCutoff,
           personalCutoff: input.cutoffs.personalCutoff,
+          unclassifiedCutoff: input.cutoffs.unclassifiedCutoff,
           maxRows: input.maxRows,
         },
       );

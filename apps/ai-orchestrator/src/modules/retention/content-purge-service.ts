@@ -4,9 +4,10 @@ import { Prisma, type PrismaClient } from "../../generated/prisma/client.js";
  * Purga de conteúdo de conversa na IA (Goal023/WU-02, G-29).
  *
  * Quem decide o prazo é o negócio, no BFF; quem decide *o que é conteúdo* é o
- * dono do dado, que é este serviço. A entrada são os dois cutoffs já
- * calculados e um teto de linhas; a saída são as contagens por tabela e se
- * restou trabalho. Nenhuma rota pública chega aqui: só a varredura chama.
+ * dono do dado, que é este serviço. A entrada são os cutoffs já calculados —
+ * comercial, pessoal e, opcional, o de não classificadas — e um teto de
+ * linhas; a saída são as contagens por tabela e se restou trabalho. Nenhuma
+ * rota pública chega aqui: só a varredura chama.
  *
  * O que expira: `Message` (com `MessageAttachment`, `transcript` incluído, por
  * cascade) e `AiRun` (com `AiToolCall` por cascade). O que sobrevive sempre:
@@ -27,6 +28,15 @@ export interface ContentPurgeInput {
   commercialCutoff: Date;
   /** Linha governada por sessão `PERSONAL` anterior a este instante expira. */
   personalCutoff: Date;
+  /**
+   * Linha governada por sessão `UNCLASSIFIED` anterior a este instante expira
+   * (U-01, Goal080). Quem decide que o grupo segue o prazo comercial é o BFF,
+   * que manda este valor já calculado. **A ausência preserva**: sem ele, a
+   * sessão não classificada continua recusando a purga, como antes do Goal080.
+   * Este serviço nunca deriva o valor do cutoff comercial — um chamador antigo,
+   * num deploy fora de ordem, não apaga nada que não apagava antes.
+   */
+  unclassifiedCutoff?: Date;
   /**
    * Teto de linhas **governadas** (`Message` + `AiRun`) desta passada. Os
    * filhos que caem por cascade não consomem o teto: eles não são decisão, são
@@ -57,14 +67,16 @@ interface GovernedRow {
 /**
  * A categoria que governa uma linha é a da sessão cuja janela
  * `[startedAt, endedAt ?? agora)` contém o instante dela: `COMMERCIAL` usa o
- * cutoff comercial, `PERSONAL` usa o pessoal.
+ * cutoff comercial, `PERSONAL` usa o pessoal e `UNCLASSIFIED` usa o de não
+ * classificadas — **só quando ele vem** (U-01, Goal080). Sem ele, a sessão não
+ * classificada recusa a purga, e o ramo nem entra no SQL.
  *
- * **U-01**: `UNCLASSIFIED` não recebe prazo e nunca é purgada, e linha que não
- * cai em nenhuma janela de sessão é tratada do mesmo jeito. Decidir prazo para
- * conteúdo possivelmente pessoal é de uma pessoa, não deste código — por isso o
- * predicado exige que exista sessão governante **e** que *nenhuma* sessão
- * governante recuse a purga, em vez de bastar uma que a permita: onde a janela
- * for ambígua, o conteúdo sobrevive.
+ * Linha que não cai em nenhuma janela de sessão nunca é purgada: U-01 trata de
+ * sessão não classificada, não de conteúdo sem sessão. Por isso o predicado
+ * exige que exista sessão governante **e** que *nenhuma* sessão governante
+ * recuse a purga, em vez de bastar uma que a permita: onde a janela for
+ * ambígua, o conteúdo só sai se todas as categorias que a governam estiverem
+ * vencidas.
  *
  * Esta é a única vez que a regra é escrita; as duas tabelas só trocam a coluna
  * de instante. Os índices `(tenantId, conversationId, createdAt)` e
@@ -77,6 +89,9 @@ function governedRows(
   now: Date,
   limit: number,
 ): Prisma.Sql {
+  const unclassified = input.unclassifiedCutoff
+    ? Prisma.sql`OR (s."category" = 'UNCLASSIFIED' AND ${occurredAt} < ${input.unclassifiedCutoff})`
+    : Prisma.empty;
   return Prisma.sql`
     SELECT r."id", r."conversationId", ${occurredAt} AS "occurredAt"
     FROM ${table} r
@@ -97,6 +112,7 @@ function governedRows(
           AND NOT (
             (s."category" = 'COMMERCIAL' AND ${occurredAt} < ${input.commercialCutoff})
             OR (s."category" = 'PERSONAL' AND ${occurredAt} < ${input.personalCutoff})
+            ${unclassified}
           )
       )
     ORDER BY ${occurredAt} ASC
@@ -198,8 +214,9 @@ export class ContentPurgeService {
 /**
  * A marca só avança, e avança até o instante da linha mais nova que esta
  * passada apagou naquela conversa — não até o cutoff. O cutoff cobriria também
- * o que sobreviveu por ser `UNCLASSIFIED`, e a marca estaria anunciando perda
- * que não houve.
+ * o que sobreviveu por cair fora de toda janela de sessão, ou por estar numa
+ * janela ambígua em que uma das categorias ainda está no prazo, e a marca
+ * estaria anunciando perda que não houve.
  *
  * `UPDATE` cru de propósito: `Conversation.updatedAt` é `@updatedAt` e um
  * `updateMany` do Prisma o reescreveria, jogando uma conversa morta para o topo

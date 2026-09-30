@@ -13,7 +13,8 @@ import { AppError } from "../../lib/errors.js";
  * de coluna interpretado como valor gravado.
  *
  * So duas categorias existem. Nao ha campo, parametro ou default para uma
- * terceira categoria "nao classificada".
+ * terceira categoria "nao classificada": esse conteudo segue o prazo Comercial
+ * (U-01, D-096), regra escrita em `retentionCutoffs`.
  */
 
 export const RETENTION_DAYS_OPTIONS = [30, 90, 180, 365] as const;
@@ -63,12 +64,12 @@ export interface RetentionState extends RetentionDaysState {
    */
   retentionDaysOptions: readonly RetentionDays[];
   /**
-   * **U-01, dito no contrato e não só na tela.** Conteúdo de sessão
-   * `UNCLASSIFIED` não tem prazo, não tem opção e não é purgado — e um
-   * segundo consumidor da API precisa saber disso sem ler a interface.
-   * Constante `false` de propósito: não é estado, é invariante.
+   * **U-01 (D-096), dito no contrato e não só na tela.** Conteúdo de sessão
+   * `UNCLASSIFIED` não tem prazo, coluna nem opção próprios: segue o prazo
+   * Comercial — e um segundo consumidor da API precisa saber disso sem ler a
+   * interface. Constante de propósito: não é estado, é invariante.
    */
-  unclassifiedPurged: false;
+  unclassifiedRetentionFollows: "COMMERCIAL";
   /**
    * Instante da última varredura **concluída** deste negócio — nula enquanto
    * nenhuma passada tiver terminado com todas as fontes de pé. Vem de
@@ -138,7 +139,7 @@ function retentionState(
   return {
     ...days,
     retentionDaysOptions: RETENTION_DAYS_OPTIONS,
-    unclassifiedPurged: false,
+    unclassifiedRetentionFollows: "COMMERCIAL",
     lastSweepCompletedAt: lastSweepCompletedAt?.toISOString() ?? null,
     appliesFrom: "NEXT_SWEEP",
   };

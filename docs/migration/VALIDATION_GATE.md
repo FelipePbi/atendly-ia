@@ -3401,3 +3401,68 @@ render depois da conversa, então teste com relógio real precisa esperá-lo com
 `findByRole`; a consulta síncrona deixou `goal018-onboarding-reachability`
 intermitente (**1** falha em **5**) sem que nenhum gate o acusasse de forma
 estável.
+
+## Não classificadas segue o prazo Comercial do negócio, do Goal080
+
+A IA, o BFF, o contrato compartilhado e a tela de retenção passam a aplicar a
+decisão U-01: o conteúdo de `Não classificadas` expira pelo prazo Comercial do
+negócio. O BFF escreve a regra uma vez (`unclassifiedCutoff` igual ao
+`commercialCutoff`), a IA recebe o cutoff como opcional e preserva na ausência,
+e o contrato troca `unclassifiedPurged: false` por `unclassifiedRetentionFollows:
+"COMMERCIAL"`. Sem migration, sem backfill e sem `UPDATE`; nenhuma rota, gate ou
+arquivo de configuração de teste ou de build mudou.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `apps/ai-orchestrator/tests/retention/content-purge.test.ts` (PostgreSQL descartável, **14** testes, eram 9): o ramo com o cutoff apaga o conteúdo vencido com os filhos e preserva o do prazo; sem o cutoff, nada do grupo é apagado; a janela ambígua só sai se toda sessão permitir; o negócio vizinho não é tocado. Passo `test:ai-orchestrator-content-purge` de `validate:integration` | Que um negócio real perca o volume esperado na primeira passada; nenhuma purga foi executada contra dado real |
+| `apps/ai-orchestrator/tests/internal/goal080-content-purge.routes.test.ts` (**9**, arquivo novo): a rota repassa o cutoff e recusa valor inválido (texto livre, data sem hora, instante sem fuso, número, nulo) com `400`, sem purga | A ordem de deploy entre BFF e IA além do cutoff opcional |
+| `apps/bff/tests/goal023-retention-sweep.test.ts` (**23**) e `goal080-retention-ai-port.test.ts` (**1**): `unclassifiedCutoff` é o `commercialCutoff` com Comercial em 30, 90, 180 e 365 dias, e não o Pessoal, e o cliente o envia no corpo | Que `RETENTION_SWEEP_ENABLED` esteja ligado em algum ambiente |
+| `apps/bff/tests/goal023-retention-settings.test.ts` (**11**): `unclassifiedRetentionFollows` é `"COMMERCIAL"`, `unclassifiedPurged` não existe, e a resposta passa em `retentionSettingsSchema` | Consumidor externo que lia o campo antigo |
+| `apps/frontend/tests/goal023-retention-settings.test.tsx` (**10**): a nota diz que Não classificadas seguem o prazo Comercial, e só o diálogo da Comercial cita o grupo | Que o texto esteja claro para uma pessoa (conferência humana do §9) |
+
+Testes de Goals anteriores tiveram asserções e fixtures alteradas (o campo do
+contrato, a nota, o teste do serviço que passou a valer sem o cutoff e a âncora
+de linha 769 para 775 em `assistant.service.test.ts`), cada uma com o motivo em
+[FINAL_AUDIT §57](FINAL_AUDIT.md); nenhum teste foi removido nem pulado.
+
+**Execução final**, sobre a árvore entregue, todos exit 0: `npm run
+validate:core` — **17** passos, **15** `passed`, **2** `skipped` (`test:bff`,
+`test:health-worker`); `npm run test:gate` — **233**/**233**; `npm run
+validate:ui` — **169** `passed`, **21** `skipped`, **0** retentativas
+(`startTime` `2026-09-30T14:37:30.913Z`); `npm run validate:integration`,
+contra um PostgreSQL descartável em `127.0.0.1:55500/ia_bff_test` — **36**
+passos, **36** `passed`, com `rehearse:goal033-authenticated-ui` em **170**
+testes, **0** `unexpected`, **0** `flaky` e **0** retentativas (`startTime`
+`2026-09-30T14:40:43.946Z`). Reexecutados pela WU-17, com PostgreSQL descartável
+em `127.0.0.1:55611` onde o teste exige banco: `test:frontend` **121**
+arquivos e **1244** testes; `test:ai-orchestrator` sem banco **1186** passando
+e **98** `skipped` de **1284**; `test:bff-integration` **61** arquivos e **470**
+testes; `test:scheduling-service` **37** arquivos e **502** testes. Os seis
+controles negativos do §7 foram feitos depois da última edição de código, com
+restauração conferida por hash; saída real em [FINAL_AUDIT §57](FINAL_AUDIT.md).
+
+**Conferência humana pendente.** A conferência do §9 do Goal **não foi feita**:
+a leitura da nota e do diálogo de redução na tela, num aparelho real e nas
+cinco larguras. Nenhum teste é declarado prova disso, e nenhuma purga, varredura
+ou `content-purge` foi executada contra dado real.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal080-2026-09-30-d-096-accepted),
+[FINAL_AUDIT §57](FINAL_AUDIT.md) e [D-096](DECISIONS.md), **ACCEPTED** no
+[review080](reviews/080-review.md) (rodada 2 do IA Loop, sem blocker; nenhum
+código de produção nem teste mudou entre as rodadas, então a execução final e
+os controles acima continuam os da rodada 1).
+
+**O que o review080 acrescenta ao gate.** O único blocker foi de documento:
+D-096 e CURRENT_STATE nomeavam uma rota interna que não existe
+(`/internal/retention/content-purge`), e nenhum gate automático o acusou.
+Nome de rota, arquivo ou função citado em documento do §8 é conferido contra o
+código pelo review, não pelo gate. Os gates da rodada 2 deram exit 0 e
+sobrescreveram os `e2e-results` (`startTime` `2026-09-30T15:11:59Z`, **169**
+`passed`, **21** `skipped`, **0** `flaky`; autenticado `2026-09-30T15:15:11Z`,
+**169** `expected` e **1** `flaky`). O `flaky` foi `configuracoes-conta` em
+`notebook-1024`, sem o marcador de sessão na primeira tentativa: falha de
+ambiente, tratada por reexecução e nunca por edição de configuração. O
+comentário do passo `test:ai-orchestrator-content-purge` em
+`scripts/validate-integration.mjs` ainda diz que a purga não alcança conteúdo
+não classificado; o passo roda o teste certo, mas o comentário ficou velho e
+estava fora do escopo deste Goal.

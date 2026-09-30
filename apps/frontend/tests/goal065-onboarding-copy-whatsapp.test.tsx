@@ -138,7 +138,9 @@ describe("tom-da-ia: automação chamada de IA, Atendly só como plataforma", ()
   test("o título pergunta pela IA, não pela Atendly", async () => {
     const { container } = await renderStep("tom-da-ia", emptyState());
     expect(
-      await screen.findByRole("heading", { name: "Como a IA deve conversar?" }),
+      await screen.findByRole("heading", {
+        name: "Gostou da forma como a IA conversou?",
+      }),
     ).toBeVisible();
     const stepBody = container.querySelector(".onboarding-content");
     expect(stepBody?.textContent).not.toMatch(/Atendly/);

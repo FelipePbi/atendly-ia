@@ -190,9 +190,7 @@ describe("onboarding: bloco WhatsApp", () => {
         <OnboardingScreen scenario="whatsapp" />
       </OnboardingRuntimeProvider>,
     );
-    await screen.findByText(
-      "Você pode usar um número de WhatsApp pessoal ou comercial.",
-    );
+    await screen.findByText("Só um número por negócio.");
     await expectNoA11yViolations(container);
   });
 

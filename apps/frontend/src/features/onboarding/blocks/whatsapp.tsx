@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import type { Conversation } from "@/data";
 import { BffHttpError } from "@/data";
 import { WhatsAppConnectionPanel } from "@/features/whatsapp/WhatsAppConnectionPanel";
-import { Icon } from "@/shared/icons/Icon";
+import { Icon, type IconName } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
 import type { OnboardingDraft } from "../OnboardingRuntime";
@@ -29,15 +29,51 @@ export function isActivationTestScenario(
   return ACTIVATION_TEST_SCENARIOS.has(scenario);
 }
 
-/** Os pontos do vault (docs/product-vault/02-Fluxos/02-Ativacao-e-Teste-do-WhatsApp.md
+/** As quatro promessas do protótipo 4.1, que cobrem os pontos do vault
+ * (docs/product-vault/02-Fluxos/02-Ativacao-e-Teste-do-WhatsApp.md
  * §"Orientação sobre número pessoal" e docs/product-vault/01-Regras/05-WhatsApp.md
- * §"Um número por negócio"), explicados antes de oferecer a conexão. */
-const PERSONAL_NUMBER_POINTS = [
-  "Só um número por negócio.",
-  "Você pode usar um número de WhatsApp pessoal ou comercial.",
-  "A Atendly organiza todas as suas conversas automaticamente.",
-  "Você pode desativar a IA para pessoas específicas, como família e amigos.",
-  "Quando você responde uma conversa manualmente, a IA sai de cena.",
+ * §"Um número por negócio"), explicadas antes de oferecer a conexão. Cada uma
+ * tem ícone próprio e a palavra-chave em destaque. */
+const PERSONAL_NUMBER_POINTS: Array<{
+  icon: IconName;
+  lead: ReactNode;
+  tail?: string;
+}> = [
+  {
+    icon: "briefcase",
+    lead: (
+      <>
+        Use seu WhatsApp <strong>pessoal ou profissional</strong>.
+      </>
+    ),
+    tail: "Só um número por negócio.",
+  },
+  {
+    icon: "chat",
+    lead: (
+      <>
+        Continue usando o WhatsApp <strong>normalmente</strong>.
+      </>
+    ),
+    tail: "Suas conversas ficam organizadas aqui.",
+  },
+  {
+    icon: "user",
+    lead: (
+      <>
+        Quando <strong>você responde</strong>, a IA sai de cena naquela
+        conversa.
+      </>
+    ),
+  },
+  {
+    icon: "shield",
+    lead: (
+      <>
+        Você escolhe <strong>quem a IA nunca responde</strong>.
+      </>
+    ),
+  },
 ];
 
 /**
@@ -227,9 +263,12 @@ export function whatsappStepBody(
   return (
     <ul className="onboarding-points">
       {PERSONAL_NUMBER_POINTS.map((point) => (
-        <li key={point}>
-          <Icon name="check" />
-          <span>{point}</span>
+        <li key={point.icon}>
+          <Icon name={point.icon} />
+          <span>
+            <span>{point.lead}</span>
+            {point.tail && <> <span>{point.tail}</span></>}
+          </span>
         </li>
       ))}
     </ul>

@@ -183,6 +183,19 @@ export const ONBOARDING_ROUTES = [
     name: "onboarding-agenda-atendly-pronta",
     contentMarker: "Sua Agenda Atendly está pronta",
   },
+  // Goal079: as duas etapas do capítulo "Sua IA". A segunda conta grava
+  // serviço e disponibilidade (terceiro PATCH da semeadura), que a
+  // demonstração usa para montar a conversa.
+  {
+    path: "/onboarding/demonstracao-da-ia",
+    name: "onboarding-demonstracao-da-ia",
+    contentMarker: "Veja sua IA atendendo",
+  },
+  {
+    path: "/onboarding/tom-da-ia",
+    name: "onboarding-tom-da-ia",
+    contentMarker: "Gostou da forma como a IA conversou?",
+  },
   {
     path: "/onboarding/whatsapp",
     name: "onboarding-whatsapp",

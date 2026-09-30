@@ -324,9 +324,9 @@ export const SEED = Object.freeze({
 /**
  * A SEGUNDA conta do ensaio (Goal065/WU-05): para no meio do onboarding, de
  * propósito, para o gate medir as etapas que só uma sessão sem onboarding
- * concluído alcança. Só o bloco de negócio é gravado — nome, segmento,
- * "Local próprio" e endereço — e nada mais: nem fonte da agenda, nem
- * serviço, nem disponibilidade, nem tom da IA, nem WhatsApp. A conta
+ * concluído alcança. São gravados o bloco de negócio (nome, segmento, "Local
+ * próprio" e endereço), a fonte da agenda, um serviço e a disponibilidade
+ * (Goal079), e nada mais: nem tom da IA, nem WhatsApp. A conta
  * PRINCIPAL (`SEED` acima) e as 75 medidas que ela já sustenta não mudam;
  * esta é uma conta e um tenant à parte, semeada depois, pelas mesmas rotas
  * do produto.
@@ -342,6 +342,10 @@ export const ONBOARDING_SEED = Object.freeze({
   businessCategory: "Estética",
   timezone: "America/Sao_Paulo",
   address: "Rua do Onboarding, 65 — Sala 1",
+  service: Object.freeze({ name: "Corte", durationMinutes: 30, price: 90 }),
+  availabilityDays: Object.freeze([1, 2, 3, 4, 5]),
+  availabilityStartTime: "09:00",
+  availabilityEndTime: "18:00",
 });
 
 /**
@@ -1550,12 +1554,14 @@ async function seedTenant(client, ai, { bffDb, schedulingDb, aiDb, legalVersions
 
 /**
  * Semeia a SEGUNDA conta (Goal065/WU-05), pelas rotas do produto, e para no
- * meio do onboarding de propósito: registra a conta e faz exatamente dois
- * `PATCH /v1/onboarding` — o bloco de negócio (nome, segmento, "Local próprio"
- * e endereço) e depois a fonte da agenda (`ATENDLY`, que a etapa `importacao`
- * exige). Nunca chama `POST /v1/onboarding/complete` — é isso que mantém a
- * sessão em `phase: "onboarding"` para o gate autenticado medir, navegando
- * direto para a URL de cada etapa.
+ * meio do onboarding de propósito: registra a conta e faz exatamente
+ * três `PATCH /v1/onboarding` — o bloco de negócio (nome, segmento, "Local
+ * próprio" e endereço), a fonte da agenda (`ATENDLY`, que a etapa `importacao`
+ * exige) e um serviço ativo com a disponibilidade (as formas de `servico-nome`
+ * e `horarios`, que a demonstração da IA usa). Nunca chama
+ * `POST /v1/onboarding/complete` — é isso que mantém a sessão em
+ * `phase: "onboarding"` para o gate autenticado medir, navegando direto para a
+ * URL de cada etapa.
  *
  * `createClient` é uma fábrica, não a instância: esta conta precisa do
  * próprio cofre de cookies, separado do cliente que semeou a conta
@@ -1607,6 +1613,31 @@ async function seedOnboardingAccount(createClient, legalVersions) {
   step(
     calendar.status === 200,
     `seed(onboarding): the calendar onboarding block answered ${calendar.status}, expected 200`,
+  );
+
+  const operation = await client.request("PATCH", "/v1/onboarding", {
+    body: {
+      service: {
+        active: true,
+        durationMinutes: ONBOARDING_SEED.service.durationMinutes,
+        name: ONBOARDING_SEED.service.name,
+        price: ONBOARDING_SEED.service.price,
+        priceType: "FIXED",
+      },
+      availability: {
+        timezone: ONBOARDING_SEED.timezone,
+        rules: ONBOARDING_SEED.availabilityDays.map((dayOfWeek) => ({
+          active: true,
+          dayOfWeek,
+          endTime: ONBOARDING_SEED.availabilityEndTime,
+          startTime: ONBOARDING_SEED.availabilityStartTime,
+        })),
+      },
+    },
+  });
+  step(
+    operation.status === 200,
+    `seed(onboarding): the service and availability onboarding block answered ${operation.status}, expected 200`,
   );
 
   return { email: ONBOARDING_SEED.email, password: ONBOARDING_ACCOUNT_PASSWORD };

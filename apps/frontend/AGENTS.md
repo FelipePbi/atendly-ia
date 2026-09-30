@@ -203,14 +203,18 @@ O mesmo passo também mede as etapas do onboarding descritas no vault
 (Goal065, WU-05): Boas-vindas, Segmento+nome, Modalidade, Endereço, Sistema
 atual, Quando importar e Importação (no estado de conectar; as três desde o
 Goal066), Primeiro serviço, Serviços adicionais, Dias, Horários (com
-"Personalizar dias diferentes" aberto), Agenda pronta e a introdução do
-WhatsApp (`ONBOARDING_ROUTES` em `e2e/routes.ts`). Os outros estados da
+"Personalizar dias diferentes" aberto), Agenda pronta, a demonstração da IA
+(Goal079, com o serviço e a agenda semeados), o estilo da IA (Goal079) e a
+introdução do WhatsApp (`ONBOARDING_ROUTES` em `e2e/routes.ts`). Os outros estados da
 importação dentro do onboarding (análise, revisão, conflitos, execução e
 resultado) exigem uma origem real e ficam no jsdom
 (`tests/goal066-onboarding-importacao.test.tsx`). A sessão vem de uma SEGUNDA conta,
 também semeada por `scripts/goal033-authenticated-ui-rehearsal.mjs`, que a
-registra e grava só o bloco de negócio (nome, segmento, "Local próprio" e
-endereço) e a fonte da agenda (que a etapa Importação exige para abrir) sem nunca completar o onboarding — é essa conta parada no meio,
+registra e grava o bloco de negócio (nome, segmento, "Local próprio" e
+endereço), a fonte da agenda (que a etapa Importação exige para abrir), um
+serviço ativo de preço fixo com duração e a disponibilidade de segunda a
+sexta (que a demonstração da IA lê do rascunho; Goal079) sem nunca completar
+o onboarding — é essa conta parada no meio,
 nunca a principal, que o gate usa para essas etapas, e a régua é a mesma
 (overflow, toque, contraste, foco, movimento), mais a conferência de que os
 oito chips de segmento ficam inteiros dentro da largura e, nas duas larguras

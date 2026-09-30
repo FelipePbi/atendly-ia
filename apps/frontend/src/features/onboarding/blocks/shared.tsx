@@ -20,6 +20,9 @@ export type OnboardingStepBody = (
   // Só o bloco WhatsApp usa isto, para o CTA "Continuar" de whatsapp-conectar
   // saber quando o número já conectou (Goal071/WU-03).
   onWhatsappStatusChange?: (connected: boolean) => void,
+  // Só a demonstração da IA usa isto: avisa a tela quando o último item entra,
+  // para o "Continuar" aparecer só no fim (Goal079).
+  onDemoDone?: (done: boolean) => void,
 ) => React.ReactNode;
 
 export type OnboardingStepPersist = (
@@ -28,27 +31,36 @@ export type OnboardingStepPersist = (
 ) => Promise<void>;
 
 export function Choice({
+  badge,
   copy,
   onClick,
+  sample,
   selected,
   title,
 }: {
+  badge?: string;
   copy: string;
   onClick: () => void;
+  sample?: string;
   selected: boolean;
   title: string;
 }) {
   return (
     <button
-      className={`choice-card${selected ? " is-selected" : ""}`}
+      aria-pressed={selected}
+      className={`choice-card${sample ? " choice-card-tone" : ""}${selected ? " is-selected" : ""}`}
       type="button"
       onClick={onClick}
     >
       <span className="choice-check">
         <Icon name="check" />
       </span>
-      <span className="choice-title">{title}</span>
+      <span className="choice-title">
+        {title}
+        {badge ? <span className="choice-badge">{badge}</span> : null}
+      </span>
       <p>{copy}</p>
+      {sample ? <span className="choice-sample">{sample}</span> : null}
     </button>
   );
 }

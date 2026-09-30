@@ -10,7 +10,7 @@
 
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { OnboardingState, Service } from "@/data";
 import {
@@ -385,7 +385,31 @@ function availabilityFixture(
   };
 }
 
+// Com prefers-reduced-motion a demonstração abre inteira (Goal079): a
+// resposta de preço é o começo da terceira mensagem, seguida da duração.
+function stubReducedMotion() {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (query: string) => ({
+      addEventListener: vi.fn(),
+      addListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+      matches: query.includes("prefers-reduced-motion"),
+      media: query,
+      onchange: null,
+      removeEventListener: vi.fn(),
+      removeListener: vi.fn(),
+    }),
+    writable: true,
+  });
+}
+
 describe("demonstracao-da-ia: a resposta de preço segue os quatro tipos", () => {
+  beforeEach(stubReducedMotion);
+  afterEach(() => {
+    Reflect.deleteProperty(window, "matchMedia");
+  });
+
   test.each([
     ["FIXED", 80, "O Corte custa R$ 80,00."],
     ["STARTING_AT", 80, "O Corte custa a partir de R$ 80,00."],
@@ -401,7 +425,9 @@ describe("demonstracao-da-ia: a resposta de preço segue os quatro tipos", () =>
         service: serviceFixture({ price, priceType }),
       }),
     );
-    expect(await screen.findByText(reply)).toBeVisible();
+    expect(
+      await screen.findByText(reply, { exact: false }),
+    ).toBeVisible();
     // Nunca um preço inventado: "Sem preço" não vira R$ 0,00.
     expect(screen.queryByText(/R\$\s?0,00/)).toBeNull();
   });

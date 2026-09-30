@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import type { BusinessModality } from "@/data";
 import { Icon, type IconName } from "@/shared/icons/Icon";
@@ -65,11 +65,42 @@ export function businessStepBody(
   return <AddressStepBody draft={draft} setDraft={setDraft} />;
 }
 
-/** Boas-vindas não grava nada (vault `01-Onboarding.md` §1): composição
- * estática de três elementos — mensagem do cliente, resposta da IA e o
- * horário na agenda —, sem carrossel e sem movimento. A versão animada do
- * protótipo é do Goal072. */
+// Instantes (ms) em que cada parte da cena entra; a última fecha em 3,2 s.
+const WELCOME_STAGE_AT_MS = [1200, 2200, 3200];
+const WELCOME_LAST_STAGE = WELCOME_STAGE_AT_MS.length;
+
+function prefersReducedMotion(): boolean {
+  if (
+    typeof window === "undefined" ||
+    typeof window.matchMedia !== "function"
+  ) {
+    return false;
+  }
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/** Boas-vindas não grava nada (vault `01-Onboarding.md` §1): composição de
+ * três elementos — mensagem da cliente, resposta da IA e agenda com 14:00,
+ * 15:30 e 17:00 —, sem carrossel. As partes entram nessa ordem, com a linha
+ * de 15:30 por último, em até 3,5 s e sem repetir. Com
+ * `prefers-reduced-motion: reduce` a cena abre no estado final. "Começar"
+ * não espera a animação. */
 function WelcomeStepBody() {
+  const [stage, setStage] = useState(() =>
+    prefersReducedMotion() ? WELCOME_LAST_STAGE : 0,
+  );
+  useEffect(() => {
+    if (stage >= WELCOME_LAST_STAGE) return;
+    const timers = WELCOME_STAGE_AT_MS.map((at, index) =>
+      window.setTimeout(
+        () => setStage((current) => Math.max(current, index + 1)),
+        at,
+      ),
+    );
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+    // A sequência roda uma vez por montagem.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
     <div className="onboarding-welcome">
       <figure
@@ -81,16 +112,30 @@ function WelcomeStepBody() {
           <span className="message-sender">Cliente</span>
           <div className="message-bubble">Oi! Tem horário na sexta?</div>
         </div>
-        <div className="message-group is-outgoing is-ai">
-          <span className="message-sender">Sua IA</span>
-          <div className="message-bubble">
-            Tenho sexta às 15h30. Posso confirmar?
+        {stage >= 1 && (
+          <div className="message-group is-outgoing is-ai">
+            <span className="message-sender">Sua IA</span>
+            <div className="message-bubble">
+              Tenho sexta às 15h30. Posso confirmar?
+            </div>
           </div>
-        </div>
-        <div className="onboarding-welcome-slot">
-          <strong>15:30</strong>
-          <span>Ana Paula · Corte</span>
-        </div>
+        )}
+        {stage >= 2 && (
+          <div className="onboarding-welcome-agenda">
+            <div className="onboarding-welcome-slot is-free" key="14:00">
+              <strong>14:00</strong>
+            </div>
+            {stage >= 3 && (
+              <div className="onboarding-welcome-slot" key="15:30">
+                <strong>15:30</strong>
+                <span>Ana Paula · Corte</span>
+              </div>
+            )}
+            <div className="onboarding-welcome-slot is-free" key="17:00">
+              <strong>17:00</strong>
+            </div>
+          </div>
+        )}
       </figure>
       <p className="field-help">Seu progresso fica salvo a cada etapa.</p>
     </div>

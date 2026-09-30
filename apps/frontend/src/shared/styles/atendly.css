@@ -690,6 +690,48 @@ p {
   outline: 3px solid var(--accent);
   outline-offset: 2px;
 }
+.choice-grid.tone-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+.choice-card-tone {
+  min-height: 0;
+  text-align: left;
+}
+.choice-badge {
+  margin-left: var(--s2);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-body, inherit);
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.choice-card-tone.is-selected .choice-badge {
+  background: var(--surface);
+}
+.choice-sample {
+  display: block;
+  margin-top: var(--s3);
+  padding: var(--s3) var(--s4);
+  border-radius: var(--r-input);
+  background: var(--surface-secondary);
+  color: var(--fg-soft);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.choice-card-tone.is-selected .choice-sample {
+  background: var(--surface);
+  animation: pop var(--at-duration-moderate) var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .choice-card-tone.is-selected .choice-sample {
+    animation: none;
+  }
+}
 .choice-check {
   position: absolute;
   right: 14px;
@@ -2629,17 +2671,14 @@ p {
 .onboarding-actions.is-single {
   justify-content: flex-end;
 }
-/* Introdução do WhatsApp: o principal vem primeiro no DOM (protótipo 4.1);
-   a partir do tablet a linha é invertida para manter "Voltar" à esquerda. */
-.onboarding-actions.is-stacked {
-  flex-direction: row-reverse;
-}
+/* Introdução do WhatsApp: o principal vem primeiro no DOM e na tela
+   (protótipo 4.1); nenhuma regra reordena a linha. */
 .onboarding-welcome {
   display: grid;
   gap: 14px;
 }
-/* Boas-vindas: composição estática (mensagem, resposta da IA, horário na
-   agenda), sem animação; a versão animada do protótipo é do Goal072. */
+/* Boas-vindas: mensagem, resposta da IA e agenda entram em sequência
+   (Goal079); com prefers-reduced-motion a cena abre completa e parada. */
 .onboarding-welcome-scene {
   margin: 0;
   padding: 18px;
@@ -2649,6 +2688,25 @@ p {
   flex-direction: column;
   gap: 4px;
   background: var(--surface-secondary);
+}
+.onboarding-welcome-scene > *,
+.onboarding-welcome-agenda > * {
+  animation: rise var(--at-duration-moderate) var(--ease);
+}
+.onboarding-welcome-agenda {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+.onboarding-welcome-slot.is-free {
+  border-left-color: var(--border);
+  color: var(--muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-welcome-scene > *,
+  .onboarding-welcome-agenda > * {
+    animation: none;
+  }
 }
 .onboarding-welcome-slot {
   padding: 10px 14px;
@@ -2743,11 +2801,26 @@ p {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-top: 18px;
   padding: 18px;
   border: 1px solid var(--border);
   border-radius: var(--r-card);
   background: var(--surface-secondary);
+}
+/* Cada item só existe no DOM depois de entrar (Goal079); com
+   prefers-reduced-motion a conversa abre inteira e parada. */
+.onboarding-demo-chat > * {
+  animation: rise var(--at-duration-moderate) var(--ease);
+}
+.onboarding-demo-event {
+  margin: 8px 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-demo-chat > * {
+    animation: none;
+  }
 }
 .summary-row {
   display: flex;

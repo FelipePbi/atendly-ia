@@ -227,7 +227,7 @@ describe("telas novas do onboarding deste Goal passam no axe", () => {
     await expectNoA11yViolations(
       await renderAndAwait(
         "demonstracao-da-ia",
-        "Veja sua IA simulando um atendimento",
+        "Veja sua IA atendendo",
       ),
     );
   });

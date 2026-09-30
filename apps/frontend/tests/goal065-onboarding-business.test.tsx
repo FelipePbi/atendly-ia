@@ -97,7 +97,19 @@ describe("boas-vindas: entrada da conta nova, sem gravação", () => {
     expect(back).not.toHaveAttribute("href");
   });
 
-  test("texto do vault, a frase do progresso e a composição estática de três elementos", async () => {
+  test("texto do vault, a frase do progresso e a composição de três elementos (cena completa com reduce)", async () => {
+    // A entrada em sequência é do goal079-onboarding-welcome-whatsapp.test.tsx;
+    // aqui, com reduce, a cena abre completa.
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: (query: string) => ({
+        addEventListener: vi.fn(),
+        matches: query.includes("prefers-reduced-motion"),
+        media: query,
+        removeEventListener: vi.fn(),
+      }),
+      writable: true,
+    });
     await renderStep("boas-vindas", emptyState());
     expect(
       await screen.findByRole("heading", {
@@ -108,13 +120,14 @@ describe("boas-vindas: entrada da conta nova, sem gravação", () => {
     expect(
       screen.getByText("Seu progresso fica salvo a cada etapa."),
     ).toBeVisible();
-    // Mensagem do cliente, resposta da IA e horário na agenda, numa figura
-    // estática com nome próprio (sem carrossel nem animação).
+    // Mensagem do cliente, resposta da IA e agenda, numa figura com nome
+    // próprio (sem carrossel).
     const scene = screen.getByRole("img", { name: /a IA responde/ });
     expect(scene).toHaveTextContent("Oi! Tem horário na sexta?");
     expect(scene).toHaveTextContent("Tenho sexta às 15h30. Posso confirmar?");
     expect(scene).toHaveTextContent("15:30");
     expect(scene).toHaveTextContent("Ana Paula · Corte");
+    Reflect.deleteProperty(window, "matchMedia");
   });
 });
 

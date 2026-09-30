@@ -460,29 +460,54 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
     expect(screen.queryByText(/simulado/u)).toBeNull();
   });
 
-  test("demonstracao-da-ia com serviço e horário reais mostra a demonstração simulada com o preço e o horário reais, e avança para tom-da-ia sem escrever nem enviar", async () => {
-    const user = userEvent.setup();
-    renderScreen(
-      "demonstracao-da-ia",
-      stateFixture({
-        ...businessDone,
-        ...calendarDone,
-        ...serviceDone,
-        ...availabilityDone,
+  test("demonstracao-da-ia com serviço e horário reais mostra a conversa com o preço e os horários reais, e avança para tom-da-ia sem escrever nem enviar", async () => {
+    // Com prefers-reduced-motion a conversa abre inteira, com o Continuar
+    // (Goal079); a sequência item a item é provada em goal079-onboarding-demo.
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: (query: string) => ({
+        addEventListener: vi.fn(),
+        addListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+        matches: query.includes("prefers-reduced-motion"),
+        media: query,
+        onchange: null,
+        removeEventListener: vi.fn(),
+        removeListener: vi.fn(),
       }),
-    );
-    expect(
-      await screen.findByText("Demonstração simulada", { exact: false }),
-    ).toBeVisible();
-    expect(screen.getByText("O Corte custa R$ 100,00.")).toBeVisible();
-    expect(screen.getAllByText(/09:00/u).length).toBeGreaterThan(0);
+      writable: true,
+    });
+    try {
+      const user = userEvent.setup();
+      renderScreen(
+        "demonstracao-da-ia",
+        stateFixture({
+          ...businessDone,
+          ...calendarDone,
+          ...serviceDone,
+          ...availabilityDone,
+        }),
+      );
+      expect(
+        await screen.findByRole("log", { name: "Conversa de exemplo da IA" }),
+      ).toBeVisible();
+      expect(
+        screen.getByText("O Corte custa R$ 100,00.", { exact: false }),
+      ).toBeVisible();
+      expect(
+        screen.getByText(/Tenho 9h, 13h ou 17h\./u),
+      ).toBeVisible();
 
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+      // "Continuar" entra num efeito depois da conversa: espera, não afirma.
+      await user.click(await screen.findByRole("button", { name: "Continuar" }));
 
-    expect(push).toHaveBeenCalledWith("/onboarding/tom-da-ia");
-    // A demonstração é simulada: nenhuma escrita nem porta de envio.
-    expect(updateOnboarding).not.toHaveBeenCalled();
-    expect(completeOnboarding).not.toHaveBeenCalled();
+      expect(push).toHaveBeenCalledWith("/onboarding/tom-da-ia");
+      // A demonstração é simulada: nenhuma escrita nem porta de envio.
+      expect(updateOnboarding).not.toHaveBeenCalled();
+      expect(completeOnboarding).not.toHaveBeenCalled();
+    } finally {
+      Reflect.deleteProperty(window, "matchMedia");
+    }
   });
 
   test("tom-da-ia salva o estilo escolhido e avança para whatsapp", async () => {
@@ -494,7 +519,9 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
     await user.click(
       await screen.findByRole("button", { name: /^Profissional/ }),
     );
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(
+      screen.getByRole("button", { name: "Continuar com Profissional" }),
+    );
 
     expect(updateOnboarding).toHaveBeenCalledWith({
       ai: { tone: "PROFESSIONAL" },
@@ -513,25 +540,15 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
         ...toneDone,
       }),
     );
+    expect(await screen.findByText("Só um número por negócio.")).toBeVisible();
     expect(
-      await screen.findByText(
-        "Você pode usar um número de WhatsApp pessoal ou comercial.",
-      ),
+      screen.getByText("Suas conversas ficam organizadas aqui."),
     ).toBeVisible();
     expect(
-      screen.getByText(
-        "A Atendly organiza todas as suas conversas automaticamente.",
-      ),
+      screen.getByText("quem a IA nunca responde", { selector: "strong" }),
     ).toBeVisible();
     expect(
-      screen.getByText(
-        "Você pode desativar a IA para pessoas específicas, como família e amigos.",
-      ),
-    ).toBeVisible();
-    expect(
-      screen.getByText(
-        "Quando você responde uma conversa manualmente, a IA sai de cena.",
-      ),
+      screen.getByText("você responde", { selector: "strong" }),
     ).toBeVisible();
 
     await user.click(
@@ -766,7 +783,9 @@ describe("erro 409 ao salvar uma etapa não cita WhatsApp", () => {
     await user.click(
       await screen.findByRole("button", { name: /^Profissional/ }),
     );
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(
+      screen.getByRole("button", { name: "Continuar com Profissional" }),
+    );
 
     expect(
       await screen.findByText(

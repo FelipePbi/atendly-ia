@@ -7991,3 +7991,80 @@ continuam os da rodada 2.
   (`startTime` `2026-09-30T12:03:21Z` e `12:06:34Z`). A conferência humana
   do §9 continua **não feita**. Ver a nota de fechamento de
   [D-094](DECISIONS.md) e o [review072](reviews/072-review.md).
+
+## Delta implementado — Goal079, 2026-09-30 ([D-095](DECISIONS.md), ACCEPTED)
+
+Corrige **O-36**, **O-37**, **O-39**, **O-42** e a parte animada de **O-01** do
+[QA_LOCAL_REVIEW](QA_LOCAL_REVIEW.md), fora da enumeração A-01…A-24 do
+FINAL_AUDIT, e a observação 3 do review065 (ordem de Tab da introdução do
+WhatsApp). Toca `apps/frontend/` e, por uma edição autorizada pelo §5 do Goal,
+`seedOnboardingAccount` em `scripts/goal033-authenticated-ui-rehearsal.mjs`;
+nenhuma rota, migration ou mudança de contrato. Decisão:
+[D-095](DECISIONS.md), proposta no Goal079, **PROPOSED** até o review.
+
+- **Boas-vindas animada.** A resposta da IA, a agenda com 14:00 e 17:00 e a
+  linha de 15:30 entram em 1,2 s, 2,2 s e 3,2 s; a figura segue `role="img"` e
+  "Começar" está habilitado desde o primeiro quadro.
+- **Demonstração da IA em sequência.** Conversa de onze itens que entram um a
+  um (o último em 11,2 s), com o dia (a próxima data depois de hoje, no fuso do
+  negócio, em `draft.days`) e os horários (primeiro, do meio e último candidato
+  do intervalo do dia, com `dayHours` vencendo o intervalo-base) calculados do
+  rascunho por `features/onboarding/demo.ts`; eventos dentro da conversa,
+  `role="log"`, "Continuar" só depois do último item; sem leitura da agenda
+  real, sem BFF e sem escrita.
+- **Estilo com amostra.** Três opções com descritor e amostra, "recomendada" em
+  Equilibrada, que vem selecionada com `tone` nulo; o CTA é "Continuar com
+  <estilo>" e enviar sem tocar grava `BALANCED`. A amostra é prévia do
+  frontend, não a saída do modelo.
+- **Promessas e ordem de Tab.** Quatro linhas com ícone próprio e `<strong>`;
+  "Conectar meu WhatsApp" antes de "Fazer isso depois" no DOM e na tela, sem
+  regra de `.onboarding-actions` que reordene a linha.
+- **Movimento reduzido.** Com `prefers-reduced-motion: reduce`, cada tela abre
+  no estado final, com o "Continuar" da demonstração à mostra.
+- **Gate autenticado.** `ONBOARDING_ROUTES` ganhou
+  `onboarding-demonstracao-da-ia` e `onboarding-tom-da-ia`, por acréscimo; a
+  segunda conta ganhou um terceiro `PATCH /v1/onboarding` (serviço ativo de preço
+  fixo e disponibilidade de segunda a sexta) e continua sem `POST
+  /v1/onboarding/complete`. `apps/frontend/AGENTS.md` foi atualizado com essas
+  duas frases.
+- **Execução final, da WU-14 da rodada 1 do IA Loop, todos exit 0:**
+  `validate:core` **17** passos (**15** `passed`, **2** `skipped`) com
+  `test:frontend` **121**/**1243** (baseline **116**/**1189**, **+5** arquivos e
+  **+54** testes); `test:gate` **233**/**233**; `validate:ui` **169** `passed`,
+  **21** `skipped`, **0** retentativas (`startTime` `2026-09-30T13:01:45Z`);
+  `validate:integration` **36**/**36** passos, com o gate autenticado em **170**
+  testes (o piso **160** mais duas rotas vezes cinco larguras), **0**
+  `unexpected`, **0** `flaky` e **0** retentativas (`startTime`
+  `2026-09-30T13:15:11Z`). Duas execuções anteriores sobre o mesmo código
+  tiveram **1** retentativa cada, em rota fora do onboarding e na tela
+  "Verificando seu acesso" de `ProductRuntime.tsx`, que o diff não toca;
+  foram reexecutadas, sem editar configuração.
+- **Oito controles negativos do §7**, rodados depois da última edição de
+  código, por edição real revertida e conferida por hash: cada um reprova o
+  teste esperado com o defeito e passa restaurado. Saída, hashes e vermelho da
+  baseline em [FINAL_AUDIT §56](FINAL_AUDIT.md).
+- **Conferência humana pendente:** a conferência do §9 do Goal **não foi
+  feita** — a Boas-vindas, a demonstração, o estilo e a introdução do WhatsApp
+  num aparelho real nas cinco larguras frente aos protótipos; o ritmo da
+  demonstração (cerca de 11 s) e o da Boas-vindas (cerca de 3 s); o "pop" da
+  amostra; e o tom de cada amostra. Nenhum teste é declarado prova de
+  fidelidade visual.
+- **Limites declarados:** o gate mede a demonstração no quadro em que a
+  encontra depois de `networkidle`, que pode ser um quadro do meio da
+  sequência; os testes jsdom com relógio falso provam ordem, momento e
+  acessibilidade, não aparência; a busca por CEP (O-15) segue pendente de
+  decisão humana — ver [D-095](DECISIONS.md).
+- **Fechamento — review079, 2026-09-30.** [D-095](DECISIONS.md)
+  **ACCEPTED** no [review079](reviews/079-review.md), rodada 2 do IA Loop,
+  sem blocker; rodada 1 `CHANGES_REQUIRED` com 1 blocker. O defeito achado
+  no review foi um teste que este Goal deixou intermitente:
+  `goal018-onboarding-reachability.test.tsx` procurava o "Continuar" da
+  demonstração antes do efeito passivo `onDemoDone`, e reprovou **1** vez em
+  **5**. A rodada 2 passou a esperar o botão com `findByRole`; nenhum código
+  de produção mudou. A execução final vigente continua a da WU-14 da rodada 1
+  (autenticado **170**/**0** retentativas). O Tech Lead confirmou **10**
+  execuções verdes seguidas do conjunto afetado e `test:frontend`
+  **121**/**1243**. Os gates da rodada 2 sobrescreveram os `e2e-results` com
+  as mesmas contagens (`startTime` `2026-09-30T13:40:18Z` e `13:43:29Z`). A
+  conferência humana do §9 continua **não feita**. Ver a nota de fechamento
+  de [D-095](DECISIONS.md) e o [review079](reviews/079-review.md).

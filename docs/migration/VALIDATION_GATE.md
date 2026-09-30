@@ -3327,3 +3327,77 @@ review: o sprite de ícones com XML inválido da rodada 1 apagava o ícone
 `clock` no app inteiro e passou por todos os gates, inclusive o gate
 autenticado; hoje `goal072-icon-sprite.test.ts`, dentro de `test:frontend`,
 parseia `public/icons/atendly-icons.svg` e exige um símbolo por `IconName`.
+
+## Onboarding com Boas-vindas animada, demonstração da IA em sequência, estilo com amostra e promessas, do Goal079
+
+`apps/frontend/` anima a Boas-vindas, troca a demonstração da IA por uma
+conversa em sequência calculada do rascunho, dá uma amostra a cada estilo da IA
+(com Equilibrada como padrão), reescreve a introdução do WhatsApp em quatro
+promessas e põe "Conectar meu WhatsApp" antes de "Fazer isso depois" na ordem
+de Tab. Nenhuma rota, migration ou mudança de contrato; `ONBOARDING_ROUTES`
+ganha duas entradas, por acréscimo, e nenhuma rota sai de `PUBLIC_ROUTES`,
+`AUTHENTICATED_ROUTES` ou `ONBOARDING_ROUTES`.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `goal079-onboarding-welcome-whatsapp.test.tsx` (jsdom, **9** testes): a Boas-vindas com relógio falso, sem e com `prefers-reduced-motion`, "Começar" habilitado no primeiro quadro, `role="img"` e `aria-label` mantidos; as quatro promessas na ordem, com `<strong>`, ícone `aria-hidden` distinto e "Só um número por negócio."; "Conectar meu WhatsApp" antes de "Fazer isso depois" e nenhuma regra de `.onboarding-actions` com `row-reverse`, `column-reverse` ou `order` | Fidelidade da composição e do ritmo aos protótipos |
+| `goal079-onboarding-demo.test.tsx` (jsdom, **14**) e `goal079-demo-slots.test.ts` (**17**): a sequência item a item, o "Continuar" só com o último item, `role="log"`, o dia e os horários do rascunho, os eventos dentro da conversa, nenhuma escrita e o cálculo puro com relógio fixo (um candidato, dois, `dayHours` vencendo o intervalo-base, hoje não conta, os quatro tipos de preço) | Que o ritmo de cerca de 11 s leia bem |
+| `goal079-onboarding-style.test.tsx` (jsdom, **8**): título, descritores e amostra com o serviço do rascunho, Equilibrada selecionada com `tone` nulo, CTA "Continuar com <estilo>", `BALANCED` gravado sem tocar, nenhum heading dentro de `<button>` | Que a amostra soe como o tom; a amostra é prévia do frontend, não a saída do modelo |
+| `goal079-onboarding-gate-routes.test.ts` (**6**): as duas rotas novas em `ONBOARDING_ROUTES` com o título da etapa como `contentMarker`, e as treze anteriores ainda presentes | Que a medida da tela passe |
+| Gate autenticado dentro de `validate:integration`, **170** testes e **0** retentativas: as `ONBOARDING_ROUTES` nas cinco larguras — overflow, toque, contraste, foco e movimento — com a segunda conta semeada com o negócio, a fonte da agenda, um serviço ativo e a disponibilidade | Fidelidade aos protótipos; e a demonstração é medida no quadro em que o gate a encontra, que pode ser do meio da sequência |
+
+A segunda conta do ensaio autenticado ganhou um terceiro `PATCH
+/v1/onboarding`, depois dos dois de antes, com um serviço ativo de preço fixo
+(Corte, 30 min, R$ 90) e a disponibilidade de segunda a sexta, das 09:00 às
+18:00; o ensaio exige 200. Sem isso, `onboarding-demonstracao-da-ia` mostraria o
+aviso "Configure…" e não a conversa. É a edição em `scripts/` que o §5 e o §10
+do Goal autorizam; o docblock de `seedOnboardingAccount` diz "três `PATCH
+/v1/onboarding`" e continua dizendo que não há `POST /v1/onboarding/complete`, e
+nenhuma linha de `e2e/authenticated-matrix.spec.ts` mudou. `apps/frontend/AGENTS.md`
+foi atualizado com a mesma frase e com as duas rotas novas.
+
+Seis arquivos de teste de Goals anteriores tiveram asserções alteradas (títulos,
+texto das promessas, CTA "Continuar com <estilo>" e a demonstração abrindo
+inteira com `prefers-reduced-motion` simulado), cada uma com o motivo e o teste
+que a substitui em [FINAL_AUDIT §56](FINAL_AUDIT.md); nenhum teste foi removido
+nem pulado.
+
+**Execução final, da WU-14 da rodada 1 do IA Loop**, sobre a árvore entregue,
+na ordem do §8, todos exit 0: `npm run validate:core` — **17** passos, **15**
+`passed`, **0** `failed`, **2** `skipped` (`test:bff`, `test:health-worker`),
+com `test:frontend` **121**/**1243** (baseline **116**/**1189**: **+5**
+arquivos e **+54** testes, a soma de 9 + 14 + 17 + 8 + 6); `npm run test:gate`
+— **233**/**233**; `npm run validate:ui` — **169** `passed`, **21** `skipped`,
+**0** retentativas (`startTime` `2026-09-30T13:01:45Z`); `npm run
+validate:integration`, contra um PostgreSQL descartável em
+`127.0.0.1:55590/ia_bff_test` — **36** passos, **36** `passed`, com
+`rehearse:goal033-authenticated-ui` em **170** testes, **0** `unexpected`,
+**0** `flaky` e **0** retentativas (`startTime` `2026-09-30T13:15:11Z`);
+`tsc --noEmit` e `eslint` de `apps/frontend`, exit 0. Duas execuções anteriores
+de `validate:integration`, sobre o mesmo código, tiveram cada uma **1**
+retentativa (a de `startTime` `2026-09-30T13:07:16Z` em `servicos` a 360 px), em
+rota fora do onboarding, parada na tela "Verificando seu acesso" de
+`shared/runtime/ProductRuntime.tsx`, que o diff não toca; foram reexecutadas
+sem editar configuração (§10 do Goal). Os oito controles negativos do §7 foram
+rodados depois da última edição de código, com restauração conferida por
+hash; saída real em [FINAL_AUDIT §56](FINAL_AUDIT.md).
+
+**Conferência humana pendente.** A conferência do §9 do Goal **não foi feita**:
+a Boas-vindas, a demonstração, o estilo e a introdução do WhatsApp num aparelho
+real nas cinco larguras frente aos protótipos; o ritmo da demonstração (cerca
+de 11 s) e o da Boas-vindas (cerca de 3 s); o "pop" da amostra; e o tom de cada
+amostra. Nenhum teste é declarado prova de fidelidade visual.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal079-2026-09-30-d-095-accepted),
+[FINAL_AUDIT §56](FINAL_AUDIT.md) e [D-095](DECISIONS.md), **ACCEPTED** no
+[review079](reviews/079-review.md) (rodada 2 do IA Loop, sem blocker; nenhum
+código de produção mudou entre as rodadas, e a execução final vigente
+continua a da WU-14 da rodada 1). Os gates da rodada 2 deram exit 0 e
+sobrescreveram os `e2e-results` com as mesmas contagens: público `startTime`
+`2026-09-30T13:40:18Z` (**169**/**21**/**0**) e autenticado
+`2026-09-30T13:43:29Z` (**170** `expected`, **0** `flaky`). A lição do review:
+o "Continuar" da demonstração entra num efeito passivo (`onDemoDone`), um
+render depois da conversa, então teste com relógio real precisa esperá-lo com
+`findByRole`; a consulta síncrona deixou `goal018-onboarding-reachability`
+intermitente (**1** falha em **5**) sem que nenhum gate o acusasse de forma
+estável.

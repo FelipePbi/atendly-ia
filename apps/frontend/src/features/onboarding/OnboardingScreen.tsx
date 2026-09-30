@@ -12,6 +12,7 @@ import {
 
 import { blockForScenario, onboardingFlow } from "./blocks";
 import { skipActivationTestStep } from "./blocks/activation-test";
+import { effectiveTone, toneLabel } from "./blocks/ai";
 import {
   onboardingError,
   stepBodyByBlock,
@@ -54,6 +55,9 @@ export function OnboardingScreen({
   // Só lido em whatsapp-conectar: enquanto falso, "Continuar" não compete com
   // o CTA primário do próprio painel de conexão (Goal071/WU-03).
   const [whatsappConnected, setWhatsappConnected] = useState(false);
+  // Só lido em demonstracao-da-ia: "Continuar" aparece quando o último item da
+  // conversa entra (ou de imediato, sem serviço e horário para simular).
+  const [demoDone, setDemoDone] = useState(false);
   const [eyebrow, title, description] = onboardingScenarios[scenario];
   // "importacao" só existe para quem escolheu importar: aberta por URL direta
   // sem a fonte gravada, volta para "sistema-atual" sem tocar na importação.
@@ -77,6 +81,8 @@ export function OnboardingScreen({
   const isWelcomeStep = scenario === "boas-vindas";
   const isSistemaAtual = scenario === "sistema-atual";
   const isQuandoImportar = scenario === "quando-importar";
+  const isAiDemo = scenario === "demonstracao-da-ia";
+  const isToneStep = scenario === "tom-da-ia";
   const isWhatsappIntro = scenario === "whatsapp";
   const isWhatsappConnect = scenario === "whatsapp-conectar";
   const isWhatsappConclusion = scenario === "whatsapp-concluido";
@@ -264,6 +270,8 @@ export function OnboardingScreen({
     <button className="btn btn-primary" disabled={busy} type="submit">
       {busy ? "Abrindo..." : "Começar"}
     </button>
+  ) : isAiDemo && !demoDone ? (
+    null
   ) : isSistemaAtual ? (
     // Os dois cards do corpo já são a ação (QA O-19, O-22): não há
     // "Continuar" aqui; a volta é o chevron do topo.
@@ -366,9 +374,8 @@ export function OnboardingScreen({
       </button>
     </>
   ) : isWhatsappIntro ? (
-    // Principal primeiro, como no protótipo (tela 4.1): no celular os botões
-    // ficam empilhados em largura total nesta ordem; a partir do tablet, a
-    // linha é invertida para manter "Voltar" à esquerda (QA O-41).
+    // Principal primeiro, como no protótipo (tela 4.1), no DOM e na tela: no
+    // celular os botões ficam empilhados em largura total nesta ordem (QA O-41).
     <>
       <button className="btn btn-primary" disabled={busy} type="submit">
         {busy ? "Salvando..." : "Conectar meu WhatsApp"}
@@ -399,7 +406,11 @@ export function OnboardingScreen({
   ) : (
     <>
       <button className="btn btn-primary" disabled={busy} type="submit">
-        {busy ? "Salvando..." : "Continuar"}
+        {busy
+          ? "Salvando..."
+          : isToneStep
+            ? `Continuar com ${toneLabel(effectiveTone(draft))}`
+            : "Continuar"}
       </button>
     </>
   );
@@ -426,7 +437,13 @@ export function OnboardingScreen({
             />
           </div>
         ) : (
-          stepBodyByBlock[blockId](scenario, draft, setDraft, setWhatsappConnected)
+          stepBodyByBlock[blockId](
+            scenario,
+            draft,
+            setDraft,
+            setWhatsappConnected,
+            setDemoDone,
+          )
         )
       }
       description={description}

@@ -1,125 +1,184 @@
+import { useEffect, useState } from "react";
+
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
+import {
+  buildDemoConversation,
+  type DemoItem,
+  type DemoTone,
+  demoToneSample,
+} from "../demo";
 import type { OnboardingDraft } from "../OnboardingRuntime";
 import type { OnboardingScenario } from "../scenarios";
 import { Choice, type OnboardingStepContext } from "./shared";
 
-const WEEKDAY_LABELS = [
-  "domingo",
-  "segunda-feira",
-  "terça-feira",
-  "quarta-feira",
-  "quinta-feira",
-  "sexta-feira",
-  "sábado",
+// Intervalo (ms) antes de cada item seguinte: o primeiro já está na tela no
+// primeiro quadro e o último entra em 11,2 s (limite: 12 s).
+const DEMO_GAP_BY_KIND_MS = { ai: 1300, client: 1300, event: 700 } as const;
+
+const TONE_OPTIONS: Array<{
+  descriptor: string;
+  label: string;
+  recommended?: boolean;
+  tone: DemoTone;
+}> = [
+  {
+    descriptor: "Clara e educada, sem emojis",
+    label: "Profissional",
+    tone: "PROFESSIONAL",
+  },
+  {
+    descriptor: "Simpática e direta, poucos emojis",
+    label: "Equilibrada",
+    recommended: true,
+    tone: "BALANCED",
+  },
+  {
+    descriptor: "Casual e próxima, com emojis",
+    label: "Descontraída",
+    tone: "CASUAL",
+  },
 ];
 
-const currencyFormatter = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-});
-
-/** A resposta de preço da demonstração, pelo tipo gravado (Goal065): a IA só
- * informa o valor cadastrado, e "A partir de" nunca vira preço fixo. */
-function demoPriceReply(draft: OnboardingDraft): string {
-  const name = draft.serviceName;
-  if (draft.servicePriceType === "ON_REQUEST") {
-    return `O valor do ${name} é sob consulta.`;
-  }
-  const raw = draft.servicePrice.trim().replace(",", ".");
-  const value = Number(raw);
-  if (
-    draft.servicePriceType === "NOT_INFORMED" ||
-    raw === "" ||
-    !Number.isFinite(value)
-  ) {
-    return `O valor do ${name} ainda não foi informado.`;
-  }
-  const price = currencyFormatter.format(value);
-  return draft.servicePriceType === "STARTING_AT"
-    ? `O ${name} custa a partir de ${price}.`
-    : `O ${name} custa ${price}.`;
+/** O estilo gravado, ou Equilibrada (o padrão do vault) enquanto nada foi gravado. */
+export function effectiveTone(draft: Pick<OnboardingDraft, "tone">): DemoTone {
+  return draft.tone ?? "BALANCED";
 }
 
-function demoDayLabel(draft: OnboardingDraft): string {
-  const [firstDay] = [...draft.days].sort((a, b) => a - b);
-  return WEEKDAY_LABELS[firstDay ?? 1] ?? WEEKDAY_LABELS[1];
+export function toneLabel(tone: DemoTone): string {
+  return TONE_OPTIONS.find((option) => option.tone === tone)?.label ?? "";
+}
+
+function prefersReducedMotion(): boolean {
+  if (
+    typeof window === "undefined" ||
+    typeof window.matchMedia !== "function"
+  ) {
+    return false;
+  }
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function demoEntryTimes(items: DemoItem[]): number[] {
+  let at = 0;
+  return items.slice(1).map((item) => {
+    at += DEMO_GAP_BY_KIND_MS[item.kind];
+    return at;
+  });
 }
 
 /**
  * Demonstração automática do bloco Sua IA, antes do estilo (vault
- * `01-Onboarding.md` §7): simulação local, sem porta de envio e sem escrita
- * em Appointment/Customer/Conversation/Message — só o serviço, o preço e o
- * horário já reais do negócio, lidos do draft carregado do onboarding.
+ * `01-Onboarding.md` §7): simulação local, sem porta de envio, sem leitura da
+ * agenda real e sem escrita em Appointment/Customer/Conversation/Message — só
+ * o serviço, o preço, a duração e os horários do rascunho carregado do
+ * onboarding. As mensagens entram uma a uma e `onDemoDone(true)` avisa a tela
+ * quando o último item entra, para o "Continuar" aparecer só então.
  */
-function AiDemoStepBody({ draft }: { draft: OnboardingDraft }) {
-  if (!draft.serviceOperational || !draft.hoursValid) {
-    const missing: string[] = [];
-    if (!draft.serviceOperational) {
-      missing.push("um serviço ativo com duração definida");
-    }
-    if (!draft.hoursValid) {
-      missing.push("um horário de atendimento configurado");
-    }
-    return (
-      <div className="onboarding-note is-important">
-        <Icon name="info" />
-        <span>
-          Configure {missing.join(" e ")} para ver a demonstração da IA.
-        </span>
-      </div>
-    );
+function AiDemoStepBody({
+  draft,
+  onDemoDone,
+}: {
+  draft: OnboardingDraft;
+  onDemoDone?: (done: boolean) => void;
+}) {
+  const [conversation] = useState(() =>
+    draft.serviceOperational && draft.hoursValid
+      ? buildDemoConversation(draft, new Date())
+      : null,
+  );
+  if (!conversation) {
+    return <DemoUnavailable draft={draft} onDemoDone={onDemoDone} />;
   }
+  return (
+    <DemoConversationView
+      items={conversation.items}
+      onDemoDone={onDemoDone}
+    />
+  );
+}
 
-  const priceReply = demoPriceReply(draft);
-  const day = demoDayLabel(draft);
+function DemoUnavailable({
+  draft,
+  onDemoDone,
+}: {
+  draft: OnboardingDraft;
+  onDemoDone?: (done: boolean) => void;
+}) {
+  useEffect(() => {
+    onDemoDone?.(true);
+    return () => onDemoDone?.(false);
+  }, [onDemoDone]);
+  const missing: string[] = [];
+  if (!draft.serviceOperational) {
+    missing.push("um serviço ativo com duração definida");
+  }
+  if (!draft.hoursValid) {
+    missing.push("um horário de atendimento configurado");
+  } else if (draft.serviceOperational) {
+    missing.push("um horário de atendimento em que o serviço caiba");
+  }
+  return (
+    <div className="onboarding-note is-important">
+      <Icon name="info" />
+      <span>Configure {missing.join(" e ")} para ver a demonstração da IA.</span>
+    </div>
+  );
+}
+
+function DemoConversationView({
+  items,
+  onDemoDone,
+}: {
+  items: DemoItem[];
+  onDemoDone?: (done: boolean) => void;
+}) {
+  const [shown, setShown] = useState(() =>
+    prefersReducedMotion() ? items.length : 1,
+  );
+  useEffect(() => {
+    if (shown >= items.length) return;
+    const timers = demoEntryTimes(items).map((at, index) =>
+      window.setTimeout(
+        () => setShown((current) => Math.max(current, index + 2)),
+        at,
+      ),
+    );
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+    // A sequência roda uma vez por montagem.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const done = shown >= items.length;
+  useEffect(() => {
+    onDemoDone?.(done);
+    return () => onDemoDone?.(false);
+  }, [done, onDemoDone]);
 
   return (
-    <>
-      <div className="onboarding-note">
-        <Icon name="spark" />
-        <span>
-          Demonstração simulada — nenhuma mensagem é enviada e nenhum
-          agendamento é criado de verdade.
-        </span>
-      </div>
-      <div className="onboarding-demo-chat" aria-label="Demonstração simulada da IA">
-        <div className="message-group">
-          <span className="message-sender">Cliente</span>
-          <div className="message-bubble">
-            Oi! Quanto custa o {draft.serviceName}?
+    <div
+      aria-label="Conversa de exemplo da IA"
+      className="onboarding-demo-chat"
+      role="log"
+    >
+      {items.slice(0, shown).map((item, index) =>
+        item.kind === "event" ? (
+          <p className="onboarding-demo-event" key={index}>
+            {item.text}
+          </p>
+        ) : (
+          <div
+            className={`message-group${item.kind === "ai" ? " is-outgoing is-ai" : ""}`}
+            key={index}
+          >
+            <span className="message-sender">
+              {item.kind === "ai" ? "Sua IA" : "Cliente"}
+            </span>
+            <div className="message-bubble">{item.text}</div>
           </div>
-        </div>
-        <div className="message-group is-outgoing is-ai">
-          <span className="message-sender">Sua IA</span>
-          <div className="message-bubble">{priceReply}</div>
-          <span className="message-meta">Serviço reconhecido</span>
-        </div>
-        <div className="message-group">
-          <span className="message-sender">Cliente</span>
-          <div className="message-bubble">Tem horário {day}?</div>
-        </div>
-        <div className="message-group is-outgoing is-ai">
-          <span className="message-sender">Sua IA</span>
-          <div className="message-bubble">
-            Tenho sim! Horário disponível às {draft.startTime}.
-          </div>
-          <span className="message-meta">Agenda consultada</span>
-        </div>
-        <div className="message-group">
-          <span className="message-sender">Cliente</span>
-          <div className="message-bubble">Pode agendar pra mim?</div>
-        </div>
-        <div className="message-group is-outgoing is-ai">
-          <span className="message-sender">Sua IA</span>
-          <div className="message-bubble">
-            Prontinho! Agendamento simulado para {day} às {draft.startTime}.
-          </div>
-          <span className="message-meta">Agendamento simulado</span>
-        </div>
-      </div>
-    </>
+        ),
+      )}
+    </div>
   );
 }
 
@@ -127,30 +186,26 @@ export function aiStepBody(
   scenario: OnboardingScenario,
   draft: OnboardingDraft,
   setDraft: (updater: (value: OnboardingDraft) => OnboardingDraft) => void,
+  _onWhatsappStatusChange?: (connected: boolean) => void,
+  onDemoDone?: (done: boolean) => void,
 ) {
-  if (scenario === "demonstracao-da-ia") return <AiDemoStepBody draft={draft} />;
+  if (scenario === "demonstracao-da-ia") {
+    return <AiDemoStepBody draft={draft} onDemoDone={onDemoDone} />;
+  }
+  const selectedTone = effectiveTone(draft);
   return (
-    <div className="choice-grid">
-      <Choice
-        selected={draft.tone === "PROFESSIONAL"}
-        title="Profissional"
-        copy="Direta, clara e cordial."
-        onClick={() =>
-          setDraft((value) => ({ ...value, tone: "PROFESSIONAL" }))
-        }
-      />
-      <Choice
-        selected={draft.tone === "BALANCED"}
-        title="Equilibrada"
-        copy="Cordial com um toque natural."
-        onClick={() => setDraft((value) => ({ ...value, tone: "BALANCED" }))}
-      />
-      <Choice
-        selected={draft.tone === "CASUAL"}
-        title="Descontraída"
-        copy="Natural, acolhedora e simples."
-        onClick={() => setDraft((value) => ({ ...value, tone: "CASUAL" }))}
-      />
+    <div className="choice-grid tone-grid">
+      {TONE_OPTIONS.map((option) => (
+        <Choice
+          badge={option.recommended ? "recomendada" : undefined}
+          copy={option.descriptor}
+          key={option.tone}
+          sample={demoToneSample(draft, option.tone)}
+          selected={selectedTone === option.tone}
+          title={option.label}
+          onClick={() => setDraft((value) => ({ ...value, tone: option.tone }))}
+        />
+      ))}
     </div>
   );
 }
@@ -165,12 +220,8 @@ export async function persistAiStep(
     ctx.go("tom-da-ia");
     return;
   }
-  if (!ctx.draft.tone) {
-    ctx.setError("Escolha um dos três estilos disponíveis.");
-    return;
-  }
   await getProductServices().onboarding.update({
-    ai: { tone: ctx.draft.tone },
+    ai: { tone: effectiveTone(ctx.draft) },
   });
   await ctx.refresh();
   ctx.go("whatsapp");

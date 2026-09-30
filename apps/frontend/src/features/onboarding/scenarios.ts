@@ -75,15 +75,15 @@ export const onboardingScenarios = {
     "ready",
   ],
   "demonstracao-da-ia": [
-    "Antes de escolher o estilo",
-    "Veja sua IA simulando um atendimento",
-    "Uma demonstração rápida, usando o serviço, o preço e o horário reais do seu negócio.",
+    "Sua IA",
+    "Veja sua IA atendendo",
+    "Uma conversa de exemplo com os seus serviços e horários. Nada é marcado de verdade.",
     "ai-demo",
   ],
   "tom-da-ia": [
-    "Atendente virtual",
-    "Como a IA deve conversar?",
-    "Escolha um dos três estilos disponíveis.",
+    "Sua IA",
+    "Gostou da forma como a IA conversou?",
+    "Escolha o jeito de falar. Você pode mudar depois.",
     "tone",
   ],
   whatsapp: [

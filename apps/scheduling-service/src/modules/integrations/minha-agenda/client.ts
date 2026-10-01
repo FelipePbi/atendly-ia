@@ -204,15 +204,27 @@ export class MinhaAgendaClient implements MinhaAgendaSourceClient {
     }
 
     if (!response.ok) {
-      await response.text();
-      // Credencial recusada e origem indisponivel sao classes diferentes
-      // (Goal060 §4): so 400/401 e credencial errada. O status da origem
-      // nunca vira o nosso — ele fica em `details`, nunca no `statusCode`.
+      const errorBody = await response.text();
+      // De quem e a falha (Goal082 §1): `invalid_grant` e 400 sao a pessoa
+      // (e-mail ou senha); 401 e a identificacao do app recusada, falha nossa.
+      // O status da origem nunca vira o nosso — ele fica em `details`, nunca
+      // no `statusCode`. Do corpo, so o campo `error` e lido.
       if (response.status === 400 || response.status === 401) {
+        const personRefused =
+          readOAuthErrorCode(errorBody) === "invalid_grant" ||
+          response.status === 400;
+        if (personRefused) {
+          throw new AppError(
+            "MINHA_AGENDA_AUTH_FAILED",
+            "Minha Agenda authentication failed: invalid credentials.",
+            422,
+            { originStatus: response.status },
+          );
+        }
         throw new AppError(
-          "MINHA_AGENDA_AUTH_FAILED",
-          "Minha Agenda authentication failed: invalid credentials.",
-          422,
+          "MINHA_AGENDA_CLIENT_REJECTED",
+          "Minha Agenda rejected the Atendly application credential.",
+          503,
           { originStatus: response.status },
         );
       }
@@ -246,6 +258,18 @@ export function createMinhaAgendaClient(
   config: MinhaAgendaClientConfig,
 ): MinhaAgendaClient {
   return new MinhaAgendaClient(config);
+}
+
+/** Campo `error` do corpo de erro do `/oauth/token`, normalizado; `undefined` se vazio, nao JSON ou nao texto. Nada mais do corpo e lido. */
+function readOAuthErrorCode(body: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (typeof parsed !== "object" || parsed === null) return undefined;
+    const value = (parsed as { error?: unknown }).error;
+    return typeof value === "string" ? value.trim().toLowerCase() : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Status HTTP da origem que causou o erro, quando conhecido (Goal060 §4). Nunca o `statusCode` do próprio erro — esse nunca é 401/403 para código `MINHA_AGENDA_*`. */

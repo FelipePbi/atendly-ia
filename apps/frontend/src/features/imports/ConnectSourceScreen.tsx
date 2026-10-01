@@ -71,6 +71,7 @@ function connectErrorMessage(error: unknown): string {
         case "MINHA_AGENDA_INVALID_RESPONSE":
           return "O Minha Agenda não respondeu agora. Nada foi salvo. Tente novamente em alguns minutos.";
         case "MINHA_AGENDA_NOT_CONFIGURED":
+        case "MINHA_AGENDA_CLIENT_REJECTED":
         case "INTEGRATION_CONFIGURATION_INVALID":
           return "A importação está indisponível agora por uma falha da Atendly, não por causa dos dados informados. Tente novamente mais tarde.";
         default:

@@ -419,12 +419,12 @@ Recusa da conexão, por classe:
 
 | Classe | Código(s) | HTTP |
 | --- | --- | --- |
-| Credencial recusada | `MINHA_AGENDA_AUTH_FAILED` | 422 |
+| Credencial da pessoa recusada | `MINHA_AGENDA_AUTH_FAILED` | 422 |
 | Conta sem um profissional único | `MINHA_AGENDA_PROFESSIONAL_NOT_FOUND`, `MINHA_AGENDA_MULTIPLE_PROFESSIONALS` | 422 |
 | Origem indisponível | `MINHA_AGENDA_TIMEOUT`, `MINHA_AGENDA_UNREACHABLE`, `MINHA_AGENDA_HTTP_ERROR`, `MINHA_AGENDA_INVALID_RESPONSE` | 502 ou 504 |
-| Falha nossa | `MINHA_AGENDA_NOT_CONFIGURED`, `INTEGRATION_CONFIGURATION_INVALID` | 503 ou 500 |
+| Falha nossa | `MINHA_AGENDA_NOT_CONFIGURED`, `MINHA_AGENDA_CLIENT_REJECTED`, `INTEGRATION_CONFIGURATION_INVALID` | 503 ou 500 |
 
-Como toda recusa de domínio que o BFF repassa, o código chega em `error.details.upstreamCode` com `error.code: "UPSTREAM_ERROR"`. Diferente do mecanismo padrão de proxy desta API — que reduz todo `5xx` de origem a `502` (ver "Status honesto do WhatsApp e da IA" e a seção da IA) —, `MINHA_AGENDA_AUTH_FAILED` e `MINHA_AGENDA_NOT_CONFIGURED` chegam com o **status que o Scheduling escolheu** (422 e 503, respectivamente): é a própria decisão dele sobre a causa, não uma falha de infraestrutura genérica que o BFF precise generalizar. Nenhum código `MINHA_AGENDA_*` sai com `401` ou `403` em nenhuma resposta desta rota — o status HTTP da origem, quando relevante, só aparece dentro de `error.details`, nunca como o status da resposta. Nenhuma mensagem, `details` ou log desta rota carrega e-mail, senha, token ou o corpo cru da resposta da origem.
+Como toda recusa de domínio que o BFF repassa, o código chega em `error.details.upstreamCode` com `error.code: "UPSTREAM_ERROR"`. Diferente do mecanismo padrão de proxy desta API — que reduz todo `5xx` de origem a `502` (ver "Status honesto do WhatsApp e da IA" e a seção da IA) —, `MINHA_AGENDA_AUTH_FAILED`, `MINHA_AGENDA_NOT_CONFIGURED` e `MINHA_AGENDA_CLIENT_REJECTED` chegam com o **status que o Scheduling escolheu** (422, 503 e 503, respectivamente): é a própria decisão dele sobre a causa, não uma falha de infraestrutura genérica que o BFF precise generalizar. Nenhum código `MINHA_AGENDA_*` sai com `401` ou `403` em nenhuma resposta desta rota — o status HTTP da origem, quando relevante, só aparece dentro de `error.details`, nunca como o status da resposta. Nenhuma mensagem, `details` ou log desta rota carrega e-mail, senha, token ou o corpo cru da resposta da origem.
 
 ### A credencial não sobrevive à conclusão da importação (Goal060)
 

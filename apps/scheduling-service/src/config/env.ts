@@ -47,9 +47,12 @@ const envSchema = z.object({
   // real de producao, nao segredo. O leitor da origem usa sempre este valor,
   // mesmo quando a linha gravada guarda um `baseUrl` antigo do portal.
   MINHA_AGENDA_API_BASE_URL: stringEnv("https://api.minhaagendaapp.com.br"),
-  // Cabecalho Basic do cliente OAuth do portal (Goal060 §1): igual para todo
-  // negocio, nunca por tenant. Sem valor, conectar a Minha Agenda sai
-  // MINHA_AGENDA_NOT_CONFIGURED e o resto do servico sobe normalmente.
+  // Identificacao do app do portal Minha Agenda (Goal060 §1, Goal082): vai no
+  // cabecalho `Authorization: Basic` do login, igual para todo negocio, fornecida
+  // pela operacao da Atendly e nunca pedida a pessoa. Aceita com ou sem o
+  // prefixo `Basic `. Sem valor, o servico sobe com um aviso no log e conectar
+  // a Minha Agenda sai MINHA_AGENDA_NOT_CONFIGURED; se o portal a recusar, sai
+  // MINHA_AGENDA_CLIENT_REJECTED.
   MINHA_AGENDA_OAUTH_CLIENT_CREDENTIAL: stringEnv(),
   // Politica unica de escrita da agenda (Goal008): quantas vezes uma
   // transacao Serializable e tentada antes de devolver erro proprio diante de

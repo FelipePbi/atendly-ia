@@ -3659,3 +3659,65 @@ reexecutou `test:frontend` por `vitest run` (**127**/**1334**) e não acrescenta
 medida nem passo ao gate: as provas deste Goal são de componente e de texto, e
 nenhuma medida renderizada lê o campo de preço, o telefone exibido ou a
 demonstração.
+
+## Recusa do login da Minha Agenda com dono, do Goal082
+
+A recusa do `/oauth/token` passa a dizer de quem é a falha: a da pessoa
+(`MINHA_AGENDA_AUTH_FAILED` 422) pede para conferir e-mail e senha, e a da
+Atendly (`MINHA_AGENDA_CLIENT_REJECTED` 503, código novo) diz que a importação
+está indisponível e fica no log da operação, sem o valor da variável. Nenhuma
+rota, migration, variável de ambiente, `render.yaml`, `/health`, opção de
+allowlist, gate ou arquivo de configuração de teste ou de build mudou, e `e2e/`
+não foi tocado.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `apps/scheduling-service/tests/unit/goal082-minha-agenda-auth-classes.test.ts` (**23**, arquivo novo): a tabela de classificação do `/oauth/token` (`invalid_grant` em 400 e 401 e 400 sem `error` dão a pessoa; 401 sem `invalid_grant`, em oito formas de corpo, dá a operação), o log de erro por recusa com código e `originStatus`, a ausência do valor da variável no log, o aviso ao subir sem a variável e o `originCode` do trabalho em segundo plano | Que o portal real responda a senha errada com `invalid_grant`: se responder 401 sem ele, a pessoa ouve que a importação está indisponível; é conferência humana |
+| `apps/bff/tests/goal082-integration-connect-client-rejected.test.ts` (**3**, arquivo novo, contra PostgreSQL): o BFF repassa `MINHA_AGENDA_CLIENT_REJECTED` com 503, sem reduzi-lo a 502, e mantém `MINHA_AGENDA_AUTH_FAILED` e `MINHA_AGENDA_NOT_CONFIGURED` | Que o BFF de produção tenha a mesma variável do Scheduling: ela é só do Scheduling |
+| `apps/frontend/tests/goal082-connect-source-client-rejected.test.tsx` (**3**, arquivo novo): `connectErrorMessage` dá ao código novo o mesmo texto de `MINHA_AGENDA_NOT_CONFIGURED`, e não o genérico; esse texto não cita senha nem e-mail, e `MINHA_AGENDA_AUTH_FAILED` continua pedindo para conferi-los | Como o texto lê num navegador real; é conferência humana |
+| `goal060-minha-agenda-connection.test.ts`: o `it.each([400, 401])` virou cinco linhas de tabela (**+3** testes) | Nenhum teste foi removido, pulado nem encolhido; a linha `401` que valia `MINHA_AGENDA_AUTH_FAILED` é a que a decisão substituiu, e o motivo está em [FINAL_AUDIT §61](FINAL_AUDIT.md) |
+
+**Execução final**, feita pela WU-16 sobre a árvore atual, sem edição de código
+depois dela, antes dos cinco controles: `npm run validate:core` — **17** passos,
+**15** `passed`, **2** `skipped` (`test:bff`, `test:health-worker`), exit 0 —;
+`npm run test:gate` — **233**/**233** —; `npm run validate:ui` — **169**
+`passed`, **21** `skipped`, **0** `flaky` (`startTime`
+`2026-10-01T03:05:23.264Z`, lido do `results.json` da WU-14, não reexecutado);
+`npm run validate:integration`, contra um PostgreSQL descartável em
+`127.0.0.1:55743/atendly_bff_test` — **36** passos `passed` —, com
+`rehearse:goal033-authenticated-ui` em **175** testes, **0** `unexpected`, **0**
+`flaky` e **0** retentativas (`startTime` `2026-10-01T03:33:36.737Z`). Suítes
+lidas dentro do `validate:core` e do `validate:integration`:
+`test:scheduling-service` **38** arquivos e **528** testes (referência
+**37**/**502**), `test:frontend` **128**/**1337** (referência **127**/**1334**),
+`test:bff-integration` **63**/**474** (referência **62**/**471**) e
+`test:ai-orchestrator` **1186** passando e **98** `skipped` de **1284**.
+
+**As retentativas anteriores e por que o gate foi refeito.** Duas execuções
+anteriores do gate autenticado tiveram **1** `flaky` cada: a do
+`validate:integration` da WU-15 (`startTime` `2026-10-01T03:09:15.119Z`,
+`[notebook-1024]`, `/onboarding/tom-da-ia` sem o título em 20000 ms) e a primeira
+da WU-16 (`startTime` `2026-10-01T03:24:40.433Z`, `[mobile-360]`, o marcador de
+sessão ausente em `configuracoes`). As duas passaram na retentativa, sem edição
+de código, e nenhuma tocou a tela de conexão. O Goal pede **0** retentativas e o
+§10 manda reexecutar sem tocar configuração; a terceira execução, acima, passou
+sem retentativa e o `results.json` em disco é o dela. `e2e-results/` segue fora
+do Git.
+
+Os cinco controles negativos do §7 foram feitos pela WU-16 depois da execução
+final, com restauração conferida por hash (**13** arquivos, **0** divergências);
+saída real em [FINAL_AUDIT §61](FINAL_AUDIT.md). A primeira tentativa do
+controle 3 foi inválida (o arquivo não compilou) e foi refeita. O vermelho da
+baseline do §6 é entrega das WU-01 e WU-02 e não foi reexecutado pela WU-16.
+
+**Conferência humana pendente.** A conferência do §9 do Goal **não foi feita**:
+conectar com e-mail e senha certos na conta de teste real e ver a importação
+seguir; conectar com a senha errada e ver "Confira o e-mail e a senha"; subir o
+Scheduling sem a variável, ou com um valor errado, e ver a tela e o log. Nenhum
+teste é declarado prova disso.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal082-2026-10-01-d-100-accepted),
+[FINAL_AUDIT §61](FINAL_AUDIT.md) e [D-100](DECISIONS.md), **PROPOSED** até o
+review do Goal082. As provas deste Goal são de unidade, de rota e de texto: nenhuma
+medida renderizada lê a mensagem da conexão, e nenhuma medida ou passo foi
+acrescentado ao gate.

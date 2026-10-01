@@ -211,11 +211,12 @@ const integrationSchema = z
 
 // Classes de erro cujo status HTTP e a propria decisao do Scheduling, nao um
 // upstream 5xx generico (Goal060 §4): `internal-http-client.ts` reduz todo
-// `>= 500` a 502 por padrao, e essas duas classes precisam chegar com o
+// `>= 500` a 502 por padrao, e essas classes precisam chegar com o
 // status que o Scheduling escolheu. O codigo nunca muda, so o status.
 const MINHA_AGENDA_UPSTREAM_STATUS: Record<string, number> = {
   MINHA_AGENDA_AUTH_FAILED: 422,
   MINHA_AGENDA_NOT_CONFIGURED: 503,
+  MINHA_AGENDA_CLIENT_REJECTED: 503,
 };
 
 function withMinhaAgendaUpstreamStatus(error: unknown): never {

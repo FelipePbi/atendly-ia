@@ -220,15 +220,21 @@ describe("Goal060: conexão Minha Agenda com e-mail e senha", () => {
   });
 
   describe("§7.2: classes de erro, nunca 401/403, nenhuma falha grava", () => {
-    it.each([400, 401])(
-      "token %i vira MINHA_AGENDA_AUTH_FAILED 422",
-      async (status) => {
-        fetchMock.mockResolvedValueOnce(
-          jsonResponse({ error: "invalid" }, status),
-        );
+    // Goal082 §1: de quem e a falha depende do corpo e do status (tabela de
+    // classificacao). A matriz completa esta em goal082-minha-agenda-auth-classes.
+    it.each([
+      [400, { error: "invalid_grant" }, "MINHA_AGENDA_AUTH_FAILED", 422],
+      [401, { error: "invalid_grant" }, "MINHA_AGENDA_AUTH_FAILED", 422],
+      [400, { error: "invalid" }, "MINHA_AGENDA_AUTH_FAILED", 422],
+      [401, { error: "invalid_client" }, "MINHA_AGENDA_CLIENT_REJECTED", 503],
+      [401, { error: "invalid" }, "MINHA_AGENDA_CLIENT_REJECTED", 503],
+    ])(
+      "token %i com %j vira %s %i",
+      async (status, body, expectedCode, expectedStatus) => {
+        fetchMock.mockResolvedValueOnce(jsonResponse(body, status));
         const response = await connect();
-        expect(response.statusCode).toBe(422);
-        expect(response.json().error.code).toBe("MINHA_AGENDA_AUTH_FAILED");
+        expect(response.statusCode).toBe(expectedStatus);
+        expect(response.json().error.code).toBe(expectedCode);
         expect(db.client.integrationConnection.rows).toHaveLength(0);
       },
     );
@@ -236,7 +242,9 @@ describe("Goal060: conexão Minha Agenda com e-mail e senha", () => {
     it.each([403, 429, 500])(
       "token %i vira a classe origem indisponível (MINHA_AGENDA_HTTP_ERROR, 502)",
       async (status) => {
-        fetchMock.mockResolvedValueOnce(jsonResponse({ error: "down" }, status));
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({ error: "down" }, status),
+        );
         const response = await connect();
         expect(response.statusCode).toBe(502);
         expect(response.json().error.code).toBe("MINHA_AGENDA_HTTP_ERROR");

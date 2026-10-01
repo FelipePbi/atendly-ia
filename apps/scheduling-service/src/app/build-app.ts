@@ -17,9 +17,32 @@ import {
 import { AppError, toErrorMessage } from "../shared/errors/app-error.js";
 import { registerHealthRoute } from "./health.js";
 
-export async function buildApp() {
+export interface BuildAppOptions {
+  /** Destino do log; so os testes passam algo. Em producao o log sai no stdout. */
+  logStream?: NodeJS.WritableStream;
+}
+
+// Recusas que a operacao precisa ver no log: a falha e da configuracao da
+// Atendly, nao dos dados da pessoa (Goal082 §2).
+const OPERATOR_VISIBLE_REFUSALS = new Set([
+  "MINHA_AGENDA_NOT_CONFIGURED",
+  "MINHA_AGENDA_CLIENT_REJECTED",
+]);
+
+/** Codigo da origem que causou a falha em segundo plano; nunca texto do erro. */
+export function importWorkOriginCode(error: unknown): string | undefined {
+  if (!(error instanceof AppError)) return undefined;
+  const cause = (error.details as { cause?: unknown } | undefined)?.cause;
+  return error.code === "MINHA_AGENDA_IMPORT_CATEGORY_FAILED" &&
+    typeof cause === "string"
+    ? cause
+    : error.code;
+}
+
+export async function buildApp(options: BuildAppOptions = {}) {
   const app = Fastify({
     logger: {
+      ...(options.logStream ? { stream: options.logStream } : {}),
       redact: [
         "req.headers.authorization",
         "req.headers.cookie",
@@ -43,12 +66,21 @@ export async function buildApp() {
     reply.header("x-request-id", request.id);
   });
 
+  if (!env.MINHA_AGENDA_OAUTH_CLIENT_CREDENTIAL) {
+    app.log.warn(
+      "MINHA_AGENDA_OAUTH_CLIENT_CREDENTIAL is not set; the Minha Agenda import is unavailable.",
+    );
+  }
+
   // Analise e execucao da importacao terminam no proprio processo (Goal061,
   // D-008): o conjunto so existe para o `onClose` esperar o que ja comecou.
   // Quem decide quem trabalha e o lease do banco.
   const importWork = new ImportBackgroundWork((error) => {
     app.log.error(
-      { errorCode: importWorkFailure(error).errorCode },
+      {
+        errorCode: importWorkFailure(error).errorCode,
+        originCode: importWorkOriginCode(error),
+      },
       "Import work failed",
     );
   });
@@ -72,6 +104,17 @@ export async function buildApp() {
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof AppError) {
+      if (OPERATOR_VISIBLE_REFUSALS.has(error.code)) {
+        request.log.error(
+          {
+            errorCode: error.code,
+            originStatus: (
+              error.details as { originStatus?: number } | undefined
+            )?.originStatus,
+          },
+          "Minha Agenda refused the connection",
+        );
+      }
       return reply.code(error.statusCode).send({
         error: {
           code: error.code,

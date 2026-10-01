@@ -8370,3 +8370,77 @@ D-094 e o item 3 de D-079.
   iniciado em 9 passa a aparecer formatado como telefone brasileiro, como o
   Scheduling já o canonicaliza. **R-03**, **R-07** e **R-04** ficam corrigidos.
   A conferência humana do §8 continua **não feita**.
+
+## Delta implementado — Goal082, 2026-10-01 ([D-100](DECISIONS.md), ACCEPTED)
+
+Fecha **R-02** do re-teste local de 2026-09-30 **no que o repositório prova**: a
+pessoa informa só e-mail e senha da Minha Agenda, a identificação do app do
+portal continua configuração interna do servidor (`MINHA_AGENDA_OAUTH_CLIENT_CREDENTIAL`,
+fornecida pela operação, nunca pedida à pessoa), e a falha agora tem dono: a da
+pessoa pede para conferir e-mail e senha, a da Atendly diz que a importação está
+indisponível, e a operação a vê no log. Sem rota, migration, variável de
+ambiente, `render.yaml`, `/health` ou campo de contrato novos; o conjunto
+fechado de `lastError` não mudou. O único acréscimo de contrato é o código
+`MINHA_AGENDA_CLIENT_REJECTED`. Decisão: [D-100](DECISIONS.md), proposta no
+Goal082, **PROPOSED** até o review; ela muda o item 4 de D-077 no 401 do login
+e **substitui** o que o delta do Goal060, acima, diz da classe "credencial
+recusada" (`/oauth/token` 400 ou 401 era `MINHA_AGENDA_AUTH_FAILED`).
+
+- **A recusa do login diz de quem é a falha.** `getAccessToken`
+  (`apps/scheduling-service/src/modules/integrations/minha-agenda/client.ts`)
+  lê o campo `error` do corpo da resposta (`readOAuthErrorCode`, só esse campo,
+  sem diferença de caixa), com o status como reserva: `invalid_grant` em 400 ou
+  401, e 400 sem `error` reconhecido, dão `MINHA_AGENDA_AUTH_FAILED` 422 (a
+  pessoa); 401 sem `invalid_grant` dá `MINHA_AGENDA_CLIENT_REJECTED` 503 (a
+  operação); 403, 429, 5xx e rede seguem como antes. O motivo é a RFC 6749 §5.2
+  e a observação de Felipe de que o login sem a identificação do app volta 401.
+- **A operação vê a falta e a recusa no log, sem o valor.** `buildApp`
+  (`app/build-app.ts`) registra um `warn` ao subir sem a variável, um `error`
+  por recusa `MINHA_AGENDA_NOT_CONFIGURED` ou `MINHA_AGENDA_CLIENT_REJECTED`
+  (código, `originStatus` e `reqId`) e o `originCode` no log do trabalho em
+  segundo plano. Nenhum registro leva o valor da variável, e-mail, senha, token
+  ou corpo da origem. `/health` não muda.
+- **BFF, tela e segundo plano.** O BFF repassa o código novo com 503
+  (`MINHA_AGENDA_UPSTREAM_STATUS`); `connectErrorMessage` usa para ele o mesmo
+  texto de `MINHA_AGENDA_NOT_CONFIGURED`; em segundo plano ele vira
+  `IMPORT_INTERNAL_ERROR`, sem editar `import-lease.ts`, e a senha recusada
+  continua `IMPORT_SOURCE_AUTH_REJECTED`.
+- **Documentação de operação.** `apps/scheduling-service/.env.example` e a
+  seção "Operação: importação da Minha Agenda" do README do Scheduling dizem o
+  que a variável é, quem a fornece, o que cada código de log quer dizer e que a
+  integração não é oficial; `apps/bff/PUBLIC_API_V1.md` põe o código novo em
+  "Falha nossa".
+- **Execução final, sobre a árvore atual.** `validate:core`: **17** passos,
+  **15** `passed`, **2** `skipped`, exit 0; `test:scheduling-service` **38**
+  arquivos e **528** testes (referência **37**/**502**; **+26**: **23** do
+  arquivo novo `goal082-minha-agenda-auth-classes` e **+3** em
+  `goal060-minha-agenda-connection.test.ts`); `test:frontend` **128**/**1337**
+  (referência **127**/**1334**); `test:ai-orchestrator` **1186** passando e
+  **98** `skipped` de **1284**. `test:gate` **233**/**233**. `validate:ui`
+  **169** `passed`, **21** `skipped`, **0** `flaky` (`startTime`
+  `2026-10-01T03:05:23.264Z`, da WU-14, não reexecutado pela WU-16).
+  `validate:integration` **36**/**36** contra um PostgreSQL descartável em
+  `127.0.0.1:55743/atendly_bff_test`, com `test:bff-integration` **63**/**474**
+  (referência **62**/**471**) e o gate autenticado em **175** testes e **0**
+  retentativas (`startTime` `2026-10-01T03:33:36.737Z`). As duas execuções
+  anteriores desse gate (`2026-10-01T03:09:15.119Z`, da WU-15, e
+  `2026-10-01T03:24:40.433Z`) tiveram **1** `flaky` cada e foram refeitas; ver
+  [FINAL_AUDIT §61](FINAL_AUDIT.md).
+- **Cinco controles negativos do §7**, feitos pela WU-16 depois da execução
+  final e sem edição de código depois dela, por edição real revertida e conferida
+  por hash: cada um reprova o teste esperado com o defeito (**9**, **1**, **9**,
+  **1** e **1** testes que falham, nos controles 1 a 5) e passa restaurado.
+  Saída, hashes e a asserção alterada em [FINAL_AUDIT §61](FINAL_AUDIT.md). O
+  vermelho da baseline do §6 é entrega das WU-01 e WU-02 e não foi reexecutado
+  pela WU-16.
+- **Fechamento no FINAL_AUDIT.** R-02 é dado como corrigido em §61 (sem
+  reescrever §4–§60); o veredito continua **0** `BLOQUEADOR-MVP`, **7**
+  `PENDENCIA-POS-MVP` e **5** `LIMITE-DECLARADO`.
+- **Conferência pendente.** A conferência do §9 do Goal **não foi feita**:
+  conectar com e-mail e senha certos na conta de teste real e ver a importação
+  seguir; conectar com a senha errada e ver "Confira o e-mail e a senha"
+  (é ela que decide o limite declarado de (a): se o portal responder senha
+  errada com 401 sem `invalid_grant`, a pessoa ouve que a importação está
+  indisponível); subir o Scheduling sem a variável, ou com um valor errado, e
+  ver a tela e o log. Nenhum teste é declarado prova disso, e o valor da
+  variável, que a operação fornece, nunca entrou no repositório.

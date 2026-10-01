@@ -74,9 +74,10 @@ export interface MinhaAgendaSystemSettings {
 
 /**
  * Endereco e cliente OAuth do sistema (Goal060 §1), iguais para todo negocio.
- * Sem `MINHA_AGENDA_OAUTH_CLIENT_CREDENTIAL`, conectar a Minha Agenda fica
+ * Sem `MINHA_AGENDA_OAUTH_CLIENT_CREDENTIAL` (identificacao do app do portal,
+ * fornecida pela operacao, nunca pela pessoa), conectar a Minha Agenda fica
  * indisponivel antes de qualquer chamada de rede ou escrita; o resto do
- * servico sobe normalmente.
+ * servico sobe normalmente, com um aviso no log (Goal082).
  */
 export function minhaAgendaSystemSettings(): MinhaAgendaSystemSettings {
   if (!env.MINHA_AGENDA_OAUTH_CLIENT_CREDENTIAL) {

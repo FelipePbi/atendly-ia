@@ -32,6 +32,7 @@ function AuthLayout({ children }: { children: ReactNode }) {
       <aside className="entry-panel" aria-label="Atendly">
         <Brand href="/login" signature="entry" />
         <div className="entry-copy">
+          <span className="entry-badge">Atendimento com IA no WhatsApp</span>
           <h2 className="entry-tagline">
             Seu atendimento começa com uma boa conversa.
           </h2>
@@ -39,29 +40,29 @@ function AuthLayout({ children }: { children: ReactNode }) {
             A Atendly aprende o jeito do seu negócio, responde clientes no
             WhatsApp e marca direto na sua agenda.
           </p>
-        </div>
-        <div className="entry-mock" aria-hidden="true">
-          <div className="entry-mock-header">
-            <span className="entry-mock-avatar">SC</span>
-            <div className="entry-mock-meta">
-              <span className="entry-mock-name">Studio Camila Reis</span>
-              <span className="entry-mock-status">
-                <span className="entry-mock-dot" />
-                IA atendendo
-              </span>
+          <div className="entry-mock" aria-hidden="true">
+            <div className="entry-mock-header">
+              <span className="entry-mock-avatar">SC</span>
+              <div className="entry-mock-meta">
+                <span className="entry-mock-name">Studio Camila Reis</span>
+                <span className="entry-mock-status">
+                  <span className="entry-mock-dot" />
+                  IA atendendo
+                </span>
+              </div>
             </div>
-          </div>
-          <div className="entry-mock-bubble entry-mock-bubble--client">
-            Oi! Vocês têm horário amanhã à tarde?
-          </div>
-          <div className="entry-mock-bubble entry-mock-bubble--ai">
-            Temos sim. Corte feminino às 15:00 ou 16:30 — qual prefere?
-          </div>
-          <div className="entry-mock-bubble entry-mock-bubble--client">
-            15:00, por favor
-          </div>
-          <div className="entry-mock-bubble entry-mock-bubble--ai">
-            Marcado: sexta, 19/09 às 15:00. Te lembro na véspera.
+            <div className="entry-mock-bubble entry-mock-bubble--client">
+              Oi! Vocês têm horário amanhã à tarde?
+            </div>
+            <div className="entry-mock-bubble entry-mock-bubble--ai">
+              Temos sim. Corte feminino às 15:00 ou 16:30 — qual prefere?
+            </div>
+            <div className="entry-mock-bubble entry-mock-bubble--client">
+              15:00, por favor
+            </div>
+            <div className="entry-mock-bubble entry-mock-bubble--ai">
+              Marcado: sexta, 19/09 às 15:00. Te lembro na véspera.
+            </div>
           </div>
         </div>
       </aside>
@@ -96,10 +97,11 @@ function PasswordField({
     <label className={`field${error ? " field-error" : ""}`}>
       <span className="label">{label}</span>
       <span className="input-wrap">
+        <Icon name="lock" className="field-icon" />
         <input
           id={id}
           name={id}
-          className="input input-with-action"
+          className="input input-with-icon input-with-action"
           type={visible ? "text" : "password"}
           autoComplete={
             autoComplete ??
@@ -416,16 +418,19 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
           {signup && (
             <label className={`field${fieldErrors.name ? " field-error" : ""}`}>
               <span className="label">Nome</span>
-              <input
-                id="name"
-                className="input"
-                name="name"
-                type="text"
-                autoComplete="name"
-                placeholder="Seu nome"
-                aria-invalid={fieldErrors.name ? true : undefined}
-                aria-describedby={fieldErrors.name ? "name-error" : undefined}
-              />
+              <span className="input-wrap">
+                <Icon name="user" className="field-icon" />
+                <input
+                  id="name"
+                  className="input input-with-icon"
+                  name="name"
+                  type="text"
+                  autoComplete="name"
+                  placeholder="Seu nome"
+                  aria-invalid={fieldErrors.name ? true : undefined}
+                  aria-describedby={fieldErrors.name ? "name-error" : undefined}
+                />
+              </span>
               {fieldErrors.name && (
                 <span id="name-error" className="field-help" role="alert">
                   {fieldErrors.name}
@@ -438,16 +443,19 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
               className={`field${fieldErrors.email ? " field-error" : ""}`}
             >
               <span className="label">E-mail</span>
-              <input
-                id="email"
-                className="input"
-                name="email"
-                type="email"
-                autoComplete="email"
-                placeholder="voce@seunegocio.com.br"
-                aria-invalid={fieldErrors.email ? true : undefined}
-                aria-describedby={fieldErrors.email ? "email-error" : undefined}
-              />
+              <span className="input-wrap">
+                <Icon name="mail" className="field-icon" />
+                <input
+                  id="email"
+                  className="input input-with-icon"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="voce@seunegocio.com.br"
+                  aria-invalid={fieldErrors.email ? true : undefined}
+                  aria-describedby={fieldErrors.email ? "email-error" : undefined}
+                />
+              </span>
               {fieldErrors.email && (
                 <span id="email-error" className="field-help" role="alert">
                   {fieldErrors.email}

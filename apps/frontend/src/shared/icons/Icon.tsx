@@ -18,6 +18,7 @@ export type IconName =
   | "info"
   | "link"
   | "lock"
+  | "mail"
   | "logout"
   | "monitor"
   | "more"

@@ -8444,3 +8444,34 @@ recusada" (`/oauth/token` 400 ou 401 era `MINHA_AGENDA_AUTH_FAILED`).
   indisponível); subir o Scheduling sem a variável, ou com um valor errado, e
   ver a tela e o log. Nenhum teste é declarado prova disso, e o valor da
   variável, que a operação fornece, nunca entrou no repositório.
+
+## Delta implementado — Goal086, 2026-10-01 (sem decisão nova)
+
+`/login` segue o quadro **L1** do protótipo aprovado nos quatro devices:
+mobile (402×812), tablet em retrato (768×1024), tablet em paisagem
+(1024×768) e desktop (1366×768). Toca só `apps/frontend/`
+(`AuthScreen.tsx`, `atendly.css`, `Icon.tsx`, o sprite `atendly-icons.svg` e
+`goal068-telas-de-entrada.test.tsx`). Sem rota, contrato, migration ou campo
+novo, e `apps/bff/PUBLIC_API_V1.md`, o vault e `docs/design-reference/` não
+mudaram. O Goal não abriu decisão em [DECISIONS](DECISIONS.md): o quadro
+resolveu todas as escolhas.
+
+- **Painel e formulário no markup do L1.** O painel da marca ganhou o selo
+  "Atendimento com IA no WhatsApp" e a conversa de exemplo passou para dentro do
+  bloco de texto; os campos de e-mail e senha (e nome, no cadastro) levam o
+  ícone à esquerda. A integração real de login e cadastro, o aceite de Termos e
+  Política e os textos de erro não mudaram.
+- **A fidelidade visual é verificada pelo loop desde a V33.** O comando
+  `npm run visual:compare -- --target L1` compara o protótipo com o app em
+  cada device e grava `side-by-side.png` e `REPORT.md` em
+  `apps/frontend/e2e-results/visual/` (ignorado pelo git). A porcentagem de
+  diferença é tendência, não aprovação: quem revisa lê o `side-by-side.png` de
+  cada device. Este registro não afirma fidelidade para nenhuma outra tela.
+- **Divergência aceita no mobile.** A saudação neutra de [D-087](DECISIONS.md)
+  ("Boas-vindas de volta. Sua agenda continua de onde parou.") não cabe numa
+  linha a 14px: o subtítulo quebra em 2 linhas e a folha fica cerca de 20px
+  mais alta que no quadro. As outras diferenças restantes são os dados de
+  exemplo do protótipo, contornos de glifo (Literata estática no app) e as
+  animações de entrada do protótipo, não portadas. L3, L4 e L5 herdam a casca
+  nova e não pioraram, mas não seguem os quadros por inteiro
+  ([review086](reviews/086-review.md)).

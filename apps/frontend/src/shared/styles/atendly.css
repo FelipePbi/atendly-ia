@@ -3782,85 +3782,115 @@ p {
   background: var(--surface);
 }
 
-/* Telas de entrada (Goal068/WU-03) — painel Petróleo com composição própria
-   por largura. Classes dedicadas (entry-*) para não herdar visual em
-   .legal-* (Termos/Privacidade), que segue usando .auth-layout/.auth-brand-panel
-   fora do escopo desta unidade.
+/* Telas de entrada — portadas do quadro L1 (Login.dc.html, Login-Tablet.dc.html
+   e Login-Desktop.dc.html). Classes dedicadas (entry-*) para não herdar visual
+   em .legal-* (Termos/Privacidade), que segue usando .auth-layout/.auth-brand-panel.
    Limiares (mesmas larguras do gate `validate:ui`: 360, 390, 768, 1024, 1440):
-   - < 768px: celular — faixa Petróleo no topo, formulário em folha (raio 24px).
+   - < 768px: celular — hero Petróleo no alto, folha clara ancorada no rodapé.
    - 768–1023px (cai a largura 768 do gate): tablet retrato — fundo Petróleo
-     full-bleed, card centralizado.
+     full-bleed, marca no alto, card centralizado abaixo.
    - 1024–1279px (cai a largura 1024 do gate): tablet paisagem — marca à
      esquerda, card à direita, sem mock.
    - >= 1280px (cai a largura 1440 do gate): desktop — painel com a frase e o
      mock de conversa, card compacto centralizado. */
 .entry-shell {
+  position: relative;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  background: var(--surface);
-}
-.entry-panel {
-  position: relative;
-  z-index: 0;
   overflow: hidden;
-  flex: none;
-  padding: calc(20px + env(safe-area-inset-top)) 20px 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  color: var(--surface);
   background: var(--accent);
 }
+.entry-shell::before,
+.entry-shell::after,
 .entry-panel::before,
 .entry-panel::after {
   content: "";
   position: absolute;
-  z-index: 0;
   border-radius: 50%;
   pointer-events: none;
 }
+.entry-shell::before,
 .entry-panel::before {
+  width: 420px;
+  height: 420px;
+  right: -160px;
+  top: -160px;
+  background: var(--at-color-primary-ink);
+}
+.entry-shell::after,
+.entry-panel::after {
   width: 260px;
   height: 260px;
-  right: -100px;
-  top: -110px;
-  background: color-mix(in oklch, var(--accent), black 22%);
-}
-.entry-panel::after {
-  width: 180px;
-  height: 180px;
-  left: -80px;
-  bottom: -60px;
-  background: color-mix(in oklch, var(--accent), white 12%);
+  left: -110px;
+  bottom: 120px;
+  background: #13696e;
   opacity: 0.6;
+}
+.entry-panel::before,
+.entry-panel::after {
+  display: none;
+}
+/* No quadro o celular tem 874px e os 62px de cima são a barra de status do
+   iPhone; no navegador ela é do sistema, então o hero começa 2px abaixo dela. */
+.entry-panel {
+  flex: none;
+  padding: calc(2px + env(safe-area-inset-top)) 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: var(--at-color-on-primary);
+  background: var(--accent);
 }
 .entry-panel .brand {
   position: relative;
   z-index: 1;
-  color: var(--surface);
-  font-size: 18px;
+  color: inherit;
+  font-size: 22px;
+  line-height: normal;
+}
+.entry-panel .brand-mark {
+  width: 30px;
+  height: 30px;
 }
 .entry-copy {
   position: relative;
   z-index: 1;
-  max-width: 42ch;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.entry-badge {
+  display: none;
+  align-self: flex-start;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  align-items: center;
+  background: rgba(247, 244, 239, 0.14);
+  color: var(--at-color-on-primary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 .entry-tagline {
-  color: var(--surface);
-  font-size: 22px;
-  line-height: 1.2;
+  max-width: 300px;
+  color: inherit;
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.15;
   letter-spacing: -0.015em;
+  text-wrap: pretty;
 }
 .entry-support {
-  margin-top: 8px;
-  color: color-mix(in oklch, var(--surface), transparent 24%);
+  max-width: 300px;
+  color: var(--accent-vivid);
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 .entry-mock {
-  position: relative;
-  z-index: 1;
   display: none;
 }
 .entry-mock-header {
@@ -3876,8 +3906,8 @@ p {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--accent-soft);
-  color: var(--accent-vivid);
+  background: var(--at-color-primary-tint-strong);
+  color: var(--at-color-primary-ink);
   font-size: 12px;
   font-weight: 600;
 }
@@ -3887,16 +3917,18 @@ p {
   gap: 1px;
 }
 .entry-mock-name {
-  color: var(--surface);
+  color: var(--at-color-on-primary);
   font-size: 14px;
   font-weight: 600;
+  line-height: normal;
 }
 .entry-mock-status {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--accent-vivid);
+  color: #9fd3cf;
   font-size: 12px;
+  line-height: normal;
 }
 .entry-mock-dot {
   width: 6px;
@@ -3906,64 +3938,67 @@ p {
 }
 .entry-mock-bubble {
   align-self: flex-start;
-  max-width: 84%;
+  max-width: calc(84% + 30px);
   padding: 10px 14px;
   border-radius: 14px 14px 14px 4px;
-  background: var(--accent-soft);
-  color: var(--accent-vivid);
+  background: var(--at-color-primary-tint-strong);
+  color: var(--at-color-primary-ink);
   font-size: 14px;
   line-height: 1.4;
 }
 .entry-mock-bubble--client {
   align-self: flex-end;
-  max-width: 80%;
+  max-width: calc(80% + 29px);
   border-radius: 14px 14px 4px 14px;
-  background: var(--surface);
+  background: var(--bg);
   color: var(--fg);
 }
 .entry-main {
   position: relative;
   z-index: 1;
-  flex: 1;
-  min-height: 0;
-  margin-top: -24px;
-  padding: 28px 20px calc(28px + env(safe-area-inset-bottom));
-  background: var(--surface);
-  border-radius: 24px 24px 0 0;
+  margin-top: auto;
+  padding: 28px 20px max(46px, calc(28px + env(safe-area-inset-bottom)));
+  background: var(--bg);
+  border-radius: 28px 28px 0 0;
 }
 .auth-card {
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 @media (min-width: 768px) and (max-width: 1023px) {
+  .entry-panel .brand {
+    font-size: 24px;
+  }
   .entry-shell {
-    flex-direction: column;
     align-items: center;
-    justify-content: center;
+    padding: 56px 0 48px;
     gap: 40px;
-    padding: 48px 24px;
-    background: var(--accent);
   }
   .entry-panel {
-    flex: none;
-    align-items: center;
-    overflow: visible;
     padding: 0;
+    align-items: center;
+    gap: 18px;
     text-align: center;
     background: transparent;
   }
-  .entry-panel::before,
-  .entry-panel::after {
-    display: none;
-  }
   .entry-copy {
-    max-width: 480px;
+    margin-top: 0;
+    gap: 18px;
+  }
+  .entry-badge {
+    display: inline-flex;
   }
   .entry-tagline {
-    font-size: 30px;
+    max-width: 520px;
+    font-size: 34px;
+  }
+  .entry-support {
+    display: none;
   }
   .entry-main {
-    flex: none;
     margin-top: 0;
     padding: 0;
     background: transparent;
@@ -3975,54 +4010,79 @@ p {
     padding: 32px;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--r-card);
-    box-shadow: var(--shadow-md);
+    border-radius: 20px;
+    box-shadow: 0 24px 64px rgba(34, 30, 26, 0.1);
   }
 }
 
-@media (min-width: 1024px) and (max-width: 1279px) {
+@media (min-width: 1024px) {
+  .entry-panel .brand {
+    font-size: 24px;
+  }
   .entry-shell {
     flex-direction: row;
+    background: var(--bg);
+  }
+  .entry-shell::before,
+  .entry-shell::after {
+    display: none;
   }
   .entry-panel {
+    position: relative;
+    overflow: hidden;
     width: 440px;
     padding: 44px 40px;
-    justify-content: flex-start;
-    gap: 32px;
+    gap: 48px;
+  }
+  .entry-panel::before,
+  .entry-panel::after {
+    display: block;
+  }
+  .entry-copy {
+    margin-top: 0;
+    gap: 18px;
+  }
+  .entry-badge {
+    display: inline-flex;
   }
   .entry-tagline {
-    font-size: 30px;
+    max-width: none;
+    font-size: 32px;
+    line-height: 1.12;
+  }
+  .entry-support {
+    max-width: 420px;
+    font-size: 15px;
+    line-height: 1.5;
   }
   .entry-main {
     flex: 1;
+    min-width: 0;
     margin-top: 0;
-    display: grid;
-    place-items: center;
-    padding: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
     border-radius: 0;
   }
   .auth-card {
-    width: min(100%, 420px);
+    width: 420px;
+    max-width: 100%;
     padding: 32px;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--r-card);
-    box-shadow: var(--shadow-md);
+    border-radius: 20px;
+    box-shadow: 0 24px 64px rgba(34, 30, 26, 0.1);
   }
 }
 
 @media (min-width: 1280px) {
-  .entry-shell {
-    flex-direction: row;
-  }
   .entry-panel {
     width: 560px;
     padding: 44px 56px;
-    justify-content: flex-start;
-    gap: 40px;
   }
   .entry-tagline {
-    font-size: 34px;
+    font-size: 40px;
   }
   .entry-mock {
     display: flex;
@@ -4030,30 +4090,17 @@ p {
     gap: 12px;
     padding: 18px;
     border-radius: 18px;
-    background: color-mix(in oklch, var(--accent), black 20%);
-    border: 1px solid color-mix(in oklch, var(--surface), transparent 88%);
-  }
-  .entry-main {
-    flex: 1;
-    margin-top: 0;
-    display: grid;
-    place-items: center;
-    padding: 48px;
-    border-radius: 0;
+    background: rgba(8, 57, 60, 0.55);
+    border: 1px solid rgba(247, 244, 239, 0.12);
   }
   .auth-card {
-    width: min(100%, 440px);
-    padding: 32px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r-card);
-    box-shadow: var(--shadow-md);
+    width: 440px;
   }
 }
 .auth-back {
   width: fit-content;
   min-height: 44px;
-  margin-bottom: 28px;
+  margin-bottom: 0;
   padding: 0 4px;
   display: inline-flex;
   align-items: center;
@@ -4067,29 +4114,81 @@ p {
   color: var(--accent);
 }
 .auth-heading {
-  margin-bottom: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .auth-heading h1 {
-  margin-bottom: 8px;
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
 }
 .auth-heading p {
-  max-width: 44ch;
-  color: var(--muted);
+  color: var(--fg-soft);
   font-size: 14px;
+  line-height: 1.45;
+  text-wrap: pretty;
 }
 .auth-form {
-  display: grid;
-  gap: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.auth-form .field {
+  gap: 6px;
+}
+.auth-form .label {
+  color: var(--fg-soft);
+  font-size: 13px;
+  line-height: normal;
+}
+.auth-form .input {
+  height: 52px;
+  min-height: 52px;
+  padding: 0 16px;
+  font-size: 16px;
+}
+.auth-form .input-with-icon {
+  padding-left: 46px;
+}
+.auth-form .input-with-action {
+  padding-right: 48px;
+}
+.auth-form .field-icon {
+  left: 16px;
+  width: 20px;
+  height: 20px;
+}
+.auth-form .field-action {
+  top: 50%;
+  right: 5px;
+  transform: translateY(-50%);
+}
+.auth-form .field-action .icon {
+  width: 20px;
+  height: 20px;
 }
 .auth-form .btn {
   width: 100%;
+  height: 52px;
   min-height: 52px;
+  margin-top: 4px;
+  color: var(--at-color-on-primary);
+  font-size: 16px;
+  letter-spacing: 0;
 }
 .auth-row {
+  margin-top: -4px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+}
+.auth-row .auth-link--standalone {
+  line-height: normal;
+  padding-block: 13px;
+  margin-block: -13px;
 }
 .auth-row:has(> :only-child) {
   justify-content: flex-end;
@@ -4115,12 +4214,16 @@ p {
   padding: 4px 2px;
 }
 .auth-footer {
-  margin-top: 26px;
-  padding-top: 22px;
-  border-top: 1px solid var(--border);
-  color: var(--muted);
-  text-align: center;
+  padding-top: 6px;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  color: var(--fg-soft);
   font-size: 14px;
+  line-height: normal;
+}
+.auth-footer .auth-link {
+  font-weight: 600;
 }
 .auth-legal {
   margin-top: 18px;
@@ -4149,7 +4252,11 @@ p {
   margin-bottom: 2px;
 }
 .auth-state {
+  display: block;
   text-align: center;
+}
+.auth-state .auth-footer {
+  margin-top: 14px;
 }
 .auth-state .state-icon {
   width: 56px;
@@ -4190,6 +4297,9 @@ p {
 .legal-document {
   width: min(100%, 760px);
   padding-block: 16px 64px;
+}
+.legal-document .auth-back {
+  margin-bottom: 28px;
 }
 .legal-document header {
   padding-bottom: 24px;
@@ -4246,26 +4356,7 @@ p {
     padding: 28px 20px calc(28px + env(safe-area-inset-bottom));
     display: block;
   }
-  .auth-card {
-    margin: 0 auto;
-  }
-  .auth-heading {
-    margin-bottom: 24px;
-  }
-  .auth-heading h1 {
-    font-size: 26px;
-    line-height: 1.3;
-  }
-  .auth-form {
-    gap: 16px;
-  }
-  .auth-row {
-    align-items: flex-start;
-  }
-  .auth-form .input {
-    min-height: 52px;
-  }
-  .auth-back {
+  .legal-document .auth-back {
     margin-bottom: 20px;
   }
   .legal-main {

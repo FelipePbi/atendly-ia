@@ -75,9 +75,9 @@ describe("painel de entrada — Petróleo, composição por largura", () => {
     expect(css).toMatch(/@media \(min-width:\s*1280px\)/);
   });
 
-  test("celular: folha do formulário nasce com raio de 24px", () => {
+  test("celular: folha do formulário nasce com raio de 28px (quadro L1)", () => {
     const rule = ruleFor(".entry-main");
-    expect(rule).toMatch(/border-radius:\s*24px 24px 0 0/);
+    expect(rule).toMatch(/border-radius:\s*28px 28px 0 0/);
   });
 
   test("mock de conversa fica oculto fora do desktop e visível a partir de 1280px", () => {

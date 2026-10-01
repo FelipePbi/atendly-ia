@@ -129,7 +129,7 @@ describe("servico-nome: os quatro tipos gravam e releem sem conversão", () => {
     const duration = screen.getByLabelText("Duração em minutos");
     await user.clear(duration);
     await user.type(duration, "45");
-    await user.type(screen.getByLabelText("Preço em reais"), "15000");
+    await user.type(screen.getByLabelText("Preço em reais"), "150");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
     await waitFor(() =>
@@ -225,7 +225,7 @@ describe("servicos-adicionais: cria por POST /v1/services sem trocar o serviço 
     const duration = screen.getByLabelText("Duração em minutos");
     await user.clear(duration);
     await user.type(duration, "30");
-    await user.type(screen.getByLabelText("Preço em reais"), "4000");
+    await user.type(screen.getByLabelText("Preço em reais"), "40");
     await user.click(screen.getByRole("button", { name: "Adicionar" }));
 
     await waitFor(() =>
@@ -411,10 +411,10 @@ describe("demonstracao-da-ia: a resposta de preço segue os quatro tipos", () =>
   });
 
   test.each([
-    ["FIXED", 80, "O Corte custa R$ 80,00."],
-    ["STARTING_AT", 80, "O Corte custa a partir de R$ 80,00."],
-    ["ON_REQUEST", null, "O valor do Corte é sob consulta."],
-    ["NOT_INFORMED", null, "O valor do Corte ainda não foi informado."],
+    ["FIXED", 80, "Corte custa R$ 80,00."],
+    ["STARTING_AT", 80, "Corte custa a partir de R$ 80,00."],
+    ["ON_REQUEST", null, "O valor de Corte é sob consulta."],
+    ["NOT_INFORMED", null, "O valor de Corte ainda não foi informado."],
   ] as const)("%s responde \"%s\"", async (priceType, price, reply) => {
     await renderStep(
       "demonstracao-da-ia",

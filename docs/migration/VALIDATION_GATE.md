@@ -3602,3 +3602,60 @@ Bloqueio, série, remarcação, cancelamento e exceções continuam fora do gate
 autenticado. A rodada 2 mostrou o custo da ordem do §7: uma edição pequena
 depois dos controles obrigou a refazer a execução final, os cinco controles e
 a prosa, e foi isso que a rodada 3 entregou.
+
+## Preço em reais, telefone nacional formatado e demonstração sem artigo, do Goal084
+
+O campo de preço passa a receber reais, o telefone na forma nacional passa a
+aparecer formatado nas telas de cliente e a demonstração da IA deixa de pôr
+artigo antes do nome do serviço. Nenhuma rota de API, contrato, migration,
+opção de allowlist, gate ou arquivo de configuração de teste ou de build mudou,
+e `e2e/` não foi tocado.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `apps/frontend/tests/goal084-price-input.test.tsx` (**24**, arquivo novo): a tabela de leitura do preço ("60" dá 6000 centavos, "60,5" dá 6050, "1.200" dá 120000, digitados e colados), a recusa acima de `Number.MAX_SAFE_INTEGER` centavos, e o `price: 60` enviado por serviço novo, edição e onboarding | Que a pessoa ache natural o campo formatar ao sair; é conferência humana |
+| `apps/frontend/tests/goal084-phone-display.test.tsx` (**19**, arquivo novo): `formatBrazilianPhone` reconhece a forma nacional (`55991919817`, `5133334444`, `5191234567`, `051991234567`) e a lista de clientes, o perfil, o seletor do novo agendamento, o detalhe do agendamento e a confirmação de duplicata mostram o telefone formatado | Que toda linha da base importada real esteja num formato reconhecido: a prova usa as formas conhecidas de IM-10 e CL-04 |
+| `apps/frontend/tests/goal084-demo-article.test.ts` (**10**, arquivo novo): nenhum texto da conversa nem da amostra de tom tem artigo antes do nome do serviço, nos quatro tipos de preço, e a primeira mensagem é "Oi! Quanto custa <nome>?" | Que a IA real concorde o gênero do serviço: a demonstração é prévia do frontend |
+| Oito arquivos de teste anteriores com asserção trocada (a máscara de centavos e o texto com artigo que afirmavam) | Nenhum teste foi removido, pulado nem encolhido; o motivo de cada troca está em [FINAL_AUDIT §60](FINAL_AUDIT.md) |
+
+**Execução final**, toda exit 0, refeita pela WU-14 sobre a árvore atual, sem
+edição de código depois dela, antes dos quatro controles: `npm run validate:core`
+— **17** passos, **15** `passed`, **2** `skipped` (`test:bff`,
+`test:health-worker`) —; `npm run test:gate` — **233**/**233** —;
+`npm run validate:ui` — **169** `passed`, **21** `skipped`, **0** `flaky`
+(`startTime` `2026-10-01T01:48:45.905Z`, lido do `results.json` da WU-12, não
+reexecutado); `npm run validate:integration`, contra um PostgreSQL descartável em
+`127.0.0.1:55741/atendly_bff_test` — **36** passos `passed` —, com
+`rehearse:goal033-authenticated-ui` em **175** testes, **0** `unexpected`, **0**
+`flaky` e **0** retentativas (`startTime` `2026-10-01T02:11:32.086Z`). Suítes
+lidas dentro do `validate:core`: `test:frontend` **127** arquivos e **1334**
+testes (referência **124**/**1280**), `test:ai-orchestrator` **1186** passando e
+**98** `skipped` de **1284**, `test:scheduling-service` **37** arquivos e **502**
+testes.
+
+**A retentativa da WU-13 e por que o gate foi refeito.** O
+`validate:integration` da WU-13 (`startTime` `2026-10-01T01:54:27.776Z`) teve **1**
+`flaky`: `[desktop-1440]` em `/configuracoes/agenda` falhou na primeira
+tentativa com `net::ERR_NO_BUFFER_SPACE` e passou na retentativa. É falha de
+ambiente, mas o Goal pede **0** retentativas; a WU-14 reexecutou o gate sem tocar
+configuração, e o `results.json` em disco é o dessa reexecução. `e2e-results/`
+segue fora do Git.
+
+Os quatro controles negativos do §6 foram feitos pela WU-14 depois da execução
+final, com restauração conferida por hash; saída real em
+[FINAL_AUDIT §60](FINAL_AUDIT.md). O vermelho da baseline do §5 é entrega das
+WU-01 a WU-03 e não foi reexecutado.
+
+**Conferência humana pendente.** A conferência do §8 do Goal **não foi feita**:
+digitar preço num navegador contra a pilha local (onboarding, serviço novo e
+edição), ver a lista de Clientes da conta com a base importada e ler a
+demonstração com um nome de serviço feminino e um masculino. Nenhum teste é
+declarado prova disso.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal084-2026-09-30-d-099-accepted),
+[FINAL_AUDIT §60](FINAL_AUDIT.md) e [D-099](DECISIONS.md), **ACCEPTED** no
+[review084](reviews/084-review.md) (rodada 1 do IA Loop, sem blocker). O review
+reexecutou `test:frontend` por `vitest run` (**127**/**1334**) e não acrescenta
+medida nem passo ao gate: as provas deste Goal são de componente e de texto, e
+nenhuma medida renderizada lê o campo de preço, o telefone exibido ou a
+demonstração.

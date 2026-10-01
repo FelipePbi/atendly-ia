@@ -210,7 +210,7 @@ describe("§6.14 serviço novo", () => {
     await user.type(duration, "40");
     await user.type(
       await screen.findByPlaceholderText("R$ 0,00"),
-      "5500",
+      "55",
     );
     await user.type(textarea, "Regra nova.");
     await user.click(screen.getByRole("button", { name: "Criar serviço" }));
@@ -241,7 +241,7 @@ describe("§6.14 serviço novo", () => {
     await user.type(duration, "40");
     await user.type(
       await screen.findByPlaceholderText("R$ 0,00"),
-      "5500",
+      "55",
     );
     await user.click(screen.getByRole("button", { name: "Criar serviço" }));
 
@@ -334,7 +334,7 @@ describe("correção rodada 2, blocker 1: PUT falhando no serviço novo não rep
       { exact: false },
     );
     await user.type(duration, "40");
-    await user.type(await screen.findByPlaceholderText("R$ 0,00"), "5500");
+    await user.type(await screen.findByPlaceholderText("R$ 0,00"), "55");
     await user.type(textarea, "Regra nova.");
     await user.click(screen.getByRole("button", { name: "Criar serviço" }));
 

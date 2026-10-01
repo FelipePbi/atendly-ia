@@ -1,5 +1,15 @@
 const MOBILE_LEGACY_FIRST_DIGITS = new Set(["6", "7", "8", "9"]);
 
+// Copiada de `BRAZILIAN_DDDS` em apps/scheduling-service/src/shared/phone/phone.ts.
+const BRAZILIAN_DDDS: ReadonlySet<string> = new Set([
+  "11", "12", "13", "14", "15", "16", "17", "18", "19", "21", "22", "24", "27",
+  "28", "31", "32", "33", "34", "35", "37", "38", "41", "42", "43", "44", "45",
+  "46", "47", "48", "49", "51", "53", "54", "55", "61", "62", "63", "64", "65",
+  "66", "67", "68", "69", "71", "73", "74", "75", "77", "79", "81", "82", "83",
+  "84", "85", "86", "87", "88", "89", "91", "92", "93", "94", "95", "96", "97",
+  "98", "99",
+]);
+
 export type NormalizedBrazilianPhone = {
   ddd: string;
   subscriber: string;
@@ -23,21 +33,39 @@ export function normalizeBrazilianPhoneDigits(
   value: string,
 ): NormalizedBrazilianPhone | null {
   const digits = extractPhoneDigits(value);
-  if (!digits.startsWith("55")) return null;
 
-  const core = digits.slice(2);
-  if (core.length === 11) {
-    return { ddd: core.slice(0, 2), subscriber: core.slice(2) };
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
+    const core = digits.slice(2);
+    if (core.length === 11) {
+      return { ddd: core.slice(0, 2), subscriber: core.slice(2) };
+    }
+    return withRestoredNinthDigit(core.slice(0, 2), core.slice(2));
   }
-  if (core.length === 10) {
-    const ddd = core.slice(0, 2);
-    const subscriber = core.slice(2);
-    const firstDigit = subscriber[0] ?? "";
-    return MOBILE_LEGACY_FIRST_DIGITS.has(firstDigit)
-      ? { ddd, subscriber: `9${subscriber}` }
-      : { ddd, subscriber };
+
+  let national = digits;
+  if (national.startsWith("0") && (national.length === 11 || national.length === 12)) {
+    national = national.slice(1);
   }
-  return null;
+  if (national.length !== 10 && national.length !== 11) return null;
+
+  const ddd = national.slice(0, 2);
+  const subscriber = national.slice(2);
+  if (!BRAZILIAN_DDDS.has(ddd)) return null;
+
+  if (national.length === 11) {
+    return subscriber.startsWith("9") ? { ddd, subscriber } : null;
+  }
+  if (!/^[2-9]/.test(subscriber)) return null;
+  return withRestoredNinthDigit(ddd, subscriber);
+}
+
+function withRestoredNinthDigit(
+  ddd: string,
+  subscriber: string,
+): NormalizedBrazilianPhone {
+  return MOBILE_LEGACY_FIRST_DIGITS.has(subscriber[0] ?? "")
+    ? { ddd, subscriber: `9${subscriber}` }
+    : { ddd, subscriber };
 }
 
 /**

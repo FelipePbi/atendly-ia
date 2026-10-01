@@ -175,7 +175,7 @@ describe("§4.6 a frase 'A IA responde' por tipo de preço", () => {
 
     await user.type(name, "Manicure");
     fireEvent.change(getDurationInput(), { target: { value: "40" } });
-    await typePrice(user, "5500");
+    await typePrice(user, "55");
 
     expect(
       screen.getByText("“Manicure custa R$ 55 e leva 40 min.”"),
@@ -190,7 +190,7 @@ describe("§4.6 a frase 'A IA responde' por tipo de preço", () => {
     await user.type(name, "Escova");
     fireEvent.change(getDurationInput(), { target: { value: "40" } });
     await user.click(screen.getByLabelText(priceTypeLabel.STARTING_AT));
-    await typePrice(user, "6000");
+    await typePrice(user, "60");
 
     expect(
       screen.getByText("“Escova custa a partir de R$ 60 e leva 40 min.”"),
@@ -232,7 +232,7 @@ describe("§4.6 a frase 'A IA responde' por tipo de preço", () => {
     await renderNewForm();
 
     fireEvent.change(getDurationInput(), { target: { value: "40" } });
-    await typePrice(user, "5500");
+    await typePrice(user, "55");
 
     expect(screen.queryByText(/custa R\$/)).toBeNull();
     expect(screen.queryByText("Prévia · como a IA responde")).toBeNull();
@@ -243,7 +243,7 @@ describe("§4.6 a frase 'A IA responde' por tipo de preço", () => {
     const name = await renderNewForm();
 
     await user.type(name, "Manicure");
-    await typePrice(user, "5500");
+    await typePrice(user, "55");
 
     expect(screen.getByText("“Manicure custa R$ 55.”")).toBeVisible();
   });
@@ -264,7 +264,7 @@ describe("§4.6 a frase 'A IA responde' por tipo de preço", () => {
 
     await user.type(name, "Manicure");
     fireEvent.change(getDurationInput(), { target: { value: "40" } });
-    await typePrice(user, "5500");
+    await typePrice(user, "55");
     expect(
       screen.getByText("“Manicure custa R$ 55 e leva 40 min.”"),
     ).toBeVisible();

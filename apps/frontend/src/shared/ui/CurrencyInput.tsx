@@ -1,6 +1,11 @@
 "use client";
 
-import { type ChangeEvent, type InputHTMLAttributes, useState } from "react";
+import {
+  type ChangeEvent,
+  type FocusEvent,
+  type InputHTMLAttributes,
+  useState,
+} from "react";
 
 const brlFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -17,102 +22,109 @@ export type CurrencyInputProps = Omit<
   onValueChange?: (valueCents: number | null) => void;
 };
 
-function initialDigits(defaultValueCents: number | null | undefined) {
-  if (
-    defaultValueCents === null ||
-    defaultValueCents === undefined ||
-    !Number.isSafeInteger(defaultValueCents) ||
-    defaultValueCents < 0
-  )
-    return "";
-  return String(defaultValueCents);
+function validCents(cents: number | null | undefined): cents is number {
+  return (
+    cents !== null &&
+    cents !== undefined &&
+    Number.isSafeInteger(cents) &&
+    cents >= 0
+  );
 }
 
-function normalizedDigits(value: string) {
-  const digits = value.replace(/\D/g, "");
-  if (!digits) return "";
-  return digits.replace(/^0+(?=\d)/, "");
+function formattedCurrency(cents: number | null) {
+  return validCents(cents) ? brlFormatter.format(cents / 100) : "";
 }
 
-function formattedCurrency(digits: string) {
-  if (!digits) return "";
-  return brlFormatter.format(Number(digits) / 100);
-}
-
-/**
- * O que a edição fez com o texto da tela: o trecho que entrou e quantos
- * caracteres saíram, pelo prefixo e pelo sufixo comuns entre o texto
- * formatado de antes e o que o navegador acabou de montar. Não importa onde
- * estava o cursor nem que evento trouxe a entrada.
- */
-function editedText(previousText: string, nextText: string) {
-  let prefix = 0;
-  while (
-    prefix < previousText.length &&
-    prefix < nextText.length &&
-    previousText[prefix] === nextText[prefix]
-  )
-    prefix += 1;
-  let suffix = 0;
-  while (
-    suffix < previousText.length - prefix &&
-    suffix < nextText.length - prefix &&
-    previousText[previousText.length - 1 - suffix] ===
-      nextText[nextText.length - 1 - suffix]
-  )
-    suffix += 1;
-  return {
-    inserted: nextText.slice(prefix, nextText.length - suffix),
-    removed: previousText.length - prefix - suffix,
-  };
+function editableText(cents: number | null) {
+  if (!validCents(cents)) return "";
+  const reais = Math.floor(cents / 100);
+  const remainder = cents % 100;
+  if (remainder === 0) return String(reais);
+  const fraction = String(remainder).padStart(2, "0").replace(/0$/, "");
+  return `${reais},${fraction}`;
 }
 
 /**
- * Máscara de centavos que acrescenta ao fim (Goal058 §4): sem nada
- * selecionado, o dígito novo entra à direita do valor qualquer que seja a
- * posição do cursor e o que não é dígito é ignorado; apagar um caractere tira
- * o último dígito. Quando a edição substitui ou apaga uma seleção (ou o
- * preenchimento automático troca o texto), o campo fica com os dígitos que
- * passou a mostrar: seleção total seguida de dígito recomeça o valor.
+ * Mantém só dígitos, pontos e vírgula (o "R$" e os espaços de um valor colado
+ * saem). Só a primeira vírgula conta e a parte depois dela fica com duas casas.
  */
-function nextDigits(digits: string, previousText: string, nextText: string) {
-  const { inserted, removed } = editedText(previousText, nextText);
-  const insertedDigits = inserted.replace(/\D/g, "");
-  if (removed === 0) return digits + insertedDigits;
-  if (removed === 1 && !insertedDigits) return digits.slice(0, -1);
-  return nextText.replace(/\D/g, "");
+function sanitizedText(raw: string) {
+  const kept = raw.replace(/[^\d.,]/g, "");
+  const comma = kept.indexOf(",");
+  if (comma === -1) return kept;
+  const decimals = kept
+    .slice(comma + 1)
+    .replace(/\D/g, "")
+    .slice(0, 2);
+  return `${kept.slice(0, comma)},${decimals}`;
+}
+
+/**
+ * Lê o texto como reais (Goal084): com vírgula, a vírgula separa os centavos e
+ * o ponto é milhar; sem vírgula, ponto seguido de um ou dois dígitos no fim é
+ * decimal e qualquer outro ponto é milhar. `undefined` quando o valor passa de
+ * Number.MAX_SAFE_INTEGER centavos.
+ */
+function parsedCents(text: string): number | null | undefined {
+  if (!/\d/.test(text)) return null;
+  let integer: string;
+  let decimals: string;
+  const comma = text.indexOf(",");
+  if (comma >= 0) {
+    integer = text.slice(0, comma).replace(/\./g, "");
+    decimals = text.slice(comma + 1);
+  } else {
+    const trailing = /^(.*)\.(\d{1,2})$/.exec(text);
+    integer = (trailing ? trailing[1] : text).replace(/\./g, "");
+    decimals = trailing ? trailing[2] : "";
+  }
+  const cents = Number(`${integer}${decimals.padEnd(2, "0")}`);
+  return Number.isSafeInteger(cents) ? cents : undefined;
 }
 
 export function CurrencyInput({
   defaultValueCents,
+  onBlur,
+  onFocus,
   onValueChange,
   ...inputProps
 }: CurrencyInputProps) {
-  const [digits, setDigits] = useState(() => initialDigits(defaultValueCents));
-  const text = formattedCurrency(digits);
+  const [cents, setCents] = useState<number | null>(() =>
+    validCents(defaultValueCents) ? defaultValueCents : null,
+  );
+  const [text, setText] = useState(() => formattedCurrency(cents));
 
-  function commit(nextDigits: string) {
-    const normalized = normalizedDigits(nextDigits);
-    const cents = normalized ? Number(normalized) : null;
-    if (cents !== null && !Number.isSafeInteger(cents)) return;
-    setDigits(normalized);
-    onValueChange?.(cents);
+  function handleFocus(event: FocusEvent<HTMLInputElement>) {
+    setText(editableText(cents));
+    onFocus?.(event);
+  }
+
+  function handleBlur(event: FocusEvent<HTMLInputElement>) {
+    setText(formattedCurrency(cents));
+    onBlur?.(event);
   }
 
   // Toda entrada chega por aqui: tecla física, teclado virtual e IME (que
   // costumam mandar `key: "Unidentified"` no keydown), colar, ditado,
   // preenchimento automático e texto arrastado. Nenhuma depende de keydown.
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
-    commit(nextDigits(digits, text, event.currentTarget.value));
+    const nextText = sanitizedText(event.currentTarget.value);
+    const nextCents = parsedCents(nextText);
+    if (nextCents === undefined) return;
+    setText(nextText);
+    setCents(nextCents);
+    onValueChange?.(nextCents);
   }
 
   return (
     <input
       {...inputProps}
-      inputMode="numeric"
+      inputMode="decimal"
       type="text"
       value={text}
+      onBlur={handleBlur}
       onChange={handleChange}
+      onFocus={handleFocus}
     />
   );
 }

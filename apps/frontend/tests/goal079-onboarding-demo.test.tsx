@@ -192,7 +192,7 @@ describe("Sequência da demonstração (§6.2)", () => {
     stubMatchMedia(false);
     await renderDemo(readyState());
 
-    expect(bubbles()).toEqual(["Oi! Quanto custa o Corte feminino?"]);
+    expect(bubbles()).toEqual(["Oi! Quanto custa Corte feminino?"]);
     expect(events()).toEqual([]);
     expect(screen.queryByRole("button", CONTINUE)).toBeNull();
 
@@ -324,7 +324,7 @@ describe("Conversa da demonstração (§6.3)", () => {
       (node) => node.textContent?.replace(/^(Cliente|Sua IA)/u, "") ?? "",
     );
     expect(order).toHaveLength(11);
-    expect(order[0]).toBe("Oi! Quanto custa o Corte feminino?");
+    expect(order[0]).toBe("Oi! Quanto custa Corte feminino?");
     expect(order[1]).toBe("Serviço identificado · Corte feminino");
     expect(order[2]).toMatch(/custa R\$\s90,00\. Leva 45 min\./u);
     expect(order[3]).toBe("Tem horário na sexta?");

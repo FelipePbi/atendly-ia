@@ -12,6 +12,7 @@ import {
   type ServiceList,
 } from "@/data";
 import { Icon, type IconName } from "@/shared/icons/Icon";
+import { displayPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Button } from "@/shared/ui/Button";
 
@@ -115,7 +116,9 @@ export function SeriesPreview() {
     customerChoice === NEW_CUSTOMER
       ? customerName.trim() || "—"
       : (selectedCustomer?.name ??
-        selectedCustomer?.phone ??
+        (selectedCustomer?.phone
+          ? displayPhone(selectedCustomer.phone, "")
+          : null) ??
         "Cliente sem identificação");
   // Telefone não identifica ninguém aqui: quem já está cadastrado vai por ID.
   const identityReady =
@@ -349,7 +352,7 @@ export function SeriesPreview() {
                       {customers.items.map((item) => (
                         <option key={item.id} value={item.id}>
                           {item.name ??
-                            item.phone ??
+                            (item.phone ? displayPhone(item.phone, "") : null) ??
                             "Cliente sem identificação"}
                         </option>
                       ))}

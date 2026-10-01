@@ -8300,3 +8300,73 @@ migration ou campo novo, e `apps/bff/PUBLIC_API_V1.md` não mudou. Decisão:
   §8 continua **não feita**, e a divergência (e) segue como pergunta para uma
   pessoa. Ver a nota de fechamento de [D-098](DECISIONS.md) e o
   [review083](reviews/083-review.md).
+
+## Delta implementado — Goal084, 2026-09-30 ([D-099](DECISIONS.md), ACCEPTED)
+
+Fecha **R-03**, **R-07** e **R-04** do re-teste local de 2026-09-30: o preço é
+digitado em reais, o telefone brasileiro na forma nacional aparece formatado em
+toda tela que mostra cliente, e a demonstração da IA não põe artigo antes do
+nome do serviço. Toca só `apps/frontend/src/`. Sem rota, contrato, migration,
+campo novo ou reescrita de dado, e `apps/bff/PUBLIC_API_V1.md` não mudou.
+Decisão: [D-099](DECISIONS.md), proposta no Goal084, **PROPOSED** até o review;
+ela substitui o item 4 de D-074 (a máscara de centavos) e mantém o item 6 de
+D-094 e o item 3 de D-079.
+
+- **Preço em reais.** `CurrencyInput` recebe texto livre: a vírgula separa os
+  centavos, o ponto é milhar e "60" é R$ 60,00. Formata "R$ 60,00" ao sair do
+  campo, mostra o texto editável ao entrar e entrega **centavos** a
+  `onValueChange`, então serviço novo, edição e onboarding gravam o mesmo valor
+  de antes (`price: 60`). `inputMode` passou a `decimal`. Valor acima de
+  `Number.MAX_SAFE_INTEGER` centavos é recusado.
+- **Telefone só para exibição.** `normalizeBrazilianPhoneDigits`
+  (`shared/phone.ts`) reconhece também a forma nacional (10 ou 11 dígitos com DDD
+  válido, `0` de tronco descartado), com a lista de DDDs copiada do Scheduling.
+  `displayPhone` passa a ser usado pelo rótulo e pelo seletor de cliente do novo
+  agendamento (`NewAppointmentFields.tsx`), pela série (`SeriesPreview.tsx`),
+  pelo rótulo de ocupação (`occupancy.ts`) e pela confirmação de duplicata
+  (`CustomerForm.tsx`). Valor não brasileiro continua cru, e o que está gravado
+  não é reescrito.
+- **Demonstração sem artigo.** `demoPriceReply`, `buildDemoConversation` e, por
+  reuso, `demoToneSample` (`features/onboarding/demo.ts`) não põem artigo nem
+  contração antes do nome do serviço: "Quanto custa Corte feminino?", "Corte
+  custa R$ 80,00.". É divergência declarada frente ao protótipo.
+- **Execução final, sobre a árvore atual.** `validate:core`: **17** passos,
+  **15** `passed`, **2** `skipped`, exit 0; `test:frontend` **127** arquivos e
+  **1334** testes (referência **124**/**1280**; **+54**: **24** + **19** + **10**
+  dos três arquivos novos `goal084-*` e **+1** em `goal058-service-form.test.tsx`);
+  `test:ai-orchestrator` **1186** passando e **98** `skipped` de **1284**;
+  `test:scheduling-service` **37**/**502**. `test:gate` **233**/**233**.
+  `validate:ui` **169** `passed`, **21** `skipped`, **0** `flaky` (`startTime`
+  `2026-10-01T01:48:45.905Z`, da WU-12). `validate:integration` **36**/**36**
+  contra um PostgreSQL descartável em `127.0.0.1:55741/atendly_bff_test`, com o
+  gate autenticado em **175** testes e **0** retentativas (`startTime`
+  `2026-10-01T02:11:32.086Z`). A execução anterior desse gate, da WU-13, teve **1**
+  `flaky` por `ERR_NO_BUFFER_SPACE` e foi refeita; ver
+  [FINAL_AUDIT §60](FINAL_AUDIT.md).
+- **Quatro controles negativos do §6**, feitos pela WU-14 depois da execução
+  final e sem edição de código depois dela, por edição real revertida e conferida
+  por hash: cada um reprova o teste esperado com o defeito (**9**, **10**, **1** e
+  **6** testes que falham, nos controles 1 a 4) e passa restaurado. Saída,
+  hashes e asserções alteradas em [FINAL_AUDIT §60](FINAL_AUDIT.md). O vermelho
+  da baseline do §5 é entrega das WU-01 a WU-03 e não foi reexecutado pela
+  WU-14.
+- **Fechamento no FINAL_AUDIT.** R-03, R-07 e R-04 são dados como corrigidos em
+  §60 (sem reescrever §4–§59); o veredito continua **0** `BLOQUEADOR-MVP`, **7**
+  `PENDENCIA-POS-MVP` e **5** `LIMITE-DECLARADO`.
+- **Conferência humana pendente:** a conferência do §8 do Goal **não foi feita**
+  — digitar preço num navegador contra a pilha local, ver a lista de Clientes da
+  conta com a base importada e ler a demonstração com um nome de serviço feminino
+  e um masculino. Nenhum teste é declarado prova disso, e a importação real da
+  Minha Agenda (R-02, Goal082) segue fora.
+- **Fechamento — review084, 2026-09-30.** [D-099](DECISIONS.md) **ACCEPTED**
+  no [review084](reviews/084-review.md), rodada 1 do IA Loop, sem blocker. O
+  item 4 de D-074 (a máscara de centavos) deixa de valer e ganhou nota de
+  substituição. O Tech Lead reexecutou `vitest run` no frontend (**127**
+  arquivos, **1334** testes, iguais aos declarados) e não reexecutou os quatro
+  controles nem o vermelho da baseline. Efeito não citado na proposta e
+  registrado na nota de fechamento: `formatPhone` da Inbox
+  (`features/conversations/format.ts`) usa a mesma normalização, então um JID
+  estrangeiro de 11 dígitos com prefixo igual a um DDD válido e assinante
+  iniciado em 9 passa a aparecer formatado como telefone brasileiro, como o
+  Scheduling já o canonicaliza. **R-03**, **R-07** e **R-04** ficam corrigidos.
+  A conferência humana do §8 continua **não feita**.

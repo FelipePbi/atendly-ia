@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
  * Goal058 (WU-02): duração aceita qualquer minuto a partir de 1 — sem exigir
- * múltiplo de 5 — e o CurrencyInput vira uma máscara de centavos que
- * acrescenta cada dígito ao fim, qualquer que seja a posição do cursor.
+ * múltiplo de 5 — e o CurrencyInput recebe o preço em reais (regra do
+ * Goal084, que substituiu a máscara de centavos do Goal058).
  */
 
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -177,41 +177,50 @@ describe("preço do serviço", () => {
   });
 });
 
-describe("CurrencyInput ignora a posição do cursor", () => {
-  test("digitar 6000 dá R$ 60,00 com o cursor no começo, no meio e no fim", async () => {
-    const cases: Array<"start" | "middle" | "end"> = ["start", "middle", "end"];
-    for (const cursor of cases) {
-      const onValueChange = vi.fn();
-      const { unmount } = render(
-        <CurrencyInput onValueChange={onValueChange} placeholder="R$ 0,00" />,
-      );
-      const input = screen.getByPlaceholderText<HTMLInputElement>("R$ 0,00");
-      const user = userEvent.setup();
+describe("CurrencyInput recebe reais e deixa o texto onde a pessoa digitou", () => {
+  test("digitar 60 entrega 6000 centavos e só formata ao sair do campo", async () => {
+    const onValueChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <CurrencyInput onValueChange={onValueChange} placeholder="R$ 0,00" />,
+    );
+    const input = screen.getByPlaceholderText<HTMLInputElement>("R$ 0,00");
 
-      for (const digit of ["6", "0", "0", "0"]) {
-        const position =
-          cursor === "start" ? 0 : cursor === "middle" ? Math.floor(input.value.length / 2) : input.value.length;
-        input.setSelectionRange(position, position);
-        await user.type(input, digit, {
-          initialSelectionStart: position,
-          initialSelectionEnd: position,
-        });
-      }
+    await user.type(input, "60");
+    expect(input.value).toBe("60");
+    expect(onValueChange).toHaveBeenLastCalledWith(6000);
 
-      expect(input.value).toBe(brl("60,00"));
-      unmount();
-    }
+    await user.tab();
+    expect(input.value).toBe(brl("60,00"));
   });
 
-  test("Backspace tira o último dígito, mesmo com seleção", async () => {
+  test("o dígito entra onde está o cursor, não é empurrado para o fim", async () => {
     const user = userEvent.setup();
     render(<CurrencyInput placeholder="R$ 0,00" />);
     const input = screen.getByPlaceholderText<HTMLInputElement>("R$ 0,00");
 
-    await user.type(input, "6000");
-    expect(input.value).toBe(brl("60,00"));
+    await user.type(input, "0");
+    await user.type(input, "6", {
+      initialSelectionStart: 0,
+      initialSelectionEnd: 0,
+    });
+    expect(input.value).toBe("60");
+  });
 
+  test("Backspace tira o último caractere digitado", async () => {
+    const onValueChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <CurrencyInput onValueChange={onValueChange} placeholder="R$ 0,00" />,
+    );
+    const input = screen.getByPlaceholderText<HTMLInputElement>("R$ 0,00");
+
+    await user.type(input, "60");
     await user.type(input, "{Backspace}");
+    expect(input.value).toBe("6");
+    expect(onValueChange).toHaveBeenLastCalledWith(600);
+
+    await user.tab();
     expect(input.value).toBe(brl("6,00"));
   });
 
@@ -220,81 +229,109 @@ describe("CurrencyInput ignora a posição do cursor", () => {
     render(<CurrencyInput placeholder="R$ 0,00" />);
     const input = screen.getByPlaceholderText<HTMLInputElement>("R$ 0,00");
 
-    await user.type(input, "6000");
-    expect(input.value).toBe(brl("60,00"));
+    await user.type(input, "60");
+    expect(input.value).toBe("60");
 
     input.setSelectionRange(0, input.value.length);
     await user.type(input, "9", {
       initialSelectionStart: 0,
       initialSelectionEnd: input.value.length,
     });
-    expect(input.value).toBe(brl("0,09"));
+    expect(input.value).toBe("9");
+
+    await user.tab();
+    expect(input.value).toBe(brl("9,00"));
   });
 
-  test("colar extrai dígitos do texto colado", async () => {
+  test("colar um valor formatado entrega os centavos dele", async () => {
+    const onValueChange = vi.fn();
     const user = userEvent.setup();
-    render(<CurrencyInput placeholder="R$ 0,00" />);
+    render(
+      <CurrencyInput onValueChange={onValueChange} placeholder="R$ 0,00" />,
+    );
     const input = screen.getByPlaceholderText<HTMLInputElement>("R$ 0,00");
 
     await user.click(input);
     await user.paste("R$ 6.000,00");
+    expect(onValueChange).toHaveBeenLastCalledWith(600000);
+
+    await user.tab();
     expect(input.value).toBe(brl("6.000,00"));
   });
 
   // Teclado virtual Android e IME mandam `key: "Unidentified"` (keyCode 229)
   // no keydown, e ditado, preenchimento automático e texto arrastado nem
   // mandam keydown: o texto chega só pelo evento `input`. Aqui nenhum keydown
-  // é disparado; o valor que o navegador monta (dígito inserido onde está o
+  // é disparado; o valor que o navegador monta (caractere inserido onde está o
   // cursor) chega pelo `input`, como no celular.
-  test("dígitos que chegam só pelo evento input, sem keydown, acumulam ao fim", () => {
+  test("caracteres que chegam só pelo evento input, sem keydown, valem como digitados", () => {
     const onValueChange = vi.fn();
+    const onKeyDown = vi.fn();
     render(
-      <CurrencyInput onValueChange={onValueChange} placeholder="R$ 0,00" />,
+      <CurrencyInput
+        onKeyDown={onKeyDown}
+        onValueChange={onValueChange}
+        placeholder="R$ 0,00"
+      />,
     );
     const input = screen.getByPlaceholderText<HTMLInputElement>("R$ 0,00");
 
-    for (const cursor of ["start", "middle", "end"] as const) {
-      fireEvent.input(input, { target: { value: "" } });
-      for (const digit of ["6", "0", "0", "0"]) {
-        const text = input.value;
-        const position =
-          cursor === "start" ? 0 : cursor === "middle" ? Math.floor(text.length / 2) : text.length;
-        fireEvent.input(input, {
-          target: { value: text.slice(0, position) + digit + text.slice(position) },
-        });
-      }
-      expect(input.value).toBe(brl("60,00"));
+    for (const char of ["6", "0", ",", "5"]) {
+      fireEvent.input(input, { target: { value: input.value + char } });
     }
-    expect(onValueChange).toHaveBeenLastCalledWith(6000);
+    expect(input.value).toBe("60,5");
+    expect(onValueChange).toHaveBeenLastCalledWith(6050);
+    expect(onKeyDown).not.toHaveBeenCalled();
+
+    fireEvent.blur(input);
+    expect(input.value).toBe(brl("60,50"));
   });
 
-  test("apagar um caractere pelo evento input tira o último dígito, onde quer que esteja o cursor", () => {
-    render(<CurrencyInput defaultValueCents={6000} placeholder="R$ 0,00" />);
+  test("apagar um caractere pelo evento input tira só ele, onde quer que esteja o cursor", () => {
+    const onValueChange = vi.fn();
+    render(
+      <CurrencyInput
+        defaultValueCents={6000}
+        onValueChange={onValueChange}
+        placeholder="R$ 0,00"
+      />,
+    );
     const input = screen.getByPlaceholderText<HTMLInputElement>("R$ 0,00");
     expect(input.value).toBe(brl("60,00"));
 
+    fireEvent.focus(input);
+    expect(input.value).toBe("60");
+
     // deleteContentBackward logo depois do "6": o navegador tira o "6".
-    const text = input.value;
-    const afterSix = text.indexOf("6") + 1;
-    fireEvent.input(input, {
-      target: { value: text.slice(0, afterSix - 1) + text.slice(afterSix) },
-    });
-    expect(input.value).toBe(brl("6,00"));
+    fireEvent.input(input, { target: { value: "0" } });
+    expect(input.value).toBe("0");
+    expect(onValueChange).toHaveBeenLastCalledWith(0);
   });
 
-  test("texto trocado de uma vez (preenchimento automático, seleção total) fica com os dígitos novos", () => {
-    render(<CurrencyInput defaultValueCents={6000} placeholder="R$ 0,00" />);
+  test("texto trocado de uma vez (preenchimento automático, seleção total) vira o valor novo", () => {
+    const onValueChange = vi.fn();
+    render(
+      <CurrencyInput
+        defaultValueCents={6000}
+        onValueChange={onValueChange}
+        placeholder="R$ 0,00"
+      />,
+    );
     const input = screen.getByPlaceholderText<HTMLInputElement>("R$ 0,00");
 
+    fireEvent.focus(input);
     fireEvent.input(input, { target: { value: "R$ 45,00" } });
-    expect(input.value).toBe(brl("45,00"));
+    expect(input.value).toBe("45,00");
+    expect(onValueChange).toHaveBeenLastCalledWith(4500);
 
-    // Seleção total e "0": o "0" coincide com o fim do texto antigo.
-    fireEvent.input(input, { target: { value: "0" } });
-    expect(input.value).toBe(brl("0,00"));
-
-    // Caractere que não é dígito é ignorado.
+    // Caractere fora do permitido é descartado.
     fireEvent.input(input, { target: { value: `${input.value}a` } });
+    expect(input.value).toBe("45,00");
+
+    fireEvent.input(input, { target: { value: "0" } });
+    expect(onValueChange).toHaveBeenLastCalledWith(0);
+
+    fireEvent.blur(input);
     expect(input.value).toBe(brl("0,00"));
   });
 });

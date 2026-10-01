@@ -143,7 +143,8 @@ describe("preço: máscara e mesmo valor gravado (§6.7)", () => {
     const user = await renderStep("servico-nome");
     await user.type(await screen.findByLabelText("Nome do serviço"), "Corte");
     const price = screen.getByLabelText("Preço em reais");
-    await user.type(price, "9000");
+    await user.type(price, "90");
+    await user.tab();
     expect(brl(price)).toBe("R$ 90,00");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 

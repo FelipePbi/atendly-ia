@@ -165,7 +165,7 @@ describe("buildDemoConversation: casos-limite", () => {
 describe("respostas de preço da demonstração", () => {
   test("ON_REQUEST responde 'sob consulta' e nunca um valor", () => {
     const draft = draftFixture({ servicePrice: "", servicePriceType: "ON_REQUEST" });
-    expect(demoPriceReply(draft)).toBe("O valor do Corte feminino é sob consulta.");
+    expect(demoPriceReply(draft)).toBe("O valor de Corte feminino é sob consulta.");
     const priceMessage = buildDemoConversation(draft, WEDNESDAY)?.items[2];
     expect(priceMessage?.text).toContain("sob consulta");
     expect(priceMessage?.text).not.toMatch(/R\$/u);
@@ -173,7 +173,7 @@ describe("respostas de preço da demonstração", () => {
 
   test("STARTING_AT responde 'a partir de'", () => {
     const draft = draftFixture({ servicePriceType: "STARTING_AT" });
-    expect(demoPriceReply(draft)).toMatch(/^O Corte feminino custa a partir de R\$\s90,00\.$/u);
+    expect(demoPriceReply(draft)).toMatch(/^Corte feminino custa a partir de R\$\s90,00\.$/u);
     expect(buildDemoConversation(draft, WEDNESDAY)?.items[2].text).toContain(
       "a partir de",
     );
@@ -190,7 +190,7 @@ describe("respostas de preço da demonstração", () => {
       demoPriceReply(
         draftFixture({ servicePrice: "", servicePriceType: "NOT_INFORMED" }),
       ),
-    ).toBe("O valor do Corte feminino ainda não foi informado.");
+    ).toBe("O valor de Corte feminino ainda não foi informado.");
   });
 });
 

@@ -353,7 +353,7 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
     const durationInput = screen.getByLabelText("Duração em minutos");
     await user.clear(durationInput);
     await user.type(durationInput, "45");
-    await user.type(screen.getByLabelText("Preço em reais"), "15000");
+    await user.type(screen.getByLabelText("Preço em reais"), "150");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
     const [patch] = updateOnboarding.mock.calls.at(-1) as [
@@ -492,7 +492,7 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
         await screen.findByRole("log", { name: "Conversa de exemplo da IA" }),
       ).toBeVisible();
       expect(
-        screen.getByText("O Corte custa R$ 100,00.", { exact: false }),
+        screen.getByText("Corte custa R$ 100,00.", { exact: false }),
       ).toBeVisible();
       expect(
         screen.getByText(/Tenho 9h, 13h ou 17h\./u),

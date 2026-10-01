@@ -7,6 +7,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { BffHttpError, type CalendarState, type Customer } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
+import { displayPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Field } from "@/shared/ui/Field";
 import { ListItem } from "@/shared/ui/ListItem";
@@ -142,14 +143,14 @@ export function CustomerForm() {
             {candidates.length === 1
               ? "cadastro com o telefone"
               : "cadastros com o telefone"}{" "}
-            {pending.phone}. O mesmo número pode pertencer a mais de uma
+            {displayPhone(pending.phone, "")}. O mesmo número pode pertencer a mais de uma
             pessoa: escolha um cadastro existente ou confirme que é uma
             pessoa nova. A Atendly não junta cadastros automaticamente.
           </p>
           <div aria-label="Cadastros com este telefone" className="list" role="list">
             {candidates.map((candidate) => (
               <ListItem
-                copy={candidate.phone || "Telefone não informado"}
+                copy={displayPhone(candidate.phone, "Telefone não informado")}
                 href={`/clientes/detalhes?id=${encodeURIComponent(candidate.id)}`}
                 key={candidate.id}
                 title={candidate.name || "Cliente sem nome"}

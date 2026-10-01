@@ -4,6 +4,7 @@ import { useId } from "react";
 
 import { type Customer, type CustomerList } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
+import { displayPhone } from "@/shared/phone";
 
 import {
   addDays,
@@ -34,7 +35,11 @@ export function weekdayShort(date: string): string {
 }
 
 export function personLabel(customer: Customer): string {
-  return customer.name ?? customer.phone ?? "Cliente sem identificação";
+  return (
+    customer.name ??
+    (customer.phone ? displayPhone(customer.phone, "") : null) ??
+    "Cliente sem identificação"
+  );
 }
 
 function initials(label: string): string {
@@ -127,7 +132,7 @@ export function CustomerField({
                     </span>
                     <span>{personLabel(item)}</span>
                     {item.name && item.phone && (
-                      <small>{item.phone}</small>
+                      <small>{displayPhone(item.phone, "")}</small>
                     )}
                   </button>
                 </li>

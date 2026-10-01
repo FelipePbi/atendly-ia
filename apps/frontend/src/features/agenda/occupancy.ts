@@ -7,6 +7,7 @@ import {
   type TimeBlockKind,
 } from "@/data";
 import type { IconName } from "@/shared/icons/Icon";
+import { displayPhone } from "@/shared/phone";
 
 export const MINUTES_PER_DAY = 24 * 60;
 
@@ -107,7 +108,9 @@ export function formatAppointmentDate(appointment: Appointment): string {
 export function customerLabel(appointment: Appointment): string {
   return (
     appointment.customer?.name ??
-    appointment.customer?.phone ??
+    (appointment.customer?.phone
+      ? displayPhone(appointment.customer.phone, "")
+      : null) ??
     "Cliente não identificado"
   );
 }

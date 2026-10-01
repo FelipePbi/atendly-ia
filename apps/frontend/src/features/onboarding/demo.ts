@@ -66,7 +66,7 @@ export function demoPriceReply(
 ): string {
   const name = draft.serviceName;
   if (draft.servicePriceType === "ON_REQUEST") {
-    return `O valor do ${name} é sob consulta.`;
+    return `O valor de ${name} é sob consulta.`;
   }
   const raw = draft.servicePrice.trim().replace(",", ".");
   const value = Number(raw);
@@ -75,12 +75,17 @@ export function demoPriceReply(
     raw === "" ||
     !Number.isFinite(value)
   ) {
-    return `O valor do ${name} ainda não foi informado.`;
+    return `O valor de ${name} ainda não foi informado.`;
   }
   const price = currencyFormatter.format(value);
   return draft.servicePriceType === "STARTING_AT"
-    ? `O ${name} custa a partir de ${price}.`
-    : `O ${name} custa ${price}.`;
+    ? `${capitalizeFirst(name)} custa a partir de ${price}.`
+    : `${capitalizeFirst(name)} custa ${price}.`;
+}
+
+/** Só a primeira letra sobe; o resto fica como a pessoa digitou. */
+function capitalizeFirst(text: string): string {
+  return text.charAt(0).toLocaleUpperCase("pt-BR") + text.slice(1);
 }
 
 export type DemoTone = "BALANCED" | "CASUAL" | "PROFESSIONAL";
@@ -247,7 +252,7 @@ export function buildDemoConversation(
   const count = slots.length;
 
   const items: DemoItem[] = [
-    { kind: "client", text: `Oi! Quanto custa o ${name}?` },
+    { kind: "client", text: `Oi! Quanto custa ${name}?` },
     { kind: "event", text: `Serviço identificado · ${name}` },
     {
       kind: "ai",
@@ -268,7 +273,7 @@ export function buildDemoConversation(
     { kind: "client", text: `Pode ser o de ${chosen}.` },
     {
       kind: "ai",
-      text: `${name}, ${dateLabel}, ${chosenAt} ${chosen}. Posso confirmar?`,
+      text: `${capitalizeFirst(name)}, ${dateLabel}, ${chosenAt} ${chosen}. Posso confirmar?`,
     },
     { kind: "client", text: "Pode!" },
     { kind: "event", text: "Agendamento simulado · nada foi marcado" },

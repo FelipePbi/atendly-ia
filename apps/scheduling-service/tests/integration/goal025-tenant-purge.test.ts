@@ -6,6 +6,7 @@ import {
   TENANT_PURGE_TABLES,
   TenantPurgeService,
 } from "../../src/modules/internal-api/tenantPurge.js";
+import { upcomingLocalSlot } from "./support/test-date.js";
 
 // Purga do negocio inteiro contra PostgreSQL real (Goal025/WU-06).
 //
@@ -96,9 +97,12 @@ describe.skipIf(!connectionString)("tenant purge against PostgreSQL", () => {
    * todas juntas.
    */
   async function seedTenant(tenantId: string): Promise<void> {
-    const start = new Date("2026-10-01T09:00:00.000Z");
-    const end = new Date("2026-10-01T10:00:00.000Z");
-    const date = new Date("2026-10-01T00:00:00.000Z");
+    // O banco compara `expiresAt` do hold com o proprio relogio
+    // (`AppointmentHold_expiresAt_check`): o atendimento nasce no futuro real.
+    const slot = upcomingLocalSlot(7);
+    const start = slot.startAt;
+    const end = new Date(start.getTime() + 60 * 60_000);
+    const date = new Date(`${slot.date}T00:00:00.000Z`);
     const dayStart = new Date("1970-01-01T09:00:00.000Z");
     const dayEnd = new Date("1970-01-01T10:00:00.000Z");
 

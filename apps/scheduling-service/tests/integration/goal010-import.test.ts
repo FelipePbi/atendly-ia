@@ -12,6 +12,7 @@ import {
 } from "../../src/modules/migrations/import-lease.js";
 import { ImportPreviewService } from "../../src/modules/migrations/import-preview-service.js";
 import { resetTenant } from "./support/reset-tenant.js";
+import { localDateAhead, upcomingLocalSlot } from "./support/test-date.js";
 
 /**
  * Goal010 WU-12 contra PostgreSQL real: o que só o banco prova da importação
@@ -51,8 +52,13 @@ const snapshotInput = {
   endDate: "2026-12-31",
   referenceDate: "2026-09-10",
 };
-/** `2026-10-01 09:00` em `America/Sao_Paulo`: o horário disputado. */
-const contestedStartAt = new Date("2026-10-01T12:00:00.000Z");
+/**
+ * 09:00 em `America/Sao_Paulo`, sete dias à frente de hoje: o horário disputado.
+ * A confirmação concorrente passa pelo motor de oferta, que só oferece o que
+ * ainda está por vir; uma data fixa vence e a corrida deixa de ser pelo horário.
+ */
+const contestedSlot = upcomingLocalSlot(7);
+const contestedStartAt = contestedSlot.startAt;
 
 let prisma: PrismaClient;
 let other: PrismaClient;
@@ -168,7 +174,7 @@ function sourceAppointment(
   return {
     id: overrides.id ?? 100,
     userId: 7,
-    date: overrides.date ?? "2026-10-01",
+    date: overrides.date ?? contestedSlot.date,
     startTime: overrides.startTime ?? "09:00",
     endTime: overrides.endTime ?? "10:00",
     duration: 60,
@@ -681,7 +687,7 @@ describeWithDatabase("goal010 import against PostgreSQL", () => {
             externalId: "101",
             raw: sourceAppointment({
               id: 101,
-              date: "2026-10-02",
+              date: localDateAhead(8),
               startTime: "14:00",
               endTime: "15:00",
               customerId: 501,
@@ -899,7 +905,7 @@ describeWithDatabase("goal010 import against PostgreSQL", () => {
       ).createAppointment({
         source: "USER",
         serviceIds: [existingService.id],
-        date: "2026-11-05",
+        date: localDateAhead(10),
         startTime: "08:00",
         customerId: existingCustomer.id,
         stepMinutes: 30,
@@ -934,7 +940,7 @@ describeWithDatabase("goal010 import against PostgreSQL", () => {
             externalId: "100",
             raw: sourceAppointment({
               id: 100,
-              date: "2026-11-06",
+              date: localDateAhead(11),
               startTime: "09:00",
               endTime: "10:00",
             }),
@@ -1187,7 +1193,7 @@ describeWithDatabase("goal010 import against PostgreSQL", () => {
       ).createAppointment({
         source: "USER",
         serviceIds: [serviceId],
-        date: "2026-10-01",
+        date: contestedSlot.date,
         startTime: "09:00",
         customerId,
         stepMinutes: 30,
@@ -1199,7 +1205,7 @@ describeWithDatabase("goal010 import against PostgreSQL", () => {
       const ready = await readyForAppointmentRace();
       const [imported, confirmation] = await runQueued(
         tenantA,
-        "2026-10-01",
+        contestedSlot.date,
         () =>
           importAppointment(
             ready.sessionId,
@@ -1228,7 +1234,7 @@ describeWithDatabase("goal010 import against PostgreSQL", () => {
       const ready = await readyForAppointmentRace();
       const [confirmation, imported] = await runQueued(
         tenantA,
-        "2026-10-01",
+        contestedSlot.date,
         () =>
           confirmAppointment(
             ready.serviceId,

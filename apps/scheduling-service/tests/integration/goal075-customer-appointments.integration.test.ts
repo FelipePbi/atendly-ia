@@ -24,6 +24,7 @@ import {
 import { AppError } from "../../src/shared/errors/app-error.js";
 import { TEST_INTERNAL_SERVICE_TOKEN } from "../unit/support/test-env.js";
 import { resetTenant } from "./support/reset-tenant.js";
+import { upcomingLocalSlot } from "./support/test-date.js";
 
 /**
  * Goal075, WU-01 contra PostgreSQL real: `nextAppointment`/`lastAppointment`
@@ -273,11 +274,12 @@ describeWithDatabase(
         "CANCELLED",
       );
       // Confirmado muito à frente: é o próximo, e não entra nas contagens.
-      // 2030-03-10T18:30Z é 15:30 em America/Sao_Paulo (UTC-3).
+      // 15:30 em America/Sao_Paulo, 400 dias à frente de hoje: sempre futuro.
+      const farSlot = upcomingLocalSlot(400, "15:30");
       await createAppointment(
         tenantA,
         customerId,
-        new Date("2030-03-10T18:30:00.000Z"),
+        farSlot.startAt,
         "CONFIRMED",
       );
 
@@ -296,7 +298,7 @@ describeWithDatabase(
       // O próximo é o confirmado no fuso do negócio; o último é a falta
       // (2026-01-31T12:00Z, 09:00 local), e o cancelado posterior não conta.
       expect(response.json().data.nextAppointment).toEqual({
-        date: "2030-03-10",
+        date: farSlot.date,
         startTime: "15:30",
         status: "CONFIRMED",
       });

@@ -1,6 +1,6 @@
 # Goal 086 — Login idêntico ao protótipo (validação da comparação visual)
 
-**Status: READY.** Preparado em 2026-10-01 por instrução do usuário (Felipe Borges), depois de [Goal082 ACCEPTED](../reviews/082-review.md). Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED.** Preparado em 2026-10-01 por instrução do usuário (Felipe Borges), depois de [Goal082 ACCEPTED](../reviews/082-review.md). Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: SONNET_HIGH
 

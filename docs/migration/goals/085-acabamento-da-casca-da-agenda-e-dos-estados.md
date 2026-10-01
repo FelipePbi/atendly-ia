@@ -1,6 +1,6 @@
 # Goal 085 — Acabamento da casca, da Agenda e dos estados
 
-**Status: PLANNED.** (READY na v109; de volta a PLANNED na v110, com o 086 à frente por instrução do usuário. Volta a READY com o mesmo ID, título e escopo, revalidando a baseline.) Preparado em 2026-10-01 pelo Tech Lead Agent após [Goal082 ACCEPTED](../reviews/082-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: PLANNED.** (READY na v109; de volta a PLANNED na v110, com o 086 à frente por instrução do usuário. Volta a READY com o mesmo ID, título e escopo, revalidando a baseline. Na v111 o 087 também passa à frente, porque reescreve a casca que o 085 toca; a decisão que o 085 propõe passa a ser **D-102**, e o escopo é precisado sobre a casca nova quando ele voltar a READY.) Preparado em 2026-10-01 pelo Tech Lead Agent após [Goal082 ACCEPTED](../reviews/082-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: SONNET_HIGH
 
@@ -149,7 +149,7 @@ O relatório e os documentos dizem que essa conferência **não foi feita** por 
 
 No mesmo diff:
 
-- [DECISIONS](../DECISIONS.md) ganha **D-101** em `PROPOSED`, no formato de D-090 a D-100. Ela diz (a) a (e), com o motivo de cada um, as divergências frente ao protótipo que ficam (o estado por linha em Conversas) e o limite declarado de R-10. O "Revisar se" inclui: o produto passar a ter estado de IA próprio para "sem WhatsApp" em `/v1/status`; a conferência do §8 mostrar o defeito de R-10 de pé; e a pessoa precisar do tipo visível no bloco curto.
+- [DECISIONS](../DECISIONS.md) ganha **D-102** em `PROPOSED`, no formato de D-090 a D-100. Ela diz (a) a (e), com o motivo de cada um, as divergências frente ao protótipo que ficam (o estado por linha em Conversas) e o limite declarado de R-10. O "Revisar se" inclui: o produto passar a ter estado de IA próprio para "sem WhatsApp" em `/v1/status`; a conferência do §8 mostrar o defeito de R-10 de pé; e a pessoa precisar do tipo visível no bloco curto.
 - [FINAL_AUDIT](../FINAL_AUDIT.md) ganha **§62**, sem reescrever §4 a §61. Ela registra R-06, R-08, R-09 e R-10 como corrigidos por este Goal, R-10 com o limite (e), e dá o veredito **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP`, 5 `LIMITE-DECLARADO`**, sem contar os achados da revisão local, recontado por execução.
 - [CURRENT_STATE](../CURRENT_STATE.md) e [VALIDATION_GATE](../VALIDATION_GATE.md) registram o que mudou, as medidas G-1 a G-3 e as contagens da execução final.
 - `apps/bff/PUBLIC_API_V1.md` **não** muda. O [QA_LOCAL_REVIEW](../QA_LOCAL_REVIEW.md), o vault e `docs/design-reference/` não são editados.
@@ -190,7 +190,7 @@ Cada critério é verificável no diff ou na execução.
 5. A largura, o toque, o contraste, o foco e `prefers-reduced-motion` das telas tocadas são decididos pelo gate renderizado (`validate:ui` e o gate autenticado dentro de `validate:integration`, com **175** testes da baseline mais G-1 a G-3, e **0** retentativas). A fidelidade ao protótipo e o comportamento no navegador de Felipe ficam no §8.
 6. Os cinco controles negativos do §7 reprovam com o defeito e passam sem ele. Eles rodam depois da última edição de código, com a saída colada.
 7. Typecheck e lint de `apps/frontend` passam. Nenhuma suíte tem teste a menos que a recontagem da baseline (referências: `test:frontend` **128**/**1337**, `test:gate` **233**). `validate:core`, `validate:ui` e `validate:integration` passam.
-8. D-101 está em `PROPOSED`. FINAL_AUDIT §62 dá o veredito **0/7/5**. CURRENT_STATE e VALIDATION_GATE são escritos depois da execução final e dos controles, com as contagens dela, e dizem que a conferência do §8 não foi feita.
+8. D-102 está em `PROPOSED`. FINAL_AUDIT §62 dá o veredito **0/7/5**. CURRENT_STATE e VALIDATION_GATE são escritos depois da execução final e dos controles, com as contagens dela, e dizem que a conferência do §8 não foi feita.
 9. `git status --porcelain=v1 -uall` lista só os arquivos autorizados, sem resto de controle negativo nem artefato de `e2e-results/`.
 
 **O que o aceite não prova:**

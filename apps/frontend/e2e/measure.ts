@@ -596,3 +596,33 @@ export async function measureBarClearance(page: Page): Promise<BarClearance> {
     };
   });
 }
+
+export type SidebarSpan = {
+  /** `null` when the sidebar is not rendered at this width. */
+  top: number | null;
+  bottom: number | null;
+  innerHeight: number;
+};
+
+/** Sub-pixel rounding of the sidebar's edges, never a gap under it. */
+export const SIDEBAR_SPAN_TOLERANCE = 1;
+
+/**
+ * Where the sidebar sits against the window (Goal085, G-3): its top edge and
+ * its bottom edge, next to `window.innerHeight`. A shell whose sidebar is as
+ * tall as the window it was loaded in leaves a gap under it the moment the
+ * window grows, and no other measurement reads that.
+ */
+export async function measureSidebarSpan(page: Page): Promise<SidebarSpan> {
+  return page.evaluate(() => {
+    const sidebar = document.querySelector("aside.sidebar");
+    const style = sidebar ? getComputedStyle(sidebar) : null;
+    const box = sidebar?.getBoundingClientRect() ?? null;
+    const rendered = !!box && !!style && style.display !== "none" && box.width > 0 && box.height > 0;
+    return {
+      top: rendered && box ? box.top : null,
+      bottom: rendered && box ? box.bottom : null,
+      innerHeight: window.innerHeight,
+    };
+  });
+}

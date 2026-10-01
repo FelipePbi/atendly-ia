@@ -34,8 +34,9 @@ export type ShellConfig = {
   mainClassName?: string;
   module?: ShellModule;
   showBottomNav?: boolean;
-  showMobileHeader?: boolean;
   title: string;
+  /** A tela já diz o estado do WhatsApp em faixa própria: a casca não repete o banner. */
+  whatsappInBand?: boolean;
 };
 
 type ShellConfigContextValue = {
@@ -56,7 +57,7 @@ function sameConfig(a: ShellConfig | null, b: ShellConfig): boolean {
     a.mainClassName === b.mainClassName &&
     a.module === b.module &&
     a.showBottomNav === b.showBottomNav &&
-    a.showMobileHeader === b.showMobileHeader &&
+    a.whatsappInBand === b.whatsappInBand &&
     a.action?.href === b.action?.href &&
     a.action?.label === b.action?.label &&
     a.action?.icon === b.action?.icon

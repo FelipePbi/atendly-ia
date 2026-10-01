@@ -23,9 +23,11 @@ import {
   measureOverflow,
   measureRunningAnimations,
   measureShellBands,
+  measureSidebarSpan,
   measureTouchTargets,
   OVERFLOW_TOLERANCE,
   SIDEBAR_BREAKPOINT,
+  SIDEBAR_SPAN_TOLERANCE,
   SIDEBAR_WIDTH,
   TOUCH_TARGET_AA,
   TOUCH_TARGET_COMFORTABLE,
@@ -1694,5 +1696,65 @@ for (const routeName of ["clientes", "servicos"] as const) {
         )
         .toBeLessThanOrEqual(barTop + BAR_CLEARANCE_TOLERANCE);
     }
+  });
+}
+
+/**
+ * The sidebar covers the whole window (Goal085, G-3): its top edge is 0 and its
+ * bottom edge is `window.innerHeight`, right after the load, after the window
+ * grows taller without a reload, and after the content is scrolled to the end.
+ * Below 1100px there is no sidebar, so there is nothing to measure; the test
+ * says so instead of skipping.
+ */
+for (const routeName of ["servicos", "clientes"] as const) {
+  test(`G-3 sidebar covers the window: ${routeName}`, async ({ page }, testInfo) => {
+    await waitForRateLimitBudget(testInfo);
+    watchRateLimitBudget(page);
+
+    const route = routeNamed(routeName);
+    await page.goto(route.path, { waitUntil: "networkidle" });
+    await proveAuthenticatedScreen(page, route);
+
+    const viewport = page.viewportSize();
+    const width = viewport?.width ?? 0;
+    const where = `${route.path} at ${testInfo.project.name} (${width}px)`;
+
+    if (width < SIDEBAR_BREAKPOINT || !viewport) {
+      const span = await measureSidebarSpan(page);
+      expect(span.top, `${where}: aside.sidebar is rendered below ${SIDEBAR_BREAKPOINT}px.`).toBeNull();
+      return;
+    }
+
+    const readings: Record<string, Awaited<ReturnType<typeof measureSidebarSpan>>> = {};
+    const prove = async (moment: string) => {
+      const span = await measureSidebarSpan(page);
+      readings[moment] = span;
+      expect(span.top, `${where}, ${moment}: aside.sidebar is not rendered.`).not.toBeNull();
+      expect
+        .soft(
+          Math.abs(span.top ?? Number.POSITIVE_INFINITY),
+          `${where}, ${moment}: aside.sidebar starts at y=${span.top}, expected 0.`,
+        )
+        .toBeLessThanOrEqual(SIDEBAR_SPAN_TOLERANCE);
+      expect
+        .soft(
+          Math.abs((span.bottom ?? Number.POSITIVE_INFINITY) - span.innerHeight),
+          `${where}, ${moment}: aside.sidebar ends at y=${span.bottom}, window height is ${span.innerHeight}.`,
+        )
+        .toBeLessThanOrEqual(SIDEBAR_SPAN_TOLERANCE);
+    };
+
+    await prove("after load");
+
+    await page.setViewportSize({ width: viewport.width, height: viewport.height + 400 });
+    await prove("after the window grew taller");
+
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await prove("after scrolling to the end");
+
+    await testInfo.attach(`sidebar-span-${route.name}`, {
+      body: JSON.stringify(readings, null, 2),
+      contentType: "application/json",
+    });
   });
 }

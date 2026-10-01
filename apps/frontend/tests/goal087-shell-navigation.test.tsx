@@ -205,7 +205,9 @@ describe("Goal087 prova 1: a sidebar", () => {
     await screen.findByRole("alert");
 
     const sidebar = sidebarOf(container);
-    expect(within(sidebar).queryByText(/WhatsApp (conectado|desconectado)/)).toBeNull();
+    // Goal085: o cartão da IA passa a dizer a desconexão; a linha de estado
+    // própria do WhatsApp (.wa-status) continua ausente.
+    expect(within(sidebar).queryByText("WhatsApp conectado")).toBeNull();
     expect(within(sidebar).queryByText(/Verificando WhatsApp|WhatsApp não confirmado/)).toBeNull();
     expect(sidebar.querySelector(".wa-status")).toBeNull();
   });

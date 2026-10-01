@@ -6944,3 +6944,33 @@ O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` 
 ### Fechamento de R-02
 
 **R-02 — "a Minha Agenda recusa o login e a tela culpa a senha" — corrigido pelo Goal082 no que o repositório prova** ([D-100](DECISIONS.md), **PROPOSED**). A pessoa informa só e-mail e senha; a identificação do app continua configuração interna do servidor, fornecida pela operação; e a falha tem dono: a recusa da senha da pessoa (`invalid_grant`, ou 400) pede para conferir e-mail e senha, e a recusa da identificação do app ou a falta da variável diz que a falha é da Atendly, sem pedir nada à pessoa, e aparece no log da operação (`warn` ao subir, `error` por recusa, `originCode` em segundo plano), sem o valor. **O que segue dependendo da conta real** (§9 do Goal, **não feita**): o formato da resposta do portal à senha errada, que decide o limite declarado de (a), e a aceitação, pelo portal, do valor que a operação fornecer. Enquanto o review não aceitar, o fechamento é **PROPOSED**.
+
+## 62. R-06 e R-10 são corrigidos: o cartão da IA diz o estado real do WhatsApp e a sidebar preenche a janela; R-08 e R-09 seguem abertos — Goal085, 2026-10-01
+
+Seção nova, escrita pelo Developer Agent na rodada 2 do IA Loop, depois da execução final e dos quatro controles negativos desta rodada, sem reescrever §4–§61. [D-102](DECISIONS.md) e esta seção seguem **PROPOSED** até o review do Goal085. **R-06**, **R-08**, **R-09** e **R-10** são achados do [re-teste local de 2026-09-30](QA_LOCAL_REVIEW.md#re-teste-local-2026-09-30-depois-dos-goals-057080), fora da enumeração A-01…A-24; o `QA_LOCAL_REVIEW` não foi editado. As contagens desta seção são as da execução final descrita em [VALIDATION_GATE](VALIDATION_GATE.md), rodada depois da última edição de código (`apps/frontend/src/shared/styles/atendly.css`, `2026-10-01T08:38:14Z`).
+
+### O que mudou
+
+Ver [D-102](DECISIONS.md) para a decisão completa. Resumo: `aiCardView(ai, whatsapp)` (`apps/frontend/src/shared/runtime/systemStatus.tsx`) dá ao cartão da IA da sidebar a prioridade do WhatsApp desconectado ("WhatsApp desconectado", "a IA não está atendendo", ação "Reconectar", nunca "IA ativa" nem "Pausar"); em `/inicio`, quando a faixa da Home já diz a desconexão, o banner da casca não repete o aviso (`whatsappInBand` em `ShellConfig`, ligado pela chamada única de `useShellConfig` da Home); a faixa da Home no estado do quadro H3 ganha o ícone de círculo cortado e a ação "Reconectar WhatsApp" em largura total; e a casca e a sidebar deixam de usar altura em unidade de viewport (a sidebar passa de `position: sticky` com `height: 100dvh` a `position: fixed` com `inset-block: 0`, e `.app-frame` perde o `min-height: 100dvh`). O diff tem 13 arquivos modificados e 2 novos, todos em `apps/frontend/`; nenhum arquivo de rota, contrato, BFF, serviço, migration ou documento de produto mudou.
+
+### Fechamento de R-06 e R-10
+
+**R-06 — "a casca diz 'IA ativa' com o WhatsApp desconectado" — corrigido pelo Goal085.** Prova: `goal085-shell-states.test.tsx` (**27** testes, provas 1 a 3), com os controles 1 a 3 reprovando-a quando o defeito volta (`7`, `1` e `1` testes vermelhos de **27**).
+
+**R-10 — "a sidebar e o conteúdo terminam antes do fim da janela" — corrigido pelo Goal085, com o limite (e) de D-102.** O defeito **não reproduz no Chromium do Playwright**, onde `dvh` acompanha a janela. A prova vermelha é uma guarda sobre a folha de estilo (`goal085-shell-css.test.ts`, **4** testes), que o controle 4 reprova ao devolver `height: 100dvh` à `.sidebar` (`expected [ '.sidebar { height: 100dvh }' ] to deeply equal []`). A medida renderizada **G-3** do gate autenticado (**10** testes novos, **205** no total contra **195** da baseline) é **regressão**: passa também na baseline. **Só a conferência humana do §7 do Goal confirma a correção, e ela não foi feita.** Enquanto o review não aceitar, o fechamento de R-10 vale até onde a guarda e a medida chegam.
+
+### R-08 e R-09 seguem abertos
+
+**R-08 (linhas de lista sublinhadas em Clientes)** e **R-09 (bloco de 1 h na Semana sem o nome)** **não** foram tocados por este Goal e continuam abertos: R-08 pertence ao Goal que levar a tela de Clientes ao quadro CL1, e R-09 ao Goal que levar a Agenda ao quadro A10. Nenhum arquivo de Clientes ou de Agenda foi editado.
+
+### O que esta seção não prova
+
+**A conferência do §7 do Goal não foi feita** por esta rodada: nem abrir o navegador em que Felipe viu R-10, com zoom e com a janela redimensionada, e ver a sidebar e o conteúdo chegarem ao fim da janela; nem ver a sidebar e a Home com o WhatsApp desconectado de verdade e a IA ativada. O `visual:compare` do H3 baixou de 14,9 / 9,0 / 9,6 / 8,4 % para **8,1 / 4,1 / 3,7 / 3,0 %** (mobile, tablet em retrato, tablet em paisagem, desktop; baseline `05c92fc`), mas a porcentagem é tendência, não aprovação. O H1 subiu (11,8 / 5,5 / 4,8 / 4,2 → 12,6 / 7,4 / 8,4 / 7,1 %) porque a conta visual está no estado do H3 e a faixa do app agora tem a altura da do H3, e não a do H1; o desktop de A1, CL1, S1, C1 e M1 subiu 0,1 ponto na coluna da sidebar, pelo cartão da IA com a desconexão. Detalhe e causas medidas em [VALIDATION_GATE](VALIDATION_GATE.md).
+
+### Veredito recontado
+
+O veredito desta auditoria continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 5 `LIMITE-DECLARADO`**, os mesmos números de §60 e §61. A mudança em relação a §61 é **nenhuma**: R-06, R-08, R-09 e R-10 são do `QA_LOCAL_REVIEW`, fora da enumeração A-01…A-24, e nenhum achado dessa enumeração foi tocado, corrigido, reclassificado ou reaberto por este diff. A recontagem parte do estado de §60, que fixou **0**/**7**/**5**, com os `PENDENCIA-POS-MVP` A-04 a A-08, A-13 e A-14 (**7**) e os `LIMITE-DECLARADO` A-11, A-15, A-16, A-17 e A-19 (**5**), relidos nas seções de fechamento até §61. Esta é uma contagem por leitura dessas seções, e não um comando: não existe verificação automática do veredito. Os achados do re-teste local não entram na contagem.
+
+### Nota de fechamento ([review085](reviews/085-review.md))
+
+D-102 foi aceita na rodada 2 do IA Loop, sem blocker. O fechamento de R-06 e de R-10 acima vale como escrito, e R-10 continua com o limite (e) de D-102: o defeito não reproduz no Chromium do Playwright, e a conferência do §7 **não foi feita**. R-08 e R-09 seguem abertos. O veredito continua **0 `BLOQUEADOR-MVP`, 7 `PENDENCIA-POS-MVP` e 5 `LIMITE-DECLARADO`**; o aceite não toca nenhum achado da enumeração A-01…A-24.

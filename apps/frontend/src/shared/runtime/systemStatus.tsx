@@ -56,6 +56,53 @@ export function aiStatusView(
   return "off";
 }
 
+export type AiCardTone = "active" | "danger" | "neutral" | "warning";
+
+export type AiCardView = {
+  action: { href: string; label: string } | null;
+  support: string | null;
+  title: string;
+  tone: AiCardTone;
+};
+
+/**
+ * O que o cartão da IA na sidebar mostra (Goal085, quadro H3). A desconexão
+ * confirmada do WhatsApp vem antes de qualquer estado da IA — "IA ativa" com o
+ * número fora do ar seria mentira — e é a mesma prioridade da faixa da Home e
+ * do banner da casca. WhatsApp `unknown` ou `loading` não muda o cartão: só a
+ * desconexão confirmada muda.
+ */
+export function aiCardView(
+  ai: StatusView,
+  whatsapp: StatusView,
+): AiCardView {
+  if (whatsapp === "off") {
+    return {
+      action: { href: "/configuracoes/whatsapp", label: "Reconectar" },
+      support: "a IA não está atendendo",
+      title: "WhatsApp desconectado",
+      tone: "danger",
+    };
+  }
+  switch (ai) {
+    case "loading":
+      return { action: null, support: null, title: "Verificando IA", tone: "neutral" };
+    case "unknown":
+      return { action: null, support: null, title: "IA não confirmado", tone: "neutral" };
+    case "active":
+      return {
+        action: { href: "/configuracoes/ia", label: "Pausar" },
+        support: "atendendo pelo WhatsApp",
+        title: "IA ativa",
+        tone: "active",
+      };
+    case "pending":
+      return { action: null, support: null, title: "IA em ativação", tone: "warning" };
+    default:
+      return { action: null, support: null, title: "IA desligada", tone: "danger" };
+  }
+}
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**

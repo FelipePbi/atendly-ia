@@ -16,6 +16,7 @@ import {
 } from "@/shared/runtime/ProductRuntime";
 import {
   accountDeletionDaysRemaining,
+  aiCardView,
   type StatusView,
   SystemStatusProvider,
   useSystemStatus,
@@ -69,6 +70,7 @@ function AppShellChrome({
   module,
   showBottomNav = true,
   title,
+  whatsappInBand = false,
 }: AppShellProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -217,7 +219,7 @@ function AppShellChrome({
             </Link>
           </nav>
           <div className="sidebar-bottom">
-            <IaCard view={status.aiView} />
+            <IaCard aiView={status.aiView} whatsappView={status.whatsappView} />
             <div
               className="dropdown sidebar-account-menu"
               onKeyDown={(event) => {
@@ -275,7 +277,7 @@ function AppShellChrome({
               linkLabel="Ver exclusão da conta"
             />
           )}
-          {!deletionDueAt && whatsappDisconnected && (
+          {!deletionDueAt && whatsappDisconnected && !whatsappInBand && (
             <PersistentStatusBanner
               text="Reconecte o WhatsApp para a IA voltar a responder."
               title="Atendimento automático parado"
@@ -416,41 +418,39 @@ function PersistentStatusBanner({
   );
 }
 
-function IaCard({ view }: { view: StatusView }) {
-  const active = view === "active";
-  const copy =
-    view === "loading"
-      ? "Verificando IA"
-      : view === "unknown"
-        ? "IA não confirmado"
-        : view === "active"
-          ? "IA ativa"
-          : view === "pending"
-            ? "IA em ativação"
-            : "IA desligada";
+function IaCard({
+  aiView,
+  whatsappView,
+}: {
+  aiView: StatusView;
+  whatsappView: StatusView;
+}) {
+  const card = aiCardView(aiView, whatsappView);
+  const disconnected = whatsappView === "off";
+  const action = card.action && (
+    <Link className="ia-card-action" href={card.action.href}>
+      {card.action.label}
+    </Link>
+  );
   return (
-    <div className="ia-card">
-      <span
-        className={clsx(
-          "ia-dot",
-          active && "is-active",
-          view === "off" && "danger",
-          view === "pending" && "warning",
-          (view === "loading" || view === "unknown") && "neutral",
-        )}
-        aria-hidden="true"
-      />
-      <div className="ia-card-text" role="status">
-        <span className="ia-card-title">{copy}</span>
-        {active && (
-          <span className="ia-card-sub">atendendo pelo WhatsApp</span>
-        )}
-      </div>
-      {active && (
-        <Link className="ia-card-action" href="/configuracoes/ia">
-          Pausar
-        </Link>
+    <div className={clsx("ia-card", disconnected && "is-disconnected")}>
+      {disconnected ? (
+        <Icon className="ia-card-ban" name="ban" />
+      ) : (
+        <span
+          className={clsx(
+            "ia-dot",
+            card.tone === "active" ? "is-active" : card.tone,
+          )}
+          aria-hidden="true"
+        />
       )}
+      <div className="ia-card-text" role="status">
+        <span className="ia-card-title">{card.title}</span>
+        {card.support && <span className="ia-card-sub">{card.support}</span>}
+        {disconnected && action}
+      </div>
+      {!disconnected && action}
     </div>
   );
 }

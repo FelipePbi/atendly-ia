@@ -132,6 +132,7 @@ export function ProductDashboardScreen() {
           attention: dashboardNeedsAttention(dashboard, status.whatsappView),
           module: "dashboard",
           title: "Início",
+          whatsappInBand: bandSaysWhatsappOff(dashboard, status.whatsappView),
         }
       : {
           active: "inicio",
@@ -222,6 +223,21 @@ function whatsappBannerIssue(view: StatusView): "off" | "unknown" | null {
   return null;
 }
 
+/**
+ * A faixa só diz "WhatsApp desconectado" quando a agenda responde: com a
+ * consulta da agenda indisponível ela vence (gravidade) e o aviso do WhatsApp
+ * continua a cargo do banner da casca.
+ */
+function bandSaysWhatsappOff(
+  dashboard: Dashboard,
+  whatsappView: StatusView,
+): boolean {
+  return (
+    whatsappBannerIssue(whatsappView) === "off" &&
+    dashboard.scheduling.status !== "error"
+  );
+}
+
 function dashboardNeedsAttention(
   dashboard: Dashboard,
   whatsappView: StatusView,
@@ -242,6 +258,8 @@ type OperationalState = {
   icon: IconName;
   title: string;
   tone: "error" | "info" | "ok" | "warning";
+  /** Faixa de desconexão do quadro H3: ícone e texto em cima, ação em largura total embaixo. */
+  variant?: "disconnected";
 };
 
 /**
@@ -280,11 +298,11 @@ function resolveOperationalState({
     return {
       action: { href: "/configuracoes/whatsapp", label: "Reconectar WhatsApp" },
       alert: true,
-      description:
-        "Reconecte o WhatsApp para a Atendly voltar a responder clientes.",
-      icon: "alert",
+      description: "Sua IA não está atendendo.",
+      icon: "ban",
       title: "WhatsApp desconectado",
       tone: "error",
+      variant: "disconnected",
     };
   }
   if (whatsappIssue === "unknown") {
@@ -371,6 +389,28 @@ function resolveOperationalState({
 
 function OperationalBand({ state }: { state: OperationalState }) {
   const active = state.tone === "ok";
+  if (state.variant === "disconnected") {
+    return (
+      <section
+        id="operational-status"
+        className="operational-strip is-disconnected"
+        role="alert"
+      >
+        <div className="operational-head">
+          <Icon className="operational-ban" name={state.icon} />
+          <div className="operational-copy">
+            <strong>{state.title}</strong>
+            <span>{state.description}</span>
+          </div>
+        </div>
+        {state.action && (
+          <Link className="operational-reconnect" href={state.action.href}>
+            {state.action.label}
+          </Link>
+        )}
+      </section>
+    );
+  }
   return (
     <section
       id="operational-status"

@@ -8617,3 +8617,29 @@ corrigido no fechamento de 11,1 para 11,0. A casca descrita acima vale como
 estado atual. O item 1 de D-074 deixa de valer na grade de 248 px, no trilho de
 88 px e no cabeçalho de marca. A conferência do §7 continua não feita
 ([review087](reviews/087-review.md)).
+
+## Delta implementado — Goal085, 2026-10-01 ([D-102](DECISIONS.md), PROPOSED)
+
+A casca diz o estado real do WhatsApp e preenche a janela, e `/inicio` com o WhatsApp desconectado segue o quadro **H3**. Toca só `apps/frontend/` (`systemStatus.tsx`, `AppShell.tsx`, `ShellConfig.tsx`, `(platform)/layout.tsx`, `DashboardScreen.tsx`, `ConversationThread.tsx`, `atendly.css`, `Icon.tsx`, o sprite `atendly-icons.svg`, os testes e as medidas de `e2e/`). Sem rota, contrato, migration, campo ou variável novos, e `apps/bff/PUBLIC_API_V1.md`, o vault e `docs/design-reference/` não mudaram. Esta seção **muda**, no estado WhatsApp desconectado, o item "Cartão da IA" do delta do Goal087 acima.
+
+- **Cartão da IA.** Com o WhatsApp desconectado, o cartão da sidebar diz "WhatsApp desconectado", "a IA não está atendendo" e oferece "Reconectar" (para `/configuracoes/whatsapp`), em tom de perigo; nunca "IA ativa" nem "Pausar". Nas outras combinações, o cartão é o do Goal087. O derivado é `aiCardView(ai, whatsapp)`, e só a desconexão confirmada o muda.
+- **Banner e faixa na Home.** Em `/inicio`, com a faixa da Home renderizada com dados e dizendo a desconexão, o banner "Atendimento automático parado" da casca não aparece (`whatsappInBand`); enquanto a Home carrega ou falha, e em toda outra rota, o banner continua. A faixa no estado do H3 tem o ícone de círculo cortado (`ban`) e a ação "Reconectar WhatsApp" em largura total. Uma única chamada de `useShellConfig` por árvore.
+- **Altura da casca.** Nenhuma regra de altura com `.app-frame` ou `.sidebar` usa `vh`, `dvh`, `svh` ou `lvh`. A sidebar, a partir de 1100 px, é `position: fixed` com `inset-block: 0`, e `main` ocupa a coluna 2 da grade. As barras inferiores abaixo de 1100 px não mudaram.
+- **`showMobileHeader`** saiu de `ShellConfig` e de quem o passava; nada o lia.
+- **Divergências declaradas.** A frase "Tentamos reconectar por 5 minutos sem sucesso." do H3 não entra (o app não tem esse dado); a conta nunca conectada aparece como "desconectado" (o `GET /v1/status` não distingue, e o quadro H4 é de outro Goal); a conta de teste tem a IA desligada e por isso mostra o checklist "Ative sua IA".
+- **R-10 tem limite declarado.** O defeito não reproduz no Chromium do Playwright: a prova vermelha é a guarda sobre a folha de estilo, a medida G-3 do gate autenticado é regressão, e **a conferência humana do §7 do Goal não foi feita**.
+- **Execução final** (depois da última edição de código, a de `atendly.css` às `2026-10-01T08:38:14Z`; detalhe em [VALIDATION_GATE](VALIDATION_GATE.md)): `validate:core` exit 0 (**17** passos, **15** `passed`, **2** `skipped`), `test:frontend` **131** arquivos e **1390** testes, `test:gate` **233**/**233**, `validate:ui` **169** `passed` e **0** retentativas (`startTime` `2026-10-01T08:54:20.203Z`), `validate:integration` **36**/**36** com o gate autenticado em **205** testes, **0** `unexpected`, **0** `flaky` e **0** retentativas (`startTime` `2026-10-01T08:57:34.803Z`; **195** da baseline mais **10** de G-3).
+- **`visual:compare`, baseline `05c92fc` e árvore final.** H3 em 8,1 / 4,1 / 3,7 / 3,0 % (mobile, tablet em retrato, tablet em paisagem, desktop), contra 14,9 / 9,0 / 9,6 / 8,4 % na baseline. H1 sobe (12,6 / 7,4 / 8,4 / 7,1 % contra 11,8 / 5,5 / 4,8 / 4,2 %) porque a conta visual está no estado do H3 e a faixa do app agora tem a altura da do H3; A1, CL1, S1, C1 e M1 ficam iguais, exceto +0,1 ponto no desktop, na coluna da sidebar. A porcentagem é tendência: a leitura é a dos `side-by-side.png`.
+
+**Fechamento — review085, 2026-10-01.** D-102 foi aceita na rodada 2 do IA Loop,
+sem blocker, depois de três blockers na rodada 1: documentos ausentes, controles
+negativos do §6 não rodados e comparação visual sem a baseline. A rodada 2 mudou
+só os quatro documentos; o código é o da rodada 1. O Tech Lead refez o
+`visual:compare` de H3, H1 e A1 e obteve os mesmos números desta seção. A casca
+descrita acima vale como estado atual. Com o WhatsApp desconectado, o item (d)
+de D-101 deixa de valer no cartão da IA; nas outras combinações, vale sem
+mudança. R-06 e R-10 estão fechados no que o repositório prova; R-08 e R-09
+seguem abertos. Continuam não feitos a conferência do §7 e a reprodução de R-10
+num navegador real. O `validate:integration` completo vem da declaração do
+Developer: no harness, a unidade ficou `SKIPPED`, e o Tech Lead conferiu em disco
+só o gate autenticado ([review085](reviews/085-review.md)).

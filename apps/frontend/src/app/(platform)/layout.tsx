@@ -35,8 +35,8 @@ function PlatformShellFrame({ children }: { children: ReactNode }) {
       mainClassName={config?.mainClassName}
       module={config?.module}
       showBottomNav={config?.showBottomNav}
-      showMobileHeader={config?.showMobileHeader}
       title={config?.title ?? "Atendly"}
+      whatsappInBand={config?.whatsappInBand}
     >
       {children}
     </AppShell>

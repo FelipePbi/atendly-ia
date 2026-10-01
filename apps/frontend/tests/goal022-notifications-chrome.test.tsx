@@ -167,8 +167,14 @@ describe("banner persistente (deriva de /v1/status, não da central)", () => {
     const banner = await screen.findByRole("alert");
     expect(within(banner).getByText("Atendimento automático parado")).toBeVisible();
     expect(within(banner).queryByText("WhatsApp desconectado")).toBeNull();
-    // Goal087: a sidebar não tem mais a linha de WhatsApp; só o banner fala dele.
-    expect(screen.queryByText("WhatsApp desconectado")).toBeNull();
+    // Goal085: a sidebar não tem a linha de WhatsApp, mas o cartão da IA diz a
+    // desconexão; fora do cartão e do banner, nada mais repete a frase.
+    expect(
+      await within(
+        document.querySelector("aside.sidebar .ia-card") as HTMLElement,
+      ).findByText("WhatsApp desconectado"),
+    ).toBeVisible();
+    expect(screen.getAllByText("WhatsApp desconectado")).toHaveLength(1);
   });
 
   test("aparece para IA indisponível (PENDING ou UNKNOWN), com frase distinta do chip", async () => {

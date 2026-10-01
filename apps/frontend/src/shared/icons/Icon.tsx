@@ -2,6 +2,7 @@ import type { SVGProps } from "react";
 
 export type IconName =
   | "alert"
+  | "ban"
   | "bell"
   | "briefcase"
   | "calendar"

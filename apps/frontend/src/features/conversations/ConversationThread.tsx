@@ -299,7 +299,6 @@ export function ConversationThread({
     mainClassName: ready ? "conversation-detail-main" : undefined,
     module: "conversations",
     showBottomNav: !ready,
-    showMobileHeader: !ready,
     title: conversation ? conversationLabel(conversation) : "Conversas",
   });
 

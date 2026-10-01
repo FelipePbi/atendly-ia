@@ -5709,3 +5709,61 @@ e todo perfil Sonnet passa effort explícito. O Sonnet 5.5 não aceita
 `claude` CLI e não força ferramenta, então isso não afeta o loop hoje. Compare
 failure rate, retry rate e taxa de escalonamento Sonnet 5 × Sonnet 5.5 em
 `ia-loop:metrics`.
+
+## V33 — Fidelidade visual verificada pelo loop
+
+Até a V32, ninguém no loop *via* uma tela. O Developer reconstruía a interface a
+partir de uma descrição em prosa do protótipo, o revisor lia o diff, e a
+fidelidade à referência aprovada ficava como "conferência humana", que nunca
+acontecia. O Goal 083 ("Novo agendamento conforme o protótipo") foi ACCEPTED com
+a tela ainda diferente do quadro A6, e a comparação lado a lado feita depois
+mostrou isso em segundos.
+
+**A ferramenta.** `npm run visual:compare -- --target <códigos>`
+(`scripts/visual-compare.mjs`) faz cinco coisas:
+
+- renderiza o quadro do protótipo, isolado pelo `data-screen-label`, sem a
+  moldura do iPhone e sem a borda dos quadros tablet/desktop;
+- renderiza a rota do app na mesma largura e altura;
+- grava `prototype.png`, `app.png`, `diff.png` e `side-by-side.png` em
+  `apps/frontend/e2e-results/visual/<alvo>/`, um diretório ignorado pelo git,
+  mais um `REPORT.md`;
+- sobe o próprio `next dev`, em porta livre, a partir do diretório em que roda,
+  isto é, a worktree do Goal;
+- fala com o BFF local por uma conta de teste dedicada. A conta é criada e
+  semeada pelas rotas do produto (`scripts/lib/visual-seed.mjs`) com os dados
+  fictícios do protótipo: Studio Camila Reis, os mesmos serviços, clientes e o
+  dia do A1.
+
+São quatro devices: mobile 402×812 (o quadro de 874 px menos a barra de status
+de 62 px), tablet portrait 768×1024, tablet landscape 1024×768 e desktop
+1366×768. O mapa de quadro para rota fica em
+`apps/frontend/e2e/visual/targets.json`. Ali entram também os passos para levar a
+tela ao estado do quadro e as notas de diferenças que são estado da conta, e não
+layout. O `next dev` reescreve `next-env.d.ts`, `tsconfig.json`, `AGENTS.md` e
+`CLAUDE.md`, e o script devolve o conteúdo original ao terminar. Assim a
+comparação não aparece no fingerprint da revisão.
+
+**No loop** (`lib/visual-fidelity.mjs`):
+
+- **Opt-in.** Um Goal entra na verificação com uma linha no próprio documento:
+  `Quadros do protótipo: A6, Agenda:A1`. O harness lê essa linha de forma
+  determinística, então nenhum modelo decide se um Goal é visual.
+- **Planejamento.** O prompt manda escrever essa linha para toda tela que tem
+  quadro no protótipo. O Goal precisa mandar *portar* o HTML/CSS do `.dc.html`
+  em vez de reinterpretar o layout.
+- **Developer.** Toda Work Unit de modelo que toca `apps/frontend` recebe
+  `prototypeFrames` no pacote e um bloco "FIDELIDADE VISUAL". O caminho sem Work
+  Units recebe o mesmo bloco. O bloco manda portar o markup, rodar a comparação,
+  abrir as imagens com Read e repetir até não haver divergência visível nos
+  quatro devices.
+- **Revisor.** O pacote de review carrega os quadros, e o prompt torna a
+  comparação critério de aceite. O revisor roda o comando, abre cada
+  `side-by-side.png`, e cada divergência visível vira um blocker. A comparação é
+  a única escrita permitida ao revisor, e só em diretório ignorado.
+
+**O que não mudou.** `validate:ui` continua medindo overflow, toque, contraste,
+foco e movimento. A porcentagem do diff é tendência, não gate: dados de conta
+diferentes sempre geram diferença. O julgamento é olhar as imagens. A comparação
+precisa do BFF local de desenvolvimento rodando. Se ele estiver fora do ar, o
+script sai com código 3, e o revisor trata isso como blocker de ambiente.

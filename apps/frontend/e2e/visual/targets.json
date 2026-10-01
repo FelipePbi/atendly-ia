@@ -1,0 +1,433 @@
+{
+  "$comment": "Mapa de quadros do protótipo (docs/design-reference/claude-design/prototype/project) para rotas do app, usado por scripts/visual-compare.mjs. file + label identificam o quadro (data-screen-label); nas versões tablet/desktop o rótulo é '<Módulo> / <label> / Portrait|Landscape|Desktop'. steps são ações simples para levar a tela ao estado do quadro (click, clickRole, fill, press, waitFor, wait). clock fixa a hora do navegador no dia semeado. notes registra diferenças que são estado da conta de teste, não layout.",
+  "targets": [
+    {
+      "code": "L1",
+      "file": "Login.dc.html",
+      "label": "Login",
+      "route": "/login",
+      "session": false
+    },
+    {
+      "code": "L3",
+      "file": "Login.dc.html",
+      "label": "Criar conta",
+      "route": "/cadastro",
+      "session": false
+    },
+    {
+      "code": "L4",
+      "file": "Login.dc.html",
+      "label": "Recuperar senha",
+      "route": "/recuperar-senha",
+      "session": false
+    },
+    {
+      "code": "L5",
+      "file": "Login.dc.html",
+      "label": "Código de recuperação",
+      "route": "/solicitacao-enviada",
+      "session": false,
+      "notes": "O app envia link por e-mail, não código (decisão de produto vigente); compare o restante da estrutura."
+    },
+    {
+      "code": "L8",
+      "file": "Login.dc.html",
+      "label": "Termos de Uso",
+      "route": "/termos-de-uso",
+      "session": false
+    },
+    {
+      "code": "L9",
+      "file": "Login.dc.html",
+      "label": "Política de Privacidade",
+      "route": "/politica-de-privacidade",
+      "session": false
+    },
+    {
+      "code": "0",
+      "file": "Onboarding-1-Negocio-e-Agenda.dc.html",
+      "label": "Boas-vindas",
+      "route": "/onboarding/boas-vindas",
+      "account": "onboarding"
+    },
+    {
+      "code": "1.1",
+      "file": "Onboarding-1-Negocio-e-Agenda.dc.html",
+      "label": "Segmento e nome",
+      "route": "/onboarding/segmento-e-nome",
+      "account": "onboarding"
+    },
+    {
+      "code": "1.2",
+      "file": "Onboarding-1-Negocio-e-Agenda.dc.html",
+      "label": "Modalidade",
+      "route": "/onboarding/modalidade",
+      "account": "onboarding"
+    },
+    {
+      "code": "1.3",
+      "file": "Onboarding-1-Negocio-e-Agenda.dc.html",
+      "label": "Endereço",
+      "route": "/onboarding/endereco",
+      "account": "onboarding",
+      "notes": "O quadro mostra o teclado do iPhone aberto; ignore o teclado."
+    },
+    {
+      "code": "2.1",
+      "file": "Onboarding-1-Negocio-e-Agenda.dc.html",
+      "label": "Sistema atual",
+      "route": "/onboarding/sistema-atual",
+      "account": "onboarding"
+    },
+    {
+      "code": "2.2",
+      "file": "Onboarding-1-Negocio-e-Agenda.dc.html",
+      "label": "Importar agora ou depois",
+      "route": "/onboarding/quando-importar",
+      "account": "onboarding"
+    },
+    {
+      "code": "2.3",
+      "file": "Onboarding-1-Negocio-e-Agenda.dc.html",
+      "label": "Primeiro serviço",
+      "route": "/onboarding/servico-nome",
+      "account": "onboarding"
+    },
+    {
+      "code": "2.4",
+      "file": "Onboarding-1-Negocio-e-Agenda.dc.html",
+      "label": "Seus serviços",
+      "route": "/onboarding/servicos-adicionais",
+      "account": "onboarding"
+    },
+    {
+      "code": "2.5",
+      "file": "Onboarding-1-Negocio-e-Agenda.dc.html",
+      "label": "Dias de atendimento",
+      "route": "/onboarding/dias-de-atendimento",
+      "account": "onboarding"
+    },
+    {
+      "code": "2.6",
+      "file": "Onboarding-1-Negocio-e-Agenda.dc.html",
+      "label": "Horário-base",
+      "route": "/onboarding/horarios",
+      "account": "onboarding"
+    },
+    {
+      "code": "2.I1",
+      "file": "Onboarding-2-Importacao.dc.html",
+      "label": "Origem da importação",
+      "route": "/onboarding/importacao",
+      "account": "onboarding",
+      "notes": "A rota só mostra a origem da importação quando a pessoa escolheu importar; se a captura mostrar outra etapa, o estado da conta de onboarding não alcança este quadro."
+    },
+    {
+      "code": "3.1",
+      "file": "Onboarding-3-IA-e-WhatsApp.dc.html",
+      "label": "Demonstração da IA",
+      "route": "/onboarding/demonstracao-da-ia",
+      "account": "onboarding"
+    },
+    {
+      "code": "3.2",
+      "file": "Onboarding-3-IA-e-WhatsApp.dc.html",
+      "label": "Estilo da IA",
+      "route": "/onboarding/tom-da-ia",
+      "account": "onboarding"
+    },
+    {
+      "code": "4.1",
+      "file": "Onboarding-3-IA-e-WhatsApp.dc.html",
+      "label": "Introdução WhatsApp",
+      "route": "/onboarding/whatsapp",
+      "account": "onboarding"
+    },
+    {
+      "code": "4.2",
+      "file": "Onboarding-3-IA-e-WhatsApp.dc.html",
+      "label": "Consentimento",
+      "route": "/onboarding/whatsapp-conectar",
+      "account": "onboarding"
+    },
+    {
+      "code": "4.6",
+      "file": "Onboarding-3-IA-e-WhatsApp.dc.html",
+      "label": "Introdução ao teste",
+      "route": "/onboarding/teste-real",
+      "account": "onboarding"
+    },
+    {
+      "code": "H1",
+      "file": "Home.dc.html",
+      "label": "Home · IA ativa",
+      "route": "/inicio",
+      "clock": "10:30",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "H3",
+      "file": "Home.dc.html",
+      "label": "Home · WhatsApp desconectado",
+      "route": "/inicio",
+      "clock": "10:30",
+      "notes": "Este quadro É o estado da conta de teste (WhatsApp desconectado): o aviso deve bater com o quadro."
+    },
+    {
+      "code": "A1",
+      "file": "Agenda.dc.html",
+      "label": "Agenda · dia",
+      "route": "/agenda",
+      "clock": "13:45",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro.",
+      "steps": [
+        {
+          "click": "Dia",
+          "exact": true,
+          "optional": true
+        }
+      ]
+    },
+    {
+      "code": "A5",
+      "file": "Agenda.dc.html",
+      "label": "Agendamento · detalhe",
+      "route": "/agenda/agendamento?id={appointmentId}",
+      "clock": "13:45",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "A6",
+      "file": "Agenda.dc.html",
+      "label": "Novo agendamento",
+      "route": "/agenda/novo",
+      "clock": "13:45",
+      "steps": [
+        {
+          "click": "Ana Paula",
+          "optional": true
+        },
+        {
+          "click": "Corte feminino",
+          "optional": true
+        },
+        {
+          "click": "Escova",
+          "optional": true
+        }
+      ],
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "A8",
+      "file": "Agenda.dc.html",
+      "label": "Agendamento · cancelar",
+      "route": "/agenda/cancelar?id={appointmentId}",
+      "clock": "13:45",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "A9",
+      "file": "Agenda.dc.html",
+      "label": "Agendamento · remarcar",
+      "route": "/agenda/reagendar?id={appointmentId}",
+      "clock": "13:45",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "A10",
+      "file": "Agenda.dc.html",
+      "label": "Agenda · semana",
+      "route": "/agenda",
+      "clock": "13:45",
+      "steps": [
+        {
+          "click": "Semana",
+          "optional": true
+        }
+      ],
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "A11",
+      "file": "Agenda.dc.html",
+      "label": "Agenda · mês",
+      "route": "/agenda",
+      "clock": "13:45",
+      "steps": [
+        {
+          "click": "Mês",
+          "optional": true
+        }
+      ],
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "S1",
+      "file": "Agenda.dc.html",
+      "label": "Serviço · editar",
+      "route": "/servicos/editar?id={serviceId}",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "CL1",
+      "file": "Clientes.dc.html",
+      "label": "Clientes · lista",
+      "route": "/clientes",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "CL4",
+      "file": "Clientes.dc.html",
+      "label": "Novo cliente",
+      "route": "/clientes/novo",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "CL5",
+      "file": "Clientes.dc.html",
+      "label": "Cliente · resumo",
+      "route": "/clientes/detalhes?id={customerId}",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "CL6",
+      "file": "Clientes.dc.html",
+      "label": "Cliente · atendimentos",
+      "route": "/clientes/detalhes?id={customerId}",
+      "steps": [
+        {
+          "click": "Atendimentos",
+          "optional": true
+        }
+      ],
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "CL7",
+      "file": "Clientes.dc.html",
+      "label": "Cliente · notas",
+      "route": "/clientes/detalhes?id={customerId}",
+      "steps": [
+        {
+          "click": "Notas",
+          "optional": true
+        }
+      ],
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "S1",
+      "file": "Servicos.dc.html",
+      "label": "Serviços · lista",
+      "route": "/servicos",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "S3",
+      "file": "Servicos.dc.html",
+      "label": "Novo serviço",
+      "route": "/servicos/novo",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "S4",
+      "file": "Servicos.dc.html",
+      "label": "Editar serviço · opções",
+      "route": "/servicos/editar?id={serviceId}",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "C1",
+      "file": "Conversas-e-Chat.dc.html",
+      "label": "Conversas · Comercial",
+      "route": "/conversas",
+      "notes": "A conta de teste não tem conversas (sem WhatsApp); compare cabeçalho, abas e estrutura. O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "C5",
+      "file": "Conversas-e-Chat.dc.html",
+      "label": "Conversas · sem WhatsApp",
+      "route": "/conversas",
+      "notes": "Este quadro É o estado da conta de teste (sem WhatsApp)."
+    },
+    {
+      "code": "NT1",
+      "file": "Notificacoes.dc.html",
+      "label": "Notificações",
+      "route": "/notificacoes",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "M1",
+      "file": "Mais-Negocio-Agenda-IA.dc.html",
+      "label": "Mais",
+      "route": "/configuracoes",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "N1",
+      "file": "Mais-Negocio-Agenda-IA.dc.html",
+      "label": "Configurações · Negócio",
+      "route": "/configuracoes/negocio",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "AG1",
+      "file": "Mais-Negocio-Agenda-IA.dc.html",
+      "label": "Configurações · Agenda",
+      "route": "/configuracoes/agenda",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "AG3",
+      "file": "Mais-Negocio-Agenda-IA.dc.html",
+      "label": "Agenda · regras de horário",
+      "route": "/configuracoes/agenda",
+      "notes": "O app não tem tela própria para estas regras: elas vivem dentro de Configurações › Agenda. O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "IA1",
+      "file": "Mais-Negocio-Agenda-IA.dc.html",
+      "label": "Configurações · IA",
+      "route": "/configuracoes/ia",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "W1",
+      "file": "Mais-WhatsApp-Importacao-Conta.dc.html",
+      "label": "Configurações · WhatsApp",
+      "route": "/configuracoes/whatsapp",
+      "notes": "O quadro mostra WhatsApp conectado; a conta de teste não tem número. Compare a estrutura."
+    },
+    {
+      "code": "I1",
+      "file": "Mais-WhatsApp-Importacao-Conta.dc.html",
+      "label": "Configurações · Importação",
+      "route": "/importacao",
+      "notes": "O quadro mostra o histórico de uma importação concluída; a conta de teste não importou (estado do I2). Compare a estrutura."
+    },
+    {
+      "code": "I2",
+      "file": "Mais-WhatsApp-Importacao-Conta.dc.html",
+      "label": "Importação · não realizada",
+      "route": "/importacao",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "R1",
+      "file": "Mais-WhatsApp-Importacao-Conta.dc.html",
+      "label": "Configurações · Conversas",
+      "route": "/configuracoes/conversas",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    },
+    {
+      "code": "C1",
+      "file": "Mais-WhatsApp-Importacao-Conta.dc.html",
+      "label": "Configurações · Conta",
+      "route": "/configuracoes/conta",
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+    }
+  ]
+}

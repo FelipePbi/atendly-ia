@@ -14,6 +14,7 @@
  * never creates the next Goal and never removes the worktree.
  */
 
+import { readPrototypeFrames } from './lib/visual-fidelity.mjs';
 import { promises as fs } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -825,6 +826,7 @@ async function main() {
       // actually ran, not against an assumption.
       developerProfile: routing.profile.name,
       goalGates,
+      prototypeFrames: await readPrototypeFrames(goal.goalPath),
     });
     // The exact tree being reviewed, hashed in full. The review packet already
     // carried the tracked diff; what was missing was the content of untracked

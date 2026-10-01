@@ -22,6 +22,8 @@
 import { dirname, join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+
+import { developerVisualInstructions, readPrototypeFrames } from '../lib/visual-fidelity.mjs';
 import { randomUUID } from 'node:crypto';
 
 import { SpikeError, invokeAgent, resolveClaudeExecutable } from '../lib/claude-process.mjs';
@@ -190,6 +192,20 @@ function buildCorrectionPrompt(context, job) {
     `desta rodada (R${context.round}): o que mudou por blocker, comandos executados com`,
     'resultado, e limitações. Não invente resultado de validação que você não executou.',
   ].join('\n');
+}
+
+/**
+ * Appends the visual-fidelity block when the Goal declares prototype frames
+ * (lib/visual-fidelity.mjs). Placed before the answer contract so the contract
+ * stays the last thing the model reads.
+ */
+function withVisualFidelity(prompt, frames) {
+  const block = developerVisualInstructions(frames);
+  if (block.length === 0) return prompt;
+  const contract = prompt.lastIndexOf('\nRetorne exclusivamente');
+  const marker = contract >= 0 ? contract : prompt.lastIndexOf('\nAo terminar');
+  const at = marker >= 0 ? marker : prompt.length;
+  return `${prompt.slice(0, at)}\n${block.join('\n')}\n${prompt.slice(at)}`;
 }
 
 function buildPrompt(context, job) {
@@ -598,7 +614,10 @@ async function handleJob(rawJob) {
         // Purely observational: derived from events the CLI already emits.
         onTelemetryEvent: STREAM_EVENTS ? (event) => telemetry.emit(event) : null,
         telemetryRoot: job.worktree,
-        prompt: isCorrection ? buildCorrectionPrompt(context, job) : buildPrompt(context, job),
+        prompt: withVisualFidelity(
+          isCorrection ? buildCorrectionPrompt(context, job) : buildPrompt(context, job),
+          await readPrototypeFrames(job.goalPath),
+        ),
         jsonSchema: developerResultSchemaFor({ jobId: job.jobId, goal: job.goal, round: job.round }),
         validatePayload: (payload) => validateDeveloperResult(payload, {
           jobId: job.jobId,

@@ -28,6 +28,7 @@
  * before, which is why the feature flag can be flipped either way at any time.
  */
 
+import { readPrototypeFrames, touchesFrontend } from './visual-fidelity.mjs';
 import { SpikeError } from './claude-process.mjs';
 import { git } from './git-ops.mjs';
 import { WORK_UNIT_NAMESPACE } from './job-store.mjs';
@@ -770,6 +771,7 @@ async function executeModelUnit({
         // between discovered. `relevantFiles` is excluded: repeating what the
         // packet already lists would spend the budget saying nothing.
         findingsLedger: findings?.forPacket({ exclude: packetRelevantFiles(unit, records) }) ?? [],
+        prototypeFrames: await prototypeFramesForUnit(unit, goalPath),
       });
       lastPacket = packet;
 
@@ -1057,4 +1059,16 @@ function renderUnit(record, unit) {
     record.report ? record.report.slice(0, 4000) : '(sem relatório)',
     '',
   ].filter((line) => line !== null).join('\n');
+}
+
+/**
+ * The prototype frames a unit must match: the Goal's declared frames, for a
+ * model-executed unit that works on the frontend (or declares no files at all,
+ * which is what a corrective unit looks like before git says what it touched).
+ */
+async function prototypeFramesForUnit(unit, goalPath) {
+  if (!goalPath || unit?.type === 'DETERMINISTIC') return [];
+  const declaresFiles = (unit?.expectedFiles?.length ?? 0) + (unit?.relevantFiles?.length ?? 0) > 0;
+  if (declaresFiles && !touchesFrontend(unit)) return [];
+  return readPrototypeFrames(goalPath);
 }

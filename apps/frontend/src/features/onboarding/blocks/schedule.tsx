@@ -57,6 +57,37 @@ function formatPrice(
     : "";
 }
 
+type ListedService = {
+  duration: number;
+  key: string;
+  name: string;
+  price: string | number | null;
+  priceType: PriceType;
+};
+
+/** Preço da linha de "Seus serviços": curto, e "sem preço informado" como
+ * texto discreto (não é erro). */
+function ListedPrice({
+  price,
+  priceType,
+}: {
+  price: string | number | null;
+  priceType: PriceType;
+}) {
+  if (priceType === "NOT_INFORMED")
+    return <span className="service-list-quiet">sem preço informado</span>;
+  if (priceType === "ON_REQUEST") return <>sob consulta</>;
+  const value =
+    typeof price === "number" ? price : Number(String(price ?? "").replace(",", "."));
+  if (!Number.isFinite(value)) return <>{formatPrice(priceType, price)}</>;
+  const amount = value.toLocaleString("pt-BR", {
+    currency: "BRL",
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    style: "currency",
+  });
+  return <>{priceType === "STARTING_AT" ? `a partir de ${amount}` : amount}</>;
+}
+
 const DURATION_STEP_MESSAGE = "A duração vai de 5 em 5 minutos.";
 const DURATION_SHORTCUTS = [30, 60, 90];
 const MINUTES_PER_DAY = 1440;
@@ -79,7 +110,7 @@ function timeToMinutes(time: string): number | null {
     : null;
 }
 
-function summarizeDays(days: number[]): string {
+function daysHead(days: number[]): string {
   const selected = weekOrder.filter((day) => days.includes(day));
   const count = selected.length;
   const first = selected[0];
@@ -89,15 +120,24 @@ function summarizeDays(days: number[]): string {
   const consecutive = positions.every(
     (position, index) => index === 0 || position === (positions[index - 1] ?? 0) + 1,
   );
-  let head: string;
-  if (count === 1) head = `Só ${names[0]}`;
-  else if (consecutive && count >= 3)
-    head = `${weekdayLabels[first]} a ${names[count - 1]}`;
-  else {
-    const list = `${names.slice(0, -1).join(", ")} e ${names[count - 1]}`;
-    head = list.charAt(0).toUpperCase() + list.slice(1);
-  }
-  return `${head} · ${count} ${count === 1 ? "dia" : "dias"} por semana`;
+  if (count === 1) return `Só ${names[0]}`;
+  if (consecutive && count >= 3)
+    return `${weekdayLabels[first]} a ${names[count - 1]}`;
+  const list = `${names.slice(0, -1).join(", ")} e ${names[count - 1]}`;
+  return list.charAt(0).toUpperCase() + list.slice(1);
+}
+
+function daysCountText(days: number[]): string {
+  const count = weekOrder.filter((day) => days.includes(day)).length;
+  return `${count} ${count === 1 ? "dia" : "dias"} por semana`;
+}
+
+/** Descrição da etapa "horarios": o mesmo resumo dos dias da etapa anterior. */
+export function hoursStepDescription(days: number[]): string {
+  const head = daysHead(days);
+  const tail = "Pausas e bloqueios você configura depois.";
+  if (head === "") return tail;
+  return `Vale para ${head.charAt(0).toLowerCase()}${head.slice(1)}. ${tail}`;
 }
 
 const DAYS_REQUIRED_MESSAGE = "Escolha pelo menos um dia de atendimento.";
@@ -122,21 +162,22 @@ function dayHourOf(
 
 /** Início e fim de um intervalo, com o erro de "fim antes do início" no
  * campo final (QA O-33), via `setCustomValidity` lido por
- * `applyInlineValidation`. */
+ * `applyInlineValidation`. `hero` é o horário-base (quadro 2.6): dois
+ * cartões com a hora em Literata e a régua de 0 a 24 h. */
 function TimeRangeFields({
   endLabel,
   endTime,
+  hero = false,
   onChangeEnd,
   onChangeStart,
-  showRange = false,
   startLabel,
   startTime,
 }: {
   endLabel: string;
   endTime: string;
+  hero?: boolean;
   onChangeEnd: (value: string) => void;
   onChangeStart: (value: string) => void;
-  showRange?: boolean;
   startLabel: string;
   startTime: string;
 }) {
@@ -152,66 +193,89 @@ function TimeRangeFields({
   }, [endTime, startTime]);
   const startMinutes = timeToMinutes(startTime);
   const endMinutes = timeToMinutes(endTime);
-  // Cada campo num `div.field` com <label for>: a mensagem de erro entra
-  // logo depois do campo, dentro da mesma célula da grade.
+  const inputClass = hero ? "time-card-input" : "input time-input";
+  const startInput = (
+    <input
+      className={inputClass}
+      data-server-field="availability.startTime"
+      id={startId}
+      required
+      type="time"
+      value={startTime}
+      onChange={(event) => onChangeStart(event.target.value)}
+    />
+  );
+  const endInput = (
+    <input
+      className={inputClass}
+      data-server-field="availability.endTime"
+      id={endId}
+      ref={endRef}
+      required
+      type="time"
+      value={endTime}
+      onChange={(event) => onChangeEnd(event.target.value)}
+    />
+  );
+  // Cada campo num `div.field`: a mensagem de erro entra logo depois do
+  // campo (ou do cartão), dentro da mesma célula da grade.
   return (
     <div className="time-range">
-      <div className="choice-grid">
-      <div className="field">
-        <label className="label" htmlFor={startId}>
-          {startLabel}
-        </label>
-        <input
-          className="input time-input"
-          data-server-field="availability.startTime"
-          id={startId}
-          required
-          type="time"
-          value={startTime}
-          onChange={(event) => onChangeStart(event.target.value)}
-        />
-      </div>
-      <div className="field">
-        <label className="label" htmlFor={endId}>
-          {endLabel}
-        </label>
-        <input
-          className="input time-input"
-          data-server-field="availability.endTime"
-          id={endId}
-          ref={endRef}
-          required
-          type="time"
-          value={endTime}
-          onChange={(event) => onChangeEnd(event.target.value)}
-        />
-      </div>
-      </div>
-      {showRange && startTime !== "" && endTime !== "" && (
-        <div className="hours-range">
-          <p className="hours-range-text">
-            Das {startTime} às {endTime}
-          </p>
-          <span aria-hidden="true" className="hours-bar">
-            <span className="hours-bar-track">
-              {startMinutes !== null &&
-                endMinutes !== null &&
-                endMinutes > startMinutes && (
-                  <span
-                    className="hours-bar-fill"
-                    style={{
-                      left: `${(startMinutes / MINUTES_PER_DAY) * 100}%`,
-                      width: `${((endMinutes - startMinutes) / MINUTES_PER_DAY) * 100}%`,
-                    }}
-                  />
-                )}
-            </span>
-            <span className="hours-bar-scale">
-              <span>0 h</span>
-              <span>24 h</span>
-            </span>
-          </span>
+      <div className={hero ? "time-cards" : "choice-grid"}>
+        <div className="field">
+          {hero ? (
+            <label className="time-card" htmlFor={startId}>
+              <span className="time-card-label">{startLabel}</span>
+              {startInput}
+            </label>
+          ) : (
+            <>
+              <label className="label" htmlFor={startId}>
+                {startLabel}
+              </label>
+              {startInput}
+            </>
+          )}
         </div>
+        <div className="field">
+          {hero ? (
+            <label className="time-card" htmlFor={endId}>
+              <span className="time-card-label">{endLabel}</span>
+              {endInput}
+            </label>
+          ) : (
+            <>
+              <label className="label" htmlFor={endId}>
+                {endLabel}
+              </label>
+              {endInput}
+            </>
+          )}
+        </div>
+      </div>
+      {hero && startTime !== "" && endTime !== "" && (
+        <span aria-hidden="true" className="hours-bar">
+          <span className="hours-bar-track">
+            {startMinutes !== null &&
+              endMinutes !== null &&
+              endMinutes > startMinutes && (
+                <span
+                  className="hours-bar-fill"
+                  style={{
+                    left: `${(startMinutes / MINUTES_PER_DAY) * 100}%`,
+                    width: `${((endMinutes - startMinutes) / MINUTES_PER_DAY) * 100}%`,
+                  }}
+                />
+              )}
+          </span>
+          <span className="hours-bar-scale">
+            <span>0h</span>
+            <span>6h</span>
+            <span>12h</span>
+            <span>18h</span>
+            <span>24h</span>
+          </span>
+        </span>
       )}
     </div>
   );
@@ -263,11 +327,13 @@ function ServiceFields({
         : "",
     );
   }, [duration]);
+  const priceLabelId = useId();
   return (
     <div className="onboarding-form">
       <label className="field">
-        <span className="label">Nome do serviço</span>
+        <span className="label">Nome</span>
         <input
+          aria-label="Nome do serviço"
           className="input"
           data-error-message="Informe o nome do serviço."
           data-server-field="service.name"
@@ -278,64 +344,77 @@ function ServiceFields({
       </label>
       <div className="field">
         <label className="label" htmlFor={durationId}>
-          Duração em minutos
+          Duração
         </label>
-        <span className="service-duration-control">
-          <button
-            aria-label="Diminuir duração"
-            className="btn btn-tertiary service-duration-step"
-            type="button"
-            onClick={() => onChangeDuration(Math.max(5, duration - 5))}
-          >
-            −
-          </button>
-          <input
-            className="input"
-            data-error-message="Informe a duração em minutos."
-            data-server-field="service.durationMinutes"
-            id={durationId}
-            max={1440}
-            min={5}
-            ref={durationRef}
-            required
-            step={5}
-            type="number"
-            value={duration}
-            onChange={(event) => onChangeDuration(Number(event.target.value))}
-          />
-          <button
-            aria-label="Aumentar duração"
-            className="btn btn-tertiary service-duration-step"
-            type="button"
-            onClick={() => onChangeDuration(Math.min(1440, duration + 5))}
-          >
-            +
-          </button>
-          <span aria-hidden="true" className="service-duration-unit">
-            min
-          </span>
-        </span>
-        <span
-          aria-label="Atalhos de duração"
-          className="service-duration-shortcuts"
-          role="group"
-        >
-          {DURATION_SHORTCUTS.map((minutes) => (
+        <div className="service-duration-row" data-error-anchor="">
+          <span className="service-duration-control">
             <button
-              aria-pressed={duration === minutes}
-              className="btn btn-tertiary service-duration-shortcut"
-              key={minutes}
+              aria-label="Diminuir duração"
+              className="btn btn-tertiary service-duration-step"
               type="button"
-              onClick={() => onChangeDuration(minutes)}
+              onClick={() => onChangeDuration(Math.max(5, duration - 5))}
             >
-              {minutes}
+              −
             </button>
-          ))}
-        </span>
+            <span className="service-duration-value">
+              <input
+                aria-label="Duração em minutos"
+                className="input"
+                data-error-message="Informe a duração em minutos."
+                data-server-field="service.durationMinutes"
+                id={durationId}
+                max={1440}
+                min={5}
+                ref={durationRef}
+                required
+                step={5}
+                type="number"
+                value={duration}
+                onChange={(event) =>
+                  onChangeDuration(Number(event.target.value))
+                }
+              />
+              <span aria-hidden="true" className="service-duration-unit">
+                min
+              </span>
+            </span>
+            <button
+              aria-label="Aumentar duração"
+              className="btn btn-tertiary service-duration-step"
+              type="button"
+              onClick={() => onChangeDuration(Math.min(1440, duration + 5))}
+            >
+              +
+            </button>
+          </span>
+          <span
+            aria-label="Atalhos de duração"
+            className="service-duration-shortcuts"
+            role="group"
+          >
+            {DURATION_SHORTCUTS.map((minutes) => (
+              <button
+                aria-pressed={duration === minutes}
+                className="btn btn-tertiary service-duration-shortcut"
+                key={minutes}
+                type="button"
+                onClick={() => onChangeDuration(minutes)}
+              >
+                {minutes}
+              </button>
+            ))}
+          </span>
+        </div>
       </div>
       <div className="field">
-        <span className="label">Preço</span>
-        <div className="chip-row price-chip-row">
+        <span className="label" id={priceLabelId}>
+          Preço <span className="label-optional">(opcional)</span>
+        </span>
+        <div
+          aria-labelledby={priceLabelId}
+          className="chip-row price-chip-row"
+          role="group"
+        >
           {priceTypeOptions.map((option) => {
             const pressed = priceType === option.value;
             return (
@@ -351,24 +430,32 @@ function ServiceFields({
             );
           })}
         </div>
+        {priceRequiresValue(priceType) && (
+          <div className="price-value-field" data-error-anchor="">
+            <span aria-hidden="true" className="price-value-adornment">
+              R$
+            </span>
+            <label className="price-value-input">
+              <span className="sr-only">
+                {priceType === "STARTING_AT"
+                  ? "Valor inicial em reais"
+                  : "Preço em reais"}
+              </span>
+              <CurrencyInput
+                className="input"
+                data-error-message="Informe o valor do serviço."
+                data-server-field="service.price"
+                defaultValueCents={priceToCents(price)}
+                hideSymbol
+                key={priceType}
+                placeholder="0,00"
+                required
+                onValueChange={(cents) => onChangePrice(centsToPrice(cents))}
+              />
+            </label>
+          </div>
+        )}
       </div>
-      {priceRequiresValue(priceType) && (
-        <label className="field">
-          <span className="label">
-            {priceType === "STARTING_AT" ? "Valor inicial em reais" : "Preço em reais"}
-          </span>
-          <CurrencyInput
-            className="input"
-            data-error-message="Informe o valor do serviço."
-            data-server-field="service.price"
-            defaultValueCents={priceToCents(price)}
-            key={priceType}
-            placeholder="R$ 0,00"
-            required
-            onValueChange={(cents) => onChangePrice(centsToPrice(cents))}
-          />
-        </label>
-      )}
     </div>
   );
 }
@@ -401,9 +488,28 @@ function AdditionalServicesStepBody({ draft }: { draft: OnboardingDraft }) {
     };
   }, []);
 
-  const additional = (items ?? []).filter(
-    (item) => item.active && item.id !== draft.serviceId,
-  );
+  const listed: ListedService[] = [
+    ...(draft.serviceName.trim() === ""
+      ? []
+      : [
+          {
+            duration: draft.serviceDuration,
+            key: draft.serviceId ?? "draft-service",
+            name: draft.serviceName,
+            price: draft.servicePrice,
+            priceType: draft.servicePriceType,
+          },
+        ]),
+    ...(items ?? [])
+      .filter((item) => item.active && item.id !== draft.serviceId)
+      .map((item) => ({
+        duration: item.durationMinutes ?? 0,
+        key: item.id,
+        name: item.name,
+        price: item.price,
+        priceType: item.priceType,
+      })),
+  ];
 
   async function addService() {
     setError(null);
@@ -436,20 +542,18 @@ function AdditionalServicesStepBody({ draft }: { draft: OnboardingDraft }) {
 
   return (
     <div className="onboarding-form">
-      {additional.length > 0 && (
-        <div className="service-summary">
-          {additional.map((item) => (
-            <div className="summary-row" key={item.id}>
-              <span>{item.name}</span>
-              <strong>
-                {item.durationMinutes
-                  ? `${item.durationMinutes} min`
-                  : "Duração pendente"}{" "}
-                · {formatPrice(item.priceType, item.price)}
-              </strong>
-            </div>
+      {listed.length > 0 && (
+        <ul className="service-list">
+          {listed.map((item) => (
+            <li className="service-list-row" key={item.key}>
+              <span className="service-list-name">{item.name}</span>
+              <span className="service-list-meta">
+                {item.duration > 0 ? `${item.duration} min` : "Duração pendente"}{" "}
+                · <ListedPrice priceType={item.priceType} price={item.price} />
+              </span>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
       {error && (
         <div className="onboarding-note is-important" role="alert">
@@ -490,13 +594,18 @@ function AdditionalServicesStepBody({ draft }: { draft: OnboardingDraft }) {
         </div>
       ) : (
         <button
-          className="btn btn-secondary"
+          className="service-add-button"
           type="button"
           onClick={() => setFormOpen(true)}
         >
+          <Icon name="plus" />
           Adicionar outro serviço
         </button>
       )}
+      <p className="service-list-note">
+        Recorrência, descrição e instruções para a IA ficam para depois, em
+        Serviços.
+      </p>
     </div>
   );
 }
@@ -510,6 +619,7 @@ function HoursStepBody({
 }) {
   const hasCustomHours = draft.days.some((day) => draft.dayHours[day]);
   const [customized, setCustomized] = useState(hasCustomHours);
+  const customId = useId();
 
   function setDayHour(day: number, field: "startTime" | "endTime", value: string) {
     setDraft((current) => {
@@ -539,10 +649,10 @@ function HoursStepBody({
   return (
     <div className="onboarding-form">
       <TimeRangeFields
-        endLabel="Fim"
+        endLabel="Termina"
         endTime={draft.endTime}
-        showRange
-        startLabel="Início"
+        hero
+        startLabel="Começa"
         startTime={draft.startTime}
         onChangeEnd={(value) =>
           setDraft((current) => ({ ...current, endTime: value }))
@@ -552,12 +662,22 @@ function HoursStepBody({
         }
       />
       <button
+        aria-describedby={`${customId}-hint`}
         aria-expanded={customized}
-        className="btn btn-secondary"
+        aria-labelledby={`${customId}-title`}
+        className="hours-custom"
         type="button"
         onClick={toggleCustomized}
       >
-        Personalizar dias diferentes
+        <span className="hours-custom-text">
+          <span className="hours-custom-title" id={`${customId}-title`}>
+            Personalizar dias diferentes
+          </span>
+          <span className="hours-custom-hint" id={`${customId}-hint`}>
+            Ex.: sábado até mais cedo
+          </span>
+        </span>
+        <Icon name="chevron-right" />
       </button>
       {customized && (
         <div className="onboarding-form">
@@ -583,6 +703,16 @@ function HoursStepBody({
   );
 }
 
+function ImportCardBars() {
+  return (
+    <>
+      {[80, 60, 70, 45].map((width) => (
+        <span className="import-bar" key={width} style={{ width: `${width}%` }} />
+      ))}
+    </>
+  );
+}
+
 export function scheduleStepBody(
   scenario: OnboardingScenario,
   draft: OnboardingDraft,
@@ -590,9 +720,30 @@ export function scheduleStepBody(
 ) {
   if (scenario === "quando-importar")
     return (
-      <div className="onboarding-note">
-        <Icon name="info" />
-        <span>Se fizer depois, a importação fica em Mais › Importação.</span>
+      <div aria-hidden="true" className="import-illustration">
+        <div className="import-card">
+          <span className="import-card-label">Minha Agenda</span>
+          <ImportCardBars />
+        </div>
+        <div className="import-arrow">
+          <svg
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2"
+            viewBox="0 0 34 24"
+            width="34"
+          >
+            <path d="M2 12h28M23 5l7 7-7 7" />
+          </svg>
+          <span>uma vez</span>
+        </div>
+        <div className="import-card is-atendly">
+          <span className="import-card-label">Atendly</span>
+          <ImportCardBars />
+        </div>
       </div>
     );
   if (scenario === "servico-nome")
@@ -653,7 +804,17 @@ export function scheduleStepBody(
         </div>
         {draft.days.length > 0 && (
           <p aria-live="polite" className="days-summary">
-            {summarizeDays(draft.days)}
+            <svg
+              aria-hidden="true"
+              className="icon"
+              viewBox="0 0 24 24"
+            >
+              <rect height="14.5" rx="2.5" width="16" x="4" y="5.5" />
+              <path d="M4 10h16M8 3.5v4M16 3.5v4" />
+            </svg>
+            <span>
+              <strong>{daysHead(draft.days)}</strong> · {daysCountText(draft.days)}
+            </span>
           </p>
         )}
       </div>

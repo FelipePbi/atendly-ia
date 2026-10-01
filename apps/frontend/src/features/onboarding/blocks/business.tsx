@@ -261,7 +261,7 @@ function ModalityStepBody({
   // contêiner declara a mensagem e `applyInlineValidation` a liga a ele.
   return (
     <div className="field">
-      <span className="label" id={labelId}>
+      <span className="label sr-only" id={labelId}>
         Modalidade de atendimento
       </span>
       <div

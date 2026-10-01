@@ -218,7 +218,13 @@ function markFieldError(root: HTMLElement, element: HTMLElement, message: string
     messageEl.setAttribute("role", "alert");
     // Fora do <label> que envolve o campo: dentro dele, o erro passaria a
     // fazer parte do nome acessível; a ligação é só por aria-describedby.
-    (element.closest("label") ?? element).insertAdjacentElement(
+    // `data-error-anchor` marca o contêiner depois do qual o erro entra,
+    // quando o controle vive dentro de uma caixa composta.
+    (
+      element.closest("[data-error-anchor]") ??
+      element.closest("label") ??
+      element
+    ).insertAdjacentElement(
       "afterend",
       messageEl,
     );

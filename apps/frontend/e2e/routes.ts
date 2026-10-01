@@ -169,12 +169,12 @@ export const ONBOARDING_ROUTES = [
   {
     path: "/onboarding/servico-nome",
     name: "onboarding-servico-nome",
-    contentMarker: "Qual serviço seus clientes mais agendam?",
+    contentMarker: "Qual é o seu primeiro serviço?",
   },
   {
     path: "/onboarding/servicos-adicionais",
     name: "onboarding-servicos-adicionais",
-    contentMarker: "Quer adicionar outros serviços agora?",
+    contentMarker: "Seus serviços",
   },
   {
     path: "/onboarding/dias-de-atendimento",

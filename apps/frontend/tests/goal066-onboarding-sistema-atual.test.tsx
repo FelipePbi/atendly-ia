@@ -432,7 +432,7 @@ describe("horários: personalizar só o início (ou só o fim) não congela o ou
     await user.type(mondayStart, "08:00");
 
     // O fim do intervalo-base muda depois da personalização do início.
-    const end = screen.getByLabelText("Fim");
+    const end = screen.getByLabelText("Termina");
     await user.clear(end);
     await user.type(end, "19:00");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
@@ -472,7 +472,7 @@ describe("horários: personalizar só o início (ou só o fim) não congela o ou
     await user.type(fridayEnd, "20:00");
 
     // O início do intervalo-base muda depois da personalização do fim.
-    const start = screen.getByLabelText("Início");
+    const start = screen.getByLabelText("Começa");
     await user.clear(start);
     await user.type(start, "10:00");
     await user.click(screen.getByRole("button", { name: "Continuar" }));

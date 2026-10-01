@@ -518,3 +518,57 @@ Conta nova percorrendo cadastro e onboarding do zero; conta antiga (com a base i
 | R-09 | Bloco de 1 h na Semana ainda esconde o nome (resto de AG-04) | Semana 1440: o atendimento de 10:00–11:00 mostra só horário, ícone e "ATENDIMENTO"; nome e serviço cortados. Blocos de 75 min ou mais já mostram nome e serviço | BAIXA |
 | R-10 | Casca termina antes do fim da janela (relatado por Felipe) | Captura de Felipe (Serviços ativo): sidebar **e** conteúdo terminam no mesmo ponto e sobra fundo cinza abaixo. Não reproduz no Chromium do Playwright (1440×900, 1280×1400, 1920×1600; Serviços, Novo serviço, Novo cliente, Configurações, Notificações, Novo agendamento) — sintoma de altura presa a `100vh` (sidebar `position: sticky; height: 100vh`, casca `min-height: 100vh`) num navegador em que `vh` não acompanha a janela (webview, zoom, redimensionamento). A casca precisa preencher a janela sem depender de `vh` | MÉDIA |
 | R-11 | **Novo agendamento muito diferente do protótipo A6** (relatado por Felipe) | `/agenda/novo`: todos os campos sem classe, com estilo nativo do navegador (borda `inset 1.6px`, raio 0, padding 1px); cabeçalho desalinhado ("Voltar à agenda", "AGENDA" e o título espalhados); faixa "Agenda Atendly é a fonte oficial · Operacional" ainda aqui (AG-10). Protótipo A6: escolha de cliente cadastrado com "Trocar", serviços em chips com soma de duração e preço ("2 serviços · 1 h 25 · R$ 150"), faixa de datas, horários "livres para 1 h 25", "Outro horário", "Adicionar observação", "Avisar a cliente pelo WhatsApp" e CTA "Criar agendamento · sex 19, 14:00"; no desktop, diálogo sobre a agenda | ALTA |
+
+## Pente-fino visual — protótipo × app (2026-10-01)
+
+Pedido por Felipe Borges depois de observar que as telas não ficavam iguais ao protótipo. A ferramenta é a da V33 do ia-loop: `npm run visual:compare -- --all`, com 53 quadros mapeados em `apps/frontend/e2e/visual/targets.json` × 4 devices (mobile 402×812, tablet 768×1024 e 1024×768, desktop 1366×768). A conta de teste é local, semeada com os dados fictícios do protótipo e sem WhatsApp conectado. Cada `side-by-side.png` foi revisado por módulo.
+
+**Linha de base, `main` em `70157b5` (até o Goal084):** os **53 quadros eram DIVERGENTE** em todos os devices. Nenhum ficou conforme, e nenhum divergia só no espaçamento. A maior parte da diferença vinha de quatro cascas comuns:
+
+1. **Navegação da área logada.**
+   - Mobile: barra global "Atendly + negócio" que o protótipo não tem. As telas empurradas mantinham a barra de abas, em vez de barra própria e CTA no rodapé.
+   - Tablet: rail lateral de ícones no lugar da barra inferior de abas.
+   - Desktop: sidebar com outra estrutura, outros ícones e outro rodapé.
+2. **Lista e detalhe no tablet landscape e no desktop.** Clientes, Serviços, Configurações e os fluxos da Agenda abriam como páginas soltas de largura cheia, com "‹ Voltar", eyebrow, H1 grande e subtítulo. O protótipo mostra a lista à esquerda e o detalhe à direita.
+3. **Onboarding.** Divergiam:
+   - o cabeçalho de progresso;
+   - o stepper, com os estados invertidos;
+   - o painel bege;
+   - o CTA ancorado no rodapé;
+   - a tipografia do título.
+4. **Telas de acesso.** Divergiam:
+   - o hero e o cartão no mobile;
+   - o selo;
+   - a tipografia;
+   - os ícones nos campos;
+   - o painel bege.
+
+**Depois dos Goals 086 e 087**, com `main` em `a74d882`:
+
+- O L1 (`/login`) ficou igual ao protótipo, com diff de 1,0% a 4,8%.
+- L3, L4 e L5 melhoraram porque compartilham a casca: o diff caiu entre 7 e 37 pontos.
+- A barra de abas do mobile e a sidebar do desktop seguem o protótipo (Goal087).
+- Os demais quadros continuam DIVERGENTE.
+- O H1 só pode ser comparado de fato com uma conta que tenha WhatsApp conectado. A conta de teste mostra o estado do H3.
+
+| Módulo | Quadros divergentes |
+| --- | --- |
+| Acesso | L3, L4, L5, L8, L9 |
+| Onboarding | 0, 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.I1, 3.1, 3.2, 4.1, 4.2 (o app junta consentimento e conexão), 4.6 |
+| Início | H3 (Goal085); o H1 depende de uma conta com WhatsApp |
+| Agenda | A1 (no desktop, o app abre em Semana), A5, A6, A8, A9, A10, A11, S1 (editar serviço) |
+| Clientes | CL1, CL4, CL5, CL6, CL7 |
+| Serviços | S1, S3, S4 |
+| Conversas e notificações | C1, C5, NT1 |
+| Configurações | M1, N1, AG1, AG3 (sem tela própria no app), IA1, W1, I1, I2, R1, C1 |
+
+**Fora da varredura**, porque a conta de teste não alcança o estado ou porque não há rota: L2, L6, L7, 2.7, 2.I2–2.I10, 4.3–4.5, 4.7–4.10, H2, H4–H7, A2–A4, A7, A12, S1b, CL2, CL3, CL8–CL10, S2, S5–S9, C2–C4, K1–K6, NT2, NT3, N2, N3, AG2, W2, W3, R2 e C2.
+
+**Divergências já declaradas em decisão.** Não contam como defeito enquanto não houver decisão nova:
+
+- a saudação neutra no login (Goal068);
+- "Avisar a cliente pelo WhatsApp" fora de Novo agendamento (D-098, item 5);
+- a recuperação de senha por link, não por código (L5);
+- a visão padrão da Agenda no tablet e no desktop: o `AGENTS.md` do frontend permite Semana, e o A1 e o AG1 do protótipo mostram Dia. Quem decide é o Goal da Agenda.
+
+As correções estão planejadas como Goals 088 a 097 no [MASTER_PLAN](MASTER_PLAN.md) (v113). Cada um declara `Quadros do protótipo:`.

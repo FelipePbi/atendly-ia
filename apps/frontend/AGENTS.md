@@ -156,8 +156,23 @@ gate, com motivo e dono. A lista é estrita nos dois sentidos: uma entrada que
 de deixar cemitério.
 
 Screenshot de página inteira é anexado por rota e por largura. É **evidência
-para pessoa**, nunca pass/fail: fidelidade à direção aprovada não é decidida por
-verificação automática, e não deve ser declarada como provada por teste.
+para pessoa**, nunca pass/fail: o gate não decide fidelidade à direção aprovada.
+
+## Fidelidade ao protótipo (`npm run visual:compare`)
+
+`npm run visual:compare -- --target <códigos>` (ia-loop V33) renderiza o quadro
+do protótipo e a rota do app no mesmo tamanho, em mobile 402×812, tablet
+768×1024 e 1024×768 e desktop 1366×768. As capturas lado a lado vão para
+`e2e-results/visual/`. O mapa de quadro para rota fica em
+`e2e/visual/targets.json`.
+
+Para Goal que declara `Quadros do protótipo:`, a regra é:
+
+- o HTML/CSS do quadro é **portado**, não reinterpretado;
+- quem implementa e quem revisa abre as imagens;
+- uma divergência visível é blocker.
+
+A porcentagem do diff é tendência, não aprovação.
 
 A saída vai para `e2e-results/`, que está no `.gitignore` de propósito — o
 revisor do IA Loop é fingerprintado por `git status --porcelain` na worktree, e

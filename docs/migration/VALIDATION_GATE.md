@@ -4058,3 +4058,78 @@ Nenhuma das duas é defeito da moldura.
 | 4 | `OnboardingShell.tsx`, mesmo `sha256` | `<p className="onboarding-eyebrow">{eyebrow}</p>` de volta dentro do `header` do título | `Tests  2 failed \| 13 passed (15)`: prova 4 em `segmento-e-nome` e `tom-da-ia` |
 
 Restaurados os cinco: `Tests  15 passed (15)`.
+
+## As etapas de negócio e agenda iguais ao protótipo, do Goal090
+
+O conteúdo das sete etapas dos quadros 1.2, 1.3, 2.2, 2.3, 2.4, 2.5 e 2.6 está em [D-105](DECISIONS.md), **ACCEPTED** no [review090](reviews/090-review.md). O Goal não mudou o gate autenticado: nenhum teste de `e2e/` foi acrescentado ou removido, `e2e/routes.ts` só trocou dois `contentMarker` (os títulos de `servico-nome` e `servicos-adicionais`), e nenhum `KNOWN_*`, `playwright.*.config.ts`, configuração de vitest ou de next e passo de `validate:*` mudou.
+
+**Execução final (rodada 3)**, depois da última edição de código: a rodada 3 pôs `data-error-anchor` na caixa `div.price-value-field` de `blocks/schedule.tsx`, de modo que a mensagem de erro do preço entra depois da caixa (em 2.3 e no formulário de adicional de 2.4, que usam o mesmo `ServiceFields`) e não dentro dela, e acrescentou duas asserções em `tests/goal065-onboarding-schedule.test.tsx`. Essa edição é anterior a 21:17:16Z, início de `validate:core`; nenhuma edição de código veio depois (os controles abaixo restauram o arquivo por cópia, com o `sha256` conferido). `sha256` finais, conferidos depois de todas as execuções e dos controles: `scenarios.ts` `3b9cf274ad248410dbc0563bc7f347cb6e578bb9573d5e0cc68696c0e2a9b75c`, `OnboardingScreen.tsx` `957b9c0b057fd5ff787446aae08a0673b7f83e86fe02163affb10d9456e35e8a`, `blocks/business.tsx` `3851ad39bcb38c7d25899aaa0ca68306ebf2eb53080b4d4cedea00f052312385`, `blocks/schedule.tsx` `04ba12a04769c9c007f96d248f625920d3449f0d5b218c34e2f6beb4c54e5fd3`, `blocks/shared.tsx` `8b3f47df93047959f8a68ce011dd471e4bc6877761f791f1af4b76696c341b22`, `shared/ui/CurrencyInput.tsx` `f1609a1ec583858f88c712841561834e53eb893909b0f063012badcc953a81e3` e `atendly.css` `498a62452317b51d62db35cd2d32fc37d831d4d5b845b36e42b50d0da51d9e8f`. Todas em 2026-10-01, horários em UTC:
+
+| Execução | Início e fim | Resultado |
+| --- | --- | --- |
+| `npm run validate:core` (inclui `test:frontend`) | início 21:17:16Z | exit 0, **17** passos, **15** `passed`, **2** `skipped` (`test:bff` e `test:health-worker`), **0** `failed`, **0** `notRun`; `test:frontend`: **134** arquivos, **1453** testes |
+| `npm run test:gate` | depois de `validate:core` | exit 0, `tests 233`, `pass 233`, `fail 0` |
+| `npm run typecheck` e `npm run lint` em `apps/frontend` | depois de `validate:core` | exit 0 e exit 0, sem aviso (`--max-warnings=0`) |
+| `CI=1 npm run validate:ui` | início 21:19:25Z | exit 0, **169** `passed`, **21** `skipped`, `validate:ui public UI gate retries: 0 — every test passed on its first attempt` |
+| `BFF_TEST_DATABASE_URL=postgresql://pgtest@127.0.0.1:55432/atendly_bff_test npm run validate:integration` (inclui o passo `rehearse:goal033-authenticated-ui`, o gate autenticado) | início 21:23:15Z, fim 21:32:12Z; `stats.startTime` do gate autenticado 21:25:17Z, duração 415 s | exit 0, **36** passos, **36** `passed`, **0** `failed`, **0** `skipped`, **0** `notRun`; gate autenticado **245** `expected`, **0** `unexpected`, **0** `flaky`, **0** `skipped`; `authenticated gate retries: 0` |
+| Os quatro controles negativos do §6 | depois de 21:32:12Z | quatro reprovações e restauração conferida, abaixo |
+| `npm run visual:compare` com os 15 quadros (0, 1.1, 1.2, 1.3, 2.1 a 2.6, 3.1, 3.2, 4.1, 4.2 e 4.6) nos quatro aparelhos | 21:33:37Z a 21:35:55Z | exit 0, 60 pares quadro e largura |
+
+O `validate:integration` aprovado e o `results.json` do gate autenticado são **posteriores** à última edição de código. As execuções da rodada 2 (20:34Z em diante) deixaram de valer: são anteriores à edição da rodada 3.
+
+O `validate:ui` rodou com `CI=1` (1 worker, o que o `playwright.*.config.ts` já lê), como no Goal089. A contagem de arquivos e testes do `vitest run` (**134** e **1453**) é a do passo `test:frontend` de `validate:core`; contra os **133** e **1430** do Goal089 há um arquivo e 23 testes a mais, dos quais **22** são do arquivo novo `goal090-onboarding-steps.test.tsx`; o teste restante vem de ajustes em testes existentes e não foi decomposto.
+
+**`visual:compare`**, execução final acima (as células da rodada 3 saíram idênticas às da rodada 2), contra os números finais do Goal089 (a coluna "Início" é a coluna "Final" da tabela do Goal089 acima neste documento, **copiada, não remedida** nesta rodada; a recontagem de início do Goal090 não foi encontrada). A porcentagem é tendência; a leitura é a dos `side-by-side.png`. Cada célula: mobile 402 / tablet em retrato 768 / tablet em paisagem 1024 / desktop 1366.
+
+| Quadro | Início (Goal089 final) | Final (Goal090) |
+| --- | --- | --- |
+| 0 Boas-vindas | 1,2 / 0,5 / 0,9 / 0,6 | 1,2 / 0,5 / 0,9 / 0,6 |
+| 1.1 Segmento e nome | 0,6 / 0,6 / 1,0 / 1,2 | 0,6 / 0,6 / 1,0 / 1,2 |
+| 1.2 Modalidade | 4,5 / 1,8 / 2,2 / 1,6 | 0,6 / 0,2 / 0,7 / 0,4 |
+| 1.3 Endereço | 16,7 / 5,2 / 5,3 / 4,2 | 14,8 / 4,4 / 4,6 / 3,7 |
+| 2.1 Sistema atual | 2,4 / 0,8 / 0,9 / 0,8 | 2,4 / 0,8 / 0,9 / 0,8 |
+| 2.2 Importar agora ou depois | 11,8 / 7,5 / 7,3 / 5,9 | 1,1 / 0,4 / 0,7 / 0,7 |
+| 2.3 Primeiro serviço | 5,9 / 2,7 / 3,0 / 2,3 | 2,1 / 0,6 / 1,0 / 0,5 |
+| 2.4 Seus serviços | 4,5 / 1,8 / 2,2 / 1,7 | 2,9 / 1,3 / 1,7 / 1,3 |
+| 2.5 Dias de atendimento | 6,8 / 2,7 / 3,1 / 2,3 | 1,2 / 0,5 / 1,0 / 0,8 |
+| 2.6 Horário-base | 5,8 / 4,3 / 3,5 / 2,6 | 3,3 / 2,4 / 1,7 / 1,4 |
+| 3.1 Demonstração da IA | 6,9 / 3,4 / 3,1 / 2,4 | 6,9 / 3,4 / 3,1 / 2,4 |
+| 3.2 Estilo da IA | 5,5 / 1,4 / 1,9 / 1,4 | 5,5 / 1,4 / 1,9 / 1,4 |
+| 4.1 Introdução WhatsApp | 6,9 / 8,8 / 8,8 / 6,9 | 6,9 / 8,8 / 8,8 / 6,9 |
+| 4.2 Consentimento | 14,3 / 7,4 / 7,4 / 5,8 | 14,3 / 7,4 / **7,5** / 5,8 |
+| 4.6 Introdução ao teste | 13,1 / 6,7 / 6,8 / 5,3 | 13,1 / 6,7 / 6,8 / 5,3 |
+
+Dos 60 pares, **0**, **1.1**, **2.1** e **3.2** (16 pares) ficam **iguais** aos do Goal089 em todas as células; os 28 pares de 1.2, 1.3, 2.2, 2.3, 2.4, 2.5 e 2.6 **melhoram**, todos; 3.1, 4.1 e 4.6 ficam iguais; um par **piora**: 4.2 em paisagem, 7,4 para 7,5 (+0,1). Esse 4.2 é estável (7,5 na primeira corrida depois do código das etapas, na final e numa repetição isolada), a causa **não foi medida**, e o quadro 4.2 está fora da lista de etapas do Goal; fica declarado, sem causa afirmada.
+
+**Uma piora corrigida no meio do caminho (1.1).** Na primeira corrida de `visual:compare` depois do código das sete etapas (2026-10-01T20:03:13Z), 1.1 saiu **4,1 / 1,9 / 2,2 / 1,7**, contra 0,6 / 0,6 / 1,0 / 1,2 do Goal089. Causa medida: `.onboarding-form .field` (especificidade 0,2,0), declarada depois no `atendly.css`, sobrescrevia `[data-step="segmento-e-nome"] .field` (também 0,2,0) e `.field:last-child`; com um override temporário dos dois seletores, 1.1 mobile caiu para 0,7 % (corrida isolada de 1.1 mobile, 20:09Z). A correção definitiva sobe a especificidade dos seletores de 1.1 para `[data-step="segmento-e-nome"] .onboarding-form .field` e `.field:last-child`, e a execução final acima devolve 1.1 aos números do Goal089.
+
+**Leitura dos `side-by-side.png`** (protótipo | app | diferenças), por quadro, nos quatro aparelhos, das execuções finais. Em todos, o vermelho do diff em bordas de texto, chevron e ícones é anti-aliasing, e "Sair" (ícone no mobile e no tablet em retrato; botão no rodapé da sidebar de 1024 px em diante) não existe no protótipo.
+
+- **1.2 Modalidade** (0,6 / 0,2 / 0,7 / 0,4). Mesma estrutura nos quatro: eyebrow "SEU NEGÓCIO", H1 "Onde você atende?", três cartões com "Local próprio" selecionado e o CTA no rodapé. Sobram "Sair" e anti-aliasing.
+- **1.3 Endereço** (14,8 / 4,4 / 4,6 / 3,7). O app tem um campo "Endereço do seu espaço"; o quadro tem CEP, "Rua e número" e "Complemento" (divergência declarada). No mobile o quadro mostra o teclado aberto, com o CTA em y 428–479, e o do app fica ancorado em y 714–765: isso explica os 14,8 %. Nos outros três aparelhos o CTA do app fica 22 px acima do quadro (topo do botão em y 940 contra 962 no tablet em retrato; 684 contra 706 no tablet em paisagem e no desktop), porque o rodapé do quadro 1.3 é `padding:10px 20px 10px` e o das outras sete etapas do arquivo é `12px 20px 32px`; é a divergência 4 de D-105, não foi alinhada. O resto é o campo único e "Sair".
+- **2.2 Importar agora ou depois** (1,1 / 0,4 / 0,7 / 0,7). As barras do cartão "Minha Agenda" saem #EFEAE2 e as do "Atendly" #DCECEB, como no quadro (rodada 2). Ilustração "MINHA AGENDA → UMA VEZ → ATENDLY", "Importar agora" acima de "Fazer depois" e a nota; as posições batem em 1024 e 1366. No desktop o quadro diz "Configurações › Importação" na nota, e o app, "Mais › Importação", como os quadros mobile e tablet em retrato.
+- **2.3 Primeiro serviço** (2,1 / 0,6 / 1,0 / 0,5). Nome, duração com o stepper (− 45 min +) e os atalhos 30/60/90, preço em controle segmentado (Fixo, A partir de, Sob consulta, Sem preço), o campo com o prefixo "R$" como adorno em #716859 a 8 px de "90,00" (rodada 2) e o CTA "Salvar serviço"; alinhado a 1–2 px. Sobram "Sair" e os dados da conta.
+- **2.4 Seus serviços** (2,9 / 1,3 / 1,7 / 1,3). O app tem uma linha (rascunho "Corte feminino · 45 min · R$ 90"); o quadro tem três, com lápis. O botão tracejado "Adicionar outro serviço" e a nota alinham. Sobram os dados da conta, o lápis (declarado) e "Sair".
+- **2.5 Dias de atendimento** (1,2 / 0,5 / 1,0 / 0,8). Chips de Seg a Sáb marcados, Dom desmarcado e o resumo "Segunda a sábado · 6 dias por semana", alinhados nos quatro aparelhos. Sobram anti-aliasing e "Sair".
+- **2.6 Horário-base** (3,3 / 2,4 / 1,7 / 1,4). Os cartões Começa/Termina e "Personalizar dias diferentes" têm a altura do quadro (84 e 68 px; rodada 2). As marcas da régua usam #716859 e não o #948B80 do quadro, por contraste (desvio 10 de D-105). H1, descrição "Vale para segunda a sábado. Pausas e bloqueios você configura depois.", cartões "Começa" e "Termina", régua de 0h a 24h com cinco marcas e o cartão "Personalizar dias diferentes". O app mostra "09:00 AM" e "06:00 PM" (locale do harness, medido abaixo) e o painel já aberto, com as linhas "Segunda · Início/Fim", "Terça · …" (no retrato o CTA ancorado cobre a lista); o quadro tem o cartão recolhido, com a seta. É o maior resto da série e tem essas duas causas, ambas declaradas em D-105.
+
+**Ambiente.** (1) O `visual:compare` abre o Chromium com `locale: "pt-BR"` no contexto, sem `--lang`; num script à parte, o `<input type="time">` nativo mostrou `AM/PM` nesse modo e `18:00` com `--lang=pt-BR` na abertura do navegador. Por isso 2.6 mostra "09:00 AM" no app; não foi mudado o script, que fica fora do escopo. (2) Corridas seguidas de `visual:compare` batem no limite de tentativas de login da conta visual: uma repetição de 4.2 respondeu `login da conta visual respondeu 429` (`RATE_LIMITED`, "Muitas tentativas. Aguarde alguns minutos e tente novamente."); não foi repetida, e a corrida final acima não foi afetada.
+
+**Controles negativos** (§6 do Goal), feitos na rodada 3 **depois da última edição de código**, cada um por edição real num arquivo de produção, restaurado por cópia do original no mesmo passo, com o `sha256` conferido idêntico (saída real de `npx vitest run tests/goal090-onboarding-steps.test.tsx`):
+
+| Controle | Arquivo e `sha256` antes e depois | Defeito | Teste com o defeito |
+| --- | --- | --- | --- |
+| 1 | `scenarios.ts`, `3b9cf274ad248410dbc0563bc7f347cb6e578bb9573d5e0cc68696c0e2a9b75c` | eyebrow de `servico-nome` de volta para "Primeiro serviço" | `Tests  1 failed \| 21 passed (22)`: prova 1, `'servico-nome': eyebrow "'Sua agenda'"` |
+| 2 | `OnboardingScreen.tsx`, `957b9c0b057fd5ff787446aae08a0673b7f83e86fe02163affb10d9456e35e8a` | "Fazer depois" antes de "Importar agora" | `Tests  1 failed \| 21 passed (22)`: prova 2, "a ordem do DOM é Importar agora, Fazer depois, nota" |
+| 3 | `blocks/schedule.tsx`, `04ba12a04769c9c007f96d248f625920d3449f0d5b218c34e2f6beb4c54e5fd3` | `draft.serviceName.trim() === ""` trocado por `true` (o serviço do rascunho sai da lista) | `Tests  2 failed \| 20 passed (22)`: prova 3, "ordem: rascunho primeiro, depois os adicionais, …" e "sem preço informado aparece como texto discreto, …" |
+| 4 | `blocks/schedule.tsx`, mesmo `sha256` do controle 3 | `hoursStepDescription` devolve sempre "Vale para segunda a sábado. Pausas e bloqueios você configura depois." | `Tests  1 failed \| 21 passed (22)`: prova 5, `dias [1,3,5]`: "Vale para segunda, quarta e sexta." |
+
+Restaurados os quatro: `Tests  22 passed (22)`; o `sha256` de cada arquivo conferido idêntico ao de antes do controle. O defeito do blocker 1 da rodada 3 (erro de preço dentro da caixa) tem prova própria: sem o `data-error-anchor` de `div.price-value-field`, `Tests  2 failed | 35 passed (37)` em `tests/goal065-onboarding-schedule.test.tsx` ("envio vazio mostra os erros de nome e valor juntos…" e "Adicionar com o formulário vazio mostra os erros no campo…"); restaurado, `37 passed (37)`, `sha256` de `blocks/schedule.tsx` idêntico.
+
+**Não feito.**
+
+- A conferência do §7 do Goal (celular real com o teclado aberto em Endereço e em Primeiro serviço, com o CTA ancorado; legibilidade da régua de horas e do resumo de dias). A prova de layout deste Goal é o `visual:compare` e a leitura dos `side-by-side.png`; jsdom não tem layout.
+- A recontagem de início do Goal090 (WU-01) não foi encontrada; a coluna "Início" da tabela de `visual:compare` é a do Goal089, copiada.
+- Execuções anteriores à edição da rodada 3 (as das rodadas 1 e 2 e as das WUs do IA Loop) não são citadas como contagem: valem para uma árvore que já não é a final. Os quatro controles negativos foram refeitos na rodada 3, depois da última edição de código.
+
+**Aceite (review090, rodada 4).** O Tech Lead rodou `visual:compare` dos sete quadros nas rodadas 2, 3 e 4, exit 0, com células iguais às da tabela acima, e abriu os `side-by-side.png`. Na rodada 3 conferiu em disco `apps/frontend/e2e-results/authenticated/results.json` (`startTime` 21:25:17Z): **245** `expected`, **0** `unexpected`, **0** `flaky`; a WU-11 do IA Loop foi `SKIPPED` por falta de banco nessa rodada. Na rodada 4, os oito gates do IA Loop passaram, e os `sha256` dos sete arquivos de produção são os listados acima. Os controles negativos foram conferidos por este registro e pelos `sha256`, não reexecutados pelo Tech Lead.

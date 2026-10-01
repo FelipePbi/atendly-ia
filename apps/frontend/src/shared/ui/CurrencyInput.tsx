@@ -14,11 +14,18 @@ const brlFormatter = new Intl.NumberFormat("pt-BR", {
   maximumFractionDigits: 2,
 });
 
+const plainFormatter = new Intl.NumberFormat("pt-BR", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 export type CurrencyInputProps = Omit<
   InputHTMLAttributes<HTMLInputElement>,
   "defaultValue" | "inputMode" | "onChange" | "type" | "value"
 > & {
   defaultValueCents?: number | null;
+  // O "R$" sai do texto do campo: quem usa desenha o símbolo como adorno ao lado.
+  hideSymbol?: boolean;
   onValueChange?: (valueCents: number | null) => void;
 };
 
@@ -31,8 +38,9 @@ function validCents(cents: number | null | undefined): cents is number {
   );
 }
 
-function formattedCurrency(cents: number | null) {
-  return validCents(cents) ? brlFormatter.format(cents / 100) : "";
+function formattedCurrency(cents: number | null, hideSymbol: boolean) {
+  if (!validCents(cents)) return "";
+  return (hideSymbol ? plainFormatter : brlFormatter).format(cents / 100);
 }
 
 function editableText(cents: number | null) {
@@ -84,6 +92,7 @@ function parsedCents(text: string): number | null | undefined {
 
 export function CurrencyInput({
   defaultValueCents,
+  hideSymbol = false,
   onBlur,
   onFocus,
   onValueChange,
@@ -92,7 +101,9 @@ export function CurrencyInput({
   const [cents, setCents] = useState<number | null>(() =>
     validCents(defaultValueCents) ? defaultValueCents : null,
   );
-  const [text, setText] = useState(() => formattedCurrency(cents));
+  const [text, setText] = useState(() =>
+    formattedCurrency(cents, hideSymbol),
+  );
 
   function handleFocus(event: FocusEvent<HTMLInputElement>) {
     setText(editableText(cents));
@@ -100,7 +111,7 @@ export function CurrencyInput({
   }
 
   function handleBlur(event: FocusEvent<HTMLInputElement>) {
-    setText(formattedCurrency(cents));
+    setText(formattedCurrency(cents, hideSymbol));
     onBlur?.(event);
   }
 

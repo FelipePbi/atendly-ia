@@ -639,8 +639,14 @@ p {
 .choice-card-modality {
   display: flex;
   align-items: center;
-  gap: var(--s4);
-  min-height: 88px;
+  gap: 14px;
+  min-height: 0;
+  padding: 16px;
+}
+.choice-card-modality.is-selected {
+  border: 1.5px solid var(--accent);
+  padding: 16px;
+  background: var(--at-color-primary-tint);
 }
 .choice-card-modality .choice-icon {
   display: grid;
@@ -649,23 +655,33 @@ p {
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  background: var(--surface-secondary);
-  color: var(--accent);
+  background: var(--at-color-surface-active);
+  color: var(--fg-soft);
 }
 .choice-card-modality.is-selected .choice-icon {
-  background: var(--surface);
+  background: var(--at-color-primary-tint-strong);
+  color: var(--at-color-primary-ink);
+}
+.choice-card-modality .choice-icon .icon {
+  width: 22px;
+  height: 22px;
 }
 .choice-card-modality .choice-text {
   flex: 1 1 auto;
   min-width: 0;
 }
 .choice-card-modality .choice-title {
-  margin-bottom: 2px;
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: normal;
 }
 .choice-card-modality .choice-copy {
   display: block;
-  color: var(--muted);
-  font-size: 14px;
+  margin-top: 2px;
+  color: var(--fg-soft);
+  font-size: 13px;
+  line-height: normal;
 }
 .choice-card-modality .choice-indicator {
   display: grid;
@@ -673,22 +689,26 @@ p {
   place-items: center;
   width: 24px;
   height: 24px;
-  border: 2px solid var(--border-strong);
+  border: 1.5px solid var(--border-strong);
   border-radius: 50%;
-  background: var(--surface);
-  color: var(--surface);
+  color: var(--at-color-on-primary);
 }
 .choice-card-modality.is-selected .choice-indicator {
   border-color: var(--accent);
   background: var(--accent);
 }
 .choice-card-modality .choice-indicator .icon {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
+  stroke-width: 3;
 }
 .choice-card-modality:focus-within {
   outline: 3px solid var(--accent);
   outline-offset: 2px;
+}
+[data-step="modalidade"] .choice-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
 }
 .choice-grid.tone-grid {
   grid-template-columns: minmax(0, 1fr);
@@ -2526,10 +2546,6 @@ p {
 /* Onboarding — moldura única (Goal089): topo na coluna abaixo de 1024 px,
    sidebar de altura total e painel bege de 1024 px em diante. A coluna ocupa a
    altura da janela: o conteúdo rola dentro dela e as ações ficam no rodapé. */
-.onboarding-page {
-  min-height: 100dvh;
-  background: var(--surface);
-}
 .onboarding-shell {
   min-height: 100dvh;
   display: grid;
@@ -2835,35 +2851,49 @@ p {
 }
 .onboarding-form {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
+/* Dias de atendimento (2.5): sete alvos de 46×56 e a linha-resumo. */
 .day-pill-row {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  display: flex;
+  justify-content: space-between;
   gap: 6px;
 }
 .day-pill {
   position: relative;
   min-width: 0;
-  min-height: 44px;
+  flex: 0 1 46px;
+  height: 56px;
   display: grid;
   place-items: center;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--fg-soft);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  color: var(--muted);
   background: var(--surface);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: 160ms var(--ease);
+  transition:
+    background-color 160ms var(--ease),
+    border-color 160ms var(--ease),
+    color 160ms var(--ease),
+    transform 120ms ease;
 }
 .day-pill:hover {
-  border-color: var(--border-strong);
+  border-color: var(--muted);
+}
+.day-pill:active {
+  transform: scale(0.98);
 }
 .day-pill.is-selected {
-  border: 1.5px solid var(--accent);
-  color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--bg);
+  background: var(--accent);
+}
+.day-pill.is-selected:hover {
+  border-color: var(--at-color-primary-hover);
+  background: var(--at-color-primary-hover);
 }
 .day-pill:focus-within {
   outline: 2px solid var(--accent);
@@ -2872,10 +2902,22 @@ p {
 .days-summary {
   margin: 0;
   padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   border-radius: 14px;
   color: var(--fg);
-  background: var(--surface-secondary);
+  background: var(--surface-interactive);
   font-size: 15px;
+}
+.days-summary .icon {
+  width: 20px;
+  height: 20px;
+  color: var(--accent);
+}
+[data-step="dias-de-atendimento"] .onboarding-content,
+[data-step="dias-de-atendimento"] .onboarding-form {
+  gap: 26px;
 }
 .time-input {
   font-family: var(--font-display);
@@ -2885,32 +2927,96 @@ p {
 }
 .time-range {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
-.hours-range {
-  display: grid;
-  gap: 8px;
+/* Horário-base (2.6): hora em Literata dentro de dois cartões, régua de 24 h
+   e o cartão "Personalizar dias diferentes". */
+[data-step="horarios"] .onboarding-form,
+[data-step="horarios"] .time-range {
+  gap: 22px;
 }
-.hours-range-text {
-  margin: 0;
+.time-cards {
+  display: flex;
+  gap: 10px;
+}
+.time-cards > .field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.time-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  cursor: text;
+}
+.time-card:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.field-error .time-card {
+  border-color: var(--danger);
+}
+.time-card-label {
+  color: var(--fg-soft);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: normal;
+}
+.time-card-input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  outline: 0;
   color: var(--fg);
-  font-size: 15px;
+  background: transparent;
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.time-card-input::-webkit-calendar-picker-indicator {
+  display: none;
+}
+/* Navegador em formato 12 h: AM/PM vira sufixo e a hora segue em destaque. */
+.time-card-input::-webkit-datetime-edit-ampm-field {
+  zoom: 0.45;
+  font-family: var(--font-body);
 }
 .hours-bar {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 2px;
 }
 .hours-bar-track {
   position: relative;
-  height: 8px;
-  border-radius: 4px;
+  height: 14px;
+}
+.hours-bar-track::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 1px;
   background: var(--border);
-  overflow: hidden;
 }
 .hours-bar-fill {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: 3px;
+  height: 8px;
   border-radius: 4px;
   background: var(--accent);
 }
@@ -2918,7 +3024,52 @@ p {
   display: flex;
   justify-content: space-between;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
+  line-height: normal;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.hours-custom {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--fg);
+  background: var(--surface);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.hours-custom:hover {
+  background: var(--surface-secondary);
+}
+.hours-custom-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hours-custom-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: normal;
+}
+.hours-custom-hint {
+  color: var(--fg-soft);
+  font-size: 13px;
+  line-height: normal;
+}
+.hours-custom .icon {
+  width: 20px;
+  height: 20px;
+  color: var(--muted);
+  transition: transform 160ms var(--ease);
+}
+.hours-custom[aria-expanded="true"] .icon {
+  transform: rotate(90deg);
 }
 /* O respiro do rodapé (12/20/46 do protótipo) é margem, não padding: a barra
    de ações tem a largura do botão, que o gate mede contra ela. */
@@ -3174,8 +3325,10 @@ p {
     animation: none;
   }
 }
-/* Segmento e nome (quadro 1.1) e Sistema atual (2.1): sem descrição visível. */
+/* Segmento e nome (quadro 1.1), Endereço (1.3) e Sistema atual (2.1): sem
+   descrição visível. */
 [data-step="segmento-e-nome"] .onboarding-heading > p,
+[data-step="endereco"] .onboarding-heading > p,
 [data-step="sistema-atual"] .onboarding-heading > p {
   position: absolute;
   width: 1px;
@@ -3188,10 +3341,10 @@ p {
 [data-step="segmento-e-nome"] .onboarding-form {
   gap: 22px;
 }
-[data-step="segmento-e-nome"] .field {
+[data-step="segmento-e-nome"] .onboarding-form .field {
   gap: 10px;
 }
-[data-step="segmento-e-nome"] .field:last-child {
+[data-step="segmento-e-nome"] .onboarding-form .field:last-child {
   gap: 6px;
 }
 [data-step="segmento-e-nome"] .label {
@@ -3247,6 +3400,421 @@ p {
   color: var(--muted);
   font-size: 12px;
   line-height: normal;
+}
+/* Descrição das etapas de Sua agenda e da Modalidade: 15 px, 8 px abaixo do
+   título (quadros 1.2, 2.2, 2.3, 2.4 e 2.6). */
+[data-step="modalidade"] .onboarding-heading,
+[data-step="servico-nome"] .onboarding-heading,
+[data-step="servicos-adicionais"] .onboarding-heading,
+[data-step="horarios"] .onboarding-heading {
+  gap: 8px;
+}
+[data-step="modalidade"] .onboarding-heading > p,
+[data-step="quando-importar"] .onboarding-heading > p,
+[data-step="servico-nome"] .onboarding-heading > p,
+[data-step="servicos-adicionais"] .onboarding-heading > p,
+[data-step="horarios"] .onboarding-heading > p {
+  font-size: 15px;
+}
+/* Importar agora ou depois (quadro 2.2): ilustração "Minha Agenda → uma vez
+   → Atendly", ações empilhadas em largura total e a nota abaixo delas. */
+[data-step="quando-importar"] .onboarding-content {
+  gap: 24px;
+}
+[data-step="quando-importar"] .onboarding-heading {
+  gap: 10px;
+}
+[data-step="quando-importar"] .onboarding-heading > p {
+  text-wrap: pretty;
+}
+.import-illustration {
+  padding: 26px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+.import-card {
+  box-sizing: content-box;
+  width: 118px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface);
+}
+.import-card-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: normal;
+  text-transform: uppercase;
+}
+.import-bar {
+  height: 8px;
+  border-radius: 4px;
+  display: block;
+  background: var(--at-color-surface-active);
+}
+.import-card.is-atendly {
+  border: 1.5px solid var(--accent);
+  box-shadow: 0 12px 30px rgba(15, 95, 99, 0.12);
+}
+.import-card.is-atendly .import-card-label {
+  color: var(--accent);
+}
+.import-card.is-atendly .import-bar {
+  background: var(--at-color-primary-tint-strong);
+}
+.import-arrow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: normal;
+  text-transform: uppercase;
+}
+[data-step="quando-importar"] .onboarding-actions {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+[data-step="quando-importar"] .onboarding-actions .btn {
+  width: 100%;
+  min-width: 0;
+  flex: none;
+}
+[data-step="quando-importar"] .onboarding-actions .btn-secondary {
+  height: 54px;
+  background: transparent;
+  border-color: var(--border-strong);
+}
+[data-step="quando-importar"] .onboarding-actions .btn-secondary:hover {
+  background: var(--surface-secondary);
+  border-color: #c9c0b3;
+}
+[data-step="quando-importar"] .onboarding-actions-note {
+  line-height: 1.4;
+}
+/* Primeiro serviço (2.3) e Seus serviços (2.4): rótulos de 13 px, campos de
+   52 px e os espaçamentos próprios de cada quadro. */
+[data-step="servico-nome"] .onboarding-content {
+  gap: 18px;
+}
+[data-step="servicos-adicionais"] .onboarding-content {
+  gap: 20px;
+}
+[data-step="servico-nome"] .onboarding-form {
+  gap: 18px;
+}
+[data-step="servicos-adicionais"] .onboarding-form {
+  gap: 20px;
+}
+.onboarding-form .field {
+  gap: 6px;
+}
+.onboarding-form .field .label {
+  color: var(--fg-soft);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: normal;
+}
+.onboarding-form .label-optional {
+  color: var(--muted);
+  font-weight: 400;
+}
+.onboarding-form .field .input {
+  height: 54px;
+  min-height: 0;
+  padding: 0 16px;
+  border-radius: 14px;
+  font-size: 16px;
+}
+.onboarding-form .field:has(.service-duration-row),
+.onboarding-form .field:has(.price-chip-row) {
+  gap: 8px;
+}
+.onboarding-form .service-duration-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.onboarding-form .service-duration-control {
+  height: 54px;
+  flex: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  gap: 0;
+  overflow: hidden;
+  background: var(--surface);
+}
+.onboarding-form .service-duration-control:has(.input:focus) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--at-color-primary-tint-strong);
+}
+.onboarding-form .service-duration-step {
+  width: 49px;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--fg-soft);
+  font-size: 22px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.onboarding-form .service-duration-step:first-child {
+  border-right: 1px solid var(--border);
+}
+.onboarding-form .service-duration-step:last-child {
+  border-left: 1px solid var(--border);
+  color: var(--accent);
+}
+.onboarding-form .service-duration-step:focus-visible {
+  outline-offset: -3px;
+}
+.onboarding-form .service-duration-value {
+  width: 92px;
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+}
+.onboarding-form .service-duration-value .input {
+  flex: none;
+  width: auto;
+  height: auto;
+  min-width: 2ch;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  field-sizing: content;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.onboarding-form .service-duration-value .input::-webkit-inner-spin-button,
+.onboarding-form .service-duration-value .input::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+.onboarding-form .service-duration-unit {
+  color: var(--fg-soft);
+  font-size: 14px;
+  font-weight: 500;
+}
+.onboarding-form .service-duration-shortcuts {
+  min-width: 0;
+  margin: 0;
+  flex: 1;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.onboarding-form .service-duration-shortcut {
+  min-width: 0;
+  height: 38px;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  flex: 1;
+  color: var(--fg-soft);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+.onboarding-form .service-duration-shortcut:hover {
+  border-color: #c9c0b3;
+  background: var(--surface-secondary);
+}
+.onboarding-form .service-duration-shortcut[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.onboarding-form .price-chip-row {
+  padding: 3px;
+  border-radius: 12px;
+  flex-wrap: nowrap;
+  gap: 3px;
+  background: var(--surface-secondary);
+}
+.onboarding-form .price-chip-row .chip {
+  min-width: 0;
+  height: 36px;
+  min-height: 0;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 9px;
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--fg-soft);
+  font-size: 13px;
+  font-weight: 500;
+}
+.onboarding-form .price-chip-row .chip:nth-child(2) {
+  flex-grow: 1.2;
+}
+.onboarding-form .price-chip-row .chip:nth-child(3) {
+  flex-grow: 1.3;
+}
+.onboarding-form .price-chip-row .chip:nth-child(4) {
+  flex-grow: 1.1;
+}
+.onboarding-form .price-chip-row .chip.is-active {
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(34, 30, 26, 0.08);
+  color: var(--fg);
+  font-weight: 600;
+}
+.onboarding-form .price-value-field {
+  height: 54px;
+  padding: 0 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  background: var(--surface);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.onboarding-form .price-value-field:hover {
+  border-color: var(--muted);
+}
+.onboarding-form .price-value-field:has(.input:focus) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--at-color-primary-tint-strong);
+}
+.onboarding-form .field-error .price-value-field {
+  border-color: var(--danger);
+}
+.onboarding-form .price-value-adornment {
+  margin-right: 8px;
+  color: var(--muted);
+}
+.onboarding-form .price-value-input {
+  min-width: 0;
+  height: 100%;
+  flex: 1;
+  display: flex;
+}
+.onboarding-form .price-value-field .input {
+  height: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  flex: 1;
+  background: transparent;
+  box-shadow: none;
+  font: inherit;
+}
+.service-list {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  list-style: none;
+}
+.service-list-row {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.service-list-row + .service-list-row {
+  border-top: 1px solid var(--border);
+}
+.service-list-name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: normal;
+}
+.service-list-meta {
+  color: var(--fg-soft);
+  font-size: 13px;
+  line-height: normal;
+}
+.service-list-quiet {
+  color: var(--muted);
+}
+.service-add-button {
+  height: 55px;
+  border: 1.5px dashed #b9b1a6;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--accent);
+  background: transparent;
+  font-size: 15px;
+  font-weight: 600;
+}
+.service-add-button:hover {
+  background: var(--accent-soft);
+}
+.service-add-button .icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
+}
+.service-list-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+/* Endereço (quadro 1.3): um campo só, com o estilo de campo do quadro. */
+[data-step="endereco"] .onboarding-top {
+  gap: 10px;
+}
+[data-step="endereco"] .onboarding-content {
+  padding-top: 6px;
+  gap: 14px;
+}
+[data-step="endereco"] .field {
+  gap: 6px;
+}
+[data-step="endereco"] .label {
+  color: var(--fg-soft);
+  font-size: 13px;
+  line-height: normal;
+}
+[data-step="endereco"] .input {
+  height: 52px;
+  min-height: 0;
+  padding: 0 16px;
+  border-color: var(--border-strong);
+  border-radius: 14px;
+  background: var(--surface);
+  font-size: 16px;
+}
+[data-step="endereco"] .input:focus {
+  border-width: 1.5px;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--at-color-primary-tint-strong);
 }
 [data-step="sistema-atual"] .onboarding-content {
   gap: 24px;

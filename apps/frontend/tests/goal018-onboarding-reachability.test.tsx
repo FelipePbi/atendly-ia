@@ -357,7 +357,7 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
     await user.clear(durationInput);
     await user.type(durationInput, "45");
     await user.type(screen.getByLabelText("Preço em reais"), "150");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
 
     const [patch] = updateOnboarding.mock.calls.at(-1) as [
       {
@@ -399,7 +399,7 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
     expect(
       await screen.findByRole("button", { name: "A partir de" }),
     ).toHaveAttribute("aria-pressed", "true");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
 
     const [patch] = updateOnboarding.mock.calls.at(-1) as [
       { service: { priceType: string } },

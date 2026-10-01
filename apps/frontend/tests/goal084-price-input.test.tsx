@@ -305,7 +305,7 @@ describe("4. onboarding, etapa do preço do primeiro serviço", () => {
     await user.clear(duration);
     await user.type(duration, "45");
     await user.type(screen.getByLabelText("Preço em reais"), "60");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
 
     await waitFor(() =>
       expect(updateOnboarding).toHaveBeenCalledWith({

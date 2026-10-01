@@ -32,7 +32,7 @@ export const onboardingScenarios = {
   "quando-importar": [
     "Sua agenda",
     "Quer importar agora?",
-    "A cópia é feita do Minha Agenda para a Atendly, uma vez só.",
+    "A importação acontece uma única vez e leva alguns minutos. Depois dela, a Atendly passa a ser sua agenda oficial.",
     "when-import",
   ],
   // A etapa monta as telas do módulo de importação (Goal066), com o título
@@ -45,27 +45,27 @@ export const onboardingScenarios = {
     "import",
   ],
   "servico-nome": [
-    "Primeiro serviço",
-    "Qual serviço seus clientes mais agendam?",
-    "Nome, duração e preço. A IA só informará o valor cadastrado. Se variar, use “Sob consulta”.",
+    "Sua agenda",
+    "Qual é o seu primeiro serviço?",
+    "Comece pelo mais comum. Os outros você adiciona depois.",
     "service-name",
   ],
   "servicos-adicionais": [
-    "Serviços adicionais",
-    "Quer adicionar outros serviços agora?",
-    "Você pode continuar sem adicionar nenhum. Isso pode ser feito depois em Serviços.",
+    "Sua agenda",
+    "Seus serviços",
+    "Adicione o que seus clientes mais pedem. Você pode ajustar tudo depois.",
     "additional-services",
   ],
   "dias-de-atendimento": [
-    "Disponibilidade",
+    "Sua agenda",
     "Em quais dias você atende?",
-    "Escolha seus dias habituais. Ajustes específicos poderão ser feitos depois.",
+    "",
     "days",
   ],
   horarios: [
-    "Horário habitual",
+    "Sua agenda",
     "Qual é seu horário de atendimento?",
-    "Use o intervalo mais comum. Pausas e exceções poderão ser ajustadas depois.",
+    "Pausas e bloqueios você configura depois.",
     "hours",
   ],
   "agenda-atendly-pronta": [

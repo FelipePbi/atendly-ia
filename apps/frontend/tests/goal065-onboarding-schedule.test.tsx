@@ -130,7 +130,7 @@ describe("servico-nome: os quatro tipos gravam e releem sem conversão", () => {
     await user.clear(duration);
     await user.type(duration, "45");
     await user.type(screen.getByLabelText("Preço em reais"), "150");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
 
     await waitFor(() =>
       expect(updateOnboarding).toHaveBeenCalledWith({
@@ -155,7 +155,7 @@ describe("servico-nome: os quatro tipos gravam e releem sem conversão", () => {
     );
     await user.click(screen.getByRole("button", { name: "Sob consulta" }));
     expect(screen.queryByLabelText("Preço em reais")).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
 
     await waitFor(() => expect(updateOnboarding).toHaveBeenCalled());
     const [patch] = updateOnboarding.mock.calls.at(-1) as [
@@ -173,7 +173,7 @@ describe("servico-nome: os quatro tipos gravam e releem sem conversão", () => {
       }),
     );
     await screen.findByDisplayValue("Corte");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
 
     await waitFor(() => expect(updateOnboarding).toHaveBeenCalled());
     const [patch] = updateOnboarding.mock.calls.at(-1) as [
@@ -191,7 +191,7 @@ describe("servico-nome: os quatro tipos gravam e releem sem conversão", () => {
 });
 
 describe("servicos-adicionais: cria por POST /v1/services sem trocar o serviço do onboarding", () => {
-  test("lista os serviços ativos, sem incluir o serviço do onboarding", async () => {
+  test("lista o serviço do onboarding e os ativos, sem repetir o do onboarding", async () => {
     listServiceCatalog.mockResolvedValue({
       editable: true,
       items: [
@@ -206,7 +206,7 @@ describe("servicos-adicionais: cria por POST /v1/services sem trocar o serviço 
     );
 
     expect(await screen.findByText("Barba")).toBeVisible();
-    expect(screen.queryByText("Corte")).toBeNull();
+    expect(screen.getAllByText("Corte")).toHaveLength(1);
   });
 
   test("Adicionar outro serviço chama POST /v1/services e mostra o criado na lista", async () => {
@@ -305,6 +305,10 @@ describe("servicos-adicionais: cria por POST /v1/services sem trocar o serviço 
     expect(nameInput).toHaveAccessibleDescription("Informe o nome do serviço.");
     expect(priceInput).toHaveAttribute("aria-invalid", "true");
     expect(priceInput).toHaveAccessibleDescription("Informe o valor do serviço.");
+    const priceBox = priceInput.closest(".price-value-field");
+    expect(priceBox?.nextElementSibling).toBe(
+      screen.getByText("Informe o valor do serviço."),
+    );
     expect(nameInput).toHaveFocus();
     expect(createServiceCatalog).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
@@ -315,13 +319,18 @@ describe("servico-nome: validação inline e recusa do servidor no campo", () =>
   test("envio vazio mostra os erros de nome e valor juntos, foca o nome e não grava", async () => {
     const user = await renderStep("servico-nome", emptyState());
     const nameInput = await screen.findByLabelText("Nome do serviço");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
 
     const priceInput = screen.getByLabelText("Preço em reais");
     expect(nameInput).toHaveAttribute("aria-invalid", "true");
     expect(nameInput).toHaveAccessibleDescription("Informe o nome do serviço.");
     expect(priceInput).toHaveAttribute("aria-invalid", "true");
     expect(priceInput).toHaveAccessibleDescription("Informe o valor do serviço.");
+    const priceBox = priceInput.closest(".price-value-field");
+    const priceError = screen.getByText("Informe o valor do serviço.");
+    expect(priceBox).not.toBeNull();
+    expect(priceBox).not.toContainElement(priceError);
+    expect(priceBox?.nextElementSibling).toBe(priceError);
     expect(nameInput).toHaveFocus();
     expect(updateOnboarding).not.toHaveBeenCalled();
   });
@@ -349,7 +358,7 @@ describe("servico-nome: validação inline e recusa do servidor no campo", () =>
       }),
     );
     await screen.findByDisplayValue("Corte");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
 
     const priceInput = await screen.findByLabelText("Valor inicial em reais");
     await waitFor(() =>
@@ -596,10 +605,10 @@ describe("horarios: Personalizar dias diferentes grava uma regra por dia", () =>
     expect(
       await screen.findByRole("button", { name: "Personalizar dias diferentes" }),
     ).toHaveAttribute("aria-expanded", "false");
-    const start = screen.getByLabelText("Início");
+    const start = screen.getByLabelText("Começa");
     await user.clear(start);
     await user.type(start, "10:00");
-    const end = screen.getByLabelText("Fim");
+    const end = screen.getByLabelText("Termina");
     await user.clear(end);
     await user.type(end, "19:00");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
@@ -629,7 +638,7 @@ describe("horarios: Personalizar dias diferentes grava uma regra por dia", () =>
         ]),
       }),
     );
-    const start = await screen.findByLabelText("Início");
+    const start = await screen.findByLabelText("Começa");
     expect(start).toHaveValue("09:00");
     await user.clear(start);
     await user.type(start, "10:00");
@@ -676,7 +685,7 @@ describe("horarios: Personalizar dias diferentes grava uma regra por dia", () =>
 
   test("fim antes do início no intervalo-base marca o campo final, com a mensagem ligada a ele, e não grava", async () => {
     const user = await renderStep("horarios", stateFixture({ availability: null }));
-    const end = await screen.findByLabelText("Fim");
+    const end = await screen.findByLabelText("Termina");
     await user.clear(end);
     await user.type(end, "08:00");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
@@ -686,7 +695,7 @@ describe("horarios: Personalizar dias diferentes grava uma regra por dia", () =>
       "O horário final deve ser depois do horário inicial.",
     );
     expect(end).toHaveFocus();
-    expect(screen.getByLabelText("Início")).not.toHaveAttribute("aria-invalid");
+    expect(screen.getByLabelText("Começa")).not.toHaveAttribute("aria-invalid");
     expect(updateOnboarding).not.toHaveBeenCalled();
   });
 
@@ -705,7 +714,7 @@ describe("horarios: Personalizar dias diferentes grava uma regra por dia", () =>
       "O horário final deve ser depois do horário inicial.",
     );
     expect(wednesdayEnd).toHaveFocus();
-    expect(screen.getByLabelText("Fim")).not.toHaveAttribute("aria-invalid");
+    expect(screen.getByLabelText("Termina")).not.toHaveAttribute("aria-invalid");
     expect(screen.getByLabelText("Segunda · Fim")).not.toHaveAttribute(
       "aria-invalid",
     );

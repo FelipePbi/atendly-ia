@@ -129,7 +129,7 @@ describe("textos das etapas: a automação se chama IA em todas as etapas do gat
       "Isso ajuda a IA a usar nomes e exemplos mais próximos da sua rotina.",
     );
     expect(onboardingScenarios["servico-nome"][2]).toContain(
-      "A IA só informará o valor cadastrado.",
+      "Comece pelo mais comum. Os outros você adiciona depois.",
     );
   });
 });

@@ -19,7 +19,10 @@ import {
   stepBodyByBlock,
   stepPersistByBlock,
 } from "./blocks/registry";
-import { skipImportAndGoToScratch } from "./blocks/schedule";
+import {
+  hoursStepDescription,
+  skipImportAndGoToScratch,
+} from "./blocks/schedule";
 import {
   ActionCard,
   applyInlineValidation,
@@ -59,7 +62,11 @@ export function OnboardingScreen({
   // Só lido em demonstracao-da-ia: "Continuar" aparece quando o último item da
   // conversa entra (ou de imediato, sem serviço e horário para simular).
   const [demoDone, setDemoDone] = useState(false);
-  const [eyebrow, title, description] = onboardingScenarios[scenario];
+  const [eyebrow, title, staticDescription] = onboardingScenarios[scenario];
+  const description =
+    scenario === "horarios"
+      ? hoursStepDescription(draft.days)
+      : staticDescription;
   // "importacao" só existe para quem escolheu importar: aberta por URL direta
   // sem a fonte gravada, volta para "sistema-atual" sem tocar na importação.
   const importWithoutSource =
@@ -82,6 +89,7 @@ export function OnboardingScreen({
   const isWelcomeStep = scenario === "boas-vindas";
   const isSistemaAtual = scenario === "sistema-atual";
   const isQuandoImportar = scenario === "quando-importar";
+  const isServicoNome = scenario === "servico-nome";
   const isAiDemo = scenario === "demonstracao-da-ia";
   const isToneStep = scenario === "tom-da-ia";
   const isWhatsappIntro = scenario === "whatsapp";
@@ -283,7 +291,11 @@ export function OnboardingScreen({
     // "Continuar" aqui; a volta é o chevron do topo.
     null
   ) : isQuandoImportar ? (
+    // Principal primeiro, como no protótipo (quadro 2.2), no DOM e na tela.
     <>
+      <button className="btn btn-primary" disabled={busy} type="submit">
+        {busy ? "Salvando..." : "Importar agora"}
+      </button>
       <button
         className="btn btn-secondary"
         disabled={busy}
@@ -292,9 +304,9 @@ export function OnboardingScreen({
       >
         {busy ? "Salvando..." : "Fazer depois"}
       </button>
-      <button className="btn btn-primary" disabled={busy} type="submit">
-        {busy ? "Salvando..." : "Importar agora"}
-      </button>
+      <p className="onboarding-actions-note">
+        Se fizer depois, a importação fica em Mais › Importação.
+      </p>
     </>
   ) : isActivationTestSucceeded ? (
     // Sucesso: só o CTA do vault. Não há "voltar" para um teste que terminou.
@@ -416,7 +428,9 @@ export function OnboardingScreen({
           ? "Salvando..."
           : isToneStep
             ? `Continuar com ${toneLabel(effectiveTone(draft))}`
-            : "Continuar"}
+            : isServicoNome
+              ? "Salvar serviço"
+              : "Continuar"}
       </button>
     </>
   );

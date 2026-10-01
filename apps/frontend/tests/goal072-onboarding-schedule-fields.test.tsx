@@ -128,7 +128,7 @@ describe("duração: passos de 5 minutos e atalhos (§6.6)", () => {
     const duration = screen.getByLabelText("Duração em minutos");
     await user.clear(duration);
     await user.type(duration, "7");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
 
     expect(duration).toHaveAttribute("aria-invalid", "true");
     expect(duration).toHaveAccessibleDescription(
@@ -145,8 +145,9 @@ describe("preço: máscara e mesmo valor gravado (§6.7)", () => {
     const price = screen.getByLabelText("Preço em reais");
     await user.type(price, "90");
     await user.tab();
-    expect(brl(price)).toBe("R$ 90,00");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    expect(brl(price)).toBe("90,00");
+    expect(screen.getByText("R$")).toHaveAttribute("aria-hidden", "true");
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
 
     await waitFor(() =>
       expect(updateOnboarding).toHaveBeenCalledWith({
@@ -178,7 +179,7 @@ describe("preço: máscara e mesmo valor gravado (§6.7)", () => {
       },
     });
     expect(brl(await screen.findByLabelText("Preço em reais"))).toBe(
-      "R$ 90,00",
+      "90,00",
     );
   });
 
@@ -200,7 +201,7 @@ describe("preço: máscara e mesmo valor gravado (§6.7)", () => {
     const user = await renderStep("servico-nome");
     await user.type(await screen.findByLabelText("Nome do serviço"), "Corte");
     await user.type(screen.getByLabelText("Preço em reais"), "9000");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await user.click(screen.getByRole("button", { name: "Salvar serviço" }));
 
     const price = screen.getByLabelText("Preço em reais");
     await waitFor(() => expect(price).toHaveAttribute("aria-invalid", "true"));
@@ -211,6 +212,15 @@ describe("preço: máscara e mesmo valor gravado (§6.7)", () => {
     );
   });
 });
+
+// O resumo tem o trecho dos dias em <strong>: o texto inteiro vive no <p>.
+function summary(text: string): HTMLElement {
+  return screen.getByText((_, node) =>
+    node?.tagName === "P" &&
+    node.classList.contains("days-summary") &&
+    node.textContent === text,
+  );
+}
 
 describe("dias: sete pílulas e resumo em texto (§6.8)", () => {
   const fullNames = [
@@ -242,24 +252,24 @@ describe("dias: sete pílulas e resumo em texto (§6.8)", () => {
     await screen.findByRole("group", { name: "Dias de atendimento" });
     // Rascunho inicial: segunda a sexta.
     expect(
-      screen.getByText("Segunda a sexta · 5 dias por semana"),
+      summary("Segunda a sexta · 5 dias por semana"),
     ).toBeVisible();
 
     await user.click(screen.getByRole("checkbox", { name: "Sábado" }));
     expect(
-      screen.getByText("Segunda a sábado · 6 dias por semana"),
+      summary("Segunda a sábado · 6 dias por semana"),
     ).toBeVisible();
 
     await user.click(screen.getByRole("checkbox", { name: "Terça" }));
     await user.click(screen.getByRole("checkbox", { name: "Quinta" }));
     await user.click(screen.getByRole("checkbox", { name: "Sábado" }));
     expect(
-      screen.getByText("Segunda, quarta e sexta · 3 dias por semana"),
+      summary("Segunda, quarta e sexta · 3 dias por semana"),
     ).toBeVisible();
 
     await user.click(screen.getByRole("checkbox", { name: "Quarta" }));
     await user.click(screen.getByRole("checkbox", { name: "Sexta" }));
-    expect(screen.getByText("Só segunda · 1 dia por semana")).toBeVisible();
+    expect(summary("Só segunda · 1 dia por semana")).toBeVisible();
   });
 
   test("nenhum dia marcado continua recusado com a mensagem de hoje", async () => {
@@ -284,16 +294,16 @@ describe("horas: intervalo em texto e barra decorativa (§6.9)", () => {
       ...emptyState(),
       availability: availabilityFor([1, 2, 3]),
     });
-    expect(await screen.findByLabelText("Início")).toHaveValue("09:00");
-    expect(screen.getByText("Das 09:00 às 18:00")).toBeVisible();
+    expect(await screen.findByLabelText("Começa")).toHaveValue("09:00");
 
     const bar = document.querySelector(".hours-bar");
     expect(bar).not.toBeNull();
     expect(bar).toHaveAttribute("aria-hidden", "true");
-    expect(bar).toHaveTextContent("0 h");
-    expect(bar).toHaveTextContent("24 h");
+    for (const mark of ["0h", "6h", "12h", "18h", "24h"]) {
+      expect(bar).toHaveTextContent(mark);
+    }
     expect(
-      screen.getByLabelText("Início").getAttribute("type"),
+      screen.getByLabelText("Começa").getAttribute("type"),
     ).toBe("time");
   });
 
@@ -302,10 +312,24 @@ describe("horas: intervalo em texto e barra decorativa (§6.9)", () => {
       ...emptyState(),
       availability: availabilityFor([1, 2, 3]),
     });
-    const end = await screen.findByLabelText("Fim");
+    const end = await screen.findByLabelText("Termina");
     await user.clear(end);
     await user.type(end, "20:00");
-    expect(screen.getByText("Das 09:00 às 20:00")).toBeVisible();
+    const fill = document.querySelector<HTMLElement>(".hours-bar-fill");
+    expect(fill?.style.left).toBe("37.5%");
+    expect(fill?.style.width).toBe("45.83333333333333%");
+  });
+
+  test("a descrição usa o mesmo resumo dos dias da etapa anterior", async () => {
+    await renderStep("horarios", {
+      ...emptyState(),
+      availability: availabilityFor([1, 2, 3]),
+    });
+    expect(
+      await screen.findByText(
+        "Vale para segunda a quarta. Pausas e bloqueios você configura depois.",
+      ),
+    ).toBeVisible();
   });
 
   test("fim antes do início continua recusado e não grava", async () => {
@@ -313,7 +337,7 @@ describe("horas: intervalo em texto e barra decorativa (§6.9)", () => {
       ...emptyState(),
       availability: availabilityFor([1, 2, 3]),
     });
-    const end = await screen.findByLabelText("Fim");
+    const end = await screen.findByLabelText("Termina");
     await user.clear(end);
     await user.type(end, "08:00");
     await user.click(screen.getByRole("button", { name: "Continuar" }));

@@ -253,6 +253,8 @@ describe("ShellConfigProvider + Negócio não excede a profundidade de atualiza�
     const user = userEvent.setup();
     renderScenario("business");
 
+    // Goal088 (N1): o editor abre sob demanda pela linha com `›`.
+    await user.click(await screen.findByRole("button", { name: /^Nome/ }));
     const nameField = await screen.findByLabelText("Nome do negócio");
     await user.clear(nameField);
     await user.type(nameField, "Novo Nome do Negócio");
@@ -321,7 +323,8 @@ describe("ShellConfigProvider + WhatsApp não excede a profundidade de atualiza�
     renderScenario("whatsapp-connected");
 
     await screen.findByRole("heading", { level: 1, name: "WhatsApp" });
-    const back = screen.getByRole("link", { name: "Configurações" });
+    // Goal088 (D-103): o voltar da tela empurrada substituiu o link "Configurações".
+    const back = screen.getByRole("link", { name: "Voltar para configurações" });
     for (let i = 0; i < 4; i += 1) {
       await user.click(back);
     }
@@ -343,7 +346,8 @@ describe("ShellConfigProvider + WhatsApp não excede a profundidade de atualiza�
       renderScenario(scenario);
 
       await screen.findByRole("heading", { level: 1, name: "WhatsApp" });
-      const back = screen.getByRole("link", { name: "Configurações" });
+      // Goal088 (D-103): o voltar da tela empurrada substituiu o link "Configurações".
+    const back = screen.getByRole("link", { name: "Voltar para configurações" });
       for (let i = 0; i < 4; i += 1) {
         await user.click(back);
       }
@@ -361,7 +365,8 @@ describe("ShellConfigProvider + Agenda não excede a profundidade de atualizaç�
     renderScenario("calendar");
 
     await screen.findByRole("heading", { level: 1, name: "Agenda" });
-    const back = screen.getByRole("link", { name: "Configurações" });
+    // Goal088 (D-103): o voltar da tela empurrada substituiu o link "Configurações".
+    const back = screen.getByRole("link", { name: "Voltar para configurações" });
     for (let i = 0; i < 4; i += 1) {
       await user.click(back);
     }
@@ -392,7 +397,8 @@ describe("ShellConfigProvider + Agenda não excede a profundidade de atualizaç�
     renderScenario("calendar-external");
 
     await screen.findByRole("heading", { level: 1, name: "Agenda" });
-    const back = screen.getByRole("link", { name: "Configurações" });
+    // Goal088 (D-103): o voltar da tela empurrada substituiu o link "Configurações".
+    const back = screen.getByRole("link", { name: "Voltar para configurações" });
     for (let i = 0; i < 4; i += 1) {
       await user.click(back);
     }

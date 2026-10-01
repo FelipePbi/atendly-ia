@@ -1,18 +1,37 @@
 "use client";
 
+import clsx from "clsx";
 import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { BffHttpError, type Service, type ServiceList as ServiceListResult } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
+import { ListDetailEmpty, ListDetailLayout } from "@/shared/layout/ListDetail";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
+import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Badge } from "@/shared/ui/Badge";
 import { Dialog } from "@/shared/ui/Dialog";
 
 import { formatServiceLine } from "./serviceFormatting";
 
-export function ServiceList() {
+type ServiceListState = {
+  busy: boolean;
+  changeStatus: () => Promise<void>;
+  error: string | null;
+  feedback: string | null;
+  filtered: Service[];
+  groups: { active: Service[]; inactive: Service[]; review: Service[] };
+  pending: Service | null;
+  query: string;
+  result: ServiceListResult | null;
+  retry: () => void;
+  setPending: (service: Service | null) => void;
+  setQuery: (value: string) => void;
+};
+
+/** `enabled=false` não busca nada: o painel que não cabe na janela nunca consome o BFF. */
+export function useServiceListState(enabled = true): ServiceListState {
   const [result, setResult] = useState<ServiceListResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -22,6 +41,7 @@ export function ServiceList() {
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
+    if (!enabled) return;
     const controller = new AbortController();
     getProductServices()
       .serviceCatalog.list(controller.signal)
@@ -33,7 +53,7 @@ export function ServiceList() {
           );
       });
     return () => controller.abort();
-  }, [reload]);
+  }, [enabled, reload]);
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("pt-BR");
@@ -79,6 +99,30 @@ export function ServiceList() {
     }
   }
 
+  return {
+    busy,
+    changeStatus,
+    error,
+    feedback,
+    filtered,
+    groups,
+    pending,
+    query,
+    result,
+    retry: () => {
+      setError(null);
+      setReload((value) => value + 1);
+    },
+    setPending,
+    setQuery,
+  };
+}
+
+export function ServiceList() {
+  const wide = useWideLayout();
+  const state = useServiceListState();
+  const { error, result } = state;
+
   useShellConfig({
     action: result?.editable
       ? { href: "/servicos/novo", icon: "plus", label: "Novo serviço" }
@@ -88,99 +132,173 @@ export function ServiceList() {
     module: "directory",
     title: "Serviços",
   });
+
+  if (wide) {
+    return (
+      <ListDetailLayout
+        detail={<ListDetailEmpty>Selecione um serviço para editar</ListDetailEmpty>}
+        list={<ServiceListPanelView heading="h1" state={state} />}
+        listLabel="Serviços"
+      />
+    );
+  }
+
+  return (
+    <section className="directory-page">
+      <DirectoryHeader
+        description="Organize o que pode ser agendado, com duração, preço e estado claros."
+        title="Serviços"
+        action={
+          result?.editable ? (
+            <Link className="btn btn-primary" href="/servicos/novo">
+              <Icon name="plus" />
+              <span>Novo serviço</span>
+            </Link>
+          ) : null
+        }
+      />
+      <ServiceListContent state={state} />
+    </section>
+  );
+}
+
+/**
+ * Lista em painel para as rotas de edição e criação: busca os próprios dados
+ * e nunca chama `useShellConfig` (a tela que a hospeda já declarou a casca).
+ */
+export function ServiceListPanel({ openId }: { openId?: string }) {
+  const state = useServiceListState();
+  return <ServiceListPanelView heading="h2" openId={openId} state={state} />;
+}
+
+function ServiceListPanelView({
+  heading: Heading,
+  openId,
+  state,
+}: {
+  heading: "h1" | "h2";
+  openId?: string;
+  state: ServiceListState;
+}) {
+  const { result } = state;
+  return (
+    <div className="service-panel">
+      <div className="service-panel-header">
+        <Heading>Serviços</Heading>
+        {result?.editable && (
+          <Link
+            aria-label="Novo serviço"
+            className="service-panel-add"
+            href="/servicos/novo"
+          >
+            <Icon name="plus" />
+          </Link>
+        )}
+      </div>
+      <ServiceListContent openId={openId} state={state} />
+    </div>
+  );
+}
+
+function ServiceListContent({
+  openId,
+  state,
+}: {
+  openId?: string;
+  state: ServiceListState;
+}) {
+  const {
+    busy,
+    changeStatus,
+    error,
+    feedback,
+    filtered,
+    groups,
+    pending,
+    query,
+    result,
+    setPending,
+    setQuery,
+  } = state;
   return (
     <>
-      <section className="directory-page">
-        <DirectoryHeader
-          description="Organize o que pode ser agendado, com duração, preço e estado claros."
-          title="Serviços"
-          action={
-            result?.editable ? (
-              <Link className="btn btn-primary" href="/servicos/novo">
-                <Icon name="plus" />
-                <span>Novo serviço</span>
-              </Link>
-            ) : null
-          }
+      {feedback && (
+        <p className="directory-retry-status" role="status">
+          {feedback}
+        </p>
+      )}
+      {!result && !error ? (
+        <DirectoryLoading />
+      ) : error ? (
+        <DirectoryState
+          actionLabel="Carregar novamente"
+          description={error}
+          error
+          onAction={state.retry}
+          title="Não foi possível carregar serviços"
         />
-        {feedback && (
-          <p className="directory-retry-status" role="status">
-            {feedback}
-          </p>
-        )}
-        {!result && !error ? (
-          <DirectoryLoading />
-        ) : error ? (
-          <DirectoryState
-            actionLabel="Carregar novamente"
-            description={error}
-            error
-            onAction={() => {
-              setError(null);
-              setReload((value) => value + 1);
-            }}
-            title="Não foi possível carregar serviços"
-          />
-        ) : result && result.items.length === 0 ? (
-          <DirectoryState
-            actionHref={result.editable ? "/servicos/novo" : undefined}
-            actionLabel={result.editable ? "Cadastrar primeiro serviço" : undefined}
-            description="A IA só oferece serviços ativos com duração e preço ou valor sob consulta."
-            title="Cadastre seu primeiro serviço"
-          />
-        ) : (
-          <>
-            <section className="directory-toolbar" aria-label="Busca">
-              <label className="directory-search">
-                <span className="sr-only">Buscar</span>
-                <Icon name="search" />
-                <input
-                  className="input"
-                  type="search"
-                  placeholder="Buscar serviço"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-              </label>
-            </section>
-            <section className="directory-list-surface">
-              <div className="directory-list-meta">
-                <strong>Serviços cadastrados</strong>
-                <span>{summaryLine(groups)}</span>
-              </div>
-              {!result?.editable && (
-                <p className="service-list-readonly-note">
-                  Serviços não podem ser editados aqui.
-                </p>
-              )}
-              <ServiceGroup
-                editable={Boolean(result?.editable)}
-                heading="Precisa de revisão"
-                services={groups.review}
-                tone="warning"
-                onToggleActive={setPending}
+      ) : result && result.items.length === 0 ? (
+        <DirectoryState
+          actionHref={result.editable ? "/servicos/novo" : undefined}
+          actionLabel={result.editable ? "Cadastrar primeiro serviço" : undefined}
+          description="A IA só oferece serviços ativos com duração e preço ou valor sob consulta."
+          title="Cadastre seu primeiro serviço"
+        />
+      ) : (
+        <>
+          <section className="directory-toolbar" aria-label="Busca">
+            <label className="directory-search">
+              <span className="sr-only">Buscar</span>
+              <Icon name="search" />
+              <input
+                className="input"
+                type="search"
+                placeholder="Buscar serviço"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
               />
-              <ServiceGroup
-                editable={Boolean(result?.editable)}
-                heading="Ativos"
-                services={groups.active}
-                onToggleActive={setPending}
-              />
-              <ServiceGroup
-                editable={Boolean(result?.editable)}
-                heading="Inativos"
-                services={groups.inactive}
-                onToggleActive={setPending}
-              />
-              {filtered.length === 0 && (
-                <p className="directory-no-results">
-                  Nenhum serviço corresponde à busca.
-                </p>
-              )}
-            </section>
-          </>
-        )}
-      </section>
+            </label>
+          </section>
+          <section className="directory-list-surface">
+            <div className="directory-list-meta">
+              <strong>Serviços cadastrados</strong>
+              <span>{summaryLine(groups)}</span>
+            </div>
+            {!result?.editable && (
+              <p className="service-list-readonly-note">
+                Serviços não podem ser editados aqui.
+              </p>
+            )}
+            <ServiceGroup
+              editable={Boolean(result?.editable)}
+              heading="Precisa de revisão"
+              openId={openId}
+              services={groups.review}
+              tone="warning"
+              onToggleActive={setPending}
+            />
+            <ServiceGroup
+              editable={Boolean(result?.editable)}
+              heading="Ativos"
+              openId={openId}
+              services={groups.active}
+              onToggleActive={setPending}
+            />
+            <ServiceGroup
+              editable={Boolean(result?.editable)}
+              heading="Inativos"
+              openId={openId}
+              services={groups.inactive}
+              onToggleActive={setPending}
+            />
+            {filtered.length === 0 && (
+              <p className="directory-no-results">
+                Nenhum serviço corresponde à busca.
+              </p>
+            )}
+          </section>
+        </>
+      )}
       <Dialog
         eyebrow="Atenção"
         onClose={() => !busy && setPending(null)}
@@ -354,12 +472,14 @@ function ServiceGroup({
   editable,
   heading,
   onToggleActive,
+  openId,
   services,
   tone,
 }: {
   editable: boolean;
   heading: string;
   onToggleActive: (service: Service) => void;
+  openId?: string;
   services: Service[];
   tone?: "warning";
 }) {
@@ -371,7 +491,10 @@ function ServiceGroup({
       </h2>
       <ul className="service-group-list">
         {services.map((service) => (
-          <li className="directory-row service-row" key={service.id}>
+          <li
+            className={clsx("directory-row service-row", service.id === openId && "is-open")}
+            key={service.id}
+          >
             <span
               aria-hidden="true"
               className="service-row-accent"
@@ -379,6 +502,7 @@ function ServiceGroup({
             />
             {editable && (
               <Link
+                aria-current={service.id === openId ? "page" : undefined}
                 aria-label={`Editar ${service.name}`}
                 className="service-row-link"
                 href={`/servicos/editar?id=${encodeURIComponent(service.id)}`}

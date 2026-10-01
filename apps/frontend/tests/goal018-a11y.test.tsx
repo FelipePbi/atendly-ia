@@ -15,6 +15,7 @@
  */
 
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, test, vi } from "vitest";
 
 import type { OnboardingState, SettingsState } from "@/data";
@@ -223,6 +224,10 @@ describe("configurações/negocio: BusinessSettings", () => {
         <ProductSettingsScreen scenario="business" />
       </ShellConfigProvider>,
     );
+    // Goal088 (N1): as linhas primeiro; o editor abre sob demanda pela linha com `›`.
+    const row = await screen.findByRole("button", { name: /^Nome/ });
+    await expectNoA11yViolations(container);
+    await userEvent.click(row);
     await screen.findByLabelText("Nome do negócio");
     await expectNoA11yViolations(container);
   });
@@ -240,6 +245,7 @@ describe("configurações/negocio: BusinessSettings", () => {
         <ProductSettingsScreen scenario="business" />
       </ShellConfigProvider>,
     );
+    await userEvent.click(await screen.findByRole("button", { name: /^Endereço/ }));
     await screen.findByLabelText("Endereço do seu espaço");
     await expectNoA11yViolations(container);
   });

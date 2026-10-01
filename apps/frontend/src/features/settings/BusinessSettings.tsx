@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, type Ref, useEffect, useRef, useState } from "react";
 
 import type { BusinessModality, SettingsState } from "@/data";
 import {
@@ -8,16 +8,19 @@ import {
   FREQUENT_BUSINESS_SEGMENTS,
 } from "@/features/onboarding/blocks/business";
 import { Icon } from "@/shared/icons/Icon";
-import { getProductServices, useProductRuntime } from "@/shared/runtime/ProductRuntime";
+import { PushedBar } from "@/shared/layout/PushedBar";
+import {
+  getProductServices,
+  useProductRuntime,
+} from "@/shared/runtime/ProductRuntime";
 import { Dialog } from "@/shared/ui/Dialog";
 
-import { SaveActions } from "./shared/fields";
-import { SettingsPage } from "./shared/SettingsPage";
-
 export function BusinessSettings({
+  headingLevel = "h1",
   settings,
   onSaved,
 }: {
+  headingLevel?: "h1" | "h2";
   settings: SettingsState;
   onSaved: (state: SettingsState) => void;
 }) {
@@ -38,6 +41,37 @@ export function BusinessSettings({
   );
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // N1 não tem formulário permanente: a linha com `›` abre o editor na própria
+  // tela empurrada, e "Cancelar" volta às linhas sem salvar nada.
+  const [editing, setEditing] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const summaryRef = useRef<HTMLDivElement>(null);
+  const returnFocusRef = useRef(false);
+  useEffect(() => {
+    if (editing) {
+      nameInputRef.current?.focus();
+      return;
+    }
+    if (!returnFocusRef.current) return;
+    returnFocusRef.current = false;
+    summaryRef.current
+      ?.querySelector<HTMLButtonElement>("button.business-row")
+      ?.focus();
+  }, [editing]);
+  function cancelEditing() {
+    setName(settings.business?.name ?? "");
+    setCategory(settings.business?.category ?? "");
+    setCustomSegment(
+      !!settings.business?.category &&
+        !FREQUENT_BUSINESS_SEGMENTS.includes(settings.business.category),
+    );
+    setModalities(settings.business?.modalities ?? []);
+    setAddress(settings.business?.address ?? "");
+    setTimezone(settings.business?.timezone ?? "America/Sao_Paulo");
+    setMessage(null);
+    returnFocusRef.current = true;
+    setEditing(false);
+  }
   const [timezoneConfirmationOpen, setTimezoneConfirmationOpen] =
     useState(false);
   const requiresAddress = modalities.includes("ON_SITE");
@@ -82,154 +116,188 @@ export function BusinessSettings({
     }
   }
   return (
-    <SettingsPage
-      title="Negócio"
-      description="Dados usados para identificar sua operação."
-    >
-      <form className="settings-panel" onSubmit={(event) => void save(event)}>
-        <div className="settings-form-grid">
-          <label className="field">
-            <span className="label">Nome do negócio</span>
-            <input
-              className="input"
-              minLength={2}
-              required
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </label>
-          <div className="field is-wide">
-            <span className="label">Qual é o seu segmento?</span>
-            <div className="chip-row">
-              {FREQUENT_BUSINESS_SEGMENTS.map((segment) => (
-                <button
-                  className={`chip${!customSegment && category === segment ? " is-active" : ""}`}
-                  key={segment}
-                  type="button"
-                  onClick={() => {
-                    setCustomSegment(false);
-                    setCategory(segment);
-                  }}
-                >
-                  {segment}
-                </button>
-              ))}
-              <button
-                className={`chip${customSegment ? " is-active" : ""}`}
-                type="button"
-                onClick={() => {
-                  setCustomSegment(true);
-                  setCategory("");
-                }}
-              >
-                Outro
-              </button>
-            </div>
-            {customSegment && (
+    <section className="settings-page business-screen">
+      <PushedBar
+        backHref="/configuracoes"
+        backLabel="Voltar para configurações"
+        headingLevel={headingLevel}
+        hideBackWide
+        title="Negócio"
+      />
+      {!editing && (
+        <BusinessSummary
+          ref={summaryRef}
+          settings={settings}
+          onEdit={() => setEditing(true)}
+        />
+      )}
+      {editing && (
+        <form
+          aria-label="Editar dados do negócio"
+          className="business-form"
+          id="business-form"
+          onSubmit={(event) => void save(event)}
+        >
+          <div className="settings-form-grid">
+            <label className="field">
+              <span className="label">Nome do negócio</span>
               <input
                 className="input"
+                minLength={2}
+                ref={nameInputRef}
                 required
-                placeholder="Qual é o seu segmento?"
-                value={category}
-                onChange={(event) => setCategory(event.target.value)}
-              />
-            )}
-          </div>
-          <label className="field">
-            <span className="label">Idioma</span>
-            <span className="input-wrap">
-              <select className="select" disabled value="pt-BR">
-                <option value="pt-BR">Português (Brasil)</option>
-              </select>
-              <span className="select-icon">
-                <Icon name="chevron-down" />
-              </span>
-            </span>
-          </label>
-          <label className="field">
-            <span className="label">Moeda</span>
-            <span className="input-wrap">
-              <select className="select" disabled value="BRL">
-                <option value="BRL">Real brasileiro (BRL)</option>
-              </select>
-              <span className="select-icon">
-                <Icon name="chevron-down" />
-              </span>
-            </span>
-          </label>
-          <label className="field is-wide">
-            <span className="label">Fuso horário</span>
-            <span className="input-wrap">
-              <select
-                className="select"
-                value={timezone}
-                onChange={(event) => setTimezone(event.target.value)}
-              >
-                <option value="America/Sao_Paulo">Brasília (GMT−3)</option>
-                <option value="America/Manaus">Manaus (GMT−4)</option>
-                <option value="America/Rio_Branco">Rio Branco (GMT−5)</option>
-              </select>
-              <span className="select-icon">
-                <Icon name="chevron-down" />
-              </span>
-            </span>
-            <span className="field-help">
-              A mudança exige revisão porque altera horários futuros.
-            </span>
-          </label>
-          <div className="field is-wide">
-            <span className="label">Modalidade de atendimento</span>
-            <div className="choice-grid">
-              {BUSINESS_MODALITY_OPTIONS.map((option) => {
-                const selected = modalities.includes(option.value);
-                return (
-                  <label
-                    className={`choice-card${selected ? " is-selected" : ""}`}
-                    key={option.value}
-                  >
-                    <input
-                      checked={selected}
-                      className="sr-only"
-                      type="checkbox"
-                      onChange={(event) =>
-                        setModalities((current) =>
-                          event.target.checked
-                            ? [...current, option.value]
-                            : current.filter((item) => item !== option.value),
-                        )
-                      }
-                    />
-                    <h3>{option.title}</h3>
-                    <p>{option.copy}</p>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-          {requiresAddress && (
-            <label className="field is-wide">
-              <span className="label">Endereço do seu espaço</span>
-              <input
-                className="input"
-                maxLength={300}
-                required
-                value={address}
-                onChange={(event) => setAddress(event.target.value)}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
               />
             </label>
-          )}
-        </div>
-        {pendingProjection && (
-          <div className="onboarding-note is-important">
-            <Icon name="info" />
-            <span>
-              Os dados do negócio foram salvos. A IA ainda está atualizando o
-              contexto com essa mudança.
-            </span>
+            <div className="field is-wide">
+              <span className="label">Qual é o seu segmento?</span>
+              <div className="chip-row">
+                {FREQUENT_BUSINESS_SEGMENTS.map((segment) => (
+                  <button
+                    className={`chip${!customSegment && category === segment ? " is-active" : ""}`}
+                    key={segment}
+                    type="button"
+                    onClick={() => {
+                      setCustomSegment(false);
+                      setCategory(segment);
+                    }}
+                  >
+                    {segment}
+                  </button>
+                ))}
+                <button
+                  className={`chip${customSegment ? " is-active" : ""}`}
+                  type="button"
+                  onClick={() => {
+                    setCustomSegment(true);
+                    setCategory("");
+                  }}
+                >
+                  Outro
+                </button>
+              </div>
+              {customSegment && (
+                <input
+                  className="input"
+                  required
+                  placeholder="Qual é o seu segmento?"
+                  value={category}
+                  onChange={(event) => setCategory(event.target.value)}
+                />
+              )}
+            </div>
+            <label className="field">
+              <span className="label">Idioma</span>
+              <span className="input-wrap">
+                <select className="select" disabled value="pt-BR">
+                  <option value="pt-BR">Português (Brasil)</option>
+                </select>
+                <span className="select-icon">
+                  <Icon name="chevron-down" />
+                </span>
+              </span>
+            </label>
+            <label className="field">
+              <span className="label">Moeda</span>
+              <span className="input-wrap">
+                <select className="select" disabled value="BRL">
+                  <option value="BRL">Real brasileiro (BRL)</option>
+                </select>
+                <span className="select-icon">
+                  <Icon name="chevron-down" />
+                </span>
+              </span>
+            </label>
+            <label className="field is-wide">
+              <span className="label">Fuso horário</span>
+              <span className="input-wrap">
+                <select
+                  className="select"
+                  value={timezone}
+                  onChange={(event) => setTimezone(event.target.value)}
+                >
+                  <option value="America/Sao_Paulo">Brasília (GMT−3)</option>
+                  <option value="America/Manaus">Manaus (GMT−4)</option>
+                  <option value="America/Rio_Branco">Rio Branco (GMT−5)</option>
+                </select>
+                <span className="select-icon">
+                  <Icon name="chevron-down" />
+                </span>
+              </span>
+              <span className="field-help">
+                A mudança exige revisão porque altera horários futuros.
+              </span>
+            </label>
+            <div className="field is-wide">
+              <span className="label">Modalidade de atendimento</span>
+              <div className="choice-grid">
+                {BUSINESS_MODALITY_OPTIONS.map((option) => {
+                  const selected = modalities.includes(option.value);
+                  return (
+                    <label
+                      className={`choice-card${selected ? " is-selected" : ""}`}
+                      key={option.value}
+                    >
+                      <input
+                        checked={selected}
+                        className="sr-only"
+                        type="checkbox"
+                        onChange={(event) =>
+                          setModalities((current) =>
+                            event.target.checked
+                              ? [...current, option.value]
+                              : current.filter((item) => item !== option.value),
+                          )
+                        }
+                      />
+                      <h3>{option.title}</h3>
+                      <p>{option.copy}</p>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            {requiresAddress && (
+              <label className="field is-wide">
+                <span className="label">Endereço do seu espaço</span>
+                <input
+                  className="input"
+                  maxLength={300}
+                  required
+                  value={address}
+                  onChange={(event) => setAddress(event.target.value)}
+                />
+              </label>
+            )}
           </div>
-        )}
-        <SaveActions busy={busy} message={message} />
-      </form>
+          {pendingProjection && (
+            <div className="onboarding-note is-important">
+              <Icon name="info" />
+              <span>
+                Os dados do negócio foram salvos. A IA ainda está atualizando o
+                contexto com essa mudança.
+              </span>
+            </div>
+          )}
+          <div className="settings-form-actions">
+            <span className="settings-save-note" role="status">
+              {message}
+            </span>
+            <button
+              className="btn btn-secondary"
+              disabled={busy}
+              type="button"
+              onClick={cancelEditing}
+            >
+              Cancelar
+            </button>
+            <button className="btn btn-primary" disabled={busy} type="submit">
+              {busy ? "Salvando..." : "Salvar alterações"}
+            </button>
+          </div>
+        </form>
+      )}
       <Dialog
         eyebrow="Revisão necessária"
         onClose={() => setTimezoneConfirmationOpen(false)}
@@ -259,6 +327,113 @@ export function BusinessSettings({
           </button>
         </div>
       </Dialog>
-    </SettingsPage>
+    </section>
+  );
+}
+
+type SummaryRow = {
+  /** A linha abre o editor dos dados do negócio; sem isso ela é só leitura. */
+  editable?: boolean;
+  label: string;
+  value: string | null;
+};
+
+const NOT_INFORMED = "Não informado";
+
+function BusinessSummary({
+  onEdit,
+  ref,
+  settings,
+}: {
+  onEdit: () => void;
+  ref: Ref<HTMLDivElement>;
+  settings: SettingsState;
+}) {
+  const business = settings.business;
+  const modalities = (business?.modalities ?? [])
+    .map(
+      (value) =>
+        BUSINESS_MODALITY_OPTIONS.find((option) => option.value === value)
+          ?.title,
+    )
+    .filter((title): title is string => Boolean(title));
+  const groups: Array<{ rows: SummaryRow[]; title: string }> = [
+    {
+      title: "Identidade",
+      rows: [
+        { editable: true, label: "Nome", value: business?.name ?? null },
+        {
+          editable: true,
+          label: "Segmento",
+          value: business?.category ?? null,
+        },
+        {
+          editable: true,
+          label: "Onde você atende",
+          value: modalities.length > 0 ? modalities.join(", ") : null,
+        },
+      ],
+    },
+    {
+      title: "Endereço e chegada",
+      rows: [
+        { editable: true, label: "Endereço", value: business?.address ?? null },
+        { label: "Como chegar", value: null },
+        { label: "Estacionamento", value: null },
+        { label: "Acessibilidade", value: null },
+      ],
+    },
+    {
+      title: "Pagamento",
+      rows: [{ label: "Formas e parcelamento", value: null }],
+    },
+    { title: "Presença", rows: [{ label: "Instagram", value: null }] },
+    {
+      title: "O que a IA sabe responder",
+      rows: [
+        { label: "Perguntas frequentes", value: null },
+        { label: "Outras informações", value: null },
+      ],
+    },
+  ];
+  return (
+    <div className="business-summary" ref={ref}>
+      {groups.map((group) => (
+        <section className="business-group" key={group.title}>
+          <h2 className="business-group-title">{group.title}</h2>
+          {group.rows.map((row) => {
+            const content = (
+              <>
+                <span className="business-row-label">{row.label}</span>
+                <span
+                  className={
+                    row.value
+                      ? "business-row-value"
+                      : "business-row-value is-empty"
+                  }
+                >
+                  {row.value ?? NOT_INFORMED}
+                  {row.editable && <Icon name="chevron-right" />}
+                </span>
+              </>
+            );
+            return row.editable ? (
+              <button
+                className="business-row"
+                key={row.label}
+                type="button"
+                onClick={onEdit}
+              >
+                {content}
+              </button>
+            ) : (
+              <div className="business-row" key={row.label}>
+                {content}
+              </div>
+            );
+          })}
+        </section>
+      ))}
+    </div>
   );
 }

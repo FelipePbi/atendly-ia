@@ -1,5 +1,6 @@
 "use client";
 
+import clsx from "clsx";
 import Link from "next/link";
 
 import type { SettingsState } from "@/data";
@@ -23,7 +24,7 @@ type HubCard = {
  * bloco que vivia dentro de Agenda) saiu do repositório junto desta troca,
  * porque perdeu o único consumidor que tinha.
  */
-export function SettingsHub({ settings }: { settings: SettingsState }) {
+function hubCards(settings: SettingsState): HubCard[] {
   const cards: HubCard[] = [
     {
       href: "/configuracoes/negocio",
@@ -77,9 +78,14 @@ export function SettingsHub({ settings }: { settings: SettingsState }) {
       copy: "Senha e acesso",
     },
   );
+  return cards;
+}
 
+export function SettingsHub({ settings }: { settings: SettingsState }) {
+  const cards = hubCards(settings);
   return (
     <SettingsPage
+      root
       title="Configurações"
       description="Gerencie os dados e conexões usados pela operação."
     >
@@ -98,5 +104,49 @@ export function SettingsHub({ settings }: { settings: SettingsState }) {
         ))}
       </div>
     </SettingsPage>
+  );
+}
+
+/**
+ * Hub em painel (de 1024 px em diante): os mesmos grupos ao lado da seção
+ * aberta, com o item aberto marcado. Não chama `useShellConfig`.
+ */
+export function SettingsHubPanel({
+  heading: Heading,
+  openHref,
+  settings,
+}: {
+  heading: "h1" | "h2";
+  openHref: string;
+  settings: SettingsState;
+}) {
+  return (
+    <div className="settings-hub-panel">
+      <div className="settings-hub-panel-header">
+        <Heading>Configurações</Heading>
+      </div>
+      <div className="settings-hub-grid">
+        {hubCards(settings).map((card) => {
+          const open = card.href === openHref;
+          return (
+            <Link
+              aria-current={open ? "page" : undefined}
+              className={clsx("settings-hub-card", open && "is-open")}
+              href={card.href}
+              key={card.href}
+            >
+              <span className="settings-hub-icon">
+                <Icon name={card.icon} />
+              </span>
+              <span className="settings-hub-copy">
+                <strong>{card.title}</strong>
+                <span>{card.copy}</span>
+              </span>
+              <Icon name="chevron-right" />
+            </Link>
+          );
+        })}
+      </div>
+    </div>
   );
 }

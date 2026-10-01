@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 
 import type { SettingsState } from "@/data";
+import { ListDetailLayout } from "@/shared/layout/ListDetail";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
+import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
 import { AccountSettings } from "./AccountSettings";
@@ -12,7 +14,7 @@ import { AvailabilitySettings } from "./AvailabilitySettings";
 import { BusinessSettings } from "./BusinessSettings";
 import { CalendarSettings } from "./CalendarSettings";
 import { ConversationsSettings } from "./ConversationsSettings";
-import { SettingsHub } from "./SettingsHub";
+import { SettingsHub, SettingsHubPanel } from "./SettingsHub";
 import { SettingsMessage } from "./shared/SettingsPage";
 import type { SettingsScenario } from "./types";
 import { WhatsAppSettings } from "./WhatsAppSettings";
@@ -48,6 +50,7 @@ export function ProductSettingsScreen({
     active: "configuracoes",
     loading: !settings && !error,
     module: "settings",
+    pushed: !isHubScenario(scenario),
     title: "Configurações",
   });
 
@@ -78,6 +81,32 @@ export function ProductSettingsScreen({
   );
 }
 
+/** Sem seção própria, o cenário é o hub (como antes, inclusive o padrão). */
+function isHubScenario(scenario: SettingsScenario): boolean {
+  return !(
+    scenario === "business" ||
+    scenario === "ai" ||
+    scenario.startsWith("whatsapp") ||
+    scenario === "calendar" ||
+    scenario === "calendar-external" ||
+    scenario === "availability" ||
+    scenario === "conversations" ||
+    scenario === "account"
+  );
+}
+
+/** Rota da seção aberta, marcada na lista de Configurações em painel. */
+function openHrefFor(scenario: SettingsScenario): string {
+  if (scenario === "ai") return "/configuracoes/ia";
+  if (scenario.startsWith("whatsapp")) return "/configuracoes/whatsapp";
+  if (scenario === "calendar" || scenario === "calendar-external")
+    return "/configuracoes/agenda";
+  if (scenario === "availability") return "/configuracoes/disponibilidade";
+  if (scenario === "conversations") return "/configuracoes/conversas";
+  if (scenario === "account") return "/configuracoes/conta";
+  return "/configuracoes/negocio";
+}
+
 function SettingsContent({
   scenario,
   settings,
@@ -89,8 +118,62 @@ function SettingsContent({
   setSettings: (state: SettingsState) => void;
   setWhatsappConnected: (connected: boolean) => void;
 }) {
-  if (scenario === "business")
-    return <BusinessSettings settings={settings} onSaved={setSettings} />;
+  const wide = useWideLayout();
+  const hub = isHubScenario(scenario);
+  if (!wide) {
+    if (hub) return <SettingsHub settings={settings} />;
+    return (
+      <SettingsSection
+        scenario={scenario}
+        settings={settings}
+        setSettings={setSettings}
+        setWhatsappConnected={setWhatsappConnected}
+      />
+    );
+  }
+  // De 1024 px em diante, a lista de Configurações fica à esquerda e a seção
+  // aberta à direita; no hub, a seção aberta é o Negócio (M1).
+  return (
+    <ListDetailLayout
+      detail={
+        hub ? (
+          <BusinessSettings
+            headingLevel="h2"
+            settings={settings}
+            onSaved={setSettings}
+          />
+        ) : (
+          <SettingsSection
+            scenario={scenario}
+            settings={settings}
+            setSettings={setSettings}
+            setWhatsappConnected={setWhatsappConnected}
+          />
+        )
+      }
+      list={
+        <SettingsHubPanel
+          heading={hub ? "h1" : "h2"}
+          openHref={openHrefFor(scenario)}
+          settings={settings}
+        />
+      }
+      listLabel="Configurações"
+    />
+  );
+}
+
+function SettingsSection({
+  scenario,
+  settings,
+  setSettings,
+  setWhatsappConnected,
+}: {
+  scenario: SettingsScenario;
+  settings: SettingsState;
+  setSettings: (state: SettingsState) => void;
+  setWhatsappConnected: (connected: boolean) => void;
+}) {
   if (scenario === "ai")
     return <AiSettings settings={settings} onSaved={setSettings} />;
   if (scenario.startsWith("whatsapp"))
@@ -101,5 +184,5 @@ function SettingsContent({
     return <AvailabilitySettings settings={settings} onSaved={setSettings} />;
   if (scenario === "conversations") return <ConversationsSettings />;
   if (scenario === "account") return <AccountSettings />;
-  return <SettingsHub settings={settings} />;
+  return <BusinessSettings settings={settings} onSaved={setSettings} />;
 }

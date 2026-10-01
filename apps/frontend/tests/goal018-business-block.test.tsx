@@ -102,6 +102,8 @@ describe("configurações/negocio: BusinessSettings dentro de ProductSettingsScr
         <ProductSettingsScreen scenario="business" />
       </ShellConfigProvider>,
     );
+    // Goal088 (N1): o editor abre sob demanda pela linha com `›`.
+    await user.click(await screen.findByRole("button", { name: /^Nome/ }));
     await screen.findByLabelText("Nome do negócio");
     return user;
   }

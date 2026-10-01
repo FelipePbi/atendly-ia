@@ -35,6 +35,7 @@ import {
   SIDEBAR_DESTINATIONS,
 } from "./navigation";
 import type { ShellConfig } from "./ShellConfig";
+import { useWideLayout } from "./useWideLayout";
 
 export type { PlatformSection, ShellContextualAction, ShellModule } from "./navigation";
 export { SHELL_MODULES } from "./navigation";
@@ -68,10 +69,14 @@ function AppShellChrome({
   children,
   mainClassName,
   module,
-  showBottomNav = true,
+  pushed = false,
+  showBottomNav: showBottomNavConfig = true,
   title,
   whatsappInBand = false,
 }: AppShellProps) {
+  const wide = useWideLayout();
+  const hideTabBar = pushed && !wide;
+  const showBottomNav = showBottomNavConfig && !hideTabBar;
   const router = useRouter();
   const pathname = usePathname();
   const { session, setUnauthenticated } = useProductRuntime();
@@ -143,6 +148,7 @@ function AppShellChrome({
           "app-frame",
           mainClassName === "conversation-detail-main" &&
             "conversation-detail-shell",
+          hideTabBar && "is-pushed",
         )}
       >
         <aside className="sidebar" aria-label="Navegação da aplicação">

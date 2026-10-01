@@ -1758,3 +1758,302 @@ for (const routeName of ["servicos", "clientes"] as const) {
     });
   });
 }
+
+/**
+ * List and detail (Goal088, D-103). The three detail routes and their lists:
+ * G-4 below 1024px, where the detail is a pushed screen; G-5 from 1024px, where
+ * the list and the detail share the window. Each test reaches the detail the
+ * way a person does: a real click on the seeded row. Each says what the other
+ * band must not show instead of skipping, and costs no request beyond the two
+ * screens it walks through.
+ */
+const WIDE_LAYOUT_BREAKPOINT = 1024;
+const LIST_COLUMN_WIDTH = 380;
+const LIST_COLUMN_TOLERANCE = 1;
+
+type ListDetailCase = {
+  /** The list route the test starts from and the detail it must reach. */
+  list: AuthenticatedRoute["name"];
+  detailPath: RegExp;
+  row: (page: Page) => Locator;
+  /** The text the open item in the list carries (visible text or accessible name). */
+  openItem: string;
+  backHref: string;
+  /** A rendered proof that the detail, not only its URL, arrived. */
+  detailLoaded: (page: Page, what: string) => Promise<void>;
+};
+
+const LIST_DETAIL_CASES: ListDetailCase[] = [
+  {
+    list: "clientes",
+    detailPath: /^\/clientes\/detalhes$/u,
+    row: (page) => page
+      .locator('a[href^="/clientes/detalhes"]', { hasText: SEED.customerName })
+      .first(),
+    openItem: SEED.customerName,
+    backHref: "/clientes",
+    detailLoaded: async (page, what) => {
+      await expect(
+        page.getByRole("heading", { level: 1, name: SEED.customerName }),
+        `${what}: the customer profile did not render its heading within ${CONTENT_TIMEOUT_MS}ms.`,
+      ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+    },
+  },
+  {
+    list: "servicos",
+    detailPath: /^\/servicos\/editar$/u,
+    row: (page) => page.getByRole("link", { name: `Editar ${SEED.serviceName}` }),
+    openItem: SEED.serviceName,
+    backHref: "/servicos",
+    detailLoaded: async (page, what) => {
+      await expect(
+        page.locator('form input[name="name"]'),
+        `${what}: the edit form did not load the service within ${CONTENT_TIMEOUT_MS}ms.`,
+      ).toHaveValue(SEED.serviceName, { timeout: CONTENT_TIMEOUT_MS });
+    },
+  },
+  {
+    list: "configuracoes",
+    detailPath: /^\/configuracoes\/negocio$/u,
+    row: (page) => page.locator('a[href="/configuracoes/negocio"]').first(),
+    openItem: "Negócio",
+    backHref: "/configuracoes",
+    detailLoaded: async (page, what) => {
+      await expect(
+        page.getByRole("heading", { level: 1, name: "Negócio", exact: true }),
+        `${what}: the business screen did not render its heading within ${CONTENT_TIMEOUT_MS}ms.`,
+      ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+    },
+  },
+];
+
+type PushedScreenMeasure = {
+  bottomNavRendered: boolean;
+  fabRendered: boolean;
+  frameIsPushed: boolean;
+  listDetailRendered: boolean;
+  innerHeight: number;
+  /** The "Voltar para …" link of the pushed bar, with its box. */
+  back: { href: string | null; width: number; height: number } | null;
+  /** A sticky or fixed block in the lower half of `main` (S4's save bar), when there is one. */
+  stickyCta: { element: string; top: number; bottom: number } | null;
+  /** The last focusable element of `main` outside the sticky block, after scrolling to the end. */
+  lastFocusable: { element: string; bottom: number } | null;
+};
+
+async function measurePushedScreen(page: Page): Promise<PushedScreenMeasure> {
+  return page.evaluate(() => {
+    const isRendered = (el: Element): boolean => {
+      const style = getComputedStyle(el);
+      const box = el.getBoundingClientRect();
+      return style.display !== "none"
+        && style.visibility !== "hidden"
+        && box.width > 0
+        && box.height > 0;
+    };
+    const describe = (el: Element): string => {
+      const classes = typeof el.className === "string" && el.className.trim() !== ""
+        ? `.${el.className.trim().split(/\s+/u).join(".")}`
+        : "";
+      return `${el.tagName.toLowerCase()}${classes}`;
+    };
+
+    const main = document.querySelector<HTMLElement>("main#main-content");
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" });
+    if (main) main.scrollTo({ top: main.scrollHeight, behavior: "instant" });
+
+    const sticky = main
+      ? Array.from(main.querySelectorAll("*")).find((el) => {
+        const position = getComputedStyle(el).position;
+        return (position === "sticky" || position === "fixed")
+          && isRendered(el)
+          && el.getBoundingClientRect().top > window.innerHeight / 2
+          && el.querySelector("button, a[href]") !== null;
+      })
+      : undefined;
+    const focusable = main
+      ? Array.from(
+        main.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled]), '
+            + 'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => isRendered(el) && !(sticky && sticky.contains(el)))
+      : [];
+    const last = focusable.at(-1);
+    const back = Array.from(document.querySelectorAll("a[href]")).find(
+      (el) => isRendered(el) && /^Voltar para /u.test(el.getAttribute("aria-label") ?? ""),
+    );
+    const backBox = back?.getBoundingClientRect();
+    const stickyBox = sticky?.getBoundingClientRect();
+    return {
+      bottomNavRendered: Array.from(document.querySelectorAll('nav[class$="-bottom-nav"]')).some(isRendered),
+      fabRendered: Array.from(document.querySelectorAll("a.fab")).some(isRendered),
+      frameIsPushed: document.querySelector(".app-frame.is-pushed") !== null,
+      listDetailRendered: document.querySelector(".list-detail") !== null,
+      innerHeight: window.innerHeight,
+      back: back && backBox
+        ? { href: back.getAttribute("href"), width: backBox.width, height: backBox.height }
+        : null,
+      stickyCta: sticky && stickyBox
+        ? { element: describe(sticky), top: stickyBox.top, bottom: stickyBox.bottom }
+        : null,
+      lastFocusable: last ? { element: describe(last), bottom: last.getBoundingClientRect().bottom } : null,
+    };
+  });
+}
+
+type ColumnBox = { left: number; right: number; top: number; bottom: number; width: number };
+
+type ListDetailBoxes = {
+  list: ColumnBox | null;
+  panel: ColumnBox | null;
+  openItems: string[];
+};
+
+async function measureListDetail(page: Page): Promise<ListDetailBoxes> {
+  return page.evaluate(() => {
+    const read = (el: Element | null) => {
+      if (!el) return null;
+      const box = el.getBoundingClientRect();
+      return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width };
+    };
+    const list = document.querySelector(".list-detail > .list-detail-list");
+    const panel = document.querySelector(".list-detail > .list-detail-panel");
+    return {
+      list: read(list),
+      panel: read(panel),
+      openItems: list
+        ? Array.from(list.querySelectorAll('[aria-current="page"]')).map(
+          (el) => `${el.getAttribute("aria-label") ?? ""} ${el.textContent ?? ""}`.trim(),
+        )
+        : [],
+    };
+  });
+}
+
+async function openListDetail(
+  page: Page,
+  testInfo: TestInfo,
+  scenario: ListDetailCase,
+): Promise<{ where: string }> {
+  await waitForRateLimitBudget(testInfo);
+  watchRateLimitBudget(page);
+
+  const route = routeNamed(scenario.list);
+  await page.goto(route.path, { waitUntil: "networkidle" });
+  await proveAuthenticatedScreen(page, route);
+
+  const width = page.viewportSize()?.width ?? 0;
+  const what = `${route.path}: the seeded row`;
+  await clickForReal(scenario.row(page), what, testInfo);
+  await expectPath(page, scenario.detailPath, `${what} at ${testInfo.project.name}`);
+  await scenario.detailLoaded(page, `${what} at ${testInfo.project.name}`);
+  return { where: `${route.path} to ${scenario.detailPath.source} at ${testInfo.project.name} (${width}px)` };
+}
+
+for (const scenario of LIST_DETAIL_CASES) {
+  test(`G-4 pushed screen below ${WIDE_LAYOUT_BREAKPOINT}px: ${scenario.list} detail`, async ({ page }, testInfo) => {
+    const { where } = await openListDetail(page, testInfo, scenario);
+    const width = page.viewportSize()?.width ?? 0;
+    const screen = await measurePushedScreen(page);
+    await testInfo.attach(`pushed-screen-${scenario.list}`, {
+      body: JSON.stringify(screen, null, 2),
+      contentType: "application/json",
+    });
+
+    if (width >= WIDE_LAYOUT_BREAKPOINT) {
+      expect(screen.frameIsPushed, `${where}: the shell hides its bars from ${WIDE_LAYOUT_BREAKPOINT}px, where the list sits beside the detail.`)
+        .toBe(false);
+      return;
+    }
+
+    expect.soft(screen.listDetailRendered, `${where}: a list is mounted beside the detail below ${WIDE_LAYOUT_BREAKPOINT}px.`)
+      .toBe(false);
+    expect.soft(screen.frameIsPushed, `${where}: the shell did not mark the pushed screen.`).toBe(true);
+    expect.soft(screen.bottomNavRendered, `${where}: the bottom bar is rendered on a pushed screen.`).toBe(false);
+    expect.soft(screen.fabRendered, `${where}: the floating action button is rendered on a pushed screen.`).toBe(false);
+
+    expect(screen.back, `${where}: the pushed bar has no "Voltar para …" link.`).not.toBeNull();
+    if (screen.back) {
+      expect.soft(screen.back.href, `${where}: the back link goes to ${screen.back.href}.`).toBe(scenario.backHref);
+      expect
+        .soft(
+          Math.min(screen.back.width, screen.back.height),
+          `${where}: the back link is ${screen.back.width}x${screen.back.height}px, below the WCAG 2.5.8 AA minimum of ${TOUCH_TARGET_AA}px.`,
+        )
+        .toBeGreaterThanOrEqual(TOUCH_TARGET_AA);
+    }
+
+    // The last control outside the sticky save bar must end above it; with no
+    // sticky bar it must end inside the window, since no bar hides it.
+    expect(screen.lastFocusable, `${where}: no focusable element found inside main.`).not.toBeNull();
+    if (screen.lastFocusable) {
+      const limit = screen.stickyCta?.top ?? screen.innerHeight;
+      const against = screen.stickyCta
+        ? `behind the fixed save bar (${screen.stickyCta.element}) that starts at y=${screen.stickyCta.top}`
+        : `past the window's ${screen.innerHeight}px`;
+      expect
+        .soft(
+          screen.lastFocusable.bottom,
+          `${where}: the last focusable element in main (${screen.lastFocusable.element}) ends at y=${screen.lastFocusable.bottom}, ${against}.`,
+        )
+        .toBeLessThanOrEqual(limit + BAR_CLEARANCE_TOLERANCE);
+    }
+    if (screen.stickyCta) {
+      expect
+        .soft(
+          screen.stickyCta.bottom,
+          `${where}: the save bar (${screen.stickyCta.element}) ends at y=${screen.stickyCta.bottom}, below the window's ${screen.innerHeight}px.`,
+        )
+        .toBeLessThanOrEqual(screen.innerHeight + BAR_CLEARANCE_TOLERANCE);
+    }
+  });
+
+  test(`G-5 list beside detail from ${WIDE_LAYOUT_BREAKPOINT}px: ${scenario.list} detail`, async ({ page }, testInfo) => {
+    const { where } = await openListDetail(page, testInfo, scenario);
+    const width = page.viewportSize()?.width ?? 0;
+    const boxes = await measureListDetail(page);
+    await testInfo.attach(`list-detail-${scenario.list}`, {
+      body: JSON.stringify(boxes, null, 2),
+      contentType: "application/json",
+    });
+
+    if (width < WIDE_LAYOUT_BREAKPOINT) {
+      expect(boxes.list, `${where}: a list is mounted beside the detail below ${WIDE_LAYOUT_BREAKPOINT}px.`).toBeNull();
+      return;
+    }
+
+    expect(boxes.list, `${where}: the list column is not rendered.`).not.toBeNull();
+    expect(boxes.panel, `${where}: the detail panel is not rendered.`).not.toBeNull();
+    if (!boxes.list || !boxes.panel) return;
+
+    expect
+      .soft(
+        Math.abs(boxes.list.width - LIST_COLUMN_WIDTH),
+        `${where}: the list column is ${boxes.list.width}px wide, expected ${LIST_COLUMN_WIDTH}px.`,
+      )
+      .toBeLessThanOrEqual(LIST_COLUMN_TOLERANCE);
+    expect
+      .soft(
+        boxes.panel.left,
+        `${where}: the detail starts at x=${boxes.panel.left}, over the list that ends at x=${boxes.list.right}.`,
+      )
+      .toBeGreaterThanOrEqual(boxes.list.right - LIST_COLUMN_TOLERANCE);
+    expect
+      .soft(
+        Math.min(boxes.list.bottom, boxes.panel.bottom) - Math.max(boxes.list.top, boxes.panel.top),
+        `${where}: the list and the detail do not share a row of the window.`,
+      )
+      .toBeGreaterThan(0);
+
+    expect
+      .soft(boxes.openItems, `${where}: expected exactly one open item (aria-current="page") in the list.`)
+      .toHaveLength(1);
+    expect
+      .soft(
+        boxes.openItems[0] ?? "",
+        `${where}: the open item is "${boxes.openItems[0] ?? ""}", expected one carrying "${scenario.openItem}".`,
+      )
+      .toContain(scenario.openItem);
+  });
+}

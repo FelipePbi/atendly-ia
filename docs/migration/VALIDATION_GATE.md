@@ -3850,3 +3850,106 @@ Li o `side-by-side.png` do H3 nos quatro devices. **Divergências que restam, to
 **Não feito:** a conferência humana do §7 do Goal (o navegador em que Felipe viu R-10, com zoom e com a janela redimensionada; a sidebar e a Home com o WhatsApp desconectado de verdade e a IA ativada). A prova de R-10 neste Goal é a guarda sobre a folha de estilo e a medida G-3 como regressão, não a reprodução do defeito.
 
 **Fechamento — review085, 2026-10-01.** Aceito na rodada 2 ([review085](reviews/085-review.md)). O Tech Lead conferiu em disco: o `sha256` de `systemStatus.tsx`, `AppShell.tsx` e `atendly.css`, igual ao da tabela de controles; o `mtime` de `atendly.css` (`08:38:14Z`); e o `results.json` do gate autenticado (`startTime` `08:57:34.803Z`, **205** `expected`, **0** `unexpected`, **0** `flaky`, **10** testes G-3, **0** retentativas). Também conferiu uma corrida de `validate:ui` posterior à citada, com **169** `passed` e **21** `skipped`, e rodou os quatro arquivos de teste tocados (**60**/**60**). **Limite de proveniência:** a WU-10 do harness (`validate:integration`) ficou `SKIPPED`. Os **36**/**36** passos acima vêm da execução do Developer contra o PostgreSQL descartável local, e só o passo do gate autenticado foi conferido em disco pelo Tech Lead. Os quatro controles negativos foram conferidos por hash e por este registro, não reexecutados.
+
+## Lista e detalhe lado a lado, tela empurrada, e as medidas G-4 e G-5 do gate autenticado, do Goal088
+
+Clientes, Serviços e Configurações abrem o detalhe ao lado da lista de 1024 px em diante e como tela empurrada, sem barra de abas, abaixo disso ([D-103](DECISIONS.md), **ACCEPTED** no [review088](reviews/088-review.md)). Duas medidas novas entram no gate autenticado, **só por acréscimo** no fim de `e2e/authenticated-matrix.spec.ts`. Nenhum teste existente, `e2e/routes.ts`, `playwright.*.config.ts`, semente, `scripts/`, `KNOWN_*` ou passo de `validate:*` mudou.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| **G-4 (tela empurrada abaixo de 1024 px)**, em `/clientes/detalhes`, `/servicos/editar` e `/configuracoes/negocio`, alcançadas por clique real na linha semeada da lista: sem `.list-detail`, `.app-frame.is-pushed`, sem barra de abas e sem FAB, link "Voltar para …" com o `href` certo e alvo de ao menos 24 px, e o CTA fixo (quando existe) dentro da janela e sem cobrir o último elemento focável. De 1024 px em diante o teste só confirma que o frame não é `is-pushed`. Três rotas vezes cinco larguras, **15** testes | Que a barra empurrada seja igual ao protótipo: isso é lido nos `side-by-side.png` |
+| **G-5 (lista ao lado do detalhe, de 1024 px em diante)**, nas mesmas rotas e pelo mesmo clique: coluna da lista com 380 px (tolerância de 1 px), painel à direita sem sobreposição, a lista e o detalhe na mesma linha, e exatamente um `aria-current="page"`, contendo o nome semeado. Abaixo de 1024 px o teste confere que a lista não está montada. Três rotas vezes cinco larguras, **15** testes | Que a lista de Configurações seja a do protótipo (outro Goal) |
+| `goal088-list-detail.test.tsx` (jsdom, **23** testes): prova 1 (de 1024 px em diante, detalhe e lista juntos, `aria-current` único, um só `h1`), prova 2 (os painéis vazios e o hub com o Negócio), prova 3 (abaixo de 1024 px, `.is-pushed`, sem barra de abas, sem FAB, voltar com nome e destino; de 1024 px em diante a casca completa), prova 4 (**uma** chamada de `useShellConfig` nas seis rotas, nas duas faixas) e prova 5 (a lista é buscada 1 vez ao lado do detalhe e 0 vez quando empurrada) | Layout: jsdom não tem layout |
+
+**Contagem do gate autenticado:** **235** testes `passed` (**205** da base mais **30** de G-4 e G-5), **0** `unexpected`, **0** `flaky`, **0** retentativas (`goal033:authenticated-ui-rehearsal authenticated gate retries: 0`). Nenhuma rota foi retirada nem largura cortada: o orçamento de requisições do BFF comportou os 30 testes novos, porque a lista não é montada nem buscada abaixo de 1024 px.
+
+**Execução final**, depois da última edição de código (`ServiceForm.tsx`, `2026-10-01T10:28:52Z`; os arquivos dos controles negativos foram restaurados depois, com o `sha256` idêntico). `npx tsc --noEmit` e `npm run lint` (`apps/frontend`): exit 0 nos dois. `npx vitest run` (`apps/frontend`): **132** arquivos, **1413** testes, todos verdes. `npm run validate:core`: exit 0, **17** passos, **15** `passed`, **2** `skipped` (`test:bff` e `test:health-worker`), **0** `failed`. `npm run test:gate`: **233**/**233**. `npm run validate:ui`: na primeira corrida, exit 0 com **166** `passed`, **21** `skipped` e **3** testes de contraste do axe (`criar-conta` em 360 e 768, `entrar` em 390) que estouraram os 30 s e passaram na retentativa; na segunda corrida, sem nenhuma edição entre as duas, **169** `passed`, **21** `skipped` e **0** retentativas. As rotas públicas não foram tocadas por este Goal; o estouro é de tempo do axe, e não se repetiu.
+
+**`validate:integration` não passou neste ambiente.** Havia um processo escutando em `127.0.0.1:55432` que fecha a conexão, então foi criado um cluster PostgreSQL 18 descartável próprio em `127.0.0.1:55433` (banco `atendly_bff_test`, extensão `vector`), e `BFF_TEST_DATABASE_URL` apontou para ele. Resultado: **36** passos, **26** `passed`, **1** `failed`, **9** `notRun`. O passo que falhou é `test:scheduling-integration`: 4 testes de `goal025-tenant-purge.test.ts` com `PrismaClientKnownRequestError`, em código do Scheduling que este Goal não toca; a causa não foi investigada. Os 9 passos seguintes, o último deles o do gate autenticado, não rodaram. **O passo `rehearse:goal033-authenticated-ui` foi então rodado à parte**, com `node scripts/goal033-authenticated-ui-rehearsal.mjs` e o mesmo `BFF_TEST_DATABASE_URL`: exit 0, `235 passed (6.9m)`, que é a contagem acima. Não é a corrida completa do gate.
+
+**`visual:compare`** (`-- --target CL5,Servicos:S4,Mais-Negocio:N1`, exit 0, e `-- --target CL1,CL4,Servicos:S1,Servicos:S3,Agenda:S1,Mais-Negocio:M1,AG1,IA1,W1,R1,Mais-WhatsApp:C1`, exit 0), depois da última edição de código. A baseline `f0d53ae` não foi renderizada de novo nesta rodada; a porcentagem é tendência, não gate.
+
+| Quadro | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| CL5 Cliente · resumo | 9,5 | 4,7 | 6,2 | 5,5 |
+| S4 Serviço · opções | 9,8 | 8,8 | 14,3 | 8,7 |
+| N1 Negócio | 8,2 | 4,2 | 5,9 | 5,1 |
+| CL1 Clientes · lista (Goal085: 11,0 / 5,1 / 4,6 / 3,6) | 11,0 | 5,1 | 3,4 | 2,7 |
+| S1 Serviços · lista (Goal085: 8,8 / 5,3 / 4,8 / 3,6) | 8,8 | 5,3 | 3,9 | 2,9 |
+| M1 Mais (Goal085: 7,6 / 3,1 / 4,7 / 4,1) | 7,6 | 3,1 | 6,0 | 5,2 |
+| CL4 | 17,3 | 8,1 | 9,2 | 7,4 |
+| S3 | 7,0 | 12,3 | 13,4 | 7,7 |
+| Agenda S1 | 9,8 | 8,9 | 14,5 | 8,8 |
+| AG1 | 10,9 | 5,3 | 5,3 | 4,9 |
+| IA1 | 14,5 | 5,5 | 6,7 | 5,5 |
+| W1 | 9,4 | 4,8 | 5,7 | 4,9 |
+| R1 | 14,3 | 8,4 | 8,7 | 7,5 |
+| C1 (WhatsApp) | 11,1 | 4,4 | 4,6 | 4,1 |
+
+Li o `side-by-side.png` de S4 em paisagem (o maior número dos três quadros) e o de M1 no desktop. No S4 em paisagem, o CTA "Salvar alterações" fica acima da barra de abas, e o resto do diff é a lista de Serviços à esquerda, o banner do WhatsApp e os campos abertos. O M1 piora em paisagem e desktop porque o painel do Negócio passou a aparecer ao lado de uma lista de Configurações que é de outro Goal. **Divergências que restam, todas declaradas em D-103 ou de dado da conta:** banner e cartão do WhatsApp desconectado; "alterações não salvas" só com o formulário alterado; S4 sem a linha-resumo dos campos essenciais; `⋯` ausente sem ação secundária; N1 com "Não informado" estático onde o contrato não tem o campo; título do painel Negócio em `h1` grande; lista de Configurações sem o cartão do negócio e os grupos; dados do CL5 da conta de teste.
+
+**Prova vermelha contra a baseline.** `goal088-list-detail.test.tsx`, rodado contra os arquivos de produção da baseline `f0d53ae` (os arquivos do Goal trocados pelos de `git show f0d53ae:`, e restaurados por `sha256` conferido no fim), reprovou com **11** falhas; na árvore final passa com **23**/**23**.
+
+**Quatro controles negativos**, feitos **depois da última edição de código**, cada um por edição real num arquivo de produção, restaurado por cópia do original no mesmo passo, com o `sha256` conferido idêntico depois (`node` com `neg.cjs`, saída reproduzida abaixo):
+
+| Controle | Arquivo e `sha256` antes e depois da restauração | Defeito introduzido | Teste com o defeito | Restaurado |
+| --- | --- | --- | --- | --- |
+| 1 | `AppShell.tsx`, `03452351882fdd703a8fdf10582d2cad01f5df27f4b0ac000e789e4bb6627c38` | `const hideTabBar = false;` no lugar de `pushed && !wide` | `Tests  3 failed \| 20 passed (23)`: a prova 3 nas três rotas de detalhe, "mostra só o detalhe, com voltar claro e a casca sem barra de abas" | `23 passed (23)` |
+| 2 | `CustomerList.tsx`, `f5efc36d0e44f41d973b92998efb01ba39d8254c97b8aaed99ddcfa28165b1d3` | `useShellConfig` dentro de `CustomerListPanel` | `Tests  4 failed \| 19 passed (23)`: prova 1 em `/clientes/detalhes`, "de 1024 px em diante, o detalhe mantém a casca completa", prova 4 "nas seis rotas, na faixa ≥1024" e prova 5 `/clientes/detalhes` ≥1024 | `23 passed (23)` |
+| 3 | `CustomerProfile.tsx`, `d1037a5d4358b6cb572d364127fbea96d3a07a6f86ede3e23b187043731e36b8` | o detalhe devolve só o perfil também em largo (`if (wide \|\| !wide) return profile;`) | `Tests  2 failed \| 21 passed (23)`: prova 1 em `/clientes/detalhes` e prova 5 ≥1024 ("busca a lista 1 vez(es)") | `23 passed (23)` |
+| 4 | `CustomerProfile.tsx`, mesmo `sha256` | a lista fica montada abaixo de 1024 px (sem o `if (!wide) return profile;`) | `Tests  2 failed \| 21 passed (23)`: prova 3 em `/clientes/detalhes` e prova 5 "<1024 busca a lista 0 vez(es)" | `23 passed (23)` |
+
+**Não feito:** a conferência do §7 do Goal (aparelho real, com toque, teclado virtual e rotação). A prova de layout deste Goal é o gate renderizado (G-4 e G-5, no Chromium do Playwright), o `visual:compare` e os `side-by-side.png`, não um aparelho.
+
+### Correção — rodada 3 (blockers da revisão da rodada 2, FIX-001)
+
+As contagens acima são da rodada 2 e ficam substituídas pelas desta subseção. O que a rodada 3 mudou: subrotas de Configurações fora do Negócio no padrão (tela empurrada abaixo de 1024 px, painel ao lado da lista de 1024 px em diante); N1 sem o cartão permanente "Editar dados do negócio" (a linha com `›` abre o editor); CTA "Criar cliente" fixo no CL4; rótulos PRÓXIMO e PREFERÊNCIAS do CL5 em Hanken Grotesk e a legenda "a cada" sem quebra; e o corpo do S4 portado (linha-resumo, Recorrência, Intervalo antes e depois com steppers, Instruções para a IA, Serviço ativo, sem o disclosure). A linha-resumo do S4 abre **expandida**, pelo motivo da divergência 4 de [D-103](DECISIONS.md). `goal088-list-detail.test.tsx` passou de **23** para **25** testes (`/configuracoes/conversas` nas provas 1, 3 e 4).
+
+**Execução final**, toda ela depois da última edição de código (`atendly-services.css`, `2026-10-01T11:39:47Z`, `sha256` `ee92627fb661e99ad4c1796960d74245fce7312af5333c29ecc69a9c8a469b21`; `ServiceForm.tsx` `af2b99b056e72b06952c43e0bf920c547239451542ce1f04fa394d6e08813d31`). `npx tsc --noEmit` e `npm run lint` (`apps/frontend`): exit 0 nos dois. `npx vitest run` (`apps/frontend`): **132** arquivos, **1415** testes, todos verdes. `npm run validate:core`: exit 0, **17** passos, **15** `passed`, **2** `skipped` (`test:bff`, `test:health-worker`), **0** `failed`; dentro dele, `test:frontend` **132**/**1415**, `test:scheduling-service` **38** arquivos e **528** testes, `test:ai-orchestrator` **93** arquivos passando e **13** pulados, **1186** testes passando e **98** pulados. `npm run test:gate`: **233**/**233**. `npm run validate:ui`, duas corridas sem edição entre elas, exit 0 nas duas: **167** `passed`, **21** `skipped`, **2** `flaky` em cada uma, todos em rotas públicas que este Goal não toca e com causa de ambiente (`browserContext.newPage: Target crashed` e o axe estourando os 30 s): na primeira, `politica-de-privacidade` em 1440 e o autoteste de contraste em 1024; na segunda, o autoteste de contraste em 360 e `termos-de-uso` em 768.
+
+**`validate:integration`**, com um cluster PostgreSQL 18 descartável próprio em `127.0.0.1:55434` (a porta `55432` estava ocupada por outro processo), criado vazio e em UTC: **36** passos, **26** `passed`, **1** `failed`, **9** `notRun`, exit 1. `test:bff-integration` passou com **63** arquivos e **474** testes. O passo que falhou é `test:scheduling-integration`: `4 failed | 139 passed (143)`, os quatro em `goal025-tenant-purge.test.ts`, com `23514` `new row for relation "AppointmentHold" violates check constraint "AppointmentHold_expiresAt_check"` em `seedTenant` (linha 241). Uma primeira corrida desta rodada foi descartada: o PostgreSQL caiu no meio por falta de memória do Windows (`could not reattach to shared memory … error code 1455`), com `test:bff-integration` falhando por `57P03`; o cluster foi recriado e a corrida acima é a segunda, completa.
+
+**`test:scheduling-integration` na base `c483db3`**, a partir de um `git archive` de `c483db3` (`apps/scheduling-service`, `scripts`, com as dependências ligadas às da worktree), com os mesmos passos e o mesmo ambiente de `validate:integration`, no mesmo cluster:
+
+- banco do Scheduling reaproveitado da corrida da head: `5 failed | 138 passed (143)`, os quatro de `goal025` com o mesmo `23514` e `goal008-agenda.test.ts` "completes what expired past the grace period…" com `expected { locked: true, completed: 2 } to match object { locked: true, completed: 1 }`;
+- banco do Scheduling apagado e recriado por `provision:scheduling-test-database`: `4 failed | 139 passed (143)`, os mesmos quatro de `goal025` — **idêntico à head**.
+
+`apps/scheduling-service` e `scripts/` são idênticos entre a head e `c483db3` (`git diff --quiet c483db3 HEAD -- apps/scheduling-service`). Causa: `goal025-tenant-purge.test.ts` fixa o atendimento em `2026-10-01T09:00Z` e o hold expira em `10:05Z`; a constraint exige `expiresAt > createdAt`, e o relógio da corrida (depois das `11:40Z` de 2026-10-01) já passou desse instante. O `completed: 2` de `goal008` aparece só com o banco reaproveitado, quando sobra um atendimento vencido de outro negócio que a varredura global conclui. **Falha anterior ao Goal, dependente do relógio, fora do diff.**
+
+**Os 9 passos `notRun`, rodados à parte** na head, na ordem de `validate:integration`, com o mesmo ambiente e o mesmo cluster: `rehearse:goal029-timezone-reconciliation`, `rehearse:goal074-human-takeover-migration`, `generate:ai-orchestrator-prisma-client`, `test:ai-orchestrator-transport-durability` (**10** arquivos, **74** testes), `test:ai-orchestrator-content-purge` (**3** arquivos, **24** testes), `test:evolution-go-webhook-outbox`, `rehearse:goal030-mvp-journey`, `rehearse:goal032-auto-reply` e `rehearse:goal033-authenticated-ui`, exit 0 nos nove. O gate autenticado (`startTime` `2026-10-01T11:47:02.995Z`): `235 passed (6.9m)`, `expected` **235**, `unexpected` **0**, `flaky` **0**, `authenticated gate retries: 0 — every test passed on its first attempt`; são os **205** da base mais os **30** de G-4 e G-5. "servicos: a 45-minute service saves through the form" passou nas cinco larguras, sem mudança no teste.
+
+**Quatro controles negativos**, depois da execução acima e da última edição de código, cada um por edição real num arquivo de produção, restaurado por cópia do original com o `sha256` conferido idêntico, e `git status --porcelain=v1 -uall` idêntico antes e depois dos quatro:
+
+| Controle | Arquivo e `sha256` antes e depois | Defeito | Teste com o defeito |
+| --- | --- | --- | --- |
+| 1 | `AppShell.tsx`, `03452351882fdd703a8fdf10582d2cad01f5df27f4b0ac000e789e4bb6627c38` | `const hideTabBar = false;` | `Tests  4 failed \| 21 passed (25)`: prova 3 em `/clientes/detalhes`, `/servicos/editar`, `/configuracoes/negocio` e `/configuracoes/conversas` |
+| 2 | `CustomerList.tsx`, `f5efc36d0e44f41d973b92998efb01ba39d8254c97b8aaed99ddcfa28165b1d3` | `useShellConfig` dentro de `CustomerListPanel` | `Tests  4 failed \| 21 passed (25)`: prova 1 em `/clientes/detalhes`, prova 3 "de 1024 px em diante, o detalhe mantém a casca completa", prova 4 "nas sete rotas, na faixa ≥1024" e prova 5 ≥1024 |
+| 3 | `CustomerProfile.tsx`, `d1037a5d4358b6cb572d364127fbea96d3a07a6f86ede3e23b187043731e36b8` | `if (wide \|\| !wide) return profile;` | `Tests  2 failed \| 23 passed (25)`: prova 1 em `/clientes/detalhes` e prova 5 "busca a lista 1 vez(es)" |
+| 4 | `CustomerProfile.tsx`, mesmo `sha256` | sem `if (!wide) return profile;` | `Tests  2 failed \| 23 passed (25)`: prova 3 em `/clientes/detalhes` e prova 5 "<1024 busca a lista 0 vez(es)" |
+
+Restaurados os quatro: `Tests  25 passed (25)`.
+
+**`visual:compare`**, depois da última edição de código, exit 0 nas duas chamadas. A porcentagem é tendência.
+
+| Quadro | mobile | tablet retrato | tablet paisagem | desktop |
+| --- | --- | --- | --- | --- |
+| CL5 Cliente · resumo | 9,4 | 4,6 | 6,1 | 5,4 |
+| S4 Serviço · opções | 9,7 | 8,7 | 14,2 | 8,7 |
+| N1 Negócio | 8,2 | 3,8 | 5,9 | 5,1 |
+| CL1 | 11,0 | 5,1 | 3,4 | 2,7 |
+| CL4 | 5,8 | 2,6 | 6,5 | 5,0 |
+| S1 | 8,8 | 5,3 | 3,9 | 2,9 |
+| S3 | 7,0 | 7,5 | 13,4 | 7,7 |
+| Agenda S1 | 9,7 | 8,9 | 14,4 | 8,8 |
+| M1 | 7,6 | 3,1 | 5,9 | 5,1 |
+| AG1 | 13,4 | 5,9 | 7,1 | 5,9 |
+| IA1 | 13,6 | 6,3 | 7,3 | 6,0 |
+| W1 | 9,1 | 4,3 | 6,6 | 5,5 |
+| R1 | 13,5 | 8,1 | 9,5 | 8,2 |
+| C1 (WhatsApp) | 10,6 | 4,4 | 5,6 | 4,9 |
+
+Leitura dos `side-by-side.png`: no CL5 em paisagem, PRÓXIMO e PREFERÊNCIAS saem em Hanken Grotesk e "a cada" fica numa linha; no N1 mobile, só as linhas agrupadas, sem cartão de edição; no S4 (mobile e desktop), barra empurrada, linha-resumo, e abaixo dela os campos de nome, duração e preço abertos, com as linhas portadas abaixo da dobra. Com `ESSENTIALS_OPEN_ON_EDIT = false` (rodado só para conferir, e revertido antes da execução final), o S4 dava 11,0 / 8,6 / 14,7 / 9,2 % e o corpo coincidia com o quadro: linha-resumo, Recorrência com o valor em petróleo, steppers Antes e Depois, Instruções e Serviço ativo; o que restava era a lista de Serviços à esquerda (S1, outro Goal), o banner do WhatsApp e "Onde é feito". Pioras das telas irmãs em relação à rodada 2: AG1, IA1, W1, R1 e C1 em paisagem e desktop, porque essas subrotas passaram a abrir ao lado da lista de Configurações (de outro Goal, diferente da do protótipo), e AG1 e IA1 no mobile, porque a barra empurrada substituiu o cabeçalho de página e o conteúdo próprio (Goal 097) subiu sobre as linhas do quadro. S3 em retrato melhora (12,3 para 7,5) com as opções abertas.
+
+**Divergências que restam, todas declaradas em D-103 ou de dado da conta:** banner e cartão do WhatsApp desconectado; `⋯` ausente sem ação secundária; "alterações não salvas" só com o formulário alterado; linha-resumo do S4 aberta por padrão (autorizada no [review088](reviews/088-review.md)) e sem "Onde é feito"; N1 com "Não informado" estático onde o contrato não tem o campo; `PrimaryGuardianPanel` no CL5; lista de Configurações, CL1 e S1 de outros Goals; dados do CL5 da conta de teste.
+
+**Não feito:** a conferência do §7 do Goal (aparelho real).

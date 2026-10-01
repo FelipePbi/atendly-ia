@@ -1076,3 +1076,125 @@
     transform: none;
   }
 }
+
+/* Goal088 (D-103): Negócio como tela empurrada e hub em painel */
+.settings-page.business-screen,
+.settings-page.is-pushed {
+  width: 100%;
+  padding: 0 0 48px;
+}
+.settings-pushed-body {
+  padding: 12px 20px 0;
+}
+.business-summary {
+  padding: 12px 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.business-group {
+  display: flex;
+  flex-direction: column;
+}
+.business-group-title {
+  margin: 0;
+  padding-bottom: 2px;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: normal;
+  text-transform: uppercase;
+}
+.business-row {
+  padding: 11px 0;
+  line-height: normal;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--fg);
+  text-decoration: none;
+}
+.business-row:last-child {
+  border-bottom: 0;
+}
+button.business-row {
+  width: 100%;
+  border-width: 0 0 1px;
+  border-style: solid;
+  border-color: var(--border);
+  background: transparent;
+  font: inherit;
+  line-height: normal;
+  text-align: left;
+  cursor: pointer;
+}
+button.business-row:last-child {
+  border-bottom-width: 0;
+}
+.business-row-label {
+  flex: none;
+  font-size: 15px;
+  font-weight: 600;
+}
+.business-row-value {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-soft);
+  font-size: 14px;
+  text-align: right;
+}
+.business-row-value.is-empty {
+  color: var(--muted);
+}
+.business-row-value .icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--muted);
+}
+.business-form {
+  margin: 12px 20px 0;
+}
+.settings-hub-panel {
+  padding: 24px 20px 32px;
+}
+.settings-hub-panel-header {
+  margin-bottom: 14px;
+}
+.settings-hub-panel-header :is(h1, h2) {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.settings-hub-panel .settings-hub-grid {
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.settings-hub-panel .settings-hub-card {
+  min-height: 0;
+  padding: 12px 14px;
+  align-items: center;
+}
+.settings-hub-card.is-open {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+@media (min-width: 768px) {
+  .business-summary,
+  .settings-pushed-body {
+    padding-inline: 28px;
+  }
+  .business-form {
+    margin-inline: 28px;
+  }
+}

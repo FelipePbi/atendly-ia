@@ -346,9 +346,6 @@ describe("intervalos antes/depois do atendimento não mudam", () => {
     );
 
     await screen.findByLabelText("Nome do serviço");
-    await userEvent.click(
-      screen.getByText("Descrição, cor, buffers, recorrência e status"),
-    );
 
     const before = screen.getByLabelText(
       "Intervalo antes do atendimento (minutos)",

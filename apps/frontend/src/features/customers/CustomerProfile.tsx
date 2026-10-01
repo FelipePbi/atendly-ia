@@ -7,16 +7,20 @@ import { type FormEvent } from "react";
 
 import { BffHttpError, type CalendarState, type CustomerDetail } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
+import { ListDetailLayout } from "@/shared/layout/ListDetail";
+import { PushedBar } from "@/shared/layout/PushedBar";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
+import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { displayPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Field } from "@/shared/ui/Field";
 import { StatePanel } from "@/shared/ui/States";
 
 import { CustomerAgenda } from "./CustomerAgenda";
+import { CustomerListPanel } from "./CustomerList";
 import { CustomerMemory } from "./CustomerMemory";
 import { CustomerNotes } from "./CustomerNotes";
-import { CustomerSummary } from "./CustomerSummary";
+import { CustomerNextAppointment, CustomerSummary } from "./CustomerSummary";
 import { CustomerTags } from "./CustomerTags";
 import { PrimaryGuardianPanel } from "./PrimaryGuardianPanel";
 
@@ -31,6 +35,7 @@ const TABS: Array<{ id: ProfileTab; label: string }> = [
 ];
 
 export function CustomerProfile({ customerId }: CustomerProfileProps) {
+  const wide = useWideLayout();
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [calendar, setCalendar] = useState<CalendarState | null>(null);
   const [error, setError] = useState<string | null>(() =>
@@ -131,6 +136,7 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
     active: "clientes",
     loading: !customer && !error,
     module: "directory",
+    pushed: true,
     title: "Detalhes do cliente",
   });
 
@@ -142,14 +148,19 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
     window.history.replaceState(null, "", url);
   }
 
-  return (
-    <section className="directory-page">
-      <header className="directory-page-header">
-        <Link className="btn btn-tertiary" href="/clientes">
-          <Icon name="chevron-left" />
-          Voltar para clientes
-        </Link>
-      </header>
+  const menuItems =
+    customer && editable && !editing
+      ? [{ label: "Editar dados", onSelect: () => setEditing(true) }]
+      : undefined;
+
+  const profile = (
+    <section className="directory-page customer-profile">
+      <PushedBar
+        backHref="/clientes"
+        backLabel="Voltar para clientes"
+        menuItems={menuItems}
+        menuLabel="Mais ações do cliente"
+      />
 
       {!customer && !error ? (
         <ProfileLoading />
@@ -218,15 +229,6 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
                   <Icon name="calendar" />
                   Agendar
                 </Link>
-              )}
-              {editable && !editing && (
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setEditing(true)}
-                  type="button"
-                >
-                  Editar dados
-                </button>
               )}
             </div>
           </section>
@@ -331,12 +333,16 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
               role="tabpanel"
               tabIndex={0}
             >
-              <CustomerSummary
-                customerId={customer.id}
-                nextAppointment={customer.nextAppointment}
-                stats={customer.appointmentStats}
-              />
-              <CustomerMemory customerId={customer.id} />
+              <div className="resume-body">
+                <CustomerSummary
+                  customerId={customer.id}
+                  stats={customer.appointmentStats}
+                />
+                <div className="resume-side">
+                  <CustomerNextAppointment appointment={customer.nextAppointment} />
+                  <CustomerMemory customerId={customer.id} />
+                </div>
+              </div>
               <PrimaryGuardianPanel
                 customerId={customer.id}
                 editable={editable}
@@ -382,6 +388,15 @@ export function CustomerProfile({ customerId }: CustomerProfileProps) {
         </>
       )}
     </section>
+  );
+
+  if (!wide) return profile;
+  return (
+    <ListDetailLayout
+      detail={profile}
+      list={<CustomerListPanel openId={customerId} />}
+      listLabel="Clientes"
+    />
   );
 }
 

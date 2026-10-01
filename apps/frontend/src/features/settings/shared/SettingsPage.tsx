@@ -2,16 +2,38 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { Icon } from "@/shared/icons/Icon";
+import { PushedBar } from "@/shared/layout/PushedBar";
 
+/**
+ * Página de Configurações. O hub (`root`) mantém o cabeçalho de página; toda
+ * subrota é tela empurrada (D-103): barra própria com voltar e título
+ * centralizado, sem eyebrow, título grande nem subtítulo. De 1024 px em
+ * diante a lista de Configurações fica ao lado e o voltar some.
+ */
 export function SettingsPage({
   children,
   description,
+  root = false,
   title,
 }: {
   children: ReactNode;
   description: string;
+  root?: boolean;
   title: string;
 }) {
+  if (!root) {
+    return (
+      <section className="settings-page is-pushed">
+        <PushedBar
+          backHref="/configuracoes"
+          backLabel="Voltar para configurações"
+          hideBackWide
+          title={title}
+        />
+        <div className="settings-pushed-body">{children}</div>
+      </section>
+    );
+  }
   return (
     <section className="settings-page">
       <Link className="settings-back" href="/configuracoes">

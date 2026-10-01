@@ -1,43 +1,4 @@
 /* Serviços — Goal015 */
-.service-form-advanced {
-  margin-top: var(--s5);
-  padding-top: var(--s5);
-  border-top: 1px solid var(--border);
-}
-.service-form-advanced summary {
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--fg-soft);
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-  list-style: none;
-}
-.service-form-advanced summary::-webkit-details-marker {
-  display: none;
-}
-.service-form-advanced summary::after {
-  content: "+";
-  width: 20px;
-  height: 20px;
-  border: 1px solid var(--border-strong);
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: var(--fg);
-  font: 500 14px/1 var(--font-mono);
-}
-.service-form-advanced summary:hover {
-  color: var(--fg);
-}
-.service-form-advanced[open] summary::after {
-  content: "\2212";
-}
-.service-form-advanced .directory-form-grid {
-  margin-top: 18px;
-}
 .service-color-preview {
   margin-top: 8px;
   display: flex;
@@ -313,7 +274,7 @@
 .directory-form-card textarea {
   min-height: 96px;
   padding-block: 12px;
-  resize: vertical;
+  resize: none;
 }
 .directory-fieldset {
   min-width: 0;
@@ -359,30 +320,6 @@
 .directory-segmented input:focus-visible + span {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
-}
-.directory-form-note {
-  padding: 12px 14px;
-  border-radius: var(--r-input);
-  color: var(--muted);
-  background: var(--surface-interactive);
-  font-size: 12px;
-}
-.directory-active-control {
-  min-height: 68px;
-  padding: 12px 14px;
-  align-items: center;
-  border: 1px solid var(--border);
-  border-radius: var(--r-input);
-  background: var(--surface-secondary);
-}
-.directory-active-copy {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-.directory-active-copy strong,
-.directory-active-copy .field-help {
-  display: block;
 }
 .directory-form-footer {
   margin-top: 24px;
@@ -448,5 +385,328 @@
 @media (max-width: 390px) {
   .directory-segmented {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Goal088 (D-103): lista em painel + editor como tela empurrada */
+.service-panel {
+  padding: 24px 20px 32px;
+}
+.service-panel-header {
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.service-panel-header :is(h1, h2) {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.service-panel-add {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--bg);
+}
+.service-panel-add .icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.25;
+}
+.service-panel .directory-list-surface,
+.service-panel .directory-state-surface {
+  margin-inline: -20px;
+  border-inline: 0;
+  border-radius: 0;
+}
+.service-panel .directory-state-surface {
+  min-height: 0;
+}
+.service-row.is-open {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.directory-page.service-form-screen {
+  width: 100%;
+  min-height: 100dvh;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.service-form-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 20px 0;
+}
+.service-form-body > .directory-form-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.service-form-body .directory-form-grid {
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+.service-form-body .directory-form-grid .is-wide {
+  grid-column: auto;
+}
+.service-form-body .directory-form-grid > .field,
+.service-form-body .directory-form-grid > .directory-fieldset {
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.service-form-body .directory-form-grid > :first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.service-form-body .label,
+.service-form-body .directory-fieldset legend {
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 600;
+}
+.service-form-body .field-help {
+  color: var(--fg-soft);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.service-form-body > .directory-form-card {
+  gap: 14px;
+}
+.service-form-body .service-essentials[hidden],
+.service-form-body .service-options [hidden] {
+  display: none;
+}
+
+/* S4: linha-resumo de nome, duração e preço. */
+.service-summary-row {
+  width: 100%;
+  padding: 10px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+}
+.service-summary-label {
+  color: var(--fg-soft);
+  font-size: 14px;
+}
+.service-summary-value {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: right;
+}
+
+/* S4: as opções abertas, separadas por divisórias. */
+.service-options {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.service-option {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.service-option + .service-option,
+.service-essentials:not([hidden])
+  ~ .service-options
+  > .service-option:first-child {
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.service-option-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.service-option-title {
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 600;
+}
+.service-option-aside {
+  color: var(--muted);
+  font-weight: 400;
+}
+.service-option-value {
+  margin: -13px 0;
+  padding: 13px 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  transition: color 0.16s var(--ease);
+}
+.service-option-value:hover {
+  color: var(--at-color-primary-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.service-option-note {
+  color: var(--fg-soft);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.service-option-help {
+  color: var(--muted);
+  font-size: 12px;
+}
+.service-buffers {
+  display: flex;
+  gap: 10px;
+}
+.service-buffer {
+  flex: 1;
+  min-width: 0;
+  height: 52px;
+  padding: 0 6px 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.service-buffer-label {
+  color: var(--fg-soft);
+  font-size: 14px;
+}
+.service-buffer-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.service-buffer-step {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--at-color-surface-active);
+  color: var(--fg-soft);
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.service-buffer-step.is-increase {
+  color: var(--accent);
+}
+.service-buffer-input {
+  field-sizing: content;
+  min-width: 1ch;
+  max-width: 4ch;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  text-align: center;
+  appearance: textfield;
+}
+.service-buffer-input::-webkit-inner-spin-button,
+.service-buffer-input::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+.service-buffer-input:focus-visible {
+  outline: var(--at-focus-ring-width) solid var(--at-focus-ring-color);
+  outline-offset: 2px;
+}
+.service-form-body .service-instruction-input {
+  min-height: 78px;
+  padding: 12px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--surface);
+  font-size: 15px;
+  line-height: 1.45;
+  resize: none;
+}
+.service-active-option.check {
+  min-height: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+.service-active-option .check-box {
+  width: 24px;
+  height: 24px;
+  flex-basis: 24px;
+  margin-top: 0;
+  border-radius: 7px;
+}
+.service-active-copy {
+  display: flex;
+  flex-direction: column;
+}
+.service-form-body .service-form-cta {
+  position: sticky;
+  bottom: 0;
+  margin: auto -20px 0;
+  padding: 12px 20px 46px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  display: block;
+  z-index: 2;
+}
+.service-form-body .service-form-cta .btn {
+  width: 100%;
+  height: 52px;
+  border-radius: 14px;
+  font-size: 16px;
+}
+@media (min-width: 768px) {
+  .service-form-body {
+    padding: 16px 28px 0;
+  }
+  .service-form-body .service-form-cta {
+    margin-inline: -28px;
+    padding-inline: 28px;
+  }
+}
+@media (min-width: 1024px) {
+  .service-form-body {
+    width: min(720px, 100%);
+    margin: 0 auto;
+  }
+}
+
+/* Com a barra de abas ainda de pé (1024 a 1099 px, D-101), o CTA fixo fica acima dela. */
+@media (min-width: 1024px) and (max-width: 1099px) {
+  .service-form-body .service-form-cta {
+    bottom: calc(81px + env(safe-area-inset-bottom));
+    padding-bottom: 12px;
   }
 }

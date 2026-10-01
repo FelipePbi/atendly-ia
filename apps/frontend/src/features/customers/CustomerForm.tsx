@@ -1,12 +1,14 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 
 import { BffHttpError, type CalendarState, type Customer } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
+import { ListDetailLayout } from "@/shared/layout/ListDetail";
+import { PushedBar } from "@/shared/layout/PushedBar";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
+import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { displayPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Field } from "@/shared/ui/Field";
@@ -14,9 +16,12 @@ import { ListItem } from "@/shared/ui/ListItem";
 import { Spinner } from "@/shared/ui/Spinner";
 import { StatePanel } from "@/shared/ui/States";
 
+import { CustomerListPanel } from "./CustomerList";
+
 type PendingInput = { name: string; phone: string };
 
 export function CustomerForm() {
+  const wide = useWideLayout();
   const router = useRouter();
   const [calendar, setCalendar] = useState<CalendarState | null>(null);
   const [loadingError, setLoadingError] = useState<string | null>(null);
@@ -101,21 +106,18 @@ export function CustomerForm() {
     active: "clientes",
     loading: !calendar && !loadingError,
     module: "directory",
+    pushed: true,
     title: "Novo cliente",
   });
 
-  return (
-    <div className="page">
-      <div className="page-header">
-        <div>
-          <Link className="btn btn-tertiary" href="/clientes">
-            <Icon name="chevron-left" />
-            Voltar
-          </Link>
-          <h1>Novo cliente</h1>
-          <p>Cadastre apenas os dados necessários para identificar e atender.</p>
-        </div>
-      </div>
+  const form = (
+    <div className="page customer-profile customer-form-screen">
+      <PushedBar
+        backHref="/clientes"
+        backIcon="x"
+        backLabel="Voltar para clientes"
+        title="Novo cliente"
+      />
 
       {loadingError ? (
         <StatePanel
@@ -215,10 +217,8 @@ export function CustomerForm() {
               {message}
             </div>
           )}
-          <div className="customer-form-footer">
-            <Link className="btn btn-secondary" href="/clientes">
-              Cancelar
-            </Link>
+          {/* CTA fixo no rodapé da tela empurrada (CL4); cancelar é o × da barra. */}
+          <div className="customer-form-cta">
             <button
               className="btn btn-primary"
               disabled={checking || busy}
@@ -230,6 +230,15 @@ export function CustomerForm() {
         </form>
       )}
     </div>
+  );
+
+  if (!wide) return form;
+  return (
+    <ListDetailLayout
+      detail={form}
+      list={<CustomerListPanel />}
+      listLabel="Clientes"
+    />
   );
 }
 

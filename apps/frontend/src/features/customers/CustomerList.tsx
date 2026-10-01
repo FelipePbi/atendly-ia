@@ -1,5 +1,6 @@
 "use client";
 
+import clsx from "clsx";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -10,14 +11,30 @@ import {
   type CustomerList as CustomerListResult,
 } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
+import { ListDetailEmpty, ListDetailLayout } from "@/shared/layout/ListDetail";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
+import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { displayPhone } from "@/shared/phone";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Field } from "@/shared/ui/Field";
 import { ListItem } from "@/shared/ui/ListItem";
 import { Skeleton, StatePanel } from "@/shared/ui/States";
 
-export function CustomerList() {
+type CustomerListData = {
+  canCreate: boolean;
+  customers: Customer[];
+  error: string | null;
+  filtered: Customer[];
+  groups: CustomerGroup[];
+  loading: boolean;
+  query: string;
+  retry: () => void;
+  setQuery: (value: string) => void;
+  today: Date;
+};
+
+/** `enabled=false` não busca nada: o painel que não cabe na janela nunca consome o BFF. */
+export function useCustomerListData(enabled = true): CustomerListData {
   const [result, setResult] = useState<CustomerListResult | null>(null);
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +42,7 @@ export function CustomerList() {
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
+    if (!enabled) return;
     const controller = new AbortController();
     const services = getProductServices();
     Promise.all([
@@ -42,7 +60,7 @@ export function CustomerList() {
           );
       });
     return () => controller.abort();
-  }, [reload]);
+  }, [enabled, reload]);
 
   const customers = result?.items ?? [];
   const filtered = useMemo(() => {
@@ -55,10 +73,29 @@ export function CustomerList() {
     );
   }, [result, query]);
   const groups = useMemo(() => groupAlphabetically(filtered), [filtered]);
-  const today = todayWallDate(timezone);
 
-  const canCreate = Boolean(result) && !result?.managedExternally;
-  const loading = !result && !error;
+  return {
+    canCreate: Boolean(result) && !result?.managedExternally,
+    customers,
+    error,
+    filtered,
+    groups,
+    loading: enabled && !result && !error,
+    query,
+    retry: () => {
+      setError(null);
+      setReload((value) => value + 1);
+    },
+    setQuery,
+    today: todayWallDate(timezone),
+  };
+}
+
+export function CustomerList() {
+  const wide = useWideLayout();
+  const data = useCustomerListData();
+  const { canCreate, customers, error, filtered, groups, loading, today } = data;
+
   useShellConfig({
     action: canCreate
       ? { href: "/clientes/novo", icon: "plus", label: "Novo cliente" }
@@ -68,6 +105,18 @@ export function CustomerList() {
     module: "directory",
     title: "Clientes",
   });
+
+  if (wide) {
+    return (
+      <ListDetailLayout
+        detail={
+          <ListDetailEmpty>Selecione um cliente para ver o perfil</ListDetailEmpty>
+        }
+        list={<CustomerListPanelView data={data} />}
+        listLabel="Clientes"
+      />
+    );
+  }
 
   return (
     <div className="page">
@@ -92,10 +141,7 @@ export function CustomerList() {
           actionLabel="Tentar novamente"
           description={error}
           icon="alert"
-          onAction={() => {
-            setError(null);
-            setReload((value) => value + 1);
-          }}
+          onAction={data.retry}
           title="Não foi possível carregar clientes"
           tone="error"
         />
@@ -115,10 +161,10 @@ export function CustomerList() {
             className="customer-search"
             icon="search"
             label="Buscar cliente"
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => data.setQuery(event.target.value)}
             placeholder="Nome ou telefone"
             type="search"
-            value={query}
+            value={data.query}
           />
           <div className="customer-list-meta">
             <strong>Clientes cadastrados</strong>
@@ -160,6 +206,145 @@ export function CustomerList() {
                       }
                     />
                   ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Lista em painel para as rotas de detalhe e criação: busca os próprios dados
+ * e nunca chama `useShellConfig` (a tela que a hospeda já declarou a casca).
+ */
+export function CustomerListPanel({ openId }: { openId?: string }) {
+  const data = useCustomerListData();
+  return <CustomerListPanelView data={data} heading="h2" openId={openId} />;
+}
+
+function CustomerListPanelView({
+  data,
+  heading: Heading = "h1",
+  openId,
+}: {
+  data: CustomerListData;
+  heading?: "h1" | "h2";
+  openId?: string;
+}) {
+  const { canCreate, customers, error, filtered, groups, loading, today } = data;
+  return (
+    <div className="customer-panel">
+      <div className="customer-panel-header">
+        <Heading>Clientes</Heading>
+        <div className="customer-panel-tools">
+          {!loading && !error && customers.length > 0 && (
+            <span className="customer-panel-count">
+              {customers.length}
+              <span className="sr-only">
+                {customers.length === 1 ? " cliente" : " clientes"}
+              </span>
+            </span>
+          )}
+          {canCreate && (
+            <Link
+              aria-label="Novo cliente"
+              className="customer-panel-add"
+              href="/clientes/novo"
+            >
+              <Icon name="plus" />
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {error ? (
+        <StatePanel
+          actionLabel="Tentar novamente"
+          description={error}
+          icon="alert"
+          onAction={data.retry}
+          title="Não foi possível carregar clientes"
+          tone="error"
+        />
+      ) : loading ? (
+        <CustomerListSkeleton />
+      ) : customers.length === 0 ? (
+        <StatePanel
+          actionHref={canCreate ? "/clientes/novo" : undefined}
+          actionLabel={canCreate ? "Cadastrar cliente" : undefined}
+          description="Depois do primeiro cadastro ou agendamento, os clientes aparecerão aqui."
+          icon="users"
+          title="Seus clientes aparecerão aqui"
+        />
+      ) : (
+        <>
+          <Field
+            className="customer-panel-search"
+            icon="search"
+            label="Buscar cliente"
+            onChange={(event) => data.setQuery(event.target.value)}
+            placeholder="Nome ou telefone"
+            type="search"
+            value={data.query}
+          />
+          {filtered.length === 0 ? (
+            <p className="customer-no-results" role="status">
+              Nenhum cliente corresponde à busca.
+            </p>
+          ) : (
+            <div aria-label="Clientes" className="customer-panel-list" role="list">
+              {groups.map((group) => (
+                <div className="customer-panel-group" key={group.letter}>
+                  <p className="customer-panel-letter">{group.letter}</p>
+                  {group.customers.map((customer) => {
+                    const open = customer.id === openId;
+                    const meta = appointmentParts(customer, today);
+                    return (
+                      <div
+                        className="customer-panel-row"
+                        key={customer.id}
+                        role="listitem"
+                      >
+                        <Link
+                          aria-current={open ? "page" : undefined}
+                          className={clsx("customer-panel-item", open && "is-open")}
+                          href={`/clientes/detalhes?id=${encodeURIComponent(customer.id)}`}
+                        >
+                          <span className="customer-panel-avatar" aria-hidden="true">
+                            {initials(customer.name)}
+                          </span>
+                          <span className="customer-panel-main">
+                            <span className="customer-panel-name list-item-title">
+                              {customer.name || "Cliente sem nome"}
+                            </span>
+                            <span className="customer-panel-phone">
+                              {displayPhone(customer.phone, "Telefone não informado")}
+                            </span>
+                          </span>
+                          <span className="customer-panel-meta">
+                            {meta.eyebrow && (
+                              <>
+                                <span className="customer-panel-eyebrow">
+                                  {meta.eyebrow}
+                                </span>{" "}
+                              </>
+                            )}
+                            <span
+                              className={clsx(
+                                "customer-panel-when",
+                                `is-${meta.tone}`,
+                              )}
+                            >
+                              {meta.value}
+                            </span>
+                          </span>
+                        </Link>
+                      </div>
+                    );
+                  })}
                 </div>
               ))}
             </div>
@@ -350,4 +535,35 @@ function appointmentText(customer: Customer, today: Date): string {
   if (customer.lastAppointment)
     return lastAppointmentText(customer.lastAppointment, today);
   return "sem atendimentos";
+}
+
+type AppointmentParts = {
+  eyebrow?: string;
+  tone: "empty" | "last" | "missed" | "next";
+  value: string;
+};
+
+/** Mesmo texto de `appointmentText`, separado em rótulo e valor para a linha do painel. */
+function appointmentParts(customer: Customer, today: Date): AppointmentParts {
+  if (customer.nextAppointment) {
+    return {
+      eyebrow: "próximo",
+      tone: "next",
+      value: nextAppointmentText(customer.nextAppointment, today).replace(
+        /^próximo /,
+        "",
+      ),
+    };
+  }
+  if (customer.lastAppointment) {
+    return {
+      eyebrow: "último",
+      tone: customer.lastAppointment.status === "NO_SHOW" ? "missed" : "last",
+      value: lastAppointmentText(customer.lastAppointment, today).replace(
+        /^último /,
+        "",
+      ),
+    };
+  }
+  return { tone: "empty", value: "sem atendimentos" };
 }

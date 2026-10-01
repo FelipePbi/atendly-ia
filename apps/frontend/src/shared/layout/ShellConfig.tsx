@@ -33,6 +33,12 @@ export type ShellConfig = {
   loading?: boolean;
   mainClassName?: string;
   module?: ShellModule;
+  /**
+   * Tela empurrada (detalhe, criação ou edição): abaixo de 1024 px a casca
+   * esconde a barra de abas e o botão flutuante; a barra própria da tela
+   * (`PushedBar`) assume o voltar.
+   */
+  pushed?: boolean;
   showBottomNav?: boolean;
   title: string;
   /** A tela já diz o estado do WhatsApp em faixa própria: a casca não repete o banner. */
@@ -56,6 +62,7 @@ function sameConfig(a: ShellConfig | null, b: ShellConfig): boolean {
     a.loading === b.loading &&
     a.mainClassName === b.mainClassName &&
     a.module === b.module &&
+    a.pushed === b.pushed &&
     a.showBottomNav === b.showBottomNav &&
     a.whatsappInBand === b.whatsappInBand &&
     a.action?.href === b.action?.href &&

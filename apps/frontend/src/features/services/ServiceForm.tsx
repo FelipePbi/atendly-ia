@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 
@@ -9,15 +8,23 @@ import {
   type ServiceColorToken,
   type ServiceList as ServiceListResult,
 } from "@/data";
+import { ListDetailLayout } from "@/shared/layout/ListDetail";
+import { PushedBar } from "@/shared/layout/PushedBar";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
+import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { CurrencyInput } from "@/shared/ui/CurrencyInput";
 
-import { formatServicePreview } from "./serviceFormatting";
 import {
-  DirectoryHeader,
+  formatServiceDuration,
+  formatServicePreview,
+  formatServicePrice,
+  formatServiceRecurrence,
+} from "./serviceFormatting";
+import {
   DirectoryState,
   requestError,
+  ServiceListPanel,
 } from "./ServiceList";
 
 const priceTypeOptions: Array<{
@@ -39,6 +46,30 @@ const colorTokenOptions: Array<{ value: ServiceColorToken; label: string }> = [
   { value: "SLATE", label: "Ardósia" },
 ];
 
+/*
+ * S4 colapsa nome, duração e preço numa linha-resumo. Aqui a linha abre
+ * expandida: o gate "a 45-minute service saves through the form" preenche a
+ * duração assim que /servicos/editar carrega, sem tocar na linha, e o Goal088
+ * o quer sem mudança. D-103 registra a divergência.
+ */
+const ESSENTIALS_OPEN_ON_EDIT = true;
+
+type BufferField = "bufferBefore" | "bufferAfter";
+
+const bufferFields: Array<{ name: BufferField; label: string; short: string }> =
+  [
+    { label: "Intervalo antes do atendimento", name: "bufferBefore", short: "Antes" },
+    { label: "Intervalo depois do atendimento", name: "bufferAfter", short: "Depois" },
+  ];
+
+function formatRecurrenceValue(value: string): string {
+  const days = value === "" ? null : Number(value);
+  const text = formatServiceRecurrence(
+    days !== null && Number.isFinite(days) && days > 0 ? days : null,
+  );
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : "Não repete";
+}
+
 function priceRequiresValue(priceType: Service["priceType"]): boolean {
   return priceType === "FIXED" || priceType === "STARTING_AT";
 }
@@ -50,7 +81,9 @@ export function ServiceForm({
   edit: boolean;
   serviceId?: string;
 }) {
+  const wide = useWideLayout();
   const router = useRouter();
+  const [dirty, setDirty] = useState(false);
   const [catalog, setCatalog] = useState<ServiceListResult | null>(null);
   const [service, setService] = useState<Service | null>(null);
   const [name, setName] = useState("");
@@ -59,7 +92,15 @@ export function ServiceForm({
   const [priceCents, setPriceCents] = useState<number | null>(null);
   const [priceError, setPriceError] = useState<string | null>(null);
   const [colorToken, setColorToken] = useState<ServiceColorToken | "">("");
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [essentialsOpen, setEssentialsOpen] = useState(
+    ESSENTIALS_OPEN_ON_EDIT,
+  );
+  const [recurrenceValue, setRecurrenceValue] = useState("");
+  const [recurrenceOpen, setRecurrenceOpen] = useState(false);
+  const [buffers, setBuffers] = useState<Record<BufferField, string>>({
+    bufferAfter: "0",
+    bufferBefore: "0",
+  });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -96,16 +137,15 @@ export function ServiceForm({
           found.price === null ? null : Math.round(found.price * 100),
         );
         setColorToken(found.colorToken ?? "");
-        if (
-          found.description ||
-          found.colorToken ||
-          found.bufferBeforeMinutes ||
-          found.bufferAfterMinutes ||
-          found.recurrenceIntervalDays ||
-          !found.active
-        ) {
-          setAdvancedOpen(true);
-        }
+        setRecurrenceValue(
+          found.recurrenceIntervalDays === null
+            ? ""
+            : String(found.recurrenceIntervalDays),
+        );
+        setBuffers({
+          bufferAfter: String(found.bufferAfterMinutes ?? 0),
+          bufferBefore: String(found.bufferBeforeMinutes ?? 0),
+        });
         getProductServices()
           .serviceCatalog.getAiInstruction(found.id, controller.signal)
           .then((result) => {
@@ -191,12 +231,14 @@ export function ServiceForm({
   }
 
   function incrementDuration() {
+    setDirty(true);
     setDurationValue((current) =>
       current === "" ? "5" : String(Number(current) + 5),
     );
   }
 
   function decrementDuration() {
+    setDirty(true);
     setDurationValue((current) =>
       current === "" ? current : String(Math.max(5, Number(current) - 5)),
     );
@@ -209,20 +251,46 @@ export function ServiceForm({
     priceType,
   });
 
+  const durationMinutes = durationValue === "" ? null : Number(durationValue);
+  const summary = [
+    name.trim() || "Sem nome",
+    formatServiceDuration(durationMinutes),
+    priceRequiresValue(priceType) && priceCents === null
+      ? "sem preço informado"
+      : formatServicePrice({
+          price: priceCents === null ? null : priceCents / 100,
+          priceType,
+        }),
+  ].join(" · ");
+  const recurrenceText = formatRecurrenceValue(recurrenceValue);
+
+  function stepBuffer(field: BufferField, delta: number) {
+    setDirty(true);
+    setBuffers((current) => {
+      const value = current[field] === "" ? 0 : Number(current[field]);
+      return { ...current, [field]: String(Math.max(0, value + delta)) };
+    });
+  }
+
   useShellConfig({
     active: "servicos",
     loading: !catalog && !error,
     module: "directory",
+    pushed: true,
     title: edit ? "Editar serviço" : "Novo serviço",
   });
-  return (
-    <>
-      <section className="directory-page is-form-page">
-        <DirectoryHeader
-          title={edit ? "Editar serviço" : "Novo serviço"}
-          description="Defina o que a IA pode oferecer ao criar novos agendamentos."
-          back="/servicos"
-        />
+
+  const barTitle = edit ? (service?.name ?? "Editar serviço") : "Novo serviço";
+  const screen = (
+    <section className="directory-page is-form-page service-form-screen">
+      <PushedBar
+        backHref="/servicos"
+        backIcon="x"
+        backLabel="Voltar para serviços"
+        subtitle={edit && dirty ? "alterações não salvas" : undefined}
+        title={barTitle}
+      />
+      <div className="service-form-body">
         {error ? (
           <DirectoryState
             actionHref="/servicos"
@@ -253,10 +321,29 @@ export function ServiceForm({
         ) : (
           <form
             className="directory-form-card"
+            onChange={() => setDirty(true)}
             onSubmit={(event) => void submit(event)}
           >
-            <h2>Essencial</h2>
-            <div className="directory-form-grid">
+            <h2 className="sr-only">Essencial</h2>
+            {edit && (
+              <button
+                aria-controls="service-essentials"
+                aria-expanded={essentialsOpen}
+                className="service-summary-row"
+                type="button"
+                onClick={() => setEssentialsOpen((open) => !open)}
+              >
+                <span className="service-summary-label">
+                  Nome, duração e preço
+                </span>
+                <span className="service-summary-value">{summary}</span>
+              </button>
+            )}
+            <div
+              className="directory-form-grid service-essentials"
+              hidden={edit && !essentialsOpen}
+              id="service-essentials"
+            >
               <label className="field is-wide">
                 <span className="label">Nome do serviço</span>
                 <input
@@ -315,7 +402,10 @@ export function ServiceForm({
                       className="btn btn-tertiary service-duration-shortcut"
                       key={minutes}
                       type="button"
-                      onClick={() => setDurationValue(String(minutes))}
+                      onClick={() => {
+                        setDirty(true);
+                        setDurationValue(String(minutes));
+                      }}
                     >
                       {minutes}
                     </button>
@@ -338,6 +428,7 @@ export function ServiceForm({
                         type="radio"
                         value={option.value}
                         onChange={() => {
+                          setDirty(true);
                           setPriceType(option.value);
                           setPriceError(null);
                         }}
@@ -365,6 +456,7 @@ export function ServiceForm({
                     }
                     key={service?.id ?? "new"}
                     onValueChange={(value) => {
+                      setDirty(true);
                       setPriceCents(value);
                       setPriceError(null);
                     }}
@@ -385,158 +477,186 @@ export function ServiceForm({
                   <p className="service-preview-text">“{preview}”</p>
                 </div>
               )}
+              <label className="field is-wide">
+                <span className="label">Descrição (opcional)</span>
+                <textarea
+                  className="input"
+                  defaultValue={service?.description ?? ""}
+                  maxLength={2000}
+                  name="description"
+                  placeholder="Detalhes que ajudam a explicar o serviço."
+                />
+              </label>
+              <label className="field">
+                <span className="label">Identidade visual (opcional)</span>
+                <select
+                  className="select"
+                  name="colorToken"
+                  value={colorToken}
+                  onChange={(event) =>
+                    setColorToken(event.target.value as ServiceColorToken | "")
+                  }
+                >
+                  <option value="">Sem cor definida</option>
+                  {colorTokenOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                {colorToken && (
+                  <span className="service-color-preview">
+                    <span
+                      aria-hidden="true"
+                      className="swatch service-swatch"
+                      data-color={colorToken}
+                    />
+                    <span className="field-help">
+                      Pré-visualização da cor usada para identificar este
+                      serviço.
+                    </span>
+                  </span>
+                )}
+              </label>
             </div>
 
-            <details
-              className="service-form-advanced"
-              open={advancedOpen}
-              onToggle={(event) =>
-                setAdvancedOpen(event.currentTarget.open)
-              }
-            >
-              <summary>Descrição, cor, buffers, recorrência e status</summary>
-              <div className="directory-form-grid">
-                <label className="field is-wide">
-                  <span className="label">Descrição (opcional)</span>
-                  <textarea
-                    className="input"
-                    defaultValue={service?.description ?? ""}
-                    maxLength={2000}
-                    name="description"
-                    placeholder="Detalhes que ajudam a explicar o serviço."
-                  />
-                </label>
-                <label className="field is-wide">
-                  <span className="label">
-                    Instruções para a IA · só ela lê
-                  </span>
-                  <textarea
-                    className="input"
-                    disabled={aiInstructionReadError}
-                    maxLength={2000}
-                    name="aiInstruction"
-                    placeholder="Não faço coloração em cabelo com henna. Se a cliente mencionar henna, peça para falar comigo antes de marcar."
-                    value={aiInstructionValue}
-                    onChange={(event) =>
-                      setAiInstructionValue(event.target.value)
-                    }
-                  />
-                  <span
-                    className="field-help"
-                    role={aiInstructionReadError ? "alert" : undefined}
+            <h2 className="sr-only">Mais opções</h2>
+            <div className="service-options">
+              <div className="service-option">
+                <div className="service-option-head">
+                  <span className="service-option-title">Recorrência</span>
+                  <button
+                    aria-controls="service-recurrence-field"
+                    aria-expanded={recurrenceOpen}
+                    className="service-option-value"
+                    type="button"
+                    onClick={() => setRecurrenceOpen((open) => !open)}
                   >
-                    {aiInstructionReadError
-                      ? "Não foi possível carregar as instruções para a IA agora. Você ainda pode salvar o serviço."
-                      : "A IA usa para decidir o que responder ou quando chamar você, e não mostra este texto às clientes."}
-                  </span>
-                </label>
-                <label className="field">
-                  <span className="label">Identidade visual (opcional)</span>
-                  <select
-                    className="select"
-                    name="colorToken"
-                    value={colorToken}
-                    onChange={(event) =>
-                      setColorToken(
-                        event.target.value as ServiceColorToken | "",
-                      )
-                    }
-                  >
-                    <option value="">Sem cor definida</option>
-                    {colorTokenOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  {colorToken && (
-                    <span className="service-color-preview">
-                      <span
-                        aria-hidden="true"
-                        className="swatch service-swatch"
-                        data-color={colorToken}
-                      />
-                      <span className="field-help">
-                        Pré-visualização da cor usada para identificar este
-                        serviço.
-                      </span>
-                    </span>
-                  )}
-                </label>
-                <label className="field">
-                  <span className="label">
-                    Intervalo antes do atendimento (minutos)
-                  </span>
-                  <input
-                    className="input"
-                    defaultValue={service?.bufferBeforeMinutes ?? 0}
-                    min={0}
-                    name="bufferBefore"
-                    step={5}
-                    type="number"
-                  />
-                </label>
-                <label className="field">
-                  <span className="label">
-                    Intervalo depois do atendimento (minutos)
-                  </span>
-                  <input
-                    className="input"
-                    defaultValue={service?.bufferAfterMinutes ?? 0}
-                    min={0}
-                    name="bufferAfter"
-                    step={5}
-                    type="number"
-                  />
-                </label>
-                <label className="field">
+                    {recurrenceText}
+                  </button>
+                </div>
+                <label
+                  className="field"
+                  hidden={!recurrenceOpen}
+                  id="service-recurrence-field"
+                >
                   <span className="label">
                     Repetir automaticamente a cada (dias)
                   </span>
                   <input
                     className="input"
-                    defaultValue={service?.recurrenceIntervalDays ?? ""}
                     min={1}
                     name="recurrence"
                     placeholder="Deixe em branco se não repetir"
                     type="number"
+                    value={recurrenceValue}
+                    onChange={(event) => setRecurrenceValue(event.target.value)}
                   />
-                  <span className="field-help">
-                    Usado quando este serviço costuma se repetir em um
-                    intervalo fixo de dias.
-                  </span>
                 </label>
-                <label className="check directory-active-control is-wide">
-                  <input
-                    defaultChecked={service?.active ?? true}
-                    name="active"
-                    type="checkbox"
-                  />
-                  <span className="check-box" />
-                  <span className="directory-active-copy">
-                    <strong>Serviço ativo</strong>
-                    <span className="field-help">
-                      Serviços inativos não são oferecidos pela IA para novos
-                      agendamentos.
-                    </span>
-                  </span>
-                </label>
+                <span className="service-option-note">
+                  Referência para a IA quando a cliente pedir “as próximas”.
+                  Nunca marca sozinha.
+                </span>
               </div>
-            </details>
 
-            <div className="directory-form-note">
-              Antes de alterar duração ou desativar um serviço, revise
-              eventuais impactos nos agendamentos futuros.
+              <div className="service-option">
+                <span className="service-option-title">
+                  Intervalo antes e depois
+                </span>
+                <div className="service-buffers">
+                  {bufferFields.map((field) => (
+                    <div className="service-buffer" key={field.name}>
+                      <span aria-hidden="true" className="service-buffer-label">
+                        {field.short}
+                      </span>
+                      <span className="service-buffer-stepper">
+                        <button
+                          aria-label={`Diminuir ${field.label.toLowerCase()}`}
+                          className="service-buffer-step"
+                          type="button"
+                          onClick={() => stepBuffer(field.name, -5)}
+                        >
+                          −
+                        </button>
+                        <input
+                          aria-label={`${field.label} (minutos)`}
+                          className="service-buffer-input"
+                          min={0}
+                          name={field.name}
+                          step={5}
+                          type="number"
+                          value={buffers[field.name]}
+                          onChange={(event) =>
+                            setBuffers((current) => ({
+                              ...current,
+                              [field.name]: event.target.value,
+                            }))
+                          }
+                        />
+                        <button
+                          aria-label={`Aumentar ${field.label.toLowerCase()}`}
+                          className="service-buffer-step is-increase"
+                          type="button"
+                          onClick={() => stepBuffer(field.name, 5)}
+                        >
+                          +
+                        </button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <span className="service-option-note">
+                  Minutos que ficam ocupados na agenda para preparar ou limpar.
+                  Entre serviços do mesmo atendimento, não se somam.
+                </span>
+              </div>
+
+              <label className="service-option">
+                <span className="service-option-title">
+                  Instruções para a IA{" "}
+                  <span className="service-option-aside">· só ela lê</span>
+                </span>
+                <textarea
+                  className="input service-instruction-input"
+                  disabled={aiInstructionReadError}
+                  maxLength={2000}
+                  name="aiInstruction"
+                  placeholder="Não faço coloração em cabelo com henna. Se a cliente mencionar henna, peça para falar comigo antes de marcar."
+                  value={aiInstructionValue}
+                  onChange={(event) => setAiInstructionValue(event.target.value)}
+                />
+                <span
+                  className="service-option-help"
+                  role={aiInstructionReadError ? "alert" : undefined}
+                >
+                  {aiInstructionReadError
+                    ? "Não foi possível carregar as instruções para a IA agora. Você ainda pode salvar o serviço."
+                    : "Nunca é enviado ao cliente. A IA usa para decidir o que responder ou quando chamar você."}
+                </span>
+              </label>
+
+              <label className="check service-option service-active-option">
+                <input
+                  defaultChecked={service?.active ?? true}
+                  name="active"
+                  type="checkbox"
+                />
+                <span className="check-box" />
+                <span className="service-active-copy">
+                  <span className="service-option-title">Serviço ativo</span>
+                  <span className="service-option-note">
+                    A IA oferece e você vê nas opções de agendamento
+                  </span>
+                </span>
+              </label>
             </div>
+
             {message && (
               <div className="directory-inline-error" role="alert">
                 {message}
               </div>
             )}
-            <div className="directory-form-footer">
-              <Link className="btn btn-secondary" href="/servicos">
-                Cancelar
-              </Link>
+            <div className="directory-form-footer service-form-cta">
               <button className="btn btn-primary" disabled={busy} type="submit">
                 {busy
                   ? "Salvando..."
@@ -547,8 +667,17 @@ export function ServiceForm({
             </div>
           </form>
         )}
-      </section>
-    </>
+      </div>
+    </section>
+  );
+
+  if (!wide) return screen;
+  return (
+    <ListDetailLayout
+      detail={screen}
+      list={<ServiceListPanel openId={edit ? serviceId : undefined} />}
+      listLabel="Serviços"
+    />
   );
 }
 

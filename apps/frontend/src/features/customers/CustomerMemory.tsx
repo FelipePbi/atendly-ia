@@ -127,18 +127,12 @@ export function CustomerMemory({ customerId }: CustomerMemoryProps) {
   }
 
   return (
-    <section aria-label="Preferências do cliente" className="directory-section">
-      <div className="directory-section-header">
-        <div>
-          <h2>Preferências</h2>
-          <p>
-            O que você e a IA percebem sobre esta pessoa. Uma preferência
-            cadastrada por você só é usada pela IA depois que você autoriza.
-          </p>
-        </div>
+    <section aria-label="Preferências do cliente" className="resume-prefs">
+      <div className="resume-prefs-head">
+        <h2 className="resume-heading">Preferências</h2>
         {!creating && (
           <button
-            className="btn btn-secondary"
+            className="resume-link"
             onClick={() => setCreating(true)}
             type="button"
           >
@@ -173,6 +167,10 @@ export function CustomerMemory({ customerId }: CustomerMemoryProps) {
           className="customer-record-form"
           onSubmit={(event) => void createEntry(event)}
         >
+          <p className="resume-ai-hint">
+            O que você e a IA percebem sobre esta pessoa. Uma preferência
+            cadastrada por você só é usada pela IA depois que você autoriza.
+          </p>
           <div className="field">
             <label className="label" htmlFor={kindId}>
               Tipo
@@ -228,20 +226,22 @@ export function CustomerMemory({ customerId }: CustomerMemoryProps) {
       ) : entries && entries.length === 0 && !creating ? (
         <p className="muted small">Nenhuma memória registrada.</p>
       ) : entries ? (
-        <div className="customer-record-list">
+        <div className="resume-pref-list">
           {entries.map((entry) => (
-            <article className="customer-record" key={entry.id}>
-              <p className="customer-record-body">{entry.value}</p>
-              <p className="customer-record-meta">
-                {KIND_LABELS[entry.kind]} · {ORIGIN_LABELS[entry.origin]} ·{" "}
-                {formatAge(entry.observedAt)}
-              </p>
-              <AuthorizationControl
-                authorized={entry.aiAllowed}
-                busy={busyId === entry.id}
-                onToggle={() => void togglePermission(entry)}
-              />
-              <div className="customer-form-footer">
+            <article className="resume-pref" key={entry.id}>
+              <div className="resume-pref-line">
+                <p className="resume-pref-body">{entry.value}</p>
+                <p className="resume-pref-origin">
+                  {KIND_LABELS[entry.kind]} · {ORIGIN_LABELS[entry.origin]} ·{" "}
+                  {formatAge(entry.observedAt)}
+                </p>
+              </div>
+              <div className="resume-pref-actions">
+                <AuthorizationControl
+                  authorized={entry.aiAllowed}
+                  busy={busyId === entry.id}
+                  onToggle={() => void togglePermission(entry)}
+                />
                 <button
                   className="btn btn-tertiary"
                   disabled={busyId === entry.id}

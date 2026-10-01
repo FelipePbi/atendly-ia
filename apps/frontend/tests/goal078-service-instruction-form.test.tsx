@@ -80,9 +80,6 @@ async function renderEditForm() {
     </ShellConfigProvider>,
   );
   await screen.findByLabelText("Nome do serviço");
-  await userEvent.click(
-    screen.getByText("Descrição, cor, buffers, recorrência e status"),
-  );
   return screen.findByLabelText<HTMLTextAreaElement>(
     "Instruções para a IA · só ela lê",
     { exact: false },
@@ -101,9 +98,6 @@ async function renderNewForm() {
     </ShellConfigProvider>,
   );
   await screen.findByLabelText("Nome do serviço");
-  await userEvent.click(
-    screen.getByText("Descrição, cor, buffers, recorrência e status"),
-  );
   return screen.getByLabelText<HTMLTextAreaElement>(
     "Instruções para a IA · só ela lê",
     { exact: false },

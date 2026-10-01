@@ -376,8 +376,12 @@ describe("§6.10 — três abas: clique, seta e endereço direto", () => {
     renderProfile();
     await screen.findByRole("heading", { name: "Ana Paula" });
 
-    // Cabeçalho: editar cadastro.
-    expect(screen.getByRole("button", { name: "Editar dados" })).toBeVisible();
+    // Cabeçalho: editar cadastro, agora no menu "⋯" da barra da tela (CL5).
+    await user.click(
+      screen.getByRole("button", { name: "Mais ações do cliente" }),
+    );
+    expect(screen.getByRole("menuitem", { name: "Editar dados" })).toBeVisible();
+    await user.keyboard("{Escape}");
 
     // Resumo: preferência (memória), resumo sob demanda, responsável principal.
     expect(
@@ -524,9 +528,12 @@ describe("Resumo — o próximo atendimento vem do detalhe do backend", () => {
     renderProfile();
     await screen.findByRole("heading", { name: "Ana Paula" });
 
-    expect(
-      await screen.findByText(/Próximo atendimento: 02\/10 às 15:30/),
-    ).toBeVisible();
+    const next = await screen.findByRole("region", {
+      name: "Próximo atendimento",
+    });
+    expect(next).toHaveTextContent("02/10");
+    expect(next).toHaveTextContent("15:30");
+    expect(next).toHaveTextContent("Confirmado");
   });
 
   test("com nextAppointment null, o Resumo não inventa próximo atendimento", async () => {
@@ -544,6 +551,8 @@ describe("Resumo — o próximo atendimento vem do detalhe do backend", () => {
     await screen.findByRole("heading", { name: "Ana Paula" });
     await screen.findByText("Atendimentos");
 
-    expect(screen.queryByText(/Próximo atendimento:/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Próximo atendimento" }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -215,7 +215,16 @@ function readBffEnv() {
 function guardTrackedFiles() {
   const files = ["next-env.d.ts", "tsconfig.json", "AGENTS.md", "CLAUDE.md"].map((name) => path.join(FRONTEND_DIR, name));
   const saved = files.filter(existsSync).map((file) => ({ file, bytes: readFileSync(file) }));
-  return () => {
+  // Cópia em disco também: se este processo for morto sem chance de rodar o
+  // `finally`, o vigia (startWatchdog) devolve os arquivos a partir dela.
+  const backupDir = path.join(OUT_DIR, ".guard");
+  mkdirSync(backupDir, { recursive: true });
+  const backups = saved.map(({ file, bytes }) => {
+    const backup = path.join(backupDir, path.basename(file));
+    writeFileSync(backup, bytes);
+    return { file, backup };
+  });
+  const restore = () => {
     for (const { file, bytes } of saved) {
       try {
         if (!readFileSync(file).equals(bytes)) writeFileSync(file, bytes);
@@ -224,6 +233,48 @@ function guardTrackedFiles() {
       }
     }
   };
+  restore.backups = backups;
+  return restore;
+}
+
+/**
+ * Vigia destacado: se este script morrer sem rodar o `finally` (o Bash do
+ * modelo estourou o tempo e matou o processo, por exemplo), o `next dev` que
+ * ele subiu ficaria vivo para sempre, segurando memória. O vigia não é filho
+ * na árvore que é morta: confere a cada 2 s se este processo ainda existe e,
+ * quando não existe, derruba a árvore do `next dev` e devolve os arquivos
+ * versionados que ele reescreve. Sai sozinho quando o `next dev` termina.
+ */
+function startWatchdog(childPid, backups) {
+  const code = `
+    const { execFileSync } = require("node:child_process");
+    const fs = require("node:fs");
+    const [parent, child, backups] = [Number(process.argv[1]), Number(process.argv[2]), JSON.parse(process.argv[3])];
+    const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+    const timer = setInterval(() => {
+      if (alive(parent)) {
+        // Com o script vivo, quem limpa é ele; o vigia só sai se o next já acabou.
+        if (!alive(child)) clearInterval(timer);
+        return;
+      }
+      clearInterval(timer);
+      if (alive(child)) {
+        try {
+          if (process.platform === "win32") execFileSync("taskkill", ["/PID", String(child), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+          else process.kill(child, "SIGKILL");
+        } catch {}
+      }
+      // O script morreu sem o finally: os arquivos versionados voltam daqui,
+      // tenha o next morrido junto ou não.
+      for (const { file, backup } of backups) { try { fs.copyFileSync(backup, file); } catch {} }
+    }, 2000);
+  `;
+  const watchdog = spawn(process.execPath, ["-e", code, String(process.pid), String(childPid), JSON.stringify(backups)], {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  watchdog.unref();
 }
 
 async function waitForHttp(url, timeoutMs, child) {
@@ -270,6 +321,7 @@ async function startFrontend(bffUrl) {
   };
   child.stdout.on("data", keep);
   child.stderr.on("data", keep);
+  startWatchdog(child.pid, restore.backups);
   const stop = async () => {
     if (child.exitCode === null) {
       if (process.platform === "win32") {
@@ -693,6 +745,11 @@ async function main() {
   const { chromium } = requireFrontend("@playwright/test");
   const prototype = await startPrototypeServer();
   const frontend = args.appUrl ? { appUrl: args.appUrl, stop: async () => {} } : await startFrontend(bffUrl);
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+    process.once(signal, () => {
+      frontend.stop().finally(() => process.exit(130));
+    });
+  }
   console.log(`app: ${frontend.appUrl} · protótipo: ${prototype.url}`);
   const browser = await chromium.launch();
   const rows = [];

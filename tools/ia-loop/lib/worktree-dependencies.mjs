@@ -45,6 +45,7 @@
  *   - No shell, argv only, same as every other command this harness spawns.
  */
 
+import { killProcessTreeSoon } from './orphan-processes.mjs';
 import { spawn } from 'node:child_process';
 import { access, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -185,7 +186,7 @@ function runInstall({ cwd, spawnFn, timeoutMs }) {
     };
 
     const timer = setTimeout(() => {
-      child.kill('SIGKILL');
+      killProcessTreeSoon(child);
       finish({ ok: false, exitCode: null, error: `TIMEOUT after ${Math.round(timeoutMs / 1000)}s` });
     }, timeoutMs);
 

@@ -5767,3 +5767,19 @@ foco e movimento. A porcentagem do diff é tendência, não gate: dados de conta
 diferentes sempre geram diferença. O julgamento é olhar as imagens. A comparação
 precisa do BFF local de desenvolvimento rodando. Se ele estiver fora do ar, o
 script sai com código 3, e o revisor trata isso como blocker de ambiente.
+
+## V34 — Nenhum processo sobrevive ao job que o criou
+
+Num Windows, `child.kill()` encerra um processo só. O resto da árvore sobrevive sem dono:
+
+- o `next dev` da comparação visual, quando o Bash do modelo estoura o tempo;
+- o `next start` e o Chromium de um gate do Playwright que bateu no timeout;
+- os workers do vitest e os servidores que um Developer subiu.
+
+Nada disso termina sozinho. Numa noite de Goals, a máquina ficou sem memória.
+
+O que mudou (`lib/orphan-processes.mjs`):
+
+- **Timeout mata a árvore.** No timeout do Claude CLI (`claude-process.mjs`), de uma ação determinística (`deterministic-executor.mjs`) ou da instalação de dependências da worktree (`worktree-dependencies.mjs`), o harness mata a árvore inteira com `taskkill /T /F`. Um dublê de teste continua recebendo o `kill` direto, porque um pid falso nunca deve chegar ao `taskkill`.
+- **Varredura de órfãos.** Ao fim de cada attempt e quando um worker sobe, ele mata os processos que perderam o pai **e** que pertencem ao loop. Pertence ao loop o processo cuja linha de comando cita `.ai-worktrees`, ou o Chromium do Playwright. Exigir as duas condições é o que deixa a varredura segura com trabalho em andamento: um processo de uma unidade ainda viva tem pai vivo, e nada fora das worktrees combina. Cada processo morto vai para o log do worker (`ORPHAN PROCESS KILLED`). A varredura não roda dentro do `node --test` e pode ser desligada com `IA_LOOP_ORPHAN_SWEEP=0`.
+- **Vigia no `visual:compare`.** Junto com o `next dev`, o script sobe um vigia destacado. Se o script morrer sem rodar o `finally`, o vigia derruba o `next dev` e devolve os arquivos versionados que ele reescreve. Testado matando o script à força no meio de uma comparação.

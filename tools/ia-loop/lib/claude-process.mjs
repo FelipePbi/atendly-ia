@@ -10,6 +10,8 @@
  */
 
 import { spawn } from 'node:child_process';
+
+import { killProcessTreeSoon } from './orphan-processes.mjs';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -373,7 +375,9 @@ export function runClaudeProcess({
 
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGKILL');
+      // The whole tree: on Windows a plain kill leaves the CLI's own tool
+      // subprocesses (servers, test runners) running forever.
+      killProcessTreeSoon(child);
     }, timeoutMs);
 
     child.stdout?.on('data', (chunk) => {

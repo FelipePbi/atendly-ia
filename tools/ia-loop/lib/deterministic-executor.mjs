@@ -20,6 +20,7 @@
  *                 not become the reason the run dies.
  */
 
+import { killProcessTreeSoon } from './orphan-processes.mjs';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 
@@ -159,7 +160,9 @@ export async function runDeterministicAction({
       // Killed, and reported as killed. A timeout that resolved as "failed"
       // would be indistinguishable from a real failure, and the two need
       // different answers: one is a fix, the other is a budget.
-      try { child.kill('SIGKILL'); } catch { /* the process is already gone */ }
+      // The whole tree: `npm run validate:ui` is npm → playwright → next start
+      // and Chromium, and killing npm alone leaves the rest running.
+      killProcessTreeSoon(child);
       finish({ ok: false, exitCode: null, signal: 'SIGKILL', error: `TIMEOUT after ${timeoutMs}ms` });
     }, timeoutMs);
     timer.unref?.();

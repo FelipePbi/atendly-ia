@@ -2,7 +2,7 @@
 
 (Até a v112, "Acabamento da casca, da Agenda e dos estados". O arquivo mantém o nome antigo para preservar os links do histórico.)
 
-**Status: READY.** Preparado de novo em 2026-10-01 pelo Tech Lead Agent após [Goal087 ACCEPTED](../reviews/087-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: ACCEPTED.** Preparado de novo em 2026-10-01 pelo Tech Lead Agent após [Goal087 ACCEPTED](../reviews/087-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: SONNET_HIGH
 

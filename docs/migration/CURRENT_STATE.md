@@ -8476,7 +8476,7 @@ resolveu todas as escolhas.
   nova e não pioraram, mas não seguem os quadros por inteiro
   ([review086](reviews/086-review.md)).
 
-## Delta implementado — Goal087, 2026-10-01 ([D-101](DECISIONS.md), PROPOSED)
+## Delta implementado — Goal087, 2026-10-01 ([D-101](DECISIONS.md), ACCEPTED)
 
 A casca da área logada passa a ter três faixas iguais ao protótipo, e `/inicio`
 segue o quadro **H1** na casca e na faixa de estado. Toca só `apps/frontend/`
@@ -8618,7 +8618,7 @@ estado atual. O item 1 de D-074 deixa de valer na grade de 248 px, no trilho de
 88 px e no cabeçalho de marca. A conferência do §7 continua não feita
 ([review087](reviews/087-review.md)).
 
-## Delta implementado — Goal085, 2026-10-01 ([D-102](DECISIONS.md), PROPOSED)
+## Delta implementado — Goal085, 2026-10-01 ([D-102](DECISIONS.md), ACCEPTED)
 
 A casca diz o estado real do WhatsApp e preenche a janela, e `/inicio` com o WhatsApp desconectado segue o quadro **H3**. Toca só `apps/frontend/` (`systemStatus.tsx`, `AppShell.tsx`, `ShellConfig.tsx`, `(platform)/layout.tsx`, `DashboardScreen.tsx`, `ConversationThread.tsx`, `atendly.css`, `Icon.tsx`, o sprite `atendly-icons.svg`, os testes e as medidas de `e2e/`). Sem rota, contrato, migration, campo ou variável novos, e `apps/bff/PUBLIC_API_V1.md`, o vault e `docs/design-reference/` não mudaram. Esta seção **muda**, no estado WhatsApp desconectado, o item "Cartão da IA" do delta do Goal087 acima.
 

@@ -3807,7 +3807,7 @@ aberto num formulário, e as outras telas logadas, cujo conteúdo próprio ainda
 diverge dos quadros. Nenhum teste é declarado prova disso, e `visual:compare`
 é tendência: quem revisa lê os `side-by-side.png`.
 
-Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal087-2026-10-01-d-101-proposed)
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal087-2026-10-01-d-101-accepted)
 e [D-101](DECISIONS.md), **PROPOSED**. FINAL_AUDIT não ganha seção neste Goal.
 
 ## A casca diz o estado real do WhatsApp e preenche a janela, e a medida G-3 do gate autenticado, do Goal085

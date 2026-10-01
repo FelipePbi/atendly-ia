@@ -8210,3 +8210,93 @@ no Goal081, **PROPOSED** até o review.
   fecha a observação 2 do review080. A conferência humana do §9 continua **não
   feita**, e A-08 segue pendente. Ver a nota de fechamento de
   [D-097](DECISIONS.md) e o [review081](reviews/081-review.md).
+
+## Delta implementado — Goal083, 2026-09-30 ([D-098](DECISIONS.md), ACCEPTED)
+
+Fecha **R-11** do re-teste local de 2026-09-30: `/agenda/novo` segue o protótipo
+**A6**, nenhum fluxo da Agenda mostra a faixa "fonte oficial · Operacional", e
+nenhum controle de texto, seleção ou área de texto da área logada fica com a
+borda nativa do navegador. Toca só `apps/frontend/`. Sem rota, contrato,
+migration ou campo novo, e `apps/bff/PUBLIC_API_V1.md` não mudou. Decisão:
+[D-098](DECISIONS.md), proposta no Goal083, **PROPOSED** até o review.
+
+- **Uma tela, a mesma rota.** `AppointmentForm.tsx` monta Cliente
+  (`CustomerField`, com "Trocar", busca e cadastro pelo mesmo campo), Serviços em
+  chips com a soma (`agreementTotal` e `totalLabel`), "Outro, sem cadastro",
+  faixa de dias (`DateStrip`), Horário em chips com "Outro horário",
+  "Adicionar observação" e o CTA "Criar agendamento · <dia abreviado> <dia>,
+  <hora>". Abaixo de 1024 px é uma coluna com o CTA colado ao rodapé; a partir de
+  1024 px a lista do dia (`DayList`, só leitura, de `readOccupancy`) fica ao
+  lado. Os componentes novos estão em `NewAppointmentFields.tsx`.
+- **O CTA cria com um clique.** O diálogo "Criar este agendamento?" e o "Revisar
+  e criar" saíram. Hold, idempotência, `ConflictPanel` com sobreposição por
+  motivo, `customerId` de entrada, `managedExternally`, `ReadOnlyState` e a
+  leitura de `createAppointments` mantêm o comportamento.
+- **"Outro, sem cadastro" não reserva.** Envia `serviceIds: []`, `title` e
+  `durationMinutes`, sem `holdId`; o choque vem pela recusa `409` da criação. Não
+  há chips de horário sugerido nesse caso, e o bloco do Horário diz por quê em uma
+  linha ("Sem serviço cadastrado não há horários sugeridos. Digite o horário
+  abaixo.").
+- **Divergência (e): "Avisar a cliente pelo WhatsApp" não é renderizado.**
+  `notifyCustomer` existe só em remarcar e cancelar; `CreateAppointmentInput` não
+  o carrega. É pergunta para uma pessoa, em [D-098](DECISIONS.md).
+- **A faixa saiu da casca.** `SourceStrip` foi apagada de `AgendaBoard.tsx`, e
+  `AppointmentFlowShell` tem o "Voltar" em chevron (`.agenda-flow-back`), sem o
+  eyebrow "Agenda", em todos os fluxos que a usam; `calendar` passou a ser
+  opcional nela.
+- **Rede de especificidade zero.** Em `atendly.css`, uma regra em `:where()`
+  escopada a `.app-frame` dá a aparência de `.input` a `input` de texto, `select`
+  e `textarea` sem classe; `checkbox`, `radio`, `range`, `color`, `file` e
+  `hidden` ficam de fora, e qualquer regra com classe vence.
+- **Gate autenticado.** `measureNativeBorderControls` (`e2e/measure.ts`, passo
+  "1c" de `authenticated-matrix.spec.ts`, `expect.soft`) reprova controle
+  renderizado, com borda visível, em `inset`/`outset` ou com raio `0px`, e diz a
+  rota, a largura e o seletor. `AUTHENTICATED_ROUTES` ganhou `agenda-novo`
+  (`/agenda/novo`), que soma **5** testes: de **170** para **175**.
+- **Execução final da rodada 3, todos exit 0**, refeita pelo FIX-001 sobre a
+  árvore atual, sem edição de código na rodada, antes dos cinco controles:
+  `validate:core` **17** passos (**15** `passed`, **2** `skipped`) e
+  `test:gate` **233**/**233**; `validate:ui` **169** `passed`, **21** `skipped`,
+  **0** `flaky` (`startTime` `2026-10-01T00:30:21.759Z` em
+  `e2e-results/results.json`); `validate:integration` **36** passos `passed`,
+  com o gate autenticado em **175** testes, **0** `flaky` e **0** retentativas
+  (`startTime` `2026-10-01T00:38:23.287Z` em
+  `e2e-results/authenticated/results.json`). Suítes lidas dentro do
+  `validate:core` da rodada 3: `test:frontend` **124**/**1280** (baseline
+  **123**/**1268**, com **11** testes novos em `goal083-new-appointment.test.tsx`
+  e **+1** líquido em `goal016-a11y.test.tsx`); `test:ai-orchestrator` **1186**
+  passando e **98** `skipped` de **1284**, e `test:scheduling-service`
+  **37**/**502**, ambos sem mudança.
+- **Cinco controles negativos do §6**, feitos pelo FIX-001 na rodada 3 depois da
+  execução final e sem edição de código depois dela, por edição real revertida
+  e conferida por hash: cada um reprova o teste esperado com o defeito (os
+  controles 1 a 4, em `goal083-new-appointment.test.tsx`, de `11 passed (11)`
+  para 6, 1, 1 e 1 testes que falham) e passa restaurado; o quinto é o gate
+  autenticado só em `agenda-novo` e `desktop-1440`, que nomeia o `input`
+  nativo. Saída, hashes e asserções alteradas em
+  [FINAL_AUDIT §59](FINAL_AUDIT.md). O vermelho da baseline do §5 é entrega da
+  rodada 1 e não foi reexecutado na rodada 3.
+- **Fechamento no FINAL_AUDIT.** R-11 é dado como corrigido em §59 (sem
+  reescrever §4–§58); o veredito continua **0** `BLOQUEADOR-MVP`, **7**
+  `PENDENCIA-POS-MVP` e **5** `LIMITE-DECLARADO`.
+- **Conferência humana pendente:** a conferência do §8 do Goal **não foi feita**
+  — a fidelidade visual ao A6 nas cinco larguras, criar pela tela nova num
+  navegador contra a pilha local (cliente cadastrado com dois serviços e cliente
+  novo) e a resposta à divergência (e). Nenhum teste é declarado prova de
+  fidelidade, e nenhuma medida renderizada abre bloqueio, série, remarcação,
+  cancelamento nem exceções.
+
+- **Fechamento — review083, 2026-09-30.** [D-098](DECISIONS.md)
+  **ACCEPTED** no [review083](reviews/083-review.md), rodada 3 do IA Loop,
+  depois de um blocker na rodada 1 (a linha de "Outro, sem cadastro") e outro
+  na rodada 2 (controles não refeitos depois dessa edição). A execução final e
+  os cinco controles acima são os do FIX-001 da rodada 3, que não editou
+  código; os `sha256` atuais conferem com os citados em
+  [FINAL_AUDIT §59](FINAL_AUDIT.md). O Tech Lead reexecutou quatro arquivos de
+  teste de frontend afetados (**45**/**45**). Os `e2e-results` em disco são de
+  uma reexecução do orquestrador sobre o mesmo código, com as mesmas contagens
+  e outros `startTime` (`2026-10-01T00:57:42.811Z` e
+  `2026-10-01T01:03:21.252Z`). **R-11** fica corrigido. A conferência humana do
+  §8 continua **não feita**, e a divergência (e) segue como pergunta para uma
+  pessoa. Ver a nota de fechamento de [D-098](DECISIONS.md) e o
+  [review083](reviews/083-review.md).

@@ -356,8 +356,8 @@ describe("grades da agenda (Dia, Semana e Mês)", () => {
   });
 });
 
-describe("diálogos de confirmação", () => {
-  async function renderCreateWithConfirm(user: UserEvent) {
+describe("criação sem diálogo de confirmação", () => {
+  async function renderCreateReady(user: UserEvent) {
     getAvailability.mockResolvedValue([
       { date: ISO_TODAY, endTime: "10:00", startTime: "09:00" },
     ]);
@@ -373,27 +373,38 @@ describe("diálogos de confirmação", () => {
     await user.type(screen.getByLabelText("Nome do cliente"), "Carla Nunes");
     await user.click(await screen.findByRole("radio", { name: "09:00" }));
     await waitFor(() => expect(createHold).toHaveBeenCalled());
-    const trigger = screen.getByRole("button", { name: "Revisar e criar" });
-    await user.click(trigger);
-    const dialog = await screen.findByRole("dialog");
-    return { ...result, dialog, trigger };
+    return result;
   }
 
-  test("confirmação de novo agendamento: foco entra no diálogo, Tab fica preso e Esc devolve o foco a quem abriu", async () => {
+  test("o CTA diz dia e hora, cria com um clique, sem diálogo no caminho, e passa no axe", async () => {
     const user = userEvent.setup();
-    const { container, dialog, trigger } = await renderCreateWithConfirm(user);
+    const { container } = await renderCreateReady(user);
 
     await expectNoA11yViolations(container);
-    expect(within(dialog).getByRole("button", { name: "Fechar" })).toHaveFocus();
+    const cta = screen.getByRole("button", { name: /^Criar agendamento · / });
+    expect(cta).toHaveAccessibleName(/, 09:00$/);
 
-    await user.tab({ shift: true });
-    expect(
-      within(dialog).getByRole("button", { name: "Confirmar agendamento" }),
-    ).toHaveFocus();
+    await user.click(cta);
 
-    await user.keyboard("{Escape}");
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(trigger).toHaveFocus();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(createAppointment).toHaveBeenCalledTimes(1));
+  });
+
+  test("a falha na criação é anunciada por role=alert e devolve o CTA", async () => {
+    createAppointment.mockRejectedValueOnce(new Error("falha de rede"));
+    const user = userEvent.setup();
+    await renderCreateReady(user);
+
+    await user.click(
+      screen.getByRole("button", { name: /^Criar agendamento · / }),
+    );
+
+    expect(await screen.findByRole("alert")).toBeVisible();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /^Criar agendamento · / }),
+      ).toBeEnabled(),
+    );
   });
 
   test("confirmação de cancelamento: mesma garantia de foco na integração real", async () => {
@@ -435,6 +446,7 @@ describe("controles de decisão de sobreposição", () => {
     );
     await user.click(await screen.findByRole("checkbox", { name: /Corte feminino/ }));
     await user.type(screen.getByLabelText("Nome do cliente"), "Carla Nunes");
+    await user.click(screen.getByRole("button", { name: "Outro horário" }));
     await user.type(
       screen.getByLabelText("Outro horário, fora dos oferecidos"),
       "1200",

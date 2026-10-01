@@ -16,6 +16,7 @@ import {
   type KnownSmallTarget,
   measureComposition,
   measureFirstTabFocus,
+  measureNativeBorderControls,
   measureOverflow,
   measureRunningAnimations,
   measureTouchTargets,
@@ -750,6 +751,20 @@ for (const route of AUTHENTICATED_ROUTES) {
           `${where}: the shell's mobile header or bottom bar runs off the viewport `
             + `(${composition.viewport.width}x${composition.viewport.height}): `
             + JSON.stringify(chromeOffGlass),
+        )
+        .toEqual([]);
+
+      // 1c. No visible control wears the browser's own border (Goal083).
+      const nativeBorders = await measureNativeBorderControls(page);
+      const viewportWidth = page.viewportSize()?.width ?? composition.viewport.width;
+      expect
+        .soft(
+          nativeBorders,
+          `${route.path} at ${testInfo.project.name} (${viewportWidth}px): visible controls with the `
+            + "browser's native border (inset/outset or 0px radius) — no product style reached them:\n"
+            + nativeBorders
+              .map((control) => `${control.selector} (${control.borderWidth} ${control.borderStyle}, radius ${control.radius})`)
+              .join("\n"),
         )
         .toEqual([]);
 

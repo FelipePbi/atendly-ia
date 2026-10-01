@@ -41,6 +41,14 @@ export const PUBLIC_ROUTES = [
 export const AUTHENTICATED_ROUTES = [
   { path: "/inicio", name: "inicio", sessionMarker: "inicio", contentMarker: ".dashboard-page" },
   { path: "/agenda", name: "agenda", sessionMarker: "agenda", contentMarker: "Agenda" },
+  // Goal083: o formulário de novo agendamento, em página própria. Shell destino
+  // é Agenda, mesmo sessionMarker de /agenda; o h1 é o título do fluxo.
+  {
+    path: "/agenda/novo",
+    name: "agenda-novo",
+    sessionMarker: "agenda",
+    contentMarker: "Novo agendamento",
+  },
   { path: "/clientes", name: "clientes", sessionMarker: "clientes", contentMarker: "Clientes" },
   { path: "/conversas", name: "conversas", sessionMarker: "conversas", contentMarker: "Conversas" },
   {

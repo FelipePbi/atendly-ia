@@ -8,16 +8,15 @@ import { Icon } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { StatePanel } from "@/shared/ui/States";
 
-import { AgendaLoading, SourceStrip } from "./AgendaBoard";
+import { AgendaLoading } from "./AgendaBoard";
 
 export function AppointmentFlowShell({
-  calendar,
   children,
   description,
   loading,
   title,
 }: {
-  calendar: CalendarState | null;
+  calendar?: CalendarState | null;
   children: ReactNode;
   description: string;
   loading: boolean;
@@ -33,14 +32,12 @@ export function AppointmentFlowShell({
     <>
       <div className="agenda-flow-page">
         <header className="agenda-flow-header">
-          <Link className="back-link" href="/agenda">
-            <Icon name="chevron-left" /> Voltar à agenda
+          <Link className="agenda-flow-back" href="/agenda">
+            <Icon name="chevron-left" /> Voltar
           </Link>
-          <p className="eyebrow">Agenda</p>
           <h1>{title}</h1>
           <p>{description}</p>
         </header>
-        {calendar && <SourceStrip />}
         {loading ? <AgendaLoading /> : children}
       </div>
     </>

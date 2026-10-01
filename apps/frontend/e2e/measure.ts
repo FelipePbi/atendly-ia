@@ -158,6 +158,77 @@ export async function measureTouchTargets(page: Page): Promise<MeasuredControl[]
   });
 }
 
+export type NativeBorderControl = {
+  selector: string;
+  borderStyle: string;
+  borderWidth: string;
+  radius: string;
+  html: string;
+};
+
+/**
+ * Visible form controls still wearing the browser's own border (Goal083):
+ * an `inset`/`outset` border, or a drawn border with a 0px radius. Both mean
+ * no rule of the product's styled the control, which is what a person reads
+ * as "this screen was not finished". Only a control with a drawn border
+ * (`border-top-width > 0` and a style other than `none`) is considered;
+ * checkbox, radio, range, color, file and hidden inputs are a different
+ * kind of control and are left out.
+ */
+export async function measureNativeBorderControls(page: Page): Promise<NativeBorderControl[]> {
+  return page.evaluate(() => {
+    const selector = [
+      "input:not([type='hidden']):not([type='checkbox']):not([type='radio'])"
+        + ":not([type='range']):not([type='color']):not([type='file'])",
+      "select",
+      "textarea",
+    ].join(", ");
+    const describe = (el: Element): string => {
+      const tag = el.tagName.toLowerCase();
+      const type = el.getAttribute("type");
+      const id = el.getAttribute("id");
+      const name = el.getAttribute("name");
+      const classes = typeof el.className === "string" && el.className.trim() !== ""
+        ? `.${el.className.trim().split(/\s+/u).join(".")}`
+        : "";
+      return `${tag}${id ? `#${id}` : ""}${classes}${type ? `[type="${type}"]` : ""}${
+        name ? `[name="${name}"]` : ""
+      }`;
+    };
+    const found: {
+      selector: string;
+      borderStyle: string;
+      borderWidth: string;
+      radius: string;
+      html: string;
+    }[] = [];
+    for (const el of Array.from(document.querySelectorAll(selector))) {
+      const style = getComputedStyle(el);
+      const box = el.getBoundingClientRect();
+      const rendered = box.width > 1
+        && box.height > 1
+        && style.display !== "none"
+        && style.visibility !== "hidden"
+        && style.opacity !== "0";
+      if (!rendered) continue;
+      const drawn = parseFloat(style.borderTopWidth) > 0 && style.borderTopStyle !== "none";
+      if (!drawn) continue;
+      const native = style.borderTopStyle === "inset"
+        || style.borderTopStyle === "outset"
+        || style.borderTopLeftRadius === "0px";
+      if (!native) continue;
+      found.push({
+        selector: describe(el),
+        borderStyle: style.borderTopStyle,
+        borderWidth: style.borderTopWidth,
+        radius: style.borderTopLeftRadius,
+        html: el.outerHTML.slice(0, 160),
+      });
+    }
+    return found;
+  });
+}
+
 /**
  * `KNOWN_SMALL_TARGETS` is strict in both directions: an entry that no longer
  * reproduces FAILS, so a fix takes its exception with it instead of leaving a

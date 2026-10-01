@@ -296,7 +296,7 @@ async function pickService(name: string | RegExp) {
 describe("identidade por customerId", () => {
   test("cliente já cadastrado vai por ID: nem o hold nem a criação mandam telefone", async () => {
     const user = await pickService(/Corte feminino/);
-    await user.selectOptions(screen.getByLabelText("Cliente"), "cus-ana");
+    await user.click(await screen.findByRole("button", { name: /Ana Paula/ }));
 
     await user.click(await screen.findByRole("radio", { name: "09:00" }));
     await waitFor(() => expect(createHold).toHaveBeenCalledTimes(1));
@@ -307,9 +307,8 @@ describe("identidade por customerId", () => {
       startTime: "09:00",
     });
 
-    await user.click(screen.getByRole("button", { name: "Revisar e criar" }));
     await user.click(
-      screen.getByRole("button", { name: "Confirmar agendamento" }),
+      screen.getByRole("button", { name: /^Criar agendamento/ }),
     );
 
     await waitFor(() => expect(createAppointment).toHaveBeenCalledTimes(1));
@@ -328,16 +327,13 @@ describe("identidade por customerId", () => {
     });
 
     const user = await pickService(/Corte feminino/);
-    await user.selectOptions(screen.getByLabelText("Cliente"), "cus-sem-fone");
+    await user.click(await screen.findByRole("button", { name: /Bia/ }));
     await user.click(await screen.findByRole("radio", { name: "09:00" }));
     await waitFor(() => expect(createHold).toHaveBeenCalled());
 
-    const submit = screen.getByRole("button", { name: "Revisar e criar" });
+    const submit = screen.getByRole("button", { name: /^Criar agendamento/ });
     expect(submit).toBeEnabled();
     await user.click(submit);
-    await user.click(
-      screen.getByRole("button", { name: "Confirmar agendamento" }),
-    );
 
     await waitFor(() => expect(createAppointment).toHaveBeenCalledTimes(1));
     expect(createAppointment.mock.calls[0][0].customerId).toBe("cus-sem-fone");
@@ -357,9 +353,8 @@ describe("identidade por customerId", () => {
     // Cliente novo ainda não tem ID: o hold não inventa um.
     expect(createHold.mock.calls[0][0].customerId).toBeUndefined();
 
-    await user.click(screen.getByRole("button", { name: "Revisar e criar" }));
     await user.click(
-      screen.getByRole("button", { name: "Confirmar agendamento" }),
+      screen.getByRole("button", { name: /^Criar agendamento/ }),
     );
 
     await waitFor(() => expect(createAppointment).toHaveBeenCalledTimes(1));
@@ -375,7 +370,9 @@ describe("múltiplos serviços e o total do acordo", () => {
     const user = await pickService(/Corte feminino/);
     await user.click(screen.getByRole("checkbox", { name: /Escova/ }));
 
-    expect(await screen.findByText("Duração total: 90 min")).toBeVisible();
+    expect(
+      await screen.findByText("2 serviços · 1 h 30 · R$ 150,00"),
+    ).toBeVisible();
     await waitFor(() => {
       const last = getAvailability.mock.calls.at(-1);
       expect(last?.[0].serviceIds).toEqual(["svc-corte", "svc-escova"]);
@@ -399,13 +396,13 @@ describe("múltiplos serviços e o total do acordo", () => {
     });
 
     const user = await pickService(/Corte feminino/);
-    const summary = screen.getByRole("complementary");
-    expect(within(summary).getByText("R$ 90,00")).toBeVisible();
+    expect(await screen.findByText("1 serviço · 1 h · R$ 90,00")).toBeVisible();
 
     await user.click(screen.getByRole("checkbox", { name: /Química/ }));
 
-    expect(within(summary).getByText("Sob consulta")).toBeVisible();
-    expect(within(summary).queryByText(/R\$/)).not.toBeInTheDocument();
+    const total = await screen.findByText(/^2 serviços · 1 h 45/);
+    expect(total).toHaveTextContent("Sob consulta");
+    expect(total).not.toHaveTextContent(/R\$/);
   });
 });
 
@@ -453,7 +450,9 @@ describe("ciclo de vida do hold", () => {
         /A reserva deste horário venceu\. O horário não está mais garantido/,
       ),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Revisar e criar" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /^Criar agendamento/ }),
+    ).toBeDisabled();
     expect(createAppointment).not.toHaveBeenCalled();
   });
 
@@ -461,13 +460,12 @@ describe("ciclo de vida do hold", () => {
     createAppointment.mockRejectedValueOnce(holdExpiredError(true));
 
     const user = await pickService(/Corte feminino/);
-    await user.selectOptions(screen.getByLabelText("Cliente"), "cus-ana");
+    await user.click(await screen.findByRole("button", { name: /Ana Paula/ }));
     await user.click(await screen.findByRole("radio", { name: "09:00" }));
     await waitFor(() => expect(createHold).toHaveBeenCalled());
 
-    await user.click(screen.getByRole("button", { name: "Revisar e criar" }));
     await user.click(
-      screen.getByRole("button", { name: "Confirmar agendamento" }),
+      screen.getByRole("button", { name: /^Criar agendamento/ }),
     );
 
     const alert = await screen.findByRole("alert");
@@ -481,13 +479,12 @@ describe("ciclo de vida do hold", () => {
 
   test("a confirmação consome a reserva: holdId vai no corpo", async () => {
     const user = await pickService(/Corte feminino/);
-    await user.selectOptions(screen.getByLabelText("Cliente"), "cus-ana");
+    await user.click(await screen.findByRole("button", { name: /Ana Paula/ }));
     await user.click(await screen.findByRole("radio", { name: "09:00" }));
     await waitFor(() => expect(createHold).toHaveBeenCalled());
 
-    await user.click(screen.getByRole("button", { name: "Revisar e criar" }));
     await user.click(
-      screen.getByRole("button", { name: "Confirmar agendamento" }),
+      screen.getByRole("button", { name: /^Criar agendamento/ }),
     );
 
     await waitFor(() => expect(createAppointment).toHaveBeenCalled());
@@ -510,6 +507,7 @@ describe("conflito e sobreposição por decisão humana", () => {
 
     const user = await pickService(/Corte feminino/);
     await screen.findByRole("radio", { name: "09:00" });
+    await user.click(screen.getByRole("button", { name: "Outro horário" }));
     const manual = screen.getByLabelText("Outro horário, fora dos oferecidos");
     await user.clear(manual);
     await user.type(manual, "12:00");
@@ -715,6 +713,7 @@ describe("acessibilidade das superfícies desta unidade", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("checkbox", { name: /Corte feminino/ }));
     await screen.findByRole("radio", { name: "09:00" });
+    await user.click(screen.getByRole("button", { name: "Outro horário" }));
     await user.type(
       screen.getByLabelText("Outro horário, fora dos oferecidos"),
       "12:00",

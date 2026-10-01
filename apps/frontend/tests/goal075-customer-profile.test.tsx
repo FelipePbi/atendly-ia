@@ -286,12 +286,14 @@ describe("§6.9 — /agenda/novo?customerId= começa com a pessoa escolhida", ()
       </ShellConfigProvider>,
     );
 
-    const select = await screen.findByLabelText("Cliente");
-    expect(select).toHaveValue("c1");
+    const swap = await screen.findByRole("button", { name: "Trocar" });
+    expect(screen.getByText("Ana Paula")).toBeVisible();
+    expect(screen.queryByLabelText("Nome do cliente")).toBeNull();
 
     const user = userEvent.setup();
-    await user.selectOptions(select, "new");
-    expect(select).toHaveValue("new");
+    await user.click(swap);
+    expect(screen.getByLabelText("Nome do cliente")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Trocar" })).toBeNull();
   });
 });
 

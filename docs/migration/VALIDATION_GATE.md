@@ -3531,3 +3531,74 @@ conferência humana. Na recontagem da baseline, `test:gate` teve **3** falhas
 porque o client Prisma do ai-orchestrator não estava gerado, e passou com
 **233**/**233** depois de `npx prisma generate`: é pré-condição do harness,
 tratada fora do diff.
+
+## Novo agendamento conforme o A6 e a medida de borda nativa, do Goal083
+
+`/agenda/novo` passa a seguir o A6 numa tela só, o CTA cria com um clique, a faixa
+"fonte oficial" sai da casca de todos os fluxos da Agenda e uma regra de
+especificidade zero dá a aparência do design system aos controles de texto sem
+classe. O gate autenticado ganha uma medida nova e uma rota nova. Nenhuma rota de
+API, contrato, migration, opção de allowlist, gate ou arquivo de configuração de
+teste ou de build mudou; em `e2e/`, só houve acréscimos.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| `apps/frontend/tests/goal083-new-appointment.test.tsx` (**11**, arquivo novo): a soma "2 serviços · 1 h 30 · R$ 150,00" e a criação com **um** clique com `customerId`, `holdId` e os dois serviços; cliente novo com `customerName` e `customerPhone` opcional; `customerId` de `/clientes` escolhido e trocável; "Outro, sem cadastro" com `serviceIds: []`, `title` e `durationMinutes` e sem hold, e o CTA desabilitado enquanto incompleto, e a linha que diz por que não há horários sugeridos, sem chips; conflito com `ConflictPanel` e sobreposição que exige motivo; nenhum "fonte oficial", "Operacional" nem "Avisar a cliente", e nenhum `input` de texto, `select` ou `textarea` do formulário sem classe | Que a tela se pareça com o A6; fidelidade visual é conferência humana |
+| `measureNativeBorderControls` (`apps/frontend/e2e/measure.ts`), chamada no passo "1c" de `apps/frontend/e2e/authenticated-matrix.spec.ts` como `expect.soft`: reprova `input` (fora `hidden`, `checkbox`, `radio`, `range`, `color` e `file`), `select` e `textarea` **renderizado**, com borda visível, em `inset`/`outset` ou com raio `0px`, e nomeia a rota, a largura e o seletor, em toda rota do gate autenticado | Bloqueio, série, remarcação, cancelamento e exceções: não estão em `AUTHENTICATED_ROUTES`, e a regra de `atendly.css` os cobre só por construção |
+| `AUTHENTICATED_ROUTES` (`apps/frontend/e2e/routes.ts`) ganha `agenda-novo` (`/agenda/novo`, `contentMarker: "Novo agendamento"`): o gate autenticado passa de **170** para **175** testes, os **5** novos um por largura | Que o seletor nomeie o campo sem `id`, classe, `type` ou `name`: ele sai como `input`, e quem o nomeia é o campo `html` do relatório |
+| `apps/frontend/tests/goal016-appointment-create.test.tsx`, `goal016-a11y.test.tsx` e `goal075-customer-profile.test.tsx`, reescritos para o fluxo de um clique, sem o diálogo de confirmação: o nome acessível do CTA traz a hora, e o erro de criação é anunciado por `role="alert"` | Nenhuma asserção de acessibilidade saiu, mas o foco preso num diálogo deixou de existir porque o diálogo deixou de existir |
+
+Cada asserção de teste anterior que mudou tem o motivo em
+[FINAL_AUDIT §59](FINAL_AUDIT.md); nenhum teste foi removido nem pulado.
+
+**Execução final da rodada 3**, toda exit 0, refeita pelo FIX-001 sobre a árvore
+atual, sem edição de código na rodada, antes dos cinco controles:
+`npm run validate:core` — **17** passos, **15** `passed`, **2** `skipped`
+(`test:bff`, `test:health-worker`) —; `npm run test:gate` — **233**/**233** —;
+`npm run validate:ui` — **169** `passed`, **21** `skipped`, **0** `flaky`
+(`startTime` `2026-10-01T00:30:21.759Z`); `npm run validate:integration`, contra
+um PostgreSQL descartável em `127.0.0.1:55733/atendly_bff_test` — **36** passos
+`passed` —, com `rehearse:goal033-authenticated-ui` em **175** testes, **0**
+`unexpected`, **0** `flaky` e **0** retentativas (`startTime`
+`2026-10-01T00:38:23.287Z`). Os `startTime` vêm dos `results.json` em
+`apps/frontend/e2e-results/` dessa execução. Suítes lidas dentro do
+`validate:core` da rodada 3: `test:frontend` **124** arquivos e **1280** testes
+(baseline **123**/**1268**), `test:ai-orchestrator` **1186** passando e **98**
+`skipped` de **1284**, `test:scheduling-service` **37** arquivos e **502**
+testes.
+
+**O que o controle 5 deixa no disco.** O quinto controle do §6 roda o gate
+autenticado só em `agenda-novo` e `desktop-1440`, por
+`scripts/goal033-authenticated-ui-rehearsal.mjs` com `GOAL033_PLAYWRIGHT_CONFIG`
+apontando para uma configuração temporária, apagada depois, e sobrescreve
+`apps/frontend/e2e-results/authenticated/results.json` com o relatório de um
+teste. O FIX-001 **restaurou** o arquivo da cópia que guardou antes: `startTime`
+`2026-10-01T00:38:23.287Z` e **175** testes. `e2e-results/` segue fora do Git.
+
+Os cinco controles negativos do §6 foram feitos na rodada 3, depois da execução
+final, com restauração conferida por hash; saída real em
+[FINAL_AUDIT §59](FINAL_AUDIT.md). O vermelho da baseline do §5 é entrega da
+rodada 1 e não foi reexecutado na rodada 3.
+
+**Conferência humana pendente.** A conferência do §8 do Goal **não foi feita**: a
+fidelidade visual da tela ao A6 em 360, 390, 768, 1024 e 1440 px; criar pela tela
+nova, num navegador contra a pilha local, um agendamento com cliente cadastrado e
+dois serviços e outro com cliente novo; e decidir a divergência (e), se a criação
+deve avisar a cliente pelo WhatsApp. Nenhum teste é declarado prova disso.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal083-2026-09-30-d-098-accepted),
+[FINAL_AUDIT §59](FINAL_AUDIT.md) e [D-098](DECISIONS.md), **ACCEPTED** no
+[review083](reviews/083-review.md) (rodada 3 do IA Loop, depois de um blocker
+na rodada 1 e outro na rodada 2).
+
+**O que o review083 acrescenta ao gate.** Até este Goal, nenhuma medida do gate
+olhava o estilo do controle, e `/agenda/novo` não estava em
+`AUTHENTICATED_ROUTES`: os campos com borda nativa passaram por todos os gates.
+`measureNativeBorderControls` reprova controle visível com borda `inset` ou
+`outset` ou com raio `0px` em toda rota medida, e o controle 5 mostrou que ela
+nomeia o campo. O seletor impresso pode ser só `input` quando o campo não tem
+`id`, classe, `type` nem `name`; quem o identifica é o `html` impresso.
+Bloqueio, série, remarcação, cancelamento e exceções continuam fora do gate
+autenticado. A rodada 2 mostrou o custo da ordem do §7: uma edição pequena
+depois dos controles obrigou a refazer a execução final, os cinco controles e
+a prosa, e foi isso que a rodada 3 entregou.

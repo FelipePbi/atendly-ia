@@ -112,7 +112,10 @@ export function SlotPicker({
   );
 }
 
-function holdNotice(hold: HoldSession, timezone?: string | null): string {
+export function holdNotice(
+  hold: HoldSession,
+  timezone?: string | null,
+): string {
   if (hold.phase === "reserving") return "Reservando o horário…";
   if (hold.phase === "expired") return HOLD_EXPIRED_NOTICE;
   if (hold.phase === "held" && hold.expiresAt) {

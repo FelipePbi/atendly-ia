@@ -558,23 +558,6 @@ function DayDetailPanel({
   );
 }
 
-export function SourceStrip() {
-  return (
-    <section className="agenda-source-strip">
-      <div className="agenda-source-copy">
-        <span className="agenda-source-icon">
-          <Icon name="calendar" />
-        </span>
-        <div>
-          <strong>Agenda Atendly é a fonte oficial</strong>
-          <span>Disponibilidade e alterações são controladas aqui.</span>
-        </div>
-      </div>
-      <span className="badge badge-success">Operacional</span>
-    </section>
-  );
-}
-
 function ViewTab({
   active,
   children,

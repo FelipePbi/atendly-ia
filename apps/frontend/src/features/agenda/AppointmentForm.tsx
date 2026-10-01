@@ -7,20 +7,18 @@ import {
   type AvailabilitySlot,
   type CalendarState,
   type CreateAppointmentInput,
+  type Customer,
   type CustomerList,
   type Service,
   type ServiceList,
 } from "@/data";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Button } from "@/shared/ui/Button";
-import { Dialog } from "@/shared/ui/Dialog";
 
 import {
   AppointmentFlowShell,
   formatMoney,
   ReadOnlyState,
-  Summary,
-  SummaryRow,
 } from "./AppointmentFlowShell";
 import { ConflictPanel, occupyingEntries } from "./ConflictPanel";
 import {
@@ -31,15 +29,20 @@ import {
   useHoldSession,
 } from "./holdSession";
 import {
+  CustomerField,
+  DateStrip,
+  DayList,
+  durationLabel,
+  weekdayShort,
+} from "./NewAppointmentFields";
+import {
   type AgendaEntry,
   buildAgendaEntries,
-  formatDate,
   isoDate,
+  parseDate,
   requestError,
 } from "./occupancy";
-import { SlotPicker } from "./SlotPicker";
-
-const NEW_CUSTOMER = "new";
+import { holdNotice } from "./SlotPicker";
 
 type AppointmentFormProps = {
   /** Pessoa escolhida de antemão (Goal075, vinda de `/clientes`). Continua trocável. */
@@ -47,14 +50,17 @@ type AppointmentFormProps = {
 };
 
 /**
- * Criação de atendimento (Goal016).
+ * Criação de atendimento (Goal016, apresentação do A6 no Goal083).
  *
  * Três regras do domínio mandam nesta tela, e nenhuma delas é invenção dela:
  * a pessoa é identificada por `customerId` — nunca por telefone, que o
  * Goal006 tirou do domínio e o Goal015 tirou do perfil; o horário escolhido é
- * reservado por um hold antes da confirmação, e a reserva perdida leva a
+ * reservado por um hold antes da criação, e a reserva perdida leva a
  * reescolher, não a um erro genérico; e sobrepor um intervalo ocupado é
  * decisão humana com motivo obrigatório.
+ *
+ * "Outro, sem cadastro" é o atendimento manual excepcional do Goal008: sem
+ * serviço, com título e duração, e sem hold — o hold exige serviço.
  */
 export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
   const router = useRouter();
@@ -63,22 +69,31 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
   const [services, setServices] = useState<ServiceList | null>(null);
   const [customers, setCustomers] = useState<CustomerList | null>(null);
   const [serviceIds, setServiceIds] = useState<string[]>([]);
-  const [customerChoice, setCustomerChoice] = useState(
-    customerId ?? NEW_CUSTOMER,
+  const [other, setOther] = useState(false);
+  const [otherTitle, setOtherTitle] = useState("");
+  const [otherDuration, setOtherDuration] = useState("");
+  const [chosenCustomerId, setChosenCustomerId] = useState<string | null>(
+    customerId ?? null,
   );
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [date, setDate] = useState(isoDate(new Date()));
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [startTime, setStartTime] = useState("");
   const [manualTime, setManualTime] = useState("");
+  const [showManual, setShowManual] = useState(false);
   const [comments, setComments] = useState("");
+  const [showComments, setShowComments] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState(false);
   const [conflict, setConflict] = useState<ConflictState | null>(null);
+  const [dayState, setDayState] = useState<{
+    date: string;
+    entries: AgendaEntry[] | null;
+  } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -140,45 +155,90 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
     return () => controller.abort();
   }, [calendar, date, serviceKey]);
 
+  const timezone = calendar?.timezone;
+  const canCreate = Boolean(calendar?.capabilities.createAppointments);
+  useEffect(() => {
+    if (!canCreate) return;
+    let active = true;
+    void readOccupancy(date, timezone).then((entries) => {
+      if (active) setDayState({ date, entries });
+    });
+    return () => {
+      active = false;
+    };
+  }, [canCreate, date, timezone]);
+
   const selectableServices = (services?.items ?? []).filter(
     (item) => item.active && item.durationMinutes !== null,
   );
   const selectedServices = selectableServices.filter((item) =>
     serviceIds.includes(item.id),
   );
-  const durationMinutes = selectedServices.reduce(
+  const servicesMinutes = selectedServices.reduce(
     (sum, item) => sum + (item.durationMinutes ?? 0),
     0,
   );
+  const otherMinutes = Number.parseInt(otherDuration, 10);
+  const otherReady =
+    otherTitle.trim().length > 0 &&
+    Number.isInteger(otherMinutes) &&
+    otherMinutes >= 1 &&
+    otherMinutes <= 1440;
+  const durationMinutes = other
+    ? otherReady
+      ? otherMinutes
+      : 0
+    : servicesMinutes;
   const total = agreementTotal(selectedServices);
-  const selectedCustomer = customers?.items.find(
-    (item) => item.id === customerChoice,
-  );
-  const customerSummary =
-    customerChoice === NEW_CUSTOMER
-      ? customerName.trim() || "—"
-      : (selectedCustomer?.name ??
-        selectedCustomer?.phone ??
-        "Cliente sem identificação");
+  const selectedCustomer = chosenCustomerId
+    ? customers?.items.find((item) => item.id === chosenCustomerId)
+    : undefined;
   // Telefone não identifica ninguém aqui: uma pessoa já cadastrada é agendada
   // pelo próprio ID, mesmo sem telefone nenhum no perfil.
-  const identityReady =
-    customerChoice === NEW_CUSTOMER
-      ? customerName.trim().length > 0
-      : Boolean(selectedCustomer);
+  const identityReady = selectedCustomer
+    ? true
+    : customerName.trim().length > 0;
+  const serviceReady = other ? otherReady : serviceIds.length > 0;
   const canSubmit =
     identityReady &&
-    serviceIds.length > 0 &&
+    serviceReady &&
     Boolean(date) &&
     Boolean(startTime) &&
+    !busy &&
     !conflict &&
     hold.phase !== "reserving" &&
     hold.phase !== "expired";
+  const blockedReason = !identityReady
+    ? "Escolha ou cadastre o cliente."
+    : !serviceReady
+      ? other
+        ? "Informe o título e a duração do atendimento."
+        : "Escolha ao menos um serviço."
+      : !startTime
+        ? "Escolha um horário."
+        : null;
+  const ctaLabel = startTime
+    ? `Criar agendamento · ${weekdayShort(date)} ${parseDate(date).getDate()}, ${startTime}`
+    : "Criar agendamento";
+  const dayEntries =
+    dayState && dayState.date === date ? dayState.entries : null;
 
   function resetSlotChoice() {
     hold.release();
     setStartTime("");
     setConflict(null);
+  }
+
+  function chooseCustomer(customer: Customer) {
+    resetSlotChoice();
+    setChosenCustomerId(customer.id);
+    setCustomerName("");
+    setCustomerPhone("");
+  }
+
+  function swapCustomer() {
+    resetSlotChoice();
+    setChosenCustomerId(null);
   }
 
   function toggleService(service: Service) {
@@ -188,8 +248,27 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
     resetSlotChoice();
     setSlots([]);
     setError(null);
+    setOther(false);
     setServiceIds(next);
     setSlotsLoading(next.length > 0);
+  }
+
+  function toggleOther() {
+    resetSlotChoice();
+    setSlots([]);
+    setSlotsLoading(false);
+    setError(null);
+    setServiceIds([]);
+    setManualTime("");
+    setOther((current) => !current);
+  }
+
+  function changeDate(value: string) {
+    setDate(value);
+    setSlots([]);
+    setSlotsLoading(!other && serviceIds.length > 0);
+    resetSlotChoice();
+    setError(null);
   }
 
   async function chooseTime(time: string) {
@@ -197,10 +276,12 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
     setError(null);
     setConflict(null);
     setStartTime(time);
+    // "Outro, sem cadastro" não tem serviço, e o hold exige serviço: a
+    // proteção contra choque fica por conta da recusa 409 na criação.
+    if (other) return;
     try {
       await hold.reserve({
-        customerId:
-          customerChoice === NEW_CUSTOMER ? undefined : customerChoice,
+        customerId: selectedCustomer?.id,
         date,
         serviceIds,
         startTime: time,
@@ -248,20 +329,19 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
     try {
       const input: CreateAppointmentInput = {
         comments: comments.trim() || undefined,
-        customerId:
-          customerChoice === NEW_CUSTOMER ? undefined : customerChoice,
-        customerName:
-          customerChoice === NEW_CUSTOMER ? customerName.trim() : undefined,
-        customerPhone:
-          customerChoice === NEW_CUSTOMER
-            ? customerPhone.trim() || undefined
-            : undefined,
+        customerId: selectedCustomer?.id,
+        customerName: selectedCustomer ? undefined : customerName.trim(),
+        customerPhone: selectedCustomer
+          ? undefined
+          : customerPhone.trim() || undefined,
         date,
-        holdId: hold.holdId ?? undefined,
+        durationMinutes: other ? otherMinutes : undefined,
+        holdId: other ? undefined : (hold.holdId ?? undefined),
         overlapOverride: overlapReason ? true : undefined,
         overlapOverrideReason: overlapReason,
-        serviceIds,
+        serviceIds: other ? [] : serviceIds,
         startTime,
+        title: other ? otherTitle.trim() : undefined,
       };
       const appointment = await getProductServices().calendar.createAppointment(
         input,
@@ -271,7 +351,6 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
         `/agenda/agendamento?id=${encodeURIComponent(appointment.id)}`,
       );
     } catch (caught) {
-      setConfirm(false);
       if (isHoldLostError(caught)) {
         hold.markLost();
         setStartTime("");
@@ -307,6 +386,11 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
     void create(reason);
   }
 
+  const timeHeading =
+    !other && durationMinutes > 0
+      ? `Horário · livres para ${durationLabel(durationMinutes)}`
+      : "Horário";
+
   return (
     <AppointmentFlowShell
       calendar={calendar}
@@ -322,147 +406,236 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
       {!loading && calendar && !calendar.capabilities.createAppointments ? (
         <ReadOnlyState operation="criar agendamentos" />
       ) : (
-        <div className="agenda-flow-layout">
+        <div className="agenda-new-layout">
           <form
-            className="agenda-form-card"
+            aria-label="Novo agendamento"
+            className="agenda-new-form"
             onSubmit={(event: FormEvent) => {
               event.preventDefault();
-              if (canSubmit) setConfirm(true);
+              if (canSubmit) void create();
             }}
           >
-            <h2>Dados do agendamento</h2>
-            <fieldset>
-              <legend>Serviços</legend>
+            <CustomerField
+              customers={customers}
+              name={customerName}
+              onChoose={chooseCustomer}
+              onName={setCustomerName}
+              onPhone={setCustomerPhone}
+              onSwap={swapCustomer}
+              phone={customerPhone}
+              selected={selectedCustomer}
+            />
+            <fieldset className="agenda-new-block">
+              <legend className="label">Serviços</legend>
               {selectableServices.length === 0 ? (
                 <p className="muted">
                   Nenhum serviço disponível para agendamento.
                 </p>
               ) : (
-                <div className="agenda-service-options">
+                <div className="agenda-new-chips">
                   {selectableServices.map((item) => (
-                    <label className="agenda-service-option" key={item.id}>
+                    <label className="agenda-new-chip" key={item.id}>
                       <input
                         checked={serviceIds.includes(item.id)}
                         onChange={() => toggleService(item)}
                         type="checkbox"
                       />
                       <span>
-                        {item.name} · {item.durationMinutes} min
+                        {item.name} · {durationLabel(item.durationMinutes ?? 0)}
                       </span>
+                    </label>
+                  ))}
+                  <button
+                    aria-pressed={other}
+                    className="agenda-new-chip agenda-new-chip-other"
+                    onClick={toggleOther}
+                    type="button"
+                  >
+                    Outro, sem cadastro
+                  </button>
+                </div>
+              )}
+              {!other && (
+                <p className="agenda-new-total">
+                  {selectedServices.length === 0
+                    ? "Nenhum serviço escolhido."
+                    : `${selectedServices.length} ${selectedServices.length === 1 ? "serviço" : "serviços"} · ${durationLabel(servicesMinutes)} · ${totalLabel(total)}`}
+                </p>
+              )}
+              {other && (
+                <div className="agenda-new-other">
+                  <label className="field">
+                    <span className="label">Título do atendimento</span>
+                    <input
+                      className="input"
+                      maxLength={200}
+                      onChange={(event) => {
+                        resetSlotChoice();
+                        setOtherTitle(event.target.value);
+                      }}
+                      value={otherTitle}
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="label">Duração em minutos</span>
+                    <input
+                      className="input"
+                      inputMode="numeric"
+                      max={1440}
+                      min={1}
+                      onChange={(event) => {
+                        setOtherDuration(event.target.value);
+                        setConflict(null);
+                      }}
+                      type="number"
+                      value={otherDuration}
+                    />
+                  </label>
+                </div>
+              )}
+            </fieldset>
+            <DateStrip
+              date={date}
+              onChange={changeDate}
+              onTogglePicker={() => setShowDatePicker((current) => !current)}
+              pickerOpen={showDatePicker}
+            />
+            <fieldset
+              className="agenda-new-block"
+              disabled={!other && serviceIds.length === 0}
+            >
+              <legend className="label">{timeHeading}</legend>
+              {other ? (
+                <p className="muted">
+                  Sem serviço cadastrado não há horários sugeridos. Digite o
+                  horário abaixo.
+                </p>
+              ) : serviceIds.length === 0 ? (
+                <p className="muted">
+                  Escolha um serviço para ver os horários livres.
+                </p>
+              ) : slotsLoading ? (
+                <p>Consultando disponibilidade…</p>
+              ) : slots.length === 0 ? (
+                <p className="muted">
+                  Nenhum horário disponível para esta seleção.
+                </p>
+              ) : (
+                <div className="agenda-new-chips">
+                  {slots.map((slot) => (
+                    <label
+                      className="agenda-new-chip"
+                      key={`${slot.date}-${slot.startTime}`}
+                    >
+                      <input
+                        checked={startTime === slot.startTime}
+                        name="start-time"
+                        onChange={() => void chooseTime(slot.startTime)}
+                        type="radio"
+                      />
+                      <span>{slot.startTime}</span>
                     </label>
                   ))}
                 </div>
               )}
-              <p className="agenda-form-status">
-                {serviceIds.length === 0
-                  ? "Nenhum serviço escolhido."
-                  : `Duração total: ${durationMinutes} min`}
-              </p>
-            </fieldset>
-            <div className="agenda-form-grid">
-              {customers &&
-                !customers.managedExternally &&
-                customers.items.length > 0 && (
-                  <label className="field is-wide">
-                    <span>Cliente</span>
-                    <select
-                      value={customerChoice}
-                      onChange={(event) => {
-                        setCustomerChoice(event.target.value);
-                        resetSlotChoice();
-                      }}
-                    >
-                      <option value={NEW_CUSTOMER}>Novo cliente</option>
-                      {customers.items.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name ??
-                            item.phone ??
-                            "Cliente sem identificação"}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-              {customerChoice === NEW_CUSTOMER && (
-                <>
-                  <label className="field">
-                    <span>Nome do cliente</span>
-                    <input
-                      required
-                      value={customerName}
-                      onChange={(event) => setCustomerName(event.target.value)}
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Telefone (opcional)</span>
-                    <input
-                      inputMode="tel"
-                      value={customerPhone}
-                      onChange={(event) => setCustomerPhone(event.target.value)}
-                    />
-                  </label>
-                </>
+              {!other && (
+                <button
+                  aria-expanded={showManual}
+                  className="btn btn-tertiary"
+                  disabled={serviceIds.length === 0}
+                  onClick={() => setShowManual((current) => !current)}
+                  type="button"
+                >
+                  Outro horário
+                </button>
               )}
-              <label className="field is-wide">
-                <span>Observações</span>
-                <textarea
-                  rows={3}
-                  value={comments}
-                  onChange={(event) => setComments(event.target.value)}
-                />
-              </label>
+              {(other || showManual) && (
+                <div className="agenda-new-manual">
+                  <label className="field">
+                    <span className="label">
+                      Outro horário, fora dos oferecidos
+                    </span>
+                    <input
+                      className="input"
+                      onChange={(event) => setManualTime(event.target.value)}
+                      type="time"
+                      value={manualTime}
+                    />
+                  </label>
+                  <button
+                    className="btn btn-secondary"
+                    disabled={!manualTime || (other && !otherReady)}
+                    onClick={() => void chooseTime(manualTime)}
+                    type="button"
+                  >
+                    Usar este horário
+                  </button>
+                  <p className="muted">
+                    Um horário fora dos oferecidos pode estar ocupado. Se
+                    estiver, a agenda mostra o que ocupa o intervalo e sobrepor
+                    exige motivo.
+                  </p>
+                </div>
+              )}
+            </fieldset>
+            <div className="agenda-new-block">
+              {showComments ? (
+                <label className="field">
+                  <span className="label">Observações</span>
+                  <textarea
+                    className="input agenda-new-textarea"
+                    onChange={(event) => setComments(event.target.value)}
+                    rows={3}
+                    value={comments}
+                  />
+                </label>
+              ) : (
+                <button
+                  aria-expanded={false}
+                  className="btn btn-tertiary"
+                  onClick={() => setShowComments(true)}
+                  type="button"
+                >
+                  Adicionar observação
+                </button>
+              )}
             </div>
-            <SlotPicker
-              date={date}
-              disabled={serviceIds.length === 0}
-              hold={hold}
-              legend="Horários disponíveis"
-              manualTime={manualTime}
-              onDateChange={(value) => {
-                setDate(value);
-                setSlots([]);
-                setSlotsLoading(serviceIds.length > 0);
-                resetSlotChoice();
-                setError(null);
-              }}
-              onManualTimeChange={setManualTime}
-              onSelect={(time) => void chooseTime(time)}
-              selected={startTime}
-              slots={slots}
-              slotsLoading={slotsLoading}
-              timezone={calendar?.timezone}
-            />
-            <div className="agenda-form-footer">
-              <Button href="/agenda" variant="secondary">
-                Cancelar
-              </Button>
-              {/* Recorrência é oferecida ao agendar (Goal016, item 6): o fluxo
-                  de série tem pré-visualização e confirmação atômica próprias,
-                  que este formulário de ocorrência única não faz. */}
-              <Button href="/agenda/serie" variant="secondary">
-                Agendar série
-              </Button>
-              <Button disabled={!canSubmit} type="submit">
-                Revisar e criar
-              </Button>
+            <div className="agenda-new-footer">
+              {!other && (
+                <p className="agenda-hold-status" role="status">
+                  {holdNotice(hold, calendar?.timezone)}
+                </p>
+              )}
+              {blockedReason && (
+                <p className="muted agenda-new-blocked">{blockedReason}</p>
+              )}
+              <div className="agenda-new-actions">
+                {/* Recorrência é oferecida ao agendar (Goal016, item 6): o fluxo
+                    de série tem pré-visualização e confirmação atômica
+                    próprias, que este formulário de ocorrência única não faz. */}
+                <Button href="/agenda/serie" variant="tertiary">
+                  Agendar série
+                </Button>
+                <Button disabled={!canSubmit} loading={busy} type="submit">
+                  {ctaLabel}
+                </Button>
+              </div>
             </div>
           </form>
-          <Summary title="Resumo">
-            <SummaryRow label="Cliente" value={customerSummary} />
-            <SummaryRow
-              label="Serviços"
-              value={selectedServices.map((item) => item.name).join(", ") || "—"}
-            />
-            <SummaryRow
-              label="Duração"
-              value={durationMinutes ? `${durationMinutes} min` : "—"}
-            />
-            <SummaryRow label="Valor" value={totalLabel(total)} />
-            <SummaryRow
-              label="Quando"
-              value={startTime ? `${formatDate(date)} às ${startTime}` : "—"}
-            />
-          </Summary>
+          <DayList
+            date={date}
+            entries={dayEntries}
+            loading={!dayState || dayState.date !== date}
+            preview={
+              startTime && durationMinutes > 0
+                ? {
+                    label: "Novo agendamento",
+                    minutes: durationMinutes,
+                    startTime,
+                  }
+                : null
+            }
+          />
         </div>
       )}
       {conflict && (
@@ -484,39 +657,6 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
           reasonError={conflict.reasonError}
         />
       )}
-      <Dialog
-        eyebrow="Confirmação"
-        onClose={() => !busy && setConfirm(false)}
-        open={confirm}
-        title="Criar este agendamento?"
-      >
-        <div className="agenda-summary-list">
-          <SummaryRow label="Cliente" value={customerSummary} />
-          <SummaryRow
-            label="Serviços"
-            value={selectedServices.map((item) => item.name).join(", ") || "—"}
-          />
-          <SummaryRow label="Duração" value={`${durationMinutes} min`} />
-          <SummaryRow label="Valor" value={totalLabel(total)} />
-          <SummaryRow
-            label="Quando"
-            value={`${formatDate(date)} às ${startTime}`}
-          />
-        </div>
-        <div className="modal-actions">
-          <Button
-            disabled={busy}
-            onClick={() => setConfirm(false)}
-            type="button"
-            variant="secondary"
-          >
-            Voltar
-          </Button>
-          <Button loading={busy} onClick={() => void create()} type="button">
-            Confirmar agendamento
-          </Button>
-        </div>
-      </Dialog>
     </AppointmentFlowShell>
   );
 }

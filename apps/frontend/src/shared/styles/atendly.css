@@ -1575,6 +1575,47 @@ p {
   text-decoration: none;
 }
 
+/*
+ * Rede de estilo: controle de texto sem classe dentro da casca logada ganha a
+ * aparência de `.input`/`.select`, em vez da borda nativa do navegador.
+ * Tudo em `:where()` (especificidade zero): `:not([class])` já deixa de fora
+ * quem tem classe, e qualquer regra de módulo vence em qualquer ordem.
+ * Checkbox, radio, range, color, file, hidden e botões não entram na lista.
+ */
+:where(
+    .app-frame
+      :is(
+        input:not([type]),
+        input[type="text"],
+        input[type="email"],
+        input[type="tel"],
+        input[type="url"],
+        input[type="search"],
+        input[type="password"],
+        input[type="number"],
+        input[type="date"],
+        input[type="time"],
+        input[type="datetime-local"],
+        input[type="month"],
+        input[type="week"],
+        select,
+        textarea
+      ):not([class])
+  ) {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-input);
+  background: var(--surface);
+  color: var(--fg);
+  padding: 0 14px;
+  font: inherit;
+}
+:where(.app-frame textarea:not([class])) {
+  min-height: 96px;
+  padding: 12px 14px;
+}
+
 @media (max-width: 1099px) {
   .app-frame {
     grid-template-columns: 88px minmax(0, 1fr);

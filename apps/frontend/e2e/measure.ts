@@ -481,3 +481,118 @@ export async function measureComposition(marker: Locator): Promise<CompositionRe
     };
   }, { navigationSelector: SHELL_NAVIGATION_SELECTOR, chromeTolerance: CHROME_TOLERANCE });
 }
+
+/** Where the shell swaps the bottom bar for the sidebar (`atendly.css`), and the sidebar's width in the prototype's desktop frames. */
+export const SIDEBAR_BREAKPOINT = 1100;
+export const SIDEBAR_WIDTH = 232;
+/** Início, Conversas, Agenda, Clientes and Mais — in the mobile and the tablet frames alike. */
+export const BOTTOM_NAV_ITEMS = 5;
+
+export type ShellBands = {
+  viewportWidth: number;
+  /** `aside.sidebar`, only when it is rendered (not `display: none`) at this width. */
+  sidebar: { width: number } | null;
+  /** The bottom bar, only when rendered, with the count of its rendered items. */
+  bottomNav: { items: number; top: number; bottom: number } | null;
+  /** How many rendered `header[class$="-mobile-header"]` the page has. */
+  mobileHeaders: number;
+};
+
+/**
+ * Which navigation the shell is showing at this width (Goal087, G-1): the
+ * sidebar, the bottom bar, and whether the mobile brand header is still there.
+ * "Rendered" is the box, not the DOM: below 1100px the sidebar stays in the DOM
+ * hidden, and a hidden one must not count.
+ */
+export async function measureShellBands(page: Page): Promise<ShellBands> {
+  return page.evaluate(() => {
+    const isRendered = (el: Element): boolean => {
+      const style = getComputedStyle(el);
+      const box = el.getBoundingClientRect();
+      return style.display !== "none"
+        && style.visibility !== "hidden"
+        && box.width > 0
+        && box.height > 0;
+    };
+    const sidebar = document.querySelector("aside.sidebar");
+    const sidebarBox = sidebar && isRendered(sidebar) ? sidebar.getBoundingClientRect() : null;
+    const bar = Array.from(document.querySelectorAll('nav[class$="-bottom-nav"]')).find(isRendered);
+    const barBox = bar?.getBoundingClientRect() ?? null;
+    return {
+      viewportWidth: window.innerWidth,
+      sidebar: sidebarBox ? { width: sidebarBox.width } : null,
+      bottomNav: bar && barBox
+        ? {
+          items: Array.from(bar.querySelectorAll(".bottom-nav-item")).filter(isRendered).length,
+          top: barBox.top,
+          bottom: barBox.bottom,
+        }
+        : null,
+      mobileHeaders: Array.from(document.querySelectorAll('header[class$="-mobile-header"]'))
+        .filter(isRendered).length,
+    };
+  });
+}
+
+export type FocusableBox = { element: string; top: number; bottom: number };
+
+export type BarClearance = {
+  /** Top of the rendered bottom bar, or `null` when there is none at this width. */
+  barTop: number | null;
+  /** The last rendered focusable element inside `main`, after scrolling to the end. */
+  lastFocusable: FocusableBox | null;
+  /** `a.fab`, when the screen has one and it is rendered. */
+  fab: FocusableBox | null;
+};
+
+/** Sub-pixel rounding of a fixed bar's edge, never content behind it. */
+export const BAR_CLEARANCE_TOLERANCE = 1;
+
+/**
+ * Whether anything is left behind the fixed bottom bar (Goal087, G-2): scrolls
+ * the document and `main` to their end, then reads the last focusable element
+ * inside `main` and the floating action button against the bar's top edge.
+ */
+export async function measureBarClearance(page: Page): Promise<BarClearance> {
+  return page.evaluate(() => {
+    const isRendered = (el: Element): boolean => {
+      const style = getComputedStyle(el);
+      const box = el.getBoundingClientRect();
+      return style.display !== "none"
+        && style.visibility !== "hidden"
+        && box.width > 0
+        && box.height > 0;
+    };
+    const describe = (el: Element): string => {
+      const classes = typeof el.className === "string" && el.className.trim() !== ""
+        ? `.${el.className.trim().split(/\s+/u).join(".")}`
+        : "";
+      return `${el.tagName.toLowerCase()}${classes}`;
+    };
+    const box = (el: Element): { element: string; top: number; bottom: number } => {
+      const rect = el.getBoundingClientRect();
+      return { element: describe(el), top: rect.top, bottom: rect.bottom };
+    };
+
+    const main = document.querySelector<HTMLElement>("main#main-content");
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" });
+    if (main) main.scrollTo({ top: main.scrollHeight, behavior: "instant" });
+
+    const bar = Array.from(document.querySelectorAll('nav[class$="-bottom-nav"]')).find(isRendered);
+    const focusable = main
+      ? Array.from(
+        main.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled]), '
+            + 'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter(isRendered)
+      : [];
+    const last = focusable.at(-1);
+    const fab = Array.from(document.querySelectorAll("a.fab")).find(isRendered);
+    return {
+      barTop: bar ? bar.getBoundingClientRect().top : null,
+      lastFocusable: last ? box(last) : null,
+      fab: fab ? box(fab) : null,
+    };
+  });
+}

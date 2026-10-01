@@ -30,6 +30,7 @@ import {
   MORE_DESTINATIONS,
   NOTIFICATIONS_DESTINATION,
   notificationsBadgeLabel,
+  SETTINGS_DESTINATION,
   SIDEBAR_DESTINATIONS,
 } from "./navigation";
 import type { ShellConfig } from "./ShellConfig";
@@ -40,13 +41,6 @@ export { SHELL_MODULES } from "./navigation";
 export type AppShellProps = ShellConfig & {
   children: ReactNode;
 };
-
-/**
- * Agenda Atendly é a única agenda oficial desde o Goal027. O shell tinha um
- * `source` que alternava esse rótulo para "Minha Agenda"; a fonte externa saiu
- * e o rótulo deixou de ser variável (Goal028 §5).
- */
-const OFFICIAL_SOURCE_LABEL = "Agenda Atendly";
 
 /**
  * `SystemStatusProvider` monta o único poller de `GET /v1/status` da árvore
@@ -70,13 +64,10 @@ export function AppShell(props: AppShellProps) {
 function AppShellChrome({
   action,
   active,
-  attention = false,
   children,
-  loading = false,
   mainClassName,
   module,
   showBottomNav = true,
-  showMobileHeader = true,
   title,
 }: AppShellProps) {
   const router = useRouter();
@@ -92,25 +83,17 @@ function AppShellChrome({
   const styleModule =
     module === "system" || module === "migration" ? "settings" : module;
   const shellClass = styleModule ? `${styleModule}-shell` : "platform-shell";
-  const mobileHeaderClass =
-    module === "dashboard"
-      ? "dashboard-mobile-header"
-      : `${styleModule ?? "platform"}-mobile-header`;
   const bottomNavClass =
     module === "dashboard"
       ? "dashboard-bottom-nav"
       : `${styleModule ?? "platform"}-bottom-nav`;
   const mainClass = mainClassName ?? `${styleModule ?? "platform"}-main`;
-  const systemAttention = module === "system";
-  const mobileAttention = systemAttention || attention;
-  const compactAccount = ["settings", "migration", "system"].includes(
-    module ?? "",
-  );
   const businessName =
     session?.businessProfile?.businessName ??
     session?.tenant.name ??
     "Seu negócio";
-  const userLabel = session?.user.email ?? "Conta principal";
+  const accountLabel =
+    session?.user.name?.trim() || session?.user.email || "Conta principal";
   const notificationsBadge = notificationsBadgeLabel(
     status.notificationsSummary?.unreadCount ?? 0,
   );
@@ -164,28 +147,6 @@ function AppShellChrome({
           <div className="sidebar-brand">
             <Brand signature="check" />
           </div>
-          <div className="business-context">
-            <span className="avatar" aria-hidden="true">
-              {initials(businessName)}
-            </span>
-            <span className="business-name">
-              <strong>{businessName}</strong>
-              <span>{OFFICIAL_SOURCE_LABEL} oficial</span>
-            </span>
-          </div>
-          <StatusLine
-            label="WhatsApp"
-            view={status.whatsappView}
-            activeCopy="WhatsApp conectado"
-            offCopy="WhatsApp desconectado"
-          />
-          <StatusLine
-            label="IA"
-            view={status.aiView}
-            activeCopy="IA ativa"
-            offCopy="IA desligada"
-            pendingCopy="IA em ativação"
-          />
           <nav className="nav" aria-label="Navegação principal">
             {SIDEBAR_DESTINATIONS.map((item) => (
               <Link
@@ -203,59 +164,60 @@ function AppShellChrome({
                 <span>{item.label}</span>
               </Link>
             ))}
+            <Link
+              className={clsx(
+                "nav-item",
+                active === SETTINGS_DESTINATION.section && "is-active",
+              )}
+              href={SETTINGS_DESTINATION.href}
+              aria-current={
+                active === SETTINGS_DESTINATION.section ? "page" : undefined
+              }
+            >
+              <Icon name={SETTINGS_DESTINATION.icon} />
+              <span>{SETTINGS_DESTINATION.label}</span>
+            </Link>
+            {/*
+              A sidebar só aparece a partir de 1100 px, e o clique no item abre
+              a central sobre a tela em vez de navegar (Goal077 §3). Continua
+              link para /notificacoes — abrir em nova aba e o destino atual
+              seguem funcionando. Divergência declarada frente ao protótipo,
+              que não tem o item: sem ele a central ficaria inalcançável fora
+              da Home.
+            */}
+            <Link
+              className={clsx(
+                "nav-item",
+                active === "notificacoes" && "is-active",
+              )}
+              href={NOTIFICATIONS_DESTINATION.href}
+              onClick={(event) => {
+                if (
+                  !notificationsDrawer ||
+                  active === "notificacoes" ||
+                  event.button !== 0 ||
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey ||
+                  event.altKey
+                ) {
+                  return;
+                }
+                event.preventDefault();
+                notificationsDrawer.open();
+              }}
+              aria-haspopup={active === "notificacoes" ? undefined : "dialog"}
+              aria-current={active === "notificacoes" ? "page" : undefined}
+            >
+              <Icon name={NOTIFICATIONS_DESTINATION.icon} />
+              <span>{NOTIFICATIONS_DESTINATION.label}</span>
+              {notificationsBadge && (
+                <span className="badge-count">{notificationsBadge}</span>
+              )}
+            </Link>
           </nav>
           <div className="sidebar-bottom">
-            <nav className="nav">
-              {/*
-                A sidebar só aparece a partir de 768 px, a largura da gaveta:
-                o clique no item abre a central sobre a tela em vez de navegar
-                (Goal077 §3). Continua link para /notificacoes — abrir em nova
-                aba e o destino atual seguem funcionando. Divergência
-                declarada frente ao protótipo, que não tem o item: sem ele a
-                central ficaria inalcançável fora da Home.
-              */}
-              <Link
-                className={clsx(
-                  "nav-item",
-                  active === "notificacoes" && "is-active",
-                )}
-                href={NOTIFICATIONS_DESTINATION.href}
-                onClick={(event) => {
-                  if (
-                    !notificationsDrawer ||
-                    active === "notificacoes" ||
-                    event.button !== 0 ||
-                    event.metaKey ||
-                    event.ctrlKey ||
-                    event.shiftKey ||
-                    event.altKey
-                  ) {
-                    return;
-                  }
-                  event.preventDefault();
-                  notificationsDrawer.open();
-                }}
-                aria-haspopup={active === "notificacoes" ? undefined : "dialog"}
-                aria-current={active === "notificacoes" ? "page" : undefined}
-              >
-                <Icon name={NOTIFICATIONS_DESTINATION.icon} />
-                <span>{NOTIFICATIONS_DESTINATION.label}</span>
-                {notificationsBadge && (
-                  <span className="badge-count">{notificationsBadge}</span>
-                )}
-              </Link>
-              <Link
-                className={clsx(
-                  "nav-item",
-                  active === "configuracoes" && "is-active",
-                )}
-                href="/configuracoes"
-                aria-current={active === "configuracoes" ? "page" : undefined}
-              >
-                <Icon name="settings" />
-                <span>Configurações</span>
-              </Link>
-            </nav>
+            <IaCard view={status.aiView} />
             <div
               className="dropdown sidebar-account-menu"
               onKeyDown={(event) => {
@@ -268,20 +230,21 @@ function AppShellChrome({
               }}
             >
               <button
-                className="account-button"
+                className="account-button business-context"
                 type="button"
                 onClick={() => setAccountOpen((value) => !value)}
                 aria-expanded={accountOpen}
                 aria-controls="account-menu"
               >
                 <span className="avatar" aria-hidden="true">
-                  {initials(userLabel)}
+                  {initials(accountLabel)}
                 </span>
-                <span className="business-name">
-                  <strong>{userLabel}</strong>
-                  <span>Conta proprietária</span>
+                <span className="account-names">
+                  <span className="account-person">{accountLabel}</span>
+                  <span className="business-name">
+                    <strong>{businessName}</strong>
+                  </span>
                 </span>
-                <Icon name={compactAccount ? "chevron-right" : "more"} />
               </button>
               {accountOpen && (
                 <div className="menu" id="account-menu">
@@ -302,26 +265,6 @@ function AppShellChrome({
           </div>
         </aside>
         <main className={mainClass} id="main-content" ref={mainRef} tabIndex={-1}>
-          {showMobileHeader && (
-            <header className={mobileHeaderClass}>
-              <Brand />
-              <span
-                className={clsx(
-                  "badge",
-                  attention && "badge-danger",
-                  systemAttention && "badge-attention",
-                )}
-              >
-                {loading
-                  ? "Carregando"
-                  : module === "migration"
-                    ? OFFICIAL_SOURCE_LABEL
-                    : mobileAttention
-                      ? "Atenção"
-                      : businessName}
-              </span>
-            </header>
-          )}
           {deletionDueAt && (
             <PersistentStatusBanner
               text={accountDeletionBannerCopy(
@@ -388,7 +331,7 @@ function AppShellChrome({
               aria-expanded={moreOpen}
               aria-current={isMoreActive(active) ? "page" : undefined}
             >
-              <Icon name="more" />
+              <Icon name="nav-more" />
               <span>Mais</span>
             </button>
           </nav>
@@ -445,8 +388,8 @@ function accountDeletionBannerCopy(days: number): string {
  * Deriva de `/v1/status` (via `useSystemStatus`, mesmo tick do shell), não da
  * central de notificações: o banner afirma a condição agora, a central guarda
  * desde quando e até quando (Goal022/WU-08). A frase nunca repete a dos chips
- * de estado da sidebar (`StatusLine`), que são "WhatsApp desconectado" /
- * "IA desligada" / "IA em ativação" / etc.
+ * de estado da sidebar (`IaCard`), que são "IA desligada" / "IA em ativação"
+ * / etc.
  */
 function PersistentStatusBanner({
   href,
@@ -473,41 +416,41 @@ function PersistentStatusBanner({
   );
 }
 
-function StatusLine({
-  activeCopy,
-  label,
-  offCopy,
-  pendingCopy,
-  view,
-}: {
-  activeCopy: string;
-  label: string;
-  offCopy: string;
-  pendingCopy?: string;
-  view: StatusView;
-}) {
+function IaCard({ view }: { view: StatusView }) {
+  const active = view === "active";
   const copy =
     view === "loading"
-      ? `Verificando ${label}`
+      ? "Verificando IA"
       : view === "unknown"
-        ? `${label} não confirmado`
+        ? "IA não confirmado"
         : view === "active"
-          ? activeCopy
+          ? "IA ativa"
           : view === "pending"
-            ? (pendingCopy ?? `${label} em ativação`)
-            : offCopy;
+            ? "IA em ativação"
+            : "IA desligada";
   return (
-    <div className="wa-status status-line" role="status">
+    <div className="ia-card">
       <span
         className={clsx(
-          "status-dot",
+          "ia-dot",
+          active && "is-active",
           view === "off" && "danger",
           view === "pending" && "warning",
           (view === "loading" || view === "unknown") && "neutral",
         )}
         aria-hidden="true"
       />
-      <span>{copy}</span>
+      <div className="ia-card-text" role="status">
+        <span className="ia-card-title">{copy}</span>
+        {active && (
+          <span className="ia-card-sub">atendendo pelo WhatsApp</span>
+        )}
+      </div>
+      {active && (
+        <Link className="ia-card-action" href="/configuracoes/ia">
+          Pausar
+        </Link>
+      )}
     </div>
   );
 }

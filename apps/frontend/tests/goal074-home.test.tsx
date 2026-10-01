@@ -612,3 +612,40 @@ describe("Goal074: faixa de estado quando a IA não está ativa", () => {
     await expectSingleBand(container, "IA não confirmada");
   });
 });
+
+describe("Goal087: 'Pausar' na faixa e sem pontos de estado", () => {
+  test("IA ativa: 'Pausar' é link para /configuracoes/ia e não há linha de pontos", async () => {
+    dashboardGet.mockResolvedValue(dashboardFixture());
+    statusGet.mockResolvedValue(systemStatusFixture());
+
+    const { container } = await renderHome();
+
+    const band = container.querySelector("#operational-status") as HTMLElement;
+    expect(within(band).getByText("IA ativa")).toBeVisible();
+    expect(within(band).getByRole("link", { name: "Pausar" })).toHaveAttribute(
+      "href",
+      "/configuracoes/ia",
+    );
+    expect(container.querySelector(".operational-points")).toBeNull();
+    expect(container.querySelector(".status-dot")).toBeNull();
+  });
+
+  test("fora de IA ativa nenhum 'Pausar' é oferecido", async () => {
+    dashboardGet.mockResolvedValue(dashboardFixture());
+    statusGet.mockResolvedValue(
+      systemStatusFixture({
+        ai: {
+          desiredEnabled: false,
+          effectiveEnabled: false,
+          reconciled: "NOOP",
+          state: "OFF",
+        },
+      }),
+    );
+
+    await renderHome();
+
+    await screen.findAllByText(/IA (inativa|pausada)/);
+    expect(screen.queryByRole("link", { name: "Pausar" })).toBeNull();
+  });
+});

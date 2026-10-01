@@ -255,16 +255,15 @@ describe("AppShell — a sidebar de verdade passa signature=\"check\" para Brand
     ).toBe("1");
   });
 
-  test("o cabeçalho do celular nunca anima o check: ele não recebe signature=\"check\"", () => {
+  test("o celular não tem cabeçalho de marca: o único Brand da casca é o da sidebar", () => {
     render(
       <AppShell active="inicio" title="Início">
         <p>Conteúdo</p>
       </AppShell>,
     );
 
-    const mobileHeaderBrand = document.querySelector("header .brand-mark");
-    expect(mobileHeaderBrand).not.toBeNull();
-    expect(mobileHeaderBrand).not.toHaveClass("brand-mark--check");
+    expect(document.querySelector("header .brand-mark")).toBeNull();
+    expect(document.querySelectorAll(".brand-mark")).toHaveLength(1);
   });
 
   test("segunda montagem de AppShell na mesma sessão: a sidebar não anima de novo", () => {

@@ -46,17 +46,39 @@ export type NavDestination = {
 
 /** Ordem e conteúdo da sidebar (tablet/notebook/desktop): cinco destinos + Configurações. */
 export const SIDEBAR_DESTINATIONS: NavDestination[] = [
-  { href: "/inicio", icon: "home", label: "Início", section: "inicio" },
-  { href: "/conversas", icon: "chat", label: "Conversas", section: "conversas" },
-  { href: "/agenda", icon: "calendar", label: "Agenda", section: "agenda" },
-  { href: "/clientes", icon: "users", label: "Clientes", section: "clientes" },
+  { href: "/inicio", icon: "nav-home", label: "Início", section: "inicio" },
+  {
+    href: "/conversas",
+    icon: "nav-chat",
+    label: "Conversas",
+    section: "conversas",
+  },
+  {
+    href: "/agenda",
+    icon: "nav-calendar",
+    label: "Agenda",
+    section: "agenda",
+  },
+  {
+    href: "/clientes",
+    icon: "nav-user",
+    label: "Clientes",
+    section: "clientes",
+  },
   {
     href: "/servicos",
-    icon: "briefcase",
+    icon: "nav-list",
     label: "Serviços",
     section: "servicos",
   },
 ];
+
+export const SETTINGS_DESTINATION: NavDestination = {
+  href: "/configuracoes",
+  icon: "nav-sliders",
+  label: "Configurações",
+  section: "configuracoes",
+};
 
 /**
  * Os quatro destinos com aba própria no bottom nav mobile. O quinto lugar é

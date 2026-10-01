@@ -3733,3 +3733,79 @@ Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal082-2026-10-01-d-10
 review do Goal082. As provas deste Goal são de unidade, de rota e de texto: nenhuma
 medida renderizada lê a mensagem da conexão, e nenhuma medida ou passo foi
 acrescentado ao gate.
+
+## A casca em três faixas e a Home iguais ao protótipo, e as medidas G-1 e G-2 do gate autenticado, do Goal087
+
+A barra inferior passa a existir abaixo de 1100 px (sem cabeçalho de marca e sem
+trilho de 88 px) e a sidebar de 232 px, de 1100 px em diante
+([D-101](DECISIONS.md), **PROPOSED**). Duas medidas novas entram no gate
+autenticado, **só por acréscimo** em `e2e/authenticated-matrix.spec.ts` e
+`e2e/measure.ts`. Nenhum teste existente, `e2e/routes.ts`,
+`playwright.*.config.ts`, semente, `scripts/`, `KNOWN_*` ou passo de
+`validate:*` mudou.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| **G-1 (faixas)**, em `/inicio` e `/clientes`, em cada uma das cinco larguras: abaixo de 1100 px a `aside.sidebar` não está renderizada, a barra inferior está com cinco itens e nenhum `header[class$="-mobile-header"]` está renderizado; a partir de 1100 px a `aside.sidebar` está renderizada com 232 px (tolerância de 1 px) e a barra inferior não está (**10** testes) | Que a barra e a sidebar tenham a aparência do quadro: isso é lido nos `side-by-side.png` do `visual:compare` |
+| **G-2 (nada atrás da barra)**, em `/clientes` e `/servicos`, abaixo de 1100 px, depois de rolar até o fim: o último elemento focável dentro de `main` e o `a.fab`, se houver, têm a caixa inteira acima do topo da barra inferior (**10** testes). É regressão: na baseline, 768 e 1024 não tinham barra | Rotas que não são `/clientes` e `/servicos`, e conteúdo escondido pelo teclado aberto ou pelo indicador de início do iPhone: só a conferência num aparelho real |
+| `goal087-shell-navigation.test.tsx` (jsdom, **20** testes): a ordem e os links da sidebar sem linha de estado do WhatsApp, o cartão da IA e o "Pausar" só com a IA ativa, a conta com nome ou e-mail, o menu, a ausência do cabeçalho de marca e a faixa da Home com "Pausar" e sem a linha de pontos | Layout e largura de viewport: jsdom não tem layout |
+
+**Execução final (rodada 3)**, sobre a árvore sem edição de código depois dela.
+A última edição de código é a de `apps/frontend/src/shared/styles/atendly.css`
+às `2026-10-01T06:52:09Z` (conta do pé da sidebar em 32 px e barra do celular em
+65 px); as execuções abaixo começam depois. As corridas da rodada 1
+(`validate:ui` de `startTime` `2026-10-01T05:52:45.834Z` e gate autenticado de
+`05:56:25.463Z`) **não** são mais a execução final e foram substituídas.
+`npx tsc --noEmit` e `npm run lint` (`apps/frontend`) — exit 0 nos dois —;
+`npx vitest run` (`apps/frontend`) — **129** arquivos e **1359** testes
+passando —; `npm run test:gate` — **233**/**233** —; `npm run validate:ui` —
+exit 0, `results.json` com `startTime` `2026-10-01T06:52:50.102Z`: **169**
+`passed`, **21** `skipped`, **0** `unexpected`, **0** `flaky`, **0**
+retentativas —; gate autenticado, por `node
+scripts/goal033-authenticated-ui-rehearsal.mjs` sozinho (o passo
+`rehearse:goal033-authenticated-ui` de `validate:integration`), contra um
+PostgreSQL 18 descartável em `127.0.0.1:55497` (o cluster da porta 55432
+aceitava TCP e não respondia), exit 0, `results.json` com `startTime`
+`2026-10-01T07:39:33.917Z`: **195** testes `expected`, **0** `unexpected`, **0**
+`flaky` e **0** retentativas: os **175** da baseline mais **20** de G-1 e G-2
+(quatro testes novos vezes cinco larguras). **Não relido nesta rodada:**
+`validate:core` completo (rodada 1: **17** passos, **15** `passed`, **2**
+`skipped`; `test:frontend` **129**/**1359**, `test:scheduling-service`
+**38**/**528**, `test:ai-orchestrator` **1186** passando e **98** `skipped`) e o
+resumo dos **36** passos de `validate:integration`; a edição de CSS não toca
+nenhum arquivo que eles leiam. `e2e-results/` segue fora do Git.
+
+**Quatro controles negativos do §6 do Goal**, feitos pela WU-11 **na rodada 1**,
+antes das duas edições de CSS das rodadas 2 e 3 (por isso **não** são
+posteriores à última edição de código, como a rodada 1 afirmava), cada um por
+edição real em
+`apps/frontend/src/shared/layout/AppShell.tsx` e restaurado por cópia do
+original, com o `sha256` conferido: `8fad2a0605fcf33ed4b96ade2be02d20742dc7cc783d4aa39fc09e6197533449`
+antes e depois de cada um, nos quatro. O `sha256` de `AppShell.tsx` na árvore
+final da rodada 3 é o mesmo, e as edições posteriores foram só de CSS, que o
+jsdom não lê; por isso os controles não foram refeitos.
+
+| Controle | Defeito introduzido | `goal087-shell-navigation.test.tsx` com o defeito | Restaurado |
+| --- | --- | --- | --- |
+| 1 | `<div className="wa-status">WhatsApp conectado</div>` de volta na sidebar | `Tests  2 failed \| 18 passed (20)`; `AssertionError: expected <div class="wa-status"></div> to be null` | `20 passed (20)` |
+| 2 | `{(active \|\| view === "off") && <Link ...>Pausar</Link>}` no cartão da IA | `Tests  1 failed \| 19 passed (20)`; `AssertionError: expected <a class="ia-card-action" …(1)></a> to be null` (IA em `OFF`) | `20 passed (20)` |
+| 3 | `accountLabel` volta a ser só `session?.user.email` | `Tests  2 failed \| 18 passed (20)`; `Unable to find an accessible element with the role "button"` (nome `/Marina Alves/`) | `20 passed (20)` |
+| 4 | `<header className="{módulo}-mobile-header"><Brand /></header>` de volta antes do `main` | `Tests  9 failed \| 11 passed (20)`; `AssertionError: expected <header …(1)>…(1)</header> to be null` | `20 passed (20)` |
+
+A primeira tentativa do controle 4 foi inválida (a edição apagou um espaço e o
+arquivo não compilou, `no tests`) e foi refeita; o resultado acima é o da
+segunda. Ao fim dos controles, `git status --porcelain=v1 -uall` listava os mesmos 15
+caminhos de antes deles. O `visual:compare` final é o da rodada 3, rodado depois
+da última edição de código.
+
+O vermelho da baseline das provas 1 a 5 e de G-1 é entrega da WU-01 à WU-03 e
+não foi reexecutado pela WU-11.
+
+**Conferência humana pendente.** A conferência do §7 do Goal087 **não foi feita**:
+a casca num celular e num tablet reais, com o indicador de início e o teclado
+aberto num formulário, e as outras telas logadas, cujo conteúdo próprio ainda
+diverge dos quadros. Nenhum teste é declarado prova disso, e `visual:compare`
+é tendência: quem revisa lê os `side-by-side.png`.
+
+Ver [CURRENT_STATE](CURRENT_STATE.md#delta-implementado--goal087-2026-10-01-d-101-proposed)
+e [D-101](DECISIONS.md), **PROPOSED**. FINAL_AUDIT não ganha seção neste Goal.

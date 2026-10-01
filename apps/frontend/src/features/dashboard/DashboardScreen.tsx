@@ -6,10 +6,12 @@ import { useEffect, useState } from "react";
 
 import {
   type Appointment,
+  appointmentStatusLabel,
   BffHttpError,
   type CalendarState,
   type Dashboard,
 } from "@/data";
+import { durationLabel } from "@/features/agenda/NewAppointmentFields";
 import {
   useNotificationsDrawer,
   useNotificationsDrawerViewport,
@@ -356,6 +358,7 @@ function resolveOperationalState({
         };
   }
   return {
+    action: { href: "/configuracoes/ia", label: "Pausar" },
     alert: false,
     description: `Atendendo pelo WhatsApp · ${automatedConversationsToday} ${
       automatedConversationsToday === 1 ? "conversa hoje" : "conversas hoje"
@@ -366,39 +369,37 @@ function resolveOperationalState({
   };
 }
 
-function OperationalBand({
-  calendarUnavailable,
-  state,
-  status,
-}: {
-  calendarUnavailable: boolean;
-  state: OperationalState;
-  status: UseSystemStatusResult;
-}) {
+function OperationalBand({ state }: { state: OperationalState }) {
+  const active = state.tone === "ok";
   return (
     <section
       id="operational-status"
       className={clsx(
         "operational-strip",
+        active && "is-active",
         state.tone === "error" && "alert-error",
         state.tone === "info" && "alert-info",
         state.tone === "warning" && "banner-warning",
       )}
       role={state.alert ? "alert" : undefined}
     >
-      <span
-        className={clsx(
-          "operational-icon",
-          state.tone === "error" && "danger",
-          state.tone === "warning" && "warning",
-        )}
-      >
-        <Icon name={state.icon} />
-      </span>
+      {active ? (
+        <span className="ia-dot is-active operational-ring" aria-hidden="true" />
+      ) : (
+        <span
+          className={clsx(
+            "operational-icon",
+            state.tone === "error" && "danger",
+            state.tone === "warning" && "warning",
+          )}
+        >
+          <Icon name={state.icon} />
+        </span>
+      )}
       <div className="operational-copy">
         <strong>{state.title}</strong>
         <span>{state.description}</span>
-        {state.action && (
+        {state.action && !active && (
           <Link
             className="btn btn-primary operational-action"
             href={state.action.href}
@@ -407,66 +408,35 @@ function OperationalBand({
           </Link>
         )}
       </div>
-      <div className="operational-points">
-        <StatusPoint
-          activeCopy="WhatsApp conectado"
-          label="WhatsApp"
-          offCopy="WhatsApp desconectado"
-          view={status.whatsappView}
-        />
-        <StatusPoint
-          activeCopy="IA ativa"
-          label="IA"
-          offCopy="IA desligada"
-          pendingCopy="IA em ativação"
-          view={status.aiView}
-        />
-        <span className="status-line">
-          <span
-            className={clsx("status-dot", calendarUnavailable && "danger")}
-          />
-          {calendarUnavailable ? "Agenda indisponível" : "Agenda"}
-        </span>
-      </div>
+      {state.action && active && (
+        <Link className="operational-link" href={state.action.href}>
+          {state.action.label}
+        </Link>
+      )}
     </section>
   );
 }
 
-function StatusPoint({
-  activeCopy,
-  label,
-  offCopy,
-  pendingCopy,
-  view,
-}: {
-  activeCopy: string;
-  label: string;
-  offCopy: string;
-  pendingCopy?: string;
-  view: StatusView;
-}) {
-  const copy =
-    view === "loading"
-      ? `Verificando ${label}`
-      : view === "unknown"
-        ? `${label} não confirmado`
-        : view === "active"
-          ? activeCopy
-          : view === "pending"
-            ? (pendingCopy ?? `${label} em ativação`)
-            : offCopy;
+function AgendaStatus({ status }: { status: string }) {
+  const label = appointmentStatusLabel(status);
+  if (status.toUpperCase() === "COMPLETED") {
+    return (
+      <span className="agenda-status is-completed">
+        <Icon name="check" />
+        {label}
+      </span>
+    );
+  }
+  const confirmed = label === "Confirmado";
   return (
-    <span className="status-line" role="status">
-      <span
-        className={clsx(
-          "status-dot",
-          view === "off" && "danger",
-          view === "pending" && "warning",
-          (view === "loading" || view === "unknown") && "neutral",
-        )}
-        aria-hidden="true"
-      />
-      {copy}
+    <span
+      className={clsx(
+        "agenda-status",
+        confirmed ? "is-confirmed" : "is-neutral",
+      )}
+    >
+      <span className="agenda-status-dot" aria-hidden="true" />
+      {label}
     </span>
   );
 }
@@ -497,17 +467,22 @@ function AgendaToday({
             key={appointment.id}
           >
             <strong className="agenda-time">{appointment.startTime}</strong>
-            <div className="agenda-copy">
-              <strong>{appointment.customer?.name ?? "Cliente"}</strong>
-              <span>
-                {appointment.services
-                  .map((service) => service.name)
-                  .join(", ")}
-              </span>
+            <span className="agenda-bar" aria-hidden="true" />
+            <div className="agenda-row-body">
+              <div className="agenda-copy">
+                <strong>{appointment.customer?.name ?? "Cliente"}</strong>
+                <span>
+                  {appointment.services.length > 0
+                    ? appointment.services
+                        .map((service) => service.name)
+                        .join(", ")
+                    : (appointment.title ?? "Atendimento")}
+                  {" · "}
+                  {durationLabel(appointment.durationMinutes)}
+                </span>
+              </div>
+              <AgendaStatus status={appointment.status} />
             </div>
-            <span className="badge">
-              {appointment.source === "AI" ? "Criado pela IA" : "Confirmado"}
-            </span>
           </Link>
         );
         return index === insertAt
@@ -540,7 +515,7 @@ function HomeBell({ unreadCount }: { unreadCount: number }) {
     unreadCount > 0 ? `Notificações, ${unreadCount} não lidas` : "Notificações";
   const content = (
     <>
-      <Icon name="inbox" />
+      <Icon name="bell" />
       {unreadCount > 0 && <span className="home-bell-dot" aria-hidden="true" />}
     </>
   );
@@ -607,12 +582,15 @@ function RealDashboard({
   const checklistVisible =
     status.phase !== "loading" && status.aiView !== "active" && !checklistComplete;
   const greeting = homeGreeting(dashboard.platform.timezone, session?.user.name);
-  const today = new Intl.DateTimeFormat("pt-BR", {
+  const todayLong = new Intl.DateTimeFormat("pt-BR", {
     day: "numeric",
     month: "long",
     timeZone: dashboard.platform.timezone,
     weekday: "long",
-  }).format(new Date());
+  })
+    .format(new Date())
+    .replace("-feira", "");
+  const today = todayLong.charAt(0).toUpperCase() + todayLong.slice(1);
   const nowLabel = currentTimeLabel(dashboard.platform.timezone);
   const operationalState = resolveOperationalState({
     aiUnavailable,
@@ -634,11 +612,7 @@ function RealDashboard({
         <HomeBell unreadCount={unreadCount} />
       </header>
 
-      <OperationalBand
-        calendarUnavailable={calendarUnavailable}
-        state={operationalState}
-        status={status}
-      />
+      <OperationalBand state={operationalState} />
 
       {checklistVisible && (
         <PostOnboardingChecklist items={checklistItems} />
@@ -684,15 +658,23 @@ function RealDashboard({
         )}
 
         <article id="agenda-today" className="card dashboard-card today-card">
-          <header className="dashboard-card-head">
-            <h2>Hoje</h2>
-            <span
-              className={`badge${calendarUnavailable ? " badge-danger" : ""}`}
-            >
-              {calendarUnavailable
-                ? "Indisponível"
-                : `${todayAppointments.length} ${todayAppointments.length === 1 ? "atendimento" : "atendimentos"}`}
-            </span>
+          <header className="dashboard-card-head today-head">
+            <div className="today-title">
+              <h2>Hoje</h2>
+              <span
+                className={clsx(
+                  "today-count",
+                  calendarUnavailable && "is-danger",
+                )}
+              >
+                {calendarUnavailable
+                  ? "· Indisponível"
+                  : `· ${todayAppointments.length} ${todayAppointments.length === 1 ? "atendimento" : "atendimentos"}`}
+              </span>
+            </div>
+            <Link className="dashboard-link" href="/agenda">
+              Ver agenda
+            </Link>
           </header>
           {calendarUnavailable ? (
             <div className="error-state" style={{ padding: "24px 16px" }}>
@@ -731,7 +713,7 @@ function RealDashboard({
         </article>
 
         <article className="card dashboard-card week-card">
-          <header className="dashboard-card-head">
+          <header className="dashboard-card-head week-head">
             <h2>Esta semana</h2>
           </header>
           <div className="week-stats">

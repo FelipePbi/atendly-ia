@@ -143,6 +143,19 @@ function aiStatus(state: AiStateValue): SystemStatus {
   });
 }
 
+// Com o WhatsApp desconectado a faixa mostra o WhatsApp (maior gravidade),
+// então os testes do estado da IA na faixa ligam o WhatsApp.
+function aiStatusWhatsappConnected(state: AiStateValue): SystemStatus {
+  return {
+    ...aiStatus(state),
+    whatsapp: {
+      checkedAt: "2026-09-14T12:00:00.000Z",
+      phoneNumber: "5511999990000",
+      status: "CONNECTED",
+    },
+  };
+}
+
 beforeEach(() => {
   dashboardGet.mockReset();
   statusGet.mockReset();
@@ -282,9 +295,9 @@ describe("checklist pós-onboarding da Home", () => {
 });
 
 describe("PENDING tem apresentação própria", () => {
-  test("distinta de 'IA desligada' (OFF) e de 'IA não confirmado' (erro)", async () => {
+  test("distinta de 'IA inativa' (OFF) e de 'IA não confirmada' (erro)", async () => {
     dashboardGet.mockResolvedValue(dashboardFixture());
-    statusGet.mockResolvedValue(aiStatus("PENDING"));
+    statusGet.mockResolvedValue(aiStatusWhatsappConnected("PENDING"));
 
     render(
       <ShellConfigProvider>
@@ -294,19 +307,19 @@ describe("PENDING tem apresentação própria", () => {
       </ShellConfigProvider>,
     );
 
-    const iaLine = (await screen.findByText("IA em ativação")).closest(
-      ".status-line",
-    );
-    expect(iaLine).not.toBeNull();
-    const dot = iaLine?.querySelector(".status-dot");
-    expect(dot).toHaveClass("warning");
-    expect(dot).not.toHaveClass("danger");
-    expect(dot).not.toHaveClass("neutral");
+    // Os pontos de estado saíram da faixa (H1): o estado da IA vive só no
+    // título da faixa única, em tom informativo e não de erro.
+    const title = await screen.findByText("IA em ativação");
+    const band = title.closest("#operational-status");
+    expect(band).not.toBeNull();
+    expect(band).toHaveClass("alert-info");
+    expect(band).not.toHaveClass("alert-error");
+    expect(band?.querySelector(".status-dot")).toBeNull();
   });
 
-  test("OFF continua 'IA desligada'", async () => {
+  test("OFF continua distinto: 'IA inativa' com a configuração incompleta", async () => {
     dashboardGet.mockResolvedValue(dashboardFixture());
-    statusGet.mockResolvedValue(aiStatus("OFF"));
+    statusGet.mockResolvedValue(aiStatusWhatsappConnected("OFF"));
 
     render(
       <ShellConfigProvider>
@@ -316,12 +329,12 @@ describe("PENDING tem apresentação própria", () => {
       </ShellConfigProvider>,
     );
 
-    expect(await screen.findByText("IA desligada")).toBeVisible();
+    expect(await screen.findByText("IA inativa")).toBeVisible();
   });
 
-  test("UNKNOWN continua 'IA não confirmado'", async () => {
+  test("UNKNOWN continua 'IA não confirmada'", async () => {
     dashboardGet.mockResolvedValue(dashboardFixture());
-    statusGet.mockResolvedValue(aiStatus("UNKNOWN"));
+    statusGet.mockResolvedValue(aiStatusWhatsappConnected("UNKNOWN"));
 
     render(
       <ShellConfigProvider>
@@ -331,7 +344,7 @@ describe("PENDING tem apresentação própria", () => {
       </ShellConfigProvider>,
     );
 
-    expect(await screen.findByText("IA não confirmado")).toBeVisible();
+    expect(await screen.findByText("IA não confirmada")).toBeVisible();
   });
 });
 

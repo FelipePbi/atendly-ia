@@ -11,16 +11,22 @@ import {
 } from "@playwright/test";
 
 import {
+  BAR_CLEARANCE_TOLERANCE,
+  BOTTOM_NAV_ITEMS,
   findStaleExceptions,
   hasFocusIndicator,
   type KnownSmallTarget,
+  measureBarClearance,
   measureComposition,
   measureFirstTabFocus,
   measureNativeBorderControls,
   measureOverflow,
   measureRunningAnimations,
+  measureShellBands,
   measureTouchTargets,
   OVERFLOW_TOLERANCE,
+  SIDEBAR_BREAKPOINT,
+  SIDEBAR_WIDTH,
   TOUCH_TARGET_AA,
   TOUCH_TARGET_COMFORTABLE,
 } from "./measure";
@@ -1570,3 +1576,123 @@ test.describe("reached by real click", () => {
     expect(new URL(page.url()).pathname, `${where}: closing the drawer navigated.`).toBe("/inicio");
   });
 });
+
+/**
+ * The three navigation bands of the logged-in shell (Goal087, G-1) and what
+ * the tablet's fixed bottom bar must not hide (G-2).
+ *
+ * The prototype has no sidebar on a tablet: below 1100px the shell shows the
+ * bottom bar, from 1100px the 232px sidebar. Nothing above reads which of the
+ * two is on the glass, so a tablet that kept a rail, or a desktop that kept the
+ * bar, passed every other measurement. These do not weaken or replace any of
+ * them: they are separate tests, run at the same five widths, with the same
+ * session, and the thresholds live in `./measure.ts`.
+ */
+for (const routeName of ["inicio", "clientes"] as const) {
+  test(`G-1 navigation band: ${routeName} shows the bar below ${SIDEBAR_BREAKPOINT}px and the sidebar from it`, async ({ page }, testInfo) => {
+    await waitForRateLimitBudget(testInfo);
+    watchRateLimitBudget(page);
+
+    const route = routeNamed(routeName);
+    await page.goto(route.path, { waitUntil: "networkidle" });
+    await proveAuthenticatedScreen(page, route);
+
+    const bands = await measureShellBands(page);
+    await testInfo.attach(`shell-bands-${route.name}`, {
+      body: JSON.stringify(bands, null, 2),
+      contentType: "application/json",
+    });
+    const where = `${route.path} at ${testInfo.project.name} (${bands.viewportWidth}px)`;
+
+    if (bands.viewportWidth < SIDEBAR_BREAKPOINT) {
+      expect
+        .soft(bands.sidebar, `${where}: aside.sidebar is rendered; below ${SIDEBAR_BREAKPOINT}px the bottom bar is the navigation.`)
+        .toBeNull();
+      expect
+        .soft(bands.bottomNav, `${where}: the bottom bar is not rendered.`)
+        .not.toBeNull();
+      expect
+        .soft(
+          bands.bottomNav?.items,
+          `${where}: the bottom bar has ${bands.bottomNav?.items ?? 0} rendered items, expected ${BOTTOM_NAV_ITEMS}.`,
+        )
+        .toBe(BOTTOM_NAV_ITEMS);
+      expect
+        .soft(bands.mobileHeaders, `${where}: a mobile brand header is rendered.`)
+        .toBe(0);
+    } else {
+      expect
+        .soft(bands.sidebar, `${where}: aside.sidebar is not rendered; from ${SIDEBAR_BREAKPOINT}px it is the navigation.`)
+        .not.toBeNull();
+      expect
+        .soft(
+          bands.sidebar?.width ?? 0,
+          `${where}: aside.sidebar is ${bands.sidebar?.width ?? 0}px wide, expected ${SIDEBAR_WIDTH}px.`,
+        )
+        .toBeGreaterThanOrEqual(SIDEBAR_WIDTH - 1);
+      expect
+        .soft(
+          bands.sidebar?.width ?? 0,
+          `${where}: aside.sidebar is ${bands.sidebar?.width ?? 0}px wide, expected ${SIDEBAR_WIDTH}px.`,
+        )
+        .toBeLessThanOrEqual(SIDEBAR_WIDTH + 1);
+      expect
+        .soft(bands.bottomNav, `${where}: the bottom bar is rendered next to the sidebar.`)
+        .toBeNull();
+    }
+  });
+}
+
+/**
+ * Nothing behind the bar: after scrolling to the end, the last focusable
+ * element inside `main` and the floating action button sit wholly above the
+ * bar's top edge. At 1100px and over there is no bar, so there is nothing to
+ * hide behind; the test says so instead of skipping.
+ */
+for (const routeName of ["clientes", "servicos"] as const) {
+  test(`G-2 nothing behind the bar: ${routeName}`, async ({ page }, testInfo) => {
+    await waitForRateLimitBudget(testInfo);
+    watchRateLimitBudget(page);
+
+    const route = routeNamed(routeName);
+    await page.goto(route.path, { waitUntil: "networkidle" });
+    await proveAuthenticatedScreen(page, route);
+
+    const width = page.viewportSize()?.width ?? 0;
+    const clearance = await measureBarClearance(page);
+    await testInfo.attach(`bar-clearance-${route.name}`, {
+      body: JSON.stringify(clearance, null, 2),
+      contentType: "application/json",
+    });
+    const where = `${route.path} at ${testInfo.project.name} (${width}px)`;
+
+    if (width >= SIDEBAR_BREAKPOINT) {
+      expect(clearance.barTop, `${where}: a bottom bar is rendered next to the sidebar.`).toBeNull();
+      return;
+    }
+
+    expect(clearance.barTop, `${where}: the bottom bar is not rendered, so there is nothing to measure against.`)
+      .not.toBeNull();
+    const barTop = clearance.barTop ?? 0;
+    expect(clearance.lastFocusable, `${where}: no focusable element found inside main.`).not.toBeNull();
+    const last = clearance.lastFocusable;
+    if (last) {
+      expect
+        .soft(
+          last.bottom,
+          `${where}: the last focusable element in main (${last.element}) ends at y=${last.bottom}, `
+            + `behind the bottom bar that starts at y=${barTop}.`,
+        )
+        .toBeLessThanOrEqual(barTop + BAR_CLEARANCE_TOLERANCE);
+    }
+    if (clearance.fab) {
+      expect
+        .soft(
+          clearance.fab.bottom,
+          `${where}: the floating action button (${clearance.fab.element}) ends at y=${clearance.fab.bottom}, `
+            + `behind the bottom bar that starts at y=${barTop}.`,
+        )
+        .toBeLessThanOrEqual(barTop + BAR_CLEARANCE_TOLERANCE);
+    }
+  });
+}

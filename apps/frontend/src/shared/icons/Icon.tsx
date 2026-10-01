@@ -2,6 +2,7 @@ import type { SVGProps } from "react";
 
 export type IconName =
   | "alert"
+  | "bell"
   | "briefcase"
   | "calendar"
   | "check"
@@ -32,7 +33,14 @@ export type IconName =
   | "user"
   | "users"
   | "x"
-  | "chat";
+  | "chat"
+  | "nav-calendar"
+  | "nav-chat"
+  | "nav-home"
+  | "nav-list"
+  | "nav-more"
+  | "nav-sliders"
+  | "nav-user";
 
 type IconProps = SVGProps<SVGSVGElement> & { name: IconName; label?: string };
 

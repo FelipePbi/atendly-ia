@@ -161,7 +161,7 @@ describe("aviso persistente de exclusão agendada", () => {
 
   test("não aparece sem exclusão nem com exclusão cancelada", async () => {
     renderShell();
-    await screen.findByText("WhatsApp conectado");
+    await screen.findByText("IA ativa");
     expect(screen.queryByRole("alert")).toBeNull();
 
     statusGet.mockResolvedValue(

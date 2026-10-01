@@ -8475,3 +8475,145 @@ resolveu todas as escolhas.
   animações de entrada do protótipo, não portadas. L3, L4 e L5 herdam a casca
   nova e não pioraram, mas não seguem os quadros por inteiro
   ([review086](reviews/086-review.md)).
+
+## Delta implementado — Goal087, 2026-10-01 ([D-101](DECISIONS.md), PROPOSED)
+
+A casca da área logada passa a ter três faixas iguais ao protótipo, e `/inicio`
+segue o quadro **H1** na casca e na faixa de estado. Toca só `apps/frontend/`
+(`AppShell.tsx`, `navigation.ts`, `atendly.css`, `globals.css`,
+`DashboardScreen.tsx`, `Icon.tsx`, o sprite `atendly-icons.svg`, os testes e as
+medidas de `e2e/`). Sem rota, contrato, migration, campo ou variável novos, e
+`apps/bff/PUBLIC_API_V1.md`, o vault e `docs/design-reference/` não mudaram.
+Esta seção **substitui**, no que a casca faz hoje, a descrição do trilho de
+88 px, do cabeçalho de marca no celular e da grade de 248 px do delta do
+Goal058 acima, que continua como registro histórico.
+
+- **Três faixas.** Abaixo de 768 px, barra inferior do celular (65 px mais
+  `env(safe-area-inset-bottom)`: os 99 px do quadro menos os 34 px do indicador de início), sem cabeçalho de marca. De 768 a 1099 px,
+  barra inferior do tablet (81 px mais a área segura), sem sidebar e sem
+  cabeçalho de marca. De 1100 px em diante, sidebar de 232 px e nenhuma barra
+  inferior. O trilho de 88 px deixou de existir. Abaixo de 1100 px a
+  `aside.sidebar` segue no DOM, oculta, para o gate autenticado continuar
+  achando o nome do negócio em `.sidebar .business-context .business-name strong`.
+- **Sidebar.** Logo; Início, Conversas, Agenda, Clientes, Serviços e
+  Configurações; Notificações (com a contagem de não lidas e a gaveta de
+  [D-093](DECISIONS.md), divergência declarada: o quadro não tem o item); no
+  fim, o cartão da IA e a conta. Sem bloco do negócio no topo e sem linha de
+  estado do WhatsApp; o banner da casca continua anunciando a desconexão.
+- **Cartão da IA.** Texto e ponto de `status.aiView`, com as palavras de antes.
+  "atendendo pelo WhatsApp" e o link "Pausar" (`/configuracoes/ia`) só com a IA
+  ativa. O ponto não anima com `prefers-reduced-motion: reduce`.
+- **Conta.** Iniciais, nome da pessoa (ou o e-mail, se `user.name` for nulo) e o
+  nome do negócio embaixo; o menu "Minha conta" e "Sair" não mudou. O botão tem
+  a altura do avatar (32 px, `line-height: normal`), como a linha do quadro: no
+  H1 de desktop o avatar ocupa y=721–750 no protótipo e no app.
+- **Faixa da Home.** Com a IA ativa, "Pausar" à direita (link para
+  `/configuracoes/ia`); a linha de pontos de estado saiu da faixa.
+- **Divergências declaradas.** Notificações na sidebar do desktop; os até 34 px
+  do indicador de início do iPhone no celular; "Pausar" leva a Configurações ›
+  IA em vez de abrir a folha H7; dados da conta de teste. Na comparação desta
+  rodada a conta visual estava com o WhatsApp desconectado e a IA desligada, e
+  por isso as imagens mostram a faixa e o cartão da IA nesses estados; o estado
+  "IA ativa" com "Pausar" está provado em jsdom, não na imagem.
+- **`visual:compare`, baseline e árvore final** (`npm run visual:compare --
+  --target H1,A1,CL1,Servicos:S1,Conversas:C1,M1`, rodado na rodada 3 depois
+  da última edição de código, a de `atendly.css` que fixou a conta em 32 px e a
+  barra do celular em 65 px; a baseline foi medida na rodada 2 servindo o
+  `HEAD` `a72afaf` em outra porta e passando `--app-url`; em porcentagem de
+  diferença, que é tendência e não aprovação; por quadro, mobile / tablet em
+  retrato / tablet em paisagem / desktop, baseline → final): H1 12,3→**11,8**,
+  5,4→**5,5**, 5,5→**4,8**, 4,8→**4,2**; A1 12,7→**12,9**, 5,8→**5,7**,
+  5,5→**5,1**, 5,0→**4,3**; CL1 10,9→**11,0**, 5,5→**5,1**, 4,6→**4,6**,
+  4,4→**3,6**; Servicos:S1 8,9→**8,8**, 4,7→**5,3**, 4,7→**4,8**, 4,4→**3,6**;
+  Conversas:C1 10,2→**11,0**, 5,7→**5,4**, 5,6→**4,6**, 5,1→**4,3**; M1
+  7,8→**7,6**, 3,5→**3,1**, 5,0→**4,7**, 4,9→**4,1**. De 24 medidas, 18 não
+  pioraram e 6 pioraram (a contagem anterior, 19 e 5, não contava o H1 em
+  tablet em retrato). H1 tablet em retrato subiu 0,1 ponto (5,4→5,5): o
+  conteúdo do estado da conta, não a casca. As outras cinco têm causa medida:
+  - **Servicos:S1 em tablet (4,7→5,3 e 4,7→4,8).** O quadro S1 é uma tela
+    secundária (seta de voltar, "Mais") e não tem barra inferior em nenhum
+    device; na baseline o tablet não tinha barra em `/servicos`, e agora tem a
+    do tablet, como todo o app. A piora está inteira na faixa da barra e do
+    botão `+` (análise por faixas de 50 px: +0,3 ponto em cada uma das duas
+    faixas de baixo). Tirar a barra de `/servicos` deixaria a rota sem
+    navegação no tablet e contradiz G-2 do VALIDATION_GATE, então fica como
+    divergência declarada.
+  - **A1, CL1 e C1 em celular (12,7→12,9; 10,9→11,0; 10,2→11,0).** A causa é a
+    remoção do cabeçalho de marca de 60 px, por (a): todo o conteúdo sobe 60
+    px e, como o conteúdo próprio dessas telas ainda não segue os quadros, as
+    linhas passam a cair em outras linhas do quadro. Prova: com 60 px de
+    `padding-top` provisório em `main`, só para medir e depois desfeito, A1
+    vai a 12,5, CL1 a 11,0 e C1 a 10,0, isto é, voltam à baseline ou abaixo
+    dela sem que a casca mude. A altura da barra não é a causa: com a barra de
+    90 px, igual ao quadro com o indicador de início, C1 vai a 10,5 e A1 e CL1
+    não mexem (12,9 e 11,0), então a divergência 2 de "Divergências
+    declaradas" do Goal custa pouco e foi mantida. O conteúdo próprio dessas
+    telas é do Goal que as portar, fora do Goal087.
+  Nesta rodada a barra do tablet passou de 72 para **81 px** (os 72 px do
+  quadro, mais os 8 px de respiro e a borda de 1 px, que o quadro soma por não
+  usar `box-sizing: border-box`) e os ícones dela de 20 para 24 px, como no
+  `*-Tablet.dc.html`; o botão `+` subiu junto. Isso baixou 0,2 a 0,3 ponto em
+  H1, A1, CL1, C1 e M1 nos dois tablets. No H1 de desktop o fundo do item
+  ativo da sidebar ocupa y=70–107 no protótipo e no app, e o passo entre itens
+  é de 40 px nos dois (antes 75–113 e 41 px), porque a linha do logo e os
+  itens passaram a ter `line-height: normal` como no quadro. Em tablet e
+  desktop "Esta semana" fica alinhada ao topo de "Hoje", na coluna lateral,
+  também sem o cartão "Precisa da sua atenção". Nos `side-by-side.png` do H1,
+  nos quatro devices, a casca coincide com o quadro: no celular e nos dois
+  tablets, a barra inferior de cinco itens sem cabeçalho de marca; no desktop,
+  a sidebar de 232 px com o logo, os destinos, o cartão da IA e a conta. O que
+  ainda difere é o conteúdo: banner e cartão de WhatsApp desconectado, o
+  checklist "Ative sua IA" e a data, que vêm do estado da conta de teste, e
+  Notificações na sidebar.
+
+**Provas e contagens da execução final.** A última edição de código é a de
+`apps/frontend/src/shared/styles/atendly.css` da rodada 3 (conta em 32 px e
+barra do celular em 65 px), às `2026-10-01T06:52:09Z`; todas as execuções abaixo
+começam depois dela, sobre a mesma árvore. As corridas da rodada 1
+(`validate:ui` de `startTime` `2026-10-01T05:52:45.834Z` e gate autenticado de
+`05:56:25.463Z`) **não** são mais a execução final: precederam duas edições de
+CSS e foram substituídas.
+
+- `npx tsc --noEmit` e `npm run lint` em `apps/frontend`: exit 0 nos dois.
+  `npx vitest run` em `apps/frontend`: **129** arquivos e **1359** testes
+  passando (a mesma contagem da rodada 1). `goal087-shell-navigation.test.tsx`
+  tem **20** testes, arquivo novo.
+- `npm run test:gate`: **233**/**233**, exit 0.
+- `npm run validate:ui` (rodada 3, exit 0; `results.json`, `startTime`
+  `2026-10-01T06:52:50.102Z`): **169** `passed`, **21** `skipped` (o teste de
+  alvo de toque só vale nas larguras de celular), **0** `unexpected`, **0**
+  `flaky`, **0** retentativas.
+- Gate autenticado (rodada 3): `node scripts/goal033-authenticated-ui-rehearsal.mjs`
+  sozinho, o mesmo passo `rehearse:goal033-authenticated-ui` de
+  `validate:integration`, contra um PostgreSQL 18 descartável em loopback
+  (`127.0.0.1:55497`; o cluster da porta 55432 aceitava TCP e não respondia),
+  exit 0, `results.json` com `startTime` `2026-10-01T07:39:33.917Z`: **195**
+  testes `expected`, **0** `unexpected`, **0** `flaky`, **0** retentativas: os
+  **175** da baseline mais **20** de G-1 e G-2.
+- **Não relido nesta rodada:** `validate:core` completo (**17** passos, **15**
+  `passed`, **2** `skipped`: `test:bff`, `test:health-worker`; `test:scheduling-service`
+  **38**/**528**; `test:ai-orchestrator` **1186** passando e **98** `skipped`) e
+  o resumo dos **36** passos de `validate:integration`, que são da WU-11 da
+  rodada 1. A edição de CSS não toca nenhum arquivo que essas suítes leem.
+- Os quatro controles negativos do §6 (ver
+  [VALIDATION_GATE](VALIDATION_GATE.md)) são da rodada 1 e **não** foram
+  refeitos: exercitam `AppShell.tsx` em jsdom, que não lê CSS, e o `sha256` de
+  `AppShell.tsx` continua `8fad2a06…33449`, igual ao de antes e depois de cada
+  controle.
+
+**Não foi feito.** A conferência do §7 do Goal087: a casca num celular e num
+tablet reais, com o indicador de início e o teclado aberto num formulário, e as
+outras telas logadas, cujo conteúdo próprio ainda diverge dos quadros. A
+fidelidade da casca é lida nas imagens do `visual:compare`, que o revisor deve
+abrir; nenhum teste é declarado prova disso. "IA sem conexão" (R-06) e a altura
+da casca sem unidade de viewport (R-10) são do Goal085. Ver
+[VALIDATION_GATE](VALIDATION_GATE.md) e [D-101](DECISIONS.md), **PROPOSED**.
+
+**Fechamento — review087, 2026-10-01.** D-101 foi aceita na rodada 3 do IA Loop,
+sem blocker, depois de três blockers na rodada 1 e três na rodada 2. O Tech Lead
+refez o `visual:compare` das seis telas e obteve os mesmos 24 números desta
+seção. O valor final do CL1 no celular, na justificativa das pioras, foi
+corrigido no fechamento de 11,1 para 11,0. A casca descrita acima vale como
+estado atual. O item 1 de D-074 deixa de valer na grade de 248 px, no trilho de
+88 px e no cabeçalho de marca. A conferência do §7 continua não feita
+([review087](reviews/087-review.md)).

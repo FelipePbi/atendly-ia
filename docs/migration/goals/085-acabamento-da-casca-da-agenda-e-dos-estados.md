@@ -1,6 +1,6 @@
 # Goal 085 — Acabamento da casca, da Agenda e dos estados
 
-**Status: READY.** Preparado em 2026-10-01 pelo Tech Lead Agent após [Goal082 ACCEPTED](../reviews/082-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
+**Status: PLANNED.** (READY na v109; de volta a PLANNED na v110, com o 086 à frente por instrução do usuário. Volta a READY com o mesmo ID, título e escopo, revalidando a baseline.) Preparado em 2026-10-01 pelo Tech Lead Agent após [Goal082 ACCEPTED](../reviews/082-review.md) e a integração do seu commit de fechamento. Executor: Developer Agent. Reviewer: Tech Lead Agent, conforme [AGENT_ROLES](../AGENT_ROLES.md) e D-018. Este documento autoriza a implementação; nada fora dele está autorizado.
 
 Developer execution profile: SONNET_HIGH
 

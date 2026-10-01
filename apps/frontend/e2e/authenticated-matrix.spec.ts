@@ -2057,3 +2057,239 @@ for (const scenario of LIST_DETAIL_CASES) {
       .toContain(scenario.openItem);
   });
 }
+
+/**
+ * The onboarding frame (Goal089, G-6). Below 1024px there is no sidebar: the
+ * column has the progress bar and "Sair" on top, and its primary action is
+ * anchored at the bottom of the window. From 1024px there is no top bar: the
+ * sidebar is as tall as the window (340px, 420px from 1366px) and the column
+ * beside it is 560px (600px from 1366px). Nothing above reads which of the two
+ * is on the glass. Separate tests, same five widths, same second account
+ * (`onboardingTest`), no change to any other measurement or to `./routes`.
+ */
+const ONBOARDING_FRAME_BREAKPOINT = 1024;
+const ONBOARDING_FRAME_WIDE_BREAKPOINT = 1366;
+const ONBOARDING_FRAME_TOLERANCE = 1;
+const ONBOARDING_FRAME_PATHS = ["/onboarding/segmento-e-nome", "/onboarding/tom-da-ia"] as const;
+
+type OnboardingFrameMeasure = {
+  innerWidth: number;
+  innerHeight: number;
+  sidebar: { top: number; bottom: number; width: number } | null;
+  column: { width: number } | null;
+  progressRendered: boolean;
+  exit: { width: number; height: number } | null;
+  primary: { top: number; bottom: number } | null;
+  /** Rendered `header` elements flush with the top of the window and as wide as it. */
+  topBars: string[];
+  visibleBrands: number;
+  brandsInSidebar: number;
+};
+
+async function measureOnboardingFrame(page: Page): Promise<OnboardingFrameMeasure> {
+  return page.evaluate(() => {
+    const isRendered = (el: Element): boolean => {
+      const style = getComputedStyle(el);
+      const box = el.getBoundingClientRect();
+      return style.display !== "none"
+        && style.visibility !== "hidden"
+        && box.width > 0
+        && box.height > 0;
+    };
+    const rendered = (selector: string): HTMLElement | null =>
+      Array.from(document.querySelectorAll<HTMLElement>(selector)).find(isRendered) ?? null;
+
+    const sidebar = rendered('nav[aria-label="Configuração inicial"]');
+    const sidebarBox = sidebar?.getBoundingClientRect() ?? null;
+    const column = rendered(".onboarding-column");
+    const exit = Array.from(document.querySelectorAll<HTMLElement>("button"))
+      .filter(isRendered)
+      .find((button) => button.textContent?.trim() === "Sair") ?? null;
+    const exitBox = exit?.getBoundingClientRect() ?? null;
+    const primary = rendered(".onboarding-actions .btn-primary");
+    const primaryBox = primary?.getBoundingClientRect() ?? null;
+    const brands = Array.from(document.querySelectorAll<HTMLElement>("a.brand")).filter(isRendered);
+
+    return {
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      sidebar: sidebarBox ? { top: sidebarBox.top, bottom: sidebarBox.bottom, width: sidebarBox.width } : null,
+      column: column ? { width: column.getBoundingClientRect().width } : null,
+      progressRendered: rendered('[role="group"][aria-label="Progresso da configuração inicial"]') !== null,
+      exit: exitBox ? { width: exitBox.width, height: exitBox.height } : null,
+      primary: primaryBox ? { top: primaryBox.top, bottom: primaryBox.bottom } : null,
+      topBars: Array.from(document.querySelectorAll("header"))
+        .filter(isRendered)
+        .filter((header) => {
+          const box = header.getBoundingClientRect();
+          return box.top <= 1 && box.width >= window.innerWidth - 1;
+        })
+        .map((header) => `header.${header.className}`),
+      visibleBrands: brands.length,
+      brandsInSidebar: sidebar ? brands.filter((brand) => sidebar.contains(brand)).length : 0,
+    };
+  });
+}
+
+type OnboardingScrollEnd = {
+  actionsTop: number | null;
+  lastFocusable: { element: string; top: number; bottom: number } | null;
+};
+
+/** Scrolls the step's content to its end, then reads its last focusable element against the actions. */
+async function measureOnboardingScrollEnd(page: Page): Promise<OnboardingScrollEnd> {
+  return page.evaluate(() => {
+    const isRendered = (el: Element): boolean => {
+      const style = getComputedStyle(el);
+      const box = el.getBoundingClientRect();
+      return style.display !== "none"
+        && style.visibility !== "hidden"
+        && box.width > 0
+        && box.height > 0;
+    };
+    const content = document.querySelector<HTMLElement>(".onboarding-content");
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" });
+    if (content) content.scrollTo({ top: content.scrollHeight, behavior: "instant" });
+    const actions = Array.from(document.querySelectorAll<HTMLElement>(".onboarding-actions")).find(isRendered);
+    const focusable = content
+      ? Array.from(
+        content.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled]), '
+            + 'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter(isRendered)
+      : [];
+    const last = focusable.at(-1);
+    const lastBox = last?.getBoundingClientRect() ?? null;
+    const classes = last && typeof last.className === "string" && last.className.trim() !== ""
+      ? `.${last.className.trim().split(/\s+/u).join(".")}`
+      : "";
+    return {
+      actionsTop: actions ? actions.getBoundingClientRect().top : null,
+      lastFocusable: last && lastBox
+        ? { element: `${last.tagName.toLowerCase()}${classes}`, top: lastBox.top, bottom: lastBox.bottom }
+        : null,
+    };
+  });
+}
+
+for (const stepPath of ONBOARDING_FRAME_PATHS) {
+  const route = ONBOARDING_ROUTES.find((candidate) => candidate.path === stepPath);
+  if (!route) throw new Error(`${stepPath} is not in ONBOARDING_ROUTES; G-6 measures the frame on it.`);
+
+  onboardingTest(`G-6 onboarding frame: ${route.name}`, async ({ page }, testInfo) => {
+    await waitForRateLimitBudget(testInfo);
+    watchRateLimitBudget(page);
+
+    await page.goto(route.path, { waitUntil: "networkidle" });
+    await proveOnboardingScreen(page, route);
+
+    const frame = await measureOnboardingFrame(page);
+    await testInfo.attach(`onboarding-frame-${route.name}`, {
+      body: JSON.stringify(frame, null, 2),
+      contentType: "application/json",
+    });
+    const where = `${route.path} at ${testInfo.project.name} (${frame.innerWidth}px)`;
+
+    if (frame.innerWidth < ONBOARDING_FRAME_BREAKPOINT) {
+      expect
+        .soft(frame.sidebar, `${where}: the "Configuração inicial" sidebar is rendered below ${ONBOARDING_FRAME_BREAKPOINT}px.`)
+        .toBeNull();
+      expect
+        .soft(frame.progressRendered, `${where}: the progress bar is not rendered below ${ONBOARDING_FRAME_BREAKPOINT}px.`)
+        .toBe(true);
+      expect(frame.exit, `${where}: "Sair" is not rendered.`).not.toBeNull();
+      if (frame.exit) {
+        expect
+          .soft(
+            Math.min(frame.exit.width, frame.exit.height),
+            `${where}: "Sair" is ${frame.exit.width}x${frame.exit.height}px, below the WCAG 2.5.8 AA minimum of ${TOUCH_TARGET_AA}px.`,
+          )
+          .toBeGreaterThanOrEqual(TOUCH_TARGET_AA);
+      }
+
+      expect(frame.primary, `${where}: the primary action is not rendered.`).not.toBeNull();
+      if (frame.primary) {
+        expect
+          .soft(
+            frame.primary.top,
+            `${where}: the primary action starts at y=${frame.primary.top}, above the window.`,
+          )
+          .toBeGreaterThanOrEqual(0);
+        expect
+          .soft(
+            frame.primary.bottom,
+            `${where}: the primary action ends at y=${frame.primary.bottom}, past the window's ${frame.innerHeight}px on opening.`,
+          )
+          .toBeLessThanOrEqual(frame.innerHeight + ONBOARDING_FRAME_TOLERANCE);
+      }
+
+      const end = await measureOnboardingScrollEnd(page);
+      await testInfo.attach(`onboarding-scroll-end-${route.name}`, {
+        body: JSON.stringify(end, null, 2),
+        contentType: "application/json",
+      });
+      expect(end.actionsTop, `${where}: the actions are not rendered.`).not.toBeNull();
+      expect(end.lastFocusable, `${where}: no focusable element found in the step's content.`).not.toBeNull();
+      if (end.actionsTop !== null && end.lastFocusable) {
+        expect
+          .soft(
+            end.lastFocusable.bottom,
+            `${where}: after scrolling to the end, the last focusable element (${end.lastFocusable.element}) `
+              + `ends at y=${end.lastFocusable.bottom}, behind the actions that start at y=${end.actionsTop}.`,
+          )
+          .toBeLessThanOrEqual(end.actionsTop + BAR_CLEARANCE_TOLERANCE);
+      }
+      return;
+    }
+
+    const wide = frame.innerWidth >= ONBOARDING_FRAME_WIDE_BREAKPOINT;
+    const sidebarWidth = wide ? 420 : 340;
+    const columnWidth = wide ? 600 : 560;
+
+    expect
+      .soft(frame.progressRendered, `${where}: the progress bar is rendered from ${ONBOARDING_FRAME_BREAKPOINT}px.`)
+      .toBe(false);
+    expect
+      .soft(frame.topBars, `${where}: a top bar is rendered from ${ONBOARDING_FRAME_BREAKPOINT}px.`)
+      .toEqual([]);
+    expect
+      .soft(frame.visibleBrands, `${where}: the brand is rendered ${frame.visibleBrands} times, expected once, inside the sidebar.`)
+      .toBe(1);
+    expect
+      .soft(frame.brandsInSidebar, `${where}: the brand is not inside the sidebar.`)
+      .toBe(1);
+
+    expect(frame.sidebar, `${where}: the "Configuração inicial" sidebar is not rendered.`).not.toBeNull();
+    if (frame.sidebar) {
+      expect
+        .soft(
+          Math.abs(frame.sidebar.top),
+          `${where}: the sidebar starts at y=${frame.sidebar.top}, expected 0.`,
+        )
+        .toBeLessThanOrEqual(ONBOARDING_FRAME_TOLERANCE);
+      expect
+        .soft(
+          Math.abs(frame.sidebar.bottom - frame.innerHeight),
+          `${where}: the sidebar ends at y=${frame.sidebar.bottom}, window height is ${frame.innerHeight}.`,
+        )
+        .toBeLessThanOrEqual(ONBOARDING_FRAME_TOLERANCE);
+      expect
+        .soft(
+          Math.abs(frame.sidebar.width - sidebarWidth),
+          `${where}: the sidebar is ${frame.sidebar.width}px wide, expected ${sidebarWidth}px.`,
+        )
+        .toBeLessThanOrEqual(ONBOARDING_FRAME_TOLERANCE);
+    }
+
+    expect(frame.column, `${where}: the step's column is not rendered.`).not.toBeNull();
+    if (frame.column) {
+      expect
+        .soft(
+          Math.abs(frame.column.width - columnWidth),
+          `${where}: the column is ${frame.column.width}px wide, expected ${columnWidth}px.`,
+        )
+        .toBeLessThanOrEqual(ONBOARDING_FRAME_TOLERANCE);
+    }
+  });
+}

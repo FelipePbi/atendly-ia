@@ -96,22 +96,65 @@ export const onboardingChapterOrder: readonly OnboardingBlockId[] = [
 
 export type OnboardingChapterStatus = "done" | "current" | "upcoming";
 
-export function chapterProgress(
-  scenario: OnboardingScenario,
-): Array<{ id: OnboardingBlockId; label: string; status: OnboardingChapterStatus }> {
-  const currentIndex = onboardingChapterOrder.indexOf(
-    blockForScenario(scenario),
+/** Passos do capítulo no caminho do produto. `endereco` entra logo depois de
+ * `modalidade`: é um passo que a pessoa vê, só não é sequencial para todos. */
+function chapterSteps(block: OnboardingBlockId): OnboardingScenario[] {
+  const steps = onboardingFlow.filter(
+    (step) => step !== "boas-vindas" && blockForScenario(step) === block,
   );
-  return onboardingChapterOrder.map((id, index) => ({
-    id,
-    label: onboardingBlockLabels[id],
-    status:
+  const modalidade = steps.indexOf("modalidade");
+  if (modalidade >= 0) steps.splice(modalidade + 1, 0, "endereco");
+  return steps;
+}
+
+/** Quanto do capítulo atual já foi percorrido: a posição do passo sobre o
+ * total, com meio passo de folga para a barra nunca fechar antes do capítulo
+ * acabar. Os desvios usam o passo que sempre os antecede, como
+ * `progressPercent`. */
+export function chapterFraction(scenario: OnboardingScenario): number {
+  if (scenario === "boas-vindas") return 0;
+  if (scenario === "whatsapp-concluido" || scenario === "teste-real-sucesso") {
+    return 1;
+  }
+  if (
+    scenario === "teste-real-falha" ||
+    scenario === "teste-real-interferencia"
+  ) {
+    return chapterFraction("teste-real-progresso");
+  }
+  if (scenario === "quando-importar" || scenario === "importacao") {
+    return chapterFraction("sistema-atual");
+  }
+  const steps = chapterSteps(blockForScenario(scenario));
+  return (steps.indexOf(scenario) + 1) / (steps.length + 0.5);
+}
+
+export function chapterProgress(scenario: OnboardingScenario): Array<{
+  fill: number;
+  id: OnboardingBlockId;
+  label: string;
+  status: OnboardingChapterStatus;
+}> {
+  // Na Boas-vindas a configuração ainda não começou: nenhum capítulo é o atual.
+  const currentIndex =
+    scenario === "boas-vindas"
+      ? -1
+      : onboardingChapterOrder.indexOf(blockForScenario(scenario));
+  return onboardingChapterOrder.map((id, index) => {
+    const status: OnboardingChapterStatus =
       index < currentIndex
         ? "done"
         : index === currentIndex
           ? "current"
-          : "upcoming",
-  }));
+          : "upcoming";
+    return {
+      fill:
+        status === "done" ? 1 : status === "current" ? chapterFraction(scenario) : 0,
+      id,
+      label: onboardingBlockLabels[id],
+      status,
+    };
+  });
 }
 
 export function progressPercent(scenario: OnboardingScenario): number {

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 
 import { activationTestStartAction } from "@/features/activation-test/ActivationTestPanels";
+import { Icon } from "@/shared/icons/Icon";
 import {
   getProductServices,
   useProductRuntime,
@@ -267,9 +268,14 @@ export function OnboardingScreen({
   const actions = isWelcomeStep ? (
     // Boas-vindas não grava nada: só avança para o primeiro campo real
     // (docs/product-vault/02-Fluxos/01-Onboarding.md §1).
-    <button className="btn btn-primary" disabled={busy} type="submit">
-      {busy ? "Abrindo..." : "Começar"}
-    </button>
+    <>
+      <button className="btn btn-primary" disabled={busy} type="submit">
+        {busy ? "Abrindo..." : "Começar"}
+      </button>
+      <p className="onboarding-actions-note">
+        Seu progresso fica salvo a cada etapa.
+      </p>
+    </>
   ) : isAiDemo && !demoDone ? (
     null
   ) : isSistemaAtual ? (
@@ -424,14 +430,17 @@ export function OnboardingScreen({
         isSistemaAtual ? (
           <div className="choice-grid">
             <ActionCard
-              copy="Traga clientes, serviços e agendamentos do Minha Agenda."
+              accent
+              copy="Trazemos seus serviços, clientes e agendamentos para a Atendly."
               disabled={busy}
+              icon={<Icon name="import" />}
               title="Sim, quero importar"
               onClick={() => go("quando-importar")}
             />
             <ActionCard
-              copy="Cadastre tudo direto na Atendly, sem importar nada."
+              copy="Você cadastra seus serviços e horários em poucos passos."
               disabled={busy}
+              icon={<Icon name="plus" />}
               title="Não, começar do zero"
               onClick={() => void chooseWithoutImportNow()}
             />

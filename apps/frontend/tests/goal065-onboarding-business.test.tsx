@@ -138,7 +138,12 @@ describe("segmento-e-nome: valida inline, grava e avança para modalidade", () =
       level: 1,
       name: "Vamos começar pelo seu negócio",
     });
-    expect(heading.previousElementSibling).toHaveTextContent("Seu negócio");
+    // O eyebrow fica no topo da coluna, fora do header do título (Goal089).
+    const eyebrow = screen
+      .getAllByText("Seu negócio")
+      .filter((element) => element.tagName === "P" && !element.closest("nav"));
+    expect(eyebrow).toHaveLength(1);
+    expect(heading.closest("header")).not.toContainElement(eyebrow[0]);
     const segmentGroup = screen.getByRole("group", {
       name: "Qual é o seu segmento?",
     });

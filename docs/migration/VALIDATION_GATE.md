@@ -3999,3 +3999,62 @@ Leitura dos `side-by-side.png`: no CL5 em paisagem, PRÓXIMO e PREFERÊNCIAS sae
 Um primeiro controle 1 com a data `2026-09-08T12:00:00.000Z` (`13:55:57Z`, `4 failed (4)`, `23514`) foi refeito com o valor literal do Goal.
 
 **Não provado por este Goal:** que os testes unitários e os de outros serviços não tenham data que vá vencer; que a suíte passe perto da meia-noite de `America/Sao_Paulo`. O `-03:00` fixo do helper vale enquanto o Brasil não voltar ao horário de verão. O gate autenticado semeia o agendamento "na data de hoje" do relógio da corrida (`1 appointment(s) on 2026-10-01` na execução final); este Goal não tocou nesse ensaio.
+
+## A moldura do onboarding igual ao protótipo e a medida G-6 do gate autenticado, do Goal089
+
+A moldura única do onboarding (topo de progresso abaixo de 1024 px, sidebar com painel de 1024 px em diante, CTA ancorado, "Sair" no rodapé da sidebar) está em [D-104](DECISIONS.md), **ACCEPTED** no [review089](reviews/089-review.md). A medida nova entra no gate autenticado **só por acréscimo** no fim de `e2e/authenticated-matrix.spec.ts`. Nenhum teste existente, `e2e/routes.ts`, `playwright.*.config.ts`, semente, `scripts/`, `KNOWN_*` ou passo de `validate:*` mudou.
+
+| O que decide agora | O que não decide |
+| --- | --- |
+| **G-6 (moldura do onboarding)**, em `/onboarding/segmento-e-nome` e `/onboarding/tom-da-ia`, com a conta parada no meio do onboarding (`onboardingTest`). Abaixo de 1024 px: sidebar não renderizada, barra de progresso renderizada, "Sair" com alvo de ao menos 24 px, botão principal inteiro dentro da janela ao abrir e último elemento focável acima das ações depois de rolar. De 1024 px em diante: nenhuma barra superior, sidebar com a altura da janela (1 px de tolerância), 340 px em 1024 e 420 px em 1440, coluna de 560 px e 600 px nas mesmas larguras. Duas rotas vezes cinco larguras, **10** testes | Que a moldura seja igual ao protótipo: isso é lido nos `side-by-side.png` |
+| `goal089-onboarding-shell.test.tsx` (jsdom, **15** testes): prova 1 (nenhuma etapa tem barra superior; a marca só existe na sidebar e "Sair" não está num `header`), prova 2 (o preenchimento parcial do segmento atual cresce no capítulo), prova 3 (✓ no concluído, número no atual e no pendente), prova 4 (o eyebrow fica fora do `header` do título) e prova 5 ("Sair" tem um só nome acessível e faz logout nas duas molduras) | Layout: jsdom não tem layout |
+
+**Contagem do gate autenticado:** **245** testes `expected` (**235** da base mais **10** de G-6), **0** `unexpected`, **0** `flaky`, **0** retentativas (`goal033:authenticated-ui-rehearsal authenticated gate retries: 0 - every test passed on its first attempt`; `startTime` `2026-10-01T17:17:20.422Z`). O orçamento de requisições do BFF comportou G-6 nas cinco larguras e nas duas rotas; nenhuma rota foi retirada nem largura cortada. O teste "onboarding-whatsapp › measured, logged in" passou nas cinco larguras: a barra de ações mede a largura do botão (o respiro do rodapé é margem, não padding, em `.onboarding-actions`), e "Conectar meu WhatsApp" fica em largura total na barra de 390 px.
+
+**Execução final**, sem nenhuma edição de código depois dela (`OnboardingShell.tsx` `22c552e8f3da1d1f3bd3adb253f85541972bea49c0b6872e14c82173212aca4a`, `blocks.ts` `68c25db80703f2cf0e6cd39a8a603c6276a4db2dd2c79fc9cf0edfca6681c5db`, `atendly.css` `4073a423e0667f29762327cfe9845b7cb4376fc6ae516864077341fa56f3efe3`; os controles negativos restauraram os arquivos com o `sha256` idêntico e o `git status` igual). `npm run validate:core`: exit 0, **17** passos, **15** `passed`, **2** `skipped` (`test:bff` e `test:health-worker`), **0** `failed`; `test:frontend` **133** arquivos e **1430** testes. `npm run test:gate`: **233**/**233**. `npm run validate:ui`: exit 0, **169** `passed`, **21** `skipped`, **0** retentativas. `npm run validate:integration`: exit 0, **36** passos, **36** `passed`, **0** `failed`, **0** `notRun`; `test:bff-integration` **63** arquivos e **474** testes, `test:scheduling-integration` **18** e **143**, `test:ai-orchestrator-transport-durability` **10** e **74**, `test:ai-orchestrator-content-purge` **3** e **24**, e o gate autenticado nos **245** testes acima.
+
+**Ambiente.** Neste Windows a memória comprometida ficou perto do limite, sem edição de configuração. `validate:ui` caiu duas vezes (Chromium com `Target crashed`, `ERR_INSUFFICIENT_RESOURCES`, 30 s do axe) com o número de workers padrão; com `CI=1` (que o `playwright.*.config.ts` já lê para usar 1 worker) passou na primeira vez, sem retentativa. `validate:integration` usou `CI=1`, `VITEST_MAX_WORKERS=1` e um cluster PostgreSQL 18 descartável em `127.0.0.1:55432` (UTC, receita da seção do Goal098). Três tentativas antes da corrida final não chegaram ao fim: uma sem `BFF_TEST_DATABASE_URL` (exit 2, `BFF_TEST_DATABASE_URL is not set`); uma com o postmaster travado pela memória (`could not reserve shared memory region ... error code 487`, `P1001`), o que levou a encerrar o processo e reiniciar o cluster; e uma corrida completa que parou em `test:scheduling-integration` com `1 failed | 142 passed (143)`, `goal008-agenda.test.ts` com `expected { locked: true, completed: 2 } to match object { locked: true, completed: 1 }`, sobre um banco do Scheduling que as corridas interrompidas anteriores deixaram com atendimento vencido, a mesma assinatura descrita no Goal098. A causa não foi investigada além dessa semelhança. A corrida seguinte, sem edição entre as duas, passou **36**/**36**.
+
+**`visual:compare`**, depois da última edição de código, exit 0 em todas as chamadas. **Baseline** é a árvore de `27e1a59` (os nove arquivos de produção trocados pelos de `git show HEAD:` e restaurados por `sha256` conferido), renderizada nesta rodada para os 16 quadros; 1.3 e 4.6 foram renderizados de novo para medir a causa das duas pioras. A porcentagem é tendência; a leitura é a dos `side-by-side.png`. Cada célula: mobile 402 / tablet em retrato 768 / tablet em paisagem 1024 / desktop 1366.
+
+| Quadro | Baseline | Final |
+| --- | --- | --- |
+| 0 Boas-vindas | 18,2 / 9,8 / 7,4 / 5,8 | 1,2 / 0,5 / 0,9 / 0,6 |
+| 1.1 Segmento e nome | 8,8 / 10,0 / 10,1 / 7,8 | 0,6 / 0,6 / 1,0 / 1,2 |
+| 2.1 Sistema atual | 8,6 / 4,1 / 4,9 / 3,7 | 2,4 / 0,8 / 0,9 / 0,8 |
+| 3.2 Estilo da IA | 19,6 / 9,1 / 8,8 / 6,9 | 5,5 / 1,4 / 1,9 / 1,4 |
+| 1.2 | 17,6 / 9,4 / 10,9 / 8,4 | 4,5 / 1,8 / 2,2 / 1,6 |
+| 1.3 Endereço | 8,5 / 9,3 / 10,9 / 8,4 | **16,7** / 5,2 / 5,3 / 4,2 |
+| 2.2 | 14,6 / 8,2 / 9,8 / 7,6 | 11,8 / 7,5 / 7,3 / 5,9 |
+| 2.3 | 16,9 / 10,2 / 7,6 / 5,9 | 5,9 / 2,7 / 3,0 / 2,3 |
+| 2.4 | 16,8 / 9,2 / 10,7 / 8,2 | 4,5 / 1,8 / 2,2 / 1,7 |
+| 2.5 | 20,0 / 10,5 / 12,0 / 9,3 | 6,8 / 2,7 / 3,1 / 2,3 |
+| 2.6 | 18,3 / 8,8 / 8,5 / 6,6 | 5,8 / 4,3 / 3,5 / 2,6 |
+| 2.I1 Importação | 15,2 / 9,1 / 9,1 / 7,0 | 15,1 / 8,6 / 6,7 / 5,2 |
+| 3.1 | 17,8 / 7,8 / 7,6 / 6,0 | 6,9 / 3,4 / 3,1 / 2,4 |
+| 4.1 | 16,6 / 10,1 / 11,7 / 9,0 | 6,9 / 8,8 / 8,8 / 6,9 |
+| 4.2 | 15,0 / 8,3 / 8,4 / 6,5 | 14,3 / 7,4 / 7,4 / 5,8 |
+| 4.6 Introdução ao teste | 12,2 / 10,0 / 8,1 / 6,1 | **13,1** / 6,7 / 6,8 / 5,3 |
+
+Dos 64 pares quadro e largura, **62** não pioram. **Duas pioras, as duas no mobile, com a causa medida nos `side-by-side.png` da baseline e da árvore final.**
+
+1. **1.3 mobile, 8,5 para 16,7.** O quadro do protótipo mostra o teclado aberto, com o "Continuar" logo acima dele (y 532–584). Na baseline o CTA ficava no fim do conteúdo curto da etapa e por coincidência caía no mesmo lugar (y 529–581); com o CTA ancorado no rodapé da coluna ele fica em y 818–870, 290 px abaixo do que o quadro mostra. O resto do diff é o conteúdo do Goal090 (um campo "Endereço do seu espaço" no lugar de CEP, rua e complemento). É o caso de teclado aberto da conferência do §7, que não foi feita.
+2. **4.6 mobile, 12,2 para 13,1.** Sem o cabeçalho da baseline (cerca de 175 px), o eyebrow e o título caem na posição do protótipo (H1 em y 206 nos dois), e a lista de quatro itens do app sobe de y 478–724 para y 370–614: sai de cima da lista de três itens do protótipo (y 510–629) e passa sobre o cartão de conversa, que o app não tem. O CTA do app são duas ações lado a lado (y 818–870); o do protótipo é um botão de largura total com a nota "Leva cerca de 3 minutos". Cartão, lista, texto e nota são o conteúdo do Goal090.
+
+Nenhuma das duas é defeito da moldura.
+
+**Divergências que restam nos quatro quadros-alvo**, todas declaradas em D-104: "Sair" (ícone à direita da barra abaixo de 1024 px, botão no rodapé da sidebar de 1024 px em diante), que o protótipo não tem; a barra de status do iPhone nos quadros mobile; o botão "Continuar" desabilitado em 1.1 e 3.2 na corrida do Developer (depende do que a conta do `visual:compare` já escolheu; na corrida do Tech Lead, no review089, saiu habilitado nos dois) e as frases de exemplo de 3.2, do template de `demo.ts` preenchido com o serviço da conta ("Corte feminino custa R$ 90,00. …", sem o "Olá!" do protótipo); o instante da animação em 0. Lido por quadro: **0** (1,2 / 0,5 / 0,9 / 0,6): marca, cena, título, descrição, CTA e a nota alinhados; sobram o ícone de "Sair" no canto superior direito do mobile e deslocamentos de cerca de 1 px na cena animada. **1.1** (0,6 / 0,6 / 1,0 / 1,2): sidebar de 340 px em paisagem e 420 px no desktop, com a marca em petróleo e o nome escuro, o stepper com o atual sobre `#EDF4F3`, a coluna de 560/600 px e o CTA no rodapé; sobram "Sair" na sidebar e o botão desabilitado. **2.1** (2,4 / 0,8 / 0,9 / 0,8): dois cartões de ação, o primeiro com o ícone `import` em petróleo; o mobile diverge no ícone "Sair" e em cerca de 1 px na posição vertical dos cartões. **3.2** (5,5 / 1,4 / 1,9 / 1,4): dois capítulos concluídos com ✓ e o terceiro atual; sobram "Sair", o botão desabilitado e as frases de exemplo, que mudam a quebra de linha dentro dos três cartões; no mobile essa diferença é a maior das quatro.
+
+**Não feito:** a conferência do §7 do Goal (celular real com o teclado aberto em Segmento e nome, e rotação do tablet no meio de uma etapa). A prova de layout deste Goal é o gate renderizado (G-6, no Chromium do Playwright), o `visual:compare` e os `side-by-side.png`. Também não foi repetida nesta rodada a execução das provas 1 a 4 contra os arquivos de produção da baseline; a prova de que elas reprovam é a dos quatro controles negativos de [D-104](DECISIONS.md).
+
+**Controles negativos** (§6 do Goal), feitos **depois da última edição de código**, cada um por edição real num arquivo de produção, restaurado por cópia do original no mesmo passo, com o `sha256` conferido idêntico e `git status --porcelain=v1 -uall` e o hash de todos os arquivos alterados iguais antes e depois dos cinco:
+
+| Controle | Arquivo e `sha256` antes e depois | Defeito | Teste com o defeito |
+| --- | --- | --- | --- |
+| 1 | `OnboardingShell.tsx`, `22c552e8f3da1d1f3bd3adb253f85541972bea49c0b6872e14c82173212aca4a` | `<header className="onboarding-topbar"><Brand href="/onboarding" /></header>` de volta no topo da coluna | `Tests  5 failed \| 10 passed (15)`: prova 1 em `boas-vindas`, `tom-da-ia`, `segmento-e-nome`, `modalidade` e `whatsapp-conectar` |
+| 2a | `blocks.ts`, `68c25db80703f2cf0e6cd39a8a603c6276a4db2dd2c79fc9cf0edfca6681c5db` | preenchimento do segmento atual fixo em 0 (`status === "current" ? 0 : 0`) | `Tests  2 failed \| 13 passed (15)`: prova 2, "quatro itens, o atual com preenchimento parcial que cresce" e "tom-da-ia: os dois primeiros concluídos e o terceiro é o atual" |
+| 2b | `blocks.ts`, mesmo `sha256` | preenchimento fixo em 100 % (`status === "current" ? 1 : 0`) | `Tests  2 failed \| 13 passed (15)`: os mesmos dois testes da prova 2 |
+| 3 | `OnboardingShell.tsx`, mesmo `sha256` | `{index + 1}` no lugar do ✓ no concluído | `Tests  1 failed \| 14 passed (15)`: prova 3, "tom-da-ia: ✓ no concluído, número no atual e no pendente" |
+| 4 | `OnboardingShell.tsx`, mesmo `sha256` | `<p className="onboarding-eyebrow">{eyebrow}</p>` de volta dentro do `header` do título | `Tests  2 failed \| 13 passed (15)`: prova 4 em `segmento-e-nome` e `tom-da-ia` |
+
+Restaurados os cinco: `Tests  15 passed (15)`.

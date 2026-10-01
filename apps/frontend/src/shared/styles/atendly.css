@@ -2523,7 +2523,9 @@ p {
   }
 }
 
-/* Onboarding — Agenda Atendly, Passo 3 */
+/* Onboarding — moldura única (Goal089): topo na coluna abaixo de 1024 px,
+   sidebar de altura total e painel bege de 1024 px em diante. A coluna ocupa a
+   altura da janela: o conteúdo rola dentro dela e as ações ficam no rodapé. */
 .onboarding-page {
   min-height: 100dvh;
   background: var(--surface);
@@ -2533,162 +2535,6 @@ p {
   display: grid;
   grid-template-rows: auto 1fr;
 }
-.onboarding-topbar {
-  min-height: 76px;
-  padding: 14px clamp(20px, 4vw, 48px);
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-}
-.onboarding-topbar .brand {
-  justify-self: start;
-}
-.step-progress {
-  width: 100%;
-  display: grid;
-  gap: 7px;
-}
-.step-progress-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-/* Barra segmentada (abaixo de 768 px): o capítulo atual é mais grosso, além
-   de mais escuro, para não depender só de cor. */
-.step-segments {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  align-items: center;
-  gap: 4px;
-}
-.step-segment {
-  height: 4px;
-  border-radius: 999px;
-  background: var(--surface-interactive);
-}
-.step-segment.is-done {
-  background: var(--accent);
-}
-.step-segment.is-current {
-  height: 8px;
-  background: var(--accent);
-}
-/* Trilho "Configuração inicial" (a partir de 768 px). */
-.onboarding-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-}
-.onboarding-rail {
-  display: none;
-}
-.onboarding-rail-title {
-  margin: 0 0 18px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-.onboarding-rail ol {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 14px;
-}
-.onboarding-rail-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--muted);
-  font-weight: 500;
-}
-.onboarding-rail-item.is-current {
-  color: var(--fg);
-  font-weight: 700;
-}
-.onboarding-rail-item.is-done {
-  color: var(--fg);
-}
-.onboarding-rail-marker {
-  width: 28px;
-  height: 28px;
-  flex: none;
-  border: 1.5px solid var(--border-strong);
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-.onboarding-rail-marker .icon {
-  width: 14px;
-  height: 14px;
-}
-.onboarding-rail-item.is-current .onboarding-rail-marker {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--at-color-on-primary);
-}
-.onboarding-rail-item.is-done .onboarding-rail-marker {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-/* Voltar: chevron no topo da etapa. Na Boas-vindas fica cinza, sem destino. */
-.onboarding-back {
-  margin: -8px 0 12px -10px;
-}
-.onboarding-back-link {
-  width: 44px;
-  height: 44px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--fg);
-}
-.onboarding-back-link:hover {
-  background: var(--surface-interactive);
-}
-.onboarding-back-link.is-disabled {
-  pointer-events: none;
-  color: var(--muted);
-}
-@media (min-width: 768px) {
-  .step-progress {
-    display: none;
-  }
-  .onboarding-body {
-    grid-template-columns: 260px minmax(0, 1fr);
-  }
-  .onboarding-rail {
-    display: block;
-    padding: clamp(40px, 7vh, 72px) 24px 48px 32px;
-    border-right: 1px solid var(--border);
-  }
-}
-/* "Sair" usa o botão secundário do design system (.btn .btn-secondary) em
-   todas as larguras; aqui só o tamanho da barra superior (QA O-02). */
-.onboarding-exit {
-  justify-self: end;
-  min-height: 44px;
-  padding: 0 14px;
-}
 .onboarding-main {
   width: min(100%, 720px);
   margin: 0 auto;
@@ -2696,24 +2542,296 @@ p {
   display: flex;
   flex-direction: column;
 }
+.onboarding-layout {
+  position: relative;
+  height: 100dvh;
+  display: flex;
+  color: var(--fg);
+  background: var(--bg);
+}
+.onboarding-sidebar {
+  display: none;
+}
+.onboarding-panel {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  background: var(--bg);
+}
+.onboarding-column {
+  flex: none;
+  width: min(100%, 600px);
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Os 62 px do protótipo no celular são a barra de status do iPhone: no
+   navegador o topo é a área segura. */
+.onboarding-top {
+  flex: none;
+  padding: env(safe-area-inset-top, 0px) 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.onboarding-top-row {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.onboarding-eyebrow {
+  color: var(--accent);
+  font-size: 12px;
+  line-height: normal;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+/* Barra de quatro segmentos (abaixo de 1024 px): o concluído é cheio e o
+   atual tem preenchimento parcial, que não depende só de cor. */
+.step-progress {
+  flex: 1;
+  min-width: 0;
+}
+.step-segments {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  gap: 4px;
+}
+.step-segment {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--border);
+}
+.step-segment.is-done {
+  background: var(--accent);
+}
+.step-segment.is-current {
+  background: var(--at-color-primary-tint-strong);
+}
+.step-segment-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+}
+/* Voltar: chevron no topo da etapa. Na Boas-vindas fica cinza, sem destino. */
+.onboarding-back-link {
+  width: 40px;
+  height: 40px;
+  margin-left: -8px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg);
+}
+.onboarding-back-link .icon {
+  width: 24px;
+  height: 24px;
+}
+.onboarding-back-link.is-disabled {
+  pointer-events: none;
+  color: #948b80;
+}
+/* "Sair" fica no espaço que o protótipo reserva à direita da barra: só o
+   ícone, espelhando o chevron. O texto continua sendo o único nome acessível,
+   oculto só visualmente. */
+.onboarding-exit {
+  width: 40px;
+  min-height: 40px;
+  height: 40px;
+  margin-right: -8px;
+  padding: 0;
+  flex: none;
+  border-color: transparent;
+  background: transparent;
+}
+.onboarding-exit .icon {
+  width: 24px;
+  height: 24px;
+}
+.onboarding-exit span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .onboarding-content {
   flex: 1;
+  min-height: 0;
+  padding: 10px 20px 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.onboarding-content.is-frame {
+  display: block;
 }
 .onboarding-heading {
-  margin-bottom: 28px;
-}
-.onboarding-heading .eyebrow {
-  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .onboarding-heading h1 {
-  max-width: 18ch;
-  font-size: clamp(28px, 4vw, 36px);
+  font-size: 28px;
   line-height: 1.2;
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
-.onboarding-heading > p:not(.eyebrow) {
-  max-width: 56ch;
-  margin-top: 10px;
+.onboarding-heading > p {
+  color: var(--fg-soft);
+  font-size: 14px;
+  line-height: 1.45;
+}
+/* Sidebar "Configuração inicial": marca e stepper dos quatro capítulos. */
+.onboarding-stepper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.onboarding-stepper-title {
+  padding: 0 12px;
   color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.onboarding-stepper ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.onboarding-stepper-item {
+  padding: 11px 12px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+}
+.onboarding-stepper-item.is-done {
+  color: var(--fg);
+}
+.onboarding-stepper-item.is-current {
+  color: var(--at-color-primary-ink);
+  background: var(--accent-soft);
+}
+.onboarding-stepper-marker {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.onboarding-stepper-marker .icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.5;
+}
+.onboarding-stepper-item.is-current .onboarding-stepper-marker {
+  border-width: 1.5px;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.onboarding-stepper-item.is-done .onboarding-stepper-marker {
+  border-color: var(--accent);
+  color: var(--at-color-on-primary);
+  background: var(--accent);
+}
+.onboarding-sidebar .brand {
+  font-size: 22px;
+}
+.onboarding-sidebar .brand-mark {
+  color: var(--accent);
+}
+@media (min-width: 768px) {
+  .onboarding-top {
+    padding-top: 40px;
+  }
+}
+@media (min-width: 1024px) {
+  .onboarding-sidebar {
+    width: 340px;
+    height: 100%;
+    flex: none;
+    padding: 36px 32px 32px;
+    border-right: 1px solid var(--border);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 40px;
+    background: var(--surface);
+  }
+  .onboarding-sidebar .onboarding-stepper {
+    width: 100%;
+  }
+  .onboarding-column {
+    width: 560px;
+  }
+  .step-progress {
+    display: none;
+  }
+  /* "Sair" no rodapé da sidebar, como botão secundário com ícone e texto. */
+  .onboarding-exit {
+    position: absolute;
+    bottom: 32px;
+    left: 32px;
+    width: auto;
+    min-height: 44px;
+    height: auto;
+    margin: 0;
+    padding: 0 14px;
+    border-color: var(--border-strong);
+    background: var(--surface);
+  }
+  .onboarding-exit .icon {
+    width: var(--at-icon-size);
+    height: var(--at-icon-size);
+  }
+  .onboarding-exit span {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    clip-path: none;
+    white-space: normal;
+  }
+}
+@media (min-width: 1366px) {
+  .onboarding-sidebar {
+    width: 420px;
+  }
+  .onboarding-column {
+    width: 600px;
+  }
 }
 .onboarding-form {
   display: grid;
@@ -2802,20 +2920,40 @@ p {
   color: var(--muted);
   font-size: 12px;
 }
+/* O respiro do rodapé (12/20/46 do protótipo) é margem, não padding: a barra
+   de ações tem a largura do botão, que o gate mede contra ela. */
 .onboarding-actions {
-  margin-top: 32px;
-  padding-top: 20px;
+  flex: none;
+  margin: 12px 20px 46px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  background: var(--bg);
+}
+.onboarding-actions .btn {
+  min-height: 52px;
+  border-radius: var(--r-input);
+  font-size: 16px;
+  letter-spacing: 0;
 }
 .onboarding-actions .btn-primary {
   flex: 1 1 auto;
-  min-width: 180px;
+  min-width: 0;
 }
 .onboarding-actions .btn-secondary {
-  min-width: 112px;
+  min-width: 96px;
+}
+@media (min-width: 768px) {
+  .onboarding-actions {
+    margin-bottom: 32px;
+  }
+  .onboarding-actions .btn-primary {
+    min-width: 180px;
+  }
+  .onboarding-actions .btn-secondary {
+    min-width: 112px;
+  }
 }
 .btn.is-disabled,
 .btn[aria-disabled="true"] {
@@ -2829,54 +2967,430 @@ p {
 }
 /* Introdução do WhatsApp: o principal vem primeiro no DOM e na tela
    (protótipo 4.1); nenhuma regra reordena a linha. */
-.onboarding-welcome {
-  display: grid;
-  gap: 14px;
+/* Boas-vindas (quadro 0): marca no topo, cena animada centrada na altura que
+   sobra, título e descrição e, no rodapé, o CTA com a nota abaixo. A ordem
+   visual vem de `order`; no DOM o título continua primeiro. */
+[data-step="boas-vindas"] .onboarding-top {
+  padding-left: 24px;
+  padding-right: 24px;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 8px);
+}
+@media (min-width: 768px) {
+  [data-step="boas-vindas"] .onboarding-top {
+    padding-top: 40px;
+  }
+}
+[data-step="boas-vindas"] .onboarding-top-row {
+  height: 32px;
+  gap: 9px;
+}
+[data-step="boas-vindas"] .onboarding-back-link,
+[data-step="boas-vindas"] .onboarding-eyebrow {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.onboarding-welcome-brand {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--accent);
+}
+.onboarding-welcome-brand > span {
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+[data-step="boas-vindas"] .onboarding-content {
+  padding: 0 24px 14px;
+  gap: 0;
+}
+[data-step="boas-vindas"] .onboarding-step-body {
+  order: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+[data-step="boas-vindas"] .onboarding-heading {
+  order: 2;
+  gap: 10px;
+}
+[data-step="boas-vindas"] .onboarding-heading h1 {
+  font-size: 32px;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  text-wrap: pretty;
+}
+[data-step="boas-vindas"] .onboarding-heading > p {
+  font-size: 15px;
+  text-wrap: pretty;
+}
+[data-step="boas-vindas"] .onboarding-note {
+  order: 3;
+}
+[data-step="boas-vindas"] .onboarding-actions {
+  margin-left: 24px;
+  margin-right: 24px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+[data-step="boas-vindas"] .onboarding-actions .btn-primary {
+  flex: none;
+  min-width: 0;
+  border-radius: 14px;
+}
+.onboarding-actions-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: normal;
+  text-align: center;
 }
 /* Boas-vindas: mensagem, resposta da IA e agenda entram em sequência
    (Goal079); com prefers-reduced-motion a cena abre completa e parada. */
 .onboarding-welcome-scene {
+  position: relative;
+  height: 290px;
   margin: 0;
-  padding: 18px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  background: var(--surface-secondary);
 }
 .onboarding-welcome-scene > *,
-.onboarding-welcome-agenda > * {
+.onboarding-welcome-booking {
   animation: rise var(--at-duration-moderate) var(--ease);
 }
+.onboarding-welcome-client {
+  position: absolute;
+  top: 6px;
+  left: 0;
+  max-width: 225px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 18px 18px 18px 6px;
+  background: var(--surface);
+  box-shadow: 0 10px 28px rgba(34, 30, 26, 0.08);
+  font-size: 15px;
+  line-height: 1.35;
+}
+.onboarding-welcome-reply {
+  position: absolute;
+  top: 74px;
+  right: 0;
+  max-width: 245px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+.onboarding-welcome-reply-bubble {
+  padding: 12px 16px;
+  border-radius: 18px 18px 6px 18px;
+  background: var(--at-color-primary-tint-strong);
+  color: #0b2f32;
+  box-shadow: 0 10px 28px rgba(15, 95, 99, 0.1);
+  font-size: 15px;
+  line-height: 1.35;
+}
+.onboarding-welcome-reply-tag {
+  padding-right: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: normal;
+}
+.onboarding-welcome-reply-tag::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
 .onboarding-welcome-agenda {
-  margin-top: 8px;
+  position: absolute;
+  right: 10px;
+  bottom: 0;
+  left: 10px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 18px 44px rgba(34, 30, 26, 0.1);
+}
+.onboarding-welcome-slot {
+  height: 50px;
+  border-bottom: 1px solid var(--border);
   display: grid;
-  gap: 6px;
+  grid-template-columns: 52px 1fr;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 .onboarding-welcome-slot.is-free {
-  border-left-color: var(--border);
+  height: 42px;
   color: var(--muted);
+}
+.onboarding-welcome-slot:last-child {
+  border-bottom: 0;
+}
+.onboarding-welcome-booking {
+  padding: 8px 12px;
+  border: 1px solid var(--at-color-primary-tint-strong);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--at-color-primary-tint);
+  color: #0b2f32;
+}
+.onboarding-welcome-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: var(--at-color-on-primary);
+}
+.onboarding-welcome-check .icon {
+  width: 11px;
+  height: 11px;
+  stroke-width: 3.5;
 }
 @media (prefers-reduced-motion: reduce) {
   .onboarding-welcome-scene > *,
-  .onboarding-welcome-agenda > * {
+  .onboarding-welcome-booking {
     animation: none;
   }
 }
-.onboarding-welcome-slot {
-  padding: 10px 14px;
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
-  border-radius: var(--r-input);
+/* Segmento e nome (quadro 1.1) e Sistema atual (2.1): sem descrição visível. */
+[data-step="segmento-e-nome"] .onboarding-heading > p,
+[data-step="sistema-atual"] .onboarding-heading > p {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+[data-step="segmento-e-nome"] .onboarding-form {
+  gap: 22px;
+}
+[data-step="segmento-e-nome"] .field {
+  gap: 10px;
+}
+[data-step="segmento-e-nome"] .field:last-child {
+  gap: 6px;
+}
+[data-step="segmento-e-nome"] .label {
+  color: var(--fg-soft);
+  font-size: 13px;
+  line-height: normal;
+}
+[data-step="segmento-e-nome"] .segment-chip-row {
+  gap: 8px;
+}
+[data-step="segmento-e-nome"] .segment-chip-row .chip {
+  box-sizing: content-box;
+  height: 38px;
+  min-height: 0;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 500;
+}
+[data-step="segmento-e-nome"] .segment-chip-row .chip:last-child {
+  color: var(--fg-soft);
+}
+[data-step="segmento-e-nome"] .segment-chip-row .chip.is-active {
+  border: 1.5px solid var(--accent);
+  background: var(--at-color-primary-tint);
+  color: var(--at-color-primary-ink);
+  font-weight: 600;
+}
+[data-step="segmento-e-nome"] .segment-chip-row .chip .icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.5;
+}
+[data-step="segmento-e-nome"] .onboarding-back-link {
+  color: #948b80;
+}
+[data-step="segmento-e-nome"] .input {
+  height: 54px;
+  min-height: 0;
+  padding: 0 16px;
+  border-color: var(--border-strong);
+  border-radius: 14px;
+  background: var(--surface);
+  font-size: 16px;
+}
+[data-step="segmento-e-nome"] .field-help {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: normal;
+}
+[data-step="sistema-atual"] .onboarding-content {
+  gap: 24px;
+}
+[data-step="sistema-atual"] .choice-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+.choice-card-action {
+  min-height: 0;
+  padding: 18px 16px;
+  border-radius: 16px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  background: var(--surface);
-  font-size: 14px;
+  gap: 14px;
 }
-.onboarding-welcome-slot strong {
-  font-variant-numeric: tabular-nums;
+.choice-card-action .choice-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--at-color-surface-active);
+  color: var(--fg-soft);
+}
+.choice-card-action .choice-icon.is-accent {
+  background: var(--at-color-primary-tint-strong);
+  color: var(--at-color-primary-ink);
+}
+.choice-card-action .choice-icon .icon {
+  width: 22px;
+  height: 22px;
+}
+.choice-card-action .choice-text {
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+}
+.choice-card-action .choice-title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: normal;
+}
+.choice-card-action .choice-text > p {
+  margin: 2px 0 0;
+  color: var(--fg-soft);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.choice-card-action .choice-chevron {
+  width: 20px;
+  height: 20px;
+  color: var(--muted);
+}
+/* Estilo da IA (quadro 3.2). */
+[data-step="tom-da-ia"] .onboarding-top {
+  gap: 12px;
+}
+[data-step="tom-da-ia"] .onboarding-content {
+  padding-top: 8px;
+  gap: 16px;
+}
+[data-step="tom-da-ia"] .onboarding-heading > p {
+  line-height: 1.4;
+}
+[data-step="tom-da-ia"] .choice-grid.tone-grid {
+  gap: 10px;
+}
+.tone-grid .choice-card-tone {
+  padding: 14px 16px;
+  border-radius: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+}
+.tone-grid .choice-card-tone.is-selected {
+  border-width: 1.5px;
+  padding: 14px 16px;
+}
+.tone-grid .choice-card-tone .choice-title {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: normal;
+}
+.tone-grid .choice-card-tone > p {
+  grid-column: 1;
+  grid-row: 2;
+  margin: 0;
+  color: var(--fg-soft);
+  font-size: 13px;
+  line-height: normal;
+}
+.tone-grid .choice-badge {
+  margin-left: 6px;
+  padding: 0;
+  background: none;
+  font-size: 12px;
+}
+.tone-grid .choice-card-tone.is-selected .choice-badge {
+  background: none;
+}
+.tone-grid .choice-card-tone .choice-check {
+  position: static;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  border: 1.5px solid var(--border-strong);
+  box-sizing: border-box;
+  display: grid;
+  background: transparent;
+}
+.tone-grid .choice-card-tone .choice-check .icon {
+  width: 13px;
+  height: 13px;
+  stroke-width: 3;
+  visibility: hidden;
+}
+.tone-grid .choice-card-tone.is-selected .choice-check {
+  border: 0;
+  background: var(--accent);
+  color: var(--at-color-on-primary);
+}
+.tone-grid .choice-card-tone.is-selected .choice-check .icon {
+  visibility: visible;
+}
+.tone-grid .choice-card-tone .choice-sample {
+  grid-column: 1 / -1;
+  justify-self: start;
+  margin-top: 10px;
+  padding: 9px 13px;
+  border-radius: 14px 14px 14px 5px;
+  background: var(--at-color-surface-active);
+  color: var(--fg);
+  line-height: 1.4;
+}
+.tone-grid .choice-card-tone.is-selected .choice-sample {
+  background: var(--at-color-primary-tint-strong);
+  color: #0b2f32;
 }
 .onboarding-note {
   margin-top: 18px;
@@ -3893,68 +4407,9 @@ p {
 }
 
 @media (max-width: 767px) {
-  .onboarding-topbar {
-    position: sticky;
-    z-index: 20;
-    top: 0;
-    min-height: calc(72px + env(safe-area-inset-top));
-    padding: calc(12px + env(safe-area-inset-top)) 16px 10px;
-    grid-template-columns: 42px 1fr 42px;
-    gap: 12px;
-  }
-  .onboarding-topbar .brand span:last-child {
-    font-size: 0;
-  }
-  .onboarding-topbar .brand-mark {
-    width: 28px;
-    height: 28px;
-  }
-  /* No celular o botão mostra só o ícone; o texto "Sair" fica oculto só
-     visualmente e continua sendo o único nome acessível (sem ::after). */
-  .onboarding-exit {
-    width: 42px;
-    min-height: 42px;
-    padding: 0;
-  }
-  .onboarding-exit span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-  .step-progress-row {
-    font-size: 11px;
-  }
   .onboarding-main {
     min-height: calc(100dvh - 72px - env(safe-area-inset-top));
     padding: 28px 16px calc(20px + env(safe-area-inset-bottom));
-  }
-  .onboarding-heading {
-    margin-bottom: 24px;
-  }
-  .onboarding-heading h1 {
-    font-size: 26px;
-    line-height: 1.3;
-  }
-  .onboarding-actions {
-    position: sticky;
-    bottom: 0;
-    margin-top: 28px;
-    padding: 16px 0 env(safe-area-inset-bottom);
-    background: var(--surface);
-  }
-  .onboarding-actions .btn {
-    min-height: 52px;
-  }
-  .onboarding-actions .btn-primary {
-    flex: 1;
-    min-width: 0;
-  }
-  .onboarding-actions .btn-secondary {
-    min-width: 96px;
   }
   .onboarding-actions.is-stacked {
     flex-direction: column;

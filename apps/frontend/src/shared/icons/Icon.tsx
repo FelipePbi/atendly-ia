@@ -16,6 +16,7 @@ export type IconName =
   | "eye"
   | "help"
   | "home"
+  | "import"
   | "inbox"
   | "info"
   | "link"

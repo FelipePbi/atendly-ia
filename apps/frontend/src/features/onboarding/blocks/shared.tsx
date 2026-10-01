@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { BffHttpError, type Session } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 
@@ -70,27 +72,43 @@ export function Choice({
  * escolha até "Continuar" gravar. Sem ✓ nem `aria-pressed` — QA O-22 (✓
  * sobre o título a 390px) fecha por construção, não por CSS. */
 export function ActionCard({
+  accent = false,
   copy,
   disabled = false,
+  icon,
   onClick,
   title,
 }: {
+  // Tinta do ladrilho do ícone: a ação principal usa a cor da marca.
+  accent?: boolean;
   copy: string;
   // Desabilitado enquanto a gravação do outro card (ou deste) não volta:
   // dois cliques não disparam dois PATCH.
   disabled?: boolean;
+  icon?: ReactNode;
   onClick: () => void;
   title: string;
 }) {
   return (
     <button
-      className="choice-card"
+      className="choice-card choice-card-action"
       disabled={disabled}
       type="button"
       onClick={onClick}
     >
-      <span className="choice-title">{title}</span>
-      <p>{copy}</p>
+      {icon ? (
+        <span
+          aria-hidden="true"
+          className={`choice-icon${accent ? " is-accent" : ""}`}
+        >
+          {icon}
+        </span>
+      ) : null}
+      <span className="choice-text">
+        <span className="choice-title">{title}</span>
+        <p>{copy}</p>
+      </span>
+      <Icon className="choice-chevron" name="chevron-right" />
     </button>
   );
 }

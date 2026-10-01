@@ -165,10 +165,11 @@ describe("sistema-atual: dois cards de ação, sem marcação e sem Continuar", 
     expect(scratchCard).not.toHaveAttribute("aria-pressed");
     expect(importCard.className).not.toContain("is-selected");
     expect(scratchCard.className).not.toContain("is-selected");
-    // Sem ✓ de seleção: nenhum ícone dentro dos cartões (QA O-22 fecha por
-    // construção, não por CSS escondendo o ícone).
-    expect(importCard.querySelector("svg")).toBeNull();
-    expect(scratchCard.querySelector("svg")).toBeNull();
+    // Sem ✓ de seleção: o cartão só leva o ícone decorativo do quadro 2.1
+    // (Goal089), nunca o de marcação (QA O-22 fecha por construção, não por
+    // CSS escondendo o ícone).
+    expect(importCard.querySelector('use[href$="#i-check"]')).toBeNull();
+    expect(scratchCard.querySelector('use[href$="#i-check"]')).toBeNull();
   });
 
   test("não oferece Continuar", async () => {

@@ -348,15 +348,15 @@ describe("progresso: trilho e barra segmentada mostram o mesmo capítulo", () =>
     }
   });
 
-  test("na Boas-vindas o primeiro capítulo é o atual e nenhum está concluído", async () => {
+  test("na Boas-vindas nenhum capítulo é o atual nem está concluído", async () => {
     renderStep("boas-vindas", stateFixture());
     await findStepHeading();
 
     const items = within(
       screen.getByRole("navigation", { name: "Configuração inicial" }),
     ).getAllByRole("listitem");
-    expect(items[0]).toHaveAttribute("aria-current", "step");
     for (const item of items) {
+      expect(item).not.toHaveAttribute("aria-current");
       expect(item.getAttribute("aria-label")).not.toMatch(/concluído/);
     }
   });

@@ -102,43 +102,42 @@ function WelcomeStepBody() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <div className="onboarding-welcome">
-      <figure
-        aria-label="Exemplo: um cliente pede horário, a IA responde e o horário entra na agenda"
-        className="onboarding-welcome-scene"
-        role="img"
-      >
-        <div className="message-group">
-          <span className="message-sender">Cliente</span>
-          <div className="message-bubble">Oi! Tem horário na sexta?</div>
-        </div>
-        {stage >= 1 && (
-          <div className="message-group is-outgoing is-ai">
-            <span className="message-sender">Sua IA</span>
-            <div className="message-bubble">
-              Tenho sexta às 15h30. Posso confirmar?
-            </div>
+    <figure
+      aria-label="Exemplo: um cliente pede horário, a IA responde e o horário entra na agenda"
+      className="onboarding-welcome-scene"
+      role="img"
+    >
+      <div className="onboarding-welcome-client">Oi! Tem horário na sexta?</div>
+      {stage >= 1 && (
+        <div className="onboarding-welcome-reply">
+          <div className="onboarding-welcome-reply-bubble">
+            Tenho sexta às 15h30. Posso confirmar?
           </div>
-        )}
-        {stage >= 2 && (
-          <div className="onboarding-welcome-agenda">
-            <div className="onboarding-welcome-slot is-free" key="14:00">
-              <strong>14:00</strong>
-            </div>
+          <span className="onboarding-welcome-reply-tag">sua IA</span>
+        </div>
+      )}
+      {stage >= 2 && (
+        <div className="onboarding-welcome-agenda">
+          <div className="onboarding-welcome-slot is-free">
+            <span>14:00</span>
+          </div>
+          <div className="onboarding-welcome-slot">
+            <span>{stage >= 3 ? "15:30" : null}</span>
             {stage >= 3 && (
-              <div className="onboarding-welcome-slot" key="15:30">
-                <strong>15:30</strong>
+              <div className="onboarding-welcome-booking">
                 <span>Ana Paula · Corte</span>
+                <span aria-hidden="true" className="onboarding-welcome-check">
+                  <Icon name="check" />
+                </span>
               </div>
             )}
-            <div className="onboarding-welcome-slot is-free" key="17:00">
-              <strong>17:00</strong>
-            </div>
           </div>
-        )}
-      </figure>
-      <p className="field-help">Seu progresso fica salvo a cada etapa.</p>
-    </div>
+          <div className="onboarding-welcome-slot is-free">
+            <span>17:00</span>
+          </div>
+        </div>
+      )}
+    </figure>
   );
 }
 

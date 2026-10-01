@@ -4,10 +4,10 @@ import Link from "next/link";
 import type { FormEvent, ReactNode } from "react";
 
 import { Icon } from "@/shared/icons/Icon";
-import { Brand } from "@/shared/ui/Brand";
+import { Brand, BrandMark } from "@/shared/ui/Brand";
 
 import { chapterProgress } from "./blocks";
-import type { OnboardingScenario } from "./scenarios";
+import { type OnboardingScenario, onboardingScenarios } from "./scenarios";
 
 /** Voltar no topo da etapa: `href` navega; `disabled` é o chevron cinza da
  * Boas-vindas (sem destino e fora da ordem de Tab); ausente, não há chevron. */
@@ -31,7 +31,7 @@ export function OnboardingShell({
   actionsStacked?: boolean;
   back?: OnboardingBack;
   body: ReactNode;
-  description: string;
+  description?: string;
   error?: string | null;
   eyebrow: string;
   onExit: () => void;
@@ -40,17 +40,20 @@ export function OnboardingShell({
   title: string;
 }) {
   return (
-    <main className="onboarding-shell">
-      <OnboardingTopbar onExit={onExit} scenario={scenario} />
-      <div className="onboarding-body">
-        <OnboardingRail scenario={scenario} />
-        <form className="onboarding-main" noValidate onSubmit={onSubmit}>
-          <OnboardingBackLink back={back} />
+    <main className="onboarding-layout" data-step={scenario}>
+      <OnboardingSidebar scenario={scenario} />
+      <div className="onboarding-panel">
+        <form className="onboarding-column" noValidate onSubmit={onSubmit}>
+          <OnboardingTop
+            back={back}
+            eyebrow={eyebrow}
+            onExit={onExit}
+            scenario={scenario}
+          />
           <div className="onboarding-content">
             <header className="onboarding-heading">
-              <p className="eyebrow">{eyebrow}</p>
               <h1>{title}</h1>
-              <p>{description}</p>
+              {description && <p>{description}</p>}
             </header>
             <div className="onboarding-step-body">{body}</div>
             {error && (
@@ -59,14 +62,14 @@ export function OnboardingShell({
                 <span>{error}</span>
               </div>
             )}
-            {actions && (
-              <div
-                className={`onboarding-actions${actionsStacked ? " is-stacked" : ""}`}
-              >
-                {actions}
-              </div>
-            )}
           </div>
+          {actions && (
+            <div
+              className={`onboarding-actions${actionsStacked ? " is-stacked" : ""}`}
+            >
+              {actions}
+            </div>
+          )}
         </form>
       </div>
     </main>
@@ -75,9 +78,8 @@ export function OnboardingShell({
 
 /** Moldura do onboarding sem o formulário da etapa (Goal066): a etapa
  * `importacao` monta as telas do módulo de importação, que têm os próprios
- * formulários, título e ações. Só a barra superior (marca, progresso,
- * "Sair") e o trilho são os mesmos das outras etapas; a navegação de volta
- * é a do módulo de importação, sem chevron. */
+ * formulários, título e ações. Topo, sidebar e painel são os mesmos das outras
+ * etapas; a navegação de volta é a do módulo de importação, sem chevron. */
 export function OnboardingFrame({
   children,
   onExit,
@@ -88,15 +90,58 @@ export function OnboardingFrame({
   scenario: OnboardingScenario;
 }) {
   return (
-    <main className="onboarding-shell">
-      <OnboardingTopbar onExit={onExit} scenario={scenario} />
-      <div className="onboarding-body">
-        <OnboardingRail scenario={scenario} />
-        <div className="onboarding-main">
-          <div className="onboarding-content">{children}</div>
+    <main className="onboarding-layout" data-step={scenario}>
+      <OnboardingSidebar scenario={scenario} />
+      <div className="onboarding-panel">
+        <div className="onboarding-column">
+          <OnboardingTop
+            eyebrow={onboardingScenarios[scenario][0]}
+            onExit={onExit}
+            scenario={scenario}
+          />
+          <div className="onboarding-content is-frame">{children}</div>
         </div>
       </div>
     </main>
+  );
+}
+
+/** Topo da coluna: chevron, barra de progresso e "Sair" (só abaixo de
+ * 1024 px; de 1024 px em diante o "Sair" vai para o rodapé da sidebar) e o
+ * eyebrow do capítulo. */
+function OnboardingTop({
+  back,
+  eyebrow,
+  onExit,
+  scenario,
+}: {
+  back?: OnboardingBack;
+  eyebrow: string;
+  onExit: () => void;
+  scenario: OnboardingScenario;
+}) {
+  return (
+    <div className="onboarding-top">
+      <div className="onboarding-top-row">
+        <OnboardingBackLink back={back} />
+        {scenario === "boas-vindas" && (
+          <span aria-hidden="true" className="onboarding-welcome-brand">
+            <BrandMark />
+            <span>Atendly</span>
+          </span>
+        )}
+        <OnboardingProgress scenario={scenario} />
+        <button
+          className="btn btn-secondary onboarding-exit"
+          type="button"
+          onClick={onExit}
+        >
+          <Icon name="logout" />
+          <span>Sair</span>
+        </button>
+      </div>
+      <p className="onboarding-eyebrow">{eyebrow}</p>
+    </div>
   );
 }
 
@@ -105,43 +150,43 @@ function OnboardingBackLink({ back }: { back?: OnboardingBack }) {
   if ("disabled" in back) {
     // Sem href e com tabIndex=-1: nem alcançável por Tab nem navegável.
     return (
-      <div className="onboarding-back">
-        <a
-          aria-disabled="true"
-          aria-label="Voltar"
-          className="onboarding-back-link is-disabled"
-          role="link"
-          tabIndex={-1}
-        >
-          <Icon name="chevron-left" />
-        </a>
-      </div>
+      <a
+        aria-disabled="true"
+        aria-label="Voltar"
+        className="onboarding-back-link is-disabled"
+        role="link"
+        tabIndex={-1}
+      >
+        <Icon name="chevron-left" />
+      </a>
     );
   }
   return (
-    <div className="onboarding-back">
-      <Link
-        aria-label="Voltar"
-        className="onboarding-back-link"
-        href={back.href}
-      >
-        <Icon name="chevron-left" />
-      </Link>
-    </div>
+    <Link
+      aria-label="Voltar"
+      className="onboarding-back-link"
+      href={back.href}
+    >
+      <Icon name="chevron-left" />
+    </Link>
   );
 }
 
-/** Trilho "Configuração inicial" (a partir de 768 px): quatro capítulos
- * numerados; o concluído troca o número por ✓ e ganha "concluído" no nome. */
-function OnboardingRail({ scenario }: { scenario: OnboardingScenario }) {
+/** Barra de quatro segmentos (abaixo de 1024 px): o concluído é cheio e o
+ * atual tem preenchimento parcial pela posição no capítulo. O preenchimento é
+ * decorativo; o estado vem de `aria-current` e do nome "concluído". Na
+ * Boas-vindas a configuração não começou e não há barra. */
+function OnboardingProgress({ scenario }: { scenario: OnboardingScenario }) {
+  if (scenario === "boas-vindas") return null;
   const chapters = chapterProgress(scenario);
   return (
-    <nav aria-label="Configuração inicial" className="onboarding-rail">
-      <p className="onboarding-rail-title" aria-hidden="true">
-        Configuração inicial
-      </p>
-      <ol>
-        {chapters.map((chapter, index) => (
+    <div
+      aria-label="Progresso da configuração inicial"
+      className="step-progress"
+      role="group"
+    >
+      <ol className="step-segments">
+        {chapters.map((chapter) => (
           <li
             aria-current={chapter.status === "current" ? "step" : undefined}
             aria-label={
@@ -149,46 +194,37 @@ function OnboardingRail({ scenario }: { scenario: OnboardingScenario }) {
                 ? `${chapter.label}, concluído`
                 : chapter.label
             }
-            className={`onboarding-rail-item is-${chapter.status}`}
+            className={`step-segment is-${chapter.status}`}
             key={chapter.id}
           >
-            <span aria-hidden="true" className="onboarding-rail-marker">
-              {chapter.status === "done" ? (
-                <Icon name="check" />
-              ) : (
-                index + 1
-              )}
-            </span>
-            <span aria-hidden="true">{chapter.label}</span>
+            {chapter.status === "current" && (
+              <span
+                aria-hidden="true"
+                className="step-segment-fill"
+                style={{ width: `${Math.round(chapter.fill * 100)}%` }}
+              />
+            )}
           </li>
         ))}
       </ol>
-    </nav>
+    </div>
   );
 }
 
-function OnboardingTopbar({
-  onExit,
-  scenario,
-}: {
-  onExit: () => void;
-  scenario: OnboardingScenario;
-}) {
+/** Sidebar "Configuração inicial" (de 1024 px em diante): marca e quatro
+ * capítulos numerados; o concluído troca o número por ✓ e ganha "concluído" no
+ * nome. */
+function OnboardingSidebar({ scenario }: { scenario: OnboardingScenario }) {
   const chapters = chapterProgress(scenario);
-  const current = chapters.find((chapter) => chapter.status === "current");
   return (
-    <header className="onboarding-topbar">
+    <nav aria-label="Configuração inicial" className="onboarding-sidebar">
       <Brand href="/onboarding" />
-      <div
-        aria-label="Progresso da configuração inicial"
-        className="step-progress"
-        role="group"
-      >
-        <div className="step-progress-row">
-          <span>{current?.label}</span>
-        </div>
-        <ol className="step-segments">
-          {chapters.map((chapter) => (
+      <div className="onboarding-stepper">
+        <p className="onboarding-stepper-title" aria-hidden="true">
+          Configuração inicial
+        </p>
+        <ol>
+          {chapters.map((chapter, index) => (
             <li
               aria-current={chapter.status === "current" ? "step" : undefined}
               aria-label={
@@ -196,20 +232,21 @@ function OnboardingTopbar({
                   ? `${chapter.label}, concluído`
                   : chapter.label
               }
-              className={`step-segment is-${chapter.status}`}
+              className={`onboarding-stepper-item is-${chapter.status}`}
               key={chapter.id}
-            />
+            >
+              <span aria-hidden="true" className="onboarding-stepper-marker">
+                {chapter.status === "done" ? (
+                  <Icon name="check" />
+                ) : (
+                  index + 1
+                )}
+              </span>
+              <span aria-hidden="true">{chapter.label}</span>
+            </li>
           ))}
         </ol>
       </div>
-      <button
-        className="btn btn-secondary onboarding-exit"
-        type="button"
-        onClick={onExit}
-      >
-        <Icon name="logout" />
-        <span>Sair</span>
-      </button>
-    </header>
+    </nav>
   );
 }

@@ -183,7 +183,7 @@ describe("Sequência da demonstração (§6.2)", () => {
         "Uma conversa de exemplo com os seus serviços e horários. Nada é marcado de verdade.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("Sua IA", { selector: "p.eyebrow" })).toBeInTheDocument();
+    expect(screen.getByText("Sua IA", { selector: "p.onboarding-eyebrow" })).toBeInTheDocument();
     expect(screen.queryByText(/Demonstração simulada/u)).toBeNull();
     expect(screen.queryByLabelText(/Demonstração simulada/u)).toBeNull();
   });

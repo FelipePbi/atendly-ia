@@ -54,7 +54,7 @@ function getServerAnimateSnapshot() {
   return false;
 }
 
-function BrandMark({ signature }: { signature?: BrandSignature }) {
+export function BrandMark({ signature }: { signature?: BrandSignature }) {
   // useSyncExternalStore, não useEffect+setState: a decisão vem de
   // sessionStorage/matchMedia (fora do React), o servidor sempre vê o
   // símbolo parado, e o valor do cliente é lido e travado uma única vez.

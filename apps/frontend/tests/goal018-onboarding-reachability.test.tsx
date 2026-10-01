@@ -262,16 +262,19 @@ describe("todo cenário sobrevivente é montado pela rota real", () => {
 
 describe("o progresso nomeia o bloco corrente, sem contagem de telas", () => {
   // O trilho e a barra segmentada repetem os quatro nomes (Goal072); o bloco
-  // corrente é o que a barra segmentada escreve.
+  // corrente é o item da barra segmentada com aria-current="step" (Goal089: a
+  // barra não escreve mais o nome, só preenche o segmento).
   const currentBlock = () =>
     within(
       screen.getByRole("group", { name: "Progresso da configuração inicial" }),
-    );
+    ).getByRole("listitem", { current: "step" });
 
-  test("boas-vindas mostra o bloco 'Seu negócio' e nenhuma contagem de etapas", async () => {
+  test("boas-vindas não tem barra de progresso nem bloco corrente, e nenhuma contagem de etapas", async () => {
     renderScreen("boas-vindas", stateFixture());
     await screen.findByRole("heading", { level: 1 });
-    expect(currentBlock().getByText("Seu negócio")).toBeVisible();
+    expect(
+      screen.queryByRole("group", { name: "Progresso da configuração inicial" }),
+    ).toBeNull();
     expect(screen.queryByText(/Etapa \d+ de \d+/)).toBeNull();
   });
 
@@ -281,7 +284,7 @@ describe("o progresso nomeia o bloco corrente, sem contagem de telas", () => {
       stateFixture({ ...businessDone, ...calendarDone }),
     );
     await screen.findByRole("heading", { level: 1 });
-    expect(currentBlock().getByText("Sua agenda")).toBeVisible();
+    expect(currentBlock()).toHaveAccessibleName("Sua agenda");
     expect(screen.queryByText(/Etapa \d+ de \d+/)).toBeNull();
   });
 
@@ -296,7 +299,7 @@ describe("o progresso nomeia o bloco corrente, sem contagem de telas", () => {
       }),
     );
     await screen.findByRole("heading", { level: 1 });
-    expect(currentBlock().getByText("Sua IA")).toBeVisible();
+    expect(currentBlock()).toHaveAccessibleName("Sua IA");
   });
 
   test("whatsapp mostra o bloco 'WhatsApp'", async () => {
@@ -311,7 +314,7 @@ describe("o progresso nomeia o bloco corrente, sem contagem de telas", () => {
       }),
     );
     await screen.findByRole("heading", { level: 1 });
-    expect(currentBlock().getByText("WhatsApp")).toBeVisible();
+    expect(currentBlock()).toHaveAccessibleName("WhatsApp");
   });
 });
 

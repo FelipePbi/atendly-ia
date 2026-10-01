@@ -120,7 +120,8 @@
       "file": "Onboarding-2-Importacao.dc.html",
       "label": "Origem da importação",
       "route": "/onboarding/importacao",
-      "account": "onboarding"
+      "account": "onboarding",
+      "notes": "A rota só mostra a origem da importação quando a pessoa escolheu importar; se a captura mostrar outra etapa, o estado da conta de onboarding não alcança este quadro."
     },
     {
       "code": "3.1",
@@ -179,7 +180,14 @@
       "label": "Agenda · dia",
       "route": "/agenda",
       "clock": "13:45",
-      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro.",
+      "steps": [
+        {
+          "click": "Dia",
+          "exact": true,
+          "optional": true
+        }
+      ]
     },
     {
       "code": "A5",
@@ -376,8 +384,8 @@
       "code": "AG3",
       "file": "Mais-Negocio-Agenda-IA.dc.html",
       "label": "Agenda · regras de horário",
-      "route": "/configuracoes/disponibilidade",
-      "notes": "O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
+      "route": "/configuracoes/agenda",
+      "notes": "O app não tem tela própria para estas regras: elas vivem dentro de Configurações › Agenda. O aviso de WhatsApp desconectado / atendimento automático parado é estado da conta de teste (sem número conectado): ignore-o na comparação; todo o resto da tela deve bater com o quadro."
     },
     {
       "code": "IA1",

@@ -238,4 +238,14 @@ export async function seedOnboardingAccount(client, { account, legalVersions, ex
       address: VISUAL_BUSINESS.address,
     },
   }), 200, "PATCH /v1/onboarding (negócio, conta de onboarding)");
+  // Agenda e operação também, como no ensaio autenticado (Goal079): a
+  // demonstração da IA e a lista de serviços do onboarding precisam de um
+  // serviço e de horários para mostrar o que o quadro mostra.
+  expectStatus(await client.request("PATCH", "/v1/onboarding", { calendar: { source: "ATENDLY" } }), 200, "PATCH /v1/onboarding (agenda, conta de onboarding)");
+  expectStatus(await client.request("PATCH", "/v1/onboarding", {
+    service: { ...ONBOARDING_SERVICE },
+    availability: {
+      rules: AVAILABILITY.map(([dayOfWeek, startTime, endTime]) => ({ dayOfWeek, startTime, endTime, active: true })),
+    },
+  }), 200, "PATCH /v1/onboarding (operação, conta de onboarding)");
 }

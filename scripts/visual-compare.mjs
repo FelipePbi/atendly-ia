@@ -71,7 +71,7 @@ const VISUAL_ACCOUNT = Object.freeze({
 
 /** Conta parada no meio do onboarding, para os quadros `/onboarding/*`. */
 const VISUAL_ONBOARDING_ACCOUNT = Object.freeze({
-  email: "visual-prototipo-onboarding-v2@example.invalid",
+  email: "visual-prototipo-onboarding-v3@example.invalid",
   password: "visual-prototipo-local-2026",
 });
 

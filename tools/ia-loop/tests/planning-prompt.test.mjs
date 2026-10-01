@@ -56,12 +56,16 @@ test('a Goal touching the frontend is told to place the rendered gate', () => {
   assert.match(prompt, /build servido/, "the reason for the ordering is not given");
 });
 
-test('the prompt refuses to let visual fidelity be claimed as proven', () => {
+test('the prompt makes visual fidelity a checked criterion, not a deferred human check', () => {
   const prompt = buildPlanningPrompt(JOB);
 
-  // The gate measures; it does not judge whether a screen matches the approved
-  // direction. A planner that writes that criterion as machine-verifiable sets
-  // up a review that approves on trust.
+  // validate-ui measures widths and contrast; it never judged whether a screen
+  // matches the prototype, and "conferência humana" was a check nobody ran
+  // (Goal 083 was accepted with the screen still different). The planner now
+  // declares the frames, and the harness makes both roles look at them.
   assert.match(prompt, /fidelidade visual/);
-  assert.match(prompt, /conferência humana/);
+  assert.match(prompt, /não é mais conferência humana/);
+  assert.match(prompt, /Quadros do protótipo: <código>/, 'the opt-in line is not specified');
+  assert.match(prompt, /npm run visual:compare/, 'the comparison command is not named');
+  assert.match(prompt, /PORTAR/, 'porting the prototype markup is not required');
 });

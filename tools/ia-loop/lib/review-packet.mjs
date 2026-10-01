@@ -12,6 +12,7 @@
  * baselines travel in the packet so the reviewer can tell them apart.
  */
 
+import { reviewerVisualInstructions } from './visual-fidelity.mjs';
 import { SpikeError } from './claude-process.mjs';
 import { summarizeGoalGateStatus } from './goal-gate-status.mjs';
 import { blockersAsItems, summarizeBlockerTrace, traceAll } from './evidence-trace.mjs';
@@ -50,6 +51,8 @@ export function buildReviewPacket({
   criteriaCoverage = null,
   /** How many numbered items the Goal declares, so a partial answer shows as one. */
   criteriaDeclared = 0,
+  /** Prototype frame codes the Goal declares (lib/visual-fidelity.mjs). */
+  prototypeFrames = [],
 }) {
   if (!goal) throw new SpikeError('INVALID_ARGS', 'goal is required');
   if (!worktreeInitialHead) throw new SpikeError('INVALID_ARGS', 'worktreeInitialHead is required');
@@ -64,6 +67,7 @@ export function buildReviewPacket({
     goalPath,
     round,
     reviewLevel,
+    prototypeFrames: Object.freeze([...prototypeFrames]),
 
     // Two distinct concepts, never collapsed.
     migrationAcceptedBaseline,
@@ -283,6 +287,9 @@ export function renderReviewPrompt(packet) {
       ]
       : []),
     '',
+    ...(packet.prototypeFrames?.length
+      ? [...reviewerVisualInstructions(packet.prototypeFrames), '']
+      : []),
     'Faça um review DEEP dirigido, conforme o próprio Goal exige:',
     '- inspecione o diff real e os arquivos alterados;',
     '- abra callers/consumers diretamente relacionados quando necessário;',
@@ -290,7 +297,8 @@ export function renderReviewPrompt(packet) {
     '- use Graphify seletivamente para confirmar impacto.',
     '',
     'NÃO repita a auditoria global do Goal0, não leia o Product Vault inteiro, não faça discovery global',
-    'e NÃO edite nenhum arquivo: você é read-only nesta etapa.',
+    'e NÃO edite nenhum arquivo: você é read-only nesta etapa (a comparação visual, quando o Goal',
+    'declara quadros, é a única exceção: ela grava só em apps/frontend/e2e-results/, ignorado pelo git).',
     '',
     'Retorne exclusivamente o JSON do contrato ReviewDecision.',
     'Em CHANGES_REQUIRED, cada blocker deve ser específico e acionável.',

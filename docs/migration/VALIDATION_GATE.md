@@ -23,6 +23,18 @@ git diff --check
 Comandos auxiliares: `npm run test:gate` (só os testes dos scripts de gate) e
 `npm run smoke:final-audit` (só a auditoria estática).
 
+**Fidelidade visual ao protótipo.** `npm run visual:compare -- --target <códigos>`
+renderiza o quadro do protótipo aprovado e a rota do app no mesmo tamanho, nos
+quatro devices (mobile 402×812, tablet 768×1024 e 1024×768, desktop 1366×768).
+Ele grava, por alvo, as duas capturas, o diff e o lado a lado em
+`apps/frontend/e2e-results/visual/`. O mapa de quadro para rota fica em
+`apps/frontend/e2e/visual/targets.json`. O comando precisa do BFF local rodando
+e usa uma conta de teste semeada com os dados fictícios do protótipo. **Não é um
+gate de pass/fail:** a porcentagem é tendência. Num Goal que declara
+`Quadros do protótipo:`, o loop obriga o Developer e o revisor a abrir as
+imagens, e uma divergência visível é blocker (ia-loop V33). Isso substitui, para
+esses Goals, a "conferência humana" que as seções antigas citam.
+
 `npm run build:all` continua existindo e agora também compila o Scheduling
 Service; ele é o agregador histórico, não o gate.
 

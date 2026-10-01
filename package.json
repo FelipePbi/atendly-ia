@@ -43,6 +43,7 @@
     "test:ia-loop": "node --test tools/ia-loop/tests/**/*.test.mjs",
     "validate:core": "node scripts/validate-core.mjs",
     "validate:integration": "node scripts/validate-integration.mjs",
+    "visual:compare": "node scripts/visual-compare.mjs",
     "validate:ui": "node scripts/validate-ui.mjs"
   },
   "engines": {

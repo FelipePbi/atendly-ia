@@ -44,6 +44,7 @@
  * packet stops is the DEFAULT of shipping everything to everyone.
  */
 
+import { developerVisualInstructions } from './visual-fidelity.mjs';
 import { SpikeError } from './claude-process.mjs';
 
 /** Lines of the Goal document used to build the summary handed to a unit. */
@@ -154,6 +155,12 @@ export function buildWorkUnitContextPacket({
    * delivered, and a unit that finishes what it can and names what it cannot.
    */
   ceiling = null,
+  /**
+   * Frame codes of the approved prototype this Goal must match (see
+   * lib/visual-fidelity.mjs). Empty for a Goal that declares none, or for a
+   * unit that does not touch the frontend.
+   */
+  prototypeFrames = [],
 }) {
   if (!goal) fail('INVALID_ARGS', 'goal is required');
   if (!unit?.id) fail('INVALID_ARGS', 'a Work Unit is required');
@@ -219,6 +226,8 @@ export function buildWorkUnitContextPacket({
         reason: typeof ceiling.reason === 'string' ? ceiling.reason.slice(0, 400) : null,
       })
       : null,
+
+    prototypeFrames: Object.freeze([...prototypeFrames]),
 
     worktree,
     constraints: WORK_UNIT_CONSTRAINTS,
@@ -300,6 +309,9 @@ export function buildWorkUnitPrompt(context, job) {
     'Restrições (o orchestrator verifica no Git depois; violação encerra a execução):',
     ...context.constraints.map((constraint) => `- ${constraint}`),
     '',
+    ...(context.prototypeFrames?.length
+      ? [...developerVisualInstructions(context.prototypeFrames), '']
+      : []),
     'Ao terminar, retorne exclusivamente o JSON do contrato WorkUnitResult, com:',
     '- protocolVersion: 2;',
     `- jobId: exatamente "${job.jobId}"; goal: "${job.goal}"; round: ${job.round};`,

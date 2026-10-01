@@ -8658,7 +8658,7 @@ Lista e detalhe de Clientes, Serviços e Configurações lado a lado de 1024 px 
 - **`visual:compare` da rodada 3.** CL5 em 9,4 / 4,6 / 6,1 / 5,4 % (mobile, tablet em retrato, tablet em paisagem, desktop); S4 em 9,7 / 8,7 / 14,2 / 8,7 % (com a linha-resumo aberta); N1 em 8,2 / 3,8 / 5,9 / 5,1 %. Telas irmãs: CL1 11,0 / 5,1 / 3,4 / 2,7 %; CL4 5,8 / 2,6 / 6,5 / 5,0 %; S1 8,8 / 5,3 / 3,9 / 2,9 %; M1 7,6 / 3,1 / 5,9 / 5,1 %; S3, A1 da Agenda, AG1, IA1, W1, R1 e C1 no [VALIDATION_GATE](VALIDATION_GATE.md). AG1, IA1, W1, R1 e C1 pioram em paisagem e desktop porque abrem ao lado da lista de Configurações, que é de outro Goal. A porcentagem é tendência; a leitura é a dos `side-by-side.png`.
 - **Não feito:** a conferência do §7 do Goal (aparelho real, com toque, teclado virtual e rotação). A baseline `f0d53ae` não foi renderizada de novo nesta rodada; os quadros CL5, S4 e N1 não têm número de baseline, e as telas irmãs de CL1, S1 e M1 são comparadas com os números do fechamento do Goal085.
 
-## Delta implementado — Goal098, 2026-10-01
+## Delta implementado — Goal098, 2026-10-01 (sem decisão nova)
 
 Os testes de integração do Scheduling deixam de depender da data do dia, e `validate:integration` volta a rodar inteiro. Toca só arquivos de teste de `apps/scheduling-service/tests/integration/` (`support/test-date.ts`, `goal010-import.test.ts`, `goal025-tenant-purge.test.ts`, `goal075-customer-appointments.integration.test.ts`); sem código de produto, contrato, migration, script ou configuração, e sem decisão nova.
 

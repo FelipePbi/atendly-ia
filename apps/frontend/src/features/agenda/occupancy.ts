@@ -471,3 +471,106 @@ export function describeEntry(entry: AgendaEntry): EntryPresentation {
       : "Exceção · indisponibilidade",
   };
 }
+
+// --- Mapa da semana (Goal100) ------------------------------------------------
+
+/** 40 → "40 min", 60 → "1 h", 70 → "1 h 10". */
+export function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours} h` : `${hours} h ${rest}`;
+}
+
+const SHORT_WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const MONDAY_FIRST = [1, 2, 3, 4, 5, 6, 0];
+
+/** Texto da pílula de dias visíveis: "Seg–Sáb", "Todos os dias" ou a lista. */
+export function visibleDaysLabel(hiddenWeekdays: number[]): string {
+  const hidden = new Set(hiddenWeekdays);
+  const visible = MONDAY_FIRST.filter((day) => !hidden.has(day));
+  if (visible.length === 7) return "Todos os dias";
+  if (visible.length === 0) return "Nenhum dia";
+  const first = MONDAY_FIRST.indexOf(visible[0]);
+  const contiguous = visible.every(
+    (day, index) => MONDAY_FIRST[first + index] === day,
+  );
+  if (contiguous && visible.length >= 3) {
+    return `${SHORT_WEEKDAYS[visible[0]]}–${SHORT_WEEKDAYS[visible[visible.length - 1]]}`;
+  }
+  return visible.map((day) => SHORT_WEEKDAYS[day]).join(", ");
+}
+
+export interface AvailabilityRuleLike {
+  active: boolean;
+  dayOfWeek: number;
+  endTime: string;
+  startTime: string;
+}
+
+/**
+ * Trechos de `[inicio, fim]` (minutos) dentro da janela que ficam fora do
+ * horário de atendimento daquele dia da semana. Sem leitura das regras, ou sem
+ * regra ativa para o dia, nada é rebaixado: sem regra não há horário a
+ * contrariar.
+ */
+export function outsideHoursRanges(
+  rules: AvailabilityRuleLike[] | null,
+  dayOfWeek: number,
+  windowStart: number,
+  windowEnd: number,
+): Array<[number, number]> {
+  if (!rules) return [];
+  const open = rules
+    .filter((rule) => rule.active && rule.dayOfWeek === dayOfWeek)
+    .map((rule) => [
+      timeToMinutes(rule.startTime),
+      timeToMinutes(rule.endTime),
+    ])
+    .sort((left, right) => (left[0]) - (right[0]));
+  if (open.length === 0) return [];
+  const ranges: Array<[number, number]> = [];
+  let cursor = windowStart;
+  for (const [from, to] of open as Array<[number, number]>) {
+    if (from > cursor) ranges.push([cursor, Math.min(from, windowEnd)]);
+    cursor = Math.max(cursor, to);
+    if (cursor >= windowEnd) break;
+  }
+  if (cursor < windowEnd) ranges.push([cursor, windowEnd]);
+  return ranges.filter(([from, to]) => to > from);
+}
+
+export interface ServiceLegendItem {
+  color: ServiceColorToken | null;
+  key: string;
+  name: string;
+}
+
+/** Serviços dos atendimentos (não cancelados) das entradas, na ordem em que aparecem. */
+export function serviceLegend(
+  entries: AgendaEntry[],
+  colors: ServiceColorMap,
+): ServiceLegendItem[] {
+  const seen = new Map<string, ServiceLegendItem>();
+  for (const entry of entries) {
+    if (entry.kind !== "appointment" || !entry.appointment) continue;
+    for (const service of entry.appointment.services) {
+      if (seen.has(service.serviceId)) continue;
+      seen.set(service.serviceId, {
+        color: colors.get(service.serviceId) ?? null,
+        key: service.serviceId,
+        name: service.name,
+      });
+    }
+  }
+  return Array.from(seen.values());
+}
+
+export function daySummaryHeading(date: string, isToday: boolean): string {
+  const parsed = parseDate(date);
+  const weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "long" })
+    .format(parsed)
+    .replace(/-feira$/, "");
+  if (isToday) return `Hoje, ${weekday} ${parsed.getDate()}`;
+  return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${parsed.getDate()}`;
+}

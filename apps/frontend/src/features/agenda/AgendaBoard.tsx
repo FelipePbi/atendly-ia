@@ -17,12 +17,14 @@ import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { StatePanel } from "@/shared/ui/States";
 
 import { AppointmentHistory } from "./AppointmentHistory";
+import { DaySummaryCard } from "./DaySummaryCard";
 import { DayView } from "./DayView";
 import { LifecycleActions } from "./LifecycleActions";
 import { MonthView } from "./MonthView";
 import {
   addDays,
   addMonths,
+  type AvailabilityRuleLike,
   buildAgendaEntries,
   customerLabel,
   endOfMonth,
@@ -38,6 +40,7 @@ import {
   startOfWeek,
   statusLabel,
   timeBlockKindLabel,
+  visibleDaysLabel,
 } from "./occupancy";
 import { OccurrenceActions } from "./OccurrenceActions";
 import { WeekView } from "./WeekView";
@@ -109,6 +112,11 @@ export function AgendaBoard() {
   const [availableWeekdays, setAvailableWeekdays] = useState<Set<
     number
   > | null>(null);
+  // Mesmas regras, inteiras: a Semana rebaixa as horas fora do horário de cada
+  // dia da semana a partir delas. `null` até a leitura chegar ou se falhar.
+  const [availabilityRules, setAvailabilityRules] = useState<
+    AvailabilityRuleLike[] | null
+  >(null);
   // Vazio enquanto o catálogo não chega ou quando a leitura falha: o traço
   // fica neutro e a lista segue inteira, sem mensagem de erro.
   const [serviceColors, setServiceColors] = useState<ServiceColorMap>(
@@ -146,6 +154,14 @@ export function AgendaBoard() {
       .get(controller.signal)
       .then((state) => {
         const rules = state.availability?.rules ?? [];
+        setAvailabilityRules(
+          rules.map((rule) => ({
+            active: Boolean(rule.active),
+            dayOfWeek: rule.dayOfWeek,
+            endTime: rule.endTime,
+            startTime: rule.startTime,
+          })),
+        );
         setAvailableWeekdays(
           new Set(
             rules.filter((rule) => rule.active).map((rule) => rule.dayOfWeek),
@@ -350,6 +366,7 @@ export function AgendaBoard() {
                 <span className="agenda-date-month">{monthYear.month}</span>{" "}
                 <span className="agenda-date-year">{monthYear.year}</span>
               </strong>
+              <div className="agenda-view-controls">
               <div
                 aria-label="Visualização da agenda"
                 className="agenda-view-tabs"
@@ -375,6 +392,16 @@ export function AgendaBoard() {
                     Mês
                   </ViewTab>
                 </div>
+              </div>
+              {view !== "day" && (
+                <Link
+                  className="agenda-visible-days"
+                  href="/configuracoes/agenda"
+                >
+                  <Icon name="eye" />
+                  {visibleDaysLabel(hiddenWeekdays)}
+                </Link>
+              )}
               </div>
               <div className="agenda-date-tools">
                 <button
@@ -450,20 +477,39 @@ export function AgendaBoard() {
               </>
             )}
             {!loading && view === "week" && (
-              <WeekView
-                entries={entries}
-                hiddenWeekdays={hiddenWeekdays}
-                onSelectDay={selectDay}
-                start={range.startDate}
-              />
+              <>
+                <WeekView
+                  availabilityRules={availabilityRules}
+                  entries={entries}
+                  hiddenWeekdays={hiddenWeekdays}
+                  onSelectDay={selectDay}
+                  serviceColors={serviceColors}
+                  start={range.startDate}
+                />
+                <DaySummaryCard
+                  date={isoDate(cursor)}
+                  entries={entries}
+                  hasAvailability={
+                    availableWeekdays !== null
+                      ? availableWeekdays.has(cursor.getDay())
+                      : null
+                  }
+                  isToday={isoDate(cursor) === isoDate(new Date())}
+                  onOpenDay={selectDay}
+                  serviceColors={serviceColors}
+                />
+              </>
             )}
             {!loading && view === "month" && (
               <MonthView
+                availableWeekdays={availableWeekdays}
                 entries={entries}
                 hiddenWeekdays={hiddenWeekdays}
+                key={isoDate(cursor)}
                 month={cursor}
                 onSelectDay={selectDay}
                 selectedDate={isoDate(cursor)}
+                serviceColors={serviceColors}
               />
             )}
           </>

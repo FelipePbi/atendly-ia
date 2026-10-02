@@ -155,7 +155,7 @@ function renderBoard() {
 }
 
 describe("Dia, Semana e Mês alternáveis", () => {
-  test("a escolha da visualização fica marcada por aria-selected, e selecionar um dia no Mês abre o Dia", async () => {
+  test("a escolha da visualização fica marcada por aria-selected; no Mês o primeiro toque seleciona o dia e o segundo abre o Dia", async () => {
     getCalendar.mockResolvedValue(calendarFixture());
     listAppointments.mockResolvedValue([appointmentFixture()]);
     listTimeBlocks.mockResolvedValue([]);
@@ -187,6 +187,23 @@ describe("Dia, Semana e Mês alternáveis", () => {
     const todayCell = within(monthGrid).getByRole("button", {
       current: "date",
     });
+
+    // Goal100: o primeiro toque num dia diferente só o seleciona (aria-pressed)
+    // e a visualização segue no Mês; tocar no dia já marcado abre o Dia.
+    const otherCell = within(monthGrid)
+      .getAllByRole("button")
+      .find(
+        (cell) =>
+          cell !== todayCell && cell.getAttribute("aria-pressed") === "false",
+      ) as HTMLElement;
+    await user.click(otherCell);
+    expect(otherCell).toHaveAttribute("aria-pressed", "true");
+    expect(monthTab).toHaveAttribute("aria-selected", "true");
+    expect(dayTab).toHaveAttribute("aria-selected", "false");
+
+    await user.click(todayCell);
+    expect(todayCell).toHaveAttribute("aria-pressed", "true");
+    expect(monthTab).toHaveAttribute("aria-selected", "true");
 
     await user.click(todayCell);
 

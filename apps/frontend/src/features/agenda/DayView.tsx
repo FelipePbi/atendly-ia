@@ -12,9 +12,11 @@ import {
   type AgendaEntry,
   appointmentServiceColors,
   datesWithActiveAppointment,
+  daySummaryHeading,
   describeEntry,
   entriesForDate,
   formatDate,
+  formatDuration,
   isoDate,
   minutesToTime,
   parseDate,
@@ -479,14 +481,6 @@ function serviceLabel(appointment: Appointment): string {
   );
 }
 
-/** 40 → "40 min", 60 → "1 h", 70 → "1 h 10". */
-function formatDuration(minutes: number): string {
-  if (minutes < 60) return `${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return rest === 0 ? `${hours} h` : `${hours} h ${rest}`;
-}
-
 function priceLabel(appointment: Appointment): string | null {
   const { totalPrice, totalPriceType } = appointment;
   if (totalPrice === null || totalPrice === undefined) return null;
@@ -499,15 +493,6 @@ function priceLabel(appointment: Appointment): string | null {
     style: "currency",
   }).format(totalPrice);
   return totalPriceType === "STARTING_AT" ? `a partir de ${amount}` : amount;
-}
-
-function daySummaryHeading(date: string, isToday: boolean): string {
-  const parsed = parseDate(date);
-  const weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "long" })
-    .format(parsed)
-    .replace(/-feira$/, "");
-  if (isToday) return `Hoje, ${weekday} ${parsed.getDate()}`;
-  return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${parsed.getDate()}`;
 }
 
 function daySummaryLabel(appointmentCount: number, blockCount: number): string {

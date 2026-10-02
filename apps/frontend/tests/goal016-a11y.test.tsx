@@ -350,6 +350,10 @@ describe("grades da agenda (Dia, Semana e Mês)", () => {
 
     await tabUntilFocused(user, target);
     expect(target).toHaveFocus();
+    // Goal100: Enter segue a regra do toque — o primeiro seleciona, o segundo abre o Dia.
+    await user.keyboard("{Enter}");
+    expect(target).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByLabelText(/Agenda de/)).not.toBeInTheDocument();
     await user.keyboard("{Enter}");
 
     expect(await screen.findByLabelText(/Agenda de/)).toBeVisible();

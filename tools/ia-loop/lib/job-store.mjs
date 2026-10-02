@@ -224,17 +224,33 @@ export async function writeJsonAtomic(path, value) {
   await rename(temp, path);
 }
 
+/**
+ * Read errors that Windows reports while another process (an antivirus scan,
+ * the indexer, a concurrent rename) holds the file for an instant. Measured:
+ * `open ... UNKNOWN: unknown error` on a job file that read fine a moment
+ * later crashed the Tech Lead worker twice in one day, each time idle.
+ */
+const TRANSIENT_READ_CODES = new Set(['UNKNOWN', 'EBUSY', 'EPERM', 'EACCES', 'EMFILE', 'ENFILE']);
+const READ_ATTEMPTS = 5;
+
 /** Reads JSON, distinguishing "absent" from "corrupt". */
-export async function readJson(path, { required = false } = {}) {
+export async function readJson(path, { required = false, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), read = readFile } = {}) {
   let raw;
-  try {
-    raw = await readFile(path, 'utf8');
-  } catch (error) {
-    if (error.code === 'ENOENT') {
-      if (required) fail('FILE_MISSING', `Expected file not found: ${path}`);
-      return null;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      raw = await read(path, 'utf8');
+      break;
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        if (required) fail('FILE_MISSING', `Expected file not found: ${path}`);
+        return null;
+      }
+      if (TRANSIENT_READ_CODES.has(error.code) && attempt < READ_ATTEMPTS) {
+        await sleep(100 * attempt);
+        continue;
+      }
+      fail('FILE_UNREADABLE', `Cannot read ${path}: ${error.message}`);
     }
-    fail('FILE_UNREADABLE', `Cannot read ${path}: ${error.message}`);
   }
 
   try {

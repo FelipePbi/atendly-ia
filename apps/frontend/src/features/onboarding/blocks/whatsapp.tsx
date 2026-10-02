@@ -2,8 +2,11 @@ import { type ReactNode, useEffect, useState } from "react";
 
 import type { Conversation } from "@/data";
 import { BffHttpError } from "@/data";
-import { WhatsAppConnectionPanel } from "@/features/whatsapp/WhatsAppConnectionPanel";
-import { Icon, type IconName } from "@/shared/icons/Icon";
+import {
+  WhatsAppConnectionPanel,
+  type WhatsAppConsentPhase,
+} from "@/features/whatsapp/WhatsAppConnectionPanel";
+import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
 import type { OnboardingDraft } from "../OnboardingRuntime";
@@ -33,14 +36,19 @@ export function isActivationTestScenario(
  * (docs/product-vault/02-Fluxos/02-Ativacao-e-Teste-do-WhatsApp.md
  * §"Orientação sobre número pessoal" e docs/product-vault/01-Regras/05-WhatsApp.md
  * §"Um número por negócio"), explicadas antes de oferecer a conexão. Cada uma
- * tem ícone próprio e a palavra-chave em destaque. */
+ * tem o ícone do quadro (traços do protótipo, fora do sprite) e a
+ * palavra-chave em destaque. */
 const PERSONAL_NUMBER_POINTS: Array<{
-  icon: IconName;
+  icon: ReactNode;
+  key: string;
   lead: ReactNode;
   tail?: string;
 }> = [
   {
-    icon: "briefcase",
+    icon: (
+      <path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z" />
+    ),
+    key: "phone",
     lead: (
       <>
         Use seu WhatsApp <strong>pessoal ou profissional</strong>.
@@ -49,7 +57,10 @@ const PERSONAL_NUMBER_POINTS: Array<{
     tail: "Só um número por negócio.",
   },
   {
-    icon: "chat",
+    icon: (
+      <path d="M5 6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.2 3.2c-.4.3-.8 0-.8-.5z" />
+    ),
+    key: "chat",
     lead: (
       <>
         Continue usando o WhatsApp <strong>normalmente</strong>.
@@ -58,7 +69,13 @@ const PERSONAL_NUMBER_POINTS: Array<{
     tail: "Suas conversas ficam organizadas aqui.",
   },
   {
-    icon: "user",
+    icon: (
+      <>
+        <circle cx="12" cy="8.5" r="3.5" />
+        <path d="M5 20a7 7 0 0 1 14 0" />
+      </>
+    ),
+    key: "user",
     lead: (
       <>
         Quando <strong>você responde</strong>, a IA sai de cena naquela
@@ -67,12 +84,19 @@ const PERSONAL_NUMBER_POINTS: Array<{
     ),
   },
   {
-    icon: "shield",
-    lead: (
+    icon: (
       <>
-        Você escolhe <strong>quem a IA nunca responde</strong>.
+        <circle cx="12" cy="12" r="8" />
+        <path d="M6.5 6.5l11 11" />
       </>
     ),
+    key: "ban",
+    lead: (
+      <>
+        Você escolhe <strong>quem a IA nunca responde</strong>:
+      </>
+    ),
+    tail: "família, amigos, quem quiser.",
   },
 ];
 
@@ -251,9 +275,16 @@ export function whatsappStepBody(
   _draft: OnboardingDraft,
   _setDraft: (updater: (value: OnboardingDraft) => OnboardingDraft) => void,
   onWhatsappStatusChange?: (connected: boolean) => void,
+  _onDemoDone?: (done: boolean) => void,
+  consentPhase?: WhatsAppConsentPhase,
 ) {
   if (scenario === "whatsapp-conectar") {
-    return <WhatsAppConnectionPanel onStatusChange={onWhatsappStatusChange} />;
+    return (
+      <WhatsAppConnectionPanel
+        consentPhase={consentPhase}
+        onStatusChange={onWhatsappStatusChange}
+      />
+    );
   }
   if (scenario === "whatsapp-concluido") return null;
   if (scenario === "contatos-ignorados") return <IgnoredContactsStepBody />;
@@ -263,8 +294,21 @@ export function whatsappStepBody(
   return (
     <ul className="onboarding-points">
       {PERSONAL_NUMBER_POINTS.map((point) => (
-        <li key={point.icon}>
-          <Icon name={point.icon} />
+        <li key={point.key}>
+          <span aria-hidden="true" className="onboarding-promise-icon">
+            <svg
+              fill="none"
+              height="20"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="1.75"
+              viewBox="0 0 24 24"
+              width="20"
+            >
+              {point.icon}
+            </svg>
+          </span>
           <span>
             <span>{point.lead}</span>
             {point.tail && <> <span>{point.tail}</span></>}

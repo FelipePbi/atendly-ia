@@ -127,6 +127,39 @@ function DemoUnavailable({
   );
 }
 
+function CheckGlyph() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      stroke="#2E7D4F"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="3"
+      viewBox="0 0 24 24"
+    >
+      <path d="M5 12.5l4.5 4.5L19 7.5" />
+    </svg>
+  );
+}
+
+function CalendarGlyph() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      stroke="#716859"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2.25"
+      viewBox="0 0 24 24"
+    >
+      <rect height="14.5" rx="2.5" width="16" x="4" y="5.5" />
+      <path d="M4 10h16M8 3.5v4M16 3.5v4" />
+    </svg>
+  );
+}
+
 function DemoConversationView({
   items,
   onDemoDone,
@@ -161,23 +194,31 @@ function DemoConversationView({
       className="onboarding-demo-chat"
       role="log"
     >
-      {items.slice(0, shown).map((item, index) =>
-        item.kind === "event" ? (
-          <p className="onboarding-demo-event" key={index}>
+      {items.slice(0, shown).map((item, index) => {
+        if (item.kind === "event") {
+          return (
+            <p className="onboarding-demo-event" key={index}>
+              <span>
+                {item.icon === "calendar" ? <CalendarGlyph /> : <CheckGlyph />}
+                {item.text}
+              </span>
+            </p>
+          );
+        }
+        if (item.kind === "ai") {
+          return (
+            <div className="demo-ai-message" key={index}>
+              <div className="demo-ai-bubble">{item.text}</div>
+              <span className="demo-ai-label">sua IA</span>
+            </div>
+          );
+        }
+        return (
+          <div className="demo-client-bubble" key={index}>
             {item.text}
-          </p>
-        ) : (
-          <div
-            className={`message-group${item.kind === "ai" ? " is-outgoing is-ai" : ""}`}
-            key={index}
-          >
-            <span className="message-sender">
-              {item.kind === "ai" ? "Sua IA" : "Cliente"}
-            </span>
-            <div className="message-bubble">{item.text}</div>
           </div>
-        ),
-      )}
+        );
+      })}
     </div>
   );
 }

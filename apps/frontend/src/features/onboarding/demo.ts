@@ -15,6 +15,8 @@ export type DemoDraft = Pick<
 >;
 
 export type DemoItem = {
+  /** Só nos eventos do sistema: o ícone da linha (quadro 3.1). */
+  icon?: "calendar" | "check";
   kind: "ai" | "client" | "event";
   text: string;
 };
@@ -217,10 +219,22 @@ export function demoSlotMinutes(
   ];
 }
 
+function weekdayName(weekday: number): string {
+  return WEEKDAY_NAMES[weekday].replace("-feira", "");
+}
+
 function weekdayShort(weekday: number): string {
-  const name = WEEKDAY_NAMES[weekday];
-  const short = name.replace("-feira", "");
-  return `${weekday === 0 || weekday === 6 ? "no" : "na"} ${short}`;
+  return `${weekday === 0 || weekday === 6 ? "no" : "na"} ${weekdayName(weekday)}`;
+}
+
+/** "à" só antes de 1h; os demais horários são "às". */
+function hourArticle(totalMinutes: number): "à" | "às" {
+  return Math.floor(totalMinutes / 60) === 1 ? "à" : "às";
+}
+
+/** O período "à tarde" só vale quando todo horário oferecido cai entre 12h e 18h. */
+function allInAfternoon(slotMinutes: number[]): boolean {
+  return slotMinutes.every((minutes) => minutes >= 12 * 60 && minutes < 18 * 60);
 }
 
 /**
@@ -247,19 +261,26 @@ export function buildDemoConversation(
   const chosenIndex = slots.length === 3 ? 1 : 0;
   const chosen = slots[chosenIndex];
   const dateLabel = `${WEEKDAY_NAMES[next.weekday]}, ${next.date.getUTCDate()} de ${MONTH_NAMES[next.date.getUTCMonth()]}`;
-  const chosenAt = Math.floor(slotMinutes[chosenIndex] / 60) === 1 ? "à" : "às";
+  const chosenAt = hourArticle(slotMinutes[chosenIndex]);
   const name = draft.serviceName;
   const count = slots.length;
+  const weekday = weekdayName(next.weekday);
 
   const items: DemoItem[] = [
     { kind: "client", text: `Oi! Quanto custa ${name}?` },
-    { kind: "event", text: `Serviço identificado · ${name}` },
+    { icon: "check", kind: "event", text: `Serviço identificado · ${name}` },
     {
       kind: "ai",
-      text: `${demoPriceReply(draft)} Leva ${draft.serviceDuration} min. Quer marcar um horário?`,
+      text: `Oi! ${demoPriceReply(draft)} Leva ${draft.serviceDuration} min. Quer marcar um horário?`,
     },
-    { kind: "client", text: `Tem horário ${weekdayShort(next.weekday)}?` },
     {
+      kind: "client",
+      text: allInAfternoon(slotMinutes)
+        ? `Quero sim! Tem ${weekday} à tarde?`
+        : `Quero sim! Tem horário ${weekdayShort(next.weekday)}?`,
+    },
+    {
+      icon: "check",
       kind: "event",
       text: `Agenda consultada · ${count} ${count === 1 ? "horário livre" : "horários livres"} ${weekdayShort(next.weekday)}`,
     },
@@ -267,17 +288,24 @@ export function buildDemoConversation(
       kind: "ai",
       text:
         count === 1
-          ? `Tenho ${formatDemoList(slots)}. Serve pra você?`
-          : `Tenho ${formatDemoList(slots)}. Qual prefere?`,
+          ? `Tenho ${weekday} ${hourArticle(slotMinutes[0])} ${formatDemoList(slots)}. Serve pra você?`
+          : `Tenho ${weekday} ${hourArticle(slotMinutes[0])} ${formatDemoList(slots)}. Qual fica melhor?`,
     },
-    { kind: "client", text: `Pode ser o de ${chosen}.` },
+    { kind: "client", text: chosen },
     {
       kind: "ai",
       text: `${capitalizeFirst(name)}, ${dateLabel}, ${chosenAt} ${chosen}. Posso confirmar?`,
     },
     { kind: "client", text: "Pode!" },
-    { kind: "event", text: "Agendamento simulado · nada foi marcado" },
-    { kind: "ai", text: "Combinado! Te espero lá." },
+    {
+      icon: "calendar",
+      kind: "event",
+      text: "Agendamento simulado · nada foi marcado",
+    },
+    {
+      kind: "ai",
+      text: `Confirmado! Te espero ${weekday} ${chosenAt} ${chosen} 😊`,
+    },
   ];
 
   return { dateLabel, items, slots };

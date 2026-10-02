@@ -134,7 +134,7 @@ function chat(): HTMLElement {
 }
 
 function bubbles(): string[] {
-  return [...chat().querySelectorAll(".message-bubble")].map(
+  return [...chat().querySelectorAll(".demo-client-bubble, .demo-ai-bubble")].map(
     (node) => node.textContent ?? "",
   );
 }
@@ -321,16 +321,16 @@ describe("Conversa da demonstração (§6.3)", () => {
     stubMatchMedia(true);
     await renderDemo(readyState());
     const order = [...chat().children].map(
-      (node) => node.textContent?.replace(/^(Cliente|Sua IA)/u, "") ?? "",
+      (node) => node.textContent?.replace(/sua IA$/u, "") ?? "",
     );
     expect(order).toHaveLength(11);
     expect(order[0]).toBe("Oi! Quanto custa Corte feminino?");
     expect(order[1]).toBe("Serviço identificado · Corte feminino");
     expect(order[2]).toMatch(/custa R\$\s90,00\. Leva 45 min\./u);
-    expect(order[3]).toBe("Tem horário na sexta?");
+    expect(order[3]).toBe("Quero sim! Tem sexta à tarde?");
     expect(order[4]).toBe("Agenda consultada · 3 horários livres na sexta");
-    expect(order[5]).toBe("Tenho 14h, 15h30 ou 17h. Qual prefere?");
-    expect(order[6]).toBe("Pode ser o de 15h30.");
+    expect(order[5]).toBe("Tenho sexta às 14h, 15h30 ou 17h. Qual fica melhor?");
+    expect(order[6]).toBe("15h30");
     expect(order[7]).toBe(
       "Corte feminino, sexta-feira, 2 de outubro, às 15h30. Posso confirmar?",
     );
@@ -350,7 +350,7 @@ describe("Conversa da demonstração (§6.3)", () => {
       ],
     };
     await renderDemo(state);
-    expect(within(chat()).getByText(/Tenho 10h ou 10h45\./u)).toBeVisible();
+    expect(within(chat()).getByText(/Tenho sexta às 10h ou 10h45\./u)).toBeVisible();
     expect(
       within(chat()).getByText("Agenda consultada · 2 horários livres na sexta"),
     ).toBeVisible();

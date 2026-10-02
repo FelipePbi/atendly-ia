@@ -2,7 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import {
   BffHttpError,
@@ -38,10 +44,22 @@ type LinkingState = {
   qrcode: string | null;
 };
 
+/** Fase do onboarding: o consentimento vem numa tela própria, antes da
+ * conexão. Ausente (Configurações), o painel mostra tudo numa tela só. */
+export type WhatsAppConsentPhase = {
+  phase: "connect" | "consent";
+  // Checkbox marcado e pergunta sobre número pessoal respondida.
+  onConsentReadyChange: (ready: boolean) => void;
+  // Vinculação expirada, falha ou desfeita: o consentimento vale de novo.
+  onConsentRequired: () => void;
+};
+
 export function WhatsAppConnectionPanel({
+  consentPhase,
   onConnected,
   onStatusChange,
 }: {
+  consentPhase?: WhatsAppConsentPhase;
   onConnected?: () => void;
   onStatusChange?: (connected: boolean) => void;
 }) {
@@ -75,12 +93,29 @@ export function WhatsAppConnectionPanel({
 
   const onConnectedRef = useRef(onConnected);
   const onStatusChangeRef = useRef(onStatusChange);
+  const consentPhaseRef = useRef(consentPhase);
   useEffect(() => {
     onConnectedRef.current = onConnected;
   }, [onConnected]);
   useEffect(() => {
     onStatusChangeRef.current = onStatusChange;
   }, [onStatusChange]);
+  useEffect(() => {
+    consentPhaseRef.current = consentPhase;
+  }, [consentPhase]);
+
+  const consentReady = consentChecked && personalAnswer !== null;
+  useEffect(() => {
+    consentPhaseRef.current?.onConsentReadyChange(consentReady);
+  }, [consentReady]);
+
+  // Em fase, a vinculação que expira volta ao consentimento, desmarcado.
+  useEffect(() => {
+    if (!expired || !consentPhaseRef.current) return;
+    setConsentChecked(false);
+    setPersonalAnswer(null);
+    consentPhaseRef.current.onConsentRequired();
+  }, [expired]);
 
   const refresh = useCallback(async () => {
     const next = await getProductServices().whatsapp.get();
@@ -268,6 +303,11 @@ export function WhatsAppConnectionPanel({
         setPhoneError(PHONE_FORMAT_ERROR);
       } else {
         setError("Não foi possível iniciar a conexão. Tente novamente.");
+        if (consentPhaseRef.current) {
+          setConsentChecked(false);
+          setPersonalAnswer(null);
+          consentPhaseRef.current.onConsentRequired();
+        }
       }
     } finally {
       setBusy(false);
@@ -290,6 +330,7 @@ export function WhatsAppConnectionPanel({
       setPhoneError(null);
       setDisconnectConfirmationOpen(false);
       onStatusChangeRef.current?.(false);
+      consentPhaseRef.current?.onConsentRequired();
     } catch {
       setError("Não foi possível desconectar o número.");
     } finally {
@@ -343,13 +384,116 @@ export function WhatsAppConnectionPanel({
   }
 
   const connected = connection?.status === "CONNECTED";
+  const phased = consentPhase !== undefined;
   const displayPhone = connection?.phoneNumber
     ? formatBrazilianPhone(connection.phoneNumber, "plus")
     : null;
 
+  if (consentPhase?.phase === "consent" && !connected) {
+    return (
+      <div className="whatsapp-consent-phase">
+        {expired && (
+          <p className="field-help" role="alert">
+            {mode === "QR" ? "O QR Code expirou." : "O código expirou."}
+          </p>
+        )}
+        <label className="check whatsapp-consent-card">
+          <input
+            aria-labelledby="whatsapp-consent-text"
+            checked={consentChecked}
+            required
+            type="checkbox"
+            onChange={(event) => setConsentChecked(event.target.checked)}
+          />
+          <span aria-hidden="true" className="check-box" />
+          <span className="whatsapp-consent-copy">
+            <span id="whatsapp-consent-text">
+              Entendo que as conversas deste número poderão ser processadas e
+              armazenadas para oferecer os recursos da Atendly.
+            </span>{" "}
+            <Link
+              className="whatsapp-consent-link"
+              href="/politica-de-privacidade"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              Saiba mais
+            </Link>
+          </span>
+        </label>
+
+        <div className="field">
+          <span className="label">
+            Você usa esse número também para conversas pessoais?
+          </span>
+          <div className="settings-segmented">
+            <label>
+              <input
+                checked={personalAnswer === "YES"}
+                name="whatsapp-personal-number"
+                type="radio"
+                onChange={() => setPersonalAnswer("YES")}
+              />
+              <span>Sim, também</span>
+            </label>
+            <label>
+              <input
+                checked={personalAnswer === "NO"}
+                name="whatsapp-personal-number"
+                type="radio"
+                onChange={() => setPersonalAnswer("NO")}
+              />
+              <span>Não, só trabalho</span>
+            </label>
+          </div>
+        </div>
+
+        {personalAnswer === "YES" && (
+          <div className="settings-control-block">
+            <strong>Tudo bem — você continua no controle:</strong>
+            <div className="settings-control-item">
+              <ControlIcon>
+                <path d="M4 7h16M4 12h16M4 17h10" />
+              </ControlIcon>
+              <span>
+                Suas conversas ficam separadas em <strong>Comercial</strong>,{" "}
+                <strong>Não classificadas</strong> e <strong>Pessoal</strong>.
+              </span>
+            </div>
+            <div className="settings-control-item">
+              <ControlIcon>
+                <circle cx="12" cy="12" r="8" />
+                <path d="M6.5 6.5l11 11" />
+              </ControlIcon>
+              <span>
+                Você marca contatos que a IA <strong>nunca</strong> deve
+                responder.
+              </span>
+            </div>
+            <div className="settings-control-item">
+              <ControlIcon>
+                <path d="M9 6v12M15 6v12" />
+              </ControlIcon>
+              <span>
+                Em conversas pessoais a IA fica <strong>desativada</strong>. E
+                quando você responde, ela sai de cena.
+              </span>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <p className="field-help" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   const badge = connected
     ? "Conectado"
-    : expired
+    : expired && !phased
       ? mode === "QR"
         ? "QR Code expirado"
         : "Código expirado"
@@ -392,7 +536,7 @@ export function WhatsAppConnectionPanel({
         </button>
       )}
 
-      {!connected && expired && (
+      {!connected && !phased && expired && (
         <section className="settings-panel settings-connect-panel">
           <p className="field-help" role="alert">
             {mode === "QR" ? "O QR Code expirou." : "O código expirou."}
@@ -512,8 +656,10 @@ export function WhatsAppConnectionPanel({
         </section>
       )}
 
-      {!connected && !expired && !linking && (
+      {!connected && (phased || !expired) && !linking && (
         <section className="settings-panel settings-connect-panel">
+          {!phased && (
+            <>
           <div className="settings-consent-note">
             <label className="check">
               <input
@@ -590,6 +736,8 @@ export function WhatsAppConnectionPanel({
                 </span>
               </div>
             </div>
+          )}
+            </>
           )}
 
           <div className="field">
@@ -694,6 +842,25 @@ export function WhatsAppConnectionPanel({
         </div>
       </Dialog>
     </div>
+  );
+}
+
+function ControlIcon({ children }: { children: ReactNode }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className="whatsapp-control-icon"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      {children}
+    </svg>
   );
 }
 

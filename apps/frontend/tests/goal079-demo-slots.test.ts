@@ -47,7 +47,7 @@ describe("buildDemoConversation: o exemplo do Goal", () => {
     const texts = (conversation?.items ?? []).map((item) => item.text);
     expect(texts).toContain("Serviço identificado · Corte feminino");
     expect(texts).toContain("Agenda consultada · 3 horários livres na sexta");
-    expect(texts).toContain("Tenho 14h, 15h30 ou 17h. Qual prefere?");
+    expect(texts).toContain("Tenho sexta às 14h, 15h30 ou 17h. Qual fica melhor?");
     expect(texts).toContain(
       "Corte feminino, sexta-feira, 2 de outubro, às 15h30. Posso confirmar?",
     );

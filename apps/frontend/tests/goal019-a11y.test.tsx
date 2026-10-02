@@ -155,7 +155,7 @@ beforeEach(() => {
 describe("telas do teste real passam no axe", () => {
   test("explicação antes do teste", async () => {
     await expectNoA11yViolations(
-      await renderAndAwait("teste-real", "Vamos testar sua IA de verdade"),
+      await renderAndAwait("teste-real", "Vamos fazer um teste real"),
     );
   });
 

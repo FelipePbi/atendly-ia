@@ -59,12 +59,32 @@ export function OnboardingScreen({
   // Só lido em whatsapp-conectar: enquanto falso, "Continuar" não compete com
   // o CTA primário do próprio painel de conexão (Goal071/WU-03).
   const [whatsappConnected, setWhatsappConnected] = useState(false);
+  // Só lido em whatsapp-conectar: o consentimento vem numa fase própria antes
+  // da conexão e volta a cada vinculação expirada, falha ou desfeita.
+  const [whatsappPhase, setWhatsappPhase] = useState<"connect" | "consent">(
+    "consent",
+  );
+  const [consentReady, setConsentReady] = useState(false);
+  const [phaseScenario, setPhaseScenario] = useState(scenario);
+  // A tela é a mesma entre etapas: ao trocar de etapa, a fase recomeça.
+  if (phaseScenario !== scenario) {
+    setPhaseScenario(scenario);
+    setWhatsappPhase("consent");
+    setConsentReady(false);
+  }
   // Só lido em demonstracao-da-ia: "Continuar" aparece quando o último item da
   // conversa entra (ou de imediato, sem serviço e horário para simular).
   const [demoDone, setDemoDone] = useState(false);
-  const [eyebrow, title, staticDescription] = onboardingScenarios[scenario];
-  const description =
-    scenario === "horarios"
+  const [eyebrow, staticTitle, staticDescription] =
+    onboardingScenarios[scenario];
+  const inConsentPhase =
+    scenario === "whatsapp-conectar" &&
+    !whatsappConnected &&
+    whatsappPhase === "consent";
+  const title = inConsentPhase ? "Antes de conectar" : staticTitle;
+  const description = inConsentPhase
+    ? ""
+    : scenario === "horarios"
       ? hoursStepDescription(draft.days)
       : staticDescription;
   // "importacao" só existe para quem escolheu importar: aberta por URL direta
@@ -159,6 +179,10 @@ export function OnboardingScreen({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (inConsentPhase) {
+      if (consentReady) setWhatsappPhase("connect");
+      return;
+    }
     const form = event.currentTarget;
     if (!applyInlineValidation(form)) return;
     setBusy(true);
@@ -352,19 +376,21 @@ export function OnboardingScreen({
       </button>
     </>
   ) : isActivationTestIntro ? (
+    // Quadro 4.6: um único CTA primário em largura total. "Fazer isso depois"
+    // continua existindo (conclui sem testar), discreto no lugar da nota.
     <>
+      <button className="btn btn-primary" disabled={busy} type="submit">
+        {busy
+          ? activationTestStartAction.intro.busy
+          : activationTestStartAction.intro.label}
+      </button>
       <button
-        className="btn btn-secondary"
+        className="btn onboarding-actions-skip"
         disabled={busy}
         type="button"
         onClick={() => void skipActivationTest()}
       >
         {busy ? "Salvando..." : "Fazer isso depois"}
-      </button>
-      <button className="btn btn-primary" disabled={busy} type="submit">
-        {busy
-          ? activationTestStartAction.intro.busy
-          : activationTestStartAction.intro.label}
       </button>
     </>
   ) : isWhatsappConclusion ? (
@@ -381,6 +407,14 @@ export function OnboardingScreen({
         {busy ? "Abrindo..." : "Ir para o início"}
       </button>
     </>
+  ) : inConsentPhase ? (
+    <button
+      className="btn btn-primary"
+      disabled={!consentReady}
+      type="submit"
+    >
+      Continuar
+    </button>
   ) : isWhatsappConnect ? (
     <>
       <button
@@ -438,7 +472,7 @@ export function OnboardingScreen({
   return (
     <OnboardingShell
       actions={actions}
-      actionsStacked={isWhatsappIntro}
+      actionsStacked={isWhatsappIntro || isActivationTestIntro}
       back={back}
       body={
         isSistemaAtual ? (
@@ -466,6 +500,14 @@ export function OnboardingScreen({
             setDraft,
             setWhatsappConnected,
             setDemoDone,
+            {
+              onConsentReadyChange: setConsentReady,
+              onConsentRequired: () => {
+                setConsentReady(false);
+                setWhatsappPhase("consent");
+              },
+              phase: whatsappPhase,
+            },
           )
         )
       }

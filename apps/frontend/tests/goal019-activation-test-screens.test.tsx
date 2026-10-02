@@ -167,8 +167,21 @@ describe("antes do teste: explicação e CTA do vault", () => {
     renderScreen("teste-real");
 
     expect(
-      await screen.findByText(/A Atendly vai enviar uma mensagem de teste/),
+      await screen.findByText(
+        /Um número da Atendly vai enviar uma mensagem no seu WhatsApp/,
+      ),
     ).toBeInTheDocument();
+    // Prévia: o aviso que o orquestrador envia e uma pergunta sem serviço.
+    expect(
+      screen.getByText(/Esta é uma conversa de teste da Atendly/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Oi! Quanto custa o atendimento?"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/e sua IA é ativada/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Leva cerca de/)).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Iniciar teste" }),
     ).toBeInTheDocument();

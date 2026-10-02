@@ -8,8 +8,10 @@
  *
  * 1. Os dois caminhos abrem no consentimento, com o checkbox desmarcado e
  *    nenhuma das duas respostas marcada, e só chamam `connect` depois dele.
- * 2. Em `whatsapp-conectar`, "Continuar" não compete com o CTA primário do
- *    painel enquanto o número não está conectado; quando o painel lê o
+ *    No onboarding (Goal099/WU-02) o consentimento é uma fase própria, com
+ *    um "Continuar" que não chama o BFF; Configurações segue numa tela só.
+ * 2. Em `whatsapp-conectar`, na fase de conexão, "Continuar" não compete com
+ *    o CTA primário do painel enquanto o número não está conectado; quando o painel lê o
  *    número conectado (`onStatusChange`), "Continuar" vira a ação principal.
  * 3. Em `whatsapp-concluido`, "Conectar agora" aponta para a etapa do
  *    onboarding (`/onboarding/whatsapp`), não para Configurações — a
@@ -175,10 +177,80 @@ async function expectConsentGate(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("o mesmo consentimento nos dois caminhos do painel", () => {
-  test("onboarding (whatsapp-conectar) abre no consentimento, com o painel real", async () => {
+  test("onboarding (whatsapp-conectar) abre na fase de consentimento e só conecta na fase seguinte, com o painel real", async () => {
     const user = userEvent.setup();
     renderScreen("whatsapp-conectar", emptyState());
-    await expectConsentGate(user);
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Antes de conectar" }),
+    ).toBeVisible();
+    const checkbox = await screen.findByRole("checkbox", { name: CONSENT_TEXT });
+    expect(checkbox).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "Sim, também" })).not.toBeChecked();
+    expect(
+      screen.getByRole("radio", { name: "Não, só trabalho" }),
+    ).not.toBeChecked();
+    expect(screen.getByRole("link", { name: "Saiba mais" })).toHaveAttribute(
+      "href",
+      "/politica-de-privacidade",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Conectar WhatsApp" }),
+    ).not.toBeInTheDocument();
+    const continuar = screen.getByRole("button", { name: "Continuar" });
+    expect(screen.getAllByRole("button", { name: "Continuar" })).toHaveLength(1);
+    expect(continuar).toBeDisabled();
+
+    await user.click(checkbox);
+    expect(continuar).toBeDisabled();
+    await user.click(screen.getByRole("radio", { name: "Sim, também" }));
+    expect(screen.getByText(/você continua no controle/i)).toBeVisible();
+    expect(continuar).toBeEnabled();
+    await user.click(continuar);
+
+    expect(connectWhatsapp).not.toHaveBeenCalled();
+    expect(getWhatsapp).toHaveBeenCalled();
+    const cta = await screen.findByRole("button", { name: "Conectar WhatsApp" });
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Continuar" })).toHaveLength(1);
+
+    connectWhatsapp.mockResolvedValue({
+      connection: {
+        connectedAt: null,
+        id: "wa-1",
+        phoneNumber: null,
+        status: "WAITING_QR",
+        updatedAt: "2026-09-27T12:00:00.000Z",
+      },
+      expiresAt: null,
+      pairingCode: null,
+      qrcode: "qr-1",
+    });
+    await user.click(cta);
+    expect(connectWhatsapp).toHaveBeenCalledWith({
+      consentAccepted: true,
+      mode: "QR",
+    });
+  });
+
+  test("onboarding volta à fase de consentimento quando a conexão falha", async () => {
+    const user = userEvent.setup();
+    renderScreen("whatsapp-conectar", emptyState());
+    await user.click(
+      await screen.findByRole("checkbox", { name: CONSENT_TEXT }),
+    );
+    await user.click(screen.getByRole("radio", { name: "Não, só trabalho" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    connectWhatsapp.mockRejectedValue(new Error("falhou"));
+    await user.click(
+      await screen.findByRole("button", { name: "Conectar WhatsApp" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Antes de conectar" }),
+    ).toBeVisible();
+    expect(screen.getByRole("checkbox", { name: CONSENT_TEXT })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
   });
 
   test("Configurações › WhatsApp abre no mesmo consentimento, com o painel real", async () => {
@@ -190,10 +262,16 @@ describe("o mesmo consentimento nos dois caminhos do painel", () => {
 });
 
 describe("whatsapp-conectar: 'Continuar' não compete com o CTA do painel", () => {
-  test("desconectado, 'Continuar' é a ação secundária e o único CTA primário é o do painel", async () => {
+  test("desconectado, na fase de conexão, 'Continuar' é a ação secundária e o único CTA primário é o do painel", async () => {
+    const user = userEvent.setup();
     renderScreen("whatsapp-conectar", emptyState());
-    const continuar = await screen.findByRole("button", { name: "Continuar" });
+    await user.click(
+      await screen.findByRole("checkbox", { name: CONSENT_TEXT }),
+    );
+    await user.click(screen.getByRole("radio", { name: "Não, só trabalho" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByRole("button", { name: "Conectar WhatsApp" });
+    const continuar = screen.getByRole("button", { name: "Continuar" });
     expect(continuar.className).toContain("btn-secondary");
     expect(continuar.className).not.toContain("btn-primary");
     const primaries = document.body.querySelectorAll(".btn-primary");
@@ -238,8 +316,18 @@ describe("whatsapp-conectar: 'Continuar' não compete com o CTA do painel", () =
   });
 
   test("o botão 'Já conectei' não existe", async () => {
+    const user = userEvent.setup();
     renderScreen("whatsapp-conectar", emptyState());
     await screen.findByRole("button", { name: "Continuar" });
+    expect(
+      screen.queryByRole("button", { name: /já conectei/i }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      await screen.findByRole("checkbox", { name: CONSENT_TEXT }),
+    );
+    await user.click(screen.getByRole("radio", { name: "Não, só trabalho" }));
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await screen.findByRole("button", { name: "Conectar WhatsApp" });
     expect(
       screen.queryByRole("button", { name: /já conectei/i }),
     ).not.toBeInTheDocument();

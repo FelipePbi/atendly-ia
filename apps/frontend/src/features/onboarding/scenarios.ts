@@ -87,13 +87,13 @@ export const onboardingScenarios = {
     "tone",
   ],
   whatsapp: [
-    "Antes de conectar",
-    "Agora vamos colocar sua IA para atender de verdade",
-    "Antes de conectar seu número, veja o que muda no seu dia a dia.",
+    "WhatsApp",
+    "Agora vamos colocar sua IA para atender de verdade.",
+    "",
     "whatsapp",
   ],
   "whatsapp-conectar": [
-    "Conectar WhatsApp",
+    "WhatsApp",
     "Ative o atendimento no seu número",
     "No celular, use o código de vinculação. No computador, escaneie o QR Code.",
     "whatsapp-connect",
@@ -110,9 +110,9 @@ export const onboardingScenarios = {
   // descreve cinco momentos distintos, e juntar dois deles obrigaria a tela a
   // interpretar o mesmo valor de duas formas.
   "teste-real": [
-    "Teste real",
-    "Vamos testar sua IA de verdade",
-    "A Atendly vai enviar uma mensagem de teste simulando um cliente. Você não precisa responder. A IA fará o atendimento automaticamente.",
+    "WhatsApp",
+    "Vamos fazer um teste real",
+    "Um número da Atendly vai enviar uma mensagem no seu WhatsApp simulando um cliente. Você só observa — a IA faz o atendimento sozinha.",
     "activation-test",
   ],
   "teste-real-progresso": [

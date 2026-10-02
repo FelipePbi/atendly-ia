@@ -428,6 +428,52 @@ export function ActivationTestIntro() {
 }
 
 /**
+ * Introdução do onboarding (quadro 4.6): a prévia da conversa e três itens.
+ *
+ * O aviso é o texto que o orquestrador envia (`ACTIVATION_TEST_NOTICE`). A
+ * pergunta não nomeia serviço: o sistema só o escolhe quando a execução
+ * começa, e a tela não pode afirmar o que ainda não sabe.
+ */
+export function ActivationTestOnboardingIntro() {
+  return (
+    <div className="activation-test-intro">
+      <div className="activation-test-preview">
+        <div className="activation-test-preview-head">
+          <span>Atendly · Teste</span>
+          <span>agora</span>
+        </div>
+        <p className="activation-test-bubble">
+          Esta é uma conversa de teste da Atendly. Você só precisa observar: a
+          IA vai conversar sozinha com um cliente simulado e marcar um
+          atendimento de teste, que é removido no final.
+        </p>
+        <p className="activation-test-bubble">Oi! Quanto custa o atendimento?</p>
+      </div>
+      <ul className="activation-test-checks">
+        <li>
+          <Icon name="check" />
+          <span>A conversa chega identificada como teste</span>
+        </li>
+        <li>
+          <Icon name="check" />
+          <span>
+            A IA informa preço, consulta a agenda e confirma um horário de
+            verdade
+          </span>
+        </li>
+        <li>
+          <Icon name="check" />
+          <span>
+            No fim, o agendamento e o cliente de teste são apagados, e sua IA é
+            ativada
+          </span>
+        </li>
+      </ul>
+    </div>
+  );
+}
+
+/**
  * Progresso: os seis marcos, um a um, lidos do servidor.
  */
 export function ActivationTestProgress() {
@@ -550,12 +596,14 @@ export function ActivationTestSucceeded() {
 /** Corpo de cada tela do teste, o mesmo para todo consumidor. */
 export function ActivationTestPanelBody({
   panel,
+  onboarding = false,
 }: {
   panel: ActivationTestPanel;
+  onboarding?: boolean;
 }) {
   if (panel === "progress") return <ActivationTestProgress />;
   if (panel === "paused") return <ActivationTestPaused />;
   if (panel === "failed") return <ActivationTestFailed />;
   if (panel === "succeeded") return <ActivationTestSucceeded />;
-  return <ActivationTestIntro />;
+  return onboarding ? <ActivationTestOnboardingIntro /> : <ActivationTestIntro />;
 }

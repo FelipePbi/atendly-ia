@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { BffHttpError, type Session } from "@/data";
+import type { WhatsAppConsentPhase } from "@/features/whatsapp/WhatsAppConnectionPanel";
 import { Icon } from "@/shared/icons/Icon";
 
 import type { OnboardingDraft } from "../OnboardingRuntime";
@@ -25,6 +26,8 @@ export type OnboardingStepBody = (
   // Só a demonstração da IA usa isto: avisa a tela quando o último item entra,
   // para o "Continuar" aparecer só no fim (Goal079).
   onDemoDone?: (done: boolean) => void,
+  // Só whatsapp-conectar usa isto: a fase de consentimento do onboarding.
+  whatsappConsentPhase?: WhatsAppConsentPhase,
 ) => React.ReactNode;
 
 export type OnboardingStepPersist = (

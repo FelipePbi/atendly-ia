@@ -192,7 +192,9 @@ describe("promessas da introdução do WhatsApp (O-42)", () => {
     expect(items[2]).toHaveTextContent(
       "Quando você responde, a IA sai de cena naquela conversa.",
     );
-    expect(items[3]).toHaveTextContent("Você escolhe quem a IA nunca responde.");
+    expect(items[3]).toHaveTextContent(
+      "Você escolhe quem a IA nunca responde: família, amigos, quem quiser.",
+    );
     expect(screen.getByText("Só um número por negócio.")).toBeVisible();
   });
 
@@ -200,24 +202,26 @@ describe("promessas da introdução do WhatsApp (O-42)", () => {
     stubMatchMedia(false);
     await renderStep("whatsapp");
     const icons = promiseItems().map((item) => {
-      const svg = item.querySelector("svg");
+      const badge = item.querySelector(".onboarding-promise-icon");
+      expect(badge).not.toBeNull();
+      expect(badge).toHaveAttribute("aria-hidden", "true");
+      const svg = badge?.querySelector("svg");
       expect(svg).not.toBeNull();
-      expect(svg).toHaveAttribute("aria-hidden", "true");
-      return svg?.querySelector("use")?.getAttribute("href");
+      expect(svg?.querySelector("use")).toBeNull();
+      return svg?.innerHTML;
     });
     expect(new Set(icons).size).toBe(4);
-    expect(icons).not.toContain("/icons/atendly-icons.svg#i-check");
   });
 
   test("o h1 da introdução não muda", async () => {
     stubMatchMedia(false);
     await renderStep("whatsapp");
-    expect(
-      screen.getByRole("heading", {
-        level: 1,
-        name: "Agora vamos colocar sua IA para atender de verdade",
-      }),
-    ).toBeInTheDocument();
+    const heading = screen.getByRole("heading", {
+      level: 1,
+      name: "Agora vamos colocar sua IA para atender de verdade.",
+    });
+    expect(heading).toBeInTheDocument();
+    expect(heading.parentElement?.querySelector("p")).toBeNull();
   });
 });
 

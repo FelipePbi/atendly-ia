@@ -24,7 +24,7 @@
  * cenários.
  */
 
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -80,7 +80,26 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
 }));
 
 vi.mock("@/features/whatsapp/WhatsAppConnectionPanel", () => ({
-  WhatsAppConnectionPanel: () => <div>Painel de conexão do WhatsApp</div>,
+  WhatsAppConnectionPanel: ({
+    consentPhase,
+  }: {
+    consentPhase?: {
+      phase: "connect" | "consent";
+      onConsentReadyChange: (ready: boolean) => void;
+    };
+  }) => (
+    <div>
+      Painel de conexão do WhatsApp
+      {consentPhase?.phase === "consent" && (
+        <button
+          type="button"
+          onClick={() => consentPhase.onConsentReadyChange(true)}
+        >
+          Aceitar consentimento
+        </button>
+      )}
+    </div>
+  ),
 }));
 
 import OnboardingPage from "@/app/onboarding/[step]/page";
@@ -252,7 +271,11 @@ describe("todo cenário sobrevivente é montado pela rota real", () => {
           {await OnboardingPage({ params: Promise.resolve({ step }) })}
         </OnboardingRuntimeProvider>,
       );
-      const [, title] = onboardingScenarios[step];
+      // Goal099/WU-02: whatsapp-conectar abre na fase de consentimento.
+      const title =
+        step === "whatsapp-conectar"
+          ? "Antes de conectar"
+          : onboardingScenarios[step][1];
       expect(
         await screen.findByRole("heading", { level: 1, name: title }),
       ).toBeVisible();
@@ -498,7 +521,7 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
         screen.getByText("Corte custa R$ 100,00.", { exact: false }),
       ).toBeVisible();
       expect(
-        screen.getByText(/Tenho 9h, 13h ou 17h\./u),
+        screen.getByText(/Tenho segunda às 9h, 13h ou 17h\./u),
       ).toBeVisible();
 
       // "Continuar" entra num efeito depois da conversa: espera, não afirma.
@@ -632,7 +655,16 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
         whatsapp: { phoneNumber: "+5511999990000", status: "CONNECTED" },
       }),
     );
-    await user.click(await screen.findByRole("button", { name: "Continuar" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Aceitar consentimento" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Aceitar consentimento" }),
+      ).not.toBeInTheDocument(),
+    );
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
 
     expect(push).toHaveBeenCalledWith("/onboarding/contatos-ignorados");
     expect(completeOnboarding).not.toHaveBeenCalled();
@@ -650,7 +682,19 @@ describe("o encadeamento real de boas-vindas a endereco até validação", () =>
         ...toneDone,
       }),
     );
-    await user.click(await screen.findByRole("button", { name: "Continuar" }));
+    // Fase de consentimento (Goal099/WU-02): aceite e resposta liberam o
+    // "Continuar", que só abre a fase de conexão. O avanço continua exigindo
+    // CONNECTED; a fase de conexão traz o "Continuar" que valida.
+    await user.click(
+      await screen.findByRole("button", { name: "Aceitar consentimento" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Aceitar consentimento" }),
+      ).not.toBeInTheDocument(),
+    );
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
     expect(
       await screen.findByText(
         "Conclua a vinculação no WhatsApp antes de continuar.",

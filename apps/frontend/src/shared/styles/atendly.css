@@ -3116,6 +3116,15 @@ p {
 .onboarding-actions.is-single {
   justify-content: flex-end;
 }
+.onboarding-actions.is-stacked {
+  flex-direction: column;
+  align-items: stretch;
+}
+.onboarding-actions.is-stacked .btn {
+  width: 100%;
+  min-width: 0;
+  flex: none;
+}
 /* Introdução do WhatsApp: o principal vem primeiro no DOM e na tela
    (protótipo 4.1); nenhuma regra reordena a linha. */
 /* Boas-vindas (quadro 0): marca no topo, cena animada centrada na altura que
@@ -4002,6 +4011,196 @@ p {
   margin-top: 1px;
   color: var(--accent);
 }
+/* Introdução do WhatsApp (quadro 4.1): título sem descrição, 24 px até as
+   promessas, cada uma com o ícone num quadrado tingido de 40 px. */
+[data-step="whatsapp"] .onboarding-content {
+  gap: 24px;
+}
+[data-step="whatsapp"] .onboarding-heading h1 {
+  text-wrap: pretty;
+}
+[data-step="whatsapp"] .onboarding-points li {
+  align-items: center;
+  padding: 12px 0;
+}
+.onboarding-promise-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--at-color-primary-tint-strong);
+  color: var(--at-color-primary-ink);
+}
+/* Fase de consentimento do onboarding (quadro 4.2): o cartão do checkbox, a
+   pergunta, o controle segmentado e o bloco "Tudo bem" do protótipo. Só existe
+   com a prop de fase de `WhatsAppConnectionPanel`; Configurações mantém o
+   estilo dos seletores `settings-*` sem estas regras. */
+[data-step="whatsapp-conectar"] .onboarding-content {
+  gap: 20px;
+}
+.whatsapp-consent-phase {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.whatsapp-consent-phase .check.whatsapp-consent-card {
+  min-height: 0;
+  padding: 14px 16px;
+  gap: 12px;
+  align-items: flex-start;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.whatsapp-consent-phase .check-box {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1.5px var(--border-strong);
+}
+.whatsapp-consent-phase .check input:checked + .check-box {
+  background: var(--accent);
+  box-shadow: none;
+  color: var(--bg);
+}
+.whatsapp-consent-link {
+  color: var(--accent);
+  font-weight: 600;
+}
+.whatsapp-consent-phase .field {
+  gap: 10px;
+}
+.whatsapp-consent-phase .field .label {
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 600;
+}
+.whatsapp-consent-phase .settings-segmented {
+  padding: 3px;
+  gap: 3px;
+  border-radius: 12px;
+  background: var(--surface-interactive);
+}
+.whatsapp-consent-phase .settings-segmented span {
+  min-height: 40px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--fg-soft);
+  font-weight: 500;
+}
+.whatsapp-consent-phase .settings-segmented input:checked + span {
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(34, 30, 26, 0.08);
+  color: var(--fg);
+  font-weight: 600;
+}
+.whatsapp-consent-phase .settings-control-block {
+  gap: 12px;
+}
+.whatsapp-consent-phase .settings-control-block > strong {
+  color: var(--at-color-primary-ink);
+  font-weight: 600;
+}
+.whatsapp-control-icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--accent);
+}
+/* Introdução do teste real (quadro 4.6): prévia da conversa e três itens. */
+[data-step="teste-real"] .onboarding-content {
+  gap: 22px;
+}
+[data-step="teste-real"] .onboarding-heading {
+  gap: 8px;
+}
+[data-step="teste-real"] .onboarding-heading > p {
+  font-size: 15px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+/* "Fazer isso depois" no lugar da nota do quadro: texto discreto, com a área
+   de toque de 44 px sem aumentar a altura que o rodapé ocupa. */
+.onboarding-actions.is-stacked .btn.onboarding-actions-skip {
+  width: auto;
+  min-height: 44px;
+  align-self: center;
+  margin: -10px 0 -19px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.activation-test-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.activation-test-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.activation-test-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-soft);
+}
+.activation-test-preview-head span:last-child {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.activation-test-bubble {
+  align-self: flex-start;
+  margin: 0;
+  padding: 9px 13px;
+  border-radius: 14px 14px 14px 5px;
+  background: var(--surface-interactive);
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--fg);
+}
+.activation-test-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.activation-test-checks li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.activation-test-checks .icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--at-color-success);
+}
 .source-card {
   min-height: 168px;
   color: var(--fg);
@@ -4035,25 +4234,97 @@ p {
   border-radius: var(--r-card);
   background: var(--surface-secondary);
 }
+/* Demonstração da IA (quadro 3.1): bolhas, rótulo "sua IA" e eventos como
+   linhas discretas dentro da própria conversa. */
+[data-step="demonstracao-da-ia"] .onboarding-top {
+  gap: 12px;
+}
+[data-step="demonstracao-da-ia"] .onboarding-content {
+  padding-top: 8px;
+  gap: 0;
+}
+[data-step="demonstracao-da-ia"] .onboarding-heading > p {
+  line-height: 1.4;
+}
 .onboarding-demo-chat {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 18px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
-  background: var(--surface-secondary);
+  gap: 8px;
+  padding-top: 16px;
 }
 /* Cada item só existe no DOM depois de entrar (Goal079); com
    prefers-reduced-motion a conversa abre inteira e parada. */
 .onboarding-demo-chat > * {
   animation: rise var(--at-duration-moderate) var(--ease);
 }
-.onboarding-demo-event {
-  margin: 8px 0;
+.demo-client-bubble {
+  align-self: flex-start;
+  max-width: 80%;
+  padding: 9px 13px;
+  border: 1px solid var(--border);
+  border-radius: 16px 16px 16px 6px;
+  background: var(--surface);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.demo-ai-message {
+  align-self: flex-end;
+  max-width: 84%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+.demo-ai-bubble {
+  padding: 9px 13px;
+  border-radius: 16px 16px 6px 16px;
+  color: #0b2f32;
+  background: var(--at-color-primary-tint-strong);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.demo-ai-label {
+  padding-right: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 11px;
+}
+.demo-ai-label::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.onboarding-demo-event {
+  margin: 0;
+  padding: 2px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.onboarding-demo-event::before,
+.onboarding-demo-event::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--border);
+}
+.onboarding-demo-event > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  min-width: 0;
   text-align: center;
+}
+.onboarding-demo-event svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
 }
 @media (prefers-reduced-motion: reduce) {
   .onboarding-demo-chat > * {

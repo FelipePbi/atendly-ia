@@ -207,6 +207,6 @@ export const ONBOARDING_ROUTES = [
   {
     path: "/onboarding/whatsapp",
     name: "onboarding-whatsapp",
-    contentMarker: "Agora vamos colocar sua IA para atender de verdade",
+    contentMarker: "Agora vamos colocar sua IA para atender de verdade.",
   },
 ] as const;

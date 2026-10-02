@@ -99,7 +99,7 @@ describe("demonstração sem artigo fixo antes do nome do serviço", () => {
     ).toMatch(/^Escova custa a partir de /u);
     const items = buildDemoConversation(draft, WEDNESDAY)?.items ?? [];
     expect(items[0].text).toBe("Oi! Quanto custa escova?");
-    expect(items[2].text).toMatch(/^Escova custa /u);
+    expect(items[2].text).toMatch(/^Oi! Escova custa /u);
   });
 
   test("só a primeira letra sobe: o resto do nome fica como foi digitado", () => {

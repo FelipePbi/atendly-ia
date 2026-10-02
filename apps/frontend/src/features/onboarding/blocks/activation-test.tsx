@@ -41,7 +41,9 @@ export function activationTestScenarioFor(
 }
 
 export function activationTestStepBody(scenario: OnboardingScenario) {
-  return <ActivationTestPanelBody panel={panelForScenario(scenario)} />;
+  return (
+    <ActivationTestPanelBody onboarding panel={panelForScenario(scenario)} />
+  );
 }
 
 /**

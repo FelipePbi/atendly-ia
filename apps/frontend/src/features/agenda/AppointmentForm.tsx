@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 
@@ -12,6 +13,7 @@ import {
   type Service,
   type ServiceList,
 } from "@/data";
+import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Button } from "@/shared/ui/Button";
 
@@ -31,7 +33,6 @@ import {
 import {
   CustomerField,
   DateStrip,
-  DayList,
   durationLabel,
   weekdayShort,
 } from "./NewAppointmentFields";
@@ -41,6 +42,7 @@ import {
   isoDate,
   parseDate,
   requestError,
+  serviceColorMap,
 } from "./occupancy";
 import { holdNotice } from "./SlotPicker";
 
@@ -90,10 +92,6 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<ConflictState | null>(null);
-  const [dayState, setDayState] = useState<{
-    date: string;
-    entries: AgendaEntry[] | null;
-  } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -115,6 +113,33 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, []);
+
+  // Dias em que o negócio não atende ficam esmaecidos na faixa de datas (A6).
+  // Sem leitura das regras, ou sem regra alguma, nenhum dia é esmaecido.
+  const [openWeekdays, setOpenWeekdays] = useState<Set<number> | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    const settingsService = getProductServices().settings;
+    if (!settingsService || typeof settingsService.get !== "function") return;
+    settingsService
+      .get(controller.signal)
+      .then((state) => {
+        const rules = state.availability?.rules ?? [];
+        setOpenWeekdays(
+          rules.length === 0
+            ? null
+            : new Set(
+                rules
+                  .filter((rule) => rule.active)
+                  .map((rule) => rule.dayOfWeek),
+              ),
+        );
+      })
+      .catch(() => {
+        // Sem as regras a faixa fica sem esmaecer; isso não bloqueia o formulário.
       });
     return () => controller.abort();
   }, []);
@@ -155,19 +180,7 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
     return () => controller.abort();
   }, [calendar, date, serviceKey]);
 
-  const timezone = calendar?.timezone;
-  const canCreate = Boolean(calendar?.capabilities.createAppointments);
-  useEffect(() => {
-    if (!canCreate) return;
-    let active = true;
-    void readOccupancy(date, timezone).then((entries) => {
-      if (active) setDayState({ date, entries });
-    });
-    return () => {
-      active = false;
-    };
-  }, [canCreate, date, timezone]);
-
+  const colors = serviceColorMap(services?.items);
   const selectableServices = (services?.items ?? []).filter(
     (item) => item.active && item.durationMinutes !== null,
   );
@@ -220,8 +233,6 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
   const ctaLabel = startTime
     ? `Criar agendamento · ${weekdayShort(date)} ${parseDate(date).getDate()}, ${startTime}`
     : "Criar agendamento";
-  const dayEntries =
-    dayState && dayState.date === date ? dayState.entries : null;
 
   function resetSlotChoice() {
     hold.release();
@@ -386,15 +397,11 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
     void create(reason);
   }
 
-  const timeHeading =
-    !other && durationMinutes > 0
-      ? `Horário · livres para ${durationLabel(durationMinutes)}`
-      : "Horário";
-
   return (
     <AppointmentFlowShell
+      appointmentRoute={{ date }}
       calendar={calendar}
-      description="Escolha cliente, serviços e um horário disponível."
+      closeLabel="Fechar novo agendamento"
       loading={loading}
       title="Novo agendamento"
     >
@@ -415,170 +422,211 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
               if (canSubmit) void create();
             }}
           >
-            <CustomerField
-              customers={customers}
-              name={customerName}
-              onChoose={chooseCustomer}
-              onName={setCustomerName}
-              onPhone={setCustomerPhone}
-              onSwap={swapCustomer}
-              phone={customerPhone}
-              selected={selectedCustomer}
-            />
-            <fieldset className="agenda-new-block">
-              <legend className="label">Serviços</legend>
-              {selectableServices.length === 0 ? (
-                <p className="muted">
-                  Nenhum serviço disponível para agendamento.
-                </p>
-              ) : (
-                <div className="agenda-new-chips">
-                  {selectableServices.map((item) => (
-                    <label className="agenda-new-chip" key={item.id}>
-                      <input
-                        checked={serviceIds.includes(item.id)}
-                        onChange={() => toggleService(item)}
-                        type="checkbox"
-                      />
-                      <span>
-                        {item.name} · {durationLabel(item.durationMinutes ?? 0)}
-                      </span>
-                    </label>
-                  ))}
-                  <button
-                    aria-pressed={other}
-                    className="agenda-new-chip agenda-new-chip-other"
-                    onClick={toggleOther}
-                    type="button"
-                  >
-                    Outro, sem cadastro
-                  </button>
-                </div>
-              )}
-              {!other && (
-                <p className="agenda-new-total">
-                  {selectedServices.length === 0
-                    ? "Nenhum serviço escolhido."
-                    : `${selectedServices.length} ${selectedServices.length === 1 ? "serviço" : "serviços"} · ${durationLabel(servicesMinutes)} · ${totalLabel(total)}`}
-                </p>
-              )}
-              {other && (
-                <div className="agenda-new-other">
-                  <label className="field">
-                    <span className="label">Título do atendimento</span>
-                    <input
-                      className="input"
-                      maxLength={200}
-                      onChange={(event) => {
-                        resetSlotChoice();
-                        setOtherTitle(event.target.value);
-                      }}
-                      value={otherTitle}
-                    />
-                  </label>
-                  <label className="field">
-                    <span className="label">Duração em minutos</span>
-                    <input
-                      className="input"
-                      inputMode="numeric"
-                      max={1440}
-                      min={1}
-                      onChange={(event) => {
-                        setOtherDuration(event.target.value);
-                        setConflict(null);
-                      }}
-                      type="number"
-                      value={otherDuration}
-                    />
-                  </label>
-                </div>
-              )}
-            </fieldset>
-            <DateStrip
-              date={date}
-              onChange={changeDate}
-              onTogglePicker={() => setShowDatePicker((current) => !current)}
-              pickerOpen={showDatePicker}
-            />
-            <fieldset
-              className="agenda-new-block"
-              disabled={!other && serviceIds.length === 0}
-            >
-              <legend className="label">{timeHeading}</legend>
-              {other ? (
-                <p className="muted">
-                  Sem serviço cadastrado não há horários sugeridos. Digite o
-                  horário abaixo.
-                </p>
-              ) : serviceIds.length === 0 ? (
-                <p className="muted">
-                  Escolha um serviço para ver os horários livres.
-                </p>
-              ) : slotsLoading ? (
-                <p>Consultando disponibilidade…</p>
-              ) : slots.length === 0 ? (
-                <p className="muted">
-                  Nenhum horário disponível para esta seleção.
-                </p>
-              ) : (
-                <div className="agenda-new-chips">
-                  {slots.map((slot) => (
-                    <label
-                      className="agenda-new-chip"
-                      key={`${slot.date}-${slot.startTime}`}
-                    >
-                      <input
-                        checked={startTime === slot.startTime}
-                        name="start-time"
-                        onChange={() => void chooseTime(slot.startTime)}
-                        type="radio"
-                      />
-                      <span>{slot.startTime}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-              {!other && (
-                <button
-                  aria-expanded={showManual}
-                  className="btn btn-tertiary"
-                  disabled={serviceIds.length === 0}
-                  onClick={() => setShowManual((current) => !current)}
-                  type="button"
+            <div className="agenda-new-columns">
+              <div className="agenda-new-column">
+                <CustomerField
+                  customers={customers}
+                  name={customerName}
+                  onChoose={chooseCustomer}
+                  onName={setCustomerName}
+                  onPhone={setCustomerPhone}
+                  onSwap={swapCustomer}
+                  phone={customerPhone}
+                  selected={selectedCustomer}
+                />
+                <fieldset className="agenda-new-block">
+                  <legend className="label">Serviços</legend>
+                  {selectableServices.length === 0 ? (
+                    <p className="muted">
+                      Nenhum serviço disponível para agendamento.
+                    </p>
+                  ) : (
+                    <div className="agenda-new-chips">
+                      {selectableServices.map((item) => (
+                        <label className="agenda-new-chip" key={item.id}>
+                          <input
+                            checked={serviceIds.includes(item.id)}
+                            onChange={() => toggleService(item)}
+                            type="checkbox"
+                          />
+                          <span>
+                            <Icon name="check" />
+                            <span
+                              aria-hidden="true"
+                              className="agenda-appt-service-dot"
+                              data-color={colors.get(item.id) ?? undefined}
+                            />
+                            {item.name}
+                            <span className="sr-only"> · </span>
+                            <small>
+                              {durationLabel(item.durationMinutes ?? 0)}
+                            </small>
+                          </span>
+                        </label>
+                      ))}
+                      <button
+                        aria-pressed={other}
+                        className="agenda-new-chip-other"
+                        onClick={toggleOther}
+                        type="button"
+                      >
+                        Outro, sem cadastro
+                      </button>
+                    </div>
+                  )}
+                  {!other && (
+                    <p className="agenda-new-total">
+                      {selectedServices.length === 0 ? (
+                        <span>Nenhum serviço escolhido.</span>
+                      ) : (
+                        <>
+                          <span>
+                            {selectedServices.length}{" "}
+                            {selectedServices.length === 1
+                              ? "serviço"
+                              : "serviços"}
+                          </span>
+                          <span className="sr-only"> · </span>
+                          <strong>
+                            {durationLabel(servicesMinutes)} ·{" "}
+                            {totalLabel(total)}
+                          </strong>
+                        </>
+                      )}
+                    </p>
+                  )}
+                  {other && (
+                    <div className="agenda-new-other">
+                      <label className="field">
+                        <span className="label">Título do atendimento</span>
+                        <input
+                          className="input"
+                          maxLength={200}
+                          onChange={(event) => {
+                            resetSlotChoice();
+                            setOtherTitle(event.target.value);
+                          }}
+                          value={otherTitle}
+                        />
+                      </label>
+                      <label className="field">
+                        <span className="label">Duração em minutos</span>
+                        <input
+                          className="input"
+                          inputMode="numeric"
+                          max={1440}
+                          min={1}
+                          onChange={(event) => {
+                            setOtherDuration(event.target.value);
+                            setConflict(null);
+                          }}
+                          type="number"
+                          value={otherDuration}
+                        />
+                      </label>
+                    </div>
+                  )}
+                </fieldset>
+              </div>
+              <div className="agenda-new-column">
+                <DateStrip
+                  date={date}
+                  openWeekdays={openWeekdays}
+                  onChange={changeDate}
+                  onTogglePicker={() =>
+                    setShowDatePicker((current) => !current)
+                  }
+                  pickerOpen={showDatePicker}
+                />
+                <fieldset
+                  className="agenda-new-block agenda-new-time"
+                  disabled={!other && serviceIds.length === 0}
                 >
-                  Outro horário
-                </button>
-              )}
-              {(other || showManual) && (
-                <div className="agenda-new-manual">
-                  <label className="field">
-                    <span className="label">
-                      Outro horário, fora dos oferecidos
-                    </span>
-                    <input
-                      className="input"
-                      onChange={(event) => setManualTime(event.target.value)}
-                      type="time"
-                      value={manualTime}
-                    />
-                  </label>
-                  <button
-                    className="btn btn-secondary"
-                    disabled={!manualTime || (other && !otherReady)}
-                    onClick={() => void chooseTime(manualTime)}
-                    type="button"
-                  >
-                    Usar este horário
-                  </button>
-                  <p className="muted">
-                    Um horário fora dos oferecidos pode estar ocupado. Se
-                    estiver, a agenda mostra o que ocupa o intervalo e sobrepor
-                    exige motivo.
-                  </p>
-                </div>
-              )}
-            </fieldset>
-            <div className="agenda-new-block">
+                  <legend className="label">
+                    Horário
+                    {!other && durationMinutes > 0 && (
+                      <span className="agenda-new-legend-note">
+                        {" "}
+                        · livres para {durationLabel(durationMinutes)}
+                      </span>
+                    )}
+                  </legend>
+                  {other ? (
+                    <p className="muted">
+                      Sem serviço cadastrado não há horários sugeridos. Digite
+                      o horário abaixo.
+                    </p>
+                  ) : serviceIds.length === 0 ? (
+                    <p className="muted">
+                      Escolha um serviço para ver os horários livres.
+                    </p>
+                  ) : slotsLoading ? (
+                    <p>Consultando disponibilidade…</p>
+                  ) : slots.length === 0 ? (
+                    <p className="muted">
+                      Nenhum horário disponível para esta seleção.
+                    </p>
+                  ) : null}
+                  {!other && (
+                    <div className="agenda-new-chips">
+                      {!slotsLoading &&
+                        slots.map((slot) => (
+                          <label
+                            className="agenda-new-chip agenda-new-slot"
+                            key={`${slot.date}-${slot.startTime}`}
+                          >
+                            <input
+                              checked={startTime === slot.startTime}
+                              name="start-time"
+                              onChange={() => void chooseTime(slot.startTime)}
+                              type="radio"
+                            />
+                            <span>{slot.startTime}</span>
+                          </label>
+                        ))}
+                      <button
+                        aria-expanded={showManual}
+                        className="agenda-new-chip-other"
+                        disabled={serviceIds.length === 0}
+                        onClick={() => setShowManual((current) => !current)}
+                        type="button"
+                      >
+                        Outro horário
+                      </button>
+                    </div>
+                  )}
+                  {(other || showManual) && (
+                    <div className="agenda-new-manual">
+                      <label className="field">
+                        <span className="label">
+                          Outro horário, fora dos oferecidos
+                        </span>
+                        <input
+                          className="input"
+                          onChange={(event) => setManualTime(event.target.value)}
+                          type="time"
+                          value={manualTime}
+                        />
+                      </label>
+                      <button
+                        className="btn btn-secondary"
+                        disabled={!manualTime || (other && !otherReady)}
+                        onClick={() => void chooseTime(manualTime)}
+                        type="button"
+                      >
+                        Usar este horário
+                      </button>
+                      <p className="muted">
+                        Um horário fora dos oferecidos pode estar ocupado. Se
+                        estiver, a agenda mostra o que ocupa o intervalo e
+                        sobrepor exige motivo.
+                      </p>
+                    </div>
+                  )}
+                </fieldset>
+              </div>
+            </div>
+            <div className="agenda-new-note">
               {showComments ? (
                 <label className="field">
                   <span className="label">Observações</span>
@@ -592,50 +640,40 @@ export function AppointmentForm({ customerId }: AppointmentFormProps = {}) {
               ) : (
                 <button
                   aria-expanded={false}
-                  className="btn btn-tertiary"
+                  className="agenda-new-note-button"
                   onClick={() => setShowComments(true)}
                   type="button"
                 >
+                  <Icon name="plus" />
                   Adicionar observação
                 </button>
               )}
             </div>
+            {/* Recorrência é oferecida ao agendar (Goal016, item 6): o fluxo
+                de série tem pré-visualização e confirmação atômica próprias,
+                que este formulário de ocorrência única não faz. */}
+            <Link className="agenda-new-series" href="/agenda/serie">
+              Agendar série
+            </Link>
             <div className="agenda-new-footer">
-              {!other && (
-                <p className="agenda-hold-status" role="status">
-                  {holdNotice(hold, calendar?.timezone)}
-                </p>
-              )}
+              <p className="agenda-hold-status" role="status">
+                {!other && hold.phase !== "none"
+                  ? holdNotice(hold, calendar?.timezone)
+                  : ""}
+              </p>
               {blockedReason && (
-                <p className="muted agenda-new-blocked">{blockedReason}</p>
+                <p className="agenda-new-blocked">{blockedReason}</p>
               )}
-              <div className="agenda-new-actions">
-                {/* Recorrência é oferecida ao agendar (Goal016, item 6): o fluxo
-                    de série tem pré-visualização e confirmação atômica
-                    próprias, que este formulário de ocorrência única não faz. */}
-                <Button href="/agenda/serie" variant="tertiary">
-                  Agendar série
-                </Button>
-                <Button disabled={!canSubmit} loading={busy} type="submit">
-                  {ctaLabel}
-                </Button>
-              </div>
+              <Button
+                className="agenda-new-cta"
+                disabled={!canSubmit}
+                loading={busy}
+                type="submit"
+              >
+                {ctaLabel}
+              </Button>
             </div>
           </form>
-          <DayList
-            date={date}
-            entries={dayEntries}
-            loading={!dayState || dayState.date !== date}
-            preview={
-              startTime && durationMinutes > 0
-                ? {
-                    label: "Novo agendamento",
-                    minutes: durationMinutes,
-                    startTime,
-                  }
-                : null
-            }
-          />
         </div>
       )}
       {conflict && (

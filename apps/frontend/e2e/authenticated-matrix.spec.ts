@@ -2277,6 +2277,194 @@ ${JSON.stringify(contrastNodes, null, 2)}`,
 });
 
 /**
+ * The new appointment screen (Goal101, G-8). From `/agenda` on the seeded day,
+ * a real click on "Novo" and then on the "Agendamento" menu item opens
+ * `/agenda/novo` the way a person does. Below 1024px the screen is pushed: no
+ * tab bar and no floating action button, the primary action ("Agendar") and the
+ * "×" are whole inside the window and at least 24px (WCAG 2.5.8 AA). From
+ * 1024px the Agenda column sits to the left of the form, without overlap, and
+ * no row of it is the open item (`aria-current="page"`): nothing is open yet.
+ * The screen goes through the same overflow, axe and focus checks as the routes
+ * above. One `goto` and the clicks: no request beyond the screens it walks
+ * through.
+ */
+type NewAppointmentMeasure = {
+  bottomNavRendered: boolean;
+  fabRendered: boolean;
+  frameIsPushed: boolean;
+  innerWidth: number;
+  innerHeight: number;
+  cta: { left: number; right: number; top: number; bottom: number; width: number; height: number } | null;
+  close: { left: number; right: number; top: number; bottom: number; width: number; height: number } | null;
+};
+
+async function measureNewAppointment(page: Page): Promise<NewAppointmentMeasure> {
+  return page.evaluate(() => {
+    const isRendered = (el: Element): boolean => {
+      const style = getComputedStyle(el);
+      const box = el.getBoundingClientRect();
+      return style.display !== "none"
+        && style.visibility !== "hidden"
+        && box.width > 0
+        && box.height > 0;
+    };
+    const read = (el: Element | null) => {
+      if (!el || !isRendered(el)) return null;
+      const box = el.getBoundingClientRect();
+      return {
+        left: box.left,
+        right: box.right,
+        top: box.top,
+        bottom: box.bottom,
+        width: box.width,
+        height: box.height,
+      };
+    };
+    return {
+      bottomNavRendered: Array.from(document.querySelectorAll('nav[class$="-bottom-nav"]')).some(isRendered),
+      fabRendered: Array.from(document.querySelectorAll("a.fab")).some(isRendered),
+      frameIsPushed: document.querySelector(".app-frame.is-pushed") !== null,
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      cta: read(document.querySelector("main#main-content .agenda-new-cta")),
+      close: read(document.querySelector('main#main-content a[aria-label^="Fechar"]')),
+    };
+  });
+}
+
+test(`G-8 new appointment from /agenda, five widths`, async ({ page }, testInfo) => {
+  await waitForRateLimitBudget(testInfo);
+  watchRateLimitBudget(page);
+
+  const route = routeNamed("agenda");
+  await page.goto(route.path, { waitUntil: "networkidle" });
+  await proveAuthenticatedScreen(page, route);
+
+  const width = page.viewportSize()?.width ?? 0;
+  const wide = width >= WIDE_LAYOUT_BREAKPOINT;
+  const what = `${route.path}: the "Novo" menu`;
+  const where = `${route.path} to /agenda/novo at ${testInfo.project.name} (${width}px)`;
+
+  await clickForReal(page.getByRole("button", { name: "Novo", exact: true }), what, testInfo);
+  await clickForReal(
+    page.getByRole("menuitem", { name: "Agendamento" }),
+    `${what}: the "Agendamento" item`,
+    testInfo,
+  );
+  await expectPath(page, /^\/agenda\/novo$/u, `${what} at ${testInfo.project.name}`);
+  await expect(
+    page.getByRole("form", { name: "Novo agendamento" }),
+    `${where}: the new appointment form did not render within ${CONTENT_TIMEOUT_MS}ms.`,
+  ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+
+  const screen = await measureNewAppointment(page);
+  await testInfo.attach("new-appointment", {
+    body: JSON.stringify(screen, null, 2),
+    contentType: "application/json",
+  });
+
+  expect(screen.close, `${where}: the "×" link is not rendered.`).not.toBeNull();
+  expect(screen.cta, `${where}: the primary action is not rendered.`).not.toBeNull();
+
+  if (!wide) {
+    expect.soft(screen.frameIsPushed, `${where}: the shell did not mark the pushed screen.`).toBe(true);
+    expect.soft(screen.bottomNavRendered, `${where}: the tab bar is rendered on the new appointment screen.`).toBe(false);
+    expect.soft(screen.fabRendered, `${where}: the floating action button is rendered on the new appointment screen.`).toBe(false);
+
+    // Whole inside the window, vertically too: scroll each target into view first.
+    await page.locator("main#main-content .agenda-new-cta").scrollIntoViewIfNeeded();
+    await page.locator('main#main-content a[aria-label^="Fechar"]').scrollIntoViewIfNeeded();
+    const settled = await measureNewAppointment(page);
+    for (const [name, box] of [["Agendar", settled.cta], ["×", settled.close]] as const) {
+      expect(box, `${where}: "${name}" is not rendered.`).not.toBeNull();
+      if (!box) continue;
+      expect
+        .soft(
+          Math.min(box.width, box.height),
+          `${where}: "${name}" is ${box.width}x${box.height}px, below the WCAG 2.5.8 AA minimum of ${TOUCH_TARGET_AA}px.`,
+        )
+        .toBeGreaterThanOrEqual(TOUCH_TARGET_AA);
+      expect
+        .soft(
+          box.left >= 0 && box.right <= settled.innerWidth && box.top >= 0 && box.bottom <= settled.innerHeight,
+          `${where}: "${name}" is not whole inside the ${settled.innerWidth}x${settled.innerHeight}px window (${JSON.stringify(box)}).`,
+        )
+        .toBe(true);
+    }
+  } else {
+    const boxes = await measureListDetail(page);
+    await testInfo.attach("new-appointment-list-detail", {
+      body: JSON.stringify(boxes, null, 2),
+      contentType: "application/json",
+    });
+    expect(boxes.list, `${where}: the Agenda column is not rendered beside the form.`).not.toBeNull();
+    expect(boxes.panel, `${where}: the form panel is not rendered.`).not.toBeNull();
+    if (boxes.list && boxes.panel) {
+      expect
+        .soft(
+          boxes.list.right,
+          `${where}: the column ends at x=${boxes.list.right}, over the form that starts at x=${boxes.panel.left}.`,
+        )
+        .toBeLessThanOrEqual(boxes.panel.left + LIST_COLUMN_TOLERANCE);
+      expect
+        .soft(
+          Math.min(boxes.list.bottom, boxes.panel.bottom) - Math.max(boxes.list.top, boxes.panel.top),
+          `${where}: the column and the form do not share a row of the window.`,
+        )
+        .toBeGreaterThan(0);
+    }
+    expect
+      .soft(boxes.openItems, `${where}: no row of the Agenda column may be open (aria-current="page") on the new appointment screen.`)
+      .toHaveLength(0);
+  }
+
+  // The checks the gate applies to every route: overflow, axe, visible focus.
+  const overflow = await measureOverflow(page);
+  expect
+    .soft(
+      overflow.scrollWidth,
+      `horizontal scroll at the new appointment screen/${testInfo.project.name}: ${overflow.scrollWidth}px of `
+        + `content in ${overflow.clientWidth}px.\nFirst offenders: ${JSON.stringify(overflow.offenders, null, 2)}`,
+    )
+    .toBeLessThanOrEqual(overflow.clientWidth + OVERFLOW_TOLERANCE);
+
+  const axe = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  const contrastNodes = axe.violations
+    .filter((violation) => violation.id === "color-contrast")
+    .flatMap((violation) => violation.nodes.map((node) => ({ html: node.html, summary: node.failureSummary ?? violation.help })));
+  const otherViolations = axe.violations.filter((violation) => violation.id !== "color-contrast");
+  if (otherViolations.length > 0) {
+    await testInfo.attach("axe-outside-the-ruler-new-appointment", {
+      body: JSON.stringify(otherViolations, null, 2),
+      contentType: "application/json",
+    });
+  }
+  expect
+    .soft(
+      contrastNodes,
+      `insufficient contrast at the new appointment screen/${testInfo.project.name}:
+${JSON.stringify(contrastNodes, null, 2)}`,
+    )
+    .toEqual([]);
+
+  const focus = await measureFirstTabFocus(page);
+  expect
+    .soft(focus, `Tab moved focus nowhere at the new appointment screen: the screen has no keyboard entry point`)
+    .not.toBeNull();
+  expect
+    .soft(focus?.visible, `focus landed on something with no box at the new appointment screen`)
+    .toBe(true);
+  expect
+    .soft(
+      hasFocusIndicator(focus),
+      `no visible focus indicator on <${focus?.tag}> at the new appointment screen/${testInfo.project.name}`,
+    )
+    .toBe(true);
+});
+
+/**
  * The onboarding frame (Goal089, G-6). Below 1024px there is no sidebar: the
  * column has the progress bar and "Sair" on top, and its primary action is
  * anchored at the bottom of the window. From 1024px there is no top bar: the

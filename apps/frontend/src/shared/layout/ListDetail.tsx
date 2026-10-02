@@ -4,6 +4,8 @@ type ListDetailLayoutProps = {
   detail: ReactNode;
   list: ReactNode;
   listLabel: string;
+  /** O painel vem antes da lista no DOM (ordem de foco/leitura); a grade mantém a lista à esquerda. */
+  panelFirst?: boolean;
 };
 
 /**
@@ -15,13 +17,23 @@ export function ListDetailLayout({
   detail,
   list,
   listLabel,
+  panelFirst = false,
 }: ListDetailLayoutProps) {
-  return (
+  const listNode = (
+    <aside aria-label={listLabel} className="list-detail-list">
+      {list}
+    </aside>
+  );
+  const panelNode = <div className="list-detail-panel">{detail}</div>;
+  return panelFirst ? (
+    <div className="list-detail list-detail-panel-first">
+      {panelNode}
+      {listNode}
+    </div>
+  ) : (
     <div className="list-detail">
-      <aside aria-label={listLabel} className="list-detail-list">
-        {list}
-      </aside>
-      <div className="list-detail-panel">{detail}</div>
+      {listNode}
+      {panelNode}
     </div>
   );
 }

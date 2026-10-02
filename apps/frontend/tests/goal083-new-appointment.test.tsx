@@ -228,6 +228,13 @@ beforeEach(() => {
   listTimeBlocks.mockResolvedValue([]);
 });
 
+/** O separador da soma é só para leitor de tela: compara o texto do bloco inteiro (A6, D-111). */
+function totalText(expected: string) {
+  return (_content: string, element: Element | null) =>
+    Boolean(element?.classList.contains("agenda-new-total")) &&
+    element?.textContent?.replace(/\s+/g, " ") === expected;
+}
+
 function renderForm(customerId?: string) {
   return render(
     <ShellConfigProvider>
@@ -251,7 +258,7 @@ describe("prova 1 — cliente cadastrado, dois serviços, um clique", () => {
     await user.click(screen.getByRole("checkbox", { name: /Escova/ }));
 
     expect(
-      await screen.findByText("2 serviços · 1 h 30 · R$ 150,00"),
+      await screen.findByText(totalText("2 serviços · 1 h 30 · R$ 150,00")),
     ).toBeVisible();
 
     await user.click(await screen.findByRole("radio", { name: "09:00" }));

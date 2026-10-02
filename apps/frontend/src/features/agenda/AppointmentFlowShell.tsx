@@ -5,6 +5,7 @@ import { type ReactNode } from "react";
 
 import { type CalendarState } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
+import { PushedBar } from "@/shared/layout/PushedBar";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { StatePanel } from "@/shared/ui/States";
@@ -14,10 +15,11 @@ import { AgendaDayColumn } from "./AgendaDayColumn";
 import { isoDate } from "./occupancy";
 
 /**
- * Rota de um agendamento que já existe (detalhe, cancelar, remarcar): tela
- * empurrada abaixo de 1024 px e, a partir dela, a coluna da Agenda à esquerda
- * (D-110 (a), estendendo D-103). `id` e `date` vêm da tela da rota; `date`
- * fica `null` enquanto o agendamento não chegou.
+ * Rota com a coluna da Agenda ao lado: tela empurrada abaixo de 1024 px e, a
+ * partir dela, a coluna à esquerda (D-110 (a), estendendo D-103). `date` vem
+ * da tela da rota e fica `null` enquanto o agendamento não chegou; `id` marca
+ * a linha do agendamento aberto e falta no novo agendamento, onde nada está
+ * aberto.
  */
 export type AppointmentRoute = { date: string | null; id?: string };
 
@@ -27,6 +29,7 @@ export function AppointmentFlowShell({
   bare = false,
   calendar = null,
   children,
+  closeLabel,
   description,
   loading,
   title,
@@ -37,6 +40,8 @@ export function AppointmentFlowShell({
   bare?: boolean;
   calendar?: CalendarState | null;
   children: ReactNode;
+  /** Troca o cabeçalho "Voltar" pela barra empurrada com "×" (nome acessível) e o título. */
+  closeLabel?: string;
   description?: string;
   loading: boolean;
   title: string;
@@ -53,6 +58,18 @@ export function AppointmentFlowShell({
   });
   const page = bare ? (
     children
+  ) : closeLabel ? (
+    <div className="agenda-new-screen">
+      <PushedBar
+        backHref={backHref}
+        backIcon="x"
+        backLabel={closeLabel}
+        title={title}
+      />
+      <div className="agenda-new-screen-body">
+        {loading ? <AgendaLoading /> : children}
+      </div>
+    </div>
   ) : (
     <div className="agenda-flow-page">
       <header className="agenda-flow-header">
@@ -73,6 +90,7 @@ export function AppointmentFlowShell({
       date={
         appointmentRoute.date ?? (loading ? null : isoDate(new Date()))
       }
+      panelFirst={Boolean(closeLabel)}
     >
       {page}
     </AgendaDayColumn>

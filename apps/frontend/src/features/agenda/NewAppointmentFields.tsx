@@ -6,16 +6,7 @@ import { type Customer, type CustomerList } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { displayPhone } from "@/shared/phone";
 
-import {
-  addDays,
-  type AgendaEntry,
-  describeEntry,
-  formatDate,
-  isoDate,
-  minutesToTime,
-  parseDate,
-  timeToMinutes,
-} from "./occupancy";
+import { addDays, isoDate, parseDate } from "./occupancy";
 
 const SUGGESTED_CUSTOMERS = 5;
 const DATE_STRIP_DAYS = 6;
@@ -96,11 +87,21 @@ export function CustomerField({
       </span>
       {selected ? (
         <div className="agenda-new-customer">
-          <span aria-hidden="true" className="agenda-new-avatar">
-            {initials(personLabel(selected))}
+          <span className="agenda-new-customer-chip">
+            <span aria-hidden="true" className="agenda-new-avatar">
+              {initials(personLabel(selected))}
+            </span>
+            {personLabel(selected)}
+            <button
+              aria-label={`Remover ${personLabel(selected)}`}
+              className="agenda-new-customer-clear"
+              onClick={onSwap}
+              type="button"
+            >
+              <Icon name="x" />
+            </button>
           </span>
-          <strong>{personLabel(selected)}</strong>
-          <button className="btn btn-tertiary" onClick={onSwap} type="button">
+          <button className="agenda-new-swap" onClick={onSwap} type="button">
             Trocar
           </button>
         </div>
@@ -166,9 +167,11 @@ export function DateStrip({
   date,
   onChange,
   onTogglePicker,
+  openWeekdays,
   pickerOpen,
 }: {
   date: string;
+  openWeekdays: Set<number> | null;
   onChange: (value: string) => void;
   onTogglePicker: () => void;
   pickerOpen: boolean;
@@ -188,7 +191,7 @@ export function DateStrip({
         className="agenda-new-days"
         role="group"
       >
-        {days.map((day) => {
+        {days.map((day, index) => {
           const parsed = parseDate(day);
           return (
             <button
@@ -199,6 +202,12 @@ export function DateStrip({
               }).format(parsed)}
               aria-pressed={date === day}
               className="agenda-new-day"
+              data-closed={
+                openWeekdays && !openWeekdays.has(parsed.getDay())
+                  ? "true"
+                  : undefined
+              }
+              data-today={index === 0 ? "true" : undefined}
               key={day}
               onClick={() => onChange(day)}
               type="button"
@@ -216,7 +225,9 @@ export function DateStrip({
           type="button"
         >
           <span>…</span>
-          <Icon name="calendar" />
+          <strong>
+            <Icon name="calendar" />
+          </strong>
         </button>
       </div>
       {(pickerOpen || custom) && (
@@ -235,71 +246,5 @@ export function DateStrip({
         </label>
       )}
     </div>
-  );
-}
-
-export function DayList({
-  date,
-  entries,
-  loading,
-  preview,
-}: {
-  date: string;
-  entries: AgendaEntry[] | null;
-  loading: boolean;
-  preview: { label: string; minutes: number; startTime: string } | null;
-}) {
-  const rows = (entries ?? [])
-    .filter((entry) => entry.kind !== "buffer")
-    .map((entry) => ({
-      end: entry.endMinutes,
-      key: entry.key,
-      presentation: describeEntry(entry),
-      start: entry.startMinutes,
-    }));
-  const previewStart = preview ? timeToMinutes(preview.startTime) : null;
-  return (
-    <aside aria-label={`Dia ${formatDate(date)}`} className="agenda-new-day-panel">
-      <h2>{formatDate(date)}</h2>
-      {loading ? (
-        <p className="muted">Consultando a agenda do dia…</p>
-      ) : entries === null ? (
-        <p className="muted">Não foi possível listar o que já está marcado.</p>
-      ) : rows.length === 0 && !preview ? (
-        <p className="muted">Nada marcado neste dia.</p>
-      ) : (
-        <ol className="agenda-new-day-list">
-          {[
-            ...rows.map((row) => ({ ...row, isNew: false })),
-            ...(preview && previewStart !== null
-              ? [
-                  {
-                    end: previewStart + preview.minutes,
-                    isNew: true,
-                    key: "new",
-                    presentation: {
-                      detail: null as string | null,
-                      title: preview.label,
-                    },
-                    start: previewStart,
-                  },
-                ]
-              : []),
-          ]
-            .sort((a, b) => a.start - b.start)
-            .map((row) => (
-              <li className={row.isNew ? "is-new" : undefined} key={row.key}>
-                <span className="agenda-new-day-time">
-                  {minutesToTime(row.start)}–{minutesToTime(row.end)}
-                </span>
-                <strong>{row.presentation.title}</strong>
-                {row.presentation.detail && (
-                  <span className="muted">{row.presentation.detail}</span>
-                )}
-              </li>
-            ))}
-        </ol>
-      )}
-    </aside>
   );
 }

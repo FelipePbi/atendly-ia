@@ -278,6 +278,17 @@ beforeEach(() => {
   listTimeBlocks.mockResolvedValue([]);
 });
 
+/** O separador da soma é só para leitor de tela: compara o texto do bloco inteiro (A6, D-111). */
+function totalText(expected: string | RegExp) {
+  return (_content: string, element: Element | null) => {
+    if (!element?.classList.contains("agenda-new-total")) return false;
+    const text = (element.textContent ?? "").replace(/\s+/g, " ");
+    return typeof expected === "string"
+      ? text === expected
+      : expected.test(text);
+  };
+}
+
 function renderCreate() {
   return render(
     <ShellConfigProvider>
@@ -371,7 +382,7 @@ describe("múltiplos serviços e o total do acordo", () => {
     await user.click(screen.getByRole("checkbox", { name: /Escova/ }));
 
     expect(
-      await screen.findByText("2 serviços · 1 h 30 · R$ 150,00"),
+      await screen.findByText(totalText("2 serviços · 1 h 30 · R$ 150,00")),
     ).toBeVisible();
     await waitFor(() => {
       const last = getAvailability.mock.calls.at(-1);
@@ -396,11 +407,13 @@ describe("múltiplos serviços e o total do acordo", () => {
     });
 
     const user = await pickService(/Corte feminino/);
-    expect(await screen.findByText("1 serviço · 1 h · R$ 90,00")).toBeVisible();
+    expect(
+      await screen.findByText(totalText("1 serviço · 1 h · R$ 90,00")),
+    ).toBeVisible();
 
     await user.click(screen.getByRole("checkbox", { name: /Química/ }));
 
-    const total = await screen.findByText(/^2 serviços · 1 h 45/);
+    const total = await screen.findByText(totalText(/^2 serviços · 1 h 45/));
     expect(total).toHaveTextContent("Sob consulta");
     expect(total).not.toHaveTextContent(/R\$/);
   });

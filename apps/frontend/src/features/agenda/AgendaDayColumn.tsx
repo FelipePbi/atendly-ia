@@ -38,6 +38,7 @@ export function AgendaDayColumn({
   calendar,
   children,
   date,
+  panelFirst = false,
 }: {
   appointmentId?: string;
   /** Lido pela tela da rota; a coluna espera por ele em vez de pedir de novo. */
@@ -45,6 +46,8 @@ export function AgendaDayColumn({
   children: ReactNode;
   /** Dia a mostrar; `null` enquanto a tela da rota ainda não sabe qual é. */
   date: string | null;
+  /** O formulário vem antes da coluna no DOM, para que o foco e a leitura comecem nele. */
+  panelFirst?: boolean;
 }) {
   const [anchor, setAnchor] = useState(date);
   const [cursor, setCursor] = useState<Date | null>(() =>
@@ -81,7 +84,12 @@ export function AgendaDayColumn({
           onChangeDay={setCursor}
         />
       )}
-      <ListDetailLayout detail={children} list={list} listLabel="Agenda do dia" />
+      <ListDetailLayout
+        detail={children}
+        list={list}
+        listLabel="Agenda do dia"
+        panelFirst={panelFirst}
+      />
     </div>
   );
 }

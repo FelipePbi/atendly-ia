@@ -411,7 +411,7 @@ describe("criação sem diálogo de confirmação", () => {
     );
   });
 
-  test("confirmação de cancelamento: mesma garantia de foco na integração real", async () => {
+  test("cancelamento em um passo (A8): a sheet prende o foco, passa no axe e Esc volta ao detalhe sem cancelar", async () => {
     getAppointment.mockResolvedValue(appointmentFixture());
     cancelAppointment.mockResolvedValue(appointmentFixture({ status: "CANCELLED" }));
     const user = userEvent.setup();
@@ -421,18 +421,25 @@ describe("criação sem diálogo de confirmação", () => {
         <CancelFlow appointmentId="apt-1" />
       </ShellConfigProvider>,
     );
-    const trigger = await screen.findByRole("button", {
-      name: "Revisar cancelamento",
-    });
-    await user.click(trigger);
+    // A sheet é a confirmação: já está aberta, sem botão "Revisar cancelamento".
     const dialog = await screen.findByRole("dialog");
+    expect(
+      screen.queryByRole("button", { name: "Revisar cancelamento" }),
+    ).not.toBeInTheDocument();
 
     await expectNoA11yViolations(container);
-    expect(within(dialog).getByRole("button", { name: "Fechar" })).toHaveFocus();
+    expect(dialog).toHaveFocus();
+
+    // Tab e Shift+Tab giram dentro da sheet, nunca saem para o detalhe inerte.
+    for (let step = 0; step < 6; step += 1) {
+      await user.tab();
+      expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    }
+    await user.tab({ shift: true });
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
 
     await user.keyboard("{Escape}");
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(trigger).toHaveFocus();
+    expect(replace).toHaveBeenCalledWith("/agenda/agendamento?id=apt-1");
     expect(cancelAppointment).not.toHaveBeenCalled();
   });
 });

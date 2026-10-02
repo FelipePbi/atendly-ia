@@ -6,41 +6,76 @@ import { type ReactNode } from "react";
 import { type CalendarState } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
+import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { StatePanel } from "@/shared/ui/States";
 
 import { AgendaLoading } from "./AgendaBoard";
+import { AgendaDayColumn } from "./AgendaDayColumn";
+import { isoDate } from "./occupancy";
+
+/**
+ * Rota de um agendamento que já existe (detalhe, cancelar, remarcar): tela
+ * empurrada abaixo de 1024 px e, a partir dela, a coluna da Agenda à esquerda
+ * (D-110 (a), estendendo D-103). `id` e `date` vêm da tela da rota; `date`
+ * fica `null` enquanto o agendamento não chegou.
+ */
+export type AppointmentRoute = { date: string | null; id?: string };
 
 export function AppointmentFlowShell({
+  appointmentRoute,
+  backHref = "/agenda",
+  bare = false,
+  calendar = null,
   children,
   description,
   loading,
   title,
 }: {
+  appointmentRoute?: AppointmentRoute;
+  backHref?: string;
+  /** A tela traz a própria barra (`PushedBar`) e cuida do carregamento. */
+  bare?: boolean;
   calendar?: CalendarState | null;
   children: ReactNode;
-  description: string;
+  description?: string;
   loading: boolean;
   title: string;
 }) {
+  const wide = useWideLayout();
+  // Uma chamada por árvore (D-030, D-031, D-103 (f)): a coluna ao lado não
+  // configura a casca.
   useShellConfig({
     active: "agenda",
     loading,
     module: "agenda",
+    ...(appointmentRoute ? { pushed: true } : {}),
     title,
   });
+  const page = bare ? (
+    children
+  ) : (
+    <div className="agenda-flow-page">
+      <header className="agenda-flow-header">
+        <Link className="agenda-flow-back" href={backHref}>
+          <Icon name="chevron-left" /> Voltar
+        </Link>
+        <h1>{title}</h1>
+        {description && <p>{description}</p>}
+      </header>
+      {loading ? <AgendaLoading /> : children}
+    </div>
+  );
+  if (!appointmentRoute || !wide) return page;
   return (
-    <>
-      <div className="agenda-flow-page">
-        <header className="agenda-flow-header">
-          <Link className="agenda-flow-back" href="/agenda">
-            <Icon name="chevron-left" /> Voltar
-          </Link>
-          <h1>{title}</h1>
-          <p>{description}</p>
-        </header>
-        {loading ? <AgendaLoading /> : children}
-      </div>
-    </>
+    <AgendaDayColumn
+      appointmentId={appointmentRoute.id}
+      calendar={calendar}
+      date={
+        appointmentRoute.date ?? (loading ? null : isoDate(new Date()))
+      }
+    >
+      {page}
+    </AgendaDayColumn>
   );
 }
 

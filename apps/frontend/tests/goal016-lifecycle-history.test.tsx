@@ -168,12 +168,21 @@ function renderDetail() {
   );
 }
 
-/** O eixo "estado" repete o rótulo no cabeçalho e no painel de ciclo de vida
- * de propósito (contexto em dois lugares); os testes de eixo isolam o painel
- * para não confundir os dois. */
-function lifecycleSection(): HTMLElement {
-  return screen.getByRole("heading", { name: "Ciclo do atendimento" })
-    .closest("section") as HTMLElement;
+/** No detalhe do quadro A5 o ciclo do atendimento vive no menu "•••" da barra
+ * (D-110 (c)): cada ação é um item do menu, e o estado é o selo ao lado do
+ * horário. */
+async function openMenu(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    await screen.findByRole("button", { name: "Mais ações do agendamento" }),
+  );
+}
+
+async function chooseMenuItem(
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+) {
+  await openMenu(user);
+  await user.click(await screen.findByRole("menuitem", { name }));
 }
 
 describe("eixos distintos do ciclo de vida", () => {
@@ -185,16 +194,23 @@ describe("eixos distintos do ciclo de vida", () => {
     renderDetail();
     const user = userEvent.setup();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Concluir atendimento" }),
-    );
+    await chooseMenuItem(user, "Concluir atendimento");
 
     await waitFor(() => expect(completeAppointment).toHaveBeenCalledWith("apt-1"));
-    const section = await waitFor(() => lifecycleSection());
-    expect(within(section).getByText("Concluído")).toBeVisible();
-    // Concluir não mexe nos outros dois eixos.
-    expect(within(section).getByText("Aguardando confirmação")).toBeVisible();
-    expect(within(section).getByText("Ainda não registrado")).toBeVisible();
+    expect(await screen.findByText("Concluído")).toBeVisible();
+    // Concluir não mexe nos outros dois eixos: a presença continua por
+    // confirmar e o valor final continua por registrar, ambos no menu.
+    await openMenu(user);
+    expect(
+      screen.getByRole("menuitem", { name: "Confirmar presença" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("menuitem", { name: "Registrar valor final" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("menuitem", { name: "Concluir atendimento" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Valor final")).not.toBeInTheDocument();
   });
 
   test("conclusão automática aparece como automática, não como ação da profissional", async () => {
@@ -207,9 +223,8 @@ describe("eixos distintos do ciclo de vida", () => {
     );
     renderDetail();
 
-    const section = await waitFor(() => lifecycleSection());
-    expect(within(section).getByText("Concluído automaticamente")).toBeVisible();
-    expect(within(section).queryByText("Concluído")).not.toBeInTheDocument();
+    expect(await screen.findByText("Concluído automaticamente")).toBeVisible();
+    expect(screen.queryByText("Concluído")).not.toBeInTheDocument();
   });
 
   test("marcar falta pede nota opcional e envia só o que foi preenchido", async () => {
@@ -220,9 +235,7 @@ describe("eixos distintos do ciclo de vida", () => {
     renderDetail();
     const user = userEvent.setup();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Marcar falta" }),
-    );
+    await chooseMenuItem(user, "Não compareceu");
     await user.type(
       screen.getByLabelText("Observação da falta (opcional)"),
       "Cliente avisou depois",
@@ -234,8 +247,7 @@ describe("eixos distintos do ciclo de vida", () => {
         note: "Cliente avisou depois",
       }),
     );
-    const section = await waitFor(() => lifecycleSection());
-    expect(within(section).getByText("Não compareceu")).toBeVisible();
+    expect(await screen.findByText("Não compareceu")).toBeVisible();
   });
 
   test("confirmar presença é uma ação própria, separada da conclusão", async () => {
@@ -246,18 +258,17 @@ describe("eixos distintos do ciclo de vida", () => {
     renderDetail();
     const user = userEvent.setup();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Confirmar presença" }),
-    );
+    await chooseMenuItem(user, "Confirmar presença");
 
     await waitFor(() =>
       expect(confirmAppointmentPresence).toHaveBeenCalledWith("apt-1"),
     );
-    expect(await screen.findByText("Presença confirmada")).toBeVisible();
     // O estado do atendimento continua confirmado: presença não conclui.
-    expect(within(lifecycleSection()).getByText("Confirmado")).toBeVisible();
+    expect(await screen.findByText("Confirmado")).toBeVisible();
+    expect(screen.queryByText("Concluído")).not.toBeInTheDocument();
+    await openMenu(user);
     expect(
-      screen.queryByRole("button", { name: "Confirmar presença" }),
+      screen.queryByRole("menuitem", { name: "Confirmar presença" }),
     ).not.toBeInTheDocument();
   });
 
@@ -275,9 +286,7 @@ describe("eixos distintos do ciclo de vida", () => {
     renderDetail();
     const user = userEvent.setup();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Registrar valor final" }),
-    );
+    await chooseMenuItem(user, "Registrar valor final");
     await user.type(
       screen.getByLabelText("Valor efetivamente cobrado (R$)"),
       "120",
@@ -290,8 +299,9 @@ describe("eixos distintos do ciclo de vida", () => {
       }),
     );
     expect(await screen.findByText("R$ 120,00")).toBeVisible();
-    // O preço previsto do acordo (R$ 90,00) continua exibido à parte.
-    expect(screen.getByText("R$ 90,00")).toBeVisible();
+    // O preço previsto do acordo (R$ 90) continua exibido à parte, no total.
+    expect(screen.getAllByText("1 h · R$ 90").length).toBeGreaterThan(0);
+    expect(screen.getByText("Valor final")).toBeVisible();
   });
 });
 
@@ -320,7 +330,7 @@ describe("histórico cronológico com desempate por sequence", () => {
     expect(items).toHaveLength(2);
     // sequence "9" vem antes de "20" mesmo com occurredAt igual — se o
     // desempate fosse por string, "20" venceria "9" na ordem errada.
-    expect(within(items[0]).getByText(/Agendamento criado/)).toBeVisible();
+    expect(within(items[0]).getByText(/Criado/)).toBeVisible();
     expect(within(items[1]).getByText(/Reserva consumida/)).toBeVisible();
   });
 
@@ -340,10 +350,10 @@ describe("histórico cronológico com desempate por sequence", () => {
     renderDetail();
 
     const item = await screen.findByRole("listitem");
-    expect(within(item).getByText(/Reagendado/)).toBeVisible();
-    expect(within(item).getByText(/IA/)).toBeVisible();
+    expect(within(item).getByText(/Remarcado/)).toBeVisible();
+    expect(within(item).getByText("IA")).toBeVisible();
     // "cus-ana" não é o user.id da sessão: nenhum identificador interno vaza.
-    expect(within(item).queryByText(/^Por /)).not.toBeInTheDocument();
+    expect(within(item).queryByText(/cus-ana/)).not.toBeInTheDocument();
     expect(
       within(item).getByText("Motivo: Cliente pediu pelo WhatsApp"),
     ).toBeVisible();
@@ -364,7 +374,7 @@ describe("histórico cronológico com desempate por sequence", () => {
     renderDetail();
 
     const item = await screen.findByRole("listitem");
-    expect(within(item).getByText("Por Dono do negócio")).toBeVisible();
+    expect(within(item).getByText("Dono do negócio")).toBeVisible();
   });
 
   test("histórico vazio não trava a tela", async () => {
@@ -382,7 +392,7 @@ describe("acessibilidade", () => {
   test("o detalhe com ciclo de vida e histórico passa no axe", async () => {
     getAppointment.mockResolvedValue(appointmentFixture());
     const { container } = renderDetail();
-    await screen.findByRole("button", { name: "Concluir atendimento" });
+    await screen.findByRole("button", { name: "Mais ações do agendamento" });
     await screen.findByRole("listitem");
     await expectNoA11yViolations(container);
   });

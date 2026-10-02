@@ -45,8 +45,11 @@ import { ShellConfigProvider } from "@/shared/layout/ShellConfig";
 const push = vi.fn();
 const replace = vi.fn();
 
+// Router estável, como o do Next: um objeto novo a cada render reexecutaria o
+// efeito de foco da sheet de cancelamento (A8) a cada tecla digitada.
+const router = { push, replace };
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push, replace }),
+  useRouter: () => router,
 }));
 
 const cancelAppointment = vi.fn();
@@ -388,14 +391,20 @@ describe("ShellConfigProvider + Detalhe do agendamento (ciclo de vida e históri
 
     renderWithShell(<AppointmentDetail appointmentId="apt-1" />);
 
-    await screen.findByRole("heading", { name: "Ana Paula" });
-    const toggle = await screen.findByRole("button", { name: "Marcar falta" });
-    await user.click(toggle);
-    await user.click(toggle);
-    await user.click(toggle);
-    await user.click(toggle);
+    const menu = await screen.findByRole("button", {
+      name: "Mais ações do agendamento",
+    });
+    // O formulário de falta abre pelo menu "•••" e fecha por "Voltar".
+    for (let round = 0; round < 4; round += 1) {
+      await user.click(menu);
+      await user.click(await screen.findByRole("menuitem", { name: "Não compareceu" }));
+      await user.click(await screen.findByRole("button", { name: "Voltar" }));
+    }
 
-    expect(await screen.findByText("Aguardando confirmação")).toBeVisible();
+    expect(await screen.findByText("Confirmado")).toBeVisible();
+    expect(
+      screen.queryByRole("form", { name: "Não compareceu" }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -407,6 +416,7 @@ describe("ShellConfigProvider + Reagendar não excede a profundidade de atualiza
 
     renderWithShell(<RescheduleFlow appointmentId="apt-1" />);
 
+    await user.click(await screen.findByRole("button", { name: "Outro horário" }));
     const manualTime = await screen.findByLabelText(
       "Outro horário, fora dos oferecidos",
     );
@@ -423,7 +433,9 @@ describe("ShellConfigProvider + Cancelar não excede a profundidade de atualiza�
 
     renderWithShell(<CancelFlow appointmentId="apt-1" />);
 
-    const reasonField = await screen.findByLabelText("Motivo ou observação (opcional)");
+    const reasonField = await screen.findByLabelText(
+      "Motivo (opcional, só para você)",
+    );
     await user.type(reasonField, "Cliente remarcou por telefone");
     expect(reasonField).toHaveValue("Cliente remarcou por telefone");
   });

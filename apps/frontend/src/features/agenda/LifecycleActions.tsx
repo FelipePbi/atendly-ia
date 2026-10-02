@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 
 import {
   type Appointment,
@@ -8,6 +8,7 @@ import {
   type AppointmentNotification,
   type AppointmentNotificationReason,
 } from "@/data";
+import { type PushedBarMenuItem } from "@/shared/layout/PushedBar";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Button } from "@/shared/ui/Button";
 
@@ -114,6 +115,114 @@ function normalizedStatus(status: string): string {
 }
 
 /**
+ * Intenções de envio **deste** agendamento que ainda descrevem um envio ou
+ * uma espera. Leitura auxiliar: falhar aqui não afirma nem esconde um estado
+ * real, só deixa de mostrar as linhas de envio — nunca bloqueia o ciclo.
+ */
+export function useAppointmentNotifications(
+  appointmentId: string | null,
+): AppointmentNotification[] {
+  const [notifications, setNotifications] = useState<AppointmentNotification[]>(
+    [],
+  );
+  useEffect(() => {
+    if (!appointmentId) return;
+    const controller = new AbortController();
+    getProductServices()
+      .calendar.listAppointmentNotifications(appointmentId, controller.signal)
+      .then(setNotifications)
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [appointmentId]);
+  return visibleNotifications(notifications);
+}
+
+/**
+ * As chamadas do ciclo do atendimento e quando cada uma é permitida, num
+ * lugar só: a lista do Dia (`LifecycleActions`) e o menu "•••" do detalhe
+ * (`useLifecycleMenu`) fazem exatamente as mesmas chamadas.
+ */
+function useLifecycleOperations(
+  appointment: Appointment | null,
+  onUpdated: (lifecycle: AppointmentLifecycle) => void,
+) {
+  const [busy, setBusy] = useState<Busy>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const status = appointment ? normalizedStatus(appointment.status) : "";
+  // O início já chegou (Goal069 AG-09): concluir ou marcar falta antes disso
+  // afirmaria um atendimento que ainda não começou.
+  const started = appointment ? appointmentHasStarted(appointment) : false;
+  const canComplete = status === "CONFIRMED" && started;
+  const canMarkNoShow =
+    (status === "CONFIRMED" || status === "COMPLETED") && started;
+  const canConfirmPresence = Boolean(
+    appointment && status !== "CANCELLED" && !appointment.presenceConfirmedAt,
+  );
+  const canSetFinalValue = Boolean(appointment) && status !== "CANCELLED";
+
+  async function run(
+    kind: Exclude<Busy, null>,
+    fallback: string,
+    call: (id: string) => Promise<AppointmentLifecycle>,
+  ): Promise<boolean> {
+    if (!appointment) return false;
+    setBusy(kind);
+    setError(null);
+    try {
+      onUpdated(await call(appointment.id));
+      return true;
+    } catch (caught) {
+      setError(requestError(caught, fallback));
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const calendar = () => getProductServices().calendar;
+
+  return {
+    busy,
+    canComplete,
+    canConfirmPresence,
+    canMarkNoShow,
+    canSetFinalValue,
+    error,
+    setError,
+    status,
+    complete: () =>
+      run("complete", "Não foi possível concluir o atendimento.", (id) =>
+        calendar().completeAppointment(id),
+      ),
+    confirmPresence: () =>
+      run(
+        "confirm-presence",
+        "Não foi possível confirmar a presença.",
+        (id) => calendar().confirmAppointmentPresence(id),
+      ),
+    markNoShow: (note: string) =>
+      run("no-show", "Não foi possível marcar a falta.", (id) =>
+        calendar().markAppointmentNoShow(id, {
+          note: note.trim() || undefined,
+        }),
+      ),
+    setFinalValue: async (input: string) => {
+      const amount = Number(input.replace(",", "."));
+      if (!Number.isFinite(amount) || amount < 0) {
+        setError("Informe um valor final válido.");
+        return false;
+      }
+      return run(
+        "final-value",
+        "Não foi possível registrar o valor final.",
+        (id) => calendar().setAppointmentFinalValue(id, { amount }),
+      );
+    },
+  };
+}
+
+/**
  * Estado, presença e valor final são eixos independentes (Goal008): concluir
  * não confirma presença, confirmar presença não fecha valor, e nenhum dos
  * três infere o outro. Cada linha aqui representa um eixo — nunca uma ação
@@ -126,28 +235,21 @@ export function LifecycleActions({
   appointment: Appointment;
   onUpdated: (lifecycle: AppointmentLifecycle) => void;
 }) {
-  const [busy, setBusy] = useState<Busy>(null);
-  const [error, setError] = useState<string | null>(null);
+  const operations = useLifecycleOperations(appointment, onUpdated);
+  const {
+    busy,
+    canComplete,
+    canConfirmPresence,
+    canMarkNoShow,
+    canSetFinalValue,
+    error,
+    status,
+  } = operations;
   const [noShowOpen, setNoShowOpen] = useState(false);
   const [noShowNote, setNoShowNote] = useState("");
   const [finalValueOpen, setFinalValueOpen] = useState(false);
   const [finalValueInput, setFinalValueInput] = useState("");
-  const [notifications, setNotifications] = useState<AppointmentNotification[]>(
-    [],
-  );
-
-  useEffect(() => {
-    const controller = new AbortController();
-    getProductServices()
-      .calendar.listAppointmentNotifications(appointment.id, controller.signal)
-      .then(setNotifications)
-      // Leitura auxiliar: falhar aqui não afirma nem esconde um estado real,
-      // só deixa de mostrar as linhas de envio — nunca bloqueia o ciclo.
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, [appointment.id]);
-
-  const visible = visibleNotifications(notifications);
+  const visible = useAppointmentNotifications(appointment.id);
   const reminders = visible.filter(
     (notification) => notification.kind === "REMINDER",
   );
@@ -155,97 +257,27 @@ export function LifecycleActions({
     (notification) => notification.kind === "CHANGE_NOTICE",
   );
 
-  const status = normalizedStatus(appointment.status);
-  // O início já chegou (Goal069 AG-09): concluir ou marcar falta antes disso
-  // afirmaria um atendimento que ainda não começou.
-  const started = appointmentHasStarted(appointment);
-  const canComplete = status === "CONFIRMED" && started;
-  const canMarkNoShow =
-    (status === "CONFIRMED" || status === "COMPLETED") && started;
-  const canConfirmPresence =
-    status !== "CANCELLED" && !appointment.presenceConfirmedAt;
-  const canSetFinalValue = status !== "CANCELLED";
-
   async function complete() {
-    setBusy("complete");
-    setError(null);
-    try {
-      onUpdated(
-        await getProductServices().calendar.completeAppointment(
-          appointment.id,
-        ),
-      );
-    } catch (caught) {
-      setError(
-        requestError(caught, "Não foi possível concluir o atendimento."),
-      );
-    } finally {
-      setBusy(null);
-    }
+    await operations.complete();
   }
 
   async function submitNoShow(event: FormEvent) {
     event.preventDefault();
-    setBusy("no-show");
-    setError(null);
-    try {
-      onUpdated(
-        await getProductServices().calendar.markAppointmentNoShow(
-          appointment.id,
-          { note: noShowNote.trim() || undefined },
-        ),
-      );
+    if (await operations.markNoShow(noShowNote)) {
       setNoShowOpen(false);
       setNoShowNote("");
-    } catch (caught) {
-      setError(requestError(caught, "Não foi possível marcar a falta."));
-    } finally {
-      setBusy(null);
     }
   }
 
   async function confirmPresence() {
-    setBusy("confirm-presence");
-    setError(null);
-    try {
-      onUpdated(
-        await getProductServices().calendar.confirmAppointmentPresence(
-          appointment.id,
-        ),
-      );
-    } catch (caught) {
-      setError(
-        requestError(caught, "Não foi possível confirmar a presença."),
-      );
-    } finally {
-      setBusy(null);
-    }
+    await operations.confirmPresence();
   }
 
   async function submitFinalValue(event: FormEvent) {
     event.preventDefault();
-    const amount = Number(finalValueInput.replace(",", "."));
-    if (!Number.isFinite(amount) || amount < 0) {
-      setError("Informe um valor final válido.");
-      return;
-    }
-    setBusy("final-value");
-    setError(null);
-    try {
-      onUpdated(
-        await getProductServices().calendar.setAppointmentFinalValue(
-          appointment.id,
-          { amount },
-        ),
-      );
+    if (await operations.setFinalValue(finalValueInput)) {
       setFinalValueOpen(false);
       setFinalValueInput("");
-    } catch (caught) {
-      setError(
-        requestError(caught, "Não foi possível registrar o valor final."),
-      );
-    } finally {
-      setBusy(null);
     }
   }
 
@@ -420,5 +452,215 @@ export function LifecycleActions({
         </form>
       )}
     </div>
+  );
+}
+
+/**
+ * As mesmas ações de `LifecycleActions`, para o menu "•••" do detalhe (A5,
+ * D-110 (c)): Concluir e Confirmar presença chamam direto; Não compareceu e
+ * Registrar valor final abrem o formulário que já pediam. Cada item só existe
+ * quando a ação é permitida — agendamento cancelado não oferece nenhum.
+ */
+export function useLifecycleMenu({
+  appointment,
+  onUpdated,
+}: {
+  appointment: Appointment | null;
+  onUpdated: (lifecycle: AppointmentLifecycle) => void;
+}): { menuItems: PushedBarMenuItem[]; panel: ReactNode } {
+  const operations = useLifecycleOperations(appointment, onUpdated);
+  const { busy, error, setError } = operations;
+  const [open, setOpen] = useState<"final-value" | "no-show" | null>(null);
+  const [noShowNote, setNoShowNote] = useState("");
+  const [finalValueInput, setFinalValueInput] = useState("");
+
+  const menuItems: PushedBarMenuItem[] = [];
+  if (operations.canComplete)
+    menuItems.push({
+      label: "Concluir atendimento",
+      onSelect: () => {
+        setOpen(null);
+        void operations.complete();
+      },
+    });
+  if (operations.canMarkNoShow)
+    menuItems.push({
+      label: "Não compareceu",
+      onSelect: () => {
+        setError(null);
+        setOpen("no-show");
+      },
+    });
+  if (operations.canConfirmPresence)
+    menuItems.push({
+      label: "Confirmar presença",
+      onSelect: () => {
+        setOpen(null);
+        void operations.confirmPresence();
+      },
+    });
+  if (operations.canSetFinalValue)
+    menuItems.push({
+      label: "Registrar valor final",
+      onSelect: () => {
+        setError(null);
+        setOpen("final-value");
+      },
+    });
+
+  async function submitNoShow(event: FormEvent) {
+    event.preventDefault();
+    if (await operations.markNoShow(noShowNote)) {
+      setOpen(null);
+      setNoShowNote("");
+    }
+  }
+
+  async function submitFinalValue(event: FormEvent) {
+    event.preventDefault();
+    if (await operations.setFinalValue(finalValueInput)) {
+      setOpen(null);
+      setFinalValueInput("");
+    }
+  }
+
+  const panel = (
+    <>
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      {open === "no-show" && operations.canMarkNoShow && (
+        <form
+          aria-label="Não compareceu"
+          className="agenda-lifecycle-form agenda-appt-lifecycle-form"
+          onSubmit={(event) => void submitNoShow(event)}
+        >
+          <label className="field">
+            <span>Observação da falta (opcional)</span>
+            <textarea
+              autoFocus
+              onChange={(event) => setNoShowNote(event.target.value)}
+              rows={3}
+              value={noShowNote}
+            />
+          </label>
+          <div className="agenda-form-footer">
+            <Button
+              onClick={() => setOpen(null)}
+              type="button"
+              variant="secondary"
+            >
+              Voltar
+            </Button>
+            <Button loading={busy === "no-show"} type="submit" variant="danger">
+              Confirmar falta
+            </Button>
+          </div>
+        </form>
+      )}
+      {open === "final-value" && operations.canSetFinalValue && (
+        <form
+          aria-label="Registrar valor final"
+          className="agenda-lifecycle-form agenda-appt-lifecycle-form"
+          onSubmit={(event) => void submitFinalValue(event)}
+        >
+          <label className="field">
+            <span>Valor efetivamente cobrado (R$)</span>
+            <input
+              autoFocus
+              inputMode="decimal"
+              onChange={(event) => setFinalValueInput(event.target.value)}
+              required
+              value={finalValueInput}
+            />
+          </label>
+          <div className="agenda-form-footer">
+            <Button
+              onClick={() => setOpen(null)}
+              type="button"
+              variant="secondary"
+            >
+              Voltar
+            </Button>
+            <Button loading={busy === "final-value"} type="submit">
+              Salvar valor final
+            </Button>
+          </div>
+        </form>
+      )}
+    </>
+  );
+
+  return { menuItems, panel };
+}
+
+function formatReminderInstant(value: string): string {
+  const date = new Date(value);
+  const weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "long" })
+    .format(date)
+    .replace("-feira", "");
+  const day = new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+  }).format(date);
+  const time = new Intl.DateTimeFormat("pt-BR", {
+    hour: "2-digit",
+    hourCycle: "h23",
+    minute: "2-digit",
+  }).format(date);
+  return `${weekday}, ${day} às ${time}`;
+}
+
+/** Frase do quadro A5 para uma intenção, a partir do estado gravado. */
+function reminderSentence(notification: AppointmentNotification): string {
+  switch (notification.state) {
+    case "SENT":
+      return `Enviado ${formatReminderInstant(notification.sentAt ?? notification.dueAt)}.`;
+    case "PENDING":
+    case "CLAIMED":
+      return `Será enviado ${formatReminderInstant(notification.dueAt)}.`;
+    default:
+      return `${notificationStateLabel(notification)}.`;
+  }
+}
+
+/**
+ * Seção "Lembrete" do detalhe (A5): o que aconteceu ou vai acontecer com o
+ * lembrete **desta ocorrência**, lido das intenções gravadas — nunca de uma
+ * data calculada na tela. Sem intenção nenhuma, nenhum estado é afirmado e a
+ * seção não aparece. O aviso de alteração pedido ao cancelar ou remarcar
+ * aparece junto, com rótulo próprio.
+ */
+export function AppointmentReminder({
+  appointmentId,
+}: {
+  appointmentId: string;
+}) {
+  const visible = useAppointmentNotifications(appointmentId);
+  const reminders = visible.filter(
+    (notification) => notification.kind === "REMINDER",
+  );
+  const changeNotices = visible.filter(
+    (notification) => notification.kind === "CHANGE_NOTICE",
+  );
+  if (reminders.length === 0 && changeNotices.length === 0) return null;
+  return (
+    <section className="agenda-appt-block">
+      <h2 className="agenda-appt-label">Lembrete</h2>
+      {reminders.map((notification) => (
+        <p className="agenda-appt-text" key={notification.id}>
+          {reminders.length > 1 &&
+            `${reminderLineLabel(notification, reminders.length)}: `}
+          {reminderSentence(notification)}
+        </p>
+      ))}
+      {changeNotices.map((notification) => (
+        <p className="agenda-appt-text" key={notification.id}>
+          Aviso de alteração: {reminderSentence(notification)}
+        </p>
+      ))}
+    </section>
   );
 }

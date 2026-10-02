@@ -718,7 +718,7 @@ function nextLabel(view: AgendaView): string {
   return "Próximo mês";
 }
 
-function monthAndYear(cursor: Date): { month: string; year: string } {
+export function monthAndYear(cursor: Date): { month: string; year: string } {
   const parts = new Intl.DateTimeFormat("pt-BR", {
     month: "long",
     year: "numeric",

@@ -45,6 +45,72 @@ export function compareAppointmentEvents(
   return sequenceDiff < zero ? -1 : sequenceDiff > zero ? 1 : 0;
 }
 
+/** Verbo do quadro A5 ("Criado pela IA"): o evento no particípio, sem a origem. */
+const EVENT_VERBS: Record<AppointmentEvent["type"], string> = {
+  CREATED: "Criado",
+  RESCHEDULED: "Remarcado",
+  CANCELLED: "Cancelado",
+  COMPLETED: "Concluído",
+  NO_SHOW: "Falta registrada",
+  FINAL_VALUE_SET: "Valor final registrado",
+  PRESENCE_CONFIRMED: "Presença confirmada",
+  HOLD_CONSUMED: "Reserva consumida",
+  OVERLAP_OVERRIDE: "Sobreposição autorizada",
+};
+
+/**
+ * Autoria do evento: a IA aparece como IA; quem agiu pela equipe aparece
+ * pelo nome só quando é a própria sessão (AG-07), senão como "equipe".
+ */
+function EventAuthor({
+  actor,
+  event,
+}: {
+  actor: string | null;
+  event: AppointmentEvent;
+}) {
+  if (event.source === "AI")
+    return (
+      <>
+        pela <strong>IA</strong>
+      </>
+    );
+  if (event.source === "USER")
+    return actor ? (
+      <>
+        por <strong>{actor}</strong>
+      </>
+    ) : (
+      <>
+        pela <strong>equipe</strong>
+      </>
+    );
+  if (event.source === "INTEGRATION")
+    return (
+      <>
+        pela <strong>integração</strong>
+      </>
+    );
+  return <>automaticamente</>;
+}
+
+function formatTimelineTimestamp(value: string): string {
+  const date = new Date(value);
+  const weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "long" })
+    .format(date)
+    .replace("-feira", "");
+  const day = new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+  }).format(date);
+  const time = new Intl.DateTimeFormat("pt-BR", {
+    hour: "2-digit",
+    hourCycle: "h23",
+    minute: "2-digit",
+  }).format(date);
+  return `${weekday}, ${day} · ${time}`;
+}
+
 function formatEventTimestamp(value: string): string {
   return new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "short",
@@ -69,9 +135,12 @@ function actorLabel(
 export function AppointmentHistory({
   appointmentId,
   reloadKey,
+  variant = "list",
 }: {
   appointmentId: string;
   reloadKey?: number;
+  /** `timeline` é o histórico do quadro A5: um ponto por evento, com autoria. */
+  variant?: "list" | "timeline";
 }) {
   const { session } = useProductRuntime();
   const [events, setEvents] = useState<AppointmentEvent[] | null>(null);
@@ -115,6 +184,31 @@ export function AppointmentHistory({
   if (events.length === 0) {
     return (
       <p className="agenda-summary-note">Nenhum evento registrado ainda.</p>
+    );
+  }
+  if (variant === "timeline") {
+    return (
+      <ol className="agenda-appt-history">
+        {events.map((event) => (
+          <li className="agenda-appt-history-item" key={event.id}>
+            <span aria-hidden="true" className="agenda-appt-history-dot" />
+            <span className="agenda-appt-history-body">
+              <span className="agenda-appt-history-text">
+                {EVENT_VERBS[event.type]}{" "}
+                <EventAuthor actor={actorLabel(event.actor, session)} event={event} />
+              </span>
+              {event.reason && (
+                <span className="agenda-appt-history-reason">
+                  Motivo: {event.reason}
+                </span>
+              )}
+              <span className="agenda-appt-history-time">
+                {formatTimelineTimestamp(event.occurredAt)}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ol>
     );
   }
   return (

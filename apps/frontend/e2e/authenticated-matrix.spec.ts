@@ -2059,6 +2059,224 @@ for (const scenario of LIST_DETAIL_CASES) {
 }
 
 /**
+ * The appointment detail (Goal093, G-7). From `/agenda` on the seeded day, a
+ * real click opens the detail the way a person does. Below 1024px the day list
+ * is on screen and its row is a link; from 1024px the board opens on the week,
+ * so the click goes to the seeded day, selects the row and takes "Ver detalhes
+ * completos". Below 1024px the detail is a pushed screen: no tab bar, and
+ * "Remarcar" and "Cancelar" are whole inside the window and at least 24px
+ * (WCAG 2.5.8 AA). From 1024px the Agenda column sits beside the detail with
+ * exactly one open row (`aria-current="page"`), the appointment just opened.
+ * The screen goes through the same overflow, axe and focus checks as the
+ * routes above. One `goto` and the clicks: no request beyond the screens it
+ * walks through.
+ */
+type AppointmentDetailMeasure = {
+  bottomNavRendered: boolean;
+  frameIsPushed: boolean;
+  innerWidth: number;
+  innerHeight: number;
+  actions: Array<{
+    name: string;
+    href: string | null;
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+    width: number;
+    height: number;
+  }>;
+};
+
+async function measureAppointmentDetail(page: Page): Promise<AppointmentDetailMeasure> {
+  return page.evaluate(() => {
+    const isRendered = (el: Element): boolean => {
+      const style = getComputedStyle(el);
+      const box = el.getBoundingClientRect();
+      return style.display !== "none"
+        && style.visibility !== "hidden"
+        && box.width > 0
+        && box.height > 0;
+    };
+    const actions = Array.from(document.querySelectorAll("main#main-content a[href]"))
+      .filter((el) => isRendered(el) && ["Remarcar", "Cancelar"].includes((el.textContent ?? "").trim()))
+      .map((el) => {
+        const box = el.getBoundingClientRect();
+        return {
+          name: (el.textContent ?? "").trim(),
+          href: el.getAttribute("href"),
+          left: box.left,
+          right: box.right,
+          top: box.top,
+          bottom: box.bottom,
+          width: box.width,
+          height: box.height,
+        };
+      });
+    return {
+      bottomNavRendered: Array.from(document.querySelectorAll('nav[class$="-bottom-nav"]')).some(isRendered),
+      frameIsPushed: document.querySelector(".app-frame.is-pushed") !== null,
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      actions,
+    };
+  });
+}
+
+test(`G-7 appointment detail from /agenda, five widths`, async ({ page }, testInfo) => {
+  await waitForRateLimitBudget(testInfo);
+  watchRateLimitBudget(page);
+
+  const route = routeNamed("agenda");
+  await page.goto(route.path, { waitUntil: "networkidle" });
+  await proveAuthenticatedScreen(page, route);
+
+  const width = page.viewportSize()?.width ?? 0;
+  const wide = width >= WIDE_LAYOUT_BREAKPOINT;
+  const what = `${route.path}: the seeded appointment`;
+  const where = `${route.path} to /agenda/agendamento at ${testInfo.project.name} (${width}px)`;
+
+  if (!wide) {
+    await clickForReal(
+      page.locator('a[href^="/agenda/agendamento"]', { hasText: SEED.customerName }).first(),
+      what,
+      testInfo,
+    );
+  } else {
+    const measuredDay = String(Number(MEASURED_DATE.slice(8, 10)));
+    const dayHead = page
+      .locator(".week-map-head")
+      .filter({ has: page.locator(".week-map-date", { hasText: new RegExp(`^${measuredDay}$`, "u") }) });
+    if ((await dayHead.count()) > 0) {
+      await clickForReal(dayHead.first(), `${what}: the seeded day`, testInfo);
+    }
+    await clickForReal(
+      page.locator(".agenda-day-layout button[aria-pressed]", { hasText: SEED.customerName }).first(),
+      `${what}: the row`,
+      testInfo,
+    );
+    await clickForReal(
+      page.getByRole("link", { name: "Ver detalhes completos" }),
+      `${what}: Ver detalhes completos`,
+      testInfo,
+    );
+  }
+  await expectPath(page, /^\/agenda\/agendamento$/u, `${what} at ${testInfo.project.name}`);
+  await expect(
+    page.getByRole("heading", { name: SEED.customerName }).first(),
+    `${where}: the appointment detail did not render the customer's heading within ${CONTENT_TIMEOUT_MS}ms.`,
+  ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+  await expect(
+    page.getByRole("link", { name: "Remarcar", exact: true }),
+    `${where}: the detail has no "Remarcar" link within ${CONTENT_TIMEOUT_MS}ms.`,
+  ).toBeVisible({ timeout: CONTENT_TIMEOUT_MS });
+
+  const detail = await measureAppointmentDetail(page);
+  await testInfo.attach("appointment-detail", {
+    body: JSON.stringify(detail, null, 2),
+    contentType: "application/json",
+  });
+
+  if (!wide) {
+    expect.soft(detail.frameIsPushed, `${where}: the shell did not mark the pushed screen.`).toBe(true);
+    expect.soft(detail.bottomNavRendered, `${where}: the tab bar is rendered on the detail.`).toBe(false);
+    for (const name of ["Remarcar", "Cancelar"]) {
+      const action = detail.actions.find((candidate) => candidate.name === name);
+      expect(action, `${where}: "${name}" is not rendered on the detail.`).toBeDefined();
+      if (!action) continue;
+      expect
+        .soft(
+          Math.min(action.width, action.height),
+          `${where}: "${name}" is ${action.width}x${action.height}px, below the WCAG 2.5.8 AA minimum of ${TOUCH_TARGET_AA}px.`,
+        )
+        .toBeGreaterThanOrEqual(TOUCH_TARGET_AA);
+      expect
+        .soft(
+          action.left >= 0 && action.right <= detail.innerWidth,
+          `${where}: "${name}" runs off the side (x=${action.left}..${action.right} in ${detail.innerWidth}px).`,
+        )
+        .toBe(true);
+      // Whole inside the window, vertically too: scroll it into view first.
+      await page.getByRole("link", { name, exact: true }).scrollIntoViewIfNeeded();
+      const settled = (await measureAppointmentDetail(page)).actions.find((candidate) => candidate.name === name);
+      expect
+        .soft(
+          settled !== undefined && settled.top >= 0 && settled.bottom <= detail.innerHeight,
+          `${where}: "${name}" is not whole inside the ${detail.innerHeight}px window (${JSON.stringify(settled)}).`,
+        )
+        .toBe(true);
+    }
+  } else {
+    const boxes = await measureListDetail(page);
+    await testInfo.attach("appointment-list-detail", {
+      body: JSON.stringify(boxes, null, 2),
+      contentType: "application/json",
+    });
+    expect(boxes.list, `${where}: the Agenda column is not rendered beside the detail.`).not.toBeNull();
+    expect(boxes.panel, `${where}: the detail panel is not rendered.`).not.toBeNull();
+    if (boxes.list && boxes.panel) {
+      expect
+        .soft(
+          boxes.panel.left,
+          `${where}: the detail starts at x=${boxes.panel.left}, over the column that ends at x=${boxes.list.right}.`,
+        )
+        .toBeGreaterThanOrEqual(boxes.list.right - LIST_COLUMN_TOLERANCE);
+    }
+    expect
+      .soft(boxes.openItems, `${where}: expected exactly one open row (aria-current="page") in the Agenda column.`)
+      .toHaveLength(1);
+    expect
+      .soft(boxes.openItems[0] ?? "", `${where}: the open row is "${boxes.openItems[0] ?? ""}", expected the opened appointment.`)
+      .toContain(SEED.customerName);
+  }
+
+  // The checks the gate applies to every route: overflow, axe, visible focus.
+  const overflow = await measureOverflow(page);
+  expect
+    .soft(
+      overflow.scrollWidth,
+      `horizontal scroll at the appointment detail/${testInfo.project.name}: ${overflow.scrollWidth}px of `
+        + `content in ${overflow.clientWidth}px.\nFirst offenders: ${JSON.stringify(overflow.offenders, null, 2)}`,
+    )
+    .toBeLessThanOrEqual(overflow.clientWidth + OVERFLOW_TOLERANCE);
+
+  const axe = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  const contrastNodes = axe.violations
+    .filter((violation) => violation.id === "color-contrast")
+    .flatMap((violation) => violation.nodes.map((node) => ({ html: node.html, summary: node.failureSummary ?? violation.help })));
+  const otherViolations = axe.violations.filter((violation) => violation.id !== "color-contrast");
+  if (otherViolations.length > 0) {
+    await testInfo.attach("axe-outside-the-ruler-appointment-detail", {
+      body: JSON.stringify(otherViolations, null, 2),
+      contentType: "application/json",
+    });
+  }
+  expect
+    .soft(
+      contrastNodes,
+      `insufficient contrast at the appointment detail/${testInfo.project.name}:
+${JSON.stringify(contrastNodes, null, 2)}`,
+    )
+    .toEqual([]);
+
+  const focus = await measureFirstTabFocus(page);
+  expect
+    .soft(focus, `Tab moved focus nowhere at the appointment detail: the screen has no keyboard entry point`)
+    .not.toBeNull();
+  expect
+    .soft(focus?.visible, `focus landed on something with no box at the appointment detail`)
+    .toBe(true);
+  expect
+    .soft(
+      hasFocusIndicator(focus),
+      `no visible focus indicator on <${focus?.tag}> at the appointment detail/${testInfo.project.name}`,
+    )
+    .toBe(true);
+});
+
+/**
  * The onboarding frame (Goal089, G-6). Below 1024px there is no sidebar: the
  * column has the progress bar and "Sair" on top, and its primary action is
  * anchored at the bottom of the window. From 1024px there is no top bar: the

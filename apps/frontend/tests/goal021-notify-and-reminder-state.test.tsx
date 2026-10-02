@@ -165,7 +165,7 @@ describe("Notificar cliente em cancelar", () => {
     renderCancel();
 
     const checkbox = await screen.findByRole("checkbox", {
-      name: /Notificar cliente/,
+      name: /Avisar a cliente pelo WhatsApp/,
     });
     expect(checkbox).toBeChecked();
     expect(screen.getByText(/alteração relevante/i)).toBeVisible();
@@ -180,13 +180,12 @@ describe("Notificar cliente em cancelar", () => {
     const user = userEvent.setup();
 
     await user.click(
-      await screen.findByRole("checkbox", { name: /Notificar cliente/ }),
+      await screen.findByRole("checkbox", {
+        name: /Avisar a cliente pelo WhatsApp/,
+      }),
     );
     await user.click(
-      screen.getByRole("button", { name: "Revisar cancelamento" }),
-    );
-    await user.click(
-      await screen.findByRole("button", { name: "Confirmar cancelamento" }),
+      screen.getByRole("button", { name: "Cancelar agendamento" }),
     );
 
     await waitFor(() => expect(cancelAppointment).toHaveBeenCalledTimes(1));
@@ -206,10 +205,12 @@ describe("Notificar cliente em remarcar", () => {
     );
 
     const checkbox = await screen.findByRole("checkbox", {
-      name: /Notificar cliente/,
+      name: /Avisar a cliente pelo WhatsApp/,
     });
     expect(checkbox).toBeChecked();
-    expect(screen.getByText(/alteração relevante/i)).toBeVisible();
+    expect(
+      screen.getByText(/Recomendado: a data e o horário mudaram/),
+    ).toBeVisible();
   });
 });
 
@@ -222,15 +223,32 @@ describe("Estado do lembrete e da confirmação no detalhe, a partir da leitura"
     );
   }
 
+  async function openMenu(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(
+      await screen.findByRole("button", { name: "Mais ações do agendamento" }),
+    );
+  }
+
+  /** O detalhe carregou e a leitura das intenções de envio já respondeu. */
+  async function settledDetail() {
+    await screen.findByRole("heading", { name: "Observações" });
+    await waitFor(() => expect(listAppointmentNotifications).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
   test("lembrete ainda agendado desta ocorrência, e presença não confirmada discretamente", async () => {
     getAppointment.mockResolvedValue(appointmentFixture());
     listAppointmentNotifications.mockResolvedValue([notificationFixture()]);
+    const user = userEvent.setup();
     renderDetail();
 
+    expect(await screen.findByText(/^Será enviado /)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Lembrete" })).toBeVisible();
+    // Presença não confirmada: a ação está no menu, sem texto de ausência.
+    await openMenu(user);
     expect(
-      await screen.findByText(/^Lembrete · Agendado para /),
+      screen.getByRole("menuitem", { name: "Confirmar presença" }),
     ).toBeVisible();
-    expect(screen.getByText("Aguardando confirmação")).toBeVisible();
     expect(listAppointmentNotifications).toHaveBeenCalledWith(
       "apt-1",
       expect.anything(),
@@ -248,7 +266,7 @@ describe("Estado do lembrete e da confirmação no detalhe, a partir da leitura"
     ]);
     renderDetail();
 
-    expect(await screen.findByText(/^Lembrete · Enviado em /)).toBeVisible();
+    expect(await screen.findByText(/^Enviado /)).toBeVisible();
   });
 
   test("não enviado traz o motivo do vocabulário fechado, nunca texto fixo", async () => {
@@ -263,9 +281,7 @@ describe("Estado do lembrete e da confirmação no detalhe, a partir da leitura"
     renderDetail();
 
     expect(
-      await screen.findByText(
-        "Lembrete · Não enviado: o cliente não tem telefone",
-      ),
+      await screen.findByText("Não enviado: o cliente não tem telefone."),
     ).toBeVisible();
   });
 
@@ -281,8 +297,8 @@ describe("Estado do lembrete e da confirmação no detalhe, a partir da leitura"
     ]);
     renderDetail();
 
-    expect(await screen.findByText(/^1º lembrete · /)).toBeVisible();
-    expect(screen.getByText(/^2º lembrete · /)).toBeVisible();
+    expect(await screen.findByText(/^1º lembrete: /)).toBeVisible();
+    expect(screen.getByText(/^2º lembrete: /)).toBeVisible();
   });
 
   test("lembrete já enviado e aviso de alteração convivem depois da remarcação", async () => {
@@ -307,8 +323,8 @@ describe("Estado do lembrete e da confirmação no detalhe, a partir da leitura"
     ]);
     renderDetail();
 
-    expect(await screen.findByText(/^Lembrete · Enviado em /)).toBeVisible();
-    expect(screen.getByText("Aviso de alteração")).toBeVisible();
+    expect(await screen.findByText(/^Enviado /)).toBeVisible();
+    expect(screen.getByText(/^Aviso de alteração: Enviado /)).toBeVisible();
   });
 
   test("intenção cancelada pela remarcação não vira linha de tela", async () => {
@@ -322,7 +338,7 @@ describe("Estado do lembrete e da confirmação no detalhe, a partir da leitura"
     ]);
     renderDetail();
 
-    await screen.findByText("Aguardando confirmação");
+    await settledDetail();
     expect(screen.queryByText(/Lembrete/)).not.toBeInTheDocument();
   });
 
@@ -331,7 +347,7 @@ describe("Estado do lembrete e da confirmação no detalhe, a partir da leitura"
     listAppointmentNotifications.mockResolvedValue([]);
     renderDetail();
 
-    await screen.findByText("Aguardando confirmação");
+    await settledDetail();
     expect(screen.queryByText(/Lembrete/)).not.toBeInTheDocument();
   });
 
@@ -339,10 +355,18 @@ describe("Estado do lembrete e da confirmação no detalhe, a partir da leitura"
     getAppointment.mockResolvedValue(
       appointmentFixture({ presenceConfirmedAt: "2026-09-14T09:55:00.000Z" }),
     );
+    const user = userEvent.setup();
     renderDetail();
 
-    expect(await screen.findByText("Presença confirmada")).toBeVisible();
-    expect(screen.queryByText("Aguardando confirmação")).not.toBeInTheDocument();
+    // Presença já confirmada: o menu não oferece confirmar de novo, e as
+    // outras ações do ciclo continuam lá.
+    await openMenu(user);
+    expect(
+      screen.getByRole("menuitem", { name: "Registrar valor final" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("menuitem", { name: "Confirmar presença" }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -354,7 +378,9 @@ describe("acessibilidade das superfícies novas", () => {
         <CancelFlow appointmentId="apt-1" />
       </ShellConfigProvider>,
     );
-    await screen.findByRole("checkbox", { name: /Notificar cliente/ });
+    await screen.findByRole("checkbox", {
+      name: /Avisar a cliente pelo WhatsApp/,
+    });
     await expectNoA11yViolations(container);
   });
 
@@ -365,7 +391,9 @@ describe("acessibilidade das superfícies novas", () => {
         <RescheduleFlow appointmentId="apt-1" />
       </ShellConfigProvider>,
     );
-    await screen.findByRole("checkbox", { name: /Notificar cliente/ });
+    await screen.findByRole("checkbox", {
+      name: /Avisar a cliente pelo WhatsApp/,
+    });
     await expectNoA11yViolations(container);
   });
 
@@ -377,7 +405,7 @@ describe("acessibilidade das superfícies novas", () => {
         <AppointmentDetail appointmentId="apt-1" />
       </ShellConfigProvider>,
     );
-    await screen.findByText(/^Lembrete · Agendado para /);
+    await screen.findByText(/^Será enviado /);
     await expectNoA11yViolations(container);
   });
 });

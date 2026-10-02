@@ -9,6 +9,7 @@
  */
 
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { type Appointment, type AppointmentEvent, type CalendarState } from "@/data";
@@ -131,7 +132,7 @@ describe("§6.8 — histórico sem identificador interno (AG-07)", () => {
     renderDetail();
 
     const item = await screen.findByRole("listitem");
-    expect(within(item).getByText("Por Dono do negócio")).toBeVisible();
+    expect(within(item).getByText("Dono do negócio")).toBeVisible();
   });
 
   test("actor sem nome na sessão mostra o e-mail", async () => {
@@ -143,7 +144,7 @@ describe("§6.8 — histórico sem identificador interno (AG-07)", () => {
     renderDetail();
 
     const item = await screen.findByRole("listitem");
-    expect(within(item).getByText("Por dono@teste.com")).toBeVisible();
+    expect(within(item).getByText("dono@teste.com")).toBeVisible();
   });
 
   test("actor desconhecido (ex.: user.id de outra pessoa) não mostra o valor", async () => {
@@ -154,7 +155,8 @@ describe("§6.8 — histórico sem identificador interno (AG-07)", () => {
     renderDetail();
 
     const item = await screen.findByRole("listitem");
-    expect(within(item).queryByText(/^Por /)).not.toBeInTheDocument();
+    // Sem nome para mostrar, a autoria cai em "equipe" (A5): nunca o id.
+    expect(within(item).getByText("equipe")).toBeVisible();
     expect(
       screen.queryByText("cmujca5al0000zoi4xr95yrxk"),
     ).not.toBeInTheDocument();
@@ -167,14 +169,18 @@ describe("§6.9 — ações de fim só a partir do início do atendimento (AG-09
       appointmentFixture({ date: "2099-01-01", startTime: "10:00" }),
     );
     listAppointmentEvents.mockResolvedValue([]);
+    const user = userEvent.setup();
     renderDetail();
 
-    await screen.findByRole("heading", { name: "Ciclo do atendimento" });
+    // O ciclo vive no menu "•••" (A5): futuro só oferece presença e valor final.
+    await user.click(
+      await screen.findByRole("button", { name: "Mais ações do agendamento" }),
+    );
     expect(
-      screen.queryByRole("button", { name: "Concluir atendimento" }),
+      screen.queryByRole("menuitem", { name: "Concluir atendimento" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Marcar falta" }),
+      screen.queryByRole("menuitem", { name: "Não compareceu" }),
     ).not.toBeInTheDocument();
   });
 
@@ -183,13 +189,17 @@ describe("§6.9 — ações de fim só a partir do início do atendimento (AG-09
       appointmentFixture({ date: "2020-01-01", startTime: "10:00" }),
     );
     listAppointmentEvents.mockResolvedValue([]);
+    const user = userEvent.setup();
     renderDetail();
 
+    await user.click(
+      await screen.findByRole("button", { name: "Mais ações do agendamento" }),
+    );
     expect(
-      await screen.findByRole("button", { name: "Concluir atendimento" }),
+      screen.getByRole("menuitem", { name: "Concluir atendimento" }),
     ).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Marcar falta" }),
+      screen.getByRole("menuitem", { name: "Não compareceu" }),
     ).toBeVisible();
   });
 });

@@ -33,6 +33,7 @@ const WEEKDAY_LABELS = ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"];
  */
 export function DayView({
   canCreateAppointment = false,
+  currentAppointmentId,
   date,
   entries,
   hasAvailability = null,
@@ -46,6 +47,8 @@ export function DayView({
 }: {
   /** Governa a ação "Criar agendamento" do dia vazio (Goal069 AG-03). */
   canCreateAppointment?: boolean;
+  /** Agendamento aberto ao lado (coluna da Agenda, D-110): a linha dele leva `aria-current="page"`. */
+  currentAppointmentId?: string | null;
   date: string;
   entries: AgendaEntry[];
   /** `null` quando a disponibilidade não pôde ser lida: o motivo some, o resto continua. */
@@ -122,6 +125,7 @@ export function DayView({
                 )}
                 <li className="agenda-day-item">
                   <DayRow
+                    currentAppointmentId={currentAppointmentId}
                     entry={entry}
                     isPast={isPast(entry, date, today, nowMinutes)}
                     onSelectAppointment={onSelectAppointment}
@@ -239,6 +243,7 @@ function WeekStrip({
 }
 
 function DayRow({
+  currentAppointmentId,
   entry,
   isPast,
   onSelectAppointment,
@@ -247,6 +252,7 @@ function DayRow({
   selectedBlockId,
   serviceColors,
 }: {
+  currentAppointmentId?: string | null;
   entry: AgendaEntry;
   isPast: boolean;
   onSelectAppointment?: (appointment: Appointment) => void;
@@ -278,6 +284,7 @@ function DayRow({
 
   if (entry.kind === "appointment" && appointment) {
     const presentation = describeEntry(entry);
+    const current = Boolean(currentAppointmentId) && appointment.id === currentAppointmentId;
     const selected = appointment.id === selectedAppointmentId;
     const content = (
       <AppointmentContent
@@ -310,6 +317,7 @@ function DayRow({
     }
     return (
       <Link
+        aria-current={current ? "page" : undefined}
         className={rowClass}
         href={`/agenda/agendamento?id=${encodeURIComponent(appointment.id)}`}
       >

@@ -609,17 +609,20 @@ describe("remarcar", () => {
       startTime: "10:00",
     });
 
-    await user.click(screen.getByRole("button", { name: "Revisar alteração" }));
+    // A9: um único "Confirmar novo horário", sem etapa de revisão.
+    expect(
+      screen.queryByRole("button", { name: "Revisar alteração" }),
+    ).not.toBeInTheDocument();
     await user.click(
-      screen.getByRole("button", { name: "Confirmar reagendamento" }),
+      screen.getByRole("button", { name: "Confirmar novo horário" }),
     );
 
     await waitFor(() => expect(rescheduleAppointment).toHaveBeenCalledTimes(1));
     expect(rescheduleAppointment.mock.calls[0][1]).toEqual({
       date: ISO_TODAY,
       holdId: "hold-r",
-      // Notificar cliente vem marcado por padrão e é sempre enviado
-      // explicitamente (Goal021), nunca omitido.
+      // "Avisar a cliente pelo WhatsApp" vem marcado por padrão e é sempre
+      // enviado explicitamente (Goal021), nunca omitido.
       notifyCustomer: true,
       overlapOverride: undefined,
       overlapOverrideReason: undefined,
@@ -642,6 +645,8 @@ describe("remarcar", () => {
     const user = userEvent.setup();
 
     await screen.findByRole("radio", { name: "10:00" });
+    // "Outro horário" abre o campo manual (A9).
+    await user.click(screen.getByRole("button", { name: "Outro horário" }));
     const manual = screen.getByLabelText("Outro horário, fora dos oferecidos");
     await user.type(manual, "14:00");
     await user.click(screen.getByRole("button", { name: "Usar este horário" }));
@@ -666,7 +671,7 @@ describe("remarcar", () => {
 });
 
 describe("cancelar", () => {
-  test("pede confirmação, explica o efeito e só então envia", async () => {
+  test("a sheet é a confirmação: explica o efeito e cancela em um toque", async () => {
     getAppointment.mockResolvedValue(appointmentFixture());
     render(
       <ShellConfigProvider>
@@ -675,26 +680,24 @@ describe("cancelar", () => {
     );
     const user = userEvent.setup();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Revisar cancelamento" }),
-    );
-
+    // A8: a sheet já abre como confirmação, sem "Revisar cancelamento".
     const dialog = await screen.findByRole("dialog");
     expect(
-      within(dialog).getByText(
-        /O atendimento passa a Cancelado, o horário volta a ficar livre/,
-      ),
+      screen.queryByRole("button", { name: "Revisar cancelamento" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).getByText("Cancelar este agendamento?"),
     ).toBeVisible();
     expect(cancelAppointment).not.toHaveBeenCalled();
 
     await user.click(
-      within(dialog).getByRole("button", { name: "Confirmar cancelamento" }),
+      within(dialog).getByRole("button", { name: "Cancelar agendamento" }),
     );
 
     await waitFor(() => expect(cancelAppointment).toHaveBeenCalledTimes(1));
     expect(cancelAppointment.mock.calls[0][0]).toBe("apt-1");
-    // Notificar cliente vem marcado por padrão e é sempre enviado
-    // explicitamente (Goal021), nunca omitido.
+    // "Avisar a cliente pelo WhatsApp" vem marcado por padrão e é sempre
+    // enviado explicitamente (Goal021), nunca omitido.
     expect(cancelAppointment.mock.calls[0][1]).toEqual({
       comments: undefined,
       notifyCustomer: true,

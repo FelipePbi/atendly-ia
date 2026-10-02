@@ -55,6 +55,12 @@ async function business(label: string): Promise<SessionHandle> {
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const NOW = new Date("2026-09-15T12:00:00.000Z");
 
+// A passada inteira varre até `tenantBatchLimit` negócios do banco compartilhado
+// (lease, três fontes e liquidação por negócio), então o custo cresce com os
+// negócios das outras suítes, que correm em paralelo. Os 5 s do vitest medem o
+// tamanho do banco, não a varredura.
+const BATCH_PASS_TIMEOUT_MS = 60_000;
+
 const baseOptions = {
   owner: "test-owner",
   leaseTtlSeconds: 300,
@@ -577,7 +583,7 @@ describe.skipIf(!RUN_INTEGRATION)(
       const busyState = await sweepState(busy.tenantId);
       expect(busyState?.leaseToken).toBe("other-token");
       expect(busyState?.lastRunAt).toBeNull();
-    });
+    }, BATCH_PASS_TIMEOUT_MS);
 
     it("nenhuma rota pública, leitura reconciliada ou tela dispara purga", async () => {
       const owner = await business("sweep-no-public-trigger");

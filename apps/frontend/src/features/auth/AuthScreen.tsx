@@ -26,9 +26,53 @@ const PASSWORD_RULE_LABELS: Record<string, string> = {
   HAS_LETTER_AND_DIGIT: "Letras e números",
 };
 
-function AuthLayout({ children }: { children: ReactNode }) {
+function ArrowRight() {
   return (
-    <main className="entry-shell">
+    <svg
+      className="auth-glyph"
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+function ChevronLeft() {
+  return (
+    <svg
+      className="auth-glyph"
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M15 5l-7 7 7 7" />
+    </svg>
+  );
+}
+
+function AuthLayout({
+  children,
+  compact,
+}: {
+  children: ReactNode;
+  compact?: boolean;
+}) {
+  return (
+    <main className={`entry-shell${compact ? " entry-shell--compact" : ""}`}>
       <aside className="entry-panel" aria-label="Atendly">
         <Brand href="/login" signature="entry" />
         <div className="entry-copy">
@@ -77,6 +121,7 @@ function PasswordField({
   error,
   help,
   showRules,
+  hint,
   autoComplete,
 }: {
   id: string;
@@ -84,6 +129,7 @@ function PasswordField({
   error?: string;
   help?: string;
   showRules?: boolean;
+  hint?: string;
   autoComplete?: string;
 }) {
   const [visible, setVisible] = useState(false);
@@ -127,6 +173,7 @@ function PasswordField({
         </span>
       )}
       {!error && help && <span className="field-help">{help}</span>}
+      {hint && <span className="auth-hint">{hint}</span>}
       {showRules && (
         <ul className="password-rules" id={rulesId}>
           {PASSWORD_POLICY_RULES.map((rule) => {
@@ -311,35 +358,50 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
     }
   }
 
-  if (scenario === "request-sent" || scenario === "link-expired") {
-    const expired = scenario === "link-expired";
+  if (scenario === "request-sent") {
+    return (
+      <AuthLayout>
+        <div className="auth-card">
+          <header className="auth-heading">
+            <h1>Confira seu e-mail</h1>
+            <p>
+              Se existir uma conta com este e-mail, você vai receber um link
+              para criar uma nova senha, válido por tempo limitado. Verifique
+              também a caixa de spam.
+            </p>
+          </header>
+          <Link className="btn btn-primary auth-cta" href="/login">
+            Voltar para entrar
+          </Link>
+          <Link className="auth-alt" href="/recuperar-senha">
+            <ChevronLeft />
+            Usar outro e-mail
+          </Link>
+        </div>
+      </AuthLayout>
+    );
+  }
+
+  if (scenario === "link-expired") {
     return (
       <AuthLayout>
         <div className="auth-card auth-state">
-          <span className={`state-icon${expired ? " is-error" : ""}`}>
-            <Icon name={expired ? "alert" : "check"} />
+          <span className="state-icon is-error">
+            <Icon name="alert" />
           </span>
-          <h1>
-            {expired ? "Este link expirou" : "Enviamos um link de recuperação"}
-          </h1>
+          <h1>Este link expirou</h1>
           <p>
-            {expired
-              ? "Por segurança, links de recuperação deixam de funcionar depois de um período. Solicite um novo para criar sua senha."
-              : "Se existir uma conta com este e-mail, você vai receber um link para criar uma nova senha, válido por tempo limitado. Verifique também a caixa de spam."}
+            Por segurança, links de recuperação deixam de funcionar depois de um
+            período. Solicite um novo para criar sua senha.
           </p>
-          <Link
-            className="btn btn-primary"
-            href={expired ? "/recuperar-senha" : "/login"}
-          >
-            {expired ? "Solicitar novo link" : "Voltar para entrar"}
+          <Link className="btn btn-primary" href="/recuperar-senha">
+            Solicitar novo link
           </Link>
-          {expired && (
-            <p className="auth-footer">
-              <Link className="auth-link auth-link--standalone" href="/login">
-                Voltar para entrar
-              </Link>
-            </p>
-          )}
+          <p className="auth-footer">
+            <Link className="auth-link auth-link--standalone" href="/login">
+              Voltar para entrar
+            </Link>
+          </p>
         </div>
       </AuthLayout>
     );
@@ -372,18 +434,18 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
       ? "signup-password"
       : "login-password";
   const title = signup
-    ? "Crie sua conta"
+    ? "Criar conta"
     : newPassword
       ? "Crie uma nova senha"
       : forgotPassword
-        ? "Esqueceu sua senha?"
+        ? "Recuperar senha"
         : "Entrar";
   const subtitle = signup
     ? "Configure o negócio e conecte seu WhatsApp em poucos minutos."
     : newPassword
       ? "Diferente da senha anterior, com pelo menos 8 caracteres, letras e números."
       : forgotPassword
-        ? "Informe o e-mail da sua conta para continuar."
+        ? "Digite o e-mail da conta. Enviamos um link para você criar uma nova senha."
         : "Boas-vindas de volta. Sua agenda continua de onde parou.";
   const submitLabel = signup
     ? "Criar conta"
@@ -394,13 +456,8 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
         : "Entrar";
 
   return (
-    <AuthLayout>
+    <AuthLayout compact={signup}>
       <div className="auth-card">
-        {(signup || forgotPassword) && (
-          <Link className="auth-back" href="/login">
-            ← Voltar para entrar
-          </Link>
-        )}
         <header className="auth-heading">
           <h1>{title}</h1>
           <p>{subtitle}</p>
@@ -470,12 +527,13 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
                 newPassword ? "Nova senha" : signup ? "Crie uma senha" : "Senha"
               }
               error={fieldErrors[passwordFieldId]}
-              showRules={newPassword || signup}
+              showRules={newPassword}
+              hint={signup ? "Mínimo de 8 caracteres, com letras e números." : undefined}
             />
           )}
           {signup && (
             <div className={`field${fieldErrors.terms ? " field-error" : ""}`}>
-              <label className="check">
+              <label className="check auth-check">
                 <input
                   id="terms"
                   name="terms"
@@ -484,7 +542,7 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
                   aria-describedby={fieldErrors.terms ? "terms-error" : undefined}
                 />
                 <span className="check-box" aria-hidden="true" />
-                <span className="small">
+                <span className="auth-check-text">
                   Li e concordo com os{" "}
                   <Link href="/termos-de-uso">Termos de Uso</Link> e declaro
                   que li a{" "}
@@ -516,9 +574,15 @@ export function AuthScreen({ scenario }: { scenario: AuthScenario }) {
           >
             {loading && <span className="spinner" />}
             <span>{loading ? `${submitLabel}...` : submitLabel}</span>
-            {signup && !loading && <Icon name="chevron-right" />}
+            {signup && !loading && <ArrowRight />}
           </button>
         </form>
+        {forgotPassword && (
+          <Link className="auth-alt" href="/login">
+            <ChevronLeft />
+            Voltar para entrar
+          </Link>
+        )}
         {!newPassword && !forgotPassword && (
           <p className="auth-footer">
             {signup ? (

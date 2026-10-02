@@ -7,7 +7,7 @@
  * Atendly" por linha).
  */
 
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -71,6 +71,9 @@ async function renderList(items: Service[], editable = true) {
     </ShellConfigProvider>,
   );
   await screen.findByRole("heading", { level: 1, name: "Serviços" });
+  await waitFor(() =>
+    expect(screen.queryByLabelText("Carregando dados")).toBeNull(),
+  );
 }
 
 describe("§4.1 a linha mostra duração · preço, com recorrência e sem oferta", () => {

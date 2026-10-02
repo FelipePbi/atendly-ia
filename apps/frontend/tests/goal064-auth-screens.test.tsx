@@ -60,7 +60,9 @@ describe("cadastro — Nome, sem 'Repita' e sem o parágrafo passivo", () => {
     await user.click(screen.getByRole("checkbox"));
     await user.click(screen.getByRole("button", { name: "Criar conta" }));
 
-    expect(await screen.findByText("Criar conta")).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "Criar conta" }),
+    ).toBeVisible();
     expect(register).toHaveBeenCalledTimes(1);
     const sentBody = register.mock.calls[0][0] as RegisterInput;
     expect(sentBody.name).toBe("Camila Studio");
@@ -69,11 +71,20 @@ describe("cadastro — Nome, sem 'Repita' e sem o parágrafo passivo", () => {
   });
 });
 
-describe("regras de senha ao vivo — texto muda ao digitar, não só ícone e cor", () => {
-  test("cada regra alterna entre 'Pendente' e 'Atendida' conforme a senha digitada", async () => {
-    const user = userEvent.setup();
+describe("senha do cadastro — dica fixa do quadro L3", () => {
+  test("mostra a dica 'Mínimo de 8 caracteres, com letras e números.' sem lista de regras", () => {
     render(<AuthScreen scenario="signup" />);
-    const passwordInput = screen.getByLabelText(/^Crie uma senha/);
+    expect(
+      screen.getByText("Mínimo de 8 caracteres, com letras e números."),
+    ).toBeVisible();
+    expect(screen.queryByText("Pendente")).not.toBeInTheDocument();
+  });
+
+  test("em /nova-senha as regras seguem alternando entre 'Pendente' e 'Atendida'", async () => {
+    window.history.pushState({}, "", "/nova-senha?token=abc123");
+    const user = userEvent.setup();
+    render(<AuthScreen scenario="new-password" />);
+    const passwordInput = screen.getByLabelText(/^Nova senha/);
 
     const lengthRule = screen
       .getByText("Pelo menos 8 caracteres")

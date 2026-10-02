@@ -175,10 +175,16 @@ describe("/agenda troca cabeçalho técnico e botões soltos por uma barra únic
     expect(screen.queryByRole("button", { name: "Novo" })).toBeNull();
   });
 
-  test("'Exceções do dia' continua alcançável e some sem manageAvailability", async () => {
+  test("'Exceção do dia' continua alcançável pelo menu e some sem manageAvailability", async () => {
+    // Goal092: o botão solto "Exceções do dia" virou o item "Exceção do dia"
+    // do menu "Novo".
+    const user = userEvent.setup();
     const first = renderPage(<AgendaPage />);
+    await user.click(await screen.findByRole("button", { name: "Novo" }));
     expect(
-      await screen.findByRole("link", { name: "Exceções do dia" }),
+      within(screen.getByRole("menu")).getByRole("menuitem", {
+        name: "Exceção do dia",
+      }),
     ).toHaveAttribute("href", "/agenda/excecoes");
     first.unmount();
 
@@ -194,8 +200,12 @@ describe("/agenda troca cabeçalho técnico e botões soltos por uma barra únic
       }),
     );
     renderPage(<AgendaPage />);
-    await screen.findAllByText("Nenhum atendimento neste dia.");
-    expect(screen.queryByRole("link", { name: "Exceções do dia" })).toBeNull();
+    await user.click(await screen.findByRole("button", { name: "Novo" }));
+    expect(
+      within(screen.getByRole("menu")).queryByRole("menuitem", {
+        name: "Exceção do dia",
+      }),
+    ).toBeNull();
   });
 
   test("agenda sem fonte configurada explica a situação sem os termos banidos", async () => {

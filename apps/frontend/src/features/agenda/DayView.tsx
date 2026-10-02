@@ -2,14 +2,15 @@
 
 import clsx from "clsx";
 import Link from "next/link";
+import { Fragment, type ReactNode, useEffect, useState } from "react";
 
 import { type Appointment, type TimeBlock } from "@/data";
-import { Icon } from "@/shared/icons/Icon";
 import { Button } from "@/shared/ui/Button";
 
 import {
   addDays,
   type AgendaEntry,
+  appointmentServiceColors,
   datesWithActiveAppointment,
   describeEntry,
   entriesForDate,
@@ -17,24 +18,16 @@ import {
   isoDate,
   minutesToTime,
   parseDate,
+  type ServiceColorMap,
   startOfWeek,
+  statusLabel,
 } from "./occupancy";
-import {
-  entryPlacement,
-  type LanedEntry,
-  layoutDayEntries,
-  timeGridBounds,
-} from "./timeGrid";
 
 const WEEKDAY_LABELS = ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"];
 
 /**
- * Dia: grade cronológica, com o ocupado na posição real do tempo.
- *
- * É a mesma mecânica da Semana (`timeGrid`): eixo de horas à esquerda e cada
- * entrada posicionada por `--start`/`--span`. Uma lista ordenada diria a
- * ordem dos eventos, mas não onde está o buraco de uma hora entre eles — e é
- * o buraco que a profissional procura ao abrir o Dia.
+ * Dia: lista cronológica (quadro A1). Cada linha é um horário, o traço da cor
+ * do serviço e o que acontece ali; a grade de horas é da Semana (`timeGrid`).
  */
 export function DayView({
   canCreateAppointment = false,
@@ -47,6 +40,7 @@ export function DayView({
   onSelectDay,
   selectedAppointmentId,
   selectedBlockId,
+  serviceColors,
 }: {
   /** Governa a ação "Criar agendamento" do dia vazio (Goal069 AG-03). */
   canCreateAppointment?: boolean;
@@ -61,18 +55,29 @@ export function DayView({
   onSelectDay: (date: Date) => void;
   selectedAppointmentId?: string | null;
   selectedBlockId?: string | null;
+  /** serviceId para colorToken, lido do catálogo; vazio deixa o traço neutro. */
+  serviceColors?: ServiceColorMap;
 }) {
+  const now = useNow();
+  const today = isoDate(now);
+  const isToday = date === today;
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
   const dayEntries = entriesForDate(entries, date);
-  const laid = layoutDayEntries(dayEntries);
+  const rows = dayEntries
+    .filter(isListedEntry)
+    .sort((left, right) => left.startMinutes - right.startMinutes);
   const appointmentCount = dayEntries.filter(
     (entry) => entry.kind === "appointment",
   ).length;
   const blockCount = dayEntries.filter(
-    (entry) => entry.kind === "block" || entry.kind === "personal",
+    (entry) => entry.kind === "block",
   ).length;
-  const { gridHeight, hours, startHour } = timeGridBounds(dayEntries);
   const weekStart = startOfWeek(parseDate(date));
   const activeDates = datesWithActiveAppointment(entries);
+  const nowIndex = isToday
+    ? rows.findIndex((entry) => entry.startMinutes > nowMinutes)
+    : -1;
 
   return (
     <section
@@ -84,13 +89,14 @@ export function DayView({
         hiddenWeekdays={hiddenWeekdays}
         onSelectDay={onSelectDay}
         selectedDate={date}
+        today={today}
         weekStart={weekStart}
       />
       <div className="agenda-day-summary">
-        <strong>{formatDate(date)}</strong>
+        <strong>{daySummaryHeading(date, isToday)}</strong>
         <span>{daySummaryLabel(appointmentCount, blockCount)}</span>
       </div>
-      {laid.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="agenda-day-empty">
           <p className="agenda-no-results">Nenhum atendimento neste dia.</p>
           {hasAvailability === false && (
@@ -105,32 +111,75 @@ export function DayView({
           )}
         </div>
       ) : (
-        <div className="agenda-day-scroll">
-          <div className="week-body">
-            <div className="week-time-axis" style={{ height: gridHeight }}>
-              {hours.map((hour) => (
-                <div className="week-time" key={hour}>
-                  {String(hour).padStart(2, "0")}:00
-                </div>
-              ))}
-            </div>
-            <div className="agenda-day-column" style={{ height: gridHeight }}>
-              {laid.map((item) => (
-                <DayEntryBar
-                  key={item.entry.key}
-                  laid={item}
-                  onSelectAppointment={onSelectAppointment}
-                  onSelectBlock={onSelectBlock}
-                  selectedAppointmentId={selectedAppointmentId}
-                  selectedBlockId={selectedBlockId}
-                  startHour={startHour}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
+        <ul className="agenda-day-list">
+          {rows.map((entry, index) => {
+            return (
+              <Fragment key={entry.key}>
+                {isToday && nowIndex === index && (
+                  <NowMarker minutes={nowMinutes} />
+                )}
+                <li className="agenda-day-item">
+                  <DayRow
+                    entry={entry}
+                    isPast={isPast(entry, date, today, nowMinutes)}
+                    onSelectAppointment={onSelectAppointment}
+                    onSelectBlock={onSelectBlock}
+                    selectedAppointmentId={selectedAppointmentId}
+                    selectedBlockId={selectedBlockId}
+                    serviceColors={serviceColors}
+                  />
+                </li>
+              </Fragment>
+            );
+          })}
+          {isToday && nowIndex === -1 && <NowMarker minutes={nowMinutes} />}
+        </ul>
       )}
     </section>
+  );
+}
+
+/** Intervalo só aparece depois do atendimento a que pertence. */
+function isListedEntry(entry: AgendaEntry): boolean {
+  if (entry.kind !== "buffer") return true;
+  return (
+    entry.appointment !== undefined &&
+    entry.startMinutes >= timeOfAppointmentEnd(entry.appointment)
+  );
+}
+
+function timeOfAppointmentEnd(appointment: Appointment): number {
+  const [hours = 0, minutes = 0] = appointment.endTime.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function isPast(
+  entry: AgendaEntry,
+  date: string,
+  today: string,
+  nowMinutes: number,
+): boolean {
+  if (date < today) return true;
+  if (date > today) return false;
+  return entry.endMinutes <= nowMinutes;
+}
+
+function useNow(): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+  return now;
+}
+
+function NowMarker({ minutes }: { minutes: number }) {
+  return (
+    <li className="agenda-day-now">
+      <span className="agenda-day-now-label">{minutesToTime(minutes)}</span>
+      <span aria-hidden="true" className="agenda-day-now-line" />
+      <span aria-hidden="true" className="agenda-day-now-dot" />
+    </li>
   );
 }
 
@@ -139,19 +188,20 @@ function WeekStrip({
   hiddenWeekdays,
   onSelectDay,
   selectedDate,
+  today,
   weekStart,
 }: {
   activeDates: Set<string>;
   hiddenWeekdays: number[];
   onSelectDay: (date: Date) => void;
   selectedDate: string;
+  today: string;
   weekStart: Date;
 }) {
   const hiddenSet = new Set(hiddenWeekdays);
   const days = Array.from({ length: 7 }, (_, index) =>
     addDays(weekStart, index),
   ).filter((day) => !hiddenSet.has(day.getDay()));
-  const today = isoDate(new Date());
 
   return (
     <div className="agenda-week-strip" role="group" aria-label="Dias da semana">
@@ -164,6 +214,7 @@ function WeekStrip({
               "agenda-week-strip-day",
               iso === selectedDate && "is-selected",
               iso === today && "is-today",
+              iso < today && "is-past",
             )}
             key={iso}
             onClick={() => onSelectDay(day)}
@@ -173,8 +224,10 @@ function WeekStrip({
               {WEEKDAY_LABELS[(day.getDay() + 6) % 7]}
             </span>
             <span className="agenda-week-strip-number">{day.getDate()}</span>
-            {activeDates.has(iso) && (
+            {activeDates.has(iso) ? (
               <span aria-hidden="true" className="agenda-week-strip-dot" />
+            ) : (
+              <span aria-hidden="true" className="agenda-week-strip-gap" />
             )}
           </button>
         );
@@ -183,79 +236,70 @@ function WeekStrip({
   );
 }
 
-function DayEntryBar({
-  laid,
+function DayRow({
+  entry,
+  isPast,
   onSelectAppointment,
   onSelectBlock,
   selectedAppointmentId,
   selectedBlockId,
-  startHour,
+  serviceColors,
 }: {
-  laid: LanedEntry;
+  entry: AgendaEntry;
+  isPast: boolean;
   onSelectAppointment?: (appointment: Appointment) => void;
   onSelectBlock?: (block: TimeBlock) => void;
   selectedAppointmentId?: string | null;
   selectedBlockId?: string | null;
-  startHour: number;
+  serviceColors?: ServiceColorMap;
 }) {
-  const { entry, lane } = laid;
-  const presentation = describeEntry(entry);
-  const timeRange = `${minutesToTime(entry.startMinutes)}–${minutesToTime(entry.endMinutes)}`;
+  const time = minutesToTime(entry.startMinutes);
   const block = entry.timeBlock;
+  const appointment = entry.appointment;
   const className = clsx(
-    "week-appointment",
-    "agenda-day-entry",
+    "agenda-day-row",
     `is-${entry.kind}`,
-    {
-      "is-no-show": presentation.isNoShow,
-      "is-selected":
-        (block !== undefined && block.id === selectedBlockId) ||
-        (entry.kind === "appointment" &&
-          entry.appointment !== undefined &&
-          entry.appointment.id === selectedAppointmentId),
-    },
-  );
-  const style = entryPlacement(entry, startHour, lane);
-  const content = (
-    <>
-      <span className="appointment-time" aria-label={timeRange}>
-        {timeRange}
-      </span>
-      <span className="week-appointment-kind">
-        <Icon name={presentation.icon} />
-        {presentation.typeLabel}
-      </span>
-      <strong>{presentation.title}</strong>
-      {presentation.detail && <span>{presentation.detail}</span>}
-      {presentation.statusText && (
-        <span
-          className={clsx(
-            "badge",
-            entry.kind === "appointment" &&
-              entry.appointment &&
-              entry.appointment.status.toUpperCase() === "COMPLETED" &&
-              "badge-success",
-            presentation.isNoShow && "badge-danger",
-          )}
-        >
-          {presentation.statusText}
-        </span>
-      )}
-    </>
+    isPast && "is-past",
   );
 
-  if (entry.kind === "appointment" && entry.appointment) {
-    const appointment = entry.appointment;
-    // A partir de 1024px, a lista seleciona em vez de navegar: o painel de
+  if (entry.kind === "buffer") {
+    return (
+      <div className="agenda-day-row is-buffer">
+        <span aria-hidden="true" />
+        <span aria-hidden="true" />
+        <span className="agenda-day-buffer-text">
+          intervalo · {entry.endMinutes - entry.startMinutes} min
+        </span>
+      </div>
+    );
+  }
+
+  if (entry.kind === "appointment" && appointment) {
+    const presentation = describeEntry(entry);
+    const selected = appointment.id === selectedAppointmentId;
+    const content = (
+      <AppointmentContent
+        appointment={appointment}
+        isPast={isPast}
+        serviceColors={serviceColors}
+        time={time}
+        title={presentation.title}
+      />
+    );
+    const rowClass = clsx(
+      className,
+      presentation.isNoShow && "is-no-show",
+      selected && "is-selected",
+    );
+    // A partir de 1024px a lista seleciona em vez de navegar: o painel de
     // detalhe abre ao lado, na mesma tela (Goal069 §2). Abaixo disso,
     // `onSelectAppointment` não é passado e o link navega como sempre.
     if (onSelectAppointment) {
       return (
         <button
-          aria-pressed={appointment.id === selectedAppointmentId}
-          className={className}
+          aria-pressed={selected}
+          className={rowClass}
           onClick={() => onSelectAppointment(appointment)}
-          style={style}
           type="button"
         >
           {content}
@@ -264,14 +308,19 @@ function DayEntryBar({
     }
     return (
       <Link
-        className={className}
+        className={rowClass}
         href={`/agenda/agendamento?id=${encodeURIComponent(appointment.id)}`}
-        style={style}
       >
         {content}
       </Link>
     );
   }
+
+  const content = <OccurrenceContent entry={entry} time={time} />;
+  const rowClass = clsx(
+    className,
+    block !== undefined && block.id === selectedBlockId && "is-selected",
+  );
 
   // Bloqueio e compromisso pessoal levam às ações da ocorrência: remover ou
   // mover só esta, ou editar a série a partir daqui (Goal016, item 5).
@@ -279,9 +328,8 @@ function DayEntryBar({
     return (
       <button
         aria-pressed={block.id === selectedBlockId}
-        className={className}
+        className={rowClass}
         onClick={() => onSelectBlock(block)}
-        style={style}
         type="button"
       >
         {content}
@@ -289,11 +337,177 @@ function DayEntryBar({
     );
   }
 
-  return (
-    <div className={clsx(className, "is-readonly")} style={style}>
-      {content}
-    </div>
+  return <div className={clsx(rowClass, "is-readonly")}>{content}</div>;
+}
+
+function AppointmentContent({
+  appointment,
+  isPast,
+  serviceColors,
+  time,
+  title,
+}: {
+  appointment: Appointment;
+  isPast: boolean;
+  serviceColors?: ServiceColorMap;
+  time: string;
+  title: string;
+}) {
+  const status = appointment.status.toUpperCase();
+  const colors = appointmentServiceColors(
+    appointment,
+    serviceColors ?? new Map(),
   );
+  const parts = colors.length > 0 ? colors : [null];
+  const meta = [
+    serviceLabel(appointment),
+    formatDuration(appointment.durationMinutes),
+    isPast ? null : priceLabel(appointment),
+  ].filter((part): part is string => Boolean(part));
+  const confirmedPresence =
+    Boolean(appointment.presenceConfirmedAt) &&
+    status !== "COMPLETED" &&
+    status !== "NO_SHOW";
+
+  return (
+    <>
+      <span className="agenda-day-time">{time}</span>
+      <span aria-hidden="true" className="agenda-day-stripe">
+        {parts.map((color, index) => (
+          <span
+            className="agenda-day-stripe-part"
+            data-color={color ?? undefined}
+            key={index}
+          />
+        ))}
+      </span>
+      <span className="agenda-day-body">
+        <span className="agenda-day-main">
+          <strong className="agenda-day-name">{title}</strong>
+          <span className="agenda-day-meta">{meta.join(" · ")}</span>
+          {confirmedPresence && (
+            <span className="agenda-day-note">
+              <CheckIcon size={11} strokeWidth={3} />
+              presença confirmada pelo lembrete
+            </span>
+          )}
+        </span>
+        <span
+          className={clsx(
+            "agenda-day-status",
+            status === "NO_SHOW" && "is-no-show",
+            status === "COMPLETED" && "is-completed",
+          )}
+        >
+          {status === "NO_SHOW" ? (
+            <BanIcon size={12} strokeWidth={2.25} />
+          ) : status === "COMPLETED" ? (
+            <CheckIcon size={12} strokeWidth={3} />
+          ) : (
+            <span aria-hidden="true" className="agenda-day-status-dot" />
+          )}
+          {statusLabel(appointment.status)}
+        </span>
+      </span>
+    </>
+  );
+}
+
+function OccurrenceContent({
+  entry,
+  time,
+}: {
+  entry: AgendaEntry;
+  time: string;
+}) {
+  const presentation = describeEntry(entry);
+  const duration = formatDuration(entry.endMinutes - entry.startMinutes);
+
+  let body: ReactNode;
+  if (entry.kind === "block") {
+    body = (
+      <span className="agenda-day-pill">
+        <BanIcon size={15} strokeWidth={2} />
+        <strong className="agenda-day-pill-title">{presentation.title}</strong>
+        <span className="agenda-day-pill-meta">bloqueio · {duration}</span>
+      </span>
+    );
+  } else if (entry.kind === "personal") {
+    body = (
+      <span className="agenda-day-personal">
+        <PersonIcon />
+        <strong className="agenda-day-personal-title">
+          {presentation.title}
+        </strong>
+        <span className="agenda-day-personal-meta">
+          · compromisso pessoal · {duration}
+        </span>
+      </span>
+    );
+  } else {
+    body = (
+      <span className="agenda-day-personal">
+        <strong className="agenda-day-personal-title">
+          {presentation.title}
+        </strong>
+        <span className="agenda-day-personal-meta">
+          · {presentation.typeLabel.toLowerCase()} · {duration}
+        </span>
+        {presentation.detail && (
+          <span className="agenda-day-personal-reason">
+            {presentation.detail}
+          </span>
+        )}
+      </span>
+    );
+  }
+
+  return (
+    <>
+      <span className="agenda-day-time">{time}</span>
+      <span aria-hidden="true" />
+      {body}
+    </>
+  );
+}
+
+function serviceLabel(appointment: Appointment): string {
+  return (
+    appointment.services.map((service) => service.name).join(" + ") ||
+    appointment.title ||
+    "Serviço não informado"
+  );
+}
+
+/** 40 → "40 min", 60 → "1 h", 70 → "1 h 10". */
+function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours} h` : `${hours} h ${rest}`;
+}
+
+function priceLabel(appointment: Appointment): string | null {
+  const { totalPrice, totalPriceType } = appointment;
+  if (totalPrice === null || totalPrice === undefined) return null;
+  if (totalPriceType === "NONE") return null;
+  const digits = Number.isInteger(totalPrice) ? 0 : 2;
+  const amount = new Intl.NumberFormat("pt-BR", {
+    currency: "BRL",
+    maximumFractionDigits: digits,
+    minimumFractionDigits: digits,
+    style: "currency",
+  }).format(totalPrice);
+  return totalPriceType === "STARTING_AT" ? `a partir de ${amount}` : amount;
+}
+
+function daySummaryHeading(date: string, isToday: boolean): string {
+  const parsed = parseDate(date);
+  const weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "long" })
+    .format(parsed)
+    .replace(/-feira$/, "");
+  if (isToday) return `Hoje, ${weekday} ${parsed.getDate()}`;
+  return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${parsed.getDate()}`;
 }
 
 function daySummaryLabel(appointmentCount: number, blockCount: number): string {
@@ -301,4 +515,66 @@ function daySummaryLabel(appointmentCount: number, blockCount: number): string {
   if (blockCount === 0) return appointmentsPart;
   const blocksPart = `${blockCount} ${blockCount === 1 ? "bloqueio" : "bloqueios"}`;
   return `${appointmentsPart} · ${blocksPart}`;
+}
+
+function CheckIcon({
+  size,
+  strokeWidth,
+}: {
+  size: number;
+  strokeWidth: number;
+}) {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height={size}
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={strokeWidth}
+      viewBox="0 0 24 24"
+      width={size}
+    >
+      <path d="M5 12.5l4.5 4.5L19 7.5" />
+    </svg>
+  );
+}
+
+function BanIcon({ size, strokeWidth }: { size: number; strokeWidth: number }) {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height={size}
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={strokeWidth}
+      viewBox="0 0 24 24"
+      width={size}
+    >
+      <circle cx="12" cy="12" r="8" />
+      <path d="M6.5 6.5l11 11" />
+    </svg>
+  );
+}
+
+function PersonIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height={15}
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      viewBox="0 0 24 24"
+      width={15}
+    >
+      <circle cx="12" cy="8.5" r="3.5" />
+      <path d="M5 20a7 7 0 0 1 14 0" />
+    </svg>
+  );
 }

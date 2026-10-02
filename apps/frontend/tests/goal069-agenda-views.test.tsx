@@ -325,17 +325,23 @@ describe("§6.6 — troca de visualização preserva o dia focado (AG-05)", () =
 
     await user.click(screen.getByRole("tab", { name: "Mês" }));
 
-    expect(
-      await screen.findByText(/Setembro de 2026/i),
-    ).toBeVisible();
-    expect(screen.queryByText(/Outubro de 2026/i)).toBeNull();
+    // Goal092: a barra mostra mês e ano ("Setembro 2026"), não mais a data
+    // longa por visualização.
+    await vi.waitFor(() =>
+      expect(document.querySelector(".agenda-date-title")).toHaveTextContent(
+        "Setembro 2026",
+      ),
+    );
+    expect(document.querySelector(".agenda-date-title")).not.toHaveTextContent(
+      "Outubro",
+    );
   });
 });
 
-describe("§6.7 — 'Próximo agendamento' relativo a agora (AG-06)", () => {
-  test("mostra o próximo real, não o primeiro da janela navegada, em Dia, Semana e Mês", async () => {
+describe("§6.7 — sem 'Próximo agendamento' na Agenda (AG-06, revisto no Goal092)", () => {
+  test("o cartão não aparece em Dia, Semana nem Mês, mesmo com agendamento futuro, e a Agenda não lê além da janela da visualização", async () => {
     const past = appointmentFixture({
-      date: "2026-09-28",
+      date: "2026-09-29",
       id: "apt-passado",
       startTime: "10:00",
       status: "CONFIRMED",
@@ -349,26 +355,37 @@ describe("§6.7 — 'Próximo agendamento' relativo a agora (AG-06)", () => {
     });
     listAppointments.mockImplementation(
       (query: { endDate: string; startDate: string }) => {
-        if (query.startDate === "2026-09-29") return Promise.resolve([future]);
-        return Promise.resolve([past]);
+        return Promise.resolve(
+          [past, future].filter(
+            (item) => item.date >= query.startDate && item.date <= query.endDate,
+          ),
+        );
       },
     );
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderBoard();
 
-    expect(
-      await screen.findByRole("link", { name: /Próximo agendamento/ }),
-    ).toHaveTextContent("Cliente Futuro");
-    expect(screen.queryByText("Ana Paula")).toBeNull();
+    await screen.findByText("Ana Paula");
+    expect(screen.queryByText(/Próximo agendamento/)).toBeNull();
+    expect(screen.queryByText("Cliente Futuro")).toBeNull();
 
     await user.click(screen.getByRole("tab", { name: "Semana" }));
-    expect(
-      await screen.findByRole("link", { name: /Próximo agendamento/ }),
-    ).toHaveTextContent("Cliente Futuro");
+    await screen.findByRole("region", { name: "Mapa da semana" });
+    expect(screen.queryByText(/Próximo agendamento/)).toBeNull();
 
     await user.click(screen.getByRole("tab", { name: "Mês" }));
-    expect(
-      await screen.findByRole("link", { name: /Próximo agendamento/ }),
-    ).toHaveTextContent("Cliente Futuro");
+    await screen.findByRole("region", { name: "Mapa do mês" });
+    expect(screen.queryByText(/Próximo agendamento/)).toBeNull();
+
+    // A leitura própria de 60 dias saiu: nenhuma janela lida passa de uma
+    // grade de mês (6 semanas = 42 dias).
+    const dayMs = 24 * 60 * 60 * 1000;
+    for (const [query] of listAppointments.mock.calls as Array<
+      [{ endDate: string; startDate: string }]
+    >) {
+      const span =
+        (Date.parse(query.endDate) - Date.parse(query.startDate)) / dayMs;
+      expect(span).toBeLessThanOrEqual(42);
+    }
   });
 });

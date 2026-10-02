@@ -43,109 +43,176 @@
 .agenda-demo-note {
   margin-bottom: 18px;
 }
-.agenda-next {
-  min-height: 76px;
-  margin-bottom: 18px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-input);
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 12px;
-  color: var(--fg);
-  background: var(--surface);
-  text-decoration: none;
-}
-.agenda-next:not(.is-readonly):hover {
-  border-color: var(--border-strong);
-  background: var(--surface-secondary);
-}
-.agenda-next-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-.agenda-next-copy {
-  min-width: 0;
-  display: grid;
-  gap: 1px;
-}
-.agenda-next-copy > span {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-.agenda-next-copy strong {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-size: 14px;
-}
-.agenda-next-copy small {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: var(--muted);
-  font-size: 12px;
-}
-.agenda-next > .icon:last-child {
-  color: var(--muted);
-}
-
+/* Barra comum da Agenda (quadro A1): mês e ano do dia focado, segmentado,
+ * setas e "Novo". Abaixo de 1024 px o título e as setas ficam na primeira
+ * linha e o segmentado ocupa a segunda; a partir de 1024 px tudo vai numa
+ * linha só, com o "Novo" na barra. */
 .agenda-command-bar {
-  margin-bottom: 16px;
+  margin: 0 4px 12px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: end;
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "title nav"
+    "tabs tabs";
+  align-items: center;
+  gap: 12px 10px;
+}
+.agenda-date-title {
+  grid-area: title;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.agenda-date-year {
+  color: #716859;
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.agenda-date-tools {
+  grid-area: nav;
+  display: flex;
+  gap: 6px;
+}
+.agenda-date-tools .icon-btn {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #e5ded4;
+  border-radius: 50%;
+  background: #fffdfa;
+}
+.agenda-date-tools .icon-btn:hover {
+  border-color: #d6cec2;
+  background: #f3efe8;
+}
+.agenda-date-tools .icon-btn:active {
+  background: #efeae2;
+  transform: scale(0.96);
+}
+.agenda-date-tools .icon {
+  width: 18px;
+  height: 18px;
+}
+.agenda-view-tabs {
+  grid-area: tabs;
+  min-width: 0;
+}
+.agenda-view-tabs .tab-list {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  overflow: visible;
+  border: 0;
+  border-radius: 12px;
+  background: #efeae2;
+}
+.agenda-view-tabs .tab {
+  min-height: 34px;
+  height: 34px;
+  padding: 0;
+  flex: 1;
+  border-radius: 9px;
+  color: #5f574e;
+  font-size: 14px;
+  font-weight: 500;
+}
+.agenda-view-tabs .tab.is-active {
+  color: var(--fg);
+  background: #fffdfa;
+  box-shadow: 0 1px 2px rgba(34, 30, 26, 0.08);
+  font-weight: 600;
+}
+.agenda-view-tabs .tab.is-active::after {
+  display: none;
+}
+.agenda-new-menu {
+  grid-area: new;
+}
+.agenda-new-menu .agenda-new-trigger {
+  width: 56px;
+  min-height: 56px;
+  height: 56px;
+  padding: 0;
+  border-radius: 50%;
+  color: #f7f4ef;
+  background: #0f5f63;
+  box-shadow: 0 8px 20px rgba(15, 95, 99, 0.3);
+}
+.agenda-new-menu .agenda-new-trigger:hover {
+  background: #0b484c;
+}
+.agenda-new-menu .agenda-new-trigger:active {
+  background: #0b484c;
+  transform: scale(0.98);
+}
+.agenda-new-menu .agenda-new-trigger .icon {
+  width: 26px;
+  height: 26px;
+}
+.agenda-new-menu .agenda-new-trigger span {
+  display: none;
 }
 .agenda-new-menu .menu {
   right: 0;
   left: auto;
 }
-.agenda-exceptions-link {
-  margin: -6px 0 16px;
+@media (max-width: 1023px) {
+  .agenda-new-menu {
+    position: fixed;
+    z-index: 51;
+    right: 20px;
+    bottom: calc(106px + env(safe-area-inset-bottom));
+  }
+  .agenda-new-menu .menu {
+    top: auto;
+    bottom: calc(100% + 8px);
+    transform-origin: bottom right;
+  }
 }
-.agenda-date-tools {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
+@media (min-width: 1024px) {
+  .agenda-command-bar {
+    margin-bottom: 14px;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas: "title tabs nav new";
+    gap: 20px;
+  }
+  .agenda-view-tabs {
+    width: 100%;
+    max-width: 420px;
+    justify-self: center;
+  }
+  .agenda-new-menu .agenda-new-trigger {
+    width: auto;
+    height: 40px;
+    min-height: 40px;
+    padding: 0 16px;
+    border-radius: 12px;
+    box-shadow: none;
+    gap: 8px;
+    letter-spacing: 0;
+  }
+  .agenda-new-menu .agenda-new-trigger .icon {
+    width: 16px;
+    height: 16px;
+  }
+  .agenda-new-menu .agenda-new-trigger span {
+    display: inline;
+  }
+  .agenda-new-menu .menu {
+    top: calc(100% + 8px);
+  }
 }
-.agenda-date-title {
-  min-width: 228px;
-  margin-inline: 4px;
-  font-size: 18px;
-  line-height: 1.3;
-}
-.agenda-view-tabs {
-  justify-self: end;
-}
-.agenda-view-tabs .tab-list {
-  border: 1px solid var(--border);
-  border-radius: var(--r-input);
-  padding: 3px;
-  gap: 2px;
-  background: var(--surface);
-}
-.agenda-view-tabs .tab {
-  min-height: 48px;
-  padding: 0 14px;
-  border-radius: 9px;
-  font-size: 13px;
-}
-.agenda-view-tabs .tab.is-active {
-  color: var(--surface);
-  background: var(--navy);
-}
-.agenda-view-tabs .tab.is-active::after {
-  display: none;
+@media (min-width: 1100px) {
+  .agenda-command-bar {
+    margin-inline: -8px;
+  }
 }
 .agenda-filters {
   margin-bottom: 16px;
@@ -551,59 +618,219 @@
 .agenda-date-button.is-selected strong {
   color: var(--accent);
 }
+/* Dia (quadro A1): a lista cronológica não é um cartão — vive direto sobre o
+   fundo da página, com o hairline entre as linhas. A Semana segue na grade. */
+.agenda-calendar.agenda-day-panel {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
 .agenda-day-summary {
-  min-height: 48px;
-  padding: 0 18px;
-  border-bottom: 1px solid var(--border);
+  padding: 10px 20px 6px;
+  border-bottom: 1px solid #e5ded4;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  color: var(--muted);
+  color: #716859;
+  font-size: 13px;
+}
+.agenda-day-summary strong {
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 600;
+}
+.agenda-day-list {
+  margin: 0;
+  padding: 0 20px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.agenda-day-item {
+  border-bottom: 1px solid #e5ded4;
+}
+.agenda-day-item:last-child {
+  border-bottom: 0;
+}
+.agenda-day-row {
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  display: grid;
+  grid-template-columns: 52px 3px minmax(0, 1fr);
+  gap: 0 10px;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  line-height: normal;
+  text-decoration: none;
+  appearance: none;
+  cursor: pointer;
+}
+.agenda-day-row.is-readonly,
+.agenda-day-row.is-buffer {
+  cursor: default;
+}
+.agenda-day-row.is-selected {
+  background: var(--accent-soft);
+}
+.agenda-day-time {
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.agenda-day-stripe {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.agenda-day-stripe-part {
+  --swatch: #b9b1a6;
+  flex: 1;
+  border-radius: 2px;
+  background: var(--swatch);
+}
+.agenda-day-body {
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.agenda-day-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.agenda-day-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+.agenda-day-meta {
+  color: #5f574e;
+  font-size: 13px;
+}
+.agenda-day-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #1f5c39;
   font-size: 12px;
 }
-
-/* Dia: mesma grade cronologica da Semana, com uma coluna so. A entrada fica na
-   posicao real do tempo (--start/--span); entradas que se sobrepoem dividem a
-   largura (--lane/--lanes) em vez de uma esconder a outra. */
-.agenda-day-scroll {
-  overflow-x: hidden;
-  overflow-y: auto;
-  max-height: 70vh;
-}
-.agenda-day-column {
-  position: relative;
-  border-left: 0;
-  background: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 71px,
-    var(--border) 71px,
-    var(--border) 72px
-  );
-}
-.agenda-day-entry {
-  --lane: 0;
-  --lanes: 1;
-  left: calc(6px + var(--lane) * (100% - 12px) / var(--lanes));
-  right: auto;
-  width: calc((100% - 12px) / var(--lanes) - 4px);
-  appearance: none;
-  text-align: left;
-  font: inherit;
-}
-.agenda-day-entry.is-readonly:hover {
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-sm);
-  transform: none;
-}
-.agenda-day-entry.is-selected {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-md);
-}
-.agenda-day-entry .badge {
+.agenda-day-status {
+  flex: none;
   display: inline-flex;
-  margin-top: 4px;
+  align-items: center;
+  gap: 5px;
+  color: #1f5c39;
+  font-size: 12px;
+  font-weight: 600;
+}
+.agenda-day-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2e7d4f;
+}
+.agenda-day-status.is-no-show {
+  color: #8a2a21;
+}
+.agenda-day-row.is-past .agenda-day-time,
+.agenda-day-row.is-past .agenda-day-name,
+.agenda-day-row.is-past .agenda-day-meta,
+.agenda-day-row.is-past .agenda-day-status.is-completed {
+  color: #716859;
+}
+.agenda-day-row.is-past .agenda-day-stripe {
+  opacity: 0.45;
+}
+.agenda-day-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: repeating-linear-gradient(
+    135deg,
+    #efeae2 0 6px,
+    #f7f4ef 6px 12px
+  );
+  color: #5f574e;
+}
+.agenda-day-pill-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.agenda-day-pill-meta {
+  margin-left: auto;
+  font-size: 13px;
+}
+.agenda-day-personal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #5f574e;
+}
+.agenda-day-personal-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.agenda-day-personal-meta {
+  font-size: 13px;
+}
+.agenda-day-personal-reason {
+  font-size: 13px;
+  color: #716859;
+}
+.agenda-day-personal-reason::before {
+  content: "· ";
+}
+.agenda-day-row.is-buffer {
+  min-height: 0;
+  padding: 0 0 6px;
+  color: #716859;
+  font-size: 12px;
+}
+.agenda-day-buffer-text {
+  grid-column: 3;
+}
+.agenda-day-now {
+  position: relative;
+  height: 0;
+  list-style: none;
+}
+.agenda-day-now-label {
+  position: absolute;
+  left: 0;
+  top: -7px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.agenda-day-now-line {
+  position: absolute;
+  left: 44px;
+  right: 0;
+  top: 0;
+  height: 1.5px;
+  background: var(--accent);
+}
+.agenda-day-now-dot {
+  position: absolute;
+  left: 40px;
+  top: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 .agenda-list-group + .agenda-list-group {
   border-top: 1px solid var(--border);
@@ -1215,48 +1442,6 @@
   .agenda-demo-note > .btn {
     display: none;
   }
-  .agenda-next {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-  }
-  .agenda-next > .icon:last-child {
-    display: none;
-  }
-  .agenda-command-bar {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-  .agenda-date-tools {
-    display: grid;
-    grid-template-columns: 44px minmax(0, 1fr) 44px auto;
-  }
-  .agenda-new-menu {
-    justify-self: stretch;
-  }
-  .agenda-new-menu .btn {
-    width: 100%;
-  }
-  .agenda-new-menu .menu {
-    left: 0;
-    right: 0;
-  }
-  .agenda-date-title {
-    min-width: 0;
-    margin: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    font-size: 16px;
-  }
-  .agenda-view-tabs {
-    justify-self: stretch;
-  }
-  .agenda-view-tabs .tab-list {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .agenda-view-tabs .tab {
-    width: 100%;
-  }
   .agenda-tab-week {
     display: none;
   }
@@ -1272,9 +1457,6 @@
   }
   .agenda-date-strip {
     grid-template-columns: repeat(7, 62px);
-    padding-inline: 16px;
-  }
-  .agenda-day-summary {
     padding-inline: 16px;
   }
   .agenda-state-surface {
@@ -1366,13 +1548,6 @@
 @media (max-width: 380px) {
   .agenda-page-actions .btn {
     min-width: 48px;
-  }
-  .agenda-date-tools {
-    grid-template-columns: 44px minmax(0, 1fr) 44px;
-  }
-  .agenda-date-tools > .btn {
-    grid-column: 1 / -1;
-    width: 100%;
   }
   .agenda-summary-row {
     gap: 12px;
@@ -1687,5 +1862,120 @@
   .agenda-new-chip-other,
   .agenda-new-day {
     transition: none;
+  }
+}
+
+/* Faixa da semana do Dia (quadro A1): sete colunas de 48 px com o dia em
+   círculo; o selecionado enche de verde, passado fica em cinza. */
+.agenda-day-panel .agenda-week-strip {
+  margin: 0;
+  padding: 8px 12px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 0;
+  overflow: visible;
+}
+.agenda-day-panel .agenda-week-strip-day {
+  width: 48px;
+  min-width: 0;
+  min-height: 0;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  gap: 6px;
+  color: var(--fg);
+}
+.agenda-day-panel .agenda-week-strip-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #716859;
+}
+.agenda-day-panel .agenda-week-strip-number {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.agenda-day-panel .agenda-week-strip-day.is-past .agenda-week-strip-number {
+  color: #716859;
+}
+.agenda-day-panel .agenda-week-strip-day.is-today .agenda-week-strip-label,
+.agenda-day-panel .agenda-week-strip-day.is-selected .agenda-week-strip-label {
+  color: var(--accent);
+}
+.agenda-day-panel .agenda-week-strip-day.is-selected .agenda-week-strip-number {
+  background: var(--accent);
+  color: var(--at-color-on-primary);
+}
+.agenda-day-panel .agenda-week-strip-day:hover:not(.is-selected) .agenda-week-strip-number {
+  background: var(--surface-interactive);
+}
+.agenda-day-panel .agenda-week-strip-dot,
+.agenda-day-panel .agenda-week-strip-gap {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+.agenda-day-panel .agenda-week-strip-dot {
+  background: var(--accent);
+}
+.agenda-day-panel .agenda-week-strip-day.is-past .agenda-week-strip-dot {
+  background: #b9b1a6;
+}
+
+/* A partir de 1024 px a lista fica numa coluna de 380 px, com o hairline à
+   direita, e o painel de detalhe ocupa o resto sem moldura. */
+@media (min-width: 1024px) {
+  .agenda-page .agenda-day-layout {
+    grid-template-columns: 380px minmax(0, 1fr);
+    gap: 0;
+  }
+  .agenda-page .agenda-day-layout {
+    margin-inline: -36px;
+  }
+  .agenda-page .agenda-day-layout .agenda-day-panel {
+    border-right: 1px solid #e5ded4;
+  }
+  .agenda-page .agenda-day-detail {
+    position: static;
+    padding: 20px 24px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .agenda-page .agenda-day-detail.is-empty {
+    min-height: 480px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+  }
+}
+@media (min-width: 1024px) and (max-width: 1099px) {
+  .agenda-page .agenda-day-layout {
+    margin-inline: -24px;
+  }
+}
+.agenda-day-detail-empty {
+  max-width: 260px;
+  margin: 0;
+  color: #716859;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+}
+/* O botão flutuante ("Novo") ocupa de 106 a 162 px acima da base da viewport
+ * abaixo de 1024 px; a barra inferior da casca (65 px) já está fora do main. */
+@media (max-width: 1023px) {
+  .agenda-page {
+    padding-bottom: calc(120px + env(safe-area-inset-bottom));
   }
 }

@@ -14,7 +14,6 @@ import {
 import { Icon } from "@/shared/icons/Icon";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
-import { Button } from "@/shared/ui/Button";
 import { StatePanel } from "@/shared/ui/States";
 
 import { AppointmentHistory } from "./AppointmentHistory";
@@ -30,8 +29,9 @@ import {
   formatAppointmentDate,
   formatDate,
   isoDate,
-  nextActiveAppointment,
   requestError,
+  type ServiceColorMap,
+  serviceColorMap,
   serviceNames,
   sourceLabel,
   startOfMonth,
@@ -44,8 +44,6 @@ import { WeekView } from "./WeekView";
 
 /** A partir daqui, o Dia mostra a lista e o painel de detalhe em duas colunas (Goal069 §2). */
 const TWO_COLUMN_MIN_WIDTH = 1024;
-/** Janela da leitura própria de "Próximo agendamento": hoje em diante, independente da data navegada (Goal069 AG-06). */
-const UPCOMING_WINDOW_DAYS = 60;
 
 export {
   customerLabel,
@@ -111,9 +109,11 @@ export function AgendaBoard() {
   const [availableWeekdays, setAvailableWeekdays] = useState<Set<
     number
   > | null>(null);
-  const [upcomingAppointments, setUpcomingAppointments] = useState<
-    Appointment[]
-  >([]);
+  // Vazio enquanto o catálogo não chega ou quando a leitura falha: o traço
+  // fica neutro e a lista segue inteira, sem mensagem de erro.
+  const [serviceColors, setServiceColors] = useState<ServiceColorMap>(
+    () => new Map(),
+  );
   const [wideLayout, setWideLayout] = useState(
     () => typeof window !== "undefined" && window.innerWidth >= TWO_COLUMN_MIN_WIDTH,
   );
@@ -214,25 +214,20 @@ export function AgendaBoard() {
     return () => controller.abort();
   }, [range.endDate, range.startDate, reload]);
 
-  // "Próximo agendamento" é relativo a agora, por leitura própria de hoje em
-  // diante — não o primeiro agendamento da janela navegada, que pode já ter
-  // passado (Goal069 AG-06). Roda uma vez que a fonte é conhecida e de novo
-  // só quando algo muda (`reload`), nunca a cada navegação de dia/semana/mês.
+  // O catálogo é lido uma vez por carga (e de novo após uma mutação), não a
+  // cada navegação de dia/semana/mês: só a cor do serviço depende dele.
   useEffect(() => {
-    if (!calendar || calendar.source === null) return;
     const controller = new AbortController();
-    const services = getProductServices().calendar;
-    const today = isoDate(new Date());
-    const horizon = isoDate(addDays(new Date(), UPCOMING_WINDOW_DAYS));
-    services
-      .listAppointments({ endDate: horizon, startDate: today }, controller.signal)
-      .then(setUpcomingAppointments)
+    const catalog = getProductServices().serviceCatalog;
+    if (!catalog || typeof catalog.list !== "function") return;
+    Promise.resolve()
+      .then(() => catalog.list(controller.signal))
+      .then((list) => setServiceColors(serviceColorMap(list.items)))
       .catch(() => {
-        /* "Próximo agendamento" só some; o resto da Agenda continua. */
+        /* Sem catálogo, o traço fica neutro e a Agenda continua. */
       });
     return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `calendar.source` (não o objeto, novo a cada navegação) decide se a leitura roda; `reload` a repete após uma mutação.
-  }, [calendar?.source, reload]);
+  }, [reload]);
 
   const entries = useMemo(
     () =>
@@ -245,7 +240,7 @@ export function AgendaBoard() {
     [appointments, exceptions, timeBlocks, calendar?.timezone],
   );
 
-  const next = nextActiveAppointment(upcomingAppointments);
+  const monthYear = monthAndYear(cursor);
   const selectedAppointment = selectedAppointmentId
     ? (appointments.find((item) => item.id === selectedAppointmentId) ?? null)
     : null;
@@ -253,9 +248,9 @@ export function AgendaBoard() {
     view === "day" && availableWeekdays !== null
       ? availableWeekdays.has(cursor.getDay())
       : null;
-  // "+ Novo", na barra superior, é o único ponto de entrada de criação em
-  // qualquer largura (Goal069 §1) — publicar uma ação de FAB aqui duplicaria
-  // o mesmo destino no celular.
+  // O botão de criar é do próprio `AgendaNewMenu` (flutuante abaixo de
+  // 1024 px, "Novo" na barra a partir dele): publicar uma ação de FAB da
+  // casca aqui duplicaria o mesmo destino no celular.
   useShellConfig({
     active: "agenda",
     loading,
@@ -350,46 +345,11 @@ export function AgendaBoard() {
         )}
         {!error && calendar && calendar.source && (
           <>
-            {next && (
-              <Link
-                className="agenda-next"
-                href={`/agenda/agendamento?id=${encodeURIComponent(next.id)}`}
-              >
-                <span className="agenda-next-icon">
-                  <Icon name="clock" />
-                </span>
-                <span className="agenda-next-copy">
-                  <span>Próximo agendamento</span>
-                  <strong>{customerLabel(next)}</strong>
-                  <small>
-                    {formatAppointmentDate(next)} · {serviceNames(next)}
-                  </small>
-                </span>
-                <Icon name="chevron-right" />
-              </Link>
-            )}
             <section className="agenda-command-bar">
-              <div className="agenda-date-tools">
-                <button
-                  aria-label={previousLabel(view)}
-                  className="icon-btn"
-                  onClick={() => goToAdjacent(-1)}
-                  type="button"
-                >
-                  <Icon name="chevron-left" />
-                </button>
-                <strong className="agenda-date-title">
-                  {periodLabel(view, cursor, range)}
-                </strong>
-                <button
-                  aria-label={nextLabel(view)}
-                  className="icon-btn"
-                  onClick={() => goToAdjacent(1)}
-                  type="button"
-                >
-                  <Icon name="chevron-right" />
-                </button>
-              </div>
+              <strong className="agenda-date-title">
+                <span className="agenda-date-month">{monthYear.month}</span>{" "}
+                <span className="agenda-date-year">{monthYear.year}</span>
+              </strong>
               <div
                 aria-label="Visualização da agenda"
                 className="agenda-view-tabs"
@@ -416,17 +376,26 @@ export function AgendaBoard() {
                   </ViewTab>
                 </div>
               </div>
+              <div className="agenda-date-tools">
+                <button
+                  aria-label={previousLabel(view)}
+                  className="icon-btn"
+                  onClick={() => goToAdjacent(-1)}
+                  type="button"
+                >
+                  <Icon name="chevron-left" />
+                </button>
+                <button
+                  aria-label={nextLabel(view)}
+                  className="icon-btn"
+                  onClick={() => goToAdjacent(1)}
+                  type="button"
+                >
+                  <Icon name="chevron-right" />
+                </button>
+              </div>
               <AgendaNewMenu capabilities={calendar.capabilities} />
             </section>
-            {calendar.capabilities.manageAvailability && (
-              <Button
-                className="agenda-exceptions-link"
-                href="/agenda/excecoes"
-                variant="secondary"
-              >
-                Exceções do dia
-              </Button>
-            )}
             {loading && <AgendaLoading />}
             {!loading && view === "day" && (
               <>
@@ -456,6 +425,7 @@ export function AgendaBoard() {
                     onSelectDay={selectDay}
                     selectedAppointmentId={wideLayout ? selectedAppointmentId : null}
                     selectedBlockId={selectedBlock?.id ?? null}
+                    serviceColors={serviceColors}
                   />
                   {wideLayout && (
                     <DayDetailPanel
@@ -519,9 +489,12 @@ function DayDetailPanel({
 }) {
   if (!appointment) {
     return (
-      <aside aria-label="Detalhe do agendamento" className="agenda-day-detail">
-        <p className="agenda-no-results">
-          Selecione um agendamento para ver os detalhes.
+      <aside
+        aria-label="Detalhe do agendamento"
+        className="agenda-day-detail is-empty"
+      >
+        <p className="agenda-day-detail-empty">
+          Selecione um atendimento para ver os detalhes
         </p>
       </aside>
     );
@@ -581,10 +554,12 @@ function ViewTab({
 }
 
 /**
- * Único ponto de entrada de criação da Agenda (AG-02): os três tipos
+ * Único ponto de entrada de criação da Agenda (AG-02): os quatro itens
  * governados pela capacidade que já os regia como botões soltos
  * (`createAppointments` para Agendamento, `manageAvailability` para
- * Compromisso pessoal e Bloqueio). Sem nenhuma das duas, o botão não existe.
+ * Compromisso pessoal, Bloqueio e Exceção do dia). Sem nenhuma das duas, o
+ * botão não existe. O mesmo botão é flutuante abaixo de 1024 px e fica na
+ * barra a partir dele (quadro A1); só o CSS muda a posição.
  */
 function AgendaNewMenu({
   capabilities,
@@ -616,7 +591,8 @@ function AgendaNewMenu({
         aria-controls="agenda-new-menu-list"
         aria-expanded={open}
         aria-haspopup="menu"
-        className="btn"
+        aria-label="Novo"
+        className="btn agenda-new-trigger"
         onClick={() => setOpen((value) => !value)}
         ref={buttonRef}
         type="button"
@@ -656,6 +632,16 @@ function AgendaNewMenu({
               Bloqueio
             </Link>
           )}
+          {capabilities.manageAvailability && (
+            <Link
+              className="menu-item"
+              href="/agenda/excecoes"
+              onClick={() => setOpen(false)}
+              role="menuitem"
+            >
+              Exceção do dia
+            </Link>
+          )}
         </div>
       )}
     </div>
@@ -686,25 +672,14 @@ function nextLabel(view: AgendaView): string {
   return "Próximo mês";
 }
 
-function periodLabel(
-  view: AgendaView,
-  cursor: Date,
-  range: { endDate: string; startDate: string },
-): string {
-  if (view === "day") return formatDate(isoDate(cursor));
-  if (view === "month") {
-    return capitalize(
-      new Intl.DateTimeFormat("pt-BR", {
-        month: "long",
-        year: "numeric",
-      }).format(cursor),
-    );
-  }
-  const formatter = new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
-    month: "short",
-  });
-  return `${formatter.format(new Date(`${range.startDate}T12:00:00`))} – ${formatter.format(new Date(`${range.endDate}T12:00:00`))}`;
+function monthAndYear(cursor: Date): { month: string; year: string } {
+  const parts = new Intl.DateTimeFormat("pt-BR", {
+    month: "long",
+    year: "numeric",
+  }).formatToParts(cursor);
+  const part = (type: string) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return { month: capitalize(part("month")), year: part("year") };
 }
 
 function capitalize(value: string): string {

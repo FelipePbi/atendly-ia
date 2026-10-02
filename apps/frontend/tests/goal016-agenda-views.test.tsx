@@ -243,12 +243,24 @@ describe("ocupação honesta da grade", () => {
 
     renderBoard();
 
-    expect(await screen.findByText("Atendimento")).toBeVisible();
-    expect(screen.getAllByText("Buffer").length).toBe(2);
-    expect(screen.getByText("Bloqueio")).toBeVisible();
-    expect(screen.getByText("Compromisso pessoal")).toBeVisible();
-    expect(screen.getByText("Dentista")).toBeVisible();
-    expect(screen.getByText("Exceção · indisponibilidade")).toBeVisible();
+    // Goal092: o Dia é a lista do quadro A1. Cada tipo tem o texto do quadro
+    // (o rótulo "Atendimento"/"Buffer" da grade saiu), e só o intervalo
+    // depois do atendimento é listado.
+    const appointmentRow = (await screen.findByText("Ana Paula")).closest(
+      ".agenda-day-row",
+    );
+    expect(appointmentRow).toHaveTextContent("Corte feminino · 1 h");
+    expect(screen.getAllByText(/^intervalo · /)).toHaveLength(1);
+    expect(screen.getByText("intervalo · 10 min")).toBeVisible();
+    expect(screen.getByText("Almoço").closest(".agenda-day-row")).toHaveTextContent(
+      "bloqueio · 1 h",
+    );
+    expect(
+      screen.getByText("Dentista").closest(".agenda-day-row"),
+    ).toHaveTextContent("compromisso pessoal · 1 h");
+    expect(
+      screen.getByText("Indisponível").closest(".agenda-day-row"),
+    ).toHaveTextContent("exceção · indisponibilidade");
     expect(screen.getByText("Feriado local")).toBeVisible();
   });
 
@@ -278,7 +290,7 @@ describe("ocupação honesta da grade", () => {
     expect(await screen.findByText("Carla Nunes")).toBeVisible();
     expect(screen.getByText("Não compareceu")).toBeVisible();
     expect(screen.queryByText("Bia Castro")).not.toBeInTheDocument();
-    expect(screen.queryByText("Buffer")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^intervalo · /)).not.toBeInTheDocument();
   });
 
   test("nenhum campo ausente do read model é fabricado: cliente e serviço ausentes mostram o texto genérico do produto", async () => {
@@ -300,14 +312,13 @@ describe("ocupação honesta da grade", () => {
   });
 });
 
-describe("Dia na posição real do tempo", () => {
+describe("Dia em ordem cronológica", () => {
   /**
-   * Rodada 2, blocker 5: o Dia listava os eventos em ordem, e ordem não é
-   * posição — uma lista não mostra a hora vaga entre duas entradas. A grade
-   * usa a mesma mecânica que a Semana já usava (`--start`/`--span`, uma hora
-   * por 72px), então o teste afirma a posição calculada, não a classe.
+   * Goal092: o Dia deixou de ser a grade de horas (`--start`/`--span`, uma
+   * hora por 72px) e virou a lista cronológica do quadro A1. A prova de
+   * posição passa a ser a ordem de início e o horário escrito em cada linha.
    */
-  test("cada entrada do Dia é posicionada por --start e --span, como na Semana", async () => {
+  test("cada entrada do Dia é uma linha com o horário de início, em ordem de início", async () => {
     getCalendar.mockResolvedValue(calendarFixture());
     listAppointments.mockResolvedValue([appointmentFixture()]);
     listTimeBlocks.mockResolvedValue([timeBlockFixture()]);
@@ -316,19 +327,20 @@ describe("Dia na posição real do tempo", () => {
     renderBoard();
 
     const daySection = await screen.findByLabelText(/Agenda de/);
-    // Atendimento 10:00–11:00: três horas depois das 07:00 que abrem a grade.
+    // Atendimento 10:00–11:00, bloqueio 12:00–13:00 no fuso do negócio.
     const appointment = within(daySection).getByRole("link", {
       name: /Ana Paula/,
     });
-    expect(appointment.getAttribute("style")).toContain("--start: 3");
-    expect(appointment.getAttribute("style")).toContain("--span: 1");
-    // Bloqueio 12:00–13:00 no fuso do negócio: cinco horas depois das 07:00.
+    expect(within(appointment).getByText("10:00")).toBeVisible();
     const block = within(daySection).getByRole("button", { name: /Almoço/ });
-    expect(block.getAttribute("style")).toContain("--start: 5");
-    expect(block.getAttribute("style")).toContain("--span: 1");
+    expect(within(block).getByText("12:00")).toBeVisible();
+    expect(
+      appointment.compareDocumentPosition(block) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
-  test("a grade cresce para caber evento fora do horário comercial, em vez de o empurrar para a borda", async () => {
+  test("evento fora do horário comercial entra na lista com o próprio horário, sem ser empurrado para a borda", async () => {
     getCalendar.mockResolvedValue(calendarFixture());
     listAppointments.mockResolvedValue([
       appointmentFixture({ endTime: "07:00", startTime: "06:00" }),
@@ -342,11 +354,10 @@ describe("Dia na posição real do tempo", () => {
     const appointment = within(daySection).getByRole("link", {
       name: /Ana Paula/,
     });
-    expect(appointment.getAttribute("style")).toContain("--start: 0");
-    expect(within(daySection).getByText("06:00")).toBeVisible();
+    expect(within(appointment).getByText("06:00")).toBeVisible();
   });
 
-  test("entradas sobrepostas dividem a largura: nenhuma esconde a outra", async () => {
+  test("entradas sobrepostas aparecem as duas, cada uma na sua linha e em ordem de início", async () => {
     getCalendar.mockResolvedValue(calendarFixture());
     listAppointments.mockResolvedValue([
       appointmentFixture(),
@@ -365,10 +376,11 @@ describe("Dia na posição real do tempo", () => {
     const daySection = await screen.findByLabelText(/Agenda de/);
     const first = within(daySection).getByRole("link", { name: /Ana Paula/ });
     const second = within(daySection).getByRole("link", { name: /Bia Castro/ });
-    expect(first.getAttribute("style")).toContain("--lane: 0");
-    expect(first.getAttribute("style")).toContain("--lanes: 2");
-    expect(second.getAttribute("style")).toContain("--lane: 1");
-    expect(second.getAttribute("style")).toContain("--lanes: 2");
+    expect(first).not.toBe(second);
+    expect(first.closest("li")).not.toBe(second.closest("li"));
+    expect(
+      first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   /**
@@ -409,8 +421,7 @@ describe("Dia na posição real do tempo", () => {
     const block = within(yesterdaySection).getByRole("button", {
       name: /Manutenção noturna/,
     });
-    expect(block.getAttribute("style")).toContain("--start: 16");
-    expect(block.getAttribute("style")).toContain("--span: 1");
+    expect(within(block).getByText("23:00")).toBeVisible();
   });
 });
 

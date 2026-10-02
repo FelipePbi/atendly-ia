@@ -145,10 +145,17 @@ describe("cada fluxo obrigatório tem rota própria e é alcançável", () => {
   });
 
   test("a agenda oferece o caminho para as exceções de disponibilidade", async () => {
+    // Goal092: o botão solto "Exceções do dia" saiu; o caminho é o item
+    // "Exceção do dia" do menu "Novo".
+    const user = userEvent.setup();
     renderPage(<AgendaPage />);
 
+    await user.click(await screen.findByRole("button", { name: "Novo" }));
+
     expect(
-      await screen.findByRole("link", { name: "Exceções do dia" }),
+      within(screen.getByRole("menu")).getByRole("menuitem", {
+        name: "Exceção do dia",
+      }),
     ).toHaveAttribute("href", "/agenda/excecoes");
   });
 

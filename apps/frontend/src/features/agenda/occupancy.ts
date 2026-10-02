@@ -3,6 +3,8 @@ import {
   type AvailabilityException,
   BffHttpError,
   isActiveAppointmentStatus,
+  type ServiceColorToken,
+  type ServiceList,
   type TimeBlock,
   type TimeBlockKind,
 } from "@/data";
@@ -205,30 +207,27 @@ export function appointmentHasStarted(
   return appointmentStartInstant(appointment).getTime() <= now.getTime();
 }
 
-export function compareAppointments(
-  left: Appointment,
-  right: Appointment,
-): number {
-  return `${left.date}T${left.startTime}`.localeCompare(
-    `${right.date}T${right.startTime}`,
-  );
+export type ServiceColorMap = ReadonlyMap<string, ServiceColorToken>;
+
+/** Serviço sem cor no catálogo não entra no mapa: o traço fica neutro. */
+export function serviceColorMap(
+  services: ServiceList["items"] | null | undefined,
+): ServiceColorMap {
+  const colors = new Map<string, ServiceColorToken>();
+  for (const service of services ?? []) {
+    if (service.colorToken) colors.set(service.id, service.colorToken);
+  }
+  return colors;
 }
 
-/**
- * O próximo agendamento ativo a partir de agora (Goal069 AG-06) — não o
- * primeiro da janela navegada, que pode já ter passado.
- */
-export function nextActiveAppointment(
-  appointments: Appointment[],
-  now: Date = new Date(),
-): Appointment | undefined {
-  return appointments
-    .filter(
-      (appointment) =>
-        isActiveAppointmentStatus(appointment.status) &&
-        appointmentStartInstant(appointment).getTime() >= now.getTime(),
-    )
-    .sort(compareAppointments)[0];
+/** Um token por serviço do atendimento, na ordem dele; `null` é traço neutro. */
+export function appointmentServiceColors(
+  appointment: Appointment,
+  colors: ServiceColorMap,
+): Array<ServiceColorToken | null> {
+  return appointment.services.map(
+    (service) => colors.get(service.serviceId) ?? null,
+  );
 }
 
 // --- Ocupação honesta da grade (Goal016) ------------------------------------

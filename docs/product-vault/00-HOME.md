@@ -42,6 +42,13 @@ status: vigente
 5. [[03-UX-UI/05-Design-System-Conceitual]]
 6. [[03-UX-UI/06-Copy-e-Linguagem]]
 
+## Go-to-market
+
+1. [[05-Go-to-Market/01-Publico-Alvo-e-Posicionamento]]
+2. [[05-Go-to-Market/02-Oferta-e-Planos]]
+3. [[05-Go-to-Market/03-Landing-Page]]
+4. [[05-Go-to-Market/04-Landing-Page-Copy]]
+
 ## Referência
 
 - [[04-Referencia/01-Glossario]]

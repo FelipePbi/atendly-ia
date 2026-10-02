@@ -53,6 +53,8 @@ Evite: busca → 15 arquivos → contexto enorme.
 | Onboarding | `product-vault/02-Fluxos/01-Onboarding.md` + `product-vault/03-UX-UI/03-Onboarding-UX.md` |
 | Comportamento, UX, navegação, regras, fluxos, requisitos de tela e responsividade como requisito de produto | `product-vault/03-UX-UI/` |
 | Aparência, layout, componentes, design system, assets, animações, microinterações e acabamento visual | `design-reference/claude-design/` |
+| Público-alvo, oferta/planos, landing page e copy de marketing | `product-vault/05-Go-to-Market/` |
+| Construção do protótipo da landing page (`apps/frontend-lp`) | `landing-page/BRIEF_PROTOTIPO.md` |
 | Termo desconhecido | `product-vault/04-Referencia/01-Glossario.md` |
 | "Isso não foi decidido diferente antes?" | `product-vault/04-Referencia/02-Decisoes-Substituidas.md` e `product-vault/04-Referencia/99-Perguntas-e-Respostas.md` |
 | Trabalho técnico de alinhamento | `PLANO_REFATORACAO.md` |

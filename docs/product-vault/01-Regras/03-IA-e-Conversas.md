@@ -94,6 +94,31 @@ Quando o cliente envia várias mensagens rápidas em sequência, a IA deve aguar
 
 Se nova mensagem chegar enquanto uma resposta está sendo preparada, a IA deve reavaliar quando possível para evitar responder algo que já foi esclarecido.
 
+## Envio em mensagens separadas
+
+**Decisão de produto (2026-10-01). Implementação pendente.**
+
+Para soar natural e não parecer um robô respondendo tudo de uma vez, a IA deve enviar respostas compostas como **mensagens curtas separadas**, na ordem em que uma pessoa as escreveria, com um intervalo breve entre elas e o indicador "digitando…" do WhatsApp antes de cada uma.
+
+Exemplo — em vez de:
+
+> Fechado! Unha em gel, sexta às 16h30. Te mando um lembrete na quinta 😉
+
+enviar:
+
+> Fechado! Unha em gel, sexta às 16h30.
+
+> Te mando um lembrete na quinta 😉
+
+Diretrizes:
+
+- separar por unidade de sentido (confirmação, pergunta, complemento), não por limite de caracteres;
+- poucas mensagens por resposta; respostas simples continuam em uma única mensagem;
+- o intervalo é curto e proporcional ao tamanho da mensagem; não se confunde com mensagem de espera ("aguarde enquanto consulto" continua rejeitada — ver [[04-Referencia/02-Decisoes-Substituidas]]);
+- se a profissional assumir a conversa no meio da sequência, as mensagens ainda não enviadas são descartadas.
+
+A landing page demonstra esse comportamento ([[05-Go-to-Market/03-Landing-Page]]); ela não deve ser publicada antes de o produto se comportar assim.
+
 ## Mudança de assunto
 
 Perguntas secundárias não devem destruir o fluxo atual.

@@ -1385,6 +1385,58 @@ Atendimento, compromisso pessoal, bloqueio, hold `Em confirmação` e os estados
 
 Essa configuração afeta somente a visualização, não muda a disponibilidade e serve para aproveitar melhor o espaço e facilitar a leitura. Os dias ocultos podem voltar a ser exibidos a qualquer momento.
 
+# Decisões de go-to-market — Landing page (2026-10-01)
+
+Sessão de brainstorm sobre público-alvo, oferta e landing page. Resultado consolidado em `05-Go-to-Market/`.
+
+### G1. Qual é o público principal da comunicação?
+
+**Direção.** Profissional de beleza autônoma que atende sozinha pelo WhatsApp. Demais segmentos entram em variações futuras. Ver [[05-Go-to-Market/01-Publico-Alvo-e-Posicionamento]].
+
+### G2. Qual dor lidera a comunicação?
+
+**Direção.** Perder cliente por demora na resposta. Interrupção constante é secundária.
+
+### G3. Qual é a ação principal da landing page?
+
+**Direção.** Cadastro self-serve com teste grátis. CTA único "Começar grátis".
+
+### G4. Como fica a oferta?
+
+**Direção.** Plano Grátis (agenda, serviços, faturamento futuro — operação manual) e plano Pro (tudo que envolve WhatsApp e IA). Pro com 14 dias grátis, sem cartão. Ver [[05-Go-to-Market/02-Oferta-e-Planos]].
+
+### G5. Comunicar "grátis para sempre"?
+
+**Direção.** Não. Usar "plano grátis".
+
+### G6. Usar escassez ou urgência?
+
+**Direção.** Não.
+
+### G7. Tratamento de gênero na comunicação?
+
+**Direção.** Feminino nas cenas de marketing; interface do produto continua neutra.
+
+### G8. Como demonstrar o produto na landing page?
+
+**Direção.** Animação motion design não interativa simulando uma conversa cliente ↔ negócio no WhatsApp, terminando com o agendamento confirmado na agenda.
+
+### G9. A IA deve enviar respostas em mensagens separadas?
+
+**Vigente como decisão de produto; implementação pendente.** Sim — mensagens curtas separadas com "digitando…" entre elas. Ver "Envio em mensagens separadas" em [[01-Regras/03-IA-e-Conversas]].
+
+### G10. A landing page usa a identidade visual do produto?
+
+**Direção.** Sim — mesma paleta e tipografia, com mais contraste, escala e motion. Ver [[05-Go-to-Market/03-Landing-Page]].
+
+### G11. A história de origem cita pessoas?
+
+**Direção.** Não. Usar apenas "um estúdio de beleza" ou "uma lash designer".
+
+### G12. Onde a landing page vive?
+
+**Direção.** Projeto separado, `apps/frontend-lp`. Detalhes técnicos fora do vault (`docs/landing-page/BRIEF_PROTOTIPO.md`).
+
 ## Relacionado
 
 - [[04-Referencia/02-Decisoes-Substituidas]]

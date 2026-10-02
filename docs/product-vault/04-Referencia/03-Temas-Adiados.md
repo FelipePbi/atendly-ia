@@ -11,16 +11,16 @@ Este arquivo registra temas propositalmente não definidos/implementados agora p
 
 ## Monetização
 
-A forma de cobrança será decidida depois da validação real do MVP.
+A camada comercial (cobrança, checkout, gestão de assinatura) continua fora do MVP e só será implementada depois da validação real.
 
-Hipóteses a avaliar futuramente:
+Direção de planos definida em 2026-10-01: **Grátis** (agenda, serviços, operação manual) e **Pro** (tudo que envolve WhatsApp e IA), com 14 dias de teste sem cartão — ver [[05-Go-to-Market/02-Oferta-e-Planos]].
 
-- Agenda gratuita ou de baixo custo;
-- plano básico de Agenda;
-- plano Pro com IA + automações;
+Seguem em aberto:
+
+- valor do Pro;
+- regra de cancelamento;
+- tiers adicionais e cobrança multi-profissional;
 - outras segmentações baseadas em valor real observado.
-
-Nenhuma dessas hipóteses é decisão vigente de preço/plano.
 
 ## Crescimento do produto
 

@@ -148,7 +148,7 @@ Não criar infraestrutura especial de beta apenas para esse momento.
 
 Não implementar camada comercial antes da validação prática.
 
-Hipóteses futuras como “Agenda básica” e “Agenda + IA + automações” ficam deliberadamente em aberto até observar uso real.
+A direção de planos foi definida em 2026-10-01 — **Grátis** (agenda e operação manual) e **Pro** (tudo que envolve WhatsApp e IA), com teste de 14 dias sem cartão — em [[05-Go-to-Market/02-Oferta-e-Planos]]. Valores e tiers seguem em aberto, e a camada comercial continua fora do MVP.
 
 ## Relacionado
 

@@ -20,6 +20,7 @@ A documentação é consultada **sob demanda**: localize o tema, abra 1–3 arqu
 - `product-vault/00-Produto/`
 - `product-vault/01-Regras/`
 - `product-vault/02-Fluxos/`
+- `product-vault/05-Go-to-Market/` — público-alvo, oferta/planos e landing page
 
 ### UX/UI
 
@@ -35,6 +36,7 @@ A documentação é consultada **sob demanda**: localize o tema, abra 1–3 arqu
 - [`AI_WORKFLOW.md`](AI_WORKFLOW.md) — política de consulta seletiva desta documentação e divisão entre docs, Graphify e RTK.
 - [`architecture/`](architecture/README.md) — decisões arquiteturais e ADRs; hoje sem ADR vigente.
 - [`design-reference/claude-design/`](design-reference/claude-design/README.md) — referência visual e comportamental aprovada do novo frontend.
+- [`landing-page/BRIEF_PROTOTIPO.md`](landing-page/BRIEF_PROTOTIPO.md) — brief técnico para prototipar a landing page em `apps/frontend-lp` (ainda não implementada); produto, oferta e copy ficam em `product-vault/05-Go-to-Market/`.
 - [`PLANO_REFATORACAO.md`](PLANO_REFATORACAO.md) — escopo da futura análise técnica de alinhamento, sem decisões arquiteturais antecipadas.
 - [`../apps/bff/PUBLIC_API_V1.md`](../apps/bff/PUBLIC_API_V1.md) — inventário do contrato HTTP que o runtime registra hoje, incluindo dívida explicitamente marcada.
 

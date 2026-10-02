@@ -126,6 +126,14 @@ Direção atual:
 
 Essa mudança é um refinamento da experiência após a prototipação, não uma correção de erro.
 
+## Plano único de assinatura
+
+**Substituída em 2026-10-01** (era hipótese — rodada de monetização, pergunta 405 do [[04-Referencia/99-Perguntas-e-Respostas]]).
+
+A hipótese anterior previa um único plano pago. Direção atual: dois planos, **Grátis** (agenda e operação manual) e **Pro** (tudo que envolve WhatsApp e IA), com teste de 14 dias sem cartão iniciado na ativação da IA. Ver [[05-Go-to-Market/02-Oferta-e-Planos]].
+
+As demais hipóteses de monetização (404–434) continuam hipóteses, exceto onde a nova direção as confirma: teste de 14 dias (406), início na ativação da IA (407), agenda utilizável antes do teste (408), IA pausa e dados permanecem sem assinatura (411) e lembretes não continuam sem assinatura (414).
+
 ## Relacionado
 
 - [[04-Referencia/99-Perguntas-e-Respostas]]

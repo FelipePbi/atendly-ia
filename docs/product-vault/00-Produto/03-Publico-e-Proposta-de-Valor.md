@@ -51,3 +51,4 @@ Essa promessa deve orientar produto, UX e copy.
 
 - [[00-Produto/01-Visao-do-Produto]]
 - [[03-UX-UI/06-Copy-e-Linguagem]]
+- [[05-Go-to-Market/01-Publico-Alvo-e-Posicionamento]] — aprofundamento do público para aquisição e marketing

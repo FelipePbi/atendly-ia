@@ -3,6 +3,8 @@
 Ferramental isolado do IA Loop. Não faz parte do runtime do Atendly e não é
 importado por `apps/` nem por `packages/`.
 
+Quem supervisiona o loop de fora lê antes [`LICOES_DO_SUPERVISOR.md`](LICOES_DO_SUPERVISOR.md): erros já cometidos pelo supervisor, as regras que saíram deles e as falhas do harness ainda abertas.
+
 Duas etapas concluídas:
 
 | Etapa | Status |

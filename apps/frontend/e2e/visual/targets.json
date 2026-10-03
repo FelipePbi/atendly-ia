@@ -121,7 +121,7 @@
       "label": "Origem da importação",
       "route": "/onboarding/importacao",
       "account": "onboarding",
-      "notes": "A rota só mostra a origem da importação quando a pessoa escolheu importar; se a captura mostrar outra etapa, o estado da conta de onboarding não alcança este quadro."
+      "notes": "A conta de onboarding grava a fonte da agenda e não tem sessão de importação, então a rota abre a importação no início, sem estado a mais; se a captura mostrar outra etapa, o estado da conta de onboarding não alcança este quadro."
     },
     {
       "code": "3.1",
@@ -474,7 +474,104 @@
       "file": "Mais-WhatsApp-Importacao-Conta.dc.html",
       "label": "Configurações · Importação",
       "route": "/importacao",
-      "notes": "O quadro mostra o histórico de uma importação concluída; a conta de teste não importou (estado do I2). Compare a estrutura."
+      "notes": "O quadro mostra o histórico de uma importação concluída; a conta de teste não importou, então o estado concluído vem de resposta fixa de GET /v1/calendar/imports (responses), só no navegador da captura. O resto da casca (GET /v1/status, que decide o banner e o item Notificações) continua real. O quadro traz a lista dos registros pendentes com o estado de cada um, que o contrato não lê: compare a estrutura.",
+      "responses": [
+        {
+          "method": "GET",
+          "path": "/v1/calendar/imports",
+          "json": {
+            "data": {
+              "right": {
+                "available": false,
+                "sessionId": "visual-compare-import",
+                "completedAt": "2026-09-18T13:42:00.000Z"
+              },
+              "session": null,
+              "history": {
+                "sessionId": "visual-compare-import",
+                "provider": "MINHA_AGENDA",
+                "sourceAccountId": "visual-compare-source",
+                "sourceAccountLabel": null,
+                "status": "COMPLETED",
+                "completedAt": "2026-09-18T13:42:00.000Z",
+                "completedBy": "visual-compare",
+                "startedAt": "2026-09-18T13:38:00.000Z",
+                "finishedAt": "2026-09-18T13:42:00.000Z",
+                "counts": {
+                  "pending": 0,
+                  "imported": 1841,
+                  "skipped": 0,
+                  "failed": 0,
+                  "needsReview": 0
+                },
+                "categories": [
+                  {
+                    "category": "SERVICE",
+                    "discovered": 12,
+                    "sourceSupported": true,
+                    "limitationCode": null,
+                    "pending": 0,
+                    "imported": 12,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0
+                  },
+                  {
+                    "category": "CUSTOMER",
+                    "discovered": 386,
+                    "sourceSupported": true,
+                    "limitationCode": null,
+                    "pending": 0,
+                    "imported": 386,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0
+                  },
+                  {
+                    "category": "FUTURE_APPOINTMENT",
+                    "discovered": 42,
+                    "sourceSupported": true,
+                    "limitationCode": null,
+                    "pending": 0,
+                    "imported": 42,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0
+                  },
+                  {
+                    "category": "PAST_APPOINTMENT",
+                    "discovered": 1400,
+                    "sourceSupported": true,
+                    "limitationCode": null,
+                    "pending": 0,
+                    "imported": 1400,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0
+                  },
+                  {
+                    "category": "AVAILABILITY",
+                    "discovered": 1,
+                    "sourceSupported": true,
+                    "limitationCode": null,
+                    "pending": 0,
+                    "imported": 1,
+                    "skipped": 0,
+                    "failed": 0,
+                    "needsReview": 0
+                  }
+                ],
+                "pendingAcceptance": {
+                  "acceptedBy": "visual-compare",
+                  "acceptedAt": "2026-09-18T13:42:00.000Z",
+                  "pendingCount": 3
+                }
+              }
+            },
+            "requestId": "visual-compare-fixed-response"
+          }
+        }
+      ]
     },
     {
       "code": "I2",

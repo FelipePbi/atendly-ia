@@ -126,6 +126,58 @@ export function formatImportDateTime(value: string | null): string | null {
   }).format(new Date(value));
 }
 
+export const DEFAULT_BUSINESS_TIMEZONE = "America/Sao_Paulo";
+
+/** Ordem do histórico concluído (I1): as cinco do quadro, depois as demais na ordem do contrato. */
+const HISTORY_FIRST_CATEGORIES: ImportCategory[] = [
+  "SERVICE",
+  "CUSTOMER",
+  "FUTURE_APPOINTMENT",
+  "PAST_APPOINTMENT",
+  "AVAILABILITY",
+];
+export const HISTORY_CATEGORY_ORDER: ImportCategory[] = [
+  ...HISTORY_FIRST_CATEGORIES,
+  ...CATEGORY_ORDER.filter(
+    (category) => !HISTORY_FIRST_CATEGORIES.includes(category),
+  ),
+];
+
+/** "18 de setembro de 2026, 10:42", no fuso do negócio. */
+export function formatImportMoment(
+  value: string | null,
+  timeZone: string = DEFAULT_BUSINESS_TIMEZONE,
+): string | null {
+  if (!value) return null;
+  const moment = new Date(value);
+  const day = new Intl.DateTimeFormat("pt-BR", {
+    day: "numeric",
+    month: "long",
+    timeZone,
+    year: "numeric",
+  }).format(moment);
+  const time = new Intl.DateTimeFormat("pt-BR", {
+    hour: "2-digit",
+    hourCycle: "h23",
+    minute: "2-digit",
+    timeZone,
+  }).format(moment);
+  return `${day}, ${time}`;
+}
+
+/** "18/09", no fuso do negócio. */
+export function formatImportDayMonth(
+  value: string | null,
+  timeZone: string = DEFAULT_BUSINESS_TIMEZONE,
+): string | null {
+  if (!value) return null;
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone,
+  }).format(new Date(value));
+}
+
 /**
  * Decisão de item aceita pelo contrato (Goal020/WU-07): as cinco do endpoint
  * `.../items/:itemId/decision`, sem `IMPORT_ALL` nem

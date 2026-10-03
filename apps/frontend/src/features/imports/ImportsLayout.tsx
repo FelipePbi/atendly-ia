@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { createContext, type ReactNode, useContext } from "react";
 
-import { Icon } from "@/shared/icons/Icon";
+import { PushedBar } from "@/shared/layout/PushedBar";
 import { Skeleton } from "@/shared/ui/States";
 
 /**
@@ -16,6 +15,10 @@ import { Skeleton } from "@/shared/ui/States";
 export type ImportsFrame = "onboarding" | "platform";
 
 const ImportsFrameContext = createContext<ImportsFrame>("platform");
+
+export function useImportsFrame(): ImportsFrame {
+  return useContext(ImportsFrameContext);
+}
 
 export function ImportsFrameProvider({
   children,
@@ -32,36 +35,55 @@ export function ImportsFrameProvider({
 }
 
 /**
- * Casco visual comum às telas do módulo (Goal020): o link "Configurações"
- * reflete o lugar conceitual da importação (Configurações → Importação, ver
- * vault), mesmo com a rota vivendo fora do prefixo `/configuracoes`. Na
- * moldura do onboarding o link não aparece, e o `<h1>` daqui é o único da
- * tela (Goal066).
+ * Casco visual comum às telas do módulo (Goal020). Na moldura `platform` a
+ * tela é empurrada dentro de Configurações (D-103, Goal105): a barra
+ * "Importação" é o único `<h1>` e traz o voltar para `/configuracoes` (que
+ * some de 1024 px em diante, com a lista ao lado). O título de cada tela vira
+ * `<h2>`. Na moldura do onboarding o `<h1>` daqui é o único da tela
+ * (Goal066). `bare` dispensa o cabeçalho da tela; sem `description`, o
+ * cabeçalho é só o título (a origem, 2.I1).
  */
 export function ImportsPage({
+  bare = false,
   children,
   description,
   title,
 }: {
+  bare?: boolean;
   children: ReactNode;
-  description: string;
+  description?: string;
   title: string;
 }) {
   const frame = useContext(ImportsFrameContext);
+  const onboarding = frame === "onboarding";
+  const Heading = onboarding ? "h1" : "h2";
+  const header = !bare && (
+    <header className="imports-header">
+      {onboarding && description && <p className="eyebrow">Importação</p>}
+      <Heading>{title}</Heading>
+      {description && <p>{description}</p>}
+    </header>
+  );
+  if (onboarding) {
+    return (
+      <section className="imports-page">
+        {header}
+        {children}
+      </section>
+    );
+  }
   return (
-    <section className="imports-page">
-      {frame === "platform" && (
-        <Link className="imports-back" href="/configuracoes">
-          <Icon name="chevron-right" />
-          Configurações
-        </Link>
-      )}
-      <header className="imports-header">
-        <p className="eyebrow">Importação</p>
-        <h1>{title}</h1>
-        <p>{description}</p>
-      </header>
-      {children}
+    <section className="imports-page is-pushed">
+      <PushedBar
+        backHref="/configuracoes"
+        backLabel="Voltar para configurações"
+        hideBackWide
+        title="Importação"
+      />
+      <div className="imports-pushed-body">
+        {header}
+        {children}
+      </div>
     </section>
   );
 }

@@ -28,12 +28,14 @@ export function OnboardingImportStep({
   onExit: () => void;
 }) {
   const reader = useImportState();
+  const { draft } = useOnboardingRuntime();
   return (
     <OnboardingFrame onExit={onExit} scenario="importacao">
       <ImportsFrameProvider frame="onboarding">
         <ImportsFlow
           historyActions={<ImportDoneActions go={go} />}
           reader={reader}
+          timeZone={draft.timezone}
         />
       </ImportsFrameProvider>
     </OnboardingFrame>

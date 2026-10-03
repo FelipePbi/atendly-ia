@@ -3453,6 +3453,7 @@ p {
   flex-direction: column;
   gap: 8px;
   background: var(--surface);
+  text-align: left;
 }
 .import-card-label {
   color: var(--muted);

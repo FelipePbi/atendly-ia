@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 
 import type { Service } from "@/data";
+import { ImportIllustration } from "@/features/imports/ImportIllustration";
 import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { CurrencyInput } from "@/shared/ui/CurrencyInput";
@@ -703,49 +704,13 @@ function HoursStepBody({
   );
 }
 
-function ImportCardBars() {
-  return (
-    <>
-      {[80, 60, 70, 45].map((width) => (
-        <span className="import-bar" key={width} style={{ width: `${width}%` }} />
-      ))}
-    </>
-  );
-}
-
 export function scheduleStepBody(
   scenario: OnboardingScenario,
   draft: OnboardingDraft,
   setDraft: (updater: (value: OnboardingDraft) => OnboardingDraft) => void,
 ) {
   if (scenario === "quando-importar")
-    return (
-      <div aria-hidden="true" className="import-illustration">
-        <div className="import-card">
-          <span className="import-card-label">Minha Agenda</span>
-          <ImportCardBars />
-        </div>
-        <div className="import-arrow">
-          <svg
-            fill="none"
-            height="24"
-            stroke="currentColor"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-            viewBox="0 0 34 24"
-            width="34"
-          >
-            <path d="M2 12h28M23 5l7 7-7 7" />
-          </svg>
-          <span>uma vez</span>
-        </div>
-        <div className="import-card is-atendly">
-          <span className="import-card-label">Atendly</span>
-          <ImportCardBars />
-        </div>
-      </div>
-    );
+    return <ImportIllustration />;
   if (scenario === "servico-nome")
     return (
       <ServiceFields

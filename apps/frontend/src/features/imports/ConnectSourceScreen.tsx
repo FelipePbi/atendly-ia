@@ -3,10 +3,10 @@
 import { type FormEvent, useState } from "react";
 
 import { BffHttpError } from "@/data";
-import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 
 import { newIdempotencyKey } from "./idempotency";
+import { ImportOriginScreen } from "./ImportOriginScreen";
 import { ImportsPage } from "./ImportsLayout";
 import type { ImportState } from "./types";
 
@@ -91,6 +91,7 @@ export function ConnectSourceScreen({
   onConnected: (state: ImportState) => void;
   replace?: boolean;
 }) {
+  const [phase, setPhase] = useState<"credentials" | "origin">("origin");
   const [values, setValues] = useState<FormValues>(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -130,34 +131,20 @@ export function ConnectSourceScreen({
     }
   }
 
+  if (phase === "origin") {
+    return (
+      <ImportOriginScreen
+        onCancel={onCancel}
+        onContinue={() => setPhase("credentials")}
+      />
+    );
+  }
+
   return (
     <ImportsPage
       description="Copie seus dados do Minha Agenda uma única vez. Nada muda na Atendly até você confirmar."
       title={replace ? "Conectar outra conta do Minha Agenda" : "Importar do Minha Agenda"}
     >
-      <div className="imports-panel">
-        <div className="imports-panel-header">
-          <h2>Isto é uma migração, não uma conexão</h2>
-        </div>
-        <ul className="imports-facts">
-          <li>
-            <Icon name="check" />
-            <span>Seus dados são copiados uma única vez.</span>
-          </li>
-          <li>
-            <Icon name="check" />
-            <span>
-              O Minha Agenda não fica conectado depois. Alterações feitas lá
-              não chegam mais à Atendly.
-            </span>
-          </li>
-          <li>
-            <Icon name="check" />
-            <span>A Atendly passa a ser sua agenda oficial.</span>
-          </li>
-        </ul>
-      </div>
-
       <form
         className="imports-panel"
         noValidate

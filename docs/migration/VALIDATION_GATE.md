@@ -5359,3 +5359,101 @@ Ao fim da rodada 3, `git status --short` lista os mesmos 14 arquivos modificados
 - **Gates do IA Loop na rodada 3,** sobre a árvore aceita, todos com exit 0: typecheck, lint, `goal106-whatsapp` 30/30, `validate:core`, `test:gate` (`tests 242, pass 242`), `validate:ui` (**169 passed**, 0 retentativas), `validate:integration` e `git diff --check`.
 - **`validate:integration` da rodada 3.** A linha "sem reexecução na rodada 3" da tabela acima descreve a execução do Developer. O IA Loop rodou a `validate:integration` na rodada 3, depois dos documentos (11 min 33 s): exit 0, gate autenticado **274 passed e 1 flaky**, com 1 retentativa, em `[mobile-390] › onboarding-agenda-atendly-pronta › measured, logged in`. A causa está no log: `page.goto: net::ERR_NO_BUFFER_SPACE`, esgotamento de buffer de socket do host Windows, não asserção. A rota está fora do escopo do Goal. A árvore da rodada 3 difere da rodada 2 só por um teste de jsdom, e a rodada 2 deu 275 passed com 0 retentativas no mesmo código de produção.
 - **Aceito sem prova completa.** "IA ativa neste número", só em jsdom; o W1 com um número conectado de verdade (a captura usa resposta fixa); o W1 sem diff zero e pior pelo diff que o painel de hoje com o número conectado, aceito pela vista dos `side-by-side.png` e pela causa medida na WU-02; a causa do M1 mobile 8,8 para 8,7, não isolada. Detalhe no [review106](reviews/106-review.md).
+
+## Configurações › Importação igual ao protótipo (I1, I2, 2.I1), do Goal105
+
+Texto do Goal105 (decisão [D-119](DECISIONS.md), `PROPOSED`), escrito pela WU-12 da rodada 1, por acréscimo. Toda contagem diz a execução que a sustenta. As execuções 1 e 2 de `visual:compare` são as da WU-01 e da WU-02 (lidas do resultado delas em `tools/ia-loop/.state/results/work_unit/`); a execução 3 e os controles são da WU-12. A execução 3 vale para a árvore final (confirmada depois da última edição de código); o vermelho da baseline e os controles são de antes dela (ver "A correção da rodada 3 e a ordem dos fatos").
+
+### As três execuções de `visual:compare`
+
+Comando: `npm run visual:compare -- --target I1,I2,2.I1,2.2,M1,W1,H3`. Cada célula é o diff em % do início de cada device: mobile 402×812 / tablet em retrato 768×1024 / tablet em paisagem 1024×768 / desktop 1366×768. O diff é uma tendência; o hash do PNG varia entre corridas iguais.
+
+| Alvo | Execução 1 (baseline, antes de qualquer mudança) | Execução 2 (logo depois de (a), antes do frontend) | Execução 3 (árvore final, saída 0) |
+| --- | --- | --- | --- |
+| I1 | 11,7 / 6,3 / 7,3 / 6,2 | 10,3 / 5,0 / 5,8 / 5,2 | 10,0 / 4,4 / 6,7 / 5,6 |
+| I2 | 13,9 / 9,8 / 10,0 / 8,7 | igual à execução 1 | 16,1 / 11,3 / 12,2 / 10,8 |
+| 2.I1 | 15,1 / 8,6 / 6,7 / 5,2 | igual à execução 1 | 2,7 / 1,8 / 2,1 / 1,6 |
+| 2.2 | 1,1 / 0,4 / 0,7 / 0,7 | igual | igual à execução 1 |
+| M1 | 8,5 / 3,8 / 5,9 / 5,1 | igual | igual à execução 1 |
+| W1 | 8,1 / 3,4 / 6,0 / 5,0 | igual | igual à execução 1 |
+| H3 | 8,1 / 4,1 / 3,7 / 3,0 | igual | igual à execução 1 |
+
+- **Execução 2 contra a 1:** só o I1 muda (a resposta fixa de `GET /v1/calendar/imports` dá o histórico no lugar da tela de conectar). I2, 2.I1, 2.2, M1, W1 e H3 dão os mesmos números.
+- **Execução 3 contra a 1:** 2.2, M1, W1 e H3 não mudam (a ilustração movida não mexeu na 2.2). O 2.I1 cai de 15,1 / 8,6 / 6,7 / 5,2 para 2,7 / 1,8 / 2,1 / 1,6. O I1 melhora nos quatro devices contra a execução 1; contra a execução 2, o tablet em paisagem (5,8 para 6,7) e o desktop (5,2 para 5,6) ficam um pouco piores, e o mobile e o tablet em retrato melhoram.
+- **Piora medida: I2.** Passa de 13,9 / 9,8 / 10,0 / 8,7 (execução 1) para 16,1 / 11,3 / 12,2 / 10,8 (execução 3). **Causa medida** nas imagens `app.png` e `side-by-side.png` das duas execuções: na execução 1 o app mostrava a tela antiga de conectar, a mesma imagem do I1 (`app.png` idêntica), e não o I2; na execução 3 mostra o I2 correto, deslocado para baixo pelo banner real da casca "Atendimento automático parado" (divergência 2 do Goal), cerca de 168 px no mobile e cerca de 80 px no desktop, e a lista do hub traz dados da conta real (divergência 3). O diff compara pixels na mesma posição, então o deslocamento pesa mais que o ganho de estrutura. Uma nova medida com o banner removido **não foi feita**.
+- **Divergências que restam, nos quatro devices:** as cinco declaradas pelo Goal (barra de status do iPhone, estado da casca por `GET /v1/status`, lista do hub com dados da conta real, bloco âmbar do I1 sem a lista por registro, stepper do 2.I1 derivado do fluxo), mais o deslocamento do I2 acima. O I1 e o 2.I1 não chegaram a diff zero, e o I2 não está "igual ao quadro" pelo diff; a comparação visual final é do Tech Lead.
+
+### O teste novo do `test:gate`
+
+`scripts/tests/visual-responses.test.mjs`, teste "targets.json: só W1 e I1 declaram responses, cada um só com o seu GET" (substitui o do Goal106, que dizia só o W1): exige exatamente W1 (`GET /v1/whatsapp`) e I1 (`GET /v1/calendar/imports`). Execução do `test:gate`: **242** testes, saída 0 (WU-09), sem teste a menos que a baseline.
+
+### Vermelho da baseline das provas novas
+
+`tests/goal105-importacao.test.tsx` rodado contra os arquivos de produção da baseline (`git show HEAD:` dos nove arquivos de produção modificados, e removidos os três arquivos novos), sem mexer no teste, na árvore da WU-12, antes da edição de CSS da rodada 3: `Tests  24 failed | 6 passed (30)` (a WU-04 mediu o mesmo). Restauração conferida por sha256 dos 12 arquivos, igual antes e depois, e `git status --porcelain` com o mesmo md5. As **seis** que passam na baseline, declaradas uma a uma:
+
+1. Prova 3: "sem `pendingAcceptance`, nenhum bloco âmbar" (a baseline não tem bloco âmbar).
+2. Prova 5: a sessão em análise, a sessão em execução, na faixa ≥1024 e na faixa <1024 (quatro testes de comportamento preservado).
+3. Prova 5: o markup da ilustração da 2.2 (a baseline já o tem inline).
+
+### Os sete controles negativos (WU-12, antes da edição de CSS da rodada 3)
+
+Cada controle aplica o defeito, roda `npx vitest run tests/goal105-importacao.test.tsx` (o 7, `node --test scripts/tests/visual-responses.test.mjs`), restaura o arquivo e confere o sha256 antes e depois (todos **iguais**). Sem o defeito, a prova volta a **30**/**30** (o 7, a `pass 9, fail 0`). Saída real, as linhas decisivas:
+
+| # | Defeito | Com o defeito | Sem o defeito |
+| --- | --- | --- | --- |
+| 1 | `ImportsScreen.tsx`: `ImportsFlow` mostra `ConnectSourceScreen` no lugar de `ImportEmptyScreen` | saída 1, `Tests  9 failed \| 21 passed (30)`; entre elas "sem histórico e sem sessão: ilustração, texto, botão e nota do I2, sem campo de credencial" (prova 1) | `Tests  30 passed (30)` |
+| 2 | `ConnectSourceScreen.tsx`: a fase inicial passa a `"credentials"` | saída 1, `Tests  5 failed \| 25 passed (30)`; "o botão mostra a origem sem pedido novo; 'Continuar' mostra o formulário" e "na etapa importacao do onboarding: h1 da origem…" | `Tests  30 passed (30)` |
+| 3 | `labels.ts`: `timeZone` tirado de `formatImportMoment` | saída 1, `Tests  1 failed \| 29 passed (30)`; "o mesmo instante em Pacific/Auckland dá outro dia, no bloco verde e no texto final" (prova 3) | `Tests  30 passed (30)` |
+| 4 | `ImportHistoryCard.tsx`: o bloco âmbar sem a condição `pendingCount > 0` | saída 1, `Tests  1 failed \| 29 passed (30)`; "com pendingCount 0, nenhum bloco âmbar" (prova 3) | `Tests  30 passed (30)` |
+| 5 | `ImportsScreen.tsx`: `if (true) return flow;`, sem a lista de 1024 px em diante | saída 1, `Tests  1 failed \| 29 passed (30)`; "de 1024 px em diante, a lista do hub tem 'Importação' marcada, o título dela é h2 e há um só h1" (prova 4) | `Tests  30 passed (30)` |
+| 6a | `ImportHistoryCard.tsx` chama `useShellConfig` | saída 1, `Tests  16 failed \| 14 passed (30)`; entre elas as duas "uma chamada de useShellConfig por árvore, com pushed, na faixa ≥1024" e "<1024" (prova 4) | `Tests  30 passed (30)` |
+| 6b | `ConnectSourceScreen.tsx` chama `useShellConfig` | saída 1, `Tests  5 failed \| 25 passed (30)`; `Error: Maximum update depth exceeded` e `Error: useShellConfig must be used inside ShellConfigProvider.` | `Tests  30 passed (30)` |
+| 7 | `targets.json`: o I2 declara `responses` (cópia do GET do I1) | saída 1, `ℹ tests 9`, `ℹ pass 8`, `ℹ fail 1`; "✖ targets.json: só W1 e I1 declaram responses, cada um só com o seu GET", `actual: [ 'W1', 'I1', 'I2' ]`, `expected: [ 'W1', 'I1' ]` | `ℹ pass 9`, `ℹ fail 0` |
+
+**O controle 6 só está provado de verdade na variante 6a.** Na 6b a prova 4 reprova apenas no teste da moldura do onboarding e por efeito colateral (laço de atualização e falta de provedor), não pela asserção "uma chamada de `useShellConfig` por árvore", que continua passando. Isto fica ao Tech Lead: aceitar a 6a como o controle 6, ou pedir uma asserção própria para `ConnectSourceScreen`.
+
+Hashes sha256 (oito primeiros caracteres), iguais antes e depois dos controles e, conferido pelo Tech Lead, também na árvore final (a edição de CSS da rodada 3 não toca nenhum destes arquivos): `ImportsScreen.tsx` e422c055, `ConnectSourceScreen.tsx` a12c39b8, `ImportHistoryCard.tsx` fe9a6609, `ImportEmptyScreen.tsx` acabd454, `ImportOriginScreen.tsx` f17460d5, `ImportIllustration.tsx` 2dff25e6, `ImportsLayout.tsx` 737406b3, `labels.ts` 6b222a73, `goal105-importacao.test.tsx` 06620e50, `targets.json` 84737471, `visual-responses.test.mjs` 7719edda.
+
+### Mudanças em testes existentes
+
+Mudou só o caminho até o formulário (agora I2 e origem antes das credenciais), o texto ou a estrutura que os quadros trocam e o link "Configurações": `goal018-onboarding-reachability`, `goal020-a11y`, `goal020-import-conflicts`, `goal020-import-preview`, `goal020-import-run`, `goal020-imports-entry`, `goal020-reachability`, `goal020-shell-invariant`, `goal060-connect-source`, `goal061-import-async`, `goal062-import`, `goal066-onboarding-importacao`, `goal072-onboarding-frame`, `goal079-onboarding-gate-routes` e `goal082-connect-source-client-rejected`. Nenhum teste foi removido nem pulado.
+
+### Execuções que sustentam cada contagem
+
+| Contagem | Execução |
+| --- | --- |
+| Suíte do frontend: **147 arquivos e 1819 testes** (baseline do Goal106: 146 e 1789) | WU-04, depois de escrita a prova nova |
+| `goal105-importacao`: **30**/**30** | WU-07 e as corridas "sem defeito" dos controles da WU-12 |
+| Typecheck e lint: saída 0 | WU-05 (typecheck) e WU-06 (lint) |
+| `validate:core`: saída 0, 15 passos passaram e 2 pulados de 17 | WU-08 |
+| `test:gate`: **242** testes, saída 0 | WU-09 |
+| `validate:ui`: 169 passaram, 21 pulados, 0 retentativas | WU-10 |
+| `validate:integration`: saída 0 em 705 s (`durationMs` 705262), 36 passos passaram; gate autenticado **275** passaram, 0 retentativas | WU-11 da rodada 3 |
+| `visual:compare`, execuções 1 e 2 | WU-01 e WU-02 |
+| `visual:compare`, execução 3 (saída 0) | WU-12 |
+| Baseline vermelha: 24 reprovam e 6 passam | WU-04 e WU-12 (mesma contagem) |
+| Sete controles | WU-12, antes da edição de CSS da rodada 3 |
+
+Os gates finais, WU-05 a WU-11 da rodada 3, correram na árvore com a impressão digital de código `code-v1:a698f84c…`; `a6695e1e…` é a árvore da rodada 1. Os documentos não entram na impressão digital.
+
+### A correção da rodada 3 e a ordem dos fatos
+
+- **(a) A correção.** A última edição de código foi `text-align: left` em `.import-card` (`apps/frontend/src/shared/styles/atendly.css`), feita na rodada 3 para o blocker do review 2: os rótulos do I2 saíam centralizados. Motivo: `.imports-empty { text-align: center }` era herdado pelo cartão. A regra é a base do componente compartilhado e vale também para a 2.2.
+- **(b) O que é de antes dela.** O vermelho da baseline (24 reprovam, 6 passam) e os sete controles negativos rodaram antes dessa edição de CSS, não "na árvore final". Os 11 hashes sha256 citados acima seguem iguais na árvore final (conferido pelo Tech Lead) e a edição é só de CSS, então o Tech Lead os aceitou sem nova corrida. Nada foi reexecutado.
+- **(c) A execução 3 depois da edição.** Os números de I1, I2 e 2.I1 foram confirmados depois da edição: a corrida da FIX-001 da rodada 3 e a do Tech Lead deram I1 10,0 / 4,4 / 6,7 / 5,6, I2 16,1 / 11,3 / 12,2 / 10,8 e 2.I1 2,7 / 1,8 / 2,1 / 1,6. A 2.2, medida de novo pelo Tech Lead, deu 1,1 / 0,4 / 0,7 / 0,7, igual à execução 1. M1, W1 e H3 não foram medidos de novo depois da edição: `.import-card` só existe em `ImportIllustration`.
+
+### Estado da árvore
+
+`git status --porcelain=v1 -uall` da WU-12, antes e depois dos controles, com o mesmo md5. Nenhum arquivo de `e2e-results/` aparece (a pasta é ignorada pelo git). Nenhuma configuração de gate mudou (`vitest.config.*`, `playwright.config.*`, `playwright.authenticated.config.ts`, `next.config.ts`). A execução 3 não reescreveu `apps/frontend/AGENTS.md` além da linha de (f).
+
+### Não feito
+
+A conferência humana da tela num aparelho real. Uma nova medida do I2 com o banner da casca removido. O 2.I2 a 2.I10 como quadros. A lista por registro do I1.
+
+**Nota de fechamento — review105, 2026-10-03.** Registrado no fechamento, a partir dos resultados do IA Loop, sem reescrever o texto acima:
+
+- **Decisão.** D-119 ACCEPTED na rodada 4, sem blocker, depois de 2 blockers na rodada 1 (documento), 1 na rodada 2 (código: rótulos do I2) e 3 na rodada 3 (documento). A rodada 4 (FIX-001) mudou só as seções do Goal105 de CURRENT_STATE e VALIDATION_GATE.
+- **Controle 6.** O Tech Lead aceita a variante 6a como o controle 6, porque ela cumpre o "ou" do Goal. A pergunta deixada acima fica respondida, sem asserção própria para `ConnectSourceScreen`.
+- **Conferência do Tech Lead na rodada 4.** Os 11 sha256 da seção dos controles batem com a árvore aceita. O único diff de `atendly.css` é `text-align: left` em `.import-card`. Depois da comparação, `git status` lista os mesmos 36 arquivos, e `apps/frontend/AGENTS.md` difere da base só na linha de (f). O Tech Lead rodou `npm run visual:compare -- --target I1,I2,2.I1` nas rodadas 1 a 4 (exit 0; a 2.2 também na rodada 3) e abriu os doze `side-by-side.png` em cada rodada. Os números da rodada 4 são os da execução 3. O vermelho da baseline e os controles foram aceitos pelo registro acima, não reexecutados pelo Tech Lead.
+- **Gates do IA Loop na rodada 4.** São os da rodada 3 (WU-05 a WU-11), reaproveitados porque a impressão digital de código continua `code-v1:a698f84c…`. Todos têm exit 0, com as contagens da tabela "Execuções que sustentam cada contagem".
+- **Aceito sem prova completa.** O histórico de uma importação real, só em jsdom (o I1 usa resposta fixa); I1 e 2.I1 sem diff zero e o I2 pior pelo diff que na execução 1, aceitos pela vista dos `side-by-side.png` e pela causa medida; o vermelho da baseline e os controles de antes da edição de CSS. Detalhe no [review105](reviews/105-review.md).

@@ -50,6 +50,7 @@ const completeImport = vi.fn();
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
     calendar: { connectIntegration },
+    settings: { get: () => new Promise<never>(() => undefined) },
     migration: {
       analyzeImport,
       completeImport,
@@ -226,6 +227,10 @@ describe("ShellConfigProvider + conexão da origem não excede a profundidade de
 
     renderScreen();
 
+    await user.click(
+      await screen.findByRole("button", { name: "Importar do Minha Agenda" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByRole("heading", { name: "Entre no Minha Agenda" });
     await user.type(
       screen.getByLabelText("E-mail do Minha Agenda"),

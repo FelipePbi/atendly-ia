@@ -10,28 +10,10 @@
   max-width: 720px;
 }
 
-.imports-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 600;
-  width: fit-content;
-}
-.imports-back:hover {
-  color: var(--fg);
-}
-.imports-back .icon {
-  width: 16px;
-  height: 16px;
-  transform: rotate(180deg);
-}
-
 .imports-header p.eyebrow {
   margin-bottom: 4px;
 }
-.imports-header h1 {
+.imports-header :is(h1, h2) {
   font-size: 26px;
 }
 .imports-header p:last-child {
@@ -93,29 +75,6 @@
   font-family: var(--font-serif, inherit);
   font-size: 20px;
   font-variant-numeric: tabular-nums;
-}
-
-.imports-facts {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 14px;
-}
-.imports-facts li {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
-  gap: 12px;
-}
-.imports-facts .icon {
-  width: 20px;
-  height: 20px;
-  margin-top: 1px;
-  color: var(--accent);
-}
-.imports-facts span {
-  display: block;
-  font-size: 14px;
 }
 
 .imports-actions {

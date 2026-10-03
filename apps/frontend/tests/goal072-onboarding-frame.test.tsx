@@ -368,7 +368,7 @@ describe("progresso: trilho e barra segmentada mostram o mesmo capítulo", () =>
     );
     await screen.findByRole("heading", {
       level: 1,
-      name: "Importar do Minha Agenda",
+      name: "De onde vamos trazer seus dados?",
     });
 
     const items = within(
@@ -392,7 +392,7 @@ describe("importacao sem calendarSource volta para sistema-atual", () => {
     expect(
       screen.queryByRole("heading", {
         level: 1,
-        name: "Importar do Minha Agenda",
+        name: "De onde vamos trazer seus dados?",
       }),
     ).toBeNull();
   });
@@ -406,7 +406,7 @@ describe("importacao sem calendarSource volta para sistema-atual", () => {
     expect(
       await screen.findByRole("heading", {
         level: 1,
-        name: "Importar do Minha Agenda",
+        name: "De onde vamos trazer seus dados?",
       }),
     ).toBeVisible();
     expect(getImportState).toHaveBeenCalled();

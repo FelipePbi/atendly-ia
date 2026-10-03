@@ -55,6 +55,7 @@ const listImportItems = vi.fn();
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
     calendar: { connectIntegration: vi.fn() },
+    settings: { get: () => new Promise<never>(() => undefined) },
     migration: {
       analyzeImport,
       completeImport,
@@ -726,7 +727,7 @@ describe("concluir é definitivo", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Sua única importação do Minha Agenda. Não é possível importar novamente.",
+        /A importação do Minha Agenda é feita uma única vez\./,
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Importar/ })).not.toBeInTheDocument();

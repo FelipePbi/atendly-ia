@@ -44,6 +44,7 @@ const getImportProgress = vi.fn();
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
     calendar: { connectIntegration },
+    settings: { get: () => new Promise<never>(() => undefined) },
     migration: {
       analyzeImport,
       executeImport: vi.fn(),
@@ -140,6 +141,10 @@ function renderScreen() {
 }
 
 async function fillCredentials(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    await screen.findByRole("button", { name: "Importar do Minha Agenda" }),
+  );
+  await user.click(screen.getByRole("button", { name: "Continuar" }));
   await user.type(
     await screen.findByLabelText("E-mail do Minha Agenda"),
     "camila@example.com",
@@ -161,10 +166,20 @@ beforeEach(() => {
 });
 
 describe("entrada decidida pelo estado", () => {
-  test("direito disponível, sem sessão nem histórico: mostra a conexão da origem", async () => {
+  test("direito disponível, sem sessão nem histórico: mostra a entrada, e a conexão da origem só depois da origem", async () => {
+    const user = userEvent.setup();
     getImportState.mockResolvedValue(availableStateFixture());
     renderScreen();
 
+    expect(
+      await screen.findByRole("heading", {
+        name: "Você ainda não importou do Minha Agenda",
+      }),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Importar do Minha Agenda" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
     expect(
       await screen.findByRole("heading", { name: "Entre no Minha Agenda" }),
     ).toBeInTheDocument();
@@ -367,6 +382,7 @@ describe("sessão viva: retomar é o padrão, substituir é decisão explícita"
     await user.click(
       screen.getByRole("button", { name: "Descartar e conectar outra conta" }),
     );
+    await user.click(await screen.findByRole("button", { name: "Continuar" }));
 
     expect(
       await screen.findByLabelText("E-mail do Minha Agenda"),

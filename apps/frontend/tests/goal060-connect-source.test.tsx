@@ -43,6 +43,7 @@ async function fillCredentials(
   email = "camila@example.com",
   password = "super-secret",
 ) {
+  await user.click(await screen.findByRole("button", { name: "Continuar" }));
   await user.type(await screen.findByLabelText("E-mail do Minha Agenda"), email);
   await user.type(screen.getByLabelText("Senha do Minha Agenda"), password);
 }
@@ -52,7 +53,9 @@ beforeEach(() => {
 });
 
 test("só existem os campos de e-mail e senha", async () => {
+  const user = userEvent.setup();
   renderScreen();
+  await user.click(await screen.findByRole("button", { name: "Continuar" }));
 
   expect(
     await screen.findByLabelText("E-mail do Minha Agenda"),
@@ -69,7 +72,9 @@ test("só existem os campos de e-mail e senha", async () => {
 });
 
 test("o texto explica que os dados servem só a esta importação e são apagados ao concluir", async () => {
+  const user = userEvent.setup();
   renderScreen();
+  await user.click(await screen.findByRole("button", { name: "Continuar" }));
 
   expect(
     await screen.findByText(

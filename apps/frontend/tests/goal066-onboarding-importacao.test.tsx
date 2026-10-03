@@ -4,8 +4,9 @@
  *
  * O que esta suíte prova:
  *
- * - a etapa `importacao`, sem sessão, mostra a tela de conectar do módulo de
- *   importação, sem o link "Configurações", sem link que saia do onboarding,
+ * - a etapa `importacao`, sem sessão, mostra a origem (2.I1) e, depois de
+ *   "Continuar", a tela de conectar do módulo de importação, sem o link
+ *   "Configurações", sem link que saia do onboarding,
  *   com um `<h1>` só e sem abrir sessão por montar; ela é montada fora de
  *   `ShellConfigProvider`, então qualquer chamada de `useShellConfig` lançaria;
  * - "Importar agora" grava `calendar.source`, relê o onboarding e só então a
@@ -16,7 +17,7 @@
  *   §5B), cada uma com o seu aviso;
  * - com falha na leitura do estado da importação, a retomada segue a regra
  *   sem importação;
- * - `/importacao` continua com o link "Configurações" e registrando o shell.
+ * - `/importacao` continua com o voltar para Configurações e registrando o shell.
  */
 
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -61,6 +62,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       startImport,
     },
     onboarding: { get: getOnboarding, update: updateOnboarding },
+    settings: { get: () => new Promise<never>(() => undefined) },
   }),
   useProductRuntime: () => ({
     refreshSession,
@@ -230,7 +232,8 @@ function expectOnlyOnboardingLinks(container: HTMLElement) {
 }
 
 describe("importacao sem sessão: a tela de conectar, na moldura do onboarding", () => {
-  test("mostra a tela de conectar do módulo, sem o link Configurações e com um <h1> só", async () => {
+  test("mostra a origem do módulo, sem o link Configurações e com um <h1> só", async () => {
+    const user = userEvent.setup();
     const { container } = renderStep(
       "importacao",
       stateFixture({ ...businessDone, ...calendarDone }),
@@ -239,11 +242,18 @@ describe("importacao sem sessão: a tela de conectar, na moldura do onboarding",
     expect(
       await screen.findByRole("heading", {
         level: 1,
-        name: "Importar do Minha Agenda",
+        name: "De onde vamos trazer seus dados?",
       }),
     ).toBeVisible();
     expect(
-      screen.getByRole("heading", { level: 2, name: "Entre no Minha Agenda" }),
+      screen.queryByRole("heading", { level: 2, name: "Entre no Minha Agenda" }),
+    ).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    expect(
+      await screen.findByRole("heading", {
+        level: 2,
+        name: "Entre no Minha Agenda",
+      }),
     ).toBeVisible();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.queryByRole("link", { name: /Configurações/ })).toBeNull();
@@ -261,7 +271,7 @@ describe("importacao sem sessão: a tela de conectar, na moldura do onboarding",
     renderStep("importacao", stateFixture({ ...businessDone, ...calendarDone }));
     await screen.findByRole("heading", {
       level: 1,
-      name: "Importar do Minha Agenda",
+      name: "De onde vamos trazer seus dados?",
     });
     expect(getImportState).toHaveBeenCalledTimes(1);
     expect(startImport).not.toHaveBeenCalled();
@@ -298,7 +308,7 @@ describe("'Importar agora' grava calendar.source antes de montar a importação"
     expect(
       await screen.findByRole("heading", {
         level: 1,
-        name: "Importar do Minha Agenda",
+        name: "De onde vamos trazer seus dados?",
       }),
     ).toBeVisible();
     expect(updateOnboarding).toHaveBeenCalledWith({
@@ -474,7 +484,7 @@ describe("falha na leitura do estado da importação não bloqueia a retomada", 
 });
 
 describe("/importacao não muda", () => {
-  test("mantém o link Configurações e registra o shell da plataforma", async () => {
+  test("mantém o voltar para Configurações e registra o shell da plataforma", async () => {
     const { ImportsScreen } = await import("@/features/imports/ImportsScreen");
     const { ShellConfigProvider, useShellConfigValue } = await import(
       "@/shared/layout/ShellConfig"
@@ -494,19 +504,18 @@ describe("/importacao não muda", () => {
       </ShellConfigProvider>,
     );
 
+    await screen.findByRole("heading", {
+      name: "Você ainda não importou do Minha Agenda",
+    });
     expect(
-      await screen.findByRole("heading", {
-        level: 1,
-        name: "Importar do Minha Agenda",
-      }),
+      screen.getByRole("heading", { level: 1, name: "Importação" }),
     ).toBeVisible();
-    expect(screen.getByRole("link", { name: /Configurações/ })).toHaveAttribute(
-      "href",
-      "/configuracoes",
-    );
+    expect(
+      screen.getByRole("link", { name: "Voltar para configurações" }),
+    ).toHaveAttribute("href", "/configuracoes");
     await waitFor(() =>
       expect(screen.getByTestId("shell")).toHaveTextContent(
-        "importacao|Importação|migration",
+        "configuracoes|Importação|migration",
       ),
     );
   });

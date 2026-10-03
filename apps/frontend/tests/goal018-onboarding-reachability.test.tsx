@@ -272,10 +272,14 @@ describe("todo cenário sobrevivente é montado pela rota real", () => {
         </OnboardingRuntimeProvider>,
       );
       // Goal099/WU-02: whatsapp-conectar abre na fase de consentimento.
+      // Goal105: importacao abre na origem, cujo h1 vem do módulo de
+      // importação, não do título do cenário.
       const title =
         step === "whatsapp-conectar"
           ? "Antes de conectar"
-          : onboardingScenarios[step][1];
+          : step === "importacao"
+            ? "De onde vamos trazer seus dados?"
+            : onboardingScenarios[step][1];
       expect(
         await screen.findByRole("heading", { level: 1, name: title }),
       ).toBeVisible();

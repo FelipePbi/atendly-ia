@@ -52,6 +52,7 @@ const completeImport = vi.fn();
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
     calendar: { connectIntegration },
+    settings: { get: () => new Promise<never>(() => undefined) },
     migration: {
       analyzeImport,
       completeImport,
@@ -276,8 +277,14 @@ beforeEach(() => {
 describe("conexão da origem", () => {
   test("sem violação de acessibilidade", async () => {
     getImportState.mockResolvedValue(availableStateFixture());
+    const user = userEvent.setup();
     const { container } = renderScreen();
 
+    await user.click(
+      await screen.findByRole("button", { name: "Importar do Minha Agenda" }),
+    );
+    await expectNoA11yViolations(container);
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByRole("heading", { name: "Entre no Minha Agenda" });
     await expectNoA11yViolations(container);
   });

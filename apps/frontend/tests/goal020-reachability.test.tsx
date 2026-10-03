@@ -274,6 +274,7 @@ function renderPage(page: React.ReactElement) {
 beforeEach(() => {
   vi.clearAllMocks();
   getWhatsapp.mockResolvedValue(null);
+  getSettings.mockRejectedValue(new Error("fora do escopo desta suíte"));
   getRetention.mockRejectedValue(new Error("fora do escopo desta suíte"));
   serviceCatalogList.mockRejectedValue(new Error("fora do escopo desta suíte"));
   // Bloco de Lembretes (Goal021/WU-010) monta junto de CalendarSettingsPage;
@@ -287,15 +288,22 @@ beforeEach(() => {
 });
 
 describe("/importacao monta a jornada real pela própria rota", () => {
-  test("direito disponível, sem sessão: monta a conexão da origem", async () => {
+  test("direito disponível, sem sessão: monta a entrada e, depois da origem, a conexão da origem", async () => {
+    const user = userEvent.setup();
     getImportState.mockResolvedValue(availableStateFixture());
     renderPage(<ImportacaoPage />);
 
+    await user.click(
+      await screen.findByRole("button", { name: "Importar do Minha Agenda" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
     expect(
       await screen.findByRole("heading", { name: "Entre no Minha Agenda" }),
     ).toBeVisible();
-    // Volta para Configurações é o outro lado do mesmo link, alcançável pela rota real.
-    expect(screen.getByRole("link", { name: /Configurações/ })).toHaveAttribute(
+    // Volta para Configurações é a barra empurrada da tela, alcançável pela rota real.
+    expect(
+      screen.getByRole("link", { name: "Voltar para configurações" }),
+    ).toHaveAttribute(
       "href",
       "/configuracoes",
     );
@@ -388,7 +396,9 @@ describe("Configurações → hub aponta para a mesma rota que a navegação dec
     renderPage(<ImportacaoPage />);
 
     expect(
-      await screen.findByRole("heading", { name: "Entre no Minha Agenda" }),
+      await screen.findByRole("heading", {
+        name: "Você ainda não importou do Minha Agenda",
+      }),
     ).toBeVisible();
   });
 });

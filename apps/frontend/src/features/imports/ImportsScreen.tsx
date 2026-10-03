@@ -2,16 +2,21 @@
 
 import { type ReactNode, useEffect, useState } from "react";
 
+import type { SettingsState } from "@/data";
+import { SettingsHubPanel } from "@/features/settings/SettingsHub";
+import { ListDetailLayout } from "@/shared/layout/ListDetail";
 import { useShellConfig } from "@/shared/layout/ShellConfig";
+import { useWideLayout } from "@/shared/layout/useWideLayout";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Dialog } from "@/shared/ui/Dialog";
 import { StatePanel } from "@/shared/ui/States";
 
 import { ConnectSourceScreen } from "./ConnectSourceScreen";
+import { ImportEmptyScreen } from "./ImportEmptyScreen";
 import { ImportHistoryCard } from "./ImportHistoryCard";
 import { ImportPreviewScreen } from "./ImportPreviewScreen";
 import { ImportRunScreen } from "./ImportRunScreen";
-import { ImportsLoading, ImportsPage } from "./ImportsLayout";
+import { ImportsLoading, ImportsPage, useImportsFrame } from "./ImportsLayout";
 import type {
   ImportHistory,
   ImportLiveSession,
@@ -72,19 +77,52 @@ export function useImportState(): ImportStateReader {
  * Ponto de entrada do módulo (Goal020): o estado lido decide a tela, nunca
  * uma tentativa de abrir sessão. Uma única chamada de `useShellConfig` por
  * árvore — as telas filhas (`ConnectSourceScreen`, `ResumeSessionScreen`,
- * `ImportHistoryScreen`) nunca chamam o hook.
+ * `ImportHistoryScreen`) e a lista de Configurações nunca chamam o hook.
+ *
+ * Composição de Configurações (D-103, Goal105): abaixo de 1024 px a tela é
+ * empurrada; de 1024 px em diante a lista do hub fica ao lado, com
+ * "Importação" marcada. Sem a leitura de `settings` (ainda a caminho ou
+ * falhou), a tela da importação aparece sozinha.
  */
 export function ImportsScreen() {
   const reader = useImportState();
+  const wide = useWideLayout();
+  const [settings, setSettings] = useState<SettingsState | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getProductServices()
+      .settings.get(controller.signal)
+      .then(setSettings)
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
 
   useShellConfig({
-    active: "importacao",
+    active: "configuracoes",
     loading: !reader.state && !reader.error,
     module: "migration",
+    pushed: true,
     title: "Importação",
   });
 
-  return <ImportsFlow reader={reader} />;
+  const flow = (
+    <ImportsFlow reader={reader} timeZone={settings?.business?.timezone} />
+  );
+  if (!wide || !settings) return flow;
+  return (
+    <ListDetailLayout
+      detail={flow}
+      list={
+        <SettingsHubPanel
+          heading="h2"
+          openHref="/importacao"
+          settings={settings}
+        />
+      }
+      listLabel="Configurações"
+    />
+  );
 }
 
 /**
@@ -96,9 +134,11 @@ export function ImportsScreen() {
 export function ImportsFlow({
   historyActions,
   reader,
+  timeZone,
 }: {
   historyActions?: ReactNode;
   reader: ImportStateReader;
+  timeZone?: string | null;
 }) {
   const { error, retry, setState, state } = reader;
 
@@ -124,7 +164,7 @@ export function ImportsFlow({
 
   if (state.history) {
     return (
-      <ImportHistoryScreen history={state.history}>
+      <ImportHistoryScreen history={state.history} timeZone={timeZone}>
         {historyActions}
       </ImportHistoryScreen>
     );
@@ -132,7 +172,7 @@ export function ImportsFlow({
   if (state.session) {
     return <ResumeSessionScreen session={state.session} onChanged={setState} />;
   }
-  return <ConnectSourceScreen onConnected={setState} />;
+  return <ImportEmptyScreen onConnected={setState} />;
 }
 
 function ResumeSessionScreen({
@@ -214,16 +254,16 @@ function ResumeSessionScreen({
 function ImportHistoryScreen({
   children,
   history,
+  timeZone,
 }: {
   children?: ReactNode;
   history: ImportHistory;
+  timeZone?: string | null;
 }) {
+  const platform = useImportsFrame() === "platform";
   return (
-    <ImportsPage
-      description="Sua única importação do Minha Agenda. Não é possível importar novamente."
-      title="Importação"
-    >
-      <ImportHistoryCard history={history} />
+    <ImportsPage bare={platform} title="Importação">
+      <ImportHistoryCard history={history} timeZone={timeZone} />
       {children}
     </ImportsPage>
   );

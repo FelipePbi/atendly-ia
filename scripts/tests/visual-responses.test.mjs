@@ -92,20 +92,42 @@ test("bffPathname tira /api/bff e ignora a query; fora do proxy devolve null", (
   assert.equal(bffPathname("http://localhost:3100/api/bffx/v1/whatsapp"), null);
 });
 
-test("targets.json: só o W1 declara responses, e só GET /v1/whatsapp conectado", () => {
+test("targets.json: só W1 e I1 declaram responses, cada um só com o seu GET", () => {
   const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "apps", "frontend", "e2e", "visual", "targets.json");
   const targets = validateTargetResponses(JSON.parse(readFileSync(file, "utf8")).targets);
   const declaring = targets.filter((target) => target.responses !== undefined);
-  assert.deepEqual(declaring.map((target) => target.code), ["W1"]);
-  assert.equal(declaring[0].file, "Mais-WhatsApp-Importacao-Conta.dc.html");
-  assert.equal(declaring[0].responses.length, 1);
-  const [only] = declaring[0].responses;
-  assert.equal(only.method, "GET");
-  assert.equal(only.path, "/v1/whatsapp");
-  assert.equal(only.json.data.status, "CONNECTED");
-  assert.equal(only.json.data.phoneNumber, "5511987654321");
-  assert.equal(only.json.data.connectedAt, "2026-09-18T15:00:00.000Z");
-  assert.equal(typeof only.json.data.id, "string");
-  assert.equal(typeof only.json.data.updatedAt, "string");
-  assert.equal(typeof only.json.requestId, "string");
+  assert.deepEqual(declaring.map((target) => target.code), ["W1", "I1"]);
+  for (const target of declaring) {
+    assert.equal(target.file, "Mais-WhatsApp-Importacao-Conta.dc.html");
+    assert.equal(target.responses.length, 1);
+    for (const entry of target.responses) {
+      assert.equal(entry.method, "GET");
+      assert.equal(typeof entry.json.requestId, "string");
+    }
+  }
+
+  const [w1, i1] = declaring;
+  const [whatsapp] = w1.responses;
+  assert.equal(whatsapp.path, "/v1/whatsapp");
+  assert.equal(whatsapp.json.data.status, "CONNECTED");
+  assert.equal(whatsapp.json.data.phoneNumber, "5511987654321");
+  assert.equal(whatsapp.json.data.connectedAt, "2026-09-18T15:00:00.000Z");
+  assert.equal(typeof whatsapp.json.data.id, "string");
+  assert.equal(typeof whatsapp.json.data.updatedAt, "string");
+
+  const [imports] = i1.responses;
+  assert.equal(imports.path, "/v1/calendar/imports");
+  const { right, session, history } = imports.json.data;
+  assert.equal(session, null);
+  assert.equal(right.available, false);
+  assert.equal(right.completedAt, "2026-09-18T13:42:00.000Z");
+  assert.equal(history.status, "COMPLETED");
+  assert.equal(history.completedAt, "2026-09-18T13:42:00.000Z");
+  const imported = Object.fromEntries(history.categories.map((category) => [category.category, category.imported]));
+  assert.equal(imported.SERVICE, 12);
+  assert.equal(imported.CUSTOMER, 386);
+  assert.equal(imported.FUTURE_APPOINTMENT, 42);
+  assert.equal(imported.PAST_APPOINTMENT, 1400);
+  assert.ok(imported.AVAILABILITY > 0);
+  assert.equal(history.pendingAcceptance.pendingCount, 3);
 });

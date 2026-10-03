@@ -45,6 +45,7 @@ const getImportProgress = vi.fn();
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
     calendar: { connectIntegration: vi.fn() },
+    settings: { get: () => new Promise<never>(() => undefined) },
     migration: {
       analyzeImport,
       decideImportItem,

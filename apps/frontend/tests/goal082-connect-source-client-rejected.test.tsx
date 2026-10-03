@@ -38,6 +38,7 @@ async function connectRejectedWith(code: string, status: number) {
     }),
   );
   render(<ConnectSourceScreen onConnected={vi.fn()} />);
+  await user.click(await screen.findByRole("button", { name: "Continuar" }));
   await user.type(
     await screen.findByLabelText("E-mail do Minha Agenda"),
     "camila@example.com",

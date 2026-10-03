@@ -147,8 +147,8 @@ export const AUTHENTICATED_ROUTES = [
  *
  * Goal066: `sistema-atual`, `quando-importar` e `importacao`. A conta parada
  * no meio não tem sessão de importação, então `importacao` é medida no
- * estado de conectar, cujo h1 é o da tela de conectar do módulo de
- * importação (a etapa usa as telas do módulo, com o `<h1>` delas). Análise,
+ * origem, cujo h1 é o da tela de origem do módulo de importação (a etapa
+ * usa as telas do módulo, com o `<h1>` delas). Análise,
  * revisão, conflitos, execução e resultado dentro do onboarding exigem uma
  * origem real e ficam provados no jsdom
  * (`tests/goal066-onboarding-importacao.test.tsx`).
@@ -188,7 +188,7 @@ export const ONBOARDING_ROUTES = [
   {
     path: "/onboarding/importacao",
     name: "onboarding-importacao",
-    contentMarker: "Importar do Minha Agenda",
+    contentMarker: "De onde vamos trazer seus dados?",
   },
   {
     path: "/onboarding/servico-nome",

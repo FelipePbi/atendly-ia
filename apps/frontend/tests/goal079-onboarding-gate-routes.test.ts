@@ -49,7 +49,15 @@ describe("Goal079 §6.8 — rotas do gate autenticado", () => {
 
   test("todo contentMarker de rota é o título de uma etapa do onboarding", () => {
     const titles = Object.values(onboardingScenarios).map((scenario) => scenario[1]);
-    for (const route of ONBOARDING_ROUTES) expect(titles).toContain(route.contentMarker);
+    for (const route of ONBOARDING_ROUTES) {
+      // Goal105: importacao é medida na origem, cujo h1 vem do módulo de
+      // importação; os demais marcadores seguem sendo o título da etapa.
+      if ((route.path as string) === "/onboarding/importacao") {
+        expect(route.contentMarker).toBe("De onde vamos trazer seus dados?");
+        continue;
+      }
+      expect(titles).toContain(route.contentMarker);
+    }
   });
 });
 

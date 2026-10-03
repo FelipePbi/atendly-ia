@@ -69,6 +69,14 @@ const calendarAppointmentSchema: z.ZodType<CalendarAppointment> = z.object({
   bufferBeforeMinutes: z.number().default(0),
   bufferAfterMinutes: z.number().default(0),
   seriesId: z.string().nullable().default(null),
+  // Ausentes em replay gravado antes do Goal103: o replay nao sabe dizer que
+  // algo aconteceu, entao nulo.
+  completedAt: z.string().nullable().default(null),
+  completionOrigin: z.enum(["MANUAL", "AUTO"]).nullable().default(null),
+  noShowAt: z.string().nullable().default(null),
+  noShowNote: z.string().nullable().default(null),
+  presenceConfirmedAt: z.string().nullable().default(null),
+  finalValue: z.number().nullable().default(null),
 });
 
 /**

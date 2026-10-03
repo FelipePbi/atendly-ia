@@ -4745,3 +4745,108 @@ A conferência humana num aparelho real; o CL6 com concluídos e o rodapé de va
 - **Reexecução do Tech Lead na árvore final.** `validate:core` exit 0 (`test:frontend` **141** arquivos e **1582** testes; `test:gate` **233**/**233**). `validate:ui` exit 0 (**169** `passed`, **21** `skipped`, **0** retentativas). `validate:integration` exit 0 contra um PostgreSQL descartável, com o gate autenticado em **255** `passed` e **0** retentativas, inclusive G-4 e G-5. Essa execução cobre o critério 5. Os `sha256` de "Árvore avaliada" conferem com a árvore aceita. O vermelho e os cinco controles negativos foram conferidos por registro e `sha256`, não reexecutados.
 - **Sublinhado no hover.** Aceito como divergência 10 de D-112: o critério de QA R-08 vale para o estado em repouso.
 - **Limite conhecido: `finalValue` não vem na listagem.** A primeira tentativa do review da rodada 4 mediu no BFF descartável: com `finalValue` 90,00 e 150,00 gravados em dois concluídos, a resposta JSON da listagem veio sem o campo. `CalendarAppointment` do Scheduling não tem `finalValue`, e o schema público o preenche com `null`. Com dados reais, o CL6 mostra "valor não registrado · registrar" em todo concluído e "Valor registrado: R$ 0" no rodapé. As provas jsdom passam porque o mock traz o campo. Detalhe e decisão pendente no [review094](reviews/094-review.md) e em [GAP_ANALYSIS](GAP_ANALYSIS.md).
+
+## A listagem de agendamentos traz o valor registrado e a presença confirmada, do Goal103 (rodadas 1 e 2)
+
+Registro da conferência com a pilha real, dos controles negativos e das contagens da execução final do Goal 103 ([D-113](DECISIONS.md), PROPOSED), escrito na WU-08 depois da última edição de código. Rodado em 2026-10-03. Nenhum arquivo de configuração de gate foi alterado (`vitest.config.*`, `playwright.config.*`, `playwright.authenticated.config.ts`, `next.config.ts`).
+
+### Árvore avaliada
+
+`sha256` dos dez arquivos alterados ou criados fora dos documentos, medidos na WU-08 depois de todos os controles, com a árvore restaurada. O spec `apps/frontend/e2e/authenticated-matrix.spec.ts`, que a rodada 1 listava como décimo primeiro, foi revertido ao estado de `79ddc3f` na rodada 2 e não é mais arquivo alterado:
+
+| Arquivo | `sha256` |
+| --- | --- |
+| `apps/bff/src/clients/scheduling/index.ts` | `122859f10292c3c039d80191b446f1a418d1872c2a1383050547478a11d814ec` |
+| `apps/scheduling-service/src/modules/appointments/appointment-lifecycle-service.ts` | `a21b793d295f05dbe1c98169dd1b5da68fbd099a6dcd22be174bdf0b850fac51` |
+| `apps/scheduling-service/src/modules/calendar/calendar-provider.ts` | `43d7e334fb5d7a0ccba3492ba42f2f0d1d0249a658b59eb7a4aee1fe7ffd4884` |
+| `apps/scheduling-service/src/modules/calendar/calendar-service.ts` | `856cfac1dcf0c1a337ea80dde2c44a8cabd5b0456ba778f254992ef248c3a4e6` |
+| `apps/scheduling-service/src/modules/integrations/atendly/provider.ts` | `0c9abda38359ca999390a5a71b90ed6adb4e4adc3134fd68946e5c4852c810da` |
+| `packages/public-api-contract/src/schemas.ts` | `9cc2c2184e9da58aea7577990b101336dd6c93d73084efdbc4b4a75b1428aa4f` |
+| `apps/ai-orchestrator/tests/goal103-appointment-lifecycle-not-exposed.test.ts` | `20752a0d3498ae92d76b0d30379b04e7507bc4ff2236c7a86e387572bdf72caa` |
+| `apps/bff/tests/goal103-appointment-listing-lifecycle.integration.test.ts` | `8222d7ecf11b03ed41df9e0442ee832f5d03e518267beed8cf27527ea5a9d78d` |
+| `apps/scheduling-service/tests/integration/goal103-appointment-listing-lifecycle.integration.test.ts` | `d9fa16eac331453dae787aa1bb19e08b72b5b2ffe6be22aa18c42ac9393791fc` |
+| `apps/scheduling-service/tests/unit/goal103-appointment-listing-lifecycle.test.ts` | `7ed6c77195ff188d3a625b94f54c8db5ca51cf0737d02165e5da3253915c4fc5` |
+
+### Execuções
+
+| Passo | Resultado | Execução que sustenta |
+| --- | --- | --- |
+| `validate:core` | exit 0, 114097 ms | WU-06 do IA Loop (`103-r1-unit-wu-06`) |
+| `test:frontend` | **141** arquivos e **1582** testes passaram, exit 0 | medido na WU-08, `npm run test:frontend` |
+| `test:gate` | **233**/**233**, exit 0 | medido na WU-08, `npm run test:gate` |
+| `validate:integration`, primeira execução (rodada 1) | exit 1, 653637 ms | WU-07 (`103-r1-unit-wu-07`); a DIAG-001 ajustou `apps/frontend/e2e/authenticated-matrix.spec.ts`, ajuste **revertido na rodada 2** |
+| `validate:integration`, segunda execução (rodada 1) | exit 0, 680509 ms, gate autenticado **255** `passed`, `retries: 0` | WU-07 (`103-r1-unit-wu-07-g2`), **com o spec alterado**; não vale para a árvore final |
+| `validate:integration`, **execução final (rodada 2)**, na árvore final com o spec igual a `79ddc3f` | exit 0, **36**/**36** passos `passed`, gate autenticado **255** `passed`, `retries: 0` (`authenticated gate retries: 0 — every test passed on its first attempt`) | FIX-001 (`103-r2-unit-fix-001`), contra um PostgreSQL 18 recém-provisionado na porta 55621, só com o banco `atendly_bff_test` criado e os demais provisionados pelo próprio runner. `onboarding-demonstracao-da-ia` passou sem retentativa |
+| `test:bff-integration` (dentro de `validate:integration`, rodada 2) | `Test Files  64 passed (64)`, `Tests  477 passed (477)` | FIX-001 |
+| `test:scheduling-integration` (idem) | `Test Files  19 passed (19)`, `Tests  145 passed (145)` | FIX-001 |
+| `test:ai-orchestrator-transport-durability` e `test:ai-orchestrator-content-purge` (idem) | `10` arquivos e `74` testes; `3` arquivos e `24` testes, todos passaram | FIX-001 |
+| `test:ai-orchestrator` (`npm run test:ai-orchestrator`, suíte inteira, rodada 2) | `Test Files  94 passed \| 13 skipped (107)`, `Tests  1188 passed \| 98 skipped (1286)` | FIX-001 |
+| Prova 1, Scheduling integração (PostgreSQL real) | **2**/**2** | medido na WU-08 |
+| Prova 2, Scheduling unidade | **6**/**6** | medido na WU-08 |
+| Prova 3, BFF | **3**/**3** | medido na WU-08 |
+| Prova 4, IA | **2**/**2** | medido na WU-08 |
+
+A causa da primeira falha de `validate:integration` (contraste em `onboarding-demonstracao-da-ia`, rodada 1) não foi medida: a rodada 1 a tratou editando o spec e a rodada 2 reverteu essa edição. Na rodada 2, com o spec igual a `79ddc3f`, a tela passou sem retentativa; a falha da rodada 1 fica registrada como intermitente, sem causa isolada. O vermelho da baseline das provas 1 a 3 vem dos relatórios de WU-01 e WU-02 (as provas 1 e 2 deram `Tests 7 failed | 1 passed (8)` com o código de produção intocado) e não foi reexecutado na WU-08.
+
+### Recontagem da baseline por suíte (rodada 2)
+
+Contagem final com o banco, tirada da execução final de `validate:integration` acima, e a baseline correspondente. A baseline é a contagem final menos os testes novos do Goal, que são todos arquivos novos: nenhum arquivo de teste rastreado foi alterado (`git diff --stat -- '*.test.ts'` vazio), então não há teste existente removido, pulado ou ajustado.
+
+| Suíte | Baseline (`79ddc3f`) | Testes novos do Goal | Final |
+| --- | --- | --- | --- |
+| `test:bff-integration`, com banco | **474** testes em 63 arquivos (derivada: 477 − 3) | 3 (prova 3) | **477** em 64 arquivos |
+| `test:scheduling-integration`, com banco | **143** testes em 18 arquivos (derivada: 145 − 2) | 2 (prova 1) | **145** em 19 arquivos |
+| `test:ai-orchestrator`, suíte inteira | **1186** passaram, 98 puladas, em 106 arquivos (**medida**: `vitest run --exclude "tests/goal103*"` na árvore final) | 2 (prova 4) | **1188** passaram, 98 puladas, em 107 arquivos |
+
+Só a baseline do `test:ai-orchestrator` foi medida; as do BFF e do Scheduling são derivadas por subtração, porque reexecutá-las sem os arquivos novos custaria outra execução inteira de `validate:integration`. A contagem do BFF **sem banco** da rodada 1 (WU-01) foi **134** `passed` e **340** `skipped`; ela não serve como baseline desta suíte, porque os 340 pulados só rodam com `BFF_TEST_DATABASE_URL`. Nenhuma suíte ficou com teste a menos.
+
+### Ambiente
+
+PostgreSQL 18 descartável, só local, na porta 55611 (usuário `pgtest`, autenticação `trust`), com os bancos `atendly_bff_test` e `atendly_scheduling_test` para as provas. A conferência da pilha real subiu o Scheduling e o BFF locais apontados para o banco descartável **só por variável de ambiente**, sem editar arquivo, com tokens sintéticos. O cluster fica fora do repositório e foi parado no fim.
+
+### Conferência com a pilha real (§4)
+
+Cenário: registro de uma conta nova, `PATCH /v1/onboarding` (negócio, calendário `ATENDLY` e regras de disponibilidade), três agendamentos por `POST /v1/appointments` com `Idempotency-Key`; um concluído por `POST /v1/appointments/:id/complete` e com valor por `POST /v1/appointments/:id/final-value` (`{ "amount": 149.9 }`), outro com `POST /v1/appointments/:id/presence`, e o terceiro sem nada. Resposta de `GET /v1/appointments?startDate=…&endDate=…` (status 200), reduzida aos campos do Goal:
+
+```json
+[
+  { "id": "cmury0s000015ggi4edtc2j4r", "title": "Corte valor", "status": "COMPLETED",
+    "completedAt": "2026-10-03T05:20:10.260Z", "completionOrigin": "MANUAL",
+    "noShowAt": null, "noShowNote": null, "presenceConfirmedAt": null, "finalValue": 149.9 },
+  { "id": "cmury0s12001aggi45jzv5kju", "title": "Corte presenca", "status": "CONFIRMED",
+    "completedAt": null, "completionOrigin": null,
+    "noShowAt": null, "noShowNote": null, "presenceConfirmedAt": "2026-10-03T05:20:10.288Z", "finalValue": null },
+  { "id": "cmury0s1u001fggi44wleblir", "title": "Corte sem-nada", "status": "CONFIRMED",
+    "completedAt": null, "completionOrigin": null,
+    "noShowAt": null, "noShowNote": null, "presenceConfirmedAt": null, "finalValue": null }
+]
+```
+
+`GET /v1/appointments/:id` do concluído: 200, `finalValue` **149.9**, `completedAt` `2026-10-03T05:20:10.260Z`, `completionOrigin` `"MANUAL"`. A rota `final-value` respondeu `finalValue: 149.9` e a `presence`, `presenceConfirmedAt: "2026-10-03T05:20:10.288Z"`, os mesmos valores da listagem. Execuções anteriores do roteiro falharam por defeito do roteiro e não do código (calendário sem configuração, disponibilidade sem regras e `POST` sem corpo com `content-type` JSON); o resultado acima é o da execução em que todas as rotas responderam 200. Não houve falta (`no-show`) nesse cenário: `noShowAt` e `noShowNote` preenchidos estão provados pelas provas 1 e 3, e não pela pilha real.
+
+### Controles negativos (§5)
+
+Rodados depois da última edição de código, cada defeito aplicado por substituição de texto e o arquivo restaurado a partir da cópia guardada fora do repositório. O `sha256` antes e depois foi **IGUAL** nos três arquivos tocados (`provider.ts` do Scheduling `0c9abda3…`, `clients/scheduling/index.ts` do BFF `122859f1…`, `client.ts` da IA `1d52cdac…`), e `git status --porcelain=v1 -uall` ficou idêntico ao do início.
+
+1. **Sem `finalValue` no mapeamento de `toAtendlyAppointment`** (prova 1). **2** reprovados de **2**. Restaurado, **2**/**2**.
+2. **Sem os seis campos no `appointmentSchema` do BFF** (prova 3). `Tests  3 failed (3)`, com `expected undefined to deeply equal '2026-10-10T12:30:00.000Z'`. Restaurado, **3**/**3**.
+3. **`finalValue` serializado com `Math.round`** (prova 1). `Tests  2 failed (2)`, com `expected 150 to be 149.9`. Restaurado, **2**/**2**.
+4. **`finalValue` declarado no schema da IA** (prova 4). **Não reprovou**: `Tests  2 passed (2)`. O cliente da IA decodifica com um `z.object` e depois monta o agendamento por `toAppointment`, que copia campo a campo; um campo declarado só no schema é lido e descartado, e a prova 4 mede a **exposição**, não a declaração. Variante rodada para ter um vermelho do defeito que (e) quer evitar: `finalValue` declarado no schema **e** copiado em `toAppointment`. `Tests  2 failed (2)`, com `expected {...} to not have property "finalValue"`. Restaurado, `sha256` igual e **2**/**2**. O §5.4 literal, portanto, **não** foi cumprido como escrito; a evidência é a execução literal (verde) mais a variante (vermelha), e o Tech Lead decide se isso cobre o critério 2.
+
+### Estado da árvore
+
+Rodada 2: `apps/frontend/e2e/authenticated-matrix.spec.ts` foi revertido ao estado de `79ddc3f` (`git checkout 79ddc3f -- apps/frontend/e2e/authenticated-matrix.spec.ts`), e `git diff 79ddc3f -- apps/frontend` ficou vazio. A tabela "Árvore avaliada" e a execução final de `validate:integration` acima valem para essa árvore. Os controles negativos, a conferência com a pilha real e as provas 1 a 4 da rodada 1 não tocam o spec e não foram refeitos.
+
+`git status --porcelain=v1 -uall` lista, além dos cinco documentos (`docs/migration/DECISIONS.md`, `GAP_ANALYSIS.md`, `CURRENT_STATE.md`, `VALIDATION_GATE.md` e `apps/bff/PUBLIC_API_V1.md`), os seis arquivos de código do Goal e os quatro testes novos da tabela acima, e nada mais. Nenhuma configuração de gate foi alterada e não restou arquivo de controle negativo.
+
+### Não feito
+
+A conferência humana num aparelho real; o `visual:compare` (o CL6 e o A1 não mudam de código e a conta de teste não tem concluído com valor); a falta (`no-show`) pela pilha real; o resumo da Home com prova própria; o vermelho da baseline das provas 1 a 3 reexecutado nesta unidade.
+
+**Nota de fechamento — review103, 2026-10-03.** Registrado no fechamento, a partir dos resultados do IA Loop, sem reescrever o texto acima:
+
+- **Decisão.** D-113 ACCEPTED na rodada 2, sem blocker. Os quatro blockers da rodada 1 (spec e2e alterado pela DIAG-001, `validate:integration` na árvore revertida, recontagem por suíte com banco e documentos) foram fechados; nenhum era de produção.
+- **Conferência do Tech Lead na rodada 2.** `git hash-object` de `apps/frontend/e2e/authenticated-matrix.spec.ts` dá `2f75aa9d…`, igual ao blob de `79ddc3f`; o `sha256` do arquivo difere só por CRLF (`core.autocrlf=true`). `git diff 79ddc3f --stat` vazio em `apps/frontend`, `apps/ai-orchestrator/src`, `prisma`, `scripts` e nas configurações de vitest e playwright. Os dez `sha256` de "Árvore avaliada" batem com a worktree. Provas 2 (**6**/**6**) e 4 (**2**/**2**) reexecutadas; provas 1 e 3 lidas. A conferência com a pilha real (§4) e os controles negativos foram aceitos pelo registro acima, não reexecutados.
+- **Gates do IA Loop na rodada 2.** typecheck, `validate:core` e `git diff --check` passaram. A WU-07 nativa da rodada 2 deu `validate:integration` exit 0, `255 passed (7.9m)` e `authenticated gate retries: 0`, além da execução do FIX-001 registrada em "Execuções".
+- **Controle 4.** Aceito na forma registrada: a execução literal fica verde e a variante com a cópia em `toAppointment` fica vermelha. Isso cobre o critério 2.
+- **Falha de contraste da rodada 1.** Sem causa medida. Fica como proposta de Goal futuro, com a hipótese da DIAG-001 (o axe mede o fade-in `rise` da demonstração do onboarding). Detalhe no [review103](reviews/103-review.md).

@@ -63,7 +63,7 @@ function toDecimalNumber(value: unknown): number | null {
   return Number(value);
 }
 
-function toSnapshot(row: AppointmentRow): AppointmentLifecycleSnapshot {
+export function toSnapshot(row: AppointmentRow): AppointmentLifecycleSnapshot {
   return {
     id: row.id,
     status: row.status,

@@ -7,6 +7,7 @@ import {
 } from "../../../shared/date-time/calendar-date-time.js";
 import { AppError } from "../../../shared/errors/app-error.js";
 import { recordAppointmentEvent } from "../../appointments/appointment-event-service.js";
+import { toSnapshot } from "../../appointments/appointment-lifecycle-service.js";
 import { AtendlyAvailability } from "../../availability/atendly-availability.js";
 import {
   type AvailableSlot,
@@ -74,6 +75,7 @@ export function toAtendlyAppointment(
     price: item.priceSnapshot === null ? null : Number(item.priceSnapshot),
   }));
   const total = computeAgreementTotal(services);
+  const lifecycle = toSnapshot(appointment);
   return {
     id: appointment.id,
     source: appointment.source,
@@ -98,6 +100,12 @@ export function toAtendlyAppointment(
     bufferBeforeMinutes: appointment.bufferBeforeMinutesSnapshot,
     bufferAfterMinutes: appointment.bufferAfterMinutesSnapshot,
     seriesId: appointment.seriesId,
+    completedAt: lifecycle.completedAt,
+    completionOrigin: lifecycle.completionOrigin,
+    noShowAt: lifecycle.noShowAt,
+    noShowNote: lifecycle.noShowNote,
+    presenceConfirmedAt: lifecycle.presenceConfirmedAt,
+    finalValue: lifecycle.finalValue,
   };
 }
 

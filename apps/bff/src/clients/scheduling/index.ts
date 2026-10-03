@@ -139,6 +139,14 @@ const appointmentSchema = z.object({
   bufferBeforeMinutes: z.number().int().nonnegative().default(0),
   bufferAfterMinutes: z.number().int().nonnegative().default(0),
   seriesId: z.string().nullable().default(null),
+  // Ciclo de vida gravado (Goal103). Defaults mantem decodavel a resposta do
+  // Scheduling anterior a este Goal, inclusive replay de idempotencia.
+  completedAt: z.string().nullable().default(null),
+  completionOrigin: z.enum(["MANUAL", "AUTO"]).nullable().default(null),
+  noShowAt: z.string().nullable().default(null),
+  noShowNote: z.string().nullable().default(null),
+  presenceConfirmedAt: z.string().nullable().default(null),
+  finalValue: z.number().nullable().default(null),
 });
 
 /**

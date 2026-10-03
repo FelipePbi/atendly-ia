@@ -259,6 +259,21 @@ Valor final é dado **separado** do acordo comercial: nunca é inferido do preç
 
 Conclusão automática: o Scheduling marca `COMPLETED` com origem `AUTO` os atendimentos confirmados cujo término venceu há trinta minutos (configurável), avaliado pelo relógio do banco. Nunca toca cancelados nem faltas, e a correção posterior para falta continua permitida.
 
+### Ciclo de vida na listagem e na leitura do agendamento (Goal103)
+
+`GET /v1/appointments` e `GET /v1/appointments/:id` devolvem, em cada agendamento, os seis campos de ciclo de vida com o valor gravado, os mesmos que as rotas de ciclo de vida acima devolvem para o mesmo agendamento:
+
+| Campo | Tipo | `null` quando |
+| --- | --- | --- |
+| `completedAt` | string ISO | não há conclusão gravada |
+| `completionOrigin` | `"MANUAL"` ou `"AUTO"` | não há conclusão gravada |
+| `noShowAt` | string ISO | não há falta gravada |
+| `noShowNote` | string | não há falta gravada, ou ela não tem nota |
+| `presenceConfirmedAt` | string ISO | a presença não foi confirmada |
+| `finalValue` | número (149,90 sai como `149.9`) | nenhum valor final foi registrado |
+
+`null` quer dizer "não aconteceu" ou resposta gravada antes do Goal103: um replay de `Idempotency-Key` guardado antes não tem os campos e decodifica com `null` nos seis. Não quer dizer "valor zero": `finalValue: null` é "sem valor registrado", e nunca é inferido do preço previsto. `finalValueSetAt`, `finalValueSetBy` e `completedBy` **não** saem aqui, só nas rotas de ciclo de vida. O mesmo vale para o agendamento devolvido pela série e pelo resumo da Home. A IA não recebe nenhum destes campos.
+
 ### Histórico operacional
 
 `GET /v1/appointments/:id/events` devolve, em ordem cronológica, um evento por mutação — cada um gravado na **mesma transação** do efeito que descreve:

@@ -98,6 +98,17 @@ export interface CalendarAppointment {
   bufferAfterMinutes: number;
   /** Serie de atendimento (Goal009); nula fora de uma serie. So referencia de leitura. */
   seriesId: string | null;
+  /**
+   * Ciclo de vida do atendimento (Goal103), com a mesma serializacao da rota
+   * de ciclo de vida: data como ISO, decimal como numero. Nulo quando nao
+   * aconteceu, ou quando a resposta foi gravada antes do Goal103.
+   */
+  completedAt: string | null;
+  completionOrigin: "MANUAL" | "AUTO" | null;
+  noShowAt: string | null;
+  noShowNote: string | null;
+  presenceConfirmedAt: string | null;
+  finalValue: number | null;
 }
 
 export interface AvailableSlot {

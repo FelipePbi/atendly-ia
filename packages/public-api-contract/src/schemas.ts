@@ -389,9 +389,9 @@ export const appointmentSchema = z.object({
   // tela por causa de um replay legítimo — a leitura de estado é feita por
   // `appointmentStatusLabel`, que trata `SCHEDULED` como confirmado.
   status: z.string(),
-  // Ciclo de vida (Goal008). Todos opcionais: o DTO de agendamento só os
-  // traz quando a rota de ciclo respondeu, e a listagem continua válida sem
-  // eles.
+  // Ciclo de vida (Goal008). A listagem e a leitura trazem o que está gravado
+  // (Goal103); todos seguem opcionais com default nulo, para que resposta
+  // anterior ao Goal103 — e replay de idempotência — continue válida.
   completedAt: z.string().nullable().optional().default(null),
   completionOrigin: z
     .enum(["MANUAL", "AUTO"])

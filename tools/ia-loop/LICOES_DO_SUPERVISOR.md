@@ -12,12 +12,14 @@ corrigidas. Elas não são erro do supervisor, mas a regra de contorno vale até
 1. **Nada no checkout principal com job ativo.** Nenhum commit, nenhum arquivo novo ou alterado
    no checkout principal enquanto houver qualquer job do Goal ativo: Developer, Reviewer,
    cobertura do Tech Lead, diagnóstico. A guarda compara HEAD e arquivos sujos antes e depois de
-   cada job e acusa `MAIN_CHECKOUT_MUTATED`. Para escrever no repositório: `npm run ia-loop:pause`
-   (ou `-- --after-goal`), esperar `status: PAUSED` e o run-auto fora do ar, fazer o trabalho,
-   commitar, limpar a pausa e retomar. Rascunhos ficam fora do repositório até a pausa.
-2. **Não reiniciar worker com o run-auto rodando.** O run-auto trata worker sem heartbeat como
-   `UNKNOWN_FATAL`, mesmo que um worker novo assuma o job. Se for preciso reiniciar um worker,
-   pausar antes, ou reanexar logo depois com `--from <goal> --resolved "<nota>"`.
+   cada job e acusa `MAIN_CHECKOUT_MUTATED`. Para escrever no repositório:
+   `npm run ia-loop:pause -- --wait` (V36), que só volta quando imprime
+   `SAFE TO CHANGE THE MAIN CHECKOUT`; fazer o trabalho, commitar e retomar com
+   `npm run ia-loop:auto`. Rascunhos ficam fora do repositório até a pausa.
+2. **Não reiniciar worker com o run-auto rodando.** Desde a V36 o run-auto tolera até 3 minutos
+   sem heartbeat se um worker novo do mesmo papel assumir a tentativa, mas reiniciar com o loop
+   pausado continua sendo o caminho seguro. Se cair mesmo assim, reanexar com
+   `--from <goal> --resolved "<nota>"`.
 3. **Confirmar que o worker morreu antes de reiniciar.** Uma linha `CRASH` no log não basta.
    Conferir o processo e o heartbeat. Se o processo está vivo e com heartbeat, não mexer
    (`WORKER_ALREADY_RUNNING` é a recusa correta).
@@ -32,9 +34,11 @@ corrigidas. Elas não são erro do supervisor, mas a regra de contorno vale até
 7. **Conferir no byte antes de declarar arquivo corrompido.** Acento estranho na saída do
    terminal costuma ser só a exibição (code page do console). Ler o arquivo como UTF-8 (por
    exemplo `node -e` ou Python) antes de concluir que há mojibake.
-8. **Depois de reiniciar a máquina:** consertar os sockets do Docker, religar workers,
-   `npm run ia-loop:recover` para o lease `DIFFERENT_BOOT`, e só então reanexar o run-auto.
-   Não reanexar antes do recover.
+8. **Depois de reiniciar a máquina:** consertar os sockets do Docker, religar workers e
+   reanexar o run-auto. Desde a V36 o worker retira sozinho o lease `DIFFERENT_BOOT`; rodar
+   `npm run ia-loop:recover -- --dry-run` antes de reanexar continua útil para conferir.
+9. **Ler o resultado do job antes de atribuir a causa.** Conferir em `results/` o código e a
+   hora da falha antes de dizer que um job morreu por desligamento, reinício ou falta de memória.
 
 ## Erros cometidos
 
@@ -99,9 +103,25 @@ corrigidas. Elas não são erro do supervisor, mas a regra de contorno vale até
   `docs/migration/MASTER_PLAN.md`. O arquivo estava íntegro; era só a exibição.
 - **Regra:** 7.
 
-## Falhas do harness ainda abertas
+### S-08 — Causa errada para a falha da DIAG-002 do Goal 103
 
-Registradas durante a supervisão de 2026-10-02 e 2026-10-03. Nada aqui foi corrigido no harness.
+- **Quando:** 2026-10-03.
+- **Sintoma:** o supervisor registrou que a DIAG-002 da correção R2 do 103 morreu no
+  desligamento da máquina. O resultado do job mostra que ela terminou FAILED às 03:20 com
+  `UNKNOWN_FATAL` (`claude-code:unrecognized_model` para `claude-sonnet-5-5`), virou
+  HUMAN_REQUIRED, e o desligamento veio depois.
+- **Regra:** 9.
+
+## Observações abertas
+
+- **M-10 — `unrecognized_model` para `claude-sonnet-5-5`.** Uma única ocorrência (DIAG-002 do
+  103, 2026-10-03 03:20, minutos antes do desligamento da máquina). Se voltar a aparecer, tratar
+  como falha transitória do CLI e investigar; hoje vira `UNKNOWN_FATAL`.
+
+## Falhas do harness corrigidas na V36
+
+Registradas durante a supervisão de 2026-10-02 e 2026-10-03 e corrigidas na V36 (ver a seção
+V36 do `README.md`). O texto abaixo é o registro original da falha.
 
 - **M-01 — Worker não reconhece lease de outra inicialização da máquina.** Depois de reiniciar
   a máquina, o worker registra `ORPHANED_EXECUTION_UNCERTAIN` sem parar e nunca pega o job.

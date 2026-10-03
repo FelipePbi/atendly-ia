@@ -2,6 +2,7 @@ export type SettingsScenario =
   | "hub"
   | "hub-external"
   | "business"
+  | "business-faq"
   | "ai"
   | "whatsapp-connected"
   | "whatsapp-disconnected"

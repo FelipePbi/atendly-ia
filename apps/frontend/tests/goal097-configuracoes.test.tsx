@@ -79,12 +79,19 @@ const updateAgendaViewPreference = vi.fn();
 const getReminders = vi.fn();
 const updateAvailability = vi.fn();
 const whatsappGet = vi.fn();
+const knowledgeList = vi.fn();
+const knowledgeGetOtherInfo = vi.fn();
+const notificationsGetPreferences = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
     auth: { logout: vi.fn() },
     migration: { getImportState: migrationGetImportState },
-    notifications: { summary: notificationsSummary },
+    knowledge: { getOtherInfo: knowledgeGetOtherInfo, list: knowledgeList },
+    notifications: {
+      getPreferences: notificationsGetPreferences,
+      summary: notificationsSummary,
+    },
     retention: { get: retentionGet },
     serviceCatalog: { list: serviceCatalogList },
     settings: {
@@ -250,9 +257,16 @@ beforeEach(() => {
     getReminders,
     updateAvailability,
     whatsappGet,
+    knowledgeList,
+    knowledgeGetOtherInfo,
+    notificationsGetPreferences,
   ]) {
     mock.mockReset();
   }
+  // Goal104: o detalhe de Negócio (aberto no hub largo) lê a base de respostas e a IA lê o aviso.
+  knowledgeList.mockRejectedValue(new Error("fora do escopo"));
+  knowledgeGetOtherInfo.mockRejectedValue(new Error("fora do escopo"));
+  notificationsGetPreferences.mockRejectedValue(new Error("fora do escopo"));
   statusGet.mockResolvedValue(statusFixture("ACTIVE", CONNECTED));
   notificationsSummary.mockResolvedValue({
     byLevel: { ATTENTION: 0, CRITICAL: 0, INFO: 0 },

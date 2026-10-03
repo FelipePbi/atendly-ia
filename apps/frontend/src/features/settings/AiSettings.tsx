@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 
 import {
   type ActivationTestRun,
@@ -18,12 +18,11 @@ import {
   readFinishedActivationTest,
   startActivationTest,
 } from "@/features/activation-test/ActivationTestPanels";
-import { KnowledgeSection } from "@/features/knowledge/KnowledgeSection";
-import { OtherInfoSection } from "@/features/knowledge/OtherInfoSection";
+import { Icon } from "@/shared/icons/Icon";
 import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { Dialog } from "@/shared/ui/Dialog";
+import { Skeleton } from "@/shared/ui/States";
 
-import { SaveActions, ToneChoice } from "./shared/fields";
 import { SettingsPage } from "./shared/SettingsPage";
 
 /**
@@ -135,13 +134,15 @@ export function AiSettings({
     return true;
   }
 
-  async function saveTone() {
+  async function chooseTone(next: AiTone) {
+    if (next === tone) return;
+    setTone(next);
     setBusy(true);
     setMessage(null);
     try {
-      await write(enabled, tone);
-      setMessage("Estilo da IA salvo.");
+      await write(enabled, next);
     } catch (error) {
+      setTone(savedTone);
       if (!(await refusedForMissingTest(error))) {
         setMessage("Não foi possível salvar o estilo.");
       }
@@ -239,34 +240,43 @@ export function AiSettings({
 
   return (
     <SettingsPage
-      title="Atendente virtual"
-      description="Acompanhe o atendimento automático e escolha um dos três estilos disponíveis."
+      title="IA"
+      description="Acompanhe o atendimento automático e escolha o jeito de falar."
     >
-      <div className="settings-stack">
+      <div className="ai-screen">
         <section
           aria-busy={
             !enabled && (read.phase === "idle" || read.phase === "loading")
           }
           aria-labelledby="ai-activation-heading"
-          className="settings-panel"
+          className="ai-state"
         >
-          <div className="settings-panel-header">
-            <div>
-              <h2 id="ai-activation-heading">Atendimento automático</h2>
+          <div className="ai-state-main">
+            <span aria-hidden="true" className="hub-row-ia">
+              <span
+                className={`hub-row-ia-ring${enabled ? " is-breathing" : " is-off"}`}
+              />
+              <span className={`hub-row-ia-dot${enabled ? "" : " is-off"}`} />
+            </span>
+            <div className="ai-state-copy">
+              <h2 id="ai-activation-heading">
+                {activationTitle(enabled, read, hasProof)}
+              </h2>
               <p>{activationCopy(enabled, read, hasProof)}</p>
             </div>
-          </div>
-          <div className="settings-status-actions">
-            {enabled ? (
+            {enabled && (
               <button
-                className="btn btn-secondary"
+                className="ai-state-action"
                 disabled={busy}
                 type="button"
                 onClick={() => setPauseConfirmationOpen(true)}
               >
-                Pausar atendimento
+                Pausar
               </button>
-            ) : read.phase === "error" ? (
+            )}
+          </div>
+          <div className="ai-state-actions">
+            {enabled ? null : read.phase === "error" ? (
               <button
                 className="btn btn-secondary"
                 disabled={busy}
@@ -294,7 +304,7 @@ export function AiSettings({
             ) : null}
           </div>
           {activationMessage && (
-            <p className="settings-inline-message" role="status">
+            <p className="ai-state-message" role="status">
               {activationMessage}
             </p>
           )}
@@ -345,38 +355,68 @@ export function AiSettings({
             </div>
           </section>
         )}
-        <section aria-labelledby="ai-tone-heading" className="settings-panel">
-          <div className="settings-panel-header">
-            <div>
-              <h2 id="ai-tone-heading">Estilo da IA</h2>
-              <p>Como a IA conversa com seus clientes.</p>
-            </div>
+        <div className="ai-tone">
+          <span className="ai-tone-label" id="ai-tone-label">
+            Jeito de falar
+          </span>
+          <div
+            aria-labelledby="ai-tone-label"
+            className="ai-tone-options"
+            role="radiogroup"
+          >
+            {TONE_OPTIONS.map((option) => (
+              <ToneOption
+                busy={busy}
+                checked={tone === option.value}
+                example={option.example}
+                key={option.value}
+                label={option.label}
+                onChoose={() => void chooseTone(option.value)}
+              />
+            ))}
           </div>
-          <div className="settings-choice-grid">
-            <ToneChoice
-              checked={tone === "PROFESSIONAL"}
-              label="Profissional"
-              onChange={() => setTone("PROFESSIONAL")}
-            />
-            <ToneChoice
-              checked={tone === "BALANCED"}
-              label="Equilibrada"
-              onChange={() => setTone("BALANCED")}
-            />
-            <ToneChoice
-              checked={tone === "CASUAL"}
-              label="Descontraída"
-              onChange={() => setTone("CASUAL")}
-            />
+          {message && (
+            <p className="ai-state-message" role="status">
+              {message}
+            </p>
+          )}
+        </div>
+        <AppointmentNoticeRow />
+        <div className="ai-contract">
+          <div className="ai-contract-column">
+            <h2 className="ai-contract-title is-can">Sozinha, ela</h2>
+            <p>
+              marca, remarca e cancela dentro dos seus horários · informa
+              preços e pagamento · confirma tudo antes de marcar
+            </p>
           </div>
-          <SaveActions
-            busy={busy}
-            message={message}
-            onClick={() => void saveTone()}
-          />
-        </section>
-        <KnowledgeSection />
-        <OtherInfoSection />
+          <div className="ai-contract-column">
+            <h2 className="ai-contract-title is-never">Nunca</h2>
+            <p>
+              dá desconto ou encaixe · marca fora dos horários · responde
+              contatos ignorados ou conversas pessoais
+            </p>
+          </div>
+        </div>
+        <div className="ai-links">
+          <Link
+            className="ai-link"
+            href="/configuracoes/negocio/perguntas-frequentes"
+          >
+            <span className="ai-link-label">O que ela sabe responder</span>
+            <span className="ai-link-value">
+              Negócio
+              <Icon name="chevron-right" />
+            </span>
+          </Link>
+          <Link className="ai-link" href="/configuracoes/whatsapp">
+            <span className="ai-link-label">Quem ela nunca responde</span>
+            <span className="ai-link-value">
+              WhatsApp
+              <Icon name="chevron-right" />
+            </span>
+          </Link>
+        </div>
       </div>
       <Dialog
         eyebrow="Impacto operacional"
@@ -415,7 +455,7 @@ function activationCopy(
   read: ActivationRead,
   hasProof: boolean,
 ): string {
-  if (enabled) return "A IA está ligada e atende seus clientes.";
+  if (enabled) return "Atendendo pelo WhatsApp";
   if (read.phase === "idle" || read.phase === "loading") {
     return "Lendo o estado do atendimento...";
   }
@@ -429,4 +469,146 @@ function activationCopy(
     return "A IA só liga depois do teste real, e o teste precisa do seu WhatsApp conectado.";
   }
   return "A IA só liga depois do teste real. Quando o teste terminar bem, o atendimento automático começa.";
+}
+
+/** Título do cartão de estado: só afirma "ativa", "pausada" ou "desligada" com leitura feita. */
+function activationTitle(
+  enabled: boolean,
+  read: ActivationRead,
+  hasProof: boolean,
+): string {
+  if (enabled) return "IA ativa";
+  if (read.phase !== "loaded") return "Atendimento automático";
+  return hasProof ? "IA pausada" : "IA desligada";
+}
+
+const TONE_OPTIONS: Array<{ example: string; label: string; value: AiTone }> = [
+  {
+    example: "“Olá! Gostaria de agendar um horário?”",
+    label: "Profissional",
+    value: "PROFESSIONAL",
+  },
+  {
+    example: "“Oi! Quer marcar um horário? 😊”",
+    label: "Equilibrada",
+    value: "BALANCED",
+  },
+  {
+    example: "“Oiii! Bora marcar? 😄”",
+    label: "Descontraída",
+    value: "CASUAL",
+  },
+];
+
+function ToneOption({
+  busy,
+  checked,
+  example,
+  label,
+  onChoose,
+}: {
+  busy: boolean;
+  checked: boolean;
+  example: string;
+  label: string;
+  onChoose: () => void;
+}) {
+  return (
+    <label className={`ai-tone-option${checked ? " is-selected" : ""}`}>
+      <input
+        checked={checked}
+        className="ai-tone-input"
+        disabled={busy}
+        name="ai-tone"
+        type="radio"
+        onChange={onChoose}
+      />
+      <span aria-hidden="true" className="ai-tone-mark">
+        {checked && <Icon name="check" />}
+      </span>
+      <span className="ai-tone-copy">
+        <span className="ai-tone-name">{label}</span>
+        <span className="ai-tone-example">{example}</span>
+      </span>
+    </label>
+  );
+}
+
+/**
+ * Aviso de agendamento criado pela IA: a mesma preferência de `/notificacoes`
+ * (`aiAppointmentCreated`), lida e gravada pelo mesmo serviço. Esqueleto
+ * enquanto carrega e a linha some quando a leitura falha, como lá.
+ */
+function AppointmentNoticeRow() {
+  const descriptionId = useId();
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [error, setError] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getProductServices()
+      .notifications.getPreferences(controller.signal)
+      .then((preferences) => setEnabled(preferences.aiAppointmentCreated))
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setError(true);
+      });
+    return () => controller.abort();
+  }, []);
+
+  async function toggle(next: boolean) {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const preferences = await getProductServices().notifications.updatePreferences(
+        { aiAppointmentCreated: next },
+      );
+      setEnabled(preferences.aiAppointmentCreated);
+    } catch {
+      setMessage("Não foi possível salvar o aviso.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (enabled === null && !error) {
+    return (
+      <div aria-busy="true" className="ai-notice-skeleton">
+        <Skeleton style={{ width: "70%", height: 20 }} />
+        <Skeleton style={{ width: "100%", height: 16 }} />
+      </div>
+    );
+  }
+  if (error || enabled === null) return null;
+
+  return (
+    <div className="ai-notice">
+      <label className="ai-notice-row">
+        <input
+          aria-describedby={descriptionId}
+          checked={enabled}
+          className="ai-notice-input"
+          disabled={busy}
+          type="checkbox"
+          onChange={(event) => void toggle(event.target.checked)}
+        />
+        <span className="ai-notice-copy">
+          <span className="ai-notice-title">
+            Avisar quando a IA marcar um horário
+          </span>
+          <span className="ai-notice-help" id={descriptionId}>
+            Desligado por padrão: você só recebe aviso quando algo precisa de
+            você.
+          </span>
+        </span>
+      </label>
+      {message && (
+        <p className="ai-state-message" role="status">
+          {message}
+        </p>
+      )}
+    </div>
+  );
 }

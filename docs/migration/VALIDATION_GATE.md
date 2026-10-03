@@ -5134,3 +5134,118 @@ O critério do Goal de **265** testes do gate autenticado e 0 retentativas é su
 - **Conferência do Tech Lead na rodada 5.** Os hashes de produção e do teste do início desta seção batem com os da árvore aceita e não mudam desde a rodada 2. `git status --porcelain=v1 -uall` tem 32 linhas, só de arquivos autorizados, sem `apps/frontend/AGENTS.md` alterado, resto de controle negativo nem `e2e-results/` rastreado. O `visual:compare -- --target M1,N1,AG1,AG3`, rodado pelo Tech Lead nas rodadas 1, 2, 3 e 5, deu exit 0; nas rodadas 3 e 5 deu os mesmos números do "Fim". O Tech Lead abriu os dezesseis `side-by-side.png` em cada uma dessas rodadas. Conferiu também `265 passed (8.8m)` e "authenticated gate retries: 0" nos JSONs `097-r{2,3,4}-unit-wu-11.json`. Os controles do §7 e o vermelho da baseline foram aceitos pelo registro acima, não reexecutados pelo Tech Lead.
 - **Gates do IA Loop na rodada 5,** sobre a árvore aceita, todos com exit 0: typecheck, lint, `goal097-configuracoes` 44/44, `validate:core`, `test:gate` (`tests 233, pass 233`), `validate:ui` (**169 passed**, 0 retentativas), `validate:integration` (gate autenticado **265 passed**, 0 retentativas) e `git diff --check`.
 - **Aceito sem prova completa.** O M1 com a IA ativa e o WhatsApp conectado, a revisão em âmbar e a Importação concluída, só em jsdom; a piora leve do M1, aceita pela vista e sem causa medida em pixels; o "Na prática" sem prova numa conversa real. Detalhe no [review097](reviews/097-review.md).
+
+## IA, Conversas e Conta iguais ao protótipo (IA1, R1 e C1), do Goal104
+
+[D-117](DECISIONS.md), **PROPOSED**. Seção escrita na WU-11 da rodada 1, depois de todas as edições de código e de teste (a última, em `e2e/routes.ts` e nos testes, às 12:00:40 no horário local, 15:00:40Z; a WU-03 foi publicada às 15:02:52Z). Nenhuma configuração de gate foi alterada. Os hashes sha256 da árvore final, conferidos iguais antes e depois dos controles: `AiSettings.tsx` `e53f90c5…`, `BusinessSettings.tsx` `ca2b66ba…`, `RetentionSection.tsx` `1480985c…`, `AccountSettings.tsx` `9e978f44…`, `BusinessKnowledgeSettings.tsx` `65b8e891…`, `ProductSettingsScreen.tsx` `55aaba75…`, `atendly-settings.css` `a07b21c9…`, `perguntas-frequentes/page.tsx` `6c3e855f…`, o teste `goal104-ia-conversas-e-conta.test.tsx` `295f8cfa…` e `e2e/routes.ts` `5f68d49e…`. `e2e/authenticated-matrix.spec.ts` (`8629db32…`) e `e2e/visual/targets.json` (`26c0b2e2…`) não mudaram. Os controles restauraram os arquivos de produção por cópia e hash, e por isso as datas de modificação deles são as da restauração; o conteúdo é o mesmo.
+
+### `visual:compare` do início e do fim
+
+Comando do fim, rodado na WU-11 sobre a árvore final, em 2026-10-03, antes de qualquer controle: `npm run visual:compare -- --target IA1,R1,Mais-WhatsApp:C1,M1,N1,AG1,AG3,H3,CL1,Servicos:S1,C5`, código 0. O início é o da WU-01 desta rodada, rodado na baseline.
+
+| Quadro | Início | Fim |
+| --- | --- | --- |
+| IA1 | 13,6 / 6,3 / 7,2 / 6,0 | 12,7 / 6,0 / 7,8 / 6,6 |
+| R1 | 13,5 / 8,1 / 9,5 / 8,3 | 17,2 / 9,4 / 10,2 / 9,1 |
+| Mais-WhatsApp:C1 | 10,6 / 4,4 / 5,7 / 4,9 | 5,1 / 2,4 / 4,9 / 4,2 |
+| M1 | 8,5 / 3,8 / 5,9 / 5,1 | 8,5 / 3,8 / 5,9 / 5,1 |
+| N1 | 8,2 / 3,8 / 5,9 / 5,2 | 8,2 / 3,8 / 5,9 / 5,2 |
+| AG1 | 8,3 / 3,7 / 6,1 / 5,1 | 8,3 / 3,7 / 6,1 / 5,1 |
+| AG3 | 15,2 / 6,4 / 7,5 / 6,7 | 15,2 / 6,4 / 7,5 / 6,7 |
+| H3 | 8,1 / 4,1 / 3,7 / 3,0 | 8,1 / 4,1 / 3,7 / 3,0 |
+| CL1 | 8,8 / 3,6 / 3,0 / 2,8 | 8,8 / 3,6 / 3,0 / 2,8 |
+| Servicos:S1 | 7,7 / 3,6 / 3,7 / 2,7 | 7,7 / 3,6 / 3,7 / 2,7 |
+| C5 | 2,6 / 0,6 / 0,5 / 0,8 | 2,6 / 0,6 / 0,5 / 0,8 |
+
+Ordem das colunas: mobile / tablet em retrato / tablet em paisagem / desktop. Os números são os do relatório de cada execução, não foram recalculados; o início do M1, N1, AG1, AG3, H3, CL1, Servicos:S1 e C5 é o fim do Goal097, e a execução final mostra que não mudaram. O diff é uma tendência; o julgamento é visual. A IA1 melhorou no mobile e no tablet em retrato e **piorou** no tablet em paisagem e no desktop. O **R1 piorou nos quatro devices.** O C1 melhorou nos quatro. Os números da IA1 e do R1 **não chegaram a zero**: a igualdade com o quadro é critério do revisor.
+
+### Os quarenta e quatro `side-by-side.png`
+
+Todas as capturas do app refletem o estado do ambiente do `visual:compare` (orquestrador da IA desligado e WhatsApp desconectado): o banner "Atendimento automático parado" da casca e, no desktop, o item "Notificações" e o cartão "WhatsApp desconectado" na sidebar. Os quadros trazem a barra de status do iPhone. Abri os de IA1, R1, C1 e N1 nos quatro devices, o M1 no mobile e no desktop, e o mobile de AG1, AG3, H3, CL1, Servicos:S1 e C5; **não abri um a um** os de tablet e desktop desses seis alvos nem os tablets do M1, mas os números deles são idênticos aos do início nos quatro devices.
+
+- **IA1, quatro devices.** A estrutura é a do quadro: cartão de estado, "Jeito de falar" com três opções e exemplos, "Equilibrada" selecionada, o aviso com interruptor, o contrato em duas colunas e as duas linhas de link. Diferenças: o banner da casca; "IA desligada" e "Conectar WhatsApp" onde o quadro tem "IA ativa" e "Pausar"; sem "2 contatos"; o texto de apoio do aviso, sem gênero; a barra de status do iPhone; os dados da lista da esquerda e a sidebar do desktop; a linha de 2 px no tablet em retrato.
+- **R1, quatro devices.** Título, os dois grupos segmentados (90 e 30 dias marcados), "O que não é afetado" e "Salvar", como o quadro. Diferenças: a nota de U-01, que o quadro não tem; o "Salvar" desabilitado em tom mais claro; o banner "Atendimento automático parado", que empurra o conteúdo; no mobile, a barra "Salvar" fixa cobrindo o conteúdo de baixo. É o que vejo como causa da piora, e **não medi em pixels**.
+- **Mais-WhatsApp:C1 (Conta), quatro devices.** Os grupos "Seus dados", "Segurança" e "Sobre" e "Excluir conta" com "Você tem 7 dias para desistir", como o quadro. O app não tem as segundas linhas ("Alterada há 2 meses", "Conectada em 2 aparelhos…") nem a versão no rodapé; o e-mail é `visual-prototipo-v2@example.invalid`; o banner da casca aparece. No tablet em paisagem e no desktop, "Excluir conta" fica abaixo da dobra, atrás do banner.
+- **N1, quatro devices.** Só as duas linhas do conhecimento mudaram: agora são links com seta e mostram "Não informado", porque a conta visual não tem perguntas frequentes nem outras informações (o quadro mostra "4 perguntas" e "Produtos veganos…"). O número não mudou.
+- **M1, mobile e desktop.** Sem mudança em relação ao início.
+- **AG1, AG3, H3, CL1, Servicos:S1 e C5, mobile.** Sem mudança em relação ao início: AG1 sem "Bloqueios que se repetem"; AG3 com a opção extra "Sem antecedência mínima", as pílulas 14:00, 14:30 e 15:00 e a barra "Salvar" fixa cobrindo parte do último grupo; H3 com o cartão de onboarding; CL1 com 8 clientes; Servicos:S1 com o campo de busca e 5 ativos; C5 com a estrutura do quadro.
+
+### Mudanças do §6 no gate autenticado
+
+`git diff` contra a baseline: em `apps/frontend/e2e/routes.ts`, 13 linhas inseridas e 1 removida. O `contentMarker` de `/configuracoes/ia` passa de "Atendente virtual" para "IA"; entra `configuracoes-negocio-perguntas-frequentes` (marcador "Perguntas frequentes") depois de `/configuracoes`, e entra `configuracoes-conversas` (marcador "Conversas") depois de `/configuracoes/whatsapp`. `e2e/authenticated-matrix.spec.ts` e `e2e/visual/targets.json` não mudaram. O gate passa de 265 para **275** testes na WU-10 (`validate:integration`); o 10 de diferença é a conta de 265 mais 10, e a divisão por rota não aparece nos títulos da saída.
+
+### Controles negativos (§7)
+
+Rodados **na WU-11, sobre a árvore final, depois da última edição de código e de teste**, em `apps/frontend`, com `npx vitest run tests/goal104-ia-conversas-e-conta.test.tsx` (**65 testes** no arquivo; 65/65 antes do primeiro controle e depois do último). Cada defeito foi injetado por edição real, por um script que troca o texto, roda o arquivo de teste e restaura os bytes originais no mesmo passo, com o sha256 conferido igual depois de cada controle e `git status --porcelain=v1 -uall` igual ao de antes (27 linhas).
+
+| Controle | Defeito injetado | Com o defeito | Sem o defeito |
+| --- | --- | --- | --- |
+| 1 | `AiSettings.tsx`: importa `KnowledgeSection` e a renderiza depois de `<AppointmentNoticeRow />` | `1 failed \| 64 passed (65)`: "nenhum texto de KnowledgeSection nem de OtherInfoSection aparece na tela" (`AssertionError: expected <h2></h2> to be null`) (prova 1) | 65/65 |
+| 2 | `AiSettings.tsx`: no `.catch` de `AppointmentNoticeRow`, `setEnabled(false)` no lugar de `setError(true)` | `1 failed \| 64 passed (65)`: "enquanto a preferência carrega há esqueleto, e com a leitura falhando a linha não aparece" (`expected <span class="ai-notice-title"></span> to be null`) (prova 1) | 65/65 |
+| 3 | `BusinessSettings.tsx`: o primeiro `.catch` de `useKnowledgeSummary` põe `faq: null` | `2 failed \| 63 passed (65)`: "com cada leitura falhando, a linha fica sem a segunda linha e nunca com 'Não informado'" e "uma leitura falhando não esconde o resumo da outra" (`expected <span class="business-row-text"></span> to be null`) (prova 2) | 65/65 |
+| 4 | `RetentionSection.tsx`: `if (reductions.length > 99)` em `save()`, de modo que a confirmação nunca abre | `4 failed \| 61 passed (65)`: "reduzir abre a confirmação; cancelar não envia nada e mantém a escolha na tela", "confirmar a redução envia um único pedido com confirmReduction true", "reduzir os dois prazos abre uma confirmação que diz que são os dois" e "reduzir só o prazo Pessoal diz qual prazo diminui" (prova 3) | 65/65 |
+| 5 | `AccountSettings.tsx`: `auth.logout()` no lugar de `auth.logoutAllDevices()` | `2 failed \| 63 passed (65)`: "'Sair' de Segurança só abre a confirmação; confirmar chama só logoutAllDevices e volta ao login" (`expected "vi.fn()" to be called 1 times, but got 0 times`) e "a falha de logoutAllDevices mostra o erro em role=alert e não sai da tela" (prova 4) | 65/65 |
+| 6 | `BusinessKnowledgeSettings.tsx`: segunda chamada de `useShellConfig` (`active: "configuracoes"`, `module: "settings"`, `pushed: true`, `title: "Configurações"`), num componente que não é o de `ProductSettingsScreen` | `5 failed \| 60 passed (65)`: "a rota nova mostra as duas seções como tela empurrada, com voltar para Negócio" (prova 2), os dois "uma chamada de useShellConfig por árvore nas quatro rotas" (`/configuracoes/negocio/perguntas-frequentes: expected 2 to be 1`, de 1024 px em diante e abaixo) e os dois testes da rota nova (`expected null not to be null`) (prova 5) | 65/65 |
+
+A segunda chamada do controle 6 foi posta em outro componente porque o mock de `useShellConfig` do teste guarda o `useId()` de cada chamada, e duas chamadas no mesmo componente dão o mesmo `useId()`.
+
+O vermelho da baseline dos 65 testes, medido na WU-11 depois da última edição, trocando os nove arquivos de produção modificados (`OtherInfoSection.tsx`, `AccountSettings.tsx`, `AiSettings.tsx`, `BusinessSettings.tsx`, `ConversationsSettings.tsx`, `ProductSettingsScreen.tsx`, `RetentionSection.tsx`, `types.ts` e `atendly-settings.css`) pelos de `HEAD` (`git show HEAD:<caminho>`), removendo os dois novos (`BusinessKnowledgeSettings.tsx` e a `page.tsx`) e restaurando tudo de uma cópia com os onze hashes conferidos iguais: `Tests 49 failed | 16 passed (65)`. Reprovam 16 testes da prova 1, 8 da prova 2, 10 da prova 3, 14 da prova 4 e 1 da prova 5. Os 16 que passam guardam comportamento que a baseline já cumpre (7 nas provas 1 a 4 e 9 na prova 5, de composição que já existia; só o teste da rota nova abaixo de 1024 px, na prova 5, reprova). O vermelho foi refeito na rodada 2 sobre a árvore atual (mesmo procedimento, `vitest run --reporter=json`, restauração conferida por sha256 dos onze arquivos): `Tests 49 failed | 16 passed (65)`, e os mesmos 16 passam. Os 16, um a um, com o motivo de a baseline já cumpri-los:
+
+1. Prova 1, "sem a IA ligada e sem WhatsApp: leva a 'Conectar WhatsApp', sem 'Teste real'": a tela de hoje já tem o link "Conectar WhatsApp" e não tem "Teste real".
+2. Prova 1, "com a leitura do teste falhando: 'Tentar novamente' e o aria-busy do cartão": a tela de hoje já tem a ação e o `aria-busy`.
+3. Prova 2, "resumo de Perguntas frequentes: zero vira 'Não informado'": o resumo do N1 já existia com esse texto.
+4. Prova 2, "resumo de Outras informações: texto vazio vira 'Não informado'": idem.
+5. Prova 3, "a leitura falhada mostra a indisponibilidade, sem inventar prazos": o R1 de hoje já tem esse estado.
+6. Prova 4, "exclusão agendada: mostra o prazo e 'Cancelar exclusão', que chama o cancelamento": o estado da exclusão agendada já existe na Conta.
+7. Prova 4, "conta já excluída: 'Conta excluída'": idem.
+8. Prova 5, "uma chamada de useShellConfig por árvore nas quatro rotas, na faixa ≥1024": composição da casca que já existia.
+9. Prova 5, "uma chamada de useShellConfig por árvore nas quatro rotas, na faixa <1024": idem.
+10. Prova 5, "'/configuracoes/ia', de 1024 px em diante, mostra a lista do hub com a linha certa marcada": idem.
+11. Prova 5, "'/configuracoes/conversas', de 1024 px em diante, mostra a lista do hub com a linha certa marcada": idem.
+12. Prova 5, "'/configuracoes/conta', de 1024 px em diante, mostra a lista do hub com a linha certa marcada": idem.
+13. Prova 5, "'/configuracoes/negocio/perguntas-freq…', de 1024 px em diante, mostra a lista do hub com a linha certa marcada": idem.
+14. Prova 5, "'/configuracoes/ia', abaixo de 1024 px, é tela empurrada sem a lista e sem barra de abas": idem.
+15. Prova 5, "'/configuracoes/conversas', abaixo de 1024 px, é tela empurrada sem a lista e sem barra de abas": idem.
+16. Prova 5, "'/configuracoes/conta', abaixo de 1024 px, é tela empurrada sem a lista e sem barra de abas": idem.
+
+Reprovam os outros 49, entre eles o teste da rota nova abaixo de 1024 px (`/configuracoes/negocio/perguntas-freq…`, "abaixo de 1024 px, é tela empurrada…").
+
+### Execuções que sustentam as contagens
+
+Todas de 2026-10-03. As linhas WU-04 a WU-10 são do loop (`tools/ia-loop/.state/results/work_unit/104-r1-unit-wu-NN.json`), publicadas depois da WU-03, a última a editar código e teste, e portanto sobre a árvore final.
+
+| Execução | Resultado |
+| --- | --- |
+| `tsc --noEmit`, WU-04 | código 0 (1,6 s) |
+| `npm run lint`, WU-05 | código 0 (14,1 s, `--max-warnings=0`) |
+| `npx vitest run goal104-ia-conversas-e-conta`, WU-06 | código 0 (9,9 s); `Tests 65 passed (65)` |
+| `validate:core`, WU-07 | código 0 (100,0 s); 17 passos, **15 passaram**, 0 falharam e 2 foram pulados (`test:bff` e `test:health-worker`, por desenho do gate) |
+| `test:gate`, WU-08 | código 0; `tests 233, pass 233, fail 0` |
+| `validate:ui`, WU-09 | código 0 (45,3 s); **169 passed** e 21 skipped; "public UI gate retries: 0" |
+| `validate:integration`, WU-10 | código 0 (694,2 s, publicada às 15:17:54Z); 36 passos passaram, 0 falharam, 0 pulados; gate autenticado **275 passed (9,7 min)**; "authenticated gate retries: 0"; `e2e-results/authenticated/results.json`: `expected 275, skipped 0, unexpected 0, flaky 0` |
+| Suíte do frontend, WU-11 (`npx vitest run` em `apps/frontend`, depois da última edição; a WU-11 não editou código nem teste e os controles restauraram os arquivos por hash) | código 0; **145 arquivos e 1759 testes passaram** (`Test Files 145 passed (145)`, `Tests 1759 passed (1759)`, 36,5 s); a baseline tinha 144 arquivos e 1693 testes (Goal097), e a diferença são os 65 testes do arquivo novo mais 1 em `goal024-settings-shell-invariant` (10 para 11) |
+| `npx vitest run tests/goal104-ia-conversas-e-conta.test.tsx`, WU-11, antes do primeiro e depois do último controle | código 0; `Tests 65 passed (65)` |
+| `visual:compare` dos onze alvos, WU-11 | código 0; a tabela do "Fim" acima |
+
+O critério do Goal de **275** testes do gate autenticado e 0 retentativas é sustentado pela WU-10 (`validate:integration`), que rodou sobre a árvore final. A linha "retries: 1 … mobile-360" que aparece na saída do `test:gate` é uma cadeia de texto de um dos autotestes do gate, não uma retentativa real.
+
+### Estado da árvore
+
+`git status --porcelain=v1 -uall` ao fim da WU-11: os arquivos de produção, de testes e de `e2e/routes.ts` listados em D-117, mais os três documentos desta WU (`docs/migration/DECISIONS.md`, `docs/migration/CURRENT_STATE.md` e `docs/migration/VALIDATION_GATE.md`). Sem `apps/frontend/AGENTS.md` modificado e sem artefato de `e2e-results/` rastreado (a pasta é ignorada pelo git). Nenhum commit, push, merge nem PR.
+
+### Não feito
+
+- Conferência humana num aparelho real.
+- A IA1 com "IA ativa" e "Pausar", em captura: a conta visual não tem esse estado, e fica provada só em jsdom.
+- Medir em pixels a causa da piora do R1 e da IA1 no tablet em paisagem e no desktop, e conferir num aparelho real se a barra "Salvar" do R1 deixa o conteúdo alcançável.
+- Abrir um a um os `side-by-side.png` de tablet e desktop de AG1, AG3, H3, CL1, Servicos:S1 e C5, e os tablets do M1 (os números são idênticos aos do início).
+- Levar a IA1 e o R1 a diff zero: o critério "igual ao quadro" é do revisor.
+- A N3, o "Adicionar" do N1 e as segundas linhas da Conta que dependem de dado que o contrato não traz.
+- Decisão do Tech Lead sobre [D-117](DECISIONS.md), que segue PROPOSED; o Goal 104 não está declarado ACCEPTED.
+
+**Nota de fechamento — review104, 2026-10-03.** Registrado no fechamento, a partir dos resultados do IA Loop, sem reescrever o texto acima:
+
+- **Decisão.** D-117 ACCEPTED na rodada 2, sem blocker. Os quatro blockers da rodada 1 foram só de documento: as duas linhas de link da IA1 descritas como "duas linhas para o conhecimento" em D-117 (a) e em CURRENT_STATE; a frase de D-117 (b) que punha a IA1 na âncora `#outras-informacoes`; os 16 testes que passam na baseline sem nome; e "quatorze testes" onde eram quatorze arquivos. A rodada 2 (FIX-001) mudou só os três documentos, refez o vermelho da baseline (`49 failed | 16 passed (65)`, os mesmos 16) e nomeou os 16 acima. O item "Decisão do Tech Lead sobre D-117" de "Não feito" está resolvido.
+- **Conferência do Tech Lead na rodada 2.** Os sha256 de produção, do teste e de `e2e/routes.ts` do início desta seção batem com os da árvore aceita; o código não mudou desde a rodada 1. `git status --porcelain=v1 -uall` tem 30 linhas, só de arquivos autorizados; `authenticated-matrix.spec.ts`, `targets.json`, as configurações de gate e `apps/frontend/AGENTS.md` estão iguais à base. O Tech Lead rodou `visual:compare -- --target IA1,R1,Mais-WhatsApp:C1` nas rodadas 1 e 2 (exit 0), com os mesmos números do "Fim", e abriu os doze `side-by-side.png` em cada rodada. Na rodada 1, rodou de novo seis arquivos de teste, entre eles o `goal104` (151/151). Os controles do §7 e o vermelho da baseline foram aceitos pelo registro acima, não reexecutados pelo Tech Lead.
+- **Gates do IA Loop na rodada 2,** sobre a árvore aceita, todos com exit 0: typecheck, lint, `goal104-ia-conversas-e-conta` 65/65, `validate:core`, `test:gate`, `validate:ui`, `validate:integration` (gate autenticado **275 passed**, 0 retentativas) e `git diff --check`.
+- **Aceito sem prova completa.** A IA1 com "IA ativa" e "Pausar", só em jsdom; a piora do R1 nos quatro devices e a da IA1 no tablet em paisagem e no desktop, aceitas pela vista dos `side-by-side.png` (nota de U-01, banner da casca e "Salvar" desabilitado) e sem causa medida em pixels. A barra "Salvar" do R1 é `position: sticky`, então o conteúdo segue alcançável pela rolagem no jsdom e nas capturas; num aparelho real não foi conferido. Detalhe no [review104](reviews/104-review.md).

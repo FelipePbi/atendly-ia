@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import type { RetentionDays, RetentionSettings } from "@/data";
 import { Icon } from "@/shared/icons/Icon";
@@ -10,26 +10,31 @@ import { Skeleton } from "@/shared/ui/States";
 
 type RetentionCategory = "commercialRetentionDays" | "personalRetentionDays";
 
-interface PendingReduction {
-  category: RetentionCategory;
-  categoryLabel: string;
-  days: RetentionDays;
-}
+const CATEGORY_LABELS: Record<RetentionCategory, string> = {
+  commercialRetentionDays: "Comercial",
+  personalRetentionDays: "Pessoal",
+};
 
 function retentionLabel(days: RetentionDays): string {
-  return `${days} dias`;
+  return days === 365 ? "1 ano" : `${days} dias`;
 }
 
+const NOT_AFFECTED = [
+  "Clientes e agendamentos",
+  "Histórico de atendimentos e valores",
+  "Observações e resumo de cada cliente",
+];
+
 /**
- * Bloco de retenção em Configurações → **Conversas** (Goal023/§8, G-29): lê e
- * grava `/v1/settings/retention`. Só duas categorias existem — Comercial e
- * Pessoal — no mesmo padrão do WU-01; Não classificadas não tem seletor
- * porque **U-01** a faz seguir o prazo Comercial: a nota ao lado diz isso e
- * que classificar como Pessoal passa a aplicar o prazo Pessoal dali em diante.
+ * Retenção em Configurações → **Conversas** (Goal023/§8, G-29; R1 no 104):
+ * lê e grava `/v1/settings/retention`. Só duas categorias existem — Comercial
+ * e Pessoal. Não classificadas não tem seletor porque **U-01** a faz seguir o
+ * prazo Comercial: a nota diz isso e que classificar como Pessoal passa a
+ * aplicar o prazo Pessoal dali em diante.
  *
- * Reduzir qualquer categoria exige confirmação explícita antes do PATCH; até
- * a confirmação, o seletor continua mostrando o valor salvo. O diálogo da
- * Comercial avisa que a redução vale também para Não classificadas.
+ * Escolher só muda o rascunho; um único "Salvar" grava os dois prazos num
+ * `PATCH`. Se algum prazo diminuiu, a confirmação abre antes e o pedido vai
+ * com `confirmReduction: true`; até lá, nada é enviado.
  *
  * **As opções vêm da resposta, não daqui.** A allowlist é do servidor: o
  * seletor mostra o que o `GET` declarou aceitar, e um seletor que inventasse a
@@ -40,8 +45,11 @@ export function RetentionSection() {
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [pendingReduction, setPendingReduction] =
-    useState<PendingReduction | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [draft, setDraft] = useState<
+    Partial<Record<RetentionCategory, RetentionDays>>
+  >({});
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -76,93 +84,146 @@ export function RetentionSection() {
     );
   }
 
-  async function persist(patch: {
-    commercialRetentionDays?: RetentionDays;
-    personalRetentionDays?: RetentionDays;
-    confirmReduction?: boolean;
-  }) {
+  const saved = settings;
+  const commercial = draft.commercialRetentionDays ?? saved.commercialRetentionDays;
+  const personal = draft.personalRetentionDays ?? saved.personalRetentionDays;
+  const dirty =
+    commercial !== saved.commercialRetentionDays ||
+    personal !== saved.personalRetentionDays;
+  const reductions = (
+    [
+      ["commercialRetentionDays", commercial],
+      ["personalRetentionDays", personal],
+    ] as const
+  ).filter(([category, days]) => days < saved[category]);
+
+  async function persist(confirmReduction: boolean) {
     setBusy(true);
     setMessage(null);
+    setFailed(false);
     try {
-      const saved = await getProductServices().retention.update(patch);
-      setSettings(saved);
-      setPendingReduction(null);
+      const updated = await getProductServices().retention.update({
+        commercialRetentionDays: commercial,
+        personalRetentionDays: personal,
+        ...(confirmReduction ? { confirmReduction: true } : {}),
+      });
+      setSettings(updated);
+      setDraft({});
+      setConfirming(false);
       setMessage("Prazo de retenção salvo.");
     } catch {
+      setConfirming(false);
+      setFailed(true);
       setMessage("Não foi possível salvar o prazo de retenção.");
     } finally {
       setBusy(false);
     }
   }
 
-  function choose(
-    category: RetentionCategory,
-    categoryLabel: string,
-    days: RetentionDays,
-  ) {
-    if (!settings || settings[category] === days) return;
-    if (days < settings[category]) {
-      setPendingReduction({ category, categoryLabel, days });
+  function save() {
+    if (!dirty || busy) return;
+    if (reductions.length > 0) {
+      setConfirming(true);
       return;
     }
-    void persist({ [category]: days });
+    void persist(false);
   }
 
+  const reducesCommercial = reductions.some(
+    ([category]) => category === "commercialRetentionDays",
+  );
+  const reductionTitle =
+    reductions.length === 1
+      ? `Reduzir retenção ${CATEGORY_LABELS[reductions[0][0]]}?`
+      : "Reduzir os prazos de retenção?";
+
   return (
-    <section className="settings-panel">
-      <div className="settings-panel-header">
-        <div>
-          <h2>Conversas</h2>
+    <div className="rules-screen retention-screen">
+      <div className="rules-fields retention-fields">
+        <div className="retention-intro">
+          <h2>Por quanto tempo guardar as mensagens</h2>
           <p>
-            Prazo de retenção do conteúdo das mensagens, separado por
-            Comercial e Pessoal.
+            Depois do prazo, as mensagens são removidas. A conversa continua na
+            lista, indicando que as antigas expiraram.
           </p>
         </div>
-      </div>
-      <div className="settings-stack">
-        <RetentionField
+        <RetentionGroup
           busy={busy}
-          label="Comercial"
-          options={settings.retentionDaysOptions}
-          value={settings.commercialRetentionDays}
-          onChange={(days) => choose("commercialRetentionDays", "Comercial", days)}
+          hint="com clientes"
+          label="Conversas comerciais"
+          options={saved.retentionDaysOptions}
+          value={commercial}
+          onChange={(days) =>
+            setDraft((current) => ({ ...current, commercialRetentionDays: days }))
+          }
         />
-        <RetentionField
+        <RetentionGroup
           busy={busy}
-          label="Pessoal"
-          options={settings.retentionDaysOptions}
-          value={settings.personalRetentionDays}
-          onChange={(days) => choose("personalRetentionDays", "Pessoal", days)}
+          hint="aba Pessoal"
+          label="Conversas pessoais"
+          options={saved.retentionDaysOptions}
+          value={personal}
+          onChange={(days) =>
+            setDraft((current) => ({ ...current, personalRetentionDays: days }))
+          }
         />
-        <div className="onboarding-note">
+        <section aria-label="O que não é afetado" className="retention-unaffected">
+          <span className="retention-unaffected-title">O que não é afetado</span>
+          <ul>
+            {NOT_AFFECTED.map((item) => (
+              <li key={item}>
+                <Icon name="check" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </section>
+        <p className="retention-note">
           <Icon name="info" />
           <span>
             Conversas Não classificadas seguem o prazo Comercial. Ao classificar
             uma conversa como Pessoal, o prazo Pessoal passa a valer para ela
             daí em diante.
           </span>
-        </div>
+        </p>
       </div>
-      <span className="settings-save-note" role="status">
-        {message}
-      </span>
+      <div className="rules-save">
+        <p
+          className={`rules-save-note${failed ? " is-error" : ""}`}
+          role={failed ? "alert" : "status"}
+        >
+          {message}
+        </p>
+        <button
+          className="rules-save-button"
+          disabled={!dirty || busy}
+          type="button"
+          onClick={save}
+        >
+          {busy && !confirming ? "Salvando..." : "Salvar"}
+        </button>
+      </div>
       <Dialog
         eyebrow="Redução de prazo"
-        onClose={() => setPendingReduction(null)}
-        open={pendingReduction !== null}
-        title={`Reduzir retenção ${pendingReduction?.categoryLabel ?? ""}?`}
+        onClose={() => setConfirming(false)}
+        open={confirming}
+        title={reductionTitle}
       >
         <p className="settings-modal-copy">
-          {pendingReduction?.category === "commercialRetentionDays"
-            ? "Mensagens Comerciais e Não classificadas mais antigas que o novo prazo poderão ser removidas na próxima varredura. Não há como recuperá-las depois."
-            : "Mensagens mais antigas que o novo prazo poderão ser removidas na próxima varredura. Não há como recuperá-las depois."}
+          {reducesCommercial
+            ? "Mensagens Comerciais e Não classificadas mais antigas que o novo prazo poderão ser removidas na próxima varredura. "
+            : "Mensagens mais antigas que o novo prazo poderão ser removidas na próxima varredura. "}
+          {reducesCommercial && reductions.length > 1
+            ? "O mesmo vale para as Pessoais. "
+            : ""}
+          Não há como recuperá-las depois.
         </p>
         <div className="modal-actions">
           <button
             className="btn btn-secondary"
             disabled={busy}
             type="button"
-            onClick={() => setPendingReduction(null)}
+            onClick={() => setConfirming(false)}
           >
             Manter prazo atual
           </button>
@@ -170,52 +231,66 @@ export function RetentionSection() {
             className="btn btn-danger"
             disabled={busy}
             type="button"
-            onClick={() =>
-              pendingReduction &&
-              void persist({
-                [pendingReduction.category]: pendingReduction.days,
-                confirmReduction: true,
-              })
-            }
+            onClick={() => void persist(true)}
           >
             {busy ? "Salvando..." : "Reduzir prazo"}
           </button>
         </div>
       </Dialog>
-    </section>
+    </div>
   );
 }
 
-function RetentionField({
+function RetentionGroup({
   busy,
+  hint,
   label,
   onChange,
   options,
   value,
 }: {
   busy: boolean;
+  hint: string;
   label: string;
   onChange: (days: RetentionDays) => void;
   options: readonly RetentionDays[];
   value: RetentionDays;
 }) {
+  const name = useId();
+  const labelId = `${name}-label`;
   return (
-    <div className="field is-wide">
-      <span className="label">{label}</span>
-      <div className="chip-row">
-        {options.map((days) => (
-          <button
-            aria-label={`${label}: ${retentionLabel(days)}`}
-            aria-pressed={value === days}
-            className={`chip${value === days ? " is-active" : ""}`}
-            disabled={busy}
-            key={days}
-            type="button"
-            onClick={() => onChange(days)}
-          >
-            {retentionLabel(days)}
-          </button>
-        ))}
+    <div className="retention-group">
+      <div className="retention-group-head">
+        <span className="retention-group-label" id={labelId}>
+          {label}
+        </span>
+        <span className="retention-group-hint">{hint}</span>
+      </div>
+      <div
+        aria-labelledby={labelId}
+        className="retention-segments"
+        role="radiogroup"
+      >
+        {options.map((days) => {
+          const selected = value === days;
+          return (
+            <label
+              className={`retention-segment${selected ? " is-selected" : ""}`}
+              key={days}
+            >
+              <input
+                checked={selected}
+                className="retention-segment-input"
+                disabled={busy}
+                name={name}
+                type="radio"
+                value={days}
+                onChange={() => onChange(days)}
+              />
+              {retentionLabel(days)}
+            </label>
+          );
+        })}
       </div>
     </div>
   );

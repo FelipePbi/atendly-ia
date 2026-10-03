@@ -43,6 +43,11 @@ const refreshSession = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
+    // Goal104: o resumo de "O que a IA sabe responder" lê a base; sem ela, a linha fica sem valor.
+    knowledge: {
+      getOtherInfo: () => Promise.reject(new Error("fora do escopo")),
+      list: () => Promise.reject(new Error("fora do escopo")),
+    },
     settings: { get: getSettings, updateBusiness },
     whatsapp: { get: getWhatsapp },
   }),

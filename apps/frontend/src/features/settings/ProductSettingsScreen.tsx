@@ -12,6 +12,7 @@ import { getProductServices } from "@/shared/runtime/ProductRuntime";
 import { AccountSettings } from "./AccountSettings";
 import { AiSettings } from "./AiSettings";
 import { AvailabilitySettings } from "./AvailabilitySettings";
+import { BusinessKnowledgeSettings } from "./BusinessKnowledgeSettings";
 import { BusinessSettings } from "./BusinessSettings";
 import { CalendarSettings } from "./CalendarSettings";
 import { ConversationsSettings } from "./ConversationsSettings";
@@ -87,6 +88,7 @@ export function ProductSettingsScreen({
 function isHubScenario(scenario: SettingsScenario): boolean {
   return !(
     scenario === "business" ||
+    scenario === "business-faq" ||
     scenario === "ai" ||
     scenario.startsWith("whatsapp") ||
     scenario === "calendar" ||
@@ -183,6 +185,7 @@ function SettingsSection({
   setSettings: (state: SettingsState) => void;
   setWhatsappConnected: (connected: boolean) => void;
 }) {
+  if (scenario === "business-faq") return <BusinessKnowledgeSettings />;
   if (scenario === "ai")
     return <AiSettings settings={settings} onSaved={setSettings} />;
   if (scenario.startsWith("whatsapp"))

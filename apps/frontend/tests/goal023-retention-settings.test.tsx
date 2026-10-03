@@ -6,12 +6,12 @@
  *
  * - o bloco lê `retention.get` e reflete os prazos salvos (Comercial e
  *   Pessoal), cada um com exatamente as quatro opções (30/90/180/365);
- * - aumentar o prazo grava direto, sem confirmação;
- * - reduzir abre um diálogo que avisa que mensagens antigas poderão ser
- *   removidas e que não há volta, e só depois de confirmado o PATCH sai com
+ * - escolher só muda o rascunho; um único "Salvar" (Goal104, R1) grava os dois
+ *   prazos num PATCH. Aumentar grava direto, sem confirmação;
+ * - reduzir e salvar abre um diálogo que avisa que mensagens antigas poderão
+ *   ser removidas e que não há volta, e só depois de confirmado o PATCH sai com
  *   `confirmReduction: true`;
- * - cancelar a confirmação não altera nada: nenhum PATCH sai e o seletor
- *   continua mostrando o valor salvo;
+ * - cancelar a confirmação não envia nada;
  * - Não classificadas é só texto explicativo, sem seletor: a nota diz que segue
  *   o prazo Comercial;
  * - o diálogo de redução da Comercial menciona Não classificadas; o da Pessoal
@@ -21,7 +21,7 @@
  *   mostra exatamente a allowlist que o `GET` declarou.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -57,25 +57,29 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+const COMMERCIAL = "Conversas comerciais";
+const PERSONAL = "Conversas pessoais";
+const INTRO = "Por quanto tempo guardar as mensagens";
+
+function group(name: string): HTMLElement {
+  return screen.getByRole("radiogroup", { name });
+}
+
+function radio(groupName: string, days: string): HTMLElement {
+  return within(group(groupName)).getByRole("radio", { name: days });
+}
+
 test("reflete os prazos salvos, com Comercial 90 e Pessoal 30 marcados", async () => {
   get.mockResolvedValue(retentionFixture());
   const { container } = render(<RetentionSection />);
 
   expect(
-    await screen.findByRole("heading", { name: "Conversas" }),
+    await screen.findByRole("heading", { name: INTRO }),
   ).toBeInTheDocument();
-  expect(
-    screen.getByRole("button", { name: "Comercial: 90 dias" }),
-  ).toHaveAttribute("aria-pressed", "true");
-  expect(
-    screen.getByRole("button", { name: "Pessoal: 30 dias" }),
-  ).toHaveAttribute("aria-pressed", "true");
-  expect(
-    screen.getByRole("button", { name: "Comercial: 30 dias" }),
-  ).toHaveAttribute("aria-pressed", "false");
-  expect(
-    screen.getByRole("button", { name: "Pessoal: 90 dias" }),
-  ).toHaveAttribute("aria-pressed", "false");
+  expect(radio(COMMERCIAL, "90 dias")).toBeChecked();
+  expect(radio(PERSONAL, "30 dias")).toBeChecked();
+  expect(radio(COMMERCIAL, "30 dias")).not.toBeChecked();
+  expect(radio(PERSONAL, "90 dias")).not.toBeChecked();
   await expectNoA11yViolations(container);
 });
 
@@ -83,17 +87,13 @@ test("cada seletor mostra exatamente as quatro opções de prazo", async () => {
   get.mockResolvedValue(retentionFixture());
   render(<RetentionSection />);
 
-  await screen.findByRole("heading", { name: "Conversas" });
-  for (const days of [30, 90, 180, 365]) {
-    expect(
-      screen.getByRole("button", { name: `Comercial: ${days} dias` }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: `Pessoal: ${days} dias` }),
-    ).toBeInTheDocument();
+  await screen.findByRole("heading", { name: INTRO });
+  for (const days of ["30 dias", "90 dias", "180 dias", "1 ano"]) {
+    expect(radio(COMMERCIAL, days)).toBeInTheDocument();
+    expect(radio(PERSONAL, days)).toBeInTheDocument();
   }
   // Quatro por categoria, e nada além: a lista é a allowlist do servidor.
-  expect(screen.getAllByRole("button", { name: /dias$/ })).toHaveLength(8);
+  expect(screen.getAllByRole("radio")).toHaveLength(8);
 });
 
 test("o seletor lê a allowlist do servidor em vez de declarar a própria", async () => {
@@ -103,65 +103,65 @@ test("o seletor lê a allowlist do servidor em vez de declarar a própria", asyn
   get.mockResolvedValue(retentionFixture({ retentionDaysOptions: [30, 90] }));
   render(<RetentionSection />);
 
-  await screen.findByRole("heading", { name: "Conversas" });
-  expect(screen.getAllByRole("button", { name: /dias$/ })).toHaveLength(4);
+  await screen.findByRole("heading", { name: INTRO });
+  expect(screen.getAllByRole("radio")).toHaveLength(4);
   expect(
-    screen.queryByRole("button", { name: "Comercial: 365 dias" }),
+    within(group(COMMERCIAL)).queryByRole("radio", { name: "1 ano" }),
   ).not.toBeInTheDocument();
 });
 
-test("aumentar o prazo grava direto, sem diálogo de confirmação", async () => {
+test("aumentar o prazo e salvar grava direto, sem diálogo de confirmação", async () => {
   get.mockResolvedValue(retentionFixture());
   update.mockResolvedValue(retentionFixture({ commercialRetentionDays: 180 }));
   const user = userEvent.setup();
   render(<RetentionSection />);
 
-  await screen.findByRole("heading", { name: "Conversas" });
-  await user.click(screen.getByRole("button", { name: "Comercial: 180 dias" }));
+  await screen.findByRole("heading", { name: INTRO });
+  await user.click(radio(COMMERCIAL, "180 dias"));
+  expect(update).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Salvar" }));
 
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   await waitFor(() =>
-    expect(update).toHaveBeenCalledWith({ commercialRetentionDays: 180 }),
+    expect(update).toHaveBeenCalledWith({
+      commercialRetentionDays: 180,
+      personalRetentionDays: 30,
+    }),
   );
-  expect(
-    screen.getByRole("button", { name: "Comercial: 180 dias" }),
-  ).toHaveAttribute("aria-pressed", "true");
+  expect(update).toHaveBeenCalledTimes(1);
+  expect(radio(COMMERCIAL, "180 dias")).toBeChecked();
 });
 
-test("reduzir abre confirmação que avisa remoção de mensagens antigas e ausência de volta, sem alterar nada antes", async () => {
+test("reduzir e salvar abre confirmação que avisa remoção de mensagens antigas e ausência de volta, sem alterar nada antes", async () => {
   get.mockResolvedValue(retentionFixture());
   const user = userEvent.setup();
   const { container } = render(<RetentionSection />);
 
-  await screen.findByRole("heading", { name: "Conversas" });
-  await user.click(screen.getByRole("button", { name: "Comercial: 30 dias" }));
+  await screen.findByRole("heading", { name: INTRO });
+  await user.click(radio(COMMERCIAL, "30 dias"));
+  await user.click(screen.getByRole("button", { name: "Salvar" }));
 
   expect(update).not.toHaveBeenCalled();
   const dialog = await screen.findByRole("dialog");
   expect(dialog).toHaveTextContent(/mensagens.*antigas.*removidas/i);
   expect(dialog).toHaveTextContent(/não há como recuperá-las/i);
-  expect(
-    screen.getByRole("button", { name: "Comercial: 90 dias" }),
-  ).toHaveAttribute("aria-pressed", "true");
   await expectNoA11yViolations(container);
 });
 
-test("cancelar a redução não faz PATCH nenhum e mantém o seletor no valor salvo", async () => {
+test("cancelar a redução não faz PATCH nenhum", async () => {
   get.mockResolvedValue(retentionFixture());
   const user = userEvent.setup();
   render(<RetentionSection />);
 
-  await screen.findByRole("heading", { name: "Conversas" });
-  await user.click(screen.getByRole("button", { name: "Comercial: 30 dias" }));
+  await screen.findByRole("heading", { name: INTRO });
+  await user.click(radio(COMMERCIAL, "30 dias"));
+  await user.click(screen.getByRole("button", { name: "Salvar" }));
   await screen.findByRole("dialog");
 
   await user.click(screen.getByRole("button", { name: "Manter prazo atual" }));
 
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(update).not.toHaveBeenCalled();
-  expect(
-    screen.getByRole("button", { name: "Comercial: 90 dias" }),
-  ).toHaveAttribute("aria-pressed", "true");
 });
 
 test("confirmar a redução só então envia o PATCH com confirmReduction", async () => {
@@ -170,8 +170,9 @@ test("confirmar a redução só então envia o PATCH com confirmReduction", asyn
   const user = userEvent.setup();
   render(<RetentionSection />);
 
-  await screen.findByRole("heading", { name: "Conversas" });
-  await user.click(screen.getByRole("button", { name: "Comercial: 30 dias" }));
+  await screen.findByRole("heading", { name: INTRO });
+  await user.click(radio(COMMERCIAL, "30 dias"));
+  await user.click(screen.getByRole("button", { name: "Salvar" }));
   await screen.findByRole("dialog");
   expect(update).not.toHaveBeenCalled();
 
@@ -180,20 +181,20 @@ test("confirmar a redução só então envia o PATCH com confirmReduction", asyn
   await waitFor(() =>
     expect(update).toHaveBeenCalledWith({
       commercialRetentionDays: 30,
+      personalRetentionDays: 30,
       confirmReduction: true,
     }),
   );
+  expect(update).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  expect(
-    screen.getByRole("button", { name: "Comercial: 30 dias" }),
-  ).toHaveAttribute("aria-pressed", "true");
+  expect(radio(COMMERCIAL, "30 dias")).toBeChecked();
 });
 
 test("Não classificadas é só texto explicativo, sem seletor: segue o prazo Comercial", async () => {
   get.mockResolvedValue(retentionFixture());
   render(<RetentionSection />);
 
-  await screen.findByRole("heading", { name: "Conversas" });
+  await screen.findByRole("heading", { name: INTRO });
   const note = screen.getByText(/Não classificadas/);
   expect(note).toBeVisible();
   expect(note.textContent).not.toMatch(/exclu[íi]|remov|apaga|delet/i);
@@ -210,7 +211,7 @@ test("Não classificadas é só texto explicativo, sem seletor: segue o prazo Co
   // O texto anterior dizia que o grupo não tinha prazo; isso não é mais verdade.
   expect(note.textContent).not.toMatch(/não têm prazo|enquanto a categoria/i);
   expect(
-    screen.queryByRole("button", { name: /Não classificadas/ }),
+    screen.queryByRole("radio", { name: /Não classificadas/ }),
   ).not.toBeInTheDocument();
 });
 
@@ -219,9 +220,10 @@ test("o diálogo de redução da Comercial menciona Não classificadas; o da Pes
   const user = userEvent.setup();
   render(<RetentionSection />);
 
-  await screen.findByRole("heading", { name: "Conversas" });
+  await screen.findByRole("heading", { name: INTRO });
 
-  await user.click(screen.getByRole("button", { name: "Comercial: 30 dias" }));
+  await user.click(radio(COMMERCIAL, "30 dias"));
+  await user.click(screen.getByRole("button", { name: "Salvar" }));
   const commercialDialog = await screen.findByRole("dialog");
   expect(commercialDialog).toHaveTextContent(
     /Mensagens Comerciais e Não classificadas mais antigas que o novo prazo/,
@@ -230,7 +232,11 @@ test("o diálogo de redução da Comercial menciona Não classificadas; o da Pes
   await user.click(screen.getByRole("button", { name: "Manter prazo atual" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: "Pessoal: 30 dias" }));
+  // Cancelar mantém a escolha na tela; volta a Comercial ao valor salvo para
+  // reduzir só a Pessoal.
+  await user.click(radio(COMMERCIAL, "90 dias"));
+  await user.click(radio(PERSONAL, "30 dias"));
+  await user.click(screen.getByRole("button", { name: "Salvar" }));
   const personalDialog = await screen.findByRole("dialog");
   expect(personalDialog).toHaveTextContent(/mensagens.*antigas.*removidas/i);
   expect(personalDialog).toHaveTextContent(/não há como recuperá-las/i);
@@ -248,6 +254,6 @@ describe("nunca inventa estado próprio", () => {
         screen.getByText("Não foi possível carregar o prazo de retenção agora."),
       ).toBeVisible(),
     );
-    expect(screen.queryByRole("button", { name: /dias/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
   });
 });

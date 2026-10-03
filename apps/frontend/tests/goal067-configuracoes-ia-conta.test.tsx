@@ -200,18 +200,24 @@ describe("Estilo da IA sem termos internos (Goal067)", () => {
 describe("Conta mostra e edita o nome (Goal067)", () => {
   test("com nome salvo, mostra o nome e não o convite", async () => {
     sessionUser = { email: "dona@studiomarina.com.br", name: "Maria Clara" };
+    const user = userEvent.setup();
     render(<AccountSettings />);
 
-    const nameField = await screen.findByLabelText("Nome");
+    const row = await screen.findByRole("button", { name: /^Nome/ });
+    expect(row).toHaveTextContent("Maria Clara");
+    await user.click(row);
+    const nameField = await screen.findByRole("textbox", { name: "Nome" });
     expect(nameField).toHaveValue("Maria Clara");
     expect(screen.getByText("Como a Atendly chama você.")).toBeVisible();
   });
 
   test("com nome nulo, mostra o convite a informá-lo", async () => {
     sessionUser = { email: "dona@studiomarina.com.br", name: null };
+    const user = userEvent.setup();
     render(<AccountSettings />);
 
-    const nameField = await screen.findByLabelText("Nome");
+    await user.click(await screen.findByRole("button", { name: /^Nome/ }));
+    const nameField = await screen.findByRole("textbox", { name: "Nome" });
     expect(nameField).toHaveValue("");
     expect(
       screen.getByText(
@@ -233,7 +239,8 @@ describe("Conta mostra e edita o nome (Goal067)", () => {
     const user = userEvent.setup();
     render(<AccountSettings />);
 
-    const nameField = await screen.findByLabelText("Nome");
+    await user.click(await screen.findByRole("button", { name: /^Nome/ }));
+    const nameField = await screen.findByRole("textbox", { name: "Nome" });
     await user.type(nameField, "Maria Clara");
     await user.click(screen.getByRole("button", { name: "Salvar nome" }));
 

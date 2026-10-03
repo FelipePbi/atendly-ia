@@ -97,14 +97,14 @@ test("o bloco desabilitado do Goal024 não existe mais", () => {
   expect(
     screen.queryByRole("button", { name: "Exclusão indisponível" }),
   ).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Excluir conta" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: /^Excluir conta/ })).toBeEnabled();
 });
 
 test("pedir enuncia os efeitos antes de executar e exige senha atual", async () => {
   const user = userEvent.setup();
   render(<AccountSettings />);
 
-  await user.click(screen.getByRole("button", { name: "Excluir conta" }));
+  await user.click(screen.getByRole("button", { name: /^Excluir conta/ }));
   const dialog = await screen.findByRole("dialog", {
     name: "Excluir sua conta?",
   });
@@ -143,7 +143,7 @@ test("senha atual incorreta recusa com erro de campo, sem chamar refresh nem fec
   const user = userEvent.setup();
   render(<AccountSettings />);
 
-  await user.click(screen.getByRole("button", { name: "Excluir conta" }));
+  await user.click(screen.getByRole("button", { name: /^Excluir conta/ }));
   const dialog = await screen.findByRole("dialog");
   await user.type(within(dialog).getByLabelText("Senha atual"), "errada-000");
 
@@ -170,7 +170,7 @@ test("falha de rede ao pedir a exclusão nunca é apresentada como sucesso", asy
   const user = userEvent.setup();
   render(<AccountSettings />);
 
-  await user.click(screen.getByRole("button", { name: "Excluir conta" }));
+  await user.click(screen.getByRole("button", { name: /^Excluir conta/ }));
   const dialog = await screen.findByRole("dialog");
   await user.type(within(dialog).getByLabelText("Senha atual"), "correta-123");
 
@@ -205,7 +205,7 @@ test("com exclusão agendada, os dias restantes vêm do vencimento devolvido pel
     ),
   ).toBeVisible();
   expect(
-    screen.queryByRole("button", { name: "Excluir conta" }),
+    screen.queryByRole("button", { name: /^Excluir conta/ }),
   ).not.toBeInTheDocument();
 
   vi.useRealTimers();
@@ -279,7 +279,7 @@ test("enquanto GET /v1/status carrega, a zona de risco não afirma nem 'sem pedi
   render(<AccountSettings />);
 
   expect(
-    screen.queryByRole("button", { name: "Excluir conta" }),
+    screen.queryByRole("button", { name: /^Excluir conta/ }),
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Cancelar exclusão" }),

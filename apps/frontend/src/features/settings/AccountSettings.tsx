@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, type ReactNode, useState } from "react";
 
 import { BffHttpError, PASSWORD_POLICY_RULES } from "@/data";
+import { Icon } from "@/shared/icons/Icon";
 import { getProductServices, useProductRuntime } from "@/shared/runtime/ProductRuntime";
 import {
   accountDeletionDaysRemaining,
@@ -54,6 +56,8 @@ export function AccountSettings() {
   const [message, setMessage] = useState<string | null>(null);
   const [nameBusy, setNameBusy] = useState(false);
   const [nameMessage, setNameMessage] = useState<string | null>(null);
+  const [sheet, setSheet] = useState<"name" | "password" | null>(null);
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [confirmingLogoutAll, setConfirmingLogoutAll] = useState(false);
   const [loggingOutAll, setLoggingOutAll] = useState(false);
   const [logoutAllError, setLogoutAllError] = useState<string | null>(null);
@@ -79,7 +83,9 @@ export function AccountSettings() {
     try {
       await getProductServices().account.updateProfile(name);
       await refreshSession();
-      setNameMessage("Nome salvo.");
+      setNameMessage(null);
+      setSavedMessage("Nome salvo.");
+      setSheet(null);
     } catch {
       setNameMessage("Não foi possível salvar o nome.");
     } finally {
@@ -111,20 +117,27 @@ export function AccountSettings() {
         confirmPassword,
       });
       form.reset();
-      setMessage("Senha alterada.");
+      setMessage(null);
+      setSavedMessage("Senha alterada.");
+      setSheet(null);
     } catch {
       setMessage("Não foi possível alterar a senha. Revise os dados.");
     } finally {
       setBusy(false);
     }
   }
-  async function logout() {
-    await getProductServices()
-      .auth.logout()
-      .catch(() => undefined);
-    setUnauthenticated();
-    router.replace("/login");
+  function openSheet(next: "name" | "password") {
+    setNameMessage(null);
+    setMessage(null);
+    setSavedMessage(null);
+    setSheet(next);
   }
+
+  function closeSheet() {
+    if (nameBusy || busy) return;
+    setSheet(null);
+  }
+
   async function logoutAllDevices() {
     setLoggingOutAll(true);
     setLogoutAllError(null);
@@ -185,80 +198,124 @@ export function AccountSettings() {
 
   return (
     <SettingsPage title="Conta" description="Gerencie credenciais e acesso.">
-      <div className="settings-stack">
-        <section className="settings-panel">
-          <div className="settings-panel-header">
-            <div>
-              <h2>Nome</h2>
-              <p>
-                {session?.user.name
-                  ? "Como a Atendly chama você."
-                  : "Adicione seu nome para a Atendly usar no cumprimento."}
-              </p>
-            </div>
-          </div>
-          <form
-            className="settings-form-grid"
-            onSubmit={(event) => void saveName(event)}
+      <div className="account-screen">
+        <AccountGroup title="Seus dados">
+          <button
+            className="business-row"
+            type="button"
+            onClick={() => openSheet("name")}
           >
-            <label className="field">
-              <span className="label">Nome</span>
-              <input
-                className="input"
-                defaultValue={session?.user.name ?? ""}
-                maxLength={120}
-                name="name"
-                required
-                type="text"
-              />
-            </label>
-            <SaveActions busy={nameBusy} message={nameMessage} label="Salvar nome" />
-          </form>
-        </section>
-        <section className="settings-panel">
-          <div className="settings-data-list">
-            <div className="settings-data-row">
-              <span>E-mail</span>
-              <strong>{session?.user.email}</strong>
-            </div>
-          </div>
-        </section>
-        <form
-          className="settings-panel"
-          onSubmit={(event) => void changePassword(event)}
-        >
-          <div className="settings-form-grid">
-            <Password name="currentPassword" label="Senha atual" />
-            <Password name="newPassword" label="Nova senha" />
-            <Password name="confirmPassword" label="Repita a nova senha" />
-          </div>
-          <SaveActions busy={busy} message={message} label="Alterar senha" />
-        </form>
-        <section className="settings-panel">
-          <div className="settings-status-actions">
-            <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={() => void logout()}
+            <span className="business-row-label">Nome</span>
+            <span
+              className={`business-row-value${session?.user.name ? "" : " is-empty"}`}
             >
-              Sair da conta
-            </button>
+              {session?.user.name ?? "Adicionar"}
+              <Icon name="chevron-right" />
+            </span>
+          </button>
+          <div className="business-row">
+            <span className="business-row-label">E-mail</span>
+            <span className="business-row-value">{session?.user.email}</span>
+          </div>
+          <button
+            className="business-row"
+            type="button"
+            onClick={() => openSheet("password")}
+          >
+            <span className="business-row-label">Senha</span>
+            <span className="business-row-value">
+              <Icon name="chevron-right" />
+            </span>
+          </button>
+        </AccountGroup>
+        {savedMessage && (
+          <p className="field-help" role="status">
+            {savedMessage}
+          </p>
+        )}
+        <AccountGroup title="Segurança">
+          <div className="business-row">
+            <span className="business-row-label" id="account-logout-all-label">
+              Sair de todos os dispositivos
+            </span>
             <button
-              className="btn btn-secondary"
+              aria-describedby="account-logout-all-label"
+              className="account-action"
               type="button"
               onClick={() => setConfirmingLogoutAll(true)}
             >
-              Sair de todos os dispositivos
+              Sair
             </button>
           </div>
-        </section>
-        <AccountDeletionSection
-          accountDeletion={accountDeletion}
-          onCancelOpen={() => setCancellingDeletion(true)}
-          onRequestOpen={() => setRequestingDeletion(true)}
-          statusPhase={statusPhase}
-        />
+        </AccountGroup>
+        <AccountGroup title="Sobre">
+          <Link className="business-row" href="/termos-de-uso">
+            <span className="business-row-label">Termos de Uso</span>
+            <span className="business-row-value">
+              <Icon name="chevron-right" />
+            </span>
+          </Link>
+          <Link className="business-row" href="/politica-de-privacidade">
+            <span className="business-row-label">Política de Privacidade</span>
+            <span className="business-row-value">
+              <Icon name="chevron-right" />
+            </span>
+          </Link>
+        </AccountGroup>
+        <div className="account-danger">
+          <AccountDeletionSection
+            accountDeletion={accountDeletion}
+            onCancelOpen={() => setCancellingDeletion(true)}
+            onRequestOpen={() => setRequestingDeletion(true)}
+            statusPhase={statusPhase}
+          />
+        </div>
       </div>
+      <Dialog
+        onClose={closeSheet}
+        open={sheet === "name"}
+        title="Nome"
+        variant="sheet"
+      >
+        <form
+          className="settings-form-grid"
+          onSubmit={(event) => void saveName(event)}
+        >
+          <p className="settings-modal-copy">
+            {session?.user.name
+              ? "Como a Atendly chama você."
+              : "Adicione seu nome para a Atendly usar no cumprimento."}
+          </p>
+          <label className="field">
+            <span className="label">Nome</span>
+            <input
+              className="input"
+              defaultValue={session?.user.name ?? ""}
+              maxLength={120}
+              name="name"
+              required
+              type="text"
+            />
+          </label>
+          <SaveActions busy={nameBusy} message={nameMessage} label="Salvar nome" />
+        </form>
+      </Dialog>
+      <Dialog
+        onClose={closeSheet}
+        open={sheet === "password"}
+        title="Senha"
+        variant="sheet"
+      >
+        <form
+          className="settings-form-grid"
+          onSubmit={(event) => void changePassword(event)}
+        >
+          <Password name="currentPassword" label="Senha atual" />
+          <Password name="newPassword" label="Nova senha" />
+          <Password name="confirmPassword" label="Repita a nova senha" />
+          <SaveActions busy={busy} message={message} label="Alterar senha" />
+        </form>
+      </Dialog>
       <Dialog
         eyebrow="Sair de todos os dispositivos"
         onClose={() => {
@@ -390,10 +447,25 @@ export function AccountSettings() {
   );
 }
 
+function AccountGroup({
+  children,
+  title,
+}: {
+  children: ReactNode;
+  title: string;
+}) {
+  return (
+    <section className="business-group">
+      <h2 className="business-group-title">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
 type AccountDeletionSummary = { status: string; dueAt: string | null } | null;
 
 /**
- * A zona de risco de Excluir conta, com quatro leituras do mesmo
+ * A área de atenção de Excluir conta, com quatro leituras do mesmo
  * `GET /v1/status`: carregando, indisponível, sem pedido (ou cancelado, que
  * admite pedir de novo) e agendado. Nunca assume "sem pedido" enquanto a
  * primeira leitura não chegou — isso esconderia uma exclusão já agendada.
@@ -407,19 +479,14 @@ function AccountDeletionSection({
   accountDeletion: AccountDeletionSummary;
   onCancelOpen: () => void;
   onRequestOpen: () => void;
-  statusPhase: "error" | "loaded" | "loading";
+  statusPhase: "error" | "loading" | "loaded";
 }) {
   if (!accountDeletion && statusPhase === "loading") {
     return (
-      <section
-        aria-hidden="true"
-        className="settings-panel settings-danger-zone"
-      >
-        <div className="settings-panel-header">
-          <div>
-            <h2>Excluir conta</h2>
-            <p>Carregando o estado da exclusão...</p>
-          </div>
+      <section aria-hidden="true" className="account-danger-card">
+        <div className="account-danger-copy">
+          <h2>Excluir conta</h2>
+          <p>Carregando o estado da exclusão...</p>
         </div>
       </section>
     );
@@ -427,15 +494,13 @@ function AccountDeletionSection({
 
   if (!accountDeletion) {
     return (
-      <section className="settings-panel settings-danger-zone">
-        <div className="settings-panel-header">
-          <div>
-            <h2>Excluir conta</h2>
-            <p role="alert">
-              Não foi possível carregar o estado da exclusão agora. Atualize a
-              página e tente de novo.
-            </p>
-          </div>
+      <section className="account-danger-card">
+        <div className="account-danger-copy">
+          <h2>Excluir conta</h2>
+          <p role="alert">
+            Não foi possível carregar o estado da exclusão agora. Atualize a
+            página e tente de novo.
+          </p>
         </div>
       </section>
     );
@@ -444,12 +509,10 @@ function AccountDeletionSection({
   if (accountDeletion.status === "SCHEDULED" && accountDeletion.dueAt) {
     const days = accountDeletionDaysRemaining(accountDeletion.dueAt);
     return (
-      <section className="settings-panel settings-danger-zone">
-        <div className="settings-panel-header">
-          <div>
-            <h2>Exclusão da conta agendada</h2>
-            <p role="status">{daysRemainingCopy(days)}</p>
-          </div>
+      <section className="account-danger-card is-stacked">
+        <div className="account-danger-copy">
+          <h2>Exclusão da conta agendada</h2>
+          <p role="status">{daysRemainingCopy(days)}</p>
         </div>
         <button
           className="btn btn-secondary"
@@ -464,32 +527,28 @@ function AccountDeletionSection({
 
   if (accountDeletion.status === "PURGED") {
     return (
-      <section className="settings-panel settings-danger-zone">
-        <div className="settings-panel-header">
-          <div>
-            <h2>Conta excluída</h2>
-            <p>Os dados desta conta já foram apagados.</p>
-          </div>
+      <section className="account-danger-card">
+        <div className="account-danger-copy">
+          <h2>Conta excluída</h2>
+          <p>Os dados desta conta já foram apagados.</p>
         </div>
       </section>
     );
   }
 
   return (
-    <section className="settings-panel settings-danger-zone">
-      <div className="settings-panel-header">
-        <div>
-          <h2>Excluir conta</h2>
-          <p>
-            Encerre o uso da Atendly. Automações e WhatsApp são desligados na
-            hora, e você tem sete dias para cancelar antes de os dados serem
-            apagados sem volta.
-          </p>
-        </div>
-      </div>
-      <button className="btn btn-danger" type="button" onClick={onRequestOpen}>
-        Excluir conta
-      </button>
-    </section>
+    <button
+      className="account-danger-card is-action"
+      type="button"
+      onClick={onRequestOpen}
+    >
+      <span className="account-danger-copy">
+        <span className="account-danger-title">Excluir conta</span>
+        <span className="account-danger-detail">
+          Você tem 7 dias para desistir
+        </span>
+      </span>
+      <Icon name="chevron-right" />
+    </button>
   );
 }

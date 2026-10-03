@@ -216,6 +216,7 @@ describe("troca de senha em Configurações › Conta", () => {
     const user = userEvent.setup();
     render(<AccountSettings />);
 
+    await user.click(await screen.findByRole("button", { name: /^Senha/ }));
     await user.type(screen.getByLabelText("Senha atual"), "senhaAtual123");
     await user.type(screen.getByLabelText("Nova senha"), "somenteletras");
     await user.type(
@@ -235,6 +236,7 @@ describe("troca de senha em Configurações › Conta", () => {
     const user = userEvent.setup();
     render(<AccountSettings />);
 
+    await user.click(await screen.findByRole("button", { name: /^Senha/ }));
     await user.type(screen.getByLabelText("Senha atual"), "senhaAtual123");
     await user.type(screen.getByLabelText("Nova senha"), "novaSenha123");
     await user.type(
@@ -256,6 +258,7 @@ describe("troca de senha em Configurações › Conta", () => {
     const user = userEvent.setup();
     render(<AccountSettings />);
 
+    await user.click(await screen.findByRole("button", { name: /^Senha/ }));
     await user.type(screen.getByLabelText("Senha atual"), "senhaAtual123");
     await user.type(screen.getByLabelText("Nova senha"), "novaSenha123");
     await user.type(

@@ -4,8 +4,8 @@
  *
  * O que esta suíte prova:
  *
- * - a ação existe ao lado de "Sair da conta", como um botão próprio, não uma
- *   variação escondida do logout simples;
+ * - a ação existe no grupo Segurança, como o botão "Sair" (Goal104, C1), e a
+ *   tela não tem mais "Sair da conta": a casca tem "Sair" em todas as larguras;
  * - ela sempre passa por uma confirmação que avisa que derruba o acesso em
  *   todos os aparelhos, inclusive o atual;
  * - cancelar não chama `auth.logoutAllDevices` e mantém a pessoa na tela;
@@ -16,8 +16,8 @@
  *   não é levada para `/login` — ela continua autenticada e vê um erro
  *   recuperável dentro do próprio diálogo, sem concluir silenciosamente que
  *   derrubou os outros aparelhos quando na verdade a chamada não foi adiante;
- * - "Sair da conta" continua chamando só `auth.logout`, sem tocar
- *   `logoutAllDevices`.
+ * - o "Sair" de Segurança abre só a confirmação: não chama `auth.logout` nem
+ *   `logoutAllDevices` antes de confirmar.
  *
  * O fluxo real de "Excluir conta" (Goal025/WU-08) tem suíte própria em
  * `goal025-account-deletion-screen.test.tsx`.
@@ -66,22 +66,29 @@ beforeEach(() => {
   logoutAllDevices.mockResolvedValue({ ok: true });
 });
 
-test("a ação existe ao lado de 'Sair da conta', como um botão próprio", () => {
+function logoutAllButton(): HTMLElement {
+  const group = screen
+    .getByRole("heading", { name: "Segurança" })
+    .closest("section") as HTMLElement;
+  expect(group).not.toBeNull();
+  expect(group).toHaveTextContent("Sair de todos os dispositivos");
+  return within(group).getByRole("button", { name: "Sair" });
+}
+
+test("a ação é o botão 'Sair' do grupo Segurança, e a tela não tem 'Sair da conta'", () => {
   render(<AccountSettings />);
 
-  expect(screen.getByRole("button", { name: "Sair da conta" })).toBeVisible();
+  expect(logoutAllButton()).toBeVisible();
   expect(
-    screen.getByRole("button", { name: "Sair de todos os dispositivos" }),
-  ).toBeVisible();
+    screen.queryByRole("button", { name: "Sair da conta" }),
+  ).not.toBeInTheDocument();
 });
 
 test("abre uma confirmação que avisa a derrubada de todos os aparelhos, inclusive o atual", async () => {
   const user = userEvent.setup();
   render(<AccountSettings />);
 
-  await user.click(
-    screen.getByRole("button", { name: "Sair de todos os dispositivos" }),
-  );
+  await user.click(logoutAllButton());
 
   const dialog = await screen.findByRole("dialog", {
     name: "Encerrar o acesso em todos os aparelhos?",
@@ -95,9 +102,7 @@ test("cancelar não chama logoutAllDevices e mantém a pessoa na tela", async ()
   const user = userEvent.setup();
   render(<AccountSettings />);
 
-  await user.click(
-    screen.getByRole("button", { name: "Sair de todos os dispositivos" }),
-  );
+  await user.click(logoutAllButton());
   await screen.findByRole("dialog");
   await user.click(screen.getByRole("button", { name: "Cancelar" }));
 
@@ -111,9 +116,7 @@ test("confirmar revoga todas as sessões sem identificador do chamador, limpa a 
   const user = userEvent.setup();
   render(<AccountSettings />);
 
-  await user.click(
-    screen.getByRole("button", { name: "Sair de todos os dispositivos" }),
-  );
+  await user.click(logoutAllButton());
   const dialog = await screen.findByRole("dialog");
   await user.click(
     within(dialog).getByRole("button", { name: "Sair de todos os dispositivos" }),
@@ -134,9 +137,7 @@ test("se logoutAllDevices falhar, a sessão local não é limpa e a pessoa não 
   const user = userEvent.setup();
   render(<AccountSettings />);
 
-  await user.click(
-    screen.getByRole("button", { name: "Sair de todos os dispositivos" }),
-  );
+  await user.click(logoutAllButton());
   const dialog = await screen.findByRole("dialog");
   await user.click(
     within(dialog).getByRole("button", { name: "Sair de todos os dispositivos" }),
@@ -153,14 +154,14 @@ test("se logoutAllDevices falhar, a sessão local não é limpa e a pessoa não 
   expect(screen.getByRole("dialog")).toBeInTheDocument();
 });
 
-test("'Sair da conta' continua chamando só o logout simples", async () => {
+test("o 'Sair' de Segurança só abre a confirmação: nenhum logout sai antes de confirmar", async () => {
   const user = userEvent.setup();
   render(<AccountSettings />);
 
-  await user.click(screen.getByRole("button", { name: "Sair da conta" }));
+  await user.click(logoutAllButton());
+  await screen.findByRole("dialog");
 
-  await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
+  expect(logout).not.toHaveBeenCalled();
   expect(logoutAllDevices).not.toHaveBeenCalled();
-  await waitFor(() => expect(setUnauthenticated).toHaveBeenCalledTimes(1));
-  expect(replace).toHaveBeenCalledWith("/login");
+  expect(setUnauthenticated).not.toHaveBeenCalled();
 });

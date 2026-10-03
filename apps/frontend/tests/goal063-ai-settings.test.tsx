@@ -40,6 +40,7 @@ const getActivationTest = vi.fn();
 const startActivationTest = vi.fn();
 const restartActivationTest = vi.fn();
 const statusGet = vi.fn();
+const getNotificationPreferences = vi.fn();
 
 vi.mock("@/shared/runtime/ProductRuntime", () => ({
   getProductServices: () => ({
@@ -48,6 +49,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       restart: restartActivationTest,
       start: startActivationTest,
     },
+    notifications: { getPreferences: getNotificationPreferences },
     settings: { get: getSettings, updateAi },
     status: { get: statusGet },
     whatsapp: { get: getWhatsapp },
@@ -169,9 +171,14 @@ beforeEach(() => {
     startActivationTest,
     restartActivationTest,
     statusGet,
+    getNotificationPreferences,
   ]) {
     mock.mockReset();
   }
+  // O aviso "IA marcou um horário" é um checkbox próprio (Goal104). Aqui a
+  // leitura falha de propósito: a linha some e "sem checkbox" segue falando só
+  // do interruptor de ativação.
+  getNotificationPreferences.mockRejectedValue(new Error("fora desta suíte"));
   getWhatsapp.mockResolvedValue(CONNECTED);
   getActivationTest.mockResolvedValue(null);
 });
@@ -185,9 +192,7 @@ describe("Configurações › IA: sem interruptor, estado lido e a ação dele",
       settingsFixture({ enabled: true, tone: "CASUAL" }),
     );
 
-    expect(
-      screen.getByText("A IA está ligada e atende seus clientes."),
-    ).toBeVisible();
+    expect(screen.getByText("Atendendo pelo WhatsApp")).toBeVisible();
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(testSection()).toBeNull();
     expect(screen.queryByRole("button", { name: "Iniciar teste" })).toBeNull();
@@ -195,7 +200,7 @@ describe("Configurações › IA: sem interruptor, estado lido e a ação dele",
     // Com a IA ativa não há teste a oferecer: a tela nem lê a execução.
     expect(getActivationTest).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "Pausar atendimento" }));
+    await user.click(screen.getByRole("button", { name: "Pausar" }));
     const dialog = await screen.findByRole("dialog", {
       name: "Pausar atendimento automático?",
     });
@@ -345,7 +350,6 @@ describe("Configurações › IA: sem interruptor, estado lido e a ação dele",
       if (!enabled) await screen.findByRole("region", { name: "Teste real" });
 
       await user.click(screen.getByRole("radio", { name: /^Descontraída/ }));
-      await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
 
       await waitFor(() => {
         expect(updateAi).toHaveBeenCalledWith({ enabled, tone: "CASUAL" });

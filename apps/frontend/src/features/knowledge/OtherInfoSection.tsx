@@ -59,7 +59,7 @@ export function OtherInfoSection() {
   }
 
   return (
-    <section className="settings-panel">
+    <section className="settings-panel" id="outras-informacoes">
       <div className="settings-panel-header">
         <div>
           <h2>Outras informações importantes</h2>

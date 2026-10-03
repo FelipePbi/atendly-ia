@@ -14,7 +14,7 @@
  * uma seção a mais, no mesmo padrão das vigentes (a redecomposição é do 024).
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 
 import type { RetentionSettings, SettingsState } from "@/data";
@@ -138,10 +138,12 @@ test("a página de Conversas é a da retenção, com os dois seletores", async (
   expect(
     await screen.findByRole("heading", { level: 1, name: "Conversas" }),
   ).toBeVisible();
-  expect(
-    await screen.findByRole("button", { name: "Comercial: 90 dias" }),
-  ).toBeVisible();
-  expect(screen.getByRole("button", { name: "Pessoal: 30 dias" })).toBeVisible();
+  const commercial = await screen.findByRole("radiogroup", {
+    name: "Conversas comerciais",
+  });
+  expect(within(commercial).getByRole("radio", { name: "90 dias" })).toBeChecked();
+  const personal = screen.getByRole("radiogroup", { name: "Conversas pessoais" });
+  expect(within(personal).getByRole("radio", { name: "30 dias" })).toBeChecked();
 });
 
 test("Conta não hospeda mais o prazo de retenção", async () => {
@@ -150,6 +152,6 @@ test("Conta não hospeda mais o prazo de retenção", async () => {
   await screen.findByRole("heading", { level: 1, name: "Conta" });
   await waitFor(() => expect(getRetention).not.toHaveBeenCalled());
   expect(
-    screen.queryByRole("button", { name: /Comercial: \d+ dias/ }),
+    screen.queryByRole("radiogroup", { name: "Conversas comerciais" }),
   ).not.toBeInTheDocument();
 });

@@ -57,6 +57,12 @@ export const AUTHENTICATED_ROUTES = [
     sessionMarker: "configuracoes",
     contentMarker: "Configurações",
   },
+  {
+    path: "/configuracoes/negocio/perguntas-frequentes",
+    name: "configuracoes-negocio-perguntas-frequentes",
+    sessionMarker: "configuracoes",
+    contentMarker: "Perguntas frequentes",
+  },
   // Goal063 §5: the rehearsal tenant has never run the real test, so the
   // screen measured here is the "no valid test" state with its own action.
   // Its shell destination is Configurações, hence the shared sessionMarker.
@@ -64,7 +70,7 @@ export const AUTHENTICATED_ROUTES = [
     path: "/configuracoes/ia",
     name: "configuracoes-ia",
     sessionMarker: "configuracoes",
-    contentMarker: "Atendente virtual",
+    contentMarker: "IA",
   },
   // Goal071: o painel de conexão do WhatsApp (consentimento, QR/código,
   // desconectar) é o mesmo de whatsapp-conectar no onboarding, servido aqui em
@@ -75,6 +81,12 @@ export const AUTHENTICATED_ROUTES = [
     name: "configuracoes-whatsapp",
     sessionMarker: "configuracoes",
     contentMarker: "WhatsApp",
+  },
+  {
+    path: "/configuracoes/conversas",
+    name: "configuracoes-conversas",
+    sessionMarker: "configuracoes",
+    contentMarker: "Conversas",
   },
   // Goal067 §5: agenda, disponibilidade e conta, cada uma em SettingsPage com
   // seu próprio h1. Shell destino é Configurações, mesmo sessionMarker acima.

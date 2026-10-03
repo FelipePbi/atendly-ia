@@ -76,6 +76,10 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
       list: customersList,
       listMemory: customersListMemory,
     },
+    knowledge: {
+      getOtherInfo: () => Promise.reject(new Error("fora do escopo")),
+      list: () => Promise.reject(new Error("fora do escopo")),
+    },
     migration: { getImportState: migrationGetImportState },
     notifications: { summary: notificationsSummary },
     serviceCatalog: {
@@ -222,7 +226,7 @@ const DETAIL_ROUTES: Array<Route & { back: { href: string; name: string } }> = [
   },
   {
     back: { href: "/configuracoes", name: "Voltar para configurações" },
-    loaded: "Prazo de retenção do conteúdo das mensagens",
+    loaded: "Por quanto tempo guardar as mensagens",
     name: "/configuracoes/conversas",
     open: { listLabel: "Configurações", text: /Conversas/ },
     screen: () => <SettingsScreen scenario="conversations" />,

@@ -54,6 +54,10 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
     },
     auth: { logout: vi.fn() },
     conversations: { ignoreByPhone: vi.fn(), list: vi.fn(), setIgnored: vi.fn() },
+    // Goal104: a linha "Avisar quando a IA marcar um horário" lê a preferência; sem ela, some.
+    notifications: {
+      getPreferences: () => Promise.reject(new Error("fora do escopo")),
+    },
     onboarding: {
       complete: completeOnboarding,
       get: getOnboarding,

@@ -6,7 +6,7 @@
  * interação repetida sem violar a regra de uma chamada de `useShellConfig` por
  * árvore. `ProductSettingsScreen` é o único ponto do módulo inteiro que chama
  * o hook; nenhuma das seções (`SettingsHub`, `BusinessSettings`,
- * `AiSettings`, `KnowledgeSection`, `OtherInfoSection`, `WhatsAppSettings`,
+ * `AiSettings`, `BusinessKnowledgeSettings`, `KnowledgeSection`, `OtherInfoSection`, `WhatsAppSettings`,
  * `CalendarSettings`, `AvailabilitySettings`, `ConversationsSettings`,
  * `AccountSettings`) chama de novo. Se essa invariante for violada, React
  * lança "Maximum update depth exceeded" e a interação abaixo lança essa mesma
@@ -21,7 +21,7 @@
  * redor dele.
  */
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -67,6 +67,7 @@ vi.mock("@/shared/runtime/ProductRuntime", () => ({
     account: { requestDeletion: vi.fn(), cancelDeletion: vi.fn() },
     auth: { changePassword, logout, logoutAllDevices },
     migration: { getImportState },
+    notifications: { getPreferences: vi.fn().mockRejectedValue(new Error("off")) },
     knowledge: {
       list: knowledgeList,
       create: knowledgeCreate,
@@ -298,27 +299,46 @@ describe("ShellConfigProvider + Negócio não excede a profundidade de atualiza�
   });
 });
 
-describe("ShellConfigProvider + Atendente virtual não excede a profundidade de atualização", () => {
-  test("alterna tom, reabre a confirmação de pausa e o diálogo de novo documento repetidamente", async () => {
+describe("ShellConfigProvider + IA não excede a profundidade de atualização", () => {
+  test("alterna tom e reabre a confirmação de pausa repetidamente", async () => {
+    // Goal104 (A1): o tom grava ao escolher; o dublê devolve o estado pedido.
+    updateAi.mockImplementation(async (input: { enabled: boolean; tone: SettingsState["ai"]["tone"] }) =>
+      settingsFixture({ ai: input }),
+    );
     const user = userEvent.setup();
     renderScenario("ai");
 
-    await screen.findByRole("heading", { level: 1, name: "Atendente virtual" });
+    await screen.findByRole("heading", { level: 1, name: "IA" });
     for (let i = 0; i < 4; i += 1) {
       await user.click(screen.getByRole("radio", { name: /^Profissional/ }));
       await user.click(screen.getByRole("radio", { name: /^Descontraída/ }));
       await user.click(screen.getByRole("radio", { name: /^Equilibrada/ }));
     }
 
-    // Goal063 §3: sem interruptor. A IA ativa oferece "Pausar atendimento",
+    // Goal063 §3: sem interruptor. A IA ativa oferece "Pausar" (Goal104, A1),
     // com a mesma confirmação de antes.
-    const pauseButton = screen.getByRole("button", { name: "Pausar atendimento" });
+    const pauseButton = screen.getByRole("button", { name: "Pausar" });
     for (let i = 0; i < 4; i += 1) {
       await user.click(pauseButton);
       await screen.findByRole("dialog", { name: "Pausar atendimento automático?" });
       await user.click(screen.getByRole("button", { name: "Manter atendimento ativo" }));
     }
 
+    // Cada escolha de tom gravou; nenhuma gravou com a IA pausada.
+    expect(updateAi).toHaveBeenCalled();
+    expect(updateAi).not.toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
+  });
+});
+
+describe("ShellConfigProvider + Perguntas frequentes não excede a profundidade de atualização", () => {
+  test("reabre o diálogo de novo documento repetidamente", async () => {
+    // Goal104 (A1): o conhecimento saiu da tela de IA para Negócio › Perguntas frequentes.
+    const user = userEvent.setup();
+    renderScenario("business-faq");
+
+    await screen.findByRole("heading", { level: 1, name: "Perguntas frequentes" });
     await screen.findByRole("heading", { name: "Conhecimento do negócio" });
     for (let i = 0; i < 4; i += 1) {
       await user.click(screen.getByRole("button", { name: "Novo documento" }));
@@ -326,7 +346,6 @@ describe("ShellConfigProvider + Atendente virtual não excede a profundidade de 
       await user.click(screen.getByRole("button", { name: "Cancelar" }));
     }
 
-    expect(updateAi).not.toHaveBeenCalled();
     expect(knowledgeCreate).not.toHaveBeenCalled();
   });
 });
@@ -449,10 +468,13 @@ describe("ShellConfigProvider + Conversas não excede a profundidade de atualiza
     renderScenario("conversations");
 
     await screen.findByRole("heading", { level: 1, name: "Conversas" });
+    const commercial = await screen.findByRole("radiogroup", {
+      name: "Conversas comerciais",
+    });
     for (let i = 0; i < 4; i += 1) {
-      await user.click(
-        await screen.findByRole("button", { name: "Comercial: 30 dias" }),
-      );
+      // Goal104 (R1): escolher só muda o rascunho; "Salvar" abre a confirmação.
+      await user.click(within(commercial).getByRole("radio", { name: "30 dias" }));
+      await user.click(screen.getByRole("button", { name: "Salvar" }));
       await screen.findByRole("dialog");
       await user.click(screen.getByRole("button", { name: "Manter prazo atual" }));
     }
@@ -467,13 +489,17 @@ describe("ShellConfigProvider + Conta não excede a profundidade de atualizaçã
     renderScenario("account");
 
     await screen.findByRole("heading", { level: 1, name: "Conta" });
-    await user.type(screen.getByLabelText("Senha atual"), "senha-atual-123");
+    // Goal104 (C1): os campos de senha vivem na folha "Senha"; o "Sair" de Segurança abre a confirmação.
+    await user.click(screen.getByRole("button", { name: /^Senha/ }));
+    await user.type(await screen.findByLabelText("Senha atual"), "senha-atual-123");
     await user.type(screen.getByLabelText("Nova senha"), "senha-nova-456");
+    await user.keyboard("{Escape}");
 
+    const security = screen
+      .getByRole("heading", { name: "Segurança" })
+      .closest("section") as HTMLElement;
     for (let i = 0; i < 4; i += 1) {
-      await user.click(
-        screen.getByRole("button", { name: "Sair de todos os dispositivos" }),
-      );
+      await user.click(within(security).getByRole("button", { name: "Sair" }));
       await screen.findByRole("dialog", {
         name: "Encerrar o acesso em todos os aparelhos?",
       });

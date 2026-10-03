@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type FormEvent, type Ref, useEffect, useRef, useState } from "react";
 
 import type { BusinessModality, SettingsState } from "@/data";
@@ -41,6 +42,7 @@ export function BusinessSettings({
   );
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const knowledge = useKnowledgeSummary();
   // N1 não tem formulário permanente: a linha com `›` abre o editor na própria
   // tela empurrada, e "Cancelar" volta às linhas sem salvar nada.
   const [editing, setEditing] = useState(false);
@@ -126,6 +128,7 @@ export function BusinessSettings({
       />
       {!editing && (
         <BusinessSummary
+          knowledge={knowledge}
           ref={summaryRef}
           settings={settings}
           onEdit={() => setEditing(true)}
@@ -334,17 +337,64 @@ export function BusinessSettings({
 type SummaryRow = {
   /** A linha abre o editor dos dados do negócio; sem isso ela é só leitura. */
   editable?: boolean;
+  /** A linha leva a outra rota. */
+  href?: string;
   label: string;
-  value: string | null;
+  /** `undefined`: ainda sem leitura, a linha fica sem segunda linha. */
+  value?: string | null;
 };
 
 const NOT_INFORMED = "Não informado";
+const OTHER_INFO_PREVIEW_LENGTH = 120;
+
+/** `undefined` enquanto a leitura carrega ou falha; `null` quando lida e vazia. */
+type KnowledgeSummary = {
+  faq: string | null | undefined;
+  otherInfo: string | null | undefined;
+};
+
+function useKnowledgeSummary(): KnowledgeSummary {
+  const [summary, setSummary] = useState<KnowledgeSummary>({
+    faq: undefined,
+    otherInfo: undefined,
+  });
+  useEffect(() => {
+    const controller = new AbortController();
+    const services = getProductServices();
+    services.knowledge
+      .list({}, controller.signal)
+      .then((documents) => {
+        const count = documents.filter(
+          (item) => item.type !== "BUSINESS_INFO" && item.status !== "INACTIVE",
+        ).length;
+        setSummary((current) => ({
+          ...current,
+          faq: count === 0 ? null : count === 1 ? "1 item" : `${count} itens`,
+        }));
+      })
+      .catch(() => undefined);
+    services.knowledge
+      .getOtherInfo(controller.signal)
+      .then(({ content }) => {
+        const text = content.trim().replace(/\s+/g, " ");
+        setSummary((current) => ({
+          ...current,
+          otherInfo: text ? text.slice(0, OTHER_INFO_PREVIEW_LENGTH) : null,
+        }));
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+  return summary;
+}
 
 function BusinessSummary({
+  knowledge,
   onEdit,
   ref,
   settings,
 }: {
+  knowledge: KnowledgeSummary;
   onEdit: () => void;
   ref: Ref<HTMLDivElement>;
   settings: SettingsState;
@@ -391,8 +441,16 @@ function BusinessSummary({
     {
       title: "O que a IA sabe responder",
       rows: [
-        { label: "Perguntas frequentes", value: null },
-        { label: "Outras informações", value: null },
+        {
+          href: "/configuracoes/negocio/perguntas-frequentes",
+          label: "Perguntas frequentes",
+          value: knowledge.faq,
+        },
+        {
+          href: "/configuracoes/negocio/perguntas-frequentes#outras-informacoes",
+          label: "Outras informações",
+          value: knowledge.otherInfo,
+        },
       ],
     },
   ];
@@ -407,16 +465,29 @@ function BusinessSummary({
                 <span className="business-row-label">{row.label}</span>
                 <span
                   className={
-                    row.value
-                      ? "business-row-value"
-                      : "business-row-value is-empty"
+                    row.value === null
+                      ? "business-row-value is-empty"
+                      : "business-row-value"
                   }
                 >
-                  {row.value ?? NOT_INFORMED}
-                  {row.editable && <Icon name="chevron-right" />}
+                  {row.value !== undefined && (
+                    <span className="business-row-text">
+                      {row.value ?? NOT_INFORMED}
+                    </span>
+                  )}
+                  {(row.editable || row.href) && (
+                    <Icon name="chevron-right" />
+                  )}
                 </span>
               </>
             );
+            if (row.href) {
+              return (
+                <Link className="business-row" href={row.href} key={row.label}>
+                  {content}
+                </Link>
+              );
+            }
             return row.editable ? (
               <button
                 className="business-row"

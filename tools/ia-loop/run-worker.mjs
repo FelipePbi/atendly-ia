@@ -29,7 +29,7 @@ import { isDirectExecution } from './lib/direct-execution.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-const WORKERS = Object.freeze({
+export const WORKERS = Object.freeze({
   tech_lead: 'workers/tech-lead.mjs',
   developer: 'workers/developer.mjs',
 });

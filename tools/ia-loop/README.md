@@ -5806,3 +5806,75 @@ Entre 2026-10-02 e 2026-10-03, um supervisor externo precisou intervir no loop p
 - **Rodadas só de documentação mais baratas (M-07).** O `ReviewDecision` ganha `correctionScope` (`DOCUMENTATION_ONLY` ou `CODE_OR_EVIDENCE`), só em `CHANGES_REQUIRED`. Numa rodada `DOCUMENTATION_ONLY`, a unidade FIX-001 recebe as linhas de contagem que os gates imprimiram, copiadas literalmente. O resultado de cada gate grava uma impressão digital do código (todo arquivo fora de `docs/**/*.md`, mais base e HEAD). Na rodada seguinte, um gate verde com impressão, action, scope e pattern idênticos é reaproveitado sem rodar de novo, e o revisor vê isso na tabela de gates (`WORK_UNIT_GATE_EVIDENCE_REUSED`). `git-diff-check` e `tooling-tests` sempre rodam. A aceitação não muda: o revisor continua decidindo. Para desligar: `IA_LOOP_GATE_EVIDENCE_REUSE=0`.
 - **Janela segura para o operador (M-04).** `npm run ia-loop:pause -- --wait [--timeout 6h] [--poll 10s]` bloqueia até não haver run em RUNNING, lease do orquestrador, lease de job ou de worktree, nem worker trabalhando. Então imprime `SAFE TO CHANGE THE MAIN CHECKOUT` e sai com 0; no timeout, sai com 2 e lista o que ainda ocupa. Uma run PAUSED volta com `npm run ia-loop:auto`; `ia-loop:resume` serve só para espera de capacidade.
 - **Pausa antes da correção (M-11).** Uma pausa comum (`npm run ia-loop:pause`, sem `--after-goal`) agora também vale na fronteira `BEFORE_CORRECTION`: depois que a revisão decidiu `CHANGES_REQUIRED` e gravou bloqueios, perfil e `correctionScope`, e antes de existir o job da correção seguinte. O `run-goal` sai limpo, o `run-auto` marca a run `PAUSED` (`AUTONOMOUS_RUN_PAUSED`, `boundary: BEFORE_CORRECTION`) e sai com 0. `npm run ia-loop:auto` retoma o mesmo Goal na rodada enfileirada, sem refazer a revisão nem republicar jobs. Uma correção já despachada não é interrompida, e `--after-goal` continua esperando o fim do Goal. Os nomes das fronteiras ficam em `PAUSE_BOUNDARIES` (`lib/autonomous-state.mjs`).
+
+## V37 — Um comando sobe o loop inteiro e ele se recupera sozinho
+
+Até a V36, o loop eram três terminais (os dois workers e o `run-auto`) e um supervisor externo com scripts próprios. Um script religava workers e outro reanexava o `run-auto` e repetia as paradas conhecidas. Um terceiro pausava o loop quando faltava memória, e outro ressuscitava o Docker depois de um reboot (`LICOES_DO_SUPERVISOR.md`, regras 2–6 e 8). A V37 junta tudo num daemon (`run-daemon.mjs`, `lib/daemon*.mjs`).
+
+**Comandos.**
+
+- `npm run ia-loop:start`: sobe o daemon desanexado e oculto, e ele sobrevive ao fechamento do terminal. `-- --foreground` roda anexado, com o log também na tela. Um segundo `start` informa o pid do daemon que já roda e sai com 0. O lock é o lease de identidade do papel `daemon` (o mesmo mecanismo dos workers), então um daemon morto não segura o lock.
+- `npm run ia-loop:stop` é gracioso. Ele pede uma pausa que pertence ao daemon e espera o `run-auto` chegar à fronteira segura e não restar job, worktree ou worker ocupado (mesmo critério de `ia-loop:pause -- --wait`). Então pede aos workers que saiam pelo canal IPC e encerra. Enquanto espera, imprime o que ainda ocupa; `--timeout` (padrão 6h) devolve exit 2. Com `--now`, mata as árvores na hora e deixa os leases para o `run-recover` da próxima subida. No `start` seguinte, a pausa pedida pelo `stop` é retirada sozinha.
+- `npm run ia-loop:daemon -- --resume [--from <goal>] [--resolved "<nota>"]` é o "pode seguir" do operador. Ele retira a pausa pedida, retoma uma run PAUSED e reanexa uma run PAUSED_FOR_HUMAN com `--from --resolved`. Sem run, inicia uma nova (exige `--from`). O pedido fica em `.state/daemon/requests/` e vale mesmo se o daemon ainda não subiu.
+- `npm run ia-loop:daemon -- --install` / `--uninstall` registra ou remove a tarefa agendada `IA Loop Daemon`. Ela usa ONLOGON, só o usuário atual, sem senha, `/RL LIMITED`, um minuto de atraso, e roda `npm run ia-loop:start` num PowerShell oculto. `--dry-run` só imprime o comando `schtasks`. Pode exigir um terminal elevado ("Access is denied"). A tarefa herda só o ambiente do usuário: uma variável como `IA_LOOP_MAX_CORRECTION_ROUNDS` precisa estar em `setx IA_LOOP_MAX_CORRECTION_ROUNDS 8`, não só no terminal.
+- `npm run ia-loop:status` ganha a seção do daemon no topo, com estado, pid, uptime, idade do heartbeat, cada filho (pid, reinícios, última saída) e o motivo de não anexar. Mostra também Docker, memória, pausa do daemon, falha guardada, último incidente e onde ficam os logs.
+
+**O que o daemon faz a cada tick** (padrão 5s):
+
+- **Workers.** Mantém os dois vivos e sobe de novo qualquer um que saia. `CODE_CHANGED` volta em 1s, já com o código novo, e `IDENTITY_CONFLICT` volta depois de `IDENTITY_RETRY_MS`. Uma queda volta com espera exponencial. Depois de `CRASH_LIMIT` quedas em `CRASH_WINDOW_MS`, emite `DAEMON_WORKER_CRASH_LOOP`, avisa e espera `CRASH_COOLDOWN_MS`. Como o daemon viu o filho sair, ele retira o lease do papel, mas só se o lease ainda nomeia aquele pid e o pid não existe mais. Sem isso, o worker novo esperaria o lease velho expirar. O worker só aceita o pedido de saída pelo IPC quando roda sob o daemon (`IA_LOOP_DAEMON_CHILD=1`). O canal fica `unref`, para não segurar o processo.
+- **Loop.** Reanexa o `run-auto` (sem argumentos) enquanto a run está RUNNING e as condições abaixo valem:
+  - nenhuma pausa pedida;
+  - memória abaixo do limite;
+  - os dois workers com heartbeat;
+  - Docker pronto;
+  - nenhum lease vivo de outro orquestrador.
+
+  Nunca anexa em PAUSED nem com `pauseRequested`, só depois de `--resume`. Um lease velho do loop (queda ou outro boot) passa antes pelo `run-recover`. Cada recusa vira uma espera com nome, visível no status (`DAEMON_ATTACH_HELD`), e falhas seguidas de anexação recuam até `ATTACH_FAILURE_LIMIT`, quando o operador é avisado.
+- **Paradas para humano.** Quando uma run que o daemon acompanhou para em PAUSED_FOR_HUMAN, ele classifica a parada contra um catálogo fechado (`lib/daemon-incidents.mjs`). O catálogo usa o texto real que o harness imprime. Uma parada do catálogo é corrigida e reanexada com `--from <goal> --resolved "<nota>"`, e a nota registra o tipo, a evidência e a tentativa. Cada tipo tem um limite de tentativas por Goal; passado o limite, ou fora do catálogo, a parada fica para o operador, com aviso uma única vez. Com pausa pedida, a correção espera o `--resume` (regra 4). Uma parada que o daemon não viu acontecer vai sempre para o operador.
+
+  | Tipo | O que o daemon faz | Limite |
+  | --- | --- | --- |
+  | `GOAL_GIT_TRANSIENT` | corrida de arquivo do Windows dentro do git do Goal: apaga o branch `ai-loop/goal-NNN` vazio (sem worktree e sem commit próprio), espera 20s e reanexa no mesmo Goal | 3 |
+  | `PLANNING_WORKTREE_ADD` | a worktree do planejamento não materializou: apaga o branch vazio, `git worktree prune` e refaz o `run-close` (até 3 vezes, só enquanto a falha for a mesma); reanexa no Goal que o fechamento deixou READY | 3 |
+  | `CLOSURE_GIT_TRANSIENT` | `git rev-parse` falhou uma vez no fechamento: igual ao anterior, sem apagar branch | 3 |
+  | `PLANNING_MODEL_CONFLICT` | o servidor trocou de modelo no meio do planejamento: guarda o diff e o `runtime.json` em `.state/daemon/incidents/`, remove a worktree do planejamento, zera o planejamento no runtime e refaz o `run-close` | 2 |
+  | `WORKER_HEARTBEAT_LOST` | um worker sumiu no meio da rodada: espera aquele papel voltar a bater (até `WORKER_RETURN_TIMEOUT_MS`) e reanexa no mesmo Goal | 3 |
+
+- **Docker.** Antes de anexar, e de novo a cada `DOCKER_CHECK_INTERVAL_MS`, o daemon confere o Docker. Se `docker info` falha, liga o Docker Desktop e espera. Se continuar fora, aplica o conserto dos sockets: encerra o Docker, renomeia `Docker\run` e `docker-secrets-engine` em `%LOCALAPPDATA%` para `.stale-<data>` e liga de novo. Depois sobe os containers (`CONTAINERS`) e espera ficarem saudáveis. Sem banco, não anexa.
+- **Memória.** A memória comprometida em `MEMORY_HIGH`% ou mais (padrão 95) pede uma pausa que pertence ao daemon. Abaixo de `MEMORY_LOW`% (padrão 85) por `MEMORY_CLEAR_AFTER_MS`, ele retira só essa pausa. Uma pausa pedida pelo operador nunca é retirada pelo daemon. A posse acaba quando o operador pede pausa também, retoma por conta própria ou troca a run (`DAEMON_PAUSE_HANDED_TO_OPERATOR`).
+- **Órfãos.** A varredura da V36 roda a cada `SWEEP_INTERVAL_MS`.
+
+**Avisos e logs.** Cada aviso vira três coisas: um toast do Windows, uma linha no log e o evento `DAEMON_NOTIFICATION`. Avisos com chave saem uma vez só, mesmo depois de reiniciar o daemon. Todos os eventos do daemon começam com `DAEMON_`, e o vocabulário fica em `lib/daemon-vocabulary.mjs`. Os logs ficam em `.state/daemon/`: `daemon.log`, um log por filho e `daemon-boot.log`. Eles giram por tamanho. O estado que precisa sobreviver a um reinício fica em `state.json`: contagem de incidentes, pausa do daemon, falha guardada e avisos dados.
+
+**Configuração** (variáveis de ambiente; valor inválido volta ao padrão):
+
+| Variável | Padrão | Para quê |
+| --- | --- | --- |
+| `IA_LOOP_DAEMON_TICK_MS` | 5000 | intervalo do tick (mínimo 250) |
+| `IA_LOOP_DAEMON_RESTART_BASE_MS` / `_RESTART_MAX_MS` | 5000 / 300000 | espera do reinício após queda, exponencial |
+| `IA_LOOP_DAEMON_CRASH_LIMIT` / `_CRASH_WINDOW_MS` / `_CRASH_COOLDOWN_MS` | 5 / 600000 / 900000 | crash loop |
+| `IA_LOOP_DAEMON_IDENTITY_RETRY_MS` | 60000 | nova tentativa após `IDENTITY_CONFLICT` |
+| `IA_LOOP_DAEMON_WORKER_STOP_GRACE_MS` | 20000 | espera da saída pedida antes de matar a árvore |
+| `IA_LOOP_DAEMON_ATTACH_BACKOFF_MS` / `_ATTACH_BACKOFF_MAX_MS` / `_ATTACH_FAILURE_LIMIT` | 30000 / 600000 / 5 | recuo da anexação e quando avisar |
+| `IA_LOOP_DAEMON_WORKER_RETURN_TIMEOUT_MS` | 300000 | espera pelo worker em `WORKER_HEARTBEAT_LOST` |
+| `IA_LOOP_DAEMON_DOCKER` | ligado | `0` desliga a etapa do Docker |
+| `IA_LOOP_DAEMON_DOCKER_DESKTOP` | `C:\Program Files\Docker\Docker\Docker Desktop.exe` | executável do Docker Desktop |
+| `IA_LOOP_DAEMON_DOCKER_START_TIMEOUT_MS` / `_DOCKER_POLL_MS` | 240000 / 5000 | espera do Docker |
+| `IA_LOOP_DAEMON_CONTAINERS` | `atendly_postgres_dev` | containers, separados por vírgula |
+| `IA_LOOP_DAEMON_CONTAINER_HEALTH_TIMEOUT_MS` | 180000 | espera do healthcheck |
+| `IA_LOOP_DAEMON_DOCKER_CHECK_INTERVAL_MS` | 300000 | nova conferência do Docker |
+| `IA_LOOP_DAEMON_MEMORY` | ligado | `0` desliga a regra de memória |
+| `IA_LOOP_DAEMON_MEMORY_HIGH` / `_MEMORY_LOW` | 95 / 85 | limites em % da memória comprometida |
+| `IA_LOOP_DAEMON_MEMORY_CLEAR_AFTER_MS` / `_MEMORY_INTERVAL_MS` | 600000 / 60000 | tempo abaixo do limite e intervalo da amostra |
+| `IA_LOOP_DAEMON_SWEEP` (ou `IA_LOOP_ORPHAN_SWEEP`) / `_SWEEP_INTERVAL_MS` | ligado / 600000 | varredura de órfãos |
+| `IA_LOOP_DAEMON_TOAST` | ligado | `0` deixa só log e evento |
+| `IA_LOOP_DAEMON_LOG_MAX_BYTES` / `_LOG_KEEP` | 10 MiB / 3 | giro dos logs |
+| `IA_LOOP_DAEMON_TASK_NAME` | `IA Loop Daemon` | nome da tarefa agendada |
+
+**Migração dos três terminais:**
+
+1. Peça a pausa e espere a janela segura: `npm run ia-loop:pause -- --wait`.
+2. Encerre os scripts do supervisor externo, começando pelo guarda, que religa os outros, e depois o keeper e o amostrador de memória. Se continuarem vivos, eles disputam os workers com o daemon.
+3. Feche os dois terminais dos workers com Ctrl+C. O `run-auto` já saiu na pausa.
+4. Rode `npm run ia-loop:start` e confira em `npm run ia-loop:status`. A run PAUSED fica parada até `npm run ia-loop:daemon -- --resume`.
+5. Para subir no logon, abra um terminal elevado, se o Windows exigir. Rode `npm run ia-loop:daemon -- --install --dry-run` e depois `--install`.

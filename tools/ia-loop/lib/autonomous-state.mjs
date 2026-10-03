@@ -345,6 +345,20 @@ export function createAutonomousStore(stateDir) {
         ...run, status: RUN_STATUS.RUNNING, pauseRequested: false, pauseAfterGoal: false, pauseReason: null,
       });
     },
+
+    /**
+     * Withdraws a pause REQUEST and touches nothing else.
+     *
+     * clearPause() also sets RUNNING, which is right for resuming a PAUSED run
+     * and wrong for every other status: on PAUSED_FOR_HUMAN it would erase the
+     * stop a person has to resolve. This is for whoever asked for the pause and
+     * no longer wants it, whatever state the run is in.
+     */
+    async withdrawPauseRequest() {
+      const run = await this.read();
+      if (!run) return null;
+      return this.write({ ...run, pauseRequested: false, pauseAfterGoal: false });
+    },
   };
 }
 

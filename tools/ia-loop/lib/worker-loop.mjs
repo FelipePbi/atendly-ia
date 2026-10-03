@@ -35,6 +35,7 @@ import { createResourceRegistry } from './resource-registry.mjs';
 import { cleanupResourcesForAttempt, scavengeOrphans } from './resource-lifecycle.mjs';
 import { activeWorktreesFromRuntime, sweepOrphanProcesses } from './orphan-processes.mjs';
 import { logResourceEvent } from './shutdown-hooks.mjs';
+import { DAEMON_CHILD_ENV, DAEMON_SHUTDOWN_MESSAGE } from './daemon-vocabulary.mjs';
 import { colorizeLogLine, createPaint } from './relay-logger.mjs';
 
 /** Moderate polling. No file watcher needed at this cadence, no busy loop. */
@@ -445,6 +446,20 @@ export async function runWorkerLoop({
 
   process.on('SIGINT', () => void shutdown('SIGINT'));
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  // On Windows every signal Node can deliver is TerminateProcess, so the two
+  // handlers above never run there and a killed worker leaves its role lease
+  // ACTIVE for the whole expiry window. The daemon starts workers with an IPC
+  // channel and asks over it instead. Registered only for a daemon child: any
+  // other parent's channel (a test runner's) is not ours to listen on.
+  if (typeof process.send === 'function' && process.env[DAEMON_CHILD_ENV] === '1') {
+    process.on('message', (message) => {
+      if (message === DAEMON_SHUTDOWN_MESSAGE) void shutdown('DAEMON_SHUTDOWN');
+    });
+    // An open IPC channel keeps a process alive. Without this, a worker that
+    // decides to stop (CODE_CHANGED, IDENTITY_CONFLICT) by setting its exit
+    // code would never actually exit under the daemon. Messages still arrive.
+    process.channel?.unref?.();
+  }
 
   const seen = new Set();
   /**

@@ -30,6 +30,7 @@ import { renderRoutingSummary, summarizeRouting } from './lib/routing-summary.mj
 import { STAGES } from './lib/stage-identity.mjs';
 import { LOOP_CONFIG } from './lib/loop-config.mjs';
 import { isDirectExecution } from './lib/direct-execution.mjs';
+import { readDaemonStatusLines } from './lib/daemon-state.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, '.state');
@@ -214,11 +215,17 @@ async function main() {
 
   const out = ['', 'ATENDLY IA LOOP', ''];
 
+  // The daemon first: whether anything is keeping the loop alive is the
+  // first question, and the answer does not depend on there being a run.
+  out.push(...await readDaemonStatusLines(STATE_DIR, { now }));
+  out.push('');
+
   if (!runtime && !goal) {
     out.push('No run recorded yet.');
     out.push('');
     out.push('Start with:');
-    out.push('  npm run ia-loop:goal -- 003 --dry-run');
+    out.push('  npm run ia-loop:start');
+    out.push('  npm run ia-loop:daemon -- --resume --from <goal>');
     console.log(out.join('\n'));
     return 0;
   }

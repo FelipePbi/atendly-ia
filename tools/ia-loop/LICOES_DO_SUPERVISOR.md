@@ -7,6 +7,10 @@ com data, sintoma, causa e regra, no mesmo commit da próxima pausa segura.
 A seção final lista falhas do próprio harness encontradas durante a supervisão e ainda não
 corrigidas. Elas não são erro do supervisor, mas a regra de contorno vale até a correção.
 
+Desde a V37 o loop roda sob o daemon (`npm run ia-loop:start`, README, seção V37), que cumpre
+sozinho as regras 2, 3, 4, 5, 6 e 8. Elas continuam aqui porque valem para quem operar o loop
+sem o daemon, e o daemon é a implementação delas: mudar uma regra é mudar o daemon.
+
 ## Regras (checklist antes de agir)
 
 1. **Nada no checkout principal com job ativo.** Nenhum commit, nenhum arquivo novo ou alterado
@@ -15,28 +19,44 @@ corrigidas. Elas não são erro do supervisor, mas a regra de contorno vale até
    cada job e acusa `MAIN_CHECKOUT_MUTATED`. Para escrever no repositório:
    `npm run ia-loop:pause -- --wait` (V36), que só volta quando imprime
    `SAFE TO CHANGE THE MAIN CHECKOUT`; fazer o trabalho, commitar e retomar com
-   `npm run ia-loop:auto`. Rascunhos ficam fora do repositório até a pausa.
+   `npm run ia-loop:auto` (com o daemon: `npm run ia-loop:daemon -- --resume`, porque o daemon
+   não reanexa sozinho uma run PAUSED). Rascunhos ficam fora do repositório até a pausa.
 2. **Não reiniciar worker com o run-auto rodando.** Desde a V36 o run-auto tolera até 3 minutos
    sem heartbeat se um worker novo do mesmo papel assumir a tentativa, mas reiniciar com o loop
    pausado continua sendo o caminho seguro. Se cair mesmo assim, reanexar com
-   `--from <goal> --resolved "<nota>"`.
+   `--from <goal> --resolved "<nota>"`. **Com o daemon (V37):** o daemon nunca reinicia worker
+   vivo; ele só sobe de novo o worker cujo processo filho saiu, e o run-auto anexado não é
+   tocado. Se o run-auto parar por `WORKER_HEARTBEAT_LOST`, o daemon espera o worker voltar e
+   reanexa com `--from --resolved` sozinho.
 3. **Confirmar que o worker morreu antes de reiniciar.** Uma linha `CRASH` no log não basta.
    Conferir o processo e o heartbeat. Se o processo está vivo e com heartbeat, não mexer
-   (`WORKER_ALREADY_RUNNING` é a recusa correta).
+   (`WORKER_ALREADY_RUNNING` é a recusa correta). **Com o daemon (V37):** a prova de morte é a
+   saída do próprio processo filho, que o daemon observa; o lease do papel só é retirado se
+   ainda apontar para aquele pid e o pid não existir mais.
 4. **Pausa pedida sobrevive a toda retomada.** Qualquer caminho do supervisor que religa o
    run-auto (recuperação de planejamento, `--from`, attach) lê `pauseRequested` antes e não
-   retoma se houver pausa pedida pelo operador.
+   retoma se houver pausa pedida pelo operador. **Com o daemon (V37):** nenhuma anexação nem
+   nova tentativa de falha catalogada acontece com `pauseRequested`; a falha fica guardada até
+   `npm run ia-loop:daemon -- --resume`.
 5. **Pausa cumprida é pausa limpa.** Depois de fazer o trabalho que motivou a pausa, limpar o
    pedido (`clearPause`) antes de retomar. Pedido esquecido para o loop horas depois sem motivo.
+   **Com o daemon (V37):** `--resume` limpa o pedido; o daemon retira sozinho só as pausas que ele
+   mesmo pediu (memória alta, `ia-loop:stop`), e perde a posse delas assim que o operador pede
+   uma pausa também.
 6. **Supervisor fora das tarefas do Claude.** Supervisor, guarda, keeper e amostrador de memória
    rodam como processos desanexados (`Start-Process ... -WindowStyle Hidden`), não como tarefa
    em segundo plano da sessão do Claude, que morre por limite de tempo ou quando o app fecha.
+   **Com o daemon (V37):** os quatro foram substituídos pelo daemon, que sobe desanexado e
+   oculto por `npm run ia-loop:start` e, com `ia-loop:daemon -- --install`, no logon.
 7. **Conferir no byte antes de declarar arquivo corrompido.** Acento estranho na saída do
    terminal costuma ser só a exibição (code page do console). Ler o arquivo como UTF-8 (por
    exemplo `node -e` ou Python) antes de concluir que há mojibake.
 8. **Depois de reiniciar a máquina:** consertar os sockets do Docker, religar workers e
    reanexar o run-auto. Desde a V36 o worker retira sozinho o lease `DIFFERENT_BOOT`; rodar
    `npm run ia-loop:recover -- --dry-run` antes de reanexar continua útil para conferir.
+   **Com o daemon (V37):** a tarefa de logon sobe o daemon, que liga o Docker Desktop, aplica o
+   conserto dos sockets se ele não subir, espera os containers ficarem saudáveis, roda o
+   `run-recover` para o lease velho do loop e só então reanexa.
 9. **Ler o resultado do job antes de atribuir a causa.** Conferir em `results/` o código e a
    hora da falha antes de dizer que um job morreu por desligamento, reinício ou falta de memória.
 

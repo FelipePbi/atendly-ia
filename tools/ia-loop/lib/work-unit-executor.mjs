@@ -156,10 +156,12 @@ function nextDynamicId(prefix, used) {
  * that the source is unknown and given the candidates, rather than being
  * pointed confidently at the wrong place.
  */
-export function buildCorrectiveUnit({ verification, failure, attribution, usedIds }) {
+export function buildCorrectiveUnit({ verification, failure, attribution, usedIds, id: recordedId = null }) {
   const ambiguous = attribution.attributed === null;
   const prefix = ambiguous ? 'DIAG' : 'FIX';
-  const id = nextDynamicId(prefix, usedIds);
+  // A resume passes the id an earlier process already gave this corrective
+  // unit, so it finds that unit's job and result instead of minting a twin.
+  const id = recordedId ?? nextDynamicId(prefix, usedIds);
 
   const evidence = (failure.report ?? '').slice(-2000);
   const suspects = attribution.attributed
@@ -192,6 +194,68 @@ export function buildCorrectiveUnit({ verification, failure, attribution, usedId
       'Nenhum critério de aceite já atendido por outra Work Unit foi revertido.',
     ],
   });
+}
+
+/**
+ * The corrective units an earlier process of THIS round already created, by
+ * the verification they were created for, in creation order.
+ *
+ * Read from the event log because `WORK_UNIT_FIX_CREATED` is the one record of
+ * that link: the corrective unit's own job names neither the gate nor the
+ * failure it answers. Recomputing it instead is not equivalent — attribution
+ * reads the changed files of every unit before it, and a unit reused from
+ * disk reports what it claimed rather than what git saw, so a resume could
+ * mint FIX-002 where DIAG-001 had already run and been paid for.
+ *
+ * Events written before the round's job id was stamped on them are matched on
+ * (goal, round) alone; newer ones must also name this round's job.
+ */
+async function readCorrectiveLineage(store, { goal, round, jobId, emit }) {
+  let events;
+  try {
+    events = await store.readEvents();
+  } catch (error) {
+    // Without the log the resume still works, it just recomputes the ids —
+    // which is what every resume did before the lineage was read at all.
+    emit(`  linhagem de correção ilegível (${error.message}); ids de correção recalculados.`);
+    return new Map();
+  }
+
+  const lineage = new Map();
+  for (const event of events) {
+    if (event.type !== 'WORK_UNIT_FIX_CREATED' || !event.forVerification) continue;
+    if (String(event.goal) !== String(goal) || Number(event.round) !== Number(round)) continue;
+    if (event.jobId && jobId && event.jobId !== jobId) continue;
+    if (!/^(FIX|DIAG)-\d{3}$/.test(event.workUnitId ?? '')) continue;
+    const entries = lineage.get(event.forVerification) ?? [];
+    if (!entries.some((entry) => entry.id === event.workUnitId)) {
+      entries.push({ id: event.workUnitId, attributedTo: event.attributedTo ?? null });
+    }
+    lineage.set(event.forVerification, entries);
+  }
+  return lineage;
+}
+
+/**
+ * The attribution a resumed corrective unit is rebuilt with.
+ *
+ * The id is the recorded one, so the wording must agree with it: a DIAG unit
+ * is told the source is unknown even if today's recomputation names a
+ * suspect, and a FIX unit keeps pointing at the unit the first run blamed.
+ */
+function attributionForRecorded(recorded, attribution, records) {
+  const diagnosis = recorded.id.startsWith('DIAG-');
+  if (diagnosis && attribution.attributed !== null) {
+    return { attributed: null, ambiguous: true, candidates: [...attribution.candidates] };
+  }
+  if (!diagnosis && attribution.attributed === null && recorded.attributedTo) {
+    return {
+      attributed: { unitId: recorded.attributedTo, files: records.get(recorded.attributedTo)?.changedFiles ?? [] },
+      ambiguous: false,
+      candidates: [recorded.attributedTo],
+    };
+  }
+  return attribution;
 }
 
 /**
@@ -234,6 +298,23 @@ export async function executeWorkUnitPlan({
   // Scoped to this round's plan, which is scoped to this Goal's worktree. An
   // entry only ever describes a tree that is still the one being edited.
   const findings = createFindingsLedger();
+
+  // The failure → corrective → re-run chain an earlier process of this round
+  // already walked. Read once, and only when a gate first comes back red: a
+  // round that never fails a gate has no lineage to follow.
+  let lineage = null;
+  const recordedCorrective = async (verificationId, index) => {
+    if (!lineage) {
+      lineage = await readCorrectiveLineage(store, { goal, round, jobId: job.jobId, emit });
+      // Reserved up front, so a NEW corrective unit can never take an id the
+      // lineage gives to another gate's failure further down the round.
+      for (const entries of lineage.values()) entries.forEach((entry) => usedIds.add(entry.id));
+    }
+    const recorded = lineage.get(verificationId)?.[index] ?? null;
+    // An id this run already used for something else is not a lineage to
+    // follow; the store record it names belongs to that other unit.
+    return recorded && !unitsById.has(recorded.id) ? recorded : null;
+  };
 
   await store.appendEvent({
     type: 'WORK_UNIT_PLAN_RESOLVED',
@@ -318,11 +399,15 @@ export async function executeWorkUnitPlan({
     // its own event so the round stays honest about what was and was not
     // verified, and skipped over rather than counted as a red gate.
     if (unit.type === 'DETERMINISTIC' && record.state === 'SKIPPED') {
-      await store.appendEvent({
-        type: 'WORK_UNIT_VERIFICATION_SKIPPED',
-        goal, round, workUnitId: unitId, action: unit.action,
-        missingEnv: record.missingEnv ?? [],
-      });
+      // Recorded once, by the process that skipped it; a replay says so in
+      // its own event rather than counting the same skip twice.
+      if (!record.replayed) {
+        await store.appendEvent({
+          type: 'WORK_UNIT_VERIFICATION_SKIPPED',
+          goal, round, workUnitId: unitId, action: unit.action,
+          missingEnv: record.missingEnv ?? [],
+        });
+      }
       emit(`  ${unitId} SKIPPED — pré-condição ausente; o gate não rodou e nenhuma correção é criada.`);
       continue;
     }
@@ -356,21 +441,32 @@ export async function executeWorkUnitPlan({
         unitChanges: new Map([...records.entries()].map(([id, entry]) => [id, entry.changedFiles ?? []])),
       });
 
-      await store.appendEvent({
-        type: 'WORK_UNIT_VERIFICATION_FAILED',
-        goal, round, workUnitId: unitId, action: unit.action,
-        attributedTo: attribution.attributed?.unitId ?? null,
-        ambiguous: attribution.ambiguous,
-        candidates: attribution.candidates,
-        fixScheduled: canFix,
-      });
+      // A failure replayed from disk was reported by the process that saw it;
+      // reporting it again would count one red gate as two.
+      if (!record.replayed) {
+        await store.appendEvent({
+          type: 'WORK_UNIT_VERIFICATION_FAILED',
+          goal, round, workUnitId: unitId, action: unit.action,
+          attributedTo: attribution.attributed?.unitId ?? null,
+          ambiguous: attribution.ambiguous,
+          candidates: attribution.candidates,
+          fixScheduled: canFix,
+        });
+      }
 
       if (canFix) {
+        // Resolving the lineage is what lets a resume walk past a gate that
+        // already failed, was corrected and passed: the corrective unit comes
+        // back under the id it ran as (its result reused, or its interrupted
+        // attempt resumed), and the re-run comes back as the -gN job it
+        // already is. Nothing FAILED is retried — the failure is replayed.
+        const recorded = await recordedCorrective(unitId, usedForThis);
         const corrective = buildCorrectiveUnit({
           verification: { id: unitId, action: unit.action },
           failure: record,
-          attribution,
+          attribution: recorded ? attributionForRecorded(recorded, attribution, records) : attribution,
           usedIds,
+          id: recorded?.id ?? null,
         });
         usedIds.add(corrective.id);
         unitsById.set(corrective.id, corrective);
@@ -384,9 +480,24 @@ export async function executeWorkUnitPlan({
         // has been built on top of a broken tree.
         queue.unshift(corrective.id, unitId);
 
+        if (recorded) {
+          // Not FIX_CREATED again: that event is the link outcome attribution
+          // counts, and the unit was created once, by the earlier process.
+          await store.appendEvent({
+            type: 'WORK_UNIT_FIX_RESUMED',
+            goal, round, jobId: job.jobId, workUnitId: corrective.id, forVerification: unitId,
+            generation,
+          });
+          emit(`  ${unitId} FAILED (em disco) → ${corrective.id} retomada da linhagem; `
+            + `o gate volta como geração ${generation + 1}`);
+          continue;
+        }
+
         await store.appendEvent({
           type: 'WORK_UNIT_FIX_CREATED',
-          goal, round, workUnitId: corrective.id, forVerification: unitId,
+          // The round's job id makes the lineage unambiguous for a later
+          // resume, even if a Goal ever reuses a (goal, round) pair.
+          goal, round, jobId: job.jobId, workUnitId: corrective.id, forVerification: unitId,
           attributedTo: attribution.attributed?.unitId ?? null,
           ambiguous: attribution.ambiguous,
         });
@@ -482,6 +593,9 @@ async function executeDeterministicUnit({ store, unit, unitJobId, goal, round, w
     return fromPersisted(unit, existing?.result?.result ?? existing?.result, { reused: true });
   }
 
+  const replayed = await replayEndedUnit({ store, unit, unitJobId, goal, round, emit });
+  if (replayed) return replayed;
+
   await store.dispatchJob(WORK_UNIT_NAMESPACE, unitJobDocument({ unit, unitJobId, goal, round, worktree, routing: null }));
   const attemptId = (await store.readAttemptState(WORK_UNIT_NAMESPACE, unitJobId))?.attemptId ?? null;
   await store.setJobStatus(WORK_UNIT_NAMESPACE, unitJobId, 'RUNNING');
@@ -518,6 +632,65 @@ async function executeDeterministicUnit({ store, unit, unitJobId, goal, round, w
     + ` (${outcome.durationMs}ms)`);
 
   return fromPersisted(unit, result, { reused: false });
+}
+
+/**
+ * Attempt statuses a resume finds a unit's job in that are history, not work.
+ *
+ * Before these were read, a restart that met one went straight to
+ * `dispatchJob`, which — correctly — refuses to start an attempt after a
+ * FAILED one. Goal 103's correction round died exactly there: WU-06 had
+ * failed, been diagnosed by DIAG-001 and passed as WU-06-g2, and the resume
+ * re-dispatched WU-06 under its original id and stopped on
+ * STAGE_NOT_RETRYABLE.
+ *
+ * SKIPPED is here for the same reason: it is terminal, so it is refused the
+ * same way, and the precondition it lacked is not something a re-dispatch of
+ * the same job can produce.
+ */
+const REPLAYED_ATTEMPT_STATUSES = Object.freeze(['FAILED', 'SKIPPED']);
+
+/**
+ * A unit whose job already ended FAILED or SKIPPED, replayed as that outcome.
+ *
+ * Replayed, never retried: the record the scheduler gets is the one the first
+ * process got, so the round walks on exactly as it did then — a red gate earns
+ * the corrective unit it already earned, a failed unit blocks what depends on
+ * it. Whether a FAILED attempt deserves another try stays a person's call
+ * (reclassify it to WAITING_FOR_CAPACITY and the next resume dispatches it).
+ *
+ * Fenced by attempt: a result left over from an earlier attempt is not this
+ * attempt's answer, and the record then says FAILED with nothing more.
+ */
+async function replayEndedUnit({ store, unit, unitJobId, goal, round, emit }) {
+  const state = await store.readAttemptState(WORK_UNIT_NAMESPACE, unitJobId);
+  if (!state || !REPLAYED_ATTEMPT_STATUSES.includes(state.attemptStatus)) return null;
+
+  const envelope = await store.readResult(WORK_UNIT_NAMESPACE, unitJobId, { expectedAttemptId: state.attemptId });
+  // A unit's own answer carries a status. A runner verdict — HUMAN_REQUIRED
+  // after an unrecoverable model failure — carries only a code and a message.
+  const answer = envelope?.result?.status ? envelope.result : null;
+  const stored = await store.readJob(WORK_UNIT_NAMESPACE, unitJobId);
+
+  const record = fromPersisted(unit, {
+    ...(answer ?? {}),
+    status: state.attemptStatus,
+    model: answer?.model ?? stored?.routing?.modelKey ?? null,
+    effort: answer?.effort ?? stored?.routing?.effort ?? null,
+    attempts: state.attempt,
+    summary: answer?.summary ?? envelope?.message ?? null,
+    blockedReason: answer?.blockedReason ?? envelope?.code ?? null,
+  }, { reused: true });
+  record.replayed = true;
+
+  await store.appendEvent({
+    type: 'WORK_UNIT_REPLAYED',
+    goal, round, workUnitId: unit.id, jobId: unitJobId,
+    attemptId: state.attemptId, status: state.attemptStatus,
+    code: envelope?.code ?? null,
+  });
+  emit(`  ${unit.id} — ${state.attemptStatus} em disco (${state.attemptId}); reproduzido, não re-executado.`);
+  return record;
 }
 
 /** A store-persisted unit result, back in scheduler shape. */
@@ -586,6 +759,9 @@ async function executeModelUnit({
     emit(`  ${unit.id} — resultado já em disco; o modelo NÃO é chamado de novo.`);
     return fromPersisted(unit, existing?.result?.result ?? existing?.result, { reused: true });
   }
+
+  const replayed = await replayEndedUnit({ store, unit, unitJobId, goal, round, emit });
+  if (replayed) return replayed;
 
   const initialRouting = routeWorkUnit({ unit, escalations: 0, mode });
   const baseRouting = toJobRouting(initialRouting.routing);

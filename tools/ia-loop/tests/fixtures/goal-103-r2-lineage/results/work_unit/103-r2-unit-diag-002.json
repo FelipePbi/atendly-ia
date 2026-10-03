@@ -1,0 +1,12 @@
+{
+  "storeVersion": 1,
+  "publishedAt": "2026-10-03T06:20:01.992Z",
+  "attemptId": "103-r2-unit-diag-002-a2",
+  "result": {
+    "ok": false,
+    "code": "UNKNOWN_FATAL",
+    "message": "Unrecoverable failure; a human must look at it.",
+    "escalation": "HUMAN_REQUIRED",
+    "attemptId": "103-r2-unit-diag-002-a2"
+  }
+}

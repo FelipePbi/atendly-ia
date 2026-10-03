@@ -1,0 +1,43 @@
+{
+  "storeVersion": 1,
+  "publishedAt": "2026-10-03T05:55:26.846Z",
+  "status": "COMPLETED",
+  "attempt": 1,
+  "currentAttemptId": "103-r2-unit-diag-001-a1",
+  "attemptStatus": "COMPLETED",
+  "attemptHistory": [],
+  "job": {
+    "protocolVersion": 2,
+    "jobId": "103-r2-unit-diag-001",
+    "role": "work_unit",
+    "goal": "103",
+    "round": 2,
+    "workUnitId": "DIAG-001",
+    "unitType": "STANDARD",
+    "complexity": "MEDIUM",
+    "risk": "MEDIUM",
+    "action": null,
+    "scope": null,
+    "worktree": "E:\\Projetos\\atendly-ia\\.ai-worktrees\\goal-103",
+    "goalPath": "E:\\Projetos\\atendly-ia\\docs\\migration\\goals\\103-a-listagem-de-agendamentos-traz-o-valor-registrado-e-a-presenca-confirmada.md",
+    "parentJobId": "103-r2-correction-e12a1c81",
+    "routing": {
+      "role": "developer",
+      "stage": "work_unit",
+      "modelKey": "sonnet",
+      "model": "claude-sonnet-5-5",
+      "family": "sonnet",
+      "effort": "high",
+      "complexity": "MEDIUM",
+      "riskScore": null,
+      "signals": [
+        "STANDARD",
+        "RISK_MEDIUM"
+      ],
+      "reason": "STANDARD_WORK_UNIT",
+      "fallbackAllowed": true,
+      "mode": "AUTO"
+    }
+  },
+  "statusAt": "2026-10-03T05:58:57.250Z"
+}

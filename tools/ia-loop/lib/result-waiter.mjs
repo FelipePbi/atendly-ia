@@ -30,7 +30,123 @@ import { readWorkerHealth, WORKER_HEALTH } from './worker-registry.mjs';
 export const DEFAULT_RESULT_TIMEOUT_MS = 6 * 60 * 60 * 1000;
 export const DEFAULT_POLL_MS = 5_000;
 
+/**
+ * How long a worker may be silent before the observer gives up on it.
+ *
+ * Restarting a worker is routine — a code change, a keeper relaunching a
+ * killed process — and the replacement only starts heartbeating once it holds
+ * the role, has judged its predecessor's lease and swept orphans. On Goal 103
+ * R2 that took about two minutes; the orchestrator, which stopped at the first
+ * OFFLINE reading, had already filed the Goal as UNKNOWN_FATAL while the new
+ * worker picked the attempt up and ran it normally. Several times
+ * OFFLINE_AFTER_MS wide, so a real restart fits and a dead worker still stops
+ * the run within minutes.
+ */
+export const DEFAULT_WORKER_RESTART_GRACE_MS = Number(process.env.IA_LOOP_WORKER_RESTART_GRACE_MS ?? 180_000);
+
 const defaultSleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+/**
+ * Is the attempt being carried by the worker that is heartbeating NOW?
+ *
+ * Asked only after an outage, because "a worker of this role is back" is not
+ * the same as "our attempt is in hand". It is when the attempt is QUEUED (the
+ * new worker will claim it through the ordinary lease check) or held under a
+ * live lease by that very process. A lease still warm from the process that
+ * DIED does not count — it is about to expire, and the new worker will then
+ * refuse the attempt as uncertain; waiting on that would turn a quick human
+ * escalation into hours of silence.
+ */
+export async function attemptProgress({ store, leaseStore = null, role, jobId, attemptId = null, workerPid = null, now = Date.now() }) {
+  const state = await store.readAttemptState(role, jobId);
+  const isOurs = !attemptId || state?.attemptId === attemptId;
+
+  if (isOurs && state?.attemptStatus === 'QUEUED') {
+    return { progressing: true, how: 'QUEUED', attemptId: state.attemptId };
+  }
+
+  // The job lease is per job, not per attempt: a capacity retry materialises
+  // its successor under the lease the worker already holds. So the holder's
+  // identity is what counts — the process heartbeating right now.
+  const lease = leaseStore ? await leaseStore.readJobLease(jobId).catch(() => null) : null;
+  if (lease && classifyLease(lease, { now }).live && Number.isInteger(workerPid) && lease.pid === workerPid) {
+    return { progressing: true, how: 'LEASED', attemptId: state?.attemptId ?? lease.attemptId ?? null };
+  }
+
+  return {
+    progressing: false,
+    detail: `${state?.attemptId ?? jobId} is ${state?.attemptStatus ?? 'unknown'}`
+      + (lease ? `, lease held by pid ${lease.pid ?? '?'} (worker pid ${workerPid ?? '?'})` : ', no lease'),
+  };
+}
+
+/**
+ * Tolerates a bounded worker outage instead of failing on its first sign.
+ *
+ * One definition for every observer — run-goal's waiter and run-close's own —
+ * so "how long is a restart allowed to take" cannot drift between them.
+ *
+ * `check(health, { attemptId })` returns `{ offline: true, ... }` only when
+ * the role has been without a usable worker for the whole grace window:
+ *
+ *   - OFFLINE at the start of the window, and still OFFLINE at its end, is the
+ *     old behaviour, just later;
+ *   - back, and carrying the attempt (see attemptProgress), ends the outage;
+ *   - back but NOT carrying it keeps the clock running, so a replacement that
+ *     can only refuse the attempt does not hold the run hostage.
+ */
+export function createWorkerOutageGuard({
+  store, leaseStore = null, role, jobId,
+  graceMs = DEFAULT_WORKER_RESTART_GRACE_MS,
+  now = () => Date.now(),
+  emit = () => {},
+  goal = null,
+  round = null,
+}) {
+  let outageStartedAt = null;
+
+  return {
+    get outageStartedAt() { return outageStartedAt; },
+
+    async check(health, { attemptId = null } = {}) {
+      const at = now();
+
+      if (health.health !== WORKER_HEALTH.OFFLINE && outageStartedAt === null) return { offline: false };
+
+      if (health.health === WORKER_HEALTH.OFFLINE) {
+        if (outageStartedAt === null) {
+          outageStartedAt = at;
+          emit(`  … ${role} is not heartbeating; waiting up to ${Math.round(graceMs / 1000)}s for a restarted worker.`);
+          await store.appendEvent({
+            type: 'WORKER_HEARTBEAT_LOST', role, jobId, attemptId, goal, round, graceMs,
+          }).catch(() => {});
+        }
+        if (at - outageStartedAt >= graceMs) {
+          return { offline: true, outageMs: at - outageStartedAt, detail: `${role} stayed offline` };
+        }
+        return { offline: false, waiting: true };
+      }
+
+      // Heartbeating again after an outage.
+      const progress = await attemptProgress({
+        store, leaseStore, role, jobId, attemptId, workerPid: health.pid ?? null, now: at,
+      });
+      if (progress.progressing) {
+        emit(`  … ${role} is back (pid ${health.pid ?? '?'}); ${progress.attemptId ?? jobId} is ${progress.how}.`);
+        await store.appendEvent({
+          type: 'WORKER_RETURNED', role, jobId, attemptId: progress.attemptId ?? attemptId, goal, round,
+          pid: health.pid ?? null, how: progress.how, outageMs: at - outageStartedAt,
+        }).catch(() => {});
+        outageStartedAt = null;
+        return { offline: false, recovered: true };
+      }
+      if (at - outageStartedAt >= graceMs) {
+        return { offline: true, outageMs: at - outageStartedAt, detail: `${role} came back without the attempt: ${progress.detail}` };
+      }
+      return { offline: false, waiting: true };
+    },
+  };
+}
 
 /**
  * @param store          the job store
@@ -40,7 +156,9 @@ const defaultSleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms);
  * @param leaseStore     for reporting lease status on an observer stop
  * @param expectedAttemptId  the attempt this call starts out waiting for
  * @param goal, round    carried onto ATTEMPT_WAIT_HANDOFF for the audit trail
- * @param resultTimeoutMs, pollMs, sleep  overridable for tests
+ * @param resultTimeoutMs, pollMs, sleep, now  overridable for tests
+ * @param workerRestartGraceMs  how long the worker may be offline before the
+ *                       observer stops (see createWorkerOutageGuard)
  * @returns `{ envelope, attemptId }` on success; `{ observerTimeout, ... }` or
  *          `{ workerOffline, ... }` when the loop stopped without one. The
  *          returned `attemptId` is always the attempt actually settled on —
@@ -55,9 +173,14 @@ export async function waitForResult(store, role, jobId, {
   round = null,
   resultTimeoutMs = DEFAULT_RESULT_TIMEOUT_MS,
   pollMs = DEFAULT_POLL_MS,
+  workerRestartGraceMs = DEFAULT_WORKER_RESTART_GRACE_MS,
   sleep = defaultSleep,
+  now = () => Date.now(),
 } = {}) {
-  const startedAt = Date.now();
+  const startedAt = now();
+  const outage = createWorkerOutageGuard({
+    store, leaseStore, role, jobId, graceMs: workerRestartGraceMs, now, emit, goal, round,
+  });
   let lastState = null;
   // Reported once per distinct stale attempt, so a five-second poll does not
   // fill the terminal and the event log with the same fact.
@@ -104,7 +227,7 @@ export async function waitForResult(store, role, jobId, {
       }
     }
 
-    if (Date.now() - startedAt > resultTimeoutMs) {
+    if (now() - startedAt > resultTimeoutMs) {
       const lease = await leaseStore?.readJobLease(jobId);
       const { status, ageMs } = lease ? classifyLease(lease) : { status: null, ageMs: null };
       return {
@@ -122,10 +245,16 @@ export async function waitForResult(store, role, jobId, {
       const suffix = health.capacityReason ? ` (${health.capacityReason})` : '';
       emit(`  … ${role}: ${health.state ?? 'unknown'}${suffix}`);
     }
-    if (health.health === WORKER_HEALTH.OFFLINE) {
+    // A worker restart is not a dead worker: the outage guard gives a
+    // replacement a bounded window to come back and carry the attempt.
+    const outageVerdict = await outage.check(health, { attemptId: currentAttemptId });
+    if (outageVerdict.offline) {
       // The worker is gone. Whether its child died with it is NOT knowable
       // here, so this is reported, not resolved: no new attempt is started.
-      return { workerOffline: true, attemptId: currentAttemptId };
+      return {
+        workerOffline: true, attemptId: currentAttemptId,
+        outageMs: outageVerdict.outageMs, detail: outageVerdict.detail,
+      };
     }
 
     await sleep(pollMs);

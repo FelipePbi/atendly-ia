@@ -163,10 +163,13 @@ test('an unauthorised successor (a plain FAILED with no retry authorisation) is 
       attemptHistory: [{ attempt: 1, attemptId: a(1), status: 'FAILED', reason: 'UNKNOWN_FATAL' }],
     });
 
-    const outcome = await waitForResult(store, 'tech_lead', JOB, { expectedAttemptId: a(1), sleep: noSleep });
+    const outcome = await waitForResult(store, 'tech_lead', JOB, {
+      expectedAttemptId: a(1), sleep: noSleep, workerRestartGraceMs: 0,
+    });
 
-    // No heartbeat was ever seeded, so the loop stops on WORKER_OFFLINE after
-    // exactly one pass — never because it consumed anything.
+    // No heartbeat was ever seeded and no restart window is granted, so the
+    // loop stops on WORKER_OFFLINE after exactly one pass — never because it
+    // consumed anything.
     assert.equal(outcome.workerOffline, true);
     assert.equal(outcome.attemptId, a(1), 'still fenced on the attempt it was told to wait for');
 
@@ -191,7 +194,9 @@ test('SUPERSEDED does not authorise a handoff', async () => {
       attemptHistory: [{ attempt: 1, attemptId: a(1), status: 'SUPERSEDED' }],
     });
 
-    const outcome = await waitForResult(store, 'tech_lead', JOB, { expectedAttemptId: a(1), sleep: noSleep });
+    const outcome = await waitForResult(store, 'tech_lead', JOB, {
+      expectedAttemptId: a(1), sleep: noSleep, workerRestartGraceMs: 0,
+    });
     assert.equal(outcome.workerOffline, true);
     assert.equal(outcome.attemptId, a(1));
   });

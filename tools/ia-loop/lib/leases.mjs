@@ -375,6 +375,35 @@ export function createLeaseStore(stateDir, { config = LEASE_CONFIG } = {}) {
 }
 
 /**
+ * Retires a job lease whose holder is proven gone, and the worktree lease that
+ * belongs to the SAME attempt with it.
+ *
+ * The caller owns the judgement (`proof` is what it established); this owns
+ * the two writes, so "retire the job lease, then the matching worktree lease"
+ * is one sequence and not a copy per caller. The worktree lease goes only when
+ * its attemptId matches: a worktree held by a different attempt is someone
+ * else's, and the job lease of this one says nothing about it. Nothing is
+ * touched when the job lease moved since it was judged.
+ */
+export async function retireAttemptLeases(leaseStore, lease, { proof }) {
+  const jobId = lease?.jobId ?? lease?.key;
+  if (!jobId) throw new SpikeError('INVALID_ARGS', 'retireAttemptLeases needs a job lease');
+
+  const retired = await leaseStore.retireJob(jobId, { expected: lease, proof });
+  if (!retired.retired) return { retired: false, reason: retired.reason, worktreeRetired: false };
+
+  let worktreeRetired = false;
+  if (lease.worktree) {
+    const wt = await leaseStore.readWorktreeLease(lease.worktree).catch(() => null);
+    if (wt && wt.attemptId === lease.attemptId) {
+      const freed = await leaseStore.retireWorktree(lease.worktree, { expected: wt, proof }).catch(() => null);
+      worktreeRetired = Boolean(freed?.retired);
+    }
+  }
+  return { retired: true, worktreeRetired };
+}
+
+/**
  * Classifies a lease by age. Deliberately never returns "dead".
  *
  * An expired lease is SUSPECTED_ORPHAN, not a failure: expiry alone is not

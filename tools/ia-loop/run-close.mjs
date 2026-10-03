@@ -33,7 +33,8 @@ import {
   CLOSURE_RESUME_POINTS, expectedMigrationStatusRowFor, planningDiffBaseFor, requiredGoalStatusFor,
   resolveClosureResumePoint,
 } from './lib/closure-resume.mjs';
-import { readWorkerHealth, WORKER_HEALTH } from './lib/worker-registry.mjs';
+import { readWorkerHealth } from './lib/worker-registry.mjs';
+import { createWorkerOutageGuard } from './lib/result-waiter.mjs';
 import { LOOP_STATES, createLoopStateMachine } from './lib/loop-state.mjs';
 import { PROTOCOL_VERSION_V2 } from './lib/contracts-v2.mjs';
 import { assertClosureScope, CLOSURE_WRITE_PREFIX } from './lib/closure-contracts.mjs';
@@ -130,6 +131,8 @@ function parseArgs(argv) {
 async function waitForResult(store, role, jobId, { leaseStore } = {}) {
   const startedAt = Date.now();
   let lastState = null;
+  // Same restart tolerance as run-goal's waiter, from the same definition.
+  const outage = createWorkerOutageGuard({ store, leaseStore, role, jobId, emit });
   for (;;) {
     const envelope = await store.readResult(role, jobId);
     if (envelope) return envelope;
@@ -150,9 +153,11 @@ async function waitForResult(store, role, jobId, { leaseStore } = {}) {
       const suffix = health.capacityReason ? ` (${health.capacityReason})` : '';
       emit(`  … ${role}: ${health.state ?? 'unknown'}${suffix}`);
     }
-    if (health.health === WORKER_HEALTH.OFFLINE) {
+    const outageVerdict = await outage.check(health);
+    if (outageVerdict.offline) {
       throw new SpikeError('WORKER_OFFLINE',
-        `The "${role}" worker stopped heartbeating. The attempt keeps its lease; no new attempt is started.`);
+        `The "${role}" worker stopped heartbeating (${outageVerdict.detail}). `
+        + 'The attempt keeps its lease; no new attempt is started.');
     }
     await sleep(POLL_MS);
   }

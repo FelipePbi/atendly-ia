@@ -36,7 +36,7 @@ import { formatRemaining } from './lib/capacity-policy.mjs';
 import { LOOP_STATES } from './lib/loop-state.mjs';
 import { AGENT_EXECUTION_STATES } from './lib/recovery-plan.mjs';
 import { readWorkerHealth, WORKER_HEALTH } from './lib/worker-registry.mjs';
-import { createLeaseStore } from './lib/leases.mjs';
+import { createLeaseStore, retireAttemptLeases } from './lib/leases.mjs';
 import { createProcessInspector } from './lib/process-inspector.mjs';
 import { collectOwnerEvidence, isRecoveryEligible, judgeOwner } from './lib/orphan-evidence.mjs';
 import { isDirectExecution } from './lib/direct-execution.mjs';
@@ -66,15 +66,8 @@ export async function reclaimBlockedJobLease({ leaseStore, inspector, jobId, now
     return { outcome: 'NOT_PROVEN', lease, verdict };
   }
 
-  const retired = await leaseStore.retireJob(jobId, { expected: lease, proof: verdict.proof });
+  const retired = await retireAttemptLeases(leaseStore, lease, { proof: verdict.proof });
   if (!retired.retired) return { outcome: 'NOT_PROVEN', lease, verdict, reason: retired.reason };
-
-  if (lease.worktree) {
-    const wt = await leaseStore.readWorktreeLease(lease.worktree).catch(() => null);
-    if (wt && wt.attemptId === lease.attemptId) {
-      await leaseStore.retireWorktree(lease.worktree, { expected: wt, proof: verdict.proof }).catch(() => null);
-    }
-  }
 
   return { outcome: 'RECLAIMED', lease, proof: verdict.proof };
 }

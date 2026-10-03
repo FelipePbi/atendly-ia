@@ -23,10 +23,14 @@ import {
   attemptIdFor,
   canStartNewAttempt,
   createLeaseStore,
+  retireAttemptLeases,
   startLeaseHeartbeat,
   workerInstanceId,
 } from './leases.mjs';
-import { isClaimableJobStatus } from './job-store.mjs';
+import { RETRYABLE_JOB_STATUSES, isClaimableJobStatus, isTerminalJobStatus } from './job-store.mjs';
+import { collectOwnerEvidence, isWorkerReclaimEligible, judgeOwner } from './orphan-evidence.mjs';
+import { createProcessInspector } from './process-inspector.mjs';
+import { FAILURE_FAMILIES, familyFor } from './failure-taxonomy.mjs';
 import { createResourceRegistry } from './resource-registry.mjs';
 import { cleanupResourcesForAttempt, scavengeOrphans } from './resource-lifecycle.mjs';
 import { sweepOrphanProcesses } from './orphan-processes.mjs';
@@ -109,7 +113,11 @@ const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
  * `canStartNewAttempt`'s lease check below, which is authoritative across
  * processes and untouched by anything cached in memory.
  */
-export async function evaluateJobEligibility({ store, leaseStore, role, jobId, seen }) {
+export async function evaluateJobEligibility({
+  store, leaseStore, role, jobId, seen,
+  inspector = defaultInspector(),
+  now = Date.now(),
+}) {
   const attemptState = await store.readAttemptState(role, jobId);
   if (!attemptState) {
     // The file does not exist yet, or is mid-write between listJobs() and this
@@ -151,16 +159,168 @@ export async function evaluateJobEligibility({ store, leaseStore, role, jobId, s
   // here. This is the actual concurrency guard — the one thing two workers (or
   // two polls) racing for the same job cannot both win.
   const lease = await leaseStore.readJobLease(jobId);
-  const verdict = canStartNewAttempt({ lease, jobStatus: attemptState.status });
+  const verdict = canStartNewAttempt({ lease, jobStatus: attemptState.status, now });
   if (!verdict.allowed) {
+    // An expired lease taken during an EARLIER boot of this machine is not
+    // uncertain at all: nothing that held it survived the reboot, child
+    // process included. Judged by the same `judgeOwner` ia-loop:recover uses,
+    // so "different boot" is defined once; only the proofs that also rule out
+    // a surviving child count here (WORKER_RECLAIM_PROOFS). Every other
+    // uncertain case still fails closed below. Without this, a worker started
+    // after a reboot logged ORPHANED_EXECUTION_UNCERTAIN every second against
+    // a lease whose holder could not possibly exist.
+    if (lease && verdict.escalate) {
+      const evidence = await collectOwnerEvidence(lease, inspector, { now, processQueries: false });
+      const owner = judgeOwner({ lease, evidence, now });
+      if (isWorkerReclaimEligible(owner)) {
+        return {
+          eligible: false, cache: false, seenKey, attemptState, lease, verdict, owner,
+          reason: 'ORPHAN_FROM_PREVIOUS_BOOT',
+          detail: `${jobId}: ${owner.proof} — ${owner.detail}`,
+        };
+      }
+    }
     return {
       eligible: false, cache: false, seenKey, attemptState, lease, verdict,
       reason: 'LEASE_BLOCKED',
       detail: `${jobId}: ${verdict.reason} — ${verdict.detail ?? ''}`,
+      // What makes this refusal a NEW fact worth logging: the persisted job
+      // state, the refusal, and the exact lease version it was judged on. The
+      // detail line carries the lease's age and so changes every poll; keying
+      // the report on it is what wrote the same refusal to the event log
+      // tens of thousands of times for one dead job.
+      reportKey: `${seenKey}|${verdict.reason}|${lease?.workerInstanceId ?? 'no-lease'}#${lease?.version ?? lease?.heartbeatAt ?? '-'}`,
     };
   }
 
   return { eligible: true, cache: 'ADD', seenKey, attemptState, lease, verdict };
+}
+
+let sharedInspector = null;
+function defaultInspector() {
+  sharedInspector ??= createProcessInspector();
+  return sharedInspector;
+}
+
+/**
+ * Takes a job back from an attempt the machine's reboot killed.
+ *
+ * Exactly what ia-loop:recover's REQUEUE_JOB does for the same proof, and
+ * nothing more: the dead attempt's leases are retired (archived, never
+ * deleted), an attempt cut short while RUNNING is recorded as INTERRUPTED, and
+ * the next attempt is materialised through `startNextAttempt` — the one door
+ * that creates successors, so the orchestrator's waiter follows it as an
+ * authorised handoff. The runtime and the loop lease are not touched; those
+ * belong to the orchestrator.
+ *
+ * Nothing is claimed here. The new attempt is QUEUED and the next poll claims
+ * it through the ordinary path, lease check included.
+ */
+export async function reclaimFromPreviousBoot({ store, leaseStore, role, jobId, lease, owner }) {
+  if (!isWorkerReclaimEligible(owner)) {
+    return { reclaimed: false, reason: 'NOT_PROVEN' };
+  }
+
+  const retired = await retireAttemptLeases(leaseStore, lease, { proof: owner.proof });
+  if (!retired.retired) return { reclaimed: false, reason: retired.reason };
+
+  const before = await store.readAttemptState(role, jobId);
+  await store.appendEvent({
+    type: 'ORPHANED_LEASE_RETIRED', role, jobId,
+    goal: lease.goal ?? null, round: lease.round ?? null,
+    attemptId: lease.attemptId ?? null, jobStatus: before?.status ?? null,
+    owner: lease.workerInstanceId ?? null, proof: owner.proof,
+    worktree: lease.worktree ?? null, retiredBy: 'WORKER',
+  });
+
+  // A result that landed before the reboot is the answer, not something to
+  // redo: the orchestrator consumes it by attempt. Requeuing would archive it.
+  if (await store.hasCompletedResult(role, jobId, { expectedAttemptId: before?.attemptId ?? null })) {
+    return { reclaimed: true, requeued: false, reason: 'RESULT_ON_DISK' };
+  }
+
+  if (before?.attemptStatus === 'RUNNING') {
+    await store.setJobStatus(role, jobId, 'INTERRUPTED');
+    await store.appendEvent({
+      type: 'JOB_INTERRUPTED', role, jobId, attemptId: before.attemptId,
+      goal: lease.goal ?? null, round: lease.round ?? null, proof: owner.proof,
+    });
+  }
+
+  const current = await store.readAttemptState(role, jobId);
+  if (!RETRYABLE_JOB_STATUSES.includes(current?.attemptStatus)) {
+    // QUEUED (claimed, never started) is already claimable once the lease is
+    // gone; anything else is not this function's to move.
+    return { reclaimed: true, requeued: false, attemptStatus: current?.attemptStatus ?? null };
+  }
+
+  const started = await store.startNextAttempt(role, jobId, {
+    reason: owner.proof,
+    detail: { interruptedBy: owner.proof, previousOwner: lease.workerInstanceId ?? null },
+  });
+  if (started.created) {
+    await store.appendEvent({
+      type: 'JOB_ATTEMPT_MATERIALISED', role, jobId,
+      attemptId: started.attemptId, attempt: started.attempt, previousAttemptId: started.previousAttemptId,
+      goal: lease.goal ?? null, round: lease.round ?? null, reason: owner.proof,
+    });
+  }
+  return { reclaimed: true, requeued: Boolean(started.created), attemptId: started.attemptId ?? current.attemptId };
+}
+
+/**
+ * Puts an attempt whose handler threw into a state the orchestrator can see.
+ *
+ * The handler settles its own attempt on every path it knows about —
+ * COMPLETED, FAILED with a result, a capacity wait. An exception escaping it
+ * means it did not, and the job was left at whatever it last wrote: QUEUED
+ * (Goal 103 R2, STAGE_NOT_RETRYABLE before the round started) or a capacity
+ * wait with nobody waiting (Goal 101 R3, CAPACITY_STATE_CORRUPT). Either way
+ * the orchestrator watched a job that would never answer, and the worker —
+ * which had cached that exact state as evaluated — never looked at it again.
+ *
+ * FAILED, plus a HUMAN_REQUIRED result fenced to the current attempt, is the
+ * shape the capacity runner already gives a failure a person must look at, so
+ * the orchestrator reads it on its existing path and the repair tools
+ * (ia-loop:authorize-retry, ia-loop:reclassify) recognise it. Not a retry:
+ * whether to run a FAILED attempt again is a person's decision, and an error
+ * that repeats would otherwise loop once a second.
+ *
+ * Leaves the job alone when it already reached a terminal status, or when a
+ * result for the current attempt is already on disk — the handler got as far
+ * as answering, and overwriting that answer would destroy it.
+ */
+export async function settleAttemptAfterError({ store, role, jobId, error }) {
+  const state = await store.readAttemptState(role, jobId);
+  if (!state) return { settled: false, reason: 'JOB_UNREADABLE' };
+  if (isTerminalJobStatus(state.status)) return { settled: false, reason: 'ALREADY_TERMINAL', status: state.status };
+
+  const existing = await store.readResult(role, jobId, { expectedAttemptId: state.attemptId });
+  if (existing) return { settled: false, reason: 'RESULT_ON_DISK', status: state.status };
+
+  const errorCode = error?.code ?? 'UNEXPECTED';
+  // Named the way the rest of the loop names a stop, so run-auto files it
+  // under a reason it knows instead of a code it has never seen.
+  const reason = familyFor({ code: errorCode }) === FAILURE_FAMILIES.HARNESS ? 'HARNESS_ERROR' : 'UNKNOWN_FATAL';
+  const diagnostic = `[${errorCode}] ${error?.message ?? String(error)}`;
+
+  let job = null;
+  try { job = await store.readJob(role, jobId); } catch { /* the envelope is enough */ }
+
+  await store.setJobStatus(role, jobId, 'FAILED');
+  await store.publishResult(role, jobId, {
+    ok: false,
+    code: reason,
+    errorCode,
+    message: `The ${role} worker failed before the attempt produced a result: ${diagnostic}`,
+    escalation: 'HUMAN_REQUIRED',
+  }, { attemptId: state.attemptId });
+  await store.appendEvent({
+    type: 'HUMAN_REQUIRED', agent: role, jobId, attemptId: state.attemptId,
+    goal: job?.goal ?? null, round: job?.round ?? null,
+    reason, errorCode, previousStatus: state.status, diagnostic, source: 'WORKER_LOOP',
+  });
+  return { settled: true, reason, errorCode, attemptId: state.attemptId, previousStatus: state.status };
 }
 
 /**
@@ -288,6 +448,12 @@ export async function runWorkerLoop({
 
   const seen = new Set();
   /**
+   * Refusals already logged, keyed by evaluateJobEligibility's `reportKey`.
+   * Evaluation still happens every poll — only the REPORT is de-duplicated, so
+   * a lease that changes, or a job that moves, is reported again at once.
+   */
+  const reported = new Set();
+  /**
    * A reason to stop that is NOT a crash, carried out of the loop so the
    * process can exit with a code that says so. Thrown after the loop unwinds,
    * never from inside it: the per-job catch there would log it as a failed job.
@@ -317,10 +483,25 @@ export async function runWorkerLoop({
 
       if (!eligibility.eligible) {
         if (eligibility.cache === 'ADD') seen.add(eligibility.seenKey);
-        if (eligibility.reason === 'LEASE_BLOCKED') {
-          log('SKIP', eligibility.detail);
-          if (eligibility.verdict?.escalate) {
-            await store.appendEvent({ type: 'ORPHANED_EXECUTION_UNCERTAIN', role, jobId, detail: eligibility.verdict.detail });
+        if (eligibility.reason === 'ORPHAN_FROM_PREVIOUS_BOOT') {
+          log('ORPHAN CONFIRMED', eligibility.detail);
+          try {
+            const reclaimed = await reclaimFromPreviousBoot({
+              store, leaseStore, role, jobId, lease: eligibility.lease, owner: eligibility.owner,
+            });
+            log('RECLAIMED', `${jobId}: ${reclaimed.reclaimed
+              ? (reclaimed.requeued ? `next attempt ${reclaimed.attemptId} queued` : (reclaimed.reason ?? reclaimed.attemptStatus ?? 'lease retired'))
+              : `not reclaimed (${reclaimed.reason})`}`);
+          } catch (error) {
+            log('ERROR', `reclaim of ${jobId} failed: [${error.code ?? 'UNEXPECTED'}] ${error.message}`);
+          }
+        } else if (eligibility.reason === 'LEASE_BLOCKED') {
+          if (!reported.has(eligibility.reportKey)) {
+            reported.add(eligibility.reportKey);
+            log('SKIP', eligibility.detail);
+            if (eligibility.verdict?.escalate) {
+              await store.appendEvent({ type: 'ORPHANED_EXECUTION_UNCERTAIN', role, jobId, detail: eligibility.verdict.detail });
+            }
           }
         } else if (eligibility.detail) {
           // TERMINAL and ATTEMPT_NOT_CLAIMABLE both carry a ready-made detail
@@ -410,7 +591,29 @@ export async function runWorkerLoop({
         await handleJob({ ...job, attemptId, workerInstanceId: workerInstanceId() });
       } catch (error) {
         log('ERROR', `job ${jobId}: [${error.code ?? 'UNEXPECTED'}] ${error.message}`);
-        await store.appendEvent({ type: 'JOB_FAILED', role, jobId, code: error.code ?? 'UNEXPECTED', message: error.message });
+        await store.appendEvent({ type: 'JOB_FAILED', role, jobId, code: error.code ?? 'UNEXPECTED', message: error.message })
+          .catch(() => {});
+
+        if (claimed?.acquired) {
+          // The attempt was ours and the handler did not settle it. Leaving
+          // it as it was is what kept Goal 103 R2 QUEUED with an IDLE worker
+          // and an orchestrator waiting forever — see settleAttemptAfterError.
+          try {
+            const settled = await settleAttemptAfterError({ store, role, jobId, error });
+            if (settled.settled) {
+              log('FAILED', `${jobId} (${settled.attemptId}) → FAILED, ${settled.reason}; a human decides whether it runs again`);
+            }
+          } catch (settleError) {
+            log('ERROR', `could not record the failure of ${jobId}: ${settleError.message}`);
+            // Not settled, so not "nothing changed": look at it again.
+            seen.delete(eligibility.seenKey);
+          }
+        } else {
+          // Never claimed (a lease I/O error, typically), so nothing ran and
+          // nothing needs settling — but the job must not stay cached as
+          // evaluated, or a transient error would strand it like a real one.
+          seen.delete(eligibility.seenKey);
+        }
       } finally {
         // Whatever this attempt created — however it ended: COMPLETED,
         // FAILED, WAITING_FOR_CAPACITY, or the catch above — is cleaned up

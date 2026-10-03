@@ -347,7 +347,30 @@ async function main() {
     // Left in place it is what makes the worker refuse the job — the new
     // attempt would be as unclaimable as the old one.
     const heldByOldAttempt = await leaseStore.readJobLease(plan.jobId).catch(() => null);
-    if (heldByOldAttempt) {
+    // A worker may already have taken the job back on its own: after a reboot
+    // it retires the dead attempt's lease (DIFFERENT_BOOT, the same proof used
+    // here), queues the next attempt and claims it — usually before anyone
+    // runs this command. The lease on disk is then the LIVE lease of the
+    // job's CURRENT attempt, not the old one's. Retiring it is impossible
+    // (its holder is alive) and requeuing would interrupt work in flight, so
+    // the requeue is already done; the orchestrator attaches and waits for it.
+    let resumedByWorker = false;
+    if (heldByOldAttempt && heldByOldAttempt.attemptId && heldByOldAttempt.attemptId === before?.attemptId
+      && (before?.attemptStatus === 'RUNNING' || before?.attemptStatus === 'QUEUED')) {
+      const liveEvidence = await collectOwnerEvidence(heldByOldAttempt, inspector, { now });
+      const liveVerdict = judgeOwner({ lease: heldByOldAttempt, evidence: liveEvidence, now });
+      if (liveVerdict.status === OWNER_STATUS.ACTIVE) {
+        resumedByWorker = true;
+        await store.appendEvent({
+          type: 'JOB_ALREADY_RESUMED', role: plan.agent, jobId: plan.jobId,
+          attemptId: before.attemptId, owner: heldByOldAttempt.workerInstanceId ?? null,
+          goal: runtime.goal, round: runtime.round, runId: autonomousRun?.autonomousRunId ?? null,
+        });
+        emit(`${before.attemptId} is already ${before.attemptStatus} under a live lease (${heldByOldAttempt.workerInstanceId ?? 'unknown'}); nothing to requeue.`);
+      }
+    }
+
+    if (heldByOldAttempt && !resumedByWorker) {
       const heldEvidence = await collectOwnerEvidence(heldByOldAttempt, inspector, { now });
       const heldVerdict = judgeOwner({ lease: heldByOldAttempt, evidence: heldEvidence, now });
       if (isRecoveryEligible(heldVerdict)) {
@@ -374,7 +397,7 @@ async function main() {
       }
     }
 
-    if (before?.attemptStatus !== 'INTERRUPTED') {
+    if (!resumedByWorker && before?.attemptStatus !== 'INTERRUPTED') {
       await store.setJobStatus(plan.agent, plan.jobId, 'INTERRUPTED');
       await store.appendEvent({
         type: 'JOB_INTERRUPTED', role: plan.agent, jobId: plan.jobId,
@@ -383,6 +406,9 @@ async function main() {
       });
     }
 
+    // With the attempt already live, startNextAttempt itself answers
+    // ATTEMPT_RUNNING / ATTEMPT_ALREADY_QUEUED and creates nothing — it is the
+    // INTERRUPTED write above that forces a successor, and that is skipped.
     const started = await store.startNextAttempt(plan.agent, plan.jobId, {
       reason: verdict?.proof ?? 'ORCHESTRATOR_GONE',
     });

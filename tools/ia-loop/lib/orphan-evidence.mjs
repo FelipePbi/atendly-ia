@@ -39,11 +39,31 @@ export const ORPHAN_PROOFS = Object.freeze([
 ]);
 
 /**
+ * The proofs strong enough for a WORKER to retire a job lease on its own.
+ *
+ * A strict subset of ORPHAN_PROOFS, on purpose. PROCESS_GONE and PID_REUSED
+ * prove the WORKER process is gone — not the `claude` child it spawned, which
+ * on Windows outlives a killed parent and may still be writing to the
+ * worktree. That is why the worker fails closed on an expired lease and a
+ * human (or ia-loop:recover) decides. A reboot is different: no process of
+ * any kind survives it, child included, so it is the one proof that settles
+ * the question without asking anybody.
+ */
+export const WORKER_RECLAIM_PROOFS = Object.freeze(['DIFFERENT_BOOT']);
+
+/**
  * Gathers evidence about a lease's holder. Async only because asking the OS for
  * another process's start time is; the judgement itself is the pure function
  * below, so every branch is testable without a machine.
+ *
+ * `processQueries: false` gathers only what is free to read — hostname and
+ * boot instant — and never asks the OS about the holder's pid. For a caller
+ * that runs every second and can only act on DIFFERENT_BOOT anyway (the
+ * worker loop), spawning a process query per poll would be pure cost. The
+ * judgement stays the same function, so the boot is still decided in exactly
+ * one place.
  */
-export async function collectOwnerEvidence(lease, inspector, { now = Date.now(), config } = {}) {
+export async function collectOwnerEvidence(lease, inspector, { now = Date.now(), config, processQueries = true } = {}) {
   if (!lease) return null;
 
   // A live heartbeat settles the question by itself, so nothing is asked of the
@@ -80,6 +100,8 @@ export async function collectOwnerEvidence(lease, inspector, { now = Date.now(),
   if (evidence.leaseHostname && evidence.leaseHostname !== evidence.currentHostname) {
     return evidence;
   }
+
+  if (!processQueries) return { ...evidence, skipped: 'PROCESS_QUERIES_DISABLED' };
 
   if (evidence.leasePid !== null) {
     evidence.pidLiveness = inspector.exists(evidence.leasePid);
@@ -207,4 +229,9 @@ export function judgeOwner({ lease, evidence, now = Date.now(), config }) {
 /** Only a proven orphan may have its lease taken. */
 export function isRecoveryEligible(verdict) {
   return verdict?.status === OWNER_STATUS.ORPHAN_CONFIRMED && ORPHAN_PROOFS.includes(verdict.proof);
+}
+
+/** A proven orphan whose proof also rules out a surviving child (see WORKER_RECLAIM_PROOFS). */
+export function isWorkerReclaimEligible(verdict) {
+  return isRecoveryEligible(verdict) && WORKER_RECLAIM_PROOFS.includes(verdict.proof);
 }
